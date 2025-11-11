@@ -952,6 +952,73 @@ body.light .theme-toggle-thumb::before {
     letter-spacing: 0.5px;
 }
 
+/* ==================== AI 聊天 ==================== */
+.ai-chat-container {
+    max-width: 980px;
+    margin: 0 auto;
+    width: 100%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+}
+.ai-chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+.ai-chat-title {
+    font-size: 18px;
+    font-weight: 700;
+}
+.ai-chat-body {
+    margin-top: 14px;
+    padding: 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    max-height: 420px;
+    overflow-y: auto;
+}
+.chat-msg {
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    margin: 8px 0;
+    max-width: 80%;
+    line-height: 1.7;
+}
+.chat-msg.user {
+    background: var(--accent-light);
+    color: var(--text-primary);
+    margin-left: auto;
+    border: 1px solid var(--accent);
+}
+.chat-msg.assistant {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    margin-right: auto;
+    border: 1px solid var(--border);
+}
+.chat-msg.assistant.streaming {
+    border-style: dashed;
+    opacity: 0.95;
+}
+.ai-chat-input {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+.ai-chat-input input {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
 /* ==================== API测试界面 ==================== */
 .api-test-container {
     max-width: 1600px;

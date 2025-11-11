@@ -269,16 +269,19 @@ class DeviceManager {
             }
 
             if (session.finalText) {
+                session.waitCompleted = true;
                 const waitedMs = waitCount * checkIntervalMs;
                 BotUtil.makeLog('info',
                     `✅ [ASR最终] "${session.finalText}" (等待${waitedMs}ms)`,
                     deviceId
                 );
             } else {
-                BotUtil.makeLog('warn',
-                    `⚠️ [ASR] 等待最终结果超时(${maxWaitMs}ms)`,
-                    deviceId
-                );
+                if (!session.waitCompleted) {
+                    BotUtil.makeLog('warn',
+                        `⚠️ [ASR] 等待最终结果超时(${maxWaitMs}ms)`,
+                        deviceId
+                    );
+                }
             }
 
             const finalText = session.finalText;

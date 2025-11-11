@@ -688,29 +688,58 @@ class APIControlCenter {
         input.value = '';
 
         try {
-            // 调用设备工作流：直接利用设备AI流程，使用一个虚拟设备ID
-            await this.ensureDeviceWs();
-            // 简单触发AI：复用设备的ASR结束逻辑入口
-            // 这里直接调用后端的设备AI处理接口（复用已有流程）
-            const res = await fetch(`${this.serverUrl}/api/device/webclient/asr/sessions`, {
-                headers: this.getHeaders()
-            }).catch(() => null);
-            // 通过工作流执行更直接：后端当前通过设备模块内部调用StreamLoader(chat)
-            // 我们用一个轻量的提示消息到日志，后端将依据最终文本驱动AI
-            if (this._deviceWs && this._deviceWs.readyState === 1) {
-                this._deviceWs.send(JSON.stringify({
-                    type: 'event',
-                    device_id: 'webclient',
-                    data_type: 'log',
-                    data: { level: 'info', message: `Web聊天: ${text}` }
-                }));
-            }
-            // 同时请求一个简易AI结果（通过后端已有接口很有限，这里仅做前端占位）
-            // 提示用户查看设备展示或TTS
-            this.appendChat('assistant', '已提交请求，设备侧将播报/显示回复。');
+            await this.startAIStream(text);
         } catch (err) {
             this.showToast('发送失败: ' + err.message, 'error');
         }
+    }
+
+    async startAIStream(prompt) {
+        // 通过 SSE 获取流式结果并渲染
+        try {
+            const url = `${this.serverUrl}/api/ai/stream?prompt=${encodeURIComponent(prompt)}&persona=`;
+            const es = new EventSource(url);
+            let acc = '';
+            const onMessage = (e) => {
+                try {
+                    const data = JSON.parse(e.data || '{}');
+                    if (data.delta) {
+                        acc += data.delta;
+                        this.renderAssistantStreaming(acc);
+                    }
+                    if (data.done) {
+                        es.close();
+                        this.renderAssistantStreaming(acc, true);
+                    }
+                    if (data.error) {
+                        es.close();
+                        this.showToast('AI错误: ' + data.error, 'error');
+                    }
+                } catch {}
+            };
+            es.addEventListener('message', onMessage);
+            es.addEventListener('error', () => {
+                es.close();
+            });
+        } catch (e) {
+            this.showToast('开启流式失败: ' + e.message, 'error');
+        }
+    }
+
+    renderAssistantStreaming(text, done = false) {
+        const box = document.getElementById('chatMessages');
+        if (!box) return;
+        let last = box.querySelector('.chat-msg.assistant.streaming');
+        if (!last) {
+            last = document.createElement('div');
+            last.className = 'chat-msg assistant streaming';
+            box.appendChild(last);
+        }
+        last.textContent = text;
+        if (done) {
+            last.classList.remove('streaming');
+        }
+        box.scrollTop = box.scrollHeight;
     }
 
     // ============== Streaming ASR via /device WebSocket ==============

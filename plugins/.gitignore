@@ -1,13 +1,6 @@
 *
 !.gitignore
 
-!genshin
-!genshin/**
-genshin/config/*
-
-!system
-!system/**
-
 !other
 other/**
 !other/restart.js
@@ -18,10 +11,8 @@ other/**
 !example
 example/**
 !example/主动复读.js
-!example/进群退群通知.js
 !example/模拟定时输入.js
-!example/伪造消息.js
-!example/葵子插件.js
+!example/状态.js
 
 !adapter
 adapter/**
@@ -43,6 +34,7 @@ api/**
 !api/stdin.js
 !api/write.js
 !api/config.js
+!api/ai.js
 
 !events
 events/**
@@ -56,6 +48,7 @@ events/**
 !stream
 stream/**
 !stream/chat.js
+!stream/device.js
 
 *.psd
 *.map
