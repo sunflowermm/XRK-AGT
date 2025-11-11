@@ -12,6 +12,7 @@ other/**
 example/**
 !example/主动复读.js
 !example/模拟定时输入.js
+!example/远程指令.js
 !example/状态.js
 
 !adapter
