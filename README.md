@@ -1,4 +1,4 @@
-# XRK-Yunzai v3.0.5
+# XRK-AGT v3.0.5
 
 基于乐神版[云崽v3.0](https://gitee.com/le-niao/Yunzai-Bot) 与喵喵版[喵崽v3.1.3](https://gitee.com/yoimiya-kokomi/Miao-Yunzai) 还有时雨版[时雨崽3.1.3](https://gitee.com/TimeRainStarSky/Yunzai)
 
@@ -11,7 +11,7 @@
 
 > 必要环境 Node.js>18.14.0 + Redis>5.0.0
 
-## XRK-Yunzai 后续计划
+## XRK-AGT 后续计划
 
 - 最快实现的就是pm2的启动方式（目前还没有实现，在查资料）{已经实现}
 - 开源对接任务处理器（对接Mysql，微信公众号等） {已完成}
@@ -24,13 +24,13 @@
 ```sh
 # 使用Gitcode
 git clone --depth=1 https://gitcode.com/Xrkseek/XRK-Yunzai.git
-cd XRK-Yunzai 
+cd XRK-AGT 
 # 使用Gitee
 git clone --depth=1 https://gitee.com/xrkseek/XRK-Yunzai.git
-cd XRK-Yunzai 
+cd XRK-AGT 
 # 使用Github
 git clone --depth=1 https://github.com/Xrkseek/XRK-Yunzai.git
-cd XRK-Yunzai 
+cd XRK-AGT 
 ```
 
 ###  安装依赖<自动>
@@ -51,7 +51,7 @@ cd XRK-Yunzai
 node app # 启动
 ```
 
-### 葵崽重要特性
+### 葵子重要特性
 
 [点进来吧](./stdin.md)
 
@@ -63,4 +63,4 @@ node app # 启动
 |:-------------------------------------------------------------:|------------------|------------------|
 |      [Yunzai v3.0](https://gitee.com/le-niao/Yunzai-Bot)      | 乐神的Yunzai-Bot V3 | 元老级项目 |
 |      [Miao-Yunzai v3.1.3](https://gitee.com/yoimiya-kokomi/Miao-Yunzai)      | 喵喵的Miao-Yunzai | 项目基础，提供了优化方向和原神功能适配 |
-|      [TRSS-Yunzai v3.1.3](https://gitee.com/TimeRainStarSky/Yunzai)      | 时雨的Yunzai | 为葵崽底层设计提供了不可磨灭的贡献，时雨崽是当之无愧的node项目的艺术品 |
+|      [TRSS-Yunzai v3.1.3](https://gitee.com/TimeRainStarSky/Yunzai)      | 时雨的Yunzai | 为葵子底层设计提供了不可磨灭的贡献，时雨崽是当之无愧的node项目的艺术品 |

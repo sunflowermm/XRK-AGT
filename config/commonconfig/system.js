@@ -9,7 +9,7 @@ export default class SystemConfig extends ConfigBase {
     super({
       name: 'system',
       displayName: '系统配置',
-      description: 'XRK-Yunzai 系统配置管理',
+      description: 'XRK-AGT 系统配置管理',
       filePath: '', // 系统配置管理多个文件，此处留空
       fileType: 'yaml'
     });
@@ -925,7 +925,7 @@ export default class SystemConfig extends ConfigBase {
                   type: 'array',
                   label: '机器人别名',
                   itemType: 'string',
-                  default: ['葵崽', '葵葵'],
+                  default: ['葵子', '葵葵'],
                   component: 'Tags'
                 },
                 addPrivate: {

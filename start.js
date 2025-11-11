@@ -1,6 +1,6 @@
 /**
  * @file start.js
- * @description 葵崽服务器主启动脚本
+ * @description 葵子服务器主启动脚本
  * @author XRK
  * @copyright 2025 XRK Studio
  * @license MIT
@@ -445,7 +445,7 @@ class ServerManager extends BaseManager {
    * @returns {Promise<void>}
    */
   async startServerMode(port) {
-    await this.logger.log(`启动葵崽服务器，端口: ${port}`);
+    await this.logger.log(`启动葵子服务器，端口: ${port}`);
     global.selectedMode = 'server';
     
     try {
@@ -673,7 +673,7 @@ class MenuManager {
    * @returns {Promise<void>}
    */
   async run() {
-    console.log(chalk.cyan('\n🤖 葵崽多端口服务器管理系统\n'));
+    console.log(chalk.cyan('\n🤖 葵子多端口服务器管理系统\n'));
     
     let shouldExit = false;
     

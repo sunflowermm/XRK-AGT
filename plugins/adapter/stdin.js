@@ -510,7 +510,7 @@ export class StdinHandler {
   startImprovedListener() {
     const appVersion = "1.4.3";
     logger.gradientLine('=', 27);
-    logger.title(`葵崽标准输入 v${appVersion}`, "yellow");
+    logger.title(`葵子标准输入 v${appVersion}`, "yellow");
     logger.tip("输入 'help' 获取帮助");
     logger.tip("输入 'exit' 退出程序");
     logger.gradientLine('=', 27);
