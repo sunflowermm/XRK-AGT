@@ -770,7 +770,16 @@ class MenuManager {
       }]);
       
       if (startNow) {
-        await this.serverManager.startWithAutoRestart(newPort);
+        // 使用 PM2 后台启动以避免当前交互式菜单阻塞
+        const success = await this.pm2Manager.executePortCommand('start', newPort);
+        if (success) {
+          console.log(chalk.green(`✓ 端口 ${newPort} 已由 PM2 后台启动`));
+          // 可选：提示查看日志
+          console.log(chalk.gray(`提示：查看日志 → pm2 logs ${this.pm2Manager.getProcessName(newPort)} --lines ${CONFIG.PM2_LINES}`));
+        } else {
+          console.log(chalk.yellow('⚠ 通过 PM2 启动失败，回退为前台启动（可Ctrl+C退出后再用PM2管理）'));
+          await this.serverManager.startWithAutoRestart(newPort);
+        }
       }
     }
   }
