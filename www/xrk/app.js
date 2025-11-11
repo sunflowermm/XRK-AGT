@@ -742,6 +742,26 @@ class APIControlCenter {
         box.scrollTop = box.scrollHeight;
     }
 
+    renderASRStreaming(text, done = false) {
+        const box = document.getElementById('chatMessages');
+        if (!box) return;
+        let last = box.querySelector('.chat-msg.assistant.asr-streaming');
+        if (!last && !done) {
+            last = document.createElement('div');
+            last.className = 'chat-msg assistant asr-streaming';
+            box.appendChild(last);
+        }
+        if (last) {
+            if (!done) {
+                last.textContent = `识别中: ${text}`;
+            } else {
+                last.classList.remove('asr-streaming');
+                last.remove();
+            }
+        }
+        box.scrollTop = box.scrollHeight;
+    }
+
     // ============== Streaming ASR via /device WebSocket ==============
     async ensureDeviceWs() {
         if (this._deviceWs && (this._deviceWs.readyState === 0 || this._deviceWs.readyState === 1)) {
@@ -782,7 +802,12 @@ class APIControlCenter {
                     return;
                 }
                 if (data?.type === 'heartbeat_response') return;
+                if (data?.type === 'asr_interim' && data.text) {
+                    this.renderASRStreaming(data.text, false);
+                    return;
+                }
                 if (data?.type === 'asr_final' && data.text) {
+                    this.renderASRStreaming('', true);
                     this.appendChat('assistant', `识别: ${data.text}`);
                     return;
                 }

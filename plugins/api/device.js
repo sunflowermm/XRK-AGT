@@ -1432,6 +1432,49 @@ export default {
             );
         }
 
+        // 订阅ASR结果事件：更新会话finalText并转发中间结果到前端
+        try {
+            Bot.on('device', (e) => {
+                try {
+                    if (!e || e.event_type !== 'asr_result') return;
+                    const deviceId = e.device_id;
+                    const sessionId = e.session_id;
+                    const text = e.text || '';
+                    const isFinal = !!e.is_final;
+                    const duration = e.duration || 0;
+                    const session = asrSessions.get(sessionId);
+                    if (session && session.deviceId === deviceId) {
+                        if (isFinal) {
+                            session.finalText = text;
+                            session.finalDuration = duration;
+                            session.finalTextSetAt = Date.now();
+                            // 立即将最终结果推送给前端，避免等待超时
+                            const ws = deviceWebSockets.get(deviceId);
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({
+                                    type: 'asr_final',
+                                    device_id: deviceId,
+                                    session_id: sessionId,
+                                    text
+                                }));
+                            }
+                        } else if (text) {
+                            // 中间结果实时转发到webclient
+                            const ws = deviceWebSockets.get(deviceId);
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({
+                                    type: 'asr_interim',
+                                    device_id: deviceId,
+                                    session_id: sessionId,
+                                    text
+                                }));
+                            }
+                        }
+                    }
+                } catch {}
+            });
+        } catch {}
+
         BotUtil.makeLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'DeviceManager');
     },
 
