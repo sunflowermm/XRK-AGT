@@ -782,6 +782,10 @@ class APIControlCenter {
                     return;
                 }
                 if (data?.type === 'heartbeat_response') return;
+                if (data?.type === 'asr_final' && data.text) {
+                    this.appendChat('assistant', `识别: ${data.text}`);
+                    return;
+                }
                 if (data?.type === 'register_response' && data.success) {
                     this.showToast('已连接设备: webclient', 'success');
                 }

@@ -237,6 +237,12 @@ class DeviceManager {
                 return { success: true };
             }
 
+            // 避免重复处理同一会话停止
+            if (session.stopped) {
+                return { success: true };
+            }
+            session.stopped = true;
+
             if (session.asrStarted) {
                 const client = this._getASRClient(deviceId);
 
@@ -275,6 +281,19 @@ class DeviceManager {
                     `✅ [ASR最终] "${session.finalText}" (等待${waitedMs}ms)`,
                     deviceId
                 );
+
+                // 将最终识别结果推送给前端设备（webclient）用于UI展示
+                try {
+                    const ws = deviceWebSockets.get(deviceId);
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'asr_final',
+                            device_id: deviceId,
+                            session_id,
+                            text: session.finalText
+                        }));
+                    }
+                } catch {}
             } else {
                 if (!session.waitCompleted) {
                     BotUtil.makeLog('warn',
