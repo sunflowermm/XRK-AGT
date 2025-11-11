@@ -1,0 +1,630 @@
+{
+  "apiGroups": [
+    {
+      "id": "core",
+      "title": "核心系统",
+      "apis": [
+        {
+          "id": "system-status",
+          "method": "GET",
+          "path": "/api/status",
+          "title": "系统状态",
+          "description": "获取系统运行状态、机器人信息和适配器列表"
+        },
+        {
+          "id": "system-config",
+          "method": "GET",
+          "path": "/api/config",
+          "title": "系统配置",
+          "description": "获取系统配置信息（需要授权）"
+        },
+        {
+          "id": "health-check",
+          "method": "GET",
+          "path": "/api/health",
+          "title": "健康检查",
+          "description": "检查系统各服务的健康状态"
+        }
+      ]
+    },
+    {
+      "id": "bot",
+      "title": "机器人管理",
+      "apis": [
+        {
+          "id": "bot-list",
+          "method": "GET",
+          "path": "/api/bots",
+          "title": "机器人列表",
+          "description": "获取所有已连接的机器人（不包括设备）"
+        },
+        {
+          "id": "bot-friends",
+          "method": "GET",
+          "path": "/api/bot/:uin/friends",
+          "title": "好友列表",
+          "description": "获取指定机器人的好友列表",
+          "pathParams": {
+            "uin": {
+              "label": "机器人UIN",
+              "placeholder": "123456789",
+              "hint": "机器人的唯一标识"
+            }
+          }
+        },
+        {
+          "id": "bot-groups",
+          "method": "GET",
+          "path": "/api/bot/:uin/groups",
+          "title": "群组列表",
+          "description": "获取指定机器人的群组列表",
+          "pathParams": {
+            "uin": {
+              "label": "机器人UIN",
+              "placeholder": "123456789",
+              "hint": "机器人的唯一标识"
+            }
+          }
+        },
+        {
+          "id": "bot-control",
+          "method": "POST",
+          "path": "/api/bot/:uin/control",
+          "title": "控制机器人",
+          "description": "执行机器人控制命令（开机/关机）",
+          "pathParams": {
+            "uin": {
+              "label": "机器人UIN",
+              "placeholder": "123456789",
+              "hint": "机器人的唯一标识"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "action",
+              "label": "操作类型",
+              "type": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "shutdown",
+                  "label": "关机"
+                },
+                {
+                  "value": "startup",
+                  "label": "开机"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "message",
+      "title": "消息系统",
+      "apis": [
+        {
+          "id": "message-send",
+          "method": "POST",
+          "path": "/api/message/send",
+          "title": "发送消息",
+          "description": "向好友或群组发送消息，支持文本和文件",
+          "bodyParams": [
+            {
+              "name": "bot_id",
+              "label": "机器人ID",
+              "type": "text",
+              "placeholder": "留空使用默认机器人",
+              "hint": "指定发送消息的机器人"
+            },
+            {
+              "name": "type",
+              "label": "消息类型",
+              "type": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "private",
+                  "label": "私聊"
+                },
+                {
+                  "value": "group",
+                  "label": "群聊"
+                }
+              ]
+            },
+            {
+              "name": "target_id",
+              "label": "目标ID",
+              "type": "text",
+              "required": true,
+              "placeholder": "好友QQ或群号",
+              "hint": "接收消息的好友或群组ID"
+            },
+            {
+              "name": "message",
+              "label": "消息内容",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "支持文本、表情、图片等",
+              "defaultValue": "你好，这是一条测试消息！"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stdin",
+      "title": "标准输入",
+      "apis": [
+        {
+          "id": "stdin-command",
+          "method": "POST",
+          "path": "/api/stdin/command",
+          "title": "发送命令",
+          "description": "通过标准输入发送命令到机器人系统",
+          "bodyParams": [
+            {
+              "name": "command",
+              "label": "命令内容",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "输入命令，支持文本或JSON格式",
+              "defaultValue": "help",
+              "hint": "可以是文本命令或JSON格式的复杂命令"
+            },
+            {
+              "name": "user_info",
+              "label": "用户信息",
+              "type": "json",
+              "placeholder": "{\"user_id\": \"123456\", \"nickname\": \"测试用户\"}",
+              "defaultValue": "{\n  \"user_id\": \"123456\",\n  \"nickname\": \"测试用户\"\n}",
+              "hint": "可选，模拟用户身份信息"
+            }
+          ]
+        },
+        {
+          "id": "stdin-custom-event",
+          "method": "POST",
+          "path": "/api/stdin/custom-event",
+          "title": "自定义事件",
+          "description": "创建自定义事件触发插件响应",
+          "bodyParams": [
+            {
+              "name": "event_type",
+              "label": "事件类型",
+              "type": "text",
+              "required": true,
+              "placeholder": "message.private.friend",
+              "hint": "事件类型，如 message.private.friend"
+            },
+            {
+              "name": "event_data",
+              "label": "事件数据",
+              "type": "json",
+              "placeholder": "{\"message\": \"测试\", \"user_id\": \"123456\"}",
+              "defaultValue": "{\n  \"message\": \"测试事件\",\n  \"user_id\": \"123456\"\n}",
+              "hint": "事件附加数据"
+            },
+            {
+              "name": "user_info",
+              "label": "用户信息",
+              "type": "json",
+              "placeholder": "{\"nickname\": \"测试用户\"}"
+            }
+          ]
+        },
+        {
+          "id": "stdin-status",
+          "method": "GET",
+          "path": "/api/stdin/status",
+          "title": "Stdin状态",
+          "description": "获取标准输入处理器的状态信息"
+        }
+      ]
+    },
+    {
+      "id": "device",
+      "title": "设备管理",
+      "apis": [
+        {
+          "id": "device-register",
+          "method": "POST",
+          "path": "/api/device/register",
+          "title": "注册设备",
+          "description": "注册新的物联网设备到系统（需要认证）",
+          "bodyParams": [
+            {
+              "name": "device_id",
+              "label": "设备ID",
+              "type": "text",
+              "required": true,
+              "placeholder": "DEVICE_001",
+              "hint": "设备的唯一标识"
+            },
+            {
+              "name": "device_type",
+              "label": "设备类型",
+              "type": "text",
+              "required": true,
+              "placeholder": "sensor",
+              "hint": "如：sensor、camera、switch、actuator等"
+            },
+            {
+              "name": "device_name",
+              "label": "设备名称",
+              "type": "text",
+              "placeholder": "客厅温度传感器",
+              "hint": "设备的显示名称"
+            },
+            {
+              "name": "capabilities",
+              "label": "设备能力",
+              "type": "json",
+              "placeholder": "[\"temperature\", \"humidity\"]",
+              "defaultValue": "[\"temperature\", \"humidity\"]",
+              "hint": "设备支持的功能列表"
+            },
+            {
+              "name": "metadata",
+              "label": "元数据",
+              "type": "json",
+              "placeholder": "{\"location\": \"客厅\", \"model\": \"DHT22\"}",
+              "defaultValue": "{}",
+              "hint": "设备的额外信息"
+            }
+          ]
+        },
+        {
+          "id": "device-list",
+          "method": "GET",
+          "path": "/api/devices",
+          "title": "设备列表",
+          "description": "获取所有注册的物联网设备及其状态统计"
+        },
+        {
+          "id": "device-detail",
+          "method": "GET",
+          "path": "/api/device/:deviceId",
+          "title": "设备详情",
+          "description": "获取指定设备的详细信息和统计数据",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "DEVICE_001",
+              "hint": "要查询的设备ID"
+            }
+          }
+        },
+        {
+          "id": "device-heartbeat",
+          "method": "POST",
+          "path": "/api/device/heartbeat",
+          "title": "心跳上报",
+          "description": "设备定期上报心跳，获取待执行命令",
+          "bodyParams": [
+            {
+              "name": "device_id",
+              "label": "设备ID",
+              "type": "text",
+              "required": true,
+              "placeholder": "DEVICE_001"
+            },
+            {
+              "name": "status",
+              "label": "设备状态",
+              "type": "json",
+              "placeholder": "{\"cpu\": 20, \"memory\": 512, \"battery\": 85}",
+              "defaultValue": "{}",
+              "hint": "当前设备状态信息（可选）"
+            }
+          ]
+        },
+        {
+          "id": "device-event",
+          "method": "POST",
+          "path": "/api/device/event",
+          "title": "事件上报",
+          "description": "设备上报事件数据，支持多种事件类型",
+          "bodyParams": [
+            {
+              "name": "device_id",
+              "label": "设备ID",
+              "type": "text",
+              "required": true,
+              "placeholder": "DEVICE_001"
+            },
+            {
+              "name": "event_type",
+              "label": "事件类型",
+              "type": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "sensor",
+                  "label": "传感器数据"
+                },
+                {
+                  "value": "status",
+                  "label": "状态变更"
+                },
+                {
+                  "value": "alert",
+                  "label": "告警事件"
+                },
+                {
+                  "value": "data",
+                  "label": "数据上报"
+                },
+                {
+                  "value": "command_result",
+                  "label": "命令结果"
+                },
+                {
+                  "value": "online",
+                  "label": "设备上线"
+                },
+                {
+                  "value": "offline",
+                  "label": "设备离线"
+                },
+                {
+                  "value": "update",
+                  "label": "固件更新"
+                },
+                {
+                  "value": "error",
+                  "label": "错误事件"
+                },
+                {
+                  "value": "custom",
+                  "label": "自定义事件"
+                }
+              ]
+            },
+            {
+              "name": "event_data",
+              "label": "事件数据",
+              "type": "json",
+              "placeholder": "{\"temperature\": 25.5, \"humidity\": 60}",
+              "defaultValue": "{\n  \"temperature\": 25.5,\n  \"humidity\": 60\n}",
+              "hint": "事件相关的数据内容"
+            }
+          ]
+        },
+        {
+          "id": "device-command",
+          "method": "POST",
+          "path": "/api/device/:deviceId/command",
+          "title": "发送命令",
+          "description": "向设备发送控制命令",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "DEVICE_001",
+              "hint": "接收命令的设备ID"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "command",
+              "label": "命令名称",
+              "type": "text",
+              "required": true,
+              "placeholder": "turn_on",
+              "hint": "要执行的命令，如：turn_on、turn_off、set_temperature等"
+            },
+            {
+              "name": "parameters",
+              "label": "命令参数",
+              "type": "json",
+              "placeholder": "{\"temperature\": 26}",
+              "defaultValue": "{}",
+              "hint": "命令相关参数"
+            },
+            {
+              "name": "priority",
+              "label": "优先级",
+              "type": "select",
+              "options": [
+                {
+                  "value": "low",
+                  "label": "低"
+                },
+                {
+                  "value": "normal",
+                  "label": "普通"
+                },
+                {
+                  "value": "high",
+                  "label": "高"
+                },
+                {
+                  "value": "urgent",
+                  "label": "紧急"
+                }
+              ],
+              "defaultValue": "normal",
+              "hint": "命令执行优先级"
+            }
+          ]
+        },
+        {
+          "id": "device-delete",
+          "method": "DELETE",
+          "path": "/api/device/:deviceId",
+          "title": "删除设备",
+          "description": "从系统中移除设备",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "DEVICE_001",
+              "hint": "要删除的设备ID"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "file",
+      "title": "文件管理",
+      "apis": [
+        {
+          "id": "file-upload",
+          "method": "POST",
+          "path": "/api/file/upload",
+          "title": "上传文件",
+          "description": "上传文件到服务器，支持多种格式"
+        },
+        {
+          "id": "file-get",
+          "method": "GET",
+          "path": "/api/file/:id",
+          "title": "获取文件",
+          "description": "通过文件ID获取文件内容",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id",
+              "hint": "上传时返回的文件ID"
+            }
+          }
+        },
+        {
+          "id": "file-delete",
+          "method": "DELETE",
+          "path": "/api/file/:id",
+          "title": "删除文件",
+          "description": "删除已上传的文件",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id",
+              "hint": "要删除的文件ID"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "plugin",
+      "title": "插件管理",
+      "apis": [
+        {
+          "id": "plugin-list",
+          "method": "GET",
+          "path": "/api/plugins",
+          "title": "插件列表",
+          "description": "获取所有已加载的插件信息"
+        },
+        {
+          "id": "plugin-reload",
+          "method": "POST",
+          "path": "/api/plugin/:key/reload",
+          "title": "重载插件",
+          "description": "重新加载指定插件",
+          "pathParams": {
+            "key": {
+              "label": "插件标识",
+              "placeholder": "example-plugin",
+              "hint": "插件的唯一标识key"
+            }
+          }
+        },
+        {
+          "id": "plugin-tasks",
+          "method": "GET",
+          "path": "/api/plugins/tasks",
+          "title": "定时任务",
+          "description": "获取所有插件的定时任务列表"
+        }
+      ]
+    }
+  ],
+  "examples": {
+    "bot-friends": {
+      "path_uin": "123456789"
+    },
+    "bot-groups": {
+      "path_uin": "123456789"
+    },
+    "bot-control": {
+      "path_uin": "123456789",
+      "action": "shutdown"
+    },
+    "message-send": {
+      "type": "group",
+      "target_id": "123456789",
+      "message": "你好，这是一条测试消息！\n支持多行文本"
+    },
+    "stdin-command": {
+      "command": "#帮助",
+      "user_info": "{\n  \"user_id\": \"123456\",\n  \"nickname\": \"测试用户\",\n  \"isMaster\": true\n}"
+    },
+    "stdin-custom-event": {
+      "event_type": "message.private.friend",
+      "event_data": "{\n  \"message\": \"#帮助\",\n  \"user_id\": \"123456\",\n  \"time\": 1234567890\n}",
+      "user_info": "{\n  \"nickname\": \"测试用户\"\n}"
+    },
+    "device-register": {
+      "device_id": "SENSOR_001",
+      "device_type": "sensor",
+      "device_name": "客厅温湿度传感器",
+      "capabilities": "[\"temperature\", \"humidity\", \"pressure\"]",
+      "metadata": "{\n  \"location\": \"客厅\",\n  \"model\": \"DHT22\",\n  \"version\": \"1.0\"\n}"
+    },
+    "device-detail": {
+      "path_deviceId": "SENSOR_001"
+    },
+    "device-heartbeat": {
+      "device_id": "SENSOR_001",
+      "status": "{\n  \"cpu\": 15,\n  \"memory\": 256,\n  \"uptime\": 3600,\n  \"battery\": 85\n}"
+    },
+    "device-event": {
+      "device_id": "SENSOR_001",
+      "event_type": "sensor",
+      "event_data": "{\n  \"sensor_type\": \"environment\",\n  \"sensor_data\": {\n    \"temperature\": 25.5,\n    \"humidity\": 60,\n    \"pressure\": 1013.25\n  },\n  \"unit\": {\n    \"temperature\": \"celsius\",\n    \"humidity\": \"percent\",\n    \"pressure\": \"hPa\"\n  }\n}"
+    },
+    "device-command": {
+      "path_deviceId": "SWITCH_001",
+      "command": "turn_on",
+      "parameters": "{\n  \"brightness\": 80,\n  \"color\": \"#FFFFFF\"\n}",
+      "priority": "normal"
+    },
+    "device-delete": {
+      "path_deviceId": "SENSOR_001"
+    },
+    "file-get": {
+      "path_id": "01HX1234567890ABCDEF"
+    },
+    "file-delete": {
+      "path_id": "01HX1234567890ABCDEF"
+    },
+    "plugin-reload": {
+      "path_key": "genshin"
+    }
+  },
+  "quickActions": [
+    {
+      "icon": "💬",
+      "text": "发送消息",
+      "apiId": "message-send"
+    },
+    {
+      "icon": "👥",
+      "text": "管理机器人",
+      "apiId": "bot-list"
+    },
+    {
+      "icon": "📡",
+      "text": "查看设备",
+      "apiId": "device-list"
+    },
+    {
+      "icon": "⌨️",
+      "text": "执行命令",
+      "apiId": "stdin-command"
+    }
+  ]
+}

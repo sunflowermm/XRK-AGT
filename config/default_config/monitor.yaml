@@ -1,0 +1,37 @@
+# 监控总开关
+enabled: true
+  
+# 监控检查间隔（毫秒）
+interval: 120000
+  
+# 浏览器进程监控
+browser:
+  enabled: true
+  maxInstances: 5              # 最大浏览器实例数
+  memoryThreshold: 90          # 内存阈值（%）触发清理
+  reserveNewest: true          # 保留最新打开的实例
+    
+  # 系统内存监控
+memory:
+  enabled: true
+  systemThreshold: 85          # 系统内存阈值（%）
+  nodeThreshold: 85            # Node堆内存阈值（%）
+  autoOptimize: true           # 自动优化
+  gcInterval: 600000           # GC最小间隔（毫秒）
+    
+# CPU监控
+cpu:
+  enabled: true
+  threshold: 90                # CPU使用率阈值（%）
+  checkDuration: 30000         # CPU检查持续时间（毫秒）
+    
+# 优化策略
+optimize:
+  aggressive: false            # 激进模式（更频繁清理）
+  autoRestart: false           # 严重时自动重启
+  restartThreshold: 95         # 重启阈值（%）
+    
+# 报告配置
+report:
+  enabled: true
+  interval: 3600000            # 报告间隔（毫秒）

@@ -1,0 +1,249 @@
+# ========================================
+#           XRK-Bot 爬虫规则
+# ========================================
+# 最后更新: 2025
+# 
+# 本文件用于指导搜索引擎爬虫的访问行为
+# 保护敏感目录，允许公开内容的索引
+
+# ----------------------------------------
+#         所有爬虫的通用规则
+# ----------------------------------------
+User-agent: *
+
+# === 禁止访问的目录（敏感/系统目录）===
+# 配置文件（包含敏感信息）
+Disallow: /config/
+Disallow: /configs/
+
+# 数据目录（用户数据、缓存等）
+Disallow: /data/
+Disallow: /database/
+Disallow: /db/
+
+# 库文件（源代码）
+Disallow: /lib/
+Disallow: /libs/
+Disallow: /src/
+
+# 插件目录（可能包含私有代码）
+Disallow: /plugins/
+Disallow: /plugin/
+
+# 临时文件
+Disallow: /temp/
+Disallow: /tmp/
+Disallow: /cache/
+
+# 资源文件（内部使用）
+Disallow: /resources/
+
+# 日志文件
+Disallow: /logs/
+Disallow: /log/
+
+# API接口（防止爬虫触发）
+Disallow: /api/
+Disallow: /apis/
+
+# 管理后台
+Disallow: /admin/
+Disallow: /manage/
+Disallow: /dashboard/
+
+# WebSocket接口
+Disallow: /ws/
+Disallow: /websocket/
+
+# 文件服务（临时文件）
+Disallow: /File/
+Disallow: /files/
+Disallow: /upload/
+Disallow: /uploads/
+
+# 备份目录
+Disallow: /backup/
+Disallow: /backups/
+
+# Node.js相关
+Disallow: /node_modules/
+Disallow: /package.json
+Disallow: /package-lock.json
+Disallow: /*.lock
+
+# 版本控制
+Disallow: /.git/
+Disallow: /.svn/
+Disallow: /.hg/
+
+# 环境和配置文件
+Disallow: /.env
+Disallow: /*.env
+Disallow: /.config
+Disallow: /*.yml
+Disallow: /*.yaml
+Disallow: /*.conf
+Disallow: /*.ini
+
+# 隐藏文件和目录
+Disallow: /.*
+Disallow: /*/.
+
+# 脚本文件（安全考虑）
+Disallow: /*.sh
+Disallow: /*.bat
+Disallow: /*.ps1
+Disallow: /*.py
+Disallow: /*.rb
+
+# 压缩包（避免下载）
+Disallow: /*.zip
+Disallow: /*.tar
+Disallow: /*.gz
+Disallow: /*.rar
+Disallow: /*.7z
+
+# SQL和数据库文件
+Disallow: /*.sql
+Disallow: /*.db
+Disallow: /*.sqlite
+
+# === 允许访问的内容 ===
+# 根目录和公开内容
+Allow: /$
+Allow: /index.html
+Allow: /favicon.ico
+Allow: /robots.txt
+
+# 静态资源（样式、脚本、图片）
+Allow: /css/
+Allow: /js/
+Allow: /images/
+Allow: /img/
+Allow: /assets/
+Allow: /static/
+Allow: /public/
+
+# 媒体文件
+Allow: /*.css$
+Allow: /*.js$
+Allow: /*.jpg$
+Allow: /*.jpeg$
+Allow: /*.png$
+Allow: /*.gif$
+Allow: /*.svg$
+Allow: /*.webp$
+Allow: /*.ico$
+
+# 字体文件
+Allow: /*.woff$
+Allow: /*.woff2$
+Allow: /*.ttf$
+Allow: /*.eot$
+
+# 文档（如果有公开文档）
+Allow: /docs/
+Allow: /doc/
+Allow: /help/
+
+# ----------------------------------------
+#         特定爬虫的规则
+# ----------------------------------------
+
+# === Google爬虫 ===
+User-agent: Googlebot
+Crawl-delay: 1
+# Google图片爬虫
+User-agent: Googlebot-Image
+Allow: /images/
+Allow: /img/
+Allow: /*.jpg$
+Allow: /*.jpeg$
+Allow: /*.png$
+Allow: /*.gif$
+Allow: /*.svg$
+Allow: /*.webp$
+
+# === Bing爬虫 ===
+User-agent: Bingbot
+Crawl-delay: 1
+
+# === 百度爬虫 ===
+User-agent: Baiduspider
+Crawl-delay: 2
+# 百度可能不遵守robots.txt，额外限制
+Disallow: /api/
+Disallow: /admin/
+
+# === 搜狗爬虫 ===
+User-agent: Sogou web spider
+Crawl-delay: 2
+
+# === 360爬虫 ===
+User-agent: 360Spider
+Crawl-delay: 2
+
+# === Yandex爬虫 ===
+User-agent: Yandex
+Crawl-delay: 2
+
+# ----------------------------------------
+#         恶意爬虫黑名单
+# ----------------------------------------
+# 完全禁止这些已知的恶意爬虫
+
+# SEO分析工具（消耗大量资源）
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+# 内容抓取工具
+User-agent: SiteSnagger
+Disallow: /
+
+User-agent: WebCopier
+Disallow: /
+
+User-agent: WebStripper
+Disallow: /
+
+User-agent: WebZip
+Disallow: /
+
+User-agent: TeleportPro
+Disallow: /
+
+User-agent: HTTrack
+Disallow: /
+
+# 其他恶意爬虫
+User-agent: Scrapy
+Disallow: /
+
+User-agent: Nutch
+Disallow: /
+
+# ----------------------------------------
+#         附加信息
+# ----------------------------------------
+
+# 网站地图位置（如果有的话）
+# Sitemap: https://your-domain.com/sitemap.xml
+
+# 注意事项：
+# 1. 本规则仅供参考，爬虫可能不遵守
+# 2. 重要的安全防护应在服务器端实现
+# 3. 定期检查访问日志，发现异常及时处理
+# 4. 考虑使用CDN或防火墙进行额外保护
+
+# ========================================
+#              规则结束
+# ========================================

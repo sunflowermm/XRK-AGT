@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  xrk-yunzai:
+    build: .
+    container_name: xrk-yunzai
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DISABLE_CONSOLE=true
+      - USE_FILE_LOG=true
+      - DEBUG=false
+      - XRK_SERVER_PORT=3000
+      - NODE_OPTIONS=--no-warnings --no-deprecation
+    ports:
+      - "3000-3100:3000-3100"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+      - ./plugins:/app/plugins
+      - ./resources:/app/resources
+    networks:
+      - xrk-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # 如果需要Redis
+  redis:
+    image: redis:7-alpine
+    container_name: xrk-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - xrk-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+networks:
+  xrk-network:
+    driver: bridge
+
+volumes:
+  redis-data:

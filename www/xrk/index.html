@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>XRK-Yunzai葵崽 API控制中心</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- 添加代码编辑器样式 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">🤖</div>
+                    <span>葵崽API Center</span>
+                </div>
+                <button class="theme-toggle" id="themeToggle">
+                    <div class="theme-toggle-thumb"></div>
+                </button>
+            </div>
+
+            <a href="#" class="home-button" id="homeButton">
+                <span class="home-button-icon">🏠</span>
+                <span>返回首页</span>
+            </a>
+
+            <div class="api-groups-container" id="apiGroups">
+                <!-- API groups will be dynamically loaded here -->
+            </div>
+        </aside>
+
+        <!-- 主内容 -->
+        <main class="main-content">
+            <!-- 头部 -->
+            <header class="header">
+                <div class="header-content">
+                    <div class="api-key-section">
+                        <div class="api-key-input">
+                            <input type="password" id="apiKey" placeholder="输入 API Key" autocomplete="off">
+                            <button id="saveApiKeyBtn">保存</button>
+                        </div>
+                    </div>
+
+                    <div class="status-cards">
+                        <div class="status-card">
+                            <span class="status-dot" id="statusDot"></span>
+                            <span id="statusText">未连接</span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 内容区 -->
+            <div class="content" id="content">
+                <!-- 欢迎屏幕 -->
+                <div class="welcome-screen">
+                    <div class="welcome-icon">🚀</div>
+                    <h1 class="welcome-title">XRK-Yunzai葵崽 API控制中心</h1>
+                    <p class="welcome-desc">强大的机器人管理与开发平台</p>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">🤖</div>
+                            <div class="stat-value" id="statBots">-</div>
+                            <div class="stat-label">在线机器人</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">📱</div>
+                            <div class="stat-value" id="statDevices">-</div>
+                            <div class="stat-label">连接设备</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🧩</div>
+                            <div class="stat-value" id="statPlugins">-</div>
+                            <div class="stat-label">活跃插件</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⏱️</div>
+                            <div class="stat-value" id="statUptime">-</div>
+                            <div class="stat-label">运行时间</div>
+                        </div>
+                    </div>
+
+                    <div class="quick-actions" id="quickActions">
+                        <!-- Quick actions will be dynamically loaded here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 遮罩层 -->
+    <div class="overlay" id="overlay"></div>
+
+    <!-- 移动端悬浮球 -->
+    <button class="floating-btn" id="floatingBtn">
+        <svg viewBox="0 0 100 100" class="sunflower-icon">
+            <circle cx="50" cy="50" r="20" fill="#FFD700"/>
+            <g class="petals">
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(0 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(30 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(60 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(90 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(120 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(150 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(180 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(210 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(240 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(270 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(300 50 50)"/>
+                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(330 50 50)"/>
+            </g>
+        </svg>
+    </button>
+
+    <!-- Toast容器 -->
+    <div id="toastContainer"></div>
+
+    <!-- 添加代码编辑器脚本 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/fold/foldcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/fold/foldgutter.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/fold/brace-fold.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/lint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/json-lint.min.js"></script>
+    
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="XRK-MultiBot - 基于Yunzai-Bot的向日葵机器人框架">
+    <title>XRK-MultiBot | 向日葵机器人框架</title>
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --accent-color: #FFD700;
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --card-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
+            --hover-shadow: 0 16px 48px rgba(31, 38, 135, 0.25);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: #0f0f23;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* 现代化背景 */
+        .bg-wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background: linear-gradient(125deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%);
+        }
+
+        .bg-gradient {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            animation: float-gradient 20s ease-in-out infinite;
+        }
+
+        .bg-gradient:nth-child(1) {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            top: -200px;
+            right: -200px;
+        }
+
+        .bg-gradient:nth-child(2) {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            bottom: -200px;
+            left: -200px;
+            animation-delay: 10s;
+        }
+
+        .bg-gradient:nth-child(3) {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation-delay: 5s;
+        }
+
+        @keyframes float-gradient {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -30px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+
+        /* 流动光线效果 */
+        .light-rays {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .light-ray {
+            position: absolute;
+            width: 2px;
+            height: 100vh;
+            background: linear-gradient(to bottom, transparent, rgba(255, 215, 0, 0.3), transparent);
+            animation: slide 8s linear infinite;
+            transform: translateX(-100vw) rotate(15deg);
+        }
+
+        .light-ray:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .light-ray:nth-child(2) { left: 30%; animation-delay: 2s; }
+        .light-ray:nth-child(3) { left: 50%; animation-delay: 4s; }
+        .light-ray:nth-child(4) { left: 70%; animation-delay: 6s; }
+        .light-ray:nth-child(5) { left: 90%; animation-delay: 8s; }
+
+        @keyframes slide {
+            to { transform: translateX(200vw) rotate(15deg); }
+        }
+
+        /* 现代向日葵 Logo */
+        .logo-container {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            z-index: 100;
+            width: 120px;
+            height: 120px;
+        }
+
+        .modern-sunflower {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            animation: gentle-rotate 20s linear infinite;
+        }
+
+        @keyframes gentle-rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .sunflower-svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.5));
+        }
+
+        /* 主容器 */
+        .container {
+            position: relative;
+            z-index: 10;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+
+        /* 顶部导航栏 */
+        .nav-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(15, 15, 35, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 15px 30px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-logo {
+            font-size: 1.5em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-link {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--accent-color);
+            transition: width 0.3s ease;
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        /* Hero 区域 */
+        .hero {
+            text-align: center;
+            padding: 120px 0 80px;
+            animation: fadeIn 1s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .hero-title {
+            font-size: clamp(2.5rem, 5vw, 4.5rem);
+            font-weight: 900;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #FFD700, #FFA500, #FF6B6B);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.2); }
+        }
+
+        .hero-subtitle {
+            font-size: 1.2em;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 30px;
+        }
+
+        .hero-badges {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 8px 20px;
+            border-radius: 25px;
+            color: white;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+
+        .badge:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .badge-icon {
+            font-size: 1.2em;
+        }
+
+        /* 卡片网格 - 使用CSS Grid优化布局 */
+        .cards-section {
+            margin: 60px 0;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5em;
+            color: white;
+            margin-bottom: 50px;
+            position: relative;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 3px;
+            background: var(--accent-color);
+            border-radius: 2px;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            animation: slideUp 0.8s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 35px;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary-gradient);
+            transform: scaleX(0);
+            transition: transform 0.4s ease;
+        }
+
+        .card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .card:hover {
+            transform: translateY(-8px) scale(1.02);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-icon {
+            width: 70px;
+            height: 70px;
+            background: var(--primary-gradient);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover .card-icon {
+            transform: rotate(10deg) scale(1.1);
+        }
+
+        .card-title {
+            font-size: 1.6em;
+            color: white;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .card-description {
+            color: rgba(255, 255, 255, 0.6);
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+
+        .card-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card-link::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .card-link:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .card-link:hover {
+            transform: translateX(5px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+
+        /* 特性展示 - 使用现代网格系统 */
+        .features {
+            margin: 80px 0;
+            padding: 60px 40px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 25px;
+            margin-top: 40px;
+        }
+
+        .feature {
+            text-align: center;
+            padding: 30px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+
+        .feature:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 215, 0, 0.3);
+            transform: translateY(-5px);
+        }
+
+        .feature-emoji {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+            display: block;
+            animation: bounce-soft 2s ease-in-out infinite;
+            animation-delay: calc(var(--i) * 0.1s);
+        }
+
+        @keyframes bounce-soft {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .feature-title {
+            color: white;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .feature-desc {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.9em;
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            padding: 60px 20px 30px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .footer-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            color: var(--accent-color);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .footer-link:hover {
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        /* 悬浮按钮 */
+        .float-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: var(--primary-gradient);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            z-index: 100;
+        }
+
+        .float-btn:hover {
+            transform: scale(1.1) rotate(15deg);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
+        }
+
+        .float-btn-icon {
+            font-size: 24px;
+        }
+
+        /* 响应式优化 */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            .hero-title {
+                font-size: 2.5rem;
+            }
+            
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .logo-container {
+                width: 80px;
+                height: 80px;
+                bottom: 20px;
+                left: 20px;
+            }
+        }
+
+        /* 加载动画 */
+        .loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0f0f23;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease;
+        }
+
+        .loader-content {
+            text-align: center;
+        }
+
+        .loader-icon {
+            font-size: 60px;
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .loader-text {
+            color: white;
+            margin-top: 20px;
+            font-size: 1.2em;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* 性能优化：使用 transform 代替 top/left */
+        .optimized-animation {
+            will-change: transform;
+            transform: translateZ(0);
+        }
+    </style>
+</head>
+<body>
+    <!-- 加载动画 -->
+    <div class="loader" id="loader">
+        <div class="loader-content">
+            <div class="loader-icon">🌻</div>
+            <div class="loader-text">正在加载中...</div>
+        </div>
+    </div>
+
+    <!-- 背景效果 -->
+    <div class="bg-wrapper">
+        <div class="bg-gradient"></div>
+        <div class="bg-gradient"></div>
+        <div class="bg-gradient"></div>
+    </div>
+
+    <!-- 流动光线 -->
+    <div class="light-rays">
+        <div class="light-ray"></div>
+        <div class="light-ray"></div>
+        <div class="light-ray"></div>
+        <div class="light-ray"></div>
+        <div class="light-ray"></div>
+    </div>
+
+    <!-- 导航栏 -->
+    <nav class="nav-bar">
+        <div class="nav-content">
+            <div class="nav-logo">🌻 XRK-MultiBot</div>
+            <div class="nav-links">
+                <a href="#home" class="nav-link">首页</a>
+                <a href="#repos" class="nav-link">仓库</a>
+                <a href="#features" class="nav-link">特性</a>
+                <a href="#about" class="nav-link">关于</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 向日葵 Logo -->
+    <div class="logo-container">
+        <div class="modern-sunflower">
+            <svg class="sunflower-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="15" fill="#8B4513"/>
+                <g transform="translate(50, 50)">
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(0)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(30)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(60)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(90)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(120)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(150)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(180)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(210)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(240)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(270)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(300)"/>
+                    <path d="M 0,-30 Q -10,-20 0,-10" fill="#FFD700" transform="rotate(330)"/>
+                </g>
+            </svg>
+        </div>
+    </div>
+
+    <!-- 主内容 -->
+    <div class="container">
+        <!-- Hero 区域 -->
+        <section id="home" class="hero">
+            <h1 class="hero-title">XRK-MultiBot</h1>
+            <p class="hero-subtitle">🌻 基于 Yunzai-Bot 的新一代机器人框架</p>
+            <div class="hero-badges">
+                <div class="badge">
+                    <span class="badge-icon">⚡</span>
+                    <span>v infinite</span>
+                </div>
+                <div class="badge">
+                    <span class="badge-icon">🚀</span>
+                    <span>高性能</span>
+                </div>
+                <div class="badge">
+                    <span class="badge-icon">🎨</span>
+                    <span>易扩展</span>
+                </div>
+                <div class="badge">
+                    <span class="badge-icon">💎</span>
+                    <span>开源免费</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 仓库卡片 -->
+        <section id="repos" class="cards-section">
+            <h2 class="section-title">📦 项目仓库</h2>
+            <div class="cards-grid">
+                <div class="card">
+                    <div class="card-icon">📱</div>
+                    <h3 class="card-title">GitCode 仓库</h3>
+                    <p class="card-description">国内访问速度最快，推荐国内用户使用</p>
+                    <a href="https://gitcode.com/Xrkseek/XRK-Yunzai" target="_blank" class="card-link">
+                        <span>立即访问</span>
+                        <span>→</span>
+                    </a>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">🔥</div>
+                    <h3 class="card-title">Gitee 仓库</h3>
+                    <p class="card-description">备用国内镜像，稳定可靠</p>
+                    <a href="https://gitee.com/xrkseek/xrk-yunzai" target="_blank" class="card-link">
+                        <span>立即访问</span>
+                        <span>→</span>
+                    </a>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">🌍</div>
+                    <h3 class="card-title">GitHub 仓库</h3>
+                    <p class="card-description">国际主仓库，获取最新更新</p>
+                    <a href="https://github.com/sunflowermm/XRK-Yunzai" target="_blank" class="card-link">
+                        <span>立即访问</span>
+                        <span>→</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 特性展示 -->
+        <section id="features" class="features">
+            <h2 class="section-title">✨ 核心特性</h2>
+            <div class="features-grid">
+                <div class="feature" style="--i: 0">
+                    <span class="feature-emoji">⚡</span>
+                    <div class="feature-title">极速响应</div>
+                    <div class="feature-desc">优化的架构设计</div>
+                </div>
+                <div class="feature" style="--i: 1">
+                    <span class="feature-emoji">🔧</span>
+                    <div class="feature-title">模块化</div>
+                    <div class="feature-desc">灵活的插件系统</div>
+                </div>
+                <div class="feature" style="--i: 2">
+                    <span class="feature-emoji">🎮</span>
+                    <div class="feature-title">游戏功能</div>
+                    <div class="feature-desc">丰富的娱乐插件</div>
+                </div>
+                <div class="feature" style="--i: 3">
+                    <span class="feature-emoji">🤖</span>
+                    <div class="feature-title">AI 支持</div>
+                    <div class="feature-desc">智能对话能力</div>
+                </div>
+                <div class="feature" style="--i: 4">
+                    <span class="feature-emoji">📱</span>
+                    <div class="feature-title">多平台</div>
+                    <div class="feature-desc">QQ、微信全支持</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 致谢 -->
+        <section id="about" class="cards-section">
+            <h2 class="section-title">🙏 特别感谢</h2>
+            <div class="cards-grid">
+                <div class="card">
+                    <div class="card-icon">👑</div>
+                    <h3 class="card-title">Yunzai-Bot V3</h3>
+                    <p class="card-description">感谢乐神的原创框架，为社区奠定基础</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🐱</div>
+                    <h3 class="card-title">Miao-Yunzai</h3>
+                    <p class="card-description">喵喵的优秀改进，提供了诸多灵感</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">⭐</div>
+                    <h3 class="card-title">TRSS-Yunzai</h3>
+                    <p class="card-description">时雨的精彩贡献，推动框架发展</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="footer-content">
+            <p>© 2024 XRK-MultiBot | 用心做最好的机器人框架</p>
+            <div class="footer-links">
+                <a href="https://gitee.com/xrkseek" target="_blank" class="footer-link">
+                    <span>🏠</span>
+                    <span>作者主页</span>
+                </a>
+                <a href="#" class="footer-link" onclick="showDocs()">
+                    <span>📚</span>
+                    <span>文档</span>
+                </a>
+                <a href="#" class="footer-link" onclick="joinGroup()">
+                    <span>💬</span>
+                    <span>交流群</span>
+                </a>
+                <a href="#" class="footer-link" onclick="donate()">
+                    <span>☕</span>
+                    <span>赞助</span>
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 悬浮按钮 -->
+    <div class="float-btn" onclick="scrollToTop()">
+        <span class="float-btn-icon">🚀</span>
+    </div>
+
+    <script>
+        // 优化的页面加载
+        window.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                document.getElementById('loader').classList.add('hidden');
+            }, 800);
+        });
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if(target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+
+        // 滚动到顶部
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 导航栏滚动效果
+        let lastScroll = 0;
+        window.addEventListener('scroll', () => {
+            const navbar = document.querySelector('.nav-bar');
+            const currentScroll = window.pageYOffset;
+            
+            if (currentScroll > 100) {
+                navbar.style.background = 'rgba(15, 15, 35, 0.95)';
+            } else {
+                navbar.style.background = 'rgba(15, 15, 35, 0.8)';
+            }
+            
+            lastScroll = currentScroll;
+        });
+
+        // 交互功能
+        function showDocs() {
+            alert('📚 文档正在完善中...\n请查看项目 README 了解更多！');
+        }
+
+        function joinGroup() {
+            alert('💬 QQ群：1056289662\n欢迎加入交流！');
+        }
+
+        function donate() {
+            if(confirm('☕ 感谢您的支持！\n是否前往项目主页？')) {
+                window.open('https://gitee.com/xrkseek', '_blank');
+            }
+        }
+
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.card, .feature').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'all 0.6s ease';
+            observer.observe(el);
+        });
+
+        // 控制台彩蛋
+        console.log('%c🌻 XRK-MultiBot', 'font-size: 30px; font-weight: bold; background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 10px 20px; border-radius: 10px;');
+        console.log('%c欢迎使用向日葵机器人框架！', 'font-size: 16px; color: #FFD700;');
+        console.log('%c永远向着阳光生长 🌻', 'font-size: 14px; color: #FFA500; font-style: italic;');
+    </script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# 是否启用工作流系统
+enabled: true
+  
+# 工作流目录路径（相对于项目根目录）
+streamDir: "plugins/stream"
+  
+# 工作流全局设置
+global:
+  # 最大执行超时时间（毫秒）
+  maxTimeout: 30000
+    
+  # 是否启用调试日志
+  debug: false
+    
+  # 并发执行限制
+  maxConcurrent: 5
+  
+# 工作流缓存设置
+cache:
+  # 是否启用缓存
+  enabled: true
+    
+  # 缓存过期时间（秒）
+  ttl: 300
+    
+  # 最大缓存条数
+  maxSize: 100
