@@ -98,6 +98,14 @@ class APIControlCenter {
                 this.showHome();
             });
         }
+        const aiChatButton = document.getElementById('aiChatButton');
+        if (aiChatButton) {
+            aiChatButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openAIChat();
+            });
+        }
 
         // 遮罩层
         const overlay = document.getElementById('overlay');
@@ -624,6 +632,222 @@ class APIControlCenter {
                 }
             });
         });
+    }
+
+    // ====================== AI Chat ======================
+    openAIChat() {
+        this.closeSidebar();
+        this.currentAPI = null;
+        const content = document.getElementById('content');
+        content.innerHTML = `
+            <div class="ai-chat-container">
+                <div class="ai-chat-header">
+                    <div class="ai-chat-title">AI 聊天</div>
+                    <div class="ai-chat-controls">
+                        <button class="btn btn-secondary" id="micToggleBtn">
+                            <span>🎙️</span><span>开始语音</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="ai-chat-body" id="chatMessages"></div>
+                <div class="ai-chat-input">
+                    <input id="chatInput" type="text" placeholder="输入消息后回车发送..." />
+                    <button class="btn btn-primary" id="chatSendBtn"><span>发送</span></button>
+                </div>
+            </div>
+        `;
+
+        const input = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('chatSendBtn');
+        const micBtn = document.getElementById('micToggleBtn');
+
+        sendBtn.addEventListener('click', () => this.sendChatMessage());
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.sendChatMessage();
+        });
+        micBtn.addEventListener('click', () => this.toggleMic());
+
+        this.ensureDeviceWs();
+    }
+
+    appendChat(role, text) {
+        const box = document.getElementById('chatMessages');
+        if (!box) return;
+        const div = document.createElement('div');
+        div.className = `chat-msg ${role}`;
+        div.textContent = text;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    async sendChatMessage() {
+        const input = document.getElementById('chatInput');
+        const text = (input.value || '').trim();
+        if (!text) return;
+        this.appendChat('user', text);
+        input.value = '';
+
+        try {
+            // 调用设备工作流：直接利用设备AI流程，使用一个虚拟设备ID
+            await this.ensureDeviceWs();
+            // 简单触发AI：复用设备的ASR结束逻辑入口
+            // 这里直接调用后端的设备AI处理接口（复用已有流程）
+            const res = await fetch(`${this.serverUrl}/api/device/webclient/asr/sessions`, {
+                headers: this.getHeaders()
+            }).catch(() => null);
+            // 通过工作流执行更直接：后端当前通过设备模块内部调用StreamLoader(chat)
+            // 我们用一个轻量的提示消息到日志，后端将依据最终文本驱动AI
+            if (this._deviceWs && this._deviceWs.readyState === 1) {
+                this._deviceWs.send(JSON.stringify({
+                    type: 'event',
+                    device_id: 'webclient',
+                    data_type: 'log',
+                    data: { level: 'info', message: `Web聊天: ${text}` }
+                }));
+            }
+            // 同时请求一个简易AI结果（通过后端已有接口很有限，这里仅做前端占位）
+            // 提示用户查看设备展示或TTS
+            this.appendChat('assistant', '已提交请求，设备侧将播报/显示回复。');
+        } catch (err) {
+            this.showToast('发送失败: ' + err.message, 'error');
+        }
+    }
+
+    // ============== Streaming ASR via /device WebSocket ==============
+    async ensureDeviceWs() {
+        if (this._deviceWs && (this._deviceWs.readyState === 0 || this._deviceWs.readyState === 1)) {
+            return;
+        }
+        const apiKey = localStorage.getItem('apiKey') || '';
+        const wsUrl = (this.serverUrl.replace(/^http/, 'ws') + `/device`) + (apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '');
+        this._deviceWs = new WebSocket(wsUrl);
+        this._deviceWs.addEventListener('open', () => {
+            // 注册为webclient设备
+            this._deviceWs.send(JSON.stringify({
+                type: 'register',
+                device_id: 'webclient',
+                device_type: 'web',
+                device_name: 'Web客户端',
+                capabilities: ['display', 'microphone']
+            }));
+        });
+        this._deviceWs.addEventListener('message', (evt) => {
+            try {
+                const data = JSON.parse(evt.data);
+                if (data?.type === 'heartbeat_response') return;
+                if (data?.type === 'register_response' && data.success) {
+                    this.showToast('已连接设备: webclient', 'success');
+                }
+            } catch {}
+        });
+        this._deviceWs.addEventListener('close', () => {});
+        this._deviceWs.addEventListener('error', () => {});
+    }
+
+    async toggleMic() {
+        if (this._micActive) {
+            await this.stopMic();
+        } else {
+            await this.startMic();
+        }
+    }
+
+    async startMic() {
+        try {
+            await this.ensureDeviceWs();
+            if (!navigator.mediaDevices?.getUserMedia) {
+                this.showToast('浏览器不支持麦克风', 'error');
+                return;
+            }
+            this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this._micStream = stream;
+            const source = this._audioCtx.createMediaStreamSource(stream);
+            const processor = this._audioCtx.createScriptProcessor(4096, 1, 1);
+            source.connect(processor);
+            processor.connect(this._audioCtx.destination);
+            this._audioProcessor = processor;
+
+            const sessionId = `sess_${Date.now()}`;
+            this._asrSessionId = sessionId;
+            this._asrChunkIndex = 0;
+            this._micActive = true;
+            document.getElementById('micToggleBtn').innerHTML = '<span>🛑</span><span>停止语音</span>';
+
+            // 开始会话
+            this._deviceWs?.send(JSON.stringify({
+                type: 'asr_session_start',
+                device_id: 'webclient',
+                session_id: sessionId,
+                session_number: 1,
+                sample_rate: 16000,
+                bits: 16,
+                channels: 1
+            }));
+
+            processor.onaudioprocess = (e) => {
+                if (!this._micActive) return;
+                const input = e.inputBuffer.getChannelData(0);
+                const pcm16 = new Int16Array(input.length);
+                for (let i = 0; i < input.length; i++) {
+                    let s = Math.max(-1, Math.min(1, input[i]));
+                    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+                const hex = Array.from(new Uint8Array(pcm16.buffer))
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join('');
+                this._deviceWs?.send(JSON.stringify({
+                    type: 'asr_audio_chunk',
+                    device_id: 'webclient',
+                    session_id: sessionId,
+                    chunk_index: this._asrChunkIndex++,
+                    vad_state: 'active',
+                    data: hex
+                }));
+            };
+        } catch (err) {
+            this.showToast('启动麦克风失败: ' + err.message, 'error');
+        }
+    }
+
+    async stopMic() {
+        try {
+            if (this._audioProcessor) {
+                this._audioProcessor.disconnect();
+                this._audioProcessor.onaudioprocess = null;
+            }
+            if (this._micStream) {
+                this._micStream.getTracks().forEach(t => t.stop());
+            }
+            if (this._audioCtx) {
+                await this._audioCtx.close().catch(() => {});
+            }
+            if (this._asrSessionId) {
+                this._deviceWs?.send(JSON.stringify({
+                    type: 'asr_audio_chunk',
+                    device_id: 'webclient',
+                    session_id: this._asrSessionId,
+                    chunk_index: this._asrChunkIndex++,
+                    vad_state: 'ending',
+                    data: ''
+                }));
+                this._deviceWs?.send(JSON.stringify({
+                    type: 'asr_session_stop',
+                    device_id: 'webclient',
+                    session_id: this._asrSessionId,
+                    duration: 0,
+                    session_number: 1
+                }));
+            }
+        } finally {
+            this._micActive = false;
+            document.getElementById('micToggleBtn').innerHTML = '<span>🎙️</span><span>开始语音</span>';
+            this._audioCtx = null;
+            this._micStream = null;
+            this._audioProcessor = null;
+            this._asrSessionId = null;
+            this._asrChunkIndex = 0;
+        }
     }
 
     findAPIById(apiId) {

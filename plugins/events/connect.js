@@ -347,7 +347,7 @@ export default class connectEvent extends EventListener {
     </div>
     
     <div class="footer">
-      Powered by XRK-Yunzai
+      Powered by XRK-AGT
     </div>
   </div>
 </body>

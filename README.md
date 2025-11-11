@@ -23,13 +23,13 @@
 
 ```sh
 # 使用Gitcode
-git clone --depth=1 https://gitcode.com/Xrkseek/XRK-Yunzai.git
+git clone --depth=1 https://gitcode.com/Xrkseek/XRK-AGT.git
 cd XRK-AGT 
 # 使用Gitee
-git clone --depth=1 https://gitee.com/xrkseek/XRK-Yunzai.git
+git clone --depth=1 https://gitee.com/xrkseek/XRK-AGT.git
 cd XRK-AGT 
 # 使用Github
-git clone --depth=1 https://github.com/Xrkseek/XRK-Yunzai.git
+git clone --depth=1 https://github.com/Xrkseek/XRK-AGT.git
 cd XRK-AGT 
 ```
 
