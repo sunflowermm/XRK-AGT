@@ -456,7 +456,7 @@ class Bootstrap {
     }
 
     const packageJson = await this.dependencyManager.parsePackageJson(packageJsonPath);
-    packageJson.imports = { ... (packageJson.imports || {}), ...mergedImports };
+    packageJson.imports = { ...(packageJson.imports || {}), ...mergedImports };
     await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
   }
 
