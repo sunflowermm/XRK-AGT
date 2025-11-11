@@ -759,10 +759,28 @@ class APIControlCenter {
                 device_name: 'Web客户端',
                 capabilities: ['display', 'microphone']
             }));
+            // 主动上报一次心跳，帮助服务端尽快建立在线状态
+            try {
+                this._deviceWs.send(JSON.stringify({
+                    type: 'heartbeat',
+                    device_id: 'webclient',
+                    status: { ui: 'ready' }
+                }));
+            } catch {}
         });
         this._deviceWs.addEventListener('message', (evt) => {
             try {
                 const data = JSON.parse(evt.data);
+                if (data?.type === 'heartbeat_request') {
+                    try {
+                        this._deviceWs?.send(JSON.stringify({
+                            type: 'heartbeat',
+                            device_id: 'webclient',
+                            status: { ts: Date.now() }
+                        }));
+                    } catch {}
+                    return;
+                }
                 if (data?.type === 'heartbeat_response') return;
                 if (data?.type === 'register_response' && data.success) {
                     this.showToast('已连接设备: webclient', 'success');
