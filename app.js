@@ -379,19 +379,7 @@ class EnvironmentValidator {
     ];
     
     for (const dir of requiredDirs) {
-      // 使用统一的目录创建方法，避免重复创建
-      try {
-        const stats = await fs.stat(dir);
-        if (!stats.isDirectory()) {
-          throw new Error(`路径 ${dir} 已存在但不是目录`);
-        }
-      } catch (error) {
-        if (error.code === 'ENOENT') {
-          await fs.mkdir(dir, { recursive: true });
-        } else {
-          throw error;
-        }
-      }
+      await fs.mkdir(dir, { recursive: true });
     }
   }
 
@@ -456,7 +444,7 @@ class Bootstrap {
     }
 
     const packageJson = await this.dependencyManager.parsePackageJson(packageJsonPath);
-    packageJson.imports = { ...(packageJson.imports || {}), ...mergedImports };
+    packageJson.imports = { ... (packageJson.imports || {}), ...mergedImports };
     await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
   }
 
@@ -539,7 +527,11 @@ process.on('unhandledRejection', async (reason) => {
     ? `${reason.message}\n${reason.stack}` 
     : String(reason);
   await logger.error(`未处理的Promise拒绝: ${errorMessage}`);
-  process.exit(1);
+  // 如果当前处于 server 模式，避免立即退出导致父进程无限重启
+  const isServerMode = process.env.XRK_SELECTED_MODE === 'server' || process.argv.includes('server');
+  if (!isServerMode) {
+    process.exit(1);
+  }
 });
 
 /**

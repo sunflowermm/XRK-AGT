@@ -62,7 +62,7 @@ export class StdinHandler {
       Bot.stdin = {
         uin: this.botId,
         nickname: 'StdinBot',
-        avatar: '',
+        avatar: 'https://q1.qlogo.cn/g?b=qq&s=0&nk=10000001',
         stat: { start_time: Date.now() / 1000 },
         version: { id: 'stdin', name: 'StdinBot', version: '1.0.0' },
         config: { master: true },
@@ -73,7 +73,7 @@ export class StdinHandler {
           nickname: user_id,
           sendMsg: async (msg) => this.sendMsg(msg, user_id, { user_id }),
           recallMsg: () => true,
-          getAvatarUrl: () => ''
+          getAvatarUrl: () => `https://q1.qlogo.cn/g?b=qq&s=0&nk=${user_id}`
         }),
         pickGroup: (group_id) => ({
           group_id,
@@ -84,7 +84,7 @@ export class StdinHandler {
             user_id,
             nickname: user_id,
             card: user_id,
-            getAvatarUrl: () => ''
+            getAvatarUrl: () => `https://q1.qlogo.cn/g?b=qq&s=0&nk=${user_id}`
           })
         }),
         getGroupArray: () => [],
@@ -510,125 +510,77 @@ export class StdinHandler {
   startImprovedListener() {
     const appVersion = "1.4.3";
     logger.gradientLine('=', 27);
-    logger.title(`葵子标准输入 v${appVersion}`, "yellow");
+    logger.title(`葵崽标准输入 v${appVersion}`, "yellow");
     logger.tip("输入 'help' 获取帮助");
     logger.tip("输入 'exit' 退出程序");
     logger.gradientLine('=', 27);
     this.rl.prompt();
   }
 
-  /**
-   * 创建标准化事件对象
-   * @param {string|Array} input - 输入内容
-   * @param {Object} userInfo - 用户信息
-   * @returns {Object} 标准化的事件对象
-   */
   createEvent(input, userInfo = {}) {
     const userId = userInfo.user_id || 'stdin';
     const nickname = userInfo.nickname || userId;
     const time = Math.floor(Date.now() / 1000);
-    const timestamp = Date.now();
     const messageId = `${userId}_${time}_${Math.floor(Math.random() * 1000)}`;
     const adapter = userInfo.adapter || 'stdin';
-    const botId = userInfo.self_id || this.botId;
 
-    // 处理消息内容
     let message = Array.isArray(input) ? input : 
                   typeof input === 'string' && input ? [{ type: "text", text: input }] : [];
     let raw_message = Array.isArray(input) ? 
-                      input.map(m => m.type === 'text' ? (m.text || m.data?.text || '') : `[${m.type}]`).join('') : 
+                      input.map(m => m.type === 'text' ? m.text : `[${m.type}]`).join('') : 
                       typeof input === 'string' ? input : '';
 
-    // 构建标准化事件对象
     const event = {
-      // 事件标识（标准化）
-      post_type: userInfo.post_type || "message",
-      event_type: userInfo.event_type || "message",
-      adapter: adapter,
+      adapter,
       adapter_id: adapter,
       adapter_name: adapter === 'api' ? 'API适配器' : '标准输入适配器',
-      bot_id: botId,
-      self_id: botId,
-      time: time,
-      timestamp: timestamp,
-      
-      // 用户信息（通用）
-      user_id: userId,
-      user_name: nickname,
-      user_avatar: userInfo.avatar || '',
-      
-      // 消息信息
       message_id: messageId,
-      message_type: userInfo.group_id ? "group" : (userInfo.message_type || "private"),
-      message: message,
-      raw_message: raw_message,
-      sub_type: userInfo.sub_type || (userInfo.group_id ? "normal" : "friend"),
-      
-      // 群组信息（如果有）
-      group_id: userInfo.group_id || '',
-      group_name: userInfo.group_name || (userInfo.group_id ? `群${userInfo.group_id}` : ''),
-      
-      // 权限信息
+      message_type: userInfo.message_type || "private",
+      post_type: userInfo.post_type || "message",
+      sub_type: userInfo.sub_type || "friend",
+      self_id: userInfo.self_id || this.botId,
+      seq: userInfo.seq || 888,
+      time,
+      uin: userInfo.uin || userId,
+      user_id: userId,
+      message,
+      raw_message,
       isMaster: userInfo.isMaster !== undefined ? userInfo.isMaster : true,
-      isStdin: true,
-      
-      // 发送者信息（标准化）
-      sender: { 
-        user_id: userId,
-        card: nickname, 
-        nickname: nickname, 
-        role: userInfo.role || "master",
-        avatar: userInfo.avatar || ''
-      },
-      
-      // 适配器特定的方法（适配器可以有自己的逻辑）
-      friend: {
-        user_id: userId,
-        nickname: nickname,
-        sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo),
-        recallMsg: () => {
-          logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`);
-          return true;
-        },
-        makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg),
-        getAvatarUrl: () => userInfo.avatar || ''
-      },
-      group: userInfo.group_id ? {
-        group_id: userInfo.group_id,
-        group_name: userInfo.group_name || `群${userInfo.group_id}`,
-        sendMsg: async (msg) => this.sendMsg(msg, userInfo.group_name || `群${userInfo.group_id}`, userInfo),
-        makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg),
-        pickMember: (user_id) => ({
-          user_id,
-          nickname: user_id,
-          card: user_id,
-          getAvatarUrl: () => ''
-        })
-      } : null,
-      member: userInfo.group_id ? {
-        user_id: userId,
-        nickname: nickname,
-        card: nickname,
-        getAvatarUrl: () => userInfo.avatar || ''
-      } : null,
-      
-      // 消息方法
-      reply: async (msg) => this.sendMsg(msg, nickname, userInfo),
-      recall: () => { 
-        logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`);
-        return true;
-      },
       toString: () => raw_message,
-      
-      // Bot实例
-      bot: Bot.stdin,
-      
-      // 原始数据（保留）
-      _raw: userInfo,
-      _adapter: adapter
+      sender: { 
+        card: nickname, 
+        nickname, 
+        role: userInfo.role || "master", 
+        user_id: userId 
+      },
+      member: { 
+        info: { user_id: userId, nickname, last_sent_time: time }, 
+        getAvatarUrl: () => userInfo.avatar || `https://q1.qlogo.cn/g?b=qq&s=0&nk=${userId}` 
+      },
+      friend: {
+        sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo),
+        recallMsg: () => logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`),
+        makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg),
+      },
+      recall: () => { 
+        logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`); 
+        return true; 
+      },
+      reply: async (msg) => this.sendMsg(msg, nickname, userInfo),
+      group: {
+        makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg),
+        sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo)
+      },
+      bot: Bot.stdin
     };
 
-    logger.debug(`创建事件: adapter=${adapter}, user_id=${userId}, message_type=${event.message_type}`);
+    if (userInfo.group_id) {
+      event.group_id = userInfo.group_id;
+      event.group_name = userInfo.group_name || `群${userInfo.group_id}`;
+      event.message_type = "group";
+    }
+
+    logger.debug(`创建事件: message = ${JSON.stringify(message)}, raw_message = ${raw_message}`);
     return event;
   }
 

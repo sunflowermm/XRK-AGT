@@ -1,27 +1,27 @@
-# 是否自动同意好友请求 1-同意 0-不处理（适配器相关，由适配器实现）
+# 是否自动同意加好友 1-同意 0-不处理
 autoFriend: 1
-# 是否自动退群人数，当被好友拉进群时，群人数小于配置值自动退出， 默认50，0则不处理（适配器相关）
+# 是否自动退群人数，当被好友拉进群时，群人数小于配置值自动退出， 默认50，0则不处理
 autoQuit: 50
-# 主人用户ID列表（通用配置，适配器可以映射到自己的用户ID格式）
-masterUsers:
-#  - "user123"  # 示例：QQ适配器可以使用QQ号，微信适配器可以使用微信ID
+# 主人QQ号
+masterQQ:
+#  - 1234567890  # 照这个格式改
 disableGuildMsg: true
-# 禁用私聊功能 true：私聊只接受特定内容（Bot主人不受限制），false：私聊可以触发全部指令，默认false
+# 禁用私聊功能 true：私聊只接受ck以及抽卡链接（Bot主人不受限制），false：私聊可以触发全部指令，默认false
 disablePrivate: false
 # 禁用私聊Bot提示内容
 disableMsg: "私聊功能已禁用"
-# 私聊通行字符串（允许通过的关键词）
+# 私聊通行字符串
 disableAdopt:
   - stoken
 
-# 白名单群组ID列表（配置后只在该群生效）
+#白名单群，配置后只在该群生效
 whiteGroup:
-# 白名单用户ID列表
-whiteUsers:
-# 黑名单群组ID列表
+#白名单qq
+whiteQQ:
+#黑名单群
 blackGroup:
-# 黑名单用户ID列表
-blackUsers:
-# 设备黑名单ID列表（用于设备相关事件）
-blackDevice:
+  - 213938015
+#黑名单qq
+blackQQ:
+  - 528952540
 

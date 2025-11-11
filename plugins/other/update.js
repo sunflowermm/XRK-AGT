@@ -33,7 +33,7 @@ export class update extends plugin {
       ]
     })
 
-    this.typeName = 'XRK-AGT'
+    this.typeName = 'XRK-Yunzai'
     this.messages = []
     
     /** XRK相关插件配置 */
@@ -422,7 +422,7 @@ export class update extends plugin {
     return common.makeForwardMsg(
       this.e, 
       [log, repoUrl], 
-      `${plugin || 'XRK-AGT'} 更新日志，共${line}条`
+      `${plugin || 'XRK-Yunzai'} 更新日志，共${line}条`
     )
   }
 

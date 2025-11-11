@@ -1,6 +1,6 @@
 /**
  * @file start.js
- * @description 葵子服务器主启动脚本
+ * @description 葵崽服务器主启动脚本
  * @author XRK
  * @copyright 2025 XRK Studio
  * @license MIT
@@ -39,14 +39,13 @@ let globalSignalHandler = null;
 const PATHS = {
   LOGS: './logs',
   DATA: './data',
-  ADAPTERS: './data/adapters',  // 通用适配器数据目录
+  BOTS: './data/bots',
   BACKUPS: './data/backups',
   CONFIG: './config',
   DEFAULT_CONFIG: './config/default_config',
-  SERVER_BOTS: './data/server_bots',  // 服务器模式数据目录
+  SERVER_BOTS: './data/server_bots',
   PM2_CONFIG: './config/pm2',
-  RESOURCE_USAGE: './resources',
-  IMPORTS_JSON: './data/importsJson'
+  RESOURCE_USAGE: './resources'
 };
 
 /**
@@ -213,7 +212,7 @@ class PM2Manager extends BaseManager {
    * @returns {string} 标准化的进程名称
    */
   getProcessName(port) {
-    return `XRK-AGT-Server-${port}`;
+    return `XRK-MultiBot-Server-${port}`;
   }
 
   /**
@@ -446,7 +445,7 @@ class ServerManager extends BaseManager {
    * @returns {Promise<void>}
    */
   async startServerMode(port) {
-    await this.logger.log(`启动葵子服务器，端口: ${port}`);
+    await this.logger.log(`启动葵崽服务器，端口: ${port}`);
     global.selectedMode = 'server';
     
     try {
@@ -491,7 +490,9 @@ class ServerManager extends BaseManager {
     
     while (restartCount < CONFIG.MAX_RESTARTS) {
       const nodeArgs = getNodeArgs();
-      const startArgs = [...nodeArgs, process.argv[1], 'server', port.toString()];
+      // 直接启动 start.js，避免通过 app.js 引导造成的额外退出处理干扰
+      const entryScript = path.join(process.cwd(), 'start.js');
+      const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
       
       await this.logger.log(`启动进程 (尝试 ${restartCount + 1}/${CONFIG.MAX_RESTARTS})`);
       
@@ -672,7 +673,7 @@ class MenuManager {
    * @returns {Promise<void>}
    */
   async run() {
-    console.log(chalk.cyan('\n🤖 葵子多端口服务器管理系统\n'));
+    console.log(chalk.cyan('\n🤖 葵崽多端口服务器管理系统\n'));
     
     let shouldExit = false;
     

@@ -1,5 +1,5 @@
 /**
- * XRK-AGT (葵子) API控制中心
+ * XRK-Yunzai葵崽 API控制中心
  * 主应用程序 - 优化版
  */
 
@@ -660,7 +660,7 @@ class APIControlCenter {
         content.innerHTML = `
             <div class="welcome-screen">
                 <div class="welcome-icon">🚀</div>
-                <h1 class="welcome-title">XRK-AGT (葵子) API控制中心</h1>
+                <h1 class="welcome-title">XRK-Yunzai葵崽 API控制中心</h1>
                 <p class="welcome-desc">强大的机器人管理与开发平台</p>
 
                 <div class="stats-grid">

@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  xrk-agt:
+  xrk-yunzai:
     build: .
-    container_name: xrk-agt
+    container_name: xrk-yunzai
     restart: unless-stopped
     environment:
       - NODE_ENV=production

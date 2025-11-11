@@ -1,8 +1,8 @@
 {
-  "name": "xrk-agt",
+  "name": "xrk-multibot",
   "version": "3.0.7",
   "author": "Le-niao, Yoimiya-Kokomi, TRSS, Xrkseek",
-  "description": "XRK-AGT (葵子) - Integrated Bot Framework",
+  "description": "Integrated Bot",
   "main": "app.js",
   "type": "module",
   "dependencies": {
