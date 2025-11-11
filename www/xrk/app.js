@@ -822,22 +822,29 @@ class APIControlCenter {
             if (this._audioCtx) {
                 await this._audioCtx.close().catch(() => {});
             }
+            // 先发送 ending，等待服务端聚合最终结果后再发送 stop，避免过早结束导致超时或丢结果
             if (this._asrSessionId) {
-                this._deviceWs?.send(JSON.stringify({
-                    type: 'asr_audio_chunk',
-                    device_id: 'webclient',
-                    session_id: this._asrSessionId,
-                    chunk_index: this._asrChunkIndex++,
-                    vad_state: 'ending',
-                    data: ''
-                }));
-                this._deviceWs?.send(JSON.stringify({
-                    type: 'asr_session_stop',
-                    device_id: 'webclient',
-                    session_id: this._asrSessionId,
-                    duration: 0,
-                    session_number: 1
-                }));
+                try {
+                    this._deviceWs?.send(JSON.stringify({
+                        type: 'asr_audio_chunk',
+                        device_id: 'webclient',
+                        session_id: this._asrSessionId,
+                        chunk_index: this._asrChunkIndex++,
+                        vad_state: 'ending',
+                        data: ''
+                    }));
+                } catch {}
+                // 等待一小段时间，让服务端处理最后的语音并返回最终文本
+                await new Promise(r => setTimeout(r, 1200));
+                try {
+                    this._deviceWs?.send(JSON.stringify({
+                        type: 'asr_session_stop',
+                        device_id: 'webclient',
+                        session_id: this._asrSessionId,
+                        duration: 0,
+                        session_number: 1
+                    }));
+                } catch {}
             }
         } finally {
             this._micActive = false;
