@@ -9,7 +9,7 @@ export default class SystemConfig extends ConfigBase {
     super({
       name: 'system',
       displayName: '系统配置',
-      description: 'XRK-Yunzai 系统配置管理',
+      description: 'XRK-AGT (葵子) 系统配置管理',
       filePath: '', // 系统配置管理多个文件，此处留空
       fileType: 'yaml'
     });
@@ -925,7 +925,7 @@ export default class SystemConfig extends ConfigBase {
                   type: 'array',
                   label: '机器人别名',
                   itemType: 'string',
-                  default: ['葵崽', '葵葵'],
+                  default: ['葵子', '葵葵'],
                   component: 'Tags'
                 },
                 addPrivate: {
@@ -995,9 +995,10 @@ export default class SystemConfig extends ConfigBase {
         fileType: 'yaml',
         schema: {
           fields: {
-            masterQQ: {
+            masterUsers: {
               type: 'array',
-              label: '主人QQ',
+              label: '主人用户ID',
+              description: '主人用户ID列表（通用配置，适配器可以映射到自己的用户ID格式）',
               itemType: 'string',
               default: [],
               component: 'Tags'
@@ -1005,19 +1006,30 @@ export default class SystemConfig extends ConfigBase {
             disableGuildMsg: {
               type: 'boolean',
               label: '禁用频道消息',
+              description: '是否禁用频道消息（适配器相关）',
               default: true,
               component: 'Switch'
             },
-            blackQQ: {
+            blackUsers: {
               type: 'array',
-              label: '黑名单QQ',
+              label: '黑名单用户ID',
+              description: '黑名单用户ID列表',
               itemType: 'string',
               default: [],
               component: 'Tags'
             },
-            whiteQQ: {
+            whiteUsers: {
               type: 'array',
-              label: '白名单QQ',
+              label: '白名单用户ID',
+              description: '白名单用户ID列表',
+              itemType: 'string',
+              default: [],
+              component: 'Tags'
+            },
+            blackDevice: {
+              type: 'array',
+              label: '设备黑名单',
+              description: '设备黑名单ID列表（用于设备相关事件）',
               itemType: 'string',
               default: [],
               component: 'Tags'

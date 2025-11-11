@@ -93,7 +93,7 @@ export default class connectEvent extends EventListener {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XRK-MultiBot</title>
+  <title>XRK-AGT (葵子)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
   <style>
@@ -288,7 +288,7 @@ export default class connectEvent extends EventListener {
       <div class="logo">
         <div class="logo-text">XRK</div>
       </div>
-      <h1 class="title">XRK-MultiBot</h1>
+      <h1 class="title">XRK-AGT (葵子)</h1>
       <div class="version">Version ${cfg.package.version}</div>
     </div>
     
@@ -347,7 +347,7 @@ export default class connectEvent extends EventListener {
     </div>
     
     <div class="footer">
-      Powered by XRK-Yunzai
+      Powered by XRK-AGT (葵子)
     </div>
   </div>
 </body>

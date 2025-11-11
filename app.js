@@ -379,7 +379,19 @@ class EnvironmentValidator {
     ];
     
     for (const dir of requiredDirs) {
-      await fs.mkdir(dir, { recursive: true });
+      // 使用统一的目录创建方法，避免重复创建
+      try {
+        const stats = await fs.stat(dir);
+        if (!stats.isDirectory()) {
+          throw new Error(`路径 ${dir} 已存在但不是目录`);
+        }
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          await fs.mkdir(dir, { recursive: true });
+        } else {
+          throw error;
+        }
+      }
     }
   }
 

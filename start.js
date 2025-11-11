@@ -1,6 +1,6 @@
 /**
  * @file start.js
- * @description 葵崽服务器主启动脚本
+ * @description 葵子服务器主启动脚本
  * @author XRK
  * @copyright 2025 XRK Studio
  * @license MIT
@@ -39,13 +39,14 @@ let globalSignalHandler = null;
 const PATHS = {
   LOGS: './logs',
   DATA: './data',
-  BOTS: './data/bots',
+  ADAPTERS: './data/adapters',  // 通用适配器数据目录
   BACKUPS: './data/backups',
   CONFIG: './config',
   DEFAULT_CONFIG: './config/default_config',
-  SERVER_BOTS: './data/server_bots',
+  SERVER_BOTS: './data/server_bots',  // 服务器模式数据目录
   PM2_CONFIG: './config/pm2',
-  RESOURCE_USAGE: './resources'
+  RESOURCE_USAGE: './resources',
+  IMPORTS_JSON: './data/importsJson'
 };
 
 /**
@@ -212,7 +213,7 @@ class PM2Manager extends BaseManager {
    * @returns {string} 标准化的进程名称
    */
   getProcessName(port) {
-    return `XRK-MultiBot-Server-${port}`;
+    return `XRK-AGT-Server-${port}`;
   }
 
   /**
@@ -445,7 +446,7 @@ class ServerManager extends BaseManager {
    * @returns {Promise<void>}
    */
   async startServerMode(port) {
-    await this.logger.log(`启动葵崽服务器，端口: ${port}`);
+    await this.logger.log(`启动葵子服务器，端口: ${port}`);
     global.selectedMode = 'server';
     
     try {
@@ -671,7 +672,7 @@ class MenuManager {
    * @returns {Promise<void>}
    */
   async run() {
-    console.log(chalk.cyan('\n🤖 葵崽多端口服务器管理系统\n'));
+    console.log(chalk.cyan('\n🤖 葵子多端口服务器管理系统\n'));
     
     let shouldExit = false;
     

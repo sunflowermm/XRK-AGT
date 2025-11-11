@@ -129,16 +129,72 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-# Yunzai data
-dump.rdb
-config/test/*
-!config/test/default.yaml
+# 运行时数据目录
+data/bots/
+data/server_bots/
+data/backups/
+data/importsJson/
 logs/
 resources/
+*.log
 
-# Docker file
-redis
-yunzai
+# Redis数据
+dump.rdb
+
+# 测试配置（保留默认配置）
+config/test/*
+!config/test/default.yaml
+
+# Docker相关
+redis/
+yunzai/
+.docker/
+
+# IDE配置
 /.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+
+# 临时文件
 /temp/
-/pnpm-lock.yaml
+/tmp/
+*.tmp
+
+# 包管理器锁定文件（可选，根据项目需求决定是否忽略）
+# /pnpm-lock.yaml
+# /package-lock.json
+# /yarn.lock
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 构建输出
+dist/
+build/
+*.tsbuildinfo
+
+# 缓存目录
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist/
+.docusaurus/
+
+# 覆盖率报告
+coverage/
+.nyc_output/
+*.lcov
+
+# PM2相关
+.pm2/
+ecosystem.config.js
