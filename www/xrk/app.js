@@ -537,7 +537,11 @@ class APIControlCenter {
                 <div class="ai-chat-header">
                     <div class="ai-chat-title">葵宝聊天</div>
                     <div class="ai-chat-controls">
-                        <button class="ai-chat-clear" onclick="app.clearChat()">清空</button>
+                        <button class="btn btn-secondary" id="micToggleBtn">
+                            <span class="mic-icon"></span>
+                            <span>开始语音</span>
+                        </button>
+                        <button class="btn btn-secondary ai-chat-clear" onclick="app.clearChat()">清空</button>
                     </div>
                 </div>
                 <div class="ai-chat-body" id="chatMessages"></div>
@@ -548,6 +552,23 @@ class APIControlCenter {
                 </div>
             </div>
         `;
+
+        // 初始化聊天功能
+        const input = document.getElementById('chatInput');
+        const micBtn = document.getElementById('micToggleBtn');
+        
+        if (input) {
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.sendChatMessage();
+            });
+        }
+        
+        if (micBtn) {
+            micBtn.addEventListener('click', () => this.toggleMic());
+        }
+
+        // 确保WebSocket连接
+        this.ensureDeviceWs();
     }
 
     showConfigPage() {
@@ -902,9 +923,9 @@ class APIControlCenter {
                     this.navigateToPage('config');
                 } else if (apiId) {
                     this.navigateToPage('api');
-                    const api = this.findAPIById(apiId);
-                    if (api) {
-                        this.selectAPI(api.method, api.path, apiId);
+                const api = this.findAPIById(apiId);
+                if (api) {
+                    this.selectAPI(api.method, api.path, apiId);
                     }
                 }
             });
@@ -1175,7 +1196,11 @@ class APIControlCenter {
             this._asrSessionId = sessionId;
             this._asrChunkIndex = 0;
             this._micActive = true;
-            document.getElementById('micToggleBtn').innerHTML = '<span>🛑</span><span>停止语音</span>';
+            const micBtn = document.getElementById('micToggleBtn');
+            if (micBtn) {
+                micBtn.classList.add('recording');
+                micBtn.innerHTML = '<span class="mic-icon"></span><span>停止语音</span>';
+            }
 
             // 开始会话
             this._deviceWs?.send(JSON.stringify({
@@ -1251,7 +1276,11 @@ class APIControlCenter {
             }
         } finally {
             this._micActive = false;
-            document.getElementById('micToggleBtn').innerHTML = '<span>🎙️</span><span>开始语音</span>';
+            const micBtn = document.getElementById('micToggleBtn');
+            if (micBtn) {
+                micBtn.classList.remove('recording');
+                micBtn.innerHTML = '<span class="mic-icon"></span><span>开始语音</span>';
+            }
             this._audioCtx = null;
             this._micStream = null;
             this._audioProcessor = null;

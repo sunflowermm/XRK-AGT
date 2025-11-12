@@ -854,6 +854,10 @@ body.light .theme-toggle-thumb::before {
     overflow-x: hidden;
     scrollbar-width: thin;
     scrollbar-color: var(--bg-tertiary) transparent;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    position: relative;
 }
 
 .content::-webkit-scrollbar {
@@ -870,14 +874,16 @@ body.light .theme-toggle-thumb::before {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     min-height: calc(100vh - 200px);
     text-align: center;
     padding: 40px 20px;
-    animation: welcomeFadeIn 0.8s ease-out;
-    max-width: 1200px;
+    animation: welcomeFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    max-width: 100%;
     margin: 0 auto;
     width: 100%;
+    box-sizing: border-box;
+    position: relative;
 }
 
 @keyframes welcomeFadeIn {
@@ -1129,7 +1135,44 @@ body.light .theme-toggle-thumb::before {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 18px;
+    padding: 24px;
+    box-shadow: var(--shadow-md);
+    animation: chatSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.ai-chat-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-sunflower);
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: chatHeaderLine 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+}
+
+@keyframes chatHeaderLine {
+    to {
+        transform: scaleX(1);
+    }
+}
+
+@keyframes chatSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.96);
+        filter: blur(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
 }
 .ai-chat-header {
     display: flex;
@@ -1152,40 +1195,187 @@ body.light .theme-toggle-thumb::before {
     overflow-y: auto;
 }
 .chat-msg {
-    padding: 12px 14px;
+    padding: 14px 18px;
     border-radius: var(--radius-md);
-    margin: 8px 0;
+    margin: 10px 0;
     max-width: 80%;
     line-height: 1.7;
+    animation: messageSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    word-wrap: break-word;
+    position: relative;
+}
+
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 .chat-msg.user {
-    background: var(--accent-light);
+    background: var(--gradient-sunflower);
     color: var(--text-primary);
     margin-left: auto;
     border: 1px solid var(--accent);
+    box-shadow: 0 2px 8px rgba(244, 164, 96, 0.3);
+    position: relative;
+}
+
+.chat-msg.user::before {
+    content: '';
+    position: absolute;
+    right: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-left: 8px solid var(--accent);
 }
 .chat-msg.assistant {
     background: var(--bg-secondary);
     color: var(--text-primary);
     margin-right: auto;
     border: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
+
+.chat-msg.assistant::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-right: 8px solid var(--bg-secondary);
 }
 .chat-msg.assistant.streaming {
     border-style: dashed;
     opacity: 0.95;
+    position: relative;
 }
-.ai-chat-input {
+
+.chat-msg.assistant.streaming::after {
+    content: '...';
+    animation: typingDots 1.4s steps(4, end) infinite;
+    display: inline-block;
+    width: 20px;
+    margin-left: 4px;
+}
+
+@keyframes typingDots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+}
+.ai-chat-input-container {
     display: flex;
     gap: 10px;
-    margin-top: 12px;
+    margin-top: 16px;
+    align-items: center;
 }
-.ai-chat-input input {
+
+.ai-chat-input {
     flex: 1;
-    padding: 12px 14px;
+    padding: 14px 18px;
     border-radius: var(--radius-md);
-    border: 1px solid var(--border);
+    border: 2px solid var(--border);
     background: var(--bg-primary);
     color: var(--text-primary);
+    font-size: 15px;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    outline: none;
+}
+
+.ai-chat-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-light);
+    transform: translateY(-2px);
+}
+
+.ai-chat-send {
+    padding: 14px 24px;
+    background: var(--gradient-sunflower);
+    color: var(--text-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-sm);
+}
+
+.ai-chat-send:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.ai-chat-send:active {
+    transform: translateY(0);
+}
+
+/* 麦克风图标 */
+.mic-icon {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    position: relative;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.mic-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 12px;
+    border: 2px solid currentColor;
+    border-radius: 4px 4px 0 0;
+    box-sizing: border-box;
+}
+
+.mic-icon::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 4px;
+    border: 2px solid currentColor;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    box-sizing: border-box;
+}
+
+#micToggleBtn.recording .mic-icon::before {
+    animation: micPulse 1s ease-in-out infinite;
+}
+
+#micToggleBtn.recording .mic-icon::after {
+    animation: micPulse 1s ease-in-out infinite;
+}
+
+@keyframes micPulse {
+    0%, 100% {
+        opacity: 1;
+        transform: translateX(-50%) scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: translateX(-50%) scale(1.1);
+    }
 }
 
 /* ==================== API测试界面 ==================== */
@@ -2770,25 +2960,48 @@ body.no-scroll {
 }
 
 /* ==================== 欢迎界面优化 ==================== */
-.welcome-screen {
+/* 系统状态页面的welcome-screen特殊样式 */
+#systemStatusPage.welcome-screen {
     text-align: center;
-    padding: 60px 40px;
-    animation: welcomeFadeIn 0.6s ease-out;
+    padding: 40px 20px;
+    padding-bottom: 60px;
+    animation: welcomeFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
 }
 
 /* 系统状态页面样式 */
 .system-status-header {
     margin-bottom: 40px;
+    text-align: center;
+    animation: fadeInDown 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .system-status-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(350px, 100%), 1fr));
     gap: 24px;
     max-width: 1400px;
     margin: 0 auto;
     padding: 20px;
+    padding-bottom: 40px;
     text-align: left;
+    width: 100%;
+    box-sizing: border-box;
+    position: relative;
 }
 
 .status-card-large {
@@ -2797,30 +3010,61 @@ body.no-scroll {
     border-radius: var(--radius-lg);
     padding: 24px;
     box-shadow: var(--shadow-md);
-    transition: all var(--transition-base);
-    animation: cardSlideIn 0.5s ease-out backwards;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: cardSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    position: relative;
+    overflow: hidden;
+    will-change: transform, box-shadow;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
 }
 
-.status-card-large:nth-child(1) { animation-delay: 0.1s; }
-.status-card-large:nth-child(2) { animation-delay: 0.2s; }
-.status-card-large:nth-child(3) { animation-delay: 0.3s; }
-.status-card-large:nth-child(4) { animation-delay: 0.4s; }
-.status-card-large:nth-child(5) { animation-delay: 0.5s; }
+.status-card-large::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(244, 164, 96, 0.1), transparent);
+    transition: left 0.6s ease;
+    z-index: 0;
+}
+
+.status-card-large:hover::before {
+    left: 100%;
+}
+
+.status-card-large > * {
+    position: relative;
+    z-index: 1;
+}
+
+.status-card-large:nth-child(1) { animation-delay: 0.05s; }
+.status-card-large:nth-child(2) { animation-delay: 0.1s; }
+.status-card-large:nth-child(3) { animation-delay: 0.15s; }
+.status-card-large:nth-child(4) { animation-delay: 0.2s; }
+.status-card-large:nth-child(5) { animation-delay: 0.25s; }
+.status-card-large:nth-child(6) { animation-delay: 0.3s; }
 
 @keyframes cardSlideIn {
     from {
         opacity: 0;
-        transform: translateY(20px);
+        transform: translateY(30px) scale(0.95);
+        filter: blur(4px);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
+        filter: blur(0);
     }
 }
 
 .status-card-large:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 60px rgba(139, 69, 19, 0.4), 0 0 0 1px var(--accent);
     border-color: var(--accent);
 }
 
@@ -2828,6 +3072,22 @@ body.no-scroll {
     margin-bottom: 20px;
     padding-bottom: 12px;
     border-bottom: 2px solid var(--border);
+    position: relative;
+}
+
+.status-card-header::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--gradient-sunflower);
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.status-card-large:hover .status-card-header::after {
+    width: 100%;
 }
 
 .status-card-header h3 {
@@ -2835,6 +3095,11 @@ body.no-scroll {
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
+    background: var(--gradient-sunflower);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    transition: all 0.3s ease;
 }
 
 .status-card-content {
@@ -2849,6 +3114,33 @@ body.no-scroll {
     align-items: center;
     padding: 12px 0;
     border-bottom: 1px solid var(--border-light);
+    transition: all 0.3s ease;
+    position: relative;
+    padding-left: 0;
+}
+
+.status-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 2px;
+    background: var(--accent);
+    transition: width 0.3s ease;
+}
+
+.status-item:hover {
+    padding-left: 12px;
+    background: linear-gradient(90deg, var(--accent-light), transparent);
+    border-radius: var(--radius-sm);
+    margin: 0 -12px;
+    padding-right: 12px;
+}
+
+.status-item:hover::before {
+    width: 4px;
 }
 
 .status-item:last-child {
@@ -2887,20 +3179,37 @@ body.no-scroll {
     height: 100%;
     background: var(--gradient-sunflower);
     border-radius: var(--radius-sm);
-    transition: width 0.5s ease-out;
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.memory-fill::after {
+.memory-fill::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, transparent 50%, rgba(0, 0, 0, 0.1) 100%);
+    border-radius: var(--radius-sm);
+}
+
+.memory-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
     animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
 }
 
 .memory-fill.process {
@@ -2933,6 +3242,30 @@ body.no-scroll {
     border-radius: var(--radius-md);
     margin-bottom: 12px;
     border: 1px solid var(--border);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.network-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent-light), transparent);
+    transition: left 0.5s ease;
+}
+
+.network-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--accent);
+}
+
+.network-item:hover::before {
+    left: 100%;
 }
 
 .network-item:last-child {
@@ -2977,6 +3310,7 @@ body.no-scroll {
     background: var(--bg-hover);
     border-color: var(--accent);
     transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(244, 164, 96, 0.2);
 }
 
 .bot-status-indicator {
@@ -3018,16 +3352,7 @@ body.no-scroll {
     color: var(--text-muted);
 }
 
-@keyframes welcomeFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
+/* 重复的welcomeFadeIn已在上方定义，此处删除 */
 
 .welcome-icon {
     font-size: 80px;

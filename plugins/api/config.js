@@ -160,7 +160,7 @@ export default {
               }
             } else if (typeof config.get === 'function') {
               // 普通配置：使用 get 方法读取指定路径的值
-              data = await config.get(keyPath);
+            data = await config.get(keyPath);
             } else {
               throw new Error('配置对象不支持 get 方法');
             }
@@ -176,7 +176,7 @@ export default {
               }
             } else if (typeof config.read === 'function') {
               // 普通配置：读取完整配置
-              data = await config.read();
+            data = await config.read();
             } else {
               throw new Error('配置对象不支持 read 方法');
             }
