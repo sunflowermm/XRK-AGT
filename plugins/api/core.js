@@ -16,8 +16,26 @@ export default {
       path: '/api/system/status',
       handler: async (req, res, Bot) => {
         try {
+          // 采样CPU两次以估算使用率
+          const snap1 = os.cpus();
+          await new Promise(r => setTimeout(r, 200));
+          const snap2 = os.cpus();
+          function cpuPercent(s1, s2) {
+            if (!s1 || !s2 || s1.length !== s2.length) return null;
+            let idle = 0, total = 0;
+            for (let i = 0; i < s1.length; i++) {
+              const t1 = s1[i].times, t2 = s2[i].times;
+              const id = Math.max(0, t2.idle - t1.idle);
+              const tot = Math.max(0, (t2.user - t1.user) + (t2.nice - t1.nice) + (t2.sys - t1.sys) + (t2.irq - t1.irq) + id);
+              idle += id; total += tot;
+            }
+            if (total <= 0) return null;
+            return +(((total - idle) / total) * 100).toFixed(2);
+          }
+          const cpuPct = cpuPercent(snap1, snap2);
+
           // 获取系统信息
-          const cpus = os.cpus();
+          const cpus = snap2;
           const totalMem = os.totalmem();
           const freeMem = os.freemem();
           const usedMem = totalMem - freeMem;
@@ -72,7 +90,9 @@ export default {
               cpu: {
                 model: cpus[0]?.model || 'Unknown',
                 cores: cpus.length,
-                usage: process.cpuUsage()
+                usage: process.cpuUsage(),
+                percent: cpuPct,
+                loadavg: os.loadavg ? os.loadavg() : [0,0,0]
               },
               memory: {
                 total: totalMem,

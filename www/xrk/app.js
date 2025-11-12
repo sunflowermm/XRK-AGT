@@ -23,6 +23,9 @@ class APIControlCenter {
         this._metricsHistory = { mem: [], procMem: [] };
         this._wsReconnectAttempt = 0;
         this._wsHeartbeatTimer = null;
+        this._ttsQueue = [];
+        this._ttsPlaying = false;
+        this._lastAsrFinal = '';
         this.init();
     }
 
@@ -39,6 +42,7 @@ class APIControlCenter {
         this.renderQuickActions();
         this.ensureDeviceWs();
         this._initParticles();
+        this._installRouter();
         
         // 每分钟更新一次系统状态
         setInterval(() => {
@@ -54,6 +58,7 @@ class APIControlCenter {
                     this.loadSystemStatus();
                 }
                 this.ensureDeviceWs();
+                this._applyRoute();
             }
         });
     }
@@ -701,9 +706,10 @@ class APIControlCenter {
             return `${minutes}分钟`;
         };
 
-        // 内存使用率
+        // 内存/CPU 使用率
         const memPercent = parseFloat(system.memory.usagePercent);
         const processMemPercent = system.memory.process.heapUsed / system.memory.process.heapTotal * 100;
+        const cpuPercent = (system.cpu && typeof system.cpu.percent === 'number') ? system.cpu.percent : null;
 
         // 先更新趋势数据，确保首次也有数据点
         try {
@@ -715,11 +721,11 @@ class APIControlCenter {
         } catch {}
 
         grid.innerHTML = `
-            <!-- 概览 -->
+            <!-- 概览（避免与内存卡片重复，展示 CPU%、在线机器人、系统运行） -->
             <div class="status-summary">
                 <div class="summary-item">
-                    <div class="summary-label">内存使用</div>
-                    <div class="summary-value">${memPercent}%</div>
+                    <div class="summary-label">CPU 使用</div>
+                    <div class="summary-value">${cpuPercent !== null ? cpuPercent + '%' : '-'}</div>
                 </div>
                 <div class="summary-item">
                     <div class="summary-label">在线机器人</div>
@@ -1322,12 +1328,10 @@ class APIControlCenter {
                     return;
                 }
                 if (data?.type === 'asr_final' && data.text) {
-                    // 先移除识别中的消息，然后显示最终结果
+                    // 仅移除识别中的消息，不再追加最终文本，避免与后端 display 重复
                     this.renderASRStreaming('', true);
-                    // 延迟一点再显示最终结果，让过渡更自然
-                    setTimeout(() => {
-                    this.appendChat('assistant', `识别: ${data.text}`);
-                    }, 350);
+                    // 记录最后一次最终文本用于去重
+                    this._lastAsrFinal = data.text || '';
                     return;
                 }
                 if (data?.type === 'register_response' && data.success) {
@@ -1489,7 +1493,8 @@ class APIControlCenter {
         const ctx = this._ensurePlaybackCtx();
         if (!ctx || !hex || typeof hex !== 'string' || hex.length === 0) return;
         try {
-            const buf = new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16))).buffer;
+            const bytes = hex.match(/.{1,2}/g).map(b => parseInt(b, 16));
+            const buf = new Uint8Array(bytes).buffer;
             const pcm16 = new Int16Array(buf);
             const float32 = new Float32Array(pcm16.length);
             for (let i = 0; i < pcm16.length; i++) {
@@ -1498,13 +1503,43 @@ class APIControlCenter {
             }
             const audioBuf = ctx.createBuffer(1, float32.length, 16000);
             audioBuf.getChannelData(0).set(float32);
-            const src = ctx.createBufferSource();
-            src.buffer = audioBuf;
-            src.connect(ctx.destination);
-            src.start();
+            // 进入顺序播放队列
+            this._ttsQueue.push(audioBuf);
+            if (!this._ttsPlaying) this._dequeueTts();
         } catch (e) {
             console.warn('Failed to play TTS audio:', e);
         }
+    }
+
+    _dequeueTts() {
+        const ctx = this._ensurePlaybackCtx();
+        if (!ctx || this._ttsPlaying) return;
+        const next = this._ttsQueue.shift();
+        if (!next) { this._ttsPlaying = false; return; }
+        this._ttsPlaying = true;
+        const src = ctx.createBufferSource();
+        src.buffer = next;
+        src.connect(ctx.destination);
+        src.addEventListener('ended', () => {
+            this._ttsPlaying = false;
+            // 继续下一段
+            this._dequeueTts();
+        });
+        try { src.start(); } catch {}
+    }
+
+    // 简单哈希路由
+    _installRouter() {
+        window.addEventListener('hashchange', () => this._applyRoute());
+        this._applyRoute();
+    }
+    _applyRoute() {
+        const hash = (location.hash || '').replace(/^#\/?/, '');
+        const page = hash.split('?')[0];
+        if (page === 'chat') { this.navigateToPage('chat'); return; }
+        if (page === 'api') { this.navigateToPage('api'); return; }
+        if (page === 'config') { this.navigateToPage('config'); return; }
+        this.navigateToPage('home');
     }
 
     async toggleMic() {

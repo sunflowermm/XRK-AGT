@@ -72,6 +72,26 @@
     --transition-bounce: 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
+/* ==================== 首页状态卡统一交互 ==================== */
+.status-card-large {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 18px 16px;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+}
+.status-card-large:hover {
+    transform: translateY(-6px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--accent);
+}
+.status-card-header h3 {
+    font-size: 16px;
+    letter-spacing: 0.2px;
+}
+.status-card-content { margin-top: 10px; }
+
 /* 亮色主题配色 - 向日葵亮色版 */
 body.light {
     --bg-primary: #fef9e7;
