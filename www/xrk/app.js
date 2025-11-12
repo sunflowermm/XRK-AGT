@@ -44,7 +44,7 @@ class APIControlCenter {
         this.loadSettings();
         this.checkConnection();
         this.currentPage = 'home'; // 默认首页
-        this.loadSystemStatus(); // 加载系统状态
+        this.loadSystemStatus(true); // 快速加载系统状态
         this.renderSidebar();
         this.renderQuickActions();
         this.ensureDeviceWs();
@@ -77,10 +77,9 @@ class APIControlCenter {
             <div class="status-card-large"><div class="status-card-header"><h3>CPU</h3></div><div class="status-card-content"><div>--% / 100%</div><canvas id="cpuPie" height="140"></canvas></div></div>
             <div class="status-card-large"><div class="status-card-header"><h3>内存</h3></div><div class="status-card-content"><div>-- / --</div><canvas id="memPie" height="140"></canvas></div></div>
             <div class="status-card-large"><div class="status-card-header"><h3>交换分区</h3></div><div class="status-card-content"><div>-- / --</div><canvas id="swapPie" height="140"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>磁盘使用</h3></div><div class="status-card-content"><canvas id="diskBar" height="180"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div><div class="status-card-content"><canvas id="netLine" height="160"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>磁盘使用</h3></div><div class="status-card-content"><div id="diskPlaceholder" style="opacity:.75;font-size:12px;margin-bottom:6px;"></div><canvas id="diskBar" height="180"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div><div class="status-card-content"><div id="netSummary" style="opacity:.75;font-size:12px;margin-bottom:6px;">--</div><canvas id="netLine" height="160"></canvas></div></div>
             <div class="status-card-large"><div class="status-card-header"><h3>进程 Top5</h3></div><div class="status-card-content"><table class="kv-table small"><tbody id="procTop"></tbody></table></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>机器人状态</h3></div><div class="status-card-content"></div></div>
         `;
     }
 
@@ -578,7 +577,7 @@ class APIControlCenter {
         if (this._lastStatusData) {
             this.renderSystemStatus(this._lastStatusData);
         }
-        this.loadSystemStatus();
+        this.loadSystemStatus(true);
     }
 
     showChatPage() {
@@ -661,15 +660,29 @@ class APIControlCenter {
         // 初始引导，无需额外图表渲染，避免首屏阻塞
     }
 
-    async loadSystemStatus() {
+    async loadSystemStatus(quick = false) {
         try {
-            const statusRes = await fetch(`${this.serverUrl}/api/system/status`, {
+            const qs = quick ? '?quick=1' : '';
+            const statusRes = await fetch(`${this.serverUrl}/api/system/status${qs}` , {
                 headers: this.getHeaders()
             });
             if (statusRes.ok) {
                 const data = await statusRes.json();
                 if (data.success) {
                     this.renderSystemStatus(data);
+                    // 首次快速渲染后，补拉完整数据
+                    if (quick) {
+                        setTimeout(() => this.loadSystemStatus(false), 300);
+                    } else {
+                        // 若重数据仍为空，做一次兜底补拉（最多一次）
+                        const emptyHeavy = (!Array.isArray(data.system?.disks) || data.system.disks.length === 0) ||
+                                          (!Array.isArray(data.processesTop5) || data.processesTop5.length === 0);
+                        const now = Date.now();
+                        if (emptyHeavy && (!this._lastStatusRefetchAt || now - this._lastStatusRefetchAt > 3000)) {
+                            this._lastStatusRefetchAt = now;
+                            setTimeout(() => this.loadSystemStatus(false), 900);
+                        }
+                    }
                 }
             }
         } catch (error) {
@@ -761,46 +774,22 @@ class APIControlCenter {
             <div class="status-card-large">
                 <div class="status-card-header"><h3>交换分区</h3></div>
                 <div class="status-card-content">
-                    <div>${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}</div>
+                    <div>${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}${swapTotal === 0 ? ' (无交换分区)' : ''}</div>
                     <canvas id="swapPie" height="140"></canvas>
                 </div>
             </div>
             <div class="status-card-large">
                 <div class="status-card-header"><h3>磁盘使用</h3></div>
-                <div class="status-card-content"><canvas id="diskBar" height="180"></canvas></div>
+                <div class="status-card-content"><div id="diskPlaceholder" style="opacity:.75;font-size:12px;margin-bottom:6px;"></div><canvas id="diskBar" height="180"></canvas></div>
             </div>
             <div class="status-card-large">
                 <div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div>
-                <div class="status-card-content"><canvas id="netLine" height="160"></canvas></div>
+                <div class="status-card-content"><div id="netSummary" style="opacity:.75;font-size:12px;margin-bottom:6px;">--</div><canvas id="netLine" height="160"></canvas></div>
             </div>
             <div class="status-card-large">
                 <div class="status-card-header"><h3>进程 Top5</h3></div>
                 <div class="status-card-content">
                     <table class="kv-table small"><tbody id="procTop"></tbody></table>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Bot运行时间:</span>
-                    <span class="status-value">${formatUptime(bot.uptime)}</span>
-                </div>
-            </div>
-            <div class="status-card-large">
-                <div class="status-card-header"><h3>机器人状态</h3></div>
-                <div class="status-card-content">
-                    <div class="status-item">
-                        <span class="status-label">在线数量:</span>
-                        <span class="status-value">${bots.filter(b => b.online).length} / ${bots.length}</span>
-                    </div>
-                    <div class="bot-list">
-                        ${bots.map(bot => `
-                            <div class="bot-status-item">
-                                <div class="bot-status-indicator ${bot.online ? 'online' : 'offline'}"></div>
-                                <div class="bot-status-info">
-                                    <div class="bot-status-name">${bot.nickname}</div>
-                                    <div class="bot-status-details">${bot.adapter} | 好友: ${bot.stats.friends} | 群组: ${bot.stats.groups}</div>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
                 </div>
             </div>
         `;
@@ -893,6 +882,10 @@ class APIControlCenter {
                     c.data.datasets[1].data = free;
                     c.update('active');
                 }
+                const ph = document.getElementById('diskPlaceholder');
+                if (ph) {
+                    ph.textContent = hasDisks ? `共 ${labels.length} 个分区: ${labels.join(', ')}` : '暂无磁盘数据';
+                }
             }
 
             // 网络上下行折线图（KB/s）
@@ -906,7 +899,7 @@ class APIControlCenter {
                             { label: '下行RX (KB/s)', data: this._metricsHistory.netRx, borderColor: '#6aa9ff', backgroundColor: 'rgba(106,169,255,0.2)', fill: true, tension: 0.3, pointRadius: 0 },
                             { label: '上行TX (KB/s)', data: this._metricsHistory.netTx, borderColor: '#f6a54c', backgroundColor: 'rgba(246,165,76,0.2)', fill: true, tension: 0.3, pointRadius: 0 }
                         ] },
-                        options: { responsive: true, plugins: { legend: { display: true } }, scales: { x: { display: false } } }
+                        options: { responsive: true, plugins: { legend: { display: true } }, scales: { x: { display: false }, y: { beginAtZero: true } } }
                     });
                 } else {
                     const c = this._charts.netLine;
@@ -915,12 +908,22 @@ class APIControlCenter {
                     c.data.datasets[1].data = this._metricsHistory.netTx;
                     c.update('active');
                 }
+                const sum = document.getElementById('netSummary');
+                if (sum) {
+                    const rx = (this._metricsHistory.netRx[this._metricsHistory.netRx.length - 1] || 0).toFixed(2);
+                    const tx = (this._metricsHistory.netTx[this._metricsHistory.netTx.length - 1] || 0).toFixed(2);
+                    sum.textContent = `当前: RX ${rx} KB/s | TX ${tx} KB/s`;
+                }
             }
 
             // 进程Top5
             const procEl = document.getElementById('procTop');
             if (procEl && Array.isArray(data.processesTop5)) {
-                procEl.innerHTML = data.processesTop5.map((p,i) => `<tr><th>#${i+1} ${p.name} (pid:${p.pid})</th><td>CPU ${Number(p.cpu||0).toFixed(1)}% | MEM ${Number(p.mem||0).toFixed(1)}%</td></tr>`).join('');
+                if (data.processesTop5.length === 0) {
+                    procEl.innerHTML = `<tr><th>暂无数据</th><td>正在收集进程信息...</td></tr>`;
+                } else {
+                    procEl.innerHTML = data.processesTop5.map((p,i) => `<tr><th>#${i+1} ${p.name} (pid:${p.pid})</th><td>CPU ${Number(p.cpu||0).toFixed(1)}% | MEM ${Number(p.mem||0).toFixed(1)}%</td></tr>`).join('');
+                }
             }
         });
     }

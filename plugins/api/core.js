@@ -18,6 +18,8 @@ export default {
       path: '/api/system/status',
       handler: async (req, res, Bot) => {
         try {
+          const q = (req && (req.query || req.searchParams)) || {};
+          const quick = q.quick === '1' || q.lite === '1';
           // 优先用 systeminformation 获取 CPU 负载，避免等待
           let cpuPct = null;
           try {
@@ -55,8 +57,8 @@ export default {
           const withTimeout = (p, ms, fb) => Promise.race([p, new Promise(r => setTimeout(() => r(fb), ms))]);
           const [siMem, fsSize, procs, netStats] = await Promise.all([
             withTimeout(si.mem().catch(() => ({})), 300, {}),
-            withTimeout(si.fsSize().catch(() => []), 500, []),
-            withTimeout(si.processes().catch(() => ({ list: [] })), 600, { list: [] }),
+            withTimeout(quick ? Promise.resolve([]) : si.fsSize().catch(() => []), quick ? 1 : 1200, []),
+            withTimeout(quick ? Promise.resolve({ list: [] }) : si.processes().catch(() => ({ list: [] })), quick ? 1 : 1500, { list: [] }),
             withTimeout(si.networkStats().catch(() => []), 400, [])
           ]);
           // 累计网络字节（总和）与瞬时速率
