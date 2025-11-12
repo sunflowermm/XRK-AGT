@@ -1,4 +1,5 @@
 import os from 'os';
+import si from 'systeminformation';
 import cfg from '../../lib/config/config.js';
 
 /**
@@ -34,12 +35,44 @@ export default {
           }
           const cpuPct = cpuPercent(snap1, snap2);
 
-          // 获取系统信息
+          // 获取系统信息（基础 + 详细）
           const cpus = snap2;
           const totalMem = os.totalmem();
           const freeMem = os.freemem();
           const usedMem = totalMem - freeMem;
           const memUsage = process.memoryUsage();
+          // systeminformation 提供跨平台详细信息
+          const [siMem, fsSize, procs, netStats] = await Promise.all([
+            si.mem().catch(() => ({})),
+            si.fsSize().catch(() => []),
+            si.processes().catch(() => ({ list: [] })),
+            si.networkStats().catch(() => [])
+          ]);
+          // 累计网络字节（总和）
+          let rxBytes = 0, txBytes = 0;
+          if (Array.isArray(netStats)) {
+            for (const n of netStats) {
+              rxBytes += Number(n.rx_bytes || 0);
+              txBytes += Number(n.tx_bytes || 0);
+            }
+          }
+          // 磁盘列表
+          const disks = Array.isArray(fsSize) ? fsSize.map(d => ({
+            fs: d.fs || d.mount || d.type || 'disk',
+            mount: d.mount || d.fs || '',
+            size: Number(d.size || 0),
+            used: Number(d.used || 0),
+            use: Number(d.use || 0)
+          })) : [];
+          // 进程Top5（按CPU，其次内存）
+          let processesTop5 = [];
+          try {
+            const list = procs?.list || [];
+            processesTop5 = list
+              .map(p => ({ pid: p.pid, name: p.name, cpu: Number(p.pcpu || p.cpu || 0), mem: Number(p.pmem || p.mem || 0) }))
+              .sort((a, b) => b.cpu - a.cpu || b.mem - a.mem)
+              .slice(0, 5);
+          } catch {}
           
           // 获取网络接口信息
           const networkInterfaces = os.networkInterfaces();
@@ -105,7 +138,14 @@ export default {
                   heapUsed: memUsage.heapUsed,
                   external: memUsage.external,
                   arrayBuffers: memUsage.arrayBuffers
-                }
+                },
+                swap: {
+                  total: Number(siMem?.swaptotal || 0),
+                  used: Number(siMem?.swapused || 0),
+                  usagePercent: siMem?.swaptotal ? +(((siMem.swapused || 0) / siMem.swaptotal) * 100).toFixed(2) : 0
+                },
+                disks,
+                network: { rxBytes, txBytes }
               },
               network: networkStats
             },

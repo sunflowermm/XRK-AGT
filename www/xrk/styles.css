@@ -1079,6 +1079,17 @@ body.light .theme-toggle-thumb::before {
     animation: statIconSpin 1s ease-in-out;
 }
 
+/* 首页卡片栅格与通用布局 */
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    width: 100%;
+    margin-top: 16px;
+}
+.center { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
+.mini-text { color: var(--text-muted); font-size: 12px; }
+
 @keyframes statIconSpin {
     0% { transform: rotate(0deg) scale(1); }
     50% { transform: rotate(180deg) scale(1.2); }

@@ -20,7 +20,8 @@ class APIControlCenter {
         this.clickThreshold = 200;
         this.autoSaveTimer = null;
         this._charts = {};
-        this._metricsHistory = { mem: [], procMem: [] };
+        this._metricsHistory = { mem: [], procMem: [], netRx: [], netTx: [] };
+        this._prevNet = { rxBytes: 0, txBytes: 0 };
         this._wsReconnectAttempt = 0;
         this._wsHeartbeatTimer = null;
         this._ttsQueue = [];
@@ -710,18 +711,32 @@ class APIControlCenter {
         const memPercent = parseFloat(system.memory.usagePercent);
         const processMemPercent = system.memory.process.heapUsed / system.memory.process.heapTotal * 100;
         const cpuPercent = (system.cpu && typeof system.cpu.percent === 'number') ? system.cpu.percent : null;
+        const swapTotal = Number(system.memory?.swap?.total || 0);
+        const swapUsed = Number(system.memory?.swap?.used || 0);
+        const swapPercent = swapTotal > 0 ? +(swapUsed / swapTotal * 100).toFixed(2) : 0;
+        const disks = Array.isArray(system.disks) ? system.disks : [];
+        const rxBytes = Number(system.network?.rxBytes || 0);
+        const txBytes = Number(system.network?.txBytes || 0);
+        let rxRate = 0, txRate = 0; // Bytes/s
+        try {
+            if (this._prevNet.rxBytes && rxBytes >= this._prevNet.rxBytes) rxRate = (rxBytes - this._prevNet.rxBytes) / 60;
+            if (this._prevNet.txBytes && txBytes >= this._prevNet.txBytes) txRate = (txBytes - this._prevNet.txBytes) / 60;
+        } catch {}
+        this._prevNet = { rxBytes, txBytes };
 
         // 先更新趋势数据，确保首次也有数据点
         try {
             this._metricsHistory.mem.push(memPercent);
             this._metricsHistory.procMem.push(processMemPercent);
+            this._metricsHistory.netRx.push(rxRate / 1024); // KB/s
+            this._metricsHistory.netTx.push(txRate / 1024);
             const cap = 60;
-            if (this._metricsHistory.mem.length > cap) this._metricsHistory.mem.shift();
-            if (this._metricsHistory.procMem.length > cap) this._metricsHistory.procMem.shift();
+            ['mem','procMem','netRx','netTx'].forEach(k => {
+                if (this._metricsHistory[k].length > cap) this._metricsHistory[k].shift();
+            });
         } catch {}
 
         grid.innerHTML = `
-            <!-- 概览（避免与内存卡片重复，展示 CPU%、在线机器人、系统运行） -->
             <div class="status-summary">
                 <div class="summary-item">
                     <div class="summary-label">CPU 使用</div>
@@ -737,106 +752,37 @@ class APIControlCenter {
                 </div>
             </div>
 
-            <!-- CPU信息 -->
-            <div class="status-card-large">
-                <div class="status-card-header">
-                    <h3>CPU 信息</h3>
+            <div class="cards-grid">
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>CPU</h3></div>
+                    <div class="status-card-content center"><canvas id="cpuPie" height="140"></canvas></div>
                 </div>
-                <div class="status-card-content">
-                    <div class="status-item">
-                        <span class="status-label">型号:</span>
-                        <span class="status-value">${system.cpu.model}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">核心数:</span>
-                        <span class="status-value">${system.cpu.cores} 核</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">架构:</span>
-                        <span class="status-value">${system.arch}</span>
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>内存</h3></div>
+                    <div class="status-card-content center">
+                        <div class="mini-text">${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</div>
+                        <canvas id="memPie" height="140"></canvas>
                     </div>
                 </div>
-            </div>
-
-            <!-- 内存使用 -->
-            <div class="status-card-large">
-                <div class="status-card-header">
-                    <h3>内存使用</h3>
-                </div>
-                <div class="status-card-content">
-                    <div class="memory-chart">
-                        <div class="memory-bar">
-                            <div class="memory-fill" style="width: ${memPercent}%"></div>
-                        </div>
-                        <div class="memory-info">
-                            <span>${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</span>
-                            <span class="memory-percent">${memPercent}%</span>
-                        </div>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">进程堆内存:</span>
-                        <span class="status-value">${formatBytes(system.memory.process.heapUsed)} / ${formatBytes(system.memory.process.heapTotal)}</span>
-                    </div>
-                    <div class="memory-chart">
-                        <div class="memory-bar">
-                            <div class="memory-fill process" style="width: ${processMemPercent.toFixed(1)}%"></div>
-                        </div>
-                        <div class="memory-info">
-                            <span>进程内存使用率</span>
-                            <span class="memory-percent">${processMemPercent.toFixed(1)}%</span>
-                        </div>
-                    </div>
-                    <div style="margin-top:12px;">
-                        <canvas id="memChart" height="80"></canvas>
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>交换分区</h3></div>
+                    <div class="status-card-content center">
+                        <div class="mini-text">${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}</div>
+                        <canvas id="swapPie" height="140"></canvas>
                     </div>
                 </div>
-            </div>
-
-            <!-- 网络信息 -->
-            <div class="status-card-large">
-                <div class="status-card-header">
-                    <h3>网络接口</h3>
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>磁盘使用</h3></div>
+                    <div class="status-card-content"><canvas id="diskBar" height="180"></canvas></div>
                 </div>
-                <div class="status-card-content">
-                    ${Object.entries(system.network).map(([name, info]) => `
-                        <div class="network-item">
-                            <div class="network-name">${name}</div>
-                            <div class="network-details">
-                                <div class="status-item">
-                                    <span class="status-label">IP地址:</span>
-                                    <span class="status-value">${info.address}</span>
-                                </div>
-                                <div class="status-item">
-                                    <span class="status-label">子网掩码:</span>
-                                    <span class="status-value">${info.netmask}</span>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div>
+                    <div class="status-card-content"><canvas id="netLine" height="160"></canvas></div>
                 </div>
-            </div>
-
-            <!-- 系统信息 -->
-            <div class="status-card-large">
-                <div class="status-card-header">
-                    <h3>系统信息</h3>
-                </div>
-                <div class="status-card-content">
-                    <div class="status-item">
-                        <span class="status-label">平台:</span>
-                        <span class="status-value">${system.platform}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">主机名:</span>
-                        <span class="status-value">${system.hostname}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Node版本:</span>
-                        <span class="status-value">${system.nodeVersion}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">系统运行时间:</span>
-                        <span class="status-value">${formatUptime(system.uptime)}</span>
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>进程 Top5</h3></div>
+                    <div class="status-card-content">
+                        <table class="kv-table small"><tbody id="procTop"></tbody></table>
                     </div>
                     <div class="status-item">
                         <span class="status-label">Bot运行时间:</span>
