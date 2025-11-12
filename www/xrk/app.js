@@ -106,6 +106,14 @@ class APIControlCenter {
                 this.openAIChat();
             });
         }
+        const configButton = document.getElementById('configButton');
+        if (configButton) {
+            configButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openConfigEditor();
+            });
+        }
 
         // 遮罩层
         const overlay = document.getElementById('overlay');
@@ -745,20 +753,45 @@ class APIControlCenter {
     renderASRStreaming(text, done = false) {
         const box = document.getElementById('chatMessages');
         if (!box) return;
+        
+        // 只保留一个识别中的消息
         let last = box.querySelector('.chat-msg.assistant.asr-streaming');
-        if (!last && !done) {
-            last = document.createElement('div');
-            last.className = 'chat-msg assistant asr-streaming';
-            box.appendChild(last);
-        }
-        if (last) {
-            if (!done) {
-                last.textContent = `识别中: ${text}`;
-            } else {
-                last.classList.remove('asr-streaming');
-                last.remove();
+        
+        if (!done && text) {
+            // 更新或创建识别中的消息
+            if (!last) {
+                last = document.createElement('div');
+                last.className = 'chat-msg assistant asr-streaming';
+                last.style.opacity = '0';
+                last.style.transform = 'translateY(10px)';
+                box.appendChild(last);
+                // 触发动画
+                requestAnimationFrame(() => {
+                    last.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                    last.style.opacity = '1';
+                    last.style.transform = 'translateY(0)';
+                });
             }
+            // 平滑更新文本
+            if (last.textContent !== `识别中: ${text}`) {
+                last.style.opacity = '0.7';
+                requestAnimationFrame(() => {
+                    last.textContent = `识别中: ${text}`;
+                    last.style.opacity = '1';
+                });
+            }
+        } else if (done && last) {
+            // 完成时淡出并移除
+            last.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+            last.style.opacity = '0';
+            last.style.transform = 'translateY(-10px)';
+            setTimeout(() => {
+                if (last && last.parentNode) {
+                    last.remove();
+                }
+            }, 300);
         }
+        
         box.scrollTop = box.scrollHeight;
     }
 
@@ -803,12 +836,17 @@ class APIControlCenter {
                 }
                 if (data?.type === 'heartbeat_response') return;
                 if (data?.type === 'asr_interim' && data.text) {
+                    // 只显示最新的识别结果
                     this.renderASRStreaming(data.text, false);
                     return;
                 }
                 if (data?.type === 'asr_final' && data.text) {
+                    // 先移除识别中的消息，然后显示最终结果
                     this.renderASRStreaming('', true);
-                    this.appendChat('assistant', `识别: ${data.text}`);
+                    // 延迟一点再显示最终结果，让过渡更自然
+                    setTimeout(() => {
+                        this.appendChat('assistant', `识别: ${data.text}`);
+                    }, 350);
                     return;
                 }
                 if (data?.type === 'register_response' && data.success) {
@@ -1934,6 +1972,254 @@ class APIControlCenter {
                 });
             } catch (e) {
                 console.error('Failed to restore inputs:', e);
+            }
+        }
+    }
+
+    // ====================== Config Editor ======================
+    async openConfigEditor() {
+        this.closeSidebar();
+        this.currentAPI = null;
+        const content = document.getElementById('content');
+        content.innerHTML = `
+            <div class="config-editor-container">
+                <div class="config-editor-header">
+                    <div class="config-editor-title">配置管理</div>
+                    <div class="config-editor-controls">
+                        <button class="btn btn-secondary" id="refreshConfigListBtn">
+                            <span>🔄</span><span>刷新</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="config-editor-body">
+                    <div class="config-list-panel" id="configListPanel">
+                        <div class="config-list-loading">加载中...</div>
+                    </div>
+                    <div class="config-editor-panel" id="configEditorPanel" style="display: none;">
+                        <div class="config-editor-toolbar">
+                            <div class="config-editor-name" id="configEditorName"></div>
+                            <div class="config-editor-actions">
+                                <button class="btn btn-secondary" id="saveConfigBtn">
+                                    <span>💾</span><span>保存</span>
+                                </button>
+                                <button class="btn btn-secondary" id="validateConfigBtn">
+                                    <span>✅</span><span>验证</span>
+                                </button>
+                                <button class="btn btn-secondary" id="backConfigBtn">
+                                    <span>←</span><span>返回</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="config-editor-content">
+                            <textarea id="configEditorTextarea" class="config-editor-textarea"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const refreshBtn = document.getElementById('refreshConfigListBtn');
+        const saveBtn = document.getElementById('saveConfigBtn');
+        const validateBtn = document.getElementById('validateConfigBtn');
+        const backBtn = document.getElementById('backConfigBtn');
+
+        refreshBtn.addEventListener('click', () => this.loadConfigList());
+        saveBtn.addEventListener('click', () => this.saveConfig());
+        validateBtn.addEventListener('click', () => this.validateConfig());
+        backBtn.addEventListener('click', () => this.backToConfigList());
+
+        await this.loadConfigList();
+    }
+
+    async loadConfigList() {
+        const panel = document.getElementById('configListPanel');
+        if (!panel) return;
+
+        try {
+            panel.innerHTML = '<div class="config-list-loading">加载中...</div>';
+            const response = await fetch(`${this.serverUrl}/api/config/list`, {
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error('获取配置列表失败');
+            }
+
+            const data = await response.json();
+            if (!data.success || !data.configs) {
+                throw new Error('配置列表格式错误');
+            }
+
+            if (data.configs.length === 0) {
+                panel.innerHTML = '<div class="config-list-empty">暂无配置</div>';
+                return;
+            }
+
+            panel.innerHTML = data.configs.map(config => `
+                <div class="config-item" data-config-name="${config.name}">
+                    <div class="config-item-icon">⚙️</div>
+                    <div class="config-item-info">
+                        <div class="config-item-name">${config.displayName || config.name}</div>
+                        <div class="config-item-desc">${config.description || ''}</div>
+                        <div class="config-item-path">${config.filePath || ''}</div>
+                    </div>
+                    <div class="config-item-actions">
+                        <button class="btn btn-sm btn-primary" data-action="edit" data-config-name="${config.name}">
+                            <span>✏️</span><span>编辑</span>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            panel.querySelectorAll('[data-action="edit"]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const configName = btn.dataset.configName;
+                    this.editConfig(configName);
+                });
+            });
+        } catch (error) {
+            panel.innerHTML = `<div class="config-list-error">加载失败: ${error.message}</div>`;
+            this.showToast('加载配置列表失败: ' + error.message, 'error');
+        }
+    }
+
+    async editConfig(configName) {
+        const listPanel = document.getElementById('configListPanel');
+        const editorPanel = document.getElementById('configEditorPanel');
+        const editorName = document.getElementById('configEditorName');
+        const editorTextarea = document.getElementById('configEditorTextarea');
+
+        if (!listPanel || !editorPanel || !editorName || !editorTextarea) return;
+
+        try {
+            listPanel.style.display = 'none';
+            editorPanel.style.display = 'block';
+            editorName.textContent = `编辑配置: ${configName}`;
+            editorTextarea.value = '加载中...';
+            editorTextarea.disabled = true;
+
+            const response = await fetch(`${this.serverUrl}/api/config/${configName}/read`, {
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error('读取配置失败');
+            }
+
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.message || '读取配置失败');
+            }
+
+            editorTextarea.value = JSON.stringify(data.data, null, 2);
+            editorTextarea.disabled = false;
+            editorTextarea.dataset.configName = configName;
+
+            // 初始化代码编辑器
+            if (this.configEditor) {
+                this.configEditor.toTextArea();
+            }
+            const theme = document.body.classList.contains('light') ? 'default' : 'monokai';
+            this.configEditor = CodeMirror.fromTextArea(editorTextarea, {
+                mode: 'application/json',
+                theme: theme,
+                lineNumbers: true,
+                lineWrapping: true,
+                matchBrackets: true,
+                autoCloseBrackets: true,
+                foldGutter: true,
+                gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter']
+            });
+        } catch (error) {
+            editorTextarea.value = `错误: ${error.message}`;
+            this.showToast('加载配置失败: ' + error.message, 'error');
+        }
+    }
+
+    async saveConfig() {
+        const editorTextarea = document.getElementById('configEditorTextarea');
+        if (!editorTextarea || !editorTextarea.dataset.configName) return;
+
+        const configName = editorTextarea.dataset.configName;
+        let configData;
+
+        try {
+            const jsonText = this.configEditor ? this.configEditor.getValue() : editorTextarea.value;
+            configData = JSON.parse(jsonText);
+        } catch (error) {
+            this.showToast('JSON 格式错误: ' + error.message, 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${this.serverUrl}/api/config/${configName}/write`, {
+                method: 'POST',
+                headers: this.getHeaders(),
+                body: JSON.stringify({
+                    data: configData,
+                    backup: true,
+                    validate: true
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                this.showToast('配置已保存', 'success');
+            } else {
+                throw new Error(result.message || '保存失败');
+            }
+        } catch (error) {
+            this.showToast('保存配置失败: ' + error.message, 'error');
+        }
+    }
+
+    async validateConfig() {
+        const editorTextarea = document.getElementById('configEditorTextarea');
+        if (!editorTextarea || !editorTextarea.dataset.configName) return;
+
+        const configName = editorTextarea.dataset.configName;
+        let configData;
+
+        try {
+            const jsonText = this.configEditor ? this.configEditor.getValue() : editorTextarea.value;
+            configData = JSON.parse(jsonText);
+        } catch (error) {
+            this.showToast('JSON 格式错误: ' + error.message, 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${this.serverUrl}/api/config/${configName}/validate`, {
+                method: 'POST',
+                headers: this.getHeaders(),
+                body: JSON.stringify({ data: configData })
+            });
+
+            const result = await response.json();
+            if (result.success && result.validation) {
+                if (result.validation.valid) {
+                    this.showToast('配置验证通过', 'success');
+                } else {
+                    this.showToast('配置验证失败: ' + result.validation.errors.join(', '), 'error');
+                }
+            } else {
+                throw new Error(result.message || '验证失败');
+            }
+        } catch (error) {
+            this.showToast('验证配置失败: ' + error.message, 'error');
+        }
+    }
+
+    backToConfigList() {
+        const listPanel = document.getElementById('configListPanel');
+        const editorPanel = document.getElementById('configEditorPanel');
+
+        if (listPanel && editorPanel) {
+            listPanel.style.display = 'block';
+            editorPanel.style.display = 'none';
+            if (this.configEditor) {
+                this.configEditor.toTextArea();
+                this.configEditor = null;
             }
         }
     }

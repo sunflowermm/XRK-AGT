@@ -185,10 +185,10 @@
           ]
         },
         {
-          "id": "stdin-custom-event",
+          "id": "stdin-event",
           "method": "POST",
-          "path": "/api/stdin/custom-event",
-          "title": "自定义事件",
+          "path": "/api/stdin/event",
+          "title": "触发事件",
           "description": "创建自定义事件触发插件响应",
           "bodyParams": [
             {
@@ -196,22 +196,25 @@
               "label": "事件类型",
               "type": "text",
               "required": true,
-              "placeholder": "message.private.friend",
-              "hint": "事件类型，如 message.private.friend"
+              "placeholder": "message",
+              "defaultValue": "message",
+              "hint": "事件类型，如 message、notice、request 等"
             },
             {
-              "name": "event_data",
-              "label": "事件数据",
+              "name": "content",
+              "label": "事件内容",
               "type": "json",
+              "required": true,
               "placeholder": "{\"message\": \"测试\", \"user_id\": \"123456\"}",
               "defaultValue": "{\n  \"message\": \"测试事件\",\n  \"user_id\": \"123456\"\n}",
-              "hint": "事件附加数据"
+              "hint": "事件内容数据"
             },
             {
               "name": "user_info",
               "label": "用户信息",
               "type": "json",
-              "placeholder": "{\"nickname\": \"测试用户\"}"
+              "placeholder": "{\"nickname\": \"测试用户\"}",
+              "hint": "可选，模拟用户身份信息"
             }
           ]
         },
@@ -221,6 +224,270 @@
           "path": "/api/stdin/status",
           "title": "Stdin状态",
           "description": "获取标准输入处理器的状态信息"
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "title": "AI 功能",
+      "apis": [
+        {
+          "id": "ai-stream",
+          "method": "GET",
+          "path": "/api/ai/stream",
+          "title": "AI 流式对话",
+          "description": "通过 SSE 获取 AI 流式回复",
+          "queryParams": [
+            {
+              "name": "prompt",
+              "label": "提示词",
+              "type": "text",
+              "required": true,
+              "placeholder": "你好",
+              "hint": "要发送给 AI 的提示词"
+            },
+            {
+              "name": "persona",
+              "label": "人设",
+              "type": "text",
+              "placeholder": "",
+              "hint": "可选，AI 人设设置"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "config",
+      "title": "配置管理",
+      "apis": [
+        {
+          "id": "config-list",
+          "method": "GET",
+          "path": "/api/config/list",
+          "title": "配置列表",
+          "description": "获取所有可用的配置文件列表（需要授权）"
+        },
+        {
+          "id": "config-structure",
+          "method": "GET",
+          "path": "/api/config/:name/structure",
+          "title": "配置结构",
+          "description": "获取指定配置的结构定义（需要授权）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot",
+              "hint": "配置名称，如 bot、server、db 等"
+            }
+          }
+        },
+        {
+          "id": "config-read",
+          "method": "GET",
+          "path": "/api/config/:name/read",
+          "title": "读取配置",
+          "description": "读取指定配置文件的内容（需要授权）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot",
+              "hint": "配置名称"
+            }
+          },
+          "queryParams": [
+            {
+              "name": "path",
+              "label": "配置路径",
+              "type": "text",
+              "placeholder": "log_level",
+              "hint": "可选，指定要读取的配置路径，如 server.host"
+            }
+          ]
+        },
+        {
+          "id": "config-write",
+          "method": "POST",
+          "path": "/api/config/:name/write",
+          "title": "写入配置",
+          "description": "写入配置到指定文件（需要授权）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot",
+              "hint": "配置名称"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "data",
+              "label": "配置数据",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"log_level\": \"info\"}",
+              "hint": "要写入的配置数据"
+            },
+            {
+              "name": "path",
+              "label": "配置路径",
+              "type": "text",
+              "placeholder": "log_level",
+              "hint": "可选，指定要写入的配置路径"
+            },
+            {
+              "name": "backup",
+              "label": "是否备份",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是"
+                },
+                {
+                  "value": "false",
+                  "label": "否"
+                }
+              ],
+              "defaultValue": "true",
+              "hint": "写入前是否备份原文件"
+            },
+            {
+              "name": "validate",
+              "label": "是否验证",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是"
+                },
+                {
+                  "value": "false",
+                  "label": "否"
+                }
+              ],
+              "defaultValue": "true",
+              "hint": "写入前是否验证数据"
+            }
+          ]
+        },
+        {
+          "id": "config-merge",
+          "method": "POST",
+          "path": "/api/config/:name/merge",
+          "title": "合并配置",
+          "description": "合并配置到指定文件（需要授权）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot",
+              "hint": "配置名称"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "data",
+              "label": "配置数据",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"log_level\": \"info\"}",
+              "hint": "要合并的配置数据"
+            },
+            {
+              "name": "deep",
+              "label": "深度合并",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是"
+                },
+                {
+                  "value": "false",
+                  "label": "否"
+                }
+              ],
+              "defaultValue": "true",
+              "hint": "是否深度合并"
+            }
+          ]
+        },
+        {
+          "id": "config-validate",
+          "method": "POST",
+          "path": "/api/config/:name/validate",
+          "title": "验证配置",
+          "description": "验证配置数据是否符合规范（需要授权）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot",
+              "hint": "配置名称"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "data",
+              "label": "配置数据",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"log_level\": \"info\"}",
+              "hint": "要验证的配置数据"
+            }
+          ]
+        },
+        {
+          "id": "config-backup",
+          "method": "POST",
+          "path": "/api/config/:name/backup",
+          "title": "备份配置",
+          "description": "备份指定配置文件（需要授权）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot",
+              "hint": "配置名称"
+            }
+          }
+        },
+        {
+          "id": "config-reset",
+          "method": "POST",
+          "path": "/api/config/:name/reset",
+          "title": "重置配置",
+          "description": "重置配置为默认值（需要授权）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot",
+              "hint": "配置名称"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "backup",
+              "label": "是否备份",
+              "type": "select",
+              "options": [
+                {
+                  "value": "true",
+                  "label": "是"
+                },
+                {
+                  "value": "false",
+                  "label": "否"
+                }
+              ],
+              "defaultValue": "true",
+              "hint": "重置前是否备份"
+            }
+          ]
+        },
+        {
+          "id": "config-clear-cache",
+          "method": "POST",
+          "path": "/api/config/clear-cache",
+          "title": "清除缓存",
+          "description": "清除所有配置缓存（需要授权）"
         }
       ]
     },
@@ -463,6 +730,48 @@
               "hint": "要删除的设备ID"
             }
           }
+        },
+        {
+          "id": "device-asr-sessions",
+          "method": "GET",
+          "path": "/api/device/:deviceId/asr/sessions",
+          "title": "ASR会话列表",
+          "description": "获取设备的 ASR 会话列表",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "DEVICE_001",
+              "hint": "设备ID"
+            }
+          }
+        },
+        {
+          "id": "device-asr-recordings",
+          "method": "GET",
+          "path": "/api/device/:deviceId/asr/recordings",
+          "title": "ASR录音列表",
+          "description": "获取设备的 ASR 录音文件列表",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "DEVICE_001",
+              "hint": "设备ID"
+            }
+          }
+        },
+        {
+          "id": "asr-recording-get",
+          "method": "GET",
+          "path": "/api/asr/recording/:filename",
+          "title": "获取录音文件",
+          "description": "下载 ASR 录音文件",
+          "pathParams": {
+            "filename": {
+              "label": "文件名",
+              "placeholder": "recording.wav",
+              "hint": "录音文件名"
+            }
+          }
         }
       ]
     },
@@ -475,7 +784,47 @@
           "method": "POST",
           "path": "/api/file/upload",
           "title": "上传文件",
-          "description": "上传文件到服务器，支持多种格式"
+          "description": "上传文件到服务器，支持多种格式（需要授权）"
+        },
+        {
+          "id": "file-upload-base64",
+          "method": "POST",
+          "path": "/api/file/upload-base64",
+          "title": "Base64上传",
+          "description": "通过 Base64 编码上传文件（需要授权）",
+          "bodyParams": [
+            {
+              "name": "data",
+              "label": "Base64数据",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "data:image/png;base64,iVBORw0KG...",
+              "hint": "Base64 编码的文件数据，可包含 data URI 前缀"
+            },
+            {
+              "name": "filename",
+              "label": "文件名",
+              "type": "text",
+              "placeholder": "image.png",
+              "defaultValue": "file",
+              "hint": "文件名称"
+            },
+            {
+              "name": "mime",
+              "label": "MIME类型",
+              "type": "text",
+              "placeholder": "image/png",
+              "defaultValue": "application/octet-stream",
+              "hint": "文件的 MIME 类型"
+            }
+          ]
+        },
+        {
+          "id": "file-list",
+          "method": "GET",
+          "path": "/api/files",
+          "title": "文件列表",
+          "description": "获取所有已上传的文件列表（需要授权）"
         },
         {
           "id": "file-get",
@@ -492,11 +841,39 @@
           }
         },
         {
+          "id": "file-download",
+          "method": "GET",
+          "path": "/api/file/download/:id",
+          "title": "下载文件",
+          "description": "下载指定文件",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id",
+              "hint": "要下载的文件ID"
+            }
+          }
+        },
+        {
+          "id": "file-preview",
+          "method": "GET",
+          "path": "/api/file/preview/:id",
+          "title": "预览文件",
+          "description": "预览媒体文件（图片、视频、音频）",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id",
+              "hint": "要预览的文件ID"
+            }
+          }
+        },
+        {
           "id": "file-delete",
           "method": "DELETE",
           "path": "/api/file/:id",
           "title": "删除文件",
-          "description": "删除已上传的文件",
+          "description": "删除已上传的文件（需要授权）",
           "pathParams": {
             "id": {
               "label": "文件ID",
@@ -603,6 +980,26 @@
     },
     "plugin-reload": {
       "path_key": "genshin"
+    },
+    "stdin-event": {
+      "event_type": "message",
+      "content": "{\n  \"message\": \"测试事件\",\n  \"user_id\": \"123456\"\n}",
+      "user_info": "{\n  \"nickname\": \"测试用户\"\n}"
+    },
+    "file-upload-base64": {
+      "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "filename": "test.png",
+      "mime": "image/png"
+    },
+    "config-read": {
+      "path_name": "bot",
+      "query_path": "log_level"
+    },
+    "config-write": {
+      "path_name": "bot",
+      "data": "{\n  \"log_level\": \"info\"\n}",
+      "backup": "true",
+      "validate": "true"
     }
   },
   "quickActions": [
