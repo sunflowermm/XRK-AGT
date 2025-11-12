@@ -31,6 +31,7 @@ class APIControlCenter {
         this._ttsQueue = [];
         this._ttsPlaying = false;
         this._lastAsrFinal = '';
+        this._chatHistory = this._loadChatHistory();
         this.init();
     }
 
@@ -73,14 +74,9 @@ class APIControlCenter {
         const grid = document.getElementById('systemStatusGrid');
         if (!grid) return;
         grid.innerHTML = `
-            <div class="status-summary">
-                <div class="summary-item"><div class="summary-label">CPU 使用</div><div class="summary-value">--</div></div>
-                <div class="summary-item"><div class="summary-label">在线机器人</div><div class="summary-value">--</div></div>
-                <div class="summary-item"><div class="summary-label">系统运行</div><div class="summary-value">--</div></div>
-            </div>
-            <div class="status-card-large"><div class="status-card-header"><h3>CPU</h3></div><div class="status-card-content"><canvas id="cpuPie" height="140"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>内存</h3></div><div class="status-card-content"><canvas id="memPie" height="140"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>交换分区</h3></div><div class="status-card-content"><canvas id="swapPie" height="140"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>CPU</h3></div><div class="status-card-content"><div>--% / 100%</div><canvas id="cpuPie" height="140"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>内存</h3></div><div class="status-card-content"><div>-- / --</div><canvas id="memPie" height="140"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>交换分区</h3></div><div class="status-card-content"><div>-- / --</div><canvas id="swapPie" height="140"></canvas></div></div>
             <div class="status-card-large"><div class="status-card-header"><h3>磁盘使用</h3></div><div class="status-card-content"><canvas id="diskBar" height="180"></canvas></div></div>
             <div class="status-card-large"><div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div><div class="status-card-content"><canvas id="netLine" height="160"></canvas></div></div>
             <div class="status-card-large"><div class="status-card-header"><h3>进程 Top5</h3></div><div class="status-card-content"><table class="kv-table small"><tbody id="procTop"></tbody></table></div></div>
@@ -578,6 +574,10 @@ class APIControlCenter {
                 </div>
             </div>
         `;
+        this.renderStatusSkeleton();
+        if (this._lastStatusData) {
+            this.renderSystemStatus(this._lastStatusData);
+        }
         this.loadSystemStatus();
     }
 
@@ -618,6 +618,9 @@ class APIControlCenter {
         if (micBtn) {
             micBtn.addEventListener('click', () => this.toggleMic());
         }
+
+        // 恢复聊天记录
+        this._restoreChatHistory();
 
         // 确保WebSocket连接
         this.ensureDeviceWs();
@@ -741,24 +744,12 @@ class APIControlCenter {
 
         this._destroyCharts();
         grid.innerHTML = `
-            <div class="status-summary">
-                <div class="summary-item">
-                    <div class="status-label">CPU 使用</div>
-                    <div class="status-value">${cpuPercent !== null ? cpuPercent + '%' : '-'}</div>
-                </div>
-                <div class="summary-item">
-                    <div class="status-label">在线机器人</div>
-                    <div class="status-value">${bots.filter(b => b.online).length} / ${bots.length}</div>
-                </div>
-                <div class="summary-item">
-                    <div class="status-label">系统运行</div>
-                    <div class="status-value">${formatUptime(system.uptime)}</div>
-                </div>
-            </div>
-
             <div class="status-card-large">
                 <div class="status-card-header"><h3>CPU</h3></div>
-                <div class="status-card-content"><canvas id="cpuPie" height="140"></canvas></div>
+                <div class="status-card-content">
+                    <div>${cpuPercent !== null ? (cpuPercent + '% / 100%') : '- / 100%'}</div>
+                    <canvas id="cpuPie" height="140"></canvas>
+                </div>
             </div>
             <div class="status-card-large">
                 <div class="status-card-header"><h3>内存</h3></div>
@@ -882,9 +873,10 @@ class APIControlCenter {
             // 磁盘条形图
             const diskEl = document.getElementById('diskBar');
             if (diskEl) {
-                const labels = disks.map(d => d.mount || d.fs);
-                const used = disks.map(d => +(d.used/1024/1024/1024).toFixed(2));
-                const free = disks.map(d => +(((d.size - d.used)/1024/1024/1024)).toFixed(2));
+                const hasDisks = Array.isArray(disks) && disks.length > 0;
+                const labels = hasDisks ? disks.map(d => d.mount || d.fs) : ['-'];
+                const used = hasDisks ? disks.map(d => +(d.used/1024/1024/1024).toFixed(2)) : [0];
+                const free = hasDisks ? disks.map(d => +(((d.size - d.used)/1024/1024/1024)).toFixed(2)) : [0];
                 if (!this._charts.diskBar) {
                     this._charts.diskBar = new Chart(diskEl.getContext('2d'), {
                         type: 'bar',
@@ -939,8 +931,11 @@ class APIControlCenter {
             const cs = getComputedStyle(document.body);
             const text = (cs.getPropertyValue('--text-primary') || '#fff').trim();
             const grid = (cs.getPropertyValue('--border') || 'rgba(255,255,255,0.2)').trim();
+            const family = cs.fontFamily || 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
+            const size = parseInt(cs.fontSize, 10) || 12;
             Chart.defaults.color = text;
             Chart.defaults.borderColor = grid;
+            Chart.defaults.font = { family, size, weight: '500' };
             if (Chart.defaults.plugins?.legend?.labels) {
                 Chart.defaults.plugins.legend.labels.color = text;
             }
@@ -1155,14 +1150,47 @@ class APIControlCenter {
         this.ensureDeviceWs();
     }
 
-    appendChat(role, text) {
+    appendChat(role, text, persist = true) {
+        if (persist) this._persistChat(role, text);
+        const box = document.getElementById('chatMessages');
+        if (box) {
+            const div = document.createElement('div');
+            div.className = `chat-msg ${role}`;
+            div.textContent = text;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+    }
+
+    _loadChatHistory() {
+        try { return JSON.parse(localStorage.getItem('chatHistory') || '[]'); } catch { return []; }
+    }
+    _saveChatHistory() {
+        try { localStorage.setItem('chatHistory', JSON.stringify((this._chatHistory || []).slice(-200))); } catch {}
+    }
+    _persistChat(role, text, ts = Date.now()) {
+        if (!text) return;
+        if (!Array.isArray(this._chatHistory)) this._chatHistory = [];
+        this._chatHistory.push({ role, text, ts });
+        this._saveChatHistory();
+    }
+    _restoreChatHistory() {
         const box = document.getElementById('chatMessages');
         if (!box) return;
-        const div = document.createElement('div');
-        div.className = `chat-msg ${role}`;
-        div.textContent = text;
-        box.appendChild(div);
+        box.innerHTML = '';
+        (this._chatHistory || []).forEach(m => {
+            const div = document.createElement('div');
+            div.className = `chat-msg ${m.role}`;
+            div.textContent = m.text;
+            box.appendChild(div);
+        });
         box.scrollTop = box.scrollHeight;
+    }
+    clearChat() {
+        this._chatHistory = [];
+        this._saveChatHistory();
+        const box = document.getElementById('chatMessages');
+        if (box) box.innerHTML = '';
     }
 
     async sendChatMessage() {
@@ -1223,6 +1251,7 @@ class APIControlCenter {
         last.textContent = text;
         if (done) {
             last.classList.remove('streaming');
+            if (text) this._persistChat('assistant', text);
         }
         box.scrollTop = box.scrollHeight;
     }
@@ -1353,10 +1382,13 @@ class APIControlCenter {
                     return;
                 }
                 if (data?.type === 'asr_final' && data.text) {
-                    // 仅移除识别中的消息，不再追加最终文本，避免与后端 display 重复
+                    // 结束识别：移除“识别中”，并把最终文本作为用户消息显示 + 持久化
                     this.renderASRStreaming('', true);
-                    // 记录最后一次最终文本用于去重
-                    this._lastAsrFinal = data.text || '';
+                    const finalText = data.text || '';
+                    if (finalText && finalText !== this._lastAsrFinal) {
+                        this.appendChat('user', finalText, true);
+                        this._lastAsrFinal = finalText;
+                    }
                     return;
                 }
                 if (data?.type === 'register_response' && data.success) {
