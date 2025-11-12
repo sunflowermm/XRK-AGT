@@ -34,12 +34,20 @@ class APIControlCenter {
         this.renderSidebar();
         this.renderQuickActions();
         
-        // 每5秒更新一次系统状态
+        // 每60秒更新一次系统状态（更温和的刷新节奏）
         setInterval(() => {
             if (this.currentPage === 'home') {
-                this.loadSystemStatus();
+                // 基础过渡钩子：添加轻微过渡class，loadSystemStatus结束后移除
+                const grid = document.getElementById('systemStatusGrid');
+                if (grid) grid.classList.add('updating');
+                this.loadSystemStatus().finally(() => {
+                    requestAnimationFrame(() => {
+                        const gridNow = document.getElementById('systemStatusGrid');
+                        if (gridNow) gridNow.classList.remove('updating');
+                    });
+                });
             }
-        }, 5000);
+        }, 60000);
         
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
@@ -1144,7 +1152,14 @@ class APIControlCenter {
                     } catch {}
                     return;
                 }
-                if (data?.type === 'heartbeat_response') return;
+                if (data?.type === 'heartbeat_response') {
+                    // 处理队列命令（例如 TTS 音频播放）
+                    const cmds = Array.isArray(data.commands) ? data.commands : [];
+                    if (cmds.length) {
+                        this._handleDeviceCommands(cmds).catch(() => {});
+                    }
+                    return;
+                }
                 if (data?.type === 'asr_interim' && data.text) {
                     // 只显示最新的识别结果
                     this.renderASRStreaming(data.text, false);
@@ -1166,6 +1181,100 @@ class APIControlCenter {
         });
         this._deviceWs.addEventListener('close', () => {});
         this._deviceWs.addEventListener('error', () => {});
+    }
+
+    // 处理后端下发的设备命令（通过心跳响应）
+    async _handleDeviceCommands(commands) {
+        for (const cmd of commands) {
+            const { id, command, parameters = {} } = cmd || {};
+            let result = { ok: false };
+            try {
+                if (command === 'play_tts_audio' && parameters.audio_data) {
+                    await this._playTtsPcmHex(parameters.audio_data);
+                    result = { ok: true };
+                } else if (command === 'display' && parameters.text) {
+                    this.appendChat('assistant', parameters.text);
+                    result = { ok: true };
+                } else if (command === 'display_clear') {
+                    const box = document.getElementById('chatMessages');
+                    if (box) box.innerHTML = '';
+                    result = { ok: true };
+                } else if (command === 'display_emotion' && parameters.emotion) {
+                    // 简化：在Web端以提示形式展示
+                    this.showToast(`表情: ${parameters.emotion}`, 'info');
+                    result = { ok: true };
+                } else {
+                    result = { ok: false, message: 'unsupported_command' };
+                }
+            } catch (e) {
+                result = { ok: false, message: e?.message || 'error' };
+            }
+            try {
+                this._deviceWs?.send(JSON.stringify({
+                    type: 'command_result',
+                    device_id: 'webclient',
+                    command_id: id,
+                    result
+                }));
+            } catch {}
+        }
+    }
+
+    // 确保用于播放的 AudioContext 存在
+    _ensurePlaybackCtx() {
+        if (!this._playCtx) {
+            try {
+                this._playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            } catch {}
+        }
+        return this._playCtx;
+    }
+
+    // 将后端hex编码的PCM16LE音频播放（16000Hz，单声道）
+    async _playTtsPcmHex(hex) {
+        const ctx = this._ensurePlaybackCtx();
+        if (!ctx) return;
+        // 建立简单缓冲队列，避免播放抖动
+        if (!this._audioQueue) this._audioQueue = [];
+        const buf = this._hexToArrayBuffer(hex);
+        const pcm = new Int16Array(buf);
+        // 转Float32并构建AudioBuffer
+        const audioBuffer = ctx.createBuffer(1, pcm.length, 16000);
+        const ch0 = audioBuffer.getChannelData(0);
+        for (let i = 0; i < pcm.length; i++) {
+            ch0[i] = Math.max(-1, Math.min(1, pcm[i] / 32768));
+        }
+        // 入队并调度播放
+        this._audioQueue.push(audioBuffer);
+        if (!this._playing) {
+            this._playing = true;
+            await this._drainQueue(ctx);
+            this._playing = false;
+        }
+    }
+
+    _hexToArrayBuffer(hex) {
+        const len = hex.length / 2;
+        const u8 = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            u8[i] = parseInt(hex.substr(i * 2, 2), 16);
+        }
+        return u8.buffer;
+    }
+
+    async _drainQueue(ctx) {
+        let currentTime = ctx.currentTime;
+        while (this._audioQueue && this._audioQueue.length) {
+            const ab = this._audioQueue.shift();
+            const src = ctx.createBufferSource();
+            src.buffer = ab;
+            src.connect(ctx.destination);
+            // 轻量排队：相邻片连续播放
+            const startAt = Math.max(currentTime, ctx.currentTime + 0.02);
+            src.start(startAt);
+            currentTime = startAt + (ab.length / ab.sampleRate);
+            await new Promise(r => setTimeout(r, Math.min(50, ab.length / ab.sampleRate * 1000)));
+        }
     }
 
     async toggleMic() {
