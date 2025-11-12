@@ -20,9 +20,12 @@ class APIControlCenter {
         this.clickThreshold = 200;
         this.autoSaveTimer = null;
         this._charts = {};
-        this._metricsHistory = { netRx: [], netTx: [] };
+        this._metricsHistory = { netRx: Array(30).fill(0), netTx: Array(30).fill(0) };
         this._prevNet = { rxBytes: 0, txBytes: 0 };
         this._prevNetTs = 0;
+        this._chartInitAttempts = 0;
+        this._chartRetryTimer = null;
+        this._lastStatusData = null;
         this._wsReconnectAttempt = 0;
         this._wsHeartbeatTimer = null;
         this._ttsQueue = [];
@@ -33,21 +36,22 @@ class APIControlCenter {
 
     async init() {
         this.reorganizeDOMStructure();
+        this.renderStatusSkeleton();
         await this.loadAPIConfig();
         this.initEventListeners();
         this.initFloatingButton();
         this.loadSettings();
         this.checkConnection();
         this.currentPage = 'home'; // 默认首页
+        this.loadSystemStatus(); // 加载系统状态
         this.renderSidebar();
         this.renderQuickActions();
         this.ensureDeviceWs();
         this._initParticles();
         this._installRouter();
-        this._applyRoute();
         
         // 每分钟更新一次系统状态
-        this._statusTimer = setInterval(() => {
+        setInterval(() => {
             if (this.currentPage === 'home') {
                 this.loadSystemStatus();
             }
@@ -65,20 +69,37 @@ class APIControlCenter {
         });
     }
 
-    _installRouter() {
-        window.addEventListener('hashchange', () => this._applyRoute());
+    renderStatusSkeleton() {
+        const grid = document.getElementById('systemStatusGrid');
+        if (!grid) return;
+        grid.innerHTML = `
+            <div class="status-summary">
+                <div class="summary-item"><div class="summary-label">CPU 使用</div><div class="summary-value">--</div></div>
+                <div class="summary-item"><div class="summary-label">在线机器人</div><div class="summary-value">--</div></div>
+                <div class="summary-item"><div class="summary-label">系统运行</div><div class="summary-value">--</div></div>
+            </div>
+            <div class="status-card-large"><div class="status-card-header"><h3>CPU</h3></div><div class="status-card-content"><canvas id="cpuPie" height="140"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>内存</h3></div><div class="status-card-content"><canvas id="memPie" height="140"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>交换分区</h3></div><div class="status-card-content"><canvas id="swapPie" height="140"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>磁盘使用</h3></div><div class="status-card-content"><canvas id="diskBar" height="180"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div><div class="status-card-content"><canvas id="netLine" height="160"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>进程 Top5</h3></div><div class="status-card-content"><table class="kv-table small"><tbody id="procTop"></tbody></table></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>机器人状态</h3></div><div class="status-card-content"></div></div>
+        `;
     }
 
-    _applyRoute() {
-        const hash = (location.hash || '#/home').replace('#/', '');
-        const page = ['home','chat','config','api'].includes(hash) ? hash : 'home';
-        if (this.currentPage !== page) {
-            this.navigateToPage(page);
-        } else if (page === 'home') {
-            this._buildHomeSkeleton();
-            this.loadSystemStatus();
-            this._startStatusWarmup();
-        }
+    _destroyCharts() {
+        try {
+            if (!this._charts) return;
+            Object.keys(this._charts).forEach(k => {
+                const c = this._charts[k];
+                if (c && typeof c.destroy === 'function') {
+                    try { c.destroy(); } catch {}
+                }
+                this._charts[k] = null;
+            });
+        } catch {}
+        this._charts = {};
     }
 
     reorganizeDOMStructure() {
@@ -109,6 +130,7 @@ class APIControlCenter {
             themeToggle.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.toggleTheme();
+                this._applyChartTheme();
             });
         }
 
@@ -552,55 +574,11 @@ class APIControlCenter {
                     <p class="welcome-desc">实时监控系统运行状态</p>
                 </div>
                 <div class="system-status-grid" id="systemStatusGrid">
+                    <!-- 系统状态卡片将在这里动态生成 -->
                 </div>
             </div>
         `;
-        this._buildHomeSkeleton();
         this.loadSystemStatus();
-        this._startStatusWarmup();
-    }
-
-    _buildHomeSkeleton() {
-        const grid = document.getElementById('systemStatusGrid');
-        if (!grid) return;
-        if (grid.dataset.built === '1') return;
-        grid.innerHTML = `
-            <div class="status-summary">
-                <div class="summary-item">
-                    <div class="summary-label">CPU 使用</div>
-                    <div class="summary-value" id="summaryCpu">-</div>
-                </div>
-                <div class="summary-item">
-                    <div class="summary-label">在线机器人</div>
-                    <div class="summary-value" id="summaryBots">-</div>
-                </div>
-                <div class="summary-item">
-                    <div class="summary-label">系统运行</div>
-                    <div class="summary-value" id="summaryUptime">-</div>
-                </div>
-            </div>
-
-            <div class="status-card-large"><div class="status-card-header"><h3>CPU</h3></div><div class="status-card-content"><canvas id="cpuPie" height="140"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>内存</h3></div><div class="status-card-content"><div id="memText">-</div><canvas id="memPie" height="140"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>交换分区</h3></div><div class="status-card-content"><div id="swapText">-</div><canvas id="swapPie" height="140"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>磁盘使用</h3></div><div class="status-card-content"><canvas id="diskBar" height="180"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div><div class="status-card-content"><canvas id="netLine" height="160"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>进程 Top5</h3></div><div class="status-card-content"><table class="kv-table small"><tbody id="procTop"></tbody></table></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>机器人状态</h3></div><div class="status-card-content"><div class="status-item"><span class="status-label">在线数量:</span><span class="status-value" id="botsCount">-</span></div><div class="bot-list" id="botsList"></div></div></div>
-        `;
-        grid.dataset.built = '1';
-    }
-
-    _startStatusWarmup() {
-        if (this._warmupTimer) { clearTimeout(this._warmupTimer); this._warmupTimer = null; }
-        let remaining = 10; // 约30秒
-        const tick = () => {
-            if (this.currentPage !== 'home') return;
-            this.loadSystemStatus();
-            remaining--;
-            if (remaining > 0) this._warmupTimer = setTimeout(tick, 3000);
-        };
-        this._warmupTimer = setTimeout(tick, 3000);
     }
 
     showChatPage() {
@@ -677,11 +655,10 @@ class APIControlCenter {
                 <div id="responseSection"></div>
             </div>
         `;
+        // 初始引导，无需额外图表渲染，避免首屏阻塞
     }
 
     async loadSystemStatus() {
-        if (this._loadingStatus) return;
-        this._loadingStatus = true;
         try {
             const statusRes = await fetch(`${this.serverUrl}/api/system/status`, {
                 headers: this.getHeaders()
@@ -694,15 +671,14 @@ class APIControlCenter {
             }
         } catch (error) {
             console.error('Failed to load system status:', error);
-        } finally {
-            this._loadingStatus = false;
         }
     }
 
     renderSystemStatus(data) {
         const grid = document.getElementById('systemStatusGrid');
         if (!grid) return;
-        this._buildHomeSkeleton();
+        this._lastStatusData = data;
+
         const { system, bot, bots } = data;
         
         // 格式化字节
@@ -739,69 +715,120 @@ class APIControlCenter {
             if (this._prevNet.rxBytes && rxBytes >= this._prevNet.rxBytes) rxRate = (rxBytes - this._prevNet.rxBytes) / dt;
             if (this._prevNet.txBytes && txBytes >= this._prevNet.txBytes) txRate = (txBytes - this._prevNet.txBytes) / dt;
         } catch {}
+        // 首次无历史时，使用后端瞬时速率作为首次样本并填充历史
+        if (!this._prevNetTs) {
+            const rxSec = Number(system.netRates?.rxSec || rxRate || 0);
+            const txSec = Number(system.netRates?.txSec || txRate || 0);
+            rxRate = rxSec;
+            txRate = txSec;
+            const rxKB = rxRate / 1024;
+            const txKB = txRate / 1024;
+            this._metricsHistory.netRx = Array(30).fill(rxKB);
+            this._metricsHistory.netTx = Array(30).fill(txKB);
+        }
         this._prevNet = { rxBytes, txBytes };
         this._prevNetTs = nowTs;
 
-        // 更新历史
+        // 先更新趋势数据
         try {
-            this._metricsHistory.netRx.push(rxRate / 1024);
+            this._metricsHistory.netRx.push(rxRate / 1024); // KB/s
             this._metricsHistory.netTx.push(txRate / 1024);
             const cap = 60;
-            ['netRx','netTx'].forEach(k => { if (this._metricsHistory[k].length > cap) this._metricsHistory[k].shift(); });
-            // 确保初始至少10个点，避免折线图空白
-            while (this._metricsHistory.netRx.length < 10) this._metricsHistory.netRx.unshift(0);
-            while (this._metricsHistory.netTx.length < 10) this._metricsHistory.netTx.unshift(0);
+            ['netRx','netTx'].forEach(k => {
+                if (this._metricsHistory[k].length > cap) this._metricsHistory[k].shift();
+            });
         } catch {}
 
-        // 更新摘要与列表
-        const summaryCpu = document.getElementById('summaryCpu');
-        const summaryBots = document.getElementById('summaryBots');
-        const summaryUptime = document.getElementById('summaryUptime');
-        const botsCount = document.getElementById('botsCount');
-        const botsList = document.getElementById('botsList');
-        document.getElementById('memText').textContent = `${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}`;
-        document.getElementById('swapText').textContent = `${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}`;
-        if (summaryCpu) summaryCpu.textContent = cpuPercent !== null ? cpuPercent + '%' : '-';
-        if (summaryBots) summaryBots.textContent = `${bots.filter(b => b.online).length} / ${bots.length}`;
-        if (summaryUptime) summaryUptime.textContent = formatUptime(system.uptime);
-        if (botsCount) botsCount.textContent = `${bots.filter(b => b.online).length} / ${bots.length}`;
-        if (botsList) botsList.innerHTML = bots.map(b => `
-            <div class="bot-status-item">
-                <div class="bot-status-indicator ${b.online ? 'online' : 'offline'}"></div>
-                <div class="bot-status-info">
-                    <div class="bot-status-name">${b.nickname}</div>
-                    <div class="bot-status-details">${b.adapter} | 好友: ${b.stats.friends} | 群组: ${b.stats.groups}</div>
+        this._destroyCharts();
+        grid.innerHTML = `
+            <div class="status-summary">
+                <div class="summary-item">
+                    <div class="status-label">CPU 使用</div>
+                    <div class="status-value">${cpuPercent !== null ? cpuPercent + '%' : '-'}</div>
                 </div>
-            </div>`).join('');
+                <div class="summary-item">
+                    <div class="status-label">在线机器人</div>
+                    <div class="status-value">${bots.filter(b => b.online).length} / ${bots.length}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="status-label">系统运行</div>
+                    <div class="status-value">${formatUptime(system.uptime)}</div>
+                </div>
+            </div>
 
-        const procEl = document.getElementById('procTop');
-        if (procEl && Array.isArray(data.processesTop5)) {
-            procEl.innerHTML = data.processesTop5.map((p,i) => `<tr><th>#${i+1} ${p.name} (pid:${p.pid})</th><td>CPU ${Number(p.cpu||0).toFixed(1)}% | MEM ${Number(p.mem||0).toFixed(1)}%</td></tr>`).join('');
-        }
+            <div class="status-card-large">
+                <div class="status-card-header"><h3>CPU</h3></div>
+                <div class="status-card-content"><canvas id="cpuPie" height="140"></canvas></div>
+            </div>
+            <div class="status-card-large">
+                <div class="status-card-header"><h3>内存</h3></div>
+                <div class="status-card-content">
+                    <div>${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</div>
+                    <canvas id="memPie" height="140"></canvas>
+                </div>
+            </div>
+            <div class="status-card-large">
+                <div class="status-card-header"><h3>交换分区</h3></div>
+                <div class="status-card-content">
+                    <div>${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}</div>
+                    <canvas id="swapPie" height="140"></canvas>
+                </div>
+            </div>
+            <div class="status-card-large">
+                <div class="status-card-header"><h3>磁盘使用</h3></div>
+                <div class="status-card-content"><canvas id="diskBar" height="180"></canvas></div>
+            </div>
+            <div class="status-card-large">
+                <div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div>
+                <div class="status-card-content"><canvas id="netLine" height="160"></canvas></div>
+            </div>
+            <div class="status-card-large">
+                <div class="status-card-header"><h3>进程 Top5</h3></div>
+                <div class="status-card-content">
+                    <table class="kv-table small"><tbody id="procTop"></tbody></table>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Bot运行时间:</span>
+                    <span class="status-value">${formatUptime(bot.uptime)}</span>
+                </div>
+            </div>
+            <div class="status-card-large">
+                <div class="status-card-header"><h3>机器人状态</h3></div>
+                <div class="status-card-content">
+                    <div class="status-item">
+                        <span class="status-label">在线数量:</span>
+                        <span class="status-value">${bots.filter(b => b.online).length} / ${bots.length}</span>
+                    </div>
+                    <div class="bot-list">
+                        ${bots.map(bot => `
+                            <div class="bot-status-item">
+                                <div class="bot-status-indicator ${bot.online ? 'online' : 'offline'}"></div>
+                                <div class="bot-status-info">
+                                    <div class="bot-status-name">${bot.nickname}</div>
+                                    <div class="bot-status-details">${bot.adapter} | 好友: ${bot.stats.friends} | 群组: ${bot.stats.groups}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
 
-        if (!window.Chart) {
-            setTimeout(() => this._initOrUpdateCharts({ system, disks, swapTotal, swapUsed, cpuPercent }), 300);
-        } else {
-            this._initOrUpdateCharts({ system, disks, swapTotal, swapUsed, cpuPercent });
-        }
-    }
-
-    _applyChartThemeColors() {
-        if (!window.Chart) return;
-        try {
-            const styles = getComputedStyle(document.body);
-            const color = styles.getPropertyValue('--text-primary')?.trim() || '#eee';
-            Chart.defaults.color = color;
-            Chart.defaults.borderColor = styles.getPropertyValue('--border')?.trim() || 'rgba(255,255,255,0.1)';
-        } catch {}
-    }
-
-    _initOrUpdateCharts(ctx) {
-        const { system, disks, swapTotal, swapUsed, cpuPercent } = ctx;
-        if (!window.Chart) return;
-        this._applyChartThemeColors();
+        // 初始化/更新图表
         requestAnimationFrame(() => {
-            // CPU
+            if (!window.Chart) {
+                this._chartInitAttempts++;
+                if (this._chartInitAttempts <= 30 && !this._chartRetryTimer) {
+                    this._chartRetryTimer = setTimeout(() => {
+                        this._chartRetryTimer = null;
+                        if (this._lastStatusData) this.renderSystemStatus(this._lastStatusData);
+                    }, 500);
+                }
+                return;
+            }
+            this._applyChartTheme();
+            this._chartInitAttempts = 0;
+            // CPU 饼图
             const cpuEl = document.getElementById('cpuPie');
             if (cpuEl) {
                 const used = Math.max(0, Math.min(100, Number(cpuPercent || 0)));
@@ -809,16 +836,16 @@ class APIControlCenter {
                 if (!this._charts.cpuPie) {
                     this._charts.cpuPie = new Chart(cpuEl.getContext('2d'), {
                         type: 'doughnut',
-                        data: { labels: ['使用','空闲'], datasets: [{ data: [used, free], backgroundColor: ['#f6a54c','#2a2415'] }] },
-                        options: { cutout: '60%', animation: { duration: 250 }, plugins: { legend: { display: true } } }
+                        data: { labels: ['使用','空闲'], datasets: [{ data: [used, free], backgroundColor: ['#f6a54c','rgba(255,255,255,0.25)'] }] },
+                        options: { cutout: '60%', plugins: { legend: { display: true } } }
                     });
                 } else {
                     this._charts.cpuPie.data.datasets[0].data = [used, free];
-                    this._charts.cpuPie.update('none');
+                    this._charts.cpuPie.update('active');
                 }
             }
 
-            // 内存
+            // 内存饼图
             const memEl = document.getElementById('memPie');
             if (memEl) {
                 const used = +(system.memory.used/1024/1024/1024).toFixed(2);
@@ -826,16 +853,16 @@ class APIControlCenter {
                 if (!this._charts.memPie) {
                     this._charts.memPie = new Chart(memEl.getContext('2d'), {
                         type: 'doughnut',
-                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#6aa9ff','#2a2415'] }] },
-                        options: { cutout: '60%', animation: { duration: 250 }, plugins: { legend: { display: true } } }
+                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#6aa9ff','rgba(255,255,255,0.25)'] }] },
+                        options: { cutout: '60%', plugins: { legend: { display: true } } }
                     });
                 } else {
                     this._charts.memPie.data.datasets[0].data = [used, free];
-                    this._charts.memPie.update('none');
+                    this._charts.memPie.update('active');
                 }
             }
 
-            // 交换分区
+            // 交换分区饼图
             const swapEl = document.getElementById('swapPie');
             if (swapEl) {
                 const used = +(swapUsed/1024/1024/1024).toFixed(2);
@@ -843,16 +870,16 @@ class APIControlCenter {
                 if (!this._charts.swapPie) {
                     this._charts.swapPie = new Chart(swapEl.getContext('2d'), {
                         type: 'doughnut',
-                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#cd5c5c','#2a2415'] }] },
-                        options: { cutout: '60%', animation: { duration: 250 }, plugins: { legend: { display: true } } }
+                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#cd5c5c','rgba(255,255,255,0.25)'] }] },
+                        options: { cutout: '60%', plugins: { legend: { display: true } } }
                     });
                 } else {
                     this._charts.swapPie.data.datasets[0].data = [used, free];
-                    this._charts.swapPie.update('none');
+                    this._charts.swapPie.update('active');
                 }
             }
 
-            // 磁盘
+            // 磁盘条形图
             const diskEl = document.getElementById('diskBar');
             if (diskEl) {
                 const labels = disks.map(d => d.mount || d.fs);
@@ -863,20 +890,20 @@ class APIControlCenter {
                         type: 'bar',
                         data: { labels, datasets: [
                             { label: '已用(GB)', data: used, backgroundColor: '#f4a460' },
-                            { label: '可用(GB)', data: free, backgroundColor: '#3a3425' }
+                            { label: '可用(GB)', data: free, backgroundColor: 'rgba(255,255,255,0.25)' }
                         ] },
-                        options: { responsive: true, parsing: false, animation: { duration: 250 }, scales: { x: { stacked: true }, y: { stacked: true } } }
+                        options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true } } }
                     });
                 } else {
                     const c = this._charts.diskBar;
                     c.data.labels = labels;
                     c.data.datasets[0].data = used;
                     c.data.datasets[1].data = free;
-                    c.update('none');
+                    c.update('active');
                 }
             }
 
-            // 网络
+            // 网络上下行折线图（KB/s）
             const netEl = document.getElementById('netLine');
             if (netEl) {
                 const labels = this._metricsHistory.netRx.map(() => '');
@@ -887,17 +914,41 @@ class APIControlCenter {
                             { label: '下行RX (KB/s)', data: this._metricsHistory.netRx, borderColor: '#6aa9ff', backgroundColor: 'rgba(106,169,255,0.2)', fill: true, tension: 0.3, pointRadius: 0 },
                             { label: '上行TX (KB/s)', data: this._metricsHistory.netTx, borderColor: '#f6a54c', backgroundColor: 'rgba(246,165,76,0.2)', fill: true, tension: 0.3, pointRadius: 0 }
                         ] },
-                        options: { responsive: true, parsing: false, animation: { duration: 250 }, plugins: { legend: { display: true } }, scales: { x: { display: false } } }
+                        options: { responsive: true, plugins: { legend: { display: true } }, scales: { x: { display: false } } }
                     });
                 } else {
                     const c = this._charts.netLine;
                     c.data.labels = labels;
                     c.data.datasets[0].data = this._metricsHistory.netRx;
                     c.data.datasets[1].data = this._metricsHistory.netTx;
-                    c.update('none');
+                    c.update('active');
                 }
             }
+
+            // 进程Top5
+            const procEl = document.getElementById('procTop');
+            if (procEl && Array.isArray(data.processesTop5)) {
+                procEl.innerHTML = data.processesTop5.map((p,i) => `<tr><th>#${i+1} ${p.name} (pid:${p.pid})</th><td>CPU ${Number(p.cpu||0).toFixed(1)}% | MEM ${Number(p.mem||0).toFixed(1)}%</td></tr>`).join('');
+            }
         });
+    }
+
+    _applyChartTheme() {
+        if (!window.Chart) return;
+        try {
+            const cs = getComputedStyle(document.body);
+            const text = (cs.getPropertyValue('--text-primary') || '#fff').trim();
+            const grid = (cs.getPropertyValue('--border') || 'rgba(255,255,255,0.2)').trim();
+            Chart.defaults.color = text;
+            Chart.defaults.borderColor = grid;
+            if (Chart.defaults.plugins?.legend?.labels) {
+                Chart.defaults.plugins.legend.labels.color = text;
+            }
+            if (Chart.defaults.plugins?.tooltip) {
+                Chart.defaults.plugins.tooltip.titleColor = text;
+                Chart.defaults.plugins.tooltip.bodyColor = text;
+            }
+        } catch {}
     }
 
     async loadStats() {

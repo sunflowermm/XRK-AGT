@@ -1,6 +1,7 @@
 import os from 'os';
 import si from 'systeminformation';
 import cfg from '../../lib/config/config.js';
+let __lastNetSample = null;
 
 /**
  * 核心系统API
@@ -17,45 +18,65 @@ export default {
       path: '/api/system/status',
       handler: async (req, res, Bot) => {
         try {
-          // 采样CPU两次以估算使用率
-          const snap1 = os.cpus();
-          await new Promise(r => setTimeout(r, 200));
-          const snap2 = os.cpus();
-          function cpuPercent(s1, s2) {
-            if (!s1 || !s2 || s1.length !== s2.length) return null;
-            let idle = 0, total = 0;
-            for (let i = 0; i < s1.length; i++) {
-              const t1 = s1[i].times, t2 = s2[i].times;
-              const id = Math.max(0, t2.idle - t1.idle);
-              const tot = Math.max(0, (t2.user - t1.user) + (t2.nice - t1.nice) + (t2.sys - t1.sys) + (t2.irq - t1.irq) + id);
-              idle += id; total += tot;
+          // 优先用 systeminformation 获取 CPU 负载，避免等待
+          let cpuPct = null;
+          try {
+            const load = await si.currentLoad();
+            if (load && typeof load.currentload === 'number') {
+              cpuPct = +load.currentload.toFixed(2);
             }
-            if (total <= 0) return null;
-            return +(((total - idle) / total) * 100).toFixed(2);
+          } catch {}
+          if (cpuPct === null) {
+            const snap1 = os.cpus();
+            await new Promise(r => setTimeout(r, 120));
+            const snap2 = os.cpus();
+            function cpuPercent(s1, s2) {
+              if (!s1 || !s2 || s1.length !== s2.length) return null;
+              let idle = 0, total = 0;
+              for (let i = 0; i < s1.length; i++) {
+                const t1 = s1[i].times, t2 = s2[i].times;
+                const id = Math.max(0, t2.idle - t1.idle);
+                const tot = Math.max(0, (t2.user - t1.user) + (t2.nice - t1.nice) + (t2.sys - t1.sys) + (t2.irq - t1.irq) + id);
+                idle += id; total += tot;
+              }
+              if (total <= 0) return null;
+              return +(((total - idle) / total) * 100).toFixed(2);
+            }
+            cpuPct = cpuPercent(snap1, snap2);
           }
-          const cpuPct = cpuPercent(snap1, snap2);
 
           // 获取系统信息（基础 + 详细）
-          const cpus = snap2;
+          const cpus = os.cpus();
           const totalMem = os.totalmem();
           const freeMem = os.freemem();
           const usedMem = totalMem - freeMem;
           const memUsage = process.memoryUsage();
-          // systeminformation 提供跨平台详细信息
+          // systeminformation 提供跨平台详细信息（超时保护，避免首屏等待过久）
+          const withTimeout = (p, ms, fb) => Promise.race([p, new Promise(r => setTimeout(() => r(fb), ms))]);
           const [siMem, fsSize, procs, netStats] = await Promise.all([
-            si.mem().catch(() => ({})),
-            si.fsSize().catch(() => []),
-            si.processes().catch(() => ({ list: [] })),
-            si.networkStats().catch(() => [])
+            withTimeout(si.mem().catch(() => ({})), 300, {}),
+            withTimeout(si.fsSize().catch(() => []), 500, []),
+            withTimeout(si.processes().catch(() => ({ list: [] })), 600, { list: [] }),
+            withTimeout(si.networkStats().catch(() => []), 400, [])
           ]);
-          // 累计网络字节（总和）
-          let rxBytes = 0, txBytes = 0;
+          // 累计网络字节（总和）与瞬时速率
+          let rxBytes = 0, txBytes = 0, rxSec = 0, txSec = 0;
           if (Array.isArray(netStats)) {
             for (const n of netStats) {
               rxBytes += Number(n.rx_bytes || 0);
               txBytes += Number(n.tx_bytes || 0);
+              rxSec += Number(n.rx_sec || 0);
+              txSec += Number(n.tx_sec || 0);
             }
           }
+          // 无需额外等待：用上次采样差值估算速率
+          const nowTs = Date.now();
+          if (__lastNetSample) {
+            const dt = Math.max(1, (nowTs - __lastNetSample.ts) / 1000);
+            rxSec = Math.max(0, (rxBytes - __lastNetSample.rx) / dt);
+            txSec = Math.max(0, (txBytes - __lastNetSample.tx) / dt);
+          }
+          __lastNetSample = { ts: nowTs, rx: rxBytes, tx: txBytes };
           // 磁盘列表
           const disks = Array.isArray(fsSize) ? fsSize.map(d => ({
             fs: d.fs || d.mount || d.type || 'disk',
@@ -147,6 +168,7 @@ export default {
               },
               disks,
               net: { rxBytes, txBytes },
+              netRates: { rxSec, txSec },
               network: networkStats
             },
             bot: {
