@@ -138,15 +138,15 @@ export default {
                   heapUsed: memUsage.heapUsed,
                   external: memUsage.external,
                   arrayBuffers: memUsage.arrayBuffers
-                },
-                swap: {
-                  total: Number(siMem?.swaptotal || 0),
-                  used: Number(siMem?.swapused || 0),
-                  usagePercent: siMem?.swaptotal ? +(((siMem.swapused || 0) / siMem.swaptotal) * 100).toFixed(2) : 0
-                },
-                disks,
-                network: { rxBytes, txBytes }
+                }
               },
+              swap: {
+                total: Number(siMem?.swaptotal || 0),
+                used: Number(siMem?.swapused || 0),
+                usagePercent: siMem?.swaptotal ? +(((siMem.swapused || 0) / siMem.swaptotal) * 100).toFixed(2) : 0
+              },
+              disks,
+              net: { rxBytes, txBytes },
               network: networkStats
             },
             bot: {
@@ -156,6 +156,7 @@ export default {
               uptime: Bot.stat?.start_time ? (Date.now() / 1000) - Bot.stat.start_time : process.uptime()
             },
             bots,
+            processesTop5,
             adapters: Bot.adapter
           });
         } catch (error) {
