@@ -1231,6 +1231,31 @@ export default {
         },
 
         {
+            method: 'POST',
+            path: '/api/device/:deviceId/ai',
+            handler: async (req, res, Bot) => {
+                try {
+                    const deviceId = req.params.deviceId;
+                    const { text } = req.body || {};
+                    if (!text || !String(text).trim()) {
+                        return res.status(400).json({ success: false, message: '缺少文本内容' });
+                    }
+                    const device = deviceManager.getDevice(deviceId);
+                    if (!device) {
+                        return res.status(404).json({ success: false, message: '设备未找到' });
+                    }
+                    if (!AI_CONFIG.enabled) {
+                        return res.status(400).json({ success: false, message: 'AI未启用' });
+                    }
+                    await deviceManager._processAIResponse(deviceId, String(text));
+                    return res.json({ success: true });
+                } catch (e) {
+                    return res.status(500).json({ success: false, message: e.message });
+                }
+            }
+        },
+
+        {
             method: 'GET',
             path: '/api/devices',
             handler: async (req, res) => {

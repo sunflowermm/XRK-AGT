@@ -7,9 +7,9 @@
         {
           "id": "system-status",
           "method": "GET",
-          "path": "/api/metrics/all",
+          "path": "/api/status",
           "title": "系统状态",
-          "description": "获取系统运行状态、机器人信息和系统指标（聚合端点）"
+          "description": "获取系统运行状态、机器人信息和适配器列表"
         },
         {
           "id": "system-config",

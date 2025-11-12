@@ -19,6 +19,8 @@ class APIControlCenter {
         this.dragThreshold = 10;
         this.clickThreshold = 200;
         this.autoSaveTimer = null;
+        this._charts = {};
+        this._metricsHistory = { mem: [], procMem: [] };
         this.init();
     }
 
@@ -33,20 +35,11 @@ class APIControlCenter {
         this.loadSystemStatus(); // 加载系统状态
         this.renderSidebar();
         this.renderQuickActions();
-        this._metricsHistory = { cpu: [], mem: [], load: [], time: [] };
         
-        // 每60秒更新一次系统状态（更温和的刷新节奏）
+        // 每分钟更新一次系统状态
         setInterval(() => {
             if (this.currentPage === 'home') {
-                // 基础过渡钩子：添加轻微过渡class，loadSystemStatus结束后移除
-                const grid = document.getElementById('systemStatusGrid');
-                if (grid) grid.classList.add('updating');
-                this.loadSystemStatus().finally(() => {
-                    requestAnimationFrame(() => {
-                        const gridNow = document.getElementById('systemStatusGrid');
-                        if (gridNow) gridNow.classList.remove('updating');
-                    });
-                });
+                this.loadSystemStatus();
             }
         }, 60000);
         
@@ -58,9 +51,6 @@ class APIControlCenter {
                 }
             }
         });
-
-        // 初始化粒子背景
-        this.initParticles();
     }
 
     reorganizeDOMStructure() {
@@ -601,221 +591,261 @@ class APIControlCenter {
 
     async loadSystemStatus() {
         try {
-            const res = await fetch(`${this.serverUrl}/api/metrics/all`, { headers: this.getHeaders() });
-            if (!res.ok) return;
-            const data = await res.json();
-            if (data?.success) {
-                if (data?.metrics) this._accumulateMetrics(data);
-                this.renderSystemStatus(data, data.metrics);
+            const statusRes = await fetch(`${this.serverUrl}/api/system/status`, {
+                headers: this.getHeaders()
+            });
+            if (statusRes.ok) {
+                const data = await statusRes.json();
+                if (data.success) {
+                    this.renderSystemStatus(data);
+                }
             }
         } catch (error) {
-            // 忽略
+            console.error('Failed to load system status:', error);
         }
     }
 
-    renderSystemStatus(data, metrics) {
+    renderSystemStatus(data) {
         const grid = document.getElementById('systemStatusGrid');
         if (!grid) return;
 
         const { system, bot, bots } = data;
-        const m = metrics?.system;
-        const proc = metrics?.process;
-
-        // helpers (local)
+        
+        // 格式化字节
         const formatBytes = (bytes) => {
-            if (!bytes || bytes <= 0) return '0 B';
+            if (bytes === 0) return '0 B';
             const k = 1024;
             const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
-        };
-        const formatUptime = (seconds) => {
-            const d = Math.floor(seconds / 86400);
-            const h = Math.floor((seconds % 86400) / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const parts = [];
-            if (d > 0) parts.push(`${d}天`);
-            if (h > 0) parts.push(`${h}时`);
-            parts.push(`${m}分`);
-            return parts.join(' ');
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         };
 
-        const cpuUsage = typeof proc?.cpuPercent === 'number' ? proc.cpuPercent.toFixed(1) : '-';
-        const sysMemUsedPct = m ? (m.memory.usagePercent).toFixed(1) : system?.memory?.usagePercent;
-        const disks = Array.isArray(m?.disks) ? m.disks : [];
+        // 格式化时间
+        const formatUptime = (seconds) => {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            if (days > 0) return `${days}天 ${hours}小时`;
+            if (hours > 0) return `${hours}小时 ${minutes}分钟`;
+            return `${minutes}分钟`;
+        };
+
+        // 内存使用率
+        const memPercent = parseFloat(system.memory.usagePercent);
+        const processMemPercent = system.memory.process.heapUsed / system.memory.process.heapTotal * 100;
 
         grid.innerHTML = `
-            <div class="status-card">
-                <div class="status-card-header"><h3>CPU</h3></div>
+            <!-- CPU信息 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>CPU 信息</h3>
+                </div>
                 <div class="status-card-content">
-                    <div class="status-big">${cpuUsage}%</div>
-                    <canvas id="cpuSpark" width="280" height="60"></canvas>
-                    <div class="status-sub">核心数 ${(metrics?.system?.cpus ?? system.cpu?.cores) ?? '-'} | 负载 ${metrics?.system?.loadAvg?.[0]?.toFixed ? metrics.system.loadAvg[0].toFixed(2) : '-'}</div>
+                    <div class="status-item">
+                        <span class="status-label">型号:</span>
+                        <span class="status-value">${system.cpu.model}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">核心数:</span>
+                        <span class="status-value">${system.cpu.cores} 核</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">架构:</span>
+                        <span class="status-value">${system.arch}</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="status-card">
-                <div class="status-card-header"><h3>内存</h3></div>
-                <div class="status-card-content">
-                    <div class="status-big">${sysMemUsedPct}%</div>
-                    <div class="status-sub">${formatBytes(m?.memory?.used || (system.memory?.used||0))} / ${formatBytes(m?.memory?.total || (system.memory?.total||0))}</div>
-                    <canvas id="memSpark" width="280" height="60"></canvas>
+            <!-- 内存使用 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>内存使用</h3>
                 </div>
-            </div>
-
-            <div class="status-card">
-                <div class="status-card-header"><h3>磁盘</h3></div>
-                <div class="status-card-content disk-list">
-                    ${disks.slice(0,3).map(d => `
-                        <div class="disk-item">
-                            <div class="disk-mount">${d.mount}</div>
-                            <div class="disk-bar"><span style="width:${d.total? (d.used/d.total*100).toFixed(1):0}%"></span></div>
-                            <div class="disk-meta">${formatBytes(d.used)} / ${formatBytes(d.total)}</div>
+                <div class="status-card-content">
+                    <div class="memory-chart">
+                        <div class="memory-bar">
+                            <div class="memory-fill" style="width: ${memPercent}%"></div>
                         </div>
-                    `).join('') || '<div class="muted">无磁盘数据</div>'}
+                        <div class="memory-info">
+                            <span>${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</span>
+                            <span class="memory-percent">${memPercent}%</span>
+                        </div>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">进程堆内存:</span>
+                        <span class="status-value">${formatBytes(system.memory.process.heapUsed)} / ${formatBytes(system.memory.process.heapTotal)}</span>
+                    </div>
+                    <div class="memory-chart">
+                        <div class="memory-bar">
+                            <div class="memory-fill process" style="width: ${processMemPercent.toFixed(1)}%"></div>
+                        </div>
+                        <div class="memory-info">
+                            <span>进程内存使用率</span>
+                            <span class="memory-percent">${processMemPercent.toFixed(1)}%</span>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px;">
+                        <canvas id="memChart" height="80"></canvas>
+                    </div>
                 </div>
             </div>
 
-            <div class="status-card">
-                <div class="status-card-header"><h3>进程</h3></div>
+            <!-- 网络信息 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>网络接口</h3>
+                </div>
                 <div class="status-card-content">
-                    <div class="kv"><span>PID</span><span>${proc?.pid ?? '-'}</span></div>
-                    <div class="kv"><span>Uptime</span><span>${formatUptime(proc?.uptime ?? system?.uptime ?? 0)}</span></div>
-                    <div class="kv"><span>RSS</span><span>${formatBytes(proc?.memory?.rss || 0)}</span></div>
-                    <div class="kv"><span>Heap</span><span>${formatBytes(proc?.memory?.heapUsed || 0)} / ${formatBytes(proc?.memory?.heapTotal || 0)}</span></div>
+                    ${Object.entries(system.network).map(([name, info]) => `
+                        <div class="network-item">
+                            <div class="network-name">${name}</div>
+                            <div class="network-details">
+                                <div class="status-item">
+                                    <span class="status-label">IP地址:</span>
+                                    <span class="status-value">${info.address}</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="status-label">子网掩码:</span>
+                                    <span class="status-value">${info.netmask}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
                 </div>
             </div>
 
-            <div class="status-card wide">
-                <div class="status-card-header"><h3>机器人与设备</h3></div>
-                <div class="status-card-content rows">
-                    <div class="kv"><span>服务地址</span><span>${bot.url}:${bot.port}</span></div>
-                    <div class="kv"><span>在线机器人</span><span>${(bots||[]).length}</span></div>
-                    <div class="kv"><span>启动时长</span><span>${formatUptime(bot.uptime)}</span></div>
+            <!-- 系统信息 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>系统信息</h3>
+                </div>
+                <div class="status-card-content">
+                    <div class="status-item">
+                        <span class="status-label">平台:</span>
+                        <span class="status-value">${system.platform}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">主机名:</span>
+                        <span class="status-value">${system.hostname}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Node版本:</span>
+                        <span class="status-value">${system.nodeVersion}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">系统运行时间:</span>
+                        <span class="status-value">${formatUptime(system.uptime)}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Bot运行时间:</span>
+                        <span class="status-value">${formatUptime(bot.uptime)}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 机器人状态 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>机器人状态</h3>
+                </div>
+                <div class="status-card-content">
+                    <div class="status-item">
+                        <span class="status-label">在线数量:</span>
+                        <span class="status-value">${bots.filter(b => b.online).length} / ${bots.length}</span>
+                    </div>
+                    <div class="bot-list">
+                        ${bots.map(bot => `
+                            <div class="bot-status-item">
+                                <div class="bot-status-indicator ${bot.online ? 'online' : 'offline'}"></div>
+                                <div class="bot-status-info">
+                                    <div class="bot-status-name">${bot.nickname}</div>
+                                    <div class="bot-status-details">${bot.adapter} | 好友: ${bot.stats.friends} | 群组: ${bot.stats.groups}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
             </div>
         `;
 
-        // 绘制微型图
-        this._drawSpark('cpuSpark', this._metricsHistory.cpu, '#f5b301');
-        this._drawSpark('memSpark', this._metricsHistory.mem, '#3aa675');
-    }
+        // 更新趋势数据
+        try {
+            this._metricsHistory.mem.push(memPercent);
+            this._metricsHistory.procMem.push(processMemPercent);
+            const cap = 60;
+            if (this._metricsHistory.mem.length > cap) this._metricsHistory.mem.shift();
+            if (this._metricsHistory.procMem.length > cap) this._metricsHistory.procMem.shift();
+        } catch {}
 
-    _accumulateMetrics(metrics) {
-        const t = metrics?.timestamp || Date.now();
-        const cpu = metrics?.process?.cpuPercent ?? 0;
-        const memPct = metrics?.system?.memory?.usagePercent ?? 0;
-        const load = Array.isArray(metrics?.system?.loadAvg) ? metrics.system.loadAvg[0] : 0;
-        const cap = 60; // 保留最近60个点（约1小时，1分/点）
-        this._metricsHistory.time.push(t);
-        this._metricsHistory.cpu.push(Math.max(0, Math.min(100, cpu)));
-        this._metricsHistory.mem.push(Math.max(0, Math.min(100, memPct)));
-        this._metricsHistory.load.push(Math.max(0, load));
-        Object.keys(this._metricsHistory).forEach(k => {
-            if (this._metricsHistory[k].length > cap) this._metricsHistory[k].shift();
-        });
-    }
-
-    _drawSpark(id, arr, color) {
-        const el = document.getElementById(id);
-        if (!el || !arr || arr.length === 0) return;
-        const ctx = el.getContext('2d');
-        const w = el.width, h = el.height;
-        ctx.clearRect(0, 0, w, h);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        const max = 100, min = 0;
-        const n = arr.length;
-        for (let i = 0; i < n; i++) {
-            const x = (i / (n - 1)) * (w - 2) + 1;
-            const v = (arr[i] - min) / (max - min);
-            const y = h - 1 - v * (h - 2);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    }
-
-    // 粒子背景（向日葵主题色）
-    initParticles() {
-        if (this._particlesInit) return;
-        this._particlesInit = true;
-        let canvas = document.getElementById('bgParticles');
-        if (!canvas) {
-            canvas = document.createElement('canvas');
-            canvas.id = 'bgParticles';
-            document.body.appendChild(canvas);
-        }
-        const ctx = canvas.getContext('2d');
-        const particles = [];
-        const colors = ['#f7d26a', '#ffd24d', '#f5b301', '#d9a40a'];
-        const count = Math.min(120, Math.max(60, Math.floor(window.innerWidth / 16)));
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-        for (let i = 0; i < count; i++) {
-            particles.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                r: Math.random() * 1.6 + 0.6,
-                a: Math.random() * Math.PI * 2,
-                v: 0.15 + Math.random() * 0.35,
-                c: colors[Math.floor(Math.random() * colors.length)]
-            });
-        }
-        const sunflowerCenter = { x: () => canvas.width * 0.82, y: () => canvas.height * 0.18 };
-        const animate = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            for (const p of particles) {
-                // 轻微向“向日葵”中心吸引，形成不突兀的动势
-                const dx = sunflowerCenter.x() - p.x;
-                const dy = sunflowerCenter.y() - p.y;
-                const dist = Math.hypot(dx, dy) || 1;
-                const ax = (dx / dist) * 0.02;
-                const ay = (dy / dist) * 0.02;
-                p.x += Math.cos(p.a) * p.v + ax;
-                p.y += Math.sin(p.a) * p.v + ay;
-                p.a += 0.003;
-                if (p.x < -10) p.x = canvas.width + 10;
-                if (p.x > canvas.width + 10) p.x = -10;
-                if (p.y < -10) p.y = canvas.height + 10;
-                if (p.y > canvas.height + 10) p.y = -10;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-                ctx.fillStyle = p.c;
-                ctx.globalAlpha = 0.55;
-                ctx.fill();
-                ctx.globalAlpha = 1;
+        // 初始化/更新 Chart.js 图表
+        const memCanvas = document.getElementById('memChart');
+        if (memCanvas && window.Chart) {
+            if (!this._charts.mem) {
+                const ctx = memCanvas.getContext('2d');
+                this._charts.mem = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: this._metricsHistory.mem.map((_, i) => ''),
+                        datasets: [
+                            {
+                                label: '内存使用率%（系统）',
+                                data: this._metricsHistory.mem,
+                                borderColor: '#6aa9ff',
+                                backgroundColor: 'rgba(106,169,255,0.2)',
+                                tension: 0.3,
+                                fill: true,
+                                pointRadius: 0
+                            },
+                            {
+                                label: '进程堆内存%（进程）',
+                                data: this._metricsHistory.procMem,
+                                borderColor: '#f6a54c',
+                                backgroundColor: 'rgba(246,165,76,0.2)',
+                                tension: 0.3,
+                                fill: true,
+                                pointRadius: 0
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        animation: { duration: 400, easing: 'easeOutQuad' },
+                        plugins: { legend: { display: true } },
+                        scales: { x: { display: false }, y: { display: true, min: 0, max: 100 } }
+                    }
+                });
+            } else {
+                const chart = this._charts.mem;
+                chart.data.labels = this._metricsHistory.mem.map((_, i) => '');
+                chart.data.datasets[0].data = this._metricsHistory.mem;
+                chart.data.datasets[1].data = this._metricsHistory.procMem;
+                chart.update('active');
             }
-            requestAnimationFrame(animate);
-        };
-        animate();
+        }
     }
-    
 
     async loadStats() {
         try {
-            const res = await fetch(`${this.serverUrl}/api/metrics/all`, { headers: this.getHeaders() });
-            if (res.ok) {
-                const data = await res.json();
-                if (data?.success) {
-                    const onlineBots = Array.isArray(data.bots) ? data.bots.filter(b => b.online).length : 0;
-                    this.updateStatValue('statBots', onlineBots);
+            const statusRes = await fetch(`${this.serverUrl}/api/status`, {
+                headers: this.getHeaders()
+            });
+            if (statusRes.ok) {
+                const data = await statusRes.json();
 
-                    const uptime = Math.floor(data.bot?.uptime || 0);
-                    const days = Math.floor(uptime / 86400);
-                    const hours = Math.floor((uptime % 86400) / 3600);
-                    const minutes = Math.floor((uptime % 3600) / 60);
+                const onlineBots = data.bots?.filter(b => b.online).length || 0;
+                this.updateStatValue('statBots', onlineBots);
 
-                    let uptimeText = '';
-                    if (days > 0) uptimeText += `${days}d `;
-                    if (hours > 0) uptimeText += `${hours}h `;
-                    uptimeText += `${minutes}m`;
-                    this.updateStatValue('statUptime', uptimeText);
-                }
+                const uptime = Math.floor(data.bot?.uptime || 0);
+                const days = Math.floor(uptime / 86400);
+                const hours = Math.floor((uptime % 86400) / 3600);
+                const minutes = Math.floor((uptime % 3600) / 60);
+
+                let uptimeText = '';
+                if (days > 0) uptimeText += `${days}d `;
+                if (hours > 0) uptimeText += `${hours}h `;
+                uptimeText += `${minutes}m`;
+
+                this.updateStatValue('statUptime', uptimeText);
             }
 
             const devicesRes = await fetch(`${this.serverUrl}/api/devices`, {
@@ -1175,11 +1205,14 @@ class APIControlCenter {
                     return;
                 }
                 if (data?.type === 'heartbeat_response') {
-                    // 处理队列命令（例如 TTS 音频播放）
-                    const cmds = Array.isArray(data.commands) ? data.commands : [];
-                    if (cmds.length) {
-                        this._handleDeviceCommands(cmds).catch(() => {});
+                    if (Array.isArray(data.commands) && data.commands.length > 0) {
+                        this._handleDeviceCommands(data.commands);
                     }
+                    return;
+                }
+                if (data?.type === 'command') {
+                    const cmd = data.command ? [data.command] : [];
+                    if (cmd.length) this._handleDeviceCommands(cmd);
                     return;
                 }
                 if (data?.type === 'asr_interim' && data.text) {
@@ -1222,7 +1255,6 @@ class APIControlCenter {
                     if (box) box.innerHTML = '';
                     result = { ok: true };
                 } else if (command === 'display_emotion' && parameters.emotion) {
-                    // 简化：在Web端以提示形式展示
                     this.showToast(`表情: ${parameters.emotion}`, 'info');
                     result = { ok: true };
                 } else {
@@ -1255,47 +1287,23 @@ class APIControlCenter {
     // 将后端hex编码的PCM16LE音频播放（16000Hz，单声道）
     async _playTtsPcmHex(hex) {
         const ctx = this._ensurePlaybackCtx();
-        if (!ctx) return;
-        // 建立简单缓冲队列，避免播放抖动
-        if (!this._audioQueue) this._audioQueue = [];
-        const buf = this._hexToArrayBuffer(hex);
-        const pcm = new Int16Array(buf);
-        // 转Float32并构建AudioBuffer
-        const audioBuffer = ctx.createBuffer(1, pcm.length, 16000);
-        const ch0 = audioBuffer.getChannelData(0);
-        for (let i = 0; i < pcm.length; i++) {
-            ch0[i] = Math.max(-1, Math.min(1, pcm[i] / 32768));
-        }
-        // 入队并调度播放
-        this._audioQueue.push(audioBuffer);
-        if (!this._playing) {
-            this._playing = true;
-            await this._drainQueue(ctx);
-            this._playing = false;
-        }
-    }
-
-    _hexToArrayBuffer(hex) {
-        const len = hex.length / 2;
-        const u8 = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-            u8[i] = parseInt(hex.substr(i * 2, 2), 16);
-        }
-        return u8.buffer;
-    }
-
-    async _drainQueue(ctx) {
-        let currentTime = ctx.currentTime;
-        while (this._audioQueue && this._audioQueue.length) {
-            const ab = this._audioQueue.shift();
+        if (!ctx || !hex || typeof hex !== 'string' || hex.length === 0) return;
+        try {
+            const buf = new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16))).buffer;
+            const pcm16 = new Int16Array(buf);
+            const float32 = new Float32Array(pcm16.length);
+            for (let i = 0; i < pcm16.length; i++) {
+                const s = pcm16[i] / 0x8000;
+                float32[i] = Math.max(-1, Math.min(1, s));
+            }
+            const audioBuf = ctx.createBuffer(1, float32.length, 16000);
+            audioBuf.getChannelData(0).set(float32);
             const src = ctx.createBufferSource();
-            src.buffer = ab;
+            src.buffer = audioBuf;
             src.connect(ctx.destination);
-            // 轻量排队：相邻片连续播放
-            const startAt = Math.max(currentTime, ctx.currentTime + 0.02);
-            src.start(startAt);
-            currentTime = startAt + (ab.length / ab.sampleRate);
-            await new Promise(r => setTimeout(r, Math.min(50, ab.length / ab.sampleRate * 1000)));
+            src.start();
+        } catch (e) {
+            console.warn('Failed to play TTS audio:', e);
         }
     }
 
@@ -1513,14 +1521,6 @@ class APIControlCenter {
                     <p class="api-desc">${api.description}</p>
                 </div>
 
-                <div class="api-quicknav">
-                    <a href="#section-path">路径参数</a>
-                    <a href="#section-query">查询参数</a>
-                    <a href="#section-body">请求体</a>
-                    <a href="#section-files">文件上传</a>
-                    <a href="#section-editor">请求编辑器</a>
-                </div>
-
                 <div class="api-content-grid">
                     <div class="params-column">
         `;
@@ -1555,7 +1555,7 @@ class APIControlCenter {
         // 查询参数
         if (api.queryParams?.length > 0) {
             html += `
-                <div class="params-section" id="section-query">
+                <div class="params-section">
                     <h3 class="section-title">
                         <span class="section-icon"></span>
                         查询参数
@@ -1571,7 +1571,7 @@ class APIControlCenter {
         // 请求体
         if (method !== 'GET' && api.bodyParams?.length > 0) {
             html += `
-                <div class="params-section" id="section-body">
+                <div class="params-section">
                     <h3 class="section-title">
                         <span class="section-icon"></span>
                         请求体参数
@@ -1586,7 +1586,7 @@ class APIControlCenter {
 
         // 文件上传
         if (apiId === 'file-upload') {
-            html += this.renderFileUploadWithAnchor();
+            html += this.renderFileUpload();
         }
 
         html += `
@@ -1600,7 +1600,7 @@ class APIControlCenter {
             </div>
             </div>
 
-            <div class="preview-column" id="section-editor">
+            <div class="preview-column">
                 <div class="json-editor">
                     <div class="editor-header">
                         <h3 class="editor-title">
@@ -1726,15 +1726,6 @@ class APIControlCenter {
                     </label>
                     <div class="file-list" id="fileList" style="display: none;"></div>
                 </div>
-            </div>
-        `;
-    }
-
-    // 包裹带锚点的文件上传区块
-    renderFileUploadWithAnchor() {
-        return `
-            <div id="section-files">
-                ${this.renderFileUpload()}
             </div>
         `;
     }
