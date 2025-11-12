@@ -18,8 +18,6 @@ export default {
       path: '/api/system/status',
       handler: async (req, res, Bot) => {
         try {
-          const q = (req && (req.query || req.searchParams)) || {};
-          const quick = q.quick === '1' || q.lite === '1';
           // 优先用 systeminformation 获取 CPU 负载，避免等待
           let cpuPct = null;
           try {
@@ -53,13 +51,12 @@ export default {
           const freeMem = os.freemem();
           const usedMem = totalMem - freeMem;
           const memUsage = process.memoryUsage();
-          // systeminformation 提供跨平台详细信息（超时保护，避免首屏等待过久）
-          const withTimeout = (p, ms, fb) => Promise.race([p, new Promise(r => setTimeout(() => r(fb), ms))]);
+          // 使用 systeminformation 直接获取，避免因超时导致的空数据
           const [siMem, fsSize, procs, netStats] = await Promise.all([
-            withTimeout(si.mem().catch(() => ({})), 300, {}),
-            withTimeout(quick ? Promise.resolve([]) : si.fsSize().catch(() => []), quick ? 1 : 1200, []),
-            withTimeout(quick ? Promise.resolve({ list: [] }) : si.processes().catch(() => ({ list: [] })), quick ? 1 : 1500, { list: [] }),
-            withTimeout(si.networkStats().catch(() => []), 400, [])
+            si.mem().catch(() => ({})),
+            si.fsSize().catch(() => []),
+            si.processes().catch(() => ({ list: [] })),
+            si.networkStats().catch(() => [])
           ]);
           // 累计网络字节（总和）与瞬时速率
           let rxBytes = 0, txBytes = 0, rxSec = 0, txSec = 0;
@@ -71,14 +68,17 @@ export default {
               txSec += Number(n.tx_sec || 0);
             }
           }
-          // 无需额外等待：用上次采样差值估算速率
+          // 用上次采样差值估算速率：简单可靠，第二次起有值
           const nowTs = Date.now();
-          if (__lastNetSample) {
+          if (__lastNetSample && Number.isFinite(__lastNetSample.rx) && Number.isFinite(__lastNetSample.tx)) {
             const dt = Math.max(1, (nowTs - __lastNetSample.ts) / 1000);
-            rxSec = Math.max(0, (rxBytes - __lastNetSample.rx) / dt);
-            txSec = Math.max(0, (txBytes - __lastNetSample.tx) / dt);
+            const rxDelta = rxBytes - __lastNetSample.rx;
+            const txDelta = txBytes - __lastNetSample.tx;
+            if (rxDelta >= 0) rxSec = rxDelta / dt;
+            if (txDelta >= 0) txSec = txDelta / dt;
           }
           __lastNetSample = { ts: nowTs, rx: rxBytes, tx: txBytes };
+
           // 磁盘列表
           const disks = Array.isArray(fsSize) ? fsSize.map(d => ({
             fs: d.fs || d.mount || d.type || 'disk',

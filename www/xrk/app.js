@@ -44,7 +44,7 @@ class APIControlCenter {
         this.loadSettings();
         this.checkConnection();
         this.currentPage = 'home'; // 默认首页
-        this.loadSystemStatus(true); // 快速加载系统状态
+        this.loadSystemStatus();
         this.renderSidebar();
         this.renderQuickActions();
         this.ensureDeviceWs();
@@ -577,7 +577,7 @@ class APIControlCenter {
         if (this._lastStatusData) {
             this.renderSystemStatus(this._lastStatusData);
         }
-        this.loadSystemStatus(true);
+        this.loadSystemStatus();
     }
 
     showChatPage() {
@@ -660,29 +660,15 @@ class APIControlCenter {
         // 初始引导，无需额外图表渲染，避免首屏阻塞
     }
 
-    async loadSystemStatus(quick = false) {
+    async loadSystemStatus() {
         try {
-            const qs = quick ? '?quick=1' : '';
-            const statusRes = await fetch(`${this.serverUrl}/api/system/status${qs}` , {
+            const statusRes = await fetch(`${this.serverUrl}/api/system/status` , {
                 headers: this.getHeaders()
             });
             if (statusRes.ok) {
                 const data = await statusRes.json();
                 if (data.success) {
                     this.renderSystemStatus(data);
-                    // 首次快速渲染后，补拉完整数据
-                    if (quick) {
-                        setTimeout(() => this.loadSystemStatus(false), 300);
-                    } else {
-                        // 若重数据仍为空，做一次兜底补拉（最多一次）
-                        const emptyHeavy = (!Array.isArray(data.system?.disks) || data.system.disks.length === 0) ||
-                                          (!Array.isArray(data.processesTop5) || data.processesTop5.length === 0);
-                        const now = Date.now();
-                        if (emptyHeavy && (!this._lastStatusRefetchAt || now - this._lastStatusRefetchAt > 3000)) {
-                            this._lastStatusRefetchAt = now;
-                            setTimeout(() => this.loadSystemStatus(false), 900);
-                        }
-                    }
                 }
             }
         } catch (error) {
@@ -845,8 +831,9 @@ class APIControlCenter {
             // 交换分区饼图
             const swapEl = document.getElementById('swapPie');
             if (swapEl) {
-                const used = +(swapUsed/1024/1024/1024).toFixed(2);
-                const free = +(((swapTotal - swapUsed)/1024/1024/1024)).toFixed(2);
+                const hasSwap = swapTotal > 0;
+                const used = hasSwap ? +(swapUsed/1024/1024/1024).toFixed(2) : 0;
+                const free = hasSwap ? +(((swapTotal - swapUsed)/1024/1024/1024)).toFixed(2) : 1; // 占位，避免全0不渲染
                 if (!this._charts.swapPie) {
                     this._charts.swapPie = new Chart(swapEl.getContext('2d'), {
                         type: 'doughnut',
