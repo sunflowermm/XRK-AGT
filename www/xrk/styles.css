@@ -3,47 +3,59 @@
  * 主样式表 - 无遮罩层版本
  */
 
-/* ==================== 全局变量 ==================== */
+/* ==================== 全局变量 - 向日葵主题 ==================== */
 :root {
-    /* 深色主题配色 */
-    --bg-primary: #0a0b14;
-    --bg-secondary: #151823;
-    --bg-tertiary: #1f2332;
-    --bg-card: #272b3e;
-    --bg-hover: #2e3348;
+    /* 向日葵黄棕色深色主题 */
+    --bg-primary: #1a1508;
+    --bg-secondary: #2a2415;
+    --bg-tertiary: #3a3425;
+    --bg-card: #4a4435;
+    --bg-hover: #5a5445;
     
-    --text-primary: #f0f2f5;
-    --text-secondary: #b8bfc8;
-    --text-muted: #7a8290;
-    --text-dim: #5a6270;
+    --text-primary: #f5e6d3;
+    --text-secondary: #d4c4a8;
+    --text-muted: #b8a88c;
+    --text-dim: #8a7a6c;
     
-    --accent: #5e72e4;
-    --accent-hover: #4c63d2;
-    --accent-light: rgba(94, 114, 228, 0.15);
-    --accent-glow: rgba(94, 114, 228, 0.4);
+    /* 向日葵主色调 - 金黄色 */
+    --accent: #f4a460;
+    --accent-hover: #da8e3d;
+    --accent-light: rgba(244, 164, 96, 0.2);
+    --accent-glow: rgba(244, 164, 96, 0.4);
     
-    --success: #00d68f;
-    --success-light: rgba(0, 214, 143, 0.15);
-    --danger: #ff3d71;
-    --danger-light: rgba(255, 61, 113, 0.15);
-    --warning: #ffaa00;
-    --warning-light: rgba(255, 170, 0, 0.15);
-    --info: #00b4d8;
-    --info-light: rgba(0, 180, 216, 0.15);
+    /* 向日葵花瓣色 - 亮黄色 */
+    --sunflower-yellow: #ffd700;
+    --sunflower-yellow-light: rgba(255, 215, 0, 0.2);
     
-    --border: rgba(255, 255, 255, 0.08);
-    --border-light: rgba(255, 255, 255, 0.04);
+    /* 向日葵中心色 - 深棕色 */
+    --sunflower-brown: #8b4513;
+    --sunflower-brown-light: rgba(139, 69, 19, 0.2);
     
-    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --gradient-success: linear-gradient(135deg, #00d68f 0%, #00b074 100%);
-    --gradient-warning: linear-gradient(135deg, #ffaa00 0%, #ff6c00 100%);
-    --gradient-danger: linear-gradient(135deg, #ff3d71 0%, #ff0844 100%);
-    --gradient-rainbow: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c, #fda085, #f6d365);
+    /* 状态颜色 - 基于向日葵色调 */
+    --success: #9acd32;
+    --success-light: rgba(154, 205, 50, 0.2);
+    --danger: #cd5c5c;
+    --danger-light: rgba(205, 92, 92, 0.2);
+    --warning: #ffa500;
+    --warning-light: rgba(255, 165, 0, 0.2);
+    --info: #87ceeb;
+    --info-light: rgba(135, 206, 235, 0.2);
     
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.15);
-    --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.2);
-    --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.3);
+    --border: rgba(244, 164, 96, 0.2);
+    --border-light: rgba(244, 164, 96, 0.1);
+    
+    /* 向日葵渐变 */
+    --gradient-primary: linear-gradient(135deg, #f4a460 0%, #da8e3d 50%, #8b4513 100%);
+    --gradient-sunflower: linear-gradient(135deg, #ffd700 0%, #f4a460 50%, #da8e3d 100%);
+    --gradient-success: linear-gradient(135deg, #9acd32 0%, #7cb342 100%);
+    --gradient-warning: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%);
+    --gradient-danger: linear-gradient(135deg, #cd5c5c 0%, #b22222 100%);
+    --gradient-warm: linear-gradient(135deg, #ffd700, #f4a460, #da8e3d, #8b4513);
+    
+    --shadow-sm: 0 2px 8px rgba(139, 69, 19, 0.2);
+    --shadow-md: 0 4px 20px rgba(139, 69, 19, 0.3);
+    --shadow-lg: 0 10px 40px rgba(139, 69, 19, 0.4);
+    --shadow-xl: 0 20px 60px rgba(139, 69, 19, 0.5);
     --shadow-glow: 0 0 40px var(--accent-glow);
     
     --radius-sm: 8px;
@@ -60,31 +72,31 @@
     --transition-bounce: 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
-/* 亮色主题配色 */
+/* 亮色主题配色 - 向日葵亮色版 */
 body.light {
-    --bg-primary: #f8f9fc;
-    --bg-secondary: #ffffff;
-    --bg-tertiary: #f3f4f9;
+    --bg-primary: #fef9e7;
+    --bg-secondary: #fef5e7;
+    --bg-tertiary: #fef0d7;
     --bg-card: #ffffff;
-    --bg-hover: #f0f2f7;
+    --bg-hover: #fff8e1;
     
-    --text-primary: #1a1d29;
-    --text-secondary: #4a5568;
-    --text-muted: #718096;
-    --text-dim: #a0aec0;
+    --text-primary: #3e2723;
+    --text-secondary: #5d4037;
+    --text-muted: #8d6e63;
+    --text-dim: #a1887f;
     
-    --accent: #5e72e4;
-    --accent-hover: #4c63d2;
-    --accent-light: rgba(94, 114, 228, 0.08);
-    --accent-glow: rgba(94, 114, 228, 0.2);
+    --accent: #f4a460;
+    --accent-hover: #da8e3d;
+    --accent-light: rgba(244, 164, 96, 0.15);
+    --accent-glow: rgba(244, 164, 96, 0.3);
     
-    --border: rgba(0, 0, 0, 0.06);
-    --border-light: rgba(0, 0, 0, 0.03);
+    --border: rgba(139, 69, 19, 0.15);
+    --border-light: rgba(139, 69, 19, 0.08);
     
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-    --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.08);
-    --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.1);
+    --shadow-sm: 0 2px 8px rgba(139, 69, 19, 0.1);
+    --shadow-md: 0 4px 20px rgba(139, 69, 19, 0.15);
+    --shadow-lg: 0 10px 40px rgba(139, 69, 19, 0.2);
+    --shadow-xl: 0 20px 60px rgba(139, 69, 19, 0.25);
 }
 
 /* ==================== 基础重置 ==================== */
@@ -118,7 +130,7 @@ body {
     overflow-x: hidden;
 }
 
-/* 动态背景效果 */
+/* 向日葵动态背景效果 */
 body::before {
     content: '';
     position: fixed;
@@ -127,20 +139,54 @@ body::before {
     right: 0;
     bottom: 0;
     background: 
-        radial-gradient(circle at 20% 50%, var(--accent-light) 0%, transparent 40%),
-        radial-gradient(circle at 80% 80%, var(--success-light) 0%, transparent 40%),
-        radial-gradient(circle at 40% 20%, var(--warning-light) 0%, transparent 40%);
+        radial-gradient(circle at 20% 50%, var(--sunflower-yellow-light) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, var(--accent-light) 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, var(--sunflower-brown-light) 0%, transparent 50%);
     pointer-events: none;
-    opacity: 0.5;
-    animation: backgroundFloat 30s ease-in-out infinite;
+    opacity: 0.4;
+    animation: sunflowerFloat 40s ease-in-out infinite;
     z-index: 0;
 }
 
-@keyframes backgroundFloat {
-    0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
-    25% { transform: translate(-20px, -20px) scale(1.05) rotate(1deg); }
-    50% { transform: translate(20px, -10px) scale(1.1) rotate(-1deg); }
-    75% { transform: translate(-10px, 20px) scale(1.05) rotate(1deg); }
+/* 向日葵花瓣装饰线条 */
+body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+        repeating-linear-gradient(45deg, transparent, transparent 2px, var(--border-light) 2px, var(--border-light) 4px),
+        repeating-linear-gradient(-45deg, transparent, transparent 2px, var(--border-light) 2px, var(--border-light) 4px);
+    pointer-events: none;
+    opacity: 0.1;
+    z-index: 0;
+    animation: lineMove 60s linear infinite;
+}
+
+@keyframes sunflowerFloat {
+    0%, 100% { 
+        transform: translate(0, 0) scale(1) rotate(0deg); 
+        opacity: 0.4;
+    }
+    25% { 
+        transform: translate(-30px, -30px) scale(1.1) rotate(5deg); 
+        opacity: 0.5;
+    }
+    50% { 
+        transform: translate(30px, -20px) scale(1.15) rotate(-5deg); 
+        opacity: 0.45;
+    }
+    75% { 
+        transform: translate(-20px, 30px) scale(1.1) rotate(3deg); 
+        opacity: 0.5;
+    }
+}
+
+@keyframes lineMove {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(100px, 100px); }
 }
 
 /* ==================== 容器布局 ==================== */
@@ -170,7 +216,7 @@ body::before {
     left: -50%;
     width: 200%;
     height: 200%;
-    background: var(--gradient-rainbow);
+    background: var(--gradient-warm);
     opacity: 0.03;
     animation: sidebarGradient 20s linear infinite;
     pointer-events: none;
@@ -537,7 +583,7 @@ body.light .theme-toggle-thumb::before {
     left: 0;
     right: 0;
     height: 1px;
-    background: var(--gradient-rainbow);
+    background: var(--gradient-warm);
     opacity: 0.3;
 }
 
@@ -745,7 +791,7 @@ body.light .theme-toggle-thumb::before {
     font-size: clamp(32px, 5vw, 48px);
     font-weight: 800;
     margin-bottom: 20px;
-    background: var(--gradient-rainbow);
+    background: var(--gradient-warm);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -811,7 +857,7 @@ body.light .theme-toggle-thumb::before {
     left: 0;
     right: 0;
     height: 4px;
-    background: var(--gradient-rainbow);
+    background: var(--gradient-warm);
     transform: scaleX(0);
     transition: transform var(--transition-base);
 }
@@ -1052,7 +1098,7 @@ body.light .theme-toggle-thumb::before {
     transform: translateX(-50%);
     width: 100px;
     height: 3px;
-    background: var(--gradient-rainbow);
+    background: var(--gradient-warm);
     border-radius: 2px;
 }
 
@@ -1165,9 +1211,114 @@ body.light .theme-toggle-thumb::before {
     margin-left: 12px;
 }
 
+/* 区域图标 - 使用线条装饰替代emoji */
 .section-icon {
-    font-size: 24px;
-    animation: iconWiggle 2s ease-in-out infinite;
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
+    vertical-align: middle;
+    position: relative;
+}
+
+.section-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    box-sizing: border-box;
+    animation: iconPulse 2s ease-in-out infinite;
+}
+
+.section-icon::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 2px;
+}
+
+.file-icon {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    vertical-align: middle;
+    position: relative;
+}
+
+.file-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 80%;
+    border: 2px solid var(--accent);
+    border-radius: 2px 2px 0 0;
+    box-sizing: border-box;
+}
+
+.file-icon::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 20%;
+    border: 2px solid var(--accent);
+    border-top: none;
+    border-radius: 0 0 2px 2px;
+    box-sizing: border-box;
+}
+
+/* 按钮图标样式 */
+.btn-icon {
+    display: inline-block;
+    position: relative;
+}
+
+.check-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    vertical-align: middle;
+    position: relative;
+}
+
+.check-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 2px solid var(--success);
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+
+.check-icon::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 5px;
+    width: 4px;
+    height: 8px;
+    border: 2px solid var(--success);
+    border-top: none;
+    border-left: none;
+    transform: rotate(45deg);
+    box-sizing: border-box;
 }
 
 @keyframes iconWiggle {
@@ -1438,16 +1589,71 @@ textarea.input-field {
     50% { transform: scale(1.02); }
 }
 
+/* 文件上传图标 - 使用线条装饰替代emoji */
 .file-upload-icon {
-    font-size: 56px;
+    display: inline-block;
+    width: 56px;
+    height: 56px;
+    position: relative;
     margin-bottom: 16px;
     animation: uploadIconBounce 0.8s ease-out;
+}
+
+.file-upload-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 32px;
+    border: 3px solid var(--accent);
+    border-radius: 4px 4px 0 0;
+    box-sizing: border-box;
+}
+
+.file-upload-icon::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32px;
+    height: 24px;
+    border: 3px solid var(--accent);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    box-sizing: border-box;
 }
 
 @keyframes uploadIconBounce {
     0% { transform: translateY(-100px) scale(0); }
     50% { transform: translateY(10px) scale(1.2); }
     100% { transform: translateY(0) scale(1); }
+}
+
+/* 删除图标 - 使用线条装饰 */
+.remove-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    position: relative;
+}
+
+.remove-icon::before,
+.remove-icon::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2px;
+    height: 12px;
+    background: var(--danger);
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.remove-icon::after {
+    transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .file-upload-text {
@@ -1827,7 +2033,7 @@ body.light .json-null {
     left: 0;
     right: 0;
     height: 4px;
-    background: var(--gradient-rainbow);
+    background: var(--gradient-warm);
     transform: scaleX(0);
     transition: transform var(--transition-base);
 }
@@ -2111,7 +2317,8 @@ body.light .json-null {
 
 .floating-btn:hover {
     transform: translateY(-50%) scale(1.1) rotate(15deg);
-    box-shadow: 0 8px 32px rgba(255, 215, 0, 0.6);
+    box-shadow: 0 8px 32px var(--accent-glow);
+    border-color: var(--sunflower-yellow);
 }
 
 .floating-btn:active {
@@ -2120,7 +2327,7 @@ body.light .json-null {
 
 .floating-btn.dragging {
     transition: none;
-    box-shadow: 0 10px 40px rgba(255, 215, 0, 0.8);
+    box-shadow: 0 10px 40px var(--accent-glow);
     animation: none;
 }
 
@@ -2330,7 +2537,7 @@ body.light .json-null {
 
     .sub-config-list-scroll {
         padding: 12px;
-        padding-bottom: 30px; /* 移动端也增加底部内边距 */
+        padding-bottom: 60px; /* 移动端也大幅增加底部内边距 */
     }
     .sub-config-list {
         grid-template-columns: 1fr;
@@ -2888,9 +3095,41 @@ body.no-scroll {
     gap: 10px;
 }
 
+/* 配置编辑器名称图标 - 使用线条装饰替代emoji */
 .config-editor-name::before {
-    content: '📄';
-    font-size: 24px;
+    content: '';
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    background: var(--gradient-sunflower);
+    border-radius: 4px;
+    position: relative;
+    vertical-align: middle;
+    animation: iconPulse 2s ease-in-out infinite;
+}
+
+.config-editor-name::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--text-primary);
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+
+@keyframes iconPulse {
+    0%, 100% { 
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% { 
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
 }
 
 .config-editor-actions {
@@ -2912,6 +3151,9 @@ body.no-scroll {
     position: relative;
     height: 100%;
     max-height: 100%;
+    /* 确保底部内容可见 */
+    padding-bottom: 0;
+    margin-bottom: 0;
 }
 
 .config-editor-textarea {
@@ -2970,15 +3212,16 @@ body.no-scroll {
     overflow-x: hidden;
     padding: 20px;
     padding-right: 12px;
-    padding-bottom: 40px; /* 增加底部内边距，确保能滚动到底部 */
+    padding-bottom: 80px; /* 大幅增加底部内边距，确保能滚动到底部并看到所有内容 */
     min-height: 0;
     max-height: 100%;
     height: 100%;
     -webkit-overflow-scrolling: touch; /* iOS 平滑滚动 */
     overscroll-behavior: contain; /* 防止滚动链 */
     box-sizing: border-box;
-    /* 确保滚动到底部 */
     scroll-behavior: smooth;
+    /* 确保内容区域有足够空间 */
+    margin-bottom: 20px;
 }
 
 .config-form-scroll::-webkit-scrollbar {
@@ -3257,11 +3500,12 @@ body.no-scroll {
     overflow-x: hidden;
     min-height: 0;
     max-height: 100%;
-    padding-bottom: 40px; /* 增加底部内边距，确保能滚动到底部 */
+    padding-bottom: 80px; /* 大幅增加底部内边距，确保能滚动到底部 */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     box-sizing: border-box;
     scroll-behavior: smooth;
+    margin-bottom: 20px;
 }
 
 .sub-config-list {
@@ -3290,10 +3534,46 @@ body.no-scroll {
     background: var(--bg-hover);
 }
 
+/* 子配置图标 - 使用动画线条替代emoji */
 .sub-config-icon {
-    font-size: 48px;
-    margin-bottom: 12px;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 12px;
     display: block;
+    position: relative;
+    background: var(--gradient-sunflower);
+    border-radius: 50%;
+    animation: iconRotate 3s linear infinite;
+}
+
+.sub-config-icon::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--text-primary);
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+
+.sub-config-icon::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    background: var(--text-primary);
+    border-radius: 50%;
+}
+
+@keyframes iconRotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 .sub-config-info {

@@ -1091,7 +1091,7 @@ class APIControlCenter {
             html += `
                 <div class="params-section">
                     <h3 class="section-title">
-                        <span class="section-icon">🔗</span>
+                        <span class="section-icon"></span>
                         路径参数
                     </h3>
                     <div class="param-grid">
@@ -1118,7 +1118,7 @@ class APIControlCenter {
             html += `
                 <div class="params-section">
                     <h3 class="section-title">
-                        <span class="section-icon">❓</span>
+                        <span class="section-icon"></span>
                         查询参数
                     </h3>
                     <div class="param-grid">
@@ -1134,7 +1134,7 @@ class APIControlCenter {
             html += `
                 <div class="params-section">
                     <h3 class="section-title">
-                        <span class="section-icon">📝</span>
+                        <span class="section-icon"></span>
                         请求体参数
                     </h3>
                     <div class="param-grid">
@@ -1153,12 +1153,10 @@ class APIControlCenter {
         html += `
             <div class="button-group">
                 <button class="btn btn-primary" onclick="app.executeRequest()">
-                    <span>🚀</span>
-                    <span>执行请求</span>
+                    <span class="btn-icon">执行请求</span>
                 </button>
                 <button class="btn btn-secondary" onclick="app.fillExample()">
-                    <span>📋</span>
-                    <span>填充示例</span>
+                    <span class="btn-icon">填充示例</span>
                 </button>
             </div>
             </div>
@@ -1167,21 +1165,19 @@ class APIControlCenter {
                 <div class="json-editor">
                     <div class="editor-header">
                         <h3 class="editor-title">
-                            <span class="section-icon">✏️</span>
+                            <span class="section-icon"></span>
                             请求编辑器
                         </h3>
                         <div class="editor-controls">
                             <button class="editor-btn" onclick="app.formatJSON()">
-                                <span>🎨</span>
-                                <span>格式化</span>
+                                <span class="btn-icon">格式化</span>
                             </button>
                             <button class="editor-btn" onclick="app.validateJSON()">
-                                <span>✅</span>
+                                <span class="check-icon"></span>
                                 <span>验证</span>
                             </button>
                             <button class="editor-btn" onclick="app.copyJSON()">
-                                <span>📋</span>
-                                <span>复制</span>
+                                <span class="btn-icon">复制</span>
                             </button>
                         </div>
                     </div>
@@ -1280,13 +1276,13 @@ class APIControlCenter {
         return `
             <div class="params-section">
                 <h3 class="section-title">
-                    <span class="section-icon">📁</span>
+                    <span class="section-icon"></span>
                     文件上传
                 </h3>
                 <div class="file-upload">
                     <input type="file" id="fileInput" class="file-upload-input" multiple onchange="app.handleFileSelect(event)">
                     <label for="fileInput" class="file-upload-label" id="fileUploadLabel">
-                        <div class="file-upload-icon">📁</div>
+                        <div class="file-upload-icon"></div>
                         <div class="file-upload-text">点击选择文件或拖放到此处</div>
                     </label>
                     <div class="file-list" id="fileList" style="display: none;"></div>
@@ -1348,11 +1344,11 @@ class APIControlCenter {
         fileList.innerHTML = this.selectedFiles.map((file, index) => `
             <div class="file-item">
                 <div class="file-info">
-                    <span class="file-icon">📄</span>
+                    <span class="file-icon"></span>
                     <span class="file-name">${file.name}</span>
                     <span class="file-size">${this.formatFileSize(file.size)}</span>
                 </div>
-                <button class="file-remove" onclick="app.removeFile(${index})">✕</button>
+                <button class="file-remove" onclick="app.removeFile(${index})"><span class="remove-icon"></span></button>
             </div>
         `).join('');
     }
@@ -1768,7 +1764,7 @@ class APIControlCenter {
         return `
             <div class="data-visualization">
                 <h3 class="section-title">
-                    <span class="section-icon">🤖</span>
+                    <span class="section-icon"></span>
                     机器人列表
                 </h3>
                 <div class="bot-grid">
@@ -1807,7 +1803,7 @@ class APIControlCenter {
         return `
             <div class="data-visualization">
                 <h3 class="section-title">
-                    <span class="section-icon">📱</span>
+                    <span class="section-icon"></span>
                     设备列表
                 </h3>
                 <div class="bot-grid">
@@ -1846,7 +1842,7 @@ class APIControlCenter {
         return `
             <div class="data-visualization">
                 <h3 class="section-title">
-                    <span class="section-icon">🧩</span>
+                    <span class="section-icon"></span>
                     插件列表
                 </h3>
                 <div class="bot-grid">
@@ -2025,13 +2021,13 @@ class APIControlCenter {
                             <div class="config-editor-name" id="configEditorName"></div>
                             <div class="config-editor-actions">
                                 <button class="btn btn-secondary" id="saveConfigBtn">
-                                    <span>💾</span><span>保存</span>
+                                    <span class="btn-icon">保存</span>
                                 </button>
                                 <button class="btn btn-secondary" id="validateConfigBtn">
-                                    <span>✅</span><span>验证</span>
+                                    <span class="btn-icon">验证</span>
                                 </button>
                                 <button class="btn btn-secondary" id="backConfigBtn">
-                                    <span>←</span><span>返回</span>
+                                    <span class="btn-icon">返回</span>
                                 </button>
                             </div>
                         </div>
@@ -2099,7 +2095,7 @@ class APIControlCenter {
                     </div>
                     <div class="config-item-actions">
                         <button class="btn btn-sm btn-primary" data-action="edit" data-config-name="${config.name}">
-                            <span>✏️</span><span>编辑</span>
+                            <span class="btn-icon">编辑</span>
                         </button>
                     </div>
                 </div>
@@ -2278,7 +2274,7 @@ class APIControlCenter {
             <div class="config-editor-toolbar">
                 <div class="config-editor-name">选择子配置: ${configName}</div>
                 <button class="btn btn-secondary" id="backConfigBtn">
-                    <span>←</span><span>返回</span>
+                    <span class="btn-icon">返回</span>
                 </button>
             </div>
             <div class="config-editor-content">
@@ -2288,14 +2284,14 @@ class APIControlCenter {
                             const subConfig = structure.configs[subName];
                             return `
                                 <div class="sub-config-item" data-sub-name="${subName}">
-                                    <div class="sub-config-icon">📄</div>
+                                    <div class="sub-config-icon"></div>
                                     <div class="sub-config-info">
                                         <div class="sub-config-name">${subConfig.displayName || subName}</div>
                                         <div class="sub-config-desc">${subConfig.description || ''}</div>
                                         <div class="sub-config-path">${subConfig.filePath || ''}</div>
                                     </div>
                                     <button class="btn btn-sm btn-primary" data-action="edit-sub" data-sub-name="${subName}">
-                                        <span>✏️</span><span>编辑</span>
+                                        <span class="btn-icon">编辑</span>
                                     </button>
                                 </div>
                             `;
@@ -2345,13 +2341,13 @@ class APIControlCenter {
                     <div class="config-editor-name">编辑配置: ${parentName}.${subName}</div>
                     <div class="config-editor-actions">
                         <button class="btn btn-secondary" id="saveConfigBtn">
-                            <span>💾</span><span>保存</span>
+                            <span class="btn-icon">保存</span>
                         </button>
                         <button class="btn btn-secondary" id="validateConfigBtn">
-                            <span>✅</span><span>验证</span>
+                            <span class="btn-icon">验证</span>
                         </button>
                         <button class="btn btn-secondary" id="backConfigBtn">
-                            <span>←</span><span>返回</span>
+                            <span class="btn-icon">返回</span>
                         </button>
                     </div>
                 </div>
@@ -2766,13 +2762,13 @@ class APIControlCenter {
                     <div class="config-editor-name">编辑配置: ${subName ? `${configName}.${subName}` : configName}</div>
                     <div class="config-editor-actions">
                         <button class="btn btn-secondary" id="saveConfigBtn">
-                            <span>💾</span><span>保存</span>
+                            <span class="btn-icon">保存</span>
                         </button>
                         <button class="btn btn-secondary" id="validateConfigBtn">
-                            <span>✅</span><span>验证</span>
+                            <span class="btn-icon">验证</span>
                         </button>
                         <button class="btn btn-secondary" id="backConfigBtn">
-                            <span>←</span><span>返回</span>
+                            <span class="btn-icon">返回</span>
                         </button>
                     </div>
                 </div>
