@@ -687,8 +687,7 @@ class APIControlCenter {
         if (!grid) return;
 
         const { system, bot, bots } = data;
-        
-        // 格式化字节
+
         const formatBytes = (bytes) => {
             if (bytes === 0) return '0 B';
             const k = 1024;
@@ -697,7 +696,6 @@ class APIControlCenter {
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         };
 
-        // 格式化时间
         const formatUptime = (seconds) => {
             const days = Math.floor(seconds / 86400);
             const hours = Math.floor((seconds % 86400) / 3600);
@@ -707,28 +705,25 @@ class APIControlCenter {
             return `${minutes}分钟`;
         };
 
-        // 内存/CPU 使用率
         const memPercent = parseFloat(system.memory.usagePercent);
         const processMemPercent = system.memory.process.heapUsed / system.memory.process.heapTotal * 100;
         const cpuPercent = (system.cpu && typeof system.cpu.percent === 'number') ? system.cpu.percent : null;
         const swapTotal = Number(system.memory?.swap?.total || 0);
         const swapUsed = Number(system.memory?.swap?.used || 0);
-        const swapPercent = swapTotal > 0 ? +(swapUsed / swapTotal * 100).toFixed(2) : 0;
         const disks = Array.isArray(system.disks) ? system.disks : [];
         const rxBytes = Number(system.network?.rxBytes || 0);
         const txBytes = Number(system.network?.txBytes || 0);
-        let rxRate = 0, txRate = 0; // Bytes/s
+        let rxRate = 0, txRate = 0;
         try {
             if (this._prevNet.rxBytes && rxBytes >= this._prevNet.rxBytes) rxRate = (rxBytes - this._prevNet.rxBytes) / 60;
             if (this._prevNet.txBytes && txBytes >= this._prevNet.txBytes) txRate = (txBytes - this._prevNet.txBytes) / 60;
         } catch {}
         this._prevNet = { rxBytes, txBytes };
 
-        // 先更新趋势数据，确保首次也有数据点
         try {
             this._metricsHistory.mem.push(memPercent);
             this._metricsHistory.procMem.push(processMemPercent);
-            this._metricsHistory.netRx.push(rxRate / 1024); // KB/s
+            this._metricsHistory.netRx.push(rxRate / 1024);
             this._metricsHistory.netTx.push(txRate / 1024);
             const cap = 60;
             ['mem','procMem','netRx','netTx'].forEach(k => {
@@ -737,139 +732,221 @@ class APIControlCenter {
         } catch {}
 
         grid.innerHTML = `
-            <div class="status-summary">
-                <div class="summary-item">
-                    <div class="summary-label">CPU 使用</div>
-                    <div class="summary-value">${cpuPercent !== null ? cpuPercent + '%' : '-'}</div>
-                </div>
-                <div class="summary-item">
-                    <div class="summary-label">在线机器人</div>
-                    <div class="summary-value">${bots.filter(b => b.online).length} / ${bots.length}</div>
-                </div>
-                <div class="summary-item">
-                    <div class="summary-label">系统运行</div>
-                    <div class="summary-value">${formatUptime(system.uptime)}</div>
-                </div>
-            </div>
-
-            <div class="cards-grid">
-                <div class="status-card-large">
-                    <div class="status-card-header"><h3>CPU</h3></div>
-                    <div class="status-card-content center"><canvas id="cpuPie" height="140"></canvas></div>
-                </div>
-                <div class="status-card-large">
-                    <div class="status-card-header"><h3>内存</h3></div>
-                    <div class="status-card-content center">
-                        <div class="mini-text">${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</div>
-                        <canvas id="memPie" height="140"></canvas>
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="card-title">CPU 使用</h5>
+                            <p class="card-text fs-4 fw-bold text-primary">${cpuPercent !== null ? cpuPercent + '%' : '-'}</p>
+                        </div>
                     </div>
                 </div>
-                <div class="status-card-large">
-                    <div class="status-card-header"><h3>交换分区</h3></div>
-                    <div class="status-card-content center">
-                        <div class="mini-text">${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}</div>
-                        <canvas id="swapPie" height="140"></canvas>
+                <div class="col-md-4">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="card-title">在线机器人</h5>
+                            <p class="card-text fs-4 fw-bold text-success">${bots.filter(b => b.online).length} / ${bots.length}</p>
+                        </div>
                     </div>
                 </div>
-                <div class="status-card-large">
-                    <div class="status-card-header"><h3>磁盘使用</h3></div>
-                    <div class="status-card-content"><canvas id="diskBar" height="180"></canvas></div>
-                </div>
-                <div class="status-card-large">
-                    <div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div>
-                    <div class="status-card-content"><canvas id="netLine" height="160"></canvas></div>
-                </div>
-                <div class="status-card-large">
-                    <div class="status-card-header"><h3>进程 Top5</h3></div>
-                    <div class="status-card-content">
-                        <table class="kv-table small"><tbody id="procTop"></tbody></table>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Bot运行时间:</span>
-                        <span class="status-value">${formatUptime(bot.uptime)}</span>
+                <div class="col-md-4">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="card-title">系统运行</h5>
+                            <p class="card-text fs-5">${formatUptime(system.uptime)}</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 机器人状态 -->
-            <div class="status-card-large">
-                <div class="status-card-header">
-                    <h3>机器人状态</h3>
-                </div>
-                <div class="status-card-content">
-                    <div class="status-item">
-                        <span class="status-label">在线数量:</span>
-                        <span class="status-value">${bots.filter(b => b.online).length} / ${bots.length}</span>
+            <div class="row g-3">
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header"><h6 class="mb-0">CPU</h6></div>
+                        <div class="card-body d-flex flex-column align-items-center"><canvas id="cpuPie" height="140"></canvas></div>
                     </div>
-                    <div class="bot-list">
-                        ${bots.map(bot => `
-                            <div class="bot-status-item">
-                                <div class="bot-status-indicator ${bot.online ? 'online' : 'offline'}"></div>
-                                <div class="bot-status-info">
-                                    <div class="bot-status-name">${bot.nickname}</div>
-                                    <div class="bot-status-details">${bot.adapter} | 好友: ${bot.stats.friends} | 群组: ${bot.stats.groups}</div>
-                                </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header"><h6 class="mb-0">内存</h6></div>
+                        <div class="card-body d-flex flex-column align-items-center">
+                            <small class="text-muted mb-2">${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</small>
+                            <canvas id="memPie" height="140"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header"><h6 class="mb-0">交换分区</h6></div>
+                        <div class="card-body d-flex flex-column align-items-center">
+                            <small class="text-muted mb-2">${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}</small>
+                            <canvas id="swapPie" height="140"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h6 class="mb-0">磁盘使用</h6></div>
+                        <div class="card-body"><canvas id="diskBar" height="180"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h6 class="mb-0">网络上下行 (KB/s)</h6></div>
+                        <div class="card-body"><canvas id="netLine" height="160"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h6 class="mb-0">进程 Top5</h6></div>
+                        <div class="card-body">
+                            <table class="table table-sm table-striped" id="procTop"></table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h6 class="mb-0">系统概览</h6></div>
+                        <div class="card-body">
+                            <div class="row g-2">
+                                <div class="col-6"><span class="text-muted">平台:</span> ${system.platform} ${system.arch}</div>
+                                <div class="col-6"><span class="text-muted">主机:</span> ${system.hostname}</div>
+                                <div class="col-6"><span class="text-muted">Node:</span> ${system.nodeVersion}</div>
+                                <div class="col-6"><span class="text-muted">机器人/插件:</span> ${bots.length} / ${typeof system.pluginsCount === 'number' ? system.pluginsCount : '-'}</div>
                             </div>
-                        `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header"><h6 class="mb-0">机器人状态</h6></div>
+                        <div class="card-body">
+                            <div class="row">
+                                ${bots.map(bot => `
+                                    <div class="col-md-6 mb-3">
+                                        <div class="d-flex align-items-center">
+                                            <div class="me-2">
+                                                <span class="badge ${bot.online ? 'bg-success' : 'bg-secondary'} rounded-pill">●</span>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <div class="fw-bold">${bot.nickname}</div>
+                                                <small class="text-muted">${bot.adapter} | 好友: ${bot.stats.friends} | 群组: ${bot.stats.groups}</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         `;
 
-        // 更新趋势数据
-        try {
-            this._metricsHistory.mem.push(memPercent);
-            this._metricsHistory.procMem.push(processMemPercent);
-            const cap = 60;
-            if (this._metricsHistory.mem.length > cap) this._metricsHistory.mem.shift();
-            if (this._metricsHistory.procMem.length > cap) this._metricsHistory.procMem.shift();
-        } catch {}
+        requestAnimationFrame(() => {
+            if (!window.Chart) return;
 
-        // 初始化/更新 Chart.js 图表
-        const memCanvas = document.getElementById('memChart');
-        if (memCanvas && window.Chart) {
-            if (!this._charts.mem) {
-                const ctx = memCanvas.getContext('2d');
-                this._charts.mem = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: this._metricsHistory.mem.map((_, i) => ''),
-                        datasets: [
-                            {
-                                label: '内存使用率%（系统）',
-                                data: this._metricsHistory.mem,
-                                borderColor: '#6aa9ff',
-                                backgroundColor: 'rgba(106,169,255,0.2)',
-                                tension: 0.3,
-                                fill: true,
-                                pointRadius: 0
-                            },
-                            {
-                                label: '进程堆内存%（进程）',
-                                data: this._metricsHistory.procMem,
-                                borderColor: '#f6a54c',
-                                backgroundColor: 'rgba(246,165,76,0.2)',
-                                tension: 0.3,
-                                fill: true,
-                                pointRadius: 0
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        animation: { duration: 400, easing: 'easeOutQuad' },
-                        plugins: { legend: { display: true } },
-                        scales: { x: { display: false }, y: { display: true, min: 0, max: 100 } }
-                    }
-                });
-            } else {
-                const chart = this._charts.mem;
-                chart.data.labels = this._metricsHistory.mem.map((_, i) => '');
-                chart.data.datasets[0].data = this._metricsHistory.mem;
-                chart.data.datasets[1].data = this._metricsHistory.procMem;
-                chart.update('active');
+            const cpuEl = document.getElementById('cpuPie');
+            if (cpuEl) {
+                const used = Math.max(0, Math.min(100, Number(cpuPercent || 0)));
+                const free = 100 - used;
+                if (!this._charts.cpuPie) {
+                    this._charts.cpuPie = new Chart(cpuEl.getContext('2d'), {
+                        type: 'doughnut',
+                        data: { labels: ['使用','空闲'], datasets: [{ data: [used, free], backgroundColor: ['#0d6efd','#6c757d'] }] },
+                        options: { cutout: '60%', plugins: { legend: { position: 'bottom' } } }
+                    });
+                } else {
+                    Object.assign(this._charts.cpuPie.data.datasets[0], { data: [used, free] });
+                    this._charts.cpuPie.update('active');
+                }
             }
-        }
+
+            const memEl = document.getElementById('memPie');
+            if (memEl) {
+                const used = Math.round(system.memory.used/1024/1024/1024*100)/100;
+                const free = Math.max(0, (system.memory.total - system.memory.used)/1024/1024/1024);
+                if (!this._charts.memPie) {
+                    this._charts.memPie = new Chart(memEl.getContext('2d'), {
+                        type: 'doughnut',
+                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#198754','#6c757d'] }] },
+                        options: { cutout: '60%', plugins: { legend: { position: 'bottom' } } }
+                    });
+                } else {
+                    Object.assign(this._charts.memPie.data.datasets[0], { data: [used, free] });
+                    this._charts.memPie.update('active');
+                }
+            }
+
+            const swapEl = document.getElementById('swapPie');
+            if (swapEl) {
+                const used = swapUsed/1024/1024/1024;
+                const free = Math.max(0, (swapTotal - swapUsed)/1024/1024/1024);
+                if (!this._charts.swapPie) {
+                    this._charts.swapPie = new Chart(swapEl.getContext('2d'), {
+                        type: 'doughnut',
+                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#dc3545','#6c757d'] }] },
+                        options: { cutout: '60%', plugins: { legend: { position: 'bottom' } } }
+                    });
+                } else {
+                    Object.assign(this._charts.swapPie.data.datasets[0], { data: [used, free] });
+                    this._charts.swapPie.update('active');
+                }
+            }
+
+            const diskEl = document.getElementById('diskBar');
+            if (diskEl) {
+                const labels = disks.map(d => d.mount || d.fs);
+                const used = disks.map(d => +(d.used/1024/1024/1024).toFixed(2));
+                const free = disks.map(d => +(((d.size - d.used)/1024/1024/1024)).toFixed(2));
+                if (!this._charts.diskBar) {
+                    this._charts.diskBar = new Chart(diskEl.getContext('2d'), {
+                        type: 'bar',
+                        data: { labels, datasets: [
+                            { label: '已用(GB)', data: used, backgroundColor: '#ffc107' },
+                            { label: '可用(GB)', data: free, backgroundColor: '#6c757d' }
+                        ]},
+                        options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' } } }
+                    });
+                } else {
+                    const c = this._charts.diskBar;
+                    c.data.labels = labels;
+                    c.data.datasets[0].data = used;
+                    c.data.datasets[1].data = free;
+                    c.update('active');
+                }
+            }
+
+            const netEl = document.getElementById('netLine');
+            if (netEl) {
+                const labels = this._metricsHistory.netRx.map(() => '');
+                if (!this._charts.netLine) {
+                    this._charts.netLine = new Chart(netEl.getContext('2d'), {
+                        type: 'line',
+                        data: { labels, datasets: [
+                            { label: '下行RX (KB/s)', data: this._metricsHistory.netRx, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', fill: true, tension: 0.3, pointRadius: 0 },
+                            { label: '上行TX (KB/s)', data: this._metricsHistory.netTx, borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.1)', fill: true, tension: 0.3, pointRadius: 0 }
+                        ]},
+                        options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { x: { display: false } } }
+                    });
+                } else {
+                    const c = this._charts.netLine;
+                    c.data.labels = labels;
+                    c.data.datasets[0].data = this._metricsHistory.netRx;
+                    c.data.datasets[1].data = this._metricsHistory.netTx;
+                    c.update('active');
+                }
+            }
+
+            const procEl = document.getElementById('procTop');
+            if (procEl && Array.isArray(data.processesTop5)) {
+                procEl.innerHTML = data.processesTop5.map((p,i) => `
+                    <tr><td>#${i+1} ${p.name} (pid:${p.pid})</td><td>CPU ${p.cpu.toFixed ? p.cpu.toFixed(1) : p.cpu}% | MEM ${p.mem.toFixed ? p.mem.toFixed(1) : p.mem}%</td></tr>
+                `).join('');
+            }
+        });
     }
 
     async loadStats() {
