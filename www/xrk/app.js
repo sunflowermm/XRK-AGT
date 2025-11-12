@@ -732,26 +732,29 @@ class APIControlCenter {
         } catch {}
 
         grid.innerHTML = `
-            <div class="row mb-3">
-                <div class="col-md-4">
-                    <div class="card text-center">
-                        <div class="card-body">
+            <div class="row mb-4">
+                <div class="col-md-4 mb-3">
+                    <div class="card stat-card shadow-sm border-0">
+                        <div class="card-body text-center">
+                            <div class="stat-icon mb-2 text-primary">💻</div>
                             <h5 class="card-title">CPU 使用</h5>
-                            <p class="card-text fs-4 fw-bold text-primary">${cpuPercent !== null ? cpuPercent + '%' : '-'}</p>
+                            <p class="card-text fs-3 fw-bold text-primary">${cpuPercent !== null ? cpuPercent + '%' : '-'}</p>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="card text-center">
-                        <div class="card-body">
+                <div class="col-md-4 mb-3">
+                    <div class="card stat-card shadow-sm border-0">
+                        <div class="card-body text-center">
+                            <div class="stat-icon mb-2 text-success">🤖</div>
                             <h5 class="card-title">在线机器人</h5>
-                            <p class="card-text fs-4 fw-bold text-success">${bots.filter(b => b.online).length} / ${bots.length}</p>
+                            <p class="card-text fs-3 fw-bold text-success">${bots.filter(b => b.online).length} / ${bots.length}</p>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="card text-center">
-                        <div class="card-body">
+                <div class="col-md-4 mb-3">
+                    <div class="card stat-card shadow-sm border-0">
+                        <div class="card-body text-center">
+                            <div class="stat-icon mb-2 text-info">⏱️</div>
                             <h5 class="card-title">系统运行</h5>
                             <p class="card-text fs-5">${formatUptime(system.uptime)}</p>
                         </div>
@@ -759,80 +762,82 @@ class APIControlCenter {
                 </div>
             </div>
 
-            <div class="row g-3">
-                <div class="col-lg-4">
-                    <div class="card h-100">
-                        <div class="card-header"><h6 class="mb-0">CPU</h6></div>
-                        <div class="card-body d-flex flex-column align-items-center"><canvas id="cpuPie" height="140"></canvas></div>
+            <div class="row g-4">
+                <div class="col-lg-4 col-md-6">
+                    <div class="card chart-card shadow-sm h-100">
+                        <div class="card-header bg-transparent"><h6 class="mb-0 fw-bold">CPU</h6></div>
+                        <div class="card-body d-flex flex-column align-items-center"><canvas id="cpuPie"></canvas></div>
                     </div>
                 </div>
-                <div class="col-lg-4">
-                    <div class="card h-100">
-                        <div class="card-header"><h6 class="mb-0">内存</h6></div>
+                <div class="col-lg-4 col-md-6">
+                    <div class="card chart-card shadow-sm h-100">
+                        <div class="card-header bg-transparent"><h6 class="mb-0 fw-bold">内存</h6></div>
                         <div class="card-body d-flex flex-column align-items-center">
                             <small class="text-muted mb-2">${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</small>
-                            <canvas id="memPie" height="140"></canvas>
+                            <canvas id="memPie"></canvas>
                         </div>
                     </div>
                 </div>
-                <div class="col-lg-4">
-                    <div class="card h-100">
-                        <div class="card-header"><h6 class="mb-0">交换分区</h6></div>
+                <div class="col-lg-4 col-md-6">
+                    <div class="card chart-card shadow-sm h-100">
+                        <div class="card-header bg-transparent"><h6 class="mb-0 fw-bold">交换分区</h6></div>
                         <div class="card-body d-flex flex-column align-items-center">
                             <small class="text-muted mb-2">${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}</small>
-                            <canvas id="swapPie" height="140"></canvas>
+                            <canvas id="swapPie"></canvas>
                         </div>
                     </div>
                 </div>
-                <div class="col-lg-6">
-                    <div class="card h-100">
-                        <div class="card-header"><h6 class="mb-0">磁盘使用</h6></div>
-                        <div class="card-body"><canvas id="diskBar" height="180"></canvas></div>
+                <div class="col-lg-6 col-md-12">
+                    <div class="card chart-card shadow-sm h-100">
+                        <div class="card-header bg-transparent"><h6 class="mb-0 fw-bold">磁盘使用</h6></div>
+                        <div class="card-body"><canvas id="diskBar"></canvas></div>
                     </div>
                 </div>
-                <div class="col-lg-6">
-                    <div class="card h-100">
-                        <div class="card-header"><h6 class="mb-0">网络上下行 (KB/s)</h6></div>
-                        <div class="card-body"><canvas id="netLine" height="160"></canvas></div>
+                <div class="col-lg-6 col-md-12">
+                    <div class="card chart-card shadow-sm h-100">
+                        <div class="card-header bg-transparent"><h6 class="mb-0 fw-bold">网络上下行 (KB/s)</h6></div>
+                        <div class="card-body"><canvas id="netLine"></canvas></div>
                     </div>
                 </div>
-                <div class="col-lg-6">
-                    <div class="card h-100">
-                        <div class="card-header"><h6 class="mb-0">进程 Top5</h6></div>
+                <div class="col-lg-6 col-md-12">
+                    <div class="card chart-card shadow-sm h-100">
+                        <div class="card-header bg-transparent"><h6 class="mb-0 fw-bold">进程 Top5</h6></div>
                         <div class="card-body">
-                            <table class="table table-sm table-striped" id="procTop"></table>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle" id="procTop"></table>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="col-lg-6">
-                    <div class="card h-100">
-                        <div class="card-header"><h6 class="mb-0">系统概览</h6></div>
+                <div class="col-lg-6 col-md-12">
+                    <div class="card chart-card shadow-sm h-100">
+                        <div class="card-header bg-transparent"><h6 class="mb-0 fw-bold">系统概览</h6></div>
                         <div class="card-body">
-                            <div class="row g-2">
-                                <div class="col-6"><span class="text-muted">平台:</span> ${system.platform} ${system.arch}</div>
-                                <div class="col-6"><span class="text-muted">主机:</span> ${system.hostname}</div>
-                                <div class="col-6"><span class="text-muted">Node:</span> ${system.nodeVersion}</div>
-                                <div class="col-6"><span class="text-muted">机器人/插件:</span> ${bots.length} / ${typeof system.pluginsCount === 'number' ? system.pluginsCount : '-'}</div>
+                            <div class="row g-3">
+                                <div class="col-6"><span class="text-muted">平台:</span> <strong>${system.platform} ${system.arch}</strong></div>
+                                <div class="col-6"><span class="text-muted">主机:</span> <strong>${system.hostname}</strong></div>
+                                <div class="col-6"><span class="text-muted">Node:</span> <strong>${system.nodeVersion}</strong></div>
+                                <div class="col-6"><span class="text-muted">机器人/插件:</span> <strong>${bots.length} / ${typeof system.pluginsCount === 'number' ? system.pluginsCount : '-'}</strong></div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="row mt-3">
+            <div class="row mt-4">
                 <div class="col-12">
-                    <div class="card">
-                        <div class="card-header"><h6 class="mb-0">机器人状态</h6></div>
+                    <div class="card chart-card shadow-sm">
+                        <div class="card-header bg-transparent"><h6 class="mb-0 fw-bold">机器人状态</h6></div>
                         <div class="card-body">
                             <div class="row">
                                 ${bots.map(bot => `
                                     <div class="col-md-6 mb-3">
-                                        <div class="d-flex align-items-center">
-                                            <div class="me-2">
-                                                <span class="badge ${bot.online ? 'bg-success' : 'bg-secondary'} rounded-pill">●</span>
+                                        <div class="d-flex align-items-center p-2 rounded hover-bg">
+                                            <div class="me-3">
+                                                <span class="badge ${bot.online ? 'bg-success' : 'bg-secondary'} rounded-pill animate-pulse">●</span>
                                             </div>
                                             <div class="flex-grow-1">
-                                                <div class="fw-bold">${bot.nickname}</div>
+                                                <div class="fw-bold text-dark">${bot.nickname}</div>
                                                 <small class="text-muted">${bot.adapter} | 好友: ${bot.stats.friends} | 群组: ${bot.stats.groups}</small>
                                             </div>
                                         </div>
@@ -848,6 +853,13 @@ class APIControlCenter {
         requestAnimationFrame(() => {
             if (!window.Chart) return;
 
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 800, easing: 'easeInOutQuart' },
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } } }
+            };
+
             const cpuEl = document.getElementById('cpuPie');
             if (cpuEl) {
                 const used = Math.max(0, Math.min(100, Number(cpuPercent || 0)));
@@ -855,8 +867,8 @@ class APIControlCenter {
                 if (!this._charts.cpuPie) {
                     this._charts.cpuPie = new Chart(cpuEl.getContext('2d'), {
                         type: 'doughnut',
-                        data: { labels: ['使用','空闲'], datasets: [{ data: [used, free], backgroundColor: ['#0d6efd','#6c757d'] }] },
-                        options: { cutout: '60%', plugins: { legend: { position: 'bottom' } } }
+                        data: { labels: ['使用','空闲'], datasets: [{ data: [used, free], backgroundColor: ['#0d6efd','#6c757d'], borderWidth: 0 }] },
+                        options: { ...chartOptions, cutout: '60%' }
                     });
                 } else {
                     Object.assign(this._charts.cpuPie.data.datasets[0], { data: [used, free] });
@@ -871,8 +883,8 @@ class APIControlCenter {
                 if (!this._charts.memPie) {
                     this._charts.memPie = new Chart(memEl.getContext('2d'), {
                         type: 'doughnut',
-                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#198754','#6c757d'] }] },
-                        options: { cutout: '60%', plugins: { legend: { position: 'bottom' } } }
+                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#198754','#6c757d'], borderWidth: 0 }] },
+                        options: { ...chartOptions, cutout: '60%' }
                     });
                 } else {
                     Object.assign(this._charts.memPie.data.datasets[0], { data: [used, free] });
@@ -887,8 +899,8 @@ class APIControlCenter {
                 if (!this._charts.swapPie) {
                     this._charts.swapPie = new Chart(swapEl.getContext('2d'), {
                         type: 'doughnut',
-                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#dc3545','#6c757d'] }] },
-                        options: { cutout: '60%', plugins: { legend: { position: 'bottom' } } }
+                        data: { labels: ['已用(GB)','可用(GB)'], datasets: [{ data: [used, free], backgroundColor: ['#dc3545','#6c757d'], borderWidth: 0 }] },
+                        options: { ...chartOptions, cutout: '60%' }
                     });
                 } else {
                     Object.assign(this._charts.swapPie.data.datasets[0], { data: [used, free] });
@@ -905,10 +917,10 @@ class APIControlCenter {
                     this._charts.diskBar = new Chart(diskEl.getContext('2d'), {
                         type: 'bar',
                         data: { labels, datasets: [
-                            { label: '已用(GB)', data: used, backgroundColor: '#ffc107' },
-                            { label: '可用(GB)', data: free, backgroundColor: '#6c757d' }
+                            { label: '已用(GB)', data: used, backgroundColor: '#ffc107', borderRadius: 2 },
+                            { label: '可用(GB)', data: free, backgroundColor: '#6c757d', borderRadius: 2 }
                         ]},
-                        options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' } } }
+                        options: { ...chartOptions, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, grid: { color: 'rgba(0,0,0,0.05)' } } } }
                     });
                 } else {
                     const c = this._charts.diskBar;
@@ -926,10 +938,10 @@ class APIControlCenter {
                     this._charts.netLine = new Chart(netEl.getContext('2d'), {
                         type: 'line',
                         data: { labels, datasets: [
-                            { label: '下行RX (KB/s)', data: this._metricsHistory.netRx, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', fill: true, tension: 0.3, pointRadius: 0 },
-                            { label: '上行TX (KB/s)', data: this._metricsHistory.netTx, borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.1)', fill: true, tension: 0.3, pointRadius: 0 }
+                            { label: '下行RX (KB/s)', data: this._metricsHistory.netRx, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 },
+                            { label: '上行TX (KB/s)', data: this._metricsHistory.netTx, borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.1)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }
                         ]},
-                        options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { x: { display: false } } }
+                        options: { ...chartOptions, scales: { x: { display: false }, y: { grid: { color: 'rgba(0,0,0,0.05)' } } } }
                     });
                 } else {
                     const c = this._charts.netLine;
@@ -943,7 +955,7 @@ class APIControlCenter {
             const procEl = document.getElementById('procTop');
             if (procEl && Array.isArray(data.processesTop5)) {
                 procEl.innerHTML = data.processesTop5.map((p,i) => `
-                    <tr><td>#${i+1} ${p.name} (pid:${p.pid})</td><td>CPU ${p.cpu.toFixed ? p.cpu.toFixed(1) : p.cpu}% | MEM ${p.mem.toFixed ? p.mem.toFixed(1) : p.mem}%</td></tr>
+                    <tr><td class="text-nowrap">#${i+1} ${p.name}</td><td><span class="badge bg-primary me-1">CPU ${p.cpu.toFixed ? p.cpu.toFixed(1) : p.cpu}%</span> <span class="badge bg-info">MEM ${p.mem.toFixed ? p.mem.toFixed(1) : p.mem}%</span></td></tr>
                 `).join('');
             }
         });
