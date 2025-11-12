@@ -29,16 +29,24 @@ class APIControlCenter {
         this.initFloatingButton();
         this.loadSettings();
         this.checkConnection();
-        this.loadStats();
+        this.currentPage = 'home'; // 默认首页
+        this.loadSystemStatus(); // 加载系统状态
         this.renderSidebar();
         this.renderQuickActions();
         
-        setInterval(() => this.loadStats(), 30000);
+        // 每5秒更新一次系统状态
+        setInterval(() => {
+            if (this.currentPage === 'home') {
+                this.loadSystemStatus();
+            }
+        }, 5000);
         
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
                 this.checkConnection();
-                this.loadStats();
+                if (this.currentPage === 'home') {
+                    this.loadSystemStatus();
+                }
             }
         });
     }
@@ -90,22 +98,7 @@ class APIControlCenter {
         }
 
         // 导航
-        const homeButton = document.getElementById('homeButton');
-        if (homeButton) {
-            homeButton.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.showHome();
-            });
-        }
-        const aiChatButton = document.getElementById('aiChatButton');
-        if (aiChatButton) {
-            aiChatButton.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.openAIChat();
-            });
-        }
+        // 导航事件已在 renderSidebar 中处理
 
         // 遮罩层
         const overlay = document.getElementById('overlay');
@@ -490,6 +483,266 @@ class APIControlCenter {
         }
     }
 
+    // 导航到指定页面
+    navigateToPage(page) {
+        this.currentPage = page;
+        const content = document.getElementById('content');
+        const apiGroups = document.getElementById('apiGroups');
+        
+        switch(page) {
+            case 'home':
+                this.showHomePage();
+                if (apiGroups) apiGroups.style.display = 'none';
+                break;
+            case 'chat':
+                this.showChatPage();
+                if (apiGroups) apiGroups.style.display = 'none';
+                break;
+            case 'config':
+                this.showConfigPage();
+                if (apiGroups) apiGroups.style.display = 'none';
+                break;
+            case 'api':
+                this.showAPIPage();
+                if (apiGroups) apiGroups.style.display = 'block';
+                break;
+        }
+        
+        // 关闭侧边栏（移动端）
+        this.closeSidebar();
+    }
+
+    showHomePage() {
+        const content = document.getElementById('content');
+        if (!content) return;
+        content.innerHTML = `
+            <div class="welcome-screen" id="systemStatusPage">
+                <div class="system-status-header">
+                    <h1 class="welcome-title">系统状态监控</h1>
+                    <p class="welcome-desc">实时监控系统运行状态</p>
+                </div>
+                <div class="system-status-grid" id="systemStatusGrid">
+                    <!-- 系统状态卡片将在这里动态生成 -->
+                </div>
+            </div>
+        `;
+        this.loadSystemStatus();
+    }
+
+    showChatPage() {
+        const content = document.getElementById('content');
+        if (!content) return;
+        content.innerHTML = `
+            <div class="ai-chat-container">
+                <div class="ai-chat-header">
+                    <div class="ai-chat-title">葵宝聊天</div>
+                    <div class="ai-chat-controls">
+                        <button class="ai-chat-clear" onclick="app.clearChat()">清空</button>
+                    </div>
+                </div>
+                <div class="ai-chat-body" id="chatMessages"></div>
+                <div class="ai-chat-input-container">
+                    <input type="text" id="chatInput" class="ai-chat-input" placeholder="输入消息..." 
+                        onkeypress="if(event.key==='Enter') app.sendChatMessage()">
+                    <button class="ai-chat-send" onclick="app.sendChatMessage()">发送</button>
+                </div>
+            </div>
+        `;
+    }
+
+    showConfigPage() {
+        this.openConfigEditor();
+    }
+
+    showAPIPage() {
+        const content = document.getElementById('content');
+        if (!content) return;
+        content.innerHTML = `
+            <div class="welcome-screen">
+                <div class="welcome-icon"></div>
+                <h1 class="welcome-title">API 调试中心</h1>
+                <p class="welcome-desc">选择左侧API进行调试</p>
+            </div>
+        `;
+    }
+
+    async loadSystemStatus() {
+        try {
+            const statusRes = await fetch(`${this.serverUrl}/api/system/status`, {
+                headers: this.getHeaders()
+            });
+            if (statusRes.ok) {
+                const data = await statusRes.json();
+                if (data.success) {
+                    this.renderSystemStatus(data);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load system status:', error);
+        }
+    }
+
+    renderSystemStatus(data) {
+        const grid = document.getElementById('systemStatusGrid');
+        if (!grid) return;
+
+        const { system, bot, bots } = data;
+        
+        // 格式化字节
+        const formatBytes = (bytes) => {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        };
+
+        // 格式化时间
+        const formatUptime = (seconds) => {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            if (days > 0) return `${days}天 ${hours}小时`;
+            if (hours > 0) return `${hours}小时 ${minutes}分钟`;
+            return `${minutes}分钟`;
+        };
+
+        // 内存使用率
+        const memPercent = parseFloat(system.memory.usagePercent);
+        const processMemPercent = system.memory.process.heapUsed / system.memory.process.heapTotal * 100;
+
+        grid.innerHTML = `
+            <!-- CPU信息 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>CPU 信息</h3>
+                </div>
+                <div class="status-card-content">
+                    <div class="status-item">
+                        <span class="status-label">型号:</span>
+                        <span class="status-value">${system.cpu.model}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">核心数:</span>
+                        <span class="status-value">${system.cpu.cores} 核</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">架构:</span>
+                        <span class="status-value">${system.arch}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 内存使用 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>内存使用</h3>
+                </div>
+                <div class="status-card-content">
+                    <div class="memory-chart">
+                        <div class="memory-bar">
+                            <div class="memory-fill" style="width: ${memPercent}%"></div>
+                        </div>
+                        <div class="memory-info">
+                            <span>${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</span>
+                            <span class="memory-percent">${memPercent}%</span>
+                        </div>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">进程堆内存:</span>
+                        <span class="status-value">${formatBytes(system.memory.process.heapUsed)} / ${formatBytes(system.memory.process.heapTotal)}</span>
+                    </div>
+                    <div class="memory-chart">
+                        <div class="memory-bar">
+                            <div class="memory-fill process" style="width: ${processMemPercent.toFixed(1)}%"></div>
+                        </div>
+                        <div class="memory-info">
+                            <span>进程内存使用率</span>
+                            <span class="memory-percent">${processMemPercent.toFixed(1)}%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 网络信息 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>网络接口</h3>
+                </div>
+                <div class="status-card-content">
+                    ${Object.entries(system.network).map(([name, info]) => `
+                        <div class="network-item">
+                            <div class="network-name">${name}</div>
+                            <div class="network-details">
+                                <div class="status-item">
+                                    <span class="status-label">IP地址:</span>
+                                    <span class="status-value">${info.address}</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="status-label">子网掩码:</span>
+                                    <span class="status-value">${info.netmask}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- 系统信息 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>系统信息</h3>
+                </div>
+                <div class="status-card-content">
+                    <div class="status-item">
+                        <span class="status-label">平台:</span>
+                        <span class="status-value">${system.platform}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">主机名:</span>
+                        <span class="status-value">${system.hostname}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Node版本:</span>
+                        <span class="status-value">${system.nodeVersion}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">系统运行时间:</span>
+                        <span class="status-value">${formatUptime(system.uptime)}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Bot运行时间:</span>
+                        <span class="status-value">${formatUptime(bot.uptime)}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 机器人状态 -->
+            <div class="status-card-large">
+                <div class="status-card-header">
+                    <h3>机器人状态</h3>
+                </div>
+                <div class="status-card-content">
+                    <div class="status-item">
+                        <span class="status-label">在线数量:</span>
+                        <span class="status-value">${bots.filter(b => b.online).length} / ${bots.length}</span>
+                    </div>
+                    <div class="bot-list">
+                        ${bots.map(bot => `
+                            <div class="bot-status-item">
+                                <div class="bot-status-indicator ${bot.online ? 'online' : 'offline'}"></div>
+                                <div class="bot-status-info">
+                                    <div class="bot-status-name">${bot.nickname}</div>
+                                    <div class="bot-status-details">${bot.adapter} | 好友: ${bot.stats.friends} | 群组: ${bot.stats.groups}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     async loadStats() {
         try {
             const statusRes = await fetch(`${this.serverUrl}/api/status`, {
@@ -550,6 +803,21 @@ class APIControlCenter {
     }
 
     renderSidebar() {
+        // 初始化导航项点击事件
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = item.dataset.page;
+                this.navigateToPage(page);
+                
+                // 更新活动状态
+                navItems.forEach(nav => nav.classList.remove('active'));
+                item.classList.add('active');
+            });
+        });
+
+        // 渲染API列表（仅在API调试页面显示）
         if (!this.apiConfig) return;
 
         const container = document.getElementById('apiGroups');
@@ -629,11 +897,14 @@ class APIControlCenter {
                 const action = item.dataset.action;
                 
                 if (action === 'ai-chat') {
-                    this.openAIChat();
+                    this.navigateToPage('chat');
+                } else if (action === 'config-manager') {
+                    this.navigateToPage('config');
                 } else if (apiId) {
-                const api = this.findAPIById(apiId);
-                if (api) {
-                    this.selectAPI(api.method, api.path, apiId);
+                    this.navigateToPage('api');
+                    const api = this.findAPIById(apiId);
+                    if (api) {
+                        this.selectAPI(api.method, api.path, apiId);
                     }
                 }
             });

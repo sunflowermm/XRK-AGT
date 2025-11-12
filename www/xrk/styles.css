@@ -341,9 +341,15 @@ body.light .theme-toggle-thumb::before {
     content: '☀️';
 }
 
-/* 首页按钮 */
-.home-button {
-    margin: 20px 16px;
+/* 侧边栏导航 */
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px 16px;
+}
+
+.nav-item {
     padding: 14px 18px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
@@ -359,35 +365,152 @@ body.light .theme-toggle-thumb::before {
     overflow: hidden;
 }
 
-.home-button::before {
+.nav-item::before {
     content: '';
     position: absolute;
     top: 50%;
     left: 0;
     width: 0;
     height: 100%;
-    background: var(--gradient-primary);
+    background: var(--gradient-sunflower);
     transition: width var(--transition-base);
     z-index: -1;
 }
 
-.home-button:hover {
+.nav-item:hover {
     transform: translateX(4px);
     border-color: var(--accent);
-    color: white;
+    color: var(--text-primary);
 }
 
-.home-button:hover::before {
+.nav-item:hover::before {
     width: 100%;
 }
 
-.home-button-icon {
-    font-size: 22px;
-    transition: transform var(--transition-bounce);
+.nav-item.active {
+    background: var(--gradient-sunflower);
+    border-color: var(--accent);
+    color: var(--text-primary);
+    font-weight: 600;
 }
 
-.home-button:hover .home-button-icon {
-    transform: rotate(360deg) scale(1.2);
+.nav-item.active::before {
+    width: 100%;
+}
+
+/* 导航图标 - 使用线条装饰 */
+.nav-icon {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.nav-item[data-page="home"] .nav-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 2px solid currentColor;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.nav-item[data-page="home"] .nav-icon::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    background: currentColor;
+    border-radius: 2px;
+}
+
+.nav-item[data-page="chat"] .nav-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60%;
+    border: 2px solid currentColor;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    box-sizing: border-box;
+}
+
+.nav-item[data-page="chat"] .nav-icon::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 30%;
+    border: 2px solid currentColor;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    box-sizing: border-box;
+}
+
+.nav-item[data-page="config"] .nav-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 2px solid currentColor;
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+
+.nav-item[data-page="config"] .nav-icon::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 8px;
+    height: 8px;
+    border: 1px solid currentColor;
+    border-radius: 1px;
+    box-sizing: border-box;
+}
+
+.nav-item[data-page="api"] .nav-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 2px solid currentColor;
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+
+.nav-item[data-page="api"] .nav-icon::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 6px solid currentColor;
+}
+
+.nav-text {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 500;
 }
 
 /* API分组 */
@@ -2651,6 +2774,248 @@ body.no-scroll {
     text-align: center;
     padding: 60px 40px;
     animation: welcomeFadeIn 0.6s ease-out;
+}
+
+/* 系统状态页面样式 */
+.system-status-header {
+    margin-bottom: 40px;
+}
+
+.system-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    text-align: left;
+}
+
+.status-card-large {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-base);
+    animation: cardSlideIn 0.5s ease-out backwards;
+}
+
+.status-card-large:nth-child(1) { animation-delay: 0.1s; }
+.status-card-large:nth-child(2) { animation-delay: 0.2s; }
+.status-card-large:nth-child(3) { animation-delay: 0.3s; }
+.status-card-large:nth-child(4) { animation-delay: 0.4s; }
+.status-card-large:nth-child(5) { animation-delay: 0.5s; }
+
+@keyframes cardSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.status-card-large:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--accent);
+}
+
+.status-card-header {
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border);
+}
+
+.status-card-header h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.status-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.status-item:last-child {
+    border-bottom: none;
+}
+
+.status-label {
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.status-value {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: right;
+}
+
+/* 内存图表 */
+.memory-chart {
+    margin: 16px 0;
+}
+
+.memory-bar {
+    width: 100%;
+    height: 24px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border);
+}
+
+.memory-fill {
+    height: 100%;
+    background: var(--gradient-sunflower);
+    border-radius: var(--radius-sm);
+    transition: width 0.5s ease-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.memory-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    animation: shimmer 2s infinite;
+}
+
+.memory-fill.process {
+    background: var(--gradient-primary);
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.memory-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.memory-percent {
+    font-weight: 600;
+    color: var(--accent);
+}
+
+/* 网络信息 */
+.network-item {
+    padding: 16px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+}
+
+.network-item:last-child {
+    margin-bottom: 0;
+}
+
+.network-name {
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 12px;
+    font-size: 15px;
+}
+
+.network-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 机器人状态列表 */
+.bot-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.bot-status-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    transition: all var(--transition-base);
+}
+
+.bot-status-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+    transform: translateX(4px);
+}
+
+.bot-status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.bot-status-indicator.online {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success-light);
+}
+
+.bot-status-indicator.offline {
+    background: var(--text-muted);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.bot-status-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.bot-status-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    font-size: 14px;
+}
+
+.bot-status-details {
+    font-size: 12px;
+    color: var(--text-muted);
 }
 
 @keyframes welcomeFadeIn {
