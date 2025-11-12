@@ -21,6 +21,8 @@ class APIControlCenter {
         this.autoSaveTimer = null;
         this._charts = {};
         this._metricsHistory = { mem: [], procMem: [] };
+        this._wsReconnectAttempt = 0;
+        this._wsHeartbeatTimer = null;
         this.init();
     }
 
@@ -35,6 +37,8 @@ class APIControlCenter {
         this.loadSystemStatus(); // 加载系统状态
         this.renderSidebar();
         this.renderQuickActions();
+        this.ensureDeviceWs();
+        this._initParticles();
         
         // 每分钟更新一次系统状态
         setInterval(() => {
@@ -49,6 +53,7 @@ class APIControlCenter {
                 if (this.currentPage === 'home') {
                     this.loadSystemStatus();
                 }
+                this.ensureDeviceWs();
             }
         });
     }
@@ -582,11 +587,77 @@ class APIControlCenter {
         if (!content) return;
         content.innerHTML = `
             <div class="welcome-screen">
-                <div class="welcome-icon"></div>
+                <div class="welcome-icon">🛠️</div>
                 <h1 class="welcome-title">API 调试中心</h1>
-                <p class="welcome-desc">选择左侧API进行调试</p>
+                <p class="welcome-desc">在左侧选择一个 API 以开始调试，或参考下方说明。</p>
+                <div class="stats-grid" style="max-width:900px;">
+                    <div class="stat-card">
+                        <div class="stat-icon">1️⃣</div>
+                        <div class="stat-label">选择 API</div>
+                        <div class="stat-value" style="font-size:24px;">从左侧列表</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">2️⃣</div>
+                        <div class="stat-label">填写参数</div>
+                        <div class="stat-value" style="font-size:24px;">自动生成表单</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">3️⃣</div>
+                        <div class="stat-label">执行并查看</div>
+                        <div class="stat-value" style="font-size:24px;">关键调试表 + JSON</div>
+                    </div>
+                </div>
+                <div id="responseSection"></div>
             </div>
         `;
+
+        // 使用 rAF 确保 DOM ready 再初始化/更新图表
+        requestAnimationFrame(() => {
+            const memCanvas = document.getElementById('memChart');
+            if (memCanvas && window.Chart) {
+                if (!this._charts.mem) {
+                    const ctx = memCanvas.getContext('2d');
+                    this._charts.mem = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: this._metricsHistory.mem.map(() => ''),
+                            datasets: [
+                                {
+                                    label: '内存使用率%（系统）',
+                                    data: this._metricsHistory.mem,
+                                    borderColor: '#6aa9ff',
+                                    backgroundColor: 'rgba(106,169,255,0.2)',
+                                    tension: 0.3,
+                                    fill: true,
+                                    pointRadius: 0
+                                },
+                                {
+                                    label: '进程堆内存%（进程）',
+                                    data: this._metricsHistory.procMem,
+                                    borderColor: '#f6a54c',
+                                    backgroundColor: 'rgba(246,165,76,0.2)',
+                                    tension: 0.3,
+                                    fill: true,
+                                    pointRadius: 0
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            animation: { duration: 400, easing: 'easeOutQuad' },
+                            plugins: { legend: { display: true } },
+                            scales: { x: { display: false }, y: { display: true, min: 0, max: 100 } }
+                        }
+                    });
+                } else {
+                    const chart = this._charts.mem;
+                    chart.data.labels = this._metricsHistory.mem.map(() => '');
+                    chart.data.datasets[0].data = this._metricsHistory.mem;
+                    chart.data.datasets[1].data = this._metricsHistory.procMem;
+                    chart.update('active');
+                }
+            }
+        });
     }
 
     async loadSystemStatus() {
@@ -634,7 +705,32 @@ class APIControlCenter {
         const memPercent = parseFloat(system.memory.usagePercent);
         const processMemPercent = system.memory.process.heapUsed / system.memory.process.heapTotal * 100;
 
+        // 先更新趋势数据，确保首次也有数据点
+        try {
+            this._metricsHistory.mem.push(memPercent);
+            this._metricsHistory.procMem.push(processMemPercent);
+            const cap = 60;
+            if (this._metricsHistory.mem.length > cap) this._metricsHistory.mem.shift();
+            if (this._metricsHistory.procMem.length > cap) this._metricsHistory.procMem.shift();
+        } catch {}
+
         grid.innerHTML = `
+            <!-- 概览 -->
+            <div class="status-summary">
+                <div class="summary-item">
+                    <div class="summary-label">内存使用</div>
+                    <div class="summary-value">${memPercent}%</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">在线机器人</div>
+                    <div class="summary-value">${bots.filter(b => b.online).length} / ${bots.length}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">系统运行</div>
+                    <div class="summary-value">${formatUptime(system.uptime)}</div>
+                </div>
+            </div>
+
             <!-- CPU信息 -->
             <div class="status-card-large">
                 <div class="status-card-header">
@@ -1158,10 +1254,13 @@ class APIControlCenter {
         } catch (error) {
             console.warn('WebSocket connection failed, will retry later:', error);
             // 如果连接失败，不抛出错误，稍后重试
+            this._scheduleWsReconnect();
             return;
         }
         this._deviceWs.addEventListener('open', () => {
             console.log('WebSocket connected to /device');
+            this._wsReconnectAttempt = 0;
+            this._startHeartbeat();
             // 注册为webclient设备
             try {
             this._deviceWs.send(JSON.stringify({
@@ -1190,6 +1289,8 @@ class APIControlCenter {
         this._deviceWs.addEventListener('close', () => {
             console.log('WebSocket closed, will retry on next use');
             this._deviceWs = null;
+            this._stopHeartbeat();
+            this._scheduleWsReconnect();
         });
         this._deviceWs.addEventListener('message', (evt) => {
             try {
@@ -1236,6 +1337,105 @@ class APIControlCenter {
         });
         this._deviceWs.addEventListener('close', () => {});
         this._deviceWs.addEventListener('error', () => {});
+    }
+
+    _scheduleWsReconnect() {
+        const attempt = Math.min(this._wsReconnectAttempt + 1, 8);
+        this._wsReconnectAttempt = attempt;
+        const backoff = Math.min(30000, 1000 * Math.pow(2, attempt)) + Math.floor(Math.random() * 500);
+        clearTimeout(this._wsReconnectTimer);
+        this._wsReconnectTimer = setTimeout(() => this.ensureDeviceWs(), backoff);
+    }
+
+    _startHeartbeat() {
+        this._stopHeartbeat();
+        this._wsHeartbeatTimer = setInterval(() => {
+            try {
+                if (this._deviceWs && this._deviceWs.readyState === 1) {
+                    this._deviceWs.send(JSON.stringify({ type: 'heartbeat', device_id: 'webclient', status: { ts: Date.now() } }));
+                }
+            } catch {}
+        }, 15000);
+    }
+
+    _stopHeartbeat() {
+        if (this._wsHeartbeatTimer) {
+            clearInterval(this._wsHeartbeatTimer);
+            this._wsHeartbeatTimer = null;
+        }
+    }
+
+    async _waitWsReady(timeout = 5000) {
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+            if (this._deviceWs && this._deviceWs.readyState === 1) return true;
+            await new Promise(r => setTimeout(r, 100));
+        }
+        return false;
+    }
+
+    _initParticles() {
+        const canvas = document.getElementById('bgParticles');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+        const dpi = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        function resize() {
+            width = canvas.clientWidth = window.innerWidth;
+            height = canvas.clientHeight = window.innerHeight;
+            canvas.width = Math.floor(width * dpi);
+            canvas.height = Math.floor(height * dpi);
+            ctx.setTransform(dpi, 0, 0, dpi, 0, 0);
+        }
+        resize();
+        window.addEventListener('resize', () => {
+            resize();
+        });
+        const count = Math.floor(Math.min(90, Math.max(50, (width + height) / 30)));
+        const particles = new Array(count).fill(0).map(() => ({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            vx: (Math.random() - 0.5) * 0.4,
+            vy: (Math.random() - 0.5) * 0.4,
+            r: Math.random() * 1.6 + 0.6,
+            a: Math.random() * Math.PI * 2
+        }));
+        const linksDist = 110;
+        function step() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = 'rgba(255,255,255,0.35)';
+            for (const p of particles) {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.a += 0.005;
+                p.vx += Math.cos(p.a) * 0.0003;
+                p.vy += Math.sin(p.a) * 0.0003;
+                if (p.x < -10) p.x = width + 10; if (p.x > width + 10) p.x = -10;
+                if (p.y < -10) p.y = height + 10; if (p.y > height + 10) p.y = -10;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const d = Math.hypot(dx, dy);
+                    if (d < linksDist) {
+                        ctx.globalAlpha = 1 - d / linksDist;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                        ctx.globalAlpha = 1;
+                    }
+                }
+            }
+            requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
     }
 
     // 处理后端下发的设备命令（通过心跳响应）
@@ -2085,15 +2285,25 @@ class APIControlCenter {
             const response = await fetch(url, options);
             const responseTime = Date.now() - startTime;
 
+            const contentType = response.headers.get('content-type') || '';
+            const rawText = await response.clone().text();
             let responseData;
-            const contentType = response.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-                responseData = await response.json();
-            } else {
-                responseData = await response.text();
+            try {
+                responseData = contentType.includes('application/json') ? JSON.parse(rawText) : rawText;
+            } catch {
+                responseData = rawText;
             }
+            const sizeBytes = new TextEncoder().encode(rawText).length;
+            const headersObj = {};
+            try { for (const [k, v] of response.headers.entries()) headersObj[k] = v; } catch {}
 
-            this.renderResponse(response.status, responseData, responseTime);
+            this.renderResponse(response.status, responseData, responseTime, {
+                url,
+                method: options.method,
+                headers: headersObj,
+                sizeBytes,
+                contentType
+            });
 
             if (response.ok) {
                 this.showToast('请求成功', 'success');
@@ -2101,7 +2311,13 @@ class APIControlCenter {
                 this.showToast(`请求失败: ${response.status}`, 'error');
             }
         } catch (error) {
-            this.renderResponse(0, { error: error.message }, Date.now() - startTime);
+            this.renderResponse(0, { error: error.message }, Date.now() - startTime, {
+                url,
+                method: (requestData.method || this.currentAPI.method) || '-',
+                headers: {},
+                sizeBytes: 0,
+                contentType: '-'
+            });
             this.showToast('请求失败: ' + error.message, 'error');
         } finally {
             button.innerHTML = originalText;
@@ -2127,9 +2343,20 @@ class APIControlCenter {
             });
 
             const responseTime = Date.now() - startTime;
-            const responseData = await response.json();
+            const rawText = await response.clone().text();
+            let responseData;
+            try { responseData = JSON.parse(rawText); } catch { responseData = rawText; }
+            const sizeBytes = new TextEncoder().encode(rawText).length;
+            const headersObj = {};
+            try { for (const [k, v] of response.headers.entries()) headersObj[k] = v; } catch {}
 
-            this.renderResponse(response.status, responseData, responseTime);
+            this.renderResponse(response.status, responseData, responseTime, {
+                url,
+                method: 'POST',
+                headers: headersObj,
+                sizeBytes,
+                contentType: response.headers.get('content-type') || ''
+            });
 
             if (response.ok) {
                 this.showToast('文件上传成功', 'success');
@@ -2140,7 +2367,13 @@ class APIControlCenter {
                 this.showToast(`上传失败: ${response.status}`, 'error');
             }
         } catch (error) {
-            this.renderResponse(0, { error: error.message }, Date.now() - startTime);
+            this.renderResponse(0, { error: error.message }, Date.now() - startTime, {
+                url,
+                method: 'POST',
+                headers: {},
+                sizeBytes: 0,
+                contentType: '-'
+            });
             this.showToast('上传失败: ' + error.message, 'error');
         } finally {
             button.innerHTML = originalText;
@@ -2148,7 +2381,7 @@ class APIControlCenter {
         }
     }
 
-    renderResponse(status, data, time) {
+    renderResponse(status, data, time, meta = {}) {
         const responseSection = document.getElementById('responseSection');
         if (!responseSection) return;
 
@@ -2166,6 +2399,13 @@ class APIControlCenter {
             }
         }
 
+        const formatBytes = (bytes) => {
+            if (!bytes || bytes <= 0) return '-';
+            const k = 1024; const sizes = ['B','KB','MB','GB'];
+            const i = Math.floor(Math.log(bytes)/Math.log(k));
+            return `${(bytes/Math.pow(k,i)).toFixed(2)} ${sizes[i]}`;
+        };
+
         responseSection.innerHTML = `
             <div class="response-section">
                 <div class="response-header">
@@ -2179,6 +2419,18 @@ class APIControlCenter {
                     </div>
                 </div>
                 
+                <div class="kv-table-wrap">
+                    <table class="kv-table">
+                        <tbody>
+                            <tr><th>方法</th><td>${meta.method || '-'}</td></tr>
+                            <tr><th>URL</th><td class="break-all">${meta.url || '-'}</td></tr>
+                            <tr><th>类型</th><td>${meta.contentType || '-'}</td></tr>
+                            <tr><th>大小</th><td>${formatBytes(meta.sizeBytes)}</td></tr>
+                            <tr><th>耗时</th><td>${time} ms</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
                 ${visualizationHtml}
                 
                 <div class="code-viewer">
@@ -2191,6 +2443,15 @@ class APIControlCenter {
                     </div>
                     <pre id="responseContent">${this.syntaxHighlight(JSON.stringify(data, null, 2))}</pre>
                 </div>
+
+                ${meta.headers && Object.keys(meta.headers).length ? `
+                <details class="headers-details"><summary>响应头</summary>
+                    <table class="kv-table small">
+                        <tbody>
+                            ${Object.entries(meta.headers).map(([k,v]) => `<tr><th>${k}</th><td class="break-all">${v}</td></tr>`).join('')}
+                        </tbody>
+                    </table>
+                </details>` : ''}
             </div>
         `;
 

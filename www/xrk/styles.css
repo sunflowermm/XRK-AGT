@@ -130,6 +130,16 @@ body {
     overflow-x: hidden;
 }
 
+/* 粒子背景最底层 */
+#bgParticles {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+    pointer-events: none;
+}
+
 /* 向日葵动态背景效果 */
 body::before {
     content: '';
@@ -869,6 +879,18 @@ body.light .theme-toggle-thumb::before {
     border-radius: 4px;
 }
 
+/* API 响应 Key-Value 表 */
+.kv-table-wrap { margin: 14px 0 18px; overflow-x: auto; }
+.kv-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); }
+.kv-table th, .kv-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.kv-table th { width: 120px; color: var(--text-muted); background: var(--bg-secondary); font-weight: 600; }
+.kv-table.small th { width: 200px; }
+.break-all { word-break: break-all; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .kv-table th { width: 90px; font-size: 12px; }
+  .kv-table td { font-size: 12px; }
+}
+
 /* ==================== 欢迎屏幕 ==================== */
 .welcome-screen {
     display: flex;
@@ -940,6 +962,25 @@ body.light .theme-toggle-thumb::before {
     max-width: 600px;
     line-height: 1.8;
 }
+
+/* 首页概览摘要 */
+.status-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin: 0 0 18px 0;
+}
+.summary-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.summary-label { color: var(--text-muted); font-size: 13px; }
+.summary-value { font-size: 18px; font-weight: 700; }
 
 /* 统计卡片 */
 .stats-grid {

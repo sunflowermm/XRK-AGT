@@ -10,7 +10,7 @@ export const AI_CONFIG = {
     enabled: true,
     baseUrl: 'https://api.gptgod.online/v1',
     apiKey: 'sk-kXTC6vIMUnNrYIJhSmOpZMPZHDQuDYWCCIOHdh1qZmxpvqKC',
-    chatModel: 'gemini-exp-1206',
+    chatModel: 'deepseek-r1-0528',
     temperature: 0.8,
     max_tokens: 2000,
     top_p: 0.9,
