@@ -2215,6 +2215,11 @@ class APIControlCenter {
             // 检查是否有 schema，如果有则使用可视化表单，否则使用 JSON 编辑器
             const hasSchema = configStructure && configStructure.schema && configStructure.schema.fields;
             
+            // 确保 configData 是对象
+            if (!configData || typeof configData !== 'object') {
+                configData = {};
+            }
+            
             if (hasSchema) {
                 // 使用可视化表单编辑器
                 this.renderConfigForm(configName, configData, configStructure.schema, editorPanel, editorTextarea);
@@ -2371,23 +2376,30 @@ class APIControlCenter {
                 console.warn('获取子配置结构失败:', e);
             }
 
+            // 确保 data.data 是对象
+            let subConfigData = data.data;
+            if (!subConfigData || typeof subConfigData !== 'object') {
+                subConfigData = {};
+            }
+            
             // 检查是否有 schema，如果有则使用可视化表单，否则使用 JSON 编辑器
             const hasSchema = subConfigStructure && subConfigStructure.fields;
             
             if (hasSchema) {
                 // 使用可视化表单编辑器
-                this.renderConfigForm(parentName, data.data, subConfigStructure, editorPanel, editorTextarea, subName);
+                this.renderConfigForm(parentName, subConfigData, subConfigStructure, editorPanel, editorTextarea, subName);
             } else {
                 // 使用 JSON 编辑器（向后兼容）
                 let jsonString;
                 try {
-                    if (typeof data.data === 'string') {
-                        jsonString = JSON.stringify(JSON.parse(data.data), null, 2);
+                    const jsonData = subConfigData || {};
+                    if (typeof jsonData === 'string') {
+                        jsonString = JSON.stringify(JSON.parse(jsonData), null, 2);
                     } else {
-                        jsonString = JSON.stringify(data.data, null, 2);
+                        jsonString = JSON.stringify(jsonData, null, 2);
                     }
                 } catch (e) {
-                    jsonString = typeof data.data === 'string' ? data.data : JSON.stringify(data.data, null, 2);
+                    jsonString = typeof subConfigData === 'string' ? subConfigData : JSON.stringify(subConfigData || {}, null, 2);
                 }
                 
                 editorTextarea.value = jsonString;
@@ -2794,16 +2806,24 @@ class APIControlCenter {
 
     /**
      * 生成表单 HTML
+     * 确保所有 schema 中定义的字段都显示，即使数据中没有该字段
      */
     generateFormHTML(data, fields, required = []) {
         let html = '<div class="config-form-scroll">';
         
+        // 确保 data 是对象
+        if (!data || typeof data !== 'object') {
+            data = {};
+        }
+        
         for (const [fieldName, fieldSchema] of Object.entries(fields)) {
-            // 处理值：如果数据中有该字段（即使是 null），使用数据中的值；否则使用默认值
+            // 处理值：优先使用数据中的值（包括 null），否则使用默认值
             let value;
-            if (data && fieldName in data) {
-                value = data[fieldName]; // 保留 null 值
+            if (data && Object.prototype.hasOwnProperty.call(data, fieldName)) {
+                // 数据中有该字段（即使是 null 或 undefined）
+                value = data[fieldName];
             } else {
+                // 数据中没有该字段，使用默认值
                 value = fieldSchema.default !== undefined ? fieldSchema.default : null;
             }
             
@@ -2900,20 +2920,22 @@ class APIControlCenter {
      */
     renderInput(fieldId, fieldName, fieldSchema, value) {
         // 允许 null 值，显示为空字符串
-        const val = value !== null && value !== undefined ? String(value) : '';
-        return `<input type="text" id="${fieldId}" class="config-form-input" data-field="${fieldName}" value="${this.escapeHtml(val)}" placeholder="${fieldSchema.placeholder || ''}" />`;
+        // 如果值是 null 或 undefined，显示为空字符串，但保留字段
+        const val = (value !== null && value !== undefined) ? String(value) : '';
+        const placeholder = fieldSchema.placeholder || '';
+        return `<input type="text" id="${fieldId}" class="config-form-input" data-field="${fieldName}" value="${this.escapeHtml(val)}" placeholder="${this.escapeHtml(placeholder)}" />`;
     }
 
     /**
      * 渲染 InputNumber 组件
      */
     renderInputNumber(fieldId, fieldName, fieldSchema, value) {
-        // 如果值是 null，显示为空，允许用户输入或保持为空
-        const val = value !== null && value !== undefined ? Number(value) : '';
+        // 如果值是 null 或 undefined，显示为空，允许用户输入或保持为空
+        const val = (value !== null && value !== undefined && !isNaN(value)) ? Number(value) : '';
         const min = fieldSchema.min !== undefined ? `min="${fieldSchema.min}"` : '';
         const max = fieldSchema.max !== undefined ? `max="${fieldSchema.max}"` : '';
         const placeholder = fieldSchema.placeholder || (fieldSchema.default !== undefined ? String(fieldSchema.default) : '');
-        return `<input type="number" id="${fieldId}" class="config-form-input config-form-number" data-field="${fieldName}" value="${val}" ${min} ${max} placeholder="${placeholder}" />`;
+        return `<input type="number" id="${fieldId}" class="config-form-input config-form-number" data-field="${fieldName}" value="${val}" ${min} ${max} placeholder="${this.escapeHtml(placeholder)}" />`;
     }
 
     /**
@@ -2934,13 +2956,13 @@ class APIControlCenter {
      */
     renderSubForm(fieldId, fieldName, fieldSchema, value) {
         const subFields = fieldSchema.fields || {};
-        // 如果 value 是 null，使用空对象，但保留字段结构
-        const subData = value && typeof value === 'object' ? value : {};
+        // 如果 value 是 null 或不是对象，使用空对象，但保留字段结构
+        const subData = (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
         let html = `<div class="config-form-subform" id="${fieldId}" data-field="${fieldName}">`;
         for (const [subFieldName, subFieldSchema] of Object.entries(subFields)) {
             // 如果子数据中有该字段（即使是 null），使用它；否则使用默认值
             let subValue;
-            if (subFieldName in subData) {
+            if (subData && Object.prototype.hasOwnProperty.call(subData, subFieldName)) {
                 subValue = subData[subFieldName]; // 保留 null
             } else {
                 subValue = subFieldSchema.default !== undefined ? subFieldSchema.default : null;
@@ -2979,7 +3001,8 @@ class APIControlCenter {
      * 渲染 Tags 组件（标签数组，用于字符串数组）
      */
     renderTags(fieldId, fieldName, fieldSchema, value) {
-        const arr = Array.isArray(value) ? value : [];
+        // 确保 value 是数组，过滤掉 null 和 undefined
+        const arr = Array.isArray(value) ? value.filter(item => item !== null && item !== undefined) : [];
         let html = `<div class="config-form-tags" id="${fieldId}" data-field="${fieldName}">`;
         html += `<div class="config-form-tags-list">`;
         arr.forEach((item, index) => {
@@ -3077,10 +3100,13 @@ class APIControlCenter {
     /**
      * 从表单收集数据
      * 确保所有字段都被收集，即使值为 null 或空
+     * 同时确保所有 schema 中定义的字段都在数据中（即使没有对应的表单元素）
      */
     collectFormData(formContainer) {
         const data = {};
         const collectedFields = new Set();
+        
+        // 收集所有表单字段
         const fields = formContainer.querySelectorAll('[data-field]');
         
         fields.forEach(field => {
@@ -3096,14 +3122,13 @@ class APIControlCenter {
                     data[fieldName] = field.checked;
                 } else if (field.type === 'number') {
                     // 数字字段：空字符串或无效值保持为 null（允许 null）
-                    const numVal = field.value !== '' && field.value !== null ? Number(field.value) : null;
+                    const numVal = field.value !== '' && field.value !== null && field.value !== undefined ? Number(field.value) : null;
                     data[fieldName] = (numVal !== null && !isNaN(numVal)) ? numVal : null;
                 } else if (field.tagName === 'SELECT') {
                     // Select：空值保持为 null
                     data[fieldName] = field.value || null;
                 } else {
                     // 字符串字段：保留空字符串（表示键存在但值为空）
-                    // null 值转换为空字符串，确保键存在
                     data[fieldName] = field.value || '';
                 }
             } else {
@@ -3119,7 +3144,7 @@ class APIControlCenter {
                 if (field.type === 'checkbox') {
                     current[lastKey] = field.checked;
                 } else if (field.type === 'number') {
-                    const numVal = field.value !== '' && field.value !== null ? Number(field.value) : null;
+                    const numVal = field.value !== '' && field.value !== null && field.value !== undefined ? Number(field.value) : null;
                     current[lastKey] = (numVal !== null && !isNaN(numVal)) ? numVal : null;
                 } else if (field.tagName === 'SELECT') {
                     current[lastKey] = field.value || null;
@@ -3171,7 +3196,7 @@ class APIControlCenter {
             if (!fieldName) return;
             
             // 确保嵌套对象存在
-            if (!data[fieldName]) {
+            if (!data[fieldName] || typeof data[fieldName] !== 'object') {
                 data[fieldName] = {};
             }
         });
