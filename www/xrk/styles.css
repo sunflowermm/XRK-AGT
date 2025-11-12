@@ -3,7 +3,7 @@
  * 主样式表 - 无遮罩层版本
  */
 
-/* ==================== 全局变量 - 向日葵主题 ==================== */
+/* ==================== 全局变量 ==================== */
 :root {
     /* 向日葵黄棕色深色主题 */
     --bg-primary: #1a1508;
@@ -999,34 +999,8 @@ body.light .theme-toggle-thumb::before {
     align-items: center;
     justify-content: space-between;
 }
-.summary-label { color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+.summary-label { color: var(--text-muted); font-size: 13px; }
 .summary-value { font-size: 18px; font-weight: 700; }
-
-/* 骨架屏 */
-.skeleton-line {
-    height: 12px;
-    background: linear-gradient(90deg, rgba(255,255,255,0.1), rgba(255,255,255,0.2), rgba(255,255,255,0.1));
-    border-radius: 6px;
-    background-size: 200% 100%;
-    animation: shimmer 1.3s infinite;
-}
-.skeleton-block {
-    width: 100%;
-    background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.12), rgba(255,255,255,0.06));
-    border-radius: var(--radius-md);
-    background-size: 200% 100%;
-    animation: shimmer 1.3s infinite;
-}
-@keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
-}
-
-/* 侧边栏可访问性：键盘焦点可见 */
-.nav-item:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-}
 
 /* 统计卡片 */
 .stats-grid {

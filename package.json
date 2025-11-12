@@ -6,7 +6,6 @@
   "main": "app.js",
   "type": "module",
   "dependencies": {
-    "chart.js": "^4.4.1",
     "systeminformation": "^5.25.11",
     "glob": "^11.0.3",
     "art-template": "^4.13.2",

@@ -1,6 +1,5 @@
 import os from 'os';
 import si from 'systeminformation';
-import { createRequire } from 'module';
 import cfg from '../../lib/config/config.js';
 
 /**
@@ -13,25 +12,6 @@ export default {
   priority: 200,
 
   routes: [
-    {
-      method: 'GET',
-      path: '/vendor/chart.js',
-      handler: async (req, res) => {
-        try {
-          const require = createRequire(import.meta.url);
-          let chartPath = '';
-          try {
-            chartPath = require.resolve('chart.js/dist/chart.umd.min.js');
-          } catch {
-            chartPath = require.resolve('chart.js/dist/chart.umd.js');
-          }
-          res.set('Content-Type', 'application/javascript; charset=utf-8');
-          res.sendFile(chartPath);
-        } catch (err) {
-          res.status(500).send('// chart.js not available: ' + String(err?.message || err));
-        }
-      }
-    },
     {
       method: 'GET',
       path: '/api/system/status',
