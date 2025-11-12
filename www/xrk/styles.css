@@ -2657,6 +2657,8 @@ body.no-scroll {
     flex-direction: column;
     overflow: hidden;
     background: var(--bg-secondary);
+    min-height: 0;
+    position: relative;
 }
 
 .config-list-panel {
@@ -2840,6 +2842,7 @@ body.no-scroll {
     padding: 32px;
     overflow: hidden;
     background: var(--bg-secondary);
+    min-height: 0;
 }
 
 .config-editor-toolbar {
@@ -2882,8 +2885,9 @@ body.no-scroll {
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-sm);
-    padding: 20px;
+    padding: 0;
     min-height: 0; /* 修复 flex 子元素滚动问题 */
+    position: relative;
 }
 
 .config-editor-textarea {
@@ -2928,6 +2932,11 @@ body.no-scroll {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
 }
 
 .config-form-scroll {
@@ -2937,6 +2946,8 @@ body.no-scroll {
     padding: 20px;
     padding-right: 12px;
     min-height: 0;
+    -webkit-overflow-scrolling: touch; /* iOS 平滑滚动 */
+    overscroll-behavior: contain; /* 防止滚动链 */
 }
 
 .config-form-scroll::-webkit-scrollbar {
@@ -3114,6 +3125,98 @@ body.no-scroll {
 }
 
 .config-form-array-remove {
+    flex-shrink: 0;
+}
+
+/* ==================== Tags 组件样式 ==================== */
+.config-form-tags {
+    margin-top: 12px;
+}
+
+.config-form-tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    min-height: 32px;
+}
+
+.config-form-tag-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--accent-light);
+    border: 1px solid var(--accent);
+    border-radius: 16px;
+    font-size: 13px;
+    color: var(--accent);
+    transition: all var(--transition-base);
+}
+
+.config-form-tag-item:hover {
+    background: var(--accent);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.config-form-tag-text {
+    user-select: none;
+}
+
+.config-form-tag-remove {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all var(--transition-base);
+}
+
+.config-form-tag-item:hover .config-form-tag-remove {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.config-form-tag-remove:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.config-form-tags-input-wrapper {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.config-form-tags-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    transition: all var(--transition-base);
+    outline: none;
+}
+
+.config-form-tags-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-light);
+    background: var(--bg-secondary);
+}
+
+.config-form-tags-add {
     flex-shrink: 0;
 }
 

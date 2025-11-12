@@ -2446,14 +2446,31 @@ class APIControlCenter {
     }
 
     async saveSubConfig() {
-        const editorTextarea = document.getElementById('configEditorTextarea');
-        if (!editorTextarea || !editorTextarea.dataset.configName || !editorTextarea.dataset.subName) {
-            this.showToast('缺少必要的配置信息', 'error');
+        // 尝试多种方式获取 editorTextarea
+        let editorTextarea = document.getElementById('configEditorTextarea');
+        if (!editorTextarea) {
+            const formContainer = document.querySelector('.config-form-container');
+            if (formContainer) {
+                editorTextarea = formContainer.querySelector('#configEditorTextarea');
+            }
+        }
+        if (!editorTextarea) {
+            editorTextarea = document.querySelector('textarea#configEditorTextarea[data-config-name]');
+        }
+        
+        if (!editorTextarea) {
+            this.showToast('无法找到配置编辑器', 'error');
             return;
         }
 
         const configName = editorTextarea.dataset.configName;
         const subName = editorTextarea.dataset.subName;
+        
+        if (!configName || !subName) {
+            this.showToast('缺少配置信息', 'error');
+            return;
+        }
+
         let configData;
 
         // 检查是否使用表单
@@ -2462,15 +2479,21 @@ class APIControlCenter {
             configData = this.collectFormData(formContainer);
         } else {
             try {
-                const jsonText = this.configEditor ? this.configEditor.getValue() : editorTextarea.value;
+                const jsonText = this.configEditor ? this.configEditor.getValue() : (editorTextarea.value || '{}');
                 if (!jsonText || jsonText.trim() === '') {
-                    throw new Error('配置内容不能为空');
+                    configData = {};
+                } else {
+                    configData = JSON.parse(jsonText);
                 }
-                configData = JSON.parse(jsonText);
             } catch (error) {
                 this.showToast('JSON 格式错误: ' + error.message, 'error');
                 return;
             }
+        }
+        
+        // 确保 configData 是对象
+        if (!configData || typeof configData !== 'object') {
+            configData = {};
         }
 
         try {
@@ -2550,13 +2573,31 @@ class APIControlCenter {
     }
 
     async saveConfig() {
-        const editorTextarea = document.getElementById('configEditorTextarea');
-        if (!editorTextarea || !editorTextarea.dataset.configName) {
-            this.showToast('缺少必要的配置信息', 'error');
+        // 尝试多种方式获取 editorTextarea
+        let editorTextarea = document.getElementById('configEditorTextarea');
+        if (!editorTextarea) {
+            // 如果找不到，尝试从表单容器中查找
+            const formContainer = document.querySelector('.config-form-container');
+            if (formContainer) {
+                editorTextarea = formContainer.querySelector('#configEditorTextarea');
+            }
+        }
+        
+        // 如果还是没有，尝试从隐藏元素中查找
+        if (!editorTextarea) {
+            editorTextarea = document.querySelector('textarea#configEditorTextarea[data-config-name]');
+        }
+        
+        if (!editorTextarea) {
+            this.showToast('无法找到配置编辑器', 'error');
             return;
         }
 
         const configName = editorTextarea.dataset.configName;
+        if (!configName) {
+            this.showToast('缺少配置名称', 'error');
+            return;
+        }
         
         // 检查是否是 system 配置的子配置（不应该通过 saveConfig 保存）
         if (configName === 'system' && editorTextarea.dataset.subName) {
@@ -2572,15 +2613,21 @@ class APIControlCenter {
             configData = this.collectFormData(formContainer);
         } else {
             try {
-                const jsonText = this.configEditor ? this.configEditor.getValue() : editorTextarea.value;
+                const jsonText = this.configEditor ? this.configEditor.getValue() : (editorTextarea.value || '{}');
                 if (!jsonText || jsonText.trim() === '') {
-                    throw new Error('配置内容不能为空');
+                    configData = {};
+                } else {
+                    configData = JSON.parse(jsonText);
                 }
-                configData = JSON.parse(jsonText);
             } catch (error) {
                 this.showToast('JSON 格式错误: ' + error.message, 'error');
                 return;
             }
+        }
+        
+        // 确保 configData 是对象
+        if (!configData || typeof configData !== 'object') {
+            configData = {};
         }
 
         try {
@@ -2752,7 +2799,14 @@ class APIControlCenter {
         let html = '<div class="config-form-scroll">';
         
         for (const [fieldName, fieldSchema] of Object.entries(fields)) {
-            const value = data && data[fieldName] !== undefined ? data[fieldName] : fieldSchema.default;
+            // 处理值：如果数据中有该字段（即使是 null），使用数据中的值；否则使用默认值
+            let value;
+            if (data && fieldName in data) {
+                value = data[fieldName]; // 保留 null 值
+            } else {
+                value = fieldSchema.default !== undefined ? fieldSchema.default : null;
+            }
+            
             const isRequired = required.includes(fieldName);
             const fieldId = `config-field-${fieldName}`;
             
@@ -2769,7 +2823,7 @@ class APIControlCenter {
             }
             
             // 根据组件类型渲染不同的输入控件
-            const component = fieldSchema.component || this.inferComponentType(fieldSchema.type);
+            const component = fieldSchema.component || this.inferComponentType(fieldSchema.type, fieldSchema);
             html += this.renderFormField(fieldId, fieldName, fieldSchema, value, component);
             
             html += `</div>`;
@@ -2782,7 +2836,17 @@ class APIControlCenter {
     /**
      * 推断组件类型
      */
-    inferComponentType(type) {
+    inferComponentType(type, fieldSchema = {}) {
+        // 如果指定了 component，直接使用
+        if (fieldSchema.component) {
+            return fieldSchema.component;
+        }
+        
+        // 如果是数组且有 itemType，可能是 Tags 组件
+        if (type === 'array' && fieldSchema.itemType === 'string') {
+            return 'Tags';
+        }
+        
         const typeMap = {
             'string': 'Input',
             'number': 'InputNumber',
@@ -2810,6 +2874,8 @@ class APIControlCenter {
                 return this.renderSubForm(fieldId, fieldName, fieldSchema, value);
             case 'Array':
                 return this.renderArray(fieldId, fieldName, fieldSchema, value);
+            case 'Tags':
+                return this.renderTags(fieldId, fieldName, fieldSchema, value);
             default:
                 return this.renderInput(fieldId, fieldName, fieldSchema, value);
         }
@@ -2833,18 +2899,21 @@ class APIControlCenter {
      * 渲染 Input 组件
      */
     renderInput(fieldId, fieldName, fieldSchema, value) {
+        // 允许 null 值，显示为空字符串
         const val = value !== null && value !== undefined ? String(value) : '';
-        return `<input type="text" id="${fieldId}" class="config-form-input" data-field="${fieldName}" value="${this.escapeHtml(val)}" />`;
+        return `<input type="text" id="${fieldId}" class="config-form-input" data-field="${fieldName}" value="${this.escapeHtml(val)}" placeholder="${fieldSchema.placeholder || ''}" />`;
     }
 
     /**
      * 渲染 InputNumber 组件
      */
     renderInputNumber(fieldId, fieldName, fieldSchema, value) {
-        const val = value !== null && value !== undefined ? Number(value) : (fieldSchema.default || 0);
+        // 如果值是 null，显示为空，允许用户输入或保持为空
+        const val = value !== null && value !== undefined ? Number(value) : '';
         const min = fieldSchema.min !== undefined ? `min="${fieldSchema.min}"` : '';
         const max = fieldSchema.max !== undefined ? `max="${fieldSchema.max}"` : '';
-        return `<input type="number" id="${fieldId}" class="config-form-input config-form-number" data-field="${fieldName}" value="${val}" ${min} ${max} />`;
+        const placeholder = fieldSchema.placeholder || (fieldSchema.default !== undefined ? String(fieldSchema.default) : '');
+        return `<input type="number" id="${fieldId}" class="config-form-input config-form-number" data-field="${fieldName}" value="${val}" ${min} ${max} placeholder="${placeholder}" />`;
     }
 
     /**
@@ -2865,17 +2934,24 @@ class APIControlCenter {
      */
     renderSubForm(fieldId, fieldName, fieldSchema, value) {
         const subFields = fieldSchema.fields || {};
-        const subData = value || {};
+        // 如果 value 是 null，使用空对象，但保留字段结构
+        const subData = value && typeof value === 'object' ? value : {};
         let html = `<div class="config-form-subform" id="${fieldId}" data-field="${fieldName}">`;
         for (const [subFieldName, subFieldSchema] of Object.entries(subFields)) {
-            const subValue = subData[subFieldName] !== undefined ? subData[subFieldName] : subFieldSchema.default;
+            // 如果子数据中有该字段（即使是 null），使用它；否则使用默认值
+            let subValue;
+            if (subFieldName in subData) {
+                subValue = subData[subFieldName]; // 保留 null
+            } else {
+                subValue = subFieldSchema.default !== undefined ? subFieldSchema.default : null;
+            }
             const subFieldId = `${fieldId}-${subFieldName}`;
             html += `<div class="config-form-subfield">`;
             html += `<label for="${subFieldId}" class="config-form-label">${subFieldSchema.label || subFieldName}</label>`;
             if (subFieldSchema.description) {
                 html += `<div class="config-form-hint">${subFieldSchema.description}</div>`;
             }
-            html += this.renderFormField(subFieldId, `${fieldName}.${subFieldName}`, subFieldSchema, subValue, subFieldSchema.component || this.inferComponentType(subFieldSchema.type));
+            html += this.renderFormField(subFieldId, `${fieldName}.${subFieldName}`, subFieldSchema, subValue, subFieldSchema.component || this.inferComponentType(subFieldSchema.type, subFieldSchema));
             html += `</div>`;
         }
         html += `</div>`;
@@ -2895,6 +2971,28 @@ class APIControlCenter {
             html += `</div>`;
         });
         html += `<button type="button" class="btn btn-sm btn-primary config-form-array-add" data-field="${fieldName}">添加项</button>`;
+        html += `</div>`;
+        return html;
+    }
+
+    /**
+     * 渲染 Tags 组件（标签数组，用于字符串数组）
+     */
+    renderTags(fieldId, fieldName, fieldSchema, value) {
+        const arr = Array.isArray(value) ? value : [];
+        let html = `<div class="config-form-tags" id="${fieldId}" data-field="${fieldName}">`;
+        html += `<div class="config-form-tags-list">`;
+        arr.forEach((item, index) => {
+            html += `<div class="config-form-tag-item" data-tag-index="${index}">`;
+            html += `<span class="config-form-tag-text">${this.escapeHtml(String(item))}</span>`;
+            html += `<button type="button" class="config-form-tag-remove" data-index="${index}">×</button>`;
+            html += `</div>`;
+        });
+        html += `</div>`;
+        html += `<div class="config-form-tags-input-wrapper">`;
+        html += `<input type="text" class="config-form-tags-input" placeholder="输入后按回车添加" />`;
+        html += `<button type="button" class="btn btn-sm btn-primary config-form-tags-add" data-field="${fieldName}">添加</button>`;
+        html += `</div>`;
         html += `</div>`;
         return html;
     }
@@ -2927,17 +3025,69 @@ class APIControlCenter {
                 this.closest('.config-form-array-item').remove();
             });
         });
+
+        // Tags 组件操作
+        formContainer.querySelectorAll('.config-form-tags').forEach(tagsContainer => {
+            const input = tagsContainer.querySelector('.config-form-tags-input');
+            const addBtn = tagsContainer.querySelector('.config-form-tags-add');
+            const tagsList = tagsContainer.querySelector('.config-form-tags-list');
+            
+            const addTag = () => {
+                const value = input.value.trim();
+                if (!value) return;
+                
+                const tagDiv = document.createElement('div');
+                tagDiv.className = 'config-form-tag-item';
+                const index = tagsList.children.length;
+                tagDiv.dataset.tagIndex = index;
+                tagDiv.innerHTML = `
+                    <span class="config-form-tag-text">${this.escapeHtml(value)}</span>
+                    <button type="button" class="config-form-tag-remove" data-index="${index}">×</button>
+                `;
+                tagsList.appendChild(tagDiv);
+                input.value = '';
+                
+                tagDiv.querySelector('.config-form-tag-remove').addEventListener('click', function() {
+                    tagDiv.remove();
+                });
+            };
+            
+            if (input) {
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addTag();
+                    }
+                });
+            }
+            
+            if (addBtn) {
+                addBtn.addEventListener('click', addTag);
+            }
+            
+            // 绑定已有标签的删除按钮
+            tagsList.querySelectorAll('.config-form-tag-remove').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    this.closest('.config-form-tag-item').remove();
+                });
+            });
+        });
     }
 
     /**
      * 从表单收集数据
+     * 确保所有字段都被收集，即使值为 null 或空
      */
     collectFormData(formContainer) {
         const data = {};
+        const collectedFields = new Set();
         const fields = formContainer.querySelectorAll('[data-field]');
         
         fields.forEach(field => {
             const fieldName = field.dataset.field;
+            if (!fieldName) return;
+            
+            collectedFields.add(fieldName);
             const fieldPath = fieldName.split('.');
             
             if (fieldPath.length === 1) {
@@ -2945,9 +3095,16 @@ class APIControlCenter {
                 if (field.type === 'checkbox') {
                     data[fieldName] = field.checked;
                 } else if (field.type === 'number') {
-                    data[fieldName] = field.value !== '' ? Number(field.value) : null;
+                    // 数字字段：空字符串或无效值保持为 null（允许 null）
+                    const numVal = field.value !== '' && field.value !== null ? Number(field.value) : null;
+                    data[fieldName] = (numVal !== null && !isNaN(numVal)) ? numVal : null;
+                } else if (field.tagName === 'SELECT') {
+                    // Select：空值保持为 null
+                    data[fieldName] = field.value || null;
                 } else {
-                    data[fieldName] = field.value;
+                    // 字符串字段：保留空字符串（表示键存在但值为空）
+                    // null 值转换为空字符串，确保键存在
+                    data[fieldName] = field.value || '';
                 }
             } else {
                 // 嵌套字段
@@ -2962,25 +3119,61 @@ class APIControlCenter {
                 if (field.type === 'checkbox') {
                     current[lastKey] = field.checked;
                 } else if (field.type === 'number') {
-                    current[lastKey] = field.value !== '' ? Number(field.value) : null;
+                    const numVal = field.value !== '' && field.value !== null ? Number(field.value) : null;
+                    current[lastKey] = (numVal !== null && !isNaN(numVal)) ? numVal : null;
+                } else if (field.tagName === 'SELECT') {
+                    current[lastKey] = field.value || null;
                 } else {
-                    current[lastKey] = field.value;
+                    current[lastKey] = field.value || '';
                 }
             }
         });
         
-        // 处理数组字段
+        // 处理数组字段：保留空数组
         formContainer.querySelectorAll('.config-form-array').forEach(arrayContainer => {
             const fieldName = arrayContainer.dataset.field;
-            const items = Array.from(arrayContainer.querySelectorAll('.config-form-array-item input')).map(input => {
-                const val = input.value;
-                // 尝试解析为数字
-                if (/^-?\d+\.?\d*$/.test(val)) {
-                    return Number(val);
-                }
-                return val;
-            });
+            if (!fieldName) return;
+            
+            collectedFields.add(fieldName);
+            const items = Array.from(arrayContainer.querySelectorAll('.config-form-array-item input'))
+                .map(input => {
+                    const val = input.value.trim();
+                    if (val === '') return null;
+                    // 尝试解析为数字
+                    if (/^-?\d+\.?\d*$/.test(val)) {
+                        return Number(val);
+                    }
+                    return val;
+                })
+                .filter(item => item !== null);
+            
+            // 即使数组为空，也保留键（空数组）
             data[fieldName] = items;
+        });
+        
+        // 处理 Tags 字段（字符串数组）
+        formContainer.querySelectorAll('.config-form-tags').forEach(tagsContainer => {
+            const fieldName = tagsContainer.dataset.field;
+            if (!fieldName) return;
+            
+            collectedFields.add(fieldName);
+            const items = Array.from(tagsContainer.querySelectorAll('.config-form-tag-text'))
+                .map(span => span.textContent.trim())
+                .filter(item => item !== '');
+            
+            // 即使数组为空，也保留键（空数组）
+            data[fieldName] = items;
+        });
+        
+        // 处理嵌套对象中的字段：确保所有子字段都被收集
+        formContainer.querySelectorAll('.config-form-subform').forEach(subForm => {
+            const fieldName = subForm.dataset.field;
+            if (!fieldName) return;
+            
+            // 确保嵌套对象存在
+            if (!data[fieldName]) {
+                data[fieldName] = {};
+            }
         });
         
         return data;
