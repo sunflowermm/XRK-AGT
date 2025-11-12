@@ -802,7 +802,7 @@ class APIControlCenter {
         // WebSocket 路径是 /device（根据 device.js 中的 ws.device 定义）
         const wsUrl = (this.serverUrl.replace(/^http/, 'ws') + `/device`) + (apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '');
         try {
-            this._deviceWs = new WebSocket(wsUrl);
+        this._deviceWs = new WebSocket(wsUrl);
         } catch (error) {
             console.warn('WebSocket connection failed, will retry later:', error);
             // 如果连接失败，不抛出错误，稍后重试
@@ -812,14 +812,14 @@ class APIControlCenter {
             console.log('WebSocket connected to /device');
             // 注册为webclient设备
             try {
-                this._deviceWs.send(JSON.stringify({
-                    type: 'register',
-                    device_id: 'webclient',
-                    device_type: 'web',
-                    device_name: 'Web客户端',
-                    capabilities: ['display', 'microphone']
-                }));
-                // 主动上报一次心跳，帮助服务端尽快建立在线状态
+            this._deviceWs.send(JSON.stringify({
+                type: 'register',
+                device_id: 'webclient',
+                device_type: 'web',
+                device_name: 'Web客户端',
+                capabilities: ['display', 'microphone']
+            }));
+            // 主动上报一次心跳，帮助服务端尽快建立在线状态
                 this._deviceWs.send(JSON.stringify({
                     type: 'heartbeat',
                     device_id: 'webclient',

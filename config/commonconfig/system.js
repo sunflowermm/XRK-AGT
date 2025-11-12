@@ -14,13 +14,23 @@ export default class SystemConfig extends ConfigBase {
       fileType: 'yaml'
     });
 
+    // 辅助函数：生成基于端口的动态路径
+    const getConfigPath = (configName) => {
+      return (cfg) => {
+        // 从 cfg 获取端口，路径格式：data/server_bots/{port}/{name}.yaml
+        const port = cfg?._port || cfg?.server?.server?.port || 8086;
+        return port ? `data/server_bots/${port}/${configName}.yaml` : `config/config/${configName}.yaml`;
+      };
+    };
+
     // 定义所有系统配置文件
+    // 使用动态路径函数，基于端口获取正确路径
     this.configFiles = {
       bot: {
         name: 'bot',
         displayName: '机器人配置',
         description: '机器人核心配置，包括日志、文件监听、Puppeteer等',
-        filePath: 'config/config/bot.yaml',
+        filePath: getConfigPath('bot'),
         fileType: 'yaml',
         schema: {
           required: ['log_level'],
@@ -207,7 +217,7 @@ export default class SystemConfig extends ConfigBase {
         name: 'server',
         displayName: '服务器配置',
         description: 'HTTP/HTTPS服务器、反向代理、SSL证书等配置',
-        filePath: 'config/config/server.yaml',
+        filePath: getConfigPath('server'),
         fileType: 'yaml',
         schema: {
           fields: {
@@ -792,7 +802,7 @@ export default class SystemConfig extends ConfigBase {
         name: 'db',
         displayName: '数据库配置',
         description: 'Sequelize数据库连接配置',
-        filePath: 'config/config/db.yaml',
+        filePath: getConfigPath('db'),
         fileType: 'yaml',
         schema: {
           required: ['dialect'],
@@ -824,7 +834,7 @@ export default class SystemConfig extends ConfigBase {
         name: 'device',
         displayName: '设备管理配置',
         description: '设备管理的核心参数配置',
-        filePath: 'config/config/device.yaml',
+        filePath: getConfigPath('device'),
         fileType: 'yaml',
         schema: {
           fields: {
@@ -888,7 +898,7 @@ export default class SystemConfig extends ConfigBase {
         name: 'group',
         displayName: '群组配置',
         description: '群聊相关配置',
-        filePath: 'config/config/group.yaml',
+        filePath: getConfigPath('group'),
         fileType: 'yaml',
         schema: {
           fields: {
@@ -959,7 +969,7 @@ export default class SystemConfig extends ConfigBase {
         name: 'notice',
         displayName: '通知配置',
         description: '各种通知服务配置',
-        filePath: 'config/config/notice.yaml',
+        filePath: getConfigPath('notice'),
         fileType: 'yaml',
         schema: {
           fields: {
@@ -991,7 +1001,7 @@ export default class SystemConfig extends ConfigBase {
         name: 'other',
         displayName: '其他配置',
         description: '其他杂项配置',
-        filePath: 'config/config/other.yaml',
+        filePath: getConfigPath('other'),
         fileType: 'yaml',
         schema: {
           fields: {
@@ -1077,7 +1087,7 @@ export default class SystemConfig extends ConfigBase {
         name: 'redis',
         displayName: 'Redis配置',
         description: 'Redis服务器连接配置',
-        filePath: 'config/config/redis.yaml',
+        filePath: getConfigPath('redis'),
         fileType: 'yaml',
         schema: {
           required: ['host', 'port', 'db'],
@@ -1123,7 +1133,7 @@ export default class SystemConfig extends ConfigBase {
         name: 'renderer',
         displayName: '渲染器配置',
         description: '渲染后端配置',
-        filePath: 'config/config/renderer.yaml',
+        filePath: getConfigPath('renderer'),
         fileType: 'yaml',
         schema: {
           fields: {
@@ -1142,7 +1152,7 @@ export default class SystemConfig extends ConfigBase {
         name: 'aistream',
         displayName: '工作流系统配置',
         description: 'AI工作流系统配置',
-        filePath: 'config/config/aistream.yaml',
+        filePath: getConfigPath('aistream'),
         fileType: 'yaml',
         schema: {
           fields: {

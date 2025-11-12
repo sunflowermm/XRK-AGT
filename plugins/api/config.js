@@ -2,6 +2,8 @@
  * 配置管理API
  * 提供统一的配置文件读写接口
  */
+import BotUtil from '../../lib/common/util.js';
+
 export default {
   name: 'config-manager',
   dsc: '配置管理API - 统一的配置文件读写接口',
@@ -92,7 +94,13 @@ export default {
 
           let data;
           if (keyPath) {
-            data = await config.get(keyPath);
+            // 如果是 system 配置，keyPath 是子配置名称
+            if (name === 'system' && config.getConfigInstance) {
+              // SystemConfig 的特殊处理
+              data = await config.read(keyPath);
+            } else {
+              data = await config.get(keyPath);
+            }
           } else {
             data = await config.read();
           }
@@ -102,10 +110,12 @@ export default {
             data
           });
         } catch (error) {
+          BotUtil.makeLog('error', `读取配置失败 [${name}]: ${error.message}`, 'ConfigAPI', error);
           res.status(500).json({
             success: false,
             message: '读取配置失败',
-            error: error.message
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
           });
         }
       }
