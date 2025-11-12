@@ -106,14 +106,6 @@ class APIControlCenter {
                 this.openAIChat();
             });
         }
-        const configButton = document.getElementById('configButton');
-        if (configButton) {
-            configButton.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.openConfigEditor();
-            });
-        }
 
         // 遮罩层
         const overlay = document.getElementById('overlay');
@@ -624,7 +616,7 @@ class APIControlCenter {
         if (!container) return;
 
         container.innerHTML = this.apiConfig.quickActions.map(action => `
-            <a href="#" class="quick-action" data-api-id="${action.apiId}">
+            <a href="#" class="quick-action" data-api-id="${action.apiId || ''}" data-action="${action.action || ''}">
                 <div class="quick-action-icon">${action.icon}</div>
                 <div class="quick-action-text">${action.text}</div>
             </a>
@@ -634,9 +626,15 @@ class APIControlCenter {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
                 const apiId = item.dataset.apiId;
-                const api = this.findAPIById(apiId);
-                if (api) {
-                    this.selectAPI(api.method, api.path, apiId);
+                const action = item.dataset.action;
+                
+                if (action === 'ai-chat') {
+                    this.openAIChat();
+                } else if (apiId) {
+                    const api = this.findAPIById(apiId);
+                    if (api) {
+                        this.selectAPI(api.method, api.path, apiId);
+                    }
                 }
             });
         });
@@ -988,6 +986,13 @@ class APIControlCenter {
                 item.classList.add('active');
             }
         });
+
+        // 特殊处理：配置管理器
+        const api = this.findAPIById(apiId);
+        if (api && api.special === 'config-editor') {
+            this.openConfigEditor();
+            return;
+        }
 
         this.currentAPI = { method, path, apiId };
         this.renderAPIInterface(method, path, apiId);
@@ -2055,13 +2060,22 @@ class APIControlCenter {
                 return;
             }
 
-            panel.innerHTML = data.configs.map(config => `
+            // 处理配置列表：SystemConfig 需要特殊显示
+            panel.innerHTML = data.configs.map(config => {
+                const isSystem = config.name === 'system';
+                const subConfigCount = isSystem && config.configs ? Object.keys(config.configs).length : 0;
+                const badge = subConfigCount > 0 ? `<span class="config-badge">${subConfigCount} 个子配置</span>` : '';
+                
+                return `
                 <div class="config-item" data-config-name="${config.name}">
-                    <div class="config-item-icon">⚙️</div>
+                    <div class="config-item-icon">${isSystem ? '📦' : '⚙️'}</div>
                     <div class="config-item-info">
-                        <div class="config-item-name">${config.displayName || config.name}</div>
+                        <div class="config-item-name">
+                            ${config.displayName || config.name}
+                            ${badge}
+                        </div>
                         <div class="config-item-desc">${config.description || ''}</div>
-                        <div class="config-item-path">${config.filePath || ''}</div>
+                        <div class="config-item-path">${config.filePath || (isSystem ? '系统配置（包含多个子配置）' : '')}</div>
                     </div>
                     <div class="config-item-actions">
                         <button class="btn btn-sm btn-primary" data-action="edit" data-config-name="${config.name}">
@@ -2069,7 +2083,8 @@ class APIControlCenter {
                         </button>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
 
             panel.querySelectorAll('[data-action="edit"]').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -2098,20 +2113,66 @@ class APIControlCenter {
             editorTextarea.value = '加载中...';
             editorTextarea.disabled = true;
 
+            // 先获取配置结构，了解配置类型
+            let configStructure = null;
+            try {
+                const structureRes = await fetch(`${this.serverUrl}/api/config/${configName}/structure`, {
+                    headers: this.getHeaders()
+                });
+                if (structureRes.ok) {
+                    const structureData = await structureRes.json();
+                    if (structureData.success) {
+                        configStructure = structureData.structure;
+                    }
+                }
+            } catch (e) {
+                console.warn('获取配置结构失败:', e);
+            }
+
             const response = await fetch(`${this.serverUrl}/api/config/${configName}/read`, {
                 headers: this.getHeaders()
             });
 
             if (!response.ok) {
-                throw new Error('读取配置失败');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `HTTP ${response.status}: 读取配置失败`);
             }
 
             const data = await response.json();
             if (!data.success) {
-                throw new Error(data.message || '读取配置失败');
+                throw new Error(data.message || data.error || '读取配置失败');
             }
 
-            editorTextarea.value = JSON.stringify(data.data, null, 2);
+            // 处理配置数据：如果是 SystemConfig，需要特殊处理
+            let configData = data.data;
+            
+            // SystemConfig 的特殊处理：它管理多个子配置文件
+            if (configName === 'system') {
+                // 检查是否有子配置结构
+                if (configStructure && configStructure.configs && Object.keys(configStructure.configs).length > 0) {
+                    // SystemConfig 需要先选择要编辑的子配置
+                    this.showSubConfigSelector(configName, configStructure, configData);
+                    return;
+                }
+                // 如果没有子配置结构，可能是直接读取了某个子配置
+                // 继续正常流程
+            }
+
+            // 将配置数据转换为 JSON 字符串（处理 YAML 格式）
+            let jsonString;
+            try {
+                if (typeof configData === 'string') {
+                    // 如果已经是字符串，尝试解析
+                    jsonString = JSON.stringify(JSON.parse(configData), null, 2);
+                } else {
+                    jsonString = JSON.stringify(configData, null, 2);
+                }
+            } catch (e) {
+                // 如果解析失败，直接使用
+                jsonString = typeof configData === 'string' ? configData : JSON.stringify(configData, null, 2);
+            }
+
+            editorTextarea.value = jsonString;
             editorTextarea.disabled = false;
             editorTextarea.dataset.configName = configName;
 
@@ -2132,7 +2193,245 @@ class APIControlCenter {
             });
         } catch (error) {
             editorTextarea.value = `错误: ${error.message}`;
+            editorTextarea.disabled = false;
             this.showToast('加载配置失败: ' + error.message, 'error');
+        }
+    }
+
+    showSubConfigSelector(configName, structure, data) {
+        const editorPanel = document.getElementById('configEditorPanel');
+        if (!editorPanel) return;
+
+        const subConfigs = Object.keys(structure.configs || {});
+        if (subConfigs.length === 0) {
+            this.showToast('该配置没有子配置', 'warning');
+            this.backToConfigList();
+            return;
+        }
+
+        editorPanel.innerHTML = `
+            <div class="config-editor-toolbar">
+                <div class="config-editor-name">选择子配置: ${configName}</div>
+                <button class="btn btn-secondary" id="backConfigBtn">
+                    <span>←</span><span>返回</span>
+                </button>
+            </div>
+            <div class="config-editor-content">
+                <div class="sub-config-list">
+                    ${subConfigs.map(subName => {
+                        const subConfig = structure.configs[subName];
+                        return `
+                            <div class="sub-config-item" data-sub-name="${subName}">
+                                <div class="sub-config-icon">📄</div>
+                                <div class="sub-config-info">
+                                    <div class="sub-config-name">${subConfig.displayName || subName}</div>
+                                    <div class="sub-config-desc">${subConfig.description || ''}</div>
+                                    <div class="sub-config-path">${subConfig.filePath || ''}</div>
+                                </div>
+                                <button class="btn btn-sm btn-primary" data-action="edit-sub" data-sub-name="${subName}">
+                                    <span>✏️</span><span>编辑</span>
+                                </button>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+
+        document.getElementById('backConfigBtn').addEventListener('click', () => this.backToConfigList());
+        
+        editorPanel.querySelectorAll('[data-action="edit-sub"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const subName = btn.dataset.subName;
+                this.editSubConfig(configName, subName);
+            });
+        });
+    }
+
+    async editSubConfig(parentName, subName) {
+        // SystemConfig 的子配置需要通过 system 配置实例读取
+        // 格式: system.bot, system.server 等
+        const fullPath = `${parentName}.${subName}`;
+        
+        try {
+            const response = await fetch(`${this.serverUrl}/api/config/${parentName}/read?path=${subName}`, {
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `HTTP ${response.status}: 读取子配置失败`);
+            }
+
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.message || data.error || '读取子配置失败');
+            }
+
+            // 显示编辑界面
+            const editorPanel = document.getElementById('configEditorPanel');
+            editorPanel.innerHTML = `
+                <div class="config-editor-toolbar">
+                    <div class="config-editor-name">编辑配置: ${parentName}.${subName}</div>
+                    <div class="config-editor-actions">
+                        <button class="btn btn-secondary" id="saveConfigBtn">
+                            <span>💾</span><span>保存</span>
+                        </button>
+                        <button class="btn btn-secondary" id="validateConfigBtn">
+                            <span>✅</span><span>验证</span>
+                        </button>
+                        <button class="btn btn-secondary" id="backConfigBtn">
+                            <span>←</span><span>返回</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="config-editor-content">
+                    <textarea id="configEditorTextarea" class="config-editor-textarea"></textarea>
+                </div>
+            `;
+
+            const editorTextarea = document.getElementById('configEditorTextarea');
+            
+            // 处理配置数据：确保转换为 JSON 字符串
+            let jsonString;
+            try {
+                if (typeof data.data === 'string') {
+                    jsonString = JSON.stringify(JSON.parse(data.data), null, 2);
+                } else {
+                    jsonString = JSON.stringify(data.data, null, 2);
+                }
+            } catch (e) {
+                jsonString = typeof data.data === 'string' ? data.data : JSON.stringify(data.data, null, 2);
+            }
+            
+            editorTextarea.value = jsonString;
+            editorTextarea.disabled = false;
+            editorTextarea.dataset.configName = parentName;
+            editorTextarea.dataset.subName = subName;
+
+            // 初始化编辑器
+            if (this.configEditor) {
+                this.configEditor.toTextArea();
+            }
+            const theme = document.body.classList.contains('light') ? 'default' : 'monokai';
+            this.configEditor = CodeMirror.fromTextArea(editorTextarea, {
+                mode: 'application/json',
+                theme: theme,
+                lineNumbers: true,
+                lineWrapping: true,
+                matchBrackets: true,
+                autoCloseBrackets: true,
+                foldGutter: true,
+                gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter']
+            });
+
+            document.getElementById('saveConfigBtn').addEventListener('click', () => this.saveSubConfig());
+            document.getElementById('validateConfigBtn').addEventListener('click', () => this.validateSubConfig());
+            document.getElementById('backConfigBtn').addEventListener('click', async () => {
+                // 返回到子配置选择界面
+                try {
+                    const structureRes = await fetch(`${this.serverUrl}/api/config/${parentName}/structure`, {
+                        headers: this.getHeaders()
+                    });
+                    if (structureRes.ok) {
+                        const structureData = await structureRes.json();
+                        if (structureData.success) {
+                            const readRes = await fetch(`${this.serverUrl}/api/config/${parentName}/read`, {
+                                headers: this.getHeaders()
+                            });
+                            if (readRes.ok) {
+                                const readData = await readRes.json();
+                                if (readData.success) {
+                                    this.showSubConfigSelector(parentName, structureData.structure, readData.data);
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    this.backToConfigList();
+                }
+            });
+        } catch (error) {
+            this.showToast('加载子配置失败: ' + error.message, 'error');
+            // 出错时返回列表
+            setTimeout(() => this.backToConfigList(), 2000);
+        }
+    }
+
+    async saveSubConfig() {
+        const editorTextarea = document.getElementById('configEditorTextarea');
+        if (!editorTextarea || !editorTextarea.dataset.configName || !editorTextarea.dataset.subName) return;
+
+        const configName = editorTextarea.dataset.configName;
+        const subName = editorTextarea.dataset.subName;
+        let configData;
+
+        try {
+            const jsonText = this.configEditor ? this.configEditor.getValue() : editorTextarea.value;
+            configData = JSON.parse(jsonText);
+        } catch (error) {
+            this.showToast('JSON 格式错误: ' + error.message, 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${this.serverUrl}/api/config/${configName}/write`, {
+                method: 'POST',
+                headers: this.getHeaders(),
+                body: JSON.stringify({
+                    data: configData,
+                    path: subName,
+                    backup: true,
+                    validate: true
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                this.showToast('配置已保存', 'success');
+            } else {
+                throw new Error(result.message || '保存失败');
+            }
+        } catch (error) {
+            this.showToast('保存配置失败: ' + error.message, 'error');
+        }
+    }
+
+    async validateSubConfig() {
+        const editorTextarea = document.getElementById('configEditorTextarea');
+        if (!editorTextarea || !editorTextarea.dataset.configName || !editorTextarea.dataset.subName) return;
+
+        const configName = editorTextarea.dataset.configName;
+        const subName = editorTextarea.dataset.subName;
+        let configData;
+
+        try {
+            const jsonText = this.configEditor ? this.configEditor.getValue() : editorTextarea.value;
+            configData = JSON.parse(jsonText);
+        } catch (error) {
+            this.showToast('JSON 格式错误: ' + error.message, 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${this.serverUrl}/api/config/${configName}/validate`, {
+                method: 'POST',
+                headers: this.getHeaders(),
+                body: JSON.stringify({ data: configData })
+            });
+
+            const result = await response.json();
+            if (result.success && result.validation) {
+                if (result.validation.valid) {
+                    this.showToast('配置验证通过', 'success');
+                } else {
+                    this.showToast('配置验证失败: ' + result.validation.errors.join(', '), 'error');
+                }
+            } else {
+                throw new Error(result.message || '验证失败');
+            }
+        } catch (error) {
+            this.showToast('验证配置失败: ' + error.message, 'error');
         }
     }
 

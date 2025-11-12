@@ -262,25 +262,12 @@
       "title": "配置管理",
       "apis": [
         {
-          "id": "config-list",
+          "id": "config-manager",
           "method": "GET",
           "path": "/api/config/list",
-          "title": "配置列表",
-          "description": "获取所有可用的配置文件列表（需要授权）"
-        },
-        {
-          "id": "config-structure",
-          "method": "GET",
-          "path": "/api/config/:name/structure",
-          "title": "配置结构",
-          "description": "获取指定配置的结构定义（需要授权）",
-          "pathParams": {
-            "name": {
-              "label": "配置名称",
-              "placeholder": "bot",
-              "hint": "配置名称，如 bot、server、db 等"
-            }
-          }
+          "title": "配置管理器",
+          "description": "打开配置管理器界面，查看和编辑所有配置文件（需要授权）",
+          "special": "config-editor"
         },
         {
           "id": "config-read",
@@ -292,7 +279,7 @@
             "name": {
               "label": "配置名称",
               "placeholder": "bot",
-              "hint": "配置名称"
+              "hint": "配置名称，如 bot、server、system 等"
             }
           },
           "queryParams": [
@@ -325,7 +312,7 @@
               "type": "json",
               "required": true,
               "placeholder": "{\"log_level\": \"info\"}",
-              "hint": "要写入的配置数据"
+              "hint": "要写入的配置数据（JSON格式）"
             },
             {
               "name": "path",
@@ -371,47 +358,6 @@
           ]
         },
         {
-          "id": "config-merge",
-          "method": "POST",
-          "path": "/api/config/:name/merge",
-          "title": "合并配置",
-          "description": "合并配置到指定文件（需要授权）",
-          "pathParams": {
-            "name": {
-              "label": "配置名称",
-              "placeholder": "bot",
-              "hint": "配置名称"
-            }
-          },
-          "bodyParams": [
-            {
-              "name": "data",
-              "label": "配置数据",
-              "type": "json",
-              "required": true,
-              "placeholder": "{\"log_level\": \"info\"}",
-              "hint": "要合并的配置数据"
-            },
-            {
-              "name": "deep",
-              "label": "深度合并",
-              "type": "select",
-              "options": [
-                {
-                  "value": "true",
-                  "label": "是"
-                },
-                {
-                  "value": "false",
-                  "label": "否"
-                }
-              ],
-              "defaultValue": "true",
-              "hint": "是否深度合并"
-            }
-          ]
-        },
-        {
           "id": "config-validate",
           "method": "POST",
           "path": "/api/config/:name/validate",
@@ -431,63 +377,9 @@
               "type": "json",
               "required": true,
               "placeholder": "{\"log_level\": \"info\"}",
-              "hint": "要验证的配置数据"
+              "hint": "要验证的配置数据（JSON格式）"
             }
           ]
-        },
-        {
-          "id": "config-backup",
-          "method": "POST",
-          "path": "/api/config/:name/backup",
-          "title": "备份配置",
-          "description": "备份指定配置文件（需要授权）",
-          "pathParams": {
-            "name": {
-              "label": "配置名称",
-              "placeholder": "bot",
-              "hint": "配置名称"
-            }
-          }
-        },
-        {
-          "id": "config-reset",
-          "method": "POST",
-          "path": "/api/config/:name/reset",
-          "title": "重置配置",
-          "description": "重置配置为默认值（需要授权）",
-          "pathParams": {
-            "name": {
-              "label": "配置名称",
-              "placeholder": "bot",
-              "hint": "配置名称"
-            }
-          },
-          "bodyParams": [
-            {
-              "name": "backup",
-              "label": "是否备份",
-              "type": "select",
-              "options": [
-                {
-                  "value": "true",
-                  "label": "是"
-                },
-                {
-                  "value": "false",
-                  "label": "否"
-                }
-              ],
-              "defaultValue": "true",
-              "hint": "重置前是否备份"
-            }
-          ]
-        },
-        {
-          "id": "config-clear-cache",
-          "method": "POST",
-          "path": "/api/config/clear-cache",
-          "title": "清除缓存",
-          "description": "清除所有配置缓存（需要授权）"
         }
       ]
     },
@@ -565,102 +457,6 @@
           }
         },
         {
-          "id": "device-heartbeat",
-          "method": "POST",
-          "path": "/api/device/heartbeat",
-          "title": "心跳上报",
-          "description": "设备定期上报心跳，获取待执行命令",
-          "bodyParams": [
-            {
-              "name": "device_id",
-              "label": "设备ID",
-              "type": "text",
-              "required": true,
-              "placeholder": "DEVICE_001"
-            },
-            {
-              "name": "status",
-              "label": "设备状态",
-              "type": "json",
-              "placeholder": "{\"cpu\": 20, \"memory\": 512, \"battery\": 85}",
-              "defaultValue": "{}",
-              "hint": "当前设备状态信息（可选）"
-            }
-          ]
-        },
-        {
-          "id": "device-event",
-          "method": "POST",
-          "path": "/api/device/event",
-          "title": "事件上报",
-          "description": "设备上报事件数据，支持多种事件类型",
-          "bodyParams": [
-            {
-              "name": "device_id",
-              "label": "设备ID",
-              "type": "text",
-              "required": true,
-              "placeholder": "DEVICE_001"
-            },
-            {
-              "name": "event_type",
-              "label": "事件类型",
-              "type": "select",
-              "required": true,
-              "options": [
-                {
-                  "value": "sensor",
-                  "label": "传感器数据"
-                },
-                {
-                  "value": "status",
-                  "label": "状态变更"
-                },
-                {
-                  "value": "alert",
-                  "label": "告警事件"
-                },
-                {
-                  "value": "data",
-                  "label": "数据上报"
-                },
-                {
-                  "value": "command_result",
-                  "label": "命令结果"
-                },
-                {
-                  "value": "online",
-                  "label": "设备上线"
-                },
-                {
-                  "value": "offline",
-                  "label": "设备离线"
-                },
-                {
-                  "value": "update",
-                  "label": "固件更新"
-                },
-                {
-                  "value": "error",
-                  "label": "错误事件"
-                },
-                {
-                  "value": "custom",
-                  "label": "自定义事件"
-                }
-              ]
-            },
-            {
-              "name": "event_data",
-              "label": "事件数据",
-              "type": "json",
-              "placeholder": "{\"temperature\": 25.5, \"humidity\": 60}",
-              "defaultValue": "{\n  \"temperature\": 25.5,\n  \"humidity\": 60\n}",
-              "hint": "事件相关的数据内容"
-            }
-          ]
-        },
-        {
           "id": "device-command",
           "method": "POST",
           "path": "/api/device/:deviceId/command",
@@ -731,48 +527,6 @@
             }
           }
         },
-        {
-          "id": "device-asr-sessions",
-          "method": "GET",
-          "path": "/api/device/:deviceId/asr/sessions",
-          "title": "ASR会话列表",
-          "description": "获取设备的 ASR 会话列表",
-          "pathParams": {
-            "deviceId": {
-              "label": "设备ID",
-              "placeholder": "DEVICE_001",
-              "hint": "设备ID"
-            }
-          }
-        },
-        {
-          "id": "device-asr-recordings",
-          "method": "GET",
-          "path": "/api/device/:deviceId/asr/recordings",
-          "title": "ASR录音列表",
-          "description": "获取设备的 ASR 录音文件列表",
-          "pathParams": {
-            "deviceId": {
-              "label": "设备ID",
-              "placeholder": "DEVICE_001",
-              "hint": "设备ID"
-            }
-          }
-        },
-        {
-          "id": "asr-recording-get",
-          "method": "GET",
-          "path": "/api/asr/recording/:filename",
-          "title": "获取录音文件",
-          "description": "下载 ASR 录音文件",
-          "pathParams": {
-            "filename": {
-              "label": "文件名",
-              "placeholder": "recording.wav",
-              "hint": "录音文件名"
-            }
-          }
-        }
       ]
     },
     {
@@ -787,46 +541,6 @@
           "description": "上传文件到服务器，支持多种格式（需要授权）"
         },
         {
-          "id": "file-upload-base64",
-          "method": "POST",
-          "path": "/api/file/upload-base64",
-          "title": "Base64上传",
-          "description": "通过 Base64 编码上传文件（需要授权）",
-          "bodyParams": [
-            {
-              "name": "data",
-              "label": "Base64数据",
-              "type": "textarea",
-              "required": true,
-              "placeholder": "data:image/png;base64,iVBORw0KG...",
-              "hint": "Base64 编码的文件数据，可包含 data URI 前缀"
-            },
-            {
-              "name": "filename",
-              "label": "文件名",
-              "type": "text",
-              "placeholder": "image.png",
-              "defaultValue": "file",
-              "hint": "文件名称"
-            },
-            {
-              "name": "mime",
-              "label": "MIME类型",
-              "type": "text",
-              "placeholder": "image/png",
-              "defaultValue": "application/octet-stream",
-              "hint": "文件的 MIME 类型"
-            }
-          ]
-        },
-        {
-          "id": "file-list",
-          "method": "GET",
-          "path": "/api/files",
-          "title": "文件列表",
-          "description": "获取所有已上传的文件列表（需要授权）"
-        },
-        {
           "id": "file-get",
           "method": "GET",
           "path": "/api/file/:id",
@@ -837,34 +551,6 @@
               "label": "文件ID",
               "placeholder": "file_id",
               "hint": "上传时返回的文件ID"
-            }
-          }
-        },
-        {
-          "id": "file-download",
-          "method": "GET",
-          "path": "/api/file/download/:id",
-          "title": "下载文件",
-          "description": "下载指定文件",
-          "pathParams": {
-            "id": {
-              "label": "文件ID",
-              "placeholder": "file_id",
-              "hint": "要下载的文件ID"
-            }
-          }
-        },
-        {
-          "id": "file-preview",
-          "method": "GET",
-          "path": "/api/file/preview/:id",
-          "title": "预览文件",
-          "description": "预览媒体文件（图片、视频、音频）",
-          "pathParams": {
-            "id": {
-              "label": "文件ID",
-              "placeholder": "file_id",
-              "hint": "要预览的文件ID"
             }
           }
         },
@@ -939,9 +625,9 @@
       "command": "#帮助",
       "user_info": "{\n  \"user_id\": \"123456\",\n  \"nickname\": \"测试用户\",\n  \"isMaster\": true\n}"
     },
-    "stdin-custom-event": {
-      "event_type": "message.private.friend",
-      "event_data": "{\n  \"message\": \"#帮助\",\n  \"user_id\": \"123456\",\n  \"time\": 1234567890\n}",
+    "stdin-event": {
+      "event_type": "message",
+      "content": "{\n  \"message\": \"测试事件\",\n  \"user_id\": \"123456\"\n}",
       "user_info": "{\n  \"nickname\": \"测试用户\"\n}"
     },
     "device-register": {
@@ -953,15 +639,6 @@
     },
     "device-detail": {
       "path_deviceId": "SENSOR_001"
-    },
-    "device-heartbeat": {
-      "device_id": "SENSOR_001",
-      "status": "{\n  \"cpu\": 15,\n  \"memory\": 256,\n  \"uptime\": 3600,\n  \"battery\": 85\n}"
-    },
-    "device-event": {
-      "device_id": "SENSOR_001",
-      "event_type": "sensor",
-      "event_data": "{\n  \"sensor_type\": \"environment\",\n  \"sensor_data\": {\n    \"temperature\": 25.5,\n    \"humidity\": 60,\n    \"pressure\": 1013.25\n  },\n  \"unit\": {\n    \"temperature\": \"celsius\",\n    \"humidity\": \"percent\",\n    \"pressure\": \"hPa\"\n  }\n}"
     },
     "device-command": {
       "path_deviceId": "SWITCH_001",
@@ -981,16 +658,6 @@
     "plugin-reload": {
       "path_key": "genshin"
     },
-    "stdin-event": {
-      "event_type": "message",
-      "content": "{\n  \"message\": \"测试事件\",\n  \"user_id\": \"123456\"\n}",
-      "user_info": "{\n  \"nickname\": \"测试用户\"\n}"
-    },
-    "file-upload-base64": {
-      "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-      "filename": "test.png",
-      "mime": "image/png"
-    },
     "config-read": {
       "path_name": "bot",
       "query_path": "log_level"
@@ -1005,23 +672,23 @@
   "quickActions": [
     {
       "icon": "💬",
-      "text": "发送消息",
-      "apiId": "message-send"
+      "text": "AI 聊天",
+      "action": "ai-chat"
     },
     {
-      "icon": "👥",
-      "text": "管理机器人",
-      "apiId": "bot-list"
+      "icon": "⚙️",
+      "text": "配置管理",
+      "apiId": "config-manager"
     },
     {
       "icon": "📡",
-      "text": "查看设备",
+      "text": "设备管理",
       "apiId": "device-list"
     },
     {
-      "icon": "⌨️",
-      "text": "执行命令",
-      "apiId": "stdin-command"
+      "icon": "🧩",
+      "text": "插件管理",
+      "apiId": "plugin-list"
     }
   ]
 }
