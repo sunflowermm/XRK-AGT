@@ -2281,6 +2281,11 @@ body.light .json-null {
 
     .config-form-scroll {
         padding: 12px;
+        padding-bottom: 30px; /* 移动端也增加底部内边距 */
+    }
+    
+    .sub-config-list-scroll {
+        padding-bottom: 30px; /* 移动端也增加底部内边距 */
     }
 
     .config-form-field {
@@ -2325,11 +2330,13 @@ body.light .json-null {
 
     .sub-config-list-scroll {
         padding: 12px;
+        padding-bottom: 30px; /* 移动端也增加底部内边距 */
     }
     .sub-config-list {
         grid-template-columns: 1fr;
         gap: 12px;
         padding: 16px;
+        padding-bottom: 16px; /* 确保底部有足够空间 */
     }
 }
 
@@ -2963,12 +2970,15 @@ body.no-scroll {
     overflow-x: hidden;
     padding: 20px;
     padding-right: 12px;
+    padding-bottom: 40px; /* 增加底部内边距，确保能滚动到底部 */
     min-height: 0;
     max-height: 100%;
     height: 100%;
     -webkit-overflow-scrolling: touch; /* iOS 平滑滚动 */
     overscroll-behavior: contain; /* 防止滚动链 */
     box-sizing: border-box;
+    /* 确保滚动到底部 */
+    scroll-behavior: smooth;
 }
 
 .config-form-scroll::-webkit-scrollbar {
@@ -3247,9 +3257,11 @@ body.no-scroll {
     overflow-x: hidden;
     min-height: 0;
     max-height: 100%;
+    padding-bottom: 40px; /* 增加底部内边距，确保能滚动到底部 */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     box-sizing: border-box;
+    scroll-behavior: smooth;
 }
 
 .sub-config-list {
@@ -3257,6 +3269,8 @@ body.no-scroll {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 20px;
     padding: 24px;
+    padding-bottom: 24px; /* 确保底部有足够空间 */
+    min-height: fit-content;
 }
 
 .sub-config-item {

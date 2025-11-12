@@ -4,6 +4,46 @@
  */
 import BotUtil from '../../lib/common/util.js';
 
+// 辅助函数：清理配置数据
+function cleanConfigData(data, config) {
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+
+  const cleaned = Array.isArray(data) ? [...data] : { ...data };
+  const schema = config?.schema;
+
+  if (schema && schema.fields) {
+    for (const [field, fieldSchema] of Object.entries(schema.fields)) {
+      if (field in cleaned) {
+        const value = cleaned[field];
+        
+        // 对于数字类型字段，将空字符串转换为 null
+        if (fieldSchema.type === 'number' && value === '') {
+          cleaned[field] = null;
+        }
+        
+        // 递归处理嵌套对象
+        if (fieldSchema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
+          cleaned[field] = cleanConfigData(value, { schema: { fields: fieldSchema.fields || {} } });
+        }
+        
+        // 递归处理数组中的对象
+        if (fieldSchema.type === 'array' && Array.isArray(value) && fieldSchema.itemType === 'object') {
+          cleaned[field] = value.map(item => {
+            if (item && typeof item === 'object') {
+              return cleanConfigData(item, { schema: { fields: fieldSchema.itemSchema?.fields || {} } });
+            }
+            return item;
+          });
+        }
+      }
+    }
+  }
+
+  return cleaned;
+}
+
 export default {
   name: 'config-manager',
   dsc: '配置管理API - 统一的配置文件读写接口',
@@ -205,6 +245,9 @@ export default {
             BotUtil.makeLog('warn', `配置数据为空 [${configName}]`, 'ConfigAPI');
           }
 
+          // 清理数据：将空字符串转换为 null（对于数字字段）
+          const cleanedData = cleanConfigData(data, config);
+
           let result;
           if (keyPath) {
             // 如果有 keyPath，使用 set 方法设置指定路径的值
@@ -212,7 +255,7 @@ export default {
               // SystemConfig 的特殊处理：keyPath 是子配置名称
               try {
                 BotUtil.makeLog('info', `写入 SystemConfig 子配置 [${configName}/${keyPath}]`, 'ConfigAPI');
-                result = await config.write(keyPath, data, { backup, validate });
+                result = await config.write(keyPath, cleanedData, { backup, validate });
                 BotUtil.makeLog('info', `SystemConfig 子配置写入成功 [${configName}/${keyPath}]`, 'ConfigAPI');
               } catch (subError) {
                 BotUtil.makeLog('error', `写入子配置失败 [${configName}/${keyPath}]: ${subError.message}`, 'ConfigAPI', subError);
@@ -220,7 +263,7 @@ export default {
               }
             } else if (typeof config.set === 'function') {
               BotUtil.makeLog('info', `使用 set 方法写入配置路径 [${configName}/${keyPath}]`, 'ConfigAPI');
-              result = await config.set(keyPath, data, { backup, validate });
+              result = await config.set(keyPath, cleanedData, { backup, validate });
             } else {
               throw new Error('配置对象不支持 set 方法');
             }
@@ -230,7 +273,7 @@ export default {
               throw new Error('SystemConfig 需要指定子配置名称（使用 path 参数）');
             } else if (typeof config.write === 'function') {
               BotUtil.makeLog('info', `写入完整配置 [${configName}]`, 'ConfigAPI');
-              result = await config.write(data, { backup, validate });
+              result = await config.write(cleanedData, { backup, validate });
               BotUtil.makeLog('info', `配置写入成功 [${configName}]`, 'ConfigAPI');
             } else {
               throw new Error('配置对象不支持 write 方法');
