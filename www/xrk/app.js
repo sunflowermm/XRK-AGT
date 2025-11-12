@@ -631,9 +631,9 @@ class APIControlCenter {
                 if (action === 'ai-chat') {
                     this.openAIChat();
                 } else if (apiId) {
-                    const api = this.findAPIById(apiId);
-                    if (api) {
-                        this.selectAPI(api.method, api.path, apiId);
+                const api = this.findAPIById(apiId);
+                if (api) {
+                    this.selectAPI(api.method, api.path, apiId);
                     }
                 }
             });
@@ -758,11 +758,11 @@ class APIControlCenter {
         if (!done && text) {
             // 更新或创建识别中的消息
             if (!last) {
-                last = document.createElement('div');
-                last.className = 'chat-msg assistant asr-streaming';
+            last = document.createElement('div');
+            last.className = 'chat-msg assistant asr-streaming';
                 last.style.opacity = '0';
                 last.style.transform = 'translateY(10px)';
-                box.appendChild(last);
+            box.appendChild(last);
                 // 触发动画
                 requestAnimationFrame(() => {
                     last.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
@@ -774,7 +774,7 @@ class APIControlCenter {
             if (last.textContent !== `识别中: ${text}`) {
                 last.style.opacity = '0.7';
                 requestAnimationFrame(() => {
-                    last.textContent = `识别中: ${text}`;
+                last.textContent = `识别中: ${text}`;
                     last.style.opacity = '1';
                 });
             }
@@ -785,8 +785,8 @@ class APIControlCenter {
             last.style.transform = 'translateY(-10px)';
             setTimeout(() => {
                 if (last && last.parentNode) {
-                    last.remove();
-                }
+                last.remove();
+            }
             }, 300);
         }
         
@@ -799,25 +799,45 @@ class APIControlCenter {
             return;
         }
         const apiKey = localStorage.getItem('apiKey') || '';
+        // WebSocket 路径是 /device（根据 device.js 中的 ws.device 定义）
         const wsUrl = (this.serverUrl.replace(/^http/, 'ws') + `/device`) + (apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '');
-        this._deviceWs = new WebSocket(wsUrl);
+        try {
+            this._deviceWs = new WebSocket(wsUrl);
+        } catch (error) {
+            console.warn('WebSocket connection failed, will retry later:', error);
+            // 如果连接失败，不抛出错误，稍后重试
+            return;
+        }
         this._deviceWs.addEventListener('open', () => {
+            console.log('WebSocket connected to /device');
             // 注册为webclient设备
-            this._deviceWs.send(JSON.stringify({
-                type: 'register',
-                device_id: 'webclient',
-                device_type: 'web',
-                device_name: 'Web客户端',
-                capabilities: ['display', 'microphone']
-            }));
-            // 主动上报一次心跳，帮助服务端尽快建立在线状态
             try {
+                this._deviceWs.send(JSON.stringify({
+                    type: 'register',
+                    device_id: 'webclient',
+                    device_type: 'web',
+                    device_name: 'Web客户端',
+                    capabilities: ['display', 'microphone']
+                }));
+                // 主动上报一次心跳，帮助服务端尽快建立在线状态
                 this._deviceWs.send(JSON.stringify({
                     type: 'heartbeat',
                     device_id: 'webclient',
                     status: { ui: 'ready' }
                 }));
-            } catch {}
+            } catch (error) {
+                console.warn('Failed to send WebSocket message:', error);
+            }
+        });
+        
+        this._deviceWs.addEventListener('error', (error) => {
+            console.warn('WebSocket error:', error);
+            // 连接失败时不抛出错误，稍后会自动重试
+        });
+        
+        this._deviceWs.addEventListener('close', () => {
+            console.log('WebSocket closed, will retry on next use');
+            this._deviceWs = null;
         });
         this._deviceWs.addEventListener('message', (evt) => {
             try {
@@ -843,7 +863,7 @@ class APIControlCenter {
                     this.renderASRStreaming('', true);
                     // 延迟一点再显示最终结果，让过渡更自然
                     setTimeout(() => {
-                        this.appendChat('assistant', `识别: ${data.text}`);
+                    this.appendChat('assistant', `识别: ${data.text}`);
                     }, 350);
                     return;
                 }
