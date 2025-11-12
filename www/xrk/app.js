@@ -2168,10 +2168,44 @@ class APIControlCenter {
             
             // SystemConfig 的特殊处理：它管理多个子配置文件
             if (configName === 'system') {
-                // 检查是否有子配置结构
-                if (configStructure && configStructure.configs && Object.keys(configStructure.configs).length > 0) {
-                    // SystemConfig 需要先选择要编辑的子配置
-                    this.showSubConfigSelector(configName, configStructure, configData);
+                // 检查返回的数据结构：如果是配置列表（有 configs 数组），显示子配置选择器
+                if (configData && (configData.configs || (Array.isArray(configData) && configData.length > 0))) {
+                    // 使用配置结构或返回的配置列表
+                    const subConfigs = configData.configs || configData;
+                    if (Array.isArray(subConfigs) && subConfigs.length > 0) {
+                        // 构造结构对象用于显示
+                        const structure = configStructure || {
+                            name: 'system',
+                            displayName: '系统配置',
+                            description: 'XRK-AGT 系统配置管理',
+                            configs: {}
+                        };
+                        // 如果结构中没有 configs，从返回的数据中构建
+                        if (!structure.configs || Object.keys(structure.configs).length === 0) {
+                            structure.configs = {};
+                            subConfigs.forEach(sub => {
+                                structure.configs[sub.name] = {
+                                    name: sub.name,
+                                    displayName: sub.displayName || sub.name,
+                                    description: sub.description || '',
+                                    filePath: sub.filePath || '',
+                                    fileType: sub.fileType || 'yaml'
+                                };
+                            });
+                        }
+                        this.showSubConfigSelector(configName, structure, configData);
+                        return;
+                    }
+                }
+                // 如果返回的是配置结构对象（有 configs 对象）
+                if (configData && configData.configs && typeof configData.configs === 'object' && !Array.isArray(configData.configs)) {
+                    const structure = configStructure || {
+                        name: configData.name || 'system',
+                        displayName: configData.displayName || '系统配置',
+                        description: configData.description || '',
+                        configs: configData.configs
+                    };
+                    this.showSubConfigSelector(configName, structure, configData);
                     return;
                 }
                 // 如果没有子配置结构，可能是直接读取了某个子配置
@@ -2380,7 +2414,10 @@ class APIControlCenter {
 
     async saveSubConfig() {
         const editorTextarea = document.getElementById('configEditorTextarea');
-        if (!editorTextarea || !editorTextarea.dataset.configName || !editorTextarea.dataset.subName) return;
+        if (!editorTextarea || !editorTextarea.dataset.configName || !editorTextarea.dataset.subName) {
+            this.showToast('缺少必要的配置信息', 'error');
+            return;
+        }
 
         const configName = editorTextarea.dataset.configName;
         const subName = editorTextarea.dataset.subName;
@@ -2388,6 +2425,9 @@ class APIControlCenter {
 
         try {
             const jsonText = this.configEditor ? this.configEditor.getValue() : editorTextarea.value;
+            if (!jsonText || jsonText.trim() === '') {
+                throw new Error('配置内容不能为空');
+            }
             configData = JSON.parse(jsonText);
         } catch (error) {
             this.showToast('JSON 格式错误: ' + error.message, 'error');
@@ -2395,9 +2435,13 @@ class APIControlCenter {
         }
 
         try {
+            // SystemConfig 的子配置保存：使用 path 参数指定子配置名称
             const response = await fetch(`${this.serverUrl}/api/config/${configName}/write`, {
                 method: 'POST',
-                headers: this.getHeaders(),
+                headers: {
+                    ...this.getHeaders(),
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({
                     data: configData,
                     path: subName,
@@ -2406,14 +2450,19 @@ class APIControlCenter {
                 })
             });
 
-            const result = await response.json();
-            if (result.success) {
-                this.showToast('配置已保存', 'success');
-            } else {
-                throw new Error(result.message || '保存失败');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: 保存失败`);
             }
+
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || result.error || '保存失败');
+            }
+
+            this.showToast('配置已保存', 'success');
         } catch (error) {
-            this.showToast('保存配置失败: ' + error.message, 'error');
+            this.showToast('保存失败: ' + error.message, 'error');
         }
     }
 
@@ -2457,13 +2506,26 @@ class APIControlCenter {
 
     async saveConfig() {
         const editorTextarea = document.getElementById('configEditorTextarea');
-        if (!editorTextarea || !editorTextarea.dataset.configName) return;
+        if (!editorTextarea || !editorTextarea.dataset.configName) {
+            this.showToast('缺少必要的配置信息', 'error');
+            return;
+        }
 
         const configName = editorTextarea.dataset.configName;
+        
+        // 检查是否是 system 配置的子配置（不应该通过 saveConfig 保存）
+        if (configName === 'system' && editorTextarea.dataset.subName) {
+            // 应该使用 saveSubConfig
+            return await this.saveSubConfig();
+        }
+        
         let configData;
 
         try {
             const jsonText = this.configEditor ? this.configEditor.getValue() : editorTextarea.value;
+            if (!jsonText || jsonText.trim() === '') {
+                throw new Error('配置内容不能为空');
+            }
             configData = JSON.parse(jsonText);
         } catch (error) {
             this.showToast('JSON 格式错误: ' + error.message, 'error');
@@ -2473,7 +2535,10 @@ class APIControlCenter {
         try {
             const response = await fetch(`${this.serverUrl}/api/config/${configName}/write`, {
                 method: 'POST',
-                headers: this.getHeaders(),
+                headers: {
+                    ...this.getHeaders(),
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({
                     data: configData,
                     backup: true,
@@ -2481,12 +2546,17 @@ class APIControlCenter {
                 })
             });
 
-            const result = await response.json();
-            if (result.success) {
-                this.showToast('配置已保存', 'success');
-            } else {
-                throw new Error(result.message || '保存失败');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: 保存失败`);
             }
+
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || result.error || '保存失败');
+            }
+
+            this.showToast('配置已保存', 'success');
         } catch (error) {
             this.showToast('保存配置失败: ' + error.message, 'error');
         }

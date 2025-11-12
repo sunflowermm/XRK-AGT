@@ -109,9 +109,9 @@ export default {
 
           let data;
           if (keyPath) {
-            // 如果是 system 配置，keyPath 是子配置名称
+            // 如果有 keyPath，读取指定路径的配置值
             if (configName === 'system' && typeof config.read === 'function') {
-              // SystemConfig 的特殊处理：读取子配置
+              // SystemConfig 的特殊处理：keyPath 是子配置名称
               try {
                 data = await config.read(keyPath);
               } catch (subError) {
@@ -119,13 +119,23 @@ export default {
                 throw subError;
               }
             } else if (typeof config.get === 'function') {
+              // 普通配置：使用 get 方法读取指定路径的值
               data = await config.get(keyPath);
             } else {
               throw new Error('配置对象不支持 get 方法');
             }
           } else {
-            // 读取完整配置
-            if (typeof config.read === 'function') {
+            // 没有 keyPath，读取完整配置
+            if (configName === 'system' && typeof config.read === 'function') {
+              // SystemConfig 的特殊处理：无参数时返回配置列表
+              try {
+                data = await config.read();
+              } catch (error) {
+                BotUtil.makeLog('error', `读取 system 配置列表失败: ${error.message}`, 'ConfigAPI', error);
+                throw error;
+              }
+            } else if (typeof config.read === 'function') {
+              // 普通配置：读取完整配置
               data = await config.read();
             } else {
               throw new Error('配置对象不支持 read 方法');
@@ -159,23 +169,57 @@ export default {
         }
 
         try {
-          const { name } = req.params;
-          const { data, path: keyPath, backup = true, validate = true } = req.body;
+          const configName = req.params?.name;
+          const { data, path: keyPath, backup = true, validate = true } = req.body || {};
 
-          const config = global.ConfigManager.get(name);
+          if (!configName) {
+            return res.status(400).json({
+              success: false,
+              message: '配置名称不能为空'
+            });
+          }
+
+          if (!global.ConfigManager) {
+            return res.status(503).json({
+              success: false,
+              message: '配置管理器未初始化'
+            });
+          }
+
+          const config = global.ConfigManager.get(configName);
 
           if (!config) {
             return res.status(404).json({
               success: false,
-              message: `配置 ${name} 不存在`
+              message: `配置 ${configName} 不存在`
             });
           }
 
           let result;
           if (keyPath) {
-            result = await config.set(keyPath, data, { backup, validate });
+            // 如果有 keyPath，使用 set 方法设置指定路径的值
+            if (configName === 'system' && typeof config.write === 'function') {
+              // SystemConfig 的特殊处理：keyPath 是子配置名称
+              try {
+                result = await config.write(keyPath, data, { backup, validate });
+              } catch (subError) {
+                BotUtil.makeLog('error', `写入子配置失败 [${configName}/${keyPath}]: ${subError.message}`, 'ConfigAPI', subError);
+                throw subError;
+              }
+            } else if (typeof config.set === 'function') {
+              result = await config.set(keyPath, data, { backup, validate });
+            } else {
+              throw new Error('配置对象不支持 set 方法');
+            }
           } else {
-            result = await config.write(data, { backup, validate });
+            // 没有 keyPath，写入完整配置
+            if (configName === 'system') {
+              throw new Error('SystemConfig 需要指定子配置名称（使用 path 参数）');
+            } else if (typeof config.write === 'function') {
+              result = await config.write(data, { backup, validate });
+            } else {
+              throw new Error('配置对象不支持 write 方法');
+            }
           }
 
           res.json({
@@ -183,10 +227,13 @@ export default {
             message: '配置已保存'
           });
         } catch (error) {
+          const errorName = req.params?.name || 'unknown';
+          BotUtil.makeLog('error', `写入配置失败 [${errorName}]: ${error.message}`, 'ConfigAPI', error);
           res.status(500).json({
             success: false,
             message: '写入配置失败',
-            error: error.message
+            error: error.message,
+            configName: errorName
           });
         }
       }

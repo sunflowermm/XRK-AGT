@@ -1246,22 +1246,36 @@ export default class SystemConfig extends ConfigBase {
 
   /**
    * 读取指定配置文件
-   * @param {string} name - 配置名称
+   * @param {string} [name] - 子配置名称（可选，如果不提供则返回配置列表）
    * @returns {Promise<Object>}
    */
   async read(name) {
+    // 如果没有提供子配置名称，返回配置列表信息
+    if (!name) {
+      return {
+        name: this.name,
+        displayName: this.displayName,
+        description: this.description,
+        configs: this.getConfigList()
+      };
+    }
+    
+    // 读取指定的子配置
     const instance = this.getConfigInstance(name);
     return await instance.read();
   }
 
   /**
    * 写入指定配置文件
-   * @param {string} name - 配置名称
+   * @param {string} name - 子配置名称
    * @param {Object} data - 配置数据
    * @param {Object} options - 写入选项
    * @returns {Promise<boolean>}
    */
   async write(name, data, options = {}) {
+    if (!name) {
+      throw new Error('SystemConfig 写入需要指定子配置名称');
+    }
     const instance = this.getConfigInstance(name);
     return await instance.write(data, options);
   }
