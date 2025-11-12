@@ -2,6 +2,59 @@ import os from 'os';
 import si from 'systeminformation';
 import cfg from '../../lib/config/config.js';
 let __lastNetSample = null;
+let __netSampler = null;
+let __netHist = [];
+const NET_HISTORY_LIMIT = 24 * 60;
+const NET_SAMPLE_MS = 60 * 1000;
+
+async function __sampleNetOnce() {
+  try {
+    const stats = await si.networkStats().catch(() => []);
+    let rxBytes = 0, txBytes = 0;
+    if (Array.isArray(stats)) {
+      for (const n of stats) {
+        rxBytes += Number(n.rx_bytes || 0);
+        txBytes += Number(n.tx_bytes || 0);
+      }
+    }
+    const now = Date.now();
+    const tsMin = Math.floor(now / 60000) * 60000;
+    let rxSec = 0, txSec = 0;
+    if (__lastNetSample) {
+      const dt = Math.max(1, (now - __lastNetSample.ts) / 1000);
+      const rxDelta = rxBytes - __lastNetSample.rx;
+      const txDelta = txBytes - __lastNetSample.tx;
+      if (rxDelta >= 0) rxSec = rxDelta / dt;
+      if (txDelta >= 0) txSec = txDelta / dt;
+    }
+    __lastNetSample = { ts: now, rx: rxBytes, tx: txBytes };
+    if (__netHist.length && __netHist[__netHist.length - 1].ts === tsMin) {
+      __netHist[__netHist.length - 1] = { ts: tsMin, rxSec, txSec };
+    } else {
+      __netHist.push({ ts: tsMin, rxSec, txSec });
+      if (__netHist.length > NET_HISTORY_LIMIT) __netHist.shift();
+    }
+  } catch {}
+}
+
+function __ensureNetSampler() {
+  if (__netSampler) return;
+  __sampleNetOnce();
+  __netSampler = setInterval(__sampleNetOnce, NET_SAMPLE_MS);
+}
+
+function __getNetHistory24h() {
+  const now = Date.now();
+  const start = Math.floor((now - 24 * 60 * 60 * 1000) / 60000) * 60000;
+  const map = new Map(__netHist.map(p => [p.ts, p]));
+  const arr = [];
+  for (let i = 0; i < 24 * 60; i++) {
+    const t = start + i * 60000;
+    const v = map.get(t);
+    if (v) arr.push({ ts: t, rxSec: v.rxSec, txSec: v.txSec }); else arr.push({ ts: t, rxSec: 0, txSec: 0 });
+  }
+  return arr;
+}
 
 /**
  * 核心系统API
@@ -11,6 +64,9 @@ export default {
   name: 'core',
   dsc: '核心系统API',
   priority: 200,
+  init: async (app, Bot) => {
+    __ensureNetSampler();
+  },
 
   routes: [
     {
@@ -171,6 +227,7 @@ export default {
               disks,
               net: { rxBytes, txBytes },
               netRates: { rxSec, txSec },
+              netHistory24h: __getNetHistory24h(),
               network: networkStats
             },
             bot: {

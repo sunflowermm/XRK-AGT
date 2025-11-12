@@ -731,15 +731,23 @@ class APIControlCenter {
         this._prevNet = { rxBytes, txBytes };
         this._prevNetTs = nowTs;
 
-        // 先更新趋势数据
-        try {
-            this._metricsHistory.netRx.push(rxRate / 1024); // KB/s
-            this._metricsHistory.netTx.push(txRate / 1024);
-            const cap = 60;
-            ['netRx','netTx'].forEach(k => {
-                if (this._metricsHistory[k].length > cap) this._metricsHistory[k].shift();
-            });
-        } catch {}
+        // 若后端提供24小时历史，用其覆盖；否则更新最近序列
+        const hist24 = Array.isArray(system.netHistory24h) ? system.netHistory24h : null;
+        if (hist24 && hist24.length) {
+            try {
+                this._metricsHistory.netRx = hist24.map(p => (Number(p.rxSec) || 0) / 1024);
+                this._metricsHistory.netTx = hist24.map(p => (Number(p.txSec) || 0) / 1024);
+            } catch {}
+        } else {
+            try {
+                this._metricsHistory.netRx.push(rxRate / 1024);
+                this._metricsHistory.netTx.push(txRate / 1024);
+                const cap = 60;
+                ['netRx','netTx'].forEach(k => {
+                    if (this._metricsHistory[k].length > cap) this._metricsHistory[k].shift();
+                });
+            } catch {}
+        }
 
         this._destroyCharts();
         grid.innerHTML = `
@@ -886,7 +894,13 @@ class APIControlCenter {
                             { label: '下行RX (KB/s)', data: this._metricsHistory.netRx, borderColor: '#6aa9ff', backgroundColor: 'rgba(106,169,255,0.2)', fill: true, tension: 0.3, pointRadius: 0 },
                             { label: '上行TX (KB/s)', data: this._metricsHistory.netTx, borderColor: '#f6a54c', backgroundColor: 'rgba(246,165,76,0.2)', fill: true, tension: 0.3, pointRadius: 0 }
                         ] },
-                        options: { responsive: true, plugins: { legend: { display: true } }, scales: { x: { display: false }, y: { beginAtZero: true } } }
+                        options: {
+                            responsive: true,
+                            animation: false,
+                            interaction: { intersect: false, mode: 'index' },
+                            plugins: { legend: { display: true }, decimation: { enabled: true, algorithm: 'min-max' } },
+                            scales: { x: { display: false }, y: { beginAtZero: true } }
+                        }
                     });
                 } else {
                     const c = this._charts.netLine;
