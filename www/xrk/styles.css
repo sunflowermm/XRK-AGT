@@ -3269,9 +3269,6 @@ body.no-scroll {
     animation: shimmer 2s infinite;
 }
 
-    background: var(--gradient-primary);
-}
-
 @keyframes shimmer {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
