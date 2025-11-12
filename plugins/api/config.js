@@ -168,9 +168,12 @@ export default {
           return res.status(403).json({ success: false, message: 'Unauthorized' });
         }
 
+        let configName = null;
         try {
-          const configName = req.params?.name;
+          configName = req.params?.name;
           const { data, path: keyPath, backup = true, validate = true } = req.body || {};
+
+          BotUtil.makeLog('info', `收到配置写入请求 [${configName}] path: ${keyPath || 'none'}`, 'ConfigAPI');
 
           if (!configName) {
             return res.status(400).json({
@@ -180,6 +183,7 @@ export default {
           }
 
           if (!global.ConfigManager) {
+            BotUtil.makeLog('error', '配置管理器未初始化', 'ConfigAPI');
             return res.status(503).json({
               success: false,
               message: '配置管理器未初始化'
@@ -189,10 +193,16 @@ export default {
           const config = global.ConfigManager.get(configName);
 
           if (!config) {
+            BotUtil.makeLog('error', `配置不存在: ${configName}`, 'ConfigAPI');
             return res.status(404).json({
               success: false,
               message: `配置 ${configName} 不存在`
             });
+          }
+
+          // 验证数据
+          if (data === undefined || data === null) {
+            BotUtil.makeLog('warn', `配置数据为空 [${configName}]`, 'ConfigAPI');
           }
 
           let result;
@@ -201,12 +211,15 @@ export default {
             if (configName === 'system' && typeof config.write === 'function') {
               // SystemConfig 的特殊处理：keyPath 是子配置名称
               try {
+                BotUtil.makeLog('info', `写入 SystemConfig 子配置 [${configName}/${keyPath}]`, 'ConfigAPI');
                 result = await config.write(keyPath, data, { backup, validate });
+                BotUtil.makeLog('info', `SystemConfig 子配置写入成功 [${configName}/${keyPath}]`, 'ConfigAPI');
               } catch (subError) {
                 BotUtil.makeLog('error', `写入子配置失败 [${configName}/${keyPath}]: ${subError.message}`, 'ConfigAPI', subError);
                 throw subError;
               }
             } else if (typeof config.set === 'function') {
+              BotUtil.makeLog('info', `使用 set 方法写入配置路径 [${configName}/${keyPath}]`, 'ConfigAPI');
               result = await config.set(keyPath, data, { backup, validate });
             } else {
               throw new Error('配置对象不支持 set 方法');
@@ -216,7 +229,9 @@ export default {
             if (configName === 'system') {
               throw new Error('SystemConfig 需要指定子配置名称（使用 path 参数）');
             } else if (typeof config.write === 'function') {
+              BotUtil.makeLog('info', `写入完整配置 [${configName}]`, 'ConfigAPI');
               result = await config.write(data, { backup, validate });
+              BotUtil.makeLog('info', `配置写入成功 [${configName}]`, 'ConfigAPI');
             } else {
               throw new Error('配置对象不支持 write 方法');
             }
@@ -227,13 +242,14 @@ export default {
             message: '配置已保存'
           });
         } catch (error) {
-          const errorName = req.params?.name || 'unknown';
+          const errorName = configName || req.params?.name || 'unknown';
           BotUtil.makeLog('error', `写入配置失败 [${errorName}]: ${error.message}`, 'ConfigAPI', error);
           res.status(500).json({
             success: false,
             message: '写入配置失败',
             error: error.message,
-            configName: errorName
+            configName: errorName,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
           });
         }
       }

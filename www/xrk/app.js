@@ -2282,28 +2282,33 @@ class APIControlCenter {
                 </button>
             </div>
             <div class="config-editor-content">
-                <div class="sub-config-list">
-                    ${subConfigs.map(subName => {
-                        const subConfig = structure.configs[subName];
-                        return `
-                            <div class="sub-config-item" data-sub-name="${subName}">
-                                <div class="sub-config-icon">📄</div>
-                                <div class="sub-config-info">
-                                    <div class="sub-config-name">${subConfig.displayName || subName}</div>
-                                    <div class="sub-config-desc">${subConfig.description || ''}</div>
-                                    <div class="sub-config-path">${subConfig.filePath || ''}</div>
+                <div class="sub-config-list-scroll">
+                    <div class="sub-config-list">
+                        ${subConfigs.map(subName => {
+                            const subConfig = structure.configs[subName];
+                            return `
+                                <div class="sub-config-item" data-sub-name="${subName}">
+                                    <div class="sub-config-icon">📄</div>
+                                    <div class="sub-config-info">
+                                        <div class="sub-config-name">${subConfig.displayName || subName}</div>
+                                        <div class="sub-config-desc">${subConfig.description || ''}</div>
+                                        <div class="sub-config-path">${subConfig.filePath || ''}</div>
+                                    </div>
+                                    <button class="btn btn-sm btn-primary" data-action="edit-sub" data-sub-name="${subName}">
+                                        <span>✏️</span><span>编辑</span>
+                                    </button>
                                 </div>
-                                <button class="btn btn-sm btn-primary" data-action="edit-sub" data-sub-name="${subName}">
-                                    <span>✏️</span><span>编辑</span>
-                                </button>
-                            </div>
-                        `;
-                    }).join('')}
+                            `;
+                        }).join('')}
+                    </div>
                 </div>
             </div>
         `;
 
-        document.getElementById('backConfigBtn').addEventListener('click', () => this.backToConfigList());
+        const backBtn = document.getElementById('backConfigBtn');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => this.backToConfigList());
+        }
         
         editorPanel.querySelectorAll('[data-action="edit-sub"]').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -2460,18 +2465,24 @@ class APIControlCenter {
     async saveSubConfig() {
         // 尝试多种方式获取 editorTextarea
         let editorTextarea = document.getElementById('configEditorTextarea');
+        
+        // 如果找不到，尝试从整个文档中查找
         if (!editorTextarea) {
-            const formContainer = document.querySelector('.config-form-container');
-            if (formContainer) {
-                editorTextarea = formContainer.querySelector('#configEditorTextarea');
-            }
+            editorTextarea = document.querySelector('textarea#configEditorTextarea');
         }
+        
+        // 如果还是没有，尝试通过 data 属性查找
         if (!editorTextarea) {
-            editorTextarea = document.querySelector('textarea#configEditorTextarea[data-config-name]');
+            editorTextarea = document.querySelector('textarea[data-config-name][data-sub-name]');
         }
         
         if (!editorTextarea) {
-            this.showToast('无法找到配置编辑器', 'error');
+            console.error('无法找到子配置编辑器，当前 DOM 状态:', {
+                hasConfigEditorTextarea: !!document.getElementById('configEditorTextarea'),
+                hasFormContainer: !!document.querySelector('.config-form-container'),
+                hasEditorPanel: !!document.getElementById('configEditorPanel')
+            });
+            this.showToast('无法找到配置编辑器，请刷新页面重试', 'error');
             return;
         }
 
@@ -2510,6 +2521,7 @@ class APIControlCenter {
 
         try {
             // SystemConfig 的子配置保存：使用 path 参数指定子配置名称
+            console.log('保存子配置:', { configName, subName, configData });
             const response = await fetch(`${this.serverUrl}/api/config/${configName}/write`, {
                 method: 'POST',
                 headers: {
@@ -2526,16 +2538,20 @@ class APIControlCenter {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
+                console.error('保存子配置失败:', errorData);
                 throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: 保存失败`);
             }
 
             const result = await response.json();
             if (!result.success) {
+                console.error('保存子配置失败:', result);
                 throw new Error(result.message || result.error || '保存失败');
             }
 
+            console.log('子配置保存成功:', result);
             this.showToast('配置已保存', 'success');
         } catch (error) {
+            console.error('保存子配置异常:', error);
             this.showToast('保存失败: ' + error.message, 'error');
         }
     }
@@ -2587,21 +2603,24 @@ class APIControlCenter {
     async saveConfig() {
         // 尝试多种方式获取 editorTextarea
         let editorTextarea = document.getElementById('configEditorTextarea');
+        
+        // 如果找不到，尝试从整个文档中查找
         if (!editorTextarea) {
-            // 如果找不到，尝试从表单容器中查找
-            const formContainer = document.querySelector('.config-form-container');
-            if (formContainer) {
-                editorTextarea = formContainer.querySelector('#configEditorTextarea');
-            }
+            editorTextarea = document.querySelector('textarea#configEditorTextarea');
         }
         
-        // 如果还是没有，尝试从隐藏元素中查找
+        // 如果还是没有，尝试通过 data 属性查找
         if (!editorTextarea) {
-            editorTextarea = document.querySelector('textarea#configEditorTextarea[data-config-name]');
+            editorTextarea = document.querySelector('textarea[data-config-name]');
         }
         
         if (!editorTextarea) {
-            this.showToast('无法找到配置编辑器', 'error');
+            console.error('无法找到配置编辑器，当前 DOM 状态:', {
+                hasConfigEditorTextarea: !!document.getElementById('configEditorTextarea'),
+                hasFormContainer: !!document.querySelector('.config-form-container'),
+                hasEditorPanel: !!document.getElementById('configEditorPanel')
+            });
+            this.showToast('无法找到配置编辑器，请刷新页面重试', 'error');
             return;
         }
 
@@ -2643,6 +2662,7 @@ class APIControlCenter {
         }
 
         try {
+            console.log('保存配置:', { configName, configData });
             const response = await fetch(`${this.serverUrl}/api/config/${configName}/write`, {
                 method: 'POST',
                 headers: {
@@ -2658,16 +2678,20 @@ class APIControlCenter {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
+                console.error('保存配置失败:', errorData);
                 throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: 保存失败`);
             }
 
             const result = await response.json();
             if (!result.success) {
+                console.error('保存配置失败:', result);
                 throw new Error(result.message || result.error || '保存失败');
             }
 
+            console.log('配置保存成功:', result);
             this.showToast('配置已保存', 'success');
         } catch (error) {
+            console.error('保存配置异常:', error);
             this.showToast('保存配置失败: ' + error.message, 'error');
         }
     }
@@ -2757,23 +2781,33 @@ class APIControlCenter {
             contentDiv = editorPanel.querySelector('.config-editor-content');
             
             // 绑定按钮事件
-            document.getElementById('saveConfigBtn').addEventListener('click', () => {
-                if (subName) {
-                    this.saveSubConfig();
-                } else {
-                    this.saveConfig();
-                }
-            });
-            document.getElementById('validateConfigBtn').addEventListener('click', () => {
-                if (subName) {
-                    this.validateSubConfig();
-                } else {
-                    this.validateConfig();
-                }
-            });
-            document.getElementById('backConfigBtn').addEventListener('click', () => {
-                this.backToConfigList();
-            });
+            const saveBtn = document.getElementById('saveConfigBtn');
+            const validateBtn = document.getElementById('validateConfigBtn');
+            const backBtn = document.getElementById('backConfigBtn');
+            
+            if (saveBtn) {
+                saveBtn.addEventListener('click', () => {
+                    if (subName) {
+                        this.saveSubConfig();
+                    } else {
+                        this.saveConfig();
+                    }
+                });
+            }
+            if (validateBtn) {
+                validateBtn.addEventListener('click', () => {
+                    if (subName) {
+                        this.validateSubConfig();
+                    } else {
+                        this.validateConfig();
+                    }
+                });
+            }
+            if (backBtn) {
+                backBtn.addEventListener('click', () => {
+                    this.backToConfigList();
+                });
+            }
         }
         
         const formContainer = document.createElement('div');
@@ -2784,21 +2818,26 @@ class APIControlCenter {
         contentDiv.innerHTML = '';
         contentDiv.appendChild(formContainer);
         
-        // 创建隐藏的 textarea 用于存储元数据
-        if (!editorTextarea) {
-            editorTextarea = document.createElement('textarea');
-            editorTextarea.id = 'configEditorTextarea';
-            editorTextarea.className = 'config-editor-textarea';
-            editorTextarea.style.display = 'none';
-            contentDiv.appendChild(editorTextarea);
+        // 总是从 DOM 中查找或创建 editorTextarea，确保它存在
+        let textareaElement = document.getElementById('configEditorTextarea');
+        if (!textareaElement) {
+            textareaElement = document.createElement('textarea');
+            textareaElement.id = 'configEditorTextarea';
+            textareaElement.className = 'config-editor-textarea';
+            textareaElement.style.display = 'none';
+            // 将 textarea 添加到 contentDiv，而不是 formContainer，避免被替换
+            contentDiv.appendChild(textareaElement);
         }
         
         // 设置数据属性
-        editorTextarea.dataset.configName = configName;
+        textareaElement.dataset.configName = configName;
         if (subName) {
-            editorTextarea.dataset.subName = subName;
+            textareaElement.dataset.subName = subName;
+        } else {
+            // 确保没有 subName 时移除该属性
+            delete textareaElement.dataset.subName;
         }
-        editorTextarea.dataset.hasForm = 'true';
+        textareaElement.dataset.hasForm = 'true';
         
         // 绑定表单事件
         this.bindFormEvents(formContainer, configName, subName);
