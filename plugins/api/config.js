@@ -79,30 +79,57 @@ export default {
           return res.status(403).json({ success: false, message: 'Unauthorized' });
         }
 
+        let configName = null;
         try {
-          const { name } = req.params;
-          const { path: keyPath } = req.query;
+          configName = req.params?.name;
+          const { path: keyPath } = req.query || {};
 
-          const config = global.ConfigManager.get(name);
+          if (!configName) {
+            return res.status(400).json({
+              success: false,
+              message: '配置名称不能为空'
+            });
+          }
+
+          if (!global.ConfigManager) {
+            return res.status(503).json({
+              success: false,
+              message: '配置管理器未初始化'
+            });
+          }
+
+          const config = global.ConfigManager.get(configName);
 
           if (!config) {
             return res.status(404).json({
               success: false,
-              message: `配置 ${name} 不存在`
+              message: `配置 ${configName} 不存在`
             });
           }
 
           let data;
           if (keyPath) {
             // 如果是 system 配置，keyPath 是子配置名称
-            if (name === 'system' && config.getConfigInstance) {
-              // SystemConfig 的特殊处理
-              data = await config.read(keyPath);
-            } else {
+            if (configName === 'system' && typeof config.read === 'function') {
+              // SystemConfig 的特殊处理：读取子配置
+              try {
+                data = await config.read(keyPath);
+              } catch (subError) {
+                BotUtil.makeLog('error', `读取子配置失败 [${configName}/${keyPath}]: ${subError.message}`, 'ConfigAPI', subError);
+                throw subError;
+              }
+            } else if (typeof config.get === 'function') {
               data = await config.get(keyPath);
+            } else {
+              throw new Error('配置对象不支持 get 方法');
             }
           } else {
-            data = await config.read();
+            // 读取完整配置
+            if (typeof config.read === 'function') {
+              data = await config.read();
+            } else {
+              throw new Error('配置对象不支持 read 方法');
+            }
           }
 
           res.json({
@@ -110,11 +137,13 @@ export default {
             data
           });
         } catch (error) {
-          BotUtil.makeLog('error', `读取配置失败 [${name}]: ${error.message}`, 'ConfigAPI', error);
+          const errorName = configName || 'unknown';
+          BotUtil.makeLog('error', `读取配置失败 [${errorName}]: ${error.message}`, 'ConfigAPI', error);
           res.status(500).json({
             success: false,
             message: '读取配置失败',
             error: error.message,
+            configName: errorName,
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
           });
         }

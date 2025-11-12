@@ -2532,17 +2532,28 @@ body.no-scroll {
 
 .config-editor-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 20px 24px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
+    padding: 24px 32px;
+    background: linear-gradient(135deg, var(--bg-card), var(--bg-tertiary));
+    border-bottom: 2px solid var(--border);
+    box-shadow: var(--shadow-sm);
 }
 
 .config-editor-title {
-    font-size: 20px;
-    font-weight: 600;
+    font-size: 26px;
+    font-weight: 700;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.config-editor-title::before {
+    content: '⚙️';
+    font-size: 28px;
+    animation: iconFloat 3s ease-in-out infinite;
 }
 
 .config-editor-controls {
@@ -2553,44 +2564,121 @@ body.no-scroll {
 .config-editor-body {
     flex: 1;
     display: flex;
+    flex-direction: column;
     overflow: hidden;
+    background: var(--bg-secondary);
 }
 
 .config-list-panel {
     flex: 1;
-    padding: 24px;
+    padding: 32px;
     overflow-y: auto;
+    background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+}
+
+.config-list-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.config-list-panel::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.config-list-panel::-webkit-scrollbar-thumb {
+    background: var(--accent);
+    border-radius: 4px;
+}
+
+.config-list-panel::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-hover);
 }
 
 .config-list-loading,
 .config-list-empty,
 .config-list-error {
     text-align: center;
-    padding: 40px;
-    color: var(--text-secondary);
+    padding: 80px 20px;
+    color: var(--text-muted);
+    font-size: 16px;
+}
+
+.config-list-loading::before {
+    content: '⏳';
+    display: block;
+    font-size: 48px;
+    margin-bottom: 16px;
+    animation: iconFloat 2s ease-in-out infinite;
+}
+
+.config-list-empty::before {
+    content: '📝';
+    display: block;
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.6;
+}
+
+.config-list-error::before {
+    content: '❌';
+    display: block;
+    font-size: 48px;
+    margin-bottom: 16px;
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-10px); }
+    75% { transform: translateX(10px); }
 }
 
 .config-item {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 16px 20px;
+    gap: 20px;
+    padding: 24px;
     background: var(--bg-card);
-    border: 1px solid var(--border);
+    border: 2px solid var(--border);
     border-radius: var(--radius-md);
-    margin-bottom: 12px;
+    margin-bottom: 16px;
+    cursor: pointer;
     transition: all var(--transition-base);
+    position: relative;
+    overflow: hidden;
+}
+
+.config-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--accent);
+    transform: scaleY(0);
+    transition: transform var(--transition-base);
 }
 
 .config-item:hover {
     background: var(--bg-hover);
     border-color: var(--accent);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: var(--shadow-lg);
+}
+
+.config-item:hover::before {
+    transform: scaleY(1);
 }
 
 .config-item-icon {
-    font-size: 24px;
+    font-size: 36px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+    transition: transform var(--transition-base);
+}
+
+.config-item:hover .config-item-icon {
+    transform: scale(1.1) rotate(5deg);
 }
 
 .config-item-info {
@@ -2599,60 +2687,95 @@ body.no-scroll {
 }
 
 .config-item-name {
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 20px;
+    font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 4px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.config-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--accent-light);
+    color: var(--accent);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--accent);
 }
 
 .config-item-desc {
     font-size: 14px;
     color: var(--text-secondary);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    line-height: 1.5;
 }
 
 .config-item-path {
     font-size: 12px;
     color: var(--text-muted);
     font-family: 'Courier New', monospace;
-}
-
-.config-badge {
+    background: var(--bg-tertiary);
+    padding: 4px 8px;
+    border-radius: 4px;
     display: inline-block;
-    margin-left: 8px;
-    padding: 2px 8px;
-    background: var(--accent-light);
-    color: var(--accent);
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
+    margin-top: 4px;
 }
 
 .config-item-actions {
     display: flex;
-    gap: 8px;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.config-item-actions .btn {
+    padding: 10px 18px;
+    font-size: 14px;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-base);
+}
+
+.config-item-actions .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
 }
 
 .config-editor-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
+    padding: 32px;
+    overflow: hidden;
     background: var(--bg-secondary);
 }
 
 .config-editor-toolbar {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 16px 24px;
-    background: var(--bg-tertiary);
-    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding: 20px 24px;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
 }
 
 .config-editor-name {
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 22px;
+    font-weight: 700;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.config-editor-name::before {
+    content: '📄';
+    font-size: 24px;
 }
 
 .config-editor-actions {
@@ -2662,60 +2785,79 @@ body.no-scroll {
 
 .config-editor-content {
     flex: 1;
-    padding: 24px;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
 }
 
 .config-editor-textarea {
+    flex: 1;
     width: 100%;
-    height: 100%;
-    min-height: 400px;
-    padding: 16px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
+    padding: 20px;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border);
     border-radius: var(--radius-md);
     color: var(--text-primary);
-    font-family: 'Courier New', monospace;
+    font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.8;
     resize: none;
+    outline: none;
+    transition: all var(--transition-base);
+}
+
+.config-editor-textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-light);
+    background: var(--bg-card);
 }
 
 .config-editor-content .CodeMirror {
+    flex: 1;
     height: 100%;
-    min-height: 400px;
     border-radius: var(--radius-md);
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+.config-editor-content .CodeMirror-focused {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .sub-config-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
     padding: 24px;
 }
 
 .sub-config-item {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 20px;
+    padding: 24px;
     background: var(--bg-card);
     border: 2px solid var(--border);
-    border-radius: var(--radius-lg);
-    transition: all var(--transition-base);
+    border-radius: var(--radius-md);
     cursor: pointer;
+    transition: all var(--transition-base);
+    text-align: center;
 }
 
 .sub-config-item:hover {
-    background: var(--bg-hover);
     border-color: var(--accent);
     transform: translateY(-4px);
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-lg);
+    background: var(--bg-hover);
 }
 
 .sub-config-icon {
-    font-size: 32px;
-    flex-shrink: 0;
+    font-size: 48px;
+    margin-bottom: 12px;
+    display: block;
 }
 
 .sub-config-info {
