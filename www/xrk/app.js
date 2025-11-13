@@ -606,6 +606,7 @@ class APIControlCenter {
     showHomePage() {
         const content = document.getElementById('content');
         if (!content) return;
+        this._destroyCharts();
         content.innerHTML = `
             <div class="welcome-screen" id="systemStatusPage">
                 <div class="system-status-header">
@@ -2090,6 +2091,44 @@ class APIControlCenter {
                     oninput="app.updateFromForm()">`;
         }
 
+        html += `</div>`;
+        return html;
+    }
+
+    /**
+     * 渲染 ArrayForm（对象数组）
+     */
+    renderArrayForm(fieldId, fieldName, fieldSchema, value) {
+        const arr = Array.isArray(value) ? value : [];
+        const subFields = fieldSchema.fields || {};
+        const makeItem = (item = {}, index = 0) => {
+            let inner = '';
+            for (const [subName, subSchema] of Object.entries(subFields)) {
+                const subVal = (item && Object.prototype.hasOwnProperty.call(item, subName)) ? item[subName] : (subSchema.default !== undefined ? subSchema.default : null);
+                inner += `
+                    <div class="config-form-subfield">
+                        <label class="config-form-label">${subSchema.label || subName}</label>
+                        ${this.renderFormField(`${fieldId}-${index}-${subName}`, `${subName}`, subSchema, subVal, subSchema.component || this.inferComponentType(subSchema.type, subSchema))}
+                    </div>
+                `;
+            }
+            return `
+                <div class="config-form-arrayform-item" data-index="${index}">
+                    ${inner}
+                    <div class="config-form-arrayform-actions">
+                        <button type="button" class="btn btn-sm btn-danger config-form-arrayform-remove" data-index="${index}">删除</button>
+                    </div>
+                </div>
+            `;
+        };
+
+        let html = `<div class="config-form-arrayform" id="${fieldId}" data-field="${fieldName}">`;
+        if (arr.length === 0) {
+            html += makeItem({}, 0);
+        } else {
+            arr.forEach((item, i) => { html += makeItem(item || {}, i); });
+        }
+        html += `<button type="button" class="btn btn-sm btn-primary config-form-arrayform-add" data-field="${fieldName}">添加项</button>`;
         html += `</div>`;
         return html;
     }
@@ -3792,7 +3831,7 @@ class APIControlCenter {
             'string': 'Input',
             'number': 'InputNumber',
             'boolean': 'Switch',
-            'array': 'Array',
+            'array': (fieldSchema.itemType === 'object' || fieldSchema.component === 'ArrayForm') ? 'ArrayForm' : 'Array',
             'object': 'SubForm'
         };
         return typeMap[type] || 'Input';
@@ -3813,6 +3852,8 @@ class APIControlCenter {
                 return this.renderSwitch(fieldId, fieldName, fieldSchema, value);
             case 'SubForm':
                 return this.renderSubForm(fieldId, fieldName, fieldSchema, value);
+            case 'ArrayForm':
+                return this.renderArrayForm(fieldId, fieldName, fieldSchema, value);
             case 'Array':
                 return this.renderArray(fieldId, fieldName, fieldSchema, value);
             case 'Tags':
@@ -3945,7 +3986,7 @@ class APIControlCenter {
      * 绑定表单事件
      */
     bindFormEvents(formContainer, configName, subName) {
-        // 数组操作
+        // 数组操作（标量）
         formContainer.querySelectorAll('.config-form-array-add').forEach(btn => {
             btn.addEventListener('click', () => {
                 const fieldName = btn.dataset.field;
@@ -3967,6 +4008,47 @@ class APIControlCenter {
         formContainer.querySelectorAll('.config-form-array-remove').forEach(btn => {
             btn.addEventListener('click', function() {
                 this.closest('.config-form-array-item').remove();
+            });
+        });
+
+        // ArrayForm（对象数组）操作
+        formContainer.querySelectorAll('.config-form-arrayform').forEach(arrayForm => {
+            const addBtn = arrayForm.querySelector('.config-form-arrayform-add');
+            if (addBtn) {
+                addBtn.addEventListener('click', () => {
+                    const index = arrayForm.querySelectorAll('.config-form-arrayform-item').length;
+                    const fieldName = arrayForm.dataset.field;
+                    // 生成空项
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = this.renderArrayForm(`${fieldName}-${index}`, fieldName, { fields: {} }, []);
+                    // 只取一项结构：根据当前 arrayForm 的子字段渲染
+                    const subFields = arrayForm.querySelector('.config-form-arrayform-item .config-form-subfield')
+                        ? Array.from(arrayForm.querySelectorAll('.config-form-arrayform-item .config-form-subfield')).map(el => el.querySelector('[data-field]')?.dataset.field?.split('.')?.[0]).filter(Boolean)
+                        : [];
+                    const item = document.createElement('div');
+                    item.className = 'config-form-arrayform-item';
+                    item.dataset.index = String(index);
+                    let inner = '';
+                    // 基于第一项的结构克隆外观（简化：克隆第一个item的innerHTML）
+                    const first = arrayForm.querySelector('.config-form-arrayform-item');
+                    if (first) {
+                        inner = first.innerHTML;
+                    }
+                    item.innerHTML = inner || `<div class="config-form-arrayform-actions"><button type="button" class="btn btn-sm btn-danger config-form-arrayform-remove" data-index="${index}">删除</button></div>`;
+                    // 清空其中的值
+                    item.querySelectorAll('[data-field]').forEach(el => {
+                        if (el.type === 'checkbox') el.checked = false;
+                        else el.value = '';
+                    });
+                    arrayForm.insertBefore(item, addBtn);
+                    const rm = item.querySelector('.config-form-arrayform-remove');
+                    if (rm) rm.addEventListener('click', () => item.remove());
+                });
+            }
+            arrayForm.querySelectorAll('.config-form-arrayform-remove').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    this.closest('.config-form-arrayform-item')?.remove();
+                });
             });
         });
 
@@ -4026,11 +4108,15 @@ class APIControlCenter {
     collectFormData(formContainer) {
         const data = {};
         const collectedFields = new Set();
+        const skipFields = new WeakSet();
+        // 标记 ArrayForm 内部字段，防止在通用收集时被重复收集为顶层
+        formContainer.querySelectorAll('.config-form-arrayform [data-field]').forEach(el => skipFields.add(el));
         
         // 收集所有表单字段
         const fields = formContainer.querySelectorAll('[data-field]');
         
         fields.forEach(field => {
+            if (skipFields.has(field)) return;
             const fieldName = field.dataset.field;
             if (!fieldName) return;
             
@@ -4094,6 +4180,38 @@ class APIControlCenter {
                 .filter(item => item !== null);
             
             // 即使数组为空，也保留键（空数组）
+            data[fieldName] = items;
+        });
+        
+        // 处理 ArrayForm（对象数组）字段
+        formContainer.querySelectorAll('.config-form-arrayform').forEach(arrayForm => {
+            const fieldName = arrayForm.dataset.field;
+            if (!fieldName) return;
+            collectedFields.add(fieldName);
+            const items = [];
+            arrayForm.querySelectorAll('.config-form-arrayform-item').forEach(itemEl => {
+                const itemObj = {};
+                const itemFields = itemEl.querySelectorAll('[data-field]');
+                itemFields.forEach(f => {
+                    const name = f.dataset.field;
+                    if (!name) return;
+                    const path = name.split('.');
+                    let cur = itemObj;
+                    for (let i = 0; i < path.length - 1; i++) {
+                        const key = path[i];
+                        if (!cur[key] || typeof cur[key] !== 'object') cur[key] = {};
+                        cur = cur[key];
+                    }
+                    const last = path[path.length - 1];
+                    if (f.type === 'checkbox') cur[last] = f.checked;
+                    else if (f.type === 'number') {
+                        const numVal = f.value !== '' && f.value !== null && f.value !== undefined ? Number(f.value) : null;
+                        cur[last] = (numVal !== null && !isNaN(numVal)) ? numVal : null;
+                    } else if (f.tagName === 'SELECT') cur[last] = f.value || null;
+                    else cur[last] = f.value || '';
+                });
+                items.push(itemObj);
+            });
             data[fieldName] = items;
         });
         

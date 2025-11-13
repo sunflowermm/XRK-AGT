@@ -1,7 +1,7 @@
 {
-  "name": "XRK-AGT",
-  "version": "3.0.7",
-  "author": "Le-niao, Yoimiya-Kokomi, TRSS, Xrkseek",
+  "name": "xrk-agt",
+  "version": "1.0.0",
+  "author": "Xrkseek",
   "description": "Integrated Bot",
   "main": "app.js",
   "type": "module",

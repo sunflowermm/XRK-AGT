@@ -8,9 +8,31 @@ let __netHist = [];
 const NET_HISTORY_LIMIT = 24 * 60;
 const NET_SAMPLE_MS = 3_000; // 单一方法：systeminformation 网络采样，每3秒
 
-// CPU 采样缓存（单一方法：systeminformation.currentLoad）
+// CPU 采样缓存（单一方法：os.cpus 快照法）
 let __cpuCache = { percent: 0, ts: 0 };
 let __cpuTimer = null;
+let __cpuPrevSnap = null;
+function __sampleCpuOnce() {
+  try {
+    const cpus = os.cpus();
+    if (!cpus || cpus.length === 0) return;
+    if (!__cpuPrevSnap) { __cpuPrevSnap = cpus; return; }
+    let idleDelta = 0, totalDelta = 0;
+    for (let i = 0; i < cpus.length; i++) {
+      const t1 = __cpuPrevSnap[i].times, t2 = cpus[i].times;
+      const idle = Math.max(0, t2.idle - t1.idle);
+      const total = Math.max(0,
+        (t2.user - t1.user) + (t2.nice - t1.nice) + (t2.sys - t1.sys) + (t2.irq - t1.irq) + idle
+      );
+      idleDelta += idle; totalDelta += total;
+    }
+    __cpuPrevSnap = cpus;
+    if (totalDelta > 0) {
+      const usedPct = +(((totalDelta - idleDelta) / totalDelta) * 100).toFixed(2);
+      __cpuCache = { percent: usedPct, ts: Date.now() };
+    }
+  } catch {}
+}
 
 let __fsCache = { disks: [], ts: 0 };
 let __procCache = { top5: [], ts: 0 };
@@ -107,18 +129,9 @@ function __ensureSysSamplers() {
     __procTimer = setInterval(__refreshProcCache, 10_000);
   }
   if (!__cpuTimer) {
-    (async () => {
-      try {
-        const load = await si.currentLoad().catch(() => null);
-        if (load && typeof load.currentload === 'number') __cpuCache = { percent: +load.currentload.toFixed(2), ts: Date.now() };
-      } catch {}
-    })();
-    __cpuTimer = setInterval(async () => {
-      try {
-        const load = await si.currentLoad().catch(() => null);
-        if (load && typeof load.currentload === 'number') __cpuCache = { percent: +load.currentload.toFixed(2), ts: Date.now() };
-      } catch {}
-    }, 2_000);
+    __cpuPrevSnap = os.cpus();
+    setTimeout(__sampleCpuOnce, 600); // 预热一次，避免首次为0
+    __cpuTimer = setInterval(__sampleCpuOnce, 2_000);
   }
 }
 
@@ -141,7 +154,10 @@ export default {
       path: '/api/system/status',
       handler: async (req, res, Bot) => {
         try {
-          // 仅返回缓存，不在请求中做计算
+          // 仅使用同一方法的缓存；若缓存过期则触发一次轻量采样
+          if (!__cpuCache.ts || (Date.now() - __cpuCache.ts > 5_000)) {
+            __sampleCpuOnce();
+          }
           const cpuPct = __cpuCache.percent || 0;
 
           // 基础信息（极快）
