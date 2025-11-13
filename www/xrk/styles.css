@@ -4076,6 +4076,7 @@ body.no-scroll {
 
 .config-form-number {
     -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 .config-form-number::-webkit-outer-spin-button,

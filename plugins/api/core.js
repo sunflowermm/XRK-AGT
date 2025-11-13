@@ -8,6 +8,11 @@ let __netHist = [];
 const NET_HISTORY_LIMIT = 24 * 60;
 const NET_SAMPLE_MS = 60 * 1000;
 
+let __fsCache = { disks: [], ts: 0 };
+let __procCache = { top5: [], ts: 0 };
+let __fsTimer = null;
+let __procTimer = null;
+
 async function __sampleNetOnce() {
   try {
     const stats = await si.networkStats().catch(() => []);
@@ -57,6 +62,44 @@ function __getNetHistory24h() {
   return arr;
 }
 
+async function __refreshFsCache() {
+  try {
+    const fsSize = await si.fsSize().catch(() => []);
+    const disks = Array.isArray(fsSize) ? fsSize.map(d => ({
+      fs: d.fs || d.mount || d.type || 'disk',
+      mount: d.mount || d.fs || '',
+      size: Number(d.size || 0),
+      used: Number(d.used || 0),
+      use: Number(d.use || 0)
+    })) : [];
+    __fsCache = { disks, ts: Date.now() };
+  } catch {}
+}
+
+async function __refreshProcCache() {
+  try {
+    const procs = await si.processes().catch(() => ({ list: [] }));
+    const list = procs?.list || [];
+    // 计算Top5（按CPU，其次内存）
+    const top5 = list
+      .map(p => ({ pid: p.pid, name: p.name, cpu: Number(p.pcpu || p.cpu || 0), mem: Number(p.pmem || p.mem || 0) }))
+      .sort((a, b) => b.cpu - a.cpu || b.mem - a.mem)
+      .slice(0, 5);
+    __procCache = { top5, ts: Date.now() };
+  } catch {}
+}
+
+function __ensureSysSamplers() {
+  if (!__fsTimer) {
+    __refreshFsCache();
+    __fsTimer = setInterval(__refreshFsCache, 30_000);
+  }
+  if (!__procTimer) {
+    __refreshProcCache();
+    __procTimer = setInterval(__refreshProcCache, 10_000);
+  }
+}
+
 /**
  * 核心系统API
  * 提供系统状态、配置查询、健康检查等基础功能
@@ -67,6 +110,7 @@ export default {
   priority: 200,
   init: async (app, Bot) => {
     __ensureNetSampler();
+    __ensureSysSamplers();
   },
 
   routes: [
@@ -75,86 +119,51 @@ export default {
       path: '/api/system/status',
       handler: async (req, res, Bot) => {
         try {
-          // 优先用 systeminformation 获取 CPU 负载，避免等待
           let cpuPct = null;
           try {
             const load = await si.currentLoad();
-            if (load && typeof load.currentload === 'number') {
-              cpuPct = +load.currentload.toFixed(2);
-            }
+            if (load && typeof load.currentload === 'number') cpuPct = +load.currentload.toFixed(2);
           } catch {}
           if (cpuPct === null) {
             const snap1 = os.cpus();
             await new Promise(r => setTimeout(r, 120));
             const snap2 = os.cpus();
-            function cpuPercent(s1, s2) {
-              if (!s1 || !s2 || s1.length !== s2.length) return null;
-              let idle = 0, total = 0;
-              for (let i = 0; i < s1.length; i++) {
-                const t1 = s1[i].times, t2 = s2[i].times;
-                const id = Math.max(0, t2.idle - t1.idle);
-                const tot = Math.max(0, (t2.user - t1.user) + (t2.nice - t1.nice) + (t2.sys - t1.sys) + (t2.irq - t1.irq) + id);
-                idle += id; total += tot;
-              }
-              if (total <= 0) return null;
-              return +(((total - idle) / total) * 100).toFixed(2);
+            let idle = 0, total = 0;
+            for (let i = 0; i < snap1.length; i++) {
+              const t1 = snap1[i].times, t2 = snap2[i].times;
+              const id = Math.max(0, t2.idle - t1.idle);
+              const tot = Math.max(0, (t2.user - t1.user) + (t2.nice - t1.nice) + (t2.sys - t1.sys) + (t2.irq - t1.irq) + id);
+              idle += id; total += tot;
             }
-            cpuPct = cpuPercent(snap1, snap2);
+            if (total > 0) cpuPct = +(((total - idle) / total) * 100).toFixed(2);
           }
 
-          // 获取系统信息（基础 + 详细）
+          // 基础信息（极快）
           const cpus = os.cpus();
           const totalMem = os.totalmem();
           const freeMem = os.freemem();
           const usedMem = totalMem - freeMem;
           const memUsage = process.memoryUsage();
-          // 使用 systeminformation 直接获取，避免因超时导致的空数据
-          const [siMem, fsSize, procs, netStats] = await Promise.all([
-            si.mem().catch(() => ({})),
-            si.fsSize().catch(() => []),
-            si.processes().catch(() => ({ list: [] })),
-            si.networkStats().catch(() => [])
-          ]);
-          // 累计网络字节（总和）与瞬时速率
-          let rxBytes = 0, txBytes = 0, rxSec = 0, txSec = 0;
-          if (Array.isArray(netStats)) {
-            for (const n of netStats) {
-              rxBytes += Number(n.rx_bytes || 0);
-              txBytes += Number(n.tx_bytes || 0);
-              rxSec += Number(n.rx_sec || 0);
-              txSec += Number(n.tx_sec || 0);
-            }
-          }
-          // 用上次采样差值估算速率：简单可靠，第二次起有值
-          const nowTs = Date.now();
-          if (__lastNetSample && Number.isFinite(__lastNetSample.rx) && Number.isFinite(__lastNetSample.tx)) {
-            const dt = Math.max(1, (nowTs - __lastNetSample.ts) / 1000);
-            const rxDelta = rxBytes - __lastNetSample.rx;
-            const txDelta = txBytes - __lastNetSample.tx;
-            if (rxDelta >= 0) rxSec = rxDelta / dt;
-            if (txDelta >= 0) txSec = txDelta / dt;
-          }
-          __lastNetSample = { ts: nowTs, rx: rxBytes, tx: txBytes };
 
-          // 磁盘列表
-          const disks = Array.isArray(fsSize) ? fsSize.map(d => ({
-            fs: d.fs || d.mount || d.type || 'disk',
-            mount: d.mount || d.fs || '',
-            size: Number(d.size || 0),
-            used: Number(d.used || 0),
-            use: Number(d.use || 0)
-          })) : [];
-          // 进程Top5（按CPU，其次内存）
-          let processesTop5 = [];
-          try {
-            const list = procs?.list || [];
-            processesTop5 = list
-              .map(p => ({ pid: p.pid, name: p.name, cpu: Number(p.pcpu || p.cpu || 0), mem: Number(p.pmem || p.mem || 0) }))
-              .sort((a, b) => b.cpu - a.cpu || b.mem - a.mem)
-              .slice(0, 5);
-          } catch {}
+          // 可选信息：交换分区（通常很快）
+          const siMem = await si.mem().catch(() => ({}));
+
+          // 网络字节与速率：仅使用采样缓存，避免每次请求 si.networkStats()
+          const lastNet = __lastNetSample || { ts: Date.now(), rx: 0, tx: 0 };
+          const rxBytes = Number(lastNet.rx || 0);
+          const txBytes = Number(lastNet.tx || 0);
+          const lastHist = __netHist.length ? __netHist[__netHist.length - 1] : { rxSec: 0, txSec: 0 };
+          const rxSec = Number(lastHist.rxSec || 0);
+          const txSec = Number(lastHist.txSec || 0);
+
+          // 磁盘 & 进程：直接使用缓存，必要时后台刷新
+          const disks = Array.isArray(__fsCache.disks) ? __fsCache.disks : [];
+          if (!__fsTimer || (Date.now() - (__fsCache.ts || 0) > 60_000)) __refreshFsCache();
+
+          const processesTop5 = Array.isArray(__procCache.top5) ? __procCache.top5 : [];
+          if (!__procTimer || (Date.now() - (__procCache.ts || 0) > 20_000)) __refreshProcCache();
           
-          // 获取网络接口信息
+          // 获取网络接口信息（轻量）
           const networkInterfaces = os.networkInterfaces();
           const networkStats = {};
           for (const [name, interfaces] of Object.entries(networkInterfaces)) {
@@ -191,6 +200,7 @@ export default {
               }
             }));
 
+          const includeHist = (req.query?.hist === '24h') || (req.query?.withHistory === '1') || (req.query?.withHistory === 'true');
           res.json({
             success: true,
             timestamp: Date.now(),
@@ -228,7 +238,7 @@ export default {
               disks,
               net: { rxBytes, txBytes },
               netRates: { rxSec, txSec },
-              netHistory24h: __getNetHistory24h(),
+              netHistory24h: includeHist ? __getNetHistory24h() : [],
               network: networkStats
             },
             bot: {

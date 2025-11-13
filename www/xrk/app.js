@@ -787,44 +787,47 @@ class APIControlCenter {
             } catch {}
         }
 
-        this._destroyCharts();
-        grid.innerHTML = `
-            <div class="status-card-large">
-                <div class="status-card-header"><h3>CPU</h3></div>
-                <div class="status-card-content">
-                    <div>${cpuPercent !== null ? (cpuPercent + '% / 100%') : '- / 100%'}</div>
-                    <canvas id="cpuPie" height="140"></canvas>
+        const hasBuilt = !!document.getElementById('cpuPie');
+        if (!hasBuilt) {
+            this._destroyCharts();
+            grid.innerHTML = `
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>CPU</h3></div>
+                    <div class="status-card-content">
+                        <div>${cpuPercent !== null ? (cpuPercent + '% / 100%') : '- / 100%'}</div>
+                        <canvas id="cpuPie" height="140"></canvas>
+                    </div>
                 </div>
-            </div>
-            <div class="status-card-large">
-                <div class="status-card-header"><h3>内存</h3></div>
-                <div class="status-card-content">
-                    <div>${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</div>
-                    <canvas id="memPie" height="140"></canvas>
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>内存</h3></div>
+                    <div class="status-card-content">
+                        <div>${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</div>
+                        <canvas id="memPie" height="140"></canvas>
+                    </div>
                 </div>
-            </div>
-            <div class="status-card-large">
-                <div class="status-card-header"><h3>交换分区</h3></div>
-                <div class="status-card-content">
-                    <div>${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}${swapTotal === 0 ? ' (无交换分区)' : ''}</div>
-                    <canvas id="swapPie" height="140"></canvas>
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>交换分区</h3></div>
+                    <div class="status-card-content">
+                        <div>${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}${swapTotal === 0 ? ' (无交换分区)' : ''}</div>
+                        <canvas id="swapPie" height="140"></canvas>
+                    </div>
                 </div>
-            </div>
-            <div class="status-card-large">
-                <div class="status-card-header"><h3>磁盘使用</h3></div>
-                <div class="status-card-content"><div id="diskPlaceholder" style="opacity:.75;font-size:12px;margin-bottom:6px;"></div><canvas id="diskBar" height="180"></canvas></div>
-            </div>
-            <div class="status-card-large">
-                <div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div>
-                <div class="status-card-content"><div id="netSummary" style="opacity:.75;font-size:12px;margin-bottom:6px;">--</div><canvas id="netLine" height="160"></canvas></div>
-            </div>
-            <div class="status-card-large">
-                <div class="status-card-header"><h3>进程 Top5</h3></div>
-                <div class="status-card-content">
-                    <table class="kv-table small"><tbody id="procTop"></tbody></table>
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>磁盘使用</h3></div>
+                    <div class="status-card-content"><div id="diskPlaceholder" style="opacity:.75;font-size:12px;margin-bottom:6px;"></div><canvas id="diskBar" height="180"></canvas></div>
                 </div>
-            </div>
-        `;
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div>
+                    <div class="status-card-content"><div id="netSummary" style="opacity:.75;font-size:12px;margin-bottom:6px;">--</div><canvas id="netLine" height="160"></canvas></div>
+                </div>
+                <div class="status-card-large">
+                    <div class="status-card-header"><h3>进程 Top5</h3></div>
+                    <div class="status-card-content">
+                        <table class="kv-table small"><tbody id="procTop"></tbody></table>
+                    </div>
+                </div>
+            `;
+        }
 
         // 初始化/更新图表
         requestAnimationFrame(() => {
@@ -1140,16 +1143,16 @@ class APIControlCenter {
                 e.preventDefault();
                 const apiId = item.dataset.apiId;
                 const action = item.dataset.action;
-                
+
                 if (action === 'ai-chat') {
                     this.navigateToPage('chat');
                 } else if (action === 'config-manager') {
                     this.navigateToPage('config');
                 } else if (apiId) {
                     this.navigateToPage('api');
-                const api = this.findAPIById(apiId);
-                if (api) {
-                    this.selectAPI(api.method, api.path, apiId);
+                    const api = this.findAPIById(apiId);
+                    if (api) {
+                        this.selectAPI(api.method, api.path, apiId);
                     }
                 }
             });
@@ -1444,8 +1447,7 @@ class APIControlCenter {
                 }
             } catch {}
         });
-        this._deviceWs.addEventListener('close', () => {});
-        this._deviceWs.addEventListener('error', () => {});
+        // 移除重复的空监听器，避免冗余
     }
 
     _scheduleWsReconnect() {
