@@ -108,11 +108,11 @@ class APIControlCenter {
         const grid = document.getElementById('systemStatusGrid');
         if (!grid) return;
         grid.innerHTML = `
-            <div class="status-card-large"><div class="status-card-header"><h3>CPU</h3></div><div class="status-card-content"><div>--% / 100%</div><canvas id="cpuPie" height="140"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>内存</h3></div><div class="status-card-content"><div>-- / --</div><canvas id="memPie" height="140"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>交换分区</h3></div><div class="status-card-content"><div>-- / --</div><canvas id="swapPie" height="140"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>磁盘使用</h3></div><div class="status-card-content"><div id="diskPlaceholder" style="opacity:.75;font-size:12px;margin-bottom:6px;"></div><canvas id="diskBar" height="180"></canvas></div></div>
-            <div class="status-card-large"><div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div><div class="status-card-content"><div id="netSummary" style="opacity:.75;font-size:12px;margin-bottom:6px;">--</div><canvas id="netLine" height="160"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>CPU</h3></div><div class="status-card-content"><div id="cpuSummary" class="status-summary">--% / 100%</div><canvas id="cpuPie" height="140"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>内存</h3></div><div class="status-card-content"><div id="memSummary" class="status-summary">-- / --</div><canvas id="memPie" height="140"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>交换分区</h3></div><div class="status-card-content"><div id="swapSummary" class="status-summary">-- / --</div><canvas id="swapPie" height="140"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>磁盘使用</h3></div><div class="status-card-content"><div id="diskPlaceholder" class="status-summary">--</div><canvas id="diskBar" height="180"></canvas></div></div>
+            <div class="status-card-large"><div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div><div class="status-card-content"><div id="netSummary" class="status-summary">--</div><canvas id="netLine" height="160"></canvas></div></div>
             <div class="status-card-large"><div class="status-card-header"><h3>进程 Top5</h3></div><div class="status-card-content"><table class="kv-table small"><tbody id="procTop"></tbody></table></div></div>
         `;
     }
@@ -150,6 +150,16 @@ class APIControlCenter {
             console.error('Failed to load API configuration:', error);
             this.showToast('加载API配置失败', 'error');
         }
+    }
+
+    _buildChatContext(limitChars = 800, limitMsgs = 8) {
+        try {
+            const msgs = (this._chatHistory || []).slice(-limitMsgs);
+            const compact = msgs.map(m => `${m.role === 'user' ? 'U' : 'A'}:${(m.text || '').replace(/\s+/g,' ').trim()}`)
+                                .join(' | ')
+                                .slice(-limitChars);
+            return compact;
+        } catch { return ''; }
     }
 
     initEventListeners() {
@@ -746,46 +756,23 @@ class APIControlCenter {
         const swapUsed = Number(system.swap?.used || 0);
         const swapPercent = swapTotal > 0 ? +(swapUsed / swapTotal * 100).toFixed(2) : 0;
         const disks = Array.isArray(system.disks) ? system.disks : [];
-        const rxBytes = Number(system.net?.rxBytes || 0);
-        const txBytes = Number(system.net?.txBytes || 0);
-        const nowTs = Number(data.timestamp || Date.now());
-        const dt = this._prevNetTs ? Math.max(1, (nowTs - this._prevNetTs) / 1000) : 60;
-        let rxRate = 0, txRate = 0;
+        // 网络速率：仅使用后端缓存速率
+        const rxSec = Number(system.netRates?.rxSec || 0);
+        const txSec = Number(system.netRates?.txSec || 0);
         try {
-            if (this._prevNet.rxBytes && rxBytes >= this._prevNet.rxBytes) rxRate = (rxBytes - this._prevNet.rxBytes) / dt;
-            if (this._prevNet.txBytes && txBytes >= this._prevNet.txBytes) txRate = (txBytes - this._prevNet.txBytes) / dt;
+            this._metricsHistory.netRx.push(rxSec / 1024);
+            this._metricsHistory.netTx.push(txSec / 1024);
+            const cap = 60;
+            ['netRx','netTx'].forEach(k => { if (this._metricsHistory[k].length > cap) this._metricsHistory[k].shift(); });
         } catch {}
-        // 首次无历史时，使用后端瞬时速率作为首次样本并填充历史
-        if (!this._prevNetTs) {
-            const rxSec = Number(system.netRates?.rxSec || rxRate || 0);
-            const txSec = Number(system.netRates?.txSec || txRate || 0);
-            rxRate = rxSec;
-            txRate = txSec;
-            const rxKB = rxRate / 1024;
-            const txKB = txRate / 1024;
-            this._metricsHistory.netRx = Array(30).fill(rxKB);
-            this._metricsHistory.netTx = Array(30).fill(txKB);
-        }
-        this._prevNet = { rxBytes, txBytes };
-        this._prevNetTs = nowTs;
 
-        // 若后端提供24小时历史，用其覆盖；否则更新最近序列
-        const hist24 = Array.isArray(system.netHistory24h) ? system.netHistory24h : null;
-        if (hist24 && hist24.length) {
-            try {
-                this._metricsHistory.netRx = hist24.map(p => (Number(p.rxSec) || 0) / 1024);
-                this._metricsHistory.netTx = hist24.map(p => (Number(p.txSec) || 0) / 1024);
-            } catch {}
-        } else {
-            try {
-                this._metricsHistory.netRx.push(rxRate / 1024);
-                this._metricsHistory.netTx.push(txRate / 1024);
-                const cap = 60;
-                ['netRx','netTx'].forEach(k => {
-                    if (this._metricsHistory[k].length > cap) this._metricsHistory[k].shift();
-                });
-            } catch {}
-        }
+        // 顶部摘要：每次刷新都更新文字
+        const cpuSum = document.getElementById('cpuSummary');
+        if (cpuSum) cpuSum.textContent = (cpuPercent !== null ? (cpuPercent + '% / 100%') : '--% / 100%');
+        const memSum = document.getElementById('memSummary');
+        if (memSum) memSum.textContent = `${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}`;
+        const swapSum = document.getElementById('swapSummary');
+        if (swapSum) swapSum.textContent = `${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}${swapTotal === 0 ? ' (无交换分区)' : ''}`;
 
         const hasBuilt = !!document.getElementById('cpuPie');
         if (!hasBuilt) {
@@ -794,31 +781,31 @@ class APIControlCenter {
                 <div class="status-card-large">
                     <div class="status-card-header"><h3>CPU</h3></div>
                     <div class="status-card-content">
-                        <div>${cpuPercent !== null ? (cpuPercent + '% / 100%') : '- / 100%'}</div>
+                        <div id="cpuSummary" class="status-summary">${cpuPercent !== null ? (cpuPercent + '% / 100%') : '--% / 100%'}</div>
                         <canvas id="cpuPie" height="140"></canvas>
                     </div>
                 </div>
                 <div class="status-card-large">
                     <div class="status-card-header"><h3>内存</h3></div>
                     <div class="status-card-content">
-                        <div>${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</div>
+                        <div id="memSummary" class="status-summary">${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}</div>
                         <canvas id="memPie" height="140"></canvas>
                     </div>
                 </div>
                 <div class="status-card-large">
                     <div class="status-card-header"><h3>交换分区</h3></div>
                     <div class="status-card-content">
-                        <div>${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}${swapTotal === 0 ? ' (无交换分区)' : ''}</div>
+                        <div id="swapSummary" class="status-summary">${formatBytes(swapUsed)} / ${formatBytes(swapTotal)}${swapTotal === 0 ? ' (无交换分区)' : ''}</div>
                         <canvas id="swapPie" height="140"></canvas>
                     </div>
                 </div>
                 <div class="status-card-large">
                     <div class="status-card-header"><h3>磁盘使用</h3></div>
-                    <div class="status-card-content"><div id="diskPlaceholder" style="opacity:.75;font-size:12px;margin-bottom:6px;"></div><canvas id="diskBar" height="180"></canvas></div>
+                    <div class="status-card-content"><div id="diskPlaceholder" class="status-summary"></div><canvas id="diskBar" height="180"></canvas></div>
                 </div>
                 <div class="status-card-large">
                     <div class="status-card-header"><h3>网络上下行 (KB/s)</h3></div>
-                    <div class="status-card-content"><div id="netSummary" style="opacity:.75;font-size:12px;margin-bottom:6px;">--</div><canvas id="netLine" height="160"></canvas></div>
+                    <div class="status-card-content"><div id="netSummary" class="status-summary">--</div><canvas id="netLine" height="160"></canvas></div>
                 </div>
                 <div class="status-card-large">
                     <div class="status-card-header"><h3>进程 Top5</h3></div>
@@ -1255,7 +1242,9 @@ class APIControlCenter {
     async startAIStream(prompt) {
         // 通过 SSE 获取流式结果并渲染
         try {
-            const url = `${this.serverUrl}/api/ai/stream?prompt=${encodeURIComponent(prompt)}&persona=`;
+            const ctx = this._buildChatContext(800, 8);
+            const finalPrompt = ctx ? `【上下文】${ctx}\n【提问】${prompt}` : prompt;
+            const url = `${this.serverUrl}/api/ai/stream?prompt=${encodeURIComponent(finalPrompt)}&persona=`;
             const es = new EventSource(url);
             let acc = '';
             const onMessage = (e) => {
@@ -2022,47 +2011,25 @@ class APIControlCenter {
 
     _loadCodeMirror() {
         if (this._codeMirrorLoading) return this._codeMirrorLoading;
-        const bases = [
-            'https://cdn.bootcdn.net/ajax/libs/codemirror/5.65.2',
-            'https://cdn.staticfile.org/codemirror/5.65.2',
-            'https://cdn.jsdelivr.net/npm/codemirror@5.65.2',
-            'https://unpkg.com/codemirror@5.65.2'
+        const base = 'https://cdn.bootcdn.net/ajax/libs/codemirror/5.65.2';
+        const cssList = [
+            `${base}/codemirror.min.css`,
+            `${base}/theme/monokai.min.css`,
+            `${base}/addon/fold/foldgutter.min.css`
         ];
-        const tryBase = async (base) => {
-            const cssCore = base.includes('@') ? `${base}/lib/codemirror.css` : `${base}/codemirror.min.css`;
-            const cssTheme = base.includes('@') ? `${base}/theme/monokai.css` : `${base}/theme/monokai.min.css`;
-            const cssFold = base.includes('@') ? `${base}/addon/fold/foldgutter.css` : `${base}/addon/fold/foldgutter.min.css`;
-            const jsList = base.includes('@') ? [
-                `${base}/lib/codemirror.js`,
-                `${base}/mode/javascript/javascript.js`,
-                `${base}/addon/edit/closebrackets.js`,
-                `${base}/addon/edit/matchbrackets.js`,
-                `${base}/addon/fold/foldcode.js`,
-                `${base}/addon/fold/foldgutter.js`,
-                `${base}/addon/fold/brace-fold.js`
-            ] : [
-                `${base}/codemirror.min.js`,
-                `${base}/mode/javascript/javascript.min.js`,
-                `${base}/addon/edit/closebrackets.min.js`,
-                `${base}/addon/edit/matchbrackets.min.js`,
-                `${base}/addon/fold/foldcode.min.js`,
-                `${base}/addon/fold/foldgutter.min.js`,
-                `${base}/addon/fold/brace-fold.min.js`
-            ];
-            await this._loadCss(cssCore);
-            await this._loadCss(cssTheme);
-            await this._loadCss(cssFold);
-            for (const src of jsList) {
-                // 逐个加载，确保顺序
-                // eslint-disable-next-line no-await-in-loop
-                await this._loadScript(src);
-            }
-        };
+        const jsList = [
+            `${base}/codemirror.min.js`,
+            `${base}/mode/javascript/javascript.min.js`,
+            `${base}/addon/edit/closebrackets.min.js`,
+            `${base}/addon/edit/matchbrackets.min.js`,
+            `${base}/addon/fold/foldcode.min.js`,
+            `${base}/addon/fold/foldgutter.min.js`,
+            `${base}/addon/fold/brace-fold.min.js`
+        ];
         this._codeMirrorLoading = (async () => {
-            for (const b of bases) {
-                try { await tryBase(b); return true; } catch (e) { continue; }
-            }
-            throw new Error('CodeMirror 资源加载失败');
+            for (const href of cssList) await this._loadCss(href);
+            for (const src of jsList) await this._loadScript(src);
+            return true;
         })();
         return this._codeMirrorLoading;
     }

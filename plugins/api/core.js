@@ -6,7 +6,11 @@ let __lastNetSample = null;
 let __netSampler = null;
 let __netHist = [];
 const NET_HISTORY_LIMIT = 24 * 60;
-const NET_SAMPLE_MS = 60 * 1000;
+const NET_SAMPLE_MS = 3_000; // 单一方法：systeminformation 网络采样，每3秒
+
+// CPU 采样缓存（单一方法：systeminformation.currentLoad）
+let __cpuCache = { percent: 0, ts: 0 };
+let __cpuTimer = null;
 
 let __fsCache = { disks: [], ts: 0 };
 let __procCache = { top5: [], ts: 0 };
@@ -45,7 +49,11 @@ async function __sampleNetOnce() {
 
 function __ensureNetSampler() {
   if (__netSampler) return;
-  __sampleNetOnce();
+  // 预热两次，避免首次为0
+  (async () => {
+    await __sampleNetOnce();
+    setTimeout(__sampleNetOnce, 1_000);
+  })();
   __netSampler = setInterval(__sampleNetOnce, NET_SAMPLE_MS);
 }
 
@@ -98,6 +106,20 @@ function __ensureSysSamplers() {
     __refreshProcCache();
     __procTimer = setInterval(__refreshProcCache, 10_000);
   }
+  if (!__cpuTimer) {
+    (async () => {
+      try {
+        const load = await si.currentLoad().catch(() => null);
+        if (load && typeof load.currentload === 'number') __cpuCache = { percent: +load.currentload.toFixed(2), ts: Date.now() };
+      } catch {}
+    })();
+    __cpuTimer = setInterval(async () => {
+      try {
+        const load = await si.currentLoad().catch(() => null);
+        if (load && typeof load.currentload === 'number') __cpuCache = { percent: +load.currentload.toFixed(2), ts: Date.now() };
+      } catch {}
+    }, 2_000);
+  }
 }
 
 /**
@@ -119,24 +141,8 @@ export default {
       path: '/api/system/status',
       handler: async (req, res, Bot) => {
         try {
-          let cpuPct = null;
-          try {
-            const load = await si.currentLoad();
-            if (load && typeof load.currentload === 'number') cpuPct = +load.currentload.toFixed(2);
-          } catch {}
-          if (cpuPct === null) {
-            const snap1 = os.cpus();
-            await new Promise(r => setTimeout(r, 120));
-            const snap2 = os.cpus();
-            let idle = 0, total = 0;
-            for (let i = 0; i < snap1.length; i++) {
-              const t1 = snap1[i].times, t2 = snap2[i].times;
-              const id = Math.max(0, t2.idle - t1.idle);
-              const tot = Math.max(0, (t2.user - t1.user) + (t2.nice - t1.nice) + (t2.sys - t1.sys) + (t2.irq - t1.irq) + id);
-              idle += id; total += tot;
-            }
-            if (total > 0) cpuPct = +(((total - idle) / total) * 100).toFixed(2);
-          }
+          // 仅返回缓存，不在请求中做计算
+          const cpuPct = __cpuCache.percent || 0;
 
           // 基础信息（极快）
           const cpus = os.cpus();
@@ -145,10 +151,10 @@ export default {
           const usedMem = totalMem - freeMem;
           const memUsage = process.memoryUsage();
 
-          // 可选信息：交换分区（通常很快）
+          // 交换分区（允许为空，但不阻塞）
           const siMem = await si.mem().catch(() => ({}));
 
-          // 网络字节与速率：仅使用采样缓存，避免每次请求 si.networkStats()
+          // 网络字节与速率：仅使用采样缓存
           const lastNet = __lastNetSample || { ts: Date.now(), rx: 0, tx: 0 };
           const rxBytes = Number(lastNet.rx || 0);
           const txBytes = Number(lastNet.tx || 0);
