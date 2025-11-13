@@ -1902,6 +1902,21 @@ textarea.input-field {
     position: relative;
 }
 
+/* 当 CodeMirror 尚未加载时，textarea 作为回退显示，需与主题一致，避免白块 */
+.json-editor-wrapper textarea {
+    display: block;
+    width: 100%;
+    height: 420px;
+    padding: 12px 14px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: none;
+    outline: none;
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 14px;
+    line-height: 1.8;
+}
+
 /* CodeMirror样式 */
 .CodeMirror {
     height: 420px;
@@ -4174,6 +4189,38 @@ body.no-scroll {
 
 .config-form-array-remove {
     flex-shrink: 0;
+}
+
+/* ============ ArrayForm（对象数组） ============ */
+.config-form-arrayform {
+    margin-top: 12px;
+}
+
+.config-form-arrayform-item {
+    padding: 12px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+}
+
+.config-form-arrayform-item .config-form-subfield {
+    margin-bottom: 10px;
+}
+
+.config-form-arrayform-item .config-form-subfield:last-child {
+    margin-bottom: 0;
+}
+
+.config-form-arrayform-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.config-form-arrayform-add {
+    margin-top: 12px;
 }
 
 /* ==================== Tags 组件样式 ==================== */
