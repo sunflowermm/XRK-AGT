@@ -1,6 +1,7 @@
 import os from 'os';
 import si from 'systeminformation';
 import cfg from '../../lib/config/config.js';
+
 let __lastNetSample = null;
 let __netSampler = null;
 let __netHist = [];
@@ -332,7 +333,12 @@ export default {
       method: 'GET',
       path: '/api/health',
       handler: async (req, res, Bot) => {
-        const redisOk = await redis.ping().then(() => true).catch(() => false);
+        let redisOk = false;
+        try {
+          // 兼容未注入 redis 客户端的情况
+          // eslint-disable-next-line no-undef
+          redisOk = await redis.ping().then(() => true).catch(() => false);
+        } catch {}
         
         res.json({
           status: 'healthy',

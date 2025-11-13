@@ -118,6 +118,32 @@ class APIControlCenter {
         }
     }
 
+    // 渲染并设置表情图标
+    _renderEmotionIcon(emotion) {
+        const map = {
+            happy: '🙂',
+            sad: '😢',
+            angry: '😠',
+            surprise: '😮',
+            love: '😍',
+            cool: '😎',
+            sleep: '😴',
+            think: '🤔',
+            wink: '😉',
+            laugh: '😂'
+        };
+        return map[String(emotion || '').toLowerCase()] || '🙂';
+    }
+
+    setEmotion(emotion) {
+        try {
+            const el = document.getElementById('emotionDisplay');
+            if (!el) return;
+            el.textContent = this._renderEmotionIcon(emotion);
+            this._currentEmotion = String(emotion || 'happy');
+        } catch {}
+    }
+
     initEventListeners() {
         // 主题切换
         const themeToggle = document.getElementById('themeToggle');
@@ -596,6 +622,10 @@ class APIControlCenter {
                     </div>
                 </div>
                 <div class="ai-chat-body" id="chatMessages"></div>
+                <div class="ai-emotion-panel" style="display:flex;align-items:center;gap:8px;justify-content:flex-start;padding:8px 12px;opacity:.9;">
+                    <div style="font-size:12px;opacity:.7;">当前表情</div>
+                    <div id="emotionDisplay" class="emotion-icon" style="font-size:28px;line-height:1;">🙂</div>
+                </div>
                 <div class="ai-chat-input-container">
                     <input type="text" id="chatInput" class="ai-chat-input" placeholder="输入消息..." 
                         onkeypress="if(event.key==='Enter') app.sendChatMessage()">
@@ -623,6 +653,9 @@ class APIControlCenter {
 
         // 确保WebSocket连接
         this.ensureDeviceWs();
+
+        // 默认显示“开心”
+        this.setEmotion('happy');
     }
 
     showConfigPage() {
@@ -1520,7 +1553,7 @@ class APIControlCenter {
                     if (box) box.innerHTML = '';
                     result = { ok: true };
                 } else if (command === 'display_emotion' && parameters.emotion) {
-                    this.showToast(`表情: ${parameters.emotion}`, 'info');
+                    this.setEmotion(parameters.emotion);
                     result = { ok: true };
                 } else {
                     result = { ok: false, message: 'unsupported_command' };

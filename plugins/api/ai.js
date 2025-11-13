@@ -1,5 +1,4 @@
 import StreamLoader from '../../lib/aistream/loader.js';
-import BotUtil from '../../lib/common/util.js';
 
 export default {
   name: 'ai-stream',
