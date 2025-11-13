@@ -214,6 +214,25 @@ body::after {
     }
 }
 
+/* ==================== 情绪展示区 ==================== */
+.emotion-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    margin: 8px 0 12px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-tertiary);
+    border: 1px dashed var(--border);
+}
+
+.emotion-icon {
+    font-size: clamp(48px, 7vw, 96px);
+    line-height: 1;
+    filter: drop-shadow(0 3px 6px rgba(0,0,0,0.15));
+    user-select: none;
+}
+
 @keyframes lineMove {
     0% { transform: translate(0, 0); }
     100% { transform: translate(100px, 100px); }

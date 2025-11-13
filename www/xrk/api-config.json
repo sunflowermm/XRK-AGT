@@ -7,9 +7,16 @@
         {
           "id": "system-status",
           "method": "GET",
-          "path": "/api/system/status",
+          "path": "/api/status",
           "title": "系统状态",
           "description": "获取系统运行状态、机器人信息和适配器列表"
+        },
+        {
+          "id": "system-status-detail",
+          "method": "GET",
+          "path": "/api/system/status",
+          "title": "系统状态详情",
+          "description": "获取系统状态详细信息"
         },
         {
           "id": "system-config",
@@ -514,6 +521,29 @@
           ]
         },
         {
+          "id": "device-ai",
+          "method": "POST",
+          "path": "/api/device/:deviceId/ai",
+          "title": "设备AI回复",
+          "description": "触发设备工作流，让后端执行AI并驱动表情/显示/TTS",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "webclient",
+              "hint": "接收AI回复的设备ID"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "text",
+              "label": "问题/文本",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "你好"
+            }
+          ]
+        },
+        {
           "id": "device-delete",
           "method": "DELETE",
           "path": "/api/device/:deviceId",
@@ -648,6 +678,10 @@
     },
     "device-delete": {
       "path_deviceId": "SENSOR_001"
+    },
+    "device-ai": {
+      "path_deviceId": "webclient",
+      "text": "[开心] 你好"
     },
     "file-get": {
       "path_id": "01HX1234567890ABCDEF"

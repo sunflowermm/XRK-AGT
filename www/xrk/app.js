@@ -35,6 +35,40 @@ class APIControlCenter {
         this.init();
     }
 
+    updateEmotionDisplay(emotion) {
+        const map = {
+            happy: '😀',
+            sad: '😢',
+            angry: '😠',
+            surprise: '😮',
+            love: '❤️',
+            cool: '😎',
+            sleep: '😴',
+            think: '🤔',
+            wink: '😉',
+            laugh: '😂'
+        };
+        const zh2en = {
+            '开心': 'happy',
+            '伤心': 'sad',
+            '生气': 'angry',
+            '惊讶': 'surprise',
+            '爱': 'love',
+            '酷': 'cool',
+            '睡觉': 'sleep',
+            '思考': 'think',
+            '眨眼': 'wink',
+            '大笑': 'laugh'
+        };
+        let code = String(emotion || '').toLowerCase();
+        if (!map[code]) {
+            code = zh2en[emotion] || 'happy';
+        }
+        const icon = map[code] || '😀';
+        const el = document.getElementById('emotionIcon');
+        if (el) el.textContent = icon;
+    }
+
     async init() {
         this.reorganizeDOMStructure();
         this.renderStatusSkeleton();
@@ -116,32 +150,6 @@ class APIControlCenter {
             console.error('Failed to load API configuration:', error);
             this.showToast('加载API配置失败', 'error');
         }
-    }
-
-    // 渲染并设置表情图标
-    _renderEmotionIcon(emotion) {
-        const map = {
-            happy: '🙂',
-            sad: '😢',
-            angry: '😠',
-            surprise: '😮',
-            love: '😍',
-            cool: '😎',
-            sleep: '😴',
-            think: '🤔',
-            wink: '😉',
-            laugh: '😂'
-        };
-        return map[String(emotion || '').toLowerCase()] || '🙂';
-    }
-
-    setEmotion(emotion) {
-        try {
-            const el = document.getElementById('emotionDisplay');
-            if (!el) return;
-            el.textContent = this._renderEmotionIcon(emotion);
-            this._currentEmotion = String(emotion || 'happy');
-        } catch {}
     }
 
     initEventListeners() {
@@ -621,11 +629,10 @@ class APIControlCenter {
                         <button class="btn btn-secondary ai-chat-clear" onclick="app.clearChat()">清空</button>
                     </div>
                 </div>
-                <div class="ai-chat-body" id="chatMessages"></div>
-                <div class="ai-emotion-panel" style="display:flex;align-items:center;gap:8px;justify-content:flex-start;padding:8px 12px;opacity:.9;">
-                    <div style="font-size:12px;opacity:.7;">当前表情</div>
-                    <div id="emotionDisplay" class="emotion-icon" style="font-size:28px;line-height:1;">🙂</div>
+                <div class="emotion-display" id="emotionDisplay">
+                    <div class="emotion-icon" id="emotionIcon">😀</div>
                 </div>
+                <div class="ai-chat-body" id="chatMessages"></div>
                 <div class="ai-chat-input-container">
                     <input type="text" id="chatInput" class="ai-chat-input" placeholder="输入消息..." 
                         onkeypress="if(event.key==='Enter') app.sendChatMessage()">
@@ -653,9 +660,7 @@ class APIControlCenter {
 
         // 确保WebSocket连接
         this.ensureDeviceWs();
-
-        // 默认显示“开心”
-        this.setEmotion('happy');
+        this.updateEmotionDisplay('happy');
     }
 
     showConfigPage() {
@@ -1360,14 +1365,19 @@ class APIControlCenter {
             this._startHeartbeat();
             // 注册为webclient设备
             try {
-            this._deviceWs.send(JSON.stringify({
-                type: 'register',
-                device_id: 'webclient',
-                device_type: 'web',
-                device_name: 'Web客户端',
-                capabilities: ['display', 'microphone']
-            }));
-            // 主动上报一次心跳，帮助服务端尽快建立在线状态
+                this._deviceWs.send(JSON.stringify({
+                    type: 'register',
+                    device_id: 'webclient',
+                    device_type: 'web',
+                    device_name: 'Web客户端',
+                    capabilities: ['display', 'microphone'],
+                    metadata: {
+                        ua: navigator.userAgent,
+                        lang: navigator.language,
+                        tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'local'
+                    }
+                }));
+                // 主动上报一次心跳，帮助服务端尽快建立在线状态
                 this._deviceWs.send(JSON.stringify({
                     type: 'heartbeat',
                     device_id: 'webclient',
@@ -1430,6 +1440,7 @@ class APIControlCenter {
                 }
                 if (data?.type === 'register_response' && data.success) {
                     this.showToast('已连接设备: webclient', 'success');
+                    try { this.loadStats(); } catch {}
                 }
             } catch {}
         });
@@ -1553,7 +1564,8 @@ class APIControlCenter {
                     if (box) box.innerHTML = '';
                     result = { ok: true };
                 } else if (command === 'display_emotion' && parameters.emotion) {
-                    this.setEmotion(parameters.emotion);
+                    try { this.updateEmotionDisplay(parameters.emotion); } catch {}
+                    this.showToast(`表情: ${parameters.emotion}`, 'info');
                     result = { ok: true };
                 } else {
                     result = { ok: false, message: 'unsupported_command' };
@@ -1977,6 +1989,10 @@ class APIControlCenter {
         if (!textarea) return;
 
         const theme = document.body.classList.contains('light') ? 'default' : 'monokai';
+        if (typeof window.CodeMirror === 'undefined') {
+            this._loadCodeMirror().then(() => this.initJSONEditor());
+            return;
+        }
 
         this.jsonEditor = CodeMirror.fromTextArea(textarea, {
             mode: 'application/json',
@@ -1999,6 +2015,75 @@ class APIControlCenter {
             if (!this.isUpdatingFromForm) {
                 this.updateFromEditor();
             }
+        });
+    }
+
+    _loadCodeMirror() {
+        if (this._codeMirrorLoading) return this._codeMirrorLoading;
+        const bases = [
+            'https://cdn.bootcdn.net/ajax/libs/codemirror/5.65.2',
+            'https://cdn.staticfile.org/codemirror/5.65.2',
+            'https://cdn.jsdelivr.net/npm/codemirror@5.65.2',
+            'https://unpkg.com/codemirror@5.65.2'
+        ];
+        const tryBase = async (base) => {
+            const cssCore = base.includes('@') ? `${base}/lib/codemirror.css` : `${base}/codemirror.min.css`;
+            const cssTheme = base.includes('@') ? `${base}/theme/monokai.css` : `${base}/theme/monokai.min.css`;
+            const cssFold = base.includes('@') ? `${base}/addon/fold/foldgutter.css` : `${base}/addon/fold/foldgutter.min.css`;
+            const jsList = base.includes('@') ? [
+                `${base}/lib/codemirror.js`,
+                `${base}/mode/javascript/javascript.js`,
+                `${base}/addon/edit/closebrackets.js`,
+                `${base}/addon/edit/matchbrackets.js`,
+                `${base}/addon/fold/foldcode.js`,
+                `${base}/addon/fold/foldgutter.js`,
+                `${base}/addon/fold/brace-fold.js`
+            ] : [
+                `${base}/codemirror.min.js`,
+                `${base}/mode/javascript/javascript.min.js`,
+                `${base}/addon/edit/closebrackets.min.js`,
+                `${base}/addon/edit/matchbrackets.min.js`,
+                `${base}/addon/fold/foldcode.min.js`,
+                `${base}/addon/fold/foldgutter.min.js`,
+                `${base}/addon/fold/brace-fold.min.js`
+            ];
+            await this._loadCss(cssCore);
+            await this._loadCss(cssTheme);
+            await this._loadCss(cssFold);
+            for (const src of jsList) {
+                // 逐个加载，确保顺序
+                // eslint-disable-next-line no-await-in-loop
+                await this._loadScript(src);
+            }
+        };
+        this._codeMirrorLoading = (async () => {
+            for (const b of bases) {
+                try { await tryBase(b); return true; } catch (e) { continue; }
+            }
+            throw new Error('CodeMirror 资源加载失败');
+        })();
+        return this._codeMirrorLoading;
+    }
+
+    _loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = src;
+            s.async = true;
+            s.onload = () => resolve(true);
+            s.onerror = () => reject(new Error('script load error'));
+            document.head.appendChild(s);
+        });
+    }
+
+    _loadCss(href) {
+        return new Promise((resolve, reject) => {
+            const l = document.createElement('link');
+            l.rel = 'stylesheet';
+            l.href = href;
+            l.onload = () => resolve(true);
+            l.onerror = () => reject(new Error('css load error'));
+            document.head.appendChild(l);
         });
     }
 
@@ -3068,6 +3153,9 @@ class APIControlCenter {
                 // 初始化代码编辑器
                 if (this.configEditor) {
                     this.configEditor.toTextArea();
+                }
+                if (typeof window.CodeMirror === 'undefined') {
+                    await this._loadCodeMirror();
                 }
                 const theme = document.body.classList.contains('light') ? 'default' : 'monokai';
                 this.configEditor = CodeMirror.fromTextArea(editorTextarea, {

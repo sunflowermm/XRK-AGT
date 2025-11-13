@@ -333,12 +333,7 @@ export default {
       method: 'GET',
       path: '/api/health',
       handler: async (req, res, Bot) => {
-        let redisOk = false;
-        try {
-          // 兼容未注入 redis 客户端的情况
-          // eslint-disable-next-line no-undef
-          redisOk = await redis.ping().then(() => true).catch(() => false);
-        } catch {}
+        const redisOk = await redis.ping().then(() => true).catch(() => false);
         
         res.json({
           status: 'healthy',

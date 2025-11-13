@@ -385,16 +385,16 @@ class DeviceManager {
 
             if (aiResult.emotion) {
                 try {
-                    const mapped = EMOTION_KEYWORDS[aiResult.emotion] || aiResult.emotion;
-                    if (SUPPORTED_EMOTIONS.includes(mapped)) {
-                        await deviceBot.emotion(mapped);
-                        BotUtil.makeLog('info',
-                            `✓ [设备] 表情: ${mapped}`,
-                            deviceId
-                        );
-                    } else {
-                        BotUtil.makeLog('warn', `⚠️ [设备] 不支持的表情: ${aiResult.emotion}`, deviceId);
+                    // 将工作流解析出的中文表情映射为设备支持的英文表情代码
+                    let emotionCode = EMOTION_KEYWORDS[aiResult.emotion] || aiResult.emotion;
+                    if (!SUPPORTED_EMOTIONS.includes(emotionCode)) {
+                        throw new Error(`未知表情: ${aiResult.emotion}`);
                     }
+                    await deviceBot.emotion(emotionCode);
+                    BotUtil.makeLog('info',
+                        `✓ [设备] 表情: ${emotionCode}`,
+                        deviceId
+                    );
                 } catch (e) {
                     BotUtil.makeLog('error',
                         `❌ [设备] 表情显示失败: ${e.message}`,
@@ -752,11 +752,9 @@ class DeviceManager {
             avatar: null,
             info: deviceInfo,
             device_type: deviceInfo.device_type,
-            device: true,
             capabilities: deviceInfo.capabilities || [],
             metadata: deviceInfo.metadata || {},
             online: true,
-            stat: { online: true },
             last_seen: Date.now(),
             stats: {
                 messages_sent: 0,

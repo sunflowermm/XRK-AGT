@@ -91,13 +91,11 @@ ${persona}
     if (!match) {
       return { emotion: null, cleanText: (text || '').trim() };
     }
-    const emotionCN = match[1];
+    const emotion = match[1];
     const cleanText = (text || '').replace(regex, '').trim();
-    if (!EMOTIONS.includes(emotionCN)) {
+    if (!EMOTIONS.includes(emotion)) {
       return { emotion: null, cleanText: (text || '').trim() };
     }
-    const MAP = { '开心': 'happy', '惊讶': 'surprise', '伤心': 'sad', '大笑': 'laugh', '害怕': 'surprise', '生气': 'angry' };
-    const emotion = MAP[emotionCN] || null;
     return { emotion, cleanText };
   }
 }
