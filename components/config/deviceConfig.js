@@ -35,7 +35,7 @@ export const VOLCENGINE_TTS_CONFIG = {
     speechRate: 5,
     loudnessRate: 0,
     emotion: 'happy',
-    chunkMs: 80,
+    chunkMs: 128,
     chunkDelayMs: 5
 };
 
