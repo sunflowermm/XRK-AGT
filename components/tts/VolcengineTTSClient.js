@@ -33,6 +33,9 @@ export default class VolcengineTTSClient {
         
         // 统计信息
         this.totalAudioBytes = 0;
+
+        // 串行发送队列，避免多音频帧并发导致突发拥塞
+        this._sendChain = Promise.resolve();
     }
 
     /**
@@ -299,9 +302,11 @@ export default class VolcengineTTSClient {
 
                         if (msg.type === 'audio') {
                             this.totalAudioBytes += msg.data.length;
-                            this._sendAudioToDevice(msg.data).catch(e => {
-                                BotUtil.makeLog('error', `[TTS] 发送音频失败: ${e.message}`, this.deviceId);
-                            });
+                            this._sendChain = this._sendChain
+                                .then(() => this._sendAudioToDevice(msg.data))
+                                .catch(e => {
+                                    BotUtil.makeLog('error', `[TTS] 发送音频失败: ${e.message}`, this.deviceId);
+                                });
                         }
                     });
 
