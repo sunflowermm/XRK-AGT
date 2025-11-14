@@ -210,6 +210,26 @@ export default class VolcengineTTSClient {
         }
     }
 
+    _sendAudioToDevice(audioData) {
+        const deviceBot = this.Bot[this.deviceId];
+        if (!deviceBot || !audioData || audioData.length === 0) return Promise.resolve();
+        const sr = this.config.sampleRate || 16000;
+        const chunkMs = Math.max(5, Math.min(512, this.config.chunkMs || 40));
+        const bytesPerMs = (sr * 2) / 1000;
+        const chunkBytes = Math.max(2, Math.floor((bytesPerMs * chunkMs) / 2) * 2);
+        const delayMs = Math.max(0, this.config.chunkDelayMs || 0);
+        return (async () => {
+            for (let offset = 0; offset < audioData.length; offset += chunkBytes) {
+                const slice = audioData.slice(offset, Math.min(offset + chunkBytes, audioData.length));
+                const hex = slice.toString('hex');
+                try { deviceBot.sendAudioChunk(hex); } catch {}
+                if (delayMs > 0) {
+                    await new Promise(r => setTimeout(r, delayMs));
+                }
+            }
+        })();
+    }
+
     /**
      * 确保WebSocket已连接
      * @returns {Promise<void>}
@@ -378,30 +398,9 @@ export default class VolcengineTTSClient {
     }
 
     /**
-     * 发送音频数据到设备
-     * @param {Buffer} audioData - 音频数据
-     * @returns {Promise<void>}
-     * @private
-     */
-    async _sendAudioToDevice(audioData) {
-        const deviceBot = this.Bot[this.deviceId];
-        if (!deviceBot) return;
-
-        try {
-            const hex = audioData.toString('hex');
-
-            await deviceBot.sendCommand('play_tts_audio', {
-                audio_data: hex
-            }, 1);
-        } catch (e) {
-            BotUtil.makeLog('error', `[TTS] 发送音频到设备失败: ${e.message}`, this.deviceId);
-        }
-    }
-
-    /**
-     * 合成语音（公共API）
+     * 合成文本
      * @param {string} text - 要合成的文本
-     * @returns {Promise<boolean>} 是否成功
+     * @returns {Promise<boolean>} - 合成结果
      */
     async synthesize(text) {
         if (!text || text.trim() === '') {

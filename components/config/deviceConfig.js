@@ -32,9 +32,11 @@ export const VOLCENGINE_TTS_CONFIG = {
     voiceType: 'zh_female_vv_uranus_bigtts',
     encoding: 'pcm',
     sampleRate: 16000,
-    speechRate: 0,
+    speechRate: 10,
     loudnessRate: 0,
-    emotion: 'happy'
+    emotion: 'happy',
+    chunkMs: 256,
+    chunkDelayMs: 0
 };
 
 // ==================== 火山ASR配置 ====================

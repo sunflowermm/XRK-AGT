@@ -801,6 +801,21 @@ class DeviceManager {
             sendCommand: async (cmd, params = {}, priority = 0) =>
                 await this.sendCommand(deviceId, cmd, params, priority),
 
+            sendAudioChunk: (hex) => {
+                const ws = deviceWebSockets.get(deviceId);
+                if (ws && ws.readyState === WebSocket.OPEN && typeof hex === 'string' && hex.length > 0) {
+                    const cmd = {
+                        command: 'play_tts_audio',
+                        parameters: { audio_data: hex },
+                        priority: 1,
+                        timestamp: Date.now()
+                    };
+                    try {
+                        ws.send(JSON.stringify({ type: 'command', command: cmd }));
+                    } catch (e) {}
+                }
+            },
+
             display: async (text, options = {}) =>
                 await this.sendCommand(
                     deviceId,
