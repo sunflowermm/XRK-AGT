@@ -293,7 +293,7 @@ class DeviceManager {
                             text: session.finalText
                         }));
                     }
-                } catch {}
+                } catch { }
             } else {
                 if (!session.waitCompleted) {
                     BotUtil.makeLog('warn',
@@ -345,9 +345,10 @@ class DeviceManager {
             );
 
             const deviceStream = StreamLoader.getStream('device');
-
             if (!deviceStream) {
                 BotUtil.makeLog('error', '❌ [AI] 设备工作流未加载', deviceId);
+                // ⭐ 发送AI错误通知
+                await this._sendAIError(deviceId);
                 return;
             }
 
@@ -356,6 +357,8 @@ class DeviceManager {
 
             if (!deviceBot) {
                 BotUtil.makeLog('error', '❌ [AI] 设备Bot未找到', deviceId);
+                // ⭐ 发送AI错误通知
+                await this._sendAIError(deviceId);
                 return;
             }
 
@@ -369,65 +372,55 @@ class DeviceManager {
 
             if (!aiResult) {
                 BotUtil.makeLog('warn', '⚠️ [AI] 工作流返回空结果', deviceId);
+                // ⭐ 发送AI错误通知
+                await this._sendAIError(deviceId);
                 return;
             }
 
             const aiTime = Date.now() - startTime;
-            BotUtil.makeLog('info',
-                `⚡ [AI性能] 处理耗时: ${aiTime}ms`,
-                deviceId
-            );
+            BotUtil.makeLog('info', `⚡ [AI性能] 处理耗时: ${aiTime}ms`, deviceId);
+            BotUtil.makeLog('info', `✅ [AI] 回复: ${aiResult.text || '(仅表情)'}`, deviceId);
 
-            BotUtil.makeLog('info',
-                `✅ [AI] 回复: ${aiResult.text || '(仅表情)'}`,
-                deviceId
-            );
-
+            // 显示表情
             if (aiResult.emotion) {
                 try {
-                    // 将工作流解析出的中文表情映射为设备支持的英文表情代码
                     let emotionCode = EMOTION_KEYWORDS[aiResult.emotion] || aiResult.emotion;
                     if (!SUPPORTED_EMOTIONS.includes(emotionCode)) {
                         throw new Error(`未知表情: ${aiResult.emotion}`);
                     }
                     await deviceBot.emotion(emotionCode);
-                    BotUtil.makeLog('info',
-                        `✓ [设备] 表情: ${emotionCode}`,
-                        deviceId
-                    );
+                    BotUtil.makeLog('info', `✓ [设备] 表情: ${emotionCode}`, deviceId);
                 } catch (e) {
-                    BotUtil.makeLog('error',
-                        `❌ [设备] 表情显示失败: ${e.message}`,
-                        deviceId
-                    );
+                    BotUtil.makeLog('error', `❌ [设备] 表情显示失败: ${e.message}`, deviceId);
                 }
                 await new Promise(r => setTimeout(r, 500));
             }
 
+            // 播放TTS
             if (aiResult.text && VOLCENGINE_TTS_CONFIG.enabled) {
                 try {
                     const ttsClient = this._getTTSClient(deviceId);
                     const success = await ttsClient.synthesize(aiResult.text);
 
                     if (success) {
-                        BotUtil.makeLog('info',
-                            `🔊 [TTS] 语音合成已启动`,
-                            deviceId
-                        );
+                        BotUtil.makeLog('info', `🔊 [TTS] 语音合成已启动`, deviceId);
+                        // ⭐ 等待一小段时间让TTS音频发送完成
+                        await new Promise(r => setTimeout(r, 1000));
+                        // ⭐ 发送TTS完成通知（可选，因为ESP端会自动检测）
+                        // await this._sendTTSFinished(deviceId);
                     } else {
-                        BotUtil.makeLog('error',
-                            `❌ [TTS] 语音合成失败`,
-                            deviceId
-                        );
+                        BotUtil.makeLog('error', `❌ [TTS] 语音合成失败`, deviceId);
+                        // ⭐ 发送AI错误通知
+                        await this._sendAIError(deviceId);
                     }
                 } catch (e) {
-                    BotUtil.makeLog('error',
-                        `❌ [TTS] 语音合成异常: ${e.message}`,
-                        deviceId
-                    );
+                    BotUtil.makeLog('error', `❌ [TTS] 语音合成异常: ${e.message}`, deviceId);
+                    // ⭐ 发送AI错误通知
+                    await this._sendAIError(deviceId);
                 }
             }
 
+            // 显示文字
             if (aiResult.text) {
                 try {
                     await deviceBot.display(aiResult.text, {
@@ -437,23 +430,40 @@ class DeviceManager {
                         wrap: true,
                         spacing: 2
                     });
-                    BotUtil.makeLog('info',
-                        `✓ [设备] 文字: ${aiResult.text}`,
-                        deviceId
-                    );
+                    BotUtil.makeLog('info', `✓ [设备] 文字: ${aiResult.text}`, deviceId);
                 } catch (e) {
-                    BotUtil.makeLog('error',
-                        `❌ [设备] 文字显示失败: ${e.message}`,
-                        deviceId
-                    );
+                    BotUtil.makeLog('error', `❌ [设备] 文字显示失败: ${e.message}`, deviceId);
                 }
             }
 
         } catch (e) {
-            BotUtil.makeLog('error',
-                `❌ [AI] 处理失败: ${e.message}`,
-                deviceId
-            );
+            BotUtil.makeLog('error', `❌ [AI] 处理失败: ${e.message}`, deviceId);
+            // ⭐ 发送AI错误通知
+            await this._sendAIError(deviceId);
+        }
+    }
+
+    // ⭐ 新增：发送AI错误通知
+    async _sendAIError(deviceId) {
+        try {
+            const deviceBot = Bot[deviceId];
+            if (deviceBot && deviceBot.sendCommand) {
+                await deviceBot.sendCommand('ai_error', {}, 1);
+            }
+        } catch (e) {
+            BotUtil.makeLog('error', `❌ [AI] 发送错误通知失败: ${e.message}`, deviceId);
+        }
+    }
+
+    // ⭐ 新增：发送TTS完成通知（可选）
+    async _sendTTSFinished(deviceId) {
+        try {
+            const deviceBot = Bot[deviceId];
+            if (deviceBot && deviceBot.sendCommand) {
+                await deviceBot.sendCommand('tts_finished', {}, 1);
+            }
+        } catch (e) {
+            BotUtil.makeLog('error', `❌ [TTS] 发送完成通知失败: ${e.message}`, deviceId);
         }
     }
 
@@ -812,7 +822,7 @@ class DeviceManager {
                     };
                     try {
                         ws.send(JSON.stringify({ type: 'command', command: cmd }));
-                    } catch (e) {}
+                    } catch (e) { }
                 }
             },
 
@@ -1443,7 +1453,7 @@ export default {
                     try {
                         const client = asrClients.get(session.deviceId);
                         if (client) {
-                            client.endUtterance().catch(() => {});
+                            client.endUtterance().catch(() => { });
                         }
                     } catch (e) {
                         // 忽略错误
@@ -1516,9 +1526,9 @@ export default {
                             }
                         }
                     }
-                } catch {}
+                } catch { }
             });
-        } catch {}
+        } catch { }
 
         BotUtil.makeLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'DeviceManager');
     },
