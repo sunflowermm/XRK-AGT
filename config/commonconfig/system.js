@@ -510,11 +510,45 @@ export default class SystemConfig extends ConfigBase {
                     }
                   }
                 },
+                hsts: {
+                  type: 'object',
+                  label: 'HSTS配置',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用HSTS',
+                      default: false,
+                      component: 'Switch'
+                    },
+                    maxAge: {
+                      type: 'number',
+                      label: '有效期',
+                      description: '有效期（秒），31536000 = 1年',
+                      min: 0,
+                      default: 31536000,
+                      component: 'InputNumber'
+                    },
+                    includeSubDomains: {
+                      type: 'boolean',
+                      label: '包含子域名',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    preload: {
+                      type: 'boolean',
+                      label: '允许预加载',
+                      default: false,
+                      component: 'Switch'
+                    }
+                  }
+                },
                 hiddenFiles: {
                   type: 'array',
                   label: '隐藏文件模式',
+                  description: '匹配这些模式的文件将返回404，注意：这些模式不会影响 /api/* 路径',
                   itemType: 'string',
-                  default: ['^\\..*', 'node_modules', '\\.git', '\\.env', 'config/', 'private/'],
+                  default: ['^\\..*', 'node_modules', '\\.git', '\\.env', '^/config/', '^/private/'],
                   component: 'Tags'
                 }
               }
@@ -541,7 +575,7 @@ export default class SystemConfig extends ConfigBase {
                   type: 'array',
                   label: '允许的方法',
                   itemType: 'string',
-                  default: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+                  default: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
                   component: 'MultiSelect'
                 },
                 headers: {

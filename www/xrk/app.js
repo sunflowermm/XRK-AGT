@@ -3422,16 +3422,16 @@ class APIControlCenter {
         if (formContainer && editorTextarea.dataset.hasForm === 'true') {
             configData = this.collectFormData(formContainer);
         } else {
-            try {
-                const jsonText = this.configEditor ? this.configEditor.getValue() : (editorTextarea.value || '{}');
-                if (!jsonText || jsonText.trim() === '') {
-                    configData = {};
-                } else {
-                    configData = JSON.parse(jsonText);
+            const jsonText = this.configEditor ? this.configEditor.getValue() : (editorTextarea.value || '{}');
+            if (!jsonText || jsonText.trim() === '') {
+                configData = {};
+            } else {
+                const parsed = this.parseJSON(jsonText);
+                if (parsed.error) {
+                    this.showToast('JSON 格式错误: ' + parsed.error, 'error');
+                    return;
                 }
-            } catch (error) {
-                this.showToast('JSON 格式错误: ' + error.message, 'error');
-                return;
+                configData = parsed.data;
             }
         }
         
@@ -3440,41 +3440,34 @@ class APIControlCenter {
             configData = {};
         }
 
-        try {
-            // SystemConfig 的子配置保存：使用 path 参数指定子配置名称
-            console.log('保存子配置:', { configName, subName, configData });
-            const response = await fetch(`${this.serverUrl}/api/config/${configName}/write`, {
-                method: 'POST',
-                headers: {
-                    ...this.getHeaders(),
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    data: configData,
-                    path: subName,
-                    backup: true,
-                    validate: true
-                })
-            });
+        // SystemConfig 的子配置保存：使用 path 参数指定子配置名称
+        const response = await fetch(`${this.serverUrl}/api/config/${configName}/write`, {
+            method: 'POST',
+            headers: {
+                ...this.getHeaders(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                data: configData,
+                path: subName,
+                backup: true,
+                validate: true
+            })
+        });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('保存子配置失败:', errorData);
-                throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: 保存失败`);
-            }
-
-            const result = await response.json();
-            if (!result.success) {
-                console.error('保存子配置失败:', result);
-                throw new Error(result.message || result.error || '保存失败');
-            }
-
-            console.log('子配置保存成功:', result);
-            this.showToast('配置已保存', 'success');
-        } catch (error) {
-            console.error('保存子配置异常:', error);
-            this.showToast('保存失败: ' + error.message, 'error');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            this.showToast('保存失败: ' + (errorData.message || errorData.error || `HTTP ${response.status}`), 'error');
+            return;
         }
+
+        const result = await response.json();
+        if (!result.success) {
+            this.showToast('保存失败: ' + (result.message || result.error || '未知错误'), 'error');
+            return;
+        }
+
+        this.showToast('配置已保存', 'success');
     }
 
     async validateSubConfig() {
@@ -3605,14 +3598,11 @@ class APIControlCenter {
 
             const result = await response.json();
             if (!result.success) {
-                console.error('保存配置失败:', result);
                 throw new Error(result.message || result.error || '保存失败');
             }
 
-            console.log('配置保存成功:', result);
             this.showToast('配置已保存', 'success');
         } catch (error) {
-            console.error('保存配置异常:', error);
             this.showToast('保存配置失败: ' + error.message, 'error');
         }
     }
@@ -3844,8 +3834,12 @@ class APIControlCenter {
         switch (component) {
             case 'Select':
                 return this.renderSelect(fieldId, fieldName, fieldSchema, value);
+            case 'MultiSelect':
+                return this.renderMultiSelect(fieldId, fieldName, fieldSchema, value);
             case 'Input':
                 return this.renderInput(fieldId, fieldName, fieldSchema, value);
+            case 'InputPassword':
+                return this.renderInputPassword(fieldId, fieldName, fieldSchema, value);
             case 'InputNumber':
                 return this.renderInputNumber(fieldId, fieldName, fieldSchema, value);
             case 'Switch':
@@ -3875,6 +3869,43 @@ class APIControlCenter {
         });
         html += `</select>`;
         return html;
+    }
+
+    /**
+     * 渲染 MultiSelect 组件（多选下拉框）
+     */
+    renderMultiSelect(fieldId, fieldName, fieldSchema, value) {
+        const options = fieldSchema.enum || [];
+        const selectedValues = Array.isArray(value) ? value : (value ? [value] : []);
+        let html = `<div class="config-form-multiselect" id="${fieldId}" data-field="${fieldName}">`;
+        html += `<div class="config-form-multiselect-selected">`;
+        html += `<div class="config-form-multiselect-tags">`;
+        selectedValues.forEach(val => {
+            html += `<span class="config-form-multiselect-tag">${this.escapeHtml(String(val))}<button type="button" class="config-form-multiselect-tag-remove" data-value="${this.escapeHtml(String(val))}">×</button></span>`;
+        });
+        html += `</div>`;
+        html += `<button type="button" class="config-form-multiselect-toggle">▼</button>`;
+        html += `</div>`;
+        html += `<div class="config-form-multiselect-dropdown" style="display: none;">`;
+        options.forEach(opt => {
+            const checked = selectedValues.includes(opt) ? 'checked' : '';
+            html += `<label class="config-form-multiselect-option">`;
+            html += `<input type="checkbox" value="${this.escapeHtml(String(opt))}" ${checked} />`;
+            html += `<span>${this.escapeHtml(String(opt))}</span>`;
+            html += `</label>`;
+        });
+        html += `</div>`;
+        html += `</div>`;
+        return html;
+    }
+
+    /**
+     * 渲染 InputPassword 组件
+     */
+    renderInputPassword(fieldId, fieldName, fieldSchema, value) {
+        const val = (value !== null && value !== undefined) ? String(value) : '';
+        const placeholder = fieldSchema.placeholder || '请输入密码';
+        return `<input type="password" id="${fieldId}" class="config-form-input config-form-password" data-field="${fieldName}" value="${this.escapeHtml(val)}" placeholder="${this.escapeHtml(placeholder)}" autocomplete="off" />`;
     }
 
     /**
@@ -4101,6 +4132,32 @@ class APIControlCenter {
     }
 
     /**
+     * 更新 MultiSelect 组件的标签显示
+     */
+    updateMultiSelectTags(multiSelect, selectedValues) {
+        const tagsContainer = multiSelect.querySelector('.config-form-multiselect-tags');
+        if (!tagsContainer) return;
+        
+        tagsContainer.innerHTML = '';
+        selectedValues.forEach(val => {
+            const tag = document.createElement('span');
+            tag.className = 'config-form-multiselect-tag';
+            tag.innerHTML = `${this.escapeHtml(String(val))}<button type="button" class="config-form-multiselect-tag-remove" data-value="${this.escapeHtml(String(val))}">×</button>`;
+            tagsContainer.appendChild(tag);
+            
+            tag.querySelector('.config-form-multiselect-tag-remove').addEventListener('click', (e) => {
+                e.stopPropagation();
+                const value = tag.querySelector('.config-form-multiselect-tag-remove').dataset.value;
+                const checkbox = multiSelect.querySelector(`input[value="${this.escapeHtml(value)}"]`);
+                if (checkbox) checkbox.checked = false;
+                const checkboxes = multiSelect.querySelectorAll('input[type="checkbox"]');
+                const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+                this.updateMultiSelectTags(multiSelect, selected);
+            });
+        });
+    }
+
+    /**
      * 从表单收集数据
      * 确保所有字段都被收集，即使值为 null 或空
      * 同时确保所有 schema 中定义的字段都在数据中（即使没有对应的表单元素）
@@ -4134,6 +4191,12 @@ class APIControlCenter {
                 } else if (field.tagName === 'SELECT') {
                     // Select：空值保持为 null
                     data[fieldName] = field.value || null;
+                } else if (field.closest('.config-form-multiselect')) {
+                    // MultiSelect：收集所有选中的值
+                    const multiSelect = field.closest('.config-form-multiselect');
+                    const checkboxes = multiSelect.querySelectorAll('input[type="checkbox"]');
+                    const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+                    data[fieldName] = selected.length > 0 ? selected : [];
                 } else {
                     // 字符串字段：保留空字符串（表示键存在但值为空）
                     data[fieldName] = field.value || '';
@@ -4155,6 +4218,12 @@ class APIControlCenter {
                     current[lastKey] = (numVal !== null && !isNaN(numVal)) ? numVal : null;
                 } else if (field.tagName === 'SELECT') {
                     current[lastKey] = field.value || null;
+                } else if (field.closest('.config-form-multiselect')) {
+                    // MultiSelect：收集所有选中的值
+                    const multiSelect = field.closest('.config-form-multiselect');
+                    const checkboxes = multiSelect.querySelectorAll('input[type="checkbox"]');
+                    const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+                    current[lastKey] = selected.length > 0 ? selected : [];
                 } else {
                     current[lastKey] = field.value || '';
                 }
@@ -4250,6 +4319,27 @@ class APIControlCenter {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    /**
+     * 安全解析 JSON，避免 try-catch 嵌套
+     */
+    parseJSON(jsonText) {
+        if (!jsonText || jsonText.trim() === '') {
+            return { data: {}, error: null };
+        }
+        
+        let data;
+        let error = null;
+        
+        try {
+            data = JSON.parse(jsonText);
+        } catch (e) {
+            error = e.message;
+            data = null;
+        }
+        
+        return { data, error };
     }
 }
 
