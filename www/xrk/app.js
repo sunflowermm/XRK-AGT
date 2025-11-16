@@ -1546,8 +1546,8 @@ class APIControlCenter {
         const linksDist = 120;
         function step() {
             ctx.clearRect(0, 0, width, height);
-            // 使用更明显的颜色
-            ctx.fillStyle = 'rgba(87, 194, 255, 0.6)';
+            // 粉色梦幻系粒子颜色
+            ctx.fillStyle = 'rgba(247, 112, 184, 0.5)';
             for (const p of particles) {
                 p.x += p.vx;
                 p.y += p.vy;
@@ -1560,8 +1560,8 @@ class APIControlCenter {
                 ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
                 ctx.fill();
             }
-            // 使用更明显的连线
-            ctx.strokeStyle = 'rgba(247, 112, 184, 0.3)';
+            // 粉色梦幻系连线
+            ctx.strokeStyle = 'rgba(140, 114, 236, 0.4)';
             ctx.lineWidth = 1.5;
             for (let i = 0; i < particles.length; i++) {
                 for (let j = i + 1; j < particles.length; j++) {

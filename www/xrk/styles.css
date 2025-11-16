@@ -143,6 +143,7 @@ html {
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    /* 背景图在最底层，确保可见 */
     background: var(--bg-primary);
     background-image: url('./img/bg.png');
     background-size: 100% auto;
@@ -155,9 +156,10 @@ body {
     transition: background-color var(--transition-slow), color var(--transition-slow);
     position: relative;
     overflow-x: hidden;
+    /* body本身不设置z-index，作为最底层 */
 }
 
-/* 背景遮罩层，确保文字可读性 - 参考用户提供的HTML样式 */
+/* 背景遮罩层 - 粉色梦幻系，降低不透明度确保背景图可见 */
 body::before {
     content: '';
     position: fixed;
@@ -165,24 +167,25 @@ body::before {
     left: 0;
     right: 0;
     bottom: 0;
+    /* 粉色梦幻系渐变 */
     background: linear-gradient(135deg,
-        rgba(87, 194, 255, 0.5) 0%,
-        rgba(247, 112, 184, 0.5) 50%,
-        rgba(140, 114, 236, 0.5) 100%);
+        rgba(247, 112, 184, 0.3) 0%,
+        rgba(140, 114, 236, 0.3) 50%,
+        rgba(87, 194, 255, 0.3) 100%);
     background-size: 200% 200%;
     animation: shine 3s infinite linear;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.6;
+    opacity: 0.4; /* 降低不透明度，让背景图可见 */
 }
 
 body.light::before {
     background: linear-gradient(135deg,
-        rgba(87, 194, 255, 0.3) 0%,
-        rgba(247, 112, 184, 0.3) 50%,
-        rgba(140, 114, 236, 0.3) 100%);
+        rgba(247, 112, 184, 0.2) 0%,
+        rgba(140, 114, 236, 0.2) 50%,
+        rgba(87, 194, 255, 0.2) 100%);
     background-size: 200% 200%;
-    opacity: 0.4;
+    opacity: 0.25;
 }
 
 @keyframes shine {
@@ -197,7 +200,7 @@ body.light::before {
     }
 }
 
-/* 粒子背景最底层 - 确保可见 */
+/* 粒子背景 - 在遮罩层之上，内容之下 */
 #bgParticles {
     position: fixed;
     inset: 0;
@@ -205,7 +208,7 @@ body.light::before {
     height: 100vh;
     z-index: 1;
     pointer-events: none;
-    opacity: 0.8;
+    opacity: 0.6; /* 降低不透明度，让背景图更明显 */
 }
 
 /* 移除冗余的sunflowerFloat动画，使用shine动画替代 */
@@ -235,17 +238,25 @@ body.light::before {
 }
 
 /* ==================== 容器布局 ==================== */
+/* 层级规则：
+   - body背景图: 最底层（无z-index）
+   - body::before遮罩: z-index: 0
+   - #bgParticles粒子: z-index: 1
+   - .app-container内容: z-index: 2
+*/
 .app-container {
     display: flex;
     height: 100vh;
     position: relative;
-    z-index: 1;
+    z-index: 2; /* 内容在最上层 */
 }
 
 /* 主内容区域 - 参考用户提供的HTML样式 */
 .main-content {
     position: relative;
-    z-index: 1;
+    z-index: 2;
+    /* 确保背景透明，让背景图可见 */
+    background: transparent;
 }
 
 /* 内容卡片 - 参考用户提供的半透明白色背景 */
@@ -260,37 +271,27 @@ body.light::before {
 /* ==================== 侧边栏 ==================== */
 .sidebar {
     width: var(--sidebar-width);
-    background: var(--bg-secondary);
-    border-right: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(255, 255, 255, 0.3);
     display: flex;
     flex-direction: column;
     transition: all var(--transition-smooth);
     position: relative;
     overflow: hidden;
+    z-index: 2;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
 }
 
-.sidebar::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: var(--gradient-warm);
-    opacity: 0.03;
-    animation: sidebarGradient 20s linear infinite;
-    pointer-events: none;
-}
-
-@keyframes sidebarGradient {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
+/* 删除冗余的sidebar渐变，避免遮挡背景图 */
 
 .sidebar-header {
     padding: 28px 24px;
-    border-bottom: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
     position: relative;
 }
 
@@ -750,13 +751,16 @@ body.light .theme-toggle-thumb::before {
     position: relative;
 }
 
-/* 头部 */
+/* 头部 - 使用半透明背景，让背景图可见 */
 .header {
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
     padding: 24px 28px;
     position: relative;
-    z-index: 10;
+    z-index: 2;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
 .header::after {
@@ -794,10 +798,12 @@ body.light .theme-toggle-thumb::before {
     display: flex;
     align-items: center;
     gap: 10px;
-    background: var(--bg-primary);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     padding: 12px 16px;
     border-radius: var(--radius-md);
-    border: 1px solid var(--border);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     flex: 1;
     transition: all var(--transition-base);
     position: relative;
@@ -865,12 +871,14 @@ body.light .theme-toggle-thumb::before {
     align-items: center;
     gap: 10px;
     padding: 12px 18px;
-    background: var(--bg-primary);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-md);
     font-size: 14px;
     font-weight: 500;
     white-space: nowrap;
-    border: 1px solid var(--border);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     transition: all var(--transition-base);
 }
 
@@ -913,11 +921,13 @@ body.light .theme-toggle-thumb::before {
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: thin;
-    scrollbar-color: var(--bg-tertiary) transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
     position: relative;
+    background: transparent; /* 透明背景，让背景图可见 */
+    z-index: 2;
 }
 
 .content::-webkit-scrollbar {
