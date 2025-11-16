@@ -3848,6 +3848,8 @@ class APIControlCenter {
                 return this.renderInput(fieldId, fieldName, fieldSchema, value);
             case 'InputNumber':
                 return this.renderInputNumber(fieldId, fieldName, fieldSchema, value);
+            case 'TextArea':
+                return this.renderTextArea(fieldId, fieldName, fieldSchema, value);
             case 'Switch':
                 return this.renderSwitch(fieldId, fieldName, fieldSchema, value);
             case 'SubForm':
@@ -3892,12 +3894,21 @@ class APIControlCenter {
      * 渲染 InputNumber 组件
      */
     renderInputNumber(fieldId, fieldName, fieldSchema, value) {
-        // 如果值是 null 或 undefined，显示为空，允许用户输入或保持为空
         const val = (value !== null && value !== undefined && !isNaN(value)) ? Number(value) : '';
         const min = fieldSchema.min !== undefined ? `min="${fieldSchema.min}"` : '';
         const max = fieldSchema.max !== undefined ? `max="${fieldSchema.max}"` : '';
         const placeholder = fieldSchema.placeholder || (fieldSchema.default !== undefined ? String(fieldSchema.default) : '');
         return `<input type="number" id="${fieldId}" class="config-form-input config-form-number" data-field="${fieldName}" value="${val}" ${min} ${max} placeholder="${this.escapeHtml(placeholder)}" />`;
+    }
+
+    /**
+     * 渲染 TextArea 组件（多行文本输入）
+     */
+    renderTextArea(fieldId, fieldName, fieldSchema, value) {
+        const val = (value !== null && value !== undefined) ? String(value) : '';
+        const placeholder = fieldSchema.placeholder || '';
+        const rows = fieldSchema.rows || 5;
+        return `<textarea id="${fieldId}" class="config-form-textarea" data-field="${fieldName}" rows="${rows}" placeholder="${this.escapeHtml(placeholder)}">${this.escapeHtml(val)}</textarea>`;
     }
 
     /**
@@ -3961,25 +3972,84 @@ class APIControlCenter {
 
     /**
      * 渲染 Tags 组件（标签数组，用于字符串数组）
+     * 支持 suggestions（建议值）功能
      */
     renderTags(fieldId, fieldName, fieldSchema, value) {
-        // 确保 value 是数组，过滤掉 null 和 undefined
         const arr = Array.isArray(value) ? value.filter(item => item !== null && item !== undefined) : [];
+        const suggestions = fieldSchema.suggestions || [];
+        const hasSuggestions = suggestions.length > 0;
+        
         let html = `<div class="config-form-tags" id="${fieldId}" data-field="${fieldName}">`;
         html += `<div class="config-form-tags-list">`;
         arr.forEach((item, index) => {
             html += `<div class="config-form-tag-item" data-tag-index="${index}">`;
             html += `<span class="config-form-tag-text">${this.escapeHtml(String(item))}</span>`;
-            html += `<button type="button" class="config-form-tag-remove" data-index="${index}">×</button>`;
+            html += `<button type="button" class="config-form-tag-remove" data-index="${index}" title="删除">×</button>`;
             html += `</div>`;
         });
         html += `</div>`;
         html += `<div class="config-form-tags-input-wrapper">`;
-        html += `<input type="text" class="config-form-tags-input" placeholder="输入后按回车添加" />`;
+        
+        if (hasSuggestions) {
+            html += `<div class="config-form-tags-suggestions" style="display: none;">`;
+            suggestions.forEach((suggestion, idx) => {
+                const isSelected = arr.includes(suggestion);
+                if (!isSelected) {
+                    html += `<div class="config-form-tag-suggestion" data-suggestion="${this.escapeHtml(String(suggestion))}">${this.escapeHtml(String(suggestion))}</div>`;
+                }
+            });
+            html += `</div>`;
+        }
+        
+        html += `<input type="text" class="config-form-tags-input" placeholder="输入后按回车添加${hasSuggestions ? '，或点击下方建议' : ''}" data-has-suggestions="${hasSuggestions}" />`;
         html += `<button type="button" class="btn btn-sm btn-primary config-form-tags-add" data-field="${fieldName}">添加</button>`;
         html += `</div>`;
         html += `</div>`;
         return html;
+    }
+
+    /**
+     * 更新标签建议列表
+     */
+    updateTagSuggestions(tagsContainer, suggestionsDiv, value, isRemoved = false) {
+        const suggestions = Array.from(suggestionsDiv.querySelectorAll('.config-form-tag-suggestion'))
+            .map(el => el.dataset.suggestion);
+        const tagsList = tagsContainer.querySelector('.config-form-tags-list');
+        const existingTags = Array.from(tagsList.children).map(el => 
+            el.querySelector('.config-form-tag-text')?.textContent.trim()
+        );
+        
+        if (isRemoved && !existingTags.includes(value)) {
+            const suggestionEl = document.createElement('div');
+            suggestionEl.className = 'config-form-tag-suggestion';
+            suggestionEl.dataset.suggestion = value;
+            suggestionEl.textContent = value;
+            suggestionEl.style.opacity = '0';
+            suggestionEl.style.transform = 'translateY(-5px)';
+            suggestionsDiv.appendChild(suggestionEl);
+            suggestionEl.addEventListener('click', () => {
+                const input = tagsContainer.querySelector('.config-form-tags-input');
+                const addBtn = tagsContainer.querySelector('.config-form-tags-add');
+                if (addBtn && typeof app.addTag === 'function') {
+                    app.addTag(value);
+                }
+            });
+            requestAnimationFrame(() => {
+                suggestionEl.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                suggestionEl.style.opacity = '1';
+                suggestionEl.style.transform = 'translateY(0)';
+            });
+        } else if (!isRemoved && existingTags.includes(value)) {
+            const suggestionEl = suggestionsDiv.querySelector(`[data-suggestion="${this.escapeHtml(value)}"]`);
+            if (suggestionEl) {
+                suggestionEl.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                suggestionEl.style.opacity = '0';
+                suggestionEl.style.transform = 'translateY(-5px)';
+                setTimeout(() => {
+                    suggestionEl.remove();
+                }, 200);
+            }
+        }
     }
 
     /**
@@ -4052,29 +4122,63 @@ class APIControlCenter {
             });
         });
 
-        // Tags 组件操作
+        // Tags 组件操作（支持 suggestions）
         formContainer.querySelectorAll('.config-form-tags').forEach(tagsContainer => {
             const input = tagsContainer.querySelector('.config-form-tags-input');
             const addBtn = tagsContainer.querySelector('.config-form-tags-add');
             const tagsList = tagsContainer.querySelector('.config-form-tags-list');
+            const suggestionsDiv = tagsContainer.querySelector('.config-form-tags-suggestions');
+            const hasSuggestions = input?.dataset.hasSuggestions === 'true';
             
-            const addTag = () => {
-                const value = input.value.trim();
+            const addTag = (tagValue = null) => {
+                const value = tagValue || input.value.trim();
                 if (!value) return;
+                
+                const existingTags = Array.from(tagsList.children).map(el => 
+                    el.querySelector('.config-form-tag-text')?.textContent.trim()
+                );
+                if (existingTags.includes(value)) {
+                    this.showToast('标签已存在', 'warning');
+                    return;
+                }
                 
                 const tagDiv = document.createElement('div');
                 tagDiv.className = 'config-form-tag-item';
+                tagDiv.style.opacity = '0';
+                tagDiv.style.transform = 'scale(0.8)';
                 const index = tagsList.children.length;
                 tagDiv.dataset.tagIndex = index;
                 tagDiv.innerHTML = `
                     <span class="config-form-tag-text">${this.escapeHtml(value)}</span>
-                    <button type="button" class="config-form-tag-remove" data-index="${index}">×</button>
+                    <button type="button" class="config-form-tag-remove" data-index="${index}" title="删除">×</button>
                 `;
                 tagsList.appendChild(tagDiv);
-                input.value = '';
+                
+                requestAnimationFrame(() => {
+                    tagDiv.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                    tagDiv.style.opacity = '1';
+                    tagDiv.style.transform = 'scale(1)';
+                });
+                
+                if (!tagValue) input.value = '';
+                if (suggestionsDiv) {
+                    this.updateTagSuggestions(tagsContainer, suggestionsDiv, value);
+                }
                 
                 tagDiv.querySelector('.config-form-tag-remove').addEventListener('click', function() {
-                    tagDiv.remove();
+                    const item = this.closest('.config-form-tag-item');
+                    item.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                    item.style.opacity = '0';
+                    item.style.transform = 'scale(0.8)';
+                    setTimeout(() => {
+                        item.remove();
+                        if (suggestionsDiv) {
+                            const removedValue = this.previousElementSibling?.textContent.trim();
+                            if (removedValue) {
+                                app.updateTagSuggestions(tagsContainer, suggestionsDiv, removedValue, true);
+                            }
+                        }
+                    }, 200);
                 });
             };
             
@@ -4085,16 +4189,69 @@ class APIControlCenter {
                         addTag();
                     }
                 });
+                
+                if (hasSuggestions && suggestionsDiv) {
+                    input.addEventListener('focus', () => {
+                        const existingTags = Array.from(tagsList.children).map(el => 
+                            el.querySelector('.config-form-tag-text')?.textContent.trim()
+                        );
+                        const visibleSuggestions = suggestionsDiv.querySelectorAll('.config-form-tag-suggestion').length;
+                        if (visibleSuggestions > 0) {
+                            suggestionsDiv.style.display = 'block';
+                            requestAnimationFrame(() => {
+                                suggestionsDiv.style.opacity = '1';
+                                suggestionsDiv.style.transform = 'translateY(0)';
+                            });
+                        }
+                    });
+                    
+                    input.addEventListener('blur', () => {
+                        setTimeout(() => {
+                            if (!suggestionsDiv.matches(':hover') && !document.activeElement?.closest('.config-form-tags-suggestions')) {
+                                suggestionsDiv.style.opacity = '0';
+                                suggestionsDiv.style.transform = 'translateY(-5px)';
+                                setTimeout(() => {
+                                    suggestionsDiv.style.display = 'none';
+                                }, 200);
+                            }
+                        }, 200);
+                    });
+                }
             }
             
             if (addBtn) {
                 addBtn.addEventListener('click', addTag);
             }
             
-            // 绑定已有标签的删除按钮
+            if (hasSuggestions && suggestionsDiv) {
+                suggestionsDiv.querySelectorAll('.config-form-tag-suggestion').forEach(suggestion => {
+                    suggestion.addEventListener('click', () => {
+                        const value = suggestion.dataset.suggestion;
+                        addTag(value);
+                        suggestionsDiv.style.opacity = '0';
+                        suggestionsDiv.style.transform = 'translateY(-5px)';
+                        setTimeout(() => {
+                            suggestionsDiv.style.display = 'none';
+                        }, 200);
+                    });
+                });
+            }
+            
             tagsList.querySelectorAll('.config-form-tag-remove').forEach(btn => {
                 btn.addEventListener('click', function() {
-                    this.closest('.config-form-tag-item').remove();
+                    const item = this.closest('.config-form-tag-item');
+                    item.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                    item.style.opacity = '0';
+                    item.style.transform = 'scale(0.8)';
+                    setTimeout(() => {
+                        item.remove();
+                        if (suggestionsDiv && hasSuggestions) {
+                            const removedValue = this.previousElementSibling?.textContent.trim();
+                            if (removedValue) {
+                                app.updateTagSuggestions(tagsContainer, suggestionsDiv, removedValue, true);
+                            }
+                        }
+                    }, 200);
                 });
             });
         });
@@ -4134,6 +4291,9 @@ class APIControlCenter {
                 } else if (field.tagName === 'SELECT') {
                     // Select：空值保持为 null
                     data[fieldName] = field.value || null;
+                } else if (field.tagName === 'TEXTAREA') {
+                    // TextArea：保留空字符串（表示键存在但值为空）
+                    data[fieldName] = field.value || '';
                 } else {
                     // 字符串字段：保留空字符串（表示键存在但值为空）
                     data[fieldName] = field.value || '';
@@ -4155,6 +4315,8 @@ class APIControlCenter {
                     current[lastKey] = (numVal !== null && !isNaN(numVal)) ? numVal : null;
                 } else if (field.tagName === 'SELECT') {
                     current[lastKey] = field.value || null;
+                } else if (field.tagName === 'TEXTAREA') {
+                    current[lastKey] = field.value || '';
                 } else {
                     current[lastKey] = field.value || '';
                 }
@@ -4187,7 +4349,7 @@ class APIControlCenter {
         formContainer.querySelectorAll('.config-form-arrayform').forEach(arrayForm => {
             const fieldName = arrayForm.dataset.field;
             if (!fieldName) return;
-            collectedFields.add(fieldName);
+                    collectedFields.add(fieldName);
             const items = [];
             arrayForm.querySelectorAll('.config-form-arrayform-item').forEach(itemEl => {
                 const itemObj = {};
