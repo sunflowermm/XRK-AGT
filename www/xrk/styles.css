@@ -155,7 +155,7 @@ body {
     overflow-x: hidden;
 }
 
-/* 背景遮罩层，确保文字可读性 */
+/* 背景遮罩层，确保文字可读性 - 参考用户提供的HTML样式 */
 body::before {
     content: '';
     position: fixed;
@@ -163,61 +163,50 @@ body::before {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(26, 21, 8, 0.75); /* 半透明深色遮罩 */
+    background: linear-gradient(135deg,
+        rgba(87, 194, 255, 0.3) 0%,
+        rgba(247, 112, 184, 0.3) 50%,
+        rgba(140, 114, 236, 0.3) 100%);
+    background-size: 200% 200%;
+    animation: shine 3s infinite linear;
     z-index: 0;
     pointer-events: none;
+    opacity: 0.4;
 }
 
 body.light::before {
-    background: rgba(254, 249, 231, 0.6); /* 亮色主题遮罩 */
+    background: linear-gradient(135deg,
+        rgba(87, 194, 255, 0.2) 0%,
+        rgba(247, 112, 184, 0.2) 50%,
+        rgba(140, 114, 236, 0.2) 100%);
+    background-size: 200% 200%;
+    opacity: 0.3;
 }
 
-/* 粒子背景最底层 */
+@keyframes shine {
+    0% {
+        background-position: 0% 0%;
+    }
+    50% {
+        background-position: 100% 100%;
+    }
+    100% {
+        background-position: 0% 0%;
+    }
+}
+
+/* 粒子背景最底层 - 确保可见 */
 #bgParticles {
     position: fixed;
     inset: 0;
     width: 100vw;
     height: 100vh;
-    z-index: 0;
+    z-index: 1;
     pointer-events: none;
+    opacity: 0.8;
 }
 
-/* 向日葵动态背景效果（移到body::after） */
-body::after {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: 
-        radial-gradient(circle at 20% 50%, var(--sunflower-yellow-light) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, var(--accent-light) 0%, transparent 50%),
-        radial-gradient(circle at 40% 20%, var(--sunflower-brown-light) 0%, transparent 50%);
-    pointer-events: none;
-    opacity: 0.3;
-    animation: sunflowerFloat 40s ease-in-out infinite;
-    z-index: 0;
-}
-
-@keyframes sunflowerFloat {
-    0%, 100% { 
-        transform: translate(0, 0) scale(1) rotate(0deg); 
-        opacity: 0.4;
-    }
-    25% { 
-        transform: translate(-30px, -30px) scale(1.1) rotate(5deg); 
-        opacity: 0.5;
-    }
-    50% { 
-        transform: translate(30px, -20px) scale(1.15) rotate(-5deg); 
-        opacity: 0.45;
-    }
-    75% { 
-        transform: translate(-20px, 30px) scale(1.1) rotate(3deg); 
-        opacity: 0.5;
-    }
-}
+/* 移除冗余的sunflowerFloat动画，使用shine动画替代 */
 
 /* ==================== 情绪展示区 ==================== */
 .emotion-display {
@@ -2873,7 +2862,12 @@ body.light .json-null {
     }
 
     .config-editor-title {
-        font-size: 20px;
+        font-size: 16px;
+        font-weight: 500;
+    }
+    
+    .config-editor-header {
+        padding: 16px 20px;
     }
 
     .config-editor-panel {
@@ -3576,16 +3570,6 @@ body.no-scroll {
 .welcome-icon {
     font-size: 80px;
     margin-bottom: 24px;
-    animation: iconFloat 3s ease-in-out infinite;
-}
-
-@keyframes iconFloat {
-    0%, 100% {
-        transform: translateY(0) scale(1);
-    }
-    50% {
-        transform: translateY(-10px) scale(1.05);
-    }
 }
 
 .welcome-title {
@@ -3757,19 +3741,18 @@ body.no-scroll {
 }
 
 .config-editor-title {
-    font-size: 26px;
-    font-weight: 700;
+    font-size: 18px;
+    font-weight: 600;
     color: var(--text-primary);
     display: flex;
     align-items: center;
-    gap: 12px;
-    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    gap: 8px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .config-editor-title::before {
     content: '⚙️';
-    font-size: 28px;
-    animation: iconFloat 3s ease-in-out infinite;
+    font-size: 20px;
 }
 
 .config-editor-controls {
@@ -3835,7 +3818,6 @@ body.no-scroll {
     display: block;
     font-size: 48px;
     margin-bottom: 16px;
-    animation: iconFloat 2s ease-in-out infinite;
 }
 
 .config-list-empty::before {
@@ -4451,22 +4433,34 @@ body.no-scroll {
 }
 
 .sub-config-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
     padding: 24px;
-    padding-bottom: 24px; /* 确保底部有足够空间 */
+    padding-bottom: 24px;
     min-height: fit-content;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .sub-config-item {
-    padding: 24px;
+    padding: 20px;
     background: var(--bg-card);
     border: 2px solid var(--border);
     border-radius: var(--radius-md);
     cursor: pointer;
     transition: all var(--transition-base);
     text-align: center;
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    box-sizing: border-box;
 }
 
 .sub-config-item:hover {

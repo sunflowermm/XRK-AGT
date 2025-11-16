@@ -1528,39 +1528,43 @@ class APIControlCenter {
         window.addEventListener('resize', () => {
             resize();
         });
-        const count = Math.floor(Math.min(90, Math.max(50, (width + height) / 30)));
+        // 优化粒子效果，使其更明显
+        const count = Math.floor(Math.min(80, Math.max(40, (width + height) / 40)));
         const particles = new Array(count).fill(0).map(() => ({
             x: Math.random() * width,
             y: Math.random() * height,
-            vx: (Math.random() - 0.5) * 0.4,
-            vy: (Math.random() - 0.5) * 0.4,
-            r: Math.random() * 1.6 + 0.6,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: (Math.random() - 0.5) * 0.5,
+            r: Math.random() * 2 + 1,
             a: Math.random() * Math.PI * 2
         }));
-        const linksDist = 110;
+        const linksDist = 120;
         function step() {
             ctx.clearRect(0, 0, width, height);
-            ctx.fillStyle = 'rgba(255,255,255,0.35)';
+            // 使用更明显的颜色
+            ctx.fillStyle = 'rgba(87, 194, 255, 0.6)';
             for (const p of particles) {
                 p.x += p.vx;
                 p.y += p.vy;
-                p.a += 0.005;
-                p.vx += Math.cos(p.a) * 0.0003;
-                p.vy += Math.sin(p.a) * 0.0003;
+                p.a += 0.01;
+                p.vx += Math.cos(p.a) * 0.0005;
+                p.vy += Math.sin(p.a) * 0.0005;
                 if (p.x < -10) p.x = width + 10; if (p.x > width + 10) p.x = -10;
                 if (p.y < -10) p.y = height + 10; if (p.y > height + 10) p.y = -10;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
                 ctx.fill();
             }
-            ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+            // 使用更明显的连线
+            ctx.strokeStyle = 'rgba(247, 112, 184, 0.3)';
+            ctx.lineWidth = 1.5;
             for (let i = 0; i < particles.length; i++) {
                 for (let j = i + 1; j < particles.length; j++) {
                     const dx = particles[i].x - particles[j].x;
                     const dy = particles[i].y - particles[j].y;
                     const d = Math.hypot(dx, dy);
                     if (d < linksDist) {
-                        ctx.globalAlpha = 1 - d / linksDist;
+                        ctx.globalAlpha = (1 - d / linksDist) * 0.5;
                         ctx.beginPath();
                         ctx.moveTo(particles[i].x, particles[i].y);
                         ctx.lineTo(particles[j].x, particles[j].y);
@@ -1697,15 +1701,8 @@ class APIControlCenter {
             await this.ensureDeviceWs();
             
             // 检查HTTPS或localhost（某些浏览器要求）
-            const isSecureContext = window.isSecureContext || 
-                                   location.protocol === 'https:' || 
-                                   location.hostname === 'localhost' || 
-                                   location.hostname === '127.0.0.1' ||
-                                   location.hostname === '0.0.0.0';
-            
-            if (!isSecureContext) {
-                this.showToast('麦克风访问需要HTTPS环境或localhost', 'warning');
-            }
+            // 现代浏览器允许HTTP访问麦克风（需要用户授权）
+            // 不再限制为localhost或HTTPS
             
             let stream = null;
             
@@ -3760,12 +3757,25 @@ class APIControlCenter {
         const editorPanel = document.getElementById('configEditorPanel');
 
         if (listPanel && editorPanel) {
-            listPanel.style.display = 'block';
-            editorPanel.style.display = 'none';
+            // 清理编辑器
             if (this.configEditor) {
-                this.configEditor.toTextArea();
+                try {
+                    this.configEditor.toTextArea();
+                } catch (e) {
+                    console.warn('清理编辑器失败:', e);
+                }
                 this.configEditor = null;
             }
+            
+            // 重置编辑器面板内容，避免嵌套问题
+            editorPanel.innerHTML = '';
+            editorPanel.style.display = 'none';
+            
+            // 显示列表面板
+            listPanel.style.display = 'block';
+            
+            // 重新加载配置列表，确保状态正确
+            this.loadConfigList();
         }
     }
 
