@@ -1414,41 +1414,7 @@ export default {
         ]
     },
 
-    async init(app, Bot) {
-        // 确保路由和WebSocket被注册
-        if (this.routes && Array.isArray(this.routes)) {
-            const HttpApi = (await import('../../lib/http/http.js')).default;
-            const apiInstance = new HttpApi(this);
-            apiInstance.registerRoutes(app, Bot);
-            BotUtil.makeLog('info', `✓ 设备管理API路由已注册 (${this.routes.length} 个路由)`, 'DeviceAPI');
-        }
-        
-        // 注册WebSocket处理器
-        if (this.ws && typeof this.ws === 'object') {
-            if (!Bot.wsf) {
-                Bot.wsf = {};
-            }
-            for (const [path, handlers] of Object.entries(this.ws)) {
-                if (!Bot.wsf[path]) {
-                    Bot.wsf[path] = [];
-                }
-                const handlerArray = Array.isArray(handlers) ? handlers : [handlers];
-                for (const handler of handlerArray) {
-                    if (typeof handler === 'function') {
-                        Bot.wsf[path].push((conn, req, socket, head) => {
-                            try {
-                                handler(conn, req, Bot, socket, head);
-                            } catch (error) {
-                                BotUtil.makeLog('error', `[DeviceAPI] WebSocket处理失败: ${error.message}`, 'DeviceAPI', error);
-                            }
-                        });
-                    }
-                }
-                BotUtil.makeLog('info', `✓ WebSocket处理器已注册: /${path}`, 'DeviceAPI');
-            }
-        }
-        
-        // 自定义初始化
+    init(app, Bot) {
         StreamLoader.configureEmbedding({
             enabled: false
         });

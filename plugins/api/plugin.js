@@ -1,5 +1,4 @@
 import PluginsLoader from '../../lib/plugins/loader.js';
-import BotUtil from '../../lib/common/util.js';
 
 /**
  * 插件管理API
@@ -36,7 +35,7 @@ export default {
               task: plugin.task ? 1 : 0
             });
           } catch (error) {
-            BotUtil.makeLog('error', `[Plugin API] 初始化插件失败: ${p.key}`, 'PluginAPI', error);
+            logger.error(`[Plugin API] 初始化插件失败: ${p.key}`, error);
           }
         }
 
