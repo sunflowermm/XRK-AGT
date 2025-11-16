@@ -1479,8 +1479,8 @@ class APIControlCenter {
         const canvas = document.getElementById('bgParticles');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        let width = canvas.width = window.innerWidth;
-        let height = canvas.height = window.innerHeight;
+        let width = window.innerWidth;
+        let height = window.innerHeight;
         const dpi = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
         function resize() {
             width = window.innerWidth;
@@ -1650,203 +1650,82 @@ class APIControlCenter {
 
     async startMic() {
         try {
-            // 检查 WebSocket 连接
             await this.ensureDeviceWs();
-            if (!this._deviceWs || this._deviceWs.readyState !== WebSocket.OPEN) {
-                this.showToast('WebSocket 未连接，请稍候再试', 'error');
-                return;
-            }
-
-            // 检查浏览器支持
             if (!navigator.mediaDevices?.getUserMedia) {
-                this.showToast('浏览器不支持麦克风功能', 'error');
+                this.showToast('浏览器不支持麦克风', 'error');
                 return;
             }
-
-            // 检查 HTTPS（远程访问需要 HTTPS 才能使用麦克风）
-            const isLocalhost = window.location.hostname === 'localhost' || 
-                               window.location.hostname === '127.0.0.1' ||
-                               window.location.hostname === '[::1]';
-            const isSecure = window.location.protocol === 'https:';
-            
-            if (!isLocalhost && !isSecure) {
-                this.showToast('远程访问需要使用 HTTPS 才能使用麦克风功能。请使用 https:// 访问', 'error');
-                return;
-            }
-
-            // 创建音频上下文，优化采样率设置
-            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-            this._audioCtx = new AudioContextClass({ 
-                sampleRate: 16000,
-                latencyHint: 'interactive' // 优化延迟
-            });
-
-            // 请求麦克风权限，优化音频约束
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                    sampleRate: 16000,
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    latency: 0.01 // 低延迟
-                }
-            });
-            
+            this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             this._micStream = stream;
             const source = this._audioCtx.createMediaStreamSource(stream);
-            
-            // 使用 ScriptProcessor（兼容性更好）
-            const bufferSize = 4096;
-            const processor = this._audioCtx.createScriptProcessor(bufferSize, 1, 1);
-            
+            const processor = this._audioCtx.createScriptProcessor(4096, 1, 1);
             source.connect(processor);
             processor.connect(this._audioCtx.destination);
             this._audioProcessor = processor;
 
-            // 创建会话
-            const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const sessionId = `sess_${Date.now()}`;
             this._asrSessionId = sessionId;
             this._asrChunkIndex = 0;
             this._micActive = true;
-            
-            // 更新 UI
             const micBtn = document.getElementById('micToggleBtn');
             if (micBtn) {
                 micBtn.classList.add('recording');
                 micBtn.innerHTML = '<span class="mic-icon"></span><span>停止语音</span>';
             }
 
-            // 开始 ASR 会话
-            try {
-                this._deviceWs.send(JSON.stringify({
-                    type: 'asr_session_start',
-                    device_id: 'webclient',
-                    session_id: sessionId,
-                    session_number: 1,
-                    sample_rate: 16000,
-                    bits: 16,
-                    channels: 1
-                }));
-            } catch (sendError) {
-                console.error('发送 ASR 会话开始消息失败:', sendError);
-                this.showToast('启动语音识别会话失败', 'error');
-                await this.stopMic();
-                return;
-            }
+            // 开始会话
+            this._deviceWs?.send(JSON.stringify({
+                type: 'asr_session_start',
+                device_id: 'webclient',
+                session_id: sessionId,
+                session_number: 1,
+                sample_rate: 16000,
+                bits: 16,
+                channels: 1
+            }));
 
-            // 优化音频处理：使用缓冲区批量发送，减少 WebSocket 消息数量
-            let audioBuffer = [];
-            const bufferThreshold = 2; // 累积 2 个 buffer 后发送
-            
             processor.onaudioprocess = (e) => {
-                if (!this._micActive || !this._deviceWs || this._deviceWs.readyState !== WebSocket.OPEN) {
-                    return;
-                }
-                
+                if (!this._micActive) return;
                 const input = e.inputBuffer.getChannelData(0);
                 const pcm16 = new Int16Array(input.length);
-                
-                // 转换为 PCM16
                 for (let i = 0; i < input.length; i++) {
                     let s = Math.max(-1, Math.min(1, input[i]));
                     pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                 }
-                
-                // 转换为十六进制字符串
                 const hex = Array.from(new Uint8Array(pcm16.buffer))
                     .map(b => b.toString(16).padStart(2, '0'))
                     .join('');
-                
-                audioBuffer.push(hex);
-                
-                // 批量发送，减少 WebSocket 消息数量
-                if (audioBuffer.length >= bufferThreshold) {
-                    const combinedData = audioBuffer.join('');
-                    audioBuffer = []; // 清空缓冲区
-                    
-                    try {
-                        this._deviceWs.send(JSON.stringify({
-                            type: 'asr_audio_chunk',
-                            device_id: 'webclient',
-                            session_id: sessionId,
-                            chunk_index: this._asrChunkIndex++,
-                            vad_state: 'active',
-                            data: combinedData
-                        }));
-                    } catch (sendError) {
-                        console.warn('发送音频数据失败:', sendError);
-                        // 如果发送失败，停止录音
-                        this.stopMic();
-                    }
-                }
+                this._deviceWs?.send(JSON.stringify({
+                    type: 'asr_audio_chunk',
+                    device_id: 'webclient',
+                    session_id: sessionId,
+                    chunk_index: this._asrChunkIndex++,
+                    vad_state: 'active',
+                    data: hex
+                }));
             };
-
-            this.showToast('语音识别已启动', 'success');
         } catch (err) {
-            console.error('启动麦克风失败:', err);
-            
-            // 提供更友好的错误提示
-            let errorMsg = '启动麦克风失败';
-            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                errorMsg = '麦克风权限被拒绝，请在浏览器设置中允许访问麦克风';
-            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-                errorMsg = '未找到麦克风设备，请检查设备连接';
-            } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-                errorMsg = '麦克风被其他应用占用，请关闭其他使用麦克风的应用';
-            } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
-                errorMsg = '麦克风不支持所需的音频格式';
-            } else {
-                errorMsg = `启动麦克风失败: ${err.message || err.name || '未知错误'}`;
-            }
-            
-            this.showToast(errorMsg, 'error');
-            
-            // 清理资源
-            await this.stopMic();
+            this.showToast('启动麦克风失败: ' + err.message, 'error');
         }
     }
 
     async stopMic() {
         try {
-            this._micActive = false; // 先停止处理，避免继续发送数据
-            
-            // 断开音频处理器
             if (this._audioProcessor) {
-                try {
-                    this._audioProcessor.disconnect();
-                    this._audioProcessor.onaudioprocess = null;
-                } catch (e) {
-                    console.warn('断开音频处理器失败:', e);
-                }
+                this._audioProcessor.disconnect();
+                this._audioProcessor.onaudioprocess = null;
             }
-            
-            // 停止媒体流
             if (this._micStream) {
-                try {
-                    this._micStream.getTracks().forEach(track => {
-                        track.stop();
-                        track.enabled = false;
-                    });
-                } catch (e) {
-                    console.warn('停止媒体流失败:', e);
-                }
+                this._micStream.getTracks().forEach(t => t.stop());
             }
-            
-            // 关闭音频上下文
-            if (this._audioCtx && this._audioCtx.state !== 'closed') {
-                try {
-                    await this._audioCtx.close().catch(() => {});
-                } catch (e) {
-                    console.warn('关闭音频上下文失败:', e);
-                }
+            if (this._audioCtx) {
+                await this._audioCtx.close().catch(() => {});
             }
-            
-            // 发送结束信号到服务端
-            if (this._asrSessionId && this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
+            // 先发送 ending，等待服务端聚合最终结果后再发送 stop，避免过早结束导致超时或丢结果
+            if (this._asrSessionId) {
                 try {
-                    // 先发送 ending 信号，让服务端知道即将结束
-                    this._deviceWs.send(JSON.stringify({
+                    this._deviceWs?.send(JSON.stringify({
                         type: 'asr_audio_chunk',
                         device_id: 'webclient',
                         session_id: this._asrSessionId,
@@ -1854,41 +1733,31 @@ class APIControlCenter {
                         vad_state: 'ending',
                         data: ''
                     }));
-                    
-                    // 等待服务端处理最后的语音数据
-                    await new Promise(r => setTimeout(r, 1200));
-                    
-                    // 发送停止信号
-                    this._deviceWs.send(JSON.stringify({
+                } catch {}
+                // 等待一小段时间，让服务端处理最后的语音并返回最终文本
+                await new Promise(r => setTimeout(r, 1200));
+                try {
+                    this._deviceWs?.send(JSON.stringify({
                         type: 'asr_session_stop',
                         device_id: 'webclient',
                         session_id: this._asrSessionId,
                         duration: 0,
                         session_number: 1
                     }));
-                } catch (sendError) {
-                    console.warn('发送停止信号失败:', sendError);
-                }
+                } catch {}
             }
-        } catch (err) {
-            console.error('停止麦克风失败:', err);
         } finally {
-            // 清理所有引用
             this._micActive = false;
             const micBtn = document.getElementById('micToggleBtn');
             if (micBtn) {
                 micBtn.classList.remove('recording');
                 micBtn.innerHTML = '<span class="mic-icon"></span><span>开始语音</span>';
             }
-            
-            // 延迟清理，确保所有异步操作完成
-            setTimeout(() => {
-                this._audioCtx = null;
-                this._micStream = null;
-                this._audioProcessor = null;
-                this._asrSessionId = null;
-                this._asrChunkIndex = 0;
-            }, 100);
+            this._audioCtx = null;
+            this._micStream = null;
+            this._audioProcessor = null;
+            this._asrSessionId = null;
+            this._asrChunkIndex = 0;
         }
     }
 

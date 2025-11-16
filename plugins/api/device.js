@@ -1375,11 +1375,7 @@ export default {
 
     ws: {
         device: [
-            (conn, req, bot, socket, head) => {
-                // 兼容不同的参数签名
-                const ws = conn;
-                const Bot = bot;
-                
+            (ws, req, Bot) => {
                 BotUtil.makeLog('info',
                     `🔌 [WebSocket] 新连接: ${req.socket.remoteAddress}`,
                     'DeviceManager'
@@ -1392,7 +1388,7 @@ export default {
                     } catch (e) {
                         BotUtil.makeLog('error',
                             `❌ [WebSocket] 消息解析失败: ${e.message}`,
-                            ws.device_id || 'unknown'
+                            ws.device_id
                         );
                     }
                 });
