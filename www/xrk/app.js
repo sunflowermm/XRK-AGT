@@ -2012,14 +2012,14 @@ class APIControlCenter {
 
     _loadCodeMirror() {
         if (this._codeMirrorLoading) return this._codeMirrorLoading;
-        const base = 'https://cdn.bootcdn.net/ajax/libs/codemirror/5.65.2';
+        const base = 'https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/codemirror/5.65.2';
         const cssList = [
-            `${base}/codemirror.min.css`,
+            `${base}/lib/codemirror.min.css`,
             `${base}/theme/monokai.min.css`,
-            `${base}/addon/fold/foldgutter.min.css`
+            `${base}/addon/fold/foldgutter.css`
         ];
         const jsList = [
-            `${base}/codemirror.min.js`,
+            `${base}/lib/codemirror.min.js`,
             `${base}/mode/javascript/javascript.min.js`,
             `${base}/addon/edit/closebrackets.min.js`,
             `${base}/addon/edit/matchbrackets.min.js`,
@@ -2028,31 +2028,56 @@ class APIControlCenter {
             `${base}/addon/fold/brace-fold.min.js`
         ];
         this._codeMirrorLoading = (async () => {
-            for (const href of cssList) await this._loadCss(href);
-            for (const src of jsList) await this._loadScript(src);
-            return true;
+            try {
+                for (const href of cssList) {
+                    await this._loadCss(href);
+                }
+                for (const src of jsList) {
+                    await this._loadScript(src);
+                }
+                return true;
+            } catch (error) {
+                console.warn('CodeMirror加载失败，使用备用方案:', error);
+                return false;
+            }
         })();
         return this._codeMirrorLoading;
     }
 
     _loadScript(src) {
         return new Promise((resolve, reject) => {
+            if (document.querySelector(`script[src="${src}"]`)) {
+                return resolve(true);
+            }
             const s = document.createElement('script');
             s.src = src;
             s.async = true;
+            s.crossOrigin = 'anonymous';
+            s.referrerPolicy = 'no-referrer';
             s.onload = () => resolve(true);
-            s.onerror = () => reject(new Error('script load error'));
+            s.onerror = () => {
+                console.warn(`脚本加载失败: ${src}`);
+                reject(new Error(`script load error: ${src}`));
+            };
             document.head.appendChild(s);
         });
     }
 
     _loadCss(href) {
         return new Promise((resolve, reject) => {
+            if (document.querySelector(`link[href="${href}"]`)) {
+                return resolve(true);
+            }
             const l = document.createElement('link');
             l.rel = 'stylesheet';
             l.href = href;
+            l.crossOrigin = 'anonymous';
+            l.referrerPolicy = 'no-referrer';
             l.onload = () => resolve(true);
-            l.onerror = () => reject(new Error('css load error'));
+            l.onerror = () => {
+                console.warn(`样式加载失败: ${href}`);
+                reject(new Error(`css load error: ${href}`));
+            };
             document.head.appendChild(l);
         });
     }
@@ -3162,9 +3187,17 @@ class APIControlCenter {
                 if (this.configEditor) {
                     this.configEditor.toTextArea();
                 }
+                
                 if (typeof window.CodeMirror === 'undefined') {
                     await this._loadCodeMirror();
+                    if (typeof window.CodeMirror === 'undefined') {
+                        editorTextarea.value = jsonString;
+                        editorTextarea.disabled = false;
+                        editorTextarea.dataset.configName = configName;
+                        return;
+                    }
                 }
+                
                 const theme = document.body.classList.contains('light') ? 'default' : 'monokai';
                 this.configEditor = CodeMirror.fromTextArea(editorTextarea, {
                     mode: 'application/json',
@@ -3337,6 +3370,18 @@ class APIControlCenter {
                 if (this.configEditor) {
                     this.configEditor.toTextArea();
                 }
+                
+                if (typeof window.CodeMirror === 'undefined') {
+                    await this._loadCodeMirror();
+                    if (typeof window.CodeMirror === 'undefined') {
+                        editorTextarea.value = jsonString;
+                        editorTextarea.disabled = false;
+                        editorTextarea.dataset.configName = parentName;
+                        editorTextarea.dataset.subName = subName;
+                        return;
+                    }
+                }
+                
                 const theme = document.body.classList.contains('light') ? 'default' : 'monokai';
                 this.configEditor = CodeMirror.fromTextArea(editorTextarea, {
                     mode: 'application/json',
