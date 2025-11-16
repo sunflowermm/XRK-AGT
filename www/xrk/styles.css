@@ -74,27 +74,7 @@
 }
 
 /* ==================== 首页状态卡统一交互 ==================== */
-.status-card-large {
-    background: var(--bg-card); /* 使用统一的卡片背景色 */
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 20px;
-    padding: 18px 18px 16px;
-    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
-}
-
-/* 亮色主题：状态卡片边框和阴影 */
-body.light .status-card-large {
-    border: 1px solid rgba(230, 57, 155, 0.3);
-    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
-}
-.status-card-large:hover {
-    transform: translateY(-6px);
-    box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.4), 0 8px 15px rgba(0, 0, 0, 0.4);
-    border-color: rgba(255, 255, 255, 0.5);
-}
+/* 注意：.status-card-large 的统一样式在上面定义，这里只保留特殊样式 */
 .status-card-header h3 {
     font-size: 16px;
     letter-spacing: 0.2px;
@@ -2678,20 +2658,22 @@ body.light .json-null {
 }
 
 .bot-card {
-    background: var(--bg-card);
+    background: var(--bg-card); /* 使用统一的卡片背景色 */
     backdrop-filter: blur(15px);
     -webkit-backdrop-filter: blur(15px);
-    border: 1px solid var(--border);
+    border: 2px solid var(--border); /* 统一边框样式 */
     border-radius: var(--radius-lg);
-    padding: 24px;
-    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+    padding: 20px; /* 统一内边距 */
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4);
+    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base), background var(--transition-base);
     animation: botCardFadeIn 0.5s ease-out backwards;
     position: relative;
     overflow: hidden;
 }
 
-/* 亮色主题：机器人卡片边框和阴影 */
+/* 亮色主题：机器人卡片统一样式 */
 body.light .bot-card {
+    border: 2px solid var(--border);
     box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
@@ -2708,9 +2690,10 @@ body.light .bot-card {
 }
 
 .bot-card:hover {
-    transform: translateY(-8px);
-    box-shadow: var(--shadow-xl);
+    transform: translateY(-6px) scale(1.01); /* 统一悬停效果 */
+    box-shadow: var(--shadow-lg);
     border-color: var(--accent);
+    background: var(--bg-hover); /* 使用统一的悬停背景 */
 }
 
 .bot-card:hover::before {
@@ -3509,7 +3492,7 @@ body.no-scroll {
 /* 系统状态页面的welcome-screen特殊样式 */
 #systemStatusPage.welcome-screen {
     text-align: center;
-    padding: 40px 20px;
+    padding: 20px 12px; /* 减小内边距，充分利用屏幕 */
     padding-bottom: 60px;
     animation: welcomeFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     width: 100%;
@@ -3542,7 +3525,7 @@ body.no-scroll {
     gap: 16px; /* 缩小间距，充分利用空间 */
     max-width: 1400px;
     margin: 0 auto;
-    padding: 16px; /* 缩小内边距 */
+    padding: 8px; /* 大幅减小内边距，充分利用屏幕 */
     padding-bottom: 32px; /* 缩小底部间距 */
     text-align: left;
     width: 100%;
@@ -3550,15 +3533,17 @@ body.no-scroll {
     position: relative;
 }
 
+/* ==================== 统一卡片样式规范 ==================== */
+/* 所有卡片使用统一的样式变量，确保主题切换时样式统一 */
 .status-card-large {
-    background: rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid var(--border);
+    background: var(--bg-card); /* 使用统一的卡片背景色 */
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border: 2px solid var(--border); /* 统一边框样式 */
     border-radius: var(--radius-lg);
-    padding: 24px;
-    box-shadow: var(--shadow-md);
-    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    padding: 20px; /* 统一内边距 */
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4);
+    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base), background var(--transition-base);
     animation: cardSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
     position: relative;
     overflow: hidden;
@@ -3567,6 +3552,12 @@ body.no-scroll {
     max-width: 100%;
     box-sizing: border-box;
     min-width: 0;
+}
+
+/* 亮色主题：状态卡片统一样式 */
+body.light .status-card-large {
+    border: 2px solid var(--border);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
 .status-card-large::before {
@@ -3611,9 +3602,10 @@ body.no-scroll {
 }
 
 .status-card-large:hover {
-    transform: translateY(-8px) scale(1.02);
-    box-shadow: 0 20px 60px rgba(139, 69, 19, 0.4), 0 0 0 1px var(--accent);
+    transform: translateY(-6px) scale(1.01); /* 统一悬停效果 */
+    box-shadow: var(--shadow-lg);
     border-color: var(--accent);
+    background: var(--bg-hover); /* 使用统一的悬停背景 */
 }
 
 .status-card-header {
@@ -4205,10 +4197,10 @@ body.no-scroll {
     display: flex;
     align-items: center;
     gap: 20px;
-    padding: 24px;
+    padding: 20px; /* 统一内边距 */
     background: var(--bg-card); /* 使用统一的卡片背景色 */
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 20px;
+    border: 2px solid var(--border); /* 统一边框样式 */
+    border-radius: var(--radius-lg); /* 统一圆角 */
     margin-bottom: 16px;
     cursor: pointer;
     transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base), background var(--transition-base);
@@ -4219,9 +4211,9 @@ body.no-scroll {
     -webkit-backdrop-filter: blur(15px);
 }
 
-/* 亮色主题：配置项边框和阴影 */
+/* 亮色主题：配置项统一样式 */
 body.light .config-item {
-    border: 2px solid rgba(230, 57, 155, 0.3);
+    border: 2px solid var(--border);
     box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
@@ -4238,9 +4230,9 @@ body.light .config-item {
 }
 
 .config-item:hover {
-    background: var(--bg-hover);
+    background: var(--bg-hover); /* 使用统一的悬停背景 */
     border-color: var(--accent);
-    transform: translateY(-4px) scale(1.01);
+    transform: translateY(-6px) scale(1.01); /* 统一悬停效果 */
     box-shadow: var(--shadow-lg);
 }
 
@@ -4342,11 +4334,11 @@ body.light .config-item-desc {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 32px;
+    padding: 20px; /* 统一内边距 */
     overflow: hidden;
-    background: var(--bg-card); /* 使用统一的卡片背景色 */
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
+    background: transparent; /* 面板本身透明，让内部卡片显示 */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     min-height: 0;
     height: 100%;
     max-height: 100%;
@@ -4358,13 +4350,19 @@ body.light .config-item-desc {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 20px;
-    padding: 20px 24px;
+    padding: 20px; /* 统一内边距 */
     background: var(--bg-card); /* 使用统一的卡片背景色 */
     backdrop-filter: blur(15px);
     -webkit-backdrop-filter: blur(15px);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow-sm);
+    border-radius: var(--radius-lg); /* 统一圆角 */
+    border: 2px solid var(--border); /* 统一边框样式 */
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4); /* 统一阴影 */
+}
+
+/* 亮色主题：编辑器工具栏统一样式 */
+body.light .config-editor-toolbar {
+    border: 2px solid var(--border);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
 .config-editor-name {
@@ -4533,18 +4531,26 @@ body.light .config-item-desc {
 
 .config-form-field {
     margin-bottom: 24px;
-    padding: 20px;
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
+    padding: 20px; /* 统一内边距 */
+    background: var(--bg-card); /* 使用统一的卡片背景色 */
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border-radius: var(--radius-lg); /* 统一圆角 */
+    border: 2px solid var(--border); /* 统一边框样式 */
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4); /* 统一阴影 */
     transition: all var(--transition-base);
+}
+
+/* 亮色主题：表单字段统一样式 */
+body.light .config-form-field {
+    border: 2px solid var(--border);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
 .config-form-field:hover {
     border-color: var(--accent);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-md);
+    background: var(--bg-hover); /* 使用统一的悬停背景 */
 }
 
 .config-form-label {
@@ -4865,11 +4871,11 @@ body.light .config-item-desc {
 }
 
 .sub-config-item {
-    padding: 24px 20px; /* 增加垂直内边距，让卡片更长 */
+    padding: 20px; /* 统一内边距 */
     min-height: 140px; /* 设置最小高度，让卡片更长 */
     background: var(--bg-card); /* 使用统一的卡片背景色 */
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 20px;
+    border: 2px solid var(--border); /* 统一边框样式 */
+    border-radius: var(--radius-lg); /* 统一圆角 */
     cursor: pointer;
     transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base), background var(--transition-base);
     text-align: center;
@@ -4886,17 +4892,17 @@ body.light .config-item-desc {
     -webkit-backdrop-filter: blur(15px);
 }
 
-/* 亮色主题：子配置项边框和阴影 */
+/* 亮色主题：子配置项统一样式 */
 body.light .sub-config-item {
-    border: 2px solid rgba(230, 57, 155, 0.3);
+    border: 2px solid var(--border);
     box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
 .sub-config-item:hover {
     border-color: var(--accent);
-    transform: translateY(-4px);
+    transform: translateY(-6px) scale(1.01); /* 统一悬停效果 */
     box-shadow: var(--shadow-lg);
-    background: var(--bg-hover);
+    background: var(--bg-hover); /* 使用统一的悬停背景 */
 }
 
 /* 子配置图标 - 使用动画线条替代emoji */
