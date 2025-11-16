@@ -7,10 +7,10 @@
 :root {
     /* 粉色梦幻系深色主题 - 深紫粉色背景 */
     --bg-primary: transparent; /* 透明，让背景图可见 */
-    --bg-secondary: rgba(247, 112, 184, 0.1);
-    --bg-tertiary: rgba(140, 114, 236, 0.1);
-    --bg-card: rgba(255, 255, 255, 0.2);
-    --bg-hover: rgba(255, 255, 255, 0.3);
+    --bg-secondary: rgba(247, 112, 184, 0.15);
+    --bg-tertiary: rgba(140, 114, 236, 0.15);
+    --bg-card: rgba(30, 25, 45, 0.75); /* 暗色主题：深色卡片背景，增强对比度 */
+    --bg-hover: rgba(40, 35, 55, 0.85); /* 暗色主题：更深的悬停背景 */
     
     /* 字体颜色 - 暗色主题：亮色文字，确保在深色背景上清晰可见 */
     --text-primary: #ffffff;
@@ -75,14 +75,20 @@
 
 /* ==================== 首页状态卡统一交互 ==================== */
 .status-card-large {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--bg-card); /* 使用统一的卡片背景色 */
     border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 20px;
     padding: 18px 18px 16px;
-    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 5px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+}
+
+/* 亮色主题：状态卡片边框和阴影 */
+body.light .status-card-large {
+    border: 1px solid rgba(230, 57, 155, 0.3);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 .status-card-large:hover {
     transform: translateY(-6px);
@@ -98,10 +104,10 @@
 /* 亮色主题配色 - 粉色梦幻系亮色版，增强对比度 */
 body.light {
     --bg-primary: transparent;
-    --bg-secondary: rgba(255, 200, 230, 0.4);
-    --bg-tertiary: rgba(220, 200, 255, 0.4);
-    --bg-card: rgba(255, 255, 255, 0.7);
-    --bg-hover: rgba(255, 255, 255, 0.85);
+    --bg-secondary: rgba(255, 200, 230, 0.5);
+    --bg-tertiary: rgba(220, 200, 255, 0.5);
+    --bg-card: rgba(255, 255, 255, 0.9); /* 亮色主题：更亮的卡片背景，增强对比度 */
+    --bg-hover: rgba(255, 255, 255, 0.95); /* 亮色主题：更亮的悬停背景 */
     
     /* 亮色主题：深色文字，确保在浅色背景上清晰可见 */
     --text-primary: #1a0a1e;
@@ -203,7 +209,7 @@ body.light::before {
     height: 100vh;
     z-index: 1;
     pointer-events: none;
-    opacity: 0.6; /* 降低不透明度，让背景图更明显 */
+    opacity: 0.5; /* 降低不透明度，让背景图更明显 */
     }
 
 /* 移除冗余的sunflowerFloat动画，使用shine动画替代 */
@@ -316,6 +322,29 @@ body.light .sidebar::before {
     }
 }
 
+/* 优化动画性能 */
+@keyframes smoothFade {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes smoothScale {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 /* 删除冗余的sidebar渐变，避免遮挡背景图 */
 
 .sidebar-header {
@@ -358,8 +387,8 @@ body.light .sidebar::before {
         box-shadow: 0 5px 15px var(--accent-glow);
     }
     50% { 
-        transform: translateY(-3px) rotate(5deg);
-        box-shadow: 0 15px 30px var(--accent-glow);
+        transform: translateY(-2px) rotate(3deg);
+        box-shadow: 0 12px 25px var(--accent-glow);
     }
 }
 
@@ -381,8 +410,8 @@ body.light .sidebar::before {
         opacity: 0;
     }
     50% { 
-        transform: scale(1.2);
-        opacity: 0.3;
+        transform: scale(1.15);
+        opacity: 0.25;
     }
 }
 
@@ -795,15 +824,17 @@ body.light .theme-toggle-thumb::before {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    /* 背景图只在主内容区域显示 */
+    /* 背景图只在主内容区域显示，确保充满整个区域 */
     background-image: url('./img/bg.png');
     background-size: cover;
-    background-position: center;
+    background-position: center center;
     background-attachment: fixed;
     background-repeat: no-repeat;
     position: relative;
     /* 确保背景图在遮罩层之上 */
     z-index: 1;
+    /* 确保背景图覆盖整个区域 */
+    min-height: 100vh;
 }
 
 /* 主内容区域的背景遮罩，让文字更清晰 */
@@ -1085,7 +1116,7 @@ body.light .header::before {
 @keyframes welcomeFadeIn {
     from { 
         opacity: 0; 
-        transform: translateY(30px) scale(0.95); 
+        transform: translateY(20px) scale(0.98); 
     }
     to { 
         opacity: 1; 
@@ -1105,10 +1136,10 @@ body.light .header::before {
         transform: translateY(0) rotate(0deg) scale(1); 
     }
     25% { 
-        transform: translateY(-10px) rotate(-5deg) scale(1.05); 
+        transform: translateY(-8px) rotate(-3deg) scale(1.03); 
     }
     75% { 
-        transform: translateY(-5px) rotate(5deg) scale(1.02); 
+        transform: translateY(-4px) rotate(3deg) scale(1.01); 
     }
 }
 
@@ -2795,23 +2826,30 @@ body.light .json-null {
     to { transform: rotate(360deg); }
 }
 
-/* Toast通知 */
+/* Toast通知 - 在主内容区域居中显示 */
 #toastContainer {
     position: fixed;
     bottom: 32px;
-    right: 32px;
-    left: 32px;
-    max-width: 420px;
+    left: var(--sidebar-width); /* 从侧边栏右侧开始 */
+    right: 0; /* 到屏幕右边缘 */
+    max-width: 500px;
     margin: 0 auto;
     pointer-events: none;
     z-index: 10000;
+    /* 确保在主内容区域内居中 */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 32px;
+    box-sizing: border-box;
 }
 
 .toast {
     padding: 18px 24px;
-    background: rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: var(--bg-card); /* 使用统一的卡片背景色 */
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     color: var(--text-primary);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-xl);
@@ -2823,18 +2861,20 @@ body.light .json-null {
     gap: 14px;
     border-left: 4px solid var(--border);
     pointer-events: auto;
-    animation: toastSlideIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     transition: all var(--transition-base);
-    opacity: 0;
+    opacity: 1; /* 初始状态可见 */
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 @keyframes toastSlideIn {
     from {
-        transform: translateX(100%);
+        transform: translateY(20px) scale(0.95);
         opacity: 0;
     }
     to {
-        transform: translateX(0);
+        transform: translateY(0) scale(1);
         opacity: 1;
     }
 }
@@ -2845,11 +2885,11 @@ body.light .json-null {
 
 @keyframes toastSlideOut {
     from {
-        transform: translateX(0);
+        transform: translateY(0) scale(1);
         opacity: 1;
     }
     to {
-        transform: translateX(100%);
+        transform: translateY(20px) scale(0.95);
         opacity: 0;
     }
 }
@@ -3016,6 +3056,7 @@ body.light .json-null {
         background-size: cover;
         background-position: center center;
         background-attachment: scroll; /* 移动端不使用fixed，避免性能问题 */
+        min-height: 100vh; /* 确保背景图覆盖整个屏幕 */
     }
 
     .header {
@@ -3066,8 +3107,11 @@ body.light .json-null {
 
     #toastContainer {
         bottom: 120px;
-        right: 20px;
-        left: 20px;
+        left: 0; /* 移动端：从屏幕左边缘开始 */
+        right: 0; /* 移动端：到屏幕右边缘 */
+        max-width: 100%;
+        padding: 0 20px;
+        align-items: center;
     }
 
     .CodeMirror {
@@ -3309,6 +3353,27 @@ body.light .json-null {
     
     .status-card-content {
         text-align: center;
+    }
+    
+    /* 手机端标题缩小，给操作区更多空间 */
+    .welcome-title {
+        font-size: clamp(24px, 4vw, 32px); /* 缩小标题 */
+        margin-bottom: 12px; /* 减少底部间距 */
+    }
+    
+    .welcome-desc {
+        font-size: 16px; /* 缩小描述文字 */
+        margin-bottom: 24px; /* 减少底部间距 */
+    }
+    
+    .system-status-header h1 {
+        font-size: clamp(24px, 4vw, 32px); /* 缩小系统状态标题 */
+        margin-bottom: 16px; /* 减少底部间距 */
+    }
+    
+    .system-status-header p {
+        font-size: 14px; /* 缩小描述文字 */
+        margin-bottom: 20px; /* 减少底部间距 */
     }
     
     /* 文字颜色优化，确保可见性 */
@@ -4108,7 +4173,7 @@ body.no-scroll {
     align-items: center;
     gap: 20px;
     padding: 24px;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--bg-card); /* 使用统一的卡片背景色 */
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-radius: 20px;
     margin-bottom: 16px;
@@ -4116,9 +4181,15 @@ body.no-scroll {
     transition: all var(--transition-base);
     position: relative;
     overflow: hidden;
-    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.2), 0 4px 5px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+}
+
+/* 亮色主题：配置项边框和阴影 */
+body.light .config-item {
+    border: 2px solid rgba(230, 57, 155, 0.3);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
 .config-item::before {
@@ -4167,7 +4238,13 @@ body.no-scroll {
     display: flex;
     align-items: center;
     gap: 8px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    /* 暗色主题：深色阴影增强可读性 */
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* 亮色主题：浅色阴影增强可读性 */
+body.light .config-item-name {
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
 .config-badge {
@@ -4184,9 +4261,15 @@ body.no-scroll {
 .config-item-desc {
     font-size: 14px;
     color: var(--text-primary);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    /* 暗色主题：深色阴影增强可读性 */
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
     margin-bottom: 6px;
     line-height: 1.5;
+}
+
+/* 亮色主题：浅色阴影增强可读性 */
+body.light .config-item-desc {
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
 .config-item-path {
@@ -4228,9 +4311,9 @@ body.no-scroll {
     flex-direction: column;
     padding: 32px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: var(--bg-card); /* 使用统一的卡片背景色 */
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     min-height: 0;
     height: 100%;
     max-height: 100%;
@@ -4243,9 +4326,9 @@ body.no-scroll {
     justify-content: space-between;
     margin-bottom: 20px;
     padding: 20px 24px;
-    background: rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: var(--bg-card); /* 使用统一的卡片背景色 */
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-sm);
@@ -4749,8 +4832,9 @@ body.no-scroll {
 }
 
 .sub-config-item {
-    padding: 20px;
-    background: rgba(255, 255, 255, 0.2);
+    padding: 24px 20px; /* 增加垂直内边距，让卡片更长 */
+    min-height: 140px; /* 设置最小高度，让卡片更长 */
+    background: var(--bg-card); /* 使用统一的卡片背景色 */
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-radius: 20px;
     cursor: pointer;
@@ -4764,9 +4848,15 @@ body.no-scroll {
     justify-content: center;
     gap: 12px;
     box-sizing: border-box;
-    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.2), 0 4px 5px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+}
+
+/* 亮色主题：子配置项边框和阴影 */
+body.light .sub-config-item {
+    border: 2px solid rgba(230, 57, 155, 0.3);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
 .sub-config-item:hover {
@@ -4828,14 +4918,27 @@ body.no-scroll {
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 6px;
+    /* 暗色主题：深色阴影增强可读性 */
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* 亮色主题：浅色阴影增强可读性 */
+body.light .sub-config-name {
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
 .sub-config-desc {
     font-size: 13px;
     color: var(--text-primary);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    /* 暗色主题：深色阴影增强可读性 */
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
     margin-bottom: 4px;
     line-height: 1.4;
+}
+
+/* 亮色主题：浅色阴影增强可读性 */
+body.light .sub-config-desc {
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
 .sub-config-path {
