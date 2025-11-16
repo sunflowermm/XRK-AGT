@@ -3099,7 +3099,7 @@ body.light .bot-card {
     }
 
     .content {
-        padding: 20px;
+        padding: 12px; /* 减小内边距，充分利用屏幕 */
         padding-bottom: 120px;
     }
 
@@ -3141,7 +3141,7 @@ body.light .bot-card {
 
     .welcome-screen {
         min-height: calc(100vh - 120px);
-        padding: 30px 20px;
+        padding: 20px 12px; /* 减小内边距，充分利用屏幕 */
     }
 
     /* 配置编辑器移动端优化 */
@@ -3169,29 +3169,39 @@ body.light .bot-card {
 
     .config-editor-toolbar {
         flex-direction: column;
-        gap: 12px;
+        gap: 8px; /* 减小间距 */
         align-items: stretch;
-        padding: 16px;
+        padding: 10px 12px; /* 进一步减小内边距，缩小工具栏卡片 */
+        margin-bottom: 12px; /* 减小底部间距 */
+    }
+
+    .config-editor-name {
+        font-size: 16px; /* 缩小字体 */
+        margin-bottom: 0;
     }
 
     .config-editor-actions {
         width: 100%;
         flex-wrap: wrap;
+        gap: 8px; /* 减小按钮间距 */
     }
 
     .config-editor-actions .btn {
         flex: 1;
-        min-width: 100px;
+        min-width: 80px; /* 减小最小宽度 */
+        padding: 8px 12px; /* 减小按钮内边距 */
+        font-size: 13px; /* 减小字体 */
     }
 
     .config-editor-content {
         padding: 12px;
+        padding-bottom: 100px; /* 大幅增加底部内边距，确保最底下的配置可以操作 */
         min-height: 0;
     }
 
     .config-form-scroll {
         padding: 12px;
-        padding-bottom: 30px; /* 移动端也增加底部内边距 */
+        padding-bottom: 120px; /* 大幅增加底部内边距，确保最底下的配置可以操作 */
     }
     
     .sub-config-list-scroll {
@@ -3224,6 +3234,7 @@ body.light .bot-card {
 
     .config-list-panel {
         padding: 16px;
+        padding-bottom: 100px; /* 大幅增加底部内边距，扩大可操作区域 */
     }
 
     .config-item {
@@ -3231,6 +3242,7 @@ body.light .bot-card {
         flex-direction: column;
         align-items: flex-start;
         gap: 12px;
+        margin-bottom: 20px; /* 增加卡片之间的间距 */
     }
 
     .config-item-actions {
@@ -3240,13 +3252,13 @@ body.light .bot-card {
 
     .sub-config-list-scroll {
         padding: 12px;
-        padding-bottom: 60px; /* 移动端也大幅增加底部内边距 */
+        padding-bottom: 100px; /* 大幅增加底部内边距，扩大可操作区域 */
     }
     .sub-config-list {
         grid-template-columns: 1fr;
         gap: 12px;
         padding: 16px;
-        padding-bottom: 16px; /* 确保底部有足够空间 */
+        padding-bottom: 100px; /* 大幅增加底部内边距，确保有足够空间 */
     }
 }
 
@@ -3358,7 +3370,7 @@ body.light .bot-card {
         flex-direction: column;
         align-items: center;
         gap: 16px;
-        padding: 16px;
+        padding: 8px; /* 减小内边距，充分利用屏幕 */
     }
     
     .status-card-large {

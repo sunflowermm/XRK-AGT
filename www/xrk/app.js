@@ -3167,10 +3167,18 @@ class APIControlCenter {
             `;
             }).join('');
 
+            // 使用事件委托，确保事件绑定可靠
             panel.querySelectorAll('[data-action="edit"]').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const configName = btn.dataset.configName;
-                    this.editConfig(configName);
+                // 先移除可能存在的旧事件监听器
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+                // 绑定新的事件监听器
+                newBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const configName = newBtn.dataset.configName;
+                    if (configName) {
+                        this.editConfig(configName);
+                    }
                 });
             });
         } catch (error) {
@@ -3809,14 +3817,58 @@ class APIControlCenter {
             }
             
             // 重置编辑器面板内容，避免嵌套问题
-            editorPanel.innerHTML = '';
+            // 但保留基本结构，以便后续重新使用
+            editorPanel.innerHTML = `
+                <div class="config-editor-toolbar">
+                    <div class="config-editor-name" id="configEditorName"></div>
+                    <div class="config-editor-actions">
+                        <button class="btn btn-secondary" id="saveConfigBtn">
+                            <span class="btn-icon">保存</span>
+                        </button>
+                        <button class="btn btn-secondary" id="validateConfigBtn">
+                            <span class="btn-icon">验证</span>
+                        </button>
+                        <button class="btn btn-secondary" id="backConfigBtn">
+                            <span class="btn-icon">返回</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="config-editor-content">
+                    <textarea id="configEditorTextarea" class="config-editor-textarea"></textarea>
+                </div>
+            `;
+            
+            // 重新绑定按钮事件，确保事件监听器正确
+            const saveBtn = document.getElementById('saveConfigBtn');
+            const validateBtn = document.getElementById('validateConfigBtn');
+            const backBtn = document.getElementById('backConfigBtn');
+            
+            if (saveBtn) {
+                // 移除旧的事件监听器（如果有）
+                const newSaveBtn = saveBtn.cloneNode(true);
+                saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+                newSaveBtn.addEventListener('click', () => this.saveConfig());
+            }
+            if (validateBtn) {
+                const newValidateBtn = validateBtn.cloneNode(true);
+                validateBtn.parentNode.replaceChild(newValidateBtn, validateBtn);
+                newValidateBtn.addEventListener('click', () => this.validateConfig());
+            }
+            if (backBtn) {
+                const newBackBtn = backBtn.cloneNode(true);
+                backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+                newBackBtn.addEventListener('click', () => this.backToConfigList());
+            }
+            
             editorPanel.style.display = 'none';
             
             // 显示列表面板
             listPanel.style.display = 'block';
             
-            // 重新加载配置列表，确保状态正确
-            this.loadConfigList();
+            // 重新加载配置列表，确保状态正确和事件绑定
+            this.loadConfigList().catch(err => {
+                console.error('重新加载配置列表失败:', err);
+            });
         }
     }
 
