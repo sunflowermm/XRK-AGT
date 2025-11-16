@@ -3338,6 +3338,9 @@ class APIControlCenter {
                 if (this.configEditor) {
                     this.configEditor.toTextArea();
                 }
+                if (typeof window.CodeMirror === 'undefined') {
+                    await this._loadCodeMirror();
+                }
                 const theme = document.body.classList.contains('light') ? 'default' : 'monokai';
                 this.configEditor = CodeMirror.fromTextArea(editorTextarea, {
                     mode: 'application/json',

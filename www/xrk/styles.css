@@ -1222,6 +1222,14 @@ body.light .theme-toggle-thumb::before {
     animation: tagFadeIn 0.2s ease-out;
 }
 
+.config-form-tag-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
 @keyframes tagFadeIn {
     from { 
         opacity: 0; 
@@ -1826,6 +1834,235 @@ body.light .theme-toggle-thumb::before {
 .config-form-array-add {
     margin-top: var(--space-sm);
     width: 100%;
+}
+
+/* ==================== 子配置列表样式 ==================== */
+.sub-config-list-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-lg);
+}
+
+.sub-config-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.sub-config-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-base);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    animation: itemSlideIn 0.3s ease-out backwards;
+}
+
+.sub-config-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--gradient-primary);
+    transform: scaleY(0);
+    transition: transform var(--transition-base);
+}
+
+.sub-config-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-purple);
+    transform: translateX(4px);
+    box-shadow: var(--shadow-sm);
+}
+
+.sub-config-item:hover::before {
+    transform: scaleY(1);
+}
+
+.sub-config-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
+}
+
+.sub-config-item:hover .sub-config-icon {
+    transform: scale(1.1) rotate(5deg);
+    box-shadow: var(--shadow-md);
+}
+
+.sub-config-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.sub-config-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-xs);
+    letter-spacing: -0.3px;
+}
+
+.sub-config-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-xs);
+    line-height: 1.5;
+}
+
+.sub-config-path {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    word-break: break-all;
+}
+
+/* ==================== 配置项样式 ==================== */
+.config-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-base);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    animation: itemSlideIn 0.3s ease-out backwards;
+}
+
+.config-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--gradient-primary);
+    transform: scaleY(0);
+    transition: transform var(--transition-base);
+}
+
+.config-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-purple);
+    transform: translateX(4px);
+    box-shadow: var(--shadow-sm);
+}
+
+.config-item:hover::before {
+    transform: scaleY(1);
+}
+
+.config-item.active {
+    background: var(--bg-overlay);
+    border-color: var(--accent-purple);
+    box-shadow: var(--shadow-sm);
+}
+
+.config-item.active::before {
+    transform: scaleY(1);
+}
+
+.config-item-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
+}
+
+.config-item:hover .config-item-icon {
+    transform: scale(1.1) rotate(5deg);
+    box-shadow: var(--shadow-md);
+}
+
+.config-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.config-item-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-xs);
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.config-item-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-xs);
+    line-height: 1.5;
+}
+
+.config-item-path {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    word-break: break-all;
+}
+
+.config-item-actions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.config-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--accent-purple);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: var(--shadow-sm);
+}
+
+/* ==================== 按钮图标样式 ==================== */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/* ==================== 配置编辑器控制按钮 ==================== */
+.config-editor-controls {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
 }
 
 /* ==================== 响应式设计 ==================== */
