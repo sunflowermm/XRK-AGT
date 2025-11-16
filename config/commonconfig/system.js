@@ -3,7 +3,6 @@ import ConfigBase from '../../lib/commonconfig/commonconfig.js';
 /**
  * 系统配置管理
  * 管理所有系统级配置文件
- * 适配新版配置文件和 bot.js，提供更丰富的组件支持
  */
 export default class SystemConfig extends ConfigBase {
   constructor() {
@@ -11,12 +10,14 @@ export default class SystemConfig extends ConfigBase {
       name: 'system',
       displayName: '系统配置',
       description: 'XRK-AGT 系统配置管理',
-      filePath: '',
+      filePath: '', // 系统配置管理多个文件，此处留空
       fileType: 'yaml'
     });
 
+    // 辅助函数：生成基于端口的动态路径
     const getConfigPath = (configName) => {
       return (cfg) => {
+        // 从 cfg 获取端口，路径格式：data/server_bots/{port}/{name}.yaml
         const port = cfg?._port || cfg?.server?.server?.port || 8086;
         return port ? `data/server_bots/${port}/${configName}.yaml` : `config/config/${configName}.yaml`;
       };
@@ -412,39 +413,20 @@ export default class SystemConfig extends ConfigBase {
                 tls: {
                   type: 'object',
                   label: 'TLS配置',
-                  description: '传输层安全配置，支持HTTP/2和现代加密套件',
                   component: 'SubForm',
                   fields: {
                     minVersion: {
                       type: 'string',
                       label: '最低TLS版本',
-                      description: '推荐使用 TLSv1.2 或更高版本',
                       enum: ['TLSv1.0', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3'],
                       default: 'TLSv1.2',
-                      component: 'Select'
-                    },
-                    maxVersion: {
-                      type: 'string',
-                      label: '最高TLS版本',
-                      description: '留空则不限制最高版本',
-                      enum: ['', 'TLSv1.2', 'TLSv1.3'],
-                      default: '',
                       component: 'Select'
                     },
                     http2: {
                       type: 'boolean',
                       label: '启用HTTP/2',
-                      description: '启用后将使用HTTP/2协议，自动回退到HTTP/1.1（如果不可用）',
                       default: true,
                       component: 'Switch'
-                    },
-                    ciphers: {
-                      type: 'string',
-                      label: '加密套件',
-                      description: '自定义TLS加密套件（留空使用默认安全套件）',
-                      default: '',
-                      component: 'TextArea',
-                      placeholder: '例如: ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256'
                     }
                   }
                 },
@@ -486,69 +468,38 @@ export default class SystemConfig extends ConfigBase {
             static: {
               type: 'object',
               label: '静态文件服务',
-              description: '静态文件缓存和索引配置',
               component: 'SubForm',
               fields: {
                 index: {
                   type: 'array',
                   label: '默认首页文件',
-                  description: '按顺序查找，返回第一个存在的文件',
                   itemType: 'string',
                   default: ['index.html', 'index.htm', 'default.html'],
-                  component: 'Tags',
-                  suggestions: ['index.html', 'index.htm', 'default.html', 'index.php']
+                  component: 'Tags'
                 },
                 extensions: {
                   type: 'boolean',
                   label: '自动添加扩展名',
-                  description: '例如：访问 /page 会自动尝试 /page.html',
                   default: false,
                   component: 'Switch'
                 },
                 cacheTime: {
                   type: 'string',
                   label: '缓存时间',
-                  description: '支持格式：1d = 1天, 1h = 1小时, 1w = 1周',
+                  description: '支持格式：1d = 1天, 1h = 1小时',
                   default: '1d',
-                  component: 'Input',
-                  placeholder: '例如: 1d, 7d, 30d'
-                },
-                cache: {
-                  type: 'object',
-                  label: '缓存配置',
-                  description: '不同文件类型的缓存时间',
-                  component: 'SubForm',
-                  fields: {
-                    static: {
-                      type: 'number',
-                      label: '静态资源缓存',
-                      description: 'CSS/JS文件缓存时间（秒）',
-                      min: 0,
-                      default: 86400,
-                      component: 'InputNumber'
-                    },
-                    images: {
-                      type: 'number',
-                      label: '图片文件缓存',
-                      description: '图片文件缓存时间（秒）',
-                      min: 0,
-                      default: 604800,
-                      component: 'InputNumber'
-                    }
-                  }
+                  component: 'Input'
                 }
               }
             },
             security: {
               type: 'object',
               label: '安全配置',
-              description: '安全头部和文件访问控制',
               component: 'SubForm',
               fields: {
                 helmet: {
                   type: 'object',
                   label: 'Helmet安全头',
-                  description: '自动添加安全相关的HTTP头部',
                   component: 'SubForm',
                   fields: {
                     enabled: {
@@ -559,58 +510,18 @@ export default class SystemConfig extends ConfigBase {
                     }
                   }
                 },
-                hsts: {
-                  type: 'object',
-                  label: 'HSTS配置',
-                  description: 'HTTP严格传输安全（需要HTTPS启用）',
-                  component: 'SubForm',
-                  fields: {
-                    enabled: {
-                      type: 'boolean',
-                      label: '启用HSTS',
-                      description: '启用后所有HTTP请求将强制重定向到HTTPS',
-                      default: false,
-                      component: 'Switch'
-                    },
-                    maxAge: {
-                      type: 'number',
-                      label: '有效期',
-                      description: '有效期（秒），31536000 = 1年',
-                      min: 0,
-                      max: 63072000,
-                      default: 31536000,
-                      component: 'InputNumber'
-                    },
-                    includeSubDomains: {
-                      type: 'boolean',
-                      label: '包含子域名',
-                      default: true,
-                      component: 'Switch'
-                    },
-                    preload: {
-                      type: 'boolean',
-                      label: '允许预加载',
-                      description: '需要提交到浏览器预加载列表',
-                      default: false,
-                      component: 'Switch'
-                    }
-                  }
-                },
                 hiddenFiles: {
                   type: 'array',
                   label: '隐藏文件模式',
-                  description: '匹配这些模式的文件将返回404。注意：不会影响 /api/* 路径',
                   itemType: 'string',
-                  default: ['^\\..*', 'node_modules', '\\.git', '\\.env', '^/config/', '^/private/'],
-                  component: 'Tags',
-                  suggestions: ['^\\..*', 'node_modules', '\\.git', '\\.env', '^/config/', '^/private/']
+                  default: ['^\\..*', 'node_modules', '\\.git', '\\.env', 'config/', 'private/'],
+                  component: 'Tags'
                 }
               }
             },
             cors: {
               type: 'object',
               label: 'CORS配置',
-              description: '跨域资源共享配置，适配最新HTTP生态',
               component: 'SubForm',
               fields: {
                 enabled: {
@@ -622,7 +533,6 @@ export default class SystemConfig extends ConfigBase {
                 origins: {
                   type: 'array',
                   label: '允许的来源',
-                  description: '使用 * 允许所有来源（不安全），建议使用具体域名',
                   itemType: 'string',
                   default: ['*'],
                   component: 'Tags'
@@ -630,34 +540,28 @@ export default class SystemConfig extends ConfigBase {
                 methods: {
                   type: 'array',
                   label: '允许的方法',
-                  description: '支持的HTTP方法，包括预检请求（OPTIONS）',
                   itemType: 'string',
-                  default: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
-                  component: 'Tags',
-                  suggestions: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD']
+                  default: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+                  component: 'MultiSelect'
                 },
                 headers: {
                   type: 'array',
                   label: '允许的请求头',
-                  description: '支持的标准请求头和自定义请求头',
                   itemType: 'string',
-                  default: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Requested-With'],
-                  component: 'Tags',
-                  suggestions: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Requested-With', 'Accept', 'Origin']
+                  default: ['Content-Type', 'Authorization', 'X-API-Key'],
+                  component: 'Tags'
                 },
                 credentials: {
                   type: 'boolean',
                   label: '允许凭证',
-                  description: '允许携带 cookies 和认证信息',
                   default: false,
                   component: 'Switch'
                 },
                 maxAge: {
                   type: 'number',
                   label: '预检缓存时间',
-                  description: '预检请求（OPTIONS）缓存时间（秒），86400 = 1天',
+                  description: '预检请求缓存时间（秒）',
                   min: 0,
-                  max: 31536000,
                   default: 86400,
                   component: 'InputNumber'
                 }
@@ -666,13 +570,11 @@ export default class SystemConfig extends ConfigBase {
             auth: {
               type: 'object',
               label: '认证配置',
-              description: 'API密钥认证和白名单配置，采用nginx风格的location匹配',
               component: 'SubForm',
               fields: {
                 apiKey: {
                   type: 'object',
                   label: 'API密钥配置',
-                  description: '使用 X-API-Key 请求头或 api_key 参数进行认证',
                   component: 'SubForm',
                   fields: {
                     enabled: {
@@ -684,14 +586,12 @@ export default class SystemConfig extends ConfigBase {
                     file: {
                       type: 'string',
                       label: '密钥存储文件',
-                      description: 'API密钥存储位置（相对于项目根目录）',
                       default: 'config/server_config/api_key.json',
                       component: 'Input'
                     },
                     length: {
                       type: 'number',
                       label: '密钥长度',
-                      description: '生成的API密钥长度（字符数）',
                       min: 16,
                       max: 128,
                       default: 64,
@@ -702,11 +602,9 @@ export default class SystemConfig extends ConfigBase {
                 whitelist: {
                   type: 'array',
                   label: '白名单路径',
-                  description: '无需认证即可访问的路径。支持精确匹配和通配符（*）',
                   itemType: 'string',
                   default: ['/', '/favicon.ico', '/health', '/status', '/robots.txt', '/xrk', '/media/*', '/uploads/*'],
-                  component: 'Tags',
-                  suggestions: ['/', '/favicon.ico', '/health', '/status', '/robots.txt', '/xrk', '/media/*', '/uploads/*', '/api/public/*']
+                  component: 'Tags'
                 }
               }
             },
@@ -1352,6 +1250,7 @@ export default class SystemConfig extends ConfigBase {
    * @returns {Promise<Object>}
    */
   async read(name) {
+    // 如果没有提供子配置名称，返回配置列表信息
     if (!name) {
       return {
         name: this.name,
@@ -1361,6 +1260,7 @@ export default class SystemConfig extends ConfigBase {
       };
     }
     
+    // 读取指定的子配置
     const instance = this.getConfigInstance(name);
     return await instance.read();
   }
@@ -1376,7 +1276,6 @@ export default class SystemConfig extends ConfigBase {
     if (!name) {
       throw new Error('SystemConfig 写入需要指定子配置名称');
     }
-    
     const instance = this.getConfigInstance(name);
     return await instance.write(data, options);
   }
@@ -1388,10 +1287,6 @@ export default class SystemConfig extends ConfigBase {
    * @returns {Promise<any>}
    */
   async get(name, keyPath) {
-    if (!name || !keyPath) {
-      throw new Error('get 方法需要配置名称和键路径');
-    }
-    
     const instance = this.getConfigInstance(name);
     return await instance.get(keyPath);
   }
@@ -1405,10 +1300,6 @@ export default class SystemConfig extends ConfigBase {
    * @returns {Promise<boolean>}
    */
   async set(name, keyPath, value, options = {}) {
-    if (!name || !keyPath) {
-      throw new Error('set 方法需要配置名称和键路径');
-    }
-    
     const instance = this.getConfigInstance(name);
     return await instance.set(keyPath, value, options);
   }
@@ -1427,13 +1318,8 @@ export default class SystemConfig extends ConfigBase {
 
     for (const [name, meta] of Object.entries(this.configFiles)) {
       structure.configs[name] = {
-        name: meta.name || name,
-        displayName: meta.displayName,
-        description: meta.description,
-        filePath: meta.filePath,
-        fileType: meta.fileType,
-        fields: meta.schema?.fields || {},
-        required: meta.schema?.required || []
+        ...meta,
+        fields: meta.schema?.fields || {}
       };
     }
 
@@ -1446,46 +1332,11 @@ export default class SystemConfig extends ConfigBase {
    */
   getConfigList() {
     return Object.entries(this.configFiles).map(([name, meta]) => ({
-      name: meta.name || name,
+      name,
       displayName: meta.displayName,
       description: meta.description,
       filePath: meta.filePath,
-      fileType: meta.fileType,
-      hasSchema: !!meta.schema,
-      fieldCount: meta.schema?.fields ? Object.keys(meta.schema.fields).length : 0
+      fileType: meta.fileType
     }));
-  }
-
-  /**
-   * 验证配置数据
-   * @param {string} name - 配置名称
-   * @param {Object} data - 配置数据
-   * @returns {Object} { valid: boolean, errors: Array }
-   */
-  validateConfig(name, data) {
-    const configMeta = this.configFiles[name];
-    if (!configMeta) {
-      return { valid: false, errors: [`未知的配置: ${name}`] };
-    }
-
-    const schema = configMeta.schema;
-    if (!schema) {
-      return { valid: true, errors: [] };
-    }
-
-    const errors = [];
-    const required = schema.required || [];
-
-    for (const field of required) {
-      if (!(field in data) || data[field] === null || data[field] === undefined) {
-        const fieldSchema = schema.fields?.[field];
-        errors.push(`必填字段缺失: ${fieldSchema?.label || field}`);
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors
-    };
   }
 }
