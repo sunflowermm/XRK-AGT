@@ -2012,14 +2012,15 @@ class APIControlCenter {
 
     _loadCodeMirror() {
         if (this._codeMirrorLoading) return this._codeMirrorLoading;
-        const base = 'https://cdn.bootcdn.net/ajax/libs/codemirror/5.65.2';
+        // 使用 jsdelivr CDN，国内访问更稳定
+        const base = 'https://cdn.jsdelivr.net/npm/codemirror@5.65.2';
         const cssList = [
-            `${base}/codemirror.min.css`,
+            `${base}/lib/codemirror.min.css`,
             `${base}/theme/monokai.min.css`,
-            `${base}/addon/fold/foldgutter.min.css`
+            `${base}/addon/fold/foldgutter.css`
         ];
         const jsList = [
-            `${base}/codemirror.min.js`,
+            `${base}/lib/codemirror.min.js`,
             `${base}/mode/javascript/javascript.min.js`,
             `${base}/addon/edit/closebrackets.min.js`,
             `${base}/addon/edit/matchbrackets.min.js`,
