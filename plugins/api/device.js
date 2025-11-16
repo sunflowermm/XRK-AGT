@@ -1375,27 +1375,29 @@ export default {
 
     ws: {
         device: [
-            (ws, req, Bot) => {
+            // WebSocket 处理器签名: (conn, req, bot, socket, head)
+            // 其中 conn 是 WebSocket 连接对象，等同于原来的 ws
+            (conn, req, bot, socket, head) => {
                 BotUtil.makeLog('info',
                     `🔌 [WebSocket] 新连接: ${req.socket.remoteAddress}`,
                     'DeviceManager'
                 );
 
-                ws.on('message', msg => {
+                conn.on('message', msg => {
                     try {
                         const data = JSON.parse(msg);
-                        deviceManager.processWebSocketMessage(ws, data, Bot);
+                        deviceManager.processWebSocketMessage(conn, data, bot);
                     } catch (e) {
                         BotUtil.makeLog('error',
                             `❌ [WebSocket] 消息解析失败: ${e.message}`,
-                            ws.device_id
+                            conn.device_id
                         );
                     }
                 });
 
-                ws.on('close', () => {
-                    if (ws.device_id) {
-                        deviceManager.handleDeviceDisconnect(ws.device_id, ws);
+                conn.on('close', () => {
+                    if (conn.device_id) {
+                        deviceManager.handleDeviceDisconnect(conn.device_id, conn);
                     } else {
                         BotUtil.makeLog('info',
                             `✓ [WebSocket] 连接关闭: ${req.socket.remoteAddress}`,
@@ -1404,10 +1406,10 @@ export default {
                     }
                 });
 
-                ws.on('error', (e) => {
+                conn.on('error', (e) => {
                     BotUtil.makeLog('error',
                         `❌ [WebSocket] 错误: ${e.message}`,
-                        ws.device_id || 'unknown'
+                        conn.device_id || 'unknown'
                     );
                 });
             }

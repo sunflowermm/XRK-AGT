@@ -1483,8 +1483,9 @@ class APIControlCenter {
         let height = canvas.height = window.innerHeight;
         const dpi = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
         function resize() {
-            width = canvas.clientWidth = window.innerWidth;
-            height = canvas.clientHeight = window.innerHeight;
+            // clientWidth 和 clientHeight 是只读属性，不能直接赋值
+            width = window.innerWidth;
+            height = window.innerHeight;
             canvas.width = Math.floor(width * dpi);
             canvas.height = Math.floor(height * dpi);
             ctx.setTransform(dpi, 0, 0, dpi, 0, 0);
