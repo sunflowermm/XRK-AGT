@@ -12,11 +12,11 @@
     --bg-card: rgba(255, 255, 255, 0.2);
     --bg-hover: rgba(255, 255, 255, 0.3);
     
-    /* 字体颜色 - 在粉色背景下清晰可见 */
+    /* 字体颜色 - 暗色主题：亮色文字，确保在深色背景上清晰可见 */
     --text-primary: #ffffff;
-    --text-secondary: rgba(255, 255, 255, 0.9);
-    --text-muted: rgba(255, 255, 255, 0.7);
-    --text-dim: rgba(255, 255, 255, 0.5);
+    --text-secondary: rgba(255, 255, 255, 0.95);
+    --text-muted: rgba(255, 255, 255, 0.8);
+    --text-dim: rgba(255, 255, 255, 0.65);
     
     /* 粉色梦幻系主色调 */
     --accent: #ff67b8;
@@ -95,31 +95,32 @@
 }
 .status-card-content { margin-top: 10px; }
 
-/* 亮色主题配色 - 粉色梦幻系亮色版 */
+/* 亮色主题配色 - 粉色梦幻系亮色版，增强对比度 */
 body.light {
     --bg-primary: transparent;
-    --bg-secondary: rgba(255, 182, 218, 0.2);
-    --bg-tertiary: rgba(200, 181, 255, 0.2);
-    --bg-card: rgba(255, 255, 255, 0.4);
-    --bg-hover: rgba(255, 255, 255, 0.5);
+    --bg-secondary: rgba(255, 200, 230, 0.4);
+    --bg-tertiary: rgba(220, 200, 255, 0.4);
+    --bg-card: rgba(255, 255, 255, 0.7);
+    --bg-hover: rgba(255, 255, 255, 0.85);
     
-    --text-primary: #1a1a2e;
-    --text-secondary: #2d2d44;
-    --text-muted: #4a4a6a;
-    --text-dim: #6a6a8a;
+    /* 亮色主题：深色文字，确保在浅色背景上清晰可见 */
+    --text-primary: #1a0a1e;
+    --text-secondary: #2d1a2e;
+    --text-muted: #4a2a4a;
+    --text-dim: #6a4a6a;
     
-    --accent: #ff67b8;
-    --accent-hover: #ff4da6;
-    --accent-light: rgba(255, 103, 184, 0.2);
-    --accent-glow: rgba(255, 103, 184, 0.4);
+    --accent: #e6399b;
+    --accent-hover: #d12a8a;
+    --accent-light: rgba(230, 57, 155, 0.25);
+    --accent-glow: rgba(230, 57, 155, 0.5);
     
-    --border: rgba(255, 103, 184, 0.3);
-    --border-light: rgba(255, 103, 184, 0.15);
+    --border: rgba(230, 57, 155, 0.4);
+    --border-light: rgba(230, 57, 155, 0.2);
     
-    --shadow-sm: 0 2px 8px rgba(255, 103, 184, 0.15);
-    --shadow-md: 0 4px 20px rgba(255, 103, 184, 0.2);
-    --shadow-lg: 0 10px 40px rgba(255, 103, 184, 0.25);
-    --shadow-xl: 0 20px 60px rgba(255, 103, 184, 0.3);
+    --shadow-sm: 0 2px 8px rgba(230, 57, 155, 0.2);
+    --shadow-md: 0 4px 20px rgba(230, 57, 155, 0.3);
+    --shadow-lg: 0 10px 40px rgba(230, 57, 155, 0.35);
+    --shadow-xl: 0 20px 60px rgba(230, 57, 155, 0.4);
 }
 
 /* ==================== 基础重置 ==================== */
@@ -144,23 +145,17 @@ html {
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-    /* 背景图在最底层，确保可见 */
+    /* body不设置背景图，背景图只在主内容区域显示 */
     background: transparent;
-    background-image: url('./img/bg.png');
-    background-size: 100% auto;
-    background-position: center;
-    background-attachment: fixed;
-    background-repeat: no-repeat;
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
     transition: background-color var(--transition-slow), color var(--transition-slow);
     position: relative;
     overflow-x: hidden;
-    /* body本身不设置z-index，作为最底层 */
 }
 
-/* 背景遮罩层 - 粉色梦幻系，降低不透明度确保背景图可见 */
+/* 背景遮罩层 - 只在主内容区域显示，侧边栏和顶部栏不显示 */
 body::before {
     content: '';
     position: fixed;
@@ -168,25 +163,24 @@ body::before {
     left: 0;
     right: 0;
     bottom: 0;
-    /* 粉色梦幻系渐变 */
+    /* 暗色主题：深色遮罩 */
     background: linear-gradient(135deg,
-        rgba(247, 112, 184, 0.3) 0%,
-        rgba(140, 114, 236, 0.3) 50%,
-        rgba(87, 194, 255, 0.3) 100%);
+        rgba(20, 20, 40, 0.85) 0%,
+        rgba(30, 25, 50, 0.85) 50%,
+        rgba(25, 30, 45, 0.85) 100%);
     background-size: 200% 200%;
     animation: shine 3s infinite linear;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.4; /* 降低不透明度，让背景图可见 */
 }
 
 body.light::before {
+    /* 亮色主题：浅色遮罩 */
     background: linear-gradient(135deg,
-        rgba(247, 112, 184, 0.2) 0%,
-        rgba(140, 114, 236, 0.2) 50%,
-        rgba(87, 194, 255, 0.2) 100%);
+        rgba(255, 240, 250, 0.6) 0%,
+        rgba(240, 235, 255, 0.6) 50%,
+        rgba(235, 245, 255, 0.6) 100%);
     background-size: 200% 200%;
-    opacity: 0.25;
 }
 
 @keyframes shine {
@@ -287,6 +281,41 @@ body.light::before {
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
 }
 
+/* 侧边栏光芒效果 - 从背景图发散 */
+.sidebar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -50px;
+    width: 100px;
+    height: 100%;
+    background: radial-gradient(ellipse at left center,
+        rgba(255, 103, 184, 0.4) 0%,
+        rgba(140, 114, 236, 0.3) 30%,
+        transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    animation: glowPulse 3s ease-in-out infinite;
+}
+
+body.light .sidebar::before {
+    background: radial-gradient(ellipse at left center,
+        rgba(255, 182, 218, 0.5) 0%,
+        rgba(200, 181, 255, 0.4) 30%,
+        transparent 70%);
+}
+
+@keyframes glowPulse {
+    0%, 100% {
+        opacity: 0.6;
+        transform: scaleY(1);
+    }
+    50% {
+        opacity: 0.9;
+        transform: scaleY(1.05);
+    }
+}
+
 /* 删除冗余的sidebar渐变，避免遮挡背景图 */
 
 .sidebar-header {
@@ -296,6 +325,7 @@ body.light::before {
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
     position: relative;
+    z-index: 1; /* 确保在光芒效果之上 */
 }
 
 .logo {
@@ -413,6 +443,8 @@ body.light .theme-toggle-thumb::before {
     flex-direction: column;
     gap: 8px;
     padding: 20px 16px;
+    position: relative;
+    z-index: 1; /* 确保在光芒效果之上 */
 }
 
 .nav-item {
@@ -588,6 +620,8 @@ body.light .theme-toggle-thumb::before {
     padding: 20px 16px;
     scrollbar-width: thin;
     scrollbar-color: var(--bg-tertiary) transparent;
+    position: relative;
+    z-index: 1; /* 确保在光芒效果之上 */
 }
 
 .api-groups-container::-webkit-scrollbar {
@@ -761,8 +795,46 @@ body.light .theme-toggle-thumb::before {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: transparent;
+    /* 背景图只在主内容区域显示 */
+    background-image: url('./img/bg.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
     position: relative;
+    /* 确保背景图在遮罩层之上 */
+    z-index: 1;
+}
+
+/* 主内容区域的背景遮罩，让文字更清晰 */
+.main-content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* 暗色主题：深色遮罩 */
+    background: linear-gradient(135deg,
+        rgba(20, 20, 40, 0.3) 0%,
+        rgba(30, 25, 50, 0.3) 50%,
+        rgba(25, 30, 45, 0.3) 100%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+body.light .main-content::before {
+    /* 亮色主题：浅色遮罩 */
+    background: linear-gradient(135deg,
+        rgba(255, 240, 250, 0.2) 0%,
+        rgba(240, 235, 255, 0.2) 50%,
+        rgba(235, 245, 255, 0.2) 100%);
+}
+
+/* 确保主内容区域的子元素在遮罩层之上 */
+.main-content > * {
+    position: relative;
+    z-index: 1;
 }
 
 /* 头部 - 使用半透明背景，让背景图可见 */
@@ -777,6 +849,30 @@ body.light .theme-toggle-thumb::before {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
+/* 顶部栏光芒效果 - 从背景图发散 */
+.header::before {
+    content: '';
+    position: absolute;
+    bottom: -30px;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: radial-gradient(ellipse at center top,
+        rgba(255, 103, 184, 0.4) 0%,
+        rgba(140, 114, 236, 0.3) 30%,
+        transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    animation: glowPulse 3s ease-in-out infinite;
+}
+
+body.light .header::before {
+    background: radial-gradient(ellipse at center top,
+        rgba(255, 182, 218, 0.5) 0%,
+        rgba(200, 181, 255, 0.4) 30%,
+        transparent 70%);
+}
+
 .header::after {
     content: '';
     position: absolute;
@@ -786,6 +882,7 @@ body.light .theme-toggle-thumb::before {
     height: 1px;
     background: var(--gradient-warm);
     opacity: 0.3;
+    z-index: 1;
 }
 
 .header-content {
@@ -1025,7 +1122,13 @@ body.light .theme-toggle-thumb::before {
     background-clip: text;
     animation: titleGradient 8s linear infinite;
     letter-spacing: -1px;
-    text-shadow: 0 2px 10px rgba(255, 103, 184, 0.5); /* 粉色阴影增强可读性 */
+    /* 暗色主题：粉色阴影增强可读性 */
+    text-shadow: 0 2px 10px rgba(255, 103, 184, 0.5);
+}
+
+/* 亮色主题：深色阴影增强可读性 */
+body.light .welcome-title {
+    text-shadow: 0 2px 8px rgba(230, 57, 155, 0.6);
 }
 
 @keyframes titleGradient {
@@ -1039,7 +1142,13 @@ body.light .theme-toggle-thumb::before {
     margin-bottom: 56px;
     max-width: 600px;
     line-height: 1.8;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); /* 增强可读性 */
+    /* 暗色主题：深色阴影增强可读性 */
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* 亮色主题：浅色阴影增强可读性 */
+body.light .welcome-desc {
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 /* 首页概览摘要 */
@@ -2903,6 +3012,10 @@ body.light .json-null {
     .main-content {
         margin-left: 0;
         width: 100%;
+        /* 移动端：背景图使用cover确保充满屏幕，并裁切多余部分 */
+        background-size: cover;
+        background-position: center center;
+        background-attachment: scroll; /* 移动端不使用fixed，避免性能问题 */
     }
 
     .header {
@@ -3073,6 +3186,13 @@ body.light .json-null {
 }
 
 @media (max-width: 480px) {
+    .main-content {
+        /* 小屏幕移动端：确保背景图充满屏幕，使用cover裁切 */
+        background-size: cover;
+        background-position: center center;
+        min-height: 100vh;
+    }
+
     .floating-btn {
         width: 58px;
         height: 58px;
