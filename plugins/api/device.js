@@ -1375,29 +1375,31 @@ export default {
 
     ws: {
         device: [
-            // WebSocket 处理器签名: (conn, req, bot, socket, head)
-            // 其中 conn 是 WebSocket 连接对象，等同于原来的 ws
             (conn, req, bot, socket, head) => {
+                // 兼容不同的参数签名
+                const ws = conn;
+                const Bot = bot;
+                
                 BotUtil.makeLog('info',
                     `🔌 [WebSocket] 新连接: ${req.socket.remoteAddress}`,
                     'DeviceManager'
                 );
 
-                conn.on('message', msg => {
+                ws.on('message', msg => {
                     try {
                         const data = JSON.parse(msg);
-                        deviceManager.processWebSocketMessage(conn, data, bot);
+                        deviceManager.processWebSocketMessage(ws, data, Bot);
                     } catch (e) {
                         BotUtil.makeLog('error',
                             `❌ [WebSocket] 消息解析失败: ${e.message}`,
-                            conn.device_id
+                            ws.device_id || 'unknown'
                         );
                     }
                 });
 
-                conn.on('close', () => {
-                    if (conn.device_id) {
-                        deviceManager.handleDeviceDisconnect(conn.device_id, conn);
+                ws.on('close', () => {
+                    if (ws.device_id) {
+                        deviceManager.handleDeviceDisconnect(ws.device_id, ws);
                     } else {
                         BotUtil.makeLog('info',
                             `✓ [WebSocket] 连接关闭: ${req.socket.remoteAddress}`,
@@ -1406,10 +1408,10 @@ export default {
                     }
                 });
 
-                conn.on('error', (e) => {
+                ws.on('error', (e) => {
                     BotUtil.makeLog('error',
                         `❌ [WebSocket] 错误: ${e.message}`,
-                        conn.device_id || 'unknown'
+                        ws.device_id || 'unknown'
                     );
                 });
             }

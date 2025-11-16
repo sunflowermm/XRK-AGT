@@ -1478,120 +1478,65 @@ class APIControlCenter {
     _initParticles() {
         const canvas = document.getElementById('bgParticles');
         if (!canvas) return;
-        
         const ctx = canvas.getContext('2d');
-        let width = window.innerWidth;
-        let height = window.innerHeight;
-        const dpi = Math.min(window.devicePixelRatio || 1, 2);
-        let rafId = null;
-        let isVisible = true;
-        
-        const resize = () => {
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+        const dpi = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        function resize() {
             width = window.innerWidth;
             height = window.innerHeight;
             canvas.width = Math.floor(width * dpi);
             canvas.height = Math.floor(height * dpi);
             ctx.setTransform(dpi, 0, 0, dpi, 0, 0);
-        };
+        }
         resize();
-        
-        let resizeTimer = null;
         window.addEventListener('resize', () => {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(resize, 100);
+            resize();
         });
-        
-        document.addEventListener('visibilitychange', () => {
-            isVisible = !document.hidden;
-            if (isVisible && !rafId) {
-                step();
-            } else if (!isVisible && rafId) {
-                cancelAnimationFrame(rafId);
-                rafId = null;
-            }
-        });
-        
-        const count = Math.floor(Math.min(60, Math.max(30, (width + height) / 40)));
-        const particles = Array.from({ length: count }, () => ({
+        const count = Math.floor(Math.min(90, Math.max(50, (width + height) / 30)));
+        const particles = new Array(count).fill(0).map(() => ({
             x: Math.random() * width,
             y: Math.random() * height,
-            vx: (Math.random() - 0.5) * 0.3,
-            vy: (Math.random() - 0.5) * 0.3,
-            r: Math.random() * 1.5 + 0.5,
+            vx: (Math.random() - 0.5) * 0.4,
+            vy: (Math.random() - 0.5) * 0.4,
+            r: Math.random() * 1.6 + 0.6,
             a: Math.random() * Math.PI * 2
         }));
-        
         const linksDist = 110;
-        const linksDistSq = linksDist * linksDist;
-        let lastTime = 0;
-        const targetFPS = 30;
-        const frameInterval = 1000 / targetFPS;
-        
-        const step = (currentTime = 0) => {
-            if (!isVisible) {
-                rafId = null;
-                return;
-            }
-            
-            const deltaTime = currentTime - lastTime;
-            if (deltaTime < frameInterval) {
-                rafId = requestAnimationFrame(step);
-                return;
-            }
-            lastTime = currentTime - (deltaTime % frameInterval);
-            
+        function step() {
             ctx.clearRect(0, 0, width, height);
-            ctx.fillStyle = 'rgba(255,255,255,0.25)';
-            
+            ctx.fillStyle = 'rgba(255,255,255,0.35)';
             for (const p of particles) {
                 p.x += p.vx;
                 p.y += p.vy;
-                p.a += 0.004;
-                p.vx += Math.cos(p.a) * 0.0002;
-                p.vy += Math.sin(p.a) * 0.0002;
-                if (p.x < -10) p.x = width + 10;
-                if (p.x > width + 10) p.x = -10;
-                if (p.y < -10) p.y = height + 10;
-                if (p.y > height + 10) p.y = -10;
+                p.a += 0.005;
+                p.vx += Math.cos(p.a) * 0.0003;
+                p.vy += Math.sin(p.a) * 0.0003;
+                if (p.x < -10) p.x = width + 10; if (p.x > width + 10) p.x = -10;
+                if (p.y < -10) p.y = height + 10; if (p.y > height + 10) p.y = -10;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
                 ctx.fill();
             }
-            
-            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.strokeStyle = 'rgba(255,255,255,0.12)';
             for (let i = 0; i < particles.length; i++) {
-                const p1 = particles[i];
                 for (let j = i + 1; j < particles.length; j++) {
-                    const p2 = particles[j];
-                    const dx = p1.x - p2.x;
-                    const dy = p1.y - p2.y;
-                    const dSq = dx * dx + dy * dy;
-                    if (dSq < linksDistSq) {
-                        const d = Math.sqrt(dSq);
-                        ctx.globalAlpha = (1 - d / linksDist) * 0.5;
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const d = Math.hypot(dx, dy);
+                    if (d < linksDist) {
+                        ctx.globalAlpha = 1 - d / linksDist;
                         ctx.beginPath();
-                        ctx.moveTo(p1.x, p1.y);
-                        ctx.lineTo(p2.x, p2.y);
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
                         ctx.stroke();
+                        ctx.globalAlpha = 1;
                     }
                 }
             }
-            ctx.globalAlpha = 1;
-            
-            rafId = requestAnimationFrame(step);
-        };
-        
-        if (isVisible) {
-            step();
+            requestAnimationFrame(step);
         }
-        
-        this._particleCleanup = () => {
-            if (rafId) {
-                cancelAnimationFrame(rafId);
-                rafId = null;
-            }
-            if (resizeTimer) clearTimeout(resizeTimer);
-        };
+        requestAnimationFrame(step);
     }
 
     // 处理后端下发的设备命令（通过心跳响应）
@@ -1706,53 +1651,12 @@ class APIControlCenter {
     async startMic() {
         try {
             await this.ensureDeviceWs();
-            
             if (!navigator.mediaDevices?.getUserMedia) {
                 this.showToast('浏览器不支持麦克风', 'error');
                 return;
             }
-            
-            // 检查是否为安全上下文（HTTPS 或 localhost）
-            const isSecureContext = window.isSecureContext || 
-                location.protocol === 'https:' || 
-                location.hostname === 'localhost' || 
-                location.hostname === '127.0.0.1' ||
-                location.hostname === '[::1]' ||
-                location.hostname === '0.0.0.0';
-            
-            if (!isSecureContext) {
-                // 尝试降级处理：提示用户但允许继续
-                console.warn('非安全上下文，麦克风功能可能受限。当前协议:', location.protocol, '主机:', location.hostname);
-                // 不阻止，让浏览器自己决定
-            }
-            
             this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            
-            let stream;
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        sampleRate: 16000,
-                        channelCount: 1,
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    } 
-                });
-            } catch (err) {
-                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                    this.showToast('麦克风权限被拒绝，请在浏览器设置中允许麦克风访问', 'error');
-                } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-                    this.showToast('未找到麦克风设备', 'error');
-                } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-                    this.showToast('麦克风被其他应用占用', 'error');
-                } else {
-                    this.showToast('启动麦克风失败: ' + (err.message || err.name), 'error');
-                }
-                console.error('getUserMedia 错误:', err);
-                return;
-            }
-            
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             this._micStream = stream;
             const source = this._audioCtx.createMediaStreamSource(stream);
             const processor = this._audioCtx.createScriptProcessor(4096, 1, 1);
@@ -3076,45 +2980,17 @@ class APIControlCenter {
 
         try {
             panel.innerHTML = '<div class="config-list-loading">加载中...</div>';
-            
-            // 添加重试逻辑
-            let data = null;
-            let lastError = null;
-            
-            for (let attempt = 0; attempt < 3; attempt++) {
-                try {
-                    const response = await fetch(`${this.serverUrl}/api/config/list`, {
-                        headers: this.getHeaders(),
-                        cache: 'no-cache'
-                    });
+            const response = await fetch(`${this.serverUrl}/api/config/list`, {
+                headers: this.getHeaders()
+            });
 
-                    if (!response.ok) {
-                        if (response.status === 404 && attempt < 2) {
-                            // 路由可能还没注册，等待后重试
-                            await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-                            continue;
-                        }
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-
-                    const result = await response.json();
-                    if (!result.success || !result.configs) {
-                        throw new Error('配置列表格式错误');
-                    }
-                    
-                    data = result;
-                    lastError = null;
-                    break; // 成功，退出重试循环
-                } catch (error) {
-                    lastError = error;
-                    if (attempt < 2) {
-                        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-                    }
-                }
+            if (!response.ok) {
+                throw new Error('获取配置列表失败');
             }
-            
-            if (lastError || !data) {
-                throw lastError || new Error('获取配置列表失败');
+
+            const data = await response.json();
+            if (!data.success || !data.configs) {
+                throw new Error('配置列表格式错误');
             }
 
             if (data.configs.length === 0) {
@@ -4386,5 +4262,4 @@ window.addEventListener('beforeunload', (e) => {
         e.preventDefault();
         e.returnValue = '';
     }
-});
 });
