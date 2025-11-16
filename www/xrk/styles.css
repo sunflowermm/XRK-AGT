@@ -3,105 +3,73 @@
  * 主样式表 - 无遮罩层版本
  */
 
-/* ==================== 全局变量 - 现代化设计系统 ==================== */
+/* ==================== 全局变量 ==================== */
 :root {
-    /* 向日葵黄棕色深色主题 - 优化版 */
-    --bg-primary: #0f0b05;
-    --bg-secondary: #1a1508;
-    --bg-tertiary: #2a2415;
-    --bg-card: #3a3425;
-    --bg-hover: #4a4435;
-    --bg-elevated: rgba(58, 52, 37, 0.8);
-    --bg-glass: rgba(26, 21, 8, 0.7);
+    /* 向日葵黄棕色深色主题 */
+    --bg-primary: #1a1508;
+    --bg-secondary: #2a2415;
+    --bg-tertiary: #3a3425;
+    --bg-card: #4a4435;
+    --bg-hover: #5a5445;
     
     --text-primary: #f5e6d3;
     --text-secondary: #d4c4a8;
     --text-muted: #b8a88c;
     --text-dim: #8a7a6c;
-    --text-inverse: #1a1508;
     
-    /* 向日葵主色调 - 金黄色（优化） */
+    /* 向日葵主色调 - 金黄色 */
     --accent: #f4a460;
-    --accent-hover: #ffb870;
-    --accent-active: #da8e3d;
-    --accent-light: rgba(244, 164, 96, 0.15);
-    --accent-medium: rgba(244, 164, 96, 0.3);
-    --accent-glow: rgba(244, 164, 96, 0.5);
-    --accent-glow-strong: rgba(244, 164, 96, 0.7);
+    --accent-hover: #da8e3d;
+    --accent-light: rgba(244, 164, 96, 0.2);
+    --accent-glow: rgba(244, 164, 96, 0.4);
     
     /* 向日葵花瓣色 - 亮黄色 */
     --sunflower-yellow: #ffd700;
     --sunflower-yellow-light: rgba(255, 215, 0, 0.2);
-    --sunflower-yellow-glow: rgba(255, 215, 0, 0.4);
     
     /* 向日葵中心色 - 深棕色 */
     --sunflower-brown: #8b4513;
     --sunflower-brown-light: rgba(139, 69, 19, 0.2);
     
-    /* 状态颜色 - 基于向日葵色调（优化） */
+    /* 状态颜色 - 基于向日葵色调 */
     --success: #9acd32;
-    --success-light: rgba(154, 205, 50, 0.15);
-    --success-glow: rgba(154, 205, 50, 0.3);
+    --success-light: rgba(154, 205, 50, 0.2);
     --danger: #cd5c5c;
-    --danger-light: rgba(205, 92, 92, 0.15);
-    --danger-glow: rgba(205, 92, 92, 0.3);
+    --danger-light: rgba(205, 92, 92, 0.2);
     --warning: #ffa500;
-    --warning-light: rgba(255, 165, 0, 0.15);
-    --warning-glow: rgba(255, 165, 0, 0.3);
+    --warning-light: rgba(255, 165, 0, 0.2);
     --info: #87ceeb;
-    --info-light: rgba(135, 206, 235, 0.15);
-    --info-glow: rgba(135, 206, 235, 0.3);
+    --info-light: rgba(135, 206, 235, 0.2);
     
-    --border: rgba(244, 164, 96, 0.25);
-    --border-light: rgba(244, 164, 96, 0.12);
-    --border-strong: rgba(244, 164, 96, 0.4);
+    --border: rgba(244, 164, 96, 0.2);
+    --border-light: rgba(244, 164, 96, 0.1);
     
-    /* 向日葵渐变（优化） */
+    /* 向日葵渐变 */
     --gradient-primary: linear-gradient(135deg, #f4a460 0%, #da8e3d 50%, #8b4513 100%);
     --gradient-sunflower: linear-gradient(135deg, #ffd700 0%, #f4a460 50%, #da8e3d 100%);
-    --gradient-sunflower-soft: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(244, 164, 96, 0.1) 100%);
     --gradient-success: linear-gradient(135deg, #9acd32 0%, #7cb342 100%);
     --gradient-warning: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%);
     --gradient-danger: linear-gradient(135deg, #cd5c5c 0%, #b22222 100%);
     --gradient-warm: linear-gradient(135deg, #ffd700, #f4a460, #da8e3d, #8b4513);
-    --gradient-glass: linear-gradient(135deg, rgba(244, 164, 96, 0.1) 0%, rgba(139, 69, 19, 0.1) 100%);
     
-    /* 阴影系统（优化） */
-    --shadow-xs: 0 1px 3px rgba(139, 69, 19, 0.12);
-    --shadow-sm: 0 2px 8px rgba(139, 69, 19, 0.15);
-    --shadow-md: 0 4px 16px rgba(139, 69, 19, 0.2);
-    --shadow-lg: 0 8px 32px rgba(139, 69, 19, 0.25);
-    --shadow-xl: 0 16px 64px rgba(139, 69, 19, 0.3);
-    --shadow-glow: 0 0 20px var(--accent-glow);
-    --shadow-glow-strong: 0 0 40px var(--accent-glow-strong);
-    --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow-sm: 0 2px 8px rgba(139, 69, 19, 0.2);
+    --shadow-md: 0 4px 20px rgba(139, 69, 19, 0.3);
+    --shadow-lg: 0 10px 40px rgba(139, 69, 19, 0.4);
+    --shadow-xl: 0 20px 60px rgba(139, 69, 19, 0.5);
+    --shadow-glow: 0 0 40px var(--accent-glow);
     
-    /* 圆角系统 */
-    --radius-xs: 4px;
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
     --radius-xl: 24px;
-    --radius-2xl: 32px;
-    --radius-full: 9999px;
     
-    /* 布局 */
     --sidebar-width: 320px;
-    --header-height: 64px;
-    --content-padding: 24px;
     
-    /* 过渡动画（优化） */
     --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-base: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-slow: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-smooth: 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     --transition-bounce: 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    --transition-spring: 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-    
-    /* 模糊效果 */
-    --blur-sm: blur(4px);
-    --blur-md: blur(8px);
-    --blur-lg: blur(16px);
 }
 
 /* ==================== 首页状态卡统一交互 ==================== */
@@ -124,41 +92,31 @@
 }
 .status-card-content { margin-top: 10px; }
 
-/* 亮色主题配色 - 向日葵亮色版（现代化） */
+/* 亮色主题配色 - 向日葵亮色版 */
 body.light {
     --bg-primary: #fef9e7;
     --bg-secondary: #fef5e7;
     --bg-tertiary: #fef0d7;
     --bg-card: #ffffff;
     --bg-hover: #fff8e1;
-    --bg-elevated: rgba(255, 255, 255, 0.9);
-    --bg-glass: rgba(254, 249, 231, 0.8);
     
     --text-primary: #3e2723;
     --text-secondary: #5d4037;
     --text-muted: #8d6e63;
     --text-dim: #a1887f;
-    --text-inverse: #f5e6d3;
     
     --accent: #f4a460;
-    --accent-hover: #ffb870;
-    --accent-active: #da8e3d;
-    --accent-light: rgba(244, 164, 96, 0.12);
-    --accent-medium: rgba(244, 164, 96, 0.25);
-    --accent-glow: rgba(244, 164, 96, 0.4);
-    --accent-glow-strong: rgba(244, 164, 96, 0.6);
+    --accent-hover: #da8e3d;
+    --accent-light: rgba(244, 164, 96, 0.15);
+    --accent-glow: rgba(244, 164, 96, 0.3);
     
-    --border: rgba(139, 69, 19, 0.18);
-    --border-light: rgba(139, 69, 19, 0.1);
-    --border-strong: rgba(139, 69, 19, 0.25);
+    --border: rgba(139, 69, 19, 0.15);
+    --border-light: rgba(139, 69, 19, 0.08);
     
-    --shadow-xs: 0 1px 3px rgba(139, 69, 19, 0.08);
     --shadow-sm: 0 2px 8px rgba(139, 69, 19, 0.1);
-    --shadow-md: 0 4px 16px rgba(139, 69, 19, 0.12);
-    --shadow-lg: 0 8px 32px rgba(139, 69, 19, 0.15);
-    --shadow-xl: 0 16px 64px rgba(139, 69, 19, 0.2);
-    --shadow-glow: 0 0 20px var(--accent-glow);
-    --shadow-glow-strong: 0 0 40px var(--accent-glow-strong);
+    --shadow-md: 0 4px 20px rgba(139, 69, 19, 0.15);
+    --shadow-lg: 0 10px 40px rgba(139, 69, 19, 0.2);
+    --shadow-xl: 0 20px 60px rgba(139, 69, 19, 0.25);
 }
 
 /* ==================== 基础重置 ==================== */
@@ -288,19 +246,16 @@ body::after {
     z-index: 1;
 }
 
-/* ==================== 侧边栏 - 现代化设计 ==================== */
+/* ==================== 侧边栏 ==================== */
 .sidebar {
     width: var(--sidebar-width);
-    background: var(--bg-glass);
-    backdrop-filter: var(--blur-md);
+    background: var(--bg-secondary);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     transition: all var(--transition-smooth);
     position: relative;
     overflow: hidden;
-    box-shadow: var(--shadow-md);
-    z-index: 10;
 }
 
 .sidebar::before {
@@ -324,10 +279,8 @@ body::after {
 .sidebar-header {
     padding: 28px 24px;
     border-bottom: 1px solid var(--border);
-    background: var(--bg-elevated);
-    backdrop-filter: var(--blur-sm);
+    background: rgba(255, 255, 255, 0.02);
     position: relative;
-    z-index: 2;
 }
 
 .logo {
@@ -341,24 +294,17 @@ body::after {
 }
 
 .logo-icon {
-    width: 48px;
-    height: 48px;
+    width: 46px;
+    height: 46px;
     background: var(--gradient-primary);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 28px;
+    font-size: 26px;
     box-shadow: var(--shadow-glow);
     position: relative;
     animation: logoFloat 4s ease-in-out infinite;
-    transition: all var(--transition-base);
-    cursor: pointer;
-}
-
-.logo-icon:hover {
-    transform: translateY(-2px) scale(1.05);
-    box-shadow: var(--shadow-glow-strong);
 }
 
 @keyframes logoFloat {
@@ -395,42 +341,35 @@ body::after {
     }
 }
 
-/* 主题切换 - 现代化 */
+/* 主题切换 */
 .theme-toggle {
     position: absolute;
     top: 50%;
     right: 24px;
     transform: translateY(-50%);
-    width: 56px;
-    height: 32px;
+    width: 52px;
+    height: 28px;
     background: var(--bg-tertiary);
-    border-radius: var(--radius-full);
+    border-radius: 50px;
     cursor: pointer;
     padding: 4px;
     transition: all var(--transition-base);
-    border: 2px solid var(--border);
+    border: 1px solid var(--border);
     overflow: hidden;
-    box-shadow: var(--shadow-sm);
 }
 
 .theme-toggle:hover {
     box-shadow: var(--shadow-md);
     border-color: var(--accent);
-    transform: translateY(-50%) scale(1.05);
-}
-
-.theme-toggle:active {
-    transform: translateY(-50%) scale(0.95);
 }
 
 .theme-toggle-thumb {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     background: linear-gradient(135deg, #ffd89b, #19547b);
-    border-radius: var(--radius-full);
-    transition: all var(--transition-spring);
+    border-radius: 50%;
+    transition: all var(--transition-bounce);
     position: relative;
-    box-shadow: var(--shadow-sm);
 }
 
 .theme-toggle-thumb::before {
@@ -790,7 +729,7 @@ body.light .theme-toggle-thumb::before {
     color: white;
 }
 
-/* ==================== 主内容区 - 现代化 ==================== */
+/* ==================== 主内容区 ==================== */
 .main-content {
     flex: 1;
     display: flex;
@@ -798,18 +737,15 @@ body.light .theme-toggle-thumb::before {
     overflow: hidden;
     background: var(--bg-primary);
     position: relative;
-    backdrop-filter: var(--blur-sm);
 }
 
-/* 头部 - 现代化设计 */
+/* 头部 */
 .header {
-    background: var(--bg-glass);
-    backdrop-filter: var(--blur-md);
+    background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
-    padding: 20px 28px;
+    padding: 24px 28px;
     position: relative;
     z-index: 10;
-    box-shadow: var(--shadow-sm);
 }
 
 .header::after {
@@ -959,10 +895,10 @@ body.light .theme-toggle-thumb::before {
     }
 }
 
-/* ==================== 内容区 - 现代化 ==================== */
+/* ==================== 内容区 ==================== */
 .content {
     flex: 1;
-    padding: var(--content-padding);
+    padding: 32px;
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: thin;
@@ -971,7 +907,6 @@ body.light .theme-toggle-thumb::before {
     max-width: 100%;
     box-sizing: border-box;
     position: relative;
-    background: var(--bg-primary);
 }
 
 .content::-webkit-scrollbar {
