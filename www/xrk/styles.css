@@ -3,59 +3,60 @@
  * 主样式表 - 无遮罩层版本
  */
 
-/* ==================== 全局变量 ==================== */
+/* ==================== 全局变量 - 粉色梦幻系 ==================== */
 :root {
-    /* 向日葵黄棕色深色主题 */
-    --bg-primary: #1a1508;
-    --bg-secondary: #2a2415;
-    --bg-tertiary: #3a3425;
-    --bg-card: #4a4435;
-    --bg-hover: #5a5445;
+    /* 粉色梦幻系深色主题 - 深紫粉色背景 */
+    --bg-primary: transparent; /* 透明，让背景图可见 */
+    --bg-secondary: rgba(247, 112, 184, 0.1);
+    --bg-tertiary: rgba(140, 114, 236, 0.1);
+    --bg-card: rgba(255, 255, 255, 0.2);
+    --bg-hover: rgba(255, 255, 255, 0.3);
     
-    --text-primary: #f5e6d3;
-    --text-secondary: #d4c4a8;
-    --text-muted: #b8a88c;
-    --text-dim: #8a7a6c;
+    /* 字体颜色 - 在粉色背景下清晰可见 */
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.9);
+    --text-muted: rgba(255, 255, 255, 0.7);
+    --text-dim: rgba(255, 255, 255, 0.5);
     
-    /* 向日葵主色调 - 金黄色 */
-    --accent: #f4a460;
-    --accent-hover: #da8e3d;
-    --accent-light: rgba(244, 164, 96, 0.2);
-    --accent-glow: rgba(244, 164, 96, 0.4);
+    /* 粉色梦幻系主色调 */
+    --accent: #ff67b8;
+    --accent-hover: #ff4da6;
+    --accent-light: rgba(255, 103, 184, 0.3);
+    --accent-glow: rgba(255, 103, 184, 0.5);
     
-    /* 向日葵花瓣色 - 亮黄色 */
-    --sunflower-yellow: #ffd700;
-    --sunflower-yellow-light: rgba(255, 215, 0, 0.2);
+    /* 粉色高亮色 */
+    --pink-bright: #ff67b8;
+    --pink-bright-light: rgba(255, 103, 184, 0.3);
     
-    /* 向日葵中心色 - 深棕色 */
-    --sunflower-brown: #8b4513;
-    --sunflower-brown-light: rgba(139, 69, 19, 0.2);
+    /* 紫色辅助色 */
+    --purple-accent: #8c72ec;
+    --purple-accent-light: rgba(140, 114, 236, 0.3);
     
-    /* 状态颜色 - 基于向日葵色调 */
-    --success: #9acd32;
-    --success-light: rgba(154, 205, 50, 0.2);
-    --danger: #cd5c5c;
-    --danger-light: rgba(205, 92, 92, 0.2);
-    --warning: #ffa500;
-    --warning-light: rgba(255, 165, 0, 0.2);
-    --info: #87ceeb;
-    --info-light: rgba(135, 206, 235, 0.2);
+    /* 状态颜色 - 粉色梦幻系 */
+    --success: #4ade80;
+    --success-light: rgba(74, 222, 128, 0.3);
+    --danger: #f87171;
+    --danger-light: rgba(248, 113, 113, 0.3);
+    --warning: #fbbf24;
+    --warning-light: rgba(251, 191, 36, 0.3);
+    --info: #60a5fa;
+    --info-light: rgba(96, 165, 250, 0.3);
     
-    --border: rgba(244, 164, 96, 0.2);
-    --border-light: rgba(244, 164, 96, 0.1);
+    --border: rgba(255, 255, 255, 0.3);
+    --border-light: rgba(255, 255, 255, 0.2);
     
-    /* 向日葵渐变 */
-    --gradient-primary: linear-gradient(135deg, #f4a460 0%, #da8e3d 50%, #8b4513 100%);
-    --gradient-sunflower: linear-gradient(135deg, #ffd700 0%, #f4a460 50%, #da8e3d 100%);
-    --gradient-success: linear-gradient(135deg, #9acd32 0%, #7cb342 100%);
-    --gradient-warning: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%);
-    --gradient-danger: linear-gradient(135deg, #cd5c5c 0%, #b22222 100%);
-    --gradient-warm: linear-gradient(135deg, #ffd700, #f4a460, #da8e3d, #8b4513);
+    /* 粉色梦幻系渐变 */
+    --gradient-primary: linear-gradient(135deg, #ff67b8 0%, #8c72ec 50%, #57c2ff 100%);
+    --gradient-pink: linear-gradient(135deg, #ff67b8 0%, #ff4da6 50%, #ff2d94 100%);
+    --gradient-success: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+    --gradient-warning: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    --gradient-danger: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    --gradient-warm: linear-gradient(135deg, #ff67b8, #8c72ec, #57c2ff);
     
-    --shadow-sm: 0 2px 8px rgba(139, 69, 19, 0.2);
-    --shadow-md: 0 4px 20px rgba(139, 69, 19, 0.3);
-    --shadow-lg: 0 10px 40px rgba(139, 69, 19, 0.4);
-    --shadow-xl: 0 20px 60px rgba(139, 69, 19, 0.5);
+    --shadow-sm: 0 2px 8px rgba(255, 103, 184, 0.2);
+    --shadow-md: 0 4px 20px rgba(255, 103, 184, 0.3);
+    --shadow-lg: 0 10px 40px rgba(255, 103, 184, 0.4);
+    --shadow-xl: 0 20px 60px rgba(255, 103, 184, 0.5);
     --shadow-glow: 0 0 40px var(--accent-glow);
     
     --radius-sm: 8px;
@@ -94,31 +95,31 @@
 }
 .status-card-content { margin-top: 10px; }
 
-/* 亮色主题配色 - 向日葵亮色版 */
+/* 亮色主题配色 - 粉色梦幻系亮色版 */
 body.light {
-    --bg-primary: #fef9e7;
-    --bg-secondary: #fef5e7;
-    --bg-tertiary: #fef0d7;
-    --bg-card: #ffffff;
-    --bg-hover: #fff8e1;
+    --bg-primary: transparent;
+    --bg-secondary: rgba(255, 182, 218, 0.2);
+    --bg-tertiary: rgba(200, 181, 255, 0.2);
+    --bg-card: rgba(255, 255, 255, 0.4);
+    --bg-hover: rgba(255, 255, 255, 0.5);
     
-    --text-primary: #3e2723;
-    --text-secondary: #5d4037;
-    --text-muted: #8d6e63;
-    --text-dim: #a1887f;
+    --text-primary: #1a1a2e;
+    --text-secondary: #2d2d44;
+    --text-muted: #4a4a6a;
+    --text-dim: #6a6a8a;
     
-    --accent: #f4a460;
-    --accent-hover: #da8e3d;
-    --accent-light: rgba(244, 164, 96, 0.15);
-    --accent-glow: rgba(244, 164, 96, 0.3);
+    --accent: #ff67b8;
+    --accent-hover: #ff4da6;
+    --accent-light: rgba(255, 103, 184, 0.2);
+    --accent-glow: rgba(255, 103, 184, 0.4);
     
-    --border: rgba(139, 69, 19, 0.15);
-    --border-light: rgba(139, 69, 19, 0.08);
+    --border: rgba(255, 103, 184, 0.3);
+    --border-light: rgba(255, 103, 184, 0.15);
     
-    --shadow-sm: 0 2px 8px rgba(139, 69, 19, 0.1);
-    --shadow-md: 0 4px 20px rgba(139, 69, 19, 0.15);
-    --shadow-lg: 0 10px 40px rgba(139, 69, 19, 0.2);
-    --shadow-xl: 0 20px 60px rgba(139, 69, 19, 0.25);
+    --shadow-sm: 0 2px 8px rgba(255, 103, 184, 0.15);
+    --shadow-md: 0 4px 20px rgba(255, 103, 184, 0.2);
+    --shadow-lg: 0 10px 40px rgba(255, 103, 184, 0.25);
+    --shadow-xl: 0 20px 60px rgba(255, 103, 184, 0.3);
 }
 
 /* ==================== 基础重置 ==================== */
@@ -144,7 +145,7 @@ html {
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     /* 背景图在最底层，确保可见 */
-    background: var(--bg-primary);
+    background: transparent;
     background-image: url('./img/bg.png');
     background-size: 100% auto;
     background-position: center;
@@ -221,7 +222,9 @@ body.light::before {
     min-height: 120px;
     margin: 8px 0 12px;
     border-radius: var(--radius-lg);
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px dashed var(--border);
 }
 
@@ -361,7 +364,9 @@ body.light::before {
     transform: translateY(-50%);
     width: 52px;
     height: 28px;
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 50px;
     cursor: pointer;
     padding: 4px;
@@ -412,7 +417,9 @@ body.light .theme-toggle-thumb::before {
 
 .nav-item {
     padding: 14px 18px;
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     display: flex;
@@ -433,7 +440,7 @@ body.light .theme-toggle-thumb::before {
     left: 0;
     width: 0;
     height: 100%;
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     transition: width var(--transition-base);
     z-index: -1;
 }
@@ -449,7 +456,7 @@ body.light .theme-toggle-thumb::before {
 }
 
 .nav-item.active {
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     border-color: var(--accent);
     color: var(--text-primary);
     font-weight: 600;
@@ -588,7 +595,9 @@ body.light .theme-toggle-thumb::before {
 }
 
 .api-groups-container::-webkit-scrollbar-thumb {
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 3px;
 }
 
@@ -622,7 +631,9 @@ body.light .theme-toggle-thumb::before {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1.2px;
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     margin-bottom: 12px;
     padding-left: 12px;
     position: relative;
@@ -649,7 +660,8 @@ body.light .theme-toggle-thumb::before {
     border-radius: var(--radius-md);
     cursor: pointer;
     transition: all var(--transition-base);
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     position: relative;
     overflow: hidden;
 }
@@ -677,7 +689,9 @@ body.light .theme-toggle-thumb::before {
 }
 
 .api-item:hover {
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: var(--text-primary);
     transform: translateX(8px);
 }
@@ -747,7 +761,7 @@ body.light .theme-toggle-thumb::before {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--bg-primary);
+    background: transparent;
     position: relative;
 }
 
@@ -935,7 +949,9 @@ body.light .theme-toggle-thumb::before {
 }
 
 .content::-webkit-scrollbar-thumb {
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 4px;
 }
 
@@ -943,7 +959,7 @@ body.light .theme-toggle-thumb::before {
 .kv-table-wrap { margin: 14px 0 18px; overflow-x: auto; }
 .kv-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); }
 .kv-table th, .kv-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-.kv-table th { width: 120px; color: var(--text-muted); background: var(--bg-secondary); font-weight: 600; }
+.kv-table th { width: 120px; color: var(--text-muted); background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font-weight: 600; }
 .kv-table.small th { width: 200px; }
 .break-all { word-break: break-all; overflow-wrap: anywhere; }
 @media (max-width: 640px) {
@@ -966,6 +982,7 @@ body.light .theme-toggle-thumb::before {
     width: 100%;
     box-sizing: border-box;
     position: relative;
+    background: transparent; /* 透明背景，让背景图可见 */
 }
 
 @keyframes welcomeFadeIn {
@@ -1008,6 +1025,7 @@ body.light .theme-toggle-thumb::before {
     background-clip: text;
     animation: titleGradient 8s linear infinite;
     letter-spacing: -1px;
+    text-shadow: 0 2px 10px rgba(255, 103, 184, 0.5); /* 粉色阴影增强可读性 */
 }
 
 @keyframes titleGradient {
@@ -1017,10 +1035,11 @@ body.light .theme-toggle-thumb::before {
 
 .welcome-desc {
     font-size: 20px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     margin-bottom: 56px;
     max-width: 600px;
     line-height: 1.8;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); /* 增强可读性 */
 }
 
 /* 首页概览摘要 */
@@ -1031,16 +1050,19 @@ body.light .theme-toggle-thumb::before {
     margin: 0 0 18px 0;
 }
 .summary-item {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: var(--radius-md);
     padding: 14px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.2), 0 4px 5px rgba(0, 0, 0, 0.3);
 }
-.summary-label { color: var(--text-muted); font-size: 13px; }
-.summary-value { font-size: 18px; font-weight: 700; color: var(--sunflower-yellow); }
+.summary-label { color: var(--text-primary); font-size: 13px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+.summary-value { font-size: 18px; font-weight: 700; color: var(--pink-bright); }
 
 /* 统计卡片 */
 .stats-grid {
@@ -1053,15 +1075,18 @@ body.light .theme-toggle-thumb::before {
 }
 
 .stat-card {
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     padding: 28px;
     border-radius: var(--radius-lg);
-    border: 1px solid var(--border);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     text-align: center;
     transition: all var(--transition-base);
     position: relative;
     overflow: hidden;
     animation: statCardSlide 0.6s ease-out backwards;
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.2), 0 4px 5px rgba(0, 0, 0, 0.3);
 }
 
 .stat-card:nth-child(1) { animation-delay: 0.1s; }
@@ -1141,10 +1166,11 @@ body.light .theme-toggle-thumb::before {
 
 .stat-label {
     font-size: 15px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 1px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); /* 增强可读性 */
 }
 
 /* 快速操作 */
@@ -1159,7 +1185,9 @@ body.light .theme-toggle-thumb::before {
 
 .quick-action {
     padding: 24px;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 2px solid var(--border);
     border-radius: var(--radius-lg);
     text-align: center;
@@ -1236,7 +1264,9 @@ body.light .theme-toggle-thumb::before {
     max-width: 980px;
     margin: 0 auto;
     width: 100%;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 24px;
@@ -1254,7 +1284,7 @@ body.light .theme-toggle-thumb::before {
     left: 0;
     right: 0;
     height: 3px;
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     transform: scaleX(0);
     transform-origin: left;
     animation: chatHeaderLine 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
@@ -1292,7 +1322,7 @@ body.light .theme-toggle-thumb::before {
 .ai-chat-body {
     margin-top: 14px;
     padding: 10px;
-    background: var(--bg-primary);
+    background: transparent;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     max-height: 420px;
@@ -1320,7 +1350,7 @@ body.light .theme-toggle-thumb::before {
     }
 }
 .chat-msg.user {
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     color: var(--text-primary);
     margin-left: auto;
     border: 1px solid var(--accent);
@@ -1341,7 +1371,9 @@ body.light .theme-toggle-thumb::before {
     border-left: 8px solid var(--accent);
 }
 .chat-msg.assistant {
-    background: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: var(--text-primary);
     margin-right: auto;
     border: 1px solid var(--border);
@@ -1392,7 +1424,7 @@ body.light .theme-toggle-thumb::before {
     padding: 14px 18px;
     border-radius: var(--radius-md);
     border: 2px solid var(--border);
-    background: var(--bg-primary);
+    background: transparent;
     color: var(--text-primary);
     font-size: 15px;
     transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1407,7 +1439,7 @@ body.light .theme-toggle-thumb::before {
 
 .ai-chat-send {
     padding: 14px 24px;
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     color: var(--text-primary);
     border: none;
     border-radius: var(--radius-md);
@@ -1541,13 +1573,16 @@ body.light .theme-toggle-thumb::before {
     gap: 14px;
     font-family: 'Monaco', 'Consolas', monospace;
     font-size: 17px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     padding: 16px 24px;
-    background: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-md);
     margin-bottom: 16px;
     border: 1px solid var(--border);
     transition: all var(--transition-base);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .api-endpoint:hover {
@@ -1556,9 +1591,10 @@ body.light .theme-toggle-thumb::before {
 }
 
 .api-desc {
-    color: var(--text-secondary);
+    color: var(--text-primary);
     font-size: 17px;
     line-height: 1.8;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); /* 增强可读性 */
 }
 
 /* 双栏布局 */
@@ -1587,7 +1623,9 @@ body.light .theme-toggle-thumb::before {
 }
 
 .params-section {
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-lg);
     padding: 28px;
     border: 1px solid var(--border);
@@ -1624,6 +1662,7 @@ body.light .theme-toggle-thumb::before {
     align-items: center;
     gap: 10px;
     position: relative;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .section-title::after {
@@ -1775,13 +1814,14 @@ body.light .theme-toggle-thumb::before {
 
 .param-label {
     font-size: 14px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     font-weight: 600;
     display: flex;
     align-items: center;
     gap: 8px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .param-label .required {
@@ -1797,14 +1837,16 @@ body.light .theme-toggle-thumb::before {
 
 .param-hint {
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-primary);
     font-weight: 400;
     font-style: italic;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
 }
 
 .input-field {
     padding: 14px 18px;
-    background: var(--bg-primary);
+    background: transparent;
     border: 2px solid var(--border);
     border-radius: var(--radius-md);
     color: var(--text-primary);
@@ -1822,7 +1864,9 @@ body.light .theme-toggle-thumb::before {
     border-color: var(--accent);
     box-shadow: 0 0 0 4px var(--accent-light);
     transform: translateY(-2px);
-    background: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 select.input-field {
@@ -1845,7 +1889,9 @@ textarea.input-field {
 
 /* JSON编辑器 */
 .json-editor {
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-lg);
     padding: 28px;
     border: 1px solid var(--border);
@@ -1894,8 +1940,11 @@ textarea.input-field {
 
 .editor-btn {
     padding: 9px 18px;
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     font-size: 13px;
@@ -1922,7 +1971,7 @@ textarea.input-field {
 }
 
 .json-editor-wrapper {
-    background: var(--bg-primary);
+    background: transparent;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     overflow: hidden;
@@ -1935,7 +1984,7 @@ textarea.input-field {
     width: 100%;
     height: 420px;
     padding: 12px 14px;
-    background: var(--bg-primary);
+    background: transparent;
     color: var(--text-primary);
     border: none;
     outline: none;
@@ -1950,16 +1999,20 @@ textarea.input-field {
     font-family: 'Monaco', 'Consolas', monospace;
     font-size: 14px;
     line-height: 1.8;
-    background: var(--bg-primary);
+    background: transparent;
 }
 
 .CodeMirror-gutters {
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-right: 1px solid var(--border);
 }
 
 .CodeMirror-linenumber {
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     font-weight: 500;
 }
 
@@ -1987,7 +2040,7 @@ textarea.input-field {
 .file-upload-label {
     display: block;
     padding: 40px;
-    background: var(--bg-primary);
+    background: transparent;
     border: 3px dashed var(--border);
     border-radius: var(--radius-lg);
     text-align: center;
@@ -2095,7 +2148,8 @@ textarea.input-field {
 }
 
 .file-upload-text {
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     font-size: 17px;
     font-weight: 500;
 }
@@ -2103,7 +2157,7 @@ textarea.input-field {
 .file-list {
     margin-top: 20px;
     padding: 20px;
-    background: var(--bg-primary);
+    background: transparent;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
 }
@@ -2114,7 +2168,9 @@ textarea.input-field {
     justify-content: space-between;
     padding: 14px 16px;
     margin-bottom: 10px;
-    background: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     gap: 14px;
@@ -2163,7 +2219,9 @@ textarea.input-field {
 }
 
 .file-size {
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     font-size: 13px;
     white-space: nowrap;
 }
@@ -2249,13 +2307,17 @@ textarea.input-field {
 }
 
 .btn-secondary {
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: var(--text-primary);
     border: 2px solid var(--border);
 }
 
 .btn-secondary:hover {
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-color: var(--accent);
     transform: translateY(-3px);
     box-shadow: var(--shadow-md);
@@ -2291,6 +2353,7 @@ textarea.input-field {
     font-size: 24px;
     font-weight: 700;
     color: var(--text-primary);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .response-meta {
@@ -2330,13 +2393,17 @@ textarea.input-field {
 }
 
 .response-time {
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     font-size: 15px;
     font-weight: 600;
 }
 
 .code-viewer {
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 28px;
@@ -2355,7 +2422,9 @@ textarea.input-field {
 }
 
 .code-language {
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     font-size: 14px;
     text-transform: uppercase;
     font-weight: 700;
@@ -2364,8 +2433,11 @@ textarea.input-field {
 
 .copy-btn {
     padding: 8px 18px;
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     font-size: 13px;
@@ -2456,7 +2528,9 @@ body.light .json-null {
 }
 
 .bot-card {
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 24px;
@@ -2536,7 +2610,7 @@ body.light .json-null {
     align-items: center;
     gap: 8px;
     padding: 8px 14px;
-    background: var(--bg-primary);
+    background: transparent;
     border-radius: 24px;
     font-size: 13px;
     font-weight: 600;
@@ -2550,7 +2624,9 @@ body.light .json-null {
 }
 
 .bot-status.offline {
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     border: 1px solid var(--text-muted);
 }
 
@@ -2579,7 +2655,9 @@ body.light .json-null {
 
 .bot-detail-label {
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -2622,7 +2700,9 @@ body.light .json-null {
 
 .toast {
     padding: 18px 24px;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: var(--text-primary);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-xl);
@@ -2677,22 +2757,22 @@ body.light .json-null {
 
 .toast.success { 
     border-left-color: var(--success);
-    background: linear-gradient(135deg, var(--bg-card), var(--success-light));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), var(--success-light));
 }
 
 .toast.error { 
     border-left-color: var(--danger);
-    background: linear-gradient(135deg, var(--bg-card), var(--danger-light));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), var(--danger-light));
 }
 
 .toast.warning { 
     border-left-color: var(--warning);
-    background: linear-gradient(135deg, var(--bg-card), var(--warning-light));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), var(--warning-light));
 }
 
 .toast.info { 
     border-left-color: var(--info);
-    background: linear-gradient(135deg, var(--bg-card), var(--info-light));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), var(--info-light));
 }
 
 .toast.success .toast-icon { color: var(--success); }
@@ -2758,7 +2838,7 @@ body.light .json-null {
 .floating-btn:hover {
     transform: translateY(-50%) scale(1.1) rotate(15deg);
     box-shadow: 0 8px 32px var(--accent-glow);
-    border-color: var(--sunflower-yellow);
+    border-color: var(--pink-bright);
 }
 
 .floating-btn:active {
@@ -3253,7 +3333,9 @@ body.no-scroll {
 }
 
 .status-card-large {
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 24px;
@@ -3330,7 +3412,7 @@ body.no-scroll {
     left: 0;
     width: 0;
     height: 2px;
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -3343,7 +3425,7 @@ body.no-scroll {
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -3396,7 +3478,8 @@ body.no-scroll {
 }
 
 .status-label {
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     font-size: 14px;
     font-weight: 500;
 }
@@ -3416,7 +3499,9 @@ body.no-scroll {
 .memory-bar {
     width: 100%;
     height: 24px;
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-sm);
     overflow: hidden;
     position: relative;
@@ -3425,7 +3510,7 @@ body.no-scroll {
 
 .memory-fill {
     height: 100%;
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     border-radius: var(--radius-sm);
     transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
@@ -3475,7 +3560,8 @@ body.no-scroll {
     align-items: center;
     margin-top: 8px;
     font-size: 13px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .memory-percent {
@@ -3486,7 +3572,9 @@ body.no-scroll {
 /* 网络信息 */
 .network-item {
     padding: 16px;
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-md);
     margin-bottom: 12px;
     border: 1px solid var(--border);
@@ -3548,7 +3636,9 @@ body.no-scroll {
     align-items: center;
     gap: 12px;
     padding: 12px;
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     transition: all var(--transition-base);
@@ -3597,7 +3687,9 @@ body.no-scroll {
 
 .bot-status-details {
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
 }
 
 /* 重复的welcomeFadeIn已在上方定义，此处删除 */
@@ -3620,7 +3712,8 @@ body.no-scroll {
 
 .welcome-desc {
     font-size: 18px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     margin-bottom: 48px;
 }
 
@@ -3635,7 +3728,9 @@ body.no-scroll {
 }
 
 .stat-card {
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 32px 24px;
@@ -3682,7 +3777,8 @@ body.no-scroll {
 
 .stat-label {
     font-size: 14px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -3701,7 +3797,9 @@ body.no-scroll {
     align-items: center;
     gap: 12px;
     padding: 32px 24px;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 2px solid var(--border);
     border-radius: var(--radius-lg);
     text-decoration: none;
@@ -3772,7 +3870,7 @@ body.no-scroll {
     align-items: center;
     justify-content: space-between;
     padding: 24px 32px;
-    background: linear-gradient(135deg, var(--bg-card), var(--bg-tertiary));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.15));
     border-bottom: 2px solid var(--border);
     box-shadow: var(--shadow-sm);
 }
@@ -3802,7 +3900,9 @@ body.no-scroll {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     min-height: 0;
     position: relative;
     height: 100%;
@@ -3815,7 +3915,7 @@ body.no-scroll {
     padding: 32px;
     overflow-y: auto;
     overflow-x: hidden;
-    background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, transparent 100%);
     min-height: 0;
     max-height: 100%;
     -webkit-overflow-scrolling: touch;
@@ -3828,7 +3928,9 @@ body.no-scroll {
 }
 
 .config-list-panel::-webkit-scrollbar-track {
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 4px;
 }
 
@@ -3846,7 +3948,9 @@ body.no-scroll {
 .config-list-error {
     text-align: center;
     padding: 80px 20px;
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     font-size: 16px;
 }
 
@@ -3943,6 +4047,7 @@ body.no-scroll {
     display: flex;
     align-items: center;
     gap: 8px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .config-badge {
@@ -3958,16 +4063,21 @@ body.no-scroll {
 
 .config-item-desc {
     font-size: 14px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     margin-bottom: 6px;
     line-height: 1.5;
 }
 
 .config-item-path {
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     font-family: 'Courier New', monospace;
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     padding: 4px 8px;
     border-radius: 4px;
     display: inline-block;
@@ -3998,7 +4108,9 @@ body.no-scroll {
     flex-direction: column;
     padding: 32px;
     overflow: hidden;
-    background: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     min-height: 0;
     height: 100%;
     max-height: 100%;
@@ -4011,7 +4123,9 @@ body.no-scroll {
     justify-content: space-between;
     margin-bottom: 20px;
     padding: 20px 24px;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-sm);
@@ -4033,7 +4147,7 @@ body.no-scroll {
     width: 20px;
     height: 20px;
     margin-right: 8px;
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     border-radius: 4px;
     position: relative;
     vertical-align: middle;
@@ -4073,7 +4187,9 @@ body.no-scroll {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-sm);
@@ -4091,7 +4207,9 @@ body.no-scroll {
     flex: 1;
     width: 100%;
     padding: 20px;
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 2px solid var(--border);
     border-radius: var(--radius-md);
     color: var(--text-primary);
@@ -4106,7 +4224,9 @@ body.no-scroll {
 .config-editor-textarea:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 4px var(--accent-light);
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .config-editor-content .CodeMirror {
@@ -4160,7 +4280,9 @@ body.no-scroll {
 }
 
 .config-form-scroll::-webkit-scrollbar-track {
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 4px;
 }
 
@@ -4176,7 +4298,9 @@ body.no-scroll {
 .config-form-field {
     margin-bottom: 24px;
     padding: 20px;
-    background: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     transition: all var(--transition-base);
@@ -4202,7 +4326,8 @@ body.no-scroll {
 
 .config-form-hint {
     font-size: 13px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     margin-bottom: 12px;
     line-height: 1.5;
 }
@@ -4211,7 +4336,9 @@ body.no-scroll {
 .config-form-select {
     width: 100%;
     padding: 12px 16px;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 2px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -4225,11 +4352,15 @@ body.no-scroll {
 .config-form-select:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 4px var(--accent-light);
-    background: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .config-form-input::placeholder {
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
 }
 
 .config-form-number {
@@ -4263,7 +4394,9 @@ body.no-scroll {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: var(--bg-tertiary);
+    background-color: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 2px solid var(--border);
     transition: all var(--transition-base);
     border-radius: 28px;
@@ -4293,7 +4426,9 @@ body.no-scroll {
 
 .config-form-subform {
     padding: 16px;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     margin-top: 12px;
@@ -4317,7 +4452,9 @@ body.no-scroll {
     align-items: center;
     margin-bottom: 12px;
     padding: 12px;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
 }
@@ -4341,7 +4478,9 @@ body.no-scroll {
 
 .config-form-arrayform-item {
     padding: 12px;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     margin-bottom: 12px;
@@ -4438,7 +4577,9 @@ body.no-scroll {
 .config-form-tags-input {
     flex: 1;
     padding: 8px 12px;
-    background: var(--bg-card);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 2px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -4451,7 +4592,9 @@ body.no-scroll {
 .config-form-tags-input:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 4px var(--accent-light);
-    background: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .config-form-tags-add {
@@ -4520,7 +4663,7 @@ body.no-scroll {
     margin: 0 auto 12px;
     display: block;
     position: relative;
-    background: var(--gradient-sunflower);
+    background: var(--gradient-pink);
     border-radius: 50%;
     animation: iconRotate 3s linear infinite;
 }
@@ -4569,14 +4712,17 @@ body.no-scroll {
 
 .sub-config-desc {
     font-size: 13px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     margin-bottom: 4px;
     line-height: 1.4;
 }
 
 .sub-config-path {
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--text-primary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    opacity: 0.9;
     font-family: 'Courier New', monospace;
     word-break: break-all;
 }
