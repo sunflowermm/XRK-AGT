@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import { ulid } from 'ulid';
 import crypto from 'crypto';
+import BotUtil from '../../lib/common/util.js';
 
 const uploadDir = path.join(process.cwd(), 'www/uploads/');
 const mediaDir = path.join(process.cwd(), 'www/media/');
@@ -209,7 +210,7 @@ export default {
             });
           }
         } catch (error) {
-          logger.error(`文件上传处理失败: ${error.message}`);
+          BotUtil.makeLog('error', `文件上传处理失败: ${error.message}`, 'FilesAPI', error);
           res.status(500).json({ 
             success: false, 
             message: '文件上传失败',
@@ -238,7 +239,7 @@ export default {
               }
             }
           } catch (err) {
-            logger.error(`查找文件失败: ${err.message}`);
+            BotUtil.makeLog('error', `查找文件失败: ${err.message}`, 'FilesAPI', err);
           }
           
           return res.status(404).json({ 
@@ -344,7 +345,7 @@ export default {
             await fs.unlink(fileInfo.path);
             fileMap.delete(id);
           } catch (err) {
-            logger.error(`删除文件失败: ${err.message}`);
+            BotUtil.makeLog('error', `删除文件失败: ${err.message}`, 'FilesAPI', err);
           }
         }
 
@@ -466,7 +467,7 @@ export default {
             timestamp: Date.now()
           });
         } catch (error) {
-          logger.error(`Base64文件上传失败: ${error.message}`);
+          BotUtil.makeLog('error', `Base64文件上传失败: ${error.message}`, 'FilesAPI', error);
           res.status(500).json({ 
             success: false, 
             message: '文件上传失败',
@@ -478,8 +479,15 @@ export default {
     }
   ],
 
-  init(app, Bot) {
-    // 定期清理过期文件
+  async init(app, Bot) {
+    // 确保路由被注册
+    if (this.routes && Array.isArray(this.routes)) {
+      const HttpApi = (await import('../../lib/http/http.js')).default;
+      const apiInstance = new HttpApi(this);
+      apiInstance.registerRoutes(app, Bot);
+    }
+    
+    // 自定义初始化：定期清理过期文件
     setInterval(async () => {
       const now = Date.now();
       const maxAge = 24 * 60 * 60 * 1000; // 24小时
@@ -489,7 +497,7 @@ export default {
           try {
             await fs.unlink(info.path);
             fileMap.delete(id);
-            logger.debug(`清理过期文件: ${info.name}`);
+            BotUtil.makeLog('debug', `清理过期文件: ${info.name}`, 'FilesAPI');
           } catch {}
         }
       }

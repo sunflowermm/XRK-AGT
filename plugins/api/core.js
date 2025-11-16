@@ -143,7 +143,15 @@ export default {
   name: 'core',
   dsc: '核心系统API',
   priority: 200,
-  init: async (app, Bot) => {
+  async init(app, Bot) {
+    // 确保路由被注册
+    if (this.routes && Array.isArray(this.routes)) {
+      const HttpApi = (await import('../../lib/http/http.js')).default;
+      const apiInstance = new HttpApi(this);
+      apiInstance.registerRoutes(app, Bot);
+    }
+    
+    // 自定义初始化
     __ensureNetSampler();
     __ensureSysSamplers();
   },

@@ -1479,8 +1479,8 @@ class APIControlCenter {
         const canvas = document.getElementById('bgParticles');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        let width = window.innerWidth;
-        let height = window.innerHeight;
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
         const dpi = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
         function resize() {
             width = window.innerWidth;

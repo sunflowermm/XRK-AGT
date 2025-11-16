@@ -49,6 +49,16 @@ export default {
   dsc: '配置管理API - 统一的配置文件读写接口',
   priority: 85,
 
+  async init(app, Bot) {
+    // 确保路由被注册
+    if (this.routes && Array.isArray(this.routes)) {
+      const HttpApi = (await import('../../lib/http/http.js')).default;
+      const apiInstance = new HttpApi(this);
+      apiInstance.registerRoutes(app, Bot);
+      BotUtil.makeLog('info', `✓ 配置管理API路由已注册 (${this.routes.length} 个路由)`, 'ConfigAPI');
+    }
+  },
+
   routes: [
     {
       method: 'GET',

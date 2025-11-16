@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'yaml';
+import BotUtil from '../../lib/common/util.js';
 
 /**
  * 判断是否为对象
@@ -132,7 +133,7 @@ export default {
             }
           });
         } catch (error) {
-          logger.error('[Data Editor API] 文件读取失败', error);
+          BotUtil.makeLog('error', '[Data Editor API] 文件读取失败', 'WriteAPI', error);
           
           if (error instanceof SyntaxError || error.name === 'YAMLParseError') {
             return res.status(400).json({ 
@@ -285,7 +286,7 @@ export default {
             }
           });
         } catch (error) {
-          logger.error('[Data Editor API] 文件写入失败', error);
+          BotUtil.makeLog('error', '[Data Editor API] 文件写入失败', 'WriteAPI', error);
           res.status(500).json({ 
             success: false, 
             message: '文件写入失败',
