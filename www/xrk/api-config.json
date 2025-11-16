@@ -387,6 +387,20 @@
               "hint": "要验证的配置数据（JSON格式）"
             }
           ]
+        },
+        {
+          "id": "config-structure",
+          "method": "GET",
+          "path": "/api/config/:name/structure",
+          "title": "配置结构",
+          "description": "获取配置文件的完整结构定义（需要授权）",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot",
+              "hint": "配置名称"
+            }
+          }
         }
       ]
     },
@@ -464,63 +478,6 @@
           }
         },
         {
-          "id": "device-command",
-          "method": "POST",
-          "path": "/api/device/:deviceId/command",
-          "title": "发送命令",
-          "description": "向设备发送控制命令",
-          "pathParams": {
-            "deviceId": {
-              "label": "设备ID",
-              "placeholder": "DEVICE_001",
-              "hint": "接收命令的设备ID"
-            }
-          },
-          "bodyParams": [
-            {
-              "name": "command",
-              "label": "命令名称",
-              "type": "text",
-              "required": true,
-              "placeholder": "turn_on",
-              "hint": "要执行的命令，如：turn_on、turn_off、set_temperature等"
-            },
-            {
-              "name": "parameters",
-              "label": "命令参数",
-              "type": "json",
-              "placeholder": "{\"temperature\": 26}",
-              "defaultValue": "{}",
-              "hint": "命令相关参数"
-            },
-            {
-              "name": "priority",
-              "label": "优先级",
-              "type": "select",
-              "options": [
-                {
-                  "value": "low",
-                  "label": "低"
-                },
-                {
-                  "value": "normal",
-                  "label": "普通"
-                },
-                {
-                  "value": "high",
-                  "label": "高"
-                },
-                {
-                  "value": "urgent",
-                  "label": "紧急"
-                }
-              ],
-              "defaultValue": "normal",
-              "hint": "命令执行优先级"
-            }
-          ]
-        },
-        {
           "id": "device-ai",
           "method": "POST",
           "path": "/api/device/:deviceId/ai",
@@ -544,16 +501,44 @@
           ]
         },
         {
-          "id": "device-delete",
-          "method": "DELETE",
-          "path": "/api/device/:deviceId",
-          "title": "删除设备",
-          "description": "从系统中移除设备",
+          "id": "device-asr-sessions",
+          "method": "GET",
+          "path": "/api/device/:deviceId/asr/sessions",
+          "title": "ASR会话列表",
+          "description": "获取指定设备的ASR会话列表",
           "pathParams": {
             "deviceId": {
               "label": "设备ID",
-              "placeholder": "DEVICE_001",
-              "hint": "要删除的设备ID"
+              "placeholder": "webclient",
+              "hint": "设备ID"
+            }
+          }
+        },
+        {
+          "id": "device-asr-recordings",
+          "method": "GET",
+          "path": "/api/device/:deviceId/asr/recordings",
+          "title": "ASR录音列表",
+          "description": "获取指定设备的ASR录音文件列表",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "webclient",
+              "hint": "设备ID"
+            }
+          }
+        },
+        {
+          "id": "asr-recording",
+          "method": "GET",
+          "path": "/api/asr/recording/:filename",
+          "title": "获取ASR录音",
+          "description": "下载ASR录音文件",
+          "pathParams": {
+            "filename": {
+              "label": "文件名",
+              "placeholder": "recording.wav",
+              "hint": "录音文件名"
             }
           }
         }
@@ -597,6 +582,137 @@
               "hint": "要删除的文件ID"
             }
           }
+        },
+        {
+          "id": "file-list",
+          "method": "GET",
+          "path": "/api/files",
+          "title": "文件列表",
+          "description": "获取所有已上传的文件列表（需要授权）"
+        },
+        {
+          "id": "file-download",
+          "method": "GET",
+          "path": "/api/file/download/:id",
+          "title": "下载文件",
+          "description": "下载文件",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id",
+              "hint": "文件ID"
+            }
+          }
+        },
+        {
+          "id": "file-preview",
+          "method": "GET",
+          "path": "/api/file/preview/:id",
+          "title": "预览文件",
+          "description": "预览文件内容",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id",
+              "hint": "文件ID"
+            }
+          }
+        },
+        {
+          "id": "file-upload-base64",
+          "method": "POST",
+          "path": "/api/file/upload-base64",
+          "title": "Base64上传",
+          "description": "通过Base64编码上传文件（需要授权）",
+          "bodyParams": [
+            {
+              "name": "filename",
+              "label": "文件名",
+              "type": "text",
+              "required": true,
+              "placeholder": "image.png"
+            },
+            {
+              "name": "data",
+              "label": "Base64数据",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "data:image/png;base64,..."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "title": "数据编辑",
+      "apis": [
+        {
+          "id": "data-read",
+          "method": "GET",
+          "path": "/api/data/read",
+          "title": "读取数据文件",
+          "description": "读取JSON或YAML文件内容（需要授权）",
+          "queryParams": [
+            {
+              "name": "filePath",
+              "label": "文件路径",
+              "type": "text",
+              "required": true,
+              "placeholder": "./config/bot.json",
+              "hint": "要读取的文件路径"
+            },
+            {
+              "name": "encoding",
+              "label": "编码格式",
+              "type": "text",
+              "placeholder": "utf8",
+              "defaultValue": "utf8",
+              "hint": "文件编码格式"
+            }
+          ]
+        },
+        {
+          "id": "data-write",
+          "method": "POST",
+          "path": "/api/data/write",
+          "title": "写入数据文件",
+          "description": "写入数据到JSON或YAML文件（需要授权）",
+          "bodyParams": [
+            {
+              "name": "filePath",
+              "label": "文件路径",
+              "type": "text",
+              "required": true,
+              "placeholder": "./config/bot.json",
+              "hint": "要写入的文件路径"
+            },
+            {
+              "name": "data",
+              "label": "数据内容",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"key\": \"value\"}",
+              "hint": "要写入的数据（JSON格式）"
+            },
+            {
+              "name": "format",
+              "label": "文件格式",
+              "type": "select",
+              "options": [
+                {
+                  "value": "json",
+                  "label": "JSON"
+                },
+                {
+                  "value": "yaml",
+                  "label": "YAML"
+                }
+              ],
+              "defaultValue": "json",
+              "hint": "文件格式"
+            }
+          ]
         }
       ]
     },
@@ -668,15 +784,6 @@
       "metadata": "{\n  \"location\": \"客厅\",\n  \"model\": \"DHT22\",\n  \"version\": \"1.0\"\n}"
     },
     "device-detail": {
-      "path_deviceId": "SENSOR_001"
-    },
-    "device-command": {
-      "path_deviceId": "SWITCH_001",
-      "command": "turn_on",
-      "parameters": "{\n  \"brightness\": 80,\n  \"color\": \"#FFFFFF\"\n}",
-      "priority": "normal"
-    },
-    "device-delete": {
       "path_deviceId": "SENSOR_001"
     },
     "device-ai": {

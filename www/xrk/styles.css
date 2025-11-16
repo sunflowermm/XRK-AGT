@@ -201,7 +201,7 @@ body.light::before {
     }
 }
 
-/* 粒子背景 - 在主内容区域之上，内容之下 */
+/* 粒子背景 - 在主内容区域之上，背景图之上，内容之下 */
 #bgParticles {
     position: fixed;
     left: var(--sidebar-width); /* 从侧边栏右侧开始 */
@@ -210,9 +210,9 @@ body.light::before {
     bottom: 0;
     width: calc(100vw - var(--sidebar-width));
     height: 100vh;
-    z-index: 2; /* 在背景图之上，但在内容之下 */
+    z-index: 3; /* 在背景图(z-index:1)和遮罩层(z-index:0)之上，但在内容(z-index:2+)之下 */
     pointer-events: none;
-    opacity: 0.8; /* 增加不透明度，让粒子更明显 */
+    opacity: 0.9; /* 增加不透明度，让粒子更明显 */
     }
 
 /* 移除冗余的sunflowerFloat动画，使用shine动画替代 */
@@ -289,33 +289,34 @@ body.light .content-card {
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
 }
 
-/* 侧边栏光芒效果 - 从背景图发散，过渡更自然 */
+/* 侧边栏边缘效果 - 使用背景图边缘颜色填充，过渡更自然 */
 .sidebar::before {
     content: '';
     position: absolute;
     top: 0;
-    right: -80px;
-    width: 150px;
+    right: -100px;
+    width: 200px;
     height: 100%;
-    background: radial-gradient(ellipse at left center,
-        rgba(255, 103, 184, 0.5) 0%,
-        rgba(255, 103, 184, 0.3) 20%,
-        rgba(140, 114, 236, 0.25) 40%,
-        rgba(140, 114, 236, 0.15) 60%,
-        transparent 85%);
+    /* 使用背景图的边缘颜色（粉色和紫色）创建渐变过渡 */
+    background: linear-gradient(to right,
+        rgba(255, 103, 184, 0.4) 0%,
+        rgba(255, 103, 184, 0.25) 15%,
+        rgba(140, 114, 236, 0.2) 30%,
+        rgba(140, 114, 236, 0.1) 50%,
+        transparent 80%);
     pointer-events: none;
     z-index: 0;
     animation: glowPulse 4s ease-in-out infinite;
-    filter: blur(8px); /* 添加模糊效果，让过渡更自然 */
+    filter: blur(12px); /* 增加模糊效果，让过渡更自然 */
 }
 
 body.light .sidebar::before {
-    background: radial-gradient(ellipse at left center,
-        rgba(255, 182, 218, 0.6) 0%,
-        rgba(255, 182, 218, 0.4) 20%,
-        rgba(200, 181, 255, 0.35) 40%,
-        rgba(200, 181, 255, 0.2) 60%,
-        transparent 85%);
+    background: linear-gradient(to right,
+        rgba(255, 182, 218, 0.5) 0%,
+        rgba(255, 182, 218, 0.3) 15%,
+        rgba(200, 181, 255, 0.25) 30%,
+        rgba(200, 181, 255, 0.15) 50%,
+        transparent 80%);
 }
 
 @keyframes glowPulse {
@@ -501,26 +502,17 @@ body.light .theme-toggle-thumb::before {
     overflow: hidden;
 }
 
+/* 删除半框预设动画 */
 .nav-item::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 0;
-    width: 0;
-    height: 100%;
-    background: var(--gradient-pink);
-    transition: width var(--transition-base);
-    z-index: -1;
+    display: none; /* 删除半框预设 */
 }
 
 .nav-item:hover {
-    transform: translateX(4px);
+    transform: translateX(3px); /* 轻微右移 */
     border-color: var(--accent);
     color: var(--text-primary);
-}
-
-.nav-item:hover::before {
-    width: 100%;
+    box-shadow: 0 2px 8px rgba(255, 103, 184, 0.3); /* 添加阴影效果 */
+    background: rgba(255, 103, 184, 0.1); /* 轻微背景色变化 */
 }
 
 .nav-item.active {
@@ -528,10 +520,11 @@ body.light .theme-toggle-thumb::before {
     border-color: var(--accent);
     color: var(--text-primary);
     font-weight: 600;
+    box-shadow: 0 2px 12px rgba(255, 103, 184, 0.4);
 }
 
 .nav-item.active::before {
-    width: 100%;
+    display: none; /* 删除半框预设 */
 }
 
 /* 导航图标 - 使用线条装饰 */
@@ -886,33 +879,34 @@ body.light .main-content::before {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-/* 顶部栏光芒效果 - 从背景图发散，过渡更自然 */
+/* 顶部栏边缘效果 - 使用背景图边缘颜色填充，过渡更自然 */
 .header::before {
     content: '';
     position: absolute;
-    bottom: -50px;
+    bottom: -80px;
     left: 0;
     right: 0;
-    height: 100px;
-    background: radial-gradient(ellipse at center top,
-        rgba(255, 103, 184, 0.5) 0%,
-        rgba(255, 103, 184, 0.3) 20%,
-        rgba(140, 114, 236, 0.25) 40%,
-        rgba(140, 114, 236, 0.15) 60%,
-        transparent 85%);
+    height: 150px;
+    /* 使用背景图的边缘颜色（粉色和紫色）创建渐变过渡 */
+    background: linear-gradient(to bottom,
+        rgba(255, 103, 184, 0.4) 0%,
+        rgba(255, 103, 184, 0.25) 15%,
+        rgba(140, 114, 236, 0.2) 30%,
+        rgba(140, 114, 236, 0.1) 50%,
+        transparent 80%);
     pointer-events: none;
     z-index: 0;
     animation: glowPulse 4s ease-in-out infinite;
-    filter: blur(8px); /* 添加模糊效果，让过渡更自然 */
+    filter: blur(12px); /* 增加模糊效果，让过渡更自然 */
 }
 
 body.light .header::before {
-    background: radial-gradient(ellipse at center top,
-        rgba(255, 182, 218, 0.6) 0%,
-        rgba(255, 182, 218, 0.4) 20%,
-        rgba(200, 181, 255, 0.35) 40%,
-        rgba(200, 181, 255, 0.2) 60%,
-        transparent 85%);
+    background: linear-gradient(to bottom,
+        rgba(255, 182, 218, 0.5) 0%,
+        rgba(255, 182, 218, 0.3) 15%,
+        rgba(200, 181, 255, 0.25) 30%,
+        rgba(200, 181, 255, 0.15) 50%,
+        transparent 80%);
 }
 
 .header::after {
@@ -3052,6 +3046,7 @@ body.light .bot-card {
     #bgParticles {
         left: 0;
         width: 100vw;
+        z-index: 3; /* 确保在移动端也在背景图之上 */
     }
 
     .floating-btn {

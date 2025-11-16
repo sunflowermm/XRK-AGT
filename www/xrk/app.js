@@ -2119,27 +2119,63 @@ class APIControlCenter {
 
     _loadCodeMirror() {
         if (this._codeMirrorLoading) return this._codeMirrorLoading;
-        const base = 'https://cdn.bootcdn.net/ajax/libs/codemirror/5.65.2';
+        // 使用多个CDN备用方案，提高加载成功率
+        const cdnBases = [
+            'https://cdn.jsdelivr.net/npm/codemirror@5.65.2',
+            'https://cdn.bootcdn.net/ajax/libs/codemirror/5.65.2',
+            'https://unpkg.com/codemirror@5.65.2'
+        ];
         const cssList = [
-            `${base}/codemirror.min.css`,
-            `${base}/theme/monokai.min.css`,
-            `${base}/addon/fold/foldgutter.min.css`
+            'codemirror.min.css',
+            'theme/monokai.min.css',
+            'addon/fold/foldgutter.min.css'
         ];
         const jsList = [
-            `${base}/codemirror.min.js`,
-            `${base}/mode/javascript/javascript.min.js`,
-            `${base}/addon/edit/closebrackets.min.js`,
-            `${base}/addon/edit/matchbrackets.min.js`,
-            `${base}/addon/fold/foldcode.min.js`,
-            `${base}/addon/fold/foldgutter.min.js`,
-            `${base}/addon/fold/brace-fold.min.js`
+            'codemirror.min.js',
+            'mode/javascript/javascript.min.js',
+            'addon/edit/closebrackets.min.js',
+            'addon/edit/matchbrackets.min.js',
+            'addon/fold/foldcode.min.js',
+            'addon/fold/foldgutter.min.js',
+            'addon/fold/brace-fold.min.js'
         ];
+        
         this._codeMirrorLoading = (async () => {
-            for (const href of cssList) await this._loadCss(href);
-            for (const src of jsList) await this._loadScript(src);
+            // 加载CSS
+            for (const css of cssList) {
+                await this._loadCssWithFallback(cdnBases, css);
+            }
+            // 加载JS
+            for (const js of jsList) {
+                await this._loadScriptWithFallback(cdnBases, js);
+            }
             return true;
         })();
         return this._codeMirrorLoading;
+    }
+    
+    async _loadCssWithFallback(cdnBases, path) {
+        for (const base of cdnBases) {
+            try {
+                await this._loadCss(`${base}/${path}`);
+                return;
+            } catch (err) {
+                console.warn(`Failed to load CSS from ${base}/${path}, trying next CDN...`);
+            }
+        }
+        throw new Error(`Failed to load CSS: ${path} from all CDNs`);
+    }
+    
+    async _loadScriptWithFallback(cdnBases, path) {
+        for (const base of cdnBases) {
+            try {
+                await this._loadScript(`${base}/${path}`);
+                return;
+            } catch (err) {
+                console.warn(`Failed to load script from ${base}/${path}, trying next CDN...`);
+            }
+        }
+        throw new Error(`Failed to load script: ${path} from all CDNs`);
     }
 
     _loadScript(src) {
