@@ -577,6 +577,9 @@ class APIControlCenter {
     // 导航到指定页面
     navigateToPage(page) {
         this.currentPage = page;
+        // 保存当前页面到localStorage
+        localStorage.setItem('currentPage', page);
+        
         const content = document.getElementById('content');
         const apiGroups = document.getElementById('apiGroups');
         
@@ -598,6 +601,9 @@ class APIControlCenter {
                 if (apiGroups) apiGroups.style.display = 'block';
                 break;
         }
+        
+        // 更新URL hash
+        window.location.hash = `#/${page}`;
         
         // 关闭侧边栏（移动端）
         this.closeSidebar();
@@ -1082,27 +1088,50 @@ class APIControlCenter {
             }
         });
 
+        // 修复手机端滑动误触问题
         let touchedItem = null;
+        let touchStartY = 0;
+        let touchStartX = 0;
+        let touchMoved = false;
 
         container.addEventListener('touchstart', (e) => {
             const apiItem = e.target.closest('.api-item');
             if (apiItem) {
                 touchedItem = apiItem;
+                touchStartY = e.touches[0].clientY;
+                touchStartX = e.touches[0].clientX;
+                touchMoved = false;
                 apiItem.classList.add('touch-active');
             }
         }, { passive: true });
 
+        container.addEventListener('touchmove', (e) => {
+            if (touchedItem && e.touches[0]) {
+                const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
+                const deltaX = Math.abs(e.touches[0].clientX - touchStartX);
+                // 如果移动距离超过10px，认为是滑动而不是点击
+                if (deltaY > 10 || deltaX > 10) {
+                    touchMoved = true;
+                    if (touchedItem) {
+                        touchedItem.classList.remove('touch-active');
+                    }
+                }
+            }
+        }, { passive: true });
+
         container.addEventListener('touchend', (e) => {
-            if (touchedItem) {
+            if (touchedItem && !touchMoved) {
                 touchedItem.classList.remove('touch-active');
                 const apiId = touchedItem.dataset.apiId;
                 const api = this.findAPIById(apiId);
                 if (api) {
                     e.preventDefault();
+                    e.stopPropagation();
                     this.selectAPI(api.method, api.path, apiId);
                 }
-                touchedItem = null;
             }
+            touchedItem = null;
+            touchMoved = false;
         }, { passive: false });
 
         container.addEventListener('touchcancel', () => {
@@ -1110,6 +1139,7 @@ class APIControlCenter {
                 touchedItem.classList.remove('touch-active');
                 touchedItem = null;
             }
+            touchMoved = false;
         }, { passive: true });
     }
 
@@ -1639,6 +1669,15 @@ class APIControlCenter {
     _applyRoute() {
         const hash = (location.hash || '').replace(/^#\/?/, '');
         const page = hash.split('?')[0];
+        
+        if (!page || page === '') {
+            const savedPage = localStorage.getItem('currentPage');
+            if (savedPage && ['home', 'chat', 'api', 'config'].includes(savedPage)) {
+                this.navigateToPage(savedPage);
+                return;
+            }
+        }
+        
         if (page === 'chat') { this.navigateToPage('chat'); return; }
         if (page === 'api') { this.navigateToPage('api'); return; }
         if (page === 'config') { this.navigateToPage('config'); return; }
@@ -1657,57 +1696,68 @@ class APIControlCenter {
         try {
             await this.ensureDeviceWs();
             
-            // 检查浏览器支持
-            if (!navigator.mediaDevices) {
-                // 尝试使用旧版API
-                const getUserMedia = navigator.getUserMedia || 
-                                    navigator.webkitGetUserMedia || 
-                                    navigator.mozGetUserMedia || 
-                                    navigator.msGetUserMedia;
-                if (!getUserMedia) {
-                    this.showToast('浏览器不支持麦克风访问，请使用现代浏览器（Chrome、Firefox、Edge等）', 'error');
-                    return;
-                }
-                // 使用旧版API（需要polyfill处理）
-                this.showToast('检测到旧版浏览器API，建议升级浏览器', 'warning');
-            }
-            
             // 检查HTTPS或localhost（某些浏览器要求）
             const isSecureContext = window.isSecureContext || 
                                    location.protocol === 'https:' || 
                                    location.hostname === 'localhost' || 
-                                   location.hostname === '127.0.0.1';
+                                   location.hostname === '127.0.0.1' ||
+                                   location.hostname === '0.0.0.0';
             
-            if (!isSecureContext && !navigator.mediaDevices) {
-                this.showToast('麦克风访问需要HTTPS环境或localhost，当前环境可能不支持', 'warning');
+            if (!isSecureContext) {
+                this.showToast('麦克风访问需要HTTPS环境或localhost', 'warning');
             }
             
-            // 检查getUserMedia方法
-            if (!navigator.mediaDevices?.getUserMedia) {
-                // 尝试polyfill
-                if (navigator.getUserMedia || navigator.webkitGetUserMedia) {
-                    // 使用旧版API，需要包装
-                    const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia;
-                    const stream = await new Promise((resolve, reject) => {
-                        legacyGetUserMedia.call(navigator, { audio: true }, resolve, reject);
+            let stream = null;
+            
+            // 优先使用新版API
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true,
+                            sampleRate: 16000
+                        } 
                     });
-                    this._micStream = stream;
-                } else {
-                    this.showToast('浏览器不支持麦克风访问', 'error');
-                    return;
+                } catch (err) {
+                    console.warn('getUserMedia failed:', err);
+                    // 如果失败，尝试不指定sampleRate
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ 
+                            audio: {
+                                echoCancellation: true,
+                                noiseSuppression: true,
+                                autoGainControl: true
+                            } 
+                        });
+                    } catch (err2) {
+                        console.warn('getUserMedia fallback failed:', err2);
+                        throw err2;
+                    }
                 }
             } else {
-                // 使用新版API
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                        sampleRate: 16000
-                    } 
-                });
-                this._micStream = stream;
+                // 尝试旧版API（Edge等浏览器）
+                const getUserMedia = navigator.getUserMedia || 
+                                    navigator.webkitGetUserMedia || 
+                                    navigator.mozGetUserMedia || 
+                                    navigator.msGetUserMedia;
+                if (getUserMedia) {
+                    stream = await new Promise((resolve, reject) => {
+                        getUserMedia.call(navigator, { audio: true }, resolve, reject);
+                    });
+                } else {
+                    this.showToast('浏览器不支持麦克风访问，请使用现代浏览器（Chrome、Firefox、Edge等）', 'error');
+                    return;
+                }
             }
+            
+            if (!stream) {
+                this.showToast('无法获取麦克风权限', 'error');
+                return;
+            }
+            
+            this._micStream = stream;
             
             // 创建音频上下文
             this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });

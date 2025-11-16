@@ -142,12 +142,34 @@ html {
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     background: var(--bg-primary);
+    background-image: url('./img/bg.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
     transition: background-color var(--transition-slow), color var(--transition-slow);
     position: relative;
     overflow-x: hidden;
+}
+
+/* 背景遮罩层，确保文字可读性 */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(26, 21, 8, 0.75); /* 半透明深色遮罩 */
+    z-index: 0;
+    pointer-events: none;
+}
+
+body.light::before {
+    background: rgba(254, 249, 231, 0.6); /* 亮色主题遮罩 */
 }
 
 /* 粒子背景最底层 */
@@ -160,8 +182,8 @@ body {
     pointer-events: none;
 }
 
-/* 向日葵动态背景效果 */
-body::before {
+/* 向日葵动态背景效果（移到body::after） */
+body::after {
     content: '';
     position: fixed;
     top: 0;
@@ -173,26 +195,9 @@ body::before {
         radial-gradient(circle at 80% 80%, var(--accent-light) 0%, transparent 50%),
         radial-gradient(circle at 40% 20%, var(--sunflower-brown-light) 0%, transparent 50%);
     pointer-events: none;
-    opacity: 0.4;
+    opacity: 0.3;
     animation: sunflowerFloat 40s ease-in-out infinite;
     z-index: 0;
-}
-
-/* 向日葵花瓣装饰线条 */
-body::after {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: 
-        repeating-linear-gradient(45deg, transparent, transparent 2px, var(--border-light) 2px, var(--border-light) 4px),
-        repeating-linear-gradient(-45deg, transparent, transparent 2px, var(--border-light) 2px, var(--border-light) 4px);
-    pointer-events: none;
-    opacity: 0.1;
-    z-index: 0;
-    animation: lineMove 60s linear infinite;
 }
 
 @keyframes sunflowerFloat {
@@ -3004,6 +3009,122 @@ body.light .json-null {
 
     .bot-details {
         grid-template-columns: 1fr;
+    }
+    
+    /* 配置管理器手机端优化 */
+    .config-item {
+        padding: 20px;
+        margin-bottom: 16px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+    }
+    
+    .config-item-title,
+    .config-item-name {
+        font-size: 16px;
+        text-align: center;
+        width: 100%;
+    }
+    
+    .config-item-desc {
+        font-size: 13px;
+        text-align: center;
+        width: 100%;
+    }
+    
+    .config-item-actions {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .sub-config-list {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+    }
+    
+    .sub-config-item {
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+        padding: 16px;
+    }
+    
+    /* 系统状态卡片手机端优化 */
+    .system-status-grid {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 16px;
+    }
+    
+    .status-card-large {
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+    }
+    
+    .status-card-header h3 {
+        font-size: 16px;
+        text-align: center;
+    }
+    
+    .status-card-content {
+        text-align: center;
+    }
+    
+    /* 文字颜色优化，确保可见性 */
+    .text-primary,
+    .welcome-title,
+    .welcome-desc {
+        color: var(--text-primary);
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+    
+    /* API卡片手机端优化 */
+    .api-item {
+        padding: 16px;
+        text-align: center;
+        font-size: 14px;
+    }
+    
+    /* 聊天界面手机端优化 */
+    .ai-chat-container {
+        padding: 16px;
+    }
+    
+    .ai-chat-header {
+        text-align: center;
+    }
+    
+    .ai-chat-title {
+        font-size: 18px;
+        text-align: center;
+    }
+    
+    .ai-chat-controls {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    /* 减小基础字体 */
+    :root {
+        font-size: 14px;
+    }
+    
+    .btn {
+        font-size: 14px;
+        padding: 14px 24px;
     }
 }
 
