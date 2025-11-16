@@ -12,11 +12,11 @@
     --bg-card: rgba(255, 255, 255, 0.2);
     --bg-hover: rgba(255, 255, 255, 0.3);
     
-    /* 字体颜色 - 在粉色背景下清晰可见 */
+    /* 字体颜色 - 在深色背景下清晰可见，增强对比度 */
     --text-primary: #ffffff;
-    --text-secondary: rgba(255, 255, 255, 0.9);
-    --text-muted: rgba(255, 255, 255, 0.7);
-    --text-dim: rgba(255, 255, 255, 0.5);
+    --text-secondary: rgba(255, 255, 255, 0.95);
+    --text-muted: rgba(255, 255, 255, 0.85);
+    --text-dim: rgba(255, 255, 255, 0.7);
     
     /* 粉色梦幻系主色调 */
     --accent: #ff67b8;
@@ -95,31 +95,32 @@
 }
 .status-card-content { margin-top: 10px; }
 
-/* 亮色主题配色 - 粉色梦幻系亮色版 */
+/* 亮色主题配色 - 粉色梦幻系亮色版，增强对比度 */
 body.light {
     --bg-primary: transparent;
-    --bg-secondary: rgba(255, 182, 218, 0.2);
-    --bg-tertiary: rgba(200, 181, 255, 0.2);
-    --bg-card: rgba(255, 255, 255, 0.4);
-    --bg-hover: rgba(255, 255, 255, 0.5);
+    --bg-secondary: rgba(255, 182, 218, 0.35);
+    --bg-tertiary: rgba(200, 181, 255, 0.35);
+    --bg-card: rgba(255, 255, 255, 0.65);
+    --bg-hover: rgba(255, 255, 255, 0.75);
     
-    --text-primary: #1a1a2e;
-    --text-secondary: #2d2d44;
-    --text-muted: #4a4a6a;
-    --text-dim: #6a6a8a;
+    /* 深色文字，确保在亮色背景下清晰可读 */
+    --text-primary: #0f0f1e;
+    --text-secondary: #1a1a2e;
+    --text-muted: #3a3a5a;
+    --text-dim: #5a5a7a;
     
-    --accent: #ff67b8;
-    --accent-hover: #ff4da6;
-    --accent-light: rgba(255, 103, 184, 0.2);
-    --accent-glow: rgba(255, 103, 184, 0.4);
+    --accent: #e91e63;
+    --accent-hover: #c2185b;
+    --accent-light: rgba(233, 30, 99, 0.25);
+    --accent-glow: rgba(233, 30, 99, 0.5);
     
-    --border: rgba(255, 103, 184, 0.3);
-    --border-light: rgba(255, 103, 184, 0.15);
+    --border: rgba(233, 30, 99, 0.4);
+    --border-light: rgba(233, 30, 99, 0.2);
     
-    --shadow-sm: 0 2px 8px rgba(255, 103, 184, 0.15);
-    --shadow-md: 0 4px 20px rgba(255, 103, 184, 0.2);
-    --shadow-lg: 0 10px 40px rgba(255, 103, 184, 0.25);
-    --shadow-xl: 0 20px 60px rgba(255, 103, 184, 0.3);
+    --shadow-sm: 0 2px 8px rgba(233, 30, 99, 0.2);
+    --shadow-md: 0 4px 20px rgba(233, 30, 99, 0.25);
+    --shadow-lg: 0 10px 40px rgba(233, 30, 99, 0.3);
+    --shadow-xl: 0 20px 60px rgba(233, 30, 99, 0.35);
 }
 
 /* ==================== 基础重置 ==================== */
@@ -144,13 +145,8 @@ html {
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-    /* 背景图在最底层，确保可见 */
+    /* body不设置背景图，背景图只在主内容区域显示 */
     background: transparent;
-    background-image: url('./img/bg.png');
-    background-size: 100% auto;
-    background-position: center;
-    background-attachment: fixed;
-    background-repeat: no-repeat;
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
@@ -182,18 +178,18 @@ body::before {
 
 body.light::before {
     background: linear-gradient(135deg,
-        rgba(247, 112, 184, 0.2) 0%,
-        rgba(140, 114, 236, 0.2) 50%,
-        rgba(87, 194, 255, 0.2) 100%);
+        rgba(255, 182, 218, 0.4) 0%,
+        rgba(200, 181, 255, 0.4) 50%,
+        rgba(173, 216, 255, 0.4) 100%);
     background-size: 200% 200%;
-    opacity: 0.25;
+    opacity: 0.5;
 }
 
 @keyframes shine {
     0% {
         background-position: 0% 0%;
     }
-    50% {
+    50% { 
         background-position: 100% 100%;
     }
     100% {
@@ -210,7 +206,7 @@ body.light::before {
     z-index: 1;
     pointer-events: none;
     opacity: 0.6; /* 降低不透明度，让背景图更明显 */
-}
+    }
 
 /* 移除冗余的sunflowerFloat动画，使用shine动画替代 */
 
@@ -258,7 +254,10 @@ body.light::before {
 .main-content {
     position: relative;
     z-index: 2;
-    /* 确保背景透明，让背景图可见 */
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     background: transparent;
 }
 
@@ -285,6 +284,44 @@ body.light::before {
     overflow: hidden;
     z-index: 2;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    /* 添加背景图发光效果 */
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1),
+                0 0 40px rgba(255, 103, 184, 0.2),
+                0 0 80px rgba(140, 114, 236, 0.15);
+}
+
+/* 侧边栏发光效果增强 */
+.sidebar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -2px;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, 
+        rgba(255, 103, 184, 0.4) 0%,
+        rgba(140, 114, 236, 0.4) 50%,
+        rgba(87, 194, 255, 0.4) 100%);
+    box-shadow: 0 0 20px rgba(255, 103, 184, 0.5),
+                0 0 40px rgba(140, 114, 236, 0.3);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* 亮色主题下的侧边栏发光效果 */
+body.light .sidebar {
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1),
+                0 0 40px rgba(233, 30, 99, 0.25),
+                0 0 80px rgba(156, 39, 176, 0.2);
+}
+
+body.light .sidebar::before {
+    background: linear-gradient(180deg, 
+        rgba(233, 30, 99, 0.5) 0%,
+        rgba(156, 39, 176, 0.5) 50%,
+        rgba(103, 58, 183, 0.5) 100%);
+    box-shadow: 0 0 20px rgba(233, 30, 99, 0.6),
+                0 0 40px rgba(156, 39, 176, 0.4);
 }
 
 /* 删除冗余的sidebar渐变，避免遮挡背景图 */
@@ -774,19 +811,46 @@ body.light .theme-toggle-thumb::before {
     padding: 24px 28px;
     position: relative;
     z-index: 2;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    /* 添加背景图发光效果 */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1),
+                0 0 40px rgba(255, 103, 184, 0.2),
+                0 0 80px rgba(140, 114, 236, 0.15);
 }
 
-.header::after {
+/* 顶部栏底部发光效果 */
+.header::before {
     content: '';
     position: absolute;
-    bottom: 0;
+    bottom: -2px;
     left: 0;
     right: 0;
-    height: 1px;
-    background: var(--gradient-warm);
-    opacity: 0.3;
+    height: 4px;
+    background: linear-gradient(90deg, 
+        rgba(255, 103, 184, 0.4) 0%,
+        rgba(140, 114, 236, 0.4) 50%,
+        rgba(87, 194, 255, 0.4) 100%);
+    box-shadow: 0 0 20px rgba(255, 103, 184, 0.5),
+                0 0 40px rgba(140, 114, 236, 0.3);
+    pointer-events: none;
+    z-index: 1;
 }
+
+/* 亮色主题下的顶部栏发光效果 */
+body.light .header {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1),
+                0 0 40px rgba(233, 30, 99, 0.25),
+                0 0 80px rgba(156, 39, 176, 0.2);
+}
+
+body.light .header::before {
+    background: linear-gradient(90deg, 
+        rgba(233, 30, 99, 0.5) 0%,
+        rgba(156, 39, 176, 0.5) 50%,
+        rgba(103, 58, 183, 0.5) 100%);
+    box-shadow: 0 0 20px rgba(233, 30, 99, 0.6),
+                0 0 40px rgba(156, 39, 176, 0.4);
+}
+
 
 .header-content {
     display: flex;
@@ -940,7 +1004,12 @@ body.light .theme-toggle-thumb::before {
     max-width: 100%;
     box-sizing: border-box;
     position: relative;
-    background: transparent; /* 透明背景，让背景图可见 */
+    /* 背景图只在内容区域显示，不覆盖侧边栏和顶部栏 */
+    background-image: url('./img/bg.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
     z-index: 2;
 }
 
@@ -2878,6 +2947,13 @@ body.light .json-null {
         --sidebar-width: 85%;
     }
 
+    /* 移动端：背景图裁剪填充屏幕，不显示完整图片 */
+    .content {
+        background-size: cover;
+        background-position: center center;
+        background-attachment: scroll; /* 移动端使用scroll提高性能 */
+    }
+
     .floating-btn {
         display: flex;
         align-items: center;
@@ -2891,7 +2967,9 @@ body.light .json-null {
         width: var(--sidebar-width);
         max-width: 320px;
         height: 100vh;
-        box-shadow: 4px 0 30px rgba(0, 0, 0, 0.3);
+        box-shadow: 4px 0 30px rgba(0, 0, 0, 0.3),
+                    0 0 40px rgba(255, 103, 184, 0.2),
+                    0 0 80px rgba(140, 114, 236, 0.15);
         transform: translateX(-100%);
         z-index: 10001;
     }
@@ -2907,6 +2985,9 @@ body.light .json-null {
 
     .header {
         padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1),
+                    0 0 40px rgba(255, 103, 184, 0.2),
+                    0 0 80px rgba(140, 114, 236, 0.15);
     }
 
     .header-content {
@@ -3073,6 +3154,12 @@ body.light .json-null {
 }
 
 @media (max-width: 480px) {
+    /* 小屏幕：确保背景图完全填充 */
+    .content {
+        background-size: cover;
+        background-position: center center;
+    }
+
     .floating-btn {
         width: 58px;
         height: 58px;
