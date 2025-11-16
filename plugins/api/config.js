@@ -59,6 +59,13 @@ export default {
         }
 
         try {
+          if (!global.ConfigManager) {
+            return res.status(503).json({
+              success: false,
+              message: '配置管理器未初始化，请稍后重试'
+            });
+          }
+
           const configList = global.ConfigManager.getList();
           
           res.json({
@@ -67,6 +74,7 @@ export default {
             count: configList.length
           });
         } catch (error) {
+          BotUtil.makeLog('error', `获取配置列表失败: ${error.message}`, 'ConfigAPI', error);
           res.status(500).json({
             success: false,
             message: '获取配置列表失败',
