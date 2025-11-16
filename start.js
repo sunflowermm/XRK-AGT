@@ -162,14 +162,30 @@ class Logger {
 
 /**
  * 基础管理类
- * 提供所有管理器的公共功能
+ * 
+ * 提供所有管理器的公共功能，包括目录管理、日志记录等。
+ * 所有管理器类应继承此类以获得统一的公共功能。
  * 
  * @abstract
  * @class BaseManager
+ * @example
+ * // 创建自定义管理器
+ * class MyManager extends BaseManager {
+ *   constructor(logger) {
+ *     super(logger);
+ *   }
+ *   
+ *   async doSomething() {
+ *     await this.ensureDirectories();
+ *     await this.logger.log('执行操作');
+ *   }
+ * }
  */
 class BaseManager {
   /**
-   * @param {Logger} logger - 日志实例
+   * 构造函数
+   * 
+   * @param {Logger} logger - 日志实例（必填）
    */
   constructor(logger) {
     /** @type {Logger} */

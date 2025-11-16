@@ -18,6 +18,12 @@ memory:
   nodeThreshold: 85            # Node堆内存阈值（%）
   autoOptimize: true           # 自动优化
   gcInterval: 600000           # GC最小间隔（毫秒）
+  
+  # 内存泄漏检测
+  leakDetection:
+    enabled: true              # 启用泄漏检测
+    threshold: 0.1             # 10%增长视为潜在泄漏
+    checkInterval: 300000      # 检查间隔（毫秒，5分钟）
     
 # CPU监控
 cpu:

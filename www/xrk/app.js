@@ -1196,10 +1196,12 @@ class APIControlCenter {
     }
 
     _loadChatHistory() {
-        try { return JSON.parse(localStorage.getItem('chatHistory') || '[]'); } catch { return []; }
+        const stored = localStorage.getItem('chatHistory');
+        if (!stored) return [];
+        return JSON.parse(stored);
     }
     _saveChatHistory() {
-        try { localStorage.setItem('chatHistory', JSON.stringify((this._chatHistory || []).slice(-200))); } catch {}
+        localStorage.setItem('chatHistory', JSON.stringify((this._chatHistory || []).slice(-200)));
     }
     _persistChat(role, text, ts = Date.now()) {
         if (!text) return;
@@ -1393,49 +1395,52 @@ class APIControlCenter {
             this._scheduleWsReconnect();
         });
         this._deviceWs.addEventListener('message', (evt) => {
+            let data;
             try {
-                const data = JSON.parse(evt.data);
-                if (data?.type === 'heartbeat_request') {
-                    try {
-                        this._deviceWs?.send(JSON.stringify({
-                            type: 'heartbeat',
-                            device_id: 'webclient',
-                            status: { ts: Date.now() }
-                        }));
-                    } catch {}
-                    return;
+                data = JSON.parse(evt.data);
+            } catch (e) {
+                return; // 无效的JSON数据，忽略
+            }
+            if (data.type === 'heartbeat_request') {
+                if (this._deviceWs && this._deviceWs.readyState === 1) {
+                    this._deviceWs.send(JSON.stringify({
+                        type: 'heartbeat',
+                        device_id: 'webclient',
+                        status: { ts: Date.now() }
+                    }));
                 }
-                if (data?.type === 'heartbeat_response') {
-                    if (Array.isArray(data.commands) && data.commands.length > 0) {
-                        this._handleDeviceCommands(data.commands);
-                    }
-                    return;
+                return;
+            }
+            if (data.type === 'heartbeat_response') {
+                if (Array.isArray(data.commands) && data.commands.length > 0) {
+                    this._handleDeviceCommands(data.commands);
                 }
-                if (data?.type === 'command') {
-                    const cmd = data.command ? [data.command] : [];
-                    if (cmd.length) this._handleDeviceCommands(cmd);
-                    return;
+                return;
+            }
+            if (data.type === 'command') {
+                const cmd = data.command ? [data.command] : [];
+                if (cmd.length) this._handleDeviceCommands(cmd);
+                return;
+            }
+            if (data.type === 'asr_interim' && data.text) {
+                // 只显示最新的识别结果
+                this.renderASRStreaming(data.text, false);
+                return;
+            }
+            if (data.type === 'asr_final' && data.text) {
+                // 结束识别：移除"识别中"，并把最终文本作为用户消息显示 + 持久化
+                this.renderASRStreaming('', true);
+                const finalText = data.text || '';
+                if (finalText && finalText !== this._lastAsrFinal) {
+                    this.appendChat('user', finalText, true);
+                    this._lastAsrFinal = finalText;
                 }
-                if (data?.type === 'asr_interim' && data.text) {
-                    // 只显示最新的识别结果
-                    this.renderASRStreaming(data.text, false);
-                    return;
-                }
-                if (data?.type === 'asr_final' && data.text) {
-                    // 结束识别：移除“识别中”，并把最终文本作为用户消息显示 + 持久化
-                    this.renderASRStreaming('', true);
-                    const finalText = data.text || '';
-                    if (finalText && finalText !== this._lastAsrFinal) {
-                        this.appendChat('user', finalText, true);
-                        this._lastAsrFinal = finalText;
-                    }
-                    return;
-                }
-                if (data?.type === 'register_response' && data.success) {
-                    this.showToast('已连接设备: webclient', 'success');
-                    try { this.loadStats(); } catch {}
-                }
-            } catch {}
+                return;
+            }
+            if (data.type === 'register_response' && data.success) {
+                this.showToast('已连接设备: webclient', 'success');
+                this.loadStats();
+            }
         });
         // 移除重复的空监听器，避免冗余
     }
@@ -1651,14 +1656,64 @@ class APIControlCenter {
     async startMic() {
         try {
             await this.ensureDeviceWs();
-            if (!navigator.mediaDevices?.getUserMedia) {
-                this.showToast('浏览器不支持麦克风', 'error');
-                return;
+            
+            // 检查浏览器支持
+            if (!navigator.mediaDevices) {
+                // 尝试使用旧版API
+                const getUserMedia = navigator.getUserMedia || 
+                                    navigator.webkitGetUserMedia || 
+                                    navigator.mozGetUserMedia || 
+                                    navigator.msGetUserMedia;
+                if (!getUserMedia) {
+                    this.showToast('浏览器不支持麦克风访问，请使用现代浏览器（Chrome、Firefox、Edge等）', 'error');
+                    return;
+                }
+                // 使用旧版API（需要polyfill处理）
+                this.showToast('检测到旧版浏览器API，建议升级浏览器', 'warning');
             }
+            
+            // 检查HTTPS或localhost（某些浏览器要求）
+            const isSecureContext = window.isSecureContext || 
+                                   location.protocol === 'https:' || 
+                                   location.hostname === 'localhost' || 
+                                   location.hostname === '127.0.0.1';
+            
+            if (!isSecureContext && !navigator.mediaDevices) {
+                this.showToast('麦克风访问需要HTTPS环境或localhost，当前环境可能不支持', 'warning');
+            }
+            
+            // 检查getUserMedia方法
+            if (!navigator.mediaDevices?.getUserMedia) {
+                // 尝试polyfill
+                if (navigator.getUserMedia || navigator.webkitGetUserMedia) {
+                    // 使用旧版API，需要包装
+                    const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia;
+                    const stream = await new Promise((resolve, reject) => {
+                        legacyGetUserMedia.call(navigator, { audio: true }, resolve, reject);
+                    });
+                    this._micStream = stream;
+                } else {
+                    this.showToast('浏览器不支持麦克风访问', 'error');
+                    return;
+                }
+            } else {
+                // 使用新版API
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 16000
+                    } 
+                });
+                this._micStream = stream;
+            }
+            
+            // 创建音频上下文
             this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this._micStream = stream;
-            const source = this._audioCtx.createMediaStreamSource(stream);
+            const source = this._audioCtx.createMediaStreamSource(this._micStream);
+            
+            // 使用ScriptProcessorNode（兼容性更好）
             const processor = this._audioCtx.createScriptProcessor(4096, 1, 1);
             source.connect(processor);
             processor.connect(this._audioCtx.destination);
