@@ -254,21 +254,20 @@ body.light::before {
     z-index: 2; /* 内容在最上层 */
 }
 
-/* 主内容区域 - 参考用户提供的HTML样式 */
-.main-content {
-    position: relative;
-    z-index: 2;
-    /* 确保背景透明，让背景图可见 */
-    background: transparent;
+/* 主内容区域定义在下方，这里删除重复定义 */
+
+/* 内容卡片 - 使用统一的卡片背景色 */
+.content-card {
+    background: var(--bg-card);
+    border-radius: 20px;
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
 }
 
-/* 内容卡片 - 参考用户提供的半透明白色背景 */
-.content-card {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 20px;
-    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+/* 亮色主题：内容卡片边框和阴影 */
+body.light .content-card {
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
 /* ==================== 侧边栏 ==================== */
@@ -280,7 +279,7 @@ body.light::before {
     border-right: 1px solid rgba(255, 255, 255, 0.3);
     display: flex;
     flex-direction: column;
-    transition: all var(--transition-smooth);
+    transition: transform var(--transition-base);
     position: relative;
     overflow: hidden;
     z-index: 2;
@@ -487,7 +486,7 @@ body.light .theme-toggle-thumb::before {
     align-items: center;
     gap: 12px;
     cursor: pointer;
-    transition: all var(--transition-base);
+    transition: transform var(--transition-base), border-color var(--transition-base);
     text-decoration: none;
     color: var(--text-primary);
     position: relative;
@@ -824,11 +823,10 @@ body.light .theme-toggle-thumb::before {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    /* 背景图只在主内容区域显示，确保充满整个区域 */
+    /* 背景图只在主内容区域显示，从侧边栏右侧开始，自然充满整个区域 */
     background-image: url('./img/bg.png');
     background-size: cover;
     background-position: center center;
-    background-attachment: fixed;
     background-repeat: no-repeat;
     position: relative;
     /* 确保背景图在遮罩层之上 */
@@ -1366,7 +1364,7 @@ body.light .welcome-desc {
     background: var(--gradient-primary);
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    transition: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transition: width var(--transition-base), height var(--transition-base);
     z-index: -1;
 }
 
@@ -2668,16 +2666,21 @@ body.light .json-null {
 }
 
 .bot-card {
-    background: rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: var(--bg-card);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 24px;
-    transition: all var(--transition-base);
+    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
     animation: botCardFadeIn 0.5s ease-out backwards;
     position: relative;
     overflow: hidden;
+}
+
+/* 亮色主题：机器人卡片边框和阴影 */
+body.light .bot-card {
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 15px rgba(230, 57, 155, 0.2);
 }
 
 .bot-card::before {
@@ -3055,7 +3058,6 @@ body.light .json-null {
         /* 移动端：背景图使用cover确保充满屏幕，并裁切多余部分 */
         background-size: cover;
         background-position: center center;
-        background-attachment: scroll; /* 移动端不使用fixed，避免性能问题 */
         min-height: 100vh; /* 确保背景图覆盖整个屏幕 */
     }
 
@@ -4178,7 +4180,7 @@ body.no-scroll {
     border-radius: 20px;
     margin-bottom: 16px;
     cursor: pointer;
-    transition: all var(--transition-base);
+    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base), background var(--transition-base);
     position: relative;
     overflow: hidden;
     box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.4);
@@ -4838,7 +4840,7 @@ body.light .config-item-desc {
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-radius: 20px;
     cursor: pointer;
-    transition: all var(--transition-base);
+    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base), background var(--transition-base);
     text-align: center;
     width: 100%;
     max-width: 400px;
