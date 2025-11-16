@@ -74,17 +74,19 @@
 
 /* ==================== 首页状态卡统一交互 ==================== */
 .status-card-large {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 20px;
     padding: 18px 18px 16px;
-    box-shadow: var(--shadow-sm);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3), 0 4px 5px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
 }
 .status-card-large:hover {
     transform: translateY(-6px);
-    box-shadow: var(--shadow-lg);
-    border-color: var(--accent);
+    box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.4), 0 8px 15px rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.5);
 }
 .status-card-header h3 {
     font-size: 16px;
@@ -143,7 +145,7 @@ body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     background: var(--bg-primary);
     background-image: url('./img/bg.png');
-    background-size: cover;
+    background-size: 100% auto;
     background-position: center;
     background-attachment: fixed;
     background-repeat: no-repeat;
@@ -164,23 +166,23 @@ body::before {
     right: 0;
     bottom: 0;
     background: linear-gradient(135deg,
-        rgba(87, 194, 255, 0.3) 0%,
-        rgba(247, 112, 184, 0.3) 50%,
-        rgba(140, 114, 236, 0.3) 100%);
+        rgba(87, 194, 255, 0.5) 0%,
+        rgba(247, 112, 184, 0.5) 50%,
+        rgba(140, 114, 236, 0.5) 100%);
     background-size: 200% 200%;
     animation: shine 3s infinite linear;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.4;
+    opacity: 0.6;
 }
 
 body.light::before {
     background: linear-gradient(135deg,
-        rgba(87, 194, 255, 0.2) 0%,
-        rgba(247, 112, 184, 0.2) 50%,
-        rgba(140, 114, 236, 0.2) 100%);
+        rgba(87, 194, 255, 0.3) 0%,
+        rgba(247, 112, 184, 0.3) 50%,
+        rgba(140, 114, 236, 0.3) 100%);
     background-size: 200% 200%;
-    opacity: 0.3;
+    opacity: 0.4;
 }
 
 @keyframes shine {
@@ -238,6 +240,21 @@ body.light::before {
     height: 100vh;
     position: relative;
     z-index: 1;
+}
+
+/* 主内容区域 - 参考用户提供的HTML样式 */
+.main-content {
+    position: relative;
+    z-index: 1;
+}
+
+/* 内容卡片 - 参考用户提供的半透明白色背景 */
+.content-card {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 /* ==================== 侧边栏 ==================== */
@@ -1460,7 +1477,13 @@ body.light .theme-toggle-thumb::before {
     max-width: 1600px;
     margin: 0 auto;
     width: 100%;
+    padding: 32px;
     animation: containerFadeIn 0.4s ease-out;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.2), 0 4px 5px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 @keyframes containerFadeIn {
@@ -2203,14 +2226,16 @@ textarea.input-field {
 }
 
 .btn-primary {
-    background: var(--gradient-primary);
+    background: linear-gradient(135deg, #4dc6ff, #ff67b8);
     color: white;
-    box-shadow: 0 4px 15px var(--accent-glow);
+    box-shadow: 0 4px 15px rgba(77, 198, 255, 0.4);
+    border: none;
 }
 
 .btn-primary:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 25px var(--accent-glow);
+    box-shadow: 0 8px 25px rgba(77, 198, 255, 0.6);
+    background: linear-gradient(135deg, #5dd5ff, #ff77c8);
 }
 
 .btn-secondary {
@@ -3724,10 +3749,12 @@ body.no-scroll {
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-primary);
-    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
     overflow: hidden;
-    box-shadow: var(--shadow-lg);
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.2), 0 4px 5px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .config-editor-header {
@@ -3847,14 +3874,17 @@ body.no-scroll {
     align-items: center;
     gap: 20px;
     padding: 24px;
-    background: var(--bg-card);
-    border: 2px solid var(--border);
-    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 20px;
     margin-bottom: 16px;
     cursor: pointer;
     transition: all var(--transition-base);
     position: relative;
     overflow: hidden;
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.2), 0 4px 5px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .config-item::before {
@@ -4447,9 +4477,9 @@ body.no-scroll {
 
 .sub-config-item {
     padding: 20px;
-    background: var(--bg-card);
-    border: 2px solid var(--border);
-    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 20px;
     cursor: pointer;
     transition: all var(--transition-base);
     text-align: center;
@@ -4461,6 +4491,9 @@ body.no-scroll {
     justify-content: center;
     gap: 12px;
     box-sizing: border-box;
+    box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.2), 0 4px 5px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .sub-config-item:hover {

@@ -85,6 +85,11 @@ class APIControlCenter {
         this._initParticles();
         this._installRouter();
         
+        // 预加载CodeMirror编辑器，避免进入API测试界面时延迟
+        this._loadCodeMirror().catch(err => {
+            console.warn('CodeMirror预加载失败:', err);
+        });
+        
         // 每分钟更新一次系统状态
         setInterval(() => {
             if (this.currentPage === 'home') {
