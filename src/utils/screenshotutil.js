@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url);
 
 // 全局常量
 const ROOT_PATH = process.cwd();
-const DB_PATH = path.join(ROOT_PATH, 'temp/screenshot/screenshot-manager.db');
+const DB_PATH = path.join(ROOT_PATH, 'trash/screenshot/screenshot-manager.db');
 const OUTPUT_BASE_PATH = path.join(ROOT_PATH, 'plugins/XRK/resources/help_other');
 const MAX_RENDER_COUNT = 100;
 const MAX_IDLE_TIME = 3600000;

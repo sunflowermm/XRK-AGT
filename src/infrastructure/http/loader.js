@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import HttpApi from './http.js';
-import BotUtil from '../common/util.js';
+import BotUtil from '../../utils/botutil.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
