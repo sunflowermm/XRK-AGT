@@ -1,4 +1,4 @@
-import PluginsLoader from '../../lib/plugins/loader.js';
+import PluginsLoader from '../../src/infrastructure/plugins/loader.js';
 
 /**
  * 插件管理API

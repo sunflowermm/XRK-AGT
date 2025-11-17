@@ -2,7 +2,7 @@
  * 配置管理API
  * 提供统一的配置文件读写接口
  */
-import BotUtil from '../../lib/common/util.js';
+import BotUtil from '../../src/utils/botutil.js';
 
 // 辅助函数：清理配置数据
 function cleanConfigData(data, config) {

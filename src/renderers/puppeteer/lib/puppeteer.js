@@ -1,11 +1,11 @@
-import Renderer from "../../../lib/renderer/Renderer.js";
+import Renderer from "../../../infrastructure/renderer/Renderer.js";
 import os from "node:os";
 import lodash from "lodash";
 import puppeteer from "puppeteer";
 import cfg from "../../../infrastructure/config/config.js";
 import fs from "node:fs";
 import path from "node:path";
-import BotUtil from "../../../lib/common/util.js";
+import BotUtil from "../../../utils/botutil.js";
 
 const _path = process.cwd();
 

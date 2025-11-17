@@ -3,7 +3,7 @@
  * 集中管理所有配置项，便于维护和扩展
  */
 
-import cfg from '../../lib/config/config.js';
+import cfg from '../../infrastructure/config/config.js';
 
 // ==================== AI配置 ====================
 export const AI_CONFIG = {

@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
-import BotUtil from '../../lib/common/util.js';
-import StreamLoader from '../../lib/aistream/loader.js';
+import BotUtil from '../../src/utils/botutil.js';
+import StreamLoader from '../../src/infrastructure/aistream/loader.js';
 import fs from 'fs';
 import path from 'path';
 

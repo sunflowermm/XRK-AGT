@@ -15,7 +15,7 @@ import events from 'events';
 import readline from 'readline';
 import vm from 'vm';
 import util from 'util';
-import common from '../../lib/common/common.js';
+// common removed; use BotUtil where needed
 import cfg from '../../lib/config/config.js';
 import { 制作聊天记录 } from '../../src/utils/util.js';
 

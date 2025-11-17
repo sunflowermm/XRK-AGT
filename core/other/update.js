@@ -2,7 +2,7 @@ import { createRequire } from 'module'
 import lodash from 'lodash'
 import fs from 'node:fs'
 import { Restart } from './restart.js'
-import common from '../../lib/common/common.js'
+import BotUtil from '../../src/utils/botutil.js'
 
 const require = createRequire(import.meta.url)
 const { exec, execSync } = require('child_process')
@@ -88,7 +88,7 @@ export class update extends plugin {
     this.updatedPlugins.add('main')
     
     /** 延迟1秒后检查并更新XRK插件 */
-    await common.sleep(1000)
+    await BotUtil.sleep(1000)
     
     const xrkUpdateResults = []
     
@@ -351,7 +351,7 @@ export class update extends plugin {
     /** 发送静默更新结果 */
     if (isSilent) {
       this.reply = originalReply
-      await this.reply(await common.makeForwardMsg(this.e, this.messages))
+      await BotUtil.makeChatRecord(this.e, this.messages, '全部更新结果')
     }
 
     /** 检查是否需要重启 */

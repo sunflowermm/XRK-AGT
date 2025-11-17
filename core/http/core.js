@@ -1,6 +1,6 @@
 import os from 'os';
 import si from 'systeminformation';
-import cfg from '../../lib/config/config.js';
+import cfg from '../../src/infrastructure/config/config.js';
 
 let __lastNetSample = null;
 let __netSampler = null;

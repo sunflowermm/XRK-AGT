@@ -1,4 +1,4 @@
-import ConfigBase from '../../lib/commonconfig/commonconfig.js';
+import ConfigBase from '../../src/infrastructure/commonconfig/commonconfig.js';
 
 /**
  * 系统配置管理

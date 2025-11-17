@@ -1,5 +1,5 @@
 import cfg from './config/config.js'
-import common from '../common/common.js'
+import BotUtil from '../utils/botutil.js'
 import { exec } from 'node:child_process'
 import os from 'node:os'
 import { createClient } from 'redis'
@@ -173,7 +173,7 @@ async function attemptRedisStart(retryCount) {
     
     const waitTime = 2000 + retryCount * 1000
     logger.info(`等待Redis服务启动 (${waitTime}ms)...`)
-    await common.sleep(waitTime)
+    await BotUtil.sleep(waitTime)
   } catch (err) {
     logger.debug(`启动Redis服务时出错: ${err.message}`)
   }
