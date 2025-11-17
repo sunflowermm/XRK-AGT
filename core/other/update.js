@@ -101,7 +101,7 @@ export class update extends plugin {
       
       logger.mark(`[更新] 检测到 ${plugin.name} 插件，自动更新中...`)
       
-      await common.sleep(1500)
+      await BotUtil.sleep(1500)
       
       /** 记录旧版本 */
       const oldCommitId = await this.getcommitId(plugin.name)
@@ -343,7 +343,7 @@ export class update extends plugin {
       plu = this.getPlugin(plu)
       if (plu === false) continue
       
-      await common.sleep(1500)
+      await BotUtil.sleep(1500)
       await this.runUpdate(plu)
       this.updatedPlugins.add(plu)
     }
@@ -419,11 +419,8 @@ export class update extends plugin {
       logger.error(error.toString())
     }
 
-    return common.makeForwardMsg(
-      this.e, 
-      [log, repoUrl], 
-      `${plugin || 'XRK-AGT'} 更新日志，共${line}条`
-    )
+    const title = `${plugin || 'XRK-AGT'} 更新日志，共${line}条`;
+    return `${title}\n\n${log}\n\n${repoUrl}`
   }
 
   /**

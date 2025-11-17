@@ -1799,9 +1799,6 @@ export default class BotUtil {
 }
 
 // 导出兼容性函数
-export async function makemsg(e, messages, title, description) {
-  return BotUtil.makeMsg(e, messages, title, description);
-}
 
 export async function 制作聊天记录(e, messages, title, description) {
   return BotUtil.makeChatRecord(e, messages, title, description);
