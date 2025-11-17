@@ -34,7 +34,7 @@
     "ws": "^8.18.0",
     "yaml": "^2.7.0",
     "ulid": "^2.3.0",
-    "oicq": "link:lib/modules/oicq",
+    "oicq": "link:src/modules/oicq",
     "icqq": "^0.6.10",
     "file-type": "^20.4.1",
     "mime": "^4.0.7",
