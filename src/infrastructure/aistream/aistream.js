@@ -1,8 +1,7 @@
 import fetch from 'node-fetch';
 import path from 'path';
 import fs from 'fs';
-import BotUtil from '../common/util.js';
-
+import BotUtil from '../../utils/botutil.js'
 /**
  * 轻量级文本相似度计算器（BM25算法）
  */
