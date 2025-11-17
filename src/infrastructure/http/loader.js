@@ -40,7 +40,7 @@ class ApiLoader {
     BotUtil.makeLog('info', '开始加载API模块...', 'ApiLoader');
     
     // API目录路径
-    const apiDir = path.join(process.cwd(), 'plugins/api');
+    const apiDir = path.join(process.cwd(), 'core/http');
     
     // 确保目录存在
     await fs.mkdir(apiDir, { recursive: true });

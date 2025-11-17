@@ -15,13 +15,13 @@ class ListenerLoader {
     let eventCount = 0
     
     try {
-      const files = await fs.readdir("./plugins/events")
+      const files = await fs.readdir("./core/events")
       const eventFiles = files.filter(file => file.endsWith(".js"))
       
       for (const file of eventFiles) {
         Bot.makeLog('debug', `加载监听事件: ${file}`, 'ListenerLoader');
         try {
-          const listener = await import(`../../plugins/events/${file}`)
+          const listener = await import(`../../core/events/${file}`)
           if (!listener.default) continue
           
           const instance = new listener.default()

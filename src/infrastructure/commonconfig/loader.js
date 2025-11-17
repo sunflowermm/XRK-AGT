@@ -18,7 +18,7 @@ class ConfigLoader {
     this.loaded = false;
     
     /** 配置目录路径 */
-    this.configDir = path.join(process.cwd(), 'config/commonconfig');
+    this.configDir = path.join(process.cwd(), 'core/commonconfig');
   }
 
   /**

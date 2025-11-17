@@ -1,5 +1,5 @@
 import AIStream from '../../src/infrastructure/aistream/aistream.js';
-import BotUtil from '../../src/utils/Botutil.js';
+import BotUtil from '../../src/utils/botutil.js';
 
 /**
  * 设备工作流

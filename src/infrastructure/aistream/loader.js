@@ -5,7 +5,7 @@ import BotUtil from '../../utils/botutil.js';
 import cfg from '../config/config.js';
 
 const _path = process.cwd();
-const STREAMS_DIR = path.join(_path, 'plugins/stream');
+const STREAMS_DIR = path.join(_path, 'core/stream');
 
 /**
  * AI工作流加载器

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import Puppeteer from '../../renderers/puppeteer/lib/puppeteer.js';
+import Puppeteer from '../renderers/puppeteer/lib/puppeteer.js';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import yaml from 'yaml';
