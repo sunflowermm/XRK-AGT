@@ -22,7 +22,7 @@ import common from './common.js';
  * @static
  * @example
  * // 使用工具函数
- * import BotUtil from './lib/common/util.js';
+ * import BotUtil from '../../utils/botutil.js';
  * 
  * // 文件操作
  * await BotUtil.mkdir('./data');
