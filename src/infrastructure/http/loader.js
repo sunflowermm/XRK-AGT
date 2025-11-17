@@ -99,7 +99,7 @@ class ApiLoader {
   async loadApi(filePath) {
     try {
       // 获取相对路径作为key
-      const key = path.relative(path.join(process.cwd(), 'plugins/api'), filePath)
+      const key = path.relative(path.join(process.cwd(), 'core/http'), filePath)
         .replace(/\\/g, '/')
         .replace(/\.js$/, '');
       
@@ -357,7 +357,7 @@ class ApiLoader {
       return;
     }
     
-    const apiDir = path.join(process.cwd(), 'plugins/api');
+    const apiDir = path.join(process.cwd(), 'core/http');
     
     try {
       const { watch } = await import('chokidar');

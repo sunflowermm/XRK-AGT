@@ -129,7 +129,7 @@ export class update extends plugin {
    * @returns {Promise<boolean>} 插件是否完整可用
    */
   async checkPluginIntegrity(plugin) {
-    const pluginPath = `plugins/${plugin.name}`
+    const pluginPath = `core/${plugin.name}`
     
     /** 检查目录是否存在 */
     if (!fs.existsSync(pluginPath)) return false
@@ -162,7 +162,7 @@ export class update extends plugin {
     }
 
     /** 验证插件git仓库是否存在 */
-    if (!fs.existsSync(`plugins/${plugin}/.git`)) return false
+    if (!fs.existsSync(`core/${plugin}/.git`)) return false
 
     this.typeName = plugin
     return plugin
@@ -198,7 +198,7 @@ export class update extends plugin {
       cm = `git reset --hard && git pull --rebase --allow-unrelated-histories`
     }
     
-    if (plugin) cm = `cd "plugins/${plugin}" && ${cm}`
+    if (plugin) cm = `cd "core/${plugin}" && ${cm}`
 
     /** 记录更新前的commit id */
     this.oldCommitId = await this.getcommitId(plugin)
@@ -247,7 +247,7 @@ export class update extends plugin {
    */
   async getcommitId(plugin = '') {
     let cm = 'git rev-parse --short HEAD'
-    if (plugin) cm = `cd "plugins/${plugin}" && ${cm}`
+    if (plugin) cm = `cd "core/${plugin}" && ${cm}`
 
     try {
       const commitId = await execSync(cm, { encoding: 'utf-8' })
@@ -265,7 +265,7 @@ export class update extends plugin {
    */
   async getTime(plugin = '') {
     let cm = 'git log -1 --pretty=%cd --date=format:"%F %T"'
-    if (plugin) cm = `cd "plugins/${plugin}" && ${cm}`
+    if (plugin) cm = `cd "core/${plugin}" && ${cm}`
 
     try {
       const time = await execSync(cm, { encoding: 'utf-8' })
@@ -316,7 +316,7 @@ export class update extends plugin {
    * @returns {Promise<void>}
    */
   async updateAll() {
-    const dirs = fs.readdirSync('./plugins/')
+    const dirs = fs.readdirSync('./core/')
     const originalReply = this.reply
     
     /** 清空已更新记录 */
@@ -374,7 +374,7 @@ export class update extends plugin {
    */
   async getLog(plugin = '') {
     let cm = 'git log -100 --pretty="%h||[%cd] %s" --date=format:"%F %T"'
-    if (plugin) cm = `cd "plugins/${plugin}" && ${cm}`
+    if (plugin) cm = `cd "core/${plugin}" && ${cm}`
 
     let logAll
     try {
@@ -407,7 +407,7 @@ export class update extends plugin {
     let repoUrl = ''
     try {
       cm = 'git config -l'
-      if (plugin) cm = `cd "plugins/${plugin}" && ${cm}`
+      if (plugin) cm = `cd "core/${plugin}" && ${cm}`
       
       const config = await execSync(cm, { encoding: 'utf-8' })
       repoUrl = config

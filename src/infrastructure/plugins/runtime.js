@@ -167,7 +167,7 @@ export default class Runtime {
     await Bot.mkdir(`temp/html/${plugin}/${path}`)
     
     // 自动计算pluResPath
-    let pluResPath = `../../../${lodash.repeat("../", paths.length)}plugins/${plugin}/resources/`
+    let pluResPath = `../../../${lodash.repeat("../", paths.length)}core/${plugin}/resources/`
     
     // 基础渲染data
     data = {
@@ -178,7 +178,7 @@ export default class Runtime {
       _plugin: plugin,
       _htmlPath: path,
       pluResPath,
-      tplFile: `./plugins/${plugin}/resources/${path}.html`,
+      tplFile: `./core/${plugin}/resources/${path}.html`,
       saveId: data.saveId || data.save_id || paths[paths.length - 1],
       ...data
     }

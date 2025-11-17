@@ -44,27 +44,6 @@ cd XRK-AGT
 ```sh
 node app # 启动
 ```
-
-## 目录与规范
-
-核心目录（更多详见 docs/STRUCTURE.md）
-```
-lib/            # 核心运行时（HTTP/WS、工作流、配置、工具）
-  http/         # API 加载器与 HttpApi 基类
-  aistream/     # 工作流加载器与 AI 基类（支持流式）
-plugins/
-  api/          # 业务 API（对象导出，基类统一挂载）
-  stream/       # 工作流（由 StreamLoader 加载）
-www/
-  xrk/          # 控制中心（前端 UI、流式聊天、语音采集）
-docs/           # 文档说明
-```
-
-统一规范
-- API 以对象导出，包含 name/dsc/priority/routes/ws/init/destroy
-- HttpApi 统一包装 routes/middleware/ws
-- 工作流由 StreamLoader 加载，流式调用推荐 SSE（/api/ai/stream）
-
 ### 葵子重要特性
 
 [点进来吧](./stdin.md)

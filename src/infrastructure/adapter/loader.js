@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /**
  * 适配器加载器
- * 负责加载plugins/adapter目录下的所有适配器文件
+ * 负责加载core/adapter目录下的所有适配器文件
  */
 class AdapterLoader {
   /**
@@ -19,7 +19,7 @@ class AdapterLoader {
     let errorCount = 0
     
     try {
-      const adapterDir = path.join(process.cwd(), 'plugins/adapter')
+      const adapterDir = path.join(process.cwd(), 'core/adapter')
       
       // 检查目录是否存在
       try {
@@ -44,7 +44,7 @@ class AdapterLoader {
       for (const file of adapterFiles) {
         try {
           Bot.makeLog('debug', `导入适配器文件: ${file}`, 'AdapterLoader');
-          await import(`../../plugins/adapter/${file}`)
+          await import(`../../core/adapter/${file}`)
           loadedCount++
         } catch (err) {
           Bot.makeLog('error', `导入适配器文件失败: ${file}`, 'AdapterLoader', err);

@@ -1199,7 +1199,7 @@ export default class SystemConfig extends ConfigBase {
             streamDir: {
               type: 'string',
               label: '工作流目录',
-              default: 'plugins/stream',
+              default: 'core/stream',
               component: 'Input'
             },
             global: {

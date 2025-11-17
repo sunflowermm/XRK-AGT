@@ -27,8 +27,7 @@ Disallow: /libs/
 Disallow: /src/
 
 # 插件目录（可能包含私有代码）
-Disallow: /plugins/
-Disallow: /plugin/
+Disallow: /core/
 
 # 临时文件
 Disallow: /temp/

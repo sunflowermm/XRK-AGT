@@ -5,7 +5,7 @@ import BotUtil from '../../src/utils/botutil.js';
  * 设备工作流
  * - 解析响应中的表情标记并驱动设备显示/表情与TTS
  * - 支持 [开心]、[开心}、[惊讶] 等简写
- * - 返回 { text, emotion } 给调用方（plugins/api/device.js 已对接 TTS 与 display）
+ * - 返回 { text, emotion } 给调用方（core/api/device.js 已对接 TTS 与 display）
  */
 export default class DeviceStream extends AIStream {
   constructor() {

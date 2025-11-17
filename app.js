@@ -267,14 +267,14 @@ class DependencyManager {
   }
 
   /**
-   * 扫描并安装插件依赖（plugins/** 和 renderers/**）
+   * 扫描并安装插件依赖（core/** 和 renderers/**）
    * - 若插件目录存在 package.json 且有依赖，自动检测 node_modules 是否齐全
    * - 缺失则执行 {manager} install（在插件子目录下）
    * - 失败会抛错，避免无限卡死
    */
   async ensurePluginDependencies(rootDir = process.cwd()) {
     const manager = await this.detectPackageManager();
-    const pluginGlobs = ['plugins', 'renderers'];
+    const pluginGlobs = ['core', 'renderers'];
 
     const dirs = [];
     for (const base of pluginGlobs) {
