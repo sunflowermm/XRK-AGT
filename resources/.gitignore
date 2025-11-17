@@ -1,0 +1,6 @@
+*
+!.gitignore
+fonts/
+!fonts
+!fonts/Genshin.ttf
+!instruct.txt

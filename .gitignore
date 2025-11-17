@@ -129,16 +129,6 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-# Yunzai data
-dump.rdb
-config/test/*
-!config/test/default.yaml
-logs/
-resources/
-
 # Docker file
-redis
-yunzai
-/.idea/
 /temp/
 /pnpm-lock.yaml

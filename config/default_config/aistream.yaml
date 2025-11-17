@@ -2,7 +2,7 @@
 enabled: true
   
 # 工作流目录路径（相对于项目根目录）
-streamDir: "plugins/stream"
+streamDir: "core/stream"
   
 # 工作流全局设置
 global:

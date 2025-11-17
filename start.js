@@ -470,7 +470,7 @@ class ServerManager extends BaseManager {
       process.argv = [originalArgv[0], originalArgv[1], 'server', port.toString()];
       
       /** 动态导入Bot类 */
-      const { default: BotClass } = await import('./lib/bot.js');
+      const { default: BotClass } = await import('./src/bot.js');
       
       /** 清理旧实例 */
       if (global.Bot) {
