@@ -1,4 +1,4 @@
-import cfg from "../../lib/config/config.js"
+import cfg from "../../src/infrastructure/config/config.js"
 import { ulid } from "ulid"
 
 Bot.adapter.push(new class ComWeChatAdapter {

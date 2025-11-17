@@ -15,9 +15,9 @@ import events from 'events';
 import readline from 'readline';
 import vm from 'vm';
 import util from 'util';
-// common removed; use BotUtil where needed
+import common from '../../src/utils/common.js';
 import cfg from '../../src/infrastructure/config/config.js';
-import BotUtil from '../../src/utils/botutil.js';
+import { 制作聊天记录 } from '../../src/utils/util.js';
 
 const ROOT_PATH = process.cwd();
 
@@ -221,7 +221,7 @@ class TerminalHandler {
                 logger.debug(`[终端工具] 撤回消息失败: ${error.message}`);
               }
             }
-            const msg = await BotUtil.makeChatRecord(e, currentOutput.trim(), '⏳ 命令执行进行中', `${cmd} | 已执行: ${((Date.now() - startTime) / 1000).toFixed(1)}秒`);
+            const msg = await 制作聊天记录(e, currentOutput.trim(), '⏳ 命令执行进行中', `${cmd} | 已执行: ${((Date.now() - startTime) / 1000).toFixed(1)}秒`);
 
             if (msg && msg.message_id) {
               msgId = msg.message_id;
@@ -1322,7 +1322,7 @@ export class EnhancedTools extends plugin {
 
       if (result.message) {
         const icon = result.code === 0 ? '✅' : '❌';
-        await BotUtil.makeChatRecord(e, result.message, `${icon} Terminal`, `命令: ${msg} | 返回代码: ${result.code} | 用时: ${this.getExecutionTime(result)}秒`);
+        await 制作聊天记录(e, result.message, `${icon} Terminal`, `命令: ${msg} | 返回代码: ${result.code} | 用时: ${this.getExecutionTime(result)}秒`);
       } else {
         await e.reply('✅ 命令执行完成，无输出', true);
       }
@@ -1367,7 +1367,7 @@ export class EnhancedTools extends plugin {
 
       if (result.message) {
         const icon = result.code === 0 ? '✅' : '❌';
-        await BotUtil.makeChatRecord(e, result.message, `${icon} Terminal (HOME)`, `目录: ${homePath} | 命令: ${msg} | 返回代码: ${result.code}`);
+        await 制作聊天记录(e, result.message, `${icon} Terminal (HOME)`, `目录: ${homePath} | 命令: ${msg} | 返回代码: ${result.code}`);
       } else {
         await e.reply('✅ 命令执行完成，无输出', true);
       }
@@ -1421,7 +1421,7 @@ roj const arr = [1,2,3];
           }
         }
         
-        await BotUtil.makeChatRecord(
+        await 制作聊天记录(
           e, 
           finalOutput, 
           '✅ JavaScript 执行结果', 
@@ -1432,7 +1432,7 @@ roj const arr = [1,2,3];
         if (config.get('jsExecutionMode') === 'safe' && result.error.includes('import')) {
           errorMsg += '\n\n💡 提示：Safe模式不支持import/export，可使用 rc set jsExecutionMode enhanced 切换到增强模式';
         }
-        await BotUtil.makeChatRecord(
+        await 制作聊天记录(
           e,
           errorMsg + (result.stack ? `\n\n调用栈:\n${result.stack}` : ''),
           '❌ JavaScript执行错误',
@@ -1475,7 +1475,7 @@ roi new Date()          // 检查日期对象`, true);
         const result = inspector.inspect(execResult.result, code);
         const output = inspector.formatResult(result);
         
-        await BotUtil.makeChatRecord(
+        await 制作聊天记录(
           e, 
           output, 
           `🔍 对象检查结果`, 
@@ -1571,7 +1571,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
             }
           }
           
-          await BotUtil.makeChatRecord(
+          await 制作聊天记录(
             e, 
             finalOutput, 
             '⚡ 快速计算结果', 
@@ -1638,7 +1638,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
       historyText += `${i + 1}. ${status} ${typeIcon} [${time}]\n   ${command}\n\n`;
     }
 
-    await BotUtil.makeChatRecord(e, historyText.trim(), `${icon} ${title}`, `共 ${historyItems.length} 条记录`);
+    await 制作聊天记录(e, historyText.trim(), `${icon} ${title}`, `共 ${historyItems.length} 条记录`);
     return true;
   }
 
@@ -1678,7 +1678,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
       
       configText += '\n💡 提示: 使用 rc set <key> <value> 修改配置';
 
-      await BotUtil.makeChatRecord(e, configText, '⚙️ 工具配置', '当前配置项');
+      await 制作聊天记录(e, configText, '⚙️ 工具配置', '当前配置项');
       return true;
     }
 
@@ -1747,7 +1747,7 @@ JS执行模式:
 • rc set timeout 60000
 • rc set maxOutputLength 10000`;
 
-      await BotUtil.makeChatRecord(e, helpText, '📋 配置帮助', '工具配置说明');
+      await 制作聊天记录(e, helpText, '📋 配置帮助', '工具配置说明');
       return true;
     }
 

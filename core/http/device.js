@@ -12,7 +12,7 @@ import {
     SYSTEM_CONFIG,
     EMOTION_KEYWORDS,
     SUPPORTED_EMOTIONS
-} from '../../components/config/deviceConfig.js';
+} from '../../src/factory/config/deviceConfig.js';
 
 // ==================== 导入工具函数 ====================
 import {
@@ -21,10 +21,10 @@ import {
     generateCommandId,
     hasCapability,
     getAudioFileList
-} from '../../components/util/deviceUtil.js';
+} from '../../src/utils/deviceutil.js';
 
 // ==================== 导入ASR和TTS工厂 ====================
-import ASRFactory from '../../components/asr/ASRFactory.js';
+import ASRFactory from '../../src/factory/asr/ASRFactory.js';
 import TTSFactory from '../../components/tts/TTSFactory.js';
 
 // ==================== 全局存储 ====================

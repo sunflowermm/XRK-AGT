@@ -2,7 +2,7 @@ import { createRequire } from 'module'
 import lodash from 'lodash'
 import fs from 'node:fs'
 import { Restart } from './restart.js'
-import BotUtil from '../../src/utils/botutil.js'
+import common from '../../src/utils/common.js'
 
 const require = createRequire(import.meta.url)
 const { exec, execSync } = require('child_process')
@@ -88,7 +88,7 @@ export class update extends plugin {
     this.updatedPlugins.add('main')
     
     /** 延迟1秒后检查并更新XRK插件 */
-    await BotUtil.sleep(1000)
+    await common.sleep(1000)
     
     const xrkUpdateResults = []
     
@@ -101,7 +101,7 @@ export class update extends plugin {
       
       logger.mark(`[更新] 检测到 ${plugin.name} 插件，自动更新中...`)
       
-      await BotUtil.sleep(1500)
+      await common.sleep(1500)
       
       /** 记录旧版本 */
       const oldCommitId = await this.getcommitId(plugin.name)
@@ -343,7 +343,7 @@ export class update extends plugin {
       plu = this.getPlugin(plu)
       if (plu === false) continue
       
-      await BotUtil.sleep(1500)
+      await common.sleep(1500)
       await this.runUpdate(plu)
       this.updatedPlugins.add(plu)
     }
@@ -351,7 +351,7 @@ export class update extends plugin {
     /** 发送静默更新结果 */
     if (isSilent) {
       this.reply = originalReply
-      await BotUtil.makeChatRecord(this.e, this.messages, '全部更新结果')
+      await this.reply(await common.makeForwardMsg(this.e, this.messages))
     }
 
     /** 检查是否需要重启 */
@@ -419,8 +419,11 @@ export class update extends plugin {
       logger.error(error.toString())
     }
 
-    const title = `${plugin || 'XRK-AGT'} 更新日志，共${line}条`;
-    return `${title}\n\n${log}\n\n${repoUrl}`
+    return common.makeForwardMsg(
+      this.e, 
+      [log, repoUrl], 
+      `${plugin || 'XRK-AGT'} 更新日志，共${line}条`
+    )
   }
 
   /**

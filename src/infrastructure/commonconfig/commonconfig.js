@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import yaml from 'yaml';
-import BotUtil from '../common/util.js';
+import BotUtil from '../../utils/botutil.js';
 
 /**
  * 配置文件管理基类

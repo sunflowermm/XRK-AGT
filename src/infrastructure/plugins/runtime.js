@@ -4,10 +4,10 @@
  */
 import lodash from "lodash"
 import fs from "node:fs/promises"
+import common from "../../utils/common.js"
 import cfg from "../config/config.js"
 import puppeteer from "../../modules/puppeteer.js"
 import Handler from "./handler.js"
-import BotUtil from "../../utils/botutil.js"
 
 /**
  * 运行时扩展注册器
@@ -129,8 +129,8 @@ export default class Runtime {
     return cfg
   }
 
-  get util() {
-    return BotUtil
+  get common() {
+    return common
   }
 
   get puppeteer() {

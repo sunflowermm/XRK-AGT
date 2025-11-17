@@ -5,7 +5,7 @@ import playwright from "playwright";
 import cfg from "../../../infrastructure/config/config.js";
 import fs from "node:fs";
 import path from "node:path";
-import BotUtil from "../../../utils/botutil.js";
+import BotUtil from "../../../lib/common/util.js";
 
 const _path = process.cwd();
 

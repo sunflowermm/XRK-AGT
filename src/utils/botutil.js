@@ -10,7 +10,7 @@ import moment from "moment";
 import chalk from "chalk";
 
 import cfg from "../infrastructure/config/config.js";
-// common module removed; all utilities consolidated into BotUtil
+import common from './common.js';
 
 /**
  * Bot 实用工具类
@@ -1693,8 +1693,11 @@ export default class BotUtil {
         }));
 
         return await BotUtil.makeMsg(e, formatMessages, title, description);
+      } else if (common?.makeForwardMsg) {
+        const forwardMsg = await common.makeForwardMsg(e, messages, title);
+        await e.reply(forwardMsg);
+        return true;
       } else {
-        // 使用本地实现
         return await BotUtil.makeMsg(e, messages, title, description);
       }
     } catch (err) {
@@ -1799,6 +1802,9 @@ export default class BotUtil {
 }
 
 // 导出兼容性函数
+export async function makemsg(e, messages, title, description) {
+  return BotUtil.makeMsg(e, messages, title, description);
+}
 
 export async function 制作聊天记录(e, messages, title, description) {
   return BotUtil.makeChatRecord(e, messages, title, description);

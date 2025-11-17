@@ -1,9 +1,9 @@
-import EventListener from "../../lib/listener/listener.js"
-import cfg from "../../lib/config/config.js"
-import { takeScreenshot } from "../../lib/common/takeScreenshot.js"
+import EventListener from "../../src/infrastructure/listener/listener.js"
+import cfg from "../../src/infrastructure/config/config.js"
+import { takeScreenshot } from "../../src/utils/screenshotutil.js"
 import fs from 'fs/promises'
 import path from 'path'
-import loader from '../../lib/plugins/loader.js'
+import loader from '../../src/infrastructure/plugins/loader.js'
 
 export default class connectEvent extends EventListener {
   constructor() {

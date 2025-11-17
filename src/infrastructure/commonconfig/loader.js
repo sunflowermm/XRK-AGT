@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import BotUtil from '../../utils/botutil.js';
+import BotUtil from '../common/util.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -19,10 +19,10 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import PluginsLoader from "./infrastructure/plugins/loader.js";
 import ListenerLoader from "./infrastructure/listener/loader.js";
 import ApiLoader from "./infrastructure/http/loader.js";
-import Packageloader from "./infrastructure/config/loader.js";
-import StreamLoader from "./infrastructure/aistream/loader.js";
-import BotUtil from './utils/botutil.js';
-import cfg from './infrastructure/config/config.js';
+import Packageloader from "./config/loader.js";
+import StreamLoader from "./aistream/loader.js";
+import BotUtil from './common/util.js';
+import cfg from './config/config.js';
 
 /**
  * Bot主类

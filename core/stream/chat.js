@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
-import AIStream from '../../lib/aistream/aistream.js';
-import BotUtil from '../../lib/common/util.js';
+import AIStream from '../../src/infrastructure/aistream/aistream.js';
+import BotUtil from '../../src/utils/botutil.js';
 
 const _path = process.cwd();
 const EMOTIONS_DIR = path.join(_path, 'resources/aiimages');

@@ -5,11 +5,11 @@ import { exec } from "child_process";
 import path from "path";
 import { ulid } from "ulid";
 import crypto from 'crypto';
-import BotUtil from "../../lib/common/util.js";
+import BotUtil from "../../src/utils/botutil.js";
 
 const tempDir = path.join(process.cwd(), "www", "stdin");
 const mediaDir = path.join(process.cwd(), "www", "media");
-const pluginsLoader = (await import("../../lib/plugins/loader.js")).default;
+const pluginsLoader = (await import("../../src/infrastructure/plugins/loader.js")).default;
 
 // 确保目录存在
 for (const dir of [tempDir, mediaDir]) {
