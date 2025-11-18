@@ -92,8 +92,6 @@ export default class Bot extends EventEmitter {
     this.ApiLoader = ApiLoader;
     this._initHttpServer();
     this._setupSignalHandlers();
-    this.generateApiKey();
-    
     return this._createProxy();
   }
   /**
