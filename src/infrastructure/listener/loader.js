@@ -97,7 +97,7 @@ class ListenerLoader {
             BotUtil.makeLog('error', `适配器初始化错误: ${adapter?.name || 'unknown'}(${adapter?.id || 'unknown'})`, 'ListenerLoader', err)
             adapterErrorCount++
           }
-        }
+      }
       
       BotUtil.makeLog('info', `加载适配器[${adapterCount}个]${adapterErrorCount > 0 ? `, 失败${adapterErrorCount}个` : ''}`, 'ListenerLoader');
   }
