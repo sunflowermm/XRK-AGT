@@ -703,7 +703,7 @@ class PluginsLoader {
       // 处理规则
       if (plugin.rule) {
         plugin.rule.forEach(rule => {
-            if (rule.reg) rule.reg = PluginExecutor.createRegExp(rule.reg)
+          if (rule.reg) rule.reg = this.createRegExp(rule.reg)
         })
       }
 
