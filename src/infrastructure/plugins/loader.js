@@ -1811,7 +1811,8 @@ class PluginsLoader {
   async changePlugin(key) {
     try {
       const timestamp = moment().format('x')
-      let app = await import(`../../${this.dir}/${key}?${timestamp}`)
+      const absPath = path.join(process.cwd(), this.dir, key)
+      let app = await import(`${pathToFileURL(absPath).href}?${timestamp}`)
       app = app.apps ? { ...app.apps } : app
 
       Object.values(app).forEach(p => {

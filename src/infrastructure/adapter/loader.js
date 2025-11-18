@@ -1,5 +1,6 @@
 import fs from "node:fs/promises"
 import paths from '#utils/paths.js';
+import BotUtil from "#utils/botutil.js";
 
 /**
  * 适配器加载器
@@ -10,8 +11,8 @@ class AdapterLoader {
    * 加载所有适配器文件
    * 适配器文件在模块级别会执行 Bot.adapter.push() 来注册自己
    */
-  async load() {
-    global.Bot.makeLog('info', "开始加载适配器文件...", 'AdapterLoader');
+  async load(bot) {
+    BotUtil.makeLog('info', "开始加载适配器文件...", 'AdapterLoader');
     let loadedCount = 0
     let errorCount = 0
     
@@ -22,7 +23,7 @@ class AdapterLoader {
       try {
         await fs.access(adapterDir)
       } catch {
-        global.Bot.makeLog('warn', `适配器目录不存在: ${adapterDir}`, 'AdapterLoader');
+        BotUtil.makeLog('warn', `适配器目录不存在: ${adapterDir}`, 'AdapterLoader');
         return { loaded: 0, errors: 0 }
       }
       
@@ -35,7 +36,7 @@ class AdapterLoader {
       }
       
       // 记录加载前的适配器数量
-      const adapterCountBefore = Bot.adapter?.length || 0
+      const adapterCountBefore = (bot?.adapter?.length) || 0
       
       // 导入所有适配器文件
       for (const file of adapterFiles) {
@@ -50,7 +51,7 @@ class AdapterLoader {
       }
       
       // 计算实际注册的适配器数量
-      const adapterCountAfter = Bot.adapter?.length || 0
+      const adapterCountAfter = (bot?.adapter?.length) || 0
       const registeredCount = adapterCountAfter - adapterCountBefore
       
       global.Bot.makeLog('info', `适配器文件加载完成: 导入${loadedCount}个文件, 注册${registeredCount}个适配器`, 'AdapterLoader');

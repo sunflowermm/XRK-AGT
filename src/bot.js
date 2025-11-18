@@ -2070,7 +2070,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     }
     
     // 加载监听事件和适配器
-    await ListenerLoader.load();
+    await ListenerLoader.load(this);
     
     // 启动文件监视
     await ApiLoader.watch(true);
