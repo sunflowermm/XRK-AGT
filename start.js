@@ -54,7 +54,7 @@ const PATHS = {
  * @enum {number|string|Object}
  */
 const CONFIG = {
-  MAX_RESTARTS: 5,
+  MAX_RESTARTS: 1000,
   SIGNAL_TIME_THRESHOLD: 3000,
   PM2_LINES: 100,
   MEMORY_LIMIT: '512M',
@@ -911,9 +911,8 @@ process.on('unhandledRejection', async (reason) => {
   const errorMessage = reason instanceof Error 
     ? `${reason.message}\n${reason.stack}` 
     : String(reason);
+  
   await logger.error(`未处理的Promise拒绝: ${errorMessage}`);
-  // 对于未处理的Promise拒绝，直接以非零码退出，避免上层无限重启
-  process.exit(1);
 });
 
 /**

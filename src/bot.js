@@ -2008,7 +2008,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     await this.generateApiKey();
     
     // 并行加载配置和模块（异步，避免日志交叉）
-    const ConfigLoader = (await import('./commonconfig/loader.js')).default;
+    const ConfigLoader = (await import('./infrastructure/commonconfig/loader.js')).default;
     
     const [configResult, streamResult, pluginsResult, apiResult] = await Promise.allSettled([
       ConfigLoader.load(),

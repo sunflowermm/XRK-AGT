@@ -206,9 +206,28 @@ class DependencyManager {
    * @returns {Promise<void>}
    */
   async installDependencies(missingDeps) {
-    // 不再自动安装依赖，直接抛出明确错误，避免卡在启动阶段
-    const list = missingDeps.join(', ');
-    throw new Error(`检测到缺失依赖: ${list}. 请手动运行包管理器安装 (如: pnpm install 或 npm install)。`);
+    await this.logger.warning(`发现 ${missingDeps.length} 个缺失的依赖`);
+    await this.logger.log(`缺失的依赖: ${missingDeps.join(', ')}`);
+    
+    const manager = await this.detectPackageManager();
+    this.packageManager = manager;
+    
+    await this.logger.log(`使用 ${manager} 安装依赖...`);
+    
+    try {
+      const { stdout, stderr } = await execAsync(`${manager} install`, {
+        maxBuffer: 1024 * 1024 * 10, // 10MB缓冲区
+        timeout: 300000 // 5分钟超时
+      });
+      
+      if (stderr && !stderr.includes('warning')) {
+        await this.logger.warning(`安装警告: ${stderr}`);
+      }
+      
+      await this.logger.success('依赖安装完成');
+    } catch (error) {
+      throw new Error(`依赖安装失败: ${error.message}`);
+    }
   }
 
   /**
@@ -254,7 +273,7 @@ class DependencyManager {
    * - 失败会抛错，避免无限卡死
    */
   async ensurePluginDependencies(rootDir = process.cwd()) {
-    // 仅检查插件依赖是否缺失，若缺失则直接抛错，防止启动期卡死或静默安装
+    const manager = await this.detectPackageManager();
     const pluginGlobs = ['core', 'renderers'];
 
     const dirs = [];
@@ -265,7 +284,7 @@ class DependencyManager {
         for (const d of entries) {
           if (d.isDirectory()) dirs.push(path.join(dir, d.name));
         }
-      } catch { /* ignore missing dirs */ }
+      } catch { /* ignore */ }
     }
 
     for (const d of dirs) {
@@ -301,7 +320,20 @@ class DependencyManager {
       }
 
       if (missing.length > 0) {
-        throw new Error(`检测到插件目录缺失依赖: ${d} -> ${missing.join(', ')}。请进入该目录手动安装依赖 (例如: pnpm install)`);
+        await this.logger.warning(`插件依赖缺失 [${d}]: ${missing.join(', ')}`);
+        try {
+          await this.logger.log(`为插件安装依赖 (${manager}): ${d}`);
+          // 子目录安装并设定合理超时与缓冲
+          await execAsync(`${manager} install`, {
+            cwd: d,
+            maxBuffer: 1024 * 1024 * 16,
+            timeout: 10 * 60 * 1000
+          });
+          await this.logger.success(`插件依赖安装完成: ${d}`);
+        } catch (err) {
+          await this.logger.error(`插件依赖安装失败: ${d} (${err.message})`);
+          throw err;
+        }
       }
     }
   }
@@ -495,8 +527,11 @@ process.on('unhandledRejection', async (reason) => {
     ? `${reason.message}\n${reason.stack}` 
     : String(reason);
   await logger.error(`未处理的Promise拒绝: ${errorMessage}`);
-  // 出现未处理的Promise拒绝时直接退出，避免卡在启动原点或进入非预期状态
-  process.exit(1);
+  // 如果当前处于 server 模式，避免立即退出导致父进程无限重启
+  const isServerMode = process.env.XRK_SELECTED_MODE === 'server' || process.argv.includes('server');
+  if (!isServerMode) {
+    process.exit(1);
+  }
 });
 
 /**
