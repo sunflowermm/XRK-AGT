@@ -1,19 +1,18 @@
 import fs from "node:fs"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
 import yaml from "yaml"
 import lodash from "lodash"
 import cfg from "#infrastructure/config/config.js"
 import Renderer from "./Renderer.js"
+import paths from "#utils/paths.js"
 
-/** 全局变量 Renderer */
+// 暴露 Renderer 构造，仅一次
 global.Renderer = Renderer
 
-/**
- * 加载渲染器
- */
 class RendererLoader {
   constructor() {
     this.renderers = new Map()
-    this.dir = "src/renderers"
     this.watcher = {}
   }
 
@@ -24,20 +23,23 @@ class RendererLoader {
   }
 
   async load() {
-    // 检查渲染器目录是否存在
-    if (!fs.existsSync(this.dir)) {
-      console.warn(`渲染器目录不存在: ${this.dir}，跳过加载`)
+    const baseDir = paths.renderers
+    if (!fs.existsSync(baseDir)) {
+      console.warn(`渲染器目录不存在: ${baseDir}，跳过加载`)
       return
     }
 
-    const subFolders = fs.readdirSync(this.dir, { withFileTypes: true }).filter((dirent) => dirent.isDirectory())
+    const subFolders = fs.readdirSync(baseDir, { withFileTypes: true }).filter(d => d.isDirectory())
     for (const subFolder of subFolders) {
       const name = subFolder.name
       try {
-        const rendererFn = (await import(`../../${this.dir}/${name}/index.js`)).default
-        const configFile = `${this.dir}/${name}/config.yaml`
+        const indexJs = path.join(baseDir, name, "index.js")
+        const configFile = path.join(baseDir, name, "config.yaml")
+
+        const rendererFn = (await import(pathToFileURL(indexJs).href)).default
         const rendererCfg = fs.existsSync(configFile) ? yaml.parse(fs.readFileSync(configFile, "utf8")) : {}
         const renderer = rendererFn(rendererCfg)
+
         if (!renderer.id || !renderer.type || !renderer.render || !lodash.isFunction(renderer.render)) {
           console.warn(`渲染器配置无效: ${name}`)
           continue
@@ -50,7 +52,6 @@ class RendererLoader {
   }
 
   getRenderer(name = cfg.renderer?.name || "puppeteer") {
-    // TODO 渲染器降级
     return this.renderers.get(name) || {}
   }
 }
