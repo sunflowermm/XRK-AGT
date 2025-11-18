@@ -692,7 +692,7 @@ export default class BotUtil {
       if (logger && typeof logger[level] === 'function') {
         logger[level](logMessage);
         if (trace && typeof logger.trace === 'function') {
-          const stack = new Error().stack.split("\n").slice(2).join("\n");
+        const stack = new Error().stack.split("\n").slice(2).join("\n");
           logger.trace(`堆栈跟踪:\n${stack}`);
         }
       } else {

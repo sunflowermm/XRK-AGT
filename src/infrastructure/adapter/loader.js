@@ -29,18 +29,18 @@ class AdapterLoader {
       }
 
       const adapterCountBefore = bot?.adapter?.length ?? 0
-
+      
       await Promise.allSettled(
         files.map(async ({ name, href }) => {
-          try {
+        try {
             BotUtil.makeLog('debug', `导入适配器文件: ${name}`, this.loggerNs)
             await import(href)
             summary.loaded += 1
-          } catch (err) {
+        } catch (err) {
             summary.failed += 1
             summary.errors.push({ name, message: err.message })
             BotUtil.makeLog('error', `导入适配器失败: ${name}`, this.loggerNs, err)
-          }
+        }
         })
       )
 

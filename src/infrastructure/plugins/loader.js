@@ -701,11 +701,11 @@ class PluginsLoader {
       }
 
       // 处理规则
-        if (plugin.rule) {
-          plugin.rule.forEach(rule => {
+      if (plugin.rule) {
+        plugin.rule.forEach(rule => {
             if (rule.reg) rule.reg = PluginExecutor.createRegExp(rule.reg)
-          })
-        }
+        })
+      }
 
       // 普通插件
       const pluginData = {

@@ -19,41 +19,42 @@ class ListenerLoader {
     
     try {
       const eventsDir = paths.coreEvents
+      const eventsDir = paths.coreEvents
       try {
         await fs.access(eventsDir)
-      } catch {
-        BotUtil.makeLog('warn', `事件目录不存在: ${eventsDir}，跳过加载`, 'ListenerLoader');
-        BotUtil.makeLog('info', `加载监听事件[${eventCount}个]`, 'ListenerLoader');
-        if (process.argv.includes("server")) {
-          await this.loadAdapters(this.bot);
-        }
-        return;
-      }
-      
-      const files = await fs.readdir(eventsDir)
-      const eventFiles = files.filter(file => file.endsWith(".js"))
-      
-      for (const file of eventFiles) {
-        BotUtil.makeLog('debug', `加载监听事件: ${file}`, 'ListenerLoader');
-        try {
-          const listener = await import(`#core/events/${file}`)
-          if (!listener.default) continue
-          
-          const instance = new listener.default()
-          const on = instance.once ? "once" : "on"
+        const files = await fs.readdir(eventsDir)
+        const eventFiles = files.filter(file => file.endsWith(".js"))
 
-          if (lodash.isArray(instance.event)) {
-            instance.event.forEach((type) => {
-              const handler = instance[type] ? type : "execute"
-              bot[on](instance.prefix + type, instance[handler].bind(instance))
-            })
-          } else {
-            const handler = instance[instance.event] ? instance.event : "execute"
-            bot[on](instance.prefix + instance.event, instance[handler].bind(instance))
+        for (const file of eventFiles) {
+          BotUtil.makeLog('debug', `加载监听事件: ${file}`, 'ListenerLoader');
+          try {
+            const listener = await import(`#core/events/${file}`)
+            if (!listener.default) continue
+
+            const instance = new listener.default()
+            const on = instance.once ? "once" : "on"
+
+            if (lodash.isArray(instance.event)) {
+              instance.event.forEach((type) => {
+                const handler = instance[type] ? type : "execute"
+                bot[on](instance.prefix + type, instance[handler].bind(instance))
+              })
+            } else {
+              const handler = instance[instance.event] ? instance.event : "execute"
+              bot[on](instance.prefix + instance.event, instance[handler].bind(instance))
+            }
+            eventCount++
+          } catch (err) {
+            BotUtil.makeLog('error', `监听事件加载错误: ${file}`, 'ListenerLoader', err);
           }
-          eventCount++
-        } catch (err) {
-          BotUtil.makeLog('error', `监听事件加载错误: ${file}`, 'ListenerLoader', err);
+        }
+      } catch (error) {
+        // 如果目录不存在，则记录警告，否则记录错误
+        if (error.code === 'ENOENT') {
+          BotUtil.makeLog('warn', `事件目录不存在: ${eventsDir}，跳过加载`, 'ListenerLoader');
+        } else {
+          BotUtil.makeLog('error', "加载事件目录失败", 'ListenerLoader', error);
+          throw error;
         }
       }
     } catch (error) {
@@ -65,12 +66,12 @@ class ListenerLoader {
 
     // 步骤2: 加载适配器（仅在服务器模式下）
     if (process.argv.includes("server")) {
-      await this.loadAdapters();
+      await this.loadAdapters(bot);
     }
   }
 
-  async loadAdapters() {
-    await AdapterLoader.load(this.bot ?? Bot)
+  async loadAdapters(bot) {
+    await AdapterLoader.load(bot ?? Bot)
 
     BotUtil.makeLog('info', "初始化适配器中...", 'ListenerLoader');
     let adapterCount = 0

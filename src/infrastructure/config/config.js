@@ -209,8 +209,8 @@ class Cfg {
     const masters = {};
     const masterList = this.masterQQ;
 
-    for (const botUin of Bot.uin) {
-      masters[botUin] = masterList.map(qq => String(qq));
+      for (const botUin of Bot.uin) {
+        masters[botUin] = masterList.map(qq => String(qq));
     }
 
     return masters;
