@@ -1035,6 +1035,14 @@ class PluginsLoader {
    */
   async getPlugins() {
     try {
+      // 检查插件目录是否存在
+      try {
+        await fs.access(this.dir)
+      } catch {
+        BotUtil.makeLog('warn', `插件目录不存在: ${this.dir}，跳过加载`, 'PluginsLoader')
+        return []
+      }
+
       const files = await fs.readdir(this.dir, { withFileTypes: true })
       const ret = []
       
@@ -1072,9 +1080,8 @@ class PluginsLoader {
       }
       return ret
     } catch (error) {
-      logger.error('获取插件文件列表失败')
-      logger.error(error)
-      return []
+      BotUtil.makeLog('error', '获取插件文件列表失败', 'PluginsLoader', error)
+      throw error
     }
   }
   /**

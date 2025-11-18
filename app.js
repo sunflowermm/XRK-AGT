@@ -527,11 +527,7 @@ process.on('unhandledRejection', async (reason) => {
     ? `${reason.message}\n${reason.stack}` 
     : String(reason);
   await logger.error(`未处理的Promise拒绝: ${errorMessage}`);
-  // 如果当前处于 server 模式，避免立即退出导致父进程无限重启
-  const isServerMode = process.env.XRK_SELECTED_MODE === 'server' || process.argv.includes('server');
-  if (!isServerMode) {
-    process.exit(1);
-  }
+  process.exit(1);
 });
 
 /**

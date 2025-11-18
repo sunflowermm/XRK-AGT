@@ -13,7 +13,7 @@ global.Renderer = Renderer
 class RendererLoader {
   constructor() {
     this.renderers = new Map()
-    this.dir = "renderers"
+    this.dir = "src/renderers"
     this.watcher = {}
   }
 
@@ -24,6 +24,12 @@ class RendererLoader {
   }
 
   async load() {
+    // 检查渲染器目录是否存在
+    if (!fs.existsSync(this.dir)) {
+      console.warn(`渲染器目录不存在: ${this.dir}，跳过加载`)
+      return
+    }
+
     const subFolders = fs.readdirSync(this.dir, { withFileTypes: true }).filter((dirent) => dirent.isDirectory())
     for (const subFolder of subFolders) {
       const name = subFolder.name
@@ -33,9 +39,12 @@ class RendererLoader {
         const rendererCfg = fs.existsSync(configFile) ? yaml.parse(fs.readFileSync(configFile, "utf8")) : {}
         const renderer = rendererFn(rendererCfg)
         if (!renderer.id || !renderer.type || !renderer.render || !lodash.isFunction(renderer.render)) {
+          console.warn(`渲染器配置无效: ${name}`)
+          continue
         }
         this.renderers.set(renderer.id, renderer)
       } catch (err) {
+        console.error(`渲染器加载失败: ${name}`, err.message)
       }
     }
   }
