@@ -9,7 +9,7 @@ import chokidar from 'chokidar'
 import moment from 'moment'
 import Handler from './handler.js'
 import Runtime from './runtime.js'
-import { segment } from 'oicq'
+import { segment } from '#oicq'
 import BotUtil from '#utils/botutil.js'
 
 global.plugin = plugin
