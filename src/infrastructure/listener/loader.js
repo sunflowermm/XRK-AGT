@@ -70,36 +70,34 @@ class ListenerLoader {
   }
 
   async loadAdapters() {
-      // 2.1: 先导入适配器文件（让它们注册到Bot.adapter数组）
-      await AdapterLoader.load(this.bot ?? Bot)
-      
-      // 2.2: 初始化已注册的适配器
-      BotUtil.makeLog('info', "初始化适配器中...", 'ListenerLoader');
-      let adapterCount = 0
-      let adapterErrorCount = 0
-      
-      if (Bot.adapter.length === 0) {
-        BotUtil.makeLog('warn', "未找到已注册的适配器", 'ListenerLoader');
-        return;
-      }
+    await AdapterLoader.load(this.bot ?? Bot)
 
-      for (const adapter of Bot.adapter) {
-          try {
-            if (!adapter || typeof adapter.load !== 'function') {
-              BotUtil.makeLog('warn', `适配器无效: ${adapter?.name || 'unknown'}(${adapter?.id || 'unknown'})`, 'ListenerLoader');
-              continue
-            }
-            
-            BotUtil.makeLog('debug', `初始化适配器: ${adapter.name}(${adapter.id})`, 'ListenerLoader');
-            await adapter.load()
-            adapterCount++
-          } catch (err) {
-            BotUtil.makeLog('error', `适配器初始化错误: ${adapter?.name || 'unknown'}(${adapter?.id || 'unknown'})`, 'ListenerLoader', err)
-            adapterErrorCount++
-          }
+    BotUtil.makeLog('info', "初始化适配器中...", 'ListenerLoader');
+    let adapterCount = 0
+    let adapterErrorCount = 0
+
+    if (Bot.adapter.length === 0) {
+      BotUtil.makeLog('warn', "未找到已注册的适配器", 'ListenerLoader');
+      return;
+    }
+
+    for (const adapter of Bot.adapter) {
+      try {
+        if (!adapter || typeof adapter.load !== 'function') {
+          BotUtil.makeLog('warn', `适配器无效: ${adapter?.name || 'unknown'}(${adapter?.id || 'unknown'})`, 'ListenerLoader');
+          continue
+        }
+
+        BotUtil.makeLog('debug', `初始化适配器: ${adapter.name}(${adapter.id})`, 'ListenerLoader');
+        await adapter.load()
+        adapterCount++
+      } catch (err) {
+        BotUtil.makeLog('error', `适配器初始化错误: ${adapter?.name || 'unknown'}(${adapter?.id || 'unknown'})`, 'ListenerLoader', err)
+        adapterErrorCount++
       }
-      
-      BotUtil.makeLog('info', `加载适配器[${adapterCount}个]${adapterErrorCount > 0 ? `, 失败${adapterErrorCount}个` : ''}`, 'ListenerLoader');
+    }
+
+    BotUtil.makeLog('info', `加载适配器[${adapterCount}个]${adapterErrorCount > 0 ? `, 失败${adapterErrorCount}个` : ''}`, 'ListenerLoader');
   }
 }
 
