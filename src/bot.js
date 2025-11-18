@@ -92,6 +92,8 @@ export default class Bot extends EventEmitter {
     this.ApiLoader = ApiLoader;
     this._initHttpServer();
     this._setupSignalHandlers();
+    this.generateApiKey();
+    
     return this._createProxy();
   }
   /**
@@ -137,16 +139,6 @@ export default class Bot extends EventEmitter {
     }
 
     return error;
-  }
-
-  /**
-   * 创建一个正则表达式对象
-   * @param {string} pattern - 正则表达式模式
-   * @param {string} [flags] - 正则表达式标志
-   * @returns {RegExp}
-   */
-  createRegExp(pattern, flags) {
-    return new RegExp(pattern, flags);
   }
 
   _createUinManager() {
@@ -2014,7 +2006,6 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     
     // 初始化基础服务（顺序执行）
     await Packageloader();
-    await this.generateApiKey();
     
     // 并行加载配置和模块（异步，避免日志交叉）
     const ConfigLoader = (await import('./infrastructure/commonconfig/loader.js')).default;
