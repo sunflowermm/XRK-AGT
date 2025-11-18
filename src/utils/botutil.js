@@ -488,7 +488,7 @@ export default class BotUtil {
     const targetLength = cfg.bot?.log_id_length || 16;
     const filler = cfg.bot?.log_id_filler || '·';
     const currentTheme = cfg.bot?.log_color || 'default';
-    const chalkInstance = chalk || global.logger?.chalk;
+    const chalkInstance = chalk || logger?.chalk;
 
     if (!id && !cfg.bot?.log_align) {
       return BotUtil.cache(cacheKey, "", 60000);
@@ -687,14 +687,16 @@ export default class BotUtil {
       logMessage = `${logMessage.slice(0, preview)}... [截断 ${logMessage.length} 字符] ...${logMessage.slice(-suffix)}`;
     }
 
-    // 使用 global.logger 输出日志（如果可用）
+    // 使用 logger 输出日志
     try {
-      const logger = global.logger?.[level] ?? console[level] ?? console.log;
-      logger(logMessage);
-
-      if (trace && global.logger?.trace) {
-        const stack = new Error().stack.split("\n").slice(2).join("\n");
-        global.logger.trace(`堆栈跟踪:\n${stack}`);
+      if (logger && typeof logger[level] === 'function') {
+        logger[level](logMessage);
+        if (trace && typeof logger.trace === 'function') {
+          const stack = new Error().stack.split("\n").slice(2).join("\n");
+          logger.trace(`堆栈跟踪:\n${stack}`);
+        }
+      } else {
+        console.log(`[${level.toUpperCase()}] ${logMessage}`);
       }
     } catch {
       console.log(`[${level.toUpperCase()}] ${logMessage}`);
@@ -765,8 +767,8 @@ export default class BotUtil {
       return await fs.stat(filePath);
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        if (global.logger?.trace) {
-          global.logger.trace(["获取", filePath, "统计信息错误", err.code || err.message]);
+        if (logger?.trace) {
+          logger.trace(["获取", filePath, "统计信息错误", err.code || err.message]);
         }
       }
       return false;
@@ -787,8 +789,8 @@ export default class BotUtil {
       return true;
     } catch (err) {
       if (err.code === "EEXIST") return true;
-      if (global.logger?.error) {
-        global.logger.error(["创建", dir, "错误", err.message]);
+      if (logger?.error) {
+        logger.error(["创建", dir, "错误", err.message]);
       }
       return false;
     }
@@ -807,8 +809,8 @@ export default class BotUtil {
       return true;
     } catch (err) {
       if (err.code === "ENOENT") return true;
-      if (global.logger?.error) {
-        global.logger.error(["删除", file, "错误", err.message]);
+      if (logger?.error) {
+        logger.error(["删除", file, "错误", err.message]);
       }
       return false;
     }
@@ -914,8 +916,8 @@ export default class BotUtil {
       const files = await globFunc(pattern, globOptions);
       return Array.isArray(files) ? files : Array.from(files);
     } catch (err) {
-      if (global.logger?.error) {
-        global.logger.error(["匹配", pattern, "错误", err.message]);
+      if (logger?.error) {
+        logger.error(["匹配", pattern, "错误", err.message]);
       }
       return [];
     }
@@ -971,8 +973,8 @@ export default class BotUtil {
         return opts.size && buffer.length > opts.size ?
           await BotUtil.#saveBufferToTempFile(buffer) : buffer;
       } catch (err) {
-        if (global.logger?.error) {
-          global.logger.error(["获取 URL 内容错误", dataStr, err.message]);
+        if (logger?.error) {
+          logger.error(["获取 URL 内容错误", dataStr, err.message]);
         }
         return Buffer.alloc(0);
       }
@@ -1071,8 +1073,8 @@ export default class BotUtil {
         }
       }
     } catch (err) {
-      if (global.logger?.error) {
-        global.logger.error(["文件类型检测错误", err.message]);
+      if (logger?.error) {
+        logger.error(["文件类型检测错误", err.message]);
       }
     }
 
@@ -1167,8 +1169,8 @@ export default class BotUtil {
 
       return url;
     } catch (err) {
-      if (global.logger?.error) {
-        global.logger.error(["文件转 URL 错误", err.message]);
+      if (logger?.error) {
+        logger.error(["文件转 URL 错误", err.message]);
       }
       throw err;
     }
@@ -1190,8 +1192,8 @@ export default class BotUtil {
     const cmdStr = String(cmd);
     const startTime = Date.now();
 
-    if (!opts.quiet && global.logger?.mark) {
-      global.logger.mark(cmdStr, "命令");
+    if (!opts.quiet && logger?.mark) {
+      logger.mark(cmdStr, "命令");
     }
 
     return new Promise((resolve) => {
@@ -1217,15 +1219,15 @@ export default class BotUtil {
           duration
         };
 
-        if (!opts.quiet && global.logger?.mark) {
+        if (!opts.quiet && logger?.mark) {
           let logMessage = `${cmdStr} [完成 ${duration}]`;
           if (result.stdout) logMessage += `\n${result.stdout}`;
           if (result.stderr) logMessage += `\n${result.stderr}`;
-          global.logger.mark(logMessage, "命令");
+          logger.mark(logMessage, "命令");
         }
 
-        if (error && !opts.quiet && global.logger?.error) {
-          global.logger.error(error, "命令");
+        if (error && !opts.quiet && logger?.error) {
+          logger.error(error, "命令");
         }
 
         resolve(result);
@@ -1702,8 +1704,8 @@ export default class BotUtil {
         return await BotUtil.makeMsg(e, messages, title, description);
       }
     } catch (err) {
-      if (global.logger?.error) {
-        global.logger.error(["创建聊天记录错误", err.message]);
+      if (logger?.error) {
+        logger.error(["创建聊天记录错误", err.message]);
       }
       try {
         const simpleMessage = typeof messages[0] === 'string' ? messages[0] : '[复杂消息]';
@@ -1761,14 +1763,14 @@ export default class BotUtil {
       }
 
       await e.reply(ngm);
-      if (global.logger?.mark) {
-        global.logger.mark(`『${title || '转发消息'}』已发送`);
+      if (logger?.mark) {
+        logger.mark(`『${title || '转发消息'}』已发送`);
       }
       return true;
 
     } catch (error) {
-      if (global.logger?.error) {
-        global.logger.error(["转发消息错误", error.message]);
+      if (logger?.error) {
+        logger.error(["转发消息错误", error.message]);
       }
 
       try {

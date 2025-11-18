@@ -1770,7 +1770,7 @@ rc help - 显示详细帮助`, true);
   /** 获取全局上下文对象 */
   getGlobalContext() {
     return {
-      Bot: global.Bot,
+      Bot: Bot,
       segment: global.segment,
       e: null,
       plugin: this,

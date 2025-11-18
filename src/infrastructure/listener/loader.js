@@ -71,17 +71,19 @@ class ListenerLoader {
 
   async loadAdapters() {
       // 2.1: 先导入适配器文件（让它们注册到Bot.adapter数组）
-      await AdapterLoader.load()
+      await AdapterLoader.load(this.bot ?? Bot)
       
       // 2.2: 初始化已注册的适配器
       BotUtil.makeLog('info', "初始化适配器中...", 'ListenerLoader');
       let adapterCount = 0
       let adapterErrorCount = 0
       
-      if (!Bot.adapter || Bot.adapter.length === 0) {
+      if (Bot.adapter.length === 0) {
         BotUtil.makeLog('warn', "未找到已注册的适配器", 'ListenerLoader');
-      } else {
-        for (const adapter of Bot.adapter) {
+        return;
+      }
+
+      for (const adapter of Bot.adapter) {
           try {
             if (!adapter || typeof adapter.load !== 'function') {
               BotUtil.makeLog('warn', `适配器无效: ${adapter?.name || 'unknown'}(${adapter?.id || 'unknown'})`, 'ListenerLoader');

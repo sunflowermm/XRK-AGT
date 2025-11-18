@@ -209,13 +209,8 @@ class Cfg {
     const masters = {};
     const masterList = this.masterQQ;
 
-    if (typeof Bot !== 'undefined' && Bot.uin && Array.isArray(Bot.uin)) {
-      for (const botUin of Bot.uin) {
-        masters[botUin] = masterList.map(qq => String(qq));
-      }
-    } else {
-      const currentBotUin = this.bot.account?.uin || 'current_bot';
-      masters[currentBotUin] = masterList.map(qq => String(qq));
+    for (const botUin of Bot.uin) {
+      masters[botUin] = masterList.map(qq => String(qq));
     }
 
     return masters;

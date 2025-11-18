@@ -28,8 +28,8 @@ class ProcessManager {
     if (global.redis) {
       await global.redis.save().catch(() => {});
     }
-    if (global.Bot?.exit) {
-      await global.Bot.exit().catch(() => {});
+    if (Bot?.exit) {
+      await Bot.exit().catch(() => {});
     }
     process.exit(1);
   }

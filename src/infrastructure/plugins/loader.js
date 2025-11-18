@@ -723,7 +723,6 @@ class PluginsLoader {
       // 处理handler
       if (plugin.handler) {
         Object.values(plugin.handler).forEach(handler => {
-          if (!handler) return
           const { fn, key, priority } = handler
           Handler.add({
             ns: plugin.namespace || file.name,
@@ -1141,7 +1140,12 @@ class PluginsLoader {
         // 编译规则正则
         if (plugin.rule) {
           plugin.rule.forEach(rule => {
-            if (rule.reg) rule.reg = this.createRegExp(rule.reg)
+            if (rule.reg) rule.reg = PluginExecutor.createRegExp(rule.reg)
+          })
+        }
+        if (plugin.rule) {
+          plugin.rule.forEach(rule => {
+            if (rule.reg) rule.reg = PluginExecutor.createRegExp(rule.reg)
           })
         }
 

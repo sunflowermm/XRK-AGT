@@ -1,69 +1,81 @@
-import fs from "node:fs/promises"
-import paths from '#utils/paths.js';
-import BotUtil from "#utils/botutil.js";
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+import paths from '#utils/paths.js'
+import BotUtil from '#utils/botutil.js'
 
-/**
- * 适配器加载器
- * 负责加载core/adapter目录下的所有适配器文件
- */
 class AdapterLoader {
-  /**
-   * 加载所有适配器文件
-   * 适配器文件在模块级别会执行 Bot.adapter.push() 来注册自己
-   */
-  async load(bot) {
-    BotUtil.makeLog('info', "开始加载适配器文件...", 'AdapterLoader');
-    let loadedCount = 0
-    let errorCount = 0
-    
+  constructor() {
+    this.baseDir = paths.coreAdapter
+    this.loggerNs = 'AdapterLoader'
+  }
+
+  async load(bot = Bot) {
+    const summary = {
+      scanned: 0,
+      loaded: 0,
+      failed: 0,
+      registered: 0,
+      errors: []
+    }
+
     try {
-      const adapterDir = paths.coreAdapter
-      
-      // 检查目录是否存在
-      try {
-        await fs.access(adapterDir)
-      } catch {
-        BotUtil.makeLog('warn', `适配器目录不存在: ${adapterDir}`, 'AdapterLoader');
-        return { loaded: 0, errors: 0 }
+      const files = await this.getAdapterFiles()
+      summary.scanned = files.length
+
+      if (!files.length) {
+        BotUtil.makeLog('info', '未找到适配器文件', this.loggerNs)
+        return summary
       }
-      
-      const files = await fs.readdir(adapterDir)
-      const adapterFiles = files.filter(file => file.endsWith(".js"))
-      
-      if (adapterFiles.length === 0) {
-        global.Bot.makeLog('info', "未找到适配器文件", 'AdapterLoader');
-        return { loaded: 0, errors: 0 }
-      }
-      
-      // 记录加载前的适配器数量
-      const adapterCountBefore = (bot?.adapter?.length) || 0
-      
-      // 导入所有适配器文件
-      for (const file of adapterFiles) {
-        try {
-          global.Bot.makeLog('debug', `导入适配器文件: ${file}`, 'AdapterLoader');
-          await import(`#core/adapter/${file}`)
-          loadedCount++
-        } catch (err) {
-          global.Bot.makeLog('error', `导入适配器文件失败: ${file}`, 'AdapterLoader', err);
-          errorCount++
-        }
-      }
-      
-      // 计算实际注册的适配器数量
-      const adapterCountAfter = (bot?.adapter?.length) || 0
-      const registeredCount = adapterCountAfter - adapterCountBefore
-      
-      global.Bot.makeLog('info', `适配器文件加载完成: 导入${loadedCount}个文件, 注册${registeredCount}个适配器`, 'AdapterLoader');
-      
-      if (errorCount > 0) {
-        global.Bot.makeLog('warn', `有${errorCount}个适配器文件加载失败`, 'AdapterLoader');
-      }
-      
-      return { loaded: loadedCount, registered: registeredCount, errors: errorCount }
+
+      const adapterCountBefore = bot?.adapter?.length ?? 0
+
+      await Promise.allSettled(
+        files.map(async ({ name, href }) => {
+          try {
+            BotUtil.makeLog('debug', `导入适配器文件: ${name}`, this.loggerNs)
+            await import(href)
+            summary.loaded += 1
+          } catch (err) {
+            summary.failed += 1
+            summary.errors.push({ name, message: err.message })
+            BotUtil.makeLog('error', `导入适配器失败: ${name}`, this.loggerNs, err)
+          }
+        })
+      )
+
+      summary.registered = (bot?.adapter?.length ?? 0) - adapterCountBefore
+
+      BotUtil.makeLog(
+        summary.failed ? 'warn' : 'info',
+        `适配器加载完成: 成功${summary.loaded}个, 注册${summary.registered}个${summary.failed ? `, 失败${summary.failed}个` : ''}`,
+        this.loggerNs
+      )
+
+      return summary
     } catch (error) {
-      global.Bot.makeLog('error', "加载适配器目录失败", 'AdapterLoader', error);
-      return { loaded: 0, errors: 1 }
+      BotUtil.makeLog('error', '适配器加载失败', this.loggerNs, error)
+      summary.failed += 1
+      summary.errors.push({ name: 'internal', message: error.message })
+      return summary
+    }
+  }
+
+  async getAdapterFiles() {
+    try {
+      const dirents = await fs.readdir(this.baseDir, { withFileTypes: true })
+      return dirents
+        .filter(dirent => dirent.isFile() && dirent.name.endsWith('.js'))
+        .map(dirent => ({
+          name: dirent.name,
+          href: pathToFileURL(path.join(this.baseDir, dirent.name)).href
+        }))
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        BotUtil.makeLog('warn', `适配器目录不存在: ${this.baseDir}`, this.loggerNs)
+        return []
+      }
+      throw error
     }
   }
 }
