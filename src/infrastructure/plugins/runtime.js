@@ -8,12 +8,6 @@ import common from "#utils/common.js"
 import cfg from "#infrastructure/config/config.js"
 import puppeteer from "#modules/puppeteer.js"
 import Handler from "./handler.js";
-import paths from '#utils/paths.js';
-import path from 'path';;
-import paths from '#utils/paths.js';
-import path from 'path';;
-import paths from '#utils/paths.js';
-import path from 'path';
 
 /**
  * 运行时扩展注册器
