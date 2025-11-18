@@ -2,7 +2,7 @@ import { createRequire } from 'module'
 import lodash from 'lodash'
 import fs from 'node:fs'
 import { Restart } from './restart.js'
-import common from '../../src/utils/common.js'
+import common from '../../../src/utils/common.js'
 
 const require = createRequire(import.meta.url)
 const { exec, execSync } = require('child_process')

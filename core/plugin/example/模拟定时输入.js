@@ -1,4 +1,4 @@
-import PluginsLoader from '../../src/infrastructure/plugins/loader.js';
+import PluginsLoader from '../../../src/infrastructure/plugins/loader.js';
 
 export class DailySignIn extends plugin {
     constructor() {

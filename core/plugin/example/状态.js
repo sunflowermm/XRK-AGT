@@ -80,7 +80,7 @@ export class stattools extends plugin {
       let pluginCount = 0
       let taskCount = 0
       try {
-        const loader = (await import('../../src/infrastructure/plugins/loader.js')).default
+        const loader = (await import('../../../src/infrastructure/plugins/loader.js')).default
         pluginCount = (loader.priority?.length || 0) + (loader.extended?.length || 0)
         taskCount = loader.task?.length || 0
       } catch (err) {
