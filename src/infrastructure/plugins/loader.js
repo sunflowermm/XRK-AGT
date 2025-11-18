@@ -37,7 +37,7 @@ class PluginsLoader {
     this.priority = []              // 普通优先级插件列表
     this.extended = []              // 扩展插件列表
     this.task = []                  // 定时任务列表
-    this.dir = 'core/plugin'            // 插件目录默认值（项目根目录下）
+    this.dir = 'core/plugin'            // 插件目录（项目根目录下，可不存在）
     this.watcher = {}               // 文件监听器
     this.cooldowns = {              // 冷却时间管理
       group: new Map(),             // 使用 Map 替代对象，性能更好
@@ -794,7 +794,7 @@ class PluginsLoader {
         await this.dealMsg(e)
       }
 
-      // 运行普通插件
+      // 运行插件
       await this.runPlugins(e, true)
       const handled = await this.runPlugins(e, false)
 
@@ -1049,41 +1049,39 @@ class PluginsLoader {
 
       const entries = await fs.readdir(pluginRoot, { withFileTypes: true })
       const ret = []
+      
+      // 需要过滤的文件夹列表
+      const excludedFolders = ['stream', 'events', 'adapter', 'api']
 
-      // 过滤目录/文件名
-      const excludedFolders = new Set(['stream', 'events', 'adapter', 'api'])
+      for (const dir of entries) {
+        if (!dir.isDirectory()) continue
+        if (excludedFolders.includes(dir.name)) continue
+        
+        const dirPath = path.join(pluginRoot, dir.name)
 
-      for (const entry of entries) {
-        // 1) 根目录下的 js 文件
-        if (entry.isFile() && entry.name.endsWith('.js')) {
-          const abs = path.join(pluginRoot, entry.name)
-          ret.push({ name: entry.name, path: pathToFileURL(abs).href })
-          continue
-        }
-
-        // 2) 子目录（排除一些目录）
-        if (!entry.isDirectory() || excludedFolders.has(entry.name)) continue
-
-        const dirPath = path.join(pluginRoot, entry.name)
-
-        // 2.1) 目录下的 index.js
+        // 检查是否有index.js
         const indexJs = path.join(dirPath, 'index.js')
         if (existsSync(indexJs)) {
-          ret.push({ name: entry.name, path: pathToFileURL(indexJs).href })
+          ret.push({
+            name: dir.name,
+            path: pathToFileURL(indexJs).href
+          })
           continue
         }
 
-        // 2.2) 扫描目录下的 js 文件
+        // 扫描目录下的js文件
         const apps = await fs.readdir(dirPath, { withFileTypes: true })
         for (const app of apps) {
           if (!app.isFile() || !app.name.endsWith('.js')) continue
-          const key = `${entry.name}/${app.name}`
+          const key = `${dir.name}/${app.name}`
           const absApp = path.join(dirPath, app.name)
-          ret.push({ name: key, path: pathToFileURL(absApp).href })
-          this.watch(entry.name, app.name)
+          ret.push({
+            name: key,
+            path: pathToFileURL(absApp).href
+          })
+          this.watch(dir.name, app.name)
         }
       }
-
       return ret
     } catch (error) {
       BotUtil.makeLog('error', '获取插件文件列表失败', 'PluginsLoader', error)

@@ -25,7 +25,7 @@ import {
 
 // ==================== 导入ASR和TTS工厂 ====================
 import ASRFactory from '../../src/factory/asr/ASRFactory.js';
-import TTSFactory from '../../components/tts/TTSFactory.js';
+import TTSFactory from '../../src/factory/tts/TTSFactory.js';
 
 // ==================== 全局存储 ====================
 const devices = new Map();
