@@ -421,7 +421,7 @@ class Cfg {
    */
   async change_bot() {
     try {
-      let log = await import('../log.js');
+      let log = await import('#infrastructure/log.js');
       log.default();
     } catch (error) {
       logger?.error?.('[Bot配置变更处理失败]', error);

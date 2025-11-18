@@ -1,4 +1,4 @@
-import ApiLoader from "./loader.js";
+import ApiLoader from "#infrastructure/http/loader.js";
 import BotUtil from "#utils/botutil.js";
 
 /**

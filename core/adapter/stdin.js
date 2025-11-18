@@ -52,7 +52,6 @@ export class StdinHandler {
     this.botId = 'stdin';
     this.initStdinBot();
     this.setupListeners();
-    this.startImprovedListener();
     global.stdinHandler = this;
   }
 
@@ -505,16 +504,6 @@ export class StdinHandler {
     }
     
     return parts.join(' ');
-  }
-
-  startImprovedListener() {
-    const appVersion = "1.4.3";
-    logger.gradientLine('=', 27);
-    logger.title(`葵子标准输入 v${appVersion}`, "yellow");
-    logger.tip("输入 'help' 获取帮助");
-    logger.tip("输入 'exit' 退出程序");
-    logger.gradientLine('=', 27);
-    this.rl.prompt();
   }
 
   createEvent(input, userInfo = {}) {
