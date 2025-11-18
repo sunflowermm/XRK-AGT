@@ -98,7 +98,6 @@ class ListenerLoader {
             adapterErrorCount++
           }
         }
-      }
       
       BotUtil.makeLog('info', `加载适配器[${adapterCount}个]${adapterErrorCount > 0 ? `, 失败${adapterErrorCount}个` : ''}`, 'ListenerLoader');
   }
