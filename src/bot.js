@@ -71,7 +71,7 @@ export default class Bot extends EventEmitter {
     
     // 配置属性
     this.apiKey = '';
-    this._cache = BotUtil.getMap('yunzai_cache', { ttl: 60000, autoClean: true });
+    this._cache = BotUtil.getMap('core_cache', { ttl: 60000, autoClean: true });
     this._rateLimiters = new Map();
     this.httpPort = null;
     this.httpsPort = null;
