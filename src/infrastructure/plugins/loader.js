@@ -35,7 +35,7 @@ class PluginsLoader {
     this.priority = []              // 普通优先级插件列表
     this.extended = []              // 扩展插件列表
     this.task = []                  // 定时任务列表
-    this.dir = 'plugins'            // 插件目录
+    this.dir = 'core'            // 插件目录（项目根目录下，可不存在）
     this.watcher = {}               // 文件监听器
     this.cooldowns = {              // 冷却时间管理
       group: new Map(),             // 使用 Map 替代对象，性能更好
@@ -78,7 +78,6 @@ class PluginsLoader {
 
       BotUtil.makeLog('info', '开始加载插件...', 'PluginsLoader')
 
-      // 获取所有插件文件
       const files = await this.getPlugins()
       this.pluginCount = 0
       const packageErr = []
