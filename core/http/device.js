@@ -1450,30 +1450,6 @@ export default {
             }
         }, 5 * 60 * 1000);
 
-        BotUtil.makeLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'DeviceManager');
-        BotUtil.makeLog('info', '⚡ [设备管理器] v31.0 - 连续对话优化版', 'DeviceManager');
-
-        if (VOLCENGINE_ASR_CONFIG.enabled) {
-            BotUtil.makeLog('info',
-                `✓ [火山ASR] 已启用（提供商: ${VOLCENGINE_ASR_CONFIG.provider}）`,
-                'DeviceManager'
-            );
-        }
-
-        if (VOLCENGINE_TTS_CONFIG.enabled) {
-            BotUtil.makeLog('info',
-                `✓ [火山TTS] 已启用（提供商: ${VOLCENGINE_TTS_CONFIG.provider}，语音: ${VOLCENGINE_TTS_CONFIG.voiceType}）`,
-                'DeviceManager'
-            );
-        }
-
-        if (AI_CONFIG.enabled) {
-            BotUtil.makeLog('info',
-                `✓ [设备AI] 已启用（模型: ${AI_CONFIG.chatModel}）`,
-                'DeviceManager'
-            );
-        }
-
         // 订阅ASR结果事件：更新会话finalText并转发中间结果到前端
         try {
             Bot.on('device', (e) => {
@@ -1516,8 +1492,6 @@ export default {
                 } catch { }
             });
         } catch { }
-
-        BotUtil.makeLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'DeviceManager');
     },
 
     destroy() {
