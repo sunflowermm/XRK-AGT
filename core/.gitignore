@@ -1,19 +1,8 @@
 *
 !.gitignore
 
-!other
-other/**
-!other/restart.js
-!other/sendLog.js
-!other/update.js
-!other/add.js
-
 !plugin
 plugin/**
-!plugin/主动复读.js
-!plugin/模拟定时输入.js
-!plugin/远程指令.js
-!plugin/状态.js
 
 !adapter
 adapter/**
