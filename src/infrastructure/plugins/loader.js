@@ -1,4 +1,6 @@
 import fs from 'fs/promises'
+import { pathToFileURL } from 'url'
+import paths from '#utils/paths.js'
 import { existsSync } from 'fs'
 import path from 'path'
 import lodash from 'lodash'
@@ -35,7 +37,7 @@ class PluginsLoader {
     this.priority = []              // 普通优先级插件列表
     this.extended = []              // 扩展插件列表
     this.task = []                  // 定时任务列表
-    this.dir = 'core'            // 插件目录（项目根目录下，可不存在）
+    this.dir = 'core/plugin'            // 插件目录（项目根目录下，可不存在）
     this.watcher = {}               // 文件监听器
     this.cooldowns = {              // 冷却时间管理
       group: new Map(),             // 使用 Map 替代对象，性能更好
@@ -1035,33 +1037,34 @@ class PluginsLoader {
    */
   async getPlugins() {
     try {
+      // 计算插件根目录绝对路径
+      const pluginRoot = path.join(process.cwd(), this.dir)
       // 检查插件目录是否存在
       try {
-        await fs.access(this.dir)
+        await fs.access(pluginRoot)
       } catch {
-        BotUtil.makeLog('warn', `插件目录不存在: ${this.dir}，跳过加载`, 'PluginsLoader')
+        BotUtil.makeLog('warn', `插件目录不存在: ${pluginRoot}，跳过加载`, 'PluginsLoader')
         return []
       }
 
-      const files = await fs.readdir(this.dir, { withFileTypes: true })
+      const entries = await fs.readdir(pluginRoot, { withFileTypes: true })
       const ret = []
       
       // 需要过滤的文件夹列表
       const excludedFolders = ['stream', 'events', 'adapter', 'api']
 
-      for (const dir of files) {
+      for (const dir of entries) {
         if (!dir.isDirectory()) continue
-        
-        // 过滤掉指定的文件夹
         if (excludedFolders.includes(dir.name)) continue
         
-        const dirPath = `${this.dir}/${dir.name}`
+        const dirPath = path.join(pluginRoot, dir.name)
 
         // 检查是否有index.js
-        if (existsSync(`${dirPath}/index.js`)) {
+        const indexJs = path.join(dirPath, 'index.js')
+        if (existsSync(indexJs)) {
           ret.push({
             name: dir.name,
-            path: `../../${dirPath}/index.js`
+            path: pathToFileURL(indexJs).href
           })
           continue
         }
@@ -1071,9 +1074,10 @@ class PluginsLoader {
         for (const app of apps) {
           if (!app.isFile() || !app.name.endsWith('.js')) continue
           const key = `${dir.name}/${app.name}`
+          const absApp = path.join(dirPath, app.name)
           ret.push({
             name: key,
-            path: `../../${dirPath}/${app.name}`
+            path: pathToFileURL(absApp).href
           })
           this.watch(dir.name, app.name)
         }

@@ -26,6 +26,8 @@ async function start() {
 
     // 创建 Bot 实例
     const bot = new Bot();
+    // 将实例暴露到全局，供 Listener/Plugins 等模块使用
+    global.Bot = bot;
 
     // 运行 Bot
     await bot.run({ port: DEBUG_PORT });
