@@ -1,13 +1,14 @@
-import Renderer from "../../../infrastructure/renderer/Renderer.js";
+import Renderer from "#infrastructure/renderer/Renderer.js";
 import os from "node:os";
 import lodash from "lodash";
 import puppeteer from "puppeteer";
-import cfg from "../../../infrastructure/config/config.js";
+import cfg from "#infrastructure/config/config.js";
 import fs from "node:fs";
 import path from "node:path";
-import BotUtil from "../../../utils/botutil.js";
+import BotUtil from "#utils/botutil.js";
+import paths from '#utils/paths.js';
 
-const _path = process.cwd();
+
 
 /**
  * Puppeteer-based browser renderer for screenshot generation
@@ -232,7 +233,7 @@ export default class PuppeteerRenderer extends Renderer {
     const savePath = this.dealTpl(name, data);
     if (!savePath) return false;
 
-    const filePath = path.join(_path, lodash.trim(savePath, "."));
+    const filePath = path.join(paths.root, lodash.trim(savePath, "."));
     if (!fs.existsSync(filePath)) {
       BotUtil.makeLog("error", `HTML file does not exist: ${filePath}`, "PuppeteerRenderer");
       return false;

@@ -1,9 +1,8 @@
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import BotUtil from '../../utils/botutil.js'
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import BotUtil from '#utils/botutil.js';
+import paths from '#utils/paths.js';
 
 /**
  * 配置加载器
@@ -18,7 +17,7 @@ class ConfigLoader {
     this.loaded = false;
     
     /** 配置目录路径 */
-    this.configDir = path.join(process.cwd(), 'core/commonconfig');
+    this.configDir = paths.coreCommonConfig;
   }
 
   /**

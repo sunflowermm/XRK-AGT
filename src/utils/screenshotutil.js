@@ -1,29 +1,28 @@
 import fs from 'fs';
 import path from 'path';
-import Puppeteer from '../renderers/puppeteer/lib/puppeteer.js';
+import Puppeteer from '#renderers/puppeteer/lib/puppeteer.js';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import yaml from 'yaml';
-import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import paths from '#utils/paths.js';
 
 // 获取 require 函数来加载 .puppeteerrc.cjs
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
 // 全局常量
-const ROOT_PATH = process.cwd();
-const DB_PATH = path.join(ROOT_PATH, 'trash/screenshot/screenshot-manager.db');
-const OUTPUT_BASE_PATH = path.join(ROOT_PATH, 'core/XRK/resources/help_other');
+const DB_PATH = path.join(paths.root, 'trash/screenshot/screenshot-manager.db');
+const OUTPUT_BASE_PATH = path.join(paths.core, 'XRK/resources/help_other');
 const MAX_RENDER_COUNT = 100;
 const MAX_IDLE_TIME = 3600000;
-const DEFAULT_IMAGE_PATH = path.join(ROOT_PATH, 'renderers', '截图失败.jpg');
-const CONFIG_PATH = path.join(ROOT_PATH, 'data/xrkconfig/config.yaml');
+const DEFAULT_IMAGE_PATH = path.join(paths.renderers, '截图失败.jpg');
+const CONFIG_PATH = path.join(paths.data, 'xrkconfig/config.yaml');
 
 // 获取浏览器可执行文件路径
 let browserExecutablePath = null;
 try {
-    const puppeteerConfig = require(path.join(ROOT_PATH, '.puppeteerrc.cjs'));
+    const puppeteerConfig = require(path.join(paths.root, '.puppeteerrc.cjs'));
     browserExecutablePath = puppeteerConfig.executablePath;
 } catch (e) {
     logger.warn('无法加载 .puppeteerrc.cjs，将使用默认浏览器路径');

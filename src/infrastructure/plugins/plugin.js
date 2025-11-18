@@ -1,4 +1,4 @@
-import StreamLoader from '../aistream/loader.js';
+import StreamLoader from '#infrastructure/aistream/loader.js';
 
 const stateArr = {}
 const SymbolTimeout = Symbol("Timeout")

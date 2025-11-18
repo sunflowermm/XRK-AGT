@@ -9,8 +9,9 @@ import md5 from "md5";
 import moment from "moment";
 import chalk from "chalk";
 
-import cfg from "../infrastructure/config/config.js";
+import cfg from "#infrastructure/config/config.js";
 import common from './common.js';
+import paths from '#utils/paths.js';
 
 /**
  * Bot 实用工具类
@@ -22,7 +23,7 @@ import common from './common.js';
  * @static
  * @example
  * // 使用工具函数
- * import BotUtil from '../../utils/botutil.js';
+ * import BotUtil from '#utils/botutil.js';
  * 
  * // 文件操作
  * await BotUtil.mkdir('./data');
@@ -885,7 +886,7 @@ export default class BotUtil {
    * @param {boolean} [opts.force=false] - 即使不是模式也强制使用 glob
    * @param {boolean} [opts.dot=true] - 包含点文件
    * @param {boolean} [opts.absolute=false] - 返回绝对路径
-   * @param {string} [opts.cwd=process.cwd()] - 当前工作目录
+   * @param {string} [opts.cwd=paths.root] - 当前工作目录
    * @param {Array} [opts.ignore=[]] - 要忽略的模式
    * @param {boolean} [opts.onlyFiles=true] - 仅匹配文件
    * @returns {Promise<Array<string>>} 匹配的文件路径
@@ -904,7 +905,7 @@ export default class BotUtil {
       const globOptions = {
         dot: opts.dot !== false,
         absolute: opts.absolute === true,
-        cwd: opts.cwd || process.cwd(),
+        cwd: opts.cwd || paths.root,
         ignore: opts.ignore || [],
         onlyFiles: opts.onlyFiles !== false,
         ...opts
@@ -1002,7 +1003,7 @@ export default class BotUtil {
    * @returns {Promise<string>} 文件 URL 或数据 URL
    */
   static async #saveBufferToTempFile(buffer) {
-    const tempDir = path.join(process.cwd(), "temp");
+    const tempDir = paths.temp;
 
     try {
       await BotUtil.mkdir(tempDir);
@@ -1101,7 +1102,7 @@ export default class BotUtil {
     };
 
     try {
-      const mediaDir = path.join(process.cwd(), "www/media");
+      const mediaDir = path.join(paths.www, "media");
       await BotUtil.mkdir(mediaDir);
 
       let fileBuffer;

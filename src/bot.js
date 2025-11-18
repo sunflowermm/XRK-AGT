@@ -16,13 +16,14 @@ import dgram from 'node:dgram';
 import chalk from 'chalk';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
-import PluginsLoader from "./infrastructure/plugins/loader.js";
-import ListenerLoader from "./infrastructure/listener/loader.js";
-import ApiLoader from "./infrastructure/http/loader.js";
-import Packageloader from "./infrastructure/config/loader.js";
-import StreamLoader from "./infrastructure/aistream/loader.js";
-import BotUtil from './utils/botutil.js';
-import cfg from './infrastructure/config/config.js';
+import PluginsLoader from "#infrastructure/plugins/loader.js";
+import ListenerLoader from "#infrastructure/listener/loader.js";
+import ApiLoader from "#infrastructure/http/loader.js";
+import Packageloader from "#infrastructure/config/loader.js";
+import StreamLoader from "#infrastructure/aistream/loader.js";
+import BotUtil from '#utils/botutil.js';
+import cfg from '#infrastructure/config/config.js';
+import paths from '#utils/paths.js';
 
 /**
  * Bot主类
@@ -697,7 +698,7 @@ export default class Bot extends EventEmitter {
         return next();
       }
       
-      const staticRoot = req.staticRoot || path.join(process.cwd(), 'www');
+      const staticRoot = req.staticRoot || paths.www;
       
       if (!fsSync.existsSync(staticRoot)) {
         fsSync.mkdirSync(staticRoot, { recursive: true });
@@ -742,7 +743,7 @@ export default class Bot extends EventEmitter {
       return next();
     }
     
-    const staticRoot = req.staticRoot || path.join(process.cwd(), 'www');
+    const staticRoot = req.staticRoot || paths.www;
     const dirPath = path.join(staticRoot, req.path);
     
     if (fsSync.existsSync(dirPath) && fsSync.statSync(dirPath).isDirectory()) {
@@ -868,7 +869,7 @@ export default class Bot extends EventEmitter {
   async _handleFavicon(req, res) {
     if (res.headersSent) return;
     
-    const staticRoot = req.staticRoot || path.join(process.cwd(), 'www');
+    const staticRoot = req.staticRoot || paths.www;
     const faviconPath = path.join(staticRoot, 'favicon.ico');
     
     if (fsSync.existsSync(faviconPath)) {
@@ -893,7 +894,7 @@ export default class Bot extends EventEmitter {
   async _handleRobotsTxt(req, res) {
     if (res.headersSent) return;
     
-    const staticRoot = req.staticRoot || path.join(process.cwd(), 'www');
+    const staticRoot = req.staticRoot || paths.www;
     const robotsPath = path.join(staticRoot, 'robots.txt');
     
     if (fsSync.existsSync(robotsPath)) {
@@ -1022,7 +1023,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       return null;
     }
     
-    const apiKeyPath = path.join(process.cwd(),
+    const apiKeyPath = path.join(paths.root,
       apiKeyConfig.file || 'config/server_config/api_key.json');
     
     if (fsSync.existsSync(apiKeyPath)) {
@@ -1734,7 +1735,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       }
       
       if (req.accepts('html')) {
-        const staticRoot = req.staticRoot || path.join(process.cwd(), 'www');
+        const staticRoot = req.staticRoot || paths.www;
         const custom404Path = path.join(staticRoot, '404.html');
         
         if (fsSync.existsSync(custom404Path)) {

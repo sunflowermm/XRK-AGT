@@ -2,6 +2,7 @@ import YAML from 'yaml';
 import fs from 'fs';
 import chokidar from 'chokidar';
 import path from 'path';
+import paths from '#utils/paths.js';
 
 /**
  * 配置管理类
@@ -15,9 +16,9 @@ class Cfg {
     this._renderer = null;
 
     this.PATHS = {
-      DEFAULT_CONFIG: path.join('config', 'default_config'),
-      SERVER_BOTS: path.join('data', 'server_bots'),
-      RENDERERS: 'renderers'
+      DEFAULT_CONFIG: paths.configDefault,
+      SERVER_BOTS: paths.dataServerBots,
+      RENDERERS: paths.renderers
     };
     const portIndex = process.argv.indexOf('server');
     if (portIndex !== -1 && process.argv[portIndex + 1]) {
@@ -69,7 +70,7 @@ class Cfg {
     bot = { ...defbot, ...bot };
 
     bot.platform = 2;
-    bot.data_dir = path.join(process.cwd(), 'data', 'server_bots', String(this._port));
+    bot.data_dir = this.getConfigDir();
     bot.server = bot.server || {};
     bot.server.port = this._port;
 
@@ -225,7 +226,7 @@ class Cfg {
    */
   get package() {
     if (this._package) return this._package;
-    this._package = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    this._package = JSON.parse(fs.readFileSync(path.join(paths.root, 'package.json'), 'utf8'));
     return this._package;
   }
   get aistream() {

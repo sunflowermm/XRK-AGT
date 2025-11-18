@@ -1,11 +1,11 @@
 import path from 'path';
 import { pathToFileURL } from 'url';
 import fs from 'fs';
-import BotUtil from '../../utils/botutil.js';
-import cfg from '../config/config.js';
+import BotUtil from '#utils/botutil.js';
+import cfg from '#infrastructure/config/config.js';
+import paths from '#utils/paths.js';
 
-const _path = process.cwd();
-const STREAMS_DIR = path.join(_path, 'core/stream');
+const STREAMS_DIR = paths.coreStream;
 
 /**
  * AI工作流加载器
@@ -60,7 +60,7 @@ class StreamLoader {
       maxContexts: config.maxContexts || 5,
       similarityThreshold: config.similarityThreshold || 0.6,
       cacheExpiry: config.cacheExpiry || 86400,
-      cachePath: config.cachePath || path.join(_path, 'data/models')
+      cachePath: config.cachePath || paths.dataModels
     };
 
     this.embeddingConfigured = true;

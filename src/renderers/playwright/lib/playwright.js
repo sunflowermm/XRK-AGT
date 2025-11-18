@@ -1,12 +1,13 @@
-import Renderer from "../../../infrastructure/renderer/Renderer.js";
+import Renderer from "#infrastructure/renderer/Renderer.js";
 import os from "node:os";
 import lodash from "lodash";
 import playwright from "playwright";
-import cfg from "../../../infrastructure/config/config.js";
+import cfg from "#infrastructure/config/config.js";
 import fs from "node:fs";
 import path from "node:path";
-import BotUtil from '../../../utils/botutil.js'
-const _path = process.cwd();
+import BotUtil from '#utils/botutil.js';
+import paths from '#utils/paths.js';
+
 
 /**
  * Playwright-based browser renderer for screenshot generation
@@ -276,7 +277,7 @@ export default class PlaywrightRenderer extends Renderer {
     const savePath = this.dealTpl(name, data);
     if (!savePath) return false;
 
-    const filePath = path.join(_path, savePath);
+    const filePath = path.join(paths.root, savePath);
     if (!fs.existsSync(filePath)) {
       BotUtil.makeLog("error", `HTML file does not exist: ${filePath}`, "PlaywrightRenderer");
       return false;

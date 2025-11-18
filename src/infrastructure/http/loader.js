@@ -2,7 +2,8 @@ import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import HttpApi from './http.js';
-import BotUtil from '../../utils/botutil.js'
+import BotUtil from '#utils/botutil.js';
+import paths from '#utils/paths.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,7 +41,7 @@ class ApiLoader {
     BotUtil.makeLog('info', '开始加载API模块...', 'ApiLoader');
     
     // API目录路径
-    const apiDir = path.join(process.cwd(), 'core/http');
+    const apiDir = paths.coreHttp;
     
     // 确保目录存在
     await fs.mkdir(apiDir, { recursive: true });
@@ -99,7 +100,7 @@ class ApiLoader {
   async loadApi(filePath) {
     try {
       // 获取相对路径作为key
-      const key = path.relative(path.join(process.cwd(), 'core/http'), filePath)
+      const key = path.relative(paths.coreHttp, filePath)
         .replace(/\\/g, '/')
         .replace(/\.js$/, '');
       
@@ -357,7 +358,7 @@ class ApiLoader {
       return;
     }
     
-    const apiDir = path.join(process.cwd(), 'core/http');
+    const apiDir = paths.coreHttp;
     
     try {
       const { watch } = await import('chokidar');

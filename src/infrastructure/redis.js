@@ -1,5 +1,5 @@
 import cfg from './config/config.js'
-import common from '../utils/common.js'
+import common from '#utils/common.js'
 import { exec } from 'node:child_process'
 import os from 'node:os'
 import { createClient } from 'redis'

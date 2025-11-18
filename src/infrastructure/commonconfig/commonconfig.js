@@ -2,7 +2,8 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import yaml from 'yaml';
-import BotUtil from '../../utils/botutil.js';
+import BotUtil from '#utils/botutil.js';
+import paths from '#utils/paths.js';
 
 /**
  * 配置文件管理基类
@@ -59,7 +60,7 @@ export default class ConfigBase {
       this._getFilePath = this.filePath;
     } else {
       // 完整文件路径
-      this.fullPath = path.join(process.cwd(), this.filePath);
+      this.fullPath = path.join(paths.root, this.filePath);
     }
     
     // 缓存配置内容
@@ -78,11 +79,11 @@ export default class ConfigBase {
       // cfg 在系统初始化时已经确保存在
       const cfg = global.cfg || { _port: parseInt(process.env.SERVER_PORT || process.env.PORT || 8086) };
       const dynamicPath = this._getFilePath(cfg);
-      return path.join(process.cwd(), dynamicPath);
+      return path.join(paths.root, dynamicPath);
     }
     // 如果没有 fullPath，尝试构造默认路径
     if (!this.fullPath) {
-      return path.join(process.cwd(), `config/config/${this.name}.yaml`);
+      return path.join(paths.config, `config/${this.name}.yaml`);
     }
     return this.fullPath;
   }

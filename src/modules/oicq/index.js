@@ -34,11 +34,6 @@ const segment = {
   }
 }
 
-try {
-  const { segment: icqq_segment } = await import(`file://${process.cwd()}/core/ICQQ-Plugin/node_modules/icqq/lib/message/elements.js`)
-  const { deprecate } = await import("node:util")
-  for (const i in icqq_segment) if (!segment[i])
-    segment[i] = deprecate(icqq_segment[i], `segment.${i} 仅在 icqq 上可用`)
-} catch {}
+
 
 export { segment }

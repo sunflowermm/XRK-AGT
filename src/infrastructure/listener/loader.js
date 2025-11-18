@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import lodash from "lodash"
-import AdapterLoader from "../adapter/loader.js"
+import AdapterLoader from "#infrastructure/adapter/loader.js";
+import paths from '#utils/paths.js';
 
 /**
  * 加载监听事件和适配器
@@ -15,7 +16,7 @@ class ListenerLoader {
     let eventCount = 0
     
     try {
-      const eventsDir = "./core/events"
+      const eventsDir = paths.coreEvents
       try {
         await fs.access(eventsDir)
       } catch {
@@ -33,7 +34,7 @@ class ListenerLoader {
       for (const file of eventFiles) {
         Bot.makeLog('debug', `加载监听事件: ${file}`, 'ListenerLoader');
         try {
-          const listener = await import(`../../core/events/${file}`)
+          const listener = await import(`#core/events/${file}`)
           if (!listener.default) continue
           
           const instance = new listener.default()

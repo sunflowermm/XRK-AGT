@@ -2,7 +2,7 @@ import fs from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
 import lodash from 'lodash'
-import cfg from '../config/config.js'
+import cfg from '#infrastructure/config/config.js'
 import plugin from './plugin.js'
 import schedule from 'node-schedule'
 import chokidar from 'chokidar'
@@ -10,7 +10,7 @@ import moment from 'moment'
 import Handler from './handler.js'
 import Runtime from './runtime.js'
 import { segment } from 'oicq'
-import BotUtil from '../../utils/botutil.js'
+import BotUtil from '#utils/botutil.js'
 
 global.plugin = plugin
 global.segment = segment

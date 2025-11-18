@@ -1,5 +1,5 @@
 import ApiLoader from "./loader.js";
-import BotUtil from "../../utils/botutil.js";
+import BotUtil from "#utils/botutil.js";
 
 /**
  * HTTP API基础类

@@ -4,10 +4,14 @@
  */
 import lodash from "lodash"
 import fs from "node:fs/promises"
-import common from "../../utils/common.js"
-import cfg from "../config/config.js"
-import puppeteer from "../../modules/puppeteer.js"
-import Handler from "./handler.js"
+import common from "#utils/common.js"
+import cfg from "#infrastructure/config/config.js"
+import puppeteer from "#modules/puppeteer.js"
+import Handler from "./handler.js";
+import paths from '#utils/paths.js';
+import path from 'path';;
+import paths from '#utils/paths.js';
+import path from 'path';
 
 /**
  * 运行时扩展注册器
@@ -167,7 +171,9 @@ export default class Runtime {
     await Bot.mkdir(`temp/html/${plugin}/${path}`)
     
     // 自动计算pluResPath
-    let pluResPath = `../../../${lodash.repeat("../", paths.length)}core/${plugin}/resources/`
+    const resourcesPath = path.join(paths.core, plugin, 'resources');
+    const tplFile = path.join(resourcesPath, `${path}.html`);
+    const pluResPath = path.relative(path.dirname(tplFile), resourcesPath) + '/';
     
     // 基础渲染data
     data = {
@@ -178,7 +184,7 @@ export default class Runtime {
       _plugin: plugin,
       _htmlPath: path,
       pluResPath,
-      tplFile: `./core/${plugin}/resources/${path}.html`,
+      tplFile,
       saveId: data.saveId || data.save_id || paths[paths.length - 1],
       ...data
     }

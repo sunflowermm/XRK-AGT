@@ -6,8 +6,8 @@
 import WebSocket from 'ws';
 import zlib from 'zlib';
 import { v4 as uuidv4 } from 'uuid';
-import BotUtil from '../../utils/botutil.js';
-import { TTS_EVENTS } from '../config/deviceConfig.js';
+import BotUtil from '#utils/botutil.js';
+import { TTS_EVENTS } from '#factory/config/deviceConfig.js';
 
 export default class VolcengineTTSClient {
     /**

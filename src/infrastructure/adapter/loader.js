@@ -1,8 +1,5 @@
 import fs from "node:fs/promises"
-import path from "path"
-import { fileURLToPath } from 'url'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+import paths from '#utils/paths.js';
 
 /**
  * 适配器加载器
@@ -19,7 +16,7 @@ class AdapterLoader {
     let errorCount = 0
     
     try {
-      const adapterDir = path.join(process.cwd(), 'core/adapter')
+      const adapterDir = paths.coreAdapter
       
       // 检查目录是否存在
       try {
@@ -44,7 +41,7 @@ class AdapterLoader {
       for (const file of adapterFiles) {
         try {
           Bot.makeLog('debug', `导入适配器文件: ${file}`, 'AdapterLoader');
-          await import(`../../core/adapter/${file}`)
+          await import(`#core/adapter/${file}`)
           loadedCount++
         } catch (err) {
           Bot.makeLog('error', `导入适配器文件失败: ${file}`, 'AdapterLoader', err);

@@ -1,7 +1,8 @@
 import fetch from 'node-fetch';
 import path from 'path';
 import fs from 'fs';
-import BotUtil from '../../utils/botutil.js'
+import BotUtil from '#utils/botutil.js';
+import paths from '#utils/paths.js';
 /**
  * 轻量级文本相似度计算器（BM25算法）
  */
@@ -128,7 +129,7 @@ export default class AIStream {
       maxContexts: 5,
       similarityThreshold: 0.6,
       cacheExpiry: 86400,
-      cachePath: path.join(process.cwd(), 'data/models'),
+      cachePath: paths.dataModels,
       onnxModel: 'Xenova/all-MiniLM-L6-v2',
       onnxQuantized: true,
       hfToken: null,

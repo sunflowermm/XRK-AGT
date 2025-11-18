@@ -1,4 +1,4 @@
-import Renderer from '../infrastructure/renderer/loader.js'
+import Renderer from '#infrastructure/renderer/loader.js'
 
 /**
  * 暂时保留对手工引用puppeteer.js的兼容

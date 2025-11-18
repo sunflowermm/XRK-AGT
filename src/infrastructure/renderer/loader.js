@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import yaml from "yaml"
 import lodash from "lodash"
-import cfg from "../config/config.js"
+import cfg from "#infrastructure/config/config.js"
 import Renderer from "./Renderer.js"
 
 /** 全局变量 Renderer */

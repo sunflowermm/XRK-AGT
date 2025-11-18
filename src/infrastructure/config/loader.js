@@ -1,8 +1,8 @@
 import cfg from "./config.js"
 import chalk from "chalk";
-import setLog from "../log.js";
-import redisInit from "../redis.js";
-import SystemMonitor from "../modules/systemmonitor.js";
+import setLog from "#infrastructure/log.js";
+import redisInit from "#infrastructure/redis.js";
+import SystemMonitor from "#modules/systemmonitor.js";
 
 const CONFIG = {
   PROCESS_TITLE: "XRK-AGT",
