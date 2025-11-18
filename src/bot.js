@@ -139,6 +139,16 @@ export default class Bot extends EventEmitter {
     return error;
   }
 
+  /**
+   * 创建一个正则表达式对象
+   * @param {string} pattern - 正则表达式模式
+   * @param {string} [flags] - 正则表达式标志
+   * @returns {RegExp}
+   */
+  createRegExp(pattern, flags) {
+    return new RegExp(pattern, flags);
+  }
+
   _createUinManager() {
     return Object.assign([], {
       toJSON() {
