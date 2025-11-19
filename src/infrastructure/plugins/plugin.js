@@ -42,7 +42,7 @@ export default class plugin {
     this.event = options.event || "message"
     this.priority = options.priority || 5000
     this.task = options.task || { name: "", fnc: "", cron: "" }
-    this.rule = options.rule || []
+    this.rule = Array.isArray(options.rule) ? options.rule : []
     this.bypassThrottle = options.bypassThrottle || false
     
     if (options.handler) {
