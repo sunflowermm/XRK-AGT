@@ -149,7 +149,8 @@ class PluginsLoader {
         return await this.dealSpecialEvent(e)
       }
 
-      const shouldContinue = await this.preCheck(e)
+      const hasBypassPlugin = this.priority.some(p => p.bypassThrottle === true);
+      const shouldContinue = await this.preCheck(e, hasBypassPlugin)
       if (!shouldContinue) return
 
       // 处理消息
@@ -443,7 +444,7 @@ class PluginsLoader {
    * @param {boolean} hasBypassPlugin - 是否有绕过节流的插件
    * @returns {Promise<boolean>} 是否继续处理
    */
-  async preCheck(e) {
+  async preCheck(e, hasBypassPlugin = false) {
     try {
       // 特殊事件（设备、标准输入）直接通过
       if (e.isDevice || e.isStdin) return true
