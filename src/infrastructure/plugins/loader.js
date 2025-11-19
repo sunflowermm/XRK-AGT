@@ -702,7 +702,7 @@ class PluginsLoader {
       }
 
       // 处理规则
-      if (plugin.rule) {
+      if (plugin.rule && Array.isArray(plugin.rule)) {
         plugin.rule.forEach(rule => {
           if (rule.reg) rule.reg = PluginExecutor.createRegExp(rule.reg)
         })
