@@ -469,7 +469,7 @@ class PluginsLoader {
       }
 
       // 处理消息前缀（将斜杠转换为#等）
-      msg = this.dealText(msg)
+      msg = MessageHandler.dealText(msg)
       const isStartCommand = /^#开机$/.test(msg)
       if (isStartCommand) {
         // 检查主人权限

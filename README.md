@@ -1,9 +1,6 @@
 # XRK-AGT v3.0.5
 
-基于乐神版[云崽v3.0](https://gitee.com/le-niao/Yunzai-Bot) 与喵喵版[喵崽v3.1.3](https://gitee.com/yoimiya-kokomi/Miao-Yunzai) 还有时雨版[时雨崽3.1.3](https://gitee.com/TimeRainStarSky/Yunzai)
-
-感谢我在编写过程中时雨佬等佬的帮助
-感谢我在编写时萌新们的支持
+这是向日葵工作室基于多语言所搭建的基于web，工作流，新型算法组件的智能体
 
 ## 使用方法
 
