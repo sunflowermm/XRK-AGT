@@ -702,11 +702,15 @@ class PluginsLoader {
       }
 
       // 处理规则
-      if (plugin.rule && Array.isArray(plugin.rule)) {
-        plugin.rule.forEach(rule => {
-          if (rule.reg) rule.reg = PluginExecutor.createRegExp(rule.reg)
-        })
+      if (!Array.isArray(plugin.rule)) {
+        plugin.rule = plugin.rule ? [plugin.rule] : []
       }
+
+      plugin.rule.forEach(rule => {
+        if (rule?.reg !== undefined) {
+          rule.reg = PluginExecutor.createRegExp(rule.reg)
+        }
+      })
 
       // 普通插件
       const pluginData = {

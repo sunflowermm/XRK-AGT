@@ -76,11 +76,15 @@ class PluginExecutor {
         plugin.e = e;
         plugin.bypassThrottle = p.bypassThrottle;
 
-        if (plugin.rule) {
-          plugin.rule.forEach(rule => {
-            if (rule.reg) rule.reg = this.createRegExp(rule.reg);
-          });
+        if (!Array.isArray(plugin.rule)) {
+          plugin.rule = plugin.rule ? [plugin.rule] : [];
         }
+
+        plugin.rule.forEach(rule => {
+          if (rule?.reg !== undefined) {
+            rule.reg = this.createRegExp(rule.reg);
+          }
+        });
 
         if (this.checkDisable(plugin) && this.filtEvent(e, plugin)) {
           activePlugins.push(plugin);
@@ -288,15 +292,35 @@ class PluginExecutor {
    * @returns {RegExp|boolean}
    */
   createRegExp(pattern) {
-    if (!pattern && pattern !== '') return false;
     if (pattern instanceof RegExp) return pattern;
-    if (typeof pattern !== 'string' || pattern === 'null' || pattern === '') return /.*/;
-    try {
-      return new RegExp(pattern);
-    } catch (e) {
-      logger.error(`正则表达式创建失败: ${pattern}`, e);
-      return false;
+
+    const buildRegExp = (source, flags = '') => {
+      try {
+        return new RegExp(source, flags);
+      } catch (error) {
+        logger.error(`正则表达式创建失败: ${source}`, error);
+        return false;
+      }
+    };
+
+    if (pattern && typeof pattern === 'object') {
+      const source = pattern.source || pattern.pattern || pattern.reg;
+      if (typeof source === 'string') {
+        return buildRegExp(source, pattern.flags || '');
+      }
     }
+
+    if (pattern === '' || pattern === null || pattern === undefined) return /.*/;
+
+    const str = String(pattern).trim();
+    if (!str) return /.*/;
+
+    const literalMatch = str.match(/^\/(.+)\/([a-z]*)$/i);
+    if (literalMatch) {
+      return buildRegExp(literalMatch[1], literalMatch[2]);
+    }
+
+    return buildRegExp(str);
   }
 }
 

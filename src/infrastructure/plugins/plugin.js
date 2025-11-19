@@ -4,6 +4,12 @@ const stateArr = {}
 const SymbolTimeout = Symbol("Timeout")
 const SymbolResolve = Symbol("Resolve")
 
+const normalizeRules = (rules) => {
+  if (!rules) return []
+  if (Array.isArray(rules)) return rules.filter(Boolean)
+  return [rules]
+}
+
 /**
  * 插件基类
  * 
@@ -42,7 +48,7 @@ export default class plugin {
     this.event = options.event || "message"
     this.priority = options.priority || 5000
     this.task = options.task || { name: "", fnc: "", cron: "" }
-    this.rule = Array.isArray(options.rule) ? options.rule : []
+    this.rule = normalizeRules(options.rule)
     this.bypassThrottle = options.bypassThrottle || false
     
     if (options.handler) {
