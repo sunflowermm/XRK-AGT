@@ -11,32 +11,32 @@ XRK-AGT 是一个基于 Node.js 的智能体运行平台，提供 **多适配器
 
 ```mermaid
 flowchart TD
-    A[start.js / app.js 启动] --> B[创建 Bot 实例 (src/bot.js)]
-    B --> C[加载基础配置 Packageloader<br/>加载通用配置 ConfigLoader]
-    C --> D[加载 AI 工作流 StreamLoader]
-    C --> E[加载插件 PluginsLoader]
-    C --> F[加载 HTTP API ApiLoader.load]
-    B --> G[初始化中间件和路由<br/>_initializeMiddlewareAndRoutes]
-    G --> H[注册 API 路由 ApiLoader.register]
-    B --> I[启动 HTTP/HTTPS 服务器<br/>serverLoad / httpsLoad]
+    A["start.js / app.js\n启动"] --> B["创建 Bot 实例\n(src/bot.js)"]
+    B --> C["加载基础配置\nPackageloader\n加载通用配置\nConfigLoader"]
+    C --> D["加载 AI 工作流\nStreamLoader"]
+    C --> E["加载插件\nPluginsLoader"]
+    C --> F["加载 HTTP API\nApiLoader.load"]
+    B --> G["初始化中间件和路由\n_initializeMiddlewareAndRoutes"]
+    G --> H["注册 API 路由\nApiLoader.register"]
+    B --> I["启动 HTTP/HTTPS 服务器\nserverLoad / httpsLoad"]
     B --> J{是否启用反向代理?}
-    J -->|是| K[初始化代理应用 _initProxyApp<br/>启动代理服务器 startProxyServers]
-    J -->|否| L[直接暴露 HTTP/HTTPS 端口]
+    J -->|是| K["初始化代理应用\n_initProxyApp\n启动代理服务器\nstartProxyServers"]
+    J -->|否| L["直接暴露\nHTTP/HTTPS 端口"]
 
     subgraph 消息流
-      M[第三方平台 / OneBotv11 / 其他适配器] --> N[适配器 (core/adapter)]
-      N --> O[适配器通过 Bot.em 触发事件]
-      O --> P[PluginsLoader.deal(e)<br/>解析消息 / 权限 / 速率限制]
-      P --> Q[匹配插件规则 plugin.rule<br/>调用插件方法]
-      Q --> R[插件内部使用 this.reply / Bot API / AIStream 等回复]
+      M["第三方平台 /\nOneBotv11 /\n其他适配器"] --> N["适配器\n(core/adapter)"]
+      N --> O["适配器通过\nBot.em 触发事件"]
+      O --> P["PluginsLoader.deal(e)\n解析消息 / 权限 /\n速率限制"]
+      P --> Q["匹配插件规则\nplugin.rule\n调用插件方法"]
+      Q --> R["插件内部使用\nthis.reply / Bot API /\nAIStream 等回复"]
     end
 
     subgraph API 流
-      S[前端 XRK Web / 第三方调用] --> T[HTTP 请求 / WebSocket]
-      T --> U[Express 中间件栈<br/>CORS/日志/认证/静态资源]
-      U --> V[匹配 /api/* 路由<br/>HttpApi 实例 handler]
-      V --> W[调用 Bot / 插件 / AIStream / 配置等服务]
-      W --> X[返回 JSON / SSE / 文件等响应]
+      S["前端 XRK Web /\n第三方调用"] --> T["HTTP 请求 /\nWebSocket"]
+      T --> U["Express 中间件栈\nCORS/日志/认证/\n静态资源"]
+      U --> V["匹配 /api/* 路由\nHttpApi 实例 handler"]
+      V --> W["调用 Bot /\n插件 / AIStream /\n配置等服务"]
+      W --> X["返回 JSON /\nSSE / 文件等响应"]
     end
 ```
 
