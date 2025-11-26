@@ -12,19 +12,18 @@
 
 ```mermaid
 flowchart TD
-  Entry[命令行: node app] --> Bootstrap[app.js Bootstrap]
-  Bootstrap --> EnvCheck[环境检查<br/>Node版本 + 目录结构]
-  Bootstrap --> Deps[依赖检测与安装<br/>DependencyManager]
-  Bootstrap --> Imports[动态 imports 合并<br/>data/importsJson/*.json]
-  Bootstrap --> Start[import ./start.js]
-  Start --> Bot[创建 Bot 实例<br/>src/bot.js]
-  Bot --> Http[初始化 HTTP/HTTPS/WS 服务]
-  Bot --> Adapters[加载适配器 core/adapter]
-  Bot --> Plugins[加载插件 core/plugin]
-  Bot --> ApiLoader[加载 HTTP API core/http]
-  Bot --> Renderers[初始化渲染器 src/renderers]
-  Bot --> Online[触发 online / ready 事件]
-```
+  Entry["命令行: node app"] --> Bootstrap["app.js\nBootstrap"]
+  Bootstrap --> EnvCheck["环境检查\nNode 版本 + 目录结构"]
+  Bootstrap --> Deps["依赖检测与安装\nDependencyManager"]
+  Bootstrap --> Imports["动态 imports 合并\ndata/importsJson/*.json"]
+  Bootstrap --> Start["import ./start.js"]
+  Start --> Bot["创建 Bot 实例\nsrc/bot.js"]
+  Bot --> Http["初始化 HTTP/HTTPS/WS 服务"]
+  Bot --> Adapters["加载适配器\ncore/adapter"]
+  Bot --> Plugins["加载插件\ncore/plugin"]
+  Bot --> ApiLoader["加载 HTTP API\ncore/http"]
+  Bot --> Renderers["初始化渲染器\nsrc/renderers"]
+  Bot --> Online["触发 online / ready 事件"]
 
 **关键文件：**
 
@@ -72,9 +71,9 @@ XRK-AGT 的配置体系分为两层：
 
 ```mermaid
 flowchart LR
-  Default[config/default_config/*.yaml] -->|初次复制| ServerCfg[data/server_bots/{port}/*.yaml]
-  ServerCfg --> Cfg[getConfig(name)]
-  Cfg --> Bot[Bot.run()<br/>global.cfg = Cfg]
+  Default["config/default_config/*.yaml"] -->|初次复制| ServerCfg["data/server_bots/{port}/*.yaml"]
+  ServerCfg --> Cfg["getConfig(name)"]
+  Cfg --> Bot["Bot.run()\n(global.cfg = Cfg)"]
 ```
 
 | 方法/属性 | 说明 |

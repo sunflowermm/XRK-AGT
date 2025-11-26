@@ -8,16 +8,16 @@
 
 ```mermaid
 flowchart TD
-    Start[进程启动<br/>start.js / app.js] --> NewBot[实例化 Bot]
-    NewBot --> InitHttp[初始化 HTTP/HTTPS/WS<br/>_initHttpServer]
-    NewBot --> GenKey[生成/加载 API Key<br/>generateApiKey]
-    NewBot --> Run[Bot.run(options)]
+    Start["进程启动\nstart.js / app.js"] --> NewBot["实例化 Bot"]
+    NewBot --> InitHttp["初始化 HTTP/HTTPS/WS\n_initHttpServer"]
+    NewBot --> GenKey["生成/加载 API Key\ngenerateApiKey"]
+    NewBot --> Run["Bot.run(options)"]
 
-    Run --> LoadCfg[加载配置/工作流/插件/API<br/>Packageloader + ConfigLoader + StreamLoader + PluginsLoader + ApiLoader]
-    Run --> Mid[初始化中间件与路由<br/>_initializeMiddlewareAndRoutes]
-    Run --> Srv[启动 HTTP/HTTPS/代理服务器<br/>serverLoad + httpsLoad + startProxyServers]
-    Run --> Listeners[加载监听器并开启 API 热重载]
-    Run --> Online[触发 online 事件<br/>emit('online', ...)]
+    Run --> LoadCfg["加载配置/工作流/插件/API\nPackageloader + ConfigLoader\n+ StreamLoader + PluginsLoader + ApiLoader"]
+    Run --> Mid["初始化中间件与路由\n_initializeMiddlewareAndRoutes"]
+    Run --> Srv["启动 HTTP/HTTPS/代理服务器\nserverLoad + httpsLoad\n+ startProxyServers"]
+    Run --> Listeners["加载监听器\n并开启 API 热重载"]
+    Run --> Online["触发 online 事件\nemit('online', ...)"]
 ```
 
 **高层职责分区：**

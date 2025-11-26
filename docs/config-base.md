@@ -16,9 +16,9 @@
 
 ```mermaid
 flowchart LR
-  App[API / 插件 / Web管理] -->|调用 get/set/merge| ConfigBase子类
-  ConfigBase子类 --> File[配置文件<br/>YAML/JSON]
-  File --> Backup[*.backup.时间戳]
+  App["API / 插件 /\nWeb 管理"] -->|调用 get/set/merge| CfgCls["ConfigBase 子类"]
+  CfgCls --> File["配置文件\nYAML / JSON"]
+  File --> Backup["*.backup.时间戳"]
 ```
 
 | 分类 | 名称 | 说明 |

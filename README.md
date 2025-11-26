@@ -23,23 +23,23 @@ XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多语言、多适配器
 
 ```mermaid
 flowchart LR
-    subgraph Clients[外部客户端]
-      QQ[QQ / OneBotv11] -->|WS| Adapters
-      WeChat[ComWeChat 等] -->|WS/HTTP| Adapters
-      WebUI[XRK Web 控制台] -->|HTTP/WS| Express
-      ThirdAPI[第三方调用方] -->|HTTP/WS| Express
+    subgraph Clients["外部客户端"]
+      QQ["QQ / OneBotv11"] -->|WS| Adapters
+      WeChat["ComWeChat 等"] -->|WS/HTTP| Adapters
+      WebUI["XRK Web 控制台"] -->|HTTP/WS| Express
+      ThirdAPI["第三方调用方"] -->|HTTP/WS| Express
     end
 
-    subgraph Core[XRK-AGT 核心]
-      Adapters[适配器层<br/>core/adapter] -->|Bot.em 事件| PluginsLoader
-      Express[HTTP/HTTPS/WS 服务<br/>src/bot.js] --> ApiLoader
-      ApiLoader[API 加载器<br/>core/http + HttpApi] --> PluginsLoader
-      PluginsLoader[插件加载器<br/>src/infrastructure/plugins] --> Plugins[插件实现<br/>core/plugin]
-      Plugins --> AIStream[AI 工作流<br/>src/infrastructure/aistream]
-      Plugins --> Renderer[渲染器<br/>src/renderers + Renderer]
-      Plugins --> Config[配置系统<br/>commonconfig + YAML]
-      Plugins --> Redis[(Redis)]
-      BotUtil[BotUtil 工具类<br/>src/utils/botutil.js] --> Plugins
+    subgraph Core["XRK-AGT 核心"]
+      Adapters["适配器层\ncore/adapter"] -->|Bot.em 事件| PluginsLoader
+      Express["HTTP/HTTPS/WS 服务\nsrc/bot.js"] --> ApiLoader
+      ApiLoader["API 加载器\ncore/http + HttpApi"] --> PluginsLoader
+      PluginsLoader["插件加载器\nsrc/infrastructure/plugins"] --> Plugins["插件实现\ncore/plugin"]
+      Plugins --> AIStream["AI 工作流\nsrc/infrastructure/aistream"]
+      Plugins --> Renderer["渲染器\nsrc/renderers + Renderer"]
+      Plugins --> Config["配置系统\ncommonconfig + YAML"]
+      Plugins --> Redis[("Redis")]
+      BotUtil["BotUtil 工具类\nsrc/utils/botutil.js"] --> Plugins
       BotUtil --> Express
       BotUtil --> ApiLoader
       BotUtil --> Adapters
