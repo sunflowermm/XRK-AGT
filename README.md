@@ -65,6 +65,61 @@ flowchart LR
 
 ---
 
+## 项目结构总览（目录 & 作用）
+
+> 更详细的逐目录解析，可参考 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)；这里给出精简但完整的一眼总览。
+
+```text
+XRK-AGT/
+├─ app.js / start.js          # 启动引导与主入口
+├─ package.json               # 项目依赖与脚本
+├─ README.md                  # 根 README（当前文件）
+├─ PROJECT_OVERVIEW.md        # 架构 & 目录详细说明
+├─ docs/                      # 模块文档（Bot/插件/适配器/AI/API/配置/渲染/工具等）
+├─ src/                       # 运行核心与基础设施
+│  ├─ bot.js                  # Bot 主类（HTTP/WS/适配器/插件/API 统筹）
+│  ├─ infrastructure/         # 基础设施层
+│  │  ├─ adapter/loader.js    # AdapterLoader，加载 core/adapter 适配器
+│  │  ├─ aistream/            # AIStream 基类与实现
+│  │  ├─ commonconfig/        # ConfigBase 基类与通用配置封装
+│  │  ├─ config/config.js     # cfg：按端口拆分 server 配置
+│  │  ├─ http/                # HttpApi 基类与 ApiLoader
+│  │  ├─ plugins/             # 插件基类 plugin 与 PluginsLoader
+│  │  ├─ renderer/Renderer.js # 渲染器基类
+│  │  └─ redis.js             # Redis 客户端封装
+│  ├─ factory/                # 语音 ASR/TTS 等工厂
+│  ├─ modules/                # 与 oicq/系统监控等相关的业务模块
+│  ├─ renderers/              # puppeteer/playwright 渲染实现
+│  └─ utils/                  # paths/botutil 等工具函数
+├─ core/                      # 适配器、API、工作流与示例插件
+│  ├─ adapter/                # 各平台适配器（OneBotv11/ComWeChat 等）
+│  ├─ http/                   # 具体 HTTP API 模块
+│  ├─ events/                 # 事件拆分与预处理
+│  ├─ stream/                 # 基于 AIStream 的工作流封装
+│  └─ plugin/                 # 业务插件与示例插件
+├─ config/                    # 默认配置、命令行工具配置
+│  ├─ default_config/         # bot/server/redis/device/renderer 等默认 YAML
+│  └─ cmd/                    # 命令行工具定义
+├─ data/                      # 运行期数据 & 服务器配置
+│  ├─ bots/                   # 各账号运行时数据（icqq 等）
+│  ├─ server_bots/            # 按端口拆分的服务器 YAML 配置
+│  ├─ backups/                # 备份文件
+│  └─ importsJson/            # 动态 imports 配置片段
+├─ www/                       # 前端静态资源根目录
+│  └─ xrk/                    # XRK Web 控制台（index.html + app.js + styles）
+├─ resources/                 # 渲染模板与静态资源（字体/HTML 模板/图片等）
+├─ temp/                      # 运行中生成的 HTML/图片等临时文件
+└─ trash/                     # Bot 定期清理的回收站目录
+```
+
+若你想 **改造底层** 或 **做二次开发**，推荐顺序是：
+
+1. 快速扫一遍上面的结构树，了解目录布局；  
+2. 阅读 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) 中的详细目录解析；  
+3. 再进入 [`docs/README.md`](docs/README.md) 与对应模块文档深入具体基类和对象。
+
+---
+
 ## 使用方法概览（你能拿它干什么）
 
 - **基础运行环境**
