@@ -24,6 +24,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import paths from '#utils/paths.js';
 
 /** 获取当前模块的目录路径 */
 const __filename = fileURLToPath(import.meta.url);
@@ -371,16 +372,7 @@ class EnvironmentValidator {
    * @returns {Promise<void>}
    */
   async checkRequiredDirectories() {
-    const requiredDirs = [
-      './logs',
-      './config',
-      './data',
-      './data/importsJson'
-    ];
-    
-    for (const dir of requiredDirs) {
-      await fs.mkdir(dir, { recursive: true });
-    }
+    await paths.ensureBaseDirs(fs);
   }
 
   /**

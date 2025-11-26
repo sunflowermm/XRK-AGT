@@ -12,9 +12,8 @@ import paths from '#utils/paths.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
-// 全局常量
-const DB_PATH = path.join(paths.root, 'trash/screenshot/screenshot-manager.db');
-const OUTPUT_BASE_PATH = path.join(paths.core, 'XRK/resources/help_other');
+const DB_PATH = path.join(paths.trash, 'screenshot/screenshot-manager.db');
+const OUTPUT_BASE_PATH = path.join(paths.trash, 'screenshot/output');
 const MAX_RENDER_COUNT = 100;
 const MAX_IDLE_TIME = 3600000;
 const DEFAULT_IMAGE_PATH = path.join(paths.renderers, '截图失败.jpg');
