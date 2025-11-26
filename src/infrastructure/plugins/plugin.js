@@ -163,9 +163,10 @@ export default class plugin {
     const normalizedTasks = normalizeTasks(options.task)
     const normalizedHandlers = normalizeHandlers(options.handler)
     const normalizedEvents = normalizeEventSubscribe(options.eventSubscribe)
+    const normalizedRules = normalizeRules(options.rule)
 
     this.task = normalizedTasks.length ? normalizedTasks : null
-    this.rule = normalizeRules(options.rule)
+    this.rule = normalizedRules || []
     this.bypassThrottle = options.bypassThrottle || false
     this.handler = normalizedHandlers.length ? normalizedHandlers : null
     this.eventSubscribe = normalizedEvents.length ? normalizedEvents : null

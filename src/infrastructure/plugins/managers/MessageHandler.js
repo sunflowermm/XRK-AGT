@@ -47,6 +47,8 @@ class MessageHandler {
    * @param {Object} e - 事件对象
    */
   async parseMessage(e) {
+    if (!Array.isArray(e.message)) return;
+    
     for (const val of e.message) {
       if (!val?.type) continue;
 

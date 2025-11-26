@@ -69,6 +69,8 @@ class PluginExecutor {
    */
   async initPlugins(e, pluginList) {
     const activePlugins = [];
+    if (!Array.isArray(pluginList)) return activePlugins;
+    
     for (const p of pluginList) {
       if (!p?.class) continue;
       try {
@@ -76,7 +78,7 @@ class PluginExecutor {
         plugin.e = e;
         plugin.bypassThrottle = p.bypassThrottle;
         plugin.priority = typeof p.execPriority === 'number' ? p.execPriority : plugin.priority;
-        plugin.rule = this.cloneRules(p.rules);
+        plugin.rule = Array.isArray(p.rules) ? this.cloneRules(p.rules) : [];
 
         if (this.checkDisable(plugin) && this.filtEvent(e, plugin)) {
           activePlugins.push(plugin);
@@ -126,8 +128,9 @@ class PluginExecutor {
    */
   async processRules(plugins, e) {
     for (const plugin of plugins) {
-      if (!plugin?.rule) continue;
+      if (!plugin?.rule || !Array.isArray(plugin.rule)) continue;
       for (const v of plugin.rule) {
+        if (!v) continue;
         if (v.event && !this.filtEvent(e, v)) continue;
         if (v.reg && e.msg !== undefined && !v.reg.test(e.msg)) continue;
 
@@ -324,7 +327,7 @@ class PluginExecutor {
         cloned.reg = new RegExp(rule.reg.source, rule.reg.flags);
       }
       return cloned;
-    }).filter(Boolean);
+    }).filter(r => r !== null && r !== undefined);
   }
 }
 

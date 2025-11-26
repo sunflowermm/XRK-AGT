@@ -772,7 +772,7 @@ class PluginsLoader {
       priority: numericPriority,
       execPriority: numericPriority,
       plugin: pluginInstance,
-      rules,
+      rules: Array.isArray(rules) ? rules : [],
       bypassThrottle: descriptor.bypassThrottle === true,
       namespace: descriptor.namespace || key,
       extended: descriptor.priority === 'extended'
@@ -813,6 +813,7 @@ class PluginsLoader {
     if (!Array.isArray(rules)) return []
 
     return rules.map((rule = {}, index) => {
+      if (!rule) return null
       const compiled = PluginExecutor.createRegExp(rule.reg)
       const reg = compiled || /.*/
 
@@ -824,7 +825,7 @@ class PluginsLoader {
         log: rule.log !== false,
         permission: rule.permission || 'all'
       }
-    })
+    }).filter(r => r !== null && r !== undefined)
   }
 
   addPluginToPool(pluginData, isExtended) {

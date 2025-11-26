@@ -132,3 +132,4 @@ dist
 # Docker file
 /temp/
 /pnpm-lock.yaml
+node_modules
