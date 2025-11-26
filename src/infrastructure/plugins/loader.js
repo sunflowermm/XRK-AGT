@@ -1046,10 +1046,12 @@ class PluginsLoader {
         const dirPath = `${this.dir}/${dir.name}`
 
         // 检查是否有index.js
-        if (existsSync(`${dirPath}/index.js`)) {
+          if (existsSync(`${dirPath}/index.js`)) {
           ret.push({
             name: dir.name,
-            path: `../../${dirPath}/index.js`
+            // 从 src/infrastructure/plugins 定位到项目根需要三级目录: ../../..
+            // 然后再进入 core/plugin/...
+            path: `../../../${dirPath}/index.js`
           })
           continue
         }
@@ -1061,7 +1063,8 @@ class PluginsLoader {
           const key = `${dir.name}/${app.name}`
           ret.push({
             name: key,
-            path: `../../${dirPath}/${app.name}`
+            // 同上，这里也需要从 src/infrastructure/plugins 返回到项目根
+            path: `../../../${dirPath}/${app.name}`
           })
           this.watch(dir.name, app.name)
         }
@@ -1796,7 +1799,9 @@ class PluginsLoader {
   async changePlugin(key) {
     try {
       const timestamp = moment().format('x')
-      let app = await import(`../../${this.dir}/${key}?${timestamp}`)
+      // 这里的相对路径是相对于当前文件(src/infrastructure/plugins)，
+      // 需要先回到项目根目录再进入 core/plugin
+      let app = await import(`../../../${this.dir}/${key}?${timestamp}`)
       app = app.apps ? { ...app.apps } : app
 
       Object.values(app).forEach(p => {
@@ -1918,7 +1923,8 @@ class PluginsLoader {
 
             await this.importPlugin({
               name: key,
-              path: `../../${this.dir}/${key}?${moment().format('X')}`
+              // 修正为从 src/infrastructure/plugins 返回到项目根
+              path: `../../../${this.dir}/${key}?${moment().format('X')}`
             }, [])
 
             this.sortPlugins()
