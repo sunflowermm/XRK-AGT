@@ -1796,6 +1796,12 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       this.proxyHttpsServer
     ].filter(Boolean);
     
+    // 停止定时清理任务
+    if (this._trashTimer) {
+      clearInterval(this._trashTimer);
+      this._trashTimer = null;
+    }
+
     await Promise.all(servers.map(server =>
       new Promise(resolve => server.close(resolve))
     ));
@@ -2092,6 +2098,71 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       apis: ApiLoader.getApiList(),
       proxyEnabled: this.proxyEnabled
     });
+
+    // 启动 trash 目录定时清理（仅清理一定时间之前的临时文件）
+    this._startTrashCleaner();
+  }
+
+  /**
+   * 启动 trash 定时清理任务
+   * - 默认每 60 分钟清理一次
+   * - 仅删除超过一定保留时间的文件/目录（默认 24 小时）
+   */
+  _startTrashCleaner() {
+    const miscCfg = cfg.server?.misc || {};
+    const intervalMinutes = Number(miscCfg.trashCleanupIntervalMinutes) || 60;
+    const maxAgeHours = Number(miscCfg.trashMaxAgeHours) || 24;
+
+    const intervalMs = Math.max(intervalMinutes, 5) * 60 * 1000;
+    const maxAgeMs = Math.max(maxAgeHours, 1) * 60 * 60 * 1000;
+
+    const runCleanup = async () => {
+      try {
+        await this._clearTrashOnce(maxAgeMs);
+      } catch (err) {
+        BotUtil.makeLog('debug', `trash 清理失败: ${err.message}`, '服务器');
+      }
+    };
+
+    // 立即执行一次，然后按间隔定时执行
+    runCleanup();
+    this._trashTimer = setInterval(runCleanup, intervalMs);
+  }
+
+  /**
+   * 执行一次 trash 清理
+   * @param {number} maxAgeMs - 保留时长，早于该时间的文件会被删除
+   */
+  async _clearTrashOnce(maxAgeMs) {
+    const trashRoot = paths.trash;
+    if (!trashRoot) return;
+
+    let entries;
+    try {
+      entries = await fs.readdir(trashRoot, { withFileTypes: true });
+    } catch {
+      // 目录不存在或不可读时忽略
+      return;
+    }
+
+    const now = Date.now();
+    const tasks = entries.map(async (entry) => {
+      const fullPath = path.join(trashRoot, entry.name);
+      try {
+        const stat = await fs.stat(fullPath);
+        if (now - stat.mtimeMs < maxAgeMs) return;
+
+        if (entry.isDirectory()) {
+          await fs.rm(fullPath, { recursive: true, force: true });
+        } else {
+          await fs.unlink(fullPath);
+        }
+      } catch {
+        // 单个文件的删除失败不影响整体清理流程
+      }
+    });
+
+    await Promise.allSettled(tasks);
   }
 
   prepareEvent(data) {

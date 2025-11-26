@@ -31,115 +31,41 @@ proxy:
   
   # 域名配置列表
   # 每个域名可以有不同的配置和处理方式
+  # 注意：
+  # - 已经通过 CDN 做 HTTPS 的域名：可以只在这里做 HTTP 反向代理，不需要在本机配置证书
+  #   这种情况下直接配置 domain/target，省略 ssl 或将 ssl.enabled 设为 false 即可
   domains:
-    # 主域名配置示例
+    # 主域名 + 本机证书配置示例（本机同时承担 TLS 终结）
     - domain: "xrkk.cc"
       # 静态文件根目录（可选）
       # 如果不配置，使用默认的www目录
       staticRoot: "./www"
       
-      # 是否启用SSL（需要配置证书）
+      # 是否启用SSL（需要在本机配置证书）
+      # 如果该域名已经交给 CDN 做 HTTPS，请删除整个 ssl 段或将 enabled 设为 false
       ssl:
-        enabled: true
-        certificate:
-          # 域名专用证书路径
-          key: "/path/to/xrkk.cc.key"
-          cert: "/path/to/xrkk.cc.cert"
-          ca: ""  # CA证书链（可选）
-      
-    # 目标服务器（如果需要代理到其他服务）
-    # 不配置则直接提供静态文件服务
-    # target: "http://localhost:3000"
+        enabled: false
+        # 本机终结 TLS 时才需要配置 certificate
+        # certificate:
+        #   key: "/path/to/xrkk.cc.key"
+        #   cert: "/path/to/xrkk.cc.cert"
+        #   ca: ""  # CA证书链（可选）
+
+      # 目标服务器（如果需要代理到其他服务）
+      # 不配置则直接提供静态文件服务
+      # 例如：仅做静态站，交给 CDN 调用本机 80 端口，则可不配置 target
+      # target: "http://localhost:3000"
       
     # 路径重写规则（可选）
     # rewritePath:
     #   from: "/"
     #   to: "/"
     
-    # 子域名配置示例（已注释）
-    # - domain: "xrk.xrkk.cc"
-    #   # 子域名专用的静态文件目录
-    #   staticRoot: "./www/xrk"
-    #   
-    #   # SSL配置（每个域名可以有自己的证书）
-    #   ssl:
-    #     enabled: true
-    #     certificate:
-    #       key: "/path/to/xrk.xrkk.cc.key"
-    #       cert: "/path/to/xrk.xrkk.cc.cert"
-    #   
-    #   # 路径重写：将 /xrk/* 重写为 /*
-    #   # 使得xrk.xrkk.cc/index.html 等同于访问原本的 /xrk/index.html
-    #   rewritePath:
-    #     from: "/xrk"
-    #     to: "/"
-    #   
-    #   # 自定义请求和响应头（可选）
-    #   headers:
-    #     request:
-    #       # 添加到代理请求的头部
-    #       X-Custom-Header: "xrk-subdomain"
-    #     response:
-    #       # 添加到响应的头部
-    #       X-Frame-Options: "SAMEORIGIN"
-    
-    # API子域名示例（反向代理到后端服务）
-    #- domain: "api.xrkk.cc"
-    # 代理到后端API服务
-    #  target: "http://localhost:8080"
-    #  
-    #  ssl:
-    #    enabled: true
-    #    certificate:
-    #      key: "/path/to/api.xrkk.cc.key"
-    #      cert: "/path/to/api.xrkk.cc.cert"
-    #  
-    # 保持原始Host头（某些后端服务需要）
-    #  preserveHostHeader: true
-      
-    # WebSocket支持
-    #  ws: true
-      
-    # 超时设置（毫秒）
-    #  timeout: 30000
-      
-    # 更复杂的路径重写规则
-    #  pathRewrite:
-    #    "^/v1": "/api/v1"
-    #    "^/v2": "/api/v2"
-    #    "^/legacy": ""
-    
-    # 通配符域名示例（处理所有子域名）
-    #- domain: "*.test.xrkk.cc"
-    # 所有 *.test.xrkk.cc 的请求都代理到这里
-    #  target: "http://localhost:9000"
-      
-    # 通配符证书
-    #  ssl:
-    #    enabled: true
-    #    certificate:
-    #      key: "/path/to/wildcard.test.xrkk.cc.key"
-    #      cert: "/path/to/wildcard.test.xrkk.cc.cert"
-      
-    # 动态路径重写（基于子域名）
-    # 例如：dev.test.xrkk.cc → http://localhost:9000/dev
-    # 例如：staging.test.xrkk.cc → http://localhost:9000/staging
-    #  rewritePath:
-    #    from: "/"
-    #    to: "/${subdomain}/"  # ${subdomain}会被实际子域名替换
-    
-    # 负载均衡示例（轮询多个后端服务器）
-    #- domain: "lb.xrkk.cc"
-    # 多个目标服务器（将自动负载均衡）
-    # 注：基础版本只支持单个target，负载均衡需要额外实现
-    #  target: "http://localhost:3001"
-      
-    # 健康检查配置（可选）
-    #  healthCheck:
-    #    enabled: true
-    #    path: "/health"
-    #    interval: 30000  # 检查间隔（毫秒）
-    #    timeout: 5000    # 超时时间（毫秒）
+    # 仅通过 CDN 做 HTTPS、在本机只做 HTTP 反代的示例：
+    # - domain: "cdn.example.com"
+    #   # 不需要 ssl 段，也不需要证书，CDN 直接回源到本机 httpPort
+    #   # 将 /api/* 代理到本机 API 服务
+    #   target: "http://localhost:3000"
 
 # ----------------------------------------
 #            HTTPS配置
