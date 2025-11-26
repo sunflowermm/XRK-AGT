@@ -24,6 +24,7 @@ flowchart TD
   Bot --> ApiLoader["加载 HTTP API\ncore/http"]
   Bot --> Renderers["初始化渲染器\nsrc/renderers"]
   Bot --> Online["触发 online / ready 事件"]
+```
 
 **关键文件：**
 
