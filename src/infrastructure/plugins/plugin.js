@@ -1,13 +1,43 @@
 import StreamLoader from '#infrastructure/aistream/loader.js';
 
-const stateArr = {}
-const SymbolTimeout = Symbol("Timeout")
-const SymbolResolve = Symbol("Resolve")
+const SymbolTimeout = Symbol('Timeout')
+const SymbolResolve = Symbol('Resolve')
 
-const normalizeRules = (rules) => {
-  if (!rules) return []
-  if (Array.isArray(rules)) return rules.filter(Boolean)
-  return [rules]
+const ensureArray = (value) => {
+  if (!value) return []
+  return Array.isArray(value) ? value.filter(Boolean) : [value]
+}
+
+const normalizeRuleShape = (rule) => {
+  if (!rule) return null
+  if (typeof rule === 'string' || rule instanceof RegExp) {
+    return { reg: rule }
+  }
+  if (typeof rule === 'object' && !Array.isArray(rule)) {
+    return { ...rule }
+  }
+  return null
+}
+
+const normalizeRules = (rules) => ensureArray(rules)
+  .map(normalizeRuleShape)
+  .filter(Boolean)
+
+const contextStore = new Map()
+
+const getContextBucket = (key, create = false) => {
+  if (!key) return null
+  if (!contextStore.has(key) && create) {
+    contextStore.set(key, new Map())
+  }
+  return contextStore.get(key) || null
+}
+
+const cleanupBucket = (key) => {
+  const bucket = contextStore.get(key)
+  if (bucket && bucket.size === 0) {
+    contextStore.delete(key)
+  }
 }
 
 /**
@@ -47,12 +77,12 @@ export default class plugin {
     this.dsc = options.dsc || "无"
     this.event = options.event || "message"
     this.priority = options.priority || 5000
-    this.task = options.task || { name: "", fnc: "", cron: "" }
+    this.task = options.task ?? null
     this.rule = normalizeRules(options.rule)
     this.bypassThrottle = options.bypassThrottle || false
     
     if (options.handler) {
-      this.handler = options.handler
+      this.handler = { ...options.handler }
       this.namespace = options.namespace || ""
     }
   }
@@ -103,25 +133,28 @@ export default class plugin {
    * 设置上下文
    */
   setContext(type, isGroup = false, time = 120, timeout = "操作超时已取消") {
+    if (!type || !this.e) return null
+
     const key = this.conKey(isGroup)
-    if (!stateArr[key]) stateArr[key] = {}
-    stateArr[key][type] = this.e
-    
+    this.finish(type, isGroup)
+
+    const bucket = getContextBucket(key, true)
+    bucket.set(type, this.e)
+
     if (time > 0) {
-      stateArr[key][type][SymbolTimeout] = setTimeout(() => {
-        if (!stateArr[key]?.[type]) return
-        
-        const state = stateArr[key][type]
-        const resolve = state[SymbolResolve]
-        
-        delete stateArr[key][type]
-        if (!Object.keys(stateArr[key]).length) delete stateArr[key]
-        
+      this.e[SymbolTimeout] = setTimeout(() => {
+        const stored = bucket.get(type)
+        if (!stored) return
+
+        const resolve = stored[SymbolResolve]
+        bucket.delete(type)
+        cleanupBucket(key)
+
         resolve ? resolve(false) : this.reply(timeout, true)
       }, time * 1000)
     }
     
-    return stateArr[key][type]
+    return this.e
   }
 
   /**
@@ -129,16 +162,27 @@ export default class plugin {
    */
   getContext(type, isGroup = false) {
     const key = this.conKey(isGroup)
-    if (!stateArr[key]) return null
-    return type ? stateArr[key][type] : stateArr[key]
+    const bucket = getContextBucket(key)
+    if (!bucket) return null
+
+    if (!type) {
+      return Object.fromEntries(bucket.entries())
+    }
+
+    return bucket.get(type) || null
   }
 
   /**
    * 结束上下文
    */
   finish(type, isGroup = false) {
+    if (!type) return
+
     const key = this.conKey(isGroup)
-    const context = stateArr[key]?.[type]
+    const bucket = getContextBucket(key)
+    if (!bucket) return
+
+    const context = bucket.get(type)
     
     if (context) {
       const timeout = context[SymbolTimeout]
@@ -147,8 +191,8 @@ export default class plugin {
       if (timeout) clearTimeout(timeout)
       if (resolve) resolve(true)
       
-      delete stateArr[key][type]
-      if (!Object.keys(stateArr[key]).length) delete stateArr[key]
+      bucket.delete(type)
+      cleanupBucket(key)
     }
   }
 
@@ -167,7 +211,8 @@ export default class plugin {
    */
   resolveContext(context) {
     const key = this.conKey(false)
-    const storedContext = stateArr[key]?.["resolveContext"]
+    const bucket = getContextBucket(key)
+    const storedContext = bucket?.get("resolveContext")
     const resolve = storedContext?.[SymbolResolve]
     
     this.finish("resolveContext")

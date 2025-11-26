@@ -49,14 +49,18 @@ class PluginsLoader {
     this.eventHistory = []          // 事件历史
     this.MAX_EVENT_HISTORY = 1000   // 最大事件历史记录数
     this.cleanupTimer = null        // 清理定时器
-    this.pluginLoadStats = {
+    this.pluginLoadStats = this.initLoadStats()
+  }
+
+  initLoadStats() {
+    return {
       plugins: [],
       totalLoadTime: 0,
       startTime: 0,
       totalPlugins: 0,
       taskCount: 0,
       extendedCount: 0
-    };
+    }
   }
 
   /**
@@ -66,71 +70,85 @@ class PluginsLoader {
     try {
       if (!isRefresh && this.priority.length) return
 
-      // 记录开始时间
-      this.pluginLoadStats.startTime = Date.now();
-      this.pluginLoadStats.plugins = [];
-
-      // 重置插件列表
-      this.priority = []
-      this.extended = []
-      this.delCount()
+      await this.prepareForLoad()
 
       BotUtil.makeLog('info', '开始加载插件...', 'PluginsLoader')
 
       const files = await this.getPlugins()
-      this.pluginCount = 0
-      const packageErr = []
-
-      const batchSize = 10
-      for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize)
-        await Promise.allSettled(
-          batch.map(async (file) => {
-            const pluginStartTime = Date.now();
-            try {
-              await this.importPlugin(file, packageErr);
-              const loadTime = Date.now() - pluginStartTime;
-
-              this.pluginLoadStats.plugins.push({
-                name: file.name,
-                loadTime: loadTime,
-                success: true
-              });
-              
-              BotUtil.makeLog('debug', `加载插件: ${file.name} (${loadTime}ms)`, 'PluginsLoader')
-            } catch (err) {
-              const loadTime = Date.now() - pluginStartTime;
-              this.pluginLoadStats.plugins.push({
-                name: file.name,
-                loadTime: loadTime,
-                success: false,
-                error: err.message
-              });
-
-              BotUtil.makeLog('error', `插件加载失败: ${file.name} - ${err.message}`, 'PluginsLoader', err)
-              return null
-            }
-          })
-        )
+      if (!files.length) {
+        this.finalizeLoad([])
+        return
       }
 
-      this.pluginLoadStats.totalLoadTime = Date.now() - this.pluginLoadStats.startTime;
-      this.pluginLoadStats.totalPlugins = this.pluginCount;
-      this.pluginLoadStats.taskCount = this.task.length;
-      this.pluginLoadStats.extendedCount = this.extended.length;
+      const packageErr = []
+      await this.loadFilesInBatches(files, packageErr)
 
-      // 显示加载结果
-      this.packageTips(packageErr)
-      this.createTask()
-      this.initEventSystem()
-      this.sortPlugins()
-      this.identifyDefaultMsgHandlers()
-
-      const totalTime = (this.pluginLoadStats.totalLoadTime / 1000).toFixed(4)
-      BotUtil.makeLog('info', `插件加载完成: 插件${this.pluginCount}个, 定时任务${this.task.length}个, 扩展插件${this.extended.length}个, 耗时${totalTime}秒`, 'PluginsLoader')
+      this.finalizeLoad(packageErr)
     } catch (error) {
       BotUtil.makeLog('error', '插件加载器初始化失败', 'PluginsLoader', error)
       throw error
+    }
+  }
+
+  async prepareForLoad() {
+    this.pluginLoadStats = this.initLoadStats()
+    this.pluginLoadStats.startTime = Date.now()
+
+    this.priority = []
+    this.extended = []
+    this.task = []
+    this.pluginCount = 0
+    await this.delCount()
+  }
+
+  finalizeLoad(packageErr) {
+    this.pluginLoadStats.totalLoadTime = Date.now() - this.pluginLoadStats.startTime
+    this.pluginLoadStats.totalPlugins = this.pluginCount
+    this.pluginLoadStats.taskCount = this.task.length
+    this.pluginLoadStats.extendedCount = this.extended.length
+
+    this.packageTips(packageErr)
+    this.createTask()
+    this.initEventSystem()
+    this.sortPlugins()
+    this.identifyDefaultMsgHandlers()
+
+    const totalTime = (this.pluginLoadStats.totalLoadTime / 1000).toFixed(4)
+    BotUtil.makeLog('info', `插件加载完成: 插件${this.pluginCount}个, 定时任务${this.task.length}个, 扩展插件${this.extended.length}个, 耗时${totalTime}秒`, 'PluginsLoader')
+  }
+
+  async loadFilesInBatches(files, packageErr) {
+    const batches = lodash.chunk(files, 10)
+    for (const batch of batches) {
+      await Promise.allSettled(
+        batch.map(file => this.loadSingleFile(file, packageErr))
+      )
+    }
+  }
+
+  async loadSingleFile(file, packageErr) {
+    const startTime = Date.now()
+    try {
+      await this.importPlugin(file, packageErr)
+      this.recordPluginStat(file.name, startTime, true)
+    } catch (error) {
+      this.recordPluginStat(file.name, startTime, false, error)
+    }
+  }
+
+  recordPluginStat(name, startTime, success, error) {
+    const loadTime = Date.now() - startTime
+    this.pluginLoadStats.plugins.push({
+      name,
+      loadTime,
+      success,
+      error: error?.message
+    })
+
+    if (success) {
+      BotUtil.makeLog('debug', `加载插件: ${name} (${loadTime}ms)`, 'PluginsLoader')
+    } else if (error) {
+      BotUtil.makeLog('error', `插件加载失败: ${name} - ${error.message}`, 'PluginsLoader', error)
     }
   }
 
@@ -652,10 +670,8 @@ class PluginsLoader {
     } catch (error) {
       if (error.stack?.includes('Cannot find package')) {
         packageErr.push({ error, file })
-      } else {
-        logger.error(`加载插件错误: ${file.name}`)
-        logger.error(error)
       }
+      throw error
     }
   }
 
@@ -668,89 +684,122 @@ class PluginsLoader {
     try {
       if (!p?.prototype) return
 
-      this.pluginCount++
-      const plugin = new p()
+      const plugin = this.createPluginInstance(p, file.name)
+      if (!plugin) return
 
       logger.debug(`加载插件实例 [${file.name}][${plugin.name}]`)
 
-      // 初始化插件
-      if (plugin.init) {
-        const initRes = await Promise.race([
-          plugin.init(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('init_timeout')), 5000))
-        ]).catch(err => {
-          logger.error(`插件 ${plugin.name} 初始化错误: ${err.message}`)
-          return 'return'
-        })
+      const initialized = await this.initializePlugin(plugin)
+      if (!initialized) return
 
-        if (initRes === 'return') return
-      }
+      this.pluginCount++
 
-      // 处理定时任务
-      if (plugin.task) {
-        const tasks = Array.isArray(plugin.task) ? plugin.task : [plugin.task]
-        tasks.forEach(t => {
-          if (t?.cron && t.fnc) {
-            this.task.push({
-              name: t.name || plugin.name,
-              cron: t.cron,
-              fnc: t.fnc,
-              log: t.log !== false
-            })
-          }
-        })
-      }
+      this.registerTasks(plugin)
+      this.normalizePluginRules(plugin)
 
-      // 处理规则
-      if (!Array.isArray(plugin.rule)) {
-        plugin.rule = plugin.rule ? [plugin.rule] : []
-      }
+      const pluginData = this.buildPluginData(plugin, p, file.name)
+      this.addPluginToPool(pluginData, plugin.priority === 'extended')
 
-      plugin.rule.forEach(rule => {
-        if (rule?.reg !== undefined) {
-          rule.reg = PluginExecutor.createRegExp(rule.reg)
-        }
-      })
-
-      // 普通插件
-      const pluginData = {
-        class: p,
-        key: file.name,
-        name: plugin.name,
-        priority: plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50),
-        plugin,
-        bypassThrottle: plugin.bypassThrottle === true
-      }
-
-      const targetArray = plugin.priority === 'extended' ? this.extended : this.priority
-      targetArray.push(pluginData)
-
-      // 处理handler
-      if (plugin.handler) {
-        Object.values(plugin.handler).forEach(handler => {
-          const { fn, key, priority } = handler
-          Handler.add({
-            ns: plugin.namespace || file.name,
-            key,
-            self: plugin,
-            priority: priority ?? plugin.priority,
-            fn: plugin[fn]
-          })
-        })
-      }
-
-      // 注册事件订阅
-      if (plugin.eventSubscribe) {
-        Object.entries(plugin.eventSubscribe).forEach(([eventType, handler]) => {
-          if (typeof handler === 'function') {
-            this.subscribeEvent(eventType, handler.bind(plugin))
-          }
-        })
-      }
+      this.registerHandlers(plugin, file)
+      this.registerEventSubscribers(plugin)
     } catch (error) {
       logger.error(`加载插件 ${file.name} 失败`)
       logger.error(error)
     }
+  }
+
+  createPluginInstance(PluginClass, fileName) {
+    try {
+      return new PluginClass()
+    } catch (error) {
+      BotUtil.makeLog('error', `实例化插件失败: ${fileName}`, 'PluginsLoader', error)
+      return null
+    }
+  }
+
+  async initializePlugin(plugin) {
+    if (typeof plugin.init !== 'function') return true
+
+    try {
+      await Promise.race([
+        plugin.init(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('init_timeout')), 5000))
+      ])
+      return true
+    } catch (err) {
+      logger.error(`插件 ${plugin.name} 初始化错误: ${err.message}`)
+      return false
+    }
+  }
+
+  registerTasks(plugin) {
+    const tasks = Array.isArray(plugin.task) ? plugin.task : (plugin.task ? [plugin.task] : [])
+    tasks.forEach(task => {
+      if (task?.cron && task.fnc) {
+        this.task.push({
+          name: task.name || plugin.name,
+          cron: task.cron,
+          fnc: task.fnc,
+          log: task.log !== false
+        })
+      }
+    })
+  }
+
+  normalizePluginRules(plugin) {
+    if (!Array.isArray(plugin.rule)) {
+      plugin.rule = plugin.rule ? [plugin.rule] : []
+    }
+
+    plugin.rule.forEach(rule => {
+      if (rule?.reg !== undefined) {
+        rule.reg = PluginExecutor.createRegExp(rule.reg)
+      }
+    })
+  }
+
+  buildPluginData(plugin, PluginClass, key) {
+    return {
+      class: PluginClass,
+      key,
+      name: plugin.name,
+      priority: plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50),
+      plugin,
+      bypassThrottle: plugin.bypassThrottle === true
+    }
+  }
+
+  addPluginToPool(pluginData, isExtended) {
+    const targetArray = isExtended ? this.extended : this.priority
+    targetArray.push(pluginData)
+  }
+
+  registerHandlers(plugin, file) {
+    if (!plugin.handler) return
+
+    Object.values(plugin.handler).forEach(handler => {
+      if (!handler?.fn) return
+      const fn = plugin[handler.fn]
+      if (typeof fn !== 'function') return
+
+      Handler.add({
+        ns: plugin.namespace || file.name,
+        key: handler.key,
+        self: plugin,
+        priority: handler.priority ?? plugin.priority,
+        fn
+      })
+    })
+  }
+
+  registerEventSubscribers(plugin) {
+    if (!plugin.eventSubscribe) return
+
+    Object.entries(plugin.eventSubscribe).forEach(([eventType, handler]) => {
+      if (typeof handler === 'function') {
+        this.subscribeEvent(eventType, handler.bind(plugin))
+      }
+    })
   }
 
   /**
