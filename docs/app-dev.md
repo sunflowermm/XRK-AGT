@@ -1,220 +1,192 @@
-## 应用 / 前后端开发总览
+## 应用 & 前后端开发总览（app.js / www/xrk）
 
-本篇文档面向 **应用开发者、前后端开发者**，帮助你快速理解：
+本篇文档面向 **应用开发者 / 前后端开发者 / 运维**，说明：
 
-- 整体启动流程（`app.js` → `start.js` → `Bot`）。
-- 后端开发入口（插件、HTTP API、配置系统、渲染器）。
-- 前端 Web 面板与静态资源的组织方式。
+- 整体启动流程（`app.js` → `start.js` → `src/bot.js`）。
+- 如何扩展 Web 前端（`www/xrk` 控制台）。
+- 如何让前端与后端 API、插件、渲染器协同工作。
 
 ---
 
-## 启动流程与运行时结构
+## 启动流程总览
 
 ```mermaid
 flowchart TD
-    CLI[命令行<br/>node app / node start.js] --> App[app.js 引导器]
-    App -->|环境检查/依赖安装| Env[EnvironmentValidator]
-    App -->|检查主依赖 + 插件依赖| Dep[DependencyManager]
-    App -->|合并 importsJson| Imports[动态 imports]
-    App --> Start[start.js]
-    Start --> Bot[Bot 实例化 & run()]
-    Bot --> Http[HTTP/HTTPS/WS 服务]
-    Bot --> Cfg[ConfigLoader 加载所有配置]
-    Bot --> Plugins[PluginsLoader 加载插件]
-    Bot --> Api[ApiLoader 加载 HTTP API]
-    Bot --> Adapter[AdapterLoader + 适配器连接]
+  Entry[命令行: node app] --> Bootstrap[app.js Bootstrap]
+  Bootstrap --> EnvCheck[环境检查<br/>Node版本 + 目录结构]
+  Bootstrap --> Deps[依赖检测与安装<br/>DependencyManager]
+  Bootstrap --> Imports[动态 imports 合并<br/>data/importsJson/*.json]
+  Bootstrap --> Start[import ./start.js]
+  Start --> Bot[创建 Bot 实例<br/>src/bot.js]
+  Bot --> Http[初始化 HTTP/HTTPS/WS 服务]
+  Bot --> Adapters[加载适配器 core/adapter]
+  Bot --> Plugins[加载插件 core/plugin]
+  Bot --> ApiLoader[加载 HTTP API core/http]
+  Bot --> Renderers[初始化渲染器 src/renderers]
+  Bot --> Online[触发 online / ready 事件]
 ```
 
-- **`app.js` 引导层**：
-  - 检查 Node.js 版本与基础目录（`logs/`、`data/`、`config/` 等）。
-  - 检测并安装缺失依赖（主项目 + `core/*` / `renderers/*` 插件依赖）。
-  - 合并 `data/importsJson/*.json` 到 `package.json.imports`，支持动态别名。  
-- **`start.js`**：
-  - 负责创建 `Bot` 实例并调用 `bot.run()`，进入实际业务层。  
-- **`Bot` 运行层**：
-  - 启动 HTTP/HTTPS/WebSocket 服务器。
-  - 加载配置 / 插件 / API / 渲染器 / 适配器，并建立与各 IM 平台的连接。  
+**关键文件：**
 
-开发者绝大多数时间只需要关注：**插件、HTTP API、配置、渲染器、前端界面** 五块。
+| 角色 | 文件 | 说明 |
+|------|------|------|
+| 引导器 | `app.js` | 检查依赖与环境、安装缺失依赖、加载动态 `imports`，最后启动 `start.js` |
+| 主程序入口 | `start.js` | 实际创建 `Bot` 实例、加载配置、监听事件、启动 HTTP/WS 服务 |
+| 运行核心 | `src/bot.js` | 封装 HTTP/HTTPS/WebSocket、中间件、认证、适配器/插件/API 装载 |
+| Web 前端 | `www/xrk/index.html` / `www/xrk/app.js` | XRK Web 控制台，包含系统状态、API 调试、配置管理前端 |
 
 ---
 
-## 后端开发：插件 / API / 配置 / 渲染
+## app.js：引导流程详解
 
-### 插件开发（消息逻辑）
+`app.js` 主要做三件事：
 
-- 入口目录：`core/plugins`（以及你自己创建的插件目录）。  
-- 基类：`src/infrastructure/plugins/plugin.js`（详见 `docs/plugin-base.md`）。  
-- 典型用法：
-  - 定义 `rule` 匹配触发条件（指令、正则、自然语言）。  
-  - 在 `handler` 中编写业务逻辑，通过 `this.e.reply()` 等输出。  
-  - 如需调用 AI 工作流，使用 `this.getStream().callAI(...)`。  
+1. **环境验证（EnvironmentValidator）**
+   - 检查 Node.js 版本（当前要求 \(\geq 14\)，实际项目中推荐 \(\geq 18\)）。
+   - 通过 `paths.ensureBaseDirs` 确保 `logs/`、`data/`、`config/` 等基础目录存在。
 
-**插件开发路线图：**
+2. **依赖管理（DependencyManager）**
+   - 解析根目录 `package.json`。
+   - 检查 `dependencies + devDependencies` 对应的模块是否存在于 `node_modules`。
+   - 若有缺失，自动选择可用的包管理器（`pnpm` → `npm` → `yarn`）执行 `install`。
+   - 同时扫描 `core/*` 与 `renderers/*` 子目录中的 `package.json`，为插件/渲染器单独安装依赖。
 
-1. 在 `core/plugins` 下创建新 JS 文件，继承 `plugin` 基类。  
-2. 设置 `name/dsc/event/rule/priority` 等属性。  
-3. 在 `handler` 中使用 `this.e` 获取上下文（用户、群组、消息内容）。  
-4. 如需读写配置，使用 `ConfigLoader.get('server')` 等接口。  
-5. （可选）借助 `BotUtil` 做日志、缓存、HTTP 请求与文件处理。  
+3. **动态 imports 合并**
+   - 扫描 `data/importsJson/*.json`，收集所有 `imports` 字段。
+   - 合并到根目录 `package.json.imports` 中，方便在运行时新增别名映射（例如第三方插件）。
 
----
-
-### HTTP/API 开发（后台接口）
-
-- 入口目录：`core/http`。  
-- 基类：`src/infrastructure/http/http.js`（详见 `docs/http-api.md`）。  
-- Loader：`src/infrastructure/http/loader.js`（详见 `docs/api-loader.md`）。  
-
-**快速示例：新增一个管理接口**
-
-```js
-// core/http/admin-status.js
-import HttpApi from '#infrastructure/http/http.js';
-import ConfigLoader from '#infrastructure/commonconfig/loader.js';
-
-export default class AdminStatusApi extends HttpApi {
-  constructor(bot) {
-    super({
-      name: 'admin-status',
-      dsc: '管理端状态与统计接口',
-      routes: [
-        {
-          method: 'GET',
-          path: '/admin/status',
-          handler: 'getStatus',
-          auth: ['admin'] // 可选：走统一鉴权
-        }
-      ]
-    }, bot);
-  }
-
-  async getStatus(req, res) {
-    const serverCfg = ConfigLoader.get('server');
-    const cfgData = await serverCfg.read();
-
-    res.json({
-      ok: true,
-      port: cfgData.server?.port,
-      adapters: Object.keys(this.bot.adapter || {}),
-      uptime: process.uptime()
-    });
-  }
-}
-```
-
-- 自动挂载路径：`/api/admin/status`，并走统一中间件（鉴权、日志等）。  
-- 前端可直接通过 `GET /api/admin/status` 获取运行状态。  
+完成上述步骤后，`app.js` 动态 `import('./start.js')`，交给主程序继续。
 
 ---
 
-### 配置系统（CommonConfig / ConfigBase）
+## commonconfig / 配置体系与前后端联动
 
-- 基类：`ConfigBase`（`docs/config-base.md` 已详细说明）。  
-- Loader：`src/infrastructure/commonconfig/loader.js`。
-- 默认配置文件：`config/default_config/*.yaml`（例如 `server.yaml`）。  
+XRK-AGT 的配置体系分为两层：
 
-**配置加载与覆盖逻辑：**
+1. **文件级配置（commonconfig / Cfg）**
+2. **对象级配置（`ConfigBase` 子类）**
+
+### 1. Cfg（src/infrastructure/config/config.js）
+
+`Cfg` 负责「**每个端口一份服务器配置**」的拆分与缓存：
 
 ```mermaid
 flowchart LR
-    Default[config/default_config/*.yaml] --> Merge[运行时加载&合并]
-    User[config/*.yaml (用户修改)] --> Merge
-    Merge --> RuntimeCfg[运行时配置对象 cfg]
-    RuntimeCfg --> API[API/插件/前端使用]
+  Default[config/default_config/*.yaml] -->|初次复制| ServerCfg[data/server_bots/{port}/*.yaml]
+  ServerCfg --> Cfg[getConfig(name)]
+  Cfg --> Bot[Bot.run()<br/>global.cfg = Cfg]
 ```
 
-- `ConfigLoader` 会实例化各个配置类（如 `ServerConfig`），每个类负责一个配置文件。  
-- 配置类内部使用 `ConfigBase` 提供的 `read/set/append/merge/reset` 等能力。  
-- 前端通过 API 调用（例如 `/api/config/*`，具体见相关 HTTP 模块）间接修改配置。  
+| 方法/属性 | 说明 |
+|----------|------|
+| `PATHS.DEFAULT_CONFIG` | 默认配置目录 `config/default_config` |
+| `PATHS.SERVER_BOTS` | 每个端口的服务器配置目录 `data/server_bots/{port}` |
+| `getConfigDir()` | 当前端口的配置根目录，例如 `data/server_bots/2537` |
+| `getConfig(name)` | 读取 `{configDir}/{name}.yaml`，若不存在则从默认配置复制一份 |
+| `getdefSet(name)` | 仅读取默认配置 `default_config/{name}.yaml` |
+| `bot/other/redis/server/device/db/monitor` | 常用配置的快捷访问器 |
+| `renderer` | 合并 `renderers/{type}/config_default.yaml` 与 `data/server_bots/{port}/renderers/{type}/config.yaml` |
+| `setConfig(name, data)` | 写回 `{name}.yaml`，并更新内存缓存 |
+| `watch(file, name, key)` | 监听配置变更，自动清除缓存，触发 `change_{name}` 钩子 |
 
-> 建议：**所有跟持久化配置有关的逻辑都放到 ConfigBase 子类里**，不要在插件中直接 `fs.writeFile`。  
+> Web 前端配置界面通常通过调用 HTTP API 修改某一类配置，然后由 API 内部调用 `cfg.setConfig(name, data)` 完成写回。
+
+### 2. ConfigBase（src/infrastructure/commonconfig/commonconfig.js）
+
+`ConfigBase` 提供面向对象、可校验的配置操作 API，便于在后台接口/插件中精细控制配置项：
+
+| 能力 | 方法 | 说明 |
+|------|------|------|
+| 文件访问 | `read()/write()/exists()/backup()` | 带缓存的 YAML/JSON 读写与自动备份 |
+| 路径操作 | `get/set/delete/append/remove` | 基于「点号 + 数组下标」的读写 API，适合 Web 表单联动 |
+| 合并与重置 | `merge()/reset()` | 深度合并、恢复默认配置 |
+| 校验 | `validate(data)` | 按 `schema` 验证字段类型、范围、枚举、自定义规则 |
+| 结构导出 | `getStructure()` | 供前端生成「动态表单」所需的字段元数据 |
+
+前端与后端的一般协作方式：
+
+- 前端通过 API 获取 `getStructure()` 与当前配置内容 → 渲染配置表单。
+- 用户在 Web 界面修改后提交 → API 内部基于 `ConfigBase.set/merge` 写回。
+- 写入时自动校验；失败则 API 返回错误信息供前端提示。
 
 ---
 
-### 渲染器与图片/HTML 生成
+## Web 控制台（www/xrk）与 API 交互
 
-- 基类：`Renderer`（详见 `docs/renderer.md`）。  
-- Loader：`src/infrastructure/renderer/loader.js`。  
-- 默认渲染器目录：`renderers/*`，模板资源目录：`resources/*`。  
+`www/xrk/index.html` + `www/xrk/app.js` 实现了一个单页控制台，核心功能包括：
 
-**常见用法：在插件中生成一张排行榜图片并发送：**
+- 系统状态监控（通过 HTTP API 拉取指标）。
+- API 调试页面（动态加载可用 API 列表）。
+- 配置管理器（读写配置相关 API）。
+- 与后台 WebSocket 建立连接，监听运行时事件。
 
-```js
-import rendererLoader from '#infrastructure/renderer/loader.js';
+**关键交互路径示意：**
 
-export async function sendRanking(e, topPlayers) {
-  const renderer = rendererLoader.getRenderer(); // 默认 puppeteer
+```mermaid
+sequenceDiagram
+  participant FE as 前端 www/xrk/app.js
+  participant Http as HTTP API(core/http)
+  participant Bot as Bot
+  participant Cfg as cfg(Config)
 
-  const img = await renderer.render({
-    name: 'ranking',
-    tplFile: './resources/html/ranking.html',
-    saveId: `group-${e.group_id}`,
-    list: topPlayers,
-    title: '本周活跃度排行榜'
-  });
+  FE->>Http: GET /api/system/status
+  Http->>Bot: 访问 Bot 运行信息
+  Http->>Cfg: 读取 server/monitor 配置
+  Http-->>FE: 返回状态数据(JSON)
 
-  await e.reply(img);
-}
+  FE->>Http: POST /api/config/save
+  Http->>Cfg: setConfig('server', newData)
+  Cfg-->>Http: 写入成功/失败
+  Http-->>FE: 返回结果，前端提示用户
 ```
+
+前端开发者需要关注：
+
+- 所有可调用的 API 列表，可以通过 `/api/...` 中某个「API 列表接口」获取（例如 `ApiLoader.getApiList()` 暴露的接口）。
+- XRK-AGT 采用常规的 REST + JSON 交互模式，支持跨域配置与 API-Key 认证。
 
 ---
 
-## 前端开发：Web 面板与静态资源
+## 典型开发场景
 
-### 静态资源目录结构
+### 1. 新增一个「配置管理」页面
 
-典型结构（可能略有不同，请以实际仓库为准）：
+1. **后台 API**
+   - 在 `core/http` 新增一个配置相关 API，例如 `config-manager.js`，内部使用 `Cfg` 或 `ConfigBase` 子类读写指定配置。
+2. **前端页面**
+   - 在 `www/xrk/app.js` 中为新页面注册路由和组件（参考现有 `config` 页模式）。
+   - 使用 `fetch` 调用新建 API，渲染表单并提交修改。
 
-```text
-www/
-  xrk/
-    index.html
-    app.js
-    css/
-    js/
-    img/
-resources/
-  html/   # 渲染器 HTML 模板
-  css/    # 模板/前端共用样式
-  img/    # 模板/前端共用图片
-```
+### 2. 在前端触发某个插件功能
 
-- `www/` 下的文件由 `Bot` 的静态资源服务直接对外暴露（通常挂载到根路径或 `/xrk`）。  
-- `resources/` 主要用于渲染器模板，但也可以与 Web 前端共用一套样式/图片，保证视觉统一。  
+1. 编写一个 HTTP API，将前端请求转为插件事件或直接调用插件方法：
+   - 例如：`/api/plugins/run-task`，内部构造事件对象 `e` 并调用对应插件。
+2. 前端页面中提供按钮或表单，点击后调用该 API。
 
-### 前端如何调用后端 API
+### 3. 前端使用渲染器生成图片
 
-```js
-// 前端示例：在 www/xrk/app.js 中
-async function fetchStatus() {
-  const res = await fetch('/api/admin/status', {
-    credentials: 'include' // 若需要 Cookie 鉴权
-  });
-  const data = await res.json();
-  console.log('当前状态:', data);
-}
-```
-
-> 建议：在前端统一封装一个 `api.js`，集中管理所有 `/api/*` 调用，便于后续维护。  
+1. 后台暴露一个 API，如 `/api/render/report`：
+   - 内部使用 `Bot.renderer.puppeteer.renderImage(...)` 或自定义渲染器。
+   - 返回 Base64 图片或可访问的临时路径。
+2. 前端调用该 API，并在页面中展示返回的图片结果。
 
 ---
 
-## 推荐开发路径按角色
+## 建议的前后端协作模式
 
-| 角色 | 推荐文档顺序 |
-|------|--------------|
-| **插件开发者** | `README.md` → `docs/README.md` → `docs/plugin-base.md` → `docs/plugins-loader.md` → `docs/botutil.md` |
-| **后端/API 开发者** | `README.md` → 本文 `docs/app-dev.md` → `docs/http-api.md` → `docs/api-loader.md` → `docs/config-base.md` |
-| **前端/Web 开发者** | `README.md` → 本文 `docs/app-dev.md` → 查看 `www/xrk` 源码 → 了解可用的 `/api/*` 接口文档 |
-| **运维/配置管理** | `README.md` → `docs/config-base.md` → 对应具体配置子类（如 server/adapter 配置） → 项目中的 HTTP 配置管理 API |
+- **后端优先提供清晰的 API 文档**：基于 `HttpApi.getInfo()` 和 `ApiLoader.getApiList()` 生成接口列表，前端直接复用。
+- **统一使用 JSON 结构**：所有接口尽量遵循 `{ success, data, message }` 结构，简化前端错误处理。
+- **通过 ConfigBase 提供「结构化配置」**：前端不直接操作 YAML，而是通过字段定义自动生成表单。
+- **渲染输出统一走 Renderer**：无论是截图、报表、预览，尽量经由 `Renderer` 管理模板与静态资源，保持一致的目录结构。
 
 ---
 
 ## 进一步阅读
 
-- `docs/bot.md`：了解 `Bot` 的整体生命周期和各个子系统如何挂接。  
-- `docs/botutil.md`：了解常用工具函数（日志、缓存、文件、HTTP、批处理等）。  
-- 适配器相关文档：`docs/adapter-loader.md`、`docs/adapter-onebotv11.md`（与外部 IM 平台对接时必读）。  
+- `PROJECT_OVERVIEW.md`：整体架构与运行逻辑。
+- `docs/bot.md`：`Bot` 生命周期、中间件与认证。
+- `docs/http-api.md` / `docs/api-loader.md`：API 定义与装载。
+- `docs/config-base.md`：配置基类细节。
+- `docs/renderer.md`：模板与截图渲染能力。
 
 

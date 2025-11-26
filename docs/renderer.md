@@ -10,22 +10,32 @@
 
 ---
 
-## 构造参数与属性
+## 总览：核心属性与方法
 
-- 构造函数参数 `data`：
-  - `id`：渲染器唯一标识（如 `puppeteer`、`playwright` 等）。
-  - `type`：渲染类型（如 `'image'`、`'html'`）。
-  - `render`：渲染入口方法名（默认 `'render'`）。
+```mermaid
+flowchart LR
+  Tpl[模板文件<br/>resources/xxx/index.html] -->|读取+缓存| DealTpl[Renderer.dealTpl]
+  DealTpl --> HtmlFile[生成临时HTML<br/>temp/html/{name}/{id}.html]
+  HtmlFile --> Engine[浏览器引擎<br/>Puppeteer / Playwright]
+  Engine --> Output[图片 / HTML / PDF 输出]
+```
 
-- 实例属性：
-  - `this.id`：渲染器 ID。
-  - `this.type`：渲染输出类型。
-  - `this.render`：引用 `this[data.render || 'render']`，作为统一入口。
-  - `this.dir = './temp/html'`：保存生成 HTML 的临时目录。
-  - `this.html = {}`：模板内容缓存。
-  - `this.watcher = {}`：文件监听器缓存。
+| 分类 | 名称 | 说明 |
+|------|------|------|
+| **构造参数** | `id` | 渲染器唯一标识（如 `puppeteer`、`playwright` 等） |
+| | `type` | 渲染类型（如 `'image'`、`'html'`） |
+| | `render` | 渲染入口方法名（默认 `'render'`，会被挂到实例的 `this.render` 上） |
+| **实例属性** | `this.id` | 渲染器 ID，用于日志与选择器 |
+| | `this.type` | 渲染输出类型（`image/html/...`） |
+| | `this.render` | 渲染入口函数引用（指向 `this[renderName]`） |
+| | `this.dir` | 临时 HTML 目录，默认 `./temp/html` |
+| | `this.html` | 模板内容缓存 `{ tplFile: string }` |
+| | `this.watcher` | 文件监听器缓存 `{ tplFile: FSWatcher }` |
+| **核心方法** | `dealTpl(name, data)` | 将模板 + 数据渲染为 HTML 文件并返回路径 |
+| | `createDir(dirname)` | 递归创建目录 |
+| | `watch(tplFile)` | 监听模板文件变动，自动清理缓存 |
 
-构造函数会调用 `createDir(this.dir)` 确保基础目录存在。
+构造函数内部会调用 `createDir(this.dir)` 确保基础目录存在。
 
 ---
 
@@ -48,25 +58,9 @@
    - `template.render(this.html[tplFile], data)` 得到 HTML 字符串。
 6. 将渲染结果写入 `savePath`，并返回该路径。
 
-```mermaid
-sequenceDiagram
-    participant Plugin as 插件/业务代码
-    participant R as 自定义渲染器(Renderer子类)
-    participant Base as Renderer基类
-    participant Engine as 浏览器引擎(Puppeteer/Playwright)
-
-    Plugin->>R: renderImage(data)
-    R->>Base: dealTpl('ranking', { tplFile, saveId, ...data })
-    Base->>Base: 读取&缓存模板 + 渲染HTML
-    Base-->>R: 返回 htmlPath
-    R->>Engine: 打开 htmlPath 并截图
-    Engine-->>R: 返回 图片 Buffer/文件路径
-    R-->>Plugin: 返回渲染结果
-```
-
-> 上层渲染器（如 Puppeteer 渲染器）通常会：  
-> - 调用 `dealTpl` 生成 HTML 文件。  
-> - 再用浏览器引擎打开该文件并截图，返回图片路径或 Buffer。  
+> 上层渲染器（如 Puppeteer 渲染器）通常会：
+> - 调用 `dealTpl` 生成 HTML 文件。
+> - 再用浏览器引擎打开该文件并截图，返回图片路径或 Buffer。
 
 ---
 
@@ -87,122 +81,114 @@ sequenceDiagram
 
 ---
 
-## 与具体渲染实现的关系
+## 如何在插件中直接使用渲染器
 
-- `src/renderers/puppeteer` 与 `src/renderers/playwright` 中的渲染器会：  
-  - 继承 `Renderer`。  
-  - 在构造函数中调用 `super({ id, type, render: 'renderImage' })` 等。  
-  - 实现 `renderImage(data)`：  
-    - 使用 `dealTpl` 生成 HTML 文件。  
-    - 调用 Puppeteer/Playwright 打开该 HTML，并按需要截图。  
-    - 返回图片路径或 Buffer。  
+**调用链示意：**
 
-> 简单理解：`Renderer` 负责「把数据+模板变成 HTML 文件」，具体渲染器负责「把 HTML 变成图片/视频/PDF 等」。  
+```mermaid
+sequenceDiagram
+  participant Plugin as 插件(rule方法)
+  participant Bot as Bot
+  participant Renderer as Renderer实例
+  participant Engine as Puppeteer/Playwright
 
----
-
-## 在插件/后端中直接使用渲染器
-
-**1. 获取渲染器实例**
-
-```js
-// 在插件、API 或其它后端模块中
-import rendererLoader from '#infrastructure/renderer/loader.js';
-
-// 使用配置中的默认渲染器（通常是 puppeteer）
-const renderer = rendererLoader.getRenderer();
-// 或者按名称获取
-// const renderer = rendererLoader.getRenderer('puppeteer');
+  Plugin->>Bot: bot.renderer['puppeteer'].render({...})
+  Bot-->>Renderer: 调用具体渲染器(renderImage)
+  Renderer->>Renderer: dealTpl(name, data)
+  Renderer-->>Engine: 打开临时HTML
+  Engine-->>Renderer: 返回图片Buffer/路径
+  Renderer-->>Bot: 返回渲染结果
+  Bot-->>Plugin: 返回图片消息对象
+  Plugin-->>用户: this.reply(图片)
 ```
 
-**2. 调用渲染方法（示例：生成排行榜图片）**
+**典型插件代码片段：**
 
 ```js
-// data 会透传给模板，模板中可直接使用这些字段
-const result = await renderer.render({
-  name: 'ranking', // 业务内部名称，用于区分不同模板子目录
-  tplFile: './resources/html/ranking.html',
-  saveId: `user-${e.user_id}`, // 生成的 html 文件名
-  list: topPlayers,            // 模板中循环渲染的数据
-  title: '本周活跃度排行榜'
+// 假设在插件方法中 (this.e 为当前事件，Bot 为全局实例)
+const renderer = Bot.renderer?.puppeteer; // 或 playwright
+if (!renderer) {
+  await this.reply('渲染器未启用或未配置');
+  return;
+}
+
+const htmlPath = await renderer.dealTpl('status', {
+  tplFile: 'resources/html/status.html',
+  saveId: `status-${this.e.user_id}`,
+  data: { title: '系统状态', items: [...] }
 });
 
-// 约定：render 通常返回 Buffer 或 图片文件路径
-await e.reply(result);
+// 具体渲染器会提供更高级封装，例如：renderImage / renderCard 等
+const img = await renderer.renderImage({
+  htmlPath,
+  viewport: { width: 800, height: 600 }
+});
+
+await this.reply(img);
 ```
 
-**3. 前端/模板中的资源引用**
-
-- 模板中通过 `{{resPath}}` 作为静态资源前缀，如：  
-  - `<link rel="stylesheet" href="{{resPath}}/css/ranking.css" />`  
-  - `<img src="{{resPath}}/img/logo.png" />`  
+> 建议：把模板文件与业务插件放在同一子目录里，路径使用 `paths.resources` 或相对路径组合，避免硬编码。
 
 ---
 
-## 开发建议：如何自定义一个渲染器
+## 与具体渲染实现的关系
 
-### 目录结构示例
+- `src/renderers/puppeteer` 与 `src/renderers/playwright` 中的渲染器会：
+  - 继承 `Renderer`。
+  - 在构造函数中调用 `super({ id, type, render: 'renderImage' })` 等。
+  - 实现 `renderImage(data)`：
+    - 使用 `dealTpl` 生成 HTML 文件。
+    - 调用 Puppeteer/Playwright 打开该 HTML，并按需要截图。
+    - 返回图片路径或 Buffer。
+  - 通过各自的 `index.js` 暴露工厂函数，在系统初始化时由 `cfg.renderer` + `Bot` 组合创建实例并挂到 `Bot.renderer`。
 
-```text
-renderers/
-  myrenderer/
-    index.js       # 渲染器工厂函数
-    config.yaml    # 渲染器专用配置（如浏览器路径、超时等）
-resources/
-  html/
-    ranking.html   # 模板文件
-```
+---
 
-### 渲染器实现示例
+## 开发自定义渲染器（实战指南）
+
+1. **创建自定义渲染器类**
 
 ```js
-// renderers/myrenderer/index.js
+// src/renderers/myrenderer/index.js
 import Renderer from '#infrastructure/renderer/Renderer.js';
-import puppeteer from 'puppeteer';
+import someEngine from 'some-render-engine';
 
-export default function createRenderer(cfg = {}) {
-  class MyRenderer extends Renderer {
-    constructor() {
-      super({ id: 'myrenderer', type: 'image', render: 'renderImage' });
-    }
-
-    async renderImage(data) {
-      // 1. 生成 HTML 文件
-      const htmlPath = await this.dealTpl('ranking', data);
-
-      // 2. 使用 puppeteer 截图
-      const browser = await puppeteer.launch(cfg.launchOptions || {});
-      const page = await browser.newPage();
-      await page.goto(`file://${htmlPath}`, { waitUntil: 'networkidle0' });
-      const buffer = await page.screenshot({ fullPage: true });
-      await browser.close();
-
-      return buffer; // 供 e.reply(buffer) 使用
-    }
+class MyRenderer extends Renderer {
+  constructor(config) {
+    super({ id: 'myrenderer', type: 'image', render: 'renderImage' });
+    this.config = config;
   }
 
-  return new MyRenderer();
+  async renderImage({ tplFile, saveId = 'default', data = {} }) {
+    const htmlPath = await this.dealTpl('myrenderer', { tplFile, saveId, ...data });
+    // 使用第三方引擎打开 htmlPath 并渲染为图片
+    const buffer = await someEngine.renderToBuffer(htmlPath, this.config.options);
+    return buffer;
+  }
+}
+
+export default function (config) {
+  return new MyRenderer(config);
 }
 ```
 
-### Loader 如何加载你的渲染器
+2. **配置与启用**
+   - 在 `config/default_config/renderers/myrenderer.yaml` 中添加默认配置。
+   - 在 `server.yaml` 中开启对应渲染器或在前端配置页面中勾选。
+   - 重启服务后，`Bot.renderer.myrenderer` 即可使用。
 
-- `src/infrastructure/renderer/loader.js` 会：  
-  - 遍历 `paths.renderers` 目录下的每一个子目录。  
-  - 动态导入 `index.js`，调用其 `default` 导出函数拿到渲染器实例。  
-  - 读取 `config.yaml` 并在创建时注入配置。  
-  - 校验 `id/type/render` 字段，并注册到 `renderers` Map 中。  
-
-> 因此，你只需要保证渲染器工厂函数返回一个 **继承自 `Renderer` 且包含 `id/type/render` 字段** 的实例，即可被整个系统自动发现和使用。  
+3. **在插件中调用**
+   - 参考上文「如何在插件中直接使用渲染器」中的示例。
 
 ---
 
-## 模板组织与前端协作
+## 模板组织与前端协作建议
 
-- **模板放在 `resources/html` 或类似目录**，方便版本管理与备份。  
-- **样式与脚本**：
-  - 推荐统一放在 `resources/css` / `resources/js` 下，通过 `resPath` 引用。  
-  - 避免在渲染 HTML 中拼接过多内联样式，便于前后端协作。  
-- **联动前端页面**：
-  - 若有 Web 面板（如 `www/xrk`），可以共用一套 CSS/组件设计，让渲染出的图片与 Web 页面风格统一。  
-  - 变更 UI 时，只需要同步更新模板与 CSS，而不必改动插件逻辑。  
+- **模板存放建议**
+  - 推荐统一放在 `resources/html/xxx/` 下，并使用有语义的目录名，如 `status/`, `dashboard/`, `report/`。
+  - 同一功能的 JS/CSS 资源可放在相邻目录，模板中通过 `resPath` 引用。
+
+- **前后端协作**
+  - 前端同学可以只关注模板与样式；后端通过 `dealTpl` 传入数据对象。
+  - 如有复杂交互（图表、动画），尽量在前端 JS 文件中完成，渲染器仅负责「首屏渲染 + 截图」。
+

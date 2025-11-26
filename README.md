@@ -8,7 +8,14 @@ XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多语言、多适配器
 - **Web 与 HTTP/API 服务**：内置 Web 控制台 + REST API + WebSocket。
 - **渲染与截图**：基于 Puppeteer / Playwright 的页面渲染与图片输出。
 
-想快速理解整体架构与对象关系，请优先阅读：`PROJECT_OVERVIEW.md` 与 `docs/README.md`。
+**如果你是第一次接触本项目：**
+
+- 仅想**先跑起来**：直接看下面的「快速开始」。  
+- 想**了解整体架构**：先看 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)。  
+- 想**做二次开发/写插件**：按顺序阅读：
+  1. [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)  
+  2. [`docs/README.md`](docs/README.md)  
+  3. [`docs/app-dev.md`](docs/app-dev.md)（应用 & 前后端总览）  
 
 ---
 
@@ -41,7 +48,7 @@ flowchart LR
 
 ---
 
-## 模块一览表
+## 模块一览表（代码视角）
 
 | 模块 | 主要文件/目录 | 职责概述 |
 |------|---------------|----------|
@@ -54,11 +61,11 @@ flowchart LR
 | 配置系统 | `config/default_config/`、`src/infrastructure/commonconfig/` | 提供 YAML/JSON 配置读写与校验，抽象为 `ConfigBase` |
 | 工具与路径 | `src/utils/botutil.js`、`src/utils/paths.js` | 封装通用工具方法与路径管理，为所有模块提供基础能力 |
 
-各模块对应的详细说明，请参见 `docs/README.md` 中的模块文档索引。
+各模块对应的详细说明，请参见 [`docs/README.md`](docs/README.md) 中的模块文档索引。
 
 ---
 
-## 使用方法概览
+## 使用方法概览（你能拿它干什么）
 
 - **基础运行环境**
   - Windows / Linux + Chrome / Chromium / Edge（用于渲染功能）。
@@ -72,12 +79,12 @@ flowchart LR
 
 详细架构与对象说明请参见：
 
-- **项目主文档**：`PROJECT_OVERVIEW.md`
-- **模块文档索引**：`docs/README.md`
+- **项目主文档**：[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)
+- **模块文档索引**：[`docs/README.md`](docs/README.md)
 
 ---
 
-## 快速开始
+## 快速开始（5 分钟跑起来）
 
 ### 克隆项目
 
@@ -117,7 +124,7 @@ node app   # 或 node start.js
 
 ---
 
-## 核心特性
+## 核心特性（为什么选 XRK-AGT）
 
 - **模块化架构**
   - `src/bot.js`：统一管理 HTTP/HTTPS/WebSocket、反向代理、中间件与认证。
@@ -137,27 +144,28 @@ node app   # 或 node start.js
 
 更多详细说明请查看：
 
-- `docs/bot.md`：`Bot` 主类与生命周期。
-- `docs/plugins-loader.md` / `docs/plugin-base.md`：插件加载器与插件基类。
-- `docs/aistream.md`：AI 工作流与上下文检索。
+- [`docs/bot.md`](docs/bot.md)：`Bot` 主类与生命周期。
+- [`docs/plugins-loader.md`](docs/plugins-loader.md) / [`docs/plugin-base.md`](docs/plugin-base.md)：插件加载器与插件基类。
+- [`docs/aistream.md`](docs/aistream.md)：AI 工作流与上下文检索。
 
 ---
 
-## 文档与开发指南
+## 文档与开发指南（跳转总览）
 
 - **总览文档**
-  - `docs/README.md`：模块文档导航（Bot / 插件 / 适配器 / AI 工作流 / HTTP API / 配置 / 渲染 / 工具 / 应用开发等）。
-  - `docs/app-dev.md`：从 `app.js` 引导到 `Bot`，并串联插件、API、配置、渲染器与 Web 前端的综合指南。
+  - [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)：整体架构、运行逻辑图、目录结构解析与重要对象索引。
+  - [`docs/README.md`](docs/README.md)：模块文档导航（Bot / 插件 / 适配器 / API / 配置 / 渲染 / 工具 / 应用开发等）。
+  - [`docs/app-dev.md`](docs/app-dev.md)：应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）。
 
-- **模块文档（docs/）**
-  - `bot.md`：`Bot` 主类与服务生命周期。
-  - `plugin-base.md` / `plugins-loader.md`：插件基类与加载器。
-  - `adapter-loader.md` / `adapter-onebotv11.md`：适配器加载与 QQ OneBotv11 说明。
-  - `aistream.md`：AI 工作流基类与 Embedding / Function Calling。
-  - `http-api.md` / `api-loader.md`：HTTP API 基类与 API 加载器。
-  - `config-base.md`：配置基类与路径/校验规则。
-  - `renderer.md`：渲染器基类与模板机制。
-  - `botutil.md`：全局工具类（日志、缓存、文件、HTTP、批处理等）。
+- **核心基类 / 运行时对象**
+  - [`docs/bot.md`](docs/bot.md)：`Bot` 主类与服务生命周期。
+  - [`docs/plugin-base.md`](docs/plugin-base.md) / [`docs/plugins-loader.md`](docs/plugins-loader.md)：插件基类与插件加载器。
+  - [`docs/adapter-loader.md`](docs/adapter-loader.md) / [`docs/adapter-onebotv11.md`](docs/adapter-onebotv11.md)：适配器加载与 QQ OneBotv11 实现。
+  - [`docs/aistream.md`](docs/aistream.md)：AI 工作流基类与 Embedding / Function Calling。
+  - [`docs/http-api.md`](docs/http-api.md) / [`docs/api-loader.md`](docs/api-loader.md)：HTTP API 基类与 API 加载器。
+  - [`docs/config-base.md`](docs/config-base.md)：配置基类与路径/校验规则、与 `cfg` 的关系。
+  - [`docs/renderer.md`](docs/renderer.md)：渲染器基类、模板渲染与截图流程。
+  - [`docs/botutil.md`](docs/botutil.md)：`BotUtil` 工具类（日志、缓存、文件/网络、批处理等）。
 
 - **Bug 修复与变更文档（可选阅读）**
   - `INDEX.md`：修复文档索引。
