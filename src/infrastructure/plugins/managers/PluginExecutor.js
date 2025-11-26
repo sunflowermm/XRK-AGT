@@ -22,31 +22,43 @@ class PluginExecutor {
    * @returns {Promise<boolean>}
    */
   async runPlugins(e, context, isExtended = false) {
+    if (!context || typeof context !== 'object') {
+      logger.error('插件上下文无效');
+      return false;
+    }
+
     const { priority, extended, defaultMsgHandlers, parseMessage } = context;
+    
     try {
-      const plugins = await this.initPlugins(e, isExtended ? extended : priority);
+      const pluginList = isExtended ? extended : priority;
+      if (!Array.isArray(pluginList)) {
+        logger.error(`插件列表无效: ${isExtended ? 'extended' : 'priority'}`);
+        return false;
+      }
+
+      const plugins = await this.initPlugins(e, pluginList);
 
       if (isExtended) {
         return await this.processPlugins(plugins, e, defaultMsgHandlers, true);
       }
 
       for (const plugin of plugins) {
-        if (plugin?.accept) {
-          try {
-            const res = await plugin.accept(e);
+        if (!plugin || typeof plugin.accept !== 'function') continue;
+        
+        try {
+          const res = await plugin.accept(e);
 
-            if (e._needReparse) {
-              delete e._needReparse;
-              if (typeof parseMessage === 'function') {
-                await parseMessage(e);
-              }
+          if (e._needReparse) {
+            delete e._needReparse;
+            if (typeof parseMessage === 'function') {
+              await parseMessage(e);
             }
-
-            if (res === 'return') return true;
-            if (res) break;
-          } catch (error) {
-            logger.error(`插件 ${plugin.name} accept错误`, error);
           }
+
+          if (res === 'return') return true;
+          if (res) break;
+        } catch (error) {
+          logger.error(`插件 ${plugin.name} accept错误`, error);
         }
       }
 
@@ -78,7 +90,7 @@ class PluginExecutor {
         plugin.e = e;
         plugin.bypassThrottle = p.bypassThrottle;
         plugin.priority = typeof p.execPriority === 'number' ? p.execPriority : plugin.priority;
-        plugin.rule = Array.isArray(p.rules) ? this.cloneRules(p.rules) : [];
+        plugin.rule = Array.isArray(p.rule) ? this.cloneRules(p.rule) : [];
 
         if (this.checkDisable(plugin) && this.filtEvent(e, plugin)) {
           activePlugins.push(plugin);
@@ -99,8 +111,8 @@ class PluginExecutor {
    * @returns {Promise<boolean>}
    */
   async processPlugins(plugins, e, defaultMsgHandlers, isExtended) {
-    if (!Array.isArray(plugins) || !plugins.length) {
-        return isExtended ? false : await this.processDefaultHandlers(e, defaultMsgHandlers);
+    if (!Array.isArray(plugins) || plugins.length === 0) {
+      return isExtended ? false : await this.processDefaultHandlers(e, defaultMsgHandlers);
     }
 
     if (isExtended) {
@@ -112,7 +124,7 @@ class PluginExecutor {
 
     for (const priority of priorities) {
       const priorityPlugins = pluginsByPriority[priority];
-      if (!Array.isArray(priorityPlugins)) continue;
+      if (!Array.isArray(priorityPlugins) || priorityPlugins.length === 0) continue;
       const handled = await this.processRules(priorityPlugins, e);
       if (handled) return true;
     }
@@ -127,8 +139,12 @@ class PluginExecutor {
    * @returns {Promise<boolean>}
    */
   async processRules(plugins, e) {
+    if (!Array.isArray(plugins)) return false;
+    
     for (const plugin of plugins) {
-      if (!plugin?.rule || !Array.isArray(plugin.rule)) continue;
+      if (!plugin) continue;
+      if (!Array.isArray(plugin.rule) || plugin.rule.length === 0) continue;
+      
       for (const v of plugin.rule) {
         if (!v) continue;
         if (v.event && !this.filtEvent(e, v)) continue;
@@ -168,7 +184,10 @@ class PluginExecutor {
    */
   async processDefaultHandlers(e, defaultMsgHandlers) {
     if (e.isDevice || e.isStdin) return false;
+    if (!Array.isArray(defaultMsgHandlers)) return false;
+    
     for (const handler of defaultMsgHandlers) {
+      if (!handler?.class) continue;
       try {
         const plugin = new handler.class(e);
         plugin.e = e;
@@ -190,21 +209,27 @@ class PluginExecutor {
    * @returns {Promise<boolean>}
    */
   async handleContext(plugins, e) {
-    if (!Array.isArray(plugins)) return false;
+    if (!Array.isArray(plugins) || plugins.length === 0) return false;
+    
     for (const plugin of plugins) {
-      if (!plugin?.getContext) continue;
-      const contexts = { ...plugin.getContext(), ...plugin.getContext(false, true) };
-      if (!lodash.isEmpty(contexts)) {
+      if (!plugin || typeof plugin.getContext !== 'function') continue;
+      
+      try {
+        const contexts = { ...plugin.getContext(), ...plugin.getContext(false, true) };
+        if (lodash.isEmpty(contexts)) continue;
+        
         for (const fnc in contexts) {
-          if (typeof plugin[fnc] === 'function') {
-            try {
-              const ret = await plugin[fnc](contexts[fnc]);
-              if (ret !== 'continue' && ret !== false) return true;
-            } catch (error) {
-              logger.error(`上下文方法 ${fnc} 执行错误`, error);
-            }
+          if (typeof plugin[fnc] !== 'function') continue;
+          
+          try {
+            const ret = await plugin[fnc](contexts[fnc]);
+            if (ret !== 'continue' && ret !== false) return true;
+          } catch (error) {
+            logger.error(`上下文方法 ${fnc} 执行错误`, error);
           }
         }
+      } catch (error) {
+        logger.error(`获取插件上下文失败`, error);
       }
     }
     return false;
@@ -319,12 +344,19 @@ class PluginExecutor {
   }
 
   cloneRules(rules) {
-    if (!Array.isArray(rules)) return [];
+    if (!Array.isArray(rules) || rules.length === 0) return [];
+    
     return rules.map(rule => {
-      if (!rule) return null;
+      if (!rule || typeof rule !== 'object') return null;
+      
       const cloned = { ...rule };
       if (rule.reg instanceof RegExp) {
-        cloned.reg = new RegExp(rule.reg.source, rule.reg.flags);
+        try {
+          cloned.reg = new RegExp(rule.reg.source, rule.reg.flags);
+        } catch (error) {
+          logger.error('正则表达式克隆失败', error);
+          cloned.reg = /.*/;
+        }
       }
       return cloned;
     }).filter(r => r !== null && r !== undefined);

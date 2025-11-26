@@ -178,10 +178,10 @@ class PluginsLoader {
       await Runtime.init(e)
 
       const context = {
-        priority: this.priority,
-        extended: this.extended,
-        defaultMsgHandlers: this.defaultMsgHandlers,
-        parseMessage: MessageHandler.dealMsg.bind(MessageHandler)
+        priority: Array.isArray(this.priority) ? this.priority : [],
+        extended: Array.isArray(this.extended) ? this.extended : [],
+        defaultMsgHandlers: Array.isArray(this.defaultMsgHandlers) ? this.defaultMsgHandlers : [],
+        parseMessage: typeof MessageHandler.dealMsg === 'function' ? MessageHandler.dealMsg.bind(MessageHandler) : null
       };
 
       await PluginExecutor.runPlugins(e, context, true);
@@ -359,10 +359,10 @@ class PluginsLoader {
 
       // 运行插件
       const context = {
-        priority: this.priority,
-        extended: this.extended,
-        defaultMsgHandlers: this.defaultMsgHandlers,
-        parseMessage: MessageHandler.dealMsg.bind(MessageHandler)
+        priority: Array.isArray(this.priority) ? this.priority : [],
+        extended: Array.isArray(this.extended) ? this.extended : [],
+        defaultMsgHandlers: Array.isArray(this.defaultMsgHandlers) ? this.defaultMsgHandlers : [],
+        parseMessage: typeof MessageHandler.dealMsg === 'function' ? MessageHandler.dealMsg.bind(MessageHandler) : null
       };
       await PluginExecutor.runPlugins(e, context, true);
       const handled = await PluginExecutor.runPlugins(e, context, false);
@@ -400,10 +400,10 @@ class PluginsLoader {
 
       // 运行插件
       const context = {
-        priority: this.priority,
-        extended: this.extended,
-        defaultMsgHandlers: this.defaultMsgHandlers,
-        parseMessage: MessageHandler.dealMsg.bind(MessageHandler)
+        priority: Array.isArray(this.priority) ? this.priority : [],
+        extended: Array.isArray(this.extended) ? this.extended : [],
+        defaultMsgHandlers: Array.isArray(this.defaultMsgHandlers) ? this.defaultMsgHandlers : [],
+        parseMessage: typeof MessageHandler.dealMsg === 'function' ? MessageHandler.dealMsg.bind(MessageHandler) : null
       };
       await PluginExecutor.runPlugins(e, context, true);
       const handled = await PluginExecutor.runPlugins(e, context, false);
