@@ -14,7 +14,10 @@ const normalizeRuleShape = (rule) => {
     return { reg: rule }
   }
   if (typeof rule === 'object' && !Array.isArray(rule)) {
-    return { ...rule }
+    return {
+      ...rule,
+      reg: rule.reg ?? rule.pattern ?? rule.source ?? rule.match
+    }
   }
   return null
 }
@@ -22,6 +25,86 @@ const normalizeRuleShape = (rule) => {
 const normalizeRules = (rules) => ensureArray(rules)
   .map(normalizeRuleShape)
   .filter(Boolean)
+
+const normalizeTaskShape = (task) => {
+  if (!task || typeof task !== 'object') return null
+  if (!task.cron || !task.fnc) return null
+  return {
+    name: task.name || '',
+    cron: String(task.cron).trim(),
+    fnc: task.fnc,
+    log: task.log !== false,
+    timezone: task.timezone,
+    immediate: task.immediate === true
+  }
+}
+
+const normalizeTasks = (tasks) => ensureArray(tasks)
+  .map(normalizeTaskShape)
+  .filter(Boolean)
+
+const normalizeHandlers = (handlers) => {
+  if (!handlers) return []
+  const list = Array.isArray(handlers)
+    ? handlers
+    : Object.values(handlers)
+
+  return list
+    .map(handler => {
+      if (!handler) return null
+      if (typeof handler === 'string') {
+        return { key: handler, fnc: handler }
+      }
+      if (typeof handler === 'function') {
+        return { key: handler.name || 'handler', fnc: handler.name, ref: handler }
+      }
+      if (typeof handler === 'object') {
+        const fnc = handler.fnc || handler.fn
+        const key = handler.key || handler.event || fnc
+        if (!fnc || !key) return null
+        return {
+          key,
+          fnc,
+          priority: handler.priority,
+          once: handler.once === true
+        }
+      }
+      return null
+    })
+    .filter(Boolean)
+}
+
+const normalizeEventSubscribe = (subs) => {
+  if (!subs) return []
+  if (Array.isArray(subs)) {
+    return subs.map(item => {
+      if (!item) return null
+      if (typeof item === 'function') return null
+      const eventType = item.eventType || item.event || item.type
+      if (!eventType) return null
+      if (typeof item.handler === 'function') {
+        return { eventType, handler: item.handler }
+      }
+      if (typeof item.handler === 'string' || typeof item.fnc === 'string') {
+        return { eventType, fnc: item.handler || item.fnc }
+      }
+      return null
+    }).filter(Boolean)
+  }
+
+  return Object.entries(subs)
+    .map(([eventType, handler]) => {
+      if (!eventType) return null
+      if (typeof handler === 'function') {
+        return { eventType, handler }
+      }
+      if (typeof handler === 'string') {
+        return { eventType, fnc: handler }
+      }
+      return null
+    })
+    .filter(Boolean)
+}
 
 const contextStore = new Map()
 
@@ -77,12 +160,17 @@ export default class plugin {
     this.dsc = options.dsc || "无"
     this.event = options.event || "message"
     this.priority = options.priority || 5000
-    this.task = options.task ?? null
+    const normalizedTasks = normalizeTasks(options.task)
+    const normalizedHandlers = normalizeHandlers(options.handler)
+    const normalizedEvents = normalizeEventSubscribe(options.eventSubscribe)
+
+    this.task = normalizedTasks.length ? normalizedTasks : null
     this.rule = normalizeRules(options.rule)
     this.bypassThrottle = options.bypassThrottle || false
+    this.handler = normalizedHandlers.length ? normalizedHandlers : null
+    this.eventSubscribe = normalizedEvents.length ? normalizedEvents : null
     
     if (options.handler) {
-      this.handler = { ...options.handler }
       this.namespace = options.namespace || ""
     }
   }
@@ -218,4 +306,29 @@ export default class plugin {
     this.finish("resolveContext")
     if (resolve && context) resolve(this.e)
   }
+
+  /**
+   * 导出插件描述（用于加载器标准化）
+   */
+  getDescriptor() {
+    return {
+      name: this.name,
+      dsc: this.dsc,
+      event: this.event,
+      priority: this.priority,
+      bypassThrottle: this.bypassThrottle === true,
+      namespace: this.namespace || '',
+      rule: normalizeRules(this.rule),
+      tasks: normalizeTasks(this.task),
+      handlers: normalizeHandlers(this.handler),
+      eventSubscribe: normalizeEventSubscribe(this.eventSubscribe)
+    }
+  }
+}
+
+export const PluginSchema = {
+  normalizeRules,
+  normalizeTasks,
+  normalizeHandlers,
+  normalizeEventSubscribe
 }

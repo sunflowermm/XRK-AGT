@@ -5,7 +5,7 @@ import { existsSync } from 'fs'
 import path from 'path'
 import lodash from 'lodash'
 import cfg from '#infrastructure/config/config.js'
-import plugin from './plugin.js'
+import plugin, { PluginSchema } from './plugin.js'
 import schedule from 'node-schedule'
 import chokidar from 'chokidar'
 import moment from 'moment'
@@ -694,14 +694,16 @@ class PluginsLoader {
 
       this.pluginCount++
 
-      this.registerTasks(plugin)
-      this.normalizePluginRules(plugin)
+      const descriptor = this.getPluginDescriptor(plugin)
+      const compiledRules = this.compileRules(descriptor.rule, plugin.name)
 
-      const pluginData = this.buildPluginData(plugin, p, file.name)
-      this.addPluginToPool(pluginData, plugin.priority === 'extended')
+      this.registerTasks(descriptor.tasks, plugin)
 
-      this.registerHandlers(plugin, file)
-      this.registerEventSubscribers(plugin)
+      const pluginData = this.buildPluginData(descriptor, compiledRules, p, file.name, plugin)
+      this.addPluginToPool(pluginData, descriptor.priority === 'extended')
+
+      this.registerHandlers(descriptor.handlers, plugin, file)
+      this.registerEventSubscribers(descriptor.eventSubscribe, plugin)
     } catch (error) {
       logger.error(`加载插件 ${file.name} 失败`)
       logger.error(error)
@@ -732,41 +734,97 @@ class PluginsLoader {
     }
   }
 
-  registerTasks(plugin) {
-    const tasks = Array.isArray(plugin.task) ? plugin.task : (plugin.task ? [plugin.task] : [])
+  registerTasks(tasks, pluginInstance) {
+    if (!Array.isArray(tasks) || !tasks.length) return
+
     tasks.forEach(task => {
-      if (task?.cron && task.fnc) {
-        this.task.push({
-          name: task.name || plugin.name,
-          cron: task.cron,
-          fnc: task.fnc,
-          log: task.log !== false
-        })
-      }
+      if (!task?.cron || !task.fnc) return
+      const fn =
+        typeof task.fnc === 'string'
+          ? pluginInstance[task.fnc]?.bind(pluginInstance)
+          : typeof task.fnc === 'function'
+            ? task.fnc.bind(pluginInstance)
+            : null
+
+      if (!fn) return
+
+      this.task.push({
+        name: task.name || pluginInstance.name,
+        cron: String(task.cron).trim(),
+        fnc: fn,
+        log: task.log !== false,
+        timezone: task.timezone,
+        immediate: task.immediate === true
+      })
     })
   }
 
-  normalizePluginRules(plugin) {
-    if (!Array.isArray(plugin.rule)) {
-      plugin.rule = plugin.rule ? [plugin.rule] : []
-    }
+  buildPluginData(descriptor, rules, PluginClass, key, pluginInstance) {
+    const numericPriority = typeof descriptor.priority === 'number'
+      ? descriptor.priority
+      : 50
 
-    plugin.rule.forEach(rule => {
-      if (rule?.reg !== undefined) {
-        rule.reg = PluginExecutor.createRegExp(rule.reg)
-      }
-    })
-  }
-
-  buildPluginData(plugin, PluginClass, key) {
     return {
       class: PluginClass,
       key,
-      name: plugin.name,
-      priority: plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50),
-      plugin,
-      bypassThrottle: plugin.bypassThrottle === true
+      name: descriptor.name,
+      dsc: descriptor.dsc,
+      priority: numericPriority,
+      execPriority: numericPriority,
+      plugin: pluginInstance,
+      rules,
+      bypassThrottle: descriptor.bypassThrottle === true,
+      namespace: descriptor.namespace || key,
+      extended: descriptor.priority === 'extended'
     }
+  }
+
+  getPluginDescriptor(pluginInstance) {
+    const descriptor = typeof pluginInstance.getDescriptor === 'function'
+      ? pluginInstance.getDescriptor()
+      : {
+        name: pluginInstance.name,
+        dsc: pluginInstance.dsc,
+        event: pluginInstance.event,
+        priority: pluginInstance.priority,
+        bypassThrottle: pluginInstance.bypassThrottle,
+        namespace: pluginInstance.namespace || '',
+        rule: pluginInstance.rule,
+        tasks: pluginInstance.task,
+        handlers: pluginInstance.handler,
+        eventSubscribe: pluginInstance.eventSubscribe
+      }
+
+    return {
+      name: descriptor.name || pluginInstance.name,
+      dsc: descriptor.dsc || pluginInstance.dsc,
+      event: descriptor.event || pluginInstance.event,
+      priority: descriptor.priority ?? pluginInstance.priority,
+      bypassThrottle: descriptor.bypassThrottle === true,
+      namespace: descriptor.namespace || pluginInstance.namespace || '',
+      rule: PluginSchema.normalizeRules(descriptor.rule),
+      tasks: PluginSchema.normalizeTasks(descriptor.tasks ?? descriptor.task),
+      handlers: PluginSchema.normalizeHandlers(descriptor.handlers ?? descriptor.handler),
+      eventSubscribe: PluginSchema.normalizeEventSubscribe(descriptor.eventSubscribe)
+    }
+  }
+
+  compileRules(rules, pluginName) {
+    if (!Array.isArray(rules)) return []
+
+    return rules.map((rule = {}, index) => {
+      const compiled = PluginExecutor.createRegExp(rule.reg)
+      const reg = compiled || /.*/
+
+      return {
+        ...rule,
+        id: `${pluginName}:${index}`,
+        reg,
+        event: rule.event || 'message.*.*',
+        log: rule.log !== false,
+        permission: rule.permission || 'all'
+      }
+    })
   }
 
   addPluginToPool(pluginData, isExtended) {
@@ -774,30 +832,39 @@ class PluginsLoader {
     targetArray.push(pluginData)
   }
 
-  registerHandlers(plugin, file) {
-    if (!plugin.handler) return
+  registerHandlers(handlers, pluginInstance, file) {
+    if (!Array.isArray(handlers) || !handlers.length) return
 
-    Object.values(plugin.handler).forEach(handler => {
-      if (!handler?.fn) return
-      const fn = plugin[handler.fn]
+    handlers.forEach(handler => {
+      if (!handler?.key) return
+      const fn =
+        typeof handler.fnc === 'string'
+          ? pluginInstance[handler.fnc]
+          : handler.ref
+
       if (typeof fn !== 'function') return
 
       Handler.add({
-        ns: plugin.namespace || file.name,
+        ns: pluginInstance.namespace || handler.namespace || file.name,
         key: handler.key,
-        self: plugin,
-        priority: handler.priority ?? plugin.priority,
-        fn
+        self: pluginInstance,
+        priority: handler.priority ?? pluginInstance.priority,
+        fn: fn.bind(pluginInstance)
       })
     })
   }
 
-  registerEventSubscribers(plugin) {
-    if (!plugin.eventSubscribe) return
+  registerEventSubscribers(subscribers, pluginInstance) {
+    if (!Array.isArray(subscribers) || !subscribers.length) return
 
-    Object.entries(plugin.eventSubscribe).forEach(([eventType, handler]) => {
-      if (typeof handler === 'function') {
-        this.subscribeEvent(eventType, handler.bind(plugin))
+    subscribers.forEach(sub => {
+      if (!sub?.eventType) return
+      if (typeof sub.handler === 'function') {
+        this.subscribeEvent(sub.eventType, sub.handler.bind(pluginInstance))
+        return
+      }
+      if (typeof sub.fnc === 'string' && typeof pluginInstance[sub.fnc] === 'function') {
+        this.subscribeEvent(sub.eventType, pluginInstance[sub.fnc].bind(pluginInstance))
       }
     })
   }

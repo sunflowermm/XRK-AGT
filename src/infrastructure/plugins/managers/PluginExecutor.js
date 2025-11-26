@@ -75,16 +75,8 @@ class PluginExecutor {
         const plugin = new p.class(e);
         plugin.e = e;
         plugin.bypassThrottle = p.bypassThrottle;
-
-        if (!Array.isArray(plugin.rule)) {
-          plugin.rule = plugin.rule ? [plugin.rule] : [];
-        }
-
-        plugin.rule.forEach(rule => {
-          if (rule?.reg !== undefined) {
-            rule.reg = this.createRegExp(rule.reg);
-          }
-        });
+        plugin.priority = typeof p.execPriority === 'number' ? p.execPriority : plugin.priority;
+        plugin.rule = this.cloneRules(p.rules);
 
         if (this.checkDisable(plugin) && this.filtEvent(e, plugin)) {
           activePlugins.push(plugin);
@@ -321,6 +313,18 @@ class PluginExecutor {
     }
 
     return buildRegExp(str);
+  }
+
+  cloneRules(rules) {
+    if (!Array.isArray(rules)) return [];
+    return rules.map(rule => {
+      if (!rule) return null;
+      const cloned = { ...rule };
+      if (rule.reg instanceof RegExp) {
+        cloned.reg = new RegExp(rule.reg.source, rule.reg.flags);
+      }
+      return cloned;
+    }).filter(Boolean);
   }
 }
 
