@@ -1,4 +1,5 @@
-## XRK-AGT v3.0.5
+## XRK-AGT v1.0.0
+
 
 XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多语言、多适配器、工作流驱动型智能体平台**，支持：
 
@@ -110,7 +111,7 @@ npm install
 
 ```sh
 node app   # 或 node start.js
-``>
+```
 
 启动后可通过浏览器访问配置中的服务地址（默认 2537 端口），具体访问 URL 会在启动日志中打印。
 
@@ -145,8 +146,8 @@ node app   # 或 node start.js
 ## 文档与开发指南
 
 - **总览文档**
-  - `PROJECT_OVERVIEW.md`：整体架构、运行逻辑图、目录结构解析与重要对象索引。
-  - `docs/README.md`：模块文档导航（Bot / 插件 / 适配器 / API / 配置 / 渲染等）。
+  - `docs/README.md`：模块文档导航（Bot / 插件 / 适配器 / AI 工作流 / HTTP API / 配置 / 渲染 / 工具 / 应用开发等）。
+  - `docs/app-dev.md`：从 `app.js` 引导到 `Bot`，并串联插件、API、配置、渲染器与 Web 前端的综合指南。
 
 - **模块文档（docs/）**
   - `bot.md`：`Bot` 主类与服务生命周期。
@@ -156,6 +157,7 @@ node app   # 或 node start.js
   - `http-api.md` / `api-loader.md`：HTTP API 基类与 API 加载器。
   - `config-base.md`：配置基类与路径/校验规则。
   - `renderer.md`：渲染器基类与模板机制。
+  - `botutil.md`：全局工具类（日志、缓存、文件、HTTP、批处理等）。
 
 - **Bug 修复与变更文档（可选阅读）**
   - `INDEX.md`：修复文档索引。

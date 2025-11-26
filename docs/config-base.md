@@ -27,12 +27,28 @@
 
 内部字段：
 
-- `this.fullPath`：当 `filePath` 为字符串时预先计算的完整路径。
-- `_cache/_cacheTime/_cacheTTL`：用于短期缓存配置，避免频繁 IO。
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `fullPath` | `string` | 当 `filePath` 为字符串时预先计算的完整路径 |
+| `_cache` | `any` | 最近一次读取的配置对象缓存 |
+| `_cacheTime` | `number` | 缓存时间戳，用于判断是否过期 |
+| `_cacheTTL` | `number` | 缓存有效期（毫秒），默认 5000 |
 
 ---
 
 ## 路径解析
+
+```mermaid
+flowchart LR
+    Start[ConfigBase 实例] --> Resolve[_resolveFilePath]
+    Resolve -->|filePath 是函数| Dyn[调用 _getFilePath(cfg)<br/>基于 global.cfg/环境变量生成路径]
+    Resolve -->|filePath 是字符串| FullPath[直接使用 fullPath]
+    Resolve -->|都未设置| Default[path.join(paths.config, 'config/<name>.yaml')]
+    Dyn --> JoinRoot[paths.root + 相对路径]
+    FullPath --> Done[返回绝对路径]
+    Default --> Done
+    JoinRoot --> Done
+```
 
 - `_resolveFilePath()`：
   - 若 `filePath` 是函数，则：
@@ -47,27 +63,24 @@
 
 ## 读取与写入
 
-- `exists()`：异步检查配置文件是否存在。
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `exists()` | `Promise<boolean>` | 异步检查配置文件是否存在 |
+| `read(useCache = true)` | `Promise<object>` | 从磁盘（或缓存）读取配置，自动按 `fileType` 解析为对象 |
+| `write(data, options?)` | `Promise<boolean>` | 写入配置到磁盘，可选备份与校验 |
+| `backup()` | `Promise<string>` | 将当前配置复制为带时间戳的备份文件，并返回备份路径 |
 
-- `read(useCache = true)`：
-  - 若启用缓存且缓存未过期，直接返回缓存。
-  - 若文件不存在，抛出错误。
-  - 读取文件内容并根据 `fileType`：
-    - YAML：`yaml.parse(content)`。
-    - JSON：`JSON.parse(content)`。
-  - 更新 `_cache` 与 `_cacheTime`。
+读取流程要点：
 
-- `write(data, { backup = true, validate = true } = {})`：
-  - 若 `validate` 为 `true`，先调用 `validate(data)`。
-  - 若 `backup` 为 `true` 且文件存在，调用 `backup()` 生成备份文件。
-  - 确保目标目录存在。
-  - 根据 `fileType` 序列化为 YAML 或 JSON：
-    - YAML：使用 `yaml.stringify`，并设置合理的缩进与行宽。
-  - 写入到 `_resolveFilePath()` 返回的路径。
-  - 更新缓存并记录日志。
+- 启用缓存时，`_cacheTTL` 内重复调用 `read(true)` 不会命中磁盘，适合高频读取的配置。  
+- 当文件不存在时，`read` 会抛出错误，调用方应捕获并决定是否使用默认配置或先写入一份模板。
 
-- `backup()`：
-  - 将当前配置文件复制为 `*.backup.时间戳`。
+写入流程要点：
+
+1. 若 `validate` 为 `true`，先调用 `validate(data)`；失败会抛出详细错误（包含错误数组）。  
+2. 若 `backup` 为 `true` 且文件存在，则自动调用 `backup()` 在同目录下生成 `.backup.<时间戳>` 文件。  
+3. 根据 `fileType` 序列化为 YAML 或 JSON，并保证使用统一缩进与行宽，方便人工修改与版本控制。  
+4. 更新内存缓存，使后续 `read` 可立即读取到最新值。
 
 ---
 
