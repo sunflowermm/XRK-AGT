@@ -34,7 +34,7 @@ class PluginsLoader {
     this.priority = []              // 普通优先级插件列表
     this.extended = []              // 扩展插件列表
     this.task = []                  // 定时任务列表
-    this.dir = 'plugins'            // 插件目录
+    this.dir = 'core/plugin'            // 插件目录
     this.watcher = {}               // 文件监听器
     this.cooldowns = {              // 冷却时间管理
       group: new Map(),             // 使用 Map 替代对象，性能更好
