@@ -43,7 +43,7 @@
           "method": "GET",
           "path": "/api/bots",
           "title": "机器人列表",
-          "description": "获取所有已连接的机器人（不包括设备）"
+          "description": "获取所有已连接的机器人"
         },
         {
           "id": "bot-friends",
@@ -68,8 +68,7 @@
           "pathParams": {
             "uin": {
               "label": "机器人UIN",
-              "placeholder": "123456789",
-              "hint": "机器人的唯一标识"
+              "placeholder": "123456789"
             }
           }
         },
@@ -78,12 +77,11 @@
           "method": "POST",
           "path": "/api/bot/:uin/control",
           "title": "控制机器人",
-          "description": "执行机器人控制命令（开机/关机）",
+          "description": "执行机器人控制命令",
           "pathParams": {
             "uin": {
               "label": "机器人UIN",
-              "placeholder": "123456789",
-              "hint": "机器人的唯一标识"
+              "placeholder": "123456789"
             }
           },
           "bodyParams": [
@@ -93,14 +91,8 @@
               "type": "select",
               "required": true,
               "options": [
-                {
-                  "value": "shutdown",
-                  "label": "关机"
-                },
-                {
-                  "value": "startup",
-                  "label": "开机"
-                }
+                { "value": "shutdown", "label": "关机" },
+                { "value": "startup", "label": "开机" }
               ]
             }
           ]
@@ -116,14 +108,13 @@
           "method": "POST",
           "path": "/api/message/send",
           "title": "发送消息",
-          "description": "向好友或群组发送消息，支持文本和文件",
+          "description": "向好友或群组发送消息",
           "bodyParams": [
             {
               "name": "bot_id",
               "label": "机器人ID",
               "type": "text",
-              "placeholder": "留空使用默认机器人",
-              "hint": "指定发送消息的机器人"
+              "placeholder": "留空使用默认机器人"
             },
             {
               "name": "type",
@@ -131,14 +122,8 @@
               "type": "select",
               "required": true,
               "options": [
-                {
-                  "value": "private",
-                  "label": "私聊"
-                },
-                {
-                  "value": "group",
-                  "label": "群聊"
-                }
+                { "value": "private", "label": "私聊" },
+                { "value": "group", "label": "群聊" }
               ]
             },
             {
@@ -146,15 +131,14 @@
               "label": "目标ID",
               "type": "text",
               "required": true,
-              "placeholder": "好友QQ或群号",
-              "hint": "接收消息的好友或群组ID"
+              "placeholder": "好友QQ或群号"
             },
             {
               "name": "message",
               "label": "消息内容",
               "type": "textarea",
               "required": true,
-              "placeholder": "支持文本、表情、图片等",
+              "placeholder": "输入消息内容",
               "defaultValue": "你好，这是一条测试消息！"
             }
           ]
@@ -177,17 +161,15 @@
               "label": "命令内容",
               "type": "textarea",
               "required": true,
-              "placeholder": "输入命令，支持文本或JSON格式",
-              "defaultValue": "help",
-              "hint": "可以是文本命令或JSON格式的复杂命令"
+              "placeholder": "输入命令",
+              "defaultValue": "help"
             },
             {
               "name": "user_info",
               "label": "用户信息",
               "type": "json",
-              "placeholder": "{\"user_id\": \"123456\", \"nickname\": \"测试用户\"}",
-              "defaultValue": "{\n  \"user_id\": \"123456\",\n  \"nickname\": \"测试用户\"\n}",
-              "hint": "可选，模拟用户身份信息"
+              "placeholder": "{\"user_id\": \"123456\"}",
+              "defaultValue": "{\n  \"user_id\": \"123456\",\n  \"nickname\": \"测试用户\"\n}"
             }
           ]
         },
@@ -204,24 +186,15 @@
               "type": "text",
               "required": true,
               "placeholder": "message",
-              "defaultValue": "message",
-              "hint": "事件类型，如 message、notice、request 等"
+              "defaultValue": "message"
             },
             {
               "name": "content",
               "label": "事件内容",
               "type": "json",
               "required": true,
-              "placeholder": "{\"message\": \"测试\", \"user_id\": \"123456\"}",
-              "defaultValue": "{\n  \"message\": \"测试事件\",\n  \"user_id\": \"123456\"\n}",
-              "hint": "事件内容数据"
-            },
-            {
-              "name": "user_info",
-              "label": "用户信息",
-              "type": "json",
-              "placeholder": "{\"nickname\": \"测试用户\"}",
-              "hint": "可选，模拟用户身份信息"
+              "placeholder": "{\"message\": \"测试\"}",
+              "defaultValue": "{\n  \"message\": \"测试事件\",\n  \"user_id\": \"123456\"\n}"
             }
           ]
         },
@@ -250,15 +223,13 @@
               "label": "提示词",
               "type": "text",
               "required": true,
-              "placeholder": "你好",
-              "hint": "要发送给 AI 的提示词"
+              "placeholder": "你好"
             },
             {
               "name": "persona",
               "label": "人设",
               "type": "text",
-              "placeholder": "",
-              "hint": "可选，AI 人设设置"
+              "placeholder": "AI 人设设置"
             }
           ]
         }
@@ -269,24 +240,22 @@
       "title": "配置管理",
       "apis": [
         {
-          "id": "config-manager",
+          "id": "config-list",
           "method": "GET",
           "path": "/api/config/list",
-          "title": "配置管理器",
-          "description": "打开配置管理器界面，查看和编辑所有配置文件（需要授权）",
-          "special": "config-editor"
+          "title": "配置列表",
+          "description": "获取所有配置文件列表"
         },
         {
           "id": "config-read",
           "method": "GET",
           "path": "/api/config/:name/read",
           "title": "读取配置",
-          "description": "读取指定配置文件的内容（需要授权）",
+          "description": "读取指定配置文件的内容",
           "pathParams": {
             "name": {
               "label": "配置名称",
-              "placeholder": "bot",
-              "hint": "配置名称，如 bot、server、system 等"
+              "placeholder": "bot"
             }
           },
           "queryParams": [
@@ -294,8 +263,7 @@
               "name": "path",
               "label": "配置路径",
               "type": "text",
-              "placeholder": "log_level",
-              "hint": "可选，指定要读取的配置路径，如 server.host"
+              "placeholder": "log_level"
             }
           ]
         },
@@ -304,12 +272,11 @@
           "method": "POST",
           "path": "/api/config/:name/write",
           "title": "写入配置",
-          "description": "写入配置到指定文件（需要授权）",
+          "description": "写入配置到指定文件",
           "pathParams": {
             "name": {
               "label": "配置名称",
-              "placeholder": "bot",
-              "hint": "配置名称"
+              "placeholder": "bot"
             }
           },
           "bodyParams": [
@@ -318,89 +285,19 @@
               "label": "配置数据",
               "type": "json",
               "required": true,
-              "placeholder": "{\"log_level\": \"info\"}",
-              "hint": "要写入的配置数据（JSON格式）"
-            },
-            {
-              "name": "path",
-              "label": "配置路径",
-              "type": "text",
-              "placeholder": "log_level",
-              "hint": "可选，指定要写入的配置路径"
+              "placeholder": "{\"log_level\": \"info\"}"
             },
             {
               "name": "backup",
               "label": "是否备份",
               "type": "select",
               "options": [
-                {
-                  "value": "true",
-                  "label": "是"
-                },
-                {
-                  "value": "false",
-                  "label": "否"
-                }
+                { "value": "true", "label": "是" },
+                { "value": "false", "label": "否" }
               ],
-              "defaultValue": "true",
-              "hint": "写入前是否备份原文件"
-            },
-            {
-              "name": "validate",
-              "label": "是否验证",
-              "type": "select",
-              "options": [
-                {
-                  "value": "true",
-                  "label": "是"
-                },
-                {
-                  "value": "false",
-                  "label": "否"
-                }
-              ],
-              "defaultValue": "true",
-              "hint": "写入前是否验证数据"
+              "defaultValue": "true"
             }
           ]
-        },
-        {
-          "id": "config-validate",
-          "method": "POST",
-          "path": "/api/config/:name/validate",
-          "title": "验证配置",
-          "description": "验证配置数据是否符合规范（需要授权）",
-          "pathParams": {
-            "name": {
-              "label": "配置名称",
-              "placeholder": "bot",
-              "hint": "配置名称"
-            }
-          },
-          "bodyParams": [
-            {
-              "name": "data",
-              "label": "配置数据",
-              "type": "json",
-              "required": true,
-              "placeholder": "{\"log_level\": \"info\"}",
-              "hint": "要验证的配置数据（JSON格式）"
-            }
-          ]
-        },
-        {
-          "id": "config-structure",
-          "method": "GET",
-          "path": "/api/config/:name/structure",
-          "title": "配置结构",
-          "description": "获取配置文件的完整结构定义（需要授权）",
-          "pathParams": {
-            "name": {
-              "label": "配置名称",
-              "placeholder": "bot",
-              "hint": "配置名称"
-            }
-          }
         }
       ]
     },
@@ -413,46 +310,34 @@
           "method": "POST",
           "path": "/api/device/register",
           "title": "注册设备",
-          "description": "注册新的物联网设备到系统（需要认证）",
+          "description": "注册新的物联网设备到系统",
           "bodyParams": [
             {
               "name": "device_id",
               "label": "设备ID",
               "type": "text",
               "required": true,
-              "placeholder": "DEVICE_001",
-              "hint": "设备的唯一标识"
+              "placeholder": "DEVICE_001"
             },
             {
               "name": "device_type",
               "label": "设备类型",
               "type": "text",
               "required": true,
-              "placeholder": "sensor",
-              "hint": "如：sensor、camera、switch、actuator等"
+              "placeholder": "sensor"
             },
             {
               "name": "device_name",
               "label": "设备名称",
               "type": "text",
-              "placeholder": "客厅温度传感器",
-              "hint": "设备的显示名称"
+              "placeholder": "温度传感器"
             },
             {
               "name": "capabilities",
               "label": "设备能力",
               "type": "json",
-              "placeholder": "[\"temperature\", \"humidity\"]",
-              "defaultValue": "[\"temperature\", \"humidity\"]",
-              "hint": "设备支持的功能列表"
-            },
-            {
-              "name": "metadata",
-              "label": "元数据",
-              "type": "json",
-              "placeholder": "{\"location\": \"客厅\", \"model\": \"DHT22\"}",
-              "defaultValue": "{}",
-              "hint": "设备的额外信息"
+              "placeholder": "[\"temperature\"]",
+              "defaultValue": "[\"temperature\", \"humidity\"]"
             }
           ]
         },
@@ -461,19 +346,18 @@
           "method": "GET",
           "path": "/api/devices",
           "title": "设备列表",
-          "description": "获取所有注册的物联网设备及其状态统计"
+          "description": "获取所有注册的物联网设备"
         },
         {
           "id": "device-detail",
           "method": "GET",
           "path": "/api/device/:deviceId",
           "title": "设备详情",
-          "description": "获取指定设备的详细信息和统计数据",
+          "description": "获取指定设备的详细信息",
           "pathParams": {
             "deviceId": {
               "label": "设备ID",
-              "placeholder": "DEVICE_001",
-              "hint": "要查询的设备ID"
+              "placeholder": "DEVICE_001"
             }
           }
         },
@@ -482,12 +366,11 @@
           "method": "POST",
           "path": "/api/device/:deviceId/ai",
           "title": "设备AI回复",
-          "description": "触发设备工作流，让后端执行AI并驱动表情/显示/TTS",
+          "description": "触发设备工作流，执行AI并驱动表情/TTS",
           "pathParams": {
             "deviceId": {
               "label": "设备ID",
-              "placeholder": "webclient",
-              "hint": "接收AI回复的设备ID"
+              "placeholder": "webclient"
             }
           },
           "bodyParams": [
@@ -499,48 +382,6 @@
               "placeholder": "你好"
             }
           ]
-        },
-        {
-          "id": "device-asr-sessions",
-          "method": "GET",
-          "path": "/api/device/:deviceId/asr/sessions",
-          "title": "ASR会话列表",
-          "description": "获取指定设备的ASR会话列表",
-          "pathParams": {
-            "deviceId": {
-              "label": "设备ID",
-              "placeholder": "webclient",
-              "hint": "设备ID"
-            }
-          }
-        },
-        {
-          "id": "device-asr-recordings",
-          "method": "GET",
-          "path": "/api/device/:deviceId/asr/recordings",
-          "title": "ASR录音列表",
-          "description": "获取指定设备的ASR录音文件列表",
-          "pathParams": {
-            "deviceId": {
-              "label": "设备ID",
-              "placeholder": "webclient",
-              "hint": "设备ID"
-            }
-          }
-        },
-        {
-          "id": "asr-recording",
-          "method": "GET",
-          "path": "/api/asr/recording/:filename",
-          "title": "获取ASR录音",
-          "description": "下载ASR录音文件",
-          "pathParams": {
-            "filename": {
-              "label": "文件名",
-              "placeholder": "recording.wav",
-              "hint": "录音文件名"
-            }
-          }
         }
       ]
     },
@@ -553,7 +394,7 @@
           "method": "POST",
           "path": "/api/file/upload",
           "title": "上传文件",
-          "description": "上传文件到服务器，支持多种格式（需要授权）"
+          "description": "上传文件到服务器"
         },
         {
           "id": "file-get",
@@ -564,8 +405,7 @@
           "pathParams": {
             "id": {
               "label": "文件ID",
-              "placeholder": "file_id",
-              "hint": "上传时返回的文件ID"
+              "placeholder": "file_id"
             }
           }
         },
@@ -574,12 +414,11 @@
           "method": "DELETE",
           "path": "/api/file/:id",
           "title": "删除文件",
-          "description": "删除已上传的文件（需要授权）",
+          "description": "删除已上传的文件",
           "pathParams": {
             "id": {
               "label": "文件ID",
-              "placeholder": "file_id",
-              "hint": "要删除的文件ID"
+              "placeholder": "file_id"
             }
           }
         },
@@ -588,131 +427,7 @@
           "method": "GET",
           "path": "/api/files",
           "title": "文件列表",
-          "description": "获取所有已上传的文件列表（需要授权）"
-        },
-        {
-          "id": "file-download",
-          "method": "GET",
-          "path": "/api/file/download/:id",
-          "title": "下载文件",
-          "description": "下载文件",
-          "pathParams": {
-            "id": {
-              "label": "文件ID",
-              "placeholder": "file_id",
-              "hint": "文件ID"
-            }
-          }
-        },
-        {
-          "id": "file-preview",
-          "method": "GET",
-          "path": "/api/file/preview/:id",
-          "title": "预览文件",
-          "description": "预览文件内容",
-          "pathParams": {
-            "id": {
-              "label": "文件ID",
-              "placeholder": "file_id",
-              "hint": "文件ID"
-            }
-          }
-        },
-        {
-          "id": "file-upload-base64",
-          "method": "POST",
-          "path": "/api/file/upload-base64",
-          "title": "Base64上传",
-          "description": "通过Base64编码上传文件（需要授权）",
-          "bodyParams": [
-            {
-              "name": "filename",
-              "label": "文件名",
-              "type": "text",
-              "required": true,
-              "placeholder": "image.png"
-            },
-            {
-              "name": "data",
-              "label": "Base64数据",
-              "type": "textarea",
-              "required": true,
-              "placeholder": "data:image/png;base64,..."
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "data",
-      "title": "数据编辑",
-      "apis": [
-        {
-          "id": "data-read",
-          "method": "GET",
-          "path": "/api/data/read",
-          "title": "读取数据文件",
-          "description": "读取JSON或YAML文件内容（需要授权）",
-          "queryParams": [
-            {
-              "name": "filePath",
-              "label": "文件路径",
-              "type": "text",
-              "required": true,
-              "placeholder": "./config/bot.json",
-              "hint": "要读取的文件路径"
-            },
-            {
-              "name": "encoding",
-              "label": "编码格式",
-              "type": "text",
-              "placeholder": "utf8",
-              "defaultValue": "utf8",
-              "hint": "文件编码格式"
-            }
-          ]
-        },
-        {
-          "id": "data-write",
-          "method": "POST",
-          "path": "/api/data/write",
-          "title": "写入数据文件",
-          "description": "写入数据到JSON或YAML文件（需要授权）",
-          "bodyParams": [
-            {
-              "name": "filePath",
-              "label": "文件路径",
-              "type": "text",
-              "required": true,
-              "placeholder": "./config/bot.json",
-              "hint": "要写入的文件路径"
-            },
-            {
-              "name": "data",
-              "label": "数据内容",
-              "type": "json",
-              "required": true,
-              "placeholder": "{\"key\": \"value\"}",
-              "hint": "要写入的数据（JSON格式）"
-            },
-            {
-              "name": "format",
-              "label": "文件格式",
-              "type": "select",
-              "options": [
-                {
-                  "value": "json",
-                  "label": "JSON"
-                },
-                {
-                  "value": "yaml",
-                  "label": "YAML"
-                }
-              ],
-              "defaultValue": "json",
-              "hint": "文件格式"
-            }
-          ]
+          "description": "获取所有已上传的文件列表"
         }
       ]
     },
@@ -736,8 +451,7 @@
           "pathParams": {
             "key": {
               "label": "插件标识",
-              "placeholder": "example-plugin",
-              "hint": "插件的唯一标识key"
+              "placeholder": "example-plugin"
             }
           }
         },
@@ -765,49 +479,24 @@
     "message-send": {
       "type": "group",
       "target_id": "123456789",
-      "message": "你好，这是一条测试消息！\n支持多行文本"
+      "message": "你好，这是一条测试消息！"
     },
     "stdin-command": {
       "command": "#帮助",
-      "user_info": "{\n  \"user_id\": \"123456\",\n  \"nickname\": \"测试用户\",\n  \"isMaster\": true\n}"
-    },
-    "stdin-event": {
-      "event_type": "message",
-      "content": "{\n  \"message\": \"测试事件\",\n  \"user_id\": \"123456\"\n}",
-      "user_info": "{\n  \"nickname\": \"测试用户\"\n}"
+      "user_info": "{\n  \"user_id\": \"123456\",\n  \"nickname\": \"测试用户\"\n}"
     },
     "device-register": {
       "device_id": "SENSOR_001",
       "device_type": "sensor",
-      "device_name": "客厅温湿度传感器",
-      "capabilities": "[\"temperature\", \"humidity\", \"pressure\"]",
-      "metadata": "{\n  \"location\": \"客厅\",\n  \"model\": \"DHT22\",\n  \"version\": \"1.0\"\n}"
-    },
-    "device-detail": {
-      "path_deviceId": "SENSOR_001"
+      "device_name": "温湿度传感器",
+      "capabilities": "[\"temperature\", \"humidity\"]"
     },
     "device-ai": {
       "path_deviceId": "webclient",
-      "text": "[开心] 你好"
-    },
-    "file-get": {
-      "path_id": "01HX1234567890ABCDEF"
-    },
-    "file-delete": {
-      "path_id": "01HX1234567890ABCDEF"
+      "text": "你好"
     },
     "plugin-reload": {
       "path_key": "genshin"
-    },
-    "config-read": {
-      "path_name": "bot",
-      "query_path": "log_level"
-    },
-    "config-write": {
-      "path_name": "bot",
-      "data": "{\n  \"log_level\": \"info\"\n}",
-      "backup": "true",
-      "validate": "true"
     }
   },
   "quickActions": [

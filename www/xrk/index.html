@@ -3,107 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XRK-AGT葵子 API控制中心</title>
-    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <title>XRK-AGT 葵子控制中心</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <canvas id="bgParticles"></canvas>
-    <div class="app-container">
+    <div class="app">
+        <!-- 侧边栏 -->
         <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo">
-                    <div class="logo-icon">🤖</div>
-                    <span>葵子API Center</span>
+            <div class="sidebar-brand">
+                <div class="brand-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
                 </div>
-                <button class="theme-toggle" id="themeToggle">
-                    <div class="theme-toggle-thumb"></div>
+                <span class="brand-name">葵子控制台</span>
+                <button class="sidebar-close" id="sidebarClose">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
                 </button>
             </div>
 
-            <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" data-page="home" id="navHome">
-                    <span class="nav-icon"></span>
-                    <span class="nav-text">返回首页</span>
-            </a>
-                <a href="#" class="nav-item" data-page="chat" id="navChat">
-                    <span class="nav-icon"></span>
-                    <span class="nav-text">葵宝聊天</span>
+            <nav class="nav">
+                <a href="#/home" class="nav-item active" data-page="home">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                        <polyline points="9,22 9,12 15,12 15,22"/>
+                    </svg>
+                    <span>系统概览</span>
                 </a>
-                <a href="#" class="nav-item" data-page="config" id="navConfig">
-                    <span class="nav-icon"></span>
-                    <span class="nav-text">配置管理器</span>
+                <a href="#/chat" class="nav-item" data-page="chat">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                    </svg>
+                    <span>AI 对话</span>
                 </a>
-                <a href="#" class="nav-item" data-page="api" id="navApi">
-                    <span class="nav-icon"></span>
-                    <span class="nav-text">API调试</span>
-            </a>
+                <a href="#/config" class="nav-item" data-page="config">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                    </svg>
+                    <span>配置管理</span>
+                </a>
+                <a href="#/api" class="nav-item" data-page="api">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="16,18 22,12 16,6"/>
+                        <polyline points="8,6 2,12 8,18"/>
+                    </svg>
+                    <span>API 调试</span>
+                </a>
             </nav>
 
-            <div class="api-groups-container" id="apiGroups" style="display: none;">
-                <!-- API groups will be dynamically loaded here -->
+            <div class="sidebar-footer">
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-dot"></span>
+                    <span class="status-text">未连接</span>
+                </div>
+                <button class="theme-btn" id="themeToggle" title="切换主题">
+                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/>
+                        <line x1="12" y1="1" x2="12" y2="3"/>
+                        <line x1="12" y1="21" x2="12" y2="23"/>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                        <line x1="1" y1="12" x2="3" y2="12"/>
+                        <line x1="21" y1="12" x2="23" y2="12"/>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
             </div>
         </aside>
 
-        <main class="main-content">
+        <!-- 主内容区 -->
+        <main class="main">
             <header class="header">
-                <div class="header-content">
-                    <div class="api-key-section">
-                        <div class="api-key-input">
-                            <input type="password" id="apiKey" placeholder="输入 API Key" autocomplete="off">
-                            <button id="saveApiKeyBtn">保存</button>
-                        </div>
-                    </div>
-
-                    <div class="status-cards">
-                        <div class="status-card">
-                            <span class="status-dot" id="statusDot"></span>
-                            <span id="statusText">未连接</span>
-                        </div>
+                <button class="menu-btn" id="menuBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="12" x2="21" y2="12"/>
+                        <line x1="3" y1="6" x2="21" y2="6"/>
+                        <line x1="3" y1="18" x2="21" y2="18"/>
+                    </svg>
+                </button>
+                <div class="header-title" id="headerTitle">系统概览</div>
+                <div class="header-actions">
+                    <div class="api-key-box">
+                        <input type="password" id="apiKey" placeholder="API Key" autocomplete="off">
+                        <button class="btn btn-sm" id="saveApiKeyBtn">保存</button>
                     </div>
                 </div>
             </header>
 
             <div class="content" id="content">
-                <div class="welcome-screen" id="systemStatusPage">
-                    <div class="system-status-header">
-                        <h1 class="welcome-title">系统状态监控</h1>
-                        <p class="welcome-desc">实时监控系统运行状态</p>
-                    </div>
-                    <div class="system-status-grid" id="systemStatusGrid">
-                    </div>
-                </div>
+                <!-- 动态内容区 -->
             </div>
         </main>
+
+        <!-- API 分组面板 (API调试页面使用) -->
+        <aside class="api-panel" id="apiPanel">
+            <div class="api-panel-header">
+                <h3>API 列表</h3>
+            </div>
+            <div class="api-groups" id="apiGroups"></div>
+        </aside>
     </div>
 
+    <!-- 遮罩层 -->
     <div class="overlay" id="overlay"></div>
 
-    <button class="floating-btn" id="floatingBtn">
-        <svg viewBox="0 0 100 100" class="sunflower-icon">
-            <circle cx="50" cy="50" r="20" fill="#FFD700"/>
-            <g class="petals">
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(0 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(30 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(60 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(90 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(120 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(150 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(180 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(210 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(240 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(270 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(300 50 50)"/>
-                <ellipse cx="50" cy="20" rx="8" ry="16" fill="#FFD700" transform="rotate(330 50 50)"/>
-            </g>
+    <!-- 移动端悬浮按钮 -->
+    <button class="fab" id="fab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
         </svg>
     </button>
 
-    <div id="toastContainer"></div>
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toastContainer"></div>
 
-    
-
-    <script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
