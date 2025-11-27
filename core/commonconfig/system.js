@@ -17,9 +17,12 @@ export default class SystemConfig extends ConfigBase {
     // 辅助函数：生成基于端口的动态路径
     const getConfigPath = (configName) => {
       return (cfg) => {
-        // 从 cfg 获取端口，路径格式：data/server_bots/{port}/{name}.yaml
-        const port = cfg?._port || cfg?.server?.server?.port || 8086;
-        return port ? `data/server_bots/${port}/${configName}.yaml` : `config/config/${configName}.yaml`;
+        // 严格模式：必须显式提供端口，避免隐式回退
+        const port = cfg?._port ?? cfg?.server?.server?.port;
+        if (!port) {
+          throw new Error(`SystemConfig: 未提供端口，无法解析路径 -> ${configName}`);
+        }
+        return `data/server_bots/${port}/${configName}.yaml`;
       };
     };
 

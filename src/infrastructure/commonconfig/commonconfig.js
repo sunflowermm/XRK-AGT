@@ -54,13 +54,18 @@ export default class ConfigBase {
     this.filePath = metadata.filePath || '';
     this.fileType = metadata.fileType || 'yaml';
     this.schema = metadata.schema || {};
+
+    // 严格校验：在构造阶段即校验 schema 的默认值与类型一致性，避免运行期回退逻辑
+    this._assertSchemaStrict(this.schema);
     
     // 如果 filePath 是函数，则动态计算路径
     if (typeof this.filePath === 'function') {
       this._getFilePath = this.filePath;
-    } else {
+    } else if (this.filePath) {
       // 完整文件路径
       this.fullPath = path.join(paths.root, this.filePath);
+    } else {
+      this.fullPath = undefined;
     }
     
     // 缓存配置内容
@@ -70,20 +75,83 @@ export default class ConfigBase {
   }
   
   /**
+   * 严格校验 schema：
+   * - 确保每个字段的 default 类型与 type 一致（若提供）
+   * - enum 必须包含 default（若提供）
+   * - array 的 itemType 与 default 数组元素类型一致（若提供）
+   * - object 的 fields 递归校验
+   */
+  _assertSchemaStrict(schema) {
+    if (!schema || !schema.fields) return;
+    const check = (fields) => {
+      for (const [key, fs] of Object.entries(fields)) {
+        // 校验 default 与 type
+        if (Object.prototype.hasOwnProperty.call(fs, 'default')) {
+          const def = fs.default;
+          const t = fs.type;
+          if (t === 'number' && !(typeof def === 'number')) {
+            throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 number`);
+          }
+          if (t === 'string' && !(typeof def === 'string')) {
+            throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 string`);
+          }
+          if (t === 'boolean' && !(typeof def === 'boolean')) {
+            throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 boolean`);
+          }
+          if (t === 'array' && !Array.isArray(def)) {
+            throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 array`);
+          }
+          if (t === 'object' && (def !== undefined) && (def !== null) && (typeof def !== 'object' || Array.isArray(def))) {
+            throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 object`);
+          }
+        }
+        // 校验 enum 与 default
+        if (fs.enum && Object.prototype.hasOwnProperty.call(fs, 'default')) {
+          if (!fs.enum.includes(fs.default)) {
+            throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须属于 enum: ${fs.enum.join(', ')}`);
+          }
+        }
+        // 校验 array 元素类型
+        if (fs.type === 'array' && fs.itemType && Array.isArray(fs.default)) {
+          for (const [i, v] of fs.default.entries()) {
+            if (fs.itemType === 'number' && typeof v !== 'number') throw new Error(`配置(${this.name}).schema 字段 ${key}[${i}] 必须为 number`);
+            if (fs.itemType === 'string' && typeof v !== 'string') throw new Error(`配置(${this.name}).schema 字段 ${key}[${i}] 必须为 string`);
+            if (fs.itemType === 'boolean' && typeof v !== 'boolean') throw new Error(`配置(${this.name}).schema 字段 ${key}[${i}] 必须为 boolean`);
+            if (fs.itemType === 'object' && (typeof v !== 'object' || Array.isArray(v))) throw new Error(`配置(${this.name}).schema 字段 ${key}[${i}] 必须为 object`);
+          }
+        }
+        // 递归校验 object 子字段
+        if (fs.type === 'object' && fs.fields) {
+          check(fs.fields);
+        }
+        // 递归校验 array 中的对象 itemSchema
+        if (fs.type === 'array' && fs.itemType === 'object' && fs.itemSchema?.fields) {
+          check(fs.itemSchema.fields);
+        }
+      }
+    };
+    check(schema.fields);
+  }
+  
+  /**
    * 获取配置文件的完整路径（支持动态路径）
    * @returns {string}
    */
   _resolveFilePath() {
     if (this._getFilePath) {
-      // 动态路径：从 cfg 获取端口
-      // cfg 在系统初始化时已经确保存在
-      const cfg = global.cfg || { _port: parseInt(process.env.SERVER_PORT || process.env.PORT || 8086) };
-      const dynamicPath = this._getFilePath(cfg);
+      // 动态路径：从全局配置获取必要信息
+      if (!global.cfg) {
+        throw new Error('全局配置未初始化，无法解析动态配置路径');
+      }
+      const dynamicPath = this._getFilePath(global.cfg);
+      if (!dynamicPath) {
+        throw new Error('动态路径函数未返回有效路径');
+      }
       return path.join(paths.root, dynamicPath);
     }
-    // 如果没有 fullPath，尝试构造默认路径
+    // 如果没有 fullPath，则认为未正确配置
     if (!this.fullPath) {
-      return path.join(paths.config, `config/${this.name}.yaml`);
+      throw new Error(`未指定配置文件路径: ${this.name}`);
     }
     return this.fullPath;
   }
@@ -412,50 +480,76 @@ export default class ConfigBase {
         }
       }
 
-      // 类型验证
+      // 类型验证（严格模式）
       if (this.schema.fields) {
         for (const [field, fieldSchema] of Object.entries(this.schema.fields)) {
-          if (field in data) {
-            const value = data[field];
-            const expectedType = fieldSchema.type;
+          if (!(field in data)) continue; // 非必填且未提供，忽略
+          const value = data[field];
+          const expectedType = fieldSchema.type;
 
-            // 允许 null 和 undefined 值（空值不进行类型验证）
-            if (value === null || value === undefined) {
-              // 如果字段允许为空（nullable），跳过类型验证
-              if (fieldSchema.nullable !== false) {
-                continue; // 跳过后续验证
-              }
-              // 如果字段不允许为空且是必需字段，已在上面检查过
-            } else if (expectedType && !this._checkType(value, expectedType)) {
-              errors.push(`字段 ${field} 类型错误，期望 ${expectedType}`);
+          // 严格：默认不允许 null/undefined（除非明确声明 nullable: true）
+          if (value === null || value === undefined) {
+            if (fieldSchema.nullable === true) continue;
+            errors.push(`字段 ${field} 不允许为空`);
+            continue;
+          }
+
+          if (expectedType && !this._checkType(value, expectedType)) {
+            errors.push(`字段 ${field} 类型错误，期望 ${expectedType}`);
+            continue;
+          }
+
+          // 数值范围
+          if (expectedType === 'number') {
+            if (fieldSchema.min !== undefined && value < fieldSchema.min) {
+              errors.push(`字段 ${field} 不能小于 ${fieldSchema.min}`);
             }
-
-            // 数值范围验证（仅当值不为 null/undefined 时）
-            if (expectedType === 'number' && value !== null && value !== undefined) {
-              if (fieldSchema.min !== undefined && value < fieldSchema.min) {
-                errors.push(`字段 ${field} 不能小于 ${fieldSchema.min}`);
-              }
-              if (fieldSchema.max !== undefined && value > fieldSchema.max) {
-                errors.push(`字段 ${field} 不能大于 ${fieldSchema.max}`);
-              }
+            if (fieldSchema.max !== undefined && value > fieldSchema.max) {
+              errors.push(`字段 ${field} 不能大于 ${fieldSchema.max}`);
             }
+          }
 
-            // 字符串长度验证（仅当值不为 null/undefined 时）
-            if (expectedType === 'string' && value !== null && value !== undefined) {
-              if (fieldSchema.minLength !== undefined && value.length < fieldSchema.minLength) {
-                errors.push(`字段 ${field} 长度不能小于 ${fieldSchema.minLength}`);
-              }
-              if (fieldSchema.maxLength !== undefined && value.length > fieldSchema.maxLength) {
-                errors.push(`字段 ${field} 长度不能大于 ${fieldSchema.maxLength}`);
-              }
-              if (fieldSchema.pattern && !new RegExp(fieldSchema.pattern).test(value)) {
-                errors.push(`字段 ${field} 格式不正确`);
-              }
+          // 字符串长度与格式
+          if (expectedType === 'string') {
+            if (fieldSchema.minLength !== undefined && value.length < fieldSchema.minLength) {
+              errors.push(`字段 ${field} 长度不能小于 ${fieldSchema.minLength}`);
             }
+            if (fieldSchema.maxLength !== undefined && value.length > fieldSchema.maxLength) {
+              errors.push(`字段 ${field} 长度不能大于 ${fieldSchema.maxLength}`);
+            }
+            if (fieldSchema.pattern && !new RegExp(fieldSchema.pattern).test(value)) {
+              errors.push(`字段 ${field} 格式不正确`);
+            }
+          }
 
-            // 枚举值验证（仅当值不为 null/undefined 时）
-            if (fieldSchema.enum && value !== null && value !== undefined && !fieldSchema.enum.includes(value)) {
-              errors.push(`字段 ${field} 值必须是: ${fieldSchema.enum.join(', ')}`);
+          // 枚举
+          if (fieldSchema.enum && !fieldSchema.enum.includes(value)) {
+            errors.push(`字段 ${field} 值必须是: ${fieldSchema.enum.join(', ')}`);
+          }
+
+          // 数组 itemType 校验
+          if (expectedType === 'array' && fieldSchema.itemType) {
+            if (!Array.isArray(value)) {
+              errors.push(`字段 ${field} 必须为数组`);
+            } else {
+              value.forEach((v, idx) => {
+                if (!this._checkType(v, fieldSchema.itemType)) {
+                  errors.push(`字段 ${field}[${idx}] 类型错误，应为 ${fieldSchema.itemType}`);
+                }
+              });
+            }
+          }
+
+          // 对象递归校验
+          if (expectedType === 'object' && fieldSchema.fields && value && typeof value === 'object' && !Array.isArray(value)) {
+            const sub = await this.validate({ ...value, _skipMeta: true }); // 复用校验，或自写递归
+            // 这里简单递归：
+            for (const [subKey, subSchema] of Object.entries(fieldSchema.fields)) {
+              if (subSchema && subSchema.type && (value[subKey] === null || value[subKey] === undefined)) {
+                if (subSchema.nullable !== true && (this.schema.required || []).includes(subKey)) {
+                  errors.push(`字段 ${field}.${subKey} 不允许为空`);
+                }
+              }
             }
           }
         }
@@ -512,6 +606,65 @@ export default class ConfigBase {
   clearCache() {
     this._cache = null;
     this._cacheTime = 0;
+  }
+
+  // ========== 生成默认对象与扁平化工具 ==========
+
+  buildDefaultFromSchema(schema = this.schema) {
+    const result = {};
+    if (!schema || !schema.fields) return result;
+    for (const [key, fs] of Object.entries(schema.fields)) {
+      if (fs.type === 'object') {
+        result[key] = this.buildDefaultFromSchema({ fields: fs.fields || {} });
+      } else if (fs.type === 'array') {
+        result[key] = Array.isArray(fs.default) ? [...fs.default] : [];
+      } else if (Object.prototype.hasOwnProperty.call(fs, 'default')) {
+        result[key] = fs.default;
+      }
+    }
+    return result;
+  }
+
+  getDefaultFromSchema() { return this.buildDefaultFromSchema(this.schema); }
+
+  getFlatSchema(prefix = '', schema = this.schema) {
+    const list = [];
+    if (!schema || !schema.fields) return list;
+    for (const [key, fs] of Object.entries(schema.fields)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (fs.type === 'object') {
+        list.push(...this.getFlatSchema(path, { fields: fs.fields || {} }));
+      } else if (fs.type === 'array' && fs.itemType === 'object' && fs.itemSchema?.fields) {
+        // 仅描述数组元素的结构，不枚举索引
+        list.push({ path, type: 'array<object>', component: fs.component, meta: { ...fs } });
+        list.push(...this.getFlatSchema(`${path}[]`, { fields: fs.itemSchema.fields }));
+      } else {
+        list.push({ path, type: fs.type, component: fs.component, meta: { ...fs } });
+      }
+    }
+    return list;
+  }
+
+  flattenData(obj, prefix = '') {
+    const out = {};
+    if (!obj || typeof obj !== 'object') return out;
+    for (const [k, v] of Object.entries(obj)) {
+      const path = prefix ? `${prefix}.${k}` : k;
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        Object.assign(out, this.flattenData(v, path));
+      } else {
+        out[path] = v;
+      }
+    }
+    return out;
+  }
+
+  expandFlatData(flat) {
+    const data = {};
+    for (const [path, value] of Object.entries(flat || {})) {
+      this._setValueByPath(data, path, value);
+    }
+    return data;
   }
 
   // ==================== 私有辅助方法 ====================

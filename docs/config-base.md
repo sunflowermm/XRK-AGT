@@ -196,6 +196,37 @@ export default class ServerConfig extends ConfigBase {
 }
 ```
 
+## API 速查（2025-01）
+
+当前仅保留以下“标准接口”，所有写入均依赖 schema 严格校验，不再做后端兜底或清洗：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/config/list` | 配置清单（含 displayName/description ） |
+| GET | `/api/config/:name/structure` | 原始嵌套 schema（用于深层编辑器） |
+| GET | `/api/config/:name/flat-structure` | 扁平 schema 列表 `[{ path, type, component, meta }]` |
+| GET | `/api/config/:name/read?path=...` | 读取整份/某个子路径（SystemConfig 需带 `path` 指子配置） |
+| GET | `/api/config/:name/flat?path=...` | 扁平化当前值 `{ 'server.host': '0.0.0.0' }` |
+| POST | `/api/config/:name/write` | 写入完整或 `path` 指定的子树（严格校验） |
+| POST | `/api/config/:name/batch-set` | 批量扁平写入：`{ flat: { 'server.host': '0.0.0.0' } }`，自动展开 & 深合并 |
+| POST | `/api/config/:name/validate` | 单纯校验 payload，返回 `{ valid, errors }` |
+| POST | `/api/config/:name/backup` | 手动备份配置文件 |
+| POST | `/api/config/:name/reset` | 恢复默认（依赖 `config/default_config/*.yaml`） |
+| POST | `/api/config/clear-cache` | 清空 ConfigBase 缓存 |
+
+> **已移除**：旧版 `merge / delete / array append / array remove` 路由全部废弃，统一用 `batch-set` + 扁平 schema 即可实现同等功能。
+
+### 前端集成建议
+1. 调用 `flat-structure` 渲染扁平化表单，彻底摆脱嵌套操作。
+2. 使用 `flat` 获取当前值，直接填入表单。
+3. 用户修改后组装 `{ flat: { '字段Path': value } }` 调 `batch-set`，后端负责展开 → 深合并 → 校验 → 写入。
+4. 所有字段必须遵守 schema 类型：
+   - `number` 传数字，`boolean` 传布尔值。
+   - `array` 的元素类型与 schema `itemType` 一致。
+   - `enum`/`Select` 值必须来自 enum 列表。
+   - 仅当字段声明 `nullable: true` 时可传 `null`。
+5. 默认值来源 `config/default_config/*.yaml`，已经全部按正确类型写入（如 `masterQQ: []`），可直接作为 `reset` 或表单初始值使用。
+
 在 API 中使用：
 
 ```js

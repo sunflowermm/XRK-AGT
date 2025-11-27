@@ -26,13 +26,13 @@ log_id_filler: '.'  # 可选: '·', '─', '•', '═', '»', '→'
 ignore_self: true
 
 # chromium 其他路径
-chromium_path:
+chromium_path: ""
 
 # puppeteer 接口地址
-puppeteer_ws:
+puppeteer_ws: ""
 
 # puppeteer 截图超时时间
-puppeteer_timeout:
+puppeteer_timeout: 0
 
 # 自动把 / 换成 #
 '/→#': true

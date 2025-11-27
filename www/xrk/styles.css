@@ -1118,60 +1118,110 @@ select.form-input {
   height: 20px;
 }
 
-/* 配置管理页面 */
-.config-container {
+/* 配置管理 */
+.config-page {
   display: grid;
+  grid-template-columns: 320px 1fr;
   gap: 24px;
 }
 
+@media (max-width: 1200px) {
+  .config-page {
+    grid-template-columns: 1fr;
+  }
+
+  .config-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+}
+
+.config-sidebar {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: fit-content;
+}
+
+.config-sidebar-header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.config-sidebar-header p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.config-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 14px;
+}
+
+.config-search svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.config-search input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  padding: 10px 0;
+  font-size: 14px;
+}
+
+.config-search input:focus {
+  outline: none;
+}
+
 .config-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
 .config-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--bg-card);
   cursor: pointer;
   transition: all var(--transition);
 }
 
-.config-item:hover {
+.config-item:hover,
+.config-item.active {
   border-color: var(--primary-200);
   box-shadow: var(--shadow-md);
 }
 
-.config-icon {
-  width: 44px;
-  height: 44px;
+.config-item.active {
   background: var(--primary-50);
-  border-radius: var(--radius);
+}
+
+.config-item-meta {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--primary);
-}
-
-.config-icon svg {
-  width: 22px;
-  height: 22px;
-}
-
-.config-info {
-  flex: 1;
-  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .config-name {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 4px;
 }
 
 .config-desc {
@@ -1179,64 +1229,157 @@ select.form-input {
   color: var(--text-muted);
 }
 
-.config-arrow {
-  width: 20px;
-  height: 20px;
-  color: var(--text-muted);
+.config-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--primary);
+  background: var(--primary-50);
+  border: 1px solid var(--primary-100);
+  margin-top: 8px;
+  width: fit-content;
 }
 
-/* 配置编辑器 */
-.config-editor {
+.config-main {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  min-height: 480px;
+}
+
+@media (max-width: 720px) {
+  .config-main {
+    padding: 20px;
+  }
+}
+
+.config-empty {
+  min-height: 320px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text-muted);
+  gap: 12px;
 }
 
-.config-editor-header {
+.config-main-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  margin-bottom: 24px;
 }
 
-.config-editor-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
+.config-main-header h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.config-main-header p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.config-main-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.config-editor-actions {
+.config-mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.config-mode-toggle button {
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.config-mode-toggle button.active {
+  background: var(--primary-50);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.config-panel {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.config-form {
+.config-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.config-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.config-group-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.config-group-header p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.config-group-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  padding: 4px 10px;
+  border-radius: var(--radius);
+}
+
+.config-field-grid {
   display: grid;
   gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .config-field {
-  background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   padding: 16px;
+  background: var(--bg-input);
 }
 
-.config-field-label {
+.config-field label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
-.config-field-required {
+.config-field .required {
   color: var(--danger);
 }
 
@@ -1246,48 +1389,125 @@ select.form-input {
   margin-bottom: 8px;
 }
 
-/* Switch 组件 */
-.switch {
-  position: relative;
-  width: 44px;
-  height: 24px;
+.config-field-dirty {
+  border-color: var(--primary-200);
+  box-shadow: 0 0 0 1px var(--primary-50);
 }
 
-.switch input {
+.config-path-alert {
+  border: 1px dashed var(--primary-200);
+  background: var(--primary-50);
+  color: var(--primary);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.config-path-alert code {
+  background: rgba(255,255,255,0.5);
+  padding: 2px 6px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.config-json-panel textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 13px;
+  min-height: 360px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.config-json-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.config-subcard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  background: var(--bg-input);
+  cursor: pointer;
+  transition: all var(--transition);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-subcard:hover {
+  border-color: var(--primary-200);
+  box-shadow: var(--shadow-md);
+}
+
+.config-subcard-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.config-subcard-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  min-height: 36px;
+}
+
+.config-switch {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  display: inline-flex;
+}
+
+.config-switch input {
   opacity: 0;
   width: 0;
   height: 0;
 }
 
-.switch-slider {
+.config-switch-slider {
   position: absolute;
-  cursor: pointer;
   inset: 0;
-  background: var(--bg-input);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 24px;
   transition: all var(--transition);
 }
 
-.switch-slider::before {
+.config-switch-slider::before {
   content: '';
   position: absolute;
-  height: 18px;
   width: 18px;
+  height: 18px;
   left: 2px;
   bottom: 2px;
   background: white;
   border-radius: 50%;
-  transition: all var(--transition);
   box-shadow: var(--shadow-sm);
+  transition: all var(--transition);
 }
 
-.switch input:checked + .switch-slider {
+.config-switch input:checked + .config-switch-slider {
   background: var(--primary);
   border-color: var(--primary);
 }
 
-.switch input:checked + .switch-slider::before {
+.config-switch input:checked + .config-switch-slider::before {
   transform: translateX(20px);
 }
 

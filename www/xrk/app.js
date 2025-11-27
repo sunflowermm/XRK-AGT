@@ -11,7 +11,6 @@ class App {
     this.apiConfig = null;
     this.selectedFiles = [];
     this.jsonEditor = null;
-    this.configEditor = null;
     this._charts = {};
     this._metricsHistory = { netRx: Array(30).fill(0), netTx: Array(30).fill(0) };
     this._chatHistory = this._loadChatHistory();
@@ -19,6 +18,7 @@ class App {
     this._micActive = false;
     this._ttsQueue = [];
     this._ttsPlaying = false;
+    this._configState = null;
     
     this.init();
   }
@@ -125,8 +125,15 @@ class App {
   toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('overlay');
-    sidebar.classList.toggle('open');
-    overlay.classList.toggle('show');
+    sidebar?.classList.toggle('open');
+    overlay?.classList.toggle('show');
+  }
+
+  openSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    sidebar?.classList.add('open');
+    overlay?.classList.add('show');
   }
 
   closeSidebar() {
@@ -199,15 +206,15 @@ class App {
       navMenu.style.display = 'none';
       apiListContainer.style.display = 'flex';
       this.renderAPIGroups();
-      // 在移动端自动打开侧边栏（仅在首次进入时）
-      if (window.innerWidth <= 768 && !this._apiSidebarOpened) {
-        this.toggleSidebar();
-        this._apiSidebarOpened = true;
+      if (window.innerWidth <= 768) {
+        this.openSidebar();
       }
     } else {
       navMenu.style.display = 'flex';
       apiListContainer.style.display = 'none';
-      this.closeSidebar();
+      if (window.innerWidth <= 768) {
+        this.closeSidebar();
+      }
     }
     
     // 渲染页面
@@ -945,35 +952,69 @@ class App {
   }
 
   // ========== 配置管理 ==========
-  async renderConfig() {
+  renderConfig() {
     const content = document.getElementById('content');
+    if (!content) return;
+
+    this._configState = {
+      list: [],
+      filter: '',
+      selected: null,
+      selectedChild: null,
+      schema: [],
+      values: {},
+      original: {},
+      rawObject: {},
+      dirty: {},
+      mode: 'form',
+      jsonText: '',
+      jsonDirty: false,
+      loading: false
+    };
+
     content.innerHTML = `
-      <div class="config-container">
-        <div class="dashboard-header">
-          <div>
+      <div class="config-page">
+        <aside class="config-sidebar">
+          <div class="config-sidebar-header">
             <h1 class="dashboard-title">配置管理</h1>
-            <p class="dashboard-subtitle">管理系统配置文件</p>
+            <p class="dashboard-subtitle">扁平 schema · 严格写入</p>
           </div>
-          <button class="btn btn-secondary" id="refreshConfigBtn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="23,4 23,10 17,10"/>
-              <polyline points="1,20 1,14 7,14"/>
-              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          <div class="config-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            刷新
-          </button>
-        </div>
-        <div class="config-list" id="configList">
-          <div class="empty-state">
-            <div class="loading-spinner" style="margin:0 auto"></div>
-            <p style="margin-top:16px">加载中...</p>
+            <input type="search" id="configSearchInput" placeholder="搜索配置 / 描述">
           </div>
-        </div>
+          <div class="config-list" id="configList">
+            <div class="empty-state">
+              <div class="loading-spinner" style="margin:0 auto"></div>
+              <p style="margin-top:12px">加载配置中...</p>
+            </div>
+          </div>
+        </aside>
+        <section class="config-main" id="configMain">
+          ${this.renderConfigPlaceholder()}
+        </section>
       </div>
     `;
-    
-    document.getElementById('refreshConfigBtn').addEventListener('click', () => this.loadConfigList());
+
+    document.getElementById('configSearchInput')?.addEventListener('input', (e) => {
+      if (!this._configState) return;
+      this._configState.filter = e.target.value.trim().toLowerCase();
+      this.renderConfigList();
+    });
+
     this.loadConfigList();
+  }
+
+  renderConfigPlaceholder() {
+    return `
+      <div class="config-empty">
+        <h2>选择左侧配置开始</h2>
+        <p>支持表单 + JSON 双模式，所有提交均通过 ConfigBase schema 严格校验。</p>
+      </div>
+    `;
   }
 
   async loadConfigList() {
@@ -982,130 +1023,644 @@ class App {
       const res = await fetch(`${this.serverUrl}/api/config/list`, { headers: this.getHeaders() });
       if (!res.ok) throw new Error('获取配置列表失败');
       const data = await res.json();
-      
-      if (!data.success || !data.configs?.length) {
-        list.innerHTML = '<div class="empty-state"><p>暂无配置</p></div>';
-        return;
-      }
-      
-      list.innerHTML = data.configs.map(cfg => `
-        <div class="config-item" data-name="${cfg.name}">
-          <div class="config-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <polyline points="14,2 14,8 20,8"/>
-            </svg>
-          </div>
-          <div class="config-info">
-            <div class="config-name">${cfg.displayName || cfg.name}</div>
-            <div class="config-desc">${cfg.description || cfg.filePath || ''}</div>
-          </div>
-          <svg class="config-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9,18 15,12 9,6"/>
-          </svg>
-        </div>
-      `).join('');
-      
-      list.querySelectorAll('.config-item').forEach(item => {
-        item.addEventListener('click', () => this.editConfig(item.dataset.name));
-      });
+      if (!data.success) throw new Error(data.message || '接口返回失败');
+      if (!this._configState) return;
+      this._configState.list = data.configs || [];
+      this.renderConfigList();
     } catch (e) {
-      list.innerHTML = `<div class="empty-state"><p>加载失败: ${e.message}</p></div>`;
+      if (list) list.innerHTML = `<div class="empty-state"><p>加载失败: ${e.message}</p></div>`;
     }
   }
 
-  async editConfig(name) {
-    const content = document.getElementById('content');
-    content.innerHTML = `
-      <div class="config-editor">
-        <div class="config-editor-header">
-          <div class="config-editor-title">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <polyline points="14,2 14,8 20,8"/>
-            </svg>
-            编辑: ${name}
-          </div>
-          <div class="config-editor-actions">
-            <button class="btn btn-secondary" id="backConfigBtn">返回</button>
-            <button class="btn btn-secondary" id="validateConfigBtn">验证</button>
-            <button class="btn btn-primary" id="saveConfigBtn">保存</button>
-          </div>
+  renderConfigList() {
+    if (!this._configState) return;
+    const list = document.getElementById('configList');
+    if (!list) return;
+
+    if (!this._configState.list.length) {
+      list.innerHTML = '<div class="empty-state"><p>暂无配置</p></div>';
+      return;
+    }
+
+    const keyword = this._configState.filter;
+    const filtered = this._configState.list.filter(cfg => {
+      if (!keyword) return true;
+      const text = `${cfg.name} ${cfg.displayName || ''} ${cfg.description || ''}`.toLowerCase();
+      return text.includes(keyword);
+    });
+
+    if (!filtered.length) {
+      list.innerHTML = '<div class="empty-state"><p>没有符合条件的配置</p></div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(cfg => {
+      const title = this.escapeHtml(cfg.displayName || cfg.name);
+      const desc = this.escapeHtml(cfg.description || cfg.filePath || '');
+      return `
+      <div class="config-item ${this._configState.selected?.name === cfg.name ? 'active' : ''}" data-name="${this.escapeHtml(cfg.name)}">
+        <div class="config-item-meta">
+          <div class="config-name">${title}</div>
+          <p class="config-desc">${desc}</p>
         </div>
-        <div class="json-editor-container">
-          <div class="json-editor-header">
-            <span class="json-editor-title">配置内容</span>
-          </div>
-          <div class="json-editor-wrapper">
-            <textarea id="configTextarea" placeholder="加载中..."></textarea>
-          </div>
-        </div>
+        ${cfg.name === 'system' ? '<span class="config-tag">多文件</span>' : ''}
       </div>
     `;
-    
-    document.getElementById('backConfigBtn').addEventListener('click', () => this.renderConfig());
-    document.getElementById('saveConfigBtn').addEventListener('click', () => this.saveConfig(name));
-    document.getElementById('validateConfigBtn').addEventListener('click', () => this.validateConfig(name));
-    
-    try {
-      const res = await fetch(`${this.serverUrl}/api/config/${name}/read`, { headers: this.getHeaders() });
-      if (!res.ok) throw new Error('读取配置失败');
-      const data = await res.json();
-      
-      const textarea = document.getElementById('configTextarea');
-      textarea.value = JSON.stringify(data.data || {}, null, 2);
-      textarea.dataset.configName = name;
-      
-      await this.initConfigEditor();
-    } catch (e) {
-      document.getElementById('configTextarea').value = `错误: ${e.message}`;
-    }
-  }
+    }).join('');
 
-  async initConfigEditor() {
-    await this.loadCodeMirror();
-    const textarea = document.getElementById('configTextarea');
-    if (!textarea || !window.CodeMirror) return;
-    
-    const theme = document.body.classList.contains('dark') ? 'monokai' : 'default';
-    this.configEditor = CodeMirror.fromTextArea(textarea, {
-      mode: 'application/json',
-      theme,
-      lineNumbers: true,
-      lineWrapping: true,
-      matchBrackets: true,
-      autoCloseBrackets: true
+    list.querySelectorAll('.config-item').forEach(item => {
+      item.addEventListener('click', () => this.selectConfig(item.dataset.name));
     });
   }
 
-  async saveConfig(name) {
-    const value = this.configEditor?.getValue() || document.getElementById('configTextarea')?.value;
+  selectConfig(name, child = null) {
+    if (!this._configState) return;
+    const config = this._configState.list.find(cfg => cfg.name === name);
+    if (!config) return;
+
+    this._configState.selected = config;
+    this._configState.selectedChild = child || null;
+    this._configState.schema = [];
+    this._configState.values = {};
+    this._configState.original = {};
+    this._configState.rawObject = {};
+    this._configState.dirty = {};
+    this._configState.mode = 'form';
+    this._configState.jsonText = '';
+    this._configState.jsonDirty = false;
+
+    this.renderConfigMainSkeleton();
+
+    if (config.name === 'system' && !child) {
+      this.renderSystemConfigChooser(config);
+      return;
+    }
+
+    this.loadSelectedConfigDetail();
+  }
+
+  renderConfigMainSkeleton() {
+    const main = document.getElementById('configMain');
+    if (!main) return;
+    main.innerHTML = `
+      <div class="empty-state">
+        <div class="loading-spinner" style="margin:0 auto"></div>
+        <p style="margin-top:12px">加载配置详情...</p>
+      </div>
+    `;
+  }
+
+  renderSystemConfigChooser(config) {
+    const main = document.getElementById('configMain');
+    if (!main) return;
+
+    const entries = Object.entries(config.configs || {});
+    if (!entries.length) {
+      main.innerHTML = '<div class="empty-state"><p>SystemConfig 未定义子配置</p></div>';
+      return;
+    }
+
+    main.innerHTML = `
+      <div class="config-main-header">
+        <div>
+          <h2>${this.escapeHtml(config.displayName || config.name)}</h2>
+          <p>${this.escapeHtml(config.description || '')}</p>
+        </div>
+      </div>
+      <div class="config-grid">
+        ${entries.map(([key, meta]) => `
+          <div class="config-subcard" data-child="${this.escapeHtml(key)}">
+            <div>
+              <div class="config-subcard-title">${this.escapeHtml(meta.displayName || key)}</div>
+              <p class="config-subcard-desc">${this.escapeHtml(meta.description || '')}</p>
+            </div>
+            <span class="config-tag">${this.escapeHtml(`system/${key}`)}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    main.querySelectorAll('.config-subcard').forEach(card => {
+      card.addEventListener('click', () => this.selectConfig('system', card.dataset.child));
+    });
+  }
+
+  async loadSelectedConfigDetail() {
+    if (!this._configState?.selected) return;
+    const { name } = this._configState.selected;
+    const child = this._configState.selectedChild;
+    const query = child ? `?path=${encodeURIComponent(child)}` : '';
+
     try {
-      const data = JSON.parse(value);
-      const res = await fetch(`${this.serverUrl}/api/config/${name}/write`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({ data, backup: true, validate: true })
-      });
-      const result = await res.json();
-      if (result.success) {
-        this.showToast('配置已保存', 'success');
-      } else {
-        throw new Error(result.message || '保存失败');
+      this._configState.loading = true;
+      const [structRes, flatRes] = await Promise.all([
+        fetch(`${this.serverUrl}/api/config/${name}/flat-structure${query}`, { headers: this.getHeaders() }),
+        fetch(`${this.serverUrl}/api/config/${name}/flat${query}`, { headers: this.getHeaders() })
+      ]);
+      if (!structRes.ok) throw new Error('获取结构失败');
+      if (!flatRes.ok) throw new Error('获取数据失败');
+
+      const structData = await structRes.json();
+      const flatData = await flatRes.json();
+      if (!structData.success) throw new Error(structData.message || '结构接口异常');
+      if (!flatData.success) throw new Error(flatData.message || '数据接口异常');
+
+      const schema = (structData.flat || []).filter(field => field.path && !field.path.includes('[]'));
+      const values = flatData.flat || {};
+
+      this._configState.schema = schema;
+      this._configState.values = { ...values };
+      this._configState.original = this._cloneFlat(values);
+      this._configState.rawObject = this.unflattenObject(values);
+      this._configState.jsonText = JSON.stringify(this._configState.rawObject, null, 2);
+      this._configState.dirty = {};
+      this._configState.jsonDirty = false;
+
+      this.renderConfigFormPanel();
+    } catch (e) {
+      const main = document.getElementById('configMain');
+      if (main) main.innerHTML = `<div class="empty-state"><p>加载失败：${e.message}</p></div>`;
+    } finally {
+      if (this._configState) this._configState.loading = false;
+    }
+  }
+
+  renderConfigFormPanel() {
+    if (!this._configState?.selected) return;
+    const main = document.getElementById('configMain');
+    if (!main) return;
+
+    const { selected, selectedChild, mode } = this._configState;
+    const dirtyCount = Object.keys(this._configState.dirty).length;
+    const saveDisabled = mode === 'form' ? dirtyCount === 0 : !this._configState.jsonDirty;
+
+    const title = this.escapeHtml(selected.displayName || selected.name);
+    const childLabel = selectedChild ? ` / ${this.escapeHtml(selectedChild)}` : '';
+    const descText = this.escapeHtml(selectedChild && selected.configs ? selected.configs[selectedChild]?.description || '' : selected.description || '');
+
+    main.innerHTML = `
+      <div class="config-main-header">
+        <div>
+          <h2>${title}${childLabel}</h2>
+          <p>${descText}</p>
+        </div>
+        <div class="config-main-actions">
+          <button class="btn btn-secondary" id="configReloadBtn">重载</button>
+          <div class="config-mode-toggle">
+            <button class="${mode === 'form' ? 'active' : ''}" data-mode="form">表单</button>
+            <button class="${mode === 'json' ? 'active' : ''}" data-mode="json">JSON</button>
+          </div>
+          <button class="btn btn-primary" id="configSaveBtn" ${saveDisabled ? 'disabled' : ''}>
+            ${mode === 'form' ? (dirtyCount ? `保存（${dirtyCount}）` : '保存') : '保存（JSON）'}
+          </button>
+        </div>
+      </div>
+      ${selected.name === 'system' && selectedChild ? this.renderSystemPathBadge(selectedChild) : ''}
+      <div class="config-panel" id="configFormWrapper" style="${mode === 'json' ? 'display:none' : ''}">
+        ${this.renderConfigFieldGroups()}
+      </div>
+      <div class="config-panel" id="configJsonWrapper" style="${mode === 'json' ? '' : 'display:none'}">
+        ${this.renderConfigJsonPanel()}
+      </div>
+    `;
+
+    document.getElementById('configReloadBtn')?.addEventListener('click', () => this.loadSelectedConfigDetail());
+    main.querySelectorAll('.config-mode-toggle button').forEach(btn => {
+      btn.addEventListener('click', () => this.switchConfigMode(btn.dataset.mode));
+    });
+    document.getElementById('configSaveBtn')?.addEventListener('click', () => this.saveConfigChanges());
+
+    this.bindConfigFieldEvents();
+    this.bindConfigJsonEvents();
+  }
+
+  renderSystemPathBadge(child) {
+    return `
+      <div class="config-path-alert">
+        <span>系统子配置</span>
+        <code>${this.escapeHtml(`system/${child}`)}</code>
+      </div>
+    `;
+  }
+
+  renderConfigFieldGroups() {
+    if (!this._configState?.schema?.length) {
+      return '<div class="empty-state"><p>该配置暂无扁平结构，可切换 JSON 模式编辑。</p></div>';
+    }
+
+    const groups = {};
+    this._configState.schema.forEach(field => {
+      const meta = field.meta || {};
+      const key = meta.group || (field.path.includes('.') ? field.path.split('.')[0] : '基础');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(field);
+    });
+
+    return Object.entries(groups).map(([group, fields]) => `
+      <div class="config-group">
+        <div class="config-group-header">
+          <div>
+            <h3>${this.escapeHtml(this.formatGroupLabel(group))}</h3>
+            <p>${this.escapeHtml(fields[0]?.meta?.groupDesc || '')}</p>
+          </div>
+          <span class="config-group-count">${fields.length} 项</span>
+        </div>
+        <div class="config-field-grid">
+          ${fields.map(field => this.renderConfigField(field)).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  renderConfigField(field) {
+    const meta = field.meta || {};
+    const path = field.path;
+    const value = this._configState.values[path];
+    const dirty = this._configState.dirty[path];
+    const inputId = `cfg-${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+    const label = this.escapeHtml(meta.label || path);
+    const description = meta.description ? `<p class="config-field-hint">${this.escapeHtml(meta.description)}</p>` : '';
+
+    return `
+      <div class="config-field ${dirty ? 'config-field-dirty' : ''}">
+        <label for="${inputId}">
+          ${label}
+          ${meta.required ? '<span class="required">*</span>' : ''}
+        </label>
+        ${description}
+        ${this.renderConfigControl(field, value, inputId)}
+      </div>
+    `;
+  }
+
+  renderConfigControl(field, value, inputId) {
+    const meta = field.meta || {};
+    const component = meta.component || field.component || this.mapTypeToComponent(field.type);
+    const dataset = `data-field="${this.escapeHtml(field.path)}" data-component="${component || ''}" data-type="${field.type}"`;
+    const disabled = meta.readonly ? 'disabled' : '';
+    const placeholder = this.escapeHtml(meta.placeholder || '');
+
+    const normalizeOptions = (options = []) => options.map(opt => {
+      if (typeof opt === 'object') return opt;
+      return { label: opt, value: opt };
+    });
+
+    switch ((component || '').toLowerCase()) {
+      case 'switch':
+        return `
+          <label class="config-switch">
+            <input type="checkbox" id="${inputId}" ${dataset} ${value ? 'checked' : ''} ${disabled}>
+            <span class="config-switch-slider"></span>
+          </label>
+        `;
+      case 'select': {
+        const opts = normalizeOptions(meta.enum || meta.options || []);
+        const current = value ?? '';
+        return `
+          <select class="form-input" id="${inputId}" ${dataset} ${disabled}>
+            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
+          </select>
+        `;
       }
+      case 'multiselect': {
+        const opts = normalizeOptions(meta.enum || meta.options || []);
+        const current = Array.isArray(value) ? value.map(v => String(v)) : [];
+        return `
+          <select class="form-input" id="${inputId}" multiple ${dataset} data-control="multiselect" ${disabled}>
+            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${current.includes(String(opt.value)) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
+          </select>
+          <p class="config-field-hint">按住 Ctrl/Command 多选</p>
+        `;
+      }
+      case 'tags': {
+        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value || ''));
+        return `
+          <textarea class="form-input" rows="3" id="${inputId}" ${dataset} data-control="tags" placeholder="每行一个值" ${disabled}>${text}</textarea>
+          <p class="config-field-hint">将文本拆分为数组</p>
+        `;
+      }
+      case 'textarea':
+      case 'text-area':
+        return `<textarea class="form-input" rows="3" id="${inputId}" ${dataset} placeholder="${placeholder}" ${disabled}>${this.escapeHtml(value ?? '')}</textarea>`;
+      case 'inputnumber':
+      case 'number':
+        return `<input type="number" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${meta.min ?? ''}" max="${meta.max ?? ''}" step="${meta.step ?? 'any'}" placeholder="${placeholder}" ${disabled}>`;
+      case 'inputpassword':
+        return `<input type="password" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      case 'arrayform':
+      case 'subform':
+      case 'json':
+        return `
+          <textarea class="form-input" rows="4" id="${inputId}" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled}>${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>
+          <p class="config-field-hint">以 JSON 形式编辑该字段</p>
+        `;
+      default:
+        return `<input type="text" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+    }
+  }
+
+  renderConfigJsonPanel() {
+    return `
+      <div class="config-json-panel">
+        <textarea id="configJsonTextarea" rows="20">${this.escapeHtml(this._configState?.jsonText || '')}</textarea>
+        <div class="config-json-actions">
+          <button class="btn btn-secondary" id="configJsonFormatBtn">格式化</button>
+          <p class="config-field-hint">JSON 模式会覆盖整份配置，提交前请仔细校验。</p>
+        </div>
+      </div>
+    `;
+  }
+
+  bindConfigFieldEvents() {
+    if (this._configState?.mode !== 'form') return;
+    const wrapper = document.getElementById('configFormWrapper');
+    if (!wrapper) return;
+    wrapper.querySelectorAll('[data-field]').forEach(el => {
+      const evt = el.type === 'checkbox' ? 'change' : 'input';
+      el.addEventListener(evt, () => this.handleConfigFieldChange(el));
+      if (evt !== 'change') {
+        el.addEventListener('change', () => this.handleConfigFieldChange(el));
+      }
+    });
+  }
+
+  bindConfigJsonEvents() {
+    if (this._configState?.mode !== 'json') return;
+    const textarea = document.getElementById('configJsonTextarea');
+    if (textarea) {
+      textarea.addEventListener('input', () => {
+        if (!this._configState) return;
+        this._configState.jsonDirty = true;
+        this._configState.pendingJson = textarea.value;
+        this.updateConfigSaveButton();
+      });
+    }
+    document.getElementById('configJsonFormatBtn')?.addEventListener('click', () => this.formatConfigJson());
+  }
+
+  formatConfigJson() {
+    const textarea = document.getElementById('configJsonTextarea');
+    if (!textarea) return;
+    try {
+      const parsed = JSON.parse(textarea.value || '{}');
+      const formatted = JSON.stringify(parsed, null, 2);
+      textarea.value = formatted;
+      if (this._configState) {
+        this._configState.pendingJson = formatted;
+        this._configState.jsonDirty = true;
+        this.updateConfigSaveButton();
+      }
+      this.showToast('JSON 已格式化', 'success');
+    } catch (e) {
+      this.showToast('JSON 格式错误: ' + e.message, 'error');
+    }
+  }
+
+  handleConfigFieldChange(target) {
+    if (!this._configState) return;
+    const path = target.dataset.field;
+    const component = (target.dataset.component || '').toLowerCase();
+    const type = target.dataset.type || '';
+    const meta = this._configState.schema.find(f => f.path === path)?.meta || {};
+
+    let value;
+    if (component === 'switch') {
+      value = !!target.checked;
+    } else if (target.dataset.control === 'tags') {
+      value = target.value.split(/\n+/).map(v => v.trim()).filter(Boolean);
+    } else if (target.dataset.control === 'multiselect') {
+      value = Array.from(target.selectedOptions).map(opt => this.castValue(opt.value, meta.itemType || 'string'));
+    } else if (target.dataset.control === 'json') {
+      try {
+        value = target.value ? JSON.parse(target.value) : null;
+      } catch (e) {
+        this.showToast('JSON 解析失败: ' + e.message, 'error');
+        return;
+      }
+    } else if (component === 'inputnumber' || type === 'number') {
+      value = target.value === '' ? null : Number(target.value);
+    } else {
+      value = target.value;
+    }
+
+    value = this.normalizeFieldValue(value, meta, type);
+    this.setConfigFieldValue(path, value);
+    this.updateConfigSaveButton();
+  }
+
+  setConfigFieldValue(path, value) {
+    if (!this._configState) return;
+    this._configState.values[path] = value;
+    this.updateDirtyState(path, value);
+    this._configState.rawObject = this.unflattenObject(this._configState.values);
+    this._configState.jsonText = JSON.stringify(this._configState.rawObject, null, 2);
+    this.refreshConfigFieldUI(path);
+  }
+
+  refreshConfigFieldUI(path) {
+    const fieldEl = document.querySelector(`[data-field="${this.escapeSelector(path)}"]`);
+    if (!fieldEl || !this._configState) return;
+    const wrapper = fieldEl.closest('.config-field');
+    if (!wrapper) return;
+    if (this._configState.dirty[path]) wrapper.classList.add('config-field-dirty');
+    else wrapper.classList.remove('config-field-dirty');
+  }
+
+  updateDirtyState(path, value) {
+    if (!this._configState) return;
+    const origin = this._configState.original[path];
+    if (this.isSameValue(origin, value)) delete this._configState.dirty[path];
+    else this._configState.dirty[path] = true;
+  }
+
+  updateConfigSaveButton() {
+    const btn = document.getElementById('configSaveBtn');
+    if (!btn || !this._configState) return;
+    const dirtyCount = Object.keys(this._configState.dirty).length;
+    if (this._configState.mode === 'form') {
+      btn.disabled = dirtyCount === 0;
+      btn.textContent = dirtyCount ? `保存（${dirtyCount}）` : '保存';
+    } else {
+      btn.disabled = !this._configState.jsonDirty;
+      btn.textContent = '保存（JSON）';
+    }
+  }
+
+  switchConfigMode(mode) {
+    if (!this._configState || this._configState.mode === mode) return;
+    this._configState.mode = mode;
+    if (mode === 'json') {
+      this._configState.pendingJson = this._configState.jsonText;
+      this._configState.jsonDirty = false;
+    }
+    this.renderConfigFormPanel();
+  }
+
+  async saveConfigChanges() {
+    if (!this._configState) return;
+    if (this._configState.mode === 'json') {
+      await this.saveConfigJson();
+    } else {
+      await this.saveConfigForm();
+    }
+  }
+
+  async saveConfigForm() {
+    if (!this._configState) return;
+    const dirtyKeys = Object.keys(this._configState.dirty);
+    if (!dirtyKeys.length) return;
+
+    const flat = {};
+    dirtyKeys.forEach(key => {
+      flat[key] = this._configState.values[key];
+    });
+
+    try {
+      await this.postBatchSet(flat);
+      dirtyKeys.forEach(key => {
+        this._configState.original[key] = this._cloneValue(this._configState.values[key]);
+      });
+      this._configState.dirty = {};
+      this.showToast('配置已保存', 'success');
+      this.loadSelectedConfigDetail();
     } catch (e) {
       this.showToast('保存失败: ' + e.message, 'error');
     }
   }
 
-  async validateConfig(name) {
-    const value = this.configEditor?.getValue() || document.getElementById('configTextarea')?.value;
+  async saveConfigJson() {
+    if (!this._configState) return;
+    const textarea = document.getElementById('configJsonTextarea');
+    if (!textarea) return;
     try {
-      JSON.parse(value);
-      this.showToast('JSON 格式正确', 'success');
+      const parsed = JSON.parse(textarea.value || '{}');
+      const flat = this.flattenObject(parsed);
+      await this.postBatchSet(flat);
+      this.showToast('配置已保存', 'success');
+      this._configState.mode = 'form';
+      this.loadSelectedConfigDetail();
     } catch (e) {
-      this.showToast('JSON 格式错误: ' + e.message, 'error');
+      this.showToast('保存失败: ' + e.message, 'error');
     }
+  }
+
+  async postBatchSet(flat) {
+    if (!this._configState?.selected) throw new Error('未选择配置');
+    if (!Object.keys(flat || {}).length) throw new Error('未检测到改动');
+    const { name } = this._configState.selected;
+    const body = { flat, backup: true, validate: true };
+    if (this._configState.selectedChild) body.path = this._configState.selectedChild;
+    const res = await fetch(`${this.serverUrl}/api/config/${name}/batch-set`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body)
+    });
+    const result = await res.json();
+    if (!res.ok || !result.success) {
+      throw new Error(result.message || '批量写入失败');
+    }
+  }
+
+  mapTypeToComponent(type) {
+    switch ((type || '').toLowerCase()) {
+      case 'boolean': return 'Switch';
+      case 'number': return 'InputNumber';
+      default: return 'Input';
+    }
+  }
+
+  formatGroupLabel(label) {
+    if (!label || label === '基础') return '基础设置';
+    return label.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+  }
+
+  normalizeFieldValue(value, meta, typeHint) {
+    const type = (meta.type || typeHint || '').toLowerCase();
+    if (type === 'number') return value === null || value === '' ? null : Number(value);
+    if (type === 'boolean') return !!value;
+    if (type === 'array' && Array.isArray(value)) return value;
+    if (type === 'array' && typeof value === 'string') return value ? value.split(',').map(v => v.trim()).filter(Boolean) : [];
+    return value;
+  }
+
+  castValue(value, type) {
+    switch ((type || '').toLowerCase()) {
+      case 'number': return Number(value);
+      case 'boolean': return value === 'true' || value === true;
+      default: return value;
+    }
+  }
+
+  flattenObject(obj, prefix = '', out = {}) {
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      Object.entries(obj).forEach(([key, val]) => {
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+          this.flattenObject(val, path, out);
+        } else {
+          out[path] = val;
+        }
+      });
+      return out;
+    }
+    if (prefix) out[prefix] = obj;
+    return out;
+  }
+
+  unflattenObject(flat = {}) {
+    const result = {};
+    Object.entries(flat).forEach(([path, value]) => {
+      const keys = path.split('.');
+      let cursor = result;
+      keys.forEach((key, idx) => {
+        if (idx === keys.length - 1) {
+          cursor[key] = this._cloneValue(value);
+        } else {
+          if (!cursor[key] || typeof cursor[key] !== 'object') cursor[key] = {};
+          cursor = cursor[key];
+        }
+      });
+    });
+    return result;
+  }
+
+  isSameValue(a, b) {
+    if (typeof a === 'object' || typeof b === 'object') {
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
+    return a === b;
+  }
+
+  _cloneFlat(data) {
+    const clone = {};
+    Object.entries(data || {}).forEach(([k, v]) => {
+      clone[k] = this._cloneValue(v);
+    });
+    return clone;
+  }
+
+  _cloneValue(value) {
+    if (Array.isArray(value) || (value && typeof value === 'object')) {
+      return JSON.parse(JSON.stringify(value));
+    }
+    return value;
+  }
+
+  escapeSelector(value = '') {
+    if (window.CSS && typeof window.CSS.escape === 'function') {
+      return window.CSS.escape(value);
+    }
+    return value.replace(/"/g, '\\"');
+  }
+
+  escapeHtml(value = '') {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // ========== API 调试 ==========
