@@ -393,9 +393,7 @@ class App {
                 <div>
                   <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px">${bot.nickname || bot.uin}</div>
                   <div style="font-size:12px;color:var(--text-muted)">
-                    ${bot.adapter || '未知适配器'} · 
-                    ${bot.stats?.friends || 0} 好友 · 
-                    ${bot.stats?.groups || 0} 群组
+                    ${bot.adapter || '未知适配器'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
                   </div>
                 </div>
                 <div style="width:8px;height:8px;border-radius:50%;background:${bot.online ? 'var(--success)' : 'var(--text-muted)'}"></div>
@@ -414,38 +412,50 @@ class App {
   
   async loadPluginsInfo() {
     try {
-      const res = await fetch(`${this.serverUrl}/api/plugins`, { headers: this.getHeaders() });
-      if (!res.ok) return;
-      const data = await res.json();
+      // 获取插件统计信息
+      const statsRes = await fetch(`${this.serverUrl}/api/plugins/stats`, { headers: this.getHeaders() });
+      const pluginsRes = await fetch(`${this.serverUrl}/api/plugins`, { headers: this.getHeaders() });
+      
       const pluginsInfo = document.getElementById('pluginsInfo');
       if (!pluginsInfo) return;
       
-      if (data.success && data.plugins && Array.isArray(data.plugins) && data.plugins.length > 0) {
-        const totalPlugins = data.plugins.length;
-        const pluginsWithRules = data.plugins.filter(p => p.rule > 0).length;
-        const pluginsWithTasks = data.plugins.filter(p => p.task > 0).length;
+      if (!statsRes.ok || !pluginsRes.ok) {
+        pluginsInfo.innerHTML = '<div style="color:var(--text-muted)">加载中...</div>';
+        return;
+      }
+      
+      const statsData = await statsRes.json();
+      const pluginsData = await pluginsRes.json();
+      
+      if (statsData.success && pluginsData.success) {
+        const stats = statsData.stats || {};
+        const plugins = pluginsData.plugins || [];
+        const totalPlugins = stats.totalPlugins || plugins.length;
+        const pluginsWithRules = plugins.filter(p => p.rule > 0).length;
+        const pluginsWithTasks = stats.taskCount || 0;
+        const loadTime = stats.totalLoadTime || 0;
+        const formatLoadTime = (ms) => {
+          if (ms < 1000) return `${ms}ms`;
+          return `${(ms / 1000).toFixed(2)}s`;
+        };
         
         pluginsInfo.innerHTML = `
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:center">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
             <div>
-              <div style="font-size:24px;font-weight:700;color:var(--primary);margin-bottom:4px">${totalPlugins}</div>
-              <div style="font-size:12px;color:var(--text-muted)">总插件数</div>
+              <div style="font-size:20px;font-weight:700;color:var(--primary);margin-bottom:4px">${totalPlugins}</div>
+              <div style="font-size:11px;color:var(--text-muted)">总插件数</div>
             </div>
             <div>
-              <div style="font-size:24px;font-weight:700;color:var(--success);margin-bottom:4px">${pluginsWithRules}</div>
-              <div style="font-size:12px;color:var(--text-muted)">有规则</div>
+              <div style="font-size:20px;font-weight:700;color:var(--success);margin-bottom:4px">${pluginsWithRules}</div>
+              <div style="font-size:11px;color:var(--text-muted)">有规则</div>
             </div>
             <div>
-              <div style="font-size:24px;font-weight:700;color:var(--warning);margin-bottom:4px">${pluginsWithTasks}</div>
-              <div style="font-size:12px;color:var(--text-muted)">定时任务</div>
+              <div style="font-size:20px;font-weight:700;color:var(--warning);margin-bottom:4px">${pluginsWithTasks}</div>
+              <div style="font-size:11px;color:var(--text-muted)">定时任务</div>
             </div>
-          </div>
-          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">最近加载的插件：</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px">
-              ${data.plugins.slice(0, 6).map(p => `
-                <span style="padding:4px 8px;background:var(--bg-input);border-radius:4px;font-size:11px;color:var(--text-secondary)">${p.name || p.key}</span>
-              `).join('')}
+            <div>
+              <div style="font-size:20px;font-weight:700;color:var(--info);margin-bottom:4px">${formatLoadTime(loadTime)}</div>
+              <div style="font-size:11px;color:var(--text-muted)">加载时间</div>
             </div>
           </div>
         `;
@@ -496,13 +506,16 @@ class App {
     
     document.getElementById('uptimeValue').textContent = formatUptime(system?.uptime);
     
-    // 更新网络历史
+    // 更新网络历史（只添加非零值或有效数据）
     const rxSec = Number(system?.netRates?.rxSec || 0) / 1024;
     const txSec = Number(system?.netRates?.txSec || 0) / 1024;
-    this._metricsHistory.netRx.push(rxSec);
-    this._metricsHistory.netTx.push(txSec);
-    if (this._metricsHistory.netRx.length > 30) this._metricsHistory.netRx.shift();
-    if (this._metricsHistory.netTx.length > 30) this._metricsHistory.netTx.shift();
+    // 过滤掉0.0或无效值
+    if (rxSec > 0 || txSec > 0 || this._metricsHistory.netRx.length === 0) {
+      this._metricsHistory.netRx.push(rxSec);
+      this._metricsHistory.netTx.push(txSec);
+      if (this._metricsHistory.netRx.length > 30) this._metricsHistory.netRx.shift();
+      if (this._metricsHistory.netTx.length > 30) this._metricsHistory.netTx.shift();
+    }
     
     // 更新进程表
     const procTable = document.getElementById('processTable');
@@ -665,8 +678,26 @@ class App {
           data: {
             labels,
             datasets: [
-              { label: '下行', data: this._metricsHistory.netRx, borderColor: primary, backgroundColor: `${primary}20`, fill: true, tension: 0.4, pointRadius: 0 },
-              { label: '上行', data: this._metricsHistory.netTx, borderColor: warning, backgroundColor: `${warning}20`, fill: true, tension: 0.4, pointRadius: 0 }
+              { 
+                label: '下行', 
+                data: this._metricsHistory.netRx, 
+                borderColor: primary, 
+                backgroundColor: `${primary}20`, 
+                fill: true, 
+                tension: 0.4, 
+                pointRadius: 0,
+                spanGaps: true
+              },
+              { 
+                label: '上行', 
+                data: this._metricsHistory.netTx, 
+                borderColor: warning, 
+                backgroundColor: `${warning}20`, 
+                fill: true, 
+                tension: 0.4, 
+                pointRadius: 0,
+                spanGaps: true
+              }
             ]
           },
           options: {
@@ -676,7 +707,18 @@ class App {
             plugins: { legend: { position: 'bottom', labels: { color: textMuted, padding: 16 } } },
             scales: {
               x: { display: false },
-              y: { beginAtZero: true, grid: { color: border }, ticks: { color: textMuted } }
+              y: { 
+                beginAtZero: true, 
+                grid: { color: border }, 
+                ticks: { 
+                  color: textMuted,
+                  callback: function(value) {
+                    // 不显示0.0
+                    if (value === 0) return '';
+                    return value.toFixed(1);
+                  }
+                }
+              }
             }
           }
         });

@@ -741,13 +741,21 @@ class DeviceManager {
      * @returns {Object} Bot实例
      */
     createDeviceBot(deviceId, deviceInfo, ws) {
+        // 确保设备名称，Web客户端使用友好名称
+        const deviceName = deviceInfo.device_type === 'web' 
+          ? 'Web客户端' 
+          : (deviceInfo.device_name || `${deviceInfo.device_type}_${deviceId}`);
+        
         Bot[deviceId] = {
             adapter: this,
             ws,
             uin: deviceId,
-            nickname: deviceInfo.device_name,
+            nickname: deviceName,
             avatar: null,
-            info: deviceInfo,
+            info: {
+                ...deviceInfo,
+                device_name: deviceName
+            },
             device_type: deviceInfo.device_type,
             capabilities: deviceInfo.capabilities || [],
             metadata: deviceInfo.metadata || {},

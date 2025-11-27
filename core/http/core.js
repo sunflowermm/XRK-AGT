@@ -203,24 +203,51 @@ export default {
           }
 
           // 获取进程信息
-          const bots = Object.entries(Bot.bots)
+          // 合并Bot.bots和直接挂载在Bot上的设备（如Web客户端）
+          const allBots = { ...Bot.bots };
+          // 查找直接挂载在Bot上的设备（device类型）
+          for (const key in Bot) {
+            if (Bot[key] && typeof Bot[key] === 'object' && Bot[key].device_type) {
+              allBots[key] = Bot[key];
+            }
+          }
+          
+          const bots = Object.entries(allBots)
             .filter(([uin, bot]) => {
               if (typeof bot !== 'object' || !bot) return false;
               const excludeKeys = ['port', 'apiKey', 'stdin', 'logger', '_eventsCount', 'url'];
               if (excludeKeys.includes(uin)) return false;
-              return bot.adapter || bot.nickname || bot.fl || bot.gl;
+              // 设备类型或普通机器人
+              return bot.device_type || bot.adapter || bot.nickname || bot.fl || bot.gl;
             })
-            .map(([uin, bot]) => ({
-              uin,
-              online: bot.stat?.online || false,
-              nickname: bot.nickname || uin,
-              adapter: bot.adapter?.name || 'unknown',
-              device: bot.device || false,
-              stats: {
-                friends: bot.fl?.size || 0,
-                groups: bot.gl?.size || 0
+            .map(([uin, bot]) => {
+              // 如果是设备类型（如Web客户端）
+              if (bot.device_type) {
+                return {
+                  uin,
+                  online: bot.online !== false, // 设备默认在线
+                  nickname: bot.nickname || bot.info?.device_name || 'Web客户端',
+                  adapter: bot.device_type === 'web' ? 'Web客户端' : (bot.device_type || '设备'),
+                  device: true,
+                  stats: {
+                    friends: 0,
+                    groups: 0
+                  }
+                };
               }
-            }));
+              // 普通机器人
+              return {
+                uin,
+                online: bot.stat?.online || false,
+                nickname: bot.nickname || uin,
+                adapter: bot.adapter?.name || 'unknown',
+                device: false,
+                stats: {
+                  friends: bot.fl?.size || 0,
+                  groups: bot.gl?.size || 0
+                }
+              };
+            });
 
           const includeHist = (req.query?.hist === '24h') || (req.query?.withHistory === '1') || (req.query?.withHistory === 'true');
           res.json({
@@ -286,24 +313,51 @@ export default {
       method: 'GET',
       path: '/api/status',
       handler: async (req, res, Bot) => {
-        const bots = Object.entries(Bot.bots)
+        // 合并Bot.bots和直接挂载在Bot上的设备（如Web客户端）
+        const allBots = { ...Bot.bots };
+        // 查找直接挂载在Bot上的设备（device类型）
+        for (const key in Bot) {
+          if (Bot[key] && typeof Bot[key] === 'object' && Bot[key].device_type) {
+            allBots[key] = Bot[key];
+          }
+        }
+        
+        const bots = Object.entries(allBots)
           .filter(([uin, bot]) => {
             if (typeof bot !== 'object' || !bot) return false;
             const excludeKeys = ['port', 'apiKey', 'stdin', 'logger', '_eventsCount', 'url'];
             if (excludeKeys.includes(uin)) return false;
-            return bot.adapter || bot.nickname || bot.fl || bot.gl;
+            // 设备类型或普通机器人
+            return bot.device_type || bot.adapter || bot.nickname || bot.fl || bot.gl;
           })
-          .map(([uin, bot]) => ({
-            uin,
-            online: bot.stat?.online || false,
-            nickname: bot.nickname || uin,
-            adapter: bot.adapter?.name || 'unknown',
-            device: bot.device || false,
-            stats: {
-              friends: bot.fl?.size || 0,
-              groups: bot.gl?.size || 0
+          .map(([uin, bot]) => {
+            // 如果是设备类型（如Web客户端）
+            if (bot.device_type) {
+              return {
+                uin,
+                online: bot.online !== false, // 设备默认在线
+                nickname: bot.nickname || bot.info?.device_name || 'Web客户端',
+                adapter: bot.device_type === 'web' ? 'Web客户端' : (bot.device_type || '设备'),
+                device: true,
+                stats: {
+                  friends: 0,
+                  groups: 0
+                }
+              };
             }
-          }));
+            // 普通机器人
+            return {
+              uin,
+              online: bot.stat?.online || false,
+              nickname: bot.nickname || uin,
+              adapter: bot.adapter?.name || 'unknown',
+              device: false,
+              stats: {
+                friends: bot.fl?.size || 0,
+                groups: bot.gl?.size || 0
+              }
+            };
+          });
 
         res.json({
           success: true,

@@ -90,6 +90,33 @@ export default {
 
         res.json({ success: true, tasks });
       }
+    },
+
+    {
+      method: 'GET',
+      path: '/api/plugins/stats',
+      handler: async (req, res, Bot) => {
+        if (!Bot.checkApiAuthorization(req)) {
+          return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        const stats = PluginsLoader.pluginLoadStats || {};
+        const priorityPlugins = PluginsLoader.priority || [];
+        const extendedPlugins = PluginsLoader.extended || [];
+        const allPlugins = [...priorityPlugins, ...extendedPlugins];
+        
+        res.json({
+          success: true,
+          stats: {
+            totalPlugins: allPlugins.length,
+            totalLoadTime: stats.totalLoadTime || 0,
+            startTime: stats.startTime || 0,
+            taskCount: PluginsLoader.task?.length || 0,
+            extendedCount: extendedPlugins.length,
+            plugins: stats.plugins || []
+          }
+        });
+      }
     }
   ]
 };
