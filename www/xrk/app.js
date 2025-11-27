@@ -1,5 +1,5 @@
 /**
- * XRK-AGT 葵子控制中心
+ * XRK-AGT控制台
  * 重构版 - 企业级简洁设计
  */
 
@@ -58,7 +58,6 @@ class App {
     document.getElementById('menuBtn')?.addEventListener('click', () => this.toggleSidebar());
     document.getElementById('sidebarClose')?.addEventListener('click', () => this.closeSidebar());
     document.getElementById('overlay')?.addEventListener('click', () => this.closeSidebar());
-    document.getElementById('fab')?.addEventListener('click', () => this.toggleSidebar());
     
     // API列表返回按钮
     document.getElementById('apiListBackBtn')?.addEventListener('click', () => {
@@ -99,105 +98,15 @@ class App {
       }
     });
     
-    // 悬浮球拖拽功能
-    this.initFabDrag();
+    // API Key 切换按钮
+    document.getElementById('apiKeyToggleBtn')?.addEventListener('click', () => this.toggleApiKeyBox());
   }
   
-  initFabDrag() {
-    const fab = document.getElementById('fab');
-    if (!fab) return;
-    
-    let isDragging = false;
-    let startX = 0;
-    let startY = 0;
-    let initialX = 0;
-    let initialY = 0;
-    
-    // 从localStorage恢复位置
-    const savedPos = localStorage.getItem('fabPosition');
-    if (savedPos) {
-      try {
-        const pos = JSON.parse(savedPos);
-        fab.style.left = pos.left;
-        fab.style.right = 'auto';
-        fab.style.bottom = pos.bottom;
-        fab.style.top = 'auto';
-      } catch (e) {}
+  toggleApiKeyBox() {
+    const apiKeyBox = document.getElementById('apiKeyBox');
+    if (apiKeyBox) {
+      apiKeyBox.classList.toggle('show');
     }
-    
-    // 监听窗口大小变化，确保悬浮球在视口内
-    window.addEventListener('resize', () => {
-      const rect = fab.getBoundingClientRect();
-      const maxX = window.innerWidth - fab.offsetWidth;
-      const maxY = window.innerHeight - fab.offsetHeight;
-      
-      if (rect.left < 0) fab.style.left = '0px';
-      if (rect.left > maxX) fab.style.left = `${maxX}px`;
-      if (rect.top < 0) fab.style.top = '0px';
-      if (rect.top > maxY) fab.style.top = `${maxY}px`;
-    });
-    
-    const startDrag = (e) => {
-      isDragging = true;
-      const touch = e.touches ? e.touches[0] : e;
-      startX = touch.clientX;
-      startY = touch.clientY;
-      
-      const rect = fab.getBoundingClientRect();
-      initialX = rect.left;
-      initialY = rect.top;
-      
-      fab.style.transition = 'none';
-      e.preventDefault();
-    };
-    
-    const drag = (e) => {
-      if (!isDragging) return;
-      
-      const touch = e.touches ? e.touches[0] : e;
-      const deltaX = touch.clientX - startX;
-      const deltaY = touch.clientY - startY;
-      
-      let newX = initialX + deltaX;
-      let newY = initialY + deltaY;
-      
-      // 限制在视口内
-      const maxX = window.innerWidth - fab.offsetWidth;
-      const maxY = window.innerHeight - fab.offsetHeight;
-      
-      newX = Math.max(0, Math.min(newX, maxX));
-      newY = Math.max(0, Math.min(newY, maxY));
-      
-      fab.style.left = `${newX}px`;
-      fab.style.right = 'auto';
-      fab.style.top = `${newY}px`;
-      fab.style.bottom = 'auto';
-      
-      e.preventDefault();
-    };
-    
-    const endDrag = () => {
-      if (!isDragging) return;
-      isDragging = false;
-      fab.style.transition = '';
-      
-      // 保存位置
-      const rect = fab.getBoundingClientRect();
-      localStorage.setItem('fabPosition', JSON.stringify({
-        left: `${rect.left}px`,
-        bottom: `${window.innerHeight - rect.bottom}px`
-      }));
-    };
-    
-    // 鼠标事件
-    fab.addEventListener('mousedown', startDrag);
-    document.addEventListener('mousemove', drag);
-    document.addEventListener('mouseup', endDrag);
-    
-    // 触摸事件
-    fab.addEventListener('touchstart', startDrag, { passive: false });
-    document.addEventListener('touchmove', drag, { passive: false });
-    document.addEventListener('touchend', endDrag);
   }
 
   loadSettings() {
@@ -279,7 +188,10 @@ class App {
     
     // 更新标题
     const titles = { home: '系统概览', chat: 'AI 对话', config: '配置管理', api: 'API 调试' };
-    document.getElementById('headerTitle').textContent = titles[page] || page;
+    const headerTitle = document.getElementById('headerTitle');
+    if (headerTitle) {
+      headerTitle.textContent = titles[page] || page;
+    }
     
     // 侧边栏内容切换：API调试页面显示API列表，其他页面显示导航
     const navMenu = document.getElementById('navMenu');
@@ -588,7 +500,7 @@ class App {
         <div class="chat-header">
           <div class="chat-header-title">
             <span class="emotion-display" id="emotionIcon">😊</span>
-            <span>葵宝聊天</span>
+            <span>AI 对话</span>
           </div>
           <div class="chat-header-actions">
             <button class="btn btn-sm btn-secondary" id="clearChatBtn">清空</button>
@@ -622,34 +534,10 @@ class App {
     document.getElementById('micBtn').addEventListener('click', () => this.toggleMic());
     document.getElementById('clearChatBtn').addEventListener('click', () => this.clearChat());
     
-    // 在聊天页面，调整悬浮球位置避免遮挡
-    this.adjustFabForChat();
-    
     this.restoreChatHistory();
     this.ensureDeviceWs();
   }
   
-  adjustFabForChat() {
-    const fab = document.getElementById('fab');
-    if (!fab || window.innerWidth > 768) return;
-    
-    // 检查悬浮球是否可能遮挡聊天输入区域
-    const chatInputArea = document.querySelector('.chat-input-area');
-    if (chatInputArea) {
-      const fabRect = fab.getBoundingClientRect();
-      const inputRect = chatInputArea.getBoundingClientRect();
-      
-      // 如果悬浮球在输入区域上方，调整位置
-      if (fabRect.bottom > inputRect.top - 10) {
-        const savedPos = localStorage.getItem('fabPosition');
-        if (!savedPos) {
-          // 只在没有保存位置时自动调整
-          fab.style.bottom = `${window.innerHeight - inputRect.top + 20}px`;
-          fab.style.right = '20px';
-        }
-      }
-    }
-  }
 
   _loadChatHistory() {
     try {
@@ -938,6 +826,8 @@ class App {
   // ========== API 调试 ==========
   renderAPI() {
     const content = document.getElementById('content');
+    if (!content) return;
+    
     content.innerHTML = `
       <div class="api-container">
         <div class="api-header-section" id="apiWelcome">

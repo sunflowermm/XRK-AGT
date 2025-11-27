@@ -1,5 +1,5 @@
 /* ========================================
-   XRK-AGT 葵子控制中心 - 企业级简洁设计
+   XRK-AGT控制台 - 企业级简洁设计
    ======================================== */
 
 /* CSS Variables */
@@ -346,6 +346,7 @@ body.dark .theme-btn .icon-moon { display: block; }
   padding: 6px 8px 6px 16px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
+  transition: all var(--transition);
 }
 
 .api-key-box input {
@@ -501,38 +502,28 @@ body.dark .theme-btn .icon-moon { display: block; }
   visibility: visible;
 }
 
-/* 悬浮按钮 */
-.fab {
+/* API Key 切换按钮 */
+.api-key-toggle-btn {
   display: none;
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 56px;
-  height: 56px;
-  background: var(--primary);
-  border: none;
-  border-radius: 50%;
-  color: white;
-  box-shadow: var(--shadow-lg);
-  cursor: move;
-  z-index: 80;
-  transition: transform var(--transition), box-shadow var(--transition);
-  touch-action: none;
-  user-select: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition);
 }
 
-.fab:active {
-  transform: scale(0.95);
+.api-key-toggle-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
-.fab:hover {
-  box-shadow: var(--shadow-xl);
-}
-
-.fab svg {
-  width: 24px;
-  height: 24px;
-  pointer-events: none;
+.api-key-toggle-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* ======== 通用组件 ======== */
@@ -1618,7 +1609,39 @@ body.dark .json-boolean { color: #f87171; }
   }
   
   .api-key-box {
-    display: none;
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    right: 0;
+    padding: 12px 16px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-md);
+    z-index: 60;
+    transform: translateY(-100%);
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition-slow);
+  }
+  
+  .api-key-box.show {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+  
+  .api-key-box input {
+    width: 100%;
+    flex: 1;
+  }
+  
+  .api-key-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   
   .content {
@@ -1648,26 +1671,14 @@ body.dark .json-boolean { color: #f87171; }
     max-width: 90%;
   }
   
-  /* 调整聊天输入区域，避免被悬浮球遮挡 */
-  .chat-input-area {
-    padding-bottom: 20px;
-    margin-bottom: 80px;
-  }
-  
   .toast-container {
     left: 16px;
     right: 16px;
-    bottom: 80px;
+    bottom: 24px;
   }
   
   .toast {
     width: 100%;
-  }
-  
-  /* 悬浮球在移动端默认位置调整，避免遮挡聊天按钮 */
-  .fab {
-    bottom: 100px;
-    right: 20px;
   }
 }
 

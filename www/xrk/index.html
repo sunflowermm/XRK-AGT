@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XRK-AGT 葵子控制中心</title>
+    <title>XRK-AGT控制台</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -20,7 +20,7 @@
                         <path d="M12 6v6l4 2"/>
                     </svg>
                 </div>
-                <span class="brand-name">葵子控制台</span>
+                <span class="brand-name">XRK-AGT控制台</span>
                 <button class="sidebar-close" id="sidebarClose">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 6L6 18M6 6l12 12"/>
@@ -109,10 +109,16 @@
                 </button>
                 <div class="header-title" id="headerTitle">系统概览</div>
                 <div class="header-actions">
-                    <div class="api-key-box">
+                    <div class="api-key-box" id="apiKeyBox">
                         <input type="password" id="apiKey" placeholder="API Key" autocomplete="off">
                         <button class="btn btn-sm" id="saveApiKeyBtn">保存</button>
                     </div>
+                    <button class="api-key-toggle-btn" id="apiKeyToggleBtn" title="显示/隐藏API Key输入">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
                 </div>
             </header>
 
@@ -126,14 +132,6 @@
     <!-- 遮罩层 -->
     <div class="overlay" id="overlay"></div>
 
-    <!-- 移动端悬浮按钮 -->
-    <button class="fab" id="fab">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-        </svg>
-    </button>
 
     <!-- Toast 容器 -->
     <div class="toast-container" id="toastContainer"></div>
