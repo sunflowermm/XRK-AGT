@@ -60,6 +60,19 @@ class App {
     document.getElementById('overlay')?.addEventListener('click', () => this.closeSidebar());
     document.getElementById('fab')?.addEventListener('click', () => this.toggleSidebar());
     
+    // API列表返回按钮
+    document.getElementById('apiListBackBtn')?.addEventListener('click', () => {
+      // 返回到导航菜单
+      const navMenu = document.getElementById('navMenu');
+      const apiListContainer = document.getElementById('apiListContainer');
+      navMenu.style.display = 'flex';
+      apiListContainer.style.display = 'none';
+      // 在移动端关闭侧边栏
+      if (window.innerWidth <= 768) {
+        this.closeSidebar();
+      }
+    });
+    
     // 主题切换
     document.getElementById('themeToggle')?.addEventListener('click', () => this.toggleTheme());
     
@@ -258,7 +271,6 @@ class App {
 
   navigateTo(page) {
     this.currentPage = page;
-    this.closeSidebar();
     
     // 更新导航状态
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -269,16 +281,22 @@ class App {
     const titles = { home: '系统概览', chat: 'AI 对话', config: '配置管理', api: 'API 调试' };
     document.getElementById('headerTitle').textContent = titles[page] || page;
     
-    // API 面板
-    const apiPanel = document.getElementById('apiPanel');
-    const main = document.querySelector('.main');
+    // 侧边栏内容切换：API调试页面显示API列表，其他页面显示导航
+    const navMenu = document.getElementById('navMenu');
+    const apiListContainer = document.getElementById('apiListContainer');
+    
     if (page === 'api') {
-      apiPanel.classList.add('show');
-      main.classList.add('with-api-panel');
+      navMenu.style.display = 'none';
+      apiListContainer.style.display = 'flex';
       this.renderAPIGroups();
+      // 在移动端自动打开侧边栏
+      if (window.innerWidth <= 768) {
+        this.toggleSidebar();
+      }
     } else {
-      apiPanel.classList.remove('show');
-      main.classList.remove('with-api-panel');
+      navMenu.style.display = 'flex';
+      apiListContainer.style.display = 'none';
+      this.closeSidebar();
     }
     
     // 渲染页面
@@ -924,7 +942,7 @@ class App {
       <div class="api-container">
         <div class="api-header-section" id="apiWelcome">
           <h1 class="api-header-title">API 调试中心</h1>
-          <p class="api-header-subtitle">在右侧面板选择 API 开始测试</p>
+          <p class="api-header-subtitle">在左侧侧边栏选择 API 开始测试</p>
         </div>
         <div id="apiTestSection" style="display:none"></div>
       </div>
@@ -958,12 +976,27 @@ class App {
 
   selectAPI(apiId) {
     const api = this.findAPIById(apiId);
-    if (!api) return;
+    if (!api) {
+      this.showToast('API 不存在', 'error');
+      return;
+    }
     
     this.currentAPI = { method: api.method, path: api.path, apiId };
     
-    document.getElementById('apiWelcome').style.display = 'none';
+    // 在移动端，选择API后关闭侧边栏
+    if (window.innerWidth <= 768) {
+      this.closeSidebar();
+    }
+    
+    const welcome = document.getElementById('apiWelcome');
     const section = document.getElementById('apiTestSection');
+    
+    if (!welcome || !section) {
+      console.error('API页面元素不存在');
+      return;
+    }
+    
+    welcome.style.display = 'none';
     section.style.display = 'block';
     
     const pathParams = (api.path.match(/:(\w+)/g) || []).map(p => p.slice(1));
@@ -1009,7 +1042,7 @@ class App {
         <div class="api-endpoint-box">
           <span>${api.path}</span>
         </div>
-        <p style="margin-top:12px;color:var(--text-secondary)">${api.description}</p>
+        <p style="margin-top:12px;color:var(--text-secondary)">${api.description || ''}</p>
       </div>
       
       <div class="api-form-grid">
@@ -1017,8 +1050,8 @@ class App {
           ${paramsHTML}
           ${apiId === 'file-upload' ? this.renderFileUpload() : ''}
           <div style="display:flex;gap:12px;margin-top:20px">
-            <button class="btn btn-primary" id="executeBtn">执行请求</button>
-            <button class="btn btn-secondary" id="fillExampleBtn">填充示例</button>
+            <button class="btn btn-primary" id="executeBtn" type="button">执行请求</button>
+            <button class="btn btn-secondary" id="fillExampleBtn" type="button">填充示例</button>
           </div>
         </div>
         <div>
@@ -1026,8 +1059,8 @@ class App {
             <div class="json-editor-header">
               <span class="json-editor-title">请求预览</span>
               <div class="json-editor-actions">
-                <button class="btn btn-sm btn-secondary" id="formatJsonBtn">格式化</button>
-                <button class="btn btn-sm btn-secondary" id="copyJsonBtn">复制</button>
+                <button class="btn btn-sm btn-secondary" id="formatJsonBtn" type="button">格式化</button>
+                <button class="btn btn-sm btn-secondary" id="copyJsonBtn" type="button">复制</button>
               </div>
             </div>
             <div class="json-editor-wrapper">
@@ -1040,21 +1073,45 @@ class App {
       <div id="responseSection"></div>
     `;
     
-    // 绑定事件
-    document.getElementById('executeBtn').addEventListener('click', () => this.executeRequest());
-    document.getElementById('fillExampleBtn').addEventListener('click', () => this.fillExample());
-    document.getElementById('formatJsonBtn')?.addEventListener('click', () => this.formatJSON());
-    document.getElementById('copyJsonBtn')?.addEventListener('click', () => this.copyJSON());
-    
-    if (apiId === 'file-upload') this.setupFileUpload();
-    
-    // 监听输入变化
-    section.querySelectorAll('input, textarea, select').forEach(el => {
-      el.addEventListener('input', () => this.updateJSONPreview());
-    });
-    
-    this.initJSONEditor();
-    this.updateJSONPreview();
+    // 等待DOM更新后绑定事件
+    setTimeout(() => {
+      const executeBtn = document.getElementById('executeBtn');
+      const fillExampleBtn = document.getElementById('fillExampleBtn');
+      const formatJsonBtn = document.getElementById('formatJsonBtn');
+      const copyJsonBtn = document.getElementById('copyJsonBtn');
+      
+      if (executeBtn) {
+        executeBtn.addEventListener('click', () => this.executeRequest());
+      }
+      
+      if (fillExampleBtn) {
+        fillExampleBtn.addEventListener('click', () => this.fillExample());
+      }
+      
+      if (formatJsonBtn) {
+        formatJsonBtn.addEventListener('click', () => this.formatJSON());
+      }
+      
+      if (copyJsonBtn) {
+        copyJsonBtn.addEventListener('click', () => this.copyJSON());
+      }
+      
+      // 文件上传设置
+      if (apiId === 'file-upload') {
+        this.setupFileUpload();
+      }
+      
+      // 监听输入变化
+      section.querySelectorAll('input, textarea, select').forEach(el => {
+        el.addEventListener('input', () => this.updateJSONPreview());
+        el.addEventListener('change', () => this.updateJSONPreview());
+      });
+      
+      // 初始化JSON编辑器
+      this.initJSONEditor().then(() => {
+        this.updateJSONPreview();
+      });
+    }, 0);
   }
 
   renderParamInput(param) {
@@ -1247,19 +1304,49 @@ class App {
 
   formatJSON() {
     try {
-      const val = this.jsonEditor?.getValue() || document.getElementById('jsonEditor')?.value;
+      const jsonEditor = document.getElementById('jsonEditor');
+      const val = this.jsonEditor?.getValue() || jsonEditor?.value || '{}';
       const formatted = JSON.stringify(JSON.parse(val), null, 2);
-      if (this.jsonEditor) this.jsonEditor.setValue(formatted);
-      else document.getElementById('jsonEditor').value = formatted;
+      if (this.jsonEditor) {
+        this.jsonEditor.setValue(formatted);
+      } else if (jsonEditor) {
+        jsonEditor.value = formatted;
+      }
       this.showToast('已格式化', 'success');
     } catch (e) {
-      this.showToast('JSON 格式错误', 'error');
+      this.showToast('JSON 格式错误: ' + e.message, 'error');
     }
   }
 
   copyJSON() {
-    const val = this.jsonEditor?.getValue() || document.getElementById('jsonEditor')?.value;
-    navigator.clipboard?.writeText(val).then(() => this.showToast('已复制', 'success'));
+    const jsonEditor = document.getElementById('jsonEditor');
+    const val = this.jsonEditor?.getValue() || jsonEditor?.value || '';
+    if (!val) {
+      this.showToast('没有可复制的内容', 'warning');
+      return;
+    }
+    
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(val).then(
+        () => this.showToast('已复制', 'success'),
+        () => this.showToast('复制失败', 'error')
+      );
+    } else {
+      // 降级方案
+      const textarea = document.createElement('textarea');
+      textarea.value = val;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        this.showToast('已复制', 'success');
+      } catch {
+        this.showToast('复制失败', 'error');
+      }
+      document.body.removeChild(textarea);
+    }
   }
 
   fillExample() {
@@ -1281,14 +1368,24 @@ class App {
   }
 
   async executeRequest() {
-    if (!this.currentAPI) return;
+    if (!this.currentAPI) {
+      this.showToast('请先选择 API', 'warning');
+      return;
+    }
+    
+    const btn = document.getElementById('executeBtn');
+    if (!btn) {
+      this.showToast('执行按钮不存在', 'error');
+      return;
+    }
     
     let requestData;
     try {
-      const val = this.jsonEditor?.getValue() || document.getElementById('jsonEditor')?.value;
+      const jsonEditor = document.getElementById('jsonEditor');
+      const val = this.jsonEditor?.getValue() || jsonEditor?.value || '{}';
       requestData = JSON.parse(val);
     } catch (e) {
-      this.showToast('请求数据格式错误', 'error');
+      this.showToast('请求数据格式错误: ' + e.message, 'error');
       return;
     }
     
@@ -1297,7 +1394,6 @@ class App {
       return this.executeFileUpload();
     }
     
-    const btn = document.getElementById('executeBtn');
     const originalText = btn.innerHTML;
     btn.innerHTML = '<span class="loading-spinner"></span> 执行中...';
     btn.disabled = true;
@@ -1305,17 +1401,22 @@ class App {
     const startTime = Date.now();
     let url = this.serverUrl + (requestData.url || this.currentAPI.path);
     
-    if (requestData.query) {
+    // 处理路径参数
+    if (requestData.url) {
+      url = this.serverUrl + requestData.url;
+    }
+    
+    if (requestData.query && Object.keys(requestData.query).length > 0) {
       url += '?' + new URLSearchParams(requestData.query).toString();
     }
     
     try {
       const options = {
-        method: requestData.method || this.currentAPI.method,
+        method: requestData.method || this.currentAPI.method || 'GET',
         headers: this.getHeaders()
       };
       
-      if (requestData.body) {
+      if (requestData.body && Object.keys(requestData.body).length > 0) {
         options.body = JSON.stringify(requestData.body);
       }
       
@@ -1323,7 +1424,11 @@ class App {
       const time = Date.now() - startTime;
       const text = await res.text();
       let data;
-      try { data = JSON.parse(text); } catch { data = text; }
+      try { 
+        data = JSON.parse(text); 
+      } catch { 
+        data = text; 
+      }
       
       this.renderResponse(res.status, data, time);
       this.showToast(res.ok ? '请求成功' : `请求失败: ${res.status}`, res.ok ? 'success' : 'error');
@@ -1331,16 +1436,29 @@ class App {
       this.renderResponse(0, { error: e.message }, Date.now() - startTime);
       this.showToast('请求失败: ' + e.message, 'error');
     } finally {
-      btn.innerHTML = originalText;
-      btn.disabled = false;
+      if (btn) {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
     }
   }
 
   async executeFileUpload() {
+    if (!this.selectedFiles || this.selectedFiles.length === 0) {
+      this.showToast('请先选择文件', 'warning');
+      return;
+    }
+    
     const formData = new FormData();
     this.selectedFiles.forEach(f => formData.append('file', f));
     
     const btn = document.getElementById('executeBtn');
+    if (!btn) {
+      this.showToast('执行按钮不存在', 'error');
+      return;
+    }
+    
+    const originalText = btn.innerHTML;
     btn.innerHTML = '<span class="loading-spinner"></span> 上传中...';
     btn.disabled = true;
     
@@ -1354,23 +1472,31 @@ class App {
       });
       
       const time = Date.now() - startTime;
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        data = { error: '响应解析失败' };
+      }
       
       this.renderResponse(res.status, data, time);
       
       if (res.ok) {
         this.showToast('上传成功', 'success');
         this.selectedFiles = [];
-        document.getElementById('fileList').innerHTML = '';
+        const fileList = document.getElementById('fileList');
+        if (fileList) fileList.innerHTML = '';
       } else {
-        this.showToast('上传失败', 'error');
+        this.showToast('上传失败: ' + (data.message || res.statusText), 'error');
       }
     } catch (e) {
       this.renderResponse(0, { error: e.message }, Date.now() - startTime);
       this.showToast('上传失败: ' + e.message, 'error');
     } finally {
-      btn.innerHTML = '执行请求';
-      btn.disabled = false;
+      if (btn) {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
     }
   }
 

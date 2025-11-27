@@ -193,6 +193,7 @@ body {
   flex-direction: column;
   gap: 4px;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .nav-item {
@@ -367,28 +368,53 @@ body.dark .theme-btn .icon-moon { display: block; }
   overflow-y: auto;
 }
 
-/* API 面板 */
-.api-panel {
-  width: var(--api-panel-width);
-  background: var(--bg-card);
-  border-left: 1px solid var(--border);
-  position: fixed;
-  top: var(--header-height);
-  right: 0;
-  height: calc(100vh - var(--header-height));
-  overflow-y: auto;
-  display: none;
-  z-index: 40;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+/* API 列表容器 (在侧边栏内) */
+.api-list-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.api-panel.show {
-  display: block;
+.api-list-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
-/* 当API面板显示时，调整主内容区域 */
-.main.with-api-panel {
-  margin-right: var(--api-panel-width);
+.api-list-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.api-list-back-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--primary);
+}
+
+.api-list-back-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.api-list-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
 }
 
 .api-panel-header {
@@ -406,7 +432,9 @@ body.dark .theme-btn .icon-moon { display: block; }
 }
 
 .api-groups {
+  flex: 1;
   padding: 12px;
+  overflow-y: auto;
 }
 
 .api-group {
@@ -1550,22 +1578,7 @@ body.dark .json-boolean { color: #f87171; }
 }
 
 /* ======== 响应式 ======== */
-@media (max-width: 1024px) {
-  .api-panel {
-    width: 300px;
-    transform: translateX(100%);
-    transition: transform var(--transition-slow);
-  }
-  
-  .api-panel.show {
-    transform: translateX(0);
-  }
-  
-  /* 在移动端，API面板以覆盖方式显示，不调整主内容 */
-  .main.with-api-panel {
-    margin-right: 0;
-  }
-}
+/* 移动端API列表样式已在侧边栏内，无需额外调整 */
 
 @media (max-width: 768px) {
   :root {

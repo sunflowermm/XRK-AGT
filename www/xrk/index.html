@@ -28,7 +28,8 @@
                 </button>
             </div>
 
-            <nav class="nav">
+            <!-- 导航菜单 -->
+            <nav class="nav" id="navMenu">
                 <a href="#/home" class="nav-item active" data-page="home">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
@@ -57,6 +58,20 @@
                     <span>API 调试</span>
                 </a>
             </nav>
+
+            <!-- API 列表 (仅在API调试页面显示) -->
+            <div class="api-list-container" id="apiListContainer" style="display:none">
+                <div class="api-list-header">
+                    <button class="api-list-back-btn" id="apiListBackBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15,18 9,12 15,6"/>
+                        </svg>
+                        <span>返回</span>
+                    </button>
+                    <h3 class="api-list-title">API 列表</h3>
+                </div>
+                <div class="api-groups" id="apiGroups"></div>
+            </div>
 
             <div class="sidebar-footer">
                 <div class="connection-status" id="connectionStatus">
@@ -106,13 +121,6 @@
             </div>
         </main>
 
-        <!-- API 分组面板 (API调试页面使用) -->
-        <aside class="api-panel" id="apiPanel">
-            <div class="api-panel-header">
-                <h3>API 列表</h3>
-            </div>
-            <div class="api-groups" id="apiGroups"></div>
-        </aside>
     </div>
 
     <!-- 遮罩层 -->
