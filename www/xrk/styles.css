@@ -379,10 +379,16 @@ body.dark .theme-btn .icon-moon { display: block; }
   overflow-y: auto;
   display: none;
   z-index: 40;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
 }
 
 .api-panel.show {
   display: block;
+}
+
+/* 当API面板显示时，调整主内容区域 */
+.main.with-api-panel {
+  margin-right: var(--api-panel-width);
 }
 
 .api-panel-header {
@@ -480,18 +486,25 @@ body.dark .theme-btn .icon-moon { display: block; }
   border-radius: 50%;
   color: white;
   box-shadow: var(--shadow-lg);
-  cursor: pointer;
+  cursor: move;
   z-index: 80;
-  transition: transform var(--transition);
+  transition: transform var(--transition), box-shadow var(--transition);
+  touch-action: none;
+  user-select: none;
 }
 
 .fab:active {
   transform: scale(0.95);
 }
 
+.fab:hover {
+  box-shadow: var(--shadow-xl);
+}
+
 .fab svg {
   width: 24px;
   height: 24px;
+  pointer-events: none;
 }
 
 /* ======== 通用组件 ======== */
@@ -1538,10 +1551,6 @@ body.dark .json-boolean { color: #f87171; }
 
 /* ======== 响应式 ======== */
 @media (max-width: 1024px) {
-  .main.with-api-panel {
-    margin-right: 0;
-  }
-  
   .api-panel {
     width: 300px;
     transform: translateX(100%);
@@ -1550,6 +1559,11 @@ body.dark .json-boolean { color: #f87171; }
   
   .api-panel.show {
     transform: translateX(0);
+  }
+  
+  /* 在移动端，API面板以覆盖方式显示，不调整主内容 */
+  .main.with-api-panel {
+    margin-right: 0;
   }
 }
 
@@ -1621,6 +1635,12 @@ body.dark .json-boolean { color: #f87171; }
     max-width: 90%;
   }
   
+  /* 调整聊天输入区域，避免被悬浮球遮挡 */
+  .chat-input-area {
+    padding-bottom: 20px;
+    margin-bottom: 80px;
+  }
+  
   .toast-container {
     left: 16px;
     right: 16px;
@@ -1629,6 +1649,12 @@ body.dark .json-boolean { color: #f87171; }
   
   .toast {
     width: 100%;
+  }
+  
+  /* 悬浮球在移动端默认位置调整，避免遮挡聊天按钮 */
+  .fab {
+    bottom: 100px;
+    right: 20px;
   }
 }
 

@@ -85,6 +85,106 @@ class App {
         this.executeRequest();
       }
     });
+    
+    // 悬浮球拖拽功能
+    this.initFabDrag();
+  }
+  
+  initFabDrag() {
+    const fab = document.getElementById('fab');
+    if (!fab) return;
+    
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialX = 0;
+    let initialY = 0;
+    
+    // 从localStorage恢复位置
+    const savedPos = localStorage.getItem('fabPosition');
+    if (savedPos) {
+      try {
+        const pos = JSON.parse(savedPos);
+        fab.style.left = pos.left;
+        fab.style.right = 'auto';
+        fab.style.bottom = pos.bottom;
+        fab.style.top = 'auto';
+      } catch (e) {}
+    }
+    
+    // 监听窗口大小变化，确保悬浮球在视口内
+    window.addEventListener('resize', () => {
+      const rect = fab.getBoundingClientRect();
+      const maxX = window.innerWidth - fab.offsetWidth;
+      const maxY = window.innerHeight - fab.offsetHeight;
+      
+      if (rect.left < 0) fab.style.left = '0px';
+      if (rect.left > maxX) fab.style.left = `${maxX}px`;
+      if (rect.top < 0) fab.style.top = '0px';
+      if (rect.top > maxY) fab.style.top = `${maxY}px`;
+    });
+    
+    const startDrag = (e) => {
+      isDragging = true;
+      const touch = e.touches ? e.touches[0] : e;
+      startX = touch.clientX;
+      startY = touch.clientY;
+      
+      const rect = fab.getBoundingClientRect();
+      initialX = rect.left;
+      initialY = rect.top;
+      
+      fab.style.transition = 'none';
+      e.preventDefault();
+    };
+    
+    const drag = (e) => {
+      if (!isDragging) return;
+      
+      const touch = e.touches ? e.touches[0] : e;
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+      
+      let newX = initialX + deltaX;
+      let newY = initialY + deltaY;
+      
+      // 限制在视口内
+      const maxX = window.innerWidth - fab.offsetWidth;
+      const maxY = window.innerHeight - fab.offsetHeight;
+      
+      newX = Math.max(0, Math.min(newX, maxX));
+      newY = Math.max(0, Math.min(newY, maxY));
+      
+      fab.style.left = `${newX}px`;
+      fab.style.right = 'auto';
+      fab.style.top = `${newY}px`;
+      fab.style.bottom = 'auto';
+      
+      e.preventDefault();
+    };
+    
+    const endDrag = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      fab.style.transition = '';
+      
+      // 保存位置
+      const rect = fab.getBoundingClientRect();
+      localStorage.setItem('fabPosition', JSON.stringify({
+        left: `${rect.left}px`,
+        bottom: `${window.innerHeight - rect.bottom}px`
+      }));
+    };
+    
+    // 鼠标事件
+    fab.addEventListener('mousedown', startDrag);
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', endDrag);
+    
+    // 触摸事件
+    fab.addEventListener('touchstart', startDrag, { passive: false });
+    document.addEventListener('touchmove', drag, { passive: false });
+    document.addEventListener('touchend', endDrag);
   }
 
   loadSettings() {
@@ -171,11 +271,14 @@ class App {
     
     // API 面板
     const apiPanel = document.getElementById('apiPanel');
+    const main = document.querySelector('.main');
     if (page === 'api') {
       apiPanel.classList.add('show');
+      main.classList.add('with-api-panel');
       this.renderAPIGroups();
     } else {
       apiPanel.classList.remove('show');
+      main.classList.remove('with-api-panel');
     }
     
     // 渲染页面
@@ -192,6 +295,16 @@ class App {
 
   // ========== 首页 ==========
   async renderHome() {
+    // 销毁旧的图表实例
+    if (this._charts.cpuMem) {
+      this._charts.cpuMem.destroy();
+      this._charts.cpuMem = null;
+    }
+    if (this._charts.net) {
+      this._charts.net.destroy();
+      this._charts.net = null;
+    }
+    
     const content = document.getElementById('content');
     content.innerHTML = `
       <div class="dashboard">
@@ -379,6 +492,12 @@ class App {
     // CPU & 内存图表
     const cpuMemCtx = document.getElementById('cpuMemChart');
     if (cpuMemCtx) {
+      // 如果图表实例存在但canvas元素不匹配，销毁并重新创建
+      if (this._charts.cpuMem && this._charts.cpuMem.canvas !== cpuMemCtx) {
+        this._charts.cpuMem.destroy();
+        this._charts.cpuMem = null;
+      }
+      
       if (!this._charts.cpuMem) {
         this._charts.cpuMem = new Chart(cpuMemCtx.getContext('2d'), {
           type: 'doughnut',
@@ -406,6 +525,12 @@ class App {
     // 网络图表
     const netCtx = document.getElementById('netChart');
     if (netCtx) {
+      // 如果图表实例存在但canvas元素不匹配，销毁并重新创建
+      if (this._charts.net && this._charts.net.canvas !== netCtx) {
+        this._charts.net.destroy();
+        this._charts.net = null;
+      }
+      
       const labels = this._metricsHistory.netRx.map(() => '');
       if (!this._charts.net) {
         this._charts.net = new Chart(netCtx.getContext('2d'), {
@@ -479,8 +604,33 @@ class App {
     document.getElementById('micBtn').addEventListener('click', () => this.toggleMic());
     document.getElementById('clearChatBtn').addEventListener('click', () => this.clearChat());
     
+    // 在聊天页面，调整悬浮球位置避免遮挡
+    this.adjustFabForChat();
+    
     this.restoreChatHistory();
     this.ensureDeviceWs();
+  }
+  
+  adjustFabForChat() {
+    const fab = document.getElementById('fab');
+    if (!fab || window.innerWidth > 768) return;
+    
+    // 检查悬浮球是否可能遮挡聊天输入区域
+    const chatInputArea = document.querySelector('.chat-input-area');
+    if (chatInputArea) {
+      const fabRect = fab.getBoundingClientRect();
+      const inputRect = chatInputArea.getBoundingClientRect();
+      
+      // 如果悬浮球在输入区域上方，调整位置
+      if (fabRect.bottom > inputRect.top - 10) {
+        const savedPos = localStorage.getItem('fabPosition');
+        if (!savedPos) {
+          // 只在没有保存位置时自动调整
+          fab.style.bottom = `${window.innerHeight - inputRect.top + 20}px`;
+          fab.style.right = '20px';
+        }
+      }
+    }
   }
 
   _loadChatHistory() {
