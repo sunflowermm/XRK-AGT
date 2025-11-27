@@ -246,16 +246,16 @@ export default {
               }
               
               return {
-                uin,
-                online: bot.stat?.online || false,
-                nickname: bot.nickname || uin,
-                adapter: bot.adapter?.name || 'unknown',
+              uin,
+              online: bot.stat?.online || false,
+              nickname: bot.nickname || uin,
+              adapter: bot.adapter?.name || 'unknown',
                 device: false,
                 avatar: avatarUrl,
-                stats: {
-                  friends: bot.fl?.size || 0,
-                  groups: bot.gl?.size || 0
-                }
+              stats: {
+                friends: bot.fl?.size || 0,
+                groups: bot.gl?.size || 0
+              }
               };
             });
 
@@ -366,16 +366,16 @@ export default {
             }
             
             return {
-              uin,
-              online: bot.stat?.online || false,
-              nickname: bot.nickname || uin,
-              adapter: bot.adapter?.name || 'unknown',
+            uin,
+            online: bot.stat?.online || false,
+            nickname: bot.nickname || uin,
+            adapter: bot.adapter?.name || 'unknown',
               device: false,
               avatar: avatarUrl,
-              stats: {
-                friends: bot.fl?.size || 0,
-                groups: bot.gl?.size || 0
-              }
+            stats: {
+              friends: bot.fl?.size || 0,
+              groups: bot.gl?.size || 0
+            }
             };
           });
 

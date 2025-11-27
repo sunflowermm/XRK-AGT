@@ -503,8 +503,8 @@ class App {
     const disks = system?.disks ?? [];
     const diskEl = document.getElementById('diskValue');
     if (diskEl) {
-      if (disks.length > 0) {
-        const disk = disks[0];
+    if (disks.length > 0) {
+      const disk = disks[0];
         const diskPercent = disk.size > 0 ? ((disk.used / disk.size) * 100).toFixed(1) : 0;
         diskEl.textContent = `${diskPercent}%`;
       } else {
@@ -517,28 +517,26 @@ class App {
       uptimeEl.textContent = formatUptime(system?.uptime || data.bot?.uptime);
     }
     
-    // 更新网络历史（只添加非零值或有效数据）
-    const rxSec = Number(system?.netRates?.rxSec || 0) / 1024;
-    const txSec = Number(system?.netRates?.txSec || 0) / 1024;
-    // 过滤掉0.0或无效值
-    if (rxSec > 0 || txSec > 0 || this._metricsHistory.netRx.length === 0) {
+    // 更新网络历史：总是推入数据，保证图表有数据点
+    const rxSec = Math.max(0, Number(system?.netRates?.rxSec) || 0) / 1024;
+    const txSec = Math.max(0, Number(system?.netRates?.txSec) || 0) / 1024;
     this._metricsHistory.netRx.push(rxSec);
     this._metricsHistory.netTx.push(txSec);
-    if (this._metricsHistory.netRx.length > 30) this._metricsHistory.netRx.shift();
-    if (this._metricsHistory.netTx.length > 30) this._metricsHistory.netTx.shift();
-    }
+    // 保留最近60个点
+    if (this._metricsHistory.netRx.length > 60) this._metricsHistory.netRx.shift();
+    if (this._metricsHistory.netTx.length > 60) this._metricsHistory.netTx.shift();
     
     // 更新进程表
     const procTable = document.getElementById('processTable');
     if (procTable) {
       if (Array.isArray(data.processesTop5) && data.processesTop5.length > 0) {
-        procTable.innerHTML = data.processesTop5.map(p => `
-          <tr>
+      procTable.innerHTML = data.processesTop5.map(p => `
+        <tr>
             <td style="font-weight:500">${p.name || '未知进程'}</td>
             <td style="color:var(--text-muted);font-family:monospace;font-size:12px">${p.pid || '--'}</td>
             <td style="color:${(p.cpu || 0) > 50 ? 'var(--warning)' : 'var(--text-primary)'};font-weight:500">${(p.cpu || 0).toFixed(1)}%</td>
             <td style="color:${(p.mem || 0) > 50 ? 'var(--warning)' : 'var(--text-primary)'};font-weight:500">${(p.mem || 0).toFixed(1)}%</td>
-          </tr>
+        </tr>
         `).join('');
       } else {
         procTable.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px">暂无进程数据</td></tr>';
@@ -724,13 +722,7 @@ class App {
                 position: 'bottom', 
                 labels: { 
                   color: textMuted, 
-                  padding: 16,
-                  filter: function(item, chart) {
-                    // 过滤掉所有值为0的图例项
-                    const dataset = chart.data.datasets[item.datasetIndex];
-                    const hasNonZeroData = dataset.data.some(val => val > 0.01);
-                    return hasNonZeroData;
-                  }
+                  padding: 16
                 } 
               },
               tooltip: {
@@ -738,12 +730,10 @@ class App {
                 callbacks: {
                   label: function(context) {
                     const value = context.parsed.y;
-                    // 不显示0.0的值
                     if (value === 0 || value < 0.01) return '';
                     return `${context.dataset.label}: ${value.toFixed(2)} KB/s`;
                   },
                   filter: function(tooltipItem) {
-                    // 过滤掉0值的tooltip
                     return tooltipItem.parsed.y > 0.01;
                   }
                 }
