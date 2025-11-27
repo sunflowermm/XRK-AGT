@@ -236,12 +236,22 @@ export default {
                 };
               }
               // 普通机器人
+              // 获取头像URL（oicq适配器）
+              let avatarUrl = null;
+              if (bot.adapter?.name === 'OneBotv11' && bot.uin) {
+                // OneBotv11使用QQ头像API
+                avatarUrl = `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100`;
+              } else if (bot.avatar) {
+                avatarUrl = bot.avatar;
+              }
+              
               return {
                 uin,
                 online: bot.stat?.online || false,
                 nickname: bot.nickname || uin,
                 adapter: bot.adapter?.name || 'unknown',
                 device: false,
+                avatar: avatarUrl,
                 stats: {
                   friends: bot.fl?.size || 0,
                   groups: bot.gl?.size || 0
@@ -346,12 +356,22 @@ export default {
               };
             }
             // 普通机器人
+            // 获取头像URL（oicq适配器）
+            let avatarUrl = null;
+            if (bot.adapter?.name === 'OneBotv11' && bot.uin) {
+              // OneBotv11使用QQ头像API
+              avatarUrl = `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100`;
+            } else if (bot.avatar) {
+              avatarUrl = bot.avatar;
+            }
+            
             return {
               uin,
               online: bot.stat?.online || false,
               nickname: bot.nickname || uin,
               adapter: bot.adapter?.name || 'unknown',
               device: false,
+              avatar: avatarUrl,
               stats: {
                 friends: bot.fl?.size || 0,
                 groups: bot.gl?.size || 0

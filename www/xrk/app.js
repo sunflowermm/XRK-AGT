@@ -329,14 +329,14 @@ class App {
             <div class="card-header">
               <span class="card-title">机器人状态</span>
             </div>
-            <div id="botsInfo" style="padding:16px;color:var(--text-muted);text-align:center">加载中...</div>
+            <div id="botsInfo" style="padding:0;color:var(--text-muted);text-align:center">加载中...</div>
           </div>
           
           <div class="card">
             <div class="card-header">
               <span class="card-title">插件信息</span>
             </div>
-            <div id="pluginsInfo" style="padding:16px;color:var(--text-muted);text-align:center">加载中...</div>
+            <div id="pluginsInfo" style="padding:20px;color:var(--text-muted);text-align:center">加载中...</div>
           </div>
         </div>
         
@@ -387,16 +387,24 @@ class App {
       
       if (data.bots && Array.isArray(data.bots) && data.bots.length > 0) {
         botsInfo.innerHTML = `
-          <div style="display:grid;gap:12px">
-            ${data.bots.map(bot => `
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--bg-input);border-radius:var(--radius)">
-                <div>
-                  <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px">${bot.nickname || bot.uin}</div>
-                  <div style="font-size:12px;color:var(--text-muted)">
+          <div style="display:grid;gap:0">
+            ${data.bots.map((bot, index) => `
+              <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;${index < data.bots.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}transition:background var(--transition);cursor:pointer" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px">${bot.nickname || bot.uin}</div>
+                  <div style="font-size:12px;color:var(--text-muted);line-height:1.4">
                     ${bot.adapter || '未知适配器'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
                   </div>
                 </div>
-                <div style="width:8px;height:8px;border-radius:50%;background:${bot.online ? 'var(--success)' : 'var(--text-muted)'}"></div>
+                <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+                  ${bot.avatar && !bot.device ? `
+                    <img src="${bot.avatar}" 
+                         alt="${bot.nickname}" 
+                         style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--bg-input);flex-shrink:0"
+                         onerror="this.style.display='none'">
+                  ` : ''}
+                  <div style="width:10px;height:10px;border-radius:50%;background:${bot.online ? 'var(--success)' : 'var(--text-muted)'};flex-shrink:0;box-shadow:0 0 0 2px ${bot.online ? 'var(--success-light)' : 'transparent'}"></div>
+                </div>
               </div>
             `).join('')}
           </div>
@@ -440,22 +448,22 @@ class App {
         };
         
         pluginsInfo.innerHTML = `
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center">
             <div>
-              <div style="font-size:20px;font-weight:700;color:var(--primary);margin-bottom:4px">${totalPlugins}</div>
-              <div style="font-size:11px;color:var(--text-muted)">总插件数</div>
+              <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px;line-height:1.2">${totalPlugins}</div>
+              <div style="font-size:12px;color:var(--text-muted);font-weight:500">总插件数</div>
             </div>
             <div>
-              <div style="font-size:20px;font-weight:700;color:var(--success);margin-bottom:4px">${pluginsWithRules}</div>
-              <div style="font-size:11px;color:var(--text-muted)">有规则</div>
+              <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px;line-height:1.2">${pluginsWithRules}</div>
+              <div style="font-size:12px;color:var(--text-muted);font-weight:500">有规则</div>
             </div>
             <div>
-              <div style="font-size:20px;font-weight:700;color:var(--warning);margin-bottom:4px">${pluginsWithTasks}</div>
-              <div style="font-size:11px;color:var(--text-muted)">定时任务</div>
+              <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px;line-height:1.2">${pluginsWithTasks}</div>
+              <div style="font-size:12px;color:var(--text-muted);font-weight:500">定时任务</div>
             </div>
             <div>
-              <div style="font-size:20px;font-weight:700;color:var(--info);margin-bottom:4px">${formatLoadTime(loadTime)}</div>
-              <div style="font-size:11px;color:var(--text-muted)">加载时间</div>
+              <div style="font-size:22px;font-weight:700;color:var(--info);margin-bottom:6px;line-height:1.2">${formatLoadTime(loadTime)}</div>
+              <div style="font-size:12px;color:var(--text-muted);font-weight:500">加载时间</div>
             </div>
           </div>
         `;
@@ -471,7 +479,7 @@ class App {
   updateSystemStatus(data) {
     const { system } = data;
     const formatBytes = (b) => {
-      if (!b) return '--';
+      if (!b || b === 0) return '0 B';
       const k = 1024;
       const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
       const i = Math.floor(Math.log(b) / Math.log(k));
@@ -479,55 +487,69 @@ class App {
     };
     
     const formatUptime = (s) => {
-      if (!s) return '--';
+      if (!s || s === 0) return '0分钟';
       const d = Math.floor(s / 86400);
       const h = Math.floor((s % 86400) / 3600);
       const m = Math.floor((s % 3600) / 60);
       if (d > 0) return `${d}天 ${h}小时`;
-      if (h > 0) return `${h}小时 ${m}分`;
+      if (h > 0) return `${h}小时 ${m}分钟`;
       return `${m}分钟`;
     };
     
     // 更新统计卡片
     const cpuPercent = system?.cpu?.percent ?? 0;
-    document.getElementById('cpuValue').textContent = `${cpuPercent.toFixed(1)}%`;
+    const cpuEl = document.getElementById('cpuValue');
+    if (cpuEl) cpuEl.textContent = `${cpuPercent.toFixed(1)}%`;
     
     const memUsed = system?.memory?.used ?? 0;
     const memTotal = system?.memory?.total ?? 1;
-    const memPercent = ((memUsed / memTotal) * 100).toFixed(1);
-    document.getElementById('memValue').textContent = `${memPercent}%`;
+    const memPercent = memTotal > 0 ? ((memUsed / memTotal) * 100).toFixed(1) : 0;
+    const memEl = document.getElementById('memValue');
+    if (memEl) memEl.textContent = `${memPercent}%`;
     
     const disks = system?.disks ?? [];
-    if (disks.length > 0) {
-      const disk = disks[0];
-      const diskPercent = ((disk.used / disk.size) * 100).toFixed(1);
-      document.getElementById('diskValue').textContent = `${diskPercent}%`;
+    const diskEl = document.getElementById('diskValue');
+    if (diskEl) {
+      if (disks.length > 0) {
+        const disk = disks[0];
+        const diskPercent = disk.size > 0 ? ((disk.used / disk.size) * 100).toFixed(1) : 0;
+        diskEl.textContent = `${diskPercent}%`;
+      } else {
+        diskEl.textContent = '--';
+      }
     }
     
-    document.getElementById('uptimeValue').textContent = formatUptime(system?.uptime);
+    const uptimeEl = document.getElementById('uptimeValue');
+    if (uptimeEl) {
+      uptimeEl.textContent = formatUptime(system?.uptime || data.bot?.uptime);
+    }
     
     // 更新网络历史（只添加非零值或有效数据）
     const rxSec = Number(system?.netRates?.rxSec || 0) / 1024;
     const txSec = Number(system?.netRates?.txSec || 0) / 1024;
     // 过滤掉0.0或无效值
     if (rxSec > 0 || txSec > 0 || this._metricsHistory.netRx.length === 0) {
-      this._metricsHistory.netRx.push(rxSec);
-      this._metricsHistory.netTx.push(txSec);
-      if (this._metricsHistory.netRx.length > 30) this._metricsHistory.netRx.shift();
-      if (this._metricsHistory.netTx.length > 30) this._metricsHistory.netTx.shift();
+    this._metricsHistory.netRx.push(rxSec);
+    this._metricsHistory.netTx.push(txSec);
+    if (this._metricsHistory.netRx.length > 30) this._metricsHistory.netRx.shift();
+    if (this._metricsHistory.netTx.length > 30) this._metricsHistory.netTx.shift();
     }
     
     // 更新进程表
     const procTable = document.getElementById('processTable');
-    if (procTable && Array.isArray(data.processesTop5)) {
-      procTable.innerHTML = data.processesTop5.map(p => `
-        <tr>
-          <td>${p.name}</td>
-          <td>${p.pid}</td>
-          <td>${p.cpu?.toFixed(1)}%</td>
-          <td>${p.mem?.toFixed(1)}%</td>
-        </tr>
-      `).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>';
+    if (procTable) {
+      if (Array.isArray(data.processesTop5) && data.processesTop5.length > 0) {
+        procTable.innerHTML = data.processesTop5.map(p => `
+          <tr>
+            <td style="font-weight:500">${p.name || '未知进程'}</td>
+            <td style="color:var(--text-muted);font-family:monospace;font-size:12px">${p.pid || '--'}</td>
+            <td style="color:${(p.cpu || 0) > 50 ? 'var(--warning)' : 'var(--text-primary)'};font-weight:500">${(p.cpu || 0).toFixed(1)}%</td>
+            <td style="color:${(p.mem || 0) > 50 ? 'var(--warning)' : 'var(--text-primary)'};font-weight:500">${(p.mem || 0).toFixed(1)}%</td>
+          </tr>
+        `).join('');
+      } else {
+        procTable.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px">暂无进程数据</td></tr>';
+      }
     }
     
     // 更新图表
@@ -711,12 +733,7 @@ class App {
                 beginAtZero: true, 
                 grid: { color: border }, 
                 ticks: { 
-                  color: textMuted,
-                  callback: function(value) {
-                    // 不显示0.0
-                    if (value === 0) return '';
-                    return value.toFixed(1);
-                  }
+                  display: false  // 完全隐藏Y轴刻度文字
                 }
               }
             }
@@ -1229,16 +1246,16 @@ class App {
       if (apiId === 'file-upload') {
         this.setupFileUpload();
       }
-      
-      // 监听输入变化
-      section.querySelectorAll('input, textarea, select').forEach(el => {
-        el.addEventListener('input', () => this.updateJSONPreview());
+    
+    // 监听输入变化
+    section.querySelectorAll('input, textarea, select').forEach(el => {
+      el.addEventListener('input', () => this.updateJSONPreview());
         el.addEventListener('change', () => this.updateJSONPreview());
-      });
-      
+    });
+    
       // 初始化JSON编辑器
       this.initJSONEditor().then(() => {
-        this.updateJSONPreview();
+    this.updateJSONPreview();
       });
     }, 0);
   }
@@ -1566,8 +1583,8 @@ class App {
       this.showToast('请求失败: ' + e.message, 'error');
     } finally {
       if (btn) {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
+      btn.innerHTML = originalText;
+      btn.disabled = false;
       }
     }
   }
@@ -1624,7 +1641,7 @@ class App {
     } finally {
       if (btn) {
         btn.innerHTML = originalText;
-        btn.disabled = false;
+      btn.disabled = false;
       }
     }
   }
