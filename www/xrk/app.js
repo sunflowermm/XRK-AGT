@@ -61,14 +61,12 @@ class App {
     
     // API列表返回按钮
     document.getElementById('apiListBackBtn')?.addEventListener('click', () => {
-      // 返回到导航菜单
+      // 返回到导航菜单，不关闭侧边栏
       const navMenu = document.getElementById('navMenu');
       const apiListContainer = document.getElementById('apiListContainer');
-      navMenu.style.display = 'flex';
-      apiListContainer.style.display = 'none';
-      // 在移动端关闭侧边栏
-      if (window.innerWidth <= 768) {
-        this.closeSidebar();
+      if (navMenu && apiListContainer) {
+        navMenu.style.display = 'flex';
+        apiListContainer.style.display = 'none';
       }
     });
     
@@ -201,9 +199,10 @@ class App {
       navMenu.style.display = 'none';
       apiListContainer.style.display = 'flex';
       this.renderAPIGroups();
-      // 在移动端自动打开侧边栏
-      if (window.innerWidth <= 768) {
+      // 在移动端自动打开侧边栏（仅在首次进入时）
+      if (window.innerWidth <= 768 && !this._apiSidebarOpened) {
         this.toggleSidebar();
+        this._apiSidebarOpened = true;
       }
     } else {
       navMenu.style.display = 'flex';
@@ -226,9 +225,13 @@ class App {
   // ========== 首页 ==========
   async renderHome() {
     // 销毁旧的图表实例
-    if (this._charts.cpuMem) {
-      this._charts.cpuMem.destroy();
-      this._charts.cpuMem = null;
+    if (this._charts.cpu) {
+      this._charts.cpu.destroy();
+      this._charts.cpu = null;
+    }
+    if (this._charts.mem) {
+      this._charts.mem.destroy();
+      this._charts.mem = null;
     }
     if (this._charts.net) {
       this._charts.net.destroy();
@@ -300,15 +303,40 @@ class App {
         <div class="chart-grid">
           <div class="chart-card">
             <div class="chart-card-header">
-              <span class="chart-card-title">CPU & 内存</span>
+              <span class="chart-card-title">系统资源</span>
             </div>
-            <div class="chart-container"><canvas id="cpuMemChart"></canvas></div>
+            <div class="chart-container-dual">
+              <div class="chart-item">
+                <div class="chart-item-label">CPU</div>
+                <div class="chart-item-canvas"><canvas id="cpuChart"></canvas></div>
+              </div>
+              <div class="chart-item">
+                <div class="chart-item-label">内存</div>
+                <div class="chart-item-canvas"><canvas id="memChart"></canvas></div>
+              </div>
+            </div>
           </div>
           <div class="chart-card">
             <div class="chart-card-header">
               <span class="chart-card-title">网络流量 (KB/s)</span>
             </div>
             <div class="chart-container"><canvas id="netChart"></canvas></div>
+          </div>
+        </div>
+        
+        <div class="info-grid">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">机器人状态</span>
+            </div>
+            <div id="botsInfo" style="padding:16px;color:var(--text-muted);text-align:center">加载中...</div>
+          </div>
+          
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">插件信息</span>
+            </div>
+            <div id="pluginsInfo" style="padding:16px;color:var(--text-muted);text-align:center">加载中...</div>
           </div>
         </div>
         
@@ -334,6 +362,8 @@ class App {
     `;
     
     this.loadSystemStatus();
+    this.loadBotsInfo();
+    this.loadPluginsInfo();
   }
 
   async loadSystemStatus() {
@@ -344,6 +374,87 @@ class App {
       if (data.success) this.updateSystemStatus(data);
     } catch (e) {
       console.error('Failed to load system status:', e);
+    }
+  }
+  
+  async loadBotsInfo() {
+    try {
+      const res = await fetch(`${this.serverUrl}/api/status`, { headers: this.getHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      const botsInfo = document.getElementById('botsInfo');
+      if (!botsInfo) return;
+      
+      if (data.bots && Array.isArray(data.bots) && data.bots.length > 0) {
+        botsInfo.innerHTML = `
+          <div style="display:grid;gap:12px">
+            ${data.bots.map(bot => `
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--bg-input);border-radius:var(--radius)">
+                <div>
+                  <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px">${bot.nickname || bot.uin}</div>
+                  <div style="font-size:12px;color:var(--text-muted)">
+                    ${bot.adapter || '未知适配器'} · 
+                    ${bot.stats?.friends || 0} 好友 · 
+                    ${bot.stats?.groups || 0} 群组
+                  </div>
+                </div>
+                <div style="width:8px;height:8px;border-radius:50%;background:${bot.online ? 'var(--success)' : 'var(--text-muted)'}"></div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else {
+        botsInfo.innerHTML = '<div style="color:var(--text-muted)">暂无机器人</div>';
+      }
+    } catch (e) {
+      const botsInfo = document.getElementById('botsInfo');
+      if (botsInfo) botsInfo.innerHTML = '<div style="color:var(--danger)">加载失败</div>';
+    }
+  }
+  
+  async loadPluginsInfo() {
+    try {
+      const res = await fetch(`${this.serverUrl}/api/plugins`, { headers: this.getHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      const pluginsInfo = document.getElementById('pluginsInfo');
+      if (!pluginsInfo) return;
+      
+      if (data.success && data.plugins && Array.isArray(data.plugins) && data.plugins.length > 0) {
+        const totalPlugins = data.plugins.length;
+        const pluginsWithRules = data.plugins.filter(p => p.rule > 0).length;
+        const pluginsWithTasks = data.plugins.filter(p => p.task > 0).length;
+        
+        pluginsInfo.innerHTML = `
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:center">
+            <div>
+              <div style="font-size:24px;font-weight:700;color:var(--primary);margin-bottom:4px">${totalPlugins}</div>
+              <div style="font-size:12px;color:var(--text-muted)">总插件数</div>
+            </div>
+            <div>
+              <div style="font-size:24px;font-weight:700;color:var(--success);margin-bottom:4px">${pluginsWithRules}</div>
+              <div style="font-size:12px;color:var(--text-muted)">有规则</div>
+            </div>
+            <div>
+              <div style="font-size:24px;font-weight:700;color:var(--warning);margin-bottom:4px">${pluginsWithTasks}</div>
+              <div style="font-size:12px;color:var(--text-muted)">定时任务</div>
+            </div>
+          </div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">最近加载的插件：</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${data.plugins.slice(0, 6).map(p => `
+                <span style="padding:4px 8px;background:var(--bg-input);border-radius:4px;font-size:11px;color:var(--text-secondary)">${p.name || p.key}</span>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        pluginsInfo.innerHTML = '<div style="color:var(--text-muted)">暂无插件</div>';
+      }
+    } catch (e) {
+      const pluginsInfo = document.getElementById('pluginsInfo');
+      if (pluginsInfo) pluginsInfo.innerHTML = '<div style="color:var(--danger)">加载失败</div>';
     }
   }
 
@@ -416,39 +527,125 @@ class App {
     const primary = getComputedStyle(document.body).getPropertyValue('--primary').trim() || '#0ea5e9';
     const success = getComputedStyle(document.body).getPropertyValue('--success').trim() || '#22c55e';
     const warning = getComputedStyle(document.body).getPropertyValue('--warning').trim() || '#f59e0b';
+    const danger = getComputedStyle(document.body).getPropertyValue('--danger').trim() || '#ef4444';
     const textMuted = getComputedStyle(document.body).getPropertyValue('--text-muted').trim() || '#94a3b8';
     const border = getComputedStyle(document.body).getPropertyValue('--border').trim() || '#e2e8f0';
     
-    // CPU & 内存图表
-    const cpuMemCtx = document.getElementById('cpuMemChart');
-    if (cpuMemCtx) {
-      // 如果图表实例存在但canvas元素不匹配，销毁并重新创建
-      if (this._charts.cpuMem && this._charts.cpuMem.canvas !== cpuMemCtx) {
-        this._charts.cpuMem.destroy();
-        this._charts.cpuMem = null;
+    // CPU 图表
+    const cpuCtx = document.getElementById('cpuChart');
+    if (cpuCtx) {
+      if (this._charts.cpu && this._charts.cpu.canvas !== cpuCtx) {
+        this._charts.cpu.destroy();
+        this._charts.cpu = null;
       }
       
-      if (!this._charts.cpuMem) {
-        this._charts.cpuMem = new Chart(cpuMemCtx.getContext('2d'), {
+      const cpuColor = cpu > 80 ? danger : cpu > 50 ? warning : primary;
+      const cpuFree = 100 - cpu;
+      
+      if (!this._charts.cpu) {
+        const cpuChart = new Chart(cpuCtx.getContext('2d'), {
           type: 'doughnut',
           data: {
-            labels: ['CPU', '内存', '空闲'],
+            labels: ['使用', '空闲'],
             datasets: [{
-              data: [cpu, mem, 100 - Math.max(cpu, mem)],
-              backgroundColor: [primary, success, border],
+              data: [cpu, cpuFree],
+              backgroundColor: [cpuColor, border],
               borderWidth: 0
             }]
           },
           options: {
-            cutout: '70%',
+            cutout: '75%',
             plugins: {
-              legend: { position: 'bottom', labels: { color: textMuted, padding: 16 } }
+              legend: { display: false },
+              tooltip: { enabled: true }
             }
           }
         });
+        
+        // 添加中心标签插件
+        const cpuLabelPlugin = {
+          id: 'cpuLabel',
+          afterDraw: (chart) => {
+            const ctx = chart.ctx;
+            const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+            const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+            const value = chart.data.datasets[0].data[0];
+            ctx.save();
+            ctx.font = 'bold 16px Inter';
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
+            ctx.restore();
+          }
+        };
+        Chart.register(cpuLabelPlugin);
+        
+        this._charts.cpu = cpuChart;
       } else {
-        this._charts.cpuMem.data.datasets[0].data = [cpu, mem, 100 - Math.max(cpu, mem)];
-        this._charts.cpuMem.update('none');
+        const cpuColor = cpu > 80 ? danger : cpu > 50 ? warning : primary;
+        this._charts.cpu.data.datasets[0].data = [cpu, 100 - cpu];
+        this._charts.cpu.data.datasets[0].backgroundColor = [cpuColor, border];
+        this._charts.cpu.update('none');
+      }
+    }
+    
+    // 内存图表
+    const memCtx = document.getElementById('memChart');
+    if (memCtx) {
+      if (this._charts.mem && this._charts.mem.canvas !== memCtx) {
+        this._charts.mem.destroy();
+        this._charts.mem = null;
+      }
+      
+      const memColor = mem > 80 ? danger : mem > 50 ? warning : success;
+      const memFree = 100 - mem;
+      
+      if (!this._charts.mem) {
+        const memChart = new Chart(memCtx.getContext('2d'), {
+          type: 'doughnut',
+          data: {
+            labels: ['使用', '空闲'],
+            datasets: [{
+              data: [mem, memFree],
+              backgroundColor: [memColor, border],
+              borderWidth: 0
+            }]
+          },
+          options: {
+            cutout: '75%',
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: true }
+            }
+          }
+        });
+        
+        // 添加中心标签插件
+        const memLabelPlugin = {
+          id: 'memLabel',
+          afterDraw: (chart) => {
+            const ctx = chart.ctx;
+            const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+            const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+            const value = chart.data.datasets[0].data[0];
+            ctx.save();
+            ctx.font = 'bold 16px Inter';
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
+            ctx.restore();
+          }
+        };
+        Chart.register(memLabelPlugin);
+        
+        this._charts.mem = memChart;
+      } else {
+        const memColor = mem > 80 ? danger : mem > 50 ? warning : success;
+        this._charts.mem.data.datasets[0].data = [mem, 100 - mem];
+        this._charts.mem.data.datasets[0].backgroundColor = [memColor, border];
+        this._charts.mem.update('none');
       }
     }
     
