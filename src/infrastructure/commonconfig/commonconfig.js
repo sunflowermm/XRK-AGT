@@ -480,82 +480,38 @@ export default class ConfigBase {
         }
       }
 
-      // 类型验证（严格模式）
       if (this.schema.fields) {
         for (const [field, fieldSchema] of Object.entries(this.schema.fields)) {
-          if (!(field in data)) continue; // 非必填且未提供，忽略
-          const value = data[field];
-          const expectedType = fieldSchema.type;
+          if (!(field in data)) continue;
 
-          // 严格：默认不允许 null/undefined（除非明确声明 nullable: true）
+          const fieldPath = field;
+          let value = data[field];
+          value = this._normalizeValueBySchema(value, fieldSchema);
+          data[field] = value;
+
           if (value === null || value === undefined) {
             if (fieldSchema.nullable === true) continue;
-            errors.push(`字段 ${field} 不允许为空`);
+            errors.push(`字段 ${fieldPath} 不允许为空`);
             continue;
           }
 
-          if (expectedType && !this._checkType(value, expectedType)) {
-            errors.push(`字段 ${field} 类型错误，期望 ${expectedType}`);
+          if (fieldSchema.type && !this._checkType(value, fieldSchema.type)) {
+            errors.push(`字段 ${fieldPath} 类型错误，期望 ${fieldSchema.type}`);
             continue;
           }
 
-          // 数值范围
-          if (expectedType === 'number') {
-            if (fieldSchema.min !== undefined && value < fieldSchema.min) {
-              errors.push(`字段 ${field} 不能小于 ${fieldSchema.min}`);
-            }
-            if (fieldSchema.max !== undefined && value > fieldSchema.max) {
-              errors.push(`字段 ${field} 不能大于 ${fieldSchema.max}`);
-            }
+          this._runFieldValidators(value, fieldSchema, fieldPath, errors);
+
+          if (fieldSchema.type === 'array') {
+            this._validateArrayField(value, fieldSchema, fieldPath, errors);
           }
 
-          // 字符串长度与格式
-          if (expectedType === 'string') {
-            if (fieldSchema.minLength !== undefined && value.length < fieldSchema.minLength) {
-              errors.push(`字段 ${field} 长度不能小于 ${fieldSchema.minLength}`);
-            }
-            if (fieldSchema.maxLength !== undefined && value.length > fieldSchema.maxLength) {
-              errors.push(`字段 ${field} 长度不能大于 ${fieldSchema.maxLength}`);
-            }
-            if (fieldSchema.pattern && !new RegExp(fieldSchema.pattern).test(value)) {
-              errors.push(`字段 ${field} 格式不正确`);
-            }
-          }
-
-          // 枚举
-          if (fieldSchema.enum && !fieldSchema.enum.includes(value)) {
-            errors.push(`字段 ${field} 值必须是: ${fieldSchema.enum.join(', ')}`);
-          }
-
-          // 数组 itemType 校验
-          if (expectedType === 'array' && fieldSchema.itemType) {
-            if (!Array.isArray(value)) {
-              errors.push(`字段 ${field} 必须为数组`);
-            } else {
-              value.forEach((v, idx) => {
-                if (!this._checkType(v, fieldSchema.itemType)) {
-                  errors.push(`字段 ${field}[${idx}] 类型错误，应为 ${fieldSchema.itemType}`);
-                }
-              });
-            }
-          }
-
-          // 对象递归校验
-          if (expectedType === 'object' && fieldSchema.fields && value && typeof value === 'object' && !Array.isArray(value)) {
-            const sub = await this.validate({ ...value, _skipMeta: true }); // 复用校验，或自写递归
-            // 这里简单递归：
-            for (const [subKey, subSchema] of Object.entries(fieldSchema.fields)) {
-              if (subSchema && subSchema.type && (value[subKey] === null || value[subKey] === undefined)) {
-                if (subSchema.nullable !== true && (this.schema.required || []).includes(subKey)) {
-                  errors.push(`字段 ${field}.${subKey} 不允许为空`);
-                }
-              }
-            }
+          if ((fieldSchema.type === 'object' || fieldSchema.type === 'map') && fieldSchema.fields) {
+            this._validateObjectField(value, fieldSchema, fieldPath, errors);
           }
         }
       }
 
-      // 自定义验证器
       if (typeof this.customValidate === 'function') {
         const customErrors = await this.customValidate(data);
         if (Array.isArray(customErrors)) {
@@ -668,6 +624,157 @@ export default class ConfigBase {
   }
 
   // ==================== 私有辅助方法 ====================
+
+  _runFieldValidators(value, schema, path, errors) {
+    const expectedType = schema.type;
+    if (expectedType === 'number') {
+      if (schema.min !== undefined && value < schema.min) {
+        errors.push(`字段 ${path} 不能小于 ${schema.min}`);
+      }
+      if (schema.max !== undefined && value > schema.max) {
+        errors.push(`字段 ${path} 不能大于 ${schema.max}`);
+      }
+    }
+
+    if (expectedType === 'string') {
+      if (schema.minLength !== undefined && value.length < schema.minLength) {
+        errors.push(`字段 ${path} 长度不能小于 ${schema.minLength}`);
+      }
+      if (schema.maxLength !== undefined && value.length > schema.maxLength) {
+        errors.push(`字段 ${path} 长度不能大于 ${schema.maxLength}`);
+      }
+      if (schema.pattern && !new RegExp(schema.pattern).test(value)) {
+        errors.push(`字段 ${path} 格式不正确`);
+      }
+    }
+
+    if (schema.enum && !schema.enum.includes(value)) {
+      errors.push(`字段 ${path} 值必须是: ${schema.enum.join(', ')}`);
+    }
+  }
+
+  _validateArrayField(value, schema, path, errors) {
+    if (!Array.isArray(value)) {
+      errors.push(`字段 ${path} 必须为数组`);
+      return;
+    }
+
+    if (!schema.itemType) return;
+
+    const itemSchema = schema.itemSchema || (schema.fields ? { fields: schema.fields } : {});
+
+    value.forEach((item, idx) => {
+      const itemPath = `${path}[${idx}]`;
+      const expectedType = schema.itemType;
+
+      const normalizedItem = this._normalizeValueBySchema(item, { ...itemSchema, type: expectedType });
+      value[idx] = normalizedItem;
+
+      if (!this._checkType(normalizedItem, expectedType)) {
+        errors.push(`字段 ${itemPath} 类型错误，应为 ${expectedType}`);
+        return;
+      }
+
+      this._runFieldValidators(normalizedItem, { ...itemSchema, type: expectedType }, itemPath, errors);
+
+      if ((expectedType === 'object' || expectedType === 'map') && (itemSchema.fields || schema.fields)) {
+        const nestedSchema = { ...itemSchema, type: expectedType };
+        if (!nestedSchema.fields && schema.fields) nestedSchema.fields = schema.fields;
+        this._validateObjectField(normalizedItem, nestedSchema, itemPath, errors);
+      }
+    });
+  }
+
+  _validateObjectField(value, schema, path, errors) {
+    if (!this._isObject(value)) {
+      errors.push(`字段 ${path} 必须为对象`);
+      return;
+    }
+
+    const fields = schema.fields || {};
+    for (const [key, childSchema] of Object.entries(fields)) {
+      const childPath = `${path}.${key}`;
+      let childValue = value[key];
+
+      if (childValue === undefined || childValue === null) {
+        if (childSchema?.nullable === true || childValue === undefined) continue;
+        errors.push(`字段 ${childPath} 不允许为空`);
+        continue;
+      }
+
+      childValue = this._normalizeValueBySchema(childValue, childSchema);
+      value[key] = childValue;
+
+      if (childSchema.type && !this._checkType(childValue, childSchema.type)) {
+        errors.push(`字段 ${childPath} 类型错误，期望 ${childSchema.type}`);
+        continue;
+      }
+
+      this._runFieldValidators(childValue, childSchema, childPath, errors);
+
+      if (childSchema.type === 'array') {
+        this._validateArrayField(childValue, childSchema, childPath, errors);
+      }
+
+      if ((childSchema.type === 'object' || childSchema.type === 'map') && childSchema.fields) {
+        this._validateObjectField(childValue, childSchema, childPath, errors);
+      }
+    }
+  }
+
+  _normalizeValueBySchema(value, schema = {}) {
+    if (value === undefined) return value;
+    const expectedType = schema.type;
+
+    if (expectedType === 'string') {
+      if (typeof value !== 'string' && value !== null && value !== undefined) {
+        return String(value);
+      }
+      return value;
+    }
+
+    if (expectedType === 'number') {
+      if (typeof value === 'number') return value;
+      if (typeof value === 'string' && value !== '') {
+        const num = Number(value);
+        return isNaN(num) ? value : num;
+      }
+      return value;
+    }
+
+    if (expectedType === 'boolean') {
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'string') {
+        const normalized = value.toLowerCase();
+        if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+        if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+      }
+      if (typeof value === 'number') return value !== 0;
+      return !!value;
+    }
+
+    if (expectedType === 'array') {
+      let arr = Array.isArray(value) ? [...value] : (value === undefined || value === null ? [] : [value]);
+      if (schema.itemType) {
+        const itemSchema = schema.itemSchema || (schema.fields ? { fields: schema.fields } : {});
+        arr = arr.map(item => this._normalizeValueBySchema(item, { ...itemSchema, type: schema.itemType }));
+      }
+      return arr;
+    }
+
+    if ((expectedType === 'object' || expectedType === 'map') && this._isObject(value)) {
+      const clone = { ...value };
+      const fields = schema.fields || {};
+      for (const [key, childSchema] of Object.entries(fields)) {
+        if (clone[key] !== undefined) {
+          clone[key] = this._normalizeValueBySchema(clone[key], childSchema);
+        }
+      }
+      return clone;
+    }
+
+    return value;
+  }
 
   /**
    * 通过路径获取值
@@ -813,6 +920,7 @@ export default class ConfigBase {
       case 'array':
         return Array.isArray(value);
       case 'object':
+      case 'map':
         return this._isObject(value);
       default:
         return true;

@@ -18,10 +18,10 @@ disableAdopt:
 whiteGroup: []
 # 白名单QQ
 whiteQQ: []
-#黑名单群
+# 黑名单群
 blackGroup:
-  - 213938015
-#黑名单qq
+  - "213938015"
+# 黑名单QQ
 blackQQ:
-  - 528952540
+  - "528952540"
 

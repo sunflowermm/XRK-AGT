@@ -227,6 +227,55 @@ export default class ServerConfig extends ConfigBase {
    - 仅当字段声明 `nullable: true` 时可传 `null`。
 5. 默认值来源 `config/default_config/*.yaml`，已经全部按正确类型写入（如 `masterQQ: []`），可直接作为 `reset` 或表单初始值使用。
 
+### Schema 元信息（驱动可视化组件）
+
+为保证前端可以自动渲染复杂字段，需要在 schema 中提供更多结构化信息：
+
+1. **数组对象编辑器**
+   ```js
+   domains: {
+     type: 'array',
+     itemType: 'object',
+     component: 'ArrayForm',        // 可省略，type+itemType 即可识别
+     itemSchema: {
+       fields: {
+         domain: { type: 'string', label: '域名', required: true },
+         target: { type: 'string', label: '目标服务', placeholder: 'http://localhost:3000' },
+         ssl: {
+           type: 'object',
+           component: 'SubForm',
+           fields: { enabled: { type: 'boolean', component: 'Switch' } }
+         }
+       }
+     }
+   }
+   ```
+   前端会自动提供“新增/删除条目”以及嵌套对象编辑功能。
+
+2. **动态键值集合（例如 group.yaml 单独群配置）**
+   ```js
+   schema: {
+     meta: {
+       collections: [
+         {
+           name: 'groupOverrides',
+           type: 'keyedObject',
+           label: '群单独配置',
+           basePath: '',                 // 数据存储位置（'' 表示根）
+           excludeKeys: ['default'],     // 忽略固定字段
+           keyLabel: '群号',
+           keyPlaceholder: '请输入群号',
+           valueTemplatePath: 'default'  // 复用某个已有字段的 schema
+         }
+       ]
+     },
+     fields: {
+       default: { type: 'object', fields: { /* ... */ } }
+     }
+   }
+   ```
+   这样前端即可渲染“增删键 + 对象表单”的组件，并默认继承 `default` 字段的表单结构。今后其它配置文件只需按照相同约定补充 `meta.collections` 即可获得同样的体验。
+
 在 API 中使用：
 
 ```js

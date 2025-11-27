@@ -938,6 +938,21 @@ export default class SystemConfig extends ConfigBase {
         filePath: getConfigPath('group'),
         fileType: 'yaml',
         schema: {
+          meta: {
+            collections: [
+              {
+                name: 'groupOverrides',
+                type: 'keyedObject',
+                label: '群单独配置',
+                description: '为特定群覆盖默认配置，键为群号或标识',
+                basePath: '',
+                excludeKeys: ['default'],
+                keyLabel: '群号',
+                keyPlaceholder: '请输入群号',
+                valueTemplatePath: 'default'
+              }
+            ]
+          },
           fields: {
             default: {
               type: 'object',

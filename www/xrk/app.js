@@ -19,6 +19,7 @@ class App {
     this._ttsQueue = [];
     this._ttsPlaying = false;
     this._configState = null;
+    this._schemaCache = {};
     
     this.init();
   }
@@ -961,7 +962,11 @@ class App {
       filter: '',
       selected: null,
       selectedChild: null,
-      schema: [],
+      flatSchema: [],
+      activeSchema: null,
+      structureMeta: {},
+      arraySchemaMap: {},
+      dynamicCollectionsMeta: [],
       values: {},
       original: {},
       rawObject: {},
@@ -1153,25 +1158,34 @@ class App {
 
     try {
       this._configState.loading = true;
-      const [structRes, flatRes] = await Promise.all([
+      const [flatStructRes, flatDataRes, structure] = await Promise.all([
         fetch(`${this.serverUrl}/api/config/${name}/flat-structure${query}`, { headers: this.getHeaders() }),
-        fetch(`${this.serverUrl}/api/config/${name}/flat${query}`, { headers: this.getHeaders() })
+        fetch(`${this.serverUrl}/api/config/${name}/flat${query}`, { headers: this.getHeaders() }),
+        this.fetchStructureSchema(name)
       ]);
-      if (!structRes.ok) throw new Error('获取结构失败');
-      if (!flatRes.ok) throw new Error('获取数据失败');
 
-      const structData = await structRes.json();
-      const flatData = await flatRes.json();
-      if (!structData.success) throw new Error(structData.message || '结构接口异常');
+      if (!flatStructRes.ok) throw new Error('获取结构失败');
+      if (!flatDataRes.ok) throw new Error('获取数据失败');
+
+      const flatStruct = await flatStructRes.json();
+      const flatData = await flatDataRes.json();
+      if (!flatStruct.success) throw new Error(flatStruct.message || '结构接口异常');
       if (!flatData.success) throw new Error(flatData.message || '数据接口异常');
 
-      const schema = (structData.flat || []).filter(field => field.path && !field.path.includes('[]'));
+      const schemaList = (flatStruct.flat || []).filter(field => field.path);
       const values = flatData.flat || {};
 
-      this._configState.schema = schema;
-      this._configState.values = { ...values };
-      this._configState.original = this._cloneFlat(values);
-      this._configState.rawObject = this.unflattenObject(values);
+      const activeSchema = this.extractActiveSchema(structure, name, child) || { fields: {} };
+      this._configState.activeSchema = activeSchema;
+      this._configState.structureMeta = activeSchema.meta || {};
+      this._configState.arraySchemaMap = this.buildArraySchemaIndex(activeSchema);
+      this._configState.dynamicCollectionsMeta = this.buildDynamicCollectionsMeta(activeSchema);
+      this._configState.flatSchema = schemaList;
+
+      const normalizedValues = this.normalizeIncomingFlatValues(schemaList, values);
+      this._configState.values = normalizedValues;
+      this._configState.original = this._cloneFlat(normalizedValues);
+      this._configState.rawObject = this.unflattenObject(normalizedValues);
       this._configState.jsonText = JSON.stringify(this._configState.rawObject, null, 2);
       this._configState.dirty = {};
       this._configState.jsonDirty = false;
@@ -1183,6 +1197,84 @@ class App {
     } finally {
       if (this._configState) this._configState.loading = false;
     }
+  }
+
+  async fetchStructureSchema(name) {
+    if (this._schemaCache[name]) {
+      return this._schemaCache[name];
+    }
+    const res = await fetch(`${this.serverUrl}/api/config/${name}/structure`, { headers: this.getHeaders() });
+    if (!res.ok) {
+      throw new Error('获取结构描述失败');
+    }
+    const data = await res.json();
+    if (!data.success) {
+      throw new Error(data.message || '结构接口异常');
+    }
+    this._schemaCache[name] = data.structure;
+    return data.structure;
+  }
+
+  extractActiveSchema(structure, name, child) {
+    if (!structure) return null;
+    if (name === 'system') {
+      if (!child) return null;
+      const target = structure.configs?.[child];
+      return target?.schema || { fields: target?.fields || {} };
+    }
+    return structure.schema || { fields: structure.fields || {} };
+  }
+
+  buildArraySchemaIndex(schema, prefix = '', map = {}) {
+    if (!schema || !schema.fields) return map;
+    for (const [key, fieldSchema] of Object.entries(schema.fields)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (fieldSchema.type === 'array' && fieldSchema.itemType === 'object') {
+        const subFields = fieldSchema.itemSchema?.fields || fieldSchema.fields || {};
+        map[path] = subFields;
+      }
+      if ((fieldSchema.type === 'object' || fieldSchema.type === 'map') && fieldSchema.fields) {
+        this.buildArraySchemaIndex(fieldSchema, path, map);
+      }
+    }
+    return map;
+  }
+
+  buildDynamicCollectionsMeta(schema) {
+    const collections = schema?.meta?.collections || [];
+    return collections.map(item => {
+      const template = this.getSchemaNodeByPath(item.valueTemplatePath, schema);
+      return {
+        ...item,
+        valueFields: template?.fields || {}
+      };
+    });
+  }
+
+  normalizeIncomingFlatValues(flatSchema, values) {
+    const normalized = { ...values };
+    if (!Array.isArray(flatSchema)) return normalized;
+    flatSchema.forEach(field => {
+      if (!Object.prototype.hasOwnProperty.call(normalized, field.path)) return;
+      normalized[field.path] = this.normalizeFieldValue(
+        normalized[field.path],
+        field.meta || {},
+        field.type
+      );
+    });
+    return normalized;
+  }
+
+  getSchemaNodeByPath(path = '', schema = this._configState?.activeSchema) {
+    if (!path) return schema;
+    if (!schema?.fields) return null;
+    const segments = path.split('.');
+    let current = schema;
+    for (const segment of segments) {
+      if (!current?.fields?.[segment]) return null;
+      current = current.fields[segment];
+    }
+    return current;
   }
 
   renderConfigFormPanel() {
@@ -1222,6 +1314,7 @@ class App {
       <div class="config-panel" id="configJsonWrapper" style="${mode === 'json' ? '' : 'display:none'}">
         ${this.renderConfigJsonPanel()}
       </div>
+      ${this.renderDynamicCollections()}
     `;
 
     document.getElementById('configReloadBtn')?.addEventListener('click', () => this.loadSelectedConfigDetail());
@@ -1232,6 +1325,8 @@ class App {
 
     this.bindConfigFieldEvents();
     this.bindConfigJsonEvents();
+    this.bindArrayObjectEvents();
+    this.bindDynamicCollectionEvents();
   }
 
   renderSystemPathBadge(child) {
@@ -1244,12 +1339,12 @@ class App {
   }
 
   renderConfigFieldGroups() {
-    if (!this._configState?.schema?.length) {
+    if (!this._configState?.flatSchema?.length) {
       return '<div class="empty-state"><p>该配置暂无扁平结构，可切换 JSON 模式编辑。</p></div>';
     }
 
     const groups = {};
-    this._configState.schema.forEach(field => {
+    this._configState.flatSchema.forEach(field => {
       const meta = field.meta || {};
       const key = meta.group || (field.path.includes('.') ? field.path.split('.')[0] : '基础');
       if (!groups[key]) groups[key] = [];
@@ -1306,7 +1401,13 @@ class App {
       return { label: opt, value: opt };
     });
 
-    switch ((component || '').toLowerCase()) {
+    const lowerComponent = (component || '').toLowerCase();
+    const isArrayObject = field.type === 'array<object>' || (lowerComponent === 'arrayform' && meta.itemType === 'object');
+    if (isArrayObject) {
+      return this.renderArrayObjectControl(field, Array.isArray(value) ? value : [], meta);
+    }
+
+    switch (lowerComponent) {
       case 'switch':
         return `
           <label class="config-switch">
@@ -1372,6 +1473,252 @@ class App {
     `;
   }
 
+  renderArrayObjectControl(field, items = [], meta = {}) {
+    const subFields = this._configState.arraySchemaMap[field.path] || meta.itemSchema?.fields || meta.fields || {};
+    const itemLabel = meta.itemLabel || '条目';
+    const body = items.length
+      ? items.map((item, idx) => this.renderArrayObjectItem(field.path, subFields, item || {}, idx, itemLabel)).join('')
+      : `<div class="config-field-hint">暂无${this.escapeHtml(itemLabel)}，点击下方按钮新增。</div>`;
+
+    return `
+      <div class="array-object" data-array-wrapper="${this.escapeHtml(field.path)}">
+        ${body}
+        <button type="button" class="btn btn-secondary array-object-add" data-action="array-add" data-field="${this.escapeHtml(field.path)}">
+          新增${this.escapeHtml(itemLabel)}
+        </button>
+      </div>
+    `;
+  }
+
+  renderArrayObjectItem(parentPath, subFields, item, index, itemLabel) {
+    return `
+      <div class="array-object-card" data-array-card="${this.escapeHtml(parentPath)}" data-index="${index}">
+        <div class="array-object-card-header">
+          <span>${this.escapeHtml(itemLabel)} #${index + 1}</span>
+          <div class="array-object-actions">
+            <button type="button" class="btn btn-sm btn-secondary array-object-remove" data-action="array-remove" data-field="${this.escapeHtml(parentPath)}" data-index="${index}">删除</button>
+          </div>
+        </div>
+        <div class="array-object-card-body">
+          ${this.renderArrayObjectFields(parentPath, subFields, item, index)}
+        </div>
+      </div>
+    `;
+  }
+
+  renderArrayObjectFields(parentPath, fields, itemValue, index, basePath = '') {
+    return Object.entries(fields || {}).map(([key, schema]) => {
+      const relPath = basePath ? `${basePath}.${key}` : key;
+      const templatePath = `${parentPath}[].${relPath}`;
+      const value = this.getNestedValue(itemValue, relPath);
+      if ((schema.type === 'object' || schema.type === 'map') && schema.fields) {
+        return `
+          <div class="array-object-subgroup">
+            <div class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</div>
+            ${this.renderArrayObjectFields(parentPath, schema.fields, value || {}, index, relPath)}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="array-object-field">
+          <label>${this.escapeHtml(schema.label || key)}</label>
+          ${schema.description ? `<p class="config-field-hint">${this.escapeHtml(schema.description)}</p>` : ''}
+          ${this.renderArrayObjectFieldControl(parentPath, relPath, templatePath, schema, value, index)}
+        </div>
+      `;
+    }).join('');
+  }
+
+  renderArrayObjectFieldControl(parentPath, relPath, templatePath, schema, value, index) {
+    const component = (schema.component || this.mapTypeToComponent(schema.type) || '').toLowerCase();
+    const dataset = `data-array-parent="${this.escapeHtml(parentPath)}" data-array-index="${index}" data-object-path="${this.escapeHtml(relPath)}" data-template-path="${this.escapeHtml(templatePath)}" data-component="${component}" data-type="${schema.type}"`;
+
+    const normalizeOptions = (options = []) => options.map(opt => (typeof opt === 'object' ? opt : { label: opt, value: opt }));
+
+    switch (component) {
+      case 'switch':
+        return `
+          <label class="config-switch">
+            <input type="checkbox" ${dataset} ${value ? 'checked' : ''}>
+            <span class="config-switch-slider"></span>
+          </label>
+        `;
+      case 'select': {
+        const opts = normalizeOptions(schema.enum || schema.options || []);
+        const current = value ?? '';
+        return `
+          <select class="form-input" ${dataset}>
+            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
+          </select>
+        `;
+      }
+      case 'multiselect': {
+        const opts = normalizeOptions(schema.enum || schema.options || []);
+        const current = Array.isArray(value) ? value.map(v => String(v)) : [];
+        return `
+          <select class="form-input" multiple ${dataset} data-control="multiselect">
+            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${current.includes(String(opt.value)) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
+          </select>
+        `;
+      }
+      case 'tags': {
+        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value || ''));
+        return `<textarea class="form-input" rows="3" ${dataset} data-control="tags" placeholder="每行一个值">${text}</textarea>`;
+      }
+      case 'textarea':
+      case 'text-area':
+        return `<textarea class="form-input" rows="3" ${dataset}>${this.escapeHtml(value ?? '')}</textarea>`;
+      case 'inputnumber':
+      case 'number':
+        return `<input type="number" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${schema.min ?? ''}" max="${schema.max ?? ''}" step="${schema.step ?? 'any'}">`;
+      case 'inputpassword':
+        return `<input type="password" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'json':
+        return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
+      default:
+        if (schema.type === 'array' || schema.type === 'object') {
+          return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
+        }
+        return `<input type="text" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+    }
+  }
+
+  renderDynamicCollections() {
+    const collections = this._configState?.dynamicCollectionsMeta || [];
+    if (!collections.length) return '';
+    return `
+      <div class="dynamic-collections">
+        ${collections.map(col => this.renderDynamicCollectionBlock(col)).join('')}
+      </div>
+    `;
+  }
+
+  renderDynamicCollectionBlock(collection) {
+    const entries = this.getDynamicCollectionEntries(collection);
+    const cards = entries.length
+      ? entries.map(entry => this.renderDynamicEntryCard(collection, entry)).join('')
+      : '<div class="config-field-hint">暂无配置，点击上方按钮新增。</div>';
+
+    return `
+      <div class="config-group">
+        <div class="config-group-header">
+          <div>
+            <h3>${this.escapeHtml(collection.label || collection.name)}</h3>
+            <p>${this.escapeHtml(collection.description || '')}</p>
+          </div>
+          <button type="button" class="btn btn-secondary" data-action="collection-add" data-collection="${this.escapeHtml(collection.name)}">
+            新增${this.escapeHtml(collection.keyLabel || '项')}
+          </button>
+        </div>
+        <div class="dynamic-collection-list">
+          ${cards}
+        </div>
+        <p class="config-field-hint">如需删除既有条目，可切换 JSON 模式手动移除。</p>
+      </div>
+    `;
+  }
+
+  renderDynamicEntryCard(collection, entry) {
+    return `
+      <div class="dynamic-entry-card" data-collection-card="${this.escapeHtml(collection.name)}" data-entry-key="${this.escapeHtml(entry.key)}">
+        <div class="array-object-card-header">
+          <span>${this.escapeHtml(collection.keyLabel || '键')}：${this.escapeHtml(entry.key)}</span>
+        </div>
+        <div class="array-object-card-body">
+          ${this.renderDynamicFields(collection, collection.valueFields || {}, entry.value || {}, entry.key)}
+        </div>
+      </div>
+    `;
+  }
+
+  getDynamicCollectionEntries(collection) {
+    const source = this.getValueFromObject(this._configState?.rawObject || {}, collection.basePath || '');
+    const exclude = new Set(collection.excludeKeys || []);
+    return Object.entries(source || {})
+      .filter(([key]) => !exclude.has(key))
+      .map(([key, value]) => ({ key, value }));
+  }
+
+  renderDynamicFields(collection, fields, value, entryKey, basePath = '') {
+    return Object.entries(fields || {}).map(([key, schema]) => {
+      const relPath = basePath ? `${basePath}.${key}` : key;
+      const templatePathBase = collection.valueTemplatePath || '';
+      const templatePath = this.normalizeTemplatePath(templatePathBase ? `${templatePathBase}.${relPath}` : relPath);
+      const fieldValue = this.getNestedValue(value, relPath);
+
+      if ((schema.type === 'object' || schema.type === 'map') && schema.fields) {
+        return `
+          <div class="array-object-subgroup">
+            <div class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</div>
+            ${this.renderDynamicFields(collection, schema.fields, fieldValue || {}, entryKey, relPath)}
+          </div>
+        `;
+      }
+
+      const dataset = `data-collection="${this.escapeHtml(collection.name)}" data-entry-key="${this.escapeHtml(entryKey)}" data-object-path="${this.escapeHtml(relPath)}" data-template-path="${this.escapeHtml(templatePath)}" data-component="${(schema.component || '').toLowerCase()}" data-type="${schema.type}"`;
+      return `
+        <div class="array-object-field">
+          <label>${this.escapeHtml(schema.label || key)}</label>
+          ${schema.description ? `<p class="config-field-hint">${this.escapeHtml(schema.description)}</p>` : ''}
+          ${this.renderDynamicFieldControl(dataset, schema, fieldValue)}
+        </div>
+      `;
+    }).join('');
+  }
+
+  renderDynamicFieldControl(dataset, schema, value) {
+    const component = (schema.component || this.mapTypeToComponent(schema.type) || '').toLowerCase();
+    const normalizeOptions = (options = []) => options.map(opt => (typeof opt === 'object' ? opt : { label: opt, value: opt }));
+
+    switch (component) {
+      case 'switch':
+        return `
+          <label class="config-switch">
+            <input type="checkbox" ${dataset} ${value ? 'checked' : ''}>
+            <span class="config-switch-slider"></span>
+          </label>
+        `;
+      case 'select': {
+        const opts = normalizeOptions(schema.enum || schema.options || []);
+        const current = value ?? '';
+        return `
+          <select class="form-input" ${dataset}>
+            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
+          </select>
+        `;
+      }
+      case 'multiselect': {
+        const opts = normalizeOptions(schema.enum || schema.options || []);
+        const current = Array.isArray(value) ? value.map(v => String(v)) : [];
+        return `
+          <select class="form-input" multiple ${dataset} data-control="multiselect">
+            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${current.includes(String(opt.value)) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
+          </select>
+        `;
+      }
+      case 'tags': {
+        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value || ''));
+        return `<textarea class="form-input" rows="3" ${dataset} data-control="tags">${text}</textarea>`;
+      }
+      case 'textarea':
+      case 'text-area':
+        return `<textarea class="form-input" rows="3" ${dataset}>${this.escapeHtml(value ?? '')}</textarea>`;
+      case 'inputnumber':
+      case 'number':
+        return `<input type="number" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${schema.min ?? ''}" max="${schema.max ?? ''}" step="${schema.step ?? 'any'}">`;
+      case 'inputpassword':
+        return `<input type="password" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'json':
+        return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
+      default:
+        if (schema.type === 'array' || schema.type === 'object') {
+          return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
+        }
+        return `<input type="text" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+    }
+  }
+
   bindConfigFieldEvents() {
     if (this._configState?.mode !== 'form') return;
     const wrapper = document.getElementById('configFormWrapper');
@@ -1417,12 +1764,171 @@ class App {
     }
   }
 
+  bindArrayObjectEvents() {
+    if (this._configState?.mode !== 'form') return;
+    const wrapper = document.getElementById('configFormWrapper');
+    if (!wrapper) return;
+
+    wrapper.querySelectorAll('[data-array-parent]').forEach(el => {
+      const evt = el.type === 'checkbox' ? 'change' : (el.tagName === 'SELECT' ? 'change' : 'input');
+      el.addEventListener(evt, () => this.handleArrayObjectFieldChange(el));
+    });
+
+    wrapper.querySelectorAll('[data-action="array-add"]').forEach(btn => {
+      btn.addEventListener('click', () => this.addArrayObjectItem(btn.dataset.field));
+    });
+
+    wrapper.querySelectorAll('[data-action="array-remove"]').forEach(btn => {
+      btn.addEventListener('click', () => this.removeArrayObjectItem(btn.dataset.field, parseInt(btn.dataset.index, 10)));
+    });
+  }
+
+  handleArrayObjectFieldChange(target) {
+    if (!this._configState) return;
+    const parentPath = target.dataset.arrayParent;
+    const index = parseInt(target.dataset.arrayIndex, 10);
+    const objectPath = target.dataset.objectPath;
+    const templatePath = this.normalizeTemplatePath(target.dataset.templatePath || '');
+    const fieldDef = this.getFlatFieldDefinition(templatePath) || {};
+    const meta = fieldDef.meta || {};
+    const type = fieldDef.type || target.dataset.type || '';
+    const component = (target.dataset.component || '').toLowerCase();
+
+    let value;
+    if (component === 'switch') {
+      value = !!target.checked;
+    } else if (target.dataset.control === 'tags') {
+      value = target.value.split(/\n+/).map(v => v.trim()).filter(Boolean);
+    } else if (target.dataset.control === 'multiselect') {
+      value = Array.from(target.selectedOptions).map(opt => this.castValue(opt.value, meta.itemType || 'string'));
+    } else if (target.dataset.control === 'json') {
+      try {
+        value = target.value ? JSON.parse(target.value) : null;
+      } catch (e) {
+        this.showToast('JSON 解析失败: ' + e.message, 'error');
+        return;
+      }
+    } else if (component === 'inputnumber' || type === 'number') {
+      value = target.value === '' ? null : Number(target.value);
+    } else {
+      value = target.value;
+    }
+
+    value = this.normalizeFieldValue(value, meta, type);
+    this.updateArrayObjectValue(parentPath, index, objectPath, value);
+  }
+
+  addArrayObjectItem(path) {
+    if (!this._configState) return;
+    const subFields = this._configState.arraySchemaMap[path] || {};
+    const template = this.buildDefaultsFromFields(subFields);
+    const list = Array.isArray(this._configState.values[path]) ? this._cloneValue(this._configState.values[path]) : [];
+    list.push(template);
+    this.setConfigFieldValue(path, list);
+    this.renderConfigFormPanel();
+  }
+
+  removeArrayObjectItem(path, index) {
+    if (!this._configState) return;
+    const list = Array.isArray(this._configState.values[path]) ? this._cloneValue(this._configState.values[path]) : [];
+    list.splice(index, 1);
+    this.setConfigFieldValue(path, list);
+    this.renderConfigFormPanel();
+  }
+
+  updateArrayObjectValue(path, index, objectPath, value) {
+    if (!this._configState) return;
+    const list = Array.isArray(this._configState.values[path]) ? this._cloneValue(this._configState.values[path]) : [];
+    if (!list[index] || typeof list[index] !== 'object') {
+      list[index] = {};
+    }
+    const updated = this.setNestedValue(list[index], objectPath, value);
+    list[index] = updated;
+    this.setConfigFieldValue(path, list);
+  }
+
+  bindDynamicCollectionEvents() {
+    if (this._configState?.mode !== 'form') return;
+    const wrapper = document.getElementById('configMain');
+    if (!wrapper) return;
+
+    wrapper.querySelectorAll('[data-action="collection-add"]').forEach(btn => {
+      btn.addEventListener('click', () => this.addDynamicCollectionEntry(btn.dataset.collection));
+    });
+
+    wrapper.querySelectorAll('[data-collection]').forEach(el => {
+      const evt = el.type === 'checkbox' ? 'change' : (el.tagName === 'SELECT' ? 'change' : 'input');
+      el.addEventListener(evt, () => this.handleDynamicFieldChange(el));
+    });
+  }
+
+  addDynamicCollectionEntry(collectionName) {
+    if (!this._configState) return;
+    const collection = this._configState.dynamicCollectionsMeta.find(col => col.name === collectionName);
+    if (!collection) return;
+    const key = (prompt(collection.keyPlaceholder || '请输入键') || '').trim();
+    if (!key) return;
+    const existing = this.getValueFromObject(this._configState.rawObject || {}, collection.basePath || '');
+    if (existing && Object.prototype.hasOwnProperty.call(existing, key)) {
+      this.showToast('该键已存在', 'warning');
+      return;
+    }
+    const defaults = this.buildDefaultsFromFields(collection.valueFields);
+    const prefix = this.combinePath(collection.basePath || '', key);
+    Object.entries(defaults).forEach(([fieldKey, fieldValue]) => {
+      const fullPath = this.combinePath(prefix, fieldKey);
+      this.setConfigFieldValue(fullPath, fieldValue);
+    });
+    this.renderConfigFormPanel();
+  }
+
+  handleDynamicFieldChange(target) {
+    if (!this._configState) return;
+    const collectionName = target.dataset.collection;
+    const key = target.dataset.entryKey;
+    const objectPath = target.dataset.objectPath;
+    const templatePath = this.normalizeTemplatePath(target.dataset.templatePath || '');
+    const collection = this._configState.dynamicCollectionsMeta.find(col => col.name === collectionName);
+    if (!collection) return;
+
+    const fieldDef = this.getFlatFieldDefinition(templatePath) || {};
+    const meta = fieldDef.meta || {};
+    const type = fieldDef.type || target.dataset.type || '';
+    const component = (target.dataset.component || '').toLowerCase();
+
+    let value;
+    if (component === 'switch') {
+      value = !!target.checked;
+    } else if (target.dataset.control === 'tags') {
+      value = target.value.split(/\n+/).map(v => v.trim()).filter(Boolean);
+    } else if (target.dataset.control === 'multiselect') {
+      value = Array.from(target.selectedOptions).map(opt => this.castValue(opt.value, meta.itemType || 'string'));
+    } else if (target.dataset.control === 'json') {
+      try {
+        value = target.value ? JSON.parse(target.value) : null;
+      } catch (e) {
+        this.showToast('JSON 解析失败: ' + e.message, 'error');
+        return;
+      }
+    } else if (component === 'inputnumber' || type === 'number') {
+      value = target.value === '' ? null : Number(target.value);
+    } else {
+      value = target.value;
+    }
+
+    value = this.normalizeFieldValue(value, meta, type);
+    const prefix = this.combinePath(collection.basePath || '', key);
+    const fullPath = this.combinePath(prefix, objectPath);
+    this.setConfigFieldValue(fullPath, value);
+  }
+
   handleConfigFieldChange(target) {
     if (!this._configState) return;
     const path = target.dataset.field;
     const component = (target.dataset.component || '').toLowerCase();
-    const type = target.dataset.type || '';
-    const meta = this._configState.schema.find(f => f.path === path)?.meta || {};
+    const fieldDef = this.getFlatFieldDefinition(path);
+    const meta = fieldDef?.meta || {};
+    const type = fieldDef?.type || target.dataset.type || '';
 
     let value;
     if (component === 'switch') {
@@ -1578,7 +2084,15 @@ class App {
   normalizeFieldValue(value, meta, typeHint) {
     const type = (meta.type || typeHint || '').toLowerCase();
     if (type === 'number') return value === null || value === '' ? null : Number(value);
-    if (type === 'boolean') return !!value;
+    if (type === 'boolean') {
+      if (typeof value === 'string') {
+        const normalized = value.toLowerCase();
+        if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+        if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+      }
+      return !!value;
+    }
+    if (type === 'array<object>' || (type === 'array' && meta.itemType === 'object')) return Array.isArray(value) ? value : [];
     if (type === 'array' && Array.isArray(value)) return value;
     if (type === 'array' && typeof value === 'string') return value ? value.split(',').map(v => v.trim()).filter(Boolean) : [];
     return value;
@@ -1590,6 +2104,72 @@ class App {
       case 'boolean': return value === 'true' || value === true;
       default: return value;
     }
+  }
+
+  getFlatFieldDefinition(path) {
+    if (!this._configState?.flatSchema) return null;
+    const exact = this._configState.flatSchema.find(field => field.path === path);
+    if (exact) return exact;
+    const normalized = this.normalizeTemplatePath(path);
+    return this._configState.flatSchema.find(field => this.normalizeTemplatePath(field.path) === normalized);
+  }
+
+  normalizeTemplatePath(path = '') {
+    return path.replace(/\[\d+\]/g, '[]');
+  }
+
+  buildDefaultsFromFields(fields = {}) {
+    const result = {};
+    Object.entries(fields).forEach(([key, schema]) => {
+      if (schema.type === 'object' && schema.fields) {
+        result[key] = this.buildDefaultsFromFields(schema.fields);
+      } else if (schema.type === 'array') {
+        if (schema.itemType === 'object') {
+          result[key] = [];
+        } else {
+          result[key] = Array.isArray(schema.default) ? [...schema.default] : [];
+        }
+      } else if (Object.prototype.hasOwnProperty.call(schema, 'default')) {
+        result[key] = this._cloneValue(schema.default);
+      } else {
+        result[key] = schema.type === 'number' ? 0 : schema.type === 'boolean' ? false : '';
+      }
+    });
+    return result;
+  }
+
+  getValueFromObject(obj, path = '') {
+    if (!path) return obj;
+    return path.split('.').reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : undefined), obj);
+  }
+
+  getNestedValue(obj = {}, path = '') {
+    if (!path) return obj;
+    return path.split('.').reduce((current, key) => (current ? current[key] : undefined), obj);
+  }
+
+  setNestedValue(source = {}, path = '', value) {
+    if (!path) return this._cloneValue(value);
+    const clone = Array.isArray(source) ? [...source] : { ...source };
+    const keys = path.split('.');
+    let cursor = clone;
+    keys.forEach((key, idx) => {
+      if (idx === keys.length - 1) {
+        cursor[key] = this._cloneValue(value);
+      } else {
+        if (!cursor[key] || typeof cursor[key] !== 'object') {
+          cursor[key] = {};
+        }
+        cursor = cursor[key];
+      }
+    });
+    return clone;
+  }
+
+  combinePath(base, tail) {
+    if (!base) return tail;
+    if (!tail) return base;
+    return `${base}.${tail}`;
   }
 
   flattenObject(obj, prefix = '', out = {}) {
