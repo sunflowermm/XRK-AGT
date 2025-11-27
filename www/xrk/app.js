@@ -390,9 +390,9 @@ class App {
           <div style="display:grid;gap:0">
             ${data.bots.map((bot, index) => `
               <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;${index < data.bots.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}transition:background var(--transition);cursor:pointer" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
-                <div style="flex:1;min-width:0">
-                  <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px">${bot.nickname || bot.uin}</div>
-                  <div style="font-size:12px;color:var(--text-muted);line-height:1.4">
+                <div style="flex:1;min-width:0;text-align:left">
+                  <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${bot.nickname || bot.uin}</div>
+                  <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
                     ${bot.adapter || '未知适配器'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
                   </div>
                 </div>
@@ -478,13 +478,6 @@ class App {
 
   updateSystemStatus(data) {
     const { system } = data;
-    const formatBytes = (b) => {
-      if (!b || b === 0) return '0 B';
-      const k = 1024;
-      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-      const i = Math.floor(Math.log(b) / Math.log(k));
-      return `${(b / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-    };
     
     const formatUptime = (s) => {
       if (!s || s === 0) return '0分钟';
@@ -726,7 +719,36 @@ class App {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { intersect: false, mode: 'index' },
-            plugins: { legend: { position: 'bottom', labels: { color: textMuted, padding: 16 } } },
+            plugins: { 
+              legend: { 
+                position: 'bottom', 
+                labels: { 
+                  color: textMuted, 
+                  padding: 16,
+                  filter: function(item, chart) {
+                    // 过滤掉所有值为0的图例项
+                    const dataset = chart.data.datasets[item.datasetIndex];
+                    const hasNonZeroData = dataset.data.some(val => val > 0.01);
+                    return hasNonZeroData;
+                  }
+                } 
+              },
+              tooltip: {
+                enabled: true,
+                callbacks: {
+                  label: function(context) {
+                    const value = context.parsed.y;
+                    // 不显示0.0的值
+                    if (value === 0 || value < 0.01) return '';
+                    return `${context.dataset.label}: ${value.toFixed(2)} KB/s`;
+                  },
+                  filter: function(tooltipItem) {
+                    // 过滤掉0值的tooltip
+                    return tooltipItem.parsed.y > 0.01;
+                  }
+                }
+              }
+            },
             scales: {
               x: { display: false },
               y: { 
@@ -743,6 +765,23 @@ class App {
         this._charts.net.data.labels = labels;
         this._charts.net.data.datasets[0].data = this._metricsHistory.netRx;
         this._charts.net.data.datasets[1].data = this._metricsHistory.netTx;
+        // 确保Y轴刻度不显示
+        if (this._charts.net.options.scales?.y?.ticks) {
+          this._charts.net.options.scales.y.ticks.display = false;
+        }
+        // 更新tooltip配置，过滤0.0值
+        if (this._charts.net.options.plugins?.tooltip) {
+          this._charts.net.options.plugins.tooltip.callbacks = {
+            label: function(context) {
+              const value = context.parsed.y;
+              if (value === 0 || value < 0.01) return '';
+              return `${context.dataset.label}: ${value.toFixed(2)} KB/s`;
+            },
+            filter: function(tooltipItem) {
+              return tooltipItem.parsed.y > 0.01;
+            }
+          };
+        }
         this._charts.net.update('none');
       }
     }
