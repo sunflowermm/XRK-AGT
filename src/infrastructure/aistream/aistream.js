@@ -943,6 +943,7 @@ export default class AIStream {
 
     const client = LLMFactory.createClient(config);
     await client.stream(messages, config, onDelta);
+  }
 
   /**
    * 根据运行时配置与外部参数解析 LLM 配置
@@ -984,7 +985,6 @@ export default class AIStream {
     resolved.path = resolved.path || defaults.path || '/chat/completions';
 
     return resolved;
-  }
   }
 
   /**

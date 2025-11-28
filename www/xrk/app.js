@@ -20,6 +20,11 @@ class App {
     this._ttsPlaying = false;
     this._configState = null;
     this._schemaCache = {};
+    this._chatSettings = {
+      workflow: localStorage.getItem('chatWorkflow') || 'chat',
+      persona: localStorage.getItem('chatPersona') || ''
+    };
+    this._chatStreamState = { running: false, source: null };
     this._activeEventSource = null;
     
     this.init();
@@ -399,6 +404,7 @@ class App {
       this.renderBotsPanel(data.bots || []);
       this.renderWorkflowInfo(data.workflows, data.panels);
       this.renderNetworkInfo(data.system?.network, data.system?.netRates);
+      this.refreshChatWorkflowOptions();
     } catch (e) {
       console.error('Failed to load system status:', e);
       this.renderBotsPanel();
@@ -872,6 +878,20 @@ class App {
             <button class="btn btn-sm btn-secondary" id="clearChatBtn">清空</button>
           </div>
         </div>
+        <div class="chat-settings">
+          <div class="chat-setting">
+            <label>模型
+              <select id="chatWorkflowSelect"></select>
+            </label>
+          </div>
+          <div class="chat-setting">
+            <label>人设
+              <input type="text" id="chatPersonaInput" placeholder="自定义人设...">
+            </label>
+          </div>
+          <button class="btn btn-sm btn-ghost" id="cancelStreamBtn" disabled>中断</button>
+          <span class="chat-stream-status" id="chatStreamStatus">空闲</span>
+        </div>
         <div class="chat-messages" id="chatMessages"></div>
         <div class="chat-input-area">
           <button class="mic-btn" id="micBtn">
@@ -899,6 +919,7 @@ class App {
     });
     document.getElementById('micBtn').addEventListener('click', () => this.toggleMic());
     document.getElementById('clearChatBtn').addEventListener('click', () => this.clearChat());
+    this.initChatControls();
     
     this.restoreChatHistory();
     this.ensureDeviceWs();
@@ -955,33 +976,173 @@ class App {
     const text = input?.value?.trim();
     if (!text) return;
     
-    this.appendChat('user', text);
     input.value = '';
     
     try {
-      await this.startAIStream(text);
+      await this.streamAIResponse(text, { appendUser: true, source: 'manual' });
     } catch (e) {
       this.showToast('发送失败: ' + e.message, 'error');
     }
   }
 
-  async startAIStream(prompt) {
-    const workflow = localStorage.getItem('chatWorkflow') || 'chat';
-    const persona = localStorage.getItem('chatPersona') || '';
-    const context = this._chatHistory.slice(-8).map(m => ({ role: m.role, text: m.text }));
+  initChatControls() {
+    const workflowSelect = document.getElementById('chatWorkflowSelect');
+    if (workflowSelect) {
+      this.populateWorkflowSelect(workflowSelect);
+      workflowSelect.value = this._chatSettings.workflow || workflowSelect.options[0]?.value || 'chat';
+      workflowSelect.addEventListener('change', () => {
+        this._chatSettings.workflow = workflowSelect.value;
+        localStorage.setItem('chatWorkflow', this._chatSettings.workflow);
+      });
+    }
+    
+    const personaInput = document.getElementById('chatPersonaInput');
+    if (personaInput) {
+      personaInput.value = this._chatSettings.persona || '';
+      personaInput.addEventListener('input', (e) => {
+        this._chatSettings.persona = e.target.value;
+        localStorage.setItem('chatPersona', this._chatSettings.persona);
+      });
+    }
+    
+    const cancelBtn = document.getElementById('cancelStreamBtn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this.cancelAIStream());
+    }
+    
+    this.updateChatStatus();
+    this.setChatInteractionState(this._chatStreamState.running);
+  }
+  
+  populateWorkflowSelect(select) {
+    const options = this.getWorkflowOptions();
+    select.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+  }
+  
+  refreshChatWorkflowOptions() {
+    const select = document.getElementById('chatWorkflowSelect');
+    if (!select) return;
+    const previous = this._chatSettings.workflow;
+    this.populateWorkflowSelect(select);
+    const match = Array.from(select.options).some(opt => opt.value === previous);
+    if (match) {
+      select.value = previous;
+    } else if (select.options.length) {
+      select.selectedIndex = 0;
+      this._chatSettings.workflow = select.value;
+      localStorage.setItem('chatWorkflow', this._chatSettings.workflow);
+    }
+  }
+  
+  getWorkflowOptions() {
+    const builtIn = [
+      { value: 'chat', label: 'Chat (默认)' },
+      { value: 'device', label: 'Device' },
+      { value: 'short', label: 'LLM-短文本' },
+      { value: 'long', label: 'LLM-长文本' },
+      { value: 'fast', label: 'LLM-极速' }
+    ];
+    const runtime = this._latestSystem?.workflows?.items || [];
+    const seen = new Set();
+    const result = [];
+    
+    runtime.forEach(item => {
+      const key = item.name;
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        result.push({ value: key, label: `${key} (${item.description || 'workflow'})` });
+      }
+    });
+    
+    builtIn.forEach(opt => {
+      if (!seen.has(opt.value)) {
+        seen.add(opt.value);
+        result.push(opt);
+      }
+    });
+    
+    return result;
+  }
+  
+  getCurrentWorkflow() {
+    return this._chatSettings.workflow || 'chat';
+  }
+  
+  getCurrentPersona() {
+    return this._chatSettings.persona?.trim() || '';
+  }
+  
+  updateChatStatus(message) {
+    const statusEl = document.getElementById('chatStreamStatus');
+    const cancelBtn = document.getElementById('cancelStreamBtn');
+    if (!statusEl) return;
+    
+    if (this._chatStreamState.running) {
+      statusEl.textContent = message || `${this._chatStreamState.source === 'voice' ? '语音' : '文本'}生成中...`;
+      statusEl.classList.add('active');
+      if (cancelBtn) cancelBtn.disabled = false;
+    } else {
+      statusEl.textContent = '空闲';
+      statusEl.classList.remove('active');
+      if (cancelBtn) cancelBtn.disabled = true;
+    }
+  }
+  
+  setChatInteractionState(streaming) {
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('chatSendBtn');
+    if (input) input.disabled = streaming;
+    if (sendBtn) sendBtn.disabled = streaming;
+  }
+  
+  stopActiveStream() {
+    if (this._activeEventSource) {
+      try {
+        this._activeEventSource.close();
+      } catch {}
+      this._activeEventSource = null;
+    }
+    this._chatStreamState = { running: false, source: null };
+    this.updateChatStatus();
+    this.setChatInteractionState(false);
+  }
+  
+  cancelAIStream() {
+    if (!this._chatStreamState.running) return;
+    this.stopActiveStream();
+    this.renderStreamingMessage('', true);
+    this.showToast('已中断 AI 输出', 'info');
+  }
+  
+  async streamAIResponse(prompt, options = {}) {
+    const text = prompt?.trim();
+    if (!text) return;
+    
+    const { appendUser = false, source = 'manual' } = options;
+    if (appendUser) {
+      this.appendChat('user', text);
+    }
+    
+    const workflow = this.getCurrentWorkflow();
+    const persona = this.getCurrentPersona();
+    const recentHistory = this._chatHistory.slice(-8).map(m => ({ role: m.role, text: m.text }));
+    const ctxSummary = recentHistory.map(m => `${m.role === 'user' ? 'U' : 'A'}:${m.text}`).join('|').slice(-800);
+    const finalPrompt = ctxSummary ? `【上下文】${ctxSummary}\n【提问】${text}` : text;
+    
     const params = new URLSearchParams({
-      prompt,
+      prompt: finalPrompt,
       workflow,
       persona
     });
-    if (context.length) {
-      params.set('context', JSON.stringify(context));
+    if (recentHistory.length) {
+      params.set('context', JSON.stringify(recentHistory));
     }
     
-    if (this._activeEventSource) {
-      this._activeEventSource.close();
-      this._activeEventSource = null;
-    }
+    this.stopActiveStream();
+    this.renderStreamingMessage('', true);
+    this._chatStreamState = { running: true, source };
+    this.updateChatStatus('AI 生成中...');
+    this.setChatInteractionState(true);
     
     const es = new EventSource(`${this.serverUrl}/api/ai/stream?${params.toString()}`);
     this._activeEventSource = es;
@@ -993,15 +1154,18 @@ class App {
         if (data.delta) {
           acc += data.delta;
           this.renderStreamingMessage(acc);
+          this.updateChatStatus(`AI 输出中 (${acc.length} 字)`);
         }
         if (data.done) {
           es.close();
           if (this._activeEventSource === es) this._activeEventSource = null;
           this.renderStreamingMessage(acc, true);
+          this.stopActiveStream();
         }
         if (data.error) {
           es.close();
           if (this._activeEventSource === es) this._activeEventSource = null;
+          this.stopActiveStream();
           this.showToast('AI错误: ' + data.error, 'error');
         }
       } catch {}
@@ -1012,6 +1176,7 @@ class App {
       if (this._activeEventSource === es) {
         this._activeEventSource = null;
       }
+      this.stopActiveStream();
       this.showToast('AI流已中断', 'warning');
     };
   }
@@ -1021,11 +1186,13 @@ class App {
     if (!box) return;
     
     let msg = box.querySelector('.chat-message.assistant.streaming');
-    if (!msg) {
+    if (!msg && !done) {
       msg = document.createElement('div');
       msg.className = 'chat-message assistant streaming';
       box.appendChild(msg);
     }
+    
+    if (!msg) return;
     
     msg.textContent = text;
     
@@ -1034,7 +1201,12 @@ class App {
       if (text) {
         this._chatHistory.push({ role: 'assistant', text, ts: Date.now() });
         this._saveChatHistory();
+      } else {
+        msg.remove();
       }
+      this.updateChatStatus();
+    } else {
+      this.updateChatStatus(`AI 输出中 (${text.length} 字)`);
     }
     
     box.scrollTop = box.scrollHeight;
@@ -2984,7 +3156,11 @@ class App {
         break;
       case 'asr_final':
         this.renderASRStreaming('', true);
-        if (data.text) this.appendChat('user', data.text);
+        if (data.text) {
+          this.appendChat('user', data.text);
+          this.streamAIResponse(data.text, { appendUser: false, source: 'voice' })
+            .catch(err => this.showToast('语音触发失败: ' + err.message, 'error'));
+        }
         break;
       case 'command':
         if (data.command === 'display' && data.parameters?.text) {
