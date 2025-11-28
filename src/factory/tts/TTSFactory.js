@@ -6,53 +6,37 @@
 
 import VolcengineTTSClient from './VolcengineTTSClient.js';
 
-/**
- * TTS工厂类
- */
+const providers = new Map([
+    ['volcengine', (deviceId, config, Bot) => new VolcengineTTSClient(deviceId, config, Bot)]
+]);
+
 export default class TTSFactory {
-    /**
-     * 创建TTS客户端
-     * @param {string} deviceId - 设备ID
-     * @param {Object} config - TTS配置
-     * @param {Object} Bot - Bot实例
-     * @returns {Object} TTS客户端实例
-     */
-    static createClient(deviceId, config, Bot) {
+    static registerProvider(name, factoryFn) {
+        if (!name || typeof factoryFn !== 'function') {
+            throw new Error('注册TTS提供商时必须提供名称和工厂函数');
+        }
+        providers.set(name.toLowerCase(), factoryFn);
+    }
+
+    static listProviders() {
+        return Array.from(providers.keys());
+    }
+
+    static isProviderSupported(provider) {
+        return providers.has((provider || '').toLowerCase());
+    }
+
+    static createClient(deviceId, config = {}, Bot) {
         if (!config.enabled) {
             throw new Error('TTS未启用');
         }
 
-        const provider = config.provider || 'volcengine';
-
-        switch (provider.toLowerCase()) {
-            case 'volcengine':
-                return new VolcengineTTSClient(deviceId, config, Bot);
-            
-            // 可以在这里添加其他TTS提供商
-            // case 'aliyun':
-            //     return new AliyunTTSClient(deviceId, config, Bot);
-            // case 'tencent':
-            //     return new TencentTTSClient(deviceId, config, Bot);
-            
-            default:
-                throw new Error(`不支持的TTS提供商: ${provider}`);
+        const provider = (config.provider || 'volcengine').toLowerCase();
+        const factory = providers.get(provider);
+        if (!factory) {
+            throw new Error(`不支持的TTS提供商: ${provider}`);
         }
-    }
 
-    /**
-     * 获取支持的TTS提供商列表
-     * @returns {Array<string>} 提供商列表
-     */
-    static getSupportedProviders() {
-        return ['volcengine'];
-    }
-
-    /**
-     * 检查提供商是否支持
-     * @param {string} provider - 提供商名称
-     * @returns {boolean} 是否支持
-     */
-    static isProviderSupported(provider) {
-        return this.getSupportedProviders().includes(provider.toLowerCase());
+        return factory(deviceId, config, Bot);
     }
 }

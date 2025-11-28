@@ -26,6 +26,9 @@ class App {
     };
     this._chatStreamState = { running: false, source: null };
     this._activeEventSource = null;
+    this._asrBubble = null;
+    this._asrSessionId = null;
+    this._asrChunkIndex = 0;
     
     this.init();
   }
@@ -3116,7 +3119,8 @@ class App {
 
   // ========== WebSocket & 语音 ==========
   async ensureDeviceWs() {
-    if (this._deviceWs?.readyState === WebSocket.OPEN) return;
+    const state = this._deviceWs?.readyState;
+    if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
     
     const apiKey = localStorage.getItem('apiKey') || '';
     const wsUrl = this.serverUrl.replace(/^http/, 'ws') + '/device' + (apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '');
@@ -3142,6 +3146,7 @@ class App {
       };
       
       this._deviceWs.onclose = () => {
+        this._deviceWs = null;
         setTimeout(() => this.ensureDeviceWs(), 5000);
       };
     } catch (e) {
@@ -3154,14 +3159,15 @@ class App {
       case 'asr_interim':
         this.renderASRStreaming(data.text, false);
         break;
-      case 'asr_final':
-        this.renderASRStreaming('', true);
-        if (data.text) {
-          this.appendChat('user', data.text);
-          this.streamAIResponse(data.text, { appendUser: false, source: 'voice' })
+      case 'asr_final': {
+        const finalText = data.text || '';
+        this.renderASRStreaming(finalText, true);
+        if (finalText) {
+          this.streamAIResponse(finalText, { appendUser: false, source: 'voice' })
             .catch(err => this.showToast('语音触发失败: ' + err.message, 'error'));
         }
         break;
+      }
       case 'command':
         if (data.command === 'display' && data.parameters?.text) {
           this.appendChat('assistant', data.parameters.text);
@@ -3173,23 +3179,45 @@ class App {
     }
   }
 
-  renderASRStreaming(text, done) {
+  renderASRStreaming(text = '', done = false) {
     const box = document.getElementById('chatMessages');
     if (!box) return;
-    
-    let msg = box.querySelector('.chat-message.asr-streaming');
-    
-    if (!done && text) {
-      if (!msg) {
-        msg = document.createElement('div');
-        msg.className = 'chat-message assistant asr-streaming';
-        box.appendChild(msg);
+
+    const finalText = (text || '').trim();
+    let bubble = this._asrBubble;
+
+    if (!bubble) {
+      if (done) {
+        if (finalText) this.appendChat('user', finalText);
+        return;
       }
-      msg.textContent = `识别中: ${text}`;
-    } else if (done && msg) {
-      msg.remove();
+      bubble = document.createElement('div');
+      bubble.className = 'chat-message user asr-streaming';
+      bubble.innerHTML = `
+        <span class="chat-stream-icon">🎙</span>
+        <span class="chat-stream-text"></span>
+      `;
+      box.appendChild(bubble);
+      this._asrBubble = bubble;
     }
-    
+
+    const textNode = bubble.querySelector('.chat-stream-text') || bubble;
+
+    if (!done) {
+      bubble.classList.add('streaming');
+      textNode.textContent = finalText || '正在聆听...';
+    } else {
+      bubble.classList.remove('streaming', 'asr-streaming');
+      if (!finalText) {
+        bubble.remove();
+      } else {
+        textNode.textContent = finalText;
+        this._chatHistory.push({ role: 'user', text: finalText, ts: Date.now(), source: 'voice' });
+        this._saveChatHistory();
+      }
+      this._asrBubble = null;
+    }
+
     box.scrollTop = box.scrollHeight;
   }
 

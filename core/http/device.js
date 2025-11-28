@@ -78,6 +78,19 @@ const deviceLogs = new Map();
 const deviceCommands = new Map();
 const commandCallbacks = new Map();
 const deviceStats = new Map();
+
+const CONNECTION_LOG_WINDOW_MS = 2000;
+const connectionLogTracker = new Map();
+
+function shouldLogConnection(remote) {
+    const now = Date.now();
+    const last = connectionLogTracker.get(remote) || 0;
+    if (now - last < CONNECTION_LOG_WINDOW_MS) {
+        return false;
+    }
+    connectionLogTracker.set(remote, now);
+    return true;
+}
 const asrClients = new Map();
 const ttsClients = new Map();
 const asrSessions = new Map();
@@ -676,7 +689,7 @@ class DeviceManager {
             device_name: device_name || `${device_type}_${device_id}`,
             capabilities,
             metadata,
-            ip_address,
+            ip_address: ip_address || ws?.remoteAddress || ws?._socket?.remoteAddress || existedDevice?.ip_address,
             firmware_version,
             online: true,
             last_seen: Date.now(),
@@ -710,21 +723,32 @@ class DeviceManager {
 
         this.createDeviceBot(device_id, device, ws, runtimeBot);
 
-        BotUtil.makeLog('info',
-            `🟢 [设备上线] ${device.device_name} (${device_id}) - IP: ${ip_address}`,
-            device.device_name
-        );
+        const wasOffline = existedDevice ? existedDevice.online === false : false;
+        const isFirstSeen = !existedDevice;
+        const shouldAnnounceOnline = isFirstSeen || wasOffline;
 
-        runtimeBot.em('device.online', {
-            post_type: 'device',
-            event_type: 'online',
-            device_id,
-            device_type,
-            device_name: device.device_name,
-            capabilities,
-            self_id: device_id,
-            time: Math.floor(Date.now() / 1000)
-        });
+        if (shouldAnnounceOnline) {
+            BotUtil.makeLog('info',
+                `🟢 [设备上线] ${device.device_name} (${device_id}) - IP: ${device.ip_address || '未知'}`,
+                device.device_name
+            );
+
+            runtimeBot.em('device.online', {
+                post_type: 'device',
+                event_type: 'online',
+                device_id,
+                device_type,
+                device_name: device.device_name,
+                capabilities,
+                self_id: device_id,
+                time: Math.floor(Date.now() / 1000)
+            });
+        } else {
+            BotUtil.makeLog('debug',
+                `↻ [设备重连] ${device.device_name} (${device_id})`,
+                device.device_name
+            );
+        }
 
         return device;
     }
@@ -750,6 +774,10 @@ class DeviceManager {
         }
 
         ws.device_id = deviceId;
+        ws.remoteAddress = ws.remoteAddress
+            || ws._socket?.remoteAddress
+            || ws._socket?.address?.()?.address
+            || 'unknown';
         ws.isAlive = true;
         ws.lastPong = Date.now();
         ws.messageQueue = [];
@@ -1150,9 +1178,14 @@ class DeviceManager {
             const { type, device_id, ...payload } = data;
             const deviceId = device_id || ws.device_id || 'unknown';
 
-            if (type !== 'heartbeat' && type !== 'asr_audio_chunk') {
+            if (!['heartbeat', 'asr_audio_chunk', 'register'].includes(type)) {
                 BotUtil.makeLog('info',
                     `📨 [WebSocket] 收到消息: type="${type}", device_id="${deviceId}"`,
+                    deviceId
+                );
+            } else if (type === 'register') {
+                BotUtil.makeLog('debug',
+                    `📨 [WebSocket] 注册请求: device_id="${deviceId}"`,
                     deviceId
                 );
             }
@@ -1488,10 +1521,13 @@ export default {
     ws: {
         device: [
             (ws, req, Bot) => {
-                BotUtil.makeLog('info',
-                    `🔌 [WebSocket] 新连接: ${req.socket.remoteAddress}`,
-                    'DeviceManager'
-                );
+                const remote = req.socket?.remoteAddress || req.headers['x-real-ip'] || 'unknown';
+                if (shouldLogConnection(remote)) {
+                    BotUtil.makeLog('info',
+                        `🔌 [WebSocket] 新连接: ${remote}`,
+                        'DeviceManager'
+                    );
+                }
 
                 ws.on('message', msg => {
                     try {
@@ -1510,7 +1546,7 @@ export default {
                         deviceManager.handleDeviceDisconnect(ws.device_id, ws);
                     } else {
                         BotUtil.makeLog('info',
-                            `✓ [WebSocket] 连接关闭: ${req.socket.remoteAddress}`,
+                            `✓ [WebSocket] 连接关闭: ${remote}`,
                             'DeviceManager'
                         );
                     }
