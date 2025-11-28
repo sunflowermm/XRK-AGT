@@ -1,4 +1,4 @@
-import { collectBotInventory } from './utils.js';
+import { collectBotInventory } from '../../src/infrastructure/http/utils/botInventory.js';
 
 /**
  * 机器人管理API

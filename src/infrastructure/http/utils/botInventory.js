@@ -1,19 +1,12 @@
 const EXCLUDE_KEYS = new Set([
   'port',
   'apiKey',
- 'stdin',
- 'logger',
- '_eventsCount',
- 'url'
+  'stdin',
+  'logger',
+  '_eventsCount',
+  'url'
 ]);
 
-/**
- * 汇总机器人/设备实例，输出统一结构
- * @param {Object} Bot
- * @param {Object} options
- * @param {boolean} options.includeDevices
- * @returns {Array<Object>}
- */
 export function collectBotInventory(Bot, { includeDevices = true } = {}) {
   if (!Bot || typeof Bot !== 'object') {
     return [];
@@ -79,10 +72,6 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
   });
 }
 
-/**
- * 统计机器人/设备数量
- * @param {Array<Object>} bots
- */
 export function summarizeBots(bots = []) {
   const summary = {
     total: bots.length,

@@ -2,7 +2,7 @@ import os from 'os';
 import si from 'systeminformation';
 import cfg from '../../src/infrastructure/config/config.js';
 import StreamLoader from '../../src/infrastructure/aistream/loader.js';
-import { collectBotInventory, summarizeBots } from './utils.js';
+import { collectBotInventory, summarizeBots } from '../../src/infrastructure/http/utils/botInventory.js';
 
 let __lastNetSample = null;
 let __netSampler = null;

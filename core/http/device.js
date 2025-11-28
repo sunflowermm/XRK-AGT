@@ -88,7 +88,20 @@ class DeviceManager {
         this.cleanupInterval = null;
         const systemConfig = getSystemConfig();
         this.AUDIO_SAVE_DIR = systemConfig.audioSaveDir;
+        this.bot = null;
         this.initializeDirectories();
+    }
+
+    setBot(botInstance) {
+        this.bot = botInstance;
+    }
+
+    getBot(override) {
+        const runtime = override || this.bot;
+        if (!runtime) {
+            throw new Error('DeviceManager: Bot 实例未初始化');
+        }
+        return runtime;
     }
 
     /**
@@ -107,7 +120,7 @@ class DeviceManager {
     _getASRClient(deviceId, config) {
         let client = asrClients.get(deviceId);
         if (!client || client.__provider !== config.provider) {
-            client = ASRFactory.createClient(deviceId, config, Bot);
+            client = ASRFactory.createClient(deviceId, config, this.getBot());
             client.__provider = config.provider;
             asrClients.set(deviceId, client);
         }
@@ -123,7 +136,7 @@ class DeviceManager {
     _getTTSClient(deviceId, config) {
         let client = ttsClients.get(deviceId);
         if (!client || client.__provider !== config.provider) {
-            client = TTSFactory.createClient(deviceId, config, Bot);
+            client = TTSFactory.createClient(deviceId, config, this.getBot());
             client.__provider = config.provider;
             ttsClients.set(deviceId, client);
         }
@@ -417,8 +430,9 @@ class DeviceManager {
                 return;
             }
 
+            const runtimeBot = this.getBot();
             const deviceInfo = devices.get(deviceId);
-            const deviceBot = Bot[deviceId];
+            const deviceBot = runtimeBot[deviceId];
 
             if (!deviceBot) {
                 BotUtil.makeLog('error', '❌ [AI] 设备Bot未找到', deviceId);
@@ -516,7 +530,8 @@ class DeviceManager {
      */
     async _sendAIError(deviceId) {
         try {
-            const deviceBot = Bot[deviceId];
+            const runtimeBot = this.getBot();
+            const deviceBot = runtimeBot[deviceId];
             if (deviceBot && deviceBot.sendCommand) {
                 await deviceBot.sendCommand('ai_error', {}, 1);
             }
@@ -637,6 +652,7 @@ class DeviceManager {
      * @returns {Promise<Object>} 设备对象
      */
     async registerDevice(deviceData, Bot, ws) {
+        const runtimeBot = this.getBot(Bot);
         const {
             device_id,
             device_type,
@@ -688,18 +704,18 @@ class DeviceManager {
             this.setupWebSocket(device_id, ws);
         }
 
-        if (!Bot.uin.includes(device_id)) {
-            Bot.uin.push(device_id);
+        if (!runtimeBot.uin.includes(device_id)) {
+            runtimeBot.uin.push(device_id);
         }
 
-        this.createDeviceBot(device_id, device, ws);
+        this.createDeviceBot(device_id, device, ws, runtimeBot);
 
         BotUtil.makeLog('info',
             `🟢 [设备上线] ${device.device_name} (${device_id}) - IP: ${ip_address}`,
             device.device_name
         );
 
-        Bot.em('device.online', {
+        runtimeBot.em('device.online', {
             post_type: 'device',
             event_type: 'online',
             device_id,
@@ -784,6 +800,7 @@ class DeviceManager {
         clearInterval(ws.heartbeatTimer);
 
         const device = devices.get(deviceId);
+        const runtimeBot = this.bot;
         if (device) {
             device.online = false;
 
@@ -792,15 +809,17 @@ class DeviceManager {
                 device.device_name
             );
 
-            Bot.em('device.offline', {
-                post_type: 'device',
-                event_type: 'offline',
-                device_id: deviceId,
-                device_type: device.device_type,
-                device_name: device.device_name,
-                self_id: deviceId,
-                time: Math.floor(Date.now() / 1000)
-            });
+            if (runtimeBot) {
+                runtimeBot.em('device.offline', {
+                    post_type: 'device',
+                    event_type: 'offline',
+                    device_id: deviceId,
+                    device_type: device.device_type,
+                    device_name: device.device_name,
+                    self_id: deviceId,
+                    time: Math.floor(Date.now() / 1000)
+                });
+            }
         }
 
         deviceWebSockets.delete(deviceId);
@@ -813,13 +832,14 @@ class DeviceManager {
      * @param {WebSocket} ws - WebSocket实例
      * @returns {Object} Bot实例
      */
-    createDeviceBot(deviceId, deviceInfo, ws) {
+    createDeviceBot(deviceId, deviceInfo, ws, botOverride) {
+        const runtimeBot = this.getBot(botOverride);
         // 确保设备名称，Web客户端使用友好名称
         const deviceName = deviceInfo.device_type === 'web' 
           ? 'Web客户端' 
           : (deviceInfo.device_name || `${deviceInfo.device_type}_${deviceId}`);
         
-        Bot[deviceId] = {
+        runtimeBot[deviceId] = {
             adapter: this,
             ws,
             uin: deviceId,
@@ -963,7 +983,7 @@ class DeviceManager {
                     last_seen: device?.last_seen,
                     capabilities: deviceInfo.capabilities,
                     metadata: deviceInfo.metadata,
-                    stats: device?.stats || Bot[deviceId].stats
+                    stats: device?.stats || runtimeBot[deviceId].stats
                 };
             },
 
@@ -971,7 +991,7 @@ class DeviceManager {
                 deviceStats.get(deviceId) || this.initDeviceStats(deviceId)
         };
 
-        return Bot[deviceId];
+        return runtimeBot[deviceId];
     }
 
     /**
@@ -1051,12 +1071,13 @@ class DeviceManager {
      * @returns {Promise<Object>} 处理结果
      */
     async processDeviceEvent(deviceId, eventType, eventData = {}, Bot) {
+        const runtimeBot = this.getBot(Bot);
         try {
             if (!devices.has(deviceId)) {
                 if (eventType === 'register') {
                     return await this.registerDevice(
                         { device_id: deviceId, ...eventData },
-                        Bot
+                        runtimeBot
                     );
                 }
                 return { success: false, error: '设备未注册' };
@@ -1096,7 +1117,7 @@ class DeviceManager {
                     return await this.handleASRSessionStop(deviceId, eventData);
 
                 default:
-                    Bot.em(`device.${eventType}`, {
+                    runtimeBot.em(`device.${eventType}`, {
                         post_type: 'device',
                         event_type: eventType,
                         device_id: deviceId,
@@ -1124,6 +1145,7 @@ class DeviceManager {
      * @returns {Promise<void>}
      */
     async processWebSocketMessage(ws, data, Bot) {
+        const runtimeBot = this.getBot(Bot);
         try {
             const { type, device_id, ...payload } = data;
             const deviceId = device_id || ws.device_id || 'unknown';
@@ -1152,7 +1174,7 @@ class DeviceManager {
                     BotUtil.makeLog('info', `🔌 [WebSocket] 设备注册请求`, deviceId);
                     const device = await this.registerDevice(
                         { device_id: deviceId, ...payload },
-                        Bot,
+                        runtimeBot,
                         ws
                     );
                     ws.send(JSON.stringify({
@@ -1167,14 +1189,14 @@ class DeviceManager {
                 case 'data': {
                     const eventType = payload.data_type || payload.event_type || type;
                     const eventData = payload.data || payload.event_data || payload;
-                    await this.processDeviceEvent(deviceId, eventType, eventData, Bot);
+                    await this.processDeviceEvent(deviceId, eventType, eventData, runtimeBot);
                     break;
                 }
 
                 case 'asr_session_start':
                 case 'asr_audio_chunk':
                 case 'asr_session_stop':
-                    await this.processDeviceEvent(deviceId, type, payload, Bot);
+                    await this.processDeviceEvent(deviceId, type, payload, runtimeBot);
                     break;
 
                 case 'log': {
@@ -1210,7 +1232,7 @@ class DeviceManager {
                 }
 
                 case 'command_result':
-                    await this.processDeviceEvent(deviceId, type, payload, Bot);
+                    await this.processDeviceEvent(deviceId, type, payload, runtimeBot);
                     break;
 
                 default:
@@ -1240,6 +1262,7 @@ class DeviceManager {
      * @param {Object} Bot - Bot实例
      */
     checkOfflineDevices(Bot) {
+        const runtimeBot = this.getBot(Bot);
         const systemConfig = getSystemConfig();
         const timeout = systemConfig.heartbeatTimeout * 1000;
         const now = Date.now();
@@ -1258,7 +1281,7 @@ class DeviceManager {
                         device.device_name
                     );
 
-                    Bot.em('device.offline', {
+                    runtimeBot.em('device.offline', {
                         post_type: 'device',
                         event_type: 'offline',
                         device_id: id,
@@ -1504,12 +1527,13 @@ export default {
     },
 
     init(app, Bot) {
+        deviceManager.setBot(Bot);
         StreamLoader.configureEmbedding({
             enabled: false
         });
 
         deviceManager.cleanupInterval = setInterval(() => {
-            deviceManager.checkOfflineDevices(Bot);
+            deviceManager.checkOfflineDevices();
         }, 30000);
 
         setInterval(() => {
@@ -1541,7 +1565,8 @@ export default {
 
         // 订阅ASR结果事件：更新会话finalText并转发中间结果到前端
         try {
-            Bot.on('device', (e) => {
+            const runtimeBot = deviceManager.getBot();
+            runtimeBot.on('device', (e) => {
                 try {
                     if (!e || e.event_type !== 'asr_result') return;
                     const deviceId = e.device_id;
