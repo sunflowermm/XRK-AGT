@@ -419,39 +419,39 @@ class App {
   }
   
   renderBotsPanel(bots = []) {
-    const botsInfo = document.getElementById('botsInfo');
-    if (!botsInfo) return;
+      const botsInfo = document.getElementById('botsInfo');
+      if (!botsInfo) return;
     if (!Array.isArray(bots) || !bots.length) {
       botsInfo.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无机器人</div>';
       return;
     }
-    
-    botsInfo.innerHTML = `
-      <div style="display:grid;gap:0">
+      
+        botsInfo.innerHTML = `
+          <div style="display:grid;gap:0">
         ${bots.map((bot, index) => `
           <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;${index < bots.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}transition:background var(--transition);cursor:pointer" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
             <div style="width:40px;height:40px;border-radius:16px;background:var(--bg-muted);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--primary)">
               ${bot.nickname?.slice(0,2) || bot.uin?.slice(-2) || '??'}
             </div>
-            <div style="flex:1;min-width:0;text-align:left">
+                <div style="flex:1;min-width:0;text-align:left">
               <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${this.escapeHtml(bot.nickname || bot.uin)}</div>
-              <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
-                ${bot.adapter || '未知适配器'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
+                  <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
+                    ${bot.adapter || '未知适配器'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+                  ${bot.avatar && !bot.device ? `
+                    <img src="${bot.avatar}" 
+                         alt="${bot.nickname}" 
+                         style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--bg-input);flex-shrink:0"
+                         onerror="this.style.display='none'">
+                  ` : ''}
+                  <div style="width:10px;height:10px;border-radius:50%;background:${bot.online ? 'var(--success)' : 'var(--text-muted)'};flex-shrink:0;box-shadow:0 0 0 2px ${bot.online ? 'var(--success-light)' : 'transparent'}"></div>
+                </div>
               </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-              ${bot.avatar && !bot.device ? `
-                <img src="${bot.avatar}" 
-                     alt="${bot.nickname}" 
-                     style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--bg-input);flex-shrink:0"
-                     onerror="this.style.display='none'">
-              ` : ''}
-              <div style="width:10px;height:10px;border-radius:50%;background:${bot.online ? 'var(--success)' : 'var(--text-muted)'};flex-shrink:0;box-shadow:0 0 0 2px ${bot.online ? 'var(--success-light)' : 'transparent'}"></div>
-            </div>
+            `).join('')}
           </div>
-        `).join('')}
-      </div>
-    `;
+        `;
   }
   
   renderWorkflowInfo(workflows = {}, panels = {}) {
@@ -527,26 +527,26 @@ class App {
       const pluginsWithTasks = summary.withTasks || summary.taskCount || 0;
       const loadTime = summary.totalLoadTime || 0;
       const formatLoadTime = (ms) => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`;
-      pluginsInfo.innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center">
-          <div>
-            <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px;line-height:1.2">${totalPlugins}</div>
-            <div style="font-size:12px;color:var(--text-muted);font-weight:500">总插件数</div>
+        pluginsInfo.innerHTML = `
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center">
+            <div>
+              <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px;line-height:1.2">${totalPlugins}</div>
+              <div style="font-size:12px;color:var(--text-muted);font-weight:500">总插件数</div>
+            </div>
+            <div>
+              <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px;line-height:1.2">${pluginsWithRules}</div>
+              <div style="font-size:12px;color:var(--text-muted);font-weight:500">有规则</div>
+            </div>
+            <div>
+              <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px;line-height:1.2">${pluginsWithTasks}</div>
+              <div style="font-size:12px;color:var(--text-muted);font-weight:500">定时任务</div>
+            </div>
+            <div>
+              <div style="font-size:22px;font-weight:700;color:var(--info);margin-bottom:6px;line-height:1.2">${formatLoadTime(loadTime)}</div>
+              <div style="font-size:12px;color:var(--text-muted);font-weight:500">加载时间</div>
+            </div>
           </div>
-          <div>
-            <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px;line-height:1.2">${pluginsWithRules}</div>
-            <div style="font-size:12px;color:var(--text-muted);font-weight:500">有规则</div>
-          </div>
-          <div>
-            <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px;line-height:1.2">${pluginsWithTasks}</div>
-            <div style="font-size:12px;color:var(--text-muted);font-weight:500">定时任务</div>
-          </div>
-          <div>
-            <div style="font-size:22px;font-weight:700;color:var(--info);margin-bottom:6px;line-height:1.2">${formatLoadTime(loadTime)}</div>
-            <div style="font-size:12px;color:var(--text-muted);font-weight:500">加载时间</div>
-          </div>
-        </div>
-      `;
+        `;
     } catch (e) {
       const pluginsInfo = document.getElementById('pluginsInfo');
       if (pluginsInfo) pluginsInfo.innerHTML = `<div style="color:var(--danger)">加载失败：${e.message || ''}</div>`;
@@ -585,7 +585,7 @@ class App {
       if (typeof metrics.disk === 'number') {
         diskEl.textContent = `${metrics.disk.toFixed(1)}%`;
       } else if (disks.length > 0) {
-        const disk = disks[0];
+      const disk = disks[0];
         const diskPercent = disk.size > 0 ? ((disk.used / disk.size) * 100).toFixed(1) : 0;
         diskEl.textContent = `${diskPercent}%`;
       } else {

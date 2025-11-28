@@ -25,6 +25,73 @@
   - `temperature`、`maxTokens`、`topP`、`presencePenalty`、`frequencyPenalty` 等。
   - 运行时可在插件中额外传入 `apiConfig` 覆盖部分字段（如 `model/baseUrl/apiKey`）。
 
+### 运行时配置来源（`config/default_config/aistream.yaml`）
+
+`cfg.aistream` 会在 `AIStream` 和设备管理模块中统一读取，结构示例：
+
+```yaml
+enabled: true
+streamDir: "core/stream"
+
+llm:
+  enabled: true
+  defaultModel: short
+  persona: "你是一名友好、简洁的智能语音助手。"
+  displayDelay: 1500
+  defaults:
+    provider: generic
+    baseUrl: https://api.example.com/v1
+    apiKey: ""
+    model: general-task
+    temperature: 0.8
+    maxTokens: 2000
+    timeout: 30000
+  models:
+    short:
+      model: smart-short
+      maxTokens: 1024
+    long:
+      model: smart-long
+      maxTokens: 8000
+    fast:
+      model: smart-fast
+      maxTokens: 512
+
+tts:
+  defaultProvider: volcengine
+  providers:
+    volcengine:
+      wsUrl: wss://openspeech.bytedance.com/api/v3/tts/bidirection
+      appKey: YOUR_APP_KEY
+
+asr:
+  defaultProvider: volcengine
+  providers:
+    volcengine:
+      wsUrl: wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
+
+device:
+  heartbeatInterval: 30
+  heartbeatTimeout: 180
+  messageQueueSize: 100
+
+emotions:
+  keywords:
+    开心: happy
+  supported:
+    - happy
+    - sad
+
+drawing:
+  defaultModel: sketch
+  models:
+    sketch:
+      provider: generic
+      baseUrl: https://api.example.com/draw
+```
+
+> `drawing` 段目前仅提供占位符，方便后续扩展图像/渲染模型。
+
 - **Embedding 配置 `this.embeddingConfig`**
   - `enabled`：是否启用向量检索。
   - `provider`：`lightweight/onnx/hf/fasttext/api`。
@@ -130,6 +197,9 @@
 - `callAI(messages, apiConfig = {})`
   - 以非流式方式调用兼容 OpenAI 的 `/chat/completions` 接口。
   - 组合 `this.config` 与 `apiConfig`，支持覆盖 `model/baseUrl/apiKey` 等。
+  - 若未显式提供 `baseUrl/apiKey`，会依据 `cfg.aistream.llm` 中的 `defaultModel` / `models` 解析。
+    - `apiConfig.workflow` / `modelKey` 可指定命名模型（如 `short/long/fast`）。
+    - 底层由 `LLMFactory`（`src/factory/llm/LLMFactory.js`）创建具体客户端，默认实现了通用 OpenAI 兼容客户端。
 
 - `callAIStream(messages, apiConfig = {}, onDelta)`
   - 使用 `stream: true` 方式调用 Chat Completion。

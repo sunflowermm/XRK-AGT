@@ -3,6 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
+import cfg from '#infrastructure/config/config.js';
+import LLMFactory from '#factory/llm/LLMFactory.js';
 /**
  * 轻量级文本相似度计算器（BM25算法）
  */
@@ -902,43 +904,16 @@ export default class AIStream {
    * AI调用
    */
   async callAI(messages, apiConfig = {}) {
-    const config = { ...this.config, ...apiConfig };
-    
+    const config = this.resolveLLMConfig(apiConfig);
     if (!config.baseUrl || !config.apiKey) {
-      throw new Error('未配置AI API');
+      throw new Error('未配置LLM API');
     }
 
     try {
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: config.model || config.chatModel || 'gpt-3.5-turbo',
-          messages,
-          temperature: config.temperature,
-          max_tokens: config.maxTokens,
-          top_p: config.topP,
-          presence_penalty: config.presencePenalty,
-          frequency_penalty: config.frequencyPenalty,
-          stream: false
-        }),
-        timeout: config.timeout || 30000
-      });
-
-      if (!response.ok) {
-        throw new Error(`API错误: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result.choices?.[0]?.message?.content || null;
+      const client = LLMFactory.createClient(config);
+      return await client.chat(messages, config);
     } catch (error) {
-      BotUtil.makeLog('error', 
-        `AI调用失败: ${error.message}`, 
-        'AIStream'
-      );
+      BotUtil.makeLog('error', `AI调用失败: ${error.message}`, 'AIStream');
       return null;
     }
   }
@@ -961,61 +936,55 @@ export default class AIStream {
    * });
    */
   async callAIStream(messages, apiConfig = {}, onDelta) {
-    const config = { ...this.config, ...apiConfig };
-
+    const config = this.resolveLLMConfig(apiConfig);
     if (!config.baseUrl || !config.apiKey) {
-      throw new Error('未配置AI API');
+      throw new Error('未配置LLM API');
     }
 
-    const response = await fetch(`${config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: config.model || config.chatModel || 'gpt-3.5-turbo',
-        messages,
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        top_p: config.topP,
-        presence_penalty: config.presencePenalty,
-        frequency_penalty: config.frequencyPenalty,
-        stream: true
-      })
-    });
+    const client = LLMFactory.createClient(config);
+    await client.stream(messages, config, onDelta);
 
-    if (!response.ok || !response.body) {
-      throw new Error(`流式API错误: ${response.status}`);
+  /**
+   * 根据运行时配置与外部参数解析 LLM 配置
+   * @param {Object} apiConfig - 自定义配置
+   * @returns {Object} LLM配置
+   */
+  resolveLLMConfig(apiConfig = {}) {
+    const merged = { ...this.config, ...apiConfig };
+
+    if (merged.baseUrl && merged.apiKey) {
+      merged.provider = merged.provider || 'generic';
+      merged.path = merged.path || '/chat/completions';
+      return merged;
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
+    const runtime = cfg.aistream || {};
+    const llm = runtime.llm || {};
+    const defaults = llm.defaults || {};
+    const models = llm.models || {};
+    const requestedKey =
+      merged.workflow ||
+      merged.modelKey ||
+      merged.llmModel ||
+      llm.defaultModel;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+    const selectedModel =
+      models[requestedKey] ||
+      models[llm.defaultModel] ||
+      {};
 
-      let index;
-      while ((index = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, index).trim();
-        buffer = buffer.slice(index + 1);
-        if (!line) continue;
-        if (!line.startsWith('data:')) continue;
+    const resolved = {
+      enabled: llm.enabled !== false,
+      ...defaults,
+      ...selectedModel,
+      ...merged
+    };
 
-        const payload = line.slice(5).trim();
-        if (payload === '[DONE]') {
-          return;
-        }
-        try {
-          const json = JSON.parse(payload);
-          const delta = json.choices?.[0]?.delta?.content || '';
-          if (delta && typeof onDelta === 'function') onDelta(delta);
-        } catch { }
-      }
-    }
+    resolved.provider = resolved.provider || 'generic';
+    resolved.path = resolved.path || defaults.path || '/chat/completions';
+
+    return resolved;
+  }
   }
 
   /**

@@ -3,16 +3,7 @@ import BotUtil from '../../src/utils/botutil.js';
 import StreamLoader from '../../src/infrastructure/aistream/loader.js';
 import fs from 'fs';
 import path from 'path';
-
-// ==================== 导入配置 ====================
-import {
-    AI_CONFIG,
-    VOLCENGINE_TTS_CONFIG,
-    VOLCENGINE_ASR_CONFIG,
-    SYSTEM_CONFIG,
-    EMOTION_KEYWORDS,
-    SUPPORTED_EMOTIONS
-} from '../../src/factory/config/deviceConfig.js';
+import cfg from '../../src/infrastructure/config/config.js';
 
 // ==================== 导入工具函数 ====================
 import {
@@ -26,6 +17,59 @@ import {
 // ==================== 导入ASR和TTS工厂 ====================
 import ASRFactory from '../../src/factory/asr/ASRFactory.js';
 import TTSFactory from '../../src/factory/tts/TTSFactory.js';
+
+const ensureConfig = (value, path) => {
+    if (value === undefined || value === null) {
+        throw new Error(`设备配置缺失: ${path}`);
+    }
+    return value;
+};
+
+const getAistreamConfig = () => ensureConfig(cfg.aistream, 'aistream');
+
+const getLLMSettings = ({ workflow, persona } = {}) => {
+    const section = ensureConfig(getAistreamConfig().llm, 'aistream.llm');
+    const models = ensureConfig(section.models, 'aistream.llm.models');
+    const key = workflow || section.defaultModel;
+    const selected = ensureConfig(models[key], `aistream.llm.models.${key}`);
+
+    return {
+        enabled: section.enabled !== false,
+        workflowKey: key,
+        workflow: key,
+        persona: persona ?? section.persona,
+        displayDelay: section.displayDelay,
+        ...section.defaults,
+        ...selected
+    };
+};
+
+const resolveProvider = (sectionName) => {
+    const section = ensureConfig(getAistreamConfig()[sectionName], `aistream.${sectionName}`);
+    if (section.enabled === false) {
+        return { enabled: false };
+    }
+    const providers = ensureConfig(section.providers, `aistream.${sectionName}.providers`);
+    const key = ensureConfig(section.defaultProvider, `aistream.${sectionName}.defaultProvider`);
+    const providerConfig = ensureConfig(providers[key], `aistream.${sectionName}.providers.${key}`);
+    return { enabled: true, provider: key, ...providerConfig };
+};
+
+const getTtsConfig = () => resolveProvider('tts');
+const getAsrConfig = () => resolveProvider('asr');
+
+const getSystemConfig = () =>
+    ensureConfig(getAistreamConfig().device, 'aistream.device');
+
+const getEmotionKeywords = () => {
+    const emotions = ensureConfig(getAistreamConfig().emotions, 'aistream.emotions');
+    return ensureConfig(emotions.keywords, 'aistream.emotions.keywords');
+};
+
+const getSupportedEmotions = () => {
+    const emotions = ensureConfig(getAistreamConfig().emotions, 'aistream.emotions');
+    return ensureConfig(emotions.supported, 'aistream.emotions.supported');
+};
 
 // ==================== 全局存储 ====================
 const devices = new Map();
@@ -42,7 +86,8 @@ const asrSessions = new Map();
 class DeviceManager {
     constructor() {
         this.cleanupInterval = null;
-        this.AUDIO_SAVE_DIR = SYSTEM_CONFIG.audioSaveDir;
+        const systemConfig = getSystemConfig();
+        this.AUDIO_SAVE_DIR = systemConfig.audioSaveDir;
         this.initializeDirectories();
     }
 
@@ -59,10 +104,11 @@ class DeviceManager {
      * @returns {Object} ASR客户端
      * @private
      */
-    _getASRClient(deviceId) {
+    _getASRClient(deviceId, config) {
         let client = asrClients.get(deviceId);
-        if (!client) {
-            client = ASRFactory.createClient(deviceId, VOLCENGINE_ASR_CONFIG, Bot);
+        if (!client || client.__provider !== config.provider) {
+            client = ASRFactory.createClient(deviceId, config, Bot);
+            client.__provider = config.provider;
             asrClients.set(deviceId, client);
         }
         return client;
@@ -74,10 +120,11 @@ class DeviceManager {
      * @returns {Object} TTS客户端
      * @private
      */
-    _getTTSClient(deviceId) {
+    _getTTSClient(deviceId, config) {
         let client = ttsClients.get(deviceId);
-        if (!client) {
-            client = TTSFactory.createClient(deviceId, VOLCENGINE_TTS_CONFIG, Bot);
+        if (!client || client.__provider !== config.provider) {
+            client = TTSFactory.createClient(deviceId, config, Bot);
+            client.__provider = config.provider;
             ttsClients.set(deviceId, client);
         }
         return client;
@@ -94,13 +141,14 @@ class DeviceManager {
     async handleASRSessionStart(deviceId, data) {
         try {
             const { session_id, sample_rate, bits, channels, session_number } = data;
+            const asrConfig = getAsrConfig();
 
             BotUtil.makeLog('info',
                 `⚡ [ASR会话#${session_number}] 开始: ${session_id}`,
                 deviceId
             );
 
-            if (!VOLCENGINE_ASR_CONFIG.enabled) {
+            if (!asrConfig.enabled) {
                 return { success: false, error: 'ASR未启用' };
             }
 
@@ -123,7 +171,7 @@ class DeviceManager {
                 finalTextSetAt: null
             });
 
-            const client = this._getASRClient(deviceId);
+            const client = this._getASRClient(deviceId, asrConfig);
             try {
                 await client.beginUtterance(session_id, {
                     sample_rate,
@@ -159,6 +207,11 @@ class DeviceManager {
     async handleASRAudioChunk(deviceId, data) {
         try {
             const { session_id, chunk_index, data: audioHex, vad_state } = data;
+            const asrConfig = getAsrConfig();
+
+            if (!asrConfig.enabled) {
+                return { success: false, error: 'ASR未启用' };
+            }
 
             const session = asrSessions.get(session_id);
             if (!session) {
@@ -173,7 +226,7 @@ class DeviceManager {
             session.audioBuffers.push(audioBuf);
 
             if (session.asrStarted && (vad_state === 'active' || vad_state === 'ending')) {
-                const client = this._getASRClient(deviceId);
+                const client = this._getASRClient(deviceId, asrConfig);
                 if (client.connected && client.currentUtterance && !client.currentUtterance.ending) {
                     client.sendAudio(audioBuf);
 
@@ -226,6 +279,7 @@ class DeviceManager {
     async handleASRSessionStop(deviceId, data) {
         try {
             const { session_id, duration, session_number } = data;
+            const asrConfig = getAsrConfig();
 
             BotUtil.makeLog('info',
                 `✓ [ASR会话#${session_number}] 停止: ${session_id} (时长=${duration}s)`,
@@ -243,8 +297,8 @@ class DeviceManager {
             }
             session.stopped = true;
 
-            if (session.asrStarted) {
-                const client = this._getASRClient(deviceId);
+            if (session.asrStarted && asrConfig.enabled) {
+                const client = this._getASRClient(deviceId, asrConfig);
 
                 if (!session.earlyEndSent) {
                     try {
@@ -314,8 +368,14 @@ class DeviceManager {
             } catch { }
 
             // 处理AI响应
-            if (AI_CONFIG.enabled && session.finalText.trim()) {
-                await this._processAIResponse(deviceId, session.finalText, 'device');
+            const aiSettings = getLLMSettings({ workflow: 'device' });
+            if (aiSettings.enabled && session.finalText.trim()) {
+                await this._processAIResponse(
+                    deviceId,
+                    session.finalText,
+                    aiSettings.workflowKey,
+                    aiSettings.persona
+                );
             }
         } else {
             BotUtil.makeLog('warn',
@@ -366,10 +426,12 @@ class DeviceManager {
                 return;
             }
 
-            const streamConfig = {
-                ...AI_CONFIG,
-                persona: personaOverride ?? AI_CONFIG.persona
-            };
+            const streamConfig = getLLMSettings({ workflow: streamName, persona: personaOverride });
+            if (!streamConfig.enabled) {
+                BotUtil.makeLog('warn', '⚠️ [AI] 工作流已禁用', deviceId);
+                await this._sendAIError(deviceId);
+                return;
+            }
 
             const aiResult = await deviceStream.execute(
                 deviceId,
@@ -392,8 +454,10 @@ class DeviceManager {
             // 显示表情
             if (aiResult.emotion) {
                 try {
-                    let emotionCode = EMOTION_KEYWORDS[aiResult.emotion] || aiResult.emotion;
-                    if (!SUPPORTED_EMOTIONS.includes(emotionCode)) {
+                    const emotionKeywords = getEmotionKeywords();
+                    const supportedEmotions = getSupportedEmotions();
+                    let emotionCode = emotionKeywords[aiResult.emotion] || aiResult.emotion;
+                    if (!supportedEmotions.includes(emotionCode)) {
                         throw new Error(`未知表情: ${aiResult.emotion}`);
                     }
                     await deviceBot.emotion(emotionCode);
@@ -405,9 +469,10 @@ class DeviceManager {
             }
 
             // 播放TTS
-            if (aiResult.text && VOLCENGINE_TTS_CONFIG.enabled) {
+            const ttsConfig = getTtsConfig();
+            if (aiResult.text && ttsConfig.enabled) {
                 try {
-                    const ttsClient = this._getTTSClient(deviceId);
+                    const ttsClient = this._getTTSClient(deviceId, ttsConfig);
                     const success = await ttsClient.synthesize(aiResult.text);
 
                     if (success) {
@@ -505,6 +570,7 @@ class DeviceManager {
      */
     addDeviceLog(deviceId, level, message, data = {}) {
         message = String(message).substring(0, 500);
+        const systemConfig = getSystemConfig();
 
         const entry = {
             timestamp: Date.now(),
@@ -516,8 +582,8 @@ class DeviceManager {
         const logs = deviceLogs.get(deviceId) || [];
         logs.unshift(entry);
 
-        if (logs.length > SYSTEM_CONFIG.maxLogsPerDevice) {
-            logs.length = SYSTEM_CONFIG.maxLogsPerDevice;
+        if (logs.length > systemConfig.maxLogsPerDevice) {
+            logs.length = systemConfig.maxLogsPerDevice;
         }
 
         deviceLogs.set(deviceId, logs);
@@ -528,7 +594,7 @@ class DeviceManager {
             this.updateDeviceStats(deviceId, 'error');
         }
 
-        if (level !== 'debug' || SYSTEM_CONFIG.enableDetailedLogs) {
+        if (level !== 'debug' || systemConfig.enableDetailedLogs) {
             BotUtil.makeLog(level,
                 `[${device?.device_name || deviceId}] ${message}`,
                 device?.device_name || deviceId
@@ -672,6 +738,7 @@ class DeviceManager {
         ws.lastPong = Date.now();
         ws.messageQueue = [];
 
+        const systemConfig = getSystemConfig();
         ws.heartbeatTimer = setInterval(() => {
             if (!ws.isAlive) {
                 this.handleDeviceDisconnect(deviceId, ws);
@@ -690,7 +757,7 @@ class DeviceManager {
                     // 忽略错误
                 }
             }
-        }, SYSTEM_CONFIG.heartbeatInterval * 1000);
+        }, systemConfig.heartbeatInterval * 1000);
 
         ws.on('pong', () => {
             ws.isAlive = true;
@@ -783,7 +850,8 @@ class DeviceManager {
             clearLogs: () => deviceLogs.set(deviceId, []),
 
             sendMsg: async (msg) => {
-                for (const [keyword, emotion] of Object.entries(EMOTION_KEYWORDS)) {
+                const emotionKeywords = getEmotionKeywords();
+                for (const [keyword, emotion] of Object.entries(emotionKeywords)) {
                     if (msg.includes(keyword)) {
                         return await this.sendCommand(
                             deviceId,
@@ -843,7 +911,8 @@ class DeviceManager {
                 ),
 
             emotion: async (emotionName) => {
-                if (!SUPPORTED_EMOTIONS.includes(emotionName)) {
+                const supportedEmotions = getSupportedEmotions();
+                if (!supportedEmotions.includes(emotionName)) {
                     throw new Error(`未知表情: ${emotionName}`);
                 }
                 return await this.sendCommand(
@@ -919,6 +988,8 @@ class DeviceManager {
             throw new Error('设备未找到');
         }
 
+        const systemConfig = getSystemConfig();
+
         const cmd = {
             id: generateCommandId(),
             command,
@@ -936,7 +1007,7 @@ class DeviceManager {
                 const timeout = setTimeout(() => {
                     commandCallbacks.delete(cmd.id);
                     resolve({ success: true, command_id: cmd.id, timeout: true });
-                }, SYSTEM_CONFIG.commandTimeout);
+                }, systemConfig.commandTimeout);
 
                 commandCallbacks.set(cmd.id, (result) => {
                     clearTimeout(timeout);
@@ -961,8 +1032,8 @@ class DeviceManager {
             queue.push(cmd);
         }
 
-        if (queue.length > SYSTEM_CONFIG.messageQueueSize) {
-            queue.length = SYSTEM_CONFIG.messageQueueSize;
+        if (queue.length > systemConfig.messageQueueSize) {
+            queue.length = systemConfig.messageQueueSize;
         }
 
         deviceCommands.set(deviceId, queue);
@@ -1169,7 +1240,8 @@ class DeviceManager {
      * @param {Object} Bot - Bot实例
      */
     checkOfflineDevices(Bot) {
-        const timeout = SYSTEM_CONFIG.heartbeatTimeout * 1000;
+        const systemConfig = getSystemConfig();
+        const timeout = systemConfig.heartbeatTimeout * 1000;
         const now = Date.now();
 
         for (const [id, device] of devices) {
@@ -1275,11 +1347,13 @@ export default {
                     if (!device) {
                         return res.status(404).json({ success: false, message: '设备未找到' });
                     }
-                    if (!AI_CONFIG.enabled) {
+                    const workflowName = (workflow || 'device').toString().trim() || 'device';
+                    const aiSettings = getLLMSettings({ workflow: workflowName, persona });
+                    if (!aiSettings.enabled) {
                         return res.status(400).json({ success: false, message: 'AI未启用' });
                     }
-                    const workflowName = (workflow || 'device').toString().trim() || 'device';
-                    await deviceManager._processAIResponse(deviceId, String(text), workflowName, persona);
+                    const personaConfig = persona ?? aiSettings.persona;
+                    await deviceManager._processAIResponse(deviceId, String(text), workflowName, personaConfig);
                     return res.json({ success: true });
                 } catch (e) {
                     return res.status(500).json({ success: false, message: e.message });

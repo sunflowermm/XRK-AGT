@@ -25,3 +25,137 @@ cache:
     
   # 最大缓存条数
   maxSize: 100
+
+# LLM 模型配置
+llm:
+  enabled: true
+  defaultModel: short
+  persona: "你是一名友好、简洁的智能语音助手。"
+  displayDelay: 1500
+  defaults:
+    provider: generic
+    baseUrl: "https://api.example.com/v1"
+    apiKey: ""
+    model: "general-task"
+    temperature: 0.8
+    maxTokens: 2000
+    topP: 0.9
+    presencePenalty: 0.6
+    frequencyPenalty: 0.6
+    timeout: 30000
+    path: "/chat/completions"
+  models:
+    short:
+      model: "smart-short"
+      maxTokens: 1024
+      temperature: 0.7
+    long:
+      model: "smart-long"
+      maxTokens: 8000
+      temperature: 0.6
+    fast:
+      model: "smart-fast"
+      maxTokens: 512
+      temperature: 1.0
+    device:
+      model: "smart-short"
+      maxTokens: 1024
+      temperature: 0.7
+    chat:
+      model: "smart-short"
+      maxTokens: 2048
+      temperature: 0.8
+
+# 绘图模型占位配置（便于后续扩展）
+drawing:
+  defaultModel: sketch
+  models:
+    sketch:
+      provider: generic
+      baseUrl: "https://api.example.com/draw"
+      apiKey: ""
+      model: "dalle-mini"
+
+# TTS 配置
+tts:
+  enabled: true
+  defaultProvider: volcengine
+  providers:
+    volcengine:
+      wsUrl: "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
+      appKey: "YOUR_APP_KEY"
+      accessKey: "YOUR_ACCESS_KEY"
+      resourceId: "seed-tts-2.0"
+      voiceType: "zh_female_vv_uranus_bigtts"
+      encoding: "pcm"
+      sampleRate: 16000
+      speechRate: 5
+      loudnessRate: 0
+      emotion: "happy"
+      chunkMs: 128
+      chunkDelayMs: 5
+
+# ASR 配置
+asr:
+  enabled: true
+  defaultProvider: volcengine
+  providers:
+    volcengine:
+      wsUrl: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+      appKey: "YOUR_APP_KEY"
+      accessKey: "YOUR_ACCESS_KEY"
+      resourceId: "volc.bigasr.sauc.duration"
+      enableItn: true
+      enablePunc: true
+      enableDdc: false
+      showUtterances: true
+      resultType: "full"
+      enableAccelerateText: true
+      accelerateScore: 15
+      persistentWs: true
+      idleCloseMs: 6000
+      endWindowSize: 350
+      forceToSpeechTime: 500
+      maxAudioBufferSize: 30
+      asrFinalTextWaitMs: 1200
+
+# 设备运行参数
+device:
+  heartbeatInterval: 30
+  heartbeatTimeout: 180
+  commandTimeout: 10000
+  maxDevices: 100
+  maxLogsPerDevice: 100
+  messageQueueSize: 100
+  wsPingIntervalMs: 30000
+  wsPongTimeoutMs: 10000
+  wsReconnectDelayMs: 2000
+  wsMaxReconnectAttempts: 5
+  enableDetailedLogs: true
+  enablePerformanceLogs: true
+  audioSaveDir: "./data/wav"
+
+# 表情映射
+emotions:
+  keywords:
+    开心: happy
+    伤心: sad
+    生气: angry
+    惊讶: surprise
+    爱: love
+    酷: cool
+    睡觉: sleep
+    思考: think
+    眨眼: wink
+    大笑: laugh
+  supported:
+    - happy
+    - sad
+    - angry
+    - surprise
+    - love
+    - cool
+    - sleep
+    - think
+    - wink
+    - laugh

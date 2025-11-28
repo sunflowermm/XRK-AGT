@@ -138,44 +138,44 @@ function __ensureSysSamplers() {
 }
 
 async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
-  if (!__cpuCache.ts || (Date.now() - __cpuCache.ts > 5_000)) {
-    __sampleCpuOnce();
-  }
+          if (!__cpuCache.ts || (Date.now() - __cpuCache.ts > 5_000)) {
+            __sampleCpuOnce();
+          }
 
-  const cpus = os.cpus();
-  const totalMem = os.totalmem();
-  const freeMem = os.freemem();
-  const usedMem = totalMem - freeMem;
-  const memUsage = process.memoryUsage();
-  const siMem = await si.mem().catch(() => ({}));
+          const cpus = os.cpus();
+          const totalMem = os.totalmem();
+          const freeMem = os.freemem();
+          const usedMem = totalMem - freeMem;
+          const memUsage = process.memoryUsage();
+          const siMem = await si.mem().catch(() => ({}));
 
-  const lastNet = __lastNetSample || { ts: Date.now(), rx: 0, tx: 0 };
-  const rxBytes = Number(lastNet.rx || 0);
-  const txBytes = Number(lastNet.tx || 0);
-  const lastHist = __netHist.length ? __netHist[__netHist.length - 1] : { rxSec: 0, txSec: 0 };
-  const rxSec = Number(lastHist.rxSec || 0);
-  const txSec = Number(lastHist.txSec || 0);
+          const lastNet = __lastNetSample || { ts: Date.now(), rx: 0, tx: 0 };
+          const rxBytes = Number(lastNet.rx || 0);
+          const txBytes = Number(lastNet.tx || 0);
+          const lastHist = __netHist.length ? __netHist[__netHist.length - 1] : { rxSec: 0, txSec: 0 };
+          const rxSec = Number(lastHist.rxSec || 0);
+          const txSec = Number(lastHist.txSec || 0);
 
-  const disks = Array.isArray(__fsCache.disks) ? __fsCache.disks : [];
-  if (!__fsTimer || (Date.now() - (__fsCache.ts || 0) > 60_000)) __refreshFsCache();
+          const disks = Array.isArray(__fsCache.disks) ? __fsCache.disks : [];
+          if (!__fsTimer || (Date.now() - (__fsCache.ts || 0) > 60_000)) __refreshFsCache();
 
-  const processesTop5 = Array.isArray(__procCache.top5) ? __procCache.top5 : [];
-  if (!__procTimer || (Date.now() - (__procCache.ts || 0) > 20_000)) __refreshProcCache();
-
+          const processesTop5 = Array.isArray(__procCache.top5) ? __procCache.top5 : [];
+          if (!__procTimer || (Date.now() - (__procCache.ts || 0) > 20_000)) __refreshProcCache();
+          
   const networkStats = {};
-  const networkInterfaces = os.networkInterfaces();
-  for (const [name, interfaces] of Object.entries(networkInterfaces)) {
+          const networkInterfaces = os.networkInterfaces();
+          for (const [name, interfaces] of Object.entries(networkInterfaces)) {
     if (!interfaces) continue;
-    for (const iface of interfaces) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        networkStats[name] = {
-          address: iface.address,
-          netmask: iface.netmask,
-          mac: iface.mac
-        };
-      }
-    }
-  }
+              for (const iface of interfaces) {
+                if (iface.family === 'IPv4' && !iface.internal) {
+                  networkStats[name] = {
+                    address: iface.address,
+                    netmask: iface.netmask,
+                    mac: iface.mac
+                  };
+                }
+              }
+            }
 
   const bots = collectBotInventory(Bot, { includeDevices: true });
   const workflowStats = StreamLoader?.getStats?.() || null;
@@ -188,55 +188,55 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
   })) || [];
 
   const system = {
-    platform: os.platform(),
-    arch: os.arch(),
-    hostname: os.hostname(),
-    nodeVersion: process.version,
-    uptime: process.uptime(),
-    cpu: {
-      model: cpus[0]?.model || 'Unknown',
-      cores: cpus.length,
-      usage: process.cpuUsage(),
+              platform: os.platform(),
+              arch: os.arch(),
+              hostname: os.hostname(),
+              nodeVersion: process.version,
+              uptime: process.uptime(),
+              cpu: {
+                model: cpus[0]?.model || 'Unknown',
+                cores: cpus.length,
+                usage: process.cpuUsage(),
       percent: __cpuCache.percent || 0,
       loadavg: os.loadavg ? os.loadavg() : [0, 0, 0]
-    },
-    memory: {
-      total: totalMem,
-      free: freeMem,
-      used: usedMem,
-      usagePercent: ((usedMem / totalMem) * 100).toFixed(2),
-      process: {
-        rss: memUsage.rss,
-        heapTotal: memUsage.heapTotal,
-        heapUsed: memUsage.heapUsed,
-        external: memUsage.external,
-        arrayBuffers: memUsage.arrayBuffers
-      }
-    },
-    swap: {
-      total: Number(siMem?.swaptotal || 0),
-      used: Number(siMem?.swapused || 0),
-      usagePercent: siMem?.swaptotal ? +(((siMem.swapused || 0) / siMem.swaptotal) * 100).toFixed(2) : 0
-    },
-    disks,
-    net: { rxBytes, txBytes },
-    netRates: { rxSec, txSec },
+              },
+              memory: {
+                total: totalMem,
+                free: freeMem,
+                used: usedMem,
+                usagePercent: ((usedMem / totalMem) * 100).toFixed(2),
+                process: {
+                  rss: memUsage.rss,
+                  heapTotal: memUsage.heapTotal,
+                  heapUsed: memUsage.heapUsed,
+                  external: memUsage.external,
+                  arrayBuffers: memUsage.arrayBuffers
+                }
+              },
+              swap: {
+                total: Number(siMem?.swaptotal || 0),
+                used: Number(siMem?.swapused || 0),
+                usagePercent: siMem?.swaptotal ? +(((siMem.swapused || 0) / siMem.swaptotal) * 100).toFixed(2) : 0
+              },
+              disks,
+              net: { rxBytes, txBytes },
+              netRates: { rxSec, txSec },
     netHistory24h: includeHistory ? __getNetHistory24h() : [],
-    network: networkStats
+              network: networkStats
   };
 
   const snapshot = {
     success: true,
     timestamp: Date.now(),
     system,
-    bot: {
-      url: Bot.url,
-      port: Bot.port,
-      startTime: Bot.stat?.start_time || Date.now() / 1000,
-      uptime: Bot.stat?.start_time ? (Date.now() / 1000) - Bot.stat.start_time : process.uptime()
-    },
-    bots,
-    processesTop5,
+            bot: {
+              url: Bot.url,
+              port: Bot.port,
+              startTime: Bot.stat?.start_time || Date.now() / 1000,
+              uptime: Bot.stat?.start_time ? (Date.now() / 1000) - Bot.stat.start_time : process.uptime()
+            },
+            bots,
+            processesTop5,
     adapters: Bot.adapter,
     workflows: {
       stats: workflowStats,

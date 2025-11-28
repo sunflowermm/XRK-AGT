@@ -1275,6 +1275,280 @@ export default class SystemConfig extends ConfigBase {
                   component: 'InputNumber'
                 }
               }
+            },
+            llm: {
+              type: 'object',
+              label: 'LLM 配置',
+              component: 'SubForm',
+              fields: {
+                enabled: {
+                  type: 'boolean',
+                  label: '启用 LLM',
+                  component: 'Switch'
+                },
+                defaultModel: {
+                  type: 'string',
+                  label: '默认模型 Key',
+                  component: 'Input'
+                },
+                persona: {
+                  type: 'string',
+                  label: '默认人设',
+                  component: 'Input'
+                },
+                displayDelay: {
+                  type: 'number',
+                  label: '展示延迟 (ms)',
+                  min: 0,
+                  component: 'InputNumber'
+                },
+                defaults: {
+                  type: 'object',
+                  label: '默认参数',
+                  component: 'SubForm',
+                  fields: {
+                    provider: { type: 'string', label: '提供商', component: 'Input' },
+                    baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
+                    apiKey: { type: 'string', label: 'API Key', component: 'Input' },
+                    model: { type: 'string', label: '模型名称', component: 'Input' },
+                    temperature: { type: 'number', label: '温度', component: 'InputNumber' },
+                    maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
+                    topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
+                    presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
+                    frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' },
+                    timeout: { type: 'number', label: '超时时间 (ms)', component: 'InputNumber' },
+                    path: { type: 'string', label: '接口路径', component: 'Input' }
+                  }
+                },
+                models: {
+                  type: 'object',
+                  label: '模型映射',
+                  component: 'SubForm',
+                  fields: {
+                    short: {
+                      type: 'object',
+                      label: '短文本模型',
+                      component: 'SubForm',
+                      fields: {
+                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
+                      }
+                    },
+                    long: {
+                      type: 'object',
+                      label: '长文本模型',
+                      component: 'SubForm',
+                      fields: {
+                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
+                      }
+                    },
+                    fast: {
+                      type: 'object',
+                      label: '极速模型',
+                      component: 'SubForm',
+                      fields: {
+                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
+                      }
+                    },
+                    device: {
+                      type: 'object',
+                      label: '设备工作流模型',
+                      component: 'SubForm',
+                      fields: {
+                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
+                      }
+                    },
+                    chat: {
+                      type: 'object',
+                      label: '聊天工作流模型',
+                      component: 'SubForm',
+                      fields: {
+                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            drawing: {
+              type: 'object',
+              label: '绘图模型配置',
+              component: 'SubForm',
+              fields: {
+                defaultModel: {
+                  type: 'string',
+                  label: '默认模型',
+                  component: 'Input'
+                },
+                models: {
+                  type: 'object',
+                  label: '模型列表',
+                  component: 'SubForm',
+                  fields: {
+                    sketch: {
+                      type: 'object',
+                      label: 'Sketch 模型',
+                      component: 'SubForm',
+                      fields: {
+                        provider: { type: 'string', label: '提供商', component: 'Input' },
+                        baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
+                        apiKey: { type: 'string', label: 'API Key', component: 'Input' },
+                        model: { type: 'string', label: '模型名称', component: 'Input' }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            tts: {
+              type: 'object',
+              label: 'TTS 配置',
+              component: 'SubForm',
+              fields: {
+                enabled: {
+                  type: 'boolean',
+                  label: '启用 TTS',
+                  component: 'Switch'
+                },
+                defaultProvider: {
+                  type: 'string',
+                  label: '默认提供商',
+                  component: 'Input'
+                },
+                providers: {
+                  type: 'object',
+                  label: '提供商参数',
+                  component: 'SubForm',
+                  fields: {
+                    volcengine: {
+                      type: 'object',
+                      label: 'Volcengine',
+                      component: 'SubForm',
+                      fields: {
+                        wsUrl: { type: 'string', label: 'WebSocket 地址', component: 'Input' },
+                        appKey: { type: 'string', label: 'App Key', component: 'Input' },
+                        accessKey: { type: 'string', label: 'Access Key', component: 'Input' },
+                        resourceId: { type: 'string', label: '资源 ID', component: 'Input' },
+                        voiceType: { type: 'string', label: '声音类型', component: 'Input' },
+                        encoding: { type: 'string', label: '编码', component: 'Input' },
+                        sampleRate: { type: 'number', label: '采样率', component: 'InputNumber' },
+                        speechRate: { type: 'number', label: '语速', component: 'InputNumber' },
+                        loudnessRate: { type: 'number', label: '音量', component: 'InputNumber' },
+                        emotion: { type: 'string', label: '情绪', component: 'Input' },
+                        chunkMs: { type: 'number', label: '分片时长(ms)', component: 'InputNumber' },
+                        chunkDelayMs: { type: 'number', label: '分片延迟(ms)', component: 'InputNumber' }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            asr: {
+              type: 'object',
+              label: 'ASR 配置',
+              component: 'SubForm',
+              fields: {
+                enabled: {
+                  type: 'boolean',
+                  label: '启用 ASR',
+                  component: 'Switch'
+                },
+                defaultProvider: {
+                  type: 'string',
+                  label: '默认提供商',
+                  component: 'Input'
+                },
+                providers: {
+                  type: 'object',
+                  label: '提供商参数',
+                  component: 'SubForm',
+                  fields: {
+                    volcengine: {
+                      type: 'object',
+                      label: 'Volcengine',
+                      component: 'SubForm',
+                      fields: {
+                        wsUrl: { type: 'string', label: 'WebSocket 地址', component: 'Input' },
+                        appKey: { type: 'string', label: 'App Key', component: 'Input' },
+                        accessKey: { type: 'string', label: 'Access Key', component: 'Input' },
+                        resourceId: { type: 'string', label: '资源 ID', component: 'Input' },
+                        enableItn: { type: 'boolean', label: '启用ITN', component: 'Switch' },
+                        enablePunc: { type: 'boolean', label: '启用标点', component: 'Switch' },
+                        enableDdc: { type: 'boolean', label: '启用 DDC', component: 'Switch' },
+                        showUtterances: { type: 'boolean', label: '输出分片结果', component: 'Switch' },
+                        resultType: { type: 'string', label: '结果类型', component: 'Input' },
+                        enableAccelerateText: { type: 'boolean', label: '启用加速文本', component: 'Switch' },
+                        accelerateScore: { type: 'number', label: '加速阈值', component: 'InputNumber' },
+                        persistentWs: { type: 'boolean', label: '持久连接', component: 'Switch' },
+                        idleCloseMs: { type: 'number', label: '空闲断开(ms)', component: 'InputNumber' },
+                        endWindowSize: { type: 'number', label: '结束窗口', component: 'InputNumber' },
+                        forceToSpeechTime: { type: 'number', label: '强制语音检测(ms)', component: 'InputNumber' },
+                        maxAudioBufferSize: { type: 'number', label: '最大音频缓冲', component: 'InputNumber' },
+                        asrFinalTextWaitMs: { type: 'number', label: '最终文本等待(ms)', component: 'InputNumber' }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            device: {
+              type: 'object',
+              label: '设备运行参数',
+              component: 'SubForm',
+              fields: {
+                heartbeatInterval: { type: 'number', label: '心跳间隔 (s)', component: 'InputNumber' },
+                heartbeatTimeout: { type: 'number', label: '心跳超时 (s)', component: 'InputNumber' },
+                commandTimeout: { type: 'number', label: '命令超时 (ms)', component: 'InputNumber' },
+                maxDevices: { type: 'number', label: '最大设备数', component: 'InputNumber' },
+                maxLogsPerDevice: { type: 'number', label: '单设备日志上限', component: 'InputNumber' },
+                messageQueueSize: { type: 'number', label: '指令队列上限', component: 'InputNumber' },
+                wsPingIntervalMs: { type: 'number', label: 'WS Ping 间隔(ms)', component: 'InputNumber' },
+                wsPongTimeoutMs: { type: 'number', label: 'WS Pong 超时(ms)', component: 'InputNumber' },
+                wsReconnectDelayMs: { type: 'number', label: 'WS 重连延迟(ms)', component: 'InputNumber' },
+                wsMaxReconnectAttempts: { type: 'number', label: 'WS 最大重连次数', component: 'InputNumber' },
+                enableDetailedLogs: { type: 'boolean', label: '详细日志', component: 'Switch' },
+                enablePerformanceLogs: { type: 'boolean', label: '性能日志', component: 'Switch' },
+                audioSaveDir: { type: 'string', label: '音频保存目录', component: 'Input' }
+              }
+            },
+            emotions: {
+              type: 'object',
+              label: '表情配置',
+              component: 'SubForm',
+              fields: {
+                keywords: {
+                  type: 'object',
+                  label: '关键词映射',
+                  component: 'SubForm',
+                  fields: {
+                    '开心': { type: 'string', label: '开心', component: 'Input' },
+                    '伤心': { type: 'string', label: '伤心', component: 'Input' },
+                    '生气': { type: 'string', label: '生气', component: 'Input' },
+                    '惊讶': { type: 'string', label: '惊讶', component: 'Input' },
+                    '爱': { type: 'string', label: '爱', component: 'Input' },
+                    '酷': { type: 'string', label: '酷', component: 'Input' },
+                    '睡觉': { type: 'string', label: '睡觉', component: 'Input' },
+                    '思考': { type: 'string', label: '思考', component: 'Input' },
+                    '眨眼': { type: 'string', label: '眨眼', component: 'Input' },
+                    '大笑': { type: 'string', label: '大笑', component: 'Input' }
+                  }
+                },
+                supported: {
+                  type: 'array',
+                  label: '支持的表情列表',
+                  component: 'ArrayForm',
+                  itemType: 'string'
+                }
+              }
             }
           }
         }

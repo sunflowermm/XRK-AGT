@@ -78,7 +78,7 @@ flowchart TD
   - `src/factory`  
     - `asr/`：语音识别工厂 `ASRFactory` 与 `VolcengineASRClient`。
     - `tts/`：语音合成工厂 `TTSFactory` 与 `VolcengineTTSClient`。
-    - `config/deviceConfig.js`：设备配置工厂。
+    - `llm/`：大模型工厂 `LLMFactory` 与 `GenericLLMClient`，统一封装 Chat Completion 调用。
   - `src/modules`  
     - `oicq/`：与 OICQ/QQ 相关的模块封装。
     - `puppeteer.js` / `systemmonitor.js`：浏览器渲染与系统监控等扩展功能。
