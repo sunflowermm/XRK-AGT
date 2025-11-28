@@ -95,6 +95,33 @@ const asrClients = new Map();
 const ttsClients = new Map();
 const asrSessions = new Map();
 
+const LOG_THROTTLE_CACHE = new Map();
+const DEFAULT_LOG_THROTTLE = 1200;
+
+function shouldEmitThrottledLog(key, windowMs = DEFAULT_LOG_THROTTLE) {
+    const now = Date.now();
+    const previous = LOG_THROTTLE_CACHE.get(key);
+    if (previous && now - previous < windowMs) {
+        return false;
+    }
+    LOG_THROTTLE_CACHE.set(key, now);
+    if (LOG_THROTTLE_CACHE.size > 5000) {
+        const cutoff = now - windowMs * 5;
+        for (const [entryKey, timestamp] of LOG_THROTTLE_CACHE) {
+            if (timestamp < cutoff) {
+                LOG_THROTTLE_CACHE.delete(entryKey);
+            }
+        }
+    }
+    return true;
+}
+
+function logWithThrottle(level, message, scope, key, windowMs = DEFAULT_LOG_THROTTLE) {
+    if (shouldEmitThrottledLog(key, windowMs)) {
+        BotUtil.makeLog(level, message, scope);
+    }
+}
+
 // ==================== 设备管理器类 ====================
 class DeviceManager {
     constructor() {
@@ -102,6 +129,7 @@ class DeviceManager {
         const systemConfig = getSystemConfig();
         this.AUDIO_SAVE_DIR = systemConfig.audioSaveDir;
         this.bot = null;
+        this._deviceEventListener = null;
         this.initializeDirectories();
     }
 
@@ -122,6 +150,65 @@ class DeviceManager {
      */
     initializeDirectories() {
         initializeDirectories([this.AUDIO_SAVE_DIR]);
+    }
+
+    attachDeviceEventBridge(botInstance = this.bot) {
+        if (botInstance) {
+            this.bot = botInstance;
+        }
+        if (!this.bot?.on) return;
+        this.detachDeviceEventBridge();
+        this._deviceEventListener = (e) => {
+            try {
+                if (!e || e.event_type !== 'asr_result') return;
+                const deviceId = e.device_id;
+                const sessionId = e.session_id;
+                const text = e.text || '';
+                const isFinal = !!e.is_final;
+                const duration = e.duration || 0;
+                const session = asrSessions.get(sessionId);
+                if (session && session.deviceId === deviceId) {
+                    if (isFinal) {
+                        session.finalText = text;
+                        session.finalDuration = duration;
+                        session.finalTextSetAt = Date.now();
+                        const ws = deviceWebSockets.get(deviceId);
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                type: 'asr_final',
+                                device_id: deviceId,
+                                session_id: sessionId,
+                                text
+                            }));
+                        }
+                    } else if (text) {
+                        const ws = deviceWebSockets.get(deviceId);
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                type: 'asr_interim',
+                                device_id: deviceId,
+                                session_id: sessionId,
+                                text
+                            }));
+                        }
+                    }
+                }
+            } catch { }
+        };
+        this.bot.on('device', this._deviceEventListener);
+    }
+
+    detachDeviceEventBridge() {
+        if (!this._deviceEventListener || !this.bot) {
+            this._deviceEventListener = null;
+            return;
+        }
+        if (typeof this.bot.off === 'function') {
+            this.bot.off('device', this._deviceEventListener);
+        } else if (typeof this.bot.removeListener === 'function') {
+            this.bot.removeListener('device', this._deviceEventListener);
+        }
+        this._deviceEventListener = null;
     }
 
     /**
@@ -623,9 +710,14 @@ class DeviceManager {
         }
 
         if (level !== 'debug' || systemConfig.enableDetailedLogs) {
-            BotUtil.makeLog(level,
-                `[${device?.device_name || deviceId}] ${message}`,
-                device?.device_name || deviceId
+            const scope = device?.device_name || deviceId;
+            const dedupWindow = Number(systemConfig.logDedupWindowMs) || DEFAULT_LOG_THROTTLE;
+            logWithThrottle(
+                level,
+                `[${scope}] ${message}`,
+                scope,
+                `device-log:${deviceId}:${level}:${message}`,
+                dedupWindow
             );
         }
 
@@ -1179,14 +1271,20 @@ class DeviceManager {
             const deviceId = device_id || ws.device_id || 'unknown';
 
             if (!['heartbeat', 'asr_audio_chunk', 'register'].includes(type)) {
-                BotUtil.makeLog('info',
+                logWithThrottle(
+                    'info',
                     `📨 [WebSocket] 收到消息: type="${type}", device_id="${deviceId}"`,
-                    deviceId
+                    deviceId,
+                    `ws:${deviceId}:${type}`,
+                    800
                 );
             } else if (type === 'register') {
-                BotUtil.makeLog('debug',
+                logWithThrottle(
+                    'debug',
                     `📨 [WebSocket] 注册请求: device_id="${deviceId}"`,
-                    deviceId
+                    deviceId,
+                    `ws-register:${deviceId}`,
+                    1500
                 );
             }
 
@@ -1601,50 +1699,12 @@ export default {
 
         // 订阅ASR结果事件：更新会话finalText并转发中间结果到前端
         try {
-            const runtimeBot = deviceManager.getBot();
-            runtimeBot.on('device', (e) => {
-                try {
-                    if (!e || e.event_type !== 'asr_result') return;
-                    const deviceId = e.device_id;
-                    const sessionId = e.session_id;
-                    const text = e.text || '';
-                    const isFinal = !!e.is_final;
-                    const duration = e.duration || 0;
-                    const session = asrSessions.get(sessionId);
-                    if (session && session.deviceId === deviceId) {
-                        if (isFinal) {
-                            session.finalText = text;
-                            session.finalDuration = duration;
-                            session.finalTextSetAt = Date.now();
-                            // 立即将最终结果推送给前端
-                            const ws = deviceWebSockets.get(deviceId);
-                            if (ws && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({
-                                    type: 'asr_final',
-                                    device_id: deviceId,
-                                    session_id: sessionId,
-                                    text
-                                }));
-                            }
-                        } else if (text) {
-                            // 中间结果实时转发到webclient
-                            const ws = deviceWebSockets.get(deviceId);
-                            if (ws && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({
-                                    type: 'asr_interim',
-                                    device_id: deviceId,
-                                    session_id: sessionId,
-                                    text
-                                }));
-                            }
-                        }
-                    }
-                } catch { }
-            });
+            deviceManager.attachDeviceEventBridge(deviceManager.getBot());
         } catch { }
     },
 
     destroy() {
+        deviceManager.detachDeviceEventBridge();
         if (deviceManager.cleanupInterval) {
             clearInterval(deviceManager.cleanupInterval);
         }

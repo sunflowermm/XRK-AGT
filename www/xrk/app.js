@@ -29,6 +29,8 @@ class App {
     this._asrBubble = null;
     this._asrSessionId = null;
     this._asrChunkIndex = 0;
+    this._systemThemeWatcher = null;
+    this.theme = 'light';
     
     this.init();
   }
@@ -121,15 +123,64 @@ class App {
     const savedKey = localStorage.getItem('apiKey');
     if (savedKey) document.getElementById('apiKey').value = savedKey;
     
-    if (localStorage.getItem('theme') === 'dark') {
-      document.body.classList.add('dark');
+    const storedTheme = localStorage.getItem('theme');
+    if (storedTheme === 'dark' || storedTheme === 'light') {
+      this.applyTheme(storedTheme);
+      this.disableSystemThemeSync();
+    } else {
+      this.applyTheme(this.detectSystemTheme());
+      this.enableSystemThemeSync();
+    }
+  }
+
+  detectSystemTheme() {
+    try {
+      if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+      }
+    } catch {}
+    return 'light';
+  }
+
+  enableSystemThemeSync() {
+    if (!window.matchMedia || this._systemThemeWatcher) return;
+    const mql = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (event) => {
+      if (!localStorage.getItem('theme')) {
+        this.applyTheme(event.matches ? 'dark' : 'light');
+      }
+    };
+    if (mql.addEventListener) {
+      mql.addEventListener('change', handler);
+    } else {
+      mql.addListener?.(handler);
+    }
+    this._systemThemeWatcher = { mql, handler };
+  }
+
+  disableSystemThemeSync() {
+    if (!this._systemThemeWatcher) return;
+    const { mql, handler } = this._systemThemeWatcher;
+    mql.removeEventListener?.('change', handler);
+    mql.removeListener?.(handler);
+    this._systemThemeWatcher = null;
+  }
+
+  applyTheme(theme, { persist = false } = {}) {
+    const nextTheme = theme === 'dark' ? 'dark' : 'light';
+    this.theme = nextTheme;
+    document.body.classList.toggle('dark', nextTheme === 'dark');
+    document.documentElement?.setAttribute('data-theme', nextTheme);
+    if (persist) {
+      localStorage.setItem('theme', nextTheme);
+      this.disableSystemThemeSync();
     }
   }
 
   toggleTheme() {
-    document.body.classList.toggle('dark');
-    localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
-    this.showToast(document.body.classList.contains('dark') ? '已切换到暗色主题' : '已切换到亮色主题', 'info');
+    const nextTheme = this.theme === 'dark' ? 'light' : 'dark';
+    this.applyTheme(nextTheme, { persist: true });
+    this.showToast(nextTheme === 'dark' ? '已切换到暗色主题' : '已切换到亮色主题', 'info');
   }
 
   toggleSidebar() {
@@ -2841,7 +2892,7 @@ class App {
     const textarea = document.getElementById('jsonEditor');
     if (!textarea || !window.CodeMirror) return;
     
-    const theme = document.body.classList.contains('dark') ? 'monokai' : 'default';
+    const theme = this.theme === 'dark' ? 'monokai' : 'default';
     this.jsonEditor = CodeMirror.fromTextArea(textarea, {
       mode: 'application/json',
       theme,
