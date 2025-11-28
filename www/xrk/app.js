@@ -20,6 +20,7 @@ class App {
     this._ttsPlaying = false;
     this._configState = null;
     this._schemaCache = {};
+    this._activeEventSource = null;
     
     this.init();
   }
@@ -346,6 +347,20 @@ class App {
             </div>
             <div id="pluginsInfo" style="padding:20px;color:var(--text-muted);text-align:center">加载中...</div>
           </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">工作流状态</span>
+            </div>
+            <div id="workflowInfo" style="padding:20px;color:var(--text-muted);text-align:center">加载中...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">网络接口</span>
+          </div>
+          <div id="networkInfo" style="padding:20px;color:var(--text-muted);text-align:center">加载中...</div>
         </div>
         
         <div class="card">
@@ -370,122 +385,178 @@ class App {
     `;
     
     this.loadSystemStatus();
-    this.loadBotsInfo();
     this.loadPluginsInfo();
   }
 
   async loadSystemStatus() {
     try {
-      const res = await fetch(`${this.serverUrl}/api/system/status`, { headers: this.getHeaders() });
-      if (!res.ok) return;
+      const res = await fetch(`${this.serverUrl}/api/system/overview?withHistory=1`, { headers: this.getHeaders() });
+      if (!res.ok) throw new Error('接口异常');
       const data = await res.json();
-      if (data.success) this.updateSystemStatus(data);
+      if (!data.success) throw new Error(data.error || '获取失败');
+      this._latestSystem = data;
+      this.updateSystemStatus(data);
+      this.renderBotsPanel(data.bots || []);
+      this.renderWorkflowInfo(data.workflows, data.panels);
+      this.renderNetworkInfo(data.system?.network, data.system?.netRates);
     } catch (e) {
       console.error('Failed to load system status:', e);
+      this.renderBotsPanel();
+      this.renderWorkflowInfo();
+      this.renderNetworkInfo();
     }
   }
   
   async loadBotsInfo() {
     try {
       const res = await fetch(`${this.serverUrl}/api/status`, { headers: this.getHeaders() });
-      if (!res.ok) return;
+      if (!res.ok) throw new Error('接口异常');
       const data = await res.json();
-      const botsInfo = document.getElementById('botsInfo');
-      if (!botsInfo) return;
-      
-      if (data.bots && Array.isArray(data.bots) && data.bots.length > 0) {
-        botsInfo.innerHTML = `
-          <div style="display:grid;gap:0">
-            ${data.bots.map((bot, index) => `
-              <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;${index < data.bots.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}transition:background var(--transition);cursor:pointer" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
-                <div style="flex:1;min-width:0;text-align:left">
-                  <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${bot.nickname || bot.uin}</div>
-                  <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
-                    ${bot.adapter || '未知适配器'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
-                  </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-                  ${bot.avatar && !bot.device ? `
-                    <img src="${bot.avatar}" 
-                         alt="${bot.nickname}" 
-                         style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--bg-input);flex-shrink:0"
-                         onerror="this.style.display='none'">
-                  ` : ''}
-                  <div style="width:10px;height:10px;border-radius:50%;background:${bot.online ? 'var(--success)' : 'var(--text-muted)'};flex-shrink:0;box-shadow:0 0 0 2px ${bot.online ? 'var(--success-light)' : 'transparent'}"></div>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        `;
-      } else {
-        botsInfo.innerHTML = '<div style="color:var(--text-muted)">暂无机器人</div>';
-      }
-    } catch (e) {
-      const botsInfo = document.getElementById('botsInfo');
-      if (botsInfo) botsInfo.innerHTML = '<div style="color:var(--danger)">加载失败</div>';
+      this.renderBotsPanel(data.bots || []);
+    } catch {
+      this.renderBotsPanel();
     }
+  }
+  
+  renderBotsPanel(bots = []) {
+    const botsInfo = document.getElementById('botsInfo');
+    if (!botsInfo) return;
+    if (!Array.isArray(bots) || !bots.length) {
+      botsInfo.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无机器人</div>';
+      return;
+    }
+    
+    botsInfo.innerHTML = `
+      <div style="display:grid;gap:0">
+        ${bots.map((bot, index) => `
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;${index < bots.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}transition:background var(--transition);cursor:pointer" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+            <div style="width:40px;height:40px;border-radius:16px;background:var(--bg-muted);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--primary)">
+              ${bot.nickname?.slice(0,2) || bot.uin?.slice(-2) || '??'}
+            </div>
+            <div style="flex:1;min-width:0;text-align:left">
+              <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${this.escapeHtml(bot.nickname || bot.uin)}</div>
+              <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
+                ${bot.adapter || '未知适配器'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+              ${bot.avatar && !bot.device ? `
+                <img src="${bot.avatar}" 
+                     alt="${bot.nickname}" 
+                     style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--bg-input);flex-shrink:0"
+                     onerror="this.style.display='none'">
+              ` : ''}
+              <div style="width:10px;height:10px;border-radius:50%;background:${bot.online ? 'var(--success)' : 'var(--text-muted)'};flex-shrink:0;box-shadow:0 0 0 2px ${bot.online ? 'var(--success-light)' : 'transparent'}"></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+  
+  renderWorkflowInfo(workflows = {}, panels = {}) {
+    const box = document.getElementById('workflowInfo');
+    if (!box) return;
+    const stats = panels?.workflows || workflows?.stats || {};
+    const items = panels?.workflows?.items || workflows?.items || [];
+    if (!stats.total) {
+      box.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无工作流数据</div>';
+      return;
+    }
+    
+    box.innerHTML = `
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px">${stats.enabled ?? 0}/${stats.total}</div>
+          <div style="font-size:12px;color:var(--text-muted)">启用 / 总数</div>
+        </div>
+        <div>
+          <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px">${stats.embeddingReady ?? 0}</div>
+          <div style="font-size:12px;color:var(--text-muted)">Embedding 就绪</div>
+        </div>
+        <div>
+          <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px">${stats.provider || '默认'}</div>
+          <div style="font-size:12px;color:var(--text-muted)">Embedding Provider</div>
+        </div>
+      </div>
+      ${items.length ? `
+        <div style="margin-top:16px;font-size:12px;color:var(--text-muted)">优先级最高的工作流</div>
+        <ul style="margin:8px 0 0;padding:0;list-style:none">
+          ${items.map(item => `
+            <li style="padding:8px 0;border-bottom:1px solid var(--border)">
+              <div style="font-weight:600;color:var(--text-primary)">${this.escapeHtml(item.name || 'workflow')}</div>
+              <div style="font-size:12px;color:var(--text-muted)">${this.escapeHtml(item.description || '')}</div>
+            </li>
+          `).join('')}
+        </ul>
+      ` : ''}
+    `;
+  }
+  
+  renderNetworkInfo(network = {}, rates = {}) {
+    const box = document.getElementById('networkInfo');
+    if (!box) return;
+    const entries = Object.entries(network || {});
+    if (!entries.length) {
+      box.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无网络信息</div>';
+      return;
+    }
+    const rateText = `${Math.max(0, Number(rates?.rxSec || 0) / 1024).toFixed(1)} KB/s ↓ · ${Math.max(0, Number(rates?.txSec || 0) / 1024).toFixed(1)} KB/s ↑`;
+    box.innerHTML = `
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${rateText}</div>
+      ${entries.map(([name, info]) => `
+        <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="font-weight:600;color:var(--text-primary)">${this.escapeHtml(name)}</div>
+          <div style="font-size:12px;color:var(--text-muted)">IP: ${info.address} · MAC: ${info.mac}</div>
+        </div>
+      `).join('')}
+    `;
   }
   
   async loadPluginsInfo() {
     try {
-      // 获取插件统计信息
-      const statsRes = await fetch(`${this.serverUrl}/api/plugins/stats`, { headers: this.getHeaders() });
-      const pluginsRes = await fetch(`${this.serverUrl}/api/plugins`, { headers: this.getHeaders() });
-      
+      const res = await fetch(`${this.serverUrl}/api/plugins/summary`, { headers: this.getHeaders() });
       const pluginsInfo = document.getElementById('pluginsInfo');
       if (!pluginsInfo) return;
-      
-      if (!statsRes.ok || !pluginsRes.ok) {
-        pluginsInfo.innerHTML = '<div style="color:var(--text-muted)">加载中...</div>';
-        return;
-      }
-      
-      const statsData = await statsRes.json();
-      const pluginsData = await pluginsRes.json();
-      
-      if (statsData.success && pluginsData.success) {
-        const stats = statsData.stats || {};
-        const plugins = pluginsData.plugins || [];
-        const totalPlugins = stats.totalPlugins || plugins.length;
-        const pluginsWithRules = plugins.filter(p => p.rule > 0).length;
-        const pluginsWithTasks = stats.taskCount || 0;
-        const loadTime = stats.totalLoadTime || 0;
-        const formatLoadTime = (ms) => {
-          if (ms < 1000) return `${ms}ms`;
-          return `${(ms / 1000).toFixed(2)}s`;
-        };
-        
-        pluginsInfo.innerHTML = `
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center">
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px;line-height:1.2">${totalPlugins}</div>
-              <div style="font-size:12px;color:var(--text-muted);font-weight:500">总插件数</div>
-            </div>
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px;line-height:1.2">${pluginsWithRules}</div>
-              <div style="font-size:12px;color:var(--text-muted);font-weight:500">有规则</div>
-            </div>
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px;line-height:1.2">${pluginsWithTasks}</div>
-              <div style="font-size:12px;color:var(--text-muted);font-weight:500">定时任务</div>
-            </div>
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--info);margin-bottom:6px;line-height:1.2">${formatLoadTime(loadTime)}</div>
-              <div style="font-size:12px;color:var(--text-muted);font-weight:500">加载时间</div>
-            </div>
+      if (!res.ok) throw new Error('接口异常');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || '获取失败');
+      const summary = data.summary || {};
+      const totalPlugins = summary.totalPlugins || (data.plugins?.length || 0);
+      const pluginsWithRules = summary.withRules || 0;
+      const pluginsWithTasks = summary.withTasks || summary.taskCount || 0;
+      const loadTime = summary.totalLoadTime || 0;
+      const formatLoadTime = (ms) => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`;
+      pluginsInfo.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center">
+          <div>
+            <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px;line-height:1.2">${totalPlugins}</div>
+            <div style="font-size:12px;color:var(--text-muted);font-weight:500">总插件数</div>
           </div>
-        `;
-      } else {
-        pluginsInfo.innerHTML = '<div style="color:var(--text-muted)">暂无插件</div>';
-      }
+          <div>
+            <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px;line-height:1.2">${pluginsWithRules}</div>
+            <div style="font-size:12px;color:var(--text-muted);font-weight:500">有规则</div>
+          </div>
+          <div>
+            <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px;line-height:1.2">${pluginsWithTasks}</div>
+            <div style="font-size:12px;color:var(--text-muted);font-weight:500">定时任务</div>
+          </div>
+          <div>
+            <div style="font-size:22px;font-weight:700;color:var(--info);margin-bottom:6px;line-height:1.2">${formatLoadTime(loadTime)}</div>
+            <div style="font-size:12px;color:var(--text-muted);font-weight:500">加载时间</div>
+          </div>
+        </div>
+      `;
     } catch (e) {
       const pluginsInfo = document.getElementById('pluginsInfo');
-      if (pluginsInfo) pluginsInfo.innerHTML = '<div style="color:var(--danger)">加载失败</div>';
+      if (pluginsInfo) pluginsInfo.innerHTML = `<div style="color:var(--danger)">加载失败：${e.message || ''}</div>`;
     }
   }
 
   updateSystemStatus(data) {
     const { system } = data;
+    const panels = data.panels || {};
+    const metrics = panels.metrics || {};
     
     const formatUptime = (s) => {
       if (!s || s === 0) return '0分钟';
@@ -498,21 +569,23 @@ class App {
     };
     
     // 更新统计卡片
-    const cpuPercent = system?.cpu?.percent ?? 0;
+    const cpuPercent = metrics.cpu ?? system?.cpu?.percent ?? 0;
     const cpuEl = document.getElementById('cpuValue');
     if (cpuEl) cpuEl.textContent = `${cpuPercent.toFixed(1)}%`;
     
     const memUsed = system?.memory?.used ?? 0;
     const memTotal = system?.memory?.total ?? 1;
-    const memPercent = memTotal > 0 ? ((memUsed / memTotal) * 100).toFixed(1) : 0;
+    const memPercent = metrics.memory ?? (memTotal > 0 ? ((memUsed / memTotal) * 100).toFixed(1) : 0);
     const memEl = document.getElementById('memValue');
     if (memEl) memEl.textContent = `${memPercent}%`;
     
     const disks = system?.disks ?? [];
     const diskEl = document.getElementById('diskValue');
     if (diskEl) {
-    if (disks.length > 0) {
-      const disk = disks[0];
+      if (typeof metrics.disk === 'number') {
+        diskEl.textContent = `${metrics.disk.toFixed(1)}%`;
+      } else if (disks.length > 0) {
+        const disk = disks[0];
         const diskPercent = disk.size > 0 ? ((disk.used / disk.size) * 100).toFixed(1) : 0;
         diskEl.textContent = `${diskPercent}%`;
       } else {
@@ -526,8 +599,8 @@ class App {
     }
     
     // 更新网络历史：总是推入数据，保证图表有数据点
-    const rxSec = Math.max(0, Number(system?.netRates?.rxSec) || 0) / 1024;
-    const txSec = Math.max(0, Number(system?.netRates?.txSec) || 0) / 1024;
+    const rxSec = Math.max(0, Number(metrics.net?.rxSec ?? system?.netRates?.rxSec ?? 0)) / 1024;
+    const txSec = Math.max(0, Number(metrics.net?.txSec ?? system?.netRates?.txSec ?? 0)) / 1024;
     this._metricsHistory.netRx.push(rxSec);
     this._metricsHistory.netTx.push(txSec);
     // 保留最近60个点
@@ -893,11 +966,25 @@ class App {
   }
 
   async startAIStream(prompt) {
-    const ctx = this._chatHistory.slice(-8).map(m => `${m.role === 'user' ? 'U' : 'A'}:${m.text}`).join('|').slice(-800);
-    const finalPrompt = ctx ? `【上下文】${ctx}\n【提问】${prompt}` : prompt;
-    const url = `${this.serverUrl}/api/ai/stream?prompt=${encodeURIComponent(finalPrompt)}&persona=`;
+    const workflow = localStorage.getItem('chatWorkflow') || 'chat';
+    const persona = localStorage.getItem('chatPersona') || '';
+    const context = this._chatHistory.slice(-8).map(m => ({ role: m.role, text: m.text }));
+    const params = new URLSearchParams({
+      prompt,
+      workflow,
+      persona
+    });
+    if (context.length) {
+      params.set('context', JSON.stringify(context));
+    }
     
-    const es = new EventSource(url);
+    if (this._activeEventSource) {
+      this._activeEventSource.close();
+      this._activeEventSource = null;
+    }
+    
+    const es = new EventSource(`${this.serverUrl}/api/ai/stream?${params.toString()}`);
+    this._activeEventSource = es;
     let acc = '';
     
     es.onmessage = (e) => {
@@ -909,16 +996,24 @@ class App {
         }
         if (data.done) {
           es.close();
+          if (this._activeEventSource === es) this._activeEventSource = null;
           this.renderStreamingMessage(acc, true);
         }
         if (data.error) {
           es.close();
+          if (this._activeEventSource === es) this._activeEventSource = null;
           this.showToast('AI错误: ' + data.error, 'error');
         }
       } catch {}
     };
     
-    es.onerror = () => es.close();
+    es.onerror = () => {
+      es.close();
+      if (this._activeEventSource === es) {
+        this._activeEventSource = null;
+      }
+      this.showToast('AI流已中断', 'warning');
+    };
   }
 
   renderStreamingMessage(text, done = false) {
@@ -990,20 +1085,20 @@ class App {
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
             <input type="search" id="configSearchInput" placeholder="搜索配置 / 描述">
-          </div>
-          <div class="config-list" id="configList">
-            <div class="empty-state">
-              <div class="loading-spinner" style="margin:0 auto"></div>
+        </div>
+        <div class="config-list" id="configList">
+          <div class="empty-state">
+            <div class="loading-spinner" style="margin:0 auto"></div>
               <p style="margin-top:12px">加载配置中...</p>
-            </div>
           </div>
+        </div>
         </aside>
         <section class="config-main" id="configMain">
           ${this.renderConfigPlaceholder()}
         </section>
       </div>
     `;
-
+    
     document.getElementById('configSearchInput')?.addEventListener('input', (e) => {
       if (!this._configState) return;
       this._configState.filter = e.target.value.trim().toLowerCase();
@@ -1043,10 +1138,10 @@ class App {
     if (!list) return;
 
     if (!this._configState.list.length) {
-      list.innerHTML = '<div class="empty-state"><p>暂无配置</p></div>';
-      return;
-    }
-
+        list.innerHTML = '<div class="empty-state"><p>暂无配置</p></div>';
+        return;
+      }
+      
     const keyword = this._configState.filter;
     const filtered = this._configState.list.filter(cfg => {
       if (!keyword) return true;
@@ -1067,13 +1162,13 @@ class App {
         <div class="config-item-meta">
           <div class="config-name">${title}</div>
           <p class="config-desc">${desc}</p>
-        </div>
+          </div>
         ${cfg.name === 'system' ? '<span class="config-tag">多文件</span>' : ''}
-      </div>
+          </div>
     `;
     }).join('');
-
-    list.querySelectorAll('.config-item').forEach(item => {
+      
+      list.querySelectorAll('.config-item').forEach(item => {
       item.addEventListener('click', () => this.selectConfig(item.dataset.name));
     });
   }
@@ -1111,7 +1206,7 @@ class App {
       <div class="empty-state">
         <div class="loading-spinner" style="margin:0 auto"></div>
         <p style="margin-top:12px">加载配置详情...</p>
-      </div>
+          </div>
     `;
   }
 
@@ -1130,21 +1225,21 @@ class App {
         <div>
           <h2>${this.escapeHtml(config.displayName || config.name)}</h2>
           <p>${this.escapeHtml(config.description || '')}</p>
+          </div>
         </div>
-      </div>
       <div class="config-grid">
         ${entries.map(([key, meta]) => `
           <div class="config-subcard" data-child="${this.escapeHtml(key)}">
             <div>
               <div class="config-subcard-title">${this.escapeHtml(meta.displayName || key)}</div>
               <p class="config-subcard-desc">${this.escapeHtml(meta.description || '')}</p>
-            </div>
+          </div>
             <span class="config-tag">${this.escapeHtml(`system/${key}`)}</span>
           </div>
         `).join('')}
       </div>
     `;
-
+    
     main.querySelectorAll('.config-subcard').forEach(card => {
       card.addEventListener('click', () => this.selectConfig('system', card.dataset.child));
     });
@@ -1207,7 +1302,7 @@ class App {
     if (!res.ok) {
       throw new Error('获取结构描述失败');
     }
-    const data = await res.json();
+      const data = await res.json();
     if (!data.success) {
       throw new Error(data.message || '结构接口异常');
     }
@@ -1912,7 +2007,7 @@ class App {
       }
     } else if (component === 'inputnumber' || type === 'number') {
       value = target.value === '' ? null : Number(target.value);
-    } else {
+      } else {
       value = target.value;
     }
 

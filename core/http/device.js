@@ -315,7 +315,7 @@ class DeviceManager {
 
             // 处理AI响应
             if (AI_CONFIG.enabled && session.finalText.trim()) {
-                await this._processAIResponse(deviceId, session.finalText);
+                await this._processAIResponse(deviceId, session.finalText, 'device');
             }
         } else {
             BotUtil.makeLog('warn',
@@ -340,7 +340,7 @@ class DeviceManager {
      * @returns {Promise<void>}
      * @private
      */
-    async _processAIResponse(deviceId, question) {
+    async _processAIResponse(deviceId, question, workflowName = 'device', personaOverride) {
         try {
             const startTime = Date.now();
 
@@ -349,9 +349,10 @@ class DeviceManager {
                 deviceId
             );
 
-            const deviceStream = StreamLoader.getStream('device');
+            const streamName = workflowName || 'device';
+            const deviceStream = StreamLoader.getStream(streamName) || StreamLoader.getStream('device');
             if (!deviceStream) {
-                BotUtil.makeLog('error', '❌ [AI] 设备工作流未加载', deviceId);
+                BotUtil.makeLog('error', `❌ [AI] 工作流未加载: ${streamName}`, deviceId);
                 await this._sendAIError(deviceId);
                 return;
             }
@@ -365,12 +366,17 @@ class DeviceManager {
                 return;
             }
 
+            const streamConfig = {
+                ...AI_CONFIG,
+                persona: personaOverride ?? AI_CONFIG.persona
+            };
+
             const aiResult = await deviceStream.execute(
                 deviceId,
                 question,
-                AI_CONFIG,
+                streamConfig,
                 deviceInfo || {},
-                AI_CONFIG.persona
+                streamConfig.persona
             );
 
             if (!aiResult) {
@@ -380,7 +386,7 @@ class DeviceManager {
             }
 
             const aiTime = Date.now() - startTime;
-            BotUtil.makeLog('info', `⚡ [AI性能] 处理耗时: ${aiTime}ms`, deviceId);
+            BotUtil.makeLog('info', `⚡ [AI性能] [${deviceStream.name}] 耗时: ${aiTime}ms`, deviceId);
             BotUtil.makeLog('info', `✅ [AI] 回复: ${aiResult.text || '(仅表情)'}`, deviceId);
 
             // 显示表情
@@ -1261,7 +1267,7 @@ export default {
             handler: async (req, res, Bot) => {
                 try {
                     const deviceId = req.params.deviceId;
-                    const { text } = req.body || {};
+                    const { text, workflow, persona } = req.body || {};
                     if (!text || !String(text).trim()) {
                         return res.status(400).json({ success: false, message: '缺少文本内容' });
                     }
@@ -1272,7 +1278,8 @@ export default {
                     if (!AI_CONFIG.enabled) {
                         return res.status(400).json({ success: false, message: 'AI未启用' });
                     }
-                    await deviceManager._processAIResponse(deviceId, String(text));
+                    const workflowName = (workflow || 'device').toString().trim() || 'device';
+                    await deviceManager._processAIResponse(deviceId, String(text), workflowName, persona);
                     return res.json({ success: true });
                 } catch (e) {
                     return res.status(500).json({ success: false, message: e.message });

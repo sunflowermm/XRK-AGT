@@ -1,5 +1,47 @@
 import PluginsLoader from '../../src/infrastructure/plugins/loader.js';
 
+function collectPluginEntries() {
+  const priorityPlugins = PluginsLoader.priority || [];
+  const extendedPlugins = PluginsLoader.extended || [];
+  const allPlugins = [...priorityPlugins, ...extendedPlugins];
+  const plugins = [];
+
+  for (const entry of allPlugins) {
+    try {
+      const instance = new entry.class();
+      plugins.push({
+        key: entry.key,
+        name: instance.name || entry.key,
+        priority: entry.priority,
+        dsc: instance.dsc || '暂无描述',
+        rule: instance.rule?.length || 0,
+        task: instance.task ? 1 : 0
+      });
+    } catch (error) {
+      logger?.error?.(`[Plugin API] 初始化插件失败: ${entry.key}`, error);
+    }
+  }
+
+  return plugins;
+}
+
+function buildPluginStats(plugins = []) {
+  const stats = PluginsLoader.pluginLoadStats || {};
+  const extendedPlugins = PluginsLoader.extended || [];
+  const taskList = PluginsLoader.task || [];
+
+  return {
+    totalPlugins: plugins.length,
+    totalLoadTime: stats.totalLoadTime || 0,
+    startTime: stats.startTime || 0,
+    taskCount: taskList.length,
+    extendedCount: extendedPlugins.length,
+    withRules: plugins.filter(p => (p.rule || 0) > 0).length,
+    withTasks: plugins.filter(p => p.task > 0).length,
+    plugins: stats.plugins || []
+  };
+}
+
 /**
  * 插件管理API
  * 提供插件列表查询、重载、任务管理等功能
@@ -14,32 +56,18 @@ export default {
       method: 'GET',
       path: '/api/plugins',
       handler: async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-
-        const plugins = [];
-        const priorityPlugins = PluginsLoader.priority || [];
-        const extendedPlugins = PluginsLoader.extended || [];
-        const allPlugins = [...priorityPlugins, ...extendedPlugins];
-        
-        for (const p of allPlugins) {
-          try {
-            const plugin = new p.class();
-            plugins.push({
-              key: p.key,
-              name: plugin.name || p.key,
-              priority: p.priority,
-              dsc: plugin.dsc || '暂无描述',
-              rule: plugin.rule?.length || 0,
-              task: plugin.task ? 1 : 0
-            });
-          } catch (error) {
-            logger.error(`[Plugin API] 初始化插件失败: ${p.key}`, error);
-          }
-        }
-
+        const plugins = collectPluginEntries();
         res.json({ success: true, plugins });
+      }
+    },
+
+    {
+      method: 'GET',
+      path: '/api/plugins/summary',
+      handler: async (req, res) => {
+        const plugins = collectPluginEntries();
+        const summary = buildPluginStats(plugins);
+        res.json({ success: true, summary, plugins });
       }
     },
 
@@ -47,10 +75,6 @@ export default {
       method: 'POST',
       path: '/api/plugin/:key/reload',
       handler: async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-
         try {
           const { key } = req.params;
           if (!key) {
@@ -77,10 +101,6 @@ export default {
       method: 'GET',
       path: '/api/plugins/tasks',
       handler: async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-
         const taskList = PluginsLoader.task || [];
         const tasks = taskList.map(t => ({
           name: t.name,
@@ -96,25 +116,10 @@ export default {
       method: 'GET',
       path: '/api/plugins/stats',
       handler: async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-
-        const stats = PluginsLoader.pluginLoadStats || {};
-        const priorityPlugins = PluginsLoader.priority || [];
-        const extendedPlugins = PluginsLoader.extended || [];
-        const allPlugins = [...priorityPlugins, ...extendedPlugins];
-        
+        const plugins = collectPluginEntries();
         res.json({
           success: true,
-          stats: {
-            totalPlugins: allPlugins.length,
-            totalLoadTime: stats.totalLoadTime || 0,
-            startTime: stats.startTime || 0,
-            taskCount: PluginsLoader.task?.length || 0,
-            extendedCount: extendedPlugins.length,
-            plugins: stats.plugins || []
-          }
+          stats: buildPluginStats(plugins)
         });
       }
     }

@@ -1,6 +1,8 @@
 import os from 'os';
 import si from 'systeminformation';
 import cfg from '../../src/infrastructure/config/config.js';
+import StreamLoader from '../../src/infrastructure/aistream/loader.js';
+import { collectBotInventory, summarizeBots } from './utils.js';
 
 let __lastNetSample = null;
 let __netSampler = null;
@@ -135,6 +137,147 @@ function __ensureSysSamplers() {
   }
 }
 
+async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
+  if (!__cpuCache.ts || (Date.now() - __cpuCache.ts > 5_000)) {
+    __sampleCpuOnce();
+  }
+
+  const cpus = os.cpus();
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  const memUsage = process.memoryUsage();
+  const siMem = await si.mem().catch(() => ({}));
+
+  const lastNet = __lastNetSample || { ts: Date.now(), rx: 0, tx: 0 };
+  const rxBytes = Number(lastNet.rx || 0);
+  const txBytes = Number(lastNet.tx || 0);
+  const lastHist = __netHist.length ? __netHist[__netHist.length - 1] : { rxSec: 0, txSec: 0 };
+  const rxSec = Number(lastHist.rxSec || 0);
+  const txSec = Number(lastHist.txSec || 0);
+
+  const disks = Array.isArray(__fsCache.disks) ? __fsCache.disks : [];
+  if (!__fsTimer || (Date.now() - (__fsCache.ts || 0) > 60_000)) __refreshFsCache();
+
+  const processesTop5 = Array.isArray(__procCache.top5) ? __procCache.top5 : [];
+  if (!__procTimer || (Date.now() - (__procCache.ts || 0) > 20_000)) __refreshProcCache();
+
+  const networkStats = {};
+  const networkInterfaces = os.networkInterfaces();
+  for (const [name, interfaces] of Object.entries(networkInterfaces)) {
+    if (!interfaces) continue;
+    for (const iface of interfaces) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        networkStats[name] = {
+          address: iface.address,
+          netmask: iface.netmask,
+          mac: iface.mac
+        };
+      }
+    }
+  }
+
+  const bots = collectBotInventory(Bot, { includeDevices: true });
+  const workflowStats = StreamLoader?.getStats?.() || null;
+  const workflowList = StreamLoader?.getStreamsByPriority?.()?.map(stream => ({
+    name: stream.name,
+    description: stream.description,
+    priority: stream.priority,
+    enabled: stream.config?.enabled !== false,
+    embeddingReady: !!stream.embeddingReady
+  })) || [];
+
+  const system = {
+    platform: os.platform(),
+    arch: os.arch(),
+    hostname: os.hostname(),
+    nodeVersion: process.version,
+    uptime: process.uptime(),
+    cpu: {
+      model: cpus[0]?.model || 'Unknown',
+      cores: cpus.length,
+      usage: process.cpuUsage(),
+      percent: __cpuCache.percent || 0,
+      loadavg: os.loadavg ? os.loadavg() : [0, 0, 0]
+    },
+    memory: {
+      total: totalMem,
+      free: freeMem,
+      used: usedMem,
+      usagePercent: ((usedMem / totalMem) * 100).toFixed(2),
+      process: {
+        rss: memUsage.rss,
+        heapTotal: memUsage.heapTotal,
+        heapUsed: memUsage.heapUsed,
+        external: memUsage.external,
+        arrayBuffers: memUsage.arrayBuffers
+      }
+    },
+    swap: {
+      total: Number(siMem?.swaptotal || 0),
+      used: Number(siMem?.swapused || 0),
+      usagePercent: siMem?.swaptotal ? +(((siMem.swapused || 0) / siMem.swaptotal) * 100).toFixed(2) : 0
+    },
+    disks,
+    net: { rxBytes, txBytes },
+    netRates: { rxSec, txSec },
+    netHistory24h: includeHistory ? __getNetHistory24h() : [],
+    network: networkStats
+  };
+
+  const snapshot = {
+    success: true,
+    timestamp: Date.now(),
+    system,
+    bot: {
+      url: Bot.url,
+      port: Bot.port,
+      startTime: Bot.stat?.start_time || Date.now() / 1000,
+      uptime: Bot.stat?.start_time ? (Date.now() / 1000) - Bot.stat.start_time : process.uptime()
+    },
+    bots,
+    processesTop5,
+    adapters: Bot.adapter,
+    workflows: {
+      stats: workflowStats,
+      items: workflowList
+    }
+  };
+
+  snapshot.panels = buildPanelPayload(snapshot);
+  return snapshot;
+}
+
+function buildPanelPayload(snapshot) {
+  const system = snapshot.system || {};
+  const bots = snapshot.bots || [];
+  const workflows = snapshot.workflows || {};
+  const botSummary = summarizeBots(bots);
+
+  const disk = Array.isArray(system.disks) && system.disks[0];
+  const diskUsage = disk && disk.size > 0 ? ((disk.used / disk.size) * 100).toFixed(1) : 0;
+
+  return {
+    metrics: {
+      cpu: system.cpu?.percent || 0,
+      memory: Number(system.memory?.usagePercent) || 0,
+      disk: Number(diskUsage) || 0,
+      swap: system.swap?.usagePercent || 0,
+      net: system.netRates || { rxSec: 0, txSec: 0 }
+    },
+    bots: botSummary,
+    workflows: {
+      total: workflows.stats?.total || 0,
+      enabled: workflows.stats?.enabled || 0,
+      embeddingReady: workflows.stats?.embedding?.ready || 0,
+      provider: workflows.stats?.embedding?.provider || null,
+      items: workflows.items?.slice(0, 5) || []
+    },
+    processes: snapshot.processesTop5 || [],
+    interfaces: system.network || {}
+  };
+}
+
 /**
  * 核心系统API
  * 提供系统状态、配置查询、健康检查等基础功能
@@ -154,161 +297,34 @@ export default {
       path: '/api/system/status',
       handler: async (req, res, Bot) => {
         try {
-          // 仅使用同一方法的缓存；若缓存过期则触发一次轻量采样
-          if (!__cpuCache.ts || (Date.now() - __cpuCache.ts > 5_000)) {
-            __sampleCpuOnce();
-          }
-          const cpuPct = __cpuCache.percent || 0;
-
-          // 基础信息（极快）
-          const cpus = os.cpus();
-          const totalMem = os.totalmem();
-          const freeMem = os.freemem();
-          const usedMem = totalMem - freeMem;
-          const memUsage = process.memoryUsage();
-
-          // 交换分区（允许为空，但不阻塞）
-          const siMem = await si.mem().catch(() => ({}));
-
-          // 网络字节与速率：仅使用采样缓存
-          const lastNet = __lastNetSample || { ts: Date.now(), rx: 0, tx: 0 };
-          const rxBytes = Number(lastNet.rx || 0);
-          const txBytes = Number(lastNet.tx || 0);
-          const lastHist = __netHist.length ? __netHist[__netHist.length - 1] : { rxSec: 0, txSec: 0 };
-          const rxSec = Number(lastHist.rxSec || 0);
-          const txSec = Number(lastHist.txSec || 0);
-
-          // 磁盘 & 进程：直接使用缓存，必要时后台刷新
-          const disks = Array.isArray(__fsCache.disks) ? __fsCache.disks : [];
-          if (!__fsTimer || (Date.now() - (__fsCache.ts || 0) > 60_000)) __refreshFsCache();
-
-          const processesTop5 = Array.isArray(__procCache.top5) ? __procCache.top5 : [];
-          if (!__procTimer || (Date.now() - (__procCache.ts || 0) > 20_000)) __refreshProcCache();
-          
-          // 获取网络接口信息（轻量）
-          const networkInterfaces = os.networkInterfaces();
-          const networkStats = {};
-          for (const [name, interfaces] of Object.entries(networkInterfaces)) {
-            if (interfaces) {
-              for (const iface of interfaces) {
-                if (iface.family === 'IPv4' && !iface.internal) {
-                  networkStats[name] = {
-                    address: iface.address,
-                    netmask: iface.netmask,
-                    mac: iface.mac
-                  };
-                }
-              }
-            }
-          }
-
-          // 获取进程信息
-          // 合并Bot.bots和直接挂载在Bot上的设备（如Web客户端）
-          const allBots = { ...Bot.bots };
-          // 查找直接挂载在Bot上的设备（device类型）
-          for (const key in Bot) {
-            if (Bot[key] && typeof Bot[key] === 'object' && Bot[key].device_type) {
-              allBots[key] = Bot[key];
-            }
-          }
-          
-          const bots = Object.entries(allBots)
-            .filter(([uin, bot]) => {
-              if (typeof bot !== 'object' || !bot) return false;
-              const excludeKeys = ['port', 'apiKey', 'stdin', 'logger', '_eventsCount', 'url'];
-              if (excludeKeys.includes(uin)) return false;
-              // 设备类型或普通机器人
-              return bot.device_type || bot.adapter || bot.nickname || bot.fl || bot.gl;
-            })
-            .map(([uin, bot]) => {
-              // 如果是设备类型（如Web客户端）
-              if (bot.device_type) {
-                return {
-                  uin,
-                  online: bot.online !== false, // 设备默认在线
-                  nickname: bot.nickname || bot.info?.device_name || 'Web客户端',
-                  adapter: bot.device_type === 'web' ? 'Web客户端' : (bot.device_type || '设备'),
-                  device: true,
-                  stats: {
-                    friends: 0,
-                    groups: 0
-                  }
-                };
-              }
-              // 普通机器人
-              // 获取头像URL（oicq适配器）
-              let avatarUrl = null;
-              if (bot.adapter?.name === 'OneBotv11' && bot.uin) {
-                // OneBotv11使用QQ头像API
-                avatarUrl = `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100`;
-              } else if (bot.avatar) {
-                avatarUrl = bot.avatar;
-              }
-              
-              return {
-              uin,
-              online: bot.stat?.online || false,
-              nickname: bot.nickname || uin,
-              adapter: bot.adapter?.name || 'unknown',
-                device: false,
-                avatar: avatarUrl,
-              stats: {
-                friends: bot.fl?.size || 0,
-                groups: bot.gl?.size || 0
-              }
-              };
-            });
-
           const includeHist = (req.query?.hist === '24h') || (req.query?.withHistory === '1') || (req.query?.withHistory === 'true');
+          const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
+          res.json(snapshot);
+        } catch (error) {
+          res.status(500).json({
+            success: false,
+            error: error.message
+          });
+        }
+      }
+    },
+
+    {
+      method: 'GET',
+      path: '/api/system/overview',
+      handler: async (req, res, Bot) => {
+        try {
+          const includeHist = (req.query?.hist === '24h') || (req.query?.withHistory === '1') || (req.query?.withHistory === 'true');
+          const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
           res.json({
             success: true,
-            timestamp: Date.now(),
-            system: {
-              platform: os.platform(),
-              arch: os.arch(),
-              hostname: os.hostname(),
-              nodeVersion: process.version,
-              uptime: process.uptime(),
-              cpu: {
-                model: cpus[0]?.model || 'Unknown',
-                cores: cpus.length,
-                usage: process.cpuUsage(),
-                percent: cpuPct,
-                loadavg: os.loadavg ? os.loadavg() : [0,0,0]
-              },
-              memory: {
-                total: totalMem,
-                free: freeMem,
-                used: usedMem,
-                usagePercent: ((usedMem / totalMem) * 100).toFixed(2),
-                process: {
-                  rss: memUsage.rss,
-                  heapTotal: memUsage.heapTotal,
-                  heapUsed: memUsage.heapUsed,
-                  external: memUsage.external,
-                  arrayBuffers: memUsage.arrayBuffers
-                }
-              },
-              swap: {
-                total: Number(siMem?.swaptotal || 0),
-                used: Number(siMem?.swapused || 0),
-                usagePercent: siMem?.swaptotal ? +(((siMem.swapused || 0) / siMem.swaptotal) * 100).toFixed(2) : 0
-              },
-              disks,
-              net: { rxBytes, txBytes },
-              netRates: { rxSec, txSec },
-              netHistory24h: includeHist ? __getNetHistory24h() : [],
-              network: networkStats
-            },
-            bot: {
-              url: Bot.url,
-              port: Bot.port,
-              startTime: Bot.stat?.start_time || Date.now() / 1000,
-              uptime: Bot.stat?.start_time ? (Date.now() / 1000) - Bot.stat.start_time : process.uptime()
-            },
-            bots,
-            processesTop5,
-            adapters: Bot.adapter
+            timestamp: snapshot.timestamp,
+            system: snapshot.system,
+            panels: snapshot.panels,
+            workflows: snapshot.workflows,
+            bots: snapshot.bots,
+            processesTop5: snapshot.processesTop5,
+            adapters: snapshot.adapters
           });
         } catch (error) {
           res.status(500).json({
@@ -323,79 +339,21 @@ export default {
       method: 'GET',
       path: '/api/status',
       handler: async (req, res, Bot) => {
-        // 合并Bot.bots和直接挂载在Bot上的设备（如Web客户端）
-        const allBots = { ...Bot.bots };
-        // 查找直接挂载在Bot上的设备（device类型）
-        for (const key in Bot) {
-          if (Bot[key] && typeof Bot[key] === 'object' && Bot[key].device_type) {
-            allBots[key] = Bot[key];
-          }
-        }
-        
-        const bots = Object.entries(allBots)
-          .filter(([uin, bot]) => {
-            if (typeof bot !== 'object' || !bot) return false;
-            const excludeKeys = ['port', 'apiKey', 'stdin', 'logger', '_eventsCount', 'url'];
-            if (excludeKeys.includes(uin)) return false;
-            // 设备类型或普通机器人
-            return bot.device_type || bot.adapter || bot.nickname || bot.fl || bot.gl;
-          })
-          .map(([uin, bot]) => {
-            // 如果是设备类型（如Web客户端）
-            if (bot.device_type) {
-              return {
-                uin,
-                online: bot.online !== false, // 设备默认在线
-                nickname: bot.nickname || bot.info?.device_name || 'Web客户端',
-                adapter: bot.device_type === 'web' ? 'Web客户端' : (bot.device_type || '设备'),
-                device: true,
-                stats: {
-                  friends: 0,
-                  groups: 0
-                }
-              };
-            }
-            // 普通机器人
-            // 获取头像URL（oicq适配器）
-            let avatarUrl = null;
-            if (bot.adapter?.name === 'OneBotv11' && bot.uin) {
-              // OneBotv11使用QQ头像API
-              avatarUrl = `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100`;
-            } else if (bot.avatar) {
-              avatarUrl = bot.avatar;
-            }
-            
-            return {
-            uin,
-            online: bot.stat?.online || false,
-            nickname: bot.nickname || uin,
-            adapter: bot.adapter?.name || 'unknown',
-              device: false,
-              avatar: avatarUrl,
-            stats: {
-              friends: bot.fl?.size || 0,
-              groups: bot.gl?.size || 0
-            }
-            };
+        try {
+          const snapshot = await buildSystemSnapshot(Bot, { includeHistory: false });
+          res.json({
+            success: true,
+            system: snapshot.system,
+            bot: snapshot.bot,
+            bots: snapshot.bots,
+            adapters: snapshot.adapters
           });
-
-        res.json({
-          success: true,
-          system: {
-            platform: os.platform(),
-            uptime: process.uptime(),
-            memory: process.memoryUsage(),
-            nodeVersion: process.version
-          },
-          bot: {
-            url: Bot.url,
-            port: Bot.port,
-            startTime: Bot.stat.start_time,
-            uptime: (Date.now() / 1000) - Bot.stat.start_time
-          },
-          bots,
-          adapters: Bot.adapter
-        });
+        } catch (error) {
+          res.status(500).json({
+            success: false,
+            error: error.message
+          });
+        }
       }
     },
 
@@ -403,10 +361,6 @@ export default {
       method: 'GET',
       path: '/api/config',
       handler: async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-
         function serialize(obj, seen = new WeakSet()) {
           if (typeof obj === 'function') {
             return obj.toString();

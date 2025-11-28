@@ -1,3 +1,5 @@
+import { collectBotInventory } from './utils.js';
+
 /**
  * 机器人管理API
  * 提供机器人状态查询、消息发送、好友群组列表等功能
@@ -12,24 +14,11 @@ export default {
       method: 'GET',
       path: '/api/bots',
       handler: async (req, res, Bot) => {
-        const bots = Object.entries(Bot.bots)
-          .filter(([uin, bot]) => {
-            if (typeof bot !== 'object' || !bot) return false;
-            const excludeKeys = ['port', 'apiKey', 'stdin', 'logger', '_eventsCount', 'url'];
-            if (excludeKeys.includes(uin)) return false;
-            if (bot.device) return false;
-            return bot.adapter || bot.nickname || bot.fl || bot.gl;
-          })
-          .map(([uin, bot]) => ({
-            uin,
-            online: bot.stat?.online || false,
-            nickname: bot.nickname || uin,
-            adapter: bot.adapter?.name || 'unknown',
-            friends: bot.fl?.size || 0,
-            groups: bot.gl?.size || 0
-          }));
-
-        res.json({ success: true, bots });
+        const includeDevicesRaw = String(req.query?.includeDevices ?? '').toLowerCase();
+        const includeDevices = includeDevicesRaw === '1' || includeDevicesRaw === 'true' || includeDevicesRaw === 'yes';
+        const bots = collectBotInventory(Bot, { includeDevices });
+        const payload = includeDevices ? bots : bots.filter(b => !b.device);
+        res.json({ success: true, bots: payload });
       }
     },
 
@@ -69,10 +58,6 @@ export default {
       method: 'POST',
       path: '/api/message/send',
       handler: async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-
         const { bot_id, type, target_id, message } = req.body;
 
         if (!type || !target_id || !message) {
@@ -151,10 +136,6 @@ export default {
       method: 'POST',
       path: '/api/bot/:uin/control',
       handler: async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-
         const { uin } = req.params;
         const { action } = req.body;
         

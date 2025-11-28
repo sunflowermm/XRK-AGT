@@ -19,6 +19,25 @@
           "description": "获取系统状态详细信息"
         },
         {
+          "id": "system-overview",
+          "method": "GET",
+          "path": "/api/system/overview",
+          "title": "系统概览",
+          "description": "获取仪表盘面板、工作流与网络统计数据",
+          "queryParams": [
+            {
+              "name": "withHistory",
+              "label": "包含历史网络数据",
+              "type": "select",
+              "options": [
+                { "value": "0", "label": "否" },
+                { "value": "1", "label": "是" }
+              ],
+              "defaultValue": "1"
+            }
+          ]
+        },
+        {
           "id": "system-config",
           "method": "GET",
           "path": "/api/config",
@@ -230,6 +249,13 @@
               "label": "人设",
               "type": "text",
               "placeholder": "AI 人设设置"
+            },
+            {
+              "name": "workflow",
+              "label": "工作流名称",
+              "type": "text",
+              "placeholder": "chat",
+              "defaultValue": "chat"
             }
           ]
         }
@@ -380,6 +406,19 @@
               "type": "textarea",
               "required": true,
               "placeholder": "你好"
+            },
+            {
+              "name": "workflow",
+              "label": "工作流",
+              "type": "text",
+              "placeholder": "device",
+              "defaultValue": "device"
+            },
+            {
+              "name": "persona",
+              "label": "人设（可选）",
+              "type": "text",
+              "placeholder": "例如：客服助理"
             }
           ]
         }
@@ -441,6 +480,13 @@
           "path": "/api/plugins",
           "title": "插件列表",
           "description": "获取所有已加载的插件信息"
+        },
+        {
+          "id": "plugin-summary",
+          "method": "GET",
+          "path": "/api/plugins/summary",
+          "title": "插件概览",
+          "description": "单次返回插件列表及统计数据"
         },
         {
           "id": "plugin-reload",

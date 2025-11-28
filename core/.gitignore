@@ -25,6 +25,7 @@ http/**
 !http/write.js
 !http/config.js
 !http/ai.js
+!http/utils.js
 
 !events
 events/**
