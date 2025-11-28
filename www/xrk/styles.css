@@ -981,6 +981,97 @@ select.form-input {
   gap: 8px;
 }
 
+.chat-settings {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.chat-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.chat-setting label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.chat-setting select,
+.chat-setting input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.chat-setting select:focus,
+.chat-setting input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-stream-status {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  border: 1px dashed var(--border);
+}
+
+.chat-stream-status.active {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-50);
+}
+
+@media (max-width: 768px) {
+  .chat-settings {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .chat-setting {
+    width: 100%;
+  }
+  
+  .chat-setting label {
+    font-size: 11px;
+  }
+}
+
 .emotion-display {
   font-size: 32px;
   line-height: 1;
