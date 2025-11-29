@@ -15,7 +15,6 @@ class App {
     this._metricsHistory = { netRx: Array(30).fill(0), netTx: Array(30).fill(0) };
     this._chatHistory = this._loadChatHistory();
     this._deviceWs = null;
-    this._deviceWsHeartbeatTimer = null;
     this._micActive = false;
     this._ttsQueue = [];
     this._ttsPlaying = false;
@@ -38,6 +37,18 @@ class App {
     this.init();
   }
 
+  // 工具方法：安全获取元素
+  $(id) {
+    return document.getElementById(id);
+  }
+
+  // 工具方法：安全添加事件监听
+  on(id, event, handler) {
+    const el = this.$(id);
+    if (el) el.addEventListener(event, handler);
+    return el;
+  }
+
   async init() {
     await this.loadAPIConfig();
     this.bindEvents();
@@ -47,11 +58,37 @@ class App {
     this.handleRoute();
     this.ensureDeviceWs();
     
+    // 配置 Chart.js 默认设置，确保与主题兼容
+    if (typeof Chart !== 'undefined') {
+      Chart.defaults.responsive = true;
+      Chart.defaults.maintainAspectRatio = false;
+      Chart.defaults.plugins.legend.display = true;
+      Chart.defaults.plugins.tooltip.enabled = true;
+      Chart.defaults.borderColor = 'transparent';
+      Chart.defaults.backgroundColor = 'transparent';
+    }
+    
     window.addEventListener('hashchange', () => this.handleRoute());
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
         this.checkConnection();
         this.ensureDeviceWs();
+      }
+    });
+    
+    // 页面卸载时清理资源
+    window.addEventListener('beforeunload', () => {
+      if (this._deviceWsHeartbeatTimer) {
+        clearInterval(this._deviceWsHeartbeatTimer);
+        this._deviceWsHeartbeatTimer = null;
+      }
+      if (this._deviceWs) {
+        try {
+          this._deviceWs.close();
+        } catch (e) {
+          // 忽略错误
+        }
+        this._deviceWs = null;
       }
     });
     
@@ -109,9 +146,9 @@ class App {
 
   bindEvents() {
     // 侧边栏
-    document.getElementById('menuBtn')?.addEventListener('click', () => this.toggleSidebar());
-    document.getElementById('sidebarClose')?.addEventListener('click', () => this.closeSidebar());
-    document.getElementById('overlay')?.addEventListener('click', () => this.closeSidebar());
+    this.on('menuBtn', 'click', () => this.toggleSidebar());
+    this.on('sidebarClose', 'click', () => this.closeSidebar());
+    this.on('overlay', 'click', () => this.closeSidebar());
     
     // API列表返回按钮
     document.getElementById('apiListBackBtn')?.addEventListener('click', () => {
@@ -125,11 +162,11 @@ class App {
     });
     
     // 主题切换
-    document.getElementById('themeToggle')?.addEventListener('click', () => this.toggleTheme());
+    this.on('themeToggle', 'click', () => this.toggleTheme());
     
     // API Key
-    document.getElementById('saveApiKeyBtn')?.addEventListener('click', () => this.saveApiKey());
-    document.getElementById('apiKey')?.addEventListener('keypress', (e) => {
+    this.on('saveApiKeyBtn', 'click', () => this.saveApiKey());
+    this.on('apiKey', 'keypress', (e) => {
       if (e.key === 'Enter') this.saveApiKey();
     });
     
@@ -151,7 +188,7 @@ class App {
     });
     
     // API Key 切换按钮
-    document.getElementById('apiKeyToggleBtn')?.addEventListener('click', () => this.toggleApiKeyBox());
+    this.on('apiKeyToggleBtn', 'click', () => this.toggleApiKeyBox());
   }
   
   toggleApiKeyBox() {
@@ -217,6 +254,80 @@ class App {
       localStorage.setItem('theme', nextTheme);
       this.disableSystemThemeSync();
     }
+    // 更新图表主题
+    this.updateChartsTheme();
+  }
+
+  // 更新所有图表的主题颜色
+  updateChartsTheme() {
+    if (typeof Chart === 'undefined') return;
+    
+    // 获取当前主题的颜色
+    const primary = getComputedStyle(document.body).getPropertyValue('--primary').trim() || '#0ea5e9';
+    const success = getComputedStyle(document.body).getPropertyValue('--success').trim() || '#22c55e';
+    const warning = getComputedStyle(document.body).getPropertyValue('--warning').trim() || '#f59e0b';
+    const danger = getComputedStyle(document.body).getPropertyValue('--danger').trim() || '#ef4444';
+    const textMuted = getComputedStyle(document.body).getPropertyValue('--text-muted').trim() || '#94a3b8';
+    const border = getComputedStyle(document.body).getPropertyValue('--border').trim() || '#e2e8f0';
+    const isDark = document.body.classList.contains('dark');
+    
+    // 更新 CPU 图表
+    if (this._charts.cpu) {
+      const cpu = this._charts.cpu.data.datasets[0].data[0];
+      const cpuColor = cpu > 80 ? danger : cpu > 50 ? warning : primary;
+      this._charts.cpu.data.datasets[0].backgroundColor = [cpuColor, border];
+      // 重新绘制以更新中心标签颜色
+      this._charts.cpu.update('none');
+    }
+    
+    // 更新内存图表
+    if (this._charts.mem) {
+      const mem = this._charts.mem.data.datasets[0].data[0];
+      const memColor = mem > 80 ? danger : mem > 50 ? warning : success;
+      this._charts.mem.data.datasets[0].backgroundColor = [memColor, border];
+      // 重新绘制以更新中心标签颜色
+      this._charts.mem.update('none');
+    }
+    
+    // 更新网络图表
+    if (this._charts.net) {
+      const netCtx = this._charts.net.canvas;
+      const netCtx2d = netCtx.getContext('2d');
+      
+      // 重新创建渐变
+      const gradientRx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
+      gradientRx.addColorStop(0, `${primary}40`);
+      gradientRx.addColorStop(1, `${primary}05`);
+      
+      const gradientTx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
+      gradientTx.addColorStop(0, `${warning}40`);
+      gradientTx.addColorStop(1, `${warning}05`);
+      
+      this._charts.net.data.datasets[0].borderColor = primary;
+      this._charts.net.data.datasets[0].backgroundColor = gradientRx;
+      this._charts.net.data.datasets[0].pointHoverBackgroundColor = primary;
+      
+      this._charts.net.data.datasets[1].borderColor = warning;
+      this._charts.net.data.datasets[1].backgroundColor = gradientTx;
+      this._charts.net.data.datasets[1].pointHoverBackgroundColor = warning;
+      
+      // 更新图例颜色
+      if (this._charts.net.options.plugins?.legend?.labels) {
+        this._charts.net.options.plugins.legend.labels.color = textMuted;
+      }
+      
+      // 更新 tooltip 颜色
+      if (this._charts.net.options.plugins?.tooltip) {
+        this._charts.net.options.plugins.tooltip.backgroundColor = isDark 
+          ? 'rgba(30, 41, 59, 0.95)' 
+          : 'rgba(0, 0, 0, 0.85)';
+        this._charts.net.options.plugins.tooltip.titleColor = isDark ? '#f1f5f9' : '#ffffff';
+        this._charts.net.options.plugins.tooltip.bodyColor = isDark ? '#cbd5e1' : '#ffffff';
+        this._charts.net.options.plugins.tooltip.borderColor = border;
+      }
+      
+      this._charts.net.update('none');
+    }
   }
 
   toggleTheme() {
@@ -226,26 +337,23 @@ class App {
   }
 
   toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('overlay');
-    sidebar?.classList.toggle('open');
-    overlay?.classList.toggle('show');
+    const sidebar = this.$('sidebar');
+    const isOpen = sidebar?.classList.contains('open');
+    isOpen ? this.closeSidebar() : this.openSidebar();
   }
 
   openSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('overlay');
-    sidebar?.classList.add('open');
-    overlay?.classList.add('show');
+    this.$('sidebar')?.classList.add('open');
+    this.$('overlay')?.classList.add('show');
   }
 
   closeSidebar() {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('overlay').classList.remove('show');
+    this.$('sidebar')?.classList.remove('open');
+    this.$('overlay')?.classList.remove('show');
   }
 
   saveApiKey() {
-    const key = document.getElementById('apiKey')?.value?.trim();
+    const key = this.$('apiKey')?.value?.trim();
     if (!key) {
       this.showToast('请输入 API Key', 'warning');
       return;
@@ -263,20 +371,22 @@ class App {
   }
 
   async checkConnection() {
+    const status = this.$('connectionStatus');
+    if (!status) return;
+    
+    const statusText = status.querySelector('.status-text');
     try {
       const res = await fetch(`${this.serverUrl}/api/health`, { headers: this.getHeaders() });
-      const status = document.getElementById('connectionStatus');
       if (res.ok) {
         status.classList.add('online');
-        status.querySelector('.status-text').textContent = '已连接';
+        statusText.textContent = '已连接';
       } else {
         status.classList.remove('online');
-        status.querySelector('.status-text').textContent = '未授权';
+        statusText.textContent = '未授权';
       }
     } catch {
-      const status = document.getElementById('connectionStatus');
       status.classList.remove('online');
-      status.querySelector('.status-text').textContent = '连接失败';
+      statusText.textContent = '连接失败';
     }
   }
 
@@ -287,66 +397,90 @@ class App {
   }
 
   navigateTo(page) {
-    this.currentPage = page;
+    const validPages = ['home', 'chat', 'config', 'api'];
+    const targetPage = validPages.includes(page) ? page : 'home';
+    
+    if (this.currentPage === targetPage) return;
+    
+    this.currentPage = targetPage;
     
     // 更新导航状态
     document.querySelectorAll('.nav-item').forEach(item => {
-      item.classList.toggle('active', item.dataset.page === page);
+      item.classList.toggle('active', item.dataset.page === targetPage);
     });
     
     // 更新标题
     const titles = { home: '系统概览', chat: 'AI 对话', config: '配置管理', api: 'API 调试' };
-    const headerTitle = document.getElementById('headerTitle');
+    const headerTitle = this.$('headerTitle');
     if (headerTitle) {
-      headerTitle.textContent = titles[page] || page;
+      headerTitle.textContent = titles[targetPage] || targetPage;
     }
     
-    // 侧边栏内容切换：API调试页面显示API列表，其他页面显示导航
-    const navMenu = document.getElementById('navMenu');
-    const apiListContainer = document.getElementById('apiListContainer');
+    // 侧边栏内容切换
+    const navMenu = this.$('navMenu');
+    const apiListContainer = this.$('apiListContainer');
+    const isMobile = window.innerWidth <= 768;
     
-    if (page === 'api') {
-      navMenu.style.display = 'none';
-      apiListContainer.style.display = 'flex';
+    if (targetPage === 'api') {
+      navMenu?.style.setProperty('display', 'none');
+      apiListContainer?.style.setProperty('display', 'flex');
       this.renderAPIGroups();
-      if (window.innerWidth <= 768) {
-        this.openSidebar();
-      }
+      if (isMobile) this.openSidebar();
     } else {
-      navMenu.style.display = 'flex';
-      apiListContainer.style.display = 'none';
-      if (window.innerWidth <= 768) {
-        this.closeSidebar();
-      }
+      navMenu?.style.setProperty('display', 'flex');
+      apiListContainer?.style.setProperty('display', 'none');
+      if (isMobile) this.closeSidebar();
     }
     
-    // 渲染页面
-    switch (page) {
-      case 'home': this.renderHome(); break;
-      case 'chat': this.renderChat(); break;
-      case 'config': this.renderConfig(); break;
-      case 'api': this.renderAPI(); break;
-      default: this.renderHome();
+    // 页面过渡动画
+    this.transitionPage(() => {
+      // 渲染页面
+      const renderMap = {
+        home: () => this.renderHome(),
+        chat: () => this.renderChat(),
+        config: () => this.renderConfig(),
+        api: () => this.renderAPI()
+      };
+      (renderMap[targetPage] || renderMap.home)();
+    });
+    
+    // 更新URL（不触发hashchange）
+    if (location.hash !== `#/${targetPage}`) {
+      history.replaceState(null, '', `#/${targetPage}`);
+    }
+  }
+
+  // 页面过渡动画
+  transitionPage(callback) {
+    const content = this.$('content');
+    if (!content) {
+      callback();
+      return;
     }
     
-    location.hash = `#/${page}`;
+    // 淡出
+    content.classList.add('page-transition-out');
+    
+    // 等待动画完成后执行回调并淡入
+    setTimeout(() => {
+      callback();
+      requestAnimationFrame(() => {
+        content.classList.remove('page-transition-out');
+        content.classList.add('page-transition-in');
+        setTimeout(() => content.classList.remove('page-transition-in'), 200);
+      });
+    }, 150);
   }
 
   // ========== 首页 ==========
   async renderHome() {
     // 销毁旧的图表实例
-    if (this._charts.cpu) {
-      this._charts.cpu.destroy();
-      this._charts.cpu = null;
-    }
-    if (this._charts.mem) {
-      this._charts.mem.destroy();
-      this._charts.mem = null;
-    }
-    if (this._charts.net) {
-      this._charts.net.destroy();
-      this._charts.net = null;
-    }
+    ['cpu', 'mem', 'net'].forEach(key => {
+      if (this._charts[key]) {
+        this._charts[key].destroy();
+        this._charts[key] = null;
+      }
+    });
     
     const content = document.getElementById('content');
     content.innerHTML = `
@@ -771,24 +905,27 @@ class App {
           }
         });
         
-        // 添加中心标签插件
-        const cpuLabelPlugin = {
-          id: 'cpuLabel',
-          afterDraw: (chart) => {
-            const ctx = chart.ctx;
-            const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
-            const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
-            const value = chart.data.datasets[0].data[0];
-            ctx.save();
-            ctx.font = 'bold 16px Inter';
-            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
-            ctx.restore();
-          }
-        };
-        Chart.register(cpuLabelPlugin);
+        // 添加中心标签插件（使用唯一ID避免重复注册）
+        if (!Chart.registry.getPlugin('cpuLabel')) {
+          const cpuLabelPlugin = {
+            id: 'cpuLabel',
+            afterDraw: (chart) => {
+              const ctx = chart.ctx;
+              const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+              const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+              const value = chart.data.datasets[0].data[0];
+              ctx.save();
+              ctx.font = 'bold 16px Inter';
+              // 动态读取CSS变量，支持主题切换
+              ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim() || '#0f172a';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
+              ctx.restore();
+            }
+          };
+          Chart.register(cpuLabelPlugin);
+        }
         
         this._charts.cpu = cpuChart;
       } else {
@@ -830,24 +967,27 @@ class App {
           }
         });
         
-        // 添加中心标签插件
-        const memLabelPlugin = {
-          id: 'memLabel',
-          afterDraw: (chart) => {
-            const ctx = chart.ctx;
-            const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
-            const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
-            const value = chart.data.datasets[0].data[0];
-            ctx.save();
-            ctx.font = 'bold 16px Inter';
-            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
-            ctx.restore();
-          }
-        };
-        Chart.register(memLabelPlugin);
+        // 添加中心标签插件（使用唯一ID避免重复注册）
+        if (!Chart.registry.getPlugin('memLabel')) {
+          const memLabelPlugin = {
+            id: 'memLabel',
+            afterDraw: (chart) => {
+              const ctx = chart.ctx;
+              const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+              const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+              const value = chart.data.datasets[0].data[0];
+              ctx.save();
+              ctx.font = 'bold 16px Inter';
+              // 动态读取CSS变量，支持主题切换
+              ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim() || '#0f172a';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
+              ctx.restore();
+            }
+          };
+          Chart.register(memLabelPlugin);
+        }
         
         this._charts.mem = memChart;
       } else {
@@ -858,7 +998,7 @@ class App {
       }
     }
     
-    // 网络图表
+    // 网络图表 - 重构为更美观的样式
     const netCtx = document.getElementById('netChart');
     if (netCtx) {
       // 如果图表实例存在但canvas元素不匹配，销毁并重新创建
@@ -868,18 +1008,24 @@ class App {
       }
       
       const labels = this._metricsHistory.netRx.map(() => '');
+      const maxValue = Math.max(
+        ...this._metricsHistory.netRx,
+        ...this._metricsHistory.netTx,
+        1
+      );
+      
       if (!this._charts.net) {
-        // 创建渐变填充
-        const ctx = netCtx.getContext('2d');
-        const gradientRx = ctx.createLinearGradient(0, 0, 0, netCtx.height);
+        // 创建渐变
+        const netCtx2d = netCtx.getContext('2d');
+        const gradientRx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
         gradientRx.addColorStop(0, `${primary}40`);
         gradientRx.addColorStop(1, `${primary}05`);
         
-        const gradientTx = ctx.createLinearGradient(0, 0, 0, netCtx.height);
+        const gradientTx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
         gradientTx.addColorStop(0, `${warning}40`);
         gradientTx.addColorStop(1, `${warning}05`);
         
-        this._charts.net = new Chart(ctx, {
+        this._charts.net = new Chart(netCtx2d, {
           type: 'line',
           data: {
             labels,
@@ -888,36 +1034,44 @@ class App {
                 label: '下行', 
                 data: this._metricsHistory.netRx, 
                 borderColor: primary,
-                borderWidth: 2,
+                borderWidth: 2.5,
                 backgroundColor: gradientRx,
                 fill: true, 
                 tension: 0.5,
                 pointRadius: 0,
                 pointHoverRadius: 4,
+                pointHoverBorderWidth: 2,
                 pointHoverBackgroundColor: primary,
                 pointHoverBorderColor: '#fff',
-                pointHoverBorderWidth: 2,
                 spanGaps: true,
-                animation: {
-                  duration: 0
+                segment: {
+                  borderColor: ctx => {
+                    const value = ctx.p1.parsed.y;
+                    if (value < 0.01) return 'transparent';
+                    return primary;
+                  }
                 }
               },
               { 
                 label: '上行', 
                 data: this._metricsHistory.netTx, 
                 borderColor: warning,
-                borderWidth: 2,
+                borderWidth: 2.5,
                 backgroundColor: gradientTx,
                 fill: true, 
                 tension: 0.5,
                 pointRadius: 0,
                 pointHoverRadius: 4,
+                pointHoverBorderWidth: 2,
                 pointHoverBackgroundColor: warning,
                 pointHoverBorderColor: '#fff',
-                pointHoverBorderWidth: 2,
                 spanGaps: true,
-                animation: {
-                  duration: 0
+                segment: {
+                  borderColor: ctx => {
+                    const value = ctx.p1.parsed.y;
+                    if (value < 0.01) return 'transparent';
+                    return warning;
+                  }
                 }
               }
             ]
@@ -925,6 +1079,9 @@ class App {
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: {
+              duration: 0
+            },
             interaction: { 
               intersect: false, 
               mode: 'index',
@@ -933,29 +1090,43 @@ class App {
             plugins: { 
               legend: { 
                 position: 'bottom',
-                display: true,
+                align: 'center',
                 labels: { 
                   color: textMuted,
-                  padding: 16,
-                  usePointStyle: true,
-                  pointStyle: 'line',
+                  padding: 12,
                   font: {
-                    size: 12,
-                    family: 'Inter, system-ui, sans-serif'
-                  }
+                    size: 11,
+                    weight: '500'
+                  },
+                  usePointStyle: true,
+                  pointStyle: 'circle',
+                  boxWidth: 6,
+                  boxHeight: 6
                 } 
               },
               tooltip: {
                 enabled: true,
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                backgroundColor: (() => {
+                  // 根据主题动态设置背景色
+                  const isDark = document.body.classList.contains('dark');
+                  return isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(0, 0, 0, 0.85)';
+                })(),
                 padding: 12,
                 titleFont: {
-                  size: 13,
+                  size: 12,
                   weight: '600'
                 },
                 bodyFont: {
-                  size: 12
+                  size: 11
                 },
+                titleColor: (() => {
+                  const isDark = document.body.classList.contains('dark');
+                  return isDark ? '#f1f5f9' : '#ffffff';
+                })(),
+                bodyColor: (() => {
+                  const isDark = document.body.classList.contains('dark');
+                  return isDark ? '#cbd5e1' : '#ffffff';
+                })(),
                 borderColor: border,
                 borderWidth: 1,
                 cornerRadius: 8,
@@ -967,9 +1138,14 @@ class App {
                   label: function(context) {
                     const value = context.parsed.y;
                     if (value === 0 || value < 0.01) return '';
-                    const unit = value >= 1024 ? 'MB/s' : 'KB/s';
-                    const displayValue = value >= 1024 ? (value / 1024).toFixed(2) : value.toFixed(2);
-                    return `${context.dataset.label}: ${displayValue} ${unit}`;
+                    const label = context.dataset.label || '';
+                    let formatted = value.toFixed(2);
+                    if (value >= 1024) {
+                      formatted = (value / 1024).toFixed(2) + ' MB/s';
+                    } else {
+                      formatted += ' KB/s';
+                    }
+                    return `${label}: ${formatted}`;
                   },
                   filter: function(tooltipItem) {
                     return tooltipItem.parsed.y > 0.01;
@@ -977,7 +1153,8 @@ class App {
                   labelColor: function(context) {
                     return {
                       borderColor: context.dataset.borderColor,
-                      backgroundColor: context.dataset.borderColor
+                      backgroundColor: context.dataset.borderColor,
+                      borderWidth: 2
                     };
                   }
                 }
@@ -992,59 +1169,47 @@ class App {
               },
               y: { 
                 beginAtZero: true,
+                max: maxValue * 1.2,
                 grid: { 
                   color: border,
-                  drawBorder: false,
-                  lineWidth: 1
+                  lineWidth: 1,
+                  drawBorder: false
                 },
                 ticks: { 
                   display: false
                 }
               }
-            },
-            elements: {
-              line: {
-                borderJoinStyle: 'round',
-                borderCapStyle: 'round'
-              }
             }
           }
         });
       } else {
-        // 更新渐变（如果canvas尺寸改变）
-        const ctx = netCtx.getContext('2d');
-        const currentGradientRx = this._charts.net.data.datasets[0].backgroundColor;
-        const currentGradientTx = this._charts.net.data.datasets[1].backgroundColor;
-        
-        // 检查是否需要重新创建渐变
-        if (!currentGradientRx || typeof currentGradientRx !== 'object') {
-          const gradientRx = ctx.createLinearGradient(0, 0, 0, netCtx.height);
-          gradientRx.addColorStop(0, `${primary}40`);
-          gradientRx.addColorStop(1, `${primary}05`);
-          this._charts.net.data.datasets[0].backgroundColor = gradientRx;
-        }
-        
-        if (!currentGradientTx || typeof currentGradientTx !== 'object') {
-          const gradientTx = ctx.createLinearGradient(0, 0, 0, netCtx.height);
-          gradientTx.addColorStop(0, `${warning}40`);
-          gradientTx.addColorStop(1, `${warning}05`);
-          this._charts.net.data.datasets[1].backgroundColor = gradientTx;
-        }
-        
+        // 更新数据
         this._charts.net.data.labels = labels;
         this._charts.net.data.datasets[0].data = this._metricsHistory.netRx;
         this._charts.net.data.datasets[1].data = this._metricsHistory.netTx;
         
-        // 更新tooltip配置
-        if (this._charts.net.options.plugins?.tooltip?.callbacks) {
-          this._charts.net.options.plugins.tooltip.callbacks.label = function(context) {
-            const value = context.parsed.y;
-            if (value === 0 || value < 0.01) return '';
-            const unit = value >= 1024 ? 'MB/s' : 'KB/s';
-            const displayValue = value >= 1024 ? (value / 1024).toFixed(2) : value.toFixed(2);
-            return `${context.dataset.label}: ${displayValue} ${unit}`;
-          };
+        // 更新Y轴最大值
+        const newMaxValue = Math.max(
+          ...this._metricsHistory.netRx,
+          ...this._metricsHistory.netTx,
+          1
+        );
+        if (this._charts.net.options.scales?.y) {
+          this._charts.net.options.scales.y.max = newMaxValue * 1.2;
         }
+        
+        // 更新渐变（如果canvas尺寸改变）
+        const netCtx2d = netCtx.getContext('2d');
+        const gradientRx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
+        gradientRx.addColorStop(0, `${primary}40`);
+        gradientRx.addColorStop(1, `${primary}05`);
+        
+        const gradientTx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
+        gradientTx.addColorStop(0, `${warning}40`);
+        gradientTx.addColorStop(1, `${warning}05`);
+        
+        this._charts.net.data.datasets[0].backgroundColor = gradientRx;
+        this._charts.net.data.datasets[1].backgroundColor = gradientTx;
         
         this._charts.net.update('none');
       }
@@ -3398,23 +3563,6 @@ class App {
           device_name: 'Web客户端',
           capabilities: ['display', 'microphone']
         }));
-        
-        // 启动前端心跳机制（每25秒发送一次，略快于后端的30秒）
-        if (this._deviceWsHeartbeatTimer) {
-          clearInterval(this._deviceWsHeartbeatTimer);
-        }
-        this._deviceWsHeartbeatTimer = setInterval(() => {
-          if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
-            try {
-              this._deviceWs.send(JSON.stringify({
-                type: 'heartbeat_response',
-                timestamp: Date.now()
-              }));
-            } catch (e) {
-              console.warn('心跳发送失败:', e);
-            }
-          }
-        }, 25000);
       };
       
       this._deviceWs.onmessage = (e) => {
@@ -3424,18 +3572,32 @@ class App {
         } catch {}
       };
       
-      this._deviceWs.onerror = (error) => {
-        console.warn('WebSocket错误:', error);
-      };
-      
       this._deviceWs.onclose = () => {
         if (this._deviceWsHeartbeatTimer) {
           clearInterval(this._deviceWsHeartbeatTimer);
           this._deviceWsHeartbeatTimer = null;
         }
         this._deviceWs = null;
-        setTimeout(() => this.ensureDeviceWs(), 5000);
+        setTimeout(() => this.ensureDeviceWs(), 2000);
       };
+      
+      this._deviceWs.onerror = (error) => {
+        console.warn('WebSocket错误:', error);
+      };
+      
+      // 前端主动心跳（作为备用机制）
+      this._deviceWsHeartbeatTimer = setInterval(() => {
+        if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
+          try {
+            this._deviceWs.send(JSON.stringify({
+              type: 'heartbeat',
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            console.warn('心跳发送失败:', e);
+          }
+        }
+      }, 25000); // 25秒发送一次，比后端30秒稍快
     } catch (e) {
       console.warn('WebSocket连接失败:', e);
     }
@@ -3446,14 +3608,23 @@ class App {
       case 'heartbeat_request':
         // 响应后端心跳请求
         if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
-          try {
-            this._deviceWs.send(JSON.stringify({
-              type: 'heartbeat_response',
-              timestamp: Date.now()
-            }));
-          } catch (e) {
-            console.warn('心跳响应失败:', e);
-          }
+          this._deviceWs.send(JSON.stringify({
+            type: 'heartbeat',
+            timestamp: Date.now()
+          }));
+        }
+        break;
+      case 'heartbeat_response':
+        // 心跳响应，可以处理返回的命令队列
+        if (data.commands && Array.isArray(data.commands) && data.commands.length > 0) {
+          data.commands.forEach(cmd => {
+            if (cmd.command === 'display' && cmd.parameters?.text) {
+              this.appendChat('assistant', cmd.parameters.text);
+            }
+            if (cmd.command === 'display_emotion' && cmd.parameters?.emotion) {
+              this.updateEmotionDisplay(cmd.parameters.emotion);
+            }
+          });
         }
         break;
       case 'asr_interim':

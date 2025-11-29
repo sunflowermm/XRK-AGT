@@ -143,7 +143,19 @@ body {
   left: 0;
   height: 100vh;
   z-index: 100;
-  transition: transform var(--transition-slow);
+  transition: transform var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+  }
 }
 
 .sidebar-brand {
@@ -209,13 +221,16 @@ body {
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
-  transition: all var(--transition);
+  transition: all var(--transition) cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  will-change: background-color, color;
 }
 
 .nav-item svg {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
+  transition: transform var(--transition);
 }
 
 .nav-item:hover {
@@ -223,9 +238,25 @@ body {
   color: var(--text-primary);
 }
 
+.nav-item:hover svg {
+  transform: scale(1.1);
+}
+
 .nav-item.active {
   background: var(--primary-100);
   color: var(--primary);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--primary);
+  border-radius: 0 2px 2px 0;
 }
 
 .sidebar-footer {
@@ -370,6 +401,30 @@ body.dark .theme-btn .icon-moon { display: block; }
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  position: relative;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* 页面过渡动画 */
+.content.page-transition-out {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+.content.page-transition-in {
+  animation: pageFadeIn 0.2s ease;
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* API 列表容器 (在侧边栏内) */
@@ -497,7 +552,9 @@ body.dark .theme-btn .icon-moon { display: block; }
   opacity: 0;
   visibility: hidden;
   z-index: 90;
-  transition: all var(--transition);
+  transition: opacity var(--transition-slow) ease, visibility var(--transition-slow) ease;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
 .overlay.show {
@@ -543,8 +600,15 @@ body.dark .theme-btn .icon-moon { display: block; }
   border-radius: var(--radius);
   border: none;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: all var(--transition) cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
+  will-change: transform, box-shadow;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn:active {
+  transform: scale(0.98);
 }
 
 .btn-sm {
@@ -560,6 +624,11 @@ body.dark .theme-btn .icon-moon { display: block; }
 .btn-primary:hover {
   background: var(--primary-dark);
   box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .btn-secondary {
@@ -589,6 +658,13 @@ body.dark .theme-btn .icon-moon { display: block; }
   border-radius: var(--radius-md);
   padding: 20px;
   box-shadow: var(--shadow-sm);
+  transition: all var(--transition) ease;
+  will-change: transform, box-shadow;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .card-header {
@@ -770,12 +846,14 @@ select.form-input {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 20px;
-  transition: all var(--transition);
+  transition: all var(--transition) cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, box-shadow, border-color;
 }
 
 .stat-card:hover {
   border-color: var(--primary-200);
   box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .stat-header {
