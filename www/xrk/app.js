@@ -1889,14 +1889,12 @@ class App {
         
         const subFieldsHtml = Array.from(subFieldGroups.entries()).map(([subGroupKey, subFields]) => {
           const subGroupLabel = this.formatGroupLabel(subGroupKey);
-          const subGroupDesc = subFields[0]?.meta?.groupDesc || '';
           
           return `
             <div class="config-subgroup-section">
               ${subFieldGroups.size > 1 ? `
                 <div class="config-subgroup-section-header">
                   <h5>${this.escapeHtml(subGroupLabel)}</h5>
-                  ${subGroupDesc ? `<p class="config-subgroup-section-desc">${this.escapeHtml(subGroupDesc)}</p>` : ''}
                 </div>
               ` : ''}
               <div class="config-field-grid">

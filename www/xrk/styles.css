@@ -1529,7 +1529,14 @@ select.form-input {
   background: var(--bg-input);
   margin-top: 20px;
   margin-bottom: 12px;
-  border-left: 3px solid var(--primary);
+  border-left: 4px solid var(--primary);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition);
+}
+
+.config-subgroup:hover {
+  border-left-color: var(--primary-dark);
+  box-shadow: var(--shadow);
 }
 
 .config-subgroup:first-child {
@@ -1537,9 +1544,9 @@ select.form-input {
 }
 
 .config-subgroup-header {
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--border-light);
 }
 
 .config-subgroup-header h4 {
@@ -1549,49 +1556,68 @@ select.form-input {
   color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .config-subgroup-header h4::before {
   content: '';
   width: 4px;
-  height: 16px;
+  height: 18px;
   background: var(--primary);
   border-radius: 2px;
+  flex-shrink: 0;
 }
 
 .config-subgroup-desc {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.5;
 }
 
 .config-subgroup-section {
-  margin-top: 12px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--border-light);
+  position: relative;
 }
 
 .config-subgroup-section:first-child {
   margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .config-subgroup-section-header {
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px dashed var(--border-light);
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: linear-gradient(to right, var(--primary-50) 0%, transparent 100%);
+  border-radius: var(--radius);
+  border-left: 3px solid var(--primary-light);
 }
 
 .config-subgroup-section-header h5 {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.config-subgroup-section-desc {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: var(--text-muted);
+.config-subgroup-section-header h5::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  background: var(--primary-light);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.config-subgroup-section .config-field-grid {
+  gap: 14px;
+  padding-left: 4px;
 }
 
 .config-subform-placeholder {

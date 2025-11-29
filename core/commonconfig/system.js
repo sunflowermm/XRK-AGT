@@ -1324,31 +1324,36 @@ export default class SystemConfig extends ConfigBase {
                       description: '默认的 LLM 提供商（generic 或 volcengine）',
                       enum: ['generic', 'volcengine'],
                       default: 'generic',
-                      component: 'Select'
+                      component: 'Select',
+                      meta: { group: 'API 配置' }
                     },
                     baseUrl: {
                       type: 'string',
                       label: 'Base URL',
                       description: 'API 基础地址',
-                      component: 'Input'
+                      component: 'Input',
+                      meta: { group: 'API 配置' }
                     },
                     apiKey: {
                       type: 'string',
                       label: 'API Key',
                       description: 'API 密钥',
-                      component: 'InputPassword'
+                      component: 'InputPassword',
+                      meta: { group: 'API 配置' }
                     },
                     model: {
                       type: 'string',
                       label: '默认聊天模型',
                       description: '默认使用的聊天模型名称',
-                      component: 'Input'
+                      component: 'Input',
+                      meta: { group: '模型配置' }
                     },
                     visionModel: {
                       type: 'string',
                       label: '默认识图模型',
                       description: '默认使用的识图模型名称',
-                      component: 'Input'
+                      component: 'Input',
+                      meta: { group: '模型配置' }
                     },
                     temperature: {
                       type: 'number',
@@ -1357,7 +1362,8 @@ export default class SystemConfig extends ConfigBase {
                       min: 0,
                       max: 2,
                       default: 0.8,
-                      component: 'InputNumber'
+                      component: 'InputNumber',
+                      meta: { group: '参数配置' }
                     },
                     maxTokens: {
                       type: 'number',
@@ -1365,7 +1371,8 @@ export default class SystemConfig extends ConfigBase {
                       description: '生成的最大 token 数量',
                       min: 1,
                       default: 2000,
-                      component: 'InputNumber'
+                      component: 'InputNumber',
+                      meta: { group: '参数配置' }
                     },
                     topP: {
                       type: 'number',
@@ -1374,7 +1381,8 @@ export default class SystemConfig extends ConfigBase {
                       min: 0,
                       max: 1,
                       default: 0.9,
-                      component: 'InputNumber'
+                      component: 'InputNumber',
+                      meta: { group: '参数配置' }
                     },
                     presencePenalty: {
                       type: 'number',
@@ -1383,7 +1391,8 @@ export default class SystemConfig extends ConfigBase {
                       min: -2,
                       max: 2,
                       default: 0.6,
-                      component: 'InputNumber'
+                      component: 'InputNumber',
+                      meta: { group: '参数配置' }
                     },
                     frequencyPenalty: {
                       type: 'number',
@@ -1392,7 +1401,8 @@ export default class SystemConfig extends ConfigBase {
                       min: -2,
                       max: 2,
                       default: 0.6,
-                      component: 'InputNumber'
+                      component: 'InputNumber',
+                      meta: { group: '参数配置' }
                     },
                     timeout: {
                       type: 'number',
@@ -1400,14 +1410,16 @@ export default class SystemConfig extends ConfigBase {
                       description: 'API 请求超时时间（毫秒）',
                       min: 1000,
                       default: 30000,
-                      component: 'InputNumber'
+                      component: 'InputNumber',
+                      meta: { group: '参数配置' }
                     },
                     path: {
                       type: 'string',
                       label: '接口路径',
                       description: 'API 接口路径，默认为 /chat/completions',
                       default: '/chat/completions',
-                      component: 'Input'
+                      component: 'Input',
+                      meta: { group: 'API 配置' }
                     }
                   }
                 },
@@ -1424,24 +1436,80 @@ export default class SystemConfig extends ConfigBase {
                       description: '默认档位，兼顾速度和质量',
                       component: 'SubForm',
                       fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
+                        label: { 
+                          type: 'string', 
+                          label: '显示名称', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
+                        description: { 
+                          type: 'string', 
+                          label: '描述', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
                         provider: {
                           type: 'string',
                           label: '提供商',
                           description: 'LLM 提供商（generic 或 volcengine）',
                           enum: ['generic', 'volcengine'],
-                          component: 'Select'
+                          component: 'Select',
+                          meta: { group: 'API 配置' }
                         },
-                        baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
-                        model: { type: 'string', label: '聊天模型', component: 'Input' },
-                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
-                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
-                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
-                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
+                        baseUrl: { 
+                          type: 'string', 
+                          label: 'Base URL', 
+                          component: 'Input',
+                          meta: { group: 'API 配置' }
+                        },
+                        apiKey: { 
+                          type: 'string', 
+                          label: 'API Key', 
+                          component: 'InputPassword',
+                          meta: { group: 'API 配置' }
+                        },
+                        model: { 
+                          type: 'string', 
+                          label: '聊天模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        visionModel: { 
+                          type: 'string', 
+                          label: '识图模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        maxTokens: { 
+                          type: 'number', 
+                          label: '最大 Tokens', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        temperature: { 
+                          type: 'number', 
+                          label: '温度', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        topP: { 
+                          type: 'number', 
+                          label: 'Top P', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        presencePenalty: { 
+                          type: 'number', 
+                          label: 'Presence Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        frequencyPenalty: { 
+                          type: 'number', 
+                          label: 'Frequency Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        }
                       }
                     },
                     fast: {
@@ -1450,23 +1518,79 @@ export default class SystemConfig extends ConfigBase {
                       description: '短文本润色 / 快速改写',
                       component: 'SubForm',
                       fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
+                        label: { 
+                          type: 'string', 
+                          label: '显示名称', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
+                        description: { 
+                          type: 'string', 
+                          label: '描述', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
                         provider: {
                           type: 'string',
                           label: '提供商',
                           enum: ['generic', 'volcengine'],
-                          component: 'Select'
+                          component: 'Select',
+                          meta: { group: 'API 配置' }
                         },
-                        baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
-                        model: { type: 'string', label: '聊天模型', component: 'Input' },
-                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
-                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
-                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
-                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
+                        baseUrl: { 
+                          type: 'string', 
+                          label: 'Base URL', 
+                          component: 'Input',
+                          meta: { group: 'API 配置' }
+                        },
+                        apiKey: { 
+                          type: 'string', 
+                          label: 'API Key', 
+                          component: 'InputPassword',
+                          meta: { group: 'API 配置' }
+                        },
+                        model: { 
+                          type: 'string', 
+                          label: '聊天模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        visionModel: { 
+                          type: 'string', 
+                          label: '识图模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        maxTokens: { 
+                          type: 'number', 
+                          label: '最大 Tokens', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        temperature: { 
+                          type: 'number', 
+                          label: '温度', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        topP: { 
+                          type: 'number', 
+                          label: 'Top P', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        presencePenalty: { 
+                          type: 'number', 
+                          label: 'Presence Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        frequencyPenalty: { 
+                          type: 'number', 
+                          label: 'Frequency Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        }
                       }
                     },
                     long: {
@@ -1475,23 +1599,79 @@ export default class SystemConfig extends ConfigBase {
                       description: '总结、分析等长上下文任务',
                       component: 'SubForm',
                       fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
+                        label: { 
+                          type: 'string', 
+                          label: '显示名称', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
+                        description: { 
+                          type: 'string', 
+                          label: '描述', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
                         provider: {
                           type: 'string',
                           label: '提供商',
                           enum: ['generic', 'volcengine'],
-                          component: 'Select'
+                          component: 'Select',
+                          meta: { group: 'API 配置' }
                         },
-                        baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
-                        model: { type: 'string', label: '聊天模型', component: 'Input' },
-                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
-                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
-                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
-                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
+                        baseUrl: { 
+                          type: 'string', 
+                          label: 'Base URL', 
+                          component: 'Input',
+                          meta: { group: 'API 配置' }
+                        },
+                        apiKey: { 
+                          type: 'string', 
+                          label: 'API Key', 
+                          component: 'InputPassword',
+                          meta: { group: 'API 配置' }
+                        },
+                        model: { 
+                          type: 'string', 
+                          label: '聊天模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        visionModel: { 
+                          type: 'string', 
+                          label: '识图模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        maxTokens: { 
+                          type: 'number', 
+                          label: '最大 Tokens', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        temperature: { 
+                          type: 'number', 
+                          label: '温度', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        topP: { 
+                          type: 'number', 
+                          label: 'Top P', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        presencePenalty: { 
+                          type: 'number', 
+                          label: 'Presence Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        frequencyPenalty: { 
+                          type: 'number', 
+                          label: 'Frequency Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        }
                       }
                     },
                     device: {
@@ -1500,23 +1680,79 @@ export default class SystemConfig extends ConfigBase {
                       description: '面向设备工作流，响应简洁',
                       component: 'SubForm',
                       fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
+                        label: { 
+                          type: 'string', 
+                          label: '显示名称', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
+                        description: { 
+                          type: 'string', 
+                          label: '描述', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
                         provider: {
                           type: 'string',
                           label: '提供商',
                           enum: ['generic', 'volcengine'],
-                          component: 'Select'
+                          component: 'Select',
+                          meta: { group: 'API 配置' }
                         },
-                        baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
-                        model: { type: 'string', label: '聊天模型', component: 'Input' },
-                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
-                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
-                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
-                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
+                        baseUrl: { 
+                          type: 'string', 
+                          label: 'Base URL', 
+                          component: 'Input',
+                          meta: { group: 'API 配置' }
+                        },
+                        apiKey: { 
+                          type: 'string', 
+                          label: 'API Key', 
+                          component: 'InputPassword',
+                          meta: { group: 'API 配置' }
+                        },
+                        model: { 
+                          type: 'string', 
+                          label: '聊天模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        visionModel: { 
+                          type: 'string', 
+                          label: '识图模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        maxTokens: { 
+                          type: 'number', 
+                          label: '最大 Tokens', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        temperature: { 
+                          type: 'number', 
+                          label: '温度', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        topP: { 
+                          type: 'number', 
+                          label: 'Top P', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        presencePenalty: { 
+                          type: 'number', 
+                          label: 'Presence Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        frequencyPenalty: { 
+                          type: 'number', 
+                          label: 'Frequency Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        }
                       }
                     },
                     creative: {
@@ -1525,23 +1761,79 @@ export default class SystemConfig extends ConfigBase {
                       description: '故事、脑洞、营销灵感',
                       component: 'SubForm',
                       fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
+                        label: { 
+                          type: 'string', 
+                          label: '显示名称', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
+                        description: { 
+                          type: 'string', 
+                          label: '描述', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
                         provider: {
                           type: 'string',
                           label: '提供商',
                           enum: ['generic', 'volcengine'],
-                          component: 'Select'
+                          component: 'Select',
+                          meta: { group: 'API 配置' }
                         },
-                        baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
-                        model: { type: 'string', label: '聊天模型', component: 'Input' },
-                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
-                        maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
-                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
-                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
+                        baseUrl: { 
+                          type: 'string', 
+                          label: 'Base URL', 
+                          component: 'Input',
+                          meta: { group: 'API 配置' }
+                        },
+                        apiKey: { 
+                          type: 'string', 
+                          label: 'API Key', 
+                          component: 'InputPassword',
+                          meta: { group: 'API 配置' }
+                        },
+                        model: { 
+                          type: 'string', 
+                          label: '聊天模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        visionModel: { 
+                          type: 'string', 
+                          label: '识图模型', 
+                          component: 'Input',
+                          meta: { group: '模型配置' }
+                        },
+                        maxTokens: { 
+                          type: 'number', 
+                          label: '最大 Tokens', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        temperature: { 
+                          type: 'number', 
+                          label: '温度', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        topP: { 
+                          type: 'number', 
+                          label: 'Top P', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        presencePenalty: { 
+                          type: 'number', 
+                          label: 'Presence Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        },
+                        frequencyPenalty: { 
+                          type: 'number', 
+                          label: 'Frequency Penalty', 
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
+                        }
                       }
                     },
                     volcengine: {
@@ -1550,47 +1842,63 @@ export default class SystemConfig extends ConfigBase {
                       description: '使用火山引擎豆包大模型',
                       component: 'SubForm',
                       fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
+                        label: { 
+                          type: 'string', 
+                          label: '显示名称', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
+                        description: { 
+                          type: 'string', 
+                          label: '描述', 
+                          component: 'Input',
+                          meta: { group: '基础信息' }
+                        },
                         provider: {
                           type: 'string',
                           label: '提供商',
                           description: '必须设置为 volcengine',
                           default: 'volcengine',
-                          component: 'Input'
+                          component: 'Input',
+                          meta: { group: 'API 配置' }
                         },
                         baseUrl: {
                           type: 'string',
                           label: 'Base URL',
                           description: '火山引擎 API 基础地址，默认：https://ark.cn-beijing.volces.com/api/v3',
                           default: 'https://ark.cn-beijing.volces.com/api/v3',
-                          component: 'Input'
+                          component: 'Input',
+                          meta: { group: 'API 配置' }
                         },
                         apiKey: {
                           type: 'string',
                           label: 'API Key',
                           description: '火山引擎 API Key，从火山引擎控制台获取',
-                          component: 'InputPassword'
+                          component: 'InputPassword',
+                          meta: { group: 'API 配置' }
                         },
                         region: {
                           type: 'string',
                           label: '区域',
                           description: '火山引擎服务区域（如 cn-beijing、cn-shanghai 等）',
                           default: 'cn-beijing',
-                          component: 'Input'
+                          component: 'Input',
+                          meta: { group: 'API 配置' }
                         },
                         model: {
                           type: 'string',
                           label: '聊天模型',
                           description: '豆包大模型名称（如 doubao-pro-4k、doubao-pro-32k、doubao-lite-4k）',
                           default: 'doubao-pro-4k',
-                          component: 'Input'
+                          component: 'Input',
+                          meta: { group: '模型配置' }
                         },
                         visionModel: {
                           type: 'string',
                           label: '识图模型',
                           description: '豆包识图模型名称（如果支持）',
-                          component: 'Input'
+                          component: 'Input',
+                          meta: { group: '模型配置' }
                         },
                         maxTokens: {
                           type: 'number',
@@ -1598,7 +1906,8 @@ export default class SystemConfig extends ConfigBase {
                           description: '生成的最大 token 数量',
                           min: 1,
                           default: 4096,
-                          component: 'InputNumber'
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
                         },
                         temperature: {
                           type: 'number',
@@ -1607,7 +1916,8 @@ export default class SystemConfig extends ConfigBase {
                           min: 0,
                           max: 2,
                           default: 0.8,
-                          component: 'InputNumber'
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
                         },
                         topP: {
                           type: 'number',
@@ -1616,7 +1926,8 @@ export default class SystemConfig extends ConfigBase {
                           min: 0,
                           max: 1,
                           default: 0.9,
-                          component: 'InputNumber'
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
                         },
                         presencePenalty: {
                           type: 'number',
@@ -1625,7 +1936,8 @@ export default class SystemConfig extends ConfigBase {
                           min: -2,
                           max: 2,
                           default: 0.6,
-                          component: 'InputNumber'
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
                         },
                         frequencyPenalty: {
                           type: 'number',
@@ -1634,7 +1946,8 @@ export default class SystemConfig extends ConfigBase {
                           min: -2,
                           max: 2,
                           default: 0.6,
-                          component: 'InputNumber'
+                          component: 'InputNumber',
+                          meta: { group: '参数配置' }
                         }
                       }
                     }
