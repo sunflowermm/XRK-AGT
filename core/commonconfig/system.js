@@ -1289,31 +1289,19 @@ export default class SystemConfig extends ConfigBase {
                   label: '启用 LLM',
                   description: '是否启用大语言模型功能',
                   default: true,
-                  component: 'Switch',
-                  meta: {
-                    group: 'LLM 基础配置',
-                    groupDesc: 'LLM 的基础设置和默认参数'
-                  }
+                  component: 'Switch'
                 },
                 defaultProfile: {
                   type: 'string',
                   label: '默认模型档位',
                   description: '默认使用的模型档位名称（如 balanced、fast、long 等）',
-                  component: 'Input',
-                  meta: {
-                    group: 'LLM 基础配置',
-                    groupDesc: 'LLM 的基础设置和默认参数'
-                  }
+                  component: 'Input'
                 },
                 persona: {
                   type: 'string',
                   label: '默认人设',
                   description: 'AI 的默认人设描述',
-                  component: 'TextArea',
-                  meta: {
-                    group: 'LLM 基础配置',
-                    groupDesc: 'LLM 的基础设置和默认参数'
-                  }
+                  component: 'TextArea'
                 },
                 displayDelay: {
                   type: 'number',
@@ -1321,11 +1309,7 @@ export default class SystemConfig extends ConfigBase {
                   description: '消息展示的延迟时间（毫秒）',
                   min: 0,
                   default: 1500,
-                  component: 'InputNumber',
-                  meta: {
-                    group: 'LLM 基础配置',
-                    groupDesc: 'LLM 的基础设置和默认参数'
-                  }
+                  component: 'InputNumber'
                 },
                 // 默认 API 参数
                 defaults: {
@@ -1333,10 +1317,6 @@ export default class SystemConfig extends ConfigBase {
                   label: '默认 API 参数',
                   description: '所有模型档位的默认 API 参数，档位配置会覆盖这些默认值',
                   component: 'SubForm',
-                  meta: {
-                    group: 'LLM 默认参数',
-                    groupDesc: '所有模型档位的默认 API 参数'
-                  },
                   fields: {
                     provider: {
                       type: 'string',
@@ -1437,10 +1417,6 @@ export default class SystemConfig extends ConfigBase {
                   label: '模型档位配置',
                   description: '不同场景的模型配置档位，用户可以选择使用',
                   component: 'SubForm',
-                  meta: {
-                    group: 'LLM 模型档位',
-                    groupDesc: '不同场景的模型配置档位（balanced、fast、long、device、creative、volcengine）'
-                  },
                   fields: {
                     balanced: {
                       type: 'object',

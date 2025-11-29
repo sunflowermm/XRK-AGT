@@ -1728,17 +1728,22 @@ class App {
 
   /**
    * 构建字段树结构，支持多级分组
+   * 优化：根据路径深度和字段类型智能分组
    */
   buildFieldTree(flatSchema) {
     const tree = {};
-    const subFormFields = new Set(); // 记录所有 SubForm 类型的字段路径
+    const subFormFields = new Map(); // 记录所有 SubForm 类型的字段路径及其信息
     
     // 第一遍：识别所有 SubForm 类型的字段
     flatSchema.forEach(field => {
       const meta = field.meta || {};
       const component = (meta.component || '').toLowerCase();
-      if (component === 'subform' || field.type === 'object') {
-        subFormFields.add(field.path);
+      if (component === 'subform' || (field.type === 'object' && meta.component !== 'json')) {
+        subFormFields.set(field.path, {
+          label: meta.label || field.path.split('.').pop() || field.path,
+          description: meta.description || '',
+          group: meta.group || null
+        });
       }
     });
     
@@ -1748,36 +1753,55 @@ class App {
       const path = field.path;
       const parts = path.split('.');
       
-      // 确定分组键：优先使用 meta.group，否则使用路径的第一部分
-      const groupKey = meta.group || parts[0] || '基础';
-      
-      // 检查是否是某个 SubForm 的子字段
-      let isSubFormChild = false;
+      // 智能确定分组键：
+      // 1. 优先使用 meta.group
+      // 2. 如果是 SubForm 的子字段，使用父 SubForm 的 group
+      // 3. 否则根据路径深度和第一部分确定
+      let groupKey = meta.group;
       let parentSubFormPath = null;
       
-      for (const subFormPath of subFormFields) {
+      // 查找最近的父 SubForm
+      for (const [subFormPath, subFormInfo] of subFormFields.entries()) {
         if (path.startsWith(subFormPath + '.')) {
-          isSubFormChild = true;
           parentSubFormPath = subFormPath;
+          // 如果子字段没有 group，使用父 SubForm 的 group
+          if (!groupKey && subFormInfo.group) {
+            groupKey = subFormInfo.group;
+          }
           break;
         }
       }
       
-      if (isSubFormChild && parentSubFormPath) {
+      // 如果还是没有 group，根据路径确定
+      if (!groupKey) {
+        if (parts.length === 1) {
+          // 顶级字段，使用字段名作为分组
+          groupKey = parts[0];
+        } else if (parts.length === 2) {
+          // 二级字段，使用第一部分作为分组
+          groupKey = parts[0];
+        } else {
+          // 更深层的字段，使用前两部分作为分组
+          groupKey = parts.slice(0, 2).join('.');
+        }
+      }
+      
+      // 格式化分组键
+      groupKey = this.formatGroupKey(groupKey);
+      
+      if (parentSubFormPath) {
         // 这是 SubForm 的子字段，需要嵌套显示
         if (!tree[groupKey]) {
           tree[groupKey] = { fields: [], subGroups: {} };
         }
         
-        // 查找父字段定义
-        const parentField = flatSchema.find(f => f.path === parentSubFormPath);
-        const parentMeta = parentField?.meta || {};
+        const subFormInfo = subFormFields.get(parentSubFormPath);
         
         // 创建子分组
         if (!tree[groupKey].subGroups[parentSubFormPath]) {
           tree[groupKey].subGroups[parentSubFormPath] = {
-            label: parentMeta.label || parentSubFormPath.split('.').pop() || parentSubFormPath,
-            description: parentMeta.description || '',
+            label: subFormInfo.label,
+            description: subFormInfo.description,
             path: parentSubFormPath,
             fields: []
           };
@@ -1785,7 +1809,7 @@ class App {
         
         tree[groupKey].subGroups[parentSubFormPath].fields.push(field);
       } else if (subFormFields.has(path)) {
-        // 这是 SubForm 字段本身，如果有子字段则不在顶级显示，否则显示为普通字段
+        // 这是 SubForm 字段本身，如果有子字段则不在顶级显示
         const hasChildren = flatSchema.some(f => f.path.startsWith(path + '.'));
         if (!hasChildren) {
           // 没有子字段，作为普通字段显示
@@ -1794,7 +1818,6 @@ class App {
           }
           tree[groupKey].fields.push(field);
         }
-        // 如果有子字段，则不在这里显示，由子字段的分组显示
       } else {
         // 普通字段，直接添加到分组
         if (!tree[groupKey]) {
@@ -1805,6 +1828,49 @@ class App {
     });
     
     return tree;
+  }
+
+  /**
+   * 格式化分组键，使其更友好
+   */
+  formatGroupKey(key) {
+    if (!key) return '其他';
+    
+    // 如果包含点，说明是嵌套路径，取最后一部分
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      // 对于 llm.defaults 这样的路径，返回 "LLM 默认参数"
+      if (parts.length === 2) {
+        const [parent, child] = parts;
+        const parentLabel = this.getFieldLabel(parent);
+        const childLabel = this.getFieldLabel(child);
+        return `${parentLabel} - ${childLabel}`;
+      }
+      return this.getFieldLabel(parts[parts.length - 1]);
+    }
+    
+    return this.getFieldLabel(key);
+  }
+
+  /**
+   * 获取字段的友好标签
+   */
+  getFieldLabel(key) {
+    const labelMap = {
+      'llm': 'LLM 大语言模型',
+      'defaults': '默认参数',
+      'profiles': '模型档位',
+      'embedding': 'Embedding 向量检索',
+      'drawing': '绘图模型',
+      'tts': 'TTS 语音合成',
+      'asr': 'ASR 语音识别',
+      'device': '设备运行参数',
+      'emotions': '表情映射',
+      'global': '全局设置',
+      'cache': '缓存设置'
+    };
+    
+    return labelMap[key] || this.formatGroupLabel(key);
   }
 
   /**
