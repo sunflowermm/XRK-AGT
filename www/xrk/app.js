@@ -1719,28 +1719,178 @@ class App {
       return '<div class="empty-state"><p>该配置暂无扁平结构，可切换 JSON 模式编辑。</p></div>';
     }
 
-    const groups = {};
-    this._configState.flatSchema.forEach(field => {
-      const meta = field.meta || {};
-      const key = meta.group || (field.path.includes('.') ? field.path.split('.')[0] : '基础');
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(field);
-    });
+    // 构建字段树结构，支持多级分组
+    const fieldTree = this.buildFieldTree(this._configState.flatSchema);
+    
+    // 渲染字段树
+    return this.renderFieldTree(fieldTree);
+  }
 
-    return Object.entries(groups).map(([group, fields]) => `
-      <div class="config-group">
-        <div class="config-group-header">
-          <div>
-            <h3>${this.escapeHtml(this.formatGroupLabel(group))}</h3>
-            <p>${this.escapeHtml(fields[0]?.meta?.groupDesc || '')}</p>
+  /**
+   * 构建字段树结构，支持多级分组
+   */
+  buildFieldTree(flatSchema) {
+    const tree = {};
+    const subFormFields = new Set(); // 记录所有 SubForm 类型的字段路径
+    
+    // 第一遍：识别所有 SubForm 类型的字段
+    flatSchema.forEach(field => {
+      const meta = field.meta || {};
+      const component = (meta.component || '').toLowerCase();
+      if (component === 'subform' || field.type === 'object') {
+        subFormFields.add(field.path);
+      }
+    });
+    
+    // 第二遍：构建字段树
+    flatSchema.forEach(field => {
+      const meta = field.meta || {};
+      const path = field.path;
+      const parts = path.split('.');
+      
+      // 确定分组键：优先使用 meta.group，否则使用路径的第一部分
+      const groupKey = meta.group || parts[0] || '基础';
+      
+      // 检查是否是某个 SubForm 的子字段
+      let isSubFormChild = false;
+      let parentSubFormPath = null;
+      
+      for (const subFormPath of subFormFields) {
+        if (path.startsWith(subFormPath + '.')) {
+          isSubFormChild = true;
+          parentSubFormPath = subFormPath;
+          break;
+        }
+      }
+      
+      if (isSubFormChild && parentSubFormPath) {
+        // 这是 SubForm 的子字段，需要嵌套显示
+        if (!tree[groupKey]) {
+          tree[groupKey] = { fields: [], subGroups: {} };
+        }
+        
+        // 查找父字段定义
+        const parentField = flatSchema.find(f => f.path === parentSubFormPath);
+        const parentMeta = parentField?.meta || {};
+        
+        // 创建子分组
+        if (!tree[groupKey].subGroups[parentSubFormPath]) {
+          tree[groupKey].subGroups[parentSubFormPath] = {
+            label: parentMeta.label || parentSubFormPath.split('.').pop() || parentSubFormPath,
+            description: parentMeta.description || '',
+            path: parentSubFormPath,
+            fields: []
+          };
+        }
+        
+        tree[groupKey].subGroups[parentSubFormPath].fields.push(field);
+      } else if (subFormFields.has(path)) {
+        // 这是 SubForm 字段本身，如果有子字段则不在顶级显示，否则显示为普通字段
+        const hasChildren = flatSchema.some(f => f.path.startsWith(path + '.'));
+        if (!hasChildren) {
+          // 没有子字段，作为普通字段显示
+          if (!tree[groupKey]) {
+            tree[groupKey] = { fields: [], subGroups: {} };
+          }
+          tree[groupKey].fields.push(field);
+        }
+        // 如果有子字段，则不在这里显示，由子字段的分组显示
+      } else {
+        // 普通字段，直接添加到分组
+        if (!tree[groupKey]) {
+          tree[groupKey] = { fields: [], subGroups: {} };
+        }
+        tree[groupKey].fields.push(field);
+      }
+    });
+    
+    return tree;
+  }
+
+  /**
+   * 渲染字段树
+   */
+  renderFieldTree(tree) {
+    return Object.entries(tree).map(([groupKey, group]) => {
+      const groupLabel = this.formatGroupLabel(groupKey);
+      const groupDesc = group.fields[0]?.meta?.groupDesc || '';
+      const totalFields = group.fields.length + Object.values(group.subGroups).reduce((sum, sg) => sum + sg.fields.length, 0);
+      
+      // 渲染子分组（SubForm），子分组内的字段也需要按分组显示
+      const subGroupsHtml = Object.entries(group.subGroups).map(([subPath, subGroup]) => {
+        // 对子分组内的字段进行分组
+        const subFieldGroups = this.groupFieldsByMeta(subGroup.fields);
+        
+        const subFieldsHtml = Array.from(subFieldGroups.entries()).map(([subGroupKey, subFields]) => {
+          const subGroupLabel = this.formatGroupLabel(subGroupKey);
+          const subGroupDesc = subFields[0]?.meta?.groupDesc || '';
+          
+          return `
+            <div class="config-subgroup-section">
+              ${subFieldGroups.size > 1 ? `
+                <div class="config-subgroup-section-header">
+                  <h5>${this.escapeHtml(subGroupLabel)}</h5>
+                  ${subGroupDesc ? `<p class="config-subgroup-section-desc">${this.escapeHtml(subGroupDesc)}</p>` : ''}
+                </div>
+              ` : ''}
+              <div class="config-field-grid">
+                ${subFields.map(field => this.renderConfigField(field)).join('')}
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        return `
+          <div class="config-subgroup" data-subform-path="${this.escapeHtml(subPath)}">
+            <div class="config-subgroup-header">
+              <h4>${this.escapeHtml(subGroup.label)}</h4>
+              ${subGroup.description ? `<p class="config-subgroup-desc">${this.escapeHtml(subGroup.description)}</p>` : ''}
+            </div>
+            ${subFieldsHtml}
           </div>
-          <span class="config-group-count">${fields.length} 项</span>
-        </div>
+        `;
+      }).join('');
+      
+      // 渲染普通字段
+      const fieldsHtml = group.fields.length > 0 ? `
         <div class="config-field-grid">
-          ${fields.map(field => this.renderConfigField(field)).join('')}
+          ${group.fields.map(field => this.renderConfigField(field)).join('')}
         </div>
-      </div>
-    `).join('');
+      ` : '';
+      
+      return `
+        <div class="config-group">
+          <div class="config-group-header">
+            <div>
+              <h3>${this.escapeHtml(groupLabel)}</h3>
+              ${groupDesc ? `<p>${this.escapeHtml(groupDesc)}</p>` : ''}
+            </div>
+            <span class="config-group-count">${totalFields} 项</span>
+          </div>
+          ${fieldsHtml}
+          ${subGroupsHtml}
+        </div>
+      `;
+    }).join('');
+  }
+
+  /**
+   * 根据 meta.group 对字段进行分组
+   */
+  groupFieldsByMeta(fields) {
+    const groups = new Map();
+    
+    fields.forEach(field => {
+      const meta = field.meta || {};
+      const groupKey = meta.group || '默认';
+      
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, []);
+      }
+      groups.get(groupKey).push(field);
+    });
+    
+    return groups;
   }
 
   renderConfigField(field) {
@@ -1825,8 +1975,23 @@ class App {
         return `<input type="number" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${meta.min ?? ''}" max="${meta.max ?? ''}" step="${meta.step ?? 'any'}" placeholder="${placeholder}" ${disabled}>`;
       case 'inputpassword':
         return `<input type="password" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      case 'subform': {
+        // SubForm 类型：检查是否有子字段，如果有则展开显示，否则显示 JSON 编辑器
+        const subFields = this.getSubFormFields(field.path);
+        if (subFields && subFields.length > 0) {
+          // 有子字段，在 renderFieldTree 中已经展开显示，这里返回空
+          // 但为了兼容，我们返回一个占位符提示
+          return `<div class="config-subform-placeholder">
+            <p class="config-field-hint">该配置项已展开显示在下方分组中</p>
+          </div>`;
+        }
+        // 没有子字段，使用 JSON 编辑器
+        return `
+          <textarea class="form-input" rows="4" id="${inputId}" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled}>${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>
+          <p class="config-field-hint">以 JSON 形式编辑该字段</p>
+        `;
+      }
       case 'arrayform':
-      case 'subform':
       case 'json':
         return `
           <textarea class="form-input" rows="4" id="${inputId}" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled}>${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>
@@ -2488,6 +2653,21 @@ class App {
     if (exact) return exact;
     const normalized = this.normalizeTemplatePath(path);
     return this._configState.flatSchema.find(field => this.normalizeTemplatePath(field.path) === normalized);
+  }
+
+  /**
+   * 获取 SubForm 的子字段
+   */
+  getSubFormFields(parentPath) {
+    if (!this._configState?.flatSchema) return null;
+    return this._configState.flatSchema.filter(field => {
+      const fieldPath = field.path;
+      // 检查是否是父路径的直接子字段
+      if (!fieldPath.startsWith(parentPath + '.')) return false;
+      const relativePath = fieldPath.substring(parentPath.length + 1);
+      // 只返回直接子字段（不包含更深层的字段）
+      return !relativePath.includes('.');
+    });
   }
 
   normalizeTemplatePath(path = '') {
