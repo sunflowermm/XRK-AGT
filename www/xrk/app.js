@@ -46,38 +46,11 @@ class App {
     this.handleRoute();
     this.ensureDeviceWs();
     
-    // 配置 Chart.js 默认设置，确保与主题兼容
-    if (typeof Chart !== 'undefined') {
-      Chart.defaults.responsive = true;
-      Chart.defaults.maintainAspectRatio = false;
-      Chart.defaults.plugins.legend.display = true;
-      Chart.defaults.plugins.tooltip.enabled = true;
-      // 使用 CSS 变量，避免硬编码颜色
-      Chart.defaults.borderColor = 'transparent';
-      Chart.defaults.backgroundColor = 'transparent';
-    }
-    
     window.addEventListener('hashchange', () => this.handleRoute());
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
         this.checkConnection();
         this.ensureDeviceWs();
-      }
-    });
-    
-    // 页面卸载时清理资源
-    window.addEventListener('beforeunload', () => {
-      if (this._deviceWsHeartbeatTimer) {
-        clearInterval(this._deviceWsHeartbeatTimer);
-        this._deviceWsHeartbeatTimer = null;
-      }
-      if (this._deviceWs) {
-        try {
-          this._deviceWs.close();
-        } catch (e) {
-          // 忽略错误
-        }
-        this._deviceWs = null;
       }
     });
     
@@ -242,80 +215,6 @@ class App {
     if (persist) {
       localStorage.setItem('theme', nextTheme);
       this.disableSystemThemeSync();
-    }
-    // 更新图表主题
-    this.updateChartsTheme();
-  }
-
-  // 更新所有图表的主题颜色
-  updateChartsTheme() {
-    if (typeof Chart === 'undefined') return;
-    
-    // 获取当前主题的颜色
-    const primary = getComputedStyle(document.body).getPropertyValue('--primary').trim() || '#0ea5e9';
-    const success = getComputedStyle(document.body).getPropertyValue('--success').trim() || '#22c55e';
-    const warning = getComputedStyle(document.body).getPropertyValue('--warning').trim() || '#f59e0b';
-    const danger = getComputedStyle(document.body).getPropertyValue('--danger').trim() || '#ef4444';
-    const textMuted = getComputedStyle(document.body).getPropertyValue('--text-muted').trim() || '#94a3b8';
-    const border = getComputedStyle(document.body).getPropertyValue('--border').trim() || '#e2e8f0';
-    const isDark = document.body.classList.contains('dark');
-    
-    // 更新 CPU 图表
-    if (this._charts.cpu) {
-      const cpu = this._charts.cpu.data.datasets[0].data[0];
-      const cpuColor = cpu > 80 ? danger : cpu > 50 ? warning : primary;
-      this._charts.cpu.data.datasets[0].backgroundColor = [cpuColor, border];
-      // 重新绘制以更新中心标签颜色
-      this._charts.cpu.update('none');
-    }
-    
-    // 更新内存图表
-    if (this._charts.mem) {
-      const mem = this._charts.mem.data.datasets[0].data[0];
-      const memColor = mem > 80 ? danger : mem > 50 ? warning : success;
-      this._charts.mem.data.datasets[0].backgroundColor = [memColor, border];
-      // 重新绘制以更新中心标签颜色
-      this._charts.mem.update('none');
-    }
-    
-    // 更新网络图表
-    if (this._charts.net) {
-      const netCtx = this._charts.net.canvas;
-      const netCtx2d = netCtx.getContext('2d');
-      
-      // 重新创建渐变
-      const gradientRx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
-      gradientRx.addColorStop(0, `${primary}40`);
-      gradientRx.addColorStop(1, `${primary}05`);
-      
-      const gradientTx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
-      gradientTx.addColorStop(0, `${warning}40`);
-      gradientTx.addColorStop(1, `${warning}05`);
-      
-      this._charts.net.data.datasets[0].borderColor = primary;
-      this._charts.net.data.datasets[0].backgroundColor = gradientRx;
-      this._charts.net.data.datasets[0].pointHoverBackgroundColor = primary;
-      
-      this._charts.net.data.datasets[1].borderColor = warning;
-      this._charts.net.data.datasets[1].backgroundColor = gradientTx;
-      this._charts.net.data.datasets[1].pointHoverBackgroundColor = warning;
-      
-      // 更新图例颜色
-      if (this._charts.net.options.plugins?.legend?.labels) {
-        this._charts.net.options.plugins.legend.labels.color = textMuted;
-      }
-      
-      // 更新 tooltip 颜色
-      if (this._charts.net.options.plugins?.tooltip) {
-        this._charts.net.options.plugins.tooltip.backgroundColor = isDark 
-          ? 'rgba(30, 41, 59, 0.95)' 
-          : 'rgba(0, 0, 0, 0.85)';
-        this._charts.net.options.plugins.tooltip.titleColor = isDark ? '#f1f5f9' : '#ffffff';
-        this._charts.net.options.plugins.tooltip.bodyColor = isDark ? '#cbd5e1' : '#ffffff';
-        this._charts.net.options.plugins.tooltip.borderColor = border;
-      }
-      
-      this._charts.net.update('none');
     }
   }
 
@@ -871,27 +770,24 @@ class App {
           }
         });
         
-        // 添加中心标签插件（使用唯一ID避免重复注册）
-        if (!Chart.registry.getPlugin('cpuLabel')) {
-          const cpuLabelPlugin = {
-            id: 'cpuLabel',
-            afterDraw: (chart) => {
-              const ctx = chart.ctx;
-              const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
-              const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
-              const value = chart.data.datasets[0].data[0];
-              ctx.save();
-              ctx.font = 'bold 16px Inter';
-              // 动态读取CSS变量，支持主题切换
-              ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim() || '#0f172a';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
-              ctx.restore();
-            }
-          };
-          Chart.register(cpuLabelPlugin);
-        }
+        // 添加中心标签插件
+        const cpuLabelPlugin = {
+          id: 'cpuLabel',
+          afterDraw: (chart) => {
+            const ctx = chart.ctx;
+            const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+            const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+            const value = chart.data.datasets[0].data[0];
+            ctx.save();
+            ctx.font = 'bold 16px Inter';
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
+            ctx.restore();
+          }
+        };
+        Chart.register(cpuLabelPlugin);
         
         this._charts.cpu = cpuChart;
       } else {
@@ -933,27 +829,24 @@ class App {
           }
         });
         
-        // 添加中心标签插件（使用唯一ID避免重复注册）
-        if (!Chart.registry.getPlugin('memLabel')) {
-          const memLabelPlugin = {
-            id: 'memLabel',
-            afterDraw: (chart) => {
-              const ctx = chart.ctx;
-              const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
-              const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
-              const value = chart.data.datasets[0].data[0];
-              ctx.save();
-              ctx.font = 'bold 16px Inter';
-              // 动态读取CSS变量，支持主题切换
-              ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim() || '#0f172a';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
-              ctx.restore();
-            }
-          };
-          Chart.register(memLabelPlugin);
-        }
+        // 添加中心标签插件
+        const memLabelPlugin = {
+          id: 'memLabel',
+          afterDraw: (chart) => {
+            const ctx = chart.ctx;
+            const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+            const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+            const value = chart.data.datasets[0].data[0];
+            ctx.save();
+            ctx.font = 'bold 16px Inter';
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
+            ctx.restore();
+          }
+        };
+        Chart.register(memLabelPlugin);
         
         this._charts.mem = memChart;
       } else {
@@ -964,7 +857,7 @@ class App {
       }
     }
     
-    // 网络图表 - 重构为更美观的样式
+    // 网络图表
     const netCtx = document.getElementById('netChart');
     if (netCtx) {
       // 如果图表实例存在但canvas元素不匹配，销毁并重新创建
@@ -974,24 +867,8 @@ class App {
       }
       
       const labels = this._metricsHistory.netRx.map(() => '');
-      const maxValue = Math.max(
-        ...this._metricsHistory.netRx,
-        ...this._metricsHistory.netTx,
-        1
-      );
-      
       if (!this._charts.net) {
-        // 创建渐变
-        const netCtx2d = netCtx.getContext('2d');
-        const gradientRx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
-        gradientRx.addColorStop(0, `${primary}40`);
-        gradientRx.addColorStop(1, `${primary}05`);
-        
-        const gradientTx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
-        gradientTx.addColorStop(0, `${warning}40`);
-        gradientTx.addColorStop(1, `${warning}05`);
-        
-        this._charts.net = new Chart(netCtx2d, {
+        this._charts.net = new Chart(netCtx.getContext('2d'), {
           type: 'line',
           data: {
             labels,
@@ -999,129 +876,61 @@ class App {
               { 
                 label: '下行', 
                 data: this._metricsHistory.netRx, 
-                borderColor: primary,
-                borderWidth: 2.5,
-                backgroundColor: gradientRx,
+                borderColor: primary, 
+                backgroundColor: `${primary}15`, 
                 fill: true, 
-                tension: 0.5,
+                tension: 0.3, 
                 pointRadius: 0,
                 pointHoverRadius: 4,
-                pointHoverBorderWidth: 2,
-                pointHoverBackgroundColor: primary,
-                pointHoverBorderColor: '#fff',
-                spanGaps: true,
-                segment: {
-                  borderColor: ctx => {
-                    const value = ctx.p1.parsed.y;
-                    if (value < 0.01) return 'transparent';
-                    return primary;
-                  }
-                }
+                borderWidth: 2,
+                spanGaps: true
               },
               { 
                 label: '上行', 
                 data: this._metricsHistory.netTx, 
-                borderColor: warning,
-                borderWidth: 2.5,
-                backgroundColor: gradientTx,
+                borderColor: warning, 
+                backgroundColor: `${warning}15`, 
                 fill: true, 
-                tension: 0.5,
+                tension: 0.3, 
                 pointRadius: 0,
                 pointHoverRadius: 4,
-                pointHoverBorderWidth: 2,
-                pointHoverBackgroundColor: warning,
-                pointHoverBorderColor: '#fff',
-                spanGaps: true,
-                segment: {
-                  borderColor: ctx => {
-                    const value = ctx.p1.parsed.y;
-                    if (value < 0.01) return 'transparent';
-                    return warning;
-                  }
-                }
+                borderWidth: 2,
+                spanGaps: true
               }
             ]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: {
-              duration: 0
-            },
-            interaction: { 
-              intersect: false, 
-              mode: 'index',
-              axis: 'x'
-            },
+            interaction: { intersect: false, mode: 'index' },
             plugins: { 
               legend: { 
-                position: 'bottom',
-                align: 'center',
+                position: 'bottom', 
+                display: true,
                 labels: { 
-                  color: textMuted,
+                  color: textMuted, 
                   padding: 12,
-                  font: {
-                    size: 11,
-                    weight: '500'
-                  },
+                  font: { size: 12 },
                   usePointStyle: true,
-                  pointStyle: 'circle',
-                  boxWidth: 6,
-                  boxHeight: 6
+                  pointStyle: 'line'
                 } 
               },
               tooltip: {
                 enabled: true,
-                backgroundColor: (() => {
-                  // 根据主题动态设置背景色
-                  const isDark = document.body.classList.contains('dark');
-                  return isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(0, 0, 0, 0.85)';
-                })(),
-                padding: 12,
-                titleFont: {
-                  size: 12,
-                  weight: '600'
-                },
-                bodyFont: {
-                  size: 11
-                },
-                titleColor: (() => {
-                  const isDark = document.body.classList.contains('dark');
-                  return isDark ? '#f1f5f9' : '#ffffff';
-                })(),
-                bodyColor: (() => {
-                  const isDark = document.body.classList.contains('dark');
-                  return isDark ? '#cbd5e1' : '#ffffff';
-                })(),
-                borderColor: border,
-                borderWidth: 1,
-                cornerRadius: 8,
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                padding: 10,
+                titleFont: { size: 12 },
+                bodyFont: { size: 11 },
+                cornerRadius: 6,
                 displayColors: true,
                 callbacks: {
-                  title: function() {
-                    return '网络流量';
-                  },
                   label: function(context) {
                     const value = context.parsed.y;
                     if (value === 0 || value < 0.01) return '';
-                    const label = context.dataset.label || '';
-                    let formatted = value.toFixed(2);
-                    if (value >= 1024) {
-                      formatted = (value / 1024).toFixed(2) + ' MB/s';
-                    } else {
-                      formatted += ' KB/s';
-                    }
-                    return `${label}: ${formatted}`;
+                    return `${context.dataset.label}: ${value.toFixed(2)} KB/s`;
                   },
                   filter: function(tooltipItem) {
                     return tooltipItem.parsed.y > 0.01;
-                  },
-                  labelColor: function(context) {
-                    return {
-                      borderColor: context.dataset.borderColor,
-                      backgroundColor: context.dataset.borderColor,
-                      borderWidth: 2
-                    };
                   }
                 }
               }
@@ -1129,54 +938,44 @@ class App {
             scales: {
               x: { 
                 display: false,
-                grid: {
-                  display: false
-                }
+                grid: { display: false }
               },
               y: { 
-                beginAtZero: true,
-                max: maxValue * 1.2,
+                beginAtZero: true, 
                 grid: { 
                   color: border,
-                  lineWidth: 1,
-                  drawBorder: false
-                },
+                  drawBorder: false,
+                  lineWidth: 1
+                }, 
                 ticks: { 
-                  display: false
+                  display: false,
+                  maxTicksLimit: 5
                 }
               }
             }
           }
         });
       } else {
-        // 更新数据
         this._charts.net.data.labels = labels;
         this._charts.net.data.datasets[0].data = this._metricsHistory.netRx;
         this._charts.net.data.datasets[1].data = this._metricsHistory.netTx;
-        
-        // 更新Y轴最大值
-        const newMaxValue = Math.max(
-          ...this._metricsHistory.netRx,
-          ...this._metricsHistory.netTx,
-          1
-        );
-        if (this._charts.net.options.scales?.y) {
-          this._charts.net.options.scales.y.max = newMaxValue * 1.2;
+        // 确保Y轴刻度不显示
+        if (this._charts.net.options.scales?.y?.ticks) {
+          this._charts.net.options.scales.y.ticks.display = false;
         }
-        
-        // 更新渐变（如果canvas尺寸改变）
-        const netCtx2d = netCtx.getContext('2d');
-        const gradientRx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
-        gradientRx.addColorStop(0, `${primary}40`);
-        gradientRx.addColorStop(1, `${primary}05`);
-        
-        const gradientTx = netCtx2d.createLinearGradient(0, 0, 0, netCtx.height || 200);
-        gradientTx.addColorStop(0, `${warning}40`);
-        gradientTx.addColorStop(1, `${warning}05`);
-        
-        this._charts.net.data.datasets[0].backgroundColor = gradientRx;
-        this._charts.net.data.datasets[1].backgroundColor = gradientTx;
-        
+        // 更新tooltip配置，过滤0.0值
+        if (this._charts.net.options.plugins?.tooltip) {
+          this._charts.net.options.plugins.tooltip.callbacks = {
+            label: function(context) {
+              const value = context.parsed.y;
+              if (value === 0 || value < 0.01) return '';
+              return `${context.dataset.label}: ${value.toFixed(2)} KB/s`;
+            },
+            filter: function(tooltipItem) {
+              return tooltipItem.parsed.y > 0.01;
+            }
+          };
+        }
         this._charts.net.update('none');
       }
     }
@@ -3515,6 +3314,12 @@ class App {
     const state = this._deviceWs?.readyState;
     if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
     
+    // 清理之前的心跳定时器
+    if (this._heartbeatTimer) {
+      clearInterval(this._heartbeatTimer);
+      this._heartbeatTimer = null;
+    }
+    
     const apiKey = localStorage.getItem('apiKey') || '';
     const wsUrl = this.serverUrl.replace(/^http/, 'ws') + '/device' + (apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '');
     
@@ -3529,6 +3334,20 @@ class App {
           device_name: 'Web客户端',
           capabilities: ['display', 'microphone']
         }));
+        
+        // 启动前端心跳检测（每30秒发送一次ping）
+        this._heartbeatTimer = setInterval(() => {
+          if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
+            try {
+              this._deviceWs.send(JSON.stringify({
+                type: 'heartbeat',
+                timestamp: Date.now()
+              }));
+            } catch (e) {
+              console.warn('心跳发送失败:', e);
+            }
+          }
+        }, 30000);
       };
       
       this._deviceWs.onmessage = (e) => {
@@ -3539,31 +3358,17 @@ class App {
       };
       
       this._deviceWs.onclose = () => {
-        if (this._deviceWsHeartbeatTimer) {
-          clearInterval(this._deviceWsHeartbeatTimer);
-          this._deviceWsHeartbeatTimer = null;
+        if (this._heartbeatTimer) {
+          clearInterval(this._heartbeatTimer);
+          this._heartbeatTimer = null;
         }
         this._deviceWs = null;
-        setTimeout(() => this.ensureDeviceWs(), 2000);
+        setTimeout(() => this.ensureDeviceWs(), 5000);
       };
       
-      this._deviceWs.onerror = (error) => {
-        console.warn('WebSocket错误:', error);
+      this._deviceWs.onerror = (e) => {
+        console.warn('WebSocket错误:', e);
       };
-      
-      // 前端主动心跳（作为备用机制）
-      this._deviceWsHeartbeatTimer = setInterval(() => {
-        if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
-          try {
-            this._deviceWs.send(JSON.stringify({
-              type: 'heartbeat',
-              timestamp: Date.now()
-            }));
-          } catch (e) {
-            console.warn('心跳发送失败:', e);
-          }
-        }
-      }, 25000); // 25秒发送一次，比后端30秒稍快
     } catch (e) {
       console.warn('WebSocket连接失败:', e);
     }
@@ -3572,25 +3377,12 @@ class App {
   handleWsMessage(data) {
     switch (data.type) {
       case 'heartbeat_request':
-        // 响应后端心跳请求
+        // 响应心跳请求
         if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
           this._deviceWs.send(JSON.stringify({
-            type: 'heartbeat',
+            type: 'heartbeat_response',
             timestamp: Date.now()
           }));
-        }
-        break;
-      case 'heartbeat_response':
-        // 心跳响应，可以处理返回的命令队列
-        if (data.commands && Array.isArray(data.commands) && data.commands.length > 0) {
-          data.commands.forEach(cmd => {
-            if (cmd.command === 'display' && cmd.parameters?.text) {
-              this.appendChat('assistant', cmd.parameters.text);
-            }
-            if (cmd.command === 'display_emotion' && cmd.parameters?.emotion) {
-              this.updateEmotionDisplay(cmd.parameters.emotion);
-            }
-          });
         }
         break;
       case 'asr_interim':

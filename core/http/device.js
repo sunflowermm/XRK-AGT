@@ -920,29 +920,13 @@ class DeviceManager {
         ws.messageQueue = [];
 
         const systemConfig = getSystemConfig();
-        const heartbeatInterval = (systemConfig.heartbeatInterval || 30) * 1000;
-        const heartbeatTimeout = (systemConfig.heartbeatTimeout || 180) * 1000;
-        
-        // 心跳检查定时器：检查是否超时
-        ws.heartbeatCheckTimer = setInterval(() => {
-            const now = Date.now();
-            const timeSinceLastPong = now - ws.lastPong;
-            
-            if (timeSinceLastPong > heartbeatTimeout) {
-                BotUtil.makeLog('warn',
-                    `⏱️ [WebSocket] 心跳超时，断开连接: ${timeSinceLastPong}ms`,
-                    deviceId
-                );
+        ws.heartbeatTimer = setInterval(() => {
+            if (!ws.isAlive) {
                 this.handleDeviceDisconnect(deviceId, ws);
                 return;
             }
-        }, heartbeatInterval);
-        
-        // 心跳发送定时器：定期发送心跳请求
-        ws.heartbeatTimer = setInterval(() => {
-            if (ws.readyState !== WebSocket.OPEN) {
-                return;
-            }
+
+            ws.isAlive = false;
 
             if (ws.readyState === WebSocket.OPEN) {
                 try {
@@ -954,7 +938,7 @@ class DeviceManager {
                     // 忽略错误
                 }
             }
-        }, heartbeatInterval);
+        }, systemConfig.heartbeatInterval * 1000);
 
         ws.on('pong', () => {
             ws.isAlive = true;
@@ -978,12 +962,7 @@ class DeviceManager {
      * @param {WebSocket} ws - WebSocket实例
      */
     handleDeviceDisconnect(deviceId, ws) {
-        if (ws.heartbeatTimer) {
-            clearInterval(ws.heartbeatTimer);
-        }
-        if (ws.heartbeatCheckTimer) {
-            clearInterval(ws.heartbeatCheckTimer);
-        }
+        clearInterval(ws.heartbeatTimer);
 
         const device = devices.get(deviceId);
         const runtimeBot = this.bot;

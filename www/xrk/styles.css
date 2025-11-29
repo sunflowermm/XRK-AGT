@@ -826,6 +826,12 @@ select.form-input {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 20px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease;
+}
+
+.chart-card:hover {
+  box-shadow: var(--shadow);
 }
 
 .chart-card-header {
@@ -839,11 +845,17 @@ select.form-input {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: 0.3px;
 }
 
 .chart-container {
   position: relative;
   height: 200px;
+  padding: 8px 0;
+}
+
+.chart-container canvas {
+  max-height: 100%;
 }
 
 .chart-container-dual {
