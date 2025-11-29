@@ -20,9 +20,11 @@ class App {
     this._ttsPlaying = false;
     this._configState = null;
     this._schemaCache = {};
+    this._llmOptions = { profiles: [], workflows: [], defaultProfile: '', defaultWorkflow: '' };
     this._chatSettings = {
-      workflow: localStorage.getItem('chatWorkflow') || 'chat',
-      persona: localStorage.getItem('chatPersona') || ''
+      workflow: localStorage.getItem('chatWorkflow') || 'device',
+      persona: localStorage.getItem('chatPersona') || '',
+      profile: localStorage.getItem('chatProfile') || ''
     };
     this._chatStreamState = { running: false, source: null };
     this._activeEventSource = null;
@@ -39,6 +41,7 @@ class App {
     await this.loadAPIConfig();
     this.bindEvents();
     this.loadSettings();
+    await this.loadLlmOptions();
     this.checkConnection();
     this.handleRoute();
     this.ensureDeviceWs();
@@ -62,6 +65,44 @@ class App {
       this.apiConfig = await res.json();
     } catch (e) {
       console.error('Failed to load API config:', e);
+    }
+  }
+
+  async loadLlmOptions() {
+    try {
+      const res = await fetch(`${this.serverUrl}/api/ai/models`, { headers: this.getHeaders() });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (!data?.success) {
+        throw new Error(data?.message || 'LLM 接口返回异常');
+      }
+      this._llmOptions = {
+        enabled: data.enabled !== false,
+        defaultProfile: data.defaultProfile || '',
+        defaultWorkflow: data.defaultWorkflow || '',
+        profiles: data.profiles || [],
+        workflows: data.workflows || []
+      };
+
+      if (!this._chatSettings.workflow && this._llmOptions.defaultWorkflow) {
+        this._chatSettings.workflow = this._llmOptions.defaultWorkflow;
+      }
+      if (this._chatSettings.workflow === 'chat') {
+        this._chatSettings.workflow = 'device';
+      }
+      localStorage.setItem('chatWorkflow', this._chatSettings.workflow);
+
+      if (!this._chatSettings.profile && this._llmOptions.defaultProfile) {
+        this._chatSettings.profile = this._llmOptions.defaultProfile;
+      }
+      localStorage.setItem('chatProfile', this._chatSettings.profile);
+
+      this.refreshChatWorkflowOptions();
+      this.refreshChatModelOptions();
+    } catch (e) {
+      console.warn('未能加载 LLM 档位信息:', e.message || e);
     }
   }
 
@@ -934,8 +975,13 @@ class App {
         </div>
         <div class="chat-settings">
           <div class="chat-setting">
-            <label>模型
+            <label>工作流
               <select id="chatWorkflowSelect"></select>
+            </label>
+          </div>
+          <div class="chat-setting">
+            <label>模型
+              <select id="chatModelSelect"></select>
             </label>
           </div>
           <div class="chat-setting">
@@ -1043,10 +1089,28 @@ class App {
     const workflowSelect = document.getElementById('chatWorkflowSelect');
     if (workflowSelect) {
       this.populateWorkflowSelect(workflowSelect);
-      workflowSelect.value = this._chatSettings.workflow || workflowSelect.options[0]?.value || 'chat';
+      const currentWorkflow = this.getCurrentWorkflow();
+      if (currentWorkflow) {
+        const optionExists = Array.from(workflowSelect.options).some(opt => opt.value === currentWorkflow);
+        workflowSelect.value = optionExists ? currentWorkflow : (workflowSelect.options[0]?.value || 'device');
+      }
       workflowSelect.addEventListener('change', () => {
         this._chatSettings.workflow = workflowSelect.value;
         localStorage.setItem('chatWorkflow', this._chatSettings.workflow);
+      });
+    }
+
+    const modelSelect = document.getElementById('chatModelSelect');
+    if (modelSelect) {
+      this.populateModelSelect(modelSelect);
+      const currentProfile = this.getCurrentProfile();
+      if (currentProfile) {
+        const optionExists = Array.from(modelSelect.options).some(opt => opt.value === currentProfile);
+        modelSelect.value = optionExists ? currentProfile : (modelSelect.options[0]?.value || '');
+      }
+      modelSelect.addEventListener('change', () => {
+        this._chatSettings.profile = modelSelect.value;
+        localStorage.setItem('chatProfile', this._chatSettings.profile);
       });
     }
     
@@ -1072,11 +1136,16 @@ class App {
     const options = this.getWorkflowOptions();
     select.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
   }
+
+  populateModelSelect(select) {
+    const options = this.getModelOptions();
+    select.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+  }
   
   refreshChatWorkflowOptions() {
     const select = document.getElementById('chatWorkflowSelect');
     if (!select) return;
-    const previous = this._chatSettings.workflow;
+    const previous = this.getCurrentWorkflow();
     this.populateWorkflowSelect(select);
     const match = Array.from(select.options).some(opt => opt.value === previous);
     if (match) {
@@ -1087,14 +1156,41 @@ class App {
       localStorage.setItem('chatWorkflow', this._chatSettings.workflow);
     }
   }
+
+  refreshChatModelOptions() {
+    const select = document.getElementById('chatModelSelect');
+    if (!select) return;
+    const previous = this.getCurrentProfile();
+    this.populateModelSelect(select);
+    const match = Array.from(select.options).some(opt => opt.value === previous);
+    if (match) {
+      select.value = previous;
+    } else if (select.options.length) {
+      select.selectedIndex = 0;
+      this._chatSettings.profile = select.value;
+      localStorage.setItem('chatProfile', this._chatSettings.profile);
+    }
+  }
   
   getWorkflowOptions() {
+    const configured = (this._llmOptions?.workflows || [])
+      .filter(item => item && !item.uiHidden)
+      .map(item => ({
+        value: item.key,
+        label: item.label ? `${item.label}${item.label === item.key ? '' : ` (${item.key})`}` : item.key
+      }))
+      .filter(opt => opt.value);
+
+    if (configured.length) {
+      return configured;
+    }
+
     const builtIn = [
-      { value: 'chat', label: 'Chat (默认)' },
-      { value: 'device', label: 'Device' },
-      { value: 'short', label: 'LLM-短文本' },
-      { value: 'long', label: 'LLM-长文本' },
-      { value: 'fast', label: 'LLM-极速' }
+      { value: 'device', label: '设备助手' },
+      { value: 'assistant', label: '日常助手' },
+      { value: 'polish', label: '润色改写' },
+      { value: 'analysis', label: '长文本分析' },
+      { value: 'creative', label: '灵感创作' }
     ];
     const runtime = this._latestSystem?.workflows?.items || [];
     const seen = new Set();
@@ -1117,13 +1213,32 @@ class App {
     
     return result;
   }
+
+  getModelOptions() {
+    const configured = (this._llmOptions?.profiles || []).map(item => ({
+      value: item.key,
+      label: item.label ? `${item.label}${item.label === item.key ? '' : ` (${item.key})`}` : item.key
+    })).filter(opt => opt.value);
+
+    if (configured.length) {
+      return configured;
+    }
+
+    return [
+      { value: this._chatSettings.profile || 'balanced', label: '默认' }
+    ];
+  }
   
   getCurrentWorkflow() {
-    return this._chatSettings.workflow || 'chat';
+    return this._chatSettings.workflow || this._llmOptions?.defaultWorkflow || 'device';
   }
   
   getCurrentPersona() {
     return this._chatSettings.persona?.trim() || '';
+  }
+
+  getCurrentProfile() {
+    return this._chatSettings.profile || this._llmOptions?.defaultProfile || '';
   }
   
   updateChatStatus(message) {
@@ -1179,6 +1294,7 @@ class App {
     
     const workflow = this.getCurrentWorkflow();
     const persona = this.getCurrentPersona();
+    const profile = this.getCurrentProfile();
     const recentHistory = this._chatHistory.slice(-8).map(m => ({ role: m.role, text: m.text }));
     const ctxSummary = recentHistory.map(m => `${m.role === 'user' ? 'U' : 'A'}:${m.text}`).join('|').slice(-800);
     const finalPrompt = ctxSummary ? `【上下文】${ctxSummary}\n【提问】${text}` : text;
@@ -1188,6 +1304,9 @@ class App {
       workflow,
       persona
     });
+    if (profile) {
+      params.set('profile', profile);
+    }
     if (recentHistory.length) {
       params.set('context', JSON.stringify(recentHistory));
     }

@@ -124,24 +124,8 @@ export default class AIStream {
     // 功能开关
     this.functionToggles = options.functionToggles || {};
     
-    // Embedding配置
-    this.embeddingConfig = {
-      enabled: false,
-      provider: 'lightweight',
-      maxContexts: 5,
-      similarityThreshold: 0.6,
-      cacheExpiry: 86400,
-      cachePath: paths.dataModels,
-      onnxModel: 'Xenova/all-MiniLM-L6-v2',
-      onnxQuantized: true,
-      hfToken: null,
-      hfModel: 'sentence-transformers/all-MiniLM-L6-v2',
-      fasttextModel: 'cc.zh.300.bin',
-      apiUrl: null,
-      apiKey: null,
-      apiModel: 'text-embedding-3-small',
-      ...options.embedding
-    };
+    // Embedding配置（支持全局档位）
+    this.embeddingConfig = this.buildEmbeddingConfig(options.embedding);
 
     // 初始化状态
     this._initialized = false;
@@ -950,36 +934,130 @@ export default class AIStream {
    * @param {Object} apiConfig - 自定义配置
    * @returns {Object} LLM配置
    */
+  buildEmbeddingConfig(overrides = {}) {
+    const runtime = cfg.aistream?.embedding || {};
+    const defaults = runtime.defaults || {};
+    const profiles = runtime.profiles || {};
+
+    const explicitProfile =
+      overrides.profile ||
+      overrides.profileKey ||
+      overrides.embeddingProfile ||
+      runtime.defaultProfile ||
+      overrides.provider;
+
+    const selectedKey = profiles[explicitProfile]
+      ? explicitProfile
+      : (runtime.defaultProfile && profiles[runtime.defaultProfile]
+        ? runtime.defaultProfile
+        : Object.keys(profiles)[0]);
+
+    const selectedProfile = selectedKey ? (profiles[selectedKey] || {}) : {};
+
+    const result = {
+      profile: selectedKey,
+      enabled: overrides.enabled ?? runtime.enabled ?? selectedProfile.enabled ?? overrides.enabled ?? true,
+      ...defaults,
+      ...selectedProfile,
+      ...overrides
+    };
+
+    result.provider = result.provider || selectedProfile.provider || defaults.provider || 'lightweight';
+    result.cachePath = result.cachePath || defaults.cachePath || paths.dataModels;
+
+    return result;
+  }
+
+  applyEmbeddingOverrides(overrides = {}) {
+    this.embeddingConfig = this.buildEmbeddingConfig({
+      ...this.embeddingConfig,
+      ...overrides
+    });
+    return this.embeddingConfig;
+  }
+
   resolveLLMConfig(apiConfig = {}) {
     const merged = { ...this.config, ...apiConfig };
+    const runtime = cfg.aistream || {};
+    const llm = runtime.llm || {};
+    const defaults = llm.defaults || {};
+    const workflows = llm.workflows || {};
+    const profiles = llm.profiles || llm.models || {};
+    const hasExplicitEndpoint = merged.baseUrl && merged.apiKey;
 
-    if (merged.baseUrl && merged.apiKey) {
+    if (hasExplicitEndpoint) {
       merged.provider = merged.provider || 'generic';
       merged.path = merged.path || '/chat/completions';
       return merged;
     }
 
-    const runtime = cfg.aistream || {};
-    const llm = runtime.llm || {};
-    const defaults = llm.defaults || {};
-    const models = llm.models || {};
-    const requestedKey =
+    const workflowKey =
       merged.workflow ||
-      merged.modelKey ||
-      merged.llmModel ||
+      merged.stream ||
+      this.name ||
+      llm.defaultWorkflow ||
       llm.defaultModel;
 
-    const selectedModel =
-      models[requestedKey] ||
-      models[llm.defaultModel] ||
-      {};
+    const workflowPreset = workflowKey ? workflows[workflowKey] : null;
+
+    const explicitProfile =
+      merged.profile ||
+      merged.profileKey ||
+      merged.llmProfile ||
+      merged.modelKey ||
+      merged.llm ||
+      merged.modelProfile;
+
+    const inferredProfileFromModel =
+      !explicitProfile &&
+      !hasExplicitEndpoint &&
+      merged.model &&
+      profiles[merged.model]
+        ? merged.model
+        : null;
+
+    const sanitizedMerged = { ...merged };
+    if (inferredProfileFromModel) {
+      delete sanitizedMerged.model;
+    }
+
+    const requestedProfile =
+      explicitProfile ||
+      inferredProfileFromModel ||
+      workflowPreset?.profile ||
+      llm.defaultProfile ||
+      llm.defaultModel;
+
+    const profileKeys = Object.keys(profiles);
+    const fallbackProfileKey = requestedProfile && profiles[requestedProfile]
+      ? requestedProfile
+      : (llm.defaultProfile && profiles[llm.defaultProfile]
+        ? llm.defaultProfile
+        : profileKeys[0]);
+
+    const selectedProfile = fallbackProfileKey ? (profiles[fallbackProfileKey] || {}) : {};
+    const overrides = workflowPreset?.overrides || {};
+    const persona =
+      sanitizedMerged.persona ??
+      workflowPreset?.persona ??
+      llm.persona ??
+      this.config.persona;
 
     const resolved = {
       enabled: llm.enabled !== false,
+      workflow: workflowKey,
+      profile: fallbackProfileKey,
+      persona,
+      displayDelay: llm.displayDelay,
       ...defaults,
-      ...selectedModel,
-      ...merged
+      ...selectedProfile,
+      ...overrides,
+      ...sanitizedMerged
     };
+
+    if (!resolved.model && selectedProfile?.model) {
+      resolved.model = selectedProfile.model;
+    }
 
     resolved.provider = resolved.provider || 'generic';
     resolved.path = resolved.path || defaults.path || '/chat/completions';

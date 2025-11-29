@@ -35,7 +35,8 @@ streamDir: "core/stream"
 
 llm:
   enabled: true
-  defaultModel: short
+  defaultWorkflow: device
+  defaultProfile: balanced
   persona: "你是一名友好、简洁的智能语音助手。"
   displayDelay: 1500
   defaults:
@@ -46,16 +47,75 @@ llm:
     temperature: 0.8
     maxTokens: 2000
     timeout: 30000
-  models:
-    short:
-      model: smart-short
+  profiles:
+    balanced:
+      label: 通用对话
+      model: smart-balanced
+      maxTokens: 4096
+    fast:
+      label: 极速润色
+      model: smart-fast
       maxTokens: 1024
     long:
+      label: 长文本
       model: smart-long
       maxTokens: 8000
-    fast:
-      model: smart-fast
-      maxTokens: 512
+    device:
+      label: 设备友好
+      model: smart-device
+      maxTokens: 1024
+    creative:
+      label: 灵感工坊
+      model: smart-creative
+      maxTokens: 4096
+  workflows:
+    device:
+      label: 设备
+      profile: device
+      persona: "你是一个语音设备助手，输出需简洁，可加表情指令。"
+    assistant:
+      label: 日常助手
+      profile: balanced
+    polish:
+      label: 润色助手
+      profile: fast
+    analysis:
+      label: 长文本分析
+      profile: long
+    creative:
+      label: 灵感创作
+      profile: creative
+    chat:
+      label: OneBot 聊天
+      profile: balanced
+      uiHidden: true
+
+embedding:
+  enabled: true
+  defaultProfile: lightweight
+  defaults:
+    provider: lightweight
+    maxContexts: 5
+    similarityThreshold: 0.6
+    cacheExpiry: 86400
+    cachePath: ./data/models
+  profiles:
+    lightweight:
+      provider: lightweight
+    onnx:
+      provider: onnx
+      onnxModel: Xenova/all-MiniLM-L6-v2
+    hf:
+      provider: hf
+      hfModel: sentence-transformers/all-MiniLM-L6-v2
+    fasttext:
+      provider: fasttext
+      fasttextModel: cc.zh.300.bin
+    api:
+      provider: api
+      apiUrl: ""
+      apiKey: ""
+      apiModel: text-embedding-3-small
 
 tts:
   defaultProvider: volcengine
@@ -91,6 +151,24 @@ drawing:
 ```
 
 > `drawing` 段目前仅提供占位符，方便后续扩展图像/渲染模型。
+
+### 调用优先级（LLM & Embedding）
+
+1. **显式传自定义配置**  
+   `apiConfig` 中包含 `baseUrl/apiKey`（或完整 headers/body）时，直接以调用方参数为准。
+2. **仅指定模型/档位 key**  
+   `apiConfig.profile / profileKey / modelKey / llm`，甚至 `model: fast`（且未自定义 endpoint）时，会在 `llm.profiles` 中查找并落到对应参数。
+3. **完全未指定**  
+   按 `workflow → workflows.*.profile → defaultProfile → defaults` 的顺序解析；Embedding 档位也遵循相同策略。
+
+### 前端可用的工作流
+
+- `device`：设备语音/屏显默认体验（网页聊天默认）。
+- `assistant`：结构化日常问答、建议。
+- `polish`：短文本润色/改写。
+- `analysis`：长文本总结、报告拆解。
+- `creative`：故事、脚本、营销灵感。
+- `chat`：OneBot/群聊专用，通过 `uiHidden: true` 隐藏在前端下拉中。
 
 - **Embedding 配置 `this.embeddingConfig`**
   - `enabled`：是否启用向量检索。
@@ -197,8 +275,9 @@ drawing:
 - `callAI(messages, apiConfig = {})`
   - 以非流式方式调用兼容 OpenAI 的 `/chat/completions` 接口。
   - 组合 `this.config` 与 `apiConfig`，支持覆盖 `model/baseUrl/apiKey` 等。
-  - 若未显式提供 `baseUrl/apiKey`，会依据 `cfg.aistream.llm` 中的 `defaultModel` / `models` 解析。
-    - `apiConfig.workflow` / `modelKey` 可指定命名模型（如 `short/long/fast`）。
+  - 若未显式提供 `baseUrl/apiKey`，优先级遵循：`workflow` 预设 → `profile/profileKey/modelKey/llm` → `defaultProfile` → `defaults`。
+    - `apiConfig.workflow` 指定工作流预设（自动带 persona + overrides）。
+    - `apiConfig.profile`/`profileKey`/`modelKey`/`llm`/`model`（匹配 profile key）可切换档位。
     - 底层由 `LLMFactory`（`src/factory/llm/LLMFactory.js`）创建具体客户端，默认实现了通用 OpenAI 兼容客户端。
 
 - `callAIStream(messages, apiConfig = {}, onDelta)`
@@ -216,6 +295,14 @@ drawing:
 
 - `process(e, question, apiConfig = {})`
   - 一个轻量包装，内部调用 `execute`，适合插件直接调用。
+
+---
+
+### 配置探查 API
+
+- `GET /api/ai/models`
+  - 返回 `profiles`（模型档位列表）、`workflows`（预设工作流）、`defaultProfile`、`defaultWorkflow`。
+  - 前端（如 `www/xrk`）可动态渲染模型选择器，不必硬编码配置。
 
 ---
 

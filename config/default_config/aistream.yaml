@@ -26,12 +26,13 @@ cache:
   # 最大缓存条数
   maxSize: 100
 
-# LLM 模型配置
+# LLM 调度配置
 llm:
   enabled: true
-  defaultModel: short
   persona: "你是一名友好、简洁的智能语音助手。"
   displayDelay: 1500
+  defaultWorkflow: device
+  defaultProfile: balanced
   defaults:
     provider: generic
     baseUrl: "https://api.example.com/v1"
@@ -44,27 +45,138 @@ llm:
     frequencyPenalty: 0.6
     timeout: 30000
     path: "/chat/completions"
-  models:
-    short:
-      model: "smart-short"
+  profiles:
+    balanced:
+      label: "通用对话"
+      description: "默认档位，兼顾速度和质量"
+      baseUrl: "https://api.example.com/v1"
+      apiKey: ""
+      model: "smart-balanced"
+      maxTokens: 4096
+      temperature: 0.8
+      tags:
+        - workflow
+        - chat
+    fast:
+      label: "极速润色"
+      description: "短文本润色 / 快速改写"
+      baseUrl: "https://fast.api.example.com/v1"
+      apiKey: ""
+      model: "smart-fast"
       maxTokens: 1024
-      temperature: 0.7
+      temperature: 0.95
+      tags:
+        - polish
+        - fast
     long:
+      label: "长文本专家"
+      description: "总结、分析等长上下文任务"
+      baseUrl: "https://api.example.com/v1"
+      apiKey: ""
       model: "smart-long"
       maxTokens: 8000
       temperature: 0.6
-    fast:
-      model: "smart-fast"
-      maxTokens: 512
-      temperature: 1.0
+      tags:
+        - analysis
+        - long
     device:
-      model: "smart-short"
+      label: "设备友好"
+      description: "面向设备工作流，响应简洁"
+      baseUrl: "https://edge.api.example.com/v1"
+      apiKey: ""
+      model: "smart-device"
       maxTokens: 1024
       temperature: 0.7
+      tags:
+        - device
+        - display
+    creative:
+      label: "灵感工坊"
+      description: "故事、脑洞、营销灵感"
+      baseUrl: "https://api.example.com/v1"
+      apiKey: ""
+      model: "smart-creative"
+      maxTokens: 4096
+      temperature: 0.95
+      tags:
+        - creative
+        - story
+  workflows:
+    device:
+      label: "设备工作流"
+      description: "面向 XRK 设备的输出"
+      profile: device
+      persona: "你是一个语音设备助手，输出需简洁，可加表情指令。"
+      overrides:
+        maxTokens: 1024
+        temperature: 0.7
+    assistant:
+      label: "日常助手"
+      description: "默认通用问答体验"
+      profile: balanced
+      persona: "你是一名专业又有温度的中文 AI 助手。"
+    polish:
+      label: "润色助手"
+      description: "高效率润色/改写"
+      profile: fast
+      persona: "你擅长对中文进行专业润色，保持原意，语气自然。"
+      overrides:
+        temperature: 0.9
+        maxTokens: 2048
+    analysis:
+      label: "长文本分析"
+      description: "总结报告/日志分析"
+      profile: long
+      persona: "你擅长梳理结构、拆解要点，并以条理化格式输出。"
+      overrides:
+        maxTokens: 6000
+        temperature: 0.65
+    creative:
+      label: "灵感创作"
+      description: "故事、脚本、营销灵感"
+      profile: creative
+      persona: "你是一位富有想象力的创意写作者。"
+      overrides:
+        temperature: 0.95
+        maxTokens: 4096
     chat:
-      model: "smart-short"
-      maxTokens: 2048
-      temperature: 0.8
+      label: "聊天工作流"
+      description: "OneBot/群聊专用"
+      profile: balanced
+      uiHidden: true
+      overrides:
+        temperature: 0.8
+        maxTokens: 4096
+
+# Embedding 配置
+embedding:
+  enabled: true
+  defaultProfile: lightweight
+  defaults:
+    provider: lightweight
+    maxContexts: 5
+    similarityThreshold: 0.6
+    cacheExpiry: 86400
+    cachePath: "./data/models"
+  profiles:
+    lightweight:
+      provider: lightweight
+    onnx:
+      provider: onnx
+      onnxModel: "Xenova/all-MiniLM-L6-v2"
+      onnxQuantized: true
+    hf:
+      provider: hf
+      hfModel: "sentence-transformers/all-MiniLM-L6-v2"
+      hfToken: ""
+    fasttext:
+      provider: fasttext
+      fasttextModel: "cc.zh.300.bin"
+    api:
+      provider: api
+      apiUrl: ""
+      apiKey: ""
+      apiModel: "text-embedding-3-small"
 
 # 绘图模型占位配置（便于后续扩展）
 drawing:

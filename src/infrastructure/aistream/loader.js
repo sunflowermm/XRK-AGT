@@ -31,41 +31,10 @@ class StreamLoader {
    * 配置Embedding设置（只配置，不初始化）
    */
   configureEmbedding(config = {}) {
-    if (this.embeddingConfigured) {
-      BotUtil.makeLog('debug', '⚠️ Embedding已配置，跳过重复配置', 'StreamLoader');
-      return;
-    }
-
-    this.embeddingConfig = {
-      enabled: config.enabled || false,
-      provider: config.provider || 'lightweight',
-      
-      // ONNX Runtime 配置
-      onnxModel: config.onnxModel || 'Xenova/all-MiniLM-L6-v2',
-      onnxQuantized: config.onnxQuantized !== false,
-      
-      // Hugging Face API 配置
-      hfToken: config.hfToken || null,
-      hfModel: config.hfModel || 'sentence-transformers/all-MiniLM-L6-v2',
-      
-      // FastText 配置
-      fasttextModel: config.fasttextModel || 'cc.zh.300.bin',
-      
-      // 自定义 API 配置
-      apiUrl: config.apiUrl || null,
-      apiKey: config.apiKey || null,
-      apiModel: config.apiModel || 'text-embedding-3-small',
-      
-      // 通用配置
-      maxContexts: config.maxContexts || 5,
-      similarityThreshold: config.similarityThreshold || 0.6,
-      cacheExpiry: config.cacheExpiry || 86400,
-      cachePath: config.cachePath || paths.dataModels
-    };
-
+    this.embeddingConfig = config;
     this.embeddingConfigured = true;
-
-    BotUtil.makeLog('debug', `Embedding配置: ${this.embeddingConfig.enabled ? '启用' : '禁用'}, 提供商: ${this.embeddingConfig.provider}`, 'StreamLoader');
+    const status = config.enabled === false ? '禁用' : '覆盖';
+    BotUtil.makeLog('debug', `Embedding配置: ${status}`, 'StreamLoader');
   }
 
   /**
@@ -155,12 +124,13 @@ class StreamLoader {
         throw new Error('工作流缺少name属性');
       }
 
-      // 应用Embedding配置（但禁用自动初始化）
-      if (this.embeddingConfig) {
+      // 应用Embedding配置覆盖
+      if (this.embeddingConfig && typeof stream.applyEmbeddingOverrides === 'function') {
+        stream.applyEmbeddingOverrides(this.embeddingConfig);
+      } else if (this.embeddingConfig) {
         stream.embeddingConfig = {
           ...stream.embeddingConfig,
-          ...this.embeddingConfig,
-          enabled: false // 暂时禁用，稍后统一初始化
+          ...this.embeddingConfig
         };
       }
 
@@ -213,7 +183,13 @@ class StreamLoader {
     let failCount = 0;
 
     for (const stream of this.streams.values()) {
-      // 启用Embedding
+      if (!stream.embeddingConfig) {
+        stream.embeddingConfig = { enabled: false };
+      }
+
+      if (stream.embeddingConfig.enabled === false) {
+        continue;
+      }
       stream.embeddingConfig.enabled = true;
 
       try {

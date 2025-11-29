@@ -27,20 +27,62 @@ const ensureConfig = (value, path) => {
 
 const getAistreamConfig = () => ensureConfig(cfg.aistream, 'aistream');
 
-const getLLMSettings = ({ workflow, persona } = {}) => {
+const getLLMSettings = ({ workflow, persona, profile } = {}) => {
     const section = ensureConfig(getAistreamConfig().llm, 'aistream.llm');
-    const models = ensureConfig(section.models, 'aistream.llm.models');
-    const key = workflow || section.defaultModel;
-    const selected = ensureConfig(models[key], `aistream.llm.models.${key}`);
+    if (section.enabled === false) {
+        return { enabled: false };
+    }
+
+    const defaults = section.defaults || {};
+    const workflows = section.workflows || {};
+    const profiles = ensureConfig(
+        section.profiles || section.models,
+        'aistream.llm.profiles'
+    );
+
+    const workflowKey =
+        workflow ||
+        section.defaultWorkflow ||
+        section.defaultModel ||
+        Object.keys(workflows)[0] ||
+        Object.keys(profiles)[0];
+
+    const workflowPreset = workflowKey ? workflows[workflowKey] : null;
+
+    const requestedProfile =
+        profile ||
+        workflowPreset?.profile ||
+        section.defaultProfile ||
+        section.defaultModel;
+
+    const profileKey = profiles[requestedProfile]
+        ? requestedProfile
+        : Object.keys(profiles)[0];
+
+    const selectedProfile = ensureConfig(
+        profiles[profileKey],
+        `aistream.llm.profiles.${profileKey}`
+    );
+
+    const overrides = workflowPreset?.overrides || {};
+    const personaResolved =
+        persona ??
+        workflowPreset?.persona ??
+        section.persona;
 
     return {
-        enabled: section.enabled !== false,
-        workflowKey: key,
-        workflow: key,
-        persona: persona ?? section.persona,
+        enabled: true,
+        workflow: workflowKey,
+        workflowKey,
+        workflowLabel: workflowPreset?.label || workflowKey,
+        profile: profileKey,
+        profileKey,
+        profileLabel: selectedProfile.label || profileKey,
+        persona: personaResolved,
         displayDelay: section.displayDelay,
-        ...section.defaults,
-        ...selected
+        ...defaults,
+        ...selectedProfile,
+        ...overrides
     };
 };
 
@@ -481,14 +523,10 @@ class DeviceManager {
             } catch { }
 
             // 处理AI响应
-            const aiSettings = getLLMSettings({ workflow: 'device' });
-            if (aiSettings.enabled && session.finalText.trim()) {
-                await this._processAIResponse(
-                    deviceId,
-                    session.finalText,
-                    aiSettings.workflowKey,
-                    aiSettings.persona
-                );
+            if (session.finalText.trim()) {
+                await this._processAIResponse(deviceId, session.finalText, {
+                    workflow: 'device'
+                });
             }
         } else {
             BotUtil.makeLog('warn',
@@ -513,9 +551,12 @@ class DeviceManager {
      * @returns {Promise<void>}
      * @private
      */
-    async _processAIResponse(deviceId, question, workflowName = 'device', personaOverride) {
+    async _processAIResponse(deviceId, question, options = {}) {
         try {
             const startTime = Date.now();
+            const workflowName = options.workflow || 'device';
+            const personaOverride = options.persona;
+            const profileOverride = options.profile || options.llm || options.model;
 
             BotUtil.makeLog('info',
                 `⚡ [AI] 开始处理: ${question.substring(0, 50)}${question.length > 50 ? '...' : ''}`,
@@ -540,7 +581,11 @@ class DeviceManager {
                 return;
             }
 
-            const streamConfig = getLLMSettings({ workflow: streamName, persona: personaOverride });
+            const streamConfig = getLLMSettings({
+                workflow: streamName,
+                persona: personaOverride,
+                profile: profileOverride
+            });
             if (!streamConfig.enabled) {
                 BotUtil.makeLog('warn', '⚠️ [AI] 工作流已禁用', deviceId);
                 await this._sendAIError(deviceId);
@@ -1493,7 +1538,7 @@ export default {
             handler: async (req, res, Bot) => {
                 try {
                     const deviceId = req.params.deviceId;
-                    const { text, workflow, persona } = req.body || {};
+                    const { text, workflow, persona, profile, llm, model, llmProfile } = req.body || {};
                     if (!text || !String(text).trim()) {
                         return res.status(400).json({ success: false, message: '缺少文本内容' });
                     }
@@ -1502,12 +1547,12 @@ export default {
                         return res.status(404).json({ success: false, message: '设备未找到' });
                     }
                     const workflowName = (workflow || 'device').toString().trim() || 'device';
-                    const aiSettings = getLLMSettings({ workflow: workflowName, persona });
-                    if (!aiSettings.enabled) {
-                        return res.status(400).json({ success: false, message: 'AI未启用' });
-                    }
-                    const personaConfig = persona ?? aiSettings.persona;
-                    await deviceManager._processAIResponse(deviceId, String(text), workflowName, personaConfig);
+                    const profileKey = llmProfile || profile || llm || model;
+                    await deviceManager._processAIResponse(deviceId, String(text), {
+                        workflow: workflowName,
+                        persona,
+                        profile: profileKey
+                    });
                     return res.json({ success: true });
                 } catch (e) {
                     return res.status(500).json({ success: false, message: e.message });
@@ -1662,10 +1707,6 @@ export default {
 
     init(app, Bot) {
         deviceManager.setBot(Bot);
-        StreamLoader.configureEmbedding({
-            enabled: false
-        });
-
         deviceManager.cleanupInterval = setInterval(() => {
             deviceManager.checkOfflineDevices();
         }, 30000);
