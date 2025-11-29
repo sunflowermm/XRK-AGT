@@ -1490,7 +1490,7 @@ export default class SystemConfig extends ConfigBase {
                           }
                         }
                       }
-                    }
+                    },
                     assistant: {
                       type: 'object',
                       label: 'assistant 工作流',
