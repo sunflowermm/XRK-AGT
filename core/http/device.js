@@ -1381,7 +1381,8 @@ class DeviceManager {
                     break;
                 }
 
-                case 'heartbeat': {
+                case 'heartbeat':
+                case 'heartbeat_response': {
                     ws.isAlive = true;
                     ws.lastPong = Date.now();
 

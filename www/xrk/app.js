@@ -15,6 +15,7 @@ class App {
     this._metricsHistory = { netRx: Array(30).fill(0), netTx: Array(30).fill(0) };
     this._chatHistory = this._loadChatHistory();
     this._deviceWs = null;
+    this._deviceWsHeartbeatTimer = null;
     this._micActive = false;
     this._ttsQueue = [];
     this._ttsPlaying = false;
@@ -868,7 +869,17 @@ class App {
       
       const labels = this._metricsHistory.netRx.map(() => '');
       if (!this._charts.net) {
-        this._charts.net = new Chart(netCtx.getContext('2d'), {
+        // 创建渐变填充
+        const ctx = netCtx.getContext('2d');
+        const gradientRx = ctx.createLinearGradient(0, 0, 0, netCtx.height);
+        gradientRx.addColorStop(0, `${primary}40`);
+        gradientRx.addColorStop(1, `${primary}05`);
+        
+        const gradientTx = ctx.createLinearGradient(0, 0, 0, netCtx.height);
+        gradientTx.addColorStop(0, `${warning}40`);
+        gradientTx.addColorStop(1, `${warning}05`);
+        
+        this._charts.net = new Chart(ctx, {
           type: 'line',
           data: {
             labels,
@@ -876,84 +887,165 @@ class App {
               { 
                 label: '下行', 
                 data: this._metricsHistory.netRx, 
-                borderColor: primary, 
-                backgroundColor: `${primary}20`, 
+                borderColor: primary,
+                borderWidth: 2,
+                backgroundColor: gradientRx,
                 fill: true, 
-                tension: 0.4, 
+                tension: 0.5,
                 pointRadius: 0,
-                spanGaps: true
+                pointHoverRadius: 4,
+                pointHoverBackgroundColor: primary,
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2,
+                spanGaps: true,
+                animation: {
+                  duration: 0
+                }
               },
               { 
                 label: '上行', 
                 data: this._metricsHistory.netTx, 
-                borderColor: warning, 
-                backgroundColor: `${warning}20`, 
+                borderColor: warning,
+                borderWidth: 2,
+                backgroundColor: gradientTx,
                 fill: true, 
-                tension: 0.4, 
+                tension: 0.5,
                 pointRadius: 0,
-                spanGaps: true
+                pointHoverRadius: 4,
+                pointHoverBackgroundColor: warning,
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2,
+                spanGaps: true,
+                animation: {
+                  duration: 0
+                }
               }
             ]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { intersect: false, mode: 'index' },
+            interaction: { 
+              intersect: false, 
+              mode: 'index',
+              axis: 'x'
+            },
             plugins: { 
               legend: { 
-                position: 'bottom', 
+                position: 'bottom',
+                display: true,
                 labels: { 
-                  color: textMuted, 
-                  padding: 16
+                  color: textMuted,
+                  padding: 16,
+                  usePointStyle: true,
+                  pointStyle: 'line',
+                  font: {
+                    size: 12,
+                    family: 'Inter, system-ui, sans-serif'
+                  }
                 } 
               },
               tooltip: {
                 enabled: true,
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                padding: 12,
+                titleFont: {
+                  size: 13,
+                  weight: '600'
+                },
+                bodyFont: {
+                  size: 12
+                },
+                borderColor: border,
+                borderWidth: 1,
+                cornerRadius: 8,
+                displayColors: true,
                 callbacks: {
+                  title: function() {
+                    return '网络流量';
+                  },
                   label: function(context) {
                     const value = context.parsed.y;
                     if (value === 0 || value < 0.01) return '';
-                    return `${context.dataset.label}: ${value.toFixed(2)} KB/s`;
+                    const unit = value >= 1024 ? 'MB/s' : 'KB/s';
+                    const displayValue = value >= 1024 ? (value / 1024).toFixed(2) : value.toFixed(2);
+                    return `${context.dataset.label}: ${displayValue} ${unit}`;
                   },
                   filter: function(tooltipItem) {
                     return tooltipItem.parsed.y > 0.01;
+                  },
+                  labelColor: function(context) {
+                    return {
+                      borderColor: context.dataset.borderColor,
+                      backgroundColor: context.dataset.borderColor
+                    };
                   }
                 }
               }
             },
             scales: {
-              x: { display: false },
-              y: { 
-                beginAtZero: true, 
-                grid: { color: border }, 
-                ticks: { 
-                  display: false  // 完全隐藏Y轴刻度文字
+              x: { 
+                display: false,
+                grid: {
+                  display: false
                 }
+              },
+              y: { 
+                beginAtZero: true,
+                grid: { 
+                  color: border,
+                  drawBorder: false,
+                  lineWidth: 1
+                },
+                ticks: { 
+                  display: false
+                }
+              }
+            },
+            elements: {
+              line: {
+                borderJoinStyle: 'round',
+                borderCapStyle: 'round'
               }
             }
           }
         });
       } else {
+        // 更新渐变（如果canvas尺寸改变）
+        const ctx = netCtx.getContext('2d');
+        const currentGradientRx = this._charts.net.data.datasets[0].backgroundColor;
+        const currentGradientTx = this._charts.net.data.datasets[1].backgroundColor;
+        
+        // 检查是否需要重新创建渐变
+        if (!currentGradientRx || typeof currentGradientRx !== 'object') {
+          const gradientRx = ctx.createLinearGradient(0, 0, 0, netCtx.height);
+          gradientRx.addColorStop(0, `${primary}40`);
+          gradientRx.addColorStop(1, `${primary}05`);
+          this._charts.net.data.datasets[0].backgroundColor = gradientRx;
+        }
+        
+        if (!currentGradientTx || typeof currentGradientTx !== 'object') {
+          const gradientTx = ctx.createLinearGradient(0, 0, 0, netCtx.height);
+          gradientTx.addColorStop(0, `${warning}40`);
+          gradientTx.addColorStop(1, `${warning}05`);
+          this._charts.net.data.datasets[1].backgroundColor = gradientTx;
+        }
+        
         this._charts.net.data.labels = labels;
         this._charts.net.data.datasets[0].data = this._metricsHistory.netRx;
         this._charts.net.data.datasets[1].data = this._metricsHistory.netTx;
-        // 确保Y轴刻度不显示
-        if (this._charts.net.options.scales?.y?.ticks) {
-          this._charts.net.options.scales.y.ticks.display = false;
-        }
-        // 更新tooltip配置，过滤0.0值
-        if (this._charts.net.options.plugins?.tooltip) {
-          this._charts.net.options.plugins.tooltip.callbacks = {
-            label: function(context) {
-              const value = context.parsed.y;
-              if (value === 0 || value < 0.01) return '';
-              return `${context.dataset.label}: ${value.toFixed(2)} KB/s`;
-            },
-            filter: function(tooltipItem) {
-              return tooltipItem.parsed.y > 0.01;
-            }
+        
+        // 更新tooltip配置
+        if (this._charts.net.options.plugins?.tooltip?.callbacks) {
+          this._charts.net.options.plugins.tooltip.callbacks.label = function(context) {
+            const value = context.parsed.y;
+            if (value === 0 || value < 0.01) return '';
+            const unit = value >= 1024 ? 'MB/s' : 'KB/s';
+            const displayValue = value >= 1024 ? (value / 1024).toFixed(2) : value.toFixed(2);
+            return `${context.dataset.label}: ${displayValue} ${unit}`;
           };
         }
+        
         this._charts.net.update('none');
       }
     }
@@ -3306,6 +3398,23 @@ class App {
           device_name: 'Web客户端',
           capabilities: ['display', 'microphone']
         }));
+        
+        // 启动前端心跳机制（每25秒发送一次，略快于后端的30秒）
+        if (this._deviceWsHeartbeatTimer) {
+          clearInterval(this._deviceWsHeartbeatTimer);
+        }
+        this._deviceWsHeartbeatTimer = setInterval(() => {
+          if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
+            try {
+              this._deviceWs.send(JSON.stringify({
+                type: 'heartbeat_response',
+                timestamp: Date.now()
+              }));
+            } catch (e) {
+              console.warn('心跳发送失败:', e);
+            }
+          }
+        }, 25000);
       };
       
       this._deviceWs.onmessage = (e) => {
@@ -3315,7 +3424,15 @@ class App {
         } catch {}
       };
       
+      this._deviceWs.onerror = (error) => {
+        console.warn('WebSocket错误:', error);
+      };
+      
       this._deviceWs.onclose = () => {
+        if (this._deviceWsHeartbeatTimer) {
+          clearInterval(this._deviceWsHeartbeatTimer);
+          this._deviceWsHeartbeatTimer = null;
+        }
         this._deviceWs = null;
         setTimeout(() => this.ensureDeviceWs(), 5000);
       };
@@ -3326,6 +3443,19 @@ class App {
 
   handleWsMessage(data) {
     switch (data.type) {
+      case 'heartbeat_request':
+        // 响应后端心跳请求
+        if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
+          try {
+            this._deviceWs.send(JSON.stringify({
+              type: 'heartbeat_response',
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            console.warn('心跳响应失败:', e);
+          }
+        }
+        break;
       case 'asr_interim':
         this.renderASRStreaming(data.text, false);
         break;
