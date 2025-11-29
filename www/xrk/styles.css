@@ -771,6 +771,7 @@ select.form-input {
   border-radius: var(--radius-md);
   padding: 20px;
   transition: all var(--transition);
+  text-align: center;
 }
 
 .stat-card:hover {
@@ -806,12 +807,15 @@ select.form-input {
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
+  text-align: center;
 }
 
 .stat-label {
   font-size: 13px;
   color: var(--text-muted);
   margin-top: 4px;
+  text-align: center;
+  line-height: 1.4;
 }
 
 /* 图表卡片 */

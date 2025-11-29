@@ -566,22 +566,22 @@ class App {
     }
     
     box.innerHTML = `
-      <div style="display:flex;gap:24px;flex-wrap:wrap">
-        <div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center">
+        <div style="text-align:center;min-width:0;flex:1 1 auto">
           <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px">${stats.enabled ?? 0}/${stats.total}</div>
-          <div style="font-size:12px;color:var(--text-muted)">启用 / 总数</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.4">启用 / 总数</div>
         </div>
-        <div>
+        <div style="text-align:center;min-width:0;flex:1 1 auto">
           <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px">${stats.embeddingReady ?? 0}</div>
-          <div style="font-size:12px;color:var(--text-muted)">Embedding 就绪</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding 就绪</div>
         </div>
-        <div>
+        <div style="text-align:center;min-width:0;flex:1 1 auto">
           <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px">${stats.provider || '默认'}</div>
-          <div style="font-size:12px;color:var(--text-muted)">Embedding Provider</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding Provider</div>
         </div>
       </div>
       ${items.length ? `
-        <div style="margin-top:16px;font-size:12px;color:var(--text-muted)">优先级最高的工作流</div>
+        <div style="margin-top:16px;font-size:12px;color:var(--text-muted);text-align:center">优先级最高的工作流</div>
         <ul style="margin:8px 0 0;padding:0;list-style:none">
           ${items.map(item => `
             <li style="padding:8px 0;border-bottom:1px solid var(--border)">
@@ -599,16 +599,16 @@ class App {
     if (!box) return;
     const entries = Object.entries(network || {});
     if (!entries.length) {
-      box.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无网络信息</div>';
+      box.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center">暂无网络信息</div>';
       return;
     }
     const rateText = `${Math.max(0, Number(rates?.rxSec || 0) / 1024).toFixed(1)} KB/s ↓ · ${Math.max(0, Number(rates?.txSec || 0) / 1024).toFixed(1)} KB/s ↑`;
     box.innerHTML = `
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${rateText}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-align:center;line-height:1.4">${rateText}</div>
       ${entries.map(([name, info]) => `
         <div style="padding:10px 0;border-bottom:1px solid var(--border)">
-          <div style="font-weight:600;color:var(--text-primary)">${this.escapeHtml(name)}</div>
-          <div style="font-size:12px;color:var(--text-muted)">IP: ${info.address} · MAC: ${info.mac}</div>
+          <div style="font-weight:600;color:var(--text-primary);text-align:center">${this.escapeHtml(name)}</div>
+          <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">IP: ${info.address} · MAC: ${info.mac}</div>
         </div>
       `).join('')}
     `;
@@ -770,10 +770,12 @@ class App {
           }
         });
         
-        // 添加中心标签插件
+        // 添加中心标签插件（仅应用于doughnut类型图表）
         const cpuLabelPlugin = {
           id: 'cpuLabel',
           afterDraw: (chart) => {
+            // 只对doughnut类型图表应用，并且只对CPU图表应用
+            if (chart.config.type !== 'doughnut' || chart.canvas.id !== 'cpuChart') return;
             const ctx = chart.ctx;
             const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
             const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
@@ -829,10 +831,12 @@ class App {
           }
         });
         
-        // 添加中心标签插件
+        // 添加中心标签插件（仅应用于doughnut类型图表）
         const memLabelPlugin = {
           id: 'memLabel',
           afterDraw: (chart) => {
+            // 只对doughnut类型图表应用，并且只对内存图表应用
+            if (chart.config.type !== 'doughnut' || chart.canvas.id !== 'memChart') return;
             const ctx = chart.ctx;
             const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
             const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
