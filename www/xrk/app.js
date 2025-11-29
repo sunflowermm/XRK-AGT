@@ -20,9 +20,9 @@ class App {
     this._ttsPlaying = false;
     this._configState = null;
     this._schemaCache = {};
-    this._llmOptions = { profiles: [], workflows: [], defaultProfile: '', defaultWorkflow: '' };
+    this._llmOptions = { profiles: [], defaultProfile: '' };
     this._chatSettings = {
-      workflow: localStorage.getItem('chatWorkflow') || 'device',
+      workflow: 'device',  // 默认使用 device 工作流
       persona: localStorage.getItem('chatPersona') || '',
       profile: localStorage.getItem('chatProfile') || ''
     };
@@ -81,18 +81,12 @@ class App {
       this._llmOptions = {
         enabled: data.enabled !== false,
         defaultProfile: data.defaultProfile || '',
-        defaultWorkflow: data.defaultWorkflow || '',
         profiles: data.profiles || [],
         workflows: data.workflows || []
       };
 
-      if (!this._chatSettings.workflow && this._llmOptions.defaultWorkflow) {
-        this._chatSettings.workflow = this._llmOptions.defaultWorkflow;
-      }
-      if (this._chatSettings.workflow === 'chat') {
-        this._chatSettings.workflow = 'device';
-      }
-      localStorage.setItem('chatWorkflow', this._chatSettings.workflow);
+      // 默认使用 device 工作流
+      this._chatSettings.workflow = 'device';
 
       if (!this._chatSettings.profile && this._llmOptions.defaultProfile) {
         this._chatSettings.profile = this._llmOptions.defaultProfile;
@@ -1001,11 +995,6 @@ class App {
         </div>
         <div class="chat-settings">
           <div class="chat-setting">
-            <label>工作流
-              <select id="chatWorkflowSelect"></select>
-            </label>
-          </div>
-          <div class="chat-setting">
             <label>模型
               <select id="chatModelSelect"></select>
             </label>
@@ -1112,20 +1101,6 @@ class App {
   }
 
   initChatControls() {
-    const workflowSelect = document.getElementById('chatWorkflowSelect');
-    if (workflowSelect) {
-      this.populateWorkflowSelect(workflowSelect);
-      const currentWorkflow = this.getCurrentWorkflow();
-      if (currentWorkflow) {
-        const optionExists = Array.from(workflowSelect.options).some(opt => opt.value === currentWorkflow);
-        workflowSelect.value = optionExists ? currentWorkflow : (workflowSelect.options[0]?.value || 'device');
-      }
-      workflowSelect.addEventListener('change', () => {
-        this._chatSettings.workflow = workflowSelect.value;
-        localStorage.setItem('chatWorkflow', this._chatSettings.workflow);
-      });
-    }
-
     const modelSelect = document.getElementById('chatModelSelect');
     if (modelSelect) {
       this.populateModelSelect(modelSelect);
@@ -1158,31 +1133,11 @@ class App {
     this.setChatInteractionState(this._chatStreamState.running);
   }
   
-  populateWorkflowSelect(select) {
-    const options = this.getWorkflowOptions();
-    select.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
-  }
-
   populateModelSelect(select) {
     const options = this.getModelOptions();
     select.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
   }
   
-  refreshChatWorkflowOptions() {
-    const select = document.getElementById('chatWorkflowSelect');
-    if (!select) return;
-    const previous = this.getCurrentWorkflow();
-    this.populateWorkflowSelect(select);
-    const match = Array.from(select.options).some(opt => opt.value === previous);
-    if (match) {
-      select.value = previous;
-    } else if (select.options.length) {
-      select.selectedIndex = 0;
-      this._chatSettings.workflow = select.value;
-      localStorage.setItem('chatWorkflow', this._chatSettings.workflow);
-    }
-  }
-
   refreshChatModelOptions() {
     const select = document.getElementById('chatModelSelect');
     if (!select) return;
@@ -1198,48 +1153,6 @@ class App {
     }
   }
   
-  getWorkflowOptions() {
-    const configured = (this._llmOptions?.workflows || [])
-      .filter(item => item && !item.uiHidden)
-      .map(item => ({
-        value: item.key,
-        label: item.label ? `${item.label}${item.label === item.key ? '' : ` (${item.key})`}` : item.key
-      }))
-      .filter(opt => opt.value);
-
-    if (configured.length) {
-      return configured;
-    }
-
-    const builtIn = [
-      { value: 'device', label: '设备助手' },
-      { value: 'assistant', label: '日常助手' },
-      { value: 'polish', label: '润色改写' },
-      { value: 'analysis', label: '长文本分析' },
-      { value: 'creative', label: '灵感创作' }
-    ];
-    const runtime = this._latestSystem?.workflows?.items || [];
-    const seen = new Set();
-    const result = [];
-    
-    runtime.forEach(item => {
-      const key = item.name;
-      if (key && !seen.has(key)) {
-        seen.add(key);
-        result.push({ value: key, label: `${key} (${item.description || 'workflow'})` });
-      }
-    });
-    
-    builtIn.forEach(opt => {
-      if (!seen.has(opt.value)) {
-        seen.add(opt.value);
-        result.push(opt);
-      }
-    });
-    
-    return result;
-  }
-
   getModelOptions() {
     const configured = (this._llmOptions?.profiles || []).map(item => ({
       value: item.key,
@@ -1253,10 +1166,6 @@ class App {
     return [
       { value: this._chatSettings.profile || 'balanced', label: '默认' }
     ];
-  }
-  
-  getCurrentWorkflow() {
-    return this._chatSettings.workflow || this._llmOptions?.defaultWorkflow || 'device';
   }
   
   getCurrentPersona() {
@@ -1318,7 +1227,8 @@ class App {
       this.appendChat('user', text);
     }
     
-    const workflow = this.getCurrentWorkflow();
+    // 默认使用 device 工作流
+    const workflow = 'device';
     const persona = this.getCurrentPersona();
     const profile = this.getCurrentProfile();
     const recentHistory = this._chatHistory.slice(-8).map(m => ({ role: m.role, text: m.text }));

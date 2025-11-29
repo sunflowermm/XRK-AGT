@@ -1276,260 +1276,389 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
+            // ==================== LLM 大语言模型配置 ====================
             llm: {
               type: 'object',
-              label: 'LLM 配置',
+              label: 'LLM 大语言模型',
+              description: '大语言模型（LLM）相关配置，包括基础设置、默认参数和模型档位',
               component: 'SubForm',
               fields: {
+                // 基础设置
                 enabled: {
                   type: 'boolean',
                   label: '启用 LLM',
-                  component: 'Switch'
+                  description: '是否启用大语言模型功能',
+                  default: true,
+                  component: 'Switch',
+                  meta: {
+                    group: 'LLM 基础配置',
+                    groupDesc: 'LLM 的基础设置和默认参数'
+                  }
                 },
                 defaultProfile: {
                   type: 'string',
                   label: '默认模型档位',
-                  component: 'Input'
-                },
-                defaultWorkflow: {
-                  type: 'string',
-                  label: '默认工作流',
-                  component: 'Input'
+                  description: '默认使用的模型档位名称（如 balanced、fast、long 等）',
+                  component: 'Input',
+                  meta: {
+                    group: 'LLM 基础配置',
+                    groupDesc: 'LLM 的基础设置和默认参数'
+                  }
                 },
                 persona: {
                   type: 'string',
                   label: '默认人设',
-                  component: 'Input'
+                  description: 'AI 的默认人设描述',
+                  component: 'TextArea',
+                  meta: {
+                    group: 'LLM 基础配置',
+                    groupDesc: 'LLM 的基础设置和默认参数'
+                  }
                 },
                 displayDelay: {
                   type: 'number',
                   label: '展示延迟 (ms)',
+                  description: '消息展示的延迟时间（毫秒）',
                   min: 0,
-                  component: 'InputNumber'
-                },
-                defaults: {
-                  type: 'object',
-                  label: '默认参数',
-                  component: 'SubForm',
-                  fields: {
-                    provider: { type: 'string', label: '提供商', component: 'Input' },
-                    baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                    apiKey: { type: 'string', label: 'API Key', component: 'Input' },
-                    model: { type: 'string', label: '模型名称', component: 'Input' },
-                    temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                    maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                    topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
-                    presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
-                    frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' },
-                    timeout: { type: 'number', label: '超时时间 (ms)', component: 'InputNumber' },
-                    path: { type: 'string', label: '接口路径', component: 'Input' }
+                  default: 1500,
+                  component: 'InputNumber',
+                  meta: {
+                    group: 'LLM 基础配置',
+                    groupDesc: 'LLM 的基础设置和默认参数'
                   }
                 },
+                // 默认 API 参数
+                defaults: {
+                  type: 'object',
+                  label: '默认 API 参数',
+                  description: '所有模型档位的默认 API 参数，档位配置会覆盖这些默认值',
+                  component: 'SubForm',
+                  meta: {
+                    group: 'LLM 默认参数',
+                    groupDesc: '所有模型档位的默认 API 参数'
+                  },
+                  fields: {
+                    provider: {
+                      type: 'string',
+                      label: '默认提供商',
+                      description: '默认的 LLM 提供商（generic 或 volcengine）',
+                      enum: ['generic', 'volcengine'],
+                      default: 'generic',
+                      component: 'Select'
+                    },
+                    baseUrl: {
+                      type: 'string',
+                      label: 'Base URL',
+                      description: 'API 基础地址',
+                      component: 'Input'
+                    },
+                    apiKey: {
+                      type: 'string',
+                      label: 'API Key',
+                      description: 'API 密钥',
+                      component: 'InputPassword'
+                    },
+                    model: {
+                      type: 'string',
+                      label: '默认聊天模型',
+                      description: '默认使用的聊天模型名称',
+                      component: 'Input'
+                    },
+                    visionModel: {
+                      type: 'string',
+                      label: '默认识图模型',
+                      description: '默认使用的识图模型名称',
+                      component: 'Input'
+                    },
+                    temperature: {
+                      type: 'number',
+                      label: '温度',
+                      description: '控制输出的随机性（0-2），值越大越随机',
+                      min: 0,
+                      max: 2,
+                      default: 0.8,
+                      component: 'InputNumber'
+                    },
+                    maxTokens: {
+                      type: 'number',
+                      label: '最大 Tokens',
+                      description: '生成的最大 token 数量',
+                      min: 1,
+                      default: 2000,
+                      component: 'InputNumber'
+                    },
+                    topP: {
+                      type: 'number',
+                      label: 'Top P',
+                      description: '核采样参数（0-1），控制输出的多样性',
+                      min: 0,
+                      max: 1,
+                      default: 0.9,
+                      component: 'InputNumber'
+                    },
+                    presencePenalty: {
+                      type: 'number',
+                      label: 'Presence Penalty',
+                      description: '存在惩罚（-2 到 2），鼓励模型谈论新话题',
+                      min: -2,
+                      max: 2,
+                      default: 0.6,
+                      component: 'InputNumber'
+                    },
+                    frequencyPenalty: {
+                      type: 'number',
+                      label: 'Frequency Penalty',
+                      description: '频率惩罚（-2 到 2），减少重复内容',
+                      min: -2,
+                      max: 2,
+                      default: 0.6,
+                      component: 'InputNumber'
+                    },
+                    timeout: {
+                      type: 'number',
+                      label: '超时时间 (ms)',
+                      description: 'API 请求超时时间（毫秒）',
+                      min: 1000,
+                      default: 30000,
+                      component: 'InputNumber'
+                    },
+                    path: {
+                      type: 'string',
+                      label: '接口路径',
+                      description: 'API 接口路径，默认为 /chat/completions',
+                      default: '/chat/completions',
+                      component: 'Input'
+                    }
+                  }
+                },
+                // 模型档位配置
                 profiles: {
                   type: 'object',
-                  label: '模型档位',
+                  label: '模型档位配置',
+                  description: '不同场景的模型配置档位，用户可以选择使用',
                   component: 'SubForm',
+                  meta: {
+                    group: 'LLM 模型档位',
+                    groupDesc: '不同场景的模型配置档位（balanced、fast、long、device、creative、volcengine）'
+                  },
                   fields: {
                     balanced: {
                       type: 'object',
-                      label: 'balanced（通用）',
+                      label: 'balanced（通用对话）',
+                      description: '默认档位，兼顾速度和质量',
                       component: 'SubForm',
                       fields: {
                         label: { type: 'string', label: '显示名称', component: 'Input' },
                         description: { type: 'string', label: '描述', component: 'Input' },
+                        provider: {
+                          type: 'string',
+                          label: '提供商',
+                          description: 'LLM 提供商（generic 或 volcengine）',
+                          enum: ['generic', 'volcengine'],
+                          component: 'Select'
+                        },
                         baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'Input' },
-                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
+                        model: { type: 'string', label: '聊天模型', component: 'Input' },
+                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
                         maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
+                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
+                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
+                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
                       }
                     },
                     fast: {
                       type: 'object',
-                      label: 'fast（极速）',
+                      label: 'fast（极速响应）',
+                      description: '短文本润色 / 快速改写',
                       component: 'SubForm',
                       fields: {
                         label: { type: 'string', label: '显示名称', component: 'Input' },
                         description: { type: 'string', label: '描述', component: 'Input' },
+                        provider: {
+                          type: 'string',
+                          label: '提供商',
+                          enum: ['generic', 'volcengine'],
+                          component: 'Select'
+                        },
                         baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'Input' },
-                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
+                        model: { type: 'string', label: '聊天模型', component: 'Input' },
+                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
                         maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
+                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
+                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
+                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
                       }
                     },
                     long: {
                       type: 'object',
-                      label: 'long（长文本）',
+                      label: 'long（长文本专家）',
+                      description: '总结、分析等长上下文任务',
                       component: 'SubForm',
                       fields: {
                         label: { type: 'string', label: '显示名称', component: 'Input' },
                         description: { type: 'string', label: '描述', component: 'Input' },
+                        provider: {
+                          type: 'string',
+                          label: '提供商',
+                          enum: ['generic', 'volcengine'],
+                          component: 'Select'
+                        },
                         baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'Input' },
-                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
+                        model: { type: 'string', label: '聊天模型', component: 'Input' },
+                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
                         maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
+                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
+                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
+                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
                       }
                     },
                     device: {
                       type: 'object',
-                      label: 'device（设备）',
+                      label: 'device（设备友好）',
+                      description: '面向设备工作流，响应简洁',
                       component: 'SubForm',
                       fields: {
                         label: { type: 'string', label: '显示名称', component: 'Input' },
                         description: { type: 'string', label: '描述', component: 'Input' },
+                        provider: {
+                          type: 'string',
+                          label: '提供商',
+                          enum: ['generic', 'volcengine'],
+                          component: 'Select'
+                        },
                         baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'Input' },
-                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
+                        model: { type: 'string', label: '聊天模型', component: 'Input' },
+                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
                         maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
+                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
+                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
+                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
                       }
                     },
                     creative: {
                       type: 'object',
-                      label: 'creative（创作）',
+                      label: 'creative（灵感工坊）',
+                      description: '故事、脑洞、营销灵感',
                       component: 'SubForm',
                       fields: {
                         label: { type: 'string', label: '显示名称', component: 'Input' },
                         description: { type: 'string', label: '描述', component: 'Input' },
+                        provider: {
+                          type: 'string',
+                          label: '提供商',
+                          enum: ['generic', 'volcengine'],
+                          component: 'Select'
+                        },
                         baseUrl: { type: 'string', label: 'Base URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'Input' },
-                        model: { type: 'string', label: '模型名称', component: 'Input' },
+                        apiKey: { type: 'string', label: 'API Key', component: 'InputPassword' },
+                        model: { type: 'string', label: '聊天模型', component: 'Input' },
+                        visionModel: { type: 'string', label: '识图模型', component: 'Input' },
                         maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' },
-                        temperature: { type: 'number', label: '温度', component: 'InputNumber' }
-                      }
-                    }
-                  }
-                },
-                workflows: {
-                  type: 'object',
-                  label: '工作流映射',
-                  component: 'SubForm',
-                  fields: {
-                    chat: {
-                      type: 'object',
-                      label: 'chat 工作流',
-                      component: 'SubForm',
-                      fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
-                        profile: { type: 'string', label: '默认档位', component: 'Input' },
-                        persona: { type: 'string', label: '人设', component: 'Input' },
-                        uiHidden: { type: 'boolean', label: '前端隐藏', component: 'Switch' },
-                        overrides: {
-                          type: 'object',
-                          label: '参数覆盖',
-                          component: 'SubForm',
-                          fields: {
-                            temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                            maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' }
-                          }
-                        }
+                        temperature: { type: 'number', label: '温度', component: 'InputNumber' },
+                        topP: { type: 'number', label: 'Top P', component: 'InputNumber' },
+                        presencePenalty: { type: 'number', label: 'Presence Penalty', component: 'InputNumber' },
+                        frequencyPenalty: { type: 'number', label: 'Frequency Penalty', component: 'InputNumber' }
                       }
                     },
-                    device: {
+                    volcengine: {
                       type: 'object',
-                      label: 'device 工作流',
+                      label: 'volcengine（火山引擎）',
+                      description: '使用火山引擎豆包大模型',
                       component: 'SubForm',
                       fields: {
                         label: { type: 'string', label: '显示名称', component: 'Input' },
                         description: { type: 'string', label: '描述', component: 'Input' },
-                        profile: { type: 'string', label: '默认档位', component: 'Input' },
-                        persona: { type: 'string', label: '人设', component: 'Input' },
-                        uiHidden: { type: 'boolean', label: '前端隐藏', component: 'Switch' },
-                        overrides: {
-                          type: 'object',
-                          label: '参数覆盖',
-                          component: 'SubForm',
-                          fields: {
-                            temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                            maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' }
-                          }
-                        }
-                      }
-                    },
-                    polish: {
-                      type: 'object',
-                      label: 'polish 工作流',
-                      component: 'SubForm',
-                      fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
-                        profile: { type: 'string', label: '默认档位', component: 'Input' },
-                        persona: { type: 'string', label: '人设', component: 'Input' },
-                        uiHidden: { type: 'boolean', label: '前端隐藏', component: 'Switch' },
-                        overrides: {
-                          type: 'object',
-                          label: '参数覆盖',
-                          component: 'SubForm',
-                          fields: {
-                            temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                            maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' }
-                          }
-                        }
-                      }
-                    },
-                    analysis: {
-                      type: 'object',
-                      label: 'analysis 工作流',
-                      component: 'SubForm',
-                      fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
-                        profile: { type: 'string', label: '默认档位', component: 'Input' },
-                        persona: { type: 'string', label: '人设', component: 'Input' },
-                        uiHidden: { type: 'boolean', label: '前端隐藏', component: 'Switch' },
-                        overrides: {
-                          type: 'object',
-                          label: '参数覆盖',
-                          component: 'SubForm',
-                          fields: {
-                            temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                            maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' }
-                          }
-                        }
-                      }
-                    },
-                    assistant: {
-                      type: 'object',
-                      label: 'assistant 工作流',
-                      component: 'SubForm',
-                      fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
-                        profile: { type: 'string', label: '默认档位', component: 'Input' },
-                        persona: { type: 'string', label: '人设', component: 'Input' },
-                        uiHidden: { type: 'boolean', label: '前端隐藏', component: 'Switch' },
-                        overrides: {
-                          type: 'object',
-                          label: '参数覆盖',
-                          component: 'SubForm',
-                          fields: {
-                            temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                            maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' }
-                          }
-                        }
-                      }
-                    },
-                    creative: {
-                      type: 'object',
-                      label: 'creative 工作流',
-                      component: 'SubForm',
-                      fields: {
-                        label: { type: 'string', label: '显示名称', component: 'Input' },
-                        description: { type: 'string', label: '描述', component: 'Input' },
-                        profile: { type: 'string', label: '默认档位', component: 'Input' },
-                        persona: { type: 'string', label: '人设', component: 'Input' },
-                        uiHidden: { type: 'boolean', label: '前端隐藏', component: 'Switch' },
-                        overrides: {
-                          type: 'object',
-                          label: '参数覆盖',
-                          component: 'SubForm',
-                          fields: {
-                            temperature: { type: 'number', label: '温度', component: 'InputNumber' },
-                            maxTokens: { type: 'number', label: '最大 Tokens', component: 'InputNumber' }
-                          }
+                        provider: {
+                          type: 'string',
+                          label: '提供商',
+                          description: '必须设置为 volcengine',
+                          default: 'volcengine',
+                          component: 'Input'
+                        },
+                        baseUrl: {
+                          type: 'string',
+                          label: 'Base URL',
+                          description: '火山引擎 API 基础地址，默认：https://ark.cn-beijing.volces.com/api/v3',
+                          default: 'https://ark.cn-beijing.volces.com/api/v3',
+                          component: 'Input'
+                        },
+                        apiKey: {
+                          type: 'string',
+                          label: 'API Key',
+                          description: '火山引擎 API Key，从火山引擎控制台获取',
+                          component: 'InputPassword'
+                        },
+                        region: {
+                          type: 'string',
+                          label: '区域',
+                          description: '火山引擎服务区域（如 cn-beijing、cn-shanghai 等）',
+                          default: 'cn-beijing',
+                          component: 'Input'
+                        },
+                        model: {
+                          type: 'string',
+                          label: '聊天模型',
+                          description: '豆包大模型名称（如 doubao-pro-4k、doubao-pro-32k、doubao-lite-4k）',
+                          default: 'doubao-pro-4k',
+                          component: 'Input'
+                        },
+                        visionModel: {
+                          type: 'string',
+                          label: '识图模型',
+                          description: '豆包识图模型名称（如果支持）',
+                          component: 'Input'
+                        },
+                        maxTokens: {
+                          type: 'number',
+                          label: '最大 Tokens',
+                          description: '生成的最大 token 数量',
+                          min: 1,
+                          default: 4096,
+                          component: 'InputNumber'
+                        },
+                        temperature: {
+                          type: 'number',
+                          label: '温度',
+                          description: '控制输出的随机性（0-2）',
+                          min: 0,
+                          max: 2,
+                          default: 0.8,
+                          component: 'InputNumber'
+                        },
+                        topP: {
+                          type: 'number',
+                          label: 'Top P',
+                          description: '核采样参数（0-1）',
+                          min: 0,
+                          max: 1,
+                          default: 0.9,
+                          component: 'InputNumber'
+                        },
+                        presencePenalty: {
+                          type: 'number',
+                          label: 'Presence Penalty',
+                          description: '存在惩罚（-2 到 2）',
+                          min: -2,
+                          max: 2,
+                          default: 0.6,
+                          component: 'InputNumber'
+                        },
+                        frequencyPenalty: {
+                          type: 'number',
+                          label: 'Frequency Penalty',
+                          description: '频率惩罚（-2 到 2）',
+                          min: -2,
+                          max: 2,
+                          default: 0.6,
+                          component: 'InputNumber'
                         }
                       }
                     }
@@ -1537,9 +1666,11 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
+            // ==================== Embedding 向量检索配置 ====================
             embedding: {
               type: 'object',
-              label: 'Embedding 配置',
+              label: 'Embedding 向量检索',
+              description: '语义检索和上下文增强相关配置',
               component: 'SubForm',
               fields: {
                 enabled: {
@@ -1621,9 +1752,11 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
+            // ==================== 绘图模型配置 ====================
             drawing: {
               type: 'object',
-              label: '绘图模型配置',
+              label: '绘图模型',
+              description: '图像生成模型相关配置',
               component: 'SubForm',
               fields: {
                 defaultModel: {
@@ -1651,9 +1784,11 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
+            // ==================== TTS 语音合成配置 ====================
             tts: {
               type: 'object',
-              label: 'TTS 配置',
+              label: 'TTS 语音合成',
+              description: '文本转语音（TTS）相关配置',
               component: 'SubForm',
               fields: {
                 enabled: {
@@ -1694,9 +1829,11 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
+            // ==================== ASR 语音识别配置 ====================
             asr: {
               type: 'object',
-              label: 'ASR 配置',
+              label: 'ASR 语音识别',
+              description: '语音转文本（ASR）相关配置',
               component: 'SubForm',
               fields: {
                 enabled: {
@@ -1742,9 +1879,11 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
+            // ==================== 设备运行参数配置 ====================
             device: {
               type: 'object',
               label: '设备运行参数',
+              description: 'XRK 设备连接和运行相关配置',
               component: 'SubForm',
               fields: {
                 heartbeatInterval: { type: 'number', label: '心跳间隔 (s)', component: 'InputNumber' },
@@ -1762,9 +1901,11 @@ export default class SystemConfig extends ConfigBase {
                 audioSaveDir: { type: 'string', label: '音频保存目录', component: 'Input' }
               }
             },
+            // ==================== 表情映射配置 ====================
             emotions: {
               type: 'object',
-              label: '表情配置',
+              label: '表情映射',
+              description: '表情关键词映射和支持的表情列表',
               component: 'SubForm',
               fields: {
                 keywords: {

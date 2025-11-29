@@ -35,60 +35,57 @@ streamDir: "core/stream"
 
 llm:
   enabled: true
-  defaultWorkflow: device
-  defaultProfile: balanced
+  defaultProfile: balanced  # 默认使用 balanced 档位
   persona: "你是一名友好、简洁的智能语音助手。"
   displayDelay: 1500
   defaults:
-    provider: generic
+    provider: generic  # 默认提供商：generic（GPT-LLM 标准调用方式）
     baseUrl: https://api.example.com/v1
     apiKey: ""
-    model: general-task
+    model: general-task  # 默认聊天模型
+    visionModel: glm-4v  # 默认识图模型
     temperature: 0.8
     maxTokens: 2000
     timeout: 30000
   profiles:
     balanced:
       label: 通用对话
+      provider: generic
       model: smart-balanced
+      visionModel: glm-4v
       maxTokens: 4096
     fast:
       label: 极速润色
+      provider: generic
       model: smart-fast
+      visionModel: glm-4v
       maxTokens: 1024
     long:
       label: 长文本
+      provider: generic
       model: smart-long
+      visionModel: glm-4v
       maxTokens: 8000
     device:
       label: 设备友好
+      provider: generic
       model: smart-device
+      visionModel: glm-4v
       maxTokens: 1024
     creative:
       label: 灵感工坊
+      provider: generic
       model: smart-creative
+      visionModel: glm-4v
       maxTokens: 4096
-  workflows:
-    device:
-      label: 设备
-      profile: device
-      persona: "你是一个语音设备助手，输出需简洁，可加表情指令。"
-    assistant:
-      label: 日常助手
-      profile: balanced
-    polish:
-      label: 润色助手
-      profile: fast
-    analysis:
-      label: 长文本分析
-      profile: long
-    creative:
-      label: 灵感创作
-      profile: creative
-    chat:
-      label: OneBot 聊天
-      profile: balanced
-      uiHidden: true
+    volcengine:
+      label: 火山引擎
+      provider: volcengine  # 使用火山引擎提供商
+      baseUrl: https://ark.cn-beijing.volces.com/api/v3
+      apiKey: ""
+      model: doubao-pro-4k
+      visionModel: doubao-pro-vision
+      maxTokens: 4096
 
 embedding:
   enabled: true
@@ -159,16 +156,18 @@ drawing:
 2. **仅指定模型/档位 key**  
    `apiConfig.profile / profileKey / modelKey / llm`，甚至 `model: fast`（且未自定义 endpoint）时，会在 `llm.profiles` 中查找并落到对应参数。
 3. **完全未指定**  
-   按 `workflow → workflows.*.profile → defaultProfile → defaults` 的顺序解析；Embedding 档位也遵循相同策略。
+   按 `defaultProfile → defaults` 的顺序解析；Embedding 档位也遵循相同策略。
 
-### 前端可用的工作流
+### 提供商支持
 
-- `device`：设备语音/屏显默认体验（网页聊天默认）。
-- `assistant`：结构化日常问答、建议。
-- `polish`：短文本润色/改写。
-- `analysis`：长文本总结、报告拆解。
-- `creative`：故事、脚本、营销灵感。
-- `chat`：OneBot/群聊专用，通过 `uiHidden: true` 隐藏在前端下拉中。
+- **generic**：默认提供商，使用 GPT-LLM 标准调用方式（兼容 OpenAI Chat Completions 协议）
+  - 适用于所有遵循 OpenAI 协议的 API（如 GPTGod、OpenAI、Azure OpenAI 等）
+  - 无需额外配置，默认使用此提供商
+  
+- **volcengine**：火山引擎豆包大模型
+  - 接口地址：`https://ark.cn-beijing.volces.com/api/v3`
+  - 支持的模型：`doubao-pro-4k`、`doubao-pro-32k`、`doubao-lite-4k` 等
+  - 详细文档：https://www.volcengine.com/docs/82379
 
 - **Embedding 配置 `this.embeddingConfig`**
   - `enabled`：是否启用向量检索。
@@ -275,10 +274,10 @@ drawing:
 - `callAI(messages, apiConfig = {})`
   - 以非流式方式调用兼容 OpenAI 的 `/chat/completions` 接口。
   - 组合 `this.config` 与 `apiConfig`，支持覆盖 `model/baseUrl/apiKey` 等。
-  - 若未显式提供 `baseUrl/apiKey`，优先级遵循：`workflow` 预设 → `profile/profileKey/modelKey/llm` → `defaultProfile` → `defaults`。
-    - `apiConfig.workflow` 指定工作流预设（自动带 persona + overrides）。
+  - 若未显式提供 `baseUrl/apiKey`，优先级遵循：`profile/profileKey/modelKey/llm` → `defaultProfile` → `defaults`。
     - `apiConfig.profile`/`profileKey`/`modelKey`/`llm`/`model`（匹配 profile key）可切换档位。
-    - 底层由 `LLMFactory`（`src/factory/llm/LLMFactory.js`）创建具体客户端，默认实现了通用 OpenAI 兼容客户端。
+    - `apiConfig.provider` 可指定提供商（如 `generic`、`volcengine`），未指定则默认使用 `generic`。
+    - 底层由 `LLMFactory`（`src/factory/llm/LLMFactory.js`）创建具体客户端，支持 `generic`（默认）和 `volcengine` 等提供商。
 
 - `callAIStream(messages, apiConfig = {}, onDelta)`
   - 使用 `stream: true` 方式调用 Chat Completion。
@@ -301,7 +300,7 @@ drawing:
 ### 配置探查 API
 
 - `GET /api/ai/models`
-  - 返回 `profiles`（模型档位列表）、`workflows`（预设工作流）、`defaultProfile`、`defaultWorkflow`。
+  - 返回 `profiles`（模型档位列表）、`defaultProfile`。
   - 前端（如 `www/xrk`）可动态渲染模型选择器，不必硬编码配置。
 
 ---

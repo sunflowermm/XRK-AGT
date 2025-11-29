@@ -31,13 +31,13 @@ llm:
   enabled: true
   persona: "你是一名友好、简洁的智能语音助手。"
   displayDelay: 1500
-  defaultWorkflow: device
-  defaultProfile: balanced
+  defaultProfile: balanced  # 默认使用 balanced 档位
   defaults:
-    provider: generic
+    provider: generic  # 默认提供商：generic（GPT-LLM 标准调用方式）
     baseUrl: "https://api.example.com/v1"
     apiKey: ""
-    model: "general-task"
+    model: "general-task"  # 默认聊天模型
+    visionModel: "glm-4v"  # 默认识图模型
     temperature: 0.8
     maxTokens: 2000
     topP: 0.9
@@ -46,107 +46,88 @@ llm:
     timeout: 30000
     path: "/chat/completions"
   profiles:
+    # 通用对话档位（默认档位，兼顾速度和质量）
     balanced:
       label: "通用对话"
       description: "默认档位，兼顾速度和质量"
+      provider: generic  # 使用 generic 提供商（GPT-LLM 标准调用方式）
       baseUrl: "https://api.example.com/v1"
       apiKey: ""
-      model: "smart-balanced"
+      model: "smart-balanced"  # 聊天模型
+      visionModel: "glm-4v"  # 识图模型（可选）
       maxTokens: 4096
       temperature: 0.8
-      tags:
-        - workflow
-        - chat
+    
+    # 极速响应档位（短文本润色 / 快速改写）
     fast:
       label: "极速润色"
       description: "短文本润色 / 快速改写"
+      provider: generic
       baseUrl: "https://fast.api.example.com/v1"
       apiKey: ""
       model: "smart-fast"
+      visionModel: "glm-4v"
       maxTokens: 1024
       temperature: 0.95
-      tags:
-        - polish
-        - fast
+    
+    # 长文本专家档位（总结、分析等长上下文任务）
     long:
       label: "长文本专家"
       description: "总结、分析等长上下文任务"
+      provider: generic
       baseUrl: "https://api.example.com/v1"
       apiKey: ""
       model: "smart-long"
+      visionModel: "glm-4v"
       maxTokens: 8000
       temperature: 0.6
-      tags:
-        - analysis
-        - long
+    
+    # 设备友好档位（面向设备工作流，响应简洁）
     device:
       label: "设备友好"
       description: "面向设备工作流，响应简洁"
+      provider: generic
       baseUrl: "https://edge.api.example.com/v1"
       apiKey: ""
       model: "smart-device"
+      visionModel: "glm-4v"
       maxTokens: 1024
       temperature: 0.7
-      tags:
-        - device
-        - display
+    
+    # 灵感工坊档位（故事、脑洞、营销灵感）
     creative:
       label: "灵感工坊"
       description: "故事、脑洞、营销灵感"
+      provider: generic
       baseUrl: "https://api.example.com/v1"
       apiKey: ""
       model: "smart-creative"
+      visionModel: "glm-4v"
       maxTokens: 4096
       temperature: 0.95
-      tags:
-        - creative
-        - story
-  workflows:
-    device:
-      label: "设备工作流"
-      description: "面向 XRK 设备的输出"
-      profile: device
-      persona: "你是一个语音设备助手，输出需简洁，可加表情指令。"
-      overrides:
-        maxTokens: 1024
-        temperature: 0.7
-    assistant:
-      label: "日常助手"
-      description: "默认通用问答体验"
-      profile: balanced
-      persona: "你是一名专业又有温度的中文 AI 助手。"
-    polish:
-      label: "润色助手"
-      description: "高效率润色/改写"
-      profile: fast
-      persona: "你擅长对中文进行专业润色，保持原意，语气自然。"
-      overrides:
-        temperature: 0.9
-        maxTokens: 2048
-    analysis:
-      label: "长文本分析"
-      description: "总结报告/日志分析"
-      profile: long
-      persona: "你擅长梳理结构、拆解要点，并以条理化格式输出。"
-      overrides:
-        maxTokens: 6000
-        temperature: 0.65
-    creative:
-      label: "灵感创作"
-      description: "故事、脚本、营销灵感"
-      profile: creative
-      persona: "你是一位富有想象力的创意写作者。"
-      overrides:
-        temperature: 0.95
-        maxTokens: 4096
-    chat:
-      label: "聊天工作流"
-      description: "OneBot/群聊专用"
-      profile: balanced
-      uiHidden: true
-      overrides:
-        temperature: 0.8
-        maxTokens: 4096
+    
+    # 火山引擎档位（使用火山引擎豆包大模型）
+    volcengine:
+      label: "火山引擎"
+      description: "使用火山引擎豆包大模型"
+      provider: volcengine  # 使用火山引擎提供商
+      # 火山引擎 API 配置
+      # 接口地址：根据 region 自动构建，格式为 https://ark.{region}.volces.com/api/v3
+      # 支持的区域：cn-beijing（北京）、cn-shanghai（上海）等
+      # 认证方式：使用 API Key 进行认证，在请求头中添加 Authorization: Bearer {api_key}
+      region: "cn-beijing"  # 服务区域，可选：cn-beijing、cn-shanghai 等
+      baseUrl: ""  # 可选：如果设置了 region，会自动构建 endpoint；也可以直接指定 baseUrl
+      apiKey: ""  # 火山引擎 API Key，从火山引擎控制台获取
+      # 豆包大模型配置
+      # 支持的模型：doubao-pro-4k、doubao-pro-32k、doubao-lite-4k、doubao-pro-vision 等
+      # 详细模型列表请参考：https://www.volcengine.com/docs/82379
+      model: "doubao-pro-4k"  # 聊天模型
+      visionModel: "doubao-pro-vision"  # 识图模型（如果支持）
+      maxTokens: 4096
+      temperature: 0.8
+      topP: 0.9
+      presencePenalty: 0.6
+      frequencyPenalty: 0.6
 
 # Embedding 配置
 embedding:

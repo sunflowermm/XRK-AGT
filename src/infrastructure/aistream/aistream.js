@@ -976,30 +976,82 @@ export default class AIStream {
     return this.embeddingConfig;
   }
 
+  /**
+   * 根据运行时配置与外部参数解析 LLM 配置
+   * 
+   * 配置优先级（从低到高）：
+   * 1. llm.defaults - 全局默认配置
+   * 2. llm.profiles[selectedProfile] - 选中的配置档位（如 balanced, fast, long）
+   * 3. llm.workflows[workflowName].overrides - 工作流覆盖配置
+   * 4. apiConfig - 代码传入的配置（最高优先级）
+   * 
+   * 提供商选择逻辑：
+   * - 如果 apiConfig 中指定了 provider，使用指定的提供商
+   * - 如果 apiConfig 中有 baseUrl 和 apiKey，默认使用 generic 提供商（GPT-LLM 标准调用）
+   * - 如果从配置文件读取，使用配置中的 provider（默认 generic）
+   * - 如果都没有，默认使用 generic 提供商
+   * 
+   * @param {Object} apiConfig - 自定义配置
+   *   - baseUrl: API 基础地址
+   *   - apiKey: API 密钥
+   *   - provider: LLM 提供商名称（如 'generic', 'volcengine' 等）
+   *   - model: 模型名称
+   *   - profile: 配置档位名称（如 'balanced', 'fast', 'long'）
+   *   - 其他 LLM 参数（temperature, maxTokens 等）
+   * @returns {Object} LLM配置
+   */
   resolveLLMConfig(apiConfig = {}) {
     const merged = { ...this.config, ...apiConfig };
     const runtime = cfg.aistream || {};
     const llm = runtime.llm || {};
     const defaults = llm.defaults || {};
-    const workflows = llm.workflows || {};
     const profiles = llm.profiles || llm.models || {};
+    
+    // 检查是否有显式的端点配置（baseUrl + apiKey）
     const hasExplicitEndpoint = merged.baseUrl && merged.apiKey;
+    
+    // 检查是否有显式的提供商配置
+    const hasExplicitProvider = merged.provider && merged.provider !== 'generic';
 
+    // 场景1: 有显式端点配置（如 godai.js 传入 API_CONFIG）
     if (hasExplicitEndpoint) {
+      // 使用传入的配置，默认使用 generic 提供商（GPT-LLM 标准调用）
       merged.provider = merged.provider || 'generic';
-      merged.path = merged.path || '/chat/completions';
+      merged.path = merged.path || defaults.path || '/chat/completions';
+      
+      // 确保必要的字段存在
+      if (!merged.model && apiConfig.chatModel) {
+        merged.model = apiConfig.chatModel;
+      }
+      if (!merged.model && apiConfig.visionModel) {
+        merged.model = apiConfig.visionModel;
+      }
+      
       return merged;
     }
 
-    const workflowKey =
-      merged.workflow ||
-      merged.stream ||
-      this.name ||
-      llm.defaultWorkflow ||
-      llm.defaultModel;
+    // 场景2: 有显式提供商配置（如指定使用 openai, anthropic 等）
+    if (hasExplicitProvider) {
+      // 使用指定的提供商，从配置文件或传入参数中获取配置
+      merged.provider = merged.provider;
+      merged.path = merged.path || defaults.path || '/chat/completions';
+      
+      // 如果配置中有该提供商的配置，使用配置
+      if (profiles[merged.provider]) {
+        const providerProfile = profiles[merged.provider];
+        return {
+          ...defaults,
+          ...providerProfile,
+          ...merged
+        };
+      }
+      
+      return merged;
+    }
 
-    const workflowPreset = workflowKey ? workflows[workflowKey] : null;
+    // 场景3: 从配置文件读取（默认场景）
 
+    // 确定配置档位（profile）
     const explicitProfile =
       merged.profile ||
       merged.profileKey ||
@@ -1008,9 +1060,9 @@ export default class AIStream {
       merged.llm ||
       merged.modelProfile;
 
+    // 尝试从模型名称推断档位
     const inferredProfileFromModel =
       !explicitProfile &&
-      !hasExplicitEndpoint &&
       merged.model &&
       profiles[merged.model]
         ? merged.model
@@ -1021,10 +1073,10 @@ export default class AIStream {
       delete sanitizedMerged.model;
     }
 
+    // 确定最终使用的档位
     const requestedProfile =
       explicitProfile ||
       inferredProfileFromModel ||
-      workflowPreset?.profile ||
       llm.defaultProfile ||
       llm.defaultModel;
 
@@ -1033,34 +1085,59 @@ export default class AIStream {
       ? requestedProfile
       : (llm.defaultProfile && profiles[llm.defaultProfile]
         ? llm.defaultProfile
-        : profileKeys[0]);
+        : profileKeys[0] || null);
 
+    // 获取选中的配置档位
     const selectedProfile = fallbackProfileKey ? (profiles[fallbackProfileKey] || {}) : {};
-    const overrides = workflowPreset?.overrides || {};
+    
+    // 获取 persona
     const persona =
       sanitizedMerged.persona ??
-      workflowPreset?.persona ??
       llm.persona ??
       this.config.persona;
 
+    // 合并所有配置（按优先级）
     const resolved = {
       enabled: llm.enabled !== false,
-      workflow: workflowKey,
       profile: fallbackProfileKey,
       persona,
       displayDelay: llm.displayDelay,
+      // 从低到高合并
       ...defaults,
       ...selectedProfile,
-      ...overrides,
       ...sanitizedMerged
     };
 
-    if (!resolved.model && selectedProfile?.model) {
-      resolved.model = selectedProfile.model;
+    // 确保 model 字段存在
+    if (!resolved.model) {
+      if (selectedProfile?.model) {
+        resolved.model = selectedProfile.model;
+      } else if (defaults.model) {
+        resolved.model = defaults.model;
+      }
     }
 
-    resolved.provider = resolved.provider || 'generic';
-    resolved.path = resolved.path || defaults.path || '/chat/completions';
+    // 确定提供商：优先使用配置中的，否则默认 generic（GPT-LLM 标准调用）
+    resolved.provider = resolved.provider || selectedProfile?.provider || defaults.provider || 'generic';
+    
+    // 确定 API 路径
+    resolved.path = resolved.path || selectedProfile?.path || defaults.path || '/chat/completions';
+    
+    // 如果配置档位中有 baseUrl 和 apiKey，使用它们
+    if (!resolved.baseUrl && selectedProfile?.baseUrl) {
+      resolved.baseUrl = selectedProfile.baseUrl;
+    }
+    if (!resolved.apiKey && selectedProfile?.apiKey) {
+      resolved.apiKey = selectedProfile.apiKey;
+    }
+    
+    // 如果 defaults 中有 baseUrl 和 apiKey，使用它们（作为最后的回退）
+    if (!resolved.baseUrl && defaults.baseUrl) {
+      resolved.baseUrl = defaults.baseUrl;
+    }
+    if (!resolved.apiKey && defaults.apiKey) {
+      resolved.apiKey = defaults.apiKey;
+    }
 
     return resolved;
   }
