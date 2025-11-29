@@ -37,18 +37,6 @@ class App {
     this.init();
   }
 
-  // 工具方法：安全获取元素
-  $(id) {
-    return document.getElementById(id);
-  }
-
-  // 工具方法：安全添加事件监听
-  on(id, event, handler) {
-    const el = this.$(id);
-    if (el) el.addEventListener(event, handler);
-    return el;
-  }
-
   async init() {
     await this.loadAPIConfig();
     this.bindEvents();
@@ -64,6 +52,7 @@ class App {
       Chart.defaults.maintainAspectRatio = false;
       Chart.defaults.plugins.legend.display = true;
       Chart.defaults.plugins.tooltip.enabled = true;
+      // 使用 CSS 变量，避免硬编码颜色
       Chart.defaults.borderColor = 'transparent';
       Chart.defaults.backgroundColor = 'transparent';
     }
@@ -146,9 +135,9 @@ class App {
 
   bindEvents() {
     // 侧边栏
-    this.on('menuBtn', 'click', () => this.toggleSidebar());
-    this.on('sidebarClose', 'click', () => this.closeSidebar());
-    this.on('overlay', 'click', () => this.closeSidebar());
+    document.getElementById('menuBtn')?.addEventListener('click', () => this.toggleSidebar());
+    document.getElementById('sidebarClose')?.addEventListener('click', () => this.closeSidebar());
+    document.getElementById('overlay')?.addEventListener('click', () => this.closeSidebar());
     
     // API列表返回按钮
     document.getElementById('apiListBackBtn')?.addEventListener('click', () => {
@@ -162,11 +151,11 @@ class App {
     });
     
     // 主题切换
-    this.on('themeToggle', 'click', () => this.toggleTheme());
+    document.getElementById('themeToggle')?.addEventListener('click', () => this.toggleTheme());
     
     // API Key
-    this.on('saveApiKeyBtn', 'click', () => this.saveApiKey());
-    this.on('apiKey', 'keypress', (e) => {
+    document.getElementById('saveApiKeyBtn')?.addEventListener('click', () => this.saveApiKey());
+    document.getElementById('apiKey')?.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') this.saveApiKey();
     });
     
@@ -188,7 +177,7 @@ class App {
     });
     
     // API Key 切换按钮
-    this.on('apiKeyToggleBtn', 'click', () => this.toggleApiKeyBox());
+    document.getElementById('apiKeyToggleBtn')?.addEventListener('click', () => this.toggleApiKeyBox());
   }
   
   toggleApiKeyBox() {
@@ -337,23 +326,26 @@ class App {
   }
 
   toggleSidebar() {
-    const sidebar = this.$('sidebar');
-    const isOpen = sidebar?.classList.contains('open');
-    isOpen ? this.closeSidebar() : this.openSidebar();
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    sidebar?.classList.toggle('open');
+    overlay?.classList.toggle('show');
   }
 
   openSidebar() {
-    this.$('sidebar')?.classList.add('open');
-    this.$('overlay')?.classList.add('show');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    sidebar?.classList.add('open');
+    overlay?.classList.add('show');
   }
 
   closeSidebar() {
-    this.$('sidebar')?.classList.remove('open');
-    this.$('overlay')?.classList.remove('show');
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('overlay').classList.remove('show');
   }
 
   saveApiKey() {
-    const key = this.$('apiKey')?.value?.trim();
+    const key = document.getElementById('apiKey')?.value?.trim();
     if (!key) {
       this.showToast('请输入 API Key', 'warning');
       return;
@@ -371,22 +363,20 @@ class App {
   }
 
   async checkConnection() {
-    const status = this.$('connectionStatus');
-    if (!status) return;
-    
-    const statusText = status.querySelector('.status-text');
     try {
       const res = await fetch(`${this.serverUrl}/api/health`, { headers: this.getHeaders() });
+      const status = document.getElementById('connectionStatus');
       if (res.ok) {
         status.classList.add('online');
-        statusText.textContent = '已连接';
+        status.querySelector('.status-text').textContent = '已连接';
       } else {
         status.classList.remove('online');
-        statusText.textContent = '未授权';
+        status.querySelector('.status-text').textContent = '未授权';
       }
     } catch {
+      const status = document.getElementById('connectionStatus');
       status.classList.remove('online');
-      statusText.textContent = '连接失败';
+      status.querySelector('.status-text').textContent = '连接失败';
     }
   }
 
@@ -397,90 +387,66 @@ class App {
   }
 
   navigateTo(page) {
-    const validPages = ['home', 'chat', 'config', 'api'];
-    const targetPage = validPages.includes(page) ? page : 'home';
-    
-    if (this.currentPage === targetPage) return;
-    
-    this.currentPage = targetPage;
+    this.currentPage = page;
     
     // 更新导航状态
     document.querySelectorAll('.nav-item').forEach(item => {
-      item.classList.toggle('active', item.dataset.page === targetPage);
+      item.classList.toggle('active', item.dataset.page === page);
     });
     
     // 更新标题
     const titles = { home: '系统概览', chat: 'AI 对话', config: '配置管理', api: 'API 调试' };
-    const headerTitle = this.$('headerTitle');
+    const headerTitle = document.getElementById('headerTitle');
     if (headerTitle) {
-      headerTitle.textContent = titles[targetPage] || targetPage;
+      headerTitle.textContent = titles[page] || page;
     }
     
-    // 侧边栏内容切换
-    const navMenu = this.$('navMenu');
-    const apiListContainer = this.$('apiListContainer');
-    const isMobile = window.innerWidth <= 768;
+    // 侧边栏内容切换：API调试页面显示API列表，其他页面显示导航
+    const navMenu = document.getElementById('navMenu');
+    const apiListContainer = document.getElementById('apiListContainer');
     
-    if (targetPage === 'api') {
-      navMenu?.style.setProperty('display', 'none');
-      apiListContainer?.style.setProperty('display', 'flex');
+    if (page === 'api') {
+      navMenu.style.display = 'none';
+      apiListContainer.style.display = 'flex';
       this.renderAPIGroups();
-      if (isMobile) this.openSidebar();
+      if (window.innerWidth <= 768) {
+        this.openSidebar();
+      }
     } else {
-      navMenu?.style.setProperty('display', 'flex');
-      apiListContainer?.style.setProperty('display', 'none');
-      if (isMobile) this.closeSidebar();
+      navMenu.style.display = 'flex';
+      apiListContainer.style.display = 'none';
+      if (window.innerWidth <= 768) {
+        this.closeSidebar();
+      }
     }
     
-    // 页面过渡动画
-    this.transitionPage(() => {
-      // 渲染页面
-      const renderMap = {
-        home: () => this.renderHome(),
-        chat: () => this.renderChat(),
-        config: () => this.renderConfig(),
-        api: () => this.renderAPI()
-      };
-      (renderMap[targetPage] || renderMap.home)();
-    });
-    
-    // 更新URL（不触发hashchange）
-    if (location.hash !== `#/${targetPage}`) {
-      history.replaceState(null, '', `#/${targetPage}`);
-    }
-  }
-
-  // 页面过渡动画
-  transitionPage(callback) {
-    const content = this.$('content');
-    if (!content) {
-      callback();
-      return;
+    // 渲染页面
+    switch (page) {
+      case 'home': this.renderHome(); break;
+      case 'chat': this.renderChat(); break;
+      case 'config': this.renderConfig(); break;
+      case 'api': this.renderAPI(); break;
+      default: this.renderHome();
     }
     
-    // 淡出
-    content.classList.add('page-transition-out');
-    
-    // 等待动画完成后执行回调并淡入
-    setTimeout(() => {
-      callback();
-      requestAnimationFrame(() => {
-        content.classList.remove('page-transition-out');
-        content.classList.add('page-transition-in');
-        setTimeout(() => content.classList.remove('page-transition-in'), 200);
-      });
-    }, 150);
+    location.hash = `#/${page}`;
   }
 
   // ========== 首页 ==========
   async renderHome() {
     // 销毁旧的图表实例
-    ['cpu', 'mem', 'net'].forEach(key => {
-      if (this._charts[key]) {
-        this._charts[key].destroy();
-        this._charts[key] = null;
-      }
-    });
+    if (this._charts.cpu) {
+      this._charts.cpu.destroy();
+      this._charts.cpu = null;
+    }
+    if (this._charts.mem) {
+      this._charts.mem.destroy();
+      this._charts.mem = null;
+    }
+    if (this._charts.net) {
+      this._charts.net.destroy();
+      this._charts.net = null;
+    }
     
     const content = document.getElementById('content');
     content.innerHTML = `
