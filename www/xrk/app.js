@@ -86,7 +86,7 @@ class App {
       };
 
       // 默认使用 device 工作流
-      this._chatSettings.workflow = 'device';
+        this._chatSettings.workflow = 'device';
 
       if (!this._chatSettings.profile && this._llmOptions.defaultProfile) {
         this._chatSettings.profile = this._llmOptions.defaultProfile;
@@ -490,15 +490,27 @@ class App {
       if (!data.success) throw new Error(data.error || '获取失败');
       this._latestSystem = data;
       this.updateSystemStatus(data);
-      this.renderBotsPanel(data.bots || []);
-      this.renderWorkflowInfo(data.workflows, data.panels);
-      this.renderNetworkInfo(data.system?.network, data.system?.netRates);
+      
+      // 渲染机器人信息
+      const bots = Array.isArray(data.bots) ? data.bots : [];
+      this.renderBotsPanel(bots);
+      
+      // 渲染工作流信息
+      const workflows = data.workflows || {};
+      const panels = data.panels || {};
+      this.renderWorkflowInfo(workflows, panels);
+      
+      // 渲染网络信息（优先使用 panels.interfaces，其次使用 system.network）
+      const network = panels.interfaces || data.system?.network || {};
+      const rates = panels.metrics?.net || data.system?.netRates || {};
+      this.renderNetworkInfo(network, rates);
+      
       this.refreshChatWorkflowOptions();
     } catch (e) {
       console.error('Failed to load system status:', e);
-      this.renderBotsPanel();
-      this.renderWorkflowInfo();
-      this.renderNetworkInfo();
+      this.renderBotsPanel([]);
+      this.renderWorkflowInfo({}, {});
+      this.renderNetworkInfo({}, {});
     }
   }
   
@@ -507,54 +519,79 @@ class App {
       const res = await fetch(`${this.serverUrl}/api/status`, { headers: this.getHeaders() });
       if (!res.ok) throw new Error('接口异常');
       const data = await res.json();
-      this.renderBotsPanel(data.bots || []);
-    } catch {
-      this.renderBotsPanel();
+      const bots = Array.isArray(data.bots) ? data.bots : [];
+      this.renderBotsPanel(bots);
+    } catch (e) {
+      console.error('Failed to load bots info:', e);
+      this.renderBotsPanel([]);
     }
   }
   
   renderBotsPanel(bots = []) {
-      const botsInfo = document.getElementById('botsInfo');
-      if (!botsInfo) return;
+    const botsInfo = document.getElementById('botsInfo');
+    if (!botsInfo) return;
+    
     if (!Array.isArray(bots) || !bots.length) {
       botsInfo.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无机器人</div>';
       return;
     }
-      
-        botsInfo.innerHTML = `
-          <div style="display:grid;gap:0">
-        ${bots.map((bot, index) => `
-          <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;${index < bots.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}transition:background var(--transition);cursor:pointer" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
-            <div style="width:40px;height:40px;border-radius:16px;background:var(--bg-muted);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--primary)">
-              ${bot.nickname?.slice(0,2) || bot.uin?.slice(-2) || '??'}
-            </div>
-                <div style="flex:1;min-width:0;text-align:left">
-              <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${this.escapeHtml(bot.nickname || bot.uin)}</div>
-                  <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
-                    ${bot.adapter || '未知适配器'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
-                  </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-                  ${bot.avatar && !bot.device ? `
-                    <img src="${bot.avatar}" 
-                         alt="${bot.nickname}" 
-                         style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--bg-input);flex-shrink:0"
-                         onerror="this.style.display='none'">
-                  ` : ''}
-                  <div style="width:10px;height:10px;border-radius:50%;background:${bot.online ? 'var(--success)' : 'var(--text-muted)'};flex-shrink:0;box-shadow:0 0 0 2px ${bot.online ? 'var(--success-light)' : 'transparent'}"></div>
+    
+    botsInfo.innerHTML = `
+      <div style="display:grid;gap:0">
+        ${bots.map((bot, index) => {
+          const nickname = bot.nickname || bot.uin || '未知';
+          const avatar = bot.avatar || '';
+          const adapter = bot.adapter || '未知适配器';
+          const isDevice = bot.device || false;
+          const isOnline = bot.online !== false;
+          const friends = bot.stats?.friends || 0;
+          const groups = bot.stats?.groups || 0;
+          
+          return `
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;${index < bots.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}transition:background var(--transition);cursor:pointer" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+              <div style="width:40px;height:40px;border-radius:16px;background:var(--bg-muted);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--primary)">
+                ${this.escapeHtml(nickname.slice(0, 2))}
+              </div>
+              <div style="flex:1;min-width:0;text-align:left">
+                <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${this.escapeHtml(nickname)}</div>
+                <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
+                  ${this.escapeHtml(adapter)}${isDevice ? '' : ` · ${friends} 好友 · ${groups} 群组`}
                 </div>
               </div>
-            `).join('')}
-          </div>
-        `;
+              <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+                ${avatar && !isDevice ? `
+                  <img src="${this.escapeHtml(avatar)}" 
+                       alt="${this.escapeHtml(nickname)}" 
+                       style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--bg-input);flex-shrink:0"
+                       onerror="this.style.display='none'">
+                ` : ''}
+                <div style="width:10px;height:10px;border-radius:50%;background:${isOnline ? 'var(--success)' : 'var(--text-muted)'};flex-shrink:0;box-shadow:0 0 0 2px ${isOnline ? 'var(--success-light)' : 'transparent'}"></div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
   }
   
   renderWorkflowInfo(workflows = {}, panels = {}) {
     const box = document.getElementById('workflowInfo');
     if (!box) return;
-    const stats = panels?.workflows || workflows?.stats || {};
-    const items = panels?.workflows?.items || workflows?.items || [];
-    if (!stats.total) {
+    
+    // 优先使用 panels.workflows（扁平化数据），其次使用 workflows.stats
+    const panelWorkflows = panels.workflows || {};
+    const workflowStats = workflows.stats || {};
+    
+    const stats = {
+      total: panelWorkflows.total ?? workflowStats.total ?? 0,
+      enabled: panelWorkflows.enabled ?? workflowStats.enabled ?? 0,
+      embeddingReady: panelWorkflows.embeddingReady ?? workflowStats.embedding?.ready ?? 0,
+      provider: panelWorkflows.provider ?? workflowStats.embedding?.provider ?? null
+    };
+    
+    const items = Array.isArray(panelWorkflows.items) ? panelWorkflows.items : (Array.isArray(workflows.items) ? workflows.items : []);
+    
+    if (!stats.total && !items.length) {
       box.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无工作流数据</div>';
       return;
     }
@@ -562,19 +599,19 @@ class App {
     box.innerHTML = `
       <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center">
         <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px">${stats.enabled ?? 0}/${stats.total}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px">${stats.enabled}/${stats.total}</div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.4">启用 / 总数</div>
         </div>
         <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px">${stats.embeddingReady ?? 0}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px">${stats.embeddingReady}</div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding 就绪</div>
         </div>
         <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px">${stats.provider || '默认'}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px">${this.escapeHtml(stats.provider || '默认')}</div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding Provider</div>
         </div>
       </div>
-      ${items.length ? `
+      ${items.length > 0 ? `
         <div style="margin-top:16px;font-size:12px;color:var(--text-muted);text-align:center">优先级最高的工作流</div>
         <ul style="margin:8px 0 0;padding:0;list-style:none">
           ${items.map(item => `
@@ -591,20 +628,29 @@ class App {
   renderNetworkInfo(network = {}, rates = {}) {
     const box = document.getElementById('networkInfo');
     if (!box) return;
+    
     const entries = Object.entries(network || {});
     if (!entries.length) {
       box.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center">暂无网络信息</div>';
       return;
     }
-    const rateText = `${Math.max(0, Number(rates?.rxSec || 0) / 1024).toFixed(1)} KB/s ↓ · ${Math.max(0, Number(rates?.txSec || 0) / 1024).toFixed(1)} KB/s ↑`;
+    
+    const rxSec = Number(rates.rxSec || rates.rx_sec || 0);
+    const txSec = Number(rates.txSec || rates.tx_sec || 0);
+    const rateText = `${Math.max(0, rxSec / 1024).toFixed(1)} KB/s ↓ · ${Math.max(0, txSec / 1024).toFixed(1)} KB/s ↑`;
+    
     box.innerHTML = `
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-align:center;line-height:1.4">${rateText}</div>
-      ${entries.map(([name, info]) => `
-        <div style="padding:10px 0;border-bottom:1px solid var(--border)">
-          <div style="font-weight:600;color:var(--text-primary);text-align:center">${this.escapeHtml(name)}</div>
-          <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">IP: ${info.address} · MAC: ${info.mac}</div>
-        </div>
-      `).join('')}
+      ${entries.map(([name, info]) => {
+        const address = info?.address || info?.ip || 'N/A';
+        const mac = info?.mac || 'N/A';
+        return `
+          <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="font-weight:600;color:var(--text-primary);text-align:center">${this.escapeHtml(name)}</div>
+            <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">IP: ${this.escapeHtml(address)} · MAC: ${this.escapeHtml(mac)}</div>
+          </div>
+        `;
+      }).join('')}
     `;
   }
   
@@ -1132,12 +1178,12 @@ class App {
     this.updateChatStatus();
     this.setChatInteractionState(this._chatStreamState.running);
   }
-  
+
   populateModelSelect(select) {
     const options = this.getModelOptions();
     select.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
   }
-  
+
   refreshChatModelOptions() {
     const select = document.getElementById('chatModelSelect');
     if (!select) return;
@@ -1152,7 +1198,7 @@ class App {
       localStorage.setItem('chatProfile', this._chatSettings.profile);
     }
   }
-  
+
   getModelOptions() {
     const configured = (this._llmOptions?.profiles || []).map(item => ({
       value: item.key,
@@ -1923,14 +1969,14 @@ class App {
       ` : '';
       
       return `
-        <div class="config-group">
-          <div class="config-group-header">
-            <div>
+      <div class="config-group">
+        <div class="config-group-header">
+          <div>
               <h3>${this.escapeHtml(groupLabel)}</h3>
               ${groupDesc ? `<p>${this.escapeHtml(groupDesc)}</p>` : ''}
-            </div>
-            <span class="config-group-count">${totalFields} 项</span>
           </div>
+            <span class="config-group-count">${totalFields} 项</span>
+        </div>
           ${fieldsHtml}
           ${subGroupsHtml}
         </div>

@@ -1590,15 +1590,15 @@ export default class SystemConfig extends ConfigBase {
                           label: 'Frequency Penalty', 
                           component: 'InputNumber',
                           meta: { group: '参数配置' }
-                        }
-                      }
-                    },
+                    }
+                  }
+                },
                     long: {
-                      type: 'object',
+                  type: 'object',
                       label: 'long（长文本专家）',
                       description: '总结、分析等长上下文任务',
-                      component: 'SubForm',
-                      fields: {
+                  component: 'SubForm',
+                  fields: {
                         label: { 
                           type: 'string', 
                           label: '显示名称', 
@@ -1734,7 +1734,7 @@ export default class SystemConfig extends ConfigBase {
                           label: '温度', 
                           component: 'InputNumber',
                           meta: { group: '参数配置' }
-                        },
+                    },
                         topP: { 
                           type: 'number', 
                           label: 'Top P', 
