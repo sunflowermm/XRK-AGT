@@ -346,7 +346,9 @@ export default {
             system: snapshot.system,
             bot: snapshot.bot,
             bots: snapshot.bots,
-            adapters: snapshot.adapters
+            adapters: snapshot.adapters,
+            workflows: snapshot.workflows,
+            panels: snapshot.panels
           });
         } catch (error) {
           res.status(500).json({
