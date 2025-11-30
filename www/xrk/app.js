@@ -554,12 +554,7 @@ class App {
     if (!box) return;
     const stats = panels?.workflows || workflows?.stats || {};
     const items = panels?.workflows?.items || workflows?.items || [];
-    const total = stats.total ?? 0;
-    const enabled = stats.enabled ?? 0;
-    const embeddingReady = stats.embeddingReady ?? stats.embedding?.ready ?? 0;
-    const provider = stats.provider ?? stats.embedding?.provider ?? '默认';
-    
-    if (!total && !items.length) {
+    if (!stats.total) {
       box.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无工作流数据</div>';
       return;
     }
@@ -567,15 +562,15 @@ class App {
     box.innerHTML = `
       <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center">
         <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px">${enabled}/${total}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px">${stats.enabled ?? 0}/${stats.total}</div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.4">启用 / 总数</div>
         </div>
         <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px">${embeddingReady}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px">${stats.embeddingReady ?? 0}</div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding 就绪</div>
         </div>
         <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px">${this.escapeHtml(provider)}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px">${stats.provider || '默认'}</div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding Provider</div>
         </div>
       </div>
@@ -596,26 +591,20 @@ class App {
   renderNetworkInfo(network = {}, rates = {}) {
     const box = document.getElementById('networkInfo');
     if (!box) return;
-    const entries = Object.entries(network || {});
+    const entries = Object.entries(network);
     if (!entries.length) {
       box.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center">暂无网络信息</div>';
       return;
     }
-    const rxSec = Number(rates?.rxSec || rates?.rx_sec || 0);
-    const txSec = Number(rates?.txSec || rates?.tx_sec || 0);
-    const rateText = `${Math.max(0, rxSec / 1024).toFixed(1)} KB/s ↓ · ${Math.max(0, txSec / 1024).toFixed(1)} KB/s ↑`;
+    const rateText = `${Math.max(0, (rates.rxSec || 0) / 1024).toFixed(1)} KB/s ↓ · ${Math.max(0, (rates.txSec || 0) / 1024).toFixed(1)} KB/s ↑`;
     box.innerHTML = `
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-align:center;line-height:1.4">${rateText}</div>
-      ${entries.map(([name, info]) => {
-        const address = info?.address || info?.ip || 'N/A';
-        const mac = info?.mac || 'N/A';
-        return `
-          <div style="padding:10px 0;border-bottom:1px solid var(--border)">
-            <div style="font-weight:600;color:var(--text-primary);text-align:center">${this.escapeHtml(name)}</div>
-            <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">IP: ${this.escapeHtml(address)} · MAC: ${this.escapeHtml(mac)}</div>
-          </div>
-        `;
-      }).join('')}
+      ${entries.map(([name, info]) => `
+        <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="font-weight:600;color:var(--text-primary);text-align:center">${this.escapeHtml(name)}</div>
+          <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">IP: ${this.escapeHtml(info.address)} · MAC: ${this.escapeHtml(info.mac)}</div>
+        </div>
+      `).join('')}
     `;
   }
   

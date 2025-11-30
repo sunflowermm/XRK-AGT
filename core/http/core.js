@@ -163,29 +163,30 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
           if (!__procTimer || (Date.now() - (__procCache.ts || 0) > 20_000)) __refreshProcCache();
           
   const networkStats = {};
-          const networkInterfaces = os.networkInterfaces();
-          for (const [name, interfaces] of Object.entries(networkInterfaces)) {
-    if (!interfaces) continue;
-              for (const iface of interfaces) {
-                if (iface.family === 'IPv4' && !iface.internal) {
-                  networkStats[name] = {
-                    address: iface.address,
-                    netmask: iface.netmask,
-                    mac: iface.mac
-                  };
-                }
-              }
-            }
+  const networkInterfaces = os.networkInterfaces();
+  for (const [name, interfaces] of Object.entries(networkInterfaces)) {
+    if (!Array.isArray(interfaces)) continue;
+    for (const iface of interfaces) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        networkStats[name] = {
+          address: iface.address,
+          netmask: iface.netmask,
+          mac: iface.mac
+        };
+        break;
+      }
+    }
+  }
 
   const bots = collectBotInventory(Bot, { includeDevices: true });
-  const workflowStats = StreamLoader?.getStats?.() || null;
-  const workflowList = StreamLoader?.getStreamsByPriority?.()?.map(stream => ({
+  const workflowStats = StreamLoader.getStats();
+  const workflowList = StreamLoader.getStreamsByPriority().map(stream => ({
     name: stream.name,
     description: stream.description,
     priority: stream.priority,
     enabled: stream.config?.enabled !== false,
     embeddingReady: !!stream.embeddingReady
-  })) || [];
+  }));
 
   const system = {
               platform: os.platform(),
@@ -249,9 +250,9 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
 }
 
 function buildPanelPayload(snapshot) {
-  const system = snapshot.system || {};
-  const bots = snapshot.bots || [];
-  const workflows = snapshot.workflows || {};
+  const system = snapshot.system;
+  const bots = snapshot.bots;
+  const workflows = snapshot.workflows;
   const botSummary = summarizeBots(bots);
 
   const disk = Array.isArray(system.disks) && system.disks[0];
@@ -259,22 +260,22 @@ function buildPanelPayload(snapshot) {
 
   return {
     metrics: {
-      cpu: system.cpu?.percent || 0,
-      memory: Number(system.memory?.usagePercent) || 0,
+      cpu: system.cpu.percent || 0,
+      memory: Number(system.memory.usagePercent) || 0,
       disk: Number(diskUsage) || 0,
-      swap: system.swap?.usagePercent || 0,
+      swap: system.swap.usagePercent || 0,
       net: system.netRates || { rxSec: 0, txSec: 0 }
     },
     bots: botSummary,
     workflows: {
-      total: workflows.stats?.total || 0,
-      enabled: workflows.stats?.enabled || 0,
-      embeddingReady: workflows.stats?.embedding?.ready || 0,
-      provider: workflows.stats?.embedding?.provider || null,
-      items: workflows.items?.slice(0, 5) || []
+      total: workflows.stats.total,
+      enabled: workflows.stats.enabled,
+      embeddingReady: workflows.stats.embedding.ready,
+      provider: workflows.stats.embedding.provider,
+      items: workflows.items.slice(0, 5)
     },
     processes: snapshot.processesTop5 || [],
-    interfaces: system.network || {}
+    interfaces: system.network
   };
 }
 
@@ -346,9 +347,7 @@ export default {
             system: snapshot.system,
             bot: snapshot.bot,
             bots: snapshot.bots,
-            adapters: snapshot.adapters,
-            workflows: snapshot.workflows,
-            panels: snapshot.panels
+            adapters: snapshot.adapters
           });
         } catch (error) {
           res.status(500).json({
@@ -395,13 +394,22 @@ export default {
       method: 'GET',
       path: '/api/health',
       handler: async (req, res, Bot) => {
-        const redisOk = await redis.ping().then(() => true).catch(() => false);
+        // 尝试获取 redis 实例（如果存在）
+        let redisOk = false;
+        try {
+          const redis = global.redis || Bot.redis;
+          if (redis && typeof redis.ping === 'function') {
+            redisOk = await redis.ping().then(() => true).catch(() => false);
+          }
+        } catch (e) {
+          // redis 不可用，忽略
+        }
         
         res.json({
           status: 'healthy',
           timestamp: Date.now(),
           services: {
-            bot: Bot.uin.length > 0 ? 'operational' : 'degraded',
+            bot: Bot.uin && Bot.uin.length > 0 ? 'operational' : 'degraded',
             redis: redisOk ? 'operational' : 'down',
             api: 'operational'
           }

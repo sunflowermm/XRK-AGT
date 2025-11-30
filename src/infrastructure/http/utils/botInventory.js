@@ -12,48 +12,35 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
     return [];
   }
 
-  const merged = new Map();
-  
-  // 首先收集 Bot.bots 中的机器人
-  if (Bot.bots && typeof Bot.bots === 'object') {
-    for (const [uin, bot] of Object.entries(Bot.bots)) {
-      if (bot && typeof bot === 'object' && !EXCLUDE_KEYS.has(uin)) {
-        merged.set(uin, bot);
-      }
-    }
-  }
+  const merged = { ...(Bot.bots || {}) };
 
-  // 然后收集设备（包括网页注册的设备）
   if (includeDevices) {
     for (const key of Object.keys(Bot)) {
-      if (EXCLUDE_KEYS.has(key)) continue;
-      if (merged.has(key)) continue;
-      
+      if (merged[key]) continue;
       const candidate = Bot[key];
       if (candidate && typeof candidate === 'object' && candidate.device_type) {
-        merged.set(key, candidate);
+        merged[key] = candidate;
       }
     }
   }
 
   const list = [];
-  for (const [uin, bot] of merged.entries()) {
+  for (const [uin, bot] of Object.entries(merged)) {
     if (!bot || typeof bot !== 'object') continue;
+    if (EXCLUDE_KEYS.has(uin)) continue;
 
-    // 处理设备
     if (bot.device_type) {
       list.push({
         uin,
         device: true,
         online: bot.online !== false,
-        nickname: bot.nickname || bot.info?.device_name || bot.device_name || '设备',
+        nickname: bot.nickname || bot.info?.device_name || '设备',
         adapter: bot.device_type === 'web' ? 'Web客户端' : (bot.device_type || 'device'),
         stats: { friends: 0, groups: 0 }
       });
       continue;
     }
 
-    // 处理普通机器人
     if (!(bot.adapter || bot.nickname || bot.fl || bot.gl)) {
       continue;
     }
@@ -68,7 +55,7 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
     list.push({
       uin,
       device: false,
-      online: bot.stat?.online !== false,
+      online: bot.stat?.online || false,
       nickname: bot.nickname || uin,
       adapter: bot.adapter?.name || 'unknown',
       avatar: avatarUrl,
