@@ -12,7 +12,13 @@ class App {
     this.selectedFiles = [];
     this.jsonEditor = null;
     this._charts = {};
-    this._metricsHistory = { netRx: Array(30).fill(0), netTx: Array(30).fill(0) };
+    this._metricsHistory = { 
+      netRx: Array(30).fill(0), 
+      netTx: Array(30).fill(0),
+      _initialized: false,
+      _lastTimestamp: null,
+      _lastUpdate: null
+    };
     this._chatHistory = this._loadChatHistory();
     this._deviceWs = null;
     this._micActive = false;
@@ -490,10 +496,14 @@ class App {
       if (!data.success) throw new Error(data.error || '获取失败');
       this._latestSystem = data;
       this.updateSystemStatus(data);
+      // 确保数据正确传递
       this.renderBotsPanel(data.bots || []);
-      this.renderWorkflowInfo(data.workflows, data.panels);
-      this.renderNetworkInfo(data.system?.network, data.system?.netRates);
-      this.refreshChatWorkflowOptions();
+      this.renderWorkflowInfo(data.workflows || {}, data.panels || {});
+      this.renderNetworkInfo(data.system?.network || {}, data.system?.netRates || {});
+      // 更新工作流选项（如果LLM选项已加载）
+      if (this._llmOptions?.workflows) {
+        this.refreshChatWorkflowOptions();
+      }
     } catch (e) {
       console.error('Failed to load system status:', e);
       this.renderBotsPanel();
@@ -552,30 +562,38 @@ class App {
   renderWorkflowInfo(workflows = {}, panels = {}) {
     const box = document.getElementById('workflowInfo');
     if (!box) return;
-    const stats = panels?.workflows || workflows?.stats || {};
-    const items = panels?.workflows?.items || workflows?.items || [];
-    if (!stats.total) {
+    // 优先使用 panels.workflows，其次使用 workflows
+    const workflowData = panels?.workflows || workflows;
+    const stats = workflowData?.stats || {};
+    const items = workflowData?.items || [];
+    const total = stats?.total ?? workflowData?.total ?? 0;
+    if (!total && !items.length) {
       box.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无工作流数据</div>';
       return;
     }
     
+    const enabled = stats?.enabled ?? workflowData?.enabled ?? 0;
+    const totalCount = total;
+    const embeddingReady = stats?.embeddingReady ?? workflowData?.embeddingReady ?? 0;
+    const provider = stats?.provider ?? workflowData?.provider ?? '默认';
+    
     box.innerHTML = `
       <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center">
         <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px">${stats.enabled ?? 0}/${stats.total}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px">${enabled}/${totalCount}</div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.4">启用 / 总数</div>
         </div>
         <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px">${stats.embeddingReady ?? 0}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px">${embeddingReady}</div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding 就绪</div>
         </div>
         <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px">${stats.provider || '默认'}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px">${this.escapeHtml(provider)}</div>
           <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding Provider</div>
         </div>
       </div>
       ${items.length ? `
-        <div style="margin-top:16px;font-size:12px;color:var(--text-muted);text-align:center">优先级最高的工作流</div>
+        <div style="margin-top:16px;font-size:12px;color:var(--text-muted);text-align:center">工作流列表</div>
         <ul style="margin:8px 0 0;padding:0;list-style:none">
           ${items.map(item => `
             <li style="padding:8px 0;border-bottom:1px solid var(--border)">
@@ -591,20 +609,28 @@ class App {
   renderNetworkInfo(network = {}, rates = {}) {
     const box = document.getElementById('networkInfo');
     if (!box) return;
-    const entries = Object.entries(network);
+    // 确保 network 是对象
+    const networkObj = network && typeof network === 'object' ? network : {};
+    const entries = Object.entries(networkObj);
     if (!entries.length) {
       box.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center">暂无网络信息</div>';
       return;
     }
-    const rateText = `${Math.max(0, (rates.rxSec || 0) / 1024).toFixed(1)} KB/s ↓ · ${Math.max(0, (rates.txSec || 0) / 1024).toFixed(1)} KB/s ↑`;
+    const rxSec = rates?.rxSec ?? rates?.rx ?? 0;
+    const txSec = rates?.txSec ?? rates?.tx ?? 0;
+    const rateText = `${Math.max(0, rxSec / 1024).toFixed(1)} KB/s ↓ · ${Math.max(0, txSec / 1024).toFixed(1)} KB/s ↑`;
     box.innerHTML = `
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-align:center;line-height:1.4">${rateText}</div>
-      ${entries.map(([name, info]) => `
+      ${entries.map(([name, info]) => {
+        const address = info?.address || '';
+        const mac = info?.mac || '';
+        return `
         <div style="padding:10px 0;border-bottom:1px solid var(--border)">
           <div style="font-weight:600;color:var(--text-primary);text-align:center">${this.escapeHtml(name)}</div>
-          <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">IP: ${this.escapeHtml(info.address)} · MAC: ${this.escapeHtml(info.mac)}</div>
+          <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">IP: ${this.escapeHtml(address)}${mac ? ` · MAC: ${this.escapeHtml(mac)}` : ''}</div>
         </div>
-      `).join('')}
+      `;
+      }).join('')}
     `;
   }
   
@@ -693,14 +719,37 @@ class App {
       uptimeEl.textContent = formatUptime(system?.uptime || data.bot?.uptime);
     }
     
-    // 更新网络历史：总是推入数据，保证图表有数据点
-    const rxSec = Math.max(0, Number(metrics.net?.rxSec ?? system?.netRates?.rxSec ?? 0)) / 1024;
-    const txSec = Math.max(0, Number(metrics.net?.txSec ?? system?.netRates?.txSec ?? 0)) / 1024;
-    this._metricsHistory.netRx.push(rxSec);
-    this._metricsHistory.netTx.push(txSec);
-    // 保留最近60个点
-    if (this._metricsHistory.netRx.length > 60) this._metricsHistory.netRx.shift();
-    if (this._metricsHistory.netTx.length > 60) this._metricsHistory.netTx.shift();
+    // 更新网络历史：使用后端返回的历史数据或累积新数据
+    const netHistory = system?.netHistory24h || [];
+    const currentRxSec = Math.max(0, Number(metrics.net?.rxSec ?? system?.netRates?.rxSec ?? 0)) / 1024;
+    const currentTxSec = Math.max(0, Number(metrics.net?.txSec ?? system?.netRates?.txSec ?? 0)) / 1024;
+    
+    // 如果有后端历史数据且历史数据不为空，使用后端数据初始化
+    if (netHistory.length > 0 && (!this._metricsHistory._initialized || this._metricsHistory._lastTimestamp !== data.timestamp)) {
+      // 从历史数据中提取最近60个点（每分钟一个点）
+      const recentHistory = netHistory.slice(-60);
+      this._metricsHistory.netRx = recentHistory.map(h => Math.max(0, (h.rxSec || 0) / 1024));
+      this._metricsHistory.netTx = recentHistory.map(h => Math.max(0, (h.txSec || 0) / 1024));
+      this._metricsHistory._initialized = true;
+      this._metricsHistory._lastTimestamp = data.timestamp;
+    } else {
+      // 累积新数据点（每60秒更新一次，保留最近60个点）
+      const now = Date.now();
+      if (!this._metricsHistory._lastUpdate || (now - this._metricsHistory._lastUpdate) >= 60000) {
+        this._metricsHistory.netRx.push(currentRxSec);
+        this._metricsHistory.netTx.push(currentTxSec);
+        this._metricsHistory._lastUpdate = now;
+        // 保留最近60个点
+        if (this._metricsHistory.netRx.length > 60) this._metricsHistory.netRx.shift();
+        if (this._metricsHistory.netTx.length > 60) this._metricsHistory.netTx.shift();
+      } else {
+        // 更新最后一个数据点
+        if (this._metricsHistory.netRx.length > 0) {
+          this._metricsHistory.netRx[this._metricsHistory.netRx.length - 1] = currentRxSec;
+          this._metricsHistory.netTx[this._metricsHistory.netTx.length - 1] = currentTxSec;
+        }
+      }
+    }
     
     // 更新进程表
     const procTable = document.getElementById('processTable');
@@ -1150,6 +1199,24 @@ class App {
       select.selectedIndex = 0;
       this._chatSettings.profile = select.value;
       localStorage.setItem('chatProfile', this._chatSettings.profile);
+    }
+  }
+
+  refreshChatWorkflowOptions() {
+    // 刷新聊天工作流选项（如果存在工作流选择器）
+    // 目前UI中可能没有工作流选择器，此方法保留以兼容现有调用
+    const select = document.getElementById('chatWorkflowSelect');
+    if (!select) return;
+    const workflows = this._llmOptions?.workflows || [];
+    const currentWorkflow = this._chatSettings.workflow || 'device';
+    select.innerHTML = workflows.map(wf => 
+      `<option value="${this.escapeHtml(wf.name || wf)}">${this.escapeHtml(wf.description || wf.name || wf)}</option>`
+    ).join('');
+    if (Array.from(select.options).some(opt => opt.value === currentWorkflow)) {
+      select.value = currentWorkflow;
+    } else if (select.options.length) {
+      select.selectedIndex = 0;
+      this._chatSettings.workflow = select.value;
     }
   }
 

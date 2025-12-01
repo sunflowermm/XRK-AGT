@@ -60,11 +60,23 @@ async function __sampleNetOnce() {
       const txDelta = txBytes - __lastNetSample.tx;
       if (rxDelta >= 0) rxSec = rxDelta / dt;
       if (txDelta >= 0) txSec = txDelta / dt;
+    } else {
+      // 首次采样，初始化但不计算速率
+      __lastNetSample = { ts: now, rx: rxBytes, tx: txBytes };
+      return;
     }
     __lastNetSample = { ts: now, rx: rxBytes, tx: txBytes };
+    // 更新或添加当前分钟的数据点
     if (__netHist.length && __netHist[__netHist.length - 1].ts === tsMin) {
-      __netHist[__netHist.length - 1] = { ts: tsMin, rxSec, txSec };
+      // 更新当前分钟的数据（取平均值或最新值）
+      const last = __netHist[__netHist.length - 1];
+      __netHist[__netHist.length - 1] = { 
+        ts: tsMin, 
+        rxSec: Math.max(last.rxSec, rxSec), 
+        txSec: Math.max(last.txSec, txSec) 
+      };
     } else {
+      // 添加新分钟的数据点
       __netHist.push({ ts: tsMin, rxSec, txSec });
       if (__netHist.length > NET_HISTORY_LIMIT) __netHist.shift();
     }
@@ -86,10 +98,16 @@ function __getNetHistory24h() {
   const start = Math.floor((now - 24 * 60 * 60 * 1000) / 60000) * 60000;
   const map = new Map(__netHist.map(p => [p.ts, p]));
   const arr = [];
+  // 返回最近24小时的数据（每分钟一个点）
   for (let i = 0; i < 24 * 60; i++) {
     const t = start + i * 60000;
     const v = map.get(t);
-    if (v) arr.push({ ts: t, rxSec: v.rxSec, txSec: v.txSec }); else arr.push({ ts: t, rxSec: 0, txSec: 0 });
+    if (v) {
+      arr.push({ ts: t, rxSec: v.rxSec || 0, txSec: v.txSec || 0 });
+    } else {
+      // 对于没有数据的点，返回0而不是跳过，保持时间序列连续性
+      arr.push({ ts: t, rxSec: 0, txSec: 0 });
+    }
   }
   return arr;
 }
