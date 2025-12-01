@@ -719,23 +719,23 @@ class App {
       uptimeEl.textContent = formatUptime(system?.uptime || data.bot?.uptime);
     }
     
-    // 更新网络历史：使用后端返回的历史数据或累积新数据
-    const netHistory = system?.netHistory24h || [];
+    // 更新网络历史：优先使用后端返回的实时数据
+    const netRecent = system?.netRecent || [];
     const currentRxSec = Math.max(0, Number(metrics.net?.rxSec ?? system?.netRates?.rxSec ?? 0)) / 1024;
     const currentTxSec = Math.max(0, Number(metrics.net?.txSec ?? system?.netRates?.txSec ?? 0)) / 1024;
     
-    // 如果有后端历史数据且历史数据不为空，使用后端数据初始化
-    if (netHistory.length > 0 && (!this._metricsHistory._initialized || this._metricsHistory._lastTimestamp !== data.timestamp)) {
-      // 从历史数据中提取最近60个点（每分钟一个点）
-      const recentHistory = netHistory.slice(-60);
-      this._metricsHistory.netRx = recentHistory.map(h => Math.max(0, (h.rxSec || 0) / 1024));
-      this._metricsHistory.netTx = recentHistory.map(h => Math.max(0, (h.txSec || 0) / 1024));
+    // 如果后端返回了实时数据，直接使用
+    if (netRecent.length > 0) {
+      // 使用后端返回的实时数据点（每3-5秒一个点）
+      this._metricsHistory.netRx = netRecent.map(h => Math.max(0, (h.rxSec || 0) / 1024));
+      this._metricsHistory.netTx = netRecent.map(h => Math.max(0, (h.txSec || 0) / 1024));
       this._metricsHistory._initialized = true;
       this._metricsHistory._lastTimestamp = data.timestamp;
     } else {
-      // 累积新数据点（每60秒更新一次，保留最近60个点）
+      // 如果没有实时数据，使用当前速率累积
       const now = Date.now();
-      if (!this._metricsHistory._lastUpdate || (now - this._metricsHistory._lastUpdate) >= 60000) {
+      if (!this._metricsHistory._lastUpdate || (now - this._metricsHistory._lastUpdate) >= 3000) {
+        // 每3秒添加一个新数据点
         this._metricsHistory.netRx.push(currentRxSec);
         this._metricsHistory.netTx.push(currentTxSec);
         this._metricsHistory._lastUpdate = now;
@@ -743,10 +743,14 @@ class App {
         if (this._metricsHistory.netRx.length > 60) this._metricsHistory.netRx.shift();
         if (this._metricsHistory.netTx.length > 60) this._metricsHistory.netTx.shift();
       } else {
-        // 更新最后一个数据点
+        // 更新最后一个数据点（实时更新当前值）
         if (this._metricsHistory.netRx.length > 0) {
           this._metricsHistory.netRx[this._metricsHistory.netRx.length - 1] = currentRxSec;
           this._metricsHistory.netTx[this._metricsHistory.netTx.length - 1] = currentTxSec;
+        } else {
+          // 如果数组为空，初始化
+          this._metricsHistory.netRx = [currentRxSec];
+          this._metricsHistory.netTx = [currentTxSec];
         }
       }
     }
@@ -988,7 +992,8 @@ class App {
                 grid: { display: false }
               },
               y: { 
-                beginAtZero: true, 
+                beginAtZero: true,
+                suggestedMax: 10, // 默认最大10 KB/s，会根据实际数据动态调整
                 grid: { 
                   color: border,
                   drawBorder: false,
@@ -1003,13 +1008,23 @@ class App {
           }
         });
       } else {
+        // 更新图表数据
         this._charts.net.data.labels = labels;
         this._charts.net.data.datasets[0].data = this._metricsHistory.netRx;
         this._charts.net.data.datasets[1].data = this._metricsHistory.netTx;
-        // 确保Y轴刻度不显示
-        if (this._charts.net.options.scales?.y?.ticks) {
-          this._charts.net.options.scales.y.ticks.display = false;
+        
+        // 动态调整Y轴范围，确保数据可见
+        const allValues = [...this._metricsHistory.netRx, ...this._metricsHistory.netTx];
+        const maxValue = Math.max(...allValues.filter(v => isFinite(v) && v > 0), 1);
+        const yMax = Math.ceil(maxValue * 1.2); // 留20%的顶部空间
+        
+        if (this._charts.net.options.scales?.y) {
+          this._charts.net.options.scales.y.max = yMax;
+          if (this._charts.net.options.scales.y.ticks) {
+            this._charts.net.options.scales.y.ticks.display = false;
+          }
         }
+        
         // 更新tooltip配置，过滤0.0值
         if (this._charts.net.options.plugins?.tooltip) {
           this._charts.net.options.plugins.tooltip.callbacks = {
@@ -1023,7 +1038,9 @@ class App {
             }
           };
         }
-        this._charts.net.update('none');
+        
+        // 使用 'default' 动画模式，让图表平滑更新
+        this._charts.net.update('default');
       }
     }
   }

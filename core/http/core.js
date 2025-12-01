@@ -6,9 +6,11 @@ import { collectBotInventory, summarizeBots } from '../../src/infrastructure/htt
 
 let __lastNetSample = null;
 let __netSampler = null;
-let __netHist = [];
-const NET_HISTORY_LIMIT = 24 * 60;
-const NET_SAMPLE_MS = 3_000; // 单一方法：systeminformation 网络采样，每3秒
+let __netHist = []; // 长期历史（按分钟）
+let __netRecent = []; // 近期数据（每3-5秒一个点，用于图表显示）
+const NET_HISTORY_LIMIT = 24 * 60; // 24小时，每分钟一个点
+const NET_RECENT_LIMIT = 60; // 最近60个点，用于实时图表
+const NET_SAMPLE_MS = 3_000; // 每3秒采样一次
 
 // CPU 采样缓存（单一方法：os.cpus 快照法）
 let __cpuCache = { percent: 0, ts: 0 };
@@ -54,32 +56,37 @@ async function __sampleNetOnce() {
     const now = Date.now();
     const tsMin = Math.floor(now / 60000) * 60000;
     let rxSec = 0, txSec = 0;
+    
     if (__lastNetSample) {
       const dt = Math.max(1, (now - __lastNetSample.ts) / 1000);
       const rxDelta = rxBytes - __lastNetSample.rx;
       const txDelta = txBytes - __lastNetSample.tx;
       if (rxDelta >= 0) rxSec = rxDelta / dt;
       if (txDelta >= 0) txSec = txDelta / dt;
-    } else {
-      // 首次采样，初始化但不计算速率
-      __lastNetSample = { ts: now, rx: rxBytes, tx: txBytes };
-      return;
+      
+      // 添加到近期数据（用于实时图表显示）
+      __netRecent.push({ ts: now, rxSec, txSec });
+      if (__netRecent.length > NET_RECENT_LIMIT) {
+        __netRecent.shift();
+      }
+      
+      // 更新或添加当前分钟的数据点（用于长期历史）
+      if (__netHist.length && __netHist[__netHist.length - 1].ts === tsMin) {
+        // 更新当前分钟的数据（取最大值，显示峰值）
+        const last = __netHist[__netHist.length - 1];
+        __netHist[__netHist.length - 1] = { 
+          ts: tsMin, 
+          rxSec: Math.max(last.rxSec, rxSec), 
+          txSec: Math.max(last.txSec, txSec) 
+        };
+      } else {
+        // 添加新分钟的数据点
+        __netHist.push({ ts: tsMin, rxSec, txSec });
+        if (__netHist.length > NET_HISTORY_LIMIT) __netHist.shift();
+      }
     }
+    
     __lastNetSample = { ts: now, rx: rxBytes, tx: txBytes };
-    // 更新或添加当前分钟的数据点
-    if (__netHist.length && __netHist[__netHist.length - 1].ts === tsMin) {
-      // 更新当前分钟的数据（取平均值或最新值）
-      const last = __netHist[__netHist.length - 1];
-      __netHist[__netHist.length - 1] = { 
-        ts: tsMin, 
-        rxSec: Math.max(last.rxSec, rxSec), 
-        txSec: Math.max(last.txSec, txSec) 
-      };
-    } else {
-      // 添加新分钟的数据点
-      __netHist.push({ ts: tsMin, rxSec, txSec });
-      if (__netHist.length > NET_HISTORY_LIMIT) __netHist.shift();
-    }
   } catch {}
 }
 
@@ -110,6 +117,25 @@ function __getNetHistory24h() {
     }
   }
   return arr;
+}
+
+function __getNetRecent() {
+  // 返回最近的数据点（用于实时图表显示）
+  // 如果近期数据不足，用当前速率填充
+  const recent = [...__netRecent];
+  const lastSample = __lastNetSample;
+  const lastHist = __netRecent.length > 0 ? __netRecent[__netRecent.length - 1] : null;
+  
+  // 如果数据不足，用最后一个值填充
+  while (recent.length < NET_RECENT_LIMIT && lastHist) {
+    recent.push({ 
+      ts: Date.now() - (NET_RECENT_LIMIT - recent.length) * NET_SAMPLE_MS, 
+      rxSec: lastHist.rxSec || 0, 
+      txSec: lastHist.txSec || 0 
+    });
+  }
+  
+  return recent.slice(-NET_RECENT_LIMIT);
 }
 
 async function __refreshFsCache() {
@@ -170,7 +196,9 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
           const lastNet = __lastNetSample || { ts: Date.now(), rx: 0, tx: 0 };
           const rxBytes = Number(lastNet.rx || 0);
           const txBytes = Number(lastNet.tx || 0);
-          const lastHist = __netHist.length ? __netHist[__netHist.length - 1] : { rxSec: 0, txSec: 0 };
+          // 优先使用最近的数据点，如果没有则使用历史数据
+          const lastRecent = __netRecent.length > 0 ? __netRecent[__netRecent.length - 1] : null;
+          const lastHist = lastRecent || (__netHist.length ? __netHist[__netHist.length - 1] : { rxSec: 0, txSec: 0 });
           const rxSec = Number(lastHist.rxSec || 0);
           const txSec = Number(lastHist.txSec || 0);
 
@@ -240,7 +268,8 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
               disks,
               net: { rxBytes, txBytes },
               netRates: { rxSec, txSec },
-    netHistory24h: includeHistory ? __getNetHistory24h() : [],
+              netHistory24h: includeHistory ? __getNetHistory24h() : [],
+              netRecent: __getNetRecent(), // 返回最近的数据点用于实时图表
               network: networkStats
   };
 
