@@ -6,8 +6,7 @@
     <meta name="description" content="XRK-AGT - 基于AI视觉的多功能体感游戏平台">
     <title>XRK-AGT | 多功能体感游戏平台</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240"></script>
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -167,6 +166,12 @@
             box-shadow: 0 15px 40px rgba(99, 102, 241, 0.4);
         }
 
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .btn-secondary {
             background: var(--glass-bg); color: var(--text-primary);
             border: 1px solid var(--glass-border); backdrop-filter: blur(10px);
@@ -177,7 +182,6 @@
             transform: translateY(-2px);
         }
 
-        /* 游戏区域 */
         .game-section {
             padding: 6rem 0; min-height: 100vh;
         }
@@ -187,7 +191,6 @@
             text-align: center; margin-bottom: 2rem;
         }
 
-        /* 游戏选择器 */
         .game-selector {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -253,7 +256,6 @@
             font-size: 0.9rem;
         }
 
-        /* 游戏容器 */
         .game-container {
             width: 95%;
             max-width: 1600px;
@@ -296,13 +298,17 @@
             z-index: 10;
             transform: scaleX(-1);
             transition: opacity 0.3s;
+            display: none;
+        }
+
+        .video-feed.active {
+            display: block;
         }
 
         .video-feed:hover {
             opacity: 1;
         }
 
-        /* HUD */
         .game-hud {
             position: absolute;
             top: 20px;
@@ -365,7 +371,6 @@
             box-shadow: 0 0 10px #22c55e;
         }
 
-        /* 粒子控制面板 */
         .particle-controls {
             position: absolute;
             top: 20px;
@@ -498,6 +503,26 @@
             opacity: 1;
         }
 
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            padding: 2rem 3rem;
+            border-radius: 1rem;
+            font-size: 1.2rem;
+            text-align: center;
+            z-index: 40;
+            max-width: 80%;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
         footer {
             padding: 4rem 0 2rem;
             text-align: center;
@@ -587,22 +612,22 @@
         <h2 class="section-title">🎮 选择你的游戏</h2>
         
         <div class="game-selector">
-            <div class="game-option active" onclick="selectGame('particles')">
+            <div class="game-option active" data-game="particles">
                 <span class="game-option-icon">✨</span>
                 <h3>3D粒子交互</h3>
                 <p>手势控制粒子形态变换</p>
             </div>
-            <div class="game-option" onclick="selectGame('sunflower')">
+            <div class="game-option" data-game="sunflower">
                 <span class="game-option-icon">🌻</span>
                 <h3>向日葵收集</h3>
                 <p>抓取向日葵投进箩筐</p>
             </div>
-            <div class="game-option" onclick="selectGame('balloon')">
+            <div class="game-option" data-game="balloon">
                 <span class="game-option-icon">🎈</span>
                 <h3>气球派对</h3>
                 <p>快速拍打上升气球</p>
             </div>
-            <div class="game-option" onclick="selectGame('fruit')">
+            <div class="game-option" data-game="fruit">
                 <span class="game-option-icon">🍎</span>
                 <h3>水果忍者</h3>
                 <p>挥手切割掉落水果</p>
@@ -610,19 +635,12 @@
         </div>
 
         <div class="game-container">
-            <!-- Three.js 粒子容器 -->
             <div id="threeContainer" style="display: block;"></div>
-            
-            <!-- 2D Canvas 游戏 -->
             <canvas id="gameCanvas" class="game-canvas" style="display: none;"></canvas>
             
-            <!-- 视频预览 -->
-            <video id="webcam" class="video-feed" playsinline></video>
-
-            <!-- 手部追踪器 -->
+            <video id="webcam" class="video-feed" playsinline autoplay></video>
             <div class="hand-tracker" id="handTracker"></div>
 
-            <!-- HUD -->
             <div class="game-hud">
                 <div class="hud-panel">
                     <div class="hud-title">手势状态</div>
@@ -637,17 +655,16 @@
                 </div>
             </div>
 
-            <!-- 粒子控制面板 -->
             <div class="particle-controls" id="particleControls">
                 <div class="control-group">
                     <label class="control-label">粒子形状</label>
                     <div class="shape-grid">
-                        <button class="shape-btn active" onclick="setShape('heart')">❤️ 爱心</button>
-                        <button class="shape-btn" onclick="setShape('saturn')">🪐 土星</button>
-                        <button class="shape-btn" onclick="setShape('flower')">🌸 花朵</button>
-                        <button class="shape-btn" onclick="setShape('buddha')">🧘 佛像</button>
-                        <button class="shape-btn" onclick="setShape('fireworks')">🎆 烟花</button>
-                        <button class="shape-btn" onclick="setShape('dna')">🧬 DNA</button>
+                        <button class="shape-btn active" data-shape="heart">❤️ 爱心</button>
+                        <button class="shape-btn" data-shape="saturn">🪐 土星</button>
+                        <button class="shape-btn" data-shape="flower">🌸 花朵</button>
+                        <button class="shape-btn" data-shape="buddha">🧘 佛像</button>
+                        <button class="shape-btn" data-shape="fireworks">🎆 烟花</button>
+                        <button class="shape-btn" data-shape="dna">🧬 DNA</button>
                     </div>
                 </div>
 
@@ -670,18 +687,19 @@
             </div>
 
             <div class="game-message" id="gameMessage"></div>
+            <div class="error-message" id="errorMessage"></div>
         </div>
 
         <div class="game-controls">
-            <button class="btn btn-primary" onclick="startGame()">
+            <button class="btn btn-primary" id="startBtn">
                 <span>🎮</span>
                 <span>启动游戏</span>
             </button>
-            <button class="btn btn-secondary" onclick="stopGame()">
+            <button class="btn btn-secondary" id="stopBtn">
                 <span>⏸️</span>
                 <span>停止</span>
             </button>
-            <button class="btn btn-secondary" onclick="resetGame()">
+            <button class="btn btn-secondary" id="resetBtn">
                 <span>🔄</span>
                 <span>重置</span>
             </button>
@@ -693,62 +711,95 @@
         <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 0.9rem;">永远向着阳光生长 🌻</p>
     </footer>
 
-    <div class="scroll-top" onclick="scrollToTop()">↑</div>
+    <div class="scroll-top" id="scrollTop">↑</div>
 
     <script>
-        // ============ 全局变量 ============
-        let currentGameMode = 'particles';
-        let stream = null;
-        let gameRunning = false;
-        let hands = null;
-        let camera = null;
-        let video = null;
+        // ============ 全局状态 ============
+        const GameState = {
+            currentMode: 'particles',
+            isRunning: false,
+            stream: null,
+            hands: null,
+            video: null,
+            
+            // Three.js
+            scene: null,
+            camera: null,
+            renderer: null,
+            particles: null,
+            particleCount: 15000,
+            positions: null,
+            targetPositions: null,
+            currentShape: 'heart',
+            
+            // 手势
+            handX: 0.5,
+            handY: 0.5,
+            handOpenness: 1.0,
+            isHandDetected: false,
+            
+            // 2D游戏
+            gameObjects: [],
+            score: 0,
+            prevFrame: null,
+            handPosition: { x: 0, y: 0, active: false }
+        };
 
         // ============ Three.js 粒子系统 ============
-        let scene, threeCamera, renderer, particles, particleGeometry, particleMaterial;
-        const particleCount = 20000;
-        let positions, targetPositions, initialPositions;
-        let handOpenness = 1.0;
-        let handX = 0.5, handY = 0.5;
-        let isHandDetected = false;
-        let currentShape = 'heart';
-
         function initThreeJS() {
             const container = document.getElementById('threeContainer');
-            scene = new THREE.Scene();
-            scene.fog = new THREE.FogExp2(0x0a0a0f, 0.002);
+            if (!container) return;
 
-            threeCamera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-            threeCamera.position.z = 30;
+            GameState.scene = new THREE.Scene();
+            GameState.scene.fog = new THREE.FogExp2(0x0a0a0f, 0.002);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setSize(container.clientWidth, container.clientHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            container.appendChild(renderer.domElement);
+            GameState.camera = new THREE.PerspectiveCamera(
+                75,
+                container.clientWidth / container.clientHeight,
+                0.1,
+                1000
+            );
+            GameState.camera.position.z = 30;
 
-            // 粒子系统
-            particleGeometry = new THREE.BufferGeometry();
-            positions = new Float32Array(particleCount * 3);
-            targetPositions = new Float32Array(particleCount * 3);
-            initialPositions = new Float32Array(particleCount * 3);
+            GameState.renderer = new THREE.WebGLRenderer({ 
+                antialias: true, 
+                alpha: true 
+            });
+            GameState.renderer.setSize(container.clientWidth, container.clientHeight);
+            GameState.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.innerHTML = '';
+            container.appendChild(GameState.renderer.domElement);
 
-            function getTexture() {
-                const canvas = document.createElement('canvas');
-                canvas.width = 32; canvas.height = 32;
-                const ctx = canvas.getContext('2d');
-                const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-                grad.addColorStop(0, 'rgba(255,255,255,1)');
-                grad.addColorStop(1, 'rgba(255,255,255,0)');
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, 32, 32);
-                const texture = new THREE.Texture(canvas);
-                texture.needsUpdate = true;
-                return texture;
+            // 创建粒子纹理
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 32, 32);
+            
+            const texture = new THREE.Texture(canvas);
+            texture.needsUpdate = true;
+
+            // 粒子几何体
+            const geometry = new THREE.BufferGeometry();
+            GameState.positions = new Float32Array(GameState.particleCount * 3);
+            GameState.targetPositions = new Float32Array(GameState.particleCount * 3);
+
+            for (let i = 0; i < GameState.particleCount; i++) {
+                GameState.positions[i * 3] = (Math.random() - 0.5) * 100;
+                GameState.positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+                GameState.positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
             }
 
-            particleMaterial = new THREE.PointsMaterial({
+            geometry.setAttribute('position', new THREE.BufferAttribute(GameState.positions, 3));
+
+            const material = new THREE.PointsMaterial({
                 size: 0.5,
-                map: getTexture(),
+                map: texture,
                 transparent: true,
                 opacity: 0.8,
                 color: new THREE.Color(0x6366f1),
@@ -756,26 +807,16 @@
                 depthWrite: false
             });
 
-            for (let i = 0; i < particleCount; i++) {
-                positions[i * 3] = (Math.random() - 0.5) * 100;
-                positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
-                positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
-                initialPositions[i * 3] = positions[i * 3];
-                initialPositions[i * 3 + 1] = positions[i * 3 + 1];
-                initialPositions[i * 3 + 2] = positions[i * 3 + 2];
-            }
-
-            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            particles = new THREE.Points(particleGeometry, particleMaterial);
-            scene.add(particles);
+            GameState.particles = new THREE.Points(geometry, material);
+            GameState.scene.add(GameState.particles);
 
             updateTargetPositions('heart');
-            animateParticles();
+            console.log('✅ Three.js 初始化成功');
         }
 
-        // 形状定义
-        const Shapes = {
-            heart: (i) => {
+        // 粒子形状定义
+        const ParticleShapes = {
+            heart: (i, count) => {
                 const t = Math.random() * Math.PI * 2;
                 const r = Math.random();
                 const x = 16 * Math.pow(Math.sin(t), 3);
@@ -783,24 +824,26 @@
                 const z = (Math.random() - 0.5) * 4;
                 return { x: x * 0.5 * r, y: y * 0.5 * r, z: z };
             },
-            saturn: (i) => {
-                const isRing = Math.random() > 0.6;
-                if (isRing) {
+            saturn: (i, count) => {
+                if (Math.random() > 0.6) {
                     const angle = Math.random() * Math.PI * 2;
                     const radius = 12 + Math.random() * 6;
-                    return { x: Math.cos(angle) * radius, y: (Math.random()-0.5), z: Math.sin(angle) * radius };
-                } else {
-                    const phi = Math.acos(-1 + (2 * Math.random()));
-                    const theta = Math.sqrt(particleCount * Math.PI) * phi;
-                    const r = 7;
-                    return {
-                        x: r * Math.cos(theta) * Math.sin(phi),
-                        y: r * Math.sin(theta) * Math.sin(phi),
-                        z: r * Math.cos(phi)
+                    return { 
+                        x: Math.cos(angle) * radius, 
+                        y: (Math.random()-0.5), 
+                        z: Math.sin(angle) * radius 
                     };
                 }
+                const phi = Math.acos(-1 + (2 * Math.random()));
+                const theta = Math.sqrt(count * Math.PI) * phi;
+                const r = 7;
+                return {
+                    x: r * Math.cos(theta) * Math.sin(phi),
+                    y: r * Math.sin(theta) * Math.sin(phi),
+                    z: r * Math.cos(phi)
+                };
             },
-            flower: (i) => {
+            flower: (i, count) => {
                 const theta = Math.random() * Math.PI * 2;
                 const phi = Math.random() * Math.PI;
                 const k = 5;
@@ -811,34 +854,40 @@
                     z: r * Math.sin(phi) * Math.sin(theta)
                 };
             },
-            buddha: (i) => {
+            buddha: (i, count) => {
                 const rand = Math.random();
-                let x, y, z;
                 if (rand < 0.2) {
                     const r = 2.5;
-                    const u = Math.random(); const v = Math.random();
-                    const theta = 2 * Math.PI * u; const phi = Math.acos(2 * v - 1);
-                    x = r * Math.sin(phi) * Math.cos(theta);
-                    y = r * Math.sin(phi) * Math.sin(theta) + 6;
-                    z = r * Math.cos(phi);
-                } else if (rand < 0.7) {
+                    const u = Math.random();
+                    const v = Math.random();
+                    const theta = 2 * Math.PI * u;
+                    const phi = Math.acos(2 * v - 1);
+                    return {
+                        x: r * Math.sin(phi) * Math.cos(theta),
+                        y: r * Math.sin(phi) * Math.sin(theta) + 6,
+                        z: r * Math.cos(phi)
+                    };
+                }
+                if (rand < 0.7) {
                     const r = 5.5 * Math.random();
                     const h = Math.random() * 7;
                     const theta = Math.random() * Math.PI * 2;
                     const coneR = 6 * (1 - h/7);
-                    x = coneR * Math.cos(theta);
-                    y = h - 1;
-                    z = coneR * Math.sin(theta);
-                } else {
-                    const angle = Math.random() * Math.PI * 2;
-                    const radius = 5 + Math.random() * 4;
-                    x = Math.cos(angle) * radius;
-                    y = -2 + (Math.random() * 2);
-                    z = Math.sin(angle) * radius;
+                    return {
+                        x: coneR * Math.cos(theta),
+                        y: h - 1,
+                        z: coneR * Math.sin(theta)
+                    };
                 }
-                return { x, y, z };
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 5 + Math.random() * 4;
+                return {
+                    x: Math.cos(angle) * radius,
+                    y: -2 + (Math.random() * 2),
+                    z: Math.sin(angle) * radius
+                };
             },
-            fireworks: (i) => {
+            fireworks: (i, count) => {
                 const r = Math.random() * 20;
                 const theta = Math.random() * Math.PI * 2;
                 const phi = Math.acos(2 * Math.random() - 1);
@@ -848,11 +897,11 @@
                     z: r * Math.cos(phi)
                 };
             },
-            dna: (i) => {
-                const t = (i / particleCount) * Math.PI * 20;
+            dna: (i, count) => {
+                const t = (i / count) * Math.PI * 20;
                 const radius = 5;
                 const height = 20;
-                const y = (i / particleCount) * height - height/2;
+                const y = (i / count) * height - height/2;
                 let x = Math.cos(t) * radius;
                 let z = Math.sin(t) * radius;
                 if (i % 2 === 0) {
@@ -869,84 +918,173 @@
         };
 
         function updateTargetPositions(shapeName) {
-            const func = Shapes[shapeName];
-            for (let i = 0; i < particleCount; i++) {
-                const pos = func(i);
-                targetPositions[i * 3] = pos.x;
-                targetPositions[i * 3 + 1] = pos.y;
-                targetPositions[i * 3 + 2] = pos.z;
+            const shapeFunc = ParticleShapes[shapeName];
+            if (!shapeFunc) return;
+
+            for (let i = 0; i < GameState.particleCount; i++) {
+                const pos = shapeFunc(i, GameState.particleCount);
+                GameState.targetPositions[i * 3] = pos.x;
+                GameState.targetPositions[i * 3 + 1] = pos.y;
+                GameState.targetPositions[i * 3 + 2] = pos.z;
             }
+            GameState.currentShape = shapeName;
         }
 
-        window.setShape = (name) => {
-            currentShape = name;
-            updateTargetPositions(name);
-            document.querySelectorAll('.shape-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-        };
-
-        document.getElementById('colorPicker').addEventListener('input', (e) => {
-            particleMaterial.color.set(e.target.value);
-        });
-
         function animateParticles() {
-            if (!gameRunning) return;
+            if (!GameState.isRunning || GameState.currentMode !== 'particles') return;
             requestAnimationFrame(animateParticles);
 
-            const positionsArr = particles.geometry.attributes.position.array;
-            particles.rotation.y += 0.002;
+            if (!GameState.particles) return;
 
-            if (isHandDetected) {
-                particles.rotation.y += (handX - 0.5) * 0.08;
-                particles.rotation.x += (handY - 0.5) * 0.08;
-            }
-
-            // 增强粒子响应：手势控制的缩放因子变化更大
-            const speed = 0.06;
-            let scaleFactor = 0.2 + (handOpenness * 1.5); // 从0.2到1.7，范围更大
+            const positions = GameState.particles.geometry.attributes.position.array;
             
-            if (currentShape === 'fireworks') {
-                scaleFactor = handOpenness * 3.5; // 烟花效果更夸张
+            // 旋转
+            GameState.particles.rotation.y += 0.002;
+            if (GameState.isHandDetected) {
+                GameState.particles.rotation.y += (GameState.handX - 0.5) * 0.08;
+                GameState.particles.rotation.x += (GameState.handY - 0.5) * 0.08;
             }
 
-            for (let i = 0; i < particleCount; i++) {
+            // 粒子更新
+            const speed = 0.06;
+            let scale = 0.2 + (GameState.handOpenness * 1.5);
+            if (GameState.currentShape === 'fireworks') {
+                scale = GameState.handOpenness * 3.5;
+            }
+
+            for (let i = 0; i < GameState.particleCount; i++) {
                 const px = i * 3;
                 const py = i * 3 + 1;
                 const pz = i * 3 + 2;
 
-                const tx = targetPositions[px] * scaleFactor;
-                const ty = targetPositions[py] * scaleFactor;
-                const tz = targetPositions[pz] * scaleFactor;
+                const tx = GameState.targetPositions[px] * scale;
+                const ty = GameState.targetPositions[py] * scale;
+                const tz = GameState.targetPositions[pz] * scale;
 
-                positionsArr[px] += (tx - positionsArr[px]) * speed;
-                positionsArr[py] += (ty - positionsArr[py]) * speed;
-                positionsArr[pz] += (tz - positionsArr[pz]) * speed;
+                positions[px] += (tx - positions[px]) * speed;
+                positions[py] += (ty - positions[py]) * speed;
+                positions[pz] += (tz - positions[pz]) * speed;
             }
 
-            particles.geometry.attributes.position.needsUpdate = true;
-            renderer.render(scene, threeCamera);
+            GameState.particles.geometry.attributes.position.needsUpdate = true;
+            GameState.renderer.render(GameState.scene, GameState.camera);
         }
 
-        // ============ 2D Canvas 游戏系统 ============
-        const gameCanvas = document.getElementById('gameCanvas');
-        const ctx = gameCanvas.getContext('2d');
-        let gameObjects = [];
-        let score = 0;
-        let prevFrame = null;
-        let handPosition = { x: 0, y: 0, active: false };
+        // ============ MediaPipe 手势检测 ============
+        async function initHandTracking() {
+            if (!window.Hands) {
+                throw new Error('MediaPipe Hands 未加载');
+            }
 
-        // 游戏对象类
+            GameState.hands = new Hands({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
+                }
+            });
+
+            GameState.hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            GameState.hands.onResults(onHandsResults);
+            console.log('✅ MediaPipe Hands 初始化成功');
+        }
+
+        function onHandsResults(results) {
+            if (!GameState.isRunning) return;
+
+            const statusDot = document.getElementById('handStatus');
+            const statusText = document.getElementById('statusText');
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                GameState.isHandDetected = true;
+                statusDot.classList.add('active');
+
+                GameState.handX = landmarks[9].x;
+                GameState.handY = landmarks[9].y;
+
+                const wrist = landmarks[0];
+                const tips = [4, 8, 12, 16, 20];
+                let totalDist = 0;
+
+                tips.forEach(idx => {
+                    const tip = landmarks[idx];
+                    const dx = tip.x - wrist.x;
+                    const dy = tip.y - wrist.y;
+                    totalDist += Math.sqrt(dx * dx + dy * dy);
+                });
+
+                const avgDist = totalDist / 5;
+                const minOpen = 0.15;
+                const maxOpen = 0.4;
+                let openness = (avgDist - minOpen) / (maxOpen - minOpen);
+                GameState.handOpenness = Math.max(0, Math.min(1, openness));
+
+                statusText.textContent = GameState.handOpenness > 0.6 ? '张开 (扩散)' : '握拳 (聚拢)';
+            } else {
+                GameState.isHandDetected = false;
+                statusDot.classList.remove('active');
+                statusText.textContent = '未检测到手势';
+                GameState.handOpenness += (1 - GameState.handOpenness) * 0.05;
+            }
+        }
+
+        async function startVideoStream() {
+            try {
+                GameState.stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    }
+                });
+
+                GameState.video = document.getElementById('webcam');
+                GameState.video.srcObject = GameState.stream;
+                
+                await new Promise((resolve, reject) => {
+                    GameState.video.onloadedmetadata = resolve;
+                    GameState.video.onerror = reject;
+                    setTimeout(() => reject(new Error('视频加载超时')), 10000);
+                });
+
+                GameState.video.classList.add('active');
+                console.log('✅ 摄像头启动成功');
+            } catch (error) {
+                console.error('摄像头启动失败:', error);
+                throw new Error('无法访问摄像头，请确保已授予摄像头权限');
+            }
+        }
+
+        async function processVideoFrame() {
+            if (!GameState.isRunning || !GameState.video || !GameState.hands) return;
+
+            try {
+                await GameState.hands.send({ image: GameState.video });
+            } catch (error) {
+                console.error('处理视频帧失败:', error);
+            }
+
+            if (GameState.isRunning) {
+                requestAnimationFrame(processVideoFrame);
+            }
+        }
+
+        // ============ 2D Canvas 游戏 ============
         class GameObject {
             constructor(x, y, type) {
                 this.x = x;
                 this.y = y;
                 this.type = type;
                 this.vx = (Math.random() - 0.5) * 3;
-                this.vy = (Math.random() - 0.5) * 3;
+                this.vy = type === 'balloon' ? -2 : (Math.random() - 0.5) * 3;
                 this.size = 50 + Math.random() * 30;
                 this.rotation = Math.random() * Math.PI * 2;
                 this.rotationSpeed = (Math.random() - 0.5) * 0.15;
-                this.grabbed = false;
                 this.popped = false;
                 this.opacity = 1;
             }
@@ -958,7 +1096,6 @@
                 }
 
                 if (this.type === 'balloon') {
-                    this.vy = -2;
                     this.y += this.vy;
                     if (this.y < -this.size) {
                         this.y = height + this.size;
@@ -1007,35 +1144,31 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 
-                const emoji = this.type === 'sunflower' ? '🌻' : 
-                              this.type === 'balloon' ? '🎈' : 
-                              ['🍎', '🍊', '🍌', '🍉'][Math.floor(Math.random() * 4)];
-                ctx.fillText(emoji, 0, 0);
-                
-                if (this.grabbed) {
-                    ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)';
-                    ctx.lineWidth = 4;
-                    ctx.beginPath();
-                    ctx.arc(0, 0, this.size * 0.7, 0, Math.PI * 2);
-                    ctx.stroke();
-                }
+                const emojis = {
+                    sunflower: '🌻',
+                    balloon: '🎈',
+                    fruit: ['🍎', '🍊', '🍌', '🍉'][Math.floor(Math.random() * 4)]
+                };
+                ctx.fillText(emojis[this.type] || '🌻', 0, 0);
                 
                 ctx.restore();
             }
 
-            checkHit(handX, handY, radius) {
-                const dx = this.x - handX;
-                const dy = this.y - handY;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                return dist < radius;
+            checkHit(x, y, radius) {
+                const dx = this.x - x;
+                const dy = this.y - y;
+                return Math.sqrt(dx * dx + dy * dy) < radius;
             }
         }
 
         function initCanvasGame(type) {
-            gameObjects = [];
-            score = 0;
-            const width = gameCanvas.width;
-            const height = gameCanvas.height;
+            const canvas = document.getElementById('gameCanvas');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            GameState.gameObjects = [];
+            GameState.score = 0;
+            document.getElementById('scoreValue').textContent = '0';
 
             const count = type === 'balloon' ? 15 : 20;
             for (let i = 0; i < count; i++) {
@@ -1043,23 +1176,23 @@
                 const y = type === 'balloon' ? height + Math.random() * height : 
                           type === 'fruit' ? -Math.random() * height :
                           Math.random() * (height * 0.4) + 50;
-                gameObjects.push(new GameObject(x, y, type));
+                GameState.gameObjects.push(new GameObject(x, y, type));
             }
         }
 
         function detectMotion() {
-            if (!video || video.readyState !== 4) return null;
+            if (!GameState.video || GameState.video.readyState !== 4) return null;
 
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = 160;
-            tempCanvas.height = 120;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 160;
+            canvas.height = 120;
             
-            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-            const currentFrame = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            ctx.drawImage(GameState.video, 0, 0, canvas.width, canvas.height);
+            const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
             
-            if (!prevFrame) {
-                prevFrame = currentFrame;
+            if (!GameState.prevFrame) {
+                GameState.prevFrame = currentFrame;
                 return null;
             }
             
@@ -1069,17 +1202,17 @@
             const threshold = 30;
             const blockSize = 10;
             
-            for (let y = 0; y < tempCanvas.height; y += blockSize) {
-                for (let x = 0; x < tempCanvas.width; x += blockSize) {
+            for (let y = 0; y < canvas.height; y += blockSize) {
+                for (let x = 0; x < canvas.width; x += blockSize) {
                     let blockDiff = 0;
                     let pixels = 0;
                     
-                    for (let dy = 0; dy < blockSize && y + dy < tempCanvas.height; dy++) {
-                        for (let dx = 0; dx < blockSize && x + dx < tempCanvas.width; dx++) {
-                            const i = ((y + dy) * tempCanvas.width + (x + dx)) * 4;
-                            const diff = Math.abs(currentFrame.data[i] - prevFrame.data[i]) +
-                                       Math.abs(currentFrame.data[i + 1] - prevFrame.data[i + 1]) +
-                                       Math.abs(currentFrame.data[i + 2] - prevFrame.data[i + 2]);
+                    for (let dy = 0; dy < blockSize && y + dy < canvas.height; dy++) {
+                        for (let dx = 0; dx < blockSize && x + dx < canvas.width; dx++) {
+                            const i = ((y + dy) * canvas.width + (x + dx)) * 4;
+                            const diff = Math.abs(currentFrame.data[i] - GameState.prevFrame.data[i]) +
+                                       Math.abs(currentFrame.data[i + 1] - GameState.prevFrame.data[i + 1]) +
+                                       Math.abs(currentFrame.data[i + 2] - GameState.prevFrame.data[i + 2]);
                             blockDiff += diff;
                             pixels++;
                         }
@@ -1095,11 +1228,12 @@
                 }
             }
             
-            prevFrame = currentFrame;
+            GameState.prevFrame = currentFrame;
             
             if (maxDiff > threshold) {
-                const scaleX = gameCanvas.width / tempCanvas.width;
-                const scaleY = gameCanvas.height / tempCanvas.height;
+                const gameCanvas = document.getElementById('gameCanvas');
+                const scaleX = gameCanvas.width / canvas.width;
+                const scaleY = gameCanvas.height / canvas.height;
                 
                 return {
                     x: maxX * scaleX,
@@ -1112,102 +1246,63 @@
         }
 
         function animateCanvasGame() {
-            if (!gameRunning || currentGameMode === 'particles') return;
+            if (!GameState.isRunning || GameState.currentMode === 'particles') return;
             requestAnimationFrame(animateCanvasGame);
 
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
             const motion = detectMotion();
             const handTracker = document.getElementById('handTracker');
             
             if (motion) {
-                handPosition = { x: motion.x, y: motion.y, active: true };
+                GameState.handPosition = { x: motion.x, y: motion.y, active: true };
                 handTracker.classList.add('active');
                 handTracker.style.left = (motion.x - 40) + 'px';
                 handTracker.style.top = (motion.y - 40) + 'px';
             } else {
-                handPosition.active = false;
+                GameState.handPosition.active = false;
                 handTracker.classList.remove('active');
             }
 
-            ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            if (handPosition.active) {
+            if (GameState.handPosition.active) {
                 const gradient = ctx.createRadialGradient(
-                    handPosition.x, handPosition.y, 0,
-                    handPosition.x, handPosition.y, 100
+                    GameState.handPosition.x, GameState.handPosition.y, 0,
+                    GameState.handPosition.x, GameState.handPosition.y, 100
                 );
                 gradient.addColorStop(0, 'rgba(251, 191, 36, 0.4)');
                 gradient.addColorStop(1, 'rgba(251, 191, 36, 0)');
                 ctx.fillStyle = gradient;
                 ctx.beginPath();
-                ctx.arc(handPosition.x, handPosition.y, 100, 0, Math.PI * 2);
+                ctx.arc(GameState.handPosition.x, GameState.handPosition.y, 100, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            gameObjects = gameObjects.filter(obj => obj.opacity > 0);
+            GameState.gameObjects = GameState.gameObjects.filter(obj => obj.opacity > 0);
 
-            gameObjects.forEach(obj => {
-                obj.update(gameCanvas.width, gameCanvas.height);
+            GameState.gameObjects.forEach(obj => {
+                obj.update(canvas.width, canvas.height);
 
-                if (handPosition.active && !obj.popped && obj.checkHit(handPosition.x, handPosition.y, 100)) {
+                if (GameState.handPosition.active && !obj.popped && 
+                    obj.checkHit(GameState.handPosition.x, GameState.handPosition.y, 100)) {
                     obj.popped = true;
-                    score += 10;
-                    document.getElementById('scoreValue').textContent = score;
+                    GameState.score += 10;
+                    document.getElementById('scoreValue').textContent = GameState.score;
                     showMessage('✨ +10', 500);
                 }
 
                 obj.draw(ctx);
             });
-
-            if (gameObjects.length === 0 && currentGameMode === 'sunflower') {
-                showMessage('🏆 全部收集完成！', 3000);
-            }
         }
 
-        // ============ MediaPipe Hands ============
-        function onHandsResults(results) {
-            if (!gameRunning) return;
-
-            const statusDot = document.getElementById('handStatus');
-            const statusText = document.getElementById('statusText');
-
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                isHandDetected = true;
-                statusDot.classList.add('active');
-
-                handX = landmarks[9].x;
-                handY = landmarks[9].y;
-
-                const wrist = landmarks[0];
-                const tips = [4, 8, 12, 16, 20];
-                let totalDist = 0;
-
-                tips.forEach(idx => {
-                    const tip = landmarks[idx];
-                    const d = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
-                    totalDist += d;
-                });
-
-                const avgDist = totalDist / 5;
-                const minOpen = 0.15;
-                const maxOpen = 0.4;
-                let openness = (avgDist - minOpen) / (maxOpen - minOpen);
-                handOpenness = Math.max(0, Math.min(1, openness));
-
-                statusText.textContent = handOpenness > 0.6 ? '张开 (扩散)' : '握拳 (聚拢)';
-            } else {
-                isHandDetected = false;
-                statusDot.classList.remove('active');
-                statusText.textContent = '未检测到手势';
-                handOpenness += (1 - handOpenness) * 0.05;
-            }
-        }
-
-        // ============ 游戏控制 ============
+        // ============ UI 控制 ============
         function selectGame(mode) {
-            currentGameMode = mode;
+            GameState.currentMode = mode;
             
-            document.querySelectorAll('.game-option').forEach(opt => opt.classList.remove('active'));
+            document.querySelectorAll('.game-option').forEach(opt => {
+                opt.classList.remove('active');
+            });
             event.target.closest('.game-option').classList.add('active');
 
             const threeContainer = document.getElementById('threeContainer');
@@ -1226,110 +1321,121 @@
                 particleControls.style.display = 'none';
                 scorePanel.style.display = 'block';
                 
-                if (gameRunning) {
+                if (GameState.isRunning) {
+                    const container = canvas.parentElement;
+                    const rect = container.getBoundingClientRect();
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
                     initCanvasGame(mode);
                 }
             }
         }
 
         async function startGame() {
+            if (GameState.isRunning) {
+                showMessage('⚠️ 游戏已在运行中', 1500);
+                return;
+            }
+
+            const startBtn = document.getElementById('startBtn');
+            startBtn.disabled = true;
+            startBtn.textContent = '正在启动...';
+
             try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                        facingMode: 'user'
-                    }
-                });
+                showMessage('🎬 正在初始化...', 2000);
 
-                video = document.getElementById('webcam');
-                video.srcObject = stream;
+                // 初始化Three.js
+                if (!GameState.renderer) {
+                    initThreeJS();
+                }
 
-                await new Promise(resolve => {
-                    video.onloadedmetadata = resolve;
-                });
+                // 启动摄像头
+                await startVideoStream();
 
-                const container = currentGameMode === 'particles' ? 
+                // 初始化手势追踪
+                if (!GameState.hands) {
+                    await initHandTracking();
+                }
+
+                // 调整容器大小
+                const container = GameState.currentMode === 'particles' ? 
                     document.getElementById('threeContainer') : 
                     document.getElementById('gameCanvas').parentElement;
                 
                 const rect = container.getBoundingClientRect();
                 
-                if (currentGameMode === 'particles') {
-                    if (!renderer) initThreeJS();
-                    renderer.setSize(rect.width, rect.height);
-                    threeCamera.aspect = rect.width / rect.height;
-                    threeCamera.updateProjectionMatrix();
+                if (GameState.currentMode === 'particles') {
+                    GameState.renderer.setSize(rect.width, rect.height);
+                    GameState.camera.aspect = rect.width / rect.height;
+                    GameState.camera.updateProjectionMatrix();
                 } else {
-                    gameCanvas.width = rect.width;
-                    gameCanvas.height = rect.height;
-                    initCanvasGame(currentGameMode);
+                    const canvas = document.getElementById('gameCanvas');
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                    initCanvasGame(GameState.currentMode);
                 }
 
-                hands = new Hands({
-                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-                });
+                GameState.isRunning = true;
 
-                hands.setOptions({
-                    maxNumHands: 1,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.5,
-                    minTrackingConfidence: 0.5
-                });
-
-                hands.onResults(onHandsResults);
-
-                camera = new Camera(video, {
-                    onFrame: async () => {
-                        if (gameRunning) await hands.send({ image: video });
-                    },
-                    width: 320,
-                    height: 240
-                });
-
-                camera.start();
-                gameRunning = true;
-
-                if (currentGameMode === 'particles') {
+                // 开始动画循环
+                if (GameState.currentMode === 'particles') {
                     animateParticles();
                 } else {
                     animateCanvasGame();
                 }
 
+                // 开始处理视频帧
+                processVideoFrame();
+
                 showMessage('🎮 游戏开始！', 2000);
-            } catch (err) {
-                alert('无法访问摄像头：' + err.message);
-                console.error(err);
+                startBtn.textContent = '🎮 启动游戏';
+                console.log('✅ 游戏启动成功');
+
+            } catch (error) {
+                console.error('游戏启动失败:', error);
+                showError(error.message || '启动失败，请刷新页面重试');
+                GameState.isRunning = false;
+                startBtn.textContent = '🎮 启动游戏';
+            } finally {
+                startBtn.disabled = false;
             }
         }
 
         function stopGame() {
-            gameRunning = false;
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
+            if (!GameState.isRunning) {
+                showMessage('⚠️ 游戏未运行', 1500);
+                return;
             }
-            if (camera) {
-                camera.stop();
-                camera = null;
+
+            GameState.isRunning = false;
+            
+            if (GameState.stream) {
+                GameState.stream.getTracks().forEach(track => track.stop());
+                GameState.stream = null;
             }
+            
+            if (GameState.video) {
+                GameState.video.srcObject = null;
+                GameState.video.classList.remove('active');
+            }
+
             document.getElementById('handTracker').classList.remove('active');
             showMessage('⏸️ 游戏已停止', 1500);
         }
 
         function resetGame() {
-            if (!gameRunning) {
-                alert('请先启动游戏！');
+            if (!GameState.isRunning) {
+                showMessage('⚠️ 请先启动游戏', 1500);
                 return;
             }
             
-            score = 0;
+            GameState.score = 0;
             document.getElementById('scoreValue').textContent = '0';
             
-            if (currentGameMode === 'particles') {
-                updateTargetPositions(currentShape);
+            if (GameState.currentMode === 'particles') {
+                updateTargetPositions(GameState.currentShape);
             } else {
-                initCanvasGame(currentGameMode);
+                initCanvasGame(GameState.currentMode);
             }
             
             showMessage('🔄 游戏已重置', 1500);
@@ -1344,51 +1450,95 @@
             }, duration);
         }
 
-        // ============ 页面功能 ============
-        window.addEventListener('scroll', () => {
-            const scrollTop = document.querySelector('.scroll-top');
-            if (window.pageYOffset > 300) {
-                scrollTop.classList.add('show');
-            } else {
-                scrollTop.classList.remove('show');
-            }
-        });
-
-        function scrollToTop() {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+        function showError(text) {
+            const errorMsg = document.getElementById('errorMessage');
+            errorMsg.textContent = text;
+            errorMsg.classList.add('show');
+            setTimeout(() => {
+                errorMsg.classList.remove('show');
+            }, 5000);
         }
 
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function(e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // ============ 事件监听 ============
+        document.addEventListener('DOMContentLoaded', () => {
+            // 游戏选择
+            document.querySelectorAll('.game-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    selectGame(this.dataset.game);
+                });
+            });
+
+            // 控制按钮
+            document.getElementById('startBtn').addEventListener('click', startGame);
+            document.getElementById('stopBtn').addEventListener('click', stopGame);
+            document.getElementById('resetBtn').addEventListener('click', resetGame);
+
+            // 形状选择
+            document.querySelectorAll('.shape-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const shape = this.dataset.shape;
+                    updateTargetPositions(shape);
+                    document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+
+            // 颜色选择
+            document.getElementById('colorPicker').addEventListener('input', (e) => {
+                if (GameState.particles) {
+                    GameState.particles.material.color.set(e.target.value);
                 }
             });
-        });
 
-        window.addEventListener('resize', () => {
-            if (!gameRunning) return;
-            
-            const container = currentGameMode === 'particles' ? 
-                document.getElementById('threeContainer') : 
-                document.getElementById('gameCanvas').parentElement;
-            
-            const rect = container.getBoundingClientRect();
-            
-            if (currentGameMode === 'particles' && renderer) {
-                renderer.setSize(rect.width, rect.height);
-                threeCamera.aspect = rect.width / rect.height;
-                threeCamera.updateProjectionMatrix();
-            } else {
-                gameCanvas.width = rect.width;
-                gameCanvas.height = rect.height;
-            }
-        });
+            // 滚动按钮
+            window.addEventListener('scroll', () => {
+                const scrollTop = document.getElementById('scrollTop');
+                if (window.pageYOffset > 300) {
+                    scrollTop.classList.add('show');
+                } else {
+                    scrollTop.classList.remove('show');
+                }
+            });
 
-        console.log('%c🌻 XRK-AGT 体感游戏平台', 'font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 10px 20px; border-radius: 8px;');
-        console.log('%c🎮 选择游戏并点击"启动游戏"开始体验！', 'font-size: 14px; color: #fbbf24;');
+            document.getElementById('scrollTop').addEventListener('click', () => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+
+            // 平滑滚动
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                });
+            });
+
+            // 窗口调整
+            window.addEventListener('resize', () => {
+                if (!GameState.isRunning) return;
+                
+                const container = GameState.currentMode === 'particles' ? 
+                    document.getElementById('threeContainer') : 
+                    document.getElementById('gameCanvas').parentElement;
+                
+                const rect = container.getBoundingClientRect();
+                
+                if (GameState.currentMode === 'particles' && GameState.renderer) {
+                    GameState.renderer.setSize(rect.width, rect.height);
+                    GameState.camera.aspect = rect.width / rect.height;
+                    GameState.camera.updateProjectionMatrix();
+                } else {
+                    const canvas = document.getElementById('gameCanvas');
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                }
+            });
+
+            console.log('%c🌻 XRK-AGT 体感游戏平台', 'font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c🎮 选择游戏并点击"启动游戏"开始体验！', 'font-size: 14px; color: #fbbf24;');
+        });
     </script>
 </body>
 </html>
