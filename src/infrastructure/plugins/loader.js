@@ -1327,11 +1327,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 保存计数
-   * @param {string} type - 计数类型
-   * @param {string} groupId - 群组ID
-   */
   async saveCount(type, groupId = '') {
     try {
       const base = groupId ? `Yz:count:group:${groupId}:` : 'Yz:count:'
@@ -1368,10 +1363,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 热更新插件
-   * @param {string} key - 插件键
-   */
   async changePlugin(key) {
     try {
       const timestamp = moment().format('x')
