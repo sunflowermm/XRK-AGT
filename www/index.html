@@ -10,7 +10,10 @@
                              window.location.hostname === '127.0.0.1' || 
                              window.location.hostname === '[::1]' ||
                              window.location.hostname === '';
+        
+        // 如果是本地访问，加载游戏相关脚本
         if (window.isLocalhost) {
+            // 加载游戏相关脚本
             const scripts = [
                 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
                 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js',
@@ -18,12 +21,31 @@
                 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
                 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js'
             ];
-            scripts.forEach(src => {
+            
+            // 按顺序加载脚本，确保Three.js先加载
+            function loadScripts(index) {
+                if (index >= scripts.length) {
+                    // 所有脚本加载完成后，等待一小段时间确保初始化完成
+                    setTimeout(() => {
+                        if (typeof THREE !== 'undefined' && typeof Hands !== 'undefined') {
+                            window.gameScriptsLoaded = true;
+                            // 触发自定义事件通知脚本已加载
+                            window.dispatchEvent(new Event('gameScriptsLoaded'));
+                        }
+                    }, 100);
+                    return;
+                }
                 const script = document.createElement('script');
-                script.src = src;
+                script.src = scripts[index];
                 script.crossOrigin = 'anonymous';
+                script.onload = () => loadScripts(index + 1);
+                script.onerror = () => {
+                    console.error('Failed to load script:', scripts[index]);
+                    loadScripts(index + 1); // 继续加载其他脚本
+                };
                 document.head.appendChild(script);
-            });
+            }
+            loadScripts(0);
         }
     </script>
     <style>
@@ -715,18 +737,79 @@
         }
 
         // ============ 初始化 ============
-        document.addEventListener('DOMContentLoaded', () => {
+        function initializeGame() {
+            console.log('Initializing game, isLocalhost:', isLocalhost);
+            
             // 根据访问来源显示/隐藏游戏部分
             if (!isLocalhost) {
+                console.log('Not localhost, hiding game section');
                 const gameSection = document.getElementById('game');
                 const gameNavItem = document.getElementById('gameNavItem');
                 if (gameSection) gameSection.style.display = 'none';
                 if (gameNavItem) gameNavItem.style.display = 'none';
+                return;
+            }
+            
+            // 显示游戏部分和导航项（本地访问）
+            console.log('Localhost detected, showing game section');
+            const gameSection = document.getElementById('game');
+            const gameNavItem = document.getElementById('gameNavItem');
+            if (gameSection) {
+                gameSection.style.display = ''; // 移除display:none
+                console.log('Game section displayed');
             } else {
+                console.error('Game section not found!');
+            }
+            if (gameNavItem) {
+                gameNavItem.style.display = ''; // 显示导航项
+                console.log('Game nav item displayed');
+            } else {
+                console.error('Game nav item not found!');
+            }
+            
+            // 检查Three.js是否已加载
+            if (typeof THREE === 'undefined') {
+                // 等待脚本加载完成
+                const checkScripts = () => {
+                    if (typeof THREE !== 'undefined' && typeof Hands !== 'undefined') {
+                        try {
+                            initThreeJS();
+                            animateParticles(performance.now());
+                            initMediaPipe();
+                        } catch (error) {
+                            console.error('Game initialization error:', error);
+                        }
+                    } else {
+                        setTimeout(checkScripts, 100);
+                    }
+                };
+                // 监听脚本加载完成事件
+                window.addEventListener('gameScriptsLoaded', () => {
+                    try {
+                        initThreeJS();
+                        animateParticles(performance.now());
+                        initMediaPipe();
+                    } catch (error) {
+                        console.error('Game initialization error:', error);
+                    }
+                }, { once: true });
+                // 同时使用轮询作为备用
+                checkScripts();
+                return;
+            }
+            
+            // Three.js已加载，直接初始化
+            try {
                 initThreeJS();
                 animateParticles(performance.now());
                 initMediaPipe();
+            } catch (error) {
+                console.error('Game initialization error:', error);
             }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeGame();
 
             // 只在本地访问时绑定游戏相关事件
             if (isLocalhost) {
