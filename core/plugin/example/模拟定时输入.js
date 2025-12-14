@@ -1,4 +1,4 @@
-import PluginsLoader from '../../../src/infrastructure/plugins/loader.js';
+import PluginsLoader from '#infrastructure/plugins/loader.js'
 
 export class DailySignIn extends plugin {
     constructor() {
@@ -8,23 +8,22 @@ export class DailySignIn extends plugin {
             event: 'onebot.message',
             priority: 5,
             rule: []
-        });
+        })
         this.task = {
             name: '每日12点模拟消息发送',
             cron: '0 0 12 * * *',
             fnc: () => {
-                this.sendDailyMessages();
+                this.sendDailyMessages()
             },
             log : false
-        };
+        }
     }
 
-    // 发送每日签到消息
     async sendDailyMessages() {
-        const messages = ['#你是谁' ];
+        const messages = ['#你是谁']
         for (const msg of messages) {
-            const fakeMsgEvent = this.createMessageEvent(msg);
-            await PluginsLoader.deal(fakeMsgEvent); // 处理模拟消息
+            const fakeMsgEvent = this.createMessageEvent(msg)
+            await PluginsLoader.deal(fakeMsgEvent)
         }
     }
 
@@ -67,9 +66,9 @@ export class DailySignIn extends plugin {
                 getAvatarUrl: () => `https://q1.qlogo.cn/g?b=qq&s=0&nk=${user_id}`
             },
             reply: async (replyMsg) => {
-                logger.info(`模拟回复：${JSON.stringify(replyMsg)}`);
-                return { message_id: `test_${Date.now()}`, time };
+                logger.info(`模拟回复：${JSON.stringify(replyMsg)}`)
+                return { message_id: `test_${Date.now()}`, time }
             }
-        };
+        }
     }
 }

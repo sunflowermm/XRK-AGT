@@ -1,4 +1,4 @@
-import cfg from "../../../src/infrastructure/config/config.js"
+import cfg from '#infrastructure/config/config.js'
 import fs from "node:fs/promises"
 import path from "node:path"
 import lodash from "lodash"

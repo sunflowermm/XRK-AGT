@@ -386,9 +386,9 @@ class PluginsLoader {
    * @param {Object} e - 事件对象
    */
   setupReply(e) {
-    e.replyNew = e.reply
+      e.replyNew = e.reply
     
-    e.reply = async (msg = '', quote = false, data = {}) => {
+      e.reply = async (msg = '', quote = false, data = {}) => {
       !msg && (() => false)()
       
       (e.isDevice || e.isStdin) && (async () => {
@@ -405,49 +405,49 @@ class PluginsLoader {
       try {
         e.isGroup && e.group && (e.group.mute_left > 0 || (e.group.all_muted && !e.group.is_admin && !e.group.is_owner)) && (() => false)()
 
-        let { recallMsg = 0, at = '' } = data
+          let { recallMsg = 0, at = '' } = data
         !Array.isArray(msg) && (msg = [msg])
 
         at && e.isGroup && segment && (() => {
-          const atId = at === true ? e.user_id : at
-          const atName = at === true ? e.sender?.card : ''
-          msg.unshift(segment.at(atId, lodash.truncate(atName, { length: 10 })), '\n')
+            const atId = at === true ? e.user_id : at
+            const atName = at === true ? e.sender?.card : ''
+            msg.unshift(segment.at(atId, lodash.truncate(atName, { length: 10 })), '\n')
         })()
 
         quote && e.message_id && segment && (() => {
-          msg.unshift(segment.reply(e.message_id))
+            msg.unshift(segment.reply(e.message_id))
         })()
 
-        let msgRes
-        try {
-          msgRes = await e.replyNew(msg, false)
-        } catch (err) {
-          logger.error(`发送消息错误: ${err.message}`)
-          const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
+          let msgRes
+          try {
+            msgRes = await e.replyNew(msg, false)
+          } catch (err) {
+            logger.error(`发送消息错误: ${err.message}`)
+            const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
           textMsg && (async () => {
-            try {
-              msgRes = await e.replyNew(textMsg)
-            } catch (innerErr) {
-              logger.debug(`纯文本发送也失败: ${innerErr.message}`)
-              return { error: err }
-            }
+              try {
+                msgRes = await e.replyNew(textMsg)
+              } catch (innerErr) {
+                logger.debug(`纯文本发送也失败: ${innerErr.message}`)
+                return { error: err }
+              }
           })()
-        }
+          }
 
         !e.isGuild && recallMsg > 0 && msgRes?.message_id && (() => {
-          const target = e.isGroup ? e.group : e.friend
+            const target = e.isGroup ? e.group : e.friend
           target?.recallMsg && setTimeout(() => {
-            target.recallMsg(msgRes.message_id)
+                target.recallMsg(msgRes.message_id)
             e.message_id && target.recallMsg(e.message_id)
-          }, recallMsg * 1000)
+              }, recallMsg * 1000)
         })()
 
-        this.count(e, 'send', msg)
-        return msgRes
-      } catch (error) {
-        logger.error('回复消息处理错误')
-        logger.error(error)
-        return { error: error.message }
+          this.count(e, 'send', msg)
+          return msgRes
+        } catch (error) {
+          logger.error('回复消息处理错误')
+          logger.error(error)
+          return { error: error.message }
       }
     }
   }

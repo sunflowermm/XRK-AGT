@@ -1,7 +1,7 @@
 import os from 'os'
 import moment from 'moment'
 import * as si from 'systeminformation'
-import { createRequire } from "module"
+import { createRequire } from 'module'
 
 const require = createRequire(import.meta.url)
 
@@ -69,10 +69,10 @@ export class stattools extends plugin {
       ])
 
       const bot = Bot[e.self_id] || Bot
-      const runtimeSeconds = Math.floor(Date.now() / 1000 - bot.stat.start_time)
+        const runtimeSeconds = Math.floor(Date.now() / 1000 - bot.stat.start_time)
       const botRuntime = this.formatTime(runtimeSeconds)
       
-      const loader = (await import('../../../src/infrastructure/plugins/loader.js')).default
+        const loader = (await import('#infrastructure/plugins/loader.js')).default
       const pluginCount = loader.priority.length + loader.extended.length
       const taskCount = loader.task.length
 
@@ -82,8 +82,8 @@ export class stattools extends plugin {
       
       const mainDisk = fsSize.find(fs => fs.mount === '/' || fs.mount === 'C:\\') || 
                        fsSize.reduce((prev, current) => 
-                         (current.size > prev.size) ? current : prev
-                       )
+          (current.size > prev.size) ? current : prev
+        )
       const activeNetwork = networkInterfaces.find(net => net.default) || networkInterfaces[0]
       
       const cpuUsage = currentLoad.currentLoad || 0
@@ -143,11 +143,11 @@ export class stattools extends plugin {
         `  定时任务：${taskCount}个`
       ]
 
-      msg.push('', `● 网络信息`)
-      msg.push(`  接口名称：${activeNetwork.iface}`)
-      msg.push(`  IPv4地址：${activeNetwork.ip4 || '无'}`)
-      msg.push(`  IPv6地址：${activeNetwork.ip6 || '无'}`)
-      msg.push(`  MAC地址：${activeNetwork.mac || '无'}`)
+        msg.push('', `● 网络信息`)
+        msg.push(`  接口名称：${activeNetwork.iface}`)
+        msg.push(`  IPv4地址：${activeNetwork.ip4 || '无'}`)
+        msg.push(`  IPv6地址：${activeNetwork.ip6 || '无'}`)
+        msg.push(`  MAC地址：${activeNetwork.mac || '无'}`)
 
       await e.reply(msg.join('\n'))
       return true

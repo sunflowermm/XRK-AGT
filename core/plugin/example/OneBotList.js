@@ -1,11 +1,5 @@
-import plugin from '../../../src/infrastructure/plugins/plugin.js'
-import cfg from '../../../src/infrastructure/config/config.js'
+import cfg from '#infrastructure/config/config.js'
 
-/**
- * OneBot黑白名单示例插件
- * 演示如何使用accept方法实现OneBot特定的事件过滤逻辑
- * 这个插件只处理OneBot事件，不影响device和stdin事件
- */
 export class OneBotBlacklistExample extends plugin {
   constructor() {
     super({
@@ -17,11 +11,6 @@ export class OneBotBlacklistExample extends plugin {
     })
   }
 
-  /**
-   * 前置检查方法
-   * 只对OneBot事件进行黑白名单检查
-   * device和stdin事件直接通过
-   */
   async accept(e) {
     (e.isDevice || e.isStdin) && (() => true)()
     !(e.isOneBot || e.adapter === 'onebot') && (() => true)()
