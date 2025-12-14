@@ -216,10 +216,13 @@ export class update extends plugin {
     let cm = 'git rev-parse --short HEAD'
     plugin && (cm = `cd "core/${plugin}" && ${cm}`)
 
-    const commitId = await execSync(cm, { encoding: 'utf-8' }).catch(error => {
+    let commitId = ''
+    try {
+      commitId = execSync(cm, { encoding: 'utf-8' })
+    } catch (error) {
       logger.error(`获取commit id失败: ${error}`)
-      return ''
-    })
+      commitId = ''
+    }
     return lodash.trim(commitId)
   }
 
@@ -232,10 +235,13 @@ export class update extends plugin {
     let cm = 'git log -1 --pretty=%cd --date=format:"%F %T"'
     plugin && (cm = `cd "core/${plugin}" && ${cm}`)
 
-    const time = await execSync(cm, { encoding: 'utf-8' }).catch(error => {
+    let time = ''
+    try {
+      time = execSync(cm, { encoding: 'utf-8' })
+    } catch (error) {
       logger.error(error.toString())
-      return '获取时间失败'
-    })
+      time = '获取时间失败'
+    }
     return lodash.trim(time)
   }
 
@@ -332,11 +338,14 @@ export class update extends plugin {
     let logCmd = 'git log -100 --pretty="%h||[%cd] %s" --date=format:"%F %T"'
     plugin && (logCmd = `cd "core/${plugin}" && ${logCmd}`)
 
-    const logAll = await execSync(logCmd, { encoding: 'utf-8' }).catch(async error => {
+    let logAll = ''
+    try {
+      logAll = execSync(logCmd, { encoding: 'utf-8' })
+    } catch (error) {
       logger.error(error.toString())
       await this.reply(error.toString())
       return false
-    })
+    }
 
     !logAll && (() => { return false })()
 
@@ -357,11 +366,14 @@ export class update extends plugin {
 
     let configCmd = 'git config -l'
     plugin && (configCmd = `cd "core/${plugin}" && ${configCmd}`)
-    
-    const config = await execSync(configCmd, { encoding: 'utf-8' }).catch(error => {
+
+    let config = ''
+    try {
+      config = execSync(configCmd, { encoding: 'utf-8' })
+    } catch (error) {
       logger.error(error.toString())
-      return ''
-    })
+      config = ''
+    }
     
     const repoUrl = config
       .match(/remote\..*\.url=.+/g)
