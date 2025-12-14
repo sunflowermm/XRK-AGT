@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url)
 const { exec, execSync } = require('child_process')
 
 let uping = false
+const updateLock = new Set()
 
 export class update extends plugin {
   constructor() {
@@ -22,7 +23,7 @@ export class update extends plugin {
           fnc: 'updateLog'
         },
         {
-          reg: '^#(强制)?更新',
+          reg: '^#(强制)?更新$',
           fnc: 'update'
         },
         {
@@ -44,21 +45,44 @@ export class update extends plugin {
 
   async update() {
     if (!this.e.isMaster) return false
-    if (uping) return this.reply('已有命令更新中..请勿重复操作')
     if (/详细|详情|面板|面版/.test(this.e.msg)) return false
 
-    this.updatedPlugins.clear()
-    const plugin = this.getPlugin()
-    if (plugin === false) return false
-
-    if (plugin === '') {
-      await this.updateMainAndXRK()
-    } else {
-      await this.runUpdate(plugin)
-      this.updatedPlugins.add(plugin)
+    if (uping) {
+      await this.reply('已有命令更新中..请勿重复操作')
+      return false
     }
 
-    if (this.isUp) setTimeout(() => this.restart(), 2000)
+    const eventId = this.e.event_id || `${this.e.self_id}_${Date.now()}`
+    if (updateLock.has(eventId)) {
+      return false
+    }
+
+    uping = true
+    updateLock.add(eventId)
+
+    try {
+      this.updatedPlugins.clear()
+      this.isUp = false
+      const plugin = this.getPlugin()
+      if (plugin === false) {
+        return false
+      }
+
+      if (plugin === '') {
+        await this.updateMainAndXRK()
+      } else {
+        await this.runUpdate(plugin)
+        this.updatedPlugins.add(plugin)
+      }
+
+      if (this.isUp) {
+        setTimeout(() => this.restart(), 2000)
+      }
+      return true
+    } finally {
+      uping = false
+      setTimeout(() => updateLock.delete(eventId), 3000)
+    }
   }
 
   async updateMainAndXRK() {
@@ -125,20 +149,20 @@ export class update extends plugin {
     let cm = 'git pull --no-rebase'
     let type = '更新'
     
-    this.e.msg.includes('强制') && (
-      type = '强制更新',
+    if (this.e.msg.includes('强制')) {
+      type = '强制更新'
       cm = `git reset --hard && git pull --rebase --allow-unrelated-histories`
-    )
-    plugin && (cm = `cd "core/${plugin}" && ${cm}`)
+    }
+    if (plugin) {
+      cm = `cd "core/${plugin}" && ${cm}`
+    }
 
     this.oldCommitId = await this.getcommitId(plugin)
     const targetName = plugin || this.typeName
     logger.mark(`${this.e.logFnc} 开始${type}：${targetName}`)
     await this.reply(`开始${type} ${targetName}`)
     
-    uping = true
     const ret = await this.execSync(cm)
-    uping = false
 
     if (ret.error) {
       logger.mark(`${this.e.logFnc} 更新失败：${targetName}`)
@@ -148,16 +172,18 @@ export class update extends plugin {
 
     const time = await this.getTime(plugin)
     const isAlreadyUp = /Already up|已经是最新/g.test(ret.stdout)
-    isAlreadyUp ? 
-      await this.reply(`${targetName} 已是最新\n最后更新时间：${time}`) :
-      (
-        await this.reply(`${targetName} 更新成功\n更新时间：${time}`),
-        this.isUp = true,
-        (async () => {
-          const updateLog = await this.getLog(plugin)
-          updateLog && await this.reply(updateLog)
-        })()
-      )
+    
+    if (isAlreadyUp) {
+      await this.reply(`${targetName} 已是最新\n最后更新时间：${time}`)
+    } else {
+      await this.reply(`${targetName} 更新成功\n更新时间：${time}`)
+      this.isUp = true
+      
+      const updateLog = await this.getLog(plugin)
+      if (updateLog) {
+        await this.reply(updateLog)
+      }
+    }
 
     logger.mark(`${this.e.logFnc} 最后更新时间：${time}`)
     return true
@@ -212,7 +238,7 @@ export class update extends plugin {
       return this.reply(`${msg}\n存在冲突：\n${errMsg}${stdout}\n请解决冲突后再更新，或者执行#强制更新，放弃本地修改`)
     }
 
-    return this.reply([errMsg, stdout])
+    return this.reply(`${msg}\n${errMsg}\n${stdout}`)
   }
 
   async updateAll() {
