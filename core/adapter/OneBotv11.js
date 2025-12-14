@@ -1295,13 +1295,10 @@ Bot.adapter.push(
       data.adapter = 'onebot'
       data.isOneBot = true
       
-      const onebotEvent = `onebot.${data.post_type}.${data.message_type}.${data.sub_type}`
-      const onebotEventSimple = `onebot.${data.post_type}.${data.message_type}`
-      const onebotEventBase = `onebot.${data.post_type}`
-      
+      // 只触发最具体的事件，事件监听器会处理
+      // 其他层级的事件由事件系统自动传播（如果需要）
+      const onebotEvent = `onebot.${data.post_type}`
       Bot.em(onebotEvent, data)
-      Bot.em(onebotEventSimple, data)
-      Bot.em(onebotEventBase, data)
     }
 
     /**
@@ -1379,8 +1376,7 @@ Bot.adapter.push(
             message: [{ ...data.file, type: "file" }],
             raw_message: `[文件：${data.file.name}]`,
           }
-          Bot.em("onebot.message.group.normal", fileEventData)
-          Bot.em("onebot.message.group", fileEventData)
+          // 只触发最具体的事件，事件监听器会处理
           Bot.em("onebot.message", fileEventData)
           break
         case "group_ban":
@@ -1495,8 +1491,7 @@ Bot.adapter.push(
             message: [{ ...data.file, type: "file" }],
             raw_message: `[文件：${data.file.name}]`,
           }
-          Bot.em("onebot.message.private.friend", offlineFileEventData)
-          Bot.em("onebot.message.private", offlineFileEventData)
+          // 只触发最具体的事件，事件监听器会处理
           Bot.em("onebot.message", offlineFileEventData)
           break
         case "client_status":
@@ -1590,13 +1585,9 @@ Bot.adapter.push(
       data.adapter = 'onebot'
       data.isOneBot = true
       
-      const onebotNoticeEvent = `onebot.${data.post_type}.${data.notice_type}.${data.sub_type}`
-      const onebotNoticeEventSimple = `onebot.${data.post_type}.${data.notice_type}`
-      const onebotNoticeEventBase = `onebot.${data.post_type}`
-      
+      // 只触发最具体的事件，事件监听器会处理
+      const onebotNoticeEvent = `onebot.${data.post_type}`
       Bot.em(onebotNoticeEvent, data)
-      Bot.em(onebotNoticeEventSimple, data)
-      Bot.em(onebotNoticeEventBase, data)
     }
 
     /**
@@ -1635,13 +1626,9 @@ Bot.adapter.push(
       data.adapter = 'onebot'
       data.isOneBot = true
       
-      const onebotRequestEvent = `onebot.${data.post_type}.${data.request_type}.${data.sub_type}`
-      const onebotRequestEventSimple = `onebot.${data.post_type}.${data.request_type}`
-      const onebotRequestEventBase = `onebot.${data.post_type}`
-      
+      // 只触发最具体的事件，事件监听器会处理
+      const onebotRequestEvent = `onebot.${data.post_type}`
       Bot.em(onebotRequestEvent, data)
-      Bot.em(onebotRequestEventSimple, data)
-      Bot.em(onebotRequestEventBase, data)
     }
 
     /**

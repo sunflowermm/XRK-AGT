@@ -280,8 +280,6 @@ export class StdinHandler {
 
     Bot.em('stdin.command', event);
     Bot.em('stdin.message', event);
-    
-    await pluginsLoader.deal(event);
 
     return {
       success: true,
@@ -519,11 +517,12 @@ export class StdinHandler {
       msg: raw_message,
       
       // 用户信息
-      sender: { 
-        card: nickname, 
-        nickname, 
-        role: userInfo.role || "master", 
-        user_id: userId 
+      sender: {
+        ...(userInfo.sender || {}),
+        card: userInfo.sender?.card || nickname,
+        nickname: userInfo.sender?.nickname || nickname,
+        role: userInfo.sender?.role || userInfo.role || "master",
+        user_id: userInfo.sender?.user_id || userId
       },
       
       // Bot实例
@@ -671,20 +670,12 @@ export class StdinHandler {
     }
   }
 
-  load() {
-    Bot.wsf = Bot.wsf || {};
-    Bot.wsf['stdin'] = Bot.wsf['stdin'] || [];
-    Bot.wsf['stdin'].push(this.handleStdin.bind(this));
-  }
-
-  async handleStdin(input) {
-    await this.handleInput(input);
-  }
+  // stdin 适配器不需要 WebSocket 挂载，它通过标准输入处理
+  // 移除冗余的 load 和 handleStdin 方法
 }
 
-// 创建并加载stdin处理器
+// 创建stdin处理器（不需要额外挂载，通过事件系统处理）
 const stdinHandler = new StdinHandler();
-stdinHandler.load();
 
 export default {
   name: 'stdin',

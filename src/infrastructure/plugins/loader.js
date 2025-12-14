@@ -162,10 +162,8 @@ class PluginsLoader {
       // 初始化事件
       this.initEvent(e)
 
-      if (this.isSpecialEvent(e)) {
-        return await this.dealSpecialEvent(e)
-      }
-
+      // 所有事件统一处理，不再区分特殊事件
+      // stdin 和 device 事件已由事件监听器标准化后传入
       const hasBypassPlugin = await this.checkBypassPlugins(e)
 
       const shouldContinue = await this.preCheck(e, hasBypassPlugin)
@@ -704,25 +702,16 @@ class PluginsLoader {
   }
 
   /**
-   * 判断是否为特殊事件
-   * @param {Object} e - 事件对象
-   * @returns {boolean}
-   */
-  isSpecialEvent(e) {
-    return this.isStdinEvent(e) || this.isDeviceEvent(e)
-  }
-
-  /**
-   * 判断是否为stdin事件
+   * 判断是否为stdin事件（用于初始化事件时设置标识）
    * @param {Object} e - 事件对象
    * @returns {boolean}
    */
   isStdinEvent(e) {
-    return e.adapter === 'api' || e.adapter === 'stdin' || e.source === 'api'
+    return e.adapter === 'api' || e.adapter === 'stdin' || e.source === 'api' || e.isStdin
   }
 
   /**
-   * 判断是否为设备事件
+   * 判断是否为设备事件（用于初始化事件时设置标识）
    * @param {Object} e - 事件对象
    * @returns {boolean}
    */
@@ -730,91 +719,6 @@ class PluginsLoader {
     return e.post_type === 'device' || e.adapter === 'device' ||
       e.isDevice || !!e.device_id ||
       (e.event_type && Bot[e.self_id])
-  }
-
-  /**
-   * 处理特殊事件
-   * @param {Object} e - 事件对象
-   * @returns {Promise}
-   */
-  async dealSpecialEvent(e) {
-    if (this.isStdinEvent(e)) {
-      return await this.dealStdinEvent(e)
-    }
-    if (this.isDeviceEvent(e)) {
-      return await this.dealDeviceEvent(e)
-    }
-  }
-
-  /**
-   * 处理stdin事件
-   * @param {Object} e - 事件对象
-   * @returns {Promise<boolean>}
-   */
-  async dealStdinEvent(e) {
-    try {
-      e.isStdin = true
-      e.logText = `[${e.adapter === 'api' ? 'API' : 'STDIN'}][${e.user_id || '未知'}]`
-
-      // 设置API响应方法
-      if (e.adapter === 'api' && !e.respond) {
-        e.respond = async (data) => {
-          if (e._apiResponse && Array.isArray(e._apiResponse)) {
-            e._apiResponse.push(data)
-          }
-          return data
-        }
-      }
-
-      // 处理消息
-      if (e.message) await this.dealMsg(e)
-      this.setupReply(e)
-
-      // 运行插件
-      await this.runPlugins(e, true)
-      const handled = await this.runPlugins(e, false)
-
-      if (!handled) {
-        logger.debug(`${e.logText} 暂无插件处理`)
-      }
-
-      return true
-    } catch (error) {
-      logger.error(`处理${e.adapter}事件错误`)
-      logger.error(error)
-      return false
-    }
-  }
-
-  /**
-   * 处理设备事件
-   * @param {Object} e - 事件对象
-   * @returns {Promise}
-   */
-  async dealDeviceEvent(e) {
-    try {
-      e.isDevice = true
-      e.logText = `[设备][${e.device_name || e.device_id}][${e.event_type || '未知事件'}]`
-
-      // 处理设备消息
-      if (e.event_type === 'message' || e.event_data?.message) {
-        e.message = e.event_data.message
-        e.raw_message = typeof e.message === 'string' ? e.message : JSON.stringify(e.message)
-        e.msg = e.raw_message
-        await this.dealMsg(e)
-      }
-
-      // 运行普通插件
-      await this.runPlugins(e, true)
-      const handled = await this.runPlugins(e, false)
-
-      if (!handled) {
-        logger.debug(`${e.logText} 设备事件暂无插件处理`)
-      }
-    } catch (error) {
-      logger.error('处理设备事件错误')
-      logger.error(error)
-    }
   }
 
   /**
