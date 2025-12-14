@@ -1,39 +1,18 @@
 import PluginsLoader from '../../src/infrastructure/plugins/loader.js'
 
-/**
- * Stdin事件监听器
- * 监听所有stdin.*事件并分发给插件系统
- * 
- * 事件流程：
- * 1. 适配器触发 Bot.em('stdin.message', event)
- * 2. 本监听器捕获事件并标准化
- * 3. 调用 plugins.deal(e) 分发给插件系统
- * 4. 插件系统通过 filtEvent 匹配插件（支持通用事件如 'message'）
- */
 export default class StdinEvent {
   constructor() {
     this.plugins = PluginsLoader
-    this.processedEvents = new Set() // 用于去重，避免重复处理
+    this.processedEvents = new Set()
     this.adapterName = 'stdin'
-    this.MAX_PROCESSED_EVENTS = 1000 // 最大保留事件数
+    this.MAX_PROCESSED_EVENTS = 1000
   }
 
-  /**
-   * 初始化事件监听
-   * 监听所有stdin.*事件
-   */
   async init() {
-    // 只监听message事件，command事件已废弃
     Bot.on('stdin.message', (e) => this.handleEvent(e, 'stdin.message'))
   }
 
-  /**
-   * 处理Stdin事件
-   * @param {Object} e - 事件对象
-   * @param {string} eventType - 事件类型
-   */
   async handleEvent(e, eventType) {
-    // 使用事件ID去重，确保每个事件只处理一次
     const eventId = e.event_id
     if (!eventId) return
     
@@ -50,9 +29,6 @@ export default class StdinEvent {
     await this.plugins.deal(e)
   }
 
-  /**
-   * 标准化事件对象
-   */
   normalizeEvent(e) {
     e.post_type = e.post_type || 'message'
     e.message_type = e.message_type || 'private'
@@ -77,10 +53,6 @@ export default class StdinEvent {
     e.msg = e.msg || e.raw_message || ''
   }
 
-  /**
-   * 清理已处理事件记录
-   * 保留最近的事件，避免内存泄漏
-   */
   cleanupProcessedEvents() {
     if (this.processedEvents.size > this.MAX_PROCESSED_EVENTS) {
       const ids = Array.from(this.processedEvents)

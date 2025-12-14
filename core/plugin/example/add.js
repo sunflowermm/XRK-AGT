@@ -51,7 +51,6 @@ export class add extends plugin {
       ]
     })
 
-    // 从cfg读取数据目录配置，充分利用配置系统
     const botCfg = cfg.bot || {}
     const otherCfg = cfg.getOther() || {}
     this.path = otherCfg.message_data_path || botCfg.data_dir || "data/messageJson/"

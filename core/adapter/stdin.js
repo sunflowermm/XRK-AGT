@@ -329,23 +329,18 @@ export class StdinHandler {
         return item;
       }
 
-      // 生成唯一文件名
       if (!fileName) {
         fileName = `${ulid()}.${fileExt}`;
       } else {
-        // 确保文件名安全
         fileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-        // 如果没有扩展名，添加扩展名
         if (!path.extname(fileName) && fileExt !== 'file') {
           fileName = `${fileName}.${fileExt}`;
         }
       }
 
-      // 保存文件到media目录
       const filePath = path.join(mediaDir, fileName);
       await fs.promises.writeFile(filePath, buffer);
       
-      // 生成访问URL
       const baseUrl = Bot.getServerUrl ? Bot.getServerUrl() : `http://localhost:${Bot.httpPort || 3000}`;
       const fileUrl = `${baseUrl}/media/${fileName}`;
 
@@ -549,12 +544,10 @@ export class StdinHandler {
       }
     }
 
-    // 只在非API模式下输出日志，避免重复
     if (userInfo.adapter !== 'api' && textLogs.length > 0) {
       logger.tag(textLogs.join("\n"), "输出", "blue");
     }
 
-    // 触发输出事件（用于WebSocket等）
     Bot.em('stdin.output', {
       nickname,
       content: processedItems,
@@ -605,11 +598,8 @@ export class StdinHandler {
     }
   }
 
-  // stdin 适配器不需要 WebSocket 挂载，它通过标准输入处理
-  // 移除冗余的 load 和 handleStdin 方法
 }
 
-// 创建stdin处理器（不需要额外挂载，通过事件系统处理）
 const stdinHandler = new StdinHandler();
 
 export default {

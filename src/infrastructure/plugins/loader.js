@@ -14,23 +14,6 @@ import { segment } from '#oicq'
 global.plugin = plugin
 global.segment = segment
 
-/**
- * 事件类型映射表
- * 用于将事件字符串转换为对应的属性路径
- * 
- * 标准化事件系统说明:
- * - OneBot 事件格式: onebot.{post_type}.{message_type/notice_type/request_type}.{sub_type}
- * - 设备事件格式: device.{event_type}
- * - 插件可以监听:
- *   - "onebot.message" 只匹配 OneBot 的 message 事件
- *   - "onebot.notice" 只匹配 OneBot 的 notice 事件
- *   - "onebot.request" 只匹配 OneBot 的 request 事件
- *   - "onebot.*" 匹配所有 OneBot 事件
- *   - "device.message" 只匹配设备的 message 事件
- *   - "device.notice" 只匹配设备的 notice 事件
- *   - "device.request" 只匹配设备的 request 事件
- *   - "device.*" 匹配所有设备事件
- */
 const EVENT_MAP = {
   'onebot.message': ['post_type', 'message_type', 'sub_type'],
   'onebot.notice': ['post_type', 'notice_type', 'sub_type'],
@@ -44,24 +27,24 @@ const EVENT_MAP = {
  */
 class PluginsLoader {
   constructor() {
-    this.priority = []              // 普通优先级插件列表
-    this.extended = []              // 扩展插件列表
-    this.task = []                  // 定时任务列表
-    this.dir = 'core/plugin'            // 插件目录
-    this.watcher = {}               // 文件监听器
-    this.cooldowns = {              // 冷却时间管理
-      group: new Map(),             // 使用 Map 替代对象，性能更好
+    this.priority = []
+    this.extended = []
+    this.task = []
+    this.dir = 'core/plugin'
+    this.watcher = {}
+    this.cooldowns = {
+      group: new Map(),
       single: new Map(),
       device: new Map()
     }
-    this.msgThrottle = new Map()    // 消息节流
-    this.eventThrottle = new Map()  // 事件节流
-    this.defaultMsgHandlers = []    // 默认消息处理器
-    this.eventSubscribers = new Map() // 事件订阅者
-    this.pluginCount = 0            // 插件计数
-    this.eventHistory = []          // 事件历史
-    this.MAX_EVENT_HISTORY = 1000   // 最大事件历史记录数
-    this.cleanupTimer = null        // 清理定时器
+    this.msgThrottle = new Map()
+    this.eventThrottle = new Map()
+    this.defaultMsgHandlers = []
+    this.eventSubscribers = new Map()
+    this.pluginCount = 0
+    this.eventHistory = []
+    this.MAX_EVENT_HISTORY = 1000
+    this.cleanupTimer = null
     this.pluginLoadStats = {
       plugins: [],
       totalLoadTime: 0,
@@ -69,7 +52,7 @@ class PluginsLoader {
       totalPlugins: 0,
       taskCount: 0,
       extendedCount: 0
-    };
+    }
   }
 
   /**
@@ -79,11 +62,8 @@ class PluginsLoader {
     try {
       if (!isRefresh && this.priority.length) return
 
-      // 记录开始时间
-      this.pluginLoadStats.startTime = Date.now();
-      this.pluginLoadStats.plugins = [];
-
-      // 重置插件列表
+      this.pluginLoadStats.startTime = Date.now()
+      this.pluginLoadStats.plugins = []
       this.priority = []
       this.extended = []
       this.delCount()
@@ -133,7 +113,6 @@ class PluginsLoader {
       this.pluginLoadStats.taskCount = this.task.length;
       this.pluginLoadStats.extendedCount = this.extended.length;
 
-      // 显示加载结果
       this.packageTips(packageErr)
       this.createTask()
       this.initEventSystem()
@@ -159,17 +138,12 @@ class PluginsLoader {
     try {
       if (!e) return
 
-      // 初始化事件
       this.initEvent(e)
-
-      // 所有事件统一处理，不再区分特殊事件
-      // stdin 和 device 事件已由事件监听器标准化后传入
       const hasBypassPlugin = await this.checkBypassPlugins(e)
 
       const shouldContinue = await this.preCheck(e, hasBypassPlugin)
       if (!shouldContinue) return
 
-      // 处理消息
       await this.dealMsg(e)
       this.setupReply(e)
       await Runtime.init(e)
@@ -192,24 +166,16 @@ class PluginsLoader {
    */
   async dealMsg(e) {
     try {
-      // 初始化消息属性
       this.initMsgProps(e)
-
-      // 解析消息
       await this.parseMessage(e)
 
-      // 设置事件属性
       this.setupEventProps(e)
-
-      // 检查权限
       this.checkPermissions(e)
 
-      // 处理别名
       if (e.msg && e.isGroup && !e.isDevice && !e.isStdin) {
         this.processAlias(e)
       }
 
-      // 添加工具方法
       this.addUtilMethods(e)
     } catch (error) {
       logger.error('处理消息内容错误')
@@ -295,21 +261,18 @@ class PluginsLoader {
    * @param {Object} e - 事件对象
    */
   setupEventProps(e) {
-    // 设置事件类型标识
     e.isPrivate = e.message_type === 'private' || e.notice_type === 'friend'
     e.isGroup = e.message_type === 'group' || e.notice_type === 'group'
     e.isGuild = e.detail_type === 'guild'
     e.isDevice = this.isDeviceEvent(e)
     e.isStdin = this.isStdinEvent(e)
 
-    // 设置发送者信息
     if (!e.sender) {
       e.sender = e.member || e.friend || {}
     }
     e.sender.card ||= e.sender.nickname || e.device_name || ''
     e.sender.nickname ||= e.sender.card
 
-    // 构建日志文本
     if (e.isDevice) {
       e.logText = `[设备][${e.device_name || e.device_id}][${e.event_type || '事件'}]`
     } else if (e.isStdin) {
@@ -320,7 +283,6 @@ class PluginsLoader {
       e.logText = `[${e.group_name || e.group_id}(${e.group_id})][${e.sender.card}(${e.user_id})]`
     }
 
-    // 设置获取回复消息方法
     e.getReply = async () => {
       const msgId = e.source?.message_id || e.reply_id
       if (!msgId) return null
@@ -333,7 +295,6 @@ class PluginsLoader {
       }
     }
 
-    // 设置撤回方法
     if (!e.recall && e.message_id && !e.isDevice && !e.isStdin) {
       const target = e.isGroup ? e.group : e.friend
       if (target?.recallMsg) {
@@ -354,7 +315,6 @@ class PluginsLoader {
       e.isMaster = true
     }
 
-    // stdin事件默认为主人权限
     if (e.isStdin && e.isMaster === undefined) {
       e.isMaster = true
     }
@@ -384,19 +344,14 @@ class PluginsLoader {
    * @param {Object} e - 事件对象
    */
   setupReply(e) {
-    // 防止重复包装
-    if (e._replySetup) {
-      return
-    }
+    if (e._replySetup) return
     e._replySetup = true
-    
-    // stdin和device事件已设置reply，保存原方法后返回
+
     if (e.isStdin || e.isDevice) {
       e.replyNew = e.reply
       return
     }
-    
-    // 保存原始reply方法
+
     e.replyNew = e.reply
     
     e.reply = async (msg = '', quote = false, data = {}) => {
@@ -466,26 +421,21 @@ class PluginsLoader {
     try {
       const plugins = await this.initPlugins(e, isExtended)
 
-      // 处理扩展插件 - 直接运行，不进行其他检查
       if (isExtended) {
         return await this.processPlugins(plugins, e, true)
       }
 
-      // 处理accept方法（前置检查）
       for (const plugin of plugins) {
         try {
           const res = await plugin.accept(e)
 
-          // 检查是否需要重新解析
           if (e._needReparse) {
             delete e._needReparse
             this.initMsgProps(e)
             await this.parseMessage(e)
           }
 
-          // 'return' 表示停止处理，不再执行后续插件
           if (res === 'return') return true
-          // false 表示拒绝处理，跳过当前插件
           if (res === false) continue
         } catch (error) {
           logger.error(`插件 ${plugin.name} accept错误`)
@@ -493,7 +443,6 @@ class PluginsLoader {
         }
       }
 
-      // 处理上下文和限制（仅普通消息）
       if (!e.isDevice && !e.isStdin) {
         if (await this.handleContext(plugins, e)) return true
         if (!this.onlyReplyAt(e)) return false
@@ -535,7 +484,6 @@ class PluginsLoader {
           })
         }
 
-        // 检查插件是否启用
         if (this.checkDisable(plugin) && this.filtEvent(e, plugin)) {
           activePlugins.push(plugin)
         }
@@ -556,7 +504,6 @@ class PluginsLoader {
    * @returns {Promise<boolean>}
    */
   async processPlugins(plugins, e, isExtended) {
-    // 确保plugins是数组
     if (!Array.isArray(plugins)) {
       logger.error('processPlugins: plugins参数不是数组')
       return false
@@ -564,12 +511,10 @@ class PluginsLoader {
 
     if (!plugins.length) return false
 
-    // 扩展插件直接处理规则
     if (isExtended) {
       return await this.processRules(plugins, e)
     }
 
-    // 普通插件按优先级分组处理
     const pluginsByPriority = lodash.groupBy(plugins, 'priority')
     const priorities = Object.keys(pluginsByPriority)
       .map(Number)
@@ -583,7 +528,6 @@ class PluginsLoader {
       if (handled) return true
     }
 
-    // 处理默认消息处理器
     return await this.processDefaultHandlers(e)
   }
 
@@ -594,7 +538,6 @@ class PluginsLoader {
    * @returns {Promise<boolean>}
    */
   async processRules(plugins, e) {
-    // 确保plugins是数组
     if (!Array.isArray(plugins)) {
       logger.error('processRules: plugins参数不是数组')
       return false
@@ -604,27 +547,20 @@ class PluginsLoader {
       if (!plugin?.rule) continue
 
       for (const v of plugin.rule) {
-        // 检查事件类型
         if (v.event && !this.filtEvent(e, v)) continue
-
-        // 检查正则匹配
         if (v.reg && e.msg !== undefined && !v.reg.test(e.msg)) continue
 
-        // 设置日志函数名
         e.logFnc = `[${plugin.name}][${v.fnc}]`
 
-        // 记录日志
         if (v.log !== false) {
           logger.info(`${e.logFnc}${e.logText} ${lodash.truncate(e.msg || '', { length: 100 })}`)
         }
 
-        // 检查权限
         if (!this.filtPermission(e, v)) return true
 
         try {
           const start = Date.now()
 
-          // 执行插件方法
           if (typeof plugin[v.fnc] === 'function') {
             const res = await plugin[v.fnc](e)
 
@@ -702,32 +638,16 @@ class PluginsLoader {
     return false
   }
 
-  /**
-   * 判断是否为stdin事件（用于初始化事件时设置标识）
-   * @param {Object} e - 事件对象
-   * @returns {boolean}
-   */
   isStdinEvent(e) {
     return e.adapter === 'api' || e.adapter === 'stdin' || e.source === 'api' || e.isStdin
   }
 
-  /**
-   * 判断是否为设备事件（用于初始化事件时设置标识）
-   * @param {Object} e - 事件对象
-   * @returns {boolean}
-   */
   isDeviceEvent(e) {
     return e.post_type === 'device' || e.adapter === 'device' ||
       e.isDevice || !!e.device_id ||
       (e.event_type && Bot[e.self_id])
   }
-
-  /**
-   * 初始化事件（标准化，支持所有适配器）
-   * @param {Object} e - 事件对象
-   */
   initEvent(e) {
-    // 设置self_id
     if (!e.self_id) {
       if (e.device_id) {
         e.self_id = e.device_id
@@ -738,17 +658,15 @@ class PluginsLoader {
       }
     }
 
-    // 设置适配器类型标识（如果还没有）
     if (!e.adapter) {
       if (e.isOneBot) e.adapter = 'onebot'
       else if (e.isDevice) e.adapter = 'device'
       else if (e.isStdin) e.adapter = 'stdin'
       else if (e.device_id) e.adapter = 'device'
       else if (this.isStdinEvent(e)) e.adapter = 'stdin'
-      else e.adapter = 'onebot' // 默认
+      else e.adapter = 'onebot'
     }
 
-    // 设置bot实例（标准化）
     let bot = null
     if (this.isStdinEvent(e)) {
       bot = Bot.stdin || Bot['stdin'] || Bot
@@ -760,7 +678,6 @@ class PluginsLoader {
       bot = Bot
     }
 
-    // 使用不可修改的bot属性
     if (!e.bot) {
       Object.defineProperty(e, 'bot', {
         value: bot,
@@ -769,7 +686,6 @@ class PluginsLoader {
       })
     }
 
-    // 生成事件ID（如果还没有）
     if (!e.event_id) {
       const postType = e.post_type || 'unknown'
       const randomId = Math.random().toString(36).substr(2, 9)
@@ -788,19 +704,15 @@ class PluginsLoader {
    */
   async preCheck(e, hasBypassPlugin = false) {
     try {
-      // 特殊事件（设备、标准输入）直接通过
       if (e.isDevice || e.isStdin) return true
 
-      // 检查是否忽略自己的消息
       const botUin = e.self_id || Bot.uin?.[0]
       if (cfg.bot?.ignore_self !== false && e.user_id === botUin) {
         return false
       }
 
-      // 获取原始消息内容并处理
       let msg = e.raw_message || ''
       if (!msg && e.message) {
-        // 如果没有raw_message，从message数组中提取文本
         if (Array.isArray(e.message)) {
           msg = e.message
             .filter(m => m.type === 'text')
@@ -811,32 +723,24 @@ class PluginsLoader {
         }
       }
 
-      // 处理消息前缀（将斜杠转换为#等）
       msg = this.dealText(msg)
       const isStartCommand = /^#开机$/.test(msg)
       if (isStartCommand) {
-        // 检查主人权限
         const masterQQ = cfg.masterQQ || cfg.master?.[e.self_id] || []
         const masters = Array.isArray(masterQQ) ? masterQQ : [masterQQ]
         const isMaster = masters.some(id => String(e.user_id) === String(id))
 
-        if (isMaster) {
-          // 主人的开机命令直接通过，不检查关机状态
-          return true
-        }
+        if (isMaster) return true
       }
 
-      // 检查关机状态 - 使用异步获取
       const shutdownStatus = await redis.get(`Yz:shutdown:${botUin}`)
       if (shutdownStatus === 'true') {
         logger.debug(`[关机状态] 忽略消息: ${msg}`)
         return false
       }
 
-      // bypass插件跳过限制检查
       if (hasBypassPlugin) return true
 
-      // 检查消息限制
       return this.checkLimit(e)
     } catch (error) {
       logger.error('前置检查错误')
@@ -904,7 +808,6 @@ class PluginsLoader {
    * @param {Object} e - 事件对象
    */
   addUtilMethods(e) {
-    // 获取可发送的媒体文件
     e.getSendableMedia = async (media) => {
       if (!media) return null
 
@@ -929,7 +832,6 @@ class PluginsLoader {
       return null
     }
 
-    // 节流控制
     e.throttle = (key, duration = 1000) => {
       const userId = e.user_id || e.device_id
       const throttleKey = `${userId}:${key}`
@@ -940,7 +842,6 @@ class PluginsLoader {
       return true
     }
 
-    // 获取事件历史
     e.getEventHistory = (filter = {}) => {
       let history = [...this.eventHistory]
 
@@ -974,25 +875,20 @@ class PluginsLoader {
         if (!dir.isDirectory()) continue
         const dirPath = `${this.dir}/${dir.name}`
 
-        // 检查是否有index.js
-          if (existsSync(`${dirPath}/index.js`)) {
+        if (existsSync(`${dirPath}/index.js`)) {
           ret.push({
             name: dir.name,
-            // 从 src/infrastructure/plugins 定位到项目根需要三级目录: ../../..
-            // 然后再进入 core/plugin/...
             path: `../../../${dirPath}/index.js`
           })
           continue
         }
 
-        // 扫描目录下的js文件
         const apps = await fs.readdir(dirPath, { withFileTypes: true })
         for (const app of apps) {
           if (!app.isFile() || !app.name.endsWith('.js')) continue
           const key = `${dir.name}/${app.name}`
           ret.push({
             name: key,
-            // 同上，这里也需要从 src/infrastructure/plugins 返回到项目根
             path: `../../../${dirPath}/${app.name}`
           })
           this.watch(dir.name, app.name)
@@ -1056,7 +952,6 @@ class PluginsLoader {
 
       logger.debug(`加载插件实例 [${file.name}][${plugin.name}]`)
 
-      // 初始化插件
       if (plugin.init) {
         const initRes = await Promise.race([
           plugin.init(),
@@ -1069,7 +964,6 @@ class PluginsLoader {
         if (initRes === 'return') return
       }
 
-      // 处理定时任务
       if (plugin.task) {
         const tasks = Array.isArray(plugin.task) ? plugin.task : [plugin.task]
         tasks.forEach(t => {
@@ -1084,14 +978,12 @@ class PluginsLoader {
         })
       }
 
-      // 处理规则
       if (plugin.rule) {
         plugin.rule.forEach(rule => {
           if (rule.reg) rule.reg = this.createRegExp(rule.reg)
         })
       }
 
-      // 普通插件
       const pluginData = {
         class: p,
         key: file.name,
@@ -1104,7 +996,6 @@ class PluginsLoader {
       const targetArray = plugin.priority === 'extended' ? this.extended : this.priority
       targetArray.push(pluginData)
 
-      // 处理handler
       if (plugin.handler) {
         Object.values(plugin.handler).forEach(handler => {
           if (!handler) return
@@ -1171,108 +1062,56 @@ class PluginsLoader {
     this.extended = lodash.orderBy(this.extended, ['priority'], ['asc'])
   }
 
-  /**
-   * 过滤事件
-   * 标准化事件系统: 支持onebot.*、device.*和stdin.*事件匹配
-   * - 监听 "message" 匹配所有适配器的 message 事件（跨平台）
-   * - 监听 "onebot.message" 只匹配 onebot 的 message 事件
-   * - 监听 "onebot.*" 匹配所有 onebot 事件
-   * - 监听 "device.message" 只匹配 device 的 message 事件
-   * - 监听 "device.*" 匹配所有 device 事件
-   * - 监听 "stdin.command" 只匹配 stdin 的 command 事件
-   * - 监听 "stdin.*" 匹配所有 stdin 事件
-   * @param {Object} e - 事件对象
-   * @param {Object} v - 规则对象或插件对象
-   * @returns {boolean}
-   */
   filtEvent(e, v) {
     if (!v.event) return true
 
     const pluginEvent = v.event
-    
-    // 构建实际触发的事件名称列表
     const possibleEvents = []
-    const genericEvents = [] // 通用事件名（如 message, notice, request）
+    const genericEvents = []
     
-    // 判断事件来源
     if (e.isOneBot || e.adapter === 'onebot') {
-      // OneBot 事件
       const postType = e.post_type || ''
       const typeKey = postType === 'message' ? 'message_type' : 
                      postType === 'notice' ? 'notice_type' : 
                      postType === 'request' ? 'request_type' : ''
-      const subTypeKey = 'sub_type'
       const type = e[typeKey] || ''
-      const subType = e[subTypeKey] || ''
+      const subType = e.sub_type || ''
       
-      // 构建onebot事件名称（从具体到通用）
-      if (postType && type && subType) {
-        possibleEvents.push(`onebot.${postType}.${type}.${subType}`)
-      }
-      if (postType && type) {
-        possibleEvents.push(`onebot.${postType}.${type}`)
-      }
+      if (postType && type && subType) possibleEvents.push(`onebot.${postType}.${type}.${subType}`)
+      if (postType && type) possibleEvents.push(`onebot.${postType}.${type}`)
       if (postType) {
         possibleEvents.push(`onebot.${postType}`)
-        genericEvents.push(postType) // 添加通用事件名
+        genericEvents.push(postType)
       }
     } else if (e.isDevice || e.adapter === 'device' || e.post_type === 'device') {
-      // 设备事件
       const eventType = e.event_type || ''
-      
       if (eventType) {
         possibleEvents.push(`device.${eventType}`)
-        genericEvents.push(eventType) // 添加通用事件名
+        genericEvents.push(eventType)
       }
       possibleEvents.push('device')
     } else if (e.isStdin || e.adapter === 'stdin') {
-      // Stdin 事件
       const eventType = e.command ? 'command' : (e.post_type || 'message')
-      
       if (eventType) {
         possibleEvents.push(`stdin.${eventType}`)
-        genericEvents.push(eventType) // 添加通用事件名
+        genericEvents.push(eventType)
       }
       possibleEvents.push('stdin')
     }
     
-    // 检查插件监听的事件是否匹配任何可能的事件
     for (const actualEvent of possibleEvents) {
-      // 1. 完全匹配
-      if (pluginEvent === actualEvent) return true
-      
-      // 2. 通配符匹配
-      if (this.matchEventPattern(pluginEvent, actualEvent)) return true
+      if (pluginEvent === actualEvent || this.matchEventPattern(pluginEvent, actualEvent)) {
+        return true
+      }
     }
     
-    // 3. 通用事件匹配：如果插件监听的是通用事件名（如 "message"），匹配所有适配器的对应事件
-    if (!pluginEvent.includes('.') || pluginEvent.split('.').length === 1) {
-      // 通用事件名，如 "message", "notice", "request"
-      const genericEventName = pluginEvent
-      return genericEvents.includes(genericEventName)
+    if (!pluginEvent.includes('.')) {
+      return genericEvents.includes(pluginEvent)
     }
     
-    // 4. 前缀匹配: onebot.* 匹配所有 onebot 事件
-    if (pluginEvent === 'onebot.*' || pluginEvent.startsWith('onebot.')) {
-      return possibleEvents.some(ev => ev.startsWith('onebot.'))
-    }
-    
-    // 5. 前缀匹配: device.* 匹配所有 device 事件
-    if (pluginEvent === 'device.*' || pluginEvent.startsWith('device.')) {
-      return possibleEvents.some(ev => ev.startsWith('device.') || ev === 'device')
-    }
-    
-    // 6. 前缀匹配: stdin.* 匹配所有 stdin 事件
-    if (pluginEvent === 'stdin.*' || pluginEvent.startsWith('stdin.')) {
-      return possibleEvents.some(ev => ev.startsWith('stdin.') || ev === 'stdin')
-    }
-    
-    // 7. 通用匹配: device/stdin 匹配所有对应事件
-    if (pluginEvent === 'device') {
-      return possibleEvents.some(ev => ev.startsWith('device.') || ev === 'device')
-    }
-    if (pluginEvent === 'stdin') {
-      return possibleEvents.some(ev => ev.startsWith('stdin.') || ev === 'stdin')
+    const adapterPrefix = pluginEvent.split('.')[0]
+    if (pluginEvent.endsWith('.*') || pluginEvent === adapterPrefix) {
+      return possibleEvents.some(ev => ev.startsWith(`${adapterPrefix}.`) || ev === adapterPrefix)
     }
     
     return false
@@ -1306,10 +1145,7 @@ class PluginsLoader {
    * @returns {boolean}
    */
   filtPermission(e, v) {
-    // 特殊事件直接通过
     if (e.isDevice || e.isStdin) return true
-
-    // 无权限要求或主人权限直接通过
     if (!v.permission || v.permission === 'all' || e.isMaster) return true
 
     const permissionMap = {
@@ -1344,10 +1180,8 @@ class PluginsLoader {
    * @returns {boolean}
    */
   checkLimit(e) {
-    // 特殊事件直接通过
     if (e.isDevice || e.isStdin) return true
 
-    // 检查群聊禁言
     if (e.isGroup && e.group) {
       const muteLeft = e.group.mute_left ?? 0
       const allMuted = e.group.all_muted === true
@@ -1359,14 +1193,11 @@ class PluginsLoader {
       }
     }
 
-    // 私聊或特殊适配器直接通过
     if (!e.message || e.isPrivate || ['cmd'].includes(e.adapter)) {
       return true
     }
 
-    // 检查CD限制
     const config = e.group_id ? cfg.getGroup(e.group_id) : {}
-
     const groupCD = config.groupGlobalCD || 0
     const singleCD = config.singleCD || 0
     const deviceCD = config.deviceCD || 0
@@ -1377,7 +1208,6 @@ class PluginsLoader {
       return false
     }
 
-    // 消息去重
     const msgId = e.message_id ?
       `${e.user_id}:${e.message_id}` :
       `${e.user_id}:${Date.now()}:${Math.random()}`
@@ -1425,7 +1255,6 @@ class PluginsLoader {
    * @returns {boolean}
    */
   onlyReplyAt(e) {
-    // 特殊事件直接通过
     if (e.isDevice || e.isStdin) return true
 
     const adapter = e.adapter || ''
@@ -1450,7 +1279,6 @@ class PluginsLoader {
   checkDisable(p) {
     if (!p) return false
 
-    // 设备和stdin事件的特殊处理
     if (p.e && (p.e.isDevice || p.e.isStdin)) {
       const other = cfg.getOther()
       if (!other) return true
@@ -1465,7 +1293,6 @@ class PluginsLoader {
       return true
     }
 
-    // 非群聊直接通过
     if (!p.e || !p.e.group_id) return true
 
     const groupCfg = cfg.getGroup(p.e.group_id)
@@ -1507,9 +1334,7 @@ class PluginsLoader {
    */
   dealText(text = '') {
     text = String(text ?? '')
-    // 处理斜杠转换
     if (cfg.bot?.['/→#']) text = text.replace(/^\s*\/\s*/, '#')
-    // 规范化命令前缀
     return text
       .replace(/^\s*[＃井#]+\s*/, '#')
       .replace(/^\s*[\\*※＊]+\s*/, '*')
@@ -1520,39 +1345,33 @@ class PluginsLoader {
    * 初始化事件系统
    */
   initEventSystem() {
-    // 清理旧的定时器
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer)
     }
 
-    // 定期清理事件历史和节流记录
     this.cleanupTimer = setInterval(() => {
       try {
-        // 清理事件历史
         if (this.eventHistory.length > this.MAX_EVENT_HISTORY) {
           this.eventHistory = this.eventHistory.slice(-this.MAX_EVENT_HISTORY)
         }
 
         const now = Date.now()
 
-        // 清理过期的事件节流记录
         for (const [key, time] of this.eventThrottle) {
           if (now - time > 60000) {
             this.eventThrottle.delete(key)
           }
         }
 
-        // 清理过期的消息节流记录
         for (const [key, time] of this.msgThrottle) {
           if (now - time > 5000) {
             this.msgThrottle.delete(key)
           }
         }
 
-        // 清理过期的冷却记录
         for (const cooldownType of ['group', 'single', 'device']) {
           for (const [key, time] of this.cooldowns[cooldownType]) {
-            if (now - time > 300000) { // 5分钟
+            if (now - time > 300000) {
               this.cooldowns[cooldownType].delete(key)
             }
           }
@@ -1566,13 +1385,7 @@ class PluginsLoader {
     this.registerGlobalEventListeners()
   }
 
-  /**
-   * 注册全局事件监听器
-   * 注意: 现在事件系统已经改为onebot.js和device.js，这里不再需要注册通用事件监听
-   */
   registerGlobalEventListeners() {
-    // 事件监听已由onebot.js和device.js处理
-    // 这里保留用于向后兼容或特殊事件
   }
 
   /**
@@ -1591,7 +1404,6 @@ class PluginsLoader {
 
     this.eventHistory.unshift(historyEntry)
 
-    // 立即清理超出限制的历史记录
     if (this.eventHistory.length > this.MAX_EVENT_HISTORY * 1.5) {
       this.eventHistory = this.eventHistory.slice(0, this.MAX_EVENT_HISTORY)
     }
@@ -1629,7 +1441,6 @@ class PluginsLoader {
 
     this.eventSubscribers.get(eventType).push(callback)
 
-    // 返回取消订阅函数
     return () => {
       const subscribers = this.eventSubscribers.get(eventType)
       if (!subscribers) return
@@ -1647,14 +1458,12 @@ class PluginsLoader {
     const created = new Set()
 
     for (const task of this.task) {
-      // 取消已存在的任务
       if (task.job) {
         task.job.cancel()
       }
 
       const name = `[${task.name}][${task.cron}]`
 
-      // 检查重复任务
       if (created.has(name)) {
         logger.warn(`重复定时任务 ${name} 已跳过`)
         continue
@@ -1663,7 +1472,6 @@ class PluginsLoader {
       created.add(name)
       logger.debug(`加载定时任务 ${name}`)
 
-      // 创建定时任务
       const cronParts = task.cron.split(/\s+/)
       const cronExp = cronParts.slice(0, 6).join(' ')
 
@@ -1693,7 +1501,6 @@ class PluginsLoader {
     if (e.isDevice || e.isStdin) return
 
     try {
-      // 检查图片
       const checkImg = item => {
         if (item?.type === 'image' && item.file && Buffer.isBuffer(item.file)) {
           this.saveCount('screenshot', e.group_id)
@@ -1762,8 +1569,6 @@ class PluginsLoader {
   async changePlugin(key) {
     try {
       const timestamp = moment().format('x')
-      // 这里的相对路径是相对于当前文件(src/infrastructure/plugins)，
-      // 需要先回到项目根目录再进入 core/plugin
       let app = await import(`../../../${this.dir}/${key}?${timestamp}`)
       app = app.apps ? { ...app.apps } : app
 
@@ -1772,14 +1577,12 @@ class PluginsLoader {
 
         const plugin = new p()
 
-        // 编译规则正则
         if (plugin.rule) {
           plugin.rule.forEach(rule => {
             if (rule.reg) rule.reg = this.createRegExp(rule.reg)
           })
         }
 
-        // 更新插件
         const update = (arr) => {
           const index = arr.findIndex(item =>
             item.key === key && item.name === plugin.name
@@ -1807,7 +1610,7 @@ class PluginsLoader {
       })
 
       this.sortPlugins()
-      this.identifyDefaultMsgHandlers() // 重新识别默认处理器
+      this.identifyDefaultMsgHandlers()
       logger.mark(`[热更新插件][${key}]`)
     } catch (error) {
       logger.error(`热更新插件错误: ${key}`)
@@ -1976,25 +1779,21 @@ class PluginsLoader {
    */
   async destroy() {
     try {
-      // 清理定时任务
       for (const task of this.task) {
         if (task.job) task.job.cancel()
       }
 
-      // 清理文件监听器
       for (const watcher of Object.values(this.watcher)) {
         if (watcher && typeof watcher.close === 'function') {
           await watcher.close()
         }
       }
 
-      // 清理定时器
       if (this.cleanupTimer) {
         clearInterval(this.cleanupTimer)
         this.cleanupTimer = null
       }
 
-      // 清理内存
       this.priority = []
       this.extended = []
       this.task = []
