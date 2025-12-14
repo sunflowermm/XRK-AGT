@@ -2238,158 +2238,13 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     }
   }
 
-  getFriendArray() {
-    const array = []
-    for (const bot_id of this.uin)
-      for (const [id, i] of this.bots[bot_id].fl || []) array.push({ ...i, bot_id })
-    return array
-  }
+  // OneBot特定函数已移至 src/infrastructure/bot/onebot.js
+  // 这些函数会在OneBot适配器加载时自动注册
 
-  getFriendList() {
-    const array = []
-    for (const bot_id of this.uin) array.push(...(this.bots[bot_id].fl?.keys() || []))
-    return array
-  }
-
-  getFriendMap() {
-    const map = new Map()
-    for (const bot_id of this.uin)
-      for (const [id, i] of this.bots[bot_id].fl || []) map.set(id, { ...i, bot_id })
-    return map
-  }
-  
-  get fl() {
-    return this.getFriendMap()
-  }
-
-  getGroupArray() {
-    const array = []
-    for (const bot_id of this.uin)
-      for (const [id, i] of this.bots[bot_id].gl || []) array.push({ ...i, bot_id })
-    return array
-  }
-
-  getGroupList() {
-    const array = []
-    for (const bot_id of this.uin) array.push(...(this.bots[bot_id].gl?.keys() || []))
-    return array
-  }
-
-  getGroupMap() {
-    const map = new Map()
-    for (const bot_id of this.uin)
-      for (const [id, i] of this.bots[bot_id].gl || []) map.set(id, { ...i, bot_id })
-    return map
-  }
-  
-  get gl() {
-    return this.getGroupMap()
-  }
-  
-  get gml() {
-    const map = new Map()
-    for (const bot_id of this.uin)
-      for (const [id, i] of this.bots[bot_id].gml || [])
-        map.set(id, Object.assign(new Map(i), { bot_id }))
-    return map
-  }
-
-  pickFriend(user_id, strict) {
-    user_id = Number(user_id) || user_id;
-    
-    const mainBot = this.bots[this.uin];
-    if (mainBot?.fl?.has(user_id)) {
-      return mainBot.pickFriend(user_id);
-    }
-    
-    const friend = this.fl.get(user_id);
-    if (friend) {
-      return this.bots[friend.bot_id].pickFriend(user_id);
-    }
-    
-    if (strict) return false;
-    
-    BotUtil.makeLog("trace", `用户 ${user_id} 不存在，使用随机Bot ${this.uin.toJSON()}`, '服务器');
-    return this.bots[this.uin].pickFriend(user_id);
-  }
-
-  get pickUser() {
-    return this.pickFriend;
-  }
-
-  pickGroup(group_id, strict) {
-    group_id = Number(group_id) || group_id;
-    
-    const mainBot = this.bots[this.uin];
-    if (mainBot?.gl?.has(group_id)) {
-      return mainBot.pickGroup(group_id);
-    }
-    
-    const group = this.gl.get(group_id);
-    if (group) {
-      return this.bots[group.bot_id].pickGroup(group_id);
-    }
-    
-    if (strict) return false;
-    
-    BotUtil.makeLog("trace", `群组 ${group_id} 不存在，使用随机Bot ${this.uin.toJSON()}`, '服务器');
-    return this.bots[this.uin].pickGroup(group_id);
-  }
-
-  pickMember(group_id, user_id) {
-    return this.pickGroup(group_id).pickMember(user_id);
-  }
-
-  async sendFriendMsg(bot_id, user_id, ...args) {
-    if (!bot_id) {
-      return this.pickFriend(user_id).sendMsg(...args);
-    }
-    
-    if (this.uin.includes(bot_id) && this.bots[bot_id]) {
-      return this.bots[bot_id].pickFriend(user_id).sendMsg(...args);
-    }
-    
-    return new Promise((resolve, reject) => {
-      const listener = data => {
-        resolve(data.bot.pickFriend(user_id).sendMsg(...args));
-        clearTimeout(timeout);
-      };
-      
-      const timeout = setTimeout(() => {
-        reject(Object.assign(Error("等待Bot上线超时"),
-          { bot_id, user_id, args }));
-        this.off(`connect.${bot_id}`, listener);
-      }, 300000);
-      
-      this.once(`connect.${bot_id}`, listener);
-    });
-  }
-
-  async sendGroupMsg(bot_id, group_id, ...args) {
-    if (!bot_id) {
-      return this.pickGroup(group_id).sendMsg(...args);
-    }
-    
-    if (this.uin.includes(bot_id) && this.bots[bot_id]) {
-      return this.bots[bot_id].pickGroup(group_id).sendMsg(...args);
-    }
-    
-    return new Promise((resolve, reject) => {
-      const listener = data => {
-        resolve(data.bot.pickGroup(group_id).sendMsg(...args));
-        clearTimeout(timeout);
-      };
-      
-      const timeout = setTimeout(() => {
-        reject(Object.assign(Error("等待Bot上线超时"),
-          { bot_id, group_id, args }));
-        this.off(`connect.${bot_id}`, listener);
-      }, 300000);
-      
-      this.once(`connect.${bot_id}`, listener);
-    });
-  }
-
+  /**
+   * 发送消息给主人（通用函数）
+   * 支持OneBot（通过pickFriend）和其他适配器
+   */
   async sendMasterMsg(msg, sleep = 5000) {
     const masterQQs = cfg.masterQQ;
     if (!masterQQs?.length) {
@@ -2402,13 +2257,40 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       const user_id = masterQQs[i];
       
       try {
-        const friend = this.pickFriend(user_id);
-        if (friend?.sendMsg) {
-          results[user_id] = await friend.sendMsg(msg);
-          BotUtil.makeLog("debug", `已发送消息给主人 ${user_id}`, '服务器');
+        // 尝试使用pickFriend（OneBot特定）或pickUser（通用）
+        const pickFn = this.pickFriend || this.pickUser;
+        if (pickFn && typeof pickFn === 'function') {
+          const friend = pickFn.call(this, user_id);
+          if (friend?.sendMsg) {
+            results[user_id] = await friend.sendMsg(msg);
+            BotUtil.makeLog("debug", `已发送消息给主人 ${user_id}`, '服务器');
+          } else {
+            results[user_id] = { error: "没有可用的Bot" };
+            BotUtil.makeLog("warn", `无法向主人 ${user_id} 发送消息`, '服务器');
+          }
         } else {
-          results[user_id] = { error: "没有可用的Bot" };
-          BotUtil.makeLog("warn", `无法向主人 ${user_id} 发送消息`, '服务器');
+          // 如果没有pickFriend/pickUser，尝试从所有bot中查找
+          let sent = false;
+          for (const bot_id of this.uin || []) {
+            const bot = this.bots[bot_id];
+            if (bot?.pickFriend) {
+              try {
+                const friend = bot.pickFriend(user_id);
+                if (friend?.sendMsg) {
+                  results[user_id] = await friend.sendMsg(msg);
+                  BotUtil.makeLog("debug", `已发送消息给主人 ${user_id}`, '服务器');
+                  sent = true;
+                  break;
+                }
+              } catch (err) {
+                // 继续尝试下一个bot
+              }
+            }
+          }
+          if (!sent) {
+            results[user_id] = { error: "没有可用的Bot或适配器不支持" };
+            BotUtil.makeLog("warn", `无法向主人 ${user_id} 发送消息`, '服务器');
+          }
         }
         
         if (sleep && i < masterQQs.length - 1) {

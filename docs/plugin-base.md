@@ -10,13 +10,65 @@
 - **插件实例（this）**
   - `this.name`：插件名称（用于日志与开关）。
   - `this.dsc`：插件描述。
-  - `this.event`：默认事件类型（如 `"message"`、`"notice"`、`"device"` 等）。
+  - `this.event`：默认事件类型（支持通用事件和特定事件，见下方说明）。
   - `this.priority`：优先级（数值越小越先执行，默认 `5000`）。
   - `this.rule`：规则数组，用于匹配消息与事件。
   - `this.task`：定时任务定义。
   - `this.handler`：通用 Handler 定义（配合 `Handler` 使用）。
   - `this.eventSubscribe`：事件订阅配置。
   - `this.bypassThrottle`：是否绕过节流与冷却限制。
+
+### 标准化事件系统
+
+插件可以通过 `event` 属性监听不同类型的事件：
+
+**通用事件监听（匹配所有来源）：**
+- `event: 'message'` - 匹配所有来源的 message 事件（OneBot、设备等）
+- `event: 'notice'` - 匹配所有来源的 notice 事件
+- `event: 'request'` - 匹配所有来源的 request 事件
+- `event: 'device'` - 匹配所有设备事件
+
+**特定事件监听（只匹配特定来源）：**
+- `event: 'onebot.message'` - 只匹配 OneBot 适配器的 message 事件
+- `event: 'device.message'` - 只匹配设备的 message 事件
+- `event: 'onebot.notice.group_increase'` - 只匹配 OneBot 的群成员增加通知
+
+**示例：**
+
+```javascript
+// 监听所有来源的消息
+export default class MyPlugin extends plugin {
+  constructor() {
+    super({
+      name: 'my-plugin',
+      event: 'message',  // 匹配所有 message 事件
+      rule: [{ reg: '^#测试$', fnc: 'test' }]
+    });
+  }
+}
+
+// 只监听 OneBot 的消息
+export default class OneBotPlugin extends plugin {
+  constructor() {
+    super({
+      name: 'onebot-plugin',
+      event: 'onebot.message',  // 只匹配 OneBot 的 message 事件
+      rule: [{ reg: '^#onebot$', fnc: 'handle' }]
+    });
+  }
+}
+
+// 只监听设备的消息
+export default class DevicePlugin extends plugin {
+  constructor() {
+    super({
+      name: 'device-plugin',
+      event: 'device.message',  // 只匹配设备的 message 事件
+      rule: [{ reg: '.*', fnc: 'handle' }]
+    });
+  }
+}
+```
 
 - **运行时上下文**
   - `this.e`：当前事件对象，由 `PluginsLoader.initPlugins` 在运行时注入。

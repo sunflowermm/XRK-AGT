@@ -4,7 +4,7 @@ export class example2 extends plugin {
       name: '复读',
       dsc: '复读用户发送的内容，然后撤回',
       /** https://oicqjs.github.io/oicq/#events */
-      event: 'message',
+      event: 'onebot.message',
       priority: 5000,
       rule: [
         {

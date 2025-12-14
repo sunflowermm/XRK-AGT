@@ -40,18 +40,26 @@ class ListenerLoader {
           if (!listener.default) continue
           
           const instance = new listener.default()
-          const on = instance.once ? "once" : "on"
-
-          if (lodash.isArray(instance.event)) {
-            instance.event.forEach((type) => {
-              const handler = instance[type] ? type : "execute"
-              bot[on](instance.prefix + type, instance[handler].bind(instance))
-            })
+          
+          // 新的事件系统：onebot.js和device.js使用init方法
+          if (typeof instance.init === 'function') {
+            await instance.init()
+            eventCount++
           } else {
-            const handler = instance[instance.event] ? instance.event : "execute"
-            bot[on](instance.prefix + instance.event, instance[handler].bind(instance))
+            // 向后兼容旧的事件监听器
+            const on = instance.once ? "once" : "on"
+
+            if (lodash.isArray(instance.event)) {
+              instance.event.forEach((type) => {
+                const handler = instance[type] ? type : "execute"
+                bot[on](instance.prefix + type, instance[handler].bind(instance))
+              })
+            } else {
+              const handler = instance[instance.event] ? instance.event : "execute"
+              bot[on](instance.prefix + instance.event, instance[handler].bind(instance))
+            }
+            eventCount++
           }
-          eventCount++
         } catch (err) {
           BotUtil.makeLog('error', `监听事件加载错误: ${file}`, 'ListenerLoader', err);
         }

@@ -12,7 +12,7 @@ export class add extends plugin {
     super({
       name: "添加消息",
       dsc: "添加消息和违禁词管理",
-      event: "message",
+      event: "onebot.message",
       priority: 5000,
       rule: [
         {

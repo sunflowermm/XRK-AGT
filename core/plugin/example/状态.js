@@ -10,7 +10,7 @@ export class stattools extends plugin {
     super({
       name: 'System Status',
       dsc: '系统状态监控',
-      event: 'message',
+      event: 'onebot.message',
       priority: 5000,
       rule: [{
         reg: '^#状态$',

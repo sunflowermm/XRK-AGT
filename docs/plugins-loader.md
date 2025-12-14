@@ -158,6 +158,46 @@
 
 ## 事件系统与订阅
 
+### 标准化事件系统
+
+XRK-AGT 采用标准化事件命名系统，确保不同来源的事件可以区分，同时支持通用事件监听。
+
+**事件命名规则：**
+
+- **OneBot 适配器事件**：
+  - 格式：`onebot.{post_type}.{message_type/notice_type/request_type}.{sub_type}`
+  - 示例：`onebot.message.group.normal`、`onebot.notice.group_increase`
+  - 同时也会触发通用事件：`message.group.normal`、`notice.group_increase`
+
+- **设备事件**：
+  - 格式：`device.{event_type}`
+  - 示例：`device.message`、`device.online`、`device.offline`
+  - 如果 `event_type` 是 `message/notice/request`，同时也会触发通用事件
+
+**插件事件监听：**
+
+插件可以通过 `event` 属性监听不同类型的事件：
+
+- **通用事件监听**：
+  - `event: 'message'` - 匹配所有来源的 message 事件（OneBot、设备等）
+  - `event: 'notice'` - 匹配所有来源的 notice 事件
+  - `event: 'request'` - 匹配所有来源的 request 事件
+  - `event: 'device'` - 匹配所有设备事件
+
+- **特定事件监听**：
+  - `event: 'onebot.message'` - 只匹配 OneBot 适配器的 message 事件
+  - `event: 'device.message'` - 只匹配设备的 message 事件
+  - `event: 'onebot.notice.group_increase'` - 只匹配 OneBot 的群成员增加通知
+
+**事件过滤逻辑：`filtEvent(e, v)`**
+
+加载器会检查插件监听的事件是否匹配实际触发的事件：
+
+1. 完全匹配：插件事件名称与实际事件名称完全一致
+2. 通用事件匹配：插件监听 `message` 时，匹配所有 `message.*`、`onebot.message.*`、`device.message`
+3. 前缀匹配：插件监听 `onebot.*` 时，匹配所有 `onebot.*` 事件
+4. 通配符匹配：支持 `*` 通配符，如 `onebot.message.*`
+
 - **全局监听注册：`initEventSystem()`**
   - 定时清理：
     - `eventHistory` 超出上限。

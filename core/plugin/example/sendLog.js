@@ -8,7 +8,7 @@ export class sendLog extends plugin {
     super({
       name: "发送日志",
       dsc: "发送最近运行日志",
-      event: "message",
+      event: "onebot.message",
       priority: -Infinity,
       rule: [
         {

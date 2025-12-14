@@ -11,7 +11,7 @@ export class Restart extends plugin {
     super({
       name: '重启与关机',
       dsc: '#重启 #关机 #停机 #开机',
-      event: 'message',
+      event: 'onebot.message',
       priority: 10,
       rule: [
         { reg: '^#重启$', fnc: 'restart', permission: 'master' },

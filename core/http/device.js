@@ -870,7 +870,8 @@ class DeviceManager {
                 device.device_name
             );
 
-            runtimeBot.em('device.online', {
+            // 标准化事件系统: 触发设备上线事件
+            const onlineEventData = {
                 post_type: 'device',
                 event_type: 'online',
                 device_id,
@@ -879,7 +880,8 @@ class DeviceManager {
                 capabilities,
                 self_id: device_id,
                 time: Math.floor(Date.now() / 1000)
-            });
+            };
+            runtimeBot.em('device.online', onlineEventData);
         } else {
             BotUtil.makeLog('debug',
                 `↻ [设备重连] ${device.device_name} (${device_id})`,
@@ -975,15 +977,17 @@ class DeviceManager {
             );
 
             if (runtimeBot) {
-                runtimeBot.em('device.offline', {
-                    post_type: 'device',
-                    event_type: 'offline',
-                    device_id: deviceId,
-                    device_type: device.device_type,
-                    device_name: device.device_name,
-                    self_id: deviceId,
-                    time: Math.floor(Date.now() / 1000)
-                });
+                    // 标准化事件系统: 触发设备离线事件
+                    const offlineEventData = {
+                        post_type: 'device',
+                        event_type: 'offline',
+                        device_id: deviceId,
+                        device_type: device.device_type,
+                        device_name: device.device_name,
+                        self_id: deviceId,
+                        time: Math.floor(Date.now() / 1000)
+                    };
+                    runtimeBot.em('device.offline', offlineEventData);
             }
         }
 
@@ -1282,7 +1286,8 @@ class DeviceManager {
                     return await this.handleASRSessionStop(deviceId, eventData);
 
                 default:
-                    runtimeBot.em(`device.${eventType}`, {
+                    // 标准化事件系统: 创建标准化事件对象
+                    const deviceEventData = {
                         post_type: 'device',
                         event_type: eventType,
                         device_id: deviceId,
@@ -1290,8 +1295,30 @@ class DeviceManager {
                         device_name: device.device_name,
                         event_data: eventData,
                         self_id: deviceId,
-                        time: Math.floor(Date.now() / 1000)
-                    });
+                        user_id: eventData.user_id || deviceId,
+                        time: Math.floor(Date.now() / 1000),
+                        event_id: `device_${eventType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        adapter: 'device',
+                        isDevice: true,
+                        bot: runtimeBot[deviceId],
+                        // 如果是消息事件，添加消息相关字段
+                        ...(eventType === 'message' ? {
+                            message: eventData.message || [{ type: 'text', text: eventData.text || '' }],
+                            raw_message: eventData.text || eventData.message || '',
+                            msg: eventData.text || eventData.message || '',
+                            sender: eventData.sender || { nickname: device.device_name }
+                        } : {})
+                    };
+                    
+                    // 触发device事件（从具体到通用）
+                    const specificDeviceEvent = `device.${eventType}`;
+                    runtimeBot.em(specificDeviceEvent, deviceEventData);
+                    runtimeBot.em('device', deviceEventData);
+                    
+                    // 如果事件类型是 message/notice/request, 同时触发通用事件
+                    if (['message', 'notice', 'request'].includes(eventType)) {
+                        runtimeBot.em(`device.${eventType}`, deviceEventData);
+                    }
             }
 
             return { success: true };

@@ -5,7 +5,7 @@ export class DailySignIn extends plugin {
         super({
             name: '每日定时消息模拟',
             dsc: '每天12点模拟发送消息',
-            event: 'message',
+            event: 'onebot.message',
             priority: 5,
             rule: []
         });

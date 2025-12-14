@@ -1,5 +1,6 @@
 import path from "node:path"
 import { ulid } from "ulid"
+import OneBotFunctions from "../../src/infrastructure/bot/onebot.js"
 
 Bot.adapter.push(
   new (class OneBotv11Adapter {
@@ -1066,7 +1067,7 @@ Bot.adapter.push(
     async connect(data, ws) {
       const self_id = data.self_id
       
-      // 初始化Bot基础结构
+      // 初始化Bot基础结构（保留OneBot特定功能）
       Bot[self_id] = {
         adapter: this,
         ws: ws,
@@ -1295,7 +1296,19 @@ Bot.adapter.push(
           Bot.makeLog("warn", `未知消息：${logger.magenta(data.raw)}`, data.self_id)
       }
 
-      Bot.em(`${data.post_type}.${data.message_type}.${data.sub_type}`, data)
+      // 标准化事件系统: OneBot事件统一使用onebot.前缀
+      // 确保事件对象有必要的标识
+      data.adapter = 'onebot'
+      data.isOneBot = true
+      
+      const onebotEvent = `onebot.${data.post_type}.${data.message_type}.${data.sub_type}`
+      const onebotEventSimple = `onebot.${data.post_type}.${data.message_type}`
+      const onebotEventBase = `onebot.${data.post_type}`
+      
+      // 触发onebot事件（从具体到通用）
+      Bot.em(onebotEvent, data)
+      Bot.em(onebotEventSimple, data)
+      Bot.em(onebotEventBase, data)
     }
 
     /**
@@ -1365,14 +1378,18 @@ Bot.adapter.push(
             `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
             true,
           )
-          Bot.em("message.group.normal", {
+          // 标准化事件系统: OneBot事件统一使用onebot.前缀
+          const fileEventData = {
             ...data,
             post_type: "message",
             message_type: "group",
             sub_type: "normal",
             message: [{ ...data.file, type: "file" }],
             raw_message: `[文件：${data.file.name}]`,
-          })
+          }
+          Bot.em("onebot.message.group.normal", fileEventData)
+          Bot.em("onebot.message.group", fileEventData)
+          Bot.em("onebot.message", fileEventData)
           break
         case "group_ban":
           Bot.makeLog(
@@ -1478,14 +1495,18 @@ Bot.adapter.push(
             `${data.self_id} <= ${data.user_id}`,
             true,
           )
-          Bot.em("message.private.friend", {
+          // 标准化事件系统: OneBot事件统一使用onebot.前缀
+          const offlineFileEventData = {
             ...data,
             post_type: "message",
             message_type: "private",
             sub_type: "friend",
             message: [{ ...data.file, type: "file" }],
             raw_message: `[文件：${data.file.name}]`,
-          })
+          }
+          Bot.em("onebot.message.private.friend", offlineFileEventData)
+          Bot.em("onebot.message.private", offlineFileEventData)
+          Bot.em("onebot.message", offlineFileEventData)
           break
         case "client_status":
           Bot.makeLog(
@@ -1575,7 +1596,18 @@ Bot.adapter.push(
         })
       }
 
-      Bot.em(`${data.post_type}.${data.notice_type}.${data.sub_type}`, data)
+      // 标准化事件系统: OneBot事件统一使用onebot.前缀
+      data.adapter = 'onebot'
+      data.isOneBot = true
+      
+      const onebotNoticeEvent = `onebot.${data.post_type}.${data.notice_type}.${data.sub_type}`
+      const onebotNoticeEventSimple = `onebot.${data.post_type}.${data.notice_type}`
+      const onebotNoticeEventBase = `onebot.${data.post_type}`
+      
+      // 触发onebot事件（从具体到通用）
+      Bot.em(onebotNoticeEvent, data)
+      Bot.em(onebotNoticeEventSimple, data)
+      Bot.em(onebotNoticeEventBase, data)
     }
 
     /**
@@ -1611,7 +1643,18 @@ Bot.adapter.push(
       }
 
       data.bot.request_list.push(data)
-      Bot.em(`${data.post_type}.${data.request_type}.${data.sub_type}`, data)
+      // 标准化事件系统: OneBot事件统一使用onebot.前缀
+      data.adapter = 'onebot'
+      data.isOneBot = true
+      
+      const onebotRequestEvent = `onebot.${data.post_type}.${data.request_type}.${data.sub_type}`
+      const onebotRequestEventSimple = `onebot.${data.post_type}.${data.request_type}`
+      const onebotRequestEventBase = `onebot.${data.post_type}`
+      
+      // 触发onebot事件（从具体到通用）
+      Bot.em(onebotRequestEvent, data)
+      Bot.em(onebotRequestEventSimple, data)
+      Bot.em(onebotRequestEventBase, data)
     }
 
     /**
@@ -1685,6 +1728,9 @@ Bot.adapter.push(
       Bot.wsf[this.path].push((ws, ...args) =>
         ws.on("message", data => this.message(data, ws, ...args)),
       )
+      
+      // 注册OneBot特定函数到Bot实例
+      OneBotFunctions.register(Bot)
     }
   })(),
 )

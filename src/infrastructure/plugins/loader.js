@@ -17,12 +17,25 @@ global.segment = segment
 /**
  * 事件类型映射表
  * 用于将事件字符串转换为对应的属性路径
+ * 
+ * 标准化事件系统说明:
+ * - OneBot 事件格式: onebot.{post_type}.{message_type/notice_type/request_type}.{sub_type}
+ * - 设备事件格式: device.{event_type}
+ * - 插件可以监听:
+ *   - "onebot.message" 只匹配 OneBot 的 message 事件
+ *   - "onebot.notice" 只匹配 OneBot 的 notice 事件
+ *   - "onebot.request" 只匹配 OneBot 的 request 事件
+ *   - "onebot.*" 匹配所有 OneBot 事件
+ *   - "device.message" 只匹配设备的 message 事件
+ *   - "device.notice" 只匹配设备的 notice 事件
+ *   - "device.request" 只匹配设备的 request 事件
+ *   - "device.*" 匹配所有设备事件
  */
 const EVENT_MAP = {
-  message: ['post_type', 'message_type', 'sub_type'],
-  notice: ['post_type', 'notice_type', 'sub_type'],
-  request: ['post_type', 'request_type', 'sub_type'],
-  device: ['post_type', 'event_type', 'sub_type']
+  'onebot.message': ['post_type', 'message_type', 'sub_type'],
+  'onebot.notice': ['post_type', 'notice_type', 'sub_type'],
+  'onebot.request': ['post_type', 'request_type', 'sub_type'],
+  'device': ['post_type', 'event_type', 'sub_type']
 }
 
 /**
@@ -369,81 +382,110 @@ class PluginsLoader {
   }
 
   /**
-   * 设置回复方法
+   * 设置回复方法（通用方法，支持所有适配器）
    * @param {Object} e - 事件对象
    */
   setupReply(e) {
-    if (!e.reply || e.isDevice) return
+    // 如果已经有reply方法且不是设备事件，使用原有逻辑
+    if (e.reply && !e.isDevice && !e.isStdin) {
+      e.replyNew = e.reply
+      e.reply = async (msg = '', quote = false, data = {}) => {
+        if (!msg) return false
 
-    e.replyNew = e.reply
-
-    e.reply = async (msg = '', quote = false, data = {}) => {
-      if (!msg) return false
-
-      try {
-        // stdin事件直接回复
-        if (e.isStdin) {
-          return await e.replyNew(msg, quote, data)
-        }
-
-        // 检查群聊禁言
-        if (e.isGroup && e.group) {
-          if (e.group.mute_left > 0 ||
-            (e.group.all_muted && !e.group.is_admin && !e.group.is_owner)) {
-            return false
-          }
-        }
-
-        let { recallMsg = 0, at = '' } = data
-        if (!Array.isArray(msg)) msg = [msg]
-
-        // 处理@
-        if (at && e.isGroup) {
-          const atId = at === true ? e.user_id : at
-          const atName = at === true ? e.sender?.card : ''
-          msg.unshift(segment.at(atId, lodash.truncate(atName, { length: 10 })), '\n')
-        }
-
-        // 处理引用
-        if (quote && e.message_id) {
-          msg.unshift(segment.reply(e.message_id))
-        }
-
-        // 发送消息
-        let msgRes
         try {
-          msgRes = await e.replyNew(msg, false)
-        } catch (err) {
-          logger.error(`发送消息错误: ${err.message}`)
-          // 尝试发送纯文本
-          const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
-          if (textMsg) {
-            try {
-              msgRes = await e.replyNew(textMsg)
-            } catch (innerErr) {
-              logger.debug(`纯文本发送也失败: ${innerErr.message}`)
-              return { error: err }
+          // 检查群聊禁言（仅OneBot）
+          if (e.isGroup && e.group) {
+            if (e.group.mute_left > 0 ||
+              (e.group.all_muted && !e.group.is_admin && !e.group.is_owner)) {
+              return false
             }
           }
-        }
 
-        // 处理撤回
-        if (!e.isGuild && recallMsg > 0 && msgRes?.message_id) {
-          const target = e.isGroup ? e.group : e.friend
-          if (target?.recallMsg) {
-            setTimeout(() => {
-              target.recallMsg(msgRes.message_id)
-              if (e.message_id) target.recallMsg(e.message_id)
-            }, recallMsg * 1000)
+          let { recallMsg = 0, at = '' } = data
+          if (!Array.isArray(msg)) msg = [msg]
+
+          // 处理@（仅OneBot）
+          if (at && e.isGroup && segment) {
+            const atId = at === true ? e.user_id : at
+            const atName = at === true ? e.sender?.card : ''
+            msg.unshift(segment.at(atId, lodash.truncate(atName, { length: 10 })), '\n')
           }
-        }
 
-        this.count(e, 'send', msg)
-        return msgRes
-      } catch (error) {
-        logger.error('回复消息处理错误')
-        logger.error(error)
-        return { error: error.message }
+          // 处理引用（仅OneBot）
+          if (quote && e.message_id && segment) {
+            msg.unshift(segment.reply(e.message_id))
+          }
+
+          // 发送消息
+          let msgRes
+          try {
+            msgRes = await e.replyNew(msg, false)
+          } catch (err) {
+            logger.error(`发送消息错误: ${err.message}`)
+            // 尝试发送纯文本
+            const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
+            if (textMsg) {
+              try {
+                msgRes = await e.replyNew(textMsg)
+              } catch (innerErr) {
+                logger.debug(`纯文本发送也失败: ${innerErr.message}`)
+                return { error: err }
+              }
+            }
+          }
+
+          // 处理撤回（仅OneBot）
+          if (!e.isGuild && recallMsg > 0 && msgRes?.message_id) {
+            const target = e.isGroup ? e.group : e.friend
+            if (target?.recallMsg) {
+              setTimeout(() => {
+                target.recallMsg(msgRes.message_id)
+                if (e.message_id) target.recallMsg(e.message_id)
+              }, recallMsg * 1000)
+            }
+          }
+
+          this.count(e, 'send', msg)
+          return msgRes
+        } catch (error) {
+          logger.error('回复消息处理错误')
+          logger.error(error)
+          return { error: error.message }
+        }
+      }
+      return
+    }
+    
+    // 对于device和stdin，使用通用回复方法
+    if (!e.reply) {
+      e.reply = async (msg = '', quote = false, data = {}) => {
+        if (!msg) return false
+        
+        try {
+          // 优先使用bot的sendMsg
+          if (e.bot && e.bot.sendMsg) {
+            return await e.bot.sendMsg(msg, quote, data)
+          }
+          
+          // 尝试使用适配器的sendMsg
+          if (e.bot?.adapter?.sendMsg) {
+            return await e.bot.adapter.sendMsg(e, msg)
+          }
+          
+          // 最后尝试使用friend/group的sendMsg
+          if (e.friend?.sendMsg) {
+            return await e.friend.sendMsg(msg)
+          }
+          if (e.group?.sendMsg) {
+            return await e.group.sendMsg(msg)
+          }
+          
+          logger.warn('无法找到回复方法')
+          return false
+        } catch (error) {
+          logger.error(`回复消息失败: ${error.message}`)
+          return { error: error.message }
+        }
       }
     }
   }
@@ -463,25 +505,25 @@ class PluginsLoader {
         return await this.processPlugins(plugins, e, true)
       }
 
-      // 处理accept方法
+      // 处理accept方法（前置检查）
       for (const plugin of plugins) {
-        if (plugin?.accept) {
-          try {
-            const res = await plugin.accept(e)
+        try {
+          const res = await plugin.accept(e)
 
-            // 检查是否需要重新解析
-            if (e._needReparse) {
-              delete e._needReparse
-              this.initMsgProps(e)
-              await this.parseMessage(e)
-            }
-
-            if (res === 'return') return true
-            if (res) break
-          } catch (error) {
-            logger.error(`插件 ${plugin.name} accept错误`)
-            logger.error(error)
+          // 检查是否需要重新解析
+          if (e._needReparse) {
+            delete e._needReparse
+            this.initMsgProps(e)
+            await this.parseMessage(e)
           }
+
+          // 'return' 表示停止处理，不再执行后续插件
+          if (res === 'return') return true
+          // false 表示拒绝处理，跳过当前插件
+          if (res === false) continue
+        } catch (error) {
+          logger.error(`插件 ${plugin.name} accept错误`)
+          logger.error(error)
         }
       }
 
@@ -809,7 +851,7 @@ class PluginsLoader {
   }
 
   /**
-   * 初始化事件
+   * 初始化事件（标准化，支持所有适配器）
    * @param {Object} e - 事件对象
    */
   initEvent(e) {
@@ -824,23 +866,42 @@ class PluginsLoader {
       }
     }
 
-    // 设置bot实例
-    const bot = this.isStdinEvent(e) ? (Bot.stdin || Bot) :
-      e.device_id && Bot[e.device_id] ? Bot[e.device_id] :
-        e.self_id && Bot[e.self_id] ? Bot[e.self_id] : Bot
+    // 设置适配器类型标识（如果还没有）
+    if (!e.adapter) {
+      if (e.isOneBot) e.adapter = 'onebot'
+      else if (e.isDevice) e.adapter = 'device'
+      else if (e.isStdin) e.adapter = 'stdin'
+      else if (e.device_id) e.adapter = 'device'
+      else if (this.isStdinEvent(e)) e.adapter = 'stdin'
+      else e.adapter = 'onebot' // 默认
+    }
+
+    // 设置bot实例（标准化）
+    let bot = null
+    if (this.isStdinEvent(e)) {
+      bot = Bot.stdin || Bot['stdin'] || Bot
+    } else if (e.device_id && Bot[e.device_id]) {
+      bot = Bot[e.device_id]
+    } else if (e.self_id && Bot[e.self_id]) {
+      bot = Bot[e.self_id]
+    } else {
+      bot = Bot
+    }
 
     // 使用不可修改的bot属性
-    Object.defineProperty(e, 'bot', {
-      value: bot,
-      writable: false,
-      configurable: false
-    })
+    if (!e.bot) {
+      Object.defineProperty(e, 'bot', {
+        value: bot,
+        writable: false,
+        configurable: false
+      })
+    }
 
-    // 生成事件ID
+    // 生成事件ID（如果还没有）
     if (!e.event_id) {
       const postType = e.post_type || 'unknown'
       const randomId = Math.random().toString(36).substr(2, 9)
-      e.event_id = `${postType}_${Date.now()}_${randomId}`
+      e.event_id = `${e.adapter || 'event'}_${postType}_${Date.now()}_${randomId}`
     }
 
     this.count(e, 'receive')
@@ -899,10 +960,6 @@ class PluginsLoader {
         logger.debug(`[关机状态] 忽略消息: ${msg}`)
         return false
       }
-
-      // 基础检查
-      if (this.checkGuildMsg(e)) return false
-      if (!this.checkBlack(e)) return false
 
       // bypass插件跳过限制检查
       if (hasBypassPlugin) return true
@@ -1244,23 +1301,130 @@ class PluginsLoader {
 
   /**
    * 过滤事件
+   * 标准化事件系统: 支持onebot.*、device.*和stdin.*事件匹配
+   * - 监听 "message" 匹配所有适配器的 message 事件（跨平台）
+   * - 监听 "onebot.message" 只匹配 onebot 的 message 事件
+   * - 监听 "onebot.*" 匹配所有 onebot 事件
+   * - 监听 "device.message" 只匹配 device 的 message 事件
+   * - 监听 "device.*" 匹配所有 device 事件
+   * - 监听 "stdin.command" 只匹配 stdin 的 command 事件
+   * - 监听 "stdin.*" 匹配所有 stdin 事件
    * @param {Object} e - 事件对象
-   * @param {Object} v - 规则对象
+   * @param {Object} v - 规则对象或插件对象
    * @returns {boolean}
    */
   filtEvent(e, v) {
     if (!v.event) return true
 
-    const event = v.event.split('.')
-    const postType = e.post_type || ''
-    const eventMap = EVENT_MAP[postType] || []
-    const newEvent = event.map((val, i) => {
-      if (val === '*') return val
-      const mapKey = eventMap[i]
-      return mapKey && e[mapKey] ? e[mapKey] : ''
-    })
+    const pluginEvent = v.event
+    
+    // 构建实际触发的事件名称列表
+    const possibleEvents = []
+    const genericEvents = [] // 通用事件名（如 message, notice, request）
+    
+    // 判断事件来源
+    if (e.isOneBot || e.adapter === 'onebot') {
+      // OneBot 事件
+      const postType = e.post_type || ''
+      const typeKey = postType === 'message' ? 'message_type' : 
+                     postType === 'notice' ? 'notice_type' : 
+                     postType === 'request' ? 'request_type' : ''
+      const subTypeKey = 'sub_type'
+      const type = e[typeKey] || ''
+      const subType = e[subTypeKey] || ''
+      
+      // 构建onebot事件名称（从具体到通用）
+      if (postType && type && subType) {
+        possibleEvents.push(`onebot.${postType}.${type}.${subType}`)
+      }
+      if (postType && type) {
+        possibleEvents.push(`onebot.${postType}.${type}`)
+      }
+      if (postType) {
+        possibleEvents.push(`onebot.${postType}`)
+        genericEvents.push(postType) // 添加通用事件名
+      }
+    } else if (e.isDevice || e.adapter === 'device' || e.post_type === 'device') {
+      // 设备事件
+      const eventType = e.event_type || ''
+      
+      if (eventType) {
+        possibleEvents.push(`device.${eventType}`)
+        genericEvents.push(eventType) // 添加通用事件名
+      }
+      possibleEvents.push('device')
+    } else if (e.isStdin || e.adapter === 'stdin') {
+      // Stdin 事件
+      const eventType = e.command ? 'command' : (e.post_type || 'message')
+      
+      if (eventType) {
+        possibleEvents.push(`stdin.${eventType}`)
+        genericEvents.push(eventType) // 添加通用事件名
+      }
+      possibleEvents.push('stdin')
+    }
+    
+    // 检查插件监听的事件是否匹配任何可能的事件
+    for (const actualEvent of possibleEvents) {
+      // 1. 完全匹配
+      if (pluginEvent === actualEvent) return true
+      
+      // 2. 通配符匹配
+      if (this.matchEventPattern(pluginEvent, actualEvent)) return true
+    }
+    
+    // 3. 通用事件匹配：如果插件监听的是通用事件名（如 "message"），匹配所有适配器的对应事件
+    if (!pluginEvent.includes('.') || pluginEvent.split('.').length === 1) {
+      // 通用事件名，如 "message", "notice", "request"
+      const genericEventName = pluginEvent
+      return genericEvents.includes(genericEventName)
+    }
+    
+    // 4. 前缀匹配: onebot.* 匹配所有 onebot 事件
+    if (pluginEvent === 'onebot.*' || pluginEvent.startsWith('onebot.')) {
+      return possibleEvents.some(ev => ev.startsWith('onebot.'))
+    }
+    
+    // 5. 前缀匹配: device.* 匹配所有 device 事件
+    if (pluginEvent === 'device.*' || pluginEvent.startsWith('device.')) {
+      return possibleEvents.some(ev => ev.startsWith('device.') || ev === 'device')
+    }
+    
+    // 6. 前缀匹配: stdin.* 匹配所有 stdin 事件
+    if (pluginEvent === 'stdin.*' || pluginEvent.startsWith('stdin.')) {
+      return possibleEvents.some(ev => ev.startsWith('stdin.') || ev === 'stdin')
+    }
+    
+    // 7. 通用匹配: device/stdin 匹配所有对应事件
+    if (pluginEvent === 'device') {
+      return possibleEvents.some(ev => ev.startsWith('device.') || ev === 'device')
+    }
+    if (pluginEvent === 'stdin') {
+      return possibleEvents.some(ev => ev.startsWith('stdin.') || ev === 'stdin')
+    }
+    
+    return false
+  }
 
-    return v.event === newEvent.join('.')
+  /**
+   * 匹配事件模式(支持通配符)
+   * @param {string} pattern - 模式字符串
+   * @param {string} event - 事件字符串
+   * @returns {boolean}
+   */
+  matchEventPattern(pattern, event) {
+    if (pattern === event) return true
+    if (!pattern.includes('*')) return false
+    
+    const patternParts = pattern.split('.')
+    const eventParts = event.split('.')
+    
+    if (patternParts.length !== eventParts.length) return false
+    
+    return patternParts.every((part, i) => {
+      if (part === '*') return true
+      return part === eventParts[i]
+    })
   }
 
   /**
@@ -1405,69 +1569,6 @@ class PluginsLoader {
       e.atBot || e.hasAlias
   }
 
-  /**
-   * 检查频道消息
-   * @param {Object} e - 事件对象
-   * @returns {boolean}
-   */
-  checkGuildMsg(e) {
-    const other = cfg.getOther()
-    return other?.disableGuildMsg === true && e.detail_type === 'guild'
-  }
-
-  /**
-   * 检查黑名单
-   * @param {Object} e - 事件对象
-   * @returns {boolean}
-   */
-  checkBlack(e) {
-    // 特殊事件直接通过
-    if (e.isDevice || e.isStdin) return true
-
-    const adapter = e.adapter || ''
-    if (['cmd'].includes(adapter)) return true
-
-    const other = cfg.getOther()
-    if (!other) return true
-
-    const check = id => [Number(id), String(id)]
-
-    // QQ黑名单
-    const blackQQ = other.blackQQ || []
-    if (Array.isArray(blackQQ)) {
-      if (check(e.user_id).some(id => blackQQ.includes(id))) return false
-      if (e.at && check(e.at).some(id => blackQQ.includes(id))) return false
-    }
-
-    // 设备黑名单
-    const blackDevice = other.blackDevice || []
-    if (e.device_id && Array.isArray(blackDevice) && blackDevice.includes(e.device_id)) {
-      return false
-    }
-
-    // QQ白名单
-    const whiteQQ = other.whiteQQ || []
-    if (Array.isArray(whiteQQ) && whiteQQ.length > 0 &&
-      !check(e.user_id).some(id => whiteQQ.includes(id))) {
-      return false
-    }
-
-    // 群组黑白名单
-    if (e.group_id) {
-      const blackGroup = other.blackGroup || []
-      if (Array.isArray(blackGroup) && check(e.group_id).some(id => blackGroup.includes(id))) {
-        return false
-      }
-
-      const whiteGroup = other.whiteGroup || []
-      if (Array.isArray(whiteGroup) && whiteGroup.length > 0 &&
-        !check(e.group_id).some(id => whiteGroup.includes(id))) {
-        return false
-      }
-    }
-
-    return true
-  }
 
   /**
    * 检查插件禁用状态
@@ -1595,21 +1696,11 @@ class PluginsLoader {
 
   /**
    * 注册全局事件监听器
+   * 注意: 现在事件系统已经改为onebot.js和device.js，这里不再需要注册通用事件监听
    */
   registerGlobalEventListeners() {
-    const eventTypes = ['message', 'notice', 'request', 'device']
-
-    eventTypes.forEach(type => {
-      Bot.on(type, (e) => {
-        try {
-          this.recordEventHistory(type, e)
-          this.distributeToSubscribers(type, e)
-        } catch (error) {
-          logger.error(`事件监听器错误 [${type}]`)
-          logger.error(error)
-        }
-      })
-    })
+    // 事件监听已由onebot.js和device.js处理
+    // 这里保留用于向后兼容或特殊事件
   }
 
   /**

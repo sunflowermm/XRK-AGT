@@ -123,37 +123,99 @@ const cleanupBucket = (key) => {
   }
 }
 
-/**
- * 插件基类
- * 
- * 所有插件的基类，提供事件处理、工作流集成、上下文管理等功能。
- * 插件通过继承此类实现消息处理、定时任务、事件监听等功能。
- * 
- * @abstract
- * @class plugin
- * @example
- * // 创建自定义插件
- * export default class MyPlugin extends plugin {
- *   constructor() {
- *     super({
- *       name: 'my-plugin',
- *       dsc: '我的插件',
- *       event: 'message',
- *       priority: 5000,
- *       rule: [
- *         {
- *           reg: '^#测试$',
- *           fnc: 'test'
- *         }
- *       ]
- *     });
- *   }
- *   
- *   async test(e) {
- *     await this.reply('测试成功');
- *   }
- * }
- */
+  /**
+   * 插件基类
+   * 
+   * 所有插件的基类，提供事件处理、工作流集成、上下文管理等功能。
+   * 插件通过继承此类实现消息处理、定时任务、事件监听等功能。
+   * 
+   * 标准化事件系统:
+   * - 监听 "message" 可以匹配所有适配器的 message 事件（跨平台）
+   * - 监听 "onebot.message" 只匹配 OneBot 适配器的 message 事件
+   * - 监听 "onebot.notice" 只匹配 OneBot 适配器的 notice 事件
+   * - 监听 "onebot.request" 只匹配 OneBot 适配器的 request 事件
+   * - 监听 "onebot.*" 可以匹配所有 OneBot 事件
+   * - 监听 "device.message" 只匹配设备的 message 事件
+   * - 监听 "device.notice" 只匹配设备的 notice 事件
+   * - 监听 "device.request" 只匹配设备的 request 事件
+   * - 监听 "device.*" 可以匹配所有设备事件
+   * - 监听 "device" 可以匹配所有设备事件
+   * - 监听 "stdin.command" 只匹配标准输入的命令事件
+   * - 监听 "stdin.*" 可以匹配所有标准输入事件
+   * 
+   * @abstract
+   * @class plugin
+   * @example
+   * // 跨平台插件：监听所有适配器的消息
+   * export default class CrossPlatformPlugin extends plugin {
+   *   constructor() {
+   *     super({
+   *       name: 'cross-platform-plugin',
+   *       dsc: '跨平台插件',
+   *       event: 'message',  // 匹配所有适配器的 message 事件
+   *       priority: 5000,
+   *       rule: [
+   *         {
+   *           reg: '^#测试$',
+   *           fnc: 'test'
+   *         }
+   *       ]
+   *     });
+   *   }
+   *   
+   *   async test(e) {
+   *     await this.reply(`收到来自 ${e.adapter} 的消息: ${e.msg}`);
+   *   }
+   * }
+   * 
+   * @example
+   * // 只监听 OneBot 的消息
+   * export default class OneBotPlugin extends plugin {
+   *   constructor() {
+   *     super({
+   *       name: 'onebot-plugin',
+   *       dsc: 'OneBot插件',
+   *       event: 'onebot.message',  // 只匹配 OneBot 的 message 事件
+   *       priority: 5000,
+   *       rule: [
+   *         {
+   *           reg: '^#测试$',
+   *           fnc: 'test'
+   *         }
+   *       ]
+   *     });
+   *   }
+   *   
+   *   async test(e) {
+   *     await this.reply('测试成功');
+   *   }
+   * }
+   * 
+   * @example
+   * // 只监听设备的消息
+   * export default class DevicePlugin extends plugin {
+   *   constructor() {
+   *     super({
+   *       name: 'device-plugin',
+   *       dsc: '设备插件',
+   *       event: 'device.message',  // 只匹配设备的 message 事件
+   *       rule: [{ reg: '.*', fnc: 'handle' }]
+   *     });
+   *   }
+   * }
+   * 
+   * @example
+   * // 监听所有 OneBot 事件
+   * export default class AllOneBotPlugin extends plugin {
+   *   constructor() {
+   *     super({
+   *       name: 'all-onebot-plugin',
+   *       event: 'onebot.*',  // 匹配所有 OneBot 事件
+   *       rule: [{ reg: '.*', fnc: 'handle' }]
+   *     });
+   *   }
+   * }
+   */
 export default class plugin {
   constructor(options = {}) {
     this.name = options.name || "your-plugin"
@@ -191,11 +253,28 @@ export default class plugin {
   }
 
   /**
-   * 回复消息
+   * 回复消息（通用方法，支持所有适配器）
    */
   reply(msg = "", quote = false, data = {}) {
-    if (!this.e?.reply || !msg) return false
-    return this.e.reply(msg, quote, data)
+    if (!this.e) return false
+    if (!msg) return false
+    
+    // 优先使用事件对象的reply方法
+    if (this.e.reply && typeof this.e.reply === 'function') {
+      return this.e.reply(msg, quote, data)
+    }
+    
+    // 如果没有reply方法，尝试使用bot的sendMsg
+    if (this.e.bot && this.e.bot.sendMsg) {
+      return this.e.bot.sendMsg(msg, quote, data)
+    }
+    
+    // 最后尝试使用适配器的sendMsg
+    if (this.e.adapter && this.e.bot?.adapter?.sendMsg) {
+      return this.e.bot.adapter.sendMsg(this.e, msg)
+    }
+    
+    return false
   }
 
   /**
@@ -306,6 +385,42 @@ export default class plugin {
     
     this.finish("resolveContext")
     if (resolve && context) resolve(this.e)
+  }
+
+  /**
+   * 前置检查方法（accept）
+   * 插件可以通过重写此方法来实现自定义的前置检查逻辑
+   * 例如：黑白名单、权限检查、事件过滤等
+   * 
+   * @param {Object} e - 事件对象
+   * @returns {Promise<boolean|string>}
+   *   - true: 通过检查，继续处理
+   *   - false: 拒绝处理，跳过当前插件
+   *   - 'return': 停止处理，不再执行后续插件
+   *   - 其他值: 继续处理，但可以用于传递状态
+   * 
+   * @example
+   * // 在插件中重写accept方法实现黑白名单
+   * async accept(e) {
+   *   // 特殊事件直接通过
+   *   if (e.isDevice || e.isStdin) return true
+   *   
+   *   // 检查黑名单
+   *   if (this.isBlacklisted(e.user_id)) {
+   *     return false
+   *   }
+   *   
+   *   // 检查白名单
+   *   if (this.hasWhitelist() && !this.isWhitelisted(e.user_id)) {
+   *     return false
+   *   }
+   *   
+   *   return true
+   * }
+   */
+  async accept(e) {
+    // 默认实现：所有事件都通过
+    return true
   }
 
   /**
