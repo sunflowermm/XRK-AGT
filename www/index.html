@@ -3,41 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="XRK-AGT - 新一代高性能向日葵机器人框架">
-    <title>XRK-AGT | 智能机器人框架</title>
+    <meta name="description" content="XRK-AGT - 基于Yunzai-Bot的向日葵机器人框架">
+    <title>XRK-AGT | 下一代机器人框架</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #050508;
+            --bg-dark: #050507;
             --bg-card: rgba(20, 20, 25, 0.6);
+            --bg-card-hover: rgba(30, 30, 40, 0.8);
             --primary: #FFD700; /* 向日葵金 */
-            --primary-glow: rgba(255, 215, 0, 0.3);
-            --accent: #6366f1; /* 科技紫 */
-            --text-main: #ffffff;
-            --text-muted: #94a3b8;
-            --border: rgba(255, 255, 255, 0.08);
-            --glass: blur(20px);
+            --primary-glow: rgba(255, 215, 0, 0.4);
+            --accent: #7C3AED; /* 紫色 */
+            --accent-glow: rgba(124, 58, 237, 0.4);
+            --text-main: #FFFFFF;
+            --text-muted: #94A3B8;
+            --border: rgba(255, 255, 255, 0.1);
+            --font-main: 'Outfit', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: var(--bg-dark);
             color: var(--text-main);
+            font-family: var(--font-main);
             overflow-x: hidden;
             line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
         }
 
         /* 动态背景 */
         .ambient-light {
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
-            pointer-events: none;
             z-index: -1;
             background: 
-                radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.15), transparent 25%),
-                radial-gradient(circle at 85% 30%, rgba(255, 215, 0, 0.1), transparent 25%);
-            filter: blur(60px);
+                radial-gradient(circle at 15% 50%, rgba(124, 58, 237, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(255, 215, 0, 0.08), transparent 25%);
+            pointer-events: none;
         }
 
         /* 导航栏 */
@@ -49,9 +55,9 @@
             justify-content: space-between;
             align-items: center;
             z-index: 100;
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            background: rgba(5, 5, 8, 0.8);
+            backdrop-filter: blur(12px);
+            background: rgba(5, 5, 7, 0.7);
+            border-bottom: 1px solid var(--border);
         }
 
         .logo {
@@ -60,16 +66,35 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            letter-spacing: -1px;
+            letter-spacing: -0.02em;
         }
-        
-        .logo span { background: linear-gradient(to right, #fff, var(--primary)); -webkit-background-clip: text; color: transparent; }
 
-        .nav-links { display: flex; gap: 30px; list-style: none; }
-        .nav-links a { text-decoration: none; color: var(--text-muted); font-size: 0.95rem; transition: 0.3s; }
-        .nav-links a:hover { color: var(--primary); }
+        .logo span { background: linear-gradient(135deg, #FFF, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
-        /* 核心区域 Hero */
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+            font-size: 0.95rem;
+        }
+
+        .nav-links a:hover { color: var(--text-main); }
+
+        /* 通用容器 */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* Hero 区域 */
         .hero {
             min-height: 100vh;
             display: flex;
@@ -77,173 +102,248 @@
             justify-content: center;
             align-items: center;
             text-align: center;
-            padding: 0 20px;
-            position: relative;
+            padding-top: 4rem;
+        }
+
+        .hero-badge {
+            background: rgba(124, 58, 237, 0.2);
+            border: 1px solid var(--accent);
+            color: #d8b4fe;
+            padding: 0.5rem 1rem;
+            border-radius: 99px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: inline-block;
         }
 
         .hero h1 {
-            font-size: clamp(3rem, 6vw, 5rem);
-            font-weight: 900;
+            font-size: clamp(3rem, 8vw, 5rem);
+            font-weight: 800;
             line-height: 1.1;
-            margin-bottom: 20px;
-            background: linear-gradient(135deg, #fff 0%, var(--text-muted) 100%);
+            margin-bottom: 1.5rem;
+            background: linear-gradient(180deg, #FFFFFF 0%, #94A3B8 100%);
             -webkit-background-clip: text;
-            color: transparent;
-        }
-
-        .hero h1 .highlight {
-            background: linear-gradient(135deg, var(--primary) 0%, #FFA500 100%);
-            -webkit-background-clip: text;
-            color: transparent;
+            -webkit-text-fill-color: transparent;
         }
 
         .hero p {
-            font-size: 1.2rem;
+            font-size: 1.25rem;
             color: var(--text-muted);
             max-width: 600px;
-            margin-bottom: 40px;
+            margin-bottom: 3rem;
         }
 
-        .btn-group { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
-        
+        .btn-group { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+
         .btn {
-            padding: 14px 32px;
+            padding: 1rem 2rem;
             border-radius: 12px;
             font-weight: 600;
             text-decoration: none;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: all 0.3s ease;
             border: 1px solid transparent;
         }
 
         .btn-primary {
-            background: var(--primary);
-            color: #000;
-            box-shadow: 0 4px 20px var(--primary-glow);
+            background: var(--text-main);
+            color: var(--bg-dark);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
         }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--primary-glow); }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+        }
 
         .btn-secondary {
-            background: rgba(255,255,255,0.05);
-            color: white;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border-color: var(--border);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--text-main);
+        }
+
+        /* 卡片网格 */
+        .section-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 6rem;
+        }
+
+        .card {
+            background: var(--bg-card);
             border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
-        .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: white; }
 
-        /* 游戏区域优化 */
-        .game-section {
-            padding: 4rem 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
+        .card:hover {
+            transform: translateY(-5px);
+            background: var(--bg-card-hover);
+            border-color: var(--accent);
+            box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
         }
 
+        .card h3 { font-size: 1.5rem; margin: 1rem 0 0.5rem; }
+        .card p { color: var(--text-muted); font-size: 0.95rem; flex-grow: 1; }
+        .card-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+        
+        .repo-link {
+            margin-top: 1.5rem;
+            color: var(--primary);
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .repo-link:hover { gap: 10px; }
+
+        /* 游戏区域 - 重构核心 */
         .game-wrapper {
             position: relative;
             width: 100%;
-            aspect-ratio: 16/9;
-            background: #000;
+            max-width: 1000px;
+            margin: 0 auto 6rem;
+            background: #111;
             border-radius: 24px;
+            border: 2px solid var(--border);
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
             overflow: hidden;
-            border: 1px solid var(--border);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            aspect-ratio: 16/9;
         }
 
-        canvas {
+        /* 视频层 */
+        #webcam {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* 镜像 */
+            opacity: 0.4;
+            filter: grayscale(30%) contrast(1.2);
+        }
+
+        /* 游戏画布层 */
+        #gameCanvas {
             position: absolute;
             top: 0; left: 0;
-            width: 100%; height: 100%;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
         }
 
-        #videoCanvas { opacity: 0.3; object-fit: cover; transform: scaleX(-1); }
-        #gameCanvas { z-index: 2; }
-
+        /* UI层 */
         .game-ui {
             position: absolute;
-            top: 20px; left: 20px; right: 20px;
-            display: flex;
-            justify-content: space-between;
-            z-index: 10;
-            pointer-events: none;
-        }
-
-        .stat-card {
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(10px);
-            padding: 10px 20px;
-            border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.1);
-            display: flex;
-            flex-direction: column;
-        }
-        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
-        .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--primary); font-family: monospace; }
-
-        .game-controls {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            margin-top: 30px;
-        }
-
-        .guide-overlay {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
+            top: 0; left: 0; width: 100%; height: 100%;
             z-index: 20;
             pointer-events: none;
-            transition: opacity 0.5s;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 2rem;
         }
-        .guide-text {
-            font-size: 2rem;
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--font-code);
+        }
+
+        .score-box {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            padding: 0.8rem 1.5rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
+        }
+
+        .score-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .score-val { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
+
+        .game-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5, 5, 7, 0.85);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            transition: opacity 0.3s;
+        }
+
+        .game-overlay.hidden { opacity: 0; pointer-events: none; }
+
+        .game-overlay h2 { font-size: 3rem; margin-bottom: 1rem; color: #fff; }
+        .game-overlay p { color: var(--text-muted); margin-bottom: 2rem; max-width: 400px; text-align: center; }
+
+        .start-btn {
+            background: linear-gradient(135deg, var(--primary), #F59E0B);
+            border: none;
+            padding: 1rem 3rem;
+            font-size: 1.2rem;
             font-weight: 800;
-            text-shadow: 0 4px 20px rgba(0,0,0,0.8);
-            margin-bottom: 10px;
+            color: #000;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 0 30px var(--primary-glow);
+            transition: transform 0.2s;
+            pointer-events: auto;
         }
-        .guide-sub { color: rgba(255,255,255,0.8); }
-        .hidden { opacity: 0; }
-
-        /* 特性卡片 Grid */
-        .grid-section { padding: 4rem 2rem; max-width: 1200px; margin: 0 auto; }
-        .section-title { text-align: center; font-size: 2.5rem; margin-bottom: 3rem; }
         
-        .card-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-        }
+        .start-btn:hover { transform: scale(1.05); }
 
-        .feature-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            padding: 30px;
-            border-radius: 20px;
-            transition: 0.3s;
-        }
-        .feature-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--primary);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        .icon { font-size: 2.5rem; margin-bottom: 15px; display: block; }
-        .feature-card h3 { margin-bottom: 10px; }
-        .feature-card p { color: var(--text-muted); font-size: 0.9rem; }
-
+        /* 页脚 */
         footer {
             border-top: 1px solid var(--border);
-            padding: 3rem 2rem;
+            padding: 4rem 2rem;
             text-align: center;
-            color: var(--text-muted);
-            margin-top: 4rem;
+            background: rgba(5,5,7,0.8);
         }
 
-        /* 隐藏的辅助 Canvas */
-        #motionCanvas { display: none; }
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
 
+        .footer-links a { color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+        .footer-links a:hover { color: var(--primary); }
+
+        /* 响应式适配 */
         @media (max-width: 768px) {
             .nav-links { display: none; }
-            .hero h1 { font-size: 2.5rem; }
-            .game-wrapper { aspect-ratio: 3/4; }
+            .hero h1 { font-size: 3rem; }
+            .game-wrapper { border-radius: 0; border-left: none; border-right: none; }
         }
+
+        /* 隐藏的辅助Canvas用于运算 */
+        #motionCanvas { display: none; }
     </style>
 </head>
 <body>
@@ -252,431 +352,497 @@
 
     <nav>
         <div class="logo">
-            <span>🌻</span> XRK-AGT
+            <span style="font-size: 1.8rem;">🌻</span>
+            <div>XRK-AGT</div>
         </div>
         <ul class="nav-links">
             <li><a href="#home">首页</a></li>
-            <li><a href="#game">体感试玩</a></li>
+            <li><a href="#repos">仓库</a></li>
             <li><a href="#features">特性</a></li>
-            <li><a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank">GitCode</a></li>
+            <li><a href="#game">体验</a></li>
+            <li><a href="#about">关于</a></li>
         </ul>
     </nav>
 
-    <section id="home" class="hero">
-        <h1>定义新一代<br><span class="highlight">机器人交互体验</span></h1>
-        <p>基于 Yunzai-Bot 的高性能向日葵框架。更懂你的 AI，更丝滑的体验。<br>开源、免费、极速响应。</p>
+    <section id="home" class="hero container">
+        <div class="hero-badge">⚡ Next Gen Bot Framework</div>
+        <h1>为创新而生<br>向日葵机器人框架</h1>
+        <p>基于 Yunzai-Bot 的高性能、模块化解决方案。内置强大的插件系统与 AI 对话能力，开箱即用。</p>
         <div class="btn-group">
-            <a href="#game" class="btn btn-primary" onclick="initCamera()">🎮 立即体验体感</a>
-            <a href="https://github.com/sunflowermm/XRK-AGT" target="_blank" class="btn btn-secondary">⭐ GitHub Star</a>
+            <a href="#game" class="btn btn-primary">🎮 立即体验</a>
+            <a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank" class="btn btn-secondary">📦 GitCode 仓库</a>
         </div>
     </section>
 
-    <section id="game" class="game-section">
-        <h2 class="section-title">高帧率体感演示</h2>
-        <p style="text-align: center; margin-bottom: 20px; color: var(--text-muted);">
-            <small>⚠️ 需要摄像头权限 | 推荐在光线充足的环境下体验 | 算法已优化</small>
+    <section id="repos" class="container" style="padding-top: 6rem;">
+        <h2 class="section-title">源码仓库</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="card-icon">🚀</div>
+                <h3>GitCode (极速)</h3>
+                <p>国内访问首选，提供最快的克隆速度和稳定的文档服务。</p>
+                <a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank" class="repo-link">访问仓库 →</a>
+            </div>
+            <div class="card">
+                <div class="card-icon">🐱</div>
+                <h3>Gitee 镜像</h3>
+                <p>官方实时同步镜像，适合已有 Gitee 账号的开发者使用。</p>
+                <a href="https://gitee.com/xrkseek/xrk-yunzai" target="_blank" class="repo-link">访问仓库 →</a>
+            </div>
+            <div class="card">
+                <div class="card-icon">🌍</div>
+                <h3>GitHub 主站</h3>
+                <p>参与全球开源协作，提交 PR 或 Issue 的最佳场所。</p>
+                <a href="https://github.com/sunflowermm/XRK-AGT" target="_blank" class="repo-link">访问仓库 →</a>
+            </div>
+        </div>
+    </section>
+
+    <section id="game" class="container" style="padding-top: 4rem;">
+        <h2 class="section-title">🌻 动作感应演示</h2>
+        <p style="text-align: center; margin-bottom: 2rem; color: var(--text-muted);">
+            无需特殊设备，使用摄像头即可体验。<br>挥动手臂收集屏幕上的向日葵，将它们放入右下角的篮子！
         </p>
-        
+
         <div class="game-wrapper">
-            <canvas id="videoCanvas"></canvas>
+            <video id="webcam" autoplay playsinline muted></video>
             <canvas id="gameCanvas"></canvas>
             <canvas id="motionCanvas"></canvas>
-            <video id="hiddenVideo" style="display:none;" playsinline autoplay muted></video>
 
             <div class="game-ui">
-                <div class="stat-card">
-                    <span class="stat-label">分数</span>
-                    <span class="stat-value" id="scoreEl">0</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-label">帧率 (FPS)</span>
-                    <span class="stat-value" id="fpsEl">0</span>
+                <div class="hud-top">
+                    <div class="score-box">
+                        <div class="score-label">得分</div>
+                        <div class="score-val" id="ui-score">0</div>
+                    </div>
+                    <div class="score-box">
+                        <div class="score-label">剩余</div>
+                        <div class="score-val" id="ui-left">0</div>
+                    </div>
+                    <div class="score-box">
+                        <div class="score-label">连击</div>
+                        <div class="score-val" id="ui-combo" style="color: #F59E0B">x0</div>
+                    </div>
                 </div>
             </div>
 
-            <div id="guideOverlay" class="guide-overlay">
-                <div class="guide-text">点击下方“启动”</div>
-                <div class="guide-sub">挥手抓取向日葵，放入右下角</div>
+            <div id="startOverlay" class="game-overlay">
+                <h2>准备好了吗？</h2>
+                <p>请确保环境光线充足，并允许浏览器使用摄像头。<br>站在距离屏幕约 1 米处。</p>
+                <button class="start-btn" onclick="game.init()">启动引擎</button>
             </div>
-        </div>
-
-        <div class="game-controls">
-            <button class="btn btn-primary" onclick="startGame()" id="startBtn">▶️ 启动引擎</button>
-            <button class="btn btn-secondary" onclick="stopGame()">⏸️ 停止</button>
-            <button class="btn btn-secondary" onclick="toggleDebug()">👁️ 切换视频背景</button>
+            
+            <div id="endOverlay" class="game-overlay hidden">
+                <h2>任务完成！</h2>
+                <p>最终得分: <span id="finalScore" style="color: var(--primary); font-weight: bold;">0</span></p>
+                <button class="start-btn" onclick="game.restart()">再来一次</button>
+            </div>
         </div>
     </section>
 
-    <section id="features" class="grid-section">
-        <h2 class="section-title">核心优势</h2>
-        <div class="card-grid">
-            <div class="feature-card">
-                <span class="icon">🚀</span>
-                <h3>极速响应</h3>
-                <p>底层逻辑深度优化，消息处理延迟降低 40%，为您提供丝般顺滑的对话体验。</p>
+    <section id="about" class="container" style="padding: 6rem 2rem;">
+        <h2 class="section-title">致谢与社区</h2>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
+            <div class="card" style="background: rgba(255,255,255,0.03);">
+                <h3>Yunzai-Bot V3</h3>
+                <p>感谢乐神 (Le-niao) 构建的坚实基础。</p>
             </div>
-            <div class="feature-card">
-                <span class="icon">🧩</span>
-                <h3>模块化设计</h3>
-                <p>功能解耦，插件热插拔。想要什么功能，装什么插件，拒绝臃肿。</p>
+            <div class="card" style="background: rgba(255,255,255,0.03);">
+                <h3>Miao-Yunzai</h3>
+                <p>感谢喵喵提供的优秀功能扩展思路。</p>
             </div>
-            <div class="feature-card">
-                <span class="icon">🎨</span>
-                <h3>高度可定制</h3>
-                <p>从欢迎语到复杂的业务逻辑，一切皆可配置。打造属于你独一无二的机器人。</p>
+            <div class="card" style="background: rgba(255,255,255,0.03);">
+                <h3>TRSS-Yunzai</h3>
+                <p>感谢时雨在多平台适配上的贡献。</p>
             </div>
         </div>
     </section>
 
     <footer>
-        <p>© 2024 XRK-AGT Framework. Designed for Innovators.</p>
-        <p style="margin-top: 10px; font-size: 0.8rem;">Powered by Web Assembly & Canvas API</p>
+        <div class="logo" style="justify-content: center; margin-bottom: 1rem;">
+            <span>🌻</span> XRK-AGT
+        </div>
+        <div class="footer-links">
+            <a href="https://gitee.com/xrkseek" target="_blank">作者主页</a>
+            <a href="#">使用文档</a>
+            <a href="#">加入 Q 群: 1056289662</a>
+            <a href="#">支持我们</a>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">© 2024 XRK-AGT Team. Built for the future.</p>
     </footer>
 
     <script>
         /**
-         * 游戏引擎核心
-         * 优化思路：
-         * 1. 降采样：使用小分辨率 Canvas 进行像素比对 (Motion Canvas)
-         * 2. 差分算法：对比前后帧像素亮度
-         * 3. 质心计算：计算运动区域的中心点，而非最大值点，提高精度
-         * 4. LERP 平滑：对坐标进行线性插值，消除抖动
+         * 核心游戏引擎类
+         * 包含：摄像头管理、优化的动作检测算法、物理渲染循环
          */
-
-        const config = {
-            sensitivity: 25, // 运动检测阈值 (0-255)
-            samplingRatio: 16, // 降采样倍率 (越大性能越好但精度越低)
-            lerpFactor: 0.15, // 平滑系数 (越小越平滑但延迟越高)
-            itemCount: 8 // 向日葵数量
-        };
-
-        // DOM 元素
-        const video = document.getElementById('hiddenVideo');
-        const motionCanvas = document.getElementById('motionCanvas');
-        const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
-        const gameCanvas = document.getElementById('gameCanvas');
-        const gameCtx = gameCanvas.getContext('2d');
-        const videoCanvas = document.getElementById('videoCanvas');
-        const videoCtx = videoCanvas.getContext('2d');
-        const scoreEl = document.getElementById('scoreEl');
-        const fpsEl = document.getElementById('fpsEl');
-        const guideOverlay = document.getElementById('guideOverlay');
-
-        // 游戏状态
-        let isRunning = false;
-        let showVideo = true;
-        let score = 0;
-        let lastTime = 0;
-        let prevFrameData = null;
-        
-        // 物理状态
-        let handPos = { x: 0, y: 0 };
-        let targetPos = { x: 0, y: 0 };
-        let isMoving = false;
-        let particles = [];
-        let sunflowers = [];
-        let basket = { x: 0, y: 0, w: 120, h: 120 };
-
-        // 尺寸管理
-        let width, height, motionW, motionH;
-
-        function resize() {
-            const rect = gameCanvas.parentElement.getBoundingClientRect();
-            width = rect.width;
-            height = rect.height;
-            
-            gameCanvas.width = width;
-            gameCanvas.height = height;
-            videoCanvas.width = width;
-            videoCanvas.height = height;
-
-            // 降采样尺寸 (比如 1280px -> 80px)
-            motionW = Math.floor(width / config.samplingRatio);
-            motionH = Math.floor(height / config.samplingRatio);
-            motionCanvas.width = motionW;
-            motionCanvas.height = motionH;
-
-            // 更新箩筐位置（右下角）
-            basket.x = width - basket.w - 20;
-            basket.y = height - basket.h - 20;
-        }
-
-        window.addEventListener('resize', resize);
-
-        // 向日葵类
-        class Sunflower {
+        class MotionGame {
             constructor() {
-                this.reset();
-            }
-
-            reset() {
-                this.x = Math.random() * (width - 100) + 50;
-                this.y = Math.random() * (height / 2) + 50;
-                this.vx = (Math.random() - 0.5) * 2;
-                this.vy = (Math.random() - 0.5) * 2;
-                this.size = 40;
-                this.grabbed = false;
-                this.scale = 0; // 出现动画
-            }
-
-            update() {
-                // 出现动画
-                if (this.scale < 1) this.scale += 0.05;
-
-                if (this.grabbed) {
-                    // 跟随手部 (带一点弹性)
-                    this.x += (handPos.x - this.x) * 0.2;
-                    this.y += (handPos.y - this.y) * 0.2;
-                    
-                    // 检测放入箩筐
-                    if (this.x > basket.x && this.y > basket.y) {
-                        score += 10;
-                        scoreEl.textContent = score;
-                        createParticles(this.x, this.y, 15, '#FFD700'); // 金色粒子
-                        this.reset();
-                        this.scale = 0;
-                        this.grabbed = false;
-                    }
-                } else {
-                    // 漂浮物理
-                    this.x += this.vx;
-                    this.y += this.vy;
-
-                    // 边界反弹
-                    if (this.x < 0 || this.x > width) this.vx *= -1;
-                    if (this.y < 0 || this.y > height) this.vy *= -1;
-
-                    // 抓取判定 (手部接近)
-                    const dx = handPos.x - this.x;
-                    const dy = handPos.y - this.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    
-                    if (isMoving && dist < 60) {
-                        this.grabbed = true;
-                    }
-                }
-            }
-
-            draw(ctx) {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.scale(this.scale, this.scale);
-                ctx.font = "40px Arial";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.shadowBlur = this.grabbed ? 20 : 0;
-                ctx.shadowColor = "#FFD700";
-                ctx.fillText("🌻", 0, 0);
-                ctx.restore();
-            }
-        }
-
-        // 粒子系统
-        class Particle {
-            constructor(x, y, color) {
-                this.x = x;
-                this.y = y;
-                this.color = color;
-                this.vx = (Math.random() - 0.5) * 10;
-                this.vy = (Math.random() - 0.5) * 10;
-                this.life = 1;
-            }
-            update() {
-                this.x += this.vx;
-                this.y += this.vy;
-                this.life -= 0.05;
-            }
-            draw(ctx) {
-                ctx.globalAlpha = this.life;
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.globalAlpha = 1;
-            }
-        }
-
-        function createParticles(x, y, count, color) {
-            for(let i=0; i<count; i++) {
-                particles.push(new Particle(x, y, color));
-            }
-        }
-
-        // 核心算法：运动检测
-        function detectMotion() {
-            if (video.readyState !== 4) return;
-
-            // 1. 绘制缩略图 (镜像绘制)
-            motionCtx.save();
-            motionCtx.scale(-1, 1);
-            motionCtx.drawImage(video, -motionW, 0, motionW, motionH);
-            motionCtx.restore();
-
-            // 2. 获取像素数据
-            const frame = motionCtx.getImageData(0, 0, motionW, motionH);
-            const data = frame.data;
-            const len = data.length;
-
-            if (!prevFrameData) {
-                prevFrameData = new Uint8Array(len);
-                for(let i=0; i<len; i++) prevFrameData[i] = data[i];
-                return;
-            }
-
-            let sumX = 0, sumY = 0, count = 0;
-
-            // 3. 像素比对 (步长为4，只取RGB的G通道，性能优化)
-            for (let i = 0; i < len; i += 4) {
-                // 简单的亮度差分
-                const diff = Math.abs(data[i+1] - prevFrameData[i+1]); 
-
-                if (diff > config.sensitivity) {
-                    // 坐标转换：i/4 是像素索引
-                    const pIndex = i / 4;
-                    const x = pIndex % motionW;
-                    const y = Math.floor(pIndex / motionW);
-
-                    sumX += x;
-                    sumY += y;
-                    count++;
-                }
+                this.video = document.getElementById('webcam');
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
                 
-                // 更新上一帧数据
-                prevFrameData[i] = data[i];     // R
-                prevFrameData[i+1] = data[i+1]; // G
-                prevFrameData[i+2] = data[i+2]; // B
+                // 动作检测专用的小画布（低分辨率以提高性能）
+                this.mCanvas = document.getElementById('motionCanvas');
+                this.mCtx = this.mCanvas.getContext('2d', { willReadFrequently: true });
+                
+                // 游戏状态
+                this.width = 0;
+                this.height = 0;
+                this.isRunning = false;
+                this.score = 0;
+                this.combo = 0;
+                this.comboTimer = null;
+                
+                // 实体
+                this.items = [];
+                this.particles = [];
+                this.hand = { x: 0, y: 0, targetX: 0, targetY: 0, radius: 60, active: false };
+                this.basket = { x: 0, y: 0, w: 180, h: 140 };
+
+                // 动作检测参数
+                this.prevFrame = null;
+                this.blendFactor = 0.2; // 动作平滑系数 (Lerp)
+                this.threshold = 25; // 像素变化阈值
+                this.sampleStride = 4; // 采样步长（性能优化）
             }
 
-            // 4. 计算质心
-            isMoving = count > 5; // 噪点过滤
-            if (isMoving) {
-                // 计算平均位置并映射回屏幕坐标
-                targetPos.x = (sumX / count) * config.samplingRatio;
-                targetPos.y = (sumY / count) * config.samplingRatio;
+            async init() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } 
+                    });
+                    this.video.srcObject = stream;
+                    
+                    // 等待视频元数据加载完成
+                    this.video.onloadedmetadata = () => {
+                        this.resize();
+                        document.getElementById('startOverlay').classList.add('hidden');
+                        document.getElementById('endOverlay').classList.add('hidden');
+                        this.startLevel();
+                        this.isRunning = true;
+                        this.loop();
+                    };
+                } catch (e) {
+                    alert('无法访问摄像头。请检查权限设置或使用 HTTPS 访问。');
+                    console.error(e);
+                }
             }
-        }
 
-        async function startGame() {
-            if (isRunning) return;
-            
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: "user",
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 } 
-                    } 
+            resize() {
+                // 设置显示画布为容器大小
+                const rect = this.canvas.parentElement.getBoundingClientRect();
+                this.width = rect.width;
+                this.height = rect.height;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+
+                // 设置运算画布为低分辨率 (例如 100xN)
+                this.mWidth = 100;
+                this.mHeight = Math.floor(this.mWidth * (this.height / this.width));
+                this.mCanvas.width = this.mWidth;
+                this.mCanvas.height = this.mHeight;
+
+                // 更新篮子位置 (右下角)
+                this.basket.x = this.width - this.basket.w - 30;
+                this.basket.y = this.height - this.basket.h - 20;
+            }
+
+            startLevel() {
+                this.items = [];
+                this.score = 0;
+                this.combo = 0;
+                this.updateUI();
+                
+                // 生成向日葵
+                for(let i=0; i<15; i++) {
+                    this.spawnItem();
+                }
+            }
+
+            spawnItem() {
+                this.items.push({
+                    x: Math.random() * (this.width - 100) + 50,
+                    y: Math.random() * (this.height * 0.4) + 50,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    size: 40 + Math.random() * 20,
+                    rotation: Math.random() * Math.PI,
+                    grabbed: false,
+                    scale: 0, // 出现动画
+                    targetScale: 1
                 });
-                video.srcObject = stream;
-                
-                // 等待视频加载
-                await new Promise(r => video.onloadedmetadata = r);
-                
-                resize();
-                isRunning = true;
-                document.getElementById('startBtn').innerText = "🚀 运行中";
-                guideOverlay.innerHTML = "<div class='guide-text'>游戏开始!</div>";
-                setTimeout(() => guideOverlay.classList.add('hidden'), 2000);
+            }
 
-                // 初始化物体
-                sunflowers = Array(config.itemCount).fill(0).map(() => new Sunflower());
-                
-                loop();
+            // 核心算法：基于质心加权的动作检测
+            detectMotion() {
+                if (this.video.readyState !== 4) return;
 
-            } catch (e) {
-                alert("无法访问摄像头: " + e.message);
+                // 1. 将视频帧绘制到低分画布
+                this.mCtx.drawImage(this.video, 0, 0, this.mWidth, this.mHeight);
+                
+                // 2. 获取像素数据
+                const frame = this.mCtx.getImageData(0, 0, this.mWidth, this.mHeight);
+                const length = frame.data.length;
+                const data = frame.data;
+
+                if (!this.prevFrame) {
+                    this.prevFrame = data;
+                    return;
+                }
+
+                let sumX = 0;
+                let sumY = 0;
+                let totalMovement = 0;
+
+                // 3. 遍历像素 (使用步长优化)
+                // 注意：这里需要镜像翻转X坐标逻辑，因为绘制的画面已经被CSS翻转了，
+                // 但Canvas数据是原始的。为了逻辑统一，我们计算原始坐标，最后在渲染光标时处理。
+                for (let i = 0; i < length; i += 4 * this.sampleStride) {
+                    const rDiff = Math.abs(data[i] - this.prevFrame[i]);
+                    const gDiff = Math.abs(data[i+1] - this.prevFrame[i+1]);
+                    const bDiff = Math.abs(data[i+2] - this.prevFrame[i+2]);
+                    
+                    if (rDiff + gDiff + bDiff > this.threshold * 3) {
+                        const pixelIndex = i / 4;
+                        const x = pixelIndex % this.mWidth;
+                        const y = Math.floor(pixelIndex / this.mWidth);
+                        
+                        // 累加坐标以计算质心
+                        // 重要：视频是镜像的，所以 X 轴需要反转计算
+                        const mirroredX = this.mWidth - x - 1; 
+
+                        sumX += mirroredX;
+                        sumY += y;
+                        totalMovement++;
+                    }
+                }
+
+                // 4. 计算平均位置 (质心)
+                if (totalMovement > 10) { // 只有足够的噪点才认为是动作
+                    const avgX = (sumX / totalMovement) * (this.width / this.mWidth);
+                    const avgY = (sumY / totalMovement) * (this.height / this.mHeight);
+
+                    this.hand.targetX = avgX;
+                    this.hand.targetY = avgY;
+                    this.hand.active = true;
+                } else {
+                    this.hand.active = false;
+                }
+
+                // 5. 保存当前帧用于下一帧对比 (深拷贝)
+                this.prevFrame = new Uint8ClampedArray(data);
+            }
+
+            update() {
+                // 平滑手部移动 (Lerp)
+                if (this.hand.active) {
+                    this.hand.x += (this.hand.targetX - this.hand.x) * this.blendFactor;
+                    this.hand.y += (this.hand.targetY - this.hand.y) * this.blendFactor;
+                }
+
+                // 物理更新
+                this.items.forEach((item, index) => {
+                    // 出现动画
+                    if (item.scale < item.targetScale) item.scale += 0.05;
+
+                    if (!item.grabbed) {
+                        // 漂浮
+                        item.x += item.vx;
+                        item.y += item.vy;
+                        
+                        // 边界反弹
+                        if (item.x < item.size || item.x > this.width - item.size) item.vx *= -1;
+                        if (item.y < item.size || item.y > this.height - item.size) item.vy *= -1;
+
+                        // 抓取检测
+                        if (this.hand.active) {
+                            const dx = this.hand.x - item.x;
+                            const dy = this.hand.y - item.y;
+                            const dist = Math.sqrt(dx*dx + dy*dy);
+                            if (dist < this.hand.radius + item.size) {
+                                item.grabbed = true;
+                                this.createParticles(item.x, item.y, '#FFD700', 5);
+                            }
+                        }
+                    } else {
+                        // 跟随手部
+                        const dx = this.hand.x - item.x;
+                        const dy = this.hand.y - item.y;
+                        item.x += dx * 0.15; // 稍微有点延迟感，感觉更有重量
+                        item.y += dy * 0.15;
+
+                        // 篮子检测
+                        if (item.x > this.basket.x && item.y > this.basket.y) {
+                            this.collectItem(index);
+                        }
+                        
+                        // 如果手部消失（停止运动），物品掉落
+                        if (!this.hand.active) {
+                            item.grabbed = false;
+                        }
+                    }
+                });
+
+                // 粒子更新
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    let p = this.particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life -= 0.02;
+                    if (p.life <= 0) this.particles.splice(i, 1);
+                }
+
+                // 胜利检测
+                if (this.items.length === 0 && this.particles.length === 0) {
+                    this.gameOver();
+                }
+            }
+
+            collectItem(index) {
+                const item = this.items[index];
+                this.items.splice(index, 1);
+                
+                // 得分逻辑
+                this.score += 10 + (this.combo * 2);
+                this.combo++;
+                this.createParticles(item.x, item.y, '#7C3AED', 15); // 紫色爆炸
+                
+                // 连击重置计时器
+                if (this.comboTimer) clearTimeout(this.comboTimer);
+                this.comboTimer = setTimeout(() => { this.combo = 0; this.updateUI(); }, 2000);
+
+                this.updateUI();
+            }
+
+            createParticles(x, y, color, count) {
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = Math.random() * 4 + 1;
+                    this.particles.push({
+                        x: x, y: y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        color: color,
+                        life: 1.0,
+                        size: Math.random() * 4 + 2
+                    });
+                }
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.width, this.height);
+
+                // 绘制篮子
+                this.ctx.save();
+                this.ctx.fillStyle = 'rgba(20, 20, 30, 0.6)';
+                this.ctx.strokeStyle = '#7C3AED';
+                this.ctx.lineWidth = 3;
+                this.ctx.shadowColor = '#7C3AED';
+                this.ctx.shadowBlur = 15;
+                this.ctx.beginPath();
+                this.ctx.roundRect(this.basket.x, this.basket.y, this.basket.w, this.basket.h, 20);
+                this.ctx.fill();
+                this.ctx.stroke();
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '40px Arial';
+                this.ctx.fillText('🧺', this.basket.x + this.basket.w/2 - 20, this.basket.y + this.basket.h/2 + 10);
+                this.ctx.restore();
+
+                // 绘制向日葵
+                this.ctx.font = '40px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.items.forEach(item => {
+                    this.ctx.save();
+                    this.ctx.translate(item.x, item.y);
+                    this.ctx.scale(item.scale, item.scale);
+                    if (item.grabbed) {
+                        this.ctx.scale(1.2, 1.2); // 抓取时变大
+                        this.ctx.shadowColor = '#FFD700';
+                        this.ctx.shadowBlur = 20;
+                    }
+                    this.ctx.fillText('🌻', 0, 0);
+                    this.ctx.restore();
+                });
+
+                // 绘制粒子
+                this.particles.forEach(p => {
+                    this.ctx.globalAlpha = p.life;
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    this.ctx.fill();
+                });
+                this.ctx.globalAlpha = 1;
+
+                // 绘制手部光标
+                if (this.hand.active) {
+                    this.ctx.save();
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.hand.x, this.hand.y, 40, 0, Math.PI * 2);
+                    this.ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
+                    this.ctx.lineWidth = 4;
+                    this.ctx.stroke();
+                    
+                    // 内部光晕
+                    const gradient = this.ctx.createRadialGradient(this.hand.x, this.hand.y, 10, this.hand.x, this.hand.y, 40);
+                    gradient.addColorStop(0, 'rgba(255, 215, 0, 0.4)');
+                    gradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                    this.ctx.fillStyle = gradient;
+                    this.ctx.fill();
+                    this.ctx.restore();
+                }
+            }
+
+            updateUI() {
+                document.getElementById('ui-score').innerText = this.score;
+                document.getElementById('ui-left').innerText = this.items.length;
+                const comboEl = document.getElementById('ui-combo');
+                comboEl.innerText = 'x' + this.combo;
+                comboEl.style.transform = this.combo > 1 ? 'scale(1.5)' : 'scale(1)';
+                comboEl.style.transition = 'transform 0.1s';
+            }
+
+            gameOver() {
+                this.isRunning = false;
+                document.getElementById('finalScore').innerText = this.score;
+                document.getElementById('endOverlay').classList.remove('hidden');
+            }
+
+            restart() {
+                document.getElementById('endOverlay').classList.add('hidden');
+                this.startLevel();
+                this.isRunning = true;
+                this.loop();
+            }
+
+            loop() {
+                if (!this.isRunning) return;
+                this.detectMotion(); // 计算动作
+                this.update();       // 更新物理
+                this.draw();         // 渲染画面
+                requestAnimationFrame(() => this.loop());
             }
         }
 
-        function stopGame() {
-            isRunning = false;
-            if(video.srcObject) {
-                video.srcObject.getTracks().forEach(t => t.stop());
-            }
-            document.getElementById('startBtn').innerText = "▶️ 重新开始";
-        }
+        // 初始化游戏实例
+        const game = new MotionGame();
+        
+        // 窗口大小调整
+        window.addEventListener('resize', () => {
+            if (game.isRunning) game.resize();
+        });
 
-        function toggleDebug() {
-            showVideo = !showVideo;
-            videoCanvas.style.opacity = showVideo ? 0.3 : 0;
-        }
-
-        // 游戏主循环
-        function loop(timestamp) {
-            if (!isRunning) return;
-
-            // FPS 计算
-            const dt = timestamp - lastTime;
-            lastTime = timestamp;
-            fpsEl.textContent = Math.round(1000 / dt);
-
-            // 1. 逻辑更新
-            detectMotion();
-
-            // 平滑插值 (Lerp)
-            handPos.x += (targetPos.x - handPos.x) * config.lerpFactor;
-            handPos.y += (targetPos.y - handPos.y) * config.lerpFactor;
-
-            // 2. 渲染背景视频 (如果开启)
-            videoCtx.clearRect(0,0,width,height);
-            if(showVideo) {
-                videoCtx.save();
-                videoCtx.scale(-1, 1);
-                videoCtx.drawImage(video, -width, 0, width, height);
-                videoCtx.restore();
-            }
-
-            // 3. 渲染游戏层
-            gameCtx.clearRect(0, 0, width, height);
-
-            // 绘制箩筐
-            gameCtx.fillStyle = "rgba(100, 100, 255, 0.2)";
-            gameCtx.strokeStyle = "#6366f1";
-            gameCtx.lineWidth = 3;
-            gameCtx.beginPath();
-            gameCtx.roundRect(basket.x, basket.y, basket.w, basket.h, 15);
-            gameCtx.fill();
-            gameCtx.stroke();
-            gameCtx.font = "40px Arial";
-            gameCtx.textAlign = "center";
-            gameCtx.fillStyle = "#fff";
-            gameCtx.fillText("🧺", basket.x + basket.w/2, basket.y + basket.h/2);
-
-            // 绘制向日葵
-            sunflowers.forEach(s => {
-                s.update();
-                s.draw(gameCtx);
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
             });
-
-            // 绘制粒子
-            for (let i = particles.length - 1; i >= 0; i--) {
-                particles[i].update();
-                particles[i].draw(gameCtx);
-                if (particles[i].life <= 0) particles.splice(i, 1);
-            }
-
-            // 绘制手部光标
-            if (isMoving) {
-                gameCtx.beginPath();
-                gameCtx.arc(handPos.x, handPos.y, 20, 0, Math.PI * 2);
-                gameCtx.fillStyle = "rgba(255, 215, 0, 0.5)"; // 核心
-                gameCtx.fill();
-                gameCtx.strokeStyle = "#fff";
-                gameCtx.lineWidth = 2;
-                gameCtx.stroke();
-                
-                // 光晕
-                gameCtx.beginPath();
-                gameCtx.arc(handPos.x, handPos.y, 35, 0, Math.PI * 2);
-                gameCtx.fillStyle = "rgba(255, 215, 0, 0.2)";
-                gameCtx.fill();
-            }
-
-            requestAnimationFrame(loop);
-        }
-
-        // 初始化尺寸
-        resize();
+        });
     </script>
 </body>
 </html>
