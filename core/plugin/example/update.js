@@ -8,7 +8,6 @@ const require = createRequire(import.meta.url)
 const { exec, execSync } = require('child_process')
 
 let uping = false
-const updateLock = new Set()
 
 export class update extends plugin {
   constructor() {
@@ -23,7 +22,7 @@ export class update extends plugin {
           fnc: 'updateLog'
         },
         {
-          reg: '^#(强制)?更新$',
+          reg: '^#(强制)?更新',
           fnc: 'update'
         },
         {
@@ -45,28 +44,15 @@ export class update extends plugin {
 
   async update() {
     if (!this.e.isMaster) return false
+    if (uping) return this.reply('已有命令更新中..请勿重复操作')
     if (/详细|详情|面板|面版/.test(this.e.msg)) return false
 
-    if (uping) {
-      await this.reply('已有命令更新中..请勿重复操作')
-      return false
-    }
-
-    const eventId = this.e.event_id || `${this.e.self_id}_${Date.now()}`
-    if (updateLock.has(eventId)) {
-      return false
-    }
-
     uping = true
-    updateLock.add(eventId)
-
     try {
       this.updatedPlugins.clear()
       this.isUp = false
       const plugin = this.getPlugin()
-      if (plugin === false) {
-        return false
-      }
+      if (plugin === false) return false
 
       if (plugin === '') {
         await this.updateMainAndXRK()
@@ -75,13 +61,9 @@ export class update extends plugin {
         this.updatedPlugins.add(plugin)
       }
 
-      if (this.isUp) {
-        setTimeout(() => this.restart(), 2000)
-      }
-      return true
+      if (this.isUp) setTimeout(() => this.restart(), 2000)
     } finally {
       uping = false
-      setTimeout(() => updateLock.delete(eventId), 3000)
     }
   }
 
@@ -218,7 +200,7 @@ export class update extends plugin {
   async gitErr(err, stdout) {
     const msg = '更新失败！'
     const errMsg = err.toString()
-    stdout = stdout.toString()
+    const stdoutStr = stdout.toString()
 
     if (errMsg.includes('Timed out')) {
       const remote = errMsg.match(/'(.+?)'/g)?.[0]?.replace(/'/g, '') || ''
@@ -234,11 +216,11 @@ export class update extends plugin {
       return this.reply(`${msg}\n存在冲突：\n${errMsg}\n请解决冲突后再更新，或者执行#强制更新，放弃本地修改`)
     }
 
-    if (stdout.includes('CONFLICT')) {
-      return this.reply(`${msg}\n存在冲突：\n${errMsg}${stdout}\n请解决冲突后再更新，或者执行#强制更新，放弃本地修改`)
+    if (stdoutStr.includes('CONFLICT')) {
+      return this.reply(`${msg}\n存在冲突：\n${errMsg}${stdoutStr}\n请解决冲突后再更新，或者执行#强制更新，放弃本地修改`)
     }
 
-    return this.reply(`${msg}\n${errMsg}\n${stdout}`)
+    return this.reply(`${msg}\n${errMsg}\n${stdoutStr}`)
   }
 
   async updateAll() {
