@@ -1,93 +1,155 @@
-## XRK-AGT 模块文档索引（docs/）
+# XRK-AGT 文档中心
 
-本目录收录了 XRK-AGT 的核心架构文档，围绕 **运行核心、插件系统、适配器、HTTP/API、AI 工作流、配置与渲染** 等模块进行说明。  
-建议配合项目主文档 `PROJECT_OVERVIEW.md` 一起阅读。
+欢迎来到 XRK-AGT 框架文档中心。本文档提供完整的框架使用指南和开发文档。
 
 ---
 
-## 快速导航
+## 📚 文档导航
 
-### 🚀 运行核心
-- [`bot.md`](bot.md)：`Bot` 主类文档，说明服务生命周期、中间件、认证与反向代理等。
+### 🚀 快速开始
 
-### 🔌 插件与事件系统
-- [`plugin-base.md`](plugin-base.md)：插件基类 `plugin` 的设计、规则匹配与上下文管理。
-- [`plugins-loader.md`](plugins-loader.md)：`PluginsLoader` 的插件加载、事件调度、冷却与节流机制。
-- [`事件系统标准化文档.md`](事件系统标准化文档.md)：事件系统标准化说明。
-- [`事件监听器开发指南.md`](事件监听器开发指南.md)：事件监听器开发指南。
+- **[项目概览](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
+- **[Bot 主类](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
 
-### 🔄 适配器与消息接入
-- [`adapter-loader.md`](adapter-loader.md)：`AdapterLoader` 如何扫描并加载 `core/adapter` 中的适配器。
-- [`adapter-onebotv11.md`](adapter-onebotv11.md)：OneBotv11 适配器的事件转译、消息封装与对象封装。
-- [`adapter-standardization.md`](adapter-standardization.md)：适配器标准化文档。
+### 🔌 插件系统
 
-### 🤖 AI 工作流
-- [`aistream.md`](aistream.md)：`AIStream` 基类，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强。
+- **[插件基类](plugin-base.md)** - 插件基类 `plugin` 的设计、规则匹配与上下文管理
+- **[插件加载器](plugins-loader.md)** - `PluginsLoader` 的插件加载、事件调度、冷却与节流机制
+- **[事件系统](事件系统标准化文档.md)** - 事件系统标准化说明、事件命名规范、插件事件监听
+
+### 🔄 适配器系统
+
+- **[适配器加载器](adapter-loader.md)** - `AdapterLoader` 如何扫描并加载适配器
+- **[OneBotv11 适配器](adapter-onebotv11.md)** - OneBotv11 适配器完整文档，包含全局对象说明和使用示例
+- **[事件监听器开发指南](事件监听器开发指南.md)** - 如何为框架注册新的事件监听器
 
 ### 🌐 HTTP/API 层
-- [`http-api.md`](http-api.md)：`HttpApi` 基类，统一路由、WebSocket 与中间件注册方式。
-- [`api-loader.md`](api-loader.md)：`ApiLoader` 的 API 自动加载、排序与热重载机制。
 
-### ⚙️ 配置与渲染
-- [`config-base.md`](config-base.md)：配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写等。
-- [`renderer.md`](renderer.md)：渲染器基类 `Renderer`，模板渲染与文件监听机制。
-- [`botutil.md`](botutil.md)：工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力。
+- **[HTTP API 基类](http-api.md)** - `HttpApi` 基类，统一路由、WebSocket 与中间件注册方式
+- **[API 加载器](api-loader.md)** - `ApiLoader` 的 API 自动加载、排序与热重载机制
+
+### 🤖 AI 工作流
+
+- **[AI Stream](aistream.md)** - `AIStream` 基类，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强
+
+### ⚙️ 配置与工具
+
+- **[配置基类](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写等
+- **[渲染器](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
+- **[工具类](botutil.md)** - 工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
 
 ### 📱 应用开发
-- [`app-dev.md`](app-dev.md)：应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）。
+
+- **[应用开发指南](app-dev.md)** - 应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）
 
 ---
 
-## 按角色推荐阅读顺序
+## 🎯 按角色推荐阅读
 
-- **插件开发者**
-  1. `bot.md` —— 了解整体运行环境与事件来源。
-  2. `plugin-base.md` —— 学习插件基类与规则/上下文用法。
-  3. `plugins-loader.md` —— 了解事件如何流转到插件。
-  4. `aistream.md` —— 需要使用 AI 工作流时再阅读。
+### 插件开发者
 
-- **适配器 / 协议开发者**
-  1. `adapter-loader.md` —— 了解适配器是如何被框架加载的。
-  2. `adapter-onebotv11.md` —— 参考成熟实现，学习事件转译与对象封装方式。
-  3. `bot.md` —— 理解适配器与 `Bot` 的交互点（`Bot.adapter` / `Bot.wsf` / `Bot.em`）。
+1. **[Bot 主类](bot.md)** - 了解整体运行环境与事件来源
+2. **[插件基类](plugin-base.md)** - 学习插件基类与规则/上下文用法
+3. **[插件加载器](plugins-loader.md)** - 了解事件如何流转到插件
+4. **[事件系统](事件系统标准化文档.md)** - 了解事件命名规范和监听方式
+5. **[AI Stream](aistream.md)** - 需要使用 AI 工作流时再阅读
 
-- **后端/API 开发者**
-  1. `bot.md` —— 了解 HTTP 服务器、认证、中间件栈。
-  2. `http-api.md` —— 学习如何定义一个新的 API 模块。
-  3. `api-loader.md` —— 理解 API 模块如何被自动加载与热重载。
+### 适配器开发者
 
-- **运维 / 配置管理者**
-  1. `config-base.md` —— 理解配置读写与校验机制。
-  2. `bot.md` + `PROJECT_OVERVIEW.md` —— 了解服务端口、反向代理、CORS 与安全策略。
+1. **[适配器加载器](adapter-loader.md)** - 了解适配器是如何被框架加载的
+2. **[OneBotv11 适配器](adapter-onebotv11.md)** - 参考成熟实现，学习事件转译与对象封装方式
+3. **[事件监听器开发指南](事件监听器开发指南.md)** - 学习如何创建新的事件监听器
+4. **[Bot 主类](bot.md)** - 理解适配器与 `Bot` 的交互点（`Bot.adapter` / `Bot.wsf` / `Bot.em`）
 
-- **前端 / 渲染相关开发者**
-  1. `renderer.md` —— 了解 HTML 模板渲染与文件生成。
-  2. 结合 `src/renderers/puppeteer` 与 `src/renderers/playwright` 实际代码阅读。
+### 后端/API 开发者
 
----
+1. **[Bot 主类](bot.md)** - 了解 HTTP 服务器、认证、中间件栈
+2. **[HTTP API 基类](http-api.md)** - 学习如何定义一个新的 API 模块
+3. **[API 加载器](api-loader.md)** - 理解 API 模块如何被自动加载与热重载
 
-## 典型开发路径示例
+### 运维 / 配置管理者
 
-- **编写一个简单指令插件**
-  1. 阅读 `PROJECT_OVERVIEW.md` 中的目录解析。
-  2. 阅读 `bot.md` 与 `plugin-base.md`。
-  3. 参考 `core/plugin/example` 目录中的示例，在 `core/plugin` 下新建自己的插件目录与 JS 文件。
+1. **[配置基类](config-base.md)** - 理解配置读写与校验机制
+2. **[Bot 主类](bot.md)** + **[项目概览](../PROJECT_OVERVIEW.md)** - 了解服务端口、反向代理、CORS 与安全策略
 
-- **新增一个 API 接口**
-  1. 阅读 `http-api.md` 与 `api-loader.md`。
-  2. 在 `core/http` 目录中新建一个 `.js` 文件，导出一个符合 `HttpApi` 结构的对象或类。
-  3. 重启或等待 `ApiLoader` 热重载，使用浏览器或 Postman 验证新接口。
+### 前端 / 渲染相关开发者
 
-- **接入新的 IM 平台**
-  1. 阅读 `adapter-loader.md` 与 `adapter-onebotv11.md`。
-  2. 在 `core/adapter` 中参照 OneBotv11 编写新适配器文件。
-  3. 确保对外暴露统一的事件结构（`post_type/message_type/notice_type` 等），这样可以复用现有插件。
+1. **[渲染器](renderer.md)** - 了解 HTML 模板渲染与文件生成
+2. **[应用开发指南](app-dev.md)** - 了解 Web 控制台开发
 
 ---
 
-## 延伸阅读
+## 📖 典型开发路径
 
-- `PROJECT_OVERVIEW.md`：从「项目视角」理解整个系统的结构与运行逻辑。
-- `INDEX.md` 及其引用的修复文档：了解历史 bug 修复与设计演进背景，有助于在改造底层时避免踩坑。
+### 编写一个简单指令插件
 
+1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 中的目录解析
+2. 阅读 **[Bot 主类](bot.md)** 与 **[插件基类](plugin-base.md)**
+3. 参考 `core/plugin/example` 目录中的示例，在 `core/plugin` 下新建自己的插件目录与 JS 文件
 
+### 新增一个 API 接口
+
+1. 阅读 **[HTTP API 基类](http-api.md)** 与 **[API 加载器](api-loader.md)**
+2. 在 `core/http` 目录中新建一个 `.js` 文件，导出一个符合 `HttpApi` 结构的对象或类
+3. 重启或等待 `ApiLoader` 热重载，使用浏览器或 Postman 验证新接口
+
+### 接入新的 IM 平台
+
+1. 阅读 **[适配器加载器](adapter-loader.md)** 与 **[OneBotv11 适配er](adapter-onebotv11.md)**
+2. 在 `core/adapter` 中参照 OneBotv11 编写新适配器文件
+3. 阅读 **[事件监听器开发指南](事件监听器开发指南.md)**，创建对应的事件监听器
+4. 确保对外暴露统一的事件结构（`post_type/message_type/notice_type` 等），这样可以复用现有插件
+
+---
+
+## 🔍 全局对象说明
+
+### Bot 主对象
+
+`Bot` 是系统的核心全局对象，继承自 `EventEmitter`。详细说明请参考：
+
+- **[Bot 主类文档](bot.md)** - 完整的 Bot 类说明
+- **[OneBotv11 适配器文档](adapter-onebotv11.md)** - Bot 对象结构和使用示例
+
+### 常用全局对象
+
+- `Bot` - Bot 主实例（EventEmitter）
+- `Bot[self_id]` - 特定 Bot 实例
+- `Bot.adapter` - 适配器列表
+- `Bot.uin` - Bot QQ 号列表
+- `Bot.wsf` - WebSocket 工厂函数映射
+- `Bot.em()` - 事件触发方法
+- `Bot.makeLog()` - 日志方法
+
+详细说明请参考各适配器文档。
+
+---
+
+## ⚠️ 重要提示
+
+1. **全局对象访问**：始终通过 `Bot[self_id]` 访问 Bot 实例，不要直接使用 `e.bot`（除非确保已初始化）
+2. **事件命名**：遵循 `适配器.类型.子类型` 格式，如 `onebot.message.group.normal`
+3. **错误处理**：所有异步操作都应使用 try-catch，API 调用失败会抛出错误
+4. **文档更新**：本文档会持续更新，请定期查看最新版本
+
+---
+
+## 📝 文档贡献
+
+如果发现文档错误或需要补充内容，请：
+
+1. 检查代码实现是否与文档一致
+2. 确保示例代码可以正常运行
+3. 避免无端引用不存在的对象或方法
+4. 提供完整、准确的说明
+
+---
+
+## 🔗 相关资源
+
+- **[项目概览](../PROJECT_OVERVIEW.md)** - 项目整体架构说明
+- **[GitHub 仓库](https://github.com/your-repo)** - 源代码仓库（如有）
+
+---
+
+*最后更新：2025-12-14*
