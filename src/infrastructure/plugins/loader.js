@@ -21,10 +21,6 @@ const EVENT_MAP = {
   'device': ['post_type', 'event_type', 'sub_type']
 }
 
-/**
- * 插件加载器类
- * 负责加载、管理和执行插件
- */
 class PluginsLoader {
   constructor() {
     this.priority = []
@@ -55,9 +51,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 加载所有插件
-   */
   async load(isRefresh = false) {
     try {
       if (!isRefresh && this.priority.length) return
@@ -71,7 +64,6 @@ class PluginsLoader {
       logger.info('-----------')
       logger.title('开始加载插件', 'yellow')
 
-      // 获取所有插件文件
       const files = await this.getPlugins()
       this.pluginCount = 0
       const packageErr = []
@@ -130,10 +122,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 处理事件
-   * @param {Object} e - 事件对象
-   */
   async deal(e) {
     try {
       if (!e) return
@@ -160,10 +148,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 处理消息内容
-   * @param {Object} e - 事件对象
-   */
   async dealMsg(e) {
     try {
       this.initMsgProps(e)
@@ -183,10 +167,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 初始化消息属性
-   * @param {Object} e - 事件对象
-   */
   initMsgProps(e) {
     e.img = []
     e.video = []
@@ -198,10 +178,6 @@ class PluginsLoader {
       (e.message ? [{ type: 'text', text: String(e.message) }] : [])
   }
 
-  /**
-   * 解析消息内容
-   * @param {Object} e - 事件对象
-   */
   async parseMessage(e) {
     for (const val of e.message) {
       if (!val?.type) continue
@@ -256,10 +232,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 设置事件属性
-   * @param {Object} e - 事件对象
-   */
   setupEventProps(e) {
     e.isPrivate = e.message_type === 'private' || e.notice_type === 'friend'
     e.isGroup = e.message_type === 'group' || e.notice_type === 'group'
@@ -303,30 +275,19 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 检查权限
-   * @param {Object} e - 事件对象
-   */
   checkPermissions(e) {
     const masterQQ = cfg.masterQQ || cfg.master?.[e.self_id] || []
     const masters = Array.isArray(masterQQ) ? masterQQ : [masterQQ]
 
     if (masters.some(id => String(e.user_id) === String(id))) {
       e.isMaster = true
-    }
-
-    if (e.isStdin && e.isMaster === undefined) {
+    } else if (e.isStdin && e.isMaster === undefined) {
       e.isMaster = true
     }
   }
 
-  /**
-   * 处理群聊别名
-   * @param {Object} e - 事件对象
-   */
   processAlias(e) {
-    const groupCfg = cfg.getGroup(e.group_id)
-    const alias = groupCfg?.botAlias
+    const alias = cfg.getGroup(e.group_id)?.botAlias
     if (!alias) return
 
     const aliases = Array.isArray(alias) ? alias : [alias]
@@ -339,10 +300,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 设置回复方法（通用方法，支持所有适配器）
-   * @param {Object} e - 事件对象
-   */
   setupReply(e) {
     if (e._replySetup) return
     e._replySetup = true
@@ -358,8 +315,11 @@ class PluginsLoader {
       if (!msg) return false
       
       try {
-        if (e.isGroup && e.group && (e.group.mute_left > 0 || (e.group.all_muted && !e.group.is_admin && !e.group.is_owner))) {
-          return false
+        if (e.isGroup && e.group) {
+          const { mute_left = 0, all_muted, is_admin, is_owner } = e.group
+          if (mute_left > 0 || (all_muted && !is_admin && !is_owner)) {
+            return false
+          }
         }
 
         let { recallMsg = 0, at = '' } = data
@@ -411,12 +371,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 运行插件
-   * @param {Object} e - 事件对象
-   * @param {boolean} isExtended - 是否为扩展插件
-   * @returns {Promise<boolean>}
-   */
   async runPlugins(e, isExtended = false) {
     try {
       const plugins = await this.initPlugins(e, isExtended)
@@ -459,12 +413,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 初始化插件列表
-   * @param {Object} e - 事件对象
-   * @param {boolean} isExtended - 是否为扩展插件
-   * @returns {Promise<Array>}
-   */
   async initPlugins(e, isExtended = false) {
     const pluginList = isExtended ? this.extended : this.priority
     const activePlugins = []
@@ -477,7 +425,6 @@ class PluginsLoader {
         plugin.e = e
         plugin.bypassThrottle = p.bypassThrottle
 
-        // 编译规则正则
         if (plugin.rule) {
           plugin.rule.forEach(rule => {
             if (rule.reg) rule.reg = this.createRegExp(rule.reg)
@@ -496,13 +443,6 @@ class PluginsLoader {
     return activePlugins
   }
 
-  /**
-   * 处理插件执行
-   * @param {Array} plugins - 插件列表
-   * @param {Object} e - 事件对象
-   * @param {boolean} isExtended - 是否为扩展插件
-   * @returns {Promise<boolean>}
-   */
   async processPlugins(plugins, e, isExtended) {
     if (!Array.isArray(plugins)) {
       logger.error('processPlugins: plugins参数不是数组')
@@ -531,12 +471,6 @@ class PluginsLoader {
     return await this.processDefaultHandlers(e)
   }
 
-  /**
-   * 处理插件规则
-   * @param {Array} plugins - 插件列表
-   * @param {Object} e - 事件对象
-   * @returns {Promise<boolean>}
-   */
   async processRules(plugins, e) {
     if (!Array.isArray(plugins)) {
       logger.error('processRules: plugins参数不是数组')
@@ -580,11 +514,6 @@ class PluginsLoader {
     return false
   }
 
-  /**
-   * 处理默认消息处理器
-   * @param {Object} e - 事件对象
-   * @returns {Promise<boolean>}
-   */
   async processDefaultHandlers(e) {
     if (e.isDevice || e.isStdin) return false
 
@@ -604,12 +533,6 @@ class PluginsLoader {
     return false
   }
 
-  /**
-   * 处理上下文
-   * @param {Array} plugins - 插件列表
-   * @param {Object} e - 事件对象
-   * @returns {Promise<boolean>}
-   */
   async handleContext(plugins, e) {
     if (!Array.isArray(plugins)) return false
 
@@ -695,13 +618,6 @@ class PluginsLoader {
     this.count(e, 'receive')
   }
 
-  /**
-   * 前置检查
-   * 检查机器人状态、权限和限制
-   * @param {Object} e - 事件对象
-   * @param {boolean} hasBypassPlugin - 是否有绕过节流的插件
-   * @returns {Promise<boolean>} 是否继续处理
-   */
   async preCheck(e, hasBypassPlugin = false) {
     try {
       if (e.isDevice || e.isStdin) return true
@@ -724,13 +640,12 @@ class PluginsLoader {
       }
 
       msg = this.dealText(msg)
-      const isStartCommand = /^#开机$/.test(msg)
-      if (isStartCommand) {
+      if (/^#开机$/.test(msg)) {
         const masterQQ = cfg.masterQQ || cfg.master?.[e.self_id] || []
         const masters = Array.isArray(masterQQ) ? masterQQ : [masterQQ]
-        const isMaster = masters.some(id => String(e.user_id) === String(id))
-
-        if (isMaster) return true
+        if (masters.some(id => String(e.user_id) === String(id))) {
+          return true
+        }
       }
 
       const shutdownStatus = await redis.get(`Yz:shutdown:${botUin}`)
@@ -749,11 +664,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 检查是否有绕过节流的插件
-   * @param {Object} e - 事件对象
-   * @returns {Promise<boolean>}
-   */
   async checkBypassPlugins(e) {
     if (!e.message) return false
 
@@ -765,10 +675,10 @@ class PluginsLoader {
         plugin.e = e
 
         if (plugin.rule) {
+          const tempMsg = this.extractMessageText(e)
           for (const rule of plugin.rule) {
             if (rule.reg) {
               rule.reg = this.createRegExp(rule.reg)
-              const tempMsg = this.extractMessageText(e)
               if (rule.reg.test(tempMsg)) return true
             }
           }
@@ -782,31 +692,19 @@ class PluginsLoader {
     return false
   }
 
-  /**
-   * 提取消息文本
-   * @param {Object} e - 事件对象
-   * @returns {string}
-   */
   extractMessageText(e) {
     if (e.raw_message) return this.dealText(e.raw_message)
     if (!e.message) return ''
 
-    let text = ''
     const messages = Array.isArray(e.message) ? e.message : [e.message]
-
-    for (const msg of messages) {
-      if (msg.type === 'text') {
-        text += msg.text || ''
-      }
-    }
+    const text = messages
+      .filter(msg => msg.type === 'text')
+      .map(msg => msg.text || '')
+      .join('')
 
     return this.dealText(text)
   }
 
-  /**
-   * 添加工具方法
-   * @param {Object} e - 事件对象
-   */
   addUtilMethods(e) {
     e.getSendableMedia = async (media) => {
       if (!media) return null
@@ -862,10 +760,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 获取插件文件列表
-   * @returns {Promise<Array>}
-   */
   async getPlugins() {
     try {
       const files = await fs.readdir(this.dir, { withFileTypes: true })
@@ -913,11 +807,6 @@ class PluginsLoader {
     };
   }
 
-  /**
-   * 导入插件
-   * @param {Object} file - 文件信息
-   * @param {Array} packageErr - 包错误列表
-   */
   async importPlugin(file, packageErr) {
     try {
       let app = await import(file.path)
@@ -1010,7 +899,6 @@ class PluginsLoader {
         })
       }
 
-      // 注册事件订阅
       if (plugin.eventSubscribe) {
         Object.entries(plugin.eventSubscribe).forEach(([eventType, handler]) => {
           if (typeof handler === 'function') {
@@ -1024,9 +912,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 识别默认消息处理器
-   */
   identifyDefaultMsgHandlers() {
     this.defaultMsgHandlers = this.priority.filter(p => {
       if (!p?.class) return false
@@ -1038,10 +923,6 @@ class PluginsLoader {
     })
   }
 
-  /**
-   * 显示依赖缺失提示
-   * @param {Array} packageErr - 包错误列表
-   */
   packageTips(packageErr) {
     if (!packageErr?.length) return
     logger.error('--------- 插件加载错误 ---------')
@@ -1054,9 +935,6 @@ class PluginsLoader {
     logger.error('--------------------------------')
   }
 
-  /**
-   * 插件排序
-   */
   sortPlugins() {
     this.priority = lodash.orderBy(this.priority, ['priority'], ['asc'])
     this.extended = lodash.orderBy(this.extended, ['priority'], ['asc'])
@@ -1117,12 +995,6 @@ class PluginsLoader {
     return false
   }
 
-  /**
-   * 匹配事件模式(支持通配符)
-   * @param {string} pattern - 模式字符串
-   * @param {string} event - 事件字符串
-   * @returns {boolean}
-   */
   matchEventPattern(pattern, event) {
     if (pattern === event) return true
     if (!pattern.includes('*')) return false
@@ -1138,47 +1010,37 @@ class PluginsLoader {
     })
   }
 
-  /**
-   * 过滤权限
-   * @param {Object} e - 事件对象
-   * @param {Object} v - 规则对象
-   * @returns {boolean}
-   */
   filtPermission(e, v) {
     if (e.isDevice || e.isStdin) return true
     if (!v.permission || v.permission === 'all' || e.isMaster) return true
 
-    const permissionMap = {
-      master: {
-        check: () => false,
-        msg: '暂无权限，只有主人才能操作'
-      },
-      owner: {
-        check: () => e.member?.is_owner === true,
-        msg: '暂无权限，只有群主才能操作'
-      },
-      admin: {
-        check: () => e.member?.is_owner === true || e.member?.is_admin === true,
-        msg: '暂无权限，只有管理员才能操作'
-      }
+    switch (v.permission) {
+      case 'master':
+        if (!e.isMaster) {
+          e.reply('暂无权限，只有主人才能操作')
+          return false
+        }
+        return true
+
+      case 'owner':
+        if (!e.isGroup || !e.member?.is_owner) {
+          e.reply('暂无权限，只有群主才能操作')
+          return false
+        }
+        return true
+
+      case 'admin':
+        if (!e.isGroup || (!e.member?.is_owner && !e.member?.is_admin)) {
+          e.reply('暂无权限，只有管理员才能操作')
+          return false
+        }
+        return true
+
+      default:
+        return true
     }
-
-    const perm = permissionMap[v.permission]
-    if (!perm || !e.isGroup) return true
-
-    if (!perm.check()) {
-      e.reply(perm.msg)
-      return false
-    }
-
-    return true
   }
 
-  /**
-   * 检查消息限制
-   * @param {Object} e - 事件对象
-   * @returns {boolean}
-   */
   checkLimit(e) {
     if (e.isDevice || e.isStdin) return true
 
@@ -1220,10 +1082,6 @@ class PluginsLoader {
     return true
   }
 
-  /**
-   * 设置消息限制
-   * @param {Object} e - 事件对象
-   */
   setLimit(e) {
     if (e.isStdin) return
 
@@ -1249,18 +1107,9 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 检查是否仅回复@消息
-   * @param {Object} e - 事件对象
-   * @returns {boolean}
-   */
   onlyReplyAt(e) {
     if (e.isDevice || e.isStdin) return true
-
-    const adapter = e.adapter || ''
-    if (!e.message || e.isPrivate || ['cmd'].includes(adapter)) {
-      return true
-    }
+    if (!e.message || e.isPrivate || ['cmd'].includes(e.adapter || '')) return true
 
     const groupCfg = e.group_id ? cfg.getGroup(e.group_id) : {}
     const onlyReplyAt = groupCfg.onlyReplyAt ?? 0
@@ -1271,47 +1120,32 @@ class PluginsLoader {
   }
 
 
-  /**
-   * 检查插件禁用状态
-   * @param {Object} p - 插件对象
-   * @returns {boolean}
-   */
   checkDisable(p) {
     if (!p) return false
+    if (!p.e) return true
 
-    if (p.e && (p.e.isDevice || p.e.isStdin)) {
+    if (p.e.isDevice || p.e.isStdin) {
       const other = cfg.getOther()
       if (!other) return true
 
-      const disableDevice = other.disableDevice || []
-      const enableDevice = other.enableDevice || []
-
+      const { disableDevice = [], enableDevice = [] } = other
       if (Array.isArray(disableDevice) && disableDevice.includes(p.name)) return false
-      if (Array.isArray(enableDevice) && enableDevice.length > 0 && !enableDevice.includes(p.name)) {
-        return false
-      }
+      if (Array.isArray(enableDevice) && enableDevice.length > 0 && !enableDevice.includes(p.name)) return false
       return true
     }
 
-    if (!p.e || !p.e.group_id) return true
+    if (!p.e.group_id) return true
 
     const groupCfg = cfg.getGroup(p.e.group_id)
     if (!groupCfg) return true
 
-    const disable = groupCfg.disable || []
-    const enable = groupCfg.enable || []
-
+    const { disable = [], enable = [] } = groupCfg
     if (Array.isArray(disable) && disable.includes(p.name)) return false
     if (Array.isArray(enable) && enable.length > 0 && !enable.includes(p.name)) return false
 
     return true
   }
 
-  /**
-   * 创建正则表达式
-   * @param {string|RegExp} pattern - 正则模式
-   * @returns {RegExp|boolean}
-   */
   createRegExp(pattern) {
     if (!pattern && pattern !== '') return false
     if (pattern instanceof RegExp) return pattern
@@ -1341,9 +1175,6 @@ class PluginsLoader {
       .trim()
   }
 
-  /**
-   * 初始化事件系统
-   */
   initEventSystem() {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer)
@@ -1388,11 +1219,6 @@ class PluginsLoader {
   registerGlobalEventListeners() {
   }
 
-  /**
-   * 记录事件历史
-   * @param {string} eventType - 事件类型
-   * @param {Object} eventData - 事件数据
-   */
   recordEventHistory(eventType, eventData) {
     const historyEntry = {
       event_id: eventData.event_id || Date.now().toString(),
@@ -1409,11 +1235,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 分发事件给订阅者
-   * @param {string} eventType - 事件类型
-   * @param {Object} eventData - 事件数据
-   */
   distributeToSubscribers(eventType, eventData) {
     const subscribers = this.eventSubscribers.get(eventType)
     if (!subscribers || subscribers.length === 0) return
@@ -1428,12 +1249,6 @@ class PluginsLoader {
     })
   }
 
-  /**
-   * 订阅事件
-   * @param {string} eventType - 事件类型
-   * @param {Function} callback - 回调函数
-   * @returns {Function} 取消订阅函数
-   */
   subscribeEvent(eventType, callback) {
     if (!this.eventSubscribers.has(eventType)) {
       this.eventSubscribers.set(eventType, [])
@@ -1451,9 +1266,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 创建定时任务
-   */
   createTask() {
     const created = new Set()
 
@@ -1491,12 +1303,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 统计计数
-   * @param {Object} e - 事件对象
-   * @param {string} type - 统计类型
-   * @param {any} msg - 消息内容
-   */
   async count(e, type, msg) {
     if (e.isDevice || e.isStdin) return
 
@@ -1601,7 +1407,6 @@ class PluginsLoader {
           }
         }
 
-        // 更新对应的插件列表
         if (plugin.priority === 'extended') {
           update(this.extended)
         } else {
@@ -1618,11 +1423,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 监听插件文件变化
-   * @param {string} dirName - 目录名
-   * @param {string} appName - 应用名
-   */
   watch(dirName, appName) {
     const watchKey = `${dirName}.${appName}`
     if (this.watcher[watchKey]) return
@@ -1641,7 +1441,6 @@ class PluginsLoader {
 
       const key = `${dirName}/${appName}`
 
-      // 监听文件变化
       watcher.on('change', lodash.debounce(() => {
         logger.mark(`[修改插件][${dirName}][${appName}]`)
         this.changePlugin(key)
@@ -1660,10 +1459,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 监听插件目录
-   * @param {string} dirName - 目录名
-   */
   watchDir(dirName) {
     if (this.watcher[dirName]) return
 
@@ -1689,7 +1484,6 @@ class PluginsLoader {
 
             await this.importPlugin({
               name: key,
-              // 修正为从 src/infrastructure/plugins 返回到项目根
               path: `../../../${this.dir}/${key}?${moment().format('X')}`
             }, [])
 
@@ -1712,12 +1506,10 @@ class PluginsLoader {
 
             logger.mark(`[删除插件][${dirName}][${appName}]`)
 
-            // 移除插件
             this.priority = this.priority.filter(p => p.key !== key)
             this.extended = this.extended.filter(p => p.key !== key)
             this.identifyDefaultMsgHandlers()
 
-            // 停止监听
             if (this.watcher[watchKey]) {
               this.watcher[watchKey].close()
               delete this.watcher[watchKey]
@@ -1741,12 +1533,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 触发自定义事件
-   * @param {string} eventType - 事件类型
-   * @param {Object} eventData - 事件数据
-   * @returns {Object}
-   */
   async emit(eventType, eventData) {
     try {
       const eventTypeParts = eventType.split('.')
@@ -1773,10 +1559,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 销毁加载器
-   * 清理所有资源
-   */
   async destroy() {
     try {
       for (const task of this.task) {
