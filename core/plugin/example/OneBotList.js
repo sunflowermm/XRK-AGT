@@ -11,14 +11,9 @@ export class OneBotBlacklistExample extends plugin {
     super({
       name: 'OneBot黑白名单示例',
       dsc: '演示如何使用accept方法实现OneBot特定逻辑',
-      event: 'onebot.message', // 只监听OneBot消息事件
+      event: 'onebot.message',
       priority: 5000,
-      rule: [
-        {
-          reg: '^#测试黑白名单$',
-          fnc: 'testBlacklist'
-        }
-      ]
+      rule: []
     })
   }
 
@@ -91,15 +86,6 @@ export class OneBotBlacklistExample extends plugin {
       }
     }
 
-    return true
-  }
-
-  /**
-   * 测试方法
-   */
-  async testBlacklist(e) {
-    logger.info(`[OneBot黑白名单示例] 收到测试消息: ${e.msg} 来自: ${e.sender.nickname}(${e.user_id})`)
-    await e.reply(`OneBot黑白名单检查通过！\n用户ID: ${e.user_id}\n适配器: ${e.adapter}`)
     return true
   }
 }

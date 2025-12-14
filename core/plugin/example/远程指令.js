@@ -1248,7 +1248,7 @@ export class EnhancedTools extends plugin {
     super({
       name: '终端工具',
       dsc: '执行终端命令和JavaScript代码',
-      event: 'onebot.message',
+      event: 'message',
       priority: 600,
       rule: [
         {

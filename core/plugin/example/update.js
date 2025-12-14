@@ -14,7 +14,7 @@ export class update extends plugin {
     super({
       name: '更新',
       dsc: '#更新 #强制更新',
-      event: 'onebot.message',
+      event: 'message',
       priority: 4000,
       rule: [
         {
