@@ -55,27 +55,17 @@ export class update extends plugin {
     if (uping) return this.reply('已有命令更新中..请勿重复操作')
     if (/详细|详情|面板|面版/.test(this.e.msg)) return false
 
-    /** 清空已更新记录 */
     this.updatedPlugins.clear()
     
-    /** 获取指定插件名称 */
     const plugin = this.getPlugin()
     if (plugin === false) return false
 
-    /** 执行更新逻辑 */
-    if (plugin === '') {
-      /** 更新主程序并自动更新XRK插件 */
-      await this.updateMainAndXRK()
-    } else {
-      /** 更新指定插件 */
-      await this.runUpdate(plugin)
+    plugin === '' ? await this.updateMainAndXRK() : (
+      await this.runUpdate(plugin),
       this.updatedPlugins.add(plugin)
-    }
+    )
 
-    /** 检查是否需要重启 */
-    if (this.isUp) {
-      setTimeout(() => this.restart(), 2000)
-    }
+    this.isUp && setTimeout(() => this.restart(), 2000)
   }
 
   /**
@@ -93,34 +83,21 @@ export class update extends plugin {
     const xrkUpdateResults = []
     
     for (const plugin of this.xrkPlugins) {
-      /** 跳过已更新的插件 */
       if (this.updatedPlugins.has(plugin.name)) continue
-      
-      /** 检查插件是否存在且完整 */
       if (!await this.checkPluginIntegrity(plugin)) continue
       
       logger.mark(`[更新] 检测到 ${plugin.name} 插件，自动更新中...`)
-      
       await common.sleep(1500)
       
-      /** 记录旧版本 */
       const oldCommitId = await this.getcommitId(plugin.name)
-      
-      /** 执行更新 */
       await this.runUpdate(plugin.name)
       this.updatedPlugins.add(plugin.name)
       
-      /** 检查是否有实际更新 */
       const newCommitId = await this.getcommitId(plugin.name)
-      if (oldCommitId !== newCommitId) {
-        xrkUpdateResults.push(`${plugin.name} 已更新`)
-      }
+      oldCommitId !== newCommitId && xrkUpdateResults.push(`${plugin.name} 已更新`)
     }
     
-    /** 发送更新结果汇总 */
-    if (xrkUpdateResults.length > 0) {
-      await this.reply(`XRK插件更新完成：\n${xrkUpdateResults.join('\n')}`)
-    }
+    xrkUpdateResults.length > 0 && await this.reply(`XRK插件更新完成：\n${xrkUpdateResults.join('\n')}`)
   }
 
   /**
@@ -131,13 +108,9 @@ export class update extends plugin {
   async checkPluginIntegrity(plugin) {
     const pluginPath = `core/${plugin.name}`
     
-    /** 检查目录是否存在 */
     if (!fs.existsSync(pluginPath)) return false
-    
-    /** 检查是否为git仓库 */
     if (!fs.existsSync(`${pluginPath}/.git`)) return false
     
-    /** 检查必需文件是否存在 */
     const isComplete = plugin.requiredFiles.every(file => 
       fs.existsSync(`${pluginPath}/${file}`)
     )
@@ -161,7 +134,6 @@ export class update extends plugin {
       if (!plugin) return ''
     }
 
-    /** 验证插件git仓库是否存在 */
     if (!fs.existsSync(`core/${plugin}/.git`)) return false
 
     this.typeName = plugin
@@ -189,16 +161,15 @@ export class update extends plugin {
   async runUpdate(plugin = '') {
     this.isNowUp = false
 
-    /** 构建git命令 */
     let cm = 'git pull --no-rebase'
     let type = '更新'
     
-    if (this.e.msg.includes('强制')) {
-      type = '强制更新'
+    this.e.msg.includes('强制') && (
+      type = '强制更新',
       cm = `git reset --hard && git pull --rebase --allow-unrelated-histories`
-    }
+    )
     
-    if (plugin) cm = `cd "core/${plugin}" && ${cm}`
+    plugin && (cm = `cd "core/${plugin}" && ${cm}`)
 
     /** 记录更新前的commit id */
     this.oldCommitId = await this.getcommitId(plugin)
@@ -212,29 +183,24 @@ export class update extends plugin {
     const ret = await this.execSync(cm)
     uping = false
 
-    /** 处理更新错误 */
-    if (ret.error) {
-      logger.mark(`${this.e.logFnc} 更新失败：${targetName}`)
-      this.gitErr(ret.error, ret.stdout)
+    ret.error && (
+      logger.mark(`${this.e.logFnc} 更新失败：${targetName}`),
+      this.gitErr(ret.error, ret.stdout),
       return false
-    }
+    )
 
-    /** 获取更新时间 */
     const time = await this.getTime(plugin)
 
-    /** 判断是否有更新 */
-    if (/Already up|已经是最新/g.test(ret.stdout)) {
-      await this.reply(`${targetName} 已是最新\n最后更新时间：${time}`)
-    } else {
-      await this.reply(`${targetName} 更新成功\n更新时间：${time}`)
-      this.isUp = true
-      
-      /** 获取并发送更新日志 */
-      const updateLog = await this.getLog(plugin)
-      if (updateLog) {
-        await this.reply(updateLog)
-      }
-    }
+    /Already up|已经是最新/g.test(ret.stdout) ? 
+      await this.reply(`${targetName} 已是最新\n最后更新时间：${time}`) :
+      (
+        await this.reply(`${targetName} 更新成功\n更新时间：${time}`),
+        this.isUp = true,
+        (async () => {
+          const updateLog = await this.getLog(plugin)
+          updateLog && await this.reply(updateLog)
+        })()
+      )
 
     logger.mark(`${this.e.logFnc} 最后更新时间：${time}`)
     return true
@@ -247,15 +213,13 @@ export class update extends plugin {
    */
   async getcommitId(plugin = '') {
     let cm = 'git rev-parse --short HEAD'
-    if (plugin) cm = `cd "core/${plugin}" && ${cm}`
+    plugin && (cm = `cd "core/${plugin}" && ${cm}`)
 
-    try {
-      const commitId = await execSync(cm, { encoding: 'utf-8' })
-      return lodash.trim(commitId)
-    } catch (error) {
+    const commitId = await execSync(cm, { encoding: 'utf-8' }).catch(error => {
       logger.error(`获取commit id失败: ${error}`)
       return ''
-    }
+    })
+    return lodash.trim(commitId)
   }
 
   /**
@@ -265,15 +229,13 @@ export class update extends plugin {
    */
   async getTime(plugin = '') {
     let cm = 'git log -1 --pretty=%cd --date=format:"%F %T"'
-    if (plugin) cm = `cd "core/${plugin}" && ${cm}`
+    plugin && (cm = `cd "core/${plugin}" && ${cm}`)
 
-    try {
-      const time = await execSync(cm, { encoding: 'utf-8' })
-      return lodash.trim(time)
-    } catch (error) {
+    const time = await execSync(cm, { encoding: 'utf-8' }).catch(error => {
       logger.error(error.toString())
       return '获取时间失败'
-    }
+    })
+    return lodash.trim(time)
   }
 
   /**
@@ -287,26 +249,21 @@ export class update extends plugin {
     const errMsg = err.toString()
     stdout = stdout.toString()
 
-    /** 连接超时 */
-    if (errMsg.includes('Timed out')) {
+    errMsg.includes('Timed out') && (() => {
       const remote = errMsg.match(/'(.+?)'/g)[0].replace(/'/g, '')
       return this.reply(`${msg}\n连接超时：${remote}`)
-    }
+    })()
 
-    /** 连接失败 */
-    if (/Failed to connect|unable to access/g.test(errMsg)) {
+    /Failed to connect|unable to access/g.test(errMsg) && (() => {
       const remote = errMsg.match(/'(.+?)'/g)[0].replace(/'/g, '')
       return this.reply(`${msg}\n连接失败：${remote}`)
-    }
+    })()
 
-    /** 存在冲突 */
-    if (errMsg.includes('be overwritten by merge')) {
+    errMsg.includes('be overwritten by merge') && 
       return this.reply(`${msg}\n存在冲突：\n${errMsg}\n请解决冲突后再更新，或者执行#强制更新，放弃本地修改`)
-    }
 
-    if (stdout.includes('CONFLICT')) {
+    stdout.includes('CONFLICT') && 
       return this.reply(`${msg}\n存在冲突：\n${errMsg}${stdout}\n请解决冲突后再更新，或者执行#强制更新，放弃本地修改`)
-    }
 
     return this.reply([errMsg, stdout])
   }
@@ -322,14 +279,13 @@ export class update extends plugin {
     /** 清空已更新记录 */
     this.updatedPlugins.clear()
 
-    /** 判断是否静默更新 */
     const isSilent = /^#静默全部(强制)?更新$/.test(this.e.msg)
-    if (isSilent) {
-      await this.reply(`开始执行静默全部更新，请稍等...`)
+    isSilent && (
+      await this.reply(`开始执行静默全部更新，请稍等...`),
       this.reply = (message) => {
         this.messages.push(message)
       }
-    }
+    )
 
     /** 更新主程序 */
     await this.runUpdate()
@@ -348,16 +304,12 @@ export class update extends plugin {
       this.updatedPlugins.add(plu)
     }
 
-    /** 发送静默更新结果 */
-    if (isSilent) {
-      this.reply = originalReply
+    isSilent && (
+      this.reply = originalReply,
       await this.reply(await common.makeForwardMsg(this.e, this.messages))
-    }
+    )
 
-    /** 检查是否需要重启 */
-    if (this.isUp) {
-      setTimeout(() => this.restart(), 2000)
-    }
+    this.isUp && setTimeout(() => this.restart(), 2000)
   }
 
   /**
@@ -374,24 +326,20 @@ export class update extends plugin {
    */
   async getLog(plugin = '') {
     let cm = 'git log -100 --pretty="%h||[%cd] %s" --date=format:"%F %T"'
-    if (plugin) cm = `cd "core/${plugin}" && ${cm}`
+    plugin && (cm = `cd "core/${plugin}" && ${cm}`)
 
-    let logAll
-    try {
-      logAll = await execSync(cm, { encoding: 'utf-8' })
-    } catch (error) {
+    const logAll = await execSync(cm, { encoding: 'utf-8' }).catch(async error => {
       logger.error(error.toString())
       await this.reply(error.toString())
       return false
-    }
+    })
 
-    if (!logAll) return false
+    !logAll && return false
 
-    /** 解析日志 */
-    logAll = logAll.trim().split('\n')
-    let log = []
+    const logLines = logAll.trim().split('\n')
+    const log = []
     
-    for (let str of logAll) {
+    for (let str of logLines) {
       str = str.split('||')
       if (str[0] == this.oldCommitId) break
       if (str[1].includes('Merge branch')) continue
@@ -399,37 +347,31 @@ export class update extends plugin {
     }
     
     const line = log.length
-    log = log.join('\n\n')
+    const logText = log.join('\n\n')
 
-    if (log.length <= 0) return ''
+    if (logText.length <= 0) return ''
 
-    /** 获取仓库地址 */
-    let repoUrl = ''
-    try {
-      cm = 'git config -l'
-      if (plugin) cm = `cd "core/${plugin}" && ${cm}`
-      
-      const config = await execSync(cm, { encoding: 'utf-8' })
-      repoUrl = config
-        .match(/remote\..*\.url=.+/g)
-        .join('\n\n')
-        .replace(/remote\..*\.url=/g, '')
-        .replace(/\/\/([^@]+)@/, '//')
-    } catch (error) {
+    let cm = 'git config -l'
+    plugin && (cm = `cd "core/${plugin}" && ${cm}`)
+    
+    const config = await execSync(cm, { encoding: 'utf-8' }).catch(error => {
       logger.error(error.toString())
-    }
+      return ''
+    })
+    
+    const repoUrl = config
+      .match(/remote\..*\.url=.+/g)
+      .join('\n\n')
+      .replace(/remote\..*\.url=/g, '')
+      .replace(/\/\/([^@]+)@/, '//')
 
     return common.makeForwardMsg(
       this.e, 
-      [log, repoUrl], 
+      [logText, repoUrl], 
       `${plugin || 'XRK-AGT'} 更新日志，共${line}条`
     )
   }
 
-  /**
-   * 查看更新日志
-   * @returns {Promise<void>}
-   */
   async updateLog() {
     const plugin = this.getPlugin()
     if (plugin === false) return false

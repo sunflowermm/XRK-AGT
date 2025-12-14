@@ -188,16 +188,16 @@ class DependencyManager {
    */
   async getMissingDependencies(dependencies, nodeModulesPath) {
     const depNames = Object.keys(dependencies).filter(dep => dep !== 'md5' && dep !== 'oicq');
-    const checkResults = await Promise.all(
-      depNames.map(async (dep) => ({
-        name: dep,
-        installed: await this.isDependencyInstalled(dep, nodeModulesPath)
-      }))
+    const missing = [];
+    
+    await Promise.all(
+      depNames.map(async (dep) => {
+        const installed = await this.isDependencyInstalled(dep, nodeModulesPath);
+        !installed && missing.push(dep);
+      })
     );
     
-    return checkResults
-      .filter(result => !result.installed)
-      .map(result => result.name);
+    return missing;
   }
 
   /**
@@ -278,65 +278,69 @@ class DependencyManager {
     const pluginGlobs = ['core', 'renderers'];
 
     const dirs = [];
-    for (const base of pluginGlobs) {
-      const dir = path.join(rootDir, base);
-      try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        for (const d of entries) {
-          if (d.isDirectory()) dirs.push(path.join(dir, d.name));
-        }
-      } catch { /* ignore */ }
-    }
-
-    for (const d of dirs) {
-      const pkgPath = path.join(d, 'package.json');
-      const nodeModulesPath = path.join(d, 'node_modules');
-      try {
-        await fs.access(pkgPath);
-      } catch {
-        continue;
-      }
-
-      let pkg;
-      try {
-        pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'));
-      } catch (e) {
-        await this.logger.warning(`插件 package.json 无法解析: ${pkgPath} (${e.message})`);
-        continue;
-      }
-
-      const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-      const depNames = Object.keys(deps);
-      if (depNames.length === 0) continue;
-
-      const missing = [];
-      for (const dep of depNames) {
+    await Promise.all(
+      pluginGlobs.map(async (base) => {
+        const dir = path.join(rootDir, base);
         try {
-          const p = path.join(nodeModulesPath, dep);
-          const s = await fs.stat(p);
-          if (!s.isDirectory()) missing.push(dep);
+          const entries = await fs.readdir(dir, { withFileTypes: true });
+          entries.forEach(d => d.isDirectory() && dirs.push(path.join(dir, d.name)));
+        } catch { /* ignore */ }
+      })
+    );
+
+    await Promise.all(
+      dirs.map(async (d) => {
+        const pkgPath = path.join(d, 'package.json');
+        const nodeModulesPath = path.join(d, 'node_modules');
+        
+        try {
+          await fs.access(pkgPath);
         } catch {
-          missing.push(dep);
+          return;
         }
-      }
 
-      if (missing.length > 0) {
-        await this.logger.warning(`插件依赖缺失 [${d}]: ${missing.join(', ')}`);
+        let pkg;
         try {
-          await this.logger.log(`为插件安装依赖 (${manager}): ${d}`);
-          // 子目录安装并设定合理超时与缓冲
-          await execAsync(`${manager} install`, {
-            cwd: d,
-            maxBuffer: 1024 * 1024 * 16,
-            timeout: 10 * 60 * 1000
-          });
-          await this.logger.success(`插件依赖安装完成: ${d}`);
-        } catch (err) {
-          await this.logger.error(`插件依赖安装失败: ${d} (${err.message})`);
-          throw err;
+          pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'));
+        } catch (e) {
+          await this.logger.warning(`插件 package.json 无法解析: ${pkgPath} (${e.message})`);
+          return;
         }
-      }
-    }
+
+        const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+        const depNames = Object.keys(deps);
+        if (depNames.length === 0) return;
+
+        const missing = [];
+        await Promise.all(
+          depNames.map(async (dep) => {
+            try {
+              const p = path.join(nodeModulesPath, dep);
+              const s = await fs.stat(p);
+              !s.isDirectory() && missing.push(dep);
+            } catch {
+              missing.push(dep);
+            }
+          })
+        );
+
+        if (missing.length > 0) {
+          await this.logger.warning(`插件依赖缺失 [${d}]: ${missing.join(', ')}`);
+          try {
+            await this.logger.log(`为插件安装依赖 (${manager}): ${d}`);
+            await execAsync(`${manager} install`, {
+              cwd: d,
+              maxBuffer: 1024 * 1024 * 16,
+              timeout: 10 * 60 * 1000
+            });
+            await this.logger.success(`插件依赖安装完成: ${d}`);
+          } catch (err) {
+            await this.logger.error(`插件依赖安装失败: ${d} (${err.message})`);
+            throw err;
+          }
+        }
+      })
+    );
   }
 }
 
@@ -362,8 +366,13 @@ class EnvironmentValidator {
     const nodeVersion = process.version;
     const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0]);
     
-    if (majorVersion < 14) {
-      throw new Error(`Node.js版本过低: ${nodeVersion}, 需要 v14.0.0 或更高版本`);
+    if (majorVersion < 18) {
+      throw new Error(`Node.js版本过低: ${nodeVersion}, 需要 v18.14.0 或更高版本`);
+    }
+    
+    const minorVersion = parseInt(nodeVersion.slice(1).split('.')[1] || '0');
+    if (majorVersion === 18 && minorVersion < 14) {
+      throw new Error(`Node.js版本过低: ${nodeVersion}, 需要 v18.14.0 或更高版本`);
     }
   }
 
@@ -421,22 +430,28 @@ class Bootstrap {
       return;
     }
 
-    let mergedImports = {};
-    for (const file of jsonFiles) {
-      const filePath = path.join(importsDir, file);
-      const content = await fs.readFile(filePath, 'utf-8');
-      const data = JSON.parse(content);
-      if (data.imports && typeof data.imports === 'object') {
-        Object.assign(mergedImports, data.imports);
-      }
-    }
+    const importDataArray = await Promise.all(
+      jsonFiles.map(async (file) => {
+        const filePath = path.join(importsDir, file);
+        try {
+          const content = await fs.readFile(filePath, 'utf-8');
+          const data = JSON.parse(content);
+          return data.imports && typeof data.imports === 'object' ? data.imports : {};
+        } catch (e) {
+          await this.logger.warning(`无法解析 imports 文件: ${filePath} (${e.message})`);
+          return {};
+        }
+      })
+    );
+
+    const mergedImports = Object.assign({}, ...importDataArray);
 
     if (Object.keys(mergedImports).length === 0) {
       return;
     }
 
     const packageJson = await this.dependencyManager.parsePackageJson(packageJsonPath);
-    packageJson.imports = { ... (packageJson.imports || {}), ...mergedImports };
+    packageJson.imports = { ...(packageJson.imports || {}), ...mergedImports };
     await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
   }
 
@@ -493,7 +508,7 @@ class Bootstrap {
       
       /** 提供故障排除建议 */
       await this.logger.log('\n故障排除建议:');
-      await this.logger.log('1. 确保Node.js版本 >= 14.0.0');
+      await this.logger.log('1. 确保Node.js版本 >= 18.14.0');
       await this.logger.log('2. 手动运行: pnpm install (或 npm install)');
       await this.logger.log('3. 检查网络连接');
       await this.logger.log('4. 查看日志文件: ./logs/bootstrap.log');

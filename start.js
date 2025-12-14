@@ -118,7 +118,8 @@ class Logger {
     if (this.queue.length === 0 || this.isWriting) return;
     
     this.isWriting = true;
-    const messages = this.queue.splice(0, this.queue.length);
+    const BATCH_SIZE = 100;
+    const messages = this.queue.splice(0, BATCH_SIZE);
     
     try {
       await fs.appendFile(this.logFile, messages.join(''));
@@ -127,7 +128,7 @@ class Logger {
     } finally {
       this.isWriting = false;
       if (this.queue.length > 0) {
-        await this.flushQueue();
+        setImmediate(() => this.flushQueue());
       }
     }
   }
@@ -396,10 +397,14 @@ class ServerManager extends BaseManager {
   async getAvailablePorts() {
     try {
       const files = await fs.readdir(PATHS.SERVER_BOTS);
-      return files
-        .filter(file => !isNaN(file))
-        .map(file => parseInt(file))
-        .sort((a, b) => a - b);
+      const ports = [];
+      
+      for (const file of files) {
+        const port = parseInt(file, 10);
+        !isNaN(port) && port > 0 && port < 65536 && ports.push(port);
+      }
+      
+      return ports.sort((a, b) => a - b);
     } catch {
       return [];
     }

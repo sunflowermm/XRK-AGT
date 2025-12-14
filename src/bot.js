@@ -2247,59 +2247,16 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
    */
   async sendMasterMsg(msg, sleep = 5000) {
     const masterQQs = cfg.masterQQ;
-    if (!masterQQs?.length) {
-      throw new Error("未配置主人QQ");
-    }
-    
     const results = {};
     
     for (let i = 0; i < masterQQs.length; i++) {
       const user_id = masterQQs[i];
+      const pickFn = this.pickFriend || this.pickUser;
+      const friend = pickFn.call(this, user_id);
+      results[user_id] = await friend.sendMsg(msg);
+      BotUtil.makeLog("debug", `已发送消息给主人 ${user_id}`, '服务器');
       
-      try {
-        // 尝试使用pickFriend（OneBot特定）或pickUser（通用）
-        const pickFn = this.pickFriend || this.pickUser;
-        if (pickFn && typeof pickFn === 'function') {
-          const friend = pickFn.call(this, user_id);
-          if (friend?.sendMsg) {
-            results[user_id] = await friend.sendMsg(msg);
-            BotUtil.makeLog("debug", `已发送消息给主人 ${user_id}`, '服务器');
-          } else {
-            results[user_id] = { error: "没有可用的Bot" };
-            BotUtil.makeLog("warn", `无法向主人 ${user_id} 发送消息`, '服务器');
-          }
-        } else {
-          // 如果没有pickFriend/pickUser，尝试从所有bot中查找
-          let sent = false;
-          for (const bot_id of this.uin || []) {
-            const bot = this.bots[bot_id];
-            if (bot?.pickFriend) {
-              try {
-                const friend = bot.pickFriend(user_id);
-                if (friend?.sendMsg) {
-                  results[user_id] = await friend.sendMsg(msg);
-                  BotUtil.makeLog("debug", `已发送消息给主人 ${user_id}`, '服务器');
-                  sent = true;
-                  break;
-                }
-              } catch (err) {
-                // 继续尝试下一个bot
-              }
-            }
-          }
-          if (!sent) {
-            results[user_id] = { error: "没有可用的Bot或适配器不支持" };
-            BotUtil.makeLog("warn", `无法向主人 ${user_id} 发送消息`, '服务器');
-          }
-        }
-        
-        if (sleep && i < masterQQs.length - 1) {
-          await BotUtil.sleep(sleep);
-        }
-      } catch (err) {
-        results[user_id] = { error: err.message };
-        BotUtil.makeLog("error", `向主人 ${user_id} 发送消息失败：${err.message}`, '服务器');
-      }
+      i < masterQQs.length - 1 && await BotUtil.sleep(sleep);
     }
     
     return results;

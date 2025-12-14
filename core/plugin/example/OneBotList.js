@@ -23,69 +23,30 @@ export class OneBotBlacklistExample extends plugin {
    * device和stdin事件直接通过
    */
   async accept(e) {
-    // 特殊事件（device、stdin）直接通过，不进行OneBot特定检查
-    if (e.isDevice || e.isStdin) return true
+    e.isDevice || e.isStdin ? return true : null
+    !(e.isOneBot || e.adapter === 'onebot') ? return true : null
 
-    // 只对OneBot事件进行黑白名单检查
-    if (e.isOneBot || e.adapter === 'onebot') {
-      const other = cfg.getOther()
-      if (!other) return true
+    const other = cfg.getOther()
+    const check = id => [Number(id), String(id)]
 
-      const check = id => [Number(id), String(id)]
+    const blackQQ = other.blackQQ
+    blackQQ.length > 0 && check(e.user_id).some(id => blackQQ.includes(id)) ? return false : null
+    blackQQ.length > 0 && e.at && check(e.at).some(id => blackQQ.includes(id)) ? return false : null
 
-      // 检查QQ黑名单
-      const blackQQ = other.blackQQ || []
-      if (Array.isArray(blackQQ) && blackQQ.length > 0) {
-        if (check(e.user_id).some(id => blackQQ.includes(id))) {
-          logger.debug(`[OneBot黑白名单] 用户 ${e.user_id} 在黑名单中，拒绝处理`)
-          return false
-        }
-        if (e.at && check(e.at).some(id => blackQQ.includes(id))) {
-          logger.debug(`[OneBot黑白名单] @的用户 ${e.at} 在黑名单中，拒绝处理`)
-          return false
-        }
-      }
+    const blackDevice = other.blackDevice
+    e.device_id && blackDevice.includes(e.device_id) ? return false : null
 
-      // 检查设备黑名单
-      const blackDevice = other.blackDevice || []
-      if (e.device_id && Array.isArray(blackDevice) && blackDevice.includes(e.device_id)) {
-        logger.debug(`[OneBot黑白名单] 设备 ${e.device_id} 在黑名单中，拒绝处理`)
-        return false
-      }
+    const whiteQQ = other.whiteQQ
+    whiteQQ.length > 0 && !check(e.user_id).some(id => whiteQQ.includes(id)) ? return false : null
 
-      // 检查QQ白名单
-      const whiteQQ = other.whiteQQ || []
-      if (Array.isArray(whiteQQ) && whiteQQ.length > 0) {
-        if (!check(e.user_id).some(id => whiteQQ.includes(id))) {
-          logger.debug(`[OneBot黑白名单] 用户 ${e.user_id} 不在白名单中，拒绝处理`)
-          return false
-        }
-      }
+    e.group_id && (() => {
+      const blackGroup = other.blackGroup
+      check(e.group_id).some(id => blackGroup.includes(id)) ? return false : null
+      const whiteGroup = other.whiteGroup
+      whiteGroup.length > 0 && !check(e.group_id).some(id => whiteGroup.includes(id)) ? return false : null
+    })()
 
-      // 检查群组黑白名单
-      if (e.group_id) {
-        const blackGroup = other.blackGroup || []
-        if (Array.isArray(blackGroup) && check(e.group_id).some(id => blackGroup.includes(id))) {
-          logger.debug(`[OneBot黑白名单] 群组 ${e.group_id} 在黑名单中，拒绝处理`)
-          return false
-        }
-
-        const whiteGroup = other.whiteGroup || []
-        if (Array.isArray(whiteGroup) && whiteGroup.length > 0) {
-          if (!check(e.group_id).some(id => whiteGroup.includes(id))) {
-            logger.debug(`[OneBot黑白名单] 群组 ${e.group_id} 不在白名单中，拒绝处理`)
-            return false
-          }
-        }
-      }
-
-      // 检查频道消息（如果禁用）
-      if (other.disableGuildMsg === true && e.detail_type === 'guild') {
-        logger.debug(`[OneBot黑白名单] 频道消息已禁用，拒绝处理`)
-        return false
-      }
-    }
-
+    other.disableGuildMsg === true && e.detail_type === 'guild' ? return false : null
     return true
   }
 }

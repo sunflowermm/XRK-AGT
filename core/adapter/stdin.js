@@ -11,14 +11,11 @@ const tempDir = path.join(process.cwd(), "www", "stdin");
 const mediaDir = path.join(process.cwd(), "www", "media");
 const pluginsLoader = (await import("../../src/infrastructure/plugins/loader.js")).default;
 
-// 确保目录存在
 for (const dir of [tempDir, mediaDir]) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
-
-// 定期清理临时文件
 setInterval(() => {
   try {
     const now = Date.now();
@@ -28,7 +25,7 @@ setInterval(() => {
       files.forEach(file => {
         const filePath = path.join(dir, file);
         const stats = fs.statSync(filePath);
-        if (now - stats.mtimeMs > 3600000) { // 1小时后清理
+        if (now - stats.mtimeMs > 3600000) {
           fs.unlinkSync(filePath);
           logger.debug(`已清理临时文件: ${file}`);
         }
@@ -57,32 +54,21 @@ export class StdinHandler {
 
   initStdinBot() {
     if (!Bot.stdin) {
-      // 确保uin列表包含stdin
       if (!Bot.uin.includes(this.botId)) {
         Bot.uin.push(this.botId);
       }
       
-      // 创建标准化的stdin Bot实例
       Bot.stdin = {
-        // 基础属性
         uin: this.botId,
         self_id: this.botId,
         nickname: 'StdinBot',
         avatar: 'https://q1.qlogo.cn/g?b=qq&s=0&nk=10000001',
-        
-        // 适配器信息
         adapter: { id: 'stdin', name: '标准输入适配器' },
         adapter_type: 'stdin',
-        
-        // 状态信息
         stat: { start_time: Date.now() / 1000 },
         version: { id: 'stdin', name: 'StdinBot', version: '1.0.0' },
         config: { master: true },
-        
-        // 通用方法
         sendMsg: async (msg) => this.sendMsg(msg, 'stdin', { user_id: 'stdin' }),
-        
-        // 兼容OneBot的方法（可选，如果OneBot函数已注册）
         pickUser: (user_id) => Bot.pickFriend ? Bot.pickFriend(user_id) : null,
         pickFriend: (user_id) => ({
           user_id,
@@ -105,8 +91,6 @@ export class StdinHandler {
         }),
         getGroupArray: () => [],
         getFriendArray: () => [],
-        
-        // 文件处理
         fileToUrl: async (filePath, opts = {}) => {
           try {
             if (typeof filePath === 'string' && filePath.startsWith('http')) {
@@ -119,34 +103,25 @@ export class StdinHandler {
             return '';
           }
         },
-        
-        // 标记
         _ready: true
       };
       
-      // 同时保存到Bot[stdin]以便统一访问
       Bot[this.botId] = Bot.stdin;
     }
   }
 
-  /**
-   * 将文件转换为URL [API 基础知识和教程 ...](https://apifox.com/apiskills/how-to-convert-image-to-base64-in-nodejs/)
-   */
   async processFileToUrl(filePath, baseUrl) {
     try {
       let buffer;
       let fileName;
       let fileExt = 'file';
 
-      // 处理不同类型的输入
       if (Buffer.isBuffer(filePath)) {
         buffer = filePath;
-        // 尝试检测文件类型
         const fileType = await BotUtil.fileType({ buffer });
         fileExt = fileType?.type?.ext || 'file';
         fileName = `${ulid()}.${fileExt}`;
       } else if (typeof filePath === 'string') {
-        // 检查文件是否存在
         if (fs.existsSync(filePath)) {
           buffer = await fs.promises.readFile(filePath);
           fileName = path.basename(filePath);
@@ -162,14 +137,9 @@ export class StdinHandler {
         throw new Error('不支持的文件格式');
       }
 
-      // 确保文件名合法
       fileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-      
-      // 保存文件到media目录
       const targetPath = path.join(mediaDir, fileName);
       await fs.promises.writeFile(targetPath, buffer);
-
-      // 返回访问URL
       const url = `${baseUrl}/media/${fileName}`;
       logger.debug(`文件已保存: ${targetPath} -> ${url}`);
       
@@ -208,8 +178,6 @@ export class StdinHandler {
           timestamp: Date.now() 
         };
       }
-
-      // 内置命令处理
       const builtinCommands = {
         "exit": () => ({ 
           success: true, 
@@ -280,9 +248,8 @@ export class StdinHandler {
   async handleEvent(event) {
     logger.debug(`处理事件: message = ${JSON.stringify(event.message)}, raw_message = ${event.raw_message}`);
     
-    // 结果收集器
     const results = [];
-    const originalReply = event.reply;
+    const originalReply = event.reply || this.createDefaultReply(event);
 
     event.reply = async (...args) => {
       let msg = args[0];
@@ -297,9 +264,8 @@ export class StdinHandler {
           processedMsg = [{ type: 'text', text: String(msg) }];
         }
         
-        const result = await originalReply.apply(event, [processedMsg]);
+        const result = await originalReply.call(event, processedMsg);
         
-        // 收集结果
         results.push({
           ...result,
           content: processedMsg
@@ -312,16 +278,12 @@ export class StdinHandler {
       }
     };
 
-    // 触发stdin事件（标准化事件系统）
-    // 先触发具体事件，再触发通用事件
     Bot.em('stdin.command', event);
     Bot.em('stdin.message', event);
     
-    // 处理插件（deal方法会处理事件）
     await pluginsLoader.deal(event);
 
-    // 构建响应
-    const response = {
+    return {
       success: true,
       code: 200,
       message: "命令已处理",
@@ -329,13 +291,17 @@ export class StdinHandler {
       timestamp: Date.now(),
       results: results
     };
-
-    return response;
   }
 
-  /**
-   * 处理消息内容，包括图片文件等 [腾讯云](https://cloud.tencent.com/developer/ask/sof/1228959/answer/1705028)
-   */
+  createDefaultReply(event) {
+    return async (msg) => {
+      return await this.sendMsg(msg, event.sender?.nickname || 'stdin', {
+        user_id: event.user_id,
+        adapter: 'stdin'
+      });
+    };
+  }
+
   async processMessageContent(content) {
     if (!Array.isArray(content)) content = [content];
     const processed = [];
@@ -364,9 +330,6 @@ export class StdinHandler {
     return processed;
   }
 
-  /**
-   * 处理媒体文件，转换为可访问的URL [Node.js + Express 处理图片上传的三种方法](https://www.javascriptcn.com/post/651118fd95b1f8cacd976e49)
-   */
   async processMediaFile(item) {
     try {
       let buffer;
@@ -429,7 +392,6 @@ export class StdinHandler {
         this.openImageFile(filePath);
       }
 
-      // 计算文件MD5 [Node.js 中图片如何转为 base64 格式](https://apifox.com/apiskills/how-to-convert-image-to-base64-in-nodejs/)
       const md5 = crypto.createHash('md5').update(buffer).digest('hex');
 
       return { 
@@ -534,7 +496,6 @@ export class StdinHandler {
                       input.map(m => m.type === 'text' ? m.text : `[${m.type}]`).join('') : 
                       typeof input === 'string' ? input : '';
 
-    // 创建标准化事件对象
     const event = {
       // 基础属性
       post_type: userInfo.post_type || "message",
@@ -573,14 +534,13 @@ export class StdinHandler {
       isPrivate: !userInfo.group_id,
       isGroup: !!userInfo.group_id,
       
-      // 辅助方法
       toString: () => raw_message,
       
-      // 回复方法（由插件加载器设置）
-      reply: null
+      reply: async (msg) => {
+        return await this.sendMsg(msg, nickname, userInfo);
+      }
     };
     
-    // 添加群组信息
     if (userInfo.group_id) {
       event.group_id = userInfo.group_id;
       event.group_name = userInfo.group_name || `群${userInfo.group_id}`;
@@ -588,8 +548,6 @@ export class StdinHandler {
       event.isGroup = true;
       event.isPrivate = false;
     }
-    
-    // 添加friend和member对象（兼容OneBot格式）
     event.friend = {
       sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo),
       recallMsg: () => logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`),
@@ -656,7 +614,6 @@ export class StdinHandler {
       }
     }
 
-    // 只在适配器模式下输出到控制台
     if (userInfo.adapter !== 'api' && textLogs.length > 0) {
       logger.tag(textLogs.join("\n"), "输出", "blue");
     }

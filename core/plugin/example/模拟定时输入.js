@@ -28,32 +28,34 @@ export class DailySignIn extends plugin {
         }
     }
 
-    // 创建模拟消息事件对象
     createMessageEvent(inputMsg) {
-        const user_id = 12345678 // 固定的发送者QQ号
+        const user_id = 12345678
         const name = "模拟用户";
         const time = Math.floor(Date.now() / 1000);
-        const self_id = Bot.uin; // 接收者为Bot的QQ号
+        const self_id = Bot.uin.toString();
 
         return {
-            adapter: "cmd",
+            adapter: "stdin",
             message_id: `test_${Date.now()}`,
-            message_type: "private", // 模拟私聊消息
+            message_type: "private",
             post_type: "message",
             sub_type: "friend",
             self_id,
             seq: 888,
             time,
             uin: self_id,
-            user_id, // 发送者QQ号
+            user_id,
             message: [{ type: "text", text: inputMsg }],
             raw_message: inputMsg,
+            msg: inputMsg,
             isMaster: true,
+            isStdin: true,
+            bot: Bot.stdin || Bot[Bot.uin.toString()],
             toString: () => inputMsg,
             sender: {
                 card: name,
                 nickname: name,
-                role: "",
+                role: "master",
                 user_id
             },
             member: {
@@ -65,13 +67,8 @@ export class DailySignIn extends plugin {
                 getAvatarUrl: () => `https://q1.qlogo.cn/g?b=qq&s=0&nk=${user_id}`
             },
             reply: async (replyMsg) => {
-                try {
-                    logger.info(`模拟回复：${JSON.stringify(replyMsg)}`);
-                    return true;
-                } catch (error) {
-                    logger.error(`回复出错！: ${error.message}`);
-                    return false;
-                }
+                logger.info(`模拟回复：${JSON.stringify(replyMsg)}`);
+                return { message_id: `test_${Date.now()}`, time };
             }
         };
     }

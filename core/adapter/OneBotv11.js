@@ -1171,7 +1171,6 @@ Bot.adapter.push(
           },
         }
 
-        // 立即触发connect事件，让上层应用知道Bot已可用
         Bot.makeLog("mark", `${this.name}(${this.id}) ${data.bot.version.version} 已连接`, self_id)
         Bot.em(`connect.${self_id}`, data)
         
@@ -1222,11 +1221,8 @@ Bot.adapter.push(
               }
             }
 
-            // 标记Bot完全就绪
             data.bot._ready = true
             data.bot._initializing = false
-            
-            // 触发ready事件
             Bot.em(`ready.${self_id}`, data)
             
           } catch (err) {
@@ -1296,8 +1292,6 @@ Bot.adapter.push(
           Bot.makeLog("warn", `未知消息：${logger.magenta(data.raw)}`, data.self_id)
       }
 
-      // 标准化事件系统: OneBot事件统一使用onebot.前缀
-      // 确保事件对象有必要的标识
       data.adapter = 'onebot'
       data.isOneBot = true
       
@@ -1305,7 +1299,6 @@ Bot.adapter.push(
       const onebotEventSimple = `onebot.${data.post_type}.${data.message_type}`
       const onebotEventBase = `onebot.${data.post_type}`
       
-      // 触发onebot事件（从具体到通用）
       Bot.em(onebotEvent, data)
       Bot.em(onebotEventSimple, data)
       Bot.em(onebotEventBase, data)
@@ -1378,7 +1371,6 @@ Bot.adapter.push(
             `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
             true,
           )
-          // 标准化事件系统: OneBot事件统一使用onebot.前缀
           const fileEventData = {
             ...data,
             post_type: "message",
@@ -1495,7 +1487,6 @@ Bot.adapter.push(
             `${data.self_id} <= ${data.user_id}`,
             true,
           )
-          // 标准化事件系统: OneBot事件统一使用onebot.前缀
           const offlineFileEventData = {
             ...data,
             post_type: "message",
@@ -1596,7 +1587,6 @@ Bot.adapter.push(
         })
       }
 
-      // 标准化事件系统: OneBot事件统一使用onebot.前缀
       data.adapter = 'onebot'
       data.isOneBot = true
       
@@ -1604,7 +1594,6 @@ Bot.adapter.push(
       const onebotNoticeEventSimple = `onebot.${data.post_type}.${data.notice_type}`
       const onebotNoticeEventBase = `onebot.${data.post_type}`
       
-      // 触发onebot事件（从具体到通用）
       Bot.em(onebotNoticeEvent, data)
       Bot.em(onebotNoticeEventSimple, data)
       Bot.em(onebotNoticeEventBase, data)
@@ -1643,7 +1632,6 @@ Bot.adapter.push(
       }
 
       data.bot.request_list.push(data)
-      // 标准化事件系统: OneBot事件统一使用onebot.前缀
       data.adapter = 'onebot'
       data.isOneBot = true
       
@@ -1651,7 +1639,6 @@ Bot.adapter.push(
       const onebotRequestEventSimple = `onebot.${data.post_type}.${data.request_type}`
       const onebotRequestEventBase = `onebot.${data.post_type}`
       
-      // 触发onebot事件（从具体到通用）
       Bot.em(onebotRequestEvent, data)
       Bot.em(onebotRequestEventSimple, data)
       Bot.em(onebotRequestEventBase, data)

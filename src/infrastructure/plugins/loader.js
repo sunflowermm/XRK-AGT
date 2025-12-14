@@ -386,14 +386,14 @@ class PluginsLoader {
    * @param {Object} e - 事件对象
    */
   setupReply(e) {
-    // 如果已经有reply方法且不是设备事件，使用原有逻辑
+    const originalReply = e.reply
+    
     if (e.reply && !e.isDevice && !e.isStdin) {
       e.replyNew = e.reply
       e.reply = async (msg = '', quote = false, data = {}) => {
         if (!msg) return false
 
         try {
-          // 检查群聊禁言（仅OneBot）
           if (e.isGroup && e.group) {
             if (e.group.mute_left > 0 ||
               (e.group.all_muted && !e.group.is_admin && !e.group.is_owner)) {
@@ -404,25 +404,21 @@ class PluginsLoader {
           let { recallMsg = 0, at = '' } = data
           if (!Array.isArray(msg)) msg = [msg]
 
-          // 处理@（仅OneBot）
           if (at && e.isGroup && segment) {
             const atId = at === true ? e.user_id : at
             const atName = at === true ? e.sender?.card : ''
             msg.unshift(segment.at(atId, lodash.truncate(atName, { length: 10 })), '\n')
           }
 
-          // 处理引用（仅OneBot）
           if (quote && e.message_id && segment) {
             msg.unshift(segment.reply(e.message_id))
           }
 
-          // 发送消息
           let msgRes
           try {
             msgRes = await e.replyNew(msg, false)
           } catch (err) {
             logger.error(`发送消息错误: ${err.message}`)
-            // 尝试发送纯文本
             const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
             if (textMsg) {
               try {
@@ -434,7 +430,6 @@ class PluginsLoader {
             }
           }
 
-          // 处理撤回（仅OneBot）
           if (!e.isGuild && recallMsg > 0 && msgRes?.message_id) {
             const target = e.isGroup ? e.group : e.friend
             if (target?.recallMsg) {
@@ -456,36 +451,30 @@ class PluginsLoader {
       return
     }
     
-    // 对于device和stdin，使用通用回复方法
-    if (!e.reply) {
-      e.reply = async (msg = '', quote = false, data = {}) => {
-        if (!msg) return false
-        
-        try {
-          // 优先使用bot的sendMsg
-          if (e.bot && e.bot.sendMsg) {
-            return await e.bot.sendMsg(msg, quote, data)
-          }
-          
-          // 尝试使用适配器的sendMsg
-          if (e.bot?.adapter?.sendMsg) {
-            return await e.bot.adapter.sendMsg(e, msg)
-          }
-          
-          // 最后尝试使用friend/group的sendMsg
-          if (e.friend?.sendMsg) {
-            return await e.friend.sendMsg(msg)
-          }
-          if (e.group?.sendMsg) {
-            return await e.group.sendMsg(msg)
-          }
-          
-          logger.warn('无法找到回复方法')
-          return false
-        } catch (error) {
-          logger.error(`回复消息失败: ${error.message}`)
-          return { error: error.message }
+    e.reply = e.reply || async (msg = '', quote = false, data = {}) => {
+      if (!msg) return false
+      
+      try {
+        if (e.bot?.sendMsg) {
+          return await e.bot.sendMsg(msg, quote, data)
         }
+        
+        if (e.bot?.adapter?.sendMsg) {
+          return await e.bot.adapter.sendMsg(e, msg)
+        }
+        
+        if (e.friend?.sendMsg) {
+          return await e.friend.sendMsg(msg)
+        }
+        if (e.group?.sendMsg) {
+          return await e.group.sendMsg(msg)
+        }
+        
+        logger.warn('无法找到回复方法')
+        return false
+      } catch (error) {
+        logger.error(`回复消息失败: ${error.message}`)
+        return { error: error.message }
       }
     }
   }

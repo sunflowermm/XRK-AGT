@@ -192,6 +192,12 @@ node app   # 或 node start.js
   - 兼容 Yunzai 风格插件开发体验（规则匹配、权限控制、上下文管理）。
   - 内建工作流基类 `AIStream`，支持多种 Embedding 与函数调用（Function Calling）。
 
+- **性能优化**
+  - 并行依赖检查：使用 `Promise.all` 批量检查依赖，提升启动速度。
+  - 并行插件依赖安装：同时处理多个插件的依赖检查与安装。
+  - 批量日志写入：优化日志队列刷新机制，使用批量写入和异步处理。
+  - 高效端口扫描：优化端口列表获取算法，减少文件系统操作。
+
 - **生产级能力**
   - 反向代理：多域名 + SNI + HTTP/2。
   - 安全与观测：CORS / Helmet / 速率限制 / 请求日志。
@@ -207,24 +213,28 @@ node app   # 或 node start.js
 
 ## 文档与开发指南（跳转总览）
 
-- **总览文档**
-  - [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)：整体架构、运行逻辑图、目录结构解析与重要对象索引。
-  - [`docs/README.md`](docs/README.md)：模块文档导航（Bot / 插件 / 适配器 / API / 配置 / 渲染 / 工具 / 应用开发等）。
-  - [`docs/app-dev.md`](docs/app-dev.md)：应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）。
+### 📚 总览文档
+- [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)：整体架构、运行逻辑图、目录结构解析与重要对象索引。
+- [`docs/README.md`](docs/README.md)：模块文档导航（Bot / 插件 / 适配器 / API / 配置 / 渲染 / 工具 / 应用开发等）。
+- [`docs/app-dev.md`](docs/app-dev.md)：应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）。
 
-- **核心基类 / 运行时对象**
-  - [`docs/bot.md`](docs/bot.md)：`Bot` 主类与服务生命周期。
-  - [`docs/plugin-base.md`](docs/plugin-base.md) / [`docs/plugins-loader.md`](docs/plugins-loader.md)：插件基类与插件加载器。
-  - [`docs/adapter-loader.md`](docs/adapter-loader.md) / [`docs/adapter-onebotv11.md`](docs/adapter-onebotv11.md)：适配器加载与 QQ OneBotv11 实现。
-  - [`docs/aistream.md`](docs/aistream.md)：AI 工作流基类与 Embedding / Function Calling。
-  - [`docs/http-api.md`](docs/http-api.md) / [`docs/api-loader.md`](docs/api-loader.md)：HTTP API 基类与 API 加载器。
-  - [`docs/config-base.md`](docs/config-base.md)：配置基类与路径/校验规则、与 `cfg` 的关系。
-  - [`docs/renderer.md`](docs/renderer.md)：渲染器基类、模板渲染与截图流程。
-  - [`docs/botutil.md`](docs/botutil.md)：`BotUtil` 工具类（日志、缓存、文件/网络、批处理等）。
+### 🔧 核心基类 / 运行时对象
+- [`docs/bot.md`](docs/bot.md)：`Bot` 主类与服务生命周期。
+- [`docs/plugin-base.md`](docs/plugin-base.md) / [`docs/plugins-loader.md`](docs/plugins-loader.md)：插件基类与插件加载器。
+- [`docs/adapter-loader.md`](docs/adapter-loader.md) / [`docs/adapter-onebotv11.md`](docs/adapter-onebotv11.md)：适配器加载与 QQ OneBotv11 实现。
+- [`docs/aistream.md`](docs/aistream.md)：AI 工作流基类与 Embedding / Function Calling。
+- [`docs/http-api.md`](docs/http-api.md) / [`docs/api-loader.md`](docs/api-loader.md)：HTTP API 基类与 API 加载器。
+- [`docs/config-base.md`](docs/config-base.md)：配置基类与路径/校验规则、与 `cfg` 的关系。
+- [`docs/renderer.md`](docs/renderer.md)：渲染器基类、模板渲染与截图流程。
+- [`docs/botutil.md`](docs/botutil.md)：`BotUtil` 工具类（日志、缓存、文件/网络、批处理等）。
 
-- **Bug 修复与变更文档（可选阅读）**
-  - `INDEX.md`：修复文档索引。
-  - `FIX_README.md` / `EXECUTIVE_SUMMARY.md` / `TECHNICAL_SUMMARY.md` 等：历史问题的详细修复说明。
+### 📖 事件系统文档
+- [`docs/事件系统标准化文档.md`](docs/事件系统标准化文档.md)：事件系统标准化说明。
+- [`docs/事件监听器开发指南.md`](docs/事件监听器开发指南.md)：事件监听器开发指南。
+
+### 🐛 Bug 修复与变更文档（可选阅读）
+- [`INDEX.md`](INDEX.md)：修复文档索引。
+- `FIX_README.md` / `EXECUTIVE_SUMMARY.md` / `TECHNICAL_SUMMARY.md` 等：历史问题的详细修复说明。
 
 ---
 

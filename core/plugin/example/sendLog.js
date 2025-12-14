@@ -405,32 +405,20 @@ export class sendLog extends plugin {
   }
 
   async makeForwardMsg(e, msgList) {
-    try {
-      const msgs = msgList.map((msg, i) => ({
-        message: msg.message,
-        nickname: msg.nickname || "日志系统",
-        user_id: String(msg.user_id || Bot.uin),
-        time: Math.floor(Date.now() / 1000) - (msgList.length - i) * 2
-      }))
-      
-      const makeForward = e.group?.makeForwardMsg || 
-                         e.friend?.makeForwardMsg || 
-                         e.bot?.makeForwardMsg ||
-                         e.makeForwardMsg ||
-                         Bot.makeForwardMsg
-      
-      if (!makeForward) {
-        logger.error("[sendLog] 未找到可用的转发消息API")
-        return null
-      }
-      
-      const context = e.group || e.friend || e.bot || e || Bot
-      return await makeForward.call(context, msgs)
-      
-    } catch (error) {
-      logger.error(`[sendLog] 制作转发消息失败:`, error)
-      return null
-    }
+    const msgs = msgList.map((msg, i) => ({
+      message: msg.message,
+      nickname: msg.nickname || "日志系统",
+      user_id: String(msg.user_id || Bot.uin.toString()),
+      time: Math.floor(Date.now() / 1000) - (msgList.length - i) * 2
+    }))
+    
+    const makeForward = e.group.makeForwardMsg || 
+                       e.friend.makeForwardMsg || 
+                       e.bot.makeForwardMsg ||
+                       Bot.makeForwardMsg
+    
+    const context = e.group || e.friend || e.bot || Bot
+    return await makeForward.call(context, msgs)
   }
 
   async replyError(errorMsg) {

@@ -68,38 +68,22 @@ export class stattools extends plugin {
         si.networkInterfaces()
       ])
 
-      // Bot信息
       const bot = Bot[e.self_id] || Bot
-      let botRuntime = '未知'
-      if (bot.stat && bot.stat.start_time) {
-        const runtimeSeconds = Math.floor(Date.now() / 1000 - bot.stat.start_time)
-        botRuntime = this.formatTime(runtimeSeconds)
-      }
+      const runtimeSeconds = Math.floor(Date.now() / 1000 - bot.stat.start_time)
+      const botRuntime = this.formatTime(runtimeSeconds)
       
-      // 插件信息 - 安全获取
-      let pluginCount = 0
-      let taskCount = 0
-      try {
-        const loader = (await import('../../../src/infrastructure/plugins/loader.js')).default
-        pluginCount = (loader.priority?.length || 0) + (loader.extended?.length || 0)
-        taskCount = loader.task?.length || 0
-      } catch (err) {
-        logger.warn('[stattools] 无法获取插件信息')
-      }
+      const loader = (await import('../../../src/infrastructure/plugins/loader.js')).default
+      const pluginCount = loader.priority.length + loader.extended.length
+      const taskCount = loader.task.length
 
       // Node进程信息
       const nodeUsage = process.memoryUsage()
       const nodeVersion = process.version
       
-      // 磁盘使用率 - 获取主分区
-      let mainDisk = fsSize.find(fs => fs.mount === '/' || fs.mount === 'C:\\')
-      if (!mainDisk && fsSize.length > 0) {
-        mainDisk = fsSize.reduce((prev, current) => 
-          (current.size > prev.size) ? current : prev
-        )
-      }
-      
-      // 获取活动网络接口
+      const mainDisk = fsSize.find(fs => fs.mount === '/' || fs.mount === 'C:\\') || 
+                       fsSize.reduce((prev, current) => 
+                         (current.size > prev.size) ? current : prev
+                       )
       const activeNetwork = networkInterfaces.find(net => net.default) || networkInterfaces[0]
       
       const cpuUsage = currentLoad.currentLoad || 0
@@ -159,20 +143,13 @@ export class stattools extends plugin {
         `  定时任务：${taskCount}个`
       ]
 
-      if (activeNetwork) {
-        msg.push('', `● 网络信息`)
-        msg.push(`  接口名称：${activeNetwork.iface}`)
-        msg.push(`  IPv4地址：${activeNetwork.ip4 || '无'}`)
-        msg.push(`  IPv6地址：${activeNetwork.ip6 || '无'}`)
-        msg.push(`  MAC地址：${activeNetwork.mac || '无'}`)
-      }
+      msg.push('', `● 网络信息`)
+      msg.push(`  接口名称：${activeNetwork.iface}`)
+      msg.push(`  IPv4地址：${activeNetwork.ip4 || '无'}`)
+      msg.push(`  IPv6地址：${activeNetwork.ip6 || '无'}`)
+      msg.push(`  MAC地址：${activeNetwork.mac || '无'}`)
 
-      await e.reply(msg.join('\n'))
-      return true
-    } catch (error) {
-      logger.error(`[stattools] 获取状态失败:`, error)
-      e.reply(`获取状态信息失败：${error.message || '未知错误'}`)
-      return false
-    }
+    await e.reply(msg.join('\n'))
+    return true
   }
 }
