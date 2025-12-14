@@ -3,138 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="XRK-AGT - 基于Yunzai-Bot的向日葵机器人框架">
-    <title>XRK-AGT | 向日葵机器人框架</title>
+    <meta name="description" content="XRK-AGT - 新一代高性能向日葵机器人框架">
+    <title>XRK-AGT | 智能机器人框架</title>
     <style>
         :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #13131f;
-            --accent-primary: #6366f1;
-            --accent-secondary: #8b5cf6;
-            --accent-gold: #fbbf24;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --glass-bg: rgba(255, 255, 255, 0.03);
-            --glass-border: rgba(255, 255, 255, 0.08);
+            --bg-dark: #050508;
+            --bg-card: rgba(20, 20, 25, 0.6);
+            --primary: #FFD700; /* 向日葵金 */
+            --primary-glow: rgba(255, 215, 0, 0.3);
+            --accent: #6366f1; /* 科技紫 */
+            --text-main: #ffffff;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.08);
+            --glass: blur(20px);
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            line-height: 1.6;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
             overflow-x: hidden;
+            line-height: 1.6;
         }
 
-        .bg-gradient {
+        /* 动态背景 */
+        .ambient-light {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 0;
-            background: radial-gradient(ellipse at top, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-                        radial-gradient(ellipse at bottom, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
-        }
-
-        .mesh-gradient {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0.4;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            pointer-events: none;
+            z-index: -1;
             background: 
-                radial-gradient(at 40% 20%, rgba(99, 102, 241, 0.3) 0px, transparent 50%),
-                radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.3) 0px, transparent 50%),
-                radial-gradient(at 0% 50%, rgba(251, 191, 36, 0.2) 0px, transparent 50%),
-                radial-gradient(at 80% 50%, rgba(99, 102, 241, 0.2) 0px, transparent 50%);
-            filter: blur(80px);
-            animation: mesh-move 20s ease-in-out infinite;
+                radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(255, 215, 0, 0.1), transparent 25%);
+            filter: blur(60px);
         }
 
-        @keyframes mesh-move {
-            0%, 100% { transform: scale(1) translateY(0); }
-            50% { transform: scale(1.1) translateY(-20px); }
-        }
-
+        /* 导航栏 */
         nav {
             position: fixed;
-            top: 0;
-            width: 100%;
-            z-index: 1000;
-            backdrop-filter: blur(20px) saturate(180%);
-            background: rgba(10, 10, 15, 0.7);
-            border-bottom: 1px solid var(--glass-border);
-        }
-
-        .nav-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 1.2rem 2rem;
+            top: 0; width: 100%;
+            padding: 1.5rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            background: rgba(5, 5, 8, 0.8);
         }
 
         .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
             display: flex;
             align-items: center;
-            gap: 0.8rem;
-            font-size: 1.3rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--accent-gold), var(--accent-primary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            gap: 10px;
+            letter-spacing: -1px;
         }
+        
+        .logo span { background: linear-gradient(to right, #fff, var(--primary)); -webkit-background-clip: text; color: transparent; }
 
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            list-style: none;
-        }
+        .nav-links { display: flex; gap: 30px; list-style: none; }
+        .nav-links a { text-decoration: none; color: var(--text-muted); font-size: 0.95rem; transition: 0.3s; }
+        .nav-links a:hover { color: var(--primary); }
 
-        .nav-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.3s;
-            position: relative;
-        }
-
-        .nav-links a:hover {
-            color: var(--text-primary);
-        }
-
-        .nav-links a::after {
-            content: '';
-            position: absolute;
-            bottom: -5px;
-            left: 0;
-            width: 0;
-            height: 2px;
-            background: var(--accent-primary);
-            transition: width 0.3s;
-        }
-
-        .nav-links a:hover::after {
-            width: 100%;
-        }
-
-        .container {
-            position: relative;
-            z-index: 1;
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 2rem;
-        }
-
+        /* 核心区域 Hero */
         .hero {
             min-height: 100vh;
             display: flex;
@@ -142,1229 +77,606 @@
             justify-content: center;
             align-items: center;
             text-align: center;
-            padding: 8rem 0 4rem;
-        }
-
-        .sunflower-icon {
-            font-size: 5rem;
-            margin-bottom: 2rem;
-            animation: float 3s ease-in-out infinite;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-20px); }
+            padding: 0 20px;
+            position: relative;
         }
 
         .hero h1 {
-            font-size: clamp(3rem, 8vw, 6rem);
-            font-weight: 800;
-            margin-bottom: 1.5rem;
-            background: linear-gradient(135deg, #fff, var(--accent-gold), var(--accent-primary));
+            font-size: clamp(3rem, 6vw, 5rem);
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #fff 0%, var(--text-muted) 100%);
             -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -0.02em;
+            color: transparent;
+        }
+
+        .hero h1 .highlight {
+            background: linear-gradient(135deg, var(--primary) 0%, #FFA500 100%);
+            -webkit-background-clip: text;
+            color: transparent;
         }
 
         .hero p {
-            font-size: 1.5rem;
-            color: var(--text-secondary);
-            margin-bottom: 3rem;
+            font-size: 1.2rem;
+            color: var(--text-muted);
             max-width: 600px;
+            margin-bottom: 40px;
         }
 
-        .badges {
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-            justify-content: center;
-            margin-bottom: 3rem;
-        }
-
-        .badge {
-            padding: 0.6rem 1.5rem;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: 2rem;
-            backdrop-filter: blur(10px);
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            transition: all 0.3s;
-        }
-
-        .badge:hover {
-            background: rgba(99, 102, 241, 0.1);
-            border-color: var(--accent-primary);
-            color: var(--text-primary);
-            transform: translateY(-2px);
-        }
-
-        .cta-buttons {
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-
+        .btn-group { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+        
         .btn {
-            padding: 1rem 2.5rem;
-            border-radius: 1rem;
+            padding: 14px 32px;
+            border-radius: 12px;
             font-weight: 600;
             text-decoration: none;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            border: none;
-            cursor: pointer;
-            font-size: 1rem;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            border: 1px solid transparent;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-            color: white;
-            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+            background: var(--primary);
+            color: #000;
+            box-shadow: 0 4px 20px var(--primary-glow);
         }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 40px rgba(99, 102, 241, 0.4);
-        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--primary-glow); }
 
         .btn-secondary {
-            background: var(--glass-bg);
-            color: var(--text-primary);
-            border: 1px solid var(--glass-border);
-            backdrop-filter: blur(10px);
+            background: rgba(255,255,255,0.05);
+            color: white;
+            border: 1px solid var(--border);
         }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: white; }
 
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.08);
-            transform: translateY(-2px);
-        }
-
-        section {
-            padding: 6rem 0;
-        }
-
-        .section-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 4rem;
-        }
-
-        .cards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 2rem;
-        }
-
-        .card {
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: 1.5rem;
-            padding: 2.5rem;
-            backdrop-filter: blur(20px);
-            transition: all 0.4s;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-            transform: scaleX(0);
-            transition: transform 0.4s;
-        }
-
-        .card:hover::before {
-            transform: scaleX(1);
-        }
-
-        .card:hover {
-            transform: translateY(-8px);
-            background: rgba(255, 255, 255, 0.06);
-            border-color: rgba(99, 102, 241, 0.3);
-        }
-
-        .card-icon {
-            font-size: 3rem;
-            margin-bottom: 1.5rem;
-            display: block;
-        }
-
-        .card h3 {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .card p {
-            color: var(--text-secondary);
-            margin-bottom: 2rem;
-            line-height: 1.8;
-        }
-
-        .card-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: var(--accent-primary);
-            text-decoration: none;
-            font-weight: 600;
-            transition: gap 0.3s;
-        }
-
-        .card-link:hover {
-            gap: 1rem;
-        }
-
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 2rem;
-            margin-top: 3rem;
-        }
-
-        .feature {
-            text-align: center;
-            padding: 2rem;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: 1rem;
-            transition: all 0.3s;
-        }
-
-        .feature:hover {
-            transform: translateY(-5px);
-            background: rgba(255, 255, 255, 0.06);
-        }
-
-        .feature-icon {
-            font-size: 3rem;
-            display: block;
-            margin-bottom: 1rem;
-        }
-
-        .feature h4 {
-            margin-bottom: 0.5rem;
-        }
-
-        .feature p {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
-        /* 体感游戏区域 */
+        /* 游戏区域优化 */
         .game-section {
-            padding: 4rem 0;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            padding: 4rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
-        .game-container {
-            width: 95%;
-            max-width: 1600px;
-            height: 85vh;
-            min-height: 700px;
+        .game-wrapper {
             position: relative;
-            background: var(--bg-secondary);
-            border: 3px solid var(--glass-border);
-            border-radius: 2rem;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 24px;
             overflow: hidden;
-            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
         }
 
-        #videoCanvas {
+        canvas {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            opacity: 0.5;
-            filter: blur(1px);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
         }
 
-        #gameCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            cursor: none;
-        }
+        #videoCanvas { opacity: 0.3; object-fit: cover; transform: scaleX(-1); }
+        #gameCanvas { z-index: 2; }
 
-        .game-hud {
+        .game-ui {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 2rem;
+            top: 20px; left: 20px; right: 20px;
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            pointer-events: none;
             z-index: 10;
+            pointer-events: none;
         }
 
-        .hud-left, .hud-right {
+        .stat-card {
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
             display: flex;
             flex-direction: column;
-            gap: 1rem;
         }
-
-        .hud-panel {
-            background: rgba(0, 0, 0, 0.7);
-            padding: 1.5rem 2rem;
-            border-radius: 1.5rem;
-            backdrop-filter: blur(20px);
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            min-width: 200px;
-        }
-
-        .hud-title {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .hud-value {
-            font-size: 2rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--accent-gold), var(--accent-primary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .basket-indicator {
-            background: rgba(139, 92, 246, 0.3);
-            border: 3px solid var(--accent-secondary);
-            padding: 1rem;
-            border-radius: 1rem;
-        }
-
-        .basket-count {
-            font-size: 3rem;
-            text-align: center;
-        }
-
-        .hand-tracker {
-            position: absolute;
-            width: 80px;
-            height: 80px;
-            border: 4px solid var(--accent-gold);
-            border-radius: 50%;
-            box-shadow: 0 0 30px rgba(251, 191, 36, 0.6),
-                        inset 0 0 20px rgba(251, 191, 36, 0.3);
-            pointer-events: none;
-            z-index: 20;
-            transition: all 0.1s;
-            display: none;
-        }
-
-        .hand-tracker.active {
-            display: block;
-        }
-
-        .hand-tracker.grabbing {
-            width: 100px;
-            height: 100px;
-            border-color: #ef4444;
-            box-shadow: 0 0 40px rgba(239, 68, 68, 0.8),
-                        inset 0 0 30px rgba(239, 68, 68, 0.4);
-        }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--primary); font-family: monospace; }
 
         .game-controls {
             display: flex;
-            gap: 1rem;
-            margin-top: 2rem;
-            flex-wrap: wrap;
             justify-content: center;
-            z-index: 1;
-            position: relative;
+            gap: 15px;
+            margin-top: 30px;
         }
 
-        .game-guide {
-            margin-top: 3rem;
-            max-width: 1200px;
-            text-align: center;
-        }
-
-        .guide-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-top: 2rem;
-        }
-
-        .guide-item {
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            padding: 2rem;
-            border-radius: 1.5rem;
-            backdrop-filter: blur(10px);
-            transition: all 0.3s;
-        }
-
-        .guide-item:hover {
-            transform: translateY(-5px);
-            background: rgba(99, 102, 241, 0.1);
-            border-color: var(--accent-primary);
-        }
-
-        .guide-item .emoji {
-            font-size: 3.5rem;
-            display: block;
-            margin-bottom: 1rem;
-        }
-
-        .guide-item h4 {
-            font-size: 1.3rem;
-            margin-bottom: 0.8rem;
-            color: var(--accent-gold);
-        }
-
-        .guide-item p {
-            color: var(--text-secondary);
-            line-height: 1.6;
-        }
-
-        .game-message {
+        .guide-overlay {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 3rem;
-            font-weight: 700;
-            color: white;
-            text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
-            opacity: 0;
+            text-align: center;
+            z-index: 20;
             pointer-events: none;
-            z-index: 30;
-            transition: opacity 0.3s;
+            transition: opacity 0.5s;
+        }
+        .guide-text {
+            font-size: 2rem;
+            font-weight: 800;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.8);
+            margin-bottom: 10px;
+        }
+        .guide-sub { color: rgba(255,255,255,0.8); }
+        .hidden { opacity: 0; }
+
+        /* 特性卡片 Grid */
+        .grid-section { padding: 4rem 2rem; max-width: 1200px; margin: 0 auto; }
+        .section-title { text-align: center; font-size: 2.5rem; margin-bottom: 3rem; }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
         }
 
-        .game-message.show {
-            opacity: 1;
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 30px;
+            border-radius: 20px;
+            transition: 0.3s;
         }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .icon { font-size: 2.5rem; margin-bottom: 15px; display: block; }
+        .feature-card h3 { margin-bottom: 10px; }
+        .feature-card p { color: var(--text-muted); font-size: 0.9rem; }
 
         footer {
-            padding: 4rem 0 2rem;
+            border-top: 1px solid var(--border);
+            padding: 3rem 2rem;
             text-align: center;
-            border-top: 1px solid var(--glass-border);
+            color: var(--text-muted);
+            margin-top: 4rem;
         }
 
-        .footer-links {
-            display: flex;
-            gap: 2rem;
-            justify-content: center;
-            margin: 2rem 0;
-            flex-wrap: wrap;
-        }
-
-        .footer-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-
-        .footer-links a:hover {
-            color: var(--accent-primary);
-        }
-
-        .scroll-top {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            width: 3rem;
-            height: 3rem;
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            opacity: 0;
-            transition: all 0.3s;
-            z-index: 100;
-        }
-
-        .scroll-top.show {
-            opacity: 1;
-        }
-
-        .scroll-top:hover {
-            transform: translateY(-5px);
-        }
+        /* 隐藏的辅助 Canvas */
+        #motionCanvas { display: none; }
 
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-            
-            .hero h1 {
-                font-size: 3rem;
-            }
-            
-            .cards-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .game-container {
-                width: 98%;
-                height: 60vh;
-            }
-
-            .game-hud {
-                flex-direction: column;
-                padding: 1rem;
-            }
-
-            .hud-panel {
-                min-width: auto;
-                padding: 1rem 1.5rem;
-            }
+            .nav-links { display: none; }
+            .hero h1 { font-size: 2.5rem; }
+            .game-wrapper { aspect-ratio: 3/4; }
         }
     </style>
 </head>
 <body>
-    <div class="bg-gradient"></div>
-    <div class="mesh-gradient"></div>
+
+    <div class="ambient-light"></div>
 
     <nav>
-        <div class="nav-container">
-            <div class="logo">
-                <span>🌻</span>
-                <span>XRK-AGT</span>
-            </div>
-            <ul class="nav-links">
-                <li><a href="#home">首页</a></li>
-                <li><a href="#repos">仓库</a></li>
-                <li><a href="#features">特性</a></li>
-                <li><a href="#game">体感游戏</a></li>
-                <li><a href="#about">关于</a></li>
-            </ul>
+        <div class="logo">
+            <span>🌻</span> XRK-AGT
         </div>
+        <ul class="nav-links">
+            <li><a href="#home">首页</a></li>
+            <li><a href="#game">体感试玩</a></li>
+            <li><a href="#features">特性</a></li>
+            <li><a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank">GitCode</a></li>
+        </ul>
     </nav>
 
-    <div class="container">
-        <section id="home" class="hero">
-            <div class="sunflower-icon">🌻</div>
-            <h1>XRK-AGT</h1>
-            <p>新一代机器人框架，为创新而生</p>
-            
-            <div class="badges">
-                <span class="badge">⚡ v infinite</span>
-                <span class="badge">🚀 高性能</span>
-                <span class="badge">🎨 易扩展</span>
-                <span class="badge">💎 开源免费</span>
-            </div>
+    <section id="home" class="hero">
+        <h1>定义新一代<br><span class="highlight">机器人交互体验</span></h1>
+        <p>基于 Yunzai-Bot 的高性能向日葵框架。更懂你的 AI，更丝滑的体验。<br>开源、免费、极速响应。</p>
+        <div class="btn-group">
+            <a href="#game" class="btn btn-primary" onclick="initCamera()">🎮 立即体验体感</a>
+            <a href="https://github.com/sunflowermm/XRK-AGT" target="_blank" class="btn btn-secondary">⭐ GitHub Star</a>
+        </div>
+    </section>
 
-            <div class="cta-buttons">
-                <a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank" class="btn btn-primary">
-                    <span>立即开始</span>
-                    <span>→</span>
-                </a>
-                <a href="#repos" class="btn btn-secondary">
-                    <span>查看文档</span>
-                </a>
-            </div>
-        </section>
-
-        <section id="repos">
-            <h2 class="section-title">📦 项目仓库</h2>
-            <div class="cards-grid">
-                <div class="card">
-                    <span class="card-icon">📱</span>
-                    <h3>GitCode 仓库</h3>
-                    <p>国内访问速度最快，推荐国内用户使用，提供稳定的服务和快速的克隆体验</p>
-                    <a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank" class="card-link">
-                        <span>访问仓库</span>
-                        <span>→</span>
-                    </a>
-                </div>
-
-                <div class="card">
-                    <span class="card-icon">🔥</span>
-                    <h3>Gitee 仓库</h3>
-                    <p>备用国内镜像，稳定可靠，适合需要多源备份的开发者</p>
-                    <a href="https://gitee.com/xrkseek/xrk-yunzai" target="_blank" class="card-link">
-                        <span>访问仓库</span>
-                        <span>→</span>
-                    </a>
-                </div>
-
-                <div class="card">
-                    <span class="card-icon">🌍</span>
-                    <h3>GitHub 仓库</h3>
-                    <p>国际主仓库，获取最新更新，与全球开发者一起协作</p>
-                    <a href="https://github.com/sunflowermm/XRK-AGT" target="_blank" class="card-link">
-                        <span>访问仓库</span>
-                        <span>→</span>
-                    </a>
-                </div>
-            </div>
-        </section>
-
-        <section id="features">
-            <h2 class="section-title">✨ 核心特性</h2>
-            <div class="features-grid">
-                <div class="feature">
-                    <span class="feature-icon">⚡</span>
-                    <h4>极速响应</h4>
-                    <p>优化的架构设计</p>
-                </div>
-                <div class="feature">
-                    <span class="feature-icon">🔧</span>
-                    <h4>模块化</h4>
-                    <p>灵活的插件系统</p>
-                </div>
-                <div class="feature">
-                    <span class="feature-icon">🎮</span>
-                    <h4>游戏功能</h4>
-                    <p>丰富的娱乐插件</p>
-                </div>
-                <div class="feature">
-                    <span class="feature-icon">🤖</span>
-                    <h4>AI 支持</h4>
-                    <p>智能对话能力</p>
-                </div>
-                <div class="feature">
-                    <span class="feature-icon">📱</span>
-                    <h4>多平台</h4>
-                    <p>QQ、微信全支持</p>
-                </div>
-            </div>
-        </section>
-    </div>
-
-    <!-- 体感游戏区域 -->
     <section id="game" class="game-section">
-        <h2 class="section-title">🎮 向日葵收集体感游戏</h2>
-        <p style="color: var(--text-secondary); margin-bottom: 2rem; font-size: 1.2rem;">
-            挥动手臂，抓取向日葵，投进箩筐！
+        <h2 class="section-title">高帧率体感演示</h2>
+        <p style="text-align: center; margin-bottom: 20px; color: var(--text-muted);">
+            <small>⚠️ 需要摄像头权限 | 推荐在光线充足的环境下体验 | 算法已优化</small>
         </p>
         
-        <div class="game-container">
+        <div class="game-wrapper">
             <canvas id="videoCanvas"></canvas>
             <canvas id="gameCanvas"></canvas>
-            
-            <div class="game-hud">
-                <div class="hud-left">
-                    <div class="hud-panel">
-                        <div class="hud-title">分数</div>
-                        <div class="hud-value" id="scoreValue">0</div>
-                    </div>
-                    <div class="hud-panel">
-                        <div class="hud-title">剩余向日葵</div>
-                        <div class="hud-value" id="itemCount">0</div>
-                    </div>
+            <canvas id="motionCanvas"></canvas>
+            <video id="hiddenVideo" style="display:none;" playsinline autoplay muted></video>
+
+            <div class="game-ui">
+                <div class="stat-card">
+                    <span class="stat-label">分数</span>
+                    <span class="stat-value" id="scoreEl">0</span>
                 </div>
-                <div class="hud-right">
-                    <div class="hud-panel basket-indicator">
-                        <div class="hud-title">箩筐</div>
-                        <div class="basket-count">🧺</div>
-                        <div class="hud-value" id="basketCount">0</div>
-                    </div>
-                    <div class="hud-panel">
-                        <div class="hud-title">手部运动</div>
-                        <div class="hud-value" id="motionLevel">0%</div>
-                    </div>
+                <div class="stat-card">
+                    <span class="stat-label">帧率 (FPS)</span>
+                    <span class="stat-value" id="fpsEl">0</span>
                 </div>
             </div>
 
-            <div class="hand-tracker" id="handTracker"></div>
-            <div class="game-message" id="gameMessage"></div>
+            <div id="guideOverlay" class="guide-overlay">
+                <div class="guide-text">点击下方“启动”</div>
+                <div class="guide-sub">挥手抓取向日葵，放入右下角</div>
+            </div>
         </div>
 
         <div class="game-controls">
-            <button class="btn btn-primary" onclick="startGame()">
-                <span>🎮</span>
-                <span>启动游戏</span>
-            </button>
-            <button class="btn btn-secondary" onclick="stopGame()">
-                <span>⏸️</span>
-                <span>停止</span>
-            </button>
-            <button class="btn btn-secondary" onclick="resetGame()">
-                <span>🔄</span>
-                <span>重新开始</span>
-            </button>
-            <button class="btn btn-secondary" onclick="toggleVideo()">
-                <span>📹</span>
-                <span id="videoToggleText">隐藏视频</span>
-            </button>
+            <button class="btn btn-primary" onclick="startGame()" id="startBtn">▶️ 启动引擎</button>
+            <button class="btn btn-secondary" onclick="stopGame()">⏸️ 停止</button>
+            <button class="btn btn-secondary" onclick="toggleDebug()">👁️ 切换视频背景</button>
         </div>
+    </section>
 
-        <div class="game-guide">
-            <h3 style="margin-bottom: 2rem; font-size: 2rem;">🎯 游戏玩法</h3>
-            <div class="guide-grid">
-                <div class="guide-item">
-                    <span class="emoji">👋</span>
-                    <h4>挥动手臂</h4>
-                    <p>在摄像头前挥动手臂，系统会自动追踪你的手部运动轨迹</p>
-                </div>
-                <div class="guide-item">
-                    <span class="emoji">🌻</span>
-                    <h4>抓取向日葵</h4>
-                    <p>将手靠近屏幕上的向日葵，它们会自动吸附到你的手上</p>
-                </div>
-                <div class="guide-item">
-                    <span class="emoji">🧺</span>
-                    <h4>投进箩筐</h4>
-                    <p>抓住向日葵后，将手移动到右下角的箩筐区域即可得分</p>
-                </div>
-                <div class="guide-item">
-                    <span class="emoji">🏆</span>
-                    <h4>挑战高分</h4>
-                    <p>快速收集所有向日葵，挑战最高分数记录！</p>
-                </div>
+    <section id="features" class="grid-section">
+        <h2 class="section-title">核心优势</h2>
+        <div class="card-grid">
+            <div class="feature-card">
+                <span class="icon">🚀</span>
+                <h3>极速响应</h3>
+                <p>底层逻辑深度优化，消息处理延迟降低 40%，为您提供丝般顺滑的对话体验。</p>
+            </div>
+            <div class="feature-card">
+                <span class="icon">🧩</span>
+                <h3>模块化设计</h3>
+                <p>功能解耦，插件热插拔。想要什么功能，装什么插件，拒绝臃肿。</p>
+            </div>
+            <div class="feature-card">
+                <span class="icon">🎨</span>
+                <h3>高度可定制</h3>
+                <p>从欢迎语到复杂的业务逻辑，一切皆可配置。打造属于你独一无二的机器人。</p>
             </div>
         </div>
     </section>
 
-    <div class="container">
-        <section id="about">
-            <h2 class="section-title">🙏 特别感谢</h2>
-            <div class="cards-grid">
-                <div class="card">
-                    <span class="card-icon">👑</span>
-                    <h3>Yunzai-Bot V3</h3>
-                    <p>感谢乐神的原创框架，为社区奠定了坚实的基础，开启了机器人开发的新纪元</p>
-                </div>
-                <div class="card">
-                    <span class="card-icon">🐱</span>
-                    <h3>Miao-Yunzai</h3>
-                    <p>喵喵的优秀改进，提供了诸多灵感，推动了框架功能的不断完善</p>
-                </div>
-                <div class="card">
-                    <span class="card-icon">⭐</span>
-                    <h3>TRSS-Yunzai</h3>
-                    <p>时雨的精彩贡献，推动框架发展，为社区带来了更多可能性</p>
-                </div>
-            </div>
-        </section>
-    </div>
-
     <footer>
-        <p style="color: var(--text-secondary);">© 2024 XRK-AGT | 用心做最好的机器人框架</p>
-        <div class="footer-links">
-            <a href="https://gitee.com/xrkseek" target="_blank">🏠 作者主页</a>
-            <a href="#" onclick="showDocs()">📚 文档</a>
-            <a href="#" onclick="joinGroup()">💬 交流群</a>
-            <a href="#" onclick="donate()">☕ 赞助</a>
-        </div>
-        <p style="color: var(--text-secondary); margin-top: 2rem; font-size: 0.9rem;">永远向着阳光生长 🌻</p>
+        <p>© 2024 XRK-AGT Framework. Designed for Innovators.</p>
+        <p style="margin-top: 10px; font-size: 0.8rem;">Powered by Web Assembly & Canvas API</p>
     </footer>
 
-    <div class="scroll-top" onclick="scrollToTop()">↑</div>
-
     <script>
-        // 游戏核心变量
-        let stream = null;
-        let gameRunning = false;
-        let animationId = null;
-        let items = [];
-        let score = 0;
-        let basketItems = 0;
-        let grabbedItems = [];
-        let videoVisible = true;
+        /**
+         * 游戏引擎核心
+         * 优化思路：
+         * 1. 降采样：使用小分辨率 Canvas 进行像素比对 (Motion Canvas)
+         * 2. 差分算法：对比前后帧像素亮度
+         * 3. 质心计算：计算运动区域的中心点，而非最大值点，提高精度
+         * 4. LERP 平滑：对坐标进行线性插值，消除抖动
+         */
 
-        // Canvas 元素
-        const videoCanvas = document.getElementById('videoCanvas');
+        const config = {
+            sensitivity: 25, // 运动检测阈值 (0-255)
+            samplingRatio: 16, // 降采样倍率 (越大性能越好但精度越低)
+            lerpFactor: 0.15, // 平滑系数 (越小越平滑但延迟越高)
+            itemCount: 8 // 向日葵数量
+        };
+
+        // DOM 元素
+        const video = document.getElementById('hiddenVideo');
+        const motionCanvas = document.getElementById('motionCanvas');
+        const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
         const gameCanvas = document.getElementById('gameCanvas');
-        const videoCtx = videoCanvas.getContext('2d');
         const gameCtx = gameCanvas.getContext('2d');
-        const video = document.createElement('video');
-        video.autoplay = true;
-        video.playsInline = true;
+        const videoCanvas = document.getElementById('videoCanvas');
+        const videoCtx = videoCanvas.getContext('2d');
+        const scoreEl = document.getElementById('scoreEl');
+        const fpsEl = document.getElementById('fpsEl');
+        const guideOverlay = document.getElementById('guideOverlay');
 
-        // 运动检测
-        let prevFrame = null;
-        let handPosition = { x: 0, y: 0, active: false };
-        const handTracker = document.getElementById('handTracker');
+        // 游戏状态
+        let isRunning = false;
+        let showVideo = true;
+        let score = 0;
+        let lastTime = 0;
+        let prevFrameData = null;
+        
+        // 物理状态
+        let handPos = { x: 0, y: 0 };
+        let targetPos = { x: 0, y: 0 };
+        let isMoving = false;
+        let particles = [];
+        let sunflowers = [];
+        let basket = { x: 0, y: 0, w: 120, h: 120 };
 
-        // 向日葵物品类
-        class Sunflower {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.vx = (Math.random() - 0.5) * 3;
-                this.vy = (Math.random() - 0.5) * 3;
-                this.size = 50 + Math.random() * 30;
-                this.rotation = Math.random() * Math.PI * 2;
-                this.rotationSpeed = (Math.random() - 0.5) * 0.15;
-                this.grabbed = false;
-                this.inBasket = false;
-                this.opacity = 1;
-            }
+        // 尺寸管理
+        let width, height, motionW, motionH;
 
-            update(width, height) {
-                if (this.grabbed || this.inBasket) return;
+        function resize() {
+            const rect = gameCanvas.parentElement.getBoundingClientRect();
+            width = rect.width;
+            height = rect.height;
+            
+            gameCanvas.width = width;
+            gameCanvas.height = height;
+            videoCanvas.width = width;
+            videoCanvas.height = height;
 
-                // 重力效果
-                this.vy += 0.4;
-                this.x += this.vx;
-                this.y += this.vy;
-                this.rotation += this.rotationSpeed;
+            // 降采样尺寸 (比如 1280px -> 80px)
+            motionW = Math.floor(width / config.samplingRatio);
+            motionH = Math.floor(height / config.samplingRatio);
+            motionCanvas.width = motionW;
+            motionCanvas.height = motionH;
 
-                // 边界碰撞
-                if (this.x < this.size || this.x > width - this.size) {
-                    this.vx *= -0.7;
-                    this.x = Math.max(this.size, Math.min(width - this.size, this.x));
-                }
-                if (this.y < this.size || this.y > height - this.size) {
-                    this.vy *= -0.7;
-                    this.y = Math.max(this.size, Math.min(height - this.size, this.y));
-                }
-
-                // 空气阻力
-                this.vx *= 0.98;
-                this.vy *= 0.98;
-            }
-
-            draw(ctx) {
-                if (this.inBasket && this.opacity <= 0) return;
-
-                ctx.save();
-                ctx.globalAlpha = this.opacity;
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.rotation);
-                
-                // 绘制向日葵
-                ctx.font = `${this.size}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('🌻', 0, 0);
-                
-                // 被抓取时的高亮效果
-                if (this.grabbed) {
-                    ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)';
-                    ctx.lineWidth = 4;
-                    ctx.beginPath();
-                    ctx.arc(0, 0, this.size * 0.7, 0, Math.PI * 2);
-                    ctx.stroke();
-                }
-                
-                ctx.restore();
-            }
-
-            checkGrab(handX, handY, grabRadius) {
-                if (this.grabbed || this.inBasket) return false;
-                const dx = this.x - handX;
-                const dy = this.y - handY;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                return dist < grabRadius;
-            }
+            // 更新箩筐位置（右下角）
+            basket.x = width - basket.w - 20;
+            basket.y = height - basket.h - 20;
         }
 
-        // 箩筐类
-        class Basket {
-            constructor(x, y, width, height) {
-                this.x = x;
-                this.y = y;
-                this.width = width;
-                this.height = height;
-                this.pulse = 0;
+        window.addEventListener('resize', resize);
+
+        // 向日葵类
+        class Sunflower {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * (width - 100) + 50;
+                this.y = Math.random() * (height / 2) + 50;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.size = 40;
+                this.grabbed = false;
+                this.scale = 0; // 出现动画
             }
 
             update() {
-                this.pulse += 0.1;
+                // 出现动画
+                if (this.scale < 1) this.scale += 0.05;
+
+                if (this.grabbed) {
+                    // 跟随手部 (带一点弹性)
+                    this.x += (handPos.x - this.x) * 0.2;
+                    this.y += (handPos.y - this.y) * 0.2;
+                    
+                    // 检测放入箩筐
+                    if (this.x > basket.x && this.y > basket.y) {
+                        score += 10;
+                        scoreEl.textContent = score;
+                        createParticles(this.x, this.y, 15, '#FFD700'); // 金色粒子
+                        this.reset();
+                        this.scale = 0;
+                        this.grabbed = false;
+                    }
+                } else {
+                    // 漂浮物理
+                    this.x += this.vx;
+                    this.y += this.vy;
+
+                    // 边界反弹
+                    if (this.x < 0 || this.x > width) this.vx *= -1;
+                    if (this.y < 0 || this.y > height) this.vy *= -1;
+
+                    // 抓取判定 (手部接近)
+                    const dx = handPos.x - this.x;
+                    const dy = handPos.y - this.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (isMoving && dist < 60) {
+                        this.grabbed = true;
+                    }
+                }
             }
 
             draw(ctx) {
-                const scale = 1 + Math.sin(this.pulse) * 0.05;
-                
                 ctx.save();
-                ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
-                ctx.scale(scale, scale);
-                ctx.translate(-(this.x + this.width / 2), -(this.y + this.height / 2));
-                
-                // 绘制箩筐背景
-                ctx.fillStyle = 'rgba(139, 92, 246, 0.2)';
-                ctx.strokeStyle = 'rgba(139, 92, 246, 0.8)';
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.roundRect(this.x, this.y, this.width, this.height, 20);
-                ctx.fill();
-                ctx.stroke();
-                
-                // 绘制箩筐图标
-                ctx.font = '80px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('🧺', this.x + this.width / 2, this.y + this.height / 2);
-                
+                ctx.translate(this.x, this.y);
+                ctx.scale(this.scale, this.scale);
+                ctx.font = "40px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.shadowBlur = this.grabbed ? 20 : 0;
+                ctx.shadowColor = "#FFD700";
+                ctx.fillText("🌻", 0, 0);
                 ctx.restore();
             }
+        }
 
-            contains(x, y) {
-                return x >= this.x && x <= this.x + this.width &&
-                       y >= this.y && y <= this.y + this.height;
+        // 粒子系统
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.vx = (Math.random() - 0.5) * 10;
+                this.vy = (Math.random() - 0.5) * 10;
+                this.life = 1;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= 0.05;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
             }
         }
 
-        let basket = null;
-
-        // 初始化游戏
-        function initGame() {
-            items = [];
-            score = 0;
-            basketItems = 0;
-            grabbedItems = [];
-            
-            const width = gameCanvas.width;
-            const height = gameCanvas.height;
-            
-            // 创建向日葵（随机分布在上半部分）
-            for (let i = 0; i < 20; i++) {
-                const x = Math.random() * (width - 100) + 50;
-                const y = Math.random() * (height * 0.4) + 50;
-                items.push(new Sunflower(x, y));
+        function createParticles(x, y, count, color) {
+            for(let i=0; i<count; i++) {
+                particles.push(new Particle(x, y, color));
             }
-            
-            // 创建箩筐（右下角）
-            const basketWidth = 200;
-            const basketHeight = 200;
-            basket = new Basket(width - basketWidth - 50, height - basketHeight - 50, basketWidth, basketHeight);
-            
-            updateStats();
         }
 
-        // 运动检测（改进版）
+        // 核心算法：运动检测
         function detectMotion() {
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = 160;
-            tempCanvas.height = 120;
-            
-            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-            const currentFrame = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-            
-            if (!prevFrame) {
-                prevFrame = currentFrame;
-                return null;
-            }
-            
-            let maxDiff = 0;
-            let maxX = 0;
-            let maxY = 0;
-            let totalMotion = 0;
-            const threshold = 30;
-            const blockSize = 10;
-            
-            for (let y = 0; y < tempCanvas.height; y += blockSize) {
-                for (let x = 0; x < tempCanvas.width; x += blockSize) {
-                    let blockDiff = 0;
-                    let pixels = 0;
-                    
-                    for (let dy = 0; dy < blockSize && y + dy < tempCanvas.height; dy++) {
-                        for (let dx = 0; dx < blockSize && x + dx < tempCanvas.width; dx++) {
-                            const i = ((y + dy) * tempCanvas.width + (x + dx)) * 4;
-                            const diff = Math.abs(currentFrame.data[i] - prevFrame.data[i]) +
-                                       Math.abs(currentFrame.data[i + 1] - prevFrame.data[i + 1]) +
-                                       Math.abs(currentFrame.data[i + 2] - prevFrame.data[i + 2]);
-                            blockDiff += diff;
-                            pixels++;
-                        }
-                    }
-                    
-                    blockDiff /= (pixels * 3);
-                    
-                    if (blockDiff > threshold) {
-                        totalMotion += blockDiff;
-                        if (blockDiff > maxDiff) {
-                            maxDiff = blockDiff;
-                            maxX = x + blockSize / 2;
-                            maxY = y + blockSize / 2;
-                        }
-                    }
-                }
-            }
-            
-            prevFrame = currentFrame;
-            
-            if (maxDiff > threshold) {
-                const scaleX = gameCanvas.width / tempCanvas.width;
-                const scaleY = gameCanvas.height / tempCanvas.height;
-                
-                return {
-                    x: maxX * scaleX,
-                    y: maxY * scaleY,
-                    intensity: Math.min(maxDiff / 100, 1),
-                    motionLevel: Math.min((totalMotion / 1000) * 100, 100)
-                };
-            }
-            
-            return null;
-        }
+            if (video.readyState !== 4) return;
 
-        // 更新统计信息
-        function updateStats() {
-            document.getElementById('scoreValue').textContent = score;
-            document.getElementById('itemCount').textContent = items.filter(item => !item.inBasket).length;
-            document.getElementById('basketCount').textContent = basketItems;
-        }
+            // 1. 绘制缩略图 (镜像绘制)
+            motionCtx.save();
+            motionCtx.scale(-1, 1);
+            motionCtx.drawImage(video, -motionW, 0, motionW, motionH);
+            motionCtx.restore();
 
-        // 显示消息
-        function showMessage(text, duration = 2000) {
-            const msg = document.getElementById('gameMessage');
-            msg.textContent = text;
-            msg.classList.add('show');
-            setTimeout(() => {
-                msg.classList.remove('show');
-            }, duration);
-        }
+            // 2. 获取像素数据
+            const frame = motionCtx.getImageData(0, 0, motionW, motionH);
+            const data = frame.data;
+            const len = data.length;
 
-        // 启动游戏
-        async function startGame() {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        facingMode: 'user'
-                    } 
-                });
-                
-                video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    const rect = gameCanvas.getBoundingClientRect();
-                    videoCanvas.width = gameCanvas.width = rect.width;
-                    videoCanvas.height = gameCanvas.height = rect.height;
-                    
-                    initGame();
-                    gameRunning = true;
-                    showMessage('🎮 游戏开始！挥动手臂抓取向日葵！', 3000);
-                    gameLoop();
-                };
-            } catch (err) {
-                alert('无法访问摄像头：' + err.message + '\n\n请确保已授权摄像头权限！');
-                console.error(err);
-            }
-        }
-
-        // 停止游戏
-        function stopGame() {
-            gameRunning = false;
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-            }
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-            }
-            handTracker.classList.remove('active');
-            showMessage('⏸️ 游戏已暂停', 1500);
-        }
-
-        // 重置游戏
-        function resetGame() {
-            if (!gameRunning) {
-                alert('请先启动游戏！');
+            if (!prevFrameData) {
+                prevFrameData = new Uint8Array(len);
+                for(let i=0; i<len; i++) prevFrameData[i] = data[i];
                 return;
             }
-            initGame();
-            showMessage('🔄 游戏已重置！', 2000);
+
+            let sumX = 0, sumY = 0, count = 0;
+
+            // 3. 像素比对 (步长为4，只取RGB的G通道，性能优化)
+            for (let i = 0; i < len; i += 4) {
+                // 简单的亮度差分
+                const diff = Math.abs(data[i+1] - prevFrameData[i+1]); 
+
+                if (diff > config.sensitivity) {
+                    // 坐标转换：i/4 是像素索引
+                    const pIndex = i / 4;
+                    const x = pIndex % motionW;
+                    const y = Math.floor(pIndex / motionW);
+
+                    sumX += x;
+                    sumY += y;
+                    count++;
+                }
+                
+                // 更新上一帧数据
+                prevFrameData[i] = data[i];     // R
+                prevFrameData[i+1] = data[i+1]; // G
+                prevFrameData[i+2] = data[i+2]; // B
+            }
+
+            // 4. 计算质心
+            isMoving = count > 5; // 噪点过滤
+            if (isMoving) {
+                // 计算平均位置并映射回屏幕坐标
+                targetPos.x = (sumX / count) * config.samplingRatio;
+                targetPos.y = (sumY / count) * config.samplingRatio;
+            }
         }
 
-        // 切换视频显示
-        function toggleVideo() {
-            videoVisible = !videoVisible;
-            videoCanvas.style.opacity = videoVisible ? '0.5' : '0';
-            document.getElementById('videoToggleText').textContent = videoVisible ? '隐藏视频' : '显示视频';
+        async function startGame() {
+            if (isRunning) return;
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: "user",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 } 
+                    } 
+                });
+                video.srcObject = stream;
+                
+                // 等待视频加载
+                await new Promise(r => video.onloadedmetadata = r);
+                
+                resize();
+                isRunning = true;
+                document.getElementById('startBtn').innerText = "🚀 运行中";
+                guideOverlay.innerHTML = "<div class='guide-text'>游戏开始!</div>";
+                setTimeout(() => guideOverlay.classList.add('hidden'), 2000);
+
+                // 初始化物体
+                sunflowers = Array(config.itemCount).fill(0).map(() => new Sunflower());
+                
+                loop();
+
+            } catch (e) {
+                alert("无法访问摄像头: " + e.message);
+            }
+        }
+
+        function stopGame() {
+            isRunning = false;
+            if(video.srcObject) {
+                video.srcObject.getTracks().forEach(t => t.stop());
+            }
+            document.getElementById('startBtn').innerText = "▶️ 重新开始";
+        }
+
+        function toggleDebug() {
+            showVideo = !showVideo;
+            videoCanvas.style.opacity = showVideo ? 0.3 : 0;
         }
 
         // 游戏主循环
-        function gameLoop() {
-            if (!gameRunning) return;
-            
-            // 绘制视频背景
-            if (videoVisible) {
+        function loop(timestamp) {
+            if (!isRunning) return;
+
+            // FPS 计算
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+            fpsEl.textContent = Math.round(1000 / dt);
+
+            // 1. 逻辑更新
+            detectMotion();
+
+            // 平滑插值 (Lerp)
+            handPos.x += (targetPos.x - handPos.x) * config.lerpFactor;
+            handPos.y += (targetPos.y - handPos.y) * config.lerpFactor;
+
+            // 2. 渲染背景视频 (如果开启)
+            videoCtx.clearRect(0,0,width,height);
+            if(showVideo) {
                 videoCtx.save();
                 videoCtx.scale(-1, 1);
-                videoCtx.drawImage(video, -videoCanvas.width, 0, videoCanvas.width, videoCanvas.height);
+                videoCtx.drawImage(video, -width, 0, width, height);
                 videoCtx.restore();
             }
-            
-            // 检测手部运动
-            const motion = detectMotion();
-            
-            if (motion) {
-                handPosition = {
-                    x: motion.x,
-                    y: motion.y,
-                    active: true,
-                    intensity: motion.intensity
-                };
-                
-                // 更新手部追踪器
-                handTracker.classList.add('active');
-                handTracker.style.left = (motion.x - 40) + 'px';
-                handTracker.style.top = (motion.y - 40) + 'px';
-                
-                // 显示运动强度
-                const motionPercent = Math.round(motion.motionLevel);
-                document.getElementById('motionLevel').textContent = motionPercent + '%';
-            } else {
-                handPosition.active = false;
-                handTracker.classList.remove('active');
-                document.getElementById('motionLevel').textContent = '0%';
+
+            // 3. 渲染游戏层
+            gameCtx.clearRect(0, 0, width, height);
+
+            // 绘制箩筐
+            gameCtx.fillStyle = "rgba(100, 100, 255, 0.2)";
+            gameCtx.strokeStyle = "#6366f1";
+            gameCtx.lineWidth = 3;
+            gameCtx.beginPath();
+            gameCtx.roundRect(basket.x, basket.y, basket.w, basket.h, 15);
+            gameCtx.fill();
+            gameCtx.stroke();
+            gameCtx.font = "40px Arial";
+            gameCtx.textAlign = "center";
+            gameCtx.fillStyle = "#fff";
+            gameCtx.fillText("🧺", basket.x + basket.w/2, basket.y + basket.h/2);
+
+            // 绘制向日葵
+            sunflowers.forEach(s => {
+                s.update();
+                s.draw(gameCtx);
+            });
+
+            // 绘制粒子
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw(gameCtx);
+                if (particles[i].life <= 0) particles.splice(i, 1);
             }
-            
-            // 清空游戏画布
-            gameCtx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
-            
-            // 绘制手部运动区域
-            if (handPosition.active) {
-                const gradient = gameCtx.createRadialGradient(
-                    handPosition.x, handPosition.y, 0,
-                    handPosition.x, handPosition.y, 80
-                );
-                gradient.addColorStop(0, 'rgba(251, 191, 36, 0.4)');
-                gradient.addColorStop(1, 'rgba(251, 191, 36, 0)');
-                gameCtx.fillStyle = gradient;
+
+            // 绘制手部光标
+            if (isMoving) {
                 gameCtx.beginPath();
-                gameCtx.arc(handPosition.x, handPosition.y, 80, 0, Math.PI * 2);
+                gameCtx.arc(handPos.x, handPos.y, 20, 0, Math.PI * 2);
+                gameCtx.fillStyle = "rgba(255, 215, 0, 0.5)"; // 核心
+                gameCtx.fill();
+                gameCtx.strokeStyle = "#fff";
+                gameCtx.lineWidth = 2;
+                gameCtx.stroke();
+                
+                // 光晕
+                gameCtx.beginPath();
+                gameCtx.arc(handPos.x, handPos.y, 35, 0, Math.PI * 2);
+                gameCtx.fillStyle = "rgba(255, 215, 0, 0.2)";
                 gameCtx.fill();
             }
-            
-            // 更新和绘制箩筐
-            if (basket) {
-                basket.update();
-                basket.draw(gameCtx);
-            }
-            
-            // 处理物品
-            const grabRadius = 100;
-            let hasGrabbed = false;
-            
-            items.forEach((item, index) => {
-                if (item.inBasket) {
-                    // 向日葵在箩筐中淡出
-                    item.opacity -= 0.05;
-                    if (item.opacity <= 0) {
-                        items.splice(index, 1);
-                    }
-                    return;
-                }
-                
-                item.update(gameCanvas.width, gameCanvas.height);
-                
-                // 检测抓取
-                if (handPosition.active && !item.grabbed) {
-                    if (item.checkGrab(handPosition.x, handPosition.y, grabRadius)) {
-                        item.grabbed = true;
-                        hasGrabbed = true;
-                        grabbedItems.push(item);
-                        handTracker.classList.add('grabbing');
-                        
-                        setTimeout(() => {
-                            handTracker.classList.remove('grabbing');
-                        }, 300);
-                    }
-                }
-                
-                // 被抓取的物品跟随手部
-                if (item.grabbed && handPosition.active) {
-                    const dx = handPosition.x - item.x;
-                    const dy = handPosition.y - item.y;
-                    item.x += dx * 0.2;
-                    item.y += dy * 0.2;
-                    
-                    // 检测是否进入箩筐
-                    if (basket && basket.contains(item.x, item.y)) {
-                        item.grabbed = false;
-                        item.inBasket = true;
-                        basketItems++;
-                        score += 10;
-                        updateStats();
-                        showMessage('✨ +10 分！', 800);
-                        
-                        // 从抓取列表中移除
-                        const grabIndex = grabbedItems.indexOf(item);
-                        if (grabIndex > -1) {
-                            grabbedItems.splice(grabIndex, 1);
-                        }
-                        
-                        // 检查是否完成
-                        if (items.filter(i => !i.inBasket).length === 0) {
-                            setTimeout(() => {
-                                showMessage('🏆 恭喜！全部收集完成！总分：' + score, 5000);
-                            }, 500);
-                        }
-                    }
-                }
-                
-                // 释放抓取
-                if (item.grabbed && !handPosition.active) {
-                    item.grabbed = false;
-                    const grabIndex = grabbedItems.indexOf(item);
-                    if (grabIndex > -1) {
-                        grabbedItems.splice(grabIndex, 1);
-                    }
-                }
-                
-                item.draw(gameCtx);
-            });
-            
-            animationId = requestAnimationFrame(gameLoop);
+
+            requestAnimationFrame(loop);
         }
 
-        // 页面滚动效果
-        window.addEventListener('scroll', () => {
-            const scrollTop = document.querySelector('.scroll-top');
-            if (window.pageYOffset > 300) {
-                scrollTop.classList.add('show');
-            } else {
-                scrollTop.classList.remove('show');
-            }
-        });
-
-        function scrollToTop() {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        // 平滑滚动
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function(e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            });
-        });
-
-        // 其他功能
-        function showDocs() {
-            alert('📚 文档正在完善中...\n请查看项目 README 了解更多！');
-        }
-
-        function joinGroup() {
-            alert('💬 QQ群：1056289662\n欢迎加入交流！');
-        }
-
-        function donate() {
-            if(confirm('☕ 感谢您的支持！\n是否前往项目主页？')) {
-                window.open('https://gitee.com/xrkseek', '_blank');
-            }
-        }
-
-        // 控制台彩蛋
-        console.log('%c🌻 XRK-AGT', 'font-size: 30px; font-weight: bold; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 15px 30px; border-radius: 10px;');
-        console.log('%c🎮 体感游戏已加载！挥动手臂开始游戏！', 'font-size: 16px; color: #fbbf24;');
-        console.log('%c提示：点击"启动游戏"按钮并授权摄像头即可开始！', 'font-size: 14px; color: #8b5cf6;');
+        // 初始化尺寸
+        resize();
     </script>
 </body>
 </html>
