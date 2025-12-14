@@ -32,7 +32,6 @@
             overflow-x: hidden;
         }
 
-        /* 背景渐变 */
         .bg-gradient {
             position: fixed;
             top: 0;
@@ -55,9 +54,7 @@
                 radial-gradient(at 40% 20%, rgba(99, 102, 241, 0.3) 0px, transparent 50%),
                 radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.3) 0px, transparent 50%),
                 radial-gradient(at 0% 50%, rgba(251, 191, 36, 0.2) 0px, transparent 50%),
-                radial-gradient(at 80% 50%, rgba(99, 102, 241, 0.2) 0px, transparent 50%),
-                radial-gradient(at 0% 100%, rgba(139, 92, 246, 0.3) 0px, transparent 50%),
-                radial-gradient(at 80% 100%, rgba(99, 102, 241, 0.3) 0px, transparent 50%);
+                radial-gradient(at 80% 50%, rgba(99, 102, 241, 0.2) 0px, transparent 50%);
             filter: blur(80px);
             animation: mesh-move 20s ease-in-out infinite;
         }
@@ -67,7 +64,6 @@
             50% { transform: scale(1.1) translateY(-20px); }
         }
 
-        /* 导航栏 */
         nav {
             position: fixed;
             top: 0;
@@ -131,7 +127,6 @@
             width: 100%;
         }
 
-        /* 主容器 */
         .container {
             position: relative;
             z-index: 1;
@@ -140,7 +135,6 @@
             padding: 0 2rem;
         }
 
-        /* Hero 区域 */
         .hero {
             min-height: 100vh;
             display: flex;
@@ -221,6 +215,9 @@
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
         }
 
         .btn-primary {
@@ -246,7 +243,6 @@
             transform: translateY(-2px);
         }
 
-        /* 卡片区域 */
         section {
             padding: 6rem 0;
         }
@@ -328,7 +324,6 @@
             gap: 1rem;
         }
 
-        /* 特性网格 */
         .features-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -365,60 +360,152 @@
             font-size: 0.9rem;
         }
 
-        /* 摄像头互动区域 */
+        /* 摄像头互动游戏区域 */
         .camera-section {
             display: none;
             padding: 4rem 0;
-            text-align: center;
+            min-height: 100vh;
         }
 
         .camera-section.show {
-            display: block;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
-        .camera-container {
-            max-width: 800px;
-            margin: 2rem auto;
+        .camera-game-container {
+            width: 90%;
+            max-width: 1200px;
+            height: 80vh;
+            min-height: 600px;
+            position: relative;
             background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
+            border: 2px solid var(--glass-border);
             border-radius: 2rem;
-            padding: 2rem;
+            overflow: hidden;
             backdrop-filter: blur(20px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         }
 
-        #video {
+        #videoCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            max-width: 640px;
-            height: auto;
-            border-radius: 1rem;
-            display: none;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.4;
+            filter: blur(2px);
         }
 
-        #canvas {
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            max-width: 640px;
-            height: auto;
+            height: 100%;
+            cursor: none;
+        }
+
+        .game-overlay {
+            position: absolute;
+            top: 2rem;
+            left: 2rem;
+            right: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .game-stats {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 1rem 1.5rem;
             border-radius: 1rem;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .stat-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .motion-indicator {
+            width: 120px;
+            height: 120px;
+            background: rgba(99, 102, 241, 0.2);
+            border: 3px solid var(--accent-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 1; }
         }
 
         .camera-controls {
             display: flex;
             gap: 1rem;
-            justify-content: center;
             margin-top: 2rem;
             flex-wrap: wrap;
+            justify-content: center;
         }
 
-        .camera-info {
+        .game-instructions {
             margin-top: 2rem;
-            padding: 1.5rem;
-            background: rgba(99, 102, 241, 0.1);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            border-radius: 1rem;
-            color: var(--text-secondary);
+            text-align: center;
+            max-width: 800px;
         }
 
-        /* 页脚 */
+        .instruction-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .instruction-item {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            padding: 1rem;
+            border-radius: 1rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .instruction-item span {
+            font-size: 2rem;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .custom-cursor {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--accent-gold);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 100;
+            transition: transform 0.1s;
+            box-shadow: 0 0 20px rgba(251, 191, 36, 0.6);
+        }
+
         footer {
             padding: 4rem 0 2rem;
             text-align: center;
@@ -443,7 +530,6 @@
             color: var(--accent-primary);
         }
 
-        /* 滚动到顶部按钮 */
         .scroll-top {
             position: fixed;
             bottom: 2rem;
@@ -469,7 +555,6 @@
             transform: translateY(-5px);
         }
 
-        /* 响应式 */
         @media (max-width: 768px) {
             .nav-links {
                 display: none;
@@ -483,8 +568,14 @@
                 grid-template-columns: 1fr;
             }
             
-            .features-grid {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            .camera-game-container {
+                width: 95%;
+                height: 70vh;
+            }
+
+            .game-overlay {
+                flex-direction: column;
+                gap: 1rem;
             }
         }
     </style>
@@ -493,7 +584,6 @@
     <div class="bg-gradient"></div>
     <div class="mesh-gradient"></div>
 
-    <!-- 导航栏 -->
     <nav>
         <div class="nav-container">
             <div class="logo">
@@ -504,13 +594,13 @@
                 <li><a href="#home">首页</a></li>
                 <li><a href="#repos">仓库</a></li>
                 <li><a href="#features">特性</a></li>
+                <li><a href="#camera">互动</a></li>
                 <li><a href="#about">关于</a></li>
             </ul>
         </div>
     </nav>
 
     <div class="container">
-        <!-- Hero 区域 -->
         <section id="home" class="hero">
             <div class="sunflower-icon">🌻</div>
             <h1>XRK-AGT</h1>
@@ -534,7 +624,6 @@
             </div>
         </section>
 
-        <!-- 仓库卡片 -->
         <section id="repos">
             <h2 class="section-title">📦 项目仓库</h2>
             <div class="cards-grid">
@@ -570,7 +659,6 @@
             </div>
         </section>
 
-        <!-- 特性展示 -->
         <section id="features">
             <h2 class="section-title">✨ 核心特性</h2>
             <div class="features-grid">
@@ -601,39 +689,85 @@
                 </div>
             </div>
         </section>
+    </div>
 
-        <!-- 摄像头互动区域 (仅本地) -->
-        <section id="camera" class="camera-section">
-            <h2 class="section-title">📸 摄像头互动</h2>
-            <p style="color: var(--text-secondary); margin-bottom: 2rem;">本地专属功能 - 实时视觉互动</p>
+    <!-- 摄像头互动游戏区域 -->
+    <section id="camera" class="camera-section">
+        <h2 class="section-title">🎮 摄像头互动游戏</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 2rem;">本地专属 - 挥动手臂抓取并甩飞向日葵！</p>
+        
+        <div class="camera-game-container">
+            <canvas id="videoCanvas"></canvas>
+            <canvas id="gameCanvas"></canvas>
             
-            <div class="camera-container">
-                <video id="video" autoplay playsinline></video>
-                <canvas id="canvas"></canvas>
-                
-                <div class="camera-controls">
-                    <button class="btn btn-primary" onclick="startCamera()">
-                        <span>📷</span>
-                        <span>开启摄像头</span>
-                    </button>
-                    <button class="btn btn-secondary" onclick="stopCamera()">
-                        <span>⏸️</span>
-                        <span>关闭摄像头</span>
-                    </button>
-                    <button class="btn btn-secondary" onclick="capturePhoto()">
-                        <span>📸</span>
-                        <span>拍照</span>
-                    </button>
+            <div class="game-overlay">
+                <div class="game-stats">
+                    <div class="stat-item">
+                        <span>🌻</span>
+                        <span id="itemCount">12 个物品</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>👋</span>
+                        <span id="motionLevel">运动: 0%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>⚡</span>
+                        <span id="grabCount">抓取: 0 次</span>
+                    </div>
                 </div>
-
-                <div class="camera-info">
-                    <p>💡 此功能仅在本地环境（127.0.0.1 或 localhost）下可用</p>
-                    <p>✨ 支持实时预览、拍照等功能</p>
+                <div class="motion-indicator" id="motionIndicator">
+                    👋
                 </div>
             </div>
-        </section>
+        </div>
 
-        <!-- 致谢 -->
+        <div class="camera-controls">
+            <button class="btn btn-primary" onclick="startGame()">
+                <span>🎮</span>
+                <span>启动游戏</span>
+            </button>
+            <button class="btn btn-secondary" onclick="stopGame()">
+                <span>⏸️</span>
+                <span>停止游戏</span>
+            </button>
+            <button class="btn btn-secondary" onclick="resetGame()">
+                <span>🔄</span>
+                <span>重置</span>
+            </button>
+            <button class="btn btn-secondary" onclick="addItems()">
+                <span>➕</span>
+                <span>增加物品</span>
+            </button>
+        </div>
+
+        <div class="game-instructions">
+            <h3 style="margin-bottom: 1rem;">🎯 游戏说明</h3>
+            <div class="instruction-grid">
+                <div class="instruction-item">
+                    <span>👋</span>
+                    <h4>挥动手臂</h4>
+                    <p>在摄像头前挥动手臂产生运动</p>
+                </div>
+                <div class="instruction-item">
+                    <span>🎯</span>
+                    <h4>靠近物品</h4>
+                    <p>运动区域靠近物品时自动抓取</p>
+                </div>
+                <div class="instruction-item">
+                    <span>💨</span>
+                    <h4>甩飞物品</h4>
+                    <p>快速移动时将物品甩向四周</p>
+                </div>
+                <div class="instruction-item">
+                    <span>🌟</span>
+                    <h4>尽情玩耍</h4>
+                    <p>看看你能创造多少混乱！</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="container">
         <section id="about">
             <h2 class="section-title">🙏 特别感谢</h2>
             <div class="cards-grid">
@@ -656,7 +790,6 @@
         </section>
     </div>
 
-    <!-- 页脚 -->
     <footer>
         <p style="color: var(--text-secondary);">© 2024 XRK-AGT | 用心做最好的机器人框架</p>
         <div class="footer-links">
@@ -668,11 +801,10 @@
         <p style="color: var(--text-secondary); margin-top: 2rem; font-size: 0.9rem;">永远向着阳光生长 🌻</p>
     </footer>
 
-    <!-- 滚动到顶部 -->
     <div class="scroll-top" onclick="scrollToTop()">↑</div>
 
     <script>
-        // 检查是否为本地环境
+        // 检查本地环境
         function isLocalhost() {
             const hostname = window.location.hostname;
             return hostname === 'localhost' || 
@@ -680,67 +812,280 @@
                    hostname.startsWith('127.');
         }
 
-        // 初始化
         if (isLocalhost()) {
             document.querySelector('.camera-section').classList.add('show');
         }
 
-        // 摄像头相关
+        // 游戏变量
         let stream = null;
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
+        let gameRunning = false;
+        let animationId = null;
+        let items = [];
+        let grabbedItem = null;
+        let grabCount = 0;
 
-        async function startCamera() {
+        const videoCanvas = document.getElementById('videoCanvas');
+        const gameCanvas = document.getElementById('gameCanvas');
+        const videoCtx = videoCanvas.getContext('2d');
+        const gameCtx = gameCanvas.getContext('2d');
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.playsInline = true;
+
+        let prevFrame = null;
+        let motionPoints = [];
+
+        // 物品类
+        class Item {
+            constructor(x, y, emoji, color) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.size = 40 + Math.random() * 20;
+                this.emoji = emoji;
+                this.color = color;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.1;
+                this.grabbed = false;
+            }
+
+            update(width, height) {
+                if (!this.grabbed) {
+                    this.vy += 0.3; // 重力
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.rotation += this.rotationSpeed;
+
+                    // 边界碰撞
+                    if (this.x < this.size || this.x > width - this.size) {
+                        this.vx *= -0.8;
+                        this.x = Math.max(this.size, Math.min(width - this.size, this.x));
+                    }
+                    if (this.y < this.size || this.y > height - this.size) {
+                        this.vy *= -0.8;
+                        this.y = Math.max(this.size, Math.min(height - this.size, this.y));
+                    }
+
+                    // 摩擦力
+                    this.vx *= 0.99;
+                    this.vy *= 0.99;
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.font = `${this.size}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, 0, 0);
+                
+                if (this.grabbed) {
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size * 0.8, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+        }
+
+        // 初始化游戏
+        function initGame() {
+            const emojis = ['🌻', '🌼', '🌸', '🌺', '🌷', '🌹', '💐', '🏵️', '⭐', '✨', '💫', '🎨'];
+            items = [];
+            
+            for (let i = 0; i < 12; i++) {
+                const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+                const x = Math.random() * (gameCanvas.width - 100) + 50;
+                const y = Math.random() * (gameCanvas.height - 100) + 50;
+                items.push(new Item(x, y, emoji));
+            }
+            
+            updateStats();
+        }
+
+        // 启动游戏
+        async function startGame() {
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
-                        width: 640, 
-                        height: 480 
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
                     } 
                 });
-                video.srcObject = stream;
-                video.style.display = 'block';
-                canvas.style.display = 'none';
                 
-                // 等待视频加载
+                video.srcObject = stream;
                 video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                    const rect = gameCanvas.getBoundingClientRect();
+                    videoCanvas.width = gameCanvas.width = rect.width;
+                    videoCanvas.height = gameCanvas.height = rect.height;
+                    
+                    initGame();
+                    gameRunning = true;
+                    gameLoop();
                 };
             } catch (err) {
                 alert('无法访问摄像头：' + err.message);
             }
         }
 
-        function stopCamera() {
+        // 停止游戏
+        function stopGame() {
+            gameRunning = false;
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
-                video.style.display = 'none';
                 stream = null;
             }
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
         }
 
-        function capturePhoto() {
-            if (!stream) {
-                alert('请先开启摄像头');
-                return;
+        // 重置游戏
+        function resetGame() {
+            initGame();
+            grabCount = 0;
+            updateStats();
+        }
+
+        // 添加物品
+        function addItems() {
+            const emojis = ['🌻', '🌼', '🌸', '🌺', '🌷', '🌹', '💐', '🏵️', '⭐', '✨', '💫', '🎨'];
+            for (let i = 0; i < 5; i++) {
+                const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+                const x = Math.random() * (gameCanvas.width - 100) + 50;
+                const y = 100;
+                items.push(new Item(x, y, emoji));
+            }
+            updateStats();
+        }
+
+        // 运动检测
+        function detectMotion() {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = 160;
+            tempCanvas.height = 120;
+            
+            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+            const currentFrame = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            
+            if (!prevFrame) {
+                prevFrame = currentFrame;
+                return [];
             }
             
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
+            const points = [];
+            const threshold = 30;
+            const gridSize = 20;
             
-            video.style.display = 'none';
-            canvas.style.display = 'block';
+            for (let y = 0; y < tempCanvas.height; y += gridSize) {
+                for (let x = 0; x < tempCanvas.width; x += gridSize) {
+                    let diff = 0;
+                    for (let dy = 0; dy < gridSize && y + dy < tempCanvas.height; dy++) {
+                        for (let dx = 0; dx < gridSize && x + dx < tempCanvas.width; dx++) {
+                            const i = ((y + dy) * tempCanvas.width + (x + dx)) * 4;
+                            diff += Math.abs(currentFrame.data[i] - prevFrame.data[i]);
+                            diff += Math.abs(currentFrame.data[i + 1] - prevFrame.data[i + 1]);
+                            diff += Math.abs(currentFrame.data[i + 2] - prevFrame.data[i + 2]);
+                        }
+                    }
+                    diff /= (gridSize * gridSize * 3);
+                    
+                    if (diff > threshold) {
+                        const scaleX = gameCanvas.width / tempCanvas.width;
+                        const scaleY = gameCanvas.height / tempCanvas.height;
+                        points.push({
+                            x: x * scaleX,
+                            y: y * scaleY,
+                            intensity: Math.min(diff / 100, 1)
+                        });
+                    }
+                }
+            }
             
-            // 添加特效
-            ctx.globalAlpha = 0.3;
-            ctx.fillStyle = 'rgba(99, 102, 241, 0.5)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            prevFrame = currentFrame;
+            return points;
         }
 
-        // 滚动效果
+        // 更新统计
+        function updateStats() {
+            document.getElementById('itemCount').textContent = `${items.length} 个物品`;
+            document.getElementById('grabCount').textContent = `抓取: ${grabCount} 次`;
+        }
+
+        // 游戏主循环
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            // 绘制视频背景
+            videoCtx.save();
+            videoCtx.scale(-1, 1);
+            videoCtx.drawImage(video, -videoCanvas.width, 0, videoCanvas.width, videoCanvas.height);
+            videoCtx.restore();
+            
+            // 检测运动
+            motionPoints = detectMotion();
+            const motionLevel = Math.min((motionPoints.length / 50) * 100, 100);
+            document.getElementById('motionLevel').textContent = `运动: ${Math.round(motionLevel)}%`;
+            
+            // 更新运动指示器
+            const indicator = document.getElementById('motionIndicator');
+            indicator.style.transform = `scale(${1 + motionLevel / 100})`;
+            indicator.style.opacity = 0.5 + (motionLevel / 200);
+            
+            // 清空游戏画布
+            gameCtx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+            
+            // 绘制运动点
+            motionPoints.forEach(point => {
+                gameCtx.fillStyle = `rgba(251, 191, 36, ${point.intensity * 0.3})`;
+                gameCtx.beginPath();
+                gameCtx.arc(point.x, point.y, 30, 0, Math.PI * 2);
+                gameCtx.fill();
+            });
+            
+            // 更新和绘制物品
+            items.forEach(item => {
+                item.update(gameCanvas.width, gameCanvas.height);
+                
+                // 检测抓取
+                if (!item.grabbed) {
+                    motionPoints.forEach(point => {
+                        const dx = item.x - point.x;
+                        const dy = item.y - point.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (dist < 60) {
+                            item.grabbed = true;
+                            grabbedItem = item;
+                            grabCount++;
+                            updateStats();
+                            
+                            // 施加力
+                            const force = (1 - dist / 60) * 20;
+                            item.vx += (Math.random() - 0.5) * force;
+                            item.vy += (Math.random() - 0.5) * force;
+                            
+                            setTimeout(() => {
+                                item.grabbed = false;
+                                if (grabbedItem === item) grabbedItem = null;
+                            }, 200);
+                        }
+                    });
+                }
+                
+                item.draw(gameCtx);
+            });
+            
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        // 页面滚动效果
         window.addEventListener('scroll', () => {
             const scrollTop = document.querySelector('.scroll-top');
             if (window.pageYOffset > 300) {
@@ -781,14 +1126,8 @@
         }
 
         // 控制台彩蛋
-        console.log(
-            '%c🌻 XRK-AGT',
-            'font-size: 30px; font-weight: bold; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 15px 30px; border-radius: 10px;'
-        );
-        console.log(
-            '%c永远向着阳光生长 🌻',
-            'font-size: 16px; color: #fbbf24; font-style: italic; margin-top: 10px;'
-        );
+        console.log('%c🌻 XRK-AGT', 'font-size: 30px; font-weight: bold; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 15px 30px; border-radius: 10px;');
+        console.log('%c🎮 本地专属摄像头游戏已启用！', 'font-size: 16px; color: #fbbf24;');
     </script>
 </body>
 </html>
