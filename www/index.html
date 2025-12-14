@@ -3,50 +3,287 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XRK-AGT | 3D 粒子交互系统</title>
+    <meta name="description" content="XRK-AGT - 基于AI视觉的多功能体感游戏平台">
+    <title>XRK-AGT | 多功能体感游戏平台</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <style>
         :root {
             --bg-primary: #0a0a0f;
+            --bg-secondary: #13131f;
             --accent-primary: #6366f1;
             --accent-secondary: #8b5cf6;
             --accent-gold: #fbbf24;
             --text-primary: #f8fafc;
-            --glass-bg: rgba(255, 255, 255, 0.05);
-            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-secondary: #94a3b8;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
-            overflow: hidden; /* 防止滚动 */
-            width: 100vw;
-            height: 100vh;
+            line-height: 1.6;
+            overflow-x: hidden;
         }
 
-        /* 背景网格动画 */
+        .bg-gradient {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+            background: radial-gradient(ellipse at top, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                        radial-gradient(ellipse at bottom, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+        }
+
         .mesh-gradient {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: -1;
-            background: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-                        radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.4;
+            background: 
+                radial-gradient(at 40% 20%, rgba(99, 102, 241, 0.3) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.3) 0px, transparent 50%),
+                radial-gradient(at 0% 50%, rgba(251, 191, 36, 0.2) 0px, transparent 50%);
+            filter: blur(80px);
+            animation: mesh-move 20s ease-in-out infinite;
         }
 
-        /* 3D 容器 */
-        #canvas-container {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 1;
+        @keyframes mesh-move {
+            0%, 100% { transform: scale(1) translateY(0); }
+            50% { transform: scale(1.1) translateY(-20px); }
         }
 
-        /* 摄像头预览 (左下角，调试用) */
+        nav {
+            position: fixed; top: 0; width: 100%; z-index: 1000;
+            backdrop-filter: blur(20px) saturate(180%);
+            background: rgba(10, 10, 15, 0.7);
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .nav-container {
+            max-width: 1400px; margin: 0 auto; padding: 1.2rem 2rem;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .logo {
+            display: flex; align-items: center; gap: 0.8rem;
+            font-size: 1.3rem; font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-gold), var(--accent-primary));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex; gap: 2rem; list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary); text-decoration: none;
+            font-weight: 500; transition: color 0.3s; position: relative;
+        }
+
+        .nav-links a:hover { color: var(--text-primary); }
+
+        .nav-links a::after {
+            content: ''; position: absolute; bottom: -5px; left: 0;
+            width: 0; height: 2px; background: var(--accent-primary);
+            transition: width 0.3s;
+        }
+
+        .nav-links a:hover::after { width: 100%; }
+
+        .container {
+            position: relative; z-index: 1;
+            max-width: 1400px; margin: 0 auto; padding: 0 2rem;
+        }
+
+        .hero {
+            min-height: 100vh; display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            text-align: center; padding: 8rem 0 4rem;
+        }
+
+        .sunflower-icon {
+            font-size: 5rem; margin-bottom: 2rem;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .hero h1 {
+            font-size: clamp(3rem, 8vw, 6rem); font-weight: 800;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, #fff, var(--accent-gold), var(--accent-primary));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .hero p {
+            font-size: 1.5rem; color: var(--text-secondary);
+            margin-bottom: 3rem; max-width: 600px;
+        }
+
+        .badges {
+            display: flex; gap: 1rem; flex-wrap: wrap;
+            justify-content: center; margin-bottom: 3rem;
+        }
+
+        .badge {
+            padding: 0.6rem 1.5rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 2rem; backdrop-filter: blur(10px);
+            font-size: 0.9rem; color: var(--text-secondary);
+            transition: all 0.3s;
+        }
+
+        .badge:hover {
+            background: rgba(99, 102, 241, 0.1);
+            border-color: var(--accent-primary);
+            color: var(--text-primary);
+            transform: translateY(-2px);
+        }
+
+        .cta-buttons {
+            display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
+        }
+
+        .btn {
+            padding: 1rem 2.5rem; border-radius: 1rem;
+            font-weight: 600; text-decoration: none;
+            transition: all 0.3s;
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            border: none; cursor: pointer; font-size: 1rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            color: white; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-secondary {
+            background: var(--glass-bg); color: var(--text-primary);
+            border: 1px solid var(--glass-border); backdrop-filter: blur(10px);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-2px);
+        }
+
+        /* 游戏区域 */
+        .game-section {
+            padding: 6rem 0; min-height: 100vh;
+        }
+
+        .section-title {
+            font-size: 2.5rem; font-weight: 700;
+            text-align: center; margin-bottom: 2rem;
+        }
+
+        /* 游戏选择器 */
+        .game-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto 3rem;
+            padding: 0 2rem;
+        }
+
+        .game-option {
+            background: var(--glass-bg);
+            border: 2px solid var(--glass-border);
+            border-radius: 1.5rem;
+            padding: 2rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .game-option::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            transform: scaleX(0);
+            transition: transform 0.3s;
+        }
+
+        .game-option:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .game-option:hover::before {
+            transform: scaleX(1);
+        }
+
+        .game-option.active {
+            border-color: var(--accent-gold);
+            background: rgba(251, 191, 36, 0.1);
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.3);
+        }
+
+        .game-option-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .game-option h3 {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .game-option p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* 游戏容器 */
+        .game-container {
+            width: 95%;
+            max-width: 1600px;
+            height: 80vh;
+            min-height: 600px;
+            margin: 0 auto;
+            position: relative;
+            background: var(--bg-secondary);
+            border: 3px solid var(--glass-border);
+            border-radius: 2rem;
+            overflow: hidden;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+        }
+
+        .game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #threeContainer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
         .video-feed {
             position: absolute;
             bottom: 20px;
@@ -55,58 +292,109 @@
             height: 120px;
             border-radius: 12px;
             border: 2px solid var(--glass-border);
-            opacity: 0.8;
+            opacity: 0.6;
             z-index: 10;
-            transform: scaleX(-1); /* 镜像 */
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transform: scaleX(-1);
             transition: opacity 0.3s;
         }
-        .video-feed:hover { opacity: 1; }
 
-        /* UI 面板 */
-        .ui-panel {
+        .video-feed:hover {
+            opacity: 1;
+        }
+
+        /* HUD */
+        .game-hud {
             position: absolute;
             top: 20px;
-            right: 20px;
-            width: 280px;
-            background: rgba(15, 15, 20, 0.6);
+            left: 0;
+            right: 0;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .hud-panel {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1.5rem 2rem;
+            border-radius: 1.5rem;
             backdrop-filter: blur(20px);
-            border: 1px solid var(--glass-border);
-            border-radius: 20px;
-            padding: 20px;
-            z-index: 100;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            animation: slideIn 0.5s ease-out;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            min-width: 180px;
         }
 
-        @keyframes slideIn {
-            from { transform: translateX(50px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        .hud-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
-        .panel-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid var(--glass-border);
-        }
-
-        .panel-title {
+        .hud-value {
+            font-size: 2rem;
             font-weight: 700;
             background: linear-gradient(135deg, var(--accent-gold), var(--accent-primary));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        /* 控制项样式 */
-        .control-group { margin-bottom: 15px; }
-        .control-label {
-            font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px; display: block;
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            background: rgba(255, 255, 255, 0.05);
+            margin-top: 0.5rem;
         }
 
-        /* 形状按钮网格 */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+            transition: background 0.3s;
+        }
+
+        .status-dot.active {
+            background: #22c55e;
+            box-shadow: 0 0 10px #22c55e;
+        }
+
+        /* 粒子控制面板 */
+        .particle-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            background: rgba(15, 15, 20, 0.85);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 20px;
+            z-index: 100;
+            pointer-events: auto;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            display: block;
+        }
+
         .shape-grid {
-            display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
         }
 
         .shape-btn {
@@ -120,202 +408,381 @@
             transition: all 0.3s;
         }
 
-        .shape-btn:hover, .shape-btn.active {
+        .shape-btn:hover,
+        .shape-btn.active {
             background: var(--accent-primary);
             border-color: var(--accent-primary);
             box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
         }
 
-        /* 颜色选择器 */
         .color-picker-wrapper {
-            display: flex; align-items: center; gap: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
             background: var(--glass-bg);
             padding: 8px;
             border-radius: 8px;
         }
-        
+
         input[type="color"] {
-            -webkit-appearance: none; border: none; width: 30px; height: 30px;
-            border-radius: 50%; overflow: hidden; cursor: pointer; background: none;
-        }
-        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); }
-
-        /* 状态指示器 */
-        .status-badge {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 4px 10px; border-radius: 20px; font-size: 0.75rem;
-            background: rgba(255,255,255,0.05);
-        }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; transition: background 0.3s; }
-        .status-dot.active { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
-
-        /* 全屏按钮 */
-        .fullscreen-btn {
-            position: absolute; bottom: 20px; right: 20px;
-            width: 40px; height: 40px;
+            -webkit-appearance: none;
+            border: none;
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
+            overflow: hidden;
+            cursor: pointer;
+            background: none;
+        }
+
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+
+        input[type="color"]::-webkit-color-swatch {
+            border: none;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .hand-tracker {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border: 4px solid var(--accent-gold);
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.6);
+            pointer-events: none;
+            z-index: 20;
+            transition: all 0.1s;
+            display: none;
+        }
+
+        .hand-tracker.active {
+            display: block;
+        }
+
+        .hand-tracker.grabbing {
+            width: 100px;
+            height: 100px;
+            border-color: #ef4444;
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.8);
+        }
+
+        .game-controls {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .game-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            font-weight: 700;
             color: white;
-            display: flex; justify-content: center; align-items: center;
-            cursor: pointer; z-index: 100;
-            font-size: 1.2rem;
-            backdrop-filter: blur(10px);
-            transition: all 0.3s;
+            text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 30;
+            transition: opacity 0.3s;
+            text-align: center;
+            padding: 2rem;
         }
-        .fullscreen-btn:hover { background: var(--accent-primary); transform: scale(1.1); }
 
-        /* 加载遮罩 */
-        #loader {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--bg-primary);
-            z-index: 9999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            transition: opacity 0.5s;
+        .game-message.show {
+            opacity: 1;
         }
-        .spinner {
-            width: 40px; height: 40px;
-            border: 4px solid var(--accent-primary);
-            border-top-color: transparent;
+
+        footer {
+            padding: 4rem 0 2rem;
+            text-align: center;
+            border-top: 1px solid var(--glass-border);
+        }
+
+        .scroll-top {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 3rem;
+            height: 3rem;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 100;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
 
+        .scroll-top.show {
+            opacity: 1;
+        }
+
+        .scroll-top:hover {
+            transform: translateY(-5px);
+        }
+
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hero h1 { font-size: 3rem; }
+            .game-container { width: 98%; height: 60vh; }
+            .game-hud { flex-direction: column; padding: 1rem; }
+            .hud-panel { min-width: auto; padding: 1rem 1.5rem; }
+            .particle-controls { width: 240px; padding: 15px; }
+            .game-selector { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
-
+    <div class="bg-gradient"></div>
     <div class="mesh-gradient"></div>
 
-    <div id="loader">
-        <div class="spinner"></div>
-        <p style="color: #94a3b8;">正在初始化粒子系统与 AI 视觉引擎...</p>
-        <p style="font-size: 0.8rem; margin-top: 10px; color: #64748b;">请允许摄像头权限以进行手势交互</p>
+    <nav>
+        <div class="nav-container">
+            <div class="logo">
+                <span>🌻</span>
+                <span>XRK-AGT</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#home">首页</a></li>
+                <li><a href="#game">体感游戏</a></li>
+                <li><a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank">项目仓库</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <section id="home" class="hero">
+            <div class="sunflower-icon">🌻</div>
+            <h1>XRK-AGT</h1>
+            <p>AI驱动的多功能体感游戏平台</p>
+            
+            <div class="badges">
+                <span class="badge">⚡ AI视觉</span>
+                <span class="badge">🎮 体感交互</span>
+                <span class="badge">🎨 3D粒子</span>
+                <span class="badge">💎 多款游戏</span>
+            </div>
+
+            <div class="cta-buttons">
+                <a href="#game" class="btn btn-primary">
+                    <span>开始游戏</span>
+                    <span>→</span>
+                </a>
+                <a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank" class="btn btn-secondary">
+                    <span>查看源码</span>
+                </a>
+            </div>
+        </section>
     </div>
 
-    <div id="canvas-container"></div>
-
-    <video id="webcam" class="video-feed" playsinline></video>
-
-    <div class="ui-panel">
-        <div class="panel-header">
-            <span class="panel-title">粒子控制台</span>
-            <div class="status-badge">
-                <div class="status-dot" id="handStatus"></div>
-                <span id="statusText">等待手势...</span>
+    <section id="game" class="game-section">
+        <h2 class="section-title">🎮 选择你的游戏</h2>
+        
+        <div class="game-selector">
+            <div class="game-option active" onclick="selectGame('particles')">
+                <span class="game-option-icon">✨</span>
+                <h3>3D粒子交互</h3>
+                <p>手势控制粒子形态变换</p>
+            </div>
+            <div class="game-option" onclick="selectGame('sunflower')">
+                <span class="game-option-icon">🌻</span>
+                <h3>向日葵收集</h3>
+                <p>抓取向日葵投进箩筐</p>
+            </div>
+            <div class="game-option" onclick="selectGame('balloon')">
+                <span class="game-option-icon">🎈</span>
+                <h3>气球派对</h3>
+                <p>快速拍打上升气球</p>
+            </div>
+            <div class="game-option" onclick="selectGame('fruit')">
+                <span class="game-option-icon">🍎</span>
+                <h3>水果忍者</h3>
+                <p>挥手切割掉落水果</p>
             </div>
         </div>
 
-        <div class="control-group">
-            <label class="control-label">模型选择</label>
-            <div class="shape-grid">
-                <button class="shape-btn active" onclick="setShape('heart')">爱心</button>
-                <button class="shape-btn" onclick="setShape('saturn')">土星</button>
-                <button class="shape-btn" onclick="setShape('flower')">花朵</button>
-                <button class="shape-btn" onclick="setShape('buddha')">佛像</button>
-                <button class="shape-btn" onclick="setShape('fireworks')">烟花</button>
-                <button class="shape-btn" onclick="setShape('dna')">DNA</button>
+        <div class="game-container">
+            <!-- Three.js 粒子容器 -->
+            <div id="threeContainer" style="display: block;"></div>
+            
+            <!-- 2D Canvas 游戏 -->
+            <canvas id="gameCanvas" class="game-canvas" style="display: none;"></canvas>
+            
+            <!-- 视频预览 -->
+            <video id="webcam" class="video-feed" playsinline></video>
+
+            <!-- 手部追踪器 -->
+            <div class="hand-tracker" id="handTracker"></div>
+
+            <!-- HUD -->
+            <div class="game-hud">
+                <div class="hud-panel">
+                    <div class="hud-title">手势状态</div>
+                    <div class="status-badge">
+                        <div class="status-dot" id="handStatus"></div>
+                        <span id="statusText">等待检测...</span>
+                    </div>
+                </div>
+                <div class="hud-panel" id="scorePanel" style="display: none;">
+                    <div class="hud-title">分数</div>
+                    <div class="hud-value" id="scoreValue">0</div>
+                </div>
             </div>
-        </div>
 
-        <div class="control-group">
-            <label class="control-label">粒子外观</label>
-            <div class="color-picker-wrapper">
-                <input type="color" id="colorPicker" value="#6366f1">
-                <span style="font-size: 0.9rem; color: #fff;">调整粒子颜色</span>
+            <!-- 粒子控制面板 -->
+            <div class="particle-controls" id="particleControls">
+                <div class="control-group">
+                    <label class="control-label">粒子形状</label>
+                    <div class="shape-grid">
+                        <button class="shape-btn active" onclick="setShape('heart')">❤️ 爱心</button>
+                        <button class="shape-btn" onclick="setShape('saturn')">🪐 土星</button>
+                        <button class="shape-btn" onclick="setShape('flower')">🌸 花朵</button>
+                        <button class="shape-btn" onclick="setShape('buddha')">🧘 佛像</button>
+                        <button class="shape-btn" onclick="setShape('fireworks')">🎆 烟花</button>
+                        <button class="shape-btn" onclick="setShape('dna')">🧬 DNA</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label">粒子颜色</label>
+                    <div class="color-picker-wrapper">
+                        <input type="color" id="colorPicker" value="#6366f1">
+                        <span style="font-size: 0.9rem;">自定义颜色</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label">操作提示</label>
+                    <p style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">
+                        🖐 <b>张开手掌</b>：粒子扩散<br>
+                        ✊ <b>握紧拳头</b>：粒子聚拢<br>
+                        👋 <b>移动手掌</b>：旋转视角
+                    </p>
+                </div>
             </div>
+
+            <div class="game-message" id="gameMessage"></div>
         </div>
 
-        <div class="control-group">
-            <label class="control-label" style="margin-top: 10px;">操作指南</label>
-            <p style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">
-                🖐 <b>张开手掌</b>：粒子扩散/放大<br>
-                ✊ <b>握紧拳头</b>：粒子聚拢/缩小<br>
-                👋 <b>移动手掌</b>：旋转视角
-            </p>
+        <div class="game-controls">
+            <button class="btn btn-primary" onclick="startGame()">
+                <span>🎮</span>
+                <span>启动游戏</span>
+            </button>
+            <button class="btn btn-secondary" onclick="stopGame()">
+                <span>⏸️</span>
+                <span>停止</span>
+            </button>
+            <button class="btn btn-secondary" onclick="resetGame()">
+                <span>🔄</span>
+                <span>重置</span>
+            </button>
         </div>
-    </div>
+    </section>
 
-    <button class="fullscreen-btn" onclick="toggleFullScreen()">⛶</button>
+    <footer>
+        <p style="color: var(--text-secondary);">© 2024 XRK-AGT | AI驱动的体感游戏平台</p>
+        <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 0.9rem;">永远向着阳光生长 🌻</p>
+    </footer>
+
+    <div class="scroll-top" onclick="scrollToTop()">↑</div>
 
     <script>
-        // --- 1. Three.js 初始化 ---
-        const container = document.getElementById('canvas-container');
-        const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x0a0a0f, 0.002);
+        // ============ 全局变量 ============
+        let currentGameMode = 'particles';
+        let stream = null;
+        let gameRunning = false;
+        let hands = null;
+        let camera = null;
+        let video = null;
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 30;
+        // ============ Three.js 粒子系统 ============
+        let scene, threeCamera, renderer, particles, particleGeometry, particleMaterial;
+        const particleCount = 20000;
+        let positions, targetPositions, initialPositions;
+        let handOpenness = 1.0;
+        let handX = 0.5, handY = 0.5;
+        let isHandDetected = false;
+        let currentShape = 'heart';
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        container.appendChild(renderer.domElement);
+        function initThreeJS() {
+            const container = document.getElementById('threeContainer');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x0a0a0f, 0.002);
 
-        // --- 2. 粒子系统核心 ---
-        const particleCount = 15000;
-        const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-        const targetPositions = new Float32Array(particleCount * 3); // 目标形状
-        const initialPositions = new Float32Array(particleCount * 3); // 原始状态
+            threeCamera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            threeCamera.position.z = 30;
 
-        // 生成圆形纹理
-        function getTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 32; canvas.height = 32;
-            const ctx = canvas.getContext('2d');
-            const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-            grad.addColorStop(0, 'rgba(255,255,255,1)');
-            grad.addColorStop(1, 'rgba(255,255,255,0)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 32, 32);
-            const texture = new THREE.Texture(canvas);
-            texture.needsUpdate = true;
-            return texture;
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // 粒子系统
+            particleGeometry = new THREE.BufferGeometry();
+            positions = new Float32Array(particleCount * 3);
+            targetPositions = new Float32Array(particleCount * 3);
+            initialPositions = new Float32Array(particleCount * 3);
+
+            function getTexture() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32; canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+                grad.addColorStop(0, 'rgba(255,255,255,1)');
+                grad.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 32, 32);
+                const texture = new THREE.Texture(canvas);
+                texture.needsUpdate = true;
+                return texture;
+            }
+
+            particleMaterial = new THREE.PointsMaterial({
+                size: 0.5,
+                map: getTexture(),
+                transparent: true,
+                opacity: 0.8,
+                color: new THREE.Color(0x6366f1),
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * 100;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+                initialPositions[i * 3] = positions[i * 3];
+                initialPositions[i * 3 + 1] = positions[i * 3 + 1];
+                initialPositions[i * 3 + 2] = positions[i * 3 + 2];
+            }
+
+            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles = new THREE.Points(particleGeometry, particleMaterial);
+            scene.add(particles);
+
+            updateTargetPositions('heart');
+            animateParticles();
         }
 
-        const material = new THREE.PointsMaterial({
-            size: 0.5,
-            map: getTexture(),
-            transparent: true,
-            opacity: 0.8,
-            vertexColors: false,
-            color: new THREE.Color(0x6366f1),
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
-        });
-
-        // 初始化随机位置
-        for (let i = 0; i < particleCount; i++) {
-            positions[i * 3] = (Math.random() - 0.5) * 100;
-            positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
-            initialPositions[i * 3] = positions[i * 3];
-            initialPositions[i * 3 + 1] = positions[i * 3 + 1];
-            initialPositions[i * 3 + 2] = positions[i * 3 + 2];
-        }
-
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const particles = new THREE.Points(geometry, material);
-        scene.add(particles);
-
-        // --- 3. 形状生成数学公式 ---
+        // 形状定义
         const Shapes = {
-            // 爱心
             heart: (i) => {
                 const t = Math.random() * Math.PI * 2;
-                const r = Math.random(); // 填充内部
-                // 3D Heart formula
+                const r = Math.random();
                 const x = 16 * Math.pow(Math.sin(t), 3);
                 const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
-                const z = (Math.random() - 0.5) * 4; 
-                // Scale down
+                const z = (Math.random() - 0.5) * 4;
                 return { x: x * 0.5 * r, y: y * 0.5 * r, z: z };
             },
-            // 土星 (球体 + 环)
             saturn: (i) => {
                 const isRing = Math.random() > 0.6;
                 if (isRing) {
@@ -323,8 +790,8 @@
                     const radius = 12 + Math.random() * 6;
                     return { x: Math.cos(angle) * radius, y: (Math.random()-0.5), z: Math.sin(angle) * radius };
                 } else {
-                    const phi = Math.acos( -1 + ( 2 * Math.random() ) );
-                    const theta = Math.sqrt( particleCount * Math.PI ) * phi;
+                    const phi = Math.acos(-1 + (2 * Math.random()));
+                    const theta = Math.sqrt(particleCount * Math.PI) * phi;
                     const r = 7;
                     return {
                         x: r * Math.cos(theta) * Math.sin(phi),
@@ -333,11 +800,10 @@
                     };
                 }
             },
-            // 花朵 (极坐标玫瑰线)
             flower: (i) => {
                 const theta = Math.random() * Math.PI * 2;
                 const phi = Math.random() * Math.PI;
-                const k = 4; // 花瓣数
+                const k = 5;
                 const r = 10 * Math.sin(k * theta) * Math.sin(phi);
                 return {
                     x: r * Math.sin(phi) * Math.cos(theta),
@@ -345,28 +811,25 @@
                     z: r * Math.sin(phi) * Math.sin(theta)
                 };
             },
-            // 佛像 (抽象打坐轮廓 - 堆叠球体)
             buddha: (i) => {
-                // 简化为三个部分：身体(圆锥/球)、头部(球)、底座(盘)
                 const rand = Math.random();
                 let x, y, z;
-                if (rand < 0.2) { // 头
+                if (rand < 0.2) {
                     const r = 2.5;
                     const u = Math.random(); const v = Math.random();
                     const theta = 2 * Math.PI * u; const phi = Math.acos(2 * v - 1);
                     x = r * Math.sin(phi) * Math.cos(theta);
-                    y = r * Math.sin(phi) * Math.sin(theta) + 6; // 抬高
+                    y = r * Math.sin(phi) * Math.sin(theta) + 6;
                     z = r * Math.cos(phi);
-                } else if (rand < 0.7) { // 身体
-                    const r = 5.5 * Math.random(); // 填充
+                } else if (rand < 0.7) {
+                    const r = 5.5 * Math.random();
                     const h = Math.random() * 7;
                     const theta = Math.random() * Math.PI * 2;
-                    // 圆锥状身体
                     const coneR = 6 * (1 - h/7);
                     x = coneR * Math.cos(theta);
                     y = h - 1;
                     z = coneR * Math.sin(theta);
-                } else { // 腿盘
+                } else {
                     const angle = Math.random() * Math.PI * 2;
                     const radius = 5 + Math.random() * 4;
                     x = Math.cos(angle) * radius;
@@ -375,9 +838,8 @@
                 }
                 return { x, y, z };
             },
-            // 烟花 (球形随机爆炸)
             fireworks: (i) => {
-                const r = Math.random() * 15;
+                const r = Math.random() * 20;
                 const theta = Math.random() * Math.PI * 2;
                 const phi = Math.acos(2 * Math.random() - 1);
                 return {
@@ -386,21 +848,17 @@
                     z: r * Math.cos(phi)
                 };
             },
-            // DNA 双螺旋
             dna: (i) => {
                 const t = (i / particleCount) * Math.PI * 20;
                 const radius = 5;
                 const height = 20;
                 const y = (i / particleCount) * height - height/2;
-                // Strand 1
                 let x = Math.cos(t) * radius;
                 let z = Math.sin(t) * radius;
-                // Strand 2 (offset)
                 if (i % 2 === 0) {
                     x = Math.cos(t + Math.PI) * radius;
                     z = Math.sin(t + Math.PI) * radius;
                 }
-                // Base pairs connecting
                 if (Math.random() > 0.8) {
                     const r = (Math.random() * 2 - 1) * radius;
                     x = Math.cos(t) * r;
@@ -410,10 +868,6 @@
             }
         };
 
-        // 当前目标
-        let currentShape = 'heart';
-        
-        // 更新目标位置函数
         function updateTargetPositions(shapeName) {
             const func = Shapes[shapeName];
             for (let i = 0; i < particleCount; i++) {
@@ -424,62 +878,36 @@
             }
         }
 
-        // 初始化第一个形状
-        updateTargetPositions('heart');
-
-        // UI 切换形状
         window.setShape = (name) => {
             currentShape = name;
             updateTargetPositions(name);
-            // 更新按钮状态
             document.querySelectorAll('.shape-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
         };
 
-        // 颜色选择
         document.getElementById('colorPicker').addEventListener('input', (e) => {
-            material.color.set(e.target.value);
+            particleMaterial.color.set(e.target.value);
         });
 
-        // 全屏切换
-        window.toggleFullScreen = () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-            } else {
-                if (document.exitFullscreen) document.exitFullscreen();
-            }
-        };
-
-        // --- 4. 交互逻辑变量 ---
-        let handOpenness = 1.0; // 0: 握拳, 1: 张开
-        let handX = 0; // 手部 X 坐标用于旋转
-        let handY = 0;
-        let isHandDetected = false;
-
-        // --- 5. 动画循环 ---
-        function animate() {
-            requestAnimationFrame(animate);
+        function animateParticles() {
+            if (!gameRunning) return;
+            requestAnimationFrame(animateParticles);
 
             const positionsArr = particles.geometry.attributes.position.array;
-            
-            // 基础旋转
             particles.rotation.y += 0.002;
-            
-            // 手势控制旋转
+
             if (isHandDetected) {
-                particles.rotation.y += (handX - 0.5) * 0.05;
-                particles.rotation.x += (handY - 0.5) * 0.05;
+                particles.rotation.y += (handX - 0.5) * 0.08;
+                particles.rotation.x += (handY - 0.5) * 0.08;
             }
 
-            // 粒子插值移动
-            const speed = 0.05;
-            // 手势控制扩散/收缩系数
-            // 如果手张开 (handOpenness -> 1)，系数为 1 (正常形状)
-            // 如果手握拳 (handOpenness -> 0)，系数为 0.1 (聚拢)
-            // 如果 "烟花" 模式，手张开时系数变大 (爆炸效果)
+            // 增强粒子响应：手势控制的缩放因子变化更大
+            const speed = 0.06;
+            let scaleFactor = 0.2 + (handOpenness * 1.5); // 从0.2到1.7，范围更大
             
-            let scaleFactor = 0.5 + (handOpenness * 0.8); 
-            if (currentShape === 'fireworks') scaleFactor = handOpenness * 2.5;
+            if (currentShape === 'fireworks') {
+                scaleFactor = handOpenness * 3.5; // 烟花效果更夸张
+            }
 
             for (let i = 0; i < particleCount; i++) {
                 const px = i * 3;
@@ -490,49 +918,266 @@
                 const ty = targetPositions[py] * scaleFactor;
                 const tz = targetPositions[pz] * scaleFactor;
 
-                // 简单的 Lerp 插值
                 positionsArr[px] += (tx - positionsArr[px]) * speed;
                 positionsArr[py] += (ty - positionsArr[py]) * speed;
                 positionsArr[pz] += (tz - positionsArr[pz]) * speed;
             }
 
             particles.geometry.attributes.position.needsUpdate = true;
-            renderer.render(scene, camera);
+            renderer.render(scene, threeCamera);
         }
 
-        animate();
+        // ============ 2D Canvas 游戏系统 ============
+        const gameCanvas = document.getElementById('gameCanvas');
+        const ctx = gameCanvas.getContext('2d');
+        let gameObjects = [];
+        let score = 0;
+        let prevFrame = null;
+        let handPosition = { x: 0, y: 0, active: false };
 
-        // 窗口调整
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        // 游戏对象类
+        class GameObject {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.vx = (Math.random() - 0.5) * 3;
+                this.vy = (Math.random() - 0.5) * 3;
+                this.size = 50 + Math.random() * 30;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.15;
+                this.grabbed = false;
+                this.popped = false;
+                this.opacity = 1;
+            }
 
-        // --- 6. MediaPipe Hands 集成 ---
-        const videoElement = document.getElementById('webcam');
-        const statusDot = document.getElementById('handStatus');
-        const statusText = document.getElementById('statusText');
-        const loader = document.getElementById('loader');
+            update(width, height) {
+                if (this.popped) {
+                    this.opacity -= 0.05;
+                    return;
+                }
 
-        function onResults(results) {
-            // 隐藏加载层
-            loader.style.opacity = '0';
-            setTimeout(() => loader.style.display = 'none', 500);
+                if (this.type === 'balloon') {
+                    this.vy = -2;
+                    this.y += this.vy;
+                    if (this.y < -this.size) {
+                        this.y = height + this.size;
+                        this.x = Math.random() * width;
+                    }
+                } else if (this.type === 'fruit') {
+                    this.vy += 0.4;
+                    this.y += this.vy;
+                    this.x += this.vx;
+                    this.rotation += this.rotationSpeed;
+                    
+                    if (this.y > height + this.size) {
+                        this.y = -this.size;
+                        this.x = Math.random() * width;
+                        this.vy = 0;
+                    }
+                } else {
+                    this.vy += 0.4;
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.rotation += this.rotationSpeed;
+                }
+
+                if (this.x < this.size || this.x > width - this.size) {
+                    this.vx *= -0.7;
+                    this.x = Math.max(this.size, Math.min(width - this.size, this.x));
+                }
+                if (this.y < this.size || this.y > height - this.size) {
+                    this.vy *= -0.7;
+                    this.y = Math.max(this.size, Math.min(height - this.size, this.y));
+                }
+
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+            }
+
+            draw(ctx) {
+                if (this.opacity <= 0) return;
+
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                
+                ctx.font = `${this.size}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                const emoji = this.type === 'sunflower' ? '🌻' : 
+                              this.type === 'balloon' ? '🎈' : 
+                              ['🍎', '🍊', '🍌', '🍉'][Math.floor(Math.random() * 4)];
+                ctx.fillText(emoji, 0, 0);
+                
+                if (this.grabbed) {
+                    ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size * 0.7, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                
+                ctx.restore();
+            }
+
+            checkHit(handX, handY, radius) {
+                const dx = this.x - handX;
+                const dy = this.y - handY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                return dist < radius;
+            }
+        }
+
+        function initCanvasGame(type) {
+            gameObjects = [];
+            score = 0;
+            const width = gameCanvas.width;
+            const height = gameCanvas.height;
+
+            const count = type === 'balloon' ? 15 : 20;
+            for (let i = 0; i < count; i++) {
+                const x = Math.random() * width;
+                const y = type === 'balloon' ? height + Math.random() * height : 
+                          type === 'fruit' ? -Math.random() * height :
+                          Math.random() * (height * 0.4) + 50;
+                gameObjects.push(new GameObject(x, y, type));
+            }
+        }
+
+        function detectMotion() {
+            if (!video || video.readyState !== 4) return null;
+
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = 160;
+            tempCanvas.height = 120;
+            
+            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+            const currentFrame = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            
+            if (!prevFrame) {
+                prevFrame = currentFrame;
+                return null;
+            }
+            
+            let maxDiff = 0;
+            let maxX = 0;
+            let maxY = 0;
+            const threshold = 30;
+            const blockSize = 10;
+            
+            for (let y = 0; y < tempCanvas.height; y += blockSize) {
+                for (let x = 0; x < tempCanvas.width; x += blockSize) {
+                    let blockDiff = 0;
+                    let pixels = 0;
+                    
+                    for (let dy = 0; dy < blockSize && y + dy < tempCanvas.height; dy++) {
+                        for (let dx = 0; dx < blockSize && x + dx < tempCanvas.width; dx++) {
+                            const i = ((y + dy) * tempCanvas.width + (x + dx)) * 4;
+                            const diff = Math.abs(currentFrame.data[i] - prevFrame.data[i]) +
+                                       Math.abs(currentFrame.data[i + 1] - prevFrame.data[i + 1]) +
+                                       Math.abs(currentFrame.data[i + 2] - prevFrame.data[i + 2]);
+                            blockDiff += diff;
+                            pixels++;
+                        }
+                    }
+                    
+                    blockDiff /= (pixels * 3);
+                    
+                    if (blockDiff > threshold && blockDiff > maxDiff) {
+                        maxDiff = blockDiff;
+                        maxX = x + blockSize / 2;
+                        maxY = y + blockSize / 2;
+                    }
+                }
+            }
+            
+            prevFrame = currentFrame;
+            
+            if (maxDiff > threshold) {
+                const scaleX = gameCanvas.width / tempCanvas.width;
+                const scaleY = gameCanvas.height / tempCanvas.height;
+                
+                return {
+                    x: maxX * scaleX,
+                    y: maxY * scaleY,
+                    intensity: Math.min(maxDiff / 100, 1)
+                };
+            }
+            
+            return null;
+        }
+
+        function animateCanvasGame() {
+            if (!gameRunning || currentGameMode === 'particles') return;
+            requestAnimationFrame(animateCanvasGame);
+
+            const motion = detectMotion();
+            const handTracker = document.getElementById('handTracker');
+            
+            if (motion) {
+                handPosition = { x: motion.x, y: motion.y, active: true };
+                handTracker.classList.add('active');
+                handTracker.style.left = (motion.x - 40) + 'px';
+                handTracker.style.top = (motion.y - 40) + 'px';
+            } else {
+                handPosition.active = false;
+                handTracker.classList.remove('active');
+            }
+
+            ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+            if (handPosition.active) {
+                const gradient = ctx.createRadialGradient(
+                    handPosition.x, handPosition.y, 0,
+                    handPosition.x, handPosition.y, 100
+                );
+                gradient.addColorStop(0, 'rgba(251, 191, 36, 0.4)');
+                gradient.addColorStop(1, 'rgba(251, 191, 36, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(handPosition.x, handPosition.y, 100, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            gameObjects = gameObjects.filter(obj => obj.opacity > 0);
+
+            gameObjects.forEach(obj => {
+                obj.update(gameCanvas.width, gameCanvas.height);
+
+                if (handPosition.active && !obj.popped && obj.checkHit(handPosition.x, handPosition.y, 100)) {
+                    obj.popped = true;
+                    score += 10;
+                    document.getElementById('scoreValue').textContent = score;
+                    showMessage('✨ +10', 500);
+                }
+
+                obj.draw(ctx);
+            });
+
+            if (gameObjects.length === 0 && currentGameMode === 'sunflower') {
+                showMessage('🏆 全部收集完成！', 3000);
+            }
+        }
+
+        // ============ MediaPipe Hands ============
+        function onHandsResults(results) {
+            if (!gameRunning) return;
+
+            const statusDot = document.getElementById('handStatus');
+            const statusText = document.getElementById('statusText');
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
                 isHandDetected = true;
                 statusDot.classList.add('active');
-                
-                // 1. 计算手掌位置 (用于旋转)
-                // 使用手腕(0)和中指根部(9)的平均值
-                handX = landmarks[9].x; 
+
+                handX = landmarks[9].x;
                 handY = landmarks[9].y;
 
-                // 2. 计算手掌张开程度 (用于缩放)
-                // 逻辑：计算指尖 (Tip) 到手腕 (Wrist, 0) 的平均距离
-                // 拇指(4), 食指(8), 中指(12), 无名指(16), 小指(20)
                 const wrist = landmarks[0];
                 const tips = [4, 8, 12, 16, 20];
                 let totalDist = 0;
@@ -542,49 +1187,208 @@
                     const d = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
                     totalDist += d;
                 });
-                
+
                 const avgDist = totalDist / 5;
-                // 根据经验，avgDist 在 0.15 (拳头) 到 0.35 (张开) 之间变化 (视摄像头距离而定)
-                // 进行归一化映射
                 const minOpen = 0.15;
                 const maxOpen = 0.4;
                 let openness = (avgDist - minOpen) / (maxOpen - minOpen);
                 handOpenness = Math.max(0, Math.min(1, openness));
 
-                statusText.textContent = handOpenness > 0.6 ? "状态: 张开 (扩散)" : "状态: 握拳 (聚拢)";
-
+                statusText.textContent = handOpenness > 0.6 ? '张开 (扩散)' : '握拳 (聚拢)';
             } else {
                 isHandDetected = false;
                 statusDot.classList.remove('active');
-                statusText.textContent = "未检测到手势";
-                // 未检测到时缓慢恢复默认状态
+                statusText.textContent = '未检测到手势';
                 handOpenness += (1 - handOpenness) * 0.05;
             }
         }
 
-        const hands = new Hands({locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-        }});
+        // ============ 游戏控制 ============
+        function selectGame(mode) {
+            currentGameMode = mode;
+            
+            document.querySelectorAll('.game-option').forEach(opt => opt.classList.remove('active'));
+            event.target.closest('.game-option').classList.add('active');
 
-        hands.setOptions({
-            maxNumHands: 1,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
+            const threeContainer = document.getElementById('threeContainer');
+            const canvas = document.getElementById('gameCanvas');
+            const particleControls = document.getElementById('particleControls');
+            const scorePanel = document.getElementById('scorePanel');
+
+            if (mode === 'particles') {
+                threeContainer.style.display = 'block';
+                canvas.style.display = 'none';
+                particleControls.style.display = 'block';
+                scorePanel.style.display = 'none';
+            } else {
+                threeContainer.style.display = 'none';
+                canvas.style.display = 'block';
+                particleControls.style.display = 'none';
+                scorePanel.style.display = 'block';
+                
+                if (gameRunning) {
+                    initCanvasGame(mode);
+                }
+            }
+        }
+
+        async function startGame() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    }
+                });
+
+                video = document.getElementById('webcam');
+                video.srcObject = stream;
+
+                await new Promise(resolve => {
+                    video.onloadedmetadata = resolve;
+                });
+
+                const container = currentGameMode === 'particles' ? 
+                    document.getElementById('threeContainer') : 
+                    document.getElementById('gameCanvas').parentElement;
+                
+                const rect = container.getBoundingClientRect();
+                
+                if (currentGameMode === 'particles') {
+                    if (!renderer) initThreeJS();
+                    renderer.setSize(rect.width, rect.height);
+                    threeCamera.aspect = rect.width / rect.height;
+                    threeCamera.updateProjectionMatrix();
+                } else {
+                    gameCanvas.width = rect.width;
+                    gameCanvas.height = rect.height;
+                    initCanvasGame(currentGameMode);
+                }
+
+                hands = new Hands({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                hands.onResults(onHandsResults);
+
+                camera = new Camera(video, {
+                    onFrame: async () => {
+                        if (gameRunning) await hands.send({ image: video });
+                    },
+                    width: 320,
+                    height: 240
+                });
+
+                camera.start();
+                gameRunning = true;
+
+                if (currentGameMode === 'particles') {
+                    animateParticles();
+                } else {
+                    animateCanvasGame();
+                }
+
+                showMessage('🎮 游戏开始！', 2000);
+            } catch (err) {
+                alert('无法访问摄像头：' + err.message);
+                console.error(err);
+            }
+        }
+
+        function stopGame() {
+            gameRunning = false;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            if (camera) {
+                camera.stop();
+                camera = null;
+            }
+            document.getElementById('handTracker').classList.remove('active');
+            showMessage('⏸️ 游戏已停止', 1500);
+        }
+
+        function resetGame() {
+            if (!gameRunning) {
+                alert('请先启动游戏！');
+                return;
+            }
+            
+            score = 0;
+            document.getElementById('scoreValue').textContent = '0';
+            
+            if (currentGameMode === 'particles') {
+                updateTargetPositions(currentShape);
+            } else {
+                initCanvasGame(currentGameMode);
+            }
+            
+            showMessage('🔄 游戏已重置', 1500);
+        }
+
+        function showMessage(text, duration = 2000) {
+            const msg = document.getElementById('gameMessage');
+            msg.textContent = text;
+            msg.classList.add('show');
+            setTimeout(() => {
+                msg.classList.remove('show');
+            }, duration);
+        }
+
+        // ============ 页面功能 ============
+        window.addEventListener('scroll', () => {
+            const scrollTop = document.querySelector('.scroll-top');
+            if (window.pageYOffset > 300) {
+                scrollTop.classList.add('show');
+            } else {
+                scrollTop.classList.remove('show');
+            }
         });
 
-        hands.onResults(onResults);
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
 
-        const cameraUtils = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({image: videoElement});
-            },
-            width: 320,
-            height: 240
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
         });
 
-        cameraUtils.start();
+        window.addEventListener('resize', () => {
+            if (!gameRunning) return;
+            
+            const container = currentGameMode === 'particles' ? 
+                document.getElementById('threeContainer') : 
+                document.getElementById('gameCanvas').parentElement;
+            
+            const rect = container.getBoundingClientRect();
+            
+            if (currentGameMode === 'particles' && renderer) {
+                renderer.setSize(rect.width, rect.height);
+                threeCamera.aspect = rect.width / rect.height;
+                threeCamera.updateProjectionMatrix();
+            } else {
+                gameCanvas.width = rect.width;
+                gameCanvas.height = rect.height;
+            }
+        });
 
+        console.log('%c🌻 XRK-AGT 体感游戏平台', 'font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 10px 20px; border-radius: 8px;');
+        console.log('%c🎮 选择游戏并点击"启动游戏"开始体验！', 'font-size: 14px; color: #fbbf24;');
     </script>
 </body>
 </html>
