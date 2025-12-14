@@ -386,94 +386,67 @@ class PluginsLoader {
    * @param {Object} e - 事件对象
    */
   setupReply(e) {
-    const originalReply = e.reply
+    e.replyNew = e.reply
     
-    if (e.reply && !e.isDevice && !e.isStdin) {
-      e.replyNew = e.reply
-      e.reply = async (msg = '', quote = false, data = {}) => {
-        if (!msg) return false
-
+    e.reply = async (msg = '', quote = false, data = {}) => {
+      !msg && (() => false)()
+      
+      (e.isDevice || e.isStdin) && (async () => {
         try {
-          if (e.isGroup && e.group) {
-            if (e.group.mute_left > 0 ||
-              (e.group.all_muted && !e.group.is_admin && !e.group.is_owner)) {
-              return false
-            }
-          }
-
-          let { recallMsg = 0, at = '' } = data
-          if (!Array.isArray(msg)) msg = [msg]
-
-          if (at && e.isGroup && segment) {
-            const atId = at === true ? e.user_id : at
-            const atName = at === true ? e.sender?.card : ''
-            msg.unshift(segment.at(atId, lodash.truncate(atName, { length: 10 })), '\n')
-          }
-
-          if (quote && e.message_id && segment) {
-            msg.unshift(segment.reply(e.message_id))
-          }
-
-          let msgRes
-          try {
-            msgRes = await e.replyNew(msg, false)
-          } catch (err) {
-            logger.error(`发送消息错误: ${err.message}`)
-            const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
-            if (textMsg) {
-              try {
-                msgRes = await e.replyNew(textMsg)
-              } catch (innerErr) {
-                logger.debug(`纯文本发送也失败: ${innerErr.message}`)
-                return { error: err }
-              }
-            }
-          }
-
-          if (!e.isGuild && recallMsg > 0 && msgRes?.message_id) {
-            const target = e.isGroup ? e.group : e.friend
-            if (target?.recallMsg) {
-              setTimeout(() => {
-                target.recallMsg(msgRes.message_id)
-                if (e.message_id) target.recallMsg(e.message_id)
-              }, recallMsg * 1000)
-            }
-          }
-
-          this.count(e, 'send', msg)
-          return msgRes
+          e.bot?.sendMsg && await e.bot.sendMsg(msg, quote, data)
+          e.bot?.adapter?.sendMsg && await e.bot.adapter.sendMsg(e, msg)
+          e.friend?.sendMsg && await e.friend.sendMsg(msg)
+          e.group?.sendMsg && await e.group.sendMsg(msg)
         } catch (error) {
-          logger.error('回复消息处理错误')
-          logger.error(error)
-          return { error: error.message }
+          logger.error(`回复消息失败: ${error.message}`)
         }
-      }
-      return
-    }
-    
-    e.reply = e.reply || async (msg = '', quote = false, data = {}) => {
-      if (!msg) return false
+      })()
       
       try {
-        if (e.bot?.sendMsg) {
-          return await e.bot.sendMsg(msg, quote, data)
+        e.isGroup && e.group && (e.group.mute_left > 0 || (e.group.all_muted && !e.group.is_admin && !e.group.is_owner)) && (() => false)()
+
+        let { recallMsg = 0, at = '' } = data
+        !Array.isArray(msg) && (msg = [msg])
+
+        at && e.isGroup && segment && (() => {
+          const atId = at === true ? e.user_id : at
+          const atName = at === true ? e.sender?.card : ''
+          msg.unshift(segment.at(atId, lodash.truncate(atName, { length: 10 })), '\n')
+        })()
+
+        quote && e.message_id && segment && (() => {
+          msg.unshift(segment.reply(e.message_id))
+        })()
+
+        let msgRes
+        try {
+          msgRes = await e.replyNew(msg, false)
+        } catch (err) {
+          logger.error(`发送消息错误: ${err.message}`)
+          const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
+          textMsg && (async () => {
+            try {
+              msgRes = await e.replyNew(textMsg)
+            } catch (innerErr) {
+              logger.debug(`纯文本发送也失败: ${innerErr.message}`)
+              return { error: err }
+            }
+          })()
         }
-        
-        if (e.bot?.adapter?.sendMsg) {
-          return await e.bot.adapter.sendMsg(e, msg)
-        }
-        
-        if (e.friend?.sendMsg) {
-          return await e.friend.sendMsg(msg)
-        }
-        if (e.group?.sendMsg) {
-          return await e.group.sendMsg(msg)
-        }
-        
-        logger.warn('无法找到回复方法')
-        return false
+
+        !e.isGuild && recallMsg > 0 && msgRes?.message_id && (() => {
+          const target = e.isGroup ? e.group : e.friend
+          target?.recallMsg && setTimeout(() => {
+            target.recallMsg(msgRes.message_id)
+            e.message_id && target.recallMsg(e.message_id)
+          }, recallMsg * 1000)
+        })()
+
+        this.count(e, 'send', msg)
+        return msgRes
       } catch (error) {
-        logger.error(`回复消息失败: ${error.message}`)
+        logger.error('回复消息处理错误')
+        logger.error(error)
         return { error: error.message }
       }
     }
