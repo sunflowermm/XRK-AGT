@@ -1,6 +1,7 @@
 import { createRequire } from 'module'
 import lodash from 'lodash'
 import fs from 'node:fs'
+import plugin from '../../../src/infrastructure/plugins/plugin.js'
 import { Restart } from './restart.js'
 import common from '../../../src/utils/common.js'
 
@@ -186,7 +187,7 @@ export class update extends plugin {
     ret.error && (
       logger.mark(`${this.e.logFnc} 更新失败：${targetName}`),
       this.gitErr(ret.error, ret.stdout),
-      return false
+      (() => { return false })()
     )
 
     const time = await this.getTime(plugin)
@@ -334,7 +335,7 @@ export class update extends plugin {
       return false
     })
 
-    !logAll && return false
+    !logAll && (() => { return false })()
 
     const logLines = logAll.trim().split('\n')
     const log = []

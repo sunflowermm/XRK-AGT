@@ -149,7 +149,12 @@ export class stattools extends plugin {
       msg.push(`  IPv6地址：${activeNetwork.ip6 || '无'}`)
       msg.push(`  MAC地址：${activeNetwork.mac || '无'}`)
 
-    await e.reply(msg.join('\n'))
-    return true
+      await e.reply(msg.join('\n'))
+      return true
+    } catch (error) {
+      logger.error(`获取系统状态失败: ${error.message}`)
+      await e.reply('获取系统状态失败')
+      return false
+    }
   }
 }

@@ -23,30 +23,30 @@ export class OneBotBlacklistExample extends plugin {
    * device和stdin事件直接通过
    */
   async accept(e) {
-    e.isDevice || e.isStdin ? return true : null
-    !(e.isOneBot || e.adapter === 'onebot') ? return true : null
+    (e.isDevice || e.isStdin) && (() => true)()
+    !(e.isOneBot || e.adapter === 'onebot') && (() => true)()
 
     const other = cfg.getOther()
     const check = id => [Number(id), String(id)]
 
     const blackQQ = other.blackQQ
-    blackQQ.length > 0 && check(e.user_id).some(id => blackQQ.includes(id)) ? return false : null
-    blackQQ.length > 0 && e.at && check(e.at).some(id => blackQQ.includes(id)) ? return false : null
+    blackQQ.length > 0 && check(e.user_id).some(id => blackQQ.includes(id)) && (() => false)()
+    blackQQ.length > 0 && e.at && check(e.at).some(id => blackQQ.includes(id)) && (() => false)()
 
     const blackDevice = other.blackDevice
-    e.device_id && blackDevice.includes(e.device_id) ? return false : null
+    e.device_id && blackDevice.includes(e.device_id) && (() => false)()
 
     const whiteQQ = other.whiteQQ
-    whiteQQ.length > 0 && !check(e.user_id).some(id => whiteQQ.includes(id)) ? return false : null
+    whiteQQ.length > 0 && !check(e.user_id).some(id => whiteQQ.includes(id)) && (() => false)()
 
     e.group_id && (() => {
       const blackGroup = other.blackGroup
-      check(e.group_id).some(id => blackGroup.includes(id)) ? return false : null
+      check(e.group_id).some(id => blackGroup.includes(id)) && (() => false)()
       const whiteGroup = other.whiteGroup
-      whiteGroup.length > 0 && !check(e.group_id).some(id => whiteGroup.includes(id)) ? return false : null
+      whiteGroup.length > 0 && !check(e.group_id).some(id => whiteGroup.includes(id)) && (() => false)()
     })()
 
-    other.disableGuildMsg === true && e.detail_type === 'guild' ? return false : null
+    other.disableGuildMsg === true && e.detail_type === 'guild' && (() => false)()
     return true
   }
 }

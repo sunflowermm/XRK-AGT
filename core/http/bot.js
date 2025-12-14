@@ -165,34 +165,5 @@ export default {
         }
       }
     }
-  ],
-
-  // WebSocket处理器
-  ws: {
-    messages: [(conn, req, Bot) => {
-      const messageListener = (data) => {
-        conn.sendMsg(JSON.stringify({
-          type: 'message',
-          data,
-          timestamp: Date.now()
-        }));
-      };
-
-      const sendListener = (data) => {
-        conn.sendMsg(JSON.stringify({
-          type: 'message.send',
-          data,
-          timestamp: Date.now()
-        }));
-      };
-
-      Bot.on('message', messageListener);
-      Bot.on('message.send', sendListener);
-
-      conn.on('close', () => {
-        Bot.off('message', messageListener);
-        Bot.off('message.send', sendListener);
-      });
-    }]
-  },
+  ]
 };
