@@ -3,9 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="XRK-AGT - 基于AI视觉的多功能体感游戏平台">
-    <title>XRK-AGT | 多功能体感游戏平台</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <title>XRK-AGT | 多语言、多适配器、工作流驱动型智能体平台</title>
+    <script>
+        // 检测是否为本地访问，只在本地访问时加载游戏相关脚本
+        window.isLocalhost = window.location.hostname === 'localhost' || 
+                             window.location.hostname === '127.0.0.1' || 
+                             window.location.hostname === '[::1]' ||
+                             window.location.hostname === '';
+        if (window.isLocalhost) {
+            const scripts = [
+                'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+                'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js',
+                'https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js',
+                'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
+                'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js'
+            ];
+            scripts.forEach(src => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.crossOrigin = 'anonymous';
+                document.head.appendChild(script);
+            });
+        }
+    </script>
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -32,13 +52,13 @@
                         radial-gradient(ellipse at bottom, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
         }
         .mesh-gradient {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.4;
-            background: 
-                radial-gradient(at 40% 20%, rgba(99, 102, 241, 0.3) 0px, transparent 50%),
-                radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.3) 0px, transparent 50%),
-                radial-gradient(at 0% 50%, rgba(251, 191, 36, 0.2) 0px, transparent 50%);
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.3;
+            background: radial-gradient(at 40% 20%, rgba(99, 102, 241, 0.25) 0px, transparent 50%),
+                        radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.25) 0px, transparent 50%),
+                        radial-gradient(at 0% 50%, rgba(251, 191, 36, 0.15) 0px, transparent 50%);
             filter: blur(80px);
             animation: mesh-move 20s ease-in-out infinite;
+            will-change: transform; /* 性能优化 */
         }
         @keyframes mesh-move {
             0%, 100% { transform: scale(1) translateY(0); }
@@ -66,408 +86,177 @@
             font-weight: 500; transition: color 0.3s; position: relative;
         }
         .nav-links a:hover { color: var(--text-primary); }
-        .nav-links a::after {
-            content: ''; position: absolute; bottom: -5px; left: 0;
-            width: 0; height: 2px; background: var(--accent-primary);
-            transition: width 0.3s;
-        }
-        .nav-links a:hover::after { width: 100%; }
-        .container {
-            position: relative; z-index: 1;
-            max-width: 1400px; margin: 0 auto; padding: 0 2rem;
-        }
+        .container { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 2rem; width: 100%; }
         .hero {
             min-height: 100vh; display: flex; flex-direction: column;
             justify-content: center; align-items: center;
             text-align: center; padding: 8rem 0 4rem;
+            max-width: 1200px; margin: 0 auto;
         }
-        .sunflower-icon {
-            font-size: 5rem; margin-bottom: 2rem;
-            animation: float 3s ease-in-out infinite;
-        }
+        .sunflower-icon { font-size: 5rem; margin-bottom: 2rem; animation: float 3s ease-in-out infinite; }
         @keyframes float {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-20px); }
         }
         .hero h1 {
-            font-size: clamp(3rem, 8vw, 6rem); font-weight: 800;
-            margin-bottom: 1.5rem;
+            font-size: clamp(3rem, 8vw, 6rem); font-weight: 800; margin-bottom: 1.5rem;
             background: linear-gradient(135deg, #fff, var(--accent-gold), var(--accent-primary));
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            letter-spacing: -0.02em;
         }
-        .hero p {
-            font-size: 1.5rem; color: var(--text-secondary);
-            margin-bottom: 3rem; max-width: 600px;
-        }
-        .badges {
-            display: flex; gap: 1rem; flex-wrap: wrap;
-            justify-content: center; margin-bottom: 3rem;
-        }
+        .hero p { font-size: 1.5rem; color: var(--text-secondary); margin-bottom: 3rem; max-width: 600px; }
+        .badges { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-bottom: 3rem; }
         .badge {
-            padding: 0.6rem 1.5rem;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: 2rem; backdrop-filter: blur(10px);
-            font-size: 0.9rem; color: var(--text-secondary);
+            padding: 0.6rem 1.5rem; background: var(--glass-bg); border: 1px solid var(--glass-border);
+            border-radius: 2rem; backdrop-filter: blur(10px); font-size: 0.9rem; color: var(--text-secondary);
             transition: all 0.3s;
         }
-        .badge:hover {
-            background: rgba(99, 102, 241, 0.1);
-            border-color: var(--accent-primary);
-            color: var(--text-primary);
-            transform: translateY(-2px);
-        }
+        .badge:hover { background: rgba(99, 102, 241, 0.1); border-color: var(--accent-primary); color: var(--text-primary); transform: translateY(-2px); }
         .cta-buttons { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
         .btn {
-            padding: 1rem 2.5rem; border-radius: 1rem;
-            font-weight: 600; text-decoration: none;
-            transition: all 0.15s ease;
-            display: inline-flex; align-items: center; gap: 0.5rem;
-            border: none; cursor: pointer; font-size: 1rem;
-            user-select: none;
-            position: relative;
-            overflow: hidden;
+            padding: 1rem 2.5rem; border-radius: 1rem; font-weight: 600; text-decoration: none;
+            transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 0.5rem;
+            border: none; cursor: pointer; font-size: 1rem; user-select: none;
         }
         .btn-primary {
             background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
             color: white; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
         }
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 40px rgba(99, 102, 241, 0.4);
-        }
-        .btn-primary:active {
-            transform: translateY(1px) scale(0.98);
-            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.3);
-        }
-        .btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 15px 40px rgba(99, 102, 241, 0.4); }
+        .btn-primary:active { transform: translateY(1px) scale(0.98); }
         .btn-secondary {
             background: var(--glass-bg); color: var(--text-primary);
             border: 1px solid var(--glass-border); backdrop-filter: blur(10px);
         }
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.08);
-            transform: translateY(-2px);
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.08); transform: translateY(-2px); }
+        .btn-secondary:active { transform: translateY(1px) scale(0.98); }
+        .game-section { padding: 6rem 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+        .section-title { font-size: 2.5rem; font-weight: 700; text-align: center; margin-bottom: 2rem; }
+        .docs-section { padding: 6rem 0; max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+        .docs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-top: 3rem; padding: 0 2rem; }
+        .docs-card {
+            background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 1.5rem;
+            padding: 2rem; transition: all 0.3s; backdrop-filter: blur(10px);
+            will-change: transform; /* 性能优化 */
         }
-        .btn-secondary:active {
-            transform: translateY(1px) scale(0.98);
-        }
-        .btn .spinner {
-            width: 18px; height: 18px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            display: none;
-        }
-        .btn.loading .spinner { display: inline-block; }
-        .btn.loading .btn-text { opacity: 0.7; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .game-section { padding: 6rem 0; min-height: 100vh; }
-        .section-title {
-            font-size: 2.5rem; font-weight: 700;
-            text-align: center; margin-bottom: 2rem;
-        }
+        .docs-card:hover { transform: translateY(-5px); border-color: var(--accent-primary); background: rgba(99, 102, 241, 0.1); }
+        .docs-card h3 { font-size: 1.5rem; margin-bottom: 1rem; color: var(--accent-gold); 
+                        background: linear-gradient(135deg, var(--accent-gold), var(--accent-primary));
+                        -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .docs-card ul { list-style: none; padding: 0; margin: 0; }
+        .docs-card li { padding: 0.5rem 0; color: var(--text-secondary); line-height: 1.6; }
+        .docs-card li:before { content: "▸ "; color: var(--accent-primary); margin-right: 0.5rem; font-weight: bold; }
         .game-selector {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            max-width: 1200px;
-            margin: 0 auto 3rem;
-            padding: 0 2rem;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem; max-width: 1200px; margin: 0 auto 3rem; padding: 0 2rem;
+            width: 100%;
         }
         .game-option {
-            background: var(--glass-bg);
-            border: 2px solid var(--glass-border);
-            border-radius: 1.5rem;
-            padding: 2rem;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
+            background: var(--glass-bg); border: 2px solid var(--glass-border); border-radius: 1.5rem;
+            padding: 2rem; cursor: pointer; transition: all 0.3s; text-align: center; 
+            position: relative; overflow: hidden; will-change: transform; /* 性能优化 */
         }
         .game-option::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
             background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-            transform: scaleX(0);
-            transition: transform 0.3s;
+            transform: scaleX(0); transition: transform 0.3s;
         }
-        .game-option:hover {
-            transform: translateY(-5px);
-            border-color: var(--accent-primary);
-            background: rgba(99, 102, 241, 0.1);
-        }
+        .game-option:hover { transform: translateY(-5px); border-color: var(--accent-primary); background: rgba(99, 102, 241, 0.1); }
         .game-option:hover::before { transform: scaleX(1); }
-        .game-option.active {
-            border-color: var(--accent-gold);
-            background: rgba(251, 191, 36, 0.1);
-            box-shadow: 0 0 30px rgba(251, 191, 36, 0.3);
-        }
+        .game-option.active { border-color: var(--accent-gold); background: rgba(251, 191, 36, 0.1); box-shadow: 0 0 30px rgba(251, 191, 36, 0.3); }
         .game-option-icon { font-size: 4rem; margin-bottom: 1rem; display: block; }
         .game-option h3 { font-size: 1.3rem; margin-bottom: 0.5rem; }
         .game-option p { color: var(--text-secondary); font-size: 0.9rem; }
         .game-container {
-            width: 95%;
-            max-width: 1600px;
-            height: 80vh;
-            min-height: 600px;
-            margin: 0 auto;
-            position: relative;
-            background: var(--bg-secondary);
-            border: 3px solid var(--glass-border);
-            border-radius: 2rem;
-            overflow: hidden;
-            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+            width: 95%; max-width: 1600px; height: 80vh; min-height: 600px; 
+            margin: 0 auto; position: relative; background: var(--bg-secondary); 
+            border: 3px solid var(--glass-border); border-radius: 2rem; 
+            overflow: hidden; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
         }
-        .game-canvas {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-        }
-        #threeContainer {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-        }
+        #threeContainer, #gameCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         .video-feed {
-            position: absolute;
-            bottom: 20px; left: 20px;
-            width: 160px; height: 120px;
-            border-radius: 12px;
-            border: 2px solid var(--glass-border);
-            opacity: 0.6;
-            z-index: 10;
-            transform: scaleX(-1);
-            transition: opacity 0.3s;
-            display: none;
-            background: #000;
+            position: absolute; bottom: 20px; left: 20px; width: 160px; height: 120px;
+            border-radius: 12px; border: 2px solid var(--glass-border); opacity: 0.7;
+            z-index: 10; transform: scaleX(-1); transition: opacity 0.3s; background: #000;
         }
-        .video-feed.active { display: block; }
         .video-feed:hover { opacity: 1; }
         .game-hud {
-            position: absolute;
-            top: 20px; left: 0; right: 0;
-            padding: 0 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            pointer-events: none;
-            z-index: 10;
+            position: absolute; top: 20px; left: 0; right: 0; padding: 0 2rem;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            pointer-events: none; z-index: 10;
         }
         .hud-panel {
-            background: rgba(0, 0, 0, 0.7);
-            padding: 1.5rem 2rem;
-            border-radius: 1.5rem;
-            backdrop-filter: blur(20px);
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            min-width: 180px;
+            background: rgba(0, 0, 0, 0.7); padding: 1.5rem 2rem; border-radius: 1.5rem;
+            backdrop-filter: blur(20px); border: 2px solid rgba(255, 255, 255, 0.1); min-width: 180px;
         }
-        .hud-title {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+        .hud-title { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px; }
         .hud-value {
-            font-size: 2rem;
-            font-weight: 700;
+            font-size: 2rem; font-weight: 700;
             background: linear-gradient(135deg, var(--accent-gold), var(--accent-primary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            background: rgba(255, 255, 255, 0.05);
-            margin-top: 0.5rem;
-        }
-        .status-dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            background: #ef4444;
-            transition: background 0.3s;
-        }
-        .status-dot.active {
-            background: #22c55e;
-            box-shadow: 0 0 10px #22c55e;
-        }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; background: rgba(255, 255, 255, 0.05); margin-top: 0.5rem; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; transition: background 0.3s; }
+        .status-dot.active { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
         .particle-controls {
-            position: absolute;
-            top: 20px; right: 20px;
-            width: 280px;
-            background: rgba(15, 15, 20, 0.85);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--glass-border);
-            border-radius: 20px;
-            padding: 20px;
-            z-index: 100;
-            pointer-events: auto;
+            position: absolute; top: 20px; right: 20px; width: 280px;
+            background: rgba(15, 15, 20, 0.85); backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border); border-radius: 20px; padding: 20px; z-index: 100; pointer-events: auto;
         }
         .control-group { margin-bottom: 15px; }
-        .control-label {
-            font-size: 0.85rem;
-            color: #94a3b8;
-            margin-bottom: 8px;
-            display: block;
-        }
-        .shape-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
+        .control-label { font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px; display: block; }
+        .shape-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
         .shape-btn {
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            color: var(--text-primary);
-            padding: 8px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            transition: all 0.3s;
+            background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary);
+            padding: 8px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; transition: all 0.3s;
         }
-        .shape-btn:hover, .shape-btn.active {
-            background: var(--accent-primary);
-            border-color: var(--accent-primary);
-            box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
-        }
-        .color-picker-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: var(--glass-bg);
-            padding: 8px;
-            border-radius: 8px;
-        }
-        input[type="color"] {
-            -webkit-appearance: none;
-            border: none;
-            width: 30px; height: 30px;
-            border-radius: 50%;
-            overflow: hidden;
-            cursor: pointer;
-            background: none;
-        }
+        .shape-btn:hover, .shape-btn.active { background: var(--accent-primary); border-color: var(--accent-primary); box-shadow: 0 0 15px rgba(99, 102, 241, 0.4); }
+        .color-picker-wrapper { display: flex; align-items: center; gap: 10px; background: var(--glass-bg); padding: 8px; border-radius: 8px; }
+        input[type="color"] { -webkit-appearance: none; border: none; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; cursor: pointer; background: none; }
         input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-        input[type="color"]::-webkit-color-swatch {
-            border: none;
-            border-radius: 50%;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-        }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.2); }
         .hand-tracker {
-            position: absolute;
-            width: 80px; height: 80px;
-            border: 4px solid var(--accent-gold);
-            border-radius: 50%;
-            box-shadow: 0 0 30px rgba(251, 191, 36, 0.6);
-            pointer-events: none;
-            z-index: 20;
-            transition: all 0.1s;
-            display: none;
+            position: absolute; width: 80px; height: 80px; border: 4px solid var(--accent-gold);
+            border-radius: 50%; box-shadow: 0 0 30px rgba(251, 191, 36, 0.6);
+            pointer-events: none; z-index: 20; transition: all 0.08s linear; display: none;
         }
         .hand-tracker.active { display: block; }
-        .hand-tracker.grabbing {
-            width: 100px; height: 100px;
-            border-color: #ef4444;
-            box-shadow: 0 0 40px rgba(239, 68, 68, 0.8);
-        }
-        .game-controls {
-            display: flex;
-            gap: 1rem;
-            margin-top: 2rem;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
+        .hand-tracker.closed { border-color: #ef4444; box-shadow: 0 0 40px rgba(239, 68, 68, 0.8); }
+        .game-controls { display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap; justify-content: center; }
         .game-message {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 3rem;
-            font-weight: 700;
-            color: white;
-            text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
-            opacity: 0;
-            pointer-events: none;
-            z-index: 30;
-            transition: opacity 0.3s;
-            text-align: center;
-            padding: 2rem;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 3rem; font-weight: 700; color: white; text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            opacity: 0; pointer-events: none; z-index: 30; transition: opacity 0.3s; text-align: center; padding: 2rem;
         }
         .game-message.show { opacity: 1; }
-        .error-message {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(239, 68, 68, 0.9);
-            color: white;
-            padding: 2rem 3rem;
-            border-radius: 1rem;
-            font-size: 1.2rem;
-            text-align: center;
-            z-index: 40;
-            max-width: 80%;
-            display: none;
+        #loader {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 15, 0.95); z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: opacity 0.5s;
         }
-        .error-message.show { display: block; }
-        footer {
-            padding: 4rem 0 2rem;
-            text-align: center;
-            border-top: 1px solid var(--glass-border);
-        }
+        #loader.hidden { opacity: 0; pointer-events: none; }
+        .spinner { width: 50px; height: 50px; border: 4px solid var(--accent-primary); border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        footer { padding: 4rem 0 2rem; text-align: center; border-top: 1px solid var(--glass-border); max-width: 1200px; margin: 0 auto; }
         .scroll-top {
-            position: fixed;
-            bottom: 2rem; right: 2rem;
-            width: 3rem; height: 3rem;
+            position: fixed; bottom: 2rem; right: 2rem; width: 3rem; height: 3rem;
             background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            opacity: 0;
-            transition: all 0.3s;
-            z-index: 100;
-            border: none;
-            color: white;
-            font-size: 1.2rem;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; opacity: 0; transition: all 0.3s; z-index: 100; border: none; color: white; font-size: 1.2rem;
         }
         .scroll-top.show { opacity: 1; }
         .scroll-top:hover { transform: translateY(-5px); }
-        .debug-panel {
-            position: fixed;
-            bottom: 20px; right: 20px;
-            background: rgba(0,0,0,0.8);
-            color: #0f0;
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 12px;
-            z-index: 9999;
-            max-width: 300px;
-            display: none;
-        }
-        .debug-panel.show { display: block; }
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .hero h1 { font-size: 3rem; }
             .game-container { width: 98%; height: 60vh; }
             .game-hud { flex-direction: column; padding: 1rem; }
             .hud-panel { min-width: auto; padding: 1rem 1.5rem; }
-            .particle-controls { width: 240px; padding: 15px; }
+            .particle-controls { width: 220px; padding: 15px; top: auto; bottom: 150px; right: 10px; }
             .game-selector { grid-template-columns: 1fr; }
+            .docs-grid { grid-template-columns: 1fr; }
+            .docs-section { padding: 3rem 1rem; }
+            .container { padding: 0 1rem; }
         }
     </style>
 </head>
@@ -476,13 +265,11 @@
     <div class="mesh-gradient"></div>
     <nav>
         <div class="nav-container">
-            <div class="logo">
-                <span>🌻</span>
-                <span>XRK-AGT</span>
-            </div>
+            <div class="logo"><span>🌻</span><span>XRK-AGT</span></div>
             <ul class="nav-links">
                 <li><a href="#home">首页</a></li>
-                <li><a href="#game">体感游戏</a></li>
+                <li><a href="#docs">文档</a></li>
+                <li id="gameNavItem" style="display:none;"><a href="#game">交互游戏</a></li>
                 <li><a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank">项目仓库</a></li>
             </ul>
         </div>
@@ -491,62 +278,101 @@
         <section id="home" class="hero">
             <div class="sunflower-icon">🌻</div>
             <h1>XRK-AGT</h1>
-            <p>AI驱动的多功能体感游戏平台</p>
+            <p>多语言、多适配器、工作流驱动型智能体平台</p>
             <div class="badges">
-                <span class="badge">⚡ AI视觉</span>
-                <span class="badge">🎮 体感交互</span>
-                <span class="badge">🎨 3D粒子</span>
-                <span class="badge">💎 多款游戏</span>
+                <span class="badge">⚡ 多平台接入</span>
+                <span class="badge">🔌 插件工作流</span>
+                <span class="badge">🌐 Web控制台</span>
+                <span class="badge">🤖 AI工作流</span>
+                <span class="badge">🎨 渲染截图</span>
             </div>
             <div class="cta-buttons">
-                <a href="#game" class="btn btn-primary">
-                    <span>开始游戏</span>
-                    <span>→</span>
-                </a>
-                <a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank" class="btn btn-secondary">
-                    <span>查看源码</span>
-                </a>
+                <a href="#docs" class="btn btn-primary"><span>查看文档</span><span>→</span></a>
+                <a href="https://gitcode.com/Xrkseek/XRK-AGT" target="_blank" class="btn btn-secondary"><span>查看源码</span></a>
             </div>
         </section>
     </div>
-    <section id="game" class="game-section">
-        <h2 class="section-title">🎮 选择你的游戏</h2>
-        <div class="game-selector">
-            <div class="game-option active" data-game="particles">
-                <span class="game-option-icon">✨</span>
-                <h3>3D粒子交互</h3>
-                <p>手势控制粒子形态变换</p>
+    <section id="docs" class="docs-section">
+        <h2 class="section-title">📚 项目文档</h2>
+        <div class="docs-grid">
+            <div class="docs-card">
+                <h3>🚀 快速开始</h3>
+                <ul>
+                    <li>Node.js ≥ 18.14.0</li>
+                    <li>Redis ≥ 5.0.0</li>
+                    <li>支持 Windows / Linux</li>
+                    <li>需要 Chrome/Chromium/Edge（渲染功能）</li>
+                </ul>
             </div>
-            <div class="game-option" data-game="sunflower">
-                <span class="game-option-icon">🌻</span>
-                <h3>向日葵收集</h3>
-                <p>抓取向日葵投进箩筐</p>
+            <div class="docs-card">
+                <h3>🔌 核心特性</h3>
+                <ul>
+                    <li>多平台消息接入（OneBotv11 / ComWeChat）</li>
+                    <li>插件工作流 + AI 工作流</li>
+                    <li>Web 控制台 + REST API + WebSocket</li>
+                    <li>基于 Puppeteer/Playwright 的渲染</li>
+                </ul>
             </div>
-            <div class="game-option" data-game="balloon">
-                <span class="game-option-icon">🎈</span>
-                <h3>气球派对</h3>
-                <p>快速拍打上升气球</p>
+            <div class="docs-card">
+                <h3>📖 文档导航</h3>
+                <ul>
+                    <li>项目概览：了解整体架构</li>
+                    <li>Bot 主类：核心运行时对象</li>
+                    <li>插件系统：规则匹配与上下文管理</li>
+                    <li>适配器系统：多平台协议对接</li>
+                    <li>AI 工作流：Chat Completion 与 Embedding</li>
+                </ul>
             </div>
-            <div class="game-option" data-game="fruit">
-                <span class="game-option-icon">🍎</span>
-                <h3>水果忍者</h3>
-                <p>挥手切割掉落水果</p>
+            <div class="docs-card">
+                <h3>🏗️ 项目结构</h3>
+                <ul>
+                    <li>src/：运行核心与基础设施</li>
+                    <li>core/：适配器、API、工作流</li>
+                    <li>config/：默认配置与命令行工具</li>
+                    <li>docs/：完整模块文档</li>
+                    <li>www/：前端静态资源</li>
+                </ul>
+            </div>
+            <div class="docs-card">
+                <h3>💡 使用场景</h3>
+                <ul>
+                    <li>搭建 QQ 智能体（聊天机器人）</li>
+                    <li>任务助手与数据监控</li>
+                    <li>垂直场景自动化工作流</li>
+                    <li>可扩展的 Bot 平台</li>
+                </ul>
+            </div>
+            <div class="docs-card">
+                <h3>🔧 开发指南</h3>
+                <ul>
+                    <li>阅读 PROJECT_OVERVIEW.md</li>
+                    <li>查看 docs/README.md</li>
+                    <li>参考 docs/app-dev.md</li>
+                    <li>了解插件与适配器开发</li>
+                </ul>
             </div>
         </div>
+    </section>
+    <section id="game" class="game-section" style="display:none;">
+        <h2 class="section-title">🎮 选择你的游戏</h2>
+        <div class="game-selector">
+            <div class="game-option active" data-game="particles"><span class="game-option-icon">✨</span><h3>3D粒子交互</h3><p>手势控制粒子形态变换</p></div>
+            <div class="game-option" data-game="sunflower"><span class="game-option-icon">🌻</span><h3>向日葵收集</h3><p>抓取向日葵得分</p></div>
+            <div class="game-option" data-game="balloon"><span class="game-option-icon">🎈</span><h3>气球派对</h3><p>快速拍打上升气球</p></div>
+            <div class="game-option" data-game="fruit"><span class="game-option-icon">🍎</span><h3>水果忍者</h3><p>挥手切割掉落水果</p></div>
+        </div>
         <div class="game-container">
-            <div id="threeContainer" style="display: block;"></div>
-            <canvas id="gameCanvas" class="game-canvas" style="display: none;"></canvas>
-            <video id="webcam" class="video-feed" playsinline autoplay muted></video>
+            <div id="loader"><div class="spinner"></div><p style="color:#94a3b8;">正在初始化 AI 视觉引擎...</p><p style="font-size:0.8rem;margin-top:10px;color:#64748b;">请允许摄像头权限</p></div>
+            <div id="threeContainer"></div>
+            <canvas id="gameCanvas" style="display:none;"></canvas>
+            <video id="webcam" class="video-feed" playsinline></video>
             <div class="hand-tracker" id="handTracker"></div>
             <div class="game-hud">
                 <div class="hud-panel">
                     <div class="hud-title">手势状态</div>
-                    <div class="status-badge">
-                        <div class="status-dot" id="handStatus"></div>
-                        <span id="statusText">等待检测...</span>
-                    </div>
+                    <div class="status-badge"><div class="status-dot" id="handStatus"></div><span id="statusText">等待手势...</span></div>
                 </div>
-                <div class="hud-panel" id="scorePanel" style="display: none;">
+                <div class="hud-panel" id="scorePanel" style="display:none;">
                     <div class="hud-title">分数</div>
                     <div class="hud-value" id="scoreValue">0</div>
                 </div>
@@ -567,718 +393,410 @@
                     <label class="control-label">粒子颜色</label>
                     <div class="color-picker-wrapper">
                         <input type="color" id="colorPicker" value="#6366f1">
-                        <span style="font-size: 0.9rem;">自定义颜色</span>
+                        <span style="font-size:0.9rem;">自定义颜色</span>
                     </div>
                 </div>
                 <div class="control-group">
                     <label class="control-label">操作提示</label>
-                    <p style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">
-                        🖐 <b>张开手掌</b>：粒子扩散<br>
-                        ✊ <b>握紧拳头</b>：粒子聚拢<br>
-                        👋 <b>移动手掌</b>：旋转视角
-                    </p>
+                    <p style="font-size:0.8rem;color:#94a3b8;line-height:1.5;">🖐 <b>张开手掌</b>：粒子扩散<br>✊ <b>握紧拳头</b>：粒子聚拢<br>👋 <b>移动手掌</b>：旋转视角</p>
                 </div>
             </div>
             <div class="game-message" id="gameMessage"></div>
-            <div class="error-message" id="errorMessage"></div>
         </div>
         <div class="game-controls">
-            <button class="btn btn-primary" id="startBtn" type="button">
-                <span class="spinner"></span>
-                <span class="btn-text">🎮 启动游戏</span>
-            </button>
-            <button class="btn btn-secondary" id="stopBtn" type="button">
-                <span>⏸️ 停止</span>
-            </button>
-            <button class="btn btn-secondary" id="resetBtn" type="button">
-                <span>🔄 重置</span>
-            </button>
+            <button class="btn btn-secondary" id="resetBtn"><span>🔄</span><span>重置游戏</span></button>
         </div>
     </section>
     <footer>
-        <p style="color: var(--text-secondary);">© 2024 XRK-AGT | AI驱动的体感游戏平台</p>
-        <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 0.9rem;">永远向着阳光生长 🌻</p>
+        <p style="color:var(--text-secondary);">© 2024 XRK-AGT | 多语言、多适配器、工作流驱动型智能体平台</p>
+        <p style="color:var(--text-secondary);margin-top:1rem;font-size:0.9rem;">永远向着阳光生长 🌻</p>
     </footer>
     <button class="scroll-top" id="scrollTop">↑</button>
-    <div class="debug-panel" id="debugPanel"></div>
 
     <script>
-        // ============ 调试工具 ============
-        const Debug = {
-            panel: null,
-            enabled: false,
-            init() {
-                this.panel = document.getElementById('debugPanel');
-            },
-            log(msg) {
-                console.log('[XRK-AGT]', msg);
-                if (this.enabled && this.panel) {
-                    this.panel.classList.add('show');
-                    this.panel.innerHTML = msg + '<br>' + this.panel.innerHTML;
-                    if (this.panel.innerHTML.length > 1000) {
-                        this.panel.innerHTML = this.panel.innerHTML.substring(0, 1000);
-                    }
-                }
-            },
-            error(msg) {
-                console.error('[XRK-AGT]', msg);
-            }
-        };
+        // ============ 访问检测 ============
+        const isLocalhost = window.isLocalhost || (window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1' || 
+                           window.location.hostname === '[::1]' ||
+                           window.location.hostname === '');
 
         // ============ 全局状态 ============
-        const GameState = {
-            currentMode: 'particles',
-            isRunning: false,
-            stream: null,
-            video: null,
-            scene: null,
-            camera: null,
-            renderer: null,
-            particles: null,
-            particleCount: 15000,
-            positions: null,
-            targetPositions: null,
-            currentShape: 'heart',
-            handX: 0.5,
-            handY: 0.5,
+        const G = {
+            mode: 'particles',
+            handX: 0.5, handY: 0.5,
             handOpenness: 1.0,
             isHandDetected: false,
-            gameObjects: [],
-            score: 0,
-            prevFrame: null,
-            handPosition: { x: 0, y: 0, active: false },
-            animationId: null
+            scene: null, camera: null, renderer: null, particles: null,
+            particleCount: isLocalhost ? 8000 : 5000, // 根据访问来源调整粒子数
+            positions: null, targetPositions: null,
+            currentShape: 'heart',
+            gameObjects: [], score: 0,
+            canvasW: 0, canvasH: 0,
+            lastFrameTime: 0,
+            targetFPS: 60,
+            frameInterval: 1000 / 60
         };
 
         // ============ Three.js 粒子系统 ============
         function initThreeJS() {
-            Debug.log('初始化 Three.js...');
             const container = document.getElementById('threeContainer');
-            if (!container) {
-                Debug.error('找不到 threeContainer');
-                return false;
+            G.scene = new THREE.Scene();
+            G.scene.fog = new THREE.FogExp2(0x0a0a0f, 0.002);
+            G.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            G.camera.position.z = 30;
+            G.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true }); // 关闭抗锯齿提升性能
+            G.renderer.setSize(container.clientWidth, container.clientHeight);
+            G.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // 降低像素比提升性能
+            container.appendChild(G.renderer.domElement);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 32; canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 32, 32);
+            const texture = new THREE.Texture(canvas);
+            texture.needsUpdate = true;
+
+            const geometry = new THREE.BufferGeometry();
+            G.positions = new Float32Array(G.particleCount * 3);
+            G.targetPositions = new Float32Array(G.particleCount * 3);
+            for (let i = 0; i < G.particleCount; i++) {
+                G.positions[i * 3] = (Math.random() - 0.5) * 100;
+                G.positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+                G.positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
             }
-            if (GameState.renderer) {
-                Debug.log('Three.js 已初始化');
-                return true;
-            }
-            try {
-                GameState.scene = new THREE.Scene();
-                GameState.scene.fog = new THREE.FogExp2(0x0a0a0f, 0.002);
-                GameState.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-                GameState.camera.position.z = 30;
-                GameState.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-                GameState.renderer.setSize(container.clientWidth, container.clientHeight);
-                GameState.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-                container.innerHTML = '';
-                container.appendChild(GameState.renderer.domElement);
-                const canvas = document.createElement('canvas');
-                canvas.width = 32;
-                canvas.height = 32;
-                const ctx = canvas.getContext('2d');
-                const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-                gradient.addColorStop(0, 'rgba(255,255,255,1)');
-                gradient.addColorStop(1, 'rgba(255,255,255,0)');
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, 32, 32);
-                const texture = new THREE.Texture(canvas);
-                texture.needsUpdate = true;
-                const geometry = new THREE.BufferGeometry();
-                GameState.positions = new Float32Array(GameState.particleCount * 3);
-                GameState.targetPositions = new Float32Array(GameState.particleCount * 3);
-                for (let i = 0; i < GameState.particleCount; i++) {
-                    GameState.positions[i * 3] = (Math.random() - 0.5) * 100;
-                    GameState.positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
-                    GameState.positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
-                }
-                geometry.setAttribute('position', new THREE.BufferAttribute(GameState.positions, 3));
-                const material = new THREE.PointsMaterial({
-                    size: 0.5,
-                    map: texture,
-                    transparent: true,
-                    opacity: 0.8,
-                    color: new THREE.Color(0x6366f1),
-                    blending: THREE.AdditiveBlending,
-                    depthWrite: false
-                });
-                GameState.particles = new THREE.Points(geometry, material);
-                GameState.scene.add(GameState.particles);
-                updateTargetPositions('heart');
-                Debug.log('✅ Three.js 初始化成功');
-                return true;
-            } catch (e) {
-                Debug.error('Three.js 初始化失败: ' + e.message);
-                return false;
-            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(G.positions, 3));
+            const material = new THREE.PointsMaterial({
+                size: 0.5, map: texture, transparent: true, opacity: 0.8,
+                color: new THREE.Color(0x6366f1), blending: THREE.AdditiveBlending, depthWrite: false
+            });
+            G.particles = new THREE.Points(geometry, material);
+            G.scene.add(G.particles);
+            updateTargetPositions('heart');
         }
 
-        // 粒子形状定义
-        const ParticleShapes = {
-            heart: (i, count) => {
-                const t = Math.random() * Math.PI * 2;
-                const r = Math.random();
-                const x = 16 * Math.pow(Math.sin(t), 3);
-                const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
-                const z = (Math.random() - 0.5) * 4;
-                return { x: x * 0.5 * r, y: y * 0.5 * r, z };
-            },
-            saturn: (i, count) => {
-                if (Math.random() > 0.6) {
-                    const angle = Math.random() * Math.PI * 2;
-                    const radius = 12 + Math.random() * 6;
-                    return { x: Math.cos(angle) * radius, y: (Math.random()-0.5), z: Math.sin(angle) * radius };
-                }
-                const phi = Math.acos(-1 + (2 * Math.random()));
-                const theta = Math.sqrt(count * Math.PI) * phi;
-                const r = 7;
-                return { x: r * Math.cos(theta) * Math.sin(phi), y: r * Math.sin(theta) * Math.sin(phi), z: r * Math.cos(phi) };
-            },
-            flower: (i, count) => {
-                const theta = Math.random() * Math.PI * 2;
-                const phi = Math.random() * Math.PI;
-                const k = 5;
-                const r = 10 * Math.sin(k * theta) * Math.sin(phi);
-                return { x: r * Math.sin(phi) * Math.cos(theta), y: r * Math.cos(phi), z: r * Math.sin(phi) * Math.sin(theta) };
-            },
-            buddha: (i, count) => {
-                const rand = Math.random();
-                if (rand < 0.2) {
-                    const r = 2.5;
-                    const u = Math.random(), v = Math.random();
-                    const theta = 2 * Math.PI * u;
-                    const phi = Math.acos(2 * v - 1);
-                    return { x: r * Math.sin(phi) * Math.cos(theta), y: r * Math.sin(phi) * Math.sin(theta) + 6, z: r * Math.cos(phi) };
-                }
-                if (rand < 0.7) {
-                    const r = 5.5 * Math.random();
-                    const h = Math.random() * 7;
-                    const theta = Math.random() * Math.PI * 2;
-                    const coneR = 6 * (1 - h/7);
-                    return { x: coneR * Math.cos(theta), y: h - 1, z: coneR * Math.sin(theta) };
-                }
-                const angle = Math.random() * Math.PI * 2;
-                const radius = 5 + Math.random() * 4;
-                return { x: Math.cos(angle) * radius, y: -2 + (Math.random() * 2), z: Math.sin(angle) * radius };
-            },
-            fireworks: (i, count) => {
-                const r = Math.random() * 20;
-                const theta = Math.random() * Math.PI * 2;
-                const phi = Math.acos(2 * Math.random() - 1);
-                return { x: r * Math.sin(phi) * Math.cos(theta), y: r * Math.sin(phi) * Math.sin(theta), z: r * Math.cos(phi) };
-            },
-            dna: (i, count) => {
-                const t = (i / count) * Math.PI * 20;
-                const radius = 5;
-                const height = 20;
-                const y = (i / count) * height - height/2;
-                let x = Math.cos(t) * radius;
-                let z = Math.sin(t) * radius;
-                if (i % 2 === 0) {
-                    x = Math.cos(t + Math.PI) * radius;
-                    z = Math.sin(t + Math.PI) * radius;
-                }
-                if (Math.random() > 0.8) {
-                    const r = (Math.random() * 2 - 1) * radius;
-                    x = Math.cos(t) * r;
-                    z = Math.sin(t) * r;
-                }
-                return { x, y, z };
-            }
+        const Shapes = {
+            heart: (i) => { const t = Math.random() * Math.PI * 2, r = Math.random(); const x = 16 * Math.pow(Math.sin(t), 3), y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t); return { x: x * 0.5 * r, y: y * 0.5 * r, z: (Math.random() - 0.5) * 4 }; },
+            saturn: (i) => { if (Math.random() > 0.6) { const a = Math.random() * Math.PI * 2, rad = 12 + Math.random() * 6; return { x: Math.cos(a) * rad, y: (Math.random()-0.5), z: Math.sin(a) * rad }; } const phi = Math.acos(-1 + 2 * Math.random()), theta = Math.sqrt(G.particleCount * Math.PI) * phi, r = 7; return { x: r * Math.cos(theta) * Math.sin(phi), y: r * Math.sin(theta) * Math.sin(phi), z: r * Math.cos(phi) }; },
+            flower: (i) => { const theta = Math.random() * Math.PI * 2, phi = Math.random() * Math.PI, k = 4, r = 10 * Math.sin(k * theta) * Math.sin(phi); return { x: r * Math.sin(phi) * Math.cos(theta), y: r * Math.cos(phi), z: r * Math.sin(phi) * Math.sin(theta) }; },
+            buddha: (i) => { const rand = Math.random(); if (rand < 0.2) { const r = 2.5, u = Math.random(), v = Math.random(), theta = 2 * Math.PI * u, phi = Math.acos(2 * v - 1); return { x: r * Math.sin(phi) * Math.cos(theta), y: r * Math.sin(phi) * Math.sin(theta) + 6, z: r * Math.cos(phi) }; } if (rand < 0.7) { const h = Math.random() * 7, theta = Math.random() * Math.PI * 2, coneR = 6 * (1 - h/7); return { x: coneR * Math.cos(theta), y: h - 1, z: coneR * Math.sin(theta) }; } const a = Math.random() * Math.PI * 2, rad = 5 + Math.random() * 4; return { x: Math.cos(a) * rad, y: -2 + Math.random() * 2, z: Math.sin(a) * rad }; },
+            fireworks: (i) => { const r = Math.random() * 15, theta = Math.random() * Math.PI * 2, phi = Math.acos(2 * Math.random() - 1); return { x: r * Math.sin(phi) * Math.cos(theta), y: r * Math.sin(phi) * Math.sin(theta), z: r * Math.cos(phi) }; },
+            dna: (i) => { const t = (i / G.particleCount) * Math.PI * 20, radius = 5, height = 20, y = (i / G.particleCount) * height - height/2; let x = Math.cos(t) * radius, z = Math.sin(t) * radius; if (i % 2 === 0) { x = Math.cos(t + Math.PI) * radius; z = Math.sin(t + Math.PI) * radius; } if (Math.random() > 0.8) { const r = (Math.random() * 2 - 1) * radius; x = Math.cos(t) * r; z = Math.sin(t) * r; } return { x, y, z }; }
         };
 
-        function updateTargetPositions(shapeName) {
-            const shapeFunc = ParticleShapes[shapeName];
-            if (!shapeFunc) return;
-            for (let i = 0; i < GameState.particleCount; i++) {
-                const pos = shapeFunc(i, GameState.particleCount);
-                GameState.targetPositions[i * 3] = pos.x;
-                GameState.targetPositions[i * 3 + 1] = pos.y;
-                GameState.targetPositions[i * 3 + 2] = pos.z;
+        function updateTargetPositions(name) {
+            const func = Shapes[name]; if (!func) return;
+            for (let i = 0; i < G.particleCount; i++) {
+                const pos = func(i);
+                G.targetPositions[i * 3] = pos.x;
+                G.targetPositions[i * 3 + 1] = pos.y;
+                G.targetPositions[i * 3 + 2] = pos.z;
             }
-            GameState.currentShape = shapeName;
+            G.currentShape = name;
         }
 
-        function animateParticles() {
-            if (!GameState.isRunning || GameState.currentMode !== 'particles') return;
-            GameState.animationId = requestAnimationFrame(animateParticles);
-            if (!GameState.particles) return;
-            const positions = GameState.particles.geometry.attributes.position.array;
-            GameState.particles.rotation.y += 0.002;
-            if (GameState.isHandDetected) {
-                GameState.particles.rotation.y += (GameState.handX - 0.5) * 0.08;
-                GameState.particles.rotation.x += (GameState.handY - 0.5) * 0.08;
+        function animateParticles(currentTime) {
+            requestAnimationFrame(animateParticles);
+            if (G.mode !== 'particles' || !G.particles) return;
+            
+            // 性能优化：限制帧率
+            const elapsed = currentTime - G.lastFrameTime;
+            if (elapsed < G.frameInterval) return;
+            G.lastFrameTime = currentTime - (elapsed % G.frameInterval);
+            
+            const pos = G.particles.geometry.attributes.position.array;
+            G.particles.rotation.y += 0.002;
+            if (G.isHandDetected) {
+                G.particles.rotation.y += (G.handX - 0.5) * 0.05;
+                G.particles.rotation.x += (G.handY - 0.5) * 0.05;
             }
-            const speed = 0.06;
-            let scale = 0.2 + (GameState.handOpenness * 1.5);
-            if (GameState.currentShape === 'fireworks') {
-                scale = GameState.handOpenness * 3.5;
-            }
-            for (let i = 0; i < GameState.particleCount; i++) {
+            let scale = 0.5 + G.handOpenness * 0.8;
+            if (G.currentShape === 'fireworks') scale = G.handOpenness * 2.5;
+            const speed = 0.05;
+            
+            // 性能优化：批量更新，减少循环开销
+            for (let i = 0; i < G.particleCount; i++) {
                 const px = i * 3, py = i * 3 + 1, pz = i * 3 + 2;
-                const tx = GameState.targetPositions[px] * scale;
-                const ty = GameState.targetPositions[py] * scale;
-                const tz = GameState.targetPositions[pz] * scale;
-                positions[px] += (tx - positions[px]) * speed;
-                positions[py] += (ty - positions[py]) * speed;
-                positions[pz] += (tz - positions[pz]) * speed;
+                pos[px] += (G.targetPositions[px] * scale - pos[px]) * speed;
+                pos[py] += (G.targetPositions[py] * scale - pos[py]) * speed;
+                pos[pz] += (G.targetPositions[pz] * scale - pos[pz]) * speed;
             }
-            GameState.particles.geometry.attributes.position.needsUpdate = true;
-            GameState.renderer.render(GameState.scene, GameState.camera);
+            G.particles.geometry.attributes.position.needsUpdate = true;
+            G.renderer.render(G.scene, G.camera);
         }
 
-        // ============ 运动检测 (简化版，不依赖MediaPipe) ============
-        function detectMotion() {
-            if (!GameState.video || GameState.video.readyState !== 4) return null;
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = 160;
-            canvas.height = 120;
-            ctx.drawImage(GameState.video, 0, 0, canvas.width, canvas.height);
-            const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            if (!GameState.prevFrame) {
-                GameState.prevFrame = currentFrame;
-                return null;
-            }
-            let maxDiff = 0, maxX = 0, maxY = 0;
-            const threshold = 30, blockSize = 10;
-            for (let y = 0; y < canvas.height; y += blockSize) {
-                for (let x = 0; x < canvas.width; x += blockSize) {
-                    let blockDiff = 0, pixels = 0;
-                    for (let dy = 0; dy < blockSize && y + dy < canvas.height; dy++) {
-                        for (let dx = 0; dx < blockSize && x + dx < canvas.width; dx++) {
-                            const i = ((y + dy) * canvas.width + (x + dx)) * 4;
-                            const diff = Math.abs(currentFrame.data[i] - GameState.prevFrame.data[i]) +
-                                       Math.abs(currentFrame.data[i + 1] - GameState.prevFrame.data[i + 1]) +
-                                       Math.abs(currentFrame.data[i + 2] - GameState.prevFrame.data[i + 2]);
-                            blockDiff += diff;
-                            pixels++;
-                        }
-                    }
-                    blockDiff /= (pixels * 3);
-                    if (blockDiff > threshold && blockDiff > maxDiff) {
-                        maxDiff = blockDiff;
-                        maxX = x + blockSize / 2;
-                        maxY = y + blockSize / 2;
-                    }
-                }
-            }
-            GameState.prevFrame = currentFrame;
-            if (maxDiff > threshold) {
-                const gameCanvas = document.getElementById('gameCanvas');
-                const container = document.getElementById('threeContainer');
-                const targetW = GameState.currentMode === 'particles' ? container.clientWidth : gameCanvas.width;
-                const targetH = GameState.currentMode === 'particles' ? container.clientHeight : gameCanvas.height;
-                const scaleX = targetW / canvas.width;
-                const scaleY = targetH / canvas.height;
-                return { x: (canvas.width - maxX) * scaleX, y: maxY * scaleY, intensity: Math.min(maxDiff / 100, 1) };
-            }
-            return null;
-        }
-
-        function processMotion() {
-            if (!GameState.isRunning) return;
-            const motion = detectMotion();
-            const statusDot = document.getElementById('handStatus');
-            const statusText = document.getElementById('statusText');
-            const handTracker = document.getElementById('handTracker');
-            if (motion) {
-                GameState.isHandDetected = true;
-                statusDot.classList.add('active');
-                statusText.textContent = '检测到运动';
-                GameState.handX = motion.x / (GameState.currentMode === 'particles' ? 
-                    document.getElementById('threeContainer').clientWidth : 
-                    document.getElementById('gameCanvas').width);
-                GameState.handY = motion.y / (GameState.currentMode === 'particles' ? 
-                    document.getElementById('threeContainer').clientHeight : 
-                    document.getElementById('gameCanvas').height);
-                GameState.handOpenness = 0.3 + motion.intensity * 0.7;
-                GameState.handPosition = { x: motion.x, y: motion.y, active: true };
-                handTracker.classList.add('active');
-                handTracker.style.left = (motion.x - 40) + 'px';
-                handTracker.style.top = (motion.y - 40) + 'px';
-            } else {
-                GameState.isHandDetected = false;
-                statusDot.classList.remove('active');
-                statusText.textContent = '等待运动...';
-                GameState.handOpenness += (1 - GameState.handOpenness) * 0.05;
-                GameState.handPosition.active = false;
-                handTracker.classList.remove('active');
-            }
-            if (GameState.isRunning) {
-                requestAnimationFrame(processMotion);
-            }
-        }
-
-        // ============ 摄像头启动 ============
-        async function startVideoStream() {
-            Debug.log('请求摄像头权限...');
-            try {
-                GameState.stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
-                });
-                GameState.video = document.getElementById('webcam');
-                GameState.video.srcObject = GameState.stream;
-                await new Promise((resolve, reject) => {
-                    GameState.video.onloadedmetadata = () => {
-                        GameState.video.play().then(resolve).catch(reject);
-                    };
-                    GameState.video.onerror = reject;
-                    setTimeout(() => reject(new Error('视频加载超时')), 10000);
-                });
-                GameState.video.classList.add('active');
-                Debug.log('✅ 摄像头启动成功');
-                return true;
-            } catch (error) {
-                Debug.error('摄像头启动失败: ' + error.message);
-                throw new Error('无法访问摄像头: ' + error.message);
-            }
-        }
-
-        // ============ 2D游戏对象 ============
+        // ============ 2D游戏 ============
         class GameObject {
             constructor(x, y, type) {
-                this.x = x;
-                this.y = y;
-                this.type = type;
-                this.vx = (Math.random() - 0.5) * 3;
-                this.vy = type === 'balloon' ? -2 : (Math.random() - 0.5) * 3;
+                this.x = x; this.y = y; this.type = type;
+                this.vx = (Math.random() - 0.5) * 4;
+                this.vy = type === 'balloon' ? -(2 + Math.random() * 2) : (Math.random() - 0.5) * 2;
                 this.size = 50 + Math.random() * 30;
                 this.rotation = Math.random() * Math.PI * 2;
-                this.rotationSpeed = (Math.random() - 0.5) * 0.15;
-                this.popped = false;
-                this.opacity = 1;
+                this.rotSpeed = (Math.random() - 0.5) * 0.1;
+                this.popped = false; this.opacity = 1;
                 this.emoji = this.getEmoji();
             }
             getEmoji() {
-                const emojis = {
-                    sunflower: '🌻',
-                    balloon: ['🎈', '🎈', '🎈', '🟡', '🔵', '🟢'][Math.floor(Math.random() * 6)],
-                    fruit: ['🍎', '🍊', '🍌', '🍉', '🍇', '🍓'][Math.floor(Math.random() * 6)]
-                };
-                return emojis[this.type] || '🌻';
+                const e = { sunflower: '🌻', balloon: ['🎈','🔴','🟡','🟢','🔵','🟣'][Math.floor(Math.random()*6)], fruit: ['🍎','🍊','🍋','🍉','🍇','🍓','🥝'][Math.floor(Math.random()*7)] };
+                return e[this.type] || '🌻';
             }
-            update(width, height) {
-                if (this.popped) {
-                    this.opacity -= 0.05;
-                    return;
-                }
+            update(w, h) {
+                if (this.popped) { this.opacity -= 0.08; return; }
                 if (this.type === 'balloon') {
-                    this.y += this.vy;
-                    this.x += Math.sin(Date.now() / 1000 + this.x) * 0.5;
-                    if (this.y < -this.size) {
-                        this.y = height + this.size;
-                        this.x = Math.random() * width;
-                    }
+                    this.y += this.vy; this.x += Math.sin(Date.now() / 500 + this.x) * 0.5;
+                    if (this.y < -this.size) { this.y = h + this.size; this.x = Math.random() * w; }
                 } else if (this.type === 'fruit') {
-                    this.vy += 0.3;
-                    this.y += this.vy;
-                    this.x += this.vx;
-                    this.rotation += this.rotationSpeed;
-                    if (this.y > height + this.size) {
-                        this.y = -this.size;
-                        this.x = Math.random() * width;
-                        this.vy = Math.random() * 2;
-                        this.emoji = this.getEmoji();
-                    }
+                    this.vy += 0.25; this.y += this.vy; this.x += this.vx; this.rotation += this.rotSpeed;
+                    if (this.y > h + this.size) { this.y = -this.size; this.x = Math.random() * w; this.vy = Math.random() * 2; this.emoji = this.getEmoji(); }
                 } else {
-                    this.vy += 0.3;
-                    this.x += this.vx;
-                    this.y += this.vy;
-                    this.rotation += this.rotationSpeed;
-                    if (this.x < this.size || this.x > width - this.size) {
-                        this.vx *= -0.7;
-                        this.x = Math.max(this.size, Math.min(width - this.size, this.x));
-                    }
-                    if (this.y > height - this.size) {
-                        this.vy *= -0.7;
-                        this.y = height - this.size;
-                    }
+                    this.vy += 0.2; this.x += this.vx; this.y += this.vy; this.rotation += this.rotSpeed;
+                    if (this.x < this.size || this.x > w - this.size) this.vx *= -0.8;
+                    if (this.y > h - this.size) { this.vy *= -0.6; this.y = h - this.size; }
                 }
-                this.vx *= 0.99;
             }
             draw(ctx) {
                 if (this.opacity <= 0) return;
-                ctx.save();
-                ctx.globalAlpha = this.opacity;
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.rotation);
-                ctx.font = `${this.size}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(this.emoji, 0, 0);
-                ctx.restore();
+                ctx.save(); ctx.globalAlpha = this.opacity;
+                ctx.translate(this.x, this.y); ctx.rotate(this.rotation);
+                ctx.font = `${this.size}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, 0, 0); ctx.restore();
             }
-            checkHit(x, y, radius) {
-                const dx = this.x - x;
-                const dy = this.y - y;
-                return Math.sqrt(dx * dx + dy * dy) < this.size / 2 + radius;
-            }
+            hit(x, y, r) { return Math.hypot(this.x - x, this.y - y) < this.size / 2 + r; }
         }
 
         function initCanvasGame(type) {
             const canvas = document.getElementById('gameCanvas');
-            GameState.gameObjects = [];
-            GameState.score = 0;
+            G.canvasW = canvas.width; G.canvasH = canvas.height;
+            G.gameObjects = []; G.score = 0;
             document.getElementById('scoreValue').textContent = '0';
             const count = type === 'balloon' ? 12 : 15;
             for (let i = 0; i < count; i++) {
-                const x = Math.random() * canvas.width;
-                const y = type === 'balloon' ? canvas.height + Math.random() * canvas.height : 
-                          type === 'fruit' ? -Math.random() * canvas.height * 0.5 :
-                          Math.random() * (canvas.height * 0.4) + 50;
-                GameState.gameObjects.push(new GameObject(x, y, type));
+                const x = Math.random() * G.canvasW;
+                const y = type === 'balloon' ? G.canvasH + Math.random() * G.canvasH : type === 'fruit' ? -Math.random() * 300 : Math.random() * G.canvasH * 0.5;
+                G.gameObjects.push(new GameObject(x, y, type));
             }
         }
 
-        function animateCanvasGame() {
-            if (!GameState.isRunning || GameState.currentMode === 'particles') return;
-            GameState.animationId = requestAnimationFrame(animateCanvasGame);
+        let lastCanvasFrame = 0;
+        function animateCanvas(currentTime) {
+            requestAnimationFrame(animateCanvas);
+            if (G.mode === 'particles') return;
+            
+            // 性能优化：限制帧率
+            const elapsed = currentTime - lastCanvasFrame;
+            if (elapsed < G.frameInterval) return;
+            lastCanvasFrame = currentTime - (elapsed % G.frameInterval);
+            
             const canvas = document.getElementById('gameCanvas');
+            if (!canvas) return;
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = 'rgba(19, 19, 31, 0.3)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            if (GameState.handPosition.active) {
-                const gradient = ctx.createRadialGradient(
-                    GameState.handPosition.x, GameState.handPosition.y, 0,
-                    GameState.handPosition.x, GameState.handPosition.y, 80
-                );
-                gradient.addColorStop(0, 'rgba(251, 191, 36, 0.5)');
-                gradient.addColorStop(1, 'rgba(251, 191, 36, 0)');
-                ctx.fillStyle = gradient;
-                ctx.beginPath();
-                ctx.arc(GameState.handPosition.x, GameState.handPosition.y, 80, 0, Math.PI * 2);
-                ctx.fill();
+
+            const handTracker = document.getElementById('handTracker');
+            let hx = 0, hy = 0;
+            if (G.isHandDetected) {
+                hx = (1 - G.handX) * canvas.width; hy = G.handY * canvas.height;
+                handTracker.classList.add('active');
+                handTracker.style.left = hx - 40 + 'px'; handTracker.style.top = hy - 40 + 'px';
+                handTracker.classList.toggle('closed', G.handOpenness < 0.5);
+                const grad = ctx.createRadialGradient(hx, hy, 0, hx, hy, 80);
+                grad.addColorStop(0, 'rgba(251,191,36,0.4)'); grad.addColorStop(1, 'rgba(251,191,36,0)');
+                ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(hx, hy, 80, 0, Math.PI * 2); ctx.fill();
+            } else {
+                handTracker.classList.remove('active');
             }
-            GameState.gameObjects = GameState.gameObjects.filter(obj => obj.opacity > 0);
-            while (GameState.gameObjects.length < 12) {
-                const type = GameState.currentMode;
+
+            G.gameObjects = G.gameObjects.filter(o => o.opacity > 0);
+            while (G.gameObjects.length < 12) {
                 const x = Math.random() * canvas.width;
-                const y = type === 'balloon' ? canvas.height + 50 : -50;
-                GameState.gameObjects.push(new GameObject(x, y, type));
+                const y = G.mode === 'balloon' ? canvas.height + 50 : -50;
+                G.gameObjects.push(new GameObject(x, y, G.mode));
             }
-            GameState.gameObjects.forEach(obj => {
+            G.gameObjects.forEach(obj => {
                 obj.update(canvas.width, canvas.height);
-                if (GameState.handPosition.active && !obj.popped && obj.checkHit(GameState.handPosition.x, GameState.handPosition.y, 60)) {
-                    obj.popped = true;
-                    GameState.score += 10;
-                    document.getElementById('scoreValue').textContent = GameState.score;
+                if (G.isHandDetected && !obj.popped && obj.hit(hx, hy, 50)) {
+                    obj.popped = true; G.score += 10;
+                    document.getElementById('scoreValue').textContent = G.score;
                     showMessage('✨ +10', 400);
                 }
                 obj.draw(ctx);
             });
         }
+        
+        // 初始化时调用animateCanvas
+        if (isLocalhost) {
+            animateCanvas(performance.now());
+        }
 
-        // ============ UI控制 ============
+        // ============ MediaPipe Hands ============
+        function initMediaPipe() {
+            if (!isLocalhost) return; // 非本地访问不初始化摄像头
+            
+            const video = document.getElementById('webcam');
+            const loader = document.getElementById('loader');
+            const statusDot = document.getElementById('handStatus');
+            const statusText = document.getElementById('statusText');
+
+            const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+            hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 }); // 降低模型复杂度提升性能
+
+            let lastProcessTime = 0;
+            const processInterval = 100; // 限制处理频率
+
+            hands.onResults((results) => {
+                loader.classList.add('hidden');
+                const now = Date.now();
+                if (now - lastProcessTime < processInterval) return; // 节流处理
+                lastProcessTime = now;
+                
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const lm = results.multiHandLandmarks[0];
+                    G.isHandDetected = true;
+                    statusDot.classList.add('active');
+                    G.handX = lm[9].x; G.handY = lm[9].y;
+                    const wrist = lm[0], tips = [4, 8, 12, 16, 20];
+                    let totalDist = 0;
+                    tips.forEach(idx => { const tip = lm[idx]; totalDist += Math.hypot(tip.x - wrist.x, tip.y - wrist.y); });
+                    const avgDist = totalDist / 5;
+                    G.handOpenness = Math.max(0, Math.min(1, (avgDist - 0.15) / 0.25));
+                    statusText.textContent = G.handOpenness > 0.5 ? '张开 (扩散)' : '握拳 (聚拢)';
+                } else {
+                    G.isHandDetected = false;
+                    statusDot.classList.remove('active');
+                    statusText.textContent = '未检测到手势';
+                    G.handOpenness += (1 - G.handOpenness) * 0.05;
+                }
+            });
+
+            const cam = new Camera(video, {
+                onFrame: async () => { 
+                    const now = Date.now();
+                    if (now - lastProcessTime >= processInterval) {
+                        lastProcessTime = now;
+                        await hands.send({ image: video }); 
+                    }
+                },
+                width: 320, height: 240
+            });
+            cam.start();
+        }
+
+        // ============ UI ============
         function selectGame(mode) {
-            GameState.currentMode = mode;
-            document.querySelectorAll('.game-option').forEach(opt => opt.classList.remove('active'));
+            G.mode = mode;
+            document.querySelectorAll('.game-option').forEach(o => o.classList.remove('active'));
             document.querySelector(`[data-game="${mode}"]`).classList.add('active');
-            const threeContainer = document.getElementById('threeContainer');
+            const three = document.getElementById('threeContainer');
             const canvas = document.getElementById('gameCanvas');
-            const particleControls = document.getElementById('particleControls');
+            const controls = document.getElementById('particleControls');
             const scorePanel = document.getElementById('scorePanel');
+            const handTracker = document.getElementById('handTracker');
             if (mode === 'particles') {
-                threeContainer.style.display = 'block';
-                canvas.style.display = 'none';
-                particleControls.style.display = 'block';
-                scorePanel.style.display = 'none';
+                three.style.display = 'block'; canvas.style.display = 'none';
+                controls.style.display = 'block'; scorePanel.style.display = 'none';
+                handTracker.classList.remove('active');
             } else {
-                threeContainer.style.display = 'none';
-                canvas.style.display = 'block';
-                particleControls.style.display = 'none';
-                scorePanel.style.display = 'block';
-                if (GameState.isRunning) {
-                    const container = canvas.parentElement;
-                    const rect = container.getBoundingClientRect();
-                    canvas.width = rect.width;
-                    canvas.height = rect.height;
-                    initCanvasGame(mode);
-                    if (GameState.animationId) cancelAnimationFrame(GameState.animationId);
-                    animateCanvasGame();
-                }
+                three.style.display = 'none'; canvas.style.display = 'block';
+                controls.style.display = 'none'; scorePanel.style.display = 'block';
+                const container = canvas.parentElement;
+                canvas.width = container.clientWidth; canvas.height = container.clientHeight;
+                initCanvasGame(mode);
             }
         }
 
-        async function startGame() {
-            Debug.log('点击了启动游戏按钮');
-            const startBtn = document.getElementById('startBtn');
-            if (GameState.isRunning) {
-                showMessage('⚠️ 游戏已在运行中', 1500);
-                return;
-            }
-            startBtn.classList.add('loading');
-            startBtn.disabled = true;
-            try {
-                showMessage('🎬 正在初始化...', 2000);
-                Debug.log('开始初始化...');
-                const threeOK = initThreeJS();
-                if (!threeOK) throw new Error('Three.js 初始化失败');
-                await startVideoStream();
-                const container = GameState.currentMode === 'particles' ? 
-                    document.getElementById('threeContainer') : 
-                    document.getElementById('gameCanvas').parentElement;
-                const rect = container.getBoundingClientRect();
-                if (GameState.currentMode === 'particles') {
-                    GameState.renderer.setSize(rect.width, rect.height);
-                    GameState.camera.aspect = rect.width / rect.height;
-                    GameState.camera.updateProjectionMatrix();
-                } else {
-                    const canvas = document.getElementById('gameCanvas');
-                    canvas.width = rect.width;
-                    canvas.height = rect.height;
-                    initCanvasGame(GameState.currentMode);
-                }
-                GameState.isRunning = true;
-                if (GameState.currentMode === 'particles') {
-                    animateParticles();
-                } else {
-                    animateCanvasGame();
-                }
-                processMotion();
-                showMessage('🎮 游戏开始！移动身体来控制', 2500);
-                Debug.log('✅ 游戏启动成功');
-            } catch (error) {
-                Debug.error('游戏启动失败: ' + error.message);
-                showError(error.message || '启动失败，请刷新页面重试');
-                GameState.isRunning = false;
-            } finally {
-                startBtn.classList.remove('loading');
-                startBtn.disabled = false;
-            }
-        }
-
-        function stopGame() {
-            Debug.log('停止游戏');
-            if (!GameState.isRunning) {
-                showMessage('⚠️ 游戏未运行', 1500);
-                return;
-            }
-            GameState.isRunning = false;
-            if (GameState.animationId) {
-                cancelAnimationFrame(GameState.animationId);
-                GameState.animationId = null;
-            }
-            if (GameState.stream) {
-                GameState.stream.getTracks().forEach(track => track.stop());
-                GameState.stream = null;
-            }
-            if (GameState.video) {
-                GameState.video.srcObject = null;
-                GameState.video.classList.remove('active');
-            }
-            document.getElementById('handTracker').classList.remove('active');
-            document.getElementById('handStatus').classList.remove('active');
-            document.getElementById('statusText').textContent = '等待检测...';
-            showMessage('⏸️ 游戏已停止', 1500);
-        }
-
-        function resetGame() {
-            Debug.log('重置游戏');
-            GameState.score = 0;
-            document.getElementById('scoreValue').textContent = '0';
-            if (GameState.currentMode === 'particles') {
-                updateTargetPositions(GameState.currentShape);
-            } else if (GameState.isRunning) {
-                const canvas = document.getElementById('gameCanvas');
-                initCanvasGame(GameState.currentMode);
-            }
-            showMessage('🔄 游戏已重置', 1500);
-        }
-
-        function showMessage(text, duration = 2000) {
+        function showMessage(text, dur = 2000) {
             const msg = document.getElementById('gameMessage');
-            msg.textContent = text;
-            msg.classList.add('show');
-            setTimeout(() => msg.classList.remove('show'), duration);
+            msg.textContent = text; msg.classList.add('show');
+            setTimeout(() => msg.classList.remove('show'), dur);
         }
 
-        function showError(text) {
-            const errorMsg = document.getElementById('errorMessage');
-            errorMsg.textContent = '❌ ' + text;
-            errorMsg.classList.add('show');
-            setTimeout(() => errorMsg.classList.remove('show'), 5000);
-        }
-
-        // ============ 事件监听 ============
+        // ============ 初始化 ============
         document.addEventListener('DOMContentLoaded', () => {
-            Debug.init();
-            Debug.log('页面加载完成');
-            document.querySelectorAll('.game-option').forEach(option => {
-                option.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    selectGame(this.dataset.game);
+            // 根据访问来源显示/隐藏游戏部分
+            if (!isLocalhost) {
+                const gameSection = document.getElementById('game');
+                const gameNavItem = document.getElementById('gameNavItem');
+                if (gameSection) gameSection.style.display = 'none';
+                if (gameNavItem) gameNavItem.style.display = 'none';
+            } else {
+                initThreeJS();
+                animateParticles(performance.now());
+                initMediaPipe();
+            }
+
+            // 只在本地访问时绑定游戏相关事件
+            if (isLocalhost) {
+                document.querySelectorAll('.game-option').forEach(opt => {
+                    opt.addEventListener('click', () => selectGame(opt.dataset.game));
                 });
-            });
-            const startBtn = document.getElementById('startBtn');
-            const stopBtn = document.getElementById('stopBtn');
-            const resetBtn = document.getElementById('resetBtn');
-            startBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                Debug.log('startBtn clicked');
-                startGame();
-            });
-            stopBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                stopGame();
-            });
-            resetBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                resetGame();
-            });
-            document.querySelectorAll('.shape-btn').forEach(btn => {
-                btn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const shape = this.dataset.shape;
-                    updateTargetPositions(shape);
-                    document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
-                    this.classList.add('active');
+
+                document.querySelectorAll('.shape-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        updateTargetPositions(btn.dataset.shape);
+                        document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                    });
                 });
-            });
-            document.getElementById('colorPicker').addEventListener('input', (e) => {
-                if (GameState.particles) {
-                    GameState.particles.material.color.set(e.target.value);
+
+                const colorPicker = document.getElementById('colorPicker');
+                if (colorPicker) {
+                    colorPicker.addEventListener('input', (e) => {
+                        if (G.particles) G.particles.material.color.set(e.target.value);
+                    });
                 }
-            });
+
+                const resetBtn = document.getElementById('resetBtn');
+                if (resetBtn) {
+                    resetBtn.addEventListener('click', () => {
+                        G.score = 0;
+                        const scoreValue = document.getElementById('scoreValue');
+                        if (scoreValue) scoreValue.textContent = '0';
+                        if (G.mode === 'particles') updateTargetPositions(G.currentShape);
+                        else initCanvasGame(G.mode);
+                        showMessage('🔄 已重置', 1500);
+                    });
+                }
+            }
+
             window.addEventListener('scroll', () => {
-                const scrollTop = document.getElementById('scrollTop');
-                scrollTop.classList.toggle('show', window.pageYOffset > 300);
+                document.getElementById('scrollTop').classList.toggle('show', window.pageYOffset > 300);
             });
-            document.getElementById('scrollTop').addEventListener('click', () => {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            });
-            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-                anchor.addEventListener('click', function(e) {
+            document.getElementById('scrollTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+            document.querySelectorAll('a[href^="#"]').forEach(a => {
+                a.addEventListener('click', (e) => {
                     e.preventDefault();
-                    const target = document.querySelector(this.getAttribute('href'));
-                    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    const target = document.querySelector(a.getAttribute('href'));
+                    if (target && target.style.display !== 'none') {
+                        target.scrollIntoView({ behavior: 'smooth' });
+                    }
                 });
             });
+
+            // 性能优化：节流resize事件
+            let resizeTimer;
             window.addEventListener('resize', () => {
-                if (!GameState.isRunning) return;
-                const container = GameState.currentMode === 'particles' ? 
-                    document.getElementById('threeContainer') : 
-                    document.getElementById('gameCanvas').parentElement;
-                const rect = container.getBoundingClientRect();
-                if (GameState.currentMode === 'particles' && GameState.renderer) {
-                    GameState.renderer.setSize(rect.width, rect.height);
-                    GameState.camera.aspect = rect.width / rect.height;
-                    GameState.camera.updateProjectionMatrix();
-                } else {
-                    const canvas = document.getElementById('gameCanvas');
-                    canvas.width = rect.width;
-                    canvas.height = rect.height;
-                }
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => {
+                    const container = document.getElementById('threeContainer');
+                    if (G.renderer && container) {
+                        G.renderer.setSize(container.clientWidth, container.clientHeight);
+                        G.camera.aspect = container.clientWidth / container.clientHeight;
+                        G.camera.updateProjectionMatrix();
+                    }
+                    if (G.mode !== 'particles') {
+                        const canvas = document.getElementById('gameCanvas');
+                        if (canvas && canvas.parentElement) {
+                            canvas.width = canvas.parentElement.clientWidth;
+                            canvas.height = canvas.parentElement.clientHeight;
+                        }
+                    }
+                }, 250);
             });
-            initThreeJS();
-            animateParticles();
-            GameState.isRunning = true;
-            setTimeout(() => {
-                GameState.isRunning = false;
-            }, 100);
-            console.log('%c🌻 XRK-AGT 体感游戏平台', 'font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 10px 20px; border-radius: 8px;');
-            console.log('%c🎮 点击"启动游戏"按钮开始体验！', 'font-size: 14px; color: #fbbf24;');
         });
     </script>
 </body>
