@@ -14,54 +14,98 @@ export default class OneBotEvent {
     Bot.on('onebot.request', (e) => this.handleEvent(e, 'onebot.request'))
   }
 
-  async handleEvent(e, eventType) {
-    try {
-      // 确保 bot 对象存在
-      if (!e.bot && e.self_id) {
-        e.bot = Bot[e.self_id]
+  /**
+   * 标准化事件基础字段
+   * @param {Object} e - 事件对象
+   * @param {string} eventType - 事件类型
+   * @returns {boolean} 是否成功标准化
+   */
+  normalizeEventBase(e, eventType) {
+    // 确保 bot 对象存在
+    e.bot = e.bot || (e.self_id ? Bot[e.self_id] : null)
+    if (!e.bot) {
+      Bot.makeLog("warn", `Bot对象不存在，忽略事件：${e.self_id}`, e.self_id)
+      return false
+    }
+    
+    // 生成或使用现有 event_id
+    if (!e.event_id) {
+      const messageId = e.message_id || ''
+      const time = e.time || Math.floor(Date.now() / 1000)
+      const randomId = Math.random().toString(36).substr(2, 9)
+      e.event_id = `${this.adapterName}_${time}_${messageId}_${randomId}`
+    }
+    
+    // 事件去重检查
+    const uniqueKey = `${this.adapterName}:${e.event_id}`
+    if (this.processedEvents.has(uniqueKey)) {
+      Bot.makeLog("debug", `事件已处理，跳过：${e.event_id}`, e.self_id)
+      return false
+    }
+    
+    this.processedEvents.add(uniqueKey)
+    this.cleanupProcessedEvents()
+    
+    // 设置适配器标识
+    e.adapter = this.adapterName
+    e.isOneBot = true
+    
+    // 从事件类型推断 post_type
+    if (!e.post_type) {
+      const parts = eventType.split('.')
+      if (parts.length >= 2) {
+        e.post_type = parts[1]
       }
-      
-      // 如果没有bot对象，无法处理事件
-      if (!e.bot) {
-        Bot.makeLog("warn", `Bot对象不存在，忽略事件：${e.self_id}`, e.self_id)
-        return
-      }
-      
-      // 如果没有event_id，生成一个唯一的ID用于去重
-      let eventId = e.event_id
-      if (!eventId) {
-        // 使用消息ID、时间戳和随机数生成唯一ID
-        const messageId = e.message_id || ''
-        const time = e.time || Math.floor(Date.now() / 1000)
-        const randomId = Math.random().toString(36).substr(2, 9)
-        eventId = `${this.adapterName}_${time}_${messageId}_${randomId}`
-        e.event_id = eventId
-      }
-      
-      const uniqueKey = `${this.adapterName}:${eventId}`
-      if (this.processedEvents.has(uniqueKey)) {
-        Bot.makeLog("debug", `事件已处理，跳过：${eventId}`, e.self_id)
-        return
-      }
-      
-      this.processedEvents.add(uniqueKey)
-      this.cleanupProcessedEvents()
-      
-      e.adapter = this.adapterName
-      e.isOneBot = true
-      
-      // 确保 post_type 存在，从事件类型中推断
-      if (!e.post_type) {
-        // 从事件类型中提取 post_type (onebot.message -> message)
-        const parts = eventType.split('.')
-        if (parts.length >= 2) {
-          e.post_type = parts[1] // message, notice, request
+    }
+    
+    // 确保 time 字段存在
+    e.time = e.time || Math.floor(Date.now() / 1000)
+    
+    return true
+  }
+
+  /**
+   * 设置事件回复方法
+   * @param {Object} e - 事件对象
+   */
+  setupReplyMethod(e) {
+    if (e.reply || !e.bot) return
+    
+    const createReply = (sendMsgFunc) => {
+      return async (msg) => {
+        if (!msg) return false
+        try {
+          return await sendMsgFunc(msg)
+        } catch (error) {
+          Bot.makeLog("error", `回复消息失败: ${error.message}`, e.self_id)
+          return false
         }
       }
-      
-      // 确保 time 字段存在
-      if (!e.time) {
-        e.time = Math.floor(Date.now() / 1000)
+    }
+    
+    if (e.message_type === 'private' && e.user_id) {
+      const friend = e.bot.pickFriend?.(e.user_id)
+      if (friend?.sendMsg) {
+        e.reply = createReply((msg) => friend.sendMsg(msg))
+      }
+    } else if (e.message_type === 'group' && e.group_id) {
+      const group = e.bot.pickGroup?.(e.group_id)
+      if (group?.sendMsg) {
+        e.reply = createReply((msg) => group.sendMsg(msg))
+      }
+    }
+  }
+
+  /**
+   * 处理事件
+   * @param {Object} e - 事件对象
+   * @param {string} eventType - 事件类型
+   */
+  async handleEvent(e, eventType) {
+    try {
+      // 标准化基础字段
+      if (!this.normalizeEventBase(e, eventType)) {
+        return
       }
       
       // 标准化消息事件
@@ -69,36 +113,8 @@ export default class OneBotEvent {
         this.normalizeMessageEvent(e)
       }
       
-      // 确保 reply 方法存在
-      if (!e.reply && e.bot) {
-        if (e.message_type === 'private' && e.user_id) {
-          const friend = e.bot.pickFriend?.(e.user_id)
-          if (friend && friend.sendMsg) {
-            e.reply = async (msg) => {
-              if (!msg) return false
-              try {
-                return await friend.sendMsg(msg)
-              } catch (error) {
-                Bot.makeLog("error", `回复消息失败: ${error.message}`, e.self_id)
-                return false
-              }
-            }
-          }
-        } else if (e.message_type === 'group' && e.group_id && e.user_id) {
-          const group = e.bot.pickGroup?.(e.group_id)
-          if (group && group.sendMsg) {
-            e.reply = async (msg) => {
-              if (!msg) return false
-              try {
-                return await group.sendMsg(msg)
-              } catch (error) {
-                Bot.makeLog("error", `回复消息失败: ${error.message}`, e.self_id)
-                return false
-              }
-            }
-          }
-        }
-      }
+      // 设置回复方法
+      this.setupReplyMethod(e)
       
       // 交给插件系统处理
       await this.plugins.deal(e)
