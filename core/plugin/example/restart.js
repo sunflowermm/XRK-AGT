@@ -57,10 +57,10 @@ export class Restart extends plugin {
     const currentUin = this.e.self_id || this.e.bot.uin || Bot.uin[0]
     const isShutdown = await redis.get(`${this.shutdownKey}:${currentUin}`)
 
-    isShutdown !== 'true' && (
-      await this.e.reply('机器人已经处于开机状态'),
-      (() => false)()
-    )
+    if (isShutdown !== 'true') {
+      await this.e.reply('机器人已经处于开机状态')
+      return false
+    }
 
     await redis.del(`${this.shutdownKey}:${currentUin}`)
     await this.e.reply('开机成功，恢复正常运行')
