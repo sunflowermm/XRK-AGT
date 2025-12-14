@@ -1244,11 +1244,106 @@ Bot.adapter.push(
      * 处理消息事件
      */
     makeMessage(data) {
-      data.message = this.parseMsg(data.message)
+      // 确保 post_type 存在
+      if (!data.post_type) {
+        data.post_type = 'message'
+      }
+      
+      // 确保 bot 对象存在
+      if (!data.bot && data.self_id) {
+        data.bot = Bot[data.self_id]
+      }
+      
+      // 如果没有bot对象，无法处理消息
+      if (!data.bot) {
+        Bot.makeLog("warn", `Bot对象不存在，忽略消息：${data.self_id}`, data.self_id)
+        return false
+      }
+      
+      // 确保 time 字段存在（OneBot v11 规范要求）
+      if (!data.time) {
+        data.time = Math.floor(Date.now() / 1000)
+      }
+      
+      // 确保 event_id 存在（用于事件去重）
+      if (!data.event_id && data.message_id) {
+        data.event_id = `onebot_${data.self_id}_${data.message_id}_${data.time}`
+      } else if (!data.event_id) {
+        data.event_id = `onebot_${data.self_id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      }
+      
+      // 确保 message_type 存在，如果不存在则根据 group_id 推断
+      if (!data.message_type) {
+        data.message_type = data.group_id ? 'group' : 'private'
+      }
+      
+      // 确保 sub_type 存在
+      if (!data.sub_type) {
+        data.sub_type = data.message_type === 'group' ? 'normal' : 'friend'
+      }
+      
+      // 解析消息数组
+      if (data.message) {
+        data.message = this.parseMsg(data.message)
+      } else {
+        data.message = []
+      }
+      
+      // 如果 raw_message 不存在，从 message 数组中提取
+      if (!data.raw_message && Array.isArray(data.message) && data.message.length > 0) {
+        data.raw_message = data.message
+          .map(seg => {
+            if (seg.type === 'text') return seg.text || ''
+            if (seg.type === 'at') return `[CQ:at,qq=${seg.qq || seg.user_id || ''}]`
+            if (seg.type === 'image') return `[CQ:image,file=${seg.url || seg.file || ''}]`
+            if (seg.type === 'face') return `[CQ:face,id=${seg.id || ''}]`
+            if (seg.type === 'reply') return `[CQ:reply,id=${seg.id || ''}]`
+            if (seg.type === 'record') return `[CQ:record,file=${seg.file || ''}]`
+            if (seg.type === 'video') return `[CQ:video,file=${seg.file || ''}]`
+            if (seg.type === 'file') return `[CQ:file,file=${seg.file || ''}]`
+            return `[${seg.type}]`
+          })
+          .join('')
+      }
+      
+      // 确保 raw_message 至少是空字符串
+      if (!data.raw_message) {
+        data.raw_message = ''
+      }
+      
+      // 设置 msg 字段（插件系统需要）
+      data.msg = data.raw_message
+      
+      // 设置标志
+      data.isGroup = data.message_type === 'group'
+      data.isPrivate = data.message_type === 'private'
+      
+      // 确保 sender 对象存在
+      if (!data.sender) {
+        data.sender = {}
+      }
+      if (!data.sender.user_id && data.user_id) {
+        data.sender.user_id = data.user_id
+      }
+      
       switch (data.message_type) {
         case "private": {
+          // 创建 friend 对象
+          if (data.user_id && data.bot.pickFriend) {
+            Object.defineProperty(data, "friend", {
+              get() {
+                return data.bot.pickFriend(data.user_id)
+              },
+              configurable: true,
+              enumerable: false
+            })
+          }
+          
           const name =
-            data.sender.card || data.sender.nickname || data.bot.fl.get(data.user_id)?.nickname
+            data.sender?.card || 
+            data.sender?.nickname || 
+            (data.bot?.fl?.get?.(data.user_id)?.nickname) ||
+            data.user_id
           Bot.makeLog(
             "info",
             `好友消息：${name ? `[${name}] ` : ""}${data.raw_message}`,
@@ -1258,11 +1353,45 @@ Bot.adapter.push(
           break
         }
         case "group": {
-          const group_name = data.group_name || data.bot.gl.get(data.group_id)?.group_name
-          let user_name = data.sender.card || data.sender.nickname
-          if (!user_name) {
+          // 创建 group 对象
+          if (data.group_id && data.bot.pickGroup) {
+            Object.defineProperty(data, "group", {
+              get() {
+                return data.bot.pickGroup(data.group_id)
+              },
+              configurable: true,
+              enumerable: false
+            })
+          }
+          
+          // 创建 member 对象
+          if (data.group_id && data.user_id && data.bot.pickMember) {
+            Object.defineProperty(data, "member", {
+              get() {
+                return data.bot.pickMember(data.group_id, data.user_id)
+              },
+              configurable: true,
+              enumerable: false
+            })
+          }
+          
+          // 创建 friend 对象（群消息中也可以访问好友信息）
+          if (data.user_id && data.bot.pickFriend) {
+            Object.defineProperty(data, "friend", {
+              get() {
+                return data.bot.pickFriend(data.user_id)
+              },
+              configurable: true,
+              enumerable: false
+            })
+          }
+          
+          const group_name = data.group_name || (data.bot?.gl?.get?.(data.group_id)?.group_name)
+          let user_name = data.sender?.card || data.sender?.nickname
+          if (!user_name && data.bot) {
             const user =
-              data.bot.gml?.get(data.group_id)?.get(data.user_id) || data.bot.fl.get(data.user_id)
+              data.bot.gml?.get?.(data.group_id)?.get?.(data.user_id) || 
+              data.bot.fl?.get?.(data.user_id)
             if (user) user_name = user?.card || user?.nickname
           }
           Bot.makeLog(
@@ -1276,29 +1405,60 @@ Bot.adapter.push(
         case "guild":
           data.message_type = "group"
           data.group_id = `${data.guild_id}-${data.channel_id}`
-          Bot.makeLog(
-            "info",
-            `频道消息：[${data.sender.nickname}] ${Bot.String(data.message)}`,
-            `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
-            true,
-          )
+          
+          // 创建 group 对象
+          if (data.group_id && data.bot.pickGroup) {
+            Object.defineProperty(data, "group", {
+              get() {
+                return data.bot.pickGroup(data.group_id)
+              },
+              configurable: true,
+              enumerable: false
+            })
+          }
+          
+          // 创建 member 对象
+          if (data.group_id && data.user_id && data.bot.pickMember) {
+            Object.defineProperty(data, "member", {
+              get() {
+                return data.bot.pickMember(data.group_id, data.user_id)
+              },
+              configurable: true,
+              enumerable: false
+            })
+          }
+          
           Object.defineProperty(data, "friend", {
             get() {
               return this.member || {}
             },
+            configurable: true,
+            enumerable: false
           })
+          
+          Bot.makeLog(
+            "info",
+            `频道消息：[${data.sender?.nickname || ''}] ${Bot.String(data.message)}`,
+            `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
+            true,
+          )
           break
         default:
-          Bot.makeLog("warn", `未知消息：${logger.magenta(data.raw)}`, data.self_id)
+          Bot.makeLog("warn", `未知消息类型：${data.message_type}，原始数据：${Bot.String(data.raw || data)}`, data.self_id)
       }
 
       data.adapter = 'onebot'
       data.isOneBot = true
       
-      // 只触发最具体的事件，事件监听器会处理
-      // 其他层级的事件由事件系统自动传播（如果需要）
+      // 触发事件（确保事件被正确触发）
       const onebotEvent = `onebot.${data.post_type}`
-      Bot.em(onebotEvent, data)
+      try {
+        Bot.em(onebotEvent, data)
+        return true
+      } catch (err) {
+        Bot.makeLog("error", `触发事件失败：${err.message}`, data.self_id, err)
+        return false
+      }
     }
 
     /**
@@ -1464,7 +1624,7 @@ Bot.adapter.push(
               )
               break
             default:
-              Bot.makeLog("warn", `未知通知：${logger.magenta(data.raw)}`, data.self_id)
+              Bot.makeLog("warn", `未知通知：${Bot.String(data.raw || data)}`, data.self_id)
           }
           break
         case "group_card":
@@ -1565,7 +1725,7 @@ Bot.adapter.push(
           Bot.sendMasterMsg(`[${data.self_id}] ${data.tag || "账号下线"}：${data.message}`)
           break
         default:
-          Bot.makeLog("warn", `未知通知：${logger.magenta(data.raw)}`, data.self_id)
+          Bot.makeLog("warn", `未知通知：${Bot.String(data.raw || data)}`, data.self_id)
       }
 
       let notice = data.notice_type.split("_")
@@ -1619,7 +1779,7 @@ Bot.adapter.push(
           }
           break
         default:
-          Bot.makeLog("warn", `未知请求：${logger.magenta(data.raw)}`, data.self_id)
+          Bot.makeLog("warn", `未知请求：${Bot.String(data.raw || data)}`, data.self_id)
       }
 
       data.bot.request_list.push(data)
@@ -1650,7 +1810,7 @@ Bot.adapter.push(
           this.connect(data, ws)
           break
         default:
-          Bot.makeLog("warn", `未知消息：${logger.magenta(data.raw)}`, data.self_id)
+          Bot.makeLog("warn", `未知消息：${Bot.String(data.raw || data)}`, data.self_id)
       }
     }
 
@@ -1669,7 +1829,7 @@ Bot.adapter.push(
 
       if (data.post_type) {
         if (data.meta_event_type !== "lifecycle" && !Bot.uin.includes(data.self_id)) {
-          Bot.makeLog("warn", `找不到对应Bot，忽略消息：${logger.magenta(data.raw)}`, data.self_id)
+          Bot.makeLog("warn", `找不到对应Bot，忽略消息：${Bot.String(data.raw || data)}`, data.self_id)
           return false
         }
         data.bot = Bot[data.self_id]
@@ -1691,7 +1851,7 @@ Bot.adapter.push(
         const cache = this.echo.get(data.echo)
         if (cache) return cache.resolve(data)
       }
-      Bot.makeLog("warn", `未知消息：${logger.magenta(data.raw)}`, data.self_id)
+      Bot.makeLog("warn", `未知消息：${Bot.String(data.raw || data)}`, data.self_id)
     }
 
     /**
