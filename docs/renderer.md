@@ -150,7 +150,7 @@ await this.reply(img);
 
 ```js
 // src/renderers/myrenderer/index.js
-import Renderer from '#infrastructure/renderer/Renderer.js';
+// Renderer 是全局对象，无需 import
 import someEngine from 'some-render-engine';
 
 class MyRenderer extends Renderer {

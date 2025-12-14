@@ -48,7 +48,7 @@ flowchart TD
   - `start.js` / `app.js`：项目启动入口，创建并运行 `Bot` 实例。
   - `package.json`：依赖与脚本定义。
   - `README.md`：项目基础说明。
-  - 各类补充文档：`INDEX.md`、`FIX_README.md`、`EXECUTIVE_SUMMARY.md` 等（主要是特定 Bug 修复说明）。
+  - 各类补充文档：项目相关说明文档。
 
 - **核心运行层（src）**
   - `src/bot.js`  

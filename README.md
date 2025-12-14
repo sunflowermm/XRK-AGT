@@ -232,9 +232,6 @@ node app   # 或 node start.js
 - [`docs/事件系统标准化文档.md`](docs/事件系统标准化文档.md)：事件系统标准化说明。
 - [`docs/事件监听器开发指南.md`](docs/事件监听器开发指南.md)：事件监听器开发指南。
 
-### 🐛 Bug 修复与变更文档（可选阅读）
-- [`INDEX.md`](INDEX.md)：修复文档索引。
-- `FIX_README.md` / `EXECUTIVE_SUMMARY.md` / `TECHNICAL_SUMMARY.md` 等：历史问题的详细修复说明。
 
 ---
 
