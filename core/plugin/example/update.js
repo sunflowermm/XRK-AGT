@@ -1,7 +1,6 @@
 import { createRequire } from 'module'
 import lodash from 'lodash'
 import fs from 'node:fs'
-import plugin from '../../../src/infrastructure/plugins/plugin.js'
 import { Restart } from './restart.js'
 import common from '../../../src/utils/common.js'
 
@@ -192,7 +191,8 @@ export class update extends plugin {
 
     const time = await this.getTime(plugin)
 
-    /Already up|已经是最新/g.test(ret.stdout) ? 
+    const isAlreadyUp = /Already up|已经是最新/g.test(ret.stdout)
+    isAlreadyUp ? 
       await this.reply(`${targetName} 已是最新\n最后更新时间：${time}`) :
       (
         await this.reply(`${targetName} 更新成功\n更新时间：${time}`),
@@ -255,16 +255,19 @@ export class update extends plugin {
       return this.reply(`${msg}\n连接超时：${remote}`)
     })()
 
-    /Failed to connect|unable to access/g.test(errMsg) && (() => {
+    const connectionFailed = /Failed to connect|unable to access/g.test(errMsg)
+    connectionFailed && (() => {
       const remote = errMsg.match(/'(.+?)'/g)[0].replace(/'/g, '')
       return this.reply(`${msg}\n连接失败：${remote}`)
     })()
 
-    errMsg.includes('be overwritten by merge') && 
+    errMsg.includes('be overwritten by merge') && (() => {
       return this.reply(`${msg}\n存在冲突：\n${errMsg}\n请解决冲突后再更新，或者执行#强制更新，放弃本地修改`)
+    })()
 
-    stdout.includes('CONFLICT') && 
+    stdout.includes('CONFLICT') && (() => {
       return this.reply(`${msg}\n存在冲突：\n${errMsg}${stdout}\n请解决冲突后再更新，或者执行#强制更新，放弃本地修改`)
+    })()
 
     return this.reply([errMsg, stdout])
   }
@@ -326,10 +329,10 @@ export class update extends plugin {
    * @returns {Promise<string|boolean>} 更新日志
    */
   async getLog(plugin = '') {
-    let cm = 'git log -100 --pretty="%h||[%cd] %s" --date=format:"%F %T"'
-    plugin && (cm = `cd "core/${plugin}" && ${cm}`)
+    let logCmd = 'git log -100 --pretty="%h||[%cd] %s" --date=format:"%F %T"'
+    plugin && (logCmd = `cd "core/${plugin}" && ${logCmd}`)
 
-    const logAll = await execSync(cm, { encoding: 'utf-8' }).catch(async error => {
+    const logAll = await execSync(logCmd, { encoding: 'utf-8' }).catch(async error => {
       logger.error(error.toString())
       await this.reply(error.toString())
       return false
@@ -352,10 +355,10 @@ export class update extends plugin {
 
     if (logText.length <= 0) return ''
 
-    let cm = 'git config -l'
-    plugin && (cm = `cd "core/${plugin}" && ${cm}`)
+    let configCmd = 'git config -l'
+    plugin && (configCmd = `cd "core/${plugin}" && ${configCmd}`)
     
-    const config = await execSync(cm, { encoding: 'utf-8' }).catch(error => {
+    const config = await execSync(configCmd, { encoding: 'utf-8' }).catch(error => {
       logger.error(error.toString())
       return ''
     })
