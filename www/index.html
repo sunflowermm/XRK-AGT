@@ -6,7 +6,6 @@
     <meta name="description" content="XRK-AGT - 基于AI视觉的多功能体感游戏平台">
     <title>XRK-AGT | 多功能体感游戏平台</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240"></script>
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -19,9 +18,7 @@
             --glass-bg: rgba(255, 255, 255, 0.03);
             --glass-border: rgba(255, 255, 255, 0.08);
         }
-
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
             background: var(--bg-primary);
@@ -29,13 +26,11 @@
             line-height: 1.6;
             overflow-x: hidden;
         }
-
         .bg-gradient {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
             background: radial-gradient(ellipse at top, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
                         radial-gradient(ellipse at bottom, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
         }
-
         .mesh-gradient {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.4;
             background: 
@@ -45,71 +40,55 @@
             filter: blur(80px);
             animation: mesh-move 20s ease-in-out infinite;
         }
-
         @keyframes mesh-move {
             0%, 100% { transform: scale(1) translateY(0); }
             50% { transform: scale(1.1) translateY(-20px); }
         }
-
         nav {
             position: fixed; top: 0; width: 100%; z-index: 1000;
             backdrop-filter: blur(20px) saturate(180%);
             background: rgba(10, 10, 15, 0.7);
             border-bottom: 1px solid var(--glass-border);
         }
-
         .nav-container {
             max-width: 1400px; margin: 0 auto; padding: 1.2rem 2rem;
             display: flex; justify-content: space-between; align-items: center;
         }
-
         .logo {
             display: flex; align-items: center; gap: 0.8rem;
             font-size: 1.3rem; font-weight: 700;
             background: linear-gradient(135deg, var(--accent-gold), var(--accent-primary));
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
-
-        .nav-links {
-            display: flex; gap: 2rem; list-style: none;
-        }
-
+        .nav-links { display: flex; gap: 2rem; list-style: none; }
         .nav-links a {
             color: var(--text-secondary); text-decoration: none;
             font-weight: 500; transition: color 0.3s; position: relative;
         }
-
         .nav-links a:hover { color: var(--text-primary); }
-
         .nav-links a::after {
             content: ''; position: absolute; bottom: -5px; left: 0;
             width: 0; height: 2px; background: var(--accent-primary);
             transition: width 0.3s;
         }
-
         .nav-links a:hover::after { width: 100%; }
-
         .container {
             position: relative; z-index: 1;
             max-width: 1400px; margin: 0 auto; padding: 0 2rem;
         }
-
         .hero {
             min-height: 100vh; display: flex; flex-direction: column;
             justify-content: center; align-items: center;
             text-align: center; padding: 8rem 0 4rem;
         }
-
         .sunflower-icon {
             font-size: 5rem; margin-bottom: 2rem;
             animation: float 3s ease-in-out infinite;
         }
-
         @keyframes float {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-20px); }
         }
-
         .hero h1 {
             font-size: clamp(3rem, 8vw, 6rem); font-weight: 800;
             margin-bottom: 1.5rem;
@@ -117,17 +96,14 @@
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             letter-spacing: -0.02em;
         }
-
         .hero p {
             font-size: 1.5rem; color: var(--text-secondary);
             margin-bottom: 3rem; max-width: 600px;
         }
-
         .badges {
             display: flex; gap: 1rem; flex-wrap: wrap;
             justify-content: center; margin-bottom: 3rem;
         }
-
         .badge {
             padding: 0.6rem 1.5rem;
             background: var(--glass-bg);
@@ -136,61 +112,67 @@
             font-size: 0.9rem; color: var(--text-secondary);
             transition: all 0.3s;
         }
-
         .badge:hover {
             background: rgba(99, 102, 241, 0.1);
             border-color: var(--accent-primary);
             color: var(--text-primary);
             transform: translateY(-2px);
         }
-
-        .cta-buttons {
-            display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
-        }
-
+        .cta-buttons { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
         .btn {
             padding: 1rem 2.5rem; border-radius: 1rem;
             font-weight: 600; text-decoration: none;
-            transition: all 0.3s;
+            transition: all 0.15s ease;
             display: inline-flex; align-items: center; gap: 0.5rem;
             border: none; cursor: pointer; font-size: 1rem;
+            user-select: none;
+            position: relative;
+            overflow: hidden;
         }
-
         .btn-primary {
             background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
             color: white; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
         }
-
         .btn-primary:hover {
             transform: translateY(-2px);
             box-shadow: 0 15px 40px rgba(99, 102, 241, 0.4);
         }
-
+        .btn-primary:active {
+            transform: translateY(1px) scale(0.98);
+            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.3);
+        }
         .btn-primary:disabled {
-            opacity: 0.5;
+            opacity: 0.6;
             cursor: not-allowed;
             transform: none;
         }
-
         .btn-secondary {
             background: var(--glass-bg); color: var(--text-primary);
             border: 1px solid var(--glass-border); backdrop-filter: blur(10px);
         }
-
         .btn-secondary:hover {
             background: rgba(255, 255, 255, 0.08);
             transform: translateY(-2px);
         }
-
-        .game-section {
-            padding: 6rem 0; min-height: 100vh;
+        .btn-secondary:active {
+            transform: translateY(1px) scale(0.98);
         }
-
+        .btn .spinner {
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+        .btn.loading .spinner { display: inline-block; }
+        .btn.loading .btn-text { opacity: 0.7; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .game-section { padding: 6rem 0; min-height: 100vh; }
         .section-title {
             font-size: 2.5rem; font-weight: 700;
             text-align: center; margin-bottom: 2rem;
         }
-
         .game-selector {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -199,7 +181,6 @@
             margin: 0 auto 3rem;
             padding: 0 2rem;
         }
-
         .game-option {
             background: var(--glass-bg);
             border: 2px solid var(--glass-border);
@@ -211,51 +192,29 @@
             position: relative;
             overflow: hidden;
         }
-
         .game-option::before {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
+            top: 0; left: 0; right: 0;
             height: 3px;
             background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
             transform: scaleX(0);
             transition: transform 0.3s;
         }
-
         .game-option:hover {
             transform: translateY(-5px);
             border-color: var(--accent-primary);
             background: rgba(99, 102, 241, 0.1);
         }
-
-        .game-option:hover::before {
-            transform: scaleX(1);
-        }
-
+        .game-option:hover::before { transform: scaleX(1); }
         .game-option.active {
             border-color: var(--accent-gold);
             background: rgba(251, 191, 36, 0.1);
             box-shadow: 0 0 30px rgba(251, 191, 36, 0.3);
         }
-
-        .game-option-icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            display: block;
-        }
-
-        .game-option h3 {
-            font-size: 1.3rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .game-option p {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
+        .game-option-icon { font-size: 4rem; margin-bottom: 1rem; display: block; }
+        .game-option h3 { font-size: 1.3rem; margin-bottom: 0.5rem; }
+        .game-option p { color: var(--text-secondary); font-size: 0.9rem; }
         .game-container {
             width: 95%;
             max-width: 1600px;
@@ -269,29 +228,20 @@
             overflow: hidden;
             box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
         }
-
         .game-canvas {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
         }
-
         #threeContainer {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
         }
-
         .video-feed {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            width: 160px;
-            height: 120px;
+            bottom: 20px; left: 20px;
+            width: 160px; height: 120px;
             border-radius: 12px;
             border: 2px solid var(--glass-border);
             opacity: 0.6;
@@ -299,21 +249,13 @@
             transform: scaleX(-1);
             transition: opacity 0.3s;
             display: none;
+            background: #000;
         }
-
-        .video-feed.active {
-            display: block;
-        }
-
-        .video-feed:hover {
-            opacity: 1;
-        }
-
+        .video-feed.active { display: block; }
+        .video-feed:hover { opacity: 1; }
         .game-hud {
             position: absolute;
-            top: 20px;
-            left: 0;
-            right: 0;
+            top: 20px; left: 0; right: 0;
             padding: 0 2rem;
             display: flex;
             justify-content: space-between;
@@ -321,7 +263,6 @@
             pointer-events: none;
             z-index: 10;
         }
-
         .hud-panel {
             background: rgba(0, 0, 0, 0.7);
             padding: 1.5rem 2rem;
@@ -330,7 +271,6 @@
             border: 2px solid rgba(255, 255, 255, 0.1);
             min-width: 180px;
         }
-
         .hud-title {
             font-size: 0.85rem;
             color: var(--text-secondary);
@@ -338,7 +278,6 @@
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-
         .hud-value {
             font-size: 2rem;
             font-weight: 700;
@@ -346,7 +285,6 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-
         .status-badge {
             display: inline-flex;
             align-items: center;
@@ -357,24 +295,19 @@
             background: rgba(255, 255, 255, 0.05);
             margin-top: 0.5rem;
         }
-
         .status-dot {
-            width: 8px;
-            height: 8px;
+            width: 8px; height: 8px;
             border-radius: 50%;
             background: #ef4444;
             transition: background 0.3s;
         }
-
         .status-dot.active {
             background: #22c55e;
             box-shadow: 0 0 10px #22c55e;
         }
-
         .particle-controls {
             position: absolute;
-            top: 20px;
-            right: 20px;
+            top: 20px; right: 20px;
             width: 280px;
             background: rgba(15, 15, 20, 0.85);
             backdrop-filter: blur(20px);
@@ -384,24 +317,18 @@
             z-index: 100;
             pointer-events: auto;
         }
-
-        .control-group {
-            margin-bottom: 15px;
-        }
-
+        .control-group { margin-bottom: 15px; }
         .control-label {
             font-size: 0.85rem;
             color: #94a3b8;
             margin-bottom: 8px;
             display: block;
         }
-
         .shape-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 8px;
         }
-
         .shape-btn {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
@@ -412,14 +339,11 @@
             font-size: 0.8rem;
             transition: all 0.3s;
         }
-
-        .shape-btn:hover,
-        .shape-btn.active {
+        .shape-btn:hover, .shape-btn.active {
             background: var(--accent-primary);
             border-color: var(--accent-primary);
             box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
         }
-
         .color-picker-wrapper {
             display: flex;
             align-items: center;
@@ -428,32 +352,24 @@
             padding: 8px;
             border-radius: 8px;
         }
-
         input[type="color"] {
             -webkit-appearance: none;
             border: none;
-            width: 30px;
-            height: 30px;
+            width: 30px; height: 30px;
             border-radius: 50%;
             overflow: hidden;
             cursor: pointer;
             background: none;
         }
-
-        input[type="color"]::-webkit-color-swatch-wrapper {
-            padding: 0;
-        }
-
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
         input[type="color"]::-webkit-color-swatch {
             border: none;
             border-radius: 50%;
             border: 2px solid rgba(255, 255, 255, 0.2);
         }
-
         .hand-tracker {
             position: absolute;
-            width: 80px;
-            height: 80px;
+            width: 80px; height: 80px;
             border: 4px solid var(--accent-gold);
             border-radius: 50%;
             box-shadow: 0 0 30px rgba(251, 191, 36, 0.6);
@@ -462,18 +378,12 @@
             transition: all 0.1s;
             display: none;
         }
-
-        .hand-tracker.active {
-            display: block;
-        }
-
+        .hand-tracker.active { display: block; }
         .hand-tracker.grabbing {
-            width: 100px;
-            height: 100px;
+            width: 100px; height: 100px;
             border-color: #ef4444;
             box-shadow: 0 0 40px rgba(239, 68, 68, 0.8);
         }
-
         .game-controls {
             display: flex;
             gap: 1rem;
@@ -481,11 +391,9 @@
             flex-wrap: wrap;
             justify-content: center;
         }
-
         .game-message {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             font-size: 3rem;
             font-weight: 700;
@@ -498,15 +406,10 @@
             text-align: center;
             padding: 2rem;
         }
-
-        .game-message.show {
-            opacity: 1;
-        }
-
+        .game-message.show { opacity: 1; }
         .error-message {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             background: rgba(239, 68, 68, 0.9);
             color: white;
@@ -518,23 +421,16 @@
             max-width: 80%;
             display: none;
         }
-
-        .error-message.show {
-            display: block;
-        }
-
+        .error-message.show { display: block; }
         footer {
             padding: 4rem 0 2rem;
             text-align: center;
             border-top: 1px solid var(--glass-border);
         }
-
         .scroll-top {
             position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            width: 3rem;
-            height: 3rem;
+            bottom: 2rem; right: 2rem;
+            width: 3rem; height: 3rem;
             background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
             border-radius: 50%;
             display: flex;
@@ -544,16 +440,26 @@
             opacity: 0;
             transition: all 0.3s;
             z-index: 100;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
         }
-
-        .scroll-top.show {
-            opacity: 1;
+        .scroll-top.show { opacity: 1; }
+        .scroll-top:hover { transform: translateY(-5px); }
+        .debug-panel {
+            position: fixed;
+            bottom: 20px; right: 20px;
+            background: rgba(0,0,0,0.8);
+            color: #0f0;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 9999;
+            max-width: 300px;
+            display: none;
         }
-
-        .scroll-top:hover {
-            transform: translateY(-5px);
-        }
-
+        .debug-panel.show { display: block; }
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .hero h1 { font-size: 3rem; }
@@ -568,7 +474,6 @@
 <body>
     <div class="bg-gradient"></div>
     <div class="mesh-gradient"></div>
-
     <nav>
         <div class="nav-container">
             <div class="logo">
@@ -582,20 +487,17 @@
             </ul>
         </div>
     </nav>
-
     <div class="container">
         <section id="home" class="hero">
             <div class="sunflower-icon">🌻</div>
             <h1>XRK-AGT</h1>
             <p>AI驱动的多功能体感游戏平台</p>
-            
             <div class="badges">
                 <span class="badge">⚡ AI视觉</span>
                 <span class="badge">🎮 体感交互</span>
                 <span class="badge">🎨 3D粒子</span>
                 <span class="badge">💎 多款游戏</span>
             </div>
-
             <div class="cta-buttons">
                 <a href="#game" class="btn btn-primary">
                     <span>开始游戏</span>
@@ -607,10 +509,8 @@
             </div>
         </section>
     </div>
-
     <section id="game" class="game-section">
         <h2 class="section-title">🎮 选择你的游戏</h2>
-        
         <div class="game-selector">
             <div class="game-option active" data-game="particles">
                 <span class="game-option-icon">✨</span>
@@ -633,14 +533,11 @@
                 <p>挥手切割掉落水果</p>
             </div>
         </div>
-
         <div class="game-container">
             <div id="threeContainer" style="display: block;"></div>
             <canvas id="gameCanvas" class="game-canvas" style="display: none;"></canvas>
-            
-            <video id="webcam" class="video-feed" playsinline autoplay></video>
+            <video id="webcam" class="video-feed" playsinline autoplay muted></video>
             <div class="hand-tracker" id="handTracker"></div>
-
             <div class="game-hud">
                 <div class="hud-panel">
                     <div class="hud-title">手势状态</div>
@@ -654,7 +551,6 @@
                     <div class="hud-value" id="scoreValue">0</div>
                 </div>
             </div>
-
             <div class="particle-controls" id="particleControls">
                 <div class="control-group">
                     <label class="control-label">粒子形状</label>
@@ -667,7 +563,6 @@
                         <button class="shape-btn" data-shape="dna">🧬 DNA</button>
                     </div>
                 </div>
-
                 <div class="control-group">
                     <label class="control-label">粒子颜色</label>
                     <div class="color-picker-wrapper">
@@ -675,7 +570,6 @@
                         <span style="font-size: 0.9rem;">自定义颜色</span>
                     </div>
                 </div>
-
                 <div class="control-group">
                     <label class="control-label">操作提示</label>
                     <p style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">
@@ -685,44 +579,58 @@
                     </p>
                 </div>
             </div>
-
             <div class="game-message" id="gameMessage"></div>
             <div class="error-message" id="errorMessage"></div>
         </div>
-
         <div class="game-controls">
-            <button class="btn btn-primary" id="startBtn">
-                <span>🎮</span>
-                <span>启动游戏</span>
+            <button class="btn btn-primary" id="startBtn" type="button">
+                <span class="spinner"></span>
+                <span class="btn-text">🎮 启动游戏</span>
             </button>
-            <button class="btn btn-secondary" id="stopBtn">
-                <span>⏸️</span>
-                <span>停止</span>
+            <button class="btn btn-secondary" id="stopBtn" type="button">
+                <span>⏸️ 停止</span>
             </button>
-            <button class="btn btn-secondary" id="resetBtn">
-                <span>🔄</span>
-                <span>重置</span>
+            <button class="btn btn-secondary" id="resetBtn" type="button">
+                <span>🔄 重置</span>
             </button>
         </div>
     </section>
-
     <footer>
         <p style="color: var(--text-secondary);">© 2024 XRK-AGT | AI驱动的体感游戏平台</p>
         <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 0.9rem;">永远向着阳光生长 🌻</p>
     </footer>
-
-    <div class="scroll-top" id="scrollTop">↑</div>
+    <button class="scroll-top" id="scrollTop">↑</button>
+    <div class="debug-panel" id="debugPanel"></div>
 
     <script>
+        // ============ 调试工具 ============
+        const Debug = {
+            panel: null,
+            enabled: false,
+            init() {
+                this.panel = document.getElementById('debugPanel');
+            },
+            log(msg) {
+                console.log('[XRK-AGT]', msg);
+                if (this.enabled && this.panel) {
+                    this.panel.classList.add('show');
+                    this.panel.innerHTML = msg + '<br>' + this.panel.innerHTML;
+                    if (this.panel.innerHTML.length > 1000) {
+                        this.panel.innerHTML = this.panel.innerHTML.substring(0, 1000);
+                    }
+                }
+            },
+            error(msg) {
+                console.error('[XRK-AGT]', msg);
+            }
+        };
+
         // ============ 全局状态 ============
         const GameState = {
             currentMode: 'particles',
             isRunning: false,
             stream: null,
-            hands: null,
             video: null,
-            
-            // Three.js
             scene: null,
             camera: null,
             renderer: null,
@@ -731,87 +639,77 @@
             positions: null,
             targetPositions: null,
             currentShape: 'heart',
-            
-            // 手势
             handX: 0.5,
             handY: 0.5,
             handOpenness: 1.0,
             isHandDetected: false,
-            
-            // 2D游戏
             gameObjects: [],
             score: 0,
             prevFrame: null,
-            handPosition: { x: 0, y: 0, active: false }
+            handPosition: { x: 0, y: 0, active: false },
+            animationId: null
         };
 
         // ============ Three.js 粒子系统 ============
         function initThreeJS() {
+            Debug.log('初始化 Three.js...');
             const container = document.getElementById('threeContainer');
-            if (!container) return;
-
-            GameState.scene = new THREE.Scene();
-            GameState.scene.fog = new THREE.FogExp2(0x0a0a0f, 0.002);
-
-            GameState.camera = new THREE.PerspectiveCamera(
-                75,
-                container.clientWidth / container.clientHeight,
-                0.1,
-                1000
-            );
-            GameState.camera.position.z = 30;
-
-            GameState.renderer = new THREE.WebGLRenderer({ 
-                antialias: true, 
-                alpha: true 
-            });
-            GameState.renderer.setSize(container.clientWidth, container.clientHeight);
-            GameState.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            container.innerHTML = '';
-            container.appendChild(GameState.renderer.domElement);
-
-            // 创建粒子纹理
-            const canvas = document.createElement('canvas');
-            canvas.width = 32;
-            canvas.height = 32;
-            const ctx = canvas.getContext('2d');
-            const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-            gradient.addColorStop(0, 'rgba(255,255,255,1)');
-            gradient.addColorStop(1, 'rgba(255,255,255,0)');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 32, 32);
-            
-            const texture = new THREE.Texture(canvas);
-            texture.needsUpdate = true;
-
-            // 粒子几何体
-            const geometry = new THREE.BufferGeometry();
-            GameState.positions = new Float32Array(GameState.particleCount * 3);
-            GameState.targetPositions = new Float32Array(GameState.particleCount * 3);
-
-            for (let i = 0; i < GameState.particleCount; i++) {
-                GameState.positions[i * 3] = (Math.random() - 0.5) * 100;
-                GameState.positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
-                GameState.positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+            if (!container) {
+                Debug.error('找不到 threeContainer');
+                return false;
             }
-
-            geometry.setAttribute('position', new THREE.BufferAttribute(GameState.positions, 3));
-
-            const material = new THREE.PointsMaterial({
-                size: 0.5,
-                map: texture,
-                transparent: true,
-                opacity: 0.8,
-                color: new THREE.Color(0x6366f1),
-                blending: THREE.AdditiveBlending,
-                depthWrite: false
-            });
-
-            GameState.particles = new THREE.Points(geometry, material);
-            GameState.scene.add(GameState.particles);
-
-            updateTargetPositions('heart');
-            console.log('✅ Three.js 初始化成功');
+            if (GameState.renderer) {
+                Debug.log('Three.js 已初始化');
+                return true;
+            }
+            try {
+                GameState.scene = new THREE.Scene();
+                GameState.scene.fog = new THREE.FogExp2(0x0a0a0f, 0.002);
+                GameState.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+                GameState.camera.position.z = 30;
+                GameState.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                GameState.renderer.setSize(container.clientWidth, container.clientHeight);
+                GameState.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                container.innerHTML = '';
+                container.appendChild(GameState.renderer.domElement);
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+                gradient.addColorStop(0, 'rgba(255,255,255,1)');
+                gradient.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 32, 32);
+                const texture = new THREE.Texture(canvas);
+                texture.needsUpdate = true;
+                const geometry = new THREE.BufferGeometry();
+                GameState.positions = new Float32Array(GameState.particleCount * 3);
+                GameState.targetPositions = new Float32Array(GameState.particleCount * 3);
+                for (let i = 0; i < GameState.particleCount; i++) {
+                    GameState.positions[i * 3] = (Math.random() - 0.5) * 100;
+                    GameState.positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+                    GameState.positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+                }
+                geometry.setAttribute('position', new THREE.BufferAttribute(GameState.positions, 3));
+                const material = new THREE.PointsMaterial({
+                    size: 0.5,
+                    map: texture,
+                    transparent: true,
+                    opacity: 0.8,
+                    color: new THREE.Color(0x6366f1),
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+                GameState.particles = new THREE.Points(geometry, material);
+                GameState.scene.add(GameState.particles);
+                updateTargetPositions('heart');
+                Debug.log('✅ Three.js 初始化成功');
+                return true;
+            } catch (e) {
+                Debug.error('Three.js 初始化失败: ' + e.message);
+                return false;
+            }
         }
 
         // 粒子形状定义
@@ -822,80 +720,51 @@
                 const x = 16 * Math.pow(Math.sin(t), 3);
                 const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
                 const z = (Math.random() - 0.5) * 4;
-                return { x: x * 0.5 * r, y: y * 0.5 * r, z: z };
+                return { x: x * 0.5 * r, y: y * 0.5 * r, z };
             },
             saturn: (i, count) => {
                 if (Math.random() > 0.6) {
                     const angle = Math.random() * Math.PI * 2;
                     const radius = 12 + Math.random() * 6;
-                    return { 
-                        x: Math.cos(angle) * radius, 
-                        y: (Math.random()-0.5), 
-                        z: Math.sin(angle) * radius 
-                    };
+                    return { x: Math.cos(angle) * radius, y: (Math.random()-0.5), z: Math.sin(angle) * radius };
                 }
                 const phi = Math.acos(-1 + (2 * Math.random()));
                 const theta = Math.sqrt(count * Math.PI) * phi;
                 const r = 7;
-                return {
-                    x: r * Math.cos(theta) * Math.sin(phi),
-                    y: r * Math.sin(theta) * Math.sin(phi),
-                    z: r * Math.cos(phi)
-                };
+                return { x: r * Math.cos(theta) * Math.sin(phi), y: r * Math.sin(theta) * Math.sin(phi), z: r * Math.cos(phi) };
             },
             flower: (i, count) => {
                 const theta = Math.random() * Math.PI * 2;
                 const phi = Math.random() * Math.PI;
                 const k = 5;
                 const r = 10 * Math.sin(k * theta) * Math.sin(phi);
-                return {
-                    x: r * Math.sin(phi) * Math.cos(theta),
-                    y: r * Math.cos(phi),
-                    z: r * Math.sin(phi) * Math.sin(theta)
-                };
+                return { x: r * Math.sin(phi) * Math.cos(theta), y: r * Math.cos(phi), z: r * Math.sin(phi) * Math.sin(theta) };
             },
             buddha: (i, count) => {
                 const rand = Math.random();
                 if (rand < 0.2) {
                     const r = 2.5;
-                    const u = Math.random();
-                    const v = Math.random();
+                    const u = Math.random(), v = Math.random();
                     const theta = 2 * Math.PI * u;
                     const phi = Math.acos(2 * v - 1);
-                    return {
-                        x: r * Math.sin(phi) * Math.cos(theta),
-                        y: r * Math.sin(phi) * Math.sin(theta) + 6,
-                        z: r * Math.cos(phi)
-                    };
+                    return { x: r * Math.sin(phi) * Math.cos(theta), y: r * Math.sin(phi) * Math.sin(theta) + 6, z: r * Math.cos(phi) };
                 }
                 if (rand < 0.7) {
                     const r = 5.5 * Math.random();
                     const h = Math.random() * 7;
                     const theta = Math.random() * Math.PI * 2;
                     const coneR = 6 * (1 - h/7);
-                    return {
-                        x: coneR * Math.cos(theta),
-                        y: h - 1,
-                        z: coneR * Math.sin(theta)
-                    };
+                    return { x: coneR * Math.cos(theta), y: h - 1, z: coneR * Math.sin(theta) };
                 }
                 const angle = Math.random() * Math.PI * 2;
                 const radius = 5 + Math.random() * 4;
-                return {
-                    x: Math.cos(angle) * radius,
-                    y: -2 + (Math.random() * 2),
-                    z: Math.sin(angle) * radius
-                };
+                return { x: Math.cos(angle) * radius, y: -2 + (Math.random() * 2), z: Math.sin(angle) * radius };
             },
             fireworks: (i, count) => {
                 const r = Math.random() * 20;
                 const theta = Math.random() * Math.PI * 2;
                 const phi = Math.acos(2 * Math.random() - 1);
-                return {
-                    x: r * Math.sin(phi) * Math.cos(theta),
-                    y: r * Math.sin(phi) * Math.sin(theta),
-                    z: r * Math.cos(phi)
-                };
+                return { x: r * Math.sin(phi) * Math.cos(theta), y: r * Math.sin(phi) * Math.sin(theta), z: r * Math.cos(phi) };
             },
             dna: (i, count) => {
                 const t = (i / count) * Math.PI * 20;
@@ -920,7 +789,6 @@
         function updateTargetPositions(shapeName) {
             const shapeFunc = ParticleShapes[shapeName];
             if (!shapeFunc) return;
-
             for (let i = 0; i < GameState.particleCount; i++) {
                 const pos = shapeFunc(i, GameState.particleCount);
                 GameState.targetPositions[i * 3] = pos.x;
@@ -932,149 +800,141 @@
 
         function animateParticles() {
             if (!GameState.isRunning || GameState.currentMode !== 'particles') return;
-            requestAnimationFrame(animateParticles);
-
+            GameState.animationId = requestAnimationFrame(animateParticles);
             if (!GameState.particles) return;
-
             const positions = GameState.particles.geometry.attributes.position.array;
-            
-            // 旋转
             GameState.particles.rotation.y += 0.002;
             if (GameState.isHandDetected) {
                 GameState.particles.rotation.y += (GameState.handX - 0.5) * 0.08;
                 GameState.particles.rotation.x += (GameState.handY - 0.5) * 0.08;
             }
-
-            // 粒子更新
             const speed = 0.06;
             let scale = 0.2 + (GameState.handOpenness * 1.5);
             if (GameState.currentShape === 'fireworks') {
                 scale = GameState.handOpenness * 3.5;
             }
-
             for (let i = 0; i < GameState.particleCount; i++) {
-                const px = i * 3;
-                const py = i * 3 + 1;
-                const pz = i * 3 + 2;
-
+                const px = i * 3, py = i * 3 + 1, pz = i * 3 + 2;
                 const tx = GameState.targetPositions[px] * scale;
                 const ty = GameState.targetPositions[py] * scale;
                 const tz = GameState.targetPositions[pz] * scale;
-
                 positions[px] += (tx - positions[px]) * speed;
                 positions[py] += (ty - positions[py]) * speed;
                 positions[pz] += (tz - positions[pz]) * speed;
             }
-
             GameState.particles.geometry.attributes.position.needsUpdate = true;
             GameState.renderer.render(GameState.scene, GameState.camera);
         }
 
-        // ============ MediaPipe 手势检测 ============
-        async function initHandTracking() {
-            if (!window.Hands) {
-                throw new Error('MediaPipe Hands 未加载');
+        // ============ 运动检测 (简化版，不依赖MediaPipe) ============
+        function detectMotion() {
+            if (!GameState.video || GameState.video.readyState !== 4) return null;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 160;
+            canvas.height = 120;
+            ctx.drawImage(GameState.video, 0, 0, canvas.width, canvas.height);
+            const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            if (!GameState.prevFrame) {
+                GameState.prevFrame = currentFrame;
+                return null;
             }
-
-            GameState.hands = new Hands({
-                locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
+            let maxDiff = 0, maxX = 0, maxY = 0;
+            const threshold = 30, blockSize = 10;
+            for (let y = 0; y < canvas.height; y += blockSize) {
+                for (let x = 0; x < canvas.width; x += blockSize) {
+                    let blockDiff = 0, pixels = 0;
+                    for (let dy = 0; dy < blockSize && y + dy < canvas.height; dy++) {
+                        for (let dx = 0; dx < blockSize && x + dx < canvas.width; dx++) {
+                            const i = ((y + dy) * canvas.width + (x + dx)) * 4;
+                            const diff = Math.abs(currentFrame.data[i] - GameState.prevFrame.data[i]) +
+                                       Math.abs(currentFrame.data[i + 1] - GameState.prevFrame.data[i + 1]) +
+                                       Math.abs(currentFrame.data[i + 2] - GameState.prevFrame.data[i + 2]);
+                            blockDiff += diff;
+                            pixels++;
+                        }
+                    }
+                    blockDiff /= (pixels * 3);
+                    if (blockDiff > threshold && blockDiff > maxDiff) {
+                        maxDiff = blockDiff;
+                        maxX = x + blockSize / 2;
+                        maxY = y + blockSize / 2;
+                    }
                 }
-            });
-
-            GameState.hands.setOptions({
-                maxNumHands: 1,
-                modelComplexity: 1,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-
-            GameState.hands.onResults(onHandsResults);
-            console.log('✅ MediaPipe Hands 初始化成功');
+            }
+            GameState.prevFrame = currentFrame;
+            if (maxDiff > threshold) {
+                const gameCanvas = document.getElementById('gameCanvas');
+                const container = document.getElementById('threeContainer');
+                const targetW = GameState.currentMode === 'particles' ? container.clientWidth : gameCanvas.width;
+                const targetH = GameState.currentMode === 'particles' ? container.clientHeight : gameCanvas.height;
+                const scaleX = targetW / canvas.width;
+                const scaleY = targetH / canvas.height;
+                return { x: (canvas.width - maxX) * scaleX, y: maxY * scaleY, intensity: Math.min(maxDiff / 100, 1) };
+            }
+            return null;
         }
 
-        function onHandsResults(results) {
+        function processMotion() {
             if (!GameState.isRunning) return;
-
+            const motion = detectMotion();
             const statusDot = document.getElementById('handStatus');
             const statusText = document.getElementById('statusText');
-
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
+            const handTracker = document.getElementById('handTracker');
+            if (motion) {
                 GameState.isHandDetected = true;
                 statusDot.classList.add('active');
-
-                GameState.handX = landmarks[9].x;
-                GameState.handY = landmarks[9].y;
-
-                const wrist = landmarks[0];
-                const tips = [4, 8, 12, 16, 20];
-                let totalDist = 0;
-
-                tips.forEach(idx => {
-                    const tip = landmarks[idx];
-                    const dx = tip.x - wrist.x;
-                    const dy = tip.y - wrist.y;
-                    totalDist += Math.sqrt(dx * dx + dy * dy);
-                });
-
-                const avgDist = totalDist / 5;
-                const minOpen = 0.15;
-                const maxOpen = 0.4;
-                let openness = (avgDist - minOpen) / (maxOpen - minOpen);
-                GameState.handOpenness = Math.max(0, Math.min(1, openness));
-
-                statusText.textContent = GameState.handOpenness > 0.6 ? '张开 (扩散)' : '握拳 (聚拢)';
+                statusText.textContent = '检测到运动';
+                GameState.handX = motion.x / (GameState.currentMode === 'particles' ? 
+                    document.getElementById('threeContainer').clientWidth : 
+                    document.getElementById('gameCanvas').width);
+                GameState.handY = motion.y / (GameState.currentMode === 'particles' ? 
+                    document.getElementById('threeContainer').clientHeight : 
+                    document.getElementById('gameCanvas').height);
+                GameState.handOpenness = 0.3 + motion.intensity * 0.7;
+                GameState.handPosition = { x: motion.x, y: motion.y, active: true };
+                handTracker.classList.add('active');
+                handTracker.style.left = (motion.x - 40) + 'px';
+                handTracker.style.top = (motion.y - 40) + 'px';
             } else {
                 GameState.isHandDetected = false;
                 statusDot.classList.remove('active');
-                statusText.textContent = '未检测到手势';
+                statusText.textContent = '等待运动...';
                 GameState.handOpenness += (1 - GameState.handOpenness) * 0.05;
+                GameState.handPosition.active = false;
+                handTracker.classList.remove('active');
+            }
+            if (GameState.isRunning) {
+                requestAnimationFrame(processMotion);
             }
         }
 
+        // ============ 摄像头启动 ============
         async function startVideoStream() {
+            Debug.log('请求摄像头权限...');
             try {
                 GameState.stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                        facingMode: 'user'
-                    }
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
                 });
-
                 GameState.video = document.getElementById('webcam');
                 GameState.video.srcObject = GameState.stream;
-                
                 await new Promise((resolve, reject) => {
-                    GameState.video.onloadedmetadata = resolve;
+                    GameState.video.onloadedmetadata = () => {
+                        GameState.video.play().then(resolve).catch(reject);
+                    };
                     GameState.video.onerror = reject;
                     setTimeout(() => reject(new Error('视频加载超时')), 10000);
                 });
-
                 GameState.video.classList.add('active');
-                console.log('✅ 摄像头启动成功');
+                Debug.log('✅ 摄像头启动成功');
+                return true;
             } catch (error) {
-                console.error('摄像头启动失败:', error);
-                throw new Error('无法访问摄像头，请确保已授予摄像头权限');
+                Debug.error('摄像头启动失败: ' + error.message);
+                throw new Error('无法访问摄像头: ' + error.message);
             }
         }
 
-        async function processVideoFrame() {
-            if (!GameState.isRunning || !GameState.video || !GameState.hands) return;
-
-            try {
-                await GameState.hands.send({ image: GameState.video });
-            } catch (error) {
-                console.error('处理视频帧失败:', error);
-            }
-
-            if (GameState.isRunning) {
-                requestAnimationFrame(processVideoFrame);
-            }
-        }
-
-        // ============ 2D Canvas 游戏 ============
+        // ============ 2D游戏对象 ============
         class GameObject {
             constructor(x, y, type) {
                 this.x = x;
@@ -1087,229 +947,137 @@
                 this.rotationSpeed = (Math.random() - 0.5) * 0.15;
                 this.popped = false;
                 this.opacity = 1;
+                this.emoji = this.getEmoji();
             }
-
+            getEmoji() {
+                const emojis = {
+                    sunflower: '🌻',
+                    balloon: ['🎈', '🎈', '🎈', '🟡', '🔵', '🟢'][Math.floor(Math.random() * 6)],
+                    fruit: ['🍎', '🍊', '🍌', '🍉', '🍇', '🍓'][Math.floor(Math.random() * 6)]
+                };
+                return emojis[this.type] || '🌻';
+            }
             update(width, height) {
                 if (this.popped) {
                     this.opacity -= 0.05;
                     return;
                 }
-
                 if (this.type === 'balloon') {
                     this.y += this.vy;
+                    this.x += Math.sin(Date.now() / 1000 + this.x) * 0.5;
                     if (this.y < -this.size) {
                         this.y = height + this.size;
                         this.x = Math.random() * width;
                     }
                 } else if (this.type === 'fruit') {
-                    this.vy += 0.4;
+                    this.vy += 0.3;
                     this.y += this.vy;
                     this.x += this.vx;
                     this.rotation += this.rotationSpeed;
-                    
                     if (this.y > height + this.size) {
                         this.y = -this.size;
                         this.x = Math.random() * width;
-                        this.vy = 0;
+                        this.vy = Math.random() * 2;
+                        this.emoji = this.getEmoji();
                     }
                 } else {
-                    this.vy += 0.4;
+                    this.vy += 0.3;
                     this.x += this.vx;
                     this.y += this.vy;
                     this.rotation += this.rotationSpeed;
+                    if (this.x < this.size || this.x > width - this.size) {
+                        this.vx *= -0.7;
+                        this.x = Math.max(this.size, Math.min(width - this.size, this.x));
+                    }
+                    if (this.y > height - this.size) {
+                        this.vy *= -0.7;
+                        this.y = height - this.size;
+                    }
                 }
-
-                if (this.x < this.size || this.x > width - this.size) {
-                    this.vx *= -0.7;
-                    this.x = Math.max(this.size, Math.min(width - this.size, this.x));
-                }
-                if (this.y < this.size || this.y > height - this.size) {
-                    this.vy *= -0.7;
-                    this.y = Math.max(this.size, Math.min(height - this.size, this.y));
-                }
-
-                this.vx *= 0.98;
-                this.vy *= 0.98;
+                this.vx *= 0.99;
             }
-
             draw(ctx) {
                 if (this.opacity <= 0) return;
-
                 ctx.save();
                 ctx.globalAlpha = this.opacity;
                 ctx.translate(this.x, this.y);
                 ctx.rotate(this.rotation);
-                
                 ctx.font = `${this.size}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                
-                const emojis = {
-                    sunflower: '🌻',
-                    balloon: '🎈',
-                    fruit: ['🍎', '🍊', '🍌', '🍉'][Math.floor(Math.random() * 4)]
-                };
-                ctx.fillText(emojis[this.type] || '🌻', 0, 0);
-                
+                ctx.fillText(this.emoji, 0, 0);
                 ctx.restore();
             }
-
             checkHit(x, y, radius) {
                 const dx = this.x - x;
                 const dy = this.y - y;
-                return Math.sqrt(dx * dx + dy * dy) < radius;
+                return Math.sqrt(dx * dx + dy * dy) < this.size / 2 + radius;
             }
         }
 
         function initCanvasGame(type) {
             const canvas = document.getElementById('gameCanvas');
-            const width = canvas.width;
-            const height = canvas.height;
-
             GameState.gameObjects = [];
             GameState.score = 0;
             document.getElementById('scoreValue').textContent = '0';
-
-            const count = type === 'balloon' ? 15 : 20;
+            const count = type === 'balloon' ? 12 : 15;
             for (let i = 0; i < count; i++) {
-                const x = Math.random() * width;
-                const y = type === 'balloon' ? height + Math.random() * height : 
-                          type === 'fruit' ? -Math.random() * height :
-                          Math.random() * (height * 0.4) + 50;
+                const x = Math.random() * canvas.width;
+                const y = type === 'balloon' ? canvas.height + Math.random() * canvas.height : 
+                          type === 'fruit' ? -Math.random() * canvas.height * 0.5 :
+                          Math.random() * (canvas.height * 0.4) + 50;
                 GameState.gameObjects.push(new GameObject(x, y, type));
             }
         }
 
-        function detectMotion() {
-            if (!GameState.video || GameState.video.readyState !== 4) return null;
-
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = 160;
-            canvas.height = 120;
-            
-            ctx.drawImage(GameState.video, 0, 0, canvas.width, canvas.height);
-            const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            
-            if (!GameState.prevFrame) {
-                GameState.prevFrame = currentFrame;
-                return null;
-            }
-            
-            let maxDiff = 0;
-            let maxX = 0;
-            let maxY = 0;
-            const threshold = 30;
-            const blockSize = 10;
-            
-            for (let y = 0; y < canvas.height; y += blockSize) {
-                for (let x = 0; x < canvas.width; x += blockSize) {
-                    let blockDiff = 0;
-                    let pixels = 0;
-                    
-                    for (let dy = 0; dy < blockSize && y + dy < canvas.height; dy++) {
-                        for (let dx = 0; dx < blockSize && x + dx < canvas.width; dx++) {
-                            const i = ((y + dy) * canvas.width + (x + dx)) * 4;
-                            const diff = Math.abs(currentFrame.data[i] - GameState.prevFrame.data[i]) +
-                                       Math.abs(currentFrame.data[i + 1] - GameState.prevFrame.data[i + 1]) +
-                                       Math.abs(currentFrame.data[i + 2] - GameState.prevFrame.data[i + 2]);
-                            blockDiff += diff;
-                            pixels++;
-                        }
-                    }
-                    
-                    blockDiff /= (pixels * 3);
-                    
-                    if (blockDiff > threshold && blockDiff > maxDiff) {
-                        maxDiff = blockDiff;
-                        maxX = x + blockSize / 2;
-                        maxY = y + blockSize / 2;
-                    }
-                }
-            }
-            
-            GameState.prevFrame = currentFrame;
-            
-            if (maxDiff > threshold) {
-                const gameCanvas = document.getElementById('gameCanvas');
-                const scaleX = gameCanvas.width / canvas.width;
-                const scaleY = gameCanvas.height / canvas.height;
-                
-                return {
-                    x: maxX * scaleX,
-                    y: maxY * scaleY,
-                    intensity: Math.min(maxDiff / 100, 1)
-                };
-            }
-            
-            return null;
-        }
-
         function animateCanvasGame() {
             if (!GameState.isRunning || GameState.currentMode === 'particles') return;
-            requestAnimationFrame(animateCanvasGame);
-
+            GameState.animationId = requestAnimationFrame(animateCanvasGame);
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
-            const motion = detectMotion();
-            const handTracker = document.getElementById('handTracker');
-            
-            if (motion) {
-                GameState.handPosition = { x: motion.x, y: motion.y, active: true };
-                handTracker.classList.add('active');
-                handTracker.style.left = (motion.x - 40) + 'px';
-                handTracker.style.top = (motion.y - 40) + 'px';
-            } else {
-                GameState.handPosition.active = false;
-                handTracker.classList.remove('active');
-            }
-
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+            ctx.fillStyle = 'rgba(19, 19, 31, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             if (GameState.handPosition.active) {
                 const gradient = ctx.createRadialGradient(
                     GameState.handPosition.x, GameState.handPosition.y, 0,
-                    GameState.handPosition.x, GameState.handPosition.y, 100
+                    GameState.handPosition.x, GameState.handPosition.y, 80
                 );
-                gradient.addColorStop(0, 'rgba(251, 191, 36, 0.4)');
+                gradient.addColorStop(0, 'rgba(251, 191, 36, 0.5)');
                 gradient.addColorStop(1, 'rgba(251, 191, 36, 0)');
                 ctx.fillStyle = gradient;
                 ctx.beginPath();
-                ctx.arc(GameState.handPosition.x, GameState.handPosition.y, 100, 0, Math.PI * 2);
+                ctx.arc(GameState.handPosition.x, GameState.handPosition.y, 80, 0, Math.PI * 2);
                 ctx.fill();
             }
-
             GameState.gameObjects = GameState.gameObjects.filter(obj => obj.opacity > 0);
-
+            while (GameState.gameObjects.length < 12) {
+                const type = GameState.currentMode;
+                const x = Math.random() * canvas.width;
+                const y = type === 'balloon' ? canvas.height + 50 : -50;
+                GameState.gameObjects.push(new GameObject(x, y, type));
+            }
             GameState.gameObjects.forEach(obj => {
                 obj.update(canvas.width, canvas.height);
-
-                if (GameState.handPosition.active && !obj.popped && 
-                    obj.checkHit(GameState.handPosition.x, GameState.handPosition.y, 100)) {
+                if (GameState.handPosition.active && !obj.popped && obj.checkHit(GameState.handPosition.x, GameState.handPosition.y, 60)) {
                     obj.popped = true;
                     GameState.score += 10;
                     document.getElementById('scoreValue').textContent = GameState.score;
-                    showMessage('✨ +10', 500);
+                    showMessage('✨ +10', 400);
                 }
-
                 obj.draw(ctx);
             });
         }
 
-        // ============ UI 控制 ============
+        // ============ UI控制 ============
         function selectGame(mode) {
             GameState.currentMode = mode;
-            
-            document.querySelectorAll('.game-option').forEach(opt => {
-                opt.classList.remove('active');
-            });
-            event.target.closest('.game-option').classList.add('active');
-
+            document.querySelectorAll('.game-option').forEach(opt => opt.classList.remove('active'));
+            document.querySelector(`[data-game="${mode}"]`).classList.add('active');
             const threeContainer = document.getElementById('threeContainer');
             const canvas = document.getElementById('gameCanvas');
             const particleControls = document.getElementById('particleControls');
             const scorePanel = document.getElementById('scorePanel');
-
             if (mode === 'particles') {
                 threeContainer.style.display = 'block';
                 canvas.style.display = 'none';
@@ -1320,50 +1088,37 @@
                 canvas.style.display = 'block';
                 particleControls.style.display = 'none';
                 scorePanel.style.display = 'block';
-                
                 if (GameState.isRunning) {
                     const container = canvas.parentElement;
                     const rect = container.getBoundingClientRect();
                     canvas.width = rect.width;
                     canvas.height = rect.height;
                     initCanvasGame(mode);
+                    if (GameState.animationId) cancelAnimationFrame(GameState.animationId);
+                    animateCanvasGame();
                 }
             }
         }
 
         async function startGame() {
+            Debug.log('点击了启动游戏按钮');
+            const startBtn = document.getElementById('startBtn');
             if (GameState.isRunning) {
                 showMessage('⚠️ 游戏已在运行中', 1500);
                 return;
             }
-
-            const startBtn = document.getElementById('startBtn');
+            startBtn.classList.add('loading');
             startBtn.disabled = true;
-            startBtn.textContent = '正在启动...';
-
             try {
                 showMessage('🎬 正在初始化...', 2000);
-
-                // 初始化Three.js
-                if (!GameState.renderer) {
-                    initThreeJS();
-                }
-
-                // 启动摄像头
+                Debug.log('开始初始化...');
+                const threeOK = initThreeJS();
+                if (!threeOK) throw new Error('Three.js 初始化失败');
                 await startVideoStream();
-
-                // 初始化手势追踪
-                if (!GameState.hands) {
-                    await initHandTracking();
-                }
-
-                // 调整容器大小
                 const container = GameState.currentMode === 'particles' ? 
                     document.getElementById('threeContainer') : 
                     document.getElementById('gameCanvas').parentElement;
-                
                 const rect = container.getBoundingClientRect();
-                
                 if (GameState.currentMode === 'particles') {
                     GameState.renderer.setSize(rect.width, rect.height);
                     GameState.camera.aspect = rect.width / rect.height;
@@ -1374,70 +1129,60 @@
                     canvas.height = rect.height;
                     initCanvasGame(GameState.currentMode);
                 }
-
                 GameState.isRunning = true;
-
-                // 开始动画循环
                 if (GameState.currentMode === 'particles') {
                     animateParticles();
                 } else {
                     animateCanvasGame();
                 }
-
-                // 开始处理视频帧
-                processVideoFrame();
-
-                showMessage('🎮 游戏开始！', 2000);
-                startBtn.textContent = '🎮 启动游戏';
-                console.log('✅ 游戏启动成功');
-
+                processMotion();
+                showMessage('🎮 游戏开始！移动身体来控制', 2500);
+                Debug.log('✅ 游戏启动成功');
             } catch (error) {
-                console.error('游戏启动失败:', error);
+                Debug.error('游戏启动失败: ' + error.message);
                 showError(error.message || '启动失败，请刷新页面重试');
                 GameState.isRunning = false;
-                startBtn.textContent = '🎮 启动游戏';
             } finally {
+                startBtn.classList.remove('loading');
                 startBtn.disabled = false;
             }
         }
 
         function stopGame() {
+            Debug.log('停止游戏');
             if (!GameState.isRunning) {
                 showMessage('⚠️ 游戏未运行', 1500);
                 return;
             }
-
             GameState.isRunning = false;
-            
+            if (GameState.animationId) {
+                cancelAnimationFrame(GameState.animationId);
+                GameState.animationId = null;
+            }
             if (GameState.stream) {
                 GameState.stream.getTracks().forEach(track => track.stop());
                 GameState.stream = null;
             }
-            
             if (GameState.video) {
                 GameState.video.srcObject = null;
                 GameState.video.classList.remove('active');
             }
-
             document.getElementById('handTracker').classList.remove('active');
+            document.getElementById('handStatus').classList.remove('active');
+            document.getElementById('statusText').textContent = '等待检测...';
             showMessage('⏸️ 游戏已停止', 1500);
         }
 
         function resetGame() {
-            if (!GameState.isRunning) {
-                showMessage('⚠️ 请先启动游戏', 1500);
-                return;
-            }
-            
+            Debug.log('重置游戏');
             GameState.score = 0;
             document.getElementById('scoreValue').textContent = '0';
-            
             if (GameState.currentMode === 'particles') {
                 updateTargetPositions(GameState.currentShape);
-            } else {
+            } else if (GameState.isRunning) {
+                const canvas = document.getElementById('gameCanvas');
                 initCanvasGame(GameState.currentMode);
             }
-            
             showMessage('🔄 游戏已重置', 1500);
         }
 
@@ -1445,86 +1190,77 @@
             const msg = document.getElementById('gameMessage');
             msg.textContent = text;
             msg.classList.add('show');
-            setTimeout(() => {
-                msg.classList.remove('show');
-            }, duration);
+            setTimeout(() => msg.classList.remove('show'), duration);
         }
 
         function showError(text) {
             const errorMsg = document.getElementById('errorMessage');
-            errorMsg.textContent = text;
+            errorMsg.textContent = '❌ ' + text;
             errorMsg.classList.add('show');
-            setTimeout(() => {
-                errorMsg.classList.remove('show');
-            }, 5000);
+            setTimeout(() => errorMsg.classList.remove('show'), 5000);
         }
 
         // ============ 事件监听 ============
         document.addEventListener('DOMContentLoaded', () => {
-            // 游戏选择
+            Debug.init();
+            Debug.log('页面加载完成');
             document.querySelectorAll('.game-option').forEach(option => {
-                option.addEventListener('click', function() {
+                option.addEventListener('click', function(e) {
+                    e.preventDefault();
                     selectGame(this.dataset.game);
                 });
             });
-
-            // 控制按钮
-            document.getElementById('startBtn').addEventListener('click', startGame);
-            document.getElementById('stopBtn').addEventListener('click', stopGame);
-            document.getElementById('resetBtn').addEventListener('click', resetGame);
-
-            // 形状选择
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            startBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                Debug.log('startBtn clicked');
+                startGame();
+            });
+            stopBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                stopGame();
+            });
+            resetBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                resetGame();
+            });
             document.querySelectorAll('.shape-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
                     const shape = this.dataset.shape;
                     updateTargetPositions(shape);
                     document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
                     this.classList.add('active');
                 });
             });
-
-            // 颜色选择
             document.getElementById('colorPicker').addEventListener('input', (e) => {
                 if (GameState.particles) {
                     GameState.particles.material.color.set(e.target.value);
                 }
             });
-
-            // 滚动按钮
             window.addEventListener('scroll', () => {
                 const scrollTop = document.getElementById('scrollTop');
-                if (window.pageYOffset > 300) {
-                    scrollTop.classList.add('show');
-                } else {
-                    scrollTop.classList.remove('show');
-                }
+                scrollTop.classList.toggle('show', window.pageYOffset > 300);
             });
-
             document.getElementById('scrollTop').addEventListener('click', () => {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             });
-
-            // 平滑滚动
             document.querySelectorAll('a[href^="#"]').forEach(anchor => {
                 anchor.addEventListener('click', function(e) {
                     e.preventDefault();
                     const target = document.querySelector(this.getAttribute('href'));
-                    if (target) {
-                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
+                    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 });
             });
-
-            // 窗口调整
             window.addEventListener('resize', () => {
                 if (!GameState.isRunning) return;
-                
                 const container = GameState.currentMode === 'particles' ? 
                     document.getElementById('threeContainer') : 
                     document.getElementById('gameCanvas').parentElement;
-                
                 const rect = container.getBoundingClientRect();
-                
                 if (GameState.currentMode === 'particles' && GameState.renderer) {
                     GameState.renderer.setSize(rect.width, rect.height);
                     GameState.camera.aspect = rect.width / rect.height;
@@ -1535,9 +1271,14 @@
                     canvas.height = rect.height;
                 }
             });
-
+            initThreeJS();
+            animateParticles();
+            GameState.isRunning = true;
+            setTimeout(() => {
+                GameState.isRunning = false;
+            }, 100);
             console.log('%c🌻 XRK-AGT 体感游戏平台', 'font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 10px 20px; border-radius: 8px;');
-            console.log('%c🎮 选择游戏并点击"启动游戏"开始体验！', 'font-size: 14px; color: #fbbf24;');
+            console.log('%c🎮 点击"启动游戏"按钮开始体验！', 'font-size: 14px; color: #fbbf24;');
         });
     </script>
 </body>
