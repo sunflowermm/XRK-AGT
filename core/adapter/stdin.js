@@ -166,7 +166,8 @@ export class StdinHandler {
       if (Array.isArray(input)) {
         logger.tag("收到消息数组", "命令", "green");
         const event = this.createEvent(input, userInfo);
-        return await this.handleEvent(event);
+        await this.handleEvent(event);
+        return { success: true, code: 200, message: "命令已处理", event_id: event.message_id, timestamp: Date.now() };
       }
 
       const trimmedInput = typeof input === 'string' ? input.trim() : '';
@@ -232,7 +233,14 @@ export class StdinHandler {
 
       logger.tag(trimmedInput, "命令", "green");
       const event = this.createEvent(trimmedInput, userInfo);
-      return await this.handleEvent(event);
+      await this.handleEvent(event);
+      return {
+        success: true,
+        code: 200,
+        message: "命令已处理",
+        event_id: event.message_id,
+        timestamp: Date.now()
+      };
     } catch (error) {
       logger.error(`处理命令错误: ${error.message}`);
       return { 
@@ -246,58 +254,16 @@ export class StdinHandler {
   }
 
   async handleEvent(event) {
-    logger.debug(`处理事件: message = ${JSON.stringify(event.message)}, raw_message = ${event.raw_message}`);
-    
-    const results = [];
-    const originalReply = event.reply || this.createDefaultReply(event);
-
-    event.reply = async (...args) => {
-      let msg = args[0];
-      let processedMsg;
-      
-      try {
-        if (Array.isArray(msg)) {
-          processedMsg = await this.processMessageContent(msg);
-        } else if (typeof msg === 'object' && msg.type) {
-          processedMsg = await this.processMessageContent([msg]);
-        } else {
-          processedMsg = [{ type: 'text', text: String(msg) }];
-        }
-        
-        const result = await originalReply.call(event, processedMsg);
-        
-        results.push({
-          ...result,
-          content: processedMsg
-        });
-        
-        return result;
-      } catch (error) {
-        logger.error(`reply包装错误: ${error.message}`);
-        throw error;
-      }
-    };
-
-    Bot.em('stdin.command', event);
-    Bot.em('stdin.message', event);
-
-    return {
-      success: true,
-      code: 200,
-      message: "命令已处理",
-      event_id: event.message_id,
-      timestamp: Date.now(),
-      results: results
-    };
-  }
-
-  createDefaultReply(event) {
-    return async (msg) => {
+    // 设置reply方法，直接调用sendMsg
+    event.reply = async (msg) => {
       return await this.sendMsg(msg, event.sender?.nickname || 'stdin', {
         user_id: event.user_id,
         adapter: 'stdin'
       });
     };
+
+    // 只触发一次事件
+    Bot.em('stdin.message', event);
   }
 
   async processMessageContent(content) {
@@ -436,21 +402,7 @@ export class StdinHandler {
       }
     } catch {}
     
-    // 使用stdin适配器
-    const result = await this.processCommand(parsedInput, { adapter: 'stdin' });
-    
-    // 在控制台显示结果
-    if (result.results && result.results.length > 0) {
-      logger.info('执行结果:');
-      result.results.forEach((r, index) => {
-        logger.mark(`[${index + 1}] ${this.formatResultForConsole(r)}`);
-      });
-    }
-    
-    if (!result.success) {
-      logger.error(`命令执行失败: ${result.error || result.message || '未知错误'}`);
-    }
-    
+    await this.processCommand(parsedInput, { adapter: 'stdin' });
     this.rl.prompt();
   }
 
@@ -482,41 +434,34 @@ export class StdinHandler {
   }
 
   createEvent(input, userInfo = {}) {
-    const userId = userInfo.user_id || 'stdin';
-    const nickname = userInfo.nickname || userId;
-    const time = Math.floor(Date.now() / 1000);
-    const messageId = `${userId}_${time}_${Math.floor(Math.random() * 1000)}`;
-    const adapter = userInfo.adapter || 'stdin';
+    const userId = userInfo.user_id || 'stdin'
+    const nickname = userInfo.nickname || userId
+    const time = Math.floor(Date.now() / 1000)
+    const messageId = `${userId}_${time}_${Math.floor(Math.random() * 10000)}`
+    const eventId = `stdin_${messageId}`
 
-    let message = Array.isArray(input) ? input : 
-                  typeof input === 'string' && input ? [{ type: "text", text: input }] : [];
-    let raw_message = Array.isArray(input) ? 
-                      input.map(m => m.type === 'text' ? m.text : `[${m.type}]`).join('') : 
-                      typeof input === 'string' ? input : '';
+    const message = Array.isArray(input) ? input : 
+                    (typeof input === 'string' && input ? [{ type: "text", text: input }] : [])
+    const raw_message = Array.isArray(input) ? 
+                        input.map(m => m.type === 'text' ? m.text : `[${m.type}]`).join('') : 
+                        (typeof input === 'string' ? input : '')
 
     const event = {
-      // 基础属性
       post_type: userInfo.post_type || "message",
       message_type: userInfo.message_type || "private",
       sub_type: userInfo.sub_type || "friend",
       self_id: userInfo.self_id || this.botId,
       user_id: userId,
       time,
-      event_id: `stdin_${messageId}`,
+      event_id: eventId,
       message_id: messageId,
-      
-      // 适配器信息
       adapter: 'stdin',
-      adapter_id: adapter,
-      adapter_name: adapter === 'api' ? 'API适配器' : '标准输入适配器',
+      adapter_id: userInfo.adapter || 'stdin',
+      adapter_name: userInfo.adapter === 'api' ? 'API适配器' : '标准输入适配器',
       isStdin: true,
-      
-      // 消息内容
       message,
       raw_message,
       msg: raw_message,
-      
-      // 用户信息
       sender: {
         ...(userInfo.sender || {}),
         card: userInfo.sender?.card || nickname,
@@ -524,52 +469,43 @@ export class StdinHandler {
         role: userInfo.sender?.role || userInfo.role || "master",
         user_id: userInfo.sender?.user_id || userId
       },
-      
-      // Bot实例
       bot: Bot.stdin || Bot[this.botId],
-      
-      // 权限
       isMaster: userInfo.isMaster !== undefined ? userInfo.isMaster : true,
       isPrivate: !userInfo.group_id,
       isGroup: !!userInfo.group_id,
-      
-      toString: () => raw_message,
-      
-      reply: async (msg) => {
-        return await this.sendMsg(msg, nickname, userInfo);
-      }
-    };
+      toString: () => raw_message
+    }
     
     if (userInfo.group_id) {
-      event.group_id = userInfo.group_id;
-      event.group_name = userInfo.group_name || `群${userInfo.group_id}`;
-      event.message_type = "group";
-      event.isGroup = true;
-      event.isPrivate = false;
+      event.group_id = userInfo.group_id
+      event.group_name = userInfo.group_name || `群${userInfo.group_id}`
+      event.message_type = "group"
+      event.isGroup = true
+      event.isPrivate = false
     }
+    
     event.friend = {
       sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo),
       recallMsg: () => logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`),
-      makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg),
-    };
+      makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg)
+    }
     
     event.member = { 
       info: { user_id: userId, nickname, last_sent_time: time }, 
       getAvatarUrl: () => userInfo.avatar || `https://q1.qlogo.cn/g?b=qq&s=0&nk=${userId}` 
-    };
+    }
     
     event.recall = () => { 
-      logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`); 
-      return true; 
-    };
+      logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`)
+      return true
+    }
     
     event.group = {
       makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg),
       sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo)
-    };
+    }
 
-    logger.debug(`创建事件: message = ${JSON.stringify(message)}, raw_message = ${raw_message}`);
-    return event;
+    return event
   }
 
   async sendMsg(msg, nickname, userInfo = {}) {
@@ -613,24 +549,23 @@ export class StdinHandler {
       }
     }
 
+    // 只在非API模式下输出日志，避免重复
     if (userInfo.adapter !== 'api' && textLogs.length > 0) {
       logger.tag(textLogs.join("\n"), "输出", "blue");
     }
 
-    // 触发输出事件
+    // 触发输出事件（用于WebSocket等）
     Bot.em('stdin.output', {
       nickname,
       content: processedItems,
       user_info: userInfo
     });
 
-    const result = {
+    return {
       message_id: `${userInfo.user_id || 'stdin'}_${Date.now()}`,
       content: processedItems,
       time: Date.now() / 1000
     };
-
-    return result;
   }
 
   async makeForwardMsg(forwardMsg) {

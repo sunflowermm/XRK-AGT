@@ -62,3 +62,22 @@ file_to_url_times: 5
 
 # 缓存群成员列表
 cache_group_member: true
+
+# 状态插件配置
+status_show_network: true    # 是否显示网络信息
+status_show_process: true    # 是否显示进程信息
+status_show_disk: true       # 是否显示磁盘信息
+
+# 日志发送插件配置
+log_send_default_lines: 120  # 默认发送日志行数
+log_send_max_lines: 1000     # 最大发送日志行数
+log_send_max_per_forward: 30 # 每条转发消息最大行数
+log_send_max_line_length: 300 # 单行日志最大长度
+log_dir: "logs"              # 日志目录
+
+# 更新插件配置
+update_auto_update_xrk: true  # 是否自动更新XRK插件
+update_sleep_between: 1500    # 更新间隔时间（毫秒）
+update_restart_delay: 2000     # 更新后重启延迟（毫秒）
+update_type_name: "XRK-AGT"   # 更新类型名称
+update_log_lines: 100         # 更新日志显示行数

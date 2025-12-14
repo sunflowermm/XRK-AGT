@@ -384,22 +384,23 @@ class PluginsLoader {
    * @param {Object} e - 事件对象
    */
   setupReply(e) {
+    // 防止重复包装
+    if (e._replySetup) {
+      return
+    }
+    e._replySetup = true
+    
+    // stdin和device事件已设置reply，保存原方法后返回
+    if (e.isStdin || e.isDevice) {
+      e.replyNew = e.reply
+      return
+    }
+    
+    // 保存原始reply方法
     e.replyNew = e.reply
     
     e.reply = async (msg = '', quote = false, data = {}) => {
       if (!msg) return false
-      
-      if (e.isDevice || e.isStdin) {
-        try {
-          if (e.bot?.sendMsg) await e.bot.sendMsg(msg, quote, data)
-          if (e.bot?.adapter?.sendMsg) await e.bot.adapter.sendMsg(e, msg)
-          if (e.friend?.sendMsg) await e.friend.sendMsg(msg)
-          if (e.group?.sendMsg) await e.group.sendMsg(msg)
-        } catch (error) {
-          logger.error(`回复消息失败: ${error.message}`)
-        }
-        return
-      }
       
       try {
         if (e.isGroup && e.group && (e.group.mute_left > 0 || (e.group.all_muted && !e.group.is_admin && !e.group.is_owner))) {

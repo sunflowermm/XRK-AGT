@@ -25,3 +25,9 @@ blackGroup:
 blackQQ:
   - "528952540"
 
+# 数据路径配置
+message_data_path: "data/messageJson/"      # 消息数据存储路径
+banned_words_path: "data/bannedWords/"      # 违禁词存储路径
+banned_images_path: "data/bannedWords/images/"  # 违禁图片存储路径
+banned_config_path: "data/bannedWords/config/"  # 违禁词配置路径
+

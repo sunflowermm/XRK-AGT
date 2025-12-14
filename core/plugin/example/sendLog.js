@@ -2,6 +2,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import lodash from "lodash"
 import moment from "moment"
+import cfg from '#infrastructure/config/config.js'
 
 export class sendLog extends plugin {
   constructor() {
@@ -19,11 +20,13 @@ export class sendLog extends plugin {
       ],
     })
 
-    this.lineNum = 120
-    this.maxNum = 1000
-    this.logDir = "logs"
-    this.maxPerForward = 30
-    this.maxLineLength = 300  // 单条日志最大长度
+    // 从cfg配置读取，充分利用配置系统
+    const botCfg = cfg.bot || {}
+    this.lineNum = botCfg.log_send_default_lines || 120
+    this.maxNum = botCfg.log_send_max_lines || 1000
+    this.logDir = botCfg.log_dir || "logs"
+    this.maxPerForward = botCfg.log_send_max_per_forward || 30
+    this.maxLineLength = botCfg.log_send_max_line_length || 300
     
     this.levelConfig = {
       ERROR: { emoji: "❌", color: "red" },
@@ -384,10 +387,11 @@ export class sendLog extends plugin {
 
   buildUsageInfo() {
     const platformInfo = logger.platform?.() || {}
+    const botCfg = cfg.bot || {}
     
     return [
       "💡 命令说明:",
-      "• #日志 - 查看最近120条日志",
+      `• #日志 - 查看最近${this.lineNum}条日志`,
       "• #错误日志 - 仅显示ERROR级别",
       "• #调试日志 - 仅显示DEBUG级别",
       "• #追踪日志 - 查看trace日志",
@@ -399,8 +403,10 @@ export class sendLog extends plugin {
       `• 最大显示: ${this.maxNum}条`,
       `• 每批最多: ${this.maxPerForward}条`,
       `• 单条限制: ${this.maxLineLength}字符`,
-      `• 主日志保留: ${platformInfo.mainLogAge || '3天'}`,
-      `• 追踪日志保留: ${platformInfo.traceLogAge || '1天'}`
+      `• 主日志保留: ${platformInfo.mainLogAge || botCfg.log_max_days || '3天'}`,
+      `• 追踪日志保留: ${platformInfo.traceLogAge || botCfg.log_trace_days || '1天'}`,
+      `• 日志等级: ${botCfg.log_level || 'info'}`,
+      `• 日志目录: ${this.logDir}`
     ].join("\n")
   }
 

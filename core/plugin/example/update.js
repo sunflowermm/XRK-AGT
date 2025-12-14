@@ -3,6 +3,7 @@ import lodash from 'lodash'
 import fs from 'node:fs'
 import common from '#utils/common.js'
 import { Restart } from './restart.js'
+import cfg from '#infrastructure/config/config.js'
 
 const require = createRequire(import.meta.url)
 const { exec, execSync } = require('child_process')
@@ -33,7 +34,14 @@ export class update extends plugin {
       ]
     })
 
-    this.typeName = 'XRK-AGT'
+    // 从cfg读取配置，充分利用配置系统
+    const botCfg = cfg.bot || {}
+    this.typeName = botCfg.update_type_name || 'XRK-AGT'
+    this.autoUpdateXRK = botCfg.update_auto_update_xrk !== false
+    this.sleepBetween = botCfg.update_sleep_between || 1500
+    this.restartDelay = botCfg.update_restart_delay || 2000
+    this.logLines = botCfg.update_log_lines || 100
+    
     this.messages = []
     this.xrkPlugins = [
       { name: 'XRK', requiredFiles: ['apps', 'package.json'] },
@@ -61,7 +69,7 @@ export class update extends plugin {
         this.updatedPlugins.add(plugin)
       }
 
-      if (this.isUp) setTimeout(() => this.restart(), 2000)
+      if (this.isUp) setTimeout(() => this.restart(), this.restartDelay)
     } finally {
       uping = false
     }
@@ -70,7 +78,12 @@ export class update extends plugin {
   async updateMainAndXRK() {
     await this.runUpdate('')
     this.updatedPlugins.add('main')
-    await common.sleep(1000)
+    await common.sleep(this.sleepBetween)
+    
+    // 根据配置决定是否自动更新XRK插件
+    if (!this.autoUpdateXRK) {
+      return
+    }
     
     const xrkUpdateResults = []
     for (const plugin of this.xrkPlugins) {
@@ -78,7 +91,7 @@ export class update extends plugin {
       if (!await this.checkPluginIntegrity(plugin)) continue
       
       logger.mark(`[更新] 检测到 ${plugin.name} 插件，自动更新中...`)
-      await common.sleep(1500)
+      await common.sleep(this.sleepBetween)
       
       const oldCommitId = await this.getcommitId(plugin.name)
       await this.runUpdate(plugin.name)
@@ -244,7 +257,7 @@ export class update extends plugin {
       plu = this.getPlugin(plu)
       if (plu === false) continue
       
-      await common.sleep(1500)
+      await common.sleep(this.sleepBetween)
       await this.runUpdate(plu)
       this.updatedPlugins.add(plu)
     }
@@ -254,7 +267,7 @@ export class update extends plugin {
       await this.reply(await common.makeForwardMsg(this.e, this.messages))
     )
 
-    this.isUp && setTimeout(() => this.restart(), 2000)
+    this.isUp && setTimeout(() => this.restart(), this.restartDelay)
   }
 
   restart() {
@@ -262,7 +275,7 @@ export class update extends plugin {
   }
 
   async getLog(plugin = '') {
-    let logCmd = 'git log -100 --pretty="%h||[%cd] %s" --date=format:"%F %T"'
+    let logCmd = `git log -${this.logLines} --pretty="%h||[%cd] %s" --date=format:"%F %T"`
     plugin && (logCmd = `cd "core/${plugin}" && ${logCmd}`)
 
     let logAll = ''

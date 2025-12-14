@@ -2,6 +2,7 @@ import os from 'os'
 import moment from 'moment'
 import * as si from 'systeminformation'
 import { createRequire } from 'module'
+import cfg from '#infrastructure/config/config.js'
 
 const require = createRequire(import.meta.url)
 
@@ -17,6 +18,12 @@ export class stattools extends plugin {
         fnc: 'status'
       }]
     })
+    
+    // 从cfg读取配置
+    const botCfg = cfg.bot || {}
+    this.showNetworkInfo = botCfg.status_show_network !== false
+    this.showProcessInfo = botCfg.status_show_process !== false
+    this.showDiskInfo = botCfg.status_show_disk !== false
   }
 
   formatFileSize(bytes) {
@@ -128,26 +135,32 @@ export class stattools extends plugin {
           `  可用：${this.formatFileSize(mainDisk.available)}`
         ].join('\n') : '  无磁盘信息',
         '',
-        `● 进程信息`,
-        `  总进程数：${processes.all}个`,
-        `  运行中：${processes.running}个`,
-        `  睡眠中：${processes.sleeping}个`,
-        `  阻塞：${processes.blocked}个`,
-        '',
+        this.showProcessInfo ? [
+          `● 进程信息`,
+          `  总进程数：${processes.all}个`,
+          `  运行中：${processes.running}个`,
+          `  睡眠中：${processes.sleeping}个`,
+          `  阻塞：${processes.blocked}个`,
+          ''
+        ] : [],
         `● Bot信息`,
         `  昵称：${bot.nickname || '未知'}`,
         `  账号：${bot.uin || e.self_id}`,
         `  运行时长：${botRuntime}`,
         `  Node版本：${nodeVersion}`,
         `  插件数量：${pluginCount}个`,
-        `  定时任务：${taskCount}个`
-      ]
+        `  定时任务：${taskCount}个`,
+        `  日志等级：${cfg.bot?.log_level || 'info'}`,
+        `  日志目录：${cfg.bot?.log_dir || 'logs'}`
+      ].flat()
 
+      if (this.showNetworkInfo) {
         msg.push('', `● 网络信息`)
         msg.push(`  接口名称：${activeNetwork.iface}`)
         msg.push(`  IPv4地址：${activeNetwork.ip4 || '无'}`)
         msg.push(`  IPv6地址：${activeNetwork.ip6 || '无'}`)
         msg.push(`  MAC地址：${activeNetwork.mac || '无'}`)
+      }
 
       await e.reply(msg.join('\n'))
       return true

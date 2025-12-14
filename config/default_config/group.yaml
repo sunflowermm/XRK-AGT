@@ -15,6 +15,17 @@ default:
   # 禁用功能，功能名称,例如：帮助
   disable: []      # 默认空数组，按需追加
 
+  # 违禁词配置
+  banned_words_enabled: true    # 是否启用违禁词检测
+  banned_words_mute_time: 720   # 违禁词触发禁言时间（分钟）
+  banned_words_warn_only: false # 是否仅警告不禁言
+  banned_words_exempt_roles: [] # 免检角色列表（如：owner, admin）
+
+  # 添加功能配置
+  addLimit: 0      # 添加限制：0-无限制 1-仅主人 2-管理员及以上
+  addReply: true   # 添加时是否回复
+  addAt: false     # 添加时是否@用户
+
 # 群单独设置，自动覆盖默认值
 123456:
   groupGlobalCD:  0    # 群聊中所有指令操作冷却时间，单位毫秒,0则无限制

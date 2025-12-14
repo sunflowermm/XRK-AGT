@@ -36,38 +36,19 @@ export default class OneBotEvent {
    * @param {string} eventType - 事件类型
    */
   async handleEvent(e, eventType) {
-    try {
-      // 确保只处理本适配器的事件
-      if (e.adapter && e.adapter !== this.adapterName && !e.isOneBot) {
-        return
-      }
-
-      // 使用适配器+事件ID作为唯一标识去重
-      // 避免 Bot.em 递归触发导致重复处理
-      const eventId = e.event_id || `${eventType}_${Date.now()}_${Math.random()}`
-      const uniqueKey = `${this.adapterName}:${eventId}`
-      
-      if (this.processedEvents.has(uniqueKey)) {
-        return
-      }
-      this.processedEvents.add(uniqueKey)
-      
-      // 清理旧的事件ID（保留最近N个）
-      this.cleanupProcessedEvents()
-      
-      // 设置事件来源标识
-      e.adapter = this.adapterName
-      e.isOneBot = true
-      
-      // 分发给插件系统处理
-      // 插件系统会通过 filtEvent 匹配插件，支持：
-      // - 特定事件: 'onebot.message' 只匹配 OneBot 的 message
-      // - 通用事件: 'message' 匹配所有适配器的 message
-      await this.plugins.deal(e)
-    } catch (error) {
-      logger.error(`[${this.adapterName}] 事件处理错误: ${error.message}`)
-      logger.error(error)
-    }
+    const eventId = e.event_id
+    if (!eventId) return
+    
+    const uniqueKey = `${this.adapterName}:${eventId}`
+    if (this.processedEvents.has(uniqueKey)) return
+    
+    this.processedEvents.add(uniqueKey)
+    this.cleanupProcessedEvents()
+    
+    e.adapter = this.adapterName
+    e.isOneBot = true
+    
+    await this.plugins.deal(e)
   }
 
   /**

@@ -211,6 +211,104 @@ export default class SystemConfig extends ConfigBase {
               description: '是否缓存群成员列表',
               default: true,
               component: 'Switch'
+            },
+            status_show_network: {
+              type: 'boolean',
+              label: '状态-显示网络信息',
+              description: '状态插件是否显示网络信息',
+              default: true,
+              component: 'Switch'
+            },
+            status_show_process: {
+              type: 'boolean',
+              label: '状态-显示进程信息',
+              description: '状态插件是否显示进程信息',
+              default: true,
+              component: 'Switch'
+            },
+            status_show_disk: {
+              type: 'boolean',
+              label: '状态-显示磁盘信息',
+              description: '状态插件是否显示磁盘信息',
+              default: true,
+              component: 'Switch'
+            },
+            log_send_default_lines: {
+              type: 'number',
+              label: '日志发送-默认行数',
+              description: '日志发送插件默认发送日志行数',
+              min: 1,
+              default: 120,
+              component: 'InputNumber'
+            },
+            log_send_max_lines: {
+              type: 'number',
+              label: '日志发送-最大行数',
+              description: '日志发送插件最大发送日志行数',
+              min: 1,
+              default: 1000,
+              component: 'InputNumber'
+            },
+            log_send_max_per_forward: {
+              type: 'number',
+              label: '日志发送-转发最大行数',
+              description: '每条转发消息最大行数',
+              min: 1,
+              default: 30,
+              component: 'InputNumber'
+            },
+            log_send_max_line_length: {
+              type: 'number',
+              label: '日志发送-单行最大长度',
+              description: '单行日志最大长度',
+              min: 1,
+              default: 300,
+              component: 'InputNumber'
+            },
+            log_dir: {
+              type: 'string',
+              label: '日志目录',
+              description: '日志存储目录',
+              default: 'logs',
+              component: 'Input'
+            },
+            update_auto_update_xrk: {
+              type: 'boolean',
+              label: '更新-自动更新XRK',
+              description: '更新插件是否自动更新XRK插件',
+              default: true,
+              component: 'Switch'
+            },
+            update_sleep_between: {
+              type: 'number',
+              label: '更新-间隔时间',
+              description: '更新间隔时间（毫秒）',
+              min: 0,
+              default: 1500,
+              component: 'InputNumber'
+            },
+            update_restart_delay: {
+              type: 'number',
+              label: '更新-重启延迟',
+              description: '更新后重启延迟（毫秒）',
+              min: 0,
+              default: 2000,
+              component: 'InputNumber'
+            },
+            update_type_name: {
+              type: 'string',
+              label: '更新-类型名称',
+              description: '更新类型名称',
+              default: 'XRK-AGT',
+              component: 'Input'
+            },
+            update_log_lines: {
+              type: 'number',
+              label: '更新-日志行数',
+              description: '更新日志显示行数',
+              min: 1,
+              default: 100,
+              component: 'InputNumber'
             }
           }
         }
@@ -1010,6 +1108,58 @@ export default class SystemConfig extends ConfigBase {
                   itemType: 'string',
                   default: [],
                   component: 'Tags'
+                },
+                banned_words_enabled: {
+                  type: 'boolean',
+                  label: '违禁词-启用',
+                  description: '是否启用违禁词检测',
+                  default: true,
+                  component: 'Switch'
+                },
+                banned_words_mute_time: {
+                  type: 'number',
+                  label: '违禁词-禁言时间',
+                  description: '违禁词触发禁言时间（分钟）',
+                  min: 0,
+                  default: 720,
+                  component: 'InputNumber'
+                },
+                banned_words_warn_only: {
+                  type: 'boolean',
+                  label: '违禁词-仅警告',
+                  description: '是否仅警告不禁言',
+                  default: false,
+                  component: 'Switch'
+                },
+                banned_words_exempt_roles: {
+                  type: 'array',
+                  label: '违禁词-免检角色',
+                  description: '免检角色列表（如：owner, admin）',
+                  itemType: 'string',
+                  default: [],
+                  component: 'Tags'
+                },
+                addLimit: {
+                  type: 'number',
+                  label: '添加-限制',
+                  description: '添加限制：0-无限制 1-仅主人 2-管理员及以上',
+                  enum: [0, 1, 2],
+                  default: 0,
+                  component: 'Select'
+                },
+                addReply: {
+                  type: 'boolean',
+                  label: '添加-回复',
+                  description: '添加时是否回复',
+                  default: true,
+                  component: 'Switch'
+                },
+                addAt: {
+                  type: 'boolean',
+                  label: '添加-@用户',
+                  description: '添加时是否@用户',
+                  default: false,
+                  component: 'Switch'
                 }
               }
             }
@@ -1130,6 +1280,34 @@ export default class SystemConfig extends ConfigBase {
               itemType: 'string',
               default: ['stoken'],
               component: 'Tags'
+            },
+            message_data_path: {
+              type: 'string',
+              label: '消息数据路径',
+              description: '消息数据存储路径',
+              default: 'data/messageJson/',
+              component: 'Input'
+            },
+            banned_words_path: {
+              type: 'string',
+              label: '违禁词路径',
+              description: '违禁词存储路径',
+              default: 'data/bannedWords/',
+              component: 'Input'
+            },
+            banned_images_path: {
+              type: 'string',
+              label: '违禁图片路径',
+              description: '违禁图片存储路径',
+              default: 'data/bannedWords/images/',
+              component: 'Input'
+            },
+            banned_config_path: {
+              type: 'string',
+              label: '违禁词配置路径',
+              description: '违禁词配置路径',
+              default: 'data/bannedWords/config/',
+              component: 'Input'
             }
           }
         }

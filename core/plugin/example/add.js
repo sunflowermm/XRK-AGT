@@ -51,10 +51,13 @@ export class add extends plugin {
       ]
     })
 
-    this.path = "data/messageJson/"
-    this.bannedWordsPath = "data/bannedWords/"
-    this.bannedImagesPath = "data/bannedWords/images/"
-    this.configPath = "data/bannedWords/config/"
+    // 从cfg读取数据目录配置，充分利用配置系统
+    const botCfg = cfg.bot || {}
+    const otherCfg = cfg.getOther() || {}
+    this.path = otherCfg.message_data_path || botCfg.data_dir || "data/messageJson/"
+    this.bannedWordsPath = otherCfg.banned_words_path || "data/bannedWords/"
+    this.bannedImagesPath = otherCfg.banned_images_path || "data/bannedWords/images/"
+    this.configPath = otherCfg.banned_config_path || "data/bannedWords/config/"
   }
 
   async init() {
@@ -95,15 +98,17 @@ export class add extends plugin {
   async initBannedWords(groupId) {
     if (bannedWordsMap[groupId]) return
     
+    // 从cfg读取默认配置
+    const groupCfg = cfg.getGroup(this.e?.self_id || '', groupId)
     bannedWordsMap[groupId] = {
       exact: new Set(),
       fuzzy: new Set(),
       images: new Map(),
       config: {
-        enabled: true,
-        muteTime: 720,
-        warnOnly: false,
-        exemptRoles: []
+        enabled: groupCfg.banned_words_enabled !== false,
+        muteTime: groupCfg.banned_words_mute_time || 720,
+        warnOnly: groupCfg.banned_words_warn_only || false,
+        exemptRoles: groupCfg.banned_words_exempt_roles || []
       }
     }
 
