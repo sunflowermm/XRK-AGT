@@ -1026,18 +1026,11 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         return Reflect.has(target, prop) || prop in botMap || prop in BotUtil;
       },
       ownKeys: (target) => {
-        const keys = new Set([
-          ...Reflect.ownKeys(target),
-          ...Reflect.ownKeys(botMap)
-        ]);
-        return Array.from(keys);
+        return Reflect.ownKeys(target);
       },
       getOwnPropertyDescriptor: (target, prop) => {
         if (Reflect.has(target, prop)) {
           return Reflect.getOwnPropertyDescriptor(target, prop);
-        }
-        if (prop in botMap) {
-          return Object.getOwnPropertyDescriptor(botMap, prop);
         }
         return undefined;
       }
