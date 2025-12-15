@@ -11,30 +11,44 @@ const tempDir = path.join(process.cwd(), "www", "stdin");
 const mediaDir = path.join(process.cwd(), "www", "media");
 const pluginsLoader = (await import("../../src/infrastructure/plugins/loader.js")).default;
 
+// 确保目录存在
 for (const dir of [tempDir, mediaDir]) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
-setInterval(() => {
+
+// 统一的清理函数，避免代码重复
+const cleanupTempFiles = () => {
   try {
     const now = Date.now();
+    let cleaned = 0;
     for (const dir of [tempDir, mediaDir]) {
       if (!fs.existsSync(dir)) continue;
       const files = fs.readdirSync(dir);
       files.forEach(file => {
         const filePath = path.join(dir, file);
-        const stats = fs.statSync(filePath);
-        if (now - stats.mtimeMs > 3600000) {
-          fs.unlinkSync(filePath);
-          logger.debug(`已清理临时文件: ${file}`);
+        try {
+          const stats = fs.statSync(filePath);
+          if (now - stats.mtimeMs > 3600000) {
+            fs.unlinkSync(filePath);
+            cleaned++;
+          }
+        } catch (err) {
+          // 忽略单个文件错误
         }
       });
+    }
+    if (cleaned > 0) {
+      logger.debug(`已清理 ${cleaned} 个临时文件`);
     }
   } catch (error) {
     logger.error(`清理临时文件错误: ${error.message}`);
   }
-}, 3600000);
+};
+
+// 定时清理（每小时一次）
+setInterval(cleanupTempFiles, 3600000);
 
 export class StdinHandler {
   constructor() {
@@ -575,27 +589,7 @@ export class StdinHandler {
   }
 
   cleanupTempFiles() {
-    try {
-      const now = Date.now();
-      let cleaned = 0;
-
-      for (const dir of [tempDir, mediaDir]) {
-        if (!fs.existsSync(dir)) continue;
-        const files = fs.readdirSync(dir);
-        files.forEach(file => {
-          const filePath = path.join(dir, file);
-          const stats = fs.statSync(filePath);
-          if (now - stats.mtimeMs > 3600000) {
-            fs.unlinkSync(filePath);
-            cleaned++;
-          }
-        });
-      }
-
-      logger.info(`清理了 ${cleaned} 个临时文件`);
-    } catch (error) {
-      logger.error(`清理临时文件错误: ${error.message}`);
-    }
+    cleanupTempFiles(); // 复用统一的清理函数
   }
 
 }

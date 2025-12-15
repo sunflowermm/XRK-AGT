@@ -14,7 +14,6 @@ const _resources = path.join(_root, 'resources');
 const _www = path.join(_root, 'www');
 const _logs = path.join(_root, 'logs');
 const _renderers = path.join(_src, 'renderers');
-const _temp = path.join(_root, 'temp');
 
 export default {
   root: _root,
@@ -26,7 +25,6 @@ export default {
   www: _www,
   logs: _logs,
   renderers: _renderers,
-  temp: _temp,
   resources: _resources,
   
   // sub-directories
@@ -47,7 +45,6 @@ export default {
    * - data: 插件与系统配置/数据
    * - resources: 插件与渲染静态资源
    * - trash: 临时文件（截图、缓存等）
-   * - temp: 运行期临时渲染目录
    */
   async ensureBaseDirs(fsPromises) {
     const fs = fsPromises || await import('fs/promises').then(m => m.default || m);
@@ -59,8 +56,7 @@ export default {
       path.join(_data, 'server_bots'),
       _resources,
       _trash,
-      path.join(_trash, 'screenshot'),
-      _temp
+      path.join(_trash, 'screenshot')
     ];
 
     for (const dir of dirs) {

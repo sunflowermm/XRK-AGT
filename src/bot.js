@@ -914,7 +914,7 @@ Disallow: /config/
 Disallow: /data/
 Disallow: /lib/
 Disallow: /plugins/
-Disallow: /temp/
+Disallow: /trash/
 Allow: /
 
 Sitemap: ${this.getServerUrl()}/sitemap.xml`;

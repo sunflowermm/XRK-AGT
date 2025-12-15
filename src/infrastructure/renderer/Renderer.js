@@ -44,7 +44,7 @@ export default class Renderer {
     this.type = data.type || 'image'
     /** 渲染器入口 */
     this.render = this[data.render || 'render']
-    this.dir = './temp/html'
+    this.dir = './trash/html'
     this.html = {}
     this.watcher = {}
     this.createDir(this.dir)
@@ -65,11 +65,11 @@ export default class Renderer {
   /** 模板 */
   dealTpl(name, data) {
     let { tplFile, saveId = name } = data
-    let savePath = `./temp/html/${name}/${saveId}.html`
+    let savePath = `./trash/html/${name}/${saveId}.html`
 
     /** 读取html模板 */
     if (!this.html[tplFile]) {
-      this.createDir(`./temp/html/${name}`)
+      this.createDir(`./trash/html/${name}`)
 
       try {
         this.html[tplFile] = fs.readFileSync(tplFile, 'utf8')

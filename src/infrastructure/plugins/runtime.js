@@ -164,7 +164,7 @@ export default class Runtime {
     path = paths.join("/")
     
     // 创建目录
-    await Bot.mkdir(`temp/html/${plugin}/${path}`)
+    await Bot.mkdir(`trash/html/${plugin}/${path}`)
     
     // 自动计算pluResPath
     const resourcesPath = path.join(paths.core, plugin, 'resources');
@@ -199,7 +199,7 @@ export default class Runtime {
     
     // 保存模板数据（开发模式）
     if (process.argv.includes("dev")) {
-      let saveDir = await Bot.mkdir(`temp/ViewData/${plugin}`)
+      let saveDir = await Bot.mkdir(`trash/ViewData/${plugin}`)
       let file = `${saveDir}/${data._htmlPath.split("/").join("_")}.json`
       await fs.writeFile(file, JSON.stringify(data))
     }

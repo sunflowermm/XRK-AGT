@@ -1005,7 +1005,7 @@ export default class BotUtil {
    * @returns {Promise<string>} 文件 URL 或数据 URL
    */
   static async #saveBufferToTempFile(buffer) {
-    const tempDir = paths.temp;
+    const tempDir = paths.trash;
 
     try {
       await BotUtil.mkdir(tempDir);

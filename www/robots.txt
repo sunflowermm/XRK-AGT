@@ -30,7 +30,7 @@ Disallow: /src/
 Disallow: /core/
 
 # 临时文件
-Disallow: /temp/
+Disallow: /trash/
 Disallow: /tmp/
 Disallow: /cache/
 
