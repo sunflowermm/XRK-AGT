@@ -221,7 +221,10 @@
         .hand-tracker {
             position: absolute; width: 80px; height: 80px; border: 4px solid var(--accent-gold);
             border-radius: 50%; box-shadow: 0 0 30px rgba(251, 191, 36, 0.6);
-            pointer-events: none; z-index: 20; transition: all 0.08s linear; display: none;
+            pointer-events: none; z-index: 20; 
+            transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease; 
+            display: none;
+            will-change: transform; /* 性能优化 */
         }
         .hand-tracker.active { display: block; }
         .hand-tracker.closed { border-color: #ef4444; box-shadow: 0 0 40px rgba(239, 68, 68, 0.8); }
@@ -454,7 +457,12 @@
             canvasW: 0, canvasH: 0,
             lastFrameTime: 0,
             targetFPS: 60,
-            frameInterval: 1000 / 60
+            frameInterval: 1000 / 60,
+            // 平滑插值状态（用于减少闪动）
+            smoothHandPositions: [
+                { x: 0.5, y: 0.5, vx: 0, vy: 0 },
+                { x: 0.5, y: 0.5, vx: 0, vy: 0 }
+            ]
         };
 
         // ============ Three.js 粒子系统（参考优化版本）============
@@ -847,36 +855,98 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             // 性能优化：减少DOM操作，批量更新
+            // 支持双手显示和平滑插值（减少闪动）
             const handTracker = document.getElementById('handTracker');
-            let hx = 0, hy = 0;
-            if (G.isHandDetected) {
-                hx = (1 - G.handX) * canvas.width; 
-                hy = G.handY * canvas.height;
+            const smoothingFactor = 0.15; // 平滑插值系数（越小越平滑，但延迟越大）
+            const velocityDamping = 0.85; // 速度衰减系数
+            
+            // 更新平滑位置（使用速度预测减少闪动）
+            for (let handIdx = 0; handIdx < 2; handIdx++) {
+                const smooth = G.smoothHandPositions[handIdx];
+                const hand = G.hands[handIdx];
                 
-                // 批量更新DOM（减少重排）
+                if (hand.detected) {
+                    // 计算目标位置（归一化坐标）
+                    const targetX = hand.x;
+                    const targetY = hand.y;
+                    
+                    // 计算速度（用于预测）
+                    const dx = targetX - smooth.x;
+                    const dy = targetY - smooth.y;
+                    smooth.vx = smooth.vx * velocityDamping + dx * (1 - velocityDamping);
+                    smooth.vy = smooth.vy * velocityDamping + dy * (1 - velocityDamping);
+                    
+                    // 平滑插值（使用速度预测）
+                    smooth.x += (targetX - smooth.x) * smoothingFactor + smooth.vx * 0.3;
+                    smooth.y += (targetY - smooth.y) * smoothingFactor + smooth.vy * 0.3;
+                } else {
+                    // 未检测到时，平滑衰减速度
+                    smooth.vx *= velocityDamping;
+                    smooth.vy *= velocityDamping;
+                }
+            }
+            
+            // 绘制双手指示器（支持两个点）
+            let hasAnyHand = false;
+            for (let handIdx = 0; handIdx < 2; handIdx++) {
+                const hand = G.hands[handIdx];
+                const smooth = G.smoothHandPositions[handIdx];
+                
+                if (hand.detected) {
+                    hasAnyHand = true;
+                    const hx = (1 - smooth.x) * canvas.width;
+                    const hy = smooth.y * canvas.height;
+                    const isClosed = hand.openness < 0.5;
+                    
+                    // 绘制手部指示器（不同颜色区分左右手）
+                    const color = handIdx === 0 ? 'rgba(251,191,36,0.4)' : 'rgba(99,102,241,0.4)';
+                    const colorOuter = handIdx === 0 ? 'rgba(251,191,36,0)' : 'rgba(99,102,241,0)';
+                    const grad = ctx.createRadialGradient(hx, hy, 0, hx, hy, 80);
+                    grad.addColorStop(0, color);
+                    grad.addColorStop(1, colorOuter);
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(hx, hy, 80, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 绘制中心点（更明显）
+                    ctx.fillStyle = isClosed ? 'rgba(239,68,68,0.8)' : 'rgba(34,197,94,0.8)';
+                    ctx.beginPath();
+                    ctx.arc(hx, hy, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            // 更新DOM手部跟踪器（使用第一只手的位置，兼容旧代码）
+            if (hasAnyHand) {
+                const firstHand = G.hands[0].detected ? G.smoothHandPositions[0] : G.smoothHandPositions[1];
+                const hx = (1 - firstHand.x) * canvas.width;
+                const hy = firstHand.y * canvas.height;
+                
                 if (!handTracker.classList.contains('active')) {
                     handTracker.classList.add('active');
                 }
-                handTracker.style.cssText = `left: ${hx - 40}px; top: ${hy - 40}px;`;
-                const isClosed = G.handOpenness < 0.5;
+                // 使用transform代替left/top，性能更好且更平滑
+                handTracker.style.transform = `translate(${hx - 40}px, ${hy - 40}px)`;
+                
+                const isClosed = (G.hands[0].detected ? G.hands[0].openness : G.hands[1].openness) < 0.5;
                 if (isClosed && !handTracker.classList.contains('closed')) {
                     handTracker.classList.add('closed');
                 } else if (!isClosed && handTracker.classList.contains('closed')) {
                     handTracker.classList.remove('closed');
                 }
-                
-                // 绘制手部指示器
-                const grad = ctx.createRadialGradient(hx, hy, 0, hx, hy, 80);
-                grad.addColorStop(0, 'rgba(251,191,36,0.4)');
-                grad.addColorStop(1, 'rgba(251,191,36,0)');
-                ctx.fillStyle = grad;
-                ctx.beginPath();
-                ctx.arc(hx, hy, 80, 0, Math.PI * 2);
-                ctx.fill();
             } else {
                 if (handTracker.classList.contains('active')) {
                     handTracker.classList.remove('active');
                 }
+            }
+            
+            // 兼容旧代码：更新G.isHandDetected和G.handX/Y
+            G.isHandDetected = hasAnyHand;
+            if (hasAnyHand) {
+                const firstHand = G.hands[0].detected ? G.smoothHandPositions[0] : G.smoothHandPositions[1];
+                G.handX = firstHand.x;
+                G.handY = firstHand.y;
             }
 
             // 性能优化：使用更高效的过滤和更新方式（原地过滤）
@@ -910,6 +980,7 @@
             let scoreUpdated = false;
             
             // 性能优化：分离更新和渲染逻辑
+            // 支持双手碰撞检测
             const hitRadius = 50;
             const hitRadiusSq = hitRadius * hitRadius;
             
@@ -918,14 +989,24 @@
                 obj.update(canvas.width, canvas.height);
                 
                 // 使用平方距离避免sqrt计算（性能优化）
-                if (G.isHandDetected && !obj.popped) {
-                    const dx = obj.x - hx;
-                    const dy = obj.y - hy;
-                    const distSq = dx * dx + dy * dy;
-                    if (distSq < hitRadiusSq) {
-                        obj.popped = true;
-                        G.score += 10;
-                        scoreUpdated = true;
+                // 支持双手碰撞检测
+                if (!obj.popped) {
+                    for (let handIdx = 0; handIdx < 2; handIdx++) {
+                        const hand = G.hands[handIdx];
+                        if (hand.detected) {
+                            const smooth = G.smoothHandPositions[handIdx];
+                            const hx = (1 - smooth.x) * canvas.width;
+                            const hy = smooth.y * canvas.height;
+                            const dx = obj.x - hx;
+                            const dy = obj.y - hy;
+                            const distSq = dx * dx + dy * dy;
+                            if (distSq < hitRadiusSq) {
+                                obj.popped = true;
+                                G.score += 10;
+                                scoreUpdated = true;
+                                break; // 只计算一次碰撞
+                            }
+                        }
                     }
                 }
             }
@@ -1004,7 +1085,7 @@
                         hand.x = landmarks[9].x;
                         hand.y = landmarks[9].y;
 
-                        // 优化的手掌张开程度计算（使用多种指标提高准确度）
+                        // 优化的手掌张开程度计算（修复：确保张开手识别为张开）
                         const wrist = landmarks[0];
                         const tips = [4, 8, 12, 16, 20]; // 五个指尖
                         
@@ -1033,16 +1114,30 @@
                             Math.pow(middleTip.y - ringTip.y, 2)
                         );
                         
-                        // 综合三种方法，提高准确度
-                        // 归一化处理（根据实际测试调整阈值）
-                        const minOpen = 0.12;
-                        const maxOpen = 0.45;
-                        const openness1 = Math.max(0, Math.min(1, (avgDist - minOpen) / (maxOpen - minOpen)));
-                        const openness2 = Math.max(0, Math.min(1, (thumbIndexDist - 0.05) / 0.2));
-                        const openness3 = Math.max(0, Math.min(1, (middleRingDist - 0.03) / 0.15));
+                        // 方法4：计算所有相邻指尖之间的平均距离（更准确判断张开）
+                        let fingerSpread = 0;
+                        const fingerPairs = [[8, 12], [12, 16], [16, 20]]; // 食指-中指, 中指-无名指, 无名指-小指
+                        fingerPairs.forEach(([idx1, idx2]) => {
+                            const p1 = landmarks[idx1];
+                            const p2 = landmarks[idx2];
+                            fingerSpread += Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+                        });
+                        fingerSpread = fingerSpread / fingerPairs.length;
                         
-                        // 加权平均（拇指食指权重更高，因为更明显）
-                        hand.openness = (openness1 * 0.4 + openness2 * 0.4 + openness3 * 0.2);
+                        // 综合四种方法，提高准确度
+                        // 归一化处理（调整阈值，确保张开手识别为张开）
+                        const minOpen = 0.10;
+                        const maxOpen = 0.50;
+                        const openness1 = Math.max(0, Math.min(1, (avgDist - minOpen) / (maxOpen - minOpen)));
+                        const openness2 = Math.max(0, Math.min(1, (thumbIndexDist - 0.04) / 0.25));
+                        const openness3 = Math.max(0, Math.min(1, (middleRingDist - 0.02) / 0.18));
+                        const openness4 = Math.max(0, Math.min(1, (fingerSpread - 0.03) / 0.20));
+                        
+                        // 加权平均（增加手指间距权重，更准确判断张开）
+                        hand.openness = (openness1 * 0.3 + openness2 * 0.3 + openness3 * 0.2 + openness4 * 0.2);
+                        
+                        // 确保值在合理范围内，并添加平滑处理
+                        hand.openness = Math.max(0, Math.min(1, hand.openness));
                         
                         // 兼容旧代码（使用第一只手）
                         if (handIdx === 0) {
