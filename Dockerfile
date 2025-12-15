@@ -31,7 +31,7 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY . .
 
 # 预创建常用目录
-RUN mkdir -p logs data data/bots data/backups config config/default_config data/server_bots config/pm2 resources
+RUN mkdir -p logs data data/bots data/backups config config/default_config data/server_bots resources
 
 # 运行时环境
 ENV NODE_ENV=production \

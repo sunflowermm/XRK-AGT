@@ -21,6 +21,7 @@
 
 import { promises as fs } from 'fs';
 import path from 'path';
+import os from 'os';
 import { spawnSync } from 'child_process';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
@@ -38,15 +39,10 @@ let globalSignalHandler = null;
  */
 const PATHS = {
   LOGS: './logs',
-  DATA: './data',
-  BOTS: './data/bots',
-  BACKUPS: './data/backups',
-  CONFIG: './config',
   DEFAULT_CONFIG: './config/default_config',
-  SERVER_BOTS: './data/server_bots',
-  PM2_CONFIG: './config/pm2',
-  RESOURCE_USAGE: './resources'
+  SERVER_BOTS: './data/server_bots'
 };
+const PM2_TMP_PREFIX = path.join(os.tmpdir(), 'xrk-agt-pm2-');
 
 /**
  * 应用程序配置常量
@@ -238,7 +234,7 @@ class BaseManager {
    * @returns {Promise<void>}
    */
   async ensureDirectories() {
-    for (const dir of Object.values(PATHS)) {
+    for (const dir of [PATHS.LOGS, PATHS.SERVER_BOTS]) {
       await fs.mkdir(dir, { recursive: true }).catch(() => {});
     }
   }
@@ -413,12 +409,20 @@ class PM2Manager extends BaseManager {
       }
     };
     
-    await fs.mkdir(PATHS.PM2_CONFIG, { recursive: true });
-    const configPath = path.join(PATHS.PM2_CONFIG, `pm2_server_${port}.json`);
+    const pm2Dir = await fs.mkdtemp(PM2_TMP_PREFIX);
+    const configPath = path.join(pm2Dir, `pm2_server_${port}.json`);
     const payload = JSON.stringify({ apps: [pm2Config] }, null, JSON_SPACE);
     await writeFileIfChanged(configPath, payload);
     
-    return configPath;
+    const cleanup = async () => {
+      try {
+        await fs.rm(pm2Dir, { recursive: true, force: true });
+      } catch {
+        /* ignore cleanup failures */
+      }
+    };
+
+    return { configPath, cleanup };
   }
 
   /**
@@ -433,8 +437,10 @@ class PM2Manager extends BaseManager {
     /** 命令映射表 */
     const commandMap = {
       start: async () => {
-        const configPath = await this.createConfig(port, 'server');
-        return this.executePM2Command('start', [configPath], processName);
+        const { configPath, cleanup } = await this.createConfig(port, 'server');
+        const ok = await this.executePM2Command('start', [configPath], processName);
+        await cleanup();
+        return ok;
       },
       logs: () => this.executePM2Command('logs', [processName, '--lines', CONFIG.PM2_LINES.toString()], processName),
       stop: () => this.executePM2Command('stop', [processName], processName),
@@ -472,10 +478,6 @@ class ServerManager extends BaseManager {
     return path.join(PATHS.SERVER_BOTS, String(port));
   }
 
-  getPm2ConfigPath(port) {
-    return path.join(PATHS.PM2_CONFIG, `pm2_server_${port}.json`);
-  }
-
   async ensurePortConfig(port) {
     const portDir = this.getPortDir(port);
     await fs.mkdir(portDir, { recursive: true });
@@ -485,11 +487,9 @@ class ServerManager extends BaseManager {
 
   async removePortConfig(port) {
     const portDir = this.getPortDir(port);
-    const pm2Config = this.getPm2ConfigPath(port);
 
     try {
       await fs.rm(portDir, { recursive: true, force: true });
-      await fs.rm(pm2Config, { force: true });
       await this.logger.warning(`端口 ${port} 的配置目录已删除`);
       return true;
     } catch (error) {
