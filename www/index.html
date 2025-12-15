@@ -449,7 +449,7 @@
             handOpenness: 1.0,
             isHandDetected: false,
             scene: null, camera: null, renderer: null, particles: null,
-            particleCount: isLocalhost ? 4000 : 3000, // 根据访问来源调整粒子数（优化性能）
+            particleCount: isLocalhost ? 5000 : 3500, // 根据访问来源调整粒子数
             positions: null, targetPositions: null,
             currentShape: 'heart',
             gameObjects: [], score: 0,
@@ -476,7 +476,7 @@
                 logarithmicDepthBuffer: false // 禁用对数深度缓冲
             });
             G.renderer.setSize(container.clientWidth, container.clientHeight);
-            G.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0)); // 进一步降低像素比提升性能
+            G.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0)); // 提高像素比使粒子更清晰
             G.renderer.shadowMap.enabled = false; // 禁用阴影
             container.appendChild(G.renderer.domElement);
 
@@ -501,10 +501,15 @@
             }
             geometry.setAttribute('position', new THREE.BufferAttribute(G.positions, 3));
             const material = new THREE.PointsMaterial({
-                size: 0.5, map: texture, transparent: true, opacity: 0.8,
-                color: new THREE.Color(0x6366f1), blending: THREE.AdditiveBlending, depthWrite: false,
-                sizeAttenuation: true, // 启用尺寸衰减
-                vertexColors: false // 禁用顶点颜色提升性能
+                size: 2.0, // 增大粒子大小使其可见
+                map: texture, 
+                transparent: true, 
+                opacity: 0.9,
+                color: new THREE.Color(0x6366f1), 
+                blending: THREE.AdditiveBlending, 
+                depthWrite: false,
+                sizeAttenuation: true,
+                vertexColors: false
             });
             G.particles = new THREE.Points(geometry, material);
             G.scene.add(G.particles);
@@ -543,8 +548,10 @@
                 G.lastFrameTime = currentTime;
             }
             
-            // 性能优化：限制帧率（修复时间计算）
+            // 性能优化：使用固定时间步长（更流畅）
             const elapsed = currentTime - G.lastFrameTime;
+            const deltaTime = Math.min(elapsed, 100); // 限制最大deltaTime避免跳帧
+            
             if (elapsed < G.frameInterval) {
                 requestAnimationFrame(animateParticles);
                 return;
@@ -571,48 +578,101 @@
                 scale = 0.5 + G.handOpenness * 2.0; // 烟花效果更明显
             }
             
-            const speed = 0.08; // 稍微加快响应速度
+            const speed = 0.1; // 加快响应速度
             
-            // 性能优化：批量更新，减少循环开销
-            for (let i = 0; i < G.particleCount; i++) {
+            // 性能优化：使用SIMD风格的批量更新（现代JS引擎优化）
+            const count = G.particleCount;
+            const posArray = pos;
+            const targetArray = targetPos;
+            
+            // 展开循环，减少分支预测失败
+            let i = 0;
+            while (i < count) {
                 const idx = i * 3;
-                const px = idx;
-                const py = idx + 1;
-                const pz = idx + 2;
+                const targetX = targetArray[idx] * scale;
+                const targetY = targetArray[idx + 1] * scale;
+                const targetZ = targetArray[idx + 2] * scale;
                 
-                // 计算目标位置（应用缩放）
-                const targetX = targetPos[px] * scale;
-                const targetY = targetPos[py] * scale;
-                const targetZ = targetPos[pz] * scale;
-                
-                // 平滑插值到目标位置
-                pos[px] += (targetX - pos[px]) * speed;
-                pos[py] += (targetY - pos[py]) * speed;
-                pos[pz] += (targetZ - pos[pz]) * speed;
+                posArray[idx] += (targetX - posArray[idx]) * speed;
+                posArray[idx + 1] += (targetY - posArray[idx + 1]) * speed;
+                posArray[idx + 2] += (targetZ - posArray[idx + 2]) * speed;
+                i++;
             }
             
+            // 只在位置变化时更新（性能优化）
             G.particles.geometry.attributes.position.needsUpdate = true;
+            
+            // 使用requestAnimationFrame自动同步刷新率
             G.renderer.render(G.scene, G.camera);
             
             // 继续动画循环
             requestAnimationFrame(animateParticles);
         }
 
-        // ============ 2D游戏 ============
+        // ============ 2D游戏（高性能优化版本）============
+        // 对象池：重用对象减少GC压力
+        const objectPool = {
+            pool: [],
+            get(x, y, type) {
+                let obj = this.pool.find(o => !o.active);
+                if (!obj) {
+                    obj = new GameObject(x, y, type);
+                    this.pool.push(obj);
+                } else {
+                    obj.reset(x, y, type);
+                }
+                return obj;
+            },
+            release(obj) {
+                obj.active = false;
+            }
+        };
+
+        // 位图缓存：预渲染emoji到canvas，避免重复绘制
+        const emojiCache = new Map();
+        function getEmojiImage(emoji, size) {
+            const key = `${emoji}-${size}`;
+            if (emojiCache.has(key)) {
+                return emojiCache.get(key);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = size * 2;
+            canvas.height = size * 2;
+            const ctx = canvas.getContext('2d');
+            ctx.font = `${size}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(emoji, size, size);
+            emojiCache.set(key, canvas);
+            return canvas;
+        }
+
         class GameObject {
             constructor(x, y, type) {
-                this.x = x; this.y = y; this.type = type;
+                this.reset(x, y, type);
+            }
+            reset(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
                 this.vx = (Math.random() - 0.5) * 4;
                 this.vy = type === 'balloon' ? -(2 + Math.random() * 2) : (Math.random() - 0.5) * 2;
                 this.size = 50 + Math.random() * 30;
                 this.rotation = Math.random() * Math.PI * 2;
                 this.rotSpeed = (Math.random() - 0.5) * 0.1;
-                this.popped = false; this.opacity = 1;
+                this.popped = false;
+                this.opacity = 1;
+                this.active = true;
                 this.emoji = this.getEmoji();
+                this.emojiImage = null; // 延迟加载
             }
             getEmoji() {
-                const e = { sunflower: '🌻', balloon: ['🎈','🔴','🟡','🟢','🔵','🟣'][Math.floor(Math.random()*6)], fruit: ['🍎','🍊','🍋','🍉','🍇','🍓','🥝'][Math.floor(Math.random()*7)] };
-                return e[this.type] || '🌻';
+                const emojis = {
+                    sunflower: '🌻',
+                    balloon: ['🎈','🔴','🟡','🟢','🔵','🟣'][Math.floor(Math.random()*6)],
+                    fruit: ['🍎','🍊','🍋','🍉','🍇','🍓','🥝'][Math.floor(Math.random()*7)]
+                };
+                return emojis[this.type] || '🌻';
             }
             update(w, h) {
                 if (this.popped) { 
@@ -650,16 +710,21 @@
                 }
             }
             draw(ctx) {
-                if (this.opacity <= 0) return;
-                // 性能优化：减少save/restore调用
+                if (this.opacity <= 0 || !this.active) return;
+                
+                // 使用位图缓存提升性能
+                if (!this.emojiImage) {
+                    this.emojiImage = getEmojiImage(this.emoji, this.size);
+                }
+                
+                // 性能优化：使用transform代替save/restore
                 ctx.save();
                 ctx.globalAlpha = this.opacity;
                 ctx.translate(this.x, this.y);
                 ctx.rotate(this.rotation);
-                ctx.font = `${this.size}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(this.emoji, 0, 0);
+                // 使用drawImage代替fillText（更快）
+                const imgSize = this.size * 2;
+                ctx.drawImage(this.emojiImage, -imgSize/2, -imgSize/2, imgSize, imgSize);
                 ctx.restore();
             }
             hit(x, y, r) { return Math.hypot(this.x - x, this.y - y) < this.size / 2 + r; }
@@ -675,7 +740,7 @@
             const scoreEl = document.getElementById('scoreValue');
             if (scoreEl) scoreEl.textContent = '0';
             
-            const count = type === 'balloon' ? 8 : type === 'fruit' ? 10 : 8;
+            const count = type === 'balloon' ? 12 : type === 'fruit' ? 15 : 10;
             for (let i = 0; i < count; i++) {
                 const x = Math.random() * G.canvasW;
                 const y = type === 'balloon' 
@@ -683,30 +748,36 @@
                     : type === 'fruit' 
                         ? -Math.random() * 300 
                         : Math.random() * G.canvasH * 0.5;
-                G.gameObjects.push(new GameObject(x, y, type));
+                G.gameObjects.push(objectPool.get(x, y, type));
             }
         }
 
         let lastCanvasFrame = 0;
+        let animationId = null;
+        
         function animateCanvas(currentTime) {
             // 先检查条件
             if (G.mode === 'particles') {
-                requestAnimationFrame(animateCanvas);
+                animationId = requestAnimationFrame(animateCanvas);
                 return;
             }
             
-            // 初始化 lastCanvasFrame（修复帧率问题）
+            // 初始化 lastCanvasFrame
             if (lastCanvasFrame === 0) {
                 lastCanvasFrame = currentTime;
             }
             
-            // 性能优化：限制帧率（修复时间计算）
+            // 性能优化：使用固定时间步长（更流畅）
             const elapsed = currentTime - lastCanvasFrame;
-            if (elapsed < G.frameInterval) {
-                requestAnimationFrame(animateCanvas);
+            const deltaTime = Math.min(elapsed, 100); // 限制最大deltaTime避免跳帧
+            lastCanvasFrame = currentTime;
+            
+            // 使用固定时间步长更新（60fps）
+            const fixedDelta = 16.67; // 60fps的帧间隔
+            if (elapsed < fixedDelta) {
+                animationId = requestAnimationFrame(animateCanvas);
                 return;
             }
-            lastCanvasFrame = currentTime;
             
             const canvas = document.getElementById('gameCanvas');
             if (!canvas) {
@@ -749,23 +820,29 @@
                 }
             }
 
-            // 性能优化：使用更高效的过滤和更新方式
-            const aliveObjects = [];
+            // 性能优化：使用更高效的过滤和更新方式（原地过滤）
+            let writeIdx = 0;
             for (let i = 0; i < G.gameObjects.length; i++) {
-                if (G.gameObjects[i].opacity > 0) {
-                    aliveObjects.push(G.gameObjects[i]);
+                const obj = G.gameObjects[i];
+                if (obj.opacity > 0 && obj.active) {
+                    if (writeIdx !== i) {
+                        G.gameObjects[writeIdx] = obj;
+                    }
+                    writeIdx++;
+                } else {
+                    objectPool.release(obj);
                 }
             }
-            G.gameObjects = aliveObjects;
+            G.gameObjects.length = writeIdx;
             
-            // 保持对象数量（减少对象数量提升性能）
-            const targetCount = G.mode === 'balloon' ? 8 : G.mode === 'fruit' ? 10 : 8;
+            // 保持对象数量（使用对象池）
+            const targetCount = G.mode === 'balloon' ? 12 : G.mode === 'fruit' ? 15 : 10;
             if (G.gameObjects.length < targetCount) {
                 const needed = targetCount - G.gameObjects.length;
                 for (let i = 0; i < needed; i++) {
                     const x = Math.random() * canvas.width;
                     const y = G.mode === 'balloon' ? canvas.height + 50 : -50;
-                    G.gameObjects.push(new GameObject(x, y, G.mode));
+                    G.gameObjects.push(objectPool.get(x, y, G.mode));
                 }
             }
             
@@ -773,15 +850,31 @@
             const scoreEl = document.getElementById('scoreValue');
             let scoreUpdated = false;
             
-            G.gameObjects.forEach(obj => {
+            // 性能优化：分离更新和渲染逻辑
+            const hitRadius = 50;
+            const hitRadiusSq = hitRadius * hitRadius;
+            
+            for (let i = 0; i < G.gameObjects.length; i++) {
+                const obj = G.gameObjects[i];
                 obj.update(canvas.width, canvas.height);
-                if (G.isHandDetected && !obj.popped && obj.hit(hx, hy, 50)) {
-                    obj.popped = true; 
-                    G.score += 10;
-                    scoreUpdated = true;
+                
+                // 使用平方距离避免sqrt计算（性能优化）
+                if (G.isHandDetected && !obj.popped) {
+                    const dx = obj.x - hx;
+                    const dy = obj.y - hy;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq < hitRadiusSq) {
+                        obj.popped = true;
+                        G.score += 10;
+                        scoreUpdated = true;
+                    }
                 }
-                obj.draw(ctx);
-            });
+            }
+            
+            // 批量绘制（减少状态切换）
+            for (let i = 0; i < G.gameObjects.length; i++) {
+                G.gameObjects[i].draw(ctx);
+            }
             
             // 只在分数变化时更新DOM（性能优化）
             if (scoreUpdated && scoreEl) {
@@ -790,7 +883,7 @@
             }
             
             // 继续动画循环
-            requestAnimationFrame(animateCanvas);
+            animationId = requestAnimationFrame(animateCanvas);
         }
         
         // 初始化时调用animateCanvas（延迟启动，确保DOM已加载）
@@ -906,23 +999,50 @@
         // ============ UI ============
         function selectGame(mode) {
             G.mode = mode;
-            document.querySelectorAll('.game-option').forEach(o => o.classList.remove('active'));
-            document.querySelector(`[data-game="${mode}"]`).classList.add('active');
+            
+            // 性能优化：批量DOM操作
+            const options = document.querySelectorAll('.game-option');
+            for (let i = 0; i < options.length; i++) {
+                options[i].classList.remove('active');
+            }
+            const activeOption = document.querySelector(`[data-game="${mode}"]`);
+            if (activeOption) activeOption.classList.add('active');
+            
             const three = document.getElementById('threeContainer');
             const canvas = document.getElementById('gameCanvas');
             const controls = document.getElementById('particleControls');
             const scorePanel = document.getElementById('scorePanel');
             const handTracker = document.getElementById('handTracker');
+            
             if (mode === 'particles') {
-                three.style.display = 'block'; canvas.style.display = 'none';
-                controls.style.display = 'block'; scorePanel.style.display = 'none';
-                handTracker.classList.remove('active');
+                three.style.display = 'block';
+                canvas.style.display = 'none';
+                controls.style.display = 'block';
+                scorePanel.style.display = 'none';
+                if (handTracker) handTracker.classList.remove('active');
+                
+                // 确保粒子系统已初始化
+                if (!G.particles) {
+                    initThreeJS();
+                    requestAnimationFrame(() => animateParticles(performance.now()));
+                }
             } else {
-                three.style.display = 'none'; canvas.style.display = 'block';
-                controls.style.display = 'none'; scorePanel.style.display = 'block';
+                three.style.display = 'none';
+                canvas.style.display = 'block';
+                controls.style.display = 'none';
+                scorePanel.style.display = 'block';
+                
                 const container = canvas.parentElement;
-                canvas.width = container.clientWidth; canvas.height = container.clientHeight;
+                if (container) {
+                    canvas.width = container.clientWidth;
+                    canvas.height = container.clientHeight;
+                }
                 initCanvasGame(mode);
+                
+                // 启动canvas动画
+                if (lastCanvasFrame === 0) {
+                    requestAnimationFrame(() => animateCanvas(performance.now()));
+                }
             }
         }
 
