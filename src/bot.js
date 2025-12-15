@@ -78,7 +78,8 @@ export default class Bot extends EventEmitter {
     this.httpsPort = null;
     this.actualPort = null;
     this.actualHttpsPort = null;
-    this.url = cfg.server.server.url || '';
+    const configuredUrl = typeof cfg.server?.server?.url === 'string' ? cfg.server.server.url.trim() : '';
+    this.url = configuredUrl;
     
     // 反向代理相关
     this.proxyEnabled = false;
@@ -1559,8 +1560,6 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
    * 显示访问地址
    */
   async _displayAccessUrls(protocol, port) {
-    const addresses = [`${protocol}://localhost:${port}`];
-    
     const ipInfo = await this.getLocalIpAddress();
     
     console.log(chalk.cyan('\n▶ 访问地址：'));
@@ -1572,7 +1571,6 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         const label = info.primary ? chalk.green(' ★') : '';
         const interfaceInfo = chalk.gray(` [${info.interface}]`);
         console.log(`    ${chalk.cyan('•')} ${chalk.white(url)}${interfaceInfo}${label}`);
-        addresses.push(url);
       });
     }
     
@@ -1582,12 +1580,31 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       console.log(`    ${chalk.cyan('•')} ${chalk.white(publicUrl)}`);
     }
     
-    if (cfg.server.server.url) {
+    const configuredUrl = typeof cfg.server?.server?.url === 'string' ? cfg.server.server.url.trim() : '';
+    if (configuredUrl) {
       console.log(chalk.yellow('\n  配置域名：'));
-      const configUrl = cfg.server.server.url.startsWith('http') ? 
-        cfg.server.server.url : 
-        `${protocol}://${cfg.server.server.url}`;
-      console.log(`    ${chalk.cyan('•')} ${chalk.white(`${configUrl}:${port}`)}`);
+      
+      // 只在用户明确配置时显示，并避免重复端口
+      let normalizedUrl = configuredUrl;
+      if (!/^https?:\/\//i.test(normalizedUrl)) {
+        normalizedUrl = `${protocol}://${normalizedUrl}`;
+      }
+      
+      let displayUrl = normalizedUrl.replace(/\/$/, '');
+      try {
+        const parsed = new URL(normalizedUrl);
+        if (!parsed.port) {
+          parsed.port = String(port);
+        }
+        displayUrl = parsed.origin + parsed.pathname.replace(/\/$/, '');
+      } catch {
+        const hasPort = /:[0-9]+$/.test(normalizedUrl.split('://')[1] || '');
+        if (!hasPort) {
+          displayUrl = `${normalizedUrl}:${port}`;
+        }
+      }
+      
+      console.log(`    ${chalk.cyan('•')} ${chalk.white(displayUrl)}`);
     }
     
     const authConfig = cfg.server.auth || {};
@@ -1824,7 +1841,8 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     
     const protocol = cfg.server.https.enabled ? 'https' : 'http';
     const port = protocol === 'https' ? this.actualHttpsPort : this.actualPort;
-    let host = cfg.server.server.url || '127.0.0.1';
+    const configuredUrl = typeof cfg.server?.server?.url === 'string' ? cfg.server.server.url.trim() : '';
+    let host = configuredUrl || '127.0.0.1';
     
     // 移除host中可能包含的协议前缀
     host = host.replace(/^https?:\/\//, '').replace(/\/$/, '');
