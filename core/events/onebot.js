@@ -67,13 +67,37 @@ export default class OneBotEvent {
   /**
    * 设置事件回复方法
    * @param {Object} e - 事件对象
+   * 注意：此方法作为备用，优先由 OneBotEnhancer 插件设置正确的 reply 方法
    */
   setupReplyMethod(e) {
+    // 如果已经有 reply 方法，不覆盖（可能由 OneBotEnhancer 插件设置）
     if (e.reply || !e.bot) return
+    
+    // 作为备用方案，尝试使用 group 或 friend 的 sendMsg
+    // 注意：此时 group 和 friend 可能还未设置（由 OneBotEnhancer 设置）
     e.reply = async (msg = '', quote = false, data = {}) => {
       if (!msg) return false
       try {
-        return await e.bot.sendMsg?.(msg, quote, data) || false
+        // 优先使用 group 的 sendMsg（群聊）
+        if (e.group?.sendMsg) {
+          return await e.group.sendMsg(msg)
+        }
+        // 其次使用 friend 的 sendMsg（私聊）
+        if (e.friend?.sendMsg) {
+          return await e.friend.sendMsg(msg)
+        }
+        // 最后尝试使用适配器的发送方法
+        if (e.bot?.adapter) {
+          const adapter = e.bot.adapter
+          if (e.message_type === 'group' && e.group_id && adapter.sendGroupMsg) {
+            return await adapter.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
+          }
+          if (e.message_type === 'private' && e.user_id && adapter.sendFriendMsg) {
+            return await adapter.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
+          }
+        }
+        Bot.makeLog("warn", `无法发送消息：找不到合适的发送方法`, e.self_id)
+        return false
       } catch (error) {
         Bot.makeLog("error", `回复消息失败: ${error.message}`, e.self_id)
         return false
@@ -98,8 +122,8 @@ export default class OneBotEvent {
         this.normalizeMessageEvent(e)
       }
       
-      // 设置回复方法
-      this.setupReplyMethod(e)
+      // 注意：reply 方法由 OneBotEnhancer 插件设置（优先级1）
+      // 这里不设置 reply，避免覆盖插件的正确实现
       
       // 交给插件系统处理
       await this.plugins.deal(e)
