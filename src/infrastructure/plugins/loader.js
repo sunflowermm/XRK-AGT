@@ -126,7 +126,9 @@ class PluginsLoader {
       const shouldContinue = await this.preCheck(e, hasBypassPlugin)
       if (!shouldContinue) return
 
-      await this.dealMsg(e)
+      const msgResult = await this.dealMsg(e)
+      if (msgResult === 'return') return
+
       this.setupReply(e)
       await Runtime.init(e)
 
@@ -149,11 +151,6 @@ class PluginsLoader {
 
       this.setupEventProps(e)
       this.checkPermissions(e)
-
-      // 处理别名（需要group_id）
-      if (e.msg && e.group_id && !e.isDevice && !e.isStdin) {
-        this.processAlias(e)
-      }
 
       this.addUtilMethods(e)
     } catch (error) {
@@ -222,21 +219,10 @@ class PluginsLoader {
   }
 
   setupEventProps(e) {
-    // 通用事件属性设置
-    e.isDevice = this.isDeviceEvent(e)
-    e.isStdin = this.isStdinEvent(e)
-
     // 基础sender信息
     e.sender.nickname ||= e.sender.card || e.device_name || ''
     e.sender.card ||= e.sender.nickname
-
-    // 基础日志文本
-    if (e.isDevice) {
-      e.logText = `[设备][${e.device_name || e.device_id}][${e.event_type || '事件'}]`
-    } else if (e.isStdin) {
-      e.logText = `[${e.adapter === 'api' ? 'API' : 'STDIN'}][${e.user_id || '未知'}]`
-    } else {
-      // 通用格式，适配器增强插件可以覆盖
+    if (!e.logText) {
       e.logText = `[${e.adapter || '未知'}][${e.user_id || '未知'}]`
     }
   }
@@ -249,23 +235,6 @@ class PluginsLoader {
       e.isMaster = true
     } else if (e.isStdin && e.isMaster === undefined) {
       e.isMaster = true
-    }
-  }
-
-  processAlias(e) {
-    // 通用别名处理，需要group_id时才处理
-    if (!e.group_id) return
-    
-    const alias = cfg.getGroup(e.group_id)?.botAlias
-    if (!alias) return
-
-    const aliases = Array.isArray(alias) ? alias : [alias]
-    for (const a of aliases) {
-      if (a && e.msg.startsWith(a)) {
-        e.msg = e.msg.slice(a.length).trim()
-        e.hasAlias = true
-        break
-      }
     }
   }
 
@@ -311,7 +280,11 @@ class PluginsLoader {
 
   async runPlugins(e, isExtended = false) {
     try {
-      const plugins = await this.initPlugins(e, isExtended)
+      const plugins = await this.initPlugins(
+        e,
+        isExtended,
+        !isExtended ? (meta) => meta.isEnhancer !== true : null
+      )
 
       if (isExtended) {
         return await this.processPlugins(plugins, e, true)
@@ -337,7 +310,6 @@ class PluginsLoader {
 
       if (!e.isDevice && !e.isStdin) {
         if (await this.handleContext(plugins, e)) return true
-        if (!this.onlyReplyAt(e)) return false
 
         const shouldSetLimit = !plugins.some(p => p.bypassThrottle === true)
         if (shouldSetLimit) this.setLimit(e)
@@ -528,20 +500,17 @@ class PluginsLoader {
     return false
   }
 
-  isStdinEvent(e) {
-    return e.adapter === 'api' || e.adapter === 'stdin' || e.source === 'api' || e.isStdin
-  }
-
-  isDeviceEvent(e) {
-    return e.post_type === 'device' || e.adapter === 'device' ||
-      e.isDevice || !!e.device_id ||
-      (e.event_type && Bot[e.self_id])
-  }
   initEvent(e) {
+    const adapterName = String(e.adapter || e.adapter_name || '').toLowerCase()
+    const isStdin = Boolean(e.isStdin || adapterName === 'stdin' || adapterName === 'api' || e.source === 'api')
+    if (isStdin && !e.isStdin) {
+      e.isStdin = true
+    }
+
     if (!e.self_id) {
       if (e.device_id) {
         e.self_id = e.device_id
-      } else if (this.isStdinEvent(e)) {
+      } else if (isStdin) {
         e.self_id = 'stdin'
       } else if (Bot.uin?.length > 0) {
         e.self_id = Bot.uin[0]
@@ -549,7 +518,7 @@ class PluginsLoader {
     }
 
     let bot = null
-    if (this.isStdinEvent(e)) {
+    if (isStdin) {
       bot = Bot.stdin || Bot['stdin'] || Bot
     } else if (e.device_id && Bot[e.device_id]) {
       bot = Bot[e.device_id]
@@ -1058,23 +1027,6 @@ class PluginsLoader {
       setCooldown('group', e.group_id, config.groupGlobalCD || 0)
       setCooldown('single', `${e.group_id}.${e.user_id}`, config.singleCD || 0)
     }
-  }
-
-  onlyReplyAt(e) {
-    if (e.isDevice || e.isStdin) return true
-    if (!e.message || !e.group_id || ['cmd'].includes(e.adapter || '')) return true
-
-    const groupCfg = cfg.getGroup(e.group_id) || {}
-    const onlyReplyAt = groupCfg.onlyReplyAt ?? 0
-
-    // 如果没有设置onlyReplyAt，或者没有botAlias，则允许回复
-    if (onlyReplyAt === 0 || !groupCfg.botAlias) return true
-    
-    // 主人权限或已使用别名
-    if ((onlyReplyAt === 2 && e.isMaster) || e.hasAlias) return true
-    
-    // 检查是否@了机器人（由适配器增强插件设置atBot属性）
-    return e.atBot === true
   }
 
 

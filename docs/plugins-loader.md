@@ -122,14 +122,14 @@
 - 若为扩展插件：
   - 直接调用 `processRules(plugins, e)`。
 - 若为普通插件：
-  - 先执行各插件的 `accept(e)`（包括适配器增强插件）：
-    - 适配器增强插件（如`OneBotEnhancer`）会在此阶段挂载适配器特定属性（`friend`、`group`、`member`、`atBot`等）。
+  - 先执行各插件的 `accept(e)`（包括适配器增强插件与响应控制逻辑）：
+    - 适配器增强插件（如`OneBotEnhancer`、`StdinEnhancer`、`DeviceEnhancer`）会在此阶段挂载适配器特定属性或标准化日志。
+    - `OneBotEnhancer` 内置别名与 `onlyReplyAt` 策略，用于决定是否继续向下游插件传递事件。
     - 若返回 `'return'`，则视为已完全处理。
     - 若返回 `false`，跳过当前插件。
     - 若返回 `true`，继续处理。
   - 对非设备/STDIN 事件：
     - `handleContext(plugins, e)`：先处理上下文回调。
-    - `onlyReplyAt(e)`：判断是否仅响应 @ 或别名（依赖增强插件设置的`atBot`属性）。
     - 若插件不带 `bypassThrottle`，调用 `setLimit(e)` 设置冷却。
   - 最后执行 `processRules(plugins, e, false)` 并根据优先级分组执行。
   - 若仍未处理，调用 `processDefaultHandlers(e)`。
@@ -150,10 +150,10 @@
   - `this.msgThrottle`：基于 `user_id:message_id` 的消息去重。
   - `this.eventThrottle`：按 (`user/device` + key) 的事件节流。
 
-- **黑白名单**
+- **黑白名单 / 响应策略**
   - `checkBlack(e)`：从配置 `other` 中读取：
     - `blackQQ/whiteQQ/blackGroup/whiteGroup/blackDevice` 等。
-  - `onlyReplyAt(e)`：根据群配置 `onlyReplyAt` 与 `botAlias` 决定是否仅在有 @ 或前缀时响应。
+  - `OneBotEnhancer`：根据群配置 `onlyReplyAt` 与 `botAlias` 判断是否仅在有 @ 或前缀时响应，并在 `accept` 阶段直接拦截不需要继续处理的事件。
 
 ---
 
@@ -248,7 +248,7 @@ XRK-AGT 采用标准化事件命名系统，确保不同来源的事件可以区
 
 - **排查问题时**
   - 查看插件是否被 `checkDisable` 或黑白名单过滤。
-  - 检查是否被 `onlyReplyAt` 或冷却限制挡掉。
+- 检查是否被 `OneBotEnhancer` 的别名/onlyReplyAt 策略或冷却限制挡掉。
   - 通过 Redis（键前缀 `Yz:count:`、`Yz:shutdown:`）确认运行状态。
 
 - **性能优化**

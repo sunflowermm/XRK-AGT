@@ -40,6 +40,8 @@ class ListenerLoader {
           if (!listener.default) continue
           
           const instance = new listener.default()
+          // 将全局 bot 注入监听器实例，避免依赖未初始化的全局 Bot
+          instance.bot = this.bot
           
           // 新的事件系统：onebot.js和device.js使用init方法
           if (typeof instance.init === 'function') {

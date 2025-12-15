@@ -1,4 +1,4 @@
-import EventListenerBase from './base.js'
+import EventListenerBase from '#infrastructure/listener/base.js'
 
 export default class OneBotEvent extends EventListenerBase {
   constructor() {
@@ -6,9 +6,10 @@ export default class OneBotEvent extends EventListenerBase {
   }
 
   async init() {
-    Bot.on('onebot.message', (e) => this.handleEvent(e, 'onebot.message'))
-    Bot.on('onebot.notice', (e) => this.handleEvent(e, 'onebot.notice'))
-    Bot.on('onebot.request', (e) => this.handleEvent(e, 'onebot.request'))
+    const bot = this.bot || Bot
+    bot.on('onebot.message', (e) => this.handleEvent(e, 'onebot.message'))
+    bot.on('onebot.notice', (e) => this.handleEvent(e, 'onebot.notice'))
+    bot.on('onebot.request', (e) => this.handleEvent(e, 'onebot.request'))
   }
 
   /**
