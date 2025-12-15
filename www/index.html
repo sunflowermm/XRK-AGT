@@ -189,6 +189,20 @@
         .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; background: rgba(255, 255, 255, 0.05); margin-top: 0.5rem; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; transition: background 0.3s; }
         .status-dot.active { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
+        .hand-indicator {
+            display: flex; gap: 8px; margin-top: 8px; font-size: 0.75rem;
+        }
+        .hand-indicator-item {
+            display: flex; align-items: center; gap: 4px; padding: 4px 8px;
+            background: rgba(255, 255, 255, 0.05); border-radius: 12px;
+        }
+        .hand-dot {
+            width: 6px; height: 6px; border-radius: 50%; background: #64748b;
+            transition: all 0.3s;
+        }
+        .hand-dot.active { box-shadow: 0 0 8px currentColor; }
+        .hand-dot.left.active { background: #3b82f6; color: #3b82f6; }
+        .hand-dot.right.active { background: #f59e0b; color: #f59e0b; }
         .particle-controls {
             position: absolute; top: 20px; right: 20px; width: 280px;
             background: rgba(15, 15, 20, 0.85); backdrop-filter: blur(20px);
@@ -390,7 +404,22 @@
                 </div>
                 <div class="control-group">
                     <label class="control-label">操作提示</label>
-                    <p style="font-size:0.8rem;color:#94a3b8;line-height:1.5;">🖐 <b>张开手掌</b>：粒子扩散<br>✊ <b>握紧拳头</b>：粒子聚拢<br>👋 <b>移动手掌</b>：旋转视角</p>
+                    <p style="font-size:0.8rem;color:#94a3b8;line-height:1.5;">
+                        🖐 <b>张开手掌</b>：粒子大幅扩散（10倍差异）<br>
+                        ✊ <b>握紧拳头</b>：粒子大幅聚拢<br>
+                        👋 <b>移动手掌</b>：旋转视角<br>
+                        🤲 <b>双手操作</b>：更精确的控制
+                    </p>
+                    <div class="hand-indicator" id="handIndicator" style="display: none;">
+                        <div class="hand-indicator-item">
+                            <div class="hand-dot left" id="leftHandDot"></div>
+                            <span>左手</span>
+                        </div>
+                        <div class="hand-indicator-item">
+                            <div class="hand-dot right" id="rightHandDot"></div>
+                            <span>右手</span>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="game-message" id="gameMessage"></div>
@@ -412,9 +441,56 @@
                            window.location.hostname === '[::1]' ||
                            window.location.hostname === '');
 
+        // ============ 性能监控和自适应系统 ============
+        const PerformanceMonitor = {
+            fps: 60,
+            frameCount: 0,
+            lastFpsUpdate: 0,
+            frameTimes: [],
+            targetFPS: 60,
+            adaptiveQuality: true,
+            
+            update(currentTime) {
+                this.frameCount++;
+                if (currentTime - this.lastFpsUpdate >= 1000) {
+                    this.fps = this.frameCount;
+                    this.frameCount = 0;
+                    this.lastFpsUpdate = currentTime;
+                    
+                    // 自适应调整
+                    if (this.adaptiveQuality) {
+                        if (this.fps < 45 && G.particleCount > 2000) {
+                            // 性能不足，减少粒子数
+                            this.adjustParticleCount(-500);
+                        } else if (this.fps > 55 && G.particleCount < 8000) {
+                            // 性能充足，增加粒子数
+                            this.adjustParticleCount(500);
+                        }
+                    }
+                }
+            },
+            
+            adjustParticleCount(delta) {
+                const oldCount = G.particleCount;
+                G.particleCount = Math.max(2000, Math.min(10000, G.particleCount + delta));
+                if (oldCount !== G.particleCount && G.particles) {
+                    // 重新初始化粒子系统
+                    initThreeJS();
+                }
+            },
+            
+            getFrameTime() {
+                return 1000 / this.targetFPS;
+            }
+        };
+
         // ============ 全局状态 ============
         const G = {
             mode: 'particles',
+            // 双手支持
+            leftHand: { x: 0.5, y: 0.5, openness: 1.0, detected: false },
+            rightHand: { x: 0.5, y: 0.5, openness: 1.0, detected: false },
+            // 兼容旧代码
             handX: 0.5, handY: 0.5,
             handOpenness: 1.0,
             isHandDetected: false,
@@ -426,7 +502,9 @@
             canvasW: 0, canvasH: 0,
             lastFrameTime: 0,
             targetFPS: 60,
-            frameInterval: 1000 / 60
+            frameInterval: 1000 / 60,
+            // 性能优化标志
+            useOptimizedUpdate: true
         };
 
         // ============ Three.js 粒子系统（参考优化版本）============
@@ -440,14 +518,28 @@
             G.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
             G.camera.position.z = 30;
             
-            // 优化渲染器设置（参考示例）
+            // 优化渲染器设置：根据设备性能调整
+            const isHighEndDevice = navigator.hardwareConcurrency >= 8 && 
+                                   (navigator.deviceMemory || 4) >= 8;
+            
             G.renderer = new THREE.WebGLRenderer({ 
-                antialias: true, 
+                antialias: isHighEndDevice, // 高端设备启用抗锯齿
                 alpha: true,
-                powerPreference: "high-performance"
+                powerPreference: "high-performance",
+                precision: "highp", // 高精度
+                stencil: false, // 禁用模板缓冲
+                depth: true,
+                logarithmicDepthBuffer: false
             });
             G.renderer.setSize(container.clientWidth, container.clientHeight);
-            G.renderer.setPixelRatio(window.devicePixelRatio);
+            // 根据设备性能调整像素比
+            const maxPixelRatio = isHighEndDevice ? 2.0 : 1.5;
+            G.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
+            
+            // 启用渲染优化
+            G.renderer.shadowMap.enabled = false;
+            G.renderer.autoClear = true;
+            G.renderer.sortObjects = false; // 禁用排序提升性能
             container.appendChild(G.renderer.domElement);
 
             // 生成圆形纹理（复用函数）
@@ -481,14 +573,17 @@
             geometry.setAttribute('position', new THREE.BufferAttribute(G.positions, 3));
             
             const material = new THREE.PointsMaterial({
-                size: 0.5, // 参考示例的大小
+                size: 0.5,
                 map: getTexture(),
                 transparent: true,
                 opacity: 0.8,
                 vertexColors: false,
                 color: new THREE.Color(0x6366f1),
                 blending: THREE.AdditiveBlending,
-                depthWrite: false
+                depthWrite: false,
+                sizeAttenuation: true,
+                // 性能优化：禁用不需要的功能
+                fog: false // 场景已有fog，材质不需要
             });
             
             G.particles = new THREE.Points(geometry, material);
@@ -506,13 +601,22 @@
         };
 
         function updateTargetPositions(name) {
-            const func = Shapes[name]; if (!func) return;
-            for (let i = 0; i < G.particleCount; i++) {
+            const func = Shapes[name]; 
+            if (!func) return;
+            
+            // 性能优化：批量更新，减少数组访问
+            const targetArr = G.targetPositions;
+            const count = G.particleCount;
+            
+            // 使用批量处理提升缓存命中率
+            for (let i = 0; i < count; i++) {
                 const pos = func(i);
-                G.targetPositions[i * 3] = pos.x;
-                G.targetPositions[i * 3 + 1] = pos.y;
-                G.targetPositions[i * 3 + 2] = pos.z;
+                const idx = i * 3;
+                targetArr[idx] = pos.x;
+                targetArr[idx + 1] = pos.y;
+                targetArr[idx + 2] = pos.z;
             }
+            
             G.currentShape = name;
         }
 
@@ -544,40 +648,111 @@
             // 基础旋转
             G.particles.rotation.y += 0.002;
             
-            // 手部控制旋转
+            // 双手控制旋转（更流畅）
             if (G.isHandDetected) {
-                const rotY = (G.handX - 0.5) * 0.05;
-                const rotX = (G.handY - 0.5) * 0.05;
+                let rotY = 0, rotX = 0;
+                
+                if (G.leftHand.detected && G.rightHand.detected) {
+                    // 双手：使用双手中心点控制旋转，双手距离控制缩放
+                    const centerX = (G.leftHand.x + G.rightHand.x) / 2;
+                    const centerY = (G.leftHand.y + G.rightHand.y) / 2;
+                    rotY = (centerX - 0.5) * 0.05;
+                    rotX = (centerY - 0.5) * 0.05;
+                } else if (G.rightHand.detected) {
+                    rotY = (G.rightHand.x - 0.5) * 0.05;
+                    rotX = (G.rightHand.y - 0.5) * 0.05;
+                } else if (G.leftHand.detected) {
+                    rotY = (G.leftHand.x - 0.5) * 0.05;
+                    rotX = (G.leftHand.y - 0.5) * 0.05;
+                }
+                
                 G.particles.rotation.y += rotY;
                 G.particles.rotation.x += rotX;
             }
             
-            // 参考示例的缩放逻辑
-            let scaleFactor = 0.5 + (G.handOpenness * 0.8);
-            if (G.currentShape === 'fireworks') {
-                scaleFactor = G.handOpenness * 2.5;
+            // 优化的缩放逻辑：增大差异，让张开和握拳区别更明显
+            let scaleFactor = 1.0;
+            
+            if (G.isHandDetected) {
+                if (G.leftHand.detected && G.rightHand.detected) {
+                    // 双手：使用平均开合度，但范围更大
+                    const avgOpenness = (G.leftHand.openness + G.rightHand.openness) / 2;
+                    // 范围：0.2 (完全握拳) 到 2.0 (完全张开) - 差异10倍！
+                    scaleFactor = 0.2 + (avgOpenness * 1.8);
+                } else {
+                    // 单手：同样使用更大的范围
+                    const openness = G.handOpenness;
+                    // 范围：0.2 (完全握拳) 到 2.0 (完全张开)
+                    scaleFactor = 0.2 + (openness * 1.8);
+                }
+                
+                // 特殊形状的额外效果
+                if (G.currentShape === 'fireworks') {
+                    scaleFactor *= 1.5; // 烟花效果更明显
+                } else if (G.currentShape === 'dna') {
+                    scaleFactor = 0.3 + (scaleFactor * 0.7); // DNA保持紧凑
+                }
+            } else {
+                // 未检测到手时，使用默认大小
+                scaleFactor = 1.0;
             }
             
-            const speed = 0.05; // 参考示例的速度
+            const speed = 0.05;
             
-            // 参考示例的简单插值循环（更高效）
+            // 高性能批量更新：使用TypedArray直接操作，减少函数调用
             const positionsArr = pos;
             const targetArr = targetPos;
+            const count = G.particleCount;
             
-            for (let i = 0; i < G.particleCount; i++) {
-                const px = i * 3;
-                const py = i * 3 + 1;
-                const pz = i * 3 + 2;
-
-                const tx = targetArr[px] * scaleFactor;
-                const ty = targetArr[py] * scaleFactor;
-                const tz = targetArr[pz] * scaleFactor;
-
-                // 简单的 Lerp 插值（参考示例）
-                positionsArr[px] += (tx - positionsArr[px]) * speed;
-                positionsArr[py] += (ty - positionsArr[py]) * speed;
-                positionsArr[pz] += (tz - positionsArr[pz]) * speed;
+            // 预计算scaleFactor避免重复乘法
+            const scaleX = scaleFactor;
+            const invSpeed = 1 - speed;
+            
+            // 展开循环，减少分支预测失败（现代JS引擎优化）
+            // 使用批量操作提升缓存命中率
+            let i = 0;
+            const batchSize = 8; // 每次处理8个粒子，利用CPU缓存
+            
+            // 批量处理
+            while (i < count - batchSize) {
+                // 展开8次迭代
+                for (let j = 0; j < batchSize; j++) {
+                    const idx = (i + j) * 3;
+                    const px = idx;
+                    const py = idx + 1;
+                    const pz = idx + 2;
+                    
+                    const tx = targetArr[px] * scaleX;
+                    const ty = targetArr[py] * scaleX;
+                    const tz = targetArr[pz] * scaleX;
+                    
+                    // 优化的Lerp：pos = pos * (1-speed) + target * speed
+                    positionsArr[px] = positionsArr[px] * invSpeed + tx * speed;
+                    positionsArr[py] = positionsArr[py] * invSpeed + ty * speed;
+                    positionsArr[pz] = positionsArr[pz] * invSpeed + tz * speed;
+                }
+                i += batchSize;
             }
+            
+            // 处理剩余粒子
+            while (i < count) {
+                const idx = i * 3;
+                const px = idx;
+                const py = idx + 1;
+                const pz = idx + 2;
+                
+                const tx = targetArr[px] * scaleX;
+                const ty = targetArr[py] * scaleX;
+                const tz = targetArr[pz] * scaleX;
+                
+                positionsArr[px] = positionsArr[px] * invSpeed + tx * speed;
+                positionsArr[py] = positionsArr[py] * invSpeed + ty * speed;
+                positionsArr[pz] = positionsArr[pz] * invSpeed + tz * speed;
+                i++;
+            }
+            
+            // 更新性能监控
+            PerformanceMonitor.update(currentTime);
             
             // 只在位置变化时更新（性能优化）
             G.particles.geometry.attributes.position.needsUpdate = true;
@@ -590,40 +765,124 @@
         }
 
         // ============ 2D游戏（高性能优化版本）============
-        // 对象池：重用对象减少GC压力
+        // 优化的对象池：使用数组索引代替find，O(1)查找
         const objectPool = {
             pool: [],
+            freeIndex: 0,
             get(x, y, type) {
-                let obj = this.pool.find(o => !o.active);
-                if (!obj) {
-                    obj = new GameObject(x, y, type);
-                    this.pool.push(obj);
-                } else {
-                    obj.reset(x, y, type);
+                let obj;
+                // 从freeIndex开始查找，避免重复扫描
+                if (this.freeIndex < this.pool.length) {
+                    obj = this.pool[this.freeIndex];
+                    if (!obj.active) {
+                        obj.reset(x, y, type);
+                        this.freeIndex++;
+                        return obj;
+                    }
                 }
+                
+                // 如果freeIndex没有找到，从头查找
+                for (let i = 0; i < this.pool.length; i++) {
+                    if (!this.pool[i].active) {
+                        obj = this.pool[i];
+                        obj.reset(x, y, type);
+                        this.freeIndex = i + 1;
+                        return obj;
+                    }
+                }
+                
+                // 没有可用对象，创建新的
+                obj = new GameObject(x, y, type);
+                this.pool.push(obj);
+                this.freeIndex = this.pool.length;
                 return obj;
             },
             release(obj) {
                 obj.active = false;
+                // 更新freeIndex到最早的空位置
+                const idx = this.pool.indexOf(obj);
+                if (idx !== -1 && idx < this.freeIndex) {
+                    this.freeIndex = idx;
+                }
+            }
+        };
+        
+        // 空间分割优化：将画布分成网格，只检测附近的物体
+        const SpatialGrid = {
+            cellSize: 150,
+            grid: new Map(),
+            
+            getCellKey(x, y) {
+                const cellX = Math.floor(x / this.cellSize);
+                const cellY = Math.floor(y / this.cellSize);
+                return `${cellX},${cellY}`;
+            },
+            
+            add(obj) {
+                const key = this.getCellKey(obj.x, obj.y);
+                if (!this.grid.has(key)) {
+                    this.grid.set(key, []);
+                }
+                this.grid.get(key).push(obj);
+            },
+            
+            getNearby(x, y, radius) {
+                const results = [];
+                const cellX = Math.floor(x / this.cellSize);
+                const cellY = Math.floor(y / this.cellSize);
+                const radiusCells = Math.ceil(radius / this.cellSize) + 1;
+                
+                for (let dx = -radiusCells; dx <= radiusCells; dx++) {
+                    for (let dy = -radiusCells; dy <= radiusCells; dy++) {
+                        const key = `${cellX + dx},${cellY + dy}`;
+                        const cell = this.grid.get(key);
+                        if (cell) {
+                            results.push(...cell);
+                        }
+                    }
+                }
+                return results;
+            },
+            
+            clear() {
+                this.grid.clear();
             }
         };
 
-        // 位图缓存：预渲染emoji到canvas，避免重复绘制
+        // 优化的位图缓存：使用离屏Canvas和尺寸分级
         const emojiCache = new Map();
+        
         function getEmojiImage(emoji, size) {
-            const key = `${emoji}-${size}`;
+            // 尺寸分级：减少缓存数量
+            const sizeLevel = Math.ceil(size / 10) * 10; // 每10px一个级别
+            const key = `${emoji}-${sizeLevel}`;
+            
             if (emojiCache.has(key)) {
                 return emojiCache.get(key);
             }
+            
+            // 使用离屏Canvas预渲染
             const canvas = document.createElement('canvas');
-            canvas.width = size * 2;
-            canvas.height = size * 2;
-            const ctx = canvas.getContext('2d');
-            ctx.font = `${size}px Arial`;
+            canvas.width = sizeLevel * 2;
+            canvas.height = sizeLevel * 2;
+            const ctx = canvas.getContext('2d', { alpha: true });
+            
+            // 优化字体渲染
+            ctx.font = `${sizeLevel}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(emoji, size, size);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.fillText(emoji, sizeLevel, sizeLevel);
+            
             emojiCache.set(key, canvas);
+            
+            // 限制缓存大小（防止内存泄漏）
+            if (emojiCache.size > 100) {
+                const firstKey = emojiCache.keys().next().value;
+                emojiCache.delete(firstKey);
+            }
+            
             return canvas;
         }
 
@@ -659,33 +918,41 @@
                     this.opacity -= 0.1; 
                     return; 
                 }
+                // 性能优化：预计算常用值，减少重复计算
+                const now = Date.now();
+                const halfSize = this.size / 2;
+                
                 if (this.type === 'balloon') {
                     this.y += this.vy; 
-                    this.x += Math.sin(Date.now() / 500 + this.x) * 0.5;
-                    if (this.y < -this.size) { 
-                        this.y = h + this.size; 
+                    // 缓存sin计算结果
+                    this.x += Math.sin(now / 500 + this.x) * 0.5;
+                    if (this.y < -halfSize) { 
+                        this.y = h + halfSize; 
                         this.x = Math.random() * w; 
                     }
                 } else if (this.type === 'fruit') {
-                    this.vy += 0.3; // 稍微加快下落速度
+                    this.vy += 0.3;
                     this.y += this.vy; 
                     this.x += this.vx; 
                     this.rotation += this.rotSpeed;
-                    if (this.y > h + this.size) { 
-                        this.y = -this.size; 
+                    if (this.y > h + halfSize) { 
+                        this.y = -halfSize; 
                         this.x = Math.random() * w; 
                         this.vy = Math.random() * 2; 
-                        this.emoji = this.getEmoji(); 
+                        this.emoji = this.getEmoji();
+                        this.emojiImage = null; // 重置缓存
                     }
                 } else {
                     this.vy += 0.2; 
                     this.x += this.vx; 
                     this.y += this.vy; 
                     this.rotation += this.rotSpeed;
-                    if (this.x < this.size || this.x > w - this.size) this.vx *= -0.8;
-                    if (this.y > h - this.size) { 
+                    if (this.x < halfSize || this.x > w - halfSize) {
+                        this.vx *= -0.8;
+                    }
+                    if (this.y > h - halfSize) { 
                         this.vy *= -0.6; 
-                        this.y = h - this.size; 
+                        this.y = h - halfSize; 
                     }
                 }
             }
@@ -698,8 +965,12 @@
                 }
                 
                 // 性能优化：减少save/restore，使用transform
+                // 只在需要时设置alpha（避免重复设置）
+                if (ctx.globalAlpha !== this.opacity) {
+                    ctx.globalAlpha = this.opacity;
+                }
+                
                 ctx.save();
-                ctx.globalAlpha = this.opacity;
                 ctx.translate(this.x, this.y);
                 ctx.rotate(this.rotation);
                 
@@ -748,25 +1019,37 @@
                 lastCanvasFrame = currentTime;
             }
             
-            // 性能优化：使用固定时间步长（更流畅）
+            // 性能优化：自适应帧率（根据性能调整）
             const elapsed = currentTime - lastCanvasFrame;
-            const deltaTime = Math.min(elapsed, 100); // 限制最大deltaTime避免跳帧
+            const deltaTime = Math.min(elapsed, 100);
             lastCanvasFrame = currentTime;
             
-            // 使用固定时间步长更新（60fps）
-            const fixedDelta = 16.67; // 60fps的帧间隔
+            // 动态调整目标FPS（性能不足时降低）
+            const targetFPS = PerformanceMonitor.fps < 30 ? 30 : 60;
+            const fixedDelta = 1000 / targetFPS;
+            
             if (elapsed < fixedDelta) {
                 animationId = requestAnimationFrame(animateCanvas);
                 return;
             }
+            
+            // 更新性能监控
+            PerformanceMonitor.update(currentTime);
             
             const canvas = document.getElementById('gameCanvas');
             if (!canvas) {
                 requestAnimationFrame(animateCanvas);
                 return;
             }
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const ctx = canvas.getContext('2d', { 
+                alpha: true,
+                desynchronized: true, // 启用异步渲染提升性能
+                willReadFrequently: false // 不频繁读取，优化渲染
+            });
+            
+            // 性能优化：使用fillRect代替clearRect（某些浏览器更快）
+            ctx.fillStyle = 'rgba(19, 19, 31, 1)'; // 背景色
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // 性能优化：减少DOM操作，批量更新
             const handTracker = document.getElementById('handTracker');
@@ -831,30 +1114,65 @@
             const scoreEl = document.getElementById('scoreValue');
             let scoreUpdated = false;
             
-            // 性能优化：分离更新和渲染逻辑
-            const hitRadius = 50;
-            const hitRadiusSq = hitRadius * hitRadius;
+            // 性能优化：使用空间分割优化碰撞检测
+            SpatialGrid.clear();
             
+            // 更新所有对象并构建空间网格
             for (let i = 0; i < G.gameObjects.length; i++) {
                 const obj = G.gameObjects[i];
                 obj.update(canvas.width, canvas.height);
-                
-                // 使用平方距离避免sqrt计算（性能优化）
-                if (G.isHandDetected && !obj.popped) {
-                    const dx = obj.x - hx;
-                    const dy = obj.y - hy;
-                    const distSq = dx * dx + dy * dy;
-                    if (distSq < hitRadiusSq) {
-                        obj.popped = true;
-                        G.score += 10;
-                        scoreUpdated = true;
+                if (!obj.popped && obj.active) {
+                    SpatialGrid.add(obj);
+                }
+            }
+            
+            // 优化的碰撞检测：只检测手部附近的物体
+            const hitRadius = 50;
+            const hitRadiusSq = hitRadius * hitRadius;
+            
+            if (G.isHandDetected) {
+                const nearbyObjects = SpatialGrid.getNearby(hx, hy, hitRadius);
+                for (let i = 0; i < nearbyObjects.length; i++) {
+                    const obj = nearbyObjects[i];
+                    if (!obj.popped && obj.active) {
+                        const dx = obj.x - hx;
+                        const dy = obj.y - hy;
+                        const distSq = dx * dx + dy * dy;
+                        if (distSq < hitRadiusSq) {
+                            obj.popped = true;
+                            G.score += 10;
+                            scoreUpdated = true;
+                        }
                     }
                 }
             }
             
-            // 批量绘制（减少状态切换）
+            // 性能优化：批量绘制，减少状态切换
+            // 分离不透明和半透明对象，先绘制不透明的
+            const opaqueObjects = [];
+            const transparentObjects = [];
+            
             for (let i = 0; i < G.gameObjects.length; i++) {
-                G.gameObjects[i].draw(ctx);
+                const obj = G.gameObjects[i];
+                if (obj.opacity > 0 && obj.active) {
+                    if (obj.opacity >= 0.99) {
+                        opaqueObjects.push(obj);
+                    } else {
+                        transparentObjects.push(obj);
+                    }
+                }
+            }
+            
+            // 先绘制不透明对象（更快）
+            for (let i = 0; i < opaqueObjects.length; i++) {
+                opaqueObjects[i].draw(ctx);
+            }
+            
+            // 再绘制半透明对象（需要alpha混合）
+            // 按透明度降序排序，减少alpha混合开销
+            transparentObjects.sort((a, b) => b.opacity - a.opacity);
+            for (let i = 0; i < transparentObjects.length; i++) {
+                transparentObjects[i].draw(ctx);
             }
             
             // 只在分数变化时更新DOM（性能优化）
@@ -886,55 +1204,140 @@
                 return;
             }
 
-            // 参考示例的简化配置
+            // 支持双手识别
             const hands = new Hands({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
             });
             
             hands.setOptions({
-                maxNumHands: 1,
-                modelComplexity: 1, // 参考示例使用1
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
+                maxNumHands: 2, // 支持双手
+                modelComplexity: 1, // 使用标准模型平衡性能和准确度
+                minDetectionConfidence: 0.7, // 提高检测置信度，减少误检
+                minTrackingConfidence: 0.7 // 提高跟踪置信度，更稳定
             });
 
-            // 参考示例的onResults处理
+            // 优化的双手识别处理函数
+            function calculateHandOpenness(landmarks) {
+                const wrist = landmarks[0];
+                const tips = [4, 8, 12, 16, 20]; // 拇指、食指、中指、无名指、小指
+                
+                // 方法1：计算所有指尖到手腕的平均距离
+                let totalDist = 0;
+                tips.forEach(idx => {
+                    const tip = landmarks[idx];
+                    const d = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
+                    totalDist += d;
+                });
+                const avgDist = totalDist / 5;
+                
+                // 方法2：计算拇指和食指的距离（更准确）
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+                const thumbIndexDist = Math.sqrt(
+                    Math.pow(thumbTip.x - indexTip.x, 2) + 
+                    Math.pow(thumbTip.y - indexTip.y, 2)
+                );
+                
+                // 方法3：计算中指和无名指的距离
+                const middleTip = landmarks[12];
+                const ringTip = landmarks[16];
+                const middleRingDist = Math.sqrt(
+                    Math.pow(middleTip.x - ringTip.x, 2) + 
+                    Math.pow(middleTip.y - ringTip.y, 2)
+                );
+                
+                // 综合三个指标，提高准确度
+                const avgDistNormalized = (avgDist - 0.12) / 0.35; // 归一化到0-1
+                const thumbIndexNormalized = (thumbIndexDist - 0.05) / 0.2;
+                const middleRingNormalized = (middleRingDist - 0.03) / 0.15;
+                
+                // 加权平均（拇指食指权重最高，因为最容易识别）
+                const openness = (
+                    avgDistNormalized * 0.4 + 
+                    thumbIndexNormalized * 0.4 + 
+                    middleRingNormalized * 0.2
+                );
+                
+                return Math.max(0, Math.min(1, openness));
+            }
+            
+            function processHand(landmarks, handLabel) {
+                const hand = handLabel === 'Left' ? G.leftHand : G.rightHand;
+                hand.detected = true;
+                
+                // 使用中指根部（landmark 9）作为手部位置
+                hand.x = landmarks[9].x;
+                hand.y = landmarks[9].y;
+                
+                // 计算手部开合度（优化后的算法）
+                hand.openness = calculateHandOpenness(landmarks);
+                
+                return hand;
+            }
+            
             function onResults(results) {
                 loader.style.opacity = '0';
                 setTimeout(() => loader.style.display = 'none', 500);
 
+                // 重置双手状态
+                G.leftHand.detected = false;
+                G.rightHand.detected = false;
+                G.isHandDetected = false;
+
                 if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                    const landmarks = results.multiHandLandmarks[0];
                     G.isHandDetected = true;
                     statusDot.classList.add('active');
                     
-                    // 参考示例的手掌位置计算
-                    G.handX = landmarks[9].x;
-                    G.handY = landmarks[9].y;
-
-                    // 参考示例的手掌张开程度计算
-                    const wrist = landmarks[0];
-                    const tips = [4, 8, 12, 16, 20];
-                    let totalDist = 0;
-
-                    tips.forEach(idx => {
-                        const tip = landmarks[idx];
-                        const d = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
-                        totalDist += d;
+                    // 处理检测到的所有手
+                    results.multiHandLandmarks.forEach((landmarks, index) => {
+                        const handLabel = results.multiHandedness[index]?.label || 'Right';
+                        const hand = processHand(landmarks, handLabel);
+                        
+                        // 更新主手状态（用于兼容旧代码和2D游戏）
+                        if (index === 0 || handLabel === 'Right') {
+                            G.handX = hand.x;
+                            G.handY = hand.y;
+                            G.handOpenness = hand.openness;
+                        }
                     });
                     
-                    const avgDist = totalDist / 5;
-                    const minOpen = 0.15;
-                    const maxOpen = 0.4;
-                    let openness = (avgDist - minOpen) / (maxOpen - minOpen);
-                    G.handOpenness = Math.max(0, Math.min(1, openness));
-
-                    statusText.textContent = G.handOpenness > 0.6 ? "状态: 张开 (扩散)" : "状态: 握拳 (聚拢)";
+                    // 更新状态显示
+                    const handCount = results.multiHandLandmarks.length;
+                    const handIndicator = document.getElementById('handIndicator');
+                    const leftHandDot = document.getElementById('leftHandDot');
+                    const rightHandDot = document.getElementById('rightHandDot');
+                    
+                    if (handCount === 2) {
+                        // 显示双手指示器
+                        if (handIndicator) handIndicator.style.display = 'flex';
+                        if (leftHandDot) {
+                            leftHandDot.classList.toggle('active', G.leftHand.detected);
+                            leftHandDot.classList.add('left');
+                        }
+                        if (rightHandDot) {
+                            rightHandDot.classList.toggle('active', G.rightHand.detected);
+                            rightHandDot.classList.add('right');
+                        }
+                        
+                        const leftStatus = G.leftHand.openness > 0.6 ? '张开' : '握拳';
+                        const rightStatus = G.rightHand.openness > 0.6 ? '张开' : '握拳';
+                        statusText.textContent = `双手检测 | 左: ${leftStatus} 右: ${rightStatus}`;
+                    } else {
+                        // 隐藏双手指示器
+                        if (handIndicator) handIndicator.style.display = 'none';
+                        if (leftHandDot) leftHandDot.classList.remove('active', 'left');
+                        if (rightHandDot) rightHandDot.classList.remove('active', 'right');
+                        
+                        const handLabel = results.multiHandedness[0]?.label || '右手';
+                        statusText.textContent = `${handLabel}检测 | ${G.handOpenness > 0.6 ? '张开 (扩散)' : '握拳 (聚拢)'}`;
+                    }
                 } else {
-                    G.isHandDetected = false;
                     statusDot.classList.remove('active');
                     statusText.textContent = "未检测到手势";
+                    // 平滑过渡到默认状态
                     G.handOpenness += (1 - G.handOpenness) * 0.05;
+                    G.leftHand.openness += (1 - G.leftHand.openness) * 0.05;
+                    G.rightHand.openness += (1 - G.rightHand.openness) * 0.05;
                 }
             }
 
