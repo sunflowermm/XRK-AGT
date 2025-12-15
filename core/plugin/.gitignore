@@ -12,3 +12,4 @@ example/**
 !example/update.js
 !example/add.js
 !example/OneBotList.js
+!example/OneBotEnhancer.js
