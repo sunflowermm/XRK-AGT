@@ -54,7 +54,7 @@ class PluginsLoader {
       this.extended = []
       this.delCount()
 
-      logger.info('-----------')
+      logger.info('--------------------------------')
       logger.title('开始加载插件', 'yellow')
 
       const files = await this.getPlugins()
