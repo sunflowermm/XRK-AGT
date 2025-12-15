@@ -532,6 +532,7 @@ class PluginsLoader {
   async preCheck(e, hasBypassPlugin = false) {
     try {
       if (e.isDevice) return true
+      if ((e.adapter || '').toLowerCase() === 'stdin') return true
 
       const botUin = e.self_id || Bot.uin?.[0]
       if (cfg.bot?.ignore_self !== false && e.user_id === botUin) {
