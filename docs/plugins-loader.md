@@ -163,6 +163,11 @@
 
 XRK-AGT 采用标准化事件命名系统，确保不同来源的事件可以区分，同时支持通用事件监听。
 
+**事件字段责任（适配器/监听器 vs 加载器）**
+- 需由适配器/监听器提供：`adapter`、`post_type`、细分类型（`message_type/notice_type/request_type/detail_type`）、可选 `sub_type`、`user_id`/`group_id`/`device_id`、`message` 或 `raw_message`、`time`
+- `PluginsLoader` 自动补全：`self_id`、`bot`、缺省 `event_id`、`isDevice`/`isStdin`、基础 `sender`、`logText`、通用 `reply` 兜底、工具方法（`getSendableMedia`/`throttle`/`getEventHistory`）
+- 适配器增强插件只补充特有字段（如 `atBot`、`friend`/`group`/`member`、`isPrivate`/`isGroup`），不要覆写 `reply/bot`
+
 **事件命名规则：**
 
 - **OneBot 适配器事件**：

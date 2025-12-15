@@ -1,11 +1,8 @@
-import PluginsLoader from '../../src/infrastructure/plugins/loader.js'
+import EventListenerBase from './base.js'
 
-export default class OneBotEvent {
+export default class OneBotEvent extends EventListenerBase {
   constructor() {
-    this.plugins = PluginsLoader
-    this.processedEvents = new Set()
-    this.adapterName = 'onebot'
-    this.MAX_PROCESSED_EVENTS = 1000
+    super('onebot')
   }
 
   async init() {
@@ -28,27 +25,15 @@ export default class OneBotEvent {
       return false
     }
     
-    // 生成或使用现有 event_id
-    if (!e.event_id) {
-      const messageId = e.message_id || ''
-      const time = e.time || Math.floor(Date.now() / 1000)
-      const randomId = Math.random().toString(36).substr(2, 9)
-      e.event_id = `${this.adapterName}_${time}_${messageId}_${randomId}`
-    }
+    this.ensureEventId(e)
     
-    // 事件去重检查
-    const uniqueKey = `${this.adapterName}:${e.event_id}`
-    if (this.processedEvents.has(uniqueKey)) {
+    if (!this.markProcessed(e)) {
       Bot.makeLog("debug", `事件已处理，跳过：${e.event_id}`, e.self_id)
       return false
     }
     
-    this.processedEvents.add(uniqueKey)
-    this.cleanupProcessedEvents()
-    
     // 设置适配器标识
-    e.adapter = this.adapterName
-    e.isOneBot = true
+    this.markAdapter(e, { isOneBot: true })
     
     // 从事件类型推断 post_type
     if (!e.post_type) {

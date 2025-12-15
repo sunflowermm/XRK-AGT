@@ -5,15 +5,19 @@ export class OneBotBlacklistExample extends plugin {
     super({
       name: 'OneBot黑白名单示例',
       dsc: '演示如何使用accept方法实现OneBot特定逻辑',
-      event: 'onebot.message',
+      event: 'onebot.*',
       priority: 5000,
       rule: []
     })
   }
 
   async accept(e) {
-    if (e.isDevice || e.isStdin) return true
-    if (!(e.isOneBot || e.adapter === 'onebot')) return true
+    const adapterName = String(e.adapter || e.adapter_name || '').toLowerCase()
+    const isOneBot =
+      adapterName.includes('onebot') ||
+      (e.isOneBot && !['stdin', 'api', 'device'].includes(adapterName))
+
+    if (!isOneBot) return true
 
     const other = cfg.getOther()
     const check = id => [Number(id), String(id)]

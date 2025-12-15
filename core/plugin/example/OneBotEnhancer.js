@@ -13,15 +13,15 @@ export default class OneBotEnhancer extends plugin {
   }
 
   async accept(e) {
-    if (e.isDevice || e.isStdin) return true
-    
-    const isOneBot = e.isOneBot || e.adapter === 'onebot' || e.adapter_name === 'OneBotv11' ||
-                     (e.post_type && !e.isDevice && !e.isStdin && e.adapter !== 'device' && e.adapter !== 'stdin')
-    
+    const adapterName = String(e.adapter || e.adapter_name || '').toLowerCase()
+    const isOneBot =
+      adapterName.includes('onebot') ||
+      (e.isOneBot && !['stdin', 'api', 'device'].includes(adapterName))
+
     if (!isOneBot) return true
 
     e.isOneBot = true
-    if (!e.adapter) e.adapter = 'onebot'
+    if (!adapterName.includes('onebot')) e.adapter = 'onebot'
 
     this.enhanceEvent(e)
     this.setupReply(e)

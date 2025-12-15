@@ -119,6 +119,7 @@ class PluginsLoader {
     try {
       if (!e) return
 
+      this.normalizeEventPayload(e)
       this.initEvent(e)
       const hasBypassPlugin = await this.checkBypassPlugins(e)
 
@@ -159,6 +160,7 @@ class PluginsLoader {
       logger.error('处理消息内容错误')
       logger.error(error)
     }
+
   }
 
   initMsgProps(e) {
@@ -168,7 +170,21 @@ class PluginsLoader {
     e.msg = ''
     e.message = Array.isArray(e.message) ? e.message :
       (e.message ? [{ type: 'text', text: String(e.message) }] : [])
-    // 特定适配器的属性（atList、atBot等）由适配器增强插件初始化
+  }
+
+  normalizeEventPayload(e) {
+    // 统一事件基础字段，减少后续重复存在性判断
+    e.adapter = String(e.adapter || e.adapter_name || 'unknown').toLowerCase()
+    if (!Array.isArray(e.message)) e.message = e.message ? [e.message] : []
+    e.raw_message ||= ''
+    e.sender ||= {}
+
+    if (!e.post_type) {
+      e.post_type = e.message_type || e.notice_type || e.request_type || e.event_type || ''
+    }
+
+    // 预先提取纯文本，避免后续重复判断
+    e.plainText = this.extractMessageText(e)
   }
 
   async parseMessage(e) {
@@ -211,9 +227,6 @@ class PluginsLoader {
     e.isStdin = this.isStdinEvent(e)
 
     // 基础sender信息
-    if (!e.sender) {
-      e.sender = {}
-    }
     e.sender.nickname ||= e.sender.card || e.device_name || ''
     e.sender.card ||= e.sender.nickname
 
@@ -226,8 +239,6 @@ class PluginsLoader {
       // 通用格式，适配器增强插件可以覆盖
       e.logText = `[${e.adapter || '未知'}][${e.user_id || '未知'}]`
     }
-
-    // 特定适配器的属性（isPrivate、isGroup、group、friend、recall等）由适配器增强插件设置
   }
 
   checkPermissions(e) {
@@ -350,13 +361,9 @@ class PluginsLoader {
       try {
         const plugin = new p.class(e)
         plugin.e = e
+        this.applyRuleTemplates(plugin, p.ruleTemplates)
+        plugin.accept = this.wrapPluginAccept(plugin, p)
         plugin.bypassThrottle = p.bypassThrottle
-
-        if (plugin.rule) {
-          plugin.rule.forEach(rule => {
-            if (rule.reg) rule.reg = this.createRegExp(rule.reg)
-          })
-        }
 
         if (this.checkDisable(plugin) && this.filtEvent(e, plugin)) {
           activePlugins.push(plugin)
@@ -368,6 +375,39 @@ class PluginsLoader {
     }
 
     return activePlugins
+  }
+
+  normalizeAdapterList(adapters) {
+    if (!adapters) return []
+    const list = Array.isArray(adapters) ? adapters : [adapters]
+    return list
+      .map(item => String(item || '').toLowerCase())
+      .filter(Boolean)
+  }
+
+  buildAdapterSet(plugin) {
+    const adapters = this.normalizeAdapterList(plugin.adapters || plugin.adapter)
+    return adapters.length ? new Set(adapters) : null
+  }
+
+  isAdapterAllowed(adapterSet, event) {
+    if (!adapterSet || adapterSet.size === 0) return true
+    const adapter = String(event.adapter || event.adapter_name || '').toLowerCase()
+    return adapterSet.has(adapter)
+  }
+
+  wrapPluginAccept(plugin, meta) {
+    const adapters = meta?.adapters
+    const accept = typeof plugin.accept === 'function'
+      ? plugin.accept.bind(plugin)
+      : async () => true
+
+    return async (event) => {
+      if (!this.isAdapterAllowed(adapters, event)) {
+        return false
+      }
+      return await accept(event)
+    }
   }
 
   async processPlugins(plugins, e, isExtended) {
@@ -409,7 +449,7 @@ class PluginsLoader {
 
       for (const v of plugin.rule) {
         if (v.event && !this.filtEvent(e, v)) continue
-        if (v.reg && e.msg !== undefined && !v.reg.test(e.msg)) continue
+        if (v.reg && !v.reg.test(e.msg)) continue
 
         e.logFnc = `[${plugin.name}][${v.fnc}]`
 
@@ -508,26 +548,6 @@ class PluginsLoader {
       }
     }
 
-    // 设置适配器类型（通用逻辑，不假设特定适配器）
-    if (!e.adapter) {
-      // 优先使用适配器标识
-      if (e.adapter_name) {
-        // 从适配器名称推断类型
-        const adapterName = e.adapter_name.toLowerCase()
-        if (adapterName.includes('onebot')) e.adapter = 'onebot'
-        else if (adapterName.includes('device')) e.adapter = 'device'
-        else if (adapterName.includes('stdin')) e.adapter = 'stdin'
-      }
-      
-      // 如果没有适配器名称，使用事件类型推断
-      if (!e.adapter) {
-        if (e.isDevice || e.device_id) e.adapter = 'device'
-        else if (e.isStdin || this.isStdinEvent(e)) e.adapter = 'stdin'
-        else if (e.isOneBot) e.adapter = 'onebot'
-        // 默认值由适配器在发送事件时设置，这里不设置默认值
-      }
-    }
-
     let bot = null
     if (this.isStdinEvent(e)) {
       bot = Bot.stdin || Bot['stdin'] || Bot
@@ -565,19 +585,7 @@ class PluginsLoader {
         return false
       }
 
-      let msg = e.raw_message || ''
-      if (!msg && e.message) {
-        if (Array.isArray(e.message)) {
-          msg = e.message
-            .filter(m => m.type === 'text')
-            .map(m => m.text || '')
-            .join('')
-        } else {
-          msg = e.message.toString()
-        }
-      }
-
-      msg = this.dealText(msg)
+      const msg = e.plainText || ''
       if (/^#开机$/.test(msg)) {
         const masterQQ = cfg.masterQQ || cfg.master?.[e.self_id] || []
         const masters = Array.isArray(masterQQ) ? masterQQ : [masterQQ]
@@ -603,23 +611,16 @@ class PluginsLoader {
   }
 
   async checkBypassPlugins(e) {
-    if (!e.message) return false
+    const text = e.plainText || ''
+    if (!text) return false
 
     for (const p of this.priority) {
-      if (!p.bypassThrottle || !p.class) continue
+      if (!p.bypassThrottle || !p.bypassRules?.length) continue
+      if (!this.isAdapterAllowed(p.adapters, e)) continue
 
       try {
-        const plugin = new p.class(e)
-        plugin.e = e
-
-        if (plugin.rule) {
-          const tempMsg = this.extractMessageText(e)
-          for (const rule of plugin.rule) {
-            if (rule.reg) {
-              rule.reg = this.createRegExp(rule.reg)
-              if (rule.reg.test(tempMsg)) return true
-            }
-          }
+        if (p.bypassRules.some(rule => rule.reg?.test(text))) {
+          return true
         }
       } catch (error) {
         logger.error('检查bypass插件错误')
@@ -632,9 +633,8 @@ class PluginsLoader {
 
   extractMessageText(e) {
     if (e.raw_message) return this.dealText(e.raw_message)
-    if (!e.message) return ''
 
-    const messages = Array.isArray(e.message) ? e.message : [e.message]
+    const messages = Array.isArray(e.message) ? e.message : (e.message ? [e.message] : [])
     const text = messages
       .filter(msg => msg.type === 'text')
       .map(msg => msg.text || '')
@@ -745,6 +745,27 @@ class PluginsLoader {
     };
   }
 
+  prepareRuleTemplates(ruleList = []) {
+    if (!Array.isArray(ruleList)) ruleList = [ruleList].filter(Boolean)
+
+    return ruleList.map(rule => {
+      const cloned = { ...rule }
+      if (cloned.reg) cloned.reg = this.createRegExp(cloned.reg)
+      return cloned
+    })
+  }
+
+  applyRuleTemplates(plugin, templates = []) {
+    if (!templates.length) return
+    plugin.rule = templates.map(t => ({ ...t, reg: t.reg }))
+  }
+
+  collectBypassRules(ruleTemplates = []) {
+    return ruleTemplates
+      .filter(rule => rule?.reg)
+      .map(rule => ({ reg: rule.reg }))
+  }
+
   async importPlugin(file, packageErr) {
     try {
       let app = await import(file.path)
@@ -805,11 +826,8 @@ class PluginsLoader {
         })
       }
 
-      if (plugin.rule) {
-        plugin.rule.forEach(rule => {
-          if (rule.reg) rule.reg = this.createRegExp(rule.reg)
-        })
-      }
+      const ruleTemplates = this.prepareRuleTemplates(plugin.rule || [])
+      this.applyRuleTemplates(plugin, ruleTemplates)
 
       const pluginData = {
         class: p,
@@ -817,7 +835,10 @@ class PluginsLoader {
         name: plugin.name,
         priority: plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50),
         plugin,
-        bypassThrottle: plugin.bypassThrottle === true
+        bypassThrottle: plugin.bypassThrottle === true,
+        adapters: this.buildAdapterSet(plugin),
+        ruleTemplates,
+        bypassRules: this.collectBypassRules(ruleTemplates)
       }
 
       const targetArray = plugin.priority === 'extended' ? this.extended : this.priority
@@ -884,35 +905,35 @@ class PluginsLoader {
     const pluginEvent = v.event
     const possibleEvents = []
     const genericEvents = []
-    
-    if (e.isOneBot || e.adapter === 'onebot') {
-      const postType = e.post_type || ''
-      const typeKey = postType === 'message' ? 'message_type' : 
-                     postType === 'notice' ? 'notice_type' : 
-                     postType === 'request' ? 'request_type' : ''
-      const type = e[typeKey] || ''
-      const subType = e.sub_type || ''
-      
-      if (postType && type && subType) possibleEvents.push(`onebot.${postType}.${type}.${subType}`)
-      if (postType && type) possibleEvents.push(`onebot.${postType}.${type}`)
-      if (postType) {
-        possibleEvents.push(`onebot.${postType}`)
-        genericEvents.push(postType)
-      }
-    } else if (e.isDevice || e.adapter === 'device' || e.post_type === 'device') {
-      const eventType = e.event_type || ''
-      if (eventType) {
-        possibleEvents.push(`device.${eventType}`)
-        genericEvents.push(eventType)
-      }
-      possibleEvents.push('device')
-    } else if (e.isStdin || e.adapter === 'stdin') {
-      const eventType = e.command ? 'command' : (e.post_type || 'message')
-      if (eventType) {
-        possibleEvents.push(`stdin.${eventType}`)
-        genericEvents.push(eventType)
-      }
-      possibleEvents.push('stdin')
+    const adapter = String(e.adapter || e.adapter_name || '').toLowerCase()
+    const postType = e.post_type || ''
+    const subType = e.sub_type || ''
+
+    // 细分类型字段（兼容 message/notice/request/guild 等）
+    const detailType =
+      e.message_type ||
+      e.notice_type ||
+      e.request_type ||
+      e.detail_type ||
+      e.event_type ||
+      ''
+
+    // 构建可能的事件键（从具体到通用），适配任意新适配器
+    if (adapter) {
+      if (postType && detailType && subType) possibleEvents.push(`${adapter}.${postType}.${detailType}.${subType}`)
+      if (postType && detailType) possibleEvents.push(`${adapter}.${postType}.${detailType}`)
+      if (postType) possibleEvents.push(`${adapter}.${postType}`)
+      if (detailType) possibleEvents.push(`${adapter}.${detailType}`)
+      possibleEvents.push(adapter)
+    }
+
+    // 通用事件（无适配器前缀）
+    if (postType && detailType && subType) possibleEvents.push(`${postType}.${detailType}.${subType}`)
+    if (postType && detailType) possibleEvents.push(`${postType}.${detailType}`)
+    if (detailType) possibleEvents.push(detailType)
+    if (postType) {
+      possibleEvents.push(postType)
+      genericEvents.push(postType)
     }
     
     for (const actualEvent of possibleEvents) {
@@ -1149,11 +1170,6 @@ class PluginsLoader {
         logger.error(error)
       }
     }, 60000)
-
-    this.registerGlobalEventListeners()
-  }
-
-  registerGlobalEventListeners() {
   }
 
   recordEventHistory(eventType, eventData) {
@@ -1310,12 +1326,8 @@ class PluginsLoader {
         if (!p?.prototype) return
 
         const plugin = new p()
-
-        if (plugin.rule) {
-          plugin.rule.forEach(rule => {
-            if (rule.reg) rule.reg = this.createRegExp(rule.reg)
-          })
-        }
+        const ruleTemplates = this.prepareRuleTemplates(plugin.rule || [])
+        this.applyRuleTemplates(plugin, ruleTemplates)
 
         const update = (arr) => {
           const index = arr.findIndex(item =>
@@ -1330,7 +1342,10 @@ class PluginsLoader {
               class: p,
               plugin,
               priority,
-              bypassThrottle: plugin.bypassThrottle === true
+              bypassThrottle: plugin.bypassThrottle === true,
+              adapters: this.buildAdapterSet(plugin),
+              ruleTemplates,
+              bypassRules: this.collectBypassRules(ruleTemplates)
             }
           }
         }
