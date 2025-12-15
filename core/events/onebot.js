@@ -190,12 +190,5 @@ export default class OneBotEvent extends EventListenerBase {
     }
   }
 
-  cleanupProcessedEvents() {
-    if (this.processedEvents.size > this.MAX_PROCESSED_EVENTS) {
-      const ids = Array.from(this.processedEvents)
-      const toRemove = ids.slice(0, ids.length - this.MAX_PROCESSED_EVENTS)
-      toRemove.forEach(id => this.processedEvents.delete(id))
-    }
-  }
 }
 

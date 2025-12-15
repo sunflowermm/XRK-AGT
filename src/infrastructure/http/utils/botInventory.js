@@ -12,17 +12,8 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
     return [];
   }
 
+  // 统一从 Bot.bots 收集，所有子 Bot（账号 / 设备 / stdin 等）都通过 Bot 代理注册到这里
   const merged = { ...(Bot.bots || {}) };
-
-  if (includeDevices) {
-    for (const key of Object.keys(Bot)) {
-      if (merged[key]) continue;
-      const candidate = Bot[key];
-      if (candidate && typeof candidate === 'object' && candidate.device_type) {
-        merged[key] = candidate;
-      }
-    }
-  }
 
   const list = [];
   for (const [uin, bot] of Object.entries(merged)) {

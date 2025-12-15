@@ -292,5 +292,22 @@ export default class MyPlugin extends plugin {
 - **AI 与外部接口**
   - 调用 `AIStream` 时注意捕获异常，对用户展示友好错误信息。
   - 避免在规则方法中做长时间阻塞操作（可拆分为异步步骤与回调事件）。
+  
+---
 
+## 与 Bot / HTTP / 辅助层的有机联系
 
+- **事件入口**：插件永远通过事件对象 `e` 与系统交互：
+  - `e.bot`：当前账号/设备/STDIN 对应的子 Bot（由监听器 + 适配器增强插件挂载）。
+  - `e.adapter`：事件来源（`onebot/device/stdin/...`）。
+  - `e.reply`：统一回复接口，内部基于 `e.bot` 与对应适配器的 `sendMsg` 实现。
+- **访问 HTTP/配置/渲染等业务能力**：
+  - 通过全局 `Bot`：
+    - 访问子 Bot：`Bot[e.self_id]` / `Bot[e.device_id]`。
+    - 调用 HTTP API：`await Bot.callRoute('/api/xxx', {...})`，让插件与 HTTP 复用相同业务能力。
+    - 使用渲染器：`Bot.renderer?.puppeteer` 生成图片后通过 `e.reply` 发送。
+  - 通过全局 `redis`：
+    - 存储跨会话状态、统计信息或长生命周期数据。
+  - 通过 `ConfigBase` 子类暴露的 HTTP 接口，插件也可以间接读写配置（不建议直接 import 配置类，优先复用 HTTP API）。
+
+> 总结：插件站在「事件中心」，向下通过 `e.bot/Bot` 访问适配器、HTTP、渲染与 Redis，向上只暴露规则和行为。业务层优先实现为插件 + 工作流，HTTP 仅作为「入口和管理界面」，保持一套逻辑可复用在不同入口（群聊、设备、Web 控制台、STDIN）。

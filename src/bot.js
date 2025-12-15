@@ -1002,17 +1002,26 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     return new Proxy(this, {
       get: (target, prop, receiver) => {
         if (prop === Symbol.toStringTag) return 'Bot';
+        // 1. 优先返回 Bot 自身属性
         if (Reflect.has(target, prop)) {
           return Reflect.get(target, prop, receiver);
         }
-        if (prop in botMap) return botMap[prop];
 
-        const utilValue = BotUtil[prop];
-        if (utilValue !== undefined) {
-          return typeof utilValue === 'function'
-            ? utilValue.bind(BotUtil)
-            : utilValue;
+        // 2. 其次返回已注册的子 Bot 实例
+        if (prop in botMap) {
+          return botMap[prop];
         }
+
+        // 3. 最后透明代理到 BotUtil 的静态方法/属性（仅限自有属性，避免 Function 原型污染）
+        if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(BotUtil, prop)) {
+          const utilValue = BotUtil[prop];
+          if (utilValue !== undefined) {
+            return typeof utilValue === 'function'
+              ? utilValue.bind(BotUtil)
+              : utilValue;
+          }
+        }
+
         return undefined;
       },
       set: (target, prop, value, receiver) => {
@@ -1023,7 +1032,12 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         return Reflect.set(target, prop, value, receiver);
       },
       has: (target, prop) => {
-        return Reflect.has(target, prop) || prop in botMap || prop in BotUtil;
+        if (Reflect.has(target, prop)) return true;
+        if (prop in botMap) return true;
+        if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(BotUtil, prop)) {
+          return true;
+        }
+        return false;
       },
       ownKeys: (target) => {
         return Reflect.ownKeys(target);

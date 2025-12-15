@@ -164,4 +164,18 @@ export default {
 
 放入 `core/http` 后，`ApiLoader` 会在启动时自动加载并注册上述路由与 WebSocket。
 
+---
 
+## 与事件系统 / 插件系统的关系
+
+- 所有 `HttpApi` 路由都运行在 **Bot 的中间件栈之后**：
+  - 先经过 CORS、安全头、日志、认证（`_authMiddleware` 等），再进入具体 API。
+  - 因此 API 不需要自己重复做这些全局安全校验，只需关注业务参数与返回值。
+- 常见交互模式：
+  - **调用子 Bot 能力**：例如在设备 API 中使用 `Bot[deviceId].sendCommand(...)` 下发控制命令。
+  - **桥接到插件体系**：
+    - 通过 `Bot.em('stdin.message', e)` 构造一个 stdin 事件，让 HTTP 请求走与命令行同一套插件逻辑。
+    - 通过 `Bot.em('device.message', e)` 触发设备消息事件，复用既有设备插件。
+  - **配置 & 管理接口**：配合 `ConfigBase` 子类暴露 `/api/config/*`，统一管理 `server/device/other` 等配置，并通过前端页面操作。
+
+> 建议：业务尽量沉淀在插件与工作流中，HTTP 层负责提供「入口与管理界面」，保持清晰分层，避免出现「HTTP 里写一套逻辑、事件里又写一套」的重复实现。

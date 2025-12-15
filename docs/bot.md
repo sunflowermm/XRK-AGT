@@ -26,7 +26,7 @@ flowchart TD
 |--------|------|
 | **服务入口** | 创建 Express 应用与 HTTP/HTTPS 服务器；暴露静态目录 `www/`，处理 `favicon.ico`、`robots.txt` 等基础请求；统一配置 CORS、安全头、压缩、速率限制、请求日志等中间件 |
 | **API 与 WebSocket** | 通过 `ApiLoader` 动态加载 `core/http` 下的 API 模块并注册到 `/api/*`；管理 `Bot.wss` 与 `Bot.wsf`，将不同路径的 WebSocket 升级请求分发给对应处理器 |
-| **适配器与多 Bot 管理** | `this.adapter` 保存适配器实例（如 OneBotv11）；`this.bots` 按账号（`self_id`）保存底层 Bot；通过 `_createProxy()` 将 `Bot` 暴露为「多 Bot 聚合代理」 |
+| **适配器与多 Bot 管理** | `this.adapter` 保存适配器实例（如 OneBotv11、ComWeChat、GSUIDCore、OPQBot、stdin、device 等）；`this.bots` 按账号或设备 ID（`self_id` / `device_id`）保存子 Bot；通过 `_createProxy()` 将 `Bot` 暴露为「多 Bot 聚合代理」并统一暴露 `BotUtil` 的静态方法 |
 | **认证与安全** | 通过 `generateApiKey` 生成/加载 API 密钥；`_authMiddleware` 实现白名单、本地连接、同源 Cookie 与 API-Key 多级认证；`_setupStaticServing` 和 `_staticSecurityMiddleware` 负责静态资源访问安全 |
 | **事件与数据流** | 继承 `EventEmitter`，统一事件入口为 `Bot.em(name, data)`；为消息事件注入 `friend` / `group` / `member` 对象，提供统一的发送、撤回、合并转发等能力 |
 | **运维与资源管理** | `getServerUrl` / `getLocalIpAddress` 用于展示访问地址；`_startTrashCleaner` / `_clearTrashOnce` 定期清理 `trash/` 目录中的临时文件；`closeServer` 优雅关闭 HTTP/HTTPS/代理与 Redis |
@@ -101,11 +101,7 @@ flowchart TD
   - `_extendEventMethods(data)`：为事件对象添加通用的辅助方法（如通用`reply`方法）。适配器特定的方法扩展由增强插件处理。
   - `em(name, data)`：如 `message.group.normal` 这类事件支持逐级截断向上派发。
 
-- **好友与群管理**
-  - `getFriendArray/getFriendList/getFriendMap` 与对应 `fl` getter：跨多 Bot 聚合好友信息。
-  - `getGroupArray/getGroupList/getGroupMap` 与对应 `gl/gml` getter：聚合群与成员信息。
-  - `pickFriend/pickGroup/pickMember`：在多 Bot 情况下自动选择合适的底层 Bot 实例。
-  - `sendFriendMsg/sendGroupMsg/sendMasterMsg`：跨 Bot 消息发送工具方法。
+> 说明：传统的好友/群管理能力由各个 IM 适配器（如 OneBotv11）在其子 Bot（`Bot[self_id]`）上实现；`Bot` 本身只提供事件准备与工具方法，不再直接维护 IM 账号细节。
 
 - **其他**
   - `getServerUrl()`：结合反向代理 / HTTPS / 端口生成最终访问 URL。
@@ -116,24 +112,76 @@ flowchart TD
 
 ## 与其它核心对象的关系
 
-- **适配器层**
-  - `AdapterLoader.load(Bot)` 通过 `paths.coreAdapter` 扫描 `core/adapter`，适配器文件内部会向 `Bot.adapter` 与 `Bot.wsf` 注册自身。
-  - 适配器（如 `OneBotv11`）在建立连接时会在 `Bot[self_id]` 下挂接底层 Bot 对象，并通过 `Bot.em` 派发事件。
+### 适配器层（Adapter / 子 Bot）
 
-- **插件层**
-  - 插件系统入口在 `src/infrastructure/plugins/loader.js`，但其事件源与回复能力均依赖 `Bot`：
-    - `Bot.em(name, data)` 会自动调用 `Bot.prepareEvent(data)` 设置通用属性。
-    - 适配器增强插件（如`OneBotEnhancer`）通过`accept`方法处理适配器特定属性（`friend`、`group`、`member`、`atBot`等）。
-    - 插件基类 `plugin` 中 `this.reply` 最终也会调用 `e.reply`，而 `e.reply` 基于底层 Bot 与适配器。
+- `AdapterLoader.load(Bot)` 通过 `paths.coreAdapter` 扫描 `core/adapter`，适配器文件内部通常会：
+  - 将自身实例 `push` 到 `Bot.adapter`，用于后续初始化与枚举。
+  - 向 `Bot.wsf[path]` 注册 WebSocket 消息处理器。
+  - 在连接建立时创建子 Bot 对象并通过 `Bot[self_id] = childBot` 注册到底层（由 `_createProxy()` 负责放入 `Bot.bots` 容器）。
+- 特殊适配器：
+  - **stdin**：`core/adapter/stdin.js` 中通过 `StdinHandler` 创建 `Bot.stdin` 子 Bot，`adapter.id === 'stdin'`，用于命令行与 HTTP 层 `callStdin/runCommand` 的统一入口。
+  - **device**：`core/http/device.js` 中的 `DeviceManager` 将物理/虚拟设备挂载为 `Bot[device_id]` 子 Bot，`adapter.id === 'device'`，提供 `sendCommand/display/emotion/camera/microphone` 等方法。
 
-- **HTTP/API 层**
-  - `ApiLoader.register(this.express, this)` 会为每个 `HttpApi` 实例注入 `Bot` 引用，使 API 能访问：
-    - 适配器提供的底层能力（如群发消息、获取用户信息等）。
-    - 插件系统状态与配置。
+> 所有子 Bot（包括 IM 账号、设备、stdin）都集中保存在 `Bot.bots` 中，主实例通过 Proxy 暴露聚合视图，同时保持自身属性相对干净。
 
-- **工作流与 AI 层**
-  - `StreamLoader.load()` 会加载基于 `AIStream` 的工作流实例，插件可以通过 `this.getStream(name)` 调用 AI 能力。
-  - Bot 本身不直接依赖 AI，但提供了统一的环境（配置 / Redis / 日志）供 `AIStream` 使用。
+### 事件监听器与插件层（Events ↔ Plugins）
+
+- **事件入口**：
+  - 适配器与业务模块通过 `Bot.em(eventName, data)` 触发事件（如 `onebot.message.group.normal`、`device.online`、`stdin.message`）。
+  - `Bot.em` 会调用 `prepareEvent(data)` 与 `_extendEventMethods(data)`，只处理通用字段（如 `bot/adapter_id/adapter_name/sender/reply`）。
+- **事件监听器（core/events/*.js）**：
+  - 继承自 `EventListenerBase`，负责：
+    - 为特定适配器命名空间去重：`onebot.*`、`device.*`、`stdin.*`。
+    - 补全适配器级的基础字段（但不挂载 `friend/group/member` 等对象）。
+    - 在通过去重检查后，统一调用 `PluginsLoader.deal(e)` 进入插件系统。
+- **插件系统（PluginsLoader + plugin 基类）**：
+  - `PluginsLoader.deal(e)` 会：
+    - 标准化事件（`initEvent/normalizeEventPayload/dealMsg`）。
+    - 调用各适配器增强插件的 `accept(e)`，挂载 `friend/group/member/atBot/isPrivate/isGroup` 等适配器特定属性。
+    - 按规则与优先级执行业务插件的 `rule`。
+  - 插件开发者只需关心 `event` 名称与事件对象 `e`，无需直接操作 `Bot.em`。
+
+> 简单理解：**适配器/业务模块只负责产生「原始事件」+ 最小字段；监听器负责「命名空间 + 去重」；插件系统负责「增强 + 业务处理」。三层之间通过 `Bot.em` 和统一的事件对象解耦。**
+
+### HTTP/API 层（ApiLoader ↔ HttpApi ↔ Bot）
+
+- `ApiLoader.load()` 动态加载 `core/http` 下的所有 API 模块，并按优先级排序。
+- `Bot.run()` 中调用 `ApiLoader.register(this.express, this)` 完成 HTTP 与 WebSocket 注册：
+  - 为所有请求注入 `req.bot = bot`、`req.apiLoader = ApiLoader`。
+  - 为每个 `HttpApi` 调用 `api.init(app, bot)` 注册路由与 WS 处理器。
+- **API 如何与事件系统/插件交互：**
+  - 在 `handler(req, res, Bot)` 内可以：
+    - 直接访问 `Bot` 与其子 Bot 能力（如 `Bot[self_id].pickFriend().sendMsg()`）。
+    - 通过 `Bot.em('stdin.message', e)` 或调用 `bot.callStdin/runCommand` 把 HTTP 请求包装成 stdin 事件，让业务逻辑复用同一套插件体系。
+    - 通过 `Bot.em('device.command', ...)` 与设备事件打通。
+
+> 建议：HTTP 层尽量只做「参数解析 + 调用 `Bot` 能力或触发事件 + 返回结构化响应」，具体业务流转交给插件与工作流实现，避免 HTTP 模块里堆积业务逻辑。
+
+### 配置与 CommonConfig（cfg ↔ ConfigLoader ↔ ConfigBase）
+
+- `src/infrastructure/config/config.js` 暴露的 `cfg` 是对 `config/default_config/*.yaml` 的聚合视图，并在 `Bot.run()` 期间初始化为 `global.cfg`。
+- `src/infrastructure/commonconfig/loader.js` 会加载 `core/commonconfig` 下所有 `ConfigBase` 子类：
+  - 每个子类描述一个配置域（如 `server`、`device` 等），提供结构化 schema 与读写 API。
+  - HTTP 层通过 `core/http/config.js` 对外暴露 `/api/config/*` 接口，实现可视化配置编辑。
+- **Bot 与配置的关系：**
+  - `Bot` 在构造和运行时大量读取 `cfg`（如端口、HTTPS/代理配置、安全策略、日志级别），但不直接管理配置文件。
+  - 配置修改通过 `ConfigBase` + HTTP API 完成，`Bot` 只消费这些配置。
+
+### Redis 与运行时状态（redis ↔ PluginsLoader ↔ Bot）
+
+- `src/infrastructure/redis.js` 提供 Redis 客户端初始化逻辑，并在成功连接后设置 `global.redis`：
+  - 插件与业务模块通过全局 `redis` 访问计数、关机状态、上下文等数据。
+- `Bot.redisExit()` 在关闭流程中负责持久化与关闭 Redis 进程（兼容旧版行为）。
+- **典型用法：**
+  - `PluginsLoader` 使用 Redis 记录统计与关机标志（如 `Yz:shutdown:${botUin}`），`preCheck` 中会参考该状态决定是否继续处理消息。
+  - 插件可以自定义使用 Redis 维护长生命周期数据。
+
+### 渲染器（Renderer ↔ Bot ↔ 插件）
+
+- `src/infrastructure/renderer/loader.js` 会根据配置 `cfg.renderer` 创建实际渲染器实例（Puppeteer/Playwright 等），并挂载到 `Bot.renderer`。
+- 插件通过 `Bot.renderer.xxx` 调用渲染器生成图片/HTML/PDF，再利用 `e.reply` 发送到各适配器。
+
+> 注意：渲染器本身与事件系统解耦，只作为一个「工具服务」挂到 `Bot` 下面，供插件业务层按需使用。
 
 ---
 

@@ -177,6 +177,19 @@ class DeviceManager {
 
     setBot(botInstance) {
         this.bot = botInstance;
+
+    // 将设备管理器作为一种适配器暴露，方便外部通过 Bot.adapter 枚举
+    if (this.bot && Array.isArray(this.bot.adapter)) {
+      const hasDeviceAdapter = this.bot.adapter.some(a => a && a.id === 'device');
+      if (!hasDeviceAdapter) {
+        this.bot.adapter.push({
+          id: 'device',
+          name: 'DeviceManager',
+          type: 'device',
+          source: 'internal'
+        });
+      }
+    }
     }
 
     getBot(override) {
@@ -1008,7 +1021,7 @@ class DeviceManager {
           ? 'Web客户端' 
           : (deviceInfo.device_name || `${deviceInfo.device_type}_${deviceId}`);
         
-        runtimeBot[deviceId] = {
+    const deviceBot = {
             adapter: this,
             ws,
             uin: deviceId,
@@ -1156,11 +1169,14 @@ class DeviceManager {
                 };
             },
 
-            getStats: () =>
-                deviceStats.get(deviceId) || this.initDeviceStats(deviceId)
-        };
+      getStats: () =>
+        deviceStats.get(deviceId) || this.initDeviceStats(deviceId)
+    };
 
-        return runtimeBot[deviceId];
+    // 通过 Bot 代理注册设备子 Bot（进入 bots 映射，而不是直接挂载到主实例上）
+    runtimeBot[deviceId] = deviceBot;
+
+    return deviceBot;
     }
 
     /**
@@ -1286,7 +1302,6 @@ class DeviceManager {
                     return await this.handleASRSessionStop(deviceId, eventData);
 
                 default:
-                    // 标准化事件系统: 创建标准化事件对象
                     const deviceEventData = {
                         post_type: 'device',
                         event_type: eventType,
@@ -1310,15 +1325,9 @@ class DeviceManager {
                         } : {})
                     };
                     
-                    // 触发device事件（从具体到通用）
                     const specificDeviceEvent = `device.${eventType}`;
                     runtimeBot.em(specificDeviceEvent, deviceEventData);
                     runtimeBot.em('device', deviceEventData);
-                    
-                    // 如果事件类型是 message/notice/request, 同时触发通用事件
-                    if (['message', 'notice', 'request'].includes(eventType)) {
-                        runtimeBot.em(`device.${eventType}`, deviceEventData);
-                    }
             }
 
             return { success: true };

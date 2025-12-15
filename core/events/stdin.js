@@ -1,31 +1,24 @@
-import PluginsLoader from '../../src/infrastructure/plugins/loader.js'
+import EventListenerBase from '#infrastructure/listener/base.js'
 
-export default class StdinEvent {
+export default class StdinEvent extends EventListenerBase {
   constructor() {
-    this.plugins = PluginsLoader
-    this.processedEvents = new Set()
-    this.adapterName = 'stdin'
-    this.MAX_PROCESSED_EVENTS = 1000
+    super('stdin')
   }
 
   async init() {
-    Bot.on('stdin.message', (e) => this.handleEvent(e, 'stdin.message'))
+    const bot = this.bot || Bot
+    bot.on('stdin.message', (e) => this.handleEvent(e))
   }
 
-  async handleEvent(e, eventType) {
-    const eventId = e.event_id
-    if (!eventId) return
-    
-    const uniqueKey = `${this.adapterName}:${eventId}`
-    if (this.processedEvents.has(uniqueKey)) return
-    
-    this.processedEvents.add(uniqueKey)
-    this.cleanupProcessedEvents()
-    
-    e.adapter = this.adapterName
-    e.isStdin = true
+  async handleEvent(e) {
+    if (!e) return
+
+    this.ensureEventId(e)
+    if (!this.markProcessed(e)) return
+
+    this.markAdapter(e, { isStdin: true })
     this.normalizeEvent(e)
-    
+
     await this.plugins.deal(e)
   }
 
@@ -51,14 +44,6 @@ export default class StdinEvent {
         : String(e.message)
     }
     e.msg = e.msg || e.raw_message || ''
-  }
-
-  cleanupProcessedEvents() {
-    if (this.processedEvents.size > this.MAX_PROCESSED_EVENTS) {
-      const ids = Array.from(this.processedEvents)
-      const toRemove = ids.slice(0, ids.length - this.MAX_PROCESSED_EVENTS)
-      toRemove.forEach(id => this.processedEvents.delete(id))
-    }
   }
 }
 
