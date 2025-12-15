@@ -1,23 +1,23 @@
 import BotUtil from '#utils/botutil.js'
 
 /**
- * 适配器基类
- * 提供标准化的Bot实例创建和事件处理
+ * Tasker 基类（原适配器 Adapter 基类）
+ * 提供标准化的 Bot 实例创建和事件处理
  */
-export class AdapterBase {
+export class TaskerBase {
   /**
    * 创建标准化的Bot实例
    * @param {Object} options - 配置选项
    * @param {string} options.id - Bot ID
    * @param {string} options.name - Bot名称
-   * @param {string} options.type - 适配器类型 (onebot/device/stdin)
+   * @param {string} options.type - tasker 类型 (onebot/device/stdin)
    * @param {Object} options.info - Bot信息
-   * @param {Object} options.adapter - 适配器实例
+   * @param {Object} options.tasker - tasker 实例
    * @param {Object} bot - Bot主实例
    * @returns {Object} 标准化的Bot实例
    */
   static createBotInstance(options, bot) {
-    const { id, name, type, info = {}, adapter } = options
+    const { id, name, type, info = {}, tasker } = options
     
     // 确保uin列表包含此Bot
     if (!bot.uin.includes(id)) {
@@ -33,9 +33,9 @@ export class AdapterBase {
       avatar: info.avatar || null,
       info: { ...info, user_id: id },
       
-      // 适配器信息
-      adapter: adapter || null,
-      adapter_type: type,
+      // tasker 信息
+      tasker: tasker || null,
+      tasker_type: type,
       
       // 状态信息
       stat: {
@@ -50,11 +50,11 @@ export class AdapterBase {
         version: '1.0.0'
       },
       
-      // 通用方法（所有适配器都支持）
-      sendMsg: null, // 由适配器实现
-      reply: null,   // 由适配器实现
+      // 通用方法（所有 tasker 都支持）
+      sendMsg: null, // 由 tasker 实现
+      reply: null,   // 由 tasker 实现
       
-      // 可选方法（适配器可选择性实现）
+      // 可选方法（tasker 可选择性实现）
       recallMsg: null,
       getMsg: null,
       
@@ -63,9 +63,9 @@ export class AdapterBase {
       _initializing: false
     }
     
-    // 适配器特定属性由适配器自己设置，这里不处理
-    // OneBot特定方法在onebot.js中注册
-    // Device和Stdin特定属性由对应适配器设置
+    // tasker 特定属性由各自实现自行设置，这里不处理
+    // OneBot 特定方法在 onebot.js 中注册
+    // Device 和 Stdin 特定属性由对应 tasker 设置
     
     // 保存到Bot实例
     bot[id] = botInstance
@@ -74,19 +74,19 @@ export class AdapterBase {
   }
   
   /**
-   * 创建标准化的事件对象（仅包含所有适配器通用的基础属性）
-   * 适配器特定的属性（如isGroup、isPrivate、friend、group等）由增强插件处理
+   * 创建标准化的事件对象（仅包含所有 tasker 通用的基础属性）
+   * tasker 特定的属性（如 isGroup、isPrivate、friend、group 等）由增强插件处理
    * 
    * @param {Object} options - 事件选项
    * @param {string} options.post_type - 事件类型 (message/notice/request)
-   * @param {string} options.adapter_type - 适配器类型
+   * @param {string} options.tasker_type - tasker 类型
    * @param {string} options.self_id - Bot ID
    * @param {Object} options.data - 事件数据
    * @param {Object} bot - Bot实例
    * @returns {Object} 标准化的事件对象
    */
   static createEvent(options, bot) {
-    const { post_type, adapter_type, self_id, data = {} } = options
+    const { post_type, tasker_type, self_id, data = {} } = options
     
     // 获取Bot实例
     const botInstance = bot[self_id] || bot
@@ -97,10 +97,10 @@ export class AdapterBase {
       post_type: post_type || 'message',
       self_id,
       time: Math.floor(Date.now() / 1000),
-      event_id: `${adapter_type || 'event'}_${post_type || 'message'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      event_id: `${tasker_type || 'event'}_${post_type || 'message'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       
-      // 适配器信息（通用）
-      adapter: adapter_type || '',
+      // tasker 信息（通用）
+      tasker: tasker_type || '',
       
       // Bot实例
       bot: botInstance,

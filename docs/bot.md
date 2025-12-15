@@ -26,7 +26,7 @@ flowchart TD
 |--------|------|
 | **服务入口** | 创建 Express 应用与 HTTP/HTTPS 服务器；暴露静态目录 `www/`，处理 `favicon.ico`、`robots.txt` 等基础请求；统一配置 CORS、安全头、压缩、速率限制、请求日志等中间件 |
 | **API 与 WebSocket** | 通过 `ApiLoader` 动态加载 `core/http` 下的 API 模块并注册到 `/api/*`；管理 `Bot.wss` 与 `Bot.wsf`，将不同路径的 WebSocket 升级请求分发给对应处理器 |
-| **适配器与多 Bot 管理** | `this.adapter` 保存真实网络适配器实例（如 OneBotv11、ComWeChat、GSUIDCore、OPQBot 等）；`this.bots` 按账号或设备 ID（`self_id` / `device_id`）保存子 Bot；通过 `_createProxy()` 将 `Bot` 暴露为「多 Bot 聚合代理」并统一暴露 `BotUtil` 的静态方法 |
+| **Tasker（任务层）与多 Bot 管理** | `this.tasker` 保存真实网络 Tasker 实例（事件/任务生成器，如 OneBotv11、ComWeChat、GSUIDCore、OPQBot 等）；`this.bots` 按账号或设备 ID（`self_id` / `device_id`）保存子 Bot；通过 `_createProxy()` 将 `Bot` 暴露为「多 Bot 聚合代理」并统一暴露 `BotUtil` 的静态方法 |
 | **认证与安全** | 通过 `generateApiKey` 生成/加载 API 密钥；`_authMiddleware` 实现白名单、本地连接、同源 Cookie 与 API-Key 多级认证；`_setupStaticServing` 和 `_staticSecurityMiddleware` 负责静态资源访问安全 |
 | **事件与数据流** | 继承 `EventEmitter`，统一事件入口为 `Bot.em(name, data)`；为消息事件注入 `friend` / `group` / `member` 对象，提供统一的发送、撤回、合并转发等能力 |
 | **运维与资源管理** | `getServerUrl` / `getLocalIpAddress` 用于展示访问地址；`_startTrashCleaner` / `_clearTrashOnce` 定期清理 `trash/` 目录中的临时文件；`closeServer` 优雅关闭 HTTP/HTTPS/代理与 Redis |
@@ -97,8 +97,8 @@ flowchart TD
   - `wsConnect(req, socket, head)`：统一处理 WebSocket 升级请求，走与 HTTP 相同的认证逻辑，并通过 `Bot.wsf[path]` 分发到具体处理器。
 
 - **事件与对象封装**
-  - `prepareEvent(data)`：只处理所有适配器通用的基础属性（`bot`、`adapter_id`、`adapter_name`、基础`sender`等）。适配器特定的对象（`friend`、`group`、`member`）由对应的增强插件通过`accept`方法处理。
-  - `_extendEventMethods(data)`：为事件对象添加通用的辅助方法（如通用`reply`方法）。适配器特定的方法扩展由增强插件处理。
+  - `prepareEvent(data)`：只处理所有 Tasker 通用的基础属性（`bot`、`tasker_id`、`tasker_name`、基础`sender`等）。Tasker 特定的对象（`friend`、`group`、`member`）由对应的增强插件通过`accept`方法处理。
+  - `_extendEventMethods(data)`：为事件对象添加通用的辅助方法（如通用`reply`方法）。Tasker 特定的方法扩展由增强插件处理。
   - `em(name, data)`：如 `message.group.normal` 这类事件支持逐级截断向上派发。
 
 > 说明：传统的好友/群管理能力由各个 IM 适配器（如 OneBotv11）在其子 Bot（`Bot[self_id]`）上实现；`Bot` 本身只提供事件准备与工具方法，不再直接维护 IM 账号细节。
@@ -112,14 +112,14 @@ flowchart TD
 
 ## 与其它核心对象的关系
 
-### 适配器层（Adapter / 子 Bot）
+### Tasker 层（任务层 / 子 Bot）
 
-- `AdapterLoader.load(Bot)` 通过 `paths.coreAdapter` 扫描 `core/adapter`，适配器文件内部通常会：
-  - 将自身实例 `push` 到 `Bot.adapter`，用于后续初始化与枚举。
+- TaskerLoader.load(Bot)` 通过 `paths.coreAdapter` 扫描 `core/adapter`，Tasker 文件内部通常会：
+  - 将自身实例 `push` 到 `Bot.tasker`，用于后续初始化与枚举。
   - 向 `Bot.wsf[path]` 注册 WebSocket 消息处理器。
   - 在连接建立时创建子 Bot 对象并通过 `Bot[self_id] = childBot` 注册到底层（由 `_createProxy()` 负责放入 `Bot.bots` 容器）。
-- 特殊子 Bot（不作为适配器枚举）：  
-  - **stdin**：`core/adapter/stdin.js` 中通过 `StdinHandler` 创建 `Bot.stdin` 子 Bot，用于命令行与 HTTP 层 `callStdin/runCommand` 的统一入口，但不会出现在 `Bot.adapter` 中。
+- 特殊子 Bot（不作为 Tasker 枚举）：  
+  - **stdin**：`core/adapter/stdin.js` 中通过 `StdinHandler` 创建 `Bot.stdin` 子 Bot，用于命令行与 HTTP 层 `callStdin/runCommand` 的统一入口，但不会出现在 `Bot.tasker` 中。
   - **device**：`core/http/device.js` 中的 `DeviceManager` 将物理/虚拟设备挂载为 `Bot[device_id]` 子 Bot，提供 `sendCommand/display/emotion/camera/microphone` 等方法，同样不作为普通适配器参与初始化循环。
 
 > 所有子 Bot（包括 IM 账号、设备、stdin）都集中保存在 `Bot.bots` 中，主实例通过 Proxy 暴露聚合视图，同时保持自身属性相对干净。
@@ -127,21 +127,21 @@ flowchart TD
 ### 事件监听器与插件层（Events ↔ Plugins）
 
 - **事件入口**：
-  - 适配器与业务模块通过 `Bot.em(eventName, data)` 触发事件（如 `onebot.message.group.normal`、`device.online`、`stdin.message`）。
-  - `Bot.em` 会调用 `prepareEvent(data)` 与 `_extendEventMethods(data)`，只处理通用字段（如 `bot/adapter_id/adapter_name/sender/reply`）。
+- Tasker 与业务模块通过 `Bot.em(eventName, data)` 触发事件（如 `onebot.message.group.normal`、`device.online`、`stdin.message`）。
+- `Bot.em` 会调用 `prepareEvent(data)` 与 `_extendEventMethods(data)`，只处理通用字段（如 `bot/tasker_id/tasker_name/sender/reply`）。
 - **事件监听器（core/events/*.js）**：
   - 继承自 `EventListenerBase`，负责：
-    - 为特定适配器命名空间去重：`onebot.*`、`device.*`、`stdin.*`。
-    - 补全适配器级的基础字段（但不挂载 `friend/group/member` 等对象）。
+    - 为特定 Tasker 命名空间去重：`onebot.*`、`device.*`、`stdin.*`。
+    - 补全 Tasker 级的基础字段（但不挂载 `friend/group/member` 等对象）。
     - 在通过去重检查后，统一调用 `PluginsLoader.deal(e)` 进入插件系统。
 - **插件系统（PluginsLoader + plugin 基类）**：
   - `PluginsLoader.deal(e)` 会：
     - 标准化事件（`initEvent/normalizeEventPayload/dealMsg`）。
-    - 调用各适配器增强插件的 `accept(e)`，挂载 `friend/group/member/atBot/isPrivate/isGroup` 等适配器特定属性。
+    - 调用各 Tasker 增强插件的 `accept(e)`，挂载 `friend/group/member/atBot/isPrivate/isGroup` 等 Tasker 特定属性。
     - 按规则与优先级执行业务插件的 `rule`。
   - 插件开发者只需关心 `event` 名称与事件对象 `e`，无需直接操作 `Bot.em`。
 
-> 简单理解：**适配器/业务模块只负责产生「原始事件」+ 最小字段；监听器负责「命名空间 + 去重」；插件系统负责「增强 + 业务处理」。三层之间通过 `Bot.em` 和统一的事件对象解耦。**
+> 简单理解：**Tasker（事件生成器）/业务模块只负责产生「原始事件」+ 最小字段；监听器负责「命名空间 + 去重」；插件系统负责「增强 + 业务处理」。三层之间通过 `Bot.em` 和统一的事件对象解耦。**
 
 ### HTTP/API 层（ApiLoader ↔ HttpApi ↔ Bot）
 

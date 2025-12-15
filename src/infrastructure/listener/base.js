@@ -2,8 +2,8 @@ import PluginsLoader from '#infrastructure/plugins/loader.js'
 
 /**
  * 事件监听基类
- * 提供通用的去重、事件ID生成与适配器标记能力
- * 适配器特有的属性应在各自监听器中调用 markAdapter 传入
+ * 提供通用的去重、事件ID生成与 tasker 标记能力（原适配器）
+ * tasker 特有的属性应在各自监听器中调用 markAdapter 传入
  */
 export default class EventListenerBase {
   constructor(adapterName = '') {
@@ -36,8 +36,8 @@ export default class EventListenerBase {
   }
 
   markAdapter(e, extraFlags = {}) {
-    if (this.adapterName && !e.adapter) {
-      e.adapter = this.adapterName
+    if (this.adapterName && !e.tasker) {
+      e.tasker = this.adapterName
     }
     Object.assign(e, extraFlags)
   }

@@ -4,10 +4,11 @@ import { pathToFileURL } from 'node:url'
 import paths from '#utils/paths.js'
 import BotUtil from '#utils/botutil.js'
 
-class AdapterLoader {
+// Tasker 加载器（原 AdapterLoader）
+class TaskerLoader {
   constructor() {
     this.baseDir = paths.coreAdapter
-    this.loggerNs = 'AdapterLoader'
+    this.loggerNs = 'TaskerLoader'
   }
 
   async load(bot = Bot) {
@@ -24,37 +25,37 @@ class AdapterLoader {
       summary.scanned = files.length
 
       if (!files.length) {
-        BotUtil.makeLog('info', '未找到适配器文件', this.loggerNs)
+        BotUtil.makeLog('info', '未找到 tasker 文件', this.loggerNs)
         return summary
       }
 
-      const adapterCountBefore = bot?.adapter?.length ?? 0
+      const adapterCountBefore = bot?.tasker?.length ?? 0
 
       await Promise.allSettled(
         files.map(async ({ name, href }) => {
           try {
-            BotUtil.makeLog('debug', `导入适配器文件: ${name}`, this.loggerNs)
+            BotUtil.makeLog('debug', `导入 tasker 文件: ${name}`, this.loggerNs)
             await import(href)
             summary.loaded += 1
           } catch (err) {
             summary.failed += 1
             summary.errors.push({ name, message: err.message })
-            BotUtil.makeLog('error', `导入适配器失败: ${name}`, this.loggerNs, err)
+            BotUtil.makeLog('error', `导入 tasker 失败: ${name}`, this.loggerNs, err)
           }
         })
       )
 
-      summary.registered = (bot?.adapter?.length ?? 0) - adapterCountBefore
+      summary.registered = (bot?.tasker?.length ?? 0) - adapterCountBefore
 
       BotUtil.makeLog(
         summary.failed ? 'warn' : 'info',
-        `适配器加载完成: 成功${summary.loaded}个, 注册${summary.registered}个${summary.failed ? `, 失败${summary.failed}个` : ''}`,
+        `Tasker 加载完成: 成功${summary.loaded}个, 注册${summary.registered}个${summary.failed ? `, 失败${summary.failed}个` : ''}`,
         this.loggerNs
       )
 
       return summary
     } catch (error) {
-      BotUtil.makeLog('error', '适配器加载失败', this.loggerNs, error)
+      BotUtil.makeLog('error', 'Tasker 加载失败', this.loggerNs, error)
       summary.failed += 1
       summary.errors.push({ name: 'internal', message: error.message })
       return summary
@@ -72,7 +73,7 @@ class AdapterLoader {
         }))
     } catch (error) {
       if (error.code === 'ENOENT') {
-        BotUtil.makeLog('warn', `适配器目录不存在: ${this.baseDir}`, this.loggerNs)
+        BotUtil.makeLog('warn', `Tasker 目录不存在: ${this.baseDir}`, this.loggerNs)
         return []
       }
       throw error
@@ -80,5 +81,5 @@ class AdapterLoader {
   }
 }
 
-export default new AdapterLoader()
+export default new TaskerLoader()
 

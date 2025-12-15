@@ -1,5 +1,5 @@
-Bot.adapter.push(
-  new (class OPQBotAdapter {
+Bot.tasker.push(
+  new (class OPQBotTasker {
     id = "QQ"
     name = "OPQBot"
     path = this.name
@@ -319,7 +319,7 @@ Bot.adapter.push(
 
     makeBot(id, ws) {
       Bot[id] = {
-        adapter: this,
+        tasker: this,
         ws,
 
         uin: id,

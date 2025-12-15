@@ -1,8 +1,8 @@
 import path from "node:path"
 import { ulid } from "ulid"
 
-Bot.adapter.push(
-  new (class OneBotv11Adapter {
+Bot.tasker.push(
+  new (class OneBotv11Tasker {
     id = "QQ"
     name = "OneBotv11"
     path = this.name
@@ -1068,7 +1068,7 @@ Bot.adapter.push(
       
       // 初始化Bot基础结构（保留OneBot特定功能）
       Bot[self_id] = {
-        adapter: this,
+        tasker: this,
         ws: ws,
         sendApi: this.sendApi.bind(this, data, ws),
         stat: {
@@ -1286,7 +1286,7 @@ Bot.adapter.push(
       data.sender.user_id = data.sender.user_id || data.user_id
       
       // 适配器标识
-      data.adapter = 'onebot'
+      data.tasker = 'onebot'
       data.isOneBot = true
       
       return true
@@ -1698,7 +1698,7 @@ Bot.adapter.push(
         })
       }
 
-      data.adapter = 'onebot'
+      data.tasker = 'onebot'
       data.isOneBot = true
       
       // 只触发最具体的事件，事件监听器会处理
@@ -1739,7 +1739,7 @@ Bot.adapter.push(
       }
 
       data.bot.request_list.push(data)
-      data.adapter = 'onebot'
+      data.tasker = 'onebot'
       data.isOneBot = true
       
       // 只触发最具体的事件，事件监听器会处理

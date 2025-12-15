@@ -1,6 +1,6 @@
 import fs from "node:fs/promises"
 import lodash from "lodash"
-import AdapterLoader from "#infrastructure/adapter/loader.js"
+import TaskerLoader from "#infrastructure/adapter/loader.js"
 import BotUtil from "#utils/botutil.js";
 import paths from '#utils/paths.js';
 
@@ -9,7 +9,7 @@ import paths from '#utils/paths.js';
  */
 class ListenerLoader {
   /**
-   * 监听事件和适配器加载
+   * 监听事件和 tasker 加载
    */
   async load(bot) {
     this.bot = bot;
@@ -73,41 +73,41 @@ class ListenerLoader {
 
     BotUtil.makeLog('info', `加载监听事件[${eventCount}个]`, 'ListenerLoader');
 
-    // 步骤2: 加载适配器（仅在服务器模式下）
+    // 步骤2: 加载 tasker（仅在服务器模式下）
     if (process.argv.includes("server")) {
       await this.loadAdapters();
     }
   }
 
   async loadAdapters() {
-    await AdapterLoader.load(this.bot ?? Bot)
+    await TaskerLoader.load(this.bot ?? Bot)
 
-    BotUtil.makeLog('info', "初始化适配器中...", 'ListenerLoader');
-    let adapterCount = 0
-    let adapterErrorCount = 0
+    BotUtil.makeLog('info', "初始化 tasker 中...", 'ListenerLoader');
+    let taskerCount = 0
+    let taskerErrorCount = 0
 
-    if (Bot.adapter.length === 0) {
-      BotUtil.makeLog('warn', "未找到已注册的适配器", 'ListenerLoader');
+    if (Bot.tasker.length === 0) {
+      BotUtil.makeLog('warn', "未找到已注册的 tasker", 'ListenerLoader');
       return;
     }
 
-    for (const adapter of Bot.adapter) {
+    for (const tasker of Bot.tasker) {
       try {
-        if (!adapter || typeof adapter.load !== 'function') {
-          BotUtil.makeLog('warn', `适配器无效: ${adapter?.name || 'unknown'}(${adapter?.id || 'unknown'})`, 'ListenerLoader');
+        if (!tasker || typeof tasker.load !== 'function') {
+          BotUtil.makeLog('warn', `tasker 无效: ${tasker?.name || 'unknown'}(${tasker?.id || 'unknown'})`, 'ListenerLoader');
           continue
         }
 
-        BotUtil.makeLog('debug', `初始化适配器: ${adapter.name}(${adapter.id})`, 'ListenerLoader');
-        await adapter.load()
-        adapterCount++
+        BotUtil.makeLog('debug', `初始化 tasker: ${tasker.name}(${tasker.id})`, 'ListenerLoader');
+        await tasker.load()
+        taskerCount++
       } catch (err) {
-        BotUtil.makeLog('error', `适配器初始化错误: ${adapter?.name || 'unknown'}(${adapter?.id || 'unknown'})`, 'ListenerLoader', err)
-        adapterErrorCount++
+        BotUtil.makeLog('error', `tasker 初始化错误: ${tasker?.name || 'unknown'}(${tasker?.id || 'unknown'})`, 'ListenerLoader', err)
+        taskerErrorCount++
       }
     }
 
-    BotUtil.makeLog('info', `加载适配器[${adapterCount}个]${adapterErrorCount > 0 ? `, 失败${adapterErrorCount}个` : ''}`, 'ListenerLoader');
+    BotUtil.makeLog('info', `加载 tasker[${taskerCount}个]${taskerErrorCount > 0 ? `, 失败${taskerErrorCount}个` : ''}`, 'ListenerLoader');
   }
 }
 

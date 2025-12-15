@@ -13,11 +13,11 @@ export default class OneBotEnhancer extends plugin {
   }
 
   async accept(e) {
-    const adapterName = this.getAdapterName(e)
-    if (!this.isOneBotEvent(adapterName, e)) return true
+    const taskerName = this.getAdapterName(e)
+    if (!this.isOneBotEvent(taskerName, e)) return true
 
     e.isOneBot = true
-    if (!adapterName.includes('onebot')) e.adapter = 'onebot'
+    if (!taskerName.includes('onebot')) e.tasker = 'onebot'
 
     this.enhanceEvent(e)
 
@@ -32,12 +32,12 @@ export default class OneBotEnhancer extends plugin {
   }
 
   getAdapterName(e) {
-    return String(e.adapter || e.adapter_name || '').toLowerCase()
+    return String(e.tasker || e.tasker_name || '').toLowerCase()
   }
 
-  isOneBotEvent(adapterName, e) {
-    if (adapterName.includes('onebot')) return true
-    if (e.isOneBot && !['stdin', 'api', 'device'].includes(adapterName)) return true
+  isOneBotEvent(taskerName, e) {
+    if (taskerName.includes('onebot')) return true
+    if (e.isOneBot && !['stdin', 'api', 'device'].includes(taskerName)) return true
     return false
   }
 
@@ -112,16 +112,16 @@ export default class OneBotEnhancer extends plugin {
   setupReply(e) {
     const fromGroup = () => {
       if (e.group?.sendMsg) return e.group.sendMsg.bind(e.group)
-      if (e.bot?.adapter?.sendGroupMsg && e.group_id) {
-        return (msg) => e.bot.adapter.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
+      if (e.bot?.tasker?.sendGroupMsg && e.group_id) {
+        return (msg) => e.bot.tasker.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
       }
       return null
     }
 
     const fromFriend = () => {
       if (e.friend?.sendMsg) return e.friend.sendMsg.bind(e.friend)
-      if (e.bot?.adapter?.sendFriendMsg && e.user_id) {
-        return (msg) => e.bot.adapter.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
+      if (e.bot?.tasker?.sendFriendMsg && e.user_id) {
+        return (msg) => e.bot.tasker.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
       }
       return null
     }

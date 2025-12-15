@@ -1,5 +1,5 @@
-Bot.adapter.push(
-  new (class GSUIDCoreAdapter {
+Bot.tasker.push(
+  new (class GSUIDCoreTasker {
     id = "GSUIDCore"
     name = "早柚核心(时雨崽)"
     path = this.id
@@ -191,7 +191,7 @@ Bot.adapter.push(
 
     makeBot(data, ws) {
       Bot[data.self_id] = {
-        adapter: this,
+        tasker: this,
         ws: ws,
         get sendApi() {
           return this.ws.sendMsg

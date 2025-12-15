@@ -1,7 +1,7 @@
 import cfg from "../../src/infrastructure/config/config.js"
 import { ulid } from "ulid"
 
-Bot.adapter.push(new class ComWeChatAdapter {
+Bot.tasker.push(new class ComWeChatTasker {
   id = "WeChat"
   name = "ComWeChat"
   path = this.name
@@ -281,7 +281,7 @@ Bot.adapter.push(new class ComWeChatAdapter {
       data.self_id = bot.self.user_id
 
     Bot[data.self_id] = {
-      adapter: this,
+      tasker: this,
       ws: ws,
       sendApi: this.sendApi.bind(this, data, ws),
       stat: { ...data.status, start_time: data.time },

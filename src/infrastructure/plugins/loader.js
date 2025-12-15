@@ -170,7 +170,7 @@ class PluginsLoader {
 
   normalizeEventPayload(e) {
     // 统一事件基础字段，减少后续重复存在性判断
-    e.adapter = String(e.adapter || e.adapter_name || 'unknown').toLowerCase()
+    e.tasker = String(e.tasker || e.tasker_name || 'unknown').toLowerCase()
     if (!Array.isArray(e.message)) e.message = e.message ? [e.message] : []
     e.raw_message ||= ''
     e.sender ||= {}
@@ -222,7 +222,7 @@ class PluginsLoader {
     e.sender.nickname ||= e.sender.card || e.device_name || ''
     e.sender.card ||= e.sender.nickname
     if (!e.logText) {
-      e.logText = `[${e.adapter || '未知'}][${e.user_id || '未知'}]`
+      e.logText = `[${e.tasker || '未知'}][${e.user_id || '未知'}]`
     }
   }
 
@@ -346,32 +346,32 @@ class PluginsLoader {
     return activePlugins
   }
 
-  normalizeAdapterList(adapters) {
-    if (!adapters) return []
-    const list = Array.isArray(adapters) ? adapters : [adapters]
+  normalizeAdapterList(taskers) {
+    if (!taskers) return []
+    const list = Array.isArray(taskers) ? taskers : [taskers]
     return list
       .map(item => String(item || '').toLowerCase())
       .filter(Boolean)
   }
 
   buildAdapterSet(plugin) {
-    const adapters = this.normalizeAdapterList(plugin.adapters || plugin.adapter)
-    return adapters.length ? new Set(adapters) : null
+    const taskers = this.normalizeAdapterList(plugin.taskers || plugin.tasker)
+    return taskers.length ? new Set(taskers) : null
   }
 
-  isAdapterAllowed(adapterSet, event) {
-    if (!adapterSet || adapterSet.size === 0) return true
-    return adapterSet.has(event.adapter)
+  isAdapterAllowed(taskerSet, event) {
+    if (!taskerSet || taskerSet.size === 0) return true
+    return taskerSet.has(event.tasker)
   }
 
   wrapPluginAccept(plugin, meta) {
-    const adapters = meta?.adapters
+    const taskers = meta?.taskers
     const accept = typeof plugin.accept === 'function'
       ? plugin.accept.bind(plugin)
       : async () => true
 
     return async (event) => {
-      if (!this.isAdapterAllowed(adapters, event)) {
+      if (!this.isAdapterAllowed(taskers, event)) {
         return false
       }
       return await accept(event)
@@ -497,13 +497,13 @@ class PluginsLoader {
   }
 
   initEvent(e) {
-    const adapterName = e.adapter
+    const taskerName = e.tasker
 
     if (!e.self_id) {
       if (e.device_id) {
         e.self_id = e.device_id
-      } else if (adapterName && adapterName !== 'unknown') {
-        e.self_id = adapterName
+      } else if (taskerName && taskerName !== 'unknown') {
+        e.self_id = taskerName
       } else if (Bot.uin?.length > 0) {
         e.self_id = Bot.uin[0]
       }
@@ -523,7 +523,7 @@ class PluginsLoader {
     if (!e.event_id) {
       const postType = e.post_type || 'unknown'
       const randomId = Math.random().toString(36).substr(2, 9)
-      e.event_id = `${e.adapter || 'event'}_${postType}_${Date.now()}_${randomId}`
+      e.event_id = `${e.tasker || 'event'}_${postType}_${Date.now()}_${randomId}`
     }
 
     this.count(e, 'receive')
@@ -532,7 +532,7 @@ class PluginsLoader {
   async preCheck(e, hasBypassPlugin = false) {
     try {
       if (e.isDevice) return true
-      if ((e.adapter || '').toLowerCase() === 'stdin') return true
+      if ((e.tasker || '').toLowerCase() === 'stdin') return true
 
       const botUin = e.self_id || Bot.uin?.[0]
       if (cfg.bot?.ignore_self !== false && e.user_id === botUin) {
@@ -570,7 +570,7 @@ class PluginsLoader {
 
     for (const p of this.priority) {
       if (!p.bypassThrottle || !p.bypassRules?.length) continue
-      if (!this.isAdapterAllowed(p.adapters, e)) continue
+      if (!this.isAdapterAllowed(p.taskers, e)) continue
 
       try {
         if (p.bypassRules.some(rule => rule.reg?.test(text))) {
@@ -790,7 +790,7 @@ class PluginsLoader {
         priority: plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50),
         plugin,
         bypassThrottle: plugin.bypassThrottle === true,
-        adapters: this.buildAdapterSet(plugin),
+        taskers: this.buildAdapterSet(plugin),
         ruleTemplates,
         bypassRules: this.collectBypassRules(ruleTemplates)
       }
@@ -859,7 +859,7 @@ class PluginsLoader {
     const pluginEvent = v.event
     const possibleEvents = []
     const genericEvents = []
-    const adapter = e.adapter || ''
+    const tasker = e.tasker || ''
     const postType = e.post_type || ''
     const subType = e.sub_type || ''
 
@@ -873,12 +873,12 @@ class PluginsLoader {
       ''
 
     // 构建可能的事件键（从具体到通用），适配任意新适配器
-    if (adapter) {
-      if (postType && detailType && subType) possibleEvents.push(`${adapter}.${postType}.${detailType}.${subType}`)
-      if (postType && detailType) possibleEvents.push(`${adapter}.${postType}.${detailType}`)
-      if (postType) possibleEvents.push(`${adapter}.${postType}`)
-      if (detailType) possibleEvents.push(`${adapter}.${detailType}`)
-      possibleEvents.push(adapter)
+    if (tasker) {
+      if (postType && detailType && subType) possibleEvents.push(`${tasker}.${postType}.${detailType}.${subType}`)
+      if (postType && detailType) possibleEvents.push(`${tasker}.${postType}.${detailType}`)
+      if (postType) possibleEvents.push(`${tasker}.${postType}`)
+      if (detailType) possibleEvents.push(`${tasker}.${detailType}`)
+      possibleEvents.push(tasker)
     }
 
     // 通用事件（无适配器前缀）
@@ -959,10 +959,10 @@ class PluginsLoader {
   checkLimit(e) {
     if (e.isDevice) return true
 
-    // 特定适配器的限制检查（如群禁言等）由适配器增强插件处理
+    // 特定 tasker 的限制检查（如群禁言等）由 tasker 增强插件处理
     // 这里只做通用的冷却检查
 
-    if (!e.message || !e.group_id || ['cmd'].includes(e.adapter)) {
+    if (!e.message || !e.group_id || ['cmd'].includes(e.tasker)) {
       return true
     }
 
@@ -992,8 +992,8 @@ class PluginsLoader {
   setLimit(e) {
     if (e.isDevice) return
 
-    const adapter = e.adapter || ''
-    if (!e.message || !e.group_id || ['cmd'].includes(adapter)) return
+    const tasker = e.tasker || ''
+    if (!e.message || !e.group_id || ['cmd'].includes(tasker)) return
 
     const groupConfig = cfg.getGroup(e.group_id) || {}
     const otherConfig = cfg.getOther() || {}
@@ -1113,7 +1113,7 @@ class PluginsLoader {
       event_type: eventType,
       event_data: eventData,
       timestamp: Date.now(),
-      source: eventData.adapter || eventData.device_id || 'internal'
+      source: eventData.tasker || eventData.device_id || 'internal'
     }
 
     this.eventHistory.unshift(historyEntry)
@@ -1284,7 +1284,7 @@ class PluginsLoader {
               plugin,
               priority,
               bypassThrottle: plugin.bypassThrottle === true,
-              adapters: this.buildAdapterSet(plugin),
+              taskers: this.buildAdapterSet(plugin),
               ruleTemplates,
               bypassRules: this.collectBypassRules(ruleTemplates)
             }

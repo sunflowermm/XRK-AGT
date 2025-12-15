@@ -33,7 +33,7 @@ export default class OneBotEvent extends EventListenerBase {
       return false
     }
     
-    // 设置适配器标识
+    // 设置 tasker 标识（原适配器）
     this.markAdapter(e, { isOneBot: true })
     
     // 从事件类型推断 post_type
@@ -72,14 +72,14 @@ export default class OneBotEvent extends EventListenerBase {
         if (e.friend?.sendMsg) {
           return await e.friend.sendMsg(msg)
         }
-        // 最后尝试使用适配器的发送方法
-        if (e.bot?.adapter) {
-          const adapter = e.bot.adapter
-          if (e.message_type === 'group' && e.group_id && adapter.sendGroupMsg) {
-            return await adapter.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
+        // 最后尝试使用 tasker 的发送方法
+        if (e.bot?.tasker) {
+          const tasker = e.bot.tasker
+          if (e.message_type === 'group' && e.group_id && tasker.sendGroupMsg) {
+            return await tasker.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
           }
-          if (e.message_type === 'private' && e.user_id && adapter.sendFriendMsg) {
-            return await adapter.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
+          if (e.message_type === 'private' && e.user_id && tasker.sendFriendMsg) {
+            return await tasker.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
           }
         }
         Bot.makeLog("warn", `无法发送消息：找不到合适的发送方法`, e.self_id)

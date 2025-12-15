@@ -82,7 +82,7 @@ export default {
             });
           }
 
-          user_info.adapter = 'api';
+          user_info.tasker = 'api';
           
           const result = wantJson && typeof Bot.callStdin === 'function'
             ? await Bot.callStdin(command, { user_info, timeout })
@@ -127,7 +127,7 @@ export default {
           const wantJson = String(req.body?.json ?? req.query?.json ?? '').toLowerCase() === 'true';
           const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
           
-          user_info.adapter = 'api';
+          user_info.tasker = 'api';
           
           const event = stdinHandler.createEvent(content, {
             ...user_info,

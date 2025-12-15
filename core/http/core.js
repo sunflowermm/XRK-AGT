@@ -285,7 +285,7 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
             },
             bots,
             processesTop5,
-    adapters: Bot.adapter,
+    taskers: Bot.tasker,
     workflows: {
       stats: workflowStats,
       items: workflowList
@@ -372,7 +372,7 @@ export default {
             workflows: snapshot.workflows,
             bots: snapshot.bots,
             processesTop5: snapshot.processesTop5,
-            adapters: snapshot.adapters
+            taskers: snapshot.taskers
           });
         } catch (error) {
           res.status(500).json({
@@ -394,7 +394,7 @@ export default {
             system: snapshot.system,
             bot: snapshot.bot,
             bots: snapshot.bots,
-            adapters: snapshot.adapters
+            taskers: snapshot.taskers
           });
         } catch (error) {
           res.status(500).json({

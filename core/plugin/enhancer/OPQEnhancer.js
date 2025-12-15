@@ -13,7 +13,7 @@ export default class OPQEnhancer extends plugin {
     if (!this.isOPQ(e)) return true
 
     e.isOPQ = true
-    e.adapter = 'opqbot'
+    e.tasker = 'opqbot'
 
     this.bindBotEntities(e)
     this.ensureLogText(e)
@@ -21,8 +21,8 @@ export default class OPQEnhancer extends plugin {
   }
 
   isOPQ(e) {
-    const adapterName = String(e.adapter || e.adapter_name || '').toLowerCase()
-    return this.adapters.some(name => adapterName.includes(name))
+    const taskerName = String(e.tasker || e.tasker_name || '').toLowerCase()
+    return this.adapters.some(name => taskerName.includes(name))
   }
 
   bindBotEntities(e) {

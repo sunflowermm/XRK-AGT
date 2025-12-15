@@ -146,13 +146,13 @@ const cleanupBucket = (key) => {
    * @abstract
    * @class plugin
    * @example
-   * // 跨平台插件：监听所有适配器的消息
+  * // 跨平台插件：监听所有 tasker 的消息
    * export default class CrossPlatformPlugin extends plugin {
    *   constructor() {
    *     super({
    *       name: 'cross-platform-plugin',
-   *       dsc: '跨平台插件',
-   *       event: 'message',  // 匹配所有适配器的 message 事件
+  *       dsc: '跨平台插件',
+  *       event: 'message',  // 匹配所有 tasker 的 message 事件
    *       priority: 5000,
    *       rule: [
    *         {
@@ -163,9 +163,9 @@ const cleanupBucket = (key) => {
    *     });
    *   }
    *   
-   *   async test(e) {
-   *     await this.reply(`收到来自 ${e.adapter} 的消息: ${e.msg}`);
-   *   }
+  *   async test(e) {
+  *     await this.reply(`收到来自 ${e.tasker} 的消息: ${e.msg}`);
+  *   }
    * }
    * 
    * @example
@@ -174,8 +174,8 @@ const cleanupBucket = (key) => {
    *   constructor() {
    *     super({
    *       name: 'onebot-plugin',
-   *       dsc: 'OneBot插件',
-   *       event: 'onebot.message',  // 只匹配 OneBot 的 message 事件
+  *       dsc: 'OneBot 插件',
+  *       event: 'onebot.message',  // 只匹配 OneBot 的 message 事件
    *       priority: 5000,
    *       rule: [
    *         {
@@ -197,8 +197,8 @@ const cleanupBucket = (key) => {
    *   constructor() {
    *     super({
    *       name: 'device-plugin',
-   *       dsc: '设备插件',
-   *       event: 'device.message',  // 只匹配设备的 message 事件
+  *       dsc: '设备插件',
+  *       event: 'device.message',  // 只匹配设备的 message 事件
    *       rule: [{ reg: '.*', fnc: 'handle' }]
    *     });
    *   }
@@ -209,8 +209,8 @@ const cleanupBucket = (key) => {
    * export default class AllOneBotPlugin extends plugin {
    *   constructor() {
    *     super({
-   *       name: 'all-onebot-plugin',
-   *       event: 'onebot.*',  // 匹配所有 OneBot 事件
+  *       name: 'all-onebot-plugin',
+  *       event: 'onebot.*',  // 匹配所有 OneBot 事件
    *       rule: [{ reg: '.*', fnc: 'handle' }]
    *     });
    *   }
@@ -253,7 +253,7 @@ export default class plugin {
   }
 
   /**
-   * 回复消息（通用方法，支持所有适配器）
+   * 回复消息（通用方法，支持所有 tasker）
    */
   reply(msg = "", quote = false, data = {}) {
     if (!this.e) return false
@@ -269,9 +269,9 @@ export default class plugin {
       return this.e.bot.sendMsg(msg, quote, data)
     }
     
-    // 最后尝试使用适配器的sendMsg
-    if (this.e.adapter && this.e.bot?.adapter?.sendMsg) {
-      return this.e.bot.adapter.sendMsg(this.e, msg)
+    // 最后尝试使用 tasker 的 sendMsg
+    if (this.e.tasker && this.e.bot?.tasker?.sendMsg) {
+      return this.e.bot.tasker.sendMsg(this.e, msg)
     }
     
     return false

@@ -25,17 +25,17 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
         device: true,
         online: bot.online !== false,
         nickname: bot.nickname || bot.info?.device_name || '设备',
-        adapter: bot.device_type === 'web' ? 'Web客户端' : (bot.device_type || 'device'),
+        tasker: bot.device_type === 'web' ? 'Web客户端' : (bot.device_type || 'device'),
         stats: { friends: 0, groups: 0 }
       });
       continue;
     }
 
-    const hasBasicInfo = bot.adapter || bot.nickname || bot.fl || bot.gl;
+    const hasBasicInfo = bot.tasker || bot.nickname || bot.fl || bot.gl;
     if (!hasBasicInfo) continue;
 
     const avatarUrl = bot.avatar ||
-      (bot.adapter?.name === 'OneBotv11' && bot.uin
+      (bot.tasker?.name === 'OneBotv11' && bot.uin
         ? `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100`
         : null);
 
@@ -44,7 +44,7 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
       device: false,
       online: Boolean(bot.stat?.online),
       nickname: bot.nickname || uin,
-      adapter: bot.adapter?.name || 'unknown',
+      tasker: bot.tasker?.name || 'unknown',
       avatar: avatarUrl,
       stats: {
         friends: bot.fl?.size || 0,

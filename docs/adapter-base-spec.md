@@ -1,44 +1,44 @@
-# 适配器底层规范
+# Tasker 底层规范（原适配器规范）
 
-本文档定义了所有适配器最底层应该具备的属性和函数，这些是适配器的基础接口，不包含任何特定适配器（如OneBot、stdin、device）的专有逻辑。
+本文档定义了所有 Tasker（任务层 / 事件生成器）最底层应该具备的属性和函数，这些是 Tasker 的基础接口，不包含任何特定 Tasker（如 OneBot、stdin、device）的专有逻辑。
 
-## 适配器基础属性
+## Tasker 基础属性
 
-### 适配器实例属性
+### Tasker 实例属性
 
-每个适配器实例应该具备以下属性：
+每个 Tasker 实例应该具备以下属性：
 
 ```javascript
 {
-  id: string,        // 适配器唯一标识（如 'QQ', 'WeChat'）
-  name: string,       // 适配器名称（如 'OneBotv11', 'stdin'）
-  path: string,       // 适配器路径
+  id: string,        // Tasker 唯一标识（如 'QQ', 'WeChat'）
+  name: string,       // Tasker 名称（如 'OneBotv11', 'stdin'）
+  path: string,       // Tasker 路径
 }
 ```
 
-### Bot实例中的适配器信息
+### Bot 实例中的 Tasker 信息
 
 ```javascript
-bot.adapter = {
-  id: string,        // 适配器ID
-  name: string,      // 适配器名称
-  // 其他适配器特定属性...
+bot.tasker = {
+  id: string,        // Tasker ID
+  name: string,      // Tasker 名称
+  // 其他 Tasker 特定属性...
 }
 ```
 
 ## 事件对象基础属性
 
-所有适配器的事件对象都应该具备以下基础属性：
+所有 Tasker 的事件对象都应该具备以下基础属性：
 
 ### 必需属性
 
 ```javascript
 {
   // 基础标识
-  self_id: string,           // Bot自身ID
-  adapter: string,            // 适配器类型（'onebot', 'stdin', 'device'等）
-  adapter_id: string,         // 适配器ID（从bot.adapter.id获取）
-  adapter_name: string,        // 适配器名称（从bot.adapter.name获取）
+  self_id: string,           // Bot 自身 ID
+  tasker: string,            // Tasker 类型（'onebot', 'stdin', 'device'等）
+  tasker_id: string,         // Tasker ID（从 bot.tasker.id 获取）
+  tasker_name: string,       // Tasker 名称（从 bot.tasker.name 获取）
   
   // 事件标识
   event_id: string,            // 事件唯一ID
@@ -65,7 +65,7 @@ bot.adapter = {
 
 ```javascript
 {
-  // 设备相关（device适配器）
+  // 设备相关（device Tasker）
   device_id?: string,           // 设备ID
   device_name?: string,         // 设备名称
   
@@ -80,20 +80,20 @@ bot.adapter = {
   
   // 事件类型标识
   post_type?: string,          // 事件类型（'message', 'notice', 'request'等）
-  event_type?: string,          // 事件类型（device适配器）
+  event_type?: string,          // 事件类型（device Tasker）
   
-  // 适配器类型标识（由适配器设置）
-  isOneBot?: boolean,           // OneBot适配器标识
-  isDevice?: boolean,           // Device适配器标识
-  isStdin?: boolean,           // Stdin适配器标识
+  // Tasker 类型标识（由 Tasker 设置）
+  isOneBot?: boolean,           // OneBot Tasker 标识
+  isDevice?: boolean,           // Device Tasker 标识
+  isStdin?: boolean,           // Stdin Tasker 标识
 }
 ```
 
-## 适配器特定属性（由增强插件处理）
+## Tasker 特定属性（由增强插件处理）
 
-以下属性不应该在底层设置，而应该由对应的适配器增强插件通过`accept`方法处理：
+以下属性不应该在底层设置，而应该由对应的 Tasker 增强插件通过 `accept` 方法处理：
 
-### OneBot特定属性
+### OneBot 特定属性
 
 ```javascript
 {
@@ -119,7 +119,7 @@ bot.adapter = {
 }
 ```
 
-### Device特定属性
+### Device 特定属性
 
 ```javascript
 {
@@ -130,7 +130,7 @@ bot.adapter = {
 }
 ```
 
-### Stdin特定属性
+### Stdin 特定属性
 
 ```javascript
 {
@@ -146,7 +146,7 @@ bot.adapter = {
 ### 消息发送（通用接口）
 
 ```javascript
-// 发送消息（适配器需要实现）
+// 发送消息（Tasker 需要实现）
 bot.sendMsg(msg, quote?, extraData?) => Promise<any>
 
 // 通用辅助方法（由bot.js提供）
@@ -155,43 +155,43 @@ bot.sendForwardMsg(sendFn, msg) => Promise<any>
 bot.fileToUrl(file, opts?) => Promise<string>
 ```
 
-### Bot选择方法（适配器特定）
+### Bot 选择方法（Tasker 特定）
 
 ```javascript
-// OneBot特定（由 OneBot 适配器内部直接提供）
+// OneBot 特定（由 OneBot Tasker 内部直接提供）
 bot.pickFriend(user_id, strict?) => Friend
 bot.pickGroup(group_id, strict?) => Group
 bot.pickMember(group_id, user_id) => Member
 
-// 其他适配器可能有不同的选择方法
+// 其他 Tasker 可能有不同的选择方法
 ```
 
 ## 事件处理流程
 
-### 1. 适配器发送事件
+### 1. Tasker 发送事件
 
-适配器在接收到事件后，应该：
+Tasker 在接收到外部上报后，应该：
 
-1. 设置基础属性（self_id, adapter, adapter_id, adapter_name等）
+1. 设置基础属性（self_id, tasker, tasker_id, tasker_name 等）
 2. 调用 `Bot.em(eventName, data)` 发送事件
 3. `Bot.em` 会自动调用 `Bot.prepareEvent(data)` 设置通用属性
 
 ### 2. Bot.prepareEvent（底层通用逻辑）
 
-`Bot.prepareEvent` 只处理所有适配器通用的属性：
+`Bot.prepareEvent` 只处理所有 Tasker 通用的属性：
 
 - 确保 `bot` 对象存在
-- 设置 `adapter_id` 和 `adapter_name`
+- 设置 `tasker_id` 和 `tasker_name`
 - 初始化基础 `sender` 对象
 - 调用 `_extendEventMethods` 添加通用方法
 
-### 3. 适配器增强插件（适配器特定逻辑）
+### 3. Tasker 增强插件（任务层特定逻辑）
 
-适配器增强插件通过 `accept` 方法处理适配器特定属性：
+Tasker 增强插件通过 `accept` 方法处理 Tasker 特定属性：
 
-- OneBot增强插件：处理 friend、group、member、atBot 等
-- Device增强插件：处理 device 特定属性
-- Stdin增强插件：处理 stdin 特定属性
+- OneBot 增强插件：处理 friend、group、member、atBot 等
+- Device 增强插件：处理 device 特定属性
+- Stdin 增强插件：处理 stdin 特定属性
 
 ### 4. 插件系统处理
 
@@ -201,19 +201,19 @@ bot.pickMember(group_id, user_id) => Member
 2. 调用其他插件的 `accept` 方法
 3. 执行匹配的插件规则
 
-## 适配器Loader规范
+## Tasker Loader 规范
 
-适配器Loader应该：
+TaskerLoader 应该：
 
-1. 扫描适配器目录
-2. 加载适配器文件
-3. 适配器文件应该通过 `Bot.adapter.push()` 注册适配器实例
-4. 适配器实例应该设置 `id` 和 `name` 属性
+1. 扫描 Tasker 目录
+2. 加载 Tasker 文件
+3. Tasker 文件应该通过 `Bot.tasker.push()` 注册 Tasker 实例
+4. Tasker 实例应该设置 `id` 和 `name` 属性
 
 ## 注意事项
 
-1. **不要假设特定适配器**：底层代码不应该假设 OneBot、stdin 或 device 的存在
-2. **使用适配器标识**：通过 `e.adapter` 或 `e.adapter_name` 判断适配器类型
+1. **不要假设特定 Tasker**：底层代码不应该假设 OneBot、stdin 或 device 的存在
+2. **使用 Tasker 标识**：通过 `e.tasker` 或 `e.tasker_name` 判断 Tasker 类型
 3. **延迟加载对象**：friend、group、member 等对象应该使用 getter 延迟加载
 4. **插件处理特定逻辑**：所有适配器特定逻辑都应该在增强插件中处理
 5. **保持底层通用**：底层代码应该对所有适配器通用

@@ -59,7 +59,8 @@ export default class Bot extends EventEmitter {
     this.stat = { start_time: Date.now() / 1000 };
     this.bot = this;
     this.bots = {};
-    this.adapter = [];
+    // Tasker 列表（原 adapter 列表）
+    this.tasker = [];
     this.uin = this._createUinManager();
     
     // Express应用和服务器
@@ -992,8 +993,8 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       if (typeof prop !== 'string') return false;
       if (!value || typeof value !== 'object') return false;
       return Boolean(
-        value.adapter ||
-        value.adapter_type ||
+        value.tasker ||
+        value.tasker_type ||
         value.self_id ||
         value.uin
       );
@@ -2238,12 +2239,12 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       });
     }
     
-    // 设置适配器信息（所有适配器通用）
-    if (data.bot?.adapter?.id) {
-      data.adapter_id = data.bot.adapter.id;
+    // 设置 tasker 信息（所有 tasker 通用）
+    if (data.bot?.tasker?.id) {
+      data.tasker_id = data.bot.tasker.id;
     }
-    if (data.bot?.adapter?.name) {
-      data.adapter_name = data.bot.adapter.name;
+    if (data.bot?.tasker?.name) {
+      data.tasker_name = data.bot.tasker.name;
     }
     
     // 初始化基础sender对象（如果不存在）
@@ -2367,7 +2368,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     const waitOutput = this._waitForStdinOutput(timeout);
     const result = await stdinHandler.processCommand(command, {
       ...user_info,
-      adapter: user_info.adapter || 'api'
+      tasker: user_info.tasker || 'api'
     });
     
     const output = await waitOutput;

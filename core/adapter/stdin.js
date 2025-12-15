@@ -77,14 +77,14 @@ export class StdinHandler {
         self_id: this.botId,
         nickname: 'StdinBot',
         avatar: 'https://q1.qlogo.cn/g?b=qq&s=0&nk=10000001',
-        adapter: { id: 'stdin', name: '标准输入适配器' },
-        adapter_type: 'stdin',
+        tasker: { id: 'stdin', name: '标准输入 tasker' },
+        tasker_type: 'stdin',
         stat: { start_time: Date.now() / 1000 },
         version: { id: 'stdin', name: 'StdinBot', version: '1.0.0' },
         config: { master: true },
         sendMsg: async (msg) => this.sendMsg(msg, 'stdin', { user_id: 'stdin' }),
         runCommand: async (command, options = {}) => Bot.callStdin
-          ? Bot.callStdin(command, { ...options, adapter: 'stdin' })
+          ? Bot.callStdin(command, { ...options, tasker: 'stdin' })
           : this.processCommand(command, options),
         pickUser: (user_id) => Bot.pickFriend ? Bot.pickFriend(user_id) : null,
         pickFriend: (user_id) => ({
@@ -406,7 +406,7 @@ export class StdinHandler {
       }
     } catch {}
     
-    await this.processCommand(parsedInput, { adapter: 'stdin' });
+    await this.processCommand(parsedInput, { tasker: 'stdin' });
     this.rl.prompt();
   }
 
@@ -459,9 +459,9 @@ export class StdinHandler {
       time,
       event_id: eventId,
       message_id: messageId,
-      adapter: 'stdin',
-      adapter_id: userInfo.adapter || 'stdin',
-      adapter_name: userInfo.adapter === 'api' ? 'API适配器' : '标准输入适配器',
+      tasker: 'stdin',
+      tasker_id: userInfo.tasker || 'stdin',
+      tasker_name: userInfo.tasker === 'api' ? 'API tasker' : '标准输入 tasker',
       isStdin: true,
       message,
       raw_message,
@@ -553,7 +553,7 @@ export class StdinHandler {
       }
     }
 
-    if (userInfo.adapter !== 'api' && textLogs.length > 0) {
+    if (userInfo.tasker !== 'api' && textLogs.length > 0) {
       logger.tag(textLogs.join("\n"), "输出", "blue");
     }
 

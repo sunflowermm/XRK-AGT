@@ -1009,7 +1009,7 @@ class DeviceManager {
           : (deviceInfo.device_name || `${deviceInfo.device_type}_${deviceId}`);
         
     const deviceBot = {
-            adapter: this,
+            tasker: this,
             ws,
             uin: deviceId,
             nickname: deviceName,
@@ -1300,7 +1300,7 @@ class DeviceManager {
                         user_id: eventData.user_id || deviceId,
                         time: Math.floor(Date.now() / 1000),
                         event_id: `device_${eventType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                        adapter: 'device',
+                        tasker: 'device',
                         isDevice: true,
                         bot: runtimeBot[deviceId],
                         // 如果是消息事件，添加消息相关字段
