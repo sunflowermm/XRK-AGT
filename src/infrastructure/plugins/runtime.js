@@ -4,6 +4,7 @@
  */
 import lodash from "lodash"
 import fs from "node:fs/promises"
+import path from "node:path"
 import common from "#utils/common.js"
 import cfg from "#infrastructure/config/config.js"
 import puppeteer from "#modules/puppeteer.js"
@@ -157,19 +158,19 @@ export default class Runtime {
    * @param cfg.beforeRender({data}) 可改写渲染的data数据
    * @returns {Promise<boolean>}
    */
-  async render(plugin, path, data = {}, cfg = {}) {
-    // 处理传入的path
-    path = path.replace(/.html$/, "")
-    let paths = lodash.filter(path.split("/"), (p) => !!p)
-    path = paths.join("/")
+  async render(plugin, tplPath, data = {}, cfg = {}) {
+    // 处理传入的路径，兼容传入 .html 结尾的写法
+    const cleanPath = String(tplPath || "").replace(/\.html$/, "")
+    const parts = lodash.filter(cleanPath.split("/"), Boolean)
+    const normalizedPath = parts.join("/") || "index"
     
     // 创建目录
-    await Bot.mkdir(`trash/html/${plugin}/${path}`)
+    await Bot.mkdir(`trash/html/${plugin}/${normalizedPath}`)
     
     // 自动计算pluResPath
-    const resourcesPath = path.join(paths.core, plugin, 'resources');
-    const tplFile = path.join(resourcesPath, `${path}.html`);
-    const pluResPath = path.relative(path.dirname(tplFile), resourcesPath) + '/';
+    const resourcesPath = path.join("resources", plugin)
+    const tplFile = path.join(resourcesPath, `${normalizedPath}.html`)
+    const pluResPath = path.relative(path.dirname(tplFile), resourcesPath) + '/'
     
     // 基础渲染data
     data = {
@@ -178,10 +179,10 @@ export default class Runtime {
       },
       _res_path: pluResPath,
       _plugin: plugin,
-      _htmlPath: path,
+      _htmlPath: normalizedPath,
       pluResPath,
       tplFile,
-      saveId: data.saveId || data.save_id || paths[paths.length - 1],
+      saveId: data.saveId || data.save_id || parts[parts.length - 1] || "index",
       ...data
     }
 
@@ -205,7 +206,7 @@ export default class Runtime {
     }
     
     // 截图
-    let base64 = await puppeteer.screenshot(`${plugin}/${path}`, data)
+    let base64 = await puppeteer.screenshot(`${plugin}/${normalizedPath}`, data)
     if (cfg.retType === "base64") {
       return base64
     }

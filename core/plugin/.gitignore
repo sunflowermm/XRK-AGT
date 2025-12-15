@@ -1,15 +1,8 @@
 *
 !.gitignore
 
+!enhancer
+enhancer/**
+
 !example
 example/**
-!example/主动复读.js
-!example/模拟定时输入.js
-!example/远程指令.js
-!example/状态.js
-!example/restart.js
-!example/sendLog.js
-!example/update.js
-!example/add.js
-!example/OneBotList.js
-!example/OneBotEnhancer.js

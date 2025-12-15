@@ -3,6 +3,10 @@
 
 !plugin
 plugin/**
+!plugin/enhancer
+!plugin/enhancer/*.js
+!plugin/example
+!plugin/example/*.js
 
 !adapter
 adapter/**
