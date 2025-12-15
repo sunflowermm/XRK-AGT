@@ -165,8 +165,7 @@ class PluginsLoader {
     e.video = []
     e.audio = []
     e.msg = ''
-    e.message = Array.isArray(e.message) ? e.message :
-      (e.message ? [{ type: 'text', text: String(e.message) }] : [])
+    if (!Array.isArray(e.message)) e.message = []
   }
 
   normalizeEventPayload(e) {
@@ -232,8 +231,6 @@ class PluginsLoader {
     const masters = Array.isArray(masterQQ) ? masterQQ : [masterQQ]
 
     if (masters.some(id => String(e.user_id) === String(id))) {
-      e.isMaster = true
-    } else if (e.isStdin && e.isMaster === undefined) {
       e.isMaster = true
     }
   }
@@ -308,7 +305,7 @@ class PluginsLoader {
         }
       }
 
-      if (!e.isDevice && !e.isStdin) {
+      if (!e.isDevice) {
         if (await this.handleContext(plugins, e)) return true
 
         const shouldSetLimit = !plugins.some(p => p.bypassThrottle === true)
@@ -364,8 +361,7 @@ class PluginsLoader {
 
   isAdapterAllowed(adapterSet, event) {
     if (!adapterSet || adapterSet.size === 0) return true
-    const adapter = String(event.adapter || event.adapter_name || '').toLowerCase()
-    return adapterSet.has(adapter)
+    return adapterSet.has(event.adapter)
   }
 
   wrapPluginAccept(plugin, meta) {
@@ -454,7 +450,7 @@ class PluginsLoader {
   }
 
   async processDefaultHandlers(e) {
-    if (e.isDevice || e.isStdin) return false
+    if (e.isDevice) return false
 
     for (const handler of this.defaultMsgHandlers) {
       try {
@@ -501,32 +497,20 @@ class PluginsLoader {
   }
 
   initEvent(e) {
-    const adapterName = String(e.adapter || e.adapter_name || '').toLowerCase()
-    const isStdin = Boolean(e.isStdin || adapterName === 'stdin' || adapterName === 'api' || e.source === 'api')
-    if (isStdin && !e.isStdin) {
-      e.isStdin = true
-    }
+    const adapterName = e.adapter
 
     if (!e.self_id) {
       if (e.device_id) {
         e.self_id = e.device_id
-      } else if (isStdin) {
-        e.self_id = 'stdin'
+      } else if (adapterName && adapterName !== 'unknown') {
+        e.self_id = adapterName
       } else if (Bot.uin?.length > 0) {
         e.self_id = Bot.uin[0]
       }
     }
 
-    let bot = null
-    if (isStdin) {
-      bot = Bot.stdin || Bot['stdin'] || Bot
-    } else if (e.device_id && Bot[e.device_id]) {
-      bot = Bot[e.device_id]
-    } else if (e.self_id && Bot[e.self_id]) {
-      bot = Bot[e.self_id]
-    } else {
-      bot = Bot
-    }
+    const identity = e.device_id || e.self_id
+    const bot = (identity && Bot[identity]) ? Bot[identity] : Bot
 
     if (!e.bot) {
       Object.defineProperty(e, 'bot', {
@@ -547,7 +531,7 @@ class PluginsLoader {
 
   async preCheck(e, hasBypassPlugin = false) {
     try {
-      if (e.isDevice || e.isStdin) return true
+      if (e.isDevice) return true
 
       const botUin = e.self_id || Bot.uin?.[0]
       if (cfg.bot?.ignore_self !== false && e.user_id === botUin) {
@@ -874,7 +858,7 @@ class PluginsLoader {
     const pluginEvent = v.event
     const possibleEvents = []
     const genericEvents = []
-    const adapter = String(e.adapter || e.adapter_name || '').toLowerCase()
+    const adapter = e.adapter || ''
     const postType = e.post_type || ''
     const subType = e.sub_type || ''
 
@@ -939,7 +923,7 @@ class PluginsLoader {
   }
 
   filtPermission(e, v) {
-    if (e.isDevice || e.isStdin) return true
+    if (e.isDevice) return true
     if (!v.permission || v.permission === 'all' || e.isMaster) return true
 
     switch (v.permission) {
@@ -972,7 +956,7 @@ class PluginsLoader {
   }
 
   checkLimit(e) {
-    if (e.isDevice || e.isStdin) return true
+    if (e.isDevice) return true
 
     // 特定适配器的限制检查（如群禁言等）由适配器增强插件处理
     // 这里只做通用的冷却检查
@@ -1005,7 +989,7 @@ class PluginsLoader {
   }
 
   setLimit(e) {
-    if (e.isStdin) return
+    if (e.isDevice) return
 
     const adapter = e.adapter || ''
     if (!e.message || !e.group_id || ['cmd'].includes(adapter)) return
@@ -1021,9 +1005,7 @@ class PluginsLoader {
       }
     }
 
-    if (e.isDevice) {
-      setCooldown('device', e.device_id, config.deviceCD || 1000)
-    } else if (e.group_id) {
+    if (e.group_id) {
       setCooldown('group', e.group_id, config.groupGlobalCD || 0)
       setCooldown('single', `${e.group_id}.${e.user_id}`, config.singleCD || 0)
     }
@@ -1034,7 +1016,7 @@ class PluginsLoader {
     if (!p) return false
     if (!p.e) return true
 
-    if (p.e.isDevice || p.e.isStdin) {
+    if (p.e.isDevice) {
       const other = cfg.getOther()
       if (!other) return true
 
@@ -1155,6 +1137,12 @@ class PluginsLoader {
   }
 
   subscribeEvent(eventType, callback) {
+    if (typeof eventType !== 'string' || !eventType.trim() || typeof callback !== 'function') {
+      return () => {}
+    }
+
+    eventType = eventType.trim()
+
     if (!this.eventSubscribers.has(eventType)) {
       this.eventSubscribers.set(eventType, [])
     }
@@ -1209,7 +1197,7 @@ class PluginsLoader {
   }
 
   async count(e, type, msg) {
-    if (e.isDevice || e.isStdin) return
+    if (e.isDevice) return
 
     try {
       const checkImg = item => {
