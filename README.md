@@ -12,10 +12,7 @@ XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多语言、多适配器
 
 - 仅想**先跑起来**：直接看下面的「快速开始」。  
 - 想**了解整体架构**：先看 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)。  
-- 想**做二次开发/写插件**：按顺序阅读：
-  1. [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)  
-  2. [`docs/README.md`](docs/README.md)  
-  3. [`docs/app-dev.md`](docs/app-dev.md)（应用 & 前后端总览）  
+- 想**做二次开发/写插件**：阅读 [`docs/完整文档.md`](docs/完整文档.md) - 整合了所有核心文档  
 
 ---
 
@@ -135,7 +132,7 @@ XRK-AGT/
 详细架构与对象说明请参见：
 
 - **项目主文档**：[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)
-- **模块文档索引**：[`docs/README.md`](docs/README.md)
+- **完整文档**：[`docs/完整文档.md`](docs/完整文档.md) - 整合了所有核心文档和API参考
 
 ---
 
@@ -211,26 +208,36 @@ node app   # 或 node start.js
 
 ---
 
-## 文档与开发指南（跳转总览）
+## 文档与开发指南
 
-### 📚 总览文档
-- [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)：整体架构、运行逻辑图、目录结构解析与重要对象索引。
-- [`docs/README.md`](docs/README.md)：模块文档导航（Bot / 插件 / 适配器 / API / 配置 / 渲染 / 工具 / 应用开发等）。
-- [`docs/app-dev.md`](docs/app-dev.md)：应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）。
+### 📚 完整文档
 
-### 🔧 核心基类 / 运行时对象
-- [`docs/bot.md`](docs/bot.md)：`Bot` 主类与服务生命周期。
-- [`docs/plugin-base.md`](docs/plugin-base.md) / [`docs/plugins-loader.md`](docs/plugins-loader.md)：插件基类与插件加载器。
-- [`docs/adapter-loader.md`](docs/adapter-loader.md) / [`docs/adapter-onebotv11.md`](docs/adapter-onebotv11.md)：适配器加载与 QQ OneBotv11 实现。
-- [`docs/aistream.md`](docs/aistream.md)：AI 工作流基类与 Embedding / Function Calling。
-- [`docs/http-api.md`](docs/http-api.md) / [`docs/api-loader.md`](docs/api-loader.md)：HTTP API 基类与 API 加载器。
-- [`docs/config-base.md`](docs/config-base.md)：配置基类与路径/校验规则、与 `cfg` 的关系。
-- [`docs/renderer.md`](docs/renderer.md)：渲染器基类、模板渲染与截图流程。
-- [`docs/botutil.md`](docs/botutil.md)：`BotUtil` 工具类（日志、缓存、文件/网络、批处理等）。
+**[`docs/完整文档.md`](docs/完整文档.md)** - **推荐从这里开始**
 
-### 📖 事件系统文档
-- [`docs/事件系统标准化文档.md`](docs/事件系统标准化文档.md)：事件系统标准化说明。
-- [`docs/事件监听器开发指南.md`](docs/事件监听器开发指南.md)：事件监听器开发指南。
+整合了所有核心文档，包含：
+- 快速开始指南
+- 架构总览
+- 核心模块详细说明（Bot、插件、适配器、事件、API、AI、配置、渲染、工具）
+- 开发指南（编写插件、创建适配器、开发API等）
+- API参考
+- 最佳实践
+
+### 📖 其他文档
+
+- [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)：项目整体架构与目录结构详细说明
+- [`docs/bot.md`](docs/bot.md)：Bot主类详细文档
+- [`docs/plugin-base.md`](docs/plugin-base.md)：插件基类详细文档
+- [`docs/plugins-loader.md`](docs/plugins-loader.md)：插件加载器详细文档
+- [`docs/adapter-base-spec.md`](docs/adapter-base-spec.md)：适配器底层规范
+- [`docs/adapter-onebotv11.md`](docs/adapter-onebotv11.md)：OneBot适配器详细文档
+- [`docs/事件系统标准化文档.md`](docs/事件系统标准化文档.md)：事件系统详细说明
+- [`docs/事件监听器开发指南.md`](docs/事件监听器开发指南.md)：事件监听器开发指南
+- [`docs/http-api.md`](docs/http-api.md)：HTTP API基类文档
+- [`docs/aistream.md`](docs/aistream.md)：AI工作流详细文档
+- [`docs/config-base.md`](docs/config-base.md)：配置系统详细文档
+- [`docs/renderer.md`](docs/renderer.md)：渲染系统详细文档
+- [`docs/botutil.md`](docs/botutil.md)：工具类详细文档
+- [`docs/app-dev.md`](docs/app-dev.md)：应用开发详细文档
 
 
 ---

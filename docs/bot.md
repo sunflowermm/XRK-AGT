@@ -97,8 +97,8 @@ flowchart TD
   - `wsConnect(req, socket, head)`：统一处理 WebSocket 升级请求，走与 HTTP 相同的认证逻辑，并通过 `Bot.wsf[path]` 分发到具体处理器。
 
 - **事件与对象封装**
-  - `prepareEvent(data)`：根据 `self_id/user_id/group_id` 等字段补充 `bot/friend/group/member` 对象。
-  - `_extendEventMethods(data)`：为 `friend/group/member` 添加 `sendFile/makeForwardMsg/sendForwardMsg/getInfo` 等通用方法。
+  - `prepareEvent(data)`：只处理所有适配器通用的基础属性（`bot`、`adapter_id`、`adapter_name`、基础`sender`等）。适配器特定的对象（`friend`、`group`、`member`）由对应的增强插件通过`accept`方法处理。
+  - `_extendEventMethods(data)`：为事件对象添加通用的辅助方法（如通用`reply`方法）。适配器特定的方法扩展由增强插件处理。
   - `em(name, data)`：如 `message.group.normal` 这类事件支持逐级截断向上派发。
 
 - **好友与群管理**
@@ -122,7 +122,8 @@ flowchart TD
 
 - **插件层**
   - 插件系统入口在 `src/infrastructure/plugins/loader.js`，但其事件源与回复能力均依赖 `Bot`：
-    - `PluginsLoader.deal(e)` 会调用 `Bot.prepareEvent(e)` 以构造统一的 `friend/group/member` 接口。
+    - `Bot.em(name, data)` 会自动调用 `Bot.prepareEvent(data)` 设置通用属性。
+    - 适配器增强插件（如`OneBotEnhancer`）通过`accept`方法处理适配器特定属性（`friend`、`group`、`member`、`atBot`等）。
     - 插件基类 `plugin` 中 `this.reply` 最终也会调用 `e.reply`，而 `e.reply` 基于底层 Bot 与适配器。
 
 - **HTTP/API 层**

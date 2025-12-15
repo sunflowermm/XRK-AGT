@@ -188,6 +188,87 @@ export default class DevicePlugin extends plugin {
 
 ---
 
+## accept 方法（前置检查）
+
+插件可以通过重写 `accept` 方法来实现自定义的前置检查逻辑。这是插件系统的核心机制之一。
+
+### 默认实现
+
+插件基类提供了默认的 `accept` 方法，默认返回 `true`（所有事件都通过）。
+
+### 适配器增强插件模式
+
+适配器增强插件使用 `accept` 方法来处理适配器特定的属性挂载：
+
+```javascript
+// OneBotEnhancer 示例
+export default class OneBotEnhancer extends plugin {
+  constructor() {
+    super({
+      name: 'OneBot事件增强',
+      event: 'onebot.*',  // 监听所有OneBot事件
+      priority: 1,       // 最高优先级，确保最先执行
+      rule: []
+    })
+  }
+
+  async accept(e) {
+    // 跳过非OneBot事件
+    if (e.isDevice || e.isStdin) return true
+    if (!(e.isOneBot || e.adapter === 'onebot')) return true
+
+    // 挂载OneBot特定属性
+    e.isOneBot = true
+    e.isPrivate = e.message_type === 'private'
+    e.isGroup = e.message_type === 'group'
+    
+    // 挂载对象（使用getter延迟加载）
+    if (e.user_id && e.bot.pickFriend) {
+      Object.defineProperty(e, "friend", {
+        get() { return e.bot.pickFriend(e.user_id) },
+        configurable: true
+      })
+    }
+    
+    // 处理@相关属性
+    this.processAtProperties(e)
+
+    return true  // 继续处理后续插件
+  }
+}
+```
+
+### 自定义前置检查
+
+插件也可以使用 `accept` 方法实现黑白名单、权限检查等：
+
+```javascript
+export default class MyPlugin extends plugin {
+  async accept(e) {
+    // 自定义检查：只允许特定用户
+    const allowedUsers = [123456, 789012]
+    if (!allowedUsers.includes(e.user_id)) {
+      return false  // 拒绝处理
+    }
+
+    return true  // 通过检查
+  }
+}
+```
+
+### accept 方法返回值
+
+- `true`: 通过检查，继续处理
+- `false`: 拒绝处理，跳过当前插件
+- `'return'`: 停止处理，不再执行后续插件
+- 其他值: 继续处理，可用于传递状态
+
+### 执行顺序
+
+1. 适配器增强插件（priority: 1）先执行，挂载适配器特定属性
+2. 其他插件按优先级顺序执行 `accept` 方法
+3. 只有通过所有 `accept` 检查的插件才会继续执行规则匹配
+
 ## 开发建议与最佳实践
 
 - **命名与日志**
@@ -195,8 +276,14 @@ export default class DevicePlugin extends plugin {
   - 对于高频触发的规则，可将 `rule.log` 设为 `false`，避免刷屏。
 
 - **优先级与节流**
+  - 适配器增强插件应使用 `priority: 1`，确保最先执行。
   - 与核心系统插件（如别名处理、调度插件）共存时，建议使用较大的 `priority`（例如 `5000` 以上）。
   - 对需要绕过全局冷却与只对少数命令生效的插件，可以将 `bypassThrottle` 设为 `true`，并结合严格的 `reg` 与 `permission`。
+
+- **accept 方法使用**
+  - 适配器增强插件应在 `accept` 中挂载适配器特定属性，而不是在规则方法中。
+  - 使用 `accept` 进行前置检查时，应尽早返回，避免不必要的处理。
+  - 适配器特定属性（如 `friend`、`group`、`member`）应使用 getter 延迟加载。
 
 - **上下文使用**
   - 多轮对话时，请务必在流程结束或异常时调用 `finish` 清理上下文，避免长期占用。

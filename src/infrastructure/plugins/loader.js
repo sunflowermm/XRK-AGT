@@ -9,17 +9,8 @@ import chokidar from 'chokidar'
 import moment from 'moment'
 import Handler from './handler.js'
 import Runtime from './runtime.js'
-import { segment } from '#oicq'
 
 global.plugin = plugin
-global.segment = segment
-
-const EVENT_MAP = {
-  'onebot.message': ['post_type', 'message_type', 'sub_type'],
-  'onebot.notice': ['post_type', 'notice_type', 'sub_type'],
-  'onebot.request': ['post_type', 'request_type', 'sub_type'],
-  'device': ['post_type', 'event_type', 'sub_type']
-}
 
 class PluginsLoader {
   constructor() {
@@ -156,7 +147,8 @@ class PluginsLoader {
       this.setupEventProps(e)
       this.checkPermissions(e)
 
-      if (e.msg && e.isGroup && !e.isDevice && !e.isStdin) {
+      // 处理别名（需要group_id）
+      if (e.msg && e.group_id && !e.isDevice && !e.isStdin) {
         this.processAlias(e)
       }
 
@@ -172,13 +164,14 @@ class PluginsLoader {
     e.video = []
     e.audio = []
     e.msg = ''
-    e.atList = []
-    e.atBot = false
     e.message = Array.isArray(e.message) ? e.message :
       (e.message ? [{ type: 'text', text: String(e.message) }] : [])
+    // 特定适配器的属性（atList、atBot等）由适配器增强插件初始化
   }
 
   async parseMessage(e) {
+    // 通用消息解析，只处理通用类型
+    // 特定适配器的消息类型（如at、reply等）应由对应适配器的增强插件处理
     for (const val of e.message) {
       if (!val?.type) continue
 
@@ -195,25 +188,6 @@ class PluginsLoader {
         case 'audio':
           if (val.url || val.file) e.audio.push(val.url || val.file)
           break
-        case 'at':
-          const id = val.qq || val.id
-          if (id == e.bot?.uin || id == e.bot?.tiny_id) {
-            e.atBot = true
-          } else if (id) {
-            e.at = id
-            e.atList.push(id)
-          }
-          break
-        case 'reply':
-          e.source = {
-            message_id: val.id,
-            seq: val.data?.seq,
-            time: val.data?.time,
-            user_id: val.data?.user_id,
-            raw_message: val.data?.message,
-          }
-          e.reply_id = val.id
-          break
         case 'file':
           e.file = {
             name: val.name,
@@ -224,55 +198,34 @@ class PluginsLoader {
           if (!e.fileList) e.fileList = []
           e.fileList.push(e.file)
           break
-        case 'face':
-          if (!e.face) e.face = []
-          if (val.id !== undefined) e.face.push(val.id)
-          break
+        // 特定适配器的消息类型（at、reply、face等）由适配器增强插件处理
       }
     }
   }
 
   setupEventProps(e) {
-    e.isPrivate = e.message_type === 'private' || e.notice_type === 'friend'
-    e.isGroup = e.message_type === 'group' || e.notice_type === 'group'
-    e.isGuild = e.detail_type === 'guild'
+    // 通用事件属性设置
     e.isDevice = this.isDeviceEvent(e)
     e.isStdin = this.isStdinEvent(e)
 
+    // 基础sender信息
     if (!e.sender) {
-      e.sender = e.member || e.friend || {}
+      e.sender = {}
     }
-    e.sender.card ||= e.sender.nickname || e.device_name || ''
-    e.sender.nickname ||= e.sender.card
+    e.sender.nickname ||= e.sender.card || e.device_name || ''
+    e.sender.card ||= e.sender.nickname
 
+    // 基础日志文本
     if (e.isDevice) {
       e.logText = `[设备][${e.device_name || e.device_id}][${e.event_type || '事件'}]`
     } else if (e.isStdin) {
       e.logText = `[${e.adapter === 'api' ? 'API' : 'STDIN'}][${e.user_id || '未知'}]`
-    } else if (e.isPrivate) {
-      e.logText = `[私聊][${e.sender.card}(${e.user_id})]`
-    } else if (e.isGroup) {
-      e.logText = `[${e.group_name || e.group_id}(${e.group_id})][${e.sender.card}(${e.user_id})]`
+    } else {
+      // 通用格式，适配器增强插件可以覆盖
+      e.logText = `[${e.adapter || '未知'}][${e.user_id || '未知'}]`
     }
 
-    e.getReply = async () => {
-      const msgId = e.source?.message_id || e.reply_id
-      if (!msgId) return null
-      try {
-        const target = e.isGroup ? e.group : e.friend
-        return target?.getMsg ? await target.getMsg(msgId) : null
-      } catch (error) {
-        logger.debug(`获取回复消息失败: ${error.message}`)
-        return null
-      }
-    }
-
-    if (!e.recall && e.message_id && !e.isDevice && !e.isStdin) {
-      const target = e.isGroup ? e.group : e.friend
-      if (target?.recallMsg) {
-        e.recall = () => target.recallMsg(e.message_id)
-      }
-    }
+    // 特定适配器的属性（isPrivate、isGroup、group、friend、recall等）由适配器增强插件设置
   }
 
   checkPermissions(e) {
@@ -287,6 +240,9 @@ class PluginsLoader {
   }
 
   processAlias(e) {
+    // 通用别名处理，需要group_id时才处理
+    if (!e.group_id) return
+    
     const alias = cfg.getGroup(e.group_id)?.botAlias
     if (!alias) return
 
@@ -304,36 +260,15 @@ class PluginsLoader {
     if (e._replySetup) return
     e._replySetup = true
 
-    if (e.isStdin || e.isDevice) {
-      e.replyNew = e.reply
-      return
-    }
-
+    // 保存原始的reply方法
     e.replyNew = e.reply
     
+    // 设置通用reply方法，特定适配器的增强功能由适配器增强插件处理
     e.reply = async (msg = '', quote = false, data = {}) => {
       if (!msg) return false
       
       try {
-        if (e.isGroup && e.group) {
-          const { mute_left = 0, all_muted, is_admin, is_owner } = e.group
-          if (mute_left > 0 || (all_muted && !is_admin && !is_owner)) {
-            return false
-          }
-        }
-
-        let { recallMsg = 0, at = '' } = data
         if (!Array.isArray(msg)) msg = [msg]
-
-        if (at && e.isGroup && segment) {
-          const atId = at === true ? e.user_id : at
-          const atName = at === true ? e.sender?.card : ''
-          msg.unshift(segment.at(atId, lodash.truncate(atName, { length: 10 })), '\n')
-        }
-
-        if (quote && e.message_id && segment) {
-          msg.unshift(segment.reply(e.message_id))
-        }
 
         let msgRes
         try {
@@ -348,16 +283,6 @@ class PluginsLoader {
               logger.debug(`纯文本发送也失败: ${innerErr.message}`)
               return { error: err }
             }
-          }
-        }
-
-        if (!e.isGuild && recallMsg > 0 && msgRes?.message_id) {
-          const target = e.isGroup ? e.group : e.friend
-          if (target?.recallMsg) {
-            setTimeout(() => {
-              target.recallMsg(msgRes.message_id)
-              if (e.message_id) target.recallMsg(e.message_id)
-            }, recallMsg * 1000)
           }
         }
 
@@ -581,13 +506,24 @@ class PluginsLoader {
       }
     }
 
+    // 设置适配器类型（通用逻辑，不假设特定适配器）
     if (!e.adapter) {
-      if (e.isOneBot) e.adapter = 'onebot'
-      else if (e.isDevice) e.adapter = 'device'
-      else if (e.isStdin) e.adapter = 'stdin'
-      else if (e.device_id) e.adapter = 'device'
-      else if (this.isStdinEvent(e)) e.adapter = 'stdin'
-      else e.adapter = 'onebot'
+      // 优先使用适配器标识
+      if (e.adapter_name) {
+        // 从适配器名称推断类型
+        const adapterName = e.adapter_name.toLowerCase()
+        if (adapterName.includes('onebot')) e.adapter = 'onebot'
+        else if (adapterName.includes('device')) e.adapter = 'device'
+        else if (adapterName.includes('stdin')) e.adapter = 'stdin'
+      }
+      
+      // 如果没有适配器名称，使用事件类型推断
+      if (!e.adapter) {
+        if (e.isDevice || e.device_id) e.adapter = 'device'
+        else if (e.isStdin || this.isStdinEvent(e)) e.adapter = 'stdin'
+        else if (e.isOneBot) e.adapter = 'onebot'
+        // 默认值由适配器在发送事件时设置，这里不设置默认值
+      }
     }
 
     let bot = null
@@ -1023,6 +959,7 @@ class PluginsLoader {
         return true
 
       case 'owner':
+        // 检查是否为群主（由适配器增强插件设置相关属性）
         if (!e.isGroup || !e.member?.is_owner) {
           e.reply('暂无权限，只有群主才能操作')
           return false
@@ -1030,6 +967,7 @@ class PluginsLoader {
         return true
 
       case 'admin':
+        // 检查是否为管理员（由适配器增强插件设置相关属性）
         if (!e.isGroup || (!e.member?.is_owner && !e.member?.is_admin)) {
           e.reply('暂无权限，只有管理员才能操作')
           return false
@@ -1044,22 +982,14 @@ class PluginsLoader {
   checkLimit(e) {
     if (e.isDevice || e.isStdin) return true
 
-    if (e.isGroup && e.group) {
-      const muteLeft = e.group.mute_left ?? 0
-      const allMuted = e.group.all_muted === true
-      const isAdmin = e.group.is_admin === true
-      const isOwner = e.group.is_owner === true
+    // 特定适配器的限制检查（如群禁言等）由适配器增强插件处理
+    // 这里只做通用的冷却检查
 
-      if (muteLeft > 0 || (allMuted && !isAdmin && !isOwner)) {
-        return false
-      }
-    }
-
-    if (!e.message || e.isPrivate || ['cmd'].includes(e.adapter)) {
+    if (!e.message || !e.group_id || ['cmd'].includes(e.adapter)) {
       return true
     }
 
-    const config = e.group_id ? cfg.getGroup(e.group_id) : {}
+    const config = cfg.getGroup(e.group_id) || {}
     const groupCD = config.groupGlobalCD || 0
     const singleCD = config.singleCD || 0
     const deviceCD = config.deviceCD || 0
@@ -1086,9 +1016,9 @@ class PluginsLoader {
     if (e.isStdin) return
 
     const adapter = e.adapter || ''
-    if (!e.message || (e.isPrivate && !e.isDevice) || ['cmd'].includes(adapter)) return
+    if (!e.message || !e.group_id || ['cmd'].includes(adapter)) return
 
-    const groupConfig = e.group_id ? cfg.getGroup(e.group_id) : {}
+    const groupConfig = cfg.getGroup(e.group_id) || {}
     const otherConfig = cfg.getOther() || {}
     const config = Object.keys(groupConfig).length > 0 ? groupConfig : otherConfig
 
@@ -1101,7 +1031,7 @@ class PluginsLoader {
 
     if (e.isDevice) {
       setCooldown('device', e.device_id, config.deviceCD || 1000)
-    } else {
+    } else if (e.group_id) {
       setCooldown('group', e.group_id, config.groupGlobalCD || 0)
       setCooldown('single', `${e.group_id}.${e.user_id}`, config.singleCD || 0)
     }
@@ -1109,14 +1039,19 @@ class PluginsLoader {
 
   onlyReplyAt(e) {
     if (e.isDevice || e.isStdin) return true
-    if (!e.message || e.isPrivate || ['cmd'].includes(e.adapter || '')) return true
+    if (!e.message || !e.group_id || ['cmd'].includes(e.adapter || '')) return true
 
-    const groupCfg = e.group_id ? cfg.getGroup(e.group_id) : {}
+    const groupCfg = cfg.getGroup(e.group_id) || {}
     const onlyReplyAt = groupCfg.onlyReplyAt ?? 0
 
-    return onlyReplyAt === 0 || !groupCfg.botAlias ||
-      (onlyReplyAt === 2 && e.isMaster) ||
-      e.atBot || e.hasAlias
+    // 如果没有设置onlyReplyAt，或者没有botAlias，则允许回复
+    if (onlyReplyAt === 0 || !groupCfg.botAlias) return true
+    
+    // 主人权限或已使用别名
+    if ((onlyReplyAt === 2 && e.isMaster) || e.hasAlias) return true
+    
+    // 检查是否@了机器人（由适配器增强插件设置atBot属性）
+    return e.atBot === true
   }
 
 

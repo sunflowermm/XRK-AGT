@@ -102,13 +102,12 @@
 
 ### 2. `dealMsg(e)`
 
-- `initMsgProps(e)`：初始化 `e.img/e.video/e.audio/e.msg/e.atList/e.atBot` 等。
-- `parseMessage(e)`：遍历 `e.message`，根据不同 `type` 填充：
-  - `text/image/video/audio/at/reply/file/face` 等字段。
+- `initMsgProps(e)`：初始化通用消息属性（`e.img/e.video/e.audio/e.msg`）。适配器特定的属性（如`atList`、`atBot`）由适配器增强插件处理。
+- `parseMessage(e)`：遍历 `e.message`，只处理通用消息类型（`text/image/video/audio/file`）。适配器特定的消息类型（如`at`、`reply`、`face`）由适配器增强插件处理。
 - `setupEventProps(e)`：
-  - 标记 `isPrivate/isGroup/isGuild/isDevice/isStdin`。
-  - 设置 `sender` / `group_name` 等。
-  - 为 `e` 添加 `getReply` / `recall` 等辅助方法。
+  - 标记通用事件类型（`isDevice/isStdin`）。
+  - 设置基础 `sender` 信息。
+  - 适配器特定的属性（`isPrivate/isGroup/isGuild`、`group_name`、`friend/group/member`等）由适配器增强插件处理。
 - `checkPermissions(e)`：识别主人（master）与 STDIN 默认主人权限。
 - `processAlias(e)`：群聊场景下处理 Bot 别名（如「葵子」）。
 - `addUtilMethods(e)`：注入 `getSendableMedia/throttle/getEventHistory` 等工具。
@@ -123,12 +122,14 @@
 - 若为扩展插件：
   - 直接调用 `processRules(plugins, e)`。
 - 若为普通插件：
-  - 先执行各插件的 `accept(e)`：
+  - 先执行各插件的 `accept(e)`（包括适配器增强插件）：
+    - 适配器增强插件（如`OneBotEnhancer`）会在此阶段挂载适配器特定属性（`friend`、`group`、`member`、`atBot`等）。
     - 若返回 `'return'`，则视为已完全处理。
-    - 若返回 truthy 值，可中断后续插件。
+    - 若返回 `false`，跳过当前插件。
+    - 若返回 `true`，继续处理。
   - 对非设备/STDIN 事件：
     - `handleContext(plugins, e)`：先处理上下文回调。
-    - `onlyReplyAt(e)`：判断是否仅响应 @ 或别名。
+    - `onlyReplyAt(e)`：判断是否仅响应 @ 或别名（依赖增强插件设置的`atBot`属性）。
     - 若插件不带 `bypassThrottle`，调用 `setLimit(e)` 设置冷却。
   - 最后执行 `processRules(plugins, e, false)` 并根据优先级分组执行。
   - 若仍未处理，调用 `processDefaultHandlers(e)`。

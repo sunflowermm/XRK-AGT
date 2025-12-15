@@ -63,18 +63,9 @@ export class AdapterBase {
       _initializing: false
     }
     
-    // 根据类型添加特定方法
-    if (type === 'onebot') {
-      // OneBot特定方法在onebot.js中注册
-    } else if (type === 'device') {
-      // Device特定方法
-      botInstance.device_type = info.device_type
-      botInstance.capabilities = info.capabilities || []
-      botInstance.online = info.online !== false
-    } else if (type === 'stdin') {
-      // Stdin特定方法
-      botInstance.config = { master: true }
-    }
+    // 适配器特定属性由适配器自己设置，这里不处理
+    // OneBot特定方法在onebot.js中注册
+    // Device和Stdin特定属性由对应适配器设置
     
     // 保存到Bot实例
     bot[id] = botInstance
@@ -83,7 +74,9 @@ export class AdapterBase {
   }
   
   /**
-   * 创建标准化的事件对象
+   * 创建标准化的事件对象（仅包含所有适配器通用的基础属性）
+   * 适配器特定的属性（如isGroup、isPrivate、friend、group等）由增强插件处理
+   * 
    * @param {Object} options - 事件选项
    * @param {string} options.post_type - 事件类型 (message/notice/request)
    * @param {string} options.adapter_type - 适配器类型
@@ -98,60 +91,42 @@ export class AdapterBase {
     // 获取Bot实例
     const botInstance = bot[self_id] || bot
     
-    // 创建标准化事件对象
+    // 创建标准化事件对象（只包含通用属性）
     const event = {
       // 基础属性
-      post_type,
+      post_type: post_type || 'message',
       self_id,
       time: Math.floor(Date.now() / 1000),
-      event_id: `${post_type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      event_id: `${adapter_type || 'event'}_${post_type || 'message'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       
-      // 适配器信息
-      adapter: adapter_type,
-      isOneBot: adapter_type === 'onebot',
-      isDevice: adapter_type === 'device',
-      isStdin: adapter_type === 'stdin',
+      // 适配器信息（通用）
+      adapter: adapter_type || '',
       
       // Bot实例
       bot: botInstance,
       
-      // 消息相关（如果是消息事件）
+      // 消息相关（通用，所有适配器都可能有的）
       message: data.message || [],
       raw_message: data.raw_message || '',
       msg: '',
       
-      // 用户相关
-      user_id: data.user_id || self_id,
+      // 用户相关（通用）
+      user_id: data.user_id || null,
       sender: data.sender || {},
       
-      // 群组相关（如果是群组消息）
+      // 群组相关（通用字段，不设置isGroup/isPrivate，由增强插件处理）
       group_id: data.group_id || null,
-      isGroup: !!data.group_id,
-      isPrivate: !data.group_id,
       
-      // 设备相关（如果是设备事件）
-      device_id: data.device_id || self_id,
+      // 设备相关（通用字段）
+      device_id: data.device_id || null,
       device_name: data.device_name || null,
       event_type: data.event_type || post_type,
       
-      // 回复方法（由插件加载器设置）
+      // 回复方法（通用，由bot.js的prepareEvent设置）
       reply: null,
       
       // 原始数据
       ...data
-    }
-    
-    // 设置回复方法
-    if (botInstance && botInstance.sendMsg) {
-      event.reply = async (msg = '', quote = false, data = {}) => {
-        if (!msg) return false
-        try {
-          return await botInstance.sendMsg(msg, quote, data)
-        } catch (error) {
-          BotUtil.makeLog('error', `回复消息失败: ${error.message}`, self_id)
-          return { error: error.message }
-        }
-      }
     }
     
     return event

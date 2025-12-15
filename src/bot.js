@@ -2165,65 +2165,57 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     await Promise.allSettled(tasks);
   }
 
+  /**
+   * 准备事件对象（通用逻辑）
+   * 只处理所有适配器通用的属性，适配器特定逻辑由插件通过accept方法处理
+   * 
+   * @param {Object} data - 事件数据对象
+   */
   prepareEvent(data) {
-    if (!this.bots[data.self_id]) return;
-    
-    if (!data.bot) {
+    // 确保bot对象存在
+    if (!data.bot && data.self_id && this.bots[data.self_id]) {
       Object.defineProperty(data, "bot", {
-        value: this.bots[data.self_id]
+        value: this.bots[data.self_id],
+        writable: false,
+        configurable: false
       });
     }
     
-    if (data.user_id) {
-      if (!data.friend) {
-        Object.defineProperty(data, "friend", {
-          value: data.bot.pickFriend(data.user_id)
-        });
-      }
-      data.sender ||= { user_id: data.user_id };
-      data.sender.nickname ||= data.friend?.nickname;
+    // 设置适配器信息（所有适配器通用）
+    if (data.bot?.adapter?.id) {
+      data.adapter_id = data.bot.adapter.id;
+    }
+    if (data.bot?.adapter?.name) {
+      data.adapter_name = data.bot.adapter.name;
     }
     
-    if (data.group_id) {
-      if (!data.group) {
-        Object.defineProperty(data, "group", {
-          value: data.bot.pickGroup(data.group_id)
-        });
-      }
-      data.group_name ||= data.group?.name;
+    // 初始化基础sender对象（如果不存在）
+    if (data.user_id && !data.sender) {
+      data.sender = { user_id: data.user_id };
     }
     
-    if (data.group && data.user_id) {
-      if (!data.member) {
-        Object.defineProperty(data, "member", {
-          value: data.group.pickMember(data.user_id)
-        });
-      }
-      data.sender.nickname ||= data.member?.nickname;
-      data.sender.card ||= data.member?.card;
-    }
-    
-    if (data.bot.adapter?.id) data.adapter_id = data.bot.adapter.id;
-    if (data.bot.adapter?.name) data.adapter_name = data.bot.adapter.name;
-    
+    // 扩展事件方法（通用方法）
     this._extendEventMethods(data);
   }
 
+  /**
+   * 扩展事件方法（通用方法）
+   * 为事件对象添加通用的辅助方法
+   * @param {Object} data - 事件数据对象
+   */
   _extendEventMethods(data) {
-    for (const target of [data.friend, data.group, data.member]) {
-      if (!target || typeof target !== "object") continue;
-      
-      target.sendFile ??= (file, name) =>
-        target.sendMsg(segment.file(file, name));
-      target.makeForwardMsg ??= this.makeForwardMsg;
-      target.sendForwardMsg ??= msg =>
-        this.sendForwardMsg(msg => target.sendMsg(msg), msg);
-      target.getInfo ??= () => target.info || target;
-    }
-    
-    if (!data.reply) {
-      data.reply = data.group?.sendMsg?.bind(data.group) ||
-        data.friend?.sendMsg?.bind(data.friend);
+    if (!data.reply && data.bot?.sendMsg) {
+      const botInstance = data.bot;
+      const selfId = data.self_id;
+      data.reply = async (msg = '', quote = false, extraData = {}) => {
+        if (!msg) return false;
+        try {
+          return await botInstance.sendMsg(msg, quote, extraData);
+        } catch (error) {
+          BotUtil.makeLog('error', `回复消息失败: ${error.message}`, selfId);
+          return false;
+        }
+      };
     }
   }
 

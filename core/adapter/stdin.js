@@ -268,15 +268,6 @@ export class StdinHandler {
   }
 
   async handleEvent(event) {
-    // 设置reply方法，直接调用sendMsg
-    event.reply = async (msg) => {
-      return await this.sendMsg(msg, event.sender?.nickname || 'stdin', {
-        user_id: event.user_id,
-        adapter: 'stdin'
-      });
-    };
-
-    // 只触发一次事件
     Bot.em('stdin.message', event);
   }
 

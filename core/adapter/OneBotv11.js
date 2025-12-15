@@ -1331,10 +1331,6 @@ Bot.adapter.push(
      * @param {Object} data - 消息数据对象
      */
     handlePrivateMessage(data) {
-      if (data.user_id && data.bot.pickFriend) {
-        this.defineEventProperty(data, "friend", () => data.bot.pickFriend(data.user_id))
-      }
-      
       const name = data.sender?.card || 
                    data.sender?.nickname || 
                    data.bot?.fl?.get?.(data.user_id)?.nickname ||
@@ -1353,18 +1349,6 @@ Bot.adapter.push(
      * @param {Object} data - 消息数据对象
      */
     handleGroupMessage(data) {
-      if (data.group_id && data.bot.pickGroup) {
-        this.defineEventProperty(data, "group", () => data.bot.pickGroup(data.group_id))
-      }
-      
-      if (data.group_id && data.user_id && data.bot.pickMember) {
-        this.defineEventProperty(data, "member", () => data.bot.pickMember(data.group_id, data.user_id))
-      }
-      
-      if (data.user_id && data.bot.pickFriend) {
-        this.defineEventProperty(data, "friend", () => data.bot.pickFriend(data.user_id))
-      }
-      
       const group_name = data.group_name || data.bot?.gl?.get?.(data.group_id)?.group_name
       let user_name = data.sender?.card || data.sender?.nickname
       
@@ -1389,16 +1373,6 @@ Bot.adapter.push(
     handleGuildMessage(data) {
       data.message_type = "group"
       data.group_id = `${data.guild_id}-${data.channel_id}`
-      
-      if (data.group_id && data.bot.pickGroup) {
-        this.defineEventProperty(data, "group", () => data.bot.pickGroup(data.group_id))
-      }
-      
-      if (data.group_id && data.user_id && data.bot.pickMember) {
-        this.defineEventProperty(data, "member", () => data.bot.pickMember(data.group_id, data.user_id))
-      }
-      
-      this.defineEventProperty(data, "friend", () => data.member || {})
       
       Bot.makeLog(
         "info",

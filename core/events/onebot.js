@@ -70,28 +70,13 @@ export default class OneBotEvent {
    */
   setupReplyMethod(e) {
     if (e.reply || !e.bot) return
-    
-    const createReply = (sendMsgFunc) => {
-      return async (msg) => {
-        if (!msg) return false
-        try {
-          return await sendMsgFunc(msg)
-        } catch (error) {
-          Bot.makeLog("error", `回复消息失败: ${error.message}`, e.self_id)
-          return false
-        }
-      }
-    }
-    
-    if (e.message_type === 'private' && e.user_id) {
-      const friend = e.bot.pickFriend?.(e.user_id)
-      if (friend?.sendMsg) {
-        e.reply = createReply((msg) => friend.sendMsg(msg))
-      }
-    } else if (e.message_type === 'group' && e.group_id) {
-      const group = e.bot.pickGroup?.(e.group_id)
-      if (group?.sendMsg) {
-        e.reply = createReply((msg) => group.sendMsg(msg))
+    e.reply = async (msg = '', quote = false, data = {}) => {
+      if (!msg) return false
+      try {
+        return await e.bot.sendMsg?.(msg, quote, data) || false
+      } catch (error) {
+        Bot.makeLog("error", `回复消息失败: ${error.message}`, e.self_id)
+        return false
       }
     }
   }
@@ -183,10 +168,6 @@ export default class OneBotEvent {
     if (!e.sub_type) {
       e.sub_type = e.message_type === 'group' ? 'normal' : 'friend'
     }
-    
-    // 设置标志
-    e.isGroup = e.message_type === 'group'
-    e.isPrivate = e.message_type === 'private'
     
     // 确保 user_id 存在
     if (!e.user_id && e.sender && e.sender.user_id) {

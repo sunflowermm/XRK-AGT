@@ -134,12 +134,17 @@ e = {
   // Bot 实例
   bot: BotInstance,                // Bot[self_id] 对象
   
-  // 对象访问器（延迟加载）
-  friend: FriendObject,            // 好友对象（私聊/群聊时可用）
-  group: GroupObject,              // 群对象（群聊时可用）
-  member: MemberObject,            // 成员对象（群聊时可用）
+  // 对象访问器（延迟加载，由OneBotEnhancer插件通过accept方法挂载）
+  friend: FriendObject,            // 好友对象（私聊/群聊时可用，由增强插件挂载）
+  group: GroupObject,              // 群对象（群聊时可用，由增强插件挂载）
+  member: MemberObject,            // 成员对象（群聊时可用，由增强插件挂载）
   
-  // 回复方法
+  // @相关属性（由OneBotEnhancer插件处理）
+  atList: Array<string>,           // @列表
+  at: string,                      // 第一个@的用户ID（兼容）
+  atBot: boolean,                  // 是否@了机器人
+  
+  // 回复方法（由增强插件或bot.js的prepareEvent设置）
   reply: Function(msg: string|Array): Promise<Object>
 }
 ```
@@ -420,16 +425,14 @@ await group.sendMsg('Hello')
    - 解析消息段数组
    - 生成必要字段
 
-4. **对象封装**
-   - 根据消息类型创建对象访问器
-   - 设置 `friend`, `group`, `member` 属性
-
-5. **事件触发**
+4. **事件触发**
    - 触发 `onebot.${post_type}` 事件
    - 事件监听器（`OneBotEvent`）接收并处理
 
-6. **插件处理**
+5. **插件处理**
    - 事件监听器调用 `plugins.deal(e)`
+   - `Bot.em` 会自动调用 `Bot.prepareEvent(e)` 设置通用属性
+   - `OneBotEnhancer` 增强插件通过`accept`方法挂载OneBot特定属性（`friend`、`group`、`member`、`atBot`等）
    - 插件系统匹配并执行相应插件
 
 ---
@@ -530,8 +533,9 @@ sendFriendMsg(data, msg) {
    - 不要直接使用 `e.bot`，除非确保已初始化
 
 2. **对象访问器**
-   - `e.friend`, `e.group`, `e.member` 是延迟加载的属性
-   - 首次访问时会创建对象，后续访问返回缓存
+   - `e.friend`, `e.group`, `e.member` 由`OneBotEnhancer`增强插件通过`accept`方法挂载
+   - 使用getter延迟加载，首次访问时创建对象
+   - 这些属性只在OneBot事件中可用，其他适配器事件中不存在
 
 3. **消息格式**
    - 消息可以是字符串、对象或数组
