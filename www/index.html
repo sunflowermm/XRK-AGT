@@ -449,7 +449,7 @@
             handOpenness: 1.0,
             isHandDetected: false,
             scene: null, camera: null, renderer: null, particles: null,
-            particleCount: isLocalhost ? 6000 : 4000, // 根据访问来源调整粒子数（优化性能）
+            particleCount: isLocalhost ? 4000 : 3000, // 根据访问来源调整粒子数（优化性能）
             positions: null, targetPositions: null,
             currentShape: 'heart',
             gameObjects: [], score: 0,
@@ -471,10 +471,13 @@
                 alpha: true,
                 powerPreference: "high-performance", // 优先使用高性能GPU
                 stencil: false, // 禁用模板缓冲
-                depth: true
+                depth: true,
+                preserveDrawingBuffer: false, // 不保留绘制缓冲区
+                logarithmicDepthBuffer: false // 禁用对数深度缓冲
             });
             G.renderer.setSize(container.clientWidth, container.clientHeight);
-            G.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.2)); // 进一步降低像素比提升性能
+            G.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0)); // 进一步降低像素比提升性能
+            G.renderer.shadowMap.enabled = false; // 禁用阴影
             container.appendChild(G.renderer.domElement);
 
             const canvas = document.createElement('canvas');
@@ -499,7 +502,9 @@
             geometry.setAttribute('position', new THREE.BufferAttribute(G.positions, 3));
             const material = new THREE.PointsMaterial({
                 size: 0.5, map: texture, transparent: true, opacity: 0.8,
-                color: new THREE.Color(0x6366f1), blending: THREE.AdditiveBlending, depthWrite: false
+                color: new THREE.Color(0x6366f1), blending: THREE.AdditiveBlending, depthWrite: false,
+                sizeAttenuation: true, // 启用尺寸衰减
+                vertexColors: false // 禁用顶点颜色提升性能
             });
             G.particles = new THREE.Points(geometry, material);
             G.scene.add(G.particles);
@@ -527,13 +532,24 @@
         }
 
         function animateParticles(currentTime) {
-            requestAnimationFrame(animateParticles);
-            if (G.mode !== 'particles' || !G.particles) return;
+            // 先检查条件，避免不必要的 requestAnimationFrame 调用
+            if (G.mode !== 'particles' || !G.particles) {
+                requestAnimationFrame(animateParticles);
+                return;
+            }
             
-            // 性能优化：限制帧率
+            // 初始化 lastFrameTime（修复卡住问题）
+            if (G.lastFrameTime === 0) {
+                G.lastFrameTime = currentTime;
+            }
+            
+            // 性能优化：限制帧率（修复时间计算）
             const elapsed = currentTime - G.lastFrameTime;
-            if (elapsed < G.frameInterval) return;
-            G.lastFrameTime = currentTime - (elapsed % G.frameInterval);
+            if (elapsed < G.frameInterval) {
+                requestAnimationFrame(animateParticles);
+                return;
+            }
+            G.lastFrameTime = currentTime;
             
             const pos = G.particles.geometry.attributes.position.array;
             const targetPos = G.targetPositions;
@@ -577,6 +593,9 @@
             
             G.particles.geometry.attributes.position.needsUpdate = true;
             G.renderer.render(G.scene, G.camera);
+            
+            // 继续动画循环
+            requestAnimationFrame(animateParticles);
         }
 
         // ============ 2D游戏 ============
@@ -632,84 +651,151 @@
             }
             draw(ctx) {
                 if (this.opacity <= 0) return;
-                ctx.save(); ctx.globalAlpha = this.opacity;
-                ctx.translate(this.x, this.y); ctx.rotate(this.rotation);
-                ctx.font = `${this.size}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.fillText(this.emoji, 0, 0); ctx.restore();
+                // 性能优化：减少save/restore调用
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.font = `${this.size}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, 0, 0);
+                ctx.restore();
             }
             hit(x, y, r) { return Math.hypot(this.x - x, this.y - y) < this.size / 2 + r; }
         }
 
         function initCanvasGame(type) {
             const canvas = document.getElementById('gameCanvas');
-            G.canvasW = canvas.width; G.canvasH = canvas.height;
-            G.gameObjects = []; G.score = 0;
-            document.getElementById('scoreValue').textContent = '0';
-            const count = type === 'balloon' ? 12 : 15;
+            if (!canvas) return;
+            G.canvasW = canvas.width;
+            G.canvasH = canvas.height;
+            G.gameObjects = [];
+            G.score = 0;
+            const scoreEl = document.getElementById('scoreValue');
+            if (scoreEl) scoreEl.textContent = '0';
+            
+            const count = type === 'balloon' ? 8 : type === 'fruit' ? 10 : 8;
             for (let i = 0; i < count; i++) {
                 const x = Math.random() * G.canvasW;
-                const y = type === 'balloon' ? G.canvasH + Math.random() * G.canvasH : type === 'fruit' ? -Math.random() * 300 : Math.random() * G.canvasH * 0.5;
+                const y = type === 'balloon' 
+                    ? G.canvasH + Math.random() * G.canvasH 
+                    : type === 'fruit' 
+                        ? -Math.random() * 300 
+                        : Math.random() * G.canvasH * 0.5;
                 G.gameObjects.push(new GameObject(x, y, type));
             }
         }
 
         let lastCanvasFrame = 0;
         function animateCanvas(currentTime) {
-            requestAnimationFrame(animateCanvas);
-            if (G.mode === 'particles') return;
+            // 先检查条件
+            if (G.mode === 'particles') {
+                requestAnimationFrame(animateCanvas);
+                return;
+            }
             
-            // 性能优化：限制帧率
+            // 初始化 lastCanvasFrame（修复帧率问题）
+            if (lastCanvasFrame === 0) {
+                lastCanvasFrame = currentTime;
+            }
+            
+            // 性能优化：限制帧率（修复时间计算）
             const elapsed = currentTime - lastCanvasFrame;
-            if (elapsed < G.frameInterval) return;
-            lastCanvasFrame = currentTime - (elapsed % G.frameInterval);
+            if (elapsed < G.frameInterval) {
+                requestAnimationFrame(animateCanvas);
+                return;
+            }
+            lastCanvasFrame = currentTime;
             
             const canvas = document.getElementById('gameCanvas');
-            if (!canvas) return;
+            if (!canvas) {
+                requestAnimationFrame(animateCanvas);
+                return;
+            }
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+            // 性能优化：减少DOM操作，批量更新
             const handTracker = document.getElementById('handTracker');
             let hx = 0, hy = 0;
             if (G.isHandDetected) {
-                hx = (1 - G.handX) * canvas.width; hy = G.handY * canvas.height;
-                handTracker.classList.add('active');
-                handTracker.style.left = hx - 40 + 'px'; handTracker.style.top = hy - 40 + 'px';
-                handTracker.classList.toggle('closed', G.handOpenness < 0.5);
+                hx = (1 - G.handX) * canvas.width; 
+                hy = G.handY * canvas.height;
+                
+                // 批量更新DOM（减少重排）
+                if (!handTracker.classList.contains('active')) {
+                    handTracker.classList.add('active');
+                }
+                handTracker.style.cssText = `left: ${hx - 40}px; top: ${hy - 40}px;`;
+                const isClosed = G.handOpenness < 0.5;
+                if (isClosed && !handTracker.classList.contains('closed')) {
+                    handTracker.classList.add('closed');
+                } else if (!isClosed && handTracker.classList.contains('closed')) {
+                    handTracker.classList.remove('closed');
+                }
+                
+                // 绘制手部指示器
                 const grad = ctx.createRadialGradient(hx, hy, 0, hx, hy, 80);
-                grad.addColorStop(0, 'rgba(251,191,36,0.4)'); grad.addColorStop(1, 'rgba(251,191,36,0)');
-                ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(hx, hy, 80, 0, Math.PI * 2); ctx.fill();
+                grad.addColorStop(0, 'rgba(251,191,36,0.4)');
+                grad.addColorStop(1, 'rgba(251,191,36,0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(hx, hy, 80, 0, Math.PI * 2);
+                ctx.fill();
             } else {
-                handTracker.classList.remove('active');
+                if (handTracker.classList.contains('active')) {
+                    handTracker.classList.remove('active');
+                }
             }
 
             // 性能优化：使用更高效的过滤和更新方式
-            G.gameObjects = G.gameObjects.filter(o => o.opacity > 0);
+            const aliveObjects = [];
+            for (let i = 0; i < G.gameObjects.length; i++) {
+                if (G.gameObjects[i].opacity > 0) {
+                    aliveObjects.push(G.gameObjects[i]);
+                }
+            }
+            G.gameObjects = aliveObjects;
             
-            // 保持对象数量
-            const targetCount = G.mode === 'balloon' ? 10 : 12;
-            while (G.gameObjects.length < targetCount) {
-                const x = Math.random() * canvas.width;
-                const y = G.mode === 'balloon' ? canvas.height + 50 : -50;
-                G.gameObjects.push(new GameObject(x, y, G.mode));
+            // 保持对象数量（减少对象数量提升性能）
+            const targetCount = G.mode === 'balloon' ? 8 : G.mode === 'fruit' ? 10 : 8;
+            if (G.gameObjects.length < targetCount) {
+                const needed = targetCount - G.gameObjects.length;
+                for (let i = 0; i < needed; i++) {
+                    const x = Math.random() * canvas.width;
+                    const y = G.mode === 'balloon' ? canvas.height + 50 : -50;
+                    G.gameObjects.push(new GameObject(x, y, G.mode));
+                }
             }
             
             // 批量更新和绘制，减少DOM操作
             const scoreEl = document.getElementById('scoreValue');
+            let scoreUpdated = false;
+            
             G.gameObjects.forEach(obj => {
                 obj.update(canvas.width, canvas.height);
                 if (G.isHandDetected && !obj.popped && obj.hit(hx, hy, 50)) {
                     obj.popped = true; 
                     G.score += 10;
-                    if (scoreEl) scoreEl.textContent = G.score;
-                    showMessage('✨ +10', 400);
+                    scoreUpdated = true;
                 }
                 obj.draw(ctx);
             });
+            
+            // 只在分数变化时更新DOM（性能优化）
+            if (scoreUpdated && scoreEl) {
+                scoreEl.textContent = G.score;
+                showMessage('✨ +10', 400);
+            }
+            
+            // 继续动画循环
+            requestAnimationFrame(animateCanvas);
         }
         
-        // 初始化时调用animateCanvas
+        // 初始化时调用animateCanvas（延迟启动，确保DOM已加载）
         if (isLocalhost) {
-            animateCanvas(performance.now());
+            requestAnimationFrame(() => animateCanvas(performance.now()));
         }
 
         // ============ MediaPipe Hands ============
@@ -738,7 +824,7 @@
 
             // 节流处理：限制处理频率以提升性能
             let lastProcessTime = 0;
-            const processInterval = 33; // 每33ms处理一次（约30fps，提升响应性）
+            const processInterval = 50; // 每50ms处理一次（约20fps，平衡性能和响应性）
 
             hands.onResults((results) => {
                 loader.classList.add('hidden');
@@ -776,12 +862,10 @@
                     
                     // 调试信息（仅在开发时使用）
                     if (window.location.search.includes('debug')) {
-                        console.log('Hand detected:', {
+                        console.log('Hand:', {
                             x: G.handX.toFixed(2),
                             y: G.handY.toFixed(2),
-                            openness: G.handOpenness.toFixed(2),
-                            thumbIndexDist: thumbIndexDist.toFixed(3),
-                            avgDist: avgDist.toFixed(3)
+                            openness: G.handOpenness.toFixed(2)
                         });
                     }
                 } else {
@@ -850,11 +934,8 @@
 
         // ============ 初始化 ============
         function initializeGame() {
-            console.log('Initializing game, isLocalhost:', isLocalhost);
-            
             // 根据访问来源显示/隐藏游戏部分
             if (!isLocalhost) {
-                console.log('Not localhost, hiding game section');
                 const gameSection = document.getElementById('game');
                 const gameNavItem = document.getElementById('gameNavItem');
                 if (gameSection) gameSection.style.display = 'none';
@@ -863,61 +944,41 @@
             }
             
             // 显示游戏部分和导航项（本地访问）
-            console.log('Localhost detected, showing game section');
             const gameSection = document.getElementById('game');
             const gameNavItem = document.getElementById('gameNavItem');
-            if (gameSection) {
-                gameSection.style.display = ''; // 移除display:none
-                console.log('Game section displayed');
-            } else {
-                console.error('Game section not found!');
-            }
-            if (gameNavItem) {
-                gameNavItem.style.display = ''; // 显示导航项
-                console.log('Game nav item displayed');
-            } else {
-                console.error('Game nav item not found!');
-            }
+            if (gameSection) gameSection.style.display = '';
+            if (gameNavItem) gameNavItem.style.display = '';
+            
+            // 统一的初始化函数，避免代码重复
+            const initGame = () => {
+                try {
+                    initThreeJS();
+                    requestAnimationFrame(() => animateParticles(performance.now()));
+                    initMediaPipe();
+                } catch (error) {
+                    console.error('Game initialization error:', error);
+                }
+            };
             
             // 检查Three.js是否已加载
             if (typeof THREE === 'undefined') {
                 // 等待脚本加载完成
                 const checkScripts = () => {
                     if (typeof THREE !== 'undefined' && typeof Hands !== 'undefined') {
-                        try {
-                            initThreeJS();
-                            animateParticles(performance.now());
-                            initMediaPipe();
-                        } catch (error) {
-                            console.error('Game initialization error:', error);
-                        }
+                        initGame();
                     } else {
                         setTimeout(checkScripts, 100);
                     }
                 };
                 // 监听脚本加载完成事件
-                window.addEventListener('gameScriptsLoaded', () => {
-                    try {
-                        initThreeJS();
-                        animateParticles(performance.now());
-                        initMediaPipe();
-                    } catch (error) {
-                        console.error('Game initialization error:', error);
-                    }
-                }, { once: true });
+                window.addEventListener('gameScriptsLoaded', initGame, { once: true });
                 // 同时使用轮询作为备用
                 checkScripts();
                 return;
             }
             
             // Three.js已加载，直接初始化
-            try {
-                initThreeJS();
-                animateParticles(performance.now());
-                initMediaPipe();
-            } catch (error) {
-                console.error('Game initialization error:', error);
-            }
+            initGame();
         }
         
         document.addEventListener('DOMContentLoaded', () => {
@@ -950,8 +1011,11 @@
                         G.score = 0;
                         const scoreValue = document.getElementById('scoreValue');
                         if (scoreValue) scoreValue.textContent = '0';
-                        if (G.mode === 'particles') updateTargetPositions(G.currentShape);
-                        else initCanvasGame(G.mode);
+                        if (G.mode === 'particles') {
+                            updateTargetPositions(G.currentShape);
+                        } else {
+                            initCanvasGame(G.mode);
+                        }
                         showMessage('🔄 已重置', 1500);
                     });
                 }
