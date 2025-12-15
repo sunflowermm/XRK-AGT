@@ -1,6 +1,5 @@
 import path from "node:path"
 import { ulid } from "ulid"
-import OneBotFunctions from "../../src/infrastructure/bot/onebot.js"
 
 Bot.adapter.push(
   new (class OneBotv11Adapter {
@@ -1819,9 +1818,6 @@ Bot.adapter.push(
       Bot.wsf[this.path].push((ws, ...args) =>
         ws.on("message", data => this.message(data, ws, ...args)),
       )
-      
-      // 注册OneBot特定函数到Bot实例
-      OneBotFunctions.register(Bot)
     }
   })(),
 )

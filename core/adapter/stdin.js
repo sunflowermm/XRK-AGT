@@ -83,6 +83,9 @@ export class StdinHandler {
         version: { id: 'stdin', name: 'StdinBot', version: '1.0.0' },
         config: { master: true },
         sendMsg: async (msg) => this.sendMsg(msg, 'stdin', { user_id: 'stdin' }),
+        runCommand: async (command, options = {}) => Bot.callStdin
+          ? Bot.callStdin(command, { ...options, adapter: 'stdin' })
+          : this.processCommand(command, options),
         pickUser: (user_id) => Bot.pickFriend ? Bot.pickFriend(user_id) : null,
         pickFriend: (user_id) => ({
           user_id,

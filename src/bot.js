@@ -986,27 +986,59 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
    * 创建Bot代理对象
    */
   _createProxy() {
-    return new Proxy(this.bots, {
-      get: (target, prop) => {
-        if (target[prop] !== undefined) return target[prop];
-        if (this[prop] !== undefined) return this[prop];
-        
+    const botMap = this.bots;
+    const isBotEntry = (prop, value) => {
+      if (Reflect.has(this, prop)) return false;
+      if (typeof prop !== 'string') return false;
+      if (!value || typeof value !== 'object') return false;
+      return Boolean(
+        value.adapter ||
+        value.adapter_type ||
+        value.self_id ||
+        value.uin
+      );
+    };
+
+    return new Proxy(this, {
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.toStringTag) return 'Bot';
+        if (Reflect.has(target, prop)) {
+          return Reflect.get(target, prop, receiver);
+        }
+        if (prop in botMap) return botMap[prop];
+
         const utilValue = BotUtil[prop];
         if (utilValue !== undefined) {
-          return typeof utilValue === 'function' ?
-            utilValue.bind(BotUtil) : utilValue;
+          return typeof utilValue === 'function'
+            ? utilValue.bind(BotUtil)
+            : utilValue;
         }
-        
-        for (const botId of [this.uin.toString(), ...this.uin]) {
-          const bot = target[botId];
-          if (bot?.[prop] !== undefined) {
-            BotUtil.makeLog("trace", `重定向 Bot.${prop} 到 Bot.${botId}.${prop}`);
-            return typeof bot[prop] === "function" ?
-              bot[prop].bind(bot) : bot[prop];
-          }
+        return undefined;
+      },
+      set: (target, prop, value, receiver) => {
+        if (isBotEntry(prop, value)) {
+          botMap[prop] = value;
+          return true;
         }
-        
-        BotUtil.makeLog("trace", `Bot.${prop} 不存在`);
+        return Reflect.set(target, prop, value, receiver);
+      },
+      has: (target, prop) => {
+        return Reflect.has(target, prop) || prop in botMap || prop in BotUtil;
+      },
+      ownKeys: (target) => {
+        const keys = new Set([
+          ...Reflect.ownKeys(target),
+          ...Reflect.ownKeys(botMap)
+        ]);
+        return Array.from(keys);
+      },
+      getOwnPropertyDescriptor: (target, prop) => {
+        if (Reflect.has(target, prop)) {
+          return Reflect.getOwnPropertyDescriptor(target, prop);
+        }
+        if (prop in botMap) {
+          return Object.getOwnPropertyDescriptor(botMap, prop);
+        }
         return undefined;
       }
     });
@@ -2235,11 +2267,208 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         }
       };
     }
+    
+    if (!data.getRoutes) {
+      data.getRoutes = (options = {}) => this.getRouteList(options);
+    }
   }
 
-  em(name = "", data = {}) {
+  /**
+   * 获取已注册的HTTP路由列表
+   * @param {Object} options
+   * @param {boolean} [options.flat=true] - 是否返回扁平数组
+   * @returns {Array} 路由列表
+   */
+  getRouteList({ flat = true } = {}) {
+    if (!ApiLoader?.apis) return [];
+    
+    const apiEntries = ApiLoader.priority?.length
+      ? ApiLoader.priority
+      : Array.from(ApiLoader.apis.values());
+    
+    const result = apiEntries.map(api => {
+      const apiName = api?.name || api?.key || 'undefined';
+      const apiDesc = api?.dsc || apiName;
+      const routes = Array.isArray(api?.routes) ? api.routes : [];
+      
+      return {
+        api: apiName,
+        dsc: apiDesc,
+        routes: routes
+          .filter(r => r?.path && r?.method)
+          .map(r => ({
+            api: apiName,
+            method: String(r.method || '').toUpperCase(),
+            path: r.path,
+            name: r.name || r.id || '',
+            desc: r.dsc || r.title || r.description || apiDesc
+          }))
+      };
+    });
+    
+    if (!flat) return result;
+    return result.flatMap(item => item.routes);
+  }
+
+  /**
+   * 触发事件
+   * @param {string} name - 事件名
+   * @param {Object} data - 事件数据
+   * @param {boolean} asJson - 是否等待stdin输出并返回JSON结果
+   * @param {Object} options - 可选配置
+   * @param {number} [options.timeout=5000] - 等待输出超时时间
+   * @returns {Promise<*>|void}
+   */
+  async em(name = "", data = {}, asJson = false, options = {}) {
     this.prepareEvent(data);
     
+    if (!asJson) {
+      this._cascadeEmit(name, data);
+      return;
+    }
+    
+    const timeout = Number(options.timeout) || 5000;
+    return await this._emitAndCollect(name, data, timeout);
+  }
+  
+  /**
+   * em 的简写形式，支持收集stdin输出
+   * @param {string} name - 事件名
+   * @param {Object} data - 事件数据
+   * @param {boolean} asJson - 是否等待stdin输出并返回JSON结果
+   * @param {Object} options - 可选配置
+   */
+  async e(name = "", data = {}, asJson = false, options = {}) {
+    return this.em(name, data, asJson, options);
+  }
+  
+  /**
+   * 供HTTP层调用的stdin命令封装
+   * @param {string|Array|Object} command - 要执行的命令或消息
+   * @param {Object} options
+   * @param {Object} [options.user_info={}] - 用户信息
+   * @param {number} [options.timeout=5000] - 等待输出超时时间
+   * @returns {Promise<Object>} 命令结果或stdin输出
+   */
+  async callStdin(command, { user_info = {}, timeout = 5000 } = {}) {
+    const stdinHandler = global.stdinHandler;
+    
+    if (!stdinHandler?.processCommand) {
+      throw this.makeError('stdin handler not initialized', 'StdinUnavailable');
+    }
+    
+    const waitOutput = this._waitForStdinOutput(timeout);
+    const result = await stdinHandler.processCommand(command, {
+      ...user_info,
+      adapter: user_info.adapter || 'api'
+    });
+    
+    const output = await waitOutput;
+    return output || result;
+  }
+  
+  /**
+   * 通过stdin执行命令的封装别名，方便HTTP层调用
+   * @param {string|Array|Object} command - 要执行的命令或消息
+   * @param {Object} options - 选项
+   * @returns {Promise<Object>} 结果
+   */
+  async runCommand(command, options = {}) {
+    return this.callStdin(command, options);
+  }
+  
+  /**
+   * 获取已注册路由的扁平/分组列表
+   * @param {Object} options
+   * @returns {Array}
+   */
+  getRoutes(options = {}) {
+    return this.getRouteList(options);
+  }
+  
+  /**
+   * 直接调用已注册的HTTP路由（内部快捷调用，无需额外HTTP客户端）
+   * @param {string} routePath - 路由路径，如 /api/status
+   * @param {Object} options
+   * @param {string} [options.method='GET'] - HTTP方法
+   * @param {Object} [options.query] - 查询参数
+   * @param {any} [options.body] - 请求体（自动JSON序列化）
+   * @param {Object} [options.headers] - 额外请求头
+   * @param {string} [options.baseUrl] - 自定义基础URL，默认当前服务URL
+   * @param {number} [options.timeout=5000] - 超时毫秒
+   * @returns {Promise<Object>} 响应结果
+   */
+  async callRoute(routePath, {
+    method = 'GET',
+    query = {},
+    body,
+    headers = {},
+    baseUrl,
+    timeout = 5000
+  } = {}) {
+    if (!routePath) {
+      throw this.makeError('routePath is required', 'RouteError');
+    }
+    
+    const fetchFn = globalThis.fetch;
+    if (typeof fetchFn !== 'function') {
+      throw this.makeError('fetch is not available in current runtime', 'RouteError');
+    }
+    
+    const url = new URL(routePath, baseUrl || this.getServerUrl());
+    if (query && typeof query === 'object') {
+      for (const [k, v] of Object.entries(query)) {
+        if (v === undefined || v === null) continue;
+        url.searchParams.append(k, v);
+      }
+    }
+    
+    const controller = typeof AbortController === 'function'
+      ? new AbortController()
+      : null;
+    const timer = controller
+      ? setTimeout(() => controller.abort(), timeout)
+      : null;
+    
+    const options = {
+      method: String(method || 'GET').toUpperCase(),
+      headers: { ...headers }
+    };
+    if (controller) options.signal = controller.signal;
+    
+    const needBody = !['GET', 'HEAD'].includes(options.method);
+    if (needBody && body !== undefined) {
+      if (typeof body === 'string' || body instanceof Blob || body instanceof ArrayBuffer) {
+        options.body = body;
+      } else if (body instanceof URLSearchParams || body instanceof FormData) {
+        options.body = body;
+      } else {
+        options.body = JSON.stringify(body);
+        if (!options.headers['Content-Type'] && !options.headers['content-type']) {
+          options.headers['Content-Type'] = 'application/json';
+        }
+      }
+    }
+    
+    try {
+      const response = await fetchFn(url, options);
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      
+      return {
+        ok: response.ok,
+        status: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        data,
+        raw: text
+      };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  
+  _cascadeEmit(name, data) {
     while (name) {
       this.emit(name, data);
       const lastDot = name.lastIndexOf(".");
@@ -2247,9 +2476,33 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       name = name.slice(0, lastDot);
     }
   }
-
-  // OneBot特定函数已移至 src/infrastructure/bot/onebot.js
-  // 这些函数会在OneBot适配器加载时自动注册
+  
+  async _emitAndCollect(name, data, timeout = 5000) {
+    const waitOutput = this._waitForStdinOutput(timeout);
+    this._cascadeEmit(name, data);
+    return await waitOutput;
+  }
+  
+  _waitForStdinOutput(timeout = 5000) {
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        cleanup();
+        resolve(null);
+      }, timeout);
+      
+      const handler = (payload) => {
+        cleanup();
+        resolve(payload);
+      };
+      
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.off('stdin.output', handler);
+      };
+      
+      this.once('stdin.output', handler);
+    });
+  }
 
   /**
    * 发送消息给主人（通用函数）

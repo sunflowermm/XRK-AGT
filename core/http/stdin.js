@@ -71,6 +71,8 @@ export default {
 
         try {
           const { command, user_info = {} } = req.body;
+          const wantJson = String(req.body?.json ?? req.query?.json ?? '').toLowerCase() === 'true';
+          const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
           
           if (!command) {
             return res.status(400).json({
@@ -81,7 +83,11 @@ export default {
           }
 
           user_info.adapter = 'api';
-          const result = await stdinHandler.processCommand(command, user_info);
+          
+          const result = wantJson && typeof Bot.callStdin === 'function'
+            ? await Bot.callStdin(command, { user_info, timeout })
+            : await stdinHandler.processCommand(command, user_info);
+          
           res.json(result);
         } catch (error) {
           res.status(500).json({
@@ -118,6 +124,8 @@ export default {
 
         try {
           const { event_type = 'message', content, user_info = {} } = req.body;
+          const wantJson = String(req.body?.json ?? req.query?.json ?? '').toLowerCase() === 'true';
+          const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
           
           user_info.adapter = 'api';
           
@@ -126,13 +134,16 @@ export default {
             post_type: event_type
           });
 
-          Bot.em(event_type, event);
+          const output = wantJson
+            ? await Bot.em(event_type, event, true, { timeout })
+            : (Bot.em(event_type, event), null);
 
           res.json({
             success: true,
             code: 200,
             message: 'Event triggered',
             event_id: event.message_id,
+            output: output || undefined,
             timestamp: Date.now()
           });
         } catch (error) {

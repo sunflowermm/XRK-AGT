@@ -158,7 +158,7 @@ bot.fileToUrl(file, opts?) => Promise<string>
 ### Bot选择方法（适配器特定）
 
 ```javascript
-// OneBot特定（由OneBotFunctions.register注册）
+// OneBot特定（由 OneBot 适配器内部直接提供）
 bot.pickFriend(user_id, strict?) => Friend
 bot.pickGroup(group_id, strict?) => Group
 bot.pickMember(group_id, user_id) => Member
