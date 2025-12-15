@@ -26,8 +26,7 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
 
   const list = [];
   for (const [uin, bot] of Object.entries(merged)) {
-    if (!bot || typeof bot !== 'object') continue;
-    if (EXCLUDE_KEYS.has(uin)) continue;
+    if (!bot || typeof bot !== 'object' || EXCLUDE_KEYS.has(uin)) continue;
 
     if (bot.device_type) {
       list.push({
@@ -41,21 +40,18 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
       continue;
     }
 
-    if (!(bot.adapter || bot.nickname || bot.fl || bot.gl)) {
-      continue;
-    }
+    const hasBasicInfo = bot.adapter || bot.nickname || bot.fl || bot.gl;
+    if (!hasBasicInfo) continue;
 
-    let avatarUrl = null;
-    if (bot.adapter?.name === 'OneBotv11' && bot.uin) {
-      avatarUrl = `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100`;
-    } else if (bot.avatar) {
-      avatarUrl = bot.avatar;
-    }
+    const avatarUrl = bot.avatar ||
+      (bot.adapter?.name === 'OneBotv11' && bot.uin
+        ? `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100`
+        : null);
 
     list.push({
       uin,
       device: false,
-      online: bot.stat?.online || false,
+      online: Boolean(bot.stat?.online),
       nickname: bot.nickname || uin,
       adapter: bot.adapter?.name || 'unknown',
       avatar: avatarUrl,

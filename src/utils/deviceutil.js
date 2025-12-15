@@ -11,11 +11,10 @@ import path from 'path';
  * @param {string[]} directories - 需要创建的目录列表
  */
 export function initializeDirectories(directories) {
-    for (const dir of directories) {
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-    }
+  if (!Array.isArray(directories) || directories.length === 0) return
+  for (const dir of new Set(directories.filter(Boolean))) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
 }
 
 /**
@@ -24,15 +23,15 @@ export function initializeDirectories(directories) {
  * @returns {Object} 验证结果 { valid: boolean, error?: string }
  */
 export function validateDeviceRegistration(deviceData) {
-    if (!deviceData.device_id) {
-        return { valid: false, error: '缺少device_id' };
-    }
-    
-    if (!deviceData.device_type) {
-        return { valid: false, error: '缺少device_type' };
-    }
-    
-    return { valid: true };
+  if (!deviceData?.device_id) {
+    return { valid: false, error: '缺少device_id' };
+  }
+
+  if (!deviceData.device_type) {
+    return { valid: false, error: '缺少device_type' };
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -40,7 +39,7 @@ export function validateDeviceRegistration(deviceData) {
  * @returns {string} 命令ID
  */
 export function generateCommandId() {
-    return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -50,7 +49,7 @@ export function generateCommandId() {
  * @returns {boolean} 是否具有该能力
  */
 export function hasCapability(device, capability) {
-    return device.capabilities?.includes(capability) || false;
+  return Boolean(device?.capabilities?.includes(capability));
 }
 
 /**
@@ -60,38 +59,32 @@ export function hasCapability(device, capability) {
  * @returns {Promise<Array>} 音频文件列表
  */
 export async function getAudioFileList(directory, deviceId = null) {
-    try {
-        const files = await fs.promises.readdir(directory);
-        
-        let audioFiles = files.filter(f => f.endsWith('.wav'));
-        
-        if (deviceId) {
-            audioFiles = audioFiles.filter(f => f.startsWith(deviceId));
-        }
-        
-        const recordings = await Promise.all(
-            audioFiles.map(async (filename) => {
-                const filepath = path.join(directory, filename);
-                const stats = await fs.promises.stat(filepath);
-                const parts = filename.replace('.wav', '').split('_');
-                const sessionId = parts.length >= 2 ? parts[1] : 'unknown';
-                
-                return {
-                    filename,
-                    session_id: sessionId,
-                    device_id: parts[0],
-                    size: stats.size,
-                    created_at: stats.birthtime,
-                    path: filepath
-                };
-            })
-        );
-        
-        // 按创建时间倒序排序
-        recordings.sort((a, b) => b.created_at - a.created_at);
-        
-        return recordings;
-    } catch (e) {
-        return [];
+  try {
+    const files = await fs.promises.readdir(directory);
+    const recordings = [];
+
+    for (const filename of files) {
+      if (!filename.endsWith('.wav')) continue;
+      if (deviceId && !filename.startsWith(deviceId)) continue;
+
+      const filepath = path.join(directory, filename);
+      const stats = await fs.promises.stat(filepath).catch(() => null);
+      if (!stats) continue;
+
+      const parts = filename.replace('.wav', '').split('_');
+      recordings.push({
+        filename,
+        session_id: parts[1] || 'unknown',
+        device_id: parts[0],
+        size: stats.size,
+        created_at: stats.birthtime,
+        path: filepath
+      });
     }
+
+    recordings.sort((a, b) => b.created_at - a.created_at);
+    return recordings;
+  } catch (e) {
+    return [];
+  }
 }

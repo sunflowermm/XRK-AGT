@@ -10,15 +10,19 @@ import path from 'node:path'
  * @param msg 消息
  * @param uin 指定bot发送，默认为Bot
  */
-async function relpyPrivate (userId, msg, uin = Bot.uin) {
-  userId = Number(userId)
+const replyPrivate = async (userId, msg, uin = Bot.uin) => {
+  const targetId = Number(userId)
+  if (!targetId || !Bot?.fl?.get) return
 
-  let friend = Bot.fl.get(userId)
-  if (friend) {
-    logger.mark(`发送好友消息[${friend.nickname}](${userId})`)
-    return await Bot[uin].pickUser(userId).sendMsg(msg).catch((err) => {
-      logger.mark(err)
-    })
+  const friend = Bot.fl.get(targetId)
+  if (!friend) return
+
+  logger.mark(`发送好友消息[${friend.nickname}](${targetId})`)
+  try {
+    return await Bot[uin].pickUser(targetId).sendMsg(msg)
+  } catch (err) {
+    logger.mark(err)
+    return undefined
   }
 }
 
@@ -51,14 +55,9 @@ async function downFile (fileUrl, savePath, param = {}) {
 }
 
 function mkdirs (dirname) {
-  if (fs.existsSync(dirname)) {
-    return true
-  } else {
-    if (mkdirs(path.dirname(dirname))) {
-      fs.mkdirSync(dirname)
-      return true
-    }
-  }
+  if (!dirname) return false
+  fs.mkdirSync(dirname, { recursive: true })
+  return true
 }
 
 /**
@@ -68,13 +67,12 @@ function mkdirs (dirname) {
  * @param dec 转发描述
  */
 function makeForwardMsg(e, msg = [], dec = '', nm = [], msgsscr = false) {
-  const forwardMsg = []
-  if (dec) forwardMsg.push({ message: dec })
-  for (const message of Array.isArray(msg) ? msg : [msg]) forwardMsg.push({ message })
+  const messages = Array.isArray(msg) ? msg : [msg]
+  const forwardMsg = dec ? [{ message: dec }, ...messages.map(message => ({ message }))] : messages.map(message => ({ message }))
 
   if (e?.group?.makeForwardMsg) return e.group.makeForwardMsg(forwardMsg)
   else if (e?.friend?.makeForwardMsg) return e.friend.makeForwardMsg(forwardMsg)
   else return Bot.makeForwardMsg(forwardMsg)
 }
 
-export default { sleep, relpyPrivate, downFile, makeForwardMsg }
+export default { sleep, replyPrivate, relpyPrivate: replyPrivate, downFile, makeForwardMsg }

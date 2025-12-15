@@ -7,6 +7,7 @@ function collectPluginEntries() {
   const plugins = [];
 
   for (const entry of allPlugins) {
+    if (!entry?.class) continue;
     try {
       const instance = new entry.class();
       plugins.push({

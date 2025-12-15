@@ -15,6 +15,17 @@ const _www = path.join(_root, 'www');
 const _logs = path.join(_root, 'logs');
 const _renderers = path.join(_src, 'renderers');
 
+const _baseDirs = [
+  _logs,
+  _config,
+  _data,
+  path.join(_data, 'importsJson'),
+  path.join(_data, 'server_bots'),
+  _resources,
+  _trash,
+  path.join(_trash, 'screenshot')
+];
+
 export default {
   root: _root,
   src: _src,
@@ -48,23 +59,12 @@ export default {
    */
   async ensureBaseDirs(fsPromises) {
     const fs = fsPromises || await import('fs/promises').then(m => m.default || m);
-    const dirs = [
-      _logs,
-      _config,
-      _data,
-      path.join(_data, 'importsJson'),
-      path.join(_data, 'server_bots'),
-      _resources,
-      _trash,
-      path.join(_trash, 'screenshot')
-    ];
-
-    for (const dir of dirs) {
+    await Promise.all(_baseDirs.map(async dir => {
       try {
         await fs.mkdir(dir, { recursive: true });
       } catch {
         // 目录创建失败不应中断主流程，交由上层日志处理
       }
-    }
+    }));
   }
 };

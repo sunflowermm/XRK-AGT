@@ -1732,14 +1732,7 @@ export default class BotUtil {
     if (messages.length === 0) return false;
 
     try {
-      const summary = await fetch("https://v1.hitokoto.cn", {
-        signal: AbortSignal.timeout(5000)
-      })
-        .then(res => res.ok ? res.json() : null)
-        .then(data => data?.hitokoto?.replace(/。/g, "+") || null)
-        .catch(() => null);
-
-      const finalSummary = summary || moment().format("HH:mm:ss.SSS.");
+      const finalSummary = moment().format("HH:mm:ss.SSS.");
 
       const rawObj = e.group?.makeForwardMsg ? e.group :
         e.friend?.makeForwardMsg ? e.friend :

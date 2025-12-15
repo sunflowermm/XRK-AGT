@@ -21,7 +21,7 @@ export default class LLMFactory {
     if (!name || typeof factoryFn !== 'function') {
       throw new Error('注册LLM提供商需要有效的名称和工厂函数');
     }
-    providers.set(name.toLowerCase(), factoryFn);
+    providers.set(String(name).toLowerCase(), factoryFn);
   }
 
   /**
@@ -56,14 +56,13 @@ export default class LLMFactory {
    * @returns {Object} LLM 客户端实例
    */
   static createClient(config = {}) {
-    // 如果没有指定提供商，默认使用 generic（GPT-LLM 标准调用方式）
     const provider = (config.provider || 'generic').toLowerCase();
     const factory = providers.get(provider) || providers.get('generic');
-    
+
     if (!factory) {
       throw new Error(`没有可用的LLM提供商: ${provider}`);
     }
-    
+
     return factory(config);
   }
 }

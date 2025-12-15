@@ -345,7 +345,7 @@ export default {
       path: '/api/system/status',
       handler: async (req, res, Bot) => {
         try {
-          const includeHist = (req.query?.hist === '24h') || (req.query?.withHistory === '1') || (req.query?.withHistory === 'true');
+          const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
           const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
           res.json(snapshot);
         } catch (error) {
@@ -362,7 +362,7 @@ export default {
       path: '/api/system/overview',
       handler: async (req, res, Bot) => {
         try {
-          const includeHist = (req.query?.hist === '24h') || (req.query?.withHistory === '1') || (req.query?.withHistory === 'true');
+          const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
           const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
           res.json({
             success: true,

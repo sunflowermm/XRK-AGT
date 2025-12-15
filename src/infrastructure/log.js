@@ -103,6 +103,13 @@ export default function setLog() {
   // 清理任务
   let cleanupJob = null
 
+  const canLog = (level) => {
+    const configLevel = cfg.bot?.log_level || 'info'
+    const targetLevel = LOG_STYLES[level]?.level || 30
+    const configLevelValue = LOG_STYLES[configLevel]?.level || 30
+    return targetLevel >= configLevelValue
+  }
+
   /**
    * 创建渐变文本
    * @param {string} text - 文本内容
@@ -220,11 +227,8 @@ export default function setLog() {
 
       // 输出到控制台（带颜色）
       const consoleMessage = prefix + message
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES[level]?.level || 30
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
 
-      if (levelValue >= configLevelValue) {
+      if (canLog(level)) {
         console.log(consoleMessage)
       }
 
@@ -283,11 +287,7 @@ export default function setLog() {
         .join(' ')
 
       const consoleMessage = prefix + chalk.green(message)
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.success.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('success')) {
         console.log(consoleMessage)
       }
 
@@ -311,11 +311,7 @@ export default function setLog() {
         .join(' ')
 
       const consoleMessage = prefix + chalk.yellow(message)
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.tip.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('tip')) {
         console.log(consoleMessage)
       }
 
@@ -341,12 +337,7 @@ export default function setLog() {
         const timeStr = formatDuration(duration)
         const prefix = createLogPrefix('info')
         const message = `Timer ended ${chalk.cyan(label)}: ${chalk.yellow(timeStr)}`
-
-        const configLevel = cfg.bot?.log_level || 'info'
-        const levelValue = LOG_STYLES.info.level
-        const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-        if (levelValue >= configLevelValue) {
+        if (canLog('info')) {
           console.log(prefix + message)
         }
 
@@ -375,11 +366,7 @@ export default function setLog() {
       }
 
       const consoleMessage = prefix + chalk.green(message)
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.done.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('done')) {
         console.log(consoleMessage)
       }
 
@@ -396,11 +383,7 @@ export default function setLog() {
       const processedText = ensureUTF8(text)
       const line = '═'.repeat(processedText.length + 10)
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(prefix + chalk[color](line))
         console.log(prefix + chalk[color](`╔ ${processedText} ╗`))
         console.log(prefix + chalk[color](line))
@@ -418,11 +401,7 @@ export default function setLog() {
       const prefix = createLogPrefix('info')
       const processedText = ensureUTF8(text)
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(prefix + chalk[color](`┌─── ${processedText} ───┐`))
       }
 
@@ -438,11 +417,7 @@ export default function setLog() {
     line: function (char = '─', length = 35, color = 'gray') {
       const prefix = createLogPrefix('info')
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(prefix + chalk[color](char.repeat(length)))
       }
 
@@ -461,11 +436,7 @@ export default function setLog() {
       const paddedText = ' '.repeat(padding) + processedText + ' '.repeat(padding)
       const line = '─'.repeat(paddedText.length)
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(prefix + chalk[color](`┌${line}┐`))
         console.log(prefix + chalk[color](`│${paddedText}│`))
         console.log(prefix + chalk[color](`└${line}┘`))
@@ -482,13 +453,9 @@ export default function setLog() {
     json: function (obj, title) {
       const prefix = createLogPrefix('info')
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
       if (title) {
         const processedTitle = ensureUTF8(title)
-        if (levelValue >= configLevelValue) {
+        if (canLog('info')) {
           console.log(prefix + chalk.cyan(`==== ${processedTitle} ====`))
         }
       }
@@ -503,7 +470,7 @@ export default function setLog() {
         }
         pinoLogger.info({ data: obj }, title ? `JSON Data [${title}]` : 'JSON Data')
       } catch (err) {
-        if (levelValue >= configLevelValue) {
+        if (canLog('info')) {
           console.log(prefix + `Cannot serialize object: ${err.message}`)
           console.log(prefix + util.inspect(obj, { depth: null, colors: true }))
         }
@@ -524,11 +491,7 @@ export default function setLog() {
       const bar = '█'.repeat(filledLength) + '░'.repeat(length - filledLength)
       const message = `${chalk.cyan('[')}${chalk.green(bar)}${chalk.cyan(']')} ${chalk.yellow(percent + '%')} ${current}/${total}`
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(`${prefix}${message}`)
       }
 
@@ -545,11 +508,7 @@ export default function setLog() {
       const prefix = createLogPrefix('warn')
       const processedText = ensureUTF8(text)
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.warn.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('warn')) {
         console.log(prefix + chalk.bold.yellow(processedText))
       }
 
@@ -564,11 +523,7 @@ export default function setLog() {
       const prefix = createLogPrefix('info')
       const processedText = ensureUTF8(text)
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(prefix + chalk.bgYellow.black(processedText))
       }
 
@@ -583,11 +538,7 @@ export default function setLog() {
       const prefix = createLogPrefix('error')
       const processedText = ensureUTF8(text)
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.error.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('error')) {
         console.log(prefix + chalk.red(processedText))
       }
 
@@ -602,11 +553,7 @@ export default function setLog() {
       const prefix = createLogPrefix('info')
       const processedText = ensureUTF8(text)
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(prefix + chalk.gray(processedText))
       }
 
@@ -621,13 +568,9 @@ export default function setLog() {
     list: function (items, title) {
       const prefix = createLogPrefix('info')
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
       if (title) {
         const processedTitle = ensureUTF8(title)
-        if (levelValue >= configLevelValue) {
+        if (canLog('info')) {
           console.log(prefix + chalk.cyan(`=== ${processedTitle} ===`))
         }
         pinoLogger.info(`List: ${processedTitle}`)
@@ -636,7 +579,7 @@ export default function setLog() {
       items.forEach((item, index) => {
         const processedItem = ensureUTF8(item)
         const bullet = chalk.gray(`  ${index + 1}.`)
-        if (levelValue >= configLevelValue) {
+        if (canLog('info')) {
           console.log(prefix + `${bullet} ${processedItem}`)
         }
         pinoLogger.info(`  ${index + 1}. ${processedItem}`)
@@ -667,11 +610,7 @@ export default function setLog() {
       const processedMessage = ensureUTF8(message)
       const statusMessage = chalk[statusColor](`${icon} [${status.toUpperCase()}] `) + processedMessage
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(prefix + statusMessage)
       }
 
@@ -690,11 +629,7 @@ export default function setLog() {
       const processedTag = ensureUTF8(tag)
       const taggedMessage = chalk[tagColor](`[${processedTag}] `) + processedText
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(prefix + taggedMessage)
       }
 
@@ -709,19 +644,15 @@ export default function setLog() {
     table: function (data, title) {
       const prefix = createLogPrefix('info')
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
       if (title) {
         const processedTitle = ensureUTF8(title)
-        if (levelValue >= configLevelValue) {
+        if (canLog('info')) {
           console.log(prefix + chalk.cyan(`=== ${processedTitle} ===`))
         }
       }
 
       if (typeof console.table === 'function' && data && typeof data === 'object') {
-        if (levelValue >= configLevelValue) {
+        if (canLog('info')) {
           console.table(data)
         }
         pinoLogger.trace({ data }, title ? `Table Data [${title}]` : 'Table Data')
@@ -739,11 +670,7 @@ export default function setLog() {
       const prefix = createLogPrefix('info')
       const gradientLineText = this.gradient(char.repeat(length))
 
-      const configLevel = cfg.bot?.log_level || 'info'
-      const levelValue = LOG_STYLES.info.level
-      const configLevelValue = LOG_STYLES[configLevel]?.level || 30
-
-      if (levelValue >= configLevelValue) {
+      if (canLog('info')) {
         console.log(prefix + gradientLineText)
       }
 
