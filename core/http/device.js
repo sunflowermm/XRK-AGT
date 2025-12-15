@@ -177,19 +177,6 @@ class DeviceManager {
 
     setBot(botInstance) {
         this.bot = botInstance;
-
-    // 将设备管理器作为一种适配器暴露，方便外部通过 Bot.adapter 枚举
-    if (this.bot && Array.isArray(this.bot.adapter)) {
-      const hasDeviceAdapter = this.bot.adapter.some(a => a && a.id === 'device');
-      if (!hasDeviceAdapter) {
-        this.bot.adapter.push({
-          id: 'device',
-          name: 'DeviceManager',
-          type: 'device',
-          source: 'internal'
-        });
-      }
-    }
     }
 
     getBot(override) {

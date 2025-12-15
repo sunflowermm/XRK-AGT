@@ -26,7 +26,7 @@ flowchart TD
 |--------|------|
 | **服务入口** | 创建 Express 应用与 HTTP/HTTPS 服务器；暴露静态目录 `www/`，处理 `favicon.ico`、`robots.txt` 等基础请求；统一配置 CORS、安全头、压缩、速率限制、请求日志等中间件 |
 | **API 与 WebSocket** | 通过 `ApiLoader` 动态加载 `core/http` 下的 API 模块并注册到 `/api/*`；管理 `Bot.wss` 与 `Bot.wsf`，将不同路径的 WebSocket 升级请求分发给对应处理器 |
-| **适配器与多 Bot 管理** | `this.adapter` 保存适配器实例（如 OneBotv11、ComWeChat、GSUIDCore、OPQBot、stdin、device 等）；`this.bots` 按账号或设备 ID（`self_id` / `device_id`）保存子 Bot；通过 `_createProxy()` 将 `Bot` 暴露为「多 Bot 聚合代理」并统一暴露 `BotUtil` 的静态方法 |
+| **适配器与多 Bot 管理** | `this.adapter` 保存真实网络适配器实例（如 OneBotv11、ComWeChat、GSUIDCore、OPQBot 等）；`this.bots` 按账号或设备 ID（`self_id` / `device_id`）保存子 Bot；通过 `_createProxy()` 将 `Bot` 暴露为「多 Bot 聚合代理」并统一暴露 `BotUtil` 的静态方法 |
 | **认证与安全** | 通过 `generateApiKey` 生成/加载 API 密钥；`_authMiddleware` 实现白名单、本地连接、同源 Cookie 与 API-Key 多级认证；`_setupStaticServing` 和 `_staticSecurityMiddleware` 负责静态资源访问安全 |
 | **事件与数据流** | 继承 `EventEmitter`，统一事件入口为 `Bot.em(name, data)`；为消息事件注入 `friend` / `group` / `member` 对象，提供统一的发送、撤回、合并转发等能力 |
 | **运维与资源管理** | `getServerUrl` / `getLocalIpAddress` 用于展示访问地址；`_startTrashCleaner` / `_clearTrashOnce` 定期清理 `trash/` 目录中的临时文件；`closeServer` 优雅关闭 HTTP/HTTPS/代理与 Redis |
@@ -118,9 +118,9 @@ flowchart TD
   - 将自身实例 `push` 到 `Bot.adapter`，用于后续初始化与枚举。
   - 向 `Bot.wsf[path]` 注册 WebSocket 消息处理器。
   - 在连接建立时创建子 Bot 对象并通过 `Bot[self_id] = childBot` 注册到底层（由 `_createProxy()` 负责放入 `Bot.bots` 容器）。
-- 特殊适配器：
-  - **stdin**：`core/adapter/stdin.js` 中通过 `StdinHandler` 创建 `Bot.stdin` 子 Bot，`adapter.id === 'stdin'`，用于命令行与 HTTP 层 `callStdin/runCommand` 的统一入口。
-  - **device**：`core/http/device.js` 中的 `DeviceManager` 将物理/虚拟设备挂载为 `Bot[device_id]` 子 Bot，`adapter.id === 'device'`，提供 `sendCommand/display/emotion/camera/microphone` 等方法。
+- 特殊子 Bot（不作为适配器枚举）：  
+  - **stdin**：`core/adapter/stdin.js` 中通过 `StdinHandler` 创建 `Bot.stdin` 子 Bot，用于命令行与 HTTP 层 `callStdin/runCommand` 的统一入口，但不会出现在 `Bot.adapter` 中。
+  - **device**：`core/http/device.js` 中的 `DeviceManager` 将物理/虚拟设备挂载为 `Bot[device_id]` 子 Bot，提供 `sendCommand/display/emotion/camera/microphone` 等方法，同样不作为普通适配器参与初始化循环。
 
 > 所有子 Bot（包括 IM 账号、设备、stdin）都集中保存在 `Bot.bots` 中，主实例通过 Proxy 暴露聚合视图，同时保持自身属性相对干净。
 

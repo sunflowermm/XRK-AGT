@@ -123,22 +123,8 @@ export class StdinHandler {
         _ready: true
       };
 
-      // 通过 Bot 代理注册 stdin 子 Bot（不会把属性挂在主实例上，只进入 bots 映射）
       Bot.stdin = stdinBot;
       Bot[this.botId] = stdinBot;
-
-      // 确保在 adapter 列表中有 stdin 的描述信息，便于枚举
-      if (Array.isArray(Bot.adapter)) {
-        const hasStdinAdapter = Bot.adapter.some(a => a && a.id === 'stdin');
-        if (!hasStdinAdapter) {
-          Bot.adapter.push({
-            id: 'stdin',
-            name: 'Stdin',
-            type: 'stdin',
-            source: 'internal'
-          });
-        }
-      }
     }
   }
 
