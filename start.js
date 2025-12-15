@@ -65,6 +65,46 @@ const CONFIG = {
   }
 };
 
+const JSON_SPACE = 2;
+
+/**
+ * 仅在内容发生变化时写入文件，避免重复创建与多余的I/O
+ * @param {string} filePath
+ * @param {string|Buffer} content
+ * @returns {Promise<boolean>} 是否发生写入
+ */
+async function writeFileIfChanged(filePath, content) {
+  try {
+    const existing = await fs.readFile(filePath, typeof content === 'string' ? 'utf8' : undefined);
+    if (existing === content) {
+      return false;
+    }
+  } catch {
+    // 文件不存在时继续写入
+  }
+
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, content);
+  return true;
+}
+
+/**
+ * 若目标不存在则复制文件
+ * @param {string} source
+ * @param {string} target
+ * @returns {Promise<boolean>} 是否执行复制
+ */
+async function copyFileIfMissing(source, target) {
+  try {
+    await fs.access(target);
+    return false;
+  } catch {
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.copyFile(source, target);
+    return true;
+  }
+}
+
 /**
  * 日志管理类
  * 
@@ -205,6 +245,43 @@ class BaseManager {
 }
 
 /**
+ * 依赖检测器
+ * 在启动前检查必要依赖，提前给出提示以减少运行时错误
+ */
+class DependencyChecker extends BaseManager {
+  async check() {
+    const results = await Promise.all([
+      this.checkBinary('pm2', ['--version'], 'PM2'),
+      this.checkBinary('pnpm', ['--version'], 'pnpm', true),
+      this.checkNodeVersion()
+    ]);
+
+    if (results.includes(false)) {
+      await this.logger.warning('检测到缺失或异常的依赖，请根据提示安装后再试。');
+    }
+  }
+
+  async checkBinary(cmd, args, label, optional = false) {
+    const result = spawnSync(cmd, args, { encoding: 'utf8', shell: true });
+    const ok = result.status === 0;
+    if (!ok) {
+      const level = optional ? 'warning' : 'error';
+      await this.logger[level](`${label} 未检测到，请确认已全局安装并可在当前终端访问`);
+    }
+    return ok || optional;
+  }
+
+  async checkNodeVersion() {
+    const major = parseInt(process.versions.node.split('.')[0], 10);
+    const ok = Number.isFinite(major) && major >= 18;
+    if (!ok) {
+      await this.logger.warning(`当前 Node.js 版本过低 (${process.versions.node})，建议 >= 18.x`);
+    }
+    return ok;
+  }
+}
+
+/**
  * PM2进程管理器
  * 负责与PM2进行交互，管理Node.js进程
  * 
@@ -338,7 +415,8 @@ class PM2Manager extends BaseManager {
     
     await fs.mkdir(PATHS.PM2_CONFIG, { recursive: true });
     const configPath = path.join(PATHS.PM2_CONFIG, `pm2_server_${port}.json`);
-    await fs.writeFile(configPath, JSON.stringify({ apps: [pm2Config] }, null, 2));
+    const payload = JSON.stringify({ apps: [pm2Config] }, null, JSON_SPACE);
+    await writeFileIfChanged(configPath, payload);
     
     return configPath;
   }
@@ -390,6 +468,36 @@ class ServerManager extends BaseManager {
     this.signalHandler = globalSignalHandler;
   }
 
+  getPortDir(port) {
+    return path.join(PATHS.SERVER_BOTS, String(port));
+  }
+
+  getPm2ConfigPath(port) {
+    return path.join(PATHS.PM2_CONFIG, `pm2_server_${port}.json`);
+  }
+
+  async ensurePortConfig(port) {
+    const portDir = this.getPortDir(port);
+    await fs.mkdir(portDir, { recursive: true });
+    await this.copyDefaultConfigs(portDir);
+    return portDir;
+  }
+
+  async removePortConfig(port) {
+    const portDir = this.getPortDir(port);
+    const pm2Config = this.getPm2ConfigPath(port);
+
+    try {
+      await fs.rm(portDir, { recursive: true, force: true });
+      await fs.rm(pm2Config, { force: true });
+      await this.logger.warning(`端口 ${port} 的配置目录已删除`);
+      return true;
+    } catch (error) {
+      await this.logger.error(`删除端口配置失败: ${error.message}\n${error.stack}`);
+      return false;
+    }
+  }
+
   /**
    * 获取可用端口列表
    * @returns {Promise<number[]>} 端口号数组
@@ -428,10 +536,7 @@ class ServerManager extends BaseManager {
     }]);
     
     const portNum = parseInt(port);
-    const portDir = path.join(PATHS.SERVER_BOTS, portNum.toString());
-    
-    await fs.mkdir(portDir, { recursive: true });
-    await this.copyDefaultConfigs(portDir);
+    await this.ensurePortConfig(portNum);
     
     return portNum;
   }
@@ -445,16 +550,19 @@ class ServerManager extends BaseManager {
   async copyDefaultConfigs(targetDir) {
     try {
       const defaultConfigFiles = await fs.readdir(PATHS.DEFAULT_CONFIG);
+      const created = [];
       
       for (const file of defaultConfigFiles) {
         if (file.endsWith('.yaml') && file !== 'qq.yaml') {
           const sourcePath = path.join(PATHS.DEFAULT_CONFIG, file);
           const targetPath = path.join(targetDir, file);
-          await fs.copyFile(sourcePath, targetPath);
+          const copied = await copyFileIfMissing(sourcePath, targetPath);
+          if (copied) created.push(file);
         }
       }
       
-      await this.logger.success(`配置文件已创建: ${targetDir}`);
+      const suffix = created.length ? ` (新建: ${created.join(', ')})` : '';
+      await this.logger.success(`配置文件已就绪: ${targetDir}${suffix}`);
     } catch (error) {
       await this.logger.error(`创建配置文件失败: ${error.message}\n${error.stack}`);
     }
@@ -468,6 +576,7 @@ class ServerManager extends BaseManager {
   async startServerMode(port) {
     await this.logger.log(`启动葵子服务器，端口: ${port}`);
     global.selectedMode = 'server';
+    await this.ensurePortConfig(port);
     
     try {
       /** 保存并修改进程参数 */
@@ -501,6 +610,7 @@ class ServerManager extends BaseManager {
    */
   async startWithAutoRestart(port) {
     global.selectedMode = 'server';
+    await this.ensurePortConfig(port);
     
     if (!this.signalHandler.isSetup) {
       this.signalHandler.setup();
@@ -726,6 +836,7 @@ class MenuManager {
         value: { action: 'start_server', port }
       })),
       { name: `${chalk.blue('+')} 添加新端口`, value: { action: 'add_port' } },
+      { name: `${chalk.red('🗑')} 删除端口配置`, value: { action: 'delete_port_config' } },
       { name: `${chalk.magenta('⚙')} PM2管理`, value: { action: 'pm2_menu' } },
       new inquirer.Separator(),
       { name: `${chalk.red('✖')} 退出`, value: { action: 'exit' } }
@@ -756,6 +867,10 @@ class MenuManager {
         
       case 'add_port':
         await this.handleAddPort();
+        break;
+
+      case 'delete_port_config':
+        await this.handleDeletePortConfig();
         break;
         
       case 'pm2_menu':
@@ -794,6 +909,33 @@ class MenuManager {
       if (startNow) {
         await this.serverManager.startWithAutoRestart(newPort);
       }
+    }
+  }
+
+  /**
+   * 删除端口配置并可选清理PM2配置
+   * @private
+   * @returns {Promise<void>}
+   */
+  async handleDeletePortConfig() {
+    const ports = await this.serverManager.getAvailablePorts();
+    if (ports.length === 0) {
+      console.log(chalk.yellow('⚠ 没有可删除的端口配置'));
+      return;
+    }
+
+    const port = await this.selectPort(ports, 'delete');
+    if (!port) return;
+
+    const { confirm } = await inquirer.prompt([{
+      type: 'confirm',
+      name: 'confirm',
+      message: `确定删除端口 ${port} 的配置目录及相关PM2配置文件吗？`,
+      default: false
+    }]);
+
+    if (confirm) {
+      await this.serverManager.removePortConfig(port);
     }
   }
 
@@ -845,7 +987,8 @@ class MenuManager {
       start: '选择要启动的端口:',
       logs: '查看哪个端口的日志?',
       stop: '停止哪个端口?',
-      restart: '重启哪个端口?'
+      restart: '重启哪个端口?',
+      delete: '选择要删除配置的端口:'
     };
     
     const choices = availablePorts.map(port => ({
@@ -942,10 +1085,12 @@ async function main() {
   const pm2Manager = new PM2Manager(logger);
   const serverManager = new ServerManager(logger, pm2Manager);
   const menuManager = new MenuManager(serverManager, pm2Manager);
+  const dependencyChecker = new DependencyChecker(logger);
   
   /** 初始化目录结构 */
   await serverManager.ensureDirectories();
   await logger.ensureLogDir();
+  await dependencyChecker.check();
   
   /** 检查命令行参数 */
   const envPort = process.env.XRK_SERVER_PORT;
