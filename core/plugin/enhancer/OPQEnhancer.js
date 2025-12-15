@@ -7,8 +7,6 @@ export default class OPQEnhancer extends plugin {
       priority: 5,
       rule: []
     })
-
-    this.adapters = ['opq', 'opqbot']
   }
 
   async accept(e) {
