@@ -555,10 +555,7 @@ export default class Bot extends EventEmitter {
     if (corsConfig.enabled === false) return;
     
     this.express.use((req, res, next) => {
-      // 如果响应已发送，直接跳过
-      if (res.headersSent) {
-        return next();
-      }
+      if (this._checkHeadersSent(res, next)) return;
       
       const config = corsConfig || {};
       const allowedOrigins = config.origins || ['*'];
@@ -679,10 +676,7 @@ export default class Bot extends EventEmitter {
       if (req.path.startsWith('/api/')) {
         return next();
       }
-      // 如果响应已发送，直接跳过
-      if (res.headersSent) {
-        return next();
-      }
+      if (this._checkHeadersSent(res, next)) return;
       this._directoryIndexMiddleware(req, res, next);
     });
     
@@ -695,10 +689,7 @@ export default class Bot extends EventEmitter {
         return next();
       }
       
-      // 如果响应已发送，直接跳过
-      if (res.headersSent) {
-        return next();
-      }
+      if (this._checkHeadersSent(res, next)) return;
       
       const staticRoot = req.staticRoot || paths.www;
       
@@ -772,10 +763,7 @@ export default class Bot extends EventEmitter {
    * 确保在响应发送前设置头部
    */
   _setStaticHeaders(res, filePath) {
-    // 如果响应已发送，不再设置头部
-    if (res.headersSent) {
-      return;
-    }
+    if (this._checkHeadersSent(res)) return;
     
     const ext = path.extname(filePath).toLowerCase();
     const mimeTypes = {
@@ -804,9 +792,7 @@ export default class Bot extends EventEmitter {
     };
     
     // 再次检查（防止在检查后、设置前响应被发送）
-    if (res.headersSent) {
-      return;
-    }
+    if (this._checkHeadersSent(res)) return;
     
     if (mimeTypes[ext]) {
       res.setHeader('Content-Type', mimeTypes[ext]);
@@ -833,10 +819,7 @@ export default class Bot extends EventEmitter {
       return next();
     }
     
-    // 如果响应已发送，直接跳过
-    if (res.headersSent) {
-      return next();
-    }
+    if (this._checkHeadersSent(res, next)) return;
     
     const normalizedPath = path.normalize(req.path);
     
@@ -869,7 +852,7 @@ export default class Bot extends EventEmitter {
    * 处理favicon请求
    */
   async _handleFavicon(req, res) {
-    if (res.headersSent) return;
+    if (this._checkHeadersSent(res)) return;
     
     const staticRoot = req.staticRoot || paths.www;
     const faviconPath = path.join(staticRoot, 'favicon.ico');
@@ -894,7 +877,7 @@ export default class Bot extends EventEmitter {
    * 处理robots.txt请求
    */
   async _handleRobotsTxt(req, res) {
-    if (res.headersSent) return;
+    if (this._checkHeadersSent(res)) return;
     
     const staticRoot = req.staticRoot || paths.www;
     const robotsPath = path.join(staticRoot, 'robots.txt');
@@ -1099,10 +1082,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
    * 采用nginx风格的location匹配：精确 > 前缀 > 正则 > 默认
    */
   _authMiddleware(req, res, next) {
-    // 如果响应已发送，直接跳过
-    if (res.headersSent) {
-      return next();
-    }
+    if (this._checkHeadersSent(res, next)) return;
     
     req.rid = `${req.ip}:${req.socket.remotePort}`;
     req.sid = `${req.protocol}://${req.hostname}:${req.socket.localPort}${req.originalUrl}`;
@@ -1246,6 +1226,26 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   }
 
   /**
+   * 检查响应是否已发送（辅助方法，减少重复代码）
+   * @param {Object} res - Express响应对象
+   * @param {Function} [next] - Express next函数（可选）
+   * @param {Error} [err] - 错误对象（可选，用于错误处理器）
+   * @returns {boolean} 如果响应已发送返回true
+   */
+  _checkHeadersSent(res, next, err) {
+    if (res.headersSent) {
+      if (next) {
+        if (err) {
+          return next(err);
+        }
+        return next();
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * 检查是否为本地连接
    */
   _isLocalConnection(address) {
@@ -1291,7 +1291,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
    * 状态处理器
    */
   _statusHandler(req, res) {
-    if (res.headersSent) return;
+    if (this._checkHeadersSent(res)) return;
     
     const status = {
       status: '运行中',
@@ -1323,7 +1323,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
    * 健康检查处理器
    */
   _healthHandler(req, res) {
-    if (res.headersSent) return;
+    if (this._checkHeadersSent(res)) return;
     
     res.json({
       status: '健康',
@@ -1336,7 +1336,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
    * 文件处理器
    */
   _fileHandler(req, res) {
-    if (res.headersSent) return;
+    if (this._checkHeadersSent(res)) return;
     
     const url = req.url.replace(/^\//, "");
     let file = this.fs[url];
@@ -1769,10 +1769,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     
     // 全局404处理（最后匹配）
     this.express.use((req, res) => {
-      // 如果响应已发送，直接返回
-      if (res.headersSent) {
-        return;
-      }
+      if (this._checkHeadersSent(res)) return;
       
       // API请求返回JSON格式404
       if (req.path.startsWith('/api/')) {
@@ -1811,10 +1808,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     
     // 全局错误处理（捕获所有未处理的错误）
     this.express.use((err, req, res, next) => {
-      // 如果响应已发送，传递给下一个错误处理器或直接返回
-      if (res.headersSent) {
-        return next(err);
-      }
+      if (this._checkHeadersSent(res, next, err)) return;
       
       const isApiRequest = req.path.startsWith('/api/');
       
