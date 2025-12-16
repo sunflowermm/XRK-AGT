@@ -1129,6 +1129,17 @@ Bot.tasker.push(
           if (params?.user_id) return this.sendFriendMsg({ ...data, ...params, bot: Bot[self_id] }, msg)
           return Promise.reject(Bot.makeError("发送失败：缺少 user_id 或 group_id", params))
         },
+        sendFriendForwardMsg: (user_id, messages, extra = {}) =>
+          this.sendFriendForwardMsg({ ...data, ...extra, self_id, user_id, bot: Bot[self_id] }, messages),
+        sendGroupForwardMsg: (group_id, messages, extra = {}) =>
+          this.sendGroupForwardMsg({ ...data, ...extra, self_id, group_id, bot: Bot[self_id] }, messages),
+        sendForwardMsg: (params, messages) => {
+          if (params?.group_id)
+            return this.sendGroupForwardMsg({ ...data, ...params, bot: Bot[self_id] }, messages)
+          if (params?.user_id)
+            return this.sendFriendForwardMsg({ ...data, ...params, bot: Bot[self_id] }, messages)
+          return Promise.reject(Bot.makeError("发送转发消息失败：缺少 user_id 或 group_id", params))
+        },
 
         pickMember: this.pickMember.bind(this, data),
         pickGroup: this.pickGroup.bind(this, data),
