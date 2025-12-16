@@ -1119,6 +1119,17 @@ Bot.tasker.push(
         getFriendMap: this.getFriendMap.bind(this, data),
         fl: new Map(),
 
+        // 便捷发送方法，供路由/插件直接调用
+        sendFriendMsg: (user_id, msg, extra = {}) =>
+          this.sendFriendMsg({ ...data, ...extra, self_id, user_id, bot: Bot[self_id] }, msg),
+        sendGroupMsg: (group_id, msg, extra = {}) =>
+          this.sendGroupMsg({ ...data, ...extra, self_id, group_id, bot: Bot[self_id] }, msg),
+        sendMsg: (params, msg) => {
+          if (params?.group_id) return this.sendGroupMsg({ ...data, ...params, bot: Bot[self_id] }, msg)
+          if (params?.user_id) return this.sendFriendMsg({ ...data, ...params, bot: Bot[self_id] }, msg)
+          return Promise.reject(Bot.makeError("发送失败：缺少 user_id 或 group_id", params))
+        },
+
         pickMember: this.pickMember.bind(this, data),
         pickGroup: this.pickGroup.bind(this, data),
         getGroupArray: this.getGroupArray.bind(this, data),
@@ -1285,6 +1296,10 @@ Bot.tasker.push(
       data.sender = data.sender || {}
       data.sender.user_id = data.sender.user_id || data.user_id
       
+      // 事件访问器和回复兜底，避免插件未挂载时缺少方法
+      this.attachRelationAccessors(data)
+      this.attachReplyMethod(data)
+      
       // 适配器标识
       data.tasker = 'onebot'
       data.isOneBot = true
@@ -1323,6 +1338,74 @@ Bot.tasker.push(
         configurable: true,
         enumerable: false
       })
+    }
+
+    /**
+     * 为事件对象挂载 friend / group / member 等访问器及聊天记录方法
+     */
+    attachRelationAccessors(data) {
+      if (!data.bot) return
+
+      const hasOwn = prop => Object.prototype.hasOwnProperty.call(data, prop)
+
+      if (data.user_id && !hasOwn("friend") && typeof data.bot.pickFriend === "function") {
+        this.defineEventProperty(data, "friend", () => data.bot.pickFriend(data.user_id))
+      }
+
+      if (data.group_id && !hasOwn("group") && typeof data.bot.pickGroup === "function") {
+        this.defineEventProperty(data, "group", () => data.bot.pickGroup(data.group_id))
+        if (!data.group_name) {
+          data.group_name = data.bot.gl?.get?.(data.group_id)?.group_name || data.group_name
+        }
+      }
+
+      if (data.group_id && data.user_id && !hasOwn("member") && typeof data.bot.pickMember === "function") {
+        this.defineEventProperty(data, "member", () => data.bot.pickMember(data.group_id, data.user_id))
+      }
+
+      // 尝试补全 sender 信息，便于插件使用
+      const memberInfo = data.bot.gml?.get?.(data.group_id)?.get?.(data.user_id)
+      const friendInfo = data.bot.fl?.get?.(data.user_id)
+      if (memberInfo) {
+        data.sender.nickname ||= memberInfo.nickname || memberInfo.card
+        data.sender.card ||= memberInfo.card
+      }
+      if (!data.sender.nickname && friendInfo?.nickname) {
+        data.sender.nickname = friendInfo.nickname
+      }
+
+      // 聊天记录快捷方法（群/私聊）
+      if (data.message_type === "group" && data.group_id && !data.getChatHistory) {
+        const ctx = { ...data, bot: data.bot, group_id: data.group_id }
+        data.getChatHistory = this.getGroupMsgHistory.bind(this, ctx)
+      } else if (data.message_type === "private" && data.user_id && !data.getChatHistory) {
+        const ctx = { ...data, bot: data.bot, user_id: data.user_id }
+        data.getChatHistory = this.getFriendMsgHistory.bind(this, ctx)
+      }
+    }
+
+    /**
+     * 为事件对象挂载 reply 方法（兜底）
+     */
+    attachReplyMethod(data) {
+      if (typeof data.reply === "function") return
+      if (!data.bot) return
+
+      const fromGroup = () => {
+        if (data.group?.sendMsg) return msg => data.group.sendMsg(msg)
+        if (data.group_id && data.bot.tasker?.sendGroupMsg)
+          return msg => data.bot.tasker.sendGroupMsg({ ...data, group_id: data.group_id }, msg)
+        return null
+      }
+
+      const fromFriend = () => {
+        if (data.friend?.sendMsg) return msg => data.friend.sendMsg(msg)
+        if (data.user_id && data.bot.tasker?.sendFriendMsg)
+          return msg => data.bot.tasker.sendFriendMsg({ ...data, user_id: data.user_id }, msg)
+        return null
+      }
+
+      data.reply = fromGroup() || fromFriend() || data.reply
     }
 
     /**

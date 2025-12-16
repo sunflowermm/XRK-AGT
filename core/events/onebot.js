@@ -106,6 +106,8 @@ export default class OneBotEvent extends EventListenerBase {
       // 标准化消息事件
       if (e.post_type === 'message') {
         this.normalizeMessageEvent(e)
+        // 兜底 reply，防止增强插件未成功挂载
+        this.setupReplyMethod(e)
       }
       
       // 注意：reply 方法由 OneBotEnhancer 插件设置（优先级1）
