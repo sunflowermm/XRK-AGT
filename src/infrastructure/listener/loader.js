@@ -1,6 +1,6 @@
 import fs from "node:fs/promises"
 import lodash from "lodash"
-import TaskerLoader from "#infrastructure/adapter/loader.js"
+import TaskerLoader from "#infrastructure/tasker/loader.js"
 import BotUtil from "#utils/botutil.js";
 import paths from '#utils/paths.js';
 

@@ -541,7 +541,7 @@ class App {
                 <div style="flex:1;min-width:0;text-align:left">
               <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${this.escapeHtml(bot.nickname || bot.uin)}</div>
                   <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
-                    ${bot.adapter || '未知适配器'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
+                    ${bot.tasker || '未知 Tasker'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">

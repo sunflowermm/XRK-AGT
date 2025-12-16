@@ -8,13 +8,13 @@ plugin/**
 !plugin/example
 !plugin/example/*.js
 
-!adapter
-adapter/**
-!adapter/ComWeChat.js
-!adapter/OneBotv11.js
-!adapter/stdin.js
-!adapter/GSUIDCORE.js
-!adapter/QBQBot.js
+!tasker
+tasker/**
+!tasker/ComWeChat.js
+!tasker/OneBotv11.js
+!tasker/stdin.js
+!tasker/GSUIDCORE.js
+!tasker/QBQBot.js
 
 !http
 http/**

@@ -1,8 +1,8 @@
-# OneBotv11 适配器文档
+# OneBotv11 Tasker 文档
 
 ## 概述
 
-OneBotv11 适配器负责对接 QQ/OneBotv11 协议，实现：
+OneBotv11 Tasker（事件生成器）负责对接 QQ/OneBotv11 协议，实现：
 
 - WebSocket 上报解析与事件转译
 - 好友、群、频道等高层对象的封装（`pickFriend/pickGroup/pickMember`）
@@ -19,8 +19,8 @@ OneBotv11 适配器负责对接 QQ/OneBotv11 协议，实现：
 ```javascript
 // Bot 主对象结构
 Bot = {
-  // 适配器列表
-  adapter: Array<Adapter>,
+  // Tasker 列表（事件生成器列表）
+  tasker: Array<Tasker>,
   
   // Bot 实例映射表（key 为 self_id）
   [self_id]: BotInstance,
@@ -51,7 +51,7 @@ Bot = {
 ```javascript
 Bot[self_id] = {
   // 基础属性
-  adapter: OneBotv11Adapter,      // 适配器实例
+  tasker: OneBotv11Tasker,      // Tasker 实例
   ws: WebSocket,                   // WebSocket 连接
   sendApi: Function,               // API 调用方法
   stat: Object,                    // 统计信息
@@ -125,8 +125,8 @@ e = {
   group_id: string,                // 群号
   group_name: string,              // 群名
   
-  // 适配器标识
-  adapter: 'onebot',
+  // Tasker 标识
+  tasker: 'onebot',
   isOneBot: true,
   isGroup: boolean,
   isPrivate: boolean,
@@ -173,8 +173,8 @@ MessageSegment = {
 适配器在模块加载时自动注册：
 
 ```javascript
-// core/adapter/OneBotv11.js
-Bot.adapter.push(new OneBotv11Adapter())
+// core/tasker/OneBotv11.js
+Bot.tasker.push(new OneBotv11Tasker())
 ```
 
 ### WebSocket 连接处理

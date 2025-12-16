@@ -39,7 +39,7 @@ export default {
   resources: _resources,
   
   // sub-directories
-  coreAdapter: path.join(_core, 'adapter'),
+  coreTasker: path.join(_core, 'tasker'),
   coreHttp: path.join(_core, 'http'),
   coreEvents: path.join(_core, 'events'),
   coreStream: path.join(_core, 'stream'),

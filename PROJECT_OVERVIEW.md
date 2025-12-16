@@ -24,7 +24,7 @@ flowchart TD
     J -->|否| L["直接暴露\nHTTP/HTTPS 端口"]
 
     subgraph 消息流
-      M["第三方平台 /\nOneBotv11 /\n其他适配器"] --> N["适配器\n(core/adapter)"]
+      M["第三方平台 /\nOneBotv11 /\n其他 Tasker"] --> N["Tasker\n(core/tasker)"]
       N --> O["适配器通过\nBot.em 触发事件"]
       O --> P["PluginsLoader.deal(e)\n解析消息 / 权限 /\n速率限制"]
       P --> Q["匹配插件规则\nplugin.rule\n调用插件方法"]
@@ -58,7 +58,7 @@ flowchart TD
       - 管理反向代理、CORS、安全头、静态资源、认证与速率限制。
       - 统一对外事件总线 `Bot.em`，为适配器与插件提供事件派发。
   - `src/infrastructure`（基础设施层）
-    - `adapter/loader.js`：扫描 `core/adapter` 目录，动态加载各类消息适配器（如 OneBotv11）。
+    - `tasker/loader.js`：扫描 `core/tasker` 目录，动态加载各类 Tasker（事件生成器，如 OneBotv11）。
     - `aistream/aistream.js`：`AIStream` 基类，封装 AI 调用、Embedding、相似度检索、函数调用等能力。
     - `commonconfig/commonconfig.js`：基于 `ConfigBase` 的通用配置系统封装。
     - `config/config.js`：服务端运行配置（端口、HTTPS、CORS、认证、静态资源等）。
@@ -90,7 +90,7 @@ flowchart TD
     - `deviceutil.js`、`screenshotutil.js` 等：设备与截图相关工具。
 
 - **适配器与事件层（core）**
-  - `core/adapter/*.js`  
+  - `core/tasker/*.js`  
     - `OneBotv11.js`：QQ/OneBotv11 适配器，实现消息收发、好友/群/频道对象封装、事件转译等。
     - `ComWeChat.js`、`GSUIDCORE.js`、`QBQBot.js`、`stdin.js`：其它平台或输入通道的适配器。
   - `core/http/*.js`  
@@ -129,7 +129,7 @@ flowchart TD
 
 - **运行核心**
   - [`docs/bot.md`](docs/bot.md) —— `Bot` 主类
-  - [`docs/adapter-loader.md`](docs/adapter-loader.md) —— `AdapterLoader`（适配器加载器）
+  - [`docs/tasker-loader.md`](docs/tasker-loader.md) —— `TaskerLoader`（Tasker 加载器）
   - [`docs/plugins-loader.md`](docs/plugins-loader.md) —— `PluginsLoader`（插件加载与调度器）
 
 - **插件与工作流**
@@ -144,8 +144,8 @@ flowchart TD
   - [`docs/config-base.md`](docs/config-base.md) —— 配置基类 `ConfigBase`
   - [`docs/renderer.md`](docs/renderer.md) —— 渲染器基类 `Renderer`
 
-- **适配器示例**
-  - [`docs/adapter-onebotv11.md`](docs/adapter-onebotv11.md) —— QQ/OneBotv11 适配器说明
+- **Tasker 示例**
+  - [`docs/tasker-onebotv11.md`](docs/tasker-onebotv11.md) —— QQ/OneBotv11 Tasker 说明
 
 ---
 
@@ -156,8 +156,8 @@ flowchart TD
   2. 再阅读 `docs/bot.md` 与 `docs/plugin-base.md`，即可编写基础插件。
 
 - **需要扩展协议 / 接入新平台：**
-  1. 阅读 `docs/adapter-loader.md` 与 `docs/adapter-onebotv11.md`。
-  2. 参考 `core/adapter` 中的现有实现编写新适配器。
+  1. 阅读 `docs/tasker-loader.md` 与 `docs/tasker-onebotv11.md`。
+  2. 参考 `core/tasker` 中的现有实现编写新 Tasker。
 
 - **需要开发 HTTP API / 前端后台一体化：**
   1. 阅读 `docs/http-api.md` 与 `docs/api-loader.md`。

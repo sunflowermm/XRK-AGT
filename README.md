@@ -28,7 +28,7 @@ flowchart LR
     end
 
     subgraph Core["XRK-AGT 核心"]
-      Adapters["适配器层\ncore/adapter"] -->|Bot.em 事件| PluginsLoader
+      Taskers["任务层\ncore/tasker"] -->|Bot.em 事件| PluginsLoader
       Express["HTTP/HTTPS/WS 服务\nsrc/bot.js"] --> ApiLoader
       ApiLoader["API 加载器\ncore/http + HttpApi"] --> PluginsLoader
       PluginsLoader["插件加载器\nsrc/infrastructure/plugins"] --> Plugins["插件实现\ncore/plugin"]
@@ -50,7 +50,7 @@ flowchart LR
 | 模块 | 主要文件/目录 | 职责概述 |
 |------|---------------|----------|
 | 运行核心 | `src/bot.js` | 管理 HTTP/HTTPS/WS 服务、中间件、认证、反向代理、事件派发及资源清理 |
-| 适配器层 | `core/adapter/` | 对接 QQ/ComWeChat 等平台协议，将上报转译为统一事件模型 |
+| 任务层（Tasker） | `core/tasker/` | 对接 QQ/ComWeChat 等平台协议，将上报转译为统一事件模型（事件生成器） |
 | 插件系统 | `src/infrastructure/plugins/`、`core/plugin/` | 扫描加载插件、规则匹配、上下文管理与定时任务调度 |
 | HTTP/API | `core/http/`、`src/infrastructure/http/` | 定义 REST/WS API 模块并统一由 `ApiLoader` 挂载到 Express |
 | AI 工作流 | `src/infrastructure/aistream/` | 封装 Chat Completion、Embedding、函数调用与上下文增强 |
@@ -76,7 +76,7 @@ XRK-AGT/
 ├─ src/                       # 运行核心与基础设施
 │  ├─ bot.js                  # Bot 主类（HTTP/WS/适配器/插件/API 统筹）
 │  ├─ infrastructure/         # 基础设施层
-│  │  ├─ adapter/loader.js    # AdapterLoader，加载 core/adapter 适配器
+│  │  ├─ tasker/loader.js    # TaskerLoader，加载 core/tasker Tasker
 │  │  ├─ aistream/            # AIStream 基类与实现
 │  │  ├─ commonconfig/        # ConfigBase 基类与通用配置封装
 │  │  ├─ config/config.js     # cfg：按端口拆分 server 配置
@@ -89,7 +89,7 @@ XRK-AGT/
 │  ├─ renderers/              # puppeteer/playwright 渲染实现
 │  └─ utils/                  # paths/botutil 等工具函数
 ├─ core/                      # 适配器、API、工作流与示例插件
-│  ├─ adapter/                # 各平台适配器（OneBotv11/ComWeChat 等）
+│  ├─ tasker/                # 各平台 Tasker（OneBotv11/ComWeChat 等）
 │  ├─ http/                   # 具体 HTTP API 模块
 │  ├─ events/                 # 事件拆分与预处理
 │  ├─ stream/                 # 基于 AIStream 的工作流封装
@@ -180,7 +180,7 @@ node app   # 或 node start.js
 
 - **模块化架构**
   - `src/bot.js`：统一管理 HTTP/HTTPS/WebSocket、反向代理、中间件与认证。
-  - `core/adapter`：适配器层（QQ / WeChat / 自定义协议）。
+  - `core/tasker`：任务层（Tasker，事件生成器，QQ / WeChat / 自定义协议）。
   - `src/infrastructure/plugins`：插件加载与事件调度核心。
   - `src/infrastructure/aistream`：AI 工作流抽象层。
   - `core/http` + `src/infrastructure/http`：API 模块与加载器。
@@ -228,8 +228,8 @@ node app   # 或 node start.js
 - [`docs/bot.md`](docs/bot.md)：Bot主类详细文档
 - [`docs/plugin-base.md`](docs/plugin-base.md)：插件基类详细文档
 - [`docs/plugins-loader.md`](docs/plugins-loader.md)：插件加载器详细文档
-- [`docs/adapter-base-spec.md`](docs/adapter-base-spec.md)：适配器底层规范
-- [`docs/adapter-onebotv11.md`](docs/adapter-onebotv11.md)：OneBot适配器详细文档
+- [`docs/tasker-base-spec.md`](docs/tasker-base-spec.md)：Tasker 底层规范（事件生成器规范）
+- [`docs/tasker-onebotv11.md`](docs/tasker-onebotv11.md)：OneBot Tasker 详细文档
 - [`docs/事件系统标准化文档.md`](docs/事件系统标准化文档.md)：事件系统详细说明
 - [`docs/事件监听器开发指南.md`](docs/事件监听器开发指南.md)：事件监听器开发指南
 - [`docs/http-api.md`](docs/http-api.md)：HTTP API基类文档

@@ -34,7 +34,7 @@ export class DailySignIn extends plugin {
         const self_id = Bot.uin.toString();
 
         return {
-            adapter: "stdin",
+            tasker: "stdin",
             message_id: `test_${Date.now()}`,
             message_type: "private",
             post_type: "message",

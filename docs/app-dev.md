@@ -19,7 +19,7 @@ flowchart TD
   Bootstrap --> Start["import ./start.js"]
   Start --> Bot["创建 Bot 实例\nsrc/bot.js"]
   Bot --> Http["初始化 HTTP/HTTPS/WS 服务"]
-  Bot --> Adapters["加载适配器\ncore/adapter"]
+  Bot --> Taskers["加载 Tasker\ncore/tasker"]
   Bot --> Plugins["加载插件\ncore/plugin"]
   Bot --> ApiLoader["加载 HTTP API\ncore/http"]
   Bot --> Renderers["初始化渲染器\nsrc/renderers"]

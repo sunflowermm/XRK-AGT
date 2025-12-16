@@ -4,10 +4,10 @@ import { pathToFileURL } from 'node:url'
 import paths from '#utils/paths.js'
 import BotUtil from '#utils/botutil.js'
 
-// Tasker 加载器（原 AdapterLoader）
+// Tasker 加载器
 class TaskerLoader {
   constructor() {
-    this.baseDir = paths.coreAdapter
+    this.baseDir = paths.coreTasker
     this.loggerNs = 'TaskerLoader'
   }
 

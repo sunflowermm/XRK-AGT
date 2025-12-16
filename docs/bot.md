@@ -114,12 +114,12 @@ flowchart TD
 
 ### Tasker 层（任务层 / 子 Bot）
 
-- TaskerLoader.load(Bot)` 通过 `paths.coreAdapter` 扫描 `core/adapter`，Tasker 文件内部通常会：
+- TaskerLoader.load(Bot)` 通过 `paths.coreTasker` 扫描 `core/tasker`，Tasker 文件内部通常会：
   - 将自身实例 `push` 到 `Bot.tasker`，用于后续初始化与枚举。
   - 向 `Bot.wsf[path]` 注册 WebSocket 消息处理器。
   - 在连接建立时创建子 Bot 对象并通过 `Bot[self_id] = childBot` 注册到底层（由 `_createProxy()` 负责放入 `Bot.bots` 容器）。
 - 特殊子 Bot（不作为 Tasker 枚举）：  
-  - **stdin**：`core/adapter/stdin.js` 中通过 `StdinHandler` 创建 `Bot.stdin` 子 Bot，用于命令行与 HTTP 层 `callStdin/runCommand` 的统一入口，但不会出现在 `Bot.tasker` 中。
+  - **stdin**：`core/tasker/stdin.js` 中通过 `StdinHandler` 创建 `Bot.stdin` 子 Bot，用于命令行与 HTTP 层 `callStdin/runCommand` 的统一入口，但不会出现在 `Bot.tasker` 中。
   - **device**：`core/http/device.js` 中的 `DeviceManager` 将物理/虚拟设备挂载为 `Bot[device_id]` 子 Bot，提供 `sendCommand/display/emotion/camera/microphone` 等方法，同样不作为普通适配器参与初始化循环。
 
 > 所有子 Bot（包括 IM 账号、设备、stdin）都集中保存在 `Bot.bots` 中，主实例通过 Proxy 暴露聚合视图，同时保持自身属性相对干净。
@@ -192,7 +192,7 @@ flowchart TD
   - 使用 `req.bot` 访问 `Bot` 实例，避免在模块中直接 `import Bot`。
 
 - **想拓展消息入口（例如接入新的 IM 平台）：**
-  - 参考 `core/adapter/OneBotv11.js` 编写新适配器，并通过 `AdapterLoader` 自动加载。
+  - 参考 `core/tasker/OneBotv11.js` 编写新 Tasker，并通过 `TaskerLoader` 自动加载。
   - 保持统一的事件结构（`post_type/message_type/notice_type` 等），确保可以被插件系统复用。
 
 - **想修改安全策略（CORS、认证、静态资源策略等）：**

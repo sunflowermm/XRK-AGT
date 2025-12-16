@@ -215,7 +215,7 @@ export default class OneBotEnhancer extends plugin {
   async accept(e) {
     // 跳过非OneBot事件
     if (e.isDevice || e.isStdin) return true
-    if (!(e.isOneBot || e.adapter === 'onebot')) return true
+    if (!(e.isOneBot || e.tasker === 'onebot')) return true
 
     // 挂载OneBot特定属性
     e.isOneBot = true
@@ -299,7 +299,7 @@ export default class MyPlugin extends plugin {
 
 - **事件入口**：插件永远通过事件对象 `e` 与系统交互：
   - `e.bot`：当前账号/设备/STDIN 对应的子 Bot（由监听器 + 适配器增强插件挂载）。
-  - `e.adapter`：事件来源（`onebot/device/stdin/...`）。
+  - `e.tasker`：事件来源（`onebot/device/stdin/...`）。
   - `e.reply`：统一回复接口，内部基于 `e.bot` 与对应适配器的 `sendMsg` 实现。
 - **访问 HTTP/配置/渲染等业务能力**：
   - 通过全局 `Bot`：

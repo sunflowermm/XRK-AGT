@@ -181,7 +181,7 @@ export default {
 
   async init(app, Bot) {
     if (!global.stdinHandler) {
-      const StdinModule = await import('../adapter/stdin.js');
+      const StdinModule = await import('../tasker/stdin.js');
       if (StdinModule.StdinHandler) {
         global.stdinHandler = new StdinModule.StdinHandler();
       }

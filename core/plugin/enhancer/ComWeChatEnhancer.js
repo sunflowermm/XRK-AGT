@@ -13,7 +13,7 @@ export default class ComWeChatEnhancer extends plugin {
     if (!this.isComWeChat(e)) return true
 
     e.isComWeChat = true
-    e.adapter = 'comwechat'
+    e.tasker = 'comwechat'
     e.platform = 'wechat'
 
     this.bindBotEntities(e)
@@ -22,8 +22,8 @@ export default class ComWeChatEnhancer extends plugin {
   }
 
   isComWeChat(e) {
-    const adapterName = String(e.adapter || e.adapter_name || '').toLowerCase()
-    return adapterName.includes('comwechat') || adapterName.includes('wechat')
+    const taskerName = String(e.tasker || e.tasker_name || '').toLowerCase()
+    return taskerName.includes('comwechat') || taskerName.includes('wechat')
   }
 
   bindBotEntities(e) {

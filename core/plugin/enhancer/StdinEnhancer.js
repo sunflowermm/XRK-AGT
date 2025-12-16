@@ -13,7 +13,7 @@ export default class StdinEnhancer extends plugin {
     if (!this.isStdinEvent(e)) return true
 
     e.isStdin = true
-    e.adapter = 'stdin'
+    e.tasker = 'stdin'
 
     this.ensureSender(e)
     this.ensureLogText(e)
@@ -21,8 +21,8 @@ export default class StdinEnhancer extends plugin {
   }
 
   isStdinEvent(e) {
-    const adapterName = String(e.adapter || e.adapter_name || '').toLowerCase()
-    return adapterName === 'stdin' || adapterName === 'api' || e.source === 'api'
+    const taskerName = String(e.tasker || e.tasker_name || '').toLowerCase()
+    return taskerName === 'stdin' || taskerName === 'api' || e.source === 'api'
   }
 
   ensureSender(e) {

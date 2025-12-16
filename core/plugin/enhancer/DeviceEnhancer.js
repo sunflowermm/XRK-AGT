@@ -13,15 +13,15 @@ export default class DeviceEnhancer extends plugin {
     if (!this.isDeviceEvent(e)) return true
 
     e.isDevice = true
-    e.adapter = 'device'
+    e.tasker = 'device'
 
     this.ensureLogText(e)
     return true
   }
 
   isDeviceEvent(e) {
-    const adapterName = String(e.adapter || e.adapter_name || '').toLowerCase()
-    return adapterName === 'device' || e.post_type === 'device' || e.isDevice
+    const taskerName = String(e.tasker || e.tasker_name || '').toLowerCase()
+    return taskerName === 'device' || e.post_type === 'device' || e.isDevice
   }
 
   ensureLogText(e) {

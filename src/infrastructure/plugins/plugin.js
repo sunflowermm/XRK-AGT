@@ -151,7 +151,7 @@ const cleanupBucket = (key) => {
    *   constructor() {
    *     super({
    *       name: 'cross-platform-plugin',
-  *       dsc: '跨平台插件',
+   *       dsc: '跨平台插件',
   *       event: 'message',  // 匹配所有 tasker 的 message 事件
    *       priority: 5000,
    *       rule: [
@@ -163,9 +163,9 @@ const cleanupBucket = (key) => {
    *     });
    *   }
    *   
-  *   async test(e) {
+   *   async test(e) {
   *     await this.reply(`收到来自 ${e.tasker} 的消息: ${e.msg}`);
-  *   }
+   *   }
    * }
    * 
    * @example
@@ -175,7 +175,7 @@ const cleanupBucket = (key) => {
    *     super({
    *       name: 'onebot-plugin',
   *       dsc: 'OneBot 插件',
-  *       event: 'onebot.message',  // 只匹配 OneBot 的 message 事件
+   *       event: 'onebot.message',  // 只匹配 OneBot 的 message 事件
    *       priority: 5000,
    *       rule: [
    *         {
@@ -197,8 +197,8 @@ const cleanupBucket = (key) => {
    *   constructor() {
    *     super({
    *       name: 'device-plugin',
-  *       dsc: '设备插件',
-  *       event: 'device.message',  // 只匹配设备的 message 事件
+   *       dsc: '设备插件',
+   *       event: 'device.message',  // 只匹配设备的 message 事件
    *       rule: [{ reg: '.*', fnc: 'handle' }]
    *     });
    *   }
@@ -209,8 +209,8 @@ const cleanupBucket = (key) => {
    * export default class AllOneBotPlugin extends plugin {
    *   constructor() {
    *     super({
-  *       name: 'all-onebot-plugin',
-  *       event: 'onebot.*',  // 匹配所有 OneBot 事件
+   *       name: 'all-onebot-plugin',
+   *       event: 'onebot.*',  // 匹配所有 OneBot 事件
    *       rule: [{ reg: '.*', fnc: 'handle' }]
    *     });
    *   }
