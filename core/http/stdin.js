@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
+import paths from '../../src/utils/paths.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,8 +29,8 @@ export default {
           });
         }
 
-        const tempDir = path.join(process.cwd(), "data/stdin");
-        const mediaDir = path.join(process.cwd(), "data/media");
+        const tempDir = path.join(paths.data, "stdin");
+        const mediaDir = path.join(paths.data, "media");
         
         res.json({
           success: true,

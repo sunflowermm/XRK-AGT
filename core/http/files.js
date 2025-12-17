@@ -3,11 +3,13 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import { ulid } from 'ulid';
 import crypto from 'crypto';
+import paths from '../../src/utils/paths.js';
 
-const uploadDir = path.join(process.cwd(), 'data/uploads/');
-const mediaDir = path.join(process.cwd(), 'data/media/');
+const uploadDir = path.join(paths.data, 'uploads');
+const mediaDir = path.join(paths.data, 'media');
 const fileMap = new Map();
 
+// 确保目录存在（防御性编程，模块加载时可能早于 ensureBaseDirs 调用）
 for (const dir of [uploadDir, mediaDir]) {
   if (!fsSync.existsSync(dir)) {
     fsSync.mkdirSync(dir, { recursive: true });

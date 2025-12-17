@@ -6,12 +6,13 @@ import path from "path";
 import { ulid } from "ulid";
 import crypto from 'crypto';
 import BotUtil from "../../src/utils/botutil.js";
+import paths from "../../src/utils/paths.js";
 
-const tempDir = path.join(process.cwd(), "www", "stdin");
-const mediaDir = path.join(process.cwd(), "www", "media");
+const tempDir = path.join(paths.data, "stdin");
+const mediaDir = path.join(paths.data, "media");
 const pluginsLoader = (await import("../../src/infrastructure/plugins/loader.js")).default;
 
-// 确保目录存在
+// 确保目录存在（防御性编程，模块加载时可能早于 ensureBaseDirs 调用）
 for (const dir of [tempDir, mediaDir]) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });

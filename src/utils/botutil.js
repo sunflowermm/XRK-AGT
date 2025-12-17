@@ -1104,7 +1104,7 @@ export default class BotUtil {
     };
 
     try {
-      const mediaDir = path.join(paths.www, "media");
+      const mediaDir = path.join(paths.data, "media");
       await BotUtil.mkdir(mediaDir);
 
       let fileBuffer;

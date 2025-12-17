@@ -536,7 +536,11 @@ export default class Bot extends EventEmitter {
       next();
     });
 
-    // ========== 第六阶段：静态文件服务（最后匹配） ==========
+    // ========== 第六阶段：数据目录静态服务（media/uploads） ==========
+    // 将 /media 和 /uploads 映射到 data 目录，而不是 www 目录
+    this._setupDataStaticServing();
+    
+    // ========== 第七阶段：静态文件服务（最后匹配） ==========
     // 注意：静态文件服务应该在API路由之后，避免拦截API请求
     // 但这里先设置，因为API路由在ApiLoader.register中注册
     this._setupStaticServing();
@@ -659,6 +663,47 @@ export default class Bot extends EventEmitter {
       };
       
       next();
+    });
+  }
+
+  /**
+   * 数据目录静态服务配置
+   * 将 /media 和 /uploads 路由映射到 data 目录
+   * 注意：这些路由在静态文件服务之前注册，使用 fallthrough: false 避免冲突
+   */
+  _setupDataStaticServing() {
+    // 统一的静态文件选项
+    const staticOptions = {
+      dotfiles: 'deny',
+      fallthrough: false, // 不继续到下一个中间件，避免与 www 静态服务冲突
+      maxAge: '1h',
+      etag: true,
+      lastModified: true,
+      setHeaders: (res, filePath) => {
+        if (!res.headersSent) {
+          this._setStaticHeaders(res, filePath);
+        }
+      }
+    };
+    
+    // /media 路由映射到 data/media
+    const mediaDir = path.join(paths.data, 'media');
+    if (!fsSync.existsSync(mediaDir)) {
+      fsSync.mkdirSync(mediaDir, { recursive: true });
+    }
+    this.express.use('/media', (req, res, next) => {
+      if (this._checkHeadersSent(res, next)) return;
+      express.static(mediaDir, staticOptions)(req, res, next);
+    });
+    
+    // /uploads 路由映射到 data/uploads
+    const uploadsDir = path.join(paths.data, 'uploads');
+    if (!fsSync.existsSync(uploadsDir)) {
+      fsSync.mkdirSync(uploadsDir, { recursive: true });
+    }
+    this.express.use('/uploads', (req, res, next) => {
+      if (this._checkHeadersSent(res, next)) return;
+      express.static(uploadsDir, staticOptions)(req, res, next);
     });
   }
 
