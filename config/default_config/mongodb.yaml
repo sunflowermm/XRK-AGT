@@ -1,0 +1,12 @@
+# mongodb地址
+host: 127.0.0.1
+# mongodb端口
+port: 27017
+# mongodb用户名，可以为空
+username: ""
+# mongodb密码，没有密码可以为空    
+password: ""
+# mongodb数据库名称
+database: "xrk_agt"
+# mongodb连接选项
+options: {}

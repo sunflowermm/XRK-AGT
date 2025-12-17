@@ -1359,6 +1359,87 @@ export default class SystemConfig extends ConfigBase {
         }
       },
 
+      mongodb: {
+        name: 'mongodb',
+        displayName: 'MongoDB配置',
+        description: 'MongoDB服务器连接配置',
+        filePath: getConfigPath('mongodb'),
+        fileType: 'yaml',
+        schema: {
+          required: ['host', 'port', 'database'],
+          fields: {
+            host: {
+              type: 'string',
+              label: 'MongoDB地址',
+              default: '127.0.0.1',
+              component: 'Input'
+            },
+            port: {
+              type: 'number',
+              label: 'MongoDB端口',
+              min: 1,
+              max: 65535,
+              default: 27017,
+              component: 'InputNumber'
+            },
+            username: {
+              type: 'string',
+              label: 'MongoDB用户名',
+              default: '',
+              component: 'Input'
+            },
+            password: {
+              type: 'string',
+              label: 'MongoDB密码',
+              default: '',
+              component: 'InputPassword'
+            },
+            database: {
+              type: 'string',
+              label: 'MongoDB数据库名称',
+              default: 'xrk_agt',
+              component: 'Input'
+            },
+            options: {
+              type: 'object',
+              label: 'MongoDB连接选项',
+              description: 'MongoDB连接选项（可选）',
+              component: 'SubForm',
+              fields: {
+                maxPoolSize: {
+                  type: 'number',
+                  label: '最大连接池大小',
+                  min: 1,
+                  default: 50,
+                  component: 'InputNumber'
+                },
+                minPoolSize: {
+                  type: 'number',
+                  label: '最小连接池大小',
+                  min: 1,
+                  default: 3,
+                  component: 'InputNumber'
+                },
+                connectTimeoutMS: {
+                  type: 'number',
+                  label: '连接超时时间(ms)',
+                  min: 1000,
+                  default: 10000,
+                  component: 'InputNumber'
+                },
+                serverSelectionTimeoutMS: {
+                  type: 'number',
+                  label: '服务器选择超时时间(ms)',
+                  min: 1000,
+                  default: 10000,
+                  component: 'InputNumber'
+                }
+              }
+            }
+          }
+        }
+      },
+
       renderer: {
         name: 'renderer',
         displayName: '渲染器配置',
@@ -1370,7 +1451,7 @@ export default class SystemConfig extends ConfigBase {
             name: {
               type: 'string',
               label: '渲染后端',
-              enum: ['puppeteer'],
+              enum: ['puppeteer', 'playwright'],
               default: 'puppeteer',
               component: 'Select'
             }

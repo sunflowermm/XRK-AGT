@@ -88,6 +88,10 @@ class Cfg {
     return this.getConfig('redis');
   }
 
+  get mongodb() {
+    return this.getConfig('mongodb');
+  }
+
   get renderer() {
     if (this._renderer) return this._renderer;
 

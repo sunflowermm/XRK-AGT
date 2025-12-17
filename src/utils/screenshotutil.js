@@ -1,43 +1,20 @@
 import fs from 'node:fs';
-import fsPromises from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-import Puppeteer from '#renderers/puppeteer/lib/puppeteer.js';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
-import yaml from 'yaml';
+import cfg from '#infrastructure/config/config.js';
+import RendererLoader from '#infrastructure/renderer/loader.js';
 import paths from '#utils/paths.js';
-
-// 获取 require 函数来加载 .puppeteerrc.cjs
-const require = createRequire(import.meta.url);
 
 const DB_PATH = path.join(paths.trash, 'screenshot/screenshot-manager.db');
 const OUTPUT_BASE_PATH = path.join(paths.trash, 'screenshot/output');
 const MAX_RENDER_COUNT = 100;
 const MAX_IDLE_TIME = 3600000;
 const DEFAULT_IMAGE_PATH = path.join(paths.renderers, '截图失败.jpg');
-const CONFIG_PATH = path.join(paths.data, 'xrkconfig/config.yaml');
 
-// 获取浏览器可执行文件路径
-let browserExecutablePath = null;
-try {
-    const puppeteerConfig = require(path.join(paths.root, '.puppeteerrc.cjs'));
-    browserExecutablePath = puppeteerConfig.executablePath;
-} catch (e) {
-    logger.warn('无法加载 .puppeteerrc.cjs，将使用默认浏览器路径');
-}
-
-// 读取配置
-let configs = { screen_shot_quality: 1 };
-try {
-    if (fs.existsSync(CONFIG_PATH)) {
-        configs = yaml.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-    } else {
-        logger.info('未找到配置文件，使用默认配置');
-    }
-} catch (e) {
-    logger.info('读取配置文件失败，使用默认配置', e);
+function getRenderer() {
+  const rendererName = cfg.renderer?.name || 'puppeteer';
+  return RendererLoader.getRenderer(rendererName);
 }
 
 class ScreenshotManager {
@@ -135,7 +112,7 @@ class ScreenshotManager {
                     );
                 `);
             } catch (err) {
-                logger.error('初始化数据库失败:', err);
+                logger.error('[Screenshot] 初始化数据库失败:', err);
                 this.dbInstance = { 
                     run: async () => ({ changes: 0 }), 
                     get: async () => null, 
@@ -162,7 +139,7 @@ class ScreenshotManager {
                 await this.browser.version();
                 return this.browser;
             } catch (e) {
-                logger.warn('现有浏览器实例不可用，将创建新实例');
+                logger.warn('[Screenshot] 浏览器实例不可用，重新创建');
                 this.browser = null;
                 this.browserPromise = null;
             }
@@ -184,59 +161,30 @@ class ScreenshotManager {
         }
     }
 
-    // 创建浏览器实例（内部方法）
     async _createBrowser() {
         if (this.isClosing) {
             throw new Error('浏览器正在关闭');
         }
         
         try {
-            const puppeteerOptions = {
-                headless: 'new',
-                args: [
-                    '--disable-gpu',
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-setuid-sandbox',
-                    '--no-zygote',
-                    '--disable-web-security',
-                    '--allow-file-access-from-files',
-                    '--disable-features=site-per-process',
-                    '--disable-infobars',
-                    '--disable-notifications',
-                    '--window-size=1920,1080',
-                    '--disable-blink-features=AutomationControlled',
-                    '--single-process',  // 避免多进程问题
-                    '--disable-extensions',
-                    '--disable-background-timer-throttling',
-                    '--disable-backgrounding-occluded-windows',
-                    '--disable-renderer-backgrounding'
-                ],
-                puppeteerTimeout: 60000
-            };
-            
-            // 如果有检测到的浏览器路径，使用它
-            if (browserExecutablePath) {
-                puppeteerOptions.executablePath = browserExecutablePath;
+            const renderer = getRenderer();
+            if (!renderer || !renderer.browserInit) {
+                throw new Error('渲染器未初始化或不可用');
             }
             
-            logger.info('puppeteer Chromium 启动中...');
-            const puppeteerInstance = new Puppeteer(puppeteerOptions);
-            const browser = await puppeteerInstance.browserInit();
+            const browser = await renderer.browserInit();
             
             if (!browser) {
                 throw new Error('浏览器实例创建失败');
             }
+            
             this.renderCount = 0;
             
-            // 启动空闲检查定时器
             if (!this.idleTimer && !this.isClosing) {
                 this.idleTimer = setInterval(() => this.checkIdle(), 5 * 60 * 1000);
             }
             
-            // 监听浏览器断开连接事件
             browser.on('disconnected', () => {
-                logger.warn('浏览器断开连接');
                 if (this.browser === browser) {
                     this.browser = null;
                     this.browserPromise = null;
@@ -245,7 +193,7 @@ class ScreenshotManager {
             
             return browser;
         } catch (error) {
-            logger.error('启动Chromium失败:', error);
+            logger.error('[Screenshot] 启动浏览器失败:', error);
             throw error;
         }
     }
@@ -271,26 +219,20 @@ class ScreenshotManager {
                         // 忽略关闭错误
                     }
                 }, 1000);
-            } catch (e) {
-                logger.error('关闭旧浏览器失败:', e);
-            }
+            } catch (e) {}
         }
         
-        // 重新创建浏览器
         try {
             await this.getBrowser();
         } catch (error) {
-            logger.error('重置浏览器失败:', error);
+            logger.error('[Screenshot] 重置浏览器失败:', error);
         }
     }
 
     // 检查浏览器空闲状态
     checkIdle() {
         if (this.isClosing) return;
-        
-        const now = Date.now();
-        if (now - this.lastUsedTime > MAX_IDLE_TIME && this.browser) {
-            logger.info('浏览器实例长时间未使用，释放资源');
+        if (Date.now() - this.lastUsedTime > MAX_IDLE_TIME && this.browser) {
             this.resetBrowser();
         }
     }
@@ -379,9 +321,7 @@ class ScreenshotManager {
             this.renderCount++;
             this.lastUsedTime = Date.now();
             
-            // 检查是否需要重置
             if (this.renderCount >= MAX_RENDER_COUNT && this.pageQueue.size === 1) {
-                logger.info(`渲染次数已达到阈值(${this.renderCount}/${MAX_RENDER_COUNT})，准备重置浏览器...`);
                 setTimeout(() => this.resetBrowser(), 1000);
             }
             
@@ -416,10 +356,9 @@ class ScreenshotManager {
         
         if (config.emulateDevice) {
             try {
-                const puppeteer = await import('puppeteer');
-                const device = puppeteer.devices[config.emulateDevice];
-                if (device) {
-                    await page.emulate(device);
+                const renderer = getRenderer();
+                if (renderer && renderer.emulateDevice && typeof renderer.emulateDevice === 'function') {
+                    await renderer.emulateDevice(page, config.emulateDevice);
                 } else {
                     await page.setViewport({
                         width: config.width || 800,
@@ -428,7 +367,6 @@ class ScreenshotManager {
                     });
                 }
             } catch (err) {
-                logger.debug('模拟设备失败:', err);
                 await page.setViewport({
                     width: config.width || 800,
                     height: config.height || 600,
@@ -604,19 +542,18 @@ class ScreenshotManager {
             fs.copyFileSync(DEFAULT_IMAGE_PATH, defaultImagePath);
             return defaultImagePath;
         } catch (error) {
-            logger.error('复制默认图片失败:', error);
+            logger.error('[Screenshot] 复制默认图片失败:', error);
             return DEFAULT_IMAGE_PATH;
         }
     }
 }
 
-// 默认配置
 const DEFAULT_CONFIG = {
     width: null,
     height: null,
     quality: 100,
     type: 'jpeg',
-    deviceScaleFactor: configs.screen_shot_quality || 1,
+    deviceScaleFactor: cfg.bot?.screen_shot_quality || 1,
     selector: null,
     waitForSelector: null,
     waitForTimeout: null,
@@ -667,7 +604,7 @@ export async function takeScreenshot(target, imageName, config = {}) {
             return imagePath;
             
         } catch (error) {
-            logger.error(`截图失败 (尝试 ${retryAttempt + 1}/${finalConfig.retryCount + 1}):`, error);
+            logger.error(`[Screenshot] 失败 [${retryAttempt + 1}/${finalConfig.retryCount + 1}]: ${error.message}`);
             
             const db = await manager.initDB();
             const today = new Date().toISOString().split('T')[0];
@@ -675,15 +612,13 @@ export async function takeScreenshot(target, imageName, config = {}) {
             await db.run(
                 `INSERT INTO error_logs (date, time, error, stack, target) VALUES (?, ?, ?, ?, ?)`,
                 today, now, error.message, error.stack, target
-            ).catch(err => logger.debug('记录错误失败:', err));
+            ).catch(() => {});
             
             if (retryAttempt < finalConfig.retryCount) {
-                if (error.message.includes('浏览器') || 
-                    error.message.includes('Protocol') ||
-                    error.message.includes('Target closed') ||
-                    error.message.includes('Session closed')) {
-                    await manager.resetBrowser();
-                }
+                if (error.message.includes('浏览器') || error.message.includes('Protocol') || 
+                error.message.includes('Target closed') || error.message.includes('Session closed')) {
+                await manager.resetBrowser();
+            }
                 
                 await new Promise(resolve => setTimeout(resolve, finalConfig.retryDelay));
                 continue;
