@@ -132,10 +132,6 @@ function handleFinalConnectionFailure(error, port) {
 }
 
 function registerEventHandlers(client) {
-  client.on('connectionPoolClosed', () => {
-    BotUtil.makeLog('warn', '连接池已关闭', 'MongoDB')
-  })
-
   client.on('serverHeartbeatFailed', (event) => {
     BotUtil.makeLog('warn', `心跳失败: ${event.failure?.message || '未知错误'}`, 'MongoDB')
   })

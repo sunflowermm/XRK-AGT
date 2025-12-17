@@ -1050,7 +1050,6 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       const keyData = JSON.parse(await fs.readFile(apiKeyPath, 'utf8'));
       this.apiKey = keyData.key;
       BotUtil.apiKey = this.apiKey;
-      BotUtil.makeLog('info', '✓ 已加载API密钥', '服务器');
       return this.apiKey;
     }
     

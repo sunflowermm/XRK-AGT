@@ -500,7 +500,6 @@ class App {
       this.renderBotsPanel(data.bots || []);
       this.renderWorkflowInfo(data.workflows || {}, data.panels || {});
       this.renderNetworkInfo(data.system?.network || {}, data.system?.netRates || {});
-      // 更新工作流选项（如果LLM选项已加载）
       if (this._llmOptions?.workflows) {
         this.refreshChatWorkflowOptions();
       }
