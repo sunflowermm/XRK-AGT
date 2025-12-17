@@ -36,6 +36,7 @@ flowchart LR
       Plugins --> Renderer["渲染器\nsrc/renderers + Renderer"]
       Plugins --> Config["配置系统\ncommonconfig + YAML"]
       Plugins --> Redis[("Redis")]
+      Plugins --> MongoDB[("MongoDB")]
       BotUtil["BotUtil 工具类\nsrc/utils/botutil.js"] --> Plugins
       BotUtil --> Express
       BotUtil --> ApiLoader
@@ -83,7 +84,8 @@ XRK-AGT/
 │  │  ├─ http/                # HttpApi 基类与 ApiLoader
 │  │  ├─ plugins/             # 插件基类 plugin 与 PluginsLoader
 │  │  ├─ renderer/Renderer.js # 渲染器基类
-│  │  └─ redis.js             # Redis 客户端封装
+│  │  ├─ redis.js             # Redis 客户端封装
+│  │  └─ mongodb.js           # MongoDB 客户端封装
 │  ├─ factory/                # 语音 ASR/TTS 等工厂
 │  ├─ modules/                # 与 oicq/系统监控等相关的业务模块
 │  ├─ renderers/              # puppeteer/playwright 渲染实现
@@ -95,7 +97,7 @@ XRK-AGT/
 │  ├─ stream/                 # 基于 AIStream 的工作流封装
 │  └─ plugin/                 # 业务插件与示例插件
 ├─ config/                    # 默认配置、命令行工具配置
-│  ├─ default_config/         # bot/server/redis/device/renderer 等默认 YAML
+│  ├─ default_config/         # bot/server/redis/mongodb/device/renderer 等默认 YAML
 │  └─ cmd/                    # 命令行工具定义
 ├─ data/                      # 运行期数据 & 服务器配置
 │  ├─ bots/                   # 各账号运行时数据（icqq 等）
@@ -123,6 +125,7 @@ XRK-AGT/
   - Windows / Linux + Chrome / Chromium / Edge（用于渲染功能）。
   - Node.js ≥ **18.14.0**。
   - Redis ≥ **5.0.0**。
+  - MongoDB ≥ **4.0.0**（可选，用于持久化存储）。
 
 - **典型使用场景**
   - 搭建 QQ 智能体（聊天机器人、任务助手、数据监控等）。
@@ -261,6 +264,6 @@ node app   # 或 node start.js
 
 - **向日葵工作室开发与测试团队**：持续打磨架构与运行稳定性。  
 - **所有提交 Issue / PR 的社区成员**：为 XRK-AGT 带来了真实场景的需求和改进建议。  
-- **开源生态中的优秀组件作者**：包括 Node.js、Redis、Puppeteer/Playwright 等，为本项目提供了坚实基础。  
+- **开源生态中的优秀组件作者**：包括 Node.js、Redis、MongoDB、Puppeteer/Playwright 等，为本项目提供了坚实基础。  
 
 

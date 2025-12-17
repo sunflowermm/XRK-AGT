@@ -75,6 +75,7 @@ flowchart TD
       - `runtime.js` / `handler.js`：插件运行时与 Handler 管理。
     - `renderer/Renderer.js`：渲染器基类，统一 HTML 模板渲染与图片生成逻辑。
     - `redis.js`：Redis 客户端封装。
+    - `mongodb.js`：MongoDB 客户端封装，提供文档数据库支持。
   - `src/factory`  
     - `asr/`：语音识别工厂 `ASRFactory` 与 `VolcengineASRClient`。
     - `tts/`：语音合成工厂 `TTSFactory` 与 `VolcengineTTSClient`。
@@ -105,7 +106,7 @@ flowchart TD
     - 示例插件：加法、重启、定时任务、状态查询、远程指令等，展示如何继承 `plugin`。
 
 - **配置与数据**
-  - `config/default_config/*.yaml`：系统默认配置（bot、server、device、redis、renderer 等）。
+  - `config/default_config/*.yaml`：系统默认配置（bot、server、device、redis、mongodb、renderer 等）。
   - `config/cmd/tools.yaml`：命令行工具及相关配置。
   - `data/`：
     - `bots/`：各 Bot 账号运行时数据。
