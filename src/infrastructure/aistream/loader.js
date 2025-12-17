@@ -438,7 +438,7 @@ class StreamLoader {
     BotUtil.makeLog('success', '├─ ✅ Lightweight (BM25)', 'StreamLoader');
 
     // Redis
-    result.redis = typeof redis !== 'undefined' && redis !== null;
+    result.redis = !!global.redis;
     if (result.redis) {
       BotUtil.makeLog('success', '└─ ✅ Redis 可用', 'StreamLoader');
     } else {

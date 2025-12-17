@@ -21,9 +21,13 @@ const _baseDirs = [
   _data,
   path.join(_data, 'importsJson'),
   path.join(_data, 'server_bots'),
+  path.join(_data, 'uploads'),
+  path.join(_data, 'media'),
+  path.join(_data, 'stdin'),
   _resources,
   _trash,
-  path.join(_trash, 'screenshot')
+  path.join(_trash, 'screenshot'),
+  path.join(_trash, 'html')
 ];
 
 export default {

@@ -130,14 +130,10 @@ export default class Bot extends EventEmitter {
     const logDetails = Object.keys(details).length > 0 ?
       chalk.gray(` Details: ${JSON.stringify(details)}`) : '';
 
-    if (typeof BotUtil !== 'undefined' && BotUtil.makeLog) {
-      BotUtil.makeLog('error', chalk.red(`✗ ${logMessage}${logDetails}`), type);
+    BotUtil.makeLog('error', chalk.red(`✗ ${logMessage}${logDetails}`), type);
 
-      if (error.stack && cfg.debug) {
-        BotUtil.makeLog('debug', chalk.gray(error.stack), type);
-      }
-    } else {
-      console.error(`[${type}] ${error.message}`, details);
+    if (error.stack && cfg.debug) {
+      BotUtil.makeLog('debug', chalk.gray(error.stack), type);
     }
 
     return error;
@@ -2078,9 +2074,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     // 处理加载结果（统一处理，避免重复日志）
     if (configResult.status === 'fulfilled') {
       global.ConfigManager = ConfigLoader;
-      if (!global.cfg && typeof cfg !== 'undefined') {
-        global.cfg = cfg;
-      }
+      global.cfg = cfg;
     } else {
       BotUtil.makeLog('error', `配置加载失败: ${configResult.reason?.message}`, '服务器');
     }

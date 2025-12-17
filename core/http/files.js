@@ -4,11 +4,10 @@ import fsSync from 'fs';
 import { ulid } from 'ulid';
 import crypto from 'crypto';
 
-const uploadDir = path.join(process.cwd(), 'www/uploads/');
-const mediaDir = path.join(process.cwd(), 'www/media/');
+const uploadDir = path.join(process.cwd(), 'data/uploads/');
+const mediaDir = path.join(process.cwd(), 'data/media/');
 const fileMap = new Map();
 
-// 确保目录存在
 for (const dir of [uploadDir, mediaDir]) {
   if (!fsSync.existsSync(dir)) {
     fsSync.mkdirSync(dir, { recursive: true });

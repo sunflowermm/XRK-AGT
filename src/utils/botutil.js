@@ -661,9 +661,9 @@ export default class BotUtil {
             maxStringLength: objectOptions.maxStringLength || 1000
           };
 
-          if (typeof util !== 'undefined' && util.inspect) {
+          try {
             logParts.push(util.inspect(item, inspectOptions));
-          } else {
+          } catch {
             logParts.push(JSON.stringify(item, BotUtil.getCircularReplacer(), 2));
           }
         } catch {

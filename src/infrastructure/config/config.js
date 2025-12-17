@@ -151,9 +151,7 @@ class Cfg {
             delete this._renderer[type];
             this._renderer = null; // 强制重新加载
 
-            if (typeof logger !== 'undefined') {
-              logger.mark(`[修改渲染器配置文件][${type}]`);
-            }
+            logger.mark(`[修改渲染器配置文件][${type}]`);
           });
 
           this.watcher[key] = watcher;
@@ -349,15 +347,10 @@ class Cfg {
       // 写入文件
       fs.writeFileSync(file, YAML.stringify(data), 'utf8');
 
-      if (typeof logger !== 'undefined') {
-        logger.mark(`[保存配置文件][${name}]`);
-      }
-
+      logger.mark(`[保存配置文件][${name}]`);
       return true;
     } catch (error) {
-      if (typeof logger !== 'undefined') {
-        logger.error(`[配置保存失败][${name}]`, error);
-      }
+      logger.error(`[配置保存失败][${name}]`, error);
       return false;
     }
   }
@@ -403,9 +396,7 @@ class Cfg {
     watcher.on('change', () => {
       delete this.config[key];
 
-      if (typeof logger !== 'undefined') {
-        logger.mark(`[修改配置文件][${name}]`);
-      }
+      logger.mark(`[修改配置文件][${name}]`);
 
       if (this[`change_${name}`]) {
         this[`change_${name}`]();

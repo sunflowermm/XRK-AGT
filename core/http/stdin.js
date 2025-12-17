@@ -28,8 +28,8 @@ export default {
           });
         }
 
-        const tempDir = path.join(process.cwd(), "www/stdin");
-        const mediaDir = path.join(process.cwd(), "www/media");
+        const tempDir = path.join(process.cwd(), "data/stdin");
+        const mediaDir = path.join(process.cwd(), "data/media");
         
         res.json({
           success: true,
@@ -182,12 +182,9 @@ export default {
   async init(app, Bot) {
     if (!global.stdinHandler) {
       const StdinModule = await import('../tasker/stdin.js');
-      if (StdinModule.StdinHandler) {
-        global.stdinHandler = new StdinModule.StdinHandler();
-      }
+      global.stdinHandler = new StdinModule.StdinHandler();
     }
     
-    // 设置Bot的URL
     if (!Bot.url && Bot.getServerUrl) {
       Bot.url = Bot.getServerUrl();
     }

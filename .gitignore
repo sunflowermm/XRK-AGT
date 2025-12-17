@@ -50,10 +50,11 @@ data/bannedWords/
 data/terminal_output/
 data/tools_history.json
 # Temporary files (screenshots, HTML, etc.)
-trash/
-# Web uploads and media
-www/uploads/
-www/media/
+!trash/
+# Web uploads and media (moved to data/)
+data/uploads/
+data/media/
+data/stdin/
 # Cache directories
 .cache/
 .parcel-cache/

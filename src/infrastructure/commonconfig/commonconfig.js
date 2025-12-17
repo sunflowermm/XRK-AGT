@@ -139,10 +139,6 @@ export default class ConfigBase {
    */
   _resolveFilePath() {
     if (this._getFilePath) {
-      // 动态路径：从全局配置获取必要信息
-      if (!global.cfg) {
-        throw new Error('全局配置未初始化，无法解析动态配置路径');
-      }
       const dynamicPath = this._getFilePath(global.cfg);
       if (!dynamicPath) {
         throw new Error('动态路径函数未返回有效路径');

@@ -1,24 +1,3 @@
-/**
- * @file start.js
- * @description 葵子服务器主启动脚本
- * @author XRK
- * @copyright 2025 XRK Studio
- * @license MIT
- * 
- * 功能特性：
- * - 交互式菜单管理
- * - PM2进程管理集成
- * - 优雅的信号处理
- * - 完整的错误追踪和日志记录
- * - 多端口服务器支持
- * 
- * 开发道德声明：
- * - 所有错误都被安全捕获并记录
- * - 用户数据路径完全隔离
- * - 进程管理遵循最小权限原则
- * - 日志记录符合隐私保护标准
- */
-
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
@@ -26,17 +5,9 @@ import { spawnSync } from 'child_process';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 
-/** 增加事件监听器上限以支持复杂的进程管理 */
 process.setMaxListeners(30);
-
-/** @type {SignalHandler|null} 全局信号处理器单例 */
 let globalSignalHandler = null;
 
-/**
- * 应用程序路径配置
- * @readonly
- * @enum {string}
- */
 const PATHS = {
   LOGS: './logs',
   DEFAULT_CONFIG: './config/default_config',
@@ -44,11 +15,6 @@ const PATHS = {
 };
 const PM2_TMP_PREFIX = path.join(os.tmpdir(), 'xrk-agt-pm2-');
 
-/**
- * 应用程序配置常量
- * @readonly
- * @enum {number|string|Object}
- */
 const CONFIG = {
   MAX_RESTARTS: 1000,
   SIGNAL_TIME_THRESHOLD: 3000,
@@ -63,33 +29,19 @@ const CONFIG = {
 
 const JSON_SPACE = 2;
 
-/**
- * 仅在内容发生变化时写入文件，避免重复创建与多余的I/O
- * @param {string} filePath
- * @param {string|Buffer} content
- * @returns {Promise<boolean>} 是否发生写入
- */
 async function writeFileIfChanged(filePath, content) {
   try {
     const existing = await fs.readFile(filePath, typeof content === 'string' ? 'utf8' : undefined);
     if (existing === content) {
       return false;
     }
-  } catch {
-    // 文件不存在时继续写入
-  }
+  } catch {}
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, content);
   return true;
 }
 
-/**
- * 若目标不存在则复制文件
- * @param {string} source
- * @param {string} target
- * @returns {Promise<boolean>} 是否执行复制
- */
 async function copyFileIfMissing(source, target) {
   try {
     await fs.access(target);
@@ -101,40 +53,17 @@ async function copyFileIfMissing(source, target) {
   }
 }
 
-/**
- * 日志管理类
- * 
- * 实现特性：
- * - 异步队列写入避免I/O阻塞
- * - 自动日志轮转
- * - 错误堆栈完整记录
- * 
- * @class Logger
- */
 class Logger {
   constructor() {
-    /** @type {string} 日志文件路径 */
     this.logFile = path.join(PATHS.LOGS, 'restart.log');
-    /** @type {boolean} 写入锁状态 */
     this.isWriting = false;
-    /** @type {Array<string>} 日志消息队列 */
     this.queue = [];
   }
 
-  /**
-   * 确保日志目录存在
-   * @returns {Promise<void>}
-   */
   async ensureLogDir() {
     await fs.mkdir(PATHS.LOGS, { recursive: true });
   }
 
-  /**
-   * 记录日志消息
-   * @param {string} message - 日志消息
-   * @param {string} [level='INFO'] - 日志级别 (INFO|ERROR|SUCCESS|WARNING|DEBUG)
-   * @returns {Promise<void>}
-   */
   async log(message, level = 'INFO') {
     const timestamp = new Date().toISOString();
     const logMessage = `[${timestamp}] [${level}] ${message}\n`;
@@ -145,11 +74,6 @@ class Logger {
     }
   }
 
-  /**
-   * 刷新日志队列到文件
-   * @private
-   * @returns {Promise<void>}
-   */
   async flushQueue() {
     if (this.queue.length === 0 || this.isWriting) return;
     
@@ -159,9 +83,7 @@ class Logger {
     
     try {
       await fs.appendFile(this.logFile, messages.join(''));
-    } catch (error) {
-      // 静默失败，避免递归错误
-    } finally {
+    } catch {} finally {
       this.isWriting = false;
       if (this.queue.length > 0) {
         setImmediate(() => this.flushQueue());
@@ -169,70 +91,24 @@ class Logger {
     }
   }
 
-  /**
-   * 记录错误日志（包含堆栈追踪）
-   * @param {string} message - 错误消息
-   * @returns {Promise<void>}
-   */
   async error(message) {
     await this.log(message, 'ERROR');
   }
 
-  /**
-   * 记录成功日志
-   * @param {string} message - 成功消息
-   * @returns {Promise<void>}
-   */
   async success(message) {
     await this.log(message, 'SUCCESS');
   }
 
-  /**
-   * 记录警告日志
-   * @param {string} message - 警告消息
-   * @returns {Promise<void>}
-   */
   async warning(message) {
     await this.log(message, 'WARNING');
   }
 }
 
-/**
- * 基础管理类
- * 
- * 提供所有管理器的公共功能，包括目录管理、日志记录等。
- * 所有管理器类应继承此类以获得统一的公共功能。
- * 
- * @abstract
- * @class BaseManager
- * @example
- * // 创建自定义管理器
- * class MyManager extends BaseManager {
- *   constructor(logger) {
- *     super(logger);
- *   }
- *   
- *   async doSomething() {
- *     await this.ensureDirectories();
- *     await this.logger.log('执行操作');
- *   }
- * }
- */
 class BaseManager {
-  /**
-   * 构造函数
-   * 
-   * @param {Logger} logger - 日志实例（必填）
-   */
   constructor(logger) {
-    /** @type {Logger} */
     this.logger = logger;
   }
 
-  /**
-   * 确保所有必要目录存在
-   * @returns {Promise<void>}
-   */
   async ensureDirectories() {
     for (const dir of [PATHS.LOGS, PATHS.SERVER_BOTS]) {
       await fs.mkdir(dir, { recursive: true }).catch(() => {});
@@ -240,10 +116,6 @@ class BaseManager {
   }
 }
 
-/**
- * 依赖检测器
- * 在启动前检查必要依赖，提前给出提示以减少运行时错误
- */
 class DependencyChecker extends BaseManager {
   async check() {
     const results = await Promise.all([
@@ -277,47 +149,22 @@ class DependencyChecker extends BaseManager {
   }
 }
 
-/**
- * PM2进程管理器
- * 负责与PM2进行交互，管理Node.js进程
- * 
- * @class PM2Manager
- * @extends BaseManager
- */
 class PM2Manager extends BaseManager {
-  /**
-   * 获取PM2可执行文件路径
-   * @private
-   * @returns {string} PM2路径
-   */
   getPM2Path() {
     return process.platform === 'win32' 
       ? 'pm2' 
       : path.join(process.cwd(), 'node_modules', 'pm2', 'bin', 'pm2');
   }
 
-  /**
-   * 生成进程名称
-   * @param {number} port - 端口号
-   * @returns {string} 标准化的进程名称
-   */
   getProcessName(port) {
     return `XRK-MultiBot-Server-${port}`;
   }
 
-  /**
-   * 执行PM2命令
-   * @param {string} command - PM2命令
-   * @param {string[]} [args=[]] - 命令参数
-   * @param {string} [processName=''] - 进程名称
-   * @returns {Promise<boolean>} 执行成功返回true
-   */
   async executePM2Command(command, args = [], processName = '') {
     const pm2Path = this.getPM2Path();
     let cmdCommand = pm2Path;
     let cmdArgs = [command, ...args];
     
-    /** Windows平台特殊处理 */
     if (process.platform === 'win32') {
       cmdCommand = 'cmd';
       cmdArgs = ['/c', 'pm2', command, ...args];
@@ -339,7 +186,6 @@ class PM2Manager extends BaseManager {
     } else {
       await this.logger.error(`PM2 ${command} ${processName} 失败，状态码: ${result.status}`);
       
-      /** Windows环境下的备用启动方案 */
       if (process.platform === 'win32' && command === 'start') {
         await this.tryAlternativeStartMethod(args);
       }
@@ -348,12 +194,6 @@ class PM2Manager extends BaseManager {
     return success;
   }
 
-  /**
-   * Windows环境备用PM2启动方法
-   * @private
-   * @param {string[]} args - 启动参数
-   * @returns {Promise<void>}
-   */
   async tryAlternativeStartMethod(args) {
     try {
       const npmWhich = spawnSync('npm', ['bin', '-g'], {
@@ -380,17 +220,9 @@ class PM2Manager extends BaseManager {
     }
   }
 
-  /**
-   * 创建PM2配置文件
-   * @param {number} port - 端口号
-   * @param {string} mode - 运行模式
-   * @returns {Promise<string>} 配置文件路径
-   */
   async createConfig(port, mode) {
     const processName = this.getProcessName(port);
     const nodeArgs = getNodeArgs();
-    
-    /** PM2配置对象 */
     const pm2Config = {
       name: processName,
       script: './app.js',
@@ -425,16 +257,8 @@ class PM2Manager extends BaseManager {
     return { configPath, cleanup };
   }
 
-  /**
-   * 执行端口相关的PM2命令
-   * @param {string} action - 操作类型 (start|logs|stop|restart)
-   * @param {number} port - 端口号
-   * @returns {Promise<boolean>} 执行成功返回true
-   */
   async executePortCommand(action, port) {
     const processName = this.getProcessName(port);
-    
-    /** 命令映射表 */
     const commandMap = {
       start: async () => {
         const { configPath, cleanup } = await this.createConfig(port, 'server');
@@ -451,23 +275,11 @@ class PM2Manager extends BaseManager {
   }
 }
 
-/**
- * 服务器管理器
- * 负责服务器的启动、停止、重启等核心功能
- * 
- * @class ServerManager
- * @extends BaseManager
- */
 class ServerManager extends BaseManager {
-  /**
-   * @param {Logger} logger - 日志实例
-   * @param {PM2Manager} pm2Manager - PM2管理器实例
-   */
   constructor(logger, pm2Manager) {
     super(logger);
     this.pm2Manager = pm2Manager;
     
-    /** 确保信号处理器单例 */
     if (!globalSignalHandler) {
       globalSignalHandler = new SignalHandler(logger);
     }
@@ -498,10 +310,6 @@ class ServerManager extends BaseManager {
     }
   }
 
-  /**
-   * 获取可用端口列表
-   * @returns {Promise<number[]>} 端口号数组
-   */
   async getAvailablePorts() {
     try {
       const files = await fs.readdir(PATHS.SERVER_BOTS);
@@ -518,10 +326,6 @@ class ServerManager extends BaseManager {
     }
   }
 
-  /**
-   * 添加新端口
-   * @returns {Promise<number|null>} 新端口号或null
-   */
   async addNewPort() {
     const { port } = await inquirer.prompt([{
       type: 'input',
@@ -541,12 +345,6 @@ class ServerManager extends BaseManager {
     return portNum;
   }
 
-  /**
-   * 复制默认配置文件
-   * @private
-   * @param {string} targetDir - 目标目录
-   * @returns {Promise<void>}
-   */
   async copyDefaultConfigs(targetDir) {
     try {
       const defaultConfigFiles = await fs.readdir(PATHS.DEFAULT_CONFIG);
@@ -568,34 +366,24 @@ class ServerManager extends BaseManager {
     }
   }
 
-  /**
-   * 启动服务器模式
-   * @param {number} port - 端口号
-   * @returns {Promise<void>}
-   */
   async startServerMode(port) {
     await this.logger.log(`启动葵子服务器，端口: ${port}`);
     global.selectedMode = 'server';
     await this.ensurePortConfig(port);
     
     try {
-      /** 保存并修改进程参数 */
       const originalArgv = [...process.argv];
       process.argv = [originalArgv[0], originalArgv[1], 'server', port.toString()];
       
-      /** 动态导入Bot类 */
       const { default: BotClass } = await import('./src/bot.js');
       
-      /** 清理旧实例 */
       if (global.Bot) {
         delete global.Bot;
       }
       
-      /** 创建并运行新实例 */
       global.Bot = new BotClass();
       await global.Bot.run({ port });
       
-      /** 恢复进程参数 */
       process.argv = originalArgv;
     } catch (error) {
       await this.logger.error(`服务器模式启动失败: ${error.message}\n${error.stack}`);
@@ -603,11 +391,6 @@ class ServerManager extends BaseManager {
     }
   }
 
-  /**
-   * 带自动重启机制的服务器启动
-   * @param {number} port - 端口号
-   * @returns {Promise<void>}
-   */
   async startWithAutoRestart(port) {
     global.selectedMode = 'server';
     await this.ensurePortConfig(port);
@@ -621,13 +404,11 @@ class ServerManager extends BaseManager {
     
     while (restartCount < CONFIG.MAX_RESTARTS) {
       const nodeArgs = getNodeArgs();
-      // 直接启动 start.js，避免通过 app.js 引导造成的额外退出处理干扰
       const entryScript = path.join(process.cwd(), 'start.js');
       const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
       
       await this.logger.log(`启动进程 (尝试 ${restartCount + 1}/${CONFIG.MAX_RESTARTS})`);
       
-      /** 准备干净的环境变量 */
       const cleanEnv = Object.assign({}, process.env, {
         XRK_SELECTED_MODE: 'server',
         XRK_SERVER_PORT: port.toString()
@@ -643,13 +424,11 @@ class ServerManager extends BaseManager {
       const exitCode = result.status || 0;
       await this.logger.log(`进程退出，状态码: ${exitCode}`);
       
-      /** 正常退出或重启请求 */
       if (exitCode === 0 || exitCode === 255) {
         await this.logger.log('正常退出');
         return;
       }
       
-      /** 计算重启延迟 */
       const waitTime = this.calculateRestartDelay(Date.now() - startTime, restartCount);
       await this.logger.warning(`将在 ${waitTime / 1000} 秒后重启`);
       
@@ -660,15 +439,7 @@ class ServerManager extends BaseManager {
     await this.logger.error(`达到最大重启次数 (${CONFIG.MAX_RESTARTS})，停止重启`);
   }
 
-  /**
-   * 计算重启延迟时间
-   * @private
-   * @param {number} runTime - 运行时间(毫秒)
-   * @param {number} restartCount - 重启次数
-   * @returns {number} 延迟时间(毫秒)
-   */
   calculateRestartDelay(runTime, restartCount) {
-    /** 快速崩溃检测 */
     if (runTime < 10000 && restartCount > 2) {
       return restartCount > 5 
         ? CONFIG.RESTART_DELAYS.LONG 
@@ -677,11 +448,6 @@ class ServerManager extends BaseManager {
     return CONFIG.RESTART_DELAYS.SHORT;
   }
 
-  /**
-   * 停止服务器
-   * @param {number} port - 端口号
-   * @returns {Promise<void>}
-   */
   async stopServer(port) {
     await this.logger.log(`尝试停止端口 ${port} 的服务器`);
     
@@ -703,16 +469,7 @@ class ServerManager extends BaseManager {
   }
 }
 
-/**
- * 信号处理器（单例）
- * 负责优雅地处理系统信号
- * 
- * @class SignalHandler
- */
 class SignalHandler {
-  /**
-   * @param {Logger} logger - 日志实例
-   */
   constructor(logger) {
     this.logger = logger;
     this.lastSignal = null;
@@ -721,16 +478,10 @@ class SignalHandler {
     this.handlers = {};
   }
 
-  /**
-   * 设置信号监听器
-   * @returns {void}
-   */
   setup() {
     if (this.isSetup) return;
     
     const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'];
-    
-    /** 创建信号处理函数 */
     const createHandler = (signal) => async () => {
       const currentTime = Date.now();
       
@@ -745,7 +496,6 @@ class SignalHandler {
       await this.logger.warning(`收到 ${signal} 信号，再次发送将退出程序`);
     };
     
-    /** 注册信号处理器 */
     signals.forEach(signal => {
       this.handlers[signal] = createHandler(signal);
       process.on(signal, this.handlers[signal]);
@@ -754,10 +504,6 @@ class SignalHandler {
     this.isSetup = true;
   }
 
-  /**
-   * 清理信号监听器
-   * @returns {Promise<void>}
-   */
   async cleanup() {
     if (!this.isSetup) return;
     
@@ -770,39 +516,18 @@ class SignalHandler {
     await this.logger.log('信号处理器已清理');
   }
 
-  /**
-   * 判断是否应该退出
-   * @private
-   * @param {string} signal - 信号类型
-   * @param {number} currentTime - 当前时间戳
-   * @returns {boolean} 是否退出
-   */
   shouldExit(signal, currentTime) {
     return signal === this.lastSignal && 
            currentTime - this.lastSignalTime < CONFIG.SIGNAL_TIME_THRESHOLD;
   }
 }
 
-/**
- * 菜单管理器
- * 提供交互式用户界面
- * 
- * @class MenuManager
- */
 class MenuManager {
-  /**
-   * @param {ServerManager} serverManager - 服务器管理器
-   * @param {PM2Manager} pm2Manager - PM2管理器
-   */
   constructor(serverManager, pm2Manager) {
     this.serverManager = serverManager;
     this.pm2Manager = pm2Manager;
   }
 
-  /**
-   * 运行主菜单循环
-   * @returns {Promise<void>}
-   */
   async run() {
     console.log(chalk.cyan('\n🤖 葵子多端口服务器管理系统\n'));
     
@@ -822,11 +547,6 @@ class MenuManager {
     }
   }
 
-  /**
-   * 显示主菜单
-   * @private
-   * @returns {Promise<Object>} 选中的选项
-   */
   async showMainMenu() {
     const availablePorts = await this.serverManager.getAvailablePorts();
     
@@ -853,12 +573,6 @@ class MenuManager {
     return selected;
   }
 
-  /**
-   * 处理菜单动作
-   * @private
-   * @param {Object} selected - 选中的选项
-   * @returns {Promise<boolean>} 是否退出
-   */
   async handleMenuAction(selected) {
     switch (selected.action) {
       case 'start_server':
@@ -888,11 +602,6 @@ class MenuManager {
     return false;
   }
 
-  /**
-   * 处理添加端口
-   * @private
-   * @returns {Promise<void>}
-   */
   async handleAddPort() {
     const newPort = await this.serverManager.addNewPort();
     
@@ -912,11 +621,6 @@ class MenuManager {
     }
   }
 
-  /**
-   * 删除端口配置并可选清理PM2配置
-   * @private
-   * @returns {Promise<void>}
-   */
   async handleDeletePortConfig() {
     const ports = await this.serverManager.getAvailablePorts();
     if (ports.length === 0) {
@@ -939,11 +643,6 @@ class MenuManager {
     }
   }
 
-  /**
-   * 显示PM2管理菜单
-   * @private
-   * @returns {Promise<void>}
-   */
   async showPM2Menu() {
     const availablePorts = await this.serverManager.getAvailablePorts();
     
@@ -975,13 +674,6 @@ class MenuManager {
     }
   }
 
-  /**
-   * 选择端口
-   * @private
-   * @param {number[]} availablePorts - 可用端口列表
-   * @param {string} action - 操作类型
-   * @returns {Promise<number|null>} 选中的端口
-   */
   async selectPort(availablePorts, action) {
     const actionMessages = {
       start: '选择要启动的端口:',
@@ -1015,19 +707,13 @@ class MenuManager {
   }
 }
 
-/**
- * 获取Node.js启动参数
- * @returns {string[]} Node参数数组
- */
 function getNodeArgs() {
   const nodeArgs = [...process.execArgv];
   
-  /** 确保垃圾回收器可用 */
   if (!nodeArgs.includes('--expose-gc')) {
     nodeArgs.push('--expose-gc');
   }
   
-  /** 屏蔽警告以提升用户体验 */
   if (!nodeArgs.includes('--no-warnings')) {
     nodeArgs.push('--no-warnings');
   }
@@ -1035,10 +721,6 @@ function getNodeArgs() {
   return nodeArgs;
 }
 
-/**
- * 全局异常处理器
- * 确保所有未捕获的错误都被记录
- */
 process.on('uncaughtException', async (error) => {
   const logger = new Logger();
   await logger.error(`未捕获的异常: ${error.message}\n${error.stack}`);
@@ -1050,10 +732,6 @@ process.on('uncaughtException', async (error) => {
   process.exit(1);
 });
 
-/**
- * Promise拒绝处理器
- * 确保所有未处理的Promise拒绝都被记录
- */
 process.on('unhandledRejection', async (reason) => {
   const logger = new Logger();
   const errorMessage = reason instanceof Error 
@@ -1063,23 +741,12 @@ process.on('unhandledRejection', async (reason) => {
   await logger.error(`未处理的Promise拒绝: ${errorMessage}`);
 });
 
-/**
- * 进程退出处理器
- * 确保资源被正确清理
- */
 process.on('exit', async () => {
   if (globalSignalHandler) {
     await globalSignalHandler.cleanup();
   }
 });
 
-/**
- * 主函数
- * 应用程序入口点
- * 
- * @async
- * @returns {Promise<void>}
- */
 async function main() {
   const logger = new Logger();
   const pm2Manager = new PM2Manager(logger);
@@ -1087,17 +754,14 @@ async function main() {
   const menuManager = new MenuManager(serverManager, pm2Manager);
   const dependencyChecker = new DependencyChecker(logger);
   
-  /** 初始化目录结构 */
   await serverManager.ensureDirectories();
   await logger.ensureLogDir();
   await dependencyChecker.check();
   
-  /** 检查命令行参数 */
   const envPort = process.env.XRK_SERVER_PORT;
   const commandArg = process.argv[2];
   const portArg = process.argv[3] || envPort;
   
-  /** 命令行模式 */
   if (commandArg && portArg && !isNaN(parseInt(portArg))) {
     const port = parseInt(portArg);
     
@@ -1112,19 +776,15 @@ async function main() {
     }
   }
   
-  /** 交互菜单模式 */
   await menuManager.run();
   
-  /** 清理资源 */
   if (globalSignalHandler) {
     await globalSignalHandler.cleanup();
   }
 }
 
-/** 导出主函数供外部调用 */
 export default main;
 
-/** 启动应用程序 */
 main().catch(async (error) => {
   const logger = new Logger();
   await logger.ensureLogDir();

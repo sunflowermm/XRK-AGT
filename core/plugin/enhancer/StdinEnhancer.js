@@ -38,5 +38,3 @@ export default class StdinEnhancer extends plugin {
     e.logText = `[STDIN][${e.user_id || '未知'}]`
   }
 }
-
-

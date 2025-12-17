@@ -56,5 +56,3 @@ export default class ComWeChatEnhancer extends plugin {
     e.logText = `[ComWeChat][${scope}]`
   }
 }
-
-

@@ -182,7 +182,7 @@ export default class OneBotEnhancer extends plugin {
 
   applyConfigPolicies(e) {
     try {
-      const otherCfg = typeof cfg.getOther === 'function' ? (cfg.getOther() || {}) : {}
+      const otherCfg = cfg.getOther() || {}
       const {
         blackQQ = [],
         whiteQQ = [],
@@ -263,7 +263,7 @@ export default class OneBotEnhancer extends plugin {
     if (e.hasAlias) return true
     if (e.atBot === true) return true
 
-    logger?.debug?.(`[OneBotEnhancer] 跳过未命中别名的消息 ${e.logText || ''}`)
+    BotUtil.makeLog('debug', `[OneBotEnhancer] 跳过未命中别名的消息 ${e.logText || ''}`, e.self_id)
     return 'return'
   }
 
@@ -272,4 +272,3 @@ export default class OneBotEnhancer extends plugin {
     return Array.isArray(alias) ? alias.filter(Boolean) : [alias].filter(Boolean)
   }
 }
-

@@ -22,7 +22,7 @@ export default class OPQEnhancer extends plugin {
 
   isOPQ(e) {
     const taskerName = String(e.tasker || e.tasker_name || '').toLowerCase()
-    return this.adapters.some(name => taskerName.includes(name))
+    return taskerName.includes('opqbot') || taskerName.includes('opq')
   }
 
   bindBotEntities(e) {
@@ -54,5 +54,3 @@ export default class OPQEnhancer extends plugin {
     e.logText = `[OPQBot][${scope}]`
   }
 }
-
-

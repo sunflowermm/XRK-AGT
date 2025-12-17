@@ -31,5 +31,3 @@ export default class DeviceEnhancer extends plugin {
     e.logText = `[设备][${deviceId}][${eventType}]`
   }
 }
-
-
