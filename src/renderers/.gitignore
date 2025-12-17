@@ -3,8 +3,14 @@
 
 !截图失败.jpg
 !puppeteer
-!puppeteer/**
-puppeteer/config_default.yaml
+puppeteer/**
+!puppeteer/config_default.yaml
+!puppeteer/index.js
+!puppeteer/lib/
+!puppeteer/lib/**
 !playwright
-!playwright/**
-playwright/config_default.yaml
+playwright/**
+!playwright/config_default.yaml
+!playwright/index.js
+!playwright/lib/
+!playwright/lib/**

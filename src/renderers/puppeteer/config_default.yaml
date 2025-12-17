@@ -1,0 +1,42 @@
+# 如需自定义，复制此文件为 config.yaml 进行配置
+# 更新配置后需要重启
+
+# 无头模式 ("new" 为新 headless 模式)
+headless: "new"
+
+# Chromium 路径（可选）
+chromiumPath:
+
+# 连接到远程浏览器（可选）
+wsEndpoint:
+
+# 浏览器启动参数
+args:
+    - --disable-gpu
+    - --no-sandbox
+    - --disable-dev-shm-usage
+    - --disable-setuid-sandbox
+    - --disable-web-security
+    - --allow-file-access-from-files
+    - --disable-infobars
+    - --disable-notifications
+    - --window-size=1920,1080
+    - --disable-blink-features=AutomationControlled
+    - --disable-extensions
+    - --disable-background-timer-throttling
+    - --disable-backgrounding-occluded-windows
+    - --disable-renderer-backgrounding
+    - --js-flags=--max-old-space-size=512
+    - --disable-accelerated-2d-canvas
+    - --disable-software-rasterizer
+
+# 截图超时时间（毫秒）
+puppeteerTimeout: 120000
+
+# 截图重启阈值
+restartNum: 150
+
+viewport:
+  width: 1280
+  height: 720
+  deviceScaleFactor: 1

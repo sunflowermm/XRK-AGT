@@ -1,5 +1,15 @@
 !.gitignore
 
+# Runtime uploads and media (ignored)
+uploads/
+media/
+
+# Allow specific files
+!favicon.ico
+!index.html
+!robots.txt
+!使用本文件夹时请观看.txt
+
 !xrk
 xrk/**
 !xrk/index.html

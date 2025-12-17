@@ -1,0 +1,70 @@
+# 如需自定义，复制此文件为 config.yaml 进行配置
+# 更新配置后需要重启
+
+# 浏览器类型: chromium, firefox, webkit
+browserType: chromium
+
+# Chromium 路径（可选）
+chromiumPath:
+
+# 连接到远程浏览器（可选）
+wsEndpoint:
+
+# 无头模式
+headless: true
+
+# 浏览器启动参数
+args:
+    - --disable-gpu
+    - --disable-software-rasterizer
+    - --disable-dev-shm-usage
+    - --no-sandbox
+    - --disable-setuid-sandbox
+    - --disable-extensions
+    - --disable-background-networking
+    - --disable-background-timer-throttling
+    - --disable-backgrounding-occluded-windows
+    - --disable-breakpad
+    - --disable-component-extensions-with-background-pages
+    - --disable-features=TranslateUI,BlinkGenPropertyTrees
+    - --disable-ipc-flooding-protection
+    - --disable-renderer-backgrounding
+    - --force-color-profile=srgb
+    - --metrics-recording-only
+    - --mute-audio
+    - --no-first-run
+    - --enable-automation
+    - --password-store=basic
+    - --use-mock-keychain
+    - --disable-blink-features=AutomationControlled
+    - --js-flags=--max-old-space-size=512
+    - --disable-accelerated-2d-canvas
+    - --disable-accelerated-jpeg-decoding
+    - --disable-accelerated-mjpeg-decode
+    - --disable-accelerated-video-decode
+
+# 截图超时时间（毫秒）
+playwrightTimeout: 120000
+
+# 健康检查间隔（毫秒）
+healthCheckInterval: 60000
+
+# 连接重试次数
+maxRetries: 3
+
+# 重试延迟（毫秒）
+retryDelay: 2000
+
+# 截图重启阈值
+restartNum: 150
+
+# 视口设置
+viewport:
+  width: 1280
+  height: 720
+  deviceScaleFactor: 1
+
+# 上下文选项（可选）
+contextOptions:
+  bypassCSP: true
+  reducedMotion: "reduce"
