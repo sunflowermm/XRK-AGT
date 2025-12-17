@@ -2159,6 +2159,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
    * 启动 trash 定时清理任务
    * - 默认每 60 分钟清理一次
    * - 仅删除超过一定保留时间的文件/目录（默认 24 小时）
+   * - 保留白名单文件（.gitignore, instruct.txt 等）
    */
   _startTrashCleaner() {
     const miscCfg = cfg.server?.misc || {};
@@ -2176,7 +2177,6 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       }
     };
 
-    // 立即执行一次，然后按间隔定时执行
     runCleanup();
     this._trashTimer = setInterval(runCleanup, intervalMs);
   }
@@ -2189,30 +2189,32 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     const trashRoot = paths.trash;
     if (!trashRoot) return;
 
+    // 白名单：需要永久保留的文件/目录
+    const preserveList = new Set(['.gitignore', 'instruct.txt']);
+
     let entries;
     try {
       entries = await fs.readdir(trashRoot, { withFileTypes: true });
     } catch {
-      // 目录不存在或不可读时忽略
       return;
     }
 
     const now = Date.now();
-    const tasks = entries.map(async (entry) => {
-      const fullPath = path.join(trashRoot, entry.name);
-      try {
-        const stat = await fs.stat(fullPath);
-        if (now - stat.mtimeMs < maxAgeMs) return;
+    const tasks = entries
+      .filter(entry => !preserveList.has(entry.name))
+      .map(async (entry) => {
+        const fullPath = path.join(trashRoot, entry.name);
+        try {
+          const stat = await fs.stat(fullPath);
+          if (now - stat.mtimeMs < maxAgeMs) return;
 
-        if (entry.isDirectory()) {
-          await fs.rm(fullPath, { recursive: true, force: true });
-        } else {
-          await fs.unlink(fullPath);
+          await (entry.isDirectory() 
+            ? fs.rm(fullPath, { recursive: true, force: true })
+            : fs.unlink(fullPath));
+        } catch {
+          // 忽略删除失败
         }
-      } catch {
-        // 单个文件的删除失败不影响整体清理流程
-      }
-    });
+      });
 
     await Promise.allSettled(tasks);
   }

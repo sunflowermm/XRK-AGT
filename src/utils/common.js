@@ -1,78 +1,85 @@
-import { pipeline } from 'stream'
-import { promisify } from 'util'
+import { pipeline } from 'node:stream/promises'
 import fetch from 'node-fetch'
-import fs from 'node:fs'
+import fs from 'node:fs/promises'
 import path from 'node:path'
+import BotUtil from './botutil.js'
 
 /**
  * 发送私聊消息，仅给好友发送
- * @param userId qq号
- * @param msg 消息
- * @param uin 指定bot发送，默认为Bot
+ * @param {string|number} userId - QQ号
+ * @param {string} msg - 消息内容
+ * @param {string} [uin=Bot.uin] - 指定bot发送
+ * @returns {Promise<undefined|*>} 发送结果
  */
-const replyPrivate = async (userId, msg, uin = Bot.uin) => {
+export const replyPrivate = async (userId, msg, uin = Bot.uin) => {
   const targetId = Number(userId)
   if (!targetId || !Bot?.fl?.get) return
 
   const friend = Bot.fl.get(targetId)
   if (!friend) return
 
-  logger.mark(`发送好友消息[${friend.nickname}](${targetId})`)
+  logger?.mark?.(`发送好友消息[${friend.nickname}](${targetId})`)
   try {
     return await Bot[uin].pickUser(targetId).sendMsg(msg)
   } catch (err) {
-    logger.mark(err)
+    logger?.mark?.(err)
     return undefined
   }
 }
 
 /**
  * 休眠函数
- * @param ms 毫秒
+ * @param {number} ms - 毫秒数
+ * @returns {Promise<void>}
  */
-function sleep (ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
+export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
  * 下载保存文件
- * @param fileUrl 下载地址
- * @param savePath 保存路径
- * @param param
+ * @param {string} fileUrl - 下载地址
+ * @param {string} savePath - 保存路径
+ * @param {Object} [param={}] - 请求参数
+ * @returns {Promise<boolean>} 是否成功
  */
-async function downFile (fileUrl, savePath, param = {}) {
+export const downFile = async (fileUrl, savePath, param = {}) => {
   try {
-    mkdirs(path.dirname(savePath))
-    logger.debug(`[下载文件] ${fileUrl}`)
+    await BotUtil.mkdir(path.dirname(savePath))
+    logger?.debug?.(`[下载文件] ${fileUrl}`)
     const response = await fetch(fileUrl, param)
-    const streamPipeline = promisify(pipeline)
-    await streamPipeline(response.body, fs.createWriteStream(savePath))
+    const { createWriteStream } = await import('node:fs')
+    await pipeline(response.body, createWriteStream(savePath))
     return true
   } catch (err) {
-    logger.error(`下载文件错误：${err}`)
+    logger?.error?.(`下载文件错误：${err}`)
     return false
   }
 }
 
-function mkdirs (dirname) {
-  if (!dirname) return false
-  fs.mkdirSync(dirname, { recursive: true })
-  return true
-}
-
 /**
  * 制作转发消息
- * @param e 消息事件
- * @param msg 消息数组
- * @param dec 转发描述
+ * @param {Object} e - 消息事件
+ * @param {Array|string} [msg=[]] - 消息数组
+ * @param {string} [dec=''] - 转发描述
+ * @param {Array} [nm=[]] - 未使用参数（保持兼容性）
+ * @param {boolean} [msgsscr=false] - 未使用参数（保持兼容性）
+ * @returns {*} 转发消息对象
  */
-function makeForwardMsg(e, msg = [], dec = '', nm = [], msgsscr = false) {
+export const makeForwardMsg = (e, msg = [], dec = '', nm = [], msgsscr = false) => {
   const messages = Array.isArray(msg) ? msg : [msg]
-  const forwardMsg = dec ? [{ message: dec }, ...messages.map(message => ({ message }))] : messages.map(message => ({ message }))
+  const forwardMsg = dec 
+    ? [{ message: dec }, ...messages.map(message => ({ message }))] 
+    : messages.map(message => ({ message }))
 
-  if (e?.group?.makeForwardMsg) return e.group.makeForwardMsg(forwardMsg)
-  else if (e?.friend?.makeForwardMsg) return e.friend.makeForwardMsg(forwardMsg)
-  else return Bot.makeForwardMsg(forwardMsg)
+  return e?.group?.makeForwardMsg?.(forwardMsg) 
+    ?? e?.friend?.makeForwardMsg?.(forwardMsg) 
+    ?? Bot.makeForwardMsg?.(forwardMsg)
 }
 
-export default { sleep, replyPrivate, relpyPrivate: replyPrivate, downFile, makeForwardMsg }
+// 保持向后兼容
+export default { 
+  sleep, 
+  replyPrivate, 
+  relpyPrivate: replyPrivate, // 修复拼写错误但保持兼容
+  downFile, 
+  makeForwardMsg 
+}

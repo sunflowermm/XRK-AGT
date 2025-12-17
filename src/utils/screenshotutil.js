@@ -1,15 +1,15 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import Puppeteer from '#renderers/puppeteer/lib/puppeteer.js';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import yaml from 'yaml';
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
 import paths from '#utils/paths.js';
 
 // 获取 require 函数来加载 .puppeteerrc.cjs
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
 const DB_PATH = path.join(paths.trash, 'screenshot/screenshot-manager.db');

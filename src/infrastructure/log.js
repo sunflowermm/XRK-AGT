@@ -851,8 +851,8 @@ function fixWindowsUTF8() {
       process.stderr.setEncoding('utf8')
 
       // 尝试执行 chcp 65001 (UTF-8)
-      const { execSync } = require('node:child_process')
       try {
+        const { execSync } = await import('node:child_process')
         execSync('chcp 65001', { stdio: 'ignore' })
       } catch {
         // 忽略错误

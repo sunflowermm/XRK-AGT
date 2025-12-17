@@ -5,6 +5,9 @@
   "description": "Integrated Bot",
   "main": "app.js",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "imports": {
     "#utils/*": "./src/utils/*",
     "#core/*": "./core/*",
