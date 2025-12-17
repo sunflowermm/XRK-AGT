@@ -463,7 +463,7 @@ export default function setLog() {
 
       try {
         const formatted = JSON.stringify(obj, null, 2)
-        if (levelValue >= configLevelValue) {
+        if (canLog('info')) {
           const lines = formatted.split('\n')
           lines.forEach((line) => {
             console.log(prefix + chalk.gray(line))

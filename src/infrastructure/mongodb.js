@@ -1,5 +1,8 @@
 import cfg from './config/config.js'
 import common from '#utils/common.js'
+import BotUtil from '#utils/botutil.js'
+import fs from 'node:fs'
+import path from 'node:path'
 import { exec } from 'node:child_process'
 import { MongoClient } from 'mongodb'
 
@@ -21,20 +24,18 @@ export default async function mongodbInit() {
 
   const mongoUrl = buildMongoUrl(cfg.mongodb)
   const clientOptions = buildClientOptions()
-  
   let client = new MongoClient(mongoUrl, clientOptions)
-  let connected = false
   let retryCount = 0
 
-  while (!connected && retryCount < MONGODB_CONFIG.MAX_RETRIES) {
+  while (retryCount < MONGODB_CONFIG.MAX_RETRIES) {
     try {
-      logger.info(`[MongoDB] 连接中 [${retryCount + 1}/${MONGODB_CONFIG.MAX_RETRIES}]: ${maskMongoUrl(mongoUrl)}`)
+      BotUtil.makeLog('info', `连接中 [${retryCount + 1}/${MONGODB_CONFIG.MAX_RETRIES}]: ${maskMongoUrl(mongoUrl)}`, 'MongoDB')
       await client.connect()
-      connected = true
-      logger.info('[MongoDB] 连接成功')
+      BotUtil.makeLog('success', '连接成功', 'MongoDB')
+      break
     } catch (err) {
       retryCount++
-      logger.warn(`[MongoDB] 连接失败 [${retryCount}/${MONGODB_CONFIG.MAX_RETRIES}]: ${err.message}`)
+      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${MONGODB_CONFIG.MAX_RETRIES}]: ${err.message}`, 'MongoDB')
 
       if (retryCount < MONGODB_CONFIG.MAX_RETRIES) {
         await attemptMongoStart(retryCount)
@@ -62,16 +63,16 @@ function buildMongoUrl(mongoConfig) {
   
   let auth = ''
   if (username || password) {
-    const user = encodeURIComponent(username || '')
+    const user = encodeURIComponent(username)
     const pass = password ? `:${encodeURIComponent(password)}` : ''
     auth = `${user}${pass}@`
   }
   
   const queryParams = new URLSearchParams()
-  if (options.maxPoolSize) queryParams.set('maxPoolSize', options.maxPoolSize)
-  if (options.minPoolSize) queryParams.set('minPoolSize', options.minPoolSize)
-  if (options.connectTimeoutMS) queryParams.set('connectTimeoutMS', options.connectTimeoutMS)
-  if (options.serverSelectionTimeoutMS) queryParams.set('serverSelectionTimeoutMS', options.serverSelectionTimeoutMS)
+  const optionKeys = ['maxPoolSize', 'minPoolSize', 'connectTimeoutMS', 'serverSelectionTimeoutMS']
+  optionKeys.forEach(key => {
+    if (options[key]) queryParams.set(key, options[key])
+  })
   
   const queryString = queryParams.toString()
   const query = queryString ? `?${queryString}` : ''
@@ -93,31 +94,38 @@ function buildClientOptions() {
 }
 
 async function attemptMongoStart(retryCount) {
-  if (process.env.NODE_ENV === 'production') {
-    return
-  }
+  if (process.env.NODE_ENV === 'production') return
 
   try {
-    const archOptions = await getArchitectureOptions()
-    const mongoConfig = '--dbpath ./data/mongodb --logpath ./data/mongodb/mongodb.log --fork'
-    const cmd = `mongod ${mongoConfig}${archOptions}`
+    const dbPath = path.join(process.cwd(), 'data', 'mongodb')
+    const logPath = path.join(dbPath, 'mongodb.log')
     
-    logger.info('[MongoDB] 尝试启动本地服务...')
+    if (!fs.existsSync(dbPath)) {
+      fs.mkdirSync(dbPath, { recursive: true })
+    }
+    
+    const archOptions = await getArchitectureOptions()
+    const forkFlag = process.platform === 'win32' ? '' : '--fork'
+    const cmd = `mongod --dbpath "${dbPath}" --logpath "${logPath}" ${forkFlag} ${archOptions}`.trim()
+    
+    BotUtil.makeLog('info', '尝试启动本地服务...', 'MongoDB')
     await execCommand(cmd)
     
     const waitTime = 3000 + retryCount * 1000
     await common.sleep(waitTime)
   } catch (err) {
-    logger.debug(`[MongoDB] 启动失败: ${err.message}`)
+    BotUtil.makeLog('debug', `启动失败: ${err.message}`, 'MongoDB')
   }
 }
 
 function handleFinalConnectionFailure(error, port) {
-  logger.error(`[MongoDB] 连接失败: ${error.message}`)
-  logger.error('[MongoDB] 请检查: 1)服务是否启动 2)配置是否正确 3)端口是否可用 4)网络是否正常')
+  BotUtil.makeLog('error', `连接失败: ${error.message}`, 'MongoDB')
+  BotUtil.makeLog('error', '请检查: 1)服务是否启动 2)配置是否正确 3)端口是否可用 4)网络是否正常', 'MongoDB')
   
   if (process.env.NODE_ENV !== 'production') {
-    logger.error(`[MongoDB] 手动启动: mongod --dbpath ./data/mongodb --fork`)
+    const dbPath = path.join(process.cwd(), 'data', 'mongodb')
+    const forkFlag = process.platform === 'win32' ? '' : '--fork'
+    BotUtil.makeLog('error', `手动启动: mongod --dbpath "${dbPath}" ${forkFlag}`.trim(), 'MongoDB')
   }
   
   process.exit(1)
@@ -125,11 +133,11 @@ function handleFinalConnectionFailure(error, port) {
 
 function registerEventHandlers(client) {
   client.on('connectionPoolClosed', () => {
-    logger.warn('[MongoDB] 连接池已关闭')
+    BotUtil.makeLog('warn', '连接池已关闭', 'MongoDB')
   })
 
   client.on('serverHeartbeatFailed', (event) => {
-    logger.warn(`[MongoDB] 心跳失败: ${event.failure?.message || '未知错误'}`)
+    BotUtil.makeLog('warn', `心跳失败: ${event.failure?.message || '未知错误'}`, 'MongoDB')
   })
 }
 
@@ -138,7 +146,7 @@ function startHealthCheck(client, db) {
     try {
       await db.admin().ping()
     } catch (err) {
-      logger.warn(`[MongoDB] 健康检查失败: ${err.message}`)
+      BotUtil.makeLog('warn', `健康检查失败: ${err.message}`, 'MongoDB')
     }
   }, MONGODB_CONFIG.HEALTH_CHECK_INTERVAL)
 }
@@ -148,7 +156,8 @@ async function getArchitectureOptions() {
   
   try {
     const { stdout: arch } = await execCommand('uname -m')
-    if (arch.trim().includes('aarch64') || arch.trim().includes('arm64')) {
+    const archType = arch.trim()
+    if (archType.includes('aarch64') || archType.includes('arm64')) {
       return ' --nojournal'
     }
   } catch {}
@@ -176,15 +185,16 @@ function maskMongoUrl(url) {
 }
 
 export async function closeMongodb() {
-  if (globalClient) {
-    try {
-      await globalClient.close()
-      logger.info('[MongoDB] 连接已关闭')
-      globalClient = null
-      globalDb = null
-    } catch (err) {
-      logger.error(`[MongoDB] 关闭失败: ${err.message}`)
-    }
+  if (!globalClient) return
+
+  try {
+    await globalClient.close()
+    BotUtil.makeLog('info', '连接已关闭', 'MongoDB')
+    globalClient = null
+    globalDb = null
+  } catch (err) {
+    BotUtil.makeLog('error', `关闭失败: ${err.message}`, 'MongoDB')
   }
 }
+
 

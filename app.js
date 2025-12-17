@@ -260,7 +260,7 @@ class DependencyManager {
       /** 安装缺失的依赖 */
       if (missingDeps.length > 0) {
         await this.installDependencies(missingDeps);
-      } else { }
+      }
     } catch (error) {
       await this.logger.error(`依赖检查失败: ${error.message}`);
       throw error;
