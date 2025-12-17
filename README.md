@@ -316,28 +316,25 @@ XRK-AGT/
 
 ```sh
 # 使用 Github
-git clone --depth=1 https://github.com/Xrkseek/XRK-AGT.git
+git clone --depth=1 https://github.com/sunflowermm/XRK-AGT.git
+# 使用 Gitcode
+git clone --depth=1 https://gitcode.com/Xrkseek/XRK-AGT.git
 cd XRK-AGT
 ```
 
 ### 安装依赖
 
 > 外网环境可先根据需要调整本地 `.npmrc`（如切换为官方源），再安装依赖。  
-> 国内环境一般可直接安装；若个别依赖安装失败，可在运行后通过向日葵插件发送 `#打依赖` 自动补齐。
 
 ```sh
-# 推荐：pnpm
+# 推荐：pnpm，且仅支持pnpm
 pnpm install
-
-# 或使用 npm
-npm install
 ```
 
 ### 运行与登录
 
 > 首次运行按终端提示完成登录。  
-> 支持多开窗口登录，模仿 QQ 客户端的多实例处理方式，保证多 Bot 回复的兼容性。  
-> 与 Yunzai-Bot v3 不同，icqq 登录配置文件存放在 `data/bots/<QQ号>/`；  
+> 支持多开窗口登录，模仿 QQ 客户端的多实例处理方式，保证多 Bot 回复的兼容性。   
 > 服务器登录相关插件配置位于 `config/server_config/`，便于迁移。
 
 启动脚本：

@@ -14,6 +14,18 @@
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
 - **[Bot 主类](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
 
+### 🏗️ 架构层次
+
+XRK-AGT 采用清晰的分层架构：
+
+- **运行核心层** (`src/bot.js`) - 系统入口，统一管理所有组件
+- **基础设施层（辅助层）** (`src/infrastructure/`) - 提供基类、加载器、工具，不包含业务逻辑
+- **任务层（Tasker）** (`core/tasker/`) - 协议转换，生成统一事件
+- **事件系统** (`core/events/`) - 事件标准化和预处理
+- **业务层** (`core/plugin/`, `core/http/`, `core/stream/`) - 具体业务实现
+
+详细说明请参考 [项目概览](../PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
+
 ### 🔌 插件系统
 
 - **[插件基类](plugin-base.md)** - 插件基类 `plugin` 的设计、规则匹配与上下文管理
@@ -21,10 +33,15 @@
 - **[事件系统](事件系统标准化文档.md)** - 事件命名/字段责任/流程速览（精简版）
 - **[事件监听器开发](事件监听器开发指南.md)** - 最小事件监听器模版与去重注意事项
 
-### 🔄 Tasker 系统（事件生成器/任务层）
+### 🔄 Tasker 系统（任务层/事件生成器）
 
 - **[Tasker 加载器](tasker-loader.md)** - `TaskerLoader` 如何扫描并加载 Tasker（事件生成器）
+- **[Tasker 底层规范](tasker-base-spec.md)** - Tasker 基础接口规范
 - **[OneBotv11 Tasker](tasker-onebotv11.md)** - OneBotv11 Tasker 完整文档，包含全局对象说明和使用示例
+
+### 📡 事件系统
+
+- **[事件系统标准化文档](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程
 - **[事件监听器开发指南](事件监听器开发指南.md)** - 如何为框架注册新的事件监听器
 
 ### 🌐 HTTP/API 层
@@ -52,34 +69,40 @@
 
 ### 插件开发者
 
-1. **[Bot 主类](bot.md)** - 了解整体运行环境与事件来源
-2. **[插件基类](plugin-base.md)** - 学习插件基类与规则/上下文用法
-3. **[插件加载器](plugins-loader.md)** - 了解事件如何流转到插件
-4. **[事件系统](事件系统标准化文档.md)** - 了解事件命名规范和监听方式
-5. **[AI Stream](aistream.md)** - 需要使用 AI 工作流时再阅读
+1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解整体架构和分层设计
+2. **[Bot 主类](bot.md)** - 了解整体运行环境与事件来源
+3. **[插件基类](plugin-base.md)** - 学习插件基类与规则/上下文用法
+4. **[插件加载器](plugins-loader.md)** - 了解事件如何流转到插件
+5. **[事件系统](事件系统标准化文档.md)** - 了解事件命名规范和监听方式
+6. **[AI Stream](aistream.md)** - 需要使用 AI 工作流时再阅读
 
-### Tasker 开发者（事件生成器开发者）
+### Tasker 开发者（任务层/事件生成器开发者）
 
-1. **[Tasker 加载器](tasker-loader.md)** - 了解 Tasker 是如何被框架加载的
-2. **[OneBotv11 Tasker](tasker-onebotv11.md)** - 参考成熟实现，学习事件转译与对象封装方式
-3. **[事件监听器开发指南](事件监听器开发指南.md)** - 学习如何创建新的事件监听器
-4. **[Bot 主类](bot.md)** - 理解 Tasker 与 `Bot` 的交互点（`Bot.tasker` / `Bot.wsf` / `Bot.em`）
+1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次和 Tasker 定位
+2. **[Tasker 加载器](tasker-loader.md)** - 了解 Tasker 是如何被框架加载的
+3. **[Tasker 底层规范](tasker-base-spec.md)** - 了解 Tasker 基础接口规范
+4. **[OneBotv11 Tasker](tasker-onebotv11.md)** - 参考成熟实现，学习事件转译与对象封装方式
+5. **[事件监听器开发指南](事件监听器开发指南.md)** - 学习如何创建新的事件监听器
+6. **[Bot 主类](bot.md)** - 理解 Tasker 与 `Bot` 的交互点（`Bot.tasker` / `Bot.wsf` / `Bot.em`）
 
 ### 后端/API 开发者
 
-1. **[Bot 主类](bot.md)** - 了解 HTTP 服务器、认证、中间件栈
-2. **[HTTP API 基类](http-api.md)** - 学习如何定义一个新的 API 模块
-3. **[API 加载器](api-loader.md)** - 理解 API 模块如何被自动加载与热重载
+1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次和 API 定位
+2. **[Bot 主类](bot.md)** - 了解 HTTP 服务器、认证、中间件栈
+3. **[HTTP API 基类](http-api.md)** - 学习如何定义一个新的 API 模块
+4. **[API 加载器](api-loader.md)** - 理解 API 模块如何被自动加载与热重载
 
 ### 运维 / 配置管理者
 
-1. **[配置基类](config-base.md)** - 理解配置读写与校验机制
-2. **[Bot 主类](bot.md)** + **[项目概览](../PROJECT_OVERVIEW.md)** - 了解服务端口、反向代理、CORS 与安全策略
+1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解整体架构和目录结构
+2. **[配置基类](config-base.md)** - 理解配置读写与校验机制
+3. **[Bot 主类](bot.md)** - 了解服务端口、反向代理、CORS 与安全策略
 
 ### 前端 / 渲染相关开发者
 
-1. **[渲染器](renderer.md)** - 了解 HTML 模板渲染与文件生成
-2. **[应用开发指南](app-dev.md)** - 了解 Web 控制台开发
+1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次
+2. **[渲染器](renderer.md)** - 了解 HTML 模板渲染与文件生成
+3. **[应用开发指南](app-dev.md)** - 了解 Web 控制台开发
 
 ---
 
@@ -87,7 +110,7 @@
 
 ### 编写一个简单指令插件
 
-1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 中的目录解析
+1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 中的架构层次说明
 2. 阅读 **[Bot 主类](bot.md)** 与 **[插件基类](plugin-base.md)**
 3. 参考 `core/plugin/example` 目录中的示例，在 `core/plugin` 下新建自己的插件目录与 JS 文件
 
@@ -97,12 +120,20 @@
 2. 在 `core/http` 目录中新建一个 `.js` 文件，导出一个符合 `HttpApi` 结构的对象或类
 3. 重启或等待 `ApiLoader` 热重载，使用浏览器或 Postman 验证新接口
 
-### 接入新的 IM 平台
+### 接入新的 IM 平台（创建新 Tasker）
 
-1. 阅读 **[Tasker 加载器](tasker-loader.md)** 与 **[OneBotv11 Tasker](tasker-onebotv11.md)**
-2. 在 `core/tasker` 中参照 OneBotv11 编写新 Tasker 文件
-3. 阅读 **[事件监听器开发指南](事件监听器开发指南.md)**，创建对应的事件监听器
-4. 确保对外暴露统一的事件结构（`post_type/message_type/notice_type` 等），这样可以复用现有插件
+1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 了解架构层次
+2. 阅读 **[Tasker 加载器](tasker-loader.md)** 与 **[Tasker 底层规范](tasker-base-spec.md)**
+3. 参考 **[OneBotv11 Tasker](tasker-onebotv11.md)**，在 `core/tasker` 中编写新 Tasker 文件
+4. 阅读 **[事件监听器开发指南](事件监听器开发指南.md)**，创建对应的事件监听器
+5. 确保对外暴露统一的事件结构（`post_type/message_type/notice_type` 等），这样可以复用现有插件
+
+### 创建新的 AI 工作流
+
+1. 阅读 **[AI Stream](aistream.md)** 了解基类设计
+2. 在 `core/stream` 目录中创建新的工作流文件
+3. 基于 `AIStream` 实现自定义工作流逻辑
+4. 在插件或 API 中调用新工作流
 
 ---
 
@@ -131,10 +162,11 @@
 
 ## ⚠️ 重要提示
 
-1. **全局对象访问**：始终通过 `Bot[self_id]` 访问 Bot 实例，不要直接使用 `e.bot`（除非确保已初始化）
-2. **事件命名**：遵循 `tasker.类型.子类型` 格式，如 `onebot.message.group.normal`
-3. **错误处理**：所有异步操作都应使用 try-catch，API 调用失败会抛出错误
-4. **文档更新**：本文档会持续更新，请定期查看最新版本
+1. **架构层次**：理解基础设施层（辅助层）和业务层的区别，基础设施层提供通用能力，业务层实现具体功能
+2. **全局对象访问**：始终通过 `Bot[self_id]` 访问 Bot 实例，不要直接使用 `e.bot`（除非确保已初始化）
+3. **事件命名**：遵循 `tasker.类型.子类型` 格式，如 `onebot.message.group.normal`
+4. **错误处理**：所有异步操作都应使用 try-catch，API 调用失败会抛出错误
+5. **文档更新**：本文档会持续更新，请定期查看最新版本
 
 ---
 
@@ -146,14 +178,16 @@
 2. 确保示例代码可以正常运行
 3. 避免无端引用不存在的对象或方法
 4. 提供完整、准确的说明
+5. 保持与架构层次的一致性
 
 ---
 
 ## 🔗 相关资源
 
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 项目整体架构说明
-- **[GitHub 仓库](https://github.com/Xrkseek/XRK-AGT)** - 源代码仓库
+- **[GitHub 仓库](https://github.com/sunflowermm/XRK-AGT)** - 源代码仓库
+- **[GitCode 仓库](https://gitcode.com/Xrkseek/XRK-AGT)** - 国内镜像仓库
 
 ---
 
-*最后更新：2025-12-14*
+*最后更新：2025-01-XX*
