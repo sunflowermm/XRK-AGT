@@ -3,10 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="XRK-AGT控制台 - 多语言、多适配器、工作流驱动型智能体平台">
+    <meta name="theme-color" content="#0ea5e9">
     <title>XRK-AGT控制台</title>
+    <!-- DNS预解析和预连接优化 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <!-- 字体加载优化 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -21,8 +27,8 @@
                     </svg>
                 </div>
                 <span class="brand-name">XRK-AGT控制台</span>
-                <button class="sidebar-close" id="sidebarClose">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="sidebar-close" id="sidebarClose" aria-label="关闭侧边栏" title="关闭侧边栏">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <path d="M18 6L6 18M6 6l12 12"/>
                     </svg>
                 </button>
@@ -78,30 +84,30 @@
                     <span class="status-dot"></span>
                     <span class="status-text">未连接</span>
                 </div>
-                <button class="theme-btn" id="themeToggle" title="切换主题">
-                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="5"/>
-                        <line x1="12" y1="1" x2="12" y2="3"/>
-                        <line x1="12" y1="21" x2="12" y2="23"/>
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                        <line x1="1" y1="12" x2="3" y2="12"/>
-                        <line x1="21" y1="12" x2="23" y2="12"/>
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                    </svg>
-                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-                    </svg>
-                </button>
+                    <button class="theme-btn" id="themeToggle" title="切换主题" aria-label="切换主题">
+                        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="5"/>
+                            <line x1="12" y1="1" x2="12" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="23"/>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                            <line x1="1" y1="12" x2="3" y2="12"/>
+                            <line x1="21" y1="12" x2="23" y2="12"/>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                        </svg>
+                        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                        </svg>
+                    </button>
             </div>
         </aside>
 
         <!-- 主内容区 -->
         <main class="main">
             <header class="header">
-                <button class="menu-btn" id="menuBtn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="menu-btn" id="menuBtn" aria-label="打开菜单" aria-expanded="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <line x1="3" y1="12" x2="21" y2="12"/>
                         <line x1="3" y1="6" x2="21" y2="6"/>
                         <line x1="3" y1="18" x2="21" y2="18"/>
@@ -136,7 +142,9 @@
     <!-- Toast 容器 -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="app.js"></script>
+    <!-- Chart.js 延迟加载优化 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+    <!-- 主应用脚本 -->
+    <script src="app.js" defer></script>
 </body>
 </html>

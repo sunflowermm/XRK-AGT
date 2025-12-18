@@ -1,7 +1,158 @@
 /**
  * XRK-AGT控制台
  * 重构版 - 企业级简洁设计
+ * 优化版本 - 性能提升与代码质量改进
  */
+
+// ========== 工具函数 ==========
+/**
+ * 防抖函数 - 延迟执行，在连续触发时只执行最后一次
+ * @param {Function} fn - 要执行的函数
+ * @param {number} delay - 延迟时间（毫秒）
+ * @returns {Function} 防抖后的函数
+ */
+function debounce(fn, delay = 300) {
+  let timer = null;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+/**
+ * 节流函数 - 限制执行频率，在指定时间内只执行一次
+ * @param {Function} fn - 要执行的函数
+ * @param {number} delay - 间隔时间（毫秒）
+ * @returns {Function} 节流后的函数
+ */
+function throttle(fn, delay = 300) {
+  let lastTime = 0;
+  return function(...args) {
+    const now = Date.now();
+    if (now - lastTime >= delay) {
+      lastTime = now;
+      fn.apply(this, args);
+    }
+  };
+}
+
+/**
+ * 安全的DOM查询 - 避免重复查询
+ * @param {string} selector - CSS选择器
+ * @param {Element} context - 查询上下文，默认为document
+ * @returns {Element|null} 找到的元素或null
+ */
+function $(selector, context = document) {
+  return context.querySelector(selector);
+}
+
+/**
+ * 批量DOM查询
+ * @param {string} selector - CSS选择器
+ * @param {Element} context - 查询上下文，默认为document
+ * @returns {NodeList} 找到的元素列表
+ */
+function $$(selector, context = document) {
+  return context.querySelectorAll(selector);
+}
+
+/**
+ * 安全的JSON解析
+ * @param {string} str - JSON字符串
+ * @param {*} defaultValue - 解析失败时的默认值
+ * @returns {*} 解析结果或默认值
+ */
+function safeJsonParse(str, defaultValue = null) {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return defaultValue;
+  }
+}
+
+/**
+ * 格式化错误信息
+ * @param {Error|string} error - 错误对象或字符串
+ * @returns {string} 格式化的错误信息
+ */
+function formatError(error) {
+  if (typeof error === 'string') return error;
+  if (error?.message) return error.message;
+  if (error?.toString) return error.toString();
+  return '未知错误';
+}
+
+/**
+ * 性能监控 - 测量函数执行时间
+ * @param {string} label - 标签
+ * @param {Function} fn - 要测量的函数
+ * @returns {Promise<*>} 函数执行结果
+ */
+async function measurePerformance(label, fn) {
+  if (process.env.NODE_ENV === 'production') {
+    return await fn();
+  }
+  const start = performance.now();
+  const result = await fn();
+  const end = performance.now();
+  console.log(`[Performance] ${label}: ${(end - start).toFixed(2)}ms`);
+  return result;
+}
+
+/**
+ * 图片懒加载 - 使用Intersection Observer API
+ * @param {string} selector - 图片选择器
+ */
+function initLazyLoad(selector = 'img[data-src]') {
+  if (!('IntersectionObserver' in window)) {
+    // 降级处理：直接加载所有图片
+    const images = $$(selector);
+    images.forEach(img => {
+      if (img.dataset.src) {
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+      }
+    });
+    return;
+  }
+
+  const imageObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const img = entry.target;
+        if (img.dataset.src) {
+          img.src = img.dataset.src;
+          img.removeAttribute('data-src');
+          img.classList.add('loaded');
+          observer.unobserve(img);
+        }
+      }
+    });
+  }, {
+    rootMargin: '50px' // 提前50px开始加载
+  });
+
+  const images = $$(selector);
+  images.forEach(img => imageObserver.observe(img));
+}
+
+/**
+ * 预加载关键资源
+ * @param {string[]} urls - 资源URL列表
+ */
+function preloadResources(urls) {
+  urls.forEach(url => {
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.href = url;
+    if (url.endsWith('.css')) {
+      link.as = 'style';
+    } else if (url.endsWith('.js')) {
+      link.as = 'script';
+    }
+    document.head.appendChild(link);
+  });
+}
 
 class App {
   constructor() {
@@ -49,6 +200,9 @@ class App {
   }
 
   async init() {
+    // 初始化懒加载
+    initLazyLoad();
+    
     await this.loadAPIConfig();
     this.bindEvents();
     this.loadSettings();
@@ -65,9 +219,19 @@ class App {
       }
     });
     
-    setInterval(() => {
-      if (this.currentPage === 'home') this.loadSystemStatus();
+    // 使用节流优化定时器，避免页面不可见时执行
+    this._statusUpdateTimer = setInterval(() => {
+      if (this.currentPage === 'home' && !document.hidden) {
+        this.loadSystemStatus();
+      }
     }, 60000);
+    
+    // 清理定时器（页面卸载时）
+    window.addEventListener('beforeunload', () => {
+      if (this._statusUpdateTimer) {
+        clearInterval(this._statusUpdateTimer);
+      }
+    });
   }
 
   async loadAPIConfig() {
@@ -103,16 +267,25 @@ class App {
   }
 
   bindEvents() {
-    // 侧边栏
-    document.getElementById('menuBtn')?.addEventListener('click', () => this.toggleSidebar());
-    document.getElementById('sidebarClose')?.addEventListener('click', () => this.closeSidebar());
-    document.getElementById('overlay')?.addEventListener('click', () => this.closeSidebar());
+    // 使用工具函数优化DOM查询
+    const menuBtn = $('#menuBtn');
+    const sidebarClose = $('#sidebarClose');
+    const overlay = $('#overlay');
+    const apiListBackBtn = $('#apiListBackBtn');
+    const themeToggle = $('#themeToggle');
+    const saveApiKeyBtn = $('#saveApiKeyBtn');
+    const apiKey = $('#apiKey');
+    const apiKeyToggleBtn = $('#apiKeyToggleBtn');
+    
+    // 侧边栏 - 使用事件委托优化
+    menuBtn?.addEventListener('click', () => this.toggleSidebar());
+    sidebarClose?.addEventListener('click', () => this.closeSidebar());
+    overlay?.addEventListener('click', () => this.closeSidebar());
     
     // API列表返回按钮
-    document.getElementById('apiListBackBtn')?.addEventListener('click', () => {
-      // 返回到导航菜单，不关闭侧边栏
-      const navMenu = document.getElementById('navMenu');
-      const apiListContainer = document.getElementById('apiListContainer');
+    apiListBackBtn?.addEventListener('click', () => {
+      const navMenu = $('#navMenu');
+      const apiListContainer = $('#apiListContainer');
       if (navMenu && apiListContainer) {
         navMenu.style.display = 'flex';
         apiListContainer.style.display = 'none';
@@ -120,22 +293,30 @@ class App {
     });
     
     // 主题切换
-    document.getElementById('themeToggle')?.addEventListener('click', () => this.toggleTheme());
+    themeToggle?.addEventListener('click', () => this.toggleTheme());
     
-    // API Key
-    document.getElementById('saveApiKeyBtn')?.addEventListener('click', () => this.saveApiKey());
-    document.getElementById('apiKey')?.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') this.saveApiKey();
-    });
-    
-    // 导航
-    document.querySelectorAll('.nav-item').forEach(item => {
-      item.addEventListener('click', (e) => {
+    // API Key - 使用防抖优化
+    const debouncedSaveApiKey = debounce(() => this.saveApiKey(), 500);
+    saveApiKeyBtn?.addEventListener('click', () => this.saveApiKey());
+    apiKey?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
         e.preventDefault();
-        const page = item.dataset.page;
-        if (page) this.navigateTo(page);
-      });
+        this.saveApiKey();
+      }
     });
+    
+    // 导航 - 使用事件委托优化性能
+    const navContainer = $('#navMenu');
+    if (navContainer) {
+      navContainer.addEventListener('click', (e) => {
+        const navItem = e.target.closest('.nav-item');
+        if (navItem) {
+          e.preventDefault();
+          const page = navItem.dataset.page;
+          if (page) this.navigateTo(page);
+        }
+      });
+    }
     
     // 快捷键
     document.addEventListener('keydown', (e) => {
@@ -146,11 +327,11 @@ class App {
     });
     
     // API Key 切换按钮
-    document.getElementById('apiKeyToggleBtn')?.addEventListener('click', () => this.toggleApiKeyBox());
+    apiKeyToggleBtn?.addEventListener('click', () => this.toggleApiKeyBox());
   }
   
   toggleApiKeyBox() {
-    const apiKeyBox = document.getElementById('apiKeyBox');
+    const apiKeyBox = $('#apiKeyBox');
     if (apiKeyBox) {
       apiKeyBox.classList.toggle('show');
     }
@@ -158,7 +339,10 @@ class App {
 
   loadSettings() {
     const savedKey = localStorage.getItem('apiKey');
-    if (savedKey) document.getElementById('apiKey').value = savedKey;
+    const apiKeyInput = $('#apiKey');
+    if (savedKey && apiKeyInput) {
+      apiKeyInput.value = savedKey;
+    }
     
     const storedTheme = localStorage.getItem('theme');
     if (storedTheme === 'dark' || storedTheme === 'light') {
@@ -221,33 +405,40 @@ class App {
   }
 
   toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('overlay');
+    const sidebar = $('#sidebar');
+    const overlay = $('#overlay');
     sidebar?.classList.toggle('open');
     overlay?.classList.toggle('show');
   }
 
   openSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('overlay');
+    const sidebar = $('#sidebar');
+    const overlay = $('#overlay');
     sidebar?.classList.add('open');
     overlay?.classList.add('show');
   }
 
   closeSidebar() {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('overlay').classList.remove('show');
+    const sidebar = $('#sidebar');
+    const overlay = $('#overlay');
+    sidebar?.classList.remove('open');
+    overlay?.classList.remove('show');
   }
 
   saveApiKey() {
-    const key = document.getElementById('apiKey')?.value?.trim();
+    const apiKeyInput = $('#apiKey');
+    const key = apiKeyInput?.value?.trim();
     if (!key) {
       this.showToast('请输入 API Key', 'warning');
       return;
     }
-    localStorage.setItem('apiKey', key);
-    this.showToast('API Key 已保存', 'success');
-    this.checkConnection();
+    try {
+      localStorage.setItem('apiKey', key);
+      this.showToast('API Key 已保存', 'success');
+      this.checkConnection();
+    } catch (error) {
+      this.showToast('保存失败: ' + formatError(error), 'error');
+    }
   }
 
   getHeaders() {
@@ -259,19 +450,39 @@ class App {
 
   async checkConnection() {
     try {
-      const res = await fetch(`${this.serverUrl}/api/health`, { headers: this.getHeaders() });
-      const status = document.getElementById('connectionStatus');
+      // 使用兼容的超时处理
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const res = await fetch(`${this.serverUrl}/api/health`, { 
+        headers: this.getHeaders(),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      const status = $('#connectionStatus');
+      if (!status) return;
+      
       if (res.ok) {
         status.classList.add('online');
-        status.querySelector('.status-text').textContent = '已连接';
+        const statusText = status.querySelector('.status-text');
+        if (statusText) statusText.textContent = '已连接';
       } else {
         status.classList.remove('online');
-        status.querySelector('.status-text').textContent = '未授权';
+        const statusText = status.querySelector('.status-text');
+        if (statusText) statusText.textContent = '未授权';
       }
-    } catch {
-      const status = document.getElementById('connectionStatus');
+    } catch (error) {
+      const status = $('#connectionStatus');
+      if (!status) return;
+      
       status.classList.remove('online');
-      status.querySelector('.status-text').textContent = '连接失败';
+      const statusText = status.querySelector('.status-text');
+      if (statusText) {
+        const isTimeout = error.name === 'AbortError' || error.name === 'TimeoutError';
+        statusText.textContent = isTimeout ? '连接超时' : '连接失败';
+      }
     }
   }
 
@@ -284,66 +495,71 @@ class App {
   navigateTo(page) {
     this.currentPage = page;
     
-    // 更新导航状态
-    document.querySelectorAll('.nav-item').forEach(item => {
+    // 更新导航状态 - 使用批量DOM操作优化
+    const navItems = $$('.nav-item');
+    navItems.forEach(item => {
       item.classList.toggle('active', item.dataset.page === page);
     });
     
     // 更新标题
     const titles = { home: '系统概览', chat: 'AI 对话', config: '配置管理', api: 'API 调试' };
-    const headerTitle = document.getElementById('headerTitle');
+    const headerTitle = $('#headerTitle');
     if (headerTitle) {
       headerTitle.textContent = titles[page] || page;
     }
     
     // 侧边栏内容切换：API调试页面显示API列表，其他页面显示导航
-    const navMenu = document.getElementById('navMenu');
-    const apiListContainer = document.getElementById('apiListContainer');
+    const navMenu = $('#navMenu');
+    const apiListContainer = $('#apiListContainer');
+    const isMobile = window.innerWidth <= 768;
     
     if (page === 'api') {
-      navMenu.style.display = 'none';
-      apiListContainer.style.display = 'flex';
+      if (navMenu) navMenu.style.display = 'none';
+      if (apiListContainer) apiListContainer.style.display = 'flex';
       this.renderAPIGroups();
-      if (window.innerWidth <= 768) {
+      if (isMobile) {
         this.openSidebar();
       }
     } else {
-      navMenu.style.display = 'flex';
-      apiListContainer.style.display = 'none';
-      if (window.innerWidth <= 768) {
+      if (navMenu) navMenu.style.display = 'flex';
+      if (apiListContainer) apiListContainer.style.display = 'none';
+      if (isMobile) {
         this.closeSidebar();
       }
     }
     
-    // 渲染页面
-    switch (page) {
-      case 'home': this.renderHome(); break;
-      case 'chat': this.renderChat(); break;
-      case 'config': this.renderConfig(); break;
-      case 'api': this.renderAPI(); break;
-      default: this.renderHome();
-    }
+    // 渲染页面 - 使用requestAnimationFrame优化渲染性能
+    requestAnimationFrame(() => {
+      switch (page) {
+        case 'home': this.renderHome(); break;
+        case 'chat': this.renderChat(); break;
+        case 'config': this.renderConfig(); break;
+        case 'api': this.renderAPI(); break;
+        default: this.renderHome();
+      }
+    });
     
-    location.hash = `#/${page}`;
+    // 使用history API优化，避免不必要的hash变化
+    if (location.hash !== `#/${page}`) {
+      location.hash = `#/${page}`;
+    }
   }
 
   // ========== 首页 ==========
   async renderHome() {
-    // 销毁旧的图表实例
-    if (this._charts.cpu) {
-      this._charts.cpu.destroy();
-      this._charts.cpu = null;
-    }
-    if (this._charts.mem) {
-      this._charts.mem.destroy();
-      this._charts.mem = null;
-    }
-    if (this._charts.net) {
-      this._charts.net.destroy();
-      this._charts.net = null;
-    }
+    // 销毁旧的图表实例 - 优化内存管理
+    ['cpu', 'mem', 'net'].forEach(key => {
+      if (this._charts[key]) {
+        try {
+          this._charts[key].destroy();
+        } catch (e) {
+          console.warn(`Failed to destroy chart ${key}:`, e);
+        }
+        this._charts[key] = null;
+      }
+    });
     
-    const content = document.getElementById('content');
+    const content = $('#content');
     content.innerHTML = `
       <div class="dashboard">
         <div class="dashboard-header">
@@ -480,8 +696,19 @@ class App {
       </div>
     `;
     
-    this.loadSystemStatus();
-    this.loadPluginsInfo();
+    // 使用requestIdleCallback优化非关键任务
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => {
+        this.loadSystemStatus();
+        this.loadPluginsInfo();
+      }, { timeout: 2000 });
+    } else {
+      // 降级处理
+      setTimeout(() => {
+        this.loadSystemStatus();
+        this.loadPluginsInfo();
+      }, 100);
+    }
   }
 
   async loadSystemStatus() {

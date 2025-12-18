@@ -59,9 +59,20 @@
   --header-height: 64px;
   --api-panel-width: 280px;
 
-  /* 动画 */
+    /* 动画 */
   --transition: 0.2s ease;
   --transition-slow: 0.3s ease;
+  
+  /* 性能优化 */
+  --will-change-transform: transform;
+  --will-change-opacity: opacity;
+  
+  /* Z-index层级管理 */
+  --z-sidebar: 100;
+  --z-header: 50;
+  --z-overlay: 90;
+  --z-toast: 1000;
+  --z-modal: 2000;
 }
 
 /* 暗色主题 */
@@ -142,8 +153,11 @@ body {
   top: 0;
   left: 0;
   height: 100vh;
-  z-index: 100;
+  z-index: var(--z-sidebar);
   transition: transform var(--transition-slow);
+  /* 性能优化：使用transform代替left，启用GPU加速 */
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .sidebar-brand {
@@ -305,7 +319,10 @@ body.dark .theme-btn .icon-moon { display: block; }
   gap: 16px;
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: var(--z-header);
+  /* 性能优化：启用GPU加速 */
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .menu-btn {
@@ -497,8 +514,11 @@ body.dark .theme-btn .icon-moon { display: block; }
   background: rgba(0, 0, 0, 0.5);
   opacity: 0;
   visibility: hidden;
-  z-index: 90;
-  transition: all var(--transition);
+  z-index: var(--z-overlay);
+  transition: opacity var(--transition), visibility var(--transition);
+  /* 性能优化：使用opacity和visibility代替display */
+  will-change: opacity, visibility;
+  backdrop-filter: blur(2px);
 }
 
 .overlay.show {
@@ -690,8 +710,10 @@ select.form-input {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 1000;
+  z-index: var(--z-toast);
   pointer-events: none;
+  /* 性能优化：启用GPU加速 */
+  will-change: transform;
 }
 
 .toast {
@@ -1155,6 +1177,13 @@ select.form-input {
   margin-top: 8px;
   transition: transform 0.2s, opacity 0.2s;
   object-fit: contain;
+  /* 懒加载优化 */
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.chat-image.loaded {
+  opacity: 1;
 }
 
 .chat-image:hover {
