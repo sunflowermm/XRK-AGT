@@ -1,0 +1,24 @@
+# 小米 MiMo LLM 工厂配置
+# 仅文本大模型调用（不包含识图逻辑）
+
+# API 基础配置
+baseUrl: https://api.xiaomimimo.com/v1
+apiKey: ""
+
+# 模型配置
+chatModel: mimo-v2-flash
+
+# API 参数配置（参考官方示例）
+temperature: 0.3
+maxTokens: 1024
+topP: 0.95
+frequencyPenalty: 0
+presencePenalty: 0
+
+# 超时配置
+timeout: 360000
+
+# 接口路径配置（OpenAI 兼容格式）
+path: /chat/completions
+
+

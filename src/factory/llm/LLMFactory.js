@@ -1,5 +1,6 @@
 import GPTGodLLMClient from './GPTGodLLMClient.js';
 import VolcengineLLMClient from './VolcengineLLMClient.js';
+import XiaomiMiMoLLMClient from './XiaomiMiMoLLMClient.js';
 
 const providers = new Map([
   // GPTGod 提供商：GPTGod 大语言模型，支持识图功能
@@ -7,7 +8,10 @@ const providers = new Map([
   ['gptgod', (config) => new GPTGodLLMClient(config)],
   // 火山引擎提供商：火山引擎豆包大模型
   // 接口地址：https://ark.cn-beijing.volces.com/api/v3
-  ['volcengine', (config) => new VolcengineLLMClient(config)]
+  ['volcengine', (config) => new VolcengineLLMClient(config)],
+  // 小米 MiMo 提供商：兼容 OpenAI API 的 MiMo 大语言模型（仅文本）
+  // 接口地址：https://api.xiaomimimo.com/v1
+  ['xiaomimimo', (config) => new XiaomiMiMoLLMClient(config)]
 ]);
 
 export default class LLMFactory {

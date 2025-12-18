@@ -237,6 +237,10 @@ class Cfg {
   get volcengine_llm() {
     return this.getConfig('volcengine_llm');
   }
+
+  get xiaomimimo_llm() {
+    return this.getConfig('xiaomimimo_llm');
+  }
   
   get volcengine_asr() {
     return this.getConfig('volcengine_asr');

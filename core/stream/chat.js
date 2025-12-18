@@ -977,6 +977,32 @@ export default class ChatStream extends AIStream {
     }
   }
 
+  /**
+   * 构建功能列表提示（优化版）
+   * 清晰说明功能列表的作用、使用方式和执行机制
+   */
+  buildFunctionsPrompt() {
+    const enabledFuncs = this.getEnabledFunctions();
+    if (enabledFuncs.length === 0) return '';
+
+    const prompts = enabledFuncs
+      .filter(f => f.prompt)
+      .map(f => f.prompt);
+
+    if (prompts.length === 0) return '';
+
+    return `【可执行命令列表】
+在回复中使用以下格式时，系统会自动解析并执行，然后从文本中移除命令格式。
+
+格式要求：精确匹配示例（类似正则），如[命令:参数1:参数2]。执行后命令格式会被移除，用户只看到普通文本。
+
+可用命令：
+${prompts.join('\n')}
+
+示例：[开心]今天真好→发送表情+文本 | [CQ:poke,qq=123456]→戳一戳 | [禁言:123456:600]→禁言600秒
+注意：格式完全匹配，参数完整，执行结果不显示在回复中但功能生效`;
+  }
+
   buildSystemPrompt(context) {
     const { e, question } = context;
     const persona = question?.persona || '我是AI助手';
@@ -986,23 +1012,47 @@ export default class ChatStream extends AIStream {
     
     let functionsPrompt = this.buildFunctionsPrompt();
     
-    // 根据权限过滤功能
-    if (botRole === '成员') {
-      functionsPrompt = functionsPrompt
-        .split('\n')
-        .filter(line => {
+    // 根据权限过滤功能（在命令列表部分进行过滤）
+    if (functionsPrompt) {
+      const lines = functionsPrompt.split('\n');
+      const filteredLines = [];
+      let inCommandsSection = false;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // 找到"可用命令："标记
+        if (line.includes('可用命令：')) {
+          inCommandsSection = true;
+          filteredLines.push(line);
+          continue;
+        }
+        
+        // 在命令区域之外，保留所有行
+        if (!inCommandsSection) {
+          filteredLines.push(line);
+          continue;
+        }
+        
+        // 在命令区域内，根据权限过滤
+        if (botRole === '成员') {
           const restrictedKeywords = [
             '禁言', '解禁', '全员禁言', '改名片', '改群名', 
             '设管', '取管', '头衔', '踢人', '精华', '公告'
           ];
-          return !restrictedKeywords.some(keyword => line.includes(keyword));
-        })
-        .join('\n');
-    } else if (botRole === '管理员') {
-      functionsPrompt = functionsPrompt
-        .split('\n')
-        .filter(line => !line.includes('[设管') && !line.includes('[取管') && !line.includes('[头衔'))
-        .join('\n');
+          if (restrictedKeywords.some(keyword => line.includes(keyword))) {
+            continue; // 跳过管理员功能
+          }
+        } else if (botRole === '管理员') {
+          if (line.includes('[设管') || line.includes('[取管') || line.includes('[头衔')) {
+            continue; // 跳过群主专属功能
+          }
+        }
+        
+        filteredLines.push(line);
+      }
+      
+      functionsPrompt = filteredLines.join('\n');
     }
 
     let embeddingHint = '';

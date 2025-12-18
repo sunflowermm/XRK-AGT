@@ -41,3 +41,30 @@ optimize:
 report:
   enabled: true
   interval: 3600000            # 报告间隔（毫秒）
+
+# 磁盘优化
+disk:
+  enabled: true
+  cleanupTemp: true            # 清理临时文件
+  cleanupLogs: true            # 清理日志文件
+  tempMaxAge: 86400000         # 临时文件最大年龄（毫秒，1天）
+  logMaxAge: 604800000         # 日志文件最大年龄（毫秒，7天）
+  maxLogSize: 104857600        # 单个日志文件最大大小（字节，100MB）
+
+# 网络优化
+network:
+  enabled: true
+  maxConnections: 1000         # 最大连接数阈值
+  cleanupIdle: true            # 清理空闲连接
+
+# 进程优化
+process:
+  enabled: true
+  priority: normal              # 进程优先级: low, normal, high
+  nice: 0                       # Linux nice值 (-20到19)
+
+# 系统级优化
+system:
+  enabled: true
+  clearCache: true              # 清理系统缓存
+  optimizeCPU: true             # 优化CPU调度

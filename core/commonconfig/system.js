@@ -1547,7 +1547,7 @@ export default class SystemConfig extends ConfigBase {
                   type: 'string',
                   label: 'LLM 运营商',
                   description: '选择 LLM 工厂的运营商',
-                  enum: ['gptgod', 'volcengine'],
+                  enum: ['gptgod', 'volcengine', 'xiaomimimo'],
                   default: 'gptgod',
                   component: 'Select'
                 }

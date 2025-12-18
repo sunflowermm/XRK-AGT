@@ -924,18 +924,18 @@ export default class AIStream {
 
     let fullText = '';
 
-    const wrapDelta = typeof onDelta === 'function'
-      ? (delta) => {
-          if (!delta) return;
-          fullText += delta;
-          onDelta(delta);
-        }
-      : (delta) => {
-          if (!delta) return;
-          fullText += delta;
-        };
+    const wrapDelta = (delta) => {
+      if (!delta) return;
+      fullText += delta;
+      if (typeof onDelta === 'function') onDelta(delta);
+    };
 
-    await client.chatStream(messages, wrapDelta, config);
+    try {
+      await client.chatStream(messages, wrapDelta, config);
+    } catch (error) {
+      BotUtil.makeLog('error', `AI调用失败: ${error.message}`, 'AIStream');
+      throw error;
+    }
 
     if (!options.enableFunctionCalling || !fullText) {
       return fullText;
@@ -1044,6 +1044,8 @@ export default class AIStream {
       providerConfig = cfg.god || {};
     } else if (provider === 'volcengine') {
       providerConfig = cfg.volcengine_llm || {};
+    } else if (provider === 'xiaomimimo') {
+      providerConfig = cfg.xiaomimimo_llm || {};
     }
     
     const finalConfig = {
