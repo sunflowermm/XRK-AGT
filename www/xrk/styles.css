@@ -370,6 +370,7 @@ body.dark .theme-btn .icon-moon { display: block; }
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  overflow-x: hidden; /* 防止内部内容过长导致整体横向平移 */
 }
 
 /* API 列表容器 (在侧边栏内) */
@@ -1103,6 +1104,8 @@ select.form-input {
 }
 
 .chat-message {
+  /* 防止在列布局中被挤压高度，始终按自身内容高度渲染，然后由容器滚动 */
+  flex: 0 0 auto;
   max-width: 80%;
   padding: 12px 16px;
   border-radius: var(--radius-md);
@@ -1224,13 +1227,27 @@ select.form-input {
 }
 
 .chat-record {
+  /* 独立聊天记录卡片：拉满一行，避免被左右压缩 */
+  width: 100%;
+  max-width: 100% !important; /* 覆盖 chat-message 的 max-width: 80% */
+  margin: 8px 0; /* 与上下普通对话气泡拉开一点距离 */
+
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-  max-width: 100% !important; /* 覆盖 chat-message 的 max-width: 80% */
   word-wrap: break-word;
+
+  /* 内部采用列布局，方便内容区域固定高度滚动 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 聊天记录卡片需要打破 .chat-message.assistant / .user 的 align-self 设置 */
+.chat-message.chat-record {
+  align-self: stretch !important;
+  max-width: 100% !important;
 }
 
 .chat-record-header {
@@ -1254,11 +1271,18 @@ select.form-input {
 
 .chat-record-content {
   padding: 12px 16px;
-  max-height: 600px;
+  /* 固定高度，由内部滚动条承载内容，不再随整体布局压缩 */
+  height: 320px;
   overflow-y: auto;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   background: var(--bg-input);
+}
+
+@media (max-width: 768px) {
+  .chat-record-content {
+    height: 240px;
+  }
 }
 
 .chat-record-item {
@@ -1418,6 +1442,8 @@ select.form-input {
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 24px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 @media (max-width: 1200px) {
@@ -1441,6 +1467,7 @@ select.form-input {
   flex-direction: column;
   gap: 20px;
   height: fit-content;
+  min-width: 0; /* 避免侧栏在极端内容下撑破 grid，导致整体横移 */
 }
 
 .config-sidebar-header h1 {
@@ -1522,6 +1549,8 @@ select.form-input {
 .config-desc {
   font-size: 13px;
   color: var(--text-muted);
+  word-wrap: break-word;
+  word-break: break-all; /* 避免长路径 / 字符串把卡片撑出屏幕 */
 }
 
 .config-tag {
@@ -1909,6 +1938,8 @@ select.form-input {
   padding: 2px 6px;
   border-radius: var(--radius);
   font-size: 12px;
+  word-wrap: break-word;
+  word-break: break-all;
 }
 
 .config-json-panel textarea {
@@ -1963,6 +1994,8 @@ select.form-input {
   color: var(--text-muted);
   line-height: 1.4;
   min-height: 36px;
+  word-wrap: break-word;
+  word-break: break-all;
 }
 
 .config-switch {
@@ -2128,6 +2161,7 @@ select.form-input {
 /* 响应结果 */
 .response-section {
   margin-top: 24px;
+  max-width: 100%;
 }
 
 .response-header {
@@ -2154,6 +2188,8 @@ select.form-input {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .response-content pre {
@@ -2162,7 +2198,12 @@ select.form-input {
   font-family: 'Monaco', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.6;
-  overflow-x: auto;
+  /* 避免超长单行把卡片和页面一起撑飞，同时保证可读性 */
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-width: 100%;
+  max-height: 60vh;
+  overflow: auto;
   color: var(--text-primary);
 }
 

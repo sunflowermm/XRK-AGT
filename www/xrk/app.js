@@ -1150,25 +1150,15 @@ class App {
     // 按时间戳排序，确保顺序正确
     const sortedHistory = [...this._chatHistory].sort((a, b) => (a.ts || 0) - (b.ts || 0));
     
+    // 恢复历史时统一不做入场动画，直接渲染为最终状态
     sortedHistory.forEach(m => {
       try {
         if (m.type === 'record') {
-          // 恢复聊天记录时，直接应用 active 类，跳过动画
-          const recordDiv = this.appendChatRecord(m.messages || [], m.title || '', m.description || '', false);
-          if (recordDiv) {
-            // 立即应用 active 类，确保样式正确显示
-            recordDiv.classList.add('message-enter-active');
-          }
+          this.appendChatRecord(m.messages || [], m.title || '', m.description || '', false);
         } else if (m.type === 'image' && m.url) {
-          const imgDiv = this.appendImageMessage(m.url, false);
-          if (imgDiv) {
-            imgDiv.classList.add('message-enter-active');
-          }
+          this.appendImageMessage(m.url, false);
         } else if (m.role && m.text) {
-          const chatDiv = this.appendChat(m.role, m.text, false);
-          if (chatDiv) {
-            chatDiv.classList.add('message-enter-active');
-          }
+          this.appendChat(m.role, m.text, false);
         }
       } catch (e) {
         console.warn('恢复聊天历史项失败:', e, m);
@@ -1179,6 +1169,22 @@ class App {
     requestAnimationFrame(() => {
       box.scrollTop = box.scrollHeight;
     });
+  }
+
+  /**
+   * 统一处理消息入场动画
+   * @param {HTMLElement} div - 消息 DOM 元素
+   * @param {boolean} animate - 是否需要入场动画（历史恢复时为 false）
+   */
+  _applyMessageEnter(div, animate = true) {
+    if (!div) return;
+    if (animate) {
+      requestAnimationFrame(() => {
+        div.classList.add('message-enter-active');
+      });
+    } else {
+      div.classList.add('message-enter-active');
+    }
   }
 
   appendChat(role, text, persist = true) {
@@ -1192,15 +1198,8 @@ class App {
       box.appendChild(div);
       box.scrollTop = box.scrollHeight;
       
-      // 只有在需要动画时才延迟添加 active 类，否则立即添加
-      if (persist) {
-        requestAnimationFrame(() => {
-          div.classList.add('message-enter-active');
-        });
-      } else {
-        // 恢复历史时立即显示，不需要动画
-        div.classList.add('message-enter-active');
-      }
+      // 统一的入场动画协议：persist=true 时做过渡，历史恢复时直接展示
+      this._applyMessageEnter(div, persist);
       
       return div;
     }
@@ -1235,9 +1234,8 @@ class App {
       
       box.appendChild(div);
       box.scrollTop = box.scrollHeight;
-      requestAnimationFrame(() => {
-        div.classList.add('message-enter-active');
-      });
+      // 统一使用入场动画协议
+      this._applyMessageEnter(div, true);
     }
   }
 
@@ -1258,12 +1256,8 @@ class App {
       box.appendChild(div);
       box.scrollTop = box.scrollHeight;
       
-      // 只有在需要动画时才延迟添加 active 类
-      if (persist) {
-        requestAnimationFrame(() => {
-          div.classList.add('message-enter-active');
-        });
-      }
+      // 统一的入场动画协议
+      this._applyMessageEnter(div, persist);
       
       if (persist) {
         this._chatHistory.push({ role: 'assistant', type: 'image', url, ts: Date.now() });
@@ -1351,15 +1345,8 @@ class App {
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
 
-    // 只有在需要动画时才延迟添加 active 类，否则立即添加
-    if (persist) {
-      requestAnimationFrame(() => {
-        div.classList.add('message-enter-active');
-      });
-    } else {
-      // 恢复历史时立即显示，不需要动画
-      div.classList.add('message-enter-active');
-    }
+    // 统一的入场动画协议
+    this._applyMessageEnter(div, persist);
 
     // 保存到聊天历史（仅在需要持久化时）
     if (persist) {
@@ -3636,6 +3623,7 @@ class App {
   renderResponse(status, data, time) {
     const section = document.getElementById('responseSection');
     const isSuccess = status >= 200 && status < 300;
+    const prettyJson = JSON.stringify(data, null, 2);
     
     section.innerHTML = `
       <div style="margin-top:32px">
@@ -3644,13 +3632,24 @@ class App {
           <div class="response-meta">
             <span class="badge ${isSuccess ? 'badge-success' : 'badge-danger'}">${status || 'Error'}</span>
             <span style="color:var(--text-muted)">${time}ms</span>
+            <button id="responseCopyBtn" class="btn btn-secondary btn-sm" type="button">复制结果</button>
           </div>
         </div>
         <div class="response-content">
-          <pre>${this.syntaxHighlight(JSON.stringify(data, null, 2))}</pre>
+          <pre>${this.syntaxHighlight(prettyJson)}</pre>
         </div>
       </div>
     `;
+    
+    // 响应结果复制按钮
+    const copyBtn = document.getElementById('responseCopyBtn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(prettyJson)
+          .then(() => this.showToast('响应结果已复制到剪贴板', 'success'))
+          .catch(() => this.showToast('复制失败，请检查浏览器权限', 'error'));
+      });
+    }
     
     section.scrollIntoView({ behavior: 'smooth' });
   }
