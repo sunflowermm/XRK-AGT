@@ -59,6 +59,36 @@ export default class XiaomiMiMoLLMClient {
   }
 
   /**
+   * 转换消息格式，确保所有消息的 content 是字符串
+   * MiMo 仅支持文本，不支持图片，所以需要将对象格式的 content 转换为字符串
+   * @param {Array} messages - 消息数组
+   * @returns {Array} 转换后的消息数组
+   */
+  transformMessages(messages) {
+    if (!Array.isArray(messages)) return messages;
+
+    return messages.map(msg => {
+      const newMsg = { ...msg };
+
+      // 如果 content 是对象，转换为字符串（MiMo 只支持字符串格式的 content）
+      if (msg.content && typeof msg.content === 'object') {
+        // 提取文本内容（支持多种可能的字段名）
+        const text = msg.content.text || msg.content.content || '';
+        // MiMo 不支持图片和多模态，忽略图片相关字段，仅使用文本
+        newMsg.content = text || '';
+      } else if (msg.content === null || msg.content === undefined) {
+        // 确保 content 不为 null 或 undefined
+        newMsg.content = '';
+      } else if (typeof msg.content !== 'string') {
+        // 如果 content 不是字符串也不是对象（如数组），尝试转换为字符串
+        newMsg.content = String(msg.content || '');
+      }
+
+      return newMsg;
+    });
+  }
+
+  /**
    * 构建请求体（OpenAI 兼容格式）
    */
   buildBody(messages, overrides = {}) {
@@ -129,10 +159,13 @@ export default class XiaomiMiMoLLMClient {
    * @returns {Promise<string>} - 回复文本
    */
   async chat(messages, overrides = {}) {
+    // 转换消息格式，确保 content 为字符串
+    const transformedMessages = this.transformMessages(messages);
+
     const resp = await fetch(this.endpoint, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(this.buildBody(messages, overrides)),
+      body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
       signal: AbortSignal.timeout(this.timeout)
     });
 
@@ -153,10 +186,13 @@ export default class XiaomiMiMoLLMClient {
    * @returns {Promise<void>}
    */
   async chatStream(messages, onDelta, overrides = {}) {
+    // 转换消息格式，确保 content 为字符串
+    const transformedMessages = this.transformMessages(messages);
+
     const resp = await fetch(this.endpoint, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(this.buildBody(messages, { ...overrides, stream: true })),
+      body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
       signal: AbortSignal.timeout(this.timeout)
     });
 
