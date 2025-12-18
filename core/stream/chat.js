@@ -136,6 +136,7 @@ export default class ChatStream extends AIStream {
         const image = this.getRandomEmotionImage(params.emotion);
         if (image && context.e) {
           await context.e.reply([{ type: 'image', data: { file: image } }]);
+          await BotUtil.sleep(300);
         }
       },
       enabled: true
@@ -939,7 +940,6 @@ export default class ChatStream extends AIStream {
 
   recordMessage(e) {
     try {
-      const isGroup = e.isGroup;
       const historyKey = e.group_id || `private_${e.user_id}`;
 
       let message = e.raw_message || e.msg || '';
@@ -963,8 +963,8 @@ export default class ChatStream extends AIStream {
         time: Date.now()
       };
 
-      // 群聊内存历史，仅用于构建「群聊记录」提示
-      if (isGroup) {
+      // 群聊内存历史
+      if (e.isGroup) {
         if (!ChatStream.messageHistory.has(e.group_id)) {
           ChatStream.messageHistory.set(e.group_id, []);
         }
@@ -975,7 +975,7 @@ export default class ChatStream extends AIStream {
         }
       }
 
-      // 全局 Redis 历史（群聊 + 私聊），用于语义检索
+      // 语义检索存储
       if (this.embeddingConfig?.enabled && message && message.length > 5) {
         this.storeMessageWithEmbedding(historyKey, msgData).catch(() => {});
       }
@@ -1226,6 +1226,7 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
 
   async execute(e, messages, config) {
     try {
+      // 构建消息上下文
       if (!Array.isArray(messages)) {
         const baseMessages = await this.buildChatContext(e, messages);
         messages = await this.buildEnhancedContext(e, messages, baseMessages);
@@ -1235,6 +1236,7 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
         messages = await this.buildEnhancedContext(e, query, messages);
       }
       
+      // 调用AI获取响应
       const context = { e, question: null, config };
       const response = await this.callAI(messages, config);
       
@@ -1242,41 +1244,29 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
         return null;
       }
       
+      // 解析功能和文本
       const { functions, cleanText } = this.parseFunctions(response, context);
       
-      const emotionIndex = functions.findIndex(f => f.type === 'emotion');
-      const isEmotionLast = emotionIndex === functions.length - 1 && functions.length > 0;
-      
-      if (isEmotionLast && cleanText) {
-        for (let i = 0; i < functions.length - 1; i++) {
-          await this.executeFunction(functions[i].type, functions[i].params, context);
-        }
-        
-        await this.sendMessages(e, cleanText);
-        await BotUtil.sleep(500);
-        await this.executeFunction(functions[emotionIndex].type, functions[emotionIndex].params, context);
-      } else {
-        for (let i = 0; i < functions.length; i++) {
-          await this.executeFunction(functions[i].type, functions[i].params, context);
-          if (i < functions.length - 1 && !functions[i].noDelay) {
-            await BotUtil.sleep(2500);
-          }
-        }
-        
-        if (cleanText) {
-          await this.sendMessages(e, cleanText);
-        }
+      // 执行所有功能
+      for (const func of functions) {
+        await this.executeFunction(func.type, func.params, context);
       }
       
-      if (this.embeddingConfig.enabled && cleanText && e) {
-        const groupId = e.group_id || `private_${e.user_id}`;
-        this.storeMessageWithEmbedding(groupId, {
-          user_id: e.self_id,
-          nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
-          message: cleanText,
-          message_id: Date.now().toString(),
-          time: Date.now()
-        }).catch(() => {});
+      // 发送文本消息
+      if (cleanText) {
+        await this.sendMessages(e, cleanText);
+        
+        // 存储到embedding
+        if (this.embeddingConfig?.enabled) {
+          const historyKey = e.group_id || `private_${e.user_id}`;
+          this.storeMessageWithEmbedding(historyKey, {
+            user_id: e.self_id,
+            nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
+            message: cleanText,
+            message_id: Date.now().toString(),
+            time: Date.now()
+          }).catch(() => {});
+        }
       }
       
       return cleanText;
@@ -1343,7 +1333,7 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
   }
 
   async sendMessages(e, cleanText) {
-    if (!cleanText) return
+    if (!cleanText) return;
 
     const messages = cleanText.includes('|') 
       ? cleanText.split('|').map(m => m.trim()).filter(m => m)
