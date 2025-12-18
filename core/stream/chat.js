@@ -1341,11 +1341,18 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
     
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      const segments = this.parseCQCodes(msg, e);
       
-      if (segments && segments.length > 0) {
-        await e.reply(segments);
+      // 检查是否包含 CQ 码，如果不包含则直接发送文本
+      const hasCQCode = /\[CQ:[^\]]+\]/.test(msg);
+      
+      if (hasCQCode) {
+        // 包含 CQ 码，解析成 segments 发送
+        const segments = this.parseCQCodes(msg, e);
+        if (segments && segments.length > 0) {
+          await e.reply(segments);
+        }
       } else if (msg) {
+        // 纯文本，直接发送
         await e.reply(msg);
       }
       
