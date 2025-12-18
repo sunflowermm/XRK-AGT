@@ -173,24 +173,7 @@ export default class AIStream {
       await this.tryInitProvider(provider);
       this.embeddingReady = true;
       this._embeddingInitialized = true;
-    } catch (error) {
-      // 降级到lightweight
-      if (provider !== 'lightweight') {
-        BotUtil.makeLog('debug', 
-          `[${this.name}] ${provider}失败，降级到lightweight`, 
-          'AIStream'
-        );
-        try {
-          this.embeddingConfig.provider = 'lightweight';
-          await this.initLightweightEmbedding();
-          this.embeddingReady = true;
-          this._embeddingInitialized = true;
-          return;
-        } catch (fallbackError) {
-          // 完全失败
-        }
-      }
-      
+    } catch {
       this.embeddingConfig.enabled = false;
       this.embeddingReady = false;
       throw new Error('Embedding初始化失败');
@@ -562,85 +545,98 @@ export default class AIStream {
       };
 
       await redis.lPush(key, JSON.stringify(data));
-      await redis.lTrim(key, 0, 99);
+      // 只保留最近 50 条，避免占用过多空间
+      await redis.lTrim(key, 0, 49);
       await redis.expire(key, this.embeddingConfig.cacheExpiry);
-    } catch (error) {
-      BotUtil.makeLog('debug', 
-        `[${this.name}] 存储失败: ${error.message}`, 
-        'AIStream'
-      );
-    }
+    } catch {}
   }
 
   async retrieveRelevantContexts(groupId, query) {
-    if (!this.embeddingConfig.enabled || typeof redis === 'undefined' || !redis) {
-      return [];
-    }
-
-    if (!this.embeddingReady || !query) {
-      return [];
-    }
+    if (!this.embeddingConfig.enabled || typeof redis === 'undefined' || !redis) return [];
+    if (!this.embeddingReady || !query) return [];
 
     try {
       const key = `ai:embedding:${this.name}:${groupId}`;
       const messages = await redis.lRange(key, 0, -1);
-      
-      if (!messages || messages.length === 0) {
-        return [];
-      }
+      if (!messages || messages.length === 0) return [];
 
       const parsedMessages = [];
       for (const msg of messages) {
         try {
           const data = JSON.parse(msg);
-          if (data.embedding) {
-            parsedMessages.push(data);
-          }
-        } catch (e) {
-          continue;
-        }
+          if (data && typeof data.message === 'string') parsedMessages.push(data);
+        } catch {}
       }
 
-      if (parsedMessages.length === 0) {
-        return [];
-      }
+      if (parsedMessages.length === 0) return [];
+
+      const now = Date.now();
+      const halfLifeDays = this.embeddingConfig.timeHalfLifeDays || 3;
+      const idealLen = this.embeddingConfig.idealTextLength || 40;
+      const qTokens = Array.from(new Set(query.split(/[\s，。！？,.!?]/).filter(Boolean)));
+
+      const scoreItem = (baseSim, data) => {
+        const text = data.message || '';
+
+        const ageMs = Math.max(0, now - (data.time || 0));
+        const ageDays = ageMs / (24 * 60 * 60 * 1000);
+        const timeDecay = Math.exp(-Math.log(2) * (ageDays / halfLifeDays));
+
+        let keywordBoost = 0;
+        if (qTokens.length && text) {
+          const dTokens = Array.from(new Set(text.split(/[\s，。！？,.!?]/).filter(Boolean)));
+          if (dTokens.length) {
+            const overlap = qTokens.filter(t => dTokens.includes(t));
+            const overlapRatio = overlap.length / qTokens.length;
+            keywordBoost = overlapRatio * 0.3;
+          }
+        }
+
+        const len = text.length || 1;
+        const lengthRatio = len / idealLen || 1;
+        const lengthPenalty = Math.exp(-Math.pow(Math.log(lengthRatio), 2));
+
+        const simPart = Math.max(baseSim, 0);
+        const finalScore = (simPart + keywordBoost) * timeDecay * (0.5 + 0.5 * lengthPenalty);
+
+        return {
+          message: text,
+          similarity: finalScore,
+          baseSimilarity: baseSim,
+          time: data.time,
+          userId: data.userId,
+          nickname: data.nickname
+        };
+      };
 
       let scored = [];
-      
+
       if (this.embeddingConfig.provider === 'lightweight') {
         const documents = parsedMessages.map(m => m.message);
         this.similarityCalculator.calculateIDF(documents);
-        
-        scored = parsedMessages.map(data => ({
-          message: data.message,
-          similarity: this.similarityCalculator.score(query, data.message) / 10,
-          time: data.time,
-          userId: data.userId,
-          nickname: data.nickname
-        }));
+        scored = parsedMessages.map(data => {
+          const bm25Score = this.similarityCalculator.score(query, data.message);
+          const baseSim = bm25Score / (10 + bm25Score);
+          return scoreItem(baseSim, data);
+        });
       } else {
         const queryEmbedding = await this.generateEmbedding(query);
-        if (!queryEmbedding) {
-          return [];
-        }
+        if (!queryEmbedding) return [];
 
-        scored = parsedMessages.map(data => ({
-          message: data.message,
-          similarity: this.cosineSimilarity(queryEmbedding, data.embedding),
-          time: data.time,
-          userId: data.userId,
-          nickname: data.nickname
-        }));
+        scored = parsedMessages
+          .filter(data => Array.isArray(data.embedding))
+          .map(data => {
+            const baseSim = this.cosineSimilarity(queryEmbedding, data.embedding);
+            return scoreItem(baseSim, data);
+          });
       }
 
-      const filtered = scored.filter(s => s.similarity >= this.embeddingConfig.similarityThreshold);
-      filtered.sort((a, b) => b.similarity - a.similarity);
-      return filtered.slice(0, this.embeddingConfig.maxContexts);
-    } catch (error) {
-      BotUtil.makeLog('debug', 
-        `[${this.name}] 检索失败: ${error.message}`, 
-        'AIStream'
-      );
+      const threshold = this.embeddingConfig.similarityThreshold ?? 0.1;
+      const preFiltered = scored.filter(s => s.baseSimilarity >= threshold / 2);
+      preFiltered.sort((a, b) => b.similarity - a.similarity);
+
+      return preFiltered.slice(0, this.embeddingConfig.maxContexts || 8);
+    } catch {
       return [];
     }
   }
@@ -650,9 +646,31 @@ export default class AIStream {
       return baseMessages;
     }
 
-    const groupId = e.group_id || `private_${e.user_id}`;
-    const query = typeof question === 'string' ? question : 
-                  (question?.content || question?.text || '');
+    const groupId = e ? (e.group_id || `private_${e.user_id}`) : 'default';
+    
+    // 如果question是字符串，直接使用；如果是对象，提取text/content；如果为null，尝试从messages提取
+    let query = '';
+    if (typeof question === 'string') {
+      query = question;
+    } else if (question && typeof question === 'object') {
+      query = question.content || question.text || '';
+    }
+    
+    // 如果query为空，尝试从baseMessages中提取
+    if (!query && Array.isArray(baseMessages)) {
+      for (let i = baseMessages.length - 1; i >= 0; i--) {
+        const msg = baseMessages[i];
+        if (msg.role === 'user') {
+          if (typeof msg.content === 'string') {
+            query = msg.content;
+            break;
+          } else if (msg.content?.text) {
+            query = msg.content.text;
+            break;
+          }
+        }
+      }
+    }
 
     if (!query) {
       return baseMessages;
@@ -817,20 +835,13 @@ export default class AIStream {
     
     for (const func of this.functions.values()) {
       if (!func.enabled || !func.parser) continue;
-      
-      try {
-        const result = func.parser(cleanText, context);
-        if (result.functions && result.functions.length > 0) {
-          allFunctions.push(...result.functions);
-        }
-        if (result.cleanText !== undefined) {
-          cleanText = result.cleanText;
-        }
-      } catch (error) {
-        BotUtil.makeLog('debug', 
-          `功能解析失败[${func.name}]: ${error.message}`, 
-          'AIStream'
-        );
+
+      const result = func.parser(cleanText, context);
+      if (result.functions && result.functions.length > 0) {
+        allFunctions.push(...result.functions);
+      }
+      if (result.cleanText !== undefined) {
+        cleanText = result.cleanText;
       }
     }
     
@@ -848,15 +859,8 @@ export default class AIStream {
       return;
     }
     
-    try {
-      if (func.handler) {
-        await func.handler(params, context);
-      }
-    } catch (error) {
-      BotUtil.makeLog('debug', 
-        `功能执行失败[${type}]: ${error.message}`, 
-        'AIStream'
-      );
+    if (func.handler) {
+      await func.handler(params, context);
     }
   }
 
@@ -889,9 +893,6 @@ export default class AIStream {
    */
   async callAI(messages, apiConfig = {}) {
     const config = this.resolveLLMConfig(apiConfig);
-    if (!config.baseUrl || !config.apiKey) {
-      throw new Error('未配置LLM API');
-    }
 
     try {
       const client = LLMFactory.createClient(config);
@@ -904,29 +905,50 @@ export default class AIStream {
 
   /**
    * 调用AI（流式输出）
-   * 
+   *
    * 调用AI接口并实时返回增量响应，支持SSE（Server-Sent Events）协议。
-   * 
+   * 可选在流式结束后对完整结果进行函数解析与执行，用于桌面/设备等带指令能力的工作流。
+   *
    * @param {Array<Object>} messages - 消息数组
    * @param {Object} apiConfig - API配置（可选）
    * @param {Function} onDelta - 增量回调函数 (delta: string) => {}
    *   - delta: 本次增量文本
-   * @returns {Promise<string>} 完整响应文本
-   * @example
-   * let fullResponse = '';
-   * await stream.callAIStream(messages, {}, (delta) => {
-   *   fullResponse += delta;
-   *   console.log('增量:', delta);
-   * });
+   * @param {Object} [options] - 额外控制参数
+   *   - {boolean} enableFunctionCalling 是否在流结束后执行函数解析（默认 false）
+   *   - {Object} context 传递给函数执行的上下文对象（如 { e, question, config }）
+   * @returns {Promise<string>} 完整响应文本（如果未启用函数解析则为原始文本）
    */
-  async callAIStream(messages, apiConfig = {}, onDelta) {
+  async callAIStream(messages, apiConfig = {}, onDelta, options = {}) {
     const config = this.resolveLLMConfig(apiConfig);
-    if (!config.baseUrl || !config.apiKey) {
-      throw new Error('未配置LLM API');
+    const client = LLMFactory.createClient(config);
+
+    let fullText = '';
+
+    const wrapDelta = typeof onDelta === 'function'
+      ? (delta) => {
+          if (!delta) return;
+          fullText += delta;
+          onDelta(delta);
+        }
+      : (delta) => {
+          if (!delta) return;
+          fullText += delta;
+        };
+
+    await client.chatStream(messages, wrapDelta, config);
+
+    if (!options.enableFunctionCalling || !fullText) {
+      return fullText;
     }
 
-    const client = LLMFactory.createClient(config);
-    await client.stream(messages, config, onDelta);
+    const context = options.context || {};
+    const { functions, cleanText } = this.parseFunctions(fullText, context);
+
+    for (const func of functions) {
+      await this.executeFunction(func.type, func.params, context);
+    }
+
+    return cleanText || fullText;
   }
 
   /**
@@ -987,14 +1009,13 @@ export default class AIStream {
    * 
    * 提供商选择逻辑：
    * - 如果 apiConfig 中指定了 provider，使用指定的提供商
-   * - 如果 apiConfig 中有 baseUrl 和 apiKey，默认使用 generic 提供商（GPT-LLM 标准调用）
-   * - 如果从配置文件读取，使用配置中的 provider（默认 generic）
-   * - 如果都没有，默认使用 generic 提供商
+   * - 如果从配置文件读取，使用配置中的 provider（默认 gptgod）
+   * - 如果都没有，默认使用 gptgod 提供商
    * 
    * @param {Object} apiConfig - 自定义配置
    *   - baseUrl: API 基础地址
    *   - apiKey: API 密钥
-   *   - provider: LLM 提供商名称（如 'generic', 'volcengine' 等）
+   *   - provider: LLM 提供商名称（如 'gptgod', 'volcengine' 等）
    *   - model: 模型名称
    *   - profile: 配置档位名称（如 'balanced', 'fast', 'long'）
    *   - 其他 LLM 参数（temperature, maxTokens 等）
@@ -1004,143 +1025,36 @@ export default class AIStream {
     const merged = { ...this.config, ...apiConfig };
     const runtime = cfg.aistream || {};
     const llm = runtime.llm || {};
-    const defaults = llm.defaults || {};
-    const profiles = llm.profiles || llm.models || {};
     
-    // 检查是否有显式的端点配置（baseUrl + apiKey）
-    const hasExplicitEndpoint = merged.baseUrl && merged.apiKey;
+    const provider = merged.provider || llm.Provider || 'gptgod';
     
-    // 检查是否有显式的提供商配置
-    const hasExplicitProvider = merged.provider && merged.provider !== 'generic';
-
-    // 场景1: 有显式端点配置（如 godai.js 传入 API_CONFIG）
-    if (hasExplicitEndpoint) {
-      // 使用传入的配置，默认使用 generic 提供商（GPT-LLM 标准调用）
-      merged.provider = merged.provider || 'generic';
-      merged.path = merged.path || defaults.path || '/chat/completions';
-      
-      // 确保必要的字段存在
-      if (!merged.model && apiConfig.chatModel) {
-        merged.model = apiConfig.chatModel;
-      }
-      if (!merged.model && apiConfig.visionModel) {
-        merged.model = apiConfig.visionModel;
-      }
-      
-      return merged;
+    if (!LLMFactory.hasProvider(provider)) {
+      BotUtil.makeLog('error', `不支持的LLM提供商: ${provider}，已回退到gptgod`, 'AIStream');
+      const fallbackProvider = 'gptgod';
+      const fallbackConfig = cfg.god || {};
+      return {
+        ...fallbackConfig,
+        ...merged,
+        provider: fallbackProvider
+      };
     }
-
-    // 场景2: 有显式提供商配置（如指定使用 openai, anthropic 等）
-    if (hasExplicitProvider) {
-      // 使用指定的提供商，从配置文件或传入参数中获取配置
-      merged.provider = merged.provider;
-      merged.path = merged.path || defaults.path || '/chat/completions';
-      
-      // 如果配置中有该提供商的配置，使用配置
-      if (profiles[merged.provider]) {
-        const providerProfile = profiles[merged.provider];
-        return {
-          ...defaults,
-          ...providerProfile,
-          ...merged
-        };
-      }
-      
-      return merged;
-    }
-
-    // 场景3: 从配置文件读取（默认场景）
-
-    // 确定配置档位（profile）
-    const explicitProfile =
-      merged.profile ||
-      merged.profileKey ||
-      merged.llmProfile ||
-      merged.modelKey ||
-      merged.llm ||
-      merged.modelProfile;
-
-    // 尝试从模型名称推断档位
-    const inferredProfileFromModel =
-      !explicitProfile &&
-      merged.model &&
-      profiles[merged.model]
-        ? merged.model
-        : null;
-
-    const sanitizedMerged = { ...merged };
-    if (inferredProfileFromModel) {
-      delete sanitizedMerged.model;
-    }
-
-    // 确定最终使用的档位
-    const requestedProfile =
-      explicitProfile ||
-      inferredProfileFromModel ||
-      llm.defaultProfile ||
-      llm.defaultModel;
-
-    const profileKeys = Object.keys(profiles);
-    const fallbackProfileKey = requestedProfile && profiles[requestedProfile]
-      ? requestedProfile
-      : (llm.defaultProfile && profiles[llm.defaultProfile]
-        ? llm.defaultProfile
-        : profileKeys[0] || null);
-
-    // 获取选中的配置档位
-    const selectedProfile = fallbackProfileKey ? (profiles[fallbackProfileKey] || {}) : {};
     
-    // 获取 persona
-    const persona =
-      sanitizedMerged.persona ??
-      llm.persona ??
-      this.config.persona;
-
-    // 合并所有配置（按优先级）
-    const resolved = {
-      enabled: llm.enabled !== false,
-      profile: fallbackProfileKey,
-      persona,
-      displayDelay: llm.displayDelay,
-      // 从低到高合并
-      ...defaults,
-      ...selectedProfile,
-      ...sanitizedMerged
+    let providerConfig = {};
+    if (provider === 'gptgod') {
+      providerConfig = cfg.god || {};
+    } else if (provider === 'volcengine') {
+      providerConfig = cfg.volcengine_llm || {};
+    }
+    
+    const finalConfig = {
+      ...providerConfig,
+      ...merged,
+      provider
     };
-
-    // 确保 model 字段存在
-    if (!resolved.model) {
-      if (selectedProfile?.model) {
-        resolved.model = selectedProfile.model;
-      } else if (defaults.model) {
-        resolved.model = defaults.model;
-      }
-    }
-
-    // 确定提供商：优先使用配置中的，否则默认 generic（GPT-LLM 标准调用）
-    resolved.provider = resolved.provider || selectedProfile?.provider || defaults.provider || 'generic';
     
-    // 确定 API 路径
-    resolved.path = resolved.path || selectedProfile?.path || defaults.path || '/chat/completions';
-    
-    // 如果配置档位中有 baseUrl 和 apiKey，使用它们
-    if (!resolved.baseUrl && selectedProfile?.baseUrl) {
-      resolved.baseUrl = selectedProfile.baseUrl;
-    }
-    if (!resolved.apiKey && selectedProfile?.apiKey) {
-      resolved.apiKey = selectedProfile.apiKey;
-    }
-    
-    // 如果 defaults 中有 baseUrl 和 apiKey，使用它们（作为最后的回退）
-    if (!resolved.baseUrl && defaults.baseUrl) {
-      resolved.baseUrl = defaults.baseUrl;
-    }
-    if (!resolved.apiKey && defaults.apiKey) {
-      resolved.apiKey = defaults.apiKey;
-    }
-
-    return resolved;
+    return finalConfig;
   }
+
 
   /**
    * 执行工作流
@@ -1158,16 +1072,20 @@ export default class AIStream {
       
       const { functions, cleanText } = this.parseFunctions(response, context);
       
-      for (const func of functions) {
+      for (let i = 0; i < functions.length; i++) {
+        const func = functions[i];
         await this.executeFunction(func.type, func.params, context);
+        
+        if (i < functions.length - 1 && !func.noDelay) {
+          await BotUtil.sleep(2500);
+        }
       }
       
-      // 存储Bot回复
-      if (this.embeddingConfig.enabled && cleanText) {
+      if (this.embeddingConfig.enabled && cleanText && e) {
         const groupId = e.group_id || `private_${e.user_id}`;
         this.storeMessageWithEmbedding(groupId, {
           user_id: e.self_id,
-          nickname: Bot.nickname || 'Bot',
+          nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
           message: cleanText,
           message_id: Date.now().toString(),
           time: Date.now()

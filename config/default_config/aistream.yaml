@@ -26,108 +26,24 @@ cache:
   # 最大缓存条数
   maxSize: 100
 
-# LLM 调度配置
+# LLM 工厂运营商选择（gptgod 或 volcengine）
+# 详细配置位于 data/server_bots/{port}/god.yaml
 llm:
-  enabled: true
-  persona: "你是一名友好、简洁的智能语音助手。"
-  displayDelay: 1500
-  defaultProfile: balanced  # 默认使用 balanced 档位
-  defaults:
-    provider: generic  # 默认提供商：generic（GPT-LLM 标准调用方式）
-    baseUrl: "https://api.example.com/v1"
-    apiKey: ""
-    model: "general-task"  # 默认聊天模型
-    visionModel: "glm-4v"  # 默认识图模型
-    temperature: 0.8
-    maxTokens: 2000
-    topP: 0.9
-    presencePenalty: 0.6
-    frequencyPenalty: 0.6
-    timeout: 30000
-    path: "/chat/completions"
-  profiles:
-    # 通用对话档位（默认档位，兼顾速度和质量）
-    balanced:
-      label: "通用对话"
-      description: "默认档位，兼顾速度和质量"
-      provider: generic  # 使用 generic 提供商（GPT-LLM 标准调用方式）
-      baseUrl: "https://api.example.com/v1"
-      apiKey: ""
-      model: "smart-balanced"  # 聊天模型
-      visionModel: "glm-4v"  # 识图模型（可选）
-      maxTokens: 4096
-      temperature: 0.8
-    
-    # 极速响应档位（短文本润色 / 快速改写）
-    fast:
-      label: "极速润色"
-      description: "短文本润色 / 快速改写"
-      provider: generic
-      baseUrl: "https://fast.api.example.com/v1"
-      apiKey: ""
-      model: "smart-fast"
-      visionModel: "glm-4v"
-      maxTokens: 1024
-      temperature: 0.95
-    
-    # 长文本专家档位（总结、分析等长上下文任务）
-    long:
-      label: "长文本专家"
-      description: "总结、分析等长上下文任务"
-      provider: generic
-      baseUrl: "https://api.example.com/v1"
-      apiKey: ""
-      model: "smart-long"
-      visionModel: "glm-4v"
-      maxTokens: 8000
-      temperature: 0.6
-    
-    # 设备友好档位（面向设备工作流，响应简洁）
-    device:
-      label: "设备友好"
-      description: "面向设备工作流，响应简洁"
-      provider: generic
-      baseUrl: "https://edge.api.example.com/v1"
-      apiKey: ""
-      model: "smart-device"
-      visionModel: "glm-4v"
-      maxTokens: 1024
-      temperature: 0.7
-    
-    # 灵感工坊档位（故事、脑洞、营销灵感）
-    creative:
-      label: "灵感工坊"
-      description: "故事、脑洞、营销灵感"
-      provider: generic
-      baseUrl: "https://api.example.com/v1"
-      apiKey: ""
-      model: "smart-creative"
-      visionModel: "glm-4v"
-      maxTokens: 4096
-      temperature: 0.95
-    
-    # 火山引擎档位（使用火山引擎豆包大模型）
-    volcengine:
-      label: "火山引擎"
-      description: "使用火山引擎豆包大模型"
-      provider: volcengine  # 使用火山引擎提供商
-      # 火山引擎 API 配置
-      # 接口地址：根据 region 自动构建，格式为 https://ark.{region}.volces.com/api/v3
-      # 支持的区域：cn-beijing（北京）、cn-shanghai（上海）等
-      # 认证方式：使用 API Key 进行认证，在请求头中添加 Authorization: Bearer {api_key}
-      region: "cn-beijing"  # 服务区域，可选：cn-beijing、cn-shanghai 等
-      baseUrl: ""  # 可选：如果设置了 region，会自动构建 endpoint；也可以直接指定 baseUrl
-      apiKey: ""  # 火山引擎 API Key，从火山引擎控制台获取
-      # 豆包大模型配置
-      # 支持的模型：doubao-pro-4k、doubao-pro-32k、doubao-lite-4k、doubao-pro-vision 等
-      # 详细模型列表请参考：https://www.volcengine.com/docs/82379
-      model: "doubao-pro-4k"  # 聊天模型
-      visionModel: "doubao-pro-vision"  # 识图模型（如果支持）
-      maxTokens: 4096
-      temperature: 0.8
-      topP: 0.9
-      presencePenalty: 0.6
-      frequencyPenalty: 0.6
+  Provider: gptgod
+
+# ASR 工厂运营商选择
+# 详细配置位于 data/server_bots/{port}/volcengine_asr.yaml
+asr:
+  Provider: volcengine
+  # ASR识别结果调用的工作流名称（工作流内部会自动选择LLM工厂）
+  workflow: device
+
+# TTS 工厂运营商选择
+# 详细配置位于 data/server_bots/{port}/volcengine_tts.yaml
+tts:
+  Provider: volcengine
+  # 是否只有ASR触发才有TTS（false表示所有消息事件都能触发TTS）
+  onlyForASR: true
 
 # Embedding 配置
 embedding:
@@ -158,59 +74,6 @@ embedding:
       apiUrl: ""
       apiKey: ""
       apiModel: "text-embedding-3-small"
-
-# 绘图模型占位配置（便于后续扩展）
-drawing:
-  defaultModel: sketch
-  models:
-    sketch:
-      provider: generic
-      baseUrl: "https://api.example.com/draw"
-      apiKey: ""
-      model: "dalle-mini"
-
-# TTS 配置
-tts:
-  enabled: true
-  defaultProvider: volcengine
-  providers:
-    volcengine:
-      wsUrl: "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
-      appKey: "YOUR_APP_KEY"
-      accessKey: "YOUR_ACCESS_KEY"
-      resourceId: "seed-tts-2.0"
-      voiceType: "zh_female_vv_uranus_bigtts"
-      encoding: "pcm"
-      sampleRate: 16000
-      speechRate: 5
-      loudnessRate: 0
-      emotion: "happy"
-      chunkMs: 128
-      chunkDelayMs: 5
-
-# ASR 配置
-asr:
-  enabled: true
-  defaultProvider: volcengine
-  providers:
-    volcengine:
-      wsUrl: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
-      appKey: "YOUR_APP_KEY"
-      accessKey: "YOUR_ACCESS_KEY"
-      resourceId: "volc.bigasr.sauc.duration"
-      enableItn: true
-      enablePunc: true
-      enableDdc: false
-      showUtterances: true
-      resultType: "full"
-      enableAccelerateText: true
-      accelerateScore: 15
-      persistentWs: true
-      idleCloseMs: 6000
-      endWindowSize: 350
-      forceToSpeechTime: 500
-      maxAudioBufferSize: 30
-      asrFinalTextWaitMs: 1200
 
 # 设备运行参数
 device:

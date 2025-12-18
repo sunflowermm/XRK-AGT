@@ -1,0 +1,28 @@
+# 火山引擎 ASR 工厂配置
+# 用于配置火山引擎语音识别（ASR）功能
+
+# WebSocket 连接配置
+wsUrl: wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
+appKey: ""
+accessKey: ""
+resourceId: volc.bigasr.sauc.duration
+
+# 功能开关配置
+enableItn: true
+enablePunc: true
+enableDdc: false
+showUtterances: true
+enableAccelerateText: true
+
+# 结果类型配置
+resultType: full
+
+# 参数配置
+accelerateScore: 15
+persistentWs: true
+idleCloseMs: 6000
+endWindowSize: 350
+forceToSpeechTime: 500
+maxAudioBufferSize: 30
+asrFinalTextWaitMs: 1200
+

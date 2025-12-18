@@ -1,0 +1,23 @@
+# 火山引擎 TTS 工厂配置
+# 用于配置火山引擎语音合成（TTS）功能
+
+# WebSocket 连接配置
+wsUrl: wss://openspeech.bytedance.com/api/v3/tts/bidirection
+appKey: ""
+accessKey: ""
+resourceId: seed-tts-2.0
+
+# 语音参数配置
+voiceType: zh_female_vv_uranus_bigtts
+encoding: pcm
+sampleRate: 16000
+
+# 语音效果配置
+speechRate: 5
+loudnessRate: 0
+emotion: happy
+
+# 分片配置
+chunkMs: 128
+chunkDelayMs: 5
+

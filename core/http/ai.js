@@ -32,7 +32,7 @@ export default {
           const persona = (req.query.persona || '').toString();
           const workflowName = (req.query.workflow || 'chat').toString().trim() || 'chat';
           const profileKey = (req.query.profile || req.query.llm || req.query.model || '').toString().trim() || undefined;
-          const context = parseOptionalJson(req.query.context);
+          const contextObj = parseOptionalJson(req.query.context);
           const metadata = parseOptionalJson(req.query.meta);
 
           const fallbackStream = StreamLoader.getStream('chat') || StreamLoader.getStream('device');
@@ -48,19 +48,53 @@ export default {
           res.setHeader('Connection', 'keep-alive');
           res.flushHeaders?.();
 
-          const messages = await stream.buildChatContext(null, { text: prompt, persona, context, metadata });
-          let acc = '';
+          const messages = await stream.buildChatContext(null, {
+            text: prompt,
+            persona,
+            context: contextObj,
+            metadata
+          });
+
           const llmOverrides = {
             ...stream.config,
             workflow: workflowName,
             persona,
             profile: profileKey
           };
-          await stream.callAIStream(messages, llmOverrides, (delta) => {
-            acc += delta;
-            res.write(`data: ${JSON.stringify({ delta, workflow: stream.name })}\n\n`);
-          });
-          res.write(`data: ${JSON.stringify({ done: true, workflow: stream.name })}\n\n`);
+
+          const executionContext = {
+            e: null,
+            question: {
+              text: prompt,
+              persona,
+              context: contextObj,
+              metadata
+            },
+            config: llmOverrides
+          };
+
+          let acc = '';
+          const finalText = await stream.callAIStream(
+            messages,
+            llmOverrides,
+            (delta) => {
+              acc += delta;
+              res.write(`data: ${JSON.stringify({ delta, workflow: stream.name })}\n\n`);
+            },
+            {
+              enableFunctionCalling: true,
+              context: executionContext
+            }
+          );
+
+          // 通知前端流结束，同时附带清洗后的文本（如果有）
+          res.write(
+            `data: ${JSON.stringify({
+              done: true,
+              workflow: stream.name,
+              text: finalText || acc
+            })}\n\n`
+          );
           res.end();
         } catch (e) {
           try {

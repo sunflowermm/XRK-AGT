@@ -229,6 +229,22 @@ class Cfg {
   get aistream() {
     return this.getConfig('aistream');
   }
+  
+  get god() {
+    return this.getConfig('god');
+  }
+  
+  get volcengine_llm() {
+    return this.getConfig('volcengine_llm');
+  }
+  
+  get volcengine_asr() {
+    return this.getConfig('volcengine_asr');
+  }
+  
+  get volcengine_tts() {
+    return this.getConfig('volcengine_tts');
+  }
   /**
    * 获取默认配置
    * @param {string} name - 配置名称

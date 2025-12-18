@@ -55,7 +55,7 @@ export default class OneBotEnhancer extends plugin {
           enumerable: false
         })
       } catch (error) {
-        BotUtil.makeLog('debug', `挂载friend失败: ${error.message}`, e.self_id)
+        // 静默失败
       }
     }
 
@@ -73,7 +73,7 @@ export default class OneBotEnhancer extends plugin {
           e.group_name = e.group.group_name
         }
       } catch (error) {
-        BotUtil.makeLog('debug', `挂载group失败: ${error.message}`, e.self_id)
+        // 静默失败
       }
     }
 
@@ -85,7 +85,7 @@ export default class OneBotEnhancer extends plugin {
           enumerable: false
         })
       } catch (error) {
-        BotUtil.makeLog('debug', `挂载member失败: ${error.message}`, e.self_id)
+        // 静默失败
       }
     }
 
@@ -110,29 +110,40 @@ export default class OneBotEnhancer extends plugin {
   }
 
   setupReply(e) {
-    const fromGroup = () => {
-      if (e.group?.sendMsg) return e.group.sendMsg.bind(e.group)
-      if (e.bot?.tasker?.sendGroupMsg && e.group_id) {
-        return (msg) => e.bot.tasker.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
-      }
-      return null
+    let sendMethod = null
+    if (e.group?.sendMsg) {
+      sendMethod = e.group.sendMsg.bind(e.group)
+    } else if (e.bot?.tasker?.sendGroupMsg && e.group_id) {
+      sendMethod = (msg) => e.bot.tasker.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
+    } else if (e.friend?.sendMsg) {
+      sendMethod = e.friend.sendMsg.bind(e.friend)
+    } else if (e.bot?.tasker?.sendFriendMsg && e.user_id) {
+      sendMethod = (msg) => e.bot.tasker.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
     }
 
-    const fromFriend = () => {
-      if (e.friend?.sendMsg) return e.friend.sendMsg.bind(e.friend)
-      if (e.bot?.tasker?.sendFriendMsg && e.user_id) {
-        return (msg) => e.bot.tasker.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
+    if (!sendMethod) return
+
+    e.reply = async (msg = '', quote = false, data = {}) => {
+      if (!msg) return false
+
+      try {
+        let message = msg
+
+        if (quote && e.message_id) {
+          const replySegment = { type: 'reply', data: { id: String(e.message_id) } }
+          message = Array.isArray(message) ? [replySegment, ...message] : [replySegment, message]
+        }
+
+        if (data?.at && e.isGroup && e.user_id) {
+          const atSegment = { type: 'at', data: { qq: String(e.user_id) } }
+          message = Array.isArray(message) ? [atSegment, ...message] : [atSegment, message]
+        }
+
+        return await sendMethod(message)
+      } catch (error) {
+        BotUtil.makeLog('error', `回复消息失败: ${error.message}`, e.self_id)
+        return false
       }
-      return null
-    }
-
-    const replyMethod = fromGroup() || fromFriend()
-    if (!replyMethod) return
-
-    if (e._replySetup) {
-      e.replyNew = replyMethod
-    } else {
-      e.reply = replyMethod
     }
   }
 
@@ -239,7 +250,7 @@ export default class OneBotEnhancer extends plugin {
               e.reply(disableMsg || '私聊功能已禁用')
             }
           } catch (err) {
-            BotUtil.makeLog('debug', `发送禁用私聊提示失败: ${err.message}`, e.self_id)
+            // 静默失败
           }
           return 'return'
         }
@@ -263,7 +274,6 @@ export default class OneBotEnhancer extends plugin {
     if (e.hasAlias) return true
     if (e.atBot === true) return true
 
-    BotUtil.makeLog('debug', `[OneBotEnhancer] 跳过未命中别名的消息 ${e.logText || ''}`, e.self_id)
     return 'return'
   }
 

@@ -28,17 +28,18 @@ class App {
     this._schemaCache = {};
     this._llmOptions = { profiles: [], defaultProfile: '' };
     this._chatSettings = {
-      workflow: 'device',  // 默认使用 device 工作流
-      persona: localStorage.getItem('chatPersona') || '',
-      profile: localStorage.getItem('chatProfile') || ''
+      workflow: 'device',
+      persona: localStorage.getItem('chatPersona') || ''
     };
-    this._chatStreamState = { running: false, source: null };
+    this._webUserId = localStorage.getItem('webUserId') || 'webclient';
     this._activeEventSource = null;
     this._asrBubble = null;
     this._asrSessionId = null;
     this._asrChunkIndex = 0;
     this._systemThemeWatcher = null;
     this.theme = 'light';
+    this._chatPendingTimer = null;
+    this._chatQuickTimeout = null; // 快速超时，用于判断是否没有流被触发
     
     this.init();
   }
@@ -91,16 +92,7 @@ class App {
         workflows: data.workflows || []
       };
 
-      // 默认使用 device 工作流
-        this._chatSettings.workflow = 'device';
-
-      if (!this._chatSettings.profile && this._llmOptions.defaultProfile) {
-        this._chatSettings.profile = this._llmOptions.defaultProfile;
-      }
-      localStorage.setItem('chatProfile', this._chatSettings.profile);
-
-      this.refreshChatWorkflowOptions();
-      this.refreshChatModelOptions();
+      this._chatSettings.workflow = 'desktop';
     } catch (e) {
       console.warn('未能加载 LLM 档位信息:', e.message || e);
     }
@@ -632,6 +624,42 @@ class App {
       }).join('')}
     `;
   }
+
+  renderMarkdown(text) {
+    if (!text) return '';
+    const esc = (s) => String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    let html = esc(text);
+
+    // code block ```
+    html = html.replace(/```([\s\S]*?)```/g, (_, code) => {
+      return `<pre class="md-code"><code>${esc(code)}</code></pre>`;
+    });
+
+    // inline code `code`
+    html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="md-inline">${esc(code)}</code>`);
+
+    // headings (##, ###)
+    html = html.replace(/^###\s+(.*)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^##\s+(.*)$/gm, '<h2>$1</h2>');
+
+    // bold **text**
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    // italic *text*
+    html = html.replace(/(^|[^\*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
+
+    // links [text](url)
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+    // simple line breaks
+    html = html.replace(/\n/g, '<br>');
+
+    return html;
+  }
   
   async loadPluginsInfo() {
     try {
@@ -1059,17 +1087,6 @@ class App {
           </div>
         </div>
         <div class="chat-settings">
-          <div class="chat-setting">
-            <label>模型
-              <select id="chatModelSelect"></select>
-            </label>
-          </div>
-          <div class="chat-setting">
-            <label>人设
-              <input type="text" id="chatPersonaInput" placeholder="自定义人设...">
-            </label>
-          </div>
-          <button class="btn btn-sm btn-ghost" id="cancelStreamBtn" disabled>中断</button>
           <span class="chat-stream-status" id="chatStreamStatus">空闲</span>
         </div>
         <div class="chat-messages" id="chatMessages"></div>
@@ -1101,6 +1118,8 @@ class App {
     document.getElementById('clearChatBtn').addEventListener('click', () => this.clearChat());
     this.initChatControls();
     
+    // 重新加载聊天历史（确保从localStorage获取最新数据）
+    this._chatHistory = this._loadChatHistory();
     this.restoreChatHistory();
     this.ensureDeviceWs();
   }
@@ -1119,29 +1138,251 @@ class App {
   restoreChatHistory() {
     const box = document.getElementById('chatMessages');
     if (!box) return;
+    
+    // 清空现有内容，避免重复显示
     box.innerHTML = '';
-    this._chatHistory.forEach(m => {
-      const div = document.createElement('div');
-      div.className = `chat-message ${m.role}`;
-      div.textContent = m.text;
-      box.appendChild(div);
+    
+    // 确保聊天历史是最新的
+    if (!Array.isArray(this._chatHistory) || this._chatHistory.length === 0) {
+      return;
+    }
+    
+    // 按时间戳排序，确保顺序正确
+    const sortedHistory = [...this._chatHistory].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    
+    sortedHistory.forEach(m => {
+      try {
+        if (m.type === 'record') {
+          // 恢复聊天记录时，直接应用 active 类，跳过动画
+          const recordDiv = this.appendChatRecord(m.messages || [], m.title || '', m.description || '', false);
+          if (recordDiv) {
+            // 立即应用 active 类，确保样式正确显示
+            recordDiv.classList.add('message-enter-active');
+          }
+        } else if (m.type === 'image' && m.url) {
+          const imgDiv = this.appendImageMessage(m.url, false);
+          if (imgDiv) {
+            imgDiv.classList.add('message-enter-active');
+          }
+        } else if (m.role && m.text) {
+          const chatDiv = this.appendChat(m.role, m.text, false);
+          if (chatDiv) {
+            chatDiv.classList.add('message-enter-active');
+          }
+        }
+      } catch (e) {
+        console.warn('恢复聊天历史项失败:', e, m);
+      }
     });
-    box.scrollTop = box.scrollHeight;
+    
+    // 延迟滚动，确保DOM渲染完成
+    requestAnimationFrame(() => {
+      box.scrollTop = box.scrollHeight;
+    });
   }
 
   appendChat(role, text, persist = true) {
-    if (persist) {
-      this._chatHistory.push({ role, text, ts: Date.now() });
-      this._saveChatHistory();
-    }
+    if (persist) this._chatHistory.push({ role, text, ts: Date.now() });
+    if (persist) this._saveChatHistory();
     const box = document.getElementById('chatMessages');
     if (box) {
       const div = document.createElement('div');
-      div.className = `chat-message ${role}`;
-      div.textContent = text;
+      div.className = `chat-message ${role} message-enter`;
+      div.innerHTML = this.renderMarkdown(text);
       box.appendChild(div);
       box.scrollTop = box.scrollHeight;
+      
+      // 只有在需要动画时才延迟添加 active 类，否则立即添加
+      if (persist) {
+        requestAnimationFrame(() => {
+          div.classList.add('message-enter-active');
+        });
+      } else {
+        // 恢复历史时立即显示，不需要动画
+        div.classList.add('message-enter-active');
+      }
+      
+      return div;
     }
+    return null;
+  }
+
+  appendChatWithAnimation(role, text, persist = true) {
+    if (persist) this._chatHistory.push({ role, text, ts: Date.now() });
+    if (persist) this._saveChatHistory();
+    const box = document.getElementById('chatMessages');
+    if (box) {
+      const div = document.createElement('div');
+      div.className = `chat-message ${role} message-enter`;
+      div.innerHTML = this.renderMarkdown(text);
+      
+      // 为助手消息添加复制按钮
+      if (role === 'assistant' && text) {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'chat-copy-btn';
+        copyBtn.innerHTML = '📋';
+        copyBtn.title = '复制';
+        copyBtn.onclick = (e) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(text).then(() => {
+            this.showToast('已复制到剪贴板', 'success');
+          }).catch(() => {
+            this.showToast('复制失败', 'error');
+          });
+        };
+        div.appendChild(copyBtn);
+      }
+      
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+      requestAnimationFrame(() => {
+        div.classList.add('message-enter-active');
+      });
+    }
+  }
+
+  appendImageMessage(url, persist = true) {
+    const box = document.getElementById('chatMessages');
+    if (box) {
+      const div = document.createElement('div');
+      div.className = 'chat-message assistant message-enter';
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '图片';
+      img.className = 'chat-image';
+      img.loading = 'lazy';
+      img.style.cursor = 'pointer';
+      img.title = '点击查看大图';
+      img.addEventListener('click', () => this.showImagePreview(url));
+      div.appendChild(img);
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+      
+      // 只有在需要动画时才延迟添加 active 类
+      if (persist) {
+        requestAnimationFrame(() => {
+          div.classList.add('message-enter-active');
+        });
+      }
+      
+      if (persist) {
+        this._chatHistory.push({ role: 'assistant', type: 'image', url, ts: Date.now() });
+        this._saveChatHistory();
+      }
+      
+      return div;
+    }
+    return null;
+  }
+
+  showImagePreview(url) {
+    // 创建预览模态框
+    let modal = document.getElementById('imagePreviewModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'imagePreviewModal';
+      modal.className = 'image-preview-modal';
+      modal.innerHTML = `
+        <div class="image-preview-overlay"></div>
+        <div class="image-preview-container">
+          <button class="image-preview-close" aria-label="关闭">&times;</button>
+          <img class="image-preview-img" src="" alt="预览图片" />
+        </div>
+      `;
+      document.body.appendChild(modal);
+      
+      // 点击遮罩层或关闭按钮关闭预览
+      modal.querySelector('.image-preview-overlay').addEventListener('click', () => this.closeImagePreview());
+      modal.querySelector('.image-preview-close').addEventListener('click', () => this.closeImagePreview());
+      
+      // ESC键关闭预览
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.style.display === 'flex') {
+          this.closeImagePreview();
+        }
+      });
+    }
+    
+    const img = modal.querySelector('.image-preview-img');
+    img.src = url;
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  closeImagePreview() {
+    const modal = document.getElementById('imagePreviewModal');
+    if (modal) {
+      modal.style.display = 'none';
+      document.body.style.overflow = '';
+    }
+  }
+
+  appendChatRecord(messages, title = '', description = '', persist = true) {
+    const box = document.getElementById('chatMessages');
+    if (!box) return null;
+
+    const messagesArray = Array.isArray(messages) ? messages : [messages];
+    if (messagesArray.length === 0) return null;
+
+    const recordId = `record_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const div = document.createElement('div');
+    div.className = 'chat-message assistant chat-record message-enter';
+    div.dataset.recordId = recordId;
+
+    let content = '';
+    // 统一显示header（即使没有title也显示，保持格式一致）
+    if (title || description) {
+      content += `<div class="chat-record-header">
+        ${title ? `<div class="chat-record-title">${this.escapeHtml(title)}</div>` : ''}
+        ${description ? `<div class="chat-record-description">${this.escapeHtml(description)}</div>` : ''}
+      </div>`;
+    }
+
+    content += '<div class="chat-record-content">';
+    messagesArray.forEach((msg) => {
+      const text = typeof msg === 'string' ? msg : (msg.message || msg.content || String(msg));
+      if (text && text.trim()) {
+        content += `<div class="chat-record-item">${this.renderMarkdown(text)}</div>`;
+      }
+    });
+    content += '</div>';
+
+    div.innerHTML = content;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+
+    // 只有在需要动画时才延迟添加 active 类，否则立即添加
+    if (persist) {
+      requestAnimationFrame(() => {
+        div.classList.add('message-enter-active');
+      });
+    } else {
+      // 恢复历史时立即显示，不需要动画
+      div.classList.add('message-enter-active');
+    }
+
+    // 保存到聊天历史（仅在需要持久化时）
+    if (persist) {
+      const recordData = {
+        role: 'assistant',
+        type: 'record',
+        title: title || '',
+        description: description || '',
+        messages: messagesArray,
+        ts: Date.now(),
+        recordId
+      };
+      this._chatHistory.push(recordData);
+      this._saveChatHistory();
+    }
+    
+    return div;
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   clearChat() {
@@ -1159,41 +1400,15 @@ class App {
     input.value = '';
     
     try {
-      await this.streamAIResponse(text, { appendUser: true, source: 'manual' });
+      this.appendChat('user', text);
+      this.sendDeviceMessage(text, { source: 'manual' });
     } catch (e) {
       this.showToast('发送失败: ' + e.message, 'error');
     }
   }
 
   initChatControls() {
-    const modelSelect = document.getElementById('chatModelSelect');
-    if (modelSelect) {
-      this.populateModelSelect(modelSelect);
-      const currentProfile = this.getCurrentProfile();
-      if (currentProfile) {
-        const optionExists = Array.from(modelSelect.options).some(opt => opt.value === currentProfile);
-        modelSelect.value = optionExists ? currentProfile : (modelSelect.options[0]?.value || '');
-      }
-      modelSelect.addEventListener('change', () => {
-        this._chatSettings.profile = modelSelect.value;
-        localStorage.setItem('chatProfile', this._chatSettings.profile);
-      });
-    }
-    
-    const personaInput = document.getElementById('chatPersonaInput');
-    if (personaInput) {
-      personaInput.value = this._chatSettings.persona || '';
-      personaInput.addEventListener('input', (e) => {
-        this._chatSettings.persona = e.target.value;
-        localStorage.setItem('chatPersona', this._chatSettings.persona);
-      });
-    }
-    
-    const cancelBtn = document.getElementById('cancelStreamBtn');
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => this.cancelAIStream());
-    }
-    
+    // Web 端简化：不再提供人设编辑和中断按钮
     this.updateChatStatus();
     this.setChatInteractionState(this._chatStreamState.running);
   }
@@ -1201,21 +1416,6 @@ class App {
   populateModelSelect(select) {
     const options = this.getModelOptions();
     select.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
-  }
-
-  refreshChatModelOptions() {
-    const select = document.getElementById('chatModelSelect');
-    if (!select) return;
-    const previous = this.getCurrentProfile();
-    this.populateModelSelect(select);
-    const match = Array.from(select.options).some(opt => opt.value === previous);
-    if (match) {
-      select.value = previous;
-    } else if (select.options.length) {
-      select.selectedIndex = 0;
-      this._chatSettings.profile = select.value;
-      localStorage.setItem('chatProfile', this._chatSettings.profile);
-    }
   }
 
   refreshChatWorkflowOptions() {
@@ -1236,29 +1436,10 @@ class App {
     }
   }
 
-  getModelOptions() {
-    const configured = (this._llmOptions?.profiles || []).map(item => ({
-      value: item.key,
-      label: item.label ? `${item.label}${item.label === item.key ? '' : ` (${item.key})`}` : item.key
-    })).filter(opt => opt.value);
-
-    if (configured.length) {
-      return configured;
-    }
-
-    return [
-      { value: this._chatSettings.profile || 'balanced', label: '默认' }
-    ];
-  }
-  
   getCurrentPersona() {
     return this._chatSettings.persona?.trim() || '';
   }
 
-  getCurrentProfile() {
-    return this._chatSettings.profile || this._llmOptions?.defaultProfile || '';
-  }
-  
   updateChatStatus(message) {
     const statusEl = document.getElementById('chatStreamStatus');
     const cancelBtn = document.getElementById('cancelStreamBtn');
@@ -1289,9 +1470,7 @@ class App {
       } catch {}
       this._activeEventSource = null;
     }
-    this._chatStreamState = { running: false, source: null };
-    this.updateChatStatus();
-    this.setChatInteractionState(false);
+    this.clearChatStreamState();
   }
   
   cancelAIStream() {
@@ -1304,73 +1483,14 @@ class App {
   async streamAIResponse(prompt, options = {}) {
     const text = prompt?.trim();
     if (!text) return;
-    
-    const { appendUser = false, source = 'manual' } = options;
+
+    const { appendUser = false, source = 'manual', meta = {} } = options;
     if (appendUser) {
       this.appendChat('user', text);
     }
-    
-    // 默认使用 device 工作流
-    const workflow = 'device';
-    const persona = this.getCurrentPersona();
-    const profile = this.getCurrentProfile();
-    const recentHistory = this._chatHistory.slice(-8).map(m => ({ role: m.role, text: m.text }));
-    const ctxSummary = recentHistory.map(m => `${m.role === 'user' ? 'U' : 'A'}:${m.text}`).join('|').slice(-800);
-    const finalPrompt = ctxSummary ? `【上下文】${ctxSummary}\n【提问】${text}` : text;
-    
-    const params = new URLSearchParams({
-      prompt: finalPrompt,
-      workflow,
-      persona
-    });
-    if (profile) {
-      params.set('profile', profile);
-    }
-    if (recentHistory.length) {
-      params.set('context', JSON.stringify(recentHistory));
-    }
-    
-    this.stopActiveStream();
-    this.renderStreamingMessage('', true);
-    this._chatStreamState = { running: true, source };
-    this.updateChatStatus('AI 生成中...');
-    this.setChatInteractionState(true);
-    
-    const es = new EventSource(`${this.serverUrl}/api/ai/stream?${params.toString()}`);
-    this._activeEventSource = es;
-    let acc = '';
-    
-    es.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data || '{}');
-        if (data.delta) {
-          acc += data.delta;
-          this.renderStreamingMessage(acc);
-          this.updateChatStatus(`AI 输出中 (${acc.length} 字)`);
-        }
-        if (data.done) {
-          es.close();
-          if (this._activeEventSource === es) this._activeEventSource = null;
-          this.renderStreamingMessage(acc, true);
-          this.stopActiveStream();
-        }
-        if (data.error) {
-          es.close();
-          if (this._activeEventSource === es) this._activeEventSource = null;
-          this.stopActiveStream();
-          this.showToast('AI错误: ' + data.error, 'error');
-        }
-      } catch {}
-    };
-    
-    es.onerror = () => {
-      es.close();
-      if (this._activeEventSource === es) {
-        this._activeEventSource = null;
-      }
-      this.stopActiveStream();
-      this.showToast('AI流已中断', 'warning');
-    };
+
+    // 统一走设备 WS，触发 message 事件
+    this.sendDeviceMessage(text, { source, meta });
   }
 
   renderStreamingMessage(text, done = false) {
@@ -1386,7 +1506,7 @@ class App {
     
     if (!msg) return;
     
-    msg.textContent = text;
+    msg.innerHTML = this.renderMarkdown(text);
     
     if (done) {
       msg.classList.remove('streaming');
@@ -3551,11 +3671,26 @@ class App {
   }
 
   // ========== WebSocket & 语音 ==========
+  getWebUserId() {
+    if (!this._webUserId) {
+      this._webUserId = `webclient_${Date.now()}`;
+      localStorage.setItem('webUserId', this._webUserId);
+    }
+    return this._webUserId;
+  }
+
   async ensureDeviceWs() {
     const state = this._deviceWs?.readyState;
     if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
     
-    // 清理之前的心跳定时器
+    // 清理旧的连接和定时器
+    if (this._deviceWs) {
+      try {
+        this._deviceWs.close();
+      } catch {}
+      this._deviceWs = null;
+    }
+    
     if (this._heartbeatTimer) {
       clearInterval(this._heartbeatTimer);
       this._heartbeatTimer = null;
@@ -3563,20 +3698,22 @@ class App {
     
     const apiKey = localStorage.getItem('apiKey') || '';
     const wsUrl = this.serverUrl.replace(/^http/, 'ws') + '/device' + (apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '');
+    const deviceId = this.getWebUserId();
     
     try {
       this._deviceWs = new WebSocket(wsUrl);
       
       this._deviceWs.onopen = () => {
+        this._deviceWs.device_id = deviceId;
         this._deviceWs.send(JSON.stringify({
           type: 'register',
-          device_id: 'webclient',
+          device_id: deviceId,
           device_type: 'web',
           device_name: 'Web客户端',
-          capabilities: ['display', 'microphone']
+          capabilities: ['display', 'microphone'],
+          user_id: this.getWebUserId()
         }));
         
-        // 启动前端心跳检测（每30秒发送一次ping）
         this._heartbeatTimer = setInterval(() => {
           if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
             try {
@@ -3595,7 +3732,9 @@ class App {
         try {
           const data = JSON.parse(e.data);
           this.handleWsMessage(data);
-        } catch {}
+        } catch (e) {
+          console.warn('WebSocket消息解析失败:', e);
+        }
       };
       
       this._deviceWs.onclose = () => {
@@ -3604,7 +3743,10 @@ class App {
           this._heartbeatTimer = null;
         }
         this._deviceWs = null;
-        setTimeout(() => this.ensureDeviceWs(), 5000);
+        // 只在当前页面是聊天页面时自动重连
+        if (this.currentPage === 'chat') {
+          setTimeout(() => this.ensureDeviceWs(), 5000);
+        }
       };
       
       this._deviceWs.onerror = (e) => {
@@ -3612,6 +3754,84 @@ class App {
       };
     } catch (e) {
       console.warn('WebSocket连接失败:', e);
+    }
+  }
+
+  clearChatPendingTimer() {
+    if (this._chatPendingTimer) {
+      clearTimeout(this._chatPendingTimer);
+      this._chatPendingTimer = null;
+    }
+    if (this._chatQuickTimeout) {
+      clearTimeout(this._chatQuickTimeout);
+      this._chatQuickTimeout = null;
+    }
+  }
+
+  // 统一的状态清除方法
+  clearChatStreamState() {
+    this.clearChatPendingTimer();
+    this._chatStreamState = { running: false, source: null };
+    this.updateChatStatus();
+    this.setChatInteractionState(false);
+  }
+
+  sendDeviceMessage(text, meta = {}) {
+    const payloadText = (text || '').trim();
+    if (!payloadText) return;
+
+    this.ensureDeviceWs();
+    const ws = this._deviceWs;
+
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      this.showToast('设备通道未连接', 'warning');
+      return;
+    }
+
+    const deviceId = ws.device_id || this.getWebUserId();
+    const userId = this.getWebUserId();
+    
+    const msg = {
+      type: 'message',
+      device_id: deviceId,
+      device_type: 'web',
+      channel: 'web-chat',
+      user_id: userId,
+      text: payloadText,
+      isMaster: true,
+      meta: {
+        persona: this.getCurrentPersona(),
+        source: meta.source || 'manual',
+        ...meta.meta
+      }
+    };
+
+    try {
+      ws.send(JSON.stringify(msg));
+      this._chatStreamState = { running: true, source: meta.source || 'manual' };
+      this.updateChatStatus('AI 处理中...');
+      this.setChatInteractionState(true);
+
+      this.clearChatPendingTimer();
+      
+      // 快速超时：2.5秒内如果没有响应，认为没有流被触发，快速退出
+      this._chatQuickTimeout = setTimeout(() => {
+        if (this._chatStreamState.running) {
+          this.clearChatStreamState();
+          // 不显示提示，静默退出
+        }
+      }, 2500);
+      
+      // 长超时：60秒作为兜底
+      this._chatPendingTimer = setTimeout(() => {
+        if (this._chatStreamState.running) {
+          this.clearChatStreamState();
+          this.showToast('AI 暂无响应，请稍后再试', 'warning');
+        }
+      }, 60000);
+    } catch (e) {
+      this.showToast('发送失败: ' + e.message, 'error');
+      this.clearChatStreamState();
     }
   }
 
@@ -3633,14 +3853,106 @@ class App {
         const finalText = data.text || '';
         this.renderASRStreaming(finalText, true);
         if (finalText) {
-          this.streamAIResponse(finalText, { appendUser: false, source: 'voice' })
-            .catch(err => this.showToast('语音触发失败: ' + err.message, 'error'));
+          this.appendChat('user', finalText);
+          this.sendDeviceMessage(finalText, { source: 'voice' });
         }
         break;
       }
+      case 'reply': {
+        // 统一处理segments格式
+        const segments = Array.isArray(data.segments) ? data.segments : [];
+        if (segments.length === 0 && data.text) {
+          segments.push({ type: 'text', text: data.text });
+        }
+        
+        // 提取文本消息和图片
+        const messages = [];
+        const images = [];
+        
+        segments.forEach(seg => {
+          // 统一处理text类型：支持两种格式（text和data.text）
+          if (seg.type === 'text' || seg.type === 'raw') {
+            const text = seg.text || (seg.data && seg.data.text) || '';
+            if (text && text.trim()) {
+              messages.push(text);
+            }
+          } else if (seg.type === 'image') {
+            // 优先使用url，如果没有则从data.file生成
+            let url = seg.url;
+            if (!url && seg.data?.file) {
+              const filePath = seg.data.file;
+              const trashIndex = filePath.indexOf('trash');
+              if (trashIndex !== -1) {
+                url = `/api/trash/${filePath.substring(trashIndex + 6).replace(/\\/g, '/')}`;
+              } else {
+                // 如果路径中没有trash，可能是相对路径，直接使用
+                url = `/api/trash/${filePath.replace(/\\/g, '/')}`;
+              }
+            }
+            if (url) images.push(url);
+          }
+        });
+        
+        // 立即清除生成中状态，避免显示时间过长
+        this.clearChatStreamState();
+        
+        // 统一显示逻辑：有title/description时显示为聊天记录，否则显示为普通消息
+        const hasChatRecord = !!(data.title || data.description);
+        
+        // 显示文本消息
+        if (hasChatRecord && messages.length > 0) {
+          const recordDiv = this.appendChatRecord(messages, data.title || '', data.description || '');
+          // 确保聊天记录正确显示，立即应用 active 类
+          if (recordDiv) {
+            requestAnimationFrame(() => {
+              recordDiv.classList.add('message-enter-active');
+            });
+          }
+        } else if (messages.length > 0) {
+          const text = messages.join('\n');
+          this.appendChatWithAnimation('assistant', text);
+        }
+        
+        // 图片统一追加显示（即使没有文本消息也要显示图片）
+        images.forEach(url => {
+          this.appendImageMessage(url, true);
+        });
+        break;
+      }
+      case 'status':
+        if (data.text) {
+          this.appendChatWithAnimation('system', data.text);
+        }
+        // 状态消息不中断聊天流程
+        break;
+      case 'error':
+        if (data.message) {
+          this.showToast(data.message, 'error');
+          // 错误时也显示在聊天中
+          this.appendChatWithAnimation('system', `错误: ${data.message}`);
+        }
+        this.clearChatStreamState();
+        break;
+      case 'register_response':
+        // 设备注册响应
+        if (data.device) {
+          this._deviceWs.device_id = data.device.device_id;
+        }
+        break;
+      case 'heartbeat_response':
+        // 心跳响应，静默处理
+        break;
+      case 'typing':
+        // 显示正在输入状态
+        if (data.typing) {
+          this.updateChatStatus('AI 正在输入...');
+        } else {
+          this.updateChatStatus();
+        }
+        break;
       case 'command':
         if (data.command === 'display' && data.parameters?.text) {
-          this.appendChat('assistant', data.parameters.text);
+          this.appendChatWithAnimation('assistant', data.parameters.text);
         }
         if (data.command === 'display_emotion' && data.parameters?.emotion) {
           this.updateEmotionDisplay(data.parameters.emotion);

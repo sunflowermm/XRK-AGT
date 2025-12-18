@@ -14,7 +14,6 @@ export default class DeviceEnhancer extends plugin {
 
     e.isDevice = true
     e.tasker = 'device'
-
     this.ensureLogText(e)
     return true
   }

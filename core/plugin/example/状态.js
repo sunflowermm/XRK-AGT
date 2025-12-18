@@ -75,8 +75,11 @@ export class stattools extends plugin {
         si.networkInterfaces()
       ])
 
-      const bot = Bot[e.self_id] || Bot
-        const runtimeSeconds = Math.floor(Date.now() / 1000 - bot.stat.start_time)
+      const bot = (globalThis.Bot && (Bot[e.self_id] || Bot)) || {}
+      const startTime = bot.stat?.start_time
+      const runtimeSeconds = typeof startTime === 'number'
+        ? Math.floor(Date.now() / 1000 - startTime)
+        : (time.uptime || os.uptime())
       const botRuntime = this.formatTime(runtimeSeconds)
       
         const loader = (await import('#infrastructure/plugins/loader.js')).default

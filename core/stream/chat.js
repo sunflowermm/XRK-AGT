@@ -134,8 +134,7 @@ export default class ChatStream extends AIStream {
       handler: async (params, context) => {
         const image = this.getRandomEmotionImage(params.emotion);
         if (image && context.e) {
-          await context.e.reply(segment.image(image));
-          await BotUtil.sleep(300);
+          await context.e.reply([{ type: 'image', data: { file: image } }]);
         }
       },
       enabled: true
@@ -910,20 +909,11 @@ export default class ChatStream extends AIStream {
     return images[Math.floor(Math.random() * images.length)];
   }
 
-  /**
-   * 记录消息
-   */
   recordMessage(e) {
-    if (!e.isGroup) return;
-    
     try {
-      const groupId = e.group_id;
-      if (!ChatStream.messageHistory.has(groupId)) {
-        ChatStream.messageHistory.set(groupId, []);
-      }
-      
-      const history = ChatStream.messageHistory.get(groupId);
-      
+      const isGroup = e.isGroup;
+      const historyKey = e.group_id || `private_${e.user_id}`;
+
       let message = e.raw_message || e.msg || '';
       if (e.message && Array.isArray(e.message)) {
         message = e.message.map(seg => {
@@ -936,33 +926,34 @@ export default class ChatStream extends AIStream {
           }
         }).join('');
       }
-      
+
       const msgData = {
         user_id: e.user_id,
         nickname: e.sender?.card || e.sender?.nickname || '未知',
-        message: message,
+        message,
         message_id: e.message_id,
-        time: Date.now(),
-        hasImage: e.img?.length > 0
+        time: Date.now()
       };
-      
-      history.push(msgData);
-      
-      if (history.length > 30) {
-        history.shift();
+
+      // 群聊内存历史，仅用于构建「群聊记录」提示
+      if (isGroup) {
+        if (!ChatStream.messageHistory.has(e.group_id)) {
+          ChatStream.messageHistory.set(e.group_id, []);
+        }
+        const history = ChatStream.messageHistory.get(e.group_id);
+        history.push(msgData);
+        if (history.length > 30) {
+          history.shift();
+        }
       }
-      
+
+      // 全局 Redis 历史（群聊 + 私聊），用于语义检索
       if (this.embeddingConfig?.enabled && message && message.length > 5) {
-        this.storeMessageWithEmbedding(groupId, msgData).catch(() => {});
+        this.storeMessageWithEmbedding(historyKey, msgData).catch(() => {});
       }
-    } catch (error) {
-      // 静默失败
-    }
+    } catch {}
   }
 
-  /**
-   * 获取Bot角色
-   */
   async getBotRole(e) {
     if (!e.isGroup) return '成员';
     
@@ -986,9 +977,6 @@ export default class ChatStream extends AIStream {
     }
   }
 
-  /**
-   * 构建系统提示
-   */
   buildSystemPrompt(context) {
     const { e, question } = context;
     const persona = question?.persona || '我是AI助手';
@@ -1022,11 +1010,13 @@ export default class ChatStream extends AIStream {
       embeddingHint = '\n💡 系统会自动检索相关历史对话\n';
     }
 
+    const botName = e.bot?.nickname || e.bot?.info?.nickname || Bot.nickname || 'AI助手';
+    
     return `【人设设定】
 ${persona}
 
 【身份信息】
-名字：${Bot.nickname}
+名字：${botName}
 QQ号：${e.self_id}
 ${e.isGroup ? `群名：${e.group?.group_name || '未知'}
 群号：${e.group_id}
@@ -1067,86 +1057,161 @@ ${isGlobalTrigger ?
 ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
   }
 
-  /**
-   * 构建聊天上下文
-   */
   async buildChatContext(e, question) {
+    if (Array.isArray(question)) {
+      return question;
+    }
+    
     const messages = [];
-    
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const botRole = await this.getBotRole(e);
-    
-    const enrichedQuestion = {
-      ...question,
-      botRole,
-      dateStr
-    };
-    
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt({ e, question: enrichedQuestion })
+      content: this.buildSystemPrompt({ e, question })
     });
     
-    if (e.isGroup) {
-      const history = ChatStream.messageHistory.get(e.group_id) || [];
-      
-      if (question?.isGlobalTrigger) {
-        const recentMessages = history.slice(-15);
-        if (recentMessages.length > 0) {
-          messages.push({
-            role: 'user',
-            content: `[群聊记录]\n${recentMessages.map(msg => 
-              `${msg.nickname}(${msg.user_id})[${msg.message_id}]: ${msg.message}`
-            ).join('\n')}\n\n请对当前话题发表你的看法。`
-          });
-        }
-      } else {
-        const recentMessages = history.slice(-10);
-        if (recentMessages.length > 0) {
-          messages.push({
-            role: 'user',
-            content: `[群聊记录]\n${recentMessages.map(msg => 
-              `${msg.nickname}(${msg.user_id})[${msg.message_id}]: ${msg.message}`
-            ).join('\n')}`
-          });
-        }
-        
-        const userInfo = e.sender?.card || e.sender?.nickname || '未知';
-        let actualQuestion = typeof question === 'string' ? question : 
-                            (question?.content || question?.text || '');
-        
-        if (question?.imageDescriptions?.length > 0) {
-          actualQuestion += ' ' + question.imageDescriptions.join(' ');
-        }
-        
-        messages.push({
-          role: 'user',
-          content: `[当前消息]\n${userInfo}(${e.user_id})[${e.message_id}]: ${actualQuestion}`
-        });
-      }
-    } else {
-      const userInfo = e.sender?.nickname || '未知';
-      let actualQuestion = typeof question === 'string' ? question : 
-                          (question?.content || question?.text || '');
-      
-      if (question?.imageDescriptions?.length > 0) {
-        actualQuestion += ' ' + question.imageDescriptions.join(' ');
-      }
-      
-      messages.push({
-        role: 'user',
-        content: `${userInfo}(${e.user_id}): ${actualQuestion}`
-      });
-    }
+    const userMessage = typeof question === 'string' ? question : 
+                       (question?.content || question?.text || '');
+    messages.push({
+      role: 'user',
+      content: userMessage
+    });
     
     return messages;
   }
 
-  /**
-   * 解析CQ码
-   */
-  async parseCQCodes(text, e) {
+  extractQueryFromMessages(messages) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === 'user') {
+        if (typeof msg.content === 'string') {
+          return msg.content;
+        } else if (msg.content?.text) {
+          return msg.content.text;
+        }
+      }
+    }
+    return '';
+  }
+
+  mergeMessageHistory(messages, e) {
+    if (!e?.isGroup || messages.length < 2) {
+      return messages;
+    }
+
+    const userMessage = messages[messages.length - 1];
+    const isGlobalTrigger = userMessage.content?.isGlobalTrigger || false;
+    const history = ChatStream.messageHistory.get(e.group_id) || [];
+    
+    if (history.length === 0) {
+      return messages;
+    }
+
+    const mergedMessages = [messages[0]];
+    
+    if (isGlobalTrigger) {
+      const recentMessages = history.slice(-15);
+      if (recentMessages.length > 0) {
+        mergedMessages.push({
+          role: 'user',
+          content: `[群聊记录]\n${recentMessages.map(msg => 
+            `${msg.nickname}(${msg.user_id})[${msg.message_id}]: ${msg.message}`
+          ).join('\n')}\n\n请对当前话题发表你的看法。`
+        });
+      }
+    } else {
+      const recentMessages = history.slice(-10);
+      if (recentMessages.length > 0) {
+        mergedMessages.push({
+          role: 'user',
+          content: `[群聊记录]\n${recentMessages.map(msg => 
+            `${msg.nickname}(${msg.user_id})[${msg.message_id}]: ${msg.message}`
+          ).join('\n')}`
+        });
+      }
+      
+      const content = userMessage.content;
+      if (typeof content === 'object' && content.text) {
+        mergedMessages.push({
+          role: 'user',
+          content: {
+            text: content.text,
+            images: content.images || [],
+            replyImages: content.replyImages || []
+          }
+        });
+      } else {
+        mergedMessages.push(userMessage);
+      }
+    }
+    
+    return mergedMessages;
+  }
+
+  async execute(e, messages, config) {
+    try {
+      if (!Array.isArray(messages)) {
+        const baseMessages = await this.buildChatContext(e, messages);
+        messages = await this.buildEnhancedContext(e, messages, baseMessages);
+      } else {
+        messages = this.mergeMessageHistory(messages, e);
+        const query = this.extractQueryFromMessages(messages);
+        messages = await this.buildEnhancedContext(e, query, messages);
+      }
+      
+      const context = { e, question: null, config };
+      const response = await this.callAI(messages, config);
+      
+      if (!response) {
+        return null;
+      }
+      
+      const { functions, cleanText } = this.parseFunctions(response, context);
+      
+      const emotionIndex = functions.findIndex(f => f.type === 'emotion');
+      const isEmotionLast = emotionIndex === functions.length - 1 && functions.length > 0;
+      
+      if (isEmotionLast && cleanText) {
+        for (let i = 0; i < functions.length - 1; i++) {
+          await this.executeFunction(functions[i].type, functions[i].params, context);
+        }
+        
+        await this.sendMessages(e, cleanText);
+        await BotUtil.sleep(500);
+        await this.executeFunction(functions[emotionIndex].type, functions[emotionIndex].params, context);
+      } else {
+        for (let i = 0; i < functions.length; i++) {
+          await this.executeFunction(functions[i].type, functions[i].params, context);
+          if (i < functions.length - 1 && !functions[i].noDelay) {
+            await BotUtil.sleep(2500);
+          }
+        }
+        
+        if (cleanText) {
+          await this.sendMessages(e, cleanText);
+        }
+      }
+      
+      if (this.embeddingConfig.enabled && cleanText && e) {
+        const groupId = e.group_id || `private_${e.user_id}`;
+        this.storeMessageWithEmbedding(groupId, {
+          user_id: e.self_id,
+          nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
+          message: cleanText,
+          message_id: Date.now().toString(),
+          time: Date.now()
+        }).catch(() => {});
+      }
+      
+      return cleanText;
+    } catch (error) {
+      BotUtil.makeLog('error', 
+        `工作流执行失败[${this.name}]: ${error.message}`, 
+        'ChatStream'
+      );
+      return null;
+    }
+  }
+
+  parseCQCodes(text, e) {
     const segments = [];
     const parts = text.split(/(\[CQ:[^\]]+\])/);
     
@@ -1173,18 +1238,18 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
                 );
                 
                 if (userExists || e.isMaster) {
-                  segments.push(segment.at(paramObj.qq));
+                  segments.push({ type: 'at', data: { qq: String(paramObj.qq) } });
                 }
               }
               break;
             case 'reply':
               if (paramObj.id) {
-                segments.push(segment.reply(paramObj.id));
+                segments.push({ type: 'reply', data: { id: String(paramObj.id) } });
               }
               break;
             case 'image':
               if (paramObj.file) {
-                segments.push(segment.image(paramObj.file));
+                segments.push({ type: 'image', data: { file: paramObj.file } });
               }
               break;
             default:
@@ -1192,44 +1257,36 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
           }
         }
       } else if (part.trim()) {
-        segments.push(part);
+        segments.push({ type: 'text', data: { text: part } });
       }
     }
     
-    return segments;
+    return segments.length > 0 ? segments : null;
   }
 
-  /**
-   * 发送消息
-   */
   async sendMessages(e, cleanText) {
-    if (cleanText.includes('|')) {
-      const messages = cleanText.split('|').map(m => m.trim()).filter(m => m);
+    if (!cleanText) return
+
+    const messages = cleanText.includes('|') 
+      ? cleanText.split('|').map(m => m.trim()).filter(m => m)
+      : [cleanText];
+    
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const segments = this.parseCQCodes(msg, e);
       
-      for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
-        const segments = await this.parseCQCodes(msg, e);
-        
-        if (segments.length > 0) {
-          await e.reply(segments);
-          
-          if (i < messages.length - 1) {
-            await BotUtil.sleep(randomRange(800, 1500));
-          }
-        }
-      }
-    } else if (cleanText) {
-      const segments = await this.parseCQCodes(cleanText, e);
-      
-      if (segments.length > 0) {
+      if (segments && segments.length > 0) {
         await e.reply(segments);
+      } else if (msg) {
+        await e.reply(msg);
+      }
+      
+      if (i < messages.length - 1) {
+        await BotUtil.sleep(randomRange(800, 1500));
       }
     }
   }
 
-  /**
-   * 清理缓存
-   */
   cleanupCache() {
     const now = Date.now();
     
@@ -1249,9 +1306,6 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
     }
   }
 
-  /**
-   * 清理资源
-   */
   async cleanup() {
     await super.cleanup();
     

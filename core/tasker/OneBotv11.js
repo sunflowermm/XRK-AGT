@@ -905,6 +905,15 @@ Bot.tasker.push(
       return data.bot.sendApi("delete_essence_msg", { message_id })
     }
 
+    setEmojiLike(data, message_id, emoji_id) {
+      Bot.makeLog("info", `设置表情回应：${emoji_id}`, `${data.self_id} => ${data.group_id}, ${message_id}`, true)
+      return data.bot.sendApi("set_emoji_like", {
+        group_id: data.group_id,
+        message_id: String(message_id),
+        emoji_id: String(emoji_id)
+      })
+    }
+
     /**
      * 创建好友对象
      */
@@ -1032,6 +1041,9 @@ Bot.tasker.push(
         getChatHistory: this.getGroupMsgHistory.bind(this, i),
         getHonorInfo: this.getGroupHonorInfo.bind(this, i),
         getEssence: this.getEssenceMsg.bind(this, i),
+        setEssenceMessage: this.setEssenceMsg.bind(this, i),
+        removeEssenceMessage: this.deleteEssenceMsg.bind(this, i),
+        setEmojiLike: (message_id, emoji_id) => this.setEmojiLike(i, message_id, emoji_id),
         getMemberArray: this.getMemberArray.bind(this, i),
         getMemberList: this.getMemberList.bind(this, i),
         getMemberMap: this.getMemberMap.bind(this, i),

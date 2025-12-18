@@ -269,30 +269,32 @@ drawing:
 
 ---
 
-## 调用流程与 execute
+## LLM 调用流程
+
+详细的 LLM 调用流程、消息格式规范和工厂处理逻辑，请参考：[LLM 工作流文档](./llm-workflow.md)
+
+### 基础方法
 
 - `callAI(messages, apiConfig = {})`
   - 以非流式方式调用兼容 OpenAI 的 `/chat/completions` 接口。
   - 组合 `this.config` 与 `apiConfig`，支持覆盖 `model/baseUrl/apiKey` 等。
-  - 若未显式提供 `baseUrl/apiKey`，优先级遵循：`profile/profileKey/modelKey/llm` → `defaultProfile` → `defaults`。
-    - `apiConfig.profile`/`profileKey`/`modelKey`/`llm`/`model`（匹配 profile key）可切换档位。
-    - `apiConfig.provider` 可指定提供商（如 `generic`、`volcengine`），未指定则默认使用 `generic`。
-    - 底层由 `LLMFactory`（`src/factory/llm/LLMFactory.js`）创建具体客户端，支持 `generic`（默认）和 `volcengine` 等提供商。
+  - 底层由 `LLMFactory` 创建具体客户端（如 `gptgod`、`volcengine`）。
+  - **注意：** 工厂负责读取运营商配置，工作流只需传入 messages。
 
 - `callAIStream(messages, apiConfig = {}, onDelta)`
   - 使用 `stream: true` 方式调用 Chat Completion。
   - 逐行解析 `data: ...` SSE 流，将增量文本通过 `onDelta(delta)` 回调返回。
 
-- `execute(e, question, config)`
-  1. 构造上下文对象 `{ e, question, config }`。
-  2. 调用子类的 `buildChatContext` 生成基础 `messages`。
-  3. 通过 `buildEnhancedContext` 加入历史上下文。
-  4. 调用 `callAI` 获取回复文本。
-  5. 调用 `parseFunctions` 解析函数调用，并依次执行。
-  6. 如启用 Embedding，则将 Bot 回复写入 Redis 以备后续检索。
-  7. 返回清洗后的文本 `cleanText`。
+- `execute(e, messages, config)`
+  - 接收插件传入的 `messages` 数组。
+  - 合并消息历史（如有）。
+  - 通过 `buildEnhancedContext` 加入 embedding 检索上下文。
+  - 调用 `callAI` 获取回复文本。
+  - 调用 `parseFunctions` 解析函数调用，并依次执行。
+  - 如启用 Embedding，则将 Bot 回复写入 Redis 以备后续检索。
+  - 返回清洗后的文本 `cleanText`。
 
-- `process(e, question, apiConfig = {})`
+- `process(e, messages, apiConfig = {})`
   - 一个轻量包装，内部调用 `execute`，适合插件直接调用。
 
 ---
@@ -307,17 +309,14 @@ drawing:
 
 ## 与插件系统的协作方式
 
-插件通常通过以下方式使用 `AIStream`：
+**重要：** 详细的协作方式和消息格式规范，请参考 [LLM 工作流文档](./llm-workflow.md)。
 
-1. 在插件构造函数中指定依赖工作流名称（可选）。
-2. 在规则处理方法中：
-   - `const stream = this.getStream('my-stream')`。
-   - 调用 `const reply = await stream.process(this.e, questionText, apiConfig)`。
-   - 使用 `this.reply(reply)` 将结果发送给用户。
-3. 如需 Function Calling：
-   - 在自定义 `AIStream` 子类的构造函数中注册函数：
-     - `this.registerFunction('xxx', {...})`。
-   - 在 `buildSystemPrompt` 中利用 `buildFunctionsPrompt()` 拼接功能描述。
+插件应按照以下方式使用工作流：
+
+1. 插件负责构建标准化的 `messages` 数组（包含人设和当前消息）。
+2. 调用 `stream.execute(e, messages)` 传入 messages。
+3. 工作流负责合并历史、增强上下文、调用工厂。
+4. 工厂负责处理图片、上传、调用 LLM API。
 
 ---
 

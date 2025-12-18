@@ -1681,6 +1681,28 @@ export default class BotUtil {
 
     try {
       const adapterName = e.adapter_name?.toUpperCase() || e.platform?.toUpperCase() || '';
+      const isDevice = e.isDevice || e.tasker === 'device' || e.post_type === 'device';
+
+      if (isDevice && e.reply) {
+        const descText = Array.isArray(description) ? description.join(' | ') : (typeof description === 'string' ? description : String(description || ''));
+        const segments = messages.map(msg => {
+          const text = typeof msg === 'string' ? msg : (msg.message || msg.content || String(msg));
+          return {
+            type: 'text',
+            text: text || ''
+          };
+        }).filter(seg => seg.text && seg.text.trim());
+        
+        if (segments.length === 0) return false;
+        
+        const replyData = {
+          segments,
+          title: title || '',
+          description: descText || ''
+        };
+        
+        return await e.reply(replyData);
+      }
 
       if (adapterName === "ICQQ") {
         const bot = e.bot || {};

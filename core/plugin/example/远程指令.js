@@ -1475,16 +1475,19 @@ roi new Date()          // 检查日期对象`, true);
         const result = inspector.inspect(execResult.result, code);
         const output = inspector.formatResult(result);
         
-        await 制作聊天记录(
-          e, 
-          output, 
-          `🔍 对象检查结果`, 
-          `表达式: ${code} | 类型: ${result.type} | 属性: ${result.propertyCount || 0} | 方法: ${result.methodCount || 0}`
-        );
+        // 发送对象检查结果
+        if (output && output.trim()) {
+          await 制作聊天记录(
+            e, 
+            output, 
+            `🔍 对象检查结果`, 
+            `表达式: ${code} | 类型: ${result.type} | 属性: ${result.propertyCount || 0} | 方法: ${result.methodCount || 0}`
+          );
+        }
         
         // 如果对象很大，提供额外的统计信息
         if (result.propertyCount > 50 || result.methodCount > 20) {
-          const stats = `\n📊 统计信息:
+          const stats = `📊 统计信息:
 • 总属性数: ${result.propertyCount}
 • 总方法数: ${result.methodCount}
 • 检查深度: ${config.get('maxObjectDepth', 4)}

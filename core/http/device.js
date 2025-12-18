@@ -4,6 +4,9 @@ import StreamLoader from '../../src/infrastructure/aistream/loader.js';
 import fs from 'fs';
 import path from 'path';
 import cfg from '../../src/infrastructure/config/config.js';
+import paths from '../../src/utils/paths.js';
+import ASRFactory from '../../src/factory/asr/ASRFactory.js';
+import TTSFactory from '../../src/factory/tts/TTSFactory.js';
 
 // ==================== 导入工具函数 ====================
 import {
@@ -13,10 +16,6 @@ import {
     hasCapability,
     getAudioFileList
 } from '../../src/utils/deviceutil.js';
-
-// ==================== 导入ASR和TTS工厂 ====================
-import ASRFactory from '../../src/factory/asr/ASRFactory.js';
-import TTSFactory from '../../src/factory/tts/TTSFactory.js';
 
 const ensureConfig = (value, path) => {
     if (value === undefined || value === null) {
@@ -522,10 +521,10 @@ class DeviceManager {
                 }
             } catch { }
 
-            // 处理AI响应
+            // 处理AI响应（ASR识别结果调用工作流，工作流自动选择LLM工厂，结果交给TTS）
             if (session.finalText.trim()) {
                 await this._processAIResponse(deviceId, session.finalText, {
-                    workflow: 'device'
+                    fromASR: true
                 });
             }
         } else {
@@ -554,22 +553,12 @@ class DeviceManager {
     async _processAIResponse(deviceId, question, options = {}) {
         try {
             const startTime = Date.now();
-            const workflowName = options.workflow || 'device';
-            const personaOverride = options.persona;
-            const profileOverride = options.profile || options.llm || options.model;
+            const fromASR = options.fromASR === true;
 
             BotUtil.makeLog('info',
                 `⚡ [AI] 开始处理: ${question.substring(0, 50)}${question.length > 50 ? '...' : ''}`,
                 deviceId
             );
-
-            const streamName = workflowName || 'device';
-            const deviceStream = StreamLoader.getStream(streamName) || StreamLoader.getStream('device');
-            if (!deviceStream) {
-                BotUtil.makeLog('error', `❌ [AI] 工作流未加载: ${streamName}`, deviceId);
-                await this._sendAIError(deviceId);
-                return;
-            }
 
             const runtimeBot = this.getBot();
             const deviceInfo = devices.get(deviceId);
@@ -581,10 +570,23 @@ class DeviceManager {
                 return;
             }
 
+            // 从配置或options中读取工作流名称
+            const aistreamConfig = getAistreamConfig();
+            const asrConfig = aistreamConfig.asr || {};
+            const workflowName = options.workflow || asrConfig.workflow || 'device';
+
+            const streamName = workflowName || 'device';
+            const deviceStream = StreamLoader.getStream(streamName) || StreamLoader.getStream('device');
+            if (!deviceStream) {
+                BotUtil.makeLog('error', `❌ [AI] 工作流未加载: ${streamName}`, deviceId);
+                await this._sendAIError(deviceId);
+                return;
+            }
+
             const streamConfig = getLLMSettings({
                 workflow: streamName,
-                persona: personaOverride,
-                profile: profileOverride
+                persona: options.persona,
+                profile: options.profile
             });
             if (!streamConfig.enabled) {
                 BotUtil.makeLog('warn', '⚠️ [AI] 工作流已禁用', deviceId);
@@ -592,6 +594,7 @@ class DeviceManager {
                 return;
             }
 
+            // 调用工作流（工作流内部会自动选择LLM工厂）
             const aiResult = await deviceStream.execute(
                 deviceId,
                 question,
@@ -627,22 +630,28 @@ class DeviceManager {
                 await new Promise(r => setTimeout(r, 500));
             }
 
-            // 播放TTS
+            // 播放TTS（只有ASR触发或配置允许时才播放）
             const ttsConfig = getTtsConfig();
-            if (aiResult.text && ttsConfig.enabled) {
-                try {
-                    const ttsClient = this._getTTSClient(deviceId, ttsConfig);
-                    const success = await ttsClient.synthesize(aiResult.text);
+            const aistreamTtsConfig = aistreamConfig.tts || {};
+            const ttsOnlyForASR = aistreamTtsConfig.onlyForASR !== false; // 默认只有ASR触发才有TTS
 
-                    if (success) {
-                        BotUtil.makeLog('info', `🔊 [TTS] 语音合成已启动`, deviceId);
-                    } else {
-                        BotUtil.makeLog('error', `❌ [TTS] 语音合成失败`, deviceId);
+            if (aiResult.text && ttsConfig.enabled) {
+                const shouldPlayTTS = fromASR || !ttsOnlyForASR;
+                if (shouldPlayTTS) {
+                    try {
+                        const ttsClient = this._getTTSClient(deviceId, ttsConfig);
+                        const success = await ttsClient.synthesize(aiResult.text);
+
+                        if (success) {
+                            BotUtil.makeLog('info', `🔊 [TTS] 语音合成已启动`, deviceId);
+                        } else {
+                            BotUtil.makeLog('error', `❌ [TTS] 语音合成失败`, deviceId);
+                            await this._sendAIError(deviceId);
+                        }
+                    } catch (e) {
+                        BotUtil.makeLog('error', `❌ [TTS] 语音合成异常: ${e.message}`, deviceId);
                         await this._sendAIError(deviceId);
                     }
-                } catch (e) {
-                    BotUtil.makeLog('error', `❌ [TTS] 语音合成异常: ${e.message}`, deviceId);
-                    await this._sendAIError(deviceId);
                 }
             }
 
@@ -1242,88 +1251,6 @@ class DeviceManager {
      * @param {Object} Bot - Bot实例
      * @returns {Promise<Object>} 处理结果
      */
-    async processDeviceEvent(deviceId, eventType, eventData = {}, Bot) {
-        const runtimeBot = this.getBot(Bot);
-        try {
-            if (!devices.has(deviceId)) {
-                if (eventType === 'register') {
-                    return await this.registerDevice(
-                        { device_id: deviceId, ...eventData },
-                        runtimeBot
-                    );
-                }
-                return { success: false, error: '设备未注册' };
-            }
-
-            const device = devices.get(deviceId);
-            device.last_seen = Date.now();
-            device.online = true;
-            device.stats.messages_received++;
-
-            this.updateDeviceStats(deviceId, 'message');
-
-            switch (eventType) {
-                case 'log': {
-                    const { level = 'info', message, data: logData } = eventData;
-                    this.addDeviceLog(deviceId, level, message, logData);
-                    break;
-                }
-
-                case 'command_result': {
-                    const { command_id, result } = eventData;
-                    const callback = commandCallbacks.get(command_id);
-                    if (callback) {
-                        callback(result);
-                        commandCallbacks.delete(command_id);
-                    }
-                    break;
-                }
-
-                case 'asr_session_start':
-                    return await this.handleASRSessionStart(deviceId, eventData);
-
-                case 'asr_audio_chunk':
-                    return await this.handleASRAudioChunk(deviceId, eventData);
-
-                case 'asr_session_stop':
-                    return await this.handleASRSessionStop(deviceId, eventData);
-
-                default:
-                    const deviceEventData = {
-                        post_type: 'device',
-                        event_type: eventType,
-                        device_id: deviceId,
-                        device_type: device.device_type,
-                        device_name: device.device_name,
-                        event_data: eventData,
-                        self_id: deviceId,
-                        user_id: eventData.user_id || deviceId,
-                        time: Math.floor(Date.now() / 1000),
-                        event_id: `device_${eventType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                        tasker: 'device',
-                        isDevice: true,
-                        bot: runtimeBot[deviceId],
-                        // 如果是消息事件，添加消息相关字段
-                        ...(eventType === 'message' ? {
-                            message: eventData.message || [{ type: 'text', text: eventData.text || '' }],
-                            raw_message: eventData.text || eventData.message || '',
-                            msg: eventData.text || eventData.message || '',
-                            sender: eventData.sender || { nickname: device.device_name }
-                        } : {})
-                    };
-                    
-                    const specificDeviceEvent = `device.${eventType}`;
-                    runtimeBot.em(specificDeviceEvent, deviceEventData);
-                    runtimeBot.em('device', deviceEventData);
-            }
-
-            return { success: true };
-
-        } catch (e) {
-            this.updateDeviceStats(deviceId, 'error');
-            return { success: false, error: e.message };
-        }
-    }
 
     /**
      * 处理WebSocket消息
@@ -1336,24 +1263,13 @@ class DeviceManager {
         const runtimeBot = this.getBot(Bot);
         try {
             const { type, device_id, ...payload } = data;
-            const deviceId = device_id || ws.device_id || 'unknown';
+            let deviceId = device_id || ws.device_id || 'unknown';
+            
 
-            if (!['heartbeat', 'asr_audio_chunk', 'register'].includes(type)) {
-                logWithThrottle(
-                    'info',
-                    `📨 [WebSocket] 收到消息: type="${type}", device_id="${deviceId}"`,
-                    deviceId,
-                    `ws:${deviceId}:${type}`,
-                    800
-                );
-            } else if (type === 'register') {
-                logWithThrottle(
-                    'debug',
-                    `📨 [WebSocket] 注册请求: device_id="${deviceId}"`,
-                    deviceId,
-                    `ws-register:${deviceId}`,
-                    1500
-                );
+
+            // 只对非心跳类型的消息记录日志
+            if (type !== 'heartbeat' && type !== 'heartbeat_response') {
+                logWithThrottle('info', `📨 [WebSocket] ${type}`, deviceId, `ws:${deviceId}:${type}`, 800);
             }
 
             if (!type) {
@@ -1368,11 +1284,22 @@ class DeviceManager {
                 return;
             }
 
+            if (type !== 'register' && !devices.has(deviceId)) {
+                BotUtil.makeLog('warn', `[WebSocket] 收到来自未注册设备的消息 (type: ${type})`, deviceId);
+                try {
+                    ws.send(JSON.stringify({
+                        type: 'error',
+                        message: '设备未注册。请先发送 register 消息。'
+                    }));
+                } catch {}
+                return;
+            }
+
             switch (type) {
                 case 'register': {
-                    BotUtil.makeLog('info', `🔌 [WebSocket] 设备注册请求`, deviceId);
+                    ws.device_id = deviceId;
                     const device = await this.registerDevice(
-                        { device_id: deviceId, ...payload },
+                        { device_id: deviceId, user_id: payload.user_id, ...payload },
                         runtimeBot,
                         ws
                     );
@@ -1384,18 +1311,16 @@ class DeviceManager {
                     break;
                 }
 
-                case 'event':
-                case 'data': {
-                    const eventType = payload.data_type || payload.event_type || type;
-                    const eventData = payload.data || payload.event_data || payload;
-                    await this.processDeviceEvent(deviceId, eventType, eventData, runtimeBot);
-                    break;
-                }
-
                 case 'asr_session_start':
+                    await this.handleASRSessionStart(deviceId, payload);
+                    break;
+
                 case 'asr_audio_chunk':
+                    await this.handleASRAudioChunk(deviceId, payload);
+                    break;
+
                 case 'asr_session_stop':
-                    await this.processDeviceEvent(deviceId, type, payload, runtimeBot);
+                    await this.handleASRSessionStop(deviceId, payload);
                     break;
 
                 case 'log': {
@@ -1430,15 +1355,200 @@ class DeviceManager {
                     break;
                 }
 
-                case 'command_result':
-                    await this.processDeviceEvent(deviceId, type, payload, runtimeBot);
+                case 'command_result': {
+                    const { command_id, result } = payload;
+                    const callback = commandCallbacks.get(command_id);
+                    if (callback) {
+                        callback(result);
+                        commandCallbacks.delete(command_id);
+                    }
+                    break;
+                }
+
+                case 'message': {
+                    const device = devices.get(deviceId);
+                    if (!device) break;
+
+                    device.last_seen = Date.now();
+                    device.online = true;
+                    device.stats.messages_received++;
+                    this.updateDeviceStats(deviceId, 'message');
+
+                    const text = payload.text || (typeof payload.message === 'string' ? payload.message : '') || '';
+                    const user_id = payload.user_id || payload.userId || deviceId;
+                    const isMaster = payload.isMaster === true || (payload.device_type === 'web' && user_id);
+                    
+                    // 确保 message 是数组格式
+                    let message = payload.message;
+                    if (!Array.isArray(message)) {
+                        if (typeof message === 'string') {
+                            message = [{ type: 'text', text: message }];
+                        } else {
+                            message = [{ type: 'text', text }];
+                        }
+                    }
+                    
+                    const messagePayload = {
+                        text,
+                        message,
+                        sender: payload.sender || { nickname: payload.nickname || 'web' },
+                        user_id,
+                        channel: payload.channel || 'web-chat',
+                        meta: payload.meta || {},
+                        isMaster
+                    };
+
+                    const deviceEventData = {
+                        post_type: 'device',
+                        event_type: 'message',
+                        device_id: deviceId,
+                        device_type: device.device_type,
+                        device_name: device.device_name,
+                        event_data: messagePayload,
+                        self_id: deviceId,
+                        user_id,
+                        isMaster,
+                        time: Math.floor(Date.now() / 1000),
+                        event_id: `device_message_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        tasker: 'device',
+                        isDevice: true,
+                        adapter_name: 'device',
+                        platform: 'device',
+                        bot: runtimeBot[deviceId],
+                        message: messagePayload.message,
+                        raw_message: text,
+                        msg: text,
+                        sender: messagePayload.sender,
+                        channel: messagePayload.channel,
+                        meta: messagePayload.meta,
+                        reply: async (segmentsOrText) => {
+                            try {
+                                const ws = deviceWebSockets.get(deviceId);
+                                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                                    return false;
+                                }
+                                
+                                let segments = [];
+                                let title = '';
+                                let description = '';
+                                
+                                if (typeof segmentsOrText === 'object' && segmentsOrText !== null && !Array.isArray(segmentsOrText)) {
+                                    if (segmentsOrText.segments) {
+                                        segments = segmentsOrText.segments;
+                                        title = segmentsOrText.title || '';
+                                        description = segmentsOrText.description || '';
+                                    } else {
+                                        segments = [{ type: 'text', text: String(segmentsOrText) }];
+                                    }
+                                } else if (Array.isArray(segmentsOrText)) {
+                                    if (
+                                        segmentsOrText.length === 1 &&
+                                        segmentsOrText[0] &&
+                                        typeof segmentsOrText[0] === 'object' &&
+                                        !Array.isArray(segmentsOrText[0]) &&
+                                        (segmentsOrText[0].segments || segmentsOrText[0].text || segmentsOrText[0].message)
+                                    ) {
+                                        const first = segmentsOrText[0];
+                                        if (Array.isArray(first.segments)) {
+                                            segments = first.segments;
+                                        } else if (first.text || first.message) {
+                                            segments = [{
+                                                type: 'text',
+                                                text: String(first.text || first.message || '')
+                                            }];
+                                        }
+                                        title = first.title || '';
+                                        description = first.description || '';
+                                    } else {
+                                        segments = segmentsOrText.map(seg =>
+                                            typeof seg === 'string' ? { type: 'text', text: seg } : seg
+                                        );
+                                    }
+                                } else if (segmentsOrText) {
+                                    segments = [{ type: 'text', text: String(segmentsOrText) }];
+                                }
+                                
+                                segments = segments.map(seg => {
+                                    if (seg.type === 'text' && seg.data && seg.data.text !== undefined) {
+                                        return { type: 'text', text: seg.data.text };
+                                    }
+                                    if (seg.type === 'image' && seg.data && seg.data.file) {
+                                        const filePath = seg.data.file;
+                                        let relativePath = '';
+                                        if (filePath.includes('trash')) {
+                                            const trashIndex = filePath.indexOf('trash');
+                                            relativePath = filePath.substring(trashIndex + 6).replace(/\\/g, '/');
+                                        } else {
+                                            try {
+                                                relativePath = path.relative(paths.trash, filePath).replace(/\\/g, '/');
+                                            } catch {
+                                                relativePath = path.basename(filePath);
+                                            }
+                                        }
+                                        return {
+                                            type: 'image',
+                                            url: `/api/trash/${relativePath}`,
+                                            data: { file: filePath }
+                                        };
+                                    }
+                                    return seg;
+                                });
+                                
+                                if (segments.length === 0) return false;
+                                
+                                const replyMsg = {
+                                    type: 'reply',
+                                    device_id: deviceId,
+                                    channel: messagePayload.channel || 'device',
+                                    segments,
+                                    timestamp: Date.now()
+                                };
+                                
+                                if (title) replyMsg.title = title;
+                                if (description) replyMsg.description = description;
+                                
+                                const logText = segments.map(seg => {
+                                    if (seg.type === 'text') {
+                                        return seg.text || (seg.data && seg.data.text) || '';
+                                    }
+                                    if (seg.type === 'image') {
+                                        return '[图片]';
+                                    }
+                                    return '';
+                                }).join('');
+                                if (logText) {
+                                    BotUtil.makeLog('info', 
+                                        `${title ? `【${title}】` : ''}${logText.substring(0, 500)}${logText.length > 500 ? '...' : ''}`, 
+                                        deviceId
+                                    );
+                                }
+                                
+                                ws.send(JSON.stringify(replyMsg));
+                                return true;
+                            } catch (err) {
+                                BotUtil.makeLog('error', `reply失败: ${err.message}`, deviceId);
+                                return false;
+                            }
+                        }
+                    };
+                    
+                    runtimeBot.em('device.message', deviceEventData);
+                    runtimeBot.em('device', deviceEventData);
+                    break;
+                }
+
+                case 'heartbeat_response':
+                    // 心跳响应，不需要处理，静默忽略
                     break;
 
                 default:
-                    ws.send(JSON.stringify({
-                        type: 'error',
-                        message: `未知消息类型: ${type}`
-                    }));
+                    // 只对非心跳类型的未知消息发送错误
+                    if (type !== 'heartbeat_response') {
+                        BotUtil.makeLog('warn',
+                            `⚠️ [WebSocket] 未知消息类型: ${type}`,
+                            deviceId
+                        );
+                    }
             }
         } catch (e) {
             BotUtil.makeLog('error',
@@ -1570,11 +1680,11 @@ export default {
                         return res.status(404).json({ success: false, message: '设备未找到' });
                     }
                     const workflowName = (workflow || 'device').toString().trim() || 'device';
-                    const profileKey = llmProfile || profile || llm || model;
                     await deviceManager._processAIResponse(deviceId, String(text), {
                         workflow: workflowName,
                         persona,
-                        profile: profileKey
+                        profile: llmProfile || profile || llm || model,
+                        fromASR: false
                     });
                     return res.json({ success: true });
                 } catch (e) {
@@ -1682,7 +1792,58 @@ export default {
                 }
             }
         },
-    ],
+        {
+            method: 'GET',
+            path: '/api/trash/*',
+                handler: async (req, res) => {
+                    try {
+                        const filePath = req.params[0];
+                        if (!filePath || filePath.includes('..')) {
+                            return res.status(400).json({
+                                success: false,
+                                message: '无效的文件路径'
+                            });
+                        }
+
+                        const fullPath = path.join(paths.trash, filePath);
+                        const normalizedPath = path.normalize(fullPath);
+                        
+                        // 安全检查：确保文件在trash目录内
+                        if (!normalizedPath.startsWith(path.normalize(paths.trash))) {
+                            return res.status(403).json({
+                                success: false,
+                                message: '访问被拒绝'
+                            });
+                        }
+
+                        if (!fs.existsSync(normalizedPath)) {
+                            return res.status(404).json({
+                                success: false,
+                                message: '文件不存在'
+                            });
+                        }
+
+                        const ext = path.extname(normalizedPath).toLowerCase();
+                        const contentTypeMap = {
+                            '.png': 'image/png',
+                            '.jpg': 'image/jpeg',
+                            '.jpeg': 'image/jpeg',
+                            '.gif': 'image/gif',
+                            '.webp': 'image/webp',
+                            '.svg': 'image/svg+xml'
+                        };
+
+                        const contentType = contentTypeMap[ext] || 'application/octet-stream';
+                        res.setHeader('Content-Type', contentType);
+                        res.setHeader('Cache-Control', 'public, max-age=3600');
+
+                        fs.createReadStream(normalizedPath).pipe(res);
+                    } catch (e) {
+                        res.status(500).json({ success: false, message: e.message });
+                    }
+                }
+            }
+        ],
 
     ws: {
         device: [
