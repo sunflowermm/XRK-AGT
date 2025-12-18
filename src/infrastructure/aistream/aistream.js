@@ -844,8 +844,23 @@ export default class AIStream {
         cleanText = result.cleanText;
       }
     }
+
+    // 优先按 AI 文本中的位置（order）排序，保证执行顺序与模型输出一致
+    const withOrder = [];
+    const withoutOrder = [];
+
+    for (const fn of allFunctions) {
+      if (typeof fn.order === 'number') {
+        withOrder.push(fn);
+      } else {
+        withoutOrder.push(fn);
+      }
+    }
+
+    withOrder.sort((a, b) => a.order - b.order);
+    const orderedFunctions = withOrder.concat(withoutOrder);
     
-    return { functions: allFunctions, cleanText };
+    return { functions: orderedFunctions, cleanText };
   }
 
   async executeFunction(type, params, context) {

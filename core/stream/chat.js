@@ -124,7 +124,8 @@ export default class ChatStream extends AIStream {
         if (match) {
           functions.push({ 
             type: 'emotion', 
-            params: { emotion: match[1] }
+            params: { emotion: match[1] },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
           cleanText = text.replace(/\[(开心|惊讶|伤心|大笑|害怕|生气)\]/g, '').trim();
         }
@@ -163,7 +164,8 @@ export default class ChatStream extends AIStream {
         while ((match = pokeRegex.exec(text))) {
           functions.push({ 
             type: 'poke', 
-            params: { qq: match[1] }
+            params: { qq: match[1] },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -210,7 +212,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'emojiReaction', 
-            params: { msgId: match[1], emojiType: match[2] }
+            params: { msgId: match[1], emojiType: match[2] },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -248,7 +251,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'thumbUp', 
-            params: { qq: match[1], count: match[2] }
+            params: { qq: match[1], count: match[2] },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -282,7 +286,11 @@ export default class ChatStream extends AIStream {
         let cleanText = text;
         
         if (text.includes('[签到]')) {
-          functions.push({ type: 'sign', params: {} });
+          functions.push({ 
+            type: 'sign', 
+            params: {}, 
+            order: text.indexOf('[签到]')
+          });
           cleanText = text.replace(/\[签到\]/g, '').trim();
         }
         
@@ -316,7 +324,8 @@ export default class ChatStream extends AIStream {
           const duration = Math.min(parseInt(match[2]), 2592000);
           functions.push({ 
             type: 'mute', 
-            params: { qq: match[1], duration }
+            params: { qq: match[1], duration },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -353,7 +362,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'unmute', 
-            params: { qq: match[1] }
+            params: { qq: match[1] },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -386,7 +396,11 @@ export default class ChatStream extends AIStream {
         let cleanText = text;
         
         if (text.includes('[全员禁言]')) {
-          functions.push({ type: 'muteAll', params: { enable: true } });
+          functions.push({ 
+            type: 'muteAll', 
+            params: { enable: true },
+            order: text.indexOf('[全员禁言]')
+          });
           cleanText = text.replace(/\[全员禁言\]/g, '').trim();
         }
         
@@ -415,7 +429,11 @@ export default class ChatStream extends AIStream {
         let cleanText = text;
         
         if (text.includes('[解除全员禁言]')) {
-          functions.push({ type: 'unmuteAll', params: { enable: false } });
+          functions.push({ 
+            type: 'unmuteAll', 
+            params: { enable: false },
+            order: text.indexOf('[解除全员禁言]')
+          });
           cleanText = text.replace(/\[解除全员禁言\]/g, '').trim();
         }
         
@@ -449,7 +467,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'setCard', 
-            params: { qq: match[1], card: match[2] }
+            params: { qq: match[1], card: match[2] },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -487,7 +506,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'setGroupName', 
-            params: { name: match[1] }
+            params: { name: match[1] },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -524,7 +544,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'setAdmin', 
-            params: { qq: match[1], enable: true }
+            params: { qq: match[1], enable: true },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -561,7 +582,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'unsetAdmin', 
-            params: { qq: match[1], enable: false }
+            params: { qq: match[1], enable: false },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -604,7 +626,8 @@ export default class ChatStream extends AIStream {
               qq: match[1], 
               title: match[2],
               duration: parseInt(match[3])
-            }
+            },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -645,7 +668,8 @@ export default class ChatStream extends AIStream {
             params: { 
               qq: match[1],
               reject: match[2] === '拒绝'
-            }
+            },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -682,7 +706,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'setEssence', 
-            params: { msgId: String(match[1]) }
+            params: { msgId: String(match[1]) },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -721,7 +746,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'removeEssence', 
-            params: { msgId: String(match[1]) }
+            params: { msgId: String(match[1]) },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -761,7 +787,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'announce', 
-            params: { content: match[1] }
+            params: { content: match[1] },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         
@@ -805,7 +832,8 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'recall', 
-            params: { msgId: String(match[1]) }
+            params: { msgId: String(match[1]) },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
         

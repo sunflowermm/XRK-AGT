@@ -1,13 +1,15 @@
 import fetch from 'node-fetch';
+import VisionFactory from '../vision/VisionFactory.js';
 
 /**
  * 小米 MiMo LLM 客户端
  *
- * 仅文本大模型调用，不包含任何识图逻辑。
  * 默认使用 OpenAI 兼容 Chat Completions 接口：
  * - baseUrl: https://api.xiaomimimo.com/v1
  * - path: /chat/completions
  * - 认证头：api-key: $MIMO_API_KEY
+ *
+ * 模型本身是纯文本的，图片统一通过 VisionFactory 转成描述文本后再交给 MiMo 处理。
  */
 export default class XiaomiMiMoLLMClient {
   constructor(config = {}) {
@@ -59,33 +61,63 @@ export default class XiaomiMiMoLLMClient {
   }
 
   /**
-   * 转换消息格式，确保所有消息的 content 是字符串
-   * MiMo 仅支持文本，不支持图片，所以需要将对象格式的 content 转换为字符串
-   * @param {Array} messages - 消息数组
-   * @returns {Array} 转换后的消息数组
+   * 通过识图工厂把图片转成文本描述，再交给 MiMo 文本模型处理
+   * @param {Array} messages - 原始消息数组
+   * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
    */
-  transformMessages(messages) {
+  async transformMessages(messages) {
     if (!Array.isArray(messages)) return messages;
 
-    return messages.map(msg => {
+    const transformed = [];
+
+    // 识图配置：由 AIStream.resolveLLMConfig 注入 visionProvider 和 visionConfig
+    const visionProvider = (this.config.visionProvider || this.config.provider || 'gptgod').toLowerCase();
+    const visionConfig = this.config.visionConfig || {};
+
+    let visionClient = null;
+    if (VisionFactory.hasProvider(visionProvider) && visionConfig.apiKey) {
+      visionClient = VisionFactory.createClient({
+        provider: visionProvider,
+        ...visionConfig
+      });
+    }
+
+    for (const msg of messages) {
       const newMsg = { ...msg };
 
-      // 如果 content 是对象，转换为字符串（MiMo 只支持字符串格式的 content）
-      if (msg.content && typeof msg.content === 'object') {
-        // 提取文本内容（支持多种可能的字段名）
+      if (msg.role === 'user' && msg.content && typeof msg.content === 'object') {
+        // 用户消息支持多模态：text + images/replyImages
         const text = msg.content.text || msg.content.content || '';
-        // MiMo 不支持图片和多模态，忽略图片相关字段，仅使用文本
-        newMsg.content = text || '';
-      } else if (msg.content === null || msg.content === undefined) {
-        // 确保 content 不为 null 或 undefined
+        const images = msg.content.images || [];
+        const replyImages = msg.content.replyImages || [];
+        const allImages = [...replyImages, ...images];
+
+        if (!visionClient || allImages.length === 0) {
+          // 没有可用的识图客户端或没有图片，直接退化为仅文本
+          newMsg.content = text || '';
+        } else {
+          const descList = await visionClient.recognizeImages(allImages);
+          const parts = [];
+
+          allImages.forEach((img, idx) => {
+            const desc = descList[idx] || '识别失败';
+            const prefix = replyImages.includes(img) ? '[回复图片:' : '[图片:';
+            parts.push(`${prefix}${desc}]`);
+          });
+
+          newMsg.content = text + (parts.length ? ' ' + parts.join(' ') : '');
+        }
+      } else if (newMsg.content && typeof newMsg.content === 'object') {
+        // 其他角色如果误传了对象，也退化为纯文本
+        newMsg.content = newMsg.content.text || newMsg.content.content || '';
+      } else if (newMsg.content == null) {
         newMsg.content = '';
-      } else if (typeof msg.content !== 'string') {
-        // 如果 content 不是字符串也不是对象（如数组），尝试转换为字符串
-        newMsg.content = String(msg.content || '');
       }
 
-      return newMsg;
-    });
+      transformed.push(newMsg);
+    }
+
+    return transformed;
   }
 
   /**
@@ -159,8 +191,8 @@ export default class XiaomiMiMoLLMClient {
    * @returns {Promise<string>} - 回复文本
    */
   async chat(messages, overrides = {}) {
-    // 转换消息格式，确保 content 为字符串
-    const transformedMessages = this.transformMessages(messages);
+    // 转换消息格式，经由 VisionFactory 抽离识图能力
+    const transformedMessages = await this.transformMessages(messages);
 
     const resp = await fetch(this.endpoint, {
       method: 'POST',
@@ -186,8 +218,8 @@ export default class XiaomiMiMoLLMClient {
    * @returns {Promise<void>}
    */
   async chatStream(messages, onDelta, overrides = {}) {
-    // 转换消息格式，确保 content 为字符串
-    const transformedMessages = this.transformMessages(messages);
+    // 转换消息格式，经由 VisionFactory 抽离识图能力
+    const transformedMessages = await this.transformMessages(messages);
 
     const resp = await fetch(this.endpoint, {
       method: 'POST',
