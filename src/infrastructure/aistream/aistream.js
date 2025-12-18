@@ -993,7 +993,8 @@ export default class AIStream {
 
     const result = {
       profile: selectedKey,
-      enabled: overrides.enabled ?? runtime.enabled ?? selectedProfile.enabled ?? overrides.enabled ?? true,
+      // enabled 优先级：显式覆盖 > 全局开关 > 档位开关 > 默认启用
+      enabled: overrides.enabled ?? runtime.enabled ?? selectedProfile.enabled ?? true,
       ...defaults,
       ...selectedProfile,
       ...overrides
@@ -1059,12 +1060,6 @@ export default class AIStream {
       'volcengine': 'volcengine_vision'
     };
     
-    // Vision Provider 到 LLM 配置的回退映射（用于兼容旧版配置）
-    const visionFallbackMap = {
-      'gptgod': 'god',
-      'volcengine': 'volcengine_llm'
-    };
-    
     if (!LLMFactory.hasProvider(provider)) {
       BotUtil.makeLog('error', `不支持的LLM提供商: ${provider}，已回退到gptgod`, 'AIStream');
       const fallbackProvider = 'gptgod';
@@ -1087,14 +1082,6 @@ export default class AIStream {
     const visionConfigKey = visionConfigMap[visionProvider];
     if (visionConfigKey) {
       visionConfig = cfg[visionConfigKey] || {};
-      // 兼容旧版：若未单独拆分 vision 配置，则回退到对应的 LLM 配置中的 vision 字段
-      const fallbackKey = visionFallbackMap[visionProvider];
-      if (fallbackKey && (!visionConfig.visionModel || !visionConfig.apiKey)) {
-        const fallbackConfig = cfg[fallbackKey] || {};
-        if (fallbackConfig.visionModel || fallbackConfig.apiKey) {
-          visionConfig = { ...visionConfig, ...fallbackConfig };
-        }
-      }
     }
 
     const finalConfig = {

@@ -95,7 +95,6 @@ ${persona}
    *  [惊讶}哇 → emotion=惊讶, text=哇
    */
   parseEmotion(text) {
-    const EMOTIONS = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
     const regex = /^\s*\[(开心|惊讶|伤心|大笑|害怕|生气)[\]\}]\s*/;
     const match = regex.exec(text || '');
     if (!match) {
@@ -103,9 +102,6 @@ ${persona}
     }
     const emotion = match[1];
     const cleanText = (text || '').replace(regex, '').trim();
-    if (!EMOTIONS.includes(emotion)) {
-      return { emotion: null, cleanText: (text || '').trim() };
-    }
     return { emotion, cleanText };
   }
 }
