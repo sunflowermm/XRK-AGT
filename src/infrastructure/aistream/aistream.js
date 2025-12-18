@@ -1025,33 +1025,69 @@ export default class AIStream {
     const merged = { ...this.config, ...apiConfig };
     const runtime = cfg.aistream || {};
     const llm = runtime.llm || {};
+    const vision = runtime.vision || {};
     
     const provider = merged.provider || llm.Provider || 'gptgod';
+    // 识图运营商：可单独配置，否则默认与 LLM Provider 一致
+    const visionProvider = (merged.visionProvider || vision.Provider || provider).toLowerCase();
+    
+    // LLM Provider 到配置名的映射（可扩展）
+    const llmConfigMap = {
+      'gptgod': 'god',
+      'volcengine': 'volcengine_llm',
+      'xiaomimimo': 'xiaomimimo_llm'
+    };
+    
+    // Vision Provider 到配置名的映射（可扩展）
+    const visionConfigMap = {
+      'gptgod': 'god_vision',
+      'volcengine': 'volcengine_vision'
+    };
+    
+    // Vision Provider 到 LLM 配置的回退映射（用于兼容旧版配置）
+    const visionFallbackMap = {
+      'gptgod': 'god',
+      'volcengine': 'volcengine_llm'
+    };
     
     if (!LLMFactory.hasProvider(provider)) {
       BotUtil.makeLog('error', `不支持的LLM提供商: ${provider}，已回退到gptgod`, 'AIStream');
       const fallbackProvider = 'gptgod';
-      const fallbackConfig = cfg.god || {};
+      const fallbackConfigKey = llmConfigMap[fallbackProvider] || 'god';
+      const fallbackConfig = cfg[fallbackConfigKey] || {};
       return {
         ...fallbackConfig,
         ...merged,
-        provider: fallbackProvider
+        provider: fallbackProvider,
+        visionProvider: visionProvider
       };
     }
     
-    let providerConfig = {};
-    if (provider === 'gptgod') {
-      providerConfig = cfg.god || {};
-    } else if (provider === 'volcengine') {
-      providerConfig = cfg.volcengine_llm || {};
-    } else if (provider === 'xiaomimimo') {
-      providerConfig = cfg.xiaomimimo_llm || {};
-    }
+    // 动态获取 LLM 配置
+    const llmConfigKey = llmConfigMap[provider];
+    const providerConfig = llmConfigKey ? (cfg[llmConfigKey] || {}) : {};
     
+    // 动态获取 Vision 配置（一个工厂一个配置文件）
+    let visionConfig = {};
+    const visionConfigKey = visionConfigMap[visionProvider];
+    if (visionConfigKey) {
+      visionConfig = cfg[visionConfigKey] || {};
+      // 兼容旧版：若未单独拆分 vision 配置，则回退到对应的 LLM 配置中的 vision 字段
+      const fallbackKey = visionFallbackMap[visionProvider];
+      if (fallbackKey && (!visionConfig.visionModel || !visionConfig.apiKey)) {
+        const fallbackConfig = cfg[fallbackKey] || {};
+        if (fallbackConfig.visionModel || fallbackConfig.apiKey) {
+          visionConfig = { ...visionConfig, ...fallbackConfig };
+        }
+      }
+    }
+
     const finalConfig = {
       ...providerConfig,
       ...merged,
-      provider
+      provider,
+      visionProvider,
+      visionConfig
     };
     
     return finalConfig;

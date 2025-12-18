@@ -1,13 +1,12 @@
-# 火山引擎 LLM 工厂配置
-# 用于配置火山引擎豆包大语言模型（仅文本，识图配置已拆分到 volcengine_vision.yaml）
+# 火山引擎 豆包 识图工厂配置
 
 # API 基础配置
 baseUrl: https://ark.cn-beijing.volces.com/api/v3
 apiKey: ""
 region: cn-beijing
 
-# 文本模型配置
-chatModel: doubao-pro-4k
+# 识图模型配置
+visionModel: doubao-vision-pro-32k
 
 # API 参数配置
 temperature: 0.8
@@ -19,4 +18,5 @@ timeout: 360000
 
 # 接口路径配置
 path: /chat/completions
+
 

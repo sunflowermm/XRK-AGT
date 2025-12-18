@@ -7,7 +7,7 @@ streamDir: "core/stream"
 # 工作流全局设置
 global:
   # 最大执行超时时间（毫秒）
-  maxTimeout: 30000
+  maxTimeout: 360000
     
   # 是否启用调试日志
   debug: false
@@ -26,9 +26,15 @@ cache:
   # 最大缓存条数
   maxSize: 100
 
-# LLM 工厂运营商选择（gptgod 或 volcengine）
-# 详细配置位于 data/server_bots/{port}/god.yaml
+# LLM 工厂运营商选择（gptgod / volcengine / xiaomimimo）
+# 文本 LLM 配置分别位于 data/server_bots/{port}/god.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml
 llm:
+  Provider: gptgod
+
+# 识图工厂运营商选择（gptgod / volcengine）
+# 一个工厂一个配置文件：god_vision.yaml、volcengine_vision.yaml
+# 注意：工作流不直接调用识图工厂，而是由 LLM 在检测到图片时调用
+vision:
   Provider: gptgod
 
 # ASR 工厂运营商选择

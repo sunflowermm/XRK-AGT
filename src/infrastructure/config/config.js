@@ -233,9 +233,19 @@ class Cfg {
   get god() {
     return this.getConfig('god');
   }
+
+  // GPTGod 识图配置（一个工厂一个配置文件）
+  get god_vision() {
+    return this.getConfig('god_vision');
+  }
   
   get volcengine_llm() {
     return this.getConfig('volcengine_llm');
+  }
+
+  // 火山引擎识图配置
+  get volcengine_vision() {
+    return this.getConfig('volcengine_vision');
   }
 
   get xiaomimimo_llm() {

@@ -1540,7 +1540,7 @@ export default class SystemConfig extends ConfigBase {
             llm: {
               type: 'object',
               label: 'LLM 工厂运营商选择',
-              description: '选择 LLM 工厂的运营商，详细配置位于 data/server_bots/{port}/god.yaml',
+              description: '选择 LLM 工厂的运营商（文本），详细配置位于 data/server_bots/{port}/god.yaml / volcengine_llm.yaml / xiaomimimo_llm.yaml',
               component: 'SubForm',
               fields: {
                 Provider: {
@@ -1548,6 +1548,22 @@ export default class SystemConfig extends ConfigBase {
                   label: 'LLM 运营商',
                   description: '选择 LLM 工厂的运营商',
                   enum: ['gptgod', 'volcengine', 'xiaomimimo'],
+                  default: 'gptgod',
+                  component: 'Select'
+                }
+              }
+            },
+            vision: {
+              type: 'object',
+              label: '识图 工厂运营商选择',
+              description: '选择识图工厂的运营商（vision），一个工厂一个配置文件：god_vision.yaml / volcengine_vision.yaml。工作流不直接调用识图工厂，而是由 LLM 在检测到图片时调用。',
+              component: 'SubForm',
+              fields: {
+                Provider: {
+                  type: 'string',
+                  label: '识图运营商',
+                  description: '选择识图工厂的运营商；如未配置则默认与 LLM Provider 一致',
+                  enum: ['gptgod', 'volcengine'],
                   default: 'gptgod',
                   component: 'Select'
                 }

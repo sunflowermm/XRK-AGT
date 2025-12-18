@@ -1,14 +1,12 @@
 # GPTGod LLM 工厂配置
-# 用于配置 GPTGod 大语言模型和识图功能
+# 用于配置 GPTGod 大语言模型（仅文本，识图配置已拆分到 god_vision.yaml）
 
-# API 基础配置
+# API 基础配置（文本）
 baseUrl: https://api.gptgod.online/v1
 apiKey: ""
-fileUploadUrl: https://api.gptgod.online/v1/files
 
-# 模型配置
+# 文本模型配置
 chatModel: gemini-exp-1114
-visionModel: glm-4-alltools
 
 # API 参数配置
 temperature: 0.8
@@ -16,7 +14,7 @@ maxTokens: 6000
 topP: 0.9
 presencePenalty: 0.6
 frequencyPenalty: 0.6
-timeout: 30000
+timeout: 360000
 
 # 接口路径配置
 path: /chat/completions

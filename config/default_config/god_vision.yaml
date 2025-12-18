@@ -1,0 +1,23 @@
+# GPTGod 识图工厂配置
+# 一个工厂一个配置文件：本文件仅负责 GPTGod 的识图能力
+
+# GPTGod 文件上传与识图模型
+baseUrl: https://api.gptgod.online/v1
+apiKey: ""
+fileUploadUrl: https://api.gptgod.online/v1/files
+
+# 识图模型配置
+visionModel: glm-4-alltools
+
+# API 参数配置
+temperature: 0.8
+maxTokens: 6000
+topP: 0.9
+presencePenalty: 0.6
+frequencyPenalty: 0.6
+timeout: 360000
+
+# 接口路径配置
+path: /chat/completions
+
+

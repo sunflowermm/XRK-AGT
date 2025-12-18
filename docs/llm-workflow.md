@@ -10,8 +10,9 @@
 工作流 (Workflow/Stream)
   ↓ 合并历史消息、增强上下文
 LLM 工厂 (LLMFactory)
-  ↓ 处理图片、上传、调用API
-LLM 提供商 (GPTGod/Volcengine/...)
+  ↓ （如有图片）调用识图工厂 (VisionFactory) 做切流
+  ↓ 调用各自 LLM 提供商 API
+LLM / 识图 提供商 (GPTGod/Volcengine/MiMo + GPTGod-Vision/Volcengine-Vision/...)
 ```
 
 ## 职责划分
@@ -38,14 +39,19 @@ LLM 提供商 (GPTGod/Volcengine/...)
 - 执行 AI 返回的函数调用
 - 存储 Bot 回复到历史记录
 
-### LLM 工厂 (LLMFactory)
+### LLM 工厂 (LLMFactory) 与 识图工厂 (VisionFactory)
 
-**职责：**
-- 读取运营商配置（baseUrl、apiKey、model 等）
-- 处理图片上传（根据运营商要求）
-- 执行图片识别（如果需要）
-- 构建符合运营商 API 格式的消息
-- 调用 LLM API
+**LLM 工厂职责：**
+- 读取 LLM 运营商配置（baseUrl、apiKey、model 等）
+- 检测消息中是否包含图片（仅做格式识别，不执行识图）
+- 如果存在图片，则根据 `aistream.yaml` 中的 `vision.Provider` 把图片 URL / 本地路径交给识图工厂
+- 接收识图工厂返回的描述文本，并按既有格式（如 `[图片:描述]`）拼接回 user 文本
+- 构建符合运营商 API 格式的消息并调用 LLM API
+
+**识图工厂职责：**
+- 读取各自识图工厂配置（`god_vision.yaml`、`volcengine_vision.yaml` 等）
+- 针对不同运营商执行下载/上传/vision 模型调用，输出纯文本描述
+- 对上只暴露统一接口（如 `recognizeImages`），不与工作流直接耦合
 
 ## Messages 格式规范
 
@@ -174,58 +180,50 @@ async execute(e, messages, config) {
 
 ### 3. 工厂处理图片并调用 API
 
-#### GPTGod 工厂处理流程
+#### GPTGod 工厂 + 识图工厂处理流程
 
 ```javascript
 // GPTGodLLMClient.js
 async chat(messages, overrides = {}) {
   // 1. 转换 messages，处理图片
   const transformedMessages = await this.transformMessages(messages);
-  
+
   // transformMessages 内部会：
-  // - 识别包含图片的 user message
-  // - 下载图片到临时目录
-  // - 上传图片到 GPTGod 文件服务
-  // - 调用识图 API 获取描述
-  // - 将描述合并到文本中
-  
+  // - 检测 user message 中的 images / replyImages
+  // - 基于 aistream.vision.Provider 选择 VisionFactory 提供商（如 GPTGodVision）
+  // - 调用识图工厂把每张图转成描述文本
+  // - 按 "[图片:描述]" / "[回复图片:描述]" 的格式拼回到文本中
+
   // 2. 构建请求体（使用运营商配置）
   const body = this.buildBody(transformedMessages, overrides);
-  
+
   // 3. 调用 API
   const resp = await fetch(this.endpoint, { ... });
-  
+
   return result;
 }
 ```
 
-#### 火山引擎工厂处理流程
+#### 火山引擎工厂 + 识图工厂处理流程
 
 ```javascript
 // VolcengineLLMClient.js
 async chat(messages, overrides = {}) {
   // 1. 转换 messages，处理图片
   const transformedMessages = await this.transformMessages(messages);
-  
+
   // transformMessages 内部会：
-  // - 识别包含图片的 user message
-  // - 直接使用图片 URL（火山引擎支持）
-  // - 构建符合 API 格式的 content 数组：
-  //   [
-  //     { type: 'text', text: '...' },
-  //     { type: 'image_url', image_url: { url: '...' } }
-  //   ]
-  
-  // 2. 如果包含图片，使用 vision 模型
-  const useVisionModel = this.hasImages(messages);
-  const modelOverride = useVisionModel ? { model: this.visionModel } : {};
-  
-  // 3. 构建请求体（使用运营商配置）
-  const body = this.buildBody(transformedMessages, { ...overrides, ...modelOverride });
-  
-  // 4. 调用 API
+  // - 检测 user message 中的 images / replyImages
+  // - 基于 aistream.vision.Provider 选择 VisionFactory 提供商（如 VolcengineVision）
+  // - 调用识图工厂把每张图转成描述文本
+  // - 按 "[图片:描述]" / "[回复图片:描述]" 的格式拼回到文本中
+
+  // 2. 构建请求体（使用运营商配置）
+  const body = this.buildBody(transformedMessages, { ...overrides });
+
+  // 3. 调用 API
   const resp = await fetch(this.endpoint, { ... });
-  
+
   return result;
 }
 ```
@@ -234,21 +232,25 @@ async chat(messages, overrides = {}) {
 
 ### 运营商配置（仅工厂读取）
 
-工厂从 `config/default_config/aistream.yaml` 读取配置：
+工厂从 `config/default_config/aistream.yaml` 以及各自的 LLM/识图配置文件中读取配置：
 
 ```yaml
 llm:
-  defaults:
-    provider: gptgod  # 或 volcengine
-    baseUrl: https://api.gptgod.online/v1
-    apiKey: "..."
-    model: gemini-exp-1114
-    visionModel: gemini-exp-vision
-  profiles:
-    balanced:
-      provider: gptgod
-      model: gemini-exp-1114
-      visionModel: gemini-exp-vision
+  Provider: gptgod
+
+vision:
+  Provider: gptgod
+
+# 文本 LLM 工厂配置（举例：data/server_bots/{port}/god.yaml）
+baseUrl: https://api.gptgod.online/v1
+apiKey: "..."
+chatModel: gemini-exp-1114
+
+# 识图工厂配置（举例：data/server_bots/{port}/god_vision.yaml）
+baseUrl: https://api.gptgod.online/v1
+apiKey: "..."
+fileUploadUrl: https://api.gptgod.online/v1/files
+visionModel: glm-4-alltools
 ```
 
 **重要：** 
