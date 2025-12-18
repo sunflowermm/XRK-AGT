@@ -932,7 +932,19 @@ class DeviceManager {
 
         const systemConfig = getSystemConfig();
         ws.heartbeatTimer = setInterval(() => {
-            if (!ws.isAlive) {
+            const device = devices.get(deviceId);
+            const now = Date.now();
+            if (device && device.online) {
+                const timeSinceLastSeen = now - (device.last_seen || 0);
+                const timeout = systemConfig.heartbeatTimeout * 1000;
+                
+                if (timeSinceLastSeen > timeout) {
+                    this.handleDeviceDisconnect(deviceId, ws);
+                    return;
+                }
+            }
+            
+            if (!ws.isAlive && ws.lastPong && (now - ws.lastPong) > 60000) {
                 this.handleDeviceDisconnect(deviceId, ws);
                 return;
             }
@@ -1355,6 +1367,18 @@ class DeviceManager {
                     break;
                 }
 
+                case 'heartbeat_response': {
+                    ws.isAlive = true;
+                    ws.lastPong = Date.now();
+                    const device = devices.get(deviceId);
+                    if (device) {
+                        device.last_seen = Date.now();
+                        device.online = true;
+                    }
+                    this.updateDeviceStats(deviceId, 'heartbeat');
+                    break;
+                }
+
                 case 'command_result': {
                     const { command_id, result } = payload;
                     const callback = commandCallbacks.get(command_id);
@@ -1369,6 +1393,9 @@ class DeviceManager {
                     const device = devices.get(deviceId);
                     if (!device) break;
 
+                    // 更新 WebSocket 和设备的活跃状态
+                    ws.isAlive = true;
+                    ws.lastPong = Date.now();
                     device.last_seen = Date.now();
                     device.online = true;
                     device.stats.messages_received++;

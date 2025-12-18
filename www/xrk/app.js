@@ -40,6 +40,10 @@ class App {
     this.theme = 'light';
     this._chatPendingTimer = null;
     this._chatQuickTimeout = null; // 快速超时，用于判断是否没有流被触发
+    this._heartbeatTimer = null;
+    this._lastHeartbeatAt = 0;     // 最近一次发送心跳的时间
+    this._lastWsMessageAt = 0;     // 最近一次收到 WS 消息的时间
+    this._offlineCheckTimer = null; // 前端兜底的离线检测（与后端30分钟规则对齐）
     
     this.init();
   }
@@ -3678,22 +3682,28 @@ class App {
     return this._webUserId;
   }
 
+  // 清理 WebSocket 相关定时器
+  _clearWsTimers() {
+    if (this._heartbeatTimer) {
+      clearInterval(this._heartbeatTimer);
+      this._heartbeatTimer = null;
+    }
+    if (this._offlineCheckTimer) {
+      clearInterval(this._offlineCheckTimer);
+      this._offlineCheckTimer = null;
+    }
+  }
+
   async ensureDeviceWs() {
     const state = this._deviceWs?.readyState;
     if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
     
     // 清理旧的连接和定时器
-    if (this._deviceWs) {
-      try {
-        this._deviceWs.close();
-      } catch {}
-      this._deviceWs = null;
-    }
-    
-    if (this._heartbeatTimer) {
-      clearInterval(this._heartbeatTimer);
-      this._heartbeatTimer = null;
-    }
+    try {
+      this._deviceWs?.close();
+    } catch {}
+    this._deviceWs = null;
+    this._clearWsTimers();
     
     const apiKey = localStorage.getItem('apiKey') || '';
     const wsUrl = this.serverUrl.replace(/^http/, 'ws') + '/device' + (apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '');
@@ -3713,23 +3723,41 @@ class App {
           user_id: this.getWebUserId()
         }));
         
+        const now = Date.now();
+        this._lastHeartbeatAt = now;
+        this._lastWsMessageAt = now;
+
+        // 主动心跳：每 30 秒向后端发送一次心跳
         this._heartbeatTimer = setInterval(() => {
-          if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
+          if (this._deviceWs?.readyState === WebSocket.OPEN) {
             try {
               this._deviceWs.send(JSON.stringify({
                 type: 'heartbeat',
                 timestamp: Date.now()
               }));
+              this._lastHeartbeatAt = Date.now();
             } catch (e) {
               console.warn('心跳发送失败:', e);
             }
           }
         }, 30000);
+
+        // 前端兜底离线检测：31 分钟内无活跃则强制重连
+        const OFFLINE_TIMEOUT = 31 * 60 * 1000;
+        this._offlineCheckTimer = setInterval(() => {
+          const lastActive = Math.max(this._lastHeartbeatAt || 0, this._lastWsMessageAt || 0);
+          if (lastActive && Date.now() - lastActive > OFFLINE_TIMEOUT) {
+            this._deviceWs?.close();
+            this._deviceWs = null;
+            this.ensureDeviceWs();
+          }
+        }, 60000);
       };
       
       this._deviceWs.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
+          this._lastWsMessageAt = Date.now();
           this.handleWsMessage(data);
         } catch (e) {
           console.warn('WebSocket消息解析失败:', e);
@@ -3737,15 +3765,9 @@ class App {
       };
       
       this._deviceWs.onclose = () => {
-        if (this._heartbeatTimer) {
-          clearInterval(this._heartbeatTimer);
-          this._heartbeatTimer = null;
-        }
+        this._clearWsTimers();
         this._deviceWs = null;
-        // 只在当前页面是聊天页面时自动重连
-        if (this.currentPage === 'chat') {
-          setTimeout(() => this.ensureDeviceWs(), 5000);
-        }
+        setTimeout(() => this.ensureDeviceWs(), 5000);
       };
       
       this._deviceWs.onerror = (e) => {
@@ -3781,8 +3803,7 @@ class App {
 
     this.ensureDeviceWs();
     const ws = this._deviceWs;
-
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    if (ws?.readyState !== WebSocket.OPEN) {
       this.showToast('设备通道未连接', 'warning');
       return;
     }
@@ -3837,13 +3858,15 @@ class App {
   handleWsMessage(data) {
     switch (data.type) {
       case 'heartbeat_request':
-        // 响应心跳请求
-        if (this._deviceWs && this._deviceWs.readyState === WebSocket.OPEN) {
+        if (this._deviceWs?.readyState === WebSocket.OPEN) {
           this._deviceWs.send(JSON.stringify({
             type: 'heartbeat_response',
             timestamp: Date.now()
           }));
         }
+        break;
+      case 'heartbeat':
+        this._lastWsMessageAt = Date.now();
         break;
       case 'asr_interim':
         this.renderASRStreaming(data.text, false);
@@ -3939,7 +3962,8 @@ class App {
         }
         break;
       case 'heartbeat_response':
-        // 心跳响应，静默处理
+        // 心跳响应，更新活跃时间
+        this._lastWsMessageAt = Date.now();
         break;
       case 'typing':
         // 显示正在输入状态
