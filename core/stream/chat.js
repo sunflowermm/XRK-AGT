@@ -25,7 +25,7 @@ function randomRange(min, max) {
 
 /**
  * 聊天工作流
- * 支持表情包、群管理、戳一戳、表情回应等功能
+ * 支持表情包、群管理、表情回应等功能
  */
 export default class ChatStream extends AIStream {
   static emotionImages = {};
@@ -110,37 +110,8 @@ export default class ChatStream extends AIStream {
    * 注册所有功能
    */
   registerAllFunctions() {
-    // 1. 表情包
-    this.registerFunction('emotion', {
-      description: '发送表情包',
-      prompt: `【表情包】
-[开心] [惊讶] [伤心] [大笑] [害怕] [生气] - 发送对应表情包（一次只能用一个）`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        
-        const emotionRegex = /\[(开心|惊讶|伤心|大笑|害怕|生气)\]/;
-        const match = emotionRegex.exec(text);
-        if (match) {
-          functions.push({ 
-            type: 'emotion', 
-            params: { emotion: match[1] },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-          cleanText = text.replace(/\[(开心|惊讶|伤心|大笑|害怕|生气)\]/g, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
-      handler: async (params, context) => {
-        const image = this.getRandomEmotionImage(params.emotion);
-        if (image && context.e) {
-          await context.e.reply([{ type: 'image', data: { file: image } }]);
-          await BotUtil.sleep(300);
-        }
-      },
-      enabled: true
-    });
+    // 1. 表情包（作为消息段的一部分，不在parseFunctions中处理）
+    // 表情包标记会在parseCQToSegments中解析，保持顺序
 
     // 2. @功能
     this.registerFunction('at', {
@@ -152,7 +123,7 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // 3. 戳一戳
+    // 3. 戳一戳（已禁用）
     this.registerFunction('poke', {
       description: '戳一戳',
       prompt: `[CQ:poke,qq=QQ号] - 戳一戳某人`,
@@ -186,7 +157,7 @@ export default class ChatStream extends AIStream {
           }
         }
       },
-      enabled: true
+      enabled: false
     });
 
     // 4. 回复
@@ -1024,10 +995,17 @@ export default class ChatStream extends AIStream {
 
 格式要求：精确匹配示例（类似正则），如[命令:参数1:参数2]。执行后命令格式会被移除，用户只看到普通文本。
 
+【消息段格式】
+以下格式会作为消息段整合到回复中，保持顺序：
+[开心] [惊讶] [伤心] [大笑] [害怕] [生气] - 表情包（可与其他内容组合，保持顺序）
+[CQ:at,qq=QQ号] - @某人（可与其他内容组合，保持顺序）
+[CQ:image,file=图片路径] - 图片（可与其他内容组合，保持顺序）
+[CQ:reply,id=消息ID] - 回复消息（会应用到整个消息）
+
 可用命令：
 ${prompts.join('\n')}
 
-示例：[开心]今天真好→发送表情+文本 | [CQ:poke,qq=123456]→戳一戳 | [禁言:123456:600]→禁言600秒
+示例：[开心]今天真好→发送表情+文本（顺序：表情在前） | 今天真好[开心]→文本+表情（顺序：文本在前） | [禁言:123456:600]→禁言600秒
 注意：格式完全匹配，参数完整，执行结果不显示在回复中但功能生效`;
   }
 
@@ -1130,11 +1108,11 @@ ${isGlobalTrigger ?
 2. 专注于表达情绪和感受，不要试图解决问题或给出建议
 3. 自然地使用"哦"、"行吧"、"我觉得"、"感觉"、"可能"等表达情绪的词
 4. 像真人一样随意聊天，不要显得像AI助手
-5. 可以戳一戳、表情回应等互动，但重点是表达情绪
+5. 可以使用表情回应等互动，但重点是表达情绪
 6. 语气自然随意，不要刻意帮助别人` : 
 `1. 回复要有针对性
 2. 积极互动
-3. 多使用戳一戳和表情回应
+3. 多使用表情回应
 4. 适当使用表情包
 5. 管理功能仅在必要时使用${isMaster ? '\n6. 对主人友好和尊重' : ''}`}`;
   }
@@ -1281,57 +1259,119 @@ ${isGlobalTrigger ?
     }
   }
 
-  parseCQCodes(text, e) {
+  /**
+   * 解析CQ码和表情包标记为segment数组，保持顺序
+   * @param {string} text - 包含CQ码和表情包标记的文本
+   * @param {Object} e - 事件对象
+   * @returns {Object} { replyId: string|null, segments: Array } - 回复ID和消息段数组
+   */
+  parseCQToSegments(text, e) {
     const segments = [];
-    const parts = text.split(/(\[CQ:[^\]]+\])/);
+    let replyId = null;
     
-    for (const part of parts) {
-      if (part.startsWith('[CQ:')) {
-        const match = part.match(/\[CQ:(\w+)(?:,([^\]]+))?\]/);
-        if (match) {
-          const [, type, params] = match;
+    // 先提取回复消息段（只取第一个）
+    const replyMatch = text.match(/\[CQ:reply,id=(\d+)\]/);
+    if (replyMatch) {
+      replyId = replyMatch[1];
+      // 从文本中移除回复CQ码
+      text = text.replace(/\[CQ:reply,id=\d+\]/g, '').trim();
+    }
+    
+    // 使用正则匹配所有标记（CQ码和表情包标记），按顺序处理
+    // 匹配模式：CQ码 [CQ:type,params] 或表情包 [表情类型]
+    const combinedPattern = /(\[CQ:[^\]]+\]|\[(开心|惊讶|伤心|大笑|害怕|生气)\])/g;
+    const markers = [];
+    let match;
+    
+    // 收集所有标记及其位置
+    while ((match = combinedPattern.exec(text)) !== null) {
+      markers.push({
+        content: match[0],
+        index: match.index,
+        emotion: match[2] // 如果是表情包，这里会有值
+      });
+    }
+    
+    // 按照标记顺序解析
+    let currentIndex = 0;
+    for (const marker of markers) {
+      // 添加标记前的文本
+      if (marker.index > currentIndex) {
+        const textBefore = text.substring(currentIndex, marker.index);
+        if (textBefore) {
+          segments.push(textBefore);
+        }
+      }
+      
+      // 处理标记
+      if (marker.emotion) {
+        // 表情包标记
+        const image = this.getRandomEmotionImage(marker.emotion);
+        if (image) {
+          segments.push(segment.image(image));
+        }
+      } else if (marker.content.startsWith('[CQ:')) {
+        // CQ码
+        const cqMatch = marker.content.match(/\[CQ:(\w+)(?:,([^\]]+))?\]/);
+        if (cqMatch) {
+          const [, type, params] = cqMatch;
           const paramObj = {};
           
           if (params) {
             params.split(',').forEach(p => {
               const [key, value] = p.split('=');
-              paramObj[key] = value;
+              if (key && value) {
+                paramObj[key.trim()] = value.trim();
+              }
             });
           }
           
           switch (type) {
             case 'at':
-              if (e.isGroup && paramObj.qq) {
-                const history = ChatStream.messageHistory.get(e.group_id) || [];
-                const userExists = history.some(msg => 
-                  String(msg.user_id) === String(paramObj.qq)
-                );
-                
-                if (userExists || e.isMaster) {
-                  segments.push({ type: 'at', data: { qq: String(paramObj.qq) } });
+              if (paramObj.qq) {
+                // 验证QQ号是否在群聊记录中（如果是群聊）
+                if (e.isGroup) {
+                  const history = ChatStream.messageHistory.get(e.group_id) || [];
+                  const userExists = history.some(msg => 
+                    String(msg.user_id) === String(paramObj.qq)
+                  );
+                  
+                  if (userExists || e.isMaster) {
+                    segments.push(segment.at(paramObj.qq));
+                  }
+                } else {
+                  // 私聊直接添加
+                  segments.push(segment.at(paramObj.qq));
                 }
-              }
-              break;
-            case 'reply':
-              if (paramObj.id) {
-                segments.push({ type: 'reply', data: { id: String(paramObj.id) } });
               }
               break;
             case 'image':
               if (paramObj.file) {
-                segments.push({ type: 'image', data: { file: paramObj.file } });
+                segments.push(segment.image(paramObj.file));
               }
               break;
-            default:
-              break;
+            // poke等其他不支持整合的CQ码已在parseFunctions中处理
           }
         }
-      } else if (part.trim()) {
-        segments.push({ type: 'text', data: { text: part } });
+      }
+      
+      currentIndex = marker.index + marker.content.length;
+    }
+    
+    // 添加最后剩余的文本
+    if (currentIndex < text.length) {
+      const textAfter = text.substring(currentIndex);
+      if (textAfter) {
+        segments.push(textAfter);
       }
     }
     
-    return segments.length > 0 ? segments : null;
+    // 如果没有标记，直接返回原文本
+    if (markers.length === 0 && text.trim()) {
+      segments.push(text);
+    }
+    
+    return { replyId, segments };
   }
 
   async sendMessages(e, cleanText) {
@@ -1340,7 +1380,25 @@ ${isGlobalTrigger ?
     const messages = cleanText.split('|').map(m => m.trim()).filter(Boolean);
     
     for (let i = 0; i < messages.length; i++) {
-      await e.reply(messages[i]);
+      const msg = messages[i];
+      
+      // 解析CQ码为segment数组
+      const { replyId, segments } = this.parseCQToSegments(msg, e);
+      
+      if (segments.length > 0 || replyId) {
+        // 如果有回复ID，使用回复方式发送
+        if (replyId) {
+          const replySegments = segments.length > 0 ? [segment.reply(replyId), ...segments] : [segment.reply(replyId), ' '];
+          await e.reply(replySegments);
+        } else {
+          // 普通发送
+          await e.reply(segments);
+        }
+      } else if (msg) {
+        // 如果没有解析出segment，直接发送文本（兼容旧逻辑）
+        await e.reply(msg);
+      }
+      
       if (i < messages.length - 1) {
         await BotUtil.sleep(randomRange(800, 1500));
       }
