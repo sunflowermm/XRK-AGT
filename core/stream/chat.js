@@ -1089,6 +1089,7 @@ ${prompts.join('\n')}
     }
 
     const botName = e.bot?.nickname || e.bot?.info?.nickname || Bot.nickname || 'AI助手';
+    const isMaster = e.isMaster === true;
     
     return `【人设设定】
 ${persona}
@@ -1099,12 +1100,13 @@ QQ号：${e.self_id}
 ${e.isGroup ? `群名：${e.group?.group_name || '未知'}
 群号：${e.group_id}
 身份：${botRole}` : ''}
+${isMaster ? '\n⚠️ 重要提示：现在跟你讲话的是主人，请对主人友好和尊重。' : ''}
 
 【时间信息】
 当前时间：${dateStr}
 
-【触发方式】
-${isGlobalTrigger ? '观察群聊后主动发言' : '被召唤回复'}
+【场景设定】
+${isGlobalTrigger ? '你闲来无事点开群聊，看到小伙伴们的发言，想表达一下自己的情绪和看法。' : '你被召唤回复，需要针对性地回答问题或提供帮助。'}
 ${embeddingHint}
 【基础规则】
 1. 你是一个真实的QQ用户，不是AI助手
@@ -1124,15 +1126,17 @@ ${functionsPrompt}
 
 【注意事项】
 ${isGlobalTrigger ? 
-`1. 主动发言要有新意
-2. 可以戳一戳活跃成员
-3. 语气自然` : 
+`1. 保持你的个性和人设，即使是表达情绪也要体现自己的特点
+2. 专注于表达情绪和感受，不要试图解决问题或给出建议
+3. 自然地使用"哦"、"行吧"、"我觉得"、"感觉"、"可能"等表达情绪的词
+4. 像真人一样随意聊天，不要显得像AI助手
+5. 可以戳一戳、表情回应等互动，但重点是表达情绪
+6. 语气自然随意，不要刻意帮助别人` : 
 `1. 回复要有针对性
-2. 积极互动`}
+2. 积极互动
 3. 多使用戳一戳和表情回应
 4. 适当使用表情包
-5. 管理功能仅在必要时使用
-${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
+5. 管理功能仅在必要时使用${isMaster ? '\n6. 对主人友好和尊重' : ''}`}`;
   }
 
   async buildChatContext(e, question) {
@@ -1192,7 +1196,7 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
           role: 'user',
           content: `[群聊记录]\n${recentMessages.map(msg => 
             `${msg.nickname}(${msg.user_id})[${msg.message_id}]: ${msg.message}`
-          ).join('\n')}\n\n请对当前话题发表你的看法。`
+          ).join('\n')}\n\n你闲来无事点开群聊，看到小伙伴们的这些发言。请根据你的个性和人设，自然地表达你的情绪和感受，保持真实的反应，不要试图解决问题。`
         });
       }
     } else {
