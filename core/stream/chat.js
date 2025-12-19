@@ -1234,7 +1234,7 @@ ${isGlobalTrigger ?
         await this.executeFunction(func.type, func.params, context);
       }
       
-      if (cleanText) {
+      if (cleanText && cleanText.trim()) {
         await this.sendMessages(e, cleanText);
         
         if (this.embeddingConfig?.enabled) {
@@ -1263,16 +1263,15 @@ ${isGlobalTrigger ?
    * 解析CQ码和表情包标记为segment数组，保持顺序
    * @param {string} text - 包含CQ码和表情包标记的文本
    * @param {Object} e - 事件对象
-   * @returns {Object} { replyId: string|null, segments: Array } - 回复ID和消息段数组
+   * @returns {Object} { hasReply: boolean, segments: Array } - 是否有回复标志和消息段数组
    */
   parseCQToSegments(text, e) {
     const segments = [];
-    let replyId = null;
+    let hasReply = false;
     
-    // 先提取回复消息段（只取第一个）
-    const replyMatch = text.match(/\[CQ:reply,id=(\d+)\]/);
-    if (replyMatch) {
-      replyId = replyMatch[1];
+    // 检测是否有回复消息段
+    if (/\[CQ:reply,id=\d+\]/.test(text)) {
+      hasReply = true;
       // 从文本中移除回复CQ码
       text = text.replace(/\[CQ:reply,id=\d+\]/g, '').trim();
     }
@@ -1380,32 +1379,27 @@ ${isGlobalTrigger ?
       }
     }
     
-    return { replyId, segments: mergedSegments };
+    return { hasReply, segments: mergedSegments };
   }
 
   async sendMessages(e, cleanText) {
-    if (!cleanText) return;
+    if (!cleanText || !cleanText.trim()) return;
 
     const messages = cleanText.split('|').map(m => m.trim()).filter(Boolean);
     
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
+      if (!msg) continue;
       
       // 解析CQ码为segment数组
-      const { replyId, segments } = this.parseCQToSegments(msg, e);
+      const { hasReply, segments } = this.parseCQToSegments(msg, e);
       
-      if (segments.length > 0 || replyId) {
-        // 如果有回复ID，使用回复方式发送
-        if (replyId) {
-          const replySegments = segments.length > 0 ? [segment.reply(replyId), ...segments] : [segment.reply(replyId), ' '];
-          await e.reply(replySegments);
-        } else {
-          // 普通发送
-          await e.reply(segments);
-        }
+      // 如果有解析出segment，使用segment方式发送
+      if (segments.length > 0) {
+        await e.reply(segments, hasReply);
       } else if (msg) {
-        // 如果没有解析出segment，直接发送文本（兼容旧逻辑）
-        await e.reply(msg);
+        // 如果没有解析出segment，直接发送原始文本
+        await e.reply(msg, hasReply);
       }
       
       if (i < messages.length - 1) {
