@@ -1298,7 +1298,7 @@ ${isGlobalTrigger ?
       // 添加标记前的文本
       if (marker.index > currentIndex) {
         const textBefore = text.substring(currentIndex, marker.index);
-        if (textBefore) {
+        if (textBefore.trim()) {
           segments.push(textBefore);
         }
       }
@@ -1358,20 +1358,29 @@ ${isGlobalTrigger ?
       currentIndex = marker.index + marker.content.length;
     }
     
-    // 添加最后剩余的文本
+    // 添加最后剩余的文本（如果没有标记，currentIndex为0，会添加整个文本）
     if (currentIndex < text.length) {
       const textAfter = text.substring(currentIndex);
-      if (textAfter) {
+      if (textAfter.trim()) {
         segments.push(textAfter);
       }
     }
     
-    // 如果没有标记，直接返回原文本
-    if (markers.length === 0 && text.trim()) {
-      segments.push(text);
+    // 合并相邻的文本段，避免重复
+    const mergedSegments = [];
+    for (let i = 0; i < segments.length; i++) {
+      const current = segments[i];
+      const last = mergedSegments[mergedSegments.length - 1];
+      
+      // 如果当前段和上一段都是文本字符串，合并它们
+      if (typeof current === 'string' && typeof last === 'string') {
+        mergedSegments[mergedSegments.length - 1] = last + current;
+      } else {
+        mergedSegments.push(current);
+      }
     }
     
-    return { replyId, segments };
+    return { replyId, segments: mergedSegments };
   }
 
   async sendMessages(e, cleanText) {
