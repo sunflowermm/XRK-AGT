@@ -1906,8 +1906,12 @@ Bot.tasker.push(
           case "request":
             return this.makeRequest(data)
           case "message_sent":
-            data.post_type = "message"
-            return this.makeMessage(data)
+            try {
+              Bot.em("onebot.message_sent", data)
+            } catch (err) {
+              // 静默失败，避免影响主链路
+            }
+            return true
         }
       } else if (data.echo) {
         const cache = this.echo.get(data.echo)

@@ -535,7 +535,10 @@ class PluginsLoader {
       if ((e.tasker || '').toLowerCase() === 'stdin') return true
 
       const botUin = e.self_id || Bot.uin?.[0]
-      if (cfg.bot?.ignore_self !== false && e.user_id === botUin) {
+      // 关键修复：不同适配器/平台可能把ID解析成 string/number，严格相等会失效
+      // 这里统一用字符串比较，确保 ignore_self 在 Linux/Windows 行为一致
+      const sameId = String(e.user_id ?? '') === String(botUin ?? '')
+      if (cfg.bot?.ignore_self !== false && sameId) {
         return false
       }
 

@@ -1252,11 +1252,9 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
         await this.executeFunction(func.type, func.params, context);
       }
       
-      // 发送文本消息
       if (cleanText) {
         await this.sendMessages(e, cleanText);
         
-        // 存储到embedding
         if (this.embeddingConfig?.enabled) {
           const historyKey = e.group_id || `private_${e.user_id}`;
           this.storeMessageWithEmbedding(historyKey, {
@@ -1269,7 +1267,7 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
         }
       }
       
-      return cleanText;
+      return '';
     } catch (error) {
       BotUtil.makeLog('error', 
         `工作流执行失败[${this.name}]: ${error.message}`, 
@@ -1335,27 +1333,10 @@ ${e.isMaster ? '6. 对主人友好和尊重' : ''}`;
   async sendMessages(e, cleanText) {
     if (!cleanText) return;
 
-    const messages = cleanText.includes('|') 
-      ? cleanText.split('|').map(m => m.trim()).filter(m => m)
-      : [cleanText];
+    const messages = cleanText.split('|').map(m => m.trim()).filter(Boolean);
     
     for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-      
-      // 检查是否包含 CQ 码，如果不包含则直接发送文本
-      const hasCQCode = /\[CQ:[^\]]+\]/.test(msg);
-      
-      if (hasCQCode) {
-        // 包含 CQ 码，解析成 segments 发送
-        const segments = this.parseCQCodes(msg, e);
-        if (segments && segments.length > 0) {
-          await e.reply(segments);
-        }
-      } else if (msg) {
-        // 纯文本，直接发送
-        await e.reply(msg);
-      }
-      
+      await e.reply(messages[i]);
       if (i < messages.length - 1) {
         await BotUtil.sleep(randomRange(800, 1500));
       }
