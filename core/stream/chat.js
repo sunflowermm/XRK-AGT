@@ -1263,18 +1263,11 @@ ${isGlobalTrigger ?
    * 解析CQ码和表情包标记为segment数组，保持顺序
    * @param {string} text - 包含CQ码和表情包标记的文本
    * @param {Object} e - 事件对象
-   * @returns {Object} { hasReply: boolean, segments: Array } - 是否有回复标志和消息段数组
+   * @returns {Object} { replyId: string|null, segments: Array } - 回复ID和消息段数组
    */
   parseCQToSegments(text, e) {
     const segments = [];
-    let hasReply = false;
-    
-    // 检测是否有回复消息段
-    if (/\[CQ:reply,id=\d+\]/.test(text)) {
-      hasReply = true;
-      // 从文本中移除回复CQ码
-      text = text.replace(/\[CQ:reply,id=\d+\]/g, '').trim();
-    }
+    let replySegment = null;
     
     // 使用正则匹配所有标记（CQ码和表情包标记），按顺序处理
     // 匹配模式：CQ码 [CQ:type,params] 或表情包 [表情类型]
@@ -1326,6 +1319,12 @@ ${isGlobalTrigger ?
           }
           
           switch (type) {
+            case 'reply':
+              // 回复消息段：提取ID，但只保留第一个（OneBot协议要求回复段在最前面）
+              if (paramObj.id && !replySegment) {
+                replySegment = segment.reply(paramObj.id);
+              }
+              break;
             case 'at':
               if (paramObj.qq) {
                 // 验证QQ号是否在群聊记录中（如果是群聊）
@@ -1379,7 +1378,12 @@ ${isGlobalTrigger ?
       }
     }
     
-    return { hasReply, segments: mergedSegments };
+    // 如果有回复段，放在最前面（OneBot协议要求）
+    if (replySegment) {
+      return { replyId: replySegment.id, segments: [replySegment, ...mergedSegments] };
+    }
+    
+    return { replyId: null, segments: mergedSegments };
   }
 
   async sendMessages(e, cleanText) {
@@ -1391,15 +1395,15 @@ ${isGlobalTrigger ?
       const msg = messages[i];
       if (!msg) continue;
       
-      // 解析CQ码为segment数组
-      const { hasReply, segments } = this.parseCQToSegments(msg, e);
+      // 解析CQ码为segment数组（参考项目逻辑：回复段已经在segments中）
+      const { replyId, segments } = this.parseCQToSegments(msg, e);
       
       // 如果有解析出segment，使用segment方式发送
       if (segments.length > 0) {
-        await e.reply(segments, hasReply);
+        await e.reply(segments);
       } else if (msg) {
         // 如果没有解析出segment，直接发送原始文本
-        await e.reply(msg, hasReply);
+        await e.reply(msg);
       }
       
       if (i < messages.length - 1) {
