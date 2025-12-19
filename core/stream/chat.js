@@ -1000,7 +1000,12 @@ export default class ChatStream extends AIStream {
 [开心] [惊讶] [伤心] [大笑] [害怕] [生气] - 表情包（可与其他内容组合，保持顺序）
 [CQ:at,qq=QQ号] - @某人（可与其他内容组合，保持顺序）
 [CQ:image,file=图片路径] - 图片（可与其他内容组合，保持顺序）
-[CQ:reply,id=消息ID] - 回复消息（会应用到整个消息）
+[CQ:reply,id=消息ID] - 回复消息（会应用到整个消息，回复段会自动放在最前面）
+
+重要说明：
+- 聊天记录中每条消息都标注了消息ID（格式：消息ID:xxx）
+- 如果需要回复某条消息，使用 [CQ:reply,id=消息ID] 格式，其中消息ID就是聊天记录中标注的ID
+- 例如：聊天记录显示"张三(123456)[消息ID:1051113239]: 你好"，要回复这条消息，使用 [CQ:reply,id=1051113239]
 
 可用命令：
 ${prompts.join('\n')}
@@ -1173,8 +1178,8 @@ ${isGlobalTrigger ?
         mergedMessages.push({
           role: 'user',
           content: `[群聊记录]\n${recentMessages.map(msg => 
-            `${msg.nickname}(${msg.user_id})[${msg.message_id}]: ${msg.message}`
-          ).join('\n')}\n\n你闲来无事点开群聊，看到小伙伴们的这些发言。请根据你的个性和人设，自然地表达你的情绪和感受，保持真实的反应，不要试图解决问题。`
+            `${msg.nickname}(${msg.user_id})[消息ID:${msg.message_id}]: ${msg.message}`
+          ).join('\n')}\n\n你闲来无事点开群聊，看到小伙伴们的这些发言。请根据你的个性和人设，自然地表达你的情绪和感受，保持真实的反应，不要试图解决问题。\n\n注意：每条消息都有消息ID，如果需要回复某条消息，使用 [CQ:reply,id=消息ID] 格式。`
         });
       }
     } else {
@@ -1183,8 +1188,8 @@ ${isGlobalTrigger ?
         mergedMessages.push({
           role: 'user',
           content: `[群聊记录]\n${recentMessages.map(msg => 
-            `${msg.nickname}(${msg.user_id})[${msg.message_id}]: ${msg.message}`
-          ).join('\n')}`
+            `${msg.nickname}(${msg.user_id})[消息ID:${msg.message_id}]: ${msg.message}`
+          ).join('\n')}\n\n注意：每条消息都有消息ID，如果需要回复某条消息，使用 [CQ:reply,id=消息ID] 格式。`
         });
       }
       
@@ -1267,7 +1272,15 @@ ${isGlobalTrigger ?
    */
   parseCQToSegments(text, e) {
     const segments = [];
-    let replySegment = null;
+    let replyId = null;
+    
+    // 先提取回复消息段（只取第一个）
+    const replyMatch = text.match(/\[CQ:reply,id=(\d+)\]/);
+    if (replyMatch) {
+      replyId = replyMatch[1];
+      // 从文本中移除回复CQ码
+      text = text.replace(/\[CQ:reply,id=\d+\]/g, '').trim();
+    }
     
     // 使用正则匹配所有标记（CQ码和表情包标记），按顺序处理
     // 匹配模式：CQ码 [CQ:type,params] 或表情包 [表情类型]
@@ -1319,12 +1332,6 @@ ${isGlobalTrigger ?
           }
           
           switch (type) {
-            case 'reply':
-              // 回复消息段：提取ID，但只保留第一个（OneBot协议要求回复段在最前面）
-              if (paramObj.id && !replySegment) {
-                replySegment = segment.reply(paramObj.id);
-              }
-              break;
             case 'at':
               if (paramObj.qq) {
                 // 验证QQ号是否在群聊记录中（如果是群聊）
@@ -1378,12 +1385,7 @@ ${isGlobalTrigger ?
       }
     }
     
-    // 如果有回复段，放在最前面（OneBot协议要求）
-    if (replySegment) {
-      return { replyId: replySegment.id, segments: [replySegment, ...mergedSegments] };
-    }
-    
-    return { replyId: null, segments: mergedSegments };
+    return { replyId, segments: mergedSegments };
   }
 
   async sendMessages(e, cleanText) {
@@ -1395,14 +1397,25 @@ ${isGlobalTrigger ?
       const msg = messages[i];
       if (!msg) continue;
       
-      // 解析CQ码为segment数组（参考项目逻辑：回复段已经在segments中）
+      // 解析CQ码为segment数组
       const { replyId, segments } = this.parseCQToSegments(msg, e);
       
-      // 如果有解析出segment，使用segment方式发送
-      if (segments.length > 0) {
-        await e.reply(segments);
-      } else if (msg) {
-        // 如果没有解析出segment，直接发送原始文本
+      // 如果有回复ID或解析出了segment，使用segment方式发送
+      if (replyId || segments.length > 0) {
+        if (replyId) {
+          // 有回复ID：回复段必须在最前面（OneBot协议要求）
+          // segment.reply返回 { type: "reply", id, ... }，makeMsg会转换为 { type: "reply", data: { id } }
+          const replySegment = segment.reply(replyId);
+          const replySegments = segments.length > 0 
+            ? [replySegment, ...segments] 
+            : [replySegment, ' '];
+          await e.reply(replySegments);
+        } else {
+          // 没有回复ID：直接发送segments
+          await e.reply(segments);
+        }
+      } else {
+        // 如果没有解析出任何内容，直接发送原始文本
         await e.reply(msg);
       }
       
