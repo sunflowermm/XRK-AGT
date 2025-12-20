@@ -173,7 +173,7 @@ export default class AIStream {
       await this.tryInitProvider(provider);
       this.embeddingReady = true;
       this._embeddingInitialized = true;
-    } catch {
+    } catch (e) {
       this.embeddingConfig.enabled = false;
       this.embeddingReady = false;
       throw new Error('Embedding初始化失败');
@@ -554,7 +554,7 @@ export default class AIStream {
       // 只保留最近 50 条，避免占用过多空间
       await redis.lTrim(key, 0, 49);
       await redis.expire(key, this.embeddingConfig.cacheExpiry || 2592000); // 默认30天
-    } catch {}
+    } catch (e) {}
   }
 
   /**
@@ -625,13 +625,13 @@ export default class AIStream {
             if (age > 1800000) continue; // 超过30分钟，跳过
           }
           validNotes.push(note);
-        } catch {
+        } catch (e) {
           continue;
         }
       }
       
       return validNotes;
-    } catch {
+    } catch (e) {
       return [];
     }
   }
@@ -675,7 +675,7 @@ export default class AIStream {
       const key = `ai:workflow:${workflowId}`;
       const data = await redis.get(key);
       return data ? JSON.parse(data) : null;
-    } catch {
+    } catch (e) {
       return null;
     }
   }
@@ -709,7 +709,7 @@ export default class AIStream {
         try {
           const data = JSON.parse(msg);
           if (data && typeof data.message === 'string') parsedMessages.push(data);
-        } catch {}
+        } catch (e) {}
       }
 
       if (parsedMessages.length === 0) return [];
@@ -780,7 +780,7 @@ export default class AIStream {
       preFiltered.sort((a, b) => b.similarity - a.similarity);
 
       return preFiltered.slice(0, this.embeddingConfig.maxContexts || 8);
-    } catch {
+    } catch (e) {
       return [];
     }
   }

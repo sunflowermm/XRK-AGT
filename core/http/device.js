@@ -234,7 +234,7 @@ class DeviceManager {
                         }
                     }
                 }
-            } catch { }
+            } catch (e) { }
         };
         this.bot.on('device', this._deviceEventListener);
     }
@@ -519,7 +519,7 @@ class DeviceManager {
                         text: session.finalText
                     }));
                 }
-            } catch { }
+            } catch (e) { }
 
             // 处理AI响应（ASR识别结果调用工作流，工作流自动选择LLM工厂，结果交给TTS）
             if (session.finalText.trim()) {
@@ -1303,7 +1303,7 @@ class DeviceManager {
                         type: 'error',
                         message: '设备未注册。请先发送 register 消息。'
                     }));
-                } catch {}
+                } catch (e) {}
                 return;
             }
 
@@ -1508,7 +1508,7 @@ class DeviceManager {
                                         } else {
                                             try {
                                                 relativePath = path.relative(paths.trash, filePath).replace(/\\/g, '/');
-                                            } catch {
+                                            } catch (e) {
                                                 relativePath = path.basename(filePath);
                                             }
                                         }
@@ -1952,7 +1952,7 @@ export default {
         // 订阅ASR结果事件：更新会话finalText并转发中间结果到前端
         try {
             deviceManager.attachDeviceEventBridge(deviceManager.getBot());
-        } catch { }
+        } catch (e) { }
     },
 
     destroy() {

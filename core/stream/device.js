@@ -1,5 +1,5 @@
-import AIStream from '../../src/infrastructure/aistream/aistream.js';
-import BotUtil from '../../src/utils/botutil.js';
+import AIStream from '#infrastructure/aistream/aistream.js';
+import BotUtil from '#utils/botutil.js';
 
 /**
  * 设备工作流
@@ -105,5 +105,3 @@ ${persona}
     return { emotion, cleanText };
   }
 }
-
-

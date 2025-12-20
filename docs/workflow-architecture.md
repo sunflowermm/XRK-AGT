@@ -271,7 +271,7 @@ const response = await stream.process(e, question, {
 
 ### 2. WorkflowManager 工作流管理器
 
-**位置**: `core/stream/workflow-manager.js`
+**位置**: `core/workflow-manager.js`
 
 **核心功能**:
 
@@ -342,11 +342,12 @@ const mcpServer = StreamLoader.mcpServer;
 - 自动为其他工作流注入workflowManager
 - 提供多步骤任务执行能力
 
-#### MCPStream (MCP服务插件)
+#### MCP HTTP API (MCP服务HTTP接口)
 
-**位置**: `core/stream/mcp.js`
+**位置**: `core/http/mcp.js`
 
-- MCP服务管理和工具暴露
+- MCP服务HTTP接口，提供RESTful API和WebSocket连接
+- 使用 `core/http/mcp-server.js` 中的 `MCPServer` 类
 - 不需要registerFunction，专注于MCP服务
 
 ---
@@ -694,8 +695,8 @@ ${this.buildFunctionsPrompt()}`;
 详见 **[`docs/mcp-guide.md`](mcp-guide.md#开发指南)** - MCP完整指南
 
 ```javascript
-import AIStream from '../../src/infrastructure/aistream/aistream.js';
-import { MCPServer } from './mcp-server.js';
+import AIStream from '#infrastructure/aistream/aistream.js';
+import { MCPServer } from '#core/http/mcp-server.js';
 import StreamLoader from '#infrastructure/aistream/loader.js';
 
 export default class MyMCPStream extends AIStream {

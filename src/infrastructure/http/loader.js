@@ -113,8 +113,15 @@ class ApiLoader {
       const fileUrl = `file://${filePath}?t=${Date.now()}`;
       const module = await import(fileUrl);
       
-      // 检查是否是有效的API模块
+      // 跳过工具类文件（只有命名导出，没有default导出）
+      // 例如：mcp-server.js 只导出 MCPServer 类，不是 HTTP API 模块
       if (!module.default) {
+        // 检查是否有命名导出（可能是工具类）
+        const namedExports = Object.keys(module).filter(k => k !== 'default');
+        if (namedExports.length > 0) {
+          BotUtil.makeLog('debug', `跳过工具类文件: ${key} (只有命名导出: ${namedExports.join(', ')})`, 'ApiLoader');
+          return false;
+        }
         BotUtil.makeLog('warn', `无效的API模块: ${key} (缺少default导出)`, 'ApiLoader');
         return false;
       }

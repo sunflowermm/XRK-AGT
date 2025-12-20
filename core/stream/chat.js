@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
-import AIStream from '../../src/infrastructure/aistream/aistream.js';
-import BotUtil from '../../src/utils/botutil.js';
+import AIStream from '#infrastructure/aistream/aistream.js';
+import BotUtil from '#utils/botutil.js';
 
 const _path = process.cwd();
 const EMOTIONS_DIR = path.join(_path, 'resources/aiimages');
@@ -100,7 +100,7 @@ export default class ChatStream extends AIStream {
         ChatStream.emotionImages[emotion] = imageFiles.map(file => 
           path.join(emotionDir, file)
         );
-      } catch {
+      } catch (error) {
         ChatStream.emotionImages[emotion] = [];
       }
     }
@@ -1003,7 +1003,7 @@ export default class ChatStream extends AIStream {
       
       ChatStream.userCache.set(cacheKey, { role, time: Date.now() });
       return role;
-    } catch {
+    } catch (error) {
       return '成员';
     }
   }
@@ -1103,7 +1103,7 @@ ${prompts.join('\n')}
       embeddingHint = '\n💡 系统会自动检索相关历史对话\n';
     }
 
-    const botName = e.bot?.nickname || e.bot?.info?.nickname || Bot.nickname || 'AI助手';
+    const botName = e.bot?.nickname || e.bot?.info?.nickname || 'AI助手';
     const isMaster = e.isMaster === true;
     
     return `【人设设定】

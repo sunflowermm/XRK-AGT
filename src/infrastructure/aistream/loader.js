@@ -4,7 +4,7 @@ import fs from 'fs';
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
-import { MCPServer } from '../../core/stream/mcp-server.js';
+import { MCPServer } from '#core/http/mcp-server.js';
 
 const STREAMS_DIR = paths.coreStream;
 
@@ -111,50 +111,49 @@ class StreamLoader {
     const startTime = Date.now();
 
     try {
-      // 动态导入
-      const fileUrl = pathToFileURL(file).href;
-      const timestamp = Date.now();
-      const module = await import(`${fileUrl}?t=${timestamp}`);
+      // 确保文件路径正确转换为 URL（Windows 路径兼容）
+      // 统一使用 pathToFileURL 转换为 URL 对象，然后使用 .href 获取字符串
+      // 与 HTTP 加载器保持一致，但使用更可靠的路径转换方式
+      const normalizedPath = path.resolve(file);
+      const fileUrlObj = pathToFileURL(normalizedPath);
+      // 添加时间戳避免缓存，使用 .href 获取字符串格式
+      const fileUrl = `${fileUrlObj.href}?t=${Date.now()}`;
+      const module = await import(fileUrl);
       const StreamClass = module.default;
 
       if (!StreamClass || typeof StreamClass !== 'function') {
         throw new Error('无效的工作流文件');
       }
 
-      // 创建实例
       const stream = new StreamClass();
-      
       if (!stream.name) {
         throw new Error('工作流缺少name属性');
       }
 
-      // 应用Embedding配置覆盖
-      if (this.embeddingConfig && typeof stream.applyEmbeddingOverrides === 'function') {
-        stream.applyEmbeddingOverrides(this.embeddingConfig);
-      } else if (this.embeddingConfig) {
-        stream.embeddingConfig = {
-          ...stream.embeddingConfig,
-          ...this.embeddingConfig
-        };
+      // 应用Embedding配置
+      if (this.embeddingConfig) {
+        if (typeof stream.applyEmbeddingOverrides === 'function') {
+          stream.applyEmbeddingOverrides(this.embeddingConfig);
+        } else {
+          stream.embeddingConfig = { ...stream.embeddingConfig, ...this.embeddingConfig };
+        }
       }
 
-      // 调用基础init（不包括Embedding初始化）
+      // 初始化
       if (typeof stream.init === 'function') {
         await stream.init();
       }
 
-      // 如果加载了TODO插件，为其他工作流注入工作流管理器
+      // 注入工作流管理器
       if (stream.name === 'todo' && stream.workflowManager) {
-        // 为已加载的工作流注入
         for (const existingStream of this.streams.values()) {
           if (existingStream.name !== 'todo' && !existingStream.workflowManager) {
             stream.injectWorkflowManager(existingStream);
           }
         }
       } else if (stream.name !== 'todo') {
-        // 为新加载的工作流注入（如果TODO已加载）
         const todoStream = this.streams.get('todo');
-        if (todoStream && todoStream.workflowManager) {
+        if (todoStream?.workflowManager) {
           todoStream.injectWorkflowManager(stream);
         }
       }
@@ -167,31 +166,20 @@ class StreamLoader {
       this.loadStats.streams.push({
         name: stream.name,
         version: stream.version,
-        loadTime: loadTime,
+        loadTime,
         success: true,
         priority: stream.priority,
         functions: stream.functions?.size || 0
       });
 
-      BotUtil.makeLog('debug', 
-        `加载工作流: ${stream.name} v${stream.version} (${loadTime}ms)`, 
-        'StreamLoader'
-      );
+      BotUtil.makeLog('debug', `加载工作流: ${stream.name} v${stream.version} (${loadTime}ms)`, 'StreamLoader');
     } catch (error) {
       this.loadStats.failedStreams++;
       const loadTime = Date.now() - startTime;
-      
-      this.loadStats.streams.push({
-        name: streamName,
-        loadTime: loadTime,
-        success: false,
-        error: error.message
-      });
-
-      BotUtil.makeLog('error', 
-        `工作流加载失败: ${streamName} - ${error.message}`, 
-        'StreamLoader'
-      );
+      const errorMessage = error.message || String(error);
+      const errorStack = error.stack ? `\n${error.stack}` : '';
+      this.loadStats.streams.push({ name: streamName, loadTime, success: false, error: errorMessage });
+      BotUtil.makeLog('error', `工作流加载失败: ${streamName} - ${errorMessage}${errorStack}`, 'StreamLoader');
     }
   }
 
@@ -622,7 +610,6 @@ class StreamLoader {
 
     BotUtil.makeLog('success', '✅ 清理完成', 'StreamLoader');
   }
-}
 
   /**
    * 注册MCP服务（统一入口）
