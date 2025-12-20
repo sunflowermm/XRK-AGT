@@ -5,6 +5,7 @@ import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
+import { BaseTools } from '../tools/base-tools.js';
 
 // 仅在需要的平台上做判断，避免无意义的常量
 const IS_WINDOWS = process.platform === 'win32';
@@ -63,6 +64,10 @@ export default class DesktopStream extends AIStream {
     this.workspace = IS_WINDOWS 
       ? path.join(os.homedir(), 'Desktop')
       : path.join(os.homedir(), 'Desktop');
+    
+    // 初始化统一工具系统
+    this.tools = new BaseTools(this.workspace);
+    this.processCleanupInterval = null;
   }
 
   /**
@@ -82,6 +87,20 @@ export default class DesktopStream extends AIStream {
     }
 
     this.registerAllFunctions();
+    
+    // 启动进程清理监控（每30秒检查一次）
+    if (IS_WINDOWS) {
+      this.processCleanupInterval = setInterval(async () => {
+        try {
+          await this.tools.autoCleanupProcesses([
+            /explorer/i, /System/i, /winlogon/i, /csrss/i, /smss/i,
+            /svchost/i, /dwm/i, /wininit/i
+          ]);
+        } catch (err) {
+          // 静默处理清理错误
+        }
+      }, 30000);
+    }
     
     DesktopStream.initialized = true;
     BotUtil.makeLog('info', `[${this.name}] 工作流已初始化`, 'DesktopStream');
@@ -537,10 +556,12 @@ export default class DesktopStream extends AIStream {
         if (!folderName) return;
 
         try {
+          const workspace = this.getWorkspace();
           const safeName = folderName.replace(/[<>:"/\\|?*]/g, '_');
-          const desktopPath = path.join(os.homedir(), 'Desktop', safeName);
-          await execCommand(`powershell -Command "New-Item -Path '${desktopPath}' -ItemType Directory -Force"`);
+          const folderPath = path.join(workspace, safeName);
+          await execCommand(`powershell -Command "New-Item -Path '${folderPath}' -ItemType Directory -Force"`);
           context.createdFolder = safeName;
+          context.createdFolderPath = folderPath;
         } catch (err) {
           await this.handleError(context, err, '创建文件夹');
         }
@@ -688,12 +709,12 @@ export default class DesktopStream extends AIStream {
         if (!(await this.requireWindows(context, '列出桌面文件'))) return;
 
         try {
-          const desktopPath = path.join(os.homedir(), 'Desktop');
-          const files = await fs.readdir(desktopPath);
+          const workspace = this.getWorkspace();
+          const files = await fs.readdir(workspace);
           const fileList = [];
 
           for (const file of files) {
-            const filePath = path.join(desktopPath, file);
+            const filePath = path.join(workspace, file);
             try {
               const stats = await fs.stat(filePath);
               const isShortcut = file.endsWith('.lnk');
@@ -710,6 +731,142 @@ export default class DesktopStream extends AIStream {
           context.desktopFiles = fileList;
         } catch (err) {
           await this.handleError(context, err, '列出桌面文件');
+        }
+      },
+      enabled: true
+    });
+
+    // 统一文件读取工具（使用BaseTools）
+    this.registerFunction('read_file', {
+      description: '读取文件（优先在工作区查找）',
+      prompt: `[读取文件:文件名或路径] - 在工作区查找并读取文件，例如：[读取文件:易忘信息.txt]`,
+      parser: (text, context) => {
+        const functions = [];
+        let cleanText = text;
+        const reg = /\[(?:读取文件|读取|查找文件|查找):([^\]]+)\]/g;
+        let match;
+
+        while ((match = reg.exec(text)) !== null) {
+          const fileName = (match[1] || '').trim();
+          if (fileName) {
+            functions.push({ type: 'read_file', params: { fileName } });
+          }
+        }
+
+        if (functions.length > 0) {
+          cleanText = text.replace(reg, '').trim();
+        }
+
+        return { functions, cleanText };
+      },
+      handler: async (params, context) => {
+        const fileName = params?.fileName;
+        if (!fileName) return;
+
+        // 先尝试直接读取（完整路径）
+        let result = await this.tools.readFile(fileName);
+        
+        // 如果失败，在工作区搜索文件
+        if (!result.success) {
+          const searchResults = await this.tools.searchFiles(path.basename(fileName), {
+            maxDepth: 2,
+            fileExtensions: null
+          });
+          
+          if (searchResults.length > 0) {
+            result = await this.tools.readFile(searchResults[0]);
+          }
+        }
+
+        if (result.success) {
+          context.fileSearchResult = { found: true, fileName: path.basename(result.path), path: result.path, content: result.content };
+          context.fileContent = result.content;
+        } else {
+          context.fileSearchResult = { found: false, fileName };
+          context.fileError = result.error || `未找到文件: ${fileName}`;
+        }
+      },
+      enabled: true
+    });
+
+    // Grep搜索工具
+    this.registerFunction('grep', {
+      description: '在文件中搜索文本',
+      prompt: `[搜索文本:关键词:文件路径(可选)] - 在文件中搜索文本，例如：[搜索文本:错误:app.log] 或 [搜索文本:错误]（在工作区搜索）`,
+      parser: (text, context) => {
+        const functions = [];
+        let cleanText = text;
+        const reg = /\[搜索文本:([^:]+)(?::([^\]]+))?\]/g;
+        let match;
+
+        while ((match = reg.exec(text)) !== null) {
+          const pattern = (match[1] || '').trim();
+          const filePath = match[2] ? match[2].trim() : null;
+          if (pattern) {
+            functions.push({ type: 'grep', params: { pattern, filePath } });
+          }
+        }
+
+        if (functions.length > 0) {
+          cleanText = text.replace(reg, '').trim();
+        }
+
+        return { functions, cleanText };
+      },
+      handler: async (params, context) => {
+        const { pattern, filePath } = params || {};
+        if (!pattern) return;
+
+        const result = await this.tools.grep(pattern, filePath, {
+          caseSensitive: false,
+          lineNumbers: true,
+          maxResults: 50
+        });
+
+        if (result.success) {
+          context.grepResults = result.matches;
+          context.grepPattern = pattern;
+        } else {
+          context.grepError = `搜索失败: ${pattern}`;
+        }
+      },
+      enabled: true
+    });
+
+    // 写入文件工具
+    this.registerFunction('write_file', {
+      description: '写入文件',
+      prompt: `[写入文件:文件路径:内容] - 写入文件，例如：[写入文件:test.txt:这是内容]`,
+      parser: (text, context) => {
+        const functions = [];
+        let cleanText = text;
+        const reg = /\[写入文件:([^:]+):([^\]]+)\]/g;
+        let match;
+
+        while ((match = reg.exec(text)) !== null) {
+          const filePath = (match[1] || '').trim();
+          const content = (match[2] || '').trim();
+          if (filePath && content) {
+            functions.push({ type: 'write_file', params: { filePath, content } });
+          }
+        }
+
+        if (functions.length > 0) {
+          cleanText = text.replace(reg, '').trim();
+        }
+
+        return { functions, cleanText };
+      },
+      handler: async (params, context) => {
+        const { filePath, content } = params || {};
+        if (!filePath || !content) return;
+
+        const result = await this.tools.writeFile(filePath, content);
+        
+        if (result.success) {
+          context.writeFileResult = { success: true, path: result.path };
+        } else {
+          context.writeFileError = result.error;
         }
       },
       enabled: true
@@ -745,14 +902,14 @@ export default class DesktopStream extends AIStream {
         if (!appName) return;
 
         try {
-          // 先尝试在桌面查找快捷方式
-          const desktopPath = path.join(os.homedir(), 'Desktop');
-          const files = await fs.readdir(desktopPath);
+          // 先尝试在工作区查找快捷方式
+          const workspace = this.getWorkspace();
+          const files = await fs.readdir(workspace);
           let shortcutPath = null;
 
           for (const file of files) {
             if (file.endsWith('.lnk') && file.toLowerCase().includes(appName.toLowerCase())) {
-              shortcutPath = path.join(desktopPath, file);
+              shortcutPath = path.join(workspace, file);
               break;
             }
           }
@@ -805,9 +962,9 @@ export default class DesktopStream extends AIStream {
         if (!fileName || !content) return;
 
         try {
-          const desktopPath = path.join(os.homedir(), 'Desktop');
+          const workspace = this.getWorkspace();
           const safeFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
-          const filePath = path.join(desktopPath, safeFileName.endsWith('.docx') ? safeFileName : `${safeFileName}.docx`);
+          const filePath = path.join(workspace, safeFileName.endsWith('.docx') ? safeFileName : `${safeFileName}.docx`);
 
           // 使用PowerShell创建Word文档
           const psScript = `
@@ -832,10 +989,10 @@ $word.Quit()
       enabled: true
     });
 
-    // 新增：生成Excel文档
+    // 生成Excel文档（只接收JSON数组格式，不做文本解析）
     this.registerFunction('create_excel_document', {
       description: '创建Excel文档',
-      prompt: `[生成Excel:文件名:数据] - 创建Excel文档，数据格式为JSON数组，例如：[生成Excel:数据表.xlsx:[{"姓名":"张三","年龄":25},{"姓名":"李四","年龄":30}]]`,
+      prompt: `[生成Excel:文件名:JSON数组] - 创建Excel文档，数据必须是JSON数组格式，例如：[生成Excel:数据表.xlsx:[{"姓名":"张三","年龄":25},{"姓名":"李四","年龄":30}]]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -847,11 +1004,14 @@ $word.Quit()
           const dataStr = (match[2] || '').trim();
           if (fileName && dataStr) {
             try {
+              // 只接受JSON格式
               const data = JSON.parse(dataStr);
+              if (!Array.isArray(data)) {
+                throw new Error('数据必须是JSON数组格式');
+              }
               functions.push({ type: 'create_excel_document', params: { fileName, data } });
             } catch (e) {
-              // JSON解析失败，尝试作为文本处理
-              functions.push({ type: 'create_excel_document', params: { fileName, data: dataStr } });
+              context.excelError = `Excel数据格式错误: ${e.message}，必须是JSON数组格式`;
             }
           }
         }
@@ -869,16 +1029,21 @@ $word.Quit()
         const data = params?.data;
         if (!fileName || !data) return;
 
-        try {
-          const desktopPath = path.join(os.homedir(), 'Desktop');
-          const safeFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
-          const filePath = path.join(desktopPath, safeFileName.endsWith('.xlsx') ? safeFileName : `${safeFileName}.xlsx`);
+        if (!Array.isArray(data)) {
+          context.excelError = '数据必须是数组格式';
+          return;
+        }
 
-          // 使用PowerShell创建Excel文档
+        try {
+          // 使用工作区路径（桌面）
+          const workspace = this.getWorkspace();
+          const safeFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
+          const filePath = path.join(workspace, safeFileName.endsWith('.xlsx') ? safeFileName : `${safeFileName}.xlsx`);
+
           const dataJson = JSON.stringify(data);
           const psScript = `
 $excel = New-Object -ComObject Excel.Application
-$excel.Visible = $false
+$excel.Visible = $true
 $workbook = $excel.Workbooks.Add()
 $worksheet = $workbook.Worksheets.Item(1)
 
@@ -886,34 +1051,63 @@ $data = @'
 ${dataJson.replace(/"/g, '`"').replace(/\$/g, '`$')}
 '@ | ConvertFrom-Json
 
-$headers = @()
 if ($data -is [Array] -and $data.Count -gt 0) {
     $headers = $data[0].PSObject.Properties.Name
     for ($i = 0; $i -lt $headers.Count; $i++) {
-        $worksheet.Cells.Item(1, $i + 1) = $headers[$i]
+        $cell = $worksheet.Cells.Item(1, $i + 1)
+        $cell.Value2 = $headers[$i]
+        $cell.Font.Bold = $true
+        $cell.Interior.Color = [System.Drawing.ColorTranslator]::ToOle([System.Drawing.Color]::LightGray)
     }
     for ($row = 0; $row -lt $data.Count; $row++) {
         for ($col = 0; $col -lt $headers.Count; $col++) {
-            $value = $data[$row].($headers[$col])
-            $worksheet.Cells.Item($row + 2, $col + 1) = $value
+            $worksheet.Cells.Item($row + 2, $col + 1).Value2 = $data[$row].($headers[$col])
         }
     }
+    $worksheet.Columns.AutoFit() | Out-Null
 } else {
-    $worksheet.Cells.Item(1, 1) = "数据"
-    $worksheet.Cells.Item(2, 1) = $data
+    $worksheet.Cells.Item(1, 1).Value2 = "数据为空"
 }
 
 $workbook.SaveAs("${filePath.replace(/\\/g, '\\\\')}")
-$workbook.Close()
-$excel.Quit()
 [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
           `;
 
-          await execCommandWithOutput(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"')}"`);
-          context.createdExcelDoc = filePath;
+          const result = await this.tools.executeCommand(
+            `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"')}"`,
+            { registerProcess: true }
+          );
+
+          if (result.success) {
+            context.createdExcelDoc = filePath;
+            context.excelPath = filePath; // 记录完整路径供AI使用
+          } else {
+            throw new Error(result.error || 'Excel生成失败');
+          }
         } catch (err) {
           await this.handleError(context, err, '生成Excel文档');
+          context.excelError = err.message;
         }
+      },
+      enabled: true
+    });
+
+    // 自动清理无用进程（在执行函数后调用）
+    this.registerFunction('cleanup_processes', {
+      description: '清理无用进程',
+      prompt: `[清理进程] - 清理已注册的无用进程`,
+      parser: (text, context) => {
+        if (!text.includes('[清理进程]')) {
+          return { functions: [], cleanText: text };
+        }
+        return {
+          functions: [{ type: 'cleanup_processes', params: {} }],
+          cleanText: text.replace(/\[清理进程\]/g, '').trim()
+        };
+      },
+      handler: async (params, context) => {
+        const result = await this.tools.cleanupProcesses();
+        context.processesCleaned = result.killed || [];
       },
       enabled: true
     });
@@ -1049,6 +1243,14 @@ ${prompts.join('\n')}
     const now = new Date().toLocaleString('zh-CN');
     const isMaster = e?.isMaster === true;
     const workspace = this.getWorkspace();
+    
+    // 如果有文件查找结果，添加到系统提示中
+    let fileContext = '';
+    if (context.fileSearchResult?.found && context.fileContent) {
+      fileContext = `\n\n【已找到文件内容】\n文件名：${context.fileSearchResult.fileName}\n文件内容如下：\n${context.fileContent.substring(0, 2000)}${context.fileContent.length > 2000 ? '\n...(内容已截断)' : ''}\n\n请在回复中直接告知用户上述文件内容。`;
+    } else if (context.fileSearchResult?.found === false) {
+      fileContext = `\n\n【文件查找结果】\n未找到文件：${context.fileError || '文件不存在'}\n请告知用户文件未找到。`;
+    }
 
     return `【人设】
 ${persona}
@@ -1056,8 +1258,40 @@ ${persona}
 【工作区】
 你的工作区是桌面目录：${workspace}
 - 所有文件操作默认在桌面进行
-- 查找文件时优先在桌面查找
+- 查找文件时优先在桌面查找，使用[查找文件:文件名]命令
 - 创建文件时默认保存到桌面
+
+【工具使用指南】
+1. 文件操作（基础工具）：
+   - [读取文件:文件名] - 在工作区（桌面）查找并读取文件，读取后文件内容会提供给你
+   - [写入文件:文件路径:内容] - 写入文件到工作区
+   - [搜索文本:关键词:文件路径(可选)] - 在文件中搜索文本（grep功能）
+
+2. Excel操作（严格格式要求）：
+   - [生成Excel:文件名:JSON数组] - 创建Excel表格并保存到桌面，会自动打开
+   - **数据格式**：必须是JSON数组，例如：[{"列名1":"值1","列名2":"值2"},{"列名1":"值3","列名2":"值4"}]
+   - **重要**：如果你有文本内容，必须先分析文本结构，提取数据，然后手动转换为JSON数组格式
+   - **文件位置**：Excel文件会保存到桌面（工作区）
+
+3. 工作流执行流程（多步骤任务）：
+   当任务包含多个步骤时（如"读取文件并创建Excel"），系统会自动创建工作流：
+   - **步骤1**：读取文件 → 使用[读取文件:文件名]，在笔记中记录文件内容
+   - **步骤2**：分析内容 → 查看笔记中的文件内容，分析并提取结构化数据，在笔记中记录JSON数组
+   - **步骤3**：创建Excel → 查看笔记中的JSON数组，使用[生成Excel:文件名:JSON数组]
+   
+4. 工作流笔记机制（关键）：
+   - 通过"笔记:"字段记录信息，所有步骤共享
+   - **步骤间信息传递**：后续步骤可以通过笔记查看之前步骤的结果
+   - **示例**：
+     * 步骤1笔记：记录文件完整内容
+     * 步骤2笔记：记录分析结果和JSON数组格式的数据
+     * 步骤3笔记：记录Excel创建结果
+
+5. 工作区说明：
+   - 所有文件操作默认在工作区（桌面）进行
+   - 文件查找优先在桌面
+   - 创建的文件会保存到桌面
+   ${fileContext ? fileContext : ''}
 
 【时间】
 ${now}
@@ -1067,8 +1301,10 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
 2. 语气自然友好，可以多说几句作为捧哏、提醒或告诫
 3. 优先使用功能函数执行操作，但一定要在回复中自然表达
 4. 文件操作默认在桌面工作区进行
-5. 如果PowerShell命令执行失败，会在笔记中记录错误，下次调用AI时会看到错误信息并重试
-6. 简洁准确但不失人情味，让用户感受到你的关心`;
+5. 查找文件时直接使用[查找文件:文件名]命令，不需要创建工作流
+6. 如果找到文件内容，请在回复中直接告知用户内容，不要只说"已找到文件"
+7. 如果PowerShell命令执行失败，会在笔记中记录错误，下次调用AI时会看到错误信息并重试
+8. 简洁准确但不失人情味，让用户感受到你的关心`;
   }
 
   async buildChatContext(e, question) {
@@ -1117,6 +1353,17 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
   }
 
   async cleanup() {
+    // 清理进程监控
+    if (this.processCleanupInterval) {
+      clearInterval(this.processCleanupInterval);
+      this.processCleanupInterval = null;
+    }
+    
+    // 清理已注册的进程
+    if (this.tools) {
+      await this.tools.cleanupProcesses();
+    }
+    
     await super.cleanup();
     DesktopStream.initialized = false;
   }

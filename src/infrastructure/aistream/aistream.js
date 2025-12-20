@@ -1220,6 +1220,12 @@ export default class AIStream {
   async execute(e, question, config) {
     try {
       const context = { e, question, config };
+      
+      // 如果stream有tools，注入到context中
+      if (this.tools) {
+        context.tools = this.tools;
+      }
+      
       const baseMessages = await this.buildChatContext(e, question);
       const messages = await this.buildEnhancedContext(e, question, baseMessages);
       const response = await this.callAI(messages, config);
@@ -1240,8 +1246,43 @@ export default class AIStream {
         }
       }
 
+      // 执行完成后，自动清理进程（如果启用了工具系统）
+      if (context.tools && typeof context.tools.cleanupProcesses === 'function') {
+        try {
+          await context.tools.cleanupProcesses();
+        } catch (err) {
+          // 静默处理清理错误
+        }
+      }
+
+      // 处理文件读取结果，完善给AI的上下文信息
+      let finalResponse = cleanText;
+      
+      // 如果读取了文件，将文件内容添加到context供后续使用
+      if (functions.some(f => f.type === 'read_file') && context.fileContent && context.fileSearchResult?.found) {
+        // 文件已读取，内容在context.fileContent中，AI可以在后续步骤中使用
+        const fileName = context.fileSearchResult.fileName || '文件';
+        if (!cleanText || cleanText.length < 20) {
+          // 如果AI回复太简短，补充文件信息
+          finalResponse = `${cleanText || '已读取文件'}\n\n【${fileName}】\n${context.fileContent.substring(0, 1000)}${context.fileContent.length > 1000 ? '\n...(内容较长，已截断)' : ''}`;
+        }
+      } else if (context.fileSearchResult?.found === false && context.fileError) {
+        // 文件未找到
+        finalResponse = `${cleanText || '抱歉，'} ${context.fileError}`;
+      } else if (context.fileSearchResult?.tooLarge) {
+        finalResponse = `${cleanText || '文件过大，无法读取。'} 文件大小：${(context.fileSearchResult.size / 1024 / 1024).toFixed(2)}MB，超过了10MB的限制`;
+      }
+      
+      // 如果创建了Excel，记录路径信息
+      if (context.createdExcelDoc || context.excelPath) {
+        const excelPath = context.excelPath || context.createdExcelDoc;
+        if (excelPath && !finalResponse.includes('Excel') && !finalResponse.includes('表格')) {
+          finalResponse += `\n\nExcel文件已创建并保存到桌面：${path.basename(excelPath)}`;
+        }
+      }
+
       // 存储AI响应到记忆系统（包含执行的函数信息）
-      if (this.embeddingConfig.enabled && cleanText && e) {
+      if (this.embeddingConfig.enabled && finalResponse && e) {
         const groupId = e.group_id || `private_${e.user_id}`;
         const executedFunctions = functions.length > 0
           ? `[执行了: ${functions.map(f => f.type).join(', ')}] `
@@ -1249,13 +1290,13 @@ export default class AIStream {
         this.storeMessageWithEmbedding(groupId, {
           user_id: e.self_id,
           nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
-          message: `${executedFunctions}${cleanText}`,
+          message: `${executedFunctions}${finalResponse}`,
           message_id: Date.now().toString(),
           time: Date.now()
         }).catch(() => { });
       }
 
-      return cleanText;
+      return finalResponse;
     } catch (error) {
       BotUtil.makeLog('error',
         `工作流执行失败[${this.name}]: ${error.message}`,
