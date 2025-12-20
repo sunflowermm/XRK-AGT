@@ -1,7 +1,8 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
+import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -9,6 +10,7 @@ import { BaseTools } from '../tools/base-tools.js';
 
 // 仅在需要的平台上做判断，避免无意义的常量
 const IS_WINDOWS = process.platform === 'win32';
+const execAsync = promisify(exec);
 
 const execCommand = (command, options = {}) => {
   return new Promise((resolve, reject) => {
@@ -114,7 +116,6 @@ export default class DesktopStream extends AIStream {
   async requireWindows(context, operation) {
     if (!IS_WINDOWS) {
       context.windowsOnly = true;
-      context.operation = operation;
       return false;
     }
     return true;
@@ -137,7 +138,8 @@ export default class DesktopStream extends AIStream {
         if (!(await this.requireWindows(context, '回桌面功能'))) return;
 
         try {
-          await execCommand('powershell -Command "(New-Object -ComObject shell.application).MinimizeAll()"');
+          // 最小化所有窗口需要使用COM对象，必须用PowerShell
+          await execAsync('powershell -Command "(New-Object -ComObject shell.application).MinimizeAll()"', { timeout: 5000 });
         } catch (err) {
           await this.handleError(context, err, '回桌面操作');
         }
@@ -559,9 +561,11 @@ export default class DesktopStream extends AIStream {
           const workspace = this.getWorkspace();
           const safeName = folderName.replace(/[<>:"/\\|?*]/g, '_');
           const folderPath = path.join(workspace, safeName);
-          await execCommand(`powershell -Command "New-Item -Path '${folderPath}' -ItemType Directory -Force"`);
+          
+          // 使用Node.js创建文件夹
+          await fs.mkdir(folderPath, { recursive: true });
+          
           context.createdFolder = safeName;
-          context.createdFolderPath = folderPath;
         } catch (err) {
           await this.handleError(context, err, '创建文件夹');
         }
@@ -915,11 +919,21 @@ export default class DesktopStream extends AIStream {
           }
 
           if (shortcutPath) {
-            // 使用快捷方式打开
-            await execCommand(`powershell -Command "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut('${shortcutPath.replace(/'/g, "''")}'); Start-Process $shortcut.TargetPath"`);
+            // 使用Node.js打开快捷方式（Windows可以直接用start命令）
+            await execAsync(`start "" "${shortcutPath}"`, { shell: 'cmd.exe' });
           } else {
-            // 尝试直接启动程序
-            await execCommand(`start "" "${appName}"`, { shell: 'cmd.exe' });
+            // 尝试直接启动程序（使用spawn）
+            try {
+              const child = spawn(appName, [], {
+                detached: true,
+                stdio: 'ignore',
+                shell: true
+              });
+              child.unref();
+            } catch (e) {
+              // 如果spawn失败，使用cmd的start命令
+              await execAsync(`start "" "${appName}"`, { shell: 'cmd.exe' });
+            }
           }
 
           context.openedApp = appName;
@@ -1011,7 +1025,7 @@ $word.Quit()
               }
               functions.push({ type: 'create_excel_document', params: { fileName, data } });
             } catch (e) {
-              context.excelError = `Excel数据格式错误: ${e.message}，必须是JSON数组格式`;
+              // JSON解析失败，跳过
             }
           }
         }
@@ -1030,8 +1044,7 @@ $word.Quit()
         if (!fileName || !data) return;
 
         if (!Array.isArray(data)) {
-          context.excelError = '数据必须是数组格式';
-          return;
+          throw new Error('数据必须是数组格式');
         }
 
         try {
@@ -1078,15 +1091,12 @@ $workbook.SaveAs("${filePath.replace(/\\/g, '\\\\')}")
             { registerProcess: true }
           );
 
-          if (result.success) {
-            context.createdExcelDoc = filePath;
-            context.excelPath = filePath; // 记录完整路径供AI使用
-          } else {
+          if (!result.success) {
             throw new Error(result.error || 'Excel生成失败');
           }
+          context.createdExcelDoc = filePath;
         } catch (err) {
           await this.handleError(context, err, '生成Excel文档');
-          context.excelError = err.message;
         }
       },
       enabled: true
@@ -1249,7 +1259,7 @@ ${prompts.join('\n')}
     if (context.fileSearchResult?.found && context.fileContent) {
       fileContext = `\n\n【已找到文件内容】\n文件名：${context.fileSearchResult.fileName}\n文件内容如下：\n${context.fileContent.substring(0, 2000)}${context.fileContent.length > 2000 ? '\n...(内容已截断)' : ''}\n\n请在回复中直接告知用户上述文件内容。`;
     } else if (context.fileSearchResult?.found === false) {
-      fileContext = `\n\n【文件查找结果】\n未找到文件：${context.fileError || '文件不存在'}\n请告知用户文件未找到。`;
+      fileContext = `\n\n【文件查找结果】\n未找到文件：${context.fileError || '文件不存在'}`;
     }
 
     return `【人设】
@@ -1297,13 +1307,13 @@ ${persona}
 ${now}
 
 ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操作。\n\n' : ''}${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【规则】
-1. 执行功能时必须回复文本内容，不要只执行不回复
+1. **必须回复**：执行功能时必须回复文本内容，不要只执行不回复！即使只执行了命令，也要说几句话
 2. 语气自然友好，可以多说几句作为捧哏、提醒或告诫
 3. 优先使用功能函数执行操作，但一定要在回复中自然表达
 4. 文件操作默认在桌面工作区进行
-5. 查找文件时直接使用[查找文件:文件名]命令，不需要创建工作流
+5. 查找文件时直接使用[读取文件:文件名]命令，不需要创建工作流
 6. 如果找到文件内容，请在回复中直接告知用户内容，不要只说"已找到文件"
-7. 如果PowerShell命令执行失败，会在笔记中记录错误，下次调用AI时会看到错误信息并重试
+7. 如果执行了操作但没有回复，系统会自动添加反馈，但你应该主动回复
 8. 简洁准确但不失人情味，让用户感受到你的关心`;
   }
 

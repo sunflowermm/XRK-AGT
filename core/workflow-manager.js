@@ -60,21 +60,12 @@ export class WorkflowManager {
       return { shouldUseTodo: false, response: '简单任务，直接执行', todos: [] };
     }
 
-    // 检查是否有相似的工作流正在运行（避免重复创建工作流）
-    const activeWorkflowGoals = Array.from(this.activeWorkflows.values())
-      .filter(w => w.status === 'running')
-      .map(w => w.goal);
+    // 检查是否有相同目标的工作流正在运行
+    const existingWorkflow = Array.from(this.activeWorkflows.values())
+      .find(w => w.status === 'running' && w.goal === goal);
     
-    const similarWorkflow = activeWorkflowGoals.find(activeGoal => {
-      // 简单的相似度判断：包含相同关键词
-      const goalWords = goal.split(/[\s，。！？,.!?]+/).filter(w => w.length > 1);
-      const activeWords = activeGoal.split(/[\s，。！？,.!?]+/).filter(w => w.length > 1);
-      const commonWords = goalWords.filter(w => activeWords.includes(w));
-      return commonWords.length >= 2; // 至少2个相同关键词
-    });
-    
-    if (similarWorkflow) {
-      return { shouldUseTodo: false, response: `已有相似工作流运行中: ${similarWorkflow}`, todos: [] };
+    if (existingWorkflow) {
+      return { shouldUseTodo: false, response: '已有相同工作流运行中', todos: [] };
     }
 
     const decisionPrompt = `【任务分析】

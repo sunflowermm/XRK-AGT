@@ -1255,31 +1255,8 @@ export default class AIStream {
         }
       }
 
-      // 处理文件读取结果，完善给AI的上下文信息
-      let finalResponse = cleanText;
-      
-      // 如果读取了文件，将文件内容添加到context供后续使用
-      if (functions.some(f => f.type === 'read_file') && context.fileContent && context.fileSearchResult?.found) {
-        // 文件已读取，内容在context.fileContent中，AI可以在后续步骤中使用
-        const fileName = context.fileSearchResult.fileName || '文件';
-        if (!cleanText || cleanText.length < 20) {
-          // 如果AI回复太简短，补充文件信息
-          finalResponse = `${cleanText || '已读取文件'}\n\n【${fileName}】\n${context.fileContent.substring(0, 1000)}${context.fileContent.length > 1000 ? '\n...(内容较长，已截断)' : ''}`;
-        }
-      } else if (context.fileSearchResult?.found === false && context.fileError) {
-        // 文件未找到
-        finalResponse = `${cleanText || '抱歉，'} ${context.fileError}`;
-      } else if (context.fileSearchResult?.tooLarge) {
-        finalResponse = `${cleanText || '文件过大，无法读取。'} 文件大小：${(context.fileSearchResult.size / 1024 / 1024).toFixed(2)}MB，超过了10MB的限制`;
-      }
-      
-      // 如果创建了Excel，记录路径信息
-      if (context.createdExcelDoc || context.excelPath) {
-        const excelPath = context.excelPath || context.createdExcelDoc;
-        if (excelPath && !finalResponse.includes('Excel') && !finalResponse.includes('表格')) {
-          finalResponse += `\n\nExcel文件已创建并保存到桌面：${path.basename(excelPath)}`;
-        }
-      }
+      // 返回AI的原始回复，不做额外处理
+      const finalResponse = cleanText || '';
 
       // 存储AI响应到记忆系统（包含执行的函数信息）
       if (this.embeddingConfig.enabled && finalResponse && e) {
