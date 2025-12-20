@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
 import { BaseTools } from '../tools/base-tools.js';
+import si from 'systeminformation';
 
 // 仅在需要的平台上做判断，避免无意义的常量
 const IS_WINDOWS = process.platform === 'win32';
@@ -198,170 +199,37 @@ export default class DesktopStream extends AIStream {
         };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '截屏功能'))) return;
-    
         try {
+          // 动态导入screenshot-desktop库
+          const screenshot = (await import('screenshot-desktop')).default;
+          
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
           const screenshotDir = path.join(paths.trash, 'screenshot');
           await fs.mkdir(screenshotDir, { recursive: true });
           
           const filename = `screenshot_${timestamp}.png`;
           const screenshotPath = path.join(screenshotDir, filename);
-          const absolutePath = path.resolve(screenshotPath);
-          const pathBase64 = Buffer.from(absolutePath, 'utf16le').toString('base64');
           
-          const psScriptPath = path.join(screenshotDir, `_cap_${Date.now()}.ps1`);
-          const psScriptContent = `
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
-    
-    $pathBytes = [System.Convert]::FromBase64String('${pathBase64}')
-    $filePath = [System.Text.Encoding]::Unicode.GetString($pathBytes)
-    
-    $dir = [System.IO.Path]::GetDirectoryName($filePath)
-    if (-not [System.IO.Directory]::Exists($dir)) {
-        [System.IO.Directory]::CreateDirectory($dir) | Out-Null
-    }
-    
-    $screens = [System.Windows.Forms.Screen]::AllScreens
-    
-    if ($null -eq $screens -or $screens.Count -eq 0) {
-        Write-Host "ERROR: Cannot get any screen"
-        exit 1
-    }
-    
-    $minX = [int]::MaxValue
-    $minY = [int]::MaxValue
-    $maxX = [int]::MinValue
-    $maxY = [int]::MinValue
-    
-    foreach ($screen in $screens) {
-        $bounds = $screen.Bounds
-        if ($bounds.Left -lt $minX) { $minX = $bounds.Left }
-        if ($bounds.Top -lt $minY) { $minY = $bounds.Top }
-        if ($bounds.Right -gt $maxX) { $maxX = $bounds.Right }
-        if ($bounds.Bottom -gt $maxY) { $maxY = $bounds.Bottom }
-    }
-    
-    $totalWidth = $maxX - $minX
-    $totalHeight = $maxY - $minY
-    
-    if ($totalWidth -le 0 -or $totalHeight -le 0) {
-        Write-Host "ERROR: Invalid screen dimensions: $totalWidth x $totalHeight"
-        exit 1
-    }
-    
-    $bitmap = New-Object System.Drawing.Bitmap($totalWidth, $totalHeight, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    if ($null -eq $bitmap) {
-        Write-Host "ERROR: Failed to create bitmap"
-        exit 1
-    }
-
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    if ($null -eq $graphics) {
-        Write-Host "ERROR: Failed to create graphics from bitmap"
-        $bitmap.Dispose()
-        exit 1
-    }
-    
-    $graphics.CopyFromScreen($minX, $minY, 0, 0, (New-Object System.Drawing.Size($totalWidth, $totalHeight)), [System.Drawing.CopyPixelOperation]::SourceCopy)
-    
-    $bitmap.Save($filePath, [System.Drawing.Imaging.ImageFormat]::Png)
-    
-    $graphics.Dispose()
-    $bitmap.Dispose()
-    
-    if ([System.IO.File]::Exists($filePath)) {
-        $fileInfo = Get-Item -LiteralPath $filePath
-        $size = $fileInfo.Length
-        if ($size -gt 0) {
-            Write-Host "SUCCESS:$size"
-        } else {
-            Write-Host "ERROR: File size is 0"
-            exit 1
-        }
-    } else {
-        Write-Host "ERROR: File not created"
-        exit 1
-    }
-    `;
+          // 使用screenshot-desktop库截图（支持多显示器）
+          const img = await screenshot({ screen: -1 }); // -1表示所有屏幕
           
-          await fs.writeFile(psScriptPath, psScriptContent, 'utf8');
+          // 保存截图
+          await fs.writeFile(screenshotPath, img);
           
-          let output = '';
-          const { spawn } = await import('child_process');
-          output = await new Promise((resolve, reject) => {
-            const ps = spawn('powershell', [
-              '-NoProfile',
-              '-ExecutionPolicy', 'Bypass',
-              '-STA',
-              '-File', psScriptPath
-            ], {
-              shell: false,
-              windowsHide: true
-            });
-            
-            let stdout = '';
-            let stderr = '';
-            
-            ps.stdout.on('data', (data) => { stdout += data.toString(); });
-            ps.stderr.on('data', (data) => { stderr += data.toString(); });
-            
-            ps.on('close', (code) => {
-              if (code !== 0) {
-                reject(new Error(`PowerShell 退出码: ${code}。错误: ${stderr || stdout || '未知错误'}`));
-              } else {
-                resolve(stdout.trim());
-              }
-            });
-            
-            ps.on('error', (err) => {
-              reject(new Error(`PowerShell 启动失败: ${err.message}`));
-            });
-          });
-          
-          // 清理临时脚本
-          try { await fs.unlink(psScriptPath); } catch (e) {}
-          
-          // 检查输出
-          if (!output || !output.includes('SUCCESS')) {
-            throw new Error(`截屏脚本执行异常。输出: ${output || '(无输出)'}`);
-          }
-          
-          // 等待文件写入完成
-          let fileReady = false;
-          for (let retry = 0; retry < 10; retry++) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-            try {
-              await fs.access(screenshotPath);
-              const stats = await fs.stat(screenshotPath);
-              if (stats.size > 0) {
-                fileReady = true;
-                break;
-              }
-            } catch (e) {
-              // 文件还未生成，继续等待
-            }
-          }
-          
-          if (!fileReady) {
-            try {
-              await fs.access(screenshotPath);
-              const stats = await fs.stat(screenshotPath);
-              if (stats.size === 0) {
-                throw new Error('截屏文件为空');
-              }
-            } catch (fileErr) {
-              throw new Error(`截屏文件未生成或无法访问: ${fileErr.message}。PowerShell 输出: ${output}`);
-            }
+          // 验证文件是否生成
+          const stats = await fs.stat(screenshotPath);
+          if (stats.size === 0) {
+            throw new Error('截屏文件为空');
           }
     
           if (context.e) {
-            // 仅发送图片，由 AI 在对话中自然说明，无需额外的“截图成功”提示
+            // 仅发送图片，由 AI 在对话中自然说明，无需额外的"截图成功"提示
             await context.e.reply([
               { type: 'image', data: { file: screenshotPath } }
             ]);
           }
+          
+          BotUtil.makeLog('info', `截图成功: ${screenshotPath} (${stats.size} bytes)`, 'DesktopStream');
         } catch (err) {
           // 截屏失败时只记录日志，不向用户额外发送「截屏失败」类提示，
           // 由 AI 在对话中根据需要自行说明。
@@ -408,23 +276,27 @@ export default class DesktopStream extends AIStream {
         };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '系统信息查看'))) return;
-
         try {
-          const cpuOutput = await execCommandWithOutput('wmic cpu get loadpercentage');
-          const cpu = cpuOutput.trim().split('\n')[1]?.trim() || '未知';
+          // 使用systeminformation库获取系统信息（跨平台）
+          const [cpu, mem] = await Promise.all([
+            si.currentLoad(),
+            si.mem()
+          ]);
 
-          const memOutput = await execCommandWithOutput('wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /Value');
-          const free = memOutput.match(/FreePhysicalMemory=(\d+)/)?.[1];
-          const total = memOutput.match(/TotalVisibleMemorySize=(\d+)/)?.[1];
+          const cpuUsage = cpu.currentLoad ? cpu.currentLoad.toFixed(1) : '0.0';
+          const memTotal = mem.total / 1024 / 1024 / 1024; // GB
+          const memFree = mem.free / 1024 / 1024 / 1024; // GB
+          const memUsed = mem.used / 1024 / 1024 / 1024; // GB
+          const memUsedPercent = ((memUsed / memTotal) * 100).toFixed(1);
 
           context.systemInfo = {
-            cpu: cpu + '%',
-            memory: free && total ? {
-              usedPercent: ((1 - parseInt(free) / parseInt(total)) * 100).toFixed(1) + '%',
-              freeGB: (parseInt(free) / 1024 / 1024).toFixed(2) + 'GB',
-              totalGB: (parseInt(total) / 1024 / 1024).toFixed(2) + 'GB'
-            } : null
+            cpu: `${cpuUsage}%`,
+            memory: {
+              usedPercent: `${memUsedPercent}%`,
+              freeGB: `${memFree.toFixed(2)}GB`,
+              totalGB: `${memTotal.toFixed(2)}GB`,
+              usedGB: `${memUsed.toFixed(2)}GB`
+            }
           };
         } catch (err) {
           await this.handleError(context, err, '获取系统信息');
@@ -615,27 +487,18 @@ export default class DesktopStream extends AIStream {
         };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '磁盘空间查看'))) return;
-
         try {
-          const output = await execCommandWithOutput('wmic logicaldisk get caption,freespace,size /format:csv');
-          const lines = output.split('\n').filter(line => line.trim() && !line.startsWith('Node'));
+          // 使用systeminformation库获取磁盘空间（跨平台）
+          const fsSize = await si.fsSize();
           const disks = [];
 
-          for (const line of lines) {
-            const parts = line.split(',');
-            if (parts.length >= 4) {
-              const caption = parts[1]?.trim();
-              const free = parseInt(parts[2]?.trim());
-              const size = parseInt(parts[3]?.trim());
-
-              if (caption && !isNaN(free) && !isNaN(size) && size > 0) {
-                const freeGB = (free / 1024 / 1024 / 1024).toFixed(2);
-                const totalGB = (size / 1024 / 1024 / 1024).toFixed(2);
-                const usedPercent = ((1 - free / size) * 100).toFixed(1);
-                disks.push(`${caption} ${usedPercent}% 已用 (${freeGB}GB / ${totalGB}GB 可用)`);
-              }
-            }
+          for (const disk of fsSize) {
+            const totalGB = disk.size / 1024 / 1024 / 1024; // GB
+            const usedGB = disk.used / 1024 / 1024 / 1024; // GB
+            const freeGB = (disk.size - disk.used) / 1024 / 1024 / 1024; // GB
+            const usedPercent = ((disk.used / disk.size) * 100).toFixed(1);
+            
+            disks.push(`${disk.mount} ${usedPercent}% 已用 (${freeGB.toFixed(2)}GB / ${totalGB.toFixed(2)}GB 可用)`);
           }
 
           context.diskSpace = disks.length > 0 ? disks : null;
@@ -969,34 +832,58 @@ export default class DesktopStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '生成Word文档'))) return;
-
         const fileName = params?.fileName;
         const content = params?.content;
         if (!fileName || !content) return;
 
         try {
+          // 动态导入docx库
+          const docxModule = await import('docx');
+          const { Document, Packer, Paragraph, TextRun } = docxModule;
+          
           const workspace = this.getWorkspace();
           const safeFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
           const filePath = path.join(workspace, safeFileName.endsWith('.docx') ? safeFileName : `${safeFileName}.docx`);
 
-          // 使用PowerShell创建Word文档
-          const psScript = `
-$word = New-Object -ComObject Word.Application
-$word.Visible = $false
-$doc = $word.Documents.Add()
-$doc.Content.Text = @"
-${content.replace(/"/g, '`"').replace(/\$/g, '`$')}
-"@
-$doc.SaveAs([ref]"${filePath.replace(/\\/g, '\\\\')}")
-$doc.Close()
-$word.Quit()
-[System.Runtime.Interopservices.Marshal]::ReleaseComObject($word) | Out-Null
-          `;
+          // 将内容按换行符分割成段落
+          // 保留空行（如果原内容中有空行）
+          const lines = content.split(/\n/);
+          const docParagraphs = lines.map(line => 
+            new Paragraph({
+              children: [new TextRun(line || ' ')] // 空行用空格代替
+            })
+          );
 
-          await execCommandWithOutput(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"')}"`);
+          // 创建Word文档
+          const doc = new Document({
+            sections: [
+              {
+                properties: {},
+                children: docParagraphs
+              }
+            ]
+          });
+
+          // 生成并保存文档
+          const buffer = await Packer.toBuffer(doc);
+          await fs.writeFile(filePath, buffer);
+          
+          // 验证文件是否生成
+          const stats = await fs.stat(filePath);
+          if (stats.size === 0) {
+            throw new Error('Word文档文件为空');
+          }
+          
           context.createdWordDoc = filePath;
+          
+          // 发送成功消息
+          if (context.e) {
+            await context.e.reply(`✅ Word文档已生成：${safeFileName}`);
+          }
+          
+          BotUtil.makeLog('info', `Word文档生成成功: ${filePath} (${stats.size} bytes)`, 'DesktopStream');
         } catch (err) {
+          BotUtil.makeLog('error', `Word文档生成失败: ${err.message}`, 'DesktopStream');
           await this.handleError(context, err, '生成Word文档');
         }
       },
@@ -1010,35 +897,113 @@ $word.Quit()
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
-        const reg = /\[生成Excel:([^:]+):([^\]]+)\]/g;
+        
+        // 使用更智能的匹配方式，能够处理JSON数组中包含的]字符
+        const pattern = /\[生成Excel:([^:]+):/g;
         let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const fileName = (match[1] || '').trim();
-          const dataStr = (match[2] || '').trim();
-          if (fileName && dataStr) {
-            try {
-              // 只接受JSON格式
-              const data = JSON.parse(dataStr);
-              if (!Array.isArray(data)) {
-                throw new Error('数据必须是JSON数组格式');
+        const matches = [];
+        
+        // 先找到所有[生成Excel:的位置
+        while ((match = pattern.exec(text)) !== null) {
+          matches.push({
+            start: match.index,
+            fileName: match[1].trim(),
+            dataStart: match.index + match[0].length
+          });
+        }
+        
+        // 对每个匹配，尝试解析JSON数组（从后往前处理，避免索引问题）
+        const toRemove = [];
+        for (let i = matches.length - 1; i >= 0; i--) {
+          const m = matches[i];
+          const afterColon = text.substring(m.dataStart);
+          
+          // 尝试找到完整的JSON数组（从[开始到匹配的]结束）
+          let bracketCount = 0;
+          let jsonEnd = -1;
+          let inString = false;
+          let escapeNext = false;
+          
+          for (let j = 0; j < afterColon.length; j++) {
+            const char = afterColon[j];
+            
+            if (escapeNext) {
+              escapeNext = false;
+              continue;
+            }
+            
+            if (char === '\\') {
+              escapeNext = true;
+              continue;
+            }
+            
+            if (char === '"') {
+              inString = !inString;
+              continue;
+            }
+            
+            if (inString) continue;
+            
+            if (char === '[') {
+              bracketCount++;
+            } else if (char === ']') {
+              bracketCount--;
+              if (bracketCount === 0) {
+                // 找到了JSON数组的结束位置
+                jsonEnd = j + 1;
+                break;
               }
-              functions.push({ type: 'create_excel_document', params: { fileName, data } });
-            } catch (e) {
-              // JSON解析失败，跳过
+            }
+          }
+          
+          if (jsonEnd > 0) {
+            // jsonEnd是JSON数组结束的位置（包括]），需要检查后面是否还有命令结束符]
+            let commandEnd = jsonEnd;
+            if (afterColon[jsonEnd] === ']') {
+              commandEnd = jsonEnd + 1;
+            }
+            
+            // 提取JSON数组字符串（不包括命令结束符]）
+            const dataStr = afterColon.substring(0, jsonEnd).trim();
+            if (dataStr.startsWith('[') && dataStr.endsWith(']')) {
+              try {
+                const data = JSON.parse(dataStr);
+                if (!Array.isArray(data)) {
+                  continue;
+                }
+                functions.push({ 
+                  type: 'create_excel_document', 
+                  params: { fileName: m.fileName, data },
+                  order: m.start
+                });
+                
+                // 记录需要移除的部分（从后往前处理，所以索引不会变化）
+                toRemove.push({
+                  start: m.start,
+                  end: m.dataStart + commandEnd
+                });
+              } catch (e) {
+                // JSON解析失败，跳过
+                BotUtil.makeLog('debug', `Excel命令JSON解析失败: ${e.message}`, 'DesktopStream');
+              }
             }
           }
         }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
+        
+        // 从后往前移除匹配的部分，避免索引变化
+        if (toRemove.length > 0) {
+          let result = text;
+          // 按start位置从大到小排序，从后往前移除
+          toRemove.sort((a, b) => b.start - a.start);
+          for (const remove of toRemove) {
+            result = result.substring(0, remove.start) + result.substring(remove.end);
+          }
+          cleanText = result.trim();
         }
 
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '生成Excel文档'))) return;
-
         const fileName = params?.fileName;
         const data = params?.data;
         if (!fileName || !data) return;
@@ -1048,54 +1013,83 @@ $word.Quit()
         }
 
         try {
+          // 动态导入exceljs库
+          const ExcelJSModule = await import('exceljs');
+          const ExcelJS = ExcelJSModule.default || ExcelJSModule;
+          
           // 使用工作区路径（桌面）
           const workspace = this.getWorkspace();
           const safeFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
           const filePath = path.join(workspace, safeFileName.endsWith('.xlsx') ? safeFileName : `${safeFileName}.xlsx`);
 
-          const dataJson = JSON.stringify(data);
-          const psScript = `
-$excel = New-Object -ComObject Excel.Application
-$excel.Visible = $true
-$workbook = $excel.Workbooks.Add()
-$worksheet = $workbook.Worksheets.Item(1)
+          // 创建工作簿和工作表
+          const workbook = new ExcelJS.Workbook();
+          const worksheet = workbook.addWorksheet('Sheet1');
 
-$data = @'
-${dataJson.replace(/"/g, '`"').replace(/\$/g, '`$')}
-'@ | ConvertFrom-Json
+          if (data.length > 0) {
+            // 获取表头（从第一条数据的键）
+            const headers = Object.keys(data[0]);
+            
+            // 设置表头样式
+            worksheet.columns = headers.map(header => ({
+              header: header,
+              key: header,
+              width: 15
+            }));
 
-if ($data -is [Array] -and $data.Count -gt 0) {
-    $headers = $data[0].PSObject.Properties.Name
-    for ($i = 0; $i -lt $headers.Count; $i++) {
-        $cell = $worksheet.Cells.Item(1, $i + 1)
-        $cell.Value2 = $headers[$i]
-        $cell.Font.Bold = $true
-        $cell.Interior.Color = [System.Drawing.ColorTranslator]::ToOle([System.Drawing.Color]::LightGray)
-    }
-    for ($row = 0; $row -lt $data.Count; $row++) {
-        for ($col = 0; $col -lt $headers.Count; $col++) {
-            $worksheet.Cells.Item($row + 2, $col + 1).Value2 = $data[$row].($headers[$col])
-        }
-    }
-    $worksheet.Columns.AutoFit() | Out-Null
-} else {
-    $worksheet.Cells.Item(1, 1).Value2 = "数据为空"
-}
+            // 设置表头行样式
+            const headerRow = worksheet.getRow(1);
+            headerRow.font = { bold: true };
+            headerRow.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFD3D3D3' }
+            };
+            headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
-$workbook.SaveAs("${filePath.replace(/\\/g, '\\\\')}")
-[System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
-          `;
+            // 添加数据行
+            data.forEach((rowData, index) => {
+              const row = worksheet.addRow(rowData);
+              row.alignment = { vertical: 'middle', horizontal: 'left' };
+            });
 
-          const result = await this.tools.executeCommand(
-            `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"')}"`,
-            { registerProcess: true }
-          );
-
-          if (!result.success) {
-            throw new Error(result.error || 'Excel生成失败');
+            // 自动调整列宽
+            worksheet.columns.forEach(column => {
+              if (column.header) {
+                let maxLength = column.header.length;
+                column.eachCell({ includeEmpty: false }, (cell) => {
+                  const cellValue = cell.value ? String(cell.value) : '';
+                  if (cellValue.length > maxLength) {
+                    maxLength = cellValue.length;
+                  }
+                });
+                column.width = Math.min(Math.max(maxLength + 2, 10), 50);
+              }
+            });
+          } else {
+            // 数据为空
+            worksheet.addRow(['数据为空']);
           }
-          context.createdExcelDoc = filePath;
+
+          // 保存文件
+          await workbook.xlsx.writeFile(filePath);
+          
+          // 验证文件是否生成
+          try {
+            await fs.access(filePath);
+            context.createdExcelDoc = filePath;
+            
+            // 发送成功消息
+            if (context.e) {
+              await context.e.reply(`✅ Excel文件已生成：${safeFileName}`);
+            }
+            
+            BotUtil.makeLog('info', `Excel文件生成成功: ${filePath}`, 'DesktopStream');
+          } catch (fileErr) {
+            throw new Error(`Excel文件未生成：${fileErr.message}`);
+          }
         } catch (err) {
+          BotUtil.makeLog('error', `Excel生成失败: ${err.message}`, 'DesktopStream');
           await this.handleError(context, err, '生成Excel文档');
         }
       },
@@ -1142,75 +1136,21 @@ $workbook.SaveAs("${filePath.replace(/\\/g, '\\\\')}")
       },
       handler: async (params, context) => {
         const goal = params?.goal;
-        if (!goal) return;
+        if (!goal || !this.workflowManager) return;
 
         try {
-          const planningMessages = [
-            {
-              role: 'system',
-              content: `你是一个任务规划助手。用户提出了一个目标，你需要将其分解为具体的执行步骤。
-
-【目标】
-${goal}
-
-【要求】
-1. 将目标分解为3-5个具体的执行步骤
-2. 每个步骤应该是可执行的、清晰的操作
-3. 步骤之间应该有逻辑顺序
-4. 输出格式：每行一个步骤，用数字编号
-
-【示例】
-目标：帮我打开微信并发送消息给张三
-步骤：
-1. 查看桌面文件，找到微信快捷方式
-2. 打开微信软件
-3. 等待微信启动完成
-4. 查找联系人张三
-5. 发送消息给张三`
-            },
-            { role: 'user', content: `请为以下目标规划执行步骤：\n${goal}` }
-          ];
-
-          const planningResponse = await this.callAI(planningMessages, this.config);
-          const todos = this.parsePlanningResponse(planningResponse, goal);
-          
-          if (this.workflowManager) {
-            const workflowId = await this.workflowManager.createWorkflow(context.e, goal, todos);
-            context.workflowId = workflowId;
-            await context.e?.reply(`工作流已启动！\n目标：${goal}\n步骤数：${todos.length}\n工作流ID：${workflowId}`);
-          } else {
-            await context.e?.reply(`TODO工作流插件未加载，无法启动多步骤工作流`);
-          }
+          const decision = await this.workflowManager.decideWorkflowMode(context.e, goal);
+          const todos = decision.todos.length > 0 ? decision.todos : await this.workflowManager.generateInitialTodos(goal);
+          const workflowId = await this.workflowManager.createWorkflow(context.e, goal, todos);
+          context.workflowId = workflowId;
         } catch (err) {
-          await this.handleError(context, err, '启动工作流');
+          BotUtil.makeLog('error', `启动工作流失败: ${err.message}`, 'DesktopStream');
         }
       },
       enabled: true
     });
   }
 
-  parsePlanningResponse(response, goal) {
-    const todos = [];
-    const lines = response.split('\n');
-    
-    for (const line of lines) {
-      const trimmed = line.trim();
-      const stepMatch = trimmed.match(/^\d+[\.、]\s*(.+)$/);
-      if (stepMatch) {
-        todos.push(stepMatch[1].trim());
-      } else if (trimmed && !trimmed.startsWith('步骤') && !trimmed.startsWith('目标')) {
-        if (trimmed.length > 5 && trimmed.length < 100) {
-          todos.push(trimmed);
-        }
-      }
-    }
-
-    if (todos.length === 0) {
-      todos.push(`分析目标：${goal}`, '执行必要操作', '验证执行结果');
-    }
-
-    return todos;
-  }
 
   /**
    * 构建功能列表提示（优化版）

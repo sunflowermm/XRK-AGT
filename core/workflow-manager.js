@@ -32,12 +32,70 @@ export class WorkflowManager {
   cleanupCompletedWorkflows() {
     for (const [id, workflow] of this.activeWorkflows.entries()) {
       if (workflow.status === 'completed' || workflow.status === 'failed') {
-        // 30秒后清理已完成的工作流
         if (Date.now() - (workflow.completedAt || 0) > 30000) {
           this.activeWorkflows.delete(id);
         }
       }
     }
+  }
+
+  /**
+   * 标准化工作流回复（统一格式，便于客户端解析）
+   * @param {Object} workflow - 工作流对象
+   * @param {string} type - 消息类型: start|step|complete|error|retry|update
+   * @param {Object} data - 消息数据
+   */
+  async sendReply(workflow, type, data = {}) {
+    const e = workflow?.context?.e;
+    if (!e) return;
+
+    const completedCount = workflow.todos.filter(t => t.status === 'completed').length;
+    const totalCount = workflow.todos.length;
+    const timestamp = Date.now();
+
+    // 标准化JSON格式（便于tasker等客户端解析）
+    const replyData = {
+      type: 'workflow',
+      event: type,
+      workflowId: workflow.id,
+      goal: workflow.goal,
+      progress: { completed: completedCount, total: totalCount },
+      iteration: workflow.iteration,
+      timestamp,
+      ...data
+    };
+
+    // 构建人类可读的文本（兼容旧客户端）
+    let text = '';
+    switch (type) {
+      case 'start':
+        text = `🚀 工作流启动\n目标: ${workflow.goal}\n步骤: ${totalCount}\nID: ${workflow.id}`;
+        break;
+      case 'step':
+        const stepNum = data.stepNum || (completedCount + 1);
+        const status = data.completion >= 0.8 ? '✅' : data.completion >= 0.5 ? '⏳' : '🔄';
+        text = `${status} [${stepNum}/${totalCount}] ${data.task || ''}\n执行: ${data.action || ''}`;
+        break;
+      case 'complete':
+        text = `🎉 工作流完成\n目标: ${workflow.goal}\n完成: ${completedCount}/${totalCount}`;
+        break;
+      case 'error':
+        text = `❌ 错误: ${data.task || ''}\n${data.error || ''}`;
+        break;
+      case 'retry':
+        text = `⚠️ 重试中: ${data.task || ''}\n${data.message || ''}`;
+        break;
+      case 'update':
+        text = `📢 ${data.message || ''}`;
+        break;
+      default:
+        text = data.message || '工作流状态更新';
+    }
+
+    const replyContent = `${JSON.stringify(replyData)}\n\n${text}`;
+    await e.reply(replyContent).catch(err => {
+      BotUtil.makeLog('debug', `发送工作流回复失败: ${err.message}`, 'WorkflowManager');
+    });
   }
 
   async decideWorkflowMode(e, goal) {
@@ -115,7 +173,8 @@ ${this.stream.buildFunctionsPrompt()}
 
     const response = await this.stream.callAI(messages, this.stream.config);
     if (!response) {
-      return { shouldUseTodo: false, response: '', todos: [] };
+      const isComplex = /并|然后|接着|之后|接下来|同时/i.test(goal);
+      return { shouldUseTodo: isComplex, response: '', todos: isComplex ? await this.generateInitialTodos(goal) : [] };
     }
 
     const shouldUseTodo = /是否需要TODO工作流:\s*是/i.test(response);
@@ -184,7 +243,6 @@ ${this.stream.buildFunctionsPrompt()}
     // 清理已完成的工作流
     this.cleanupCompletedWorkflows();
 
-    // 创建唯一键（基于目标和用户ID）
     const userKey = e?.user_id || e?.sender?.user_id || 'default';
     const workflowKey = `${userKey}:${goal}`;
 
@@ -194,11 +252,9 @@ ${this.stream.buildFunctionsPrompt()}
       return this.workflowLock.get(workflowKey);
     }
 
-    // 检查是否已有相同目标的工作流在运行
     const existingWorkflow = Array.from(this.activeWorkflows.values())
       .find(w => w.status === 'running' && w.goal === goal && 
                  (w.context?.e?.user_id === userKey || !w.context?.e?.user_id));
-    
     if (existingWorkflow) {
       BotUtil.makeLog('info', `工作流已存在，跳过创建: ${goal}`, 'WorkflowManager');
       return existingWorkflow.id;
@@ -231,27 +287,15 @@ ${this.stream.buildFunctionsPrompt()}
     await this.stream.storeWorkflowMemory(workflowId, { goal, createdAt: Date.now() });
     this.activeWorkflows.set(workflowId, workflow);
     
-    // 更新锁中的workflowId
     this.workflowLock.set(workflowKey, workflowId);
     
-    // 发送工作流启动通知
-    if (e) {
-      try {
-        const goalPreview = goal.length > 40 ? goal.substring(0, 40) + '...' : goal;
-        await e.reply(`✅ 工作流已启动！\n目标：${goalPreview}\n步骤数：${initialTodos.length}\nID：${workflowId}`);
-      } catch (err) {
-        BotUtil.makeLog('debug', `发送工作流启动通知失败: ${err.message}`, 'WorkflowManager');
-      }
-    }
+    // 发送启动通知
+    await this.sendReply(workflow, 'start', { todos: initialTodos });
     
-    // 异步执行，完成后释放锁
     this.executeWorkflow(workflowId).catch(err => {
       BotUtil.makeLog('error', `工作流执行失败[${workflowId}]: ${err.message}`, 'WorkflowManager');
     }).finally(() => {
-      // 5秒后释放锁
-      setTimeout(() => {
-        this.workflowLock.delete(workflowKey);
-      }, 5000);
+      setTimeout(() => this.workflowLock.delete(workflowKey), 5000);
     });
     
     return workflowId;
@@ -268,16 +312,7 @@ ${this.stream.buildFunctionsPrompt()}
         if (this.isAllCompleted(workflow)) {
           workflow.status = 'completed';
           workflow.completedAt = Date.now();
-          const completedCount = workflow.todos.filter(t => t.status === 'completed').length;
-          const totalCount = workflow.todos.length;
-          await this.sendWorkflowUpdate(workflow, `✅ 工作流完成！(${completedCount}/${totalCount}任务已完成)`);
-          if (workflow.context.e) {
-            try {
-              await workflow.context.e.reply(`🎉 工作流执行完成\n目标：${workflow.goal}\n已完成 ${completedCount}/${totalCount} 个任务`);
-            } catch (err) {
-              BotUtil.makeLog('debug', `发送完成通知失败: ${err.message}`, 'WorkflowManager');
-            }
-          }
+          await this.sendReply(workflow, 'complete');
           break;
         }
 
@@ -293,7 +328,7 @@ ${this.stream.buildFunctionsPrompt()}
       if (workflow.iteration >= workflow.maxIterations) {
         workflow.status = 'failed';
         workflow.completedAt = Date.now();
-        await this.sendWorkflowUpdate(workflow, '工作流达到最大迭代次数，已停止');
+        await this.sendReply(workflow, 'error', { error: '达到最大迭代次数', message: '工作流已停止' });
       }
     } catch (error) {
       workflow.status = 'failed';
@@ -316,7 +351,7 @@ ${this.stream.buildFunctionsPrompt()}
     
     try {
       const notes = await this.stream.getNotes(workflow.id);
-      const notesText = notes.length > 0 
+      const notesText = notes.length > 0
         ? `\n【工作流笔记】（所有步骤共享）\n${notes.map((n, i) => `${i + 1}. ${n.content}`).join('\n')}\n`
         : '';
 
@@ -326,14 +361,45 @@ ${this.stream.buildFunctionsPrompt()}
         { role: 'user', content: prompt }
       ];
 
-      const response = await this.stream.callAI(messages, this.stream.config);
-      if (!response) throw new Error('AI返回空响应');
+      // 重试机制：最多重试3次
+      let response = null;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (!response && retryCount < maxRetries) {
+        response = await this.stream.callAI(messages, this.stream.config);
+        if (!response) {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            await this.sendReply(workflow, 'retry', { 
+              task: todo.content, 
+              message: `AI响应为空，正在重试 (${retryCount}/${maxRetries})` 
+            });
+            await BotUtil.sleep(2000);
+          }
+        }
+      }
+      
+      if (!response) {
+        throw new Error(`AI返回空响应（已重试${maxRetries}次）`);
+      }
 
       const { action, completion, nextStep, note } = this.parseAIResponse(response, workflow, todo);
+      
+      // 提取执行动作
+      const actionMatch = response.match(/执行动作:\s*([^\n]+)/);
+      const actionText = actionMatch ? actionMatch[1].trim() : response.substring(0, 100);
+      
+      // 立即发送步骤进度
+      const completedCount = workflow.todos.filter(t => t.status === 'completed').length;
+      await this.sendReply(workflow, 'step', {
+        stepNum: completedCount + 1,
+        task: todo.content,
+        action: actionText,
+        completion: completion || 0.5
+      });
 
-      if (note?.trim()) {
-        await this.storeNote(workflow, todo.id, note);
-      }
+      if (note?.trim()) await this.storeNote(workflow, todo.id, note);
 
       workflow.history.push({
         todoId: todo.id,
@@ -354,11 +420,10 @@ ${this.stream.buildFunctionsPrompt()}
         await this.storeNote(workflow, todo.id, `执行错误: ${errorMsg}。请检查命令是否正确，文件是否存在。`);
         todo.status = 'pending';
         todo.error = errorMsg;
-        await this.sendWorkflowUpdate(workflow, `✗ 任务失败: ${todo.content}\n错误: ${errorMsg}`);
-        // 不要return，让AI继续尝试修复
+        await this.sendReply(workflow, 'error', { task: todo.content, error: errorMsg });
       }
 
-      const completionRate = completion || this.evaluateCompletion(workflow, todo, response);
+      const completionRate = completion || 0.5;
       this.updateTodoStatus(workflow, todo, completionRate);
 
       if (nextStep?.trim()) {
@@ -375,6 +440,7 @@ ${this.stream.buildFunctionsPrompt()}
       todo.status = 'failed';
       todo.error = error.message;
       BotUtil.makeLog('error', `Todo执行失败[${todo.id}]: ${error.message}`, 'WorkflowManager');
+      await this.sendReply(workflow, 'error', { task: todo.content, error: error.message });
     }
   }
 
@@ -384,45 +450,34 @@ ${this.stream.buildFunctionsPrompt()}
   }
 
   updateTodoStatus(workflow, todo, completionRate) {
-    // 确保completionRate是有效数值
-    if (typeof completionRate !== 'number' || isNaN(completionRate)) {
-      completionRate = 0.5;
-    }
-    
-    if (completionRate >= 0.8) {
+    const rate = (typeof completionRate === 'number' && !isNaN(completionRate)) ? completionRate : 0.5;
+    if (rate >= 0.8) {
       todo.status = 'completed';
       todo.completedAt = Date.now();
-      this.sendWorkflowUpdate(workflow, `✓ 任务完成: ${todo.content}`);
-    } else if (completionRate >= 0.5) {
-      // 保持进行中状态，不改变
-      if (todo.status !== 'in_progress') {
-        todo.status = 'in_progress';
-      }
-      this.sendWorkflowUpdate(workflow, `⟳ 进行中 (${(completionRate * 100).toFixed(0)}%): ${todo.content}`);
+    } else if (rate >= 0.5) {
+      todo.status = 'in_progress';
     } else {
-      // 完成度低，标记为待处理以便重试
       todo.status = 'pending';
-      this.sendWorkflowUpdate(workflow, `○ 待处理 (${(completionRate * 100).toFixed(0)}%): ${todo.content}`);
     }
   }
 
   buildTodoPrompt(workflow, todo, notesText = '') {
-    const errorNotes = notesText ? notesText.split('\n').filter(n => n.includes('执行错误') || n.includes('错误')).slice(0, 3).join('\n') : '';
-    const recentNotes = notesText ? notesText.split('\n').slice(-10).join('\n') : ''; // 获取最近10条笔记
-    const hasErrors = errorNotes.length > 0;
+    const notes = notesText.split('\n');
+    const errorNotes = notes.filter(n => n.includes('执行错误') || n.includes('错误')).slice(0, 3).join('\n');
+    const recentNotes = notes.slice(-10).join('\n');
     const completedCount = workflow.todos.filter(t => t.status === 'completed').length;
     const totalCount = workflow.todos.length;
-    const previousTodos = workflow.todos.filter(t => t.status === 'completed').slice(-3); // 最近完成的3个任务
+    const previousTodos = workflow.todos.filter(t => t.status === 'completed').slice(-3);
 
     return `【工作流目标】${workflow.goal}
 
 【当前任务】${todo.content}
 
 【进度状态】${completedCount}/${totalCount}任务已完成
-${previousTodos.length > 0 ? `【已完成任务】\n${previousTodos.map(t => `✓ ${t.content}`).join('\n')}\n` : ''}${hasErrors ? `【⚠️ 错误信息】（需要修复）\n${errorNotes}\n` : ''}${recentNotes ? `【📝 工作流笔记】（所有步骤共享，可查看之前步骤的信息）\n${recentNotes}\n` : ''}
+${previousTodos.length > 0 ? `【已完成任务】\n${previousTodos.map(t => `✓ ${t.content}`).join('\n')}\n` : ''}${errorNotes ? `【⚠️ 错误信息】（需要修复）\n${errorNotes}\n` : ''}${recentNotes ? `【📝 工作流笔记】（所有步骤共享，可查看之前步骤的信息）\n${recentNotes}\n` : ''}
 
 【执行要求】
-1. ${hasErrors ? '**优先修复上述错误**，然后继续执行当前任务' : '分析当前任务，执行必要操作'}
+1. ${errorNotes ? '**优先修复上述错误**，然后继续执行当前任务' : '分析当前任务，执行必要操作'}
 2. 使用可用命令完成操作（命令格式：[命令:参数]）
 3. 如果当前任务需要从之前步骤获取信息，请查看上述"工作流笔记"
 4. 严格按照输出格式回复
@@ -435,27 +490,20 @@ ${previousTodos.length > 0 ? `【已完成任务】\n${previousTodos.map(t => `�
   }
 
   buildSystemPrompt(workflow) {
-    let functionsPrompt = '';
-    
+    const allFunctions = [];
+    if (this.stream.functions) {
+      allFunctions.push(...Array.from(this.stream.functions.values()));
+    }
     if (this.stream._mergedStreams) {
-      const allFunctions = [];
-      if (this.stream.functions) {
-        allFunctions.push(...Array.from(this.stream.functions.values()));
-      }
       for (const mergedStream of this.stream._mergedStreams) {
         if (mergedStream.functions) {
           allFunctions.push(...Array.from(mergedStream.functions.values()));
         }
       }
-      const prompts = allFunctions
-        .filter(f => f.enabled && f.prompt)
-        .map(f => f.prompt);
-      if (prompts.length > 0) {
-        functionsPrompt = `【可用命令】\n${prompts.join('\n')}`;
-      }
-    } else {
-      functionsPrompt = this.stream.buildFunctionsPrompt();
     }
+    const functionsPrompt = allFunctions.length > 0
+      ? `【可用命令】\n${allFunctions.filter(f => f.enabled && f.prompt).map(f => f.prompt).join('\n')}`
+      : this.stream.buildFunctionsPrompt();
 
     return `【工作流执行助手】
 你正在执行一个多步骤工作流任务。你的职责是：
@@ -491,40 +539,23 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】（必须严
     const completionMatch = response.match(/完成度评估:\s*([0-9.]+)/);
     let completion = completionMatch ? parseFloat(completionMatch[1]) : null;
     
-    // 如果没找到完成度，尝试从上下文中推断
     if (completion === null) {
-      const lowerResponse = response.toLowerCase();
-      if (lowerResponse.includes('完成') || lowerResponse.includes('成功') || lowerResponse.includes('已')) {
-        completion = 0.9;
-      } else if (lowerResponse.includes('失败') || lowerResponse.includes('错误') || lowerResponse.includes('无法')) {
-        completion = 0.2;
-      } else {
-        completion = 0.5; // 默认中等完成度
-      }
+      const lower = response.toLowerCase();
+      completion = lower.includes('完成') || lower.includes('成功') || lower.includes('已') ? 0.9
+        : lower.includes('失败') || lower.includes('错误') || lower.includes('无法') ? 0.2
+        : 0.5;
     }
     
     // 确保完成度在0-1范围内
     completion = Math.max(0, Math.min(1, completion));
 
-    // 提取下一步建议
     const nextStepMatch = response.match(/下一步建议:\s*(.+?)(?:\n|$)/);
-    let nextStep = null;
-    if (nextStepMatch) {
-      const suggestion = nextStepMatch[1].trim();
-      if (!suggestion.includes('无') && suggestion.length > 2) {
-        nextStep = suggestion;
-      }
-    }
+    const nextStep = nextStepMatch && !nextStepMatch[1].trim().includes('无') && nextStepMatch[1].trim().length > 2
+      ? nextStepMatch[1].trim() : null;
 
-    // 提取笔记
     const noteMatch = response.match(/笔记:\s*([\s\S]+?)(?:\n\n|\n完成度评估|$)/);
-    let note = null;
-    if (noteMatch) {
-      const noteContent = noteMatch[1].trim();
-      if (!noteContent.includes('无') && noteContent.length > 0) {
-        note = noteContent;
-      }
-    }
+    const note = noteMatch && !noteMatch[1].trim().includes('无') && noteMatch[1].trim().length > 0
+      ? noteMatch[1].trim() : null;
 
     return { action: response, completion, nextStep, note };
   }
@@ -562,54 +593,14 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】（必须严
     }
   }
 
-  evaluateCompletion(workflow, todo, response) {
-    // 如果AI已经提供了完成度评估，优先使用
-    const completionMatch = response.match(/完成度评估:\s*([0-9.]+)/);
-    if (completionMatch) {
-      const parsed = parseFloat(completionMatch[1]);
-      if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
-        return parsed;
-      }
-    }
 
-    // 否则从上下文推断
-    const completedKeywords = ['完成', '成功', '已', 'done', 'success', 'finished', '完成度评估'];
-    const failedKeywords = ['失败', '错误', '无法', 'failed', 'error', 'cannot', '失败'];
-    const lowerResponse = response.toLowerCase();
-    let score = 0.5;
-
-    if (completedKeywords.some(kw => lowerResponse.includes(kw))) score += 0.3;
-    if (failedKeywords.some(kw => lowerResponse.includes(kw))) score -= 0.3;
-    if (todo.result?.executed && todo.result.success) score += 0.3;
-    if (todo.result?.executed && !todo.result.success) score -= 0.3;
-    if (todo.error) score -= 0.4;
-
-    return Math.max(0, Math.min(1, score));
-  }
-
-  async sendWorkflowUpdate(workflow, message) {
-    if (!workflow.context.e) return;
-    try {
-      const statusText = this.getWorkflowStatusText(workflow);
-      const goalPreview = workflow.goal.length > 30 ? workflow.goal.substring(0, 30) + '...' : workflow.goal;
-      await workflow.context.e.reply(`[工作流更新] ${goalPreview}\n${statusText}\n${message}`);
-    } catch (error) {
-      BotUtil.makeLog('debug', `发送工作流更新失败: ${error.message}`, 'WorkflowManager');
-    }
-  }
-
-  getWorkflowStatusText(workflow) {
-    const completed = workflow.todos.filter(t => t.status === 'completed').length;
-    return `进度: ${completed}/${workflow.todos.length} | 迭代: ${workflow.iteration}/${workflow.maxIterations}`;
-  }
 
   getWorkflow(workflowId) {
     return this.activeWorkflows.get(workflowId);
   }
 
   stopWorkflow(workflowId) {
-    const workflow = this.activeWorkflows.get(workflowId);
-    if (workflow) workflow.status = 'paused';
+    this.activeWorkflows.get(workflowId)?.status = 'paused';
   }
 
   removeWorkflow(workflowId) {

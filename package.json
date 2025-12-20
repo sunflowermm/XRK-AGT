@@ -60,7 +60,10 @@
     "compression": "^1.8.1",
     "helmet": "^8.1.0",
     "express-rate-limit": "^8.1.0",
-    "http-proxy-middleware": "^3.0.5"
+    "http-proxy-middleware": "^3.0.5",
+    "exceljs": "^4.4.0",
+    "screenshot-desktop": "^1.15.0",
+    "docx": "^8.5.0"
   },
   "devDependencies": {
     "eslint": "^9.18.0",

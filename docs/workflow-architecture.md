@@ -284,6 +284,7 @@ const decision = await workflowManager.decideWorkflowMode(e, goal);
 if (decision.shouldUseTodo && decision.todos.length > 0) {
   // 复杂任务：启动TODO工作流
   const workflowId = await workflowManager.createWorkflow(e, goal, decision.todos);
+  // 工作流会自动发送start事件，插件不需要reply
 } else {
   // 简单任务：直接执行
   await stream.process(e, { content: goal });
@@ -296,6 +297,30 @@ if (decision.shouldUseTodo && decision.todos.length > 0) {
 - AI决定是否记录笔记
 - 笔记内容由整个工作流共享
 - 自动评估完成度（0-1之间）
+- **统一reply机制**：所有步骤进度、错误、完成等消息由`sendReply()`统一发送
+
+**核心方法**：
+- `sendReply(workflow, type, data)` - 标准化回复，支持JSON格式
+- `executeTodo(workflow, todo)` - 执行单个TODO步骤
+- `updateTodoStatus(workflow, todo, completionRate)` - 更新TODO状态
+
+#### 标准化Reply方法
+
+```javascript
+// 工作流管理器内部使用sendReply()统一发送所有消息
+await this.sendReply(workflow, 'step', {
+  stepNum: 2,
+  task: '读取文件内容',
+  action: '[读取文件:test.txt]',
+  completion: 0.9
+});
+```
+
+**Reply特点**：
+- ✅ 统一格式：JSON + 人类可读文本
+- ✅ 便于解析：客户端（tasker）可以解析JSON获取结构化数据
+- ✅ 向后兼容：旧客户端可以读取文本部分
+- ✅ 实时反馈：每个步骤执行后立即发送进度
 
 ### 3. StreamLoader 工作流加载器
 
@@ -599,19 +624,74 @@ import StreamLoader from '#infrastructure/aistream/loader.js';
 export default class MyPlugin extends plugin {
   async triggerWorkflow() {
     const question = this.e.msg.substring(3).trim();
+    if (!question) return this.reply('请输入内容');
     
-    // 简单调用：process方法自动处理合并工作流和TODO决策
-    const stream = StreamLoader.getStream('chat');
+    const stream = StreamLoader.getStream('desktop');
+    if (!stream) return this.reply('工作流未加载');
     
-    const response = await stream.process(this.e, question, {
-      mergeStreams: ['desktop'],  // 合并desktop工作流
-      enableTodo: true,           // 启用TODO智能决策
-      enableMemory: true          // 启用记忆系统
+    // 工作流会自己负责所有reply，插件不需要处理返回值
+    await stream.process(this.e, question, {
+      mergeStreams: ['desktop'],
+      enableTodo: true,
+      enableMemory: true
     });
     
-    return response ? this.reply(response) : true;
+    return true;
   }
 }
+```
+
+#### 工作流Reply机制（重要）
+
+**核心原则**：
+- ✅ **工作流负责所有reply**：一旦工作流启动，所有消息由工作流管理器统一发送
+- ✅ **插件不负责reply**：插件只需传递`e`给工作流，不需要调用`reply()`
+- ✅ **标准化输出格式**：所有工作流回复使用统一的JSON格式，便于客户端（如tasker）解析
+
+**Reply格式**：
+
+工作流的所有回复都包含两部分：
+1. **JSON格式**（便于客户端解析）：
+```json
+{
+  "type": "workflow",
+  "event": "start|step|complete|error|retry|update",
+  "workflowId": "workflow_1234567890_abc123",
+  "goal": "帮我分析易忘信息.txt并创建excel表格",
+  "progress": { "completed": 2, "total": 4 },
+  "iteration": 1,
+  "timestamp": 1234567890,
+  "task": "读取文件内容",
+  "action": "[读取文件:易忘信息.txt]",
+  "completion": 0.9
+}
+```
+
+2. **人类可读文本**（兼容旧客户端）：
+```
+✅ [2/4] 读取文件内容
+执行: [读取文件:易忘信息.txt]
+```
+
+**Reply事件类型**：
+- `start`: 工作流启动
+- `step`: 步骤执行进度
+- `complete`: 工作流完成
+- `error`: 执行错误
+- `retry`: 重试中
+- `update`: 状态更新
+
+**插件开发注意事项**：
+```javascript
+// ❌ 错误：插件不应该处理工作流的返回值
+const response = await stream.process(this.e, question, { enableTodo: true });
+if (response) {
+  await this.reply(response); // 不要这样做！工作流会自己reply
+}
+
+// ✅ 正确：工作流自己负责所有reply，插件不需要处理返回值
+await stream.process(this.e, question, { enableTodo: true });
+// 工作流启动时返回null，简单任务返回响应文本，都由工作流自己处理
 ```
 
 ### 2. 开发工作流
@@ -747,7 +827,14 @@ export default class MyMCPStream extends AIStream {
 - **笔记记录**：重要信息要记录到笔记
 - **完成度评估**：客观评估完成度
 
-### 4. MCP工具设计
+### 4. 代码优化原则
+
+- **删除冗余判断**：避免不必要的存在性检查（`?.`、`if (xxx)`）
+- **合并冗余函数**：删除只做简单包装的函数
+- **简化嵌套**：减少try-catch嵌套，使用`.catch()`链式调用
+- **统一reply机制**：所有工作流消息由`sendReply()`统一发送，插件不处理
+
+### 5. MCP工具设计
 
 详见 **[`docs/mcp-guide.md`](mcp-guide.md#开发指南)** - MCP完整指南
 

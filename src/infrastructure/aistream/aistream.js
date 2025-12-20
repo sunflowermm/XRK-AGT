@@ -1027,9 +1027,33 @@ export default class AIStream {
   async callAI(messages, apiConfig = {}) {
     const config = this.resolveLLMConfig(apiConfig);
 
+    // 调试日志：记录调用信息
+    const messagesPreview = messages.map(m => {
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      const preview = content.length > 200 ? content.substring(0, 200) + '...' : content;
+      return `${m.role}: ${preview}`;
+    }).join('\n');
+    
+    BotUtil.makeLog('info', 
+      `[${this.name}] 调用LLM工厂\nProvider: ${config.provider || 'unknown'}\nModel: ${config.model || 'unknown'}\n消息:\n${messagesPreview}`,
+      'AIStream'
+    );
+
     try {
       const client = LLMFactory.createClient(config);
-      return await client.chat(messages, config);
+      const response = await client.chat(messages, config);
+      
+      // 调试日志：记录响应结果
+      const responsePreview = response && response.length > 500 
+        ? response.substring(0, 500) + '...' 
+        : (response || '(空响应)');
+      
+      BotUtil.makeLog('info',
+        `[${this.name}] LLM响应\n长度: ${response?.length || 0}字符\n内容: ${responsePreview}`,
+        'AIStream'
+      );
+      
+      return response;
     } catch (error) {
       BotUtil.makeLog('error', `AI调用失败: ${error.message}`, 'AIStream');
       return null;
@@ -1055,6 +1079,18 @@ export default class AIStream {
     const config = this.resolveLLMConfig(apiConfig);
     const client = LLMFactory.createClient(config);
 
+    // 调试日志：记录调用信息
+    const messagesPreview = messages.map(m => {
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      const preview = content.length > 200 ? content.substring(0, 200) + '...' : content;
+      return `${m.role}: ${preview}`;
+    }).join('\n');
+    
+    BotUtil.makeLog('info',
+      `[${this.name}] 调用LLM工厂(流式)\nProvider: ${config.provider || 'unknown'}\nModel: ${config.model || 'unknown'}\n消息:\n${messagesPreview}`,
+      'AIStream'
+    );
+
     let fullText = '';
 
     const wrapDelta = (delta) => {
@@ -1065,6 +1101,16 @@ export default class AIStream {
 
     try {
       await client.chatStream(messages, wrapDelta, config);
+      
+      // 调试日志：记录流式响应结果
+      const responsePreview = fullText && fullText.length > 500 
+        ? fullText.substring(0, 500) + '...' 
+        : (fullText || '(空响应)');
+      
+      BotUtil.makeLog('info',
+        `[${this.name}] LLM流式响应完成\n长度: ${fullText?.length || 0}字符\n内容: ${responsePreview}`,
+        'AIStream'
+      );
     } catch (error) {
       BotUtil.makeLog('error', `AI调用失败: ${error.message}`, 'AIStream');
       throw error;
@@ -1343,7 +1389,8 @@ export default class AIStream {
 
           if (decision.shouldUseTodo && decision.todos.length > 0) {
             await stream.workflowManager.createWorkflow(e, questionText, decision.todos);
-            return `✅ 已启动多步骤工作流（${decision.todos.length}个步骤）`;
+            // 工作流已启动，会自己负责所有reply，返回null让插件不处理
+            return null;
           }
         }
       }
@@ -1352,7 +1399,12 @@ export default class AIStream {
         ? question
         : (question?.content || question?.text || question);
       try {
-        return await stream.execute(e, finalQuestion, apiConfig);
+        const response = await stream.execute(e, finalQuestion, apiConfig);
+        if (enableTodo && response && e?.reply) {
+          await e.reply(response);
+          return null;
+        }
+        return response;
       } catch (error) {
         BotUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AIStream');
         return null;
