@@ -604,7 +604,7 @@ class DeviceManager {
             );
 
             if (!aiResult) {
-                BotUtil.makeLog('warn', '⚠️ [AI] 工作流返回空结果', deviceId);
+                BotUtil.makeLog('warn', '⚠️ [AI] 工作流执行完成，但未返回结果', deviceId);
                 await this._sendAIError(deviceId);
                 return;
             }

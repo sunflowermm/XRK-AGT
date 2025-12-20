@@ -4,6 +4,7 @@ import fs from 'fs';
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
+import { MCPServer } from '../../core/stream/mcp-server.js';
 
 const STREAMS_DIR = paths.coreStream;
 
@@ -87,6 +88,9 @@ class StreamLoader {
         await this.applyEmbeddingConfig();
       }
 
+      // 阶段3: 初始化MCP服务（注册所有工具）
+      await this.initMCP();
+
       this.loadStats.totalLoadTime = Date.now() - this.loadStats.startTime;
       this.loadStats.totalStreams = this.streams.size;
       this.loaded = true;
@@ -137,6 +141,22 @@ class StreamLoader {
       // 调用基础init（不包括Embedding初始化）
       if (typeof stream.init === 'function') {
         await stream.init();
+      }
+
+      // 如果加载了TODO插件，为其他工作流注入工作流管理器
+      if (stream.name === 'todo' && stream.workflowManager) {
+        // 为已加载的工作流注入
+        for (const existingStream of this.streams.values()) {
+          if (existingStream.name !== 'todo' && !existingStream.workflowManager) {
+            stream.injectWorkflowManager(existingStream);
+          }
+        }
+      } else if (stream.name !== 'todo') {
+        // 为新加载的工作流注入（如果TODO已加载）
+        const todoStream = this.streams.get('todo');
+        if (todoStream && todoStream.workflowManager) {
+          todoStream.injectWorkflowManager(stream);
+        }
       }
 
       // 保存
@@ -375,9 +395,80 @@ class StreamLoader {
         provider: this.embeddingConfig?.provider || 'none',
         configured: this.embeddingConfigured
       },
+      mcp: {
+        toolCount: this.mcpServer?.tools?.size || 0
+      },
       loadStats: this.loadStats
     };
   }
+
+  /**
+   * 创建合并工作流（主工作流 + 副工作流，仅合并functions）
+   */
+  mergeStreams(options = {}) {
+    const {
+      name,
+      main,
+      secondary = [],
+      prefixSecondary = true,
+      description
+    } = options;
+
+    if (!main || secondary.length === 0) {
+      throw new Error('mergeStreams 需要主工作流和至少一个副工作流');
+    }
+
+    const mainStream = this.getStream(main);
+    if (!mainStream) {
+      throw new Error(`主工作流未找到: ${main}`);
+    }
+
+    const secondaryStreams = secondary
+      .map(n => this.getStream(n))
+      .filter(Boolean);
+
+    if (secondaryStreams.length === 0) {
+      throw new Error('未找到有效的副工作流');
+    }
+
+    const mergedName = name || `${main}-merged`;
+
+    if (this.streams.has(mergedName)) {
+      return this.streams.get(mergedName);
+    }
+
+    // 构建合并实例：克隆主工作流的原型和核心属性，独立的functions集合
+    const merged = Object.create(Object.getPrototypeOf(mainStream));
+    Object.assign(merged, mainStream);
+    merged.name = mergedName;
+    merged.description = description || `${mainStream.description || main} + ${secondary.join(',')}`;
+    merged.primaryStream = mainStream.name;
+    merged.secondaryStreams = secondaryStreams.map(s => s.name);
+    merged._mergedStreams = [mainStream, ...secondaryStreams]; // 保存引用，供workflow-manager使用
+    merged.functions = new Map();
+
+    const adopt = (source, isPrimary) => {
+      if (!source.functions) return;
+      for (const [fname, fconfig] of source.functions.entries()) {
+        const newName = (!isPrimary && prefixSecondary) ? `${source.name}.${fname}` : fname;
+        if (merged.functions.has(newName)) continue; // 避免冲突覆盖
+        merged.functions.set(newName, {
+          ...fconfig,
+          source: source.name,
+          primary: isPrimary
+        });
+      }
+    };
+
+    adopt(mainStream, true);
+    for (const s of secondaryStreams) {
+      adopt(s, false);
+    }
+
+    this.streams.set(mergedName, merged);
+    return merged;
+  }
+
 
   /**
    * 检查Embedding依赖
@@ -530,6 +621,93 @@ class StreamLoader {
     this.embeddingConfigured = false;
 
     BotUtil.makeLog('success', '✅ 清理完成', 'StreamLoader');
+  }
+}
+
+  /**
+   * 注册MCP服务（统一入口）
+   * @param {MCPServer} mcpServer - MCP服务器实例
+   */
+  registerMCP(mcpServer) {
+    if (!mcpServer) return;
+
+    // 从所有工作流收集工具并注册到MCP服务器
+    for (const stream of this.streams.values()) {
+      if (stream.functions && stream.functions.size > 0) {
+        // 自动注册工作流的函数为MCP工具
+        for (const [funcName, func] of stream.functions.entries()) {
+          if (func.enabled && mcpServer.registerTool) {
+            const toolName = stream.name !== 'mcp' ? `${stream.name}.${funcName}` : funcName;
+            mcpServer.registerTool(toolName, {
+              description: func.description || func.prompt || `执行${funcName}操作`,
+              inputSchema: this.buildMCPInputSchema(func),
+              handler: async (args) => {
+                const context = { e: args.e || null, question: null };
+                if (func.handler) {
+                  await func.handler(args, context);
+                  return { success: true, context };
+                }
+                return { success: false, message: '函数处理器未定义' };
+              }
+            });
+          }
+        }
+      }
+    }
+
+    // 保存MCP服务器引用（供HTTP API使用）
+    this.mcpServer = mcpServer;
+    BotUtil.makeLog('info', `MCP服务已注册，共${mcpServer.tools.size}个工具`, 'StreamLoader');
+  }
+
+  /**
+   * 初始化MCP服务（如果配置启用）
+   */
+  async initMCP() {
+    const mcpConfig = cfg.aistream?.mcp || {};
+    if (mcpConfig.enabled === false) {
+      BotUtil.makeLog('debug', 'MCP服务已禁用', 'StreamLoader');
+      return;
+    }
+
+    // 创建MCP服务器实例
+    if (!this.mcpServer) {
+      this.mcpServer = new MCPServer();
+      BotUtil.makeLog('info', 'MCP服务器已创建', 'StreamLoader');
+    }
+
+    // 注册所有工作流的工具
+    this.registerMCP(this.mcpServer);
+  }
+
+  /**
+   * 构建MCP输入schema
+   */
+  buildMCPInputSchema(func) {
+    const schema = {
+      type: 'object',
+      properties: {},
+      required: []
+    };
+
+    if (func.prompt) {
+      const paramMatches = func.prompt.match(/\[([^\]]+)\]/g);
+      if (paramMatches) {
+        paramMatches.forEach(match => {
+          const parts = match.replace(/[\[\]]/g, '').split(':');
+          if (parts.length > 1) {
+            const paramName = parts[1].trim();
+            schema.properties[paramName] = {
+              type: 'string',
+              description: `参数: ${paramName}`
+            };
+            schema.required.push(paramName);
+          }
+        });
+      }
+    }
+
+    return schema;
   }
 }
 

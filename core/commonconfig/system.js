@@ -1615,6 +1615,37 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
+            // ==================== MCP服务配置 ====================
+            mcp: {
+              type: 'object',
+              label: 'MCP服务配置',
+              description: 'Model Context Protocol (MCP) 服务配置，用于工具调用和跨平台集成',
+              component: 'SubForm',
+              fields: {
+                enabled: {
+                  type: 'boolean',
+                  label: '启用MCP服务',
+                  description: '启用MCP服务，允许其他平台连接和调用工具',
+                  default: true,
+                  component: 'Switch'
+                },
+                port: {
+                  type: 'number',
+                  label: 'MCP服务端口',
+                  description: 'MCP服务监听的端口号（可选，默认使用HTTP API端口）',
+                  min: 1024,
+                  max: 65535,
+                  component: 'InputNumber'
+                },
+                autoRegister: {
+                  type: 'boolean',
+                  label: '自动注册工具',
+                  description: '自动从工作流中收集并注册MCP工具',
+                  default: true,
+                  component: 'Switch'
+                }
+              }
+            },
             // ==================== Embedding 向量检索配置 ====================
             embedding: {
               type: 'object',

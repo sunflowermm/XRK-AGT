@@ -394,19 +394,28 @@ node app   # 或 node start.js
 
 ## 文档与开发指南
 
-### 📚 完整文档
+### 📚 完整文档导航
 
-**[`docs/完整文档.md`](docs/完整文档.md)** - **推荐从这里开始**
+#### 🚀 快速开始
+- **[`docs/完整文档.md`](docs/完整文档.md)** - 整合了所有核心文档，推荐从这里开始
+- **[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)** - 项目整体架构与目录结构详细说明
 
-整合了所有核心文档，包含：
-- 快速开始指南
-- 架构总览
-- 核心模块详细说明（Bot、插件、Tasker、事件、API、AI、配置、渲染、工具）
-- 开发指南（编写插件、创建 Tasker、开发 API 等）
-- API 参考
-- 最佳实践
+#### 🤖 AI工作流系统（重点）
+- **[`docs/workflow-architecture.md`](docs/workflow-architecture.md)** - **AI工作流系统完整文档**
+  - 架构概览与核心特性
+  - 系统架构图与执行流程图
+  - 工作流合并原理详解
+  - 记忆系统与使用指南
+  - 最佳实践
+- **[`docs/mcp-guide.md`](docs/mcp-guide.md)** - **MCP (Model Context Protocol) 完整指南** ⭐
+  - MCP概述与架构图
+  - MCP服务器与HTTP API
+  - 工具注册机制详解
+  - 外部平台连接（小智AI、Claude、豆包）
+  - 示例工具与开发指南
+  - 配置说明
 
-### 📖 其他文档
+#### 📖 其他核心文档
 
 #### 运行核心与基础设施
 - [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)：项目整体架构与目录结构详细说明
@@ -428,7 +437,8 @@ node app   # 或 node start.js
 - [`docs/api-loader.md`](docs/api-loader.md)：API 加载器文档
 
 #### AI 工作流
-- [`docs/aistream.md`](docs/aistream.md)：AI 工作流详细文档
+- **[`docs/workflow-architecture.md`](docs/workflow-architecture.md)**：AI工作流系统完整文档（推荐）
+- [`docs/aistream.md`](docs/aistream.md)：AI 工作流基类详细文档
 
 #### 配置与渲染
 - [`docs/config-base.md`](docs/config-base.md)：配置系统详细文档

@@ -515,7 +515,12 @@ export default class AIStream {
   }
 
   /**
-   * 存储和检索
+   * 统一记忆系统（使用全局redis）
+   * 支持消息记忆、笔记记忆、工作流记忆等
+   */
+
+  /**
+   * 存储消息记忆（带embedding）
    */
   async storeMessageWithEmbedding(groupId, message) {
     if (!this.embeddingConfig.enabled || typeof redis === 'undefined' || !redis) {
@@ -527,7 +532,7 @@ export default class AIStream {
     }
 
     try {
-      const key = `ai:embedding:${this.name}:${groupId}`;
+      const key = `ai:memory:${this.name}:${groupId}`;
       const messageText = `${message.nickname}: ${message.message}`;
       
       const embedding = await this.generateEmbedding(messageText);
@@ -536,6 +541,7 @@ export default class AIStream {
       }
 
       const data = {
+        type: 'message',
         message: messageText,
         embedding: embedding,
         userId: message.user_id,
@@ -547,17 +553,155 @@ export default class AIStream {
       await redis.lPush(key, JSON.stringify(data));
       // 只保留最近 50 条，避免占用过多空间
       await redis.lTrim(key, 0, 49);
-      await redis.expire(key, this.embeddingConfig.cacheExpiry);
+      await redis.expire(key, this.embeddingConfig.cacheExpiry || 2592000); // 默认30天
     } catch {}
   }
 
-  async retrieveRelevantContexts(groupId, query) {
+  /**
+   * 存储笔记（工作流笔记，由AI决定是否记录）
+   * TODO笔记是临时记忆，30分钟过期，只在TODO循环内有效
+   * @param {string} workflowId - 工作流ID
+   * @param {string} content - 笔记内容
+   * @param {string} source - 来源（如todo_id）
+   * @param {boolean} isTemporary - 是否为临时笔记（TODO笔记，30分钟过期）
+   */
+  async storeNote(workflowId, content, source = '', isTemporary = true) {
+    if (typeof redis === 'undefined' || !redis) {
+      return false;
+    }
+
+    try {
+      // TODO笔记使用临时键，30分钟过期
+      const key = `ai:notes:${workflowId}`;
+      const note = {
+        content,
+        source,
+        time: Date.now(),
+        temporary: isTemporary
+      };
+      
+      if (isTemporary) {
+        // 临时笔记：30分钟过期
+        await redis.lPush(key, JSON.stringify(note));
+        await redis.expire(key, 1800); // 30分钟 = 1800秒
+      } else {
+        // 永久笔记：3天过期
+        await redis.lPush(key, JSON.stringify(note));
+        await redis.expire(key, 86400 * 3);
+      }
+      
+      // 限制笔记数量
+      await redis.lTrim(key, 0, 99); // 最多保留100条笔记
+      
+      return true;
+    } catch (error) {
+      BotUtil.makeLog('error', `存储笔记失败: ${error.message}`, 'AIStream');
+      return false;
+    }
+  }
+
+  /**
+   * 获取工作流笔记（自动过滤过期笔记）
+   * @param {string} workflowId - 工作流ID
+   * @returns {Array} 笔记列表
+   */
+  async getNotes(workflowId) {
+    if (typeof redis === 'undefined' || !redis) {
+      return [];
+    }
+
+    try {
+      const key = `ai:notes:${workflowId}`;
+      const notes = await redis.lRange(key, 0, -1);
+      const now = Date.now();
+      const validNotes = [];
+      
+      for (const noteStr of notes) {
+        try {
+          const note = JSON.parse(noteStr);
+          // 如果是临时笔记，检查是否过期（30分钟）
+          if (note.temporary) {
+            const age = now - (note.time || 0);
+            if (age > 1800000) continue; // 超过30分钟，跳过
+          }
+          validNotes.push(note);
+        } catch {
+          continue;
+        }
+      }
+      
+      return validNotes;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 存储工作流记忆
+   * @param {string} workflowId - 工作流ID
+   * @param {Object} data - 记忆数据
+   */
+  async storeWorkflowMemory(workflowId, data) {
+    if (typeof redis === 'undefined' || !redis) {
+      return false;
+    }
+
+    try {
+      const key = `ai:workflow:${workflowId}`;
+      const memory = {
+        ...data,
+        time: Date.now()
+      };
+
+      await redis.setEx(key, 86400 * 3, JSON.stringify(memory)); // 3天过期
+      return true;
+    } catch (error) {
+      BotUtil.makeLog('error', `存储工作流记忆失败: ${error.message}`, 'AIStream');
+      return false;
+    }
+  }
+
+  /**
+   * 获取工作流记忆
+   * @param {string} workflowId - 工作流ID
+   * @returns {Object|null} 记忆数据
+   */
+  async getWorkflowMemory(workflowId) {
+    if (typeof redis === 'undefined' || !redis) {
+      return null;
+    }
+
+    try {
+      const key = `ai:workflow:${workflowId}`;
+      const data = await redis.get(key);
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async retrieveRelevantContexts(groupId, query, includeNotes = false, workflowId = null) {
     if (!this.embeddingConfig.enabled || typeof redis === 'undefined' || !redis) return [];
     if (!this.embeddingReady || !query) return [];
 
     try {
-      const key = `ai:embedding:${this.name}:${groupId}`;
+      // 使用工作流名称作为键的一部分，确保每个工作流独立
+      const streamName = this.name; // 合并工作流会自动使用合并后的名称
+      const key = `ai:memory:${streamName}:${groupId}`;
       const messages = await redis.lRange(key, 0, -1);
+      
+      // 如果包含笔记，添加工作流笔记
+      if (includeNotes && workflowId) {
+        const notes = await this.getNotes(workflowId);
+        notes.forEach(note => {
+          messages.push(JSON.stringify({
+            type: 'note',
+            message: `[笔记] ${note.content}`,
+            time: note.time,
+            source: note.source
+          }));
+        });
+      }
       if (!messages || messages.length === 0) return [];
 
       const parsedMessages = [];
@@ -863,6 +1007,31 @@ export default class AIStream {
     return { functions: orderedFunctions, cleanText };
   }
 
+  /**
+   * 执行函数（支持合并工作流）
+   * @private
+   */
+  async _executeFunctionWithMerge(func, context) {
+    // 尝试在当前工作流执行
+    if (this.functions && this.functions.has(func.type)) {
+      await this.executeFunction(func.type, func.params, context);
+      return true;
+    }
+    
+    // 如果是合并工作流，尝试在合并的工作流中执行
+    if (this._mergedStreams) {
+      for (const mergedStream of this._mergedStreams) {
+        if (mergedStream.functions && mergedStream.functions.has(func.type)) {
+          await mergedStream.executeFunction(func.type, func.params, context);
+          return true;
+        }
+      }
+    }
+    
+    BotUtil.makeLog('warn', `函数未找到: ${func.type}`, 'AIStream');
+    return false;
+  }
+
   async executeFunction(type, params, context) {
     const func = this.functions.get(type);
     
@@ -1112,21 +1281,26 @@ export default class AIStream {
       
       const { functions, cleanText } = this.parseFunctions(response, context);
       
+      // 执行函数（支持合并工作流）
       for (let i = 0; i < functions.length; i++) {
         const func = functions[i];
-        await this.executeFunction(func.type, func.params, context);
+        await this._executeFunctionWithMerge(func, context);
         
         if (i < functions.length - 1 && !func.noDelay) {
           await BotUtil.sleep(2500);
         }
       }
       
+      // 存储AI响应到记忆系统（包含执行的函数信息）
       if (this.embeddingConfig.enabled && cleanText && e) {
         const groupId = e.group_id || `private_${e.user_id}`;
+        const executedFunctions = functions.length > 0 
+          ? `[执行了: ${functions.map(f => f.type).join(', ')}] ` 
+          : '';
         this.storeMessageWithEmbedding(groupId, {
           user_id: e.self_id,
           nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
-          message: cleanText,
+          message: `${executedFunctions}${cleanText}`,
           message_id: Date.now().toString(),
           time: Date.now()
         }).catch(() => {});
@@ -1142,9 +1316,91 @@ export default class AIStream {
     }
   }
 
-  async process(e, question, apiConfig = {}) {
+  /**
+   * 处理工作流（支持合并工作流和TODO决策）
+   * @param {Object} e - 事件对象
+   * @param {string|Object} question - 用户问题
+   * @param {Object} options - 处理选项
+   *   - mergeStreams: Array<string> - 要合并的工作流名称列表
+   *   - enableTodo: boolean - 是否启用TODO智能决策
+   *   - enableMemory: boolean - 是否启用记忆系统
+   *   - apiConfig: Object - LLM配置
+   * @returns {Promise<string|null>} 响应文本
+   */
+  async process(e, question, options = {}) {
     try {
-      return await this.execute(e, question, apiConfig);
+      const {
+        mergeStreams = [],
+        enableTodo = false,
+        enableMemory = false,
+        ...apiConfig
+      } = options;
+
+      // 如果需要合并工作流，创建合并流
+      let stream = this;
+      if (mergeStreams.length > 0) {
+        const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
+        const mergedName = `${this.name}-${mergeStreams.join('-')}`;
+        stream = StreamLoader.getStream(mergedName) ||
+          StreamLoader.mergeStreams({
+            name: mergedName,
+            main: this.name,
+            secondary: mergeStreams,
+            prefixSecondary: true
+          });
+        
+        // 确保合并流有workflowManager（从todo插件注入）
+        if (!stream.workflowManager) {
+          const todoStream = StreamLoader.getStream('todo');
+          if (todoStream && todoStream.workflowManager) {
+            todoStream.injectWorkflowManager(stream);
+          }
+        } else {
+          // 更新workflowManager的stream引用
+          stream.workflowManager.stream = stream;
+        }
+      }
+
+      // 如果启用TODO，进行智能决策
+      if (enableTodo) {
+        // 确保有workflowManager
+        if (!stream.workflowManager) {
+          const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
+          const todoStream = StreamLoader.getStream('todo');
+          if (todoStream && todoStream.workflowManager) {
+            todoStream.injectWorkflowManager(stream);
+          }
+        }
+        
+        if (stream.workflowManager) {
+          const decision = await stream.workflowManager.decideWorkflowMode(e, 
+          typeof question === 'string' ? question : (question?.content || question?.text || '')
+        );
+
+        if (decision.shouldUseTodo && decision.todos.length > 0) {
+          // 复杂任务：启动TODO工作流
+          const workflowId = await stream.workflowManager.createWorkflow(e, 
+            typeof question === 'string' ? question : (question?.content || question?.text || ''),
+            decision.todos
+          );
+          // TODO工作流在后台执行，返回初始消息
+          return `✅ 已启动多步骤工作流（${decision.todos.length}个步骤）`;
+        }
+      }
+
+      // 如果启用记忆系统，注册记忆插件
+      if (enableMemory) {
+        const MemoryStream = StreamLoader.getStream('memory');
+        if (MemoryStream) {
+          // 记忆系统会自动工作
+        }
+      }
+
+      // 执行工作流（确保question格式正确）
+      const finalQuestion = typeof question === 'string' 
+        ? question 
+        : (question?.content || question?.text || question);
+      return await stream.execute(e, finalQuestion, apiConfig);
     } catch (error) {
       BotUtil.makeLog('error', 
         `工作流处理失败[${this.name}]: ${error.message}`, 

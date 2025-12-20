@@ -909,48 +909,80 @@ export default class ChatStream extends AIStream {
     return images[Math.floor(Math.random() * images.length)];
   }
 
+  /**
+   * 记录消息到历史（多平台兼容）
+   * 历史记录包含：用户信息、消息内容、消息ID、时间戳
+   * 支持onebot、其他平台的事件对象
+   */
   recordMessage(e) {
+    if (!e) return;
+    
     try {
-      const historyKey = e.group_id || `private_${e.user_id}`;
+      // 多平台兼容：获取群组ID或用户ID
+      const groupId = e.group_id || e.groupId || null;
+      const userId = e.user_id || e.userId || e.user?.id || null;
+      const historyKey = groupId || `private_${userId}`;
 
-      let message = e.raw_message || e.msg || '';
-      if (e.message && Array.isArray(e.message)) {
-        message = e.message.map(seg => {
-          switch (seg.type) {
-            case 'text': return seg.text;
-            case 'image': return '[图片]';
-            case 'at': return `[CQ:at,qq=${seg.qq}]`;
-            case 'reply': return `[CQ:reply,id=${seg.id}]`;
-            default: return '';
-          }
-        }).join('');
+      // 多平台兼容：提取消息内容
+      let message = '';
+      if (e.raw_message) {
+        message = e.raw_message;
+      } else if (e.msg) {
+        message = e.msg;
+      } else if (e.message) {
+        if (typeof e.message === 'string') {
+          message = e.message;
+        } else if (Array.isArray(e.message)) {
+          // onebot格式：消息段数组
+          message = e.message.map(seg => {
+            switch (seg.type) {
+              case 'text': return seg.text || '';
+              case 'image': return '[图片]';
+              case 'at': return `@${seg.qq || seg.user_id || ''}`;
+              case 'reply': return `[回复:${seg.id || ''}]`;
+              default: return '';
+            }
+          }).join('');
+        }
+      } else if (e.content) {
+        message = typeof e.content === 'string' ? e.content : e.content.text || '';
       }
 
+      // 多平台兼容：获取用户信息
+      const nickname = e.sender?.card || e.sender?.nickname || 
+                      e.user?.name || e.user?.nickname || 
+                      e.from?.name || '未知';
+      const messageId = e.message_id || e.messageId || e.id || Date.now().toString();
+
       const msgData = {
-        user_id: e.user_id,
-        nickname: e.sender?.card || e.sender?.nickname || '未知',
+        user_id: userId,
+        nickname,
         message,
-        message_id: e.message_id,
-        time: Date.now()
+        message_id: messageId,
+        time: e.time || Date.now(),
+        platform: e.platform || 'onebot' // 标识平台类型
       };
 
-      // 群聊内存历史
-      if (e.isGroup) {
-        if (!ChatStream.messageHistory.has(e.group_id)) {
-          ChatStream.messageHistory.set(e.group_id, []);
+      // 群聊内存历史（仅群聊）
+      if (groupId && e.isGroup !== false) {
+        if (!ChatStream.messageHistory.has(groupId)) {
+          ChatStream.messageHistory.set(groupId, []);
         }
-        const history = ChatStream.messageHistory.get(e.group_id);
+        const history = ChatStream.messageHistory.get(groupId);
         history.push(msgData);
-        if (history.length > 30) {
+        // 限制历史记录数量，避免内存溢出
+        if (history.length > 50) {
           history.shift();
         }
       }
 
-      // 语义检索存储
+      // 语义检索存储（启用embedding时）
       if (this.embeddingConfig?.enabled && message && message.length > 5) {
         this.storeMessageWithEmbedding(historyKey, msgData).catch(() => {});
       }
-    } catch {}
+    } catch (error) {
+      BotUtil.makeLog('debug', `记录消息失败: ${error.message}`, 'ChatStream');
+    }
   }
 
   async getBotRole(e) {
@@ -1234,20 +1266,49 @@ ${isGlobalTrigger ?
       // 解析功能和文本
       const { functions, cleanText } = this.parseFunctions(response, context);
       
-      // 执行所有功能
+      // 执行所有功能（记录到历史）
+      const executedFunctions = [];
       for (const func of functions) {
-        await this.executeFunction(func.type, func.params, context);
+        try {
+          await this.executeFunction(func.type, func.params, context);
+          executedFunctions.push(func.type);
+        } catch (error) {
+          BotUtil.makeLog('error', `函数执行失败[${func.type}]: ${error.message}`, 'ChatStream');
+        }
       }
       
       if (cleanText && cleanText.trim()) {
+        // 记录AI响应到内存历史（包含执行的函数信息）
+        if (e?.isGroup && e.group_id) {
+          const history = ChatStream.messageHistory.get(e.group_id) || [];
+          const functionInfo = executedFunctions.length > 0 
+            ? `[执行了: ${executedFunctions.join(', ')}] ` 
+            : '';
+          history.push({
+            user_id: e.self_id,
+            nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
+            message: `${functionInfo}${cleanText}`,
+            message_id: Date.now().toString(),
+            time: Date.now(),
+            platform: 'onebot'
+          });
+          if (history.length > 50) {
+            history.shift();
+          }
+        }
+        
         await this.sendMessages(e, cleanText);
         
+        // 记录到embedding记忆系统（包含执行的函数信息）
         if (this.embeddingConfig?.enabled) {
           const historyKey = e.group_id || `private_${e.user_id}`;
+          const functionInfo = executedFunctions.length > 0 
+            ? `[执行了: ${executedFunctions.join(', ')}] ` 
+            : '';
           this.storeMessageWithEmbedding(historyKey, {
             user_id: e.self_id,
             nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
-            message: cleanText,
+            message: `${functionInfo}${cleanText}`,
             message_id: Date.now().toString(),
             time: Date.now()
           }).catch(() => {});
