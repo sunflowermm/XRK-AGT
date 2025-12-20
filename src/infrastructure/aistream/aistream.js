@@ -1285,10 +1285,13 @@ export default class AIStream {
         ...apiConfig
       } = options;
 
-      // 如果需要合并工作流，创建合并流
+      let StreamLoader = null;
+      if (mergeStreams.length > 0 || enableTodo) {
+        StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
+      }
+
       let stream = this;
       if (mergeStreams.length > 0) {
-        const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
         const mergedName = `${this.name}-${mergeStreams.join('-')}`;
         stream = StreamLoader.getStream(mergedName) ||
           StreamLoader.mergeStreams({
@@ -1310,7 +1313,6 @@ export default class AIStream {
 
       if (enableTodo) {
         if (!stream.workflowManager) {
-          const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
           const todoStream = StreamLoader.getStream('todo');
           if (todoStream?.workflowManager) {
             todoStream.injectWorkflowManager(stream);
