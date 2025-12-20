@@ -2,8 +2,6 @@ import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
 
 export default class MemoryStream extends AIStream {
-  static initialized = false;
-
   constructor() {
     super({
       name: 'memory',
@@ -32,7 +30,6 @@ export default class MemoryStream extends AIStream {
       BotUtil.makeLog('warn', `[${this.name}] Embedding初始化失败，记忆功能可能受限`, 'MemoryStream');
     }
 
-    MemoryStream.initialized = true;
     BotUtil.makeLog('info', `[${this.name}] 记忆系统已初始化`, 'MemoryStream');
   }
 
@@ -46,6 +43,5 @@ export default class MemoryStream extends AIStream {
 
   async cleanup() {
     await super.cleanup();
-    MemoryStream.initialized = false;
   }
 }

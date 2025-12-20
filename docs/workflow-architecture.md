@@ -372,7 +372,7 @@ const mcpServer = StreamLoader.mcpServer;
 **位置**: `core/http/mcp.js`
 
 - MCP服务HTTP接口，提供RESTful API和WebSocket连接
-- 使用 `core/http/mcp-server.js` 中的 `MCPServer` 类
+- 使用 `src/utils/mcp-server.js` 中的 `MCPServer` 类
 - 不需要registerFunction，专注于MCP服务
 
 ---
@@ -776,7 +776,7 @@ ${this.buildFunctionsPrompt()}`;
 
 ```javascript
 import AIStream from '#infrastructure/aistream/aistream.js';
-import { MCPServer } from '#core/http/mcp-server.js';
+import { MCPServer } from '#utils/mcp-server.js';
 import StreamLoader from '#infrastructure/aistream/loader.js';
 
 export default class MyMCPStream extends AIStream {

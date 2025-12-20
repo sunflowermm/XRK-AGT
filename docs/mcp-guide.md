@@ -111,7 +111,7 @@ sequenceDiagram
 
 ### MCPServer类
 
-**位置**: `core/http/mcp-server.js`
+**位置**: `src/utils/mcp-server.js`
 
 **核心功能**：
 - 工具注册与管理

@@ -32,7 +32,6 @@ export default class ChatStream extends AIStream {
   static messageHistory = new Map();
   static userCache = new Map();
   static cleanupTimer = null;
-  static initialized = false;
 
   constructor() {
     super({
@@ -62,10 +61,6 @@ export default class ChatStream extends AIStream {
   async init() {
     await super.init();
     
-    if (ChatStream.initialized) {
-      return;
-    }
-    
     try {
       await BotUtil.mkdir(EMOTIONS_DIR);
       await this.loadEmotionImages();
@@ -74,8 +69,6 @@ export default class ChatStream extends AIStream {
       if (!ChatStream.cleanupTimer) {
         ChatStream.cleanupTimer = setInterval(() => this.cleanupCache(), 300000);
       }
-      
-      ChatStream.initialized = true;
     } catch (error) {
       BotUtil.makeLog('error', 
         `[${this.name}] 初始化失败: ${error.message}`, 
@@ -1515,7 +1508,5 @@ ${isGlobalTrigger ?
       clearInterval(ChatStream.cleanupTimer);
       ChatStream.cleanupTimer = null;
     }
-    
-    ChatStream.initialized = false;
   }
 }

@@ -4,7 +4,7 @@ import fs from 'fs';
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
-import { MCPServer } from '../../../core/http/mcp-server.js';
+import { MCPServer } from '#utils/mcp-server.js';
 
 const STREAMS_DIR = paths.coreStream;
 

@@ -6,7 +6,7 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
-import { BaseTools } from '../tools/base-tools.js';
+import { BaseTools } from '#utils/base-tools.js';
 import si from 'systeminformation';
 
 // 仅在需要的平台上做判断，避免无意义的常量
@@ -40,7 +40,6 @@ const execCommandWithOutput = (command, options = {}) => {
  * 提供系统操作、文件管理、信息查询等实用功能
  */
 export default class DesktopStream extends AIStream {
-  static initialized = false;
 
   constructor() {
     super({
@@ -105,7 +104,6 @@ export default class DesktopStream extends AIStream {
       }, 30000);
     }
     
-    DesktopStream.initialized = true;
     BotUtil.makeLog('info', `[${this.name}] 工作流已初始化`, 'DesktopStream');
   }
 
@@ -1315,6 +1313,5 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
     }
     
     await super.cleanup();
-    DesktopStream.initialized = false;
   }
 }

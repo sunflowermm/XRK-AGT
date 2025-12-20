@@ -3,8 +3,6 @@ import BotUtil from '#utils/botutil.js';
 import { WorkflowManager } from '../workflow-manager.js';
 
 export default class TodoStream extends AIStream {
-  static initialized = false;
-
   constructor() {
     super({
       name: 'todo',
@@ -25,7 +23,6 @@ export default class TodoStream extends AIStream {
   async init() {
     await super.init();
     this.workflowManager = new WorkflowManager(this);
-    TodoStream.initialized = true;
     BotUtil.makeLog('info', `[${this.name}] TODO工作流插件已初始化`, 'TodoStream');
   }
 
@@ -46,6 +43,5 @@ export default class TodoStream extends AIStream {
 
   async cleanup() {
     await super.cleanup();
-    TodoStream.initialized = false;
   }
 }
