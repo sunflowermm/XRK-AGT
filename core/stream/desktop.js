@@ -268,76 +268,71 @@ export default class DesktopStream extends AIStream {
           await fs.writeFile(psScriptPath, psScriptContent, 'utf8');
           
           let output = '';
-          try {
-            const { spawn } = await import('child_process');
-            output = await new Promise((resolve, reject) => {
-              const ps = spawn('powershell', [
-                '-NoProfile',
-                '-ExecutionPolicy', 'Bypass',
-                '-STA',
-                '-File', psScriptPath
-              ], {
-                shell: false,
-                windowsHide: true
-              });
-              
-              let stdout = '';
-              let stderr = '';
-              
-              ps.stdout.on('data', (data) => { stdout += data.toString(); });
-              ps.stderr.on('data', (data) => { stderr += data.toString(); });
-              
-              ps.on('close', (code) => {
-                if (code !== 0) {
-                  reject(new Error(`PowerShell 退出码: ${code}。错误: ${stderr || stdout || '未知错误'}`));
-                } else {
-                  resolve(stdout.trim());
-                }
-              });
-              
-              ps.on('error', (err) => {
-                reject(new Error(`PowerShell 启动失败: ${err.message}`));
-              });
+          const { spawn } = await import('child_process');
+          output = await new Promise((resolve, reject) => {
+            const ps = spawn('powershell', [
+              '-NoProfile',
+              '-ExecutionPolicy', 'Bypass',
+              '-STA',
+              '-File', psScriptPath
+            ], {
+              shell: false,
+              windowsHide: true
             });
             
-            // 清理临时脚本
-            try { await fs.unlink(psScriptPath); } catch (e) {}
+            let stdout = '';
+            let stderr = '';
             
-            // 检查输出
-            if (!output || !output.includes('SUCCESS')) {
-              throw new Error(`截屏脚本执行异常。输出: ${output || '(无输出)'}`);
-            }
+            ps.stdout.on('data', (data) => { stdout += data.toString(); });
+            ps.stderr.on('data', (data) => { stderr += data.toString(); });
             
-            // 等待文件写入完成
-            let fileReady = false;
-            for (let retry = 0; retry < 10; retry++) {
-              await new Promise(resolve => setTimeout(resolve, 200));
-              try {
-                await fs.access(screenshotPath);
-                const stats = await fs.stat(screenshotPath);
-                if (stats.size > 0) {
-                  fileReady = true;
-                  break;
-                }
-              } catch (e) {
-                // 文件还未生成，继续等待
+            ps.on('close', (code) => {
+              if (code !== 0) {
+                reject(new Error(`PowerShell 退出码: ${code}。错误: ${stderr || stdout || '未知错误'}`));
+              } else {
+                resolve(stdout.trim());
               }
-            }
+            });
             
-            if (!fileReady) {
-              try {
-                await fs.access(screenshotPath);
-                const stats = await fs.stat(screenshotPath);
-                if (stats.size === 0) {
-                  throw new Error('截屏文件为空');
-                }
-              } catch (fileErr) {
-                throw new Error(`截屏文件未生成或无法访问: ${fileErr.message}。PowerShell 输出: ${output}`);
+            ps.on('error', (err) => {
+              reject(new Error(`PowerShell 启动失败: ${err.message}`));
+            });
+          });
+          
+          // 清理临时脚本
+          try { await fs.unlink(psScriptPath); } catch (e) {}
+          
+          // 检查输出
+          if (!output || !output.includes('SUCCESS')) {
+            throw new Error(`截屏脚本执行异常。输出: ${output || '(无输出)'}`);
+          }
+          
+          // 等待文件写入完成
+          let fileReady = false;
+          for (let retry = 0; retry < 10; retry++) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+            try {
+              await fs.access(screenshotPath);
+              const stats = await fs.stat(screenshotPath);
+              if (stats.size > 0) {
+                fileReady = true;
+                break;
               }
+            } catch (e) {
+              // 文件还未生成，继续等待
             }
-          } catch (execErr) {
-            try { await fs.unlink(psScriptPath); } catch (e) {}
-            throw execErr;
+          }
+          
+          if (!fileReady) {
+            try {
+              await fs.access(screenshotPath);
+              const stats = await fs.stat(screenshotPath);
+              if (stats.size === 0) {
+                throw new Error('截屏文件为空');
+              }
+            } catch (fileErr) {
+              throw new Error(`截屏文件未生成或无法访问: ${fileErr.message}。PowerShell 输出: ${output}`);
+            }
           }
     
           if (context.e) {
@@ -923,35 +918,29 @@ $excel.Quit()
       enabled: true
     });
 
-    // 新增：启动工作流
     this.registerFunction('start_workflow', {
       description: '启动多步骤工作流',
       prompt: `[启动工作流:目标描述] - 启动一个多步骤工作流，AI会自动规划步骤并执行，例如：[启动工作流:帮我打开微信并发送消息给张三]`,
       parser: (text, context) => {
         const functions = [];
-        let cleanText = text;
         const reg = /\[启动工作流:([^\]]+)\]/g;
         let match;
 
         while ((match = reg.exec(text)) !== null) {
           const goal = (match[1] || '').trim();
-          if (goal) {
-            functions.push({ type: 'start_workflow', params: { goal } });
-          }
+          if (goal) functions.push({ type: 'start_workflow', params: { goal } });
         }
 
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
+        return {
+          functions,
+          cleanText: functions.length > 0 ? text.replace(reg, '').trim() : text
+        };
       },
       handler: async (params, context) => {
         const goal = params?.goal;
         if (!goal) return;
 
         try {
-          // 让AI规划初始Todo列表
           const planningMessages = [
             {
               role: 'system',
@@ -975,18 +964,12 @@ ${goal}
 4. 查找联系人张三
 5. 发送消息给张三`
             },
-            {
-              role: 'user',
-              content: `请为以下目标规划执行步骤：\n${goal}`
-            }
+            { role: 'user', content: `请为以下目标规划执行步骤：\n${goal}` }
           ];
 
           const planningResponse = await this.callAI(planningMessages, this.config);
-          
-          // 解析步骤
           const todos = this.parsePlanningResponse(planningResponse, goal);
           
-          // 创建工作流（如果workflowManager已注入）
           if (this.workflowManager) {
             const workflowId = await this.workflowManager.createWorkflow(context.e, goal, todos);
             context.workflowId = workflowId;
@@ -1002,32 +985,24 @@ ${goal}
     });
   }
 
-  /**
-   * 解析AI规划响应，提取Todo列表
-   */
   parsePlanningResponse(response, goal) {
     const todos = [];
     const lines = response.split('\n');
     
     for (const line of lines) {
       const trimmed = line.trim();
-      // 匹配数字开头的步骤
       const stepMatch = trimmed.match(/^\d+[\.、]\s*(.+)$/);
       if (stepMatch) {
         todos.push(stepMatch[1].trim());
       } else if (trimmed && !trimmed.startsWith('步骤') && !trimmed.startsWith('目标')) {
-        // 如果没有数字编号，但看起来像步骤，也添加
         if (trimmed.length > 5 && trimmed.length < 100) {
           todos.push(trimmed);
         }
       }
     }
 
-    // 如果没有解析到步骤，使用默认步骤
     if (todos.length === 0) {
-      todos.push(`分析目标：${goal}`);
-      todos.push('执行必要操作');
-      todos.push('验证执行结果');
+      todos.push(`分析目标：${goal}`, '执行必要操作', '验证执行结果');
     }
 
     return todos;

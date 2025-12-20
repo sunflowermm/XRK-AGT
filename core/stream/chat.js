@@ -822,14 +822,14 @@ export default class ChatStream extends AIStream {
           let canRecall = false;
           let messageInfo = null;
           
-          try {
-            if (context.e.bot && context.e.bot.sendApi) {
+          if (context.e.bot && context.e.bot.sendApi) {
+            try {
               messageInfo = await context.e.bot.sendApi('get_msg', {
                 message_id: params.msgId
               });
+            } catch (error) {
+              // 忽略获取消息信息失败
             }
-          } catch (error) {
-            // 忽略获取消息信息失败
           }
           
           if (context.e.isGroup) {
@@ -1374,7 +1374,8 @@ ${isGlobalTrigger ?
         // 表情包标记
         const image = this.getRandomEmotionImage(marker.emotion);
         if (image) {
-          segments.push(segment.image(image));
+          const seg = global.segment || segment;
+          segments.push(seg.image(image));
         }
       } else if (marker.content.startsWith('[CQ:')) {
         // CQ码
@@ -1382,6 +1383,7 @@ ${isGlobalTrigger ?
         if (cqMatch) {
           const [, type, params] = cqMatch;
           const paramObj = {};
+          const seg = global.segment || segment;
           
           if (params) {
             params.split(',').forEach(p => {
@@ -1403,17 +1405,17 @@ ${isGlobalTrigger ?
                   );
                   
                   if (userExists || e.isMaster) {
-                    segments.push(segment.at(paramObj.qq));
+                    segments.push(seg.at(paramObj.qq));
                   }
                 } else {
                   // 私聊直接添加
-                  segments.push(segment.at(paramObj.qq));
+                  segments.push(seg.at(paramObj.qq));
                 }
               }
               break;
             case 'image':
               if (paramObj.file) {
-                segments.push(segment.image(paramObj.file));
+                segments.push(seg.image(paramObj.file));
               }
               break;
             // poke等其他不支持整合的CQ码已在parseFunctions中处理
@@ -1466,7 +1468,8 @@ ${isGlobalTrigger ?
         if (replyId) {
           // 有回复ID：回复段必须在最前面（OneBot协议要求）
           // segment.reply返回 { type: "reply", id, ... }，makeMsg会转换为 { type: "reply", data: { id } }
-          const replySegment = segment.reply(replyId);
+          const seg = global.segment || segment;
+          const replySegment = seg.reply(replyId);
           const replySegments = segments.length > 0 
             ? [replySegment, ...segments] 
             : [replySegment, ' '];

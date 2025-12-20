@@ -40,7 +40,7 @@ class LightweightSimilarity {
       this.idf.set(term, Math.log((docCount - count + 0.5) / (count + 0.5) + 1));
     }
 
-    this.avgDocLength = documents.reduce((sum, doc) => 
+    this.avgDocLength = documents.reduce((sum, doc) =>
       sum + this.tokenize(doc).length, 0) / docCount;
   }
 
@@ -109,7 +109,7 @@ export default class AIStream {
     this.version = options.version || '1.0.0';
     this.author = options.author || 'unknown';
     this.priority = options.priority || 100;
-    
+
     // AI配置
     this.config = {
       enabled: true,
@@ -120,10 +120,10 @@ export default class AIStream {
       frequencyPenalty: 0.6,
       ...options.config
     };
-    
+
     // 功能开关
     this.functionToggles = options.functionToggles || {};
-    
+
     // Embedding配置（支持全局档位）
     this.embeddingConfig = this.buildEmbeddingConfig(options.embedding);
 
@@ -143,7 +143,7 @@ export default class AIStream {
     if (!this.functions) {
       this.functions = new Map();
     }
-    
+
     if (this.embeddingModel === undefined) {
       this.embeddingModel = null;
       this.embeddingReady = false;
@@ -214,21 +214,21 @@ export default class AIStream {
 
   async initONNXEmbedding() {
     const ort = await import('onnxruntime-node');
-    
+
     const modelName = this.embeddingConfig.onnxModel;
     const cachePath = this.embeddingConfig.cachePath;
-    
+
     if (!fs.existsSync(cachePath)) {
       fs.mkdirSync(cachePath, { recursive: true });
     }
-    
+
     const modelPath = await this.downloadONNXModel(modelName);
-    
+
     this.embeddingSession = await ort.InferenceSession.create(modelPath, {
       executionProviders: ['cpu'],
       graphOptimizationLevel: 'all'
     });
-    
+
     await this.loadONNXTokenizer(modelName);
     await this.testEmbeddingModel();
   }
@@ -237,25 +237,25 @@ export default class AIStream {
     const cachePath = this.embeddingConfig.cachePath;
     const modelDir = path.join(cachePath, modelName.replace('/', '_'));
     const modelPath = path.join(modelDir, 'model_quantized.onnx');
-    
+
     if (fs.existsSync(modelPath)) {
       return modelPath;
     }
-    
+
     if (!fs.existsSync(modelDir)) {
       fs.mkdirSync(modelDir, { recursive: true });
     }
-    
+
     const modelUrl = `https://huggingface.co/${modelName}/resolve/main/onnx/model_quantized.onnx`;
-    
+
     const response = await fetch(modelUrl);
     if (!response.ok) {
       throw new Error(`下载失败: ${response.status}`);
     }
-    
+
     const buffer = await response.arrayBuffer();
     fs.writeFileSync(modelPath, Buffer.from(buffer));
-    
+
     return modelPath;
   }
 
@@ -270,27 +270,27 @@ export default class AIStream {
 
   async initHFEmbedding() {
     const config = this.embeddingConfig;
-    
+
     if (!config.hfToken) {
       throw new Error('未配置HF Token');
     }
 
     const { HfInference } = await import('@huggingface/inference');
     this.embeddingModel = new HfInference(config.hfToken);
-    
+
     await this.testHFConnection();
   }
 
   async initFastTextEmbedding() {
     const FastText = await import('fasttext.js');
-    
+
     const modelName = this.embeddingConfig.fasttextModel;
     const modelPath = path.join(this.embeddingConfig.cachePath, modelName);
-    
+
     if (!fs.existsSync(modelPath)) {
       await this.downloadFastTextModel(modelName);
     }
-    
+
     this.embeddingModel = new FastText.FastText();
     await this.embeddingModel.load(modelPath);
     await this.testEmbeddingModel();
@@ -299,25 +299,25 @@ export default class AIStream {
   async downloadFastTextModel(modelName) {
     const cachePath = this.embeddingConfig.cachePath;
     const modelPath = path.join(cachePath, modelName);
-    
+
     if (!fs.existsSync(cachePath)) {
       fs.mkdirSync(cachePath, { recursive: true });
     }
-    
+
     const modelUrl = `https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/${modelName}`;
-    
+
     const response = await fetch(modelUrl);
     if (!response.ok) {
       throw new Error(`下载失败: ${response.status}`);
     }
-    
+
     const buffer = await response.arrayBuffer();
     fs.writeFileSync(modelPath, Buffer.from(buffer));
   }
 
   async initAPIEmbedding() {
     const config = this.embeddingConfig;
-    
+
     if (!config.apiUrl || !config.apiKey) {
       throw new Error('未配置API');
     }
@@ -377,8 +377,8 @@ export default class AIStream {
           return null;
       }
     } catch (error) {
-      BotUtil.makeLog('debug', 
-        `[${this.name}] 生成Embedding失败: ${error.message}`, 
+      BotUtil.makeLog('debug',
+        `[${this.name}] 生成Embedding失败: ${error.message}`,
         'AIStream'
       );
       return null;
@@ -391,31 +391,31 @@ export default class AIStream {
     }
 
     const ort = await import('onnxruntime-node');
-    
+
     const inputIds = this.tokenizer.encode(text);
     const attentionMask = new Array(inputIds.length).fill(1);
-    
+
     const maxLength = 512;
     while (inputIds.length < maxLength) {
       inputIds.push(0);
       attentionMask.push(0);
     }
-    
+
     const inputIdsTensor = new ort.Tensor('int64', BigInt64Array.from(inputIds.map(id => BigInt(id))), [1, maxLength]);
     const attentionMaskTensor = new ort.Tensor('int64', BigInt64Array.from(attentionMask.map(m => BigInt(m))), [1, maxLength]);
-    
+
     const feeds = {
       input_ids: inputIdsTensor,
       attention_mask: attentionMaskTensor
     };
-    
+
     const results = await this.embeddingSession.run(feeds);
     const outputTensor = results[Object.keys(results)[0]];
-    
+
     const embeddings = Array.from(outputTensor.data);
     const embeddingDim = embeddings.length / maxLength;
     const meanEmbedding = new Array(embeddingDim).fill(0);
-    
+
     let validTokens = 0;
     for (let i = 0; i < maxLength; i++) {
       if (attentionMask[i] === 1) {
@@ -425,7 +425,7 @@ export default class AIStream {
         validTokens++;
       }
     }
-    
+
     const result = meanEmbedding.map(v => v / validTokens);
     const norm = Math.sqrt(result.reduce((sum, v) => sum + v * v, 0));
     return result.map(v => v / norm);
@@ -440,7 +440,7 @@ export default class AIStream {
       model: this.embeddingConfig.hfModel,
       inputs: text
     });
-    
+
     return Array.isArray(result) ? result : Array.from(result);
   }
 
@@ -455,7 +455,7 @@ export default class AIStream {
 
   async generateAPIEmbedding(text) {
     const config = this.embeddingConfig;
-    
+
     if (!config.apiUrl || !config.apiKey) {
       throw new Error('未配置API');
     }
@@ -480,11 +480,11 @@ export default class AIStream {
 
     const result = await response.json();
     const embedding = result.data?.[0]?.embedding;
-    
+
     if (!embedding || !Array.isArray(embedding)) {
       throw new Error('API返回无效数据');
     }
-    
+
     return embedding;
   }
 
@@ -534,7 +534,7 @@ export default class AIStream {
     try {
       const key = `ai:memory:${this.name}:${groupId}`;
       const messageText = `${message.nickname}: ${message.message}`;
-      
+
       const embedding = await this.generateEmbedding(messageText);
       if (!embedding) {
         return;
@@ -554,45 +554,18 @@ export default class AIStream {
       // 只保留最近 50 条，避免占用过多空间
       await redis.lTrim(key, 0, 49);
       await redis.expire(key, this.embeddingConfig.cacheExpiry || 2592000); // 默认30天
-    } catch (e) {}
+    } catch (e) { }
   }
 
-  /**
-   * 存储笔记（工作流笔记，由AI决定是否记录）
-   * TODO笔记是临时记忆，30分钟过期，只在TODO循环内有效
-   * @param {string} workflowId - 工作流ID
-   * @param {string} content - 笔记内容
-   * @param {string} source - 来源（如todo_id）
-   * @param {boolean} isTemporary - 是否为临时笔记（TODO笔记，30分钟过期）
-   */
   async storeNote(workflowId, content, source = '', isTemporary = true) {
-    if (typeof redis === 'undefined' || !redis) {
-      return false;
-    }
+    if (typeof redis === 'undefined' || !redis) return false;
 
     try {
-      // TODO笔记使用临时键，30分钟过期
       const key = `ai:notes:${workflowId}`;
-      const note = {
-        content,
-        source,
-        time: Date.now(),
-        temporary: isTemporary
-      };
-      
-      if (isTemporary) {
-        // 临时笔记：30分钟过期
-        await redis.lPush(key, JSON.stringify(note));
-        await redis.expire(key, 1800); // 30分钟 = 1800秒
-      } else {
-        // 永久笔记：3天过期
-        await redis.lPush(key, JSON.stringify(note));
-        await redis.expire(key, 86400 * 3);
-      }
-      
-      // 限制笔记数量
-      await redis.lTrim(key, 0, 99); // 最多保留100条笔记
-      
+      const note = { content, source, time: Date.now(), temporary: isTemporary };
+      await redis.lPush(key, JSON.stringify(note));
+      await redis.expire(key, isTemporary ? 1800 : 86400 * 3);
+      await redis.lTrim(key, 0, 99);
       return true;
     } catch (error) {
       BotUtil.makeLog('error', `存储笔记失败: ${error.message}`, 'AIStream');
@@ -600,60 +573,38 @@ export default class AIStream {
     }
   }
 
-  /**
-   * 获取工作流笔记（自动过滤过期笔记）
-   * @param {string} workflowId - 工作流ID
-   * @returns {Array} 笔记列表
-   */
   async getNotes(workflowId) {
-    if (typeof redis === 'undefined' || !redis) {
-      return [];
-    }
+    if (typeof redis === 'undefined' || !redis) return [];
 
     try {
       const key = `ai:notes:${workflowId}`;
       const notes = await redis.lRange(key, 0, -1);
       const now = Date.now();
       const validNotes = [];
-      
+
       for (const noteStr of notes) {
         try {
           const note = JSON.parse(noteStr);
-          // 如果是临时笔记，检查是否过期（30分钟）
-          if (note.temporary) {
-            const age = now - (note.time || 0);
-            if (age > 1800000) continue; // 超过30分钟，跳过
-          }
+          if (note.temporary && (now - (note.time || 0)) > 1800000) continue;
           validNotes.push(note);
         } catch (e) {
           continue;
         }
       }
-      
+
       return validNotes;
     } catch (e) {
       return [];
     }
   }
 
-  /**
-   * 存储工作流记忆
-   * @param {string} workflowId - 工作流ID
-   * @param {Object} data - 记忆数据
-   */
   async storeWorkflowMemory(workflowId, data) {
-    if (typeof redis === 'undefined' || !redis) {
-      return false;
-    }
+    if (typeof redis === 'undefined' || !redis) return false;
 
     try {
       const key = `ai:workflow:${workflowId}`;
-      const memory = {
-        ...data,
-        time: Date.now()
-      };
-
-      await redis.setEx(key, 86400 * 3, JSON.stringify(memory)); // 3天过期
+      const memory = { ...data, time: Date.now() };
+      await redis.setEx(key, 86400 * 3, JSON.stringify(memory));
       return true;
     } catch (error) {
       BotUtil.makeLog('error', `存储工作流记忆失败: ${error.message}`, 'AIStream');
@@ -661,15 +612,8 @@ export default class AIStream {
     }
   }
 
-  /**
-   * 获取工作流记忆
-   * @param {string} workflowId - 工作流ID
-   * @returns {Object|null} 记忆数据
-   */
   async getWorkflowMemory(workflowId) {
-    if (typeof redis === 'undefined' || !redis) {
-      return null;
-    }
+    if (typeof redis === 'undefined' || !redis) return null;
 
     try {
       const key = `ai:workflow:${workflowId}`;
@@ -685,12 +629,10 @@ export default class AIStream {
     if (!this.embeddingReady || !query) return [];
 
     try {
-      // 使用工作流名称作为键的一部分，确保每个工作流独立
-      const streamName = this.name; // 合并工作流会自动使用合并后的名称
+      const streamName = this.name;
       const key = `ai:memory:${streamName}:${groupId}`;
       const messages = await redis.lRange(key, 0, -1);
-      
-      // 如果包含笔记，添加工作流笔记
+
       if (includeNotes && workflowId) {
         const notes = await this.getNotes(workflowId);
         notes.forEach(note => {
@@ -709,7 +651,7 @@ export default class AIStream {
         try {
           const data = JSON.parse(msg);
           if (data && typeof data.message === 'string') parsedMessages.push(data);
-        } catch (e) {}
+        } catch (e) { }
       }
 
       if (parsedMessages.length === 0) return [];
@@ -791,7 +733,7 @@ export default class AIStream {
     }
 
     const groupId = e ? (e.group_id || `private_${e.user_id}`) : 'default';
-    
+
     // 如果question是字符串，直接使用；如果是对象，提取text/content；如果为null，尝试从messages提取
     let query = '';
     if (typeof question === 'string') {
@@ -799,7 +741,7 @@ export default class AIStream {
     } else if (question && typeof question === 'object') {
       query = question.content || question.text || '';
     }
-    
+
     // 如果query为空，尝试从baseMessages中提取
     if (!query && Array.isArray(baseMessages)) {
       for (let i = baseMessages.length - 1; i >= 0; i--) {
@@ -822,7 +764,7 @@ export default class AIStream {
 
     try {
       const relevantContexts = await this.retrieveRelevantContexts(groupId, query);
-      
+
       if (relevantContexts.length === 0) {
         return baseMessages;
       }
@@ -830,7 +772,7 @@ export default class AIStream {
       const enhanced = [...baseMessages];
       const contextPrompt = [
         '\n【相关历史对话】',
-        relevantContexts.map((ctx, i) => 
+        relevantContexts.map((ctx, i) =>
           `${i + 1}. ${ctx.message.substring(0, 100)} (相关度: ${(ctx.similarity * 100).toFixed(0)}%)`
         ).join('\n'),
         '\n以上是相关历史对话，可参考但不要重复。\n'
@@ -847,8 +789,8 @@ export default class AIStream {
 
       return enhanced;
     } catch (error) {
-      BotUtil.makeLog('debug', 
-        `[${this.name}] 构建上下文失败: ${error.message}`, 
+      BotUtil.makeLog('debug',
+        `[${this.name}] 构建上下文失败: ${error.message}`,
         'AIStream'
       );
       return baseMessages;
@@ -976,7 +918,7 @@ export default class AIStream {
   parseFunctions(text, context = {}) {
     let cleanText = text;
     const allFunctions = [];
-    
+
     for (const func of this.functions.values()) {
       if (!func.enabled || !func.parser) continue;
 
@@ -1003,7 +945,7 @@ export default class AIStream {
 
     withOrder.sort((a, b) => a.order - b.order);
     const orderedFunctions = withOrder.concat(withoutOrder);
-    
+
     return { functions: orderedFunctions, cleanText };
   }
 
@@ -1017,7 +959,7 @@ export default class AIStream {
       await this.executeFunction(func.type, func.params, context);
       return true;
     }
-    
+
     // 如果是合并工作流，尝试在合并的工作流中执行
     if (this._mergedStreams) {
       for (const mergedStream of this._mergedStreams) {
@@ -1027,22 +969,22 @@ export default class AIStream {
         }
       }
     }
-    
+
     BotUtil.makeLog('warn', `函数未找到: ${func.type}`, 'AIStream');
     return false;
   }
 
   async executeFunction(type, params, context) {
     const func = this.functions.get(type);
-    
+
     if (!func || !func.enabled) {
       return;
     }
-    
+
     if (func.permission && !(await this.checkPermission(func.permission, context))) {
       return;
     }
-    
+
     if (func.handler) {
       await func.handler(params, context);
     }
@@ -1055,7 +997,14 @@ export default class AIStream {
 
     try {
       const member = e.group?.pickMember(e.self_id);
-      const info = await member?.getInfo().catch(() => null);
+      let info = null;
+      if (member) {
+        try {
+          info = await member.getInfo();
+        } catch (e) {
+          info = null;
+        }
+      }
       const role = info?.role || 'member';
 
       switch (permission) {
@@ -1211,24 +1160,24 @@ export default class AIStream {
     const runtime = cfg.aistream || {};
     const llm = runtime.llm || {};
     const vision = runtime.vision || {};
-    
+
     const provider = merged.provider || llm.Provider || 'gptgod';
     // 识图运营商：可单独配置，否则默认与 LLM Provider 一致
     const visionProvider = (merged.visionProvider || vision.Provider || provider).toLowerCase();
-    
+
     // LLM Provider 到配置名的映射（可扩展）
     const llmConfigMap = {
       'gptgod': 'god',
       'volcengine': 'volcengine_llm',
       'xiaomimimo': 'xiaomimimo_llm'
     };
-    
+
     // Vision Provider 到配置名的映射（可扩展）
     const visionConfigMap = {
       'gptgod': 'god_vision',
       'volcengine': 'volcengine_vision'
     };
-    
+
     if (!LLMFactory.hasProvider(provider)) {
       BotUtil.makeLog('error', `不支持的LLM提供商: ${provider}，已回退到gptgod`, 'AIStream');
       const fallbackProvider = 'gptgod';
@@ -1241,11 +1190,11 @@ export default class AIStream {
         visionProvider: visionProvider
       };
     }
-    
+
     // 动态获取 LLM 配置
     const llmConfigKey = llmConfigMap[provider];
     const providerConfig = llmConfigKey ? (cfg[llmConfigKey] || {}) : {};
-    
+
     // 动态获取 Vision 配置（一个工厂一个配置文件）
     let visionConfig = {};
     const visionConfigKey = visionConfigMap[visionProvider];
@@ -1260,7 +1209,7 @@ export default class AIStream {
       visionProvider,
       visionConfig
     };
-    
+
     return finalConfig;
   }
 
@@ -1274,28 +1223,28 @@ export default class AIStream {
       const baseMessages = await this.buildChatContext(e, question);
       const messages = await this.buildEnhancedContext(e, question, baseMessages);
       const response = await this.callAI(messages, config);
-      
+
       if (!response) {
         return null;
       }
-      
+
       const { functions, cleanText } = this.parseFunctions(response, context);
-      
+
       // 执行函数（支持合并工作流）
       for (let i = 0; i < functions.length; i++) {
         const func = functions[i];
         await this._executeFunctionWithMerge(func, context);
-        
+
         if (i < functions.length - 1 && !func.noDelay) {
           await BotUtil.sleep(2500);
         }
       }
-      
+
       // 存储AI响应到记忆系统（包含执行的函数信息）
       if (this.embeddingConfig.enabled && cleanText && e) {
         const groupId = e.group_id || `private_${e.user_id}`;
-        const executedFunctions = functions.length > 0 
-          ? `[执行了: ${functions.map(f => f.type).join(', ')}] ` 
+        const executedFunctions = functions.length > 0
+          ? `[执行了: ${functions.map(f => f.type).join(', ')}] `
           : '';
         this.storeMessageWithEmbedding(groupId, {
           user_id: e.self_id,
@@ -1303,13 +1252,13 @@ export default class AIStream {
           message: `${executedFunctions}${cleanText}`,
           message_id: Date.now().toString(),
           time: Date.now()
-        }).catch(() => {});
+        }).catch(() => { });
       }
-      
+
       return cleanText;
     } catch (error) {
-      BotUtil.makeLog('error', 
-        `工作流执行失败[${this.name}]: ${error.message}`, 
+      BotUtil.makeLog('error',
+        `工作流执行失败[${this.name}]: ${error.message}`,
         'AIStream'
       );
       return null;
@@ -1348,71 +1297,52 @@ export default class AIStream {
             secondary: mergeStreams,
             prefixSecondary: true
           });
-        
-        // 确保合并流有workflowManager（从todo插件注入）
+
         if (!stream.workflowManager) {
           const todoStream = StreamLoader.getStream('todo');
-          if (todoStream && todoStream.workflowManager) {
+          if (todoStream?.workflowManager) {
             todoStream.injectWorkflowManager(stream);
           }
         } else {
-          // 更新workflowManager的stream引用
           stream.workflowManager.stream = stream;
         }
       }
 
-      // 如果启用TODO，进行智能决策
       if (enableTodo) {
-        // 确保有workflowManager
         if (!stream.workflowManager) {
           const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
           const todoStream = StreamLoader.getStream('todo');
-          if (todoStream && todoStream.workflowManager) {
+          if (todoStream?.workflowManager) {
             todoStream.injectWorkflowManager(stream);
           }
         }
-        
+
         if (stream.workflowManager) {
-          const decision = await stream.workflowManager.decideWorkflowMode(e, 
-          typeof question === 'string' ? question : (question?.content || question?.text || '')
-        );
+          const questionText = typeof question === 'string' ? question : (question?.content || question?.text || '');
+          const decision = await stream.workflowManager.decideWorkflowMode(e, questionText);
 
-        if (decision.shouldUseTodo && decision.todos.length > 0) {
-          // 复杂任务：启动TODO工作流
-          const workflowId = await stream.workflowManager.createWorkflow(e, 
-            typeof question === 'string' ? question : (question?.content || question?.text || ''),
-            decision.todos
-          );
-          // TODO工作流在后台执行，返回初始消息
-          return `✅ 已启动多步骤工作流（${decision.todos.length}个步骤）`;
+          if (decision.shouldUseTodo && decision.todos.length > 0) {
+            await stream.workflowManager.createWorkflow(e, questionText, decision.todos);
+            return `✅ 已启动多步骤工作流（${decision.todos.length}个步骤）`;
+          }
         }
       }
 
-      // 如果启用记忆系统，注册记忆插件
-      if (enableMemory) {
-        const MemoryStream = StreamLoader.getStream('memory');
-        if (MemoryStream) {
-          // 记忆系统会自动工作
-        }
-      }
-
-      // 执行工作流（确保question格式正确）
-      const finalQuestion = typeof question === 'string' 
-        ? question 
+      const finalQuestion = typeof question === 'string'
+        ? question
         : (question?.content || question?.text || question);
-      return await stream.execute(e, finalQuestion, apiConfig);
+      try {
+        return await stream.execute(e, finalQuestion, apiConfig);
+      } catch (error) {
+        BotUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AIStream');
+        return null;
+      }
     } catch (error) {
-      BotUtil.makeLog('error', 
-        `工作流处理失败[${this.name}]: ${error.message}`, 
-        'AIStream'
-      );
+      BotUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AIStream');
       return null;
     }
   }
 
-  /**
-   * 工具方法
-   */
   getInfo() {
     return {
       name: this.name,
@@ -1439,11 +1369,11 @@ export default class AIStream {
 
   async cleanup() {
     BotUtil.makeLog('debug', `[${this.name}] 清理资源`, 'AIStream');
-    
+
     if (this.embeddingSession) {
       this.embeddingSession = null;
     }
-    
+
     if (this.embeddingModel && typeof this.embeddingModel.dispose === 'function') {
       try {
         await this.embeddingModel.dispose();
@@ -1451,7 +1381,7 @@ export default class AIStream {
         // 静默处理
       }
     }
-    
+
     this.embeddingModel = null;
     this.embeddingReady = false;
     this.tokenizer = null;

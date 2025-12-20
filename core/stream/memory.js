@@ -1,10 +1,6 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
 
-/**
- * 记忆系统工作流插件
- * 可注册的记忆功能，自动为其他工作流提供记忆能力
- */
 export default class MemoryStream extends AIStream {
   static initialized = false;
 
@@ -14,7 +10,7 @@ export default class MemoryStream extends AIStream {
       description: '记忆系统工作流插件',
       version: '1.0.0',
       author: 'XRK',
-      priority: 1, // 高优先级，确保先加载
+      priority: 1,
       config: {
         enabled: true,
         temperature: 0.7,
@@ -29,7 +25,7 @@ export default class MemoryStream extends AIStream {
 
   async init() {
     await super.init();
-
+    
     try {
       await this.initEmbedding();
     } catch (error) {
@@ -40,15 +36,11 @@ export default class MemoryStream extends AIStream {
     BotUtil.makeLog('info', `[${this.name}] 记忆系统已初始化`, 'MemoryStream');
   }
 
-  /**
-   * 构建系统提示词（记忆系统不需要自己的提示词）
-   */
   buildSystemPrompt(context) {
     return '记忆系统插件，为其他工作流提供记忆能力。';
   }
 
   async buildChatContext(e, question) {
-    // 记忆系统不直接处理消息，而是为其他工作流提供记忆能力
     return [];
   }
 

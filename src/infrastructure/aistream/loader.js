@@ -144,7 +144,6 @@ class StreamLoader {
         await stream.init();
       }
 
-      // 注入工作流管理器
       if (stream.name === 'todo' && stream.workflowManager) {
         for (const existingStream of this.streams.values()) {
           if (existingStream.name !== 'todo' && !existingStream.workflowManager) {
@@ -432,7 +431,7 @@ class StreamLoader {
     merged.description = description || `${mainStream.description || main} + ${secondary.join(',')}`;
     merged.primaryStream = mainStream.name;
     merged.secondaryStreams = secondaryStreams.map(s => s.name);
-    merged._mergedStreams = [mainStream, ...secondaryStreams]; // 保存引用，供workflow-manager使用
+    merged._mergedStreams = [mainStream, ...secondaryStreams];
     merged.functions = new Map();
 
     const adopt = (source, isPrimary) => {
