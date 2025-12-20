@@ -600,7 +600,10 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】（必须严
   }
 
   stopWorkflow(workflowId) {
-    this.activeWorkflows.get(workflowId)?.status = 'paused';
+    const workflow = this.activeWorkflows.get(workflowId);
+    if (workflow) {
+      workflow.status = 'paused';
+    }
   }
 
   removeWorkflow(workflowId) {
