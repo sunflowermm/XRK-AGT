@@ -4,7 +4,7 @@ import fs from 'fs';
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
-import { MCPServer } from '#core/http/mcp-server.js';
+import { MCPServer } from '../../../core/http/mcp-server.js';
 
 const STREAMS_DIR = paths.coreStream;
 
@@ -112,8 +112,8 @@ class StreamLoader {
 
     try {
       // 确保文件路径正确转换为 URL（Windows 路径兼容）
-      // 统一使用 pathToFileURL 转换为 URL 对象，然后使用 .href 获取字符串
-      // 与 HTTP 加载器保持一致，但使用更可靠的路径转换方式
+      // 使用 pathToFileURL 转换为 URL 对象，这是 Node.js 推荐的方式
+      // 可以正确处理 Windows 路径、特殊字符和编码问题
       const normalizedPath = path.resolve(file);
       const fileUrlObj = pathToFileURL(normalizedPath);
       // 添加时间戳避免缓存，使用 .href 获取字符串格式
