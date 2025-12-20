@@ -28,6 +28,8 @@ http/**
 !http/write.js
 !http/config.js
 !http/ai.js
+!http/mcp.js
+!http/mcp-server.js
 
 !events
 events/**
@@ -39,6 +41,9 @@ events/**
 stream/**
 !stream/chat.js
 !stream/device.js
+!stream/desktop.js
+!stream/memory.js
+!stream/todo.js
 
 !commonconfig
 commonconfig/**
@@ -51,6 +56,6 @@ commonconfig/**
 !commonconfig/volcengine_tts.js
 !commonconfig/xiaomimimo_llm.js
 !commonconfig/tools.js
-
 *.psd
 *.map
+!workflow-manager.js
