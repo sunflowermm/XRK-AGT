@@ -367,6 +367,11 @@ node app   # 或 node start.js
 ### 插件与工作流
 
 - 兼容 Yunzai 风格插件开发体验（规则匹配、权限控制、上下文管理）
+- **通用工作流系统**：基于 `AIStream` 的通用、可扩展、标准化工作流框架
+  - **无特化逻辑**：底层代码不包含任何针对特定业务场景的硬编码
+  - **快速构建**：通过函数注册机制，5分钟即可创建自定义工作流
+  - **自动上下文传递**：步骤间自动传递执行结果，无需手动管理
+  - **标准化接口**：统一的接口和规范，易于集成和扩展
 - 内建工作流基类 `AIStream`，支持多种 Embedding 与函数调用（Function Calling）
 - 支持增强插件（Enhancer），为特定 Tasker 提供功能增强
 
@@ -401,6 +406,18 @@ node app   # 或 node start.js
 - **[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)** - 项目整体架构与目录结构详细说明
 
 #### 🤖 AI工作流系统（重点）
+- **[`docs/WORKFLOW_GUIDE.md`](docs/WORKFLOW_GUIDE.md)** - **工作流开发指南** ⭐ 新
+  - 快速开始：5分钟创建你的第一个工作流
+  - 核心概念：函数注册、上下文传递、笔记系统
+  - 高级用法：自定义系统提示、错误处理、工作流合并
+  - 完整示例：数据处理工作流
+  - 最佳实践与故障排查
+- **[`docs/WORKFLOW_ARCHITECTURE.md`](docs/WORKFLOW_ARCHITECTURE.md)** - **工作流系统架构文档** ⭐ 新
+  - 系统概述与设计原则（通用性、可扩展性、标准化）
+  - 架构层次与核心组件详解
+  - 数据流与上下文传递机制
+  - 扩展点与关键设计决策
+  - 性能优化与错误处理策略
 - **[`docs/workflow-architecture.md`](docs/workflow-architecture.md)** - **AI工作流系统完整文档**
   - 架构概览与核心特性
   - 系统架构图与执行流程图

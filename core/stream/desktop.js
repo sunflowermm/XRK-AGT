@@ -13,20 +13,11 @@ import si from 'systeminformation';
 const IS_WINDOWS = process.platform === 'win32';
 const execAsync = promisify(exec);
 
-const execCommand = (command, options = {}) => {
-  return new Promise((resolve, reject) => {
-    exec(command, options, (error) => {
-      if (error) return reject(error);
-      resolve();
-    });
-  });
-};
-
-const execCommandWithOutput = (command, options = {}) => {
+// 统一的命令执行函数
+const execCommand = (command, options = {}, needOutput = false) => {
   return new Promise((resolve, reject) => {
     exec(command, { ...options, encoding: 'utf8' }, (error, stdout, stderr) => {
       if (error) {
-        // 将 stderr 附加到 error 对象以便调试
         error.stderr = stderr;
         return reject(error);
       }
@@ -88,7 +79,21 @@ export default class DesktopStream extends AIStream {
       // Embedding初始化失败，继续运行
     }
 
+    // 先注册自己的函数
     this.registerAllFunctions();
+    BotUtil.makeLog('info', `[${this.name}] 注册函数完成: ${this.functions.size} 个`, 'DesktopStream');
+
+    // 合并 ToolsStream（提供 read/grep/write/run 核心工具）
+    try {
+      const ToolsStream = (await import('./tools.js')).default;
+      const toolsStream = new ToolsStream();
+      await toolsStream.init();
+      
+      const result = this.merge(toolsStream);
+      BotUtil.makeLog('info', `[${this.name}] 已合并 ToolsStream: +${result.mergedCount} 个函数，总计: ${this.functions.size} 个`, 'DesktopStream');
+    } catch (error) {
+      BotUtil.makeLog('error', `[${this.name}] 合并 ToolsStream 失败: ${error.message}`, 'DesktopStream');
+    }
     
     // 启动进程清理监控（每30秒检查一次）
     if (IS_WINDOWS) {
@@ -107,17 +112,15 @@ export default class DesktopStream extends AIStream {
     BotUtil.makeLog('info', `[${this.name}] 工作流已初始化`, 'DesktopStream');
   }
 
-  async handleError(context, error, operation) {
+  handleError(context, error, operation) {
     BotUtil.makeLog('error', `[desktop] ${operation}失败: ${error.message}`, 'DesktopStream');
     context.lastError = { operation, message: error.message };
   }
 
-  async requireWindows(context, operation) {
-    if (!IS_WINDOWS) {
-      context.windowsOnly = true;
-      return false;
-    }
-    return true;
+  requireWindows(context, operation) {
+    if (IS_WINDOWS) return true;
+    context.windowsOnly = true;
+    return false;
   }
 
   registerAllFunctions() {
@@ -134,13 +137,12 @@ export default class DesktopStream extends AIStream {
         };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '回桌面功能'))) return;
+        if (!this.requireWindows(context, '回桌面功能')) return;
 
         try {
-          // 最小化所有窗口需要使用COM对象，必须用PowerShell
           await execAsync('powershell -Command "(New-Object -ComObject shell.application).MinimizeAll()"', { timeout: 5000 });
         } catch (err) {
-          await this.handleError(context, err, '回桌面操作');
+          this.handleError(context, err, '回桌面操作');
         }
       },
       enabled: true
@@ -168,7 +170,7 @@ export default class DesktopStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '打开系统工具功能'))) return;
+        if (!this.requireWindows(context, '打开系统工具功能')) return;
 
         const tool = params?.tool;
         if (!tool) return;
@@ -179,7 +181,7 @@ export default class DesktopStream extends AIStream {
           await execCommand(`start "" ${tool}`, { shell: 'cmd.exe' });
           context.executedTool = toolNames[tool] || '应用';
         } catch (err) {
-          await this.handleError(context, err, '打开系统工具');
+          this.handleError(context, err, '打开系统工具');
         }
       },
       enabled: true
@@ -250,12 +252,12 @@ export default class DesktopStream extends AIStream {
         };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '锁屏功能'))) return;
+        if (!this.requireWindows(context, '锁屏功能')) return;
 
         try {
           await execCommand('rundll32.exe user32.dll,LockWorkStation');
         } catch (err) {
-          await this.handleError(context, err, '锁屏操作');
+          this.handleError(context, err, '锁屏操作');
         }
       },
       enabled: true
@@ -297,7 +299,7 @@ export default class DesktopStream extends AIStream {
             }
           };
         } catch (err) {
-          await this.handleError(context, err, '获取系统信息');
+          this.handleError(context, err, '获取系统信息');
         }
       },
       enabled: true
@@ -340,7 +342,7 @@ export default class DesktopStream extends AIStream {
           await execCommand(command, { shell: IS_WINDOWS ? 'cmd.exe' : undefined });
           context.openedUrl = url;
         } catch (err) {
-          await this.handleError(context, err, '打开网页');
+          this.handleError(context, err, '打开网页');
         }
       },
       enabled: true
@@ -371,7 +373,7 @@ export default class DesktopStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '关机/重启功能'))) return;
+        if (!this.requireWindows(context, '关机/重启功能')) return;
 
         const commands = {
           shutdown: { cmd: 'shutdown /s /t 60', delay: 60 },
@@ -392,7 +394,7 @@ export default class DesktopStream extends AIStream {
           }
         } catch (err) {
           if (action !== 'cancel') {
-            await this.handleError(context, err, '电源控制操作');
+            this.handleError(context, err, '电源控制操作');
           }
         }
       },
@@ -422,7 +424,7 @@ export default class DesktopStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '创建文件夹功能'))) return;
+        if (!this.requireWindows(context, '创建文件夹功能')) return;
 
         const folderName = params?.folderName;
         if (!folderName) return;
@@ -437,7 +439,7 @@ export default class DesktopStream extends AIStream {
           
           context.createdFolder = safeName;
         } catch (err) {
-          await this.handleError(context, err, '创建文件夹');
+          this.handleError(context, err, '创建文件夹');
         }
       },
       enabled: true
@@ -466,7 +468,7 @@ export default class DesktopStream extends AIStream {
           const command = commands[process.platform] || commands.linux;
           await execCommand(command);
         } catch (err) {
-          await this.handleError(context, err, '打开资源管理器');
+          this.handleError(context, err, '打开资源管理器');
         }
       },
       enabled: true
@@ -501,7 +503,7 @@ export default class DesktopStream extends AIStream {
 
           context.diskSpace = disks.length > 0 ? disks : null;
         } catch (err) {
-          await this.handleError(context, err, '获取磁盘空间');
+          this.handleError(context, err, '获取磁盘空间');
         }
       },
       enabled: true
@@ -531,7 +533,7 @@ export default class DesktopStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '执行PowerShell命令'))) return;
+        if (!this.requireWindows(context, '执行PowerShell命令')) return;
 
         const command = params?.command;
         if (!command) return;
@@ -541,9 +543,10 @@ export default class DesktopStream extends AIStream {
           const workspace = this.getWorkspace();
           const fullCommand = `cd "${workspace}"; ${command}`;
           
-          const output = await execCommandWithOutput(
+          const output = await execCommand(
             `powershell -NoProfile -ExecutionPolicy Bypass -Command "${fullCommand.replace(/"/g, '\\"')}"`,
-            { maxBuffer: 10 * 1024 * 1024, cwd: workspace }
+            { maxBuffer: 10 * 1024 * 1024, cwd: workspace },
+            true
           );
           context.commandOutput = output.trim();
           context.commandSuccess = true;
@@ -551,7 +554,7 @@ export default class DesktopStream extends AIStream {
           context.commandError = err.message;
           context.commandSuccess = false;
           context.commandStderr = err.stderr || '';
-          await this.handleError(context, err, '执行PowerShell命令');
+          this.handleError(context, err, '执行PowerShell命令');
         }
       },
       enabled: true
@@ -571,7 +574,7 @@ export default class DesktopStream extends AIStream {
         };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '列出桌面文件'))) return;
+        if (!this.requireWindows(context, '列出桌面文件')) return;
 
         try {
           const workspace = this.getWorkspace();
@@ -594,148 +597,36 @@ export default class DesktopStream extends AIStream {
           }
 
           context.desktopFiles = fileList;
+
+          // 在多步工作流中，将桌面文件列表写入笔记，供后续步骤和其他插件读取
+          if (context.workflowId && Array.isArray(fileList) && fileList.length > 0) {
+            const lines = fileList.map((item, index) => {
+              const sizeText = typeof item.size === 'number'
+                ? ` (${(item.size / 1024).toFixed(1)} KB)`
+                : '';
+              return `${index + 1}. [${item.type}] ${item.name}${sizeText}`;
+            }).join('\n');
+
+            try {
+              await this.storeNote(
+                context.workflowId,
+                `【桌面文件列表】\n工作区：${workspace}\n共 ${fileList.length} 个项目：\n${lines}`,
+                'list_desktop_files',
+                true
+              );
+            } catch {
+              // 记笔记失败不影响主流程
+            }
+          }
         } catch (err) {
-          await this.handleError(context, err, '列出桌面文件');
+          this.handleError(context, err, '列出桌面文件');
         }
       },
       enabled: true
     });
 
-    // 统一文件读取工具（使用BaseTools）
-    this.registerFunction('read_file', {
-      description: '读取文件（优先在工作区查找）',
-      prompt: `[读取文件:文件名或路径] - 在工作区查找并读取文件，例如：[读取文件:易忘信息.txt]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[(?:读取文件|读取|查找文件|查找):([^\]]+)\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const fileName = (match[1] || '').trim();
-          if (fileName) {
-            functions.push({ type: 'read_file', params: { fileName } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
-      handler: async (params, context) => {
-        const fileName = params?.fileName;
-        if (!fileName) return;
-
-        // 先尝试直接读取（完整路径）
-        let result = await this.tools.readFile(fileName);
-        
-        // 如果失败，在工作区搜索文件
-        if (!result.success) {
-          const searchResults = await this.tools.searchFiles(path.basename(fileName), {
-            maxDepth: 2,
-            fileExtensions: null
-          });
-          
-          if (searchResults.length > 0) {
-            result = await this.tools.readFile(searchResults[0]);
-          }
-        }
-
-        if (result.success) {
-          context.fileSearchResult = { found: true, fileName: path.basename(result.path), path: result.path, content: result.content };
-          context.fileContent = result.content;
-        } else {
-          context.fileSearchResult = { found: false, fileName };
-          context.fileError = result.error || `未找到文件: ${fileName}`;
-        }
-      },
-      enabled: true
-    });
-
-    // Grep搜索工具
-    this.registerFunction('grep', {
-      description: '在文件中搜索文本',
-      prompt: `[搜索文本:关键词:文件路径(可选)] - 在文件中搜索文本，例如：[搜索文本:错误:app.log] 或 [搜索文本:错误]（在工作区搜索）`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[搜索文本:([^:]+)(?::([^\]]+))?\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const pattern = (match[1] || '').trim();
-          const filePath = match[2] ? match[2].trim() : null;
-          if (pattern) {
-            functions.push({ type: 'grep', params: { pattern, filePath } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
-      handler: async (params, context) => {
-        const { pattern, filePath } = params || {};
-        if (!pattern) return;
-
-        const result = await this.tools.grep(pattern, filePath, {
-          caseSensitive: false,
-          lineNumbers: true,
-          maxResults: 50
-        });
-
-        if (result.success) {
-          context.grepResults = result.matches;
-          context.grepPattern = pattern;
-        } else {
-          context.grepError = `搜索失败: ${pattern}`;
-        }
-      },
-      enabled: true
-    });
-
-    // 写入文件工具
-    this.registerFunction('write_file', {
-      description: '写入文件',
-      prompt: `[写入文件:文件路径:内容] - 写入文件，例如：[写入文件:test.txt:这是内容]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[写入文件:([^:]+):([^\]]+)\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const filePath = (match[1] || '').trim();
-          const content = (match[2] || '').trim();
-          if (filePath && content) {
-            functions.push({ type: 'write_file', params: { filePath, content } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
-      handler: async (params, context) => {
-        const { filePath, content } = params || {};
-        if (!filePath || !content) return;
-
-        const result = await this.tools.writeFile(filePath, content);
-        
-        if (result.success) {
-          context.writeFileResult = { success: true, path: result.path };
-        } else {
-          context.writeFileError = result.error;
-        }
-      },
-      enabled: true
-    });
+    // 注意：read/grep/write/run已移至tools工作流，这里不再重复注册
+    // desktop工作流会与tools工作流合并，自动获得这些功能
 
     // 新增：打开软件（通过快捷方式或程序名）
     this.registerFunction('open_application', {
@@ -761,7 +652,7 @@ export default class DesktopStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (!(await this.requireWindows(context, '打开软件'))) return;
+        if (!this.requireWindows(context, '打开软件')) return;
 
         const appName = params?.appName;
         if (!appName) return;
@@ -799,7 +690,7 @@ export default class DesktopStream extends AIStream {
 
           context.openedApp = appName;
         } catch (err) {
-          await this.handleError(context, err, '打开软件');
+          this.handleError(context, err, '打开软件');
         }
       },
       enabled: true
@@ -882,7 +773,7 @@ export default class DesktopStream extends AIStream {
           BotUtil.makeLog('info', `Word文档生成成功: ${filePath} (${stats.size} bytes)`, 'DesktopStream');
         } catch (err) {
           BotUtil.makeLog('error', `Word文档生成失败: ${err.message}`, 'DesktopStream');
-          await this.handleError(context, err, '生成Word文档');
+          this.handleError(context, err, '生成Word文档');
         }
       },
       enabled: true
@@ -914,7 +805,7 @@ export default class DesktopStream extends AIStream {
         const toRemove = [];
         for (let i = matches.length - 1; i >= 0; i--) {
           const m = matches[i];
-          const afterColon = text.substring(m.dataStart);
+          const afterColon = text.slice(m.dataStart);
           
           // 尝试找到完整的JSON数组（从[开始到匹配的]结束）
           let bracketCount = 0;
@@ -962,7 +853,7 @@ export default class DesktopStream extends AIStream {
             }
             
             // 提取JSON数组字符串（不包括命令结束符]）
-            const dataStr = afterColon.substring(0, jsonEnd).trim();
+            const dataStr = afterColon.slice(0, jsonEnd).trim();
             if (dataStr.startsWith('[') && dataStr.endsWith(']')) {
               try {
                 const data = JSON.parse(dataStr);
@@ -994,7 +885,7 @@ export default class DesktopStream extends AIStream {
           // 按start位置从大到小排序，从后往前移除
           toRemove.sort((a, b) => b.start - a.start);
           for (const remove of toRemove) {
-            result = result.substring(0, remove.start) + result.substring(remove.end);
+            result = result.slice(0, remove.start) + result.slice(remove.end);
           }
           cleanText = result.trim();
         }
@@ -1088,7 +979,7 @@ export default class DesktopStream extends AIStream {
           }
         } catch (err) {
           BotUtil.makeLog('error', `Excel生成失败: ${err.message}`, 'DesktopStream');
-          await this.handleError(context, err, '生成Excel文档');
+          this.handleError(context, err, '生成Excel文档');
         }
       },
       enabled: true
@@ -1117,6 +1008,8 @@ export default class DesktopStream extends AIStream {
     this.registerFunction('start_workflow', {
       description: '启动多步骤工作流',
       prompt: `[启动工作流:目标描述] - 启动一个多步骤工作流，AI会自动规划步骤并执行，例如：[启动工作流:帮我打开微信并发送消息给张三]`,
+      // 仅允许顶层调用，工作流内部会被过滤掉
+      onlyTopLevel: true,
       parser: (text, context) => {
         const functions = [];
         const reg = /\[启动工作流:([^\]]+)\]/g;
@@ -1136,10 +1029,20 @@ export default class DesktopStream extends AIStream {
         const goal = params?.goal;
         if (!goal || !this.workflowManager) return;
 
+        // 禁止在已有工作流内部再次启动新的工作流，避免嵌套和重复创建
+        // 这个检查必须放在最前面，避免任何可能触发任务分析的调用
+        if (context.workflowId) {
+          BotUtil.makeLog('warn', `[start_workflow] 已忽略工作流内部请求："${goal}"（工作流ID: ${context.workflowId}）`, 'DesktopStream');
+          try {
+            await this.storeNote(context.workflowId, `已忽略嵌套工作流请求："${goal}"（当前已在工作流中）`, 'start_workflow', true);
+          } catch {
+            // 忽略笔记失败
+          }
+          return;
+        }
+
         try {
-          const decision = await this.workflowManager.decideWorkflowMode(context.e, goal);
-          const todos = decision.todos.length > 0 ? decision.todos : await this.workflowManager.generateInitialTodos(goal);
-          const workflowId = await this.workflowManager.createWorkflow(context.e, goal, todos);
+          const workflowId = await this.createWorkflowFromGoal(context.e, goal);
           context.workflowId = workflowId;
         } catch (err) {
           BotUtil.makeLog('error', `启动工作流失败: ${err.message}`, 'DesktopStream');
@@ -1186,73 +1089,59 @@ ${prompts.join('\n')}
     const { question, e } = context;
     const persona =
       (question && (question.persona || question.PERSONA)) ||
-      '你是一个贴心智能的桌面助手，热情友好，会主动关心用户。执行功能时不只是简单操作，还会多说几句作为"捧哏"——可以温馨提醒、适当调侃、给出建议或表达关心，让对话更生动有趣。';
+      '你是一个智能桌面助手，帮助用户完成文件操作、系统管理等任务。';
     const functionsPrompt = this.buildFunctionsPrompt();
     const now = new Date().toLocaleString('zh-CN');
     const isMaster = e?.isMaster === true;
     const workspace = this.getWorkspace();
     
-    // 如果有文件查找结果，添加到系统提示中
-    let fileContext = '';
-    if (context.fileSearchResult?.found && context.fileContent) {
-      fileContext = `\n\n【已找到文件内容】\n文件名：${context.fileSearchResult.fileName}\n文件内容如下：\n${context.fileContent.substring(0, 2000)}${context.fileContent.length > 2000 ? '\n...(内容已截断)' : ''}\n\n请在回复中直接告知用户上述文件内容。`;
-    } else if (context.fileSearchResult?.found === false) {
-      fileContext = `\n\n【文件查找结果】\n未找到文件：${context.fileError || '文件不存在'}`;
+    // 优先从workflow context中获取文件内容（工作流场景）
+    // 如果是在工作流中，workflowId会在context中
+    let fileContent = context.fileContent;
+    let fileSearchResult = context.fileSearchResult;
+    let commandOutput = context.commandOutput;
+    
+    const workflowContext = this.getWorkflowContext(context);
+    if (workflowContext) {
+      fileContent = workflowContext.fileContent || fileContent;
+      fileSearchResult = workflowContext.fileSearchResult || fileSearchResult;
+      commandOutput = workflowContext.commandOutput || commandOutput;
     }
+    
+    const fileContext = this.buildFileContext(fileSearchResult, fileContent, commandOutput, context);
 
     return `【人设】
 ${persona}
 
 【工作区】
-你的工作区是桌面目录：${workspace}
-- 所有文件操作默认在桌面进行
-- 查找文件时优先在桌面查找，使用[查找文件:文件名]命令
-- 创建文件时默认保存到桌面
+工作区：${workspace}
+- 文件操作默认在此目录进行
 
-【工具使用指南】
-1. 文件操作（基础工具）：
-   - [读取文件:文件名] - 在工作区（桌面）查找并读取文件，读取后文件内容会提供给你
-   - [写入文件:文件路径:内容] - 写入文件到工作区
-   - [搜索文本:关键词:文件路径(可选)] - 在文件中搜索文本（grep功能）
+【核心工具】（read/grep/write/run）
+- [读取:文件路径] - 读取文件（工作流中会自动存笔记）
+- [搜索:关键词:文件路径(可选)] - 搜索文本（工作流中会自动存笔记）
+- [写入:文件路径:内容] - 写入文件
+- [执行:命令] - 执行命令
+- [笔记:内容] - 记录笔记（仅在工作流中可用）
 
-2. Excel操作（严格格式要求）：
-   - [生成Excel:文件名:JSON数组] - 创建Excel表格并保存到桌面，会自动打开
-   - **数据格式**：必须是JSON数组，例如：[{"列名1":"值1","列名2":"值2"},{"列名1":"值3","列名2":"值4"}]
-   - **重要**：如果你有文本内容，必须先分析文本结构，提取数据，然后手动转换为JSON数组格式
-   - **文件位置**：Excel文件会保存到桌面（工作区）
+【Excel操作】
+- [生成Excel:文件名:JSON数组] - 创建Excel，数据必须是JSON数组格式
+- 示例：[{"列1":"值1","列2":"值2"},{"列1":"值3","列2":"值4"}]
 
-3. 工作流执行流程（多步骤任务）：
-   当任务包含多个步骤时（如"读取文件并创建Excel"），系统会自动创建工作流：
-   - **步骤1**：读取文件 → 使用[读取文件:文件名]，在笔记中记录文件内容
-   - **步骤2**：分析内容 → 查看笔记中的文件内容，分析并提取结构化数据，在笔记中记录JSON数组
-   - **步骤3**：创建Excel → 查看笔记中的JSON数组，使用[生成Excel:文件名:JSON数组]
-   
-4. 工作流笔记机制（关键）：
-   - 通过"笔记:"字段记录信息，所有步骤共享
-   - **步骤间信息传递**：后续步骤可以通过笔记查看之前步骤的结果
-   - **示例**：
-     * 步骤1笔记：记录文件完整内容
-     * 步骤2笔记：记录分析结果和JSON数组格式的数据
-     * 步骤3笔记：记录Excel创建结果
-
-5. 工作区说明：
-   - 所有文件操作默认在工作区（桌面）进行
-   - 文件查找优先在桌面
-   - 创建的文件会保存到桌面
+【工作流笔记】
+- read和grep的结果会自动存到笔记
+- 后续步骤可通过"工作流笔记"查看之前步骤的结果
+- 使用[笔记:内容]手动记录信息
    ${fileContext ? fileContext : ''}
 
 【时间】
 ${now}
 
 ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操作。\n\n' : ''}${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【规则】
-1. **必须回复**：执行功能时必须回复文本内容，不要只执行不回复！即使只执行了命令，也要说几句话
-2. 语气自然友好，可以多说几句作为捧哏、提醒或告诫
-3. 优先使用功能函数执行操作，但一定要在回复中自然表达
-4. 文件操作默认在桌面工作区进行
-5. 查找文件时直接使用[读取文件:文件名]命令，不需要创建工作流
-6. 如果找到文件内容，请在回复中直接告知用户内容，不要只说"已找到文件"
-7. 如果执行了操作但没有回复，系统会自动添加反馈，但你应该主动回复
-8. 简洁准确但不失人情味，让用户感受到你的关心`;
+1. 执行功能时必须回复文本内容，不要只执行不回复
+2. 优先使用功能函数执行操作
+3. 文件操作默认在工作区进行
+4. 如果找到文件内容，请在回复中直接告知用户内容`;
   }
 
   async buildChatContext(e, question) {
@@ -1300,14 +1189,78 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
     return messages;
   }
 
+  /**
+   * 从目标创建工作流
+   */
+  async createWorkflowFromGoal(e, goal) {
+    const decision = await this.workflowManager.decideWorkflowMode(e, goal);
+    const todos = decision.todos.length > 0 
+      ? decision.todos 
+      : await this.workflowManager.generateInitialTodos(goal);
+    return await this.workflowManager.createWorkflow(e, goal, todos);
+  }
+
+  /**
+   * 获取工作流上下文
+   */
+  getWorkflowContext(context) {
+    if (!context.workflowId || !this.workflowManager) return null;
+    
+    const workflow = this.workflowManager.getWorkflow(context.workflowId);
+    return workflow?.context || null;
+  }
+
+  /**
+   * 构建文件上下文提示
+   */
+  buildFileContext(fileSearchResult, fileContent, commandOutput, context) {
+    const sections = [];
+    
+    const fileSection = this.buildFileSection(fileSearchResult, fileContent, context);
+    if (fileSection) sections.push(fileSection);
+    
+    const commandSection = this.buildCommandSection(commandOutput, context);
+    if (commandSection) sections.push(commandSection);
+    
+    return sections.join('\n\n');
+  }
+
+  /**
+   * 构建文件部分
+   */
+  buildFileSection(fileSearchResult, fileContent, context) {
+    if (fileSearchResult?.found && fileContent) {
+      const fileName = fileSearchResult.fileName || '文件';
+      const filePath = fileSearchResult.path || '';
+      const content = fileContent.slice(0, 2000);
+      const truncated = fileContent.length > 2000 ? '\n...(内容已截断)' : '';
+      return `【已找到文件内容】\n文件名：${fileName}\n${filePath ? `文件路径：${filePath}\n` : ''}文件内容如下：\n${content}${truncated}\n\n请在回复中直接告知用户上述文件内容，或使用此内容完成后续任务（如生成Excel）。`;
+    }
+    
+    if (fileSearchResult?.found === false) {
+      return `【文件查找结果】\n未找到文件：${context.fileError || '文件不存在'}`;
+    }
+    
+    return '';
+  }
+
+  /**
+   * 构建命令部分
+   */
+  buildCommandSection(commandOutput, context) {
+    if (!commandOutput || !context.commandSuccess) return '';
+    
+    const output = commandOutput.slice(0, 1000);
+    const truncated = commandOutput.length > 1000 ? '\n...(输出已截断)' : '';
+    return `【上一个命令的输出结果】\n${output}${truncated}\n\n可以使用此输出结果来完成当前任务。`;
+  }
+
   async cleanup() {
-    // 清理进程监控
     if (this.processCleanupInterval) {
       clearInterval(this.processCleanupInterval);
       this.processCleanupInterval = null;
     }
     
-    // 清理已注册的进程
     if (this.tools) {
       await this.tools.cleanupProcesses();
     }

@@ -1356,7 +1356,7 @@ ${isGlobalTrigger ?
     for (const marker of markers) {
       // 添加标记前的文本
       if (marker.index > currentIndex) {
-        const textBefore = text.substring(currentIndex, marker.index);
+        const textBefore = text.slice(currentIndex, marker.index);
         if (textBefore.trim()) {
           segments.push(textBefore);
         }
@@ -1421,7 +1421,7 @@ ${isGlobalTrigger ?
     
     // 添加最后剩余的文本（如果没有标记，currentIndex为0，会添加整个文本）
     if (currentIndex < text.length) {
-      const textAfter = text.substring(currentIndex);
+      const textAfter = text.slice(currentIndex);
       if (textAfter.trim()) {
         segments.push(textAfter);
       }

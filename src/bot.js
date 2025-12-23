@@ -542,7 +542,8 @@ export default class Bot extends EventEmitter {
     
     // ========== 第七阶段：静态文件服务（最后匹配） ==========
     // 注意：静态文件服务应该在API路由之后，避免拦截API请求
-    // 但这里先设置，因为API路由在ApiLoader.register中注册
+    // API路由在ApiLoader.register中注册，会通过优先级确保在静态文件服务之前
+    // 静态文件服务已经添加了 /api/ 路径跳过逻辑，确保不会拦截API请求
     this._setupStaticServing();
   }
 
@@ -569,7 +570,7 @@ export default class Bot extends EventEmitter {
         res.header('Access-Control-Allow-Methods',
           config.methods?.join(', ') || 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
         res.header('Access-Control-Allow-Headers',
-          config.headers?.join(', ') || 'Content-Type, Authorization, X-API-Key, X-Requested-With');
+          config.headers?.join(', ') || 'Content-Type, Authorization, X-API-Key, X-User-Email, X-Requested-With');
         res.header('Access-Control-Allow-Credentials',
           config.credentials ? 'true' : 'false');
         res.header('Access-Control-Max-Age',
@@ -587,7 +588,7 @@ export default class Bot extends EventEmitter {
       res.header('Access-Control-Allow-Methods',
         config.methods?.join(', ') || 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
       res.header('Access-Control-Allow-Headers',
-        config.headers?.join(', ') || 'Content-Type, Authorization, X-API-Key, X-Requested-With');
+        config.headers?.join(', ') || 'Content-Type, Authorization, X-API-Key, X-User-Email, X-Requested-With');
       res.header('Access-Control-Allow-Credentials',
         config.credentials ? 'true' : 'false');
       res.header('Access-Control-Expose-Headers',
@@ -854,6 +855,7 @@ export default class Bot extends EventEmitter {
   /**
    * 静态文件安全中间件
    * nginx风格：只处理静态文件，不拦截API路由
+   * 重要：必须跳过所有 /api/ 开头的路径，确保API路由优先
    */
   _staticSecurityMiddleware(req, res, next) {
     if (req.path.startsWith('/api/')) {

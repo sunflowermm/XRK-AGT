@@ -1,8 +1,5 @@
+*
 !.gitignore
-
-# Runtime uploads and media (ignored)
-uploads/
-media/
 
 # Allow specific files
 !favicon.ico

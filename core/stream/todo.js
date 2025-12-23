@@ -26,11 +26,15 @@ export default class TodoStream extends AIStream {
     BotUtil.makeLog('info', `[${this.name}] TODO工作流插件已初始化`, 'TodoStream');
   }
 
+  /**
+   * 注入工作流管理器到目标stream
+   */
   injectWorkflowManager(targetStream) {
-    if (!targetStream.workflowManager) {
-      targetStream.workflowManager = this.workflowManager;
-      this.workflowManager.stream = targetStream;
-    }
+    if (!targetStream) return;
+    if (targetStream.workflowManager) return;
+    
+    targetStream.workflowManager = this.workflowManager;
+    this.workflowManager.stream = targetStream;
   }
 
   buildSystemPrompt(context) {

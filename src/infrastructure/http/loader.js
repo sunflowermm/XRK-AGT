@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import HttpApi from './http.js';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
+import { validateApiInstance, getApiPriority } from './utils/helpers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -140,26 +141,18 @@ class ApiLoader {
         return false;
       }
       
-      // 验证API实例
-      if (!apiInstance || typeof apiInstance !== 'object') {
-        BotUtil.makeLog('warn', `API实例创建失败: ${key}`, 'ApiLoader');
+      // 验证和标准化API实例
+      if (!validateApiInstance(apiInstance, key)) {
         return false;
-      }
-      
-      // 验证routes属性
-      if (apiInstance.routes && !Array.isArray(apiInstance.routes)) {
-        BotUtil.makeLog('warn', `API模块 ${key} 的routes不是数组: ${typeof apiInstance.routes}`, 'ApiLoader');
-        apiInstance.routes = [];
       }
       
       // 确保有getInfo方法
       if (typeof apiInstance.getInfo !== 'function') {
-        // 如果没有getInfo方法，添加一个默认的
         apiInstance.getInfo = function() {
           return {
             name: this.name || key,
             dsc: this.dsc || '暂无描述',
-            priority: this.priority || 100,
+            priority: getApiPriority(this),
             routes: this.routes ? this.routes.length : 0,
             enable: this.enable !== false,
             createTime: this.createTime || Date.now()
@@ -167,7 +160,7 @@ class ApiLoader {
         };
       }
       
-      // 设置API的key
+      // 设置API的key和文件路径
       apiInstance.key = key;
       apiInstance.filePath = filePath;
       
@@ -203,11 +196,30 @@ class ApiLoader {
   
   /**
    * 按优先级排序
+   * 增强健壮性，防止 undefined 错误
    */
   sortByPriority() {
     this.priority = Array.from(this.apis.values())
-      .filter(api => api && api.enable !== false)
-      .sort((a, b) => (b.priority || 100) - (a.priority || 100));
+      .filter(api => {
+        // 严格验证：确保 api 存在且是对象
+        if (!api || typeof api !== 'object') {
+          BotUtil.makeLog('warn', '发现无效的API实例，已过滤', 'ApiLoader');
+          return false;
+        }
+        // 检查是否启用
+        return api.enable !== false;
+      })
+      .sort((a, b) => {
+        // 双重安全检查，防止 undefined 错误
+        if (!a || !b) {
+          BotUtil.makeLog('warn', '排序时发现无效的API实例', 'ApiLoader');
+          return 0;
+        }
+        // 使用工具函数安全获取优先级
+        const priorityA = getApiPriority(a);
+        const priorityB = getApiPriority(b);
+        return priorityB - priorityA; // 降序：优先级高的在前
+      });
   }
   
   /**
@@ -230,13 +242,20 @@ class ApiLoader {
     
     // 按优先级顺序初始化API
     for (const api of this.priority) {
-      if (!api || api.enable === false) {
-        const apiName = api?.name || api?.key || 'undefined';
+      // 严格检查API实例
+      if (!api || typeof api !== 'object') {
+        BotUtil.makeLog('warn', `发现无效的API实例，已跳过`, 'ApiLoader');
+        continue;
+      }
+      
+      if (api.enable === false) {
+        const apiName = api.name || api.key || 'unknown';
         BotUtil.makeLog('debug', `跳过API: ${apiName} (已禁用)`, 'ApiLoader');
         continue;
       }
       
-      const apiName = api.name || api.key || 'undefined';
+      const apiName = api.name || api.key || 'unknown';
+      const apiPriority = getApiPriority(api);
       
       try {
         const routeCountBefore = api.routes ? api.routes.length : 0;
@@ -251,14 +270,20 @@ class ApiLoader {
           BotUtil.makeLog('warn', `API没有init方法: ${apiName}`, 'ApiLoader');
         }
         
-        BotUtil.makeLog('info', `注册API: ${apiName} (优先级: ${api.priority || 100}, 路由: ${routeCountBefore}, WS: ${wsCountBefore})`, 'ApiLoader');
+        BotUtil.makeLog('info', `注册API: ${apiName} (优先级: ${apiPriority}, 路由: ${routeCountBefore}, WS: ${wsCountBefore})`, 'ApiLoader');
       } catch (error) {
         BotUtil.makeLog('error', `注册API失败: ${apiName} - ${error.message}`, 'ApiLoader', error);
+        // 继续处理下一个API，不中断整个注册过程
       }
     }
     
-    // 404处理
-    app.use('/api/*', (req, res) => {
+    // 404处理（排除代理路由，避免拦截 /api/god/*）
+    app.use('/api/*', (req, res, next) => {
+      // 跳过代理路由，让代理中间件处理
+      if (req.path.startsWith('/api/god/')) {
+        return next();
+      }
+      
       if (!res.headersSent) {
         res.status(404).json({
           success: false,

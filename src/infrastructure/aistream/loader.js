@@ -144,18 +144,7 @@ class StreamLoader {
         await stream.init();
       }
 
-      if (stream.name === 'todo' && stream.workflowManager) {
-        for (const existingStream of this.streams.values()) {
-          if (existingStream.name !== 'todo' && !existingStream.workflowManager) {
-            stream.injectWorkflowManager(existingStream);
-          }
-        }
-      } else if (stream.name !== 'todo') {
-        const todoStream = this.streams.get('todo');
-        if (todoStream?.workflowManager) {
-          todoStream.injectWorkflowManager(stream);
-        }
-      }
+      this.injectWorkflowManagerToStreams(stream);
 
       // 保存
       this.streams.set(stream.name, stream);
@@ -694,6 +683,55 @@ class StreamLoader {
     }
 
     return schema;
+  }
+
+  /**
+   * 注入工作流管理器到streams
+   */
+  injectWorkflowManagerToStreams(stream) {
+    if (this.isTodoStream(stream)) {
+      this.injectToExistingStreams(stream);
+      return;
+    }
+    
+    this.injectFromTodoStream(stream);
+  }
+
+  /**
+   * 判断是否为todo stream
+   */
+  isTodoStream(stream) {
+    return stream.name === 'todo' && stream.workflowManager;
+  }
+
+  /**
+   * 注入到已存在的streams
+   */
+  injectToExistingStreams(todoStream) {
+    for (const existingStream of this.streams.values()) {
+      if (this.shouldInject(existingStream)) {
+        todoStream.injectWorkflowManager(existingStream);
+      }
+    }
+  }
+
+  /**
+   * 判断是否应该注入
+   */
+  shouldInject(stream) {
+    return stream.name !== 'todo' && !stream.workflowManager;
+  }
+
+  /**
+   * 从todo stream注入
+   */
+  injectFromTodoStream(stream) {
+    if (stream.name === 'todo') return;
+    
+    const todoStream = this.streams.get('todo');
+    if (!todoStream?.workflowManager) return;
+    
+    todoStream.injectWorkflowManager(stream);
   }
 }
 

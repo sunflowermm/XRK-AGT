@@ -44,6 +44,7 @@ stream/**
 !stream/desktop.js
 !stream/memory.js
 !stream/todo.js
+!stream/tools.js
 
 !commonconfig
 commonconfig/**
@@ -58,4 +59,5 @@ commonconfig/**
 !commonconfig/tools.js
 *.psd
 *.map
+
 !workflow-manager.js

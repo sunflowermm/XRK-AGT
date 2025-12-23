@@ -858,6 +858,56 @@ export default class AIStream {
   }
 
   /**
+   * 合并另一个 Stream 的函数到当前 Stream
+   * 
+   * @param {AIStream} stream - 要合并的 Stream 实例
+   * @param {Object} options - 合并选项
+   *   - overwrite: 是否覆盖已存在的函数（默认false）
+   *   - prefix: 为合并的函数添加前缀（可选）
+   * @example
+   * const toolsStream = new ToolsStream();
+   * await toolsStream.init();
+   * this.merge(toolsStream);
+   */
+  merge(stream, options = {}) {
+    const { overwrite = false, prefix = '' } = options;
+
+    if (!stream || !stream.functions) {
+      throw new Error('无效的 Stream 实例');
+    }
+
+    // 初始化 _mergedStreams 数组
+    if (!this._mergedStreams) {
+      this._mergedStreams = [];
+    }
+
+    // 添加到合并列表
+    if (!this._mergedStreams.includes(stream)) {
+      this._mergedStreams.push(stream);
+    }
+
+    // 复制函数
+    let mergedCount = 0;
+    let skippedCount = 0;
+
+    for (const [name, func] of stream.functions.entries()) {
+      const newName = prefix ? `${prefix}${name}` : name;
+
+      if (this.functions.has(newName) && !overwrite) {
+        skippedCount++;
+        continue;
+      }
+
+      this.functions.set(newName, func);
+      mergedCount++;
+    }
+
+    BotUtil.makeLog('debug', `[${this.name}] 合并 ${stream.name}: 成功 ${mergedCount}, 跳过 ${skippedCount}`, 'AIStream');
+
+    return { mergedCount, skippedCount };
+  }
+
+  /**
    * 构建系统提示词（抽象方法，必须实现）
    * 
    * 子类必须实现此方法，用于构建AI的系统提示词。
@@ -1365,34 +1415,13 @@ export default class AIStream {
             prefixSecondary: true
           });
 
-        if (!stream.workflowManager) {
-          const todoStream = StreamLoader.getStream('todo');
-          if (todoStream?.workflowManager) {
-            todoStream.injectWorkflowManager(stream);
-          }
-        } else {
-          stream.workflowManager.stream = stream;
-        }
+        this.ensureWorkflowManager(stream);
       }
 
       if (enableTodo) {
-        if (!stream.workflowManager) {
-          const todoStream = StreamLoader.getStream('todo');
-          if (todoStream?.workflowManager) {
-            todoStream.injectWorkflowManager(stream);
-          }
-        }
-
-        if (stream.workflowManager) {
-          const questionText = typeof question === 'string' ? question : (question?.content || question?.text || '');
-          const decision = await stream.workflowManager.decideWorkflowMode(e, questionText);
-
-          if (decision.shouldUseTodo && decision.todos.length > 0) {
-            await stream.workflowManager.createWorkflow(e, questionText, decision.todos);
-            // 工作流已启动，会自己负责所有reply，返回null让插件不处理
-            return null;
-          }
-        }
+        this.ensureWorkflowManager(stream);
+        const workflowResult = await this.tryStartWorkflow(stream, e, question);
+        if (workflowResult) return workflowResult;
       }
 
       const finalQuestion = typeof question === 'string'
@@ -1437,6 +1466,46 @@ export default class AIStream {
         permission: f.permission
       }))
     };
+  }
+
+  /**
+   * 确保stream有workflowManager
+   */
+  ensureWorkflowManager(stream) {
+    if (stream.workflowManager) {
+      stream.workflowManager.stream = stream;
+      return;
+    }
+    
+    const todoStream = StreamLoader.getStream('todo');
+    if (todoStream?.workflowManager) {
+      todoStream.injectWorkflowManager(stream);
+    }
+  }
+
+  /**
+   * 尝试启动工作流
+   */
+  async tryStartWorkflow(stream, e, question) {
+    if (!stream.workflowManager) return null;
+    
+    const questionText = this.extractQuestionText(question);
+    const decision = await stream.workflowManager.decideWorkflowMode(e, questionText);
+    
+    if (!decision.shouldUseTodo || decision.todos.length === 0) {
+      return null;
+    }
+    
+    await stream.workflowManager.createWorkflow(e, questionText, decision.todos);
+    return null;
+  }
+
+  /**
+   * 提取问题文本
+   */
+  extractQuestionText(question) {
+    if (typeof question === 'string') return question;
+    return question?.content || question?.text || '';
   }
 
   async cleanup() {
