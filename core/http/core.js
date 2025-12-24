@@ -95,59 +95,23 @@ async function __sampleNetWindows() {
   }
 
   // 方法3: 使用wmic（Windows Management Instrumentation，兼容性最好）
-  // 使用格式化数据获取实际速率值（Bytes/sec）
   try {
     const { stdout } = await execAsync(
-      'wmic path Win32_PerfFormattedData_Tcpip_NetworkInterface get Name,BytesReceivedPerSec,BytesSentPerSec /format:list 2>nul',
+      'wmic path Win32_PerfRawData_Tcpip_NetworkInterface get BytesReceivedPersec,BytesSentPersec /format:list 2>nul',
       { timeout: 5000, maxBuffer: 1024 * 1024 }
     );
     if (stdout && stdout.trim().length > 0) {
       let rxRate = 0, txRate = 0;
       const lines = stdout.split('\n');
-      let currentName = '';
-      
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('Name=')) {
-          currentName = trimmed.substring(5).toLowerCase();
-        } else if (trimmed.startsWith('BytesReceivedPerSec=')) {
-          // 过滤掉虚拟网卡
-          if (currentName && 
-              !currentName.includes('loopback') && 
-              !currentName.includes('teredo') && 
-              !currentName.includes('isatap') && 
-              !currentName.includes('virtual') &&
-              !currentName.includes('vmware') &&
-              !currentName.includes('hyper-v') &&
-              !currentName.includes('vbox')) {
-            const val = parseFloat(trimmed.substring(20)) || 0;
-            if (!isNaN(val) && val >= 0) {
-              rxRate += val;
-            }
-          }
-        } else if (trimmed.startsWith('BytesSentPerSec=')) {
-          // 过滤掉虚拟网卡
-          if (currentName && 
-              !currentName.includes('loopback') && 
-              !currentName.includes('teredo') && 
-              !currentName.includes('isatap') && 
-              !currentName.includes('virtual') &&
-              !currentName.includes('vmware') &&
-              !currentName.includes('hyper-v') &&
-              !currentName.includes('vbox')) {
-            const val = parseFloat(trimmed.substring(16)) || 0;
-            if (!isNaN(val) && val >= 0) {
-              txRate += val;
-            }
-          }
+        if (line.includes('BytesReceivedPersec=')) {
+          const val = parseFloat(line.split('=')[1]) || 0;
+          if (!isNaN(val)) rxRate += val;
+        } else if (line.includes('BytesSentPersec=')) {
+          const val = parseFloat(line.split('=')[1]) || 0;
+          if (!isNaN(val)) txRate += val;
         }
       }
-      
-      // 验证数据合理性（最大10GB/s）
-      const maxRate = 10 * 1024 * 1024 * 1024; // 10GB/s
-      if (rxRate > maxRate) rxRate = 0;
-      if (txRate > maxRate) txRate = 0;
-      
       // 即使为0也返回（可能是真实值）
       return { rxRate, txRate, method: 'wmic' };
     }
@@ -301,20 +265,14 @@ async function __sampleNetOnce() {
             
           } else if (nativeResult.rxRate !== undefined) {
             // 速率值，转换为累计值
-            // 验证速率值合理性（最大10GB/s）
-            const maxRate = 10 * 1024 * 1024 * 1024; // 10GB/s
-            let rxRate = Math.min(nativeResult.rxRate, maxRate);
-            let txRate = Math.min(nativeResult.txRate || 0, maxRate);
-            
             if (__lastNetSample) {
               const dt = Math.max(0.1, (now - __lastNetSample.ts) / 1000);
-              // 使用平滑处理：新累计值 = 上次累计值 + 速率 * 时间差
-              rxBytes = __lastNetSample.rx + (rxRate * dt);
-              txBytes = __lastNetSample.tx + (txRate * dt);
+              rxBytes = __lastNetSample.rx + (nativeResult.rxRate * dt);
+              txBytes = __lastNetSample.tx + (nativeResult.txRate * dt);
             } else {
-              // 首次采样，使用当前速率估算初始累计值（假设1分钟的历史）
-              rxBytes = rxRate * 60;
-              txBytes = txRate * 60;
+              // 首次采样，使用当前速率估算初始累计值
+              rxBytes = nativeResult.rxRate * 60;
+              txBytes = nativeResult.txRate * 60;
             }
             method = nativeResult.method;
             isValid = true;
