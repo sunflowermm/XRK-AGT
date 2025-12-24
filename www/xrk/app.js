@@ -1527,9 +1527,9 @@ class App {
         textParts.push(seg);
         allText.push(seg);
       } else if (seg.type === 'text' || seg.type === 'raw') {
-        // 文本段
-        const text = seg.text || (seg.data && seg.data.text) || '';
-        if (text && text.trim()) {
+        // 文本段：device.js 已标准化为 seg.text
+        const text = seg.text || '';
+        if (text.trim()) {
           textParts.push(text);
           allText.push(text);
         }
@@ -1540,16 +1540,12 @@ class App {
           textDiv.className = 'chat-text';
           textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
           div.appendChild(textDiv);
-          textParts.length = 0; // 清空已处理的文本
+          textParts.length = 0;
         }
         
-        // 获取图片 URL：优先使用 seg.url（device.js 已转换），其次使用其他字段
-        let url = seg.url || (seg.data && seg.data.url) || (seg.data && seg.data.file) || seg.file;
+        // device.js 已转换文件路径为 URL，直接使用 seg.url
+        const url = seg.url;
         if (url) {
-          // 如果是相对路径，确保以 / 开头（device.js 已经处理好了）
-          if (url && !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:')) {
-            // 相对路径已经是正确的格式（如 /api/trash/... 或 /api/device/file/...）
-          }
           const imgContainer = document.createElement('div');
           imgContainer.className = 'chat-image-container';
           const img = document.createElement('img');
@@ -4249,50 +4245,34 @@ class App {
         break;
       }
       case 'reply': {
-        // 统一处理segments格式
+        // 处理 segments：device.js 已标准化格式
         let segments = Array.isArray(data.segments) ? data.segments : [];
         if (segments.length === 0 && data.text) {
           segments.push({ type: 'text', text: data.text });
         }
         
-        // 立即清除生成中状态，避免显示时间过长
         this.clearChatStreamState();
         
-        // 统一显示逻辑：有title/description时显示为聊天记录，否则按顺序渲染segments
-        const hasChatRecord = !!(data.title || data.description);
-        
-        if (hasChatRecord) {
-          // 提取文本消息用于聊天记录
-          const messages = [];
-          segments.forEach(seg => {
-            if (typeof seg === 'string') {
-              messages.push(seg);
-            } else if (seg.type === 'text' || seg.type === 'raw') {
-              const text = seg.text || (seg.data && seg.data.text) || '';
-              if (text && text.trim()) {
-                messages.push(text);
-              }
-            }
-          });
+        // 有 title/description 时显示为聊天记录，否则按顺序渲染 segments
+        if (data.title || data.description) {
+          const messages = segments
+            .filter(seg => typeof seg === 'string' || seg.type === 'text' || seg.type === 'raw')
+            .map(seg => typeof seg === 'string' ? seg : (seg.text || seg.data?.text || ''))
+            .filter(text => text.trim());
           
           if (messages.length > 0) {
             const recordDiv = this.appendChatRecord(messages, data.title || '', data.description || '');
             if (recordDiv) {
-              requestAnimationFrame(() => {
-                recordDiv.classList.add('message-enter-active');
-              });
+              requestAnimationFrame(() => recordDiv.classList.add('message-enter-active'));
             }
           }
           
-          // 聊天记录模式下，图片单独显示
-          segments.filter(s => s.type === 'image').forEach(seg => {
-            const url = seg.url || (seg.data && seg.data.url) || (seg.data && seg.data.file);
-            if (url) {
-              this.appendImageMessage(url, true);
-            }
+          // 图片单独显示
+          segments.filter(s => s.type === 'image' && s.url).forEach(seg => {
+            this.appendImageMessage(seg.url, true);
           });
         } else {
-          // 普通消息模式：按顺序渲染segments（保持文本和图片的混合顺序）
+          // 按顺序渲染 segments（保持文本和图片的混合顺序）
           this.appendSegments(segments, true);
         }
         break;

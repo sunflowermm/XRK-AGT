@@ -1,3 +1,23 @@
+/**
+ * Device HTTP/WebSocket 服务
+ * 
+ * 职责：
+ * 1. 提供 WebSocket 连接管理（web 客户端连接）
+ * 2. 接收 tasker 发送的消息，转发到 web 客户端
+ * 3. 将文件路径转换为 web 可访问的 URL
+ * 4. 支持多种协议：WebSocket（实时通信）、HTTP（文件服务）
+ * 
+ * Tasker 职责：
+ * - 处理平台协议（OneBot、Telegram 等）
+ * - 发送标准格式的 segments 到 device.js
+ * - 不关心 web 客户端的实现细节
+ * 
+ * Web 客户端职责：
+ * - 通过 WebSocket 接收标准化的 segments
+ * - 渲染文本和图片（按顺序）
+ * - 支持多种协议：WebSocket（实时）、HTTP（文件访问）
+ */
+
 import WebSocket from 'ws';
 import BotUtil from '../../src/utils/botutil.js';
 import StreamLoader from '../../src/infrastructure/aistream/loader.js';
@@ -1448,6 +1468,23 @@ class DeviceManager {
                         sender: messagePayload.sender,
                         channel: messagePayload.channel,
                         meta: messagePayload.meta,
+                        /**
+                         * 回复消息到 web 客户端
+                         * 
+                         * 职责：
+                         * 1. 接收 tasker 发送的 segments（标准格式）
+                         * 2. 将文件路径转换为 web 可访问的 URL
+                         * 3. 通过 WebSocket 发送到 web 客户端
+                         * 
+                         * Tasker 标准格式：
+                         * - 字符串：'text'
+                         * - Segment 对象：{ type: 'text', text: '...' } 或 { type: 'image', data: { file: '...' } }
+                         * - Segment 数组：['text', { type: 'image', ... }]
+                         * - 包含 segments 的对象：{ segments: [...], title: '...', description: '...' }
+                         * 
+                         * @param {string|Array|Object} segmentsOrText - Tasker 发送的消息内容
+                         * @returns {Promise<boolean>} 是否发送成功
+                         */
                         reply: async (segmentsOrText) => {
                             try {
                                 const ws = deviceWebSockets.get(deviceId);
@@ -1455,127 +1492,92 @@ class DeviceManager {
                                     return false;
                                 }
                                 
+                                // 标准化输入：tasker 发送的 segments 格式
                                 let segments = [];
                                 let title = '';
                                 let description = '';
                                 
-                                if (typeof segmentsOrText === 'object' && segmentsOrText !== null && !Array.isArray(segmentsOrText)) {
+                                if (Array.isArray(segmentsOrText)) {
+                                    // 数组：直接使用，标准化字符串为 text segment
+                                    segments = segmentsOrText.map(seg =>
+                                        typeof seg === 'string' ? { type: 'text', text: seg } : seg
+                                    );
+                                } else if (segmentsOrText && typeof segmentsOrText === 'object') {
                                     if (segmentsOrText.segments) {
+                                        // 包含 segments 的对象（用于传递 title/description）
                                         segments = segmentsOrText.segments;
                                         title = segmentsOrText.title || '';
                                         description = segmentsOrText.description || '';
                                     } else {
+                                        // 单个对象：转换为 text segment
                                         segments = [{ type: 'text', text: String(segmentsOrText) }];
                                     }
-                                } else if (Array.isArray(segmentsOrText)) {
-                                    if (
-                                        segmentsOrText.length === 1 &&
-                                        segmentsOrText[0] &&
-                                        typeof segmentsOrText[0] === 'object' &&
-                                        !Array.isArray(segmentsOrText[0]) &&
-                                        (segmentsOrText[0].segments || segmentsOrText[0].text || segmentsOrText[0].message)
-                                    ) {
-                                        const first = segmentsOrText[0];
-                                        if (Array.isArray(first.segments)) {
-                                            segments = first.segments;
-                                        } else if (first.text || first.message) {
-                                            segments = [{
-                                                type: 'text',
-                                                text: String(first.text || first.message || '')
-                                            }];
-                                        }
-                                        title = first.title || '';
-                                        description = first.description || '';
-                                    } else {
-                                        segments = segmentsOrText.map(seg =>
-                                            typeof seg === 'string' ? { type: 'text', text: seg } : seg
-                                        );
-                                    }
                                 } else if (segmentsOrText) {
+                                    // 字符串：转换为 text segment
                                     segments = [{ type: 'text', text: String(segmentsOrText) }];
                                 }
                                 
+                                // 处理 segments：转换文件路径为 web URL
                                 segments = segments.map(seg => {
-                                    // 处理文本段
-                                    if (seg.type === 'text' && seg.data && seg.data.text !== undefined) {
-                                        return { type: 'text', text: seg.data.text };
-                                    }
-                                    // 处理字符串类型的文本
+                                    // 字符串类型：转换为 text segment（防御性处理）
                                     if (typeof seg === 'string') {
                                         return { type: 'text', text: seg };
                                     }
                                     
-                                    // 处理图片段：支持多种格式
+                                    // 文本段：标准化格式
+                                    if (seg.type === 'text') {
+                                        const text = seg.text || (seg.data?.text) || '';
+                                        return text ? { type: 'text', text } : null;
+                                    }
+                                    
+                                    // 图片段：转换文件路径为 URL
                                     if (seg.type === 'image') {
-                                        // 获取文件路径：支持 seg.data.file、seg.url、seg.file 等多种格式
-                                        let filePath = seg.data?.file || seg.url || seg.file || seg.data?.url;
-                                        
-                                        // 如果已经有 url，直接使用
-                                        if (seg.url && !filePath) {
+                                        // 如果已有 url，直接使用
+                                        if (seg.url) {
                                             return seg;
                                         }
                                         
+                                        // 获取文件路径（标准格式：seg.data.file）
+                                        const filePath = seg.data?.file;
                                         if (!filePath) {
-                                            // 没有文件路径，跳过这个 segment
                                             return null;
                                         }
                                         
-                                        // 优先检查是否为trash目录下的文件（使用trash API）
+                                        // 转换路径为 web URL
                                         const normalizedPath = path.normalize(filePath);
                                         const trashPath = path.normalize(paths.trash);
                                         
                                         if (normalizedPath.startsWith(trashPath)) {
-                                            // trash目录下的文件：使用trash API
-                                            try {
-                                                const relativePath = path.relative(trashPath, normalizedPath).replace(/\\/g, '/');
-                                                return {
-                                                    type: 'image',
-                                                    url: `/api/trash/${relativePath}`,
-                                                    data: { file: filePath }
-                                                };
-                                            } catch (e) {
-                                                // 如果路径转换失败，使用文件名
-                                                const relativePath = path.basename(filePath);
-                                                return {
-                                                    type: 'image',
-                                                    url: `/api/trash/${relativePath}`,
-                                                    data: { file: filePath }
-                                                };
-                                            }
+                                            // trash 目录：使用 trash API
+                                            const relativePath = path.relative(trashPath, normalizedPath).replace(/\\/g, '/');
+                                            return {
+                                                type: 'image',
+                                                url: `/api/trash/${relativePath}`,
+                                                data: { file: filePath }
+                                            };
                                         }
                                         
-                                        // 其他绝对路径：使用通用文件服务
                                         if (path.isAbsolute(filePath)) {
-                                            try {
-                                                const fileId = Buffer.from(filePath, 'utf8').toString('base64url');
-                                                return {
-                                                    type: 'image',
-                                                    url: `/api/device/file/${fileId}`,
-                                                    data: { file: filePath }
-                                                };
-                                            } catch (e) {
-                                                // 编码失败，回退到trash API
-                                                const relativePath = path.basename(filePath);
-                                                return {
-                                                    type: 'image',
-                                                    url: `/api/trash/${relativePath}`,
-                                                    data: { file: filePath }
-                                                };
-                                            }
+                                            // 绝对路径：使用通用文件服务
+                                            const fileId = Buffer.from(filePath, 'utf8').toString('base64url');
+                                            return {
+                                                type: 'image',
+                                                url: `/api/device/file/${fileId}`,
+                                                data: { file: filePath }
+                                            };
                                         }
                                         
-                                        // 相对路径：使用trash API
-                                        const relativePath = filePath.replace(/\\/g, '/');
+                                        // 相对路径：使用 trash API
                                         return {
                                             type: 'image',
-                                            url: `/api/trash/${relativePath}`,
+                                            url: `/api/trash/${filePath.replace(/\\/g, '/')}`,
                                             data: { file: filePath }
                                         };
                                     }
                                     
-                                    // 其他类型的 segment 直接返回
+                                    // 其他类型 segment：直接返回
                                     return seg;
-                                }).filter(seg => seg !== null); // 过滤掉 null
+                                }).filter(seg => seg !== null);
                                 
                                 if (segments.length === 0) return false;
                                 
