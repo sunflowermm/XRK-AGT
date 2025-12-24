@@ -1416,6 +1416,9 @@ class App {
       try {
         if (m.type === 'record') {
           this.appendChatRecord(m.messages || [], m.title || '', m.description || '', false);
+        } else if (m.segments && Array.isArray(m.segments)) {
+          // 支持 segments 格式（文本和图片混合）
+          this.appendSegments(m.segments, false);
         } else if (m.type === 'image' && m.url) {
           this.appendImageMessage(m.url, false);
         } else if (m.role && m.text) {
@@ -1500,47 +1503,110 @@ class App {
     }
   }
 
-  appendImageMessage(url, persist = true) {
+  /**
+   * 按顺序渲染 segments（文本和图片混合）
+   * @param {Array} segments - 消息段数组
+   * @param {boolean} persist - 是否持久化到历史记录
+   * @returns {HTMLElement|null} 创建的消息容器
+   */
+  appendSegments(segments, persist = true) {
+    if (!segments || segments.length === 0) return null;
+    
     const box = document.getElementById('chatMessages');
-    if (box) {
-      const div = document.createElement('div');
-      div.className = 'chat-message assistant message-enter';
-      const img = document.createElement('img');
-      img.src = url;
-      img.alt = '图片';
-      img.className = 'chat-image';
-      img.loading = 'lazy';
-      img.style.cursor = 'pointer';
-      img.title = '点击查看大图';
-      
-      // 图片加载完成后显示
-      img.onload = () => {
-        img.classList.add('loaded');
-      };
-      
-      // 图片加载失败时也显示（避免一直隐藏）
-      img.onerror = () => {
-        img.classList.add('loaded');
-        img.alt = '图片加载失败';
-        img.style.opacity = '0.5';
-      };
-      
-      img.addEventListener('click', () => this.showImagePreview(url));
-      div.appendChild(img);
-      box.appendChild(div);
-      box.scrollTop = box.scrollHeight;
-      
-      // 统一的入场动画协议
-      this._applyMessageEnter(div, persist);
-      
-      if (persist) {
-        this._chatHistory.push({ role: 'assistant', type: 'image', url, ts: Date.now() });
-        this._saveChatHistory();
+    if (!box) return null;
+    
+    const div = document.createElement('div');
+    div.className = 'chat-message assistant message-enter';
+    
+    const textParts = [];
+    const allText = [];
+    
+    segments.forEach(seg => {
+      if (typeof seg === 'string') {
+        // 纯文本
+        textParts.push(seg);
+        allText.push(seg);
+      } else if (seg.type === 'text' || seg.type === 'raw') {
+        // 文本段
+        const text = seg.text || (seg.data && seg.data.text) || '';
+        if (text && text.trim()) {
+          textParts.push(text);
+          allText.push(text);
+        }
+      } else if (seg.type === 'image') {
+        // 图片段：先渲染之前的文本，再渲染图片
+        if (textParts.length > 0) {
+          const textDiv = document.createElement('div');
+          textDiv.className = 'chat-text';
+          textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+          div.appendChild(textDiv);
+          textParts.length = 0; // 清空已处理的文本
+        }
+        
+        const url = seg.url || (seg.data && seg.data.url) || (seg.data && seg.data.file);
+        if (url) {
+          const imgContainer = document.createElement('div');
+          imgContainer.className = 'chat-image-container';
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = '图片';
+          img.className = 'chat-image';
+          img.loading = 'lazy';
+          img.style.cursor = 'pointer';
+          img.title = '点击查看大图';
+          
+          img.onload = () => {
+            img.classList.add('loaded');
+          };
+          
+          img.onerror = () => {
+            img.classList.add('loaded');
+            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfliqDovb3lpLHotKU8L3RleHQ+PC9zdmc+';
+            img.alt = '图片加载失败';
+          };
+          
+          img.addEventListener('click', () => this.showImagePreview(url));
+          imgContainer.appendChild(img);
+          div.appendChild(imgContainer);
+        }
       }
-      
-      return div;
+    });
+    
+    // 渲染剩余的文本
+    if (textParts.length > 0) {
+      const textDiv = document.createElement('div');
+      textDiv.className = 'chat-text';
+      textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+      div.appendChild(textDiv);
     }
-    return null;
+    
+    // 如果没有内容，不添加
+    if (div.children.length === 0) return null;
+    
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    
+    this._applyMessageEnter(div, persist);
+    
+    if (persist) {
+      const textContent = allText.join('').trim();
+      const normalizedSegments = segments.map(s => {
+        if (typeof s === 'string') return { type: 'text', text: s };
+        return s;
+      });
+      this._chatHistory.push({ 
+        role: 'assistant', 
+        segments: normalizedSegments,
+        ts: Date.now() 
+      });
+      this._saveChatHistory();
+    }
+    
+    return div;
+  }
+
+  appendImageMessage(url, persist = true) {
+    return this.appendSegments([{ type: 'image', url }], persist);
   }
 
   showImagePreview(url) {
@@ -4179,54 +4245,51 @@ class App {
       }
       case 'reply': {
         // 统一处理segments格式
-        const segments = Array.isArray(data.segments) ? data.segments : [];
+        let segments = Array.isArray(data.segments) ? data.segments : [];
         if (segments.length === 0 && data.text) {
           segments.push({ type: 'text', text: data.text });
         }
         
-        // 提取文本消息和图片
-        const messages = [];
-        const images = [];
-        
-        segments.forEach(seg => {
-          // 统一处理text类型：支持两种格式（text和data.text）
-          if (seg.type === 'text' || seg.type === 'raw') {
-            const text = seg.text || (seg.data && seg.data.text) || '';
-            if (text && text.trim()) {
-              messages.push(text);
-            }
-          } else if (seg.type === 'image') {
-            // 直接使用url（路径转换已在后端device.js的reply方法中处理）
-            if (seg.url) {
-              images.push(seg.url);
-            }
-          }
-        });
-        
         // 立即清除生成中状态，避免显示时间过长
         this.clearChatStreamState();
         
-        // 统一显示逻辑：有title/description时显示为聊天记录，否则显示为普通消息
+        // 统一显示逻辑：有title/description时显示为聊天记录，否则按顺序渲染segments
         const hasChatRecord = !!(data.title || data.description);
         
-        // 显示文本消息
-        if (hasChatRecord && messages.length > 0) {
-          const recordDiv = this.appendChatRecord(messages, data.title || '', data.description || '');
-          // 确保聊天记录正确显示，立即应用 active 类
-          if (recordDiv) {
-            requestAnimationFrame(() => {
-              recordDiv.classList.add('message-enter-active');
-            });
+        if (hasChatRecord) {
+          // 提取文本消息用于聊天记录
+          const messages = [];
+          segments.forEach(seg => {
+            if (typeof seg === 'string') {
+              messages.push(seg);
+            } else if (seg.type === 'text' || seg.type === 'raw') {
+              const text = seg.text || (seg.data && seg.data.text) || '';
+              if (text && text.trim()) {
+                messages.push(text);
+              }
+            }
+          });
+          
+          if (messages.length > 0) {
+            const recordDiv = this.appendChatRecord(messages, data.title || '', data.description || '');
+            if (recordDiv) {
+              requestAnimationFrame(() => {
+                recordDiv.classList.add('message-enter-active');
+              });
+            }
           }
-        } else if (messages.length > 0) {
-          const text = messages.join('\n');
-          this.appendChatWithAnimation('assistant', text);
+          
+          // 聊天记录模式下，图片单独显示
+          segments.filter(s => s.type === 'image').forEach(seg => {
+            const url = seg.url || (seg.data && seg.data.url) || (seg.data && seg.data.file);
+            if (url) {
+              this.appendImageMessage(url, true);
+            }
+          });
+        } else {
+          // 普通消息模式：按顺序渲染segments（保持文本和图片的混合顺序）
+          this.appendSegments(segments, true);
         }
-        
-        // 图片统一追加显示（即使没有文本消息也要显示图片）
-        images.forEach(url => {
-          this.appendImageMessage(url, true);
-        });
         break;
       }
       case 'status':
