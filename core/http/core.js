@@ -57,26 +57,26 @@ async function __sampleNetWindows() {
   try {
     // 方法1: 使用Get-NetAdapterStatistics（PowerShell，累计值，Windows Server最准确）
     try {
-      const { stdout } = await execAsync(
-        'powershell -NoProfile -Command "$adapters = Get-NetAdapterStatistics | Where-Object { $_.InterfaceDescription -notlike \"*Loopback*\" -and $_.InterfaceDescription -notlike \"*Teredo*\" -and $_.InterfaceDescription -notlike \"*isatap*\" }; $rx = ($adapters | Measure-Object -Property ReceivedBytes -Sum).Sum; $tx = ($adapters | Measure-Object -Property SentBytes -Sum).Sum; \"$rx|$tx\""',
-        { timeout: 3000, maxBuffer: 1024 * 1024 }
+      const { stdout, stderr } = await execAsync(
+        'powershell -NoProfile -Command "$adapters = Get-NetAdapterStatistics | Where-Object { $_.InterfaceDescription -notlike \"*Loopback*\" -and $_.InterfaceDescription -notlike \"*Teredo*\" -and $_.InterfaceDescription -notlike \"*isatap*\" -and $_.InterfaceDescription -notlike \"*Virtual*\" }; if ($adapters) { $rx = ($adapters | Measure-Object -Property ReceivedBytes -Sum).Sum; $tx = ($adapters | Measure-Object -Property SentBytes -Sum).Sum; \"$rx|$tx\" } else { \"0|0\" }"',
+        { timeout: 5000, maxBuffer: 1024 * 1024 }
       );
       const parts = stdout.trim().split('|');
       if (parts.length === 2) {
         const rxBytes = parseFloat(parts[0]) || 0;
         const txBytes = parseFloat(parts[1]) || 0;
-        // 即使为0也返回，因为可能是真实值（无流量）
+        // 返回结果，即使为0也返回（可能是真实值）
         return { rxBytes, txBytes, method: 'Get-NetAdapterStatistics' };
       }
     } catch (e) {
-      // 继续尝试其他方法
+      BotUtil.makeLog('debug', `Get-NetAdapterStatistics失败: ${e.message}`, 'CoreAPI');
     }
 
     // 方法2: 使用Get-Counter（PowerShell，速率值，需要转换为累计值）
     try {
       const { stdout } = await execAsync(
-        'powershell -NoProfile -Command "$r = Get-Counter \"\\Network Interface(*)\\Bytes Received/sec\", \"\\Network Interface(*)\\Bytes Sent/sec\" -ErrorAction SilentlyContinue; if ($r) { $rx = 0; $tx = 0; $r.CounterSamples | ForEach-Object { if ($_.Path -match \"Bytes Received\") { $rx += $_.CookedValue } elseif ($_.Path -match \"Bytes Sent\") { $tx += $_.CookedValue } }; \"$rx|$tx\" } else { \"0|0\" }"',
-        { timeout: 3000, maxBuffer: 1024 * 1024 }
+        'powershell -NoProfile -Command "$r = Get-Counter \"\\Network Interface(*)\\Bytes Received/sec\", \"\\Network Interface(*)\\Bytes Sent/sec\" -ErrorAction SilentlyContinue; if ($r) { $rx = 0; $tx = 0; $r.CounterSamples | ForEach-Object { if ($_.Path -match \"Bytes Received\" -and $_.Path -notmatch \"Loopback|Teredo|isatap\") { $rx += $_.CookedValue } elseif ($_.Path -match \"Bytes Sent\" -and $_.Path -notmatch \"Loopback|Teredo|isatap\") { $tx += $_.CookedValue } }; \"$rx|$tx\" } else { \"0|0\" }"',
+        { timeout: 5000, maxBuffer: 1024 * 1024 }
       );
       const parts = stdout.trim().split('|');
       if (parts.length === 2) {
@@ -86,11 +86,12 @@ async function __sampleNetWindows() {
         return { rxRate, txRate, method: 'Get-Counter' };
       }
     } catch (e) {
-      // 继续尝试其他方法
+      BotUtil.makeLog('debug', `Get-Counter失败: ${e.message}`, 'CoreAPI');
     }
 
     return null;
   } catch (error) {
+    BotUtil.makeLog('error', `Windows网络采样失败: ${error.message}`, 'CoreAPI');
     return null;
   }
 }
@@ -222,6 +223,11 @@ async function __sampleNetOnce() {
             txBytes = nativeResult.txBytes;
             method = nativeResult.method;
             isValid = true;
+            
+            // 调试日志：记录首次成功使用原生方法
+            if (!__netMethodValidated) {
+              BotUtil.makeLog('info', `Windows Server使用原生方法: ${method}, rxBytes=${rxBytes}, txBytes=${txBytes}`, 'CoreAPI');
+            }
           } else if (nativeResult.rxRate !== undefined) {
             // 速率值，转换为累计值
             if (__lastNetSample) {
@@ -235,6 +241,16 @@ async function __sampleNetOnce() {
             }
             method = nativeResult.method;
             isValid = true;
+            
+            // 调试日志
+            if (!__netMethodValidated) {
+              BotUtil.makeLog('info', `Windows Server使用原生方法: ${method}, rxRate=${nativeResult.rxRate}, txRate=${nativeResult.txRate}`, 'CoreAPI');
+            }
+          }
+        } else {
+          // 原生方法也失败，记录日志
+          if (!__netMethodValidated) {
+            BotUtil.makeLog('warn', 'Windows Server网络采样：systeminformation和原生方法都失败', 'CoreAPI');
           }
         }
       } else {
@@ -309,18 +325,21 @@ async function __sampleNetOnce() {
       }
       
       // 更新或添加当前分钟的数据点（用于长期历史）
-      if (__netHist.length && __netHist[__netHist.length - 1].ts === tsMin) {
-        // 更新当前分钟的数据（取最大值，显示峰值）
-        const last = __netHist[__netHist.length - 1];
-        __netHist[__netHist.length - 1] = { 
-          ts: tsMin, 
-          rxSec: Math.max(last.rxSec, rxSec), 
-          txSec: Math.max(last.txSec, txSec) 
-        };
-      } else {
-        // 添加新分钟的数据点
-        __netHist.push({ ts: tsMin, rxSec, txSec });
-        if (__netHist.length > NET_HISTORY_LIMIT) __netHist.shift();
+      // 只有当速率大于0时才添加到历史，避免大量0值
+      if (rxSec > 0 || txSec > 0) {
+        if (__netHist.length && __netHist[__netHist.length - 1].ts === tsMin) {
+          // 更新当前分钟的数据（取最大值，显示峰值）
+          const last = __netHist[__netHist.length - 1];
+          __netHist[__netHist.length - 1] = { 
+            ts: tsMin, 
+            rxSec: Math.max(last.rxSec, rxSec), 
+            txSec: Math.max(last.txSec, txSec) 
+          };
+        } else {
+          // 添加新分钟的数据点
+          __netHist.push({ ts: tsMin, rxSec, txSec });
+          if (__netHist.length > NET_HISTORY_LIMIT) __netHist.shift();
+        }
       }
     }
     
@@ -348,20 +367,28 @@ function __ensureNetSampler() {
 function __getNetHistory24h() {
   const now = Date.now();
   const start = Math.floor((now - 24 * 60 * 60 * 1000) / 60000) * 60000;
-  const map = new Map(__netHist.map(p => [p.ts, p]));
-  const arr = [];
-  // 返回最近24小时的数据（每分钟一个点）
-  for (let i = 0; i < 24 * 60; i++) {
-    const t = start + i * 60000;
-    const v = map.get(t);
-    if (v) {
-      arr.push({ ts: t, rxSec: v.rxSec || 0, txSec: v.txSec || 0 });
-    } else {
-      // 对于没有数据的点，返回0而不是跳过，保持时间序列连续性
-      arr.push({ ts: t, rxSec: 0, txSec: 0 });
-    }
+  
+  // 如果没有历史数据，返回空数组
+  if (__netHist.length === 0) {
+    return [];
   }
-  return arr;
+  
+  // 返回最近24小时的数据（只包含有数据的点）
+  const recent24h = __netHist.filter(p => p.ts >= start);
+  
+  // 如果24小时内没有数据，返回最近的数据点（最多返回最近1小时的数据）
+  if (recent24h.length === 0) {
+    const oneHourAgo = now - 60 * 60 * 1000;
+    const recent = __netHist.filter(p => p.ts >= oneHourAgo);
+    return recent.length > 0 ? recent : [];
+  }
+  
+  // 如果数据点太多（超过1440个，即24小时每分钟一个点），只返回最近的数据
+  if (recent24h.length > 1440) {
+    return recent24h.slice(-1440);
+  }
+  
+  return recent24h;
 }
 
 function __getNetRecent() {
