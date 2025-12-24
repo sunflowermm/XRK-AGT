@@ -1501,17 +1501,53 @@ class DeviceManager {
                                     }
                                     if (seg.type === 'image' && seg.data && seg.data.file) {
                                         const filePath = seg.data.file;
-                                        let relativePath = '';
-                                        if (filePath.includes('trash')) {
-                                            const trashIndex = filePath.indexOf('trash');
-                                            relativePath = filePath.substring(trashIndex + 6).replace(/\\/g, '/');
-                                        } else {
+                                        
+                                        // 优先检查是否为trash目录下的文件（使用trash API）
+                                        const normalizedPath = path.normalize(filePath);
+                                        const trashPath = path.normalize(paths.trash);
+                                        
+                                        if (normalizedPath.startsWith(trashPath)) {
+                                            // trash目录下的文件：使用trash API
                                             try {
-                                                relativePath = path.relative(paths.trash, filePath).replace(/\\/g, '/');
+                                                const relativePath = path.relative(trashPath, normalizedPath).replace(/\\/g, '/');
+                                                return {
+                                                    type: 'image',
+                                                    url: `/api/trash/${relativePath}`,
+                                                    data: { file: filePath }
+                                                };
                                             } catch (e) {
-                                                relativePath = path.basename(filePath);
+                                                // 如果路径转换失败，使用文件名
+                                                const relativePath = path.basename(filePath);
+                                                return {
+                                                    type: 'image',
+                                                    url: `/api/trash/${relativePath}`,
+                                                    data: { file: filePath }
+                                                };
                                             }
                                         }
+                                        
+                                        // 其他绝对路径：使用通用文件服务
+                                        if (path.isAbsolute(filePath)) {
+                                            try {
+                                                const fileId = Buffer.from(filePath, 'utf8').toString('base64url');
+                                                return {
+                                                    type: 'image',
+                                                    url: `/api/device/file/${fileId}`,
+                                                    data: { file: filePath }
+                                                };
+                                            } catch (e) {
+                                                // 编码失败，回退到trash API
+                                                const relativePath = path.basename(filePath);
+                                                return {
+                                                    type: 'image',
+                                                    url: `/api/trash/${relativePath}`,
+                                                    data: { file: filePath }
+                                                };
+                                            }
+                                        }
+                                        
+                                        // 相对路径：使用trash API
+                                        const relativePath = filePath.replace(/\\/g, '/');
                                         return {
                                             type: 'image',
                                             url: `/api/trash/${relativePath}`,
@@ -1786,41 +1822,6 @@ export default {
 
         {
             method: 'GET',
-            path: '/api/asr/recording/:filename',
-            handler: async (req, res) => {
-                try {
-                    const filename = req.params.filename;
-
-                    if (!filename.endsWith('.wav') || filename.includes('..')) {
-                        return res.status(400).json({
-                            success: false,
-                            message: '无效的文件名'
-                        });
-                    }
-
-                    const filepath = path.join(deviceManager.AUDIO_SAVE_DIR, filename);
-
-                    if (!fs.existsSync(filepath)) {
-                        return res.status(404).json({
-                            success: false,
-                            message: '文件不存在'
-                        });
-                    }
-
-                    res.setHeader('Content-Type', 'audio/wav');
-                    res.setHeader(
-                        'Content-Disposition',
-                        `attachment; filename="${filename}"`
-                    );
-
-                    fs.createReadStream(filepath).pipe(res);
-                } catch (e) {
-                    res.status(500).json({ success: false, message: e.message });
-                }
-            }
-        },
-        {
-            method: 'GET',
             path: '/api/trash/*',
                 handler: async (req, res) => {
                     try {
@@ -1863,6 +1864,96 @@ export default {
                         const contentType = contentTypeMap[ext] || 'application/octet-stream';
                         res.setHeader('Content-Type', contentType);
                         res.setHeader('Cache-Control', 'public, max-age=3600');
+
+                        fs.createReadStream(normalizedPath).pipe(res);
+                    } catch (e) {
+                        res.status(500).json({ success: false, message: e.message });
+                    }
+                }
+            },
+            {
+                method: 'GET',
+                path: '/api/device/file/:fileId',
+                handler: async (req, res) => {
+                    try {
+                        const fileId = req.params.fileId;
+                        if (!fileId) {
+                            return res.status(400).json({
+                                success: false,
+                                message: '文件ID不能为空'
+                            });
+                        }
+
+                        // 解码文件路径
+                        let filePath;
+                        try {
+                            filePath = Buffer.from(fileId, 'base64url').toString('utf8');
+                        } catch (e) {
+                            return res.status(400).json({
+                                success: false,
+                                message: '无效的文件ID'
+                            });
+                        }
+
+                        // 安全检查：确保是绝对路径且文件存在
+                        if (!path.isAbsolute(filePath)) {
+                            return res.status(400).json({
+                                success: false,
+                                message: '只支持绝对路径'
+                            });
+                        }
+
+                        const normalizedPath = path.normalize(filePath);
+                        
+                        // 安全检查：禁止访问系统关键目录
+                        const forbiddenPaths = [
+                            path.join(paths.root, 'node_modules'),
+                            path.join(paths.root, '.git'),
+                            process.cwd() !== paths.root ? process.cwd() : null
+                        ].filter(Boolean);
+                        
+                        for (const forbidden of forbiddenPaths) {
+                            if (normalizedPath.startsWith(path.normalize(forbidden))) {
+                                return res.status(403).json({
+                                    success: false,
+                                    message: '访问被拒绝'
+                                });
+                            }
+                        }
+
+                        if (!fs.existsSync(normalizedPath)) {
+                            return res.status(404).json({
+                                success: false,
+                                message: '文件不存在'
+                            });
+                        }
+
+                        // 检查是否为文件（不是目录）
+                        const stats = fs.statSync(normalizedPath);
+                        if (!stats.isFile()) {
+                            return res.status(400).json({
+                                success: false,
+                                message: '路径不是文件'
+                            });
+                        }
+
+                        // 设置Content-Type
+                        const ext = path.extname(normalizedPath).toLowerCase();
+                        const contentTypeMap = {
+                            '.png': 'image/png',
+                            '.jpg': 'image/jpeg',
+                            '.jpeg': 'image/jpeg',
+                            '.gif': 'image/gif',
+                            '.webp': 'image/webp',
+                            '.svg': 'image/svg+xml',
+                            '.bmp': 'image/bmp',
+                            '.ico': 'image/x-icon'
+                        };
+
+                        const contentType = contentTypeMap[ext] || 'application/octet-stream';
+                        res.setHeader('Content-Type', contentType);
+                        res.setHeader('Cache-Control', 'public, max-age=3600');
+                        res.setHeader('Content-Disposition', `inline; filename="${path.basename(normalizedPath)}"`);
 
                         fs.createReadStream(normalizedPath).pipe(res);
                     } catch (e) {

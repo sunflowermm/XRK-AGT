@@ -2166,7 +2166,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       await this.startProxyServers();
     }
     
-    // 加载监听事件和适配器
+    // 加载监听事件和Tasker
     await ListenerLoader.load(this);
     
     // 启动文件监视
@@ -2261,7 +2261,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
 
   /**
    * 准备事件对象（通用逻辑）
-   * 只处理所有适配器通用的属性，适配器特定逻辑由插件通过accept方法处理
+   * 只处理所有Tasker通用的属性，Tasker特定逻辑由插件通过accept方法处理
    * 
    * @param {Object} data - 事件数据对象
    */

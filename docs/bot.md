@@ -101,7 +101,7 @@ flowchart TD
   - `_extendEventMethods(data)`：为事件对象添加通用的辅助方法（如通用`reply`方法）。Tasker 特定的方法扩展由增强插件处理。
   - `em(name, data)`：如 `message.group.normal` 这类事件支持逐级截断向上派发。
 
-> 说明：传统的好友/群管理能力由各个 IM 适配器（如 OneBotv11）在其子 Bot（`Bot[self_id]`）上实现；`Bot` 本身只提供事件准备与工具方法，不再直接维护 IM 账号细节。
+> 说明：传统的好友/群管理能力由各个 IM Tasker（如 OneBotv11）在其子 Bot（`Bot[self_id]`）上实现；`Bot` 本身只提供事件准备与工具方法，不再直接维护 IM 账号细节。
 
 - **其他**
   - `getServerUrl()`：结合反向代理 / HTTPS / 端口生成最终访问 URL。
@@ -120,7 +120,7 @@ flowchart TD
   - 在连接建立时创建子 Bot 对象并通过 `Bot[self_id] = childBot` 注册到底层（由 `_createProxy()` 负责放入 `Bot.bots` 容器）。
 - 特殊子 Bot（不作为 Tasker 枚举）：  
   - **stdin**：`core/tasker/stdin.js` 中通过 `StdinHandler` 创建 `Bot.stdin` 子 Bot，用于命令行与 HTTP 层 `callStdin/runCommand` 的统一入口，但不会出现在 `Bot.tasker` 中。
-  - **device**：`core/http/device.js` 中的 `DeviceManager` 将物理/虚拟设备挂载为 `Bot[device_id]` 子 Bot，提供 `sendCommand/display/emotion/camera/microphone` 等方法，同样不作为普通适配器参与初始化循环。
+  - **device**：`core/http/device.js` 中的 `DeviceManager` 将物理/虚拟设备挂载为 `Bot[device_id]` 子 Bot，提供 `sendCommand/display/emotion/camera/microphone` 等方法，同样不作为普通Tasker参与初始化循环。
 
 > 所有子 Bot（包括 IM 账号、设备、stdin）都集中保存在 `Bot.bots` 中，主实例通过 Proxy 暴露聚合视图，同时保持自身属性相对干净。
 
@@ -179,7 +179,7 @@ flowchart TD
 ### 渲染器（Renderer ↔ Bot ↔ 插件）
 
 - `src/infrastructure/renderer/loader.js` 会根据配置 `cfg.renderer` 创建实际渲染器实例（Puppeteer/Playwright 等），并挂载到 `Bot.renderer`。
-- 插件通过 `Bot.renderer.xxx` 调用渲染器生成图片/HTML/PDF，再利用 `e.reply` 发送到各适配器。
+- 插件通过 `Bot.renderer.xxx` 调用渲染器生成图片/HTML/PDF，再利用 `e.reply` 发送到各Tasker。
 
 > 注意：渲染器本身与事件系统解耦，只作为一个「工具服务」挂到 `Bot` 下面，供插件业务层按需使用。
 

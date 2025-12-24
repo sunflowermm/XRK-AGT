@@ -32,7 +32,7 @@ flowchart TD
 |------|------|------|
 | 引导器 | `app.js` | 检查依赖与环境、安装缺失依赖、加载动态 `imports`，最后启动 `start.js` |
 | 主程序入口 | `start.js` | 实际创建 `Bot` 实例、加载配置、监听事件、启动 HTTP/WS 服务 |
-| 运行核心 | `src/bot.js` | 封装 HTTP/HTTPS/WebSocket、中间件、认证、适配器/插件/API 装载 |
+| 运行核心 | `src/bot.js` | 封装 HTTP/HTTPS/WebSocket、中间件、认证、Tasker/插件/API 装载 |
 | Web 前端 | `www/xrk/index.html` / `www/xrk/app.js` | XRK Web 控制台，包含系统状态、API 调试、配置管理前端 |
 
 ---

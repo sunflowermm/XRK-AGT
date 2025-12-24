@@ -200,7 +200,6 @@ export default class DesktopStream extends AIStream {
       },
       handler: async (params, context) => {
         try {
-          // 动态导入screenshot-desktop库
           const screenshot = (await import('screenshot-desktop')).default;
           
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -210,20 +209,15 @@ export default class DesktopStream extends AIStream {
           const filename = `screenshot_${timestamp}.png`;
           const screenshotPath = path.join(screenshotDir, filename);
           
-          // 使用screenshot-desktop库截图（支持多显示器）
-          const img = await screenshot({ screen: -1 }); // -1表示所有屏幕
-          
-          // 保存截图
+          const img = await screenshot({ screen: -1 });
           await fs.writeFile(screenshotPath, img);
           
-          // 验证文件是否生成
           const stats = await fs.stat(screenshotPath);
           if (stats.size === 0) {
             throw new Error('截屏文件为空');
           }
     
           if (context.e) {
-            // 仅发送图片，由 AI 在对话中自然说明，无需额外的"截图成功"提示
             await context.e.reply([
               { type: 'image', data: { file: screenshotPath } }
             ]);
@@ -231,8 +225,6 @@ export default class DesktopStream extends AIStream {
           
           BotUtil.makeLog('info', `截图成功: ${screenshotPath} (${stats.size} bytes)`, 'DesktopStream');
         } catch (err) {
-          // 截屏失败时只记录日志，不向用户额外发送「截屏失败」类提示，
-          // 由 AI 在对话中根据需要自行说明。
           BotUtil.makeLog('error', `[desktop] 截屏失败: ${err.message}`, 'DesktopStream');
         }
       },
@@ -1080,7 +1072,6 @@ ${prompts.join('\n')}
 示例：
 - "[打开计算器]好的，马上帮你打开计算器，这样你就可以算账啦~" → 执行打开计算器+回复文本
 - "[回桌面]没问题，帮你回到桌面，这样找文件更方便" → 执行回桌面+回复文本
-- "[截屏]好的，我这就截个屏给你看看" → 执行截屏（会发送图片）+回复文本
 - "[启动工作流:帮我打开微信]好的，我来帮你规划并执行这个任务" → 启动多步骤工作流
 注意：格式完全匹配，参数完整，必须同时回复文本内容，不要只执行功能不回复！`;
   }
@@ -1193,11 +1184,26 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
    * 从目标创建工作流
    */
   async createWorkflowFromGoal(e, goal) {
-    const decision = await this.workflowManager.decideWorkflowMode(e, goal);
+    // 先创建 workflow 对象（但不执行），以便记录决策步骤
+    const workflowId = `workflow_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    const tempWorkflow = this.workflowManager.createWorkflowObject(workflowId, goal, [], e);
+    
+    // 使用临时 workflow 对象记录决策步骤
+    const decision = await this.workflowManager.decideWorkflowMode(e, goal, tempWorkflow);
     const todos = decision.todos.length > 0 
       ? decision.todos 
-      : await this.workflowManager.generateInitialTodos(goal);
-    return await this.workflowManager.createWorkflow(e, goal, todos);
+      : await this.workflowManager.generateInitialTodos(goal, tempWorkflow);
+    
+    // 创建正式的工作流，并合并决策步骤
+    const finalWorkflowId = await this.workflowManager.createWorkflow(e, goal, todos);
+    const finalWorkflow = this.workflowManager.getWorkflow(finalWorkflowId);
+    
+    // 将临时 workflow 的决策步骤复制到正式 workflow
+    if (finalWorkflow && tempWorkflow.decisionSteps) {
+      finalWorkflow.decisionSteps = tempWorkflow.decisionSteps;
+    }
+    
+    return finalWorkflowId;
   }
 
   /**

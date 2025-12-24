@@ -170,7 +170,7 @@ export class WorkflowManager {
   /**
    * 判断是否需要工作流
    */
-  async decideWorkflowMode(e, goal) {
+  async decideWorkflowMode(e, goal, workflow = null) {
     // 查找已存在的相同工作流
     const existing = Array.from(this.activeWorkflows.values())
       .find(w => w.status === WORKFLOW_STATUS.RUNNING && w.goal === goal);
@@ -179,15 +179,26 @@ export class WorkflowManager {
       return { shouldUseTodo: false, response: '已有相同工作流运行中', todos: [] };
     }
 
-    return await this.aiDecideWorkflow(goal);
+    return await this.aiDecideWorkflow(goal, workflow);
   }
 
   /**
    * AI判断是否需要工作流
    */
-  async aiDecideWorkflow(goal) {
+  async aiDecideWorkflow(goal, workflow = null) {
     const messages = this.buildDecisionMessages(goal);
     const response = await this.stream.callAI(messages, this.stream.config);
+    
+    // 记录决策阶段的 AI 调用
+    if (workflow) {
+      this.recordDecisionStep(workflow, {
+        type: 'decision',
+        prompt: messages[1]?.content || '',
+        messages,
+        aiResponse: response || '',
+        timestamp: Date.now()
+      });
+    }
     
     if (!response) {
       return { shouldUseTodo: false, response: '', todos: [] };
@@ -200,7 +211,7 @@ export class WorkflowManager {
       return { shouldUseTodo, response, todos };
     }
     
-    const generatedTodos = await this.generateInitialTodos(goal);
+    const generatedTodos = await this.generateInitialTodos(goal, workflow);
     return { shouldUseTodo: true, response, todos: generatedTodos };
   }
 
@@ -208,44 +219,34 @@ export class WorkflowManager {
    * 构建决策提示和消息
    */
   buildDecisionMessages(goal) {
-    const prompt = `【任务分析】
-用户请求：${goal}
+    return [
+      {
+        role: 'system',
+        content: `你是任务分析助手，只负责评估任务，不执行任何操作。
 
-【你的任务】
-分析这个任务是否需要多步骤完成。
+【重要】
+- 这是评估阶段，不是执行阶段
+- 不要使用任何命令格式
+- 不要执行任何操作
+- 只输出分析结果
 
 【判断标准】
-- 简单任务（单步可完成）：只包含一个操作的简单命令 → 不需要TODO工作流
-- 复杂任务（需要多步）：包含多个操作或需要分步处理 → 需要TODO工作流
-
-【重要原则】
-1. 用户明确说了"工作区的文件"，说明文件路径已知，不需要先列出文件确认
-2. 读取文件内容 + 告诉用户 = 两步即可，不要添加多余的确认步骤
-3. 步骤要精简高效，避免冗余操作
+- 简单任务（单步可完成）→ 不需要工作流
+- 复杂任务（需要多步）→ 需要工作流
 
 【输出格式】
 是否需要TODO工作流: [是/否]
 理由: [简要说明]
 
-如果选择"是"，请继续输出：
+如果选择"是"，输出：
 TODO列表:
-1. [第一步]
-2. [第二步]
-...`;
-
-    return [
-      {
-        role: 'system',
-        content: `你是一个智能任务分析助手。分析用户请求，判断是否需要多步骤工作流。
-
-${this.stream.buildFunctionsPrompt()}
-
-【重要】
-- 简单任务（单步可完成）：直接执行，不需要工作流
-- 复杂任务（需要多步）：需要规划TODO列表
-- 避免冗余步骤：如果用户已经明确文件位置，不需要先列出文件确认`
+1. 第一步（任务描述，不要包含命令格式）
+2. 第二步（任务描述，不要包含命令格式）`
       },
-      { role: 'user', content: prompt }
+      {
+        role: 'user',
+        content: `分析任务：${goal}`
+      }
     ];
   }
 
@@ -260,7 +261,9 @@ ${this.stream.buildFunctionsPrompt()}
     const todoRegex = /^\d+[\.、]\s*(.+)$/gm;
     let match;
     while ((match = todoRegex.exec(todoMatch[1])) !== null) {
-      const content = match[1].trim();
+      let content = match[1].trim();
+      // 清理命令格式（如果AI错误地包含了）
+      content = content.replace(/\[([^\]]+)\]/g, '$1').trim();
       if (content) {
         todos.push(content);
       }
@@ -272,35 +275,43 @@ ${this.stream.buildFunctionsPrompt()}
   /**
    * 生成初始TODO列表
    */
-  async generateInitialTodos(goal) {
+  async generateInitialTodos(goal, workflow = null) {
     const messages = [
       {
         role: 'system',
-        content: `你是一个任务规划助手。将复杂任务分解为具体步骤。
+        content: `你是任务规划助手，只负责规划步骤，不执行任何操作。
 
-【重要原则】
-1. 步骤要精简高效，避免冗余操作
-2. 如果用户明确说了"工作区的文件"，说明文件路径已知，直接读取即可
-3. 不要添加"列出文件"、"确认文件是否存在"等多余步骤
-4. 读取文件 + 分析回复 = 2步即可完成`
+【重要】
+- 这是规划阶段，不是执行阶段
+- 不要使用任何命令格式
+- 不要执行任何操作
+- 只输出步骤描述（任务描述，不要包含命令格式）
+
+【要求】
+- 步骤要精简高效
+- 避免冗余步骤
+- 输出格式：每行一个步骤，用数字编号`
       },
       {
         role: 'user',
-        content: `请将以下任务分解为2-3个具体的执行步骤：
-
-任务：${goal}
-
-要求：
-1. 每个步骤应该是可执行的、清晰的操作
-2. 步骤之间应该有逻辑顺序
-3. 避免冗余步骤（如果文件路径已知，直接读取）
-4. 输出格式：每行一个步骤，用数字编号`
+        content: `将任务分解为2-3个步骤：${goal}`
       }
     ];
     
     const response = await this.stream.callAI(messages, this.stream.config);
+    
+    if (workflow) {
+      this.recordDecisionStep(workflow, {
+        type: 'generate_todos',
+        prompt: messages[1]?.content || '',
+        messages,
+        aiResponse: response || '',
+        timestamp: Date.now()
+      });
+    }
+    
     const todos = response ? this.extractTodos(response) : [];
-    return todos.length > 0 ? todos : ['读取文件内容', '分析并回复用户'];
+    return todos.length > 0 ? todos : ['执行第一步', '执行第二步'];
   }
 
   /**
@@ -375,7 +386,8 @@ ${this.stream.buildFunctionsPrompt()}
       maxIterations: WORKFLOW_CONFIG.MAX_ITERATIONS,
       iteration: 0,
       status: WORKFLOW_STATUS.RUNNING,
-      debugSteps: []
+      debugSteps: [],
+      decisionSteps: []  // 记录决策阶段的 AI 调用
     };
   }
 
@@ -498,15 +510,21 @@ ${this.stream.buildFunctionsPrompt()}
     const result = await this.executeAction(workflow, response);
     todo.result = result;
 
+    // 如果执行失败或格式错误，记录到笔记
+    if (!result.executed && result.functions.length === 0) {
+      const actionText = this.extractActionText(response);
+      const errorMsg = `上一步执行失败：执行动作格式不正确（${actionText}），未解析到任何可执行命令。请使用正确的命令格式，如[读取:文件路径]。`;
+      await this.storeNote(workflow, todo.id, errorMsg);
+    } else if (result.error) {
+      await this.storeNote(workflow, todo.id, `执行错误：${result.error}`);
+    }
+
     // 合并上下文（包括文件内容、命令输出等）
     this.mergeContext(workflow, result.context);
     
-    // 如果执行了读取或搜索操作，更新笔记快照
-    if (result.executed && (result.functions.includes('read') || result.functions.includes('grep'))) {
-      const updatedNotes = await this.stream.getNotes(workflow.id);
-      todo.notes = updatedNotes;
-      BotUtil.makeLog('info', `[TODO-${todo.id}] 更新笔记: ${updatedNotes.length}条`, 'WorkflowManager');
-    }
+    // 更新笔记快照
+    const updatedNotes = await this.stream.getNotes(workflow.id);
+    todo.notes = updatedNotes;
     
     // 处理执行结果并反馈给用户
     await this.handleExecutionResult(workflow, todo, result, parsed.completion);
@@ -689,7 +707,7 @@ ${this.stream.buildFunctionsPrompt()}
    * 处理执行错误
    */
   async handleExecutionError(workflow, todo, errorMsg) {
-    await this.storeNote(workflow, todo.id, `执行错误: ${errorMsg}。请检查命令是否正确，文件是否存在。`);
+    await this.storeNote(workflow, todo.id, `错误: ${errorMsg}`);
     todo.status = TODO_STATUS.PENDING;
     todo.error = errorMsg;
     await this.sendReply(workflow, 'error', { task: todo.content, error: errorMsg });
@@ -702,19 +720,9 @@ ${this.stream.buildFunctionsPrompt()}
     if (result.error) return result.error;
     if (!result.context) return null;
     
-    // 通用错误字段提取（按优先级）
     const errorFields = ['commandError', 'fileError', 'error'];
     for (const field of errorFields) {
-      if (result.context[field]) {
-        return result.context[field];
-      }
-    }
-    
-    // 查找所有以Error结尾的字段
-    for (const [key, value] of Object.entries(result.context)) {
-      if (key.endsWith('Error') && value) {
-        return value;
-      }
+      if (result.context[field]) return result.context[field];
     }
     
     return null;
@@ -787,20 +795,21 @@ ${this.stream.buildFunctionsPrompt()}
   }
 
   /**
-   * 构建提示部分
+   * 构建提示部分（通用、简洁）
    */
   buildPromptSections(workflow, todo, context, progress, previousTodos, notes) {
     const sections = [];
     
-    sections.push(`【工作流目标】${workflow.goal}`);
+    sections.push(`【目标】${workflow.goal}`);
     sections.push(`【当前任务】${todo.content}`);
-    sections.push(`【进度状态】${progress.completed}/${progress.total}任务已完成`);
+    sections.push(`【进度】${progress.completed}/${progress.total}`);
     
     const completedTasks = this.buildCompletedTasksSection(previousTodos);
-    if (completedTasks) sections.push(completedTasks);
-    
-    const errors = this.buildErrorSection(notes);
-    if (errors) sections.push(errors);
+    if (completedTasks) {
+      sections.push(completedTasks);
+      const taskCheck = this.buildTaskCheckSection(workflow, todo, previousTodos);
+      if (taskCheck) sections.push(taskCheck);
+    }
     
     const contextSection = this.buildContextSection(context);
     if (contextSection) sections.push(contextSection);
@@ -809,9 +818,79 @@ ${this.stream.buildFunctionsPrompt()}
     if (notesSection) sections.push(notesSection);
     
     sections.push(this.buildRequirementsSection(context));
-    sections.push('【输出格式】\n**第一部分：自然对话**（必须）\n- 先用1-2句话自然地和用户交流，说明你在做什么\n- 语气要像正常聊天一样，可以加点个性、幽默或提醒\n\n**第二部分：格式化输出**（必须包含所有4项）\n完成度评估: [0-1之间的数字，0.8以上表示完成]\n执行动作: [使用的命令]\n下一步建议: [如果完成填"无"，否则描述下一步]\n笔记: [重要信息；read/grep已自动存笔记，无需重复；如果无需记录填"无"]');
     
     return sections;
+  }
+
+  /**
+   * 构建任务检查部分（通用机制）
+   */
+  buildTaskCheckSection(workflow, todo, previousTodos) {
+    const completedOps = [];
+    
+    for (const prevTodo of previousTodos) {
+      if (!prevTodo.result || !prevTodo.result.executed) continue;
+      
+      const prevResult = prevTodo.result;
+      const prevContext = prevResult.context || {};
+      const prevFunctions = prevResult.functions || [];
+      const relevantContext = this.extractRelevantContext(prevContext);
+      
+      if (prevFunctions.length > 0 || Object.keys(relevantContext).length > 0) {
+        completedOps.push({
+          task: prevTodo.content,
+          functions: prevFunctions,
+          context: relevantContext
+        });
+      }
+    }
+    
+    if (completedOps.length === 0) return '';
+    
+    const hints = ['检查上一步已执行的操作和结果：'];
+    
+    for (const op of completedOps) {
+      const details = [];
+      if (op.functions.length > 0) {
+        details.push(`已执行: ${op.functions.join('、')}`);
+      }
+      for (const [key, value] of Object.entries(op.context)) {
+        const displayValue = typeof value === 'string' && (value.includes('/') || value.includes('\\'))
+          ? value.split(/[/\\]/).pop()
+          : value;
+        details.push(`${key}: ${displayValue}`);
+      }
+      if (details.length > 0) {
+        hints.push(`  ✓ ${op.task} - ${details.join('，')}`);
+      }
+    }
+    
+    hints.push('如果上一步已完成当前任务目标，标记完成度=1.0，执行动作="无"');
+    hints.push('不要重复执行相同操作');
+    
+    return `【检查】\n${hints.join('\n')}\n`;
+  }
+
+  /**
+   * 提取相关上下文（通用方式，提取所有可能相关的信息）
+   */
+  extractRelevantContext(context) {
+    if (!context || typeof context !== 'object') return {};
+    
+    const relevant = {};
+    // 提取所有可能表示操作结果的字段（通用方式）
+    const resultFields = [
+      'createdExcelDoc', 'createdWordDoc', 'openedUrl',
+      'createdFile', 'generatedFile', 'openedFile', 'executedCommand'
+    ];
+    
+    for (const field of resultFields) {
+      if (context[field]) {
+        relevant[field] = context[field];
+      }
+    }
+    
+    return relevant;
   }
 
   /**
@@ -819,31 +898,33 @@ ${this.stream.buildFunctionsPrompt()}
    */
   buildCompletedTasksSection(previousTodos) {
     if (previousTodos.length === 0) return '';
-    return `【已完成任务】\n${previousTodos.map(t => `✓ ${t.content}`).join('\n')}\n`;
+    
+    const taskLines = previousTodos.map(todo => {
+      let line = `✓ ${todo.content}`;
+      
+      if (todo.result?.executed) {
+        const details = [];
+        if (todo.result.functions?.length > 0) {
+          details.push(`执行: ${todo.result.functions.join('、')}`);
+        }
+        const ctx = this.extractRelevantContext(todo.result.context);
+        for (const [key, value] of Object.entries(ctx)) {
+          const displayValue = typeof value === 'string' && (value.includes('/') || value.includes('\\'))
+            ? value.split(/[/\\]/).pop()
+            : value;
+          details.push(`${key}: ${displayValue}`);
+        }
+        if (details.length > 0) {
+          line += ` [${details.join('，')}]`;
+        }
+      }
+      
+      return line;
+    });
+    
+    return `【已完成任务】\n${taskLines.join('\n')}\n`;
   }
 
-  /**
-   * 构建错误部分
-   */
-  buildErrorSection(notes) {
-    const errorNotes = this.extractErrorNotes(notes);
-    if (errorNotes.length === 0) return '';
-    return `【⚠️ 错误信息】（需要修复）\n${errorNotes.join('\n')}\n`;
-  }
-
-  /**
-   * 提取错误笔记
-   */
-  extractErrorNotes(notes) {
-    return notes
-      .filter(note => note.content && (
-        note.content.includes('执行错误') || 
-        note.content.includes('错误') || 
-        note.content.includes('失败')
-      ))
-      .slice(0, 3)
-      .map(note => note.content.slice(0, 300));
-  }
 
   /**
    * 构建上下文部分
@@ -861,81 +942,61 @@ ${this.stream.buildFunctionsPrompt()}
   }
 
   /**
-   * 构建文件上下文部分
+   * 构建文件上下文部分（通用）
    */
   buildFileContextSection(context) {
     if (!context.fileContent) return '';
     
     const fileName = context.fileSearchResult?.fileName || context.fileName || '文件';
-    const filePath = context.fileSearchResult?.path || context.filePath || '';
     const content = context.fileContent.slice(0, 5000);
-    const truncated = context.fileContent.length > 5000 ? '\n...(内容已截断，完整内容已保存)' : '';
+    const truncated = context.fileContent.length > 5000 ? '\n...(已截断)' : '';
     
-    return `【📄 已读取的文件内容】（重要：必须使用此内容完成当前任务）\n文件名：${fileName}${filePath ? `\n文件路径：${filePath}` : ''}\n\n【完整文件内容】\n${content}${truncated}`;
+    return `【文件内容】\n文件名：${fileName}\n${content}${truncated}`;
   }
 
   /**
-   * 构建命令上下文部分
+   * 构建命令上下文部分（通用）
    */
   buildCommandContextSection(context) {
     if (!context.commandOutput || !context.commandSuccess) return '';
     
     const output = context.commandOutput.slice(0, 1000);
-    const truncated = context.commandOutput.length > 1000 ? '\n...(输出已截断)' : '';
+    const truncated = context.commandOutput.length > 1000 ? '\n...(已截断)' : '';
     
-    return `【📋 上一个命令的输出结果】\n${output}${truncated}`;
+    return `【命令输出】\n${output}${truncated}`;
   }
 
   /**
-   * 构建笔记部分
+   * 构建笔记部分（通用，无特定场景过滤）
    */
   buildNotesSection(notes) {
-    const otherNotes = this.extractOtherNotes(notes);
-    if (otherNotes.length === 0) return '';
+    if (!notes || notes.length === 0) return '';
     
-    const noteLines = [];
-    for (let i = 0; i < otherNotes.length; i++) {
-      const note = otherNotes[i];
-      const content = note.content.slice(0, 300);
-      const truncated = note.content.length > 300 ? '...' : '';
-      noteLines.push(`${i + 1}. ${content}${truncated}`);
-    }
+    const relevantNotes = notes
+      .filter(note => note.content && note.content.trim())
+      .slice(-3);
     
-    return `【📝 工作流笔记】\n${noteLines.join('\n')}`;
+    if (relevantNotes.length === 0) return '';
+    
+    return `【笔记】\n${relevantNotes.map((note, i) => `${i + 1}. ${note.content.slice(0, 200)}${note.content.length > 200 ? '...' : ''}`).join('\n')}`;
   }
 
   /**
-   * 提取其他笔记
-   */
-  extractOtherNotes(notes) {
-    return notes
-      .filter(note => note.content && 
-        !note.content.includes('【文件读取结果】') && 
-        !note.content.includes('执行错误') && 
-        !note.content.includes('失败'))
-      .slice(-5);
-  }
-
-  /**
-   * 构建要求部分
+   * 构建要求部分（通用）
    */
   buildRequirementsSection(context) {
-    const requirements = ['分析当前任务，执行必要操作'];
+    const requirements = [
+      '只执行当前任务描述的操作',
+      '检查已完成任务，避免重复执行',
+      '完成度>=0.8表示已执行且成功',
+      '使用已有上下文内容'
+    ];
     
-    if (context.fileContent) {
-      requirements.push('**重要**：必须使用"已读取的文件内容"完成当前任务，不要使用示例数据');
-    }
-    requirements.push('使用可用命令完成操作');
-    if (context.commandOutput) {
-      requirements.push('**重要**：可以使用上一个命令的输出结果来完成任务');
-    }
-    requirements.push('严格按照输出格式回复');
-    
-    return `【执行要求】\n${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
+    return `【要求】\n${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
   }
 
   /**
-   * 构建系统提示
+   * 构建系统提示（完全通用，无特定场景）
    */
   buildSystemPrompt(workflow) {
     const functionsPrompt = this.buildFunctionsPrompt();
@@ -944,88 +1005,61 @@ ${this.stream.buildFunctionsPrompt()}
     return `【工作流执行助手】
 执行多步骤工作流任务。
 
-【核心工具】（read/grep/write/run）
-- [读取:文件路径] - 读取文件（自动存笔记和上下文，优先使用；不要用powershell/cmd读取文件）
-- [搜索:关键词:文件路径(可选)] - 搜索文本（自动存笔记和上下文）
-- [写入:文件路径:内容] - 写入文件
-- [执行:命令] - 执行命令（输出会保存到上下文；禁止用来读取或修改文件内容）
-- [笔记:内容] - 手动记录笔记
+【工具】
+${functionsPrompt || '- 无可用工具'}
 
-【工作区说明】
-- 工作区默认为桌面目录
-- 用户说"工作区的文件"就是指桌面上的文件，直接读取即可
-- 不需要先列出文件或确认文件是否存在，直接[读取:文件名]即可
-
-【执行流程】
-1. 首先检查"已读取的文件内容"部分，如果有内容说明文件已被读取
-2. 如果文件已读取，直接使用该内容完成任务，不要再次读取
-3. 如果文件未读取，使用[读取:文件路径]命令读取
-4. 评估完成度（0-1，>=0.8表示完成）
-5. read/grep命令会自动保存结果到上下文和笔记，无需手动记录
-
-【重要原则】
-- 完成度 >= 0.8：任务完成，下一步建议填"无"
-- 完成度 < 0.8：任务进行中，可以建议下一步
-- **如果看到"已读取的文件内容"，说明文件已被读取，直接使用该内容，不要再次读取**
-- **禁止重复读取同一个文件**
-- **禁止添加不必要的步骤，避免冗余操作**
-- **严禁使用[启动工作流:...]命令！你已经在工作流中执行任务，不要启动新工作流，直接使用可用命令完成任务即可**
-- **禁止使用[执行:ls]、[执行:dir]等命令列出文件，直接读取即可**
-- **工作流内部只能使用read/grep/write/run等基础命令，不能启动新工作流**
-- 读取文件时，一律使用[读取:文件路径]，例如[读取:易忘信息.txt]
-- 禁止使用powershell/cmd命令读取文件内容
-- 上下文共享：所有步骤共享上下文，文件内容会自动传递给下一个步骤
-- **任务完成后，下一步建议必须填"无"或"完成"，不要建议额外操作**
+【原则】
+1. 只执行当前任务描述的操作
+2. 检查已完成任务，避免重复执行
+3. 完成度>=0.8表示已执行且成功，<0.8表示未完成或部分完成
+4. 使用已有上下文内容，不重复获取
+5. 禁止启动新工作流
 ${contextInfo}
-${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
-**第一部分：自然对话**（必须）
-- 先用1-2句话自然地和用户交流，说明你在做什么
-- 语气要像正常聊天一样，可以加点个性、幽默或提醒
-- 例如："好的，我来帮你读取这个文件看看里面有什么内容~"
+【输出格式】
+自然对话（1-2句话）
 
-**第二部分：格式化输出**（必须包含所有4项）
-完成度评估: [0-1之间的数字，0.8以上表示完成]
-执行动作: [使用的命令，如[读取:test.txt]]
-下一步建议: [如果完成填"无"，否则描述下一步]
-笔记: [重要信息；read/grep已自动存笔记，无需重复；如果无需记录填"无"]
-
-**示例输出：**
-好的，我先来读取一下这个文件，看看里面都有什么重要信息~
-
-完成度评估: 0.9
-执行动作: [读取:易忘信息.txt]
-下一步建议: 无
-笔记: 无
+完成度评估: [0-1]
+执行动作: [命令或"无"]
+下一步建议: [下一步或"无"]
+笔记: [信息或"无"]
 `;
   }
 
   /**
-   * 构建函数提示（工作流内部专用，过滤顶层命令）
+   * 构建函数提示（通用，说明用法）
    */
   buildFunctionsPrompt() {
     const allFunctions = this.collectAllFunctions();
+    const prompts = [];
     
-    if (allFunctions.length === 0) {
-      return '';
-    }
-    
-    const enabledPrompts = new Set();
     for (const func of allFunctions) {
-      // 过滤仅允许顶层调用的函数（例如启动新工作流）
-      if (func.onlyTopLevel) {
-        BotUtil.makeLog('debug', `过滤顶层命令: ${func.description}`, 'WorkflowManager');
-        continue;
-      }
-      if (func.enabled && func.prompt) {
-        enabledPrompts.add(func.prompt);
+      if (func.onlyTopLevel || !func.enabled || !func.prompt) continue;
+      
+      const simplified = this.simplifyPrompt(func.prompt);
+      if (simplified && !prompts.includes(simplified)) {
+        prompts.push(simplified);
       }
     }
     
-    if (enabledPrompts.size === 0) {
-      return '';
-    }
+    if (prompts.length === 0) return '';
     
-    return `【可用命令】\n${Array.from(enabledPrompts).join('\n')}`;
+    return `【工具使用说明】
+要执行某个操作，在回复中直接使用对应的命令格式即可。例如：
+- 想要执行回桌面，发送：[回桌面]
+- 想要读取文件，发送：[读取:文件路径]
+- 想要生成Excel，发送：[生成Excel:文件名:JSON数组]
+
+【可用工具】
+${prompts.map(p => `- ${p}`).join('\n')}`;
+  }
+
+  /**
+   * 简化 prompt 文本
+   */
+  simplifyPrompt(prompt) {
+    if (!prompt) return '';
+    const match = prompt.match(/^(\[[^\]]+\])/);
+    return match ? match[1] : prompt.split(' - ')[0].trim();
   }
 
   /**
@@ -1054,27 +1088,22 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
   }
 
   /**
-   * 构建上下文信息
+   * 构建上下文信息（通用）
    */
   buildContextInfo(context) {
     if (!context) return '';
-    
     const info = [];
     
     if (context.fileContent) {
       const fileName = context.fileSearchResult?.fileName || context.fileName || '文件';
-      info.push(`✅ 上一个步骤已成功读取文件：${fileName}`);
-      info.push(`📋 文件内容已保存在工作流上下文中，当前任务可以直接使用该内容`);
-      info.push(`⚠️ 请在"已读取的文件内容"部分查看完整内容`);
+      info.push(`已读取文件：${fileName}`);
     }
     
     if (context.commandOutput && context.commandSuccess) {
-      info.push('✅ 上一个命令执行成功，输出结果已保存在工作流上下文中');
+      info.push('上一个命令执行成功');
     }
     
-    if (info.length === 0) return '';
-    
-    return `\n【🔔 重要上下文】\n${info.join('\n')}\n`;
+    return info.length > 0 ? `\n【上下文】\n${info.join('\n')}\n` : '';
   }
 
   /**
@@ -1167,15 +1196,48 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
   /**
    * 执行动作
    */
-  async executeAction(workflow, actionText) {
+  async executeAction(workflow, response) {
     const context = this.buildActionContext(workflow);
+    let actionText = this.extractActionText(response);
+    
+    // 尝试修复格式：如果缺少方括号，尝试添加
+    actionText = this.fixActionFormat(actionText);
     
     try {
       return await this.executeFunctions(actionText, context);
     } catch (error) {
       BotUtil.makeLog('error', `执行动作失败: ${error.message}`, 'WorkflowManager');
-      return { executed: false, functions: [], context: {}, success: false, error: error.message };
+      return { executed: false, functions: [], context: { ...context, error: error.message }, success: false, error: error.message };
     }
+  }
+
+  /**
+   * 修复执行动作格式（如果缺少方括号）
+   */
+  fixActionFormat(actionText) {
+    if (!actionText || actionText.trim() === '无') return actionText;
+    
+    // 如果已经有方括号，直接返回
+    if (actionText.includes('[') && actionText.includes(']')) {
+      return actionText;
+    }
+    
+    // 尝试修复常见格式：命令:参数 -> [命令:参数]
+    const patterns = [
+      /^(\w+):(.+)$/,  // 命令:参数
+      /^(\w+)$/,       // 单个命令
+    ];
+    
+    for (const pattern of patterns) {
+      const match = actionText.match(pattern);
+      if (match) {
+        const fixed = `[${actionText}]`;
+        BotUtil.makeLog('debug', `[格式修复] ${actionText} -> ${fixed}`, 'WorkflowManager');
+        return fixed;
+      }
+    }
+    
+    return actionText;
   }
 
   /**
@@ -1198,12 +1260,14 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
     
     if (functions.length === 0) {
       BotUtil.makeLog('warn', `[执行] 没有解析到任何函数`, 'WorkflowManager');
+      // 记录解析失败信息到上下文，供笔记系统使用
+      context.parseError = `执行动作格式不正确：${actionText}`;
       return {
         executed: false,
         functions: [],
         context,
-        success: true,
-        error: null
+        success: false,
+        error: '未解析到任何可执行命令'
       };
     }
     
@@ -1241,18 +1305,12 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
     let cleanText = actionText;
     const allFunctions = [];
 
-    // 在工作流内部，直接清理掉所有 [启动工作流:...] 命令文本，避免被解析
+    // 在工作流内部，直接清理掉所有 [启动工作流:...] 命令文本
     if (context.workflowId) {
       cleanText = cleanText.replace(/\[启动工作流:[^\]]+\]/g, '').trim();
-      if (cleanText !== actionText) {
-        BotUtil.makeLog('warn', `[解析] 已清理工作流内部的 [启动工作流:...] 命令文本`, 'WorkflowManager');
-      }
     }
 
     const streams = [this.stream, ...(this.stream?._mergedStreams || [])];
-    
-    BotUtil.makeLog('debug', `[解析] 动作文本: ${actionText.substring(0, 100)}${actionText.length > 100 ? '...' : ''}`, 'WorkflowManager');
-    BotUtil.makeLog('debug', `[解析] 可用流: ${streams.map(s => `${s?.name}(${s?.functions?.size || 0})`).join(', ')}`, 'WorkflowManager');
 
     for (const s of streams) {
       if (!s?.functions || s.functions.size === 0) continue;
@@ -1271,7 +1329,6 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
 
         const result = func.parser(cleanText, context);
         if (result.functions && result.functions.length > 0) {
-          BotUtil.makeLog('debug', `[解析] ${func.description} → ${result.functions.length} 个操作`, 'WorkflowManager');
           allFunctions.push(...result.functions);
         }
         if (result.cleanText !== undefined) {
@@ -1282,15 +1339,10 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
 
     BotUtil.makeLog('info', `[解析] 总计: ${allFunctions.length} 个函数 [${allFunctions.map(f => f.type).join(', ')}]`, 'WorkflowManager');
 
-    // 在工作流内部，禁止再次启动多步工作流（双重保险）
-    const filteredFunctions = allFunctions.filter(fn => {
-      if (!context.workflowId) return true;
-      if (fn.type === 'start_workflow') {
-        BotUtil.makeLog('warn', `[解析] 过滤工作流内部的 start_workflow 命令`, 'WorkflowManager');
-        return false;
-      }
-      return true;
-    });
+    // 在工作流内部，禁止再次启动多步工作流
+    const filteredFunctions = context.workflowId
+      ? allFunctions.filter(fn => fn.type !== 'start_workflow')
+      : allFunctions;
 
     // 按 order 排序
     const withOrder = filteredFunctions.filter(fn => typeof fn.order === 'number');
@@ -1321,16 +1373,6 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
    */
   handleFunctionError(context, func, error) {
     context.commandError = context.commandError || error.message;
-    if (this.isFileRelatedFunction(func.type)) {
-      context.fileError = context.fileError || error.message;
-    }
-  }
-
-  /**
-   * 判断是否为文件相关函数
-   */
-  isFileRelatedFunction(funcType) {
-    return funcType.includes('read') || funcType.includes('file');
   }
 
   /**
@@ -1354,6 +1396,26 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
    */
   removeWorkflow(workflowId) {
     this.activeWorkflows.delete(workflowId);
+  }
+
+  /**
+   * 记录决策阶段的 AI 调用
+   */
+  recordDecisionStep(workflow, { type, prompt, messages, aiResponse, timestamp }) {
+    if (!workflow) return;
+    if (!workflow.decisionSteps) {
+      workflow.decisionSteps = [];
+    }
+
+    const decisionRecord = {
+      type,
+      prompt,
+      messages: Array.isArray(messages) ? messages : [],
+      aiResponse: aiResponse || '',
+      timestamp: timestamp || Date.now()
+    };
+
+    workflow.decisionSteps.push(decisionRecord);
   }
 
   /**
@@ -1441,7 +1503,7 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
   }
 
   /**
-   * 将多步工作流的完整信息写入 data/debug 目录
+   * 将工作流的完整信息写入 data/debug 目录（包括所有 prompt 和 AI 回应）
    */
   async saveDebugLog(workflow) {
     if (!workflow) return;
@@ -1449,12 +1511,18 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
     const steps = Array.isArray(workflow.debugSteps) ? workflow.debugSteps : [];
     const totalTodos = Array.isArray(workflow.todos) ? workflow.todos.length : 0;
 
-    // 仅对多步工作流或实际执行了多步的情况写入调试日志
-    if (totalTodos <= 1 && steps.length <= 1) {
-      return;
-    }
+    // 记录所有工作流，包括单步工作流，确保所有 prompt 和 AI 回应都被记录
+    // 移除之前的限制条件，现在所有工作流都会被记录
 
     const debugDir = path.join(paths.data, 'debug');
+    // 确保 debug 目录存在
+    try {
+      const fs = await import('fs/promises');
+      await fs.mkdir(debugDir, { recursive: true });
+    } catch (err) {
+      BotUtil.makeLog('error', `创建 debug 目录失败: ${err.message}`, 'WorkflowManager');
+    }
+    
     const filePath = path.join(debugDir, `workflow-${workflow.id}.json`);
 
     const safeTodos = (workflow.todos || []).map(todo => ({
@@ -1477,10 +1545,14 @@ ${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【输出格式】
       todos: safeTodos,
       notes: workflow.notes || [],
       history: workflow.history || [],
-      steps
+      steps,
+      // 记录决策阶段的 AI 调用
+      decisionSteps: Array.isArray(workflow.decisionSteps) ? workflow.decisionSteps : []
     };
 
     const json = JSON.stringify(payload, null, 2);
     await BotUtil.writeFile(filePath, json, { encoding: 'utf8' });
+    BotUtil.makeLog('info', `工作流调试日志已保存: ${filePath}`, 'WorkflowManager');
   }
 }
+

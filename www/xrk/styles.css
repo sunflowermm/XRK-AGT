@@ -1119,10 +1119,14 @@ select.form-input {
 .chat-messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* 确保消息不会超出容器 */
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .chat-message {
@@ -1134,6 +1138,12 @@ select.form-input {
   font-size: 14px;
   line-height: 1.6;
   position: relative;
+  /* 防止消息内容溢出容器 */
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  /* 确保消息框不会超出容器 */
+  box-sizing: border-box;
 }
 
 .chat-copy-btn {
@@ -1175,11 +1185,13 @@ select.form-input {
   max-height: 400px;
   border-radius: var(--radius-md);
   margin-top: 8px;
-  transition: transform 0.2s, opacity 0.2s;
+  transition: transform 0.2s, opacity 0.3s ease;
   object-fit: contain;
-  /* 懒加载优化 */
+  /* 初始状态：显示占位，加载完成后显示 */
   opacity: 0;
-  transition: opacity 0.3s ease;
+  display: block;
+  width: auto;
+  height: auto;
 }
 
 .chat-image.loaded {
@@ -1188,7 +1200,22 @@ select.form-input {
 
 .chat-image:hover {
   transform: scale(1.02);
-  opacity: 0.9;
+  opacity: 0.95;
+}
+
+/* 图片加载占位符 */
+.chat-image:not(.loaded) {
+  background: var(--bg-input);
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-image:not(.loaded)::before {
+  content: '🖼️';
+  font-size: 48px;
+  opacity: 0.3;
 }
 
 /* 图片预览模态框 */

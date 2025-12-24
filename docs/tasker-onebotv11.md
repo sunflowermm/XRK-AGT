@@ -168,9 +168,9 @@ MessageSegment = {
 
 ## 注册与初始化
 
-### 适配器注册
+### Tasker注册
 
-适配器在模块加载时自动注册：
+Tasker在模块加载时自动注册：
 
 ```javascript
 // core/tasker/OneBotv11.js
@@ -179,7 +179,7 @@ Bot.tasker.push(new OneBotv11Tasker())
 
 ### WebSocket 连接处理
 
-适配器在 `load()` 方法中向 `Bot.wsf[this.path]` 注册 WebSocket 处理函数：
+Tasker在 `load()` 方法中向 `Bot.wsf[this.path]` 注册 WebSocket 处理函数：
 
 ```javascript
 // this.path = 'OneBotv11'
@@ -210,7 +210,7 @@ Bot.wsf['OneBotv11'].push((ws, ...args) => {
 
 **示例：**
 ```javascript
-// 在适配器内部使用
+// 在Tasker内部使用
 const result = await this.sendApi(data, ws, 'get_login_info')
 // result = { user_id: '123456', nickname: 'Bot' }
 ```
@@ -381,11 +381,11 @@ await group.sendMsg('Hello')
 
 ### 生命周期事件处理
 
-当 OneBot 客户端发送 `lifecycle` 元事件时，适配器会执行以下流程：
+当 OneBot 客户端发送 `lifecycle` 元事件时，Tasker会执行以下流程：
 
 1. **创建 Bot 实例**
    - 在 `Bot[self_id]` 下创建基础 Bot 对象
-   - 挂载适配器、WebSocket、API 方法等
+   - 挂载Tasker、WebSocket、API 方法等
    - 将 `self_id` 加入 `Bot.uin` 列表
 
 2. **获取基础信息**
@@ -468,8 +468,8 @@ export default class MyPlugin extends plugin {
   }
 }
 
-// ❌ 错误：直接调用适配器方法
-// 适配器方法不应在插件中直接调用
+// ❌ 错误：直接调用Tasker方法
+// Tasker方法不应在插件中直接调用
 ```
 
 ### 在插件中访问好友/群信息
@@ -511,10 +511,10 @@ export default class MyPlugin extends plugin {
 }
 ```
 
-### 在适配器内部使用
+### 在Tasker内部使用
 
 ```javascript
-// ✅ 正确：在适配器方法中使用
+// ✅ 正确：在Tasker方法中使用
 sendFriendMsg(data, msg) {
   // data.bot 是 Bot[self_id] 实例
   return data.bot.sendApi('send_msg', {
@@ -535,7 +535,7 @@ sendFriendMsg(data, msg) {
 2. **对象访问器**
    - `e.friend`, `e.group`, `e.member` 由`OneBotEnhancer`增强插件通过`accept`方法挂载
    - 使用getter延迟加载，首次访问时创建对象
-   - 这些属性只在OneBot事件中可用，其他适配器事件中不存在
+   - 这些属性只在OneBot事件中可用，其他Tasker事件中不存在
 
 3. **消息格式**
    - 消息可以是字符串、对象或数组
@@ -555,7 +555,7 @@ sendFriendMsg(data, msg) {
 
 ### 观察日志
 
-适配器使用 `Bot.makeLog` 记录日志：
+Tasker使用 `Bot.makeLog` 记录日志：
 
 - **info**: 正常操作（发送/接收消息、群变动等）
 - **warn**: 警告信息（未知消息类型、Bot 不存在等）
@@ -566,7 +566,7 @@ sendFriendMsg(data, msg) {
 
 - 所有通过 OneBotv11 接入的消息最终都会转译为统一事件格式
 - 事件经由 `OneBotEvent` 监听器处理，然后交给 `PluginsLoader.deal(e)` 处理
-- 插件通过 `e.friend/e.group/e.member` 调用的方法，实际上都由适配器封装与执行
+- 插件通过 `e.friend/e.group/e.member` 调用的方法，实际上都由Tasker封装与执行
 
 ---
 
@@ -576,4 +576,4 @@ sendFriendMsg(data, msg) {
 - [OneBot v11 规范](https://github.com/botuniverse/onebot-11)
 - [NapCat 文档](https://napcat.github.io/)
 
-适配器实现的方法与 OneBot v11 规范保持一致，部分扩展方法请参考适配器源码注释。
+Tasker实现的方法与 OneBot v11 规范保持一致，部分扩展方法请参考Tasker源码注释。

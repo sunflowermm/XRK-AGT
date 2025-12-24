@@ -1,6 +1,6 @@
 ## XRK-AGT v1.0.0
 
-XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多平台、多适配器、工作流驱动型智能体平台**，采用分层架构设计，支持：
+XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多平台、多Tasker、工作流驱动型智能体平台**，采用分层架构设计，支持：
 
 - **多平台消息接入**：OneBotv11 / ComWeChat / 自定义 Tasker
 - **插件工作流**：指令插件 + AI 工作流 (`AIStream`)
@@ -232,7 +232,7 @@ XRK-AGT/
 │  └─ utils/                  # 工具函数（paths/botutil 等）
 │
 ├─ core/                      # 业务层与任务层
-│  ├─ tasker/                 # 任务层（Tasker）- 各平台适配器
+│  ├─ tasker/                 # 任务层（Tasker）- 各平台Tasker
 │  │  ├─ OneBotv11.js         # OneBotv11 Tasker
 │  │  ├─ ComWeChat.js         # ComWeChat Tasker
 │  │  ├─ stdin.js             # stdin Tasker
@@ -437,6 +437,12 @@ node app   # 或 node start.js
 #### 运行核心与基础设施
 - [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)：项目整体架构与目录结构详细说明
 - [`docs/bot.md`](docs/bot.md)：Bot 主类详细文档
+- **[`docs/server.md`](docs/server.md)** - **Server 服务器架构文档** ⭐ 新
+  - 统一的HTTP/HTTPS/WebSocket服务
+  - 反向代理系统（多域名、SNI支持）
+  - 端口运行逻辑与配置
+  - 平台SDK适配度
+  - 快速搭建各种通讯协议
 
 #### 任务层与事件系统
 - [`docs/tasker-base-spec.md`](docs/tasker-base-spec.md)：Tasker 底层规范（事件生成器规范）

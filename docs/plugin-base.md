@@ -29,7 +29,7 @@
 - `event: 'device'` - 匹配所有设备事件
 
 **特定事件监听（只匹配特定来源）：**
-- `event: 'onebot.message'` - 只匹配 OneBot 适配器的 message 事件
+- `event: 'onebot.message'` - 只匹配 OneBot Tasker 的 message 事件
 - `event: 'device.message'` - 只匹配设备的 message 事件
 - `event: 'onebot.notice.group_increase'` - 只匹配 OneBot 的群成员增加通知
 
@@ -196,9 +196,9 @@ export default class DevicePlugin extends plugin {
 
 插件基类提供了默认的 `accept` 方法，默认返回 `true`（所有事件都通过）。
 
-### 适配器增强插件模式
+### Tasker增强插件模式
 
-适配器增强插件使用 `accept` 方法来处理适配器特定的属性挂载：
+Tasker增强插件使用 `accept` 方法来处理Tasker特定的属性挂载：
 
 ```javascript
 // OneBotEnhancer 示例
@@ -265,7 +265,7 @@ export default class MyPlugin extends plugin {
 
 ### 执行顺序
 
-1. 适配器增强插件（priority: 1）先执行，挂载适配器特定属性
+1. Tasker增强插件（priority: 1）先执行，挂载Tasker特定属性
 2. 其他插件按优先级顺序执行 `accept` 方法
 3. 只有通过所有 `accept` 检查的插件才会继续执行规则匹配
 
@@ -276,14 +276,14 @@ export default class MyPlugin extends plugin {
   - 对于高频触发的规则，可将 `rule.log` 设为 `false`，避免刷屏。
 
 - **优先级与节流**
-  - 适配器增强插件应使用 `priority: 1`，确保最先执行。
+  - Tasker增强插件应使用 `priority: 1`，确保最先执行。
   - 与核心系统插件（如别名处理、调度插件）共存时，建议使用较大的 `priority`（例如 `5000` 以上）。
   - 对需要绕过全局冷却与只对少数命令生效的插件，可以将 `bypassThrottle` 设为 `true`，并结合严格的 `reg` 与 `permission`。
 
 - **accept 方法使用**
-  - 适配器增强插件应在 `accept` 中挂载适配器特定属性，而不是在规则方法中。
+  - Tasker增强插件应在 `accept` 中挂载Tasker特定属性，而不是在规则方法中。
   - 使用 `accept` 进行前置检查时，应尽早返回，避免不必要的处理。
-  - 适配器特定属性（如 `friend`、`group`、`member`）应使用 getter 延迟加载。
+  - Tasker特定属性（如 `friend`、`group`、`member`）应使用 getter 延迟加载。
 
 - **上下文使用**
   - 多轮对话时，请务必在流程结束或异常时调用 `finish` 清理上下文，避免长期占用。
@@ -298,9 +298,9 @@ export default class MyPlugin extends plugin {
 ## 与 Bot / HTTP / 辅助层的有机联系
 
 - **事件入口**：插件永远通过事件对象 `e` 与系统交互：
-  - `e.bot`：当前账号/设备/STDIN 对应的子 Bot（由监听器 + 适配器增强插件挂载）。
+  - `e.bot`：当前账号/设备/STDIN 对应的子 Bot（由监听器 + Tasker增强插件挂载）。
   - `e.tasker`：事件来源（`onebot/device/stdin/...`）。
-  - `e.reply`：统一回复接口，内部基于 `e.bot` 与对应适配器的 `sendMsg` 实现。
+  - `e.reply`：统一回复接口，内部基于 `e.bot` 与对应Tasker的 `sendMsg` 实现。
 - **访问 HTTP/配置/渲染等业务能力**：
   - 通过全局 `Bot`：
     - 访问子 Bot：`Bot[e.self_id]` / `Bot[e.device_id]`。
@@ -310,4 +310,4 @@ export default class MyPlugin extends plugin {
     - 存储跨会话状态、统计信息或长生命周期数据。
   - 通过 `ConfigBase` 子类暴露的 HTTP 接口，插件也可以间接读写配置（不建议直接 import 配置类，优先复用 HTTP API）。
 
-> 总结：插件站在「事件中心」，向下通过 `e.bot/Bot` 访问适配器、HTTP、渲染与 Redis，向上只暴露规则和行为。业务层优先实现为插件 + 工作流，HTTP 仅作为「入口和管理界面」，保持一套逻辑可复用在不同入口（群聊、设备、Web 控制台、STDIN）。
+> 总结：插件站在「事件中心」，向下通过 `e.bot/Bot` 访问Tasker、HTTP、渲染与 Redis，向上只暴露规则和行为。业务层优先实现为插件 + 工作流，HTTP 仅作为「入口和管理界面」，保持一套逻辑可复用在不同入口（群聊、设备、Web 控制台、STDIN）。

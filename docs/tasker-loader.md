@@ -28,13 +28,13 @@
 ## 加载流程：`load(bot = Bot)`
 
 1. 初始化统计对象 `summary`：
-   - `scanned`：扫描到的适配器文件数。
+   - `scanned`：扫描到的Tasker文件数。
    - `loaded`：成功 `import` 的数量。
    - `failed`：导入失败数量。
    - `registered`：新注册的 Tasker 数量（`bot.tasker.length` 的增量）。
    - `errors`：失败详情 `{ name, message }[]`。
 
-2. 调用 `getAdapterFiles()`：
+2. 调用 `getTaskerFiles()`：
    - 使用 `fs.readdir(baseDir, { withFileTypes: true })`。
    - 筛选出 `.js` 文件并转换为 `{ name, href }`，其中：
      - `href` 使用 `pathToFileURL` 生成 `file://` URL，适配 ES Module 动态导入。
@@ -57,7 +57,7 @@
 
 ---
 
-## 扫描逻辑：`getAdapterFiles()`
+## 扫描逻辑：`getTaskerFiles()`
 
 - 使用 `fs.readdir(this.baseDir, { withFileTypes: true })` 读取目录。
 - 过滤出「普通文件 + `.js` 扩展名」。

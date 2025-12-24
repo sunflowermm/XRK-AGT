@@ -172,6 +172,7 @@ class App {
     };
     this._chatHistory = this._loadChatHistory();
     this._deviceWs = null;
+    this._wsConnecting = false;
     this._micActive = false;
     this._ttsQueue = [];
     this._ttsPlaying = false;
@@ -195,6 +196,7 @@ class App {
     this._lastHeartbeatAt = 0;     // 最近一次发送心跳的时间
     this._lastWsMessageAt = 0;     // 最近一次收到 WS 消息的时间
     this._offlineCheckTimer = null; // 前端兜底的离线检测（与后端30分钟规则对齐）
+    this._processedMessageIds = new Set(); // 消息去重集合
     
     this.init();
   }
@@ -1353,6 +1355,14 @@ class App {
     this._chatHistory = this._loadChatHistory();
     this.restoreChatHistory();
     this.ensureDeviceWs();
+    
+    // 页面可见性变化时重新加载聊天历史
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        this._chatHistory = this._loadChatHistory();
+        this.restoreChatHistory();
+      }
+    });
   }
   
 
@@ -1363,12 +1373,32 @@ class App {
   }
 
   _saveChatHistory() {
-    localStorage.setItem('chatHistory', JSON.stringify(this._chatHistory.slice(-200)));
+    try {
+      // 保存最后200条记录，确保有足够空间
+      const historyToSave = Array.isArray(this._chatHistory) 
+        ? this._chatHistory.slice(-200) 
+        : [];
+      localStorage.setItem('chatHistory', JSON.stringify(historyToSave));
+    } catch (e) {
+      console.warn('保存聊天记录失败:', e);
+      // 如果存储空间不足，尝试保存更少的记录
+      try {
+        const historyToSave = Array.isArray(this._chatHistory) 
+          ? this._chatHistory.slice(-100) 
+          : [];
+        localStorage.setItem('chatHistory', JSON.stringify(historyToSave));
+      } catch (e2) {
+        console.error('保存聊天记录失败（精简版）:', e2);
+      }
+    }
   }
 
   restoreChatHistory() {
     const box = document.getElementById('chatMessages');
     if (!box) return;
+    
+    // 重新加载聊天历史（确保从localStorage获取最新数据）
+    this._chatHistory = this._loadChatHistory();
     
     // 清空现有内容，避免重复显示
     box.innerHTML = '';
@@ -1482,6 +1512,19 @@ class App {
       img.loading = 'lazy';
       img.style.cursor = 'pointer';
       img.title = '点击查看大图';
+      
+      // 图片加载完成后显示
+      img.onload = () => {
+        img.classList.add('loaded');
+      };
+      
+      // 图片加载失败时也显示（避免一直隐藏）
+      img.onerror = () => {
+        img.classList.add('loaded');
+        img.alt = '图片加载失败';
+        img.style.opacity = '0.5';
+      };
+      
       img.addEventListener('click', () => this.showImagePreview(url));
       div.appendChild(img);
       box.appendChild(div);
@@ -1608,6 +1651,12 @@ class App {
     this._saveChatHistory();
     const box = document.getElementById('chatMessages');
     if (box) box.innerHTML = '';
+    // 确保localStorage也被清空
+    try {
+      localStorage.removeItem('chatHistory');
+    } catch (e) {
+      console.warn('清空聊天记录失败:', e);
+    }
   }
 
   async sendChatMessage() {
@@ -3925,6 +3974,10 @@ class App {
     const state = this._deviceWs?.readyState;
     if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
     
+    // 防止重复连接：如果正在连接中，直接返回
+    if (this._wsConnecting) return;
+    this._wsConnecting = true;
+    
     // 清理旧的连接和定时器
     try {
       this._deviceWs?.close();
@@ -3940,6 +3993,7 @@ class App {
       this._deviceWs = new WebSocket(wsUrl);
       
       this._deviceWs.onopen = () => {
+        this._wsConnecting = false;
         this._deviceWs.device_id = deviceId;
         this._deviceWs.send(JSON.stringify({
           type: 'register',
@@ -3992,15 +4046,18 @@ class App {
       };
       
       this._deviceWs.onclose = () => {
+        this._wsConnecting = false;
         this._clearWsTimers();
         this._deviceWs = null;
         setTimeout(() => this.ensureDeviceWs(), 5000);
       };
       
       this._deviceWs.onerror = (e) => {
+        this._wsConnecting = false;
         console.warn('WebSocket错误:', e);
       };
     } catch (e) {
+      this._wsConnecting = false;
       console.warn('WebSocket连接失败:', e);
     }
   }
@@ -4083,6 +4140,19 @@ class App {
   }
 
   handleWsMessage(data) {
+    // 消息去重：使用event_id或timestamp+type作为唯一标识
+    const messageId = data.event_id || `${data.type}_${data.timestamp || Date.now()}_${JSON.stringify(data).slice(0, 50)}`;
+    if (this._processedMessageIds.has(messageId)) {
+      return; // 已处理过，跳过
+    }
+    this._processedMessageIds.add(messageId);
+    
+    // 限制去重集合大小，避免内存泄漏
+    if (this._processedMessageIds.size > 1000) {
+      const firstId = this._processedMessageIds.values().next().value;
+      this._processedMessageIds.delete(firstId);
+    }
+    
     switch (data.type) {
       case 'heartbeat_request':
         if (this._deviceWs?.readyState === WebSocket.OPEN) {
@@ -4126,19 +4196,10 @@ class App {
               messages.push(text);
             }
           } else if (seg.type === 'image') {
-            // 优先使用url，如果没有则从data.file生成
-            let url = seg.url;
-            if (!url && seg.data?.file) {
-              const filePath = seg.data.file;
-              const trashIndex = filePath.indexOf('trash');
-              if (trashIndex !== -1) {
-                url = `/api/trash/${filePath.substring(trashIndex + 6).replace(/\\/g, '/')}`;
-              } else {
-                // 如果路径中没有trash，可能是相对路径，直接使用
-                url = `/api/trash/${filePath.replace(/\\/g, '/')}`;
-              }
+            // 直接使用url（路径转换已在后端device.js的reply方法中处理）
+            if (seg.url) {
+              images.push(seg.url);
             }
-            if (url) images.push(url);
           }
         });
         

@@ -1,4 +1,4 @@
-# Tasker 底层规范（原适配器规范）
+# Tasker 底层规范
 
 本文档定义了所有 Tasker（任务层 / 事件生成器）最底层应该具备的属性和函数，这些是 Tasker 的基础接口，不包含任何特定 Tasker（如 OneBot、stdin、device）的专有逻辑。
 
@@ -51,9 +51,9 @@ bot.tasker = {
   user_id: string|number,       // 用户ID（如果适用）
   sender: {                    // 发送者信息对象
     user_id: string|number,     // 用户ID
-    nickname?: string,          // 昵称（适配器特定）
-    card?: string,              // 名片/备注（适配器特定）
-    // 其他适配器特定字段...
+    nickname?: string,          // 昵称（Tasker特定）
+    card?: string,              // 名片/备注（Tasker特定）
+    // 其他Tasker特定字段...
   },
   
   // 回复方法（通用）
@@ -197,7 +197,7 @@ Tasker 增强插件通过 `accept` 方法处理 Tasker 特定属性：
 
 插件系统会：
 
-1. 调用适配器增强插件的 `accept` 方法
+1. 调用Tasker增强插件的 `accept` 方法
 2. 调用其他插件的 `accept` 方法
 3. 执行匹配的插件规则
 
@@ -215,6 +215,6 @@ TaskerLoader 应该：
 1. **不要假设特定 Tasker**：底层代码不应该假设 OneBot、stdin 或 device 的存在
 2. **使用 Tasker 标识**：通过 `e.tasker` 或 `e.tasker_name` 判断 Tasker 类型
 3. **延迟加载对象**：friend、group、member 等对象应该使用 getter 延迟加载
-4. **插件处理特定逻辑**：所有适配器特定逻辑都应该在增强插件中处理
-5. **保持底层通用**：底层代码应该对所有适配器通用
+4. **插件处理特定逻辑**：所有Tasker特定逻辑都应该在增强插件中处理
+5. **保持底层通用**：底层代码应该对所有Tasker通用
 

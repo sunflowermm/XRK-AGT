@@ -4,6 +4,7 @@ import fsSync from 'fs';
 import { ulid } from 'ulid';
 import crypto from 'crypto';
 import paths from '../../src/utils/paths.js';
+import BotUtil from '../../src/utils/botutil.js';
 
 const uploadDir = path.join(paths.data, 'uploads');
 const mediaDir = path.join(paths.data, 'media');
@@ -73,28 +74,6 @@ async function parseMultipartData(req) {
 }
 
 /**
- * 根据MIME类型获取文件扩展名
- */
-function getExtFromMime(mimeType) {
-  const mimeMap = {
-    'image/jpeg': '.jpg',
-    'image/png': '.png',
-    'image/gif': '.gif',
-    'image/webp': '.webp',
-    'video/mp4': '.mp4',
-    'video/webm': '.webm',
-    'audio/mpeg': '.mp3',
-    'audio/ogg': '.ogg',
-    'audio/wav': '.wav',
-    'application/pdf': '.pdf',
-    'application/json': '.json',
-    'text/plain': '.txt',
-    'text/html': '.html'
-  };
-  return mimeMap[mimeType] || '.file';
-}
-
-/**
  * 文件管理API
  * 提供文件上传、下载、预览等功能
  */
@@ -159,8 +138,8 @@ export default {
               name: file.originalname,
               path: targetPath,
               url: `${Bot.url}/${isMedia ? 'media' : 'uploads'}/${filename}`,
-              download_url: `${Bot.url}/api/file/download/${fileId}`,
-              preview_url: isMedia ? `${Bot.url}/api/file/preview/${fileId}` : null,
+              download_url: `${Bot.url}/api/file/${fileId}?download=true`,
+              preview_url: isMedia ? `${Bot.url}/api/file/${fileId}` : null,
               size: file.size,
               mime: file.mimetype,
               hash: hash,
@@ -210,7 +189,7 @@ export default {
             });
           }
         } catch (error) {
-          logger.error(`文件上传处理失败: ${error.message}`);
+          BotUtil.makeLog('error', `文件上传处理失败: ${error.message}`, 'FileAPI');
           res.status(500).json({ 
             success: false, 
             message: '文件上传失败',
@@ -226,6 +205,7 @@ export default {
       path: '/api/file/:id',
       handler: async (req, res, Bot) => {
         const { id } = req.params;
+        const { download } = req.query;
         const fileInfo = fileMap.get(id);
 
         if (!fileInfo) {
@@ -235,11 +215,16 @@ export default {
               const file = files.find(f => f.includes(id));
               if (file) {
                 const filePath = path.join(dir, file);
+                if (download === 'true') {
+                  return res.download(filePath, file);
+                }
+                res.setHeader('Content-Type', 'application/octet-stream');
+                res.setHeader('Cache-Control', 'public, max-age=3600');
                 return res.sendFile(filePath);
               }
             }
           } catch (err) {
-            logger.error(`查找文件失败: ${err.message}`);
+            BotUtil.makeLog('error', `查找文件失败: ${err.message}`, 'FileAPI');
           }
           
           return res.status(404).json({ 
@@ -251,69 +236,14 @@ export default {
 
         try {
           await fs.access(fileInfo.path);
-          res.sendFile(fileInfo.path);
-        } catch {
-          fileMap.delete(id);
-          res.status(404).json({ 
-            success: false, 
-            message: '文件不存在',
-            code: 404
-          });
-        }
-      }
-    },
-
-    {
-      method: 'GET',
-      path: '/api/file/download/:id',
-      handler: async (req, res, Bot) => {
-        const { id } = req.params;
-        const fileInfo = fileMap.get(id);
-
-        if (!fileInfo) {
-          return res.status(404).json({ 
-            success: false, 
-            message: '文件不存在',
-            code: 404
-          });
-        }
-
-        try {
-          await fs.access(fileInfo.path);
-          res.download(fileInfo.path, fileInfo.name);
-        } catch {
-          fileMap.delete(id);
-          res.status(404).json({ 
-            success: false, 
-            message: '文件不存在',
-            code: 404
-          });
-        }
-      }
-    },
-
-    {
-      method: 'GET',
-      path: '/api/file/preview/:id',
-      handler: async (req, res, Bot) => {
-        const { id } = req.params;
-        const fileInfo = fileMap.get(id);
-
-        if (!fileInfo || !fileInfo.is_media) {
-          return res.status(404).json({ 
-            success: false, 
-            message: '预览不可用',
-            code: 404
-          });
-        }
-
-        try {
-          await fs.access(fileInfo.path);
           
-          res.setHeader('Content-Type', fileInfo.mime);
-          res.setHeader('Cache-Control', 'public, max-age=3600');
-          
-          res.sendFile(fileInfo.path);
+          if (download === 'true') {
+            res.download(fileInfo.path, fileInfo.name);
+          } else {
+            res.setHeader('Content-Type', fileInfo.mime);
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.sendFile(fileInfo.path);
+          }
         } catch {
           fileMap.delete(id);
           res.status(404).json({ 
@@ -345,7 +275,7 @@ export default {
             await fs.unlink(fileInfo.path);
             fileMap.delete(id);
           } catch (err) {
-            logger.error(`删除文件失败: ${err.message}`);
+            BotUtil.makeLog('error', `删除文件失败: ${err.message}`, 'FileAPI');
           }
         }
 
@@ -387,95 +317,6 @@ export default {
           timestamp: Date.now()
         });
       }
-    },
-
-    {
-      method: 'POST',
-      path: '/api/file/upload-base64',
-      handler: async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ 
-            success: false, 
-            message: 'Unauthorized',
-            code: 403
-          });
-        }
-
-        const { data, filename = 'file', mime = 'application/octet-stream' } = req.body;
-
-        if (!data) {
-          return res.status(400).json({ 
-            success: false, 
-            message: '缺少文件数据',
-            code: 400
-          });
-        }
-
-        try {
-          let base64Data = data;
-          if (data.includes(',')) {
-            base64Data = data.split(',')[1];
-          }
-          
-          const buffer = Buffer.from(base64Data, 'base64');
-          
-          const ext = path.extname(filename) || getExtFromMime(mime);
-          const fileId = ulid();
-          const finalFilename = `${fileId}${ext}`;
-          
-          const isMedia = /^(image|video|audio)\//.test(mime);
-          const targetDir = isMedia ? mediaDir : uploadDir;
-          const targetPath = path.join(targetDir, finalFilename);
-          
-          await fs.writeFile(targetPath, buffer);
-          
-          const fileInfo = {
-            id: fileId,
-            name: filename,
-            path: targetPath,
-            url: `${Bot.url}/${isMedia ? 'media' : 'uploads'}/${finalFilename}`,
-            download_url: `${Bot.url}/api/file/download/${fileId}`,
-            preview_url: isMedia ? `${Bot.url}/api/file/preview/${fileId}` : null,
-            size: buffer.length,
-            mime: mime,
-            is_media: isMedia,
-            upload_time: Date.now()
-          };
-
-          fileMap.set(fileId, fileInfo);
-
-          const results = [{
-            type: isMedia ? 'image' : 'file',
-            data: [{
-              type: isMedia ? 'image' : 'file',
-              url: fileInfo.url,
-              name: fileInfo.name,
-              size: fileInfo.size,
-              mime: fileInfo.mime,
-              download_url: fileInfo.download_url,
-              preview_url: fileInfo.preview_url
-            }]
-          }];
-
-          res.json({
-            success: true,
-            code: 200,
-            file_id: fileId,
-            file_url: fileInfo.url,
-            file_name: fileInfo.name,
-            results: results,
-            timestamp: Date.now()
-          });
-        } catch (error) {
-          logger.error(`Base64文件上传失败: ${error.message}`);
-          res.status(500).json({ 
-            success: false, 
-            message: '文件上传失败',
-            error: error.message,
-            code: 500
-          });
-        }
-      }
     }
   ],
 
@@ -490,7 +331,7 @@ export default {
           try {
             await fs.unlink(info.path);
             fileMap.delete(id);
-            logger.debug(`清理过期文件: ${info.name}`);
+            BotUtil.makeLog('debug', `清理过期文件: ${info.name}`, 'FileAPI');
           } catch {}
         }
       }

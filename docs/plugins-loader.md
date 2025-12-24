@@ -102,12 +102,12 @@
 
 ### 2. `dealMsg(e)`
 
-- `initMsgProps(e)`：初始化通用消息属性（`e.img/e.video/e.audio/e.msg`）。适配器特定的属性（如`atList`、`atBot`）由适配器增强插件处理。
-- `parseMessage(e)`：遍历 `e.message`，只处理通用消息类型（`text/image/video/audio/file`）。适配器特定的消息类型（如`at`、`reply`、`face`）由适配器增强插件处理。
+- `initMsgProps(e)`：初始化通用消息属性（`e.img/e.video/e.audio/e.msg`）。Tasker特定的属性（如`atList`、`atBot`）由Tasker增强插件处理。
+- `parseMessage(e)`：遍历 `e.message`，只处理通用消息类型（`text/image/video/audio/file`）。Tasker特定的消息类型（如`at`、`reply`、`face`）由Tasker增强插件处理。
 - `setupEventProps(e)`：
   - 标记通用事件类型（`isDevice/isStdin`）。
   - 设置基础 `sender` 信息。
-  - 适配器特定的属性（`isPrivate/isGroup/isGuild`、`group_name`、`friend/group/member`等）由适配器增强插件处理。
+  - Tasker特定的属性（`isPrivate/isGroup/isGuild`、`group_name`、`friend/group/member`等）由Tasker增强插件处理。
 - `checkPermissions(e)`：识别主人（master）与 STDIN 默认主人权限。
 - `processAlias(e)`：群聊场景下处理 Bot 别名（如「葵子」）。
 - `addUtilMethods(e)`：注入 `getSendableMedia/throttle/getEventHistory` 等工具。
@@ -122,8 +122,8 @@
 - 若为扩展插件：
   - 直接调用 `processRules(plugins, e)`。
 - 若为普通插件：
-  - 先执行各插件的 `accept(e)`（包括适配器增强插件与响应控制逻辑）：
-    - 适配器增强插件（如`OneBotEnhancer`、`StdinEnhancer`、`DeviceEnhancer`）会在此阶段挂载适配器特定属性或标准化日志。
+  - 先执行各插件的 `accept(e)`（包括Tasker增强插件与响应控制逻辑）：
+    - Tasker增强插件（如`OneBotEnhancer`、`StdinEnhancer`、`DeviceEnhancer`）会在此阶段挂载Tasker特定属性或标准化日志。
     - `OneBotEnhancer` 内置别名与 `onlyReplyAt` 策略，用于决定是否继续向下游插件传递事件。
     - 若返回 `'return'`，则视为已完全处理。
     - 若返回 `false`，跳过当前插件。
@@ -163,14 +163,14 @@
 
 XRK-AGT 采用标准化事件命名系统，确保不同来源的事件可以区分，同时支持通用事件监听。
 
-**事件字段责任（适配器/监听器 vs 加载器）**
+**事件字段责任（Tasker/监听器 vs 加载器）**
 - 需由 Tasker/监听器提供：`tasker`、`post_type`、细分类型（`message_type/notice_type/request_type/detail_type`）、可选 `sub_type`、`user_id`/`group_id`/`device_id`、`message` 或 `raw_message`、`time`
 - `PluginsLoader` 自动补全：`self_id`、`bot`、缺省 `event_id`、`isDevice`/`isStdin`、基础 `sender`、`logText`、通用 `reply` 兜底、工具方法（`getSendableMedia`/`throttle`/`getEventHistory`）
-- 适配器增强插件只补充特有字段（如 `atBot`、`friend`/`group`/`member`、`isPrivate`/`isGroup`），不要覆写 `reply/bot`
+- Tasker增强插件只补充特有字段（如 `atBot`、`friend`/`group`/`member`、`isPrivate`/`isGroup`），不要覆写 `reply/bot`
 
 **事件命名规则：**
 
-- **OneBot 适配器事件**：
+- **OneBot Tasker事件**：
   - 格式：`onebot.{post_type}.{message_type/notice_type/request_type}.{sub_type}`
   - 示例：`onebot.message.group.normal`、`onebot.notice.group_increase`
   - 同时也会触发通用事件：`message.group.normal`、`notice.group_increase`
@@ -191,7 +191,7 @@ XRK-AGT 采用标准化事件命名系统，确保不同来源的事件可以区
   - `event: 'device'` - 匹配所有设备事件
 
 - **特定事件监听**：
-  - `event: 'onebot.message'` - 只匹配 OneBot 适配器的 message 事件
+  - `event: 'onebot.message'` - 只匹配 OneBot Tasker 的 message 事件
   - `event: 'device.message'` - 只匹配设备的 message 事件
   - `event: 'onebot.notice.group_increase'` - 只匹配 OneBot 的群成员增加通知
 

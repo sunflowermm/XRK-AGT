@@ -1,6 +1,6 @@
 ## BotUtil 工具类文档（src/utils/botutil.js）
 
-`BotUtil` 是 XRK-AGT 的核心工具类，提供 **日志封装、缓存管理、文件系统操作、网络请求、批处理与重试、时间和大小格式化、消息辅助等** 能力，被 `Bot`、适配器、插件和 API 广泛使用。
+`BotUtil` 是 XRK-AGT 的核心工具类，提供 **日志封装、缓存管理、文件系统操作、网络请求、批处理与重试、时间和大小格式化、消息辅助等** 能力，被 `Bot`、Tasker、插件和 API 广泛使用。
 
 ---
 
@@ -11,7 +11,7 @@
 | 所在文件 | `src/utils/botutil.js` |
 | 类型 | 全静态工具类（`export default class BotUtil`） |
 | 典型使用方式 | `import BotUtil from '#utils/botutil.js'` |
-| 主要服务对象 | `Bot`、插件（`plugin`）、适配器、`ApiLoader` 等 |
+| 主要服务对象 | `Bot`、插件（`plugin`）、Tasker、`ApiLoader` 等 |
 
 ---
 
@@ -136,7 +136,7 @@
 |------|------|
 | `extractTextContent(message)` | 从字符串/消息数组/事件对象中提取纯文本内容，适合日志与检索 |
 | `makeChatRecord(e, messages, title, description?)` | 根据事件 `e` 创建聊天记录：在 ICQQ 情况下生成合并转发消息，否则退化为普通消息 |
-| `makeMsg(e, messages, title, description)` | 制作合并转发消息，尽量调用适配器的 `makeForwardMsg` 能力，并附带摘要与标题 |
+| `makeMsg(e, messages, title, description)` | 制作合并转发消息，尽量调用Tasker的 `makeForwardMsg` 能力，并附带摘要与标题 |
 | `parseJSON(str, defaultValue?)` | 安全解析 JSON 字符串，异常时返回默认值 |
 
 同时还导出了两个兼容函数：
@@ -157,8 +157,8 @@
   - 插件中常用 `BotUtil.sleep/retry/batch` 实现复杂的异步流程。
   - 使用 `BotUtil.extractTextContent` 或 `String` 做调试输出与上下文处理。
 
-- **适配器与 API**
-  - 适配器在大量网络/文件转换场景中复用 `Buffer/fileType/fileToUrl`。
+- **Tasker与 API**
+  - Tasker在大量网络/文件转换场景中复用 `Buffer/fileType/fileToUrl`。
   - `ApiLoader` 与自定义 API 通过 `makeLog` 与 `getTimeDiff` 进行监控与审计。
 
 > 推荐做法：在需要「基础设施能力」时优先使用 `BotUtil` 封装的方法，而不是在插件或业务代码中直接操作 Node.js 底层 API，以保证行为一致、易于维护和统一审计。

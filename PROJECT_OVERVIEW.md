@@ -163,7 +163,7 @@ flowchart TD
 - **`src/utils/`**：工具函数
   - `paths.js`：统一路径管理（core、config、data、www、trash、temp 等）
   - `botutil.js`：日志、文件、随机字符串、延迟等常用工具
-  - `deviceutil.js`、`screenshotutil.js` 等：设备与截图相关工具
+  - `deviceutil.js` 等：设备相关工具
 
 ### 任务层（Tasker）- `core/tasker/`
 
