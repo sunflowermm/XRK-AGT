@@ -15,6 +15,7 @@ import os from 'node:os';
 import dgram from 'node:dgram';
 import chalk from 'chalk';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import zlib from 'node:zlib';
 
 import PluginsLoader from "#infrastructure/plugins/loader.js";
 import ListenerLoader from "#infrastructure/listener/loader.js";
@@ -67,9 +68,32 @@ export default class Bot extends EventEmitter {
     this.express = Object.assign(express(), { skip_auth: [], quiet: [] });
     this.server = null;
     this.httpsServer = null;
-    this.wss = new WebSocketServer({ noServer: true });
+    this.wss = new WebSocketServer({ 
+      noServer: true,
+      perMessageDeflate: {
+        zlibDeflateOptions: {
+          chunkSize: 1024,
+          memLevel: 7,
+          level: 3
+        },
+        zlibInflateOptions: {
+          chunkSize: 10 * 1024
+        },
+        clientNoContextTakeover: true,
+        serverNoContextTakeover: true,
+        serverMaxWindowBits: 10,
+        concurrencyLimit: 10,
+        threshold: 1024
+      },
+      maxPayload: 100 * 1024 * 1024, // 100MB
+      clientTracking: true
+    });
     this.wsf = Object.create(null);
     this.fs = Object.create(null);
+    
+    // WebSocket连接管理
+    this._wsConnections = new Map(); // 连接池
+    this._wsHeartbeatInterval = null;
     
     // 配置属性
     this.apiKey = '';
@@ -460,20 +484,28 @@ export default class Bot extends EventEmitter {
       next();
     });
     
-    // 2. 压缩中间件（优先处理，减少传输）
+    // 2. 压缩中间件（优先处理，减少传输，支持brotli）
     if (cfg.server.compression.enabled !== false) {
+      // 使用标准compression中间件，Node.js 18+原生支持brotli（自动选择）
       this.express.use(compression({
         filter: (req, res) => {
+          // 跳过压缩的情况
           if (req.headers['x-no-compression']) return false;
+          
+          // API请求：只压缩JSON和文本
           if (req.path.startsWith('/api/')) {
             const contentType = res.getHeader('content-type') || '';
             return compression.filter(req, res) && 
                    (contentType.includes('json') || contentType.includes('text'));
           }
+          
+          // 静态文件：使用标准过滤
           return compression.filter(req, res);
         },
         level: cfg.server.compression.level || 6,
         threshold: cfg.server.compression.threshold || 1024
+        // Node.js 18+ 的compression中间件会自动检测客户端支持的编码
+        // 如果客户端支持brotli，会自动使用brotli（更好的压缩比）
       }));
     }
     
@@ -508,6 +540,7 @@ export default class Bot extends EventEmitter {
     // 系统路由（精确匹配，无需认证）
     this.express.get('/status', this._statusHandler.bind(this));
     this.express.get('/health', this._healthHandler.bind(this));
+    this.express.get('/metrics', this._metricsHandler.bind(this)); // 性能指标
     this.express.get('/robots.txt', this._handleRobotsTxt.bind(this));
     this.express.get('/favicon.ico', this._handleFavicon.bind(this));
     
@@ -747,6 +780,7 @@ export default class Bot extends EventEmitter {
         maxAge: cfg.server.static.cacheTime || '1d',
         etag: true,
         lastModified: true,
+        immutable: cfg.server.static.immutable !== false, // 静态资源不可变
         setHeaders: (res, filePath) => {
           // 确保在设置头部前检查响应状态
           if (!res.headersSent) {
@@ -755,6 +789,7 @@ export default class Bot extends EventEmitter {
         }
       };
       
+      // 使用express.static，Node.js会自动使用sendfile优化
       express.static(staticRoot, staticOptions)(req, res, next);
     });
   }
@@ -802,7 +837,7 @@ export default class Bot extends EventEmitter {
 
   /**
    * 设置静态文件响应头
-   * 确保在响应发送前设置头部
+   * 确保在响应发送前设置头部，优化缓存策略
    */
   _setStaticHeaders(res, filePath) {
     if (this._checkHeadersSent(res)) return;
@@ -820,6 +855,7 @@ export default class Bot extends EventEmitter {
       '.gif': 'image/gif',
       '.svg': 'image/svg+xml',
       '.webp': 'image/webp',
+      '.avif': 'image/avif',
       '.ico': 'image/x-icon',
       '.mp4': 'video/mp4',
       '.webm': 'video/webm',
@@ -843,11 +879,19 @@ export default class Bot extends EventEmitter {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     
     const cacheConfig = cfg.server.static.cache || {};
+    const immutableExts = ['.css', '.js', '.woff', '.woff2', '.ttf', '.otf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg'];
+    
+    // 优化缓存策略：HTML不缓存，静态资源长期缓存
     if (['.html', '.htm'].includes(ext)) {
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    } else if (['.css', '.js', '.json'].includes(ext)) {
-      res.setHeader('Cache-Control', `public, max-age=${cacheConfig.static || 86400}`);
-    } else if (['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico'].includes(ext)) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+    } else if (immutableExts.includes(ext)) {
+      // 静态资源使用长期缓存 + immutable
+      const maxAge = cacheConfig.static || 31536000; // 默认1年
+      res.setHeader('Cache-Control', `public, max-age=${maxAge}, immutable`);
+    } else if (['.json'].includes(ext)) {
+      res.setHeader('Cache-Control', `public, max-age=${cacheConfig.static || 3600}`);
+    } else if (['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.avif', '.ico'].includes(ext)) {
       res.setHeader('Cache-Control', `public, max-age=${cacheConfig.images || 604800}`);
     }
   }
@@ -1375,6 +1419,49 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   }
 
   /**
+   * 性能指标处理器
+   * 提供详细的性能监控数据
+   */
+  _metricsHandler(req, res) {
+    if (this._checkHeadersSent(res)) return;
+    
+    const memUsage = process.memoryUsage();
+    const cpuUsage = process.cpuUsage();
+    const wsStats = this.getWebSocketStats();
+    
+    const metrics = {
+      timestamp: Date.now(),
+      uptime: process.uptime(),
+      memory: {
+        rss: memUsage.rss,
+        heapTotal: memUsage.heapTotal,
+        heapUsed: memUsage.heapUsed,
+        external: memUsage.external,
+        arrayBuffers: memUsage.arrayBuffers
+      },
+      cpu: {
+        user: cpuUsage.user,
+        system: cpuUsage.system
+      },
+      websocket: wsStats,
+      server: {
+        httpPort: this.httpPort,
+        httpsPort: this.httpsPort,
+        actualPort: this.actualPort,
+        actualHttpsPort: this.actualHttpsPort,
+        proxyEnabled: this.proxyEnabled
+      },
+      platform: {
+        node: process.version,
+        platform: process.platform,
+        arch: process.arch
+      }
+    };
+    
+    res.type('json').send(JSON.stringify(metrics, null, 2));
+  }
+
+  /**
    * 文件处理器
    */
   _fileHandler(req, res) {
@@ -1425,6 +1512,99 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   }
 
   /**
+   * 启动WebSocket心跳检测
+   * 定期检查连接状态，清理死连接
+   */
+  _startWebSocketHeartbeat() {
+    if (this._wsHeartbeatInterval) return; // 已启动
+    
+    const interval = cfg.server.websocket?.heartbeatInterval || 30000; // 30秒
+    const timeout = cfg.server.websocket?.heartbeatTimeout || 60000; // 60秒超时
+    
+    this._wsHeartbeatInterval = setInterval(() => {
+      const now = Date.now();
+      const deadConnections = [];
+      
+      for (const [id, conn] of this._wsConnections.entries()) {
+        // 检查连接是否超时
+        if (now - conn.lastPing > timeout) {
+          deadConnections.push(id);
+          try {
+            conn.terminate();
+          } catch (err) {
+            // 忽略已关闭的连接
+          }
+          continue;
+        }
+        
+        // 发送ping
+        if (conn.readyState === conn.OPEN) {
+          try {
+            conn.isAlive = false;
+            conn.ping();
+          } catch (err) {
+            deadConnections.push(id);
+          }
+        } else {
+          deadConnections.push(id);
+        }
+      }
+      
+      // 清理死连接
+      for (const id of deadConnections) {
+        this._wsConnections.delete(id);
+      }
+      
+      if (deadConnections.length > 0) {
+        BotUtil.makeLog("debug", `清理 ${deadConnections.length} 个WebSocket死连接`, '服务器');
+      }
+    }, interval);
+  }
+
+  /**
+   * 停止WebSocket心跳检测
+   */
+  _stopWebSocketHeartbeat() {
+    if (this._wsHeartbeatInterval) {
+      clearInterval(this._wsHeartbeatInterval);
+      this._wsHeartbeatInterval = null;
+    }
+  }
+
+  /**
+   * 获取WebSocket连接统计
+   */
+  getWebSocketStats() {
+    const stats = {
+      total: this._wsConnections.size,
+      byPath: {},
+      oldest: null,
+      newest: null
+    };
+    
+    let oldestTime = Infinity;
+    let newestTime = 0;
+    
+    for (const [id, conn] of this._wsConnections.entries()) {
+      const path = conn.path || 'unknown';
+      stats.byPath[path] = (stats.byPath[path] || 0) + 1;
+      
+      if (conn.connectedAt) {
+        if (conn.connectedAt < oldestTime) {
+          oldestTime = conn.connectedAt;
+          stats.oldest = { id, path, connectedAt: conn.connectedAt };
+        }
+        if (conn.connectedAt > newestTime) {
+          newestTime = conn.connectedAt;
+          stats.newest = { id, path, connectedAt: conn.connectedAt };
+        }
+      }
+    }
+    
+    return stats;
+  }
+
+  /**
    * WebSocket连接处理
    */
   wsConnect(req, socket, head) {
@@ -1468,25 +1648,82 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     BotUtil.makeLog("debug", `WebSocket路径匹配: ${req.url} -> ${wsPath}`, '服务器');
     
     this.wss.handleUpgrade(req, socket, head, conn => {
-      BotUtil.makeLog("debug", `WebSocket连接建立：${req.url}`, '服务器');
+      const connectionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      conn.id = connectionId;
+      conn.path = wsPath;
+      conn.remoteAddress = req.socket.remoteAddress;
+      conn.connectedAt = Date.now();
+      conn.lastPing = Date.now();
+      conn.isAlive = true;
       
-      conn.on("error", err => BotUtil.makeLog("error", err, '服务器'));
-      conn.on("close", () => BotUtil.makeLog("debug", `WebSocket断开：${req.url}`, '服务器'));
+      // 添加到连接池
+      this._wsConnections.set(connectionId, conn);
       
-      conn.on("message", msg => {
-        const logMsg = Buffer.isBuffer(msg) && msg.length > 1024 ?
-          `[二进制消息，长度：${msg.length}]` : BotUtil.String(msg);
-        BotUtil.makeLog("trace", `WS消息：${logMsg}`, '服务器');
+      BotUtil.makeLog("debug", `WebSocket连接建立：${req.url} [${connectionId}]`, '服务器');
+      
+      // 心跳检测
+      conn.on("pong", () => {
+        conn.isAlive = true;
+        conn.lastPing = Date.now();
       });
       
-      conn.sendMsg = msg => {
-        if (!Buffer.isBuffer(msg)) msg = BotUtil.String(msg);
-        BotUtil.makeLog("trace", `WS发送：${msg}`, '服务器');
-        return conn.send(msg);
+      // 错误处理（增强）
+      conn.on("error", err => {
+        BotUtil.makeLog("error", `WebSocket错误 [${connectionId}]: ${err.message}`, '服务器');
+        this._wsConnections.delete(connectionId);
+      });
+      
+      // 连接关闭处理
+      conn.on("close", (code, reason) => {
+        BotUtil.makeLog("debug", `WebSocket断开：${req.url} [${connectionId}] 代码: ${code}`, '服务器');
+        this._wsConnections.delete(connectionId);
+      });
+      
+      // 消息处理（增强）
+      conn.on("message", (msg, isBinary) => {
+        try {
+          conn.lastPing = Date.now(); // 更新活跃时间
+          const logMsg = Buffer.isBuffer(msg) && msg.length > 1024 ?
+            `[二进制消息，长度：${msg.length}]` : BotUtil.String(msg);
+          BotUtil.makeLog("trace", `WS消息 [${connectionId}]: ${logMsg}`, '服务器');
+        } catch (err) {
+          BotUtil.makeLog("error", `WebSocket消息处理错误 [${connectionId}]: ${err.message}`, '服务器');
+        }
+      });
+      
+      // 增强的发送方法（带错误恢复）
+      conn.sendMsg = (msg, options = {}) => {
+        try {
+          if (conn.readyState !== conn.OPEN) {
+            BotUtil.makeLog("warn", `WebSocket未就绪，无法发送 [${connectionId}]`, '服务器');
+            return false;
+          }
+          
+          if (!Buffer.isBuffer(msg)) {
+            msg = Buffer.from(typeof msg === 'string' ? msg : JSON.stringify(msg));
+          }
+          
+          const logMsg = msg.length > 1024 ? `[二进制消息，长度：${msg.length}]` : BotUtil.String(msg);
+          BotUtil.makeLog("trace", `WS发送 [${connectionId}]: ${logMsg}`, '服务器');
+          
+          return conn.send(msg, options);
+        } catch (err) {
+          BotUtil.makeLog("error", `WebSocket发送错误 [${connectionId}]: ${err.message}`, '服务器');
+          this._wsConnections.delete(connectionId);
+          return false;
+        }
       };
       
-      for (const handler of this.wsf[wsPath]) {
-        handler(conn, req, socket, head);
+      // 启动心跳检测
+      this._startWebSocketHeartbeat();
+      
+      // 调用注册的处理器
+      try {
+        for (const handler of this.wsf[wsPath]) {
+          handler(conn, req, socket, head);
+        }
+      } catch (err) {
+        BotUtil.makeLog("error", `WebSocket处理器错误 [${connectionId}]: ${err.message}`, '服务器');
       }
     });
   }
@@ -1535,18 +1772,17 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     
     if (isHttps) {
       this.httpsPort = serverInfo.port;
+      this.actualHttpsPort = serverInfo.port;
     } else {
       this.httpPort = serverInfo.port;
+      this.actualPort = serverInfo.port;
     }
     
     const protocol = isHttps ? 'https' : 'http';
     const serverType = isHttps ? 'HTTPS' : 'HTTP';
     
+    // 启动信息在汇总中显示，这里只记录日志
     BotUtil.makeLog("info", `✓ ${serverType}服务器监听在 ${host}:${serverInfo.port}`, '服务器');
-    
-    if (!isHttps && !this.proxyEnabled) {
-      await this._displayAccessUrls(protocol, serverInfo.port);
-    }
   }
 
   /**
@@ -1882,6 +2118,19 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   async closeServer() {
     BotUtil.makeLog('info', '⏳ 正在关闭服务器...', '服务器');
     
+    // 停止WebSocket心跳检测
+    this._stopWebSocketHeartbeat();
+    
+    // 关闭所有WebSocket连接
+    for (const [id, conn] of this._wsConnections.entries()) {
+      try {
+        conn.terminate();
+      } catch (err) {
+        // 忽略已关闭的连接
+      }
+    }
+    this._wsConnections.clear();
+    
     const servers = [
       this.server,
       this.httpsServer,
@@ -2172,15 +2421,9 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     // 启动文件监视
     await ApiLoader.watch(true);
     
-    // 启动完成
+    // 启动完成 - 显示完整启动信息
     const loadTime = Date.now() - startTime;
-    BotUtil.makeLog('info', `智能体启动完成 (耗时: ${loadTime}ms)`, '服务器');
-    
-    if (Object.keys(this.wsf).length > 0) {
-      BotUtil.makeLog("info", `⚡ WebSocket服务：${this.getServerUrl().replace(/^http/, "ws")}/ [${Object.keys(this.wsf).join(', ')}]`, '服务器');
-    }
-    
-    BotUtil.makeLog('info', `服务器地址：${this.getServerUrl()}`, '服务器');
+    await this._displayStartupSummary(loadTime, startTime);
     
     this.emit("online", {
       bot: this,
@@ -2193,6 +2436,108 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
 
     // 启动 trash 目录定时清理（仅清理一定时间之前的临时文件）
     this._startTrashCleaner();
+  }
+
+  /**
+   * 显示启动汇总信息
+   * 包含服务器配置、性能指标、服务状态等
+   */
+  async _displayStartupSummary(loadTime, startTime) {
+    const memUsage = process.memoryUsage();
+    const memMB = (size) => `${(size / 1024 / 1024).toFixed(2)}MB`;
+    
+    console.log(chalk.cyan('\n' + '═'.repeat(60)));
+    console.log(chalk.cyan('║') + chalk.bold('  XRK-AGT 启动完成') + ' '.repeat(40) + chalk.cyan('║'));
+    console.log(chalk.cyan('═'.repeat(60)));
+    
+    // 启动时间统计
+    console.log(chalk.yellow('\n▶ 启动统计：'));
+    console.log(`    ${chalk.cyan('•')} 总耗时：${chalk.white(`${loadTime}ms`)}`);
+    console.log(`    ${chalk.cyan('•')} 启动时间：${chalk.white(new Date(startTime).toLocaleString('zh-CN'))}`);
+    console.log(`    ${chalk.cyan('•')} 运行时长：${chalk.white(`${process.uptime().toFixed(2)}s`)}`);
+    
+    // 服务器信息
+    console.log(chalk.yellow('\n▶ 服务器信息：'));
+    console.log(`    ${chalk.cyan('•')} HTTP端口：${chalk.white(this.actualPort)}`);
+    if (this.actualHttpsPort) {
+      console.log(`    ${chalk.cyan('•')} HTTPS端口：${chalk.white(this.actualHttpsPort)}`);
+    }
+    console.log(`    ${chalk.cyan('•')} 服务器地址：${chalk.white(this.getServerUrl())}`);
+    if (this.proxyEnabled) {
+      console.log(`    ${chalk.cyan('•')} 反向代理：${chalk.green('已启用')} (${this.domainConfigs.size}个域名)`);
+    }
+    
+    // WebSocket信息
+    const wsPaths = Object.keys(this.wsf);
+    if (wsPaths.length > 0) {
+      console.log(chalk.yellow('\n▶ WebSocket服务：'));
+      console.log(`    ${chalk.cyan('•')} 服务地址：${chalk.white(this.getServerUrl().replace(/^http/, "ws"))}`);
+      console.log(`    ${chalk.cyan('•')} 连接路径：${chalk.white(wsPaths.length + '个')} ${chalk.gray(`[${wsPaths.join(', ')}]`)}`);
+      const wsStats = this.getWebSocketStats();
+      console.log(`    ${chalk.cyan('•')} 当前连接：${chalk.white(wsStats.total + '个')}`);
+    }
+    
+    // 性能指标
+    console.log(chalk.yellow('\n▶ 性能指标：'));
+    console.log(`    ${chalk.cyan('•')} 内存使用：${chalk.white(memMB(memUsage.heapUsed))} / ${chalk.white(memMB(memUsage.heapTotal))}`);
+    console.log(`    ${chalk.cyan('•')} RSS内存：${chalk.white(memMB(memUsage.rss))}`);
+    console.log(`    ${chalk.cyan('•')} 外部内存：${chalk.white(memMB(memUsage.external))}`);
+    const cpuInfo = os.cpus();
+    console.log(`    ${chalk.cyan('•')} CPU核心：${chalk.white(cpuInfo.length + '核')}`);
+    console.log(`    ${chalk.cyan('•')} 平台：${chalk.white(`${process.platform} ${process.arch}`)}`);
+    console.log(`    ${chalk.cyan('•')} Node.js：${chalk.white(process.version)}`);
+    
+    // 服务器配置
+    console.log(chalk.yellow('\n▶ 服务器配置：'));
+    const compressionEnabled = cfg.server.compression?.enabled !== false;
+    console.log(`    ${chalk.cyan('•')} 压缩：${compressionEnabled ? chalk.green('已启用') : chalk.gray('已禁用')} ${compressionEnabled ? chalk.gray(`(级别: ${cfg.server.compression?.level || 6})`) : ''}`);
+    
+    const helmetEnabled = cfg.server.security?.helmet?.enabled !== false;
+    console.log(`    ${chalk.cyan('•')} 安全头：${helmetEnabled ? chalk.green('已启用') : chalk.gray('已禁用')}`);
+    
+    const corsEnabled = cfg.server.cors?.enabled !== false;
+    console.log(`    ${chalk.cyan('•')} CORS：${corsEnabled ? chalk.green('已启用') : chalk.gray('已禁用')}`);
+    
+    const rateLimitEnabled = cfg.server.rateLimit?.enabled !== false;
+    console.log(`    ${chalk.cyan('•')} 速率限制：${rateLimitEnabled ? chalk.green('已启用') : chalk.gray('已禁用')}`);
+    
+    const httpsEnabled = cfg.server.https?.enabled === true;
+    console.log(`    ${chalk.cyan('•')} HTTPS：${httpsEnabled ? chalk.green('已启用') : chalk.gray('已禁用')}`);
+    if (httpsEnabled && cfg.server.https?.tls?.http2 === true) {
+      console.log(`    ${chalk.cyan('•')} HTTP/2：${chalk.green('已启用')}`);
+    }
+    
+    // API统计
+    const apiList = ApiLoader.getApiList();
+    const totalRoutes = apiList.reduce((sum, api) => sum + (api.routes || 0), 0);
+    const totalWS = apiList.reduce((sum, api) => sum + (api.ws || 0), 0);
+    console.log(chalk.yellow('\n▶ API统计：'));
+    console.log(`    ${chalk.cyan('•')} API模块：${chalk.white(apiList.length + '个')}`);
+    console.log(`    ${chalk.cyan('•')} HTTP路由：${chalk.white(totalRoutes + '个')}`);
+    console.log(`    ${chalk.cyan('•')} WebSocket路由：${chalk.white(totalWS + '个')}`);
+    
+    // 认证信息
+    const authConfig = cfg.server.auth || {};
+    if (authConfig.apiKey?.enabled !== false) {
+      console.log(chalk.yellow('\n▶ 认证配置：'));
+      console.log(`    ${chalk.cyan('•')} API密钥：${chalk.white(this.apiKey)}`);
+      console.log(chalk.gray(`    使用 X-API-Key 请求头进行认证`));
+      
+      if (authConfig.whitelist?.length) {
+        console.log(`    ${chalk.cyan('•')} 白名单路径：${chalk.white(authConfig.whitelist.length + '个')}`);
+      }
+    }
+    
+    // 访问地址
+    await this._displayAccessUrls('http', this.actualPort);
+    
+    console.log(chalk.cyan('\n' + '═'.repeat(60) + '\n'));
+    
+    // 简化的日志输出（用于日志文件）
+    BotUtil.makeLog('info', `智能体启动完成 (耗时: ${loadTime}ms)`, '服务器');
+    if (wsPaths.length > 0) {
+      BotUtil.makeLog("info", `⚡ WebSocket服务：${this.getServerUrl().replace(/^http/, "ws")}/ [${wsPaths.join(', ')}]`, '服务器');
+    }
   }
 
   /**
