@@ -16,8 +16,8 @@ export class MCPServer {
     this.tools = new Map(); // 注册的工具
     this.resources = new Map(); // 注册的资源
     
-    // 注册示例工具（供测试和演示使用）
-    this.registerExampleTools();
+    // 注册跨平台通用工具
+    this.registerCoreTools();
   }
 
   /**
@@ -107,139 +107,80 @@ export class MCPServer {
   }
 
   /**
-   * 注册示例工具（供测试和演示使用）
+   * 注册跨平台通用核心工具
+   * 这些工具在所有平台上都可用，提供基础功能
    */
-  registerExampleTools() {
-    // 示例工具1：获取系统信息
-    this.registerTool('get_system_info', {
-      description: '获取系统信息（操作系统、CPU、内存等）',
+  registerCoreTools() {
+    // 工具1：系统信息（跨平台）
+    this.registerTool('system.info', {
+      description: '获取系统信息（操作系统、CPU、内存、平台等）',
       inputSchema: {
         type: 'object',
-        properties: {},
+        properties: {
+          detail: {
+            type: 'boolean',
+            description: '是否返回详细信息（默认false）',
+            default: false
+          }
+        },
         required: []
       },
       handler: async (args) => {
-        return {
+        const { detail = false } = args;
+        const memUsage = process.memoryUsage();
+        const cpuInfo = os.cpus();
+        
+        const info = {
           platform: process.platform,
           arch: process.arch,
           nodeVersion: process.version,
-          cpuCount: os.cpus().length,
-          totalMemory: `${Math.round(os.totalmem() / 1024 / 1024 / 1024)}GB`,
-          freeMemory: `${Math.round(os.freemem() / 1024 / 1024 / 1024)}GB`,
-          uptime: `${Math.round(os.uptime() / 3600)}小时`,
-          hostname: os.hostname()
-        };
-      }
-    });
-
-    // 示例工具2：计算数学表达式
-    this.registerTool('calculate', {
-      description: '计算数学表达式（支持基本运算）',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          expression: {
-            type: 'string',
-            description: '要计算的数学表达式，例如: "2 + 2" 或 "10 * 5"'
-          }
-        },
-        required: ['expression']
-      },
-      handler: async (args) => {
-        const { expression } = args;
-        if (!expression) {
-          throw new Error('表达式不能为空');
-        }
-
-        // 安全计算：只允许基本数学运算
-        const safeExpression = expression.replace(/[^0-9+\-*/().\s]/g, '');
-        try {
-          // 使用Function构造器进行安全计算
-          const result = Function(`"use strict"; return (${safeExpression})`)();
-          return {
-            expression,
-            result,
-            formatted: `${expression} = ${result}`
-          };
-        } catch (error) {
-          throw new Error(`计算失败: ${error.message}`);
-        }
-      }
-    });
-
-    // 示例工具3：文本处理
-    this.registerTool('text_process', {
-      description: '文本处理工具（统计字数、转换大小写等）',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          text: {
-            type: 'string',
-            description: '要处理的文本'
+          hostname: os.hostname(),
+          cpu: {
+            cores: cpuInfo.length,
+            model: cpuInfo[0]?.model || 'Unknown'
           },
-          operation: {
-            type: 'string',
-            enum: ['count', 'uppercase', 'lowercase', 'reverse'],
-            description: '操作类型: count(统计字数), uppercase(转大写), lowercase(转小写), reverse(反转)'
+          memory: {
+            total: `${Math.round(os.totalmem() / 1024 / 1024 / 1024)}GB`,
+            free: `${Math.round(os.freemem() / 1024 / 1024 / 1024)}GB`,
+            used: `${Math.round((os.totalmem() - os.freemem()) / 1024 / 1024 / 1024)}GB`,
+            usage: Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100)
+          },
+          uptime: {
+            seconds: Math.round(os.uptime()),
+            hours: Math.round(os.uptime() / 3600),
+            days: Math.round(os.uptime() / 86400)
           }
-        },
-        required: ['text', 'operation']
-      },
-      handler: async (args) => {
-        const { text, operation } = args;
-        if (!text) {
-          throw new Error('文本不能为空');
+        };
+        
+        if (detail) {
+          info.processMemory = {
+            rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+            heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+            heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+            external: `${Math.round(memUsage.external / 1024 / 1024)}MB`
+          };
+          info.networkInterfaces = Object.keys(os.networkInterfaces()).length;
         }
-
-        switch (operation) {
-          case 'count':
-            return {
-              text,
-              operation: 'count',
-              result: {
-                length: text.length,
-                words: text.split(/\s+/).filter(w => w).length,
-                lines: text.split('\n').length
-              }
-            };
-          case 'uppercase':
-            return {
-              text,
-              operation: 'uppercase',
-              result: text.toUpperCase()
-            };
-          case 'lowercase':
-            return {
-              text,
-              operation: 'lowercase',
-              result: text.toLowerCase()
-            };
-          case 'reverse':
-            return {
-              text,
-              operation: 'reverse',
-              result: text.split('').reverse().join('')
-            };
-          default:
-            throw new Error(`不支持的操作: ${operation}`);
-        }
+        
+        return info;
       }
     });
 
-    // 示例工具4：时间工具
-    this.registerTool('get_time', {
-      description: '获取当前时间信息',
+    // 工具2：时间工具（跨平台）
+    this.registerTool('time.now', {
+      description: '获取当前时间信息（支持多种格式和时区）',
       inputSchema: {
         type: 'object',
         properties: {
           format: {
             type: 'string',
-            enum: ['iso', 'locale', 'timestamp'],
-            description: '时间格式: iso(ISO格式), locale(本地格式), timestamp(时间戳)'
+            enum: ['iso', 'locale', 'timestamp', 'unix'],
+            description: '时间格式: iso(ISO 8601), locale(本地格式), timestamp(毫秒时间戳), unix(秒时间戳)',
+            default: 'locale'
           },
           timezone: {
             type: 'string',
-            description: '时区（可选，例如: Asia/Shanghai）'
+            description: '时区（可选，例如: Asia/Shanghai, America/New_York）'
           }
         },
         required: []
@@ -247,34 +188,135 @@ export class MCPServer {
       handler: async (args) => {
         const { format = 'locale', timezone } = args;
         const now = new Date();
+        const options = timezone ? { timeZone: timezone } : {};
 
         switch (format) {
           case 'iso':
             return {
               format: 'iso',
               time: now.toISOString(),
-              timestamp: now.getTime()
+              timestamp: now.getTime(),
+              unix: Math.floor(now.getTime() / 1000)
             };
           case 'timestamp':
             return {
               format: 'timestamp',
               timestamp: now.getTime(),
-              seconds: Math.floor(now.getTime() / 1000)
+              unix: Math.floor(now.getTime() / 1000),
+              iso: now.toISOString()
+            };
+          case 'unix':
+            return {
+              format: 'unix',
+              unix: Math.floor(now.getTime() / 1000),
+              timestamp: now.getTime(),
+              iso: now.toISOString()
             };
           case 'locale':
           default:
             return {
               format: 'locale',
-              time: now.toLocaleString('zh-CN', timezone ? { timeZone: timezone } : {}),
-              date: now.toLocaleDateString('zh-CN'),
-              timeOnly: now.toLocaleTimeString('zh-CN'),
-              timestamp: now.getTime()
+              time: now.toLocaleString('zh-CN', options),
+              date: now.toLocaleDateString('zh-CN', options),
+              timeOnly: now.toLocaleTimeString('zh-CN', options),
+              timestamp: now.getTime(),
+              unix: Math.floor(now.getTime() / 1000),
+              iso: now.toISOString()
             };
         }
       }
     });
 
-    BotUtil.makeLog('info', `已注册${this.tools.size}个MCP示例工具`, 'MCPServer');
+    // 工具3：UUID生成（跨平台）
+    this.registerTool('util.uuid', {
+      description: '生成UUID（通用唯一标识符）',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          version: {
+            type: 'string',
+            enum: ['v4'],
+            description: 'UUID版本: v4(随机UUID)',
+            default: 'v4'
+          },
+          count: {
+            type: 'integer',
+            description: '生成数量（1-100）',
+            minimum: 1,
+            maximum: 100,
+            default: 1
+          }
+        },
+        required: []
+      },
+      handler: async (args) => {
+        const { version = 'v4', count = 1 } = args;
+        const crypto = await import('crypto');
+        
+        const generateUUID = () => {
+          // 使用crypto.randomUUID() (Node.js 14.17.0+)
+          if (crypto.randomUUID) {
+            return crypto.randomUUID();
+          }
+          // 降级方案：手动生成v4 UUID
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        };
+        
+        const uuids = [];
+        for (let i = 0; i < Math.min(count, 100); i++) {
+          uuids.push(generateUUID());
+        }
+        
+        return {
+          version,
+          count: uuids.length,
+          uuids: count === 1 ? uuids[0] : uuids
+        };
+      }
+    });
+
+    // 工具4：哈希计算（跨平台）
+    this.registerTool('util.hash', {
+      description: '计算字符串或数据的哈希值（支持多种算法）',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'string',
+            description: '要计算哈希的数据'
+          },
+          algorithm: {
+            type: 'string',
+            enum: ['md5', 'sha1', 'sha256', 'sha512'],
+            description: '哈希算法',
+            default: 'sha256'
+          }
+        },
+        required: ['data']
+      },
+      handler: async (args) => {
+        const { data, algorithm = 'sha256' } = args;
+        if (!data) {
+          throw new Error('数据不能为空');
+        }
+
+        const crypto = await import('crypto');
+        const hash = crypto.createHash(algorithm);
+        hash.update(data);
+        
+        return {
+          algorithm,
+          hash: hash.digest('hex'),
+          length: hash.digest('hex').length
+        };
+      }
+    });
+
+    BotUtil.makeLog('info', `已注册${this.tools.size}个MCP核心工具`, 'MCPServer');
   }
 }
 
