@@ -83,7 +83,7 @@ flowchart TB
     I --> J[app.method注册路由]
     J --> K[registerWebSocketHandlers]
     K --> L[遍历wsHandlers]
-    L --> M[bot.wsf[path]追加处理器]
+    L --> M[bot.wsf追加处理器]
     M --> N{是否有initHook}
     N -->|是| O[执行自定义初始化钩子]
     N -->|否| P[初始化完成]

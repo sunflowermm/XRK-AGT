@@ -199,7 +199,7 @@ flowchart TB
     C --> D[Tasker.push到Bot.tasker]
     D --> E[注册WebSocket处理器到Bot.wsf]
     E --> F[连接建立时创建子Bot]
-    F --> G[Bot[self_id] = childBot]
+    F --> G[创建Bot实例<br/>Bot.self_id = childBot]
     G --> H[_createProxy放入Bot.bots]
     
     style A fill:#E6F3FF

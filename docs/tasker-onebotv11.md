@@ -189,9 +189,9 @@ flowchart TB
     A[模块加载<br/>core/tasker/OneBotv11.js] --> B[创建Tasker实例]
     B --> C[Bot.tasker.push注册]
     C --> D[load方法初始化]
-    D --> E[注册WebSocket路径<br/>Bot.wsf[path]]
+    D --> E[注册WebSocket路径<br/>Bot.wsf注册]
     E --> F[等待连接建立]
-    F --> G[创建Bot实例<br/>Bot[self_id]]
+    F --> G[创建Bot实例<br/>Bot.self_id]
     G --> H[Tasker可用]
     
     style A fill:#E6F3FF
