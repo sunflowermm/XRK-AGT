@@ -54,46 +54,80 @@ let __procTimer = null;
  * Windows网络流量采样（优化版，Windows Server优先使用累计值方法）
  */
 async function __sampleNetWindows() {
+  let lastError = null;
+  
+  // 方法1: 使用Get-NetAdapterStatistics（PowerShell，累计值，Windows Server最准确）
   try {
-    // 方法1: 使用Get-NetAdapterStatistics（PowerShell，累计值，Windows Server最准确）
-    try {
-      const { stdout, stderr } = await execAsync(
-        'powershell -NoProfile -Command "$adapters = Get-NetAdapterStatistics | Where-Object { $_.InterfaceDescription -notlike \"*Loopback*\" -and $_.InterfaceDescription -notlike \"*Teredo*\" -and $_.InterfaceDescription -notlike \"*isatap*\" -and $_.InterfaceDescription -notlike \"*Virtual*\" }; if ($adapters) { $rx = ($adapters | Measure-Object -Property ReceivedBytes -Sum).Sum; $tx = ($adapters | Measure-Object -Property SentBytes -Sum).Sum; \"$rx|$tx\" } else { \"0|0\" }"',
-        { timeout: 5000, maxBuffer: 1024 * 1024 }
-      );
-      const parts = stdout.trim().split('|');
-      if (parts.length === 2) {
-        const rxBytes = parseFloat(parts[0]) || 0;
-        const txBytes = parseFloat(parts[1]) || 0;
-        // 返回结果，即使为0也返回（可能是真实值）
-        return { rxBytes, txBytes, method: 'Get-NetAdapterStatistics' };
-      }
-    } catch (e) {
-      BotUtil.makeLog('debug', `Get-NetAdapterStatistics失败: ${e.message}`, 'CoreAPI');
+    const { stdout, stderr } = await execAsync(
+      'powershell -NoProfile -Command "$adapters = Get-NetAdapterStatistics | Where-Object { $_.InterfaceDescription -notlike \"*Loopback*\" -and $_.InterfaceDescription -notlike \"*Teredo*\" -and $_.InterfaceDescription -notlike \"*isatap*\" -and $_.InterfaceDescription -notlike \"*Virtual*\" }; if ($adapters) { $rx = ($adapters | Measure-Object -Property ReceivedBytes -Sum).Sum; $tx = ($adapters | Measure-Object -Property SentBytes -Sum).Sum; \"$rx|$tx\" } else { \"0|0\" }"',
+      { timeout: 5000, maxBuffer: 1024 * 1024 }
+    );
+    const parts = stdout.trim().split('|');
+    if (parts.length === 2) {
+      const rxBytes = parseFloat(parts[0]) || 0;
+      const txBytes = parseFloat(parts[1]) || 0;
+      // 返回结果，即使为0也返回（可能是真实值）
+      return { rxBytes, txBytes, method: 'Get-NetAdapterStatistics' };
+    } else {
+      lastError = `Get-NetAdapterStatistics输出格式错误: ${stdout.substring(0, 100)}`;
     }
-
-    // 方法2: 使用Get-Counter（PowerShell，速率值，需要转换为累计值）
-    try {
-      const { stdout } = await execAsync(
-        'powershell -NoProfile -Command "$r = Get-Counter \"\\Network Interface(*)\\Bytes Received/sec\", \"\\Network Interface(*)\\Bytes Sent/sec\" -ErrorAction SilentlyContinue; if ($r) { $rx = 0; $tx = 0; $r.CounterSamples | ForEach-Object { if ($_.Path -match \"Bytes Received\" -and $_.Path -notmatch \"Loopback|Teredo|isatap\") { $rx += $_.CookedValue } elseif ($_.Path -match \"Bytes Sent\" -and $_.Path -notmatch \"Loopback|Teredo|isatap\") { $tx += $_.CookedValue } }; \"$rx|$tx\" } else { \"0|0\" }"',
-        { timeout: 5000, maxBuffer: 1024 * 1024 }
-      );
-      const parts = stdout.trim().split('|');
-      if (parts.length === 2) {
-        const rxRate = parseFloat(parts[0]) || 0;
-        const txRate = parseFloat(parts[1]) || 0;
-        // 返回速率值，后续会转换为累计值
-        return { rxRate, txRate, method: 'Get-Counter' };
-      }
-    } catch (e) {
-      BotUtil.makeLog('debug', `Get-Counter失败: ${e.message}`, 'CoreAPI');
-    }
-
-    return null;
-  } catch (error) {
-    BotUtil.makeLog('error', `Windows网络采样失败: ${error.message}`, 'CoreAPI');
-    return null;
+  } catch (e) {
+    lastError = `Get-NetAdapterStatistics失败: ${e.message}`;
+    BotUtil.makeLog('debug', lastError, 'CoreAPI');
   }
+
+  // 方法2: 使用Get-Counter（PowerShell，速率值，需要转换为累计值）
+  try {
+    const { stdout } = await execAsync(
+      'powershell -NoProfile -Command "$r = Get-Counter \"\\Network Interface(*)\\Bytes Received/sec\", \"\\Network Interface(*)\\Bytes Sent/sec\" -ErrorAction SilentlyContinue; if ($r) { $rx = 0; $tx = 0; $r.CounterSamples | ForEach-Object { if ($_.Path -match \"Bytes Received\" -and $_.Path -notmatch \"Loopback|Teredo|isatap\") { $rx += $_.CookedValue } elseif ($_.Path -match \"Bytes Sent\" -and $_.Path -notmatch \"Loopback|Teredo|isatap\") { $tx += $_.CookedValue } }; \"$rx|$tx\" } else { \"0|0\" }"',
+      { timeout: 5000, maxBuffer: 1024 * 1024 }
+    );
+    const parts = stdout.trim().split('|');
+    if (parts.length === 2) {
+      const rxRate = parseFloat(parts[0]) || 0;
+      const txRate = parseFloat(parts[1]) || 0;
+      // 返回速率值，后续会转换为累计值
+      return { rxRate, txRate, method: 'Get-Counter' };
+    } else {
+      lastError = `Get-Counter输出格式错误: ${stdout.substring(0, 100)}`;
+    }
+  } catch (e) {
+    lastError = `Get-Counter失败: ${e.message}`;
+    BotUtil.makeLog('debug', lastError, 'CoreAPI');
+  }
+
+  // 方法3: 使用wmic（Windows Management Instrumentation，兼容性最好）
+  try {
+    const { stdout } = await execAsync(
+      'wmic path Win32_PerfRawData_Tcpip_NetworkInterface get BytesReceivedPersec,BytesSentPersec /format:list 2>nul',
+      { timeout: 5000, maxBuffer: 1024 * 1024 }
+    );
+    if (stdout && stdout.trim().length > 0) {
+      let rxRate = 0, txRate = 0;
+      const lines = stdout.split('\n');
+      for (const line of lines) {
+        if (line.includes('BytesReceivedPersec=')) {
+          const val = parseFloat(line.split('=')[1]) || 0;
+          if (!isNaN(val)) rxRate += val;
+        } else if (line.includes('BytesSentPersec=')) {
+          const val = parseFloat(line.split('=')[1]) || 0;
+          if (!isNaN(val)) txRate += val;
+        }
+      }
+      // 即使为0也返回（可能是真实值）
+      return { rxRate, txRate, method: 'wmic' };
+    }
+  } catch (e) {
+    lastError = `wmic失败: ${e.message}`;
+    BotUtil.makeLog('debug', lastError, 'CoreAPI');
+  }
+
+  // 所有方法都失败，记录详细错误
+  if (lastError) {
+    BotUtil.makeLog('warn', `Windows Server网络采样所有方法失败，最后错误: ${lastError}`, 'CoreAPI');
+  }
+  
+  return null;
 }
 
 /**
@@ -159,9 +193,13 @@ async function __sampleNetOnce() {
     let method = 'systeminformation';
     let isValid = false;
 
-    // 优先使用systeminformation（跨平台，最准确）
+    // 优先使用systeminformation（第三方库，跨平台，最准确）
     try {
-      const stats = await si.networkStats().catch(() => []);
+      const stats = await si.networkStats().catch((err) => {
+        BotUtil.makeLog('debug', `systeminformation.networkStats()异常: ${err.message}`, 'CoreAPI');
+        return [];
+      });
+      
       if (Array.isArray(stats) && stats.length > 0) {
         let totalRx = 0, totalTx = 0;
         for (const n of stats) {
@@ -179,34 +217,47 @@ async function __sampleNetOnce() {
             txBytes = totalTx;
             method = 'systeminformation';
             isValid = true;
-          }
-        } else if (__lastNetSample && (totalRx === 0 && totalTx === 0)) {
-          // systeminformation返回0，但之前有数据
-          // 在Windows Server上，如果systeminformation持续返回0，可能是库的问题，使用原生方法作为降级
-          if (platform === 'win32') {
-            isValid = false; // 标记为无效，使用原生方法降级
           } else {
-            // 其他平台，可能是真的没有流量，使用0值
-            rxBytes = 0;
-            txBytes = 0;
-            method = 'systeminformation';
-            isValid = true;
+            // 数据异常（可能是计数器重置），但在Windows Server上仍然尝试原生方法
+            if (platform === 'win32') {
+              isValid = false;
+            } else {
+              // 其他平台，接受数据
+              rxBytes = totalRx;
+              txBytes = totalTx;
+              method = 'systeminformation';
+              isValid = true;
+            }
           }
-        } else if (!__lastNetSample && (totalRx === 0 && totalTx === 0)) {
-          // 首次采样且为0，可能是真的没有流量，也可能是Windows Server的问题
-          // 在Windows Server上，首次采样为0时也尝试原生方法
+        } else {
+          // systeminformation返回0
+          // 在Windows Server上，如果systeminformation返回0，尝试原生方法
+          // 其他平台，可能是真的没有流量，接受0值
           if (platform === 'win32') {
-            isValid = false; // 标记为无效，使用原生方法降级
+            isValid = false; // Windows Server上尝试原生方法
           } else {
+            // 其他平台，接受0值（可能是真的没有流量）
             rxBytes = 0;
             txBytes = 0;
             method = 'systeminformation';
             isValid = true;
           }
         }
+      } else {
+        // systeminformation返回空数组
+        if (platform === 'win32') {
+          isValid = false; // Windows Server上尝试原生方法
+        } else {
+          // 其他平台，可能是真的没有网络接口
+          rxBytes = 0;
+          txBytes = 0;
+          method = 'systeminformation';
+          isValid = true;
+        }
       }
     } catch (e) {
       // systeminformation失败，使用原生方法作为降级方案
+      BotUtil.makeLog('debug', `systeminformation失败: ${e.message}`, 'CoreAPI');
       isValid = false;
     }
 
@@ -248,9 +299,31 @@ async function __sampleNetOnce() {
             }
           }
         } else {
-          // 原生方法也失败，记录日志
+          // 原生方法也失败，记录详细日志并尝试最后的fallback
           if (!__netMethodValidated) {
-            BotUtil.makeLog('warn', 'Windows Server网络采样：systeminformation和原生方法都失败', 'CoreAPI');
+            BotUtil.makeLog('warn', 'Windows Server网络采样：systeminformation和原生方法都失败，尝试最后的fallback', 'CoreAPI');
+            
+            // 最后的fallback：尝试使用systeminformation的原始数据，即使为0也接受
+            try {
+              const stats = await si.networkStats().catch(() => []);
+              if (Array.isArray(stats) && stats.length > 0) {
+                let totalRx = 0, totalTx = 0;
+                for (const n of stats) {
+                  totalRx += Number(n.rx_bytes || n.bytes_recv || 0);
+                  totalTx += Number(n.tx_bytes || n.bytes_sent || 0);
+                }
+                // 即使为0也接受，作为初始值（可能是真的没有流量）
+                rxBytes = totalRx;
+                txBytes = totalTx;
+                method = 'systeminformation-fallback';
+                isValid = true;
+                BotUtil.makeLog('info', `使用systeminformation fallback: rxBytes=${rxBytes}, txBytes=${txBytes}, 接口数=${stats.length}`, 'CoreAPI');
+              } else {
+                BotUtil.makeLog('warn', `systeminformation返回空数组，网络接口数=0`, 'CoreAPI');
+              }
+            } catch (e) {
+              BotUtil.makeLog('error', `最后的fallback也失败: ${e.message}`, 'CoreAPI');
+            }
           }
         }
       } else {
