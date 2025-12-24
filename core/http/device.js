@@ -1530,15 +1530,15 @@ class DeviceManager {
                                         return text ? { type: 'text', text } : null;
                                     }
                                     
-                                    // 图片段：转换文件路径为 URL
-                                    if (seg.type === 'image') {
+                                    // 文件类型 segment（image/video/record/file）：转换文件路径为 URL
+                                    if (['image', 'video', 'record', 'file'].includes(seg.type)) {
                                         // 如果已有 url，直接使用
                                         if (seg.url) {
                                             return seg;
                                         }
                                         
-                                        // 获取文件路径（标准格式：seg.data.file）
-                                        const filePath = seg.data?.file;
+                                        // 获取文件路径：支持 oicq 格式（seg.file）和标准格式（seg.data.file）
+                                        const filePath = seg.file || seg.data?.file;
                                         if (!filePath) {
                                             return null;
                                         }
@@ -1547,31 +1547,25 @@ class DeviceManager {
                                         const normalizedPath = path.normalize(filePath);
                                         const trashPath = path.normalize(paths.trash);
                                         
+                                        let url;
                                         if (normalizedPath.startsWith(trashPath)) {
                                             // trash 目录：使用 trash API
                                             const relativePath = path.relative(trashPath, normalizedPath).replace(/\\/g, '/');
-                                            return {
-                                                type: 'image',
-                                                url: `/api/trash/${relativePath}`,
-                                                data: { file: filePath }
-                                            };
-                                        }
-                                        
-                                        if (path.isAbsolute(filePath)) {
+                                            url = `/api/trash/${relativePath}`;
+                                        } else if (path.isAbsolute(filePath)) {
                                             // 绝对路径：使用通用文件服务
                                             const fileId = Buffer.from(filePath, 'utf8').toString('base64url');
-                                            return {
-                                                type: 'image',
-                                                url: `/api/device/file/${fileId}`,
-                                                data: { file: filePath }
-                                            };
+                                            url = `/api/device/file/${fileId}`;
+                                        } else {
+                                            // 相对路径：使用 trash API
+                                            url = `/api/trash/${filePath.replace(/\\/g, '/')}`;
                                         }
                                         
-                                        // 相对路径：使用 trash API
                                         return {
-                                            type: 'image',
-                                            url: `/api/trash/${filePath.replace(/\\/g, '/')}`,
-                                            data: { file: filePath }
+                                            type: seg.type,
+                                            url,
+                                            data: { file: filePath },
+                                            name: seg.name
                                         };
                                     }
                                     

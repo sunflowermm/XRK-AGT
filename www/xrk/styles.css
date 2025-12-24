@@ -1218,6 +1218,160 @@ select.form-input {
   opacity: 0.3;
 }
 
+/* 图片容器 */
+.chat-image-container {
+  margin-top: 8px;
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* 视频容器和样式 */
+.chat-video-container {
+  margin-top: 8px;
+  display: inline-block;
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-input);
+}
+
+.chat-video {
+  max-width: 100%;
+  max-height: 400px;
+  width: auto;
+  height: auto;
+  display: block;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
+.chat-video::-webkit-media-controls-panel {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* 音频容器和样式 */
+.chat-audio-container {
+  margin-top: 8px;
+  display: inline-block;
+  width: 100%;
+  max-width: 400px;
+  padding: 8px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.chat-audio {
+  width: 100%;
+  height: 32px;
+  outline: none;
+}
+
+.chat-audio::-webkit-media-controls-panel {
+  background-color: transparent;
+}
+
+.chat-audio::-webkit-media-controls-play-button {
+  background-color: var(--primary);
+  border-radius: 50%;
+}
+
+/* @ 提及样式 */
+.chat-text {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.chat-text .chat-at {
+  color: var(--primary);
+  font-weight: 500;
+  background: var(--primary-50);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  margin: 0 2px;
+}
+
+/* 回复样式 */
+.chat-reply {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--bg-input);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+
+.chat-reply-content {
+  max-height: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 文件样式 */
+.chat-file {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: inline-block;
+}
+
+.chat-file-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.chat-file-link:hover {
+  color: var(--primary);
+}
+
+.chat-file-icon {
+  font-size: 18px;
+}
+
+.chat-file-name {
+  font-weight: 500;
+}
+
+/* Markdown 和原始内容样式 */
+.chat-markdown {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  line-height: 1.6;
+}
+
+.chat-raw {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 媒体文件通用样式 */
+.chat-image-container,
+.chat-video-container,
+.chat-audio-container {
+  transition: transform 0.2s, opacity 0.3s ease;
+}
+
+.chat-image-container:hover,
+.chat-video-container:hover {
+  transform: scale(1.01);
+}
+
 /* 图片预览模态框 */
 .image-preview-modal {
   display: none;

@@ -1414,7 +1414,7 @@ class App {
     // 恢复历史时统一不做入场动画，直接渲染为最终状态
     sortedHistory.forEach(m => {
       try {
-        if (m.type === 'record') {
+        if (m.type === 'chat-record' || (m.type === 'record' && m.messages)) {
           this.appendChatRecord(m.messages || [], m.title || '', m.description || '', false);
         } else if (m.segments && Array.isArray(m.segments)) {
           // 支持 segments 格式（文本和图片混合）
@@ -1543,7 +1543,6 @@ class App {
           textParts.length = 0;
         }
         
-        // device.js 已转换文件路径为 URL，直接使用 seg.url
         const url = seg.url;
         if (url) {
           const imgContainer = document.createElement('div');
@@ -1556,10 +1555,7 @@ class App {
           img.style.cursor = 'pointer';
           img.title = '点击查看大图';
           
-          img.onload = () => {
-            img.classList.add('loaded');
-          };
-          
+          img.onload = () => img.classList.add('loaded');
           img.onerror = () => {
             img.classList.add('loaded');
             img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfliqDovb3lpLHotKU8L3RleHQ+PC9zdmc+';
@@ -1569,6 +1565,121 @@ class App {
           img.addEventListener('click', () => this.showImagePreview(url));
           imgContainer.appendChild(img);
           div.appendChild(imgContainer);
+        }
+      } else if (seg.type === 'video') {
+        // 视频段：先渲染之前的文本，再渲染视频
+        if (textParts.length > 0) {
+          const textDiv = document.createElement('div');
+          textDiv.className = 'chat-text';
+          textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+          div.appendChild(textDiv);
+          textParts.length = 0;
+        }
+        
+        const url = seg.url;
+        if (url) {
+          const videoContainer = document.createElement('div');
+          videoContainer.className = 'chat-video-container';
+          const video = document.createElement('video');
+          video.src = url;
+          video.controls = true;
+          video.className = 'chat-video';
+          video.preload = 'metadata';
+          video.title = seg.name || '视频';
+          video.onloadedmetadata = () => {
+            // 视频加载完成后可以显示
+          };
+          video.onerror = () => {
+            videoContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">视频加载失败</div>';
+          };
+          videoContainer.appendChild(video);
+          div.appendChild(videoContainer);
+        }
+      } else if (seg.type === 'record') {
+        // 音频段：先渲染之前的文本，再渲染音频
+        if (textParts.length > 0) {
+          const textDiv = document.createElement('div');
+          textDiv.className = 'chat-text';
+          textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+          div.appendChild(textDiv);
+          textParts.length = 0;
+        }
+        
+        const url = seg.url;
+        if (url) {
+          const audioContainer = document.createElement('div');
+          audioContainer.className = 'chat-audio-container';
+          const audio = document.createElement('audio');
+          audio.src = url;
+          audio.controls = true;
+          audio.className = 'chat-audio';
+          audio.preload = 'metadata';
+          audio.title = seg.name || '语音';
+          audio.onerror = () => {
+            audioContainer.innerHTML = '<div style="padding: 8px; text-align: center; color: var(--text-muted); font-size: 12px;">音频加载失败</div>';
+          };
+          audioContainer.appendChild(audio);
+          div.appendChild(audioContainer);
+        }
+      } else if (seg.type === 'at') {
+        // @ 提及：显示为特殊样式，添加到文本中
+        const atText = `@${seg.name || seg.qq || ''}`;
+        textParts.push(`<span class="chat-at">${this.escapeHtml(atText)}</span>`);
+        allText.push(atText);
+      } else if (seg.type === 'reply') {
+        // 回复：显示为引用样式
+        if (textParts.length > 0) {
+          const textDiv = document.createElement('div');
+          textDiv.className = 'chat-text';
+          textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+          div.appendChild(textDiv);
+          textParts.length = 0;
+        }
+        
+        const replyDiv = document.createElement('div');
+        replyDiv.className = 'chat-reply';
+        const replyText = seg.text || '引用消息';
+        replyDiv.innerHTML = `<div class="chat-reply-content">${this.escapeHtml(replyText)}</div>`;
+        div.appendChild(replyDiv);
+      } else if (seg.type === 'file') {
+        // 文件：显示为下载链接
+        if (textParts.length > 0) {
+          const textDiv = document.createElement('div');
+          textDiv.className = 'chat-text';
+          textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+          div.appendChild(textDiv);
+          textParts.length = 0;
+        }
+        
+        const url = seg.url || seg.file;
+        if (url) {
+          const fileDiv = document.createElement('div');
+          fileDiv.className = 'chat-file';
+          const fileName = seg.name || '文件';
+          fileDiv.innerHTML = `
+            <a href="${url}" download="${fileName}" class="chat-file-link">
+              <span class="chat-file-icon">📎</span>
+              <span class="chat-file-name">${this.escapeHtml(fileName)}</span>
+            </a>
+          `;
+          div.appendChild(fileDiv);
+        }
+      } else if (seg.type === 'markdown' || seg.type === 'raw') {
+        // Markdown 或原始内容：直接渲染
+        const content = seg.data || seg.markdown || seg.raw || '';
+        if (content) {
+          if (textParts.length > 0) {
+            const textDiv = document.createElement('div');
+            textDiv.className = 'chat-text';
+            textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+            div.appendChild(textDiv);
+            textParts.length = 0;
+          }
+          
+          const contentDiv = document.createElement('div');
+          contentDiv.className = seg.type === 'markdown' ? 'chat-markdown' : 'chat-raw';
+          contentDiv.innerHTML = seg.type === 'markdown' ? this.renderMarkdown(content) : this.escapeHtml(content);
+          div.appendChild(contentDiv);
         }
       }
     });
@@ -4267,9 +4378,14 @@ class App {
             }
           }
           
-          // 图片单独显示
-          segments.filter(s => s.type === 'image' && s.url).forEach(seg => {
-            this.appendImageMessage(seg.url, true);
+          // 媒体文件单独显示（图片/视频/音频）
+          segments.filter(s => ['image', 'video', 'record'].includes(s.type) && s.url).forEach(seg => {
+            if (seg.type === 'image') {
+              this.appendImageMessage(seg.url, true);
+            } else {
+              // 视频和音频通过 appendSegments 渲染
+              this.appendSegments([seg], true);
+            }
           });
         } else {
           // 按顺序渲染 segments（保持文本和图片的混合顺序）
