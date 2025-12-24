@@ -171,6 +171,8 @@ class App {
       _lastUpdate: null
     };
     this._chatHistory = this._loadChatHistory();
+    // 聊天流状态默认初始化，避免渲染阶段空引用
+    this._chatStreamState = { running: false, source: null };
     this._deviceWs = null;
     this._wsConnecting = false;
     this._micActive = false;
