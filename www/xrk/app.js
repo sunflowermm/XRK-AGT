@@ -1489,11 +1489,7 @@ class App {
         copyBtn.title = '复制';
         copyBtn.onclick = (e) => {
           e.stopPropagation();
-          navigator.clipboard.writeText(text).then(() => {
-            this.showToast('已复制到剪贴板', 'success');
-          }).catch(() => {
-            this.showToast('复制失败', 'error');
-          });
+          this.copyToClipboard(text, '已复制到剪贴板', '复制失败');
         };
         div.appendChild(copyBtn);
       }
@@ -3916,27 +3912,7 @@ class App {
       return;
     }
     
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(val).then(
-        () => this.showToast('已复制', 'success'),
-        () => this.showToast('复制失败', 'error')
-      );
-    } else {
-      // 降级方案
-      const textarea = document.createElement('textarea');
-      textarea.value = val;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      try {
-        document.execCommand('copy');
-        this.showToast('已复制', 'success');
-      } catch {
-        this.showToast('复制失败', 'error');
-      }
-      document.body.removeChild(textarea);
-    }
+    this.copyToClipboard(val, '已复制', '复制失败');
   }
 
   fillExample() {
@@ -4020,10 +3996,24 @@ class App {
         data = text; 
       }
       
-      this.renderResponse(res.status, data, time);
+      // 保存请求信息用于显示
+      const requestInfo = {
+        method: options.method || 'GET',
+        url: url,
+        headers: options.headers || {},
+        body: requestData.body || null
+      };
+      
+      this.renderResponse(res.status, data, time, requestInfo);
       this.showToast(res.ok ? '请求成功' : `请求失败: ${res.status}`, res.ok ? 'success' : 'error');
     } catch (e) {
-      this.renderResponse(0, { error: e.message }, Date.now() - startTime);
+      const requestInfo = {
+        method: requestData.method || this.currentAPI.method || 'GET',
+        url: url,
+        headers: this.getHeaders(),
+        body: requestData.body || null
+      };
+      this.renderResponse(0, { error: e.message }, Date.now() - startTime, requestInfo);
       this.showToast('请求失败: ' + e.message, 'error');
     } finally {
       if (btn) {
@@ -4069,7 +4059,14 @@ class App {
         data = { error: '响应解析失败' };
       }
       
-      this.renderResponse(res.status, data, time);
+      const requestInfo = {
+        method: 'POST',
+        url: `${this.serverUrl}/api/file/upload`,
+        headers: { 'X-API-Key': localStorage.getItem('apiKey') || '' },
+        body: null // FormData 不显示
+      };
+      
+      this.renderResponse(res.status, data, time, requestInfo);
       
       if (res.ok) {
         this.showToast('上传成功', 'success');
@@ -4080,7 +4077,13 @@ class App {
         this.showToast('上传失败: ' + (data.message || res.statusText), 'error');
       }
     } catch (e) {
-      this.renderResponse(0, { error: e.message }, Date.now() - startTime);
+      const requestInfo = {
+        method: 'POST',
+        url: `${this.serverUrl}/api/file/upload`,
+        headers: { 'X-API-Key': localStorage.getItem('apiKey') || '' },
+        body: null
+      };
+      this.renderResponse(0, { error: e.message }, Date.now() - startTime, requestInfo);
       this.showToast('上传失败: ' + e.message, 'error');
     } finally {
       if (btn) {
@@ -4090,38 +4093,132 @@ class App {
     }
   }
 
-  renderResponse(status, data, time) {
+  renderResponse(status, data, time, requestInfo = {}) {
     const section = document.getElementById('responseSection');
     const isSuccess = status >= 200 && status < 300;
     const prettyJson = JSON.stringify(data, null, 2);
     
+    // 格式化请求头显示
+    const headers = requestInfo.headers || {};
+    const headersHtml = Object.entries(headers).map(([key, value]) => 
+      `<div class="request-header-item"><span class="request-header-key">${this.escapeHtml(key)}</span>: <span class="request-header-value">${this.escapeHtml(String(value))}</span></div>`
+    ).join('');
+    
     section.innerHTML = `
       <div style="margin-top:32px">
-        <div class="response-header">
-          <h3 class="response-title">响应结果</h3>
-          <div class="response-meta">
-            <span class="badge ${isSuccess ? 'badge-success' : 'badge-danger'}">${status || 'Error'}</span>
-            <span style="color:var(--text-muted)">${time}ms</span>
-            <button id="responseCopyBtn" class="btn btn-secondary btn-sm" type="button">复制结果</button>
+        <!-- 请求头一览 -->
+        <div class="request-info-section">
+          <div class="request-info-header" id="requestInfoToggle">
+            <h3 class="request-info-title">
+              <span class="request-info-icon">▼</span>
+              请求信息
+            </h3>
+            <div class="request-info-meta">
+              <span class="request-method-badge">${requestInfo.method || 'GET'}</span>
+              <span class="request-url-text" title="${this.escapeHtml(requestInfo.url || '')}">${this.escapeHtml((requestInfo.url || '').substring(0, 60))}${(requestInfo.url || '').length > 60 ? '...' : ''}</span>
+            </div>
+          </div>
+          <div class="request-info-content" id="requestInfoContent" style="display:none">
+            <div class="request-info-item">
+              <div class="request-info-label">请求方法</div>
+              <div class="request-info-value">${requestInfo.method || 'GET'}</div>
+            </div>
+            <div class="request-info-item">
+              <div class="request-info-label">请求URL</div>
+              <div class="request-info-value request-url-full">${this.escapeHtml(requestInfo.url || '')}</div>
+            </div>
+            ${headersHtml ? `
+            <div class="request-info-item">
+              <div class="request-info-label">请求头</div>
+              <div class="request-info-value request-headers">${headersHtml}</div>
+            </div>
+            ` : ''}
+            ${requestInfo.body ? `
+            <div class="request-info-item">
+              <div class="request-info-label">请求体</div>
+              <div class="request-info-value request-body"><pre>${this.syntaxHighlight(JSON.stringify(requestInfo.body, null, 2))}</pre></div>
+            </div>
+            ` : ''}
           </div>
         </div>
-        <div class="response-content">
-          <pre>${this.syntaxHighlight(prettyJson)}</pre>
+        
+        <!-- 响应结果 -->
+        <div class="response-section">
+          <div class="response-header">
+            <h3 class="response-title">响应结果</h3>
+            <div class="response-meta">
+              <span class="badge ${isSuccess ? 'badge-success' : 'badge-danger'}">${status || 'Error'}</span>
+              <span style="color:var(--text-muted)">${time}ms</span>
+              <button id="responseCopyBtn" class="btn btn-secondary btn-sm" type="button">复制结果</button>
+            </div>
+          </div>
+          <div class="response-content">
+            <pre>${this.syntaxHighlight(prettyJson)}</pre>
+          </div>
         </div>
       </div>
     `;
     
-    // 响应结果复制按钮
+    // 请求信息折叠/展开
+    const toggleBtn = document.getElementById('requestInfoToggle');
+    const content = document.getElementById('requestInfoContent');
+    if (toggleBtn && content) {
+      toggleBtn.addEventListener('click', () => {
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? 'block' : 'none';
+        const icon = toggleBtn.querySelector('.request-info-icon');
+        if (icon) icon.textContent = isHidden ? '▲' : '▼';
+      });
+    }
+    
+    // 响应结果复制按钮（支持 HTTP 协议降级）
     const copyBtn = document.getElementById('responseCopyBtn');
     if (copyBtn) {
       copyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(prettyJson)
-          .then(() => this.showToast('响应结果已复制到剪贴板', 'success'))
-          .catch(() => this.showToast('复制失败，请检查浏览器权限', 'error'));
+        this.copyToClipboard(prettyJson, '响应结果已复制到剪贴板', '复制失败，请检查浏览器权限');
       });
     }
     
     section.scrollIntoView({ behavior: 'smooth' });
+  }
+  
+  // 通用的复制到剪贴板方法（支持 HTTP 协议降级）
+  copyToClipboard(text, successMsg = '已复制到剪贴板', errorMsg = '复制失败') {
+    if (navigator.clipboard && window.isSecureContext) {
+      // HTTPS 或 localhost 使用 Clipboard API
+      navigator.clipboard.writeText(text)
+        .then(() => this.showToast(successMsg, 'success'))
+        .catch(() => this.fallbackCopyText(text, successMsg, errorMsg));
+    } else {
+      // HTTP 协议使用降级方案
+      this.fallbackCopyText(text, successMsg, errorMsg);
+    }
+  }
+  
+  // 降级复制方案（适用于 HTTP 协议）
+  fallbackCopyText(text, successMsg, errorMsg) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    textarea.style.left = '-999999px';
+    textarea.style.top = '-999999px';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      if (successful) {
+        this.showToast(successMsg, 'success');
+      } else {
+        this.showToast(errorMsg, 'error');
+      }
+    } catch (err) {
+      document.body.removeChild(textarea);
+      this.showToast(errorMsg, 'error');
+    }
   }
 
   syntaxHighlight(json) {
