@@ -2511,10 +2511,12 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     const apiList = ApiLoader.getApiList();
     const totalRoutes = apiList.reduce((sum, api) => sum + (api.routes || 0), 0);
     const totalWS = apiList.reduce((sum, api) => sum + (api.ws || 0), 0);
+    // 从Bot实例获取实际WebSocket路径数量（更准确）
+    const actualWSPaths = Object.keys(this.wsf || {}).length;
     console.log(chalk.yellow('\n▶ API统计：'));
     console.log(`    ${chalk.cyan('•')} API模块：${chalk.white(apiList.length + '个')}`);
     console.log(`    ${chalk.cyan('•')} HTTP路由：${chalk.white(totalRoutes + '个')}`);
-    console.log(`    ${chalk.cyan('•')} WebSocket路由：${chalk.white(totalWS + '个')}`);
+    console.log(`    ${chalk.cyan('•')} WebSocket路由：${chalk.white(actualWSPaths + '个')} ${actualWSPaths !== totalWS ? chalk.gray(`(API统计: ${totalWS})`) : ''}`);
     
     // 认证信息
     const authConfig = cfg.server.auth || {};

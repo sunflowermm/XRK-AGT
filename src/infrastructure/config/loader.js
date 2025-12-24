@@ -112,16 +112,25 @@ class InitManager {
   async startMonitoring() {
     const monitorConfig = cfg.monitor;
     
-    if (!monitorConfig.enabled) {
+    if (!monitorConfig?.enabled) {
       logger.debug('系统监控未启用');
       return;
     }
 
-    await this.systemMonitor.start(monitorConfig);
+    // 延迟启动监控，确保日志播完后再开始第一次检查
+    // 使用setTimeout确保在下一个事件循环中启动
+    setTimeout(async () => {
+      try {
+        await this.systemMonitor.start(monitorConfig);
+        logger.debug('系统监控已启动');
+      } catch (error) {
+        logger.error(`系统监控启动失败: ${error.message}`);
+      }
+    }, 100);
 
     this.systemMonitor.on('critical', async ({ type, status }) => {
       logger.error(`系统资源严重不足: ${type}`);
-      if (monitorConfig.optimize.autoRestart) {
+      if (monitorConfig.optimize?.autoRestart) {
         logger.error('将在5秒后重启...');
         setTimeout(() => this.processManager.restart(), 5000);
       }

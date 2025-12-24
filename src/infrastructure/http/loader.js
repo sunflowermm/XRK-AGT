@@ -352,6 +352,7 @@ class ApiLoader {
             dsc: api.dsc || '暂无描述',
             priority: api.priority || 100,
             routes: api.routes ? api.routes.length : 0,
+            ws: api.ws ? Object.keys(api.ws).length : 0,
             enable: api.enable !== false,
             createTime: api.createTime || Date.now()
           });

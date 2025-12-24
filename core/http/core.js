@@ -1,8 +1,13 @@
 import os from 'os';
 import si from 'systeminformation';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import cfg from '../../src/infrastructure/config/config.js';
 import StreamLoader from '../../src/infrastructure/aistream/loader.js';
 import { collectBotInventory, summarizeBots } from '../../src/infrastructure/http/utils/botInventory.js';
+import BotUtil from '#utils/botutil.js';
+
+const execAsync = promisify(exec);
 
 let __lastNetSample = null;
 let __netSampler = null;
@@ -11,6 +16,8 @@ let __netRecent = []; // 近期数据（每3-5秒一个点，用于图表显示�
 const NET_HISTORY_LIMIT = 24 * 60; // 24小时，每分钟一个点
 const NET_RECENT_LIMIT = 60; // 最近60个点，用于实时图表
 const NET_SAMPLE_MS = 3_000; // 每3秒采样一次
+let __netMethod = 'auto'; // 当前使用的网络采样方法
+let __netMethodValidated = false; // 是否已验证方法有效性
 
 // CPU 采样缓存（单一方法：os.cpus 快照法）
 let __cpuCache = { percent: 0, ts: 0 };
@@ -43,26 +50,251 @@ let __procCache = { top5: [], ts: 0 };
 let __fsTimer = null;
 let __procTimer = null;
 
-async function __sampleNetOnce() {
+/**
+ * Windows网络流量采样（使用性能计数器，最准确）
+ */
+async function __sampleNetWindows() {
   try {
-    const stats = await si.networkStats().catch(() => []);
-    let rxBytes = 0, txBytes = 0;
-    if (Array.isArray(stats)) {
-      for (const n of stats) {
-        rxBytes += Number(n.rx_bytes || 0);
-        txBytes += Number(n.tx_bytes || 0);
+    // 方法1: 使用Get-Counter（PowerShell，Windows Server最准确）
+    try {
+      const { stdout } = await execAsync(
+        'powershell -NoProfile -Command "$r = Get-Counter \"\\Network Interface(*)\\Bytes Received/sec\", \"\\Network Interface(*)\\Bytes Sent/sec\" -ErrorAction SilentlyContinue; if ($r) { $rx = 0; $tx = 0; $r.CounterSamples | ForEach-Object { if ($_.Path -match \"Bytes Received\") { $rx += $_.CookedValue } elseif ($_.Path -match \"Bytes Sent\") { $tx += $_.CookedValue } }; \"$rx|$tx\" } else { \"0|0\" }"',
+        { timeout: 2000, maxBuffer: 1024 * 1024 }
+      );
+      const parts = stdout.trim().split('|');
+      if (parts.length === 2) {
+        const rxRate = parseFloat(parts[0]) || 0;
+        const txRate = parseFloat(parts[1]) || 0;
+        if (rxRate > 0 || txRate > 0) {
+          return { rxRate, txRate, method: 'Get-Counter' };
+        }
+      }
+    } catch (e) {
+      // 继续尝试其他方法
+    }
+
+    // 方法2: 使用Get-NetAdapterStatistics（PowerShell，累计值）
+    try {
+      const { stdout } = await execAsync(
+        'powershell -NoProfile -Command "$adapters = Get-NetAdapterStatistics | Where-Object { $_.InterfaceDescription -notlike \"*Loopback*\" -and $_.InterfaceDescription -notlike \"*Teredo*\" }; $rx = ($adapters | Measure-Object -Property ReceivedBytes -Sum).Sum; $tx = ($adapters | Measure-Object -Property SentBytes -Sum).Sum; \"$rx|$tx\""',
+        { timeout: 2000, maxBuffer: 1024 * 1024 }
+      );
+      const parts = stdout.trim().split('|');
+      if (parts.length === 2) {
+        const rxBytes = parseFloat(parts[0]) || 0;
+        const txBytes = parseFloat(parts[1]) || 0;
+        if (rxBytes > 0 || txBytes > 0) {
+          return { rxBytes, txBytes, method: 'Get-NetAdapterStatistics' };
+        }
+      }
+    } catch (e) {
+      // 继续尝试其他方法
+    }
+
+    // 方法3: 使用typeperf（Windows性能计数器命令行工具）
+    try {
+      const { stdout } = await execAsync(
+        'typeperf "\\Network Interface(*)\\Bytes Received/sec" "\\Network Interface(*)\\Bytes Sent/sec" -sc 1 -si 1 2>nul | findstr /C:"\\"',
+        { timeout: 2000, maxBuffer: 1024 * 1024 }
+      );
+      const lines = stdout.split('\n').filter(l => l.includes('\\') && !l.includes('"'));
+      let rxRate = 0, txRate = 0;
+      for (const line of lines) {
+        const matches = line.match(/(\d+\.\d+)/g);
+        if (matches && matches.length >= 2) {
+          if (line.includes('Received')) rxRate += parseFloat(matches[matches.length - 1]) || 0;
+          if (line.includes('Sent')) txRate += parseFloat(matches[matches.length - 1]) || 0;
+        }
+      }
+      if (rxRate > 0 || txRate > 0) {
+        return { rxRate, txRate, method: 'typeperf' };
+      }
+    } catch (e) {
+      // 继续尝试其他方法
+    }
+
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Linux/macOS网络流量采样
+ */
+async function __sampleNetUnix() {
+  try {
+    const platform = process.platform;
+    
+    if (platform === 'linux') {
+      // Linux: 读取/proc/net/dev（最快最准确）
+      try {
+        const { stdout } = await execAsync(
+          'cat /proc/net/dev | grep -v "lo:" | awk \'BEGIN {rx=0; tx=0} {if(NR>2 && $1!="") {rx+=$2; tx+=$10}}\' END \'{print rx"|"tx}\'',
+          { timeout: 1000 }
+        );
+        const parts = stdout.trim().split('|');
+        if (parts.length === 2) {
+          const rxBytes = parseInt(parts[0]) || 0;
+          const txBytes = parseInt(parts[1]) || 0;
+          if (rxBytes > 0 || txBytes > 0) {
+            return { rxBytes, txBytes, method: '/proc/net/dev' };
+          }
+        }
+      } catch (e) {
+        // 降级方案
+      }
+    } else if (platform === 'darwin') {
+      // macOS: 使用netstat -ib
+      try {
+        const { stdout } = await execAsync(
+          'netstat -ib | awk \'BEGIN {rx=0; tx=0} /^[^I]/ {if($1!="Name" && $1!="") {rx+=$7; tx+=$10}}\' END \'{print rx"|"tx}\'',
+          { timeout: 2000 }
+        );
+        const parts = stdout.trim().split('|');
+        if (parts.length === 2) {
+          const rxBytes = parseInt(parts[0]) || 0;
+          const txBytes = parseInt(parts[1]) || 0;
+          if (rxBytes > 0 || txBytes > 0) {
+            return { rxBytes, txBytes, method: 'netstat -ib' };
+          }
+        }
+      } catch (e) {
+        // 降级方案
       }
     }
+
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * 网络流量采样（优化版，支持多方法fallback）
+ */
+async function __sampleNetOnce() {
+  try {
+    const platform = process.platform;
     const now = Date.now();
+    let rxBytes = 0, txBytes = 0;
+    let rxRate = 0, txRate = 0;
+    let method = 'systeminformation';
+    let isValid = false;
+
+    // 优先使用systeminformation（跨平台，但Windows Server可能不准确）
+    try {
+      const stats = await si.networkStats().catch(() => []);
+      if (Array.isArray(stats) && stats.length > 0) {
+        let totalRx = 0, totalTx = 0;
+        for (const n of stats) {
+          const rx = Number(n.rx_bytes || n.bytes_recv || 0);
+          const tx = Number(n.tx_bytes || n.bytes_sent || 0);
+          totalRx += rx;
+          totalTx += tx;
+        }
+        
+        // 验证数据有效性（累计值应该递增或至少不为0）
+        if (totalRx > 0 || totalTx > 0) {
+          // 检查是否是累计值（应该大于上次的值或接近）
+          if (!__lastNetSample || totalRx >= __lastNetSample.rx * 0.9 || totalTx >= __lastNetSample.tx * 0.9) {
+            rxBytes = totalRx;
+            txBytes = totalTx;
+            method = 'systeminformation';
+            isValid = true;
+          }
+        }
+      }
+    } catch (e) {
+      // systeminformation失败，尝试原生方法
+    }
+
+    // 如果systeminformation无效，使用平台原生方法
+    if (!isValid) {
+      let nativeResult = null;
+      
+      if (platform === 'win32') {
+        nativeResult = await __sampleNetWindows();
+        if (nativeResult) {
+          if (nativeResult.rxBytes !== undefined) {
+            // 累计值
+            rxBytes = nativeResult.rxBytes;
+            txBytes = nativeResult.txBytes;
+            method = nativeResult.method;
+            isValid = true;
+          } else if (nativeResult.rxRate !== undefined) {
+            // 速率值，需要转换为累计值（估算）
+            if (__lastNetSample) {
+              const dt = (now - __lastNetSample.ts) / 1000;
+              rxBytes = __lastNetSample.rx + (nativeResult.rxRate * dt);
+              txBytes = __lastNetSample.tx + (nativeResult.txRate * dt);
+            } else {
+              rxBytes = nativeResult.rxRate * 60; // 估算1分钟累计
+              txBytes = nativeResult.txRate * 60;
+            }
+            method = nativeResult.method;
+            isValid = true;
+          }
+        }
+      } else {
+        nativeResult = await __sampleNetUnix();
+        if (nativeResult) {
+          rxBytes = nativeResult.rxBytes;
+          txBytes = nativeResult.txBytes;
+          method = nativeResult.method;
+          isValid = true;
+        }
+      }
+    }
+
+    // 如果所有方法都失败，使用上次的值（避免图表变平）
+    if (!isValid && __lastNetSample) {
+      rxBytes = __lastNetSample.rx;
+      txBytes = __lastNetSample.tx;
+      method = 'fallback';
+    } else if (!isValid) {
+      // 首次采样，使用0
+      rxBytes = 0;
+      txBytes = 0;
+      method = 'initial';
+    }
+
+    // 记录方法有效性（用于日志）
+    if (!__netMethodValidated && isValid) {
+      __netMethod = method;
+      __netMethodValidated = true;
+      BotUtil.makeLog('debug', `网络采样方法: ${method}`, 'CoreAPI');
+    }
+
     const tsMin = Math.floor(now / 60000) * 60000;
     let rxSec = 0, txSec = 0;
     
-    if (__lastNetSample) {
-      const dt = Math.max(1, (now - __lastNetSample.ts) / 1000);
+    if (__lastNetSample && isValid) {
+      const dt = Math.max(0.1, (now - __lastNetSample.ts) / 1000); // 最小0.1秒
       const rxDelta = rxBytes - __lastNetSample.rx;
       const txDelta = txBytes - __lastNetSample.tx;
-      if (rxDelta >= 0) rxSec = rxDelta / dt;
-      if (txDelta >= 0) txSec = txDelta / dt;
+      
+      // 计算速率（bytes/s），处理计数器重置的情况
+      if (rxDelta >= 0) {
+        rxSec = rxDelta / dt;
+      } else {
+        // 计数器重置，使用上次速率
+        rxSec = __netRecent.length > 0 ? __netRecent[__netRecent.length - 1].rxSec : 0;
+      }
+      
+      if (txDelta >= 0) {
+        txSec = txDelta / dt;
+      } else {
+        // 计数器重置，使用上次速率
+        txSec = __netRecent.length > 0 ? __netRecent[__netRecent.length - 1].txSec : 0;
+      }
+      
+      // 数据验证：如果速率异常大（可能是计数器重置），使用平滑处理
+      const maxRate = 10 * 1024 * 1024 * 1024; // 10GB/s上限
+      if (rxSec > maxRate || txSec > maxRate) {
+        rxSec = __netRecent.length > 0 ? __netRecent[__netRecent.length - 1].rxSec : 0;
+        txSec = __netRecent.length > 0 ? __netRecent[__netRecent.length - 1].txSec : 0;
+      }
       
       // 添加到近期数据（用于实时图表显示）
       __netRecent.push({ ts: now, rxSec, txSec });
@@ -87,16 +319,23 @@ async function __sampleNetOnce() {
     }
     
     __lastNetSample = { ts: now, rx: rxBytes, tx: txBytes };
-  } catch {}
+  } catch (error) {
+    BotUtil.makeLog('error', `网络采样失败: ${error.message}`, 'CoreAPI');
+  }
 }
 
 function __ensureNetSampler() {
   if (__netSampler) return;
-  // 预热两次，避免首次为0
+  
+  // 预热三次，确保数据准确（Windows Server需要更多预热）
   (async () => {
     await __sampleNetOnce();
-    setTimeout(__sampleNetOnce, 1_000);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await __sampleNetOnce();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await __sampleNetOnce();
   })();
+  
   __netSampler = setInterval(__sampleNetOnce, NET_SAMPLE_MS);
 }
 
@@ -123,17 +362,26 @@ function __getNetRecent() {
   // 返回最近的数据点（用于实时图表显示）
   // 如果近期数据不足，用当前速率填充
   const recent = [...__netRecent];
-  const lastSample = __lastNetSample;
   const lastHist = __netRecent.length > 0 ? __netRecent[__netRecent.length - 1] : null;
   
-  // 如果数据不足，用最后一个值填充
-  while (recent.length < NET_RECENT_LIMIT && lastHist) {
-    recent.push({ 
-      ts: Date.now() - (NET_RECENT_LIMIT - recent.length) * NET_SAMPLE_MS, 
-      rxSec: lastHist.rxSec || 0, 
-      txSec: lastHist.txSec || 0 
-    });
+  // 如果数据不足，用最后一个值填充（确保图表连续性）
+  if (recent.length < NET_RECENT_LIMIT) {
+    const now = Date.now();
+    const lastRx = lastHist?.rxSec || 0;
+    const lastTx = lastHist?.txSec || 0;
+    
+    while (recent.length < NET_RECENT_LIMIT) {
+      const idx = recent.length;
+      recent.push({ 
+        ts: now - (NET_RECENT_LIMIT - idx) * NET_SAMPLE_MS, 
+        rxSec: lastRx, 
+        txSec: lastTx 
+      });
+    }
   }
+  
+  // 确保数据按时间排序
+  recent.sort((a, b) => a.ts - b.ts);
   
   return recent.slice(-NET_RECENT_LIMIT);
 }
@@ -196,11 +444,23 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
           const lastNet = __lastNetSample || { ts: Date.now(), rx: 0, tx: 0 };
           const rxBytes = Number(lastNet.rx || 0);
           const txBytes = Number(lastNet.tx || 0);
+          
           // 优先使用最近的数据点，如果没有则使用历史数据
-          const lastRecent = __netRecent.length > 0 ? __netRecent[__netRecent.length - 1] : null;
-          const lastHist = lastRecent || (__netHist.length ? __netHist[__netHist.length - 1] : { rxSec: 0, txSec: 0 });
-          const rxSec = Number(lastHist.rxSec || 0);
-          const txSec = Number(lastHist.txSec || 0);
+          // 使用最近3个点的平均值，提高数据稳定性
+          let rxSec = 0, txSec = 0;
+          if (__netRecent.length > 0) {
+            const recent = __netRecent.slice(-3); // 最近3个点
+            rxSec = recent.reduce((sum, p) => sum + (p.rxSec || 0), 0) / recent.length;
+            txSec = recent.reduce((sum, p) => sum + (p.txSec || 0), 0) / recent.length;
+          } else if (__netHist.length > 0) {
+            const lastHist = __netHist[__netHist.length - 1];
+            rxSec = Number(lastHist.rxSec || 0);
+            txSec = Number(lastHist.txSec || 0);
+          }
+          
+          // 数据验证：确保不为NaN或Infinity
+          rxSec = isFinite(rxSec) ? rxSec : 0;
+          txSec = isFinite(txSec) ? txSec : 0;
 
           const disks = Array.isArray(__fsCache.disks) ? __fsCache.disks : [];
           if (!__fsTimer || (Date.now() - (__fsCache.ts || 0) > 60_000)) __refreshFsCache();

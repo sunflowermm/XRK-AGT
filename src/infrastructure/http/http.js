@@ -245,6 +245,7 @@ export default class HttpApi {
       dsc: this.dsc,
       priority: this.priority,
       routes: this.routes ? this.routes.length : 0,
+      ws: this.wsHandlers ? Object.keys(this.wsHandlers).length : 0,
       enable: this.enable,
       createTime: this.createTime
     };
