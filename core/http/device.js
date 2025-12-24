@@ -1496,11 +1496,29 @@ class DeviceManager {
                                 }
                                 
                                 segments = segments.map(seg => {
+                                    // 处理文本段
                                     if (seg.type === 'text' && seg.data && seg.data.text !== undefined) {
                                         return { type: 'text', text: seg.data.text };
                                     }
-                                    if (seg.type === 'image' && seg.data && seg.data.file) {
-                                        const filePath = seg.data.file;
+                                    // 处理字符串类型的文本
+                                    if (typeof seg === 'string') {
+                                        return { type: 'text', text: seg };
+                                    }
+                                    
+                                    // 处理图片段：支持多种格式
+                                    if (seg.type === 'image') {
+                                        // 获取文件路径：支持 seg.data.file、seg.url、seg.file 等多种格式
+                                        let filePath = seg.data?.file || seg.url || seg.file || seg.data?.url;
+                                        
+                                        // 如果已经有 url，直接使用
+                                        if (seg.url && !filePath) {
+                                            return seg;
+                                        }
+                                        
+                                        if (!filePath) {
+                                            // 没有文件路径，跳过这个 segment
+                                            return null;
+                                        }
                                         
                                         // 优先检查是否为trash目录下的文件（使用trash API）
                                         const normalizedPath = path.normalize(filePath);
@@ -1554,8 +1572,10 @@ class DeviceManager {
                                             data: { file: filePath }
                                         };
                                     }
+                                    
+                                    // 其他类型的 segment 直接返回
                                     return seg;
-                                });
+                                }).filter(seg => seg !== null); // 过滤掉 null
                                 
                                 if (segments.length === 0) return false;
                                 

@@ -1543,8 +1543,13 @@ class App {
           textParts.length = 0; // 清空已处理的文本
         }
         
-        const url = seg.url || (seg.data && seg.data.url) || (seg.data && seg.data.file);
+        // 获取图片 URL：优先使用 seg.url（device.js 已转换），其次使用其他字段
+        let url = seg.url || (seg.data && seg.data.url) || (seg.data && seg.data.file) || seg.file;
         if (url) {
+          // 如果是相对路径，确保以 / 开头（device.js 已经处理好了）
+          if (url && !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:')) {
+            // 相对路径已经是正确的格式（如 /api/trash/... 或 /api/device/file/...）
+          }
           const imgContainer = document.createElement('div');
           imgContainer.className = 'chat-image-container';
           const img = document.createElement('img');
