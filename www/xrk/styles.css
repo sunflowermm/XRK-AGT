@@ -1263,7 +1263,7 @@ select.form-input {
 
 .chat-audio {
   width: 100%;
-  height: 32px;
+  height: 36px;
   outline: none;
 }
 
@@ -1338,6 +1338,21 @@ select.form-input {
 
 .chat-file-name {
   font-weight: 500;
+}
+
+.chat-media-placeholder {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+  margin-top: 8px;
+}
+
+.chat-media-placeholder.small {
+  padding: 8px;
+  font-size: 12px;
 }
 
 /* Markdown 和原始内容样式 */

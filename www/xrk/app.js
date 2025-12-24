@@ -1592,10 +1592,15 @@ class App {
             // 视频加载完成后可以显示
           };
           video.onerror = () => {
-            videoContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">视频加载失败</div>';
+            videoContainer.innerHTML = '<div class="chat-media-placeholder">视频加载失败</div>';
           };
           videoContainer.appendChild(video);
           div.appendChild(videoContainer);
+        } else {
+          const fallback = document.createElement('div');
+          fallback.className = 'chat-media-placeholder';
+          fallback.textContent = '视频地址缺失';
+          div.appendChild(fallback);
         }
       } else if (seg.type === 'record') {
         // 音频段：先渲染之前的文本，再渲染音频
@@ -1618,10 +1623,15 @@ class App {
           audio.preload = 'metadata';
           audio.title = seg.name || '语音';
           audio.onerror = () => {
-            audioContainer.innerHTML = '<div style="padding: 8px; text-align: center; color: var(--text-muted); font-size: 12px;">音频加载失败</div>';
+            audioContainer.innerHTML = '<div class="chat-media-placeholder small">音频加载失败</div>';
           };
           audioContainer.appendChild(audio);
           div.appendChild(audioContainer);
+        } else {
+          const fallback = document.createElement('div');
+          fallback.className = 'chat-media-placeholder small';
+          fallback.textContent = '音频地址缺失';
+          div.appendChild(fallback);
         }
       } else if (seg.type === 'at') {
         // @ 提及：显示为特殊样式，添加到文本中

@@ -1532,21 +1532,27 @@ class DeviceManager {
                                     
                                     // 文件类型 segment（image/video/record/file）：转换文件路径为 URL
                                     if (['image', 'video', 'record', 'file'].includes(seg.type)) {
-                                        // 如果已有 url，直接使用
-                                        if (seg.url) {
-                                            return seg;
-                                        }
-                                        
+                                        // 已有 url：直接使用
+                                        if (seg.url) return seg;
+
                                         // 获取文件路径：支持 oicq 格式（seg.file）和标准格式（seg.data.file）
                                         const filePath = seg.file || seg.data?.file;
-                                        if (!filePath) {
-                                            return null;
+                                        if (!filePath) return null;
+
+                                        // 远程 URL（http/https/data）：直接使用
+                                        if (/^https?:\/\//i.test(filePath) || filePath.startsWith('data:')) {
+                                            return {
+                                                type: seg.type,
+                                                url: filePath,
+                                                data: { file: filePath },
+                                                name: seg.name
+                                            };
                                         }
-                                        
-                                        // 转换路径为 web URL
+
+                                        // 转换本地路径为 web URL
                                         const normalizedPath = path.normalize(filePath);
                                         const trashPath = path.normalize(paths.trash);
-                                        
+
                                         let url;
                                         if (normalizedPath.startsWith(trashPath)) {
                                             // trash 目录：使用 trash API
@@ -1560,7 +1566,7 @@ class DeviceManager {
                                             // 相对路径：使用 trash API
                                             url = `/api/trash/${filePath.replace(/\\/g, '/')}`;
                                         }
-                                        
+
                                         return {
                                             type: seg.type,
                                             url,
