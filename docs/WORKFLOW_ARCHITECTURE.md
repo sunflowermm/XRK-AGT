@@ -11,38 +11,72 @@
 
 ## 架构层次
 
-```
-┌─────────────────────────────────────┐
-│     业务层 (Business Layer)         │
-│  - 自定义工作流 (Custom Workflows)   │
-│  - 业务逻辑 (Business Logic)         │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│     工作流层 (Workflow Layer)        │
-│  - WorkflowManager                  │
-│  - 任务规划与执行                    │
-│  - 上下文管理                        │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│     流层 (Stream Layer)             │
-│  - AIStream (基类)                  │
-│  - 函数注册与解析                    │
-│  - 消息处理                          │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│     基础设施层 (Infrastructure)     │
-│  - StreamLoader                     │
-│  - LLM集成                          │
-│  - 配置管理                          │
-└─────────────────────────────────────┘
+**工作流系统架构层次图**:
+
+```mermaid
+flowchart TB
+    subgraph Business["业务层<br/>Business Layer"]
+        Custom[自定义工作流<br/>Custom Workflows]
+        Logic[业务逻辑<br/>Business Logic]
+    end
+    
+    subgraph Workflow["工作流层<br/>Workflow Layer"]
+        Manager[WorkflowManager<br/>任务规划与执行]
+        Context[上下文管理]
+    end
+    
+    subgraph Stream["流层<br/>Stream Layer"]
+        Base[AIStream基类]
+        Functions[函数注册与解析]
+        Message[消息处理]
+    end
+    
+    subgraph Infra["基础设施层<br/>Infrastructure"]
+        Loader[StreamLoader]
+        LLM[LLM集成]
+        Config[配置管理]
+    end
+    
+    Business --> Workflow
+    Workflow --> Stream
+    Stream --> Infra
+    
+    style Business fill:#E6F3FF
+    style Workflow fill:#FFE6CC
+    style Stream fill:#90EE90
+    style Infra fill:#87CEEB
 ```
 
 ## 核心组件
 
 ### 1. WorkflowManager
+
+**WorkflowManager架构**:
+
+```mermaid
+classDiagram
+    class WorkflowManager {
+        +createWorkflow(e, goal, todos)
+        +executeWorkflow(workflowId)
+        +decideWorkflowMode(e, goal)
+        +buildSystemPrompt(workflow)
+        +sendReply(workflow, type, data)
+        +executeTodo(workflow, todo)
+    }
+    
+    class Workflow {
+        +string id
+        +string goal
+        +Array todos
+        +Array notes
+        +string streamName
+        +Object context
+    }
+    
+    WorkflowManager "1" --> "*" Workflow : manages
+    
+    note for WorkflowManager "单例模式<br/>全局共享<br/>无状态设计"
+```
 
 **职责**：
 - 工作流的创建、执行和管理
@@ -55,11 +89,6 @@
 - `executeWorkflow(workflowId)` - 执行工作流
 - `decideWorkflowMode(e, goal)` - 判断是否需要工作流
 - `buildSystemPrompt(workflow)` - 构建系统提示
-
-**设计特点**：
-- 单例模式，全局共享
-- 无状态设计（状态存储在workflow对象中）
-- 通用上下文合并机制
 
 ### 2. AIStream
 
@@ -75,11 +104,6 @@
 - `buildSystemPrompt(context)` - 构建系统提示
 - `buildChatContext(e, question)` - 构建聊天上下文
 
-**设计特点**：
-- 抽象基类，提供通用功能
-- 模板方法模式
-- 可扩展的提示构建
-
 ### 3. StreamLoader
 
 **职责**：
@@ -93,57 +117,57 @@
 - `injectWorkflowManagerToStreams(stream)` - 注入工作流管理器
 - `mergeStreams(config)` - 合并工作流
 
-**设计特点**：
-- 延迟加载
-- 自动依赖注入
-- 支持工作流合并
-
 ## 数据流
 
 ### 工作流执行流程
 
+**完整执行流程图**:
+
+```mermaid
+flowchart TB
+    A[用户请求] --> B[decideWorkflowMode<br/>判断是否需要工作流]
+    B --> C{是否需要工作流}
+    C -->|是| D[createWorkflow<br/>创建工作流]
+    C -->|否| E[直接执行]
+    D --> F[executeWorkflow<br/>执行工作流循环]
+    F --> G[executeTodo<br/>执行单个任务]
+    G --> H[buildTodoPrompt<br/>构建任务提示]
+    H --> I[callAI<br/>调用AI]
+    I --> J[parseAIResponse<br/>解析AI响应]
+    J --> K{是否完成}
+    K -->|否| G
+    K -->|是| L[工作流完成]
+    E --> L
+    
+    style A fill:#E6F3FF
+    style D fill:#FFE6CC
+    style L fill:#90EE90
 ```
-用户请求
-    ↓
-decideWorkflowMode() - 判断是否需要工作流
-    ↓
-createWorkflow() - 创建工作流
-    ↓
-executeWorkflow() - 执行工作流循环
-    ↓
-executeTodo() - 执行单个任务
-    ↓
-buildTodoPrompt() - 构建任务提示
-    ↓
-callAI() - 调用AI
-    ↓
-parseAIResponse() - 解析AI响应
-    ↓
-executeAction() - 执行动作（函数调用）
-    ↓
-mergeContext() - 合并上下文
-    ↓
-下一个任务...
-```
+
+**详细步骤**：
+- `executeAction()` - 执行动作（函数调用）
+- `mergeContext()` - 合并上下文
+- 循环执行下一个任务直到完成
 
 ### 上下文传递机制
 
-```
-步骤1执行
-    ↓
-设置 context.fileContent
-    ↓
-mergeContext() - 合并到 workflow.context
-    ↓
-步骤2执行
-    ↓
-从 workflow.context 读取 fileContent
-    ↓
-使用 fileContent 完成任务
-    ↓
-设置新的 context.xxx
-    ↓
-继续传递...
+**上下文传递流程**:
+
+```mermaid
+sequenceDiagram
+    participant Step1 as 步骤1
+    participant Context as workflow.context
+    participant Step2 as 步骤2
+    participant Step3 as 步骤3
+    
+    Step1->>Step1: 执行任务
+    Step1->>Context: 设置context.fileContent
+    Step1->>Context: mergeContext合并上下文
+    Step2->>Context: 读取fileContent
+    Step2->>Step2: 使用fileContent完成任务
+    Step2->>Context: 设置新的context.xxx
+    Step3->>Context: 读取之前步骤的上下文
+    Step3->>Step3: 继续执行任务
 ```
 
 ## 扩展点

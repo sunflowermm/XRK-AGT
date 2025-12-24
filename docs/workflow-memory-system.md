@@ -24,6 +24,31 @@ XRK-AGT的记忆系统采用**工作流独立**的设计，确保：
 
 ## 独立记忆系统设计
 
+**记忆系统架构**:
+
+```mermaid
+flowchart TB
+    subgraph Memory["记忆系统"]
+        subgraph MessageMemory["消息记忆"]
+            M1[ai:memory:chat:group_123<br/>chat工作流]
+            M2[ai:memory:desktop:group_123<br/>desktop工作流]
+            M3[ai:memory:chat-desktop:group_123<br/>合并工作流]
+        end
+        
+        subgraph NoteMemory["笔记记忆"]
+            N1[ai:notes:workflow_xxx<br/>TODO笔记<br/>30分钟过期]
+        end
+        
+        subgraph WorkflowMemory["工作流记忆"]
+            W1[ai:workflow:workflow_xxx<br/>工作流元数据<br/>3天过期]
+        end
+    end
+    
+    style MessageMemory fill:#E6F3FF
+    style NoteMemory fill:#FFE6CC
+    style WorkflowMemory fill:#90EE90
+```
+
 ### 核心原则
 
 1. **工作流名称作为键的一部分**
@@ -290,6 +315,30 @@ await this.stream.storeNote(workflowId, '已创建Excel文件，包含3行3列�
 ---
 
 ## 键值对设计
+
+**记忆键值对架构**:
+
+```mermaid
+flowchart LR
+    subgraph Keys["Redis键设计"]
+        A[消息记忆键<br/>ai:memory:streamName:groupId]
+        B[笔记记忆键<br/>ai:notes:workflowId]
+        C[工作流记忆键<br/>ai:workflow:workflowId]
+    end
+    
+    subgraph Values["存储内容"]
+        D[带embedding的消息历史]
+        E[工作流笔记<br/>30分钟过期]
+        F[工作流元数据<br/>3天过期]
+    end
+    
+    A --> D
+    B --> E
+    C --> F
+    
+    style Keys fill:#E6F3FF
+    style Values fill:#FFE6CC
+```
 
 ### 消息记忆
 

@@ -12,6 +12,22 @@
 
 ## 快速开始
 
+**工作流开发流程**:
+
+```mermaid
+flowchart TB
+    A[创建AIStream子类] --> B[定义构造函数<br/>配置name/description等]
+    B --> C[实现init方法<br/>调用super.init]
+    C --> D[注册函数<br/>registerFunction]
+    D --> E[实现buildSystemPrompt<br/>构建系统提示词]
+    E --> F[实现buildChatContext<br/>构建聊天上下文]
+    F --> G[工作流可用]
+    
+    style A fill:#E6F3FF
+    style D fill:#FFE6CC
+    style G fill:#90EE90
+```
+
 ### 创建你的第一个工作流
 
 ```javascript
@@ -447,5 +463,8 @@ handler: async (params, context) => {
 ## 更多资源
 
 - **架构文档**：[`WORKFLOW_ARCHITECTURE.md`](WORKFLOW_ARCHITECTURE.md) - 深入了解系统架构
+- **代码示例**：查看`core/stream/tools.js`了解基础工具实现
+- **复杂示例**：查看`core/stream/desktop.js`了解复杂工作流实现
+
 - **代码示例**：查看`core/stream/tools.js`了解基础工具实现
 - **复杂示例**：查看`core/stream/desktop.js`了解复杂工作流实现

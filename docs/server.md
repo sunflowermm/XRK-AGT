@@ -32,54 +32,92 @@
 
 ### 系统架构层次
 
-```
-客户端层
-  ├─ 浏览器/Web前端
-  ├─ 移动端应用
-  ├─ 第三方API调用
-  ├─ WebSocket客户端
-  └─ 平台SDK（OneBot/ComWeChat等）
-        ↓
-反向代理层（可选）
-  ├─ HTTP代理服务器（:80）
-  ├─ HTTPS代理服务器（:443 + SNI）
-  └─ 域名路由与路径重写
-        ↓
-核心服务层（src/bot.js）
-  ├─ Express应用（中间件容器）
-  ├─ HTTP服务器（:2537）
-  ├─ HTTPS服务器（:2538，可选）
-  └─ WebSocket服务器（协议升级）
-        ↓
-中间件层（按顺序执行）
-  1. CORS跨域处理
-  2. Helmet安全头
-  3. 响应压缩（Compression）
-  4. 速率限制（Rate Limiting）
-  5. 请求体解析（Body Parser）
-  6. API认证（Auth Middleware）
-        ↓
-路由层（按优先级匹配）
-  1. 系统路由（/status, /health）
-  2. 文件服务路由（/File）
-  3. API路由（/api/*，由ApiLoader注册）
-  4. 数据静态服务（/media, /uploads）
-  5. 静态文件服务（/www/*，最后匹配）
-        ↓
-业务层
-  ├─ 插件系统（PluginsLoader）
-  ├─ 工作流系统（StreamLoader）
-  └─ Tasker层（TaskerLoader）
+```mermaid
+flowchart TB
+    subgraph Clients["客户端层"]
+        Browser[浏览器/Web前端]
+        Mobile[移动端应用]
+        ThirdAPI[第三方API调用]
+        WSClient[WebSocket客户端]
+        SDK[平台SDK<br/>OneBot/ComWeChat等]
+    end
+    
+    subgraph Proxy["反向代理层（可选）"]
+        HTTPProxy[HTTP代理服务器<br/>:80]
+        HTTPSProxy[HTTPS代理服务器<br/>:443 + SNI]
+        DomainRoute[域名路由与路径重写]
+    end
+    
+    subgraph Core["核心服务层<br/>src/bot.js"]
+        Express[Express应用<br/>中间件容器]
+        HTTPServer[HTTP服务器<br/>:2537]
+        HTTPSServer[HTTPS服务器<br/>:2538可选]
+        WSServer[WebSocket服务器<br/>协议升级]
+    end
+    
+    subgraph Middleware["中间件层（按顺序）"]
+        CORS[CORS跨域处理]
+        Helmet[Helmet安全头]
+        Compression[响应压缩]
+        RateLimit[速率限制]
+        BodyParser[请求体解析]
+        Auth[API认证]
+    end
+    
+    subgraph Routes["路由层（按优先级）"]
+        SystemRoute[系统路由<br/>/status /health]
+        FileRoute[文件服务路由<br/>/File]
+        APIRoute[API路由<br/>/api/*]
+        MediaRoute[数据静态服务<br/>/media /uploads]
+        StaticRoute[静态文件服务<br/>/www/*]
+    end
+    
+    subgraph Business["业务层"]
+        Plugins[插件系统<br/>PluginsLoader]
+        Streams[工作流系统<br/>StreamLoader]
+        Taskers[Tasker层<br/>TaskerLoader]
+    end
+    
+    Clients --> Proxy
+    Proxy --> Core
+    Core --> Middleware
+    Middleware --> Routes
+    Routes --> Business
+    
+    style Clients fill:#E6F3FF
+    style Core fill:#FFE6CC
+    style Business fill:#90EE90
 ```
 
 ### 数据流向
 
-```
-请求流程：
-客户端 → 反向代理（可选）→ 核心服务 → 中间件处理 → 路由匹配 → 业务处理 → 返回响应
-
-WebSocket流程：
-客户端 → HTTP升级请求 → WebSocket服务器 → 路径路由 → Tasker处理 → 双向通信
+```mermaid
+sequenceDiagram
+    participant Client as 客户端
+    participant Proxy as 反向代理（可选）
+    participant Server as 核心服务
+    participant Middleware as 中间件层
+    participant Route as 路由层
+    participant Business as 业务层
+    
+    Note over Client,Business: HTTP请求流程
+    Client->>Proxy: HTTP/HTTPS请求
+    Proxy->>Server: 转发请求
+    Server->>Middleware: 中间件处理
+    Middleware->>Route: 路由匹配
+    Route->>Business: 业务处理
+    Business-->>Route: 返回响应
+    Route-->>Middleware: 响应
+    Middleware-->>Server: 响应
+    Server-->>Proxy: 响应
+    Proxy-->>Client: 响应
+    
+    Note over Client,Business: WebSocket流程
+    Client->>Server: HTTP升级请求
+    Server->>Server: WebSocket协议升级
+    Server->>Route: 路径路由
+    Route->>Business: Tasker处理
+    Business<-->Business: 双向通信
 ```
 
 ---
@@ -123,10 +161,41 @@ WebSocket流程：
 
 ### 端口架构
 
+```mermaid
+flowchart TB
+    subgraph Internet["互联网用户"]
+        User[用户请求]
+    end
+    
+    subgraph Proxy["反向代理层（可选）"]
+        HTTP80[HTTP代理<br/>:80]
+        HTTPS443[HTTPS代理<br/>:443 + SNI]
+    end
+    
+    subgraph Core["核心服务层"]
+        HTTP2537[HTTP服务器<br/>:2537]
+        HTTPS2538[HTTPS服务器<br/>:2538可选]
+        WS[WebSocket服务器]
+    end
+    
+    User -->|HTTP| HTTP80
+    User -->|HTTPS| HTTPS443
+    HTTP80 -->|转发| HTTP2537
+    HTTPS443 -->|转发| HTTPS2538
+    User -->|直接访问| HTTP2537
+    User -->|直接访问| HTTPS2538
+    User -->|WebSocket| WS
+    
+    style User fill:#E6F3FF
+    style Proxy fill:#FFE6CC
+    style Core fill:#90EE90
 ```
-互联网用户
-    ↓
-反向代理层（可选）
+
+**端口说明**：
+
+- **HTTP端口**（默认2537）：核心HTTP服务
+- **HTTPS端口**（默认2538，可选）：HTTPS服务
+- **反向代理端口**（80/443，可选）：多域名代理服务
   ├─ HTTP代理 :80 → 转发到核心服务 :2537
   └─ HTTPS代理 :443 → 转发到核心服务 :2538
     ↓
@@ -139,14 +208,36 @@ WebSocket流程：
 
 ### 端口运行流程
 
-**启用反向代理时：**
-```
-用户请求 → 反向代理（:80/:443）→ 域名路由 → 转发到核心服务（:2537/:2538）→ 业务处理 → 返回响应
+**启用反向代理时**:
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Proxy as 反向代理<br/>:80/:443
+    participant Core as 核心服务<br/>:2537/:2538
+    participant Business as 业务处理
+    
+    User->>Proxy: HTTP/HTTPS请求
+    Proxy->>Proxy: 域名路由与路径重写
+    Proxy->>Core: 转发到核心服务
+    Core->>Business: 业务处理
+    Business-->>Core: 返回响应
+    Core-->>Proxy: 响应
+    Proxy-->>User: 返回响应
 ```
 
-**直接访问时：**
-```
-用户请求 → 核心服务（:2537/:2538）→ 业务处理 → 直接返回响应
+**直接访问时**:
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Core as 核心服务<br/>:2537/:2538
+    participant Business as 业务处理
+    
+    User->>Core: 直接HTTP/HTTPS请求
+    Core->>Business: 业务处理
+    Business-->>Core: 返回响应
+    Core-->>User: 直接返回响应
 ```
 
 ### 端口配置关系表
@@ -176,16 +267,29 @@ WebSocket流程：
 
 #### 3. 端口检测逻辑
 
-```javascript
-// 端口检测流程
+```mermaid
+flowchart TB
+    A[读取配置端口号] --> B[尝试绑定端口]
+    B --> C{端口是否可用}
+    C -->|可用| D[绑定成功]
+    C -->|被占用| E[自动递增端口号]
+    E --> F[重新尝试绑定]
+    F --> C
+    D --> G[记录实际使用端口]
+    G --> H[输出访问URL]
+    
+    style A fill:#E6F3FF
+    style C fill:#FFE6CC
+    style H fill:#90EE90
+```
+
+**检测步骤**：
+
 1. 读取配置中的端口号
 2. 尝试绑定端口
-3. 如果端口被占用：
-   - 自动递增端口号
-   - 重新尝试绑定
-   - 记录实际使用的端口
-4. 启动成功后输出访问URL
-```
+3. 如果端口被占用：自动递增端口号，重新尝试绑定
+4. 记录实际使用的端口
+5. 启动成功后输出访问URL
 
 ---
 

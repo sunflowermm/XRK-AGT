@@ -205,70 +205,44 @@ flowchart LR
 
 > 更详细的逐目录解析，可参考 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)；这里给出精简但完整的一眼总览。
 
-```text
-XRK-AGT/
-├─ app.js / start.js          # 启动引导与主入口
-├─ package.json               # 项目依赖与脚本
-├─ README.md                  # 根 README（当前文件）
-├─ PROJECT_OVERVIEW.md        # 架构 & 目录详细说明
-├─ docs/                      # 模块文档（Bot/插件/Tasker/事件/API/AI/配置/渲染/工具等）
-│
-├─ src/                       # 运行核心与基础设施
-│  ├─ bot.js                  # Bot 主类（运行核心层）
-│  ├─ infrastructure/         # 基础设施层（辅助层）
-│  │  ├─ tasker/loader.js    # TaskerLoader，加载 core/tasker Tasker
-│  │  ├─ plugins/             # 插件系统基础设施（plugin 基类、PluginsLoader）
-│  │  ├─ listener/            # 事件监听器基础设施（EventListener 基类、ListenerLoader）
-│  │  ├─ http/                # HTTP API 基础设施（HttpApi 基类、ApiLoader）
-│  │  ├─ aistream/            # AI 工作流基础设施（AIStream 基类、StreamLoader）
-│  │  ├─ renderer/            # 渲染器基础设施（Renderer 基类、RendererLoader）
-│  │  ├─ commonconfig/        # 配置系统基础设施（ConfigBase 基类）
-│  │  ├─ config/              # 配置加载器（服务端配置管理）
-│  │  ├─ redis.js             # Redis 客户端封装
-│  │  └─ mongodb.js           # MongoDB 客户端封装
-│  ├─ factory/                # 工厂类（ASR/TTS/LLM）
-│  ├─ modules/                # 业务模块（oicq/系统监控等）
-│  ├─ renderers/              # 渲染实现（puppeteer/playwright）
-│  └─ utils/                  # 工具函数（paths/botutil 等）
-│
-├─ core/                      # 业务层与任务层
-│  ├─ tasker/                 # 任务层（Tasker）- 各平台Tasker
-│  │  ├─ OneBotv11.js         # OneBotv11 Tasker
-│  │  ├─ ComWeChat.js         # ComWeChat Tasker
-│  │  ├─ stdin.js             # stdin Tasker
-│  │  └─ ...                  # 其他 Tasker
-│  ├─ events/                 # 事件系统 - 事件监听器
-│  │  ├─ onebot.js            # OneBot 事件监听器
-│  │  ├─ device.js            # Device 事件监听器
-│  │  └─ stdin.js             # Stdin 事件监听器
-│  ├─ plugin/                 # 业务层 - 业务插件
-│  │  ├─ enhancer/            # 增强插件（Tasker 特定功能增强）
-│  │  └─ example/             # 示例插件
-│  ├─ http/                   # 业务层 - HTTP API
-│  │  ├─ ai.js                # AI 相关 API
-│  │  ├─ bot.js               # Bot 相关 API
-│  │  ├─ config.js            # 配置相关 API
-│  │  └─ ...                  # 其他 API
-│  └─ stream/                 # 业务层 - 工作流
-│     ├─ chat.js              # 聊天工作流
-│     └─ device.js            # 设备工作流
-│
-├─ config/                    # 默认配置、命令行工具配置
-│  ├─ default_config/         # bot/server/redis/mongodb/device/renderer 等默认 YAML
-│  └─ cmd/                    # 命令行工具定义
-│
-├─ data/                      # 运行期数据 & 服务器配置
-│  ├─ bots/                   # 各账号运行时数据（icqq 等）
-│  ├─ server_bots/            # 按端口拆分的服务器 YAML 配置
-│  ├─ backups/                # 备份文件
-│  └─ importsJson/            # 动态 imports 配置片段
-│
-├─ www/                       # 前端静态资源根目录
-│  └─ xrk/                    # XRK Web 控制台（index.html + app.js + styles）
-│
-├─ resources/                 # 渲染模板与静态资源（字体/HTML 模板/图片等）
-├─ temp/                      # 运行中生成的 HTML/图片等临时文件
-└─ trash/                     # Bot 定期清理的回收站目录
+```mermaid
+graph TD
+    Root[XRK-AGT/] --> App[app.js / start.js<br/>启动入口]
+    Root --> Src[src/<br/>运行核心与基础设施]
+    Root --> Core[core/<br/>业务层与任务层]
+    Root --> Config[config/<br/>默认配置]
+    Root --> Data[data/<br/>运行期数据]
+    Root --> Www[www/<br/>前端静态资源]
+    Root --> Docs[docs/<br/>模块文档]
+    Root --> Resources[resources/<br/>渲染模板]
+    Root --> Temp[temp/<br/>临时文件]
+    Root --> Trash[trash/<br/>回收站]
+    
+    Src --> Bot[bot.js<br/>Bot主类]
+    Src --> Infra[infrastructure/<br/>基础设施层]
+    Src --> Factory[factory/<br/>工厂类]
+    Src --> Modules[modules/<br/>业务模块]
+    Src --> Renderers[renderers/<br/>渲染实现]
+    Src --> Utils[utils/<br/>工具函数]
+    
+    Infra --> TaskerLoader[tasker/loader.js]
+    Infra --> PluginsInfra[plugins/<br/>插件系统]
+    Infra --> ListenerInfra[listener/<br/>事件监听器]
+    Infra --> HttpInfra[http/<br/>HTTP API]
+    Infra --> AistreamInfra[aistream/<br/>AI工作流]
+    Infra --> RendererInfra[renderer/<br/>渲染器]
+    Infra --> ConfigInfra[commonconfig/<br/>配置系统]
+    
+    Core --> TaskerCore[tasker/<br/>任务层]
+    Core --> Events[events/<br/>事件系统]
+    Core --> PluginCore[plugin/<br/>业务插件]
+    Core --> HttpCore[http/<br/>HTTP API]
+    Core --> StreamCore[stream/<br/>工作流]
+    
+    style Root fill:#FFD700
+    style Bot fill:#87CEEB
+    style Infra fill:#90EE90
+    style Core fill:#FFB6C1
 ```
 
 ### 层次关系说明
@@ -311,6 +285,21 @@ XRK-AGT/
 ---
 
 ## 快速开始（5 分钟跑起来）
+
+**快速开始流程图**:
+
+```mermaid
+flowchart TB
+    A[克隆项目] --> B[安装依赖<br/>pnpm install]
+    B --> C[运行项目<br/>node app]
+    C --> D[首次登录<br/>按终端提示]
+    D --> E[访问Web控制台<br/>默认2537端口]
+    E --> F[开始使用]
+    
+    style A fill:#E6F3FF
+    style B fill:#FFE6CC
+    style F fill:#90EE90
+```
 
 ### 克隆项目
 

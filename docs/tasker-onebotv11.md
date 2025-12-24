@@ -14,35 +14,49 @@ OneBotv11 Tasker（事件生成器）负责对接 QQ/OneBotv11 协议，实现�
 
 ### Bot 主对象
 
-`Bot` 是系统的核心全局对象，继承自 `EventEmitter`，提供以下重要属性：
+`Bot` 是系统的核心全局对象，继承自 `EventEmitter`。
 
-```javascript
-// Bot 主对象结构
-Bot = {
-  // Tasker 列表（事件生成器列表）
-  tasker: Array<Tasker>,
-  
-  // Bot 实例映射表（key 为 self_id）
-  [self_id]: BotInstance,
-  
-  // QQ 号列表
-  uin: Array<string>,
-  
-  // WebSocket 工厂函数映射
-  wsf: Object<string, Array<Function>>,
-  
-  // 事件触发方法
-  em(eventName: string, data: Object): void,
-  
-  // 日志方法
-  makeLog(level: string, message: string|Array, self_id?: string, error?: Error): void,
-  
-  // 工具方法
-  String(value: any): string,
-  Buffer(value: any, options?: Object): Promise<Buffer>,
-  makeError(message: string, context?: any, details?: Object): Error
-}
+**Bot主对象结构**:
+
+```mermaid
+classDiagram
+    class Bot {
+        +Array tasker
+        +Array uin
+        +Object wsf
+        +em(eventName, data)
+        +makeLog(level, message)
+        +String(value)
+        +Buffer(value)
+        +makeError(message)
+    }
+    
+    class BotInstance {
+        +Tasker tasker
+        +WebSocket ws
+        +Function sendApi
+        +pickFriend(user_id)
+        +pickGroup(group_id)
+        +pickMember(group_id, user_id)
+        +Map fl
+        +Map gl
+        +Map gml
+    }
+    
+    Bot "1" --> "*" BotInstance : [self_id]
+    BotInstance --> Tasker : contains
+    
+    note for Bot "继承EventEmitter<br/>统一管理所有组件"
 ```
+
+**重要属性**：
+
+- `tasker` - Tasker 列表（事件生成器列表）
+- `[self_id]` - Bot 实例映射表（key 为 self_id）
+- `uin` - QQ 号列表
+- `wsf` - WebSocket 工厂函数映射
+- `em(eventName, data)` - 事件触发方法
+- `makeLog(level, message)` - 日志方法
 
 ### Bot 实例对象 (Bot[self_id])
 
@@ -168,6 +182,23 @@ MessageSegment = {
 
 ## 注册与初始化
 
+**OneBotv11 Tasker注册流程**:
+
+```mermaid
+flowchart TB
+    A[模块加载<br/>core/tasker/OneBotv11.js] --> B[创建Tasker实例]
+    B --> C[Bot.tasker.push注册]
+    C --> D[load方法初始化]
+    D --> E[注册WebSocket路径<br/>Bot.wsf[path]]
+    E --> F[等待连接建立]
+    F --> G[创建Bot实例<br/>Bot[self_id]]
+    G --> H[Tasker可用]
+    
+    style A fill:#E6F3FF
+    style C fill:#FFE6CC
+    style H fill:#90EE90
+```
+
 ### Tasker注册
 
 Tasker在模块加载时自动注册：
@@ -217,25 +248,39 @@ const result = await this.sendApi(data, ws, 'get_login_info')
 
 ### 消息处理
 
+**消息处理流程**:
+
+```mermaid
+sequenceDiagram
+    participant WS as WebSocket连接
+    participant Tasker as OneBotv11 Tasker
+    participant Bot as Bot.em
+    participant Listener as 事件监听器
+    
+    WS->>Tasker: 接收OneBot上报
+    Tasker->>Tasker: parseMsg解析消息段
+    Tasker->>Tasker: makeMessage标准化
+    Tasker->>Tasker: 标准化基础字段<br/>post_type/time/event_id
+    Tasker->>Tasker: 解析消息数组
+    Tasker->>Tasker: 生成raw_message和msg
+    Tasker->>Bot: em触发onebot.message事件
+    Bot->>Listener: 事件分发
+    Listener->>Listener: 去重/标记/预处理
+    Listener->>Listener: PluginsLoader.deal
+```
+
 #### `parseMsg(msg)`
 
 将 OneBot 消息段数组转换为内部统一格式。
 
-**参数：**
-- `msg: Array<Object>|Object|string` - 消息数据
-
-**返回：** `Array<MessageSegment>` - 标准化的消息段数组
+**参数**：`msg: Array<Object>|Object|string` - 消息数据  
+**返回**：`Array<MessageSegment>` - 标准化的消息段数组
 
 #### `makeMessage(data)`
 
 处理消息事件，标准化数据并触发事件。
 
-**参数：**
-- `data: Object` - 原始消息数据
-
-**返回：** `boolean` - 是否成功处理
-
-**处理流程：**
+**处理流程**：
 1. 标准化基础字段（`post_type`, `time`, `event_id`, `message_type`, `sub_type`）
 2. 解析消息数组
 3. 生成 `raw_message` 和 `msg`

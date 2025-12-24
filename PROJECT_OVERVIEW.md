@@ -90,7 +90,20 @@ flowchart TD
     
     InitServer --> MessageFlow
     InitServer --> APIFlow
+    
+    style Start fill:#E6F3FF
+    style InitServer fill:#FFE6CC
+    style Response fill:#90EE90
+    style Response2 fill:#90EE90
 ```
+
+**详细流程说明**：
+
+1. **启动阶段**：`app.js` → `start.js` → 创建Bot实例
+2. **加载阶段**：配置 → 基础设施 → 业务层
+3. **服务初始化**：HTTP/HTTPS/WS服务器，可选反向代理
+4. **消息处理**：平台 → Tasker → 事件监听器 → 插件系统 → 业务处理
+5. **API处理**：客户端 → Express中间件 → API路由 → 业务逻辑 → 响应
 
 ---
 
@@ -118,36 +131,71 @@ flowchart TD
 
 基础设施层提供所有基础设施和基类，为业务层提供通用能力，**不包含具体业务逻辑**。
 
+**基础设施层架构**:
+
+```mermaid
+flowchart TB
+    subgraph Infrastructure["基础设施层"]
+        subgraph Loaders["加载器模块"]
+            TL[TaskerLoader<br/>任务层加载器]
+            PL[PluginsLoader<br/>插件加载器]
+            AL[ApiLoader<br/>API加载器]
+            SL[StreamLoader<br/>工作流加载器]
+            LL[ListenerLoader<br/>事件监听器加载器]
+        end
+        
+        subgraph BaseClasses["基类库"]
+            Plugin[plugin基类<br/>规则匹配/上下文管理]
+            HttpApi[HttpApi基类<br/>REST/WebSocket API]
+            AIStream[AIStream基类<br/>AI调用/Embedding]
+            Renderer[Renderer基类<br/>HTML渲染/图片生成]
+            ConfigBase[ConfigBase基类<br/>配置管理]
+            EventListener[EventListener基类<br/>事件监听]
+        end
+        
+        subgraph ConfigDB["配置与数据库"]
+            Config[config.js<br/>服务端配置]
+            Redis[redis.js<br/>Redis客户端]
+            MongoDB[mongodb.js<br/>MongoDB客户端]
+            Log[log.js<br/>统一日志]
+        end
+    end
+    
+    Loaders --> BaseClasses
+    BaseClasses --> ConfigDB
+    
+    style Loaders fill:#E6F3FF
+    style BaseClasses fill:#FFE6CC
+    style ConfigDB fill:#90EE90
+```
+
 #### 加载器模块
 
-- **`tasker/loader.js`** (`TaskerLoader`)：扫描 `core/tasker` 目录，动态加载各类 Tasker（事件生成器，如 OneBotv11）
-- **`plugins/loader.js`** (`PluginsLoader`)：插件加载与运行核心
-  - 扫描 `core/plugin` 目录并实例化插件
-  - 将事件统一分发给插件
-  - 管理定时任务、上下文、冷却时间、黑白名单等
-- **`http/loader.js`** (`ApiLoader`)：动态加载 `core/http` 中的 API 模块，并注册到 Express
-- **`aistream/loader.js`** (`StreamLoader`)：加载 `core/stream` 中的 AI 工作流
-- **`listener/loader.js`** (`ListenerLoader`)：事件监听器加载器，用于挂接自定义事件监听逻辑
+- **`tasker/loader.js`** (`TaskerLoader`) - 扫描 `core/tasker` 目录，动态加载各类 Tasker
+- **`plugins/loader.js`** (`PluginsLoader`) - 插件加载与运行核心
+- **`http/loader.js`** (`ApiLoader`) - 动态加载 `core/http` 中的 API 模块
+- **`aistream/loader.js`** (`StreamLoader`) - 加载 `core/stream` 中的 AI 工作流
+- **`listener/loader.js`** (`ListenerLoader`) - 事件监听器加载器
 
 #### 基类库
 
-- **`plugins/plugin.js`**：插件基类 `plugin`，封装规则匹配、上下文管理、工作流集成等功能
-- **`http/http.js`**：`HttpApi` 基类，提供统一的 REST/WebSocket API 定义方式
-- **`aistream/aistream.js`**：`AIStream` 基类，封装 AI 调用、Embedding、相似度检索、函数调用等能力
-- **`renderer/Renderer.js`**：渲染器基类，统一 HTML 模板渲染与图片生成逻辑
-- **`commonconfig/commonconfig.js`**：基于 `ConfigBase` 的通用配置系统封装
-- **`listener/listener.js`**：事件监听器基类 `EventListener`
+- **`plugins/plugin.js`** - 插件基类，封装规则匹配、上下文管理、工作流集成等功能
+- **`http/http.js`** - `HttpApi` 基类，提供统一的 REST/WebSocket API 定义方式
+- **`aistream/aistream.js`** - `AIStream` 基类，封装 AI 调用、Embedding、相似度检索、函数调用等能力
+- **`renderer/Renderer.js`** - 渲染器基类，统一 HTML 模板渲染与图片生成逻辑
+- **`commonconfig/commonconfig.js`** - 基于 `ConfigBase` 的通用配置系统封装
+- **`listener/listener.js`** - 事件监听器基类 `EventListener`
 
 #### 配置与数据库
 
-- **`config/config.js`**：服务端运行配置（端口、HTTPS、CORS、认证、静态资源等）
-- **`redis.js`**：Redis 客户端封装
-- **`mongodb.js`**：MongoDB 客户端封装，提供文档数据库支持
-- **`log.js`**：统一日志封装
+- **`config/config.js`** - 服务端运行配置（端口、HTTPS、CORS、认证、静态资源等）
+- **`redis.js`** - Redis 客户端封装
+- **`mongodb.js`** - MongoDB 客户端封装，提供文档数据库支持
+- **`log.js`** - 统一日志封装
 
 #### 运行时管理
 
-- **`plugins/runtime.js`** / **`plugins/handler.js`**：插件运行时与 Handler 管理
+- **`plugins/runtime.js`** / **`plugins/handler.js`** - 插件运行时与 Handler 管理
 
 ### 其他核心模块（src）
 
@@ -169,48 +217,85 @@ flowchart TD
 
 **职责**：对接各平台协议（QQ/微信/自定义），将平台消息转换为统一事件模型，通过 `Bot.em` 触发事件
 
-- **`OneBotv11.js`**：QQ/OneBotv11 Tasker，实现消息收发、好友/群/频道对象封装、事件转译等
-- **`ComWeChat.js`**、**`GSUIDCORE.js`**、**`QBQBot.js`**、**`stdin.js`**：其它平台或输入通道的 Tasker
+```mermaid
+flowchart LR
+    A[外部平台<br/>QQ/微信/自定义] --> B[Tasker协议转换]
+    B --> C[统一事件模型]
+    C --> D[Bot.em触发事件]
+    D --> E[事件系统处理]
+    
+    style A fill:#E6F3FF
+    style C fill:#FFE6CC
+    style E fill:#90EE90
+```
+
+- **`OneBotv11.js`** - QQ/OneBotv11 Tasker，实现消息收发、好友/群/频道对象封装、事件转译等
+- **`ComWeChat.js`**、**`GSUIDCORE.js`**、**`QBQBot.js`**、**`stdin.js`** - 其它平台或输入通道的 Tasker
 
 ### 事件系统 - `core/events/`
 
 **职责**：监听 `Bot.em` 事件，进行去重、标记、预处理，然后调用 `PluginsLoader.deal(e)` 分发到插件
 
-- **`onebot.js`**：OneBot 事件监听器，对不同 post_type（message/notice/request）的事件进行拆分与预处理
-- **`device.js`**：Device 事件监听器
-- **`stdin.js`**：Stdin 事件监听器
+- **`onebot.js`** - OneBot 事件监听器，对不同 post_type（message/notice/request）的事件进行拆分与预处理
+- **`device.js`** - Device 事件监听器
+- **`stdin.js`** - Stdin 事件监听器
 
 ### 业务层 - `core/`
 
 业务层基于基础设施层的基类实现具体业务功能。
 
+**业务层结构**:
+
+```mermaid
+flowchart TB
+    subgraph Business["业务层 core/"]
+        Plugin[plugin/<br/>业务插件]
+        Http[http/<br/>HTTP API]
+        Stream[stream/<br/>工作流]
+        CommonConfig[commonconfig/<br/>系统配置]
+    end
+    
+    subgraph PluginDetail["业务插件"]
+        Enhancer[enhancer/<br/>增强插件]
+        Example[example/<br/>示例插件]
+    end
+    
+    Plugin --> Enhancer
+    Plugin --> Example
+    
+    style Business fill:#E6F3FF
+    style Plugin fill:#FFE6CC
+    style Http fill:#FFE6CC
+    style Stream fill:#FFE6CC
+```
+
 #### 业务插件 - `core/plugin/`
 
-- **`enhancer/`**：增强插件（Tasker 特定功能增强）
+- **`enhancer/`** - 增强插件（Tasker 特定功能增强）
   - `OneBotEnhancer.js`、`ComWeChatEnhancer.js`、`DeviceEnhancer.js` 等
-- **`example/`**：示例插件
+- **`example/`** - 示例插件
   - 加法、重启、定时任务、状态查询、远程指令等，展示如何继承 `plugin`
 
 #### HTTP API - `core/http/`
 
 通过 `ApiLoader` 被动态加载为 HTTP API 模块，通常导出 `HttpApi` 风格的配置或类：
 
-- `ai.js`：AI 相关 API
-- `bot.js`：Bot 相关 API
-- `config.js`：配置相关 API
-- `device.js`：设备相关 API
-- `files.js`：文件相关 API
-- `plugin.js`：插件相关 API
-- `stdin.js`：标准输入相关 API
-- `write.js`：写入相关 API
+- `ai.js` - AI 相关 API
+- `bot.js` - Bot 相关 API
+- `config.js` - 配置相关 API
+- `device.js` - 设备相关 API
+- `files.js` - 文件相关 API
+- `plugin.js` - 插件相关 API
+- `stdin.js` - 标准输入相关 API
+- `write.js` - 写入相关 API
 - 等等
 
 #### 工作流 - `core/stream/`
 
 工作流级别的封装（如 chat/device 流），通常基于 `AIStream`：
 
-- `chat.js`：聊天工作流
-- `device.js`：设备工作流
+- `chat.js` - 聊天工作流
+- `device.js` - 设备工作流
 
 #### 系统配置 - `core/commonconfig/`
 

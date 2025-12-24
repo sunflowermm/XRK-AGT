@@ -13,17 +13,48 @@
 
 ## 基础属性与配置
 
-- **基础信息**
-  - `name`：工作流名称（默认 `base-stream`）。
-  - `description`：描述（默认 `基础工作流`）。
-  - `version`：版本号。
-  - `author`：作者标识。
-  - `priority`：工作流优先级。
+**AIStream结构图**:
 
-- **AI 调用配置 `this.config`**
-  - `enabled`：是否启用（默认 `true`）。
-  - `temperature`、`maxTokens`、`topP`、`presencePenalty`、`frequencyPenalty` 等。
-  - 运行时可在插件中额外传入 `apiConfig` 覆盖部分字段（如 `model/baseUrl/apiKey`）。
+```mermaid
+classDiagram
+    class AIStream {
+        +string name
+        +string description
+        +string version
+        +number priority
+        +Object config
+        +Map functions
+        +init()
+        +process(e, question, config)
+        +registerFunction(name, def)
+        +buildSystemPrompt(context)
+        +buildChatContext(e, question)
+    }
+    
+    class Function {
+        +string name
+        +string description
+        +string prompt
+        +function handler
+        +Object inputSchema
+    }
+    
+    AIStream "1" --> "*" Function : contains
+    
+    note for AIStream "所有自定义AI工作流<br/>都应继承此类"
+```
+
+**基础信息**：
+- `name` - 工作流名称（默认 `base-stream`）
+- `description` - 描述（默认 `基础工作流`）
+- `version` - 版本号
+- `author` - 作者标识
+- `priority` - 工作流优先级
+
+**AI调用配置 `this.config`**：
+- `enabled` - 是否启用（默认 `true`）
+- `temperature`、`maxTokens`、`topP`、`presencePenalty`、`frequencyPenalty` 等
+- 运行时可在插件中额外传入 `apiConfig` 覆盖部分字段
 
 ### 运行时配置来源（`config/default_config/aistream.yaml`）
 
@@ -151,12 +182,33 @@ drawing:
 
 ### 调用优先级（LLM & Embedding）
 
-1. **显式传自定义配置**  
-   `apiConfig` 中包含 `baseUrl/apiKey`（或完整 headers/body）时，直接以调用方参数为准。
-2. **仅指定模型/档位 key**  
-   `apiConfig.profile / profileKey / modelKey / llm`，甚至 `model: fast`（且未自定义 endpoint）时，会在 `llm.profiles` 中查找并落到对应参数。
-3. **完全未指定**  
-   按 `defaultProfile → defaults` 的顺序解析；Embedding 档位也遵循相同策略。
+**配置优先级流程图**:
+
+```mermaid
+flowchart TB
+    A[API调用] --> B{apiConfig中是否有<br/>baseUrl/apiKey?}
+    B -->|是| C[使用显式自定义配置]
+    B -->|否| D{是否指定profile/modelKey?}
+    D -->|是| E[在llm.profiles中查找]
+    D -->|否| F[使用defaultProfile]
+    E --> G[使用对应档位配置]
+    F --> H[使用defaults配置]
+    C --> I[执行API调用]
+    G --> I
+    H --> I
+    
+    style A fill:#E6F3FF
+    style C fill:#FFD700
+    style G fill:#FFE6CC
+    style H fill:#87CEEB
+    style I fill:#90EE90
+```
+
+**优先级说明**：
+
+1. **显式传自定义配置** - `apiConfig` 中包含 `baseUrl/apiKey` 时，直接以调用方参数为准
+2. **仅指定模型/档位 key** - 在 `llm.profiles` 中查找对应参数
+3. **完全未指定** - 按 `defaultProfile → defaults` 的顺序解析
 
 ### 提供商支持
 
@@ -185,70 +237,120 @@ drawing:
 
 ## 生命周期与初始化
 
-- `init()`：基本初始化（仅执行一次）
-  - 初始化函数映射 `this.functions = new Map()`。
-  - 初始化与 Embedding 相关的内部字段。
+**初始化流程**:
 
-- `initEmbedding()`：Embedding 初始化
-  - 根据 `embeddingConfig.provider` 调用：
-    - `initLightweightEmbedding()`：使用 `LightweightSimilarity` 与 BM25 风格计算。
-    - `initONNXEmbedding()`：加载 ONNX 模型与简易 tokenizer。
-    - `initHFEmbedding()`：通过 `@huggingface/inference` 接入在线模型。
-    - `initFastTextEmbedding()`：下载 fastText 向量并加载。
-    - `initAPIEmbedding()`：调用外部 Embedding API。
-  - 若指定 provider 初始化失败，会尝试降级到 `lightweight`，否则关闭 Embedding 功能。
+```mermaid
+flowchart TB
+    A[AIStream.init] --> B[初始化functions Map]
+    B --> C[初始化Embedding字段]
+    C --> D{是否启用Embedding}
+    D -->|是| E[initEmbedding]
+    D -->|否| F[初始化完成]
+    E --> G{选择provider}
+    G -->|lightweight| H[initLightweightEmbedding<br/>BM25风格]
+    G -->|onnx| I[initONNXEmbedding<br/>加载ONNX模型]
+    G -->|hf| J[initHFEmbedding<br/>接入HuggingFace]
+    G -->|fasttext| K[initFastTextEmbedding<br/>下载fastText向量]
+    G -->|api| L[initAPIEmbedding<br/>调用外部API]
+    H --> M{初始化是否成功}
+    I --> M
+    J --> M
+    K --> M
+    L --> M
+    M -->|失败| N[降级到lightweight]
+    M -->|成功| F
+    N --> F
+    
+    style A fill:#E6F3FF
+    style E fill:#FFE6CC
+    style F fill:#90EE90
+    style N fill:#FFB6C1
+```
 
-> 通常由工作流加载器在系统启动时统一初始化，插件只需假定可用即可。
+**步骤说明**：
+
+- `init()` - 基本初始化（仅执行一次）
+  - 初始化函数映射 `this.functions = new Map()`
+  - 初始化与 Embedding 相关的内部字段
+- `initEmbedding()` - Embedding 初始化
+  - 根据 `embeddingConfig.provider` 调用对应的初始化方法
+  - 若指定 provider 初始化失败，会尝试降级到 `lightweight`
+
+> 通常由工作流加载器在系统启动时统一初始化，插件只需假定可用即可
 
 ---
 
 ## Embedding 与上下文增强
 
-- **生成向量：`generateEmbedding(text)`**
-  - 根据当前 provider 路由到：
-    - `generateONNXEmbedding` / `generateHFEmbedding` / `generateFastTextEmbedding` / `generateAPIEmbedding`。
-  - 对于 `lightweight`，直接返回原文本，稍后用 BM25 计算。
+**Embedding处理流程**:
 
-- **存储对话：`storeMessageWithEmbedding(groupId, message)`**
-  - 将 `message`（包含 `message/nickname/user_id/time/embedding` 等）写入 Redis 列表：
-    - key：`ai:embedding:${this.name}:${groupId}`。
-  - 仅在 `embeddingConfig.enabled` 且初始化成功时生效。
+```mermaid
+sequenceDiagram
+    participant Stream as AIStream
+    participant Embedding as Embedding Provider
+    participant Redis as Redis存储
+    participant LLM as LLM调用
+    
+    Stream->>Stream: storeMessageWithEmbedding
+    Stream->>Embedding: generateEmbedding(text)
+    Embedding-->>Stream: 返回向量/文本
+    Stream->>Redis: 存储消息+向量<br/>key: ai:embedding:name:groupId
+    
+    Stream->>Stream: retrieveRelevantContexts
+    Stream->>Redis: 读取历史消息
+    Redis-->>Stream: 返回消息列表
+    Stream->>Embedding: 计算相似度<br/>BM25或余弦相似度
+    Embedding-->>Stream: 返回相关上下文
+    Stream->>Stream: buildEnhancedContext
+    Stream->>LLM: 调用LLM<br/>包含增强上下文
+```
 
-- **检索相关上下文：`retrieveRelevantContexts(groupId, query)`**
-  - 从 Redis 列表读取历史消息，解析为结构化对象。
-  - 若 provider 为 `lightweight`，使用 `LightweightSimilarity` 计算 BM25 风格分数。
-  - 否则使用 `cosineSimilarity` 计算向量余弦相似度。
-  - 过滤低于阈值的结果，并按分数降序返回前 `maxContexts` 条。
+**核心方法**：
 
-- **构建增强上下文：`buildEnhancedContext(e, question, baseMessages)`**
-  - 使用 `retrieveRelevantContexts` 获取相关历史。
-  - 将其以「系统提示」形式附加到 `messages` 开头（或合并到首条 `system` 消息中）。
+- `generateEmbedding(text)` - 根据provider生成向量或返回文本
+- `storeMessageWithEmbedding(groupId, message)` - 存储消息到Redis（key: `ai:embedding:${name}:${groupId}`）
+- `retrieveRelevantContexts(groupId, query)` - 检索相关上下文（BM25或余弦相似度）
+- `buildEnhancedContext(e, question, baseMessages)` - 构建增强上下文，附加到messages开头
 
 ---
 
 ## 函数调用（Function Calling）
 
-- **注册函数：`registerFunction(name, options)`**
-  - `options` 字段：
-    - `handler(params, context)`：实际执行函数。
-    - `prompt`：用于在系统提示中对该函数进行说明。
-    - `parser(text, context)`：从 AI 输出中解析出待执行的函数列表。
-    - `enabled`：是否启用。
-    - `permission`：自定义权限标识。
-    - `description`：函数描述。
+**函数调用完整流程**:
 
-- **启用状态与开关**
-  - `isFunctionEnabled(name)`：是否启用。
-  - `toggleFunction(name, enabled)`：运行时开关。
-  - `getEnabledFunctions()`：获取所有启用函数列表。
+```mermaid
+flowchart TB
+    A[LLM返回响应] --> B[parseFunctions解析]
+    B --> C[遍历已注册函数]
+    C --> D[调用各自的parser]
+    D --> E[汇总函数调用列表]
+    E --> F{是否有函数调用}
+    F -->|否| G[返回清洗后的文本]
+    F -->|是| H[遍历函数调用]
+    H --> I[executeFunction执行]
+    I --> J{检查权限}
+    J -->|通过| K[执行handler]
+    J -->|拒绝| L[返回权限错误]
+    K --> M[函数执行结果]
+    M --> N[合并到上下文]
+    N --> O[继续LLM调用或返回]
+    
+    style A fill:#E6F3FF
+    style I fill:#FFE6CC
+    style O fill:#90EE90
+    style L fill:#FFB6C1
+```
 
-- **解析与执行**
-  - `parseFunctions(text, context)`：
-    - 遍历已注册函数，调用各自的 `parser`。
-    - 汇总所有需要执行的函数调用 `functions` 与清洗后的文本 `cleanText`。
-  - `executeFunction(type, params, context)`：
-    - 按名称在 `this.functions` 中查找。
-    - 检查权限（`checkPermission`），然后执行 `handler`。
+**核心方法**：
+
+- `registerFunction(name, options)` - 注册函数
+  - `handler` - 实际执行函数
+  - `prompt` - 系统提示说明
+  - `parser` - 解析AI输出中的函数调用
+  - `enabled` - 是否启用
+  - `permission` - 权限标识
+- `parseFunctions(text, context)` - 解析函数调用，返回函数列表和清洗后的文本
+- `executeFunction(type, params, context)` - 执行函数，检查权限后调用handler
 
 ---
 

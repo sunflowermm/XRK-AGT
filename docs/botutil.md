@@ -30,28 +30,58 @@
 
 ## Map 与缓存管理
 
+**缓存系统架构**:
+
+```mermaid
+classDiagram
+    class BotUtil {
+        +getMap(name, options)
+        +deleteMap(name)
+        +cache(key, value, ttl)
+        +clearCache(pattern)
+    }
+    
+    class ExtendedMap {
+        +setMany(entries)
+        +getMany(keys)
+        +cleanExpired()
+        +destroy()
+        +maxSize
+        +ttl
+    }
+    
+    class MemoryCache {
+        +Map存储
+        +TTL过期
+    }
+    
+    BotUtil --> ExtendedMap : creates
+    BotUtil --> MemoryCache : uses
+    
+    note for ExtendedMap "支持TTL、LRU驱逐<br/>批量操作能力"
+    note for MemoryCache "轻量级KV缓存<br/>用于日志ID格式化等"
+```
+
 ### 扩展 Map：`getMap` 与 `deleteMap`
 
-| 方法 | 签名 | 说明 |
-|------|------|------|
-| `getMap(name?, options?)` | `name = 'default'`，`options = { maxSize, ttl, onEvict, autoClean, cleanInterval }` | 返回一个带 TTL、LRU 驱逐和批量操作能力的 Map，常用于全局缓存、统计等 |
-| `deleteMap(name)` | 删除命名 Map，并调用其 `destroy` 清理资源 | 用于模块卸载或重置全局状态 |
+**功能特性**：
 
-扩展 Map 额外支持：
+- `getMap(name?, options?)` - 返回带TTL、LRU驱逐和批量操作能力的Map
+- `deleteMap(name)` - 删除命名Map并清理资源
 
-- `setMany(entries)`：批量写入。
-- `getMany(keys)`：批量读取。
-- `cleanExpired()`：手动清理过期条目。
-- `destroy()`：销毁当前 Map 与其内部定时器。
+**扩展方法**：
+
+- `setMany(entries)` - 批量写入
+- `getMany(keys)` - 批量读取
+- `cleanExpired()` - 手动清理过期条目
+- `destroy()` - 销毁Map与定时器
 
 ### 轻量缓存：`cache` 与 `clearCache`
 
-| 方法 | 说明 |
-|------|------|
-| `cache(key, value?, ttl?)` | 设置或获取内存缓存；`ttl` 为毫秒，0 表示不过期 |
-| `clearCache(pattern?)` | 清除所有缓存或根据字符串/正则匹配键来清除 |
+- `cache(key, value?, ttl?)` - 设置或获取内存缓存，支持TTL过期
+- `clearCache(pattern?)` - 清除所有缓存或按模式匹配清除
 
-该缓存被用于日志 ID 格式化、复杂对象字符串化等场景，减少重复计算。
+> 该缓存用于日志ID格式化、复杂对象字符串化等场景，减少重复计算
 
 ---
 

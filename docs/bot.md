@@ -35,38 +35,73 @@ flowchart TD
 
 ## 生命周期与启动流程
 
-1. **实例化**
-   - `constructor()` 中：
-     - 初始化 Express、HTTP 服务器、WebSocketServer、反向代理状态等。
-     - 立即调用 `_initHttpServer()`、`_setupSignalHandlers()` 与 `generateApiKey()`。
-     - 返回 `_createProxy()` 生成的代理对象，使 `Bot` 既是类实例又是多 Bot 访问入口。
+### 实例化阶段
 
-2. **运行入口：`run(options)`**
-   - 设置实际端口 `actualPort` / `actualHttpsPort` 与对外端口 `httpPort` / `httpsPort`。
-   - 根据配置决定是否启用反向代理，并在启用时：
-     - `_initProxyApp()` 构建专用代理 Express 应用。
-     - `_loadDomainCertificates()` 与 `_createHttpsProxyServer()` 支持多域名 + HTTP/2。
-   - 加载基础模块：
-     - `Packageloader()`：基础运行环境与配置加载。
-     - `ConfigLoader.load()`：通用配置。
-     - `StreamLoader.load()`：AI 工作流。
-     - `PluginsLoader.load()`：插件系统。
-     - `ApiLoader.load()`：HTTP API。
-   - 调用 `_initializeMiddlewareAndRoutes()` 配置中间件与系统路由。
-   - `ApiLoader.register(this.express, this)` 注册 API 与 WebSocket。
-   - `_setupFinalHandlers()` 配置全局 404 与错误处理。
-   - `serverLoad(false)` 启动 HTTP，若开启 HTTPS 则调用 `httpsLoad()`。
-   - 若开启代理，调用 `startProxyServers()` 并通过 `_displayProxyInfo()` 打印可访问域名。
-   - `ListenerLoader.load(this)` 加载事件监听。
-   - `ApiLoader.watch(true)` 启用 API 文件热重载。
-   - `_startTrashCleaner()` 启动 trash 目录清理任务。
-   - 最终通过 `this.emit("online", {...})` 广播在线事件。
+```mermaid
+flowchart LR
+    A[new Bot] --> B[初始化Express]
+    B --> C[初始化HTTP服务器]
+    C --> D[初始化WebSocket]
+    D --> E[_initHttpServer]
+    E --> F[_setupSignalHandlers]
+    F --> G[generateApiKey]
+    G --> H[_createProxy]
+    H --> I[返回代理对象]
+    
+    style A fill:#E6F3FF
+    style H fill:#FFE6CC
+    style I fill:#90EE90
+```
 
-3. **关闭流程：`closeServer()`**
-   - 由信号处理器 `_setupSignalHandlers()` 捕获 `SIGINT` / `SIGTERM` 触发。
-   - 关闭 HTTP/HTTPS/代理服务器。
-   - 停止 trash 清理定时器。
-   - 调用 `redisExit()`，保存并关闭 Redis。
+### 运行流程：run(options)
+
+```mermaid
+flowchart TB
+    Start[Bot.run] --> Port[设置端口配置]
+    Port --> Proxy{是否启用反向代理}
+    Proxy -->|是| ProxyInit[_initProxyApp<br/>_loadDomainCertificates]
+    Proxy -->|否| LoadModules[加载基础模块]
+    ProxyInit --> LoadModules
+    
+    LoadModules --> Config[ConfigLoader.load]
+    Config --> Stream[StreamLoader.load]
+    Stream --> Plugin[PluginsLoader.load]
+    Plugin --> API[ApiLoader.load]
+    
+    API --> Middleware[_initializeMiddlewareAndRoutes]
+    Middleware --> Register[ApiLoader.register]
+    Register --> Handlers[_setupFinalHandlers]
+    
+    Handlers --> Server{启动服务器}
+    Server -->|HTTP| HttpServer[serverLoad]
+    Server -->|HTTPS| HttpsServer[httpsLoad]
+    
+    HttpServer --> Listener[ListenerLoader.load]
+    HttpsServer --> Listener
+    Listener --> Watch[ApiLoader.watch热重载]
+    Watch --> Trash[_startTrashCleaner]
+    Trash --> Online[emit online事件]
+    
+    style Start fill:#E6F3FF
+    style LoadModules fill:#FFE6CC
+    style Online fill:#90EE90
+```
+
+### 关闭流程：closeServer()
+
+```mermaid
+sequenceDiagram
+    participant Signal as 信号处理器
+    participant Bot as Bot实例
+    participant Server as HTTP/HTTPS服务器
+    participant Redis as Redis客户端
+    
+    Signal->>Bot: 捕获SIGINT/SIGTERM
+    Bot->>Server: 关闭HTTP/HTTPS/代理服务器
+    Bot->>Bot: 停止trash清理定时器
+    Bot->>Redis: redisExit保存并关闭
+    Bot->>Bot: 优雅关闭完成
+```
 
 ---
 
@@ -112,36 +147,137 @@ flowchart TD
 
 ## 与其它核心对象的关系
 
+### Bot对象关系图
+
+```mermaid
+classDiagram
+    class Bot {
+        +Array tasker
+        +Map bots
+        +Express express
+        +WebSocketServer wss
+        +Map wsf
+        +run(options)
+        +em(name, data)
+        +prepareEvent(data)
+    }
+    
+    class Tasker {
+        +string name
+        +init()
+    }
+    
+    class SubBot {
+        +string self_id
+        +pickFriend(id)
+        +pickGroup(id)
+    }
+    
+    class DeviceBot {
+        +string device_id
+        +sendCommand(cmd)
+        +display(text)
+    }
+    
+    Bot "1" --> "*" Tasker : contains
+    Bot "1" --> "*" SubBot : contains via Proxy
+    Bot "1" --> "*" DeviceBot : contains via Proxy
+    
+    note for Bot "通过_createProxy()暴露为多Bot聚合代理"
+    note for SubBot "IM账号子Bot<br/>如Bot[self_id]"
+    note for DeviceBot "设备子Bot<br/>如Bot[device_id]"
+```
+
 ### Tasker 层（任务层 / 子 Bot）
 
-- TaskerLoader.load(Bot)` 通过 `paths.coreTasker` 扫描 `core/tasker`，Tasker 文件内部通常会：
-  - 将自身实例 `push` 到 `Bot.tasker`，用于后续初始化与枚举。
-  - 向 `Bot.wsf[path]` 注册 WebSocket 消息处理器。
-  - 在连接建立时创建子 Bot 对象并通过 `Bot[self_id] = childBot` 注册到底层（由 `_createProxy()` 负责放入 `Bot.bots` 容器）。
-- 特殊子 Bot（不作为 Tasker 枚举）：  
-  - **stdin**：`core/tasker/stdin.js` 中通过 `StdinHandler` 创建 `Bot.stdin` 子 Bot，用于命令行与 HTTP 层 `callStdin/runCommand` 的统一入口，但不会出现在 `Bot.tasker` 中。
-  - **device**：`core/http/device.js` 中的 `DeviceManager` 将物理/虚拟设备挂载为 `Bot[device_id]` 子 Bot，提供 `sendCommand/display/emotion/camera/microphone` 等方法，同样不作为普通Tasker参与初始化循环。
+**Tasker加载流程**:
 
-> 所有子 Bot（包括 IM 账号、设备、stdin）都集中保存在 `Bot.bots` 中，主实例通过 Proxy 暴露聚合视图，同时保持自身属性相对干净。
+```mermaid
+flowchart TB
+    A[TaskerLoader.load] --> B[扫描core/tasker目录]
+    B --> C[加载Tasker文件]
+    C --> D[Tasker.push到Bot.tasker]
+    D --> E[注册WebSocket处理器到Bot.wsf]
+    E --> F[连接建立时创建子Bot]
+    F --> G[Bot[self_id] = childBot]
+    G --> H[_createProxy放入Bot.bots]
+    
+    style A fill:#E6F3FF
+    style D fill:#FFE6CC
+    style H fill:#90EE90
+```
+
+**特殊子Bot**:
+- **stdin**: `Bot.stdin` - 命令行与HTTP统一入口，不参与Tasker枚举
+- **device**: `Bot[device_id]` - 设备控制，由DeviceManager管理
+
+> 所有子Bot都保存在 `Bot.bots` 中，通过Proxy暴露聚合视图
 
 ### 事件监听器与插件层（Events ↔ Plugins）
 
-- **事件入口**：
-- Tasker 与业务模块通过 `Bot.em(eventName, data)` 触发事件（如 `onebot.message.group.normal`、`device.online`、`stdin.message`）。
-- `Bot.em` 会调用 `prepareEvent(data)` 与 `_extendEventMethods(data)`，只处理通用字段（如 `bot/tasker_id/tasker_name/sender/reply`）。
-- **事件监听器（core/events/*.js）**：
-  - 继承自 `EventListenerBase`，负责：
-    - 为特定 Tasker 命名空间去重：`onebot.*`、`device.*`、`stdin.*`。
-    - 补全 Tasker 级的基础字段（但不挂载 `friend/group/member` 等对象）。
-    - 在通过去重检查后，统一调用 `PluginsLoader.deal(e)` 进入插件系统。
-- **插件系统（PluginsLoader + plugin 基类）**：
-  - `PluginsLoader.deal(e)` 会：
-    - 标准化事件（`initEvent/normalizeEventPayload/dealMsg`）。
-    - 调用各 Tasker 增强插件的 `accept(e)`，挂载 `friend/group/member/atBot/isPrivate/isGroup` 等 Tasker 特定属性。
-    - 按规则与优先级执行业务插件的 `rule`。
-  - 插件开发者只需关心 `event` 名称与事件对象 `e`，无需直接操作 `Bot.em`。
+**事件流处理架构**:
 
-> 简单理解：**Tasker（事件生成器）/业务模块只负责产生「原始事件」+ 最小字段；监听器负责「命名空间 + 去重」；插件系统负责「增强 + 业务处理」。三层之间通过 `Bot.em` 和统一的事件对象解耦。**
+```mermaid
+flowchart TB
+    subgraph TaskerLayer["Tasker层（事件生成）"]
+        T1[OneBot Tasker]
+        T2[Device Tasker]
+        T3[Stdin Tasker]
+    end
+    
+    subgraph EventLayer["事件层（标准化）"]
+        E1[Bot.em触发事件]
+        E2[prepareEvent处理]
+        E3[事件监听器]
+        E4[去重检查]
+    end
+    
+    subgraph PluginLayer["插件层（业务处理）"]
+        P1[PluginsLoader.deal]
+        P2[增强插件accept]
+        P3[业务插件rule]
+    end
+    
+    T1 --> E1
+    T2 --> E1
+    T3 --> E1
+    E1 --> E2
+    E2 --> E3
+    E3 --> E4
+    E4 --> P1
+    P1 --> P2
+    P2 --> P3
+    
+    style TaskerLayer fill:#E6F3FF
+    style EventLayer fill:#FFE6CC
+    style PluginLayer fill:#90EE90
+```
+
+**事件处理流程**:
+
+```mermaid
+sequenceDiagram
+    participant Tasker as Tasker/业务模块
+    participant Bot as Bot.em
+    participant Listener as 事件监听器
+    participant Loader as PluginsLoader
+    participant Enhancer as 增强插件
+    participant Plugin as 业务插件
+    
+    Tasker->>Bot: em(eventName, data)
+    Bot->>Bot: prepareEvent(data)
+    Bot->>Bot: _extendEventMethods(data)
+    Bot->>Listener: 触发事件
+    Listener->>Listener: 去重检查
+    Listener->>Loader: PluginsLoader.deal(e)
+    Loader->>Loader: initEvent/normalizeEventPayload
+    Loader->>Enhancer: accept(e)挂载属性
+    Enhancer-->>Loader: friend/group/member等
+    Loader->>Plugin: 执行rule规则
+    Plugin-->>Loader: 处理结果
+```
+
+> **核心设计**：Tasker生成原始事件 → 监听器标准化去重 → 插件系统增强并处理业务逻辑
 
 ### HTTP/API 层（ApiLoader ↔ HttpApi ↔ Bot）
 

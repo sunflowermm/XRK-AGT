@@ -15,70 +15,134 @@
 
 ## 构造参数与属性
 
-构造函数接收一个 `data` 对象，常用字段如下：
+**HttpApi结构图**:
 
-- `name`：API 名称（必填，用于标识与日志）。
-- `dsc`：描述。
-- `routes`：路由数组：
-  - `method`：HTTP 方法（如 `GET`、`POST`）。
-  - `path`：路由路径（通常以 `/api/` 为前缀）。
-  - `handler(req, res, Bot, next)`：实际处理函数。
-  - `middleware`：可选中间件数组，仅作用于该路由。
-- `priority`：优先级，数值越大越先被初始化（默认 `100`）。
-- `enable`：是否启用（默认 `true`）。
-- `init(app, Bot)`：自定义初始化钩子。
-- `ws`：WebSocket 处理器映射 `{ '/path': handler | handler[] }`。
-- `middleware`：全局中间件数组，在该 API 的所有路由前调用。
+```mermaid
+classDiagram
+    class HttpApi {
+        +string name
+        +string dsc
+        +Array routes
+        +number priority
+        +boolean enable
+        +Object ws
+        +Array middleware
+        +init(app, Bot)
+        +init(app, bot)
+        +registerRoutes(app, bot)
+        +registerWebSocketHandlers(bot)
+    }
+    
+    class Route {
+        +string method
+        +string path
+        +function handler
+        +Array middleware
+    }
+    
+    HttpApi "1" --> "*" Route : contains
+    
+    note for HttpApi "所有core/http下的API模块<br/>都可以导出对象或继承HttpApi"
+```
 
-内部重要属性：
+**构造参数**：
 
-- `this.loader`：指向 `ApiLoader` 单例。
-- `this.wsHandlers`：WebSocket 处理器集合。
-- `this.middleware`：API 级中间件。
-- `this.createTime`：创建时间戳。
+- `name` - API名称（必填）
+- `dsc` - 描述
+- `routes` - 路由数组（method/path/handler/middleware）
+- `priority` - 优先级（默认100）
+- `enable` - 是否启用（默认true）
+- `init(app, Bot)` - 自定义初始化钩子
+- `ws` - WebSocket处理器映射
+- `middleware` - 全局中间件数组
+
+**内部属性**：
+
+- `this.loader` - 指向ApiLoader单例
+- `this.wsHandlers` - WebSocket处理器集合
+- `this.middleware` - API级中间件
+- `this.createTime` - 创建时间戳
 
 ---
 
 ## 初始化流程：`init(app, bot)`
 
-被 `ApiLoader.register(app, bot)` 调用，完成 API 的注册流程：
+**API初始化完整流程**:
 
-1. **挂载全局中间件**
-   - 若 `this.middleware` 非空：
-     - 依次 `app.use(mw)`，该 API 的所有路由都会经过这些中间件。
+```mermaid
+flowchart TB
+    A[ApiLoader.register] --> B[HttpApi.init]
+    B --> C{是否有全局中间件}
+    C -->|是| D[app.use挂载中间件]
+    C -->|否| E[registerRoutes注册HTTP路由]
+    D --> E
+    E --> F[验证routes数组]
+    F --> G[遍历每个路由]
+    G --> H[验证method/path/handler]
+    H --> I[wrapHandler包装处理函数]
+    I --> J[app[method]注册路由]
+    J --> K[registerWebSocketHandlers]
+    K --> L[遍历wsHandlers]
+    L --> M[bot.wsf[path]追加处理器]
+    M --> N{是否有initHook}
+    N -->|是| O[执行自定义初始化钩子]
+    N -->|否| P[初始化完成]
+    O --> P
+    
+    style A fill:#E6F3FF
+    style I fill:#FFE6CC
+    style P fill:#90EE90
+```
 
-2. **注册 HTTP 路由**
-   - 调用 `registerRoutes(app, bot)`：
-     - 检查 `routes` 是否为数组。
-     - 遍历每个路由：
-       - 验证 `method/path/handler`。
-       - 将 `method` 转为小写并检查 `app[method]` 是否存在。
-       - 通过 `wrapHandler(handler, bot)` 包装处理函数。
-       - 调用 `app[method](path, ...middleware, wrappedHandler)` 完成注册。
+**步骤说明**：
 
-3. **注册 WebSocket 处理器**
-   - 调用 `registerWebSocketHandlers(bot)`：
-     - 遍历 `this.wsHandlers`：
-       - 为 `bot.wsf[path]` 追加包装后的处理函数。
-       - 处理函数在执行时会捕获异常并写入日志。
-
-4. **执行自定义初始化钩子**
-   - 若 `initHook` 存在，调用 `await this.initHook(app, bot)`，允许 API 做进一步初始化。
+1. **挂载全局中间件** - 若 `this.middleware` 非空，依次 `app.use(mw)`
+2. **注册HTTP路由** - `registerRoutes` 验证并注册所有路由
+3. **注册WebSocket处理器** - `registerWebSocketHandlers` 注册WS处理函数
+4. **执行自定义初始化钩子** - 若存在 `initHook`，执行自定义初始化
 
 ---
 
 ## 路由处理包装：`wrapHandler(handler, bot)`
 
-- 封装通用逻辑：
-  - 在执行前注入：
-    - `req.bot = bot`：便于访问 `Bot` 实例。
-    - `req.api = this`：便于在 handler 内访问当前 API 实例。
-  - 捕获 handler 内部错误并统一处理：
-    - 写日志：`[HttpApi] name 处理请求失败`。
-    - 若响应未发送，则返回 `500` JSON 错误。
-    - 若响应已发送，只记录警告日志，不再写响应。
+**请求处理流程**:
 
-> handler 内推荐直接使用 `res.json/res.send` 等返回结果，不依赖返回值自动发送响应。
+```mermaid
+sequenceDiagram
+    participant Client as 客户端
+    participant Express as Express路由
+    participant Wrapper as wrapHandler
+    participant Handler as API Handler
+    participant Bot as Bot实例
+    
+    Client->>Express: HTTP请求
+    Express->>Wrapper: 调用包装后的handler
+    Wrapper->>Wrapper: 注入req.bot = bot
+    Wrapper->>Wrapper: 注入req.api = this
+    Wrapper->>Handler: 执行handler(req, res, Bot)
+    Handler->>Bot: 访问Bot能力
+    Bot-->>Handler: 返回结果
+    Handler->>Handler: res.json/send响应
+    alt 发生错误
+        Handler-->>Wrapper: 抛出异常
+        Wrapper->>Wrapper: 捕获异常写日志
+        Wrapper->>Client: 返回500错误
+    else 正常处理
+        Handler-->>Client: 返回响应
+    end
+```
+
+**包装逻辑**：
+
+- 执行前注入：
+  - `req.bot = bot` - 便于访问Bot实例
+  - `req.api = this` - 便于访问当前API实例
+- 错误处理：
+  - 捕获handler内部错误并写日志
+  - 若响应未发送，返回500 JSON错误
+  - 若响应已发送，只记录警告日志
+
+> **最佳实践**：handler内推荐直接使用 `res.json/res.send` 返回结果，不依赖返回值自动发送响应
 
 ---
 

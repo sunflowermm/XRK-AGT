@@ -21,6 +21,44 @@
 
 ## 详细执行流程
 
+**复杂任务执行流程图**:
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Plugin as 插件
+    participant Stream as 工作流
+    participant Manager as WorkflowManager
+    participant LLM as LLM
+    participant Func as 函数执行
+    participant Notes as 笔记系统
+    
+    User->>Plugin: 发送复杂任务
+    Plugin->>Stream: process(e, question, {enableTodo: true})
+    Stream->>Manager: decideWorkflowMode()
+    Manager->>LLM: 分析任务复杂度
+    LLM-->>Manager: 复杂任务，需要TODO
+    Manager->>LLM: 规划TODO列表
+    LLM-->>Manager: TODO列表
+    Manager->>Manager: createWorkflow()
+    
+    loop 执行每个TODO步骤
+        Manager->>Notes: 获取工作流笔记
+        Notes-->>Manager: 笔记内容
+        Manager->>LLM: 执行TODO（包含笔记上下文）
+        LLM-->>Manager: 执行计划+函数调用
+        Manager->>Func: 执行函数
+        Func-->>Manager: 执行结果
+        Manager->>Notes: 记录笔记（如果AI决定）
+        Manager->>LLM: 评估完成度
+        LLM-->>Manager: 完成度评估
+    end
+    
+    Manager-->>Stream: 工作流完成
+    Stream-->>Plugin: 返回结果
+    Plugin-->>User: 回复消息
+```
+
 ### 步骤1：用户发送请求
 
 ```

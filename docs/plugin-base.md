@@ -7,20 +7,63 @@
 
 ## 核心概念
 
-- **插件实例（this）**
-  - `this.name`：插件名称（用于日志与开关）。
-  - `this.dsc`：插件描述。
-  - `this.event`：默认事件类型（支持通用事件和特定事件，见下方说明）。
-  - `this.priority`：优先级（数值越小越先执行，默认 `5000`）。
-  - `this.rule`：规则数组，用于匹配消息与事件。
-  - `this.task`：定时任务定义。
-  - `this.handler`：通用 Handler 定义（配合 `Handler` 使用）。
-  - `this.eventSubscribe`：事件订阅配置。
-  - `this.bypassThrottle`：是否绕过节流与冷却限制。
+### 插件实例结构
+
+```mermaid
+classDiagram
+    class Plugin {
+        +string name
+        +string dsc
+        +string event
+        +number priority
+        +Array rule
+        +Array task
+        +Object handler
+        +Object eventSubscribe
+        +boolean bypassThrottle
+        +EventObject e
+        +reply(msg, quote, data)
+        +getStream(name)
+        +getAllStreams()
+        +init()
+    }
+    
+    class EventObject {
+        +string event_id
+        +string tasker_id
+        +Object sender
+        +Function reply
+    }
+    
+    Plugin --> EventObject : contains
+    note for Plugin "所有业务插件继承plugin基类"
+```
 
 ### 标准化事件系统
 
 插件可以通过 `event` 属性监听不同类型的事件：
+
+```mermaid
+flowchart TB
+    subgraph Events["事件类型"]
+        A[通用事件<br/>message/notice/request]
+        B[特定事件<br/>onebot.message<br/>device.message]
+    end
+    
+    subgraph Plugin["插件匹配"]
+        C{event属性}
+        C -->|通用事件| D[匹配所有来源]
+        C -->|特定事件| E[只匹配特定Tasker]
+    end
+    
+    A --> C
+    B --> C
+    
+    style A fill:#E6F3FF
+    style B fill:#FFE6CC
+    style D fill:#90EE90
+    style E fill:#87CEEB
+```
 
 **通用事件监听（匹配所有来源）：**
 - `event: 'message'` - 匹配所有来源的 message 事件（OneBot、设备等）
@@ -81,6 +124,26 @@ export default class DevicePlugin extends plugin {
 
 构造函数接收一个 `options` 对象，并通过一系列标准化函数处理：
 
+```mermaid
+flowchart LR
+    A[构造函数<br/>接收options] --> B[normalizeTasks<br/>标准化定时任务]
+    A --> C[normalizeHandlers<br/>标准化Handler]
+    A --> D[normalizeEventSubscribe<br/>标准化事件订阅]
+    A --> E[normalizeRules<br/>标准化规则]
+    
+    B --> F[统一结构]
+    C --> F
+    D --> F
+    E --> F
+    F --> G[插件实例创建完成]
+    
+    style A fill:#E6F3FF
+    style F fill:#FFE6CC
+    style G fill:#90EE90
+```
+
+**标准化函数说明**：
+
 - `normalizeTasks(options.task)`  
   - 支持单个对象或数组。
   - 统一为 `{ name, cron, fnc, log, timezone, immediate }` 结构。
@@ -108,26 +171,46 @@ export default class DevicePlugin extends plugin {
 
 ## 规则与事件处理
 
-- **规则结构（标准化后）**
-  - `reg`：用于匹配 `e.msg` 的正则表达式。
-  - `fnc`：当规则匹配时调用的插件方法名。
-  - `event`：可选的事件过滤配置（如 `message.group.normal`）。
-  - `log`：是否记录日志（默认 `true`）。
-  - `permission`：权限要求（如 `master/owner/admin`）。
+**规则处理流程**:
 
-- **执行流程（由 PluginsLoader 负责）：**
-  1. `PluginsLoader.deal(e)` 解析消息并构造事件对象。
-  2. `initPlugins(e)` 为每个插件创建实例，并给 `plugin.e = e`。
-  3. 为每条规则编译正则，调用 `createRegExp`。
-  4. `processRules(plugins, e)` 遍历规则：
-     - 检查 `event` 与 `post_type` 是否匹配。
-     - 使用 `reg.test(e.msg)` 做匹配。
-     - 若通过权限与限制检查，调用对应方法 `plugin[fnc](e)`。
+```mermaid
+sequenceDiagram
+    participant Loader as PluginsLoader
+    participant Plugin as 插件实例
+    participant Rule as 规则匹配器
+    
+    Loader->>Loader: deal(e)解析消息
+    Loader->>Plugin: initPlugins(e)创建实例
+    Plugin->>Plugin: plugin.e = e
+    Loader->>Rule: createRegExp编译正则
+    Loader->>Rule: processRules遍历规则
+    Rule->>Rule: 检查event匹配
+    Rule->>Rule: reg.test(e.msg)匹配
+    Rule->>Rule: 检查权限与限制
+    Rule->>Plugin: plugin[fnc](e)调用方法
+    Plugin-->>Rule: 返回结果
+    Rule-->>Loader: 处理完成
+```
 
-**插件方法返回值约定：**
+**规则结构（标准化后）**：
+- `reg`：用于匹配 `e.msg` 的正则表达式
+- `fnc`：当规则匹配时调用的插件方法名
+- `event`：可选的事件过滤配置（如 `message.group.normal`）
+- `log`：是否记录日志（默认 `true`）
+- `permission`：权限要求（如 `master/owner/admin`）
 
-- 返回 `false`：表示「未处理」，允许后续插件继续处理。
-- 返回其它值（或无返回）：视为「已处理」，阻止同优先级后续规则。
+**插件方法返回值约定**：
+
+```mermaid
+flowchart TB
+    A[插件方法执行] --> B{返回值}
+    B -->|false| C[未处理<br/>继续后续插件]
+    B -->|其他值/无返回| D[已处理<br/>阻止同优先级后续规则]
+    
+    style B fill:#E6F3FF
+    style C fill:#FFE6CC
+    style D fill:#90EE90
+```
 
 ---
 
@@ -135,32 +218,37 @@ export default class DevicePlugin extends plugin {
 
 `plugin` 内置一套轻量级上下文管理机制，适合做「等待下一条消息继续操作」这种交互。
 
-- `conKey(isGroup = false)`  
-  - 根据 `插件名 + self_id + user_id/group_id` 生成上下文桶的 key。
+**上下文管理流程**:
 
-- `setContext(type, isGroup = false, time = 120, timeoutMsg = "操作超时已取消")`
-  - 为当前事件 `this.e` 写入一个上下文。
-  - 若设置了 `time > 0`，将在超时时自动执行：
-    - 若存在等待 `resolve`，则返回 `false`。
-    - 否则自动调用 `this.reply(timeoutMsg)`。
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Plugin as 插件
+    participant Context as 上下文系统
+    
+    User->>Plugin: 第一次命令
+    Plugin->>Context: setContext(type, time)
+    Context->>Context: 创建上下文桶<br/>设置超时定时器
+    Context-->>Plugin: 上下文已设置
+    
+    User->>Plugin: 下一条消息
+    Plugin->>Context: getContext(type)
+    Context-->>Plugin: 返回上下文
+    Plugin->>Plugin: 使用上下文处理
+    Plugin->>Context: finish(type)清理
+    Context->>Context: 清除定时器和状态
+```
 
-- `getContext(type?, isGroup = false)`
-  - 获取当前会话（或群）下的上下文。
-  - 不传 `type` 时返回当前桶内所有键值对。
+**核心方法**：
 
-- `finish(type, isGroup = false)`
-  - 主动结束指定类型的上下文，清理定时器与 `resolve`。
+- `conKey(isGroup = false)` - 根据 `插件名 + self_id + user_id/group_id` 生成上下文桶的 key
+- `setContext(type, isGroup, time, timeoutMsg)` - 写入上下文，支持超时自动处理
+- `getContext(type?, isGroup)` - 获取上下文，不传type时返回所有键值对
+- `finish(type, isGroup)` - 主动结束上下文，清理定时器与resolve
+- `awaitContext(...args)` - Promise风格的等待，内部使用setContext("resolveContext")
+- `resolveContext(context)` - 读取resolveContext，执行resolve并调用finish
 
-- `awaitContext(...args)`
-  - 封装为 Promise 风格的等待：  
-    - 内部调用 `setContext("resolveContext", ...args)` 并存储 `SymbolResolve`。
-    - 后续通过 `resolveContext` 触发。
-
-- `resolveContext(context)`
-  - 读取 `resolveContext` 对应的上下文，执行 `resolve` 并调用 `finish`。
-
-> 典型用法：  
-> 第一次命令设置上下文，下一条消息自动进入对应处理函数，实现多轮输入。
+> **典型用法**：第一次命令设置上下文，下一条消息自动进入对应处理函数，实现多轮输入
 
 ---
 
@@ -258,16 +346,42 @@ export default class MyPlugin extends plugin {
 
 ### accept 方法返回值
 
-- `true`: 通过检查，继续处理
-- `false`: 拒绝处理，跳过当前插件
-- `'return'`: 停止处理，不再执行后续插件
-- 其他值: 继续处理，可用于传递状态
+```mermaid
+flowchart TB
+    A[accept方法调用] --> B{返回值判断}
+    B -->|true| C[通过检查<br/>继续处理]
+    B -->|false| D[拒绝处理<br/>跳过当前插件]
+    B -->|'return'| E[停止处理<br/>不再执行后续插件]
+    B -->|其他值| F[继续处理<br/>可用于传递状态]
+    
+    style A fill:#E6F3FF
+    style C fill:#90EE90
+    style D fill:#FFB6C1
+    style E fill:#FFD700
+```
 
 ### 执行顺序
 
-1. Tasker增强插件（priority: 1）先执行，挂载Tasker特定属性
-2. 其他插件按优先级顺序执行 `accept` 方法
-3. 只有通过所有 `accept` 检查的插件才会继续执行规则匹配
+```mermaid
+sequenceDiagram
+    participant Loader as PluginsLoader
+    participant Enhancer as Tasker增强插件<br/>priority: 1
+    participant Plugin1 as 插件1<br/>priority: 100
+    participant Plugin2 as 插件2<br/>priority: 5000
+    
+    Loader->>Enhancer: accept(e)挂载属性
+    Enhancer-->>Loader: true
+    Loader->>Plugin1: accept(e)前置检查
+    Plugin1-->>Loader: true/false
+    alt accept返回true
+        Loader->>Plugin1: 执行规则匹配
+    end
+    Loader->>Plugin2: accept(e)前置检查
+    Plugin2-->>Loader: true/false
+    alt accept返回true
+        Loader->>Plugin2: 执行规则匹配
+    end
+```
 
 ## 开发建议与最佳实践
 

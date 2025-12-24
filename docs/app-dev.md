@@ -63,8 +63,29 @@ flowchart TD
 
 XRK-AGT 的配置体系分为两层：
 
-1. **文件级配置（commonconfig / Cfg）**
-2. **对象级配置（`ConfigBase` 子类）**
+```mermaid
+flowchart TB
+    subgraph ConfigLayer["配置层"]
+        A[文件级配置<br/>Cfg<br/>commonconfig]
+        B[对象级配置<br/>ConfigBase子类]
+    end
+    
+    subgraph Usage["使用方式"]
+        C[Bot.run<br/>global.cfg]
+        D[HTTP API<br/>配置读写]
+        E[前端表单<br/>动态配置]
+    end
+    
+    A --> C
+    A --> D
+    B --> D
+    B --> E
+    D --> E
+    
+    style A fill:#E6F3FF
+    style B fill:#FFE6CC
+    style E fill:#90EE90
+```
 
 ### 1. Cfg（src/infrastructure/config/config.js）
 
@@ -74,7 +95,12 @@ XRK-AGT 的配置体系分为两层：
 flowchart LR
   Default["config/default_config/*.yaml"] -->|初次复制| ServerCfg["data/server_bots/{port}/*.yaml"]
   ServerCfg --> Cfg["getConfig(name)"]
-  Cfg --> Bot["Bot.run()\n(global.cfg = Cfg)"]
+  Cfg --> Cache["内存缓存"]
+  Cache --> Bot["Bot.run()<br/>global.cfg = Cfg"]
+  
+  style Default fill:#E6F3FF
+  style ServerCfg fill:#FFE6CC
+  style Bot fill:#90EE90
 ```
 
 | 方法/属性 | 说明 |
@@ -151,24 +177,63 @@ sequenceDiagram
 
 ### 1. 新增一个「配置管理」页面
 
-1. **后台 API**
-   - 在 `core/http` 新增一个配置相关 API，例如 `config-manager.js`，内部使用 `Cfg` 或 `ConfigBase` 子类读写指定配置。
-2. **前端页面**
-   - 在 `www/xrk/app.js` 中为新页面注册路由和组件（参考现有 `config` 页模式）。
-   - 使用 `fetch` 调用新建 API，渲染表单并提交修改。
+```mermaid
+flowchart LR
+    A[创建API文件<br/>core/http/config-manager.js] --> B[使用ConfigBase读写配置]
+    B --> C[前端注册路由<br/>www/xrk/app.js]
+    C --> D[使用fetch调用API]
+    D --> E[渲染表单并提交]
+    
+    style A fill:#E6F3FF
+    style B fill:#FFE6CC
+    style E fill:#90EE90
+```
+
+**步骤**:
+1. **后台 API**: 在 `core/http` 创建 API，使用 `ConfigBase` 子类读写配置
+2. **前端页面**: 在 `www/xrk/app.js` 注册路由，使用 `fetch` 调用 API
 
 ### 2. 在前端触发某个插件功能
 
-1. 编写一个 HTTP API，将前端请求转为插件事件或直接调用插件方法：
-   - 例如：`/api/plugins/run-task`，内部构造事件对象 `e` 并调用对应插件。
-2. 前端页面中提供按钮或表单，点击后调用该 API。
+```mermaid
+sequenceDiagram
+    participant FE as 前端页面
+    participant API as HTTP API
+    participant Bot as Bot实例
+    participant Plugin as 插件
+    
+    FE->>API: POST /api/plugins/run-task
+    API->>API: 构造事件对象e
+    API->>Bot: 触发事件或调用插件
+    Bot->>Plugin: 执行插件方法
+    Plugin-->>Bot: 返回结果
+    Bot-->>API: 处理结果
+    API-->>FE: 返回JSON响应
+```
+
+**步骤**:
+1. 创建 HTTP API，构造事件对象并调用插件
+2. 前端提供按钮，点击后调用 API
 
 ### 3. 前端使用渲染器生成图片
 
-1. 后台暴露一个 API，如 `/api/render/report`：
-   - 内部使用 `Bot.renderer.puppeteer.renderImage(...)` 或自定义渲染器。
-   - 返回 Base64 图片或可访问的临时路径。
-2. 前端调用该 API，并在页面中展示返回的图片结果。
+```mermaid
+flowchart TB
+    A[前端请求] --> B[HTTP API<br/>/api/render/report]
+    B --> C[Bot.renderer.puppeteer]
+    C --> D[renderImage]
+    D --> E[生成图片]
+    E --> F[返回Base64/路径]
+    F --> G[前端展示图片]
+    
+    style A fill:#E6F3FF
+    style C fill:#FFE6CC
+    style G fill:#90EE90
+```
+
+**步骤**:
+1. 创建渲染API，使用 `Bot.renderer` 生成图片
+2. 前端调用API并展示返回的图片
 
 ---
 

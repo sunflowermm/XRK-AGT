@@ -18,6 +18,45 @@
 
 XRK-AGT 采用清晰的分层架构：
 
+```mermaid
+flowchart TB
+    subgraph Runtime["运行核心层"]
+        Bot[Bot主类<br/>src/bot.js]
+    end
+    
+    subgraph Infra["基础设施层（辅助层）"]
+        Loaders[加载器<br/>TaskerLoader/PluginsLoader<br/>ApiLoader/StreamLoader]
+        BaseClasses[基类库<br/>plugin/HttpApi/AIStream<br/>Renderer/ConfigBase]
+    end
+    
+    subgraph Tasker["任务层（Tasker）"]
+        Taskers[各平台Tasker<br/>协议转换]
+    end
+    
+    subgraph Events["事件系统"]
+        Listeners[事件监听器<br/>去重/标准化]
+    end
+    
+    subgraph Business["业务层"]
+        Plugins[业务插件]
+        APIs[HTTP API]
+        Streams[工作流]
+    end
+    
+    Bot --> Infra
+    Infra --> Tasker
+    Infra --> Events
+    Infra --> Business
+    Tasker --> Events
+    Events --> Business
+    
+    style Bot fill:#FFD700
+    style Infra fill:#90EE90
+    style Business fill:#87CEEB
+```
+
+**层次说明**：
+
 - **运行核心层** (`src/bot.js`) - 系统入口，统一管理所有组件
 - **基础设施层（辅助层）** (`src/infrastructure/`) - 提供基类、加载器、工具，不包含业务逻辑
 - **任务层（Tasker）** (`core/tasker/`) - 协议转换，生成统一事件

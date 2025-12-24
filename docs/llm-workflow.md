@@ -4,35 +4,105 @@
 
 ## 架构概览
 
-```
-插件 (Plugin)
-  ↓ 构建 messages 数组
-工作流 (Workflow/Stream)
-  ↓ 合并历史消息、增强上下文
-LLM 工厂 (LLMFactory)
-  ↓ （如有图片）调用识图工厂 (VisionFactory) 做切流
-  ↓ 调用各自 LLM 提供商 API
-LLM / 识图 提供商 (GPTGod/Volcengine/MiMo + GPTGod-Vision/Volcengine-Vision/...)
+**LLM调用完整流程**:
+
+```mermaid
+flowchart TB
+    subgraph Plugin["插件层"]
+        A[插件监听事件]
+        B[提取消息内容]
+        C[构建messages数组]
+    end
+    
+    subgraph Stream["工作流层"]
+        D[接收messages]
+        E[合并历史消息]
+        F[增强上下文<br/>embedding检索]
+    end
+    
+    subgraph Factory["工厂层"]
+        G[LLM工厂]
+        H{是否有图片?}
+        I[识图工厂<br/>VisionFactory]
+        J[调用LLM提供商API]
+    end
+    
+    subgraph Provider["提供商层"]
+        K[GPTGod/Volcengine/MiMo]
+        L[Vision提供商]
+    end
+    
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H -->|有图片| I
+    H -->|无图片| J
+    I --> L
+    L --> J
+    J --> K
+    
+    style Plugin fill:#E6F3FF
+    style Stream fill:#FFE6CC
+    style Factory fill:#90EE90
+    style Provider fill:#87CEEB
 ```
 
 ## 职责划分
 
+**职责划分架构图**:
+
+```mermaid
+flowchart LR
+    subgraph Plugin["插件层职责"]
+        P1[监听事件]
+        P2[提取消息]
+        P3[构建messages]
+        P4[包含人设]
+    end
+    
+    subgraph Stream["工作流层职责"]
+        S1[接收messages]
+        S2[合并历史]
+        S3[增强上下文]
+        S4[执行函数调用]
+        S5[存储回复]
+    end
+    
+    subgraph Factory["工厂层职责"]
+        F1[读取配置]
+        F2[检测图片]
+        F3[调用识图工厂]
+        F4[调用LLM API]
+    end
+    
+    Plugin --> Stream
+    Stream --> Factory
+    
+    style Plugin fill:#E6F3FF
+    style Stream fill:#FFE6CC
+    style Factory fill:#90EE90
+```
+
 ### 插件 (Plugin)
 
-**职责：**
+**职责**：
 - 监听 tasker 事件（如 OneBot、Web 等）
 - 从事件中提取消息内容（文本、图片URL等）
 - 构建标准化的 `messages` 数组
 - 在 system prompt 中包含人设（persona）
 
-**不负责：**
+**不负责**：
 - ❌ 消息历史合并（由工作流负责）
 - ❌ 图片识别（由工厂负责）
 - ❌ 运营商配置读取（由工厂负责）
 
 ### 工作流 (Workflow/Stream)
 
-**职责：**
+**职责**：
 - 接收插件传入的 `messages` 数组
 - 合并消息历史（从内部存储获取）
 - 增强上下文（embedding 检索）
@@ -41,14 +111,14 @@ LLM / 识图 提供商 (GPTGod/Volcengine/MiMo + GPTGod-Vision/Volcengine-Vision
 
 ### LLM 工厂 (LLMFactory) 与 识图工厂 (VisionFactory)
 
-**LLM 工厂职责：**
+**LLM 工厂职责**：
 - 读取 LLM 运营商配置（baseUrl、apiKey、model 等）
 - 检测消息中是否包含图片（仅做格式识别，不执行识图）
 - 如果存在图片，则根据 `aistream.yaml` 中的 `vision.Provider` 把图片 URL / 本地路径交给识图工厂
 - 接收识图工厂返回的描述文本，并按既有格式（如 `[图片:描述]`）拼接回 user 文本
 - 构建符合运营商 API 格式的消息并调用 LLM API
 
-**识图工厂职责：**
+**识图工厂职责**：
 - 读取各自识图工厂配置（`god_vision.yaml`、`volcengine_vision.yaml` 等）
 - 针对不同运营商执行下载/上传/vision 模型调用，输出纯文本描述
 - 对上只暴露统一接口（如 `recognizeImages`），不与工作流直接耦合

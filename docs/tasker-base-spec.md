@@ -4,62 +4,99 @@
 
 ## Tasker 基础属性
 
+**Tasker结构图**:
+
+```mermaid
+classDiagram
+    class Tasker {
+        +string id
+        +string name
+        +string path
+        +load()
+        +message(wsMessage, ws)
+    }
+    
+    class BotTasker {
+        +string id
+        +string name
+    }
+    
+    class EventObject {
+        +string self_id
+        +string tasker
+        +string tasker_id
+        +string tasker_name
+        +string event_id
+        +number time
+        +Bot bot
+        +Object sender
+        +Function reply
+    }
+    
+    Tasker --> BotTasker : registers
+    Tasker --> EventObject : generates
+    
+    note for Tasker "所有Tasker都应具备<br/>这些基础属性"
+```
+
 ### Tasker 实例属性
 
 每个 Tasker 实例应该具备以下属性：
 
-```javascript
-{
-  id: string,        // Tasker 唯一标识（如 'QQ', 'WeChat'）
-  name: string,       // Tasker 名称（如 'OneBotv11', 'stdin'）
-  path: string,       // Tasker 路径
-}
-```
+- `id` - Tasker 唯一标识（如 'QQ', 'WeChat'）
+- `name` - Tasker 名称（如 'OneBotv11', 'stdin'）
+- `path` - Tasker 路径
 
 ### Bot 实例中的 Tasker 信息
 
-```javascript
-bot.tasker = {
-  id: string,        // Tasker ID
-  name: string,      // Tasker 名称
-  // 其他 Tasker 特定属性...
-}
-```
+- `bot.tasker.id` - Tasker ID
+- `bot.tasker.name` - Tasker 名称
+- 其他 Tasker 特定属性...
 
 ## 事件对象基础属性
 
 所有 Tasker 的事件对象都应该具备以下基础属性：
 
+**事件对象结构**:
+
+```mermaid
+classDiagram
+    class EventObject {
+        +string self_id
+        +string tasker
+        +string tasker_id
+        +string tasker_name
+        +string event_id
+        +number time
+        +Bot bot
+        +Object sender
+        +Function reply
+        +string user_id
+        +string device_id
+        +Array message
+        +string msg
+        +string group_id
+        +string post_type
+    }
+    
+    class Sender {
+        +string user_id
+        +string nickname
+        +string card
+    }
+    
+    EventObject --> Sender : contains
+    
+    note for EventObject "所有Tasker事件对象<br/>都应具备这些基础属性"
+```
+
 ### 必需属性
 
-```javascript
-{
-  // 基础标识
-  self_id: string,           // Bot 自身 ID
-  tasker: string,            // Tasker 类型（'onebot', 'stdin', 'device'等）
-  tasker_id: string,         // Tasker ID（从 bot.tasker.id 获取）
-  tasker_name: string,       // Tasker 名称（从 bot.tasker.name 获取）
-  
-  // 事件标识
-  event_id: string,            // 事件唯一ID
-  time: number,                // 事件时间戳（Unix时间戳，秒）
-  
-  // Bot对象
-  bot: Bot,                    // Bot实例（只读，不可修改）
-  
-  // 发送者基础信息
-  user_id: string|number,       // 用户ID（如果适用）
-  sender: {                    // 发送者信息对象
-    user_id: string|number,     // 用户ID
-    nickname?: string,          // 昵称（Tasker特定）
-    card?: string,              // 名片/备注（Tasker特定）
-    // 其他Tasker特定字段...
-  },
-  
-  // 回复方法（通用）
-  reply: Function,             // 通用回复方法
-}
-```
+- **基础标识**：`self_id`、`tasker`、`tasker_id`、`tasker_name`
+- **事件标识**：`event_id`、`time`
+- **Bot对象**：`bot`（只读，不可修改）
+- **发送者信息**：`user_id`、`sender` 对象
+- **回复方法**：`reply` 通用回复方法
 
 ### 可选属性（根据事件类型）
 

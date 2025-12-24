@@ -35,50 +35,70 @@
 
 ## 加载流程
 
+**插件加载完整流程**:
+
+```mermaid
+flowchart TB
+    A[PluginsLoader.load] --> B{是否已加载}
+    B -->|是且非刷新| Z[直接返回]
+    B -->|否或刷新| C[重置内部状态]
+    C --> D[getPlugins扫描目录]
+    D --> E[分批并发导入插件<br/>batchSize=10]
+    E --> F[importPlugin动态导入]
+    F --> G[loadPlugin创建实例]
+    G --> H{priority类型}
+    H -->|extended| I[归类到extended]
+    H -->|普通| J[归类到priority]
+    I --> K[处理handler和eventSubscribe]
+    J --> K
+    K --> L[createTask创建定时任务]
+    L --> M[initEventSystem初始化事件系统]
+    M --> N[sortPlugins按优先级排序]
+    N --> O[加载完成]
+    
+    style A fill:#E6F3FF
+    style G fill:#FFE6CC
+    style O fill:#90EE90
+```
+
 ### 1. `load(isRefresh = false)`
 
-- 若不是刷新且已经加载过插件，则直接返回。
-- 记录加载开始时间，重置内部状态：
-  - `this.priority = []`：普通插件。
-  - `this.extended = []`：扩展插件。
-  - `this.task = []`：定时任务列表。
-  - `this.delCount()`：重置 Redis 统计值。
-- 调用 `getPlugins()` 获取插件文件列表：
-  - 扫描目录 `this.dir = 'core/plugin'`。
-  - 支持 `子目录/index.js` 或子目录内多个 `*.js` 文件。
-- 分批（batchSize = 10）并发导入插件（`importPlugin`）。
-- 统计加载时间、插件数量、任务数量与扩展插件数量。
-- 调用：
-  - `packageTips(packageErr)`：输出缺失依赖提示。
-  - `createTask()`：创建定时任务。
-  - `initEventSystem()`：初始化事件订阅与清理逻辑。
-  - `sortPlugins()`：按优先级排序插件。
-  - `identifyDefaultMsgHandlers()`：识别拥有 `handleNonMatchMsg` 方法的「默认消息处理器」。
+- 若不是刷新且已经加载过插件，则直接返回
+- 记录加载开始时间，重置内部状态（priority/extended/task）
+- 调用 `getPlugins()` 扫描 `core/plugin` 目录
+- 分批（batchSize = 10）并发导入插件
+- 调用后续处理函数完成初始化
 
-> 插件开发者只需要在 `core/plugin` 下新建目录与 JS 文件，即可被自动发现和加载。
+> 插件开发者只需要在 `core/plugin` 下新建目录与 JS 文件，即可被自动发现和加载
 
 ### 2. `importPlugin(file, packageErr)`
 
-- `await import(file.path)` 动态导入模块。
-- 支持导出对象 `apps`（多插件聚合）或单一导出。
-- 对每个导出的插件类调用 `loadPlugin(file, p)`。
-- 若遇到 `Cannot find package` 错误，记录在 `packageErr` 中，用于统一输出依赖缺失提示。
+- `await import(file.path)` 动态导入模块
+- 支持导出对象 `apps`（多插件聚合）或单一导出
+- 对每个导出的插件类调用 `loadPlugin(file, p)`
 
 ### 3. `loadPlugin(file, p)`
 
-- 忽略无 `prototype` 的导出（非类）。
-- 创建插件实例 `const plugin = new p()`：
-  - 若定义了 `plugin.init()`，则以 5 秒超时限制执行初始化。
-  - 支持在 `plugin.task` 中声明 Cron 任务，会被标准化并压入 `this.task`。
-  - 编译 `plugin.rule` 中的正则表达式。
-- 构建内部插件描述：
-  - `priority` 为 `plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50)`。
-  - `bypassThrottle` 由 `plugin.bypassThrottle` 决定。
-  - 归类到 `this.extended` 或 `this.priority`。
-- 处理 `plugin.handler`：
-  - 将各 handler 注册到 `Handler.add`，用于统一指令分发。
-- 处理 `plugin.eventSubscribe`：
-  - 通过 `subscribeEvent(eventType, callback)` 注册到 `this.eventSubscribers`。
+```mermaid
+flowchart LR
+    A[loadPlugin] --> B{是否有prototype}
+    B -->|否| Z[忽略非类导出]
+    B -->|是| C[创建插件实例<br/>new p]
+    C --> D[执行plugin.init<br/>5秒超时]
+    D --> E[标准化task]
+    E --> F[编译rule正则]
+    F --> G[构建插件描述]
+    G --> H{priority判断}
+    H -->|extended| I[归类到extended]
+    H -->|普通| J[归类到priority]
+    I --> K[处理handler]
+    J --> K
+    K --> L[处理eventSubscribe]
+    
+    style A fill:#E6F3FF
+    style C fill:#FFE6CC
+    style K fill:#90EE90
+```
 
 ---
 
@@ -86,19 +106,45 @@
 
 ### 1. 入口：`deal(e)`
 
-1. `initEvent(e)`：补全 `self_id/bot/event_id`，统计接收计数。
-2. 若为特殊事件（STDIN/API 或设备），交给 `dealSpecialEvent(e)`。
-3. `checkBypassPlugins(e)`：检查是否有带 `bypassThrottle` 且规则匹配的插件。
-4. `preCheck(e, hasBypassPlugin)`：
-   - 忽略自身消息（可通过配置关闭）。
-   - 检查「关机状态」（redis key `Yz:shutdown:${botUin}`）。
-   - 检查频道消息、黑名单。
-   - 若无 bypass 插件，检查消息冷却与节流。
-5. `dealMsg(e)`：解析消息内容、构建日志文本、注入工具方法。
-6. `setupReply(e)`：包装 `e.reply`，统一处理引用、@、撤回等逻辑。
-7. `Runtime.init(e)`：插件运行时初始化。
-8. `runPlugins(e, true)`：先执行扩展插件。
-9. `runPlugins(e, false)`：再执行普通插件规则。
+**事件处理完整流程**:
+
+```mermaid
+flowchart TB
+    A[deal入口] --> B[initEvent补全属性]
+    B --> C{是否为特殊事件}
+    C -->|是| D[dealSpecialEvent处理]
+    C -->|否| E[checkBypassPlugins检查]
+    E --> F[preCheck前置检查]
+    F --> G{检查结果}
+    G -->|失败| Z[跳过处理]
+    G -->|通过| H[dealMsg解析消息]
+    H --> I[setupReply包装回复]
+    I --> J[Runtime.init运行时初始化]
+    J --> K[runPlugins扩展插件]
+    K --> L[runPlugins普通插件]
+    L --> M[处理完成]
+    
+    style A fill:#E6F3FF
+    style F fill:#FFE6CC
+    style M fill:#90EE90
+    style Z fill:#FFB6C1
+```
+
+**步骤说明**：
+
+1. `initEvent(e)` - 补全 `self_id/bot/event_id`，统计接收计数
+2. 若为特殊事件（STDIN/API 或设备），交给 `dealSpecialEvent(e)`
+3. `checkBypassPlugins(e)` - 检查是否有带 `bypassThrottle` 且规则匹配的插件
+4. `preCheck(e, hasBypassPlugin)` - 前置检查：
+   - 忽略自身消息
+   - 检查关机状态
+   - 检查频道消息、黑名单
+   - 检查消息冷却与节流
+5. `dealMsg(e)` - 解析消息内容、构建日志文本、注入工具方法
+6. `setupReply(e)` - 包装 `e.reply`，统一处理引用、@、撤回等逻辑
+7. `Runtime.init(e)` - 插件运行时初始化
+8. `runPlugins(e, true)` - 先执行扩展插件
+9. `runPlugins(e, false)` - 再执行普通插件规则
 
 ### 2. `dealMsg(e)`
 

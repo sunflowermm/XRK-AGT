@@ -27,33 +27,38 @@
 
 ## 加载流程：`load(bot = Bot)`
 
-1. 初始化统计对象 `summary`：
-   - `scanned`：扫描到的Tasker文件数。
-   - `loaded`：成功 `import` 的数量。
-   - `failed`：导入失败数量。
-   - `registered`：新注册的 Tasker 数量（`bot.tasker.length` 的增量）。
-   - `errors`：失败详情 `{ name, message }[]`。
+**Tasker加载完整流程**:
 
-2. 调用 `getTaskerFiles()`：
-   - 使用 `fs.readdir(baseDir, { withFileTypes: true })`。
-   - 筛选出 `.js` 文件并转换为 `{ name, href }`，其中：
-     - `href` 使用 `pathToFileURL` 生成 `file://` URL，适配 ES Module 动态导入。
+```mermaid
+flowchart TB
+    A[TaskerLoader.load] --> B[初始化summary统计对象]
+    B --> C[getTaskerFiles扫描目录]
+    C --> D[读取core/tasker目录]
+    D --> E[筛选.js文件]
+    E --> F[转换为file://URL]
+    F --> G[批量动态导入]
+    G --> H{import结果}
+    H -->|成功| I[summary.loaded++]
+    H -->|失败| J[summary.failed++<br/>记录错误]
+    I --> K[统计注册数量<br/>bot.tasker.length]
+    J --> K
+    K --> L[输出加载日志]
+    L --> M[返回summary]
+    
+    style A fill:#E6F3FF
+    style G fill:#FFE6CC
+    style M fill:#90EE90
+    style J fill:#FFB6C1
+```
 
-3. 批量导入：
-   - 对每个 `{ name, href }` 执行：
-     - `await import(href)`。
-     - 成功则 `summary.loaded++`。
-     - 失败则 `summary.failed++`，并记录错误。
+**步骤说明**：
 
-4. 统计注册数量：
-   - 假设 Tasker 内部会向 `bot.tasker` 数组追加自身：
-     - `summary.registered = bot.tasker.length - taskerCountBefore`。
-
-5. 输出总结日志：
-   - 类似：  
-     `Tasker 加载完成: 成功X个, 注册Y个, 失败Z个`。
-
-6. 返回 `summary`，便于 API 或调试页面展示。
+1. 初始化统计对象 `summary`（scanned/loaded/failed/registered/errors）
+2. 调用 `getTaskerFiles()` 扫描 `core/tasker` 目录，筛选 `.js` 文件
+3. 批量导入：对每个文件执行 `await import(href)`
+4. 统计注册数量：检查 `bot.tasker.length` 的增量
+5. 输出总结日志
+6. 返回 `summary`，便于 API 或调试页面展示
 
 ---
 
@@ -70,19 +75,51 @@
 
 ## 与 Tasker 实现的关系
 
-- **Tasker 文件（例如 `core/tasker/OneBotv11.js`）的典型结构：**
-  - 在模块顶层执行：
-    - `Bot.tasker.push(new OneBotv11Tasker())`。
-  - 在 Tasker 类中实现：
-    - `load()`：向 `Bot.wsf[path]` 注册 WebSocket 消息处理函数。
-    - `message(wsMessage, ws)`：解析 OneBotv11 上报并调用 `Bot.em` 触发框架事件。
-    - 各种 send/get 接口封装（发送私聊、群聊、频道消息，获取好友/群列表等）。
+**Tasker注册与事件流**:
 
-- **事件流向：**
-  1. 外部平台通过 WebSocket 与 XRK-AGT 建立连接（如 OneBotv11）。
-  2. `Bot.wsConnect` 根据路径选择对应的 Tasker 处理函数。
-  3. Tasker 解析 JSON 上报，将其转换为统一事件结构（`post_type/message_type/...`）。
-  4. 调用 `Bot.em("message.group.normal", data)` 等事件，交由 `PluginsLoader` 进一步处理。
+```mermaid
+flowchart TB
+    subgraph TaskerFile["Tasker文件<br/>core/tasker/OneBotv11.js"]
+        A[模块顶层执行<br/>Bot.tasker.push]
+        B[Tasker类实现<br/>load方法]
+        C[WebSocket处理<br/>message方法]
+    end
+    
+    subgraph EventFlow["事件流向"]
+        D[外部平台连接<br/>WebSocket]
+        E[Bot.wsConnect<br/>路径分发]
+        F[Tasker解析上报]
+        G[Bot.em触发事件]
+        H[PluginsLoader处理]
+    end
+    
+    A --> B
+    B --> C
+    D --> E
+    E --> C
+    C --> F
+    F --> G
+    G --> H
+    
+    style TaskerFile fill:#E6F3FF
+    style EventFlow fill:#FFE6CC
+    style H fill:#90EE90
+```
+
+**Tasker文件典型结构**：
+
+- 模块顶层：`Bot.tasker.push(new OneBotv11Tasker())`
+- Tasker类方法：
+  - `load()` - 向 `Bot.wsf[path]` 注册 WebSocket 消息处理函数
+  - `message(wsMessage, ws)` - 解析上报并调用 `Bot.em` 触发事件
+  - 各种 send/get 接口封装（发送消息、获取列表等）
+
+**事件流向**：
+
+1. 外部平台通过 WebSocket 与 XRK-AGT 建立连接
+2. `Bot.wsConnect` 根据路径选择对应的 Tasker 处理函数
+3. Tasker 解析 JSON 上报，转换为统一事件结构
+4. 调用 `Bot.em("message.group.normal", data)` 触发事件，交由 `PluginsLoader` 处理
 
 ---
 

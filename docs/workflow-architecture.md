@@ -277,6 +277,26 @@ const response = await stream.process(e, question, {
 
 #### 智能决策
 
+```mermaid
+flowchart TB
+    A[用户请求] --> B[第一次LLM调用<br/>decideWorkflowMode]
+    B --> C{分析任务复杂度}
+    C -->|简单任务| D[直接执行<br/>stream.process]
+    C -->|复杂任务| E[生成TODO列表]
+    E --> F[创建工作流<br/>createWorkflow]
+    F --> G[执行TODO步骤]
+    G --> H[工作流完成]
+    D --> I[返回结果]
+    H --> I
+    
+    style B fill:#E6F3FF
+    style C fill:#FFE6CC
+    style E fill:#90EE90
+    style I fill:#87CEEB
+```
+
+**代码示例**：
+
 ```javascript
 // 第一次LLM调用，决定是否开启TODO工作流
 const decision = await workflowManager.decideWorkflowMode(e, goal);
@@ -329,6 +349,27 @@ await this.sendReply(workflow, 'step', {
 **核心功能**:
 
 #### 工作流合并
+
+```mermaid
+flowchart TB
+    A[StreamLoader.mergeStreams] --> B[加载主工作流]
+    A --> C[加载副工作流列表]
+    B --> D[保留主工作流<br/>人设和上下文]
+    C --> E[提取副工作流<br/>functions]
+    E --> F{prefixSecondary?}
+    F -->|是| G[函数名加前缀<br/>desktop.open_application]
+    F -->|否| H[保持原函数名]
+    G --> I[合并所有functions]
+    H --> I
+    D --> I
+    I --> J[创建合并工作流实例]
+    
+    style A fill:#E6F3FF
+    style D fill:#FFE6CC
+    style J fill:#90EE90
+```
+
+**代码示例**：
 
 ```javascript
 // 合并主工作流和副工作流

@@ -70,7 +70,7 @@ flowchart TB
     DeviceStream -->|自动注册| ToolRegistry
     ExampleTools -->|内置工具| ToolRegistry
 
-    StreamLoader -->|initMCP()| MCPServer
+    StreamLoader -->|initMCP| MCPServer
     MCPServer -->|工具列表| HTTPAPI
 
     XiaoZhi -->|HTTP/WS| HTTPAPI
@@ -91,13 +91,14 @@ sequenceDiagram
     participant Server as MCPServer
     participant Tool as 工具处理器
 
+    Note over Client,Tool: 工具列表查询流程
     Client->>API: GET /api/mcp/tools
     API->>Server: listTools()
     Server-->>API: 工具列表
     API-->>Client: JSON响应
 
-    Client->>API: POST /api/mcp/tools/call
-    Note over Client,API: {name: "tool_name", arguments: {...}}
+    Note over Client,Tool: 工具调用流程
+    Client->>API: POST /api/mcp/tools/call<br/>{name: "tool_name", arguments: {...}}
     API->>Server: handleToolCall(request)
     Server->>Tool: 执行工具handler
     Tool-->>Server: 执行结果
@@ -118,9 +119,26 @@ sequenceDiagram
 - 工具调用处理
 - 错误处理与日志记录
 
-### 初始化
-
-MCP服务器在系统启动时自动初始化：
+```mermaid
+classDiagram
+    class MCPServer {
+        +Map tools
+        +registerTool(name, toolDef)
+        +listTools()
+        +handleToolCall(request)
+        -validateToolCall(request)
+        -executeTool(tool, args)
+    }
+    
+    class ToolDefinition {
+        +string name
+        +string description
+        +object inputSchema
+        +function handler
+    }
+    
+    MCPServer "1" --> "*" ToolDefinition : contains
+```
 
 ```javascript
 // src/infrastructure/aistream/loader.js
@@ -136,6 +154,31 @@ async initMCP() {
   // 注册所有工作流的工具
   this.registerMCP(this.mcpServer);
 }
+```
+
+### 初始化流程图
+
+```mermaid
+sequenceDiagram
+    participant SL as StreamLoader
+    participant Config as 配置系统
+    participant MCP as MCPServer
+    participant Stream as 工作流实例
+
+    SL->>Config: 读取MCP配置
+    Config-->>SL: mcp.enabled
+    alt MCP已启用
+        SL->>MCP: new MCPServer()
+        SL->>SL: registerMCP(mcpServer)
+        loop 遍历所有工作流
+            SL->>Stream: 获取functions
+            Stream-->>SL: 函数列表
+            SL->>MCP: registerTool(name, toolDef)
+        end
+        MCP-->>SL: 初始化完成
+    else MCP已禁用
+        SL->>SL: 跳过初始化
+    end
 ```
 
 ### 工具注册
@@ -159,6 +202,25 @@ mcpServer.registerTool('tool_name', {
 ```
 
 ### 工具调用
+
+```mermaid
+flowchart TD
+    A[接收工具调用请求] --> B{验证工具是否存在}
+    B -->|不存在| C[返回错误: 工具未找到]
+    B -->|存在| D[验证参数Schema]
+    D -->|验证失败| E[返回错误: 参数无效]
+    D -->|验证成功| F[执行工具handler]
+    F --> G{执行结果}
+    G -->|成功| H[返回结果内容]
+    G -->|错误| I[返回错误信息]
+    
+    style C fill:#FFB6C1
+    style E fill:#FFB6C1
+    style H fill:#90EE90
+    style I fill:#FFB6C1
+```
+
+**代码示例**：
 
 ```javascript
 // 处理工具调用请求
@@ -335,16 +397,24 @@ const ws = new WebSocket('ws://your-server:port/mcp/ws');
 ### 自动注册流程
 
 ```mermaid
-flowchart LR
+flowchart TB
     A[系统启动] --> B[StreamLoader.load]
     B --> C[加载所有工作流]
-    C --> D[initMCP]
-    D --> E[创建MCPServer]
-    E --> F[registerMCP]
-    F --> G[遍历所有工作流]
-    G --> H[收集functions]
-    H --> I[注册为MCP工具]
-    I --> J[工具可用]
+    C --> D{检查MCP配置}
+    D -->|enabled=true| E[initMCP]
+    D -->|enabled=false| Z[跳过MCP初始化]
+    E --> F[创建MCPServer实例]
+    F --> G[registerMCP]
+    G --> H[遍历所有工作流]
+    H --> I[收集functions]
+    I --> J[生成工具Schema]
+    J --> K[注册为MCP工具]
+    K --> L[工具可用]
+    
+    style E fill:#90EE90
+    style F fill:#90EE90
+    style K fill:#FFD700
+    style L fill:#87CEEB
 ```
 
 ### 工具命名规则
@@ -357,6 +427,20 @@ flowchart LR
 ### 工具Schema生成
 
 系统自动从工作流函数的`prompt`中提取参数信息，生成JSON Schema：
+
+```mermaid
+flowchart LR
+    A[工作流函数定义] --> B[解析prompt参数]
+    B --> C[生成JSON Schema]
+    C --> D[创建MCP工具定义]
+    D --> E[注册到MCPServer]
+    
+    style A fill:#E6F3FF
+    style C fill:#FFE6CC
+    style E fill:#E6FFE6
+```
+
+**示例代码**：
 
 ```javascript
 // 工作流函数定义
@@ -383,6 +467,44 @@ this.registerFunction('send_message', {
 ---
 
 ## 外部平台连接
+
+XRK-AGT的MCP服务支持多种连接方式，方便不同平台的AI系统接入：
+
+```mermaid
+flowchart TB
+    subgraph Platforms["外部AI平台"]
+        XiaoZhi["小智AI<br/>HTTP API"]
+        Claude["Claude<br/>MCP协议"]
+        Doubao["豆包<br/>WebSocket"]
+        Other["其他平台<br/>标准接口"]
+    end
+    
+    subgraph Connections["连接方式"]
+        HTTP["HTTP REST API<br/>/api/mcp/tools"]
+        WS["WebSocket<br/>/mcp/ws"]
+        SSE["Server-Sent Events<br/>/api/mcp/connect"]
+    end
+    
+    subgraph Server["MCP服务器"]
+        Tools["工具注册表"]
+    end
+    
+    XiaoZhi --> HTTP
+    Claude --> HTTP
+    Claude --> WS
+    Doubao --> WS
+    Other --> HTTP
+    Other --> WS
+    Other --> SSE
+    
+    HTTP --> Tools
+    WS --> Tools
+    SSE --> Tools
+    
+    style Platforms fill:#E6F3FF
+    style Connections fill:#FFE6CC
+    style Server fill:#E6FFE6
+```
 
 ### 小智AI连接
 
