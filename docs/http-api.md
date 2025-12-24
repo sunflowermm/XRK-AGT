@@ -80,7 +80,7 @@ flowchart TB
     F --> G[遍历每个路由]
     G --> H[验证method/path/handler]
     H --> I[wrapHandler包装处理函数]
-    I --> J[app[method]注册路由]
+    I --> J[app.method注册路由]
     J --> K[registerWebSocketHandlers]
     K --> L[遍历wsHandlers]
     L --> M[bot.wsf[path]追加处理器]
