@@ -73,7 +73,6 @@ async function __sampleNetWindows() {
     }
   } catch (e) {
     lastError = `Get-NetAdapterStatistics失败: ${e.message}`;
-    BotUtil.makeLog('debug', lastError, 'CoreAPI');
   }
 
   // 方法2: 使用Get-Counter（PowerShell，速率值，需要转换为累计值）
@@ -93,38 +92,67 @@ async function __sampleNetWindows() {
     }
   } catch (e) {
     lastError = `Get-Counter失败: ${e.message}`;
-    BotUtil.makeLog('debug', lastError, 'CoreAPI');
   }
 
   // 方法3: 使用wmic（Windows Management Instrumentation，兼容性最好）
+  // 使用格式化数据获取实际速率值（Bytes/sec）
   try {
     const { stdout } = await execAsync(
-      'wmic path Win32_PerfRawData_Tcpip_NetworkInterface get BytesReceivedPersec,BytesSentPersec /format:list 2>nul',
+      'wmic path Win32_PerfFormattedData_Tcpip_NetworkInterface get Name,BytesReceivedPerSec,BytesSentPerSec /format:list 2>nul',
       { timeout: 5000, maxBuffer: 1024 * 1024 }
     );
     if (stdout && stdout.trim().length > 0) {
       let rxRate = 0, txRate = 0;
       const lines = stdout.split('\n');
+      let currentName = '';
+      
       for (const line of lines) {
-        if (line.includes('BytesReceivedPersec=')) {
-          const val = parseFloat(line.split('=')[1]) || 0;
-          if (!isNaN(val)) rxRate += val;
-        } else if (line.includes('BytesSentPersec=')) {
-          const val = parseFloat(line.split('=')[1]) || 0;
-          if (!isNaN(val)) txRate += val;
+        const trimmed = line.trim();
+        if (trimmed.startsWith('Name=')) {
+          currentName = trimmed.substring(5).toLowerCase();
+        } else if (trimmed.startsWith('BytesReceivedPerSec=')) {
+          // 过滤掉虚拟网卡
+          if (currentName && 
+              !currentName.includes('loopback') && 
+              !currentName.includes('teredo') && 
+              !currentName.includes('isatap') && 
+              !currentName.includes('virtual') &&
+              !currentName.includes('vmware') &&
+              !currentName.includes('hyper-v') &&
+              !currentName.includes('vbox')) {
+            const val = parseFloat(trimmed.substring(20)) || 0;
+            if (!isNaN(val) && val >= 0) {
+              rxRate += val;
+            }
+          }
+        } else if (trimmed.startsWith('BytesSentPerSec=')) {
+          // 过滤掉虚拟网卡
+          if (currentName && 
+              !currentName.includes('loopback') && 
+              !currentName.includes('teredo') && 
+              !currentName.includes('isatap') && 
+              !currentName.includes('virtual') &&
+              !currentName.includes('vmware') &&
+              !currentName.includes('hyper-v') &&
+              !currentName.includes('vbox')) {
+            const val = parseFloat(trimmed.substring(16)) || 0;
+            if (!isNaN(val) && val >= 0) {
+              txRate += val;
+            }
+          }
         }
       }
+      
+      // 验证数据合理性（最大10GB/s）
+      const maxRate = 10 * 1024 * 1024 * 1024; // 10GB/s
+      if (rxRate > maxRate) rxRate = 0;
+      if (txRate > maxRate) txRate = 0;
+      
       // 即使为0也返回（可能是真实值）
       return { rxRate, txRate, method: 'wmic' };
     }
   } catch (e) {
     lastError = `wmic失败: ${e.message}`;
-    BotUtil.makeLog('debug', lastError, 'CoreAPI');
-  }
-
-  // 所有方法都失败，记录详细错误
-  if (lastError) {
-    BotUtil.makeLog('warn', `Windows Server网络采样所有方法失败，最后错误: ${lastError}`, 'CoreAPI');
   }
   
   return null;
@@ -195,10 +223,7 @@ async function __sampleNetOnce() {
 
     // 优先使用systeminformation（第三方库，跨平台，最准确）
     try {
-      const stats = await si.networkStats().catch((err) => {
-        BotUtil.makeLog('debug', `systeminformation.networkStats()异常: ${err.message}`, 'CoreAPI');
-        return [];
-      });
+      const stats = await si.networkStats().catch(() => []);
       
       if (Array.isArray(stats) && stats.length > 0) {
         let totalRx = 0, totalTx = 0;
@@ -257,7 +282,6 @@ async function __sampleNetOnce() {
       }
     } catch (e) {
       // systeminformation失败，使用原生方法作为降级方案
-      BotUtil.makeLog('debug', `systeminformation失败: ${e.message}`, 'CoreAPI');
       isValid = false;
     }
 
@@ -275,34 +299,30 @@ async function __sampleNetOnce() {
             method = nativeResult.method;
             isValid = true;
             
-            // 调试日志：记录首次成功使用原生方法
-            if (!__netMethodValidated) {
-              BotUtil.makeLog('info', `Windows Server使用原生方法: ${method}, rxBytes=${rxBytes}, txBytes=${txBytes}`, 'CoreAPI');
-            }
           } else if (nativeResult.rxRate !== undefined) {
             // 速率值，转换为累计值
+            // 验证速率值合理性（最大10GB/s）
+            const maxRate = 10 * 1024 * 1024 * 1024; // 10GB/s
+            let rxRate = Math.min(nativeResult.rxRate, maxRate);
+            let txRate = Math.min(nativeResult.txRate || 0, maxRate);
+            
             if (__lastNetSample) {
               const dt = Math.max(0.1, (now - __lastNetSample.ts) / 1000);
-              rxBytes = __lastNetSample.rx + (nativeResult.rxRate * dt);
-              txBytes = __lastNetSample.tx + (nativeResult.txRate * dt);
+              // 使用平滑处理：新累计值 = 上次累计值 + 速率 * 时间差
+              rxBytes = __lastNetSample.rx + (rxRate * dt);
+              txBytes = __lastNetSample.tx + (txRate * dt);
             } else {
-              // 首次采样，使用当前速率估算初始累计值
-              rxBytes = nativeResult.rxRate * 60;
-              txBytes = nativeResult.txRate * 60;
+              // 首次采样，使用当前速率估算初始累计值（假设1分钟的历史）
+              rxBytes = rxRate * 60;
+              txBytes = txRate * 60;
             }
             method = nativeResult.method;
             isValid = true;
             
-            // 调试日志
-            if (!__netMethodValidated) {
-              BotUtil.makeLog('info', `Windows Server使用原生方法: ${method}, rxRate=${nativeResult.rxRate}, txRate=${nativeResult.txRate}`, 'CoreAPI');
-            }
           }
         } else {
-          // 原生方法也失败，记录详细日志并尝试最后的fallback
+          // 原生方法也失败，尝试最后的fallback
           if (!__netMethodValidated) {
-            BotUtil.makeLog('warn', 'Windows Server网络采样：systeminformation和原生方法都失败，尝试最后的fallback', 'CoreAPI');
-            
             // 最后的fallback：尝试使用systeminformation的原始数据，即使为0也接受
             try {
               const stats = await si.networkStats().catch(() => []);
@@ -317,12 +337,9 @@ async function __sampleNetOnce() {
                 txBytes = totalTx;
                 method = 'systeminformation-fallback';
                 isValid = true;
-                BotUtil.makeLog('info', `使用systeminformation fallback: rxBytes=${rxBytes}, txBytes=${txBytes}, 接口数=${stats.length}`, 'CoreAPI');
-              } else {
-                BotUtil.makeLog('warn', `systeminformation返回空数组，网络接口数=0`, 'CoreAPI');
               }
             } catch (e) {
-              BotUtil.makeLog('error', `最后的fallback也失败: ${e.message}`, 'CoreAPI');
+              // 忽略错误，继续使用fallback逻辑
             }
           }
         }
@@ -353,12 +370,10 @@ async function __sampleNetOnce() {
       }
     }
 
-    // 记录方法有效性（用于日志）
+    // 记录方法有效性
     if (!__netMethodValidated && isValid && method !== 'fallback' && method !== 'initial') {
       __netMethod = method;
       __netMethodValidated = true;
-      const methodType = method === 'systeminformation' ? ' (主要-第三方库)' : ' (降级-原生方法)';
-      BotUtil.makeLog('debug', `网络采样方法: ${method}${methodType}`, 'CoreAPI');
     }
 
     const tsMin = Math.floor(now / 60000) * 60000;
@@ -418,7 +433,7 @@ async function __sampleNetOnce() {
     
     __lastNetSample = { ts: now, rx: rxBytes, tx: txBytes };
   } catch (error) {
-    BotUtil.makeLog('error', `网络采样失败: ${error.message}`, 'CoreAPI');
+    // 静默处理错误
   }
 }
 
