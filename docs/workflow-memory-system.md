@@ -72,7 +72,7 @@ flowchart TB
 
 ### 场景1：用户请求"帮我做一个表格"（简单任务）
 
-详见 [`docs/workflow-architecture.md`](workflow-architecture.md#完整调用流程模拟)
+详见 [`docs/工作流系统完整文档.md`](工作流系统完整文档.md#工作流执行流程)
 
 ### 场景2：用户请求"帮我依据报告.docx做一个表格"（复杂任务）
 

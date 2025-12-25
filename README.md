@@ -395,24 +395,19 @@ node app   # 或 node start.js
 - **[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)** - 项目整体架构与目录结构详细说明
 
 #### 🤖 AI工作流系统（重点）
-- **[`docs/WORKFLOW_GUIDE.md`](docs/WORKFLOW_GUIDE.md)** - **工作流开发指南** ⭐ 新
-  - 快速开始：5分钟创建你的第一个工作流
-  - 核心概念：函数注册、上下文传递、笔记系统
-  - 高级用法：自定义系统提示、错误处理、工作流合并
-  - 完整示例：数据处理工作流
-  - 最佳实践与故障排查
-- **[`docs/WORKFLOW_ARCHITECTURE.md`](docs/WORKFLOW_ARCHITECTURE.md)** - **工作流系统架构文档** ⭐ 新
-  - 系统概述与设计原则（通用性、可扩展性、标准化）
-  - 架构层次与核心组件详解
-  - 数据流与上下文传递机制
-  - 扩展点与关键设计决策
-  - 性能优化与错误处理策略
-- **[`docs/workflow-architecture.md`](docs/workflow-architecture.md)** - **AI工作流系统完整文档**
-  - 架构概览与核心特性
-  - 系统架构图与执行流程图
-  - 工作流合并原理详解
-  - 记忆系统与使用指南
-  - 最佳实践
+- **[`docs/工作流系统完整文档.md`](docs/工作流系统完整文档.md)** - **工作流系统完整文档** ⭐ 推荐
+  - 系统概述与核心架构
+  - 工作流执行流程（简单任务和复杂任务）
+  - 工作流管理器详解
+  - 工作流开发指南
+  - 记忆系统与工作流合并机制
+  - MCP工具注册
+  - 最佳实践与常见问题
+- **[`docs/工作流开发文档.md`](docs/工作流开发文档.md)** - **工作流开发文档**（补充）
+  - 开发细节和代码示例
+  - 创建核心工作流和辅助工作流
+  - 函数注册详解
+  - 业务逻辑说明
 - **[`docs/mcp-guide.md`](docs/mcp-guide.md)** - **MCP (Model Context Protocol) 完整指南** ⭐
   - MCP概述与架构图
   - MCP服务器与HTTP API
@@ -449,7 +444,8 @@ node app   # 或 node start.js
 - [`docs/api-loader.md`](docs/api-loader.md)：API 加载器文档
 
 #### AI 工作流
-- **[`docs/workflow-architecture.md`](docs/workflow-architecture.md)**：AI工作流系统完整文档（推荐）
+- **[`docs/工作流系统完整文档.md`](docs/工作流系统完整文档.md)**：工作流系统完整文档（推荐）
+- [`docs/工作流开发文档.md`](docs/工作流开发文档.md)：工作流开发文档（补充）
 - [`docs/aistream.md`](docs/aistream.md)：AI 工作流基类详细文档
 
 #### 配置与渲染
