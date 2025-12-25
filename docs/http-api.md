@@ -81,22 +81,22 @@ classDiagram
 
 ```mermaid
 flowchart TB
-    A[ApiLoader.register] --> B[HttpApi.init]
-    B --> C{是否有全局中间件}
-    C -->|是| D[app.use挂载中间件]
-    C -->|否| E[registerRoutes注册HTTP路由]
+    A["ApiLoader.register"] --> B["HttpApi.init"]
+    B --> C{"是否有全局中间件"}
+    C -->|是| D["app.use挂载中间件"]
+    C -->|否| E["registerRoutes注册HTTP路由"]
     D --> E
-    E --> F[验证routes数组]
-    F --> G[遍历每个路由]
-    G --> H[验证method/path/handler]
-    H --> I[wrapHandler包装处理函数]
-    I --> J[app.method注册路由]
-    J --> K[registerWebSocketHandlers]
-    K --> L[遍历wsHandlers]
-    L --> M[bot.wsf追加处理器]
-    M --> N{是否有initHook}
-    N -->|是| O[执行自定义初始化钩子]
-    N -->|否| P[初始化完成]
+    E --> F["验证routes数组"]
+    F --> G["遍历每个路由"]
+    G --> H["验证method/path/handler"]
+    H --> I["wrapHandler包装处理函数"]
+    I --> J["app.method注册路由"]
+    J --> K["registerWebSocketHandlers"]
+    K --> L["遍历wsHandlers"]
+    L --> M["bot.wsf追加处理器"]
+    M --> N{"是否有initHook"}
+    N -->|是| O["执行自定义初始化钩子"]
+    N -->|否| P["初始化完成"]
     O --> P
     
     style A fill:#E6F3FF

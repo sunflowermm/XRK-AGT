@@ -199,14 +199,14 @@ drawing:
 
 ```mermaid
 flowchart TB
-    A[API调用] --> B{apiConfig中是否有<br/>baseUrl/apiKey?}
-    B -->|是| C[使用显式自定义配置]
-    B -->|否| D{是否指定profile/modelKey?}
-    D -->|是| E[在llm.profiles中查找]
-    D -->|否| F[使用defaultProfile]
-    E --> G[使用对应档位配置]
-    F --> H[使用defaults配置]
-    C --> I[执行API调用]
+    A["API调用"] --> B{"apiConfig中是否有<br/>baseUrl/apiKey?"}
+    B -->|是| C["使用显式自定义配置"]
+    B -->|否| D{"是否指定profile/modelKey?"}
+    D -->|是| E["在llm.profiles中查找"]
+    D -->|否| F["使用defaultProfile"]
+    E --> G["使用对应档位配置"]
+    F --> H["使用defaults配置"]
+    C --> I["执行API调用"]
     G --> I
     H --> I
     
@@ -254,23 +254,23 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    A[AIStream.init] --> B[初始化functions Map]
-    B --> C[初始化Embedding字段]
-    C --> D{是否启用Embedding}
-    D -->|是| E[initEmbedding]
-    D -->|否| F[初始化完成]
-    E --> G{选择provider}
-    G -->|lightweight| H[initLightweightEmbedding<br/>BM25风格]
-    G -->|onnx| I[initONNXEmbedding<br/>加载ONNX模型]
-    G -->|hf| J[initHFEmbedding<br/>接入HuggingFace]
-    G -->|fasttext| K[initFastTextEmbedding<br/>下载fastText向量]
-    G -->|api| L[initAPIEmbedding<br/>调用外部API]
-    H --> M{初始化是否成功}
+    A["AIStream.init"] --> B["初始化functions Map"]
+    B --> C["初始化Embedding字段"]
+    C --> D{"是否启用Embedding"}
+    D -->|是| E["initEmbedding"]
+    D -->|否| F["初始化完成"]
+    E --> G{"选择provider"}
+    G -->|lightweight| H["initLightweightEmbedding<br/>BM25风格"]
+    G -->|onnx| I["initONNXEmbedding<br/>加载ONNX模型"]
+    G -->|hf| J["initHFEmbedding<br/>接入HuggingFace"]
+    G -->|fasttext| K["initFastTextEmbedding<br/>下载fastText向量"]
+    G -->|api| L["initAPIEmbedding<br/>调用外部API"]
+    H --> M{"初始化是否成功"}
     I --> M
     J --> M
     K --> M
     L --> M
-    M -->|失败| N[降级到lightweight]
+    M -->|失败| N["降级到lightweight"]
     M -->|成功| F
     N --> F
     
@@ -333,20 +333,20 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    A[LLM返回响应] --> B[parseFunctions解析]
-    B --> C[遍历已注册函数]
-    C --> D[调用各自的parser]
-    D --> E[汇总函数调用列表]
-    E --> F{是否有函数调用}
-    F -->|否| G[返回清洗后的文本]
-    F -->|是| H[遍历函数调用]
-    H --> I[executeFunction执行]
-    I --> J{检查权限}
-    J -->|通过| K[执行handler]
-    J -->|拒绝| L[返回权限错误]
-    K --> M[函数执行结果]
-    M --> N[合并到上下文]
-    N --> O[继续LLM调用或返回]
+    A["LLM返回响应"] --> B["parseFunctions解析"]
+    B --> C["遍历已注册函数"]
+    C --> D["调用各自的parser"]
+    D --> E["汇总函数调用列表"]
+    E --> F{"是否有函数调用"}
+    F -->|否| G["返回清洗后的文本"]
+    F -->|是| H["遍历函数调用"]
+    H --> I["executeFunction执行"]
+    I --> J{"检查权限"}
+    J -->|通过| K["执行handler"]
+    J -->|拒绝| L["返回权限错误"]
+    K --> M["函数执行结果"]
+    M --> N["合并到上下文"]
+    N --> O["继续LLM调用或返回"]
     
     style A fill:#E6F3FF
     style I fill:#FFE6CC

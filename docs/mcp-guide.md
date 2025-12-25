@@ -65,7 +65,24 @@ flowchart TB
         StreamLoader["StreamLoader<br/>工作流加载器"]
     end
 
-    ChatStream -->|自动注册| ToolRegistry
+    ChatStream --> ToolRegistry
+    DesktopStream --> ToolRegistry
+    DeviceStream --> ToolRegistry
+    StreamLoader --> ChatStream
+    StreamLoader --> DesktopStream
+    StreamLoader --> DeviceStream
+    ToolRegistry --> GETTools
+    ToolRegistry --> POSTCall
+    ToolRegistry --> SSEConnect
+    ToolRegistry --> WSConnect
+    XiaoZhi --> GETTools
+    Claude --> POSTCall
+    Doubao --> WSConnect
+    
+    style External fill:#E6F3FF
+    style Streams fill:#FFE6CC
+    style MCPServer fill:#90EE90
+    style HTTPAPI fill:#87CEEB
     DesktopStream -->|自动注册| ToolRegistry
     DeviceStream -->|自动注册| ToolRegistry
     ExampleTools -->|内置工具| ToolRegistry
@@ -205,14 +222,14 @@ mcpServer.registerTool('tool_name', {
 
 ```mermaid
 flowchart TD
-    A[接收工具调用请求] --> B{验证工具是否存在}
-    B -->|不存在| C[返回错误: 工具未找到]
-    B -->|存在| D[验证参数Schema]
-    D -->|验证失败| E[返回错误: 参数无效]
-    D -->|验证成功| F[执行工具handler]
-    F --> G{执行结果}
-    G -->|成功| H[返回结果内容]
-    G -->|错误| I[返回错误信息]
+    A["接收工具调用请求"] --> B{"验证工具是否存在"}
+    B -->|不存在| C["返回错误: 工具未找到"]
+    B -->|存在| D["验证参数Schema"]
+    D -->|验证失败| E["返回错误: 参数无效"]
+    D -->|验证成功| F["执行工具handler"]
+    F --> G{"执行结果"}
+    G -->|成功| H["返回结果内容"]
+    G -->|错误| I["返回错误信息"]
     
     style C fill:#FFB6C1
     style E fill:#FFB6C1
@@ -398,18 +415,18 @@ const ws = new WebSocket('ws://your-server:port/mcp/ws');
 
 ```mermaid
 flowchart TB
-    A[系统启动] --> B[StreamLoader.load]
-    B --> C[加载所有工作流]
-    C --> D{检查MCP配置}
-    D -->|enabled=true| E[initMCP]
-    D -->|enabled=false| Z[跳过MCP初始化]
-    E --> F[创建MCPServer实例]
-    F --> G[registerMCP]
-    G --> H[遍历所有工作流]
-    H --> I[收集functions]
-    I --> J[生成工具Schema]
-    J --> K[注册为MCP工具]
-    K --> L[工具可用]
+    A["系统启动"] --> B["StreamLoader.load"]
+    B --> C["加载所有工作流"]
+    C --> D{"检查MCP配置"}
+    D -->|enabled=true| E["initMCP"]
+    D -->|enabled=false| Z["跳过MCP初始化"]
+    E --> F["创建MCPServer实例"]
+    F --> G["registerMCP"]
+    G --> H["遍历所有工作流"]
+    H --> I["收集functions"]
+    I --> J["生成工具Schema"]
+    J --> K["注册为MCP工具"]
+    K --> L["工具可用"]
     
     style E fill:#90EE90
     style F fill:#90EE90
@@ -430,10 +447,10 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    A[工作流函数定义] --> B[解析prompt参数]
-    B --> C[生成JSON Schema]
-    C --> D[创建MCP工具定义]
-    D --> E[注册到MCPServer]
+    A["工作流函数定义"] --> B["解析prompt参数"]
+    B --> C["生成JSON Schema"]
+    C --> D["创建MCP工具定义"]
+    D --> E["注册到MCPServer"]
     
     style A fill:#E6F3FF
     style C fill:#FFE6CC
@@ -500,6 +517,10 @@ flowchart TB
     HTTP --> Tools
     WS --> Tools
     SSE --> Tools
+    
+    style Platforms fill:#E6F3FF
+    style Connections fill:#FFE6CC
+    style Server fill:#90EE90
     
     style Platforms fill:#E6F3FF
     style Connections fill:#FFE6CC

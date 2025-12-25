@@ -35,28 +35,28 @@
 
 ```mermaid
 flowchart TB
-    A[ApiLoader.load] --> B[确保core/http目录存在]
-    B --> C[getApiFiles递归扫描]
-    C --> D[收集.js文件<br/>跳过.和_开头]
-    D --> E[遍历每个文件]
-    E --> F[loadApi加载单个API]
-    F --> G[生成相对路径key]
-    G --> H{key是否已存在}
-    H -->|是| I[unloadApi卸载旧API]
-    H -->|否| J[构建file://URL]
+    A["ApiLoader.load"] --> B["确保core/http目录存在"]
+    B --> C["getApiFiles递归扫描"]
+    C --> D["收集.js文件<br/>跳过.和_开头"]
+    D --> E["遍历每个文件"]
+    E --> F["loadApi加载单个API"]
+    F --> G["生成相对路径key"]
+    G --> H{"key是否已存在"}
+    H -->|是| I["unloadApi卸载旧API"]
+    H -->|否| J["构建file://URL"]
     I --> J
-    J --> K[动态导入模块]
-    K --> L{导出类型}
-    L -->|类| M[new module.default]
-    L -->|对象| N[new HttpApi包装]
-    M --> O[校验routes数组]
+    J --> K["动态导入模块"]
+    K --> L{"导出类型"}
+    L -->|类| M["new module.default"]
+    L -->|对象| N["new HttpApi包装"]
+    M --> O["校验routes数组"]
     N --> O
-    O --> P[确保getInfo方法存在]
-    P --> Q[存入apis Map]
-    Q --> R[sortByPriority排序]
-    R --> S[过滤enable=false]
-    S --> T[按priority排序]
-    T --> U[loaded=true]
+    O --> P["确保getInfo方法存在"]
+    P --> Q["存入apis Map"]
+    Q --> R["sortByPriority排序"]
+    R --> S["过滤enable=false"]
+    S --> T["按priority排序"]
+    T --> U["loaded=true"]
     
     style A fill:#E6F3FF
     style F fill:#FFE6CC
@@ -133,21 +133,21 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    A[watch启用] --> B{enable参数}
-    B -->|false| C[关闭所有watcher]
-    B -->|true| D[chokidar.watch监视core/http]
-    D --> E[监听文件事件]
-    E --> F{事件类型}
-    F -->|add新增| G[loadApi加载新API]
-    F -->|change修改| H[changeApi热重载]
-    F -->|unlink删除| I[unloadApi卸载API]
-    G --> J[sortByPriority排序]
+    A["watch启用"] --> B{"enable参数"}
+    B -->|false| C["关闭所有watcher"]
+    B -->|true| D["chokidar.watch监视core/http"]
+    D --> E["监听文件事件"]
+    E --> F{"事件类型"}
+    F -->|add新增| G["loadApi加载新API"]
+    F -->|change修改| H["changeApi热重载"]
+    F -->|unlink删除| I["unloadApi卸载API"]
+    G --> J["sortByPriority排序"]
     H --> J
     I --> J
-    J --> K{是否有app/bot}
-    K -->|是| L[调用init即时挂载]
-    K -->|否| M[等待register时挂载]
-    L --> N[热加载完成]
+    J --> K{"是否有app/bot"}
+    K -->|是| L["调用init即时挂载"]
+    K -->|否| M["等待register时挂载"]
+    L --> N["热加载完成"]
     M --> N
     
     style A fill:#E6F3FF

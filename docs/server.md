@@ -35,34 +35,57 @@
 ```mermaid
 flowchart TB
     subgraph Clients["客户端层"]
-        Browser[浏览器/Web前端]
-        Mobile[移动端应用]
-        ThirdAPI[第三方API调用]
-        WSClient[WebSocket客户端]
-        SDK[平台SDK<br/>OneBot/ComWeChat等]
+        Browser["浏览器/Web前端"]
+        Mobile["移动端应用"]
+        ThirdAPI["第三方API调用"]
+        WSClient["WebSocket客户端"]
+        SDK["平台SDK<br/>OneBot/ComWeChat等"]
     end
     
     subgraph Proxy["反向代理层（可选）"]
-        HTTPProxy[HTTP代理服务器<br/>:80]
-        HTTPSProxy[HTTPS代理服务器<br/>:443 + SNI]
-        DomainRoute[域名路由与路径重写]
+        HTTPProxy["HTTP代理服务器<br/>:80"]
+        HTTPSProxy["HTTPS代理服务器<br/>:443 + SNI"]
+        DomainRoute["域名路由与路径重写"]
     end
     
-    subgraph Core["核心服务层<br/>src/bot.js"]
-        Express[Express应用<br/>中间件容器]
-        HTTPServer[HTTP服务器<br/>:2537]
-        HTTPSServer[HTTPS服务器<br/>:2538可选]
-        WSServer[WebSocket服务器<br/>协议升级]
+    subgraph Core["核心服务层"]
+        Express["Express应用<br/>中间件容器"]
+        HTTPServer["HTTP服务器<br/>:2537"]
+        HTTPSServer["HTTPS服务器<br/>:2538可选"]
+        WSServer["WebSocket服务器<br/>协议升级"]
     end
     
     subgraph Middleware["中间件层（按顺序）"]
-        CORS[CORS跨域处理]
-        Helmet[Helmet安全头]
-        Compression[响应压缩]
-        RateLimit[速率限制]
-        BodyParser[请求体解析]
-        Auth[API认证]
+        CORS["CORS跨域处理"]
+        Helmet["Helmet安全头"]
+        Compression["响应压缩"]
+        RateLimit["速率限制"]
+        BodyParser["请求体解析"]
+        Auth["API认证"]
     end
+    
+    Browser --> HTTPProxy
+    Mobile --> HTTPSProxy
+    ThirdAPI --> Express
+    WSClient --> WSServer
+    SDK --> Express
+    
+    HTTPProxy --> HTTPServer
+    HTTPSProxy --> HTTPSServer
+    DomainRoute --> HTTPProxy
+    DomainRoute --> HTTPSProxy
+    
+    Express --> CORS
+    CORS --> Helmet
+    Helmet --> Compression
+    Compression --> RateLimit
+    RateLimit --> BodyParser
+    BodyParser --> Auth
+    
+    style Clients fill:#E6F3FF
+    style Proxy fill:#FFE6CC
+    style Core fill:#90EE90
+    style Middleware fill:#87CEEB
     
     subgraph Routes["路由层（按优先级）"]
         SystemRoute[系统路由<br/>/status /health]
@@ -269,14 +292,14 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    A[读取配置端口号] --> B[尝试绑定端口]
-    B --> C{端口是否可用}
-    C -->|可用| D[绑定成功]
-    C -->|被占用| E[自动递增端口号]
-    E --> F[重新尝试绑定]
+    A["读取配置端口号"] --> B["尝试绑定端口"]
+    B --> C{"端口是否可用"}
+    C -->|可用| D["绑定成功"]
+    C -->|被占用| E["自动递增端口号"]
+    E --> F["重新尝试绑定"]
     F --> C
-    D --> G[记录实际使用端口]
-    G --> H[输出访问URL]
+    D --> G["记录实际使用端口"]
+    G --> H["输出访问URL"]
     
     style A fill:#E6F3FF
     style C fill:#FFE6CC

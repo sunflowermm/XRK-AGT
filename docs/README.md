@@ -21,34 +21,43 @@ XRK-AGT 采用清晰的分层架构：
 ```mermaid
 flowchart TB
     subgraph Runtime["运行核心层"]
-        Bot[Bot主类<br/>src/bot.js]
+        Bot["Bot主类<br/>src/bot.js"]
     end
     
     subgraph Infra["基础设施层（辅助层）"]
-        Loaders[加载器<br/>TaskerLoader/PluginsLoader<br/>ApiLoader/StreamLoader]
-        BaseClasses[基类库<br/>plugin/HttpApi/AIStream<br/>Renderer/ConfigBase]
+        Loaders["加载器<br/>TaskerLoader/PluginsLoader<br/>ApiLoader/StreamLoader"]
+        BaseClasses["基类库<br/>plugin/HttpApi/AIStream<br/>Renderer/ConfigBase"]
     end
     
     subgraph Tasker["任务层（Tasker）"]
-        Taskers[各平台Tasker<br/>协议转换]
+        Taskers["各平台Tasker<br/>协议转换"]
     end
     
     subgraph Events["事件系统"]
-        Listeners[事件监听器<br/>去重/标准化]
+        Listeners["事件监听器<br/>去重/标准化"]
     end
     
     subgraph Business["业务层"]
-        Plugins[业务插件]
-        APIs[HTTP API]
-        Streams[工作流]
+        Plugins["业务插件"]
+        APIs["HTTP API"]
+        Streams["工作流"]
     end
     
-    Bot --> Infra
-    Infra --> Tasker
-    Infra --> Events
-    Infra --> Business
-    Tasker --> Events
-    Events --> Business
+    Bot --> Loaders
+    Bot --> BaseClasses
+    Loaders --> Taskers
+    Loaders --> Listeners
+    Loaders --> Plugins
+    Loaders --> APIs
+    Loaders --> Streams
+    Taskers --> Listeners
+    Listeners --> Plugins
+    
+    style Runtime fill:#E6F3FF
+    style Infra fill:#FFE6CC
+    style Tasker fill:#90EE90
+    style Events fill:#87CEEB
+    style Business fill:#FFB6C1
     
     style Bot fill:#FFD700
     style Infra fill:#90EE90

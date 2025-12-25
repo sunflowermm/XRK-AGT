@@ -57,14 +57,14 @@ classDiagram
 ```mermaid
 flowchart TB
     subgraph Events["事件类型"]
-        A[通用事件<br/>message/notice/request]
-        B[特定事件<br/>onebot.message<br/>device.message]
+        A["通用事件<br/>message/notice/request"]
+        B["特定事件<br/>onebot.message<br/>device.message"]
     end
     
     subgraph Plugin["插件匹配"]
-        C{event属性}
-        C -->|通用事件| D[匹配所有来源]
-        C -->|特定事件| E[只匹配特定Tasker]
+        C{"event属性"}
+        C -->|通用事件| D["匹配所有来源"]
+        C -->|特定事件| E["只匹配特定Tasker"]
     end
     
     A --> C
@@ -137,16 +137,16 @@ export default class DevicePlugin extends plugin {
 
 ```mermaid
 flowchart LR
-    A[构造函数<br/>接收options] --> B[normalizeTasks<br/>标准化定时任务]
-    A --> C[normalizeHandlers<br/>标准化Handler]
-    A --> D[normalizeEventSubscribe<br/>标准化事件订阅]
-    A --> E[normalizeRules<br/>标准化规则]
+    A["构造函数<br/>接收options"] --> B["normalizeTasks<br/>标准化定时任务"]
+    A --> C["normalizeHandlers<br/>标准化Handler"]
+    A --> D["normalizeEventSubscribe<br/>标准化事件订阅"]
+    A --> E["normalizeRules<br/>标准化规则"]
     
-    B --> F[统一结构]
+    B --> F["统一结构"]
     C --> F
     D --> F
     E --> F
-    F --> G[插件实例创建完成]
+    F --> G["插件实例创建完成"]
     
     style A fill:#E6F3FF
     style F fill:#FFE6CC
@@ -214,9 +214,9 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    A[插件方法执行] --> B{返回值}
-    B -->|false| C[未处理<br/>继续后续插件]
-    B -->|其他值/无返回| D[已处理<br/>阻止同优先级后续规则]
+    A["插件方法执行"] --> B{"返回值"}
+    B -->|false| C["未处理<br/>继续后续插件"]
+    B -->|其他值/无返回| D["已处理<br/>阻止同优先级后续规则"]
     
     style B fill:#E6F3FF
     style C fill:#FFE6CC
@@ -359,11 +359,11 @@ export default class MyPlugin extends plugin {
 
 ```mermaid
 flowchart TB
-    A[accept方法调用] --> B{返回值判断}
-    B -->|true| C[通过检查<br/>继续处理]
-    B -->|false| D[拒绝处理<br/>跳过当前插件]
-    B -->|'return'| E[停止处理<br/>不再执行后续插件]
-    B -->|其他值| F[继续处理<br/>可用于传递状态]
+    A["accept方法调用"] --> B{"返回值判断"}
+    B -->|true| C["通过检查<br/>继续处理"]
+    B -->|false| D["拒绝处理<br/>跳过当前插件"]
+    B -->|'return'| E["停止处理<br/>不再执行后续插件"]
+    B -->|其他值| F["继续处理<br/>可用于传递状态"]
     
     style A fill:#E6F3FF
     style C fill:#90EE90

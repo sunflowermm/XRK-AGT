@@ -39,14 +39,14 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A[new Bot] --> B[初始化Express]
-    B --> C[初始化HTTP服务器]
-    C --> D[初始化WebSocket]
-    D --> E[_initHttpServer]
-    E --> F[_setupSignalHandlers]
-    F --> G[generateApiKey]
-    G --> H[_createProxy]
-    H --> I[返回代理对象]
+    A["new Bot"] --> B["初始化Express"]
+    B --> C["初始化HTTP服务器"]
+    C --> D["初始化WebSocket"]
+    D --> E["_initHttpServer"]
+    E --> F["_setupSignalHandlers"]
+    F --> G["generateApiKey"]
+    G --> H["_createProxy"]
+    H --> I["返回代理对象"]
     
     style A fill:#E6F3FF
     style H fill:#FFE6CC
@@ -57,30 +57,30 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    Start[Bot.run] --> Port[设置端口配置]
-    Port --> Proxy{是否启用反向代理}
-    Proxy -->|是| ProxyInit[_initProxyApp<br/>_loadDomainCertificates]
-    Proxy -->|否| LoadModules[加载基础模块]
+    Start["Bot.run"] --> Port["设置端口配置"]
+    Port --> Proxy{"是否启用反向代理"}
+    Proxy -->|是| ProxyInit["_initProxyApp<br/>_loadDomainCertificates"]
+    Proxy -->|否| LoadModules["加载基础模块"]
     ProxyInit --> LoadModules
     
-    LoadModules --> Config[ConfigLoader.load]
-    Config --> Stream[StreamLoader.load]
-    Stream --> Plugin[PluginsLoader.load]
-    Plugin --> API[ApiLoader.load]
+    LoadModules --> Config["ConfigLoader.load"]
+    Config --> Stream["StreamLoader.load"]
+    Stream --> Plugin["PluginsLoader.load"]
+    Plugin --> API["ApiLoader.load"]
     
-    API --> Middleware[_initializeMiddlewareAndRoutes]
-    Middleware --> Register[ApiLoader.register]
-    Register --> Handlers[_setupFinalHandlers]
+    API --> Middleware["_initializeMiddlewareAndRoutes"]
+    Middleware --> Register["ApiLoader.register"]
+    Register --> Handlers["_setupFinalHandlers"]
     
-    Handlers --> Server{启动服务器}
-    Server -->|HTTP| HttpServer[serverLoad]
-    Server -->|HTTPS| HttpsServer[httpsLoad]
+    Handlers --> Server{"启动服务器"}
+    Server -->|HTTP| HttpServer["serverLoad"]
+    Server -->|HTTPS| HttpsServer["httpsLoad"]
     
-    HttpServer --> Listener[ListenerLoader.load]
+    HttpServer --> Listener["ListenerLoader.load"]
     HttpsServer --> Listener
-    Listener --> Watch[ApiLoader.watch热重载]
-    Watch --> Trash[_startTrashCleaner]
-    Trash --> Online[emit online事件]
+    Listener --> Watch["ApiLoader.watch热重载"]
+    Watch --> Trash["_startTrashCleaner"]
+    Trash --> Online["emit online事件"]
     
     style Start fill:#E6F3FF
     style LoadModules fill:#FFE6CC
@@ -194,13 +194,13 @@ classDiagram
 
 ```mermaid
 flowchart TB
-    A[TaskerLoader.load] --> B[扫描core/tasker目录]
-    B --> C[加载Tasker文件]
-    C --> D[Tasker.push到Bot.tasker]
-    D --> E[注册WebSocket处理器到Bot.wsf]
-    E --> F[连接建立时创建子Bot]
-    F --> G[创建Bot实例<br/>Bot.self_id = childBot]
-    G --> H[_createProxy放入Bot.bots]
+    A["TaskerLoader.load"] --> B["扫描core/tasker目录"]
+    B --> C["加载Tasker文件"]
+    C --> D["Tasker.push到Bot.tasker"]
+    D --> E["注册WebSocket处理器到Bot.wsf"]
+    E --> F["连接建立时创建子Bot"]
+    F --> G["创建Bot实例<br/>Bot.self_id = childBot"]
+    G --> H["_createProxy放入Bot.bots"]
     
     style A fill:#E6F3FF
     style D fill:#FFE6CC
@@ -220,22 +220,22 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph TaskerLayer["Tasker层（事件生成）"]
-        T1[OneBot Tasker]
-        T2[Device Tasker]
-        T3[Stdin Tasker]
+        T1["OneBot Tasker"]
+        T2["Device Tasker"]
+        T3["Stdin Tasker"]
     end
     
     subgraph EventLayer["事件层（标准化）"]
-        E1[Bot.em触发事件]
-        E2[prepareEvent处理]
-        E3[事件监听器]
-        E4[去重检查]
+        E1["Bot.em触发事件"]
+        E2["prepareEvent处理"]
+        E3["事件监听器"]
+        E4["去重检查"]
     end
     
     subgraph PluginLayer["插件层（业务处理）"]
-        P1[PluginsLoader.deal]
-        P2[增强插件accept]
-        P3[业务插件rule]
+        P1["PluginsLoader.deal"]
+        P2["增强插件accept"]
+        P3["业务插件rule"]
     end
     
     T1 --> E1
@@ -247,6 +247,10 @@ flowchart TB
     E4 --> P1
     P1 --> P2
     P2 --> P3
+    
+    style TaskerLayer fill:#E6F3FF
+    style EventLayer fill:#FFE6CC
+    style PluginLayer fill:#90EE90
     
     style TaskerLayer fill:#E6F3FF
     style EventLayer fill:#FFE6CC
