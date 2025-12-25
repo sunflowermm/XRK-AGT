@@ -45,6 +45,7 @@ stream/**
 !stream/memory.js
 !stream/todo.js
 !stream/tools.js
+!stream/database.js
 
 !commonconfig
 commonconfig/**

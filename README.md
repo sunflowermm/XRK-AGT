@@ -34,7 +34,7 @@ flowchart TB
       Bot["Bot 主类<br/>src/bot.js<br/>统一管理所有组件"]
     end
 
-    subgraph Infrastructure["基础设施层（辅助层）<br/>src/infrastructure/"]
+    subgraph Infrastructure["基础设施层（辅助层）"]
       TaskerLoader["TaskerLoader<br/>任务层加载器"]
       PluginsLoader["PluginsLoader<br/>插件加载与调度"]
       ApiLoader["ApiLoader<br/>API 加载器"]
@@ -43,32 +43,40 @@ flowchart TB
       BaseClasses["基类库<br/>plugin/HttpApi/AIStream<br/>Renderer/ConfigBase/EventListener"]
     end
 
-    subgraph Tasker["任务层（Tasker）<br/>core/tasker/"]
+    subgraph Tasker["任务层（Tasker）"]
       OneBotTasker["OneBotv11 Tasker"]
       ComWeChatTasker["ComWeChat Tasker"]
       StdinTasker["stdin Tasker"]
       CustomTasker["自定义 Tasker"]
     end
 
-    subgraph EventSystem["事件系统<br/>core/events/"]
+    subgraph EventSystem["事件系统"]
       OneBotEvent["OneBot 事件监听器"]
       DeviceEvent["Device 事件监听器"]
       StdinEvent["Stdin 事件监听器"]
     end
 
-    subgraph Business["业务层<br/>core/"]
+    subgraph Business["业务层"]
       Plugins["业务插件<br/>core/plugin/"]
       HttpApis["HTTP API<br/>core/http/"]
       Streams["工作流<br/>core/stream/"]
     end
 
-    Clients -->|协议转换| Tasker
-    Tasker -->|Bot.em 触发事件| EventSystem
-    EventSystem -->|去重/标记/预处理| PluginsLoader
-    PluginsLoader -->|规则匹配| Plugins
+    QQ --> OneBotTasker
+    WeChat --> ComWeChatTasker
+    OneBotTasker --> OneBotEvent
+    ComWeChatTasker --> OneBotEvent
+    StdinTasker --> StdinEvent
+    CustomTasker --> OneBotEvent
     
-    WebUI -->|HTTP/WS| Bot
-    ThirdAPI -->|HTTP/WS| Bot
+    OneBotEvent --> PluginsLoader
+    DeviceEvent --> PluginsLoader
+    StdinEvent --> PluginsLoader
+    
+    PluginsLoader --> Plugins
+    
+    WebUI --> Bot
+    ThirdAPI --> Bot
     Bot --> ApiLoader
     ApiLoader --> HttpApis
     
@@ -76,10 +84,30 @@ flowchart TB
     HttpApis --> BaseClasses
     Streams --> BaseClasses
     
-    Bot --> Infrastructure
-    Infrastructure --> Tasker
-    Infrastructure --> EventSystem
-    Infrastructure --> Business
+    Bot --> TaskerLoader
+    Bot --> PluginsLoader
+    Bot --> ApiLoader
+    Bot --> StreamLoader
+    Bot --> ListenerLoader
+    Bot --> BaseClasses
+    
+    TaskerLoader --> OneBotTasker
+    TaskerLoader --> ComWeChatTasker
+    TaskerLoader --> StdinTasker
+    TaskerLoader --> CustomTasker
+    
+    ListenerLoader --> OneBotEvent
+    ListenerLoader --> DeviceEvent
+    ListenerLoader --> StdinEvent
+    
+    StreamLoader --> Streams
+    
+    style Clients fill:#E6F3FF
+    style Runtime fill:#FFE6CC
+    style Infrastructure fill:#90EE90
+    style Tasker fill:#87CEEB
+    style EventSystem fill:#FFB6C1
+    style Business fill:#DDA0DD
 ```
 
 ### 📋 各层职责说明
@@ -120,29 +148,56 @@ flowchart TB
 ## 架构总览图（核心组件关系）
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph Clients["外部客户端"]
-      QQ["QQ / OneBotv11"] -->|WS| Taskers
-      WeChat["ComWeChat 等"] -->|WS/HTTP| Taskers
-      WebUI["XRK Web 控制台"] -->|HTTP/WS| Express
-      ThirdAPI["第三方调用方"] -->|HTTP/WS| Express
+      QQ["QQ / OneBotv11"]
+      WeChat["ComWeChat 等"]
+      WebUI["XRK Web 控制台"]
+      ThirdAPI["第三方调用方"]
+    end
+
+    subgraph Protocol["协议转换"]
+      ProtocolConv["协议转换层"]
     end
 
     subgraph Core["XRK-AGT 核心"]
-      Taskers["任务层<br/>core/tasker"] -->|Bot.em 事件| EventSystem
-      EventSystem["事件系统<br/>core/events"] -->|去重/标记| PluginsLoader
-      Express["HTTP/HTTPS/WS 服务<br/>src/bot.js"] --> ApiLoader
-      ApiLoader["API 加载器<br/>src/infrastructure/http"] --> HttpApis
-      PluginsLoader["插件加载器<br/>src/infrastructure/plugins"] --> Plugins["业务插件<br/>core/plugin"]
-      Plugins --> AIStream["AI 工作流基类<br/>src/infrastructure/aistream"]
-      Plugins --> Renderer["渲染器基类<br/>src/infrastructure/renderer"]
-      Plugins --> Config["配置系统<br/>src/infrastructure/commonconfig"]
-      Plugins --> Redis[("Redis")]
-      Plugins --> MongoDB[("MongoDB")]
-      HttpApis["HTTP API<br/>core/http"] --> AIStream
-      HttpApis --> Renderer
-      HttpApis --> Config
+      Express["HTTP/HTTPS/WS 服务<br/>src/bot.js"]
+      Taskers["任务层<br/>core/tasker"]
+      EventSystem["事件系统<br/>core/events"]
+      PluginsLoader["插件加载器<br/>src/infrastructure/plugins"]
+      ApiLoader["API 加载器<br/>src/infrastructure/http"]
+      Plugins["业务插件<br/>core/plugin"]
+      HttpApis["HTTP API<br/>core/http"]
+      AIStream["AI 工作流基类<br/>src/infrastructure/aistream"]
+      Renderer["渲染器基类<br/>src/infrastructure/renderer"]
+      Config["配置系统<br/>src/infrastructure/commonconfig"]
+      Redis[("Redis")]
+      MongoDB[("MongoDB")]
     end
+
+    QQ -->|WS| ProtocolConv
+    WeChat -->|WS/HTTP| ProtocolConv
+    WebUI -->|HTTP/WS| Express
+    ThirdAPI -->|HTTP/WS| Express
+    
+    ProtocolConv --> Taskers
+    Taskers -->|Bot.em 事件| EventSystem
+    EventSystem -->|去重/标记| PluginsLoader
+    Express --> ApiLoader
+    ApiLoader --> HttpApis
+    PluginsLoader --> Plugins
+    Plugins --> AIStream
+    Plugins --> Renderer
+    Plugins --> Config
+    Plugins --> Redis
+    Plugins --> MongoDB
+    HttpApis --> AIStream
+    HttpApis --> Renderer
+    HttpApis --> Config
+    
+    style Clients fill:#E6F3FF
+    style Protocol fill:#FFE6CC
+    style Core fill:#90EE90
 ```
 
 ---
@@ -207,37 +262,37 @@ flowchart LR
 
 ```mermaid
 graph TD
-    Root[XRK-AGT/] --> App[app.js / start.js<br/>启动入口]
-    Root --> Src[src/<br/>运行核心与基础设施]
-    Root --> Core[core/<br/>业务层与任务层]
-    Root --> Config[config/<br/>默认配置]
-    Root --> Data[data/<br/>运行期数据]
-    Root --> Www[www/<br/>前端静态资源]
-    Root --> Docs[docs/<br/>模块文档]
-    Root --> Resources[resources/<br/>渲染模板]
-    Root --> Temp[temp/<br/>临时文件]
-    Root --> Trash[trash/<br/>回收站]
+    Root["XRK-AGT/"] --> App["app.js / start.js<br/>启动入口"]
+    Root --> Src["src/<br/>运行核心与基础设施"]
+    Root --> Core["core/<br/>业务层与任务层"]
+    Root --> Config["config/<br/>默认配置"]
+    Root --> Data["data/<br/>运行期数据"]
+    Root --> Www["www/<br/>前端静态资源"]
+    Root --> Docs["docs/<br/>模块文档"]
+    Root --> Resources["resources/<br/>渲染模板"]
+    Root --> Temp["temp/<br/>临时文件"]
+    Root --> Trash["trash/<br/>回收站"]
     
-    Src --> Bot[bot.js<br/>Bot主类]
-    Src --> Infra[infrastructure/<br/>基础设施层]
-    Src --> Factory[factory/<br/>工厂类]
-    Src --> Modules[modules/<br/>业务模块]
-    Src --> Renderers[renderers/<br/>渲染实现]
-    Src --> Utils[utils/<br/>工具函数]
+    Src --> Bot["bot.js<br/>Bot主类"]
+    Src --> Infra["infrastructure/<br/>基础设施层"]
+    Src --> Factory["factory/<br/>工厂类"]
+    Src --> Modules["modules/<br/>业务模块"]
+    Src --> Renderers["renderers/<br/>渲染实现"]
+    Src --> Utils["utils/<br/>工具函数"]
     
-    Infra --> TaskerLoader[tasker/loader.js]
-    Infra --> PluginsInfra[plugins/<br/>插件系统]
-    Infra --> ListenerInfra[listener/<br/>事件监听器]
-    Infra --> HttpInfra[http/<br/>HTTP API]
-    Infra --> AistreamInfra[aistream/<br/>AI工作流]
-    Infra --> RendererInfra[renderer/<br/>渲染器]
-    Infra --> ConfigInfra[commonconfig/<br/>配置系统]
+    Infra --> TaskerLoader["tasker/loader.js"]
+    Infra --> PluginsInfra["plugins/<br/>插件系统"]
+    Infra --> ListenerInfra["listener/<br/>事件监听器"]
+    Infra --> HttpInfra["http/<br/>HTTP API"]
+    Infra --> AistreamInfra["aistream/<br/>AI工作流"]
+    Infra --> RendererInfra["renderer/<br/>渲染器"]
+    Infra --> ConfigInfra["commonconfig/<br/>配置系统"]
     
-    Core --> TaskerCore[tasker/<br/>任务层]
-    Core --> Events[events/<br/>事件系统]
-    Core --> PluginCore[plugin/<br/>业务插件]
-    Core --> HttpCore[http/<br/>HTTP API]
-    Core --> StreamCore[stream/<br/>工作流]
+    Core --> TaskerCore["tasker/<br/>任务层"]
+    Core --> Events["events/<br/>事件系统"]
+    Core --> PluginCore["plugin/<br/>业务插件"]
+    Core --> HttpCore["http/<br/>HTTP API"]
+    Core --> StreamCore["stream/<br/>工作流"]
     
     style Root fill:#FFD700
     style Bot fill:#87CEEB
@@ -290,11 +345,11 @@ graph TD
 
 ```mermaid
 flowchart TB
-    A[克隆项目] --> B[安装依赖<br/>pnpm install]
-    B --> C[运行项目<br/>node app]
-    C --> D[首次登录<br/>按终端提示]
-    D --> E[访问Web控制台<br/>默认2537端口]
-    E --> F[开始使用]
+    A["克隆项目"] --> B["安装依赖<br/>pnpm install"]
+    B --> C["运行项目<br/>node app"]
+    C --> D["首次登录<br/>按终端提示"]
+    D --> E["访问Web控制台<br/>默认2537端口"]
+    E --> F["开始使用"]
     
     style A fill:#E6F3FF
     style B fill:#FFE6CC
