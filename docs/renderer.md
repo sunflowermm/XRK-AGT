@@ -1,5 +1,7 @@
 ## Renderer 文档（src/infrastructure/renderer/Renderer.js）
 
+> **可扩展性**：Renderer是渲染系统的核心基类。通过继承Renderer，开发者可以快速创建自定义渲染器，支持HTML模板、图片生成等功能。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+
 `Renderer` 是 XRK-AGT 中的 **渲染器基类**，用于统一：
 
 - HTML 模板渲染。
@@ -7,6 +9,13 @@
 - 模板文件监听与自动重载。
 
 具体渲染实现（如 Puppeteer/Playwright 渲染图片）会基于此类封装生成 HTML，再交给浏览器引擎截图。
+
+### 扩展特性
+
+- ✅ **模板系统**：支持art-template模板引擎
+- ✅ **文件监听**：自动监听模板文件变更
+- ✅ **缓存机制**：模板内容自动缓存
+- ✅ **灵活渲染**：支持多种渲染方式（image/html/pdf）
 
 ---
 

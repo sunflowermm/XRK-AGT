@@ -1,6 +1,19 @@
 ## AIStream 文档（src/infrastructure/aistream/aistream.js）
 
+> **注意**：本文档是AIStream基类的技术文档。  
+> **完整文档**：请参考 **[工作流系统完整文档](工作流系统完整文档.md)** - 包含系统概述、架构设计、执行流程等完整内容。  
+> **可扩展性**：AIStream是工作流系统的核心扩展点。通过继承AIStream，开发者可以快速创建自定义工作流。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+
 `AIStream` 是 XRK-AGT 中的 **AI 工作流基类**，用于封装：
+
+### 扩展特性
+
+- ✅ **零配置扩展**：放置到 `core/stream/` 目录即可自动加载
+- ✅ **函数注册系统**：支持动态prompt和复杂解析
+- ✅ **Embedding提供商**：支持多种Embedding提供商（lightweight/onnx/hf/fasttext/api）
+- ✅ **工作流合并**：支持功能合并和组合
+- ✅ **上下文增强**：自动上下文检索和增强
+- ✅ **热重载支持**：修改代码后自动重载
 
 - 调用外部 Chat Completion API（如 OpenAI 兼容接口）。
 - 多种 Embedding 提供商（ONNX/HuggingFace/FastText/API/轻量级 BM25）。

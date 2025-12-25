@@ -90,7 +90,19 @@ flowchart TB
 
 ### 🤖 AI 工作流
 
-- **[AI Stream](aistream.md)** - `AIStream` 基类，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强
+- **[工作流系统完整文档](工作流系统完整文档.md)** - **工作流系统完整文档** ⭐ 推荐
+  - 系统概述与核心架构
+  - 工作流执行流程（简单任务和复杂任务）
+  - 工作流管理器详解
+  - 工作流开发指南
+  - 记忆系统与工作流合并机制
+  - MCP工具注册
+  - 最佳实践与常见问题
+- **[工作流开发文档](工作流开发文档.md)** - 工作流开发文档（补充）
+- **[复杂任务示例](workflow-complex-task-example.md)** - 复杂任务完整调用流程模拟
+- **[记忆系统文档](workflow-memory-system.md)** - 工作流记忆系统详细文档
+- **[MCP完整指南](mcp-guide.md)** - MCP工具注册与连接
+- **[AI Stream](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强
 
 ### ⚙️ 配置与工具
 
@@ -113,7 +125,7 @@ flowchart TB
 3. **[插件基类](plugin-base.md)** - 学习插件基类与规则/上下文用法
 4. **[插件加载器](plugins-loader.md)** - 了解事件如何流转到插件
 5. **[事件系统](事件系统标准化文档.md)** - 了解事件命名规范和监听方式
-6. **[AI Stream](aistream.md)** - 需要使用 AI 工作流时再阅读
+6. **[工作流系统完整文档](工作流系统完整文档.md)** - 需要使用 AI 工作流时再阅读
 
 ### Tasker 开发者（任务层/事件生成器开发者）
 
