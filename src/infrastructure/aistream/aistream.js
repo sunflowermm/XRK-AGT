@@ -728,6 +728,9 @@ export default class AIStream {
   }
 
   async buildEnhancedContext(e, question, baseMessages) {
+    // 注入辅助工作流的上下文（如记忆和知识库）
+    // 注意：知识库和记忆信息现在通过buildFunctionsPrompt自动展示，这里不再重复注入
+
     if (!this.embeddingConfig.enabled || !this.embeddingReady) {
       return baseMessages;
     }
@@ -829,10 +832,13 @@ export default class AIStream {
       description = ''
     } = options;
 
+    // 支持prompt为函数类型，用于动态生成（如包含知识库列表）
+    const resolvedPrompt = typeof prompt === 'function' ? prompt() : prompt;
+
     this.functions.set(name, {
       name,
       handler,
-      prompt,
+      prompt: resolvedPrompt,
       parser,
       enabled: this.functionToggles[name] ?? enabled,
       permission,
@@ -927,13 +933,15 @@ export default class AIStream {
     throw new Error('buildSystemPrompt需要子类实现');
   }
 
+
   buildFunctionsPrompt() {
     const enabledFuncs = this.getEnabledFunctions();
     if (enabledFuncs.length === 0) return '';
 
+    // 动态解析prompt（如果为函数类型）
     const prompts = enabledFuncs
       .filter(f => f.prompt)
-      .map(f => f.prompt)
+      .map(f => typeof f.prompt === 'function' ? f.prompt() : f.prompt)
       .join('\n');
 
     return prompts ? `\n【功能列表】\n${prompts}` : '';
@@ -1389,12 +1397,14 @@ export default class AIStream {
 
   /**
    * 处理工作流（支持合并工作流和TODO决策）
+   * 优化：简化调用方式，支持丰富的参数配置
    * @param {Object} e - 事件对象
    * @param {string|Object} question - 用户问题
    * @param {Object} options - 处理选项
    *   - mergeStreams: Array<string> - 要合并的工作流名称列表
    *   - enableTodo: boolean - 是否启用TODO智能决策
    *   - enableMemory: boolean - 是否启用记忆系统
+   *   - enableDatabase: boolean - 是否启用知识库系统
    *   - apiConfig: Object - LLM配置
    * @returns {Promise<string|null>} 响应文本
    */
@@ -1404,15 +1414,22 @@ export default class AIStream {
         mergeStreams = [],
         enableTodo = false,
         enableMemory = false,
+        enableDatabase = false,
         ...apiConfig
       } = options;
 
       let StreamLoader = null;
-      if (mergeStreams.length > 0 || enableTodo) {
+      if (mergeStreams.length > 0 || enableTodo || enableMemory || enableDatabase) {
         StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
       }
 
       let stream = this;
+      
+      // 自动合并辅助工作流（如果启用）
+      if (enableMemory || enableDatabase) {
+        await this.autoMergeAuxiliaryStreams(stream, { enableMemory, enableDatabase });
+      }
+      
       if (mergeStreams.length > 0) {
         const mergedName = `${this.name}-${mergeStreams.join('-')}`;
         stream = StreamLoader.getStream(mergedName) ||
@@ -1434,9 +1451,12 @@ export default class AIStream {
       const response = await stream.execute(e, finalQuestion, apiConfig);
       
       // 步骤2: 检查是否需要自动启动工作流
-      // 只有在enableTodo=true且AI没有启动工作流的情况下才尝试自动启动
-      if (enableTodo && response && !this.hasWorkflowCommand(response)) {
-        await this.maybeAutoStartWorkflow(stream, e, question);
+      // 只有在AI明确输出了工作流命令时才启动工作流
+      // 如果AI输出了其他命令，说明AI认为这是简单任务，不需要工作流
+      // 如果AI没有输出任何命令，说明AI可能还在等待信息或认为需要更多信息，不应该自动启动工作流
+      if (enableTodo && response && this.hasWorkflowCommand(response)) {
+        // AI已经明确要求启动工作流，不需要再调用任务分析助手
+        // 工作流会在execute中通过start_workflow handler自动启动
       }
       
       return response;
@@ -1493,44 +1513,76 @@ export default class AIStream {
   }
 
   /**
-   * 可能自动启动工作流（如果满足条件）
+   * 自动合并辅助工作流（简化调用方式）
+   * @param {Object} stream - 主工作流
+   * @param {Object} options - 选项
+   *   - enableMemory: boolean - 是否启用记忆系统
+   *   - enableDatabase: boolean - 是否启用知识库
    */
-  async maybeAutoStartWorkflow(stream, e, question) {
-    if (!stream.workflowManager) return;
+  async autoMergeAuxiliaryStreams(stream, options = {}) {
+    const { enableMemory = false, enableDatabase = false } = options;
+    const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
     
-    // 检查是否已有运行中的工作流
-    if (this.hasRunningWorkflow(stream, e)) {
-      return;
+    const auxiliaryStreams = [];
+    if (enableMemory) auxiliaryStreams.push('memory');
+    if (enableDatabase) auxiliaryStreams.push('database');
+    
+    for (const streamName of auxiliaryStreams) {
+      try {
+        let auxStream = StreamLoader.getStream(streamName);
+        
+        // 如果stream不存在，尝试创建
+        if (!auxStream) {
+          const StreamClass = await this.loadAuxiliaryStreamClass(streamName);
+          if (StreamClass) {
+            auxStream = new StreamClass();
+            await auxStream.init();
+            StreamLoader.registerStream(streamName, auxStream);
+          }
+        }
+        
+        if (auxStream) {
+          // 合并辅助工作流的功能
+          const result = stream.merge(auxStream, { prefix: '' });
+          BotUtil.makeLog('debug', `[${stream.name}] 自动合并辅助工作流 ${streamName}: +${result.mergedCount} 个函数`, 'AIStream');
+          
+          // 特殊处理：memory stream需要注入记忆到context
+          if (streamName === 'memory' && auxStream.getMemoriesForContext) {
+            const memories = await auxStream.getMemoriesForContext({ e: stream.context?.e });
+            if (memories.length > 0) {
+              if (!stream._auxiliaryContext) {
+                stream._auxiliaryContext = {};
+              }
+              stream._auxiliaryContext.memories = memories;
+            }
+          }
+        }
+      } catch (error) {
+        BotUtil.makeLog('warn', `[${stream.name}] 自动合并辅助工作流 ${streamName} 失败: ${error.message}`, 'AIStream');
+      }
     }
-    
-    this.ensureWorkflowManager(stream);
-    await this.tryStartWorkflow(stream, e, question);
   }
 
   /**
-   * 检查是否已有运行中的工作流
+   * 加载辅助工作流类（简化调用方式）
    */
-  hasRunningWorkflow(stream, e) {
-    const { activeWorkflows } = stream.workflowManager || {};
-    if (!activeWorkflows?.size) return false;
-    
-    const userId = e?.user_id || e?.user?.id || '';
-    return Array.from(activeWorkflows.values()).some(w => {
-      const workflowUserId = w.context?.e?.user_id || w.context?.e?.user?.id || '';
-      return w.status === 'running' && workflowUserId === userId;
-    });
-  }
-
-  /**
-   * 尝试启动工作流
-   */
-  async tryStartWorkflow(stream, e, question) {
-    const questionText = this.extractQuestionText(question);
-    const decision = await stream.workflowManager.decideWorkflowMode(e, questionText);
-    
-    if (decision.shouldUseTodo && decision.todos.length > 0) {
-      await stream.workflowManager.createWorkflow(e, questionText, decision.todos);
+  async loadAuxiliaryStreamClass(streamName) {
+    try {
+      const streamMap = {
+        'memory': () => import('#core/stream/memory.js'),
+        'database': () => import('#core/stream/database.js'),
+        'todo': () => import('#core/stream/todo.js')
+      };
+      
+      const loader = streamMap[streamName];
+      if (loader) {
+        const module = await loader();
+        return module.default;
+      }
+    } catch (error) {
+      BotUtil.makeLog('error', `加载辅助工作流类 ${streamName} 失败: ${error.message}`, 'AIStream');
     }
+    return null;
   }
 
   /**

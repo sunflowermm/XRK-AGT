@@ -1013,13 +1013,15 @@ export default class ChatStream extends AIStream {
       .filter(f => f.prompt)
       .map(f => f.prompt);
 
-    if (prompts.length === 0) return '';
+    // 动态解析prompt（如果为函数类型）
+    const resolvedPrompts = prompts.map(p => typeof p === 'function' ? p() : p);
+
+    if (resolvedPrompts.length === 0) return '';
 
     return `【可执行命令列表】
 在回复中使用以下格式时，系统会自动解析并执行，然后从文本中移除命令格式。
 
 格式要求：精确匹配示例（类似正则），如[命令:参数1:参数2]。执行后命令格式会被移除，用户只看到普通文本。
-
 【消息段格式】
 以下格式会作为消息段整合到回复中，保持顺序：
 [开心] [惊讶] [伤心] [大笑] [害怕] [生气] - 表情包（可与其他内容组合，保持顺序）
@@ -1033,7 +1035,7 @@ export default class ChatStream extends AIStream {
 - 例如：聊天记录显示"张三(123456)[消息ID:1051113239]: 你好"，要回复这条消息，使用 [CQ:reply,id=1051113239]
 
 可用命令：
-${prompts.join('\n')}
+${resolvedPrompts.join('\n')}
 
 示例：[开心]今天真好→发送表情+文本（顺序：表情在前） | 今天真好[开心]→文本+表情（顺序：文本在前） | [禁言:123456:600]→禁言600秒
 注意：格式完全匹配，参数完整，执行结果不显示在回复中但功能生效`;

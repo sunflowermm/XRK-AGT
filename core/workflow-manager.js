@@ -1179,10 +1179,12 @@ ${contextInfo}
     const funcPrompts = [];
     
     // 合并所有stream的func.prompt（包括mergedStreams）
+    // 动态解析prompt（如果为函数类型）
     for (const func of allFunctions) {
       if (func.onlyTopLevel || !func.enabled || !func.prompt) continue;
       
-      const simplified = this.simplifyPrompt(func.prompt);
+      const resolvedPrompt = typeof func.prompt === 'function' ? func.prompt() : func.prompt;
+      const simplified = this.simplifyPrompt(resolvedPrompt);
       if (simplified && !funcPrompts.includes(simplified)) {
         funcPrompts.push(simplified);
       }
@@ -1196,11 +1198,10 @@ ${contextInfo}
 - [读取:文件1.txt][读取:文件2.txt] - 同时读取两个文件
 - [回桌面] - 单个命令
 - [完成] - 标记当前任务已完成
-
-【重要】输出格式要求：
+【输出格式要求】
 - 必须同时输出[]指令和自然语言说明
 - 例如："好的，我来帮你回到桌面。[回桌面]"
-- 自然语言说明会在回复中显示给用户
+- 自然语言说明会在回复中显示给用户，让用户了解执行情况
 
 【可用工具列表】
 ${funcPrompts.map(p => `- ${p}`).join('\n')}

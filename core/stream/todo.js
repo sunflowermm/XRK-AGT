@@ -37,6 +37,10 @@ export default class TodoStream extends AIStream {
     this.workflowManager.stream = targetStream;
   }
 
+  /**
+   * 构建系统提示（辅助工作流，合并时不会被调用）
+   * 只有注册的函数的prompt字段会被合并到主工作流
+   */
   buildSystemPrompt(context) {
     return 'TODO工作流插件，为其他工作流提供多步骤任务执行能力。';
   }

@@ -1307,6 +1307,9 @@ export default class DesktopStream extends AIStream {
 
     if (prompts.length === 0) return '';
 
+    // 动态解析prompt（如果为函数类型）
+    const resolvedPrompts = prompts.map(p => typeof p === 'function' ? p() : p);
+
     return `【可执行命令列表】
 在回复中使用以下格式时，系统会自动解析并执行，然后从文本中移除命令格式。
 
@@ -1315,7 +1318,7 @@ export default class DesktopStream extends AIStream {
 重要：使用命令时，必须在回复中包含自然对话内容，不要只执行功能不说话！可以多说几句作为捧哏、提醒或告诫，让对话更生动自然。
 
 可用命令：
-${prompts.join('\n')}
+${resolvedPrompts.join('\n')}
 
 示例：
 - "[打开计算器]好的，马上帮你打开计算器，这样你就可以算账啦~" → 执行打开计算器+回复文本
