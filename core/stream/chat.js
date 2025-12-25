@@ -1259,6 +1259,15 @@ ${isGlobalTrigger ?
       // 解析功能和文本
       const { functions, cleanText } = this.parseFunctions(response, context);
       
+      // 先发送自然语言回复（如果有），然后再执行函数
+      // 这样可以确保用户先看到AI的自然语言回复，然后才看到工作流启动等操作
+      let naturalLanguageSent = false;
+      if (cleanText && cleanText.trim()) {
+        // 立即发送自然语言回复
+        await this.sendMessages(e, cleanText.trim());
+        naturalLanguageSent = true;
+      }
+      
       // 执行所有功能（记录到历史）
       const executedFunctions = [];
       for (const func of functions) {
@@ -1270,8 +1279,8 @@ ${isGlobalTrigger ?
         }
       }
       
-      if (cleanText && cleanText.trim()) {
-        // 记录AI响应到内存历史（包含执行的函数信息）
+      // 记录AI响应到内存历史（包含执行的函数信息）
+      if (naturalLanguageSent) {
         if (e?.isGroup && e.group_id) {
           const history = ChatStream.messageHistory.get(e.group_id) || [];
           const functionInfo = executedFunctions.length > 0 
@@ -1290,8 +1299,6 @@ ${isGlobalTrigger ?
           }
         }
         
-        await this.sendMessages(e, cleanText);
-        
         // 记录到embedding记忆系统（包含执行的函数信息）
         if (this.embeddingConfig?.enabled) {
           const historyKey = e.group_id || `private_${e.user_id}`;
@@ -1308,7 +1315,7 @@ ${isGlobalTrigger ?
         }
       }
       
-      return '';
+      return naturalLanguageSent ? cleanText : '';
     } catch (error) {
       BotUtil.makeLog('error', 
         `工作流执行失败[${this.name}]: ${error.message}`, 

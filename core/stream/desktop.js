@@ -8,6 +8,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import { BaseTools } from '#utils/base-tools.js';
 import si from 'systeminformation';
+import fetch from 'node-fetch';
 
 // 仅在需要的平台上做判断，避免无意义的常量
 const IS_WINDOWS = process.platform === 'win32';
@@ -52,12 +53,12 @@ export default class DesktopStream extends AIStream {
         provider: 'lightweight'
       }
     });
-    
+
     // 工作区：桌面目录（desktop工作流的默认工作区）
-    this.workspace = IS_WINDOWS 
+    this.workspace = IS_WINDOWS
       ? path.join(os.homedir(), 'Desktop')
       : path.join(os.homedir(), 'Desktop');
-    
+
     // 初始化统一工具系统
     this.tools = new BaseTools(this.workspace);
     this.processCleanupInterval = null;
@@ -88,13 +89,13 @@ export default class DesktopStream extends AIStream {
       const ToolsStream = (await import('./tools.js')).default;
       const toolsStream = new ToolsStream();
       await toolsStream.init();
-      
+
       const result = this.merge(toolsStream);
       BotUtil.makeLog('info', `[${this.name}] 已合并 ToolsStream: +${result.mergedCount} 个函数，总计: ${this.functions.size} 个`, 'DesktopStream');
     } catch (error) {
       BotUtil.makeLog('error', `[${this.name}] 合并 ToolsStream 失败: ${error.message}`, 'DesktopStream');
     }
-    
+
     // 启动进程清理监控（每30秒检查一次）
     if (IS_WINDOWS) {
       this.processCleanupInterval = setInterval(async () => {
@@ -108,7 +109,7 @@ export default class DesktopStream extends AIStream {
         }
       }, 30000);
     }
-    
+
     BotUtil.makeLog('info', `[${this.name}] 工作流已初始化`, 'DesktopStream');
   }
 
@@ -176,7 +177,7 @@ export default class DesktopStream extends AIStream {
         if (!tool) return;
 
         const toolNames = { notepad: '记事本', calc: '计算器', taskmgr: '任务管理器' };
-        
+
         try {
           await execCommand(`start "" ${tool}`, { shell: 'cmd.exe' });
           context.executedTool = toolNames[tool] || '应用';
@@ -201,28 +202,28 @@ export default class DesktopStream extends AIStream {
       handler: async (params, context) => {
         try {
           const screenshot = (await import('screenshot-desktop')).default;
-          
+
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
           const screenshotDir = path.join(paths.trash, 'screenshot');
           await fs.mkdir(screenshotDir, { recursive: true });
-          
+
           const filename = `screenshot_${timestamp}.png`;
           const screenshotPath = path.join(screenshotDir, filename);
-          
+
           const img = await screenshot({ screen: -1 });
           await fs.writeFile(screenshotPath, img);
-          
+
           const stats = await fs.stat(screenshotPath);
           if (stats.size === 0) {
             throw new Error('截屏文件为空');
           }
-    
+
           if (context.e) {
             await context.e.reply([
               { type: 'image', data: { file: screenshotPath } }
             ]);
           }
-          
+
           BotUtil.makeLog('info', `截图成功: ${screenshotPath} (${stats.size} bytes)`, 'DesktopStream');
         } catch (err) {
           BotUtil.makeLog('error', `[desktop] 截屏失败: ${err.message}`, 'DesktopStream');
@@ -425,10 +426,10 @@ export default class DesktopStream extends AIStream {
           const workspace = this.getWorkspace();
           const safeName = folderName.replace(/[<>:"/\\|?*]/g, '_');
           const folderPath = path.join(workspace, safeName);
-          
+
           // 使用Node.js创建文件夹
           await fs.mkdir(folderPath, { recursive: true });
-          
+
           context.createdFolder = safeName;
         } catch (err) {
           this.handleError(context, err, '创建文件夹');
@@ -489,7 +490,7 @@ export default class DesktopStream extends AIStream {
             const usedGB = disk.used / 1024 / 1024 / 1024; // GB
             const freeGB = (disk.size - disk.used) / 1024 / 1024 / 1024; // GB
             const usedPercent = ((disk.used / disk.size) * 100).toFixed(1);
-            
+
             disks.push(`${disk.mount} ${usedPercent}% 已用 (${freeGB.toFixed(2)}GB / ${totalGB.toFixed(2)}GB 可用)`);
           }
 
@@ -534,7 +535,7 @@ export default class DesktopStream extends AIStream {
           // 设置工作区为桌面
           const workspace = this.getWorkspace();
           const fullCommand = `cd "${workspace}"; ${command}`;
-          
+
           const output = await execCommand(
             `powershell -NoProfile -ExecutionPolicy Bypass -Command "${fullCommand.replace(/"/g, '\\"')}"`,
             { maxBuffer: 10 * 1024 * 1024, cwd: workspace },
@@ -721,7 +722,7 @@ export default class DesktopStream extends AIStream {
           // 动态导入docx库
           const docxModule = await import('docx');
           const { Document, Packer, Paragraph, TextRun } = docxModule;
-          
+
           const workspace = this.getWorkspace();
           const safeFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
           const filePath = path.join(workspace, safeFileName.endsWith('.docx') ? safeFileName : `${safeFileName}.docx`);
@@ -729,7 +730,7 @@ export default class DesktopStream extends AIStream {
           // 将内容按换行符分割成段落
           // 保留空行（如果原内容中有空行）
           const lines = content.split(/\n/);
-          const docParagraphs = lines.map(line => 
+          const docParagraphs = lines.map(line =>
             new Paragraph({
               children: [new TextRun(line || ' ')] // 空行用空格代替
             })
@@ -748,20 +749,20 @@ export default class DesktopStream extends AIStream {
           // 生成并保存文档
           const buffer = await Packer.toBuffer(doc);
           await fs.writeFile(filePath, buffer);
-          
+
           // 验证文件是否生成
           const stats = await fs.stat(filePath);
           if (stats.size === 0) {
             throw new Error('Word文档文件为空');
           }
-          
+
           context.createdWordDoc = filePath;
-          
+
           // 发送成功消息
           if (context.e) {
             await context.e.reply(`✅ Word文档已生成：${safeFileName}`);
           }
-          
+
           BotUtil.makeLog('info', `Word文档生成成功: ${filePath} (${stats.size} bytes)`, 'DesktopStream');
         } catch (err) {
           BotUtil.makeLog('error', `Word文档生成失败: ${err.message}`, 'DesktopStream');
@@ -778,12 +779,12 @@ export default class DesktopStream extends AIStream {
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
-        
+
         // 使用更智能的匹配方式，能够处理JSON数组中包含的]字符
         const pattern = /\[生成Excel:([^:]+):/g;
         let match;
         const matches = [];
-        
+
         // 先找到所有[生成Excel:的位置
         while ((match = pattern.exec(text)) !== null) {
           matches.push({
@@ -792,39 +793,39 @@ export default class DesktopStream extends AIStream {
             dataStart: match.index + match[0].length
           });
         }
-        
+
         // 对每个匹配，尝试解析JSON数组（从后往前处理，避免索引问题）
         const toRemove = [];
         for (let i = matches.length - 1; i >= 0; i--) {
           const m = matches[i];
           const afterColon = text.slice(m.dataStart);
-          
+
           // 尝试找到完整的JSON数组（从[开始到匹配的]结束）
           let bracketCount = 0;
           let jsonEnd = -1;
           let inString = false;
           let escapeNext = false;
-          
+
           for (let j = 0; j < afterColon.length; j++) {
             const char = afterColon[j];
-            
+
             if (escapeNext) {
               escapeNext = false;
               continue;
             }
-            
+
             if (char === '\\') {
               escapeNext = true;
               continue;
             }
-            
+
             if (char === '"') {
               inString = !inString;
               continue;
             }
-            
+
             if (inString) continue;
-            
+
             if (char === '[') {
               bracketCount++;
             } else if (char === ']') {
@@ -836,14 +837,14 @@ export default class DesktopStream extends AIStream {
               }
             }
           }
-          
+
           if (jsonEnd > 0) {
             // jsonEnd是JSON数组结束的位置（包括]），需要检查后面是否还有命令结束符]
             let commandEnd = jsonEnd;
             if (afterColon[jsonEnd] === ']') {
               commandEnd = jsonEnd + 1;
             }
-            
+
             // 提取JSON数组字符串（不包括命令结束符]）
             const dataStr = afterColon.slice(0, jsonEnd).trim();
             if (dataStr.startsWith('[') && dataStr.endsWith(']')) {
@@ -852,12 +853,12 @@ export default class DesktopStream extends AIStream {
                 if (!Array.isArray(data)) {
                   continue;
                 }
-                functions.push({ 
-                  type: 'create_excel_document', 
+                functions.push({
+                  type: 'create_excel_document',
                   params: { fileName: m.fileName, data },
                   order: m.start
                 });
-                
+
                 // 记录需要移除的部分（从后往前处理，所以索引不会变化）
                 toRemove.push({
                   start: m.start,
@@ -870,7 +871,7 @@ export default class DesktopStream extends AIStream {
             }
           }
         }
-        
+
         // 从后往前移除匹配的部分，避免索引变化
         if (toRemove.length > 0) {
           let result = text;
@@ -897,7 +898,7 @@ export default class DesktopStream extends AIStream {
           // 动态导入exceljs库
           const ExcelJSModule = await import('exceljs');
           const ExcelJS = ExcelJSModule.default || ExcelJSModule;
-          
+
           // 使用工作区路径（桌面）
           const workspace = this.getWorkspace();
           const safeFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
@@ -910,7 +911,7 @@ export default class DesktopStream extends AIStream {
           if (data.length > 0) {
             // 获取表头（从第一条数据的键）
             const headers = Object.keys(data[0]);
-            
+
             // 设置表头样式
             worksheet.columns = headers.map(header => ({
               header: header,
@@ -954,17 +955,17 @@ export default class DesktopStream extends AIStream {
 
           // 保存文件
           await workbook.xlsx.writeFile(filePath);
-          
+
           // 验证文件是否生成
           try {
             await fs.access(filePath);
             context.createdExcelDoc = filePath;
-            
+
             // 发送成功消息
             if (context.e) {
               await context.e.reply(`✅ Excel文件已生成：${safeFileName}`);
             }
-            
+
             BotUtil.makeLog('info', `Excel文件生成成功: ${filePath}`, 'DesktopStream');
           } catch (fileErr) {
             throw new Error(`Excel文件未生成：${fileErr.message}`);
@@ -1022,7 +1023,6 @@ export default class DesktopStream extends AIStream {
         if (!goal || !this.workflowManager) return;
 
         // 禁止在已有工作流内部再次启动新的工作流，避免嵌套和重复创建
-        // 这个检查必须放在最前面，避免任何可能触发任务分析的调用
         if (context.workflowId) {
           BotUtil.makeLog('warn', `[start_workflow] 已忽略工作流内部请求："${goal}"（工作流ID: ${context.workflowId}）`, 'DesktopStream');
           try {
@@ -1033,6 +1033,8 @@ export default class DesktopStream extends AIStream {
           return;
         }
 
+        // 注意：自然语言回复已经在execute中发送了，这里不需要重复发送
+        // 直接启动工作流
         try {
           const workflowId = await this.createWorkflowFromGoal(context.e, goal);
           context.workflowId = workflowId;
@@ -1042,17 +1044,263 @@ export default class DesktopStream extends AIStream {
       },
       enabled: true
     });
+    this.registerFunction('stock_quote', {
+      description: '查询单只A股实时行情，并把结果记录到当前工作流的笔记中',
+      prompt: `[股票:代码] - 查询单只A股实时行情并写入工作流笔记，例如：[股票:600519]、[股票:000001]，只能是股票代码，不能是中文字符，并且如果执行之后会自动写进笔记`,
+      parser: (text, context) => {
+        const functions = [];
+        let cleanText = text;
+        const reg = /\[(?:股票|stock):(\d{6})\]/gi;
+        let match;
+
+        while ((match = reg.exec(text)) !== null) {
+          const code = (match[1] || '').trim();
+          if (code) {
+            functions.push({ type: 'stock_quote', params: { code } });
+          }
+        }
+
+        if (functions.length > 0) {
+          cleanText = text.replace(reg, '').trim();
+        }
+
+        return { functions, cleanText };
+      },
+      handler: async (params, context) => {
+        const code = params?.code;
+        const { e, workflowId } = context || {};
+
+        if (!code) return;
+
+        try {
+          const stockData = await this.fetchStockQuote(code);
+
+          if (!stockData) {
+            if (e) {
+              await e.reply(`没有查询到股票 ${code} 的有效行情数据，请确认代码是否正确。`);
+              await BotUtil.sleep(300);
+            }
+            if (workflowId) {
+              await this.storeNote(
+                workflowId,
+                `【股票查询失败】\n代码：${code}\n原因：未获取到有效数据`,
+                'stock',
+                true
+              );
+            }
+            return;
+          }
+
+          const {
+            name,
+            current,
+            change,
+            changePercent,
+            open,
+            preClose,
+            high,
+            low,
+            date,
+            time
+          } = stockData;
+
+          const summary =
+            `${name}（${code}）当前价格：${current.toFixed(2)}，` +
+            `涨跌：${parseFloat(change).toFixed(2)}（${parseFloat(changePercent).toFixed(2)}%）`;
+
+          if (e) {
+            await e.reply(
+              `${summary}\n` +
+              `今开：${open.toFixed(2)}，昨收：${preClose.toFixed(2)}，` +
+              `最高：${high.toFixed(2)}，最低：${low.toFixed(2)}\n` +
+              (date && time ? `数据时间：${date} ${time}` : '')
+            );
+            await BotUtil.sleep(300);
+          }
+
+          if (workflowId) {
+            const noteContent =
+              `【股票行情查询】\n` +
+              `代码：${code}\n名称：${name}\n` +
+              `当前价：${current.toFixed(2)}\n` +
+              `涨跌：${parseFloat(change).toFixed(2)}（${parseFloat(changePercent).toFixed(2)}%）\n` +
+              `今开：${open.toFixed(2)}  昨收：${preClose.toFixed(2)}\n` +
+              `最高：${high.toFixed(2)}  最低：${low.toFixed(2)}\n` +
+              (date && time ? `数据时间：${date} ${time}\n` : '') +
+              `（本条笔记由股票信息工作流自动生成，供后续多步工作流分析与决策使用）`;
+
+            await this.storeNote(workflowId, noteContent, 'stock', true);
+            context.stockNoteStored = true;
+          }
+        } catch (error) {
+          BotUtil.makeLog(
+            'error',
+            `[example] 股票行情查询异常(${code}): ${error.message}`,
+            'StockExampleStream'
+          );
+
+          if (context?.e) {
+            await context.e.reply(`查询股票 ${code} 行情时发生异常，请稍后再试。`);
+            await BotUtil.sleep(300);
+          }
+
+          if (context?.workflowId) {
+            await this.storeNote(
+              context.workflowId,
+              `【股票查询异常】\n代码：${code}\n错误：${error.message}`,
+              'stock',
+              true
+            );
+          }
+        }
+      },
+      enabled: true
+    });
   }
 
+  /**
+   * 解码GBK编码的响应数据
+   * 优先使用iconv-lite，如果不可用则使用兼容方案
+   */
+  decodeGBKResponse(buffer) {
+    // 优先使用iconv-lite解码GBK
+    try {
+      const iconv = require('iconv-lite');
+      return iconv.decode(buffer, 'gbk');
+    } catch (e) {
+      // 如果iconv-lite不可用，尝试使用TextDecoder
+      try {
+        const decoder = new TextDecoder('gbk', { fatal: false });
+        return decoder.decode(buffer);
+      } catch (e2) {
+        // 最后使用binary编码（兼容方案，可能无法完全正确解码）
+        BotUtil.makeLog('warn', '股票数据解码：使用binary编码，名称可能显示异常，建议安装iconv-lite', 'DesktopStream');
+        return buffer.toString('binary');
+      }
+    }
+  }
+
+  /**
+   * 获取股票行情数据
+   * 优化：改进GBK解码和名称解析
+   */
+  async fetchStockQuote(code) {
+    const SINA_API = 'https://hq.sinajs.cn/list=';
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // 获取股票代码前缀（ES6箭头函数）
+    const getStockPrefix = (c) => {
+      if (c.startsWith('6')) return `sh${c}`;
+      if (c.startsWith('0') || c.startsWith('3')) return `sz${c}`;
+      return `sh${c}`;
+    };
+
+    const parseStockData = (data, rawCode) => {
+      try {
+        const match = data.match(/="(.+)"/);
+        if (!match || !match[1]) {
+          return null;
+        }
+
+        const fields = match[1].split(',');
+
+        // 个股完整版
+        // 优化名称解析：正确处理GBK编码的中文名称
+        let name = fields[0] || '';
+        
+        if (name) {
+          name = name.trim();
+          
+          // 检查名称是否包含中文字符
+          const hasChinese = /[\u4e00-\u9fa5]/.test(name);
+          
+          if (hasChinese) {
+            // 如果包含中文，说明解码成功，只清理特殊字符
+            name = name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s\-\(\)（）]/g, '').trim();
+          } else {
+            // 如果不包含中文，可能是解码失败，尝试重新解码
+            // 或者名称本身就是英文/数字（如ETF、LOF等）
+            // 先检查是否是纯数字（可能是代码）
+            if (/^\d+$/.test(name)) {
+              // 如果是纯数字，说明名称字段可能是代码，使用代码作为名称
+              name = rawCode.replace(/^(sh|sz)/, '') || '未知';
+            } else {
+              // 否则保留原始名称（可能是英文名称）
+              name = name.trim();
+            }
+          }
+        } else {
+          // 如果名称为空，使用股票代码
+          name = rawCode.replace(/^(sh|sz)/, '') || '未知';
+        }
+
+        return {
+          code: rawCode,
+          name: name,
+          open: parseFloat(fields[1]) || 0,
+          preClose: parseFloat(fields[2]) || 0,
+          current: parseFloat(fields[3]) || 0,
+          high: parseFloat(fields[4]) || 0,
+          low: parseFloat(fields[5]) || 0,
+          buy: parseFloat(fields[6]) || 0,
+          sell: parseFloat(fields[7]) || 0,
+          volume: parseInt(fields[8]) || 0,
+          amount: parseFloat(fields[9]) || 0,
+          change: (parseFloat(fields[3]) - parseFloat(fields[2])).toFixed(2),
+          changePercent: (
+            ((parseFloat(fields[3]) - parseFloat(fields[2])) / parseFloat(fields[2])) *
+            100
+          ).toFixed(2),
+          date: fields[30] || '',
+          time: fields[31] || ''
+        };
+      } catch {
+        return null;
+      }
+    };
+
+    const stockCode = getStockPrefix(code);
+    const url = SINA_API + stockCode;
+
+    // 适当延时，避免频率过高
+    await delay(300);
+
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Referer: 'https://finance.sina.com.cn',
+        Accept: '*/*',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        Connection: 'keep-alive'
+      },
+      timeout: 10000
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    // 获取响应数据，新浪API返回的是GBK编码
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // 步骤1: 解码GBK编码的响应数据
+    const text = this.decodeGBKResponse(buffer);
+    
+    return parseStockData(text, stockCode);
+  }
 
   /**
    * 构建功能列表提示（优化版）
    * 清晰说明功能列表的作用、使用方式和执行机制
    */
   buildFunctionsPrompt() {
+    // 合并所有stream的prompt（功能都合并了，prompt也应该合并）
     const enabledFuncs = this.getEnabledFunctions();
     if (enabledFuncs.length === 0) return '';
 
+    // 合并所有stream的prompt
     const prompts = enabledFuncs
       .filter(f => f.prompt)
       .map(f => f.prompt);
@@ -1073,7 +1321,16 @@ ${prompts.join('\n')}
 - "[打开计算器]好的，马上帮你打开计算器，这样你就可以算账啦~" → 执行打开计算器+回复文本
 - "[回桌面]没问题，帮你回到桌面，这样找文件更方便" → 执行回桌面+回复文本
 - "[启动工作流:帮我打开微信]好的，我来帮你规划并执行这个任务" → 启动多步骤工作流
-注意：格式完全匹配，参数完整，必须同时回复文本内容，不要只执行功能不回复！`;
+
+【重要规则】
+1. 格式完全匹配，参数完整，必须同时回复文本内容，不要只执行功能不回复
+2. 【关键】如果要启动工作流（使用[启动工作流:目标]），必须遵守以下规则：
+   - 只能输出一个[启动工作流:目标]命令，不要输出多个
+   - 在同一回复中不要执行其他命令（如[回桌面]、[截屏]等）
+   - 正确示例：[启动工作流:帮我回桌面然后再截图]好的，我来帮你完成这个任务
+   - 错误示例：[回桌面][启动工作流:帮我回桌面然后再截图]（不要同时执行）
+   - 工作流启动后会自动执行所有步骤，不需要手动执行其他命令
+   - 如果用户要求多步骤任务，应该使用[启动工作流:目标]，而不是手动执行每一步`;
   }
 
   buildSystemPrompt(context) {
@@ -1085,25 +1342,24 @@ ${prompts.join('\n')}
     const now = new Date().toLocaleString('zh-CN');
     const isMaster = e?.isMaster === true;
     const workspace = this.getWorkspace();
-    
+
     // 优先从workflow context中获取文件内容（工作流场景）
     // 如果是在工作流中，workflowId会在context中
     let fileContent = context.fileContent;
     let fileSearchResult = context.fileSearchResult;
     let commandOutput = context.commandOutput;
-    
+
     const workflowContext = this.getWorkflowContext(context);
     if (workflowContext) {
       fileContent = workflowContext.fileContent || fileContent;
       fileSearchResult = workflowContext.fileSearchResult || fileSearchResult;
       commandOutput = workflowContext.commandOutput || commandOutput;
     }
-    
+
     const fileContext = this.buildFileContext(fileSearchResult, fileContent, commandOutput, context);
 
     return `【人设】
 ${persona}
-
 【工作区】
 工作区：${workspace}
 - 文件操作默认在此目录进行
@@ -1124,15 +1380,24 @@ ${persona}
 - 后续步骤可通过"工作流笔记"查看之前步骤的结果
 - 使用[笔记:内容]手动记录信息
    ${fileContext ? fileContext : ''}
-
 【时间】
 ${now}
-
 ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操作。\n\n' : ''}${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【规则】
 1. 执行功能时必须回复文本内容，不要只执行不回复
 2. 优先使用功能函数执行操作
 3. 文件操作默认在工作区进行
-4. 如果找到文件内容，请在回复中直接告知用户内容`;
+4. 如果找到文件内容，请在回复中直接告知用户内容
+5. 【关键】如果要启动工作流（使用[启动工作流:目标]），必须遵守以下规则：
+   - 只能输出一个[启动工作流:目标]命令，不要输出多个
+   - 启动工作流时，只输出[启动工作流:目标]和自然语言回复
+   - 不要同时执行其他命令（如[回桌面]、[截屏]等）
+   - 工作流启动后会自动执行所有步骤，不需要手动执行
+   - 如果用户要求多步骤任务，应该使用[启动工作流:目标]，而不是手动执行每一步
+
+【任务类型判断】
+- 简单任务：只需要一个操作即可完成，例如"查询股票"、"回到桌面"、"读取文件"
+- 复杂任务：需要多个步骤才能完成，例如"查股票然后生成表格"、"读取多个文件并合并"
+- 对于复杂任务，使用[启动工作流:目标]启动工作流，让系统自动执行所有步骤`;
   }
 
   async buildChatContext(e, question) {
@@ -1169,7 +1434,7 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
         message: text,
         message_id: Date.now().toString(),
         time: Date.now()
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     messages.push({
@@ -1187,22 +1452,24 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
     // 先创建 workflow 对象（但不执行），以便记录决策步骤
     const workflowId = `workflow_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     const tempWorkflow = this.workflowManager.createWorkflowObject(workflowId, goal, [], e);
-    
+
     // 使用临时 workflow 对象记录决策步骤
+    // 注意：任务分析助手不应该发送自然语言回复，只用于判断
     const decision = await this.workflowManager.decideWorkflowMode(e, goal, tempWorkflow);
-    const todos = decision.todos.length > 0 
-      ? decision.todos 
-      : await this.workflowManager.generateInitialTodos(goal, tempWorkflow);
     
+    const todos = decision.todos.length > 0
+      ? decision.todos
+      : await this.workflowManager.generateInitialTodos(goal, tempWorkflow);
+
     // 创建正式的工作流，并合并决策步骤
     const finalWorkflowId = await this.workflowManager.createWorkflow(e, goal, todos);
     const finalWorkflow = this.workflowManager.getWorkflow(finalWorkflowId);
-    
+
     // 将临时 workflow 的决策步骤复制到正式 workflow
     if (finalWorkflow && tempWorkflow.decisionSteps) {
       finalWorkflow.decisionSteps = tempWorkflow.decisionSteps;
     }
-    
+
     return finalWorkflowId;
   }
 
@@ -1211,7 +1478,7 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
    */
   getWorkflowContext(context) {
     if (!context.workflowId || !this.workflowManager) return null;
-    
+
     const workflow = this.workflowManager.getWorkflow(context.workflowId);
     return workflow?.context || null;
   }
@@ -1221,13 +1488,13 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
    */
   buildFileContext(fileSearchResult, fileContent, commandOutput, context) {
     const sections = [];
-    
+
     const fileSection = this.buildFileSection(fileSearchResult, fileContent, context);
     if (fileSection) sections.push(fileSection);
-    
+
     const commandSection = this.buildCommandSection(commandOutput, context);
     if (commandSection) sections.push(commandSection);
-    
+
     return sections.join('\n\n');
   }
 
@@ -1242,11 +1509,11 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
       const truncated = fileContent.length > 2000 ? '\n...(内容已截断)' : '';
       return `【已找到文件内容】\n文件名：${fileName}\n${filePath ? `文件路径：${filePath}\n` : ''}文件内容如下：\n${content}${truncated}\n\n请在回复中直接告知用户上述文件内容，或使用此内容完成后续任务（如生成Excel）。`;
     }
-    
+
     if (fileSearchResult?.found === false) {
       return `【文件查找结果】\n未找到文件：${context.fileError || '文件不存在'}`;
     }
-    
+
     return '';
   }
 
@@ -1255,7 +1522,7 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
    */
   buildCommandSection(commandOutput, context) {
     if (!commandOutput || !context.commandSuccess) return '';
-    
+
     const output = commandOutput.slice(0, 1000);
     const truncated = commandOutput.length > 1000 ? '\n...(输出已截断)' : '';
     return `【上一个命令的输出结果】\n${output}${truncated}\n\n可以使用此输出结果来完成当前任务。`;
@@ -1266,11 +1533,11 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
       clearInterval(this.processCleanupInterval);
       this.processCleanupInterval = null;
     }
-    
+
     if (this.tools) {
       await this.tools.cleanupProcesses();
     }
-    
+
     await super.cleanup();
   }
 }

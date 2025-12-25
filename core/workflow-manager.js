@@ -140,22 +140,15 @@ export class WorkflowManager {
   }
 
   /**
-   * 格式化步骤文本
+   * 格式化步骤文本（不包含自然语言回复）
    */
   formatStepText(progress, data) {
     const stepNum = data.stepNum || (progress.completed + 1);
     const completion = data.completion || 0.5;
     const status = this.getStepStatusIcon(completion);
     
-    // 构建基础状态信息
-    let text = `${status} [${stepNum}/${progress.total}] ${data.task || ''}\n执行: ${data.action || ''}`;
-    
-    // 如果有AI的自然语言回复，添加到消息中
-    if (data.aiMessage && data.aiMessage.trim()) {
-      text += `\n\n💬 ${data.aiMessage}`;
-    }
-    
-    return text;
+    // 构建基础状态信息（不包含自然语言）
+    return `${status} [${stepNum}/${progress.total}] ${data.task || ''}\n执行: ${data.action || ''}`;
   }
 
   /**
@@ -171,15 +164,31 @@ export class WorkflowManager {
    * 判断是否需要工作流
    */
   async decideWorkflowMode(e, goal, workflow = null) {
-    // 查找已存在的相同工作流
-    const existing = Array.from(this.activeWorkflows.values())
-      .find(w => w.status === WORKFLOW_STATUS.RUNNING && w.goal === goal);
-    
+    // 检查是否已有运行中的工作流
+    const existing = this.findExistingWorkflow(e, goal);
     if (existing) {
-      return { shouldUseTodo: false, response: '已有相同工作流运行中', todos: [] };
+      const userId = e?.user_id || e?.user?.id || '';
+      BotUtil.makeLog('debug', `用户 ${userId} 已有运行中的工作流，跳过任务分析`, 'WorkflowManager');
+      return { shouldUseTodo: false, response: '已有运行中的工作流', todos: [] };
     }
 
+    // 调用AI判断，响应会被清理，不会执行任何命令
     return await this.aiDecideWorkflow(goal, workflow);
+  }
+
+  /**
+   * 查找已存在的运行中工作流
+   */
+  findExistingWorkflow(e, goal) {
+    const userId = e?.user_id || e?.user?.id || '';
+    
+    return Array.from(this.activeWorkflows.values())
+      .find(w => {
+        if (w.status !== WORKFLOW_STATUS.RUNNING) return false;
+        
+        const workflowUserId = w.context?.e?.user_id || w.context?.e?.user?.id || '';
+        return w.goal === goal || workflowUserId === userId;
+      });
   }
 
   /**
@@ -187,6 +196,9 @@ export class WorkflowManager {
    */
   async aiDecideWorkflow(goal, workflow = null) {
     const messages = this.buildDecisionMessages(goal);
+    
+    // 调用AI时，确保不会解析和执行任何命令
+    // 任务分析助手的响应只用于判断，不执行任何操作
     const response = await this.stream.callAI(messages, this.stream.config);
     
     // 记录决策阶段的 AI 调用
@@ -204,44 +216,134 @@ export class WorkflowManager {
       return { shouldUseTodo: false, response: '', todos: [] };
     }
 
-    const shouldUseTodo = /是否需要TODO工作流:\s*是/i.test(response);
-    const todos = shouldUseTodo ? this.extractTodos(response) : [];
+    // 提取判断结果（移除所有命令格式，确保不会执行）
+    const cleanResponse = this.cleanDecisionResponse(response);
+    const shouldUseTodo = /是否需要TODO工作流:\s*是/i.test(cleanResponse);
     
-    if (!shouldUseTodo || todos.length > 0) {
-      return { shouldUseTodo, response, todos };
+    // 如果不需要工作流，直接返回
+    if (!shouldUseTodo) {
+      return { shouldUseTodo: false, response: cleanResponse, todos: [] };
     }
     
+    // 提取TODO列表
+    const todos = this.extractTodos(cleanResponse);
+    
+    // 如果已有TODO列表，直接返回
+    if (todos.length > 0) {
+      return { shouldUseTodo: true, response: cleanResponse, todos };
+    }
+    
+    // 如果没有TODO列表，生成初始TODO
     const generatedTodos = await this.generateInitialTodos(goal, workflow);
-    return { shouldUseTodo: true, response, todos: generatedTodos };
+    return { shouldUseTodo: true, response: cleanResponse, todos: generatedTodos };
+  }
+
+
+  /**
+   * 清理决策响应，移除所有命令格式，确保不会执行任何命令
+   * 只保留格式化的判断结果
+   * 任务分析助手不应该有自然语言回复，只返回判断结果
+   */
+  cleanDecisionResponse(response) {
+    if (!response) return '';
+    
+    // 移除所有[]格式的命令
+    let cleaned = response.replace(/\[([^\]]+)\]/g, '').trim();
+    
+    // 移除所有自然语言，只保留格式化的判断结果
+    // 保留"是否需要TODO工作流"和"TODO列表"部分
+    const todoMatch = cleaned.match(/是否需要TODO工作流:[\s\S]+?(?:\n\n|$)/);
+    if (todoMatch) {
+      cleaned = todoMatch[0].trim();
+    } else {
+      // 如果没有找到格式化输出，返回空（任务分析助手不应该有自然语言）
+      cleaned = '';
+    }
+    
+    // 清理多余的空行
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+    
+    return cleaned;
   }
 
   /**
    * 构建决策提示和消息
+   * 优化：明确区分简单任务和复杂任务
    */
   buildDecisionMessages(goal) {
+    // 获取可用指令列表，用于指导TODO设计
+    const allFunctions = this.collectAllFunctions();
+    const availableCommands = allFunctions
+      .filter(f => !f.onlyTopLevel && f.enabled && f.prompt)
+      .map(f => this.simplifyPrompt(f.prompt))
+      .filter(cmd => cmd && !cmd.includes('启动工作流'))
+      .slice(0, 25); // 增加数量，提供更多参考
+    
+    const commandsList = availableCommands.length > 0 
+      ? `\n【可用指令参考】（用于设计TODO步骤）\n${availableCommands.map(cmd => `- ${cmd}`).join('\n')}\n`
+      : '';
+
     return [
       {
         role: 'system',
         content: `你是任务分析助手，只负责评估任务，不执行任何操作。
 
-【重要】
+【严格禁止】
 - 这是评估阶段，不是执行阶段
-- 不要使用任何命令格式
-- 不要执行任何操作
-- 只输出分析结果
+- 你没有任何执行权限，不能执行任何函数或命令
+- 绝对禁止使用任何命令格式（如[回桌面]、[截屏]、[股票:代码]、[读取:文件]等）
+- 绝对禁止在回复中包含任何[]格式的命令
+- 绝对禁止执行任何操作
+- 你的回复不会被解析为命令，也不会执行任何操作
 
-【判断标准】
-- 简单任务（单步可完成）→ 不需要工作流
-- 复杂任务（需要多步）→ 需要工作流
+【你的职责】
+- 只分析任务是否需要多步工作流
+- 如果需要工作流，根据可用指令列表设计合理的TODO步骤
+- 只输出分析结果，不执行任何操作
 
+【判断标准 - 简单任务 vs 复杂任务】
+
+【简单任务】（不需要工作流，单步可完成）
+- 只需要执行一个操作即可完成的任务
+- 例如：
+  * "查询688270的股票" → 只需执行[股票:688270]
+  * "回到桌面" → 只需执行[回桌面]
+  * "读取文件test.txt" → 只需执行[读取:test.txt]
+  * "截屏" → 只需执行[截屏]
+  * "搜索文件中的关键词" → 只需执行[搜索:关键词:文件路径]
+- 特点：任务目标单一，一个指令就能完成
+
+【复杂任务】（需要工作流，多步完成）
+- 需要多个步骤、多个操作才能完成的任务
+- 例如：
+  * "查股票然后生成表格" → 需要：1.查询股票 2.分析数据 3.生成表格
+  * "读取文件A和文件B，然后合并内容" → 需要：1.读取A 2.读取B 3.合并
+  * "先回桌面，然后截图，最后保存" → 需要：1.回桌面 2.截图 3.保存
+  * "查询多只股票并对比分析" → 需要：1.查询股票1 2.查询股票2 3.对比分析
+- 特点：任务目标复杂，需要多个步骤，步骤之间有依赖关系
+
+【TODO设计原则】
+- 根据任务描述和可用指令列表，设计合理的步骤
+- 每个步骤应该对应一个具体的操作目标
+- 步骤描述要清晰，使用纯文本描述，不要使用命令格式
+- 步骤之间要有逻辑顺序，前一步的输出可能是后一步的输入
+- 例如：任务"查股票然后生成表格"可以分解为：
+  1. 查询股票行情数据
+  2. 分析数据并生成Excel表格
+${commandsList}
 【输出格式】
 是否需要TODO工作流: [是/否]
-理由: [简要说明]
-
+理由: [简要说明为什么是简单任务或复杂任务]
 如果选择"是"，输出：
 TODO列表:
-1. 第一步（任务描述，不要包含命令格式）
-2. 第二步（任务描述，不要包含命令格式）`
+1. 第一步（任务描述，纯文本，不要包含任何命令格式）
+2. 第二步（任务描述，纯文本，不要包含任何命令格式）
+
+【重要提醒】
+- 你的回复只会用于判断是否需要工作流，不会执行任何命令
+- 即使你在回复中写了命令格式，也不会被执行
+- 请只输出分析结果，不要包含任何命令格式
+- 不要输出自然语言说明，只输出格式化的判断结果`
       },
       {
         role: 'user',
@@ -250,10 +352,9 @@ TODO列表:
     ];
   }
 
-  /**
-   * 提取TODO列表
-   */
   extractTodos(text) {
+    if (!text) return [];
+    
     const todos = [];
     const todoMatch = text.match(/TODO列表:\s*([\s\S]+?)(?:\n\n|$)/);
     if (!todoMatch) return todos;
@@ -262,9 +363,11 @@ TODO列表:
     let match;
     while ((match = todoRegex.exec(todoMatch[1])) !== null) {
       let content = match[1].trim();
-      // 清理命令格式（如果AI错误地包含了）
-      content = content.replace(/\[([^\]]+)\]/g, '$1').trim();
-      if (content) {
+      // 移除所有命令格式，确保不会执行任何命令
+      content = content.replace(/\[([^\]]+)\]/g, '').trim();
+      // 移除多余空格
+      content = content.replace(/\s+/g, ' ').trim();
+      if (content && content.length > 2) {
         todos.push(content);
       }
     }
@@ -272,25 +375,52 @@ TODO列表:
     return todos;
   }
 
-  /**
-   * 生成初始TODO列表
-   */
   async generateInitialTodos(goal, workflow = null) {
+    // 获取可用指令列表，用于指导TODO设计
+    const allFunctions = this.collectAllFunctions();
+    const availableCommands = allFunctions
+      .filter(f => !f.onlyTopLevel && f.enabled && f.prompt)
+      .map(f => this.simplifyPrompt(f.prompt))
+      .filter(cmd => cmd && !cmd.includes('启动工作流'))
+      .slice(0, 20);
+    
+    const commandsList = availableCommands.length > 0 
+      ? `\n【可用指令参考】（用于设计TODO步骤）\n${availableCommands.map(cmd => `- ${cmd}`).join('\n')}\n`
+      : '';
+
     const messages = [
       {
         role: 'system',
         content: `你是任务规划助手，只负责规划步骤，不执行任何操作。
 
-【重要】
+【严格禁止】
 - 这是规划阶段，不是执行阶段
-- 不要使用任何命令格式
-- 不要执行任何操作
-- 只输出步骤描述（任务描述，不要包含命令格式）
+- 你没有任何执行权限，不能执行任何函数或命令
+- 绝对禁止使用任何命令格式（如[回桌面]、[截屏]、[股票:代码]、[读取:文件]等）
+- 绝对禁止在回复中包含任何[]格式的命令
+- 绝对禁止执行任何操作
 
+【你的职责】
+- 只规划任务步骤，不执行任何操作
+- 根据可用指令列表设计合理的步骤
+- 只输出步骤描述，纯文本，不要包含任何命令格式
+
+【TODO设计原则】
+- 根据任务描述和可用指令列表，设计合理的步骤
+- 每个步骤应该对应一个具体的操作目标
+- 步骤描述要清晰，不要使用命令格式
+${commandsList}
 【要求】
 - 步骤要精简高效
 - 避免冗余步骤
-- 输出格式：每行一个步骤，用数字编号`
+- 输出格式：每行一个步骤，用数字编号
+- 步骤描述必须是纯文本，不要包含任何命令格式
+
+【重要提醒】
+- 你的回复只会用于创建工作流步骤，不会执行任何命令
+- 即使你在回复中写了命令格式，也不会被执行
+- 请只输出步骤描述，不要包含任何命令格式
+- 不要输出自然语言说明，只输出格式化的步骤列表`
       },
       {
         role: 'user',
@@ -310,7 +440,9 @@ TODO列表:
       });
     }
     
-    const todos = response ? this.extractTodos(response) : [];
+    // 清理响应，移除所有命令格式
+    const cleanResponse = response ? this.cleanDecisionResponse(response) : '';
+    const todos = cleanResponse ? this.extractTodos(cleanResponse) : [];
     return todos.length > 0 ? todos : ['执行第一步', '执行第二步'];
   }
 
@@ -357,16 +489,18 @@ TODO列表:
     }
 
     // 检查是否已有运行中的工作流
-    for (const workflow of this.activeWorkflows.values()) {
-      if (workflow.status === WORKFLOW_STATUS.RUNNING) {
-        const workflowUserKey = workflow.context?.e?.user_id || workflow.context?.e?.sender?.user_id;
-        if (workflowUserKey === userKey) {
-          BotUtil.makeLog('warn', `[工作流] 用户 ${userKey} 已有运行中的工作流 [${workflow.id}]，拒绝创建新工作流`, 'WorkflowManager');
-          return workflow.id;
-        }
-      }
+    const existing = Array.from(this.activeWorkflows.values())
+      .find(w => {
+        if (w.status !== WORKFLOW_STATUS.RUNNING) return false;
+        const workflowUserKey = w.context?.e?.user_id || w.context?.e?.sender?.user_id;
+        return workflowUserKey === userKey;
+      });
+
+    if (existing) {
+      BotUtil.makeLog('warn', `[工作流] 用户 ${userKey} 已有运行中的工作流 [${existing.id}]，拒绝创建新工作流`, 'WorkflowManager');
+      return existing.id;
     }
-    
+
     return null;
   }
 
@@ -438,6 +572,9 @@ TODO列表:
         workflow.status = WORKFLOW_STATUS.COMPLETED;
         workflow.completedAt = Date.now();
         await this.sendReply(workflow, 'complete');
+        
+        // 工作流完成后，调用AI进行收尾总结
+        await this.generateWorkflowSummary(workflow);
         return;
       }
 
@@ -495,6 +632,7 @@ TODO列表:
    * 处理TODO
    */
   async processTodo(workflow, todo) {
+    // 步骤1: 准备上下文和提示
     const notes = await this.stream.getNotes(workflow.id);
     const prompt = await this.buildTodoPrompt(workflow, todo, notes);
     const messages = [
@@ -502,73 +640,54 @@ TODO列表:
       { role: 'user', content: prompt }
     ];
     
+    // 步骤2: 调用AI获取执行指令
     const response = await this.callAIWithRetry(messages, workflow, todo);
     const parsed = this.parseAIResponse(response);
     
-    await this.handleTodoResponse(workflow, todo, response, parsed, notes);
+    // 步骤3: 记录历史
+    this.recordHistory(workflow, todo, response, parsed);
     
-    const result = await this.executeAction(workflow, response);
+    // 步骤4: 执行所有提取的指令
+    const result = await this.executeAction(workflow, parsed.commands);
     todo.result = result;
 
-    // 如果执行失败或格式错误，记录到笔记
-    if (!result.executed && result.functions.length === 0) {
-      const actionText = this.extractActionText(response);
-      const errorMsg = `上一步执行失败：执行动作格式不正确（${actionText}），未解析到任何可执行命令。请使用正确的命令格式，如[读取:文件路径]。`;
-      await this.storeNote(workflow, todo.id, errorMsg);
-    } else if (result.error) {
+    // 步骤5: 智能判断完成度
+    const completion = this.calculateSmartCompletion(workflow, todo, parsed, result);
+    
+    // 步骤6: 记录错误和异常情况
+    if (result.error) {
       await this.storeNote(workflow, todo.id, `执行错误：${result.error}`);
     }
-
-    // 合并上下文（包括文件内容、命令输出等）
-    this.mergeContext(workflow, result.context);
     
-    // 更新笔记快照
-    const updatedNotes = await this.stream.getNotes(workflow.id);
-    todo.notes = updatedNotes;
-    
-    // 处理执行结果并反馈给用户
-    await this.handleExecutionResult(workflow, todo, result, parsed.completion);
-    
-    // 只有在完成度低于0.8且有明确的下一步建议时才添加新步骤
-    if (parsed.completion < WORKFLOW_CONFIG.COMPLETION_THRESHOLD && parsed.nextStep?.trim()) {
-      BotUtil.makeLog('info', `工作流[${workflow.id}] 添加新步骤: ${parsed.nextStep}`, 'WorkflowManager');
-      this.addNextStep(workflow, parsed.nextStep);
+    if (completion < WORKFLOW_CONFIG.COMPLETION_THRESHOLD && parsed.hasCompleteCommand) {
+      await this.storeNote(workflow, todo.id, `AI标记完成但系统判断未完成，完成度：${completion.toFixed(2)}`);
     }
 
+    // 步骤7: 合并上下文并更新笔记
+    this.mergeContext(workflow, result.context);
+    todo.notes = await this.stream.getNotes(workflow.id);
+    
+    // 步骤8: 发送流程回复
+    await this.handleExecutionResult(workflow, todo, result, completion);
+    
+    // 步骤9: 发送自然语言回复（在流程回复之后）
+    const aiMessage = this.extractAIMessage(response);
+    if (aiMessage?.trim()) {
+      await this.sendAIMessage(workflow, aiMessage);
+    }
+
+    // 步骤10: 记录调试信息
     this.recordDebugStep(workflow, todo, {
       prompt,
       messages,
       response,
       parsed,
       notes,
-      result
+      result,
+      completion
     });
   }
 
-  /**
-   * 处理TODO响应
-   */
-  async handleTodoResponse(workflow, todo, response, parsed, notes) {
-    const actionText = this.extractActionText(response);
-    const progress = this.calculateProgress(workflow);
-    
-    // 提取AI的自然语言回复（去除格式化的输出部分）
-    const aiMessage = this.extractAIMessage(response);
-    
-    await this.sendReply(workflow, 'step', {
-      stepNum: progress.completed + 1,
-      task: todo.content,
-      action: actionText,
-      completion: parsed.completion || 0.5,
-      aiMessage: aiMessage  // 添加AI的自然语言回复
-    });
-
-    if (parsed.note?.trim()) {
-      await this.storeNote(workflow, todo.id, parsed.note);
-    }
-
-    this.recordHistory(workflow, todo, response, parsed);
-  }
 
   /**
    * 记录历史
@@ -578,20 +697,21 @@ TODO列表:
       todoId: todo.id,
       iteration: workflow.iteration,
       response,
-      completion: parsed.completion,
-      note: parsed.note || null,
+      commands: parsed.commands || [],
+      hasCompleteCommand: parsed.hasCompleteCommand || false,
       timestamp: Date.now()
     });
   }
 
   /**
    * 处理TODO错误
+   * 简化：错误时记录note，标记为完成，继续下一步
    */
   async handleTodoError(workflow, todo, error) {
-    todo.status = TODO_STATUS.FAILED;
-    todo.error = error.message;
     BotUtil.makeLog('error', `Todo执行失败[${todo.id}]: ${error.message}`, 'WorkflowManager');
-    await this.sendReply(workflow, 'error', { task: todo.content, error: error.message });
+    await this.storeNote(workflow, todo.id, `执行异常: ${error.message}，已记录到笔记，继续下一步`);
+    todo.status = TODO_STATUS.COMPLETED;
+    todo.error = error.message;
   }
 
   /**
@@ -621,50 +741,34 @@ TODO列表:
   }
 
   /**
-   * 提取执行动作文本
-   */
-  extractActionText(response) {
-    const actionMatch = response.match(/执行动作:\s*([^\n]+)/);
-    return actionMatch ? actionMatch[1].trim() : response.slice(0, 100);
-  }
-
-  /**
-   * 提取AI的自然语言回复
-   * 去除格式化的输出部分（完成度评估、执行动作、下一步建议、笔记）
+   * 提取AI的自然语言回复（去除[]指令）
    */
   extractAIMessage(response) {
     if (!response) return '';
     
-    // 找到格式化输出的开始位置
-    const formatStart = response.search(/完成度评估:\s*[0-9.]+/);
-    
-    if (formatStart === -1) {
-      // 如果没有找到格式化输出，返回整个响应
-      return response.trim();
-    }
-    
-    // 提取格式化输出之前的内容作为AI的自然语言回复
-    const aiMessage = response.slice(0, formatStart).trim();
-    
-    // 如果提取的消息太短或为空，返回一个默认消息
-    if (!aiMessage || aiMessage.length < 5) {
-      return '';
-    }
-    
-    return aiMessage;
+    // 移除所有[]指令，保留自然语言
+    return response
+      .replace(/\[([^\]]+)\]/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim();
   }
 
   /**
    * 合并上下文
    */
   mergeContext(workflow, newContext) {
-    if (!newContext) return;
+    if (!newContext || typeof newContext !== 'object') return;
     
     // 保留事件对象 e
     const e = workflow.context.e;
     
-    // 合并新上下文
-    workflow.context = { ...workflow.context, ...newContext };
+    // 合并新上下文，排除undefined和null值
+    for (const [key, value] of Object.entries(newContext)) {
+      if (value !== undefined && value !== null && key !== 'e') {
+        workflow.context[key] = value;
+      }
+    }
     
     // 确保事件对象不被覆盖
     if (e) {
@@ -676,63 +780,114 @@ TODO列表:
       const fileName = newContext.fileSearchResult?.fileName || newContext.fileName || '未知文件';
       BotUtil.makeLog('debug', `工作流[${workflow.id}]上下文已更新：读取文件 ${fileName}`, 'WorkflowManager');
     }
-    if (newContext.commandOutput) {
-      BotUtil.makeLog('debug', `工作流[${workflow.id}]上下文已更新：命令输出`, 'WorkflowManager');
+    if (newContext.commandOutput && newContext.commandSuccess) {
+      BotUtil.makeLog('debug', `工作流[${workflow.id}]上下文已更新：命令执行成功`, 'WorkflowManager');
     }
   }
 
-  /**
-   * 处理执行结果
-   */
   async handleExecutionResult(workflow, todo, result, completion) {
-    const errorMsg = this.extractErrorMessage(result);
-    
-    // 如果有错误，处理错误
-    if (errorMsg) {
-      await this.handleExecutionError(workflow, todo, errorMsg);
-      return;
-    }
-    
-    // 没有错误，根据完成度更新状态
     const completionRate = completion || 0.5;
+    const progress = this.calculateProgress(workflow);
+    
+    // 构建执行动作文本（显示所有执行的指令）
+    const actionText = result.functions && result.functions.length > 0
+      ? result.functions.map(f => `[${f}]`).join('')
+      : '无';
+    
+    // 发送流程回复（自然语言已在processTodo中发送）
+    await this.sendReply(workflow, 'step', {
+      stepNum: progress.completed + 1,
+      task: todo.content,
+      action: actionText,
+      completion: completionRate
+    });
+    
     this.updateTodoStatus(workflow, todo, completionRate);
-    
-    // 如果任务完成度高但没有执行任何函数，记录警告日志
-    if (completionRate >= WORKFLOW_CONFIG.COMPLETION_THRESHOLD && !result.executed) {
-      BotUtil.makeLog('warn', `任务[${todo.id}]标记为完成但未执行任何操作`, 'WorkflowManager');
-    }
   }
 
   /**
-   * 处理执行错误
+   * 发送AI的自然语言回复（单独发送）
    */
-  async handleExecutionError(workflow, todo, errorMsg) {
-    await this.storeNote(workflow, todo.id, `错误: ${errorMsg}`);
-    todo.status = TODO_STATUS.PENDING;
-    todo.error = errorMsg;
-    await this.sendReply(workflow, 'error', { task: todo.content, error: errorMsg });
+  async sendAIMessage(workflow, message) {
+    const e = workflow?.context?.e;
+    if (!e || !message || !message.trim()) return;
+    
+    await e.reply(message.trim()).catch(err => {
+      BotUtil.makeLog('debug', `发送AI自然语言回复失败: ${err.message}`, 'WorkflowManager');
+    });
   }
 
-  /**
-   * 提取错误信息
-   */
-  extractErrorMessage(result) {
-    if (result.error) return result.error;
-    if (!result.context) return null;
-    
-    const errorFields = ['commandError', 'fileError', 'error'];
-    for (const field of errorFields) {
-      if (result.context[field]) return result.context[field];
-    }
-    
-    return null;
-  }
-
-  /**
-   * 添加下一步
-   */
   addNextStep(workflow, nextStep) {
     workflow.todos.push(this.createTodoObject(workflow.todos.length, nextStep));
+  }
+
+  /**
+   * 生成工作流完成总结（收尾AI调用）
+   */
+  async generateWorkflowSummary(workflow) {
+    const e = workflow?.context?.e;
+    if (!e) return;
+
+    try {
+      // 收集已完成的任务信息
+      const completedTodos = workflow.todos.filter(t => t.status === TODO_STATUS.COMPLETED);
+      const todosSummary = completedTodos.map((todo, index) => {
+        const actionText = todo.result?.functions?.length > 0
+          ? todo.result.functions.map(f => `[${f}]`).join('')
+          : '无';
+        return `${index + 1}. ${todo.content} - 执行: ${actionText}`;
+      }).join('\n');
+
+      // 收集工作流笔记摘要
+      const notesSummary = workflow.notes
+        .slice(-5)
+        .map((note, index) => `${index + 1}. ${note.content.slice(0, 200)}${note.content.length > 200 ? '...' : ''}`)
+        .join('\n');
+
+      const messages = [
+        {
+          role: 'system',
+          content: `你是工作流总结助手，负责对已完成的工作流进行总结。
+
+【你的职责】
+- 对已完成的工作流进行简洁、清晰的总结
+- 说明完成了哪些任务，取得了什么结果
+- 用自然、友好的语言向用户汇报
+- 不要使用任何命令格式，只输出自然语言
+
+【输出要求】
+- 简洁明了，2-3句话即可
+- 突出主要成果
+- 语气友好自然`
+        },
+        {
+          role: 'user',
+          content: `工作流目标：${workflow.goal}
+
+已完成的任务：
+${todosSummary}
+
+工作流笔记摘要：
+${notesSummary || '无'}
+
+请对这次工作流进行总结，用自然语言向用户汇报完成情况。`
+        }
+      ];
+
+      const response = await this.stream.callAI(messages, this.stream.config);
+      
+      if (response && response.trim()) {
+        // 清理响应，移除可能的命令格式
+        const summary = response.replace(/\[([^\]]+)\]/g, '').trim();
+        if (summary) {
+          await e.reply(summary).catch(err => {
+            BotUtil.makeLog('debug', `发送工作流总结失败: ${err.message}`, 'WorkflowManager');
+          });
+        }
+      }
+    } catch (error) {
+      BotUtil.makeLog('error', `生成工作流总结失败: ${error.message}`, 'WorkflowManager');
+    }
   }
 
   /**
@@ -795,81 +950,51 @@ TODO列表:
   }
 
   /**
-   * 构建提示部分（通用、简洁）
+   * 构建提示部分（通用、简洁，提高token量）
    */
   buildPromptSections(workflow, todo, context, progress, previousTodos, notes) {
     const sections = [];
     
-    sections.push(`【目标】${workflow.goal}`);
-    sections.push(`【当前任务】${todo.content}`);
-    sections.push(`【进度】${progress.completed}/${progress.total}`);
+    sections.push(`【工作流目标】\n${workflow.goal}\n`);
+    // 强调当前步骤位置
+    const stepNum = progress.completed + 1;
+    sections.push(`【当前步骤】第 ${stepNum}/${progress.total} 步\n`);
+    sections.push(`【当前任务】\n${todo.content}\n`);
+    sections.push(`【执行进度】已完成 ${progress.completed}/${progress.total} 个任务\n`);
     
     const completedTasks = this.buildCompletedTasksSection(previousTodos);
     if (completedTasks) {
       sections.push(completedTasks);
-      const taskCheck = this.buildTaskCheckSection(workflow, todo, previousTodos);
-      if (taskCheck) sections.push(taskCheck);
     }
     
     const contextSection = this.buildContextSection(context);
-    if (contextSection) sections.push(contextSection);
+    if (contextSection) {
+      sections.push(contextSection);
+    }
     
     const notesSection = this.buildNotesSection(notes);
-    if (notesSection) sections.push(notesSection);
+    if (notesSection) {
+      sections.push(notesSection);
+    }
     
     sections.push(this.buildRequirementsSection(context));
+    
+    // 添加更多上下文信息以提高token量和准确性
+    if (workflow.history && workflow.history.length > 0) {
+      const recentHistory = workflow.history.slice(-5); // 增加历史记录数量
+      const historyText = recentHistory.map((h, idx) => {
+        const commands = h.commands || [];
+        const stepInfo = `步骤${idx + 1}: ${commands.length > 0 ? commands.join(' ') : '无指令'}`;
+        return `  - ${stepInfo}`;
+      }).join('\n');
+      if (historyText) {
+        sections.push(`【最近执行记录】（用于参考，避免重复执行）\n${historyText}\n`);
+      }
+    }
     
     return sections;
   }
 
-  /**
-   * 构建任务检查部分（通用机制）
-   */
-  buildTaskCheckSection(workflow, todo, previousTodos) {
-    const completedOps = [];
-    
-    for (const prevTodo of previousTodos) {
-      if (!prevTodo.result || !prevTodo.result.executed) continue;
-      
-      const prevResult = prevTodo.result;
-      const prevContext = prevResult.context || {};
-      const prevFunctions = prevResult.functions || [];
-      const relevantContext = this.extractRelevantContext(prevContext);
-      
-      if (prevFunctions.length > 0 || Object.keys(relevantContext).length > 0) {
-        completedOps.push({
-          task: prevTodo.content,
-          functions: prevFunctions,
-          context: relevantContext
-        });
-      }
-    }
-    
-    if (completedOps.length === 0) return '';
-    
-    const hints = ['检查上一步已执行的操作和结果：'];
-    
-    for (const op of completedOps) {
-      const details = [];
-      if (op.functions.length > 0) {
-        details.push(`已执行: ${op.functions.join('、')}`);
-      }
-      for (const [key, value] of Object.entries(op.context)) {
-        const displayValue = typeof value === 'string' && (value.includes('/') || value.includes('\\'))
-          ? value.split(/[/\\]/).pop()
-          : value;
-        details.push(`${key}: ${displayValue}`);
-      }
-      if (details.length > 0) {
-        hints.push(`  ✓ ${op.task} - ${details.join('，')}`);
-      }
-    }
-    
-    hints.push('如果上一步已完成当前任务目标，标记完成度=1.0，执行动作="无"');
-    hints.push('不要重复执行相同操作');
-    
-    return `【检查】\n${hints.join('\n')}\n`;
-  }
 
   /**
    * 提取相关上下文（通用方式，提取所有可能相关的信息）
@@ -878,15 +1003,17 @@ TODO列表:
     if (!context || typeof context !== 'object') return {};
     
     const relevant = {};
-    // 提取所有可能表示操作结果的字段（通用方式）
-    const resultFields = [
-      'createdExcelDoc', 'createdWordDoc', 'openedUrl',
-      'createdFile', 'generatedFile', 'openedFile', 'executedCommand'
-    ];
+    const excludeFields = ['e', 'workflowId', 'question'];
     
-    for (const field of resultFields) {
-      if (context[field]) {
-        relevant[field] = context[field];
+    for (const [key, value] of Object.entries(context)) {
+      if (excludeFields.includes(key)) continue;
+      if (value === null || value === undefined) continue;
+      if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) continue;
+      
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || Array.isArray(value)) {
+        relevant[key] = value;
+      } else if (typeof value === 'object') {
+        relevant[key] = JSON.stringify(value).slice(0, 200);
       }
     }
     
@@ -905,7 +1032,7 @@ TODO列表:
       if (todo.result?.executed) {
         const details = [];
         if (todo.result.functions?.length > 0) {
-          details.push(`执行: ${todo.result.functions.join('、')}`);
+          details.push(`执行: ${todo.result.functions.map(f => `[${f}]`).join('、')}`);
         }
         const ctx = this.extractRelevantContext(todo.result.context);
         for (const [key, value] of Object.entries(ctx)) {
@@ -922,7 +1049,7 @@ TODO列表:
       return line;
     });
     
-    return `【已完成任务】\n${taskLines.join('\n')}\n`;
+    return `【已完成任务】\n${taskLines.join('\n')}\n\n【重要提示】\n仔细检查已完成任务的上下文信息。如果已完成任务的上下文显示已经完成了当前任务的目标，直接输出[完成]，不要重复执行相同操作。\n`;
   }
 
 
@@ -974,88 +1101,115 @@ TODO列表:
     
     const relevantNotes = notes
       .filter(note => note.content && note.content.trim())
-      .slice(-3);
+      .slice(-5);
     
     if (relevantNotes.length === 0) return '';
     
-    return `【笔记】\n${relevantNotes.map((note, i) => `${i + 1}. ${note.content.slice(0, 200)}${note.content.length > 200 ? '...' : ''}`).join('\n')}`;
+    return `【工作流笔记】\n${relevantNotes.map((note, i) => `${i + 1}. ${note.content.slice(0, 500)}${note.content.length > 500 ? '...' : ''}`).join('\n\n')}\n\n重要：这些笔记记录了之前步骤的执行结果和上下文信息，请基于这些实际信息判断当前任务是否已完成。\n`;
   }
 
   /**
    * 构建要求部分（通用）
+   * 优化：提高清晰度和可操作性
    */
   buildRequirementsSection(context) {
     const requirements = [
-      '只执行当前任务描述的操作',
-      '检查已完成任务，避免重复执行',
-      '完成度>=0.8表示已执行且成功',
-      '使用已有上下文内容'
+      '仔细阅读当前任务描述，明确这一步要完成什么',
+      '检查已完成任务的上下文信息（笔记、文件内容、命令输出等），判断当前任务是否已经完成',
+      '如果已完成任务的上下文显示已经完成了当前任务的目标，直接输出[完成]',
+      '如果当前任务未完成，根据任务描述选择合适的指令执行',
+      '不要重复执行相同操作，充分利用已有上下文内容（笔记、文件、数据等）',
+      '基于实际上下文判断，不要编造信息',
+      '如果任务需要多个操作，可以一次输出多个[]指令，例如：[读取:文件1.txt][读取:文件2.txt]',
+      '执行完成后，输出[完成]标记任务完成',
+      '必须同时输出[]指令和自然语言说明，让用户了解执行情况'
     ];
     
-    return `【要求】\n${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
+    return `【执行要求】\n${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
   }
 
   /**
-   * 构建系统提示（完全通用，无特定场景）
+   * 构建系统提示（systemprompt）
+   * 包含工作流执行规则和funcprompt（函数提示）
+   * 优化：提高清晰度和准确性
    */
   buildSystemPrompt(workflow) {
-    const functionsPrompt = this.buildFunctionsPrompt();
+    const funcPrompt = this.buildFunctionsPrompt();
     const contextInfo = this.buildContextInfo(workflow.context);
 
     return `【工作流执行助手】
 执行多步骤工作流任务。
 
 【工具】
-${functionsPrompt || '- 无可用工具'}
+${funcPrompt || '- 无可用工具'}
 
-【原则】
-1. 只执行当前任务描述的操作
-2. 检查已完成任务，避免重复执行
-3. 完成度>=0.8表示已执行且成功，<0.8表示未完成或部分完成
-4. 使用已有上下文内容，不重复获取
-5. 禁止启动新工作流
+【核心原则】
+1. 只输出[]指令，不要输出任何特殊格式
+2. 可以一次执行多个函数，例如：[股票:600519][股票:000001][股票:000858]
+3. 如果任务已完成，输出[完成]或[标记完成]
+4. 如果任务需要继续，输出相应的[]指令
+5. 仔细检查已完成任务的上下文信息，如果已经完成了当前任务的目标，直接输出[完成]
+6. 避免重复执行相同操作，充分利用已有上下文内容（笔记、文件、数据等）
+7. 使用已有上下文内容，不重复获取相同信息
+8. 【严格禁止】绝对禁止启动新工作流，不要输出[启动工作流:...]命令
+9. 基于实际上下文判断，不要编造信息
+10. 对于复杂任务，可以分步执行，每一步都要明确目标
+
+【任务完成判断】
+- 如果已完成任务的上下文信息显示已经完成了当前任务的目标，直接输出[完成]
+- 例如：如果任务是"查询股票"，而上下文显示已经查询到了股票数据，直接输出[完成]
+- 不要重复执行已经完成的操作
+
+【输出要求】
+- 只输出[]指令，例如：[回桌面]、[读取:文件.txt]、[完成]
+- 可以输出多个指令，例如：[读取:文件1.txt][读取:文件2.txt]
+- 如果任务已完成，输出[完成]
+- 【重要】必须添加自然语言说明（1-2句话），说明你正在做什么或已完成什么
+- 自然语言说明会在回复中显示给用户，让用户了解执行情况
 ${contextInfo}
-【输出格式】
-自然对话（1-2句话）
-
-完成度评估: [0-1]
-执行动作: [命令或"无"]
-下一步建议: [下一步或"无"]
-笔记: [信息或"无"]
 `;
   }
 
   /**
-   * 构建函数提示（通用，说明用法）
+   * 构建函数提示（funcprompt）
+   * 合并所有stream的func.prompt字段（功能都合并了，prompt也应该合并）
    */
   buildFunctionsPrompt() {
     const allFunctions = this.collectAllFunctions();
-    const prompts = [];
+    const funcPrompts = [];
     
+    // 合并所有stream的func.prompt（包括mergedStreams）
     for (const func of allFunctions) {
       if (func.onlyTopLevel || !func.enabled || !func.prompt) continue;
       
       const simplified = this.simplifyPrompt(func.prompt);
-      if (simplified && !prompts.includes(simplified)) {
-        prompts.push(simplified);
+      if (simplified && !funcPrompts.includes(simplified)) {
+        funcPrompts.push(simplified);
       }
     }
     
-    if (prompts.length === 0) return '';
+    if (funcPrompts.length === 0) return '';
     
     return `【工具使用说明】
-要执行某个操作，在回复中直接使用对应的命令格式即可。例如：
-- 想要执行回桌面，发送：[回桌面]
-- 想要读取文件，发送：[读取:文件路径]
-- 想要生成Excel，发送：[生成Excel:文件名:JSON数组]
+直接输出[]指令即可执行操作，可以一次执行多个函数：
+- [股票:600519][股票:000001][股票:000858] - 同时查询三只股票
+- [读取:文件1.txt][读取:文件2.txt] - 同时读取两个文件
+- [回桌面] - 单个命令
+- [完成] - 标记当前任务已完成
 
-【可用工具】
-${prompts.map(p => `- ${p}`).join('\n')}`;
+【重要】输出格式要求：
+- 必须同时输出[]指令和自然语言说明
+- 例如："好的，我来帮你回到桌面。[回桌面]"
+- 自然语言说明会在回复中显示给用户
+
+【可用工具列表】
+${funcPrompts.map(p => `- ${p}`).join('\n')}
+
+【完成指令】
+- [完成] - 标记当前任务已完成，系统会自动判断完成度
+- [标记完成] - 同[完成]`;
   }
 
-  /**
-   * 简化 prompt 文本
-   */
   simplifyPrompt(prompt) {
     if (!prompt) return '';
     const match = prompt.match(/^(\[[^\]]+\])/);
@@ -1063,20 +1217,23 @@ ${prompts.map(p => `- ${p}`).join('\n')}`;
   }
 
   /**
-   * 收集所有函数
+   * 收集所有函数（合并所有stream的functions）
+   * 用于构建funcprompt和执行functions
    */
   collectAllFunctions() {
     const allFunctions = [];
     
-    if (this.stream.functions) {
+    // 主stream的函数
+    if (this.stream?.functions) {
       for (const func of this.stream.functions.values()) {
         allFunctions.push(func);
       }
     }
     
-    if (this.stream._mergedStreams) {
+    // 合并stream的函数（功能都合并了，funcprompt也合并）
+    if (this.stream?._mergedStreams) {
       for (const mergedStream of this.stream._mergedStreams) {
-        if (mergedStream.functions) {
+        if (mergedStream?.functions) {
           for (const func of mergedStream.functions.values()) {
             allFunctions.push(func);
           }
@@ -1107,137 +1264,228 @@ ${prompts.map(p => `- ${p}`).join('\n')}`;
   }
 
   /**
-   * 解析AI响应
+   * 解析AI响应 - 只提取[]指令
    */
   parseAIResponse(response) {
+    // 提取所有[]指令
+    const commands = this.extractCommands(response);
+    
+    // 检查是否有完成指令
+    const hasCompleteCommand = commands.some(cmd => 
+      /^\[(完成|标记完成)\]$/i.test(cmd.trim())
+    );
+    
     return {
-      completion: this.extractCompletion(response),
-      nextStep: this.extractNextStep(response),
-      note: this.extractNote(response)
+      commands,
+      hasCompleteCommand,
+      // 完成度和下一步由系统智能判断，不再从AI响应中提取
+      completion: null,
+      nextStep: null,
+      note: null
     };
   }
 
   /**
-   * 提取完成度
+   * 提取所有[]指令
    */
-  extractCompletion(response) {
-    const match = response.match(/完成度评估:\s*([0-9.]+)/);
-    if (match) {
-      return Math.max(0, Math.min(1, parseFloat(match[1])));
-    }
+  extractCommands(response) {
+    if (!response) return [];
     
-    return this.inferCompletionFromText(response);
-  }
-
-  /**
-   * 从文本推断完成度
-   */
-  inferCompletionFromText(response) {
-    const lower = response.toLowerCase();
+    const commands = [];
+    const commandRegex = /\[([^\]]+)\]/g;
+    let match;
     
-    // 成功关键词（按优先级）
-    if (lower.includes('完成') || lower.includes('成功') || lower.includes('已')) {
-      return 0.9;
-    }
-    
-    // 失败关键词
-    if (lower.includes('失败') || lower.includes('错误') || lower.includes('无法')) {
-      return 0.2;
-    }
-    
-    return 0.5;
-  }
-
-  /**
-   * 提取下一步
-   */
-  extractNextStep(response) {
-    const match = response.match(/下一步建议:\s*(.+?)(?:\n|$)/);
-    if (!match) return null;
-    
-    const nextStep = match[1].trim();
-    if (this.isInvalidNextStep(nextStep)) return null;
-    return nextStep;
-  }
-
-  /**
-   * 判断是否为无效的下一步
-   */
-  isInvalidNextStep(nextStep) {
-    const lower = nextStep.toLowerCase();
-    // 更严格的判断：包含"无"、"完成"、"结束"等关键词都视为无效
-    return lower.includes('无') || 
-           lower.includes('完成') || 
-           lower.includes('结束') ||
-           lower.includes('已完成') ||
-           lower === 'none' ||
-           nextStep.length <= 2;
-  }
-
-  /**
-   * 提取笔记
-   */
-  extractNote(response) {
-    const match = response.match(/笔记:\s*([\s\S]+?)(?:\n\n|\n完成度评估|$)/);
-    if (!match) return null;
-    
-    const note = match[1].trim();
-    if (this.isInvalidNote(note)) return null;
-    return note;
-  }
-
-  /**
-   * 判断是否为无效笔记
-   */
-  isInvalidNote(note) {
-    return note.includes('无') || note.length === 0;
-  }
-
-  /**
-   * 执行动作
-   */
-  async executeAction(workflow, response) {
-    const context = this.buildActionContext(workflow);
-    let actionText = this.extractActionText(response);
-    
-    // 尝试修复格式：如果缺少方括号，尝试添加
-    actionText = this.fixActionFormat(actionText);
-    
-    try {
-      return await this.executeFunctions(actionText, context);
-    } catch (error) {
-      BotUtil.makeLog('error', `执行动作失败: ${error.message}`, 'WorkflowManager');
-      return { executed: false, functions: [], context: { ...context, error: error.message }, success: false, error: error.message };
-    }
-  }
-
-  /**
-   * 修复执行动作格式（如果缺少方括号）
-   */
-  fixActionFormat(actionText) {
-    if (!actionText || actionText.trim() === '无') return actionText;
-    
-    // 如果已经有方括号，直接返回
-    if (actionText.includes('[') && actionText.includes(']')) {
-      return actionText;
-    }
-    
-    // 尝试修复常见格式：命令:参数 -> [命令:参数]
-    const patterns = [
-      /^(\w+):(.+)$/,  // 命令:参数
-      /^(\w+)$/,       // 单个命令
-    ];
-    
-    for (const pattern of patterns) {
-      const match = actionText.match(pattern);
-      if (match) {
-        const fixed = `[${actionText}]`;
-        BotUtil.makeLog('debug', `[格式修复] ${actionText} -> ${fixed}`, 'WorkflowManager');
-        return fixed;
+    while ((match = commandRegex.exec(response)) !== null) {
+      const fullCommand = `[${match[1]}]`;
+      // 排除工作流启动命令
+      if (!/^\[启动工作流:/.test(fullCommand)) {
+        commands.push(fullCommand);
       }
     }
     
-    return actionText;
+    return commands;
+  }
+
+  /**
+   * 智能判断完成度 - 基于执行结果、上下文、完成指令等
+   */
+  calculateSmartCompletion(workflow, todo, parsed, result) {
+    // 1. 如果AI输出了[完成]指令，直接判断为完成
+    if (parsed.hasCompleteCommand) {
+      return 1.0;
+    }
+    
+    // 2. 检查上下文是否显示任务已完成（优先检查，因为上下文更可靠）
+    const contextCompletion = this.checkContextCompletion(workflow, todo);
+    if (contextCompletion >= WORKFLOW_CONFIG.COMPLETION_THRESHOLD) {
+      return contextCompletion;
+    }
+    
+    // 3. 如果执行成功且没有错误
+    if (result?.success && result?.executed && !result.error) {
+      if (result.functions?.length > 0) {
+        return 0.9;
+      }
+      // 执行成功但没有函数，可能是无操作任务
+      return 0.8;
+    }
+    
+    // 4. 如果有执行但失败
+    if (result?.executed && result.error) {
+      return 0.3;
+    }
+    
+    // 5. 如果有执行但部分成功（部分函数执行成功）
+    if (result?.executed && result.functions?.length > 0) {
+      const totalCommands = parsed.commands?.filter(cmd => 
+        !/^\[(完成|标记完成)\]$/i.test(cmd.trim())
+      ).length || 0;
+      const executedCount = result.functions.length;
+      const failedCount = result.failedFunctions?.length || 0;
+      
+      if (totalCommands > 0) {
+        // 根据成功率和失败率计算完成度
+        const successRate = executedCount / totalCommands;
+        const failRate = failedCount / totalCommands;
+        return Math.max(0.3, Math.min(0.9, 0.5 + (successRate * 0.4) - (failRate * 0.2)));
+      }
+      
+      // 如果有成功执行但无法计算比例，使用默认值
+      if (result.successRate !== undefined) {
+        return Math.max(0.5, result.successRate);
+      }
+      return 0.7;
+    }
+    
+    // 6. 如果AI输出了指令但未执行，可能是解析失败或任务描述不清晰
+    if (parsed.commands?.length > 0) {
+      return 0.5;
+    }
+    
+    // 7. 如果没有任何指令输出，可能是任务已完成或不需要操作
+    return 0.6;
+  }
+
+  /**
+   * 检查上下文是否显示任务已完成
+   */
+  checkContextCompletion(workflow, todo) {
+    const context = workflow.context || {};
+    const previousTodos = workflow.todos.filter(t => 
+      t.status === TODO_STATUS.COMPLETED && t.id !== todo.id
+    );
+    
+    // 检查已完成任务的上下文是否已经完成了当前任务的目标
+    for (const prevTodo of previousTodos) {
+      if (!prevTodo.result?.context) continue;
+      
+      const prevContext = prevTodo.result.context;
+      const prevFunctions = prevTodo.result.functions || [];
+      
+      // 检查文件操作：如果上一步已经读取了相同文件，则认为已完成
+      if (context.fileName && prevContext.fileName && 
+          context.fileName === prevContext.fileName &&
+          context.fileContent && prevContext.fileContent) {
+        return 1.0;
+      }
+      
+      // 检查命令执行：如果上一步已经执行了相同命令且成功，则认为已完成
+      if (context.commandOutput && prevContext.commandOutput &&
+          prevContext.commandSuccess && context.commandSuccess) {
+        // 进一步检查命令是否相同（通过函数类型判断）
+        if (prevFunctions.length > 0) {
+          return 1.0;
+        }
+      }
+      
+      // 检查是否有明确的完成标记
+      if (prevContext.taskCompleted || prevContext.completed) {
+        return 1.0;
+      }
+    }
+    
+    // 检查笔记中是否有相关信息表明任务已完成
+    const notes = workflow.notes || [];
+    const todoNotes = todo.notes || [];
+    const allNotes = [...notes, ...todoNotes];
+    
+    const completionKeywords = ['完成', '成功', '已完成', '执行完成', '操作成功'];
+    const relevantNotes = allNotes.filter(note => {
+      const content = note.content || '';
+      return completionKeywords.some(keyword => content.includes(keyword));
+    });
+    
+    if (relevantNotes.length > 0) {
+      return 0.85;
+    }
+    
+    return 0;
+  }
+
+  /**
+   * 执行动作 - 执行所有[]指令
+   */
+  async executeAction(workflow, commands) {
+    const context = this.buildActionContext(workflow);
+    
+    // 如果没有指令，返回成功（可能是任务已完成或不需要操作）
+    if (!commands || commands.length === 0) {
+      return {
+        executed: false,
+        functions: [],
+        context,
+        success: true,
+        error: null
+      };
+    }
+    
+    // 过滤掉完成指令（这些指令不需要执行，只用于判断）
+    const executableCommands = commands.filter(cmd => {
+      const trimmed = cmd.trim();
+      return !/^\[(完成|标记完成)\]$/i.test(trimmed);
+    });
+    
+    // 如果只有完成指令，返回成功
+    if (executableCommands.length === 0) {
+      return {
+        executed: false,
+        functions: [],
+        context,
+        success: true,
+        error: null
+      };
+    }
+    
+    // 合并所有指令为一个字符串，确保格式正确
+    const actionText = executableCommands.join('').trim();
+    
+    if (!actionText) {
+      return {
+        executed: false,
+        functions: [],
+        context,
+        success: true,
+        error: null
+      };
+    }
+    
+    try {
+      const result = await this.executeFunctions(actionText, context);
+      // 确保上下文被正确传递
+      if (result.context) {
+        Object.assign(context, result.context);
+      }
+      return result;
+    } catch (error) {
+      BotUtil.makeLog('error', `执行动作失败: ${error.message}`, 'WorkflowManager');
+      return { 
+        executed: false, 
+        functions: [], 
+        context: { ...context, error: error.message }, 
+        success: false, 
+        error: error.message 
+      };
+    }
   }
 
   /**
@@ -1259,7 +1507,7 @@ ${prompts.map(p => `- ${p}`).join('\n')}`;
     const { functions } = this.parseWorkflowFunctions(actionText, context);
     
     if (functions.length === 0) {
-      BotUtil.makeLog('warn', `[执行] 没有解析到任何函数`, 'WorkflowManager');
+      BotUtil.makeLog('warn', `[执行] 没有解析到任何函数: ${actionText}`, 'WorkflowManager');
       // 记录解析失败信息到上下文，供笔记系统使用
       context.parseError = `执行动作格式不正确：${actionText}`;
       return {
@@ -1272,75 +1520,93 @@ ${prompts.map(p => `- ${p}`).join('\n')}`;
     }
     
     const executedFunctions = [];
+    const failedFunctions = [];
     let lastError = null;
     
+    // 顺序执行所有函数
     for (const func of functions) {
-      BotUtil.makeLog('info', `[执行] ${func.type}(${JSON.stringify(func.params)})`, 'WorkflowManager');
-      const result = await this.executeSingleFunction(func, context);
-      if (result.executed) {
-        executedFunctions.push(func.type);
-        BotUtil.makeLog('info', `[执行] ✓ ${func.type} 成功`, 'WorkflowManager');
-      } else {
-        BotUtil.makeLog('warn', `[执行] ✗ ${func.type} 失败`, 'WorkflowManager');
+      try {
+        BotUtil.makeLog('info', `[执行] ${func.type}(${JSON.stringify(func.params)})`, 'WorkflowManager');
+        const result = await this.executeSingleFunction(func, context);
+        
+        if (result.executed) {
+          executedFunctions.push(func.type);
+          BotUtil.makeLog('info', `[执行] ✓ ${func.type} 成功`, 'WorkflowManager');
+        } else {
+          failedFunctions.push(func.type);
+          BotUtil.makeLog('warn', `[执行] ✗ ${func.type} 失败`, 'WorkflowManager');
+        }
+        
+        if (result.error) {
+          lastError = result.error;
+        }
+      } catch (error) {
+        failedFunctions.push(func.type);
+        lastError = error;
+        BotUtil.makeLog('error', `[执行] ✗ ${func.type} 异常: ${error.message}`, 'WorkflowManager');
       }
-      if (result.error) lastError = result.error;
     }
 
     const success = executedFunctions.length === functions.length && !lastError;
-    BotUtil.makeLog('info', `[执行] 结果: ${executedFunctions.length}/${functions.length} 成功`, 'WorkflowManager');
+    const successRate = functions.length > 0 ? executedFunctions.length / functions.length : 0;
+    
+    BotUtil.makeLog('info', `[执行] 结果: ${executedFunctions.length}/${functions.length} 成功 (${(successRate * 100).toFixed(0)}%)`, 'WorkflowManager');
 
     return {
       executed: executedFunctions.length > 0,
       functions: executedFunctions,
+      failedFunctions,
       context,
       success,
+      successRate,
       error: lastError?.message || null
     };
   }
 
   /**
-   * 解析工作流中的指令（支持合并工作流），并在工作流内部禁用启动新工作流
+   * 解析工作流函数（合并所有stream的functions）
+   * 确保合并后的functions能正常执行
    */
   parseWorkflowFunctions(actionText, context = {}) {
     let cleanText = actionText;
     const allFunctions = [];
+    const isInWorkflow = !!context.workflowId;
 
-    // 在工作流内部，直接清理掉所有 [启动工作流:...] 命令文本
-    if (context.workflowId) {
+    // 在工作流内部，清理掉所有 [启动工作流:...] 命令文本
+    if (isInWorkflow) {
       cleanText = cleanText.replace(/\[启动工作流:[^\]]+\]/g, '').trim();
     }
 
+    // 合并所有stream的functions（主stream + mergedStreams）
     const streams = [this.stream, ...(this.stream?._mergedStreams || [])];
 
     for (const s of streams) {
       if (!s?.functions || s.functions.size === 0) continue;
 
       for (const func of s.functions.values()) {
-        // 在工作流内部，直接跳过 start_workflow 的解析，避免AI看到和返回这个命令
-        if (context.workflowId && func.type === 'start_workflow') {
-          continue;
-        }
-        // 在工作流内部，跳过所有 onlyTopLevel 的函数
-        if (context.workflowId && func.onlyTopLevel) {
+        // 在工作流内部，跳过不允许的函数
+        if (isInWorkflow && (func.type === 'start_workflow' || func.onlyTopLevel)) {
           continue;
         }
         
         if (!func.enabled || !func.parser) continue;
 
-        const result = func.parser(cleanText, context);
-        if (result.functions && result.functions.length > 0) {
-          allFunctions.push(...result.functions);
-        }
-        if (result.cleanText !== undefined) {
-          cleanText = result.cleanText;
+        try {
+          const result = func.parser(cleanText, context);
+          if (result.functions?.length > 0) {
+            allFunctions.push(...result.functions);
+          }
+          if (result.cleanText !== undefined) {
+            cleanText = result.cleanText;
+          }
+        } catch (error) {
+          BotUtil.makeLog('warn', `解析函数失败[${func.type}]: ${error.message}`, 'WorkflowManager');
         }
       }
     }
 
-    BotUtil.makeLog('info', `[解析] 总计: ${allFunctions.length} 个函数 [${allFunctions.map(f => f.type).join(', ')}]`, 'WorkflowManager');
-
-    // 在工作流内部，禁止再次启动多步工作流
-    const filteredFunctions = context.workflowId
+    // 在工作流内部，再次过滤掉启动工作流函数（双重保险）
+    const filteredFunctions = isInWorkflow
       ? allFunctions.filter(fn => fn.type !== 'start_workflow')
       : allFunctions;
 
@@ -1351,12 +1617,13 @@ ${prompts.map(p => `- ${p}`).join('\n')}`;
     
     const orderedFunctions = withOrder.concat(withoutOrder);
 
+    if (orderedFunctions.length > 0) {
+      BotUtil.makeLog('info', `[解析] 总计: ${orderedFunctions.length} 个函数 [${orderedFunctions.map(f => f.type).join(', ')}]`, 'WorkflowManager');
+    }
+
     return { functions: orderedFunctions, cleanText };
   }
 
-  /**
-   * 执行单个函数
-   */
   async executeSingleFunction(func, context) {
     try {
       const executed = await this.stream._executeFunctionWithMerge(func, context);
@@ -1368,9 +1635,6 @@ ${prompts.map(p => `- ${p}`).join('\n')}`;
     }
   }
 
-  /**
-   * 处理函数错误
-   */
   handleFunctionError(context, func, error) {
     context.commandError = context.commandError || error.message;
   }
@@ -1421,7 +1685,7 @@ ${prompts.map(p => `- ${p}`).join('\n')}`;
   /**
    * 记录单步调试信息（完整、不截断）
    */
-  recordDebugStep(workflow, todo, { prompt, messages, response, parsed, notes, result }) {
+  recordDebugStep(workflow, todo, { prompt, messages, response, parsed, notes, result, completion }) {
     if (!workflow) return;
     if (!workflow.debugSteps) {
       workflow.debugSteps = [];
@@ -1444,7 +1708,11 @@ ${prompts.map(p => `- ${p}`).join('\n')}`;
       prompt,
       messages,
       aiResponse: response,
-      parsed,
+      parsed: {
+        commands: parsed.commands || [],
+        hasCompleteCommand: parsed.hasCompleteCommand || false
+      },
+      completion: completion || null,
       notesSnapshot: Array.isArray(notes) ? notes : [],
       todoNotes: Array.isArray(todo.notes) ? todo.notes : [],
       executionResult: safeResult
@@ -1555,4 +1823,3 @@ ${prompts.map(p => `- ${p}`).join('\n')}`;
     BotUtil.makeLog('info', `工作流调试日志已保存: ${filePath}`, 'WorkflowManager');
   }
 }
-

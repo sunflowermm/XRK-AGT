@@ -1332,6 +1332,14 @@ export default class AIStream {
 
       const { functions, cleanText } = this.parseFunctions(response, context);
 
+      // 先发送自然语言回复（如果有），然后再执行函数
+      // 这样可以确保用户先看到AI的自然语言回复，然后才看到工作流启动等操作
+      if (cleanText && cleanText.trim() && e?.reply) {
+        await e.reply(cleanText.trim()).catch(err => {
+          BotUtil.makeLog('debug', `发送自然语言回复失败: ${err.message}`, 'AIStream');
+        });
+      }
+
       // 执行函数（支持合并工作流）
       for (let i = 0; i < functions.length; i++) {
         const func = functions[i];
@@ -1418,26 +1426,20 @@ export default class AIStream {
         this.ensureWorkflowManager(stream);
       }
 
-      if (enableTodo) {
-        this.ensureWorkflowManager(stream);
-        const workflowResult = await this.tryStartWorkflow(stream, e, question);
-        if (workflowResult) return workflowResult;
-      }
-
-      const finalQuestion = typeof question === 'string'
-        ? question
+      // 步骤1: 执行AI调用（带人设）
+      const finalQuestion = typeof question === 'string' 
+        ? question 
         : (question?.content || question?.text || question);
-      try {
-        const response = await stream.execute(e, finalQuestion, apiConfig);
-        if (enableTodo && response && e?.reply) {
-          await e.reply(response);
-          return null;
-        }
-        return response;
-      } catch (error) {
-        BotUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AIStream');
-        return null;
+      
+      const response = await stream.execute(e, finalQuestion, apiConfig);
+      
+      // 步骤2: 检查是否需要自动启动工作流
+      // 只有在enableTodo=true且AI没有启动工作流的情况下才尝试自动启动
+      if (enableTodo && response && !this.hasWorkflowCommand(response)) {
+        await this.maybeAutoStartWorkflow(stream, e, question);
       }
+      
+      return response;
     } catch (error) {
       BotUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AIStream');
       return null;
@@ -1484,20 +1486,51 @@ export default class AIStream {
   }
 
   /**
+   * 检查响应中是否包含工作流命令
+   */
+  hasWorkflowCommand(response) {
+    return response && /\[启动工作流:[^\]]+\]/.test(response);
+  }
+
+  /**
+   * 可能自动启动工作流（如果满足条件）
+   */
+  async maybeAutoStartWorkflow(stream, e, question) {
+    if (!stream.workflowManager) return;
+    
+    // 检查是否已有运行中的工作流
+    if (this.hasRunningWorkflow(stream, e)) {
+      return;
+    }
+    
+    this.ensureWorkflowManager(stream);
+    await this.tryStartWorkflow(stream, e, question);
+  }
+
+  /**
+   * 检查是否已有运行中的工作流
+   */
+  hasRunningWorkflow(stream, e) {
+    const { activeWorkflows } = stream.workflowManager || {};
+    if (!activeWorkflows?.size) return false;
+    
+    const userId = e?.user_id || e?.user?.id || '';
+    return Array.from(activeWorkflows.values()).some(w => {
+      const workflowUserId = w.context?.e?.user_id || w.context?.e?.user?.id || '';
+      return w.status === 'running' && workflowUserId === userId;
+    });
+  }
+
+  /**
    * 尝试启动工作流
    */
   async tryStartWorkflow(stream, e, question) {
-    if (!stream.workflowManager) return null;
-    
     const questionText = this.extractQuestionText(question);
     const decision = await stream.workflowManager.decideWorkflowMode(e, questionText);
     
-    if (!decision.shouldUseTodo || decision.todos.length === 0) {
-      return null;
+    if (decision.shouldUseTodo && decision.todos.length > 0) {
+      await stream.workflowManager.createWorkflow(e, questionText, decision.todos);
     }
-    
-    await stream.workflowManager.createWorkflow(e, questionText, decision.todos);
-    return null;
   }
 
   /**
