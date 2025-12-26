@@ -186,15 +186,22 @@ export default class ChatStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (context.e?.isGroup && EMOJI_REACTIONS[params.emojiType]) {
-          const emojiIds = EMOJI_REACTIONS[params.emojiType];
-          const emojiId = emojiIds[Math.floor(Math.random() * emojiIds.length)];
-          try {
-            await context.e.group.setEmojiLike(params.msgId, emojiId);
+        if (!context.e?.isGroup || !EMOJI_REACTIONS[params.emojiType]) return;
+        
+        const emojiIds = EMOJI_REACTIONS[params.emojiType];
+        const emojiId = emojiIds[Math.floor(Math.random() * emojiIds.length)];
+        const msgId = String(params.msgId || '');
+        
+        if (!msgId) return;
+        
+        try {
+          const group = context.e.group;
+          if (group && typeof group.setEmojiLike === 'function') {
+            await group.setEmojiLike(msgId, emojiId);
             await BotUtil.sleep(200);
-          } catch (error) {
-            // 静默失败
           }
+        } catch (error) {
+          BotUtil.makeLog('debug', `表情回应失败: ${error.message}`, 'ChatStream');
         }
       },
       enabled: true
@@ -228,8 +235,10 @@ export default class ChatStream extends AIStream {
         if (context.e?.isGroup) {
           const thumbCount = Math.min(parseInt(params.count) || 1, 50);
           try {
-            const member = context.e.group.pickMember(params.qq);
-            await member.thumbUp(thumbCount);
+            const member = context.e.group?.pickMember(params.qq);
+            if (member && typeof member.thumbUp === 'function') {
+              await member.thumbUp(thumbCount);
+            }
             await BotUtil.sleep(300);
           } catch (error) {
             // 静默失败
@@ -986,8 +995,9 @@ export default class ChatStream extends AIStream {
     }
     
     try {
-      const member = e.group.pickMember(e.self_id);
-      const info = await member.getInfo();
+      const member = e.group?.pickMember(e.self_id);
+      if (!member) return '成员';
+      const info = await member.getInfo?.() || {};
       const role = info.role === 'owner' ? '群主' : 
                    info.role === 'admin' ? '管理员' : '成员';
       
@@ -1095,7 +1105,7 @@ ${resolvedPrompts.join('\n')}
       embeddingHint = '\n💡 系统会自动检索相关历史对话\n';
     }
 
-    const botName = e.bot?.nickname || e.bot?.info?.nickname || 'AI助手';
+    const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'AI助手';
     const isMaster = e.isMaster === true;
     
     return `【人设设定】
@@ -1287,7 +1297,7 @@ ${isGlobalTrigger ?
             : '';
           history.push({
             user_id: e.self_id,
-            nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
+            nickname: e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot',
             message: `${functionInfo}${cleanText}`,
             message_id: Date.now().toString(),
             time: Date.now(),
@@ -1306,7 +1316,7 @@ ${isGlobalTrigger ?
             : '';
           this.storeMessageWithEmbedding(historyKey, {
             user_id: e.self_id,
-            nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
+            nickname: e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot',
             message: `${functionInfo}${cleanText}`,
             message_id: Date.now().toString(),
             time: Date.now()
