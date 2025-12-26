@@ -64,35 +64,20 @@ tts:
   # 是否只有ASR触发才有TTS（false表示所有消息事件都能触发TTS）
   onlyForASR: true
 
-# Embedding 配置
+# Embedding 配置（简化：仅支持本地和远程两种模式）
 embedding:
   enabled: true
-  defaultProfile: lightweight
-  defaults:
-    provider: lightweight
-    maxContexts: 5
-    similarityThreshold: 0.6
-    cacheExpiry: 86400
-    cachePath: "./data/models"
-  profiles:
-    lightweight:
-      provider: lightweight
-    onnx:
-      provider: onnx
-      onnxModel: "Xenova/all-MiniLM-L6-v2"
-      onnxQuantized: true
-    hf:
-      provider: hf
-      hfModel: "sentence-transformers/all-MiniLM-L6-v2"
-      hfToken: ""
-    fasttext:
-      provider: fasttext
-      fasttextModel: "cc.zh.300.bin"
-    api:
-      provider: api
-      apiUrl: ""
-      apiKey: ""
-      apiModel: "text-embedding-3-small"
+  mode: local  # local: 本地 lightweight 算法 | remote: 远程 API 接口
+  # 本地模式配置（lightweight BM25算法，无需额外配置）
+  # 远程模式配置（标准 OpenAI 兼容接口）
+  remote:
+    apiUrl: ""      # API 地址，如 https://api.openai.com/v1/embeddings
+    apiKey: ""      # API 密钥
+    apiModel: "text-embedding-3-small"  # 模型名称
+  # 通用配置
+  maxContexts: 5              # 最大上下文条数
+  similarityThreshold: 0.6    # 相似度阈值
+  cacheExpiry: 86400          # 缓存时长（秒）
 
 # 设备运行参数
 device:

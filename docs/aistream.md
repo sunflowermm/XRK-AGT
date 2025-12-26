@@ -10,17 +10,17 @@
 
 - ✅ **零配置扩展**：放置到 `core/stream/` 目录即可自动加载
 - ✅ **函数注册系统**：支持动态prompt和复杂解析
-- ✅ **Embedding提供商**：支持多种Embedding提供商（lightweight/onnx/hf/fasttext/api）
+- ✅ **Embedding模式**：支持本地（BM25）和远程（API）两种模式
 - ✅ **工作流合并**：支持功能合并和组合
 - ✅ **上下文增强**：自动上下文检索和增强
 - ✅ **热重载支持**：修改代码后自动重载
 
 - 调用外部 Chat Completion API（如 OpenAI 兼容接口）。
-- 多种 Embedding 提供商（ONNX/HuggingFace/FastText/API/轻量级 BM25）。
+- Embedding 支持（本地 BM25 算法 / 远程 API 接口）。
 - 相似度检索与历史上下文增强。
 - 函数调用（Function Calling）与权限控制。
 
-所有自定义 AI 工作流都应继承此类，并实现 `buildSystemPrompt` 与 `buildChatContext`。
+所有自定义 AI 工作流都应继承此类，可选择实现 `buildSystemPrompt` 与 `buildChatContext`。
 
 ---
 
@@ -71,180 +71,147 @@ classDiagram
 
 ### 运行时配置来源（`config/default_config/aistream.yaml`）
 
-`cfg.aistream` 会在 `AIStream` 和设备管理模块中统一读取，结构示例：
+`cfg.aistream` 会在 `AIStream` 和设备管理模块中统一读取，实际配置结构：
 
 ```yaml
+# 是否启用工作流系统
 enabled: true
+
+# 工作流目录路径（相对于项目根目录）
 streamDir: "core/stream"
 
-llm:
-  enabled: true
-  defaultProfile: balanced  # 默认使用 balanced 档位
-  persona: "你是一名友好、简洁的智能语音助手。"
-  displayDelay: 1500
-  defaults:
-    provider: generic  # 默认提供商：generic（GPT-LLM 标准调用方式）
-    baseUrl: https://api.example.com/v1
-    apiKey: ""
-    model: general-task  # 默认聊天模型
-    visionModel: glm-4v  # 默认识图模型
-    temperature: 0.8
-    maxTokens: 2000
-    timeout: 30000
-  profiles:
-    balanced:
-      label: 通用对话
-      provider: generic
-      model: smart-balanced
-      visionModel: glm-4v
-      maxTokens: 4096
-    fast:
-      label: 极速润色
-      provider: generic
-      model: smart-fast
-      visionModel: glm-4v
-      maxTokens: 1024
-    long:
-      label: 长文本
-      provider: generic
-      model: smart-long
-      visionModel: glm-4v
-      maxTokens: 8000
-    device:
-      label: 设备友好
-      provider: generic
-      model: smart-device
-      visionModel: glm-4v
-      maxTokens: 1024
-    creative:
-      label: 灵感工坊
-      provider: generic
-      model: smart-creative
-      visionModel: glm-4v
-      maxTokens: 4096
-    volcengine:
-      label: 火山引擎
-      provider: volcengine  # 使用火山引擎提供商
-      baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      apiKey: ""
-      model: doubao-pro-4k
-      visionModel: doubao-pro-vision
-      maxTokens: 4096
+# 工作流全局设置
+global:
+  maxTimeout: 360000      # 最大执行超时时间（毫秒）
+  debug: false            # 是否启用调试日志
+  maxConcurrent: 5        # 并发执行限制
 
+# 工作流缓存设置
+cache:
+  enabled: true           # 是否启用缓存
+  ttl: 300                # 缓存过期时间（秒）
+  maxSize: 100            # 最大缓存条数
+
+# LLM 工厂运营商选择（gptgod / volcengine / xiaomimimo）
+# 文本 LLM 配置分别位于 data/server_bots/{port}/god.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml
+llm:
+  Provider: gptgod        # LLM 提供商
+  timeout: 360000         # LLM请求超时时间（毫秒），默认360000（6分钟）
+  retry:                  # LLM请求重试配置
+    enabled: true         # 是否启用重试
+    maxAttempts: 3        # 最大重试次数
+    delay: 2000           # 重试延迟（毫秒）
+    retryOn: ["timeout", "network", "5xx"]  # 重试条件
+
+# 识图工厂运营商选择（gptgod / volcengine）
+# 一个工厂一个配置文件：god_vision.yaml、volcengine_vision.yaml
+vision:
+  Provider: gptgod
+
+# ASR 工厂运营商选择
+# 详细配置位于 data/server_bots/{port}/volcengine_asr.yaml
+asr:
+  Provider: volcengine
+  workflow: device        # ASR识别结果调用的工作流名称
+
+# TTS 工厂运营商选择
+# 详细配置位于 data/server_bots/{port}/volcengine_tts.yaml
+tts:
+  Provider: volcengine
+  onlyForASR: true        # 是否只有ASR触发才有TTS
+
+# Embedding 配置（简化：仅支持本地和远程两种模式）
 embedding:
   enabled: true
-  defaultProfile: lightweight
-  defaults:
-    provider: lightweight
-    maxContexts: 5
-    similarityThreshold: 0.6
-    cacheExpiry: 86400
-    cachePath: ./data/models
-  profiles:
-    lightweight:
-      provider: lightweight
-    onnx:
-      provider: onnx
-      onnxModel: Xenova/all-MiniLM-L6-v2
-    hf:
-      provider: hf
-      hfModel: sentence-transformers/all-MiniLM-L6-v2
-    fasttext:
-      provider: fasttext
-      fasttextModel: cc.zh.300.bin
-    api:
-      provider: api
-      apiUrl: ""
-      apiKey: ""
-      apiModel: text-embedding-3-small
+  mode: local             # local: 本地 BM25 算法 | remote: 远程 API 接口
+  remote:                 # 远程模式配置（mode: remote 时使用）
+    apiUrl: ""            # API 地址，如 https://api.openai.com/v1/embeddings
+    apiKey: ""            # API 密钥
+    apiModel: "text-embedding-3-small"  # 模型名称
+  maxContexts: 5          # 最大上下文条数
+  similarityThreshold: 0.6  # 相似度阈值
+  cacheExpiry: 86400      # 缓存时长（秒）
 
-tts:
-  defaultProvider: volcengine
-  providers:
-    volcengine:
-      wsUrl: wss://openspeech.bytedance.com/api/v3/tts/bidirection
-      appKey: YOUR_APP_KEY
-
-asr:
-  defaultProvider: volcengine
-  providers:
-    volcengine:
-      wsUrl: wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
-
+# 设备运行参数
 device:
   heartbeatInterval: 30
   heartbeatTimeout: 180
+  commandTimeout: 10000
+  maxDevices: 100
+  maxLogsPerDevice: 100
   messageQueueSize: 100
+  wsPingIntervalMs: 30000
+  wsPongTimeoutMs: 10000
+  wsReconnectDelayMs: 2000
+  wsMaxReconnectAttempts: 5
+  enableDetailedLogs: true
+  enablePerformanceLogs: true
+  audioSaveDir: "./data/wav"
 
+# 表情映射
 emotions:
   keywords:
     开心: happy
+    伤心: sad
+    生气: angry
+    惊讶: surprise
+    爱: love
+    酷: cool
+    睡觉: sleep
+    思考: think
+    眨眼: wink
+    大笑: laugh
   supported:
     - happy
     - sad
-
-drawing:
-  defaultModel: sketch
-  models:
-    sketch:
-      provider: generic
-      baseUrl: https://api.example.com/draw
+    - angry
+    - surprise
+    - love
+    - cool
+    - sleep
+    - think
+    - wink
+    - laugh
 ```
 
-> `drawing` 段目前仅提供占位符，方便后续扩展图像/渲染模型。
+> **注意**：
+> - LLM、Vision、ASR、TTS 的详细配置位于各自的配置文件中，不在 `aistream.yaml` 中
+> - Embedding 配置会自动从 `cfg.aistream.embedding` 读取，工作流只需设置 `embedding: { enabled: true }`
 
-### 调用优先级（LLM & Embedding）
+### LLM 提供商配置
 
-**配置优先级流程图**:
+LLM 配置通过 `llm.Provider` 指定，支持的提供商：
 
-```mermaid
-flowchart TB
-    A["API调用"] --> B{"apiConfig中是否有<br/>baseUrl/apiKey?"}
-    B -->|是| C["使用显式自定义配置"]
-    B -->|否| D{"是否指定profile/modelKey?"}
-    D -->|是| E["在llm.profiles中查找"]
-    D -->|否| F["使用defaultProfile"]
-    E --> G["使用对应档位配置"]
-    F --> H["使用defaults配置"]
-    C --> I["执行API调用"]
-    G --> I
-    H --> I
-    
-    style A fill:#E6F3FF
-    style C fill:#FFD700
-    style G fill:#FFE6CC
-    style H fill:#87CEEB
-    style I fill:#90EE90
-```
+- **gptgod**：GPTGod 提供商（默认）
+  - 配置文件：`data/server_bots/{port}/god.yaml`
+  - 支持标准 OpenAI Chat Completions 协议
 
-**优先级说明**：
-
-1. **显式传自定义配置** - `apiConfig` 中包含 `baseUrl/apiKey` 时，直接以调用方参数为准
-2. **仅指定模型/档位 key** - 在 `llm.profiles` 中查找对应参数
-3. **完全未指定** - 按 `defaultProfile → defaults` 的顺序解析
-
-### 提供商支持
-
-- **generic**：默认提供商，使用 GPT-LLM 标准调用方式（兼容 OpenAI Chat Completions 协议）
-  - 适用于所有遵循 OpenAI 协议的 API（如 GPTGod、OpenAI、Azure OpenAI 等）
-  - 无需额外配置，默认使用此提供商
-  
 - **volcengine**：火山引擎豆包大模型
+  - 配置文件：`data/server_bots/{port}/volcengine_llm.yaml`
   - 接口地址：`https://ark.cn-beijing.volces.com/api/v3`
   - 支持的模型：`doubao-pro-4k`、`doubao-pro-32k`、`doubao-lite-4k` 等
   - 详细文档：https://www.volcengine.com/docs/82379
 
-- **Embedding 配置 `this.embeddingConfig`**
-  - `enabled`：是否启用向量检索。
-  - `provider`：`lightweight/onnx/hf/fasttext/api`。
-  - `maxContexts`：最多拼接多少条历史上下文。
-  - `similarityThreshold`：相似度阈值。
-  - `cacheExpiry`：Redis 缓存过期时间。
-  - 模型配置：
-    - ONNX：`onnxModel/onnxQuantized`。
-    - HuggingFace：`hfToken/hfModel`。
-    - FastText：`fasttextModel`。
-    - API：`apiUrl/apiKey/apiModel`。
+- **xiaomimimo**：小咪咪莫提供商
+  - 配置文件：`data/server_bots/{port}/xiaomimimo_llm.yaml`
+
+> **注意**：LLM 的详细配置（如 `baseUrl`、`apiKey`、`model` 等）位于各自的配置文件中，不在 `aistream.yaml` 中。
+
+### Embedding 配置 `this.embeddingConfig`
+
+Embedding 配置会自动从 `cfg.aistream.embedding` 读取：
+
+- `enabled`：是否启用向量检索（从 `cfg.aistream.embedding.enabled` 读取，默认 `true`）
+- `mode`：`local`（本地 BM25）或 `remote`（远程 API，从 `cfg.aistream.embedding.mode` 读取，默认 `local`）
+- `maxContexts`：最多拼接多少条历史上下文（从 `cfg.aistream.embedding.maxContexts` 读取，默认 `5`）
+- `similarityThreshold`：相似度阈值（从 `cfg.aistream.embedding.similarityThreshold` 读取，默认 `0.6`）
+- `cacheExpiry`：Redis 缓存过期时间（从 `cfg.aistream.embedding.cacheExpiry` 读取，默认 `86400` 秒）
+- 远程模式配置（`mode: remote` 时，从 `cfg.aistream.embedding.remote` 读取）：
+  - `apiUrl`：API 地址（如 `https://api.openai.com/v1/embeddings`）
+  - `apiKey`：API 密钥
+  - `apiModel`：模型名称（默认 `text-embedding-3-small`）
+
+> **注意**：工作流构造函数中只需设置 `embedding: { enabled: true }`，其他配置会自动从 `cfg.aistream.embedding` 读取。
 
 ---
 
@@ -259,25 +226,19 @@ flowchart TB
     C --> D{"是否启用Embedding"}
     D -->|是| E["initEmbedding"]
     D -->|否| F["初始化完成"]
-    E --> G{"选择provider"}
-    G -->|lightweight| H["initLightweightEmbedding<br/>BM25风格"]
-    G -->|onnx| I["initONNXEmbedding<br/>加载ONNX模型"]
-    G -->|hf| J["initHFEmbedding<br/>接入HuggingFace"]
-    G -->|fasttext| K["initFastTextEmbedding<br/>下载fastText向量"]
-    G -->|api| L["initAPIEmbedding<br/>调用外部API"]
-    H --> M{"初始化是否成功"}
-    I --> M
-    J --> M
-    K --> M
-    L --> M
-    M -->|失败| N["降级到lightweight"]
-    M -->|成功| F
-    N --> F
+    E --> G{"选择mode"}
+    G -->|local| H["initLightweightEmbedding<br/>BM25算法"]
+    G -->|remote| I["initAPIEmbedding<br/>远程API接口"]
+    H --> J{"初始化是否成功"}
+    I --> J
+    J -->|失败| K["降级到local模式"]
+    J -->|成功| F
+    K --> F
     
     style A fill:#E6F3FF
     style E fill:#FFE6CC
     style F fill:#90EE90
-    style N fill:#FFB6C1
+    style K fill:#FFB6C1
 ```
 
 **步骤说明**：
@@ -286,8 +247,10 @@ flowchart TB
   - 初始化函数映射 `this.functions = new Map()`
   - 初始化与 Embedding 相关的内部字段
 - `initEmbedding()` - Embedding 初始化
-  - 根据 `embeddingConfig.provider` 调用对应的初始化方法
-  - 若指定 provider 初始化失败，会尝试降级到 `lightweight`
+  - 根据 `embeddingConfig.mode` 选择本地（`local`）或远程（`remote`）模式
+  - 本地模式：使用 BM25 算法，无需额外配置
+  - 远程模式：调用外部 API，需要配置 `apiUrl`、`apiKey`、`apiModel`
+  - 若远程模式初始化失败，会自动回退到本地模式
 
 > 通常由工作流加载器在系统启动时统一初始化，插件只需假定可用即可
 
@@ -374,13 +337,15 @@ flowchart TB
     - 角色设定。
     - 回复风格约束。
     - 场景限制等。
+  - **注意**：此方法为可选实现，子类可根据需要实现。未实现时返回空字符串。
 
 - `buildChatContext(e, question)`  
   - 将事件与用户问题转换为 Chat Completion 的 `messages` 数组：
     - `[{ role: 'system', content: ... }, { role: 'user', content: ... }, ...]`。
   - 可以根据群聊 / 私聊 / 设备事件等差异，做不同上下文拼装。
+  - **注意**：此方法为可选实现，子类可根据需要实现。未实现时返回空数组。
 
-> 若子类未实现上述方法，会抛出错误，提示必须实现。
+> 若子类未实现上述方法，基类会提供默认实现，不会抛出错误。
 
 ---
 
@@ -417,8 +382,8 @@ flowchart TB
 ### 配置探查 API
 
 - `GET /api/ai/models`
-  - 返回 `profiles`（模型档位列表）、`defaultProfile`。
-  - 前端（如 `www/xrk`）可动态渲染模型选择器，不必硬编码配置。
+  - 返回可用的 LLM 提供商列表和配置信息。
+  - 前端（如 `www/xrk`）可动态渲染模型选择器。
 
 ---
 
@@ -438,8 +403,8 @@ flowchart TB
 ## 清理与关闭：`cleanup()`
 
 - 记录日志 `[name] 清理资源`。
-- 若存在可释放的资源（如 ONNX Session、FastText 模型等），尝试释放。
 - 重置 Embedding 状态与初始化标记。
+- 清理函数映射和合并的工作流引用。
 
 > 框架层可在应用关闭或热重载时调用该方法，以避免内存泄漏。
 

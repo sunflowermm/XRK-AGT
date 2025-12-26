@@ -48,10 +48,7 @@ export default class ChatStream extends AIStream {
         presencePenalty: 0.6,
         frequencyPenalty: 0.6
       },
-      embedding: {
-        enabled: true,
-        provider: 'lightweight',
-      }
+      embedding: { enabled: true }
     });
   }
 

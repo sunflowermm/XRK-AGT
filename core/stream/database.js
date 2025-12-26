@@ -23,7 +23,7 @@ export default class DatabaseStream extends AIStream {
         temperature: 0.7,
         maxTokens: 2000
       },
-      embedding: { enabled: false }
+      embedding: { enabled: true }
     });
     
     // 知识库存储目录
@@ -33,6 +33,13 @@ export default class DatabaseStream extends AIStream {
 
   async init() {
     await super.init();
+    
+    // 初始化 Embedding（用于向量检索）
+    try {
+      await this.initEmbedding();
+    } catch (error) {
+      BotUtil.makeLog('warn', `[${this.name}] Embedding初始化失败，将使用关键词搜索`, 'DatabaseStream');
+    }
     
     // 确保知识库目录存在
     await fs.mkdir(this.dbDir, { recursive: true });
@@ -165,7 +172,7 @@ export default class DatabaseStream extends AIStream {
   }
 
   /**
-   * 保存知识（简化版：自动处理文本或JSON）
+   * 保存知识（自动处理文本或JSON，并生成 embedding）
    */
   async saveKnowledge(db, content, context) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
@@ -192,16 +199,41 @@ export default class DatabaseStream extends AIStream {
       ...knowledgeData,
       createdAt: new Date().toISOString()
     };
+
+    // 如果启用 embedding，生成并缓存向量
+    if (this.embeddingConfig.enabled && this.embeddingReady) {
+      const textContent = typeof record.content === 'string' 
+        ? record.content 
+        : JSON.stringify(record);
+      const embedding = await this.generateEmbedding(textContent);
+      if (embedding && Array.isArray(embedding)) {
+        record.embedding = embedding;
+      }
+    }
     
     records.push(record);
+    
     await fs.writeFile(dbFile, JSON.stringify(records, null, 2), 'utf8');
     this.databases.set(db, records);
+    
+    // 异步生成 embedding（不阻塞主流程）
+    if (this.embeddingConfig.enabled && this.embeddingReady && !record.embedding) {
+      const textContent = typeof record.content === 'string' 
+        ? record.content 
+        : JSON.stringify(record);
+      this.generateEmbedding(textContent).then(embedding => {
+        if (embedding && Array.isArray(embedding)) {
+          record.embedding = embedding;
+          this.saveEmbeddingAsync(record, db).catch(() => {});
+        }
+      }).catch(() => {});
+    }
     
     BotUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
   }
 
   /**
-   * 查询知识（简化版：支持关键词搜索）
+   * 查询知识（支持向量检索和关键词搜索）
    */
   async queryKnowledge(db, keyword, context) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
@@ -218,11 +250,138 @@ export default class DatabaseStream extends AIStream {
       return records;
     }
     
-    // 支持关键词搜索（在content字段中搜索）
+    // 如果启用 embedding 且已就绪，使用向量检索
+    if (this.embeddingConfig.enabled && this.embeddingReady) {
+      return await this.queryKnowledgeWithEmbedding(records, keyword, db);
+    }
+    
+    // 否则使用关键词搜索
     return records.filter(record => {
       const content = JSON.stringify(record).toLowerCase();
       return content.includes(keyword.toLowerCase());
     });
+  }
+
+  /**
+   * 使用向量检索知识库
+   */
+  async queryKnowledgeWithEmbedding(records, query, dbName = null) {
+    if (!records || records.length === 0) return [];
+    
+    const queryEmbedding = await this.generateEmbedding(query);
+    if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
+      // 回退到关键词搜索
+      return records.filter(record => {
+        const content = JSON.stringify(record).toLowerCase();
+        return content.includes(query.toLowerCase());
+      });
+    }
+
+    // 为每条记录计算相似度
+    const scored = [];
+    for (const record of records) {
+      const content = typeof record.content === 'string' 
+        ? record.content 
+        : JSON.stringify(record);
+      
+      // 如果记录已有 embedding，直接使用
+      let recordEmbedding = record.embedding;
+      if (!recordEmbedding || !Array.isArray(recordEmbedding)) {
+        // 生成 embedding（不立即保存，避免频繁IO）
+        recordEmbedding = await this.generateEmbedding(content);
+        if (!recordEmbedding || !Array.isArray(recordEmbedding)) {
+          continue; // 跳过无法生成 embedding 的记录
+        }
+        // 异步保存 embedding（不阻塞检索）
+        record.embedding = recordEmbedding;
+        if (dbName) {
+          this.saveEmbeddingAsync(record, dbName).catch(() => {}); // 静默失败
+        }
+      }
+
+      const similarity = this.cosineSimilarity(queryEmbedding, recordEmbedding);
+      scored.push({ record, similarity });
+    }
+
+    // 按相似度排序并过滤
+    const threshold = this.embeddingConfig.similarityThreshold ?? 0.3;
+    return scored
+      .filter(item => item.similarity >= threshold)
+      .sort((a, b) => b.similarity - a.similarity)
+      .map(item => item.record);
+  }
+
+  /**
+   * 异步保存 embedding（不阻塞主流程）
+   */
+  async saveEmbeddingAsync(record, db) {
+    const dbFile = path.join(this.dbDir, `${db}.json`);
+    try {
+      const data = await fs.readFile(dbFile, 'utf8');
+      const records = JSON.parse(data);
+      const index = records.findIndex(r => r.id === record.id);
+      if (index >= 0 && record.embedding) {
+        records[index].embedding = record.embedding;
+        await fs.writeFile(dbFile, JSON.stringify(records, null, 2), 'utf8');
+        this.databases.set(db, records);
+      }
+    } catch (error) {
+      // 静默失败，不影响主流程
+    }
+  }
+
+  /**
+   * 自动检索相关知识库内容（用于 RAG）
+   */
+  async retrieveKnowledgeContexts(query, maxResults = 5) {
+    if (!query || !this.embeddingConfig.enabled || !this.embeddingReady) {
+      return [];
+    }
+
+    try {
+      const databases = await this.listDatabases({});
+      if (databases.length === 0) return [];
+
+      const allResults = [];
+      
+      // 从所有知识库检索
+      for (const db of databases) {
+        const results = await this.queryKnowledge(db, query, {});
+        results.forEach(record => {
+          const content = typeof record.content === 'string' 
+            ? record.content 
+            : JSON.stringify(record);
+          allResults.push({
+            source: `知识库:${db}`,
+            content: content.substring(0, 200), // 限制长度
+            record: record
+          });
+        });
+      }
+
+      // 如果使用向量检索，按相似度排序
+      if (this.embeddingConfig.mode === 'remote') {
+        const queryEmbedding = await this.generateEmbedding(query);
+        if (queryEmbedding && Array.isArray(queryEmbedding)) {
+          for (const result of allResults) {
+            const recordEmbedding = result.record.embedding || 
+              await this.generateEmbedding(result.content);
+            if (recordEmbedding && Array.isArray(recordEmbedding)) {
+              result.similarity = this.cosineSimilarity(queryEmbedding, recordEmbedding);
+              if (!result.record.embedding) {
+                result.record.embedding = recordEmbedding; // 缓存
+              }
+            }
+          }
+          allResults.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
+        }
+      }
+
+      return allResults.slice(0, maxResults);
+    } catch (error) {
+      BotUtil.makeLog('debug', `[${this.name}] 检索知识库失败: ${error.message}`, 'DatabaseStream');
+      return [];
+    }
   }
 
   /**
@@ -283,21 +442,6 @@ export default class DatabaseStream extends AIStream {
     await fs.writeFile(dbFile, JSON.stringify(records, null, 2), 'utf8');
     this.databases.set(db, records);
     return records.length;
-  }
-
-  /**
-   * 获取知识库内容（用于构建prompt）
-   */
-  async getKnowledgeForContext(db, limit = 10) {
-    const dbFile = path.join(this.dbDir, `${db}.json`);
-    
-    try {
-      const data = await fs.readFile(dbFile, 'utf8');
-      const records = JSON.parse(data);
-      return records.slice(-limit); // 返回最新的N条
-    } catch {
-      return [];
-    }
   }
 
   /**

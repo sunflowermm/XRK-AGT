@@ -21,10 +21,7 @@ export default class MemoryStream extends AIStream {
         temperature: 0.7,
         maxTokens: 2000
       },
-      embedding: {
-        enabled: true,
-        provider: 'lightweight'
-      }
+      embedding: { enabled: true }
     });
     
     // 记忆存储目录

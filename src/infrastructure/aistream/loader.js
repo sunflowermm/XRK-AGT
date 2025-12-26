@@ -17,8 +17,6 @@ class StreamLoader {
     this.streams = new Map();
     this.streamClasses = new Map();
     this.loaded = false;
-    this.embeddingConfigured = false;
-    this.embeddingConfig = null;
     this.loadStats = {
       streams: [],
       totalLoadTime: 0,
@@ -28,15 +26,6 @@ class StreamLoader {
     };
   }
 
-  /**
-   * 配置Embedding设置（只配置，不初始化）
-   */
-  configureEmbedding(config = {}) {
-    this.embeddingConfig = config;
-    this.embeddingConfigured = true;
-    const status = config.enabled === false ? '禁用' : '覆盖';
-    BotUtil.makeLog('debug', `Embedding配置: ${status}`, 'StreamLoader');
-  }
 
   /**
    * 加载所有工作流（标准化流程）
@@ -82,10 +71,11 @@ class StreamLoader {
         await this.loadStreamClass(file);
       }
 
-      // 阶段2: 应用Embedding配置
-      if (this.embeddingConfig && this.embeddingConfig.enabled) {
+      // 阶段2: 应用Embedding配置（直接从 cfg 读取）
+      const embeddingConfig = cfg.aistream?.embedding || {};
+      if (embeddingConfig.enabled !== false) {
         BotUtil.makeLog('debug', '配置Embedding...', 'StreamLoader');
-        await this.applyEmbeddingConfig();
+        await this.applyEmbeddingConfig(embeddingConfig);
       }
 
       // 阶段3: 初始化MCP服务（注册所有工具）
@@ -130,14 +120,7 @@ class StreamLoader {
         throw new Error('工作流缺少name属性');
       }
 
-      // 应用Embedding配置
-      if (this.embeddingConfig) {
-        if (typeof stream.applyEmbeddingOverrides === 'function') {
-          stream.applyEmbeddingOverrides(this.embeddingConfig);
-        } else {
-          stream.embeddingConfig = { ...stream.embeddingConfig, ...this.embeddingConfig };
-        }
-      }
+      // Embedding配置从 cfg 自动读取，无需手动配置
 
       // 初始化
       if (typeof stream.init === 'function') {
@@ -172,28 +155,34 @@ class StreamLoader {
   }
 
   /**
-   * 统一应用Embedding配置并初始化
+   * 统一应用Embedding配置并初始化（从 cfg 读取）
    */
-  async applyEmbeddingConfig() {
+  async applyEmbeddingConfig(embeddingConfig = null) {
+    const config = embeddingConfig || cfg.aistream?.embedding || {};
     let successCount = 0;
     let failCount = 0;
 
     for (const stream of this.streams.values()) {
-      if (!stream.embeddingConfig) {
-        stream.embeddingConfig = { enabled: false };
-      }
-
-      if (stream.embeddingConfig.enabled === false) {
+      // 如果工作流明确禁用 embedding，跳过
+      if (stream.embeddingConfig?.enabled === false) {
         continue;
       }
-      stream.embeddingConfig.enabled = true;
+      
+      // 应用全局配置
+      if (config.enabled !== false) {
+        if (typeof stream.applyEmbeddingOverrides === 'function') {
+          stream.applyEmbeddingOverrides(config);
+        } else {
+          stream.embeddingConfig = { ...stream.embeddingConfig, ...config };
+        }
+      }
 
       try {
         // 初始化Embedding
         await stream.initEmbedding();
-        const provider = stream.embeddingConfig.provider;
+        const mode = stream.embeddingConfig.mode || 'local';
         BotUtil.makeLog('debug', 
-          `Embedding初始化: ${stream.name} - ${provider}`, 
+          `Embedding初始化: ${stream.name} - ${mode}`, 
           'StreamLoader'
         );
         successCount++;
@@ -249,7 +238,7 @@ class StreamLoader {
       
       let embStatus = '';
       if (stream.embeddingConfig?.enabled && stream.embeddingReady) {
-        embStatus = ` [${stream.embeddingConfig.provider}]`;
+        embStatus = ` [${stream.embeddingConfig.mode || 'local'}]`;
       }
       
       BotUtil.makeLog('debug', 
@@ -275,7 +264,6 @@ class StreamLoader {
     this.streams.clear();
     this.streamClasses.clear();
     this.loaded = false;
-    this.embeddingConfigured = false;
     
     // 重新加载
     await this.load();
@@ -283,17 +271,15 @@ class StreamLoader {
   }
 
   /**
-   * 切换所有工作流的Embedding
+   * 切换所有工作流的Embedding（从 cfg 读取配置）
    */
   async toggleAllEmbedding(enabled) {
-    if (!this.embeddingConfig) {
-      BotUtil.makeLog('warn', '⚠️ Embedding未配置', 'StreamLoader');
-      return false;
-    }
-
+    const embeddingConfig = cfg.aistream?.embedding || {};
+    
     BotUtil.makeLog('info', `🔄 ${enabled ? '启用' : '禁用'}Embedding...`, 'StreamLoader');
-
-    this.embeddingConfig.enabled = enabled;
+    
+    // 更新全局配置（如果需要持久化，应该更新配置文件）
+    embeddingConfig.enabled = enabled;
     let successCount = 0;
     let failCount = 0;
 
@@ -368,8 +354,7 @@ class StreamLoader {
       embedding: {
         enabled: embeddingEnabled,
         ready: embeddingReady,
-        provider: this.embeddingConfig?.provider || 'none',
-        configured: this.embeddingConfigured
+        mode: this.embeddingConfig?.mode || cfg.aistream?.embedding?.mode || 'local'
       },
       mcp: {
         toolCount: this.mcpServer?.tools?.size || 0
@@ -451,58 +436,32 @@ class StreamLoader {
    */
   async checkEmbeddingDependencies() {
     const result = {
-      onnx: false,
-      hf: false,
-      fasttext: false,
-      api: false,
+      embedding: { mode: 'local', available: true },
       redis: false,
-      lightweight: true, // 总是可用
       errors: []
     };
 
     BotUtil.makeLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'StreamLoader');
     BotUtil.makeLog('info', '【检查 Embedding 依赖】', 'StreamLoader');
 
-    // ONNX
-    try {
-      await import('onnxruntime-node');
-      result.onnx = true;
-      BotUtil.makeLog('success', '├─ ✅ ONNX Runtime', 'StreamLoader');
-    } catch (error) {
-      result.errors.push('ONNX Runtime 不可用');
-      BotUtil.makeLog('warn', '├─ ❌ ONNX Runtime', 'StreamLoader');
-      BotUtil.makeLog('info', '│  💡 pnpm add onnxruntime-node -w', 'StreamLoader');
+    // Embedding 模式检查（简化：只有 local 和 remote）
+    const embeddingConfig = cfg.aistream?.embedding || {};
+    const mode = embeddingConfig.mode || 'local';
+    
+    if (mode === 'local') {
+      BotUtil.makeLog('success', '├─ ✅ Embedding: 本地模式 (BM25)', 'StreamLoader');
+      result.embedding = { mode: 'local', available: true };
+    } else if (mode === 'remote') {
+      const hasRemoteConfig = !!(embeddingConfig.remote?.apiUrl && embeddingConfig.remote?.apiKey);
+      if (hasRemoteConfig) {
+        BotUtil.makeLog('success', '├─ ✅ Embedding: 远程模式 (API)', 'StreamLoader');
+        result.embedding = { mode: 'remote', available: true };
+      } else {
+        BotUtil.makeLog('warn', '├─ ❌ Embedding: 远程模式未配置', 'StreamLoader');
+        result.embedding = { mode: 'remote', available: false };
+        result.errors.push('远程 Embedding API 未配置');
+      }
     }
-
-    // HF
-    result.hf = !!this.embeddingConfig?.hfToken;
-    if (result.hf) {
-      BotUtil.makeLog('success', '├─ ✅ HF Token 已配置', 'StreamLoader');
-    } else {
-      result.errors.push('HF Token 未配置');
-      BotUtil.makeLog('warn', '├─ ❌ HF Token 未配置', 'StreamLoader');
-    }
-
-    // FastText
-    try {
-      await import('fasttext.js');
-      result.fasttext = true;
-      BotUtil.makeLog('success', '├─ ✅ FastText.js', 'StreamLoader');
-    } catch (error) {
-      result.errors.push('FastText.js 不可用');
-      BotUtil.makeLog('warn', '├─ ❌ FastText.js', 'StreamLoader');
-    }
-
-    // API
-    result.api = !!(this.embeddingConfig?.apiUrl && this.embeddingConfig?.apiKey);
-    if (result.api) {
-      BotUtil.makeLog('success', '├─ ✅ 自定义 API', 'StreamLoader');
-    } else {
-      BotUtil.makeLog('warn', '├─ ❌ 自定义 API 未配置', 'StreamLoader');
-    }
-
-    // Lightweight
-    BotUtil.makeLog('success', '├─ ✅ Lightweight (BM25)', 'StreamLoader');
 
     // Redis
     result.redis = !!global.redis;
@@ -594,7 +553,6 @@ class StreamLoader {
     this.streams.clear();
     this.streamClasses.clear();
     this.loaded = false;
-    this.embeddingConfigured = false;
 
     BotUtil.makeLog('success', '✅ 清理完成', 'StreamLoader');
   }

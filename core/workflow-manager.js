@@ -1,6 +1,7 @@
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 import path from 'path';
+import StreamLoader from '#infrastructure/aistream/loader.js';
 
 // 工作流状态常量
 const WORKFLOW_STATUS = {
@@ -1128,11 +1129,6 @@ ${notesSummary || '无'}
     return `【执行要求】\n${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
   }
 
-  /**
-   * 构建系统提示（systemprompt）
-   * 包含工作流执行规则和funcprompt（函数提示）
-   * 优化：提高清晰度和准确性
-   */
   buildSystemPrompt(workflow) {
     const funcPrompt = this.buildFunctionsPrompt();
     const contextInfo = this.buildContextInfo(workflow.context);
@@ -1161,7 +1157,7 @@ ${funcPrompt || '- 无可用工具'}
 - 不要重复执行已经完成的操作
 
 【输出要求】
-- 只输出[]指令，例如：[回桌面]、[读取:文件.txt]、[完成]
+- 只输出[]指令，例如：[回桌面]、[读取:文件.txt]、[生成Excel:文件名.xlsx:[{"列":"值"}]]、[完成]
 - 可以输出多个指令，例如：[读取:文件1.txt][读取:文件2.txt]
 - 如果任务已完成，输出[完成]
 - 【重要】必须添加自然语言说明（1-2句话），说明你正在做什么或已完成什么
@@ -1170,16 +1166,10 @@ ${contextInfo}
 `;
   }
 
-  /**
-   * 构建函数提示（funcprompt）
-   * 合并所有stream的func.prompt字段（功能都合并了，prompt也应该合并）
-   */
   buildFunctionsPrompt() {
     const allFunctions = this.collectAllFunctions();
     const funcPrompts = [];
     
-    // 合并所有stream的func.prompt（包括mergedStreams）
-    // 动态解析prompt（如果为函数类型）
     for (const func of allFunctions) {
       if (func.onlyTopLevel || !func.enabled || !func.prompt) continue;
       
@@ -1196,6 +1186,7 @@ ${contextInfo}
 直接输出[]指令即可执行操作，可以一次执行多个函数：
 - [股票:600519][股票:000001][股票:000858] - 同时查询三只股票
 - [读取:文件1.txt][读取:文件2.txt] - 同时读取两个文件
+- [生成Excel:文件名.xlsx:[{"列1":"值1","列2":"值2"}]] - 生成Excel文件
 - [回桌面] - 单个命令
 - [完成] - 标记当前任务已完成
 【输出格式要求】
@@ -1213,33 +1204,47 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
 
   simplifyPrompt(prompt) {
     if (!prompt) return '';
-    const match = prompt.match(/^(\[[^\]]+\])/);
-    return match ? match[1] : prompt.split(' - ')[0].trim();
+    const parts = prompt.split(' - ');
+    const command = parts[0].trim();
+    const description = parts[1]?.trim();
+    
+    if (command.startsWith('[') && command.includes(']')) {
+      const endIndex = command.indexOf(']');
+      const baseCommand = command.substring(0, endIndex + 1);
+      return description ? `${baseCommand} - ${description.split('，')[0]}` : baseCommand;
+    }
+    
+    return command;
   }
 
-  /**
-   * 收集所有函数（合并所有stream的functions）
-   * 用于构建funcprompt和执行functions
-   */
   collectAllFunctions() {
     const allFunctions = [];
+    const seen = new Set();
     
-    // 主stream的函数
-    if (this.stream?.functions) {
-      for (const func of this.stream.functions.values()) {
-        allFunctions.push(func);
+    const addFunctions = (stream) => {
+      if (!stream?.functions) return;
+      stream.functions.forEach(func => {
+        const key = `${stream.name}.${func.type}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          allFunctions.push(func);
+        }
+      });
+    };
+    
+    if (this.stream) {
+      addFunctions(this.stream);
+      if (Array.isArray(this.stream._mergedStreams)) {
+        this.stream._mergedStreams.forEach(addFunctions);
       }
     }
     
-    // 合并stream的函数（功能都合并了，funcprompt也合并）
-    if (this.stream?._mergedStreams) {
-      for (const mergedStream of this.stream._mergedStreams) {
-        if (mergedStream?.functions) {
-          for (const func of mergedStream.functions.values()) {
-            allFunctions.push(func);
-          }
-        }
-      }
+    try {
+      StreamLoader.getAllStreams().forEach(stream => {
+        if (stream !== this.stream) addFunctions(stream);
+      });
+    } catch (error) {
+      BotUtil.makeLog('warn', `[收集函数] 获取所有stream失败: ${error.message}`, 'WorkflowManager');
     }
     
     return allFunctions;
@@ -1441,10 +1446,9 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     }
     
     // 过滤掉完成指令（这些指令不需要执行，只用于判断）
-    const executableCommands = commands.filter(cmd => {
-      const trimmed = cmd.trim();
-      return !/^\[(完成|标记完成)\]$/i.test(trimmed);
-    });
+    const executableCommands = commands
+      .map(cmd => cmd?.trim())
+      .filter(cmd => cmd && !/^\[(完成|标记完成)\]$/i.test(cmd));
     
     // 如果只有完成指令，返回成功
     if (executableCommands.length === 0) {
@@ -1457,8 +1461,8 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
       };
     }
     
-    // 合并所有指令为一个字符串，确保格式正确
-    const actionText = executableCommands.join('').trim();
+    // 合并所有指令为一个字符串，确保格式正确（保留命令之间的分隔）
+    const actionText = executableCommands.join(' ').trim();
     
     if (!actionText) {
       return {
@@ -1489,12 +1493,9 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     }
   }
 
-  /**
-   * 构建动作上下文
-   */
   buildActionContext(workflow) {
     return {
-      e: workflow.context.e, 
+      e: workflow.context.e,
       question: null,
       workflowId: workflow.id,
       ...workflow.context
@@ -1505,26 +1506,22 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
    * 执行函数
    */
   async executeFunctions(actionText, context) {
-    const { functions } = this.parseWorkflowFunctions(actionText, context);
+    if (!actionText?.trim()) {
+      return { executed: false, functions: [], context, success: true, error: null };
+    }
+
+    const { functions } = this.parseWorkflowFunctions(actionText.trim(), context);
     
     if (functions.length === 0) {
-      BotUtil.makeLog('warn', `[执行] 没有解析到任何函数: ${actionText}`, 'WorkflowManager');
-      // 记录解析失败信息到上下文，供笔记系统使用
-      context.parseError = `执行动作格式不正确：${actionText}`;
-      return {
-        executed: false,
-        functions: [],
-        context,
-        success: false,
-        error: '未解析到任何可执行命令'
-      };
+      BotUtil.makeLog('warn', `[执行] 没有解析到任何函数: ${actionText.substring(0, 100)}`, 'WorkflowManager');
+      context.parseError = `执行动作格式不正确：${actionText.substring(0, 100)}`;
+      return { executed: false, functions: [], context, success: false, error: '未解析到任何可执行命令' };
     }
     
     const executedFunctions = [];
     const failedFunctions = [];
     let lastError = null;
     
-    // 顺序执行所有函数
     for (const func of functions) {
       try {
         BotUtil.makeLog('info', `[执行] ${func.type}(${JSON.stringify(func.params)})`, 'WorkflowManager');
@@ -1538,9 +1535,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
           BotUtil.makeLog('warn', `[执行] ✗ ${func.type} 失败`, 'WorkflowManager');
         }
         
-        if (result.error) {
-          lastError = result.error;
-        }
+        if (result.error) lastError = result.error;
       } catch (error) {
         failedFunctions.push(func.type);
         lastError = error;
@@ -1568,67 +1563,130 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
    * 解析工作流函数（合并所有stream的functions）
    * 确保合并后的functions能正常执行
    */
+  _collectAllStreams() {
+    const streamSet = new Set();
+    
+    if (this.stream) {
+      streamSet.add(this.stream);
+      if (Array.isArray(this.stream._mergedStreams)) {
+        this.stream._mergedStreams.forEach(s => s && streamSet.add(s));
+      }
+      if (this.stream._parentStream) {
+        streamSet.add(this.stream._parentStream);
+        if (Array.isArray(this.stream._parentStream._mergedStreams)) {
+          this.stream._parentStream._mergedStreams.forEach(s => s && streamSet.add(s));
+        }
+      }
+    }
+    
+    try {
+      StreamLoader.getAllStreams().forEach(stream => {
+        if (stream?.functions) streamSet.add(stream);
+      });
+    } catch (error) {
+      BotUtil.makeLog('warn', `[解析] 获取所有stream失败: ${error.message}`, 'WorkflowManager');
+    }
+    
+    return Array.from(streamSet);
+  }
+
   parseWorkflowFunctions(actionText, context = {}) {
-    let cleanText = actionText;
+    if (!actionText || typeof actionText !== 'string') {
+      return { functions: [], cleanText: '' };
+    }
+
+    let cleanText = actionText.trim();
     const allFunctions = [];
     const isInWorkflow = !!context.workflowId;
 
-    // 在工作流内部，清理掉所有 [启动工作流:...] 命令文本
     if (isInWorkflow) {
       cleanText = cleanText.replace(/\[启动工作流:[^\]]+\]/g, '').trim();
     }
 
-    // 合并所有stream的functions（主stream + mergedStreams）
-    const streams = [this.stream, ...(this.stream?._mergedStreams || [])];
+    const streams = this._collectAllStreams();
+    if (streams.length === 0) {
+      BotUtil.makeLog('warn', `[解析] 没有可用的stream: ${actionText.substring(0, 50)}`, 'WorkflowManager');
+      return { functions: [], cleanText };
+    }
 
-    for (const s of streams) {
-      if (!s?.functions || s.functions.size === 0) continue;
+    let totalParsers = 0;
+    let attemptedParsers = 0;
 
-      for (const func of s.functions.values()) {
-        // 在工作流内部，跳过不允许的函数
-        if (isInWorkflow && (func.type === 'start_workflow' || func.onlyTopLevel)) {
-          continue;
-        }
-        
+    for (const stream of streams) {
+      if (!stream?.functions?.size) continue;
+
+      const streamName = stream?.name || stream?.constructor?.name || 'unknown';
+
+      for (const func of stream.functions.values()) {
+        if (isInWorkflow && (func.type === 'start_workflow' || func.onlyTopLevel)) continue;
         if (!func.enabled || !func.parser) continue;
+
+        totalParsers++;
+        attemptedParsers++;
 
         try {
           const result = func.parser(cleanText, context);
-          if (result.functions?.length > 0) {
-            allFunctions.push(...result.functions);
+          if (result?.functions?.length) {
+            result.functions.forEach(f => {
+              f._sourceStream = stream;
+              allFunctions.push(f);
+            });
+            BotUtil.makeLog('debug', `[解析] ${streamName}.${func.type} 匹配到 ${result.functions.length} 个函数`, 'WorkflowManager');
           }
-          if (result.cleanText !== undefined) {
+          if (result?.cleanText !== undefined) {
             cleanText = result.cleanText;
           }
         } catch (error) {
-          BotUtil.makeLog('warn', `解析函数失败[${func.type}]: ${error.message}`, 'WorkflowManager');
+          BotUtil.makeLog('warn', `解析函数失败[${streamName}.${func.type}]: ${error.message}`, 'WorkflowManager');
         }
       }
     }
 
-    // 在工作流内部，再次过滤掉启动工作流函数（双重保险）
     const filteredFunctions = isInWorkflow
       ? allFunctions.filter(fn => fn.type !== 'start_workflow')
       : allFunctions;
 
-    // 按 order 排序
-    const withOrder = filteredFunctions.filter(fn => typeof fn.order === 'number');
-    const withoutOrder = filteredFunctions.filter(fn => typeof fn.order !== 'number');
-    withOrder.sort((a, b) => a.order - b.order);
-    
-    const orderedFunctions = withOrder.concat(withoutOrder);
+    const orderedFunctions = [
+      ...filteredFunctions.filter(f => typeof f.order === 'number').sort((a, b) => a.order - b.order),
+      ...filteredFunctions.filter(f => typeof f.order !== 'number')
+    ];
 
     if (orderedFunctions.length > 0) {
       BotUtil.makeLog('info', `[解析] 总计: ${orderedFunctions.length} 个函数 [${orderedFunctions.map(f => f.type).join(', ')}]`, 'WorkflowManager');
+    } else if (actionText.trim()) {
+      BotUtil.makeLog('debug', `[解析] 未匹配到函数 (${attemptedParsers}/${totalParsers}, streams: ${streams.map(s => s.name).join(', ')}): ${actionText.substring(0, 100)}`, 'WorkflowManager');
     }
 
     return { functions: orderedFunctions, cleanText };
   }
 
+  async _executeFunctionInStream(stream, func, context) {
+    if (!stream?.functions?.has(func.type)) return null;
+    const result = await stream.executeFunction(func.type, func.params, context);
+    return { executed: result?.success || false, error: result?.error || null };
+  }
+
   async executeSingleFunction(func, context) {
     try {
-      const executed = await this.stream._executeFunctionWithMerge(func, context);
-      return { executed: !!executed, error: null };
+      const targetStream = func._sourceStream || this.stream;
+      
+      const result = await this._executeFunctionInStream(targetStream, func, context);
+      if (result) return result;
+      
+      if (targetStream?._mergedStreams) {
+        for (const mergedStream of targetStream._mergedStreams) {
+          const result = await this._executeFunctionInStream(mergedStream, func, context);
+          if (result) return result;
+        }
+      }
+      
+      for (const stream of StreamLoader.getAllStreams()) {
+        const result = await this._executeFunctionInStream(stream, func, context);
+        if (result) return result;
+      }
+      
+      BotUtil.makeLog('warn', `函数未找到: ${func.type}`, 'WorkflowManager');
+      return { executed: false, error: `函数未找到: ${func.type}` };
     } catch (error) {
       this.handleFunctionError(context, func, error);
       BotUtil.makeLog('error', `工作流函数执行失败[${func.type}]: ${error.message}`, 'WorkflowManager');
@@ -1640,16 +1698,10 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     context.commandError = context.commandError || error.message;
   }
 
-  /**
-   * 获取工作流
-   */
   getWorkflow(workflowId) {
     return this.activeWorkflows.get(workflowId);
   }
 
-  /**
-   * 停止工作流
-   */
   stopWorkflow(workflowId) {
     const workflow = this.activeWorkflows.get(workflowId);
     if (!workflow) return;

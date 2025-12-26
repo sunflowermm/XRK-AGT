@@ -657,9 +657,7 @@ function buildPanelPayload(snapshot) {
       total: workflows.stats.total,
       enabled: workflows.stats.enabled,
       embeddingReady: workflows.stats.embedding?.ready || 0,
-      provider: workflows.stats.embedding?.provider && workflows.stats.embedding.provider !== 'none' 
-        ? workflows.stats.embedding.provider 
-        : null,
+      mode: workflows.stats.embedding?.mode || 'local',
       items: workflows.items.slice(0, 5)
     },
     processes: snapshot.processesTop5 || [],

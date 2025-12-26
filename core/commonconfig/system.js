@@ -1691,83 +1691,68 @@ export default class SystemConfig extends ConfigBase {
             embedding: {
               type: 'object',
               label: 'Embedding 向量检索',
-              description: '语义检索和上下文增强相关配置',
+              description: '语义检索和上下文增强相关配置（简化：仅支持本地和远程两种模式）',
               component: 'SubForm',
               fields: {
                 enabled: {
                   type: 'boolean',
                   label: '启用 Embedding',
-                  component: 'Switch'
+                  component: 'Switch',
+                  default: true
                 },
-                defaultProfile: {
+                mode: {
                   type: 'string',
-                  label: '默认档位',
-                  component: 'Input'
+                  label: '模式',
+                  component: 'Select',
+                  options: [
+                    { label: '本地模式 (lightweight BM25)', value: 'local' },
+                    { label: '远程模式 (API 接口)', value: 'remote' }
+                  ],
+                  default: 'local',
+                  description: '本地模式使用轻量级 BM25 算法，无需额外配置；远程模式使用标准 OpenAI 兼容接口'
                 },
-                defaults: {
+                maxContexts: {
+                  type: 'number',
+                  label: '最大上下文条数',
+                  component: 'InputNumber',
+                  default: 5
+                },
+                similarityThreshold: {
+                  type: 'number',
+                  label: '相似度阈值',
+                  component: 'InputNumber',
+                  default: 0.6
+                },
+                cacheExpiry: {
+                  type: 'number',
+                  label: '缓存时长 (秒)',
+                  component: 'InputNumber',
+                  default: 86400
+                },
+                remote: {
                   type: 'object',
-                  label: '默认参数',
+                  label: '远程模式配置',
                   component: 'SubForm',
                   fields: {
-                    provider: { type: 'string', label: '提供商', component: 'Input' },
-                    maxContexts: { type: 'number', label: '最大上下文条数', component: 'InputNumber' },
-                    similarityThreshold: { type: 'number', label: '相似度阈值', component: 'InputNumber' },
-                    cacheExpiry: { type: 'number', label: '缓存时长 (秒)', component: 'InputNumber' },
-                    cachePath: { type: 'string', label: '缓存路径', component: 'Input' }
-                  }
-                },
-                profiles: {
-                  type: 'object',
-                  label: '档位映射',
-                  component: 'SubForm',
-                  fields: {
-                    lightweight: {
-                      type: 'object',
-                      label: 'lightweight',
-                      component: 'SubForm',
-                      fields: {
-                        provider: { type: 'string', label: '提供商', component: 'Input' }
-                      }
+                    apiUrl: {
+                      type: 'string',
+                      label: 'API 地址',
+                      component: 'Input',
+                      placeholder: 'https://api.openai.com/v1/embeddings',
+                      description: '标准 OpenAI 兼容接口地址'
                     },
-                    onnx: {
-                      type: 'object',
-                      label: 'onnx',
-                      component: 'SubForm',
-                      fields: {
-                        provider: { type: 'string', label: '提供商', component: 'Input' },
-                        onnxModel: { type: 'string', label: 'ONNX 模型', component: 'Input' },
-                        onnxQuantized: { type: 'boolean', label: '使用量化模型', component: 'Switch' }
-                      }
+                    apiKey: {
+                      type: 'string',
+                      label: 'API 密钥',
+                      component: 'Input',
+                      inputType: 'password'
                     },
-                    hf: {
-                      type: 'object',
-                      label: 'hf',
-                      component: 'SubForm',
-                      fields: {
-                        provider: { type: 'string', label: '提供商', component: 'Input' },
-                        hfModel: { type: 'string', label: 'HF 模型', component: 'Input' },
-                        hfToken: { type: 'string', label: 'HF Token', component: 'Input' }
-                      }
-                    },
-                    fasttext: {
-                      type: 'object',
-                      label: 'fasttext',
-                      component: 'SubForm',
-                      fields: {
-                        provider: { type: 'string', label: '提供商', component: 'Input' },
-                        fasttextModel: { type: 'string', label: '模型文件', component: 'Input' }
-                      }
-                    },
-                    api: {
-                      type: 'object',
-                      label: 'api',
-                      component: 'SubForm',
-                      fields: {
-                        provider: { type: 'string', label: '提供商', component: 'Input' },
-                        apiUrl: { type: 'string', label: 'API URL', component: 'Input' },
-                        apiKey: { type: 'string', label: 'API Key', component: 'Input' },
-                        apiModel: { type: 'string', label: 'API 模型', component: 'Input' }
-                      }
+                    apiModel: {
+                      type: 'string',
+                      label: '模型名称',
+                      component: 'Input',
+                      default: 'text-embedding-3-small',
+                      placeholder: 'text-embedding-3-small'
                     }
                   }
                 }
