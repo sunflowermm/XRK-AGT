@@ -931,7 +931,7 @@ Bot.tasker.push(
       Bot.makeLog("info", `设置表情回应：${emoji_id} (${set ? '贴' : '取消'})`, `${data.self_id} => ${data.group_id}, ${message_id}`, true)
       try {
         return data.bot.sendApi("set_msg_emoji_like", {
-          message_id: String(message_id),
+        message_id: String(message_id),
           emoji_id: Number(emoji_id),
           set: Boolean(set)
         }).catch(err => {

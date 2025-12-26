@@ -1730,10 +1730,10 @@ export default class SystemConfig extends ConfigBase {
                   default: 86400
                 },
                 remote: {
-                  type: 'object',
+                      type: 'object',
                   label: '远程模式配置',
-                  component: 'SubForm',
-                  fields: {
+                      component: 'SubForm',
+                      fields: {
                     apiUrl: {
                       type: 'string',
                       label: 'API 地址',

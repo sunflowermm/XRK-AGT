@@ -1227,8 +1227,8 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
         const key = `${stream.name}.${func.type}`;
         if (!seen.has(key)) {
           seen.add(key);
-          allFunctions.push(func);
-        }
+        allFunctions.push(func);
+      }
       });
     };
     
@@ -1495,7 +1495,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
 
   buildActionContext(workflow) {
     return {
-      e: workflow.context.e,
+      e: workflow.context.e, 
       question: null,
       workflowId: workflow.id,
       ...workflow.context

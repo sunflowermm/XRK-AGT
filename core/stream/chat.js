@@ -147,13 +147,15 @@ export default class ChatStream extends AIStream {
           }
         }
       },
-      enabled: false
+      enabled: true
     });
 
     // 4. 回复
     this.registerFunction('reply', {
       description: '回复消息',
-      prompt: `[CQ:reply,id=消息ID] - 回复某条消息`,
+      prompt: `[CQ:reply,id=消息ID] - 回复指定消息
+重要：消息ID必须从聊天记录中准确获取，格式为"消息ID:xxx"中的xxx部分
+示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 你好"，要回复这条消息，使用 [CQ:reply,id=1051113239]你的回复内容`,
       parser: (text, context) => {
         return { functions: [], cleanText: text };
       },
@@ -163,8 +165,10 @@ export default class ChatStream extends AIStream {
     // 5. 表情回应
     this.registerFunction('emojiReaction', {
       description: '表情回应',
-      prompt: `[回应:消息ID:表情类型] - 给消息添加表情回应
-表情类型: 开心/惊讶/伤心/大笑/害怕/喜欢/爱心/生气`,
+      prompt: `[回应:消息ID:表情类型] - 给指定消息添加表情回应
+重要：消息ID必须从聊天记录中准确获取，格式为"消息ID:xxx"中的xxx部分
+表情类型: 开心/惊讶/伤心/大笑/害怕/喜欢/爱心/生气
+示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 你好"，要回应这条消息，使用 [回应:1051113239:开心]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -174,7 +178,7 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'emojiReaction', 
-            params: { msgId: match[1], emojiType: match[2] },
+            params: { msgId: String(match[1]).trim(), emojiType: match[2].trim() },
             order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
@@ -186,13 +190,24 @@ export default class ChatStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (!context.e?.isGroup || !EMOJI_REACTIONS[params.emojiType]) return;
+        if (!context.e?.isGroup || !EMOJI_REACTIONS[params.emojiType]) {
+          BotUtil.makeLog('debug', `表情回应失败: ${!context.e?.isGroup ? '非群聊' : '无效表情类型'}`, 'ChatStream');
+          return;
+        }
         
         const emojiIds = EMOJI_REACTIONS[params.emojiType];
-        const emojiId = Number(emojiIds[Math.floor(Math.random() * emojiIds.length)]);
-        const msgId = params.msgId || '';
+        if (!emojiIds || emojiIds.length === 0) {
+          BotUtil.makeLog('debug', `表情回应失败: 表情类型${params.emojiType}无可用表情ID`, 'ChatStream');
+          return;
+        }
         
-        if (!msgId) return;
+        const emojiId = Number(emojiIds[Math.floor(Math.random() * emojiIds.length)]);
+        const msgId = String(params.msgId || '').trim();
+        
+        if (!msgId) {
+          BotUtil.makeLog('debug', '表情回应失败: 消息ID为空', 'ChatStream');
+          return;
+        }
         
         try {
           const group = context.e.group;
@@ -200,14 +215,15 @@ export default class ChatStream extends AIStream {
             const result = await group.setEmojiLike(msgId, emojiId, true);
             if (result !== null && result !== undefined) {
               await BotUtil.sleep(200);
+              BotUtil.makeLog('debug', `表情回应成功: 消息ID=${msgId}, 表情ID=${emojiId}`, 'ChatStream');
             } else {
-              BotUtil.makeLog('debug', '表情回应API调用失败', 'ChatStream');
+              BotUtil.makeLog('warn', `表情回应API调用失败: 消息ID=${msgId}`, 'ChatStream');
             }
           } else {
-            BotUtil.makeLog('debug', '表情回应功能不可用（API不存在）', 'ChatStream');
+            BotUtil.makeLog('warn', '表情回应功能不可用（API不存在）', 'ChatStream');
           }
         } catch (error) {
-          BotUtil.makeLog('debug', `表情回应失败: ${error.message}`, 'ChatStream');
+          BotUtil.makeLog('warn', `表情回应失败: ${error.message}`, 'ChatStream');
         }
       },
       enabled: true
@@ -673,7 +689,9 @@ export default class ChatStream extends AIStream {
     // 18. 设置精华消息
     this.registerFunction('setEssence', {
       description: '设置精华消息',
-      prompt: `[设精华:消息ID] - 将某条消息设为精华`,
+      prompt: `[设精华:消息ID] - 将指定消息设为精华
+重要：消息ID必须从聊天记录中准确获取，格式为"消息ID:xxx"中的xxx部分
+示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 重要内容"，要设为精华，使用 [设精华:1051113239]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -683,7 +701,7 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'setEssence', 
-            params: { msgId: String(match[1]) },
+            params: { msgId: String(match[1]).trim() },
             order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
@@ -695,15 +713,34 @@ export default class ChatStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (context.e?.isGroup && context.e.bot) {
-          try {
+        if (!context.e?.isGroup) {
+          BotUtil.makeLog('debug', '设置精华失败: 非群聊', 'ChatStream');
+          return;
+        }
+        
+        const msgId = String(params.msgId || '').trim();
+        if (!msgId) {
+          BotUtil.makeLog('debug', '设置精华失败: 消息ID为空', 'ChatStream');
+          return;
+        }
+        
+        try {
+          const group = context.e.group;
+          if (group && typeof group.setEssenceMessage === 'function') {
+            await group.setEssenceMessage(msgId);
+            await BotUtil.sleep(300);
+            BotUtil.makeLog('debug', `设置精华成功: 消息ID=${msgId}`, 'ChatStream');
+          } else if (context.e.bot && context.e.bot.sendApi) {
             await context.e.bot.sendApi('set_essence_msg', {
-              message_id: String(params.msgId)
+              message_id: msgId
             });
             await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `设置精华失败: ${error.message}`, 'ChatStream');
+            BotUtil.makeLog('debug', `设置精华成功: 消息ID=${msgId}`, 'ChatStream');
+          } else {
+            BotUtil.makeLog('warn', '设置精华失败: API不可用', 'ChatStream');
           }
+        } catch (error) {
+          BotUtil.makeLog('warn', `设置精华失败: ${error.message}`, 'ChatStream');
         }
       },
       enabled: true,
@@ -713,7 +750,9 @@ export default class ChatStream extends AIStream {
     // 19. 取消精华消息
     this.registerFunction('removeEssence', {
       description: '取消精华消息',
-      prompt: `[取消精华:消息ID] - 取消某条精华消息`,
+      prompt: `[取消精华:消息ID] - 取消指定消息的精华状态
+重要：消息ID必须从聊天记录中准确获取，格式为"消息ID:xxx"中的xxx部分
+示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 内容"，要取消精华，使用 [取消精华:1051113239]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -723,7 +762,7 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'removeEssence', 
-            params: { msgId: String(match[1]) },
+            params: { msgId: String(match[1]).trim() },
             order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
@@ -735,15 +774,28 @@ export default class ChatStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (context.e?.isGroup && context.e.bot) {
-          try {
-            await context.e.bot.sendApi('delete_essence_msg', {
-              message_id: String(params.msgId)
-            });
+        if (!context.e?.isGroup) {
+          BotUtil.makeLog('debug', '取消精华失败: 非群聊', 'ChatStream');
+          return;
+        }
+        
+        const msgId = String(params.msgId || '').trim();
+        if (!msgId) {
+          BotUtil.makeLog('debug', '取消精华失败: 消息ID为空', 'ChatStream');
+          return;
+        }
+        
+        try {
+          const group = context.e.group;
+          if (group && typeof group.removeEssenceMessage === 'function') {
+            await group.removeEssenceMessage(msgId);
             await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `取消精华失败: ${error.message}`, 'ChatStream');
+            BotUtil.makeLog('debug', `取消精华成功: 消息ID=${msgId}`, 'ChatStream');
+          } else {
+            BotUtil.makeLog('warn', '取消精华失败: API不可用', 'ChatStream');
           }
+        } catch (error) {
+          BotUtil.makeLog('warn', `取消精华失败: ${error.message}`, 'ChatStream');
         }
       },
       enabled: true,
@@ -776,18 +828,25 @@ export default class ChatStream extends AIStream {
         return { functions, cleanText };
       },
       handler: async (params, context) => {
-        if (context.e?.isGroup && context.e.bot) {
-          try {
+        if (!context.e?.isGroup) {
+          BotUtil.makeLog('debug', '发送群公告失败: 非群聊', 'ChatStream');
+          return;
+        }
+        
+        try {
+          // 使用 tasker 层的 send_group_notice API
+          if (context.e.bot && context.e.bot.sendApi) {
             await context.e.bot.sendApi('send_group_notice', {
               group_id: context.e.group_id,
               content: params.content
-            }).catch(err => {
-              BotUtil.makeLog('warn', `发送群公告失败: ${err.message}`, 'ChatStream');
             });
             await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `发送公告失败: ${error.message}`, 'ChatStream');
+            BotUtil.makeLog('debug', '发送群公告成功', 'ChatStream');
+          } else {
+            BotUtil.makeLog('warn', '发送群公告失败: API不可用', 'ChatStream');
           }
+        } catch (error) {
+          BotUtil.makeLog('warn', `发送公告失败: ${error.message}`, 'ChatStream');
         }
       },
       enabled: true,
@@ -905,6 +964,155 @@ export default class ChatStream extends AIStream {
       enabled: true,
       requirePermissionCheck: true
     });
+
+    // 22. 获取群信息ex（新增）
+    this.registerFunction('getGroupInfoEx', {
+      description: '获取群详细信息ex',
+      prompt: `[获取群信息ex] - 获取群的扩展详细信息（包括更多群信息）`,
+      parser: (text, context) => {
+        const functions = [];
+        let cleanText = text;
+        
+        if (text.includes('[获取群信息ex]')) {
+          functions.push({ 
+            type: 'getGroupInfoEx', 
+            params: {}, 
+            order: text.indexOf('[获取群信息ex]')
+          });
+          cleanText = text.replace(/\[获取群信息ex\]/g, '').trim();
+        }
+        
+        return { functions, cleanText };
+      },
+      handler: async (params, context) => {
+        if (!context.e?.isGroup) return;
+        
+        try {
+          const group = context.e.group;
+          if (group && typeof group.getInfoEx === 'function') {
+            const info = await group.getInfoEx();
+            BotUtil.makeLog('debug', `获取群信息ex成功: ${JSON.stringify(info)}`, 'ChatStream');
+          }
+        } catch (error) {
+          BotUtil.makeLog('warn', `获取群信息ex失败: ${error.message}`, 'ChatStream');
+        }
+      },
+      enabled: true
+    });
+
+    // 23. 获取@全体成员剩余次数（新增）
+    this.registerFunction('getAtAllRemain', {
+      description: '获取@全体成员剩余次数',
+      prompt: `[获取@全体剩余] - 获取群@全体成员的剩余次数`,
+      parser: (text, context) => {
+        const functions = [];
+        let cleanText = text;
+        
+        if (text.includes('[获取@全体剩余]')) {
+          functions.push({ 
+            type: 'getAtAllRemain', 
+            params: {}, 
+            order: text.indexOf('[获取@全体剩余]')
+          });
+          cleanText = text.replace(/\[获取@全体剩余\]/g, '').trim();
+        }
+        
+        return { functions, cleanText };
+      },
+      handler: async (params, context) => {
+        if (!context.e?.isGroup) return;
+        
+        try {
+          const group = context.e.group;
+          if (group && typeof group.getAtAllRemain === 'function') {
+            const remain = await group.getAtAllRemain();
+            BotUtil.makeLog('debug', `@全体成员剩余次数: ${JSON.stringify(remain)}`, 'ChatStream');
+          }
+        } catch (error) {
+          BotUtil.makeLog('warn', `获取@全体剩余次数失败: ${error.message}`, 'ChatStream');
+        }
+      },
+      enabled: true
+    });
+
+    // 24. 获取群禁言列表（新增）
+    this.registerFunction('getBanList', {
+      description: '获取群禁言列表',
+      prompt: `[获取禁言列表] - 获取当前被禁言的成员列表`,
+      parser: (text, context) => {
+        const functions = [];
+        let cleanText = text;
+        
+        if (text.includes('[获取禁言列表]')) {
+          functions.push({ 
+            type: 'getBanList', 
+            params: {}, 
+            order: text.indexOf('[获取禁言列表]')
+          });
+          cleanText = text.replace(/\[获取禁言列表\]/g, '').trim();
+        }
+        
+        return { functions, cleanText };
+      },
+      handler: async (params, context) => {
+        if (!context.e?.isGroup) return;
+        
+        try {
+          const group = context.e.group;
+          if (group && typeof group.getBanList === 'function') {
+            const banList = await group.getBanList();
+            BotUtil.makeLog('debug', `群禁言列表: ${JSON.stringify(banList)}`, 'ChatStream');
+          }
+        } catch (error) {
+          BotUtil.makeLog('warn', `获取禁言列表失败: ${error.message}`, 'ChatStream');
+        }
+      },
+      enabled: true,
+      requireAdmin: true
+    });
+
+    // 25. 设置群代办（新增）
+    this.registerFunction('setGroupTodo', {
+      description: '设置群代办',
+      prompt: `[群代办:内容] - 设置群代办事项
+示例：[群代办:明天检查项目进度]`,
+      parser: (text, context) => {
+        const functions = [];
+        let cleanText = text;
+        const regex = /\[群代办:([^\]]+)\]/g;
+        let match;
+        
+        while ((match = regex.exec(text))) {
+          functions.push({ 
+            type: 'setGroupTodo', 
+            params: { content: match[1] },
+            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
+          });
+        }
+        
+        if (functions.length > 0) {
+          cleanText = text.replace(regex, '').trim();
+        }
+        
+        return { functions, cleanText };
+      },
+      handler: async (params, context) => {
+        if (!context.e?.isGroup) return;
+        
+        try {
+          const group = context.e.group;
+          if (group && typeof group.setTodo === 'function') {
+            await group.setTodo(params.content);
+            await BotUtil.sleep(300);
+            BotUtil.makeLog('debug', `设置群代办成功: ${params.content}`, 'ChatStream');
+          }
+        } catch (error) {
+          BotUtil.makeLog('warn', `设置群代办失败: ${error.message}`, 'ChatStream');
+        }
+      },
+      enabled: true,
+      requireAdmin: true
+    });
   }
 
   /**
@@ -959,7 +1167,25 @@ export default class ChatStream extends AIStream {
       const nickname = e.sender?.card || e.sender?.nickname || 
                       e.user?.name || e.user?.nickname || 
                       e.from?.name || '未知';
-      const messageId = e.message_id || e.messageId || e.id || Date.now().toString();
+      
+      // 优先使用真实的消息ID，确保准确
+      let messageId = e.message_id || e.messageId || e.id;
+      
+      // 如果消息ID不存在，尝试从消息段中提取（回复消息的ID）
+      if (!messageId && e.message && Array.isArray(e.message)) {
+        const replySeg = e.message.find(seg => seg.type === 'reply');
+        if (replySeg && replySeg.id) {
+          messageId = String(replySeg.id);
+        }
+      }
+      
+      // 如果仍然没有消息ID，使用时间戳作为临时ID（不推荐，但作为兜底）
+      if (!messageId) {
+        messageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        BotUtil.makeLog('debug', `消息ID缺失，使用临时ID: ${messageId}`, 'ChatStream');
+      } else {
+        messageId = String(messageId);
+      }
 
       const msgData = {
         user_id: userId,
@@ -1044,10 +1270,31 @@ export default class ChatStream extends AIStream {
 [CQ:image,file=图片路径] - 图片（可与其他内容组合，保持顺序）
 [CQ:reply,id=消息ID] - 回复消息（会应用到整个消息，回复段会自动放在最前面）
 
-重要说明：
-- 聊天记录中每条消息都标注了消息ID（格式：消息ID:xxx）
-- 如果需要回复某条消息，使用 [CQ:reply,id=消息ID] 格式，其中消息ID就是聊天记录中标注的ID
-- 例如：聊天记录显示"张三(123456)[消息ID:1051113239]: 你好"，要回复这条消息，使用 [CQ:reply,id=1051113239]
+【消息ID使用说明】
+聊天记录中每条消息都标注了消息ID，格式为：消息ID:xxx（例如：消息ID:1051113239）
+
+重要规则：
+1. 回复消息：使用 [CQ:reply,id=消息ID] 格式，消息ID就是聊天记录中标注的ID
+   示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 你好"
+   要回复这条消息，使用：[CQ:reply,id=1051113239]你的回复内容
+
+2. 表情回应：使用 [回应:消息ID:表情类型] 格式
+   示例：要回应消息ID为1051113239的消息，使用：[回应:1051113239:开心]
+
+3. 设置精华：使用 [设精华:消息ID] 格式
+   示例：要将消息ID为1051113239的消息设为精华，使用：[设精华:1051113239]
+
+4. 取消精华：使用 [取消精华:消息ID] 格式
+   示例：要取消消息ID为1051113239的消息的精华，使用：[取消精华:1051113239]
+
+5. 撤回消息：使用 [撤回:消息ID] 格式
+   示例：要撤回消息ID为1051113239的消息，使用：[撤回:1051113239]
+
+⚠️ 关键提示：
+- 消息ID必须从聊天记录中准确复制，不要自己编造
+- 消息ID通常是数字字符串，例如：1051113239、1234567890等
+- 如果聊天记录中没有显示消息ID，说明该消息无法进行这些操作
+- 回复、表情回应、精华等操作都需要准确的消息ID才能成功
 
 可用命令：
 ${resolvedPrompts.join('\n')}
@@ -1219,9 +1466,14 @@ ${isGlobalTrigger ?
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `[群聊记录]\n${recentMessages.map(msg => 
-            `${msg.nickname}(${msg.user_id})[消息ID:${msg.message_id}]: ${msg.message}`
-          ).join('\n')}\n\n你闲来无事点开群聊，看到小伙伴们的这些发言。请根据你的个性和人设，自然地表达你的情绪和感受，保持真实的反应，不要试图解决问题。\n\n注意：每条消息都有消息ID，如果需要回复某条消息，使用 [CQ:reply,id=消息ID] 格式。`
+          content: `[群聊记录]\n${recentMessages.map(msg => {
+            const msgId = msg.message_id || msg.id || '未知';
+            return `${msg.nickname}(${msg.user_id})[消息ID:${msgId}]: ${msg.message}`;
+          }).join('\n')}\n\n你闲来无事点开群聊，看到小伙伴们的这些发言。请根据你的个性和人设，自然地表达你的情绪和感受，保持真实的反应，不要试图解决问题。\n\n⚠️ 重要提示：每条消息都有消息ID（格式：消息ID:xxx），你可以：
+- 回复消息：使用 [CQ:reply,id=消息ID] 格式
+- 表情回应：使用 [回应:消息ID:表情类型] 格式（表情类型：开心/惊讶/伤心/大笑/害怕/喜欢/爱心/生气）
+- 设置精华：使用 [设精华:消息ID] 格式（需要管理员权限）
+消息ID必须从上面的聊天记录中准确复制，不要自己编造。`
         });
       }
     } else {
@@ -1229,9 +1481,14 @@ ${isGlobalTrigger ?
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `[群聊记录]\n${recentMessages.map(msg => 
-            `${msg.nickname}(${msg.user_id})[消息ID:${msg.message_id}]: ${msg.message}`
-          ).join('\n')}\n\n注意：每条消息都有消息ID，如果需要回复某条消息，使用 [CQ:reply,id=消息ID] 格式。`
+          content: `[群聊记录]\n${recentMessages.map(msg => {
+            const msgId = msg.message_id || msg.id || '未知';
+            return `${msg.nickname}(${msg.user_id})[消息ID:${msgId}]: ${msg.message}`;
+          }).join('\n')}\n\n⚠️ 重要提示：每条消息都有消息ID（格式：消息ID:xxx），你可以：
+- 回复消息：使用 [CQ:reply,id=消息ID] 格式
+- 表情回应：使用 [回应:消息ID:表情类型] 格式（表情类型：开心/惊讶/伤心/大笑/害怕/喜欢/爱心/生气）
+- 设置精华：使用 [设精华:消息ID] 格式（需要管理员权限）
+消息ID必须从上面的聊天记录中准确复制，不要自己编造。`
         });
       }
       

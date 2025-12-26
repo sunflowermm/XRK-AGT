@@ -185,7 +185,7 @@ LLM 配置通过 `llm.Provider` 指定，支持的提供商：
 - **gptgod**：GPTGod 提供商（默认）
   - 配置文件：`data/server_bots/{port}/god.yaml`
   - 支持标准 OpenAI Chat Completions 协议
-
+  
 - **volcengine**：火山引擎豆包大模型
   - 配置文件：`data/server_bots/{port}/volcengine_llm.yaml`
   - 接口地址：`https://ark.cn-beijing.volces.com/api/v3`

@@ -275,9 +275,9 @@ class StreamLoader {
    */
   async toggleAllEmbedding(enabled) {
     const embeddingConfig = cfg.aistream?.embedding || {};
-    
+
     BotUtil.makeLog('info', `🔄 ${enabled ? '启用' : '禁用'}Embedding...`, 'StreamLoader');
-    
+
     // 更新全局配置（如果需要持久化，应该更新配置文件）
     embeddingConfig.enabled = enabled;
     let successCount = 0;
@@ -456,11 +456,11 @@ class StreamLoader {
       if (hasRemoteConfig) {
         BotUtil.makeLog('success', '├─ ✅ Embedding: 远程模式 (API)', 'StreamLoader');
         result.embedding = { mode: 'remote', available: true };
-      } else {
+    } else {
         BotUtil.makeLog('warn', '├─ ❌ Embedding: 远程模式未配置', 'StreamLoader');
         result.embedding = { mode: 'remote', available: false };
         result.errors.push('远程 Embedding API 未配置');
-      }
+    }
     }
 
     // Redis
