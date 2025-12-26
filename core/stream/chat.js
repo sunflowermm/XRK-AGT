@@ -189,16 +189,22 @@ export default class ChatStream extends AIStream {
         if (!context.e?.isGroup || !EMOJI_REACTIONS[params.emojiType]) return;
         
         const emojiIds = EMOJI_REACTIONS[params.emojiType];
-        const emojiId = emojiIds[Math.floor(Math.random() * emojiIds.length)];
-        const msgId = String(params.msgId || '');
+        const emojiId = Number(emojiIds[Math.floor(Math.random() * emojiIds.length)]);
+        const msgId = params.msgId || '';
         
         if (!msgId) return;
         
         try {
           const group = context.e.group;
           if (group && typeof group.setEmojiLike === 'function') {
-            await group.setEmojiLike(msgId, emojiId);
-            await BotUtil.sleep(200);
+            const result = await group.setEmojiLike(msgId, emojiId, true);
+            if (result !== null && result !== undefined) {
+              await BotUtil.sleep(200);
+            } else {
+              BotUtil.makeLog('debug', '表情回应API调用失败', 'ChatStream');
+            }
+          } else {
+            BotUtil.makeLog('debug', '表情回应功能不可用（API不存在）', 'ChatStream');
           }
         } catch (error) {
           BotUtil.makeLog('debug', `表情回应失败: ${error.message}`, 'ChatStream');
@@ -772,9 +778,11 @@ export default class ChatStream extends AIStream {
       handler: async (params, context) => {
         if (context.e?.isGroup && context.e.bot) {
           try {
-            await context.e.bot.sendApi('_send_group_notice', {
+            await context.e.bot.sendApi('send_group_notice', {
               group_id: context.e.group_id,
               content: params.content
+            }).catch(err => {
+              BotUtil.makeLog('warn', `发送群公告失败: ${err.message}`, 'ChatStream');
             });
             await BotUtil.sleep(300);
           } catch (error) {
@@ -1114,7 +1122,7 @@ ${persona}
 【身份信息】
 名字：${botName}
 QQ号：${e.self_id}
-${e.isGroup ? `群名：${e.group?.group_name || '未知'}
+${e.isGroup ? `群名：${e.group?.group_name || e.group_name || e.bot?.gl?.get?.(e.group_id)?.group_name || '未知'}
 群号：${e.group_id}
 身份：${botRole}` : ''}
 ${isMaster ? '\n⚠️ 重要提示：现在跟你讲话的是主人，请对主人友好和尊重。' : ''}
