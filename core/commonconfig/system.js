@@ -1546,7 +1546,6 @@ export default class SystemConfig extends ConfigBase {
                 Provider: {
                   type: 'string',
                   label: 'LLM 运营商',
-                  description: '选择 LLM 工厂的运营商',
                   enum: ['gptgod', 'volcengine', 'xiaomimimo'],
                   default: 'gptgod',
                   component: 'Select'
@@ -1554,7 +1553,7 @@ export default class SystemConfig extends ConfigBase {
                 timeout: {
                   type: 'number',
                   label: '请求超时时间',
-                  description: 'LLM请求超时时间（毫秒），默认360000（6分钟）。如果请求超过此时间，会触发"operation was aborted"错误',
+                  description: 'LLM请求超时时间（毫秒），默认360000（6分钟）。超时会触发"operation was aborted"错误',
                   min: 1000,
                   default: 360000,
                   component: 'InputNumber'
@@ -1567,14 +1566,12 @@ export default class SystemConfig extends ConfigBase {
                     enabled: {
                       type: 'boolean',
                       label: '启用重试',
-                      description: '是否启用自动重试机制',
                       default: true,
                       component: 'Switch'
                     },
                     maxAttempts: {
                       type: 'number',
                       label: '最大重试次数',
-                      description: '请求失败时的最大重试次数',
                       min: 1,
                       max: 10,
                       default: 3,
@@ -1582,8 +1579,7 @@ export default class SystemConfig extends ConfigBase {
                     },
                     delay: {
                       type: 'number',
-                      label: '重试延迟',
-                      description: '重试之间的延迟时间（毫秒）',
+                      label: '重试延迟（毫秒）',
                       min: 100,
                       default: 2000,
                       component: 'InputNumber'
@@ -1591,14 +1587,11 @@ export default class SystemConfig extends ConfigBase {
                     retryOn: {
                       type: 'array',
                       label: '重试条件',
-                      description: '哪些错误应该重试：timeout（超时）、network（网络错误）、5xx（服务器错误）、all（所有错误）',
-                      items: {
-                        type: 'string',
-                        enum: ['timeout', 'network', '5xx', 'all']
-                      },
+                      description: 'timeout（超时）、network（网络错误）、5xx（服务器错误）、all（所有错误）',
+                      itemType: 'string',
+                      enum: ['timeout', 'network', '5xx', 'all'],
                       default: ['timeout', 'network', '5xx'],
-                      component: 'Select',
-                      multiple: true
+                      component: 'MultiSelect'
                     }
                   }
                 }
@@ -1622,14 +1615,13 @@ export default class SystemConfig extends ConfigBase {
             },
             asr: {
               type: 'object',
-              label: 'ASR 工厂运营商选择',
-              description: '选择 ASR 工厂的运营商，详细配置位于 data/server_bots/{port}/volcengine_asr.yaml。ASR识别结果会调用工作流，工作流内部会自动选择LLM工厂。',
+              label: 'ASR工厂运营商选择',
+              description: '选择 ASR 工厂的运营商，详细配置位于 data/server_bots/{port}/volcengine_asr.yaml。ASR识别结果会调用工作流。',
               component: 'SubForm',
               fields: {
                 Provider: {
                   type: 'string',
                   label: 'ASR 运营商',
-                  description: '选择 ASR 工厂的运营商',
                   enum: ['volcengine'],
                   default: 'volcengine',
                   component: 'Select'
@@ -1637,7 +1629,7 @@ export default class SystemConfig extends ConfigBase {
                 workflow: {
                   type: 'string',
                   label: '工作流名称',
-                  description: 'ASR识别结果调用的工作流名称（工作流内部会自动选择LLM工厂）',
+                  description: 'ASR识别结果调用的工作流名称',
                   default: 'device',
                   component: 'Input'
                 }
@@ -1645,14 +1637,13 @@ export default class SystemConfig extends ConfigBase {
             },
             tts: {
               type: 'object',
-              label: 'TTS 工厂运营商选择',
+              label: 'TTS工厂运营商选择',
               description: '选择 TTS 工厂的运营商，详细配置位于 data/server_bots/{port}/volcengine_tts.yaml',
               component: 'SubForm',
               fields: {
                 Provider: {
                   type: 'string',
                   label: 'TTS 运营商',
-                  description: '选择 TTS 工厂的运营商',
                   enum: ['volcengine'],
                   default: 'volcengine',
                   component: 'Select'
@@ -1660,7 +1651,7 @@ export default class SystemConfig extends ConfigBase {
                 onlyForASR: {
                   type: 'boolean',
                   label: '仅ASR触发TTS',
-                  description: '是否只有ASR触发才有TTS（关闭后所有消息事件都能触发TTS）',
+                  description: '关闭后所有消息事件都能触发TTS',
                   default: true,
                   component: 'Switch'
                 }
