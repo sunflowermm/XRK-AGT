@@ -153,7 +153,13 @@ export default {
           // 校验并写入
           const valid = await config.validate(merged);
           if (!valid.valid) {
-            return res.status(400).json({ success: false, message: '校验失败', errors: valid.errors });
+            BotUtil.makeLog('warn', `配置验证失败 [${name}${keyPath ? '/' + keyPath : ''}]: ${valid.errors.join('; ')}`, 'ConfigAPI');
+            return res.status(400).json({ 
+              success: false, 
+              message: '校验失败', 
+              errors: valid.errors,
+              details: valid.errors 
+            });
           }
           await config.write(merged, { backup, validate });
           res.json({ success: true, message: '批量写入成功' });

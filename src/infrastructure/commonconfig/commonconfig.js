@@ -107,7 +107,15 @@ export default class ConfigBase {
         }
         // 校验 enum 与 default
         if (fs.enum && Object.prototype.hasOwnProperty.call(fs, 'default')) {
-          if (!fs.enum.includes(fs.default)) {
+          const def = fs.default;
+          // 对于数组类型，要求每个默认值都在 enum 中
+          if (fs.type === 'array' && Array.isArray(def)) {
+            for (const v of def) {
+              if (!fs.enum.includes(v)) {
+                throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 中的值 "${v}" 必须属于 enum: ${fs.enum.join(', ')}`);
+              }
+            }
+          } else if (!fs.enum.includes(def)) {
             throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须属于 enum: ${fs.enum.join(', ')}`);
           }
         }
@@ -644,8 +652,17 @@ export default class ConfigBase {
       }
     }
 
-    if (schema.enum && !schema.enum.includes(value)) {
-      errors.push(`字段 ${path} 值必须是: ${schema.enum.join(', ')}`);
+    // 对于数组类型，检查每个元素是否在 enum 中
+    if (schema.enum) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (!schema.enum.includes(item)) {
+            errors.push(`字段 ${path} 中的值 "${item}" 必须是: ${schema.enum.join(', ')}`);
+          }
+        }
+      } else if (!schema.enum.includes(value)) {
+        errors.push(`字段 ${path} 值必须是: ${schema.enum.join(', ')}`);
+      }
     }
   }
 

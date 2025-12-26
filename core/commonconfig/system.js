@@ -1487,10 +1487,9 @@ export default class SystemConfig extends ConfigBase {
               fields: {
                 maxTimeout: {
                   type: 'number',
-                  label: '最大执行超时',
-                  description: '最大执行超时时间（毫秒）',
+                  label: '最大执行超时（毫秒）',
                   min: 1000,
-                  default: 30000,
+                  default: 360000,
                   component: 'InputNumber'
                 },
                 debug: {
@@ -1539,21 +1538,21 @@ export default class SystemConfig extends ConfigBase {
             // ==================== 工厂运营商选择 ====================
             llm: {
               type: 'object',
-              label: 'LLM 工厂运营商选择',
-              description: '选择 LLM 工厂的运营商（文本），详细配置位于 data/server_bots/{port}/god.yaml / volcengine_llm.yaml / xiaomimimo_llm.yaml',
+              label: 'LLM工厂运营商选择',
+              description: '详细配置位于 data/server_bots/{port}/god.yaml / volcengine_llm.yaml / xiaomimimo_llm.yaml',
               component: 'SubForm',
               fields: {
                 Provider: {
                   type: 'string',
-                  label: 'LLM 运营商',
+                  label: 'LLM运营商',
                   enum: ['gptgod', 'volcengine', 'xiaomimimo'],
                   default: 'gptgod',
                   component: 'Select'
                 },
                 timeout: {
                   type: 'number',
-                  label: '请求超时时间',
-                  description: 'LLM请求超时时间（毫秒），默认360000（6分钟）。超时会触发"operation was aborted"错误',
+                  label: '请求超时时间（毫秒）',
+                  description: '默认360000（6分钟），超时会触发"operation was aborted"错误',
                   min: 1000,
                   default: 360000,
                   component: 'InputNumber'
@@ -1599,14 +1598,14 @@ export default class SystemConfig extends ConfigBase {
             },
             vision: {
               type: 'object',
-              label: '识图 工厂运营商选择',
-              description: '选择识图工厂的运营商（vision），一个工厂一个配置文件：god_vision.yaml / volcengine_vision.yaml。工作流不直接调用识图工厂，而是由 LLM 在检测到图片时调用。',
+              label: '识图工厂运营商选择',
+              description: '配置文件：god_vision.yaml / volcengine_vision.yaml。工作流不直接调用识图工厂，而是由 LLM 在检测到图片时调用。',
               component: 'SubForm',
               fields: {
                 Provider: {
                   type: 'string',
                   label: '识图运营商',
-                  description: '选择识图工厂的运营商；如未配置则默认与 LLM Provider 一致',
+                  description: '如未配置则默认与 LLM Provider 一致',
                   enum: ['gptgod', 'volcengine'],
                   default: 'gptgod',
                   component: 'Select'
@@ -1616,12 +1615,12 @@ export default class SystemConfig extends ConfigBase {
             asr: {
               type: 'object',
               label: 'ASR工厂运营商选择',
-              description: '选择 ASR 工厂的运营商，详细配置位于 data/server_bots/{port}/volcengine_asr.yaml。ASR识别结果会调用工作流。',
+              description: '详细配置位于 data/server_bots/{port}/volcengine_asr.yaml。ASR识别结果会调用工作流。',
               component: 'SubForm',
               fields: {
                 Provider: {
                   type: 'string',
-                  label: 'ASR 运营商',
+                  label: 'ASR运营商',
                   enum: ['volcengine'],
                   default: 'volcengine',
                   component: 'Select'
@@ -1638,12 +1637,12 @@ export default class SystemConfig extends ConfigBase {
             tts: {
               type: 'object',
               label: 'TTS工厂运营商选择',
-              description: '选择 TTS 工厂的运营商，详细配置位于 data/server_bots/{port}/volcengine_tts.yaml',
+              description: '详细配置位于 data/server_bots/{port}/volcengine_tts.yaml',
               component: 'SubForm',
               fields: {
                 Provider: {
                   type: 'string',
-                  label: 'TTS 运营商',
+                  label: 'TTS运营商',
                   enum: ['volcengine'],
                   default: 'volcengine',
                   component: 'Select'
