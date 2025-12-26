@@ -140,7 +140,7 @@ sequenceDiagram
     Server->>Server: WebSocket协议升级
     Server->>Route: 路径路由
     Route->>Business: Tasker处理
-    Business<-->Business: 双向通信
+    Business->>Business: 双向通信（持续）
 ```
 
 ---
