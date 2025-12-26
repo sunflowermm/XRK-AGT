@@ -1080,42 +1080,185 @@ export default class AIStream {
   }
 
   /**
-   * AI调用
+   * 获取重试配置（从aistream.yaml读取）
+   * @returns {Object} 重试配置对象
    */
-  async callAI(messages, apiConfig = {}) {
-    const config = this.resolveLLMConfig(apiConfig);
+  getRetryConfig() {
+    const runtime = (cfg && cfg.aistream) ? cfg.aistream : {};
+    const llm = (runtime && runtime.llm) ? runtime.llm : {};
+    const retryConfig = llm.retry || {};
+    return {
+      enabled: retryConfig.enabled !== false, // 默认启用
+      maxAttempts: retryConfig.maxAttempts || 3,
+      delay: retryConfig.delay || 2000,
+      retryOn: retryConfig.retryOn || ['timeout', 'network', '5xx']
+    };
+  }
 
-    // 调试日志：记录调用信息
-    const messagesPreview = messages.map(m => {
+  /**
+   * 判断错误类型
+   * @param {Error} error - 错误对象
+   * @returns {Object} 错误类型信息
+   */
+  classifyError(error) {
+    const isTimeout = error.name === 'AbortError' || 
+                     error.name === 'TimeoutError' ||
+                     error.message?.includes('aborted') ||
+                     error.message?.includes('timeout');
+    const isNetwork = error.message?.includes('network') || 
+                    error.message?.includes('ECONNREFUSED') ||
+                    error.message?.includes('ENOTFOUND');
+    const is5xx = error.message?.match(/\b(5\d{2})\b/);
+    
+    return { isTimeout, isNetwork, is5xx };
+  }
+
+  /**
+   * 判断是否应该重试
+   * @param {Object} errorInfo - 错误类型信息
+   * @param {Object} retryConfig - 重试配置
+   * @param {number} attempt - 当前尝试次数
+   * @returns {boolean} 是否应该重试
+   */
+  shouldRetry(errorInfo, retryConfig, attempt) {
+    if (!retryConfig.enabled || attempt >= retryConfig.maxAttempts) {
+      return false;
+    }
+    
+    const { isTimeout, isNetwork, is5xx } = errorInfo;
+    const { retryOn } = retryConfig;
+    
+    return (
+      (isTimeout && retryOn.includes('timeout')) ||
+      (isNetwork && retryOn.includes('network')) ||
+      (is5xx && retryOn.includes('5xx')) ||
+      (retryOn.includes('all'))
+    );
+  }
+
+  /**
+   * 格式化超时时间（毫秒转秒）
+   * @param {Object} config - 配置对象
+   * @returns {number} 超时秒数
+   */
+  getTimeoutSeconds(config) {
+    const timeout = config.timeout || this.config?.timeout || 360000;
+    return Math.round(timeout / 1000);
+  }
+
+  /**
+   * 格式化消息预览（用于日志记录）
+   * @param {Array} messages - 消息数组
+   * @returns {string} 格式化后的消息预览
+   */
+  formatMessagesPreview(messages) {
+    return messages.map(m => {
       const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
       const preview = content.length > 200 ? content.substring(0, 200) + '...' : content;
       return `${m.role}: ${preview}`;
     }).join('\n');
-    
+  }
+
+  /**
+   * 记录AI调用日志
+   * @param {string} type - 调用类型（'normal' 或 'stream'）
+   * @param {Object} config - 配置对象
+   * @param {Array} messages - 消息数组
+   */
+  logAICall(type, config, messages) {
+    const messagesPreview = this.formatMessagesPreview(messages);
+    const typeLabel = type === 'stream' ? '(流式)' : '';
     BotUtil.makeLog('info', 
-      `[${this.name}] 调用LLM工厂\nProvider: ${config.provider || 'unknown'}\nModel: ${config.model || 'unknown'}\n消息:\n${messagesPreview}`,
+      `[${this.name}] 调用LLM工厂${typeLabel}\nProvider: ${config.provider || 'unknown'}\nModel: ${config.model || 'unknown'}\n消息:\n${messagesPreview}`,
       'AIStream'
     );
+  }
 
-    try {
-      const client = LLMFactory.createClient(config);
-      const response = await client.chat(messages, config);
-      
-      // 调试日志：记录响应结果
-      const responsePreview = response && response.length > 500 
-        ? response.substring(0, 500) + '...' 
-        : (response || '(空响应)');
-      
-      BotUtil.makeLog('info',
-        `[${this.name}] LLM响应\n长度: ${response?.length || 0}字符\n内容: ${responsePreview}`,
+  /**
+   * 记录AI响应日志
+   * @param {string} response - 响应文本
+   * @param {boolean} isStream - 是否为流式响应
+   */
+  logAIResponse(response, isStream = false) {
+    const responsePreview = response && response.length > 500 
+      ? response.substring(0, 500) + '...' 
+      : (response || '(空响应)');
+    const typeLabel = isStream ? '流式' : '';
+    BotUtil.makeLog('info',
+      `[${this.name}] LLM${typeLabel}响应${isStream ? '完成' : ''}\n长度: ${response?.length || 0}字符\n内容: ${responsePreview}`,
+      'AIStream'
+    );
+  }
+
+  /**
+   * AI调用
+   */
+  async callAI(messages, apiConfig = {}) {
+    const config = this.resolveLLMConfig(apiConfig);
+    const retryConfig = this.getRetryConfig();
+    this.logAICall('normal', config, messages);
+
+    let lastError = null;
+    for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
+      try {
+        const client = LLMFactory.createClient(config);
+        const response = await client.chat(messages, config);
+        this.logAIResponse(response, false);
+        return response;
+      } catch (error) {
+        lastError = error;
+        const errorInfo = this.classifyError(error);
+        const timeoutSeconds = this.getTimeoutSeconds(config);
+        const shouldRetry = this.shouldRetry(errorInfo, retryConfig, attempt);
+        
+        // 记录警告日志
+        if (errorInfo.isTimeout) {
+          BotUtil.makeLog('warn', 
+            `[${this.name}] AI调用超时（${timeoutSeconds}秒）${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '请求被中止'}`,
+            'AIStream'
+          );
+        } else {
+          BotUtil.makeLog('warn', 
+            `[${this.name}] AI调用失败${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '未知错误'}`,
+            'AIStream'
+          );
+        }
+        
+        // 如果需要重试，等待后继续
+        if (shouldRetry) {
+          await BotUtil.sleep(retryConfig.delay);
+          continue;
+        }
+        
+        // 不需要重试或已达到最大重试次数
+        if (errorInfo.isTimeout) {
+          BotUtil.makeLog('error', 
+            `[${this.name}] AI调用超时（${timeoutSeconds}秒），已重试${attempt}次`,
+            'AIStream'
+          );
+          throw new Error(`AI调用超时（${timeoutSeconds}秒），已重试${attempt}次，请稍后重试`);
+        }
+        
+        BotUtil.makeLog('error', 
+          `[${this.name}] AI调用失败: ${error.message || '未知错误'}`,
+          'AIStream'
+        );
+        
+        return null;
+      }
+    }
+    
+    // 所有重试都失败
+    if (lastError) {
+      const timeoutSeconds = this.getTimeoutSeconds(config);
+      BotUtil.makeLog('error', 
+        `[${this.name}] AI调用失败，已重试${retryConfig.maxAttempts}次: ${lastError.message || '未知错误'}`,
         'AIStream'
       );
-      
-      return response;
-    } catch (error) {
-      BotUtil.makeLog('error', `AI调用失败: ${error.message}`, 'AIStream');
-      return null;
+      throw new Error(`AI调用失败，已重试${retryConfig.maxAttempts}次，请检查网络连接或稍后重试`);
     }
+    
+    return null;
   }
 
   /**
@@ -1135,43 +1278,74 @@ export default class AIStream {
    */
   async callAIStream(messages, apiConfig = {}, onDelta, options = {}) {
     const config = this.resolveLLMConfig(apiConfig);
-    const client = LLMFactory.createClient(config);
-
-    // 调试日志：记录调用信息
-    const messagesPreview = messages.map(m => {
-      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-      const preview = content.length > 200 ? content.substring(0, 200) + '...' : content;
-      return `${m.role}: ${preview}`;
-    }).join('\n');
-    
-    BotUtil.makeLog('info',
-      `[${this.name}] 调用LLM工厂(流式)\nProvider: ${config.provider || 'unknown'}\nModel: ${config.model || 'unknown'}\n消息:\n${messagesPreview}`,
-      'AIStream'
-    );
+    const retryConfig = this.getRetryConfig();
+    this.logAICall('stream', config, messages);
 
     let fullText = '';
-
     const wrapDelta = (delta) => {
       if (!delta) return;
       fullText += delta;
       if (typeof onDelta === 'function') onDelta(delta);
     };
 
-    try {
-      await client.chatStream(messages, wrapDelta, config);
-      
-      // 调试日志：记录流式响应结果
-      const responsePreview = fullText && fullText.length > 500 
-        ? fullText.substring(0, 500) + '...' 
-        : (fullText || '(空响应)');
-      
-      BotUtil.makeLog('info',
-        `[${this.name}] LLM流式响应完成\n长度: ${fullText?.length || 0}字符\n内容: ${responsePreview}`,
+    let lastError = null;
+    for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
+      try {
+        const client = LLMFactory.createClient(config);
+        await client.chatStream(messages, wrapDelta, config);
+        this.logAIResponse(fullText, true);
+        break; // 成功，退出重试循环
+      } catch (error) {
+        lastError = error;
+        const errorInfo = this.classifyError(error);
+        const timeoutSeconds = this.getTimeoutSeconds(config);
+        const shouldRetry = this.shouldRetry(errorInfo, retryConfig, attempt);
+        
+        // 记录警告日志
+        if (errorInfo.isTimeout) {
+          BotUtil.makeLog('warn', 
+            `[${this.name}] AI流式调用超时（${timeoutSeconds}秒）${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '请求被中止'}`,
+            'AIStream'
+          );
+        } else {
+          BotUtil.makeLog('warn', 
+            `[${this.name}] AI流式调用失败${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '未知错误'}`,
+            'AIStream'
+          );
+        }
+        
+        // 如果需要重试，重置fullText并等待后继续
+        if (shouldRetry) {
+          fullText = ''; // 重置文本，准备重试
+          await BotUtil.sleep(retryConfig.delay);
+          continue;
+        }
+        
+        // 不需要重试或已达到最大重试次数
+        if (errorInfo.isTimeout) {
+          BotUtil.makeLog('error', 
+            `[${this.name}] AI流式调用超时（${timeoutSeconds}秒），已重试${attempt}次`,
+            'AIStream'
+          );
+          throw new Error(`AI流式调用超时（${timeoutSeconds}秒），已重试${attempt}次，请稍后重试`);
+        }
+        
+        BotUtil.makeLog('error', 
+          `[${this.name}] AI流式调用失败: ${error.message || '未知错误'}`,
+          'AIStream'
+        );
+        throw error;
+      }
+    }
+    
+    // 所有重试都失败
+    if (lastError) {
+      const timeoutSeconds = this.getTimeoutSeconds(config);
+      BotUtil.makeLog('error', 
+        `[${this.name}] AI流式调用失败，已重试${retryConfig.maxAttempts}次: ${lastError.message || '未知错误'}`,
         'AIStream'
       );
-    } catch (error) {
-      BotUtil.makeLog('error', `AI调用失败: ${error.message}`, 'AIStream');
-      throw error;
+      throw new Error(`AI流式调用失败，已重试${retryConfig.maxAttempts}次，请检查网络连接或稍后重试`);
     }
 
     if (!options.enableFunctionCalling || !fullText) {
@@ -1260,14 +1434,25 @@ export default class AIStream {
    * @returns {Object} LLM配置
    */
   resolveLLMConfig(apiConfig = {}) {
+    // 使用安全的配置读取，确保有默认值
     const merged = { ...this.config, ...apiConfig };
-    const runtime = cfg.aistream || {};
-    const llm = runtime.llm || {};
-    const vision = runtime.vision || {};
+    const runtime = (cfg && cfg.aistream) ? cfg.aistream : {};
+    const llm = (runtime && runtime.llm) ? runtime.llm : {};
+    const vision = (runtime && runtime.vision) ? runtime.vision : {};
+    const global = (runtime && runtime.global) ? runtime.global : {};
 
+    // Provider配置：优先级 apiConfig > llm.Provider > 默认值
     const provider = merged.provider || llm.Provider || 'gptgod';
     // 识图运营商：可单独配置，否则默认与 LLM Provider 一致
     const visionProvider = (merged.visionProvider || vision.Provider || provider).toLowerCase();
+    
+    // 从aistream.yaml的global配置中读取timeout（优先使用全局配置）
+    // 优先级：apiConfig.timeout > llm.timeout > global.maxTimeout > this.config.timeout > 默认360000
+    const timeout = merged.timeout || 
+                    (llm.timeout && typeof llm.timeout === 'number' ? llm.timeout : null) ||
+                    (global.maxTimeout && typeof global.maxTimeout === 'number' ? global.maxTimeout : null) ||
+                    (this.config && this.config.timeout && typeof this.config.timeout === 'number' ? this.config.timeout : null) ||
+                    360000;
 
     // LLM Provider 到配置名的映射（可扩展）
     const llmConfigMap = {
@@ -1282,28 +1467,35 @@ export default class AIStream {
       'volcengine': 'volcengine_vision'
     };
 
+    // 检查Provider是否支持
     if (!LLMFactory.hasProvider(provider)) {
       BotUtil.makeLog('error', `不支持的LLM提供商: ${provider}，已回退到gptgod`, 'AIStream');
       const fallbackProvider = 'gptgod';
       const fallbackConfigKey = llmConfigMap[fallbackProvider] || 'god';
-      const fallbackConfig = cfg[fallbackConfigKey] || {};
+      // 安全读取配置，确保cfg存在
+      const fallbackConfig = (cfg && cfg[fallbackConfigKey] && typeof cfg[fallbackConfigKey] === 'object') 
+        ? cfg[fallbackConfigKey] 
+        : {};
       return {
         ...fallbackConfig,
         ...merged,
         provider: fallbackProvider,
-        visionProvider: visionProvider
+        visionProvider: visionProvider,
+        timeout // 确保timeout被传递
       };
     }
 
-    // 动态获取 LLM 配置
+    // 动态获取 LLM 配置（安全读取）
     const llmConfigKey = llmConfigMap[provider];
-    const providerConfig = llmConfigKey ? (cfg[llmConfigKey] || {}) : {};
+    const providerConfig = (llmConfigKey && cfg && cfg[llmConfigKey] && typeof cfg[llmConfigKey] === 'object') 
+      ? cfg[llmConfigKey] 
+      : {};
 
-    // 动态获取 Vision 配置（一个工厂一个配置文件）
+    // 动态获取 Vision 配置（一个工厂一个配置文件，安全读取）
     let visionConfig = {};
     const visionConfigKey = visionConfigMap[visionProvider];
-    if (visionConfigKey) {
-      visionConfig = cfg[visionConfigKey] || {};
+    if (visionConfigKey && cfg && cfg[visionConfigKey] && typeof cfg[visionConfigKey] === 'object') {
+      visionConfig = cfg[visionConfigKey];
     }
 
     const finalConfig = {
@@ -1311,7 +1503,8 @@ export default class AIStream {
       ...merged,
       provider,
       visionProvider,
-      visionConfig
+      visionConfig,
+      timeout // 确保timeout被正确传递
     };
 
     return finalConfig;

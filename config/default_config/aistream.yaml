@@ -30,6 +30,19 @@ cache:
 # 文本 LLM 配置分别位于 data/server_bots/{port}/god.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml
 llm:
   Provider: gptgod
+  # LLM请求超时时间（毫秒），默认360000（6分钟）
+  # 如果请求超过此时间，会触发"operation was aborted"错误
+  timeout: 360000
+  # LLM请求重试配置
+  retry:
+    # 是否启用重试
+    enabled: true
+    # 最大重试次数
+    maxAttempts: 3
+    # 重试延迟（毫秒）
+    delay: 2000
+    # 重试条件：哪些错误应该重试（timeout/network/5xx/all）
+    retryOn: ["timeout", "network", "5xx"]
 
 # 识图工厂运营商选择（gptgod / volcengine）
 # 一个工厂一个配置文件：god_vision.yaml、volcengine_vision.yaml

@@ -1550,6 +1550,57 @@ export default class SystemConfig extends ConfigBase {
                   enum: ['gptgod', 'volcengine', 'xiaomimimo'],
                   default: 'gptgod',
                   component: 'Select'
+                },
+                timeout: {
+                  type: 'number',
+                  label: '请求超时时间',
+                  description: 'LLM请求超时时间（毫秒），默认360000（6分钟）。如果请求超过此时间，会触发"operation was aborted"错误',
+                  min: 1000,
+                  default: 360000,
+                  component: 'InputNumber'
+                },
+                retry: {
+                  type: 'object',
+                  label: '重试配置',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用重试',
+                      description: '是否启用自动重试机制',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    maxAttempts: {
+                      type: 'number',
+                      label: '最大重试次数',
+                      description: '请求失败时的最大重试次数',
+                      min: 1,
+                      max: 10,
+                      default: 3,
+                      component: 'InputNumber'
+                    },
+                    delay: {
+                      type: 'number',
+                      label: '重试延迟',
+                      description: '重试之间的延迟时间（毫秒）',
+                      min: 100,
+                      default: 2000,
+                      component: 'InputNumber'
+                    },
+                    retryOn: {
+                      type: 'array',
+                      label: '重试条件',
+                      description: '哪些错误应该重试：timeout（超时）、network（网络错误）、5xx（服务器错误）、all（所有错误）',
+                      items: {
+                        type: 'string',
+                        enum: ['timeout', 'network', '5xx', 'all']
+                      },
+                      default: ['timeout', 'network', '5xx'],
+                      component: 'Select',
+                      multiple: true
+                    }
+                  }
                 }
               }
             },
