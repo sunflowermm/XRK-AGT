@@ -1168,7 +1168,13 @@ export default class AIStream {
       parser,
       enabled: this.functionToggles[name] ?? enabled,
       permission,
-      description
+      description,
+      // 保存所有其他选项（如 requireAdmin, requireOwner 等）
+      ...Object.fromEntries(
+        Object.entries(options).filter(([key]) => 
+          !['handler', 'prompt', 'parser', 'enabled', 'permission', 'description'].includes(key)
+        )
+      )
     });
   }
 

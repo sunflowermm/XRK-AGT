@@ -1169,13 +1169,14 @@ export default class ChatStream extends AIStream {
                       e.from?.name || '未知';
       
       // 优先使用真实的消息ID，确保准确
-      let messageId = e.message_id || e.messageId || e.id;
+      // 优先级：e.message_id > e.messageId > e.id > e.source?.id
+      let messageId = e.message_id || e.messageId || e.id || e.source?.id;
       
       // 如果消息ID不存在，尝试从消息段中提取（回复消息的ID）
       if (!messageId && e.message && Array.isArray(e.message)) {
         const replySeg = e.message.find(seg => seg.type === 'reply');
         if (replySeg && replySeg.id) {
-          messageId = String(replySeg.id);
+          messageId = replySeg.id;
         }
       }
       
@@ -1245,12 +1246,32 @@ export default class ChatStream extends AIStream {
   /**
    * 构建功能列表提示（优化版）
    * 清晰说明功能列表的作用、使用方式和执行机制
+   * 根据权限自动过滤功能
    */
-  buildFunctionsPrompt() {
+  buildFunctionsPrompt(context = {}) {
+    const { botRole = '成员' } = context;
+    
+    // 获取所有启用的函数
     const enabledFuncs = this.getEnabledFunctions();
     if (enabledFuncs.length === 0) return '';
 
-    const prompts = enabledFuncs
+    // 根据权限过滤函数
+    const filteredFuncs = enabledFuncs.filter(func => {
+      // 如果函数需要管理员权限
+      if (func.requireAdmin) {
+        return botRole === '管理员' || botRole === '群主';
+      }
+      // 如果函数需要群主权限
+      if (func.requireOwner) {
+        return botRole === '群主';
+      }
+      // 其他函数所有角色都可以使用
+      return true;
+    });
+
+    if (filteredFuncs.length === 0) return '';
+
+    const prompts = filteredFuncs
       .filter(f => f.prompt)
       .map(f => f.prompt);
 
@@ -1262,45 +1283,25 @@ export default class ChatStream extends AIStream {
     return `【可执行命令列表】
 在回复中使用以下格式时，系统会自动解析并执行，然后从文本中移除命令格式。
 
-格式要求：精确匹配示例（类似正则），如[命令:参数1:参数2]。执行后命令格式会被移除，用户只看到普通文本。
-【消息段格式】
-以下格式会作为消息段整合到回复中，保持顺序：
-[开心] [惊讶] [伤心] [大笑] [害怕] [生气] - 表情包（可与其他内容组合，保持顺序）
-[CQ:at,qq=QQ号] - @某人（可与其他内容组合，保持顺序）
-[CQ:image,file=图片路径] - 图片（可与其他内容组合，保持顺序）
-[CQ:reply,id=消息ID] - 回复消息（会应用到整个消息，回复段会自动放在最前面）
+【消息段格式】（保持顺序）
+[开心][惊讶][伤心][大笑][害怕][生气] - 表情包
+[CQ:at,qq=QQ号] - @某人
+[CQ:image,file=图片路径] - 图片
+[CQ:reply,id=消息ID] - 回复消息（回复段自动放在最前面）
 
-【消息ID使用说明】
-聊天记录中每条消息都标注了消息ID，格式为：消息ID:xxx（例如：消息ID:1051113239）
-
-重要规则：
-1. 回复消息：使用 [CQ:reply,id=消息ID] 格式，消息ID就是聊天记录中标注的ID
-   示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 你好"
-   要回复这条消息，使用：[CQ:reply,id=1051113239]你的回复内容
-
-2. 表情回应：使用 [回应:消息ID:表情类型] 格式
-   示例：要回应消息ID为1051113239的消息，使用：[回应:1051113239:开心]
-
-3. 设置精华：使用 [设精华:消息ID] 格式
-   示例：要将消息ID为1051113239的消息设为精华，使用：[设精华:1051113239]
-
-4. 取消精华：使用 [取消精华:消息ID] 格式
-   示例：要取消消息ID为1051113239的消息的精华，使用：[取消精华:1051113239]
-
-5. 撤回消息：使用 [撤回:消息ID] 格式
-   示例：要撤回消息ID为1051113239的消息，使用：[撤回:1051113239]
-
-⚠️ 关键提示：
-- 消息ID必须从聊天记录中准确复制，不要自己编造
-- 消息ID通常是数字字符串，例如：1051113239、1234567890等
-- 如果聊天记录中没有显示消息ID，说明该消息无法进行这些操作
-- 回复、表情回应、精华等操作都需要准确的消息ID才能成功
+【消息ID使用】
+聊天记录格式：昵称(QQ号)[ID:消息ID]: 内容
+- 回复：使用 [CQ:reply,id=消息ID]，消息ID从聊天记录的[ID:xxx]中复制
+- 表情回应：使用 [回应:消息ID:表情类型]（表情类型：开心/惊讶/伤心/大笑/害怕/喜欢/爱心/生气）
+- 设置精华：使用 [设精华:消息ID]（需管理员权限）
+- 取消精华：使用 [取消精华:消息ID]（需管理员权限）
+- 撤回消息：使用 [撤回:消息ID]（需管理员权限或3分钟内）
 
 可用命令：
 ${resolvedPrompts.join('\n')}
 
-示例：[开心]今天真好→发送表情+文本（顺序：表情在前） | 今天真好[开心]→文本+表情（顺序：文本在前） | [禁言:123456:600]→禁言600秒
-注意：格式完全匹配，参数完整，执行结果不显示在回复中但功能生效`;
+示例：[开心]今天真好 | [禁言:123456:600]→禁言600秒
+注意：格式完全匹配，参数完整，执行后命令格式会被移除`;
   }
 
   buildSystemPrompt(context) {
@@ -1310,50 +1311,8 @@ ${resolvedPrompts.join('\n')}
     const botRole = question?.botRole || '成员';
     const dateStr = question?.dateStr || new Date().toLocaleString('zh-CN');
     
-    let functionsPrompt = this.buildFunctionsPrompt();
-    
-    // 根据权限过滤功能（在命令列表部分进行过滤）
-    if (functionsPrompt) {
-      const lines = functionsPrompt.split('\n');
-      const filteredLines = [];
-      let inCommandsSection = false;
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        
-        // 找到"可用命令："标记
-        if (line.includes('可用命令：')) {
-          inCommandsSection = true;
-          filteredLines.push(line);
-          continue;
-        }
-        
-        // 在命令区域之外，保留所有行
-        if (!inCommandsSection) {
-          filteredLines.push(line);
-          continue;
-        }
-        
-        // 在命令区域内，根据权限过滤
-        if (botRole === '成员') {
-          const restrictedKeywords = [
-            '禁言', '解禁', '全员禁言', '改名片', '改群名', 
-            '设管', '取管', '头衔', '踢人', '精华', '公告'
-          ];
-          if (restrictedKeywords.some(keyword => line.includes(keyword))) {
-            continue; // 跳过管理员功能
-          }
-        } else if (botRole === '管理员') {
-          if (line.includes('[设管') || line.includes('[取管') || line.includes('[头衔')) {
-            continue; // 跳过群主专属功能
-          }
-        }
-        
-        filteredLines.push(line);
-      }
-      
-      functionsPrompt = filteredLines.join('\n');
-    }
+    // 根据权限构建功能列表（权限过滤已在 buildFunctionsPrompt 中完成）
+    const functionsPrompt = this.buildFunctionsPrompt({ botRole });
 
     let embeddingHint = '';
     if (this.embeddingConfig?.enabled && this.embeddingReady) {
@@ -1367,12 +1326,8 @@ ${resolvedPrompts.join('\n')}
 ${persona}
 
 【身份信息】
-名字：${botName}
-QQ号：${e.self_id}
-${e.isGroup ? `群名：${e.group?.group_name || e.group_name || e.bot?.gl?.get?.(e.group_id)?.group_name || '未知'}
-群号：${e.group_id}
-身份：${botRole}` : ''}
-${isMaster ? '\n⚠️ 重要提示：现在跟你讲话的是主人，请对主人友好和尊重。' : ''}
+名字：${botName} | QQ号：${e.self_id}${e.isGroup ? ` | 群号：${e.group_id} | 身份：${botRole}` : ''}
+${isMaster ? '⚠️ 现在跟你讲话的是主人，请对主人友好和尊重。' : ''}
 
 【时间信息】
 当前时间：${dateStr}
@@ -1402,8 +1357,7 @@ ${isGlobalTrigger ?
 2. 专注于表达情绪和感受，不要试图解决问题或给出建议
 3. 自然地使用"哦"、"行吧"、"我觉得"、"感觉"、"可能"等表达情绪的词
 4. 像真人一样随意聊天，不要显得像AI助手
-5. 可以使用表情回应等互动，但重点是表达情绪
-6. 语气自然随意，不要刻意帮助别人` : 
+5. 可以使用表情回应等互动，但重点是表达情绪` : 
 `1. 回复要有针对性
 2. 积极互动
 3. 多使用表情回应
@@ -1461,19 +1415,26 @@ ${isGlobalTrigger ?
 
     const mergedMessages = [messages[0]];
     
+    // 格式化聊天记录，确保消息ID清晰可见
+    const formatHistoryMessage = (msgs, triggerType) => {
+      const historyText = msgs.map(msg => {
+        const msgId = msg.message_id || '未知';
+        return `${msg.nickname}(${msg.user_id})[ID:${msgId}]: ${msg.message}`;
+      }).join('\n');
+      
+      if (triggerType === 'global') {
+        return `[群聊记录]\n${historyText}\n\n你闲来无事点开群聊，看到这些发言。请根据你的个性和人设，自然地表达情绪和感受，不要试图解决问题。`;
+      } else {
+        return `[群聊记录]\n${historyText}`;
+      }
+    };
+    
     if (isGlobalTrigger) {
       const recentMessages = history.slice(-15);
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `[群聊记录]\n${recentMessages.map(msg => {
-            const msgId = msg.message_id || msg.id || '未知';
-            return `${msg.nickname}(${msg.user_id})[消息ID:${msgId}]: ${msg.message}`;
-          }).join('\n')}\n\n你闲来无事点开群聊，看到小伙伴们的这些发言。请根据你的个性和人设，自然地表达你的情绪和感受，保持真实的反应，不要试图解决问题。\n\n⚠️ 重要提示：每条消息都有消息ID（格式：消息ID:xxx），你可以：
-- 回复消息：使用 [CQ:reply,id=消息ID] 格式
-- 表情回应：使用 [回应:消息ID:表情类型] 格式（表情类型：开心/惊讶/伤心/大笑/害怕/喜欢/爱心/生气）
-- 设置精华：使用 [设精华:消息ID] 格式（需要管理员权限）
-消息ID必须从上面的聊天记录中准确复制，不要自己编造。`
+          content: formatHistoryMessage(recentMessages, 'global')
         });
       }
     } else {
@@ -1481,14 +1442,7 @@ ${isGlobalTrigger ?
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `[群聊记录]\n${recentMessages.map(msg => {
-            const msgId = msg.message_id || msg.id || '未知';
-            return `${msg.nickname}(${msg.user_id})[消息ID:${msgId}]: ${msg.message}`;
-          }).join('\n')}\n\n⚠️ 重要提示：每条消息都有消息ID（格式：消息ID:xxx），你可以：
-- 回复消息：使用 [CQ:reply,id=消息ID] 格式
-- 表情回应：使用 [回应:消息ID:表情类型] 格式（表情类型：开心/惊讶/伤心/大笑/害怕/喜欢/爱心/生气）
-- 设置精华：使用 [设精华:消息ID] 格式（需要管理员权限）
-消息ID必须从上面的聊天记录中准确复制，不要自己编造。`
+          content: formatHistoryMessage(recentMessages, 'normal')
         });
       }
       
