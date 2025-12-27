@@ -1241,20 +1241,23 @@ export default class ChatStream extends AIStream {
       const member = e.group?.pickMember(e.self_id);
       if (!member) return '成员';
       
-      let roleValue = member.role;
+      if (member.is_owner) return '群主';
+      if (member.is_admin) return '管理员';
       
-      if (!roleValue && typeof member.getInfo === 'function') {
+      if (typeof member.getInfo === 'function') {
         try {
           const info = await member.getInfo();
-          roleValue = info?.role;
+          if (info?.role) {
+            const normalizedRole = String(info.role).toLowerCase().trim();
+            return normalizedRole === 'owner' ? '群主' : 
+                   normalizedRole === 'admin' ? '管理员' : '成员';
+          }
         } catch (err) {
           // 静默失败
         }
       }
       
-      const normalizedRole = roleValue ? String(roleValue).toLowerCase().trim() : '';
-      return normalizedRole === 'owner' ? '群主' : 
-             normalizedRole === 'admin' ? '管理员' : '成员';
+      return '成员';
     } catch (error) {
       return '成员';
     }
