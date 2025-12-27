@@ -108,25 +108,41 @@ export class update extends plugin {
     }
   }
 
+  /**
+   * 检查插件完整性（用于XRK插件）
+   * @param {Object} plugin - 插件对象 { name, requiredFiles }
+   * @returns {boolean} 是否完整
+   */
   async checkPluginIntegrity(plugin) {
-    const pluginPath = `core/${plugin.name}`
-    if (!fs.existsSync(pluginPath)) return false
-    if (!fs.existsSync(`${pluginPath}/.git`)) return false
+    // 检查是否是有效的git仓库
+    if (!this.isValidGitPlugin(plugin.name)) return false
     
+    const pluginPath = `core/${plugin.name}`
+    
+    // 检查必需文件是否存在
     const missingFiles = plugin.requiredFiles.filter(file => !fs.existsSync(`${pluginPath}/${file}`))
     if (missingFiles.length > 0) {
-      logger.mark(`[更新] ${plugin.name} 目录不完整，跳过更新`)
+      logger.mark(`[更新] ${plugin.name} 目录不完整，缺少文件: ${missingFiles.join(', ')}，跳过更新`)
       return false
     }
+    
     return true
   }
 
+  /**
+   * 获取插件名称并验证（用于单个插件更新）
+   * @param {string} plugin - 插件名称，为空时从消息中提取
+   * @returns {string|false} 插件名称或false
+   */
   getPlugin(plugin = '') {
     if (!plugin) {
       plugin = this.e.msg.replace(/#(强制)?更新(日志)?/, '').trim()
       if (!plugin) return ''
     }
-    if (!fs.existsSync(`core/${plugin}/.git`)) return false
+    
+    // 验证是否是有效的git仓库
+    if (!this.isValidGitPlugin(plugin)) return false
+    
     this.typeName = plugin
     return plugin
   }
@@ -236,58 +252,73 @@ export class update extends plugin {
     return this.reply(`${msg}\n${errMsg}\n${stdoutStr}`)
   }
 
+  /**
+   * 检查插件是否是有效的git仓库（不修改typeName）
+   * @param {string} plugin - 插件名称
+   * @returns {boolean} 是否是有效的git仓库
+   */
+  isValidGitPlugin(plugin) {
+    if (!plugin) return false
+    const pluginPath = `core/${plugin}`
+    return fs.existsSync(pluginPath) && 
+           fs.statSync(pluginPath).isDirectory() && 
+           fs.existsSync(`${pluginPath}/.git`)
+  }
+
   async updateAll() {
-    const dirs = fs.readdirSync('./core/')
     const originalReply = this.reply
     this.updatedPlugins.clear()
 
     const isSilent = /^#静默全部(强制)?更新$/.test(this.e.msg)
-    isSilent && (
-      await this.reply(`开始执行静默全部更新，请稍等...`),
+    if (isSilent) {
+      await this.reply(`开始执行静默全部更新，请稍等...`)
       this.reply = (message) => {
         this.messages.push(message)
       }
-    )
+    }
 
+    // 更新主仓库
     await this.runUpdate()
     this.updatedPlugins.add('main')
 
-    for (let plu of dirs) {
-      if (this.updatedPlugins.has(plu)) continue
-      plu = this.getPlugin(plu)
-      if (plu === false) continue
-      
-      await common.sleep(this.sleepBetween)
-      await this.runUpdate(plu)
-      this.updatedPlugins.add(plu)
-    }
-
+    // 更新 core/plugin/ 目录下的插件
     try {
       const pluginDir = './core/plugin'
       if (fs.existsSync(pluginDir)) {
         const pluginSubdirs = fs.readdirSync(pluginDir)
-        for (let plu of pluginSubdirs) {
-          if (this.updatedPlugins.has(`plugin/${plu}`)) continue
+        for (const plu of pluginSubdirs) {
+          const pluginPath = `plugin/${plu}`
+          
+          // 跳过已更新的插件
+          if (this.updatedPlugins.has(pluginPath)) continue
+          
+          // 跳过示例和增强器目录
           if (plu === 'example' || plu === 'enhancer') continue
           
-          // 检查是否是git仓库
-          if (!fs.existsSync(`core/plugin/${plu}/.git`)) continue
+          // 检查是否是有效的git仓库
+          if (!this.isValidGitPlugin(pluginPath)) continue
           
           await common.sleep(this.sleepBetween)
-          await this.runUpdate(`plugin/${plu}`)
-          this.updatedPlugins.add(`plugin/${plu}`)
+          await this.runUpdate(pluginPath)
+          this.updatedPlugins.add(pluginPath)
         }
       }
     } catch (error) {
       logger.error(`检查plugin目录失败: ${error}`)
     }
     
-    isSilent && (
-      this.reply = originalReply,
-      await this.reply(await common.makeForwardMsg(this.e, this.messages))
-    )
+    // 恢复reply方法并发送汇总消息
+    if (isSilent) {
+      this.reply = originalReply
+      if (this.messages.length > 0) {
+        await this.reply(await common.makeForwardMsg(this.e, this.messages))
+      }
+      this.messages = []
+    }
 
-    this.isUp && setTimeout(() => this.restart(), this.restartDelay)
+    if (this.isUp) {
+      setTimeout(() => this.restart(), this.restartDelay)
+    }
   }
 
   restart() {

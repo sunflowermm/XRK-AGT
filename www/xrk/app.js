@@ -230,9 +230,15 @@ class App {
     });
     
     // 使用节流优化定时器，避免页面不可见时执行
+    // 每60秒刷新一次系统状态（仅在首页且页面可见时）
     this._statusUpdateTimer = setInterval(() => {
       if (this.currentPage === 'home' && !document.hidden) {
-        this.loadSystemStatus();
+        this.loadSystemStatus().catch(err => {
+          // 静默处理错误，避免控制台噪音
+          if (err.name !== 'AbortError' && err.name !== 'TimeoutError') {
+            console.warn('定时刷新系统状态失败:', err);
+          }
+        });
       }
     }, 60000);
     
@@ -721,37 +727,66 @@ class App {
     }
   }
 
+  /**
+   * 加载系统状态（企业级统一方法）
+   * 从后端获取系统概览数据，包括机器人、工作流、网络等信息
+   */
   async loadSystemStatus() {
     try {
-      const res = await fetch(`${this.serverUrl}/api/system/overview?withHistory=1`, { headers: this.getHeaders() });
-      if (!res.ok) throw new Error('接口异常');
+      const res = await fetch(`${this.serverUrl}/api/system/overview?withHistory=1`, { 
+        headers: this.getHeaders(),
+        signal: AbortSignal.timeout(10000) // 10秒超时
+      });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
       const data = await res.json();
-      if (!data.success) throw new Error(data.error || '获取失败');
+      
+      if (!data.success) {
+        throw new Error(data.error || '获取系统状态失败');
+      }
+      
+      // 保存最新数据
       this._latestSystem = data;
+      
+      // 更新系统状态显示
       this.updateSystemStatus(data);
-      // 确保数据正确传递
+      
+      // 渲染各个面板（确保数据正确传递）
       this.renderBotsPanel(data.bots || []);
       this.renderWorkflowInfo(data.workflows || {}, data.panels || {});
       this.renderNetworkInfo(data.system?.network || {}, data.system?.netRates || {});
-      if (this._llmOptions?.workflows) {
-        this.refreshChatWorkflowOptions();
-      }
+      
     } catch (e) {
-      console.error('Failed to load system status:', e);
-      this.renderBotsPanel();
-      this.renderWorkflowInfo();
-      this.renderNetworkInfo();
+      // 网络错误或超时
+      if (e.name === 'AbortError' || e.name === 'TimeoutError') {
+        console.warn('系统状态加载超时，使用缓存数据');
+      } else {
+        console.error('Failed to load system status:', e);
+      }
+      
+      // 降级处理：使用空数据或缓存数据渲染，避免页面空白
+      const cachedData = this._latestSystem || {};
+      this.renderBotsPanel(cachedData.bots || []);
+      this.renderWorkflowInfo(cachedData.workflows || {}, cachedData.panels || {});
+      this.renderNetworkInfo(cachedData.system?.network || {}, cachedData.system?.netRates || {});
     }
   }
   
+  /**
+   * 加载机器人信息
+   */
   async loadBotsInfo() {
     try {
       const res = await fetch(`${this.serverUrl}/api/status`, { headers: this.getHeaders() });
       if (!res.ok) throw new Error('接口异常');
       const data = await res.json();
       this.renderBotsPanel(data.bots || []);
-    } catch {
-      this.renderBotsPanel();
+    } catch (e) {
+      // 降级处理：使用空数组渲染，避免页面空白
+      this.renderBotsPanel([]);
     }
   }
   
@@ -902,14 +937,28 @@ class App {
     return html;
   }
   
+  /**
+   * 加载插件信息
+   */
   async loadPluginsInfo() {
+    const pluginsInfo = document.getElementById('pluginsInfo');
+    if (!pluginsInfo) return;
+    
     try {
-      const res = await fetch(`${this.serverUrl}/api/plugins/summary`, { headers: this.getHeaders() });
-      const pluginsInfo = document.getElementById('pluginsInfo');
-      if (!pluginsInfo) return;
-      if (!res.ok) throw new Error('接口异常');
+      const res = await fetch(`${this.serverUrl}/api/plugins/summary`, { 
+        headers: this.getHeaders(),
+        signal: AbortSignal.timeout(5000) // 5秒超时
+      });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
       const data = await res.json();
-      if (!data.success) throw new Error(data.message || '获取失败');
+      
+      if (!data.success) {
+        throw new Error(data.message || data.error || '获取插件信息失败');
+      }
       const summary = data.summary || {};
       const totalPlugins = summary.totalPlugins || (data.plugins?.length || 0);
       const pluginsWithRules = summary.withRules || 0;
@@ -937,8 +986,13 @@ class App {
           </div>
         `;
     } catch (e) {
-      const pluginsInfo = document.getElementById('pluginsInfo');
-      if (pluginsInfo) pluginsInfo.innerHTML = `<div style="color:var(--danger)">加载失败：${e.message || ''}</div>`;
+      // 降级处理：显示错误信息或使用空状态
+      if (e.name === 'AbortError' || e.name === 'TimeoutError') {
+        pluginsInfo.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center">加载超时</div>';
+      } else {
+        console.warn('Failed to load plugins info:', e);
+        pluginsInfo.innerHTML = `<div style="color:var(--text-muted);padding:16px;text-align:center">加载失败：${this.escapeHtml(e.message || '未知错误')}</div>`;
+      }
     }
   }
 
