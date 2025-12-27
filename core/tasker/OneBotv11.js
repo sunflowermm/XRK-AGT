@@ -1057,6 +1057,74 @@ Bot.tasker.push(
       })
     }
 
+    /**
+     * 发送群公告
+     * @param {Object} data - 数据对象
+     * @param {string} content - 公告内容（必需）
+     * @param {string} image - 图片路径（可选）
+     * @param {number|string} pinned - 是否置顶（可选）
+     * @param {number|string} type - 公告类型（可选）
+     * @param {number|string} confirm_required - 是否需要确认（可选）
+     * @param {number|string} is_show_edit_card - 是否显示编辑卡片（可选）
+     * @param {number|string} tip_window_type - 提示窗口类型（可选）
+     * @returns {Promise}
+     */
+    sendGroupNotice(data, content, options = {}) {
+      const { image, pinned, type, confirm_required, is_show_edit_card, tip_window_type } = options
+      
+      Bot.makeLog("info", `发送群公告：${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`, `${data.self_id} => ${data.group_id}`, true)
+      
+      const params = {
+        group_id: data.group_id,
+        content: String(content)
+      }
+      
+      // 可选参数
+      if (image !== undefined) params.image = String(image)
+      if (pinned !== undefined) params.pinned = pinned
+      if (type !== undefined) params.type = type
+      if (confirm_required !== undefined) params.confirm_required = confirm_required
+      if (is_show_edit_card !== undefined) params.is_show_edit_card = is_show_edit_card
+      if (tip_window_type !== undefined) params.tip_window_type = tip_window_type
+      
+      return data.bot.sendApi("_send_group_notice", params).catch(err => {
+        Bot.makeLog("warn", `发送群公告失败: ${err.message}`, data.self_id)
+        return null
+      })
+    }
+
+    /**
+     * 获取群公告
+     * @param {Object} data - 数据对象
+     * @returns {Promise}
+     */
+    getGroupNotice(data) {
+      Bot.makeLog("info", `获取群公告`, `${data.self_id} => ${data.group_id}`, true)
+      return data.bot.sendApi("_get_group_notice", {
+        group_id: data.group_id
+      }).catch(err => {
+        Bot.makeLog("warn", `获取群公告失败: ${err.message}`, data.self_id)
+        return null
+      })
+    }
+
+    /**
+     * 删除群公告
+     * @param {Object} data - 数据对象
+     * @param {string} notice_id - 公告ID
+     * @returns {Promise}
+     */
+    deleteGroupNotice(data, notice_id) {
+      Bot.makeLog("info", `删除群公告：${notice_id}`, `${data.self_id} => ${data.group_id}`, true)
+      return data.bot.sendApi("_delete_group_notice", {
+        group_id: data.group_id,
+        notice_id: String(notice_id)
+      }).catch(err => {
+        Bot.makeLog("warn", `删除群公告失败: ${err.message}`, data.self_id)
+        return null
+      })
+    }
+
     // ========== 文件相关新增 API ==========
 
     moveGroupFile(data, file_id, busid, folder_id) {
@@ -1477,6 +1545,9 @@ Bot.tasker.push(
         getSystemMsg: this.getGroupSystemMsg.bind(this, i),
         getFilterSystemMsg: this.getGroupFilterSystemMsg.bind(this, i),
         setSearch: this.setGroupSearch.bind(this, i),
+        sendNotice: (content, options) => this.sendGroupNotice(i, content, options),
+        getNotice: this.getGroupNotice.bind(this, i),
+        deleteNotice: notice_id => this.deleteGroupNotice(i, notice_id),
         fs: this.getGroupFs(i),
         get is_owner() {
           const botMemberInfo = data.bot.gml?.get(group_id)?.get(data.self_id)

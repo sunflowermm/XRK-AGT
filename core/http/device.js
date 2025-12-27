@@ -1517,11 +1517,16 @@ class DeviceManager {
                                     segments = [{ type: 'text', text: String(segmentsOrText) }];
                                 }
                                 
-                                // 处理 segments：转换文件路径为 web URL
+                                // 处理 segments：转换文件路径为 web URL，支持转发消息
                                 segments = segments.map(seg => {
                                     // 字符串类型：转换为 text segment（防御性处理）
                                     if (typeof seg === 'string') {
                                         return { type: 'text', text: seg };
+                                    }
+                                    
+                                    // 转发消息类型：直接返回，保持结构
+                                    if (seg.type === 'forward' || seg.type === 'node') {
+                                        return seg;
                                     }
                                     
                                     // 文本段：标准化格式
@@ -1581,31 +1586,50 @@ class DeviceManager {
                                 
                                 if (segments.length === 0) return false;
                                 
+                                // 检查是否为转发消息（聊天记录）
+                                const isForward = segments.length === 1 && 
+                                    (segments[0].type === 'forward' || segments[0].type === 'node' || 
+                                     (segments[0].messages && Array.isArray(segments[0].messages)) ||
+                                     (segments[0].data && segments[0].data.messages && Array.isArray(segments[0].data.messages)));
+                                
                                 const replyMsg = {
-                                    type: 'reply',
+                                    type: isForward ? 'forward' : 'reply',
                                     device_id: deviceId,
                                     channel: messagePayload.channel || 'device',
-                                    segments,
                                     timestamp: Date.now()
                                 };
                                 
-                                if (title) replyMsg.title = title;
-                                if (description) replyMsg.description = description;
-                                
-                                const logText = segments.map(seg => {
-                                    if (seg.type === 'text') {
-                                        return seg.text || (seg.data && seg.data.text) || '';
-                                    }
-                                    if (seg.type === 'image') {
-                                        return '[图片]';
-                                    }
-                                    return '';
-                                }).join('');
-                                if (logText) {
+                                if (isForward) {
+                                    // 转发消息：使用特殊格式
+                                    const forwardData = segments[0].messages || segments[0].data?.messages || segments[0];
+                                    replyMsg.messages = Array.isArray(forwardData) ? forwardData : [forwardData];
+                                    if (title) replyMsg.title = title;
+                                    if (description) replyMsg.description = description;
                                     BotUtil.makeLog('info', 
-                                        `${title ? `【${title}】` : ''}${logText.substring(0, 500)}${logText.length > 500 ? '...' : ''}`, 
+                                        `📨 [转发消息] ${Array.isArray(forwardData) ? forwardData.length : 1}条消息${title ? ` - ${title}` : ''}`, 
                                         deviceId
                                     );
+                                } else {
+                                    // 普通消息：使用 segments 格式
+                                    replyMsg.segments = segments;
+                                    if (title) replyMsg.title = title;
+                                    if (description) replyMsg.description = description;
+                                    
+                                    const logText = segments.map(seg => {
+                                        if (seg.type === 'text') {
+                                            return seg.text || (seg.data && seg.data.text) || '';
+                                        }
+                                        if (seg.type === 'image') {
+                                            return '[图片]';
+                                        }
+                                        return '';
+                                    }).join('');
+                                    if (logText) {
+                                        BotUtil.makeLog('info', 
+                                            `${title ? `【${title}】` : ''}${logText.substring(0, 500)}${logText.length > 500 ? '...' : ''}`, 
+                                            deviceId
+                                        );
+                                    }
                                 }
                                 
                                 ws.send(JSON.stringify(replyMsg));

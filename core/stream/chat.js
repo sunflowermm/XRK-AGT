@@ -804,18 +804,22 @@ export default class ChatStream extends AIStream {
     // 20. 发送群公告
     this.registerFunction('announce', {
       description: '发送群公告',
-      prompt: `[公告:公告内容] - 发送群公告
-示例：[公告:明天晚上8点开会]`,
+      prompt: `[群公告:内容] - 发送群公告
+[群公告:内容:图片路径] - 发送带图片的群公告
+示例：[群公告:重要通知：明天下午开会]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
-        const regex = /\[公告:([^\]]+)\]/g;
+        const regex = /\[群公告:([^:]+)(?::([^\]]+))?\]/g;
         let match;
         
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'announce', 
-            params: { content: match[1] },
+            params: { 
+              content: match[1].trim(),
+              image: match[2] ? match[2].trim() : undefined
+            },
             order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
@@ -832,20 +836,49 @@ export default class ChatStream extends AIStream {
           return;
         }
         
+        const content = String(params.content || '').trim();
+        if (!content) {
+          BotUtil.makeLog('debug', '发送群公告失败: 内容为空', 'ChatStream');
+          return;
+        }
+        
         try {
-          // 使用 tasker 层的 send_group_notice API
-          if (context.e.bot && context.e.bot.sendApi) {
-            await context.e.bot.sendApi('send_group_notice', {
+          const group = context.e.group;
+          const image = params.image ? String(params.image).trim() : undefined;
+          
+          // 优先使用 tasker 的 sendNotice 方法
+          if (group && typeof group.sendNotice === 'function') {
+            const options = {};
+            if (image) options.image = image;
+            
+            const result = await group.sendNotice(content, options);
+            
+            if (result !== null && result !== undefined) {
+              await BotUtil.sleep(300);
+              BotUtil.makeLog('debug', `发送群公告成功: 群${context.e.group_id}`, 'ChatStream');
+            } else {
+              BotUtil.makeLog('warn', `发送群公告失败: API返回空结果`, 'ChatStream');
+            }
+          } else if (context.e.bot && context.e.bot.sendApi) {
+            // 降级方案：直接调用 sendApi
+            const apiParams = {
               group_id: context.e.group_id,
-              content: params.content
-            });
-            await BotUtil.sleep(300);
-            BotUtil.makeLog('debug', '发送群公告成功', 'ChatStream');
+              content: content
+            };
+            if (image) apiParams.image = image;
+            
+            const result = await context.e.bot.sendApi('_send_group_notice', apiParams);
+            if (result && result.status === 'ok') {
+              await BotUtil.sleep(300);
+              BotUtil.makeLog('debug', `发送群公告成功: 群${context.e.group_id}`, 'ChatStream');
+            } else {
+              BotUtil.makeLog('warn', `发送群公告失败: API返回错误`, 'ChatStream');
+            }
           } else {
             BotUtil.makeLog('warn', '发送群公告失败: API不可用', 'ChatStream');
           }
         } catch (error) {
-          BotUtil.makeLog('warn', `发送公告失败: ${error.message}`, 'ChatStream');
+          BotUtil.makeLog('warn', `发送群公告失败: ${error.message}`, 'ChatStream');
         }
       },
       enabled: true,
