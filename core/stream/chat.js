@@ -1169,8 +1169,9 @@ export default class ChatStream extends AIStream {
                       e.from?.name || '未知';
       
       // 优先使用真实的消息ID，确保准确
-      // 优先级：e.message_id > e.messageId > e.id > e.source?.id
-      let messageId = e.message_id || e.messageId || e.id || e.source?.id;
+      // 优先级：message_id > real_id > messageId > id > source?.id
+      // 参考 tasker 层消息结构：message_id 和 real_id 都是有效的消息ID
+      let messageId = e.message_id || e.real_id || e.messageId || e.id || e.source?.id;
       
       // 如果消息ID不存在，尝试从消息段中提取（回复消息的ID）
       if (!messageId && e.message && Array.isArray(e.message)) {
@@ -1409,24 +1410,33 @@ ${isGlobalTrigger ?
     const isGlobalTrigger = userMessage.content?.isGlobalTrigger || false;
     const history = ChatStream.messageHistory.get(e.group_id) || [];
     
-    if (history.length === 0) {
-      return messages;
-    }
-
     const mergedMessages = [messages[0]];
     
-    // 格式化聊天记录，确保消息ID清晰可见
-    const formatHistoryMessage = (msgs, triggerType) => {
-      const historyText = msgs.map(msg => {
-        const msgId = msg.message_id || '未知';
-        return `${msg.nickname}(${msg.user_id})[ID:${msgId}]: ${msg.message}`;
-      }).join('\n');
+    // 获取当前用户消息的 message_id
+    // 参考 tasker 层消息结构：message_id 和 real_id 都是有效的消息ID
+    const currentMsgId = e.message_id || e.real_id || e.messageId || e.id || e.source?.id || '未知';
+    
+    // 格式化单条消息
+    const formatMessage = (msg) => {
+      // 参考 tasker 层消息结构：优先使用 message_id，其次 real_id
+      const msgId = msg.message_id || msg.real_id || '未知';
+      return `${msg.nickname}(${msg.user_id})[ID:${msgId}]: ${msg.message}`;
+    };
+    
+    // 构建聊天记录文本
+    const buildHistoryText = (msgs, includeCurrent = false) => {
+      const lines = msgs.map(formatMessage);
       
-      if (triggerType === 'global') {
-        return `[群聊记录]\n${historyText}\n\n你闲来无事点开群聊，看到这些发言。请根据你的个性和人设，自然地表达情绪和感受，不要试图解决问题。`;
-      } else {
-        return `[群聊记录]\n${historyText}`;
+      // 如果包含当前消息，添加到末尾
+      if (includeCurrent && e.user_id) {
+        const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
+        const currentContent = typeof userMessage.content === 'string' 
+          ? userMessage.content 
+          : (userMessage.content?.text || '');
+        lines.push(`${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`);
       }
+      
+      return lines.join('\n');
     };
     
     if (isGlobalTrigger) {
@@ -1434,30 +1444,45 @@ ${isGlobalTrigger ?
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: formatHistoryMessage(recentMessages, 'global')
+          content: `[群聊记录]\n${buildHistoryText(recentMessages)}\n\n你闲来无事点开群聊，看到这些发言。请根据你的个性和人设，自然地表达情绪和感受，不要试图解决问题。`
         });
       }
     } else {
       const recentMessages = history.slice(-10);
-      if (recentMessages.length > 0) {
+      if (recentMessages.length > 0 || currentMsgId !== '未知') {
         mergedMessages.push({
           role: 'user',
-          content: formatHistoryMessage(recentMessages, 'normal')
+          content: `[群聊记录]\n${buildHistoryText(recentMessages, true)}`
         });
       }
       
-      const content = userMessage.content;
-      if (typeof content === 'object' && content.text) {
+      // 当前用户消息已在聊天记录中，不需要重复添加
+      // 但如果聊天记录为空，仍然需要添加用户消息（带消息ID）
+      if (recentMessages.length === 0 && currentMsgId !== '未知') {
+        const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
+        const currentContent = typeof userMessage.content === 'string' 
+          ? userMessage.content 
+          : (userMessage.content?.text || '');
+        
         mergedMessages.push({
           role: 'user',
-          content: {
-            text: content.text,
-            images: content.images || [],
-            replyImages: content.replyImages || []
-          }
+          content: `[群聊记录]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`
         });
-      } else {
-        mergedMessages.push(userMessage);
+      } else if (recentMessages.length === 0) {
+        // 如果无法获取消息ID，使用原始消息格式
+        const content = userMessage.content;
+        if (typeof content === 'object' && content.text) {
+          mergedMessages.push({
+            role: 'user',
+            content: {
+              text: content.text,
+              images: content.images || [],
+              replyImages: content.replyImages || []
+            }
+          });
+        } else {
+          mergedMessages.push(userMessage);
+        }
       }
     }
     
