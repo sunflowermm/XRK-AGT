@@ -262,6 +262,26 @@ export class update extends plugin {
       this.updatedPlugins.add(plu)
     }
 
+    try {
+      const pluginDir = './core/plugin'
+      if (fs.existsSync(pluginDir)) {
+        const pluginSubdirs = fs.readdirSync(pluginDir)
+        for (let plu of pluginSubdirs) {
+          if (this.updatedPlugins.has(`plugin/${plu}`)) continue
+          if (plu === 'example' || plu === 'enhancer') continue
+          
+          // 检查是否是git仓库
+          if (!fs.existsSync(`core/plugin/${plu}/.git`)) continue
+          
+          await common.sleep(this.sleepBetween)
+          await this.runUpdate(`plugin/${plu}`)
+          this.updatedPlugins.add(`plugin/${plu}`)
+        }
+      }
+    } catch (error) {
+      logger.error(`检查plugin目录失败: ${error}`)
+    }
+    
     isSilent && (
       this.reply = originalReply,
       await this.reply(await common.makeForwardMsg(this.e, this.messages))
