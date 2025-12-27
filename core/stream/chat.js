@@ -1241,6 +1241,14 @@ export default class ChatStream extends AIStream {
       const member = e.group?.pickMember(e.self_id);
       if (!member) return '成员';
       
+      let roleValue = member.role;
+      
+      if (roleValue) {
+        const normalizedRole = String(roleValue).toLowerCase().trim();
+        return normalizedRole === 'owner' ? '群主' : 
+               normalizedRole === 'admin' ? '管理员' : '成员';
+      }
+      
       if (member.is_owner) return '群主';
       if (member.is_admin) return '管理员';
       
