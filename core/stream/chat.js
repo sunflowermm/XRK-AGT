@@ -6,6 +6,7 @@ import BotUtil from '#utils/botutil.js';
 const _path = process.cwd();
 const EMOTIONS_DIR = path.join(_path, 'resources/aiimages');
 const EMOTION_TYPES = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
+const DEBUG_DIR = path.join(_path, 'logs/chat_debug');
 
 // 表情回应映射
 const EMOJI_REACTIONS = {
@@ -60,6 +61,7 @@ export default class ChatStream extends AIStream {
     
     try {
       await BotUtil.mkdir(EMOTIONS_DIR);
+      await BotUtil.mkdir(DEBUG_DIR);
       await this.loadEmotionImages();
       this.registerAllFunctions();
       
@@ -1502,6 +1504,9 @@ ${isGlobalTrigger ?
       // 解析功能和文本
       const { functions, cleanText } = this.parseFunctions(response, context);
       
+      // 保存调试信息
+      await this.saveDebugInfo(e, messages, response, { functions, cleanText });
+      
       // 先发送自然语言回复（如果有），然后再执行函数
       // 这样可以确保用户先看到AI的自然语言回复，然后才看到工作流启动等操作
       let naturalLanguageSent = false;
@@ -1748,6 +1753,69 @@ ${isGlobalTrigger ?
       if (now - data.time > 300000) {
         ChatStream.userCache.delete(key);
       }
+    }
+  }
+
+  /**
+   * 保存调试信息到JSON文件
+   */
+  async saveDebugInfo(e, messages, response, parsed) {
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const groupId = e?.group_id || 'private';
+      const userId = e?.user_id || 'unknown';
+      const filename = `chat_debug_${groupId}_${userId}_${timestamp}.json`;
+      const filepath = path.join(DEBUG_DIR, filename);
+      
+      // 提取事件对象的关键信息（避免循环引用）
+      const eventInfo = {
+        self_id: e?.self_id,
+        user_id: e?.user_id,
+        group_id: e?.group_id,
+        message_id: e?.message_id || e?.real_id,
+        message_type: e?.message_type,
+        raw_message: e?.raw_message,
+        sender: e?.sender ? {
+          user_id: e.sender.user_id,
+          nickname: e.sender.nickname,
+          card: e.sender.card
+        } : null,
+        isGroup: e?.isGroup,
+        isMaster: e?.isMaster
+      };
+      
+      const debugData = {
+        timestamp: new Date().toISOString(),
+        event: eventInfo,
+        messages: messages.map(msg => ({
+          role: msg.role,
+          content: typeof msg.content === 'string' 
+            ? msg.content 
+            : (msg.content?.text || JSON.stringify(msg.content))
+        })),
+        aiResponse: response,
+        parsed: {
+          functions: parsed.functions.map(f => ({
+            type: f.type,
+            params: f.params
+          })),
+          cleanText: parsed.cleanText
+        },
+        messageHistory: e?.isGroup && e?.group_id 
+          ? (ChatStream.messageHistory.get(e.group_id) || []).slice(-10).map(msg => ({
+              user_id: msg.user_id,
+              nickname: msg.nickname,
+              message: msg.message,
+              message_id: msg.message_id,
+              time: new Date(msg.time).toISOString()
+            }))
+          : []
+      };
+      
+      await fs.promises.writeFile(filepath, JSON.stringify(debugData, null, 2), 'utf-8');
+      BotUtil.makeLog('debug', `调试信息已保存: ${filename}`, 'ChatStream');
+    } catch (error) {
+      BotUtil.makeLog('warn', `保存调试信息失败: ${error.message}`, 'ChatStream');
     }
   }
 
