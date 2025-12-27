@@ -6,7 +6,6 @@ import BotUtil from '#utils/botutil.js';
 const _path = process.cwd();
 const EMOTIONS_DIR = path.join(_path, 'resources/aiimages');
 const EMOTION_TYPES = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
-const DEBUG_DIR = path.join(_path, 'logs/chat_debug');
 
 // 表情回应映射
 const EMOJI_REACTIONS = {
@@ -61,7 +60,6 @@ export default class ChatStream extends AIStream {
     
     try {
       await BotUtil.mkdir(EMOTIONS_DIR);
-      await BotUtil.mkdir(DEBUG_DIR);
       await this.loadEmotionImages();
       this.registerAllFunctions();
       
@@ -1286,24 +1284,9 @@ export default class ChatStream extends AIStream {
     return `【可执行命令列表】
 在回复中使用以下格式时，系统会自动解析并执行，然后从文本中移除命令格式。
 
-【消息段格式】（保持顺序）
-[开心][惊讶][伤心][大笑][害怕][生气] - 表情包
-[CQ:at,qq=QQ号] - @某人
-[CQ:image,file=图片路径] - 图片
-[CQ:reply,id=消息ID] - 回复消息（回复段自动放在最前面）
-
-【消息ID使用】
-聊天记录格式：昵称(QQ号)[ID:消息ID]: 内容
-- 回复：使用 [CQ:reply,id=消息ID]，消息ID从聊天记录的[ID:xxx]中复制
-- 表情回应：使用 [回应:消息ID:表情类型]（表情类型：开心/惊讶/伤心/大笑/害怕/喜欢/爱心/生气）
-- 设置精华：使用 [设精华:消息ID]（需管理员权限）
-- 取消精华：使用 [取消精华:消息ID]（需管理员权限）
-- 撤回消息：使用 [撤回:消息ID]（需管理员权限或3分钟内）
-
 可用命令：
 ${resolvedPrompts.join('\n')}
 
-示例：[开心]今天真好 | [禁言:123456:600]→禁言600秒
 注意：格式完全匹配，参数完整，执行后命令格式会被移除`;
   }
 
@@ -1415,51 +1398,62 @@ ${isGlobalTrigger ?
     const mergedMessages = [messages[0]];
     
     // 获取当前用户消息的 message_id
-    // 参考 tasker 层消息结构：message_id 和 real_id 都是有效的消息ID
     const currentMsgId = e.message_id || e.real_id || e.messageId || e.id || e.source?.id || '未知';
+    const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
+    const currentContent = typeof userMessage.content === 'string' 
+      ? userMessage.content 
+      : (userMessage.content?.text || '');
     
     // 格式化单条消息
     const formatMessage = (msg) => {
-      // 参考 tasker 层消息结构：优先使用 message_id，其次 real_id
       const msgId = msg.message_id || msg.real_id || '未知';
       return `${msg.nickname}(${msg.user_id})[ID:${msgId}]: ${msg.message}`;
     };
     
-    // 构建聊天记录文本
-    const buildHistoryText = (msgs, includeCurrent = false) => {
-      const lines = msgs.map(formatMessage);
-      
-      // 如果包含当前消息，添加到末尾
-      if (includeCurrent && e.user_id) {
-        const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
-        const currentContent = typeof userMessage.content === 'string' 
-          ? userMessage.content 
-          : (userMessage.content?.text || '');
-        lines.push(`${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`);
+    // 过滤历史记录：排除当前消息（避免重复）
+    const filteredHistory = history.filter(msg => 
+      String(msg.message_id) !== String(currentMsgId)
+    );
+    
+    // 去重：按消息ID去重，保留最新的
+    const uniqueHistory = [];
+    const seenIds = new Set();
+    for (let i = filteredHistory.length - 1; i >= 0; i--) {
+      const msg = filteredHistory[i];
+      const msgId = msg.message_id || msg.real_id;
+      if (msgId && !seenIds.has(String(msgId))) {
+        seenIds.add(String(msgId));
+        uniqueHistory.unshift(msg);
       }
-      
-      return lines.join('\n');
-    };
+    }
     
     if (isGlobalTrigger) {
-      const recentMessages = history.slice(-15);
+      const recentMessages = uniqueHistory.slice(-15);
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `[群聊记录]\n${buildHistoryText(recentMessages)}\n\n你闲来无事点开群聊，看到这些发言。请根据你的个性和人设，自然地表达情绪和感受，不要试图解决问题。`
+          content: `[群聊记录]\n${recentMessages.map(formatMessage).join('\n')}\n\n你闲来无事点开群聊，看到这些发言。请根据你的个性和人设，自然地表达情绪和感受，不要试图解决问题。`
         });
       }
     } else {
-      const recentMessages = history.slice(-10);
+      const recentMessages = uniqueHistory.slice(-10);
       
-      // 构建聊天记录（包含当前消息）
-      if (recentMessages.length > 0 || currentMsgId !== '未知') {
+      // 分别显示历史记录和当前消息
+      if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `[群聊记录]\n${buildHistoryText(recentMessages, true)}`
+          content: `[群聊记录]\n${recentMessages.map(formatMessage).join('\n')}`
         });
-      } else {
-        // 如果无法获取消息ID且没有历史记录，使用原始消息格式
+      }
+      
+      // 当前消息单独显示
+      if (currentMsgId !== '未知' && currentContent) {
+        mergedMessages.push({
+          role: 'user',
+          content: `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`
+        });
+      } else if (currentContent) {
+        // 如果无法获取消息ID，使用原始消息格式
         const content = userMessage.content;
         if (typeof content === 'object' && content.text) {
           mergedMessages.push({
@@ -1503,9 +1497,6 @@ ${isGlobalTrigger ?
       
       // 解析功能和文本
       const { functions, cleanText } = this.parseFunctions(response, context);
-      
-      // 保存调试信息
-      await this.saveDebugInfo(e, messages, response, { functions, cleanText });
       
       // 先发送自然语言回复（如果有），然后再执行函数
       // 这样可以确保用户先看到AI的自然语言回复，然后才看到工作流启动等操作
@@ -1753,69 +1744,6 @@ ${isGlobalTrigger ?
       if (now - data.time > 300000) {
         ChatStream.userCache.delete(key);
       }
-    }
-  }
-
-  /**
-   * 保存调试信息到JSON文件
-   */
-  async saveDebugInfo(e, messages, response, parsed) {
-    try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const groupId = e?.group_id || 'private';
-      const userId = e?.user_id || 'unknown';
-      const filename = `chat_debug_${groupId}_${userId}_${timestamp}.json`;
-      const filepath = path.join(DEBUG_DIR, filename);
-      
-      // 提取事件对象的关键信息（避免循环引用）
-      const eventInfo = {
-        self_id: e?.self_id,
-        user_id: e?.user_id,
-        group_id: e?.group_id,
-        message_id: e?.message_id || e?.real_id,
-        message_type: e?.message_type,
-        raw_message: e?.raw_message,
-        sender: e?.sender ? {
-          user_id: e.sender.user_id,
-          nickname: e.sender.nickname,
-          card: e.sender.card
-        } : null,
-        isGroup: e?.isGroup,
-        isMaster: e?.isMaster
-      };
-      
-      const debugData = {
-        timestamp: new Date().toISOString(),
-        event: eventInfo,
-        messages: messages.map(msg => ({
-          role: msg.role,
-          content: typeof msg.content === 'string' 
-            ? msg.content 
-            : (msg.content?.text || JSON.stringify(msg.content))
-        })),
-        aiResponse: response,
-        parsed: {
-          functions: parsed.functions.map(f => ({
-            type: f.type,
-            params: f.params
-          })),
-          cleanText: parsed.cleanText
-        },
-        messageHistory: e?.isGroup && e?.group_id 
-          ? (ChatStream.messageHistory.get(e.group_id) || []).slice(-10).map(msg => ({
-              user_id: msg.user_id,
-              nickname: msg.nickname,
-              message: msg.message,
-              message_id: msg.message_id,
-              time: new Date(msg.time).toISOString()
-            }))
-          : []
-      };
-      
-      await fs.promises.writeFile(filepath, JSON.stringify(debugData, null, 2), 'utf-8');
-      BotUtil.makeLog('debug', `调试信息已保存: ${filename}`, 'ChatStream');
-    } catch (error) {
-      BotUtil.makeLog('warn', `保存调试信息失败: ${error.message}`, 'ChatStream');
     }
   }
 
