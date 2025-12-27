@@ -1248,13 +1248,24 @@ export default class ChatStream extends AIStream {
     try {
       const member = e.group?.pickMember(e.self_id);
       if (!member) return '成员';
-      const info = await member.getInfo?.() || {};
-      const role = info.role === 'owner' ? '群主' : 
-                   info.role === 'admin' ? '管理员' : '成员';
+      
+      // 优先使用 member 对象本身的 role 字段
+      let roleValue = member.role;
+      
+      // 如果没有，尝试从 getInfo 获取
+      if (!roleValue) {
+        const info = await member.getInfo?.() || {};
+        roleValue = info.role;
+      }
+      
+      // 转换为中文角色名
+      const role = roleValue === 'owner' ? '群主' : 
+                   roleValue === 'admin' ? '管理员' : '成员';
       
       ChatStream.userCache.set(cacheKey, { role, time: Date.now() });
       return role;
     } catch (error) {
+      BotUtil.makeLog('debug', `获取机器人角色失败: ${error.message}`, 'ChatStream');
       return '成员';
     }
   }
