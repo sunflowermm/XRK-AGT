@@ -1524,8 +1524,13 @@ class DeviceManager {
                                         return { type: 'text', text: seg };
                                     }
                                     
-                                    // 转发消息类型：直接返回，保持结构
-                                    if (seg.type === 'forward' || seg.type === 'node') {
+                                    // 转发消息类型：直接返回，保持结构（forward类型包含data.messages）
+                                    if (seg.type === 'forward') {
+                                        return seg;
+                                    }
+                                    
+                                    // node类型：如果是转发消息的一部分，保持原样
+                                    if (seg.type === 'node') {
                                         return seg;
                                     }
                                     
@@ -1587,10 +1592,12 @@ class DeviceManager {
                                 if (segments.length === 0) return false;
                                 
                                 // 检查是否为转发消息（聊天记录）
-                                const isForward = segments.length === 1 && 
-                                    (segments[0].type === 'forward' || segments[0].type === 'node' || 
-                                     (segments[0].messages && Array.isArray(segments[0].messages)) ||
-                                     (segments[0].data && segments[0].data.messages && Array.isArray(segments[0].data.messages)));
+                                // 判断条件：单个segment且为forward类型，或包含messages数组
+                                const isForward = segments.length === 1 && segments[0] && (
+                                    segments[0].type === 'forward' ||
+                                    (segments[0].data && segments[0].data.messages && Array.isArray(segments[0].data.messages)) ||
+                                    (segments[0].messages && Array.isArray(segments[0].messages))
+                                );
                                 
                                 const replyMsg = {
                                     type: isForward ? 'forward' : 'reply',
@@ -1601,12 +1608,24 @@ class DeviceManager {
                                 
                                 if (isForward) {
                                     // 转发消息：使用特殊格式
-                                    const forwardData = segments[0].messages || segments[0].data?.messages || segments[0];
+                                    // 支持多种格式：segments[0].data.messages (botutil格式) 或 segments[0].messages
+                                    let forwardData = null;
+                                    if (segments[0].data && segments[0].data.messages && Array.isArray(segments[0].data.messages)) {
+                                        forwardData = segments[0].data.messages;
+                                    } else if (segments[0].messages && Array.isArray(segments[0].messages)) {
+                                        forwardData = segments[0].messages;
+                                    } else if (segments[0].type === 'node' && segments[0].data) {
+                                        // 单个node格式，转换为数组
+                                        forwardData = [segments[0]];
+                                    } else {
+                                        forwardData = [segments[0]];
+                                    }
+                                    
                                     replyMsg.messages = Array.isArray(forwardData) ? forwardData : [forwardData];
                                     if (title) replyMsg.title = title;
                                     if (description) replyMsg.description = description;
                                     BotUtil.makeLog('info', 
-                                        `📨 [转发消息] ${Array.isArray(forwardData) ? forwardData.length : 1}条消息${title ? ` - ${title}` : ''}`, 
+                                        `📨 [转发消息] ${replyMsg.messages.length}条消息${title ? ` - ${title}` : ''}`, 
                                         deviceId
                                     );
                                 } else {

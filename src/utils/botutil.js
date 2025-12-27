@@ -1685,18 +1685,39 @@ export default class BotUtil {
 
       if (isDevice && e.reply) {
         const descText = Array.isArray(description) ? description.join(' | ') : (typeof description === 'string' ? description : String(description || ''));
-        const segments = messages.map(msg => {
+        
+        // 对于web客户端，使用转发消息格式发送聊天记录
+        const bot = e.bot || {};
+        const nickname = bot.nickname || "Bot";
+        const user_id = bot.uin || e.self_id || 0;
+        const currentTime = Math.floor(Date.now() / 1000);
+        
+        // 格式化消息为转发消息格式
+        const forwardMessages = messages.map((msg, idx) => {
           const text = typeof msg === 'string' ? msg : (msg.message || msg.content || String(msg));
           return {
-            type: 'text',
-            text: text || ''
+            type: 'node',
+            data: {
+              user_id: user_id,
+              nickname: nickname,
+              time: currentTime + idx,
+              content: text ? [{ type: 'text', data: { text } }] : []
+            }
           };
-        }).filter(seg => seg.text && seg.text.trim());
+        }).filter(msg => msg.data.content.length > 0);
         
-        if (segments.length === 0) return false;
+        if (forwardMessages.length === 0) return false;
+        
+        // 使用转发消息格式发送
+        const forwardSegment = {
+          type: 'forward',
+          data: {
+            messages: forwardMessages
+          }
+        };
         
         const replyData = {
-          segments,
+          segments: [forwardSegment],
           title: title || '',
           description: descText || ''
         };

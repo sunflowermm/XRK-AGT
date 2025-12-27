@@ -4502,6 +4502,36 @@ class App {
         }
         break;
       }
+      case 'forward': {
+        // 处理转发消息（聊天记录）
+        this.clearChatStreamState();
+        
+        if (data.messages && Array.isArray(data.messages)) {
+          // 提取消息内容：支持node格式和普通格式
+          const messages = data.messages.map(msg => {
+            if (msg.type === 'node' && msg.data) {
+              // node格式：提取content中的文本
+              if (msg.data.content && Array.isArray(msg.data.content)) {
+                const texts = msg.data.content
+                  .filter(c => c.type === 'text' && c.data?.text)
+                  .map(c => c.data.text);
+                return texts.join('') || (msg.data.content?.[0]?.data?.text || '');
+              }
+              return msg.data.content || msg.data.message || '';
+            }
+            // 普通格式
+            return typeof msg === 'string' ? msg : (msg.message || msg.content || String(msg));
+          }).filter(text => text && text.trim());
+          
+          if (messages.length > 0) {
+            const recordDiv = this.appendChatRecord(messages, data.title || '', data.description || '');
+            if (recordDiv) {
+              requestAnimationFrame(() => recordDiv.classList.add('message-enter-active'));
+            }
+          }
+        }
+        break;
+      }
       case 'status':
         if (data.text) {
           this.appendChatWithAnimation('system', data.text);
