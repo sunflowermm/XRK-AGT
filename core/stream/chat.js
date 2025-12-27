@@ -1449,27 +1449,15 @@ ${isGlobalTrigger ?
       }
     } else {
       const recentMessages = history.slice(-10);
+      
+      // 构建聊天记录（包含当前消息）
       if (recentMessages.length > 0 || currentMsgId !== '未知') {
         mergedMessages.push({
           role: 'user',
           content: `[群聊记录]\n${buildHistoryText(recentMessages, true)}`
         });
-      }
-      
-      // 当前用户消息已在聊天记录中，不需要重复添加
-      // 但如果聊天记录为空，仍然需要添加用户消息（带消息ID）
-      if (recentMessages.length === 0 && currentMsgId !== '未知') {
-        const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
-        const currentContent = typeof userMessage.content === 'string' 
-          ? userMessage.content 
-          : (userMessage.content?.text || '');
-        
-        mergedMessages.push({
-          role: 'user',
-          content: `[群聊记录]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`
-        });
-      } else if (recentMessages.length === 0) {
-        // 如果无法获取消息ID，使用原始消息格式
+      } else {
+        // 如果无法获取消息ID且没有历史记录，使用原始消息格式
         const content = userMessage.content;
         if (typeof content === 'object' && content.text) {
           mergedMessages.push({
@@ -1494,7 +1482,9 @@ ${isGlobalTrigger ?
       // 构建消息上下文
       if (!Array.isArray(messages)) {
         const baseMessages = await this.buildChatContext(e, messages);
-        messages = await this.buildEnhancedContext(e, messages, baseMessages);
+        // 合并聊天记录（必须在 buildEnhancedContext 之前）
+        const mergedMessages = this.mergeMessageHistory(baseMessages, e);
+        messages = await this.buildEnhancedContext(e, messages, mergedMessages);
       } else {
         messages = this.mergeMessageHistory(messages, e);
         const query = this.extractQueryFromMessages(messages);
