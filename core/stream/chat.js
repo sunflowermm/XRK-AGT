@@ -1236,32 +1236,10 @@ export default class ChatStream extends AIStream {
 
   async getBotRole(e) {
     if (!e.isGroup) return '成员';
-    
-    try {
       const member = e.group?.pickMember(e.self_id);
-      if (!member) return '成员';
-      
       let roleValue = member.role;
-      
-      if (!roleValue && typeof member.getInfo === 'function') {
-        try {
-          const info = await member.getInfo();
-          roleValue = info?.role;
-        } catch (err) {
-          // 静默失败
-        }
-      }
-      
-      if (roleValue) {
-        const normalizedRole = String(roleValue).toLowerCase().trim();
-        return normalizedRole === 'owner' ? '群主' : 
-               normalizedRole === 'admin' ? '管理员' : '成员';
-      }
-      
-      return '成员';
-    } catch (error) {
-      return '成员';
-    }
+      return roleValue === 'owner' ? '群主' : 
+             roleValue === 'admin' ? '管理员' : '成员';
   }
 
   /**
