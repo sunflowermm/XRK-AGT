@@ -30,7 +30,6 @@ function randomRange(min, max) {
 export default class ChatStream extends AIStream {
   static emotionImages = {};
   static messageHistory = new Map();
-  static userCache = new Map();
   static cleanupTimer = null;
 
   constructor() {
@@ -1238,21 +1237,12 @@ export default class ChatStream extends AIStream {
   async getBotRole(e) {
     if (!e.isGroup) return '成员';
     
-    const cacheKey = `bot_role_${e.group_id}`;
-    const cached = ChatStream.userCache.get(cacheKey);
-    
-    if (cached && Date.now() - cached.time < 300000) {
-      return cached.role;
-    }
-    
     try {
       const member = e.group?.pickMember(e.self_id);
       if (!member) return '成员';
       
-      // 优先使用 member 对象本身的 role 字段
       let roleValue = member.role;
       
-      // 如果没有，尝试从 getInfo 获取
       if (!roleValue && typeof member.getInfo === 'function') {
         try {
           const info = await member.getInfo();
@@ -1262,17 +1252,10 @@ export default class ChatStream extends AIStream {
         }
       }
       
-      // 标准化角色值（处理大小写和类型）
-      const normalizedRole = String(roleValue || '').toLowerCase().trim();
-      
-      // 转换为中文角色名
-      const role = normalizedRole === 'owner' ? '群主' : 
-                   normalizedRole === 'admin' ? '管理员' : '成员';
-      
-      ChatStream.userCache.set(cacheKey, { role, time: Date.now() });
-      return role;
+      const normalizedRole = roleValue ? String(roleValue).toLowerCase().trim() : '';
+      return normalizedRole === 'owner' ? '群主' : 
+             normalizedRole === 'admin' ? '管理员' : '成员';
     } catch (error) {
-      BotUtil.makeLog('debug', `获取机器人角色失败: ${error.message}`, 'ChatStream');
       return '成员';
     }
   }
@@ -1773,11 +1756,6 @@ ${isGlobalTrigger ?
       }
     }
     
-    for (const [key, data] of ChatStream.userCache.entries()) {
-      if (now - data.time > 300000) {
-        ChatStream.userCache.delete(key);
-      }
-    }
   }
 
   async cleanup() {
