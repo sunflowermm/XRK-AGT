@@ -1127,6 +1127,28 @@ select.form-input {
   /* 确保消息不会超出容器 */
   min-width: 0;
   box-sizing: border-box;
+  /* 优化滚动体验 */
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Webkit 浏览器滚动条样式 */
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .chat-message {
@@ -1685,11 +1707,17 @@ select.form-input {
   font-size: 14px;
   outline: none;
   transition: all var(--transition);
+  resize: none;
 }
 
 .chat-input:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-100);
+  background: var(--bg-card);
+}
+
+.chat-input::placeholder {
+  color: var(--text-muted);
 }
 
 .chat-send-btn {
@@ -1704,10 +1732,22 @@ select.form-input {
   align-items: center;
   justify-content: center;
   transition: all var(--transition);
+  flex-shrink: 0;
 }
 
 .chat-send-btn:hover {
   background: var(--primary-dark);
+  transform: scale(1.05);
+}
+
+.chat-send-btn:active {
+  transform: scale(0.95);
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .chat-send-btn svg {
@@ -1718,6 +1758,7 @@ select.form-input {
 .mic-btn {
   width: 44px;
   height: 44px;
+  flex-shrink: 0;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1730,8 +1771,13 @@ select.form-input {
 }
 
 .mic-btn:hover {
+  background: var(--bg-hover);
   border-color: var(--primary);
   color: var(--primary);
+}
+
+.mic-btn:active {
+  transform: scale(0.95);
 }
 
 .mic-btn.recording {
