@@ -1071,11 +1071,12 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 25. 设置群代办（新增）
+    // 25. 设置群代办
     this.registerFunction('setGroupTodo', {
       description: '设置群代办',
-      prompt: `[群代办:内容] - 设置群代办事项
-示例：[群代办:明天检查项目进度]`,
+      prompt: `[群代办:消息ID] - 将指定消息设为群代办
+重要：消息ID必须从聊天记录中准确获取，格式为"ID:xxx"中的xxx部分
+示例：聊天记录显示"张三(123456)[ID:1051113239]: 明天检查项目进度"，要设为群代办，使用 [群代办:1051113239]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -1085,7 +1086,7 @@ export default class ChatStream extends AIStream {
         while ((match = regex.exec(text))) {
           functions.push({ 
             type: 'setGroupTodo', 
-            params: { content: match[1] },
+            params: { msgId: String(match[1]).trim() },
             order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
           });
         }
@@ -1099,12 +1100,26 @@ export default class ChatStream extends AIStream {
       handler: async (params, context) => {
         if (!context.e?.isGroup) return;
         
+        const msgId = String(params.msgId || '').trim();
+        if (!msgId) {
+          BotUtil.makeLog('debug', '设置群代办失败: 消息ID为空', 'ChatStream');
+          return;
+        }
+        
         try {
-          const group = context.e.group;
-          if (group && typeof group.setTodo === 'function') {
-            await group.setTodo(params.content);
-            await BotUtil.sleep(300);
-            BotUtil.makeLog('debug', `设置群代办成功: ${params.content}`, 'ChatStream');
+          if (context.e.bot && context.e.bot.sendApi) {
+            const result = await context.e.bot.sendApi('set_group_todo', {
+              group_id: context.e.group_id,
+              message_id: msgId
+            });
+            if (result !== null && result !== undefined) {
+              await BotUtil.sleep(300);
+              BotUtil.makeLog('debug', `设置群代办成功: 消息ID=${msgId}`, 'ChatStream');
+            } else {
+              BotUtil.makeLog('warn', `设置群代办失败: API返回空结果`, 'ChatStream');
+            }
+          } else {
+            BotUtil.makeLog('warn', '设置群代办失败: API不可用', 'ChatStream');
           }
         } catch (error) {
           BotUtil.makeLog('warn', `设置群代办失败: ${error.message}`, 'ChatStream');
