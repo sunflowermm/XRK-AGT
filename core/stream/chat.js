@@ -1236,10 +1236,41 @@ export default class ChatStream extends AIStream {
 
   async getBotRole(e) {
     if (!e.isGroup) return '成员';
-      const member = e.group?.pickMember(e.self_id);
-      let roleValue = member.role;
-      return roleValue === 'owner' ? '群主' : 
-             roleValue === 'admin' ? '管理员' : '成员';
+    const member = e.group?.pickMember(e.self_id);
+    const roleValue = member?.role;
+    return roleValue === 'owner' ? '群主' : 
+           roleValue === 'admin' ? '管理员' : '成员';
+  }
+
+  recordAIResponse(e, text, executedFunctions = []) {
+    if (!text || !text.trim()) return;
+    
+    const functionInfo = executedFunctions.length > 0 
+      ? `[执行了: ${executedFunctions.join(', ')}] ` 
+      : '';
+    const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot';
+    const message = `${functionInfo}${text}`;
+    const msgData = {
+      user_id: e.self_id,
+      nickname: botName,
+      message,
+      message_id: Date.now().toString(),
+      time: Date.now(),
+      platform: 'onebot'
+    };
+    
+    if (e?.isGroup && e.group_id) {
+      const history = ChatStream.messageHistory.get(e.group_id) || [];
+      history.push(msgData);
+      if (history.length > 50) {
+        history.shift();
+      }
+    }
+    
+    if (this.embeddingConfig?.enabled) {
+      const historyKey = e.group_id || `private_${e.user_id}`;
+      this.storeMessageWithEmbedding(historyKey, msgData).catch(() => {});
+    }
   }
 
   /**
@@ -1288,11 +1319,11 @@ ${resolvedPrompts.join('\n')}
 注意：格式完全匹配，参数完整，执行后命令格式会被移除`;
   }
 
-  buildSystemPrompt(context) {
+  async buildSystemPrompt(context) {
     const { e, question } = context;
     const persona = question?.persona || '我是AI助手';
     const isGlobalTrigger = question?.isGlobalTrigger || false;
-    const botRole = question?.botRole || '成员';
+    const botRole = question?.botRole || await this.getBotRole(e);
     const dateStr = question?.dateStr || new Date().toLocaleString('zh-CN');
     
     // 根据权限构建功能列表（权限过滤已在 buildFunctionsPrompt 中完成）
@@ -1357,7 +1388,7 @@ ${isGlobalTrigger ?
     const messages = [];
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt({ e, question })
+      content: await this.buildSystemPrompt({ e, question })
     });
     
     const userMessage = typeof question === 'string' ? question : 
@@ -1475,15 +1506,11 @@ ${isGlobalTrigger ?
     try {
       // 构建消息上下文
       if (!Array.isArray(messages)) {
-        const baseMessages = await this.buildChatContext(e, messages);
-        // 合并聊天记录（必须在 buildEnhancedContext 之前）
-        const mergedMessages = this.mergeMessageHistory(baseMessages, e);
-        messages = await this.buildEnhancedContext(e, messages, mergedMessages);
-      } else {
-        messages = this.mergeMessageHistory(messages, e);
-        const query = this.extractQueryFromMessages(messages);
-        messages = await this.buildEnhancedContext(e, query, messages);
+        messages = await this.buildChatContext(e, messages);
       }
+      messages = this.mergeMessageHistory(messages, e);
+      const query = Array.isArray(messages) ? this.extractQueryFromMessages(messages) : messages;
+      messages = await this.buildEnhancedContext(e, query, messages);
       
       // 调用AI获取响应
       const context = { e, question: null, config };
@@ -1516,40 +1543,9 @@ ${isGlobalTrigger ?
         }
       }
       
-      // 记录AI响应到内存历史（包含执行的函数信息）
+      // 记录AI响应到历史（包含执行的函数信息）
       if (naturalLanguageSent) {
-        if (e?.isGroup && e.group_id) {
-          const history = ChatStream.messageHistory.get(e.group_id) || [];
-          const functionInfo = executedFunctions.length > 0 
-            ? `[执行了: ${executedFunctions.join(', ')}] ` 
-            : '';
-          history.push({
-            user_id: e.self_id,
-            nickname: e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot',
-            message: `${functionInfo}${cleanText}`,
-            message_id: Date.now().toString(),
-            time: Date.now(),
-            platform: 'onebot'
-          });
-          if (history.length > 50) {
-            history.shift();
-          }
-        }
-        
-        // 记录到embedding记忆系统（包含执行的函数信息）
-        if (this.embeddingConfig?.enabled) {
-          const historyKey = e.group_id || `private_${e.user_id}`;
-          const functionInfo = executedFunctions.length > 0 
-            ? `[执行了: ${executedFunctions.join(', ')}] ` 
-            : '';
-          this.storeMessageWithEmbedding(historyKey, {
-            user_id: e.self_id,
-            nickname: e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot',
-            message: `${functionInfo}${cleanText}`,
-            message_id: Date.now().toString(),
-            time: Date.now()
-          }).catch(() => {});
-        }
+        this.recordAIResponse(e, cleanText, executedFunctions);
       }
       
       return naturalLanguageSent ? cleanText : '';
