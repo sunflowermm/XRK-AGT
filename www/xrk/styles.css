@@ -1289,6 +1289,16 @@ select.form-input {
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   margin: 0 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-block;
+}
+
+.chat-text .chat-at:hover {
+  background: var(--primary);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* 回复样式 */
@@ -1496,17 +1506,18 @@ select.form-input {
 
 .chat-record-content {
   padding: 12px 16px;
-  /* 固定高度，由内部滚动条承载内容，不再随整体布局压缩 */
-  height: 320px;
+  /* 自适应高度，最大高度限制，超出时滚动 */
+  max-height: 400px;
   overflow-y: auto;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   background: var(--bg-input);
+  line-height: 1.6;
 }
 
 @media (max-width: 768px) {
   .chat-record-content {
-    height: 240px;
+    max-height: 300px;
   }
 }
 
@@ -1527,6 +1538,84 @@ select.form-input {
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 12px;
+}
+
+.chat-record-item pre {
+  background: var(--bg-subtle);
+  padding: 8px 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.chat-record-item pre code {
+  background: transparent;
+  padding: 0;
+}
+
+/* 按钮样式 */
+.chat-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 0;
+}
+
+.chat-button {
+  padding: 6px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.chat-button:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.chat-button:active {
+  transform: scale(0.98);
+}
+
+/* 自定义类型样式 */
+.chat-custom {
+  padding: 8px 12px;
+  margin: 8px 0;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Markdown 和 Raw 内容样式优化 */
+.chat-markdown {
+  padding: 12px;
+  margin: 8px 0;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  line-height: 1.6;
+}
+
+.chat-raw {
+  padding: 12px;
+  margin: 8px 0;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .chat-message.user {

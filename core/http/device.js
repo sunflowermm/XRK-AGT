@@ -1489,6 +1489,7 @@ class DeviceManager {
                             try {
                                 const ws = deviceWebSockets.get(deviceId);
                                 if (!ws || ws.readyState !== WebSocket.OPEN) {
+                                    BotUtil.makeLog('warn', `[WebSocket] 连接未打开，无法发送消息`, deviceId);
                                     return false;
                                 }
                                 
@@ -1498,10 +1499,19 @@ class DeviceManager {
                                 let description = '';
                                 
                                 if (Array.isArray(segmentsOrText)) {
-                                    // 数组：直接使用，标准化字符串为 text segment
-                                    segments = segmentsOrText.map(seg =>
-                                        typeof seg === 'string' ? { type: 'text', text: seg } : seg
-                                    );
+                                    // 检查数组的第一个元素是否是包含segments的对象（可能是replyData被错误包装成数组）
+                                    if (segmentsOrText.length === 1 && segmentsOrText[0] && typeof segmentsOrText[0] === 'object' && segmentsOrText[0].segments) {
+                                        // 提取replyData对象
+                                        const replyData = segmentsOrText[0];
+                                        segments = replyData.segments;
+                                        title = replyData.title || '';
+                                        description = replyData.description || '';
+                                    } else {
+                                        // 数组：直接使用，标准化字符串为 text segment
+                                        segments = segmentsOrText.map(seg =>
+                                            typeof seg === 'string' ? { type: 'text', text: seg } : seg
+                                        );
+                                    }
                                 } else if (segmentsOrText && typeof segmentsOrText === 'object') {
                                     if (segmentsOrText.segments) {
                                         // 包含 segments 的对象（用于传递 title/description）
@@ -1518,10 +1528,14 @@ class DeviceManager {
                                 }
                                 
                                 // 处理 segments：转换文件路径为 web URL，支持转发消息
-                                segments = segments.map(seg => {
+                                segments = segments.map((seg, idx) => {
                                     // 字符串类型：转换为 text segment（防御性处理）
                                     if (typeof seg === 'string') {
                                         return { type: 'text', text: seg };
+                                    }
+                                    
+                                    if (!seg || typeof seg !== 'object') {
+                                        return seg;
                                     }
                                     
                                     // 转发消息类型：直接返回，保持结构（forward类型包含data.messages）
@@ -1529,7 +1543,7 @@ class DeviceManager {
                                         return seg;
                                     }
                                     
-                                    // node类型：如果是转发消息的一部分，保持原样
+                                    // node类型：保持原样（转发消息的组成部分）
                                     if (seg.type === 'node') {
                                         return seg;
                                     }
@@ -1538,6 +1552,20 @@ class DeviceManager {
                                     if (seg.type === 'text') {
                                         const text = seg.text || (seg.data?.text) || '';
                                         return text ? { type: 'text', text } : null;
+                                    }
+                                    
+                                    // at 类型：标准化格式，确保qq和name字段
+                                    if (seg.type === 'at') {
+                                        return {
+                                            type: 'at',
+                                            qq: seg.qq || seg.user_id || '',
+                                            name: seg.name || ''
+                                        };
+                                    }
+                                    
+                                    // 特殊类型：保持原样（reply/markdown/raw/button）
+                                    if (['reply', 'markdown', 'raw', 'button'].includes(seg.type)) {
+                                        return seg;
                                     }
                                     
                                     // 文件类型 segment（image/video/record/file）：转换文件路径为 URL
@@ -1589,13 +1617,15 @@ class DeviceManager {
                                     return seg;
                                 }).filter(seg => seg !== null);
                                 
-                                if (segments.length === 0) return false;
+                                if (segments.length === 0) {
+                                    BotUtil.makeLog('warn', `[回复消息] segments为空，无法发送`, deviceId);
+                                    return false;
+                                }
                                 
                                 // 检查是否为转发消息（聊天记录）
-                                // 判断条件：单个segment且为forward类型，或包含messages数组
                                 const isForward = segments.length === 1 && segments[0] && (
                                     segments[0].type === 'forward' ||
-                                    (segments[0].data && segments[0].data.messages && Array.isArray(segments[0].data.messages)) ||
+                                    (segments[0].data?.messages && Array.isArray(segments[0].data.messages)) ||
                                     (segments[0].messages && Array.isArray(segments[0].messages))
                                 );
                                 
@@ -1603,31 +1633,42 @@ class DeviceManager {
                                     type: isForward ? 'forward' : 'reply',
                                     device_id: deviceId,
                                     channel: messagePayload.channel || 'device',
-                                    timestamp: Date.now()
+                                    timestamp: Date.now(),
+                                    message_id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
                                 };
                                 
                                 if (isForward) {
-                                    // 转发消息：使用特殊格式
-                                    // 支持多种格式：segments[0].data.messages (botutil格式) 或 segments[0].messages
+                                    // 转发消息：提取messages数组
                                     let forwardData = null;
-                                    if (segments[0].data && segments[0].data.messages && Array.isArray(segments[0].data.messages)) {
+                                    if (segments[0].data?.messages && Array.isArray(segments[0].data.messages)) {
                                         forwardData = segments[0].data.messages;
                                     } else if (segments[0].messages && Array.isArray(segments[0].messages)) {
                                         forwardData = segments[0].messages;
                                     } else if (segments[0].type === 'node' && segments[0].data) {
-                                        // 单个node格式，转换为数组
                                         forwardData = [segments[0]];
                                     } else {
-                                        forwardData = [segments[0]];
+                                        forwardData = segments[0].data?.messages || segments[0].messages;
+                                        if (!Array.isArray(forwardData)) {
+                                            forwardData = [segments[0]];
+                                        }
                                     }
                                     
-                                    replyMsg.messages = Array.isArray(forwardData) ? forwardData : [forwardData];
-                                    if (title) replyMsg.title = title;
-                                    if (description) replyMsg.description = description;
-                                    BotUtil.makeLog('info', 
-                                        `📨 [转发消息] ${replyMsg.messages.length}条消息${title ? ` - ${title}` : ''}`, 
-                                        deviceId
-                                    );
+                                    // 验证并发送转发消息
+                                    if (Array.isArray(forwardData) && forwardData.length > 0) {
+                                        replyMsg.messages = forwardData;
+                                        if (title) replyMsg.title = title;
+                                        if (description) replyMsg.description = description;
+                                        BotUtil.makeLog('info', 
+                                            `📨 [转发消息] ${forwardData.length}条消息${title ? ` - ${title}` : ''}`, 
+                                            deviceId
+                                        );
+                                    } else {
+                                        BotUtil.makeLog('warn', `[转发消息] 格式错误，降级为普通消息`, deviceId);
+                                        replyMsg.type = 'reply';
+                                        replyMsg.segments = segments;
+                                        if (title) replyMsg.title = title;
+                                        if (description) replyMsg.description = description;
+                                    }
                                 } else {
                                     // 普通消息：使用 segments 格式
                                     replyMsg.segments = segments;

@@ -1458,8 +1458,11 @@ class App {
     if (persist) this._saveChatHistory();
     const box = document.getElementById('chatMessages');
     if (box) {
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const div = document.createElement('div');
+      div.id = messageId;
       div.className = `chat-message ${role} message-enter`;
+      div.dataset.messageId = messageId;
       div.innerHTML = this.renderMarkdown(text);
       box.appendChild(div);
       box.scrollTop = box.scrollHeight;
@@ -1477,8 +1480,11 @@ class App {
     if (persist) this._saveChatHistory();
     const box = document.getElementById('chatMessages');
     if (box) {
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const div = document.createElement('div');
+      div.id = messageId;
       div.className = `chat-message ${role} message-enter`;
+      div.dataset.messageId = messageId;
       div.innerHTML = this.renderMarkdown(text);
       
       // 为助手消息添加复制按钮
@@ -1514,7 +1520,10 @@ class App {
     if (!box) return null;
     
     const div = document.createElement('div');
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    div.id = messageId;
     div.className = 'chat-message assistant message-enter';
+    div.dataset.messageId = messageId;
     
     const textParts = [];
     const allText = [];
@@ -1524,7 +1533,7 @@ class App {
         // 纯文本
         textParts.push(seg);
         allText.push(seg);
-      } else if (seg.type === 'text' || seg.type === 'raw') {
+      } else if (seg.type === 'text') {
         // 文本段：device.js 已标准化为 seg.text
         const text = seg.text || '';
         if (text.trim()) {
@@ -1631,8 +1640,11 @@ class App {
         }
       } else if (seg.type === 'at') {
         // @ 提及：显示为特殊样式，添加到文本中
-        const atText = `@${seg.name || seg.qq || ''}`;
-        textParts.push(`<span class="chat-at">${this.escapeHtml(atText)}</span>`);
+        const qq = seg.qq || seg.user_id || '';
+        const name = seg.name || '';
+        const atText = name ? `@${name}` : (qq ? `@${qq}` : '@未知用户');
+        const atHtml = `<span class="chat-at" data-qq="${this.escapeHtml(String(qq))}" data-name="${this.escapeHtml(name)}">${this.escapeHtml(atText)}</span>`;
+        textParts.push(atHtml);
         allText.push(atText);
       } else if (seg.type === 'reply') {
         // 回复：显示为引用样式
@@ -1674,21 +1686,80 @@ class App {
         }
       } else if (seg.type === 'markdown' || seg.type === 'raw') {
         // Markdown 或原始内容：直接渲染
+        if (textParts.length > 0) {
+          const textDiv = document.createElement('div');
+          textDiv.className = 'chat-text';
+          textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+          div.appendChild(textDiv);
+          textParts.length = 0;
+        }
+        
         const content = seg.data || seg.markdown || seg.raw || '';
         if (content) {
-          if (textParts.length > 0) {
-            const textDiv = document.createElement('div');
-            textDiv.className = 'chat-text';
-            textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
-            div.appendChild(textDiv);
-            textParts.length = 0;
-          }
-          
           const contentDiv = document.createElement('div');
           contentDiv.className = seg.type === 'markdown' ? 'chat-markdown' : 'chat-raw';
           contentDiv.innerHTML = seg.type === 'markdown' ? this.renderMarkdown(content) : this.escapeHtml(content);
           div.appendChild(contentDiv);
         }
+      } else if (seg.type === 'button') {
+        // 按钮：显示为交互按钮
+        if (textParts.length > 0) {
+          const textDiv = document.createElement('div');
+          textDiv.className = 'chat-text';
+          textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+          div.appendChild(textDiv);
+          textParts.length = 0;
+        }
+        
+        const buttons = Array.isArray(seg.data) ? seg.data : (seg.data ? [seg.data] : []);
+        if (buttons.length > 0) {
+          const buttonContainer = document.createElement('div');
+          buttonContainer.className = 'chat-buttons';
+          buttons.forEach((btn, idx) => {
+            const button = document.createElement('button');
+            button.className = 'chat-button';
+            button.textContent = btn.text || btn.label || `按钮${idx + 1}`;
+            button.title = btn.tooltip || '';
+            if (btn.action || btn.onClick) {
+              button.addEventListener('click', () => {
+                if (typeof btn.onClick === 'function') {
+                  btn.onClick();
+                } else if (btn.action) {
+                  // 按钮动作处理
+                  if (btn.action === 'copy' && btn.data) {
+                    navigator.clipboard.writeText(btn.data).then(() => {
+                      this.showToast('已复制到剪贴板', 'success');
+                    }).catch(() => {});
+                  }
+                }
+              });
+            }
+            buttonContainer.appendChild(button);
+          });
+          div.appendChild(buttonContainer);
+        }
+      } else if (seg.type && seg.type !== 'forward' && seg.type !== 'node') {
+        // 自定义类型或其他未知类型：尝试渲染
+        if (textParts.length > 0) {
+          const textDiv = document.createElement('div');
+          textDiv.className = 'chat-text';
+          textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
+          div.appendChild(textDiv);
+          textParts.length = 0;
+        }
+        
+        const customDiv = document.createElement('div');
+        customDiv.className = `chat-custom chat-custom-${seg.type}`;
+        if (seg.data) {
+          if (typeof seg.data === 'string') {
+            customDiv.textContent = seg.data;
+          } else if (typeof seg.data === 'object') {
+            customDiv.textContent = JSON.stringify(seg.data, null, 2);
+          }
+        } else {
+          customDiv.textContent = `[${seg.type}]`;
+        }
+        div.appendChild(customDiv);
       }
     });
     
@@ -1777,11 +1848,14 @@ class App {
 
     const messagesArray = Array.isArray(messages) ? messages : [messages];
     if (messagesArray.length === 0) return null;
-
+    
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const recordId = `record_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const div = document.createElement('div');
+    div.id = messageId;
     div.className = 'chat-message assistant chat-record message-enter';
     div.dataset.recordId = recordId;
+    div.dataset.messageId = messageId;
 
     let content = '';
     // 统一显示header（即使没有title也显示，保持格式一致）
@@ -1952,8 +2026,11 @@ class App {
     
     let msg = box.querySelector('.chat-message.assistant.streaming');
     if (!msg && !done) {
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       msg = document.createElement('div');
+      msg.id = messageId;
       msg.className = 'chat-message assistant streaming';
+      msg.dataset.messageId = messageId;
       box.appendChild(msg);
     }
     
@@ -4506,21 +4583,44 @@ class App {
         // 处理转发消息（聊天记录）
         this.clearChatStreamState();
         
-        if (data.messages && Array.isArray(data.messages)) {
+        if (data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
           // 提取消息内容：支持node格式和普通格式
-          const messages = data.messages.map(msg => {
+          const messages = data.messages.map((msg) => {
+            // node格式：从content数组中提取文本
             if (msg.type === 'node' && msg.data) {
-              // node格式：提取content中的文本
               if (msg.data.content && Array.isArray(msg.data.content)) {
                 const texts = msg.data.content
-                  .filter(c => c.type === 'text' && c.data?.text)
-                  .map(c => c.data.text);
-                return texts.join('') || (msg.data.content?.[0]?.data?.text || '');
+                  .filter(c => c && c.type === 'text' && c.data && c.data.text)
+                  .map(c => c.data.text)
+                  .filter(text => text && text.trim());
+                if (texts.length > 0) {
+                  return texts.join('\n');
+                }
+                const firstContent = msg.data.content[0];
+                if (firstContent && firstContent.data && firstContent.data.text) {
+                  return firstContent.data.text;
+                }
               }
-              return msg.data.content || msg.data.message || '';
+              // 降级处理
+              if (typeof msg.data.content === 'string') {
+                return msg.data.content;
+              }
+              if (msg.data.message) {
+                return typeof msg.data.message === 'string' ? msg.data.message : String(msg.data.message);
+              }
+              return '';
             }
-            // 普通格式
-            return typeof msg === 'string' ? msg : (msg.message || msg.content || String(msg));
+            // 普通格式：直接提取文本
+            if (typeof msg === 'string') {
+              return msg;
+            }
+            if (msg.message) {
+              return typeof msg.message === 'string' ? msg.message : String(msg.message);
+            }
+            if (msg.content) {
+              return typeof msg.content === 'string' ? msg.content : String(msg.content);
+            }
+            return String(msg);
           }).filter(text => text && text.trim());
           
           if (messages.length > 0) {

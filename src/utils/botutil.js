@@ -1692,23 +1692,35 @@ export default class BotUtil {
         const user_id = bot.uin || e.self_id || 0;
         const currentTime = Math.floor(Date.now() / 1000);
         
-        // 格式化消息为转发消息格式
-        const forwardMessages = messages.map((msg, idx) => {
-          const text = typeof msg === 'string' ? msg : (msg.message || msg.content || String(msg));
-          return {
-            type: 'node',
-            data: {
-              user_id: user_id,
-              nickname: nickname,
-              time: currentTime + idx,
-              content: text ? [{ type: 'text', data: { text } }] : []
-            }
-          };
-        }).filter(msg => msg.data.content.length > 0);
+        // 格式化消息为转发消息格式（OneBot标准格式）
+        const forwardMessages = messages
+          .map((msg, idx) => {
+            const text = typeof msg === 'string' ? msg : (msg.message || msg.content || String(msg));
+            if (!text || !text.trim()) return null;
+            
+            return {
+              type: 'node',
+              data: {
+                user_id: user_id,
+                nickname: nickname,
+                time: currentTime + idx,
+                content: [{ type: 'text', data: { text: text.trim() } }]
+              }
+            };
+          })
+          .filter(msg => msg !== null && msg.data && msg.data.content && msg.data.content.length > 0);
         
-        if (forwardMessages.length === 0) return false;
+        if (forwardMessages.length === 0) {
+          // 如果没有有效消息，降级为普通文本消息
+          const firstMsg = messages[0];
+          const text = typeof firstMsg === 'string' ? firstMsg : (firstMsg?.message || firstMsg?.content || String(firstMsg || ''));
+          if (text && text.trim()) {
+            return await e.reply(text.trim());
+          }
+          return false;
+        }
         
-        // 使用转发消息格式发送
+        // 使用转发消息格式发送（OneBot标准：forward segment包含data.messages）
         const forwardSegment = {
           type: 'forward',
           data: {
