@@ -1,37 +1,40 @@
 version: '3.8'
 
 services:
-  xrk-yunzai:
+  xrk-agt:
     build: .
-    container_name: xrk-yunzai
+    container_name: xrk-agt
     restart: unless-stopped
     environment:
       - NODE_ENV=production
       - DISABLE_CONSOLE=true
       - USE_FILE_LOG=true
       - DEBUG=false
-      - XRK_SERVER_PORT=3000
       - NODE_OPTIONS=--no-warnings --no-deprecation
     ports:
-      - "3000-3100:3000-3100"
+      - "2537:2537"  # HTTP 默认端口
+      - "2538:2538"  # HTTPS 默认端口
+      - "80:80"      # 反向代理 HTTP 端口（如启用）
+      - "443:443"    # 反向代理 HTTPS 端口（如启用）
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config
-      - ./plugins:/app/plugins
       - ./resources:/app/resources
     networks:
       - xrk-network
+    depends_on:
+      - redis
     deploy:
       resources:
         limits:
           cpus: '2.0'
-          memory: 1024M
+          memory: 2048M
         reservations:
           cpus: '0.5'
           memory: 512M
 
-  # 如果需要Redis
+  # Redis 服务（可选，如不需要可注释）
   redis:
     image: redis:7-alpine
     container_name: xrk-redis

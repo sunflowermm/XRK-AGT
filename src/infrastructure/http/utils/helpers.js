@@ -1,4 +1,5 @@
 import BotUtil from '#utils/botutil.js';
+import { HttpResponse } from '#utils/http-utils.js';
 
 /**
  * HTTP工具函数库
@@ -52,61 +53,6 @@ export function validateApiInstance(api, key = 'unknown') {
   }
   
   return true;
-}
-
-/**
- * 标准化API响应
- * @deprecated 请使用 HttpResponse.success() 替代
- * @param {Object} res - Express响应对象
- * @param {Object} data - 响应数据
- * @param {number} statusCode - HTTP状态码
- * @param {string} message - 响应消息
- */
-export function sendJsonResponse(res, data = null, statusCode = 200, message = null) {
-  if (res.headersSent) {
-    BotUtil.makeLog('warn', '响应已发送，无法再次发送', 'HttpHelpers');
-    return;
-  }
-  
-  const response = {
-    success: statusCode >= 200 && statusCode < 300,
-    timestamp: Date.now()
-  };
-  
-  if (message) response.message = message;
-  if (data !== null) response.data = data;
-  
-  res.status(statusCode).json(response);
-}
-
-/**
- * 发送错误响应
- * @deprecated 请使用 HttpResponse.error() 替代
- * @param {Object} res - Express响应对象
- * @param {string|Error} error - 错误信息或错误对象
- * @param {number} statusCode - HTTP状态码
- */
-export function sendErrorResponse(res, error, statusCode = 500) {
-  if (res.headersSent) {
-    BotUtil.makeLog('warn', '响应已发送，无法发送错误响应', 'HttpHelpers');
-    return;
-  }
-  
-  const message = error instanceof Error ? error.message : String(error);
-  const response = {
-    success: false,
-    message,
-    timestamp: Date.now()
-  };
-  
-  if (process.env.NODE_ENV === 'development' && error instanceof Error) {
-    response.error = {
-      message: error.message,
-      stack: error.stack
-    };
-  }
-  
-  res.status(statusCode).json(response);
 }
 
 /**
@@ -224,7 +170,7 @@ export function createRateLimiter(options = {}) {
     record.count++;
     
     if (record.count > max) {
-      return sendErrorResponse(res, '请求过于频繁，请稍后再试', 429);
+      return HttpResponse.error(res, new Error('请求过于频繁，请稍后再试'), 429);
     }
     
     res.setHeader('X-RateLimit-Limit', max);
@@ -248,11 +194,11 @@ export function createAuthMiddleware(verifyFn) {
         req.user = result.user;
         next();
       } else {
-        sendErrorResponse(res, result.message || '认证失败', 401);
+        HttpResponse.error(res, new Error(result.message || '认证失败'), 401);
       }
     } catch (error) {
       BotUtil.makeLog('error', `认证中间件错误: ${error.message}`, 'HttpHelpers', error);
-      sendErrorResponse(res, '认证过程出错', 500);
+      HttpResponse.error(res, error, 500);
     }
   };
 }
@@ -314,53 +260,6 @@ export function createRequestLogger(options = {}) {
 }
 
 /**
- * 安全解析JSON
- * @param {string} jsonString - JSON字符串
- * @param {*} defaultValue - 默认值
- * @returns {*} 解析结果
- */
-export function safeJsonParse(jsonString, defaultValue = null) {
-  try {
-    return JSON.parse(jsonString);
-  } catch (error) {
-    return defaultValue;
-  }
-}
-
-/**
- * 深度合并对象
- * @param {Object} target - 目标对象
- * @param {...Object} sources - 源对象
- * @returns {Object} 合并后的对象
- */
-export function deepMerge(target, ...sources) {
-  if (!sources.length) return target;
-  const source = sources.shift();
-  
-  if (isObject(target) && isObject(source)) {
-    for (const key in source) {
-      if (isObject(source[key])) {
-        if (!target[key]) Object.assign(target, { [key]: {} });
-        deepMerge(target[key], source[key]);
-      } else {
-        Object.assign(target, { [key]: source[key] });
-      }
-    }
-  }
-  
-  return deepMerge(target, ...sources);
-}
-
-/**
- * 判断是否为对象
- * @param {*} item - 待判断的值
- * @returns {boolean}
- */
-function isObject(item) {
-  return item && typeof item === 'object' && !Array.isArray(item);
-}
-
-/**
  * 创建分页响应
  * @param {Object} res - Express响应对象
  * @param {Array} data - 数据数组
@@ -370,7 +269,7 @@ export function sendPaginatedResponse(res, data, pagination) {
   const { page = 1, pageSize = 10, total = 0 } = pagination;
   const totalPages = Math.ceil(total / pageSize);
   
-  sendJsonResponse(res, {
+  HttpResponse.success(res, {
     items: data,
     pagination: {
       page: Number(page),

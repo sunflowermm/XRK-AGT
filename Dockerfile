@@ -12,13 +12,12 @@ RUN apk add --no-cache \
     freetype \
     harfbuzz \
     ttf-freefont \
-  && npm install -g pnpm pm2
+  && npm install -g pnpm
 
 WORKDIR /app
 
 # 仅复制包管理文件以利用缓存
-COPY package*.json ./
-COPY pnpm-lock.yaml* ./
+COPY package.json pnpm-lock.yaml* ./
 
 # 禁止 Puppeteer 在安装时下载浏览器；指定系统 Chromium 路径
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
@@ -31,7 +30,7 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY . .
 
 # 预创建常用目录
-RUN mkdir -p logs data data/bots data/backups config config/default_config data/server_bots resources
+RUN mkdir -p logs data data/bots data/backups config config/default_config data/server_bots resources www
 
 # 运行时环境
 ENV NODE_ENV=production \
@@ -40,12 +39,12 @@ ENV NODE_ENV=production \
     DEBUG=false \
     NODE_OPTIONS="--no-warnings --no-deprecation"
 
-# 暴露端口段
-EXPOSE 3000-3100
+# 暴露端口（默认 HTTP 2537，HTTPS 2538，以及可能的代理端口 80/443）
+EXPOSE 2537 2538 80 443
 
-# 健康检查（可按需替换为HTTP探针）
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD node -e "process.exit(0)" || exit 1
+# 健康检查（HTTP 探针）
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:2537/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
 
 # 启动命令
 CMD ["node", "--no-warnings", "--no-deprecation", "app.js"]

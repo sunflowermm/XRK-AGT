@@ -84,14 +84,23 @@ export default class MyApi extends HttpApi {
 
 ### 响应处理
 
-```javascript
-import { sendJsonResponse, sendErrorResponse, sendPaginatedResponse } from '#infrastructure/http/utils/helpers.js';
+推荐使用 `HttpResponse` 类进行统一的响应处理：
 
-// 发送JSON响应
-sendJsonResponse(res, { data: 'value' }, 200, '成功');
+```javascript
+import { HttpResponse } from '#utils/http-utils.js';
+import { sendPaginatedResponse } from '#infrastructure/http/utils/helpers.js';
+
+// 发送成功响应
+HttpResponse.success(res, { data: 'value' }, '成功');
 
 // 发送错误响应
-sendErrorResponse(res, '错误信息', 400);
+HttpResponse.error(res, new Error('错误信息'), 400);
+
+// 发送验证错误响应
+HttpResponse.validationError(res, '验证失败', 4001);
+
+// 发送未找到响应
+HttpResponse.notFound(res, '资源未找到');
 
 // 发送分页响应
 sendPaginatedResponse(res, items, { page: 1, pageSize: 10, total: 100 });
@@ -117,7 +126,7 @@ const schema = {
 
 const { valid, errors } = validateRequest(req, schema);
 if (!valid) {
-  return sendErrorResponse(res, errors.join(', '), 400);
+  return HttpResponse.error(res, new Error(errors.join(', ')), 400);
 }
 ```
 
@@ -199,7 +208,7 @@ export default {
       handler: async (req, res) => {
         const file = req.file;
         // 处理文件
-        sendJsonResponse(res, { fileId: file.filename });
+        HttpResponse.success(res, { fileId: file.filename });
       }
     }
   ]
@@ -236,7 +245,7 @@ export default {
       handler: async (req, res) => {
         const collection = getCollection('users');
         const users = await collection.find({}).toArray();
-        sendJsonResponse(res, users);
+        HttpResponse.success(res, users);
       }
     }
   ]

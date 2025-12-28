@@ -1,3 +1,12 @@
+/**
+ * 截图工具模块
+ * 
+ * 注意：此模块目前未被使用。代码库中使用了其他截图方案（如 desktop.js 中的 screenshot-desktop）。
+ * 此模块提供了基于 puppeteer/playwright 的网页截图功能，包含完整的浏览器管理、缓存和错误处理。
+ * 
+ * 如需使用此模块，请导入 takeScreenshot 函数。
+ */
+
 import fs from 'node:fs';
 import path from 'node:path';
 import sqlite3 from 'sqlite3';

@@ -1,0 +1,71 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# 日志文件
+logs/
+*.log
+*.log.txt
+
+# 运行时数据（通过 volume 挂载）
+data/
+!data/configs/
+
+# 临时文件
+trash/
+temp/
+*.tmp
+
+# 开发工具
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# 文档（可选，如需要文档可删除此项）
+# docs/
+
+# 测试文件
+test/
+tests/
+*.test.js
+*.spec.js
+
+# 构建产物
+dist/
+build/
+*.map
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker 相关
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 其他
+*.md
+!README.md
+LICENSE
+.prettierrc*
+.eslintrc*
+.editorconfig
+
