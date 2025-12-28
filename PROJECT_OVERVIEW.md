@@ -1,6 +1,6 @@
 # XRK-AGT 项目概览
 
-> **更新日期**: 2024-12-26  
+> **更新日期**: 2025-12-26  
 > **Node.js 版本要求**: ≥ 24.12.0 (LTS)  
 > 本文档提供 XRK-AGT 项目的完整架构概览、目录结构说明和核心特性介绍。
 
@@ -215,21 +215,9 @@ flowchart TB
 **职责**：提供所有基础设施和基类，为业务层提供通用能力
 
 **包含**：
-- **加载器**：
-  - `TaskerLoader` - 任务层加载器
-  - `PluginsLoader` - 插件加载与调度
-  - `ApiLoader` - API 加载器
-  - `StreamLoader` - 工作流加载器
-  - `ListenerLoader` - 事件监听器加载器
-- **基类库**：
-  - `plugin` - 插件基类
-  - `HttpApi` - HTTP API 基类
-  - `AIStream` - AI 工作流基类
-  - `Renderer` - 渲染器基类
-  - `ConfigBase` - 配置基类
-  - `EventListener` - 事件监听器基类
-- **HTTP业务层**：
-  - `http-business.js` - 重定向、CDN、反向代理增强
+- **加载器**：TaskerLoader、PluginsLoader、ApiLoader、StreamLoader、ListenerLoader
+- **基类库**：plugin、HttpApi、AIStream、Renderer、ConfigBase、EventListener
+- **HTTP业务层**：`http-business.js` - 重定向、CDN、反向代理增强
 - **数据库客户端**：`redis.js`、`mongodb.js`
 - **配置管理**：`config/`、`commonconfig/`
 
@@ -239,11 +227,7 @@ flowchart TB
 
 **职责**：对接各平台协议（QQ/微信/自定义），将平台消息转换为统一事件模型，通过 `Bot.em` 触发事件
 
-**包含**：
-- `OneBotv11.js` - OneBot v11 协议
-- `ComWeChat.js` - ComWeChat 协议
-- `stdin.js` - 标准输入任务器
-- 自定义 Tasker
+**包含**：`OneBotv11.js`、`ComWeChat.js`、`stdin.js`、自定义 Tasker
 
 **特点**：事件生成器，负责协议转换
 
@@ -251,10 +235,7 @@ flowchart TB
 
 **职责**：监听 `Bot.em` 事件，进行去重、标记、预处理，然后调用 `PluginsLoader.deal(e)` 分发到插件
 
-**包含**：
-- `onebot.js` - OneBot 事件监听器
-- `device.js` - 设备事件监听器
-- `stdin.js` - 标准输入事件监听器
+**包含**：`onebot.js`、`device.js`、`stdin.js`
 
 **特点**：事件标准化和预处理层
 
@@ -263,9 +244,7 @@ flowchart TB
 **职责**：实现具体业务逻辑
 
 **包含**：
-- **业务插件** (`core/plugin/`)：
-  - `enhancer/` - 增强插件（为特定 Tasker 提供功能增强）
-  - `example/` - 示例插件
+- **业务插件** (`core/plugin/`)：`enhancer/`、`example/`
 - **HTTP API** (`core/http/`)：具体的 REST/WebSocket API 实现
 - **工作流** (`core/stream/`)：基于 `AIStream` 的业务工作流实现
 
@@ -279,11 +258,10 @@ flowchart TB
 
 ```
 XRK-AGT/
-├── app.js                    # 应用启动入口（依赖检查、环境验证）
-├── start.js                  # 主启动脚本（创建Bot实例）
+├── app.js                    # 应用启动入口
+├── start.js                  # 主启动脚本
 ├── package.json              # 项目配置和依赖
-├── pnpm-lock.yaml            # pnpm 锁定文件
-├── PROJECT_OVERVIEW.md       # 项目概览文档（本文档）
+├── PROJECT_OVERVIEW.md        # 项目概览文档（本文档）
 │
 ├── src/                      # 运行核心与基础设施
 │   ├── bot.js                # Bot主类（核心运行时）
@@ -298,61 +276,32 @@ XRK-AGT/
 │   │   └── config/          # 配置加载器
 │   ├── utils/               # 工具函数
 │   │   ├── botutil.js       # 核心工具类
-│   │   ├── http-business.js # HTTP业务层（重定向/CDN/反向代理增强）
-│   │   ├── paths.js         # 路径管理
-│   │   └── ...              # 其他工具
+│   │   ├── http-business.js # HTTP业务层
+│   │   └── paths.js         # 路径管理
 │   ├── factory/             # 工厂类（ASR/TTS/LLM/Vision）
 │   ├── modules/             # 业务模块
 │   └── renderers/           # 渲染实现（Puppeteer/Playwright）
 │
 ├── core/                     # 业务层与任务层
 │   ├── tasker/              # 任务层（协议转换）
-│   │   ├── OneBotv11.js    # OneBot v11 Tasker
-│   │   ├── ComWeChat.js    # ComWeChat Tasker
-│   │   └── stdin.js        # 标准输入Tasker
 │   ├── events/              # 事件系统
-│   │   ├── onebot.js       # OneBot事件监听器
-│   │   ├── device.js       # 设备事件监听器
-│   │   └── stdin.js        # 标准输入事件监听器
 │   ├── plugin/              # 业务插件
-│   │   ├── enhancer/       # 增强插件
-│   │   └── example/        # 示例插件
 │   ├── http/                # HTTP API
-│   │   ├── ai.js           # AI相关API
-│   │   ├── bot.js          # Bot相关API
-│   │   └── ...             # 其他API
 │   ├── stream/              # 工作流
-│   │   ├── chat.js         # 聊天工作流
-│   │   ├── device.js       # 设备工作流
-│   │   └── ...             # 其他工作流
 │   └── commonconfig/        # 业务配置
 │
 ├── config/                   # 配置文件
 │   ├── default_config/      # 默认配置
-│   │   ├── server.yaml      # 服务器配置（HTTP/HTTPS/反向代理/CDN/重定向）
-│   │   ├── bot.yaml         # Bot配置
-│   │   └── ...              # 其他配置
-│   └── server_config/        # 服务器配置
-│       └── api_key.json     # API密钥
+│   └── server_config/       # 服务器配置
 │
 ├── data/                     # 运行期数据
 │   ├── server_bots/          # 服务器Bot配置（按端口分目录）
 │   ├── configs/              # 运行时配置
 │   ├── media/                # 媒体文件
-│   ├── uploads/              # 上传文件
-│   └── ...                   # 其他数据
+│   └── uploads/              # 上传文件
 │
 ├── www/                       # 前端静态资源
-│   ├── index.html            # 首页
-│   ├── xrk/                  # Web控制台
-│   └── ...                   # 其他静态资源
-│
-├── docs/                      # 文档
-│   ├── 完整文档.md            # 完整文档（推荐从这里开始）
-│   ├── server.md             # Server服务器架构文档
-│   ├── http-business-layer.md # HTTP业务层文档
-│   └── ...                   # 其他文档
-│
+├── docs/                     # 文档
 ├── resources/                 # 渲染模板和资源
 ├── logs/                      # 日志文件
 └── trash/                     # 回收站（自动清理）
@@ -360,30 +309,14 @@ XRK-AGT/
 
 ### 关键目录说明
 
-#### `src/` - 运行核心与基础设施
-
-- **`bot.js`**：Bot主类，系统核心运行时
-- **`infrastructure/`**：基础设施层，提供基类和加载器
-- **`utils/http-business.js`**：HTTP业务层，提供重定向、CDN、反向代理增强功能
-- **`utils/`**：工具函数集合
-
-#### `core/` - 业务层与任务层
-
-- **`tasker/`**：任务层，协议转换
-- **`events/`**：事件系统，事件标准化和预处理
-- **`plugin/`**：业务插件实现
-- **`http/`**：HTTP API实现
-- **`stream/`**：AI工作流实现
-
-#### `config/` - 配置文件
-
-- **`default_config/`**：默认配置模板
-- **`server_config/`**：服务器运行时配置
-
-#### `data/` - 运行期数据
-
-- **`server_bots/`**：按端口分目录的Bot配置
-- **`media/`**、**`uploads/`**：媒体和上传文件
+- **`src/bot.js`**：Bot主类，系统核心运行时
+- **`src/infrastructure/`**：基础设施层，提供基类和加载器
+- **`src/utils/http-business.js`**：HTTP业务层，提供重定向、CDN、反向代理增强功能
+- **`core/tasker/`**：任务层，协议转换
+- **`core/events/`**：事件系统，事件标准化和预处理
+- **`core/plugin/`**：业务插件实现
+- **`core/http/`**：HTTP API实现
+- **`core/stream/`**：AI工作流实现
 
 ---
 
@@ -501,7 +434,7 @@ proxy:
           weight: 3
         - url: "http://backend2:3000"
           weight: 1
-      loadBalance: "weighted"
+      loadBalancingAlgorithm: "weighted"
 ```
 
 **详细文档**：参见 [`docs/http-business-layer.md`](docs/http-business-layer.md)
@@ -577,74 +510,15 @@ flowchart LR
 
 ### 7大核心扩展点
 
-1. **插件扩展** (`core/plugin/`)
-   - 基类：`src/infrastructure/plugins/plugin.js`
-   - 文档：`docs/plugin-base.md`
-
-2. **工作流扩展** (`core/stream/`)
-   - 基类：`src/infrastructure/aistream/aistream.js`
-   - 文档：`docs/工作流系统完整文档.md`
-
-3. **Tasker扩展** (`core/tasker/`)
-   - 规范：`docs/tasker-base-spec.md`
-   - 文档：`docs/tasker-loader.md`
-
-4. **事件监听器扩展** (`core/events/`)
-   - 基类：`src/infrastructure/listener/base.js`
-   - 文档：`docs/事件监听器开发指南.md`
-
-5. **HTTP API扩展** (`core/http/`)
-   - 基类：`src/infrastructure/http/http.js`
-   - 文档：`docs/http-api.md`
-
-6. **渲染器扩展** (`src/renderers/`)
-   - 基类：`src/infrastructure/renderer/Renderer.js`
-   - 文档：`docs/renderer.md`
-
-7. **配置扩展** (`core/commonconfig/`)
-   - 基类：`src/infrastructure/commonconfig/commonconfig.js`
-   - 文档：`docs/config-base.md`
+1. **插件扩展** (`core/plugin/`) - 基类：`src/infrastructure/plugins/plugin.js`
+2. **工作流扩展** (`core/stream/`) - 基类：`src/infrastructure/aistream/aistream.js`
+3. **Tasker扩展** (`core/tasker/`) - 规范：`docs/tasker-base-spec.md`
+4. **事件监听器扩展** (`core/events/`) - 基类：`src/infrastructure/listener/base.js`
+5. **HTTP API扩展** (`core/http/`) - 基类：`src/infrastructure/http/http.js`
+6. **渲染器扩展** (`src/renderers/`) - 基类：`src/infrastructure/renderer/Renderer.js`
+7. **配置扩展** (`core/commonconfig/`) - 基类：`src/infrastructure/commonconfig/commonconfig.js`
 
 **详细说明**：参见 [`docs/框架可扩展性指南.md`](docs/框架可扩展性指南.md)
-
----
-
-## 核心模块一览
-
-### 运行核心层
-
-| 模块 | 文件/目录 | 职责 |
-|------|----------|------|
-| Bot主类 | `src/bot.js` | 管理HTTP/HTTPS/WS服务、中间件、认证、反向代理、事件总线 |
-
-### 基础设施层
-
-| 模块 | 文件/目录 | 职责 |
-|------|----------|------|
-| Tasker加载器 | `src/infrastructure/tasker/loader.js` | 扫描并加载Tasker |
-| 插件系统 | `src/infrastructure/plugins/` | 插件基类和加载器 |
-| 事件监听器 | `src/infrastructure/listener/` | 事件监听器基类和加载器 |
-| HTTP API | `src/infrastructure/http/` | HTTP API基类和加载器 |
-| AI工作流 | `src/infrastructure/aistream/` | AI工作流基类和加载器 |
-| 渲染器 | `src/infrastructure/renderer/` | 渲染器基类和加载器 |
-| 配置系统 | `src/infrastructure/commonconfig/` | 配置基类和通用配置 |
-| HTTP业务层 | `src/utils/http-business.js` | 重定向、CDN、反向代理增强 |
-
-### 任务层
-
-| 模块 | 文件/目录 | 职责 |
-|------|----------|------|
-| OneBotv11 | `core/tasker/OneBotv11.js` | OneBot v11协议转换 |
-| ComWeChat | `core/tasker/ComWeChat.js` | ComWeChat协议转换 |
-| stdin | `core/tasker/stdin.js` | 标准输入任务器 |
-
-### 业务层
-
-| 模块 | 文件/目录 | 职责 |
-|------|----------|------|
-| 业务插件 | `core/plugin/` | 具体业务插件实现 |
-| HTTP API | `core/http/` | 具体的REST/WebSocket API |
-| 工作流 | `core/stream/` | 基于AIStream的业务工作流 |
 
 ---
 
@@ -702,30 +576,6 @@ sequenceDiagram
             Business-->>Client: 返回响应
         end
     end
-```
-
----
-
-## 配置体系
-
-### 配置文件结构
-
-```
-config/
-├── default_config/          # 默认配置模板
-│   ├── server.yaml         # 服务器配置（HTTP/HTTPS/反向代理/CDN/重定向）
-│   ├── bot.yaml            # Bot配置
-│   ├── aistream.yaml       # 工作流配置
-│   └── ...                 # 其他配置
-└── server_config/          # 服务器运行时配置
-    └── api_key.json        # API密钥
-
-data/
-└── server_bots/            # Bot运行时配置（按端口分目录）
-    └── {port}/             # 端口目录
-        ├── server.yaml     # 服务器配置
-        ├── bot.yaml        # Bot配置
-        └── ...             # 其他配置
 ```
 
 ### 配置加载流程
@@ -804,4 +654,3 @@ flowchart TB
 ---
 
 *本文档持续更新中，如有问题或建议，请提交Issue。*
-
