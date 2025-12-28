@@ -475,6 +475,138 @@ export default class SystemConfig extends ConfigBase {
                       component: 'InputNumber'
                     }
                   }
+                },
+                healthCheck: {
+                  type: 'object',
+                  label: '健康检查配置',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用健康检查',
+                      default: false,
+                      component: 'Switch'
+                    },
+                    interval: {
+                      type: 'number',
+                      label: '检查间隔',
+                      description: '检查间隔（毫秒）',
+                      min: 1000,
+                      default: 30000,
+                      component: 'InputNumber'
+                    },
+                    maxFailures: {
+                      type: 'number',
+                      label: '最大失败次数',
+                      description: '超过后标记为不健康',
+                      min: 1,
+                      default: 3,
+                      component: 'InputNumber'
+                    }
+                  }
+                }
+              }
+            },
+            redirects: {
+              type: 'array',
+              label: 'HTTP重定向配置',
+              description: '支持301/302/307/308重定向，支持通配符和条件匹配',
+              component: 'ArrayForm',
+              itemType: 'object',
+              fields: {
+                from: {
+                  type: 'string',
+                  label: '源路径',
+                  required: true,
+                  component: 'Input',
+                  placeholder: '/old-path'
+                },
+                to: {
+                  type: 'string',
+                  label: '目标路径',
+                  required: true,
+                  component: 'Input',
+                  placeholder: '/new-path'
+                },
+                status: {
+                  type: 'number',
+                  label: 'HTTP状态码',
+                  enum: [301, 302, 307, 308],
+                  default: 301,
+                  component: 'Select'
+                },
+                preserveQuery: {
+                  type: 'boolean',
+                  label: '保留查询参数',
+                  default: true,
+                  component: 'Switch'
+                },
+                condition: {
+                  type: 'string',
+                  label: '条件表达式',
+                  description: 'JavaScript条件表达式（可选）',
+                  component: 'Input',
+                  placeholder: "req.headers['user-agent'].includes('Mobile')"
+                }
+              }
+            },
+            cdn: {
+              type: 'object',
+              label: 'CDN配置',
+              component: 'SubForm',
+              fields: {
+                enabled: {
+                  type: 'boolean',
+                  label: '启用CDN',
+                  default: false,
+                  component: 'Switch'
+                },
+                domain: {
+                  type: 'string',
+                  label: 'CDN域名',
+                  component: 'Input',
+                  placeholder: 'cdn.example.com'
+                },
+                staticPrefix: {
+                  type: 'string',
+                  label: '静态资源前缀',
+                  default: '/static',
+                  component: 'Input'
+                },
+                https: {
+                  type: 'boolean',
+                  label: '使用HTTPS',
+                  default: true,
+                  component: 'Switch'
+                },
+                cacheControl: {
+                  type: 'object',
+                  label: '缓存控制',
+                  component: 'SubForm',
+                  fields: {
+                    static: {
+                      type: 'number',
+                      label: '静态资源缓存（秒）',
+                      description: 'CSS/JS/字体文件',
+                      min: 0,
+                      default: 31536000,
+                      component: 'InputNumber'
+                    },
+                    images: {
+                      type: 'number',
+                      label: '图片缓存（秒）',
+                      min: 0,
+                      default: 604800,
+                      component: 'InputNumber'
+                    },
+                    default: {
+                      type: 'number',
+                      label: '默认缓存（秒）',
+                      min: 0,
+                      default: 3600,
+                      component: 'InputNumber'
+                    }
+                  }
                 }
               }
             },

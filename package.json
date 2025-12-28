@@ -6,7 +6,7 @@
   "main": "app.js",
   "type": "module",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.12.0"
   },
   "imports": {
     "#utils/*": "./src/utils/*",
@@ -71,7 +71,6 @@
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-n": "^17.15.1",
     "eslint-plugin-promise": "^7.2.1",
-    "express": "^4.21.2",
     "express-art-template": "^1.0.1"
   },
   "pnpm": {

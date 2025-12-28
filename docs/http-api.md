@@ -154,6 +154,10 @@ sequenceDiagram
 
 > **最佳实践**：handler内推荐直接使用 `res.json/res.send` 返回结果，不依赖返回值自动发送响应
 
+> **相关文档**：
+> - [HTTP业务层文档](http-business-layer.md) - 重定向、CDN、反向代理增强功能
+> - [Server服务器架构文档](server.md) - 完整的服务器架构说明
+
 ---
 
 ## WebSocket 集成：`registerWebSocketHandlers(bot)`

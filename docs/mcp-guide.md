@@ -621,7 +621,7 @@ MCP服务器内置了4个示例工具，供测试和演示使用：
 {
   "platform": "win32",
   "arch": "x64",
-  "nodeVersion": "v18.14.0",
+  "nodeVersion": "v24.12.0",
   "cpuCount": 8,
   "totalMemory": "16GB",
   "freeMemory": "8GB",

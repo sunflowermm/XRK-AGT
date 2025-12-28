@@ -1,18 +1,90 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { spawn } from 'child_process';
 import paths from '#utils/paths.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const execAsync = promisify(exec);
+function execAsync(command, args = [], options = {}) {
+  return new Promise((resolve, reject) => {
+    const { timeout, maxBuffer, ...spawnOptions } = options;
+    const maxBufferSize = maxBuffer || 1024 * 1024 * 10;
+
+    const child = spawn(command, args, {
+      ...spawnOptions,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let timeoutId = null;
+
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    if (timeout) {
+      timeoutId = setTimeout(() => {
+        try {
+          child.kill('SIGTERM');
+        } catch {}
+        cleanup();
+        const error = new Error(`Command timed out after ${timeout}ms`);
+        error.code = 'TIMEOUT';
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      }, timeout);
+    }
+
+    const checkBuffer = () => {
+      if (stdout.length > maxBufferSize || stderr.length > maxBufferSize) {
+        try {
+          child.kill('SIGTERM');
+        } catch {}
+        cleanup();
+        const error = new Error(`Command output exceeded maxBuffer size of ${maxBufferSize} bytes`);
+        error.code = 'MAXBUFFER';
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      }
+    };
+
+    child.stdout?.on('data', (data) => {
+      stdout += data.toString();
+      checkBuffer();
+    });
+
+    child.stderr?.on('data', (data) => {
+      stderr += data.toString();
+      checkBuffer();
+    });
+
+    child.on('error', (error) => {
+      cleanup();
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      cleanup();
+      if (code !== 0) {
+        const error = new Error(`Command failed with exit code ${code}`);
+        error.code = code;
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
+
 class BootstrapLogger {
   constructor() {
     this.logFile = path.join('./logs', 'bootstrap.log');
-    this.consoleEnabled = true;
   }
 
   async ensureLogDir() {
@@ -25,17 +97,13 @@ class BootstrapLogger {
     
     try {
       await fs.appendFile(this.logFile, logMessage);
-      
-      if (this.consoleEnabled) {
-        const colorMap = {
-          INFO: '\x1b[36m',
-          SUCCESS: '\x1b[32m',
-          WARNING: '\x1b[33m',
-          ERROR: '\x1b[31m'
-        };
-        
-        console.log(`${colorMap[level] || ''}${message}\x1b[0m`);
-      }
+      const colors = {
+        INFO: '\x1b[36m',
+        SUCCESS: '\x1b[32m',
+        WARNING: '\x1b[33m',
+        ERROR: '\x1b[31m'
+      };
+      console.log(`${colors[level] || ''}${message}\x1b[0m`);
     } catch (error) {
       console.error('日志写入失败:', error.message);
     }
@@ -53,24 +121,10 @@ class BootstrapLogger {
     await this.log(message, 'ERROR');
   }
 }
+
 class DependencyManager {
   constructor(logger) {
     this.logger = logger;
-    this.packageManager = 'pnpm';
-  }
-  async detectPackageManager() {
-    const managers = ['pnpm', 'npm', 'yarn'];
-    
-    for (const manager of managers) {
-      try {
-        await execAsync(`${manager} --version`);
-        return manager;
-      } catch {
-        continue;
-      }
-    }
-    
-    throw new Error('未找到可用的包管理器 (pnpm/npm/yarn)');
   }
 
   async parsePackageJson(packageJsonPath) {
@@ -94,37 +148,26 @@ class DependencyManager {
 
   async getMissingDependencies(dependencies, nodeModulesPath) {
     const depNames = Object.keys(dependencies).filter(dep => dep !== 'md5' && dep !== 'oicq');
-    const missing = [];
-    
-    await Promise.all(
-      depNames.map(async (dep) => {
-        const installed = await this.isDependencyInstalled(dep, nodeModulesPath);
-        !installed && missing.push(dep);
-      })
+    const results = await Promise.all(
+      depNames.map(dep => this.isDependencyInstalled(dep, nodeModulesPath))
     );
-    
-    return missing;
+    return depNames.filter((_, i) => !results[i]);
   }
 
   async installDependencies(missingDeps) {
     await this.logger.warning(`发现 ${missingDeps.length} 个缺失的依赖`);
     await this.logger.log(`缺失的依赖: ${missingDeps.join(', ')}`);
-    
-    const manager = await this.detectPackageManager();
-    this.packageManager = manager;
-    
-    await this.logger.log(`使用 ${manager} 安装依赖...`);
+    await this.logger.log('使用 pnpm 安装依赖...');
     
     try {
-      const { stdout, stderr } = await execAsync(`${manager} install`, {
-        maxBuffer: 1024 * 1024 * 10, // 10MB缓冲区
-        timeout: 300000 // 5分钟超时
+      const { stdout, stderr } = await execAsync('pnpm', ['install'], {
+        maxBuffer: 1024 * 1024 * 10,
+        timeout: 300000
       });
       
       if (stderr && !stderr.includes('warning')) {
         await this.logger.warning(`安装警告: ${stderr}`);
       }
-      
       await this.logger.success('依赖安装完成');
     } catch (error) {
       throw new Error(`依赖安装失败: ${error.message}`);
@@ -137,13 +180,10 @@ class DependencyManager {
     try {
       const packageJson = await this.parsePackageJson(packageJsonPath);
       const allDependencies = {
-        ...packageJson.dependencies || {},
-        ...packageJson.devDependencies || {}
+        ...(packageJson.dependencies || {}),
+        ...(packageJson.devDependencies || {})
       };
-      const missingDeps = await this.getMissingDependencies(
-        allDependencies, 
-        nodeModulesPath
-      );
+      const missingDeps = await this.getMissingDependencies(allDependencies, nodeModulesPath);
       if (missingDeps.length > 0) {
         await this.installDependencies(missingDeps);
       }
@@ -154,17 +194,16 @@ class DependencyManager {
   }
 
   async ensurePluginDependencies(rootDir = process.cwd()) {
-    const manager = await this.detectPackageManager();
     const pluginGlobs = ['core', 'renderers'];
-
     const dirs = [];
+
     await Promise.all(
       pluginGlobs.map(async (base) => {
         const dir = path.join(rootDir, base);
         try {
           const entries = await fs.readdir(dir, { withFileTypes: true });
           entries.forEach(d => d.isDirectory() && dirs.push(path.join(dir, d.name)));
-        } catch { /* ignore */ }
+        } catch {}
       })
     );
 
@@ -191,24 +230,24 @@ class DependencyManager {
         const depNames = Object.keys(deps);
         if (depNames.length === 0) return;
 
-        const missing = [];
-        await Promise.all(
+        const results = await Promise.all(
           depNames.map(async (dep) => {
             try {
               const p = path.join(nodeModulesPath, dep);
               const s = await fs.stat(p);
-              !s.isDirectory() && missing.push(dep);
+              return s.isDirectory();
             } catch {
-              missing.push(dep);
+              return false;
             }
           })
         );
+        const missing = depNames.filter((_, i) => !results[i]);
 
         if (missing.length > 0) {
           await this.logger.warning(`插件依赖缺失 [${d}]: ${missing.join(', ')}`);
           try {
-            await this.logger.log(`为插件安装依赖 (${manager}): ${d}`);
-            await execAsync(`${manager} install`, {
+            await this.logger.log(`为插件安装依赖 (pnpm): ${d}`);
+            await execAsync('pnpm', ['install'], {
               cwd: d,
               maxBuffer: 1024 * 1024 * 16,
               timeout: 10 * 60 * 1000
@@ -230,16 +269,9 @@ class EnvironmentValidator {
   }
 
   async checkNodeVersion() {
-    const nodeVersion = process.version;
-    const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0]);
-    
-    if (majorVersion < 18) {
-      throw new Error(`Node.js版本过低: ${nodeVersion}, 需要 v18.14.0 或更高版本`);
-    }
-    
-    const minorVersion = parseInt(nodeVersion.slice(1).split('.')[1] || '0');
-    if (majorVersion === 18 && minorVersion < 14) {
-      throw new Error(`Node.js版本过低: ${nodeVersion}, 需要 v18.14.0 或更高版本`);
+    const [major, minor] = process.version.slice(1).split('.').map(Number);
+    if (major < 18 || (major === 18 && minor < 14)) {
+      throw new Error(`Node.js版本过低: ${process.version}, 需要 v18.14.0 或更高版本`);
     }
   }
 
@@ -252,6 +284,7 @@ class EnvironmentValidator {
     await this.checkRequiredDirectories();
   }
 }
+
 class Bootstrap {
   constructor() {
     this.logger = new BootstrapLogger();
@@ -281,7 +314,7 @@ class Bootstrap {
         try {
           const content = await fs.readFile(filePath, 'utf-8');
           const data = JSON.parse(content);
-          return data.imports && typeof data.imports === 'object' ? data.imports : {};
+          return (data.imports && typeof data.imports === 'object') ? data.imports : {};
         } catch (e) {
           await this.logger.warning(`无法解析 imports 文件: ${filePath} (${e.message})`);
           return {};
@@ -333,7 +366,7 @@ class Bootstrap {
       await this.logger.error(`引导失败: ${error.message}`);
       await this.logger.log('\n故障排除建议:');
       await this.logger.log('1. 确保Node.js版本 >= 18.14.0');
-      await this.logger.log('2. 手动运行: pnpm install (或 npm install)');
+      await this.logger.log('2. 手动运行: pnpm install');
       await this.logger.log('3. 检查网络连接');
       await this.logger.log('4. 查看日志文件: ./logs/bootstrap.log');
       

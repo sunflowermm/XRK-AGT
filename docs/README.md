@@ -60,8 +60,6 @@ flowchart TB
     style Business fill:#FFB6C1
     
     style Bot fill:#FFD700
-    style Infra fill:#90EE90
-    style Business fill:#87CEEB
 ```
 
 **层次说明**：
@@ -250,4 +248,4 @@ flowchart TB
 
 ---
 
-*最后更新：2025-01-XX*
+*最后更新：2025-12-26*

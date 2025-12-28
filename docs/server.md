@@ -396,32 +396,25 @@ https:
 
 ### 反向代理架构
 
-```
-互联网用户
-  ├─ 用户1访问 xrkk.cc
-  └─ 用户2访问 api.example.com
-        ↓
-反向代理服务器
-  ├─ 域名路由器（根据Host头判断）
-  ├─ SNI证书选择器（HTTPS时选择对应证书）
-  └─ 路径重写器（可选）
-        ↓
-后端服务
-  ├─ 本地服务 :2537（默认）
-  ├─ 远程服务1 :3000（可选）
-  └─ 远程服务2 :3001（可选）
+```mermaid
+flowchart TB
+    A[互联网用户] --> B[反向代理服务器]
+    B --> C[域名路由器]
+    C --> D[SNI证书选择器]
+    D --> E[路径重写器]
+    E --> F[负载均衡器]
+    F --> G[健康检查器]
+    G --> H[后端服务]
+    H --> I[本地服务 :2537]
+    H --> J[远程服务1 :3000]
+    H --> K[远程服务2 :3001]
+    
+    style A fill:#E6F3FF
+    style B fill:#FFE6CC
+    style H fill:#90EE90
 ```
 
-### 反向代理工作流程
-
-```
-1. 用户请求到达反向代理（:80/:443）
-2. 解析请求的Host头，确定目标域名
-3. 查找域名配置，选择对应的SSL证书（HTTPS）
-4. 应用路径重写规则（如果配置）
-5. 转发请求到目标服务（本地:2537或外部服务）
-6. 返回响应给用户
-```
+**说明**：请求经过域名路由、SSL证书选择、路径重写、负载均衡和健康检查后，转发到后端服务。
 
 ### 反向代理特性
 
@@ -438,17 +431,6 @@ proxy:
           key: "/path/to/xrkk.cc.key"
           cert: "/path/to/xrkk.cc.cert"
       target: "http://localhost:2537"
-    
-    - domain: "api.example.com"
-      ssl:
-        enabled: true
-        certificate:
-          key: "/path/to/api.example.com.key"
-          cert: "/path/to/api.example.com.cert"
-      target: "http://localhost:3000"
-      rewritePath:
-        from: "/api"
-        to: "/"
 ```
 
 #### 2. SNI（Server Name Indication）
@@ -461,20 +443,23 @@ proxy:
 
 ```yaml
 rewritePath:
-  from: "/old-path"
-  to: "/new-path"
+  from: "/api"
+  to: "/"
 ```
 
-**示例**：
-- 请求：`https://api.example.com/api/users`
-- 重写后：`http://localhost:3000/users`
+**示例**：`https://api.example.com/api/users` → `http://localhost:3000/users`
 
-#### 4. WebSocket 代理
+#### 4. 负载均衡（新增）
 
-```yaml
-# 默认启用WebSocket代理
-ws: true  # 或 false 禁用
-```
+支持轮询、加权、最少连接三种算法，详见 [HTTP业务层文档](http-business-layer.md#反向代理增强)
+
+#### 5. 健康检查（新增）
+
+自动检测上游服务器健康状态，实现故障转移，详见 [HTTP业务层文档](http-business-layer.md#反向代理增强)
+
+#### 6. WebSocket 代理
+
+默认启用WebSocket代理，支持协议升级
 
 ---
 
@@ -947,7 +932,11 @@ XRK-AGT方案：
 - 多域名支持（SNI）
 - 路径重写
 - WebSocket代理
+- 负载均衡（轮询/加权/最少连接）
+- 健康检查和故障转移
 - 无需额外Nginx配置
+
+**详细文档**：参见 [HTTP业务层文档](http-business-layer.md)
 
 ### 4. 开箱即用的Web控制台
 
@@ -1060,7 +1049,7 @@ A: 检查：
 
 ### Q: 如何实现负载均衡？
 
-A: 使用反向代理的 `target` 配置，可以指向多个后端服务（需要额外的负载均衡器）。
+A: 使用反向代理的 `target` 配置，支持数组形式配置多个后端服务，系统内置负载均衡算法。详见 [HTTP业务层文档](http-business-layer.md#反向代理增强)。
 
 ---
 
@@ -1070,11 +1059,15 @@ XRK-AGT 的 Server 层提供了：
 
 ✅ **统一的服务器架构** - 一个入口管理所有服务  
 ✅ **灵活的端口管理** - 自动检测和冲突处理  
-✅ **强大的反向代理** - 多域名、SNI、路径重写  
+✅ **强大的反向代理** - 多域名、SNI、路径重写、负载均衡、健康检查  
 ✅ **完善的WebSocket支持** - 协议升级、路径路由  
 ✅ **开箱即用的静态服务** - 零配置Web控制台  
 ✅ **完善的安全中间件** - 安全头、CORS、速率限制  
+✅ **HTTP业务层功能** - 重定向、CDN支持、反向代理增强  
 ✅ **快速搭建能力** - 5-15分钟搭建各种服务  
+
+**相关文档**：
+- [HTTP业务层文档](http-business-layer.md) - 重定向、CDN、负载均衡详细说明
 
 这使得 XRK-AGT 能够快速搭建各种通讯协议的客户端或服务端，是系统架构的核心优势之一。
 

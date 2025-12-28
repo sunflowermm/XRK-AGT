@@ -6,16 +6,15 @@ import express from "express";
 import http from "node:http";
 import https from "node:https";
 import tls from "node:tls";
+import dgram from 'node:dgram';
 import { WebSocketServer } from "ws";
 import compression from 'compression';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import os from 'node:os';
-import dgram from 'node:dgram';
 import chalk from 'chalk';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import zlib from 'node:zlib';
 
 import PluginsLoader from "#infrastructure/plugins/loader.js";
 import ListenerLoader from "#infrastructure/listener/loader.js";
@@ -26,7 +25,7 @@ import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
-import { InputValidator } from '#utils/input-validator.js';
+import HTTPBusinessLayer from '#utils/http-business.js';
 
 /**
  * Bot主类
@@ -117,6 +116,8 @@ export default class Bot extends EventEmitter {
     this.domainConfigs = new Map();
     this.sslContexts = new Map();
     
+    this.httpBusiness = new HTTPBusinessLayer(cfg.server);
+    
     this.ApiLoader = ApiLoader;
     this._initHttpServer();
     this._setupSignalHandlers();
@@ -135,7 +136,8 @@ export default class Bot extends EventEmitter {
   makeError(message, type = 'Error', details = {}) {
     let error;
 
-    if (message instanceof Error) {
+    // 使用Node.js 24.12 Error.isError()进行可靠的错误类型判断
+    if (Error.isError ? Error.isError(message) : message instanceof Error) {
       error = message;
       if (type === 'Error' && error.type) {
         type = error.type;
@@ -245,12 +247,19 @@ export default class Bot extends EventEmitter {
         }
       }
       
-      // 如果配置了自定义目标，使用自定义代理
       if (domainConfig.target) {
-        let middleware = this.proxyMiddlewares.get(domainConfig.domain);
+        const upstream = this.httpBusiness.selectProxyUpstream(
+          hostname,
+          domainConfig.loadBalance || 'round-robin'
+        );
+        
+        const targetUrl = upstream?.url || domainConfig.target;
+        
+        let middleware = this.proxyMiddlewares.get(`${domainConfig.domain}-${targetUrl}`);
         if (!middleware) {
-          middleware = this._createProxyMiddleware(domainConfig);
-          this.proxyMiddlewares.set(domainConfig.domain, middleware);
+          const configWithUpstream = { ...domainConfig, target: targetUrl };
+          middleware = this._createProxyMiddleware(configWithUpstream);
+          this.proxyMiddlewares.set(`${domainConfig.domain}-${targetUrl}`, middleware);
         }
         return middleware(req, res, next);
       }
@@ -270,6 +279,9 @@ export default class Bot extends EventEmitter {
             true
           );
           BotUtil.makeLog('error', `代理错误 [${hostname}]: ${err.message}`, '代理');
+          
+          this.httpBusiness.markProxyFailure(hostname, `http://127.0.0.1:${targetPort}`);
+          
           if (!res.headersSent) {
             res.status(502).json({
               error: '网关错误',
@@ -414,9 +426,14 @@ export default class Bot extends EventEmitter {
         }
       },
       
-      onError: (err, req, res) => {
-        BotUtil.makeLog('error', `代理错误 [${domainConfig.domain}]: ${err.message}`, '代理');
-        if (!res.headersSent) {
+        onError: (err, req, res) => {
+          BotUtil.makeLog('error', `代理错误 [${domainConfig.domain}]: ${err.message}`, '代理');
+          
+          if (domainConfig.target) {
+            this.httpBusiness.markProxyFailure(domainConfig.domain, domainConfig.target);
+          }
+          
+          if (!res.headersSent) {
           res.status(502).json({
             error: '网关错误',
             message: '代理服务器错误',
@@ -499,7 +516,7 @@ export default class Bot extends EventEmitter {
     
     // 2. 压缩中间件（优先处理，减少传输，支持brotli）
     if (cfg.server.compression.enabled !== false) {
-      // 使用标准compression中间件，Node.js 18+原生支持brotli（自动选择）
+      // 使用标准compression中间件，Node.js 24+原生支持brotli（自动选择）
       this.express.use(compression({
         filter: (req, res) => {
           // 跳过压缩的情况
@@ -517,7 +534,7 @@ export default class Bot extends EventEmitter {
         },
         level: cfg.server.compression.level || 6,
         threshold: cfg.server.compression.threshold || 1024
-        // Node.js 18+ 的compression中间件会自动检测客户端支持的编码
+        // Node.js 24+ 的compression中间件会自动检测客户端支持的编码
         // 如果客户端支持brotli，会自动使用brotli（更好的压缩比）
       }));
     }
@@ -549,7 +566,14 @@ export default class Bot extends EventEmitter {
     // 7. 请求体解析（POST/PUT等需要）
     this._setupBodyParsers();
     
-    // ========== 第二阶段：精确路由匹配（优先级最高） ==========
+    this.express.use((req, res, next) => {
+      if (this.httpBusiness.handleRedirect(req, res)) {
+        return;
+      }
+      next();
+    });
+    
+    // ========== 第三阶段：精确路由匹配（优先级最高） ==========
     // 系统路由（精确匹配，无需认证）
     this.express.get('/status', this._statusHandler.bind(this));
     this.express.get('/health', this._healthHandler.bind(this));
@@ -557,15 +581,15 @@ export default class Bot extends EventEmitter {
     this.express.get('/robots.txt', this._handleRobotsTxt.bind(this));
     this.express.get('/favicon.ico', this._handleFavicon.bind(this));
     
-    // ========== 第三阶段：前缀路由匹配 ==========
+    // ========== 第四阶段：前缀路由匹配 ==========
     // 文件服务路由（/File前缀）
     this.express.use('/File', this._fileHandler.bind(this));
     
-    // ========== 第四阶段：认证中间件（API和受保护资源） ==========
+    // ========== 第五阶段：认证中间件（API和受保护资源） ==========
     // 认证中间件（对需要认证的路径生效）
     this.express.use(this._authMiddleware.bind(this));
     
-    // ========== 第五阶段：UI Cookie设置（同源前端） ==========
+    // ========== 第六阶段：UI Cookie设置（同源前端） ==========
     this.express.use((req, res, next) => {
       if (req.path.startsWith('/xrk') && !res.headersSent) {
         try {
@@ -582,11 +606,11 @@ export default class Bot extends EventEmitter {
       next();
     });
 
-    // ========== 第六阶段：数据目录静态服务（media/uploads） ==========
+    // ========== 第七阶段：数据目录静态服务（media/uploads） ==========
     // 将 /media 和 /uploads 映射到 data 目录，而不是 www 目录
     this._setupDataStaticServing();
     
-    // ========== 第七阶段：静态文件服务（最后匹配） ==========
+    // ========== 第八阶段：静态文件服务（最后匹配） ==========
     // 注意：静态文件服务应该在API路由之后，避免拦截API请求
     // API路由在ApiLoader.register中注册，会通过优先级确保在静态文件服务之前
     // 静态文件服务已经添加了 /api/ 路径跳过逻辑，确保不会拦截API请求
@@ -848,12 +872,10 @@ export default class Bot extends EventEmitter {
     next();
   }
 
-  /**
-   * 设置静态文件响应头
-   * 确保在响应发送前设置头部，优化缓存策略
-   */
   _setStaticHeaders(res, filePath) {
     if (this._checkHeadersSent(res)) return;
+    
+    this.httpBusiness.handleCDN({ headers: {} }, res, filePath);
     
     const ext = path.extname(filePath).toLowerCase();
     const mimeTypes = {
@@ -1204,29 +1226,47 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       return next();
     }
     
-    // ========== 白名单匹配（nginx location风格） ==========
+    // ========== 白名单匹配（使用 Node.js 24 全局 URLPattern API） ==========
     let isWhitelisted = false;
     
     for (const whitelistPath of whitelist) {
-      // 精确匹配（最高优先级）
-      if (whitelistPath === req.path) {
-        isWhitelisted = true;
-        break;
-      }
-      
-      // 前缀匹配（通配符 *）
-      if (whitelistPath.endsWith('*')) {
-        const prefix = whitelistPath.slice(0, -1);
-        if (req.path.startsWith(prefix)) {
+      try {
+        // 精确匹配（最高优先级）
+        if (whitelistPath === req.path) {
           isWhitelisted = true;
           break;
         }
-      }
-      
-      // 目录匹配（以/结尾的路径）
-      if (whitelistPath.endsWith('/') && req.path.startsWith(whitelistPath)) {
-        isWhitelisted = true;
-        break;
+        
+        // 使用 URLPattern 进行模式匹配（Node.js 24+ 全局可用）
+        let pattern;
+        if (whitelistPath.endsWith('*')) {
+          // 前缀匹配：将 * 转换为 URLPattern 语法
+          const prefix = whitelistPath.slice(0, -1);
+          pattern = new URLPattern({ pathname: `${prefix}*` });
+        } else if (whitelistPath.endsWith('/')) {
+          // 目录匹配
+          pattern = new URLPattern({ pathname: `${whitelistPath}*` });
+        } else {
+          // 精确匹配
+          pattern = new URLPattern({ pathname: whitelistPath });
+        }
+        
+        if (pattern.test({ pathname: req.path })) {
+          isWhitelisted = true;
+          break;
+        }
+      } catch {
+        // 降级到传统匹配方式（兼容性）
+        if (whitelistPath.endsWith('*')) {
+          const prefix = whitelistPath.slice(0, -1);
+          if (req.path.startsWith(prefix)) {
+            isWhitelisted = true;
+            break;
+          }
+        } else if (whitelistPath.endsWith('/') && req.path.startsWith(whitelistPath)) {
+          isWhitelisted = true;
+          break;
+        }
       }
     }
     
@@ -1629,14 +1669,27 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     const authConfig = cfg.server.auth || {};
     const whitelist = authConfig.whitelist || [];
     
-    // 检查WebSocket路径是否在白名单中
+    // 检查WebSocket路径是否在白名单中（使用 Node.js 24 URLPattern API）
     const path = req.url.split("?")[0]; // 去除查询参数
     const isWhitelisted = whitelist.some(whitelistPath => {
       if (whitelistPath === path) return true;
-      if (whitelistPath.endsWith('*')) {
-        return path.startsWith(whitelistPath.slice(0, -1));
+      try {
+        // 使用 URLPattern 进行模式匹配（Node.js 24+ 全局可用）
+        let pattern;
+        if (whitelistPath.endsWith('*')) {
+          const prefix = whitelistPath.slice(0, -1);
+          pattern = new URLPattern({ pathname: `${prefix}*` });
+        } else {
+          pattern = new URLPattern({ pathname: whitelistPath });
+        }
+        return pattern.test({ pathname: path });
+      } catch {
+        // 降级到传统匹配方式（兼容性）
+        if (whitelistPath.endsWith('*')) {
+          return path.startsWith(whitelistPath.slice(0, -1));
+        }
+        return false;
       }
-      return false;
     });
     
     // 如果不在白名单且不是本地连接，则需要认证
@@ -1680,9 +1733,11 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         conn.lastPing = Date.now();
       });
       
-      // 错误处理（增强）
+      // 错误处理（使用 Node.js 24 Error.isError() 优化）
       conn.on("error", err => {
-        BotUtil.makeLog("error", `WebSocket错误 [${connectionId}]: ${err.message}`, '服务器');
+        // 使用 Error.isError() 进行可靠的错误类型判断（Node.js 24+）
+        const errorMsg = Error.isError(err) ? err.message : String(err);
+        BotUtil.makeLog("error", `WebSocket错误 [${connectionId}]: ${errorMsg}`, '服务器');
         this._wsConnections.delete(connectionId);
       });
       
@@ -1692,7 +1747,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         this._wsConnections.delete(connectionId);
       });
       
-      // 消息处理（增强）
+      // 消息处理（增强，使用 Node.js 24 Error.isError()）
       conn.on("message", (msg, isBinary) => {
         try {
           conn.lastPing = Date.now(); // 更新活跃时间
@@ -1700,7 +1755,9 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
             `[二进制消息，长度：${msg.length}]` : BotUtil.String(msg);
           BotUtil.makeLog("trace", `WS消息 [${connectionId}]: ${logMsg}`, '服务器');
         } catch (err) {
-          BotUtil.makeLog("error", `WebSocket消息处理错误 [${connectionId}]: ${err.message}`, '服务器');
+          // 使用 Error.isError() 进行可靠的错误类型判断（Node.js 24+）
+          const errorMsg = Error.isError(err) ? err.message : String(err);
+          BotUtil.makeLog("error", `WebSocket消息处理错误 [${connectionId}]: ${errorMsg}`, '服务器');
         }
       });
       
@@ -1721,7 +1778,9 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
           
           return conn.send(msg, options);
         } catch (err) {
-          BotUtil.makeLog("error", `WebSocket发送错误 [${connectionId}]: ${err.message}`, '服务器');
+          // 使用 Error.isError() 进行可靠的错误类型判断（Node.js 24+）
+          const errorMsg = Error.isError(err) ? err.message : String(err);
+          BotUtil.makeLog("error", `WebSocket发送错误 [${connectionId}]: ${errorMsg}`, '服务器');
           this._wsConnections.delete(connectionId);
           return false;
         }
@@ -1736,7 +1795,9 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
           handler(conn, req, socket, head);
         }
       } catch (err) {
-        BotUtil.makeLog("error", `WebSocket处理器错误 [${connectionId}]: ${err.message}`, '服务器');
+        // 使用 Error.isError() 进行可靠的错误类型判断（Node.js 24+）
+        const errorMsg = Error.isError(err) ? err.message : String(err);
+        BotUtil.makeLog("error", `WebSocket处理器错误 [${connectionId}]: ${errorMsg}`, '服务器');
       }
     });
   }

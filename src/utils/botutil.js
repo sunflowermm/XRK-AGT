@@ -1,8 +1,6 @@
 import fs from "node:fs/promises";
-import * as fsSync from "fs";
 import path from "node:path";
 import crypto from 'node:crypto';
-import { exec as execCallback, execFile } from "node:child_process";
 import { ulid } from "ulid";
 import { fileTypeFromBuffer } from "file-type";
 import md5 from "md5";

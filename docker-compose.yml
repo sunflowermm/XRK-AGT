@@ -7,15 +7,12 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - DISABLE_CONSOLE=true
-      - USE_FILE_LOG=true
-      - DEBUG=false
       - NODE_OPTIONS=--no-warnings --no-deprecation
     ports:
-      - "2537:2537"  # HTTP 默认端口
-      - "2538:2538"  # HTTPS 默认端口
-      - "80:80"      # 反向代理 HTTP 端口（如启用）
-      - "443:443"    # 反向代理 HTTPS 端口（如启用）
+      - "2537:2537"
+      - "2538:2538"
+      - "80:80"
+      - "443:443"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -34,7 +31,6 @@ services:
           cpus: '0.5'
           memory: 512M
 
-  # Redis 服务（可选，如不需要可注释）
   redis:
     image: redis:7-alpine
     container_name: xrk-redis

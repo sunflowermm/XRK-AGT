@@ -322,7 +322,7 @@ graph TD
 ### 基础运行环境
 
 - Windows / Linux + Chrome / Chromium / Edge（用于渲染功能）
-- Node.js ≥ **18.14.0**
+- Node.js ≥ **24.12.0**（LTS 版本，推荐）
 - Redis ≥ **5.0.0**
 - MongoDB ≥ **4.0.0**（可选，用于持久化存储）
 
@@ -421,6 +421,11 @@ node app   # 或 node start.js
 
 ### 性能优化
 
+- **Node.js 24.12.0 LTS 优化**：
+  - V8 引擎 13.6：提升 JavaScript 执行性能，支持 Float16Array、RegExp.escape、Error.isError 等新特性
+  - AsyncLocalStorage 优化：默认使用 AsyncContextFrame，提升异步上下文追踪性能
+  - HTTP 客户端升级至 Undici 7：提升网络请求性能和可靠性
+  - 全局 URLPattern API：简化路由匹配，无需显式导入
 - 并行依赖检查：使用 `Promise.all` 批量检查依赖，提升启动速度
 - 并行插件依赖安装：同时处理多个插件的依赖检查与安装
 - 批量日志写入：优化日志队列刷新机制，使用批量写入和异步处理

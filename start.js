@@ -130,7 +130,9 @@ class DependencyChecker extends BaseManager {
   }
 
   async checkBinary(cmd, args, label, optional = false) {
-    const result = spawnSync(cmd, args, { encoding: 'utf8', shell: true });
+    // 使用 spawnSync 配合参数数组，避免 DEP0190 警告
+    // 在 Windows 上会自动处理 .cmd/.bat 文件
+    const result = spawnSync(cmd, args, { encoding: 'utf8', shell: false });
     const ok = result.status === 0;
     if (!ok) {
       const level = optional ? 'warning' : 'error';
@@ -172,11 +174,13 @@ class PM2Manager extends BaseManager {
     
     await this.logger.log(`执行PM2命令: ${command} ${args.join(' ')}`);
     
+    // 使用参数数组传递，避免 DEP0190 警告
+    // Windows 上已通过 cmd /c 处理，无需额外启用 shell
     const result = spawnSync(cmdCommand, cmdArgs, {
       stdio: 'inherit',
       windowsHide: true,
       detached: false,
-      shell: process.platform === 'win32'
+      shell: false
     });
     
     const success = result.status === 0;
@@ -196,19 +200,21 @@ class PM2Manager extends BaseManager {
 
   async tryAlternativeStartMethod(args) {
     try {
+      // 使用参数数组传递，避免 DEP0190 警告
       const npmWhich = spawnSync('npm', ['bin', '-g'], {
         encoding: 'utf8',
-        shell: true
+        shell: false
       });
       
       if (npmWhich.stdout) {
         const globalPath = npmWhich.stdout.trim();
         const absolutePm2Path = path.join(globalPath, 'pm2.cmd');
         
+        // 使用参数数组传递，避免 DEP0190 警告
         const retryResult = spawnSync(absolutePm2Path, ['start', ...args], {
           stdio: 'inherit',
           windowsHide: true,
-          shell: true
+          shell: false
         });
         
         if (retryResult.status === 0) {

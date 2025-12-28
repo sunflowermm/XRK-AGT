@@ -29,6 +29,12 @@ proxy:
   # HTTPS监听端口（作为反向代理时建议使用443）
   httpsPort: 443
   
+  # 健康检查配置（用于负载均衡和故障转移）
+  healthCheck:
+    enabled: false      # 是否启用健康检查
+    interval: 30000     # 检查间隔（毫秒）
+    maxFailures: 3      # 最大失败次数（超过后标记为不健康）
+  
   # 域名配置列表
   # 每个域名可以有不同的配置和处理方式
   # 注意：
@@ -277,6 +283,47 @@ logging:
     - "/health"
     - "/favicon.ico"
     - "/robots.txt"
+
+# ----------------------------------------
+#            HTTP重定向配置
+# ----------------------------------------
+redirects:
+  # 重定向规则列表
+  # 支持301(永久)、302(临时)、307(临时保持方法)、308(永久保持方法)
+  # 示例：
+  # - from: "/old-path"
+  #   to: "/new-path"
+  #   status: 301
+  #   preserveQuery: true  # 是否保留查询参数
+  # - from: "/blog/*"
+  #   to: "/articles/*"
+  #   status: 301
+  # - from: "/old-page"
+  #   to: "https://example.com/new-page"  # 外部重定向
+  #   status: 302
+  #   condition: "req.headers['user-agent'].includes('Mobile')"  # 可选条件
+
+# ----------------------------------------
+#            CDN配置
+# ----------------------------------------
+cdn:
+  # 是否启用CDN支持
+  enabled: false
+  
+  # CDN域名（如果启用，静态资源将使用此域名）
+  # domain: "cdn.example.com"
+  
+  # 静态资源前缀（CDN只应用于这些路径的资源）
+  staticPrefix: "/static"
+  
+  # 是否使用HTTPS CDN
+  https: true
+  
+  # CDN缓存控制配置（秒）
+  cacheControl:
+    static: 31536000    # CSS/JS/字体文件：1年
+    images: 604800      # 图片文件：7天
+    default: 3600       # 其他文件：1小时
 
 # ----------------------------------------
 #            其他配置

@@ -27,8 +27,6 @@ import cfg from '../../src/infrastructure/config/config.js';
 import paths from '../../src/utils/paths.js';
 import ASRFactory from '../../src/factory/asr/ASRFactory.js';
 import TTSFactory from '../../src/factory/tts/TTSFactory.js';
-import { errorHandler, ErrorCodes } from '../../src/utils/error-handler.js';
-import { InputValidator } from '../../src/utils/input-validator.js';
 import { HttpResponse } from '../../src/utils/http-utils.js';
 
 // ==================== 导入工具函数 ====================
