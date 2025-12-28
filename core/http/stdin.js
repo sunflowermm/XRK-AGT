@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
 import paths from '../../src/utils/paths.js';
+import { HttpResponse } from '../../src/utils/http-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,144 +19,95 @@ export default {
     {
       method: 'GET',
       path: '/api/stdin/status',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         const stdinHandler = global.stdinHandler;
         
         if (!stdinHandler) {
-          return res.status(503).json({
-            success: false,
-            code: 503,
-            message: 'Stdin handler not initialized'
-          });
+          return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.status');
         }
 
         const tempDir = path.join(paths.data, "stdin");
         const mediaDir = path.join(paths.data, "media");
         
-        res.json({
-          success: true,
-          code: 200,
-          data: {
-            bot_id: 'stdin',
-            status: 'online',
-            uptime: process.uptime(),
-            temp_files: fs.existsSync(tempDir) ? fs.readdirSync(tempDir).length : 0,
-            media_files: fs.existsSync(mediaDir) ? fs.readdirSync(mediaDir).length : 0,
-            base_url: Bot.getServerUrl ? Bot.getServerUrl() : `http://localhost:${Bot.httpPort || 3000}`,
-            timestamp: Date.now()
-          }
+        HttpResponse.success(res, {
+          bot_id: 'stdin',
+          status: 'online',
+          uptime: process.uptime(),
+          temp_files: fs.existsSync(tempDir) ? fs.readdirSync(tempDir).length : 0,
+          media_files: fs.existsSync(mediaDir) ? fs.readdirSync(mediaDir).length : 0,
+          base_url: Bot.getServerUrl ? Bot.getServerUrl() : `http://localhost:${Bot.httpPort || 3000}`,
+          timestamp: Date.now()
         });
-      }
+      }, 'stdin.status')
     },
 
     {
       method: 'POST',
       path: '/api/stdin/command',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ 
-            success: false, 
-            code: 403,
-            message: 'Unauthorized' 
-          });
+          return HttpResponse.forbidden(res, 'Unauthorized');
         }
 
         const stdinHandler = global.stdinHandler;
         
         if (!stdinHandler) {
-          return res.status(503).json({
-            success: false,
-            code: 503,
-            message: 'Stdin handler not initialized'
-          });
+          return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.command');
         }
 
-        try {
-          const { command, user_info = {} } = req.body;
-          const wantJson = String(req.body?.json ?? req.query?.json ?? '').toLowerCase() === 'true';
-          const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
-          
-          if (!command) {
-            return res.status(400).json({
-              success: false,
-              code: 400,
-              message: 'Command is required'
-            });
-          }
-
-          user_info.tasker = 'api';
-          
-          const result = wantJson && typeof Bot.callStdin === 'function'
-            ? await Bot.callStdin(command, { user_info, timeout })
-            : await stdinHandler.processCommand(command, user_info);
-          
-          res.json(result);
-        } catch (error) {
-          res.status(500).json({
-            success: false,
-            code: 500,
-            error: error.message,
-            timestamp: Date.now()
-          });
+        const { command, user_info = {} } = req.body;
+        const wantJson = String(req.body?.json ?? req.query?.json ?? '').toLowerCase() === 'true';
+        const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
+        
+        if (!command) {
+          return HttpResponse.validationError(res, 'Command is required');
         }
-      }
+
+        user_info.tasker = 'api';
+        
+        const result = wantJson && typeof Bot.callStdin === 'function'
+          ? await Bot.callStdin(command, { user_info, timeout })
+          : await stdinHandler.processCommand(command, user_info);
+        
+        res.json(result);
+      }, 'stdin.command')
     },
 
     {
       method: 'POST',
       path: '/api/stdin/event',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ 
-            success: false, 
-            code: 403,
-            message: 'Unauthorized' 
-          });
+          return HttpResponse.forbidden(res, 'Unauthorized');
         }
 
         const stdinHandler = global.stdinHandler;
         
         if (!stdinHandler) {
-          return res.status(503).json({
-            success: false,
-            code: 503,
-            message: 'Stdin handler not initialized'
-          });
+          return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.event');
         }
 
-        try {
-          const { event_type = 'message', content, user_info = {} } = req.body;
-          const wantJson = String(req.body?.json ?? req.query?.json ?? '').toLowerCase() === 'true';
-          const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
-          
-          user_info.tasker = 'api';
-          
-          const event = stdinHandler.createEvent(content, {
-            ...user_info,
-            post_type: event_type
-          });
+        const { event_type = 'message', content, user_info = {} } = req.body;
+        const wantJson = String(req.body?.json ?? req.query?.json ?? '').toLowerCase() === 'true';
+        const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
+        
+        user_info.tasker = 'api';
+        
+        const event = stdinHandler.createEvent(content, {
+          ...user_info,
+          post_type: event_type
+        });
 
-          const output = wantJson
-            ? await Bot.em(event_type, event, true, { timeout })
-            : (Bot.em(event_type, event), null);
+        const output = wantJson
+          ? await Bot.em(event_type, event, true, { timeout })
+          : (Bot.em(event_type, event), null);
 
-          res.json({
-            success: true,
-            code: 200,
-            message: 'Event triggered',
-            event_id: event.message_id,
-            output: output || undefined,
-            timestamp: Date.now()
-          });
-        } catch (error) {
-          res.status(500).json({
-            success: false,
-            code: 500,
-            error: error.message,
-            timestamp: Date.now()
-          });
-        }
-      }
+        HttpResponse.success(res, {
+          event_id: event.message_id,
+          output: output || undefined,
+          timestamp: Date.now()
+        }, 'Event triggered');
+      }, 'stdin.event')
     }
   ],
 

@@ -611,6 +611,21 @@ export default class BotUtil {
    * @param {boolean} [trace=false] - 包含堆栈跟踪
    * @returns {string} 格式化的日志消息
    */
+  /**
+   * 标准化日志记录
+   * 
+   * 日志级别说明：
+   * - trace: 详细的执行跟踪，仅用于深度调试
+   * - debug: 调试信息，用于开发时排查问题（内部状态、变量值、执行流程）
+   * - info: 一般信息，用户可见的重要操作和状态（启动、完成、关键步骤）
+   * - warn: 警告信息，可能的问题但不影响运行
+   * - error: 错误信息，需要关注的问题
+   * - fatal: 致命错误，可能导致系统崩溃
+   * 
+   * debug vs info 区别：
+   * - debug: 技术细节、内部实现、开发调试信息（如：函数调用、变量值、解析过程）
+   * - info: 业务逻辑、用户操作、系统状态（如：工作流启动、任务完成、API调用）
+   */
   static makeLog(level = "info", msg, id, trace = false) {
     const validLevels = ["trace", "debug", "info", "warn", "error", "fatal", "mark", "success", "tip"];
     level = validLevels.includes(level) ? level : "info";
@@ -631,7 +646,7 @@ export default class BotUtil {
     const currentPriority = levelPriorities[level] ?? 2;
     const configPriority = levelPriorities[configLogLevel] ?? 2;
 
-    // 如果日志级别低于配置级别，直接返回
+    // 如果日志级别低于配置级别，直接返回（不输出）
     if (currentPriority < configPriority) {
       return "";
     }

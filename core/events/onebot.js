@@ -1,4 +1,6 @@
 import EventListenerBase from '#infrastructure/listener/base.js'
+import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
+import { EventNormalizer } from '#utils/event-normalizer.js'
 
 export default class OneBotEvent extends EventListenerBase {
   constructor() {
@@ -13,7 +15,7 @@ export default class OneBotEvent extends EventListenerBase {
   }
 
   /**
-   * 标准化事件基础字段
+   * 标准化事件基础字段（使用统一标准化器）
    * @param {Object} e - 事件对象
    * @param {string} eventType - 事件类型
    * @returns {boolean} 是否成功标准化
@@ -22,6 +24,7 @@ export default class OneBotEvent extends EventListenerBase {
     // 确保 bot 对象存在
     e.bot = e.bot || (e.self_id ? Bot[e.self_id] : null)
     if (!e.bot) {
+      // warn: Bot对象不存在需要关注
       Bot.makeLog("warn", `Bot对象不存在，忽略事件：${e.self_id}`, e.self_id)
       return false
     }
@@ -29,6 +32,7 @@ export default class OneBotEvent extends EventListenerBase {
     this.ensureEventId(e)
     
     if (!this.markProcessed(e)) {
+      // debug: 事件去重是技术细节
       Bot.makeLog("debug", `事件已处理，跳过：${e.event_id}`, e.self_id)
       return false
     }
@@ -36,16 +40,16 @@ export default class OneBotEvent extends EventListenerBase {
     // 设置 tasker 标识（原适配器）
     this.markAdapter(e, { isOneBot: true })
     
-    // 从事件类型推断 post_type
-    if (!e.post_type) {
-      const parts = eventType.split('.')
-      if (parts.length >= 2) {
-        e.post_type = parts[1]
-      }
-    }
+    // 使用统一标准化器
+    EventNormalizer.normalize(e, {
+      defaultPostType: 'message',
+      defaultMessageType: e.group_id ? 'group' : 'private',
+      defaultUserId: e.user_id,
+      defaultSubType: e.group_id ? 'normal' : 'friend'
+    })
     
-    // 确保 time 字段存在
-    e.time = e.time || Math.floor(Date.now() / 1000)
+    // OneBot特有标准化
+    EventNormalizer.normalizeOneBot(e, eventType)
     
     return true
   }
@@ -82,10 +86,17 @@ export default class OneBotEvent extends EventListenerBase {
             return await tasker.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
           }
         }
+        // warn: 发送方法缺失需要关注
         Bot.makeLog("warn", `无法发送消息：找不到合适的发送方法`, e.self_id)
         return false
       } catch (error) {
-        Bot.makeLog("error", `回复消息失败: ${error.message}`, e.self_id)
+        errorHandler.handle(
+          error,
+          { context: 'setupReplyMethod', selfId: e.self_id, code: ErrorCodes.SYSTEM_ERROR },
+          true
+        )
+        // debug: 发送失败是技术细节
+        Bot.makeLog("debug", `回复消息失败: ${error.message}`, e.self_id)
         return false
       }
     }
@@ -116,25 +127,24 @@ export default class OneBotEvent extends EventListenerBase {
       // 交给插件系统处理
       await this.plugins.deal(e)
     } catch (error) {
-      Bot.makeLog("error", `处理OneBot事件失败: ${error.message}`, e.self_id, error)
+      errorHandler.handle(
+        error,
+        { context: 'handleEvent', eventType, selfId: e?.self_id, code: ErrorCodes.SYSTEM_ERROR },
+        true
+      )
+      Bot.makeLog("error", `处理OneBot事件失败: ${error.message}`, e?.self_id, error)
     }
   }
 
   /**
-   * 标准化消息事件
-   * 确保所有必要的字段都被正确设置
+   * 标准化消息事件（使用统一标准化器，保留OneBot特有的CQ码处理）
    */
   normalizeMessageEvent(e) {
-    // 确保 message 是数组
-    if (!Array.isArray(e.message)) {
-      if (e.message) {
-        e.message = [{ type: 'text', text: String(e.message) }]
-      } else {
-        e.message = []
-      }
-    }
+    // 使用统一标准化器处理基础字段
+    EventNormalizer.normalizeMessage(e)
+    EventNormalizer.normalizeGroup(e)
     
-    // 确保 raw_message 存在
+    // OneBot特有的CQ码处理
     if (!e.raw_message && Array.isArray(e.message) && e.message.length > 0) {
       e.raw_message = e.message
         .map(seg => {
@@ -149,46 +159,20 @@ export default class OneBotEvent extends EventListenerBase {
           return `[${seg.type}]`
         })
         .join('')
-    }
-    
-    // 确保 raw_message 至少是空字符串
-    if (!e.raw_message) {
-      e.raw_message = ''
-    }
-    
-    // 设置 msg 字段（插件系统需要）
-    if (!e.msg) {
-      e.msg = e.raw_message
-    }
-    
-    // 确保 sender 对象存在
-    if (!e.sender) {
-      e.sender = {}
-    }
-    
-    // 确保 sender.user_id 存在
-    if (!e.sender.user_id && e.user_id) {
-      e.sender.user_id = e.user_id
-    }
-    
-    // 确保 message_type 存在
-    if (!e.message_type) {
-      e.message_type = e.group_id ? 'group' : 'private'
-    }
-    
-    // 确保 sub_type 存在
-    if (!e.sub_type) {
-      e.sub_type = e.message_type === 'group' ? 'normal' : 'friend'
-    }
-    
-    // 确保 user_id 存在
-    if (!e.user_id && e.sender && e.sender.user_id) {
-      e.user_id = e.sender.user_id
+      // 更新msg字段
+      if (!e.msg) {
+        e.msg = e.raw_message
+      }
     }
     
     // 确保 self_id 存在
     if (!e.self_id && e.bot && e.bot.uin) {
       e.self_id = e.bot.uin
+    }
+    
+    // 确保 user_id 存在
+    if (!e.user_id && e.sender && e.sender.user_id) {
+      e.user_id = e.sender.user_id
     }
   }
 

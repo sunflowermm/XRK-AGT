@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
+import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 
 const _path = process.cwd();
 const EMOTIONS_DIR = path.join(_path, 'resources/aiimages');
@@ -66,11 +67,16 @@ export default class ChatStream extends AIStream {
         ChatStream.cleanupTimer = setInterval(() => this.cleanupCache(), 300000);
       }
     } catch (error) {
+      const botError = errorHandler.handle(
+        error,
+        { context: 'ChatStream.init', code: ErrorCodes.SYSTEM_ERROR },
+        true
+      );
       BotUtil.makeLog('error', 
-        `[${this.name}] 初始化失败: ${error.message}`, 
+        `[${this.name}] 初始化失败: ${botError.message}`, 
         'ChatStream'
       );
-      throw error;
+      throw botError;
     }
   }
 
@@ -222,7 +228,13 @@ export default class ChatStream extends AIStream {
             BotUtil.makeLog('warn', '表情回应功能不可用（API不存在）', 'ChatStream');
           }
         } catch (error) {
-          BotUtil.makeLog('warn', `表情回应失败: ${error.message}`, 'ChatStream');
+          // debug: 表情回应失败是技术细节，不影响业务流程
+          errorHandler.handle(
+            error,
+            { context: 'emojiReaction', msgId, code: ErrorCodes.SYSTEM_ERROR },
+            false // 不记录日志，因为已经用 debug 记录了
+          );
+          BotUtil.makeLog('debug', `表情回应失败: ${error.message}`, 'ChatStream');
         }
       },
       enabled: true

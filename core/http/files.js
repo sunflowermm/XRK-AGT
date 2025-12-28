@@ -5,6 +5,9 @@ import { ulid } from 'ulid';
 import crypto from 'crypto';
 import paths from '../../src/utils/paths.js';
 import BotUtil from '../../src/utils/botutil.js';
+import { errorHandler, ErrorCodes } from '../../src/utils/error-handler.js';
+import { InputValidator } from '../../src/utils/input-validator.js';
+import { HttpResponse } from '../../src/utils/http-utils.js';
 
 const uploadDir = path.join(paths.data, 'uploads');
 const mediaDir = path.join(paths.data, 'media');
@@ -86,16 +89,11 @@ export default {
     {
       method: 'POST',
       path: '/api/file/upload',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ 
-            success: false, 
-            message: 'Unauthorized',
-            code: 403
-          });
+          return HttpResponse.forbidden(res, 'Unauthorized');
         }
 
-        try {
           const contentType = req.headers['content-type'] || '';
           let files = [];
           
@@ -103,19 +101,11 @@ export default {
             const result = await parseMultipartData(req);
             files = result.files;
           } else {
-            return res.status(400).json({ 
-              success: false, 
-              message: '请使用 multipart/form-data 格式上传文件',
-              code: 400
-            });
+          return HttpResponse.validationError(res, '请使用 multipart/form-data 格式上传文件');
           }
 
           if (files.length === 0) {
-            return res.status(400).json({ 
-              success: false, 
-              message: '没有文件',
-              code: 400
-            });
+          return HttpResponse.validationError(res, '没有文件');
           }
 
           const uploadedFiles = [];
@@ -127,7 +117,9 @@ export default {
             
             const isMedia = /\.(jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)$/i.test(ext);
             const targetDir = isMedia ? mediaDir : uploadDir;
-            const targetPath = path.join(targetDir, filename);
+            // 路径验证（防止路径遍历）
+            const safeFilename = InputValidator.validatePath(filename, targetDir);
+            const targetPath = path.join(targetDir, safeFilename);
             
             await fs.writeFile(targetPath, file.buffer);
             
@@ -166,9 +158,7 @@ export default {
 
           if (files.length === 1) {
             const fileInfo = uploadedFiles[0];
-            res.json({
-              success: true,
-              code: 200,
+          HttpResponse.success(res, {
               file_id: fileInfo.id,
               file_url: fileInfo.url,
               file_name: fileInfo.name,
@@ -176,9 +166,7 @@ export default {
               timestamp: Date.now()
             });
           } else {
-            res.json({
-              success: true,
-              code: 200,
+          HttpResponse.success(res, {
               files: uploadedFiles.map(f => ({
                 file_id: f.id,
                 file_url: f.url,
@@ -188,23 +176,19 @@ export default {
               timestamp: Date.now()
             });
           }
-        } catch (error) {
-          BotUtil.makeLog('error', `文件上传处理失败: ${error.message}`, 'FileAPI');
-          res.status(500).json({ 
-            success: false, 
-            message: '文件上传失败',
-            error: error.message,
-            code: 500
-          });
-        }
-      }
+      }, 'file.upload')
     },
 
     {
       method: 'GET',
       path: '/api/file/:id',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        // 输入验证
         const { id } = req.params;
+        if (!id || typeof id !== 'string' || id.length > 50) {
+          return HttpResponse.validationError(res, '无效的文件ID');
+        }
+        
         const { download } = req.query;
         const fileInfo = fileMap.get(id);
 
@@ -214,7 +198,10 @@ export default {
               const files = await fs.readdir(dir);
               const file = files.find(f => f.includes(id));
               if (file) {
-                const filePath = path.join(dir, file);
+                // 路径验证
+                const safeFile = InputValidator.validatePath(file, dir);
+                const filePath = path.join(dir, safeFile);
+                
                 if (download === 'true') {
                   return res.download(filePath, file);
                 }
@@ -224,17 +211,15 @@ export default {
               }
             }
           } catch (err) {
-            BotUtil.makeLog('error', `查找文件失败: ${err.message}`, 'FileAPI');
+            // debug: 文件查找失败是技术细节
+            BotUtil.makeLog('debug', `查找文件失败: ${err.message}`, 'FileAPI');
           }
           
-          return res.status(404).json({ 
-            success: false, 
-            message: '文件不存在',
-            code: 404
-          });
+          return HttpResponse.notFound(res, '文件不存在');
         }
 
-        try {
+        // 路径验证
+        InputValidator.validatePath(fileInfo.path, fileInfo.is_media ? mediaDir : uploadDir);
           await fs.access(fileInfo.path);
           
           if (download === 'true') {
@@ -244,60 +229,50 @@ export default {
             res.setHeader('Cache-Control', 'public, max-age=3600');
             res.sendFile(fileInfo.path);
           }
-        } catch {
-          fileMap.delete(id);
-          res.status(404).json({ 
-            success: false, 
-            message: '文件不存在',
-            code: 404
-          });
-        }
-      }
+      }, 'file.get')
     },
 
     {
       method: 'DELETE',
       path: '/api/file/:id',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ 
-            success: false, 
-            message: 'Unauthorized',
-            code: 403
-          });
+          return HttpResponse.forbidden(res, 'Unauthorized');
         }
 
+        // 输入验证
         const { id } = req.params;
+        if (!id || typeof id !== 'string' || id.length > 50) {
+          return HttpResponse.validationError(res, '无效的文件ID');
+        }
+        
         const fileInfo = fileMap.get(id);
 
         if (fileInfo) {
           try {
+            // 路径验证
+            InputValidator.validatePath(fileInfo.path, fileInfo.is_media ? mediaDir : uploadDir);
             await fs.unlink(fileInfo.path);
             fileMap.delete(id);
           } catch (err) {
+            errorHandler.handle(
+              err,
+              { context: 'file.delete', fileId: id, code: ErrorCodes.SYSTEM_ERROR }
+            );
             BotUtil.makeLog('error', `删除文件失败: ${err.message}`, 'FileAPI');
           }
         }
 
-        res.json({ 
-          success: true, 
-          message: '文件已删除',
-          code: 200,
-          timestamp: Date.now()
-        });
-      }
+        HttpResponse.success(res, null, '文件已删除');
+      }, 'file.delete')
     },
 
     {
       method: 'GET',
       path: '/api/files',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         if (!Bot.checkApiAuthorization(req)) {
-          return res.status(403).json({ 
-            success: false, 
-            message: 'Unauthorized',
-            code: 403
-          });
+          return HttpResponse.forbidden(res, 'Unauthorized');
         }
 
         const files = Array.from(fileMap.values()).map(f => ({
@@ -310,13 +285,12 @@ export default {
           upload_time: f.upload_time
         }));
 
-        res.json({ 
-          success: true, 
+        HttpResponse.success(res, {
           files,
           total: files.length,
           timestamp: Date.now()
         });
-      }
+      }, 'file.list')
     }
   ],
 

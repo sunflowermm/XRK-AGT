@@ -27,6 +27,9 @@ import cfg from '../../src/infrastructure/config/config.js';
 import paths from '../../src/utils/paths.js';
 import ASRFactory from '../../src/factory/asr/ASRFactory.js';
 import TTSFactory from '../../src/factory/tts/TTSFactory.js';
+import { errorHandler, ErrorCodes } from '../../src/utils/error-handler.js';
+import { InputValidator } from '../../src/utils/input-validator.js';
+import { HttpResponse } from '../../src/utils/http-utils.js';
 
 // ==================== 导入工具函数 ====================
 import {
@@ -598,6 +601,7 @@ class DeviceManager {
             const streamName = workflowName || 'device';
             const deviceStream = StreamLoader.getStream(streamName) || StreamLoader.getStream('device');
             if (!deviceStream) {
+                // error: 工作流未加载是业务错误
                 BotUtil.makeLog('error', `❌ [AI] 工作流未加载: ${streamName}`, deviceId);
                 await this._sendAIError(deviceId);
                 return;
@@ -609,6 +613,7 @@ class DeviceManager {
                 profile: options.profile
             });
             if (!streamConfig.enabled) {
+                // warn: 工作流已禁用需要关注
                 BotUtil.makeLog('warn', '⚠️ [AI] 工作流已禁用', deviceId);
                 await this._sendAIError(deviceId);
                 return;
@@ -624,12 +629,14 @@ class DeviceManager {
             );
 
             if (!aiResult) {
+                // warn: 未返回结果需要关注
                 BotUtil.makeLog('warn', '⚠️ [AI] 工作流执行完成，但未返回结果', deviceId);
                 await this._sendAIError(deviceId);
                 return;
             }
 
             const aiTime = Date.now() - startTime;
+            // info: AI性能和回复是重要的业务信息
             BotUtil.makeLog('info', `⚡ [AI性能] [${deviceStream.name}] 耗时: ${aiTime}ms`, deviceId);
             BotUtil.makeLog('info', `✅ [AI] 回复: ${aiResult.text || '(仅表情)'}`, deviceId);
 
@@ -1507,10 +1514,10 @@ class DeviceManager {
                                         title = replyData.title || '';
                                         description = replyData.description || '';
                                     } else {
-                                        // 数组：直接使用，标准化字符串为 text segment
-                                        segments = segmentsOrText.map(seg =>
-                                            typeof seg === 'string' ? { type: 'text', text: seg } : seg
-                                        );
+                                    // 数组：直接使用，标准化字符串为 text segment
+                                    segments = segmentsOrText.map(seg =>
+                                        typeof seg === 'string' ? { type: 'text', text: seg } : seg
+                                    );
                                     }
                                 } else if (segmentsOrText && typeof segmentsOrText === 'object') {
                                     if (segmentsOrText.segments) {
@@ -1672,23 +1679,23 @@ class DeviceManager {
                                 } else {
                                     // 普通消息：使用 segments 格式
                                     replyMsg.segments = segments;
-                                    if (title) replyMsg.title = title;
-                                    if (description) replyMsg.description = description;
-                                    
-                                    const logText = segments.map(seg => {
-                                        if (seg.type === 'text') {
-                                            return seg.text || (seg.data && seg.data.text) || '';
-                                        }
-                                        if (seg.type === 'image') {
-                                            return '[图片]';
-                                        }
-                                        return '';
-                                    }).join('');
-                                    if (logText) {
-                                        BotUtil.makeLog('info', 
-                                            `${title ? `【${title}】` : ''}${logText.substring(0, 500)}${logText.length > 500 ? '...' : ''}`, 
-                                            deviceId
-                                        );
+                                if (title) replyMsg.title = title;
+                                if (description) replyMsg.description = description;
+                                
+                                const logText = segments.map(seg => {
+                                    if (seg.type === 'text') {
+                                        return seg.text || (seg.data && seg.data.text) || '';
+                                    }
+                                    if (seg.type === 'image') {
+                                        return '[图片]';
+                                    }
+                                    return '';
+                                }).join('');
+                                if (logText) {
+                                    BotUtil.makeLog('info', 
+                                        `${title ? `【${title}】` : ''}${logText.substring(0, 500)}${logText.length > 500 ? '...' : ''}`, 
+                                        deviceId
+                                    );
                                     }
                                 }
                                 
@@ -1818,8 +1825,7 @@ export default {
         {
             method: 'POST',
             path: '/api/device/register',
-            handler: async (req, res, Bot) => {
-                try {
+            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
                     const device = await deviceManager.registerDevice(
                         {
                             ...req.body,
@@ -1827,26 +1833,22 @@ export default {
                         },
                         Bot
                     );
-                    res.json({ success: true, device_id: device.device_id });
-                } catch (e) {
-                    res.status(400).json({ success: false, message: e.message });
-                }
-            }
+                HttpResponse.success(res, { device_id: device.device_id });
+            }, 'device.register')
         },
 
         {
             method: 'POST',
             path: '/api/device/:deviceId/ai',
-            handler: async (req, res, Bot) => {
-                try {
+            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
                     const deviceId = req.params.deviceId;
                     const { text, workflow, persona, profile, llm, model, llmProfile } = req.body || {};
                     if (!text || !String(text).trim()) {
-                        return res.status(400).json({ success: false, message: '缺少文本内容' });
+                    return HttpResponse.validationError(res, '缺少文本内容');
                     }
                     const device = deviceManager.getDevice(deviceId);
                     if (!device) {
-                        return res.status(404).json({ success: false, message: '设备未找到' });
+                    return HttpResponse.notFound(res, '设备未找到');
                     }
                     const workflowName = (workflow || 'device').toString().trim() || 'device';
                     await deviceManager._processAIResponse(deviceId, String(text), {
@@ -1855,39 +1857,36 @@ export default {
                         profile: llmProfile || profile || llm || model,
                         fromASR: false
                     });
-                    return res.json({ success: true });
-                } catch (e) {
-                    return res.status(500).json({ success: false, message: e.message });
-                }
-            }
+                HttpResponse.success(res);
+            }, 'device.ai')
         },
 
         {
             method: 'GET',
             path: '/api/devices',
-            handler: async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req, res) => {
                 const list = deviceManager.getDeviceList();
-                res.json({ success: true, devices: list, count: list.length });
-            }
+                HttpResponse.success(res, { devices: list, count: list.length });
+            }, 'device.list')
         },
 
         {
             method: 'GET',
             path: '/api/device/:deviceId',
-            handler: async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req, res) => {
                 const device = deviceManager.getDevice(req.params.deviceId);
                 if (device) {
-                    res.json({ success: true, device });
+                    HttpResponse.success(res, { device });
                 } else {
-                    res.status(404).json({ success: false, message: '设备未找到' });
+                    HttpResponse.notFound(res, '设备未找到');
                 }
-            }
+            }, 'device.get')
         },
 
         {
             method: 'GET',
             path: '/api/device/:deviceId/asr/sessions',
-            handler: async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req, res) => {
                 const sessions = Array.from(asrSessions.entries())
                     .filter(([_, s]) => s.deviceId === req.params.deviceId)
                     .map(([sid, s]) => ({
@@ -1900,61 +1899,41 @@ export default {
                         elapsed: ((Date.now() - s.startTime) / 1000).toFixed(1),
                     }));
 
-                res.json({ success: true, sessions, count: sessions.length });
-            }
+                HttpResponse.success(res, { sessions, count: sessions.length });
+            }, 'device.asr.sessions')
         },
 
         {
             method: 'GET',
             path: '/api/device/:deviceId/asr/recordings',
-            handler: async (req, res) => {
-                try {
+            handler: HttpResponse.asyncHandler(async (req, res) => {
                     const recordings = await getAudioFileList(
                         deviceManager.AUDIO_SAVE_DIR,
                         req.params.deviceId
                     );
 
-                    res.json({
-                        success: true,
+                HttpResponse.success(res, {
                         recordings,
                         count: recordings.length,
                         total_size: recordings.reduce((s, r) => s + r.size, 0)
                     });
-                } catch (e) {
-                    res.status(500).json({ success: false, message: e.message });
-                }
-            }
+            }, 'device.asr.recordings')
         },
 
         {
             method: 'GET',
             path: '/api/trash/*',
-                handler: async (req, res) => {
-                    try {
+                handler: HttpResponse.asyncHandler(async (req, res) => {
                         const filePath = req.params[0];
                         if (!filePath || filePath.includes('..')) {
-                            return res.status(400).json({
-                                success: false,
-                                message: '无效的文件路径'
-                            });
+                        return HttpResponse.validationError(res, '无效的文件路径');
                         }
 
                         const fullPath = path.join(paths.trash, filePath);
-                        const normalizedPath = path.normalize(fullPath);
-                        
-                        // 安全检查：确保文件在trash目录内
-                        if (!normalizedPath.startsWith(path.normalize(paths.trash))) {
-                            return res.status(403).json({
-                                success: false,
-                                message: '访问被拒绝'
-                            });
-                        }
+                    const normalizedPath = InputValidator.validatePath(filePath, paths.trash);
 
                         if (!fs.existsSync(normalizedPath)) {
-                            return res.status(404).json({
-                                success: false,
-                                message: '文件不存在'
-                            });
+                        return HttpResponse.notFound(res, '文件不存在');
                         }
 
                         const ext = path.extname(normalizedPath).toLowerCase();
@@ -1972,22 +1951,15 @@ export default {
                         res.setHeader('Cache-Control', 'public, max-age=3600');
 
                         fs.createReadStream(normalizedPath).pipe(res);
-                    } catch (e) {
-                        res.status(500).json({ success: false, message: e.message });
-                    }
-                }
+                }, 'trash.file')
             },
             {
                 method: 'GET',
                 path: '/api/device/file/:fileId',
-                handler: async (req, res) => {
-                    try {
+                handler: HttpResponse.asyncHandler(async (req, res) => {
                         const fileId = req.params.fileId;
                         if (!fileId) {
-                            return res.status(400).json({
-                                success: false,
-                                message: '文件ID不能为空'
-                            });
+                        return HttpResponse.validationError(res, '文件ID不能为空');
                         }
 
                         // 解码文件路径
@@ -1995,18 +1967,12 @@ export default {
                         try {
                             filePath = Buffer.from(fileId, 'base64url').toString('utf8');
                         } catch (e) {
-                            return res.status(400).json({
-                                success: false,
-                                message: '无效的文件ID'
-                            });
+                        return HttpResponse.validationError(res, '无效的文件ID');
                         }
 
                         // 安全检查：确保是绝对路径且文件存在
                         if (!path.isAbsolute(filePath)) {
-                            return res.status(400).json({
-                                success: false,
-                                message: '只支持绝对路径'
-                            });
+                        return HttpResponse.validationError(res, '只支持绝对路径');
                         }
 
                         const normalizedPath = path.normalize(filePath);
@@ -2020,27 +1986,18 @@ export default {
                         
                         for (const forbidden of forbiddenPaths) {
                             if (normalizedPath.startsWith(path.normalize(forbidden))) {
-                                return res.status(403).json({
-                                    success: false,
-                                    message: '访问被拒绝'
-                                });
+                            return HttpResponse.forbidden(res, '访问被拒绝');
                             }
                         }
 
                         if (!fs.existsSync(normalizedPath)) {
-                            return res.status(404).json({
-                                success: false,
-                                message: '文件不存在'
-                            });
+                        return HttpResponse.notFound(res, '文件不存在');
                         }
 
                         // 检查是否为文件（不是目录）
                         const stats = fs.statSync(normalizedPath);
                         if (!stats.isFile()) {
-                            return res.status(400).json({
-                                success: false,
-                                message: '路径不是文件'
-                            });
+                        return HttpResponse.validationError(res, '路径不是文件');
                         }
 
                         // 设置Content-Type
@@ -2062,10 +2019,7 @@ export default {
                         res.setHeader('Content-Disposition', `inline; filename="${path.basename(normalizedPath)}"`);
 
                         fs.createReadStream(normalizedPath).pipe(res);
-                    } catch (e) {
-                        res.status(500).json({ success: false, message: e.message });
-                    }
-                }
+                }, 'device.file')
             }
         ],
 

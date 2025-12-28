@@ -25,6 +25,8 @@ import StreamLoader from "#infrastructure/aistream/loader.js";
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
+import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
+import { InputValidator } from '#utils/input-validator.js';
 
 /**
  * Bot主类
@@ -196,6 +198,11 @@ export default class Bot extends EventEmitter {
     if (typeof handler === "function") {
       return handler.call(this, err, isHttps);
     }
+    errorHandler.handle(
+      err,
+      { context: isHttps ? 'HTTPS服务器' : 'HTTP服务器', code: ErrorCodes.SYSTEM_ERROR },
+      true
+    );
     BotUtil.makeLog("error", err, isHttps ? "HTTPS服务器" : "HTTP服务器");
   }
 
@@ -233,6 +240,7 @@ export default class Bot extends EventEmitter {
         if (from && req.path.startsWith(from)) {
           const newPath = req.path.replace(from, to || '');
           req.url = newPath + (req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '');
+          // debug: 路径重写是技术细节
           BotUtil.makeLog('debug', `路径重写：${req.path} → ${newPath}`, '代理');
         }
       }
@@ -256,6 +264,11 @@ export default class Bot extends EventEmitter {
         secure: false,
         logLevel: 'warn',
         onError: (err, req, res) => {
+          errorHandler.handle(
+            err,
+            { context: 'proxy', hostname, code: ErrorCodes.NETWORK_ERROR },
+            true
+          );
           BotUtil.makeLog('error', `代理错误 [${hostname}]: ${err.message}`, '代理');
           if (!res.headersSent) {
             res.status(502).json({
@@ -1857,21 +1870,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     if (this.actualHttpsPort) {
       console.log(`    ${chalk.cyan('•')} HTTPS：${chalk.white(`https://localhost:${this.actualHttpsPort}`)}`);
     }
-    
-    const authConfig = cfg.server.auth || {};
-    if (authConfig.apiKey?.enabled !== false) {
-      console.log(chalk.yellow('\n▶ API密钥：'));
-      console.log(`    ${chalk.cyan('•')} ${chalk.white(this.apiKey)}`);
-      console.log(chalk.gray(`    使用 X-API-Key 请求头进行认证`));
-    }
-    
-    if (authConfig.whitelist?.length) {
-      console.log(chalk.yellow('\n▶ 白名单路径：'));
-      authConfig.whitelist.forEach(path => {
-        console.log(`    ${chalk.cyan('•')} ${chalk.white(path)}`);
-      });
-      console.log('\n');
-    }
+    console.log('\n');
   }
 
   /**
@@ -1923,20 +1922,6 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       }
       
       console.log(`    ${chalk.cyan('•')} ${chalk.white(displayUrl)}`);
-    }
-    
-    const authConfig = cfg.server.auth || {};
-    if (authConfig.apiKey?.enabled !== false) {
-      console.log(chalk.yellow('\n  API密钥：'));
-      console.log(`    ${chalk.cyan('•')} ${chalk.white(this.apiKey)}`);
-      console.log(chalk.gray(`    使用 X-API-Key 请求头`));
-    }
-    
-    if (authConfig.whitelist?.length) {
-      console.log(chalk.yellow('\n  白名单路径：'));
-      authConfig.whitelist.forEach(path => {
-        console.log(`    ${chalk.cyan('•')} ${chalk.white(path)}`);
-      });
     }
   }
 
@@ -2527,6 +2512,9 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       
       if (authConfig.whitelist?.length) {
         console.log(`    ${chalk.cyan('•')} 白名单路径：${chalk.white(authConfig.whitelist.length + '个')}`);
+        authConfig.whitelist.forEach(path => {
+          console.log(`      ${chalk.gray('•')} ${chalk.gray(path)}`);
+        });
       }
     }
     

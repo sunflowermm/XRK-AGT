@@ -6,6 +6,7 @@ import cfg from '../../src/infrastructure/config/config.js';
 import StreamLoader from '../../src/infrastructure/aistream/loader.js';
 import { collectBotInventory, summarizeBots } from '../../src/infrastructure/http/utils/botInventory.js';
 import BotUtil from '#utils/botutil.js';
+import { HttpResponse } from '../../src/utils/http-utils.js';
 
 const execAsync = promisify(exec);
 
@@ -682,71 +683,48 @@ export default {
     {
       method: 'GET',
       path: '/api/system/status',
-      handler: async (req, res, Bot) => {
-        try {
-          const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
-          const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
-          res.json(snapshot);
-        } catch (error) {
-          res.status(500).json({
-            success: false,
-            error: error.message
-          });
-        }
-      }
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
+        const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
+        res.json(snapshot);
+      }, 'system.status')
     },
 
     {
       method: 'GET',
       path: '/api/system/overview',
-      handler: async (req, res, Bot) => {
-        try {
-          const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
-          const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
-          res.json({
-            success: true,
-            timestamp: snapshot.timestamp,
-            system: snapshot.system,
-            panels: snapshot.panels,
-            workflows: snapshot.workflows,
-            bots: snapshot.bots,
-            processesTop5: snapshot.processesTop5,
-            taskers: snapshot.taskers,
-            network: {
-              current: snapshot.system.netRates,
-              recent: snapshot.system.netRecent,
-              history: snapshot.system.netHistory24h
-            }
-          });
-        } catch (error) {
-          res.status(500).json({
-            success: false,
-            error: error.message
-          });
-        }
-      }
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
+        const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
+        HttpResponse.success(res, {
+          timestamp: snapshot.timestamp,
+          system: snapshot.system,
+          panels: snapshot.panels,
+          workflows: snapshot.workflows,
+          bots: snapshot.bots,
+          processesTop5: snapshot.processesTop5,
+          taskers: snapshot.taskers,
+          network: {
+            current: snapshot.system.netRates,
+            recent: snapshot.system.netRecent,
+            history: snapshot.system.netHistory24h
+          }
+        });
+      }, 'system.overview')
     },
 
     {
       method: 'GET',
       path: '/api/status',
-      handler: async (req, res, Bot) => {
-        try {
-          const snapshot = await buildSystemSnapshot(Bot, { includeHistory: false });
-          res.json({
-            success: true,
-            system: snapshot.system,
-            bot: snapshot.bot,
-            bots: snapshot.bots,
-            taskers: snapshot.taskers
-          });
-        } catch (error) {
-          res.status(500).json({
-            success: false,
-            error: error.message
-          });
-        }
-      }
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const snapshot = await buildSystemSnapshot(Bot, { includeHistory: false });
+        HttpResponse.success(res, {
+          system: snapshot.system,
+          bot: snapshot.bot,
+          bots: snapshot.bots,
+          taskers: snapshot.taskers
+        });
+      }, 'status')
     },
 
     {
@@ -774,8 +752,7 @@ export default {
           return result;
         }
 
-        res.json({
-          success: true,
+        HttpResponse.success(res, {
           config: serialize(cfg)
         });
       }
@@ -784,7 +761,7 @@ export default {
     {
       method: 'GET',
       path: '/api/health',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         // 尝试获取 redis 实例（如果存在）
         let redisOk = false;
         try {
@@ -796,7 +773,7 @@ export default {
           // redis 不可用，忽略
         }
         
-        res.json({
+        HttpResponse.success(res, {
           status: 'healthy',
           timestamp: Date.now(),
           services: {
@@ -805,7 +782,7 @@ export default {
             api: 'operational'
           }
         });
-      }
+      }, 'health')
     }
   ]
 };

@@ -775,7 +775,7 @@ class SystemMonitor extends EventEmitter {
             return;
         }
 
-        logger.info('🚀 执行全系统优化...');
+        logger.info('执行系统优化...');
         this.lastOptimizeTime = now;
 
         try {
@@ -802,7 +802,7 @@ class SystemMonitor extends EventEmitter {
                 await this.optimizeProcess();
             }
 
-            logger.info('✅ 系统优化完成');
+            logger.info('系统优化完成');
         } catch (error) {
             logger.error(`系统优化失败: ${error.message}`);
         }
@@ -818,13 +818,17 @@ class SystemMonitor extends EventEmitter {
         }
 
         const beforeMem = process.memoryUsage();
-        const beforeHeapStats = v8.getHeapStatistics();
 
         // 垃圾回收
         if (global.gc) {
             global.gc();
-            logger.info('  ✓ 已执行堆内存垃圾回收');
             await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 激进模式：多次GC
+            if (this.config.optimize?.aggressive) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                global.gc();
+            }
         }
 
         // 清理内部缓存
@@ -832,22 +836,11 @@ class SystemMonitor extends EventEmitter {
         this.cpuHistory = this.cpuHistory.slice(-10);
         this.memoryHistory = this.memoryHistory.slice(-10);
 
-        // 注意：资源追踪仅用于监控，实际清理需要应用层处理
-
-        // 激进模式：多次GC
-        if (this.config.optimize?.aggressive) {
-            if (global.gc) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                global.gc();
-                logger.info('  ✓ 已执行二次垃圾回收（激进模式）');
-            }
-        }
-
         const afterMem = process.memoryUsage();
         const freed = beforeMem.heapUsed - afterMem.heapUsed;
         
         if (freed > 0) {
-            logger.info(`  ✓ 释放堆内存: ${(freed / 1024 / 1024).toFixed(2)}MB`);
+            logger.info(`  ✓ 内存优化: 释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
         }
         
         if (afterMem.heapUsed < this.leakDetection.baseline * 0.9) {
@@ -962,7 +955,7 @@ class SystemMonitor extends EventEmitter {
                 }
 
                 if (cleaned > 0) {
-                    logger.info(`  ✓ 清理日志文件: ${cleaned} 个，释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
+                    logger.info(`  ✓ 清理日志: ${cleaned} 个，释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
                 }
             } catch (e) {
                 // 日志目录不存在，忽略
@@ -984,7 +977,7 @@ class SystemMonitor extends EventEmitter {
                 try {
                     await execAsync('sync');
                     await execAsync('echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true');
-                    logger.info('  ✓ 已清理Linux系统缓存');
+                    logger.info('  ✓ 系统缓存已清理');
                 } catch (e) {
                     // 权限不足，忽略
                 }
@@ -992,7 +985,7 @@ class SystemMonitor extends EventEmitter {
                 // Windows: 清理DNS缓存
                 try {
                     await execAsync('ipconfig /flushdns');
-                    logger.info('  ✓ 已清理Windows DNS缓存');
+                    logger.info('  ✓ DNS缓存已清理');
                 } catch (e) {
                     // 忽略错误
                 }
@@ -1000,7 +993,7 @@ class SystemMonitor extends EventEmitter {
                 // macOS: 清理DNS缓存
                 try {
                     await execAsync('sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder 2>/dev/null || true');
-                    logger.info('  ✓ 已清理macOS DNS缓存');
+                    logger.info('  ✓ DNS缓存已清理');
                 } catch (e) {
                     // 权限不足，忽略
                 }
@@ -1019,7 +1012,7 @@ class SystemMonitor extends EventEmitter {
             if (this.config.network?.cleanupIdle) {
                 // 这里可以添加具体的网络连接清理逻辑
                 // 例如清理HTTP keep-alive连接等
-                logger.info('  ✓ 网络连接已优化');
+                // 仅在需要时输出日志
             }
         } catch (error) {
             logger.error(`网络优化失败: ${error.message}`);

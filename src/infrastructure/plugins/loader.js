@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
 import lodash from 'lodash'
+import os from 'os'
 import cfg from '../config/config.js'
 import plugin from './plugin.js'
 import schedule from 'node-schedule'
@@ -10,6 +11,8 @@ import moment from 'moment'
 import Handler from './handler.js'
 import Runtime from './runtime.js'
 import { segment } from '#oicq'
+import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
+import { EventDeduplicator, IntelligentCache, PluginMatcher } from '#utils/neural-algorithms.js'
 
 global.plugin = plugin
 global.segment = segment
@@ -31,8 +34,18 @@ class PluginsLoader {
     this.defaultMsgHandlers = []
     this.eventSubscribers = new Map()
     this.pluginCount = 0
-    this.eventHistory = []
+    // 使用智能缓存替换简单数组
+    this.eventHistoryCache = new IntelligentCache({ maxSize: 1000, ttl: 3600000 })
+    this.eventHistory = [] // 保留用于向后兼容
     this.MAX_EVENT_HISTORY = 1000
+    // 使用神经网络算法进行事件去重
+    this.eventDeduplicator = new EventDeduplicator({ 
+      similarityThreshold: 0.85, 
+      timeWindow: 60000,
+      maxHistory: 1000
+    })
+    // 使用智能插件匹配器
+    this.pluginMatcher = new PluginMatcher()
     this.cleanupTimer = null
     this.pluginLoadStats = {
       plugins: [],
@@ -61,7 +74,8 @@ class PluginsLoader {
       this.pluginCount = 0
       const packageErr = []
 
-      const batchSize = 10
+      // 动态批次大小（根据内存使用情况调整）
+      const batchSize = this.getDynamicBatchSize()
       for (let i = 0; i < files.length; i += batchSize) {
         const batch = files.slice(i, i + batchSize)
         await Promise.allSettled(
@@ -85,8 +99,14 @@ class PluginsLoader {
                 error: err.message
               });
 
+              // 使用标准化错误处理
+              const botError = errorHandler.handle(
+                err,
+                { context: 'loadPlugin', pluginName: file.name },
+                true
+              )
               logger.error(`插件加载失败: ${file.name}`)
-              logger.error(err)
+              logger.error(botError)
               return null
             }
           })
@@ -104,14 +124,23 @@ class PluginsLoader {
       this.sortPlugins()
       this.identifyDefaultMsgHandlers()
 
-      logger.success(`加载定时任务[${this.task.length}个]`)
-      logger.success(`加载插件[${this.pluginCount}个]`)
-      logger.success(`加载扩展插件[${this.extended.length}个]`)
-      logger.success(`总加载耗时: ${(this.pluginLoadStats.totalLoadTime / 1000).toFixed(4)}秒`)
+      // info: 插件加载结果是重要的业务信息
+      logger.info(`加载定时任务[${this.task.length}个]`)
+      logger.info(`加载插件[${this.pluginCount}个]`)
+      logger.info(`加载扩展插件[${this.extended.length}个]`)
+      logger.info(`总加载耗时: ${(this.pluginLoadStats.totalLoadTime / 1000).toFixed(4)}秒`)
+      
+      // 性能分析
+      this.analyzePluginPerformance()
     } catch (error) {
+      const botError = errorHandler.handle(
+        error,
+        { context: 'load', code: ErrorCodes.PLUGIN_LOAD_FAILED },
+        true
+      )
       logger.error('插件加载器初始化失败')
-      logger.error(error)
-      throw error
+      logger.error(botError)
+      throw botError
     }
   }
 
@@ -136,9 +165,16 @@ class PluginsLoader {
       const handled = await this.runPlugins(e, false)
 
       if (!handled) {
+        // debug: 无插件处理是技术细节
         logger.debug(`${e.logText} 暂无插件处理`)
       }
     } catch (error) {
+      // 使用标准化错误处理
+      errorHandler.handle(
+        error,
+        { context: 'deal', event: e?.logText, code: ErrorCodes.PLUGIN_EXECUTION_FAILED },
+        true
+      )
       logger.error('处理事件错误')
       logger.error(error)
     }
@@ -148,16 +184,19 @@ class PluginsLoader {
     try {
       this.initMsgProps(e)
       await this.parseMessage(e)
-
       this.setupEventProps(e)
       this.checkPermissions(e)
-
       this.addUtilMethods(e)
     } catch (error) {
+      // 使用标准化错误处理
+      errorHandler.handle(
+        error,
+        { context: 'dealMsg', event: e?.logText, code: ErrorCodes.PLUGIN_EXECUTION_FAILED },
+        true
+      )
       logger.error('处理消息内容错误')
       logger.error(error)
     }
-
   }
 
   initMsgProps(e) {
@@ -253,12 +292,14 @@ class PluginsLoader {
         try {
           msgRes = await e.replyNew(msg, false)
         } catch (err) {
-          logger.error(`发送消息错误: ${err.message}`)
+          // debug: 发送失败是技术细节，不影响业务流程
+          logger.debug(`发送消息错误: ${err.message}`)
           const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
           if (textMsg) {
             try {
               msgRes = await e.replyNew(textMsg)
             } catch (innerErr) {
+              // debug: 重试失败是技术细节
               logger.debug(`纯文本发送也失败: ${innerErr.message}`)
               return { error: err }
             }
@@ -268,6 +309,11 @@ class PluginsLoader {
         this.count(e, 'send', msg)
         return msgRes
       } catch (error) {
+        errorHandler.handle(
+          error,
+          { context: 'setupReply', code: ErrorCodes.PLUGIN_EXECUTION_FAILED },
+          true
+        )
         logger.error('回复消息处理错误')
         logger.error(error)
         return { error: error.message }
@@ -300,6 +346,11 @@ class PluginsLoader {
           if (res === 'return') return true
           if (res === false) continue
         } catch (error) {
+          errorHandler.handle(
+            error,
+            { context: 'runPlugins', pluginName: plugin.name, code: ErrorCodes.PLUGIN_EXECUTION_FAILED },
+            true
+          )
           logger.error(`插件 ${plugin.name} accept错误`)
           logger.error(error)
         }
@@ -314,6 +365,11 @@ class PluginsLoader {
 
       return await this.processPlugins(plugins, e, false)
     } catch (error) {
+      errorHandler.handle(
+        error,
+        { context: 'runPlugins', code: ErrorCodes.PLUGIN_EXECUTION_FAILED },
+        true
+      )
       logger.error('运行插件错误')
       logger.error(error)
       return false
@@ -338,6 +394,11 @@ class PluginsLoader {
           activePlugins.push(plugin)
         }
       } catch (error) {
+        errorHandler.handle(
+          error,
+          { context: 'initPlugins', pluginName: p.name, code: ErrorCodes.PLUGIN_LOAD_FAILED },
+          true
+        )
         logger.error(`初始化插件 ${p.name} 失败`)
         logger.error(error)
       }
@@ -380,7 +441,8 @@ class PluginsLoader {
 
   async processPlugins(plugins, e, isExtended) {
     if (!Array.isArray(plugins)) {
-      logger.error('processPlugins: plugins参数不是数组')
+      // warn: 参数错误需要关注但不影响运行
+      logger.warn('processPlugins: plugins参数不是数组')
       return false
     }
 
@@ -408,7 +470,8 @@ class PluginsLoader {
 
   async processRules(plugins, e) {
     if (!Array.isArray(plugins)) {
-      logger.error('processRules: plugins参数不是数组')
+      // warn: 参数错误需要关注但不影响运行
+      logger.warn('processRules: plugins参数不是数组')
       return false
     }
 
@@ -417,11 +480,15 @@ class PluginsLoader {
 
       for (const v of plugin.rule) {
         if (v.event && !this.filtEvent(e, v)) continue
-        if (v.reg && !v.reg.test(e.msg)) continue
+        
+        // 使用智能匹配器替换简单正则测试
+        const matchResult = this.pluginMatcher.matchRule(v, e)
+        if (!matchResult.matched) continue
 
         e.logFnc = `[${plugin.name}][${v.fnc}]`
 
         if (v.log !== false) {
+          // info: 插件执行是重要的业务信息
           logger.info(`${e.logFnc}${e.logText} ${lodash.truncate(e.msg || '', { length: 100 })}`)
         }
 
@@ -441,8 +508,7 @@ class PluginsLoader {
             }
           }
         } catch (error) {
-          logger.error(`${e.logFnc} 执行错误`)
-          logger.error(error)
+          errorHandler.handle(error, { context: 'processRules', pluginName: plugin.name, rule: v.fnc })
         }
       }
     }
@@ -461,6 +527,11 @@ class PluginsLoader {
           if (res === 'return' || res) return true
         }
       } catch (error) {
+        errorHandler.handle(
+          error,
+          { context: 'processDefaultHandlers', handlerName: handler.name, code: ErrorCodes.PLUGIN_EXECUTION_FAILED },
+          true
+        )
         logger.error(`默认消息处理器 ${handler.name} 执行错误`)
         logger.error(error)
       }
@@ -486,6 +557,11 @@ class PluginsLoader {
               const ret = await plugin[fnc](contexts[fnc])
               if (ret !== 'continue' && ret !== false) return true
             } catch (error) {
+              errorHandler.handle(
+                error,
+                { context: 'handleContext', pluginName: plugin.name, fnc, code: ErrorCodes.PLUGIN_EXECUTION_FAILED },
+                true
+              )
               logger.error(`上下文方法 ${fnc} 执行错误`)
               logger.error(error)
             }
@@ -561,6 +637,11 @@ class PluginsLoader {
 
       return this.checkLimit(e)
     } catch (error) {
+      errorHandler.handle(
+        error,
+        { context: 'preCheck', code: ErrorCodes.PLUGIN_EXECUTION_FAILED },
+        true
+      )
       logger.error('前置检查错误')
       logger.error(error)
       return false
@@ -580,6 +661,11 @@ class PluginsLoader {
           return true
         }
       } catch (error) {
+        errorHandler.handle(
+          error,
+          { context: 'checkBypassPlugins', pluginName: p.name, code: ErrorCodes.PLUGIN_EXECUTION_FAILED },
+          true
+        )
         logger.error('检查bypass插件错误')
         logger.error(error)
       }
@@ -636,22 +722,8 @@ class PluginsLoader {
     }
 
     e.getEventHistory = (filter = {}) => {
-      let history = [...this.eventHistory]
-
-      if (filter.event_type) {
-        history = history.filter(h => h.event_type === filter.event_type)
-      }
-      if (filter.user_id) {
-        history = history.filter(h => h.event_data?.user_id === filter.user_id)
-      }
-      if (filter.device_id) {
-        history = history.filter(h => h.event_data?.device_id === filter.device_id)
-      }
-      if (filter.limit && typeof filter.limit === 'number') {
-        history = history.slice(0, filter.limit)
-      }
-
-      return history
+      // 使用统一的过滤方法，减少冗余代码
+      return this.filterEventHistory(this.eventHistory, filter)
     }
   }
 
@@ -1078,39 +1150,91 @@ class PluginsLoader {
 
     this.cleanupTimer = setInterval(() => {
       try {
-        if (this.eventHistory.length > this.MAX_EVENT_HISTORY) {
-          this.eventHistory = this.eventHistory.slice(-this.MAX_EVENT_HISTORY)
-        }
-
-        const now = Date.now()
-
-        for (const [key, time] of this.eventThrottle) {
-          if (now - time > 60000) {
-            this.eventThrottle.delete(key)
-          }
-        }
-
-        for (const [key, time] of this.msgThrottle) {
-          if (now - time > 5000) {
-            this.msgThrottle.delete(key)
-          }
-        }
-
-        for (const cooldownType of ['group', 'single', 'device']) {
-          for (const [key, time] of this.cooldowns[cooldownType]) {
-            if (now - time > 300000) {
-              this.cooldowns[cooldownType].delete(key)
-            }
-          }
-        }
+        // 统一清理逻辑：使用智能缓存自动管理
+        this.cleanupEventHistory()
+        this.cleanupThrottles()
+        this.cleanupCooldowns()
       } catch (error) {
-        logger.error('清理定时器执行错误')
-        logger.error(error)
+        errorHandler.handle(error, { context: 'cleanupTimer' })
       }
     }, 60000)
   }
 
+  /**
+   * 统一的事件历史清理（使用智能缓存）
+   */
+  cleanupEventHistory() {
+    // 智能缓存会自动清理过期项
+    if (this.eventHistory.length > this.MAX_EVENT_HISTORY) {
+      this.eventHistory = this.eventHistory.slice(-this.MAX_EVENT_HISTORY)
+    }
+  }
+
+  /**
+   * 统一的节流清理
+   */
+  cleanupThrottles() {
+    const now = Date.now()
+    
+    // 清理事件节流
+    for (const [key, time] of this.eventThrottle) {
+      if (now - time > 60000) {
+        this.eventThrottle.delete(key)
+      }
+    }
+
+    // 清理消息节流
+    for (const [key, time] of this.msgThrottle) {
+      if (now - time > 5000) {
+        this.msgThrottle.delete(key)
+      }
+    }
+  }
+
+  /**
+   * 统一的冷却清理
+   */
+  cleanupCooldowns() {
+    const now = Date.now()
+    for (const cooldownType of ['group', 'single', 'device']) {
+      for (const [key, time] of this.cooldowns[cooldownType]) {
+        if (now - time > 300000) {
+          this.cooldowns[cooldownType].delete(key)
+        }
+      }
+    }
+  }
+
+  /**
+   * 统一的事件历史过滤方法（减少冗余代码）
+   */
+  filterEventHistory(history, filter = {}) {
+    let filtered = [...history]
+
+    if (filter.event_type) {
+      filtered = filtered.filter(h => h.event_type === filter.event_type)
+    }
+    if (filter.user_id) {
+      filtered = filtered.filter(h => h.event_data?.user_id === filter.user_id)
+    }
+    if (filter.device_id) {
+      filtered = filtered.filter(h => h.event_data?.device_id === filter.device_id)
+    }
+    if (filter.limit && typeof filter.limit === 'number') {
+      filtered = filtered.slice(0, filter.limit)
+    }
+
+    return filtered
+  }
+
   recordEventHistory(eventType, eventData) {
+    // 使用事件去重器检查是否重复
+    if (this.eventDeduplicator.isDuplicate(eventData)) {
+      // debug: 重复事件是内部技术细节
+      logger.debug(`事件去重: ${eventType} - ${eventData.event_id || 'unknown'}`)
+      return
+    }
+
     const historyEntry = {
       event_id: eventData.event_id || Date.now().toString(),
       event_type: eventType,
@@ -1119,6 +1243,9 @@ class PluginsLoader {
       source: eventData.tasker || eventData.device_id || 'internal'
     }
 
+    // 同时存储到智能缓存和数组（向后兼容）
+    const cacheKey = `${eventType}:${historyEntry.event_id}`
+    this.eventHistoryCache.set(cacheKey, historyEntry)
     this.eventHistory.unshift(historyEntry)
 
     if (this.eventHistory.length > this.MAX_EVENT_HISTORY * 1.5) {
@@ -1446,6 +1573,53 @@ class PluginsLoader {
     }
   }
 
+  /**
+   * 获取动态批次大小（根据内存使用情况）
+   */
+  getDynamicBatchSize() {
+    try {
+      const totalMemory = os.totalmem()
+      const freeMemory = os.freemem()
+      const memoryUsage = (totalMemory - freeMemory) / totalMemory
+      
+      if (memoryUsage > 0.8) return 5  // 内存紧张时减小批次
+      if (memoryUsage > 0.6) return 8
+      return 10  // 默认批次
+    } catch (error) {
+      // debug: 获取内存信息失败不影响加载
+      logger.debug(`获取内存信息失败，使用默认批次大小: ${error.message}`)
+      return 10
+    }
+  }
+
+  /**
+   * 分析插件加载性能
+   */
+  analyzePluginPerformance() {
+    try {
+      const slowPlugins = this.pluginLoadStats.plugins
+        .filter(p => p.loadTime > 1000)
+        .sort((a, b) => b.loadTime - a.loadTime)
+      
+      if (slowPlugins.length > 0) {
+        // warn: 性能问题需要关注
+        logger.warn(`发现 ${slowPlugins.length} 个加载较慢的插件:`)
+        slowPlugins.slice(0, 5).forEach(p => {
+          logger.warn(`  - ${p.name}: ${p.loadTime}ms`)
+        })
+      }
+      
+      // debug: 性能统计是技术细节
+      const avgLoadTime = this.pluginLoadStats.plugins.length > 0
+        ? this.pluginLoadStats.plugins.reduce((sum, p) => sum + p.loadTime, 0) / this.pluginLoadStats.plugins.length
+        : 0
+      logger.debug(`平均插件加载时间: ${avgLoadTime.toFixed(2)}ms`)
+    } catch (error) {
+      // debug: 性能分析失败不影响加载
+      logger.debug(`性能分析失败: ${error.message}`)
+    }
+  }
+
   async destroy() {
     try {
       for (const task of this.task) {
@@ -1477,8 +1651,60 @@ class PluginsLoader {
 
       logger.info('插件加载器已销毁')
     } catch (error) {
+      errorHandler.handle(
+        error,
+        { context: 'destroy', code: ErrorCodes.SYSTEM_ERROR },
+        true
+      )
       logger.error('销毁插件加载器失败')
       logger.error(error)
+    }
+  }
+
+  /**
+   * 获取动态批次大小（根据内存使用情况）
+   */
+  getDynamicBatchSize() {
+    try {
+      const totalMemory = os.totalmem()
+      const freeMemory = os.freemem()
+      const memoryUsage = (totalMemory - freeMemory) / totalMemory
+      
+      if (memoryUsage > 0.8) return 5  // 内存紧张时减小批次
+      if (memoryUsage > 0.6) return 8
+      return 10  // 默认批次
+    } catch (error) {
+      // debug: 获取内存信息失败不影响加载
+      logger.debug(`获取内存信息失败，使用默认批次大小: ${error.message}`)
+      return 10
+    }
+  }
+
+  /**
+   * 分析插件加载性能
+   */
+  analyzePluginPerformance() {
+    try {
+      const slowPlugins = this.pluginLoadStats.plugins
+        .filter(p => p.loadTime > 1000)
+        .sort((a, b) => b.loadTime - a.loadTime)
+      
+      if (slowPlugins.length > 0) {
+        // warn: 性能问题需要关注
+        logger.warn(`发现 ${slowPlugins.length} 个加载较慢的插件:`)
+        slowPlugins.slice(0, 5).forEach(p => {
+          logger.warn(`  - ${p.name}: ${p.loadTime}ms`)
+        })
+      }
+      
+      // debug: 性能统计是技术细节
+      const avgLoadTime = this.pluginLoadStats.plugins.length > 0
+        ? this.pluginLoadStats.plugins.reduce((sum, p) => sum + p.loadTime, 0) / this.pluginLoadStats.plugins.length
+        : 0
+      logger.debug(`平均插件加载时间: ${avgLoadTime.toFixed(2)}ms`)
+    } catch (error) {
+      // debug: 性能分析失败不影响加载
+      logger.debug(`性能分析失败: ${error.message}`)
     }
   }
 }

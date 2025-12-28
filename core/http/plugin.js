@@ -1,4 +1,6 @@
 import PluginsLoader from '../../src/infrastructure/plugins/loader.js';
+import { HttpResponse } from '../../src/utils/http-utils.js';
+import BotUtil from '#utils/botutil.js';
 
 function collectPluginEntries() {
   const priorityPlugins = PluginsLoader.priority || [];
@@ -19,7 +21,7 @@ function collectPluginEntries() {
         task: instance.task ? 1 : 0
       });
     } catch (error) {
-      logger?.error?.(`[Plugin API] 初始化插件失败: ${entry.key}`, error);
+      BotUtil.makeLog('error', `[Plugin API] 初始化插件失败: ${entry.key}`, 'Plugin', error);
     }
   }
 
@@ -56,52 +58,40 @@ export default {
     {
       method: 'GET',
       path: '/api/plugins',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const plugins = collectPluginEntries();
-        res.json({ success: true, plugins });
-      }
+        HttpResponse.success(res, { plugins });
+      }, 'plugin.list')
     },
 
     {
       method: 'GET',
       path: '/api/plugins/summary',
-      handler: async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const plugins = collectPluginEntries();
         const summary = buildPluginStats(plugins);
-        res.json({ success: true, summary, plugins });
-      }
+        HttpResponse.success(res, { summary, plugins });
+      }, 'plugin.summary')
     },
 
     {
       method: 'POST',
       path: '/api/plugin/:key/reload',
-      handler: async (req, res, Bot) => {
-        try {
-          const { key } = req.params;
-          if (!key) {
-            return res.status(400).json({ 
-              success: false, 
-              message: '缺少插件key参数' 
-            });
-          }
-
-          await PluginsLoader.changePlugin(decodeURIComponent(key));
-          
-          res.json({ success: true, message: '插件重载成功' });
-        } catch (error) {
-          res.status(500).json({ 
-            success: false, 
-            message: '插件重载失败',
-            error: error.message 
-          });
+      handler: HttpResponse.asyncHandler(async (req, res) => {
+        const { key } = req.params;
+        if (!key) {
+          return HttpResponse.validationError(res, '缺少插件key参数');
         }
-      }
+
+        await PluginsLoader.changePlugin(decodeURIComponent(key));
+        HttpResponse.success(res, null, '插件重载成功');
+      }, 'plugin.reload')
     },
 
     {
       method: 'GET',
       path: '/api/plugins/tasks',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const taskList = PluginsLoader.task || [];
         const tasks = taskList.map(t => ({
           name: t.name,
@@ -109,20 +99,19 @@ export default {
           nextRun: t.job?.nextInvocation ? t.job.nextInvocation() : null
         }));
 
-        res.json({ success: true, tasks });
-      }
+        HttpResponse.success(res, { tasks });
+      }, 'plugin.tasks')
     },
 
     {
       method: 'GET',
       path: '/api/plugins/stats',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const plugins = collectPluginEntries();
-        res.json({
-          success: true,
+        HttpResponse.success(res, {
           stats: buildPluginStats(plugins)
         });
-      }
+      }, 'plugin.stats')
     }
   ]
 };

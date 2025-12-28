@@ -1,5 +1,6 @@
 import BotUtil from '#utils/botutil.js';
 import StreamLoader from '#infrastructure/aistream/loader.js';
+import { HttpResponse } from '../../src/utils/http-utils.js';
 
 /**
  * MCP HTTP API
@@ -22,69 +23,38 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/tools',
-      handler: async (req, res, Bot) => {
-        try {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
           const mcpServer = StreamLoader.mcpServer;
           if (!mcpServer) {
-            return res.status(503).json({ 
-              success: false,
-              error: 'MCP服务未启用',
-              code: 503
-            });
+          return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp.tools');
           }
 
           const tools = mcpServer.listTools();
-          res.json({ 
-            success: true,
+        HttpResponse.success(res, {
             tools,
             count: tools.length
           });
-        } catch (error) {
-          BotUtil.makeLog('error', `获取MCP工具列表失败: ${error.message}`, 'MCPApi');
-          res.status(500).json({ 
-            success: false,
-            error: error.message,
-            code: 500
-          });
-        }
-      }
+      }, 'mcp.tools')
     },
     {
       method: 'POST',
       path: '/api/mcp/tools/call',
-      handler: async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         const startTime = Date.now();
-        try {
           const { name, arguments: args } = req.body;
           
           if (!name) {
-            return res.status(400).json({ 
-              success: false,
-              error: '工具名称不能为空',
-              code: 400,
-              message: '工具名称参数缺失'
-            });
+          return HttpResponse.validationError(res, '工具名称不能为空');
           }
 
           const mcpServer = StreamLoader.mcpServer;
           if (!mcpServer) {
-            return res.status(503).json({ 
-              success: false,
-              error: 'MCP服务未启用',
-              code: 503,
-              message: 'MCP服务器未初始化'
-            });
+          return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp.tools.call');
           }
 
           // 验证工具是否存在
           if (!mcpServer.tools.has(name)) {
-            return res.status(404).json({
-              success: false,
-              error: '工具未找到',
-              code: 404,
-              message: `工具 "${name}" 不存在`,
-              availableTools: Array.from(mcpServer.tools.keys()).slice(0, 10) // 返回前10个可用工具
-            });
+          return HttpResponse.notFound(res, `工具 "${name}" 不存在`);
           }
 
           const result = await mcpServer.handleToolCall({ name, arguments: args || {} });
@@ -99,21 +69,7 @@ export default {
               timestamp: Date.now()
             }
           });
-        } catch (error) {
-          const duration = Date.now() - startTime;
-          BotUtil.makeLog('error', `MCP工具调用失败[${req.body?.name || 'unknown'}]: ${error.message}`, 'MCPApi');
-          res.status(500).json({ 
-            success: false,
-            error: error.message,
-            code: 500,
-            message: '工具执行时发生错误',
-            metadata: {
-              duration: `${duration}ms`,
-              timestamp: Date.now()
-            }
-          });
-        }
-      }
+      }, 'mcp.tools.call')
     },
     {
       method: 'GET',
@@ -163,71 +119,42 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/tools/:name',
-      handler: async (req, res, Bot) => {
-        try {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
           const { name } = req.params;
           const mcpServer = StreamLoader.mcpServer;
           
           if (!mcpServer) {
-            return res.status(503).json({ 
-              success: false,
-              error: 'MCP服务未启用',
-              code: 503
-            });
+          return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp.tool.detail');
           }
 
           if (!mcpServer.tools.has(name)) {
-            return res.status(404).json({
-              success: false,
-              error: '工具未找到',
-              code: 404,
-              message: `工具 "${name}" 不存在`
-            });
+          return HttpResponse.notFound(res, `工具 "${name}" 不存在`);
           }
 
           const tool = mcpServer.tools.get(name);
-          res.json({
-            success: true,
+        HttpResponse.success(res, {
             tool: {
               name: tool.name,
               description: tool.description,
               inputSchema: tool.inputSchema
             }
           });
-        } catch (error) {
-          BotUtil.makeLog('error', `获取MCP工具详情失败: ${error.message}`, 'MCPApi');
-          res.status(500).json({ 
-            success: false,
-            error: error.message,
-            code: 500
-          });
-        }
-      }
+      }, 'mcp.tool.detail')
     },
     {
       method: 'GET',
       path: '/api/mcp/health',
-      handler: async (req, res, Bot) => {
-        try {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
           const mcpServer = StreamLoader.mcpServer;
           const isEnabled = mcpServer !== null;
           
-          res.json({
-            success: true,
+        HttpResponse.success(res, {
             status: isEnabled ? 'healthy' : 'disabled',
             enabled: isEnabled,
             toolsCount: isEnabled ? mcpServer.tools.size : 0,
             timestamp: Date.now()
           });
-        } catch (error) {
-          res.status(500).json({
-            success: false,
-            status: 'error',
-            error: error.message,
-            timestamp: Date.now()
-          });
-        }
-      }
+      }, 'mcp.health')
     }
   ],
 

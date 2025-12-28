@@ -2,6 +2,10 @@ import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 import path from 'path';
 import StreamLoader from '#infrastructure/aistream/loader.js';
+import { BotError, ErrorCodes, errorHandler } from '#utils/error-handler.js';
+import { InputValidator } from '#utils/input-validator.js';
+import { WorkflowCleanupManager } from '#utils/heap-manager.js';
+import { WorkflowDecisionTree } from '#utils/neural-algorithms.js';
 
 // 工作流状态常量
 const WORKFLOW_STATUS = {
@@ -47,6 +51,15 @@ export class WorkflowManager {
     this.stream = streamInstance;
     this.activeWorkflows = new Map();
     this.workflowLock = new Map();
+    this.cleanupManager = new WorkflowCleanupManager();
+    // 使用神经网络决策树优化工作流决策
+    this.decisionTree = new WorkflowDecisionTree();
+    
+    // 启动定期清理任务（使用堆算法优化）
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupCompletedWorkflows();
+      this.cleanupStaleLocks();
+    }, 60000); // 每分钟清理一次
     
     globalWorkflowManager = this;
   }
@@ -68,23 +81,59 @@ export class WorkflowManager {
   }
 
   /**
-   * 清理已完成的工作流（防止内存泄漏）
+   * 清理已完成的工作流（使用堆算法优化，防止内存泄漏）
    */
   cleanupCompletedWorkflows() {
-    const now = Date.now();
-    const toDelete = [];
-    
-    for (const [id, workflow] of this.activeWorkflows.entries()) {
-      const { status, completedAt } = workflow;
-      if ((status === WORKFLOW_STATUS.COMPLETED || status === WORKFLOW_STATUS.FAILED) && 
-          completedAt && (now - completedAt) > WORKFLOW_CONFIG.CLEANUP_DELAY) {
-        toDelete.push(id);
+    try {
+      const now = Date.now();
+      const toDelete = this.cleanupManager.getWorkflowsToCleanup(now);
+      
+      // 同时检查直接存储的工作流（兼容旧逻辑）
+      for (const [id, workflow] of this.activeWorkflows.entries()) {
+        const { status, completedAt } = workflow;
+        if ((status === WORKFLOW_STATUS.COMPLETED || status === WORKFLOW_STATUS.FAILED) && 
+            completedAt && (now - completedAt) > WORKFLOW_CONFIG.CLEANUP_DELAY &&
+            !toDelete.includes(id)) {
+          toDelete.push(id);
+        }
       }
+      
+      if (toDelete.length > 0) {
+        BotUtil.makeLog('info', `清理 ${toDelete.length} 个已完成的工作流`, 'WorkflowManager');
+        toDelete.forEach(id => {
+          this.activeWorkflows.delete(id);
+          this.cleanupManager.remove(id);
+        });
+      }
+    } catch (error) {
+      errorHandler.handle(error, { context: 'cleanupCompletedWorkflows' }, true);
     }
-    
-    if (toDelete.length > 0) {
-      BotUtil.makeLog('debug', `清理 ${toDelete.length} 个已完成的工作流`, 'WorkflowManager');
-      toDelete.forEach(id => this.activeWorkflows.delete(id));
+  }
+
+  /**
+   * 清理过期的锁（防止锁泄漏）
+   */
+  cleanupStaleLocks() {
+    try {
+      const now = Date.now();
+      const staleThreshold = 300000; // 5分钟
+      const toDelete = [];
+      
+      for (const [key, workflowId] of this.workflowLock.entries()) {
+        const workflow = this.activeWorkflows.get(workflowId);
+        if (!workflow || 
+            (workflow.status !== WORKFLOW_STATUS.RUNNING && 
+             (now - (workflow.completedAt || workflow.createdAt)) > staleThreshold)) {
+          toDelete.push(key);
+        }
+      }
+      
+      if (toDelete.length > 0) {
+        BotUtil.makeLog('debug', `清理 ${toDelete.length} 个过期的锁`, 'WorkflowManager');
+        toDelete.forEach(key => this.workflowLock.delete(key));
+      }
+    } catch (error) {
+      errorHandler.handle(error, { context: 'cleanupStaleLocks' }, true);
     }
   }
 
@@ -113,6 +162,7 @@ export class WorkflowManager {
     const replyContent = `${JSON.stringify(replyData)}\n\n${text}`;
     
     await e.reply(replyContent).catch(err => {
+      // debug: 发送失败是技术细节，不影响业务流程
       BotUtil.makeLog('debug', `发送工作流回复失败: ${err.message}`, 'WorkflowManager');
     });
   }
@@ -169,6 +219,7 @@ export class WorkflowManager {
     const existing = this.findExistingWorkflow(e, goal);
     if (existing) {
       const userId = e?.user_id || e?.user?.id || '';
+      // debug: 内部状态检查，不影响用户可见的业务流程
       BotUtil.makeLog('debug', `用户 ${userId} 已有运行中的工作流，跳过任务分析`, 'WorkflowManager');
       return { shouldUseTodo: false, response: '已有运行中的工作流', todos: [] };
     }
@@ -193,9 +244,26 @@ export class WorkflowManager {
   }
 
   /**
-   * AI判断是否需要工作流
+   * AI判断是否需要工作流（使用神经网络决策树优化）
    */
   async aiDecideWorkflow(goal, workflow = null) {
+    // 先尝试使用决策树预测（神经网络算法）
+    const prediction = this.decisionTree.predict(goal, []);
+    
+    // 如果预测置信度高，直接使用预测结果（减少AI调用）
+    if (prediction && prediction.confidence >= 0.8) {
+      BotUtil.makeLog('debug', `使用决策树预测（置信度: ${prediction.confidence.toFixed(2)}）`, 'WorkflowManager');
+      
+      if (!prediction.shouldUseTodo) {
+        return { shouldUseTodo: false, response: '基于历史决策模式，此任务不需要工作流', todos: [] };
+      }
+      
+      // 如果需要工作流，继续生成TODO
+      const generatedTodos = await this.generateInitialTodos(goal, workflow);
+      return { shouldUseTodo: true, response: '基于历史决策模式，此任务需要工作流', todos: generatedTodos };
+    }
+
+    // 置信度不足，调用AI进行决策
     const messages = this.buildDecisionMessages(goal);
     
     // 调用AI时，确保不会解析和执行任何命令
@@ -221,13 +289,14 @@ export class WorkflowManager {
     const cleanResponse = this.cleanDecisionResponse(response);
     const shouldUseTodo = /是否需要TODO工作流:\s*是/i.test(cleanResponse);
     
+    // 记录决策到决策树（用于学习）
+    const todos = this.extractTodos(cleanResponse);
+    this.decisionTree.recordDecision(goal, todos, shouldUseTodo);
+    
     // 如果不需要工作流，直接返回
     if (!shouldUseTodo) {
       return { shouldUseTodo: false, response: cleanResponse, todos: [] };
     }
-    
-    // 提取TODO列表
-    const todos = this.extractTodos(cleanResponse);
     
     // 如果已有TODO列表，直接返回
     if (todos.length > 0) {
@@ -243,28 +312,43 @@ export class WorkflowManager {
   /**
    * 清理决策响应，移除所有命令格式，确保不会执行任何命令
    * 只保留格式化的判断结果
-   * 任务分析助手不应该有自然语言回复，只返回判断结果
    */
   cleanDecisionResponse(response) {
     if (!response) return '';
     
-    // 移除所有[]格式的命令
-    let cleaned = response.replace(/\[([^\]]+)\]/g, '').trim();
+    // 先清理命令格式
+    let cleaned = this.cleanAIResponse(response);
     
-    // 移除所有自然语言，只保留格式化的判断结果
-    // 保留"是否需要TODO工作流"和"TODO列表"部分
+    // 只保留格式化的判断结果部分
     const todoMatch = cleaned.match(/是否需要TODO工作流:[\s\S]+?(?:\n\n|$)/);
     if (todoMatch) {
       cleaned = todoMatch[0].trim();
     } else {
-      // 如果没有找到格式化输出，返回空（任务分析助手不应该有自然语言）
-      cleaned = '';
+      cleaned = ''; // 没有格式化输出，返回空
     }
     
-    // 清理多余的空行
-    cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
-    
     return cleaned;
+  }
+
+  /**
+   * 获取可用指令列表（统一方法，避免重复代码）
+   */
+  getAvailableCommands(limit = 25) {
+    const allFunctions = this.collectAllFunctions();
+    return allFunctions
+      .filter(f => !f.onlyTopLevel && f.enabled && f.prompt)
+      .map(f => this.simplifyPrompt(f.prompt))
+      .filter(cmd => cmd && !cmd.includes('启动工作流'))
+      .slice(0, limit);
+  }
+
+  /**
+   * 格式化指令列表为字符串
+   */
+  formatCommandsList(commands, title = '【可用指令参考】（用于设计TODO步骤）') {
+    return commands.length > 0 
+      ? `\n${title}\n${commands.map(cmd => `- ${cmd}`).join('\n')}\n`
+      : '';
   }
 
   /**
@@ -272,17 +356,8 @@ export class WorkflowManager {
    * 优化：明确区分简单任务和复杂任务
    */
   buildDecisionMessages(goal) {
-    // 获取可用指令列表，用于指导TODO设计
-    const allFunctions = this.collectAllFunctions();
-    const availableCommands = allFunctions
-      .filter(f => !f.onlyTopLevel && f.enabled && f.prompt)
-      .map(f => this.simplifyPrompt(f.prompt))
-      .filter(cmd => cmd && !cmd.includes('启动工作流'))
-      .slice(0, 25); // 增加数量，提供更多参考
-    
-    const commandsList = availableCommands.length > 0 
-      ? `\n【可用指令参考】（用于设计TODO步骤）\n${availableCommands.map(cmd => `- ${cmd}`).join('\n')}\n`
-      : '';
+    const availableCommands = this.getAvailableCommands(25);
+    const commandsList = this.formatCommandsList(availableCommands);
 
     return [
       {
@@ -353,6 +428,17 @@ TODO列表:
     ];
   }
 
+  /**
+   * 清理文本，移除命令格式和多余空格（统一方法）
+   */
+  sanitizeText(text) {
+    if (!text) return '';
+    return text
+      .replace(/\[([^\]]+)\]/g, '') // 移除命令格式
+      .replace(/\s+/g, ' ') // 移除多余空格
+      .trim();
+  }
+
   extractTodos(text) {
     if (!text) return [];
     
@@ -363,11 +449,7 @@ TODO列表:
     const todoRegex = /^\d+[\.、]\s*(.+)$/gm;
     let match;
     while ((match = todoRegex.exec(todoMatch[1])) !== null) {
-      let content = match[1].trim();
-      // 移除所有命令格式，确保不会执行任何命令
-      content = content.replace(/\[([^\]]+)\]/g, '').trim();
-      // 移除多余空格
-      content = content.replace(/\s+/g, ' ').trim();
+      const content = this.sanitizeText(match[1]);
       if (content && content.length > 2) {
         todos.push(content);
       }
@@ -377,17 +459,9 @@ TODO列表:
   }
 
   async generateInitialTodos(goal, workflow = null) {
-    // 获取可用指令列表，用于指导TODO设计
-    const allFunctions = this.collectAllFunctions();
-    const availableCommands = allFunctions
-      .filter(f => !f.onlyTopLevel && f.enabled && f.prompt)
-      .map(f => this.simplifyPrompt(f.prompt))
-      .filter(cmd => cmd && !cmd.includes('启动工作流'))
-      .slice(0, 20);
-    
-    const commandsList = availableCommands.length > 0 
-      ? `\n【可用指令参考】（用于设计TODO步骤）\n${availableCommands.map(cmd => `- ${cmd}`).join('\n')}\n`
-      : '';
+    // 使用统一方法获取可用指令列表
+    const availableCommands = this.getAvailableCommands(20);
+    const commandsList = this.formatCommandsList(availableCommands);
 
     const messages = [
       {
@@ -451,32 +525,54 @@ ${commandsList}
    * 创建工作流
    */
   async createWorkflow(e, goal, initialTodos = []) {
-    this.cleanupCompletedWorkflows();
+    try {
+      // 输入验证
+      if (!goal || typeof goal !== 'string') {
+        throw new BotError('工作流目标不能为空', ErrorCodes.INVALID_INPUT);
+      }
+      
+      const sanitizedGoal = InputValidator.sanitizeText(goal, 500);
+      const sanitizedTodos = Array.isArray(initialTodos) 
+        ? initialTodos.map(t => InputValidator.sanitizeText(t, 200))
+        : [];
 
-    const userKey = e?.user_id || e?.sender?.user_id || 'default';
-    const workflowKey = `${userKey}:${goal}`;
+      this.cleanupCompletedWorkflows();
 
-    const existingId = this.checkExistingWorkflow(workflowKey, goal, userKey);
-    if (existingId) return existingId;
+      const userKey = e?.user_id || e?.sender?.user_id || 'default';
+      const workflowKey = `${userKey}:${sanitizedGoal}`;
 
-    this.workflowLock.set(workflowKey, null);
+      const existingId = this.checkExistingWorkflow(workflowKey, sanitizedGoal, userKey);
+      if (existingId) return existingId;
 
-    const workflowId = `workflow_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-    const workflow = this.createWorkflowObject(workflowId, goal, initialTodos, e);
+      this.workflowLock.set(workflowKey, null);
 
-    await this.stream.storeWorkflowMemory(workflowId, { goal, createdAt: Date.now() });
-    this.activeWorkflows.set(workflowId, workflow);
-    this.workflowLock.set(workflowKey, workflowId);
-    
-    await this.sendReply(workflow, 'start', { todos: initialTodos });
-    
-    this.executeWorkflow(workflowId).catch(err => {
-      BotUtil.makeLog('error', `工作流执行失败[${workflowId}]: ${err.message}`, 'WorkflowManager');
-    }).finally(() => {
-      setTimeout(() => this.workflowLock.delete(workflowKey), WORKFLOW_CONFIG.LOCK_CLEANUP_DELAY);
-    });
-    
-    return workflowId;
+      const workflowId = `workflow_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+      const workflow = this.createWorkflowObject(workflowId, sanitizedGoal, sanitizedTodos, e);
+
+      await this.stream.storeWorkflowMemory(workflowId, { goal: sanitizedGoal, createdAt: Date.now() });
+      this.activeWorkflows.set(workflowId, workflow);
+      this.workflowLock.set(workflowKey, workflowId);
+      
+      // info: 工作流创建是重要的业务操作
+      BotUtil.makeLog('info', `创建工作流 [${workflowId}]: ${sanitizedGoal}`, 'WorkflowManager');
+      await this.sendReply(workflow, 'start', { todos: sanitizedTodos });
+      
+      this.executeWorkflow(workflowId).catch(err => {
+        const error = errorHandler.handle(
+          err, 
+          { workflowId, goal: sanitizedGoal, context: 'createWorkflow' },
+          true
+        );
+        BotUtil.makeLog('error', `工作流执行失败[${workflowId}]: ${error.message}`, 'WorkflowManager');
+      }).finally(() => {
+        setTimeout(() => this.workflowLock.delete(workflowKey), WORKFLOW_CONFIG.LOCK_CLEANUP_DELAY);
+      });
+      
+      return workflowId;
+    } catch (error) {
+      const handledError = errorHandler.handle(error, { goal, context: 'createWorkflow' }, true);
+      throw handledError;
+    }
   }
 
   /**
@@ -544,20 +640,44 @@ ${commandsList}
    * 执行工作流
    */
   async executeWorkflow(workflowId) {
-    const workflow = this.activeWorkflows.get(workflowId);
-    if (!workflow) {
-      throw new Error(`工作流不存在: ${workflowId}`);
-    }
-
     try {
-      await this.runWorkflowLoop(workflow);
-      this.handleWorkflowCompletion(workflow);
+      // 输入验证
+      InputValidator.validateWorkflowId(workflowId);
+      
+      const workflow = this.activeWorkflows.get(workflowId);
+      if (!workflow) {
+        throw new BotError(`工作流不存在: ${workflowId}`, ErrorCodes.WORKFLOW_NOT_FOUND);
+      }
+
+      try {
+        await this.runWorkflowLoop(workflow);
+        this.handleWorkflowCompletion(workflow);
+        
+        // 工作流完成，调度清理
+        if (workflow.status === WORKFLOW_STATUS.COMPLETED || 
+            workflow.status === WORKFLOW_STATUS.FAILED) {
+          workflow.completedAt = Date.now();
+          this.cleanupManager.scheduleCleanup(
+            workflowId, 
+            workflow.completedAt, 
+            WORKFLOW_CONFIG.CLEANUP_DELAY
+          );
+        }
+      } catch (error) {
+        this.handleWorkflowError(workflow, error);
+      } finally {
+        await this.saveDebugLog(workflow).catch(err => {
+          // debug: 日志保存失败不影响业务流程
+          BotUtil.makeLog('debug', `保存工作流调试日志失败[${workflowId}]: ${err.message}`, 'WorkflowManager');
+        });
+      }
     } catch (error) {
-      this.handleWorkflowError(workflow, error);
-    } finally {
-      await this.saveDebugLog(workflow).catch(err => {
-        BotUtil.makeLog('error', `保存工作流调试日志失败[${workflowId}]: ${err.message}`, 'WorkflowManager');
-      });
+      const handledError = errorHandler.handle(
+        error, 
+        { workflowId, context: 'executeWorkflow' },
+        true
+      );
+      throw handledError;
     }
   }
 
@@ -611,9 +731,25 @@ ${commandsList}
    * 处理工作流错误
    */
   handleWorkflowError(workflow, error) {
+    const botError = BotError.fromError(
+      error, 
+      ErrorCodes.WORKFLOW_EXECUTION_FAILED,
+      { workflowId: workflow.id, goal: workflow.goal }
+    );
+    
     workflow.status = WORKFLOW_STATUS.FAILED;
-    workflow.error = error.message;
-    BotUtil.makeLog('error', `工作流执行异常[${workflow.id}]: ${error.message}`, 'WorkflowManager');
+    workflow.error = botError.message;
+    workflow.completedAt = Date.now();
+    
+    // 调度清理
+    this.cleanupManager.scheduleCleanup(
+      workflow.id,
+      workflow.completedAt,
+      WORKFLOW_CONFIG.CLEANUP_DELAY
+    );
+    
+    errorHandler.handle(botError, { workflowId: workflow.id }, true);
+    BotUtil.makeLog('error', `工作流执行异常[${workflow.id}]: ${botError.message}`, 'WorkflowManager');
   }
 
   /**
@@ -706,13 +842,21 @@ ${commandsList}
 
   /**
    * 处理TODO错误
-   * 简化：错误时记录note，标记为完成，继续下一步
+   * 标准化错误处理，记录错误并继续执行
    */
   async handleTodoError(workflow, todo, error) {
-    BotUtil.makeLog('error', `Todo执行失败[${todo.id}]: ${error.message}`, 'WorkflowManager');
-    await this.storeNote(workflow, todo.id, `执行异常: ${error.message}，已记录到笔记，继续下一步`);
+    const botError = BotError.fromError(
+      error,
+      ErrorCodes.WORKFLOW_EXECUTION_FAILED,
+      { workflowId: workflow.id, todoId: todo.id, todoContent: todo.content }
+    );
+    
+    errorHandler.handle(botError, { workflowId: workflow.id, todoId: todo.id }, true);
+    BotUtil.makeLog('error', `Todo执行失败[${todo.id}]: ${botError.message}`, 'WorkflowManager');
+    
+    await this.storeNote(workflow, todo.id, `执行异常: ${botError.message}，已记录到笔记，继续下一步`);
     todo.status = TODO_STATUS.COMPLETED;
-    todo.error = error.message;
+    todo.error = botError.message;
   }
 
   /**
@@ -742,17 +886,22 @@ ${commandsList}
   }
 
   /**
+   * 清理AI响应文本（统一方法，移除命令格式和多余空白）
+   */
+  cleanAIResponse(response) {
+    if (!response) return '';
+    return response
+      .replace(/\[([^\]]+)\]/g, '') // 移除命令格式
+      .replace(/\n{3,}/g, '\n\n') // 合并多余空行
+      .replace(/[ \t]{2,}/g, ' ') // 合并多余空格
+      .trim();
+  }
+
+  /**
    * 提取AI的自然语言回复（去除[]指令）
    */
   extractAIMessage(response) {
-    if (!response) return '';
-    
-    // 移除所有[]指令，保留自然语言
-    return response
-      .replace(/\[([^\]]+)\]/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/[ \t]{2,}/g, ' ')
-      .trim();
+    return this.cleanAIResponse(response);
   }
 
   /**
@@ -790,10 +939,8 @@ ${commandsList}
     const completionRate = completion || 0.5;
     const progress = this.calculateProgress(workflow);
     
-    // 构建执行动作文本（显示所有执行的指令）
-    const actionText = result.functions && result.functions.length > 0
-      ? result.functions.map(f => `[${f}]`).join('')
-      : '无';
+    // 构建执行动作文本（使用统一格式化方法）
+    const actionText = this.formatFunctions(result.functions);
     
     // 发送流程回复（自然语言已在processTodo中发送）
     await this.sendReply(workflow, 'step', {
@@ -814,6 +961,7 @@ ${commandsList}
     if (!e || !message || !message.trim()) return;
     
     await e.reply(message.trim()).catch(err => {
+      // debug: 发送失败是技术细节
       BotUtil.makeLog('debug', `发送AI自然语言回复失败: ${err.message}`, 'WorkflowManager');
     });
   }
@@ -833,16 +981,14 @@ ${commandsList}
       // 收集已完成的任务信息
       const completedTodos = workflow.todos.filter(t => t.status === TODO_STATUS.COMPLETED);
       const todosSummary = completedTodos.map((todo, index) => {
-        const actionText = todo.result?.functions?.length > 0
-          ? todo.result.functions.map(f => `[${f}]`).join('')
-          : '无';
+        const actionText = this.formatFunctions(todo.result?.functions);
         return `${index + 1}. ${todo.content} - 执行: ${actionText}`;
       }).join('\n');
 
       // 收集工作流笔记摘要
       const notesSummary = workflow.notes
         .slice(-5)
-        .map((note, index) => `${index + 1}. ${note.content.slice(0, 200)}${note.content.length > 200 ? '...' : ''}`)
+        .map((note, index) => `${index + 1}. ${this.truncateText(note.content, 200)}`)
         .join('\n');
 
       const messages = [
@@ -877,11 +1023,12 @@ ${notesSummary || '无'}
 
       const response = await this.stream.callAI(messages, this.stream.config);
       
-      if (response && response.trim()) {
-        // 清理响应，移除可能的命令格式
-        const summary = response.replace(/\[([^\]]+)\]/g, '').trim();
+      if (response) {
+        // 使用统一的清理方法
+        const summary = this.cleanAIResponse(response);
         if (summary) {
           await e.reply(summary).catch(err => {
+            // debug: 发送失败是技术细节
             BotUtil.makeLog('debug', `发送工作流总结失败: ${err.message}`, 'WorkflowManager');
           });
         }
@@ -998,24 +1145,22 @@ ${notesSummary || '无'}
 
 
   /**
-   * 提取相关上下文（通用方式，提取所有可能相关的信息）
+   * 提取相关上下文（简化，删除冗余逻辑）
    */
   extractRelevantContext(context) {
     if (!context || typeof context !== 'object') return {};
     
-    const relevant = {};
     const excludeFields = ['e', 'workflowId', 'question'];
+    const relevant = {};
     
     for (const [key, value] of Object.entries(context)) {
-      if (excludeFields.includes(key)) continue;
-      if (value === null || value === undefined) continue;
+      if (excludeFields.includes(key) || value == null) continue;
+      
       if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) continue;
       
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || Array.isArray(value)) {
-        relevant[key] = value;
-      } else if (typeof value === 'object') {
-        relevant[key] = JSON.stringify(value).slice(0, 200);
-      }
+      relevant[key] = typeof value === 'object' && !Array.isArray(value)
+        ? this.truncateText(JSON.stringify(value), 200)
+        : value;
     }
     
     return relevant;
@@ -1033,7 +1178,7 @@ ${notesSummary || '无'}
       if (todo.result?.executed) {
         const details = [];
         if (todo.result.functions?.length > 0) {
-          details.push(`执行: ${todo.result.functions.map(f => `[${f}]`).join('、')}`);
+          details.push(`执行: ${this.formatFunctions(todo.result.functions, '、')}`);
         }
         const ctx = this.extractRelevantContext(todo.result.context);
         for (const [key, value] of Object.entries(ctx)) {
@@ -1055,43 +1200,33 @@ ${notesSummary || '无'}
 
 
   /**
-   * 构建上下文部分
+   * 构建上下文部分（合并，删除冗余方法）
    */
   buildContextSection(context) {
     const sections = [];
     
-    const fileSection = this.buildFileContextSection(context);
-    if (fileSection) sections.push(fileSection);
+    // 文件上下文
+    if (context.fileContent) {
+      const fileName = context.fileSearchResult?.fileName || context.fileName || '文件';
+      const content = this.truncateText(context.fileContent, 5000, '\n...(已截断)');
+      sections.push(`【文件内容】\n文件名：${fileName}\n${content}`);
+    }
     
-    const commandSection = this.buildCommandContextSection(context);
-    if (commandSection) sections.push(commandSection);
+    // 命令上下文
+    if (context.commandOutput && context.commandSuccess) {
+      const output = this.truncateText(context.commandOutput, 1000, '\n...(已截断)');
+      sections.push(`【命令输出】\n${output}`);
+    }
     
     return sections.join('\n\n');
   }
 
   /**
-   * 构建文件上下文部分（通用）
+   * 截断文本（统一方法）
    */
-  buildFileContextSection(context) {
-    if (!context.fileContent) return '';
-    
-    const fileName = context.fileSearchResult?.fileName || context.fileName || '文件';
-    const content = context.fileContent.slice(0, 5000);
-    const truncated = context.fileContent.length > 5000 ? '\n...(已截断)' : '';
-    
-    return `【文件内容】\n文件名：${fileName}\n${content}${truncated}`;
-  }
-
-  /**
-   * 构建命令上下文部分（通用）
-   */
-  buildCommandContextSection(context) {
-    if (!context.commandOutput || !context.commandSuccess) return '';
-    
-    const output = context.commandOutput.slice(0, 1000);
-    const truncated = context.commandOutput.length > 1000 ? '\n...(已截断)' : '';
-    
-    return `【命令输出】\n${output}${truncated}`;
+  truncateText(text, maxLength, suffix = '...') {
+    if (!text || text.length <= maxLength) return text;
+    return text.slice(0, maxLength) + suffix;
   }
 
   /**
@@ -1106,7 +1241,11 @@ ${notesSummary || '无'}
     
     if (relevantNotes.length === 0) return '';
     
-    return `【工作流笔记】\n${relevantNotes.map((note, i) => `${i + 1}. ${note.content.slice(0, 500)}${note.content.length > 500 ? '...' : ''}`).join('\n\n')}\n\n重要：这些笔记记录了之前步骤的执行结果和上下文信息，请基于这些实际信息判断当前任务是否已完成。\n`;
+    const notesText = relevantNotes
+      .map((note, i) => `${i + 1}. ${this.truncateText(note.content, 500)}`)
+      .join('\n\n');
+    
+    return `【工作流笔记】\n${notesText}\n\n重要：这些笔记记录了之前步骤的执行结果和上下文信息，请基于这些实际信息判断当前任务是否已完成。\n`;
   }
 
   /**
@@ -1202,6 +1341,25 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
 - [标记完成] - 同[完成]`;
   }
 
+  /**
+   * 过滤可执行命令（移除完成指令）
+   */
+  filterExecutableCommands(commands) {
+    return commands
+      .map(cmd => cmd?.trim())
+      .filter(cmd => cmd && !/^\[(完成|标记完成)\]$/i.test(cmd));
+  }
+
+  /**
+   * 格式化函数列表为字符串（统一方法）
+   */
+  formatFunctions(functions, separator = '') {
+    if (!functions || !Array.isArray(functions) || functions.length === 0) {
+      return '无';
+    }
+    return functions.map(f => `[${f}]`).join(separator);
+  }
+
   simplifyPrompt(prompt) {
     if (!prompt) return '';
     const parts = prompt.split(' - ');
@@ -1232,20 +1390,9 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
       });
     };
     
-    if (this.stream) {
-      addFunctions(this.stream);
-      if (Array.isArray(this.stream._mergedStreams)) {
-        this.stream._mergedStreams.forEach(addFunctions);
-      }
-    }
-    
-    try {
-      StreamLoader.getAllStreams().forEach(stream => {
-        if (stream !== this.stream) addFunctions(stream);
-      });
-    } catch (error) {
-      BotUtil.makeLog('warn', `[收集函数] 获取所有stream失败: ${error.message}`, 'WorkflowManager');
-    }
+    // 使用统一的stream收集方法
+    const streams = this._collectAllStreams();
+    streams.forEach(addFunctions);
     
     return allFunctions;
   }
@@ -1482,23 +1629,31 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
       }
       return result;
     } catch (error) {
-      BotUtil.makeLog('error', `执行动作失败: ${error.message}`, 'WorkflowManager');
+      const botError = errorHandler.handle(
+        error,
+        { context: 'executeAction', workflowId: context.workflowId },
+        true
+      );
+      BotUtil.makeLog('error', `执行动作失败: ${botError.message}`, 'WorkflowManager');
       return { 
         executed: false, 
         functions: [], 
-        context: { ...context, error: error.message }, 
+        context: { ...context, error: botError.message }, 
         success: false, 
-        error: error.message 
+        error: botError.message 
       };
     }
   }
 
+  /**
+   * 构建执行上下文（简化，删除冗余字段）
+   */
   buildActionContext(workflow) {
+    const { e, ...restContext } = workflow.context;
     return {
-      e: workflow.context.e, 
-      question: null,
+      e,
       workflowId: workflow.id,
-      ...workflow.context
+      ...restContext
     };
   }
 
@@ -1513,8 +1668,8 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     const { functions } = this.parseWorkflowFunctions(actionText.trim(), context);
     
     if (functions.length === 0) {
-      BotUtil.makeLog('warn', `[执行] 没有解析到任何函数: ${actionText.substring(0, 100)}`, 'WorkflowManager');
-      context.parseError = `执行动作格式不正确：${actionText.substring(0, 100)}`;
+      BotUtil.makeLog('warn', `[执行] 没有解析到任何函数: ${this.truncateText(actionText, 100)}`, 'WorkflowManager');
+      context.parseError = `执行动作格式不正确：${this.truncateText(actionText, 100)}`;
       return { executed: false, functions: [], context, success: false, error: '未解析到任何可执行命令' };
     }
     
@@ -1524,6 +1679,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     
     for (const func of functions) {
       try {
+        // info: 函数执行是重要的业务操作
         BotUtil.makeLog('info', `[执行] ${func.type}(${JSON.stringify(func.params)})`, 'WorkflowManager');
         const result = await this.executeSingleFunction(func, context);
         
@@ -1546,6 +1702,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     const success = executedFunctions.length === functions.length && !lastError;
     const successRate = functions.length > 0 ? executedFunctions.length / functions.length : 0;
     
+    // info: 执行结果是重要的业务信息
     BotUtil.makeLog('info', `[执行] 结果: ${executedFunctions.length}/${functions.length} 成功 (${(successRate * 100).toFixed(0)}%)`, 'WorkflowManager');
 
     return {
@@ -1560,28 +1717,33 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
   }
 
   /**
-   * 解析工作流函数（合并所有stream的functions）
-   * 确保合并后的functions能正常执行
+   * 收集所有相关的stream（统一方法，避免重复代码）
    */
   _collectAllStreams() {
     const streamSet = new Set();
     
-    if (this.stream) {
-      streamSet.add(this.stream);
-      if (Array.isArray(this.stream._mergedStreams)) {
-        this.stream._mergedStreams.forEach(s => s && streamSet.add(s));
+    // 添加主stream及其合并的stream
+    const addStreamAndMerged = (stream) => {
+      if (!stream) return;
+      streamSet.add(stream);
+      if (Array.isArray(stream._mergedStreams)) {
+        stream._mergedStreams.forEach(s => s && streamSet.add(s));
       }
+    };
+    
+    if (this.stream) {
+      addStreamAndMerged(this.stream);
       if (this.stream._parentStream) {
-        streamSet.add(this.stream._parentStream);
-        if (Array.isArray(this.stream._parentStream._mergedStreams)) {
-          this.stream._parentStream._mergedStreams.forEach(s => s && streamSet.add(s));
-        }
+        addStreamAndMerged(this.stream._parentStream);
       }
     }
     
+    // 添加所有其他stream
     try {
       StreamLoader.getAllStreams().forEach(stream => {
-        if (stream?.functions) streamSet.add(stream);
+        if (stream?.functions && stream !== this.stream) {
+          streamSet.add(stream);
+        }
       });
     } catch (error) {
       BotUtil.makeLog('warn', `[解析] 获取所有stream失败: ${error.message}`, 'WorkflowManager');
@@ -1605,7 +1767,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
 
     const streams = this._collectAllStreams();
     if (streams.length === 0) {
-      BotUtil.makeLog('warn', `[解析] 没有可用的stream: ${actionText.substring(0, 50)}`, 'WorkflowManager');
+      BotUtil.makeLog('warn', `[解析] 没有可用的stream: ${this.truncateText(actionText, 50)}`, 'WorkflowManager');
       return { functions: [], cleanText };
     }
 
@@ -1631,6 +1793,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
               f._sourceStream = stream;
               allFunctions.push(f);
             });
+            // debug: 解析过程是技术细节
             BotUtil.makeLog('debug', `[解析] ${streamName}.${func.type} 匹配到 ${result.functions.length} 个函数`, 'WorkflowManager');
           }
           if (result?.cleanText !== undefined) {
@@ -1652,9 +1815,11 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     ];
 
     if (orderedFunctions.length > 0) {
+      // info: 解析结果是重要的业务信息
       BotUtil.makeLog('info', `[解析] 总计: ${orderedFunctions.length} 个函数 [${orderedFunctions.map(f => f.type).join(', ')}]`, 'WorkflowManager');
     } else if (actionText.trim()) {
-      BotUtil.makeLog('debug', `[解析] 未匹配到函数 (${attemptedParsers}/${totalParsers}, streams: ${streams.map(s => s.name).join(', ')}): ${actionText.substring(0, 100)}`, 'WorkflowManager');
+      // debug: 未匹配到函数是技术细节
+      BotUtil.makeLog('debug', `[解析] 未匹配到函数 (${attemptedParsers}/${totalParsers}, streams: ${streams.map(s => s.name).join(', ')}): ${this.truncateText(actionText, 100)}`, 'WorkflowManager');
     }
 
     return { functions: orderedFunctions, cleanText };

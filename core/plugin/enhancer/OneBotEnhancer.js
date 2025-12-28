@@ -1,38 +1,20 @@
 import cfg from '#infrastructure/config/config.js'
 import BotUtil from '#utils/botutil.js'
+import EnhancerBase from '#infrastructure/plugins/enhancer-base.js'
 
-export default class OneBotEnhancer extends plugin {
+export default class OneBotEnhancer extends EnhancerBase {
   constructor() {
     super({
       name: 'OneBot事件增强',
       dsc: '为OneBot事件挂载特定属性',
-      event: 'onebot.*',
-      priority: 1,
-      rule: []
+      event: 'onebot.*'
     })
   }
 
-  async accept(e) {
-    const taskerName = this.getAdapterName(e)
-    if (!this.isOneBotEvent(taskerName, e)) return true
-
-    e.isOneBot = true
-    if (!taskerName.includes('onebot')) e.tasker = 'onebot'
-
-    this.enhanceEvent(e)
-
-    const cfgResult = this.applyConfigPolicies(e)
-    if (cfgResult === 'return' || cfgResult === false) return cfgResult
-
-    this.setupReply(e)
-    this.applyAlias(e)
-    if (this.enforceReplyPolicy(e) === 'return') return 'return'
-
-    return true
-  }
-
-  getAdapterName(e) {
-    return String(e.tasker || e.tasker_name || '').toLowerCase()
+  isTargetEvent(e, taskerName) {
+    if (taskerName.includes('onebot')) return true
+    if (e.isOneBot && !['stdin', 'api', 'device'].includes(taskerName)) return true
+    return false
   }
 
   isOneBotEvent(taskerName, e) {

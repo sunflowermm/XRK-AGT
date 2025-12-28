@@ -1,32 +1,23 @@
-export default class DeviceEnhancer extends plugin {
+import EnhancerBase from '#infrastructure/plugins/enhancer-base.js'
+
+export default class DeviceEnhancer extends EnhancerBase {
   constructor() {
     super({
       name: 'device-enhancer',
       dsc: '设备事件属性补齐与日志标准化',
-      event: 'device.*',
-      priority: 1,
-      rule: []
+      event: 'device.*'
     })
   }
 
-  async accept(e) {
-    if (!this.isDeviceEvent(e)) return true
-
-    e.isDevice = true
-    e.tasker = 'device'
-    this.ensureLogText(e)
-    return true
-  }
-
-  isDeviceEvent(e) {
-    const taskerName = String(e.tasker || e.tasker_name || '').toLowerCase()
+  isTargetEvent(e, taskerName) {
     return taskerName === 'device' || e.post_type === 'device' || e.isDevice
   }
 
-  ensureLogText(e) {
-    if (e.logText && !/未知/.test(e.logText)) return
+  enhanceEvent(e) {
+    e.isDevice = true
+    e.tasker = 'device'
     const deviceId = e.device_id || e.self_id || 'unknown'
     const eventType = e.event_type || e.post_type || 'event'
-    e.logText = `[设备][${deviceId}][${eventType}]`
+    this.ensureLogText(e, '设备', deviceId, eventType)
   }
 }

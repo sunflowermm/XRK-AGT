@@ -1,5 +1,8 @@
 import StreamLoader from '../../src/infrastructure/aistream/loader.js';
 import cfg from '../../src/infrastructure/config/config.js';
+import { errorHandler, ErrorCodes } from '../../src/utils/error-handler.js';
+import { InputValidator } from '../../src/utils/input-validator.js';
+import { HttpResponse } from '../../src/utils/http-utils.js';
 
 function parseOptionalJson(raw) {
   if (!raw && raw !== 0) return null;
@@ -23,10 +26,10 @@ export default {
       path: '/api/ai/stream',
       handler: async (req, res) => {
         try {
-          const prompt = (req.query.prompt || '').toString();
+          // 输入验证
+          const prompt = InputValidator.sanitizeText((req.query.prompt || '').toString(), 10000);
           if (!prompt.trim()) {
-            res.status(400).json({ success: false, message: '缺少 prompt 参数' });
-            return;
+            return HttpResponse.validationError(res, '缺少 prompt 参数');
           }
 
           const persona = (req.query.persona || '').toString();
@@ -38,8 +41,7 @@ export default {
           const fallbackStream = StreamLoader.getStream('chat') || StreamLoader.getStream('device');
           const stream = StreamLoader.getStream(workflowName) || fallbackStream;
           if (!stream) {
-            res.status(500).json({ success: false, message: '工作流未加载' });
-            return;
+            return HttpResponse.error(res, new Error('工作流未加载'), 500, 'ai.stream');
           }
 
           // SSE 头
@@ -97,6 +99,7 @@ export default {
           );
           res.end();
         } catch (e) {
+          errorHandler.handle(e, { context: 'ai.stream', code: ErrorCodes.SYSTEM_ERROR });
           try {
             res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
           } catch {}
@@ -107,49 +110,44 @@ export default {
     {
       method: 'GET',
       path: '/api/ai/models',
-      handler: async (_req, res) => {
-        try {
-          const llm = cfg.aistream?.llm;
-          if (!llm) {
-            return res.status(404).json({ success: false, message: '未找到 LLM 配置' });
-          }
-
-          const defaults = llm.defaults || {};
-          const profiles = Object.entries(llm.profiles || llm.models || {}).map(([key, value]) => ({
-            key,
-            label: value.label || key,
-            description: value.description || '',
-            tags: value.tags || [],
-            model: value.model || defaults.model,
-            baseUrl: value.baseUrl || defaults.baseUrl,
-            maxTokens: value.maxTokens || defaults.maxTokens,
-            temperature: value.temperature ?? defaults.temperature,
-            hasApiKey: Boolean(value.apiKey || defaults.apiKey),
-            capabilities: value.capabilities || value.tags || []
-          }));
-
-          const workflows = Object.entries(llm.workflows || {}).map(([key, value]) => ({
-            key,
-            label: value.label || key,
-            description: value.description || '',
-            profile: value.profile || null,
-            persona: value.persona || null,
-            uiHidden: Boolean(value.uiHidden)
-          }));
-
-          res.json({
-            success: true,
-            enabled: llm.enabled !== false,
-            defaultProfile: llm.defaultProfile || llm.defaultModel || profiles[0]?.key || null,
-            defaultWorkflow: llm.defaultWorkflow || llm.defaultProfile || workflows[0]?.key || null,
-            persona: llm.persona || '',
-            profiles,
-            workflows
-          });
-        } catch (e) {
-          res.status(500).json({ success: false, message: e.message });
+      handler: HttpResponse.asyncHandler(async (_req, res) => {
+        const llm = cfg.aistream?.llm;
+        if (!llm) {
+          return HttpResponse.notFound(res, '未找到 LLM 配置');
         }
-      }
+
+        const defaults = llm.defaults || {};
+        const profiles = Object.entries(llm.profiles || llm.models || {}).map(([key, value]) => ({
+          key,
+          label: value.label || key,
+          description: value.description || '',
+          tags: value.tags || [],
+          model: value.model || defaults.model,
+          baseUrl: value.baseUrl || defaults.baseUrl,
+          maxTokens: value.maxTokens || defaults.maxTokens,
+          temperature: value.temperature ?? defaults.temperature,
+          hasApiKey: Boolean(value.apiKey || defaults.apiKey),
+          capabilities: value.capabilities || value.tags || []
+        }));
+
+        const workflows = Object.entries(llm.workflows || {}).map(([key, value]) => ({
+          key,
+          label: value.label || key,
+          description: value.description || '',
+          profile: value.profile || null,
+          persona: value.persona || null,
+          uiHidden: Boolean(value.uiHidden)
+        }));
+
+        HttpResponse.success(res, {
+          enabled: llm.enabled !== false,
+          defaultProfile: llm.defaultProfile || llm.defaultModel || profiles[0]?.key || null,
+          defaultWorkflow: llm.defaultWorkflow || llm.defaultProfile || workflows[0]?.key || null,
+          persona: llm.persona || '',
+          profiles,
+          workflows
+        });
+      }, 'ai.models')
     }
   ]
 };

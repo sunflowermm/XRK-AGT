@@ -56,6 +56,7 @@ export function validateApiInstance(api, key = 'unknown') {
 
 /**
  * 标准化API响应
+ * @deprecated 请使用 HttpResponse.success() 替代
  * @param {Object} res - Express响应对象
  * @param {Object} data - 响应数据
  * @param {number} statusCode - HTTP状态码
@@ -80,6 +81,7 @@ export function sendJsonResponse(res, data = null, statusCode = 200, message = n
 
 /**
  * 发送错误响应
+ * @deprecated 请使用 HttpResponse.error() 替代
  * @param {Object} res - Express响应对象
  * @param {string|Error} error - 错误信息或错误对象
  * @param {number} statusCode - HTTP状态码
