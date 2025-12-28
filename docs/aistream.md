@@ -226,12 +226,12 @@ flowchart TB
     C --> D{"是否启用Embedding"}
     D -->|是| E["initEmbedding"]
     D -->|否| F["初始化完成"]
-    E --> G{"选择mode"}
-    G -->|local| H["initLightweightEmbedding<br/>BM25算法"]
-    G -->|remote| I["initAPIEmbedding<br/>远程API接口"]
+    E --> G{"选择mode<br/>从cfg读取"}
+    G -->|local| H["initLightweightEmbedding<br/>BM25算法<br/>零依赖"]
+    G -->|remote| I["initRemoteEmbedding<br/>远程API接口<br/>需要apiUrl+apiKey"]
     H --> J{"初始化是否成功"}
     I --> J
-    J -->|失败| K["降级到local模式"]
+    J -->|失败| K["降级到local模式<br/>自动回退"]
     J -->|成功| F
     K --> F
     
@@ -266,27 +266,44 @@ sequenceDiagram
     participant Embedding as Embedding Provider
     participant Redis as Redis存储
     participant LLM as LLM调用
+    participant Knowledge as 知识库
     
     Stream->>Stream: storeMessageWithEmbedding
     Stream->>Embedding: generateEmbedding(text)
+    Note over Embedding: local模式: 返回文本<br/>remote模式: 调用API生成向量
     Embedding-->>Stream: 返回向量/文本
-    Stream->>Redis: 存储消息+向量<br/>key: ai:embedding:name:groupId
+    Stream->>Redis: 存储消息+向量<br/>key: ai:memory:name:groupId
     
-    Stream->>Stream: retrieveRelevantContexts
+    Stream->>Stream: buildEnhancedContext
+    Stream->>Stream: retrieveRelevantContexts<br/>检索历史对话
     Stream->>Redis: 读取历史消息
     Redis-->>Stream: 返回消息列表
-    Stream->>Embedding: 计算相似度<br/>BM25或余弦相似度
-    Embedding-->>Stream: 返回相关上下文
-    Stream->>Stream: buildEnhancedContext
+    Stream->>Embedding: 计算相似度<br/>local: BM25算法<br/>remote: 余弦相似度
+    Embedding-->>Stream: 返回相关上下文<br/>带相似度分数
+    
+    Stream->>Knowledge: retrieveKnowledgeContexts<br/>检索知识库
+    Knowledge-->>Stream: 返回知识库上下文
+    
+    Stream->>Stream: optimizeContextsWithAttention<br/>注意力机制优化
     Stream->>LLM: 调用LLM<br/>包含增强上下文
 ```
 
 **核心方法**：
 
-- `generateEmbedding(text)` - 根据provider生成向量或返回文本
-- `storeMessageWithEmbedding(groupId, message)` - 存储消息到Redis（key: `ai:embedding:${name}:${groupId}`）
-- `retrieveRelevantContexts(groupId, query)` - 检索相关上下文（BM25或余弦相似度）
-- `buildEnhancedContext(e, question, baseMessages)` - 构建增强上下文，附加到messages开头
+- `generateEmbedding(text)` - 根据模式生成向量或返回文本
+  - 本地模式（`mode: 'local'`）：返回文本本身（用于BM25算法）
+  - 远程模式（`mode: 'remote'`）：调用API生成向量
+- `storeMessageWithEmbedding(groupId, message)` - 存储消息到Redis（key: `ai:memory:${name}:${groupId}`）
+- `retrieveRelevantContexts(groupId, query, includeNotes, workflowId)` - 检索相关上下文
+  - 本地模式：使用BM25算法计算相似度
+  - 远程模式：使用余弦相似度计算向量相似度
+  - 支持时间衰减、关键词增强、长度惩罚等多因素评分
+  - 使用注意力机制优化上下文选择
+- `buildEnhancedContext(e, question, baseMessages)` - 构建增强上下文（完整RAG流程）
+  - 自动检索历史对话上下文（如果启用Embedding）
+  - 自动检索知识库上下文（如果合并了database stream）
+  - 合并所有上下文，使用注意力机制优化选择
+  - 构建上下文提示词，附加到 `baseMessages` 开头
 
 ---
 
@@ -365,17 +382,39 @@ flowchart TB
   - 使用 `stream: true` 方式调用 Chat Completion。
   - 逐行解析 `data: ...` SSE 流，将增量文本通过 `onDelta(delta)` 回调返回。
 
-- `execute(e, messages, config)`
-  - 接收插件传入的 `messages` 数组。
-  - 合并消息历史（如有）。
-  - 通过 `buildEnhancedContext` 加入 embedding 检索上下文。
-  - 调用 `callAI` 获取回复文本。
-  - 调用 `parseFunctions` 解析函数调用，并依次执行。
+- `execute(e, question, config)`
+  - 接收插件传入的事件对象、用户问题和LLM配置。
+  - 构建基础上下文：`buildChatContext(e, question)` - 将事件和问题转换为消息数组
+  - 增强上下文：`buildEnhancedContext(e, question, baseMessages)` - 自动检索历史对话和知识库
+  - 调用 `callAI(messages, config)` 获取回复文本。
+  - 调用 `parseFunctions(response, context)` 解析函数调用。
+  - 先发送自然语言回复（如果有 `cleanText`）。
+  - 执行函数：`executeFunctionsWithReAct(functions, context, question)` - 使用ReAct模式
   - 如启用 Embedding，则将 Bot 回复写入 Redis 以备后续检索。
   - 返回清洗后的文本 `cleanText`。
 
-- `process(e, messages, apiConfig = {})`
-  - 一个轻量包装，内部调用 `execute`，适合插件直接调用。
+**参数**：
+- `e`: 事件对象（可选）
+- `question`: 用户问题（字符串或对象 `{content: string, text: string}`）
+- `config`: LLM配置对象（可选，会与 `this.config` 合并）
+
+**返回值**：`Promise<string|null>` - 清洗后的AI回复文本
+
+- `process(e, question, options = {})`
+  - 工作流处理的简化入口，支持工作流合并、TODO决策、记忆系统等高级功能。
+  - 内部调用 `execute`，但提供了更丰富的参数选项。
+
+**参数**：
+- `e`: 事件对象
+- `question`: 用户问题（字符串或对象）
+- `options`: 处理选项对象
+  - `mergeStreams`: `Array<string>` - 要合并的工作流名称列表
+  - `enableTodo`: `boolean` - 是否启用TODO智能决策（默认 `false`）
+  - `enableMemory`: `boolean` - 是否启用记忆系统（默认 `false`）
+  - `enableDatabase`: `boolean` - 是否启用知识库系统（默认 `false`）
+  - `apiConfig`: `Object` - LLM配置（可选，会与 `this.config` 合并）
+
+**返回值**：`Promise<string|null>` - AI回复文本
 
 ---
 

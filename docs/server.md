@@ -56,12 +56,14 @@ flowchart TB
     end
     
     subgraph Middleware["中间件层（按顺序）"]
+        Track["请求追踪<br/>requestId"]
+        Compression["响应压缩<br/>Compression"]
+        Helmet["安全头<br/>Helmet"]
         CORS["CORS跨域处理"]
-        Helmet["Helmet安全头"]
-        Compression["响应压缩"]
+        Logging["请求日志"]
         RateLimit["速率限制"]
         BodyParser["请求体解析"]
-        Auth["API认证"]
+        Redirect["重定向检查<br/>HTTP业务层"]
     end
     
     Browser --> HTTPProxy
@@ -75,12 +77,14 @@ flowchart TB
     DomainRoute --> HTTPProxy
     DomainRoute --> HTTPSProxy
     
-    Express --> CORS
-    CORS --> Helmet
-    Helmet --> Compression
-    Compression --> RateLimit
+    Express --> Track
+    Track --> Compression
+    Compression --> Helmet
+    Helmet --> CORS
+    CORS --> Logging
+    Logging --> RateLimit
     RateLimit --> BodyParser
-    BodyParser --> Auth
+    BodyParser --> Redirect
     
     style Clients fill:#E6F3FF
     style Proxy fill:#FFE6CC
@@ -370,24 +374,23 @@ https:
 
 ### 中间件执行顺序
 
-```
-请求进入
-  ↓
-1. CORS跨域处理
-  ↓
-2. Helmet安全头
-  ↓
-3. 响应压缩（Compression）
-  ↓
-4. 速率限制（Rate Limiting）
-  ↓
-5. 请求体解析（Body Parser）
-  ↓
-6. API认证检查（如果需要）
-  ↓
-7. 路由匹配
-  ↓
-返回响应
+```mermaid
+flowchart TD
+    Request["HTTP请求"] --> Track["1. 请求追踪<br/>requestId/startTime"]
+    Track --> Compress["2. 响应压缩<br/>Compression<br/>支持brotli"]
+    Compress --> Helmet["3. 安全头<br/>Helmet<br/>X-Content-Type-Options等"]
+    Helmet --> CORS["4. CORS处理<br/>跨域/预检请求"]
+    CORS --> Logging["5. 请求日志<br/>记录请求/响应时间"]
+    Logging --> RateLimit["6. 速率限制<br/>全局/API限流"]
+    RateLimit --> BodyParser["7. 请求体解析<br/>JSON/URL-Encoded/Raw"]
+    BodyParser --> Redirect["8. 重定向检查<br/>HTTP业务层"]
+    Redirect --> Routes["9. 路由匹配<br/>系统路由/API/静态文件"]
+    Routes --> Auth["10. 认证中间件<br/>白名单/本地/API Key"]
+    Auth --> Handler["业务处理"]
+    Handler --> Response["返回响应"]
+    
+    style Request fill:#E6F3FF
+    style Response fill:#90EE90
 ```
 
 ---
@@ -467,27 +470,36 @@ rewritePath:
 
 ### WebSocket 架构
 
-```
-WebSocket客户端
-  ↓ HTTP Upgrade请求
-HTTP服务器
-  ↓ 协议升级
-WebSocket服务器
-  ↓ 路径路由
-  ├─ /OneBotv11 → OneBotv11 Handler
-  ├─ /device → Device Handler
-  └─ /custom → 自定义 Handler
+```mermaid
+flowchart TD
+    Client["WebSocket客户端"] --> Upgrade["HTTP Upgrade请求<br/>GET /path HTTP/1.1<br/>Upgrade: websocket"]
+    Upgrade --> Server["HTTP服务器<br/>监听upgrade事件"]
+    Server --> Auth["认证检查<br/>同HTTP认证机制"]
+    Auth --> PathCheck["路径检查<br/>Bot.wsf[path]"]
+    PathCheck --> Handler["路径处理器<br/>/OneBotv11 → OneBotv11 Handler<br/>/device → Device Handler<br/>/custom → 自定义 Handler"]
+    Handler --> WS["WebSocket连接建立<br/>双向通信"]
+    
+    style Client fill:#E6F3FF
+    style WS fill:#90EE90
 ```
 
 ### WebSocket 连接流程
 
-```
-1. 客户端发送HTTP Upgrade请求
-2. 服务器检查路径是否注册（Bot.wsf[path]）
-3. 执行认证检查（如果需要）
-4. 升级为WebSocket连接
-5. 调用对应的Handler处理消息
-6. 建立双向通信
+```mermaid
+sequenceDiagram
+    participant Client as WebSocket客户端
+    participant Server as HTTP服务器
+    participant Auth as 认证检查
+    participant Path as 路径路由
+    participant Handler as 路径处理器
+    
+    Client->>Server: HTTP Upgrade请求
+    Server->>Auth: 检查认证（同HTTP）
+    Auth->>Server: 认证通过
+    Server->>Path: 查找路径处理器（Bot.wsf[path]）
+    Path->>Handler: 调用处理器
+    Handler->>Client: WebSocket连接建立
+    Client<->Handler: 双向通信（持续）
 ```
 
 ### WebSocket 注册
@@ -511,26 +523,53 @@ Bot.wsf['OneBotv11'].push((ws, ...args) => {
 
 ## 静态文件服务
 
-### 静态文件架构
+### 静态文件服务架构
 
-```
-HTTP请求
-  ↓
-路径匹配判断
-  ├─ /api/* → API路由（跳过静态服务）
-  ├─ /media/* → 数据目录（data/media）
-  ├─ /uploads/* → 数据目录（data/uploads）
-  ├─ /www/* → 静态文件（www/）
-  └─ / → 自动查找index.html
+```mermaid
+flowchart TD
+    Request["HTTP请求"] --> CheckAPI{是否为/api/*?}
+    CheckAPI -->|是| APIRoute["API路由处理<br/>跳过静态服务"]
+    CheckAPI -->|否| SystemRoute["系统路由<br/>/status /health /metrics<br/>/robots.txt /favicon.ico"]
+    SystemRoute --> FileRoute["文件服务路由<br/>/File/*"]
+    FileRoute --> Auth["认证中间件"]
+    Auth --> DataStatic["数据静态服务<br/>/media → data/media<br/>/uploads → data/uploads"]
+    DataStatic --> Static["静态文件服务<br/>/www/* → www/<br/>/ → index.html"]
+    Static --> NotFound["404处理"]
+    
+    style Request fill:#E6F3FF
+    style APIRoute fill:#90EE90
+    style NotFound fill:#FF6B6B
 ```
 
 ### 静态文件服务优先级
 
-```
-1. API路由（/api/*）- 最高优先级，跳过静态服务
-2. 数据目录（/media, /uploads）- 映射到data目录
-3. 静态文件（/www/*）- 映射到www目录
-4. 根路径（/）- 自动查找index.html
+```mermaid
+graph TD
+    Request["HTTP请求"] --> Priority1["1. 系统路由<br/>精确匹配<br/>/status /health /metrics"]
+    Request --> Priority2["2. 文件服务<br/>/File/*"]
+    Request --> Priority3["3. API路由<br/>/api/*<br/>最高优先级"]
+    Request --> Priority4["4. 认证中间件<br/>白名单/本地/API Key"]
+    Request --> Priority5["5. 数据静态服务<br/>/media /uploads<br/>映射到data目录"]
+    Request --> Priority6["6. 静态文件服务<br/>/www/* /<br/>映射到www目录"]
+    Request --> Priority7["7. 404处理"]
+    
+    Priority1 --> Match1{匹配?}
+    Priority2 --> Match2{匹配?}
+    Priority3 --> Match3{匹配?}
+    Priority4 --> Match4{通过?}
+    Priority5 --> Match5{匹配?}
+    Priority6 --> Match6{匹配?}
+    Priority7 --> Match7[处理]
+    
+    Match1 -->|是| Handler1[处理]
+    Match2 -->|是| Handler2[处理]
+    Match3 -->|是| Handler3[处理]
+    Match4 -->|是| Handler4[继续]
+    Match5 -->|是| Handler5[处理]
+    Match6 -->|是| Handler6[处理]
+    
+    style Request fill:#E6F3FF
+    style Handler3 fill:#90EE90
 ```
 
 ### 静态文件配置
@@ -560,20 +599,22 @@ static:
 
 ### 安全中间件栈
 
-```
-请求
-  ↓
-1. Helmet安全头（X-Content-Type-Options, X-Frame-Options等）
-  ↓
-2. CORS跨域（Access-Control-Allow-Origin等）
-  ↓
-3. 速率限制（防止恶意请求）
-  ↓
-4. API认证（API Key检查）
-  ↓
-5. 请求体解析（JSON/URL-encoded/Multipart）
-  ↓
-路由处理
+```mermaid
+flowchart TD
+    Request["HTTP请求"] --> Track["请求追踪<br/>requestId"]
+    Track --> Compress["响应压缩<br/>减少传输"]
+    Compress --> Helmet["Helmet安全头<br/>X-Content-Type-Options<br/>X-Frame-Options<br/>HSTS等"]
+    Helmet --> CORS["CORS跨域<br/>Access-Control-Allow-Origin<br/>预检请求处理"]
+    CORS --> Logging["请求日志<br/>X-Request-Id<br/>X-Response-Time"]
+    Logging --> RateLimit["速率限制<br/>防止恶意请求<br/>全局/API限流"]
+    RateLimit --> BodyParser["请求体解析<br/>JSON/URL-encoded/Raw<br/>大小限制"]
+    BodyParser --> Redirect["重定向检查<br/>HTTP业务层"]
+    Redirect --> Routes["路由匹配"]
+    Routes --> Auth["API认证<br/>白名单/本地/API Key"]
+    Auth --> Handler["业务处理"]
+    
+    style Request fill:#E6F3FF
+    style Handler fill:#90EE90
 ```
 
 ### 1. Helmet 安全头

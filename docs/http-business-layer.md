@@ -28,25 +28,30 @@ HTTP业务层（`HTTPBusinessLayer`）是XRK-AGT框架的核心HTTP功能模块�
 
 ```mermaid
 flowchart TB
-    A[HTTP请求] --> B[HTTP业务层]
-    B --> C[重定向管理器]
-    B --> D[CDN管理器]
-    B --> E[反向代理管理器]
+    Request["HTTP请求"] --> Business["HTTP业务层<br/>HTTPBusinessLayer"]
     
-    C -->|匹配规则| F[执行重定向]
-    D -->|设置头部| G[CDN响应头]
-    D -->|生成URL| H[CDN资源URL]
-    E -->|负载均衡| I[选择上游服务器]
-    E -->|健康检查| J[故障转移]
+    Business --> Redirect["重定向管理器<br/>RedirectManager"]
+    Business --> CDN["CDN管理器<br/>CDNManager"]
+    Business --> Proxy["反向代理管理器<br/>ProxyManager"]
     
-    F --> L[返回响应]
-    G --> L
-    H --> L
-    I --> L
-    J --> L
+    Redirect -->|匹配规则| RedirectAction["执行重定向<br/>301/302/307/308"]
+    CDN -->|设置头部| CDNHeaders["CDN响应头<br/>Cache-Control等"]
+    CDN -->|生成URL| CDNUrl["CDN资源URL<br/>cdn.example.com"]
+    Proxy -->|负载均衡| LoadBalance["选择上游服务器<br/>轮询/加权/最少连接"]
+    Proxy -->|健康检查| HealthCheck["故障转移<br/>自动切换"]
+    
+    RedirectAction --> Response["返回响应"]
+    CDNHeaders --> Response
+    CDNUrl --> Response
+    LoadBalance --> Response
+    HealthCheck --> Response
+    
+    style Request fill:#E6F3FF
+    style Business fill:#FFE6CC
+    style Response fill:#90EE90
 ```
 
-**流程说明**：请求首先进入HTTP业务层，依次经过重定向检查、CDN处理、反向代理路由，最终返回响应。
+**流程说明**：请求首先进入HTTP业务层，依次经过重定向检查、CDN处理、反向代理路由，最终返回响应。HTTP业务层在Bot的中间件链中，位于请求体解析之后、路由匹配之前。
 
 ### 文件位置
 
