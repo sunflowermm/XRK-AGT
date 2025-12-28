@@ -2458,8 +2458,6 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       console.log(chalk.yellow('\n▶ WebSocket服务：'));
       console.log(`    ${chalk.cyan('•')} 服务地址：${chalk.white(this.getServerUrl().replace(/^http/, "ws"))}`);
       console.log(`    ${chalk.cyan('•')} 连接路径：${chalk.white(wsPaths.length + '个')} ${chalk.gray(`[${wsPaths.join(', ')}]`)}`);
-      const wsStats = this.getWebSocketStats();
-      console.log(`    ${chalk.cyan('•')} 当前连接：${chalk.white(wsStats.total + '个')}`);
     }
     
     // 性能指标
