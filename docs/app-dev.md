@@ -15,17 +15,17 @@
 
 ```mermaid
 flowchart TD
-  Entry["命令行: node app"] --> Bootstrap["app.js\nBootstrap"]
-  Bootstrap --> EnvCheck["环境检查\nNode 版本 + 目录结构"]
-  Bootstrap --> Deps["依赖检测与安装\nDependencyManager"]
-  Bootstrap --> Imports["动态 imports 合并\ndata/importsJson/*.json"]
+  Entry["命令行: node app"] --> Bootstrap["app.js<br/>Bootstrap"]
+  Bootstrap --> EnvCheck["环境检查<br/>Node 版本 + 目录结构"]
+  Bootstrap --> Deps["依赖检测与安装<br/>DependencyManager"]
+  Bootstrap --> Imports["动态 imports 合并<br/>data/importsJson/*.json"]
   Bootstrap --> Start["import ./start.js"]
-  Start --> Bot["创建 Bot 实例\nsrc/bot.js"]
+  Start --> Bot["创建 Bot 实例<br/>src/bot.js"]
   Bot --> Http["初始化 HTTP/HTTPS/WS 服务"]
-  Bot --> Taskers["加载 Tasker\ncore/tasker"]
-  Bot --> Plugins["加载插件\ncore/plugin"]
-  Bot --> ApiLoader["加载 HTTP API\ncore/http"]
-  Bot --> Renderers["初始化渲染器\nsrc/renderers"]
+  Bot --> Taskers["加载 Tasker<br/>core/tasker"]
+  Bot --> Plugins["加载插件<br/>core/plugin"]
+  Bot --> ApiLoader["加载 HTTP API<br/>core/http"]
+  Bot --> Renderers["初始化渲染器<br/>src/renderers"]
   Bot --> Online["触发 online / ready 事件"]
 ```
 
@@ -397,28 +397,50 @@ export default class AssistantPlugin extends plugin {
 
 ```javascript
 // 1. 创建HTTP API（core/http/ai-chat.js）
-export default class AIChatAPI extends HttpApi {
-  registerRoutes(app) {
-    app.post('/api/ai/chat', async (req, res) => {
-      const { message, streamName = 'chat' } = req.body;
-      const stream = StreamLoader.getStream(streamName);
-      
-      // 构造事件对象
-      const e = {
-        user_id: req.user?.id || 'web_user',
-        group_id: `web_${req.user?.id}`,
-        msg: message,
-        reply: async (msg) => {
-          res.json({ success: true, response: msg });
+import StreamLoader from '#infrastructure/aistream/loader.js';
+
+export default {
+  name: 'ai-chat-api',
+  dsc: 'AI聊天API',
+  routes: [
+    {
+      method: 'POST',
+      path: '/api/ai/chat',
+      handler: async (req, res, bot) => {
+        const { message, streamName = 'chat' } = req.body;
+        const stream = StreamLoader.getStream(streamName);
+        
+        if (!stream) {
+          return res.status(404).json({
+            success: false,
+            message: '工作流未找到'
+          });
         }
-      };
-      
-      await stream.process(e, message, {
-        enableMemory: true
-      });
-    });
-  }
-}
+        
+        // 构造事件对象
+        const e = {
+          user_id: req.user?.id || 'web_user',
+          group_id: `web_${req.user?.id}`,
+          msg: message,
+          reply: async (msg) => {
+            res.json({ success: true, response: msg });
+          }
+        };
+        
+        try {
+          await stream.process(e, message, {
+            enableMemory: true
+          });
+        } catch (error) {
+          res.status(500).json({
+            success: false,
+            message: error.message
+          });
+        }
+      }
+    }
+  ]
+};
 
 // 2. 前端调用（www/xrk/app.js）
 async function sendMessage(message) {
@@ -469,18 +491,38 @@ export default class ReportPlugin extends plugin {
 }
 
 // 2. 创建HTTP API（core/http/report.js）
-export default class ReportAPI extends HttpApi {
-  registerRoutes(app) {
-    app.get('/api/report/generate', async (req, res) => {
-      const renderer = Bot.renderer?.puppeteer;
-      const imagePath = await renderer.renderImage({
-        template: 'report-template',
-        data: req.query
-      });
-      res.sendFile(imagePath);
-    });
-  }
-}
+export default {
+  name: 'report-api',
+  dsc: '报表生成API',
+  routes: [
+    {
+      method: 'GET',
+      path: '/api/report/generate',
+      handler: async (req, res, bot) => {
+        const renderer = bot.renderer?.puppeteer;
+        if (!renderer) {
+          return res.status(503).json({
+            success: false,
+            message: '渲染器未初始化'
+          });
+        }
+        
+        try {
+          const imagePath = await renderer.renderImage({
+            template: 'report-template',
+            data: req.query
+          });
+          res.sendFile(imagePath);
+        } catch (error) {
+          res.status(500).json({
+            success: false,
+            message: error.message
+          });
+        }
+      }
+    }
+  ]
+};
 ```
 
 **应用场景**：数据报表、图表生成、可视化大屏

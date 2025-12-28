@@ -23,9 +23,9 @@
 
 ```mermaid
 flowchart LR
-  Tpl["模板文件\nresources/xxx/index.html"] -->|读取+缓存| DealTpl["Renderer.dealTpl"]
-  DealTpl --> HtmlFile["生成临时 HTML\n./temp/html/{name}/{id}.html"]
-  HtmlFile --> Engine["浏览器引擎\nPuppeteer / Playwright"]
+  Tpl["模板文件<br/>resources/xxx/index.html"] -->|读取+缓存| DealTpl["Renderer.dealTpl"]
+  DealTpl --> HtmlFile["生成临时 HTML<br/>./temp/html/{name}/{id}.html"]
+  HtmlFile --> Engine["浏览器引擎<br/>Puppeteer / Playwright"]
   Engine --> Output["图片 / HTML / PDF 输出"]
 ```
 
