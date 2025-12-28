@@ -227,21 +227,39 @@ async buildMessages(e, questionData, isGlobalTrigger, chatStream) {
 
 ```javascript
 // 工作流（chat.js）
-async execute(e, messages, config) {
-  // 合并消息历史
-  messages = this.mergeMessageHistory(messages, e);
+async execute(e, question, config) {
+  const context = { e, question, config };
   
-  // 增强上下文（embedding检索）
-  const query = this.extractQueryFromMessages(messages);
-  messages = await this.buildEnhancedContext(e, query, messages);
+  // 构建基础上下文
+  const baseMessages = await this.buildChatContext(e, question);
+  
+  // 增强上下文（RAG流程：历史对话 + 知识库）
+  const messages = await this.buildEnhancedContext(e, question, baseMessages);
   
   // 调用 LLM 工厂
   const response = await this.callAI(messages, config);
   
-  // 执行函数调用
+  // 解析函数调用
   const { functions, cleanText } = this.parseFunctions(response, context);
-  for (const func of functions) {
-    await this.executeFunction(func.type, func.params, context);
+  
+  // 先发送自然语言回复（如果有）
+  if (cleanText && cleanText.trim() && e?.reply) {
+    await e.reply(cleanText.trim());
+  }
+  
+  // 执行函数（ReAct模式）
+  await this.executeFunctionsWithReAct(functions, context, question);
+  
+  // 存储到记忆系统
+  if (this.embeddingConfig.enabled && cleanText && e) {
+    const groupId = e.group_id || `private_${e.user_id}`;
+    await this.storeMessageWithEmbedding(groupId, {
+      user_id: e.self_id,
+      nickname: e.bot?.nickname || 'Bot',
+      message: cleanText,
+      message_id: Date.now().toString(),
+      time: Date.now()
+    });
   }
   
   return cleanText;
@@ -328,31 +346,95 @@ visionModel: glm-4-alltools
 - 插件和工作流不应直接读取运营商配置
 - 插件只需构建 messages，工厂会自动应用配置
 
+## 上下文增强（RAG流程）
+
+工作流的 `buildEnhancedContext` 方法实现了完整的RAG（检索增强生成）流程：
+
+### 执行流程
+
+```javascript
+async buildEnhancedContext(e, question, baseMessages) {
+  // 1. 提取查询文本
+  const query = this.extractQuestionText(question);
+  
+  // 2. 检索历史对话上下文（如果启用Embedding）
+  const historyContexts = this.embeddingConfig.enabled && this.embeddingReady
+    ? await this.retrieveRelevantContexts(groupId, query)
+    : [];
+  
+  // 3. 检索知识库上下文（如果合并了database stream）
+  const knowledgeContexts = await this.retrieveKnowledgeContexts(query);
+  
+  // 4. 合并所有上下文
+  const allContexts = [
+    ...historyContexts.map(ctx => ({ type: 'history', ...ctx })),
+    ...knowledgeContexts.map(ctx => ({ type: 'knowledge', ...ctx }))
+  ];
+  
+  // 5. 使用注意力机制优化上下文选择
+  const optimizedContexts = await this.optimizeContextsWithAttention(
+    allContexts, 
+    query, 
+    maxTokens
+  );
+  
+  // 6. 构建上下文提示词，附加到 baseMessages 开头
+  if (optimizedContexts.length > 0) {
+    const contextPrompt = this.buildContextPrompt(optimizedContexts);
+    baseMessages.unshift({
+      role: 'system',
+      content: contextPrompt
+    });
+  }
+  
+  return baseMessages;
+}
+```
+
+### 上下文检索机制
+
+1. **历史对话检索**：
+   - 使用Embedding相似度检索（本地BM25或远程向量相似度）
+   - 支持时间衰减、关键词增强、长度惩罚等多因素评分
+   - 使用注意力机制优化上下文选择
+
+2. **知识库检索**：
+   - 自动检查是否有合并的 `database` stream
+   - 如果存在，调用 `database.retrieveKnowledgeContexts(query)`
+   - 返回相关知识库内容
+
+3. **上下文优化**：
+   - 使用注意力机制计算上下文重要性
+   - 按Token限制选择最优上下文组合
+   - 自动压缩过长文本
+
 ## 示例：完整调用链
 
 ```javascript
 // 1. 插件监听事件
 async handleMessage(e) {
   const chatStream = StreamLoader.getStream('chat');
-  chatStream.recordMessage(e);  // 记录到历史
   
   if (await this.shouldTriggerAI(e)) {
     const questionData = await this.processMessageContent(e, chatStream);
-    const messages = await this.buildMessages(e, questionData, false, chatStream);
+    const question = questionData.text || e.msg;
     
-    // 2. 调用工作流
-    const result = await chatStream.execute(e, messages);
+    // 2. 调用工作流（工作流会自动处理历史、上下文增强、函数执行等）
+    const result = await chatStream.process(e, question, {
+      enableMemory: true,
+      enableDatabase: true
+    });
     
-    // 3. 发送回复
-    await chatStream.sendMessages(e, result);
+    // 注意：工作流内部已经发送了回复，插件不需要再次发送
+    // 如果工作流返回了结果，可以用于日志记录等
   }
 }
 
-// 插件构建的 messages：
+// 工作流内部构建的 messages（通过 buildChatContext + buildEnhancedContext）：
 [
   {
     role: 'system',
-    content: '【人设设定】\n我是AI助手...'
+    content: '【人设设定】\n我是AI助手...\n\n【相关历史对话】\n1. 用户: 你好 (相关度: 85%)\n\n【相关知识库】\n1. [知识库] 相关信息...'
   },
   {
     role: 'user',
@@ -362,13 +444,6 @@ async handleMessage(e) {
       replyImages: []
     }
   }
-]
-
-// 工作流处理后（合并历史）：
-[
-  { role: 'system', content: '...' },
-  { role: 'user', content: '[群聊记录]\n...' },
-  { role: 'user', content: { text: '...', images: [...] } }
 ]
 
 // 工厂处理后（GPTGod）：
@@ -398,9 +473,10 @@ async handleMessage(e) {
    - 火山引擎：直接使用图片 URL，使用 vision 模型
 
 2. **消息历史：**
-   - 插件只构建当前消息
-   - 工作流负责合并历史消息
-   - 历史消息由工作流的 `recordMessage` 方法存储
+   - 工作流通过 `buildChatContext` 构建基础消息
+   - 工作流通过 `buildEnhancedContext` 自动检索历史对话（使用Embedding相似度）
+   - 历史消息存储在Redis中（key: `ai:memory:{streamName}:{groupId}`）
+   - 工作流通过 `storeMessageWithEmbedding` 存储新消息
 
 3. **人设传递：**
    - 人设在插件中传入到 system prompt

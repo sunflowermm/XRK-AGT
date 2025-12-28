@@ -28,25 +28,36 @@ XRK-AGT的记忆系统采用**工作流独立**的设计，确保：
 
 ```mermaid
 flowchart TB
-    subgraph Memory["记忆系统"]
+    subgraph Memory["记忆系统（Redis存储）"]
         subgraph MessageMemory["消息记忆"]
-            M1["ai:memory:chat:group_123<br/>chat工作流"]
-            M2["ai:memory:desktop:group_123<br/>desktop工作流"]
-            M3["ai:memory:chat-desktop:group_123<br/>合并工作流"]
+            M1["ai:memory:chat:group_123<br/>chat工作流<br/>支持Embedding检索"]
+            M2["ai:memory:desktop:group_123<br/>desktop工作流<br/>支持Embedding检索"]
+            M3["ai:memory:chat-desktop:group_123<br/>合并工作流<br/>支持Embedding检索"]
         end
         
         subgraph NoteMemory["笔记记忆"]
-            N1["ai:notes:workflow_xxx<br/>TODO笔记<br/>30分钟过期"]
+            N1["ai:notes:workflow_xxx<br/>TODO笔记<br/>30分钟过期<br/>临时记忆"]
         end
         
         subgraph WorkflowMemory["工作流记忆"]
-            W1["ai:workflow:workflow_xxx<br/>工作流元数据<br/>3天过期"]
+            W1["ai:workflow:workflow_xxx<br/>工作流元数据<br/>3天过期<br/>持久化记忆"]
         end
     end
+    
+    subgraph Embedding["Embedding检索"]
+        E1["本地模式<br/>BM25算法<br/>零依赖"]
+        E2["远程模式<br/>API接口<br/>向量相似度"]
+    end
+    
+    MessageMemory --> Embedding
+    Embedding --> M1
+    Embedding --> M2
+    Embedding --> M3
     
     style MessageMemory fill:#E6F3FF
     style NoteMemory fill:#FFE6CC
     style WorkflowMemory fill:#90EE90
+    style Embedding fill:#87CEEB
 ```
 
 ### 核心原则
@@ -275,9 +286,15 @@ const notes = await this.stream.getNotes(workflowId);
 
 **检索相关记忆**：
 ```javascript
-const contexts = await this.stream.retrieveRelevantContexts(groupId, '表格内容', true, workflowId);
-// 从 ai:memory:chat-desktop:group_123 检索
-// 返回：用户刚才回复的表格内容
+const contexts = await this.stream.retrieveRelevantContexts(
+  groupId, 
+  '表格内容', 
+  true,  // includeNotes: 包含TODO笔记
+  workflowId
+);
+// 从 ai:memory:chat-desktop:group_123 检索历史对话
+// 从 ai:notes:workflow_xxx 检索TODO笔记
+// 返回：用户刚才回复的表格内容（带相似度分数）
 ```
 
 **LLM响应**：
@@ -500,4 +517,5 @@ XRK-AGT的记忆系统采用**工作流独立**的设计：
 - ✅ **键值对不冲突**：使用工作流名称确保唯一性
 
 这样的设计确保了记忆系统的**清晰、独立、可扩展**。
+
 

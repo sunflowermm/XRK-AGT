@@ -126,8 +126,13 @@ export default class DevicePlugin extends plugin {
 
 - **运行时上下文**
   - `this.e`：当前事件对象，由 `PluginsLoader.initPlugins` 在运行时注入。
-  - `this.reply(msg, quote?, data?)`：统一回复接口。
+  - `this.reply(msg, quote?, data?)`：统一回复接口（支持所有tasker）。
   - `this.getStream(name)` / `this.getAllStreams()`：访问 AI 工作流。
+  
+**注意**：
+- `this.e` 在插件方法执行时自动注入，无需手动设置
+- `this.reply()` 优先使用 `e.reply`，如果没有则回退到 `bot.sendMsg`
+- 工作流内部已经处理了回复发送，插件调用工作流后不需要再次调用 `reply()`
 
 ---
 
@@ -265,11 +270,68 @@ sequenceDiagram
 
 ## 与 AI 工作流集成
 
-- `getStream(name)` / `getAllStreams()`
-  - 通过 `StreamLoader` 获取 `AIStream` 实例。
-  - 插件可以在规则方法中调用 `stream.process(e, question, config)` 来完成一次 AI 对话。
+插件可以通过 `getStream(name)` 和 `getAllStreams()` 方法访问工作流系统：
 
-> 建议将 AI 调用封装在插件方法内部，并对失败情况进行友好提示，避免插件阻塞整体事件处理。
+### 核心方法
+
+- `getStream(name)` - 获取指定名称的工作流实例
+  - 通过 `StreamLoader.getStream(name)` 获取
+  - 返回 `AIStream` 实例或 `null`
+  
+- `getAllStreams()` - 获取所有已加载的工作流
+  - 通过 `StreamLoader.getAllStreams()` 获取
+  - 返回 `AIStream[]` 数组
+
+### 使用示例
+
+```javascript
+// 在插件方法中调用工作流
+async test(e) {
+  // 获取工作流
+  const chatStream = this.getStream('chat');
+  if (!chatStream) {
+    await this.reply('工作流未加载');
+    return;
+  }
+  
+  // 调用工作流（推荐使用 process 方法）
+  try {
+    const response = await chatStream.process(e, e.msg, {
+      enableMemory: true,      // 启用记忆系统
+      enableDatabase: true,   // 启用知识库
+      enableTodo: false       // 是否启用TODO工作流
+    });
+    
+    // 注意：工作流内部已经发送了回复，这里不需要再次发送
+    // response 是AI的回复文本，可用于日志记录等
+  } catch (error) {
+    await this.reply(`工作流执行失败: ${error.message}`);
+  }
+}
+
+// 合并多个工作流
+async complexTask(e) {
+  const desktopStream = this.getStream('desktop');
+  if (!desktopStream) return;
+  
+  await desktopStream.process(e, e.msg, {
+    mergeStreams: ['tools'],  // 合并tools工作流
+    enableTodo: true,         // 启用TODO智能决策
+    enableMemory: true,       // 启用记忆系统
+    enableDatabase: true      // 启用知识库
+  });
+}
+```
+
+### 最佳实践
+
+1. **错误处理**：始终使用 try-catch 包裹工作流调用，提供友好错误提示
+2. **工作流选择**：根据业务需求选择合适的工作流（chat、desktop、device等）
+3. **参数配置**：合理使用 `enableMemory`、`enableDatabase`、`enableTodo` 等选项
+4. **回复机制**：工作流内部已经发送了回复，插件不需要再次调用 `reply()`
+5. **异步处理**：工作流调用是异步的，确保使用 `await` 等待完成
+
+> **注意**：工作流内部已经处理了回复发送，插件不需要再次调用 `reply()`。如果工作流返回了结果，可以用于日志记录、状态更新等用途。
 
 ---
 

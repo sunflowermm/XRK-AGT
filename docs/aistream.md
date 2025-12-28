@@ -430,12 +430,52 @@ flowchart TB
 
 **重要：** 详细的协作方式和消息格式规范，请参考 [LLM 工作流文档](./llm-workflow.md)。
 
+### 插件调用工作流的标准方式
+
 插件应按照以下方式使用工作流：
 
-1. 插件负责构建标准化的 `messages` 数组（包含人设和当前消息）。
-2. 调用 `stream.execute(e, messages)` 传入 messages。
-3. 工作流负责合并历史、增强上下文、调用工厂。
-4. 工厂负责处理图片、上传、调用 LLM API。
+```javascript
+// 1. 获取工作流实例
+const stream = this.getStream('chat');
+
+// 2. 调用 process 方法（推荐）
+await stream.process(e, question, {
+  enableMemory: true,      // 启用记忆系统
+  enableDatabase: true,   // 启用知识库
+  enableTodo: false       // 是否启用TODO工作流
+});
+
+// 3. 工作流内部自动处理：
+//    - buildChatContext: 构建基础消息数组
+//    - buildEnhancedContext: 检索历史对话和知识库（RAG流程）
+//    - callAI: 调用LLM工厂
+//    - parseFunctions: 解析函数调用
+//    - executeFunctionsWithReAct: 执行函数（ReAct模式）
+//    - storeMessageWithEmbedding: 存储到记忆系统
+//    - 自动发送回复（插件不需要再次调用reply）
+```
+
+### 职责划分
+
+1. **插件职责**：
+   - 监听事件、提取消息内容
+   - 调用 `stream.process(e, question, options)`
+   - 处理错误和异常情况
+
+2. **工作流职责**：
+   - 构建消息上下文（`buildChatContext`）
+   - 增强上下文（`buildEnhancedContext` - RAG流程）
+   - 调用LLM工厂（`callAI`）
+   - 解析和执行函数调用（`parseFunctions` + `executeFunctionsWithReAct`）
+   - 存储到记忆系统（`storeMessageWithEmbedding`）
+   - 自动发送回复
+
+3. **工厂职责**：
+   - 处理图片识别（VisionFactory）
+   - 调用LLM API（LLMFactory）
+   - 读取运营商配置
+
+> **注意**：插件不需要构建 `messages` 数组，工作流会通过 `buildChatContext` 和 `buildEnhancedContext` 自动构建。插件只需要传入事件对象 `e` 和用户问题 `question`。
 
 ---
 

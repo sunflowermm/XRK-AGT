@@ -296,19 +296,66 @@ XRK-AGT 采用标准化事件命名系统，确保不同来源的事件可以区
 
 ---
 
+## 与工作流系统集成
+
+PluginsLoader 与工作流系统无缝集成，插件可以通过 `getStream()` 访问工作流：
+
+```javascript
+// 插件中调用工作流
+async handleMessage(e) {
+  const stream = this.getStream('chat');
+  if (stream) {
+    await stream.process(e, e.msg, {
+      enableMemory: true,
+      enableDatabase: true
+    });
+  }
+}
+```
+
+**集成流程**：
+1. 插件通过 `this.getStream(name)` 获取工作流实例
+2. 调用 `stream.process(e, question, options)` 执行工作流
+3. 工作流内部自动处理回复发送，插件不需要再次调用 `reply()`
+
+---
+
 ## 开发与调试建议
 
-- **编写插件时**
-  - 尽量让插件逻辑与 `PluginsLoader` 解耦，只依赖 `plugin` 基类与事件对象 `e`。
-  - 使用明确的 `name` 与 `priority`，避免与系统插件产生抢占冲突。
+### 编写插件时
 
-- **排查问题时**
-  - 查看插件是否被 `checkDisable` 或黑白名单过滤。
-- 检查是否被 `OneBotEnhancer` 的别名/onlyReplyAt 策略或冷却限制挡掉。
-  - 通过 Redis（键前缀 `Yz:count:`、`Yz:shutdown:`）确认运行状态。
+- **解耦设计**：尽量让插件逻辑与 `PluginsLoader` 解耦，只依赖 `plugin` 基类与事件对象 `e`
+- **命名规范**：使用明确的 `name` 与 `priority`，避免与系统插件产生抢占冲突
+- **工作流集成**：通过 `getStream()` 访问工作流，使用 `process()` 方法执行
+- **错误处理**：始终使用 try-catch 包裹工作流调用，提供友好错误提示
 
-- **性能优化**
-  - 对于高频事件，注意规则设计与日志级别，避免过多无效正则测试与日志输出。
-  - 合理使用 `bypassThrottle`，只为少数必要命令开启。
+### 排查问题时
+
+1. **插件加载检查**：
+   - 查看插件是否被 `checkDisable` 或黑白名单过滤
+   - 检查插件文件是否正确放置在 `core/plugin/` 目录
+   - 查看加载日志，确认插件是否成功加载
+
+2. **事件处理检查**：
+   - 检查是否被 `OneBotEnhancer` 的别名/onlyReplyAt 策略拦截
+   - 检查是否被冷却限制挡掉
+   - 检查事件类型是否匹配（`event` 属性）
+
+3. **工作流调用检查**：
+   - 确认工作流是否已加载（`StreamLoader.getStream(name)`）
+   - 检查工作流配置是否正确（`embedding`、`config` 等）
+   - 查看工作流执行日志
+
+4. **系统状态检查**：
+   - 通过 Redis（键前缀 `Yz:count:`、`Yz:shutdown:`）确认运行状态
+   - 查看 Bot 运行日志
+   - 检查 HTTP API 是否正常
+
+### 性能优化
+
+- **规则设计**：对于高频事件，注意规则设计与日志级别，避免过多无效正则测试与日志输出
+- **节流使用**：合理使用 `bypassThrottle`，只为少数必要命令开启
+- **工作流优化**：合理使用 `enableMemory`、`enableDatabase` 等选项，避免过度检索
+- **上下文管理**：及时清理上下文，避免长期占用内存
 
 

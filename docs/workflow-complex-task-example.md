@@ -47,10 +47,15 @@ sequenceDiagram
     
     User->>Plugin: 发送复杂任务
     Plugin->>Stream: process(e, question, {enableTodo: true})
-    Stream->>Manager: decideWorkflowMode()
-    Manager->>LLM: 分析任务复杂度
+    Stream->>Stream: execute(e, question, config)
+    Stream->>Stream: buildChatContext + buildEnhancedContext
+    Stream->>LLM: callAI（第1次AI调用）
+    LLM-->>Stream: 响应包含[启动工作流:目标]
+    Stream->>Stream: parseFunctions + hasWorkflowCommand
+    Stream->>Manager: 检测到工作流命令
+    Manager->>LLM: decideWorkflowMode（第2次AI调用）
     LLM-->>Manager: 复杂任务，需要TODO
-    Manager->>LLM: 规划TODO列表
+    Manager->>LLM: 规划TODO列表（第3次AI调用）
     LLM-->>Manager: TODO列表
     Manager->>Manager: createWorkflow()
     
@@ -96,23 +101,25 @@ const response = await stream.process(this.e, question, {
 
 ### 步骤3：智能决策（第一次LLM调用）
 
-**系统提示词**：
-```
-【人设】
+**系统提示词构建**：
+```javascript
+// 主工作流的 buildSystemPrompt
+buildSystemPrompt(context) {
+  return `【人设】
 你是一个智能助手。
 
 【工作区】
-你的工作区是桌面目录：C:\Users\Sunflower\Desktop
+你的工作区是桌面目录：C:\\Users\\Sunflower\\Desktop
 - 所有文件操作默认在桌面进行
 - 查找文件时优先在桌面查找
 - 创建文件时默认保存到桌面
 
 【可用功能】（包含合并工作流的所有指令）
-[列出桌面文件] - 列出桌面文件和快捷方式
-[读取文件:文件名] - 在桌面工作区读取文件内容
-[执行命令:PowerShell命令] - 在工作区执行PowerShell命令
-[生成Excel:文件名:数据] - 创建Excel文档
-...
+${this.buildFunctionsPrompt()}  // 自动收集所有已注册函数的prompt
+`;
+}
+
+// buildEnhancedContext 会自动检索历史对话和知识库，增强上下文
 ```
 
 **LLM分析**：

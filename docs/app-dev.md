@@ -1,10 +1,13 @@
 ## 应用 & 前后端开发总览（app.js / www/xrk）
 
-本篇文档面向 **应用开发者 / 前后端开发者 / 运维**，说明：
+> **本文档面向应用开发者、前后端开发者、运维人员，提供完整的应用开发思路和技术栈整合方案。**
 
-- 整体启动流程（`app.js` → `start.js` → `src/bot.js`）。
-- 如何扩展 Web 前端（`www/xrk` 控制台）。
-- 如何让前端与后端 API、插件、渲染器协同工作。
+本篇文档说明：
+
+- 整体启动流程（`app.js` → `start.js` → `src/bot.js`）
+- 如何扩展 Web 前端（`www/xrk` 控制台）
+- 如何让前端与后端 API、插件、渲染器、工作流协同工作
+- **完整的技术栈整合方案**：插件系统 + 工作流系统 + HTTP API + 渲染器 + 配置系统 + 事件系统
 
 ---
 
@@ -246,12 +249,345 @@ flowchart TB
 
 ---
 
+## 完整技术栈整合方案
+
+XRK-AGT 提供了完整的技术栈，开发者可以灵活组合使用：
+
+### 技术栈架构图
+
+```mermaid
+flowchart TB
+    subgraph Frontend["前端层（www/xrk）"]
+        FE1[Web控制台<br/>单页应用]
+        FE2[API调试界面]
+        FE3[配置管理界面]
+        FE4[实时监控面板]
+    end
+    
+    subgraph Backend["后端层"]
+        subgraph API["HTTP API层"]
+            API1[REST API<br/>core/http]
+            API2[WebSocket<br/>实时通信]
+            API3[MCP协议<br/>工具调用]
+        end
+        
+        subgraph Plugin["插件系统"]
+            P1[业务插件<br/>core/plugin]
+            P2[事件监听器<br/>core/events]
+            P3[定时任务<br/>Cron调度]
+        end
+        
+        subgraph Workflow["工作流系统"]
+            W1[AIStream基类<br/>core/stream]
+            W2[函数调用<br/>Function Calling]
+            W3[上下文增强<br/>RAG流程]
+            W4[记忆系统<br/>Redis存储]
+        end
+        
+        subgraph Infrastructure["基础设施层"]
+            I1[配置系统<br/>Cfg/ConfigBase]
+            I2[渲染器<br/>Renderer]
+            I3[事件系统<br/>Bot.em]
+            I4[Tasker<br/>协议适配器]
+        end
+    end
+    
+    subgraph External["外部服务"]
+        E1[LLM提供商<br/>GPTGod/Volcengine]
+        E2[Redis<br/>缓存/存储]
+        E3[数据库<br/>可选]
+    end
+    
+    FE1 --> API1
+    FE2 --> API1
+    FE3 --> API1
+    FE4 --> API2
+    
+    API1 --> Plugin
+    API1 --> Workflow
+    API2 --> Plugin
+    
+    Plugin --> Workflow
+    Plugin --> Infrastructure
+    
+    Workflow --> I1
+    Workflow --> E1
+    Workflow --> E2
+    
+    Infrastructure --> E2
+    Infrastructure --> E3
+    
+    style Frontend fill:#E6F3FF
+    style Backend fill:#FFE6CC
+    style External fill:#90EE90
+```
+
+### 技术栈组合方案
+
+#### 方案1：简单AI对话应用
+
+**技术栈**：插件 + 工作流 + LLM
+
+```javascript
+// 1. 创建插件（core/plugin/chat.js）
+export default class ChatPlugin extends plugin {
+  constructor() {
+    super({
+      name: '聊天插件',
+      event: 'message',
+      rule: [{ reg: '.*', fnc: 'chat' }]
+    });
+  }
+  
+  async chat(e) {
+    const stream = this.getStream('chat');
+    await stream.process(e, e.msg, {
+      enableMemory: true  // 启用记忆系统
+    });
+  }
+}
+
+// 2. 工作流自动处理：
+//    - 检索历史对话（Embedding相似度）
+//    - 调用LLM生成回复
+//    - 存储到记忆系统
+//    - 自动发送回复
+```
+
+**应用场景**：智能客服、聊天机器人、问答系统
+
+#### 方案2：复杂任务自动化应用
+
+**技术栈**：插件 + 工作流 + TODO系统 + 记忆系统
+
+```javascript
+// 1. 创建插件（core/plugin/assistant.js）
+export default class AssistantPlugin extends plugin {
+  constructor() {
+    super({
+      name: '智能助手',
+      event: 'message',
+      rule: [{ reg: '^#助手', fnc: 'assistant' }]
+    });
+  }
+  
+  async assistant(e) {
+    const desktopStream = this.getStream('desktop');
+    await desktopStream.process(e, e.msg, {
+      mergeStreams: ['tools'],      // 合并工具工作流
+      enableTodo: true,             // 启用TODO智能决策
+      enableMemory: true,           // 启用记忆系统
+      enableDatabase: true          // 启用知识库
+    });
+  }
+}
+
+// 2. 工作流自动处理：
+//    - AI判断任务复杂度
+//    - 复杂任务：创建TODO工作流，逐步执行
+//    - 简单任务：直接执行
+//    - 自动记录笔记，传递上下文
+```
+
+**应用场景**：智能办公助手、自动化脚本、任务编排
+
+#### 方案3：Web控制台应用
+
+**技术栈**：前端 + HTTP API + 工作流 + 渲染器
+
+```javascript
+// 1. 创建HTTP API（core/http/ai-chat.js）
+export default class AIChatAPI extends HttpApi {
+  registerRoutes(app) {
+    app.post('/api/ai/chat', async (req, res) => {
+      const { message, streamName = 'chat' } = req.body;
+      const stream = StreamLoader.getStream(streamName);
+      
+      // 构造事件对象
+      const e = {
+        user_id: req.user?.id || 'web_user',
+        group_id: `web_${req.user?.id}`,
+        msg: message,
+        reply: async (msg) => {
+          res.json({ success: true, response: msg });
+        }
+      };
+      
+      await stream.process(e, message, {
+        enableMemory: true
+      });
+    });
+  }
+}
+
+// 2. 前端调用（www/xrk/app.js）
+async function sendMessage(message) {
+  const response = await fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message })
+  });
+  const data = await response.json();
+  displayMessage(data.response);
+}
+```
+
+**应用场景**：Web聊天界面、管理后台、API服务
+
+#### 方案4：数据可视化应用
+
+**技术栈**：插件 + 工作流 + 渲染器 + HTTP API
+
+```javascript
+// 1. 创建插件（core/plugin/report.js）
+export default class ReportPlugin extends plugin {
+  constructor() {
+    super({
+      name: '报表生成',
+      event: 'message',
+      rule: [{ reg: '^#报表', fnc: 'generateReport' }]
+    });
+  }
+  
+  async generateReport(e) {
+    // 调用工作流分析数据
+    const stream = this.getStream('desktop');
+    const analysis = await stream.process(e, '分析数据并生成报表', {
+      enableTodo: true
+    });
+    
+    // 使用渲染器生成图片
+    const renderer = Bot.renderer?.puppeteer;
+    if (renderer) {
+      const imagePath = await renderer.renderImage({
+        template: 'report-template',
+        data: { analysis }
+      });
+      await this.reply(imagePath);
+    }
+  }
+}
+
+// 2. 创建HTTP API（core/http/report.js）
+export default class ReportAPI extends HttpApi {
+  registerRoutes(app) {
+    app.get('/api/report/generate', async (req, res) => {
+      const renderer = Bot.renderer?.puppeteer;
+      const imagePath = await renderer.renderImage({
+        template: 'report-template',
+        data: req.query
+      });
+      res.sendFile(imagePath);
+    });
+  }
+}
+```
+
+**应用场景**：数据报表、图表生成、可视化大屏
+
+#### 方案5：多平台统一应用
+
+**技术栈**：Tasker + 插件 + 工作流 + 事件系统
+
+```javascript
+// 1. 创建跨平台插件（core/plugin/unified.js）
+export default class UnifiedPlugin extends plugin {
+  constructor() {
+    super({
+      name: '统一处理',
+      event: 'message',  // 监听所有来源的消息
+      rule: [{ reg: '^#统一', fnc: 'handle' }]
+    });
+  }
+  
+  async handle(e) {
+    // 自动识别来源（OneBot/设备/Web）
+    const source = e.tasker || 'unknown';
+    
+    // 统一调用工作流
+    const stream = this.getStream('chat');
+    await stream.process(e, e.msg, {
+      enableMemory: true
+    });
+    
+    // 记录跨平台日志
+    BotUtil.makeLog('info', 
+      `[${source}] 用户 ${e.user_id}: ${e.msg}`, 
+      'UnifiedPlugin'
+    );
+  }
+}
+```
+
+**应用场景**：多平台客服、统一管理、跨平台自动化
+
+### 技术栈选择指南
+
+| 应用类型 | 推荐技术栈 | 核心组件 |
+|---------|-----------|---------|
+| **简单对话** | 插件 + 工作流 | `chat` stream + `enableMemory` |
+| **复杂任务** | 插件 + 工作流 + TODO | `desktop` stream + `enableTodo` |
+| **Web应用** | 前端 + HTTP API + 工作流 | REST API + `process()` |
+| **数据可视化** | 插件 + 工作流 + 渲染器 | `Renderer` + 模板系统 |
+| **多平台** | Tasker + 插件 + 事件系统 | 通用事件监听 |
+| **配置管理** | HTTP API + ConfigBase | 动态表单生成 |
+| **实时通信** | WebSocket + 事件系统 | `Bot.em` + 事件订阅 |
+
+### 开发流程建议
+
+```mermaid
+flowchart TB
+    A["确定应用需求"] --> B["选择技术栈组合"]
+    B --> C["设计数据流"]
+    C --> D["实现后端逻辑<br/>插件/API/工作流"]
+    D --> E["实现前端界面<br/>www/xrk"]
+    E --> F["集成测试"]
+    F --> G["部署上线"]
+    
+    style A fill:#E6F3FF
+    style B fill:#FFE6CC
+    style G fill:#90EE90
+```
+
+### 最佳实践
+
+1. **分层设计**：
+   - 前端：专注于UI和交互
+   - HTTP API：提供标准化接口
+   - 插件：处理业务逻辑
+   - 工作流：AI能力和复杂任务
+   - 基础设施：配置、渲染、存储
+
+2. **技术栈组合原则**：
+   - 简单功能：直接使用插件 + 工作流
+   - 复杂功能：插件 + 工作流 + TODO系统
+   - Web应用：前端 + HTTP API + 工作流
+   - 数据展示：工作流 + 渲染器
+
+3. **性能优化**：
+   - 合理使用记忆系统（避免过度检索）
+   - 工作流合并（减少重复加载）
+   - 渲染器缓存（避免重复渲染）
+   - 配置缓存（减少文件读取）
+
+4. **可维护性**：
+   - 使用ConfigBase管理配置
+   - 统一错误处理
+   - 日志记录规范
+   - 代码模块化
+
+---
+
 ## 进一步阅读
 
-- `PROJECT_OVERVIEW.md`：整体架构与运行逻辑。
-- `docs/bot.md`：`Bot` 生命周期、中间件与认证。
-- `docs/http-api.md` / `docs/api-loader.md`：API 定义与装载。
-- `docs/config-base.md`：配置基类细节。
-- `docs/renderer.md`：模板与截图渲染能力。
+- **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：整体架构与运行逻辑
+- **[框架可扩展性指南](框架可扩展性指南.md)**：完整的扩展能力说明
+- **[工作流系统完整文档](工作流系统完整文档.md)**：工作流系统详细文档
+- **[插件基类文档](plugin-base.md)**：插件基类完整API
+- **[AIStream文档](aistream.md)**：AIStream基类完整API
+- **[Bot文档](bot.md)**：Bot生命周期、中间件与认证
+- **[HTTP API文档](http-api.md)**：API定义与装载
+- **[配置系统文档](config-base.md)**：配置基类细节
+- **[渲染器文档](renderer.md)**：模板与截图渲染能力
 
 
