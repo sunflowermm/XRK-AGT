@@ -1,6 +1,6 @@
 ## Bot 主类文档（src/bot.js）
 
-`Bot` 是 XRK-AGT 的核心运行时对象，负责 **HTTP/HTTPS/WebSocket 服务、反向代理、API 装载、插件与工作流集成、事件派发与资源清理** 等。
+`Bot` 是 XRK-AGT 的核心运行时对象，负责 **HTTP/HTTPS/WebSocket 服务、反向代理（负载均衡、健康检查）、HTTP业务层（重定向、CDN）、API 装载、插件与工作流集成、事件派发与资源清理** 等。
 
 ---
 
@@ -26,7 +26,7 @@ flowchart TD
 |--------|------|
 | **服务入口** | 创建 Express 应用与 HTTP/HTTPS 服务器；暴露静态目录 `www/`，处理 `favicon.ico`、`robots.txt` 等基础请求；统一配置 CORS、安全头、压缩、速率限制、请求日志等中间件 |
 | **API 与 WebSocket** | 通过 `ApiLoader` 动态加载 `core/http` 下的 API 模块并注册到 `/api/*`；管理 `Bot.wss` 与 `Bot.wsf`，将不同路径的 WebSocket 升级请求分发给对应处理器 |
-| **Tasker（任务层）与多 Bot 管理** | `this.tasker` 保存真实网络 Tasker 实例（事件/任务生成器，如 OneBotv11、ComWeChat、GSUIDCore、OPQBot 等）；`this.bots` 按账号或设备 ID（`self_id` / `device_id`）保存子 Bot；通过 `_createProxy()` 将 `Bot` 暴露为「多 Bot 聚合代理」并统一暴露 `BotUtil` 的静态方法 |
+| **Tasker（任务层）与多 Bot 管理** | `this.tasker` 保存真实网络 Tasker 实例（事件/任务生成器，如 OneBotv11、ComWeChat、GSUIDCORE、QBQBot、stdin 等）；`this.bots` 按账号或设备 ID（`self_id` / `device_id`）保存子 Bot；通过 `_createProxy()` 将 `Bot` 暴露为「多 Bot 聚合代理」并统一暴露 `BotUtil` 的静态方法 |
 | **认证与安全** | 通过 `generateApiKey` 生成/加载 API 密钥；`_authMiddleware` 实现白名单、本地连接、同源 Cookie 与 API-Key 多级认证；`_setupStaticServing` 和 `_staticSecurityMiddleware` 负责静态资源访问安全 |
 | **事件与数据流** | 继承 `EventEmitter`，统一事件入口为 `Bot.em(name, data)`；为消息事件注入 `friend` / `group` / `member` 对象，提供统一的发送、撤回、合并转发等能力 |
 | **运维与资源管理** | `getServerUrl` / `getLocalIpAddress` 用于展示访问地址；`_startTrashCleaner` / `_clearTrashOnce` 定期清理 `trash/` 目录中的临时文件；`closeServer` 优雅关闭 HTTP/HTTPS/代理与 Redis |
@@ -311,7 +311,7 @@ sequenceDiagram
 
 - `src/infrastructure/redis.js` 提供 Redis 客户端初始化逻辑，并在成功连接后设置 `global.redis`：
   - 插件与业务模块通过全局 `redis` 访问计数、关机状态、上下文等数据。
-- `Bot.redisExit()` 在关闭流程中负责持久化与关闭 Redis 进程（兼容旧版行为）。
+- `Bot.redisExit()` 在关闭流程中负责持久化与关闭 Redis 进程。
 - **典型用法：**
   - `PluginsLoader` 使用 Redis 记录统计与关机标志（如 `Yz:shutdown:${botUin}`），`preCheck` 中会参考该状态决定是否继续处理消息。
   - 插件可以自定义使用 Redis 维护长生命周期数据。

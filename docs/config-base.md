@@ -206,7 +206,7 @@ export default class ServerConfig extends ConfigBase {
 }
 ```
 
-## API 速查（2025-01）
+## API 速查（2024-12）
 
 当前仅保留以下“标准接口”，所有写入均依赖 schema 严格校验，不再做后端兜底或清洗：
 
@@ -224,7 +224,7 @@ export default class ServerConfig extends ConfigBase {
 | POST | `/api/config/:name/reset` | 恢复默认（依赖 `config/default_config/*.yaml`） |
 | POST | `/api/config/clear-cache` | 清空 ConfigBase 缓存 |
 
-> **已移除**：旧版 `merge / delete / array append / array remove` 路由全部废弃，统一用 `batch-set` + 扁平 schema 即可实现同等功能。
+> **注意**：配置更新统一使用 `batch-set` + 扁平 schema 实现。
 
 ### 前端集成建议
 1. 调用 `flat-structure` 渲染扁平化表单，彻底摆脱嵌套操作。
