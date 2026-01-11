@@ -3,7 +3,7 @@
 log_level: info
 
 # 日志头内容自定义，例如: "MYBOT" 将显示 [MYBOT]
-log_align: "XRKYZ"
+log_align: "XRKAGT"
 
 # 日志头颜色方案，可选: 'default', 'scheme1', 'scheme2', 'scheme3', 'scheme4'
 # default: ['#3494E6', '#3498db', '#00b4d8', '#0077b6', '#023e8a'], // 默认蓝系
