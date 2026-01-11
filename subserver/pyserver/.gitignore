@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv/
+.uv/
+
+# uv 生成文件
+uv.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志
+logs/
+*.log
+
+# 配置文件（如果包含敏感信息，取消注释）
+# config.yaml
+
+# 数据文件
+data/
+*.db
+*.sqlite
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 模型文件
+models/
+*.bin
+*.pt
+*.pth
+*.onnx
+
+# 向量数据库
+vector_db/
+chroma_db/
+milvus_data/
