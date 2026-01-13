@@ -1,0 +1,59 @@
+# XRK-AGT Python 子服务端依赖（2025版本）
+
+# Web 框架
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# HTTP 客户端
+httpx>=0.27.0
+aiohttp>=3.9.0
+
+# AI/ML 框架（2025最新）
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-core>=0.3.0
+langchain-text-splitters>=0.3.0
+langchain-openai>=0.2.0  # OpenAI集成
+langchain-ollama>=0.1.0  # Ollama集成
+
+# LlamaIndex（可选，用于高级RAG）
+llama-index>=0.10.0
+llama-index-vector-stores-chroma>=0.1.0
+
+# 向量数据库
+chromadb>=0.5.0
+faiss-cpu>=1.7.4  # 或 faiss-gpu（如果有GPU）
+
+# 本地LLM（Ollama）
+ollama>=0.1.0  # Ollama Python客户端
+
+# 文档处理
+pypdf2>=3.0.0
+python-docx>=1.1.0
+pandas>=2.2.0
+openpyxl>=3.1.0
+
+# 配置管理
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# 异步工具
+aiofiles>=23.2.0
+asyncio-throttle>=1.0.0
+
+# 日志
+loguru>=0.7.0
+
+# 开发工具（可选）
+pytest>=8.0.0
+black>=24.0.0
+ruff>=0.1.0  # 更快的linter，替代flake8
+
+# 性能优化（可选）
+orjson>=3.9.0  # 更快的JSON解析
+msgpack>=1.0.0  # 二进制序列化
+
+# 监控（可选）
+prometheus-client>=0.19.0

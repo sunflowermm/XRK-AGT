@@ -39,11 +39,6 @@ export class MCPServer {
    * @param {Object} tool.inputSchema - 输入参数schema（JSON Schema格式）
    * @param {Function} tool.handler - 工具处理函数
    */
-  /**
-   * 注册MCP工具
-   * @param {string} name - 工具名称
-   * @param {Object} tool - 工具定义
-   */
   registerTool(name, tool) {
     // 检查是否已存在同名工具
     if (this.tools.has(name)) {
@@ -112,6 +107,7 @@ export class MCPServer {
    */
   async handleToolCall(request) {
     const { name, arguments: args } = request;
+    const startTime = Date.now();
 
     if (!this.tools.has(name)) {
       return {
@@ -119,11 +115,13 @@ export class MCPServer {
           {
             type: 'text',
             text: JSON.stringify({
+              success: false,
               error: {
                 code: -32601,
-                message: `工具未找到: ${name}`
+                message: `工具未找到: ${name}`,
+                timestamp: Date.now()
               }
-            })
+            }, null, 2)
           }
         ],
         isError: true
@@ -150,18 +148,15 @@ export class MCPServer {
         };
       }
       
-      // 否则将result转换为MCP标准格式
-      // 检查是否为错误结果（有success字段且为false）
+      // 检查是否为错误结果
       const isError = result && typeof result === 'object' && result.success === false;
-      const resultData = result !== undefined && result !== null 
-        ? (typeof result === 'object' ? result : { result })
-        : { success: true };
       
+      // 直接返回结果，不做增强（AI无法使用MCP，增强逻辑无用）
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(resultData, null, 2)
+            text: JSON.stringify(result !== undefined && result !== null ? result : { success: true }, null, 2)
           }
         ],
         isError
@@ -174,12 +169,14 @@ export class MCPServer {
           {
             type: 'text',
             text: JSON.stringify({
+              success: false,
               error: {
                 code: -32603,
                 message: error.message,
-                data: { tool: name }
+                data: { tool: name, arguments: args },
+                timestamp: Date.now()
               }
-            })
+            }, null, 2)
           }
         ],
         isError: true
@@ -433,7 +430,6 @@ export class MCPServer {
 
   /**
    * 注册跨平台通用核心工具
-   * 这些工具在所有平台上都可用，提供基础功能
    */
   registerCoreTools() {
     // 工具1：系统信息（跨平台）
