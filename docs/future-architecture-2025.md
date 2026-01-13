@@ -15,7 +15,7 @@
 
 ### 核心目标
 
-1. **统一接口调用**：主服务端（Node.js）通过HTTP接口连接Python子服务端
+1. **高性能内服务调用**：Python作为子服务端，仅面向Node.js主服务端，不暴露给外部，专注优化延迟实现0延迟响应
 2. **简化插件开发**：插件通过Bot对象直接调用Python服务，无需关心底层实现
 3. **利用Python AI生态**：集成2025年最新的Python AI工具和框架（LangChain、Ollama等）
 4. **代码精简**：删除Node.js端冗余的AI功能代码，迁移到Python端
@@ -34,7 +34,7 @@
 - ✅ **迁移AI功能到Python端**：使用LangChain生态（RAG、LLM、向量数据库）
 - ✅ **删除Node.js端冗余代码**：删除Embedding、BM25、向量检索等代码
 - ✅ **保留业务逻辑层**：工作流、插件、事件系统保留在Node.js端
-- ✅ **统一调用接口**：通过Bot对象统一调用Python服务
+- ✅ **统一调用接口**：通过Bot对象统一调用Python子服务，优化延迟实现近零延迟响应
 
 ---
 
@@ -49,31 +49,31 @@ graph TB
     end
     
     subgraph "Node.js主服务端"
-        B --> C[HTTP接口层]
-        C --> D[Python服务代理]
-        D --> E[HTTP客户端]
-        C --> F[工作流系统]
-        C --> G[插件系统]
+        B --> C[工作流系统]
+        B --> D[插件系统]
+        C --> E[Python服务代理]
+        D --> E
+        E --> F[HTTP客户端<br/>本地调用]
     end
     
-    subgraph "Python子服务端"
-        E --> H[FastAPI路由]
-        H --> I[RAG引擎]
-        H --> J[LLM服务]
-        H --> K[向量数据库]
-        H --> L[工具服务]
+    subgraph "Python子服务端<br/>（内部服务，不对外暴露）"
+        F --> G[FastAPI路由]
+        G --> H[RAG引擎]
+        G --> I[LLM服务]
+        G --> J[向量数据库]
         
-        I --> M[LangChain 0.3+]
-        I --> N[LlamaIndex]
-        J --> O[Ollama/本地模型]
-        J --> P[OpenAI API]
-        K --> Q[ChromaDB/FAISS]
-        L --> R[Python工具库]
+        H --> K[LangChain 0.3+]
+        H --> L[LlamaIndex]
+        I --> M[Ollama/本地模型]
+        I --> N[OpenAI API]
+        J --> O[ChromaDB]
+        J --> P[FAISS]
     end
     
     style A fill:#e1f5ff
     style B fill:#fff4e1
-    style C fill:#fff4e1
+    style E fill:#fff4e1
+    style G fill:#e8f5e9
     style H fill:#e8f5e9
     style I fill:#e8f5e9
     style J fill:#e8f5e9
@@ -85,22 +85,21 @@ graph TB
 sequenceDiagram
     participant Plugin as 插件
     participant Bot as Bot对象
-    participant API as HTTP接口
-    participant Proxy as Python代理
-    participant Python as Python服务端
-    participant LangChain as LangChain Agent
+    participant Proxy as Python代理<br/>（本地HTTP客户端）
+    participant Python as Python子服务端<br/>（localhost:8000）
+    participant LangChain as LangChain RAG
     
     Plugin->>Bot: Bot.python.ragQuery('查询内容')
-    Bot->>API: POST /api/python/rag/query
-    API->>Proxy: 转发请求到Python服务端
-    Proxy->>Python: HTTP POST http://localhost:8000/api/rag/query
+    Bot->>Proxy: 调用Python服务
+    Proxy->>Python: HTTP POST localhost:8000/api/rag/query<br/>（本地调用，优化延迟）
     Python->>LangChain: 调用LangChain RAG服务
     LangChain->>LangChain: 向量检索 + LLM生成
     LangChain->>Python: 返回结果
     Python->>Proxy: JSON响应
-    Proxy->>API: 返回结果
-    API->>Bot: 返回结果
+    Proxy->>Bot: 返回结果
     Bot->>Plugin: 返回结构化数据
+    
+    Note over Proxy,Python: 内部服务调用，不对外暴露<br/>专注优化延迟，实现0延迟响应
 ```
 
 ### 架构对比（迁移前后）
@@ -200,20 +199,24 @@ graph TB
 
 #### 3. 向量数据库
 
-```python
-# ChromaDB 0.5+
-- 更好的性能
-- 持久化优化
-- 多租户支持
+**ChromaDB（主要选择）**
+- 轻量级、易于部署
+- 持久化支持，数据安全可靠
+- 与LangChain深度集成
+- 支持多集合（collections）管理
+- 本地部署，无外部依赖
 
-# FAISS (Meta)
-- 高性能向量检索
-- GPU加速支持
+**FAISS（高性能场景）**
+- Meta开源的高性能向量检索库
+- 支持GPU加速（可选）
+- 适合大规模向量检索
+- 需要额外的集成工作
 
-# Qdrant (可选)
-- 云原生设计
-- 更好的扩展性
-```
+**规划**：
+- 默认使用ChromaDB作为向量存储
+- 数据持久化到本地目录（`data/chroma`）
+- 支持知识库、记忆系统等多个集合
+- 未来可根据需求扩展FAISS支持
 
 #### 4. 工具库
 
@@ -602,36 +605,109 @@ class ApiLoader:
         # ... 其他API
 ```
 
-### 3. 插件使用示例
+### 3. 插件系统调用工作流流程
 
-**文件**: `core/plugin/example/rag_example.js`
+#### 3.1 插件调用工作流的完整流程
+
+以 `xxx.js` 插件为例，展示插件如何调用工作流系统：
+
+**文件**: `core/plugin/example/xxx.js`
 
 ```javascript
-/**
- * RAG插件示例
- * 使用Bot对象调用Python服务端
- */
-export default {
-  name: 'rag_example',
-  dsc: 'RAG功能示例插件',
-  
-  async onMessage(e, Bot) {
-    const text = e.message;
-    
-    // 使用Bot对象调用Python RAG服务
-    const result = await Bot.python.ragQuery(text, {
-      top_k: 5,
-      collection: 'documents'
+import StreamLoader from '#infrastructure/aistream/loader.js';
+
+export default class xxx extends plugin {
+  constructor() {
+    super({
+      name: "XXX工作流",
+      event: "message",
+      priority: 1000,
+      rule: [
+        {
+          reg: "^xxx",
+          fnc: "triggerWorkflow",
+          permission: 'master'
+        }
+      ]
     });
-    
-    if (result.success) {
-      const answers = result.data.results.map(r => r.content).join('\n\n');
-      await Bot.reply(e, `RAG查询结果：\n${answers}`);
-    } else {
-      await Bot.reply(e, `查询失败：${result.error}`);
-    }
   }
-};
+
+  async triggerWorkflow() {
+    const question = this.e.msg.trim().substring(3).trim();
+    if (!question) {
+      return this.reply('请输入要询问的内容');
+    }
+
+    // 1. 获取工作流实例
+    const stream = StreamLoader.getStream('desktop');
+    if (!stream) return this.reply('工作流未加载');
+
+    // 2. 调用工作流的process方法
+    await stream.process(this.e, question, {
+      enableTodo: true,        // 启用TODO工作流
+      enableMemory: true,      // 启用记忆系统
+      enableDatabase: true     // 启用知识库
+    });
+
+    return true;
+  }
+}
+```
+
+#### 3.2 插件调用工作流的流程图
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Plugin as xxx.js插件
+    participant StreamLoader as StreamLoader
+    participant Workflow as desktop工作流
+    participant Python as Python服务<br/>（RAG/LLM）
+    
+    User->>Plugin: 发送消息 "xxx查询股票"
+    Plugin->>Plugin: 规则匹配（reg: "^xxx"）
+    Plugin->>Plugin: 提取问题（"查询股票"）
+    Plugin->>StreamLoader: getStream('desktop')
+    StreamLoader-->>Plugin: 返回工作流实例
+    Plugin->>Workflow: stream.process(e, question, options)
+    
+    Note over Workflow: 工作流内部处理
+    Workflow->>Workflow: 构建系统提示词
+    Workflow->>Workflow: 合并辅助工作流<br/>（memory/database/todo）
+    Workflow->>Workflow: 构建函数提示词
+    Workflow->>Python: 调用LLM生成回复
+    Python-->>Workflow: 返回AI回复
+    Workflow->>Workflow: 解析函数调用（如[股票:688270]）
+    Workflow->>Workflow: 执行函数
+    Workflow->>Python: 调用RAG查询（如需要）
+    Python-->>Workflow: 返回RAG结果
+    Workflow->>User: 发送最终回复
+    
+    Note over Plugin: 工作流内部已发送回复<br/>插件无需再次调用reply()
+```
+
+#### 3.3 关键要点
+
+1. **插件获取工作流**：通过 `StreamLoader.getStream(name)` 获取工作流实例
+2. **调用process方法**：使用 `stream.process(e, question, options)` 统一接口
+3. **自动合并辅助工作流**：通过 `enableMemory`、`enableDatabase` 等选项自动合并
+4. **回复机制**：工作流内部已处理回复发送，插件无需再次调用 `reply()`
+5. **错误处理**：插件应检查工作流是否存在，并提供友好的错误提示
+
+#### 3.4 插件调用Python服务的示例
+
+```javascript
+// 插件直接调用Python服务（不通过工作流）
+async queryRAG(e) {
+  const result = await Bot.python.ragQuery(e.msg, {
+    top_k: 5,
+    collection: 'documents'
+  });
+  
+  if (result.success) {
+    await this.reply(`查询结果：${result.data.results[0].content}`);
+  }
+}
 ```
 
 ---
@@ -682,14 +758,18 @@ gantt
 ```yaml
 python:
   enabled: true
-  url: "http://localhost:8000"
-  timeout: 30000
+  url: "http://localhost:8000"  # 本地调用，不对外暴露
+  timeout: 5000                 # 超时时间（毫秒）
+  keep_alive: true              # 保持连接，减少延迟
   retry:
     max_attempts: 3
-    delay: 1000
+    delay: 500
   health_check:
-    interval: 5000
-    timeout: 3000
+    interval: 10000
+    timeout: 2000
+  connection_pool:
+    max: 10                     # 连接池大小
+    idle_timeout: 30000
 ```
 
 ### Python配置
@@ -698,13 +778,14 @@ python:
 
 ```yaml
 server:
-  host: "0.0.0.0"
+  host: "127.0.0.1"    # 仅本地监听，不对外暴露
   port: 8000
   reload: false
+  workers: 1           # 单进程，减少开销
 
 rag:
   embeddings:
-    provider: "ollama"  # ollama | openai | local
+    provider: "ollama"  # ollama | openai
     model: "nomic-embed-text"
   llm:
     provider: "ollama"  # ollama | openai
@@ -712,6 +793,7 @@ rag:
   vectorstore:
     type: "chroma"
     persist_directory: "./data/chroma"
+    collection_prefix: "xrk_"  # 集合前缀
   chunk_size: 1000
   chunk_overlap: 200
 
@@ -725,29 +807,31 @@ llm:
 
 ## 优势总结
 
-### 1. 性能提升
+### 1. 性能优化
 
-- ✅ **单次调用**：减少多轮AI调用，一次完成
+- ✅ **本地调用**：Python服务运行在本地，网络延迟极低
+- ✅ **连接池**：HTTP连接复用，减少连接建立开销
 - ✅ **异步处理**：Python异步框架性能优异
-- ✅ **本地模型**：Ollama本地运行，无需API限制
+- ✅ **批量处理**：支持批量请求，提升吞吐量
+- ✅ **本地模型**：Ollama本地运行，无需API限制，响应速度快
 
 ### 2. 生态优势
 
 - ✅ **成熟工具**：LangChain、LlamaIndex等成熟框架
 - ✅ **丰富模型**：支持各种开源和商业模型
-- ✅ **向量数据库**：ChromaDB、FAISS等高性能方案
+- ✅ **向量数据库**：ChromaDB持久化存储，性能优异
 
 ### 3. 开发体验
 
-- ✅ **统一接口**：Bot对象统一调用
+- ✅ **统一接口**：Bot对象统一调用，插件开发简单
 - ✅ **类型安全**：Pydantic提供类型验证
 - ✅ **易于扩展**：FastAPI路由系统灵活
 
-### 4. 维护性
+### 4. 安全性
 
-- ✅ **代码分离**：Node端和Python端职责清晰
-- ✅ **独立部署**：Python服务可独立扩展
-- ✅ **技术选型**：使用最适合的工具
+- ✅ **内部服务**：Python服务仅监听本地，不对外暴露
+- ✅ **权限控制**：所有调用经过Node.js主服务端验证
+- ✅ **隔离部署**：Python服务独立运行，故障隔离
 
 ---
 
@@ -992,7 +1076,7 @@ async queryKnowledge(db, keyword) {
 # config/default_config/aistream.yaml
 embedding:
   enabled: true
-  mode: python  # 改为python，指向Python服务
+  mode: python  # 指向Python服务
   python:
     url: "http://localhost:8000"
     service: "rag"
@@ -1000,23 +1084,28 @@ embedding:
 
 ---
 
-### ⚠️ 注意事项
+### ⚠️ 重要说明
 
-1. **向后兼容**
-   - 保留接口方法，但改为调用Python服务
-   - 逐步迁移，不要一次性删除
+1. **Python子服务端定位**
+   - Python服务作为内部子服务，仅面向Node.js主服务端调用
+   - 不对外暴露HTTP接口，确保安全性
+   - 本地调用（localhost），专注优化延迟实现0延迟响应
+   - 通过连接池、请求缓存等技术优化性能
 
 2. **错误处理**
    - Python服务不可用时，需要有降级方案
-   - 添加健康检查和重试机制
+   - 添加健康检查和自动重连机制
+   - 服务启动失败时，Node.js端应优雅降级
 
 3. **数据迁移**
    - 现有Redis中的向量数据需要迁移到ChromaDB
-   - 提供迁移脚本
+   - 提供数据迁移脚本，支持增量迁移
+   - 迁移期间保证服务可用性
 
-4. **测试覆盖**
-   - 充分测试迁移后的功能
-   - 确保性能不下降
+4. **性能优化**
+   - 本地HTTP调用使用keep-alive连接
+   - 实现请求缓存机制，减少重复调用
+   - 异步批量处理，提升吞吐量
 
 ---
 
@@ -1070,31 +1159,31 @@ embedding:
 ```mermaid
 graph TB
     subgraph "Node.js主服务端（精简后）"
-        A[工作流系统] --> B[插件系统]
-        B --> C[事件系统]
-        C --> D[工具注册]
-        D --> E[Python服务代理]
+        A[工作流系统] --> E[Python服务代理]
+        B[插件系统] --> E
+        C[事件系统] --> A
+        C --> B
+        E --> F[HTTP客户端<br/>本地调用]
     end
     
-    subgraph "Python子服务端（LangChain生态）"
-        E --> F[FastAPI路由]
-        F --> G[LangChain Agent]
-        F --> H[RAG服务]
-        F --> I[LLM服务]
-        F --> J[向量数据库]
+    subgraph "Python子服务端<br/>（内部服务，不对外暴露）"
+        F --> G[FastAPI路由]
+        G --> H[RAG服务]
+        G --> I[LLM服务]
+        G --> J[向量数据库]
         
-        G --> K[工具调用]
-        H --> L[文档检索]
-        I --> M[文本生成]
-        J --> N[ChromaDB]
+        H --> K[LangChain RAG]
+        H --> L[ChromaDB]
+        I --> M[Ollama/OpenAI]
+        J --> L
     end
     
     style A fill:#fff4e1
     style B fill:#fff4e1
-    style C fill:#fff4e1
-    style G fill:#e8f5e9
+    style E fill:#fff4e1
     style H fill:#e8f5e9
     style I fill:#e8f5e9
+    style J fill:#e8f5e9
 ```
 
 ---
@@ -1280,54 +1369,6 @@ subserver/pyserver/
    - 批量处理
 
 ---
-
-## 下一步行动
-
-### 立即执行（优先级高）
-
-1. ✅ **搭建Python服务端基础框架**
-   - FastAPI应用
-   - HTTP路由
-   - 配置管理
-
-2. ✅ **实现HTTP代理接口**
-   - Node.js端Python代理
-   - Bot对象扩展
-   - 错误处理
-
-3. ✅ **集成LangChain RAG服务**
-   - RAG服务实现
-   - ChromaDB配置
-   - API接口
-
-### 后续执行（优先级中）
-
-4. ✅ **集成LangChain Agent**
-   - Agent服务实现
-   - 工具调用
-   - API接口
-
-5. ✅ **迁移现有功能**
-   - 知识库向量检索 → LangChain
-   - 记忆系统向量检索 → LangChain
-   - Embedding生成 → LangChain
-
-6. ✅ **代码清理**
-   - 删除Node.js端Embedding代码
-   - 删除BM25算法
-   - 删除向量检索逻辑
-
-### 优化和扩展（优先级低）
-
-7. ✅ **性能优化**
-   - 缓存机制
-   - 异步优化
-   - 批量处理
-
-8. ✅ **监控和日志**
-   - 性能监控
-   - 错误追踪
-   - 使用统计
 
 ---
 
