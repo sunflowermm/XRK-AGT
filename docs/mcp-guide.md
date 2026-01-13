@@ -8,8 +8,9 @@
 - [MCP HTTP API](#mcp-http-api)
 - [工具注册机制](#工具注册机制)
 - [外部平台连接](#外部平台连接)
-- [示例工具](#示例工具)
+- [核心工具](#核心工具)
 - [开发指南](#开发指南)
+- [Cursor配置](#cursor配置)
 - [配置说明](#配置说明)
 
 ---
@@ -52,7 +53,7 @@ flowchart TB
 
         subgraph MCPServer["MCP服务器"]
             ToolRegistry["工具注册表<br/>MCPServer.tools"]
-            ExampleTools["示例工具<br/>get_system_info<br/>calculate<br/>text_process<br/>get_time"]
+            CoreTools["核心工具<br/>system.info<br/>time.now<br/>util.uuid<br/>util.hash"]
         end
 
         subgraph HTTPAPI["HTTP API层"]
@@ -85,7 +86,7 @@ flowchart TB
     style HTTPAPI fill:#87CEEB
     DesktopStream -->|自动注册| ToolRegistry
     DeviceStream -->|自动注册| ToolRegistry
-    ExampleTools -->|内置工具| ToolRegistry
+    CoreTools -->|内置工具| ToolRegistry
 
     StreamLoader -->|initMCP| MCPServer
     MCPServer -->|工具列表| HTTPAPI
@@ -280,11 +281,16 @@ Host: your-server:port
   "success": true,
   "tools": [
     {
-      "name": "get_system_info",
-      "description": "获取系统信息（操作系统、CPU、内存等）",
+      "name": "system.info",
+      "description": "获取系统信息（操作系统、CPU、内存、平台等）",
       "inputSchema": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "detail": {
+            "type": "boolean",
+            "description": "是否返回详细信息（默认false）"
+          }
+        },
         "required": []
       }
     },
@@ -307,8 +313,13 @@ Host: your-server:port
 Content-Type: application/json
 
 {
-  "name": "get_system_info",
-  "arguments": {}
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "system.info",
+    "arguments": {}
+  }
 }
 ```
 
@@ -368,17 +379,39 @@ const ws = new WebSocket('ws://your-server:port/mcp/ws');
 
 **消息格式**：
 
-1. **调用工具**：
+1. **调用工具**（标准JSON-RPC格式）：
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "system.info",
+    "arguments": {}
+  }
+}
+```
+
+或使用兼容旧版格式：
 ```json
 {
   "type": "call_tool",
   "requestId": "req_123",
-  "name": "get_system_info",
+  "name": "system.info",
   "arguments": {}
 }
 ```
 
-2. **获取工具列表**：
+2. **获取工具列表**（标准JSON-RPC格式）：
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list"
+}
+```
+
+或使用兼容旧版格式：
 ```json
 {
   "type": "list_tools"
@@ -387,7 +420,19 @@ const ws = new WebSocket('ws://your-server:port/mcp/ws');
 
 **响应格式**：
 
-1. **工具调用结果**：
+1. **工具调用结果**（标准JSON-RPC格式）：
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [{"type": "text", "text": "..."}],
+    "isError": false
+  }
+}
+```
+
+或使用兼容旧版格式：
 ```json
 {
   "type": "tool_result",
@@ -399,7 +444,18 @@ const ws = new WebSocket('ws://your-server:port/mcp/ws');
 }
 ```
 
-2. **工具列表**：
+2. **工具列表**（标准JSON-RPC格式）：
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [...]
+  }
+}
+```
+
+或使用兼容旧版格式：
 ```json
 {
   "type": "tools_list",
@@ -438,8 +494,8 @@ flowchart TB
 
 - **工作流工具**：`{streamName}.{functionName}`
   - 例如：`chat.send_message`、`desktop.open_application`
-- **示例工具**：直接使用工具名
-  - 例如：`get_system_info`、`calculate`
+- **核心工具**：直接使用工具名
+  - 例如：`system.info`、`time.now`、`util.uuid`、`util.hash`
 
 ### 工具Schema生成
 
@@ -448,38 +504,129 @@ flowchart TB
 ```mermaid
 flowchart LR
     A["工作流函数定义"] --> B["解析prompt参数"]
-    B --> C["生成JSON Schema"]
-    C --> D["创建MCP工具定义"]
-    D --> E["注册到MCPServer"]
+    B --> C["验证参数名格式"]
+    C --> D["生成JSON Schema"]
+    D --> E["创建MCP工具定义"]
+    E --> F["注册到MCPServer"]
     
     style A fill:#E6F3FF
     style C fill:#FFE6CC
-    style E fill:#E6FFE6
+    style D fill:#FFE6CC
+    style F fill:#E6FFE6
 ```
 
-**示例代码**：
+**标准格式**：
 
 ```javascript
-// 工作流函数定义
-this.registerFunction('send_message', {
-  prompt: '[发送消息:消息内容:目标群组]',
-  handler: async (params, context) => {...}
+// 工作流函数定义（参数名必须使用英文）
+this.registerFunction('read', {
+  prompt: '[读取:filePath] - 读取文件内容，例如：[读取:易忘信息.txt]',
+  handler: async (params, context) => {
+    const { filePath } = params;
+    // 直接使用英文参数名
+  }
 });
 
 // 自动生成的MCP工具
 {
-  name: 'chat.send_message',
-  description: '发送消息',
+  name: 'tools.read',
+  description: '读取文件内容',
   inputSchema: {
     type: 'object',
     properties: {
-      '消息内容': { type: 'string' },
-      '目标群组': { type: 'string' }
+      filePath: {
+        type: 'string',
+        description: 'filePath'
+      }
     },
-    required: ['消息内容']
+    required: ['filePath']
   }
 }
 ```
+
+**参数命名规范**：
+- ✅ 使用英文：`filePath`, `keyword`, `command`
+- ❌ 禁止中文：`文件路径`, `关键词`, `命令`
+
+### 工具注册标准
+
+#### 核心原则
+
+1. **参数名必须使用英文**：符合 JSON Schema 规范，只能包含字母、数字、下划线
+2. **直接映射**：MCP 参数名直接传递给内部 handler，无需转换
+3. **标准化格式**：prompt 格式统一为 `[操作:paramName]`
+
+#### Prompt 格式标准
+
+**基本格式**：
+```
+[操作:paramName] - 描述，例如：[操作:example]
+```
+
+**多参数格式**：
+```
+[操作:param1:param2] - 描述，例如：[操作:value1:value2]
+```
+
+#### 工具注册示例
+
+**示例1：单参数工具**
+```javascript
+this.registerFunction('read', {
+  description: '读取文件内容',
+  prompt: `[读取:filePath] - 读取文件内容，例如：[读取:易忘信息.txt]`,
+  handler: async (params, context) => {
+    const { filePath } = params || {};
+    // filePath 直接来自 MCP 调用
+  },
+  enabled: true
+});
+```
+
+**示例2：多参数工具**
+```javascript
+this.registerFunction('write', {
+  description: '写入文件',
+  prompt: `[写入:filePath:content] - 写入文件，例如：[写入:test.txt:这是内容]`,
+  handler: async (params, context) => {
+    const { filePath, content } = params || {};
+  },
+  enabled: true
+});
+```
+
+#### 常见参数名参考
+
+| 用途 | 推荐参数名 | 说明 |
+|------|-----------|------|
+| 文件路径 | `filePath` | 文件或目录路径 |
+| 关键词 | `keyword` | 搜索关键词 |
+| 命令 | `command` | 执行的命令 |
+| 内容 | `content` | 文本内容 |
+| URL | `url` | 网址 |
+| 应用名 | `appName` | 应用程序名称 |
+| 股票代码 | `stockCode` | 股票代码 |
+| 知识库名 | `knowledgeBase` | 知识库名称 |
+
+#### Schema 自动生成
+
+`buildMCPInputSchema()` 方法会自动从 prompt 中提取参数名：
+
+1. 匹配所有 `[操作:param]` 格式
+2. 提取冒号后的参数名
+3. 验证参数名格式（必须是英文标识符）
+4. 生成 JSON Schema
+
+**参数名提取规则**：
+- ✅ 提取：`filePath`, `keyword`, `command`
+- ❌ 忽略：`易忘信息.txt`, `ls -la`, `错误`（示例值）
+
+#### 注意事项
+
+1. **参数名一致性**：prompt 中的参数名必须与 handler 中使用的参数名一致
+2. **示例值位置**：示例值放在描述中，不要放在参数位置
+3. **参数顺序**：多参数时，顺序要明确
+4. **可选参数**：在 handler 中使用默认值处理可选参数
 
 ---
 
@@ -540,7 +687,7 @@ tools = response.json()['tools']
 
 # 调用工具
 result = requests.post('http://your-server:port/api/mcp/tools/call', json={
-    'name': 'get_system_info',
+    'name': 'system.info',
     'arguments': {}
 })
 print(result.json())
@@ -585,11 +732,22 @@ ws = websocket.WebSocketApp(
 # 获取工具列表
 ws.send(json.dumps({'type': 'list_tools'}))
 
-# 调用工具
+# 调用工具（标准JSON-RPC格式）
+ws.send(json.dumps({
+    'jsonrpc': '2.0',
+    'id': 1,
+    'method': 'tools/call',
+    'params': {
+        'name': 'system.info',
+        'arguments': {}
+    }
+}))
+
+# 或使用兼容旧版格式
 ws.send(json.dumps({
     'type': 'call_tool',
     'requestId': 'req_1',
-    'name': 'get_system_info',
+    'name': 'system.info',
     'arguments': {}
 }))
 
@@ -598,55 +756,32 @@ ws.run_forever()
 
 ---
 
-## 示例工具
+## 核心工具
 
-MCP服务器内置了4个示例工具，供测试和演示使用：
+MCP服务器内置了4个核心工具，符合MCP 1.0标准：
 
-### 1. get_system_info
+### 1. system.info
 
-获取系统信息（操作系统、CPU、内存等）
-
-**参数**：无
-
-**示例**：
-```json
-{
-  "name": "get_system_info",
-  "arguments": {}
-}
-```
-
-**返回**：
-```json
-{
-  "platform": "win32",
-  "arch": "x64",
-  "nodeVersion": "v24.12.0",
-  "cpuCount": 8,
-  "totalMemory": "16GB",
-  "freeMemory": "8GB",
-  "uptime": "24小时",
-  "hostname": "DESKTOP-XXX"
-}
-```
-
-### 2. calculate
-
-计算数学表达式（支持基本运算）
+获取系统信息（操作系统、CPU、内存、平台等）
 
 **参数**：
 ```json
 {
-  "expression": "2 + 2 * 3"
+  "detail": false  // 可选，是否返回详细信息
 }
 ```
 
-**示例**：
+**示例**（JSON-RPC）：
 ```json
 {
-  "name": "calculate",
-  "arguments": {
-    "expression": "10 * 5 + 20"
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "system.info",
+    "arguments": {
+      "detail": true
+    }
   }
 }
 ```
@@ -654,56 +789,28 @@ MCP服务器内置了4个示例工具，供测试和演示使用：
 **返回**：
 ```json
 {
-  "expression": "10 * 5 + 20",
-  "result": 70,
-  "formatted": "10 * 5 + 20 = 70"
-}
-```
-
-### 3. text_process
-
-文本处理工具（统计字数、转换大小写等）
-
-**参数**：
-```json
-{
-  "text": "Hello World",
-  "operation": "uppercase"  // count, uppercase, lowercase, reverse
-}
-```
-
-**示例**：
-```json
-{
-  "name": "text_process",
-  "arguments": {
-    "text": "Hello World",
-    "operation": "count"
-  }
-}
-```
-
-**返回**：
-```json
-{
-  "text": "Hello World",
-  "operation": "count",
+  "jsonrpc": "2.0",
+  "id": 1,
   "result": {
-    "length": 11,
-    "words": 2,
-    "lines": 1
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"platform\":\"win32\",\"arch\":\"x64\",\"nodeVersion\":\"v24.12.0\",\"hostname\":\"DESKTOP-XXX\",\"cpu\":{\"cores\":8,\"model\":\"...\"},\"memory\":{\"total\":\"16GB\",\"free\":\"8GB\",\"used\":\"8GB\",\"usage\":50},\"uptime\":{\"seconds\":86400,\"hours\":24,\"days\":1}}"
+      }
+    ],
+    "isError": false
   }
 }
 ```
 
-### 4. get_time
+### 2. time.now
 
-获取当前时间信息
+获取当前时间信息（支持多种格式和时区）
 
 **参数**：
 ```json
 {
-  "format": "locale",  // iso, locale, timestamp
+  "format": "locale",  // iso, locale, timestamp, unix
   "timezone": "Asia/Shanghai"  // 可选
 }
 ```
@@ -711,21 +818,71 @@ MCP服务器内置了4个示例工具，供测试和演示使用：
 **示例**：
 ```json
 {
-  "name": "get_time",
-  "arguments": {
-    "format": "locale"
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "time.now",
+    "arguments": {
+      "format": "iso"
+    }
   }
 }
 ```
 
-**返回**：
+### 3. util.uuid
+
+生成UUID（通用唯一标识符）
+
+**参数**：
 ```json
 {
-  "format": "locale",
-  "time": "2024/1/1 12:00:00",
-  "date": "2024/1/1",
-  "timeOnly": "12:00:00",
-  "timestamp": 1703123456789
+  "version": "v4",  // UUID版本
+  "count": 1  // 生成数量（1-100）
+}
+```
+
+**示例**：
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "util.uuid",
+    "arguments": {
+      "version": "v4",
+      "count": 5
+    }
+  }
+}
+```
+
+### 4. util.hash
+
+计算字符串或数据的哈希值（支持多种算法）
+
+**参数**：
+```json
+{
+  "data": "Hello World",
+  "algorithm": "sha256"  // md5, sha1, sha256, sha512
+}
+```
+
+**示例**：
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "util.hash",
+    "arguments": {
+      "data": "Hello World",
+      "algorithm": "sha256"
+    }
+  }
 }
 ```
 
@@ -791,10 +948,23 @@ mcpServer.registerTool('custom_tool', {
 # 获取工具列表
 curl http://localhost:2537/api/mcp/tools
 
-# 调用工具
+# 调用工具（JSON-RPC标准）
+curl -X POST http://localhost:2537/api/mcp/jsonrpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "system.info",
+      "arguments": {}
+    }
+  }'
+
+# 调用工具（兼容旧版RESTful API）
 curl -X POST http://localhost:2537/api/mcp/tools/call \
   -H "Content-Type: application/json" \
-  -d '{"name": "get_system_info", "arguments": {}}'
+  -d '{"name": "system.info", "arguments": {}}'
 ```
 
 ---
@@ -825,6 +995,108 @@ aistream: {
 
 ---
 
+## Cursor配置
+
+### 配置方式
+
+Cursor 支持三种传输方式连接 MCP 服务器：
+
+**1. HTTP 传输（推荐）**
+
+适用于远程或本地部署，支持多用户。
+
+**配置位置**: `~/.cursor/mcp.json` 或项目根目录的 `.cursor/mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "xrk-agt": {
+      "url": "http://localhost:2537/api/mcp/jsonrpc",
+      "transport": "http",
+      "description": "XRK-AGT MCP服务器 - 提供工作流工具和系统功能"
+    }
+  }
+}
+```
+
+**2. SSE 传输**
+
+适用于需要实时更新的场景。
+
+```json
+{
+  "mcpServers": {
+    "xrk-agt": {
+      "url": "http://localhost:2537/api/mcp/connect",
+      "transport": "sse",
+      "description": "XRK-AGT MCP服务器 - SSE连接"
+    }
+  }
+}
+```
+
+**3. WebSocket 传输**
+
+适用于需要双向通信的场景。
+
+```json
+{
+  "mcpServers": {
+    "xrk-agt": {
+      "url": "ws://localhost:2537/mcp/ws",
+      "transport": "websocket",
+      "description": "XRK-AGT MCP服务器 - WebSocket连接"
+    }
+  }
+}
+```
+
+详细请求/响应格式请参考本文档的 [MCP HTTP API](#mcp-http-api) 章节。
+
+### 测试连接
+
+```bash
+# 健康检查
+curl http://localhost:2537/api/mcp/health
+
+# 获取工具列表（RESTful）
+curl http://localhost:2537/api/mcp/tools
+
+# 调用工具（JSON-RPC）
+curl -X POST http://localhost:2537/api/mcp/jsonrpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list"
+  }'
+```
+
+### 故障排除
+
+**连接失败**：
+1. 检查 XRK-AGT 服务器是否正在运行
+2. 确认端口号是否正确（默认2537）
+3. 检查防火墙设置
+
+**工具调用失败**：
+1. 查看服务器日志
+2. 验证工具名称是否正确
+3. 检查参数格式是否符合 JSON Schema
+
+**Cursor 无法识别 MCP 服务器**：
+1. 确认配置文件路径正确
+2. 重启 Cursor
+3. 检查 JSON 格式是否正确
+
+## 协议版本
+
+- **MCP协议版本**: 2024-11-05（MCP 1.0标准）
+- **JSON-RPC版本**: 2.0
+- **服务器版本**: 1.0.0
+
+---
+
 ## 总结
 
 XRK-AGT的MCP系统提供了：
@@ -832,8 +1104,7 @@ XRK-AGT的MCP系统提供了：
 - ✅ **标准化工具接口**：遵循MCP协议，支持外部AI平台连接
 - ✅ **自动工具注册**：所有工作流函数自动注册为MCP工具
 - ✅ **多协议支持**：HTTP REST API、SSE、WebSocket
-- ✅ **示例工具**：内置4个示例工具，便于测试和演示
+- ✅ **核心工具**：内置4个核心工具，便于测试和演示
 - ✅ **易于扩展**：支持自定义工具开发
 
-通过MCP协议，XRK-AGT可以轻松与外部AI平台集成，实现工具共享和跨平台协作。
-
+通过MCP协议，XRK-AGT可以轻松与Cursor、Claude、小智AI等外部AI平台集成，实现工具共享和跨平台协作。

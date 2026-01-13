@@ -317,7 +317,7 @@ export class WorkflowManager {
     if (!response) return '';
     
     // 先清理命令格式
-    let cleaned = this.cleanAIResponse(response);
+    let cleaned = this.sanitizeText(response, true);
     
     // 只保留格式化的判断结果部分
     const todoMatch = cleaned.match(/是否需要TODO工作流:[\s\S]+?(?:\n\n|$)/);
@@ -429,14 +429,19 @@ TODO列表:
   }
 
   /**
-   * 清理文本，移除命令格式和多余空格（统一方法）
+   * 清理文本，移除命令格式和多余空白（统一方法）
    */
-  sanitizeText(text) {
+  sanitizeText(text, removeCommands = true) {
     if (!text) return '';
-    return text
-      .replace(/\[([^\]]+)\]/g, '') // 移除命令格式
-      .replace(/\s+/g, ' ') // 移除多余空格
+    let cleaned = text;
+    if (removeCommands) {
+      cleaned = cleaned.replace(/\[([^\]]+)\]/g, ''); // 移除命令格式
+    }
+    cleaned = cleaned
+      .replace(/\n{3,}/g, '\n\n') // 合并多余空行
+      .replace(/[ \t]{2,}/g, ' ') // 合并多余空格
       .trim();
+    return cleaned;
   }
 
   extractTodos(text) {
@@ -800,8 +805,7 @@ ${commandsList}
       await this.storeNote(workflow, todo.id, `AI标记完成但系统判断未完成，完成度：${completion.toFixed(2)}`);
     }
 
-    // 步骤7: 合并上下文并更新笔记
-    this.mergeContext(workflow, result.context);
+    // 步骤7: 更新笔记（context已在工具执行时自动更新）
     todo.notes = await this.stream.getNotes(workflow.id);
     
     // 步骤8: 发送流程回复
@@ -886,54 +890,13 @@ ${commandsList}
   }
 
   /**
-   * 清理AI响应文本（统一方法，移除命令格式和多余空白）
-   */
-  cleanAIResponse(response) {
-    if (!response) return '';
-    return response
-      .replace(/\[([^\]]+)\]/g, '') // 移除命令格式
-      .replace(/\n{3,}/g, '\n\n') // 合并多余空行
-      .replace(/[ \t]{2,}/g, ' ') // 合并多余空格
-      .trim();
-  }
-
-  /**
    * 提取AI的自然语言回复（去除[]指令）
+   * 使用sanitizeText统一处理
    */
   extractAIMessage(response) {
-    return this.cleanAIResponse(response);
+    return this.sanitizeText(response, true);
   }
 
-  /**
-   * 合并上下文
-   */
-  mergeContext(workflow, newContext) {
-    if (!newContext || typeof newContext !== 'object') return;
-    
-    // 保留事件对象 e
-    const e = workflow.context.e;
-    
-    // 合并新上下文，排除undefined和null值
-    for (const [key, value] of Object.entries(newContext)) {
-      if (value !== undefined && value !== null && key !== 'e') {
-        workflow.context[key] = value;
-      }
-    }
-    
-    // 确保事件对象不被覆盖
-    if (e) {
-      workflow.context.e = e;
-    }
-    
-    // 记录上下文更新日志（仅在有重要数据时）
-    if (newContext.fileContent) {
-      const fileName = newContext.fileSearchResult?.fileName || newContext.fileName || '未知文件';
-      BotUtil.makeLog('debug', `工作流[${workflow.id}]上下文已更新：读取文件 ${fileName}`, 'WorkflowManager');
-    }
-    if (newContext.commandOutput && newContext.commandSuccess) {
-      BotUtil.makeLog('debug', `工作流[${workflow.id}]上下文已更新：命令执行成功`, 'WorkflowManager');
-    }
-  }
 
   async handleExecutionResult(workflow, todo, result, completion) {
     const completionRate = completion || 0.5;
@@ -1025,7 +988,7 @@ ${notesSummary || '无'}
       
       if (response) {
         // 使用统一的清理方法
-        const summary = this.cleanAIResponse(response);
+        const summary = this.sanitizeText(response, true);
         if (summary) {
           await e.reply(summary).catch(err => {
             // debug: 发送失败是技术细节
@@ -1586,7 +1549,6 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
       return {
         executed: false,
         functions: [],
-        context,
         success: true,
         error: null
       };
@@ -1602,7 +1564,6 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
       return {
         executed: false,
         functions: [],
-        context,
         success: true,
         error: null
       };
@@ -1615,7 +1576,6 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
       return {
         executed: false,
         functions: [],
-        context,
         success: true,
         error: null
       };
@@ -1623,10 +1583,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     
     try {
       const result = await this.executeFunctions(actionText, context);
-      // 确保上下文被正确传递
-      if (result.context) {
-        Object.assign(context, result.context);
-      }
+      // context已经在_executeFunctionInStream中自动更新，无需再次合并
       return result;
     } catch (error) {
       const botError = errorHandler.handle(
@@ -1638,7 +1595,6 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
       return { 
         executed: false, 
         functions: [], 
-        context: { ...context, error: botError.message }, 
         success: false, 
         error: botError.message 
       };
@@ -1646,14 +1602,12 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
   }
 
   /**
-   * 构建执行上下文（简化，删除冗余字段）
+   * 构建执行上下文
    */
   buildActionContext(workflow) {
-    const { e, ...restContext } = workflow.context;
     return {
-      e,
-      workflowId: workflow.id,
-      ...restContext
+      ...workflow.context,
+      workflowId: workflow.id
     };
   }
 
@@ -1662,7 +1616,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
    */
   async executeFunctions(actionText, context) {
     if (!actionText?.trim()) {
-      return { executed: false, functions: [], context, success: true, error: null };
+      return { executed: false, functions: [], success: true, error: null };
     }
 
     const { functions } = this.parseWorkflowFunctions(actionText.trim(), context);
@@ -1670,7 +1624,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     if (functions.length === 0) {
       BotUtil.makeLog('warn', `[执行] 没有解析到任何函数: ${this.truncateText(actionText, 100)}`, 'WorkflowManager');
       context.parseError = `执行动作格式不正确：${this.truncateText(actionText, 100)}`;
-      return { executed: false, functions: [], context, success: false, error: '未解析到任何可执行命令' };
+      return { executed: false, functions: [], success: false, error: '未解析到任何可执行命令' };
     }
     
     const executedFunctions = [];
@@ -1709,7 +1663,6 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
       executed: executedFunctions.length > 0,
       functions: executedFunctions,
       failedFunctions,
-      context,
       success,
       successRate,
       error: lastError?.message || null
@@ -1825,10 +1778,39 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
     return { functions: orderedFunctions, cleanText };
   }
 
+  /**
+   * 在工作流stream中执行函数
+   * @param {Object} stream - 工作流实例
+   * @param {Object} func - 函数对象 { type, params }
+   * @param {Object} context - 上下文对象
+   * @returns {Promise<Object>} 执行结果 { executed, error, result }
+   */
   async _executeFunctionInStream(stream, func, context) {
     if (!stream?.functions?.has(func.type)) return null;
+    
     const result = await stream.executeFunction(func.type, func.params, context);
-    return { executed: result?.success || false, error: result?.error || null };
+    
+    // executeFunction返回格式: { success: boolean, result: any, error?: string, verified?: boolean }
+    // 将结果存储到context中，供后续步骤使用
+    if (result?.success && result.result !== undefined) {
+      const resultKey = func.type.replace(/\./g, '_');
+      const resultData = result.result;
+      
+      // 存储到context（使用工具类型作为key）
+      context[resultKey] = resultData;
+      
+      // 同时存储到lastToolResult（统一访问接口）
+      if (!context.lastToolResult) {
+        context.lastToolResult = {};
+      }
+      context.lastToolResult[func.type] = resultData;
+    }
+    
+    return {
+      executed: result?.success || false,
+      error: result?.error || null,
+      result: result?.result
+    };
   }
 
   async executeSingleFunction(func, context) {

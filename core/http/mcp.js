@@ -4,12 +4,15 @@ import { HttpResponse } from '../../src/utils/http-utils.js';
 
 /**
  * MCP HTTP API
- * 提供Model Context Protocol服务，支持外部AI平台（如小智AI、Claude、豆包）连接并调用工具
+ * 符合MCP 1.0标准（2025），支持JSON-RPC 2.0协议
+ * 支持外部AI平台（Cursor、Claude、小智AI、豆包）连接并调用工具
  * 
  * 功能：
- * - 工具列表查询：GET /api/mcp/tools
- * - 工具调用：POST /api/mcp/tools/call
- * - 工具详情：GET /api/mcp/tools/:name
+ * - JSON-RPC端点：POST /api/mcp/jsonrpc（标准MCP协议）
+ * - 工具列表查询：GET /api/mcp/tools（兼容旧版）
+ * - 工具调用：POST /api/mcp/tools/call（兼容旧版）
+ * - 资源管理：GET /api/mcp/resources
+ * - 提示词管理：GET /api/mcp/prompts
  * - SSE连接：GET /api/mcp/connect
  * - WebSocket连接：ws://host/mcp/ws
  * - 健康检查：GET /api/mcp/health
@@ -21,19 +24,37 @@ export default {
 
   routes: [
     {
+      method: 'POST',
+      path: '/api/mcp/jsonrpc',
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const mcpServer = StreamLoader.mcpServer;
+        if (!mcpServer) {
+          return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp.jsonrpc');
+        }
+
+        try {
+          const request = req.body;
+          const response = await mcpServer.handleJSONRPC(request);
+          res.json(response);
+        } catch (error) {
+          return HttpResponse.error(res, error, 500, 'mcp.jsonrpc');
+        }
+      }, 'mcp.jsonrpc')
+    },
+    {
       method: 'GET',
       path: '/api/mcp/tools',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-          const mcpServer = StreamLoader.mcpServer;
-          if (!mcpServer) {
+        const mcpServer = StreamLoader.mcpServer;
+        if (!mcpServer) {
           return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp.tools');
-          }
+        }
 
-          const tools = mcpServer.listTools();
+        const tools = mcpServer.listTools();
         HttpResponse.success(res, {
-            tools,
-            count: tools.length
-          });
+          tools,
+          count: tools.length
+        });
       }, 'mcp.tools')
     },
     {
@@ -143,17 +164,92 @@ export default {
     },
     {
       method: 'GET',
+      path: '/api/mcp/resources',
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const mcpServer = StreamLoader.mcpServer;
+        if (!mcpServer) {
+          return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp.resources');
+        }
+
+        const resources = mcpServer.listResources();
+        HttpResponse.success(res, {
+          resources,
+          count: resources.length
+        });
+      }, 'mcp.resources')
+    },
+    {
+      method: 'GET',
+      path: '/api/mcp/resources/:uri',
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const { uri } = req.params;
+        const mcpServer = StreamLoader.mcpServer;
+        
+        if (!mcpServer) {
+          return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp.resource.read');
+        }
+
+        try {
+          const resource = await mcpServer.getResource(decodeURIComponent(uri));
+          HttpResponse.success(res, { resource });
+        } catch (error) {
+          return HttpResponse.notFound(res, `资源未找到: ${uri}`);
+        }
+      }, 'mcp.resource.read')
+    },
+    {
+      method: 'GET',
+      path: '/api/mcp/prompts',
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const mcpServer = StreamLoader.mcpServer;
+        if (!mcpServer) {
+          return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp.prompts');
+        }
+
+        const prompts = mcpServer.listPrompts();
+        HttpResponse.success(res, {
+          prompts,
+          count: prompts.length
+        });
+      }, 'mcp.prompts')
+    },
+    {
+      method: 'POST',
+      path: '/api/mcp/prompts/:name',
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const { name } = req.params;
+        const { arguments: args } = req.body;
+        const mcpServer = StreamLoader.mcpServer;
+        
+        if (!mcpServer) {
+          return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp.prompt.get');
+        }
+
+        try {
+          const prompt = await mcpServer.getPrompt(name, args || {});
+          HttpResponse.success(res, { prompt });
+        } catch (error) {
+          return HttpResponse.notFound(res, `提示词未找到: ${name}`);
+        }
+      }, 'mcp.prompt.get')
+    },
+    {
+      method: 'GET',
       path: '/api/mcp/health',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-          const mcpServer = StreamLoader.mcpServer;
-          const isEnabled = mcpServer !== null;
-          
+        const mcpServer = StreamLoader.mcpServer;
+        const isEnabled = mcpServer !== null;
+        
         HttpResponse.success(res, {
-            status: isEnabled ? 'healthy' : 'disabled',
-            enabled: isEnabled,
-            toolsCount: isEnabled ? mcpServer.tools.size : 0,
-            timestamp: Date.now()
-          });
+          status: isEnabled ? 'healthy' : 'disabled',
+          enabled: isEnabled,
+          initialized: isEnabled ? mcpServer.initialized : false,
+          toolsCount: isEnabled ? mcpServer.tools.size : 0,
+          resourcesCount: isEnabled ? mcpServer.resources.size : 0,
+          promptsCount: isEnabled ? mcpServer.prompts.size : 0,
+          protocolVersion: isEnabled ? mcpServer.serverInfo.protocolVersion : null,
+          timestamp: Date.now()
+        });
       }, 'mcp.health')
     }
   ],
@@ -162,32 +258,46 @@ export default {
     '/mcp/ws': (ws, req, Bot) => {
       BotUtil.makeLog('info', 'MCP WebSocket连接已建立', 'MCPApi');
 
-      // 发送连接确认
+      const mcpServer = StreamLoader.mcpServer;
+      if (!mcpServer) {
+        ws.send(JSON.stringify({
+          jsonrpc: '2.0',
+          id: null,
+          error: {
+            code: -32000,
+            message: 'MCP服务未启用'
+          }
+        }));
+        ws.close();
+        return;
+      }
+
+      // 发送连接确认（兼容旧版）
       ws.send(JSON.stringify({
         type: 'connected',
-        message: 'MCP WebSocket连接已建立'
+        message: 'MCP WebSocket连接已建立',
+        protocol: 'mcp-1.0'
       }));
 
       ws.on('message', async (data) => {
         const startTime = Date.now();
+        let message;
         try {
-          const message = JSON.parse(data.toString());
+          message = JSON.parse(data.toString());
+          
+          // 支持标准JSON-RPC格式
+          if (message.jsonrpc === '2.0') {
+            const response = await mcpServer.handleJSONRPC(message);
+            ws.send(JSON.stringify(response));
+            return;
+          }
+
+          // 兼容旧版消息格式
           const { type, requestId } = message;
           
           if (type === 'call_tool') {
             const { name, arguments: args } = message;
-            const mcpServer = StreamLoader.mcpServer;
             
-            if (!mcpServer) {
-              ws.send(JSON.stringify({ 
-                type: 'error',
-                requestId,
-                error: 'MCP服务未启用',
-                code: 503
-              }));
-              return;
-            }
-
             if (!mcpServer.tools.has(name)) {
               ws.send(JSON.stringify({
                 type: 'error',
@@ -213,8 +323,7 @@ export default {
               }
             }));
           } else if (type === 'list_tools') {
-            const mcpServer = StreamLoader.mcpServer;
-            const tools = mcpServer ? mcpServer.listTools() : [];
+            const tools = mcpServer.listTools();
             ws.send(JSON.stringify({
               type: 'tools_list',
               requestId,
@@ -222,11 +331,28 @@ export default {
               count: tools.length,
               timestamp: Date.now()
             }));
+          } else if (type === 'list_resources') {
+            const resources = mcpServer.listResources();
+            ws.send(JSON.stringify({
+              type: 'resources_list',
+              requestId,
+              resources,
+              count: resources.length,
+              timestamp: Date.now()
+            }));
+          } else if (type === 'list_prompts') {
+            const prompts = mcpServer.listPrompts();
+            ws.send(JSON.stringify({
+              type: 'prompts_list',
+              requestId,
+              prompts,
+              count: prompts.length,
+              timestamp: Date.now()
+            }));
           } else if (type === 'get_tool') {
             const { name } = message;
-            const mcpServer = StreamLoader.mcpServer;
             
-            if (!mcpServer || !mcpServer.tools.has(name)) {
+            if (!mcpServer.tools.has(name)) {
               ws.send(JSON.stringify({
                 type: 'error',
                 requestId,
@@ -264,16 +390,22 @@ export default {
         } catch (error) {
           BotUtil.makeLog('error', `MCP WebSocket消息处理失败: ${error.message}`, 'MCPApi');
           ws.send(JSON.stringify({
-            type: 'error',
-            requestId: null,
-            error: error.message,
-            code: 500
+            jsonrpc: '2.0',
+            id: message?.id || null,
+            error: {
+              code: -32603,
+              message: error.message
+            }
           }));
         }
       });
 
       ws.on('close', () => {
         BotUtil.makeLog('info', 'MCP WebSocket连接已关闭', 'MCPApi');
+      });
+
+      ws.on('error', (error) => {
+        BotUtil.makeLog('error', `MCP WebSocket错误: ${error.message}`, 'MCPApi');
       });
     }
   }

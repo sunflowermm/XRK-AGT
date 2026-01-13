@@ -48,7 +48,7 @@ export default class ToolsStream extends AIStream {
     // 1. READ - 读取文件
     this.registerFunction('read', {
       description: '读取文件内容',
-      prompt: `[读取:文件路径] - 读取文件内容，例如：[读取:易忘信息.txt]`,
+      prompt: `[读取:filePath] - 读取文件内容，例如：[读取:易忘信息.txt]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -68,8 +68,8 @@ export default class ToolsStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
-        const filePath = params?.filePath;
+      handler: async (params = {}, context = {}) => {
+        const { filePath } = params;
         if (!filePath) return;
 
         let result = await this.tools.readFile(filePath);
@@ -90,7 +90,7 @@ export default class ToolsStream extends AIStream {
     // 2. GREP - 搜索文本
     this.registerFunction('grep', {
       description: '在文件中搜索文本',
-      prompt: `[搜索:关键词:文件路径(可选)] - 搜索文本，例如：[搜索:错误:app.log] 或 [搜索:错误]`,
+      prompt: `[搜索:keyword:filePath] - 搜索文本，例如：[搜索:错误:app.log] 或 [搜索:错误]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -111,8 +111,8 @@ export default class ToolsStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
-        const { pattern, filePath } = params || {};
+      handler: async (params = {}, context = {}) => {
+        const { pattern, filePath } = params;
         if (!pattern) return;
 
         const result = await this.tools.grep(pattern, filePath, {
@@ -133,7 +133,7 @@ export default class ToolsStream extends AIStream {
     // 3. WRITE - 写入文件
     this.registerFunction('write', {
       description: '写入文件',
-      prompt: `[写入:文件路径:内容] - 写入文件，例如：[写入:test.txt:这是内容]`,
+      prompt: `[写入:filePath:content] - 写入文件，例如：[写入:test.txt:这是内容]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -154,8 +154,8 @@ export default class ToolsStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
-        const { filePath, content } = params || {};
+      handler: async (params = {}, context = {}) => {
+        const { filePath, content } = params;
         if (!filePath || !content) return;
 
         const result = await this.tools.writeFile(filePath, content);
@@ -172,7 +172,7 @@ export default class ToolsStream extends AIStream {
     // 4. RUN - 执行命令
     this.registerFunction('run', {
       description: '执行命令',
-      prompt: `[执行:命令] - 执行命令，例如：[执行:ls -la] 或 [执行:Get-ChildItem]`,
+      prompt: `[执行:command] - 执行命令，例如：[执行:ls -la] 或 [执行:Get-ChildItem]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -192,13 +192,13 @@ export default class ToolsStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         if (!IS_WINDOWS) {
           context.commandError = 'run命令仅在Windows上支持';
           return;
         }
 
-        const command = params?.command;
+        const { command } = params;
         if (!command) return;
 
         try {
@@ -214,7 +214,7 @@ export default class ToolsStream extends AIStream {
     // 5. NOTE - 记录笔记（工作流专用）
     this.registerFunction('note', {
       description: '记录笔记到工作流',
-      prompt: `[笔记:内容] - 记录笔记到工作流，例如：[笔记:重要信息]`,
+      prompt: `[笔记:content] - 记录笔记到工作流，例如：[笔记:重要信息]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -234,8 +234,8 @@ export default class ToolsStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
-        const content = params?.content;
+      handler: async (params = {}, context = {}) => {
+        const { content } = params;
         if (!content || !context.workflowId) return;
 
         await this.storeNote(context.workflowId, content, 'note', true);
@@ -277,10 +277,8 @@ export default class ToolsStream extends AIStream {
       content: result.content
     };
     
-    if (!context.workflowId) return;
-    
     const noteContent = `【文件读取结果】\n已读取文件：${fileName}\n文件路径：${result.path}\n\n【完整文件内容】\n${result.content}`;
-    await this.storeNote(context.workflowId, noteContent, 'read', true);
+    await this.storeNoteIfWorkflow(context, noteContent, 'read', true);
   }
 
   /**
@@ -294,12 +292,10 @@ export default class ToolsStream extends AIStream {
       found: false,
       fileName: filePath,
       path: null,
-      error: error
+      error
     };
     
-    if (!context.workflowId) return;
-    
-    await this.storeNote(context.workflowId, `【文件读取失败】\n文件：${filePath}\n错误：${error}`, 'read', true);
+    await this.storeNoteIfWorkflow(context, `【文件读取失败】\n文件：${filePath}\n错误：${error}`, 'read', true);
   }
 
   /**
@@ -309,11 +305,9 @@ export default class ToolsStream extends AIStream {
     context.grepResults = result.matches;
     context.grepPattern = pattern;
     
-    if (!context.workflowId) return;
-    
     const matchesText = this.formatGrepMatches(result.matches);
     const noteContent = `【搜索结果】\n关键词：${pattern}\n${filePath ? `文件：${filePath}\n` : ''}找到 ${result.matches.length} 个匹配项：\n${matchesText}${result.matches.length > 20 ? '\n...(结果已截断)' : ''}`;
-    await this.storeNote(context.workflowId, noteContent, 'grep', true);
+    await this.storeNoteIfWorkflow(context, noteContent, 'grep', true);
   }
 
   /**
@@ -329,10 +323,7 @@ export default class ToolsStream extends AIStream {
    */
   async handleGrepFailure(pattern, context) {
     context.grepError = `搜索失败: ${pattern}`;
-    
-    if (!context.workflowId) return;
-    
-    await this.storeNote(context.workflowId, `【搜索失败】\n关键词：${pattern}\n错误：搜索失败`, 'grep', true);
+    await this.storeNoteIfWorkflow(context, `【搜索失败】\n关键词：${pattern}\n错误：搜索失败`, 'grep', true);
   }
 
   /**
@@ -340,10 +331,7 @@ export default class ToolsStream extends AIStream {
    */
   async handleWriteSuccess(result, context) {
     context.writeFileResult = { success: true, path: result.path };
-    
-    if (!context.workflowId) return;
-    
-    await this.storeNote(context.workflowId, `【文件写入成功】\n文件：${result.path}`, 'write', true);
+    await this.storeNoteIfWorkflow(context, `【文件写入成功】\n文件：${result.path}`, 'write', true);
   }
 
   /**
@@ -351,10 +339,7 @@ export default class ToolsStream extends AIStream {
    */
   async handleWriteFailure(filePath, result, context) {
     context.writeFileError = result.error;
-    
-    if (!context.workflowId) return;
-    
-    await this.storeNote(context.workflowId, `【文件写入失败】\n文件：${filePath}\n错误：${result.error}`, 'write', true);
+    await this.storeNoteIfWorkflow(context, `【文件写入失败】\n文件：${filePath}\n错误：${result.error}`, 'write', true);
   }
 
   /**
@@ -399,10 +384,8 @@ export default class ToolsStream extends AIStream {
     context.commandOutput = output;
     context.commandSuccess = true;
     
-    if (!context.workflowId) return;
-    
-    const truncatedOutput = output.length > 1000 ? output.slice(0, 1000) + '...' : output;
-    await this.storeNote(context.workflowId, `【命令执行成功】\n命令：${command}\n输出：${truncatedOutput}`, 'run', true);
+    const truncatedOutput = output.length > 1000 ? `${output.slice(0, 1000)}...` : output;
+    await this.storeNoteIfWorkflow(context, `【命令执行成功】\n命令：${command}\n输出：${truncatedOutput}`, 'run', true);
   }
 
   /**
@@ -412,10 +395,7 @@ export default class ToolsStream extends AIStream {
     context.commandError = err.message;
     context.commandSuccess = false;
     context.commandStderr = err.stderr || '';
-    
-    if (!context.workflowId) return;
-    
-    await this.storeNote(context.workflowId, `【命令执行失败】\n命令：${command}\n错误：${err.message}`, 'run', true);
+    await this.storeNoteIfWorkflow(context, `【命令执行失败】\n命令：${command}\n错误：${err.message}`, 'run', true);
   }
 
   buildSystemPrompt(context) {

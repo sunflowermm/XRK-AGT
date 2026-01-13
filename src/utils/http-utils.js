@@ -132,6 +132,7 @@ export class HttpResponse {
       res.setHeader('Cache-Control', 'no-cache')
       res.setHeader('Connection', 'keep-alive')
       res.setHeader('X-Accel-Buffering', 'no')
+      res.setHeader('Access-Control-Allow-Origin', '*')
 
       await streamHandler(res)
     } catch (error) {
@@ -145,6 +146,76 @@ export class HttpResponse {
       
       errorHandler.handle(error, { context, code: ErrorCodes.SYSTEM_ERROR })
     }
+  }
+
+  /**
+   * JSON-RPC 2.0 错误响应（MCP标准）
+   * @param {Object} res - Express响应对象
+   * @param {number|string} id - 请求ID
+   * @param {number} code - JSON-RPC错误码
+   * @param {string} message - 错误消息
+   * @param {*} data - 错误数据（可选）
+   * @param {number} httpStatusCode - HTTP状态码
+   */
+  static jsonRpcError(res, id, code, message, data = null, httpStatusCode = 200) {
+    const response = {
+      jsonrpc: '2.0',
+      id,
+      error: {
+        code,
+        message
+      }
+    }
+    
+    if (data !== null) {
+      response.error.data = data
+    }
+    
+    return res.status(httpStatusCode).json(response)
+  }
+
+  /**
+   * JSON-RPC 2.0 成功响应（MCP标准）
+   * @param {Object} res - Express响应对象
+   * @param {number|string} id - 请求ID
+   * @param {*} result - 结果数据
+   */
+  static jsonRpcSuccess(res, id, result) {
+    return res.json({
+      jsonrpc: '2.0',
+      id,
+      result
+    })
+  }
+
+  /**
+   * 验证JSON-RPC请求格式
+   * @param {Object} request - JSON-RPC请求
+   * @returns {Object|null} 错误对象，如果验证通过则返回null
+   */
+  static validateJsonRpcRequest(request) {
+    if (!request || typeof request !== 'object') {
+      return {
+        code: -32600,
+        message: 'Invalid Request: request must be an object'
+      }
+    }
+
+    if (request.jsonrpc !== '2.0') {
+      return {
+        code: -32600,
+        message: 'Invalid Request: jsonrpc must be "2.0"'
+      }
+    }
+
+    if (request.method === undefined || typeof request.method !== 'string') {
+      return {
+        code: -32600,
+        message: 'Invalid Request: method is required and must be a string'
+      }
+    }
+
+    return null
   }
 }
 

@@ -730,6 +730,13 @@ export default class AIStream {
     }
   }
 
+  /**
+   * 存储笔记到工作流（统一方法）
+   * @param {string} workflowId - 工作流ID
+   * @param {string} content - 笔记内容
+   * @param {string} source - 来源
+   * @param {boolean} isTemporary - 是否临时
+   */
   async storeNote(workflowId, content, source = '', isTemporary = true) {
     if (typeof redis === 'undefined' || !redis) return false;
 
@@ -744,6 +751,21 @@ export default class AIStream {
       BotUtil.makeLog('error', `存储笔记失败: ${error.message}`, 'AIStream');
       return false;
     }
+  }
+
+  /**
+   * 存储笔记（如果工作流存在）
+   * 辅助方法，简化workflowId检查
+   * @param {Object} context - 上下文对象
+   * @param {string} content - 笔记内容
+   * @param {string} source - 来源
+   * @param {boolean} isTemporary - 是否临时
+   */
+  async storeNoteIfWorkflow(context, content, source = '', isTemporary = true) {
+    if (context?.workflowId) {
+      return await this.storeNote(context.workflowId, content, source, isTemporary);
+    }
+    return false;
   }
 
   async getNotes(workflowId) {

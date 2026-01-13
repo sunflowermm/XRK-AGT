@@ -449,7 +449,40 @@ node app   # 或 node start.js
 
 ## 文档与开发指南
 
-### 📚 完整文档导航
+### 🔌 在 Cursor 中使用
+
+XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI 编辑器中直接调用。
+
+### 快速配置
+
+1. 启动 XRK-AGT：`npm start`
+2. 配置 Cursor 的 `mcp.json`：
+```json
+{
+  "mcpServers": {
+    "xrk-agt": {
+      "url": "http://localhost:2537/api/mcp/jsonrpc",
+      "transport": "http",
+      "description": "XRK-AGT 智能助手服务器"
+    }
+  }
+}
+```
+3. 重启 Cursor，即可使用！
+
+### 可用功能
+
+- 桌面操作（回桌面、截屏、打开工具等）
+- 文件操作（创建Word/Excel、文件管理等）
+- 信息查询（系统信息、天气、股票等）
+- 工作流管理（多步骤任务自动化）
+
+详细文档：
+- [Cursor 快速开始](./docs/cursor-quick-start.md)
+- [MCP 集成指南](./docs/README-MCP.md)
+- [完整 MCP 文档](./docs/mcp-guide.md)
+
+## 📚 完整文档导航
 
 #### 🚀 快速开始
 - **[`docs/完整文档.md`](docs/完整文档.md)** - 整合了所有核心文档，推荐从这里开始

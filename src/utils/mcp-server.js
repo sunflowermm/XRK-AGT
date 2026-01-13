@@ -3,18 +3,29 @@ import os from 'os';
 
 /**
  * Model Context Protocol (MCP) 服务器实现
- * 提供标准化的工具调用接口，支持AI与系统工具之间的通信
+ * 符合MCP 1.0标准（2025），基于JSON-RPC 2.0协议
  * 
- * 作用：
+ * 功能：
  * - 统一管理所有工作流的函数，作为MCP工具暴露给外部AI平台
- * - 支持小智AI、Claude、豆包等平台通过HTTP/WebSocket调用工具
+ * - 支持Cursor、Claude、小智AI等平台通过HTTP/WebSocket/SSE调用工具
  * - 提供标准化的工具注册、调用、错误处理机制
+ * - 支持资源管理和提示词管理
+ * 
+ * 协议版本：MCP 1.0
+ * 传输方式：stdio、SSE、HTTP
  */
 export class MCPServer {
   constructor(streamInstance = null) {
     this.stream = streamInstance;
     this.tools = new Map(); // 注册的工具
     this.resources = new Map(); // 注册的资源
+    this.prompts = new Map(); // 注册的提示词
+    this.initialized = false; // 初始化状态
+    this.serverInfo = {
+      name: 'xrk-agt-mcp-server',
+      version: '1.0.0',
+      protocolVersion: '2024-11-05' // MCP协议版本
+    };
     
     // 注册跨平台通用工具
     this.registerCoreTools();
@@ -28,7 +39,17 @@ export class MCPServer {
    * @param {Object} tool.inputSchema - 输入参数schema（JSON Schema格式）
    * @param {Function} tool.handler - 工具处理函数
    */
+  /**
+   * 注册MCP工具
+   * @param {string} name - 工具名称
+   * @param {Object} tool - 工具定义
+   */
   registerTool(name, tool) {
+    // 检查是否已存在同名工具
+    if (this.tools.has(name)) {
+      BotUtil.makeLog('warn', `MCP工具已存在，将被覆盖: ${name}`, 'MCPServer');
+    }
+    
     this.tools.set(name, {
       name,
       description: tool.description || '',
@@ -42,27 +63,69 @@ export class MCPServer {
    * 注册MCP资源
    * @param {string} uri - 资源URI
    * @param {Object} resource - 资源定义
+   * @param {string} resource.name - 资源名称
+   * @param {string} resource.description - 资源描述
+   * @param {string} resource.mimeType - MIME类型
+   * @param {Function} resource.handler - 资源处理函数
    */
   registerResource(uri, resource) {
-    this.resources.set(uri, resource);
+    this.resources.set(uri, {
+      uri,
+      name: resource.name || uri,
+      description: resource.description || '',
+      mimeType: resource.mimeType || 'text/plain',
+      handler: resource.handler
+    });
+    BotUtil.makeLog('debug', `MCP资源已注册: ${uri}`, 'MCPServer');
   }
 
   /**
-   * 处理MCP工具调用请求
+   * 注册MCP提示词
+   * @param {string} name - 提示词名称
+   * @param {Object} prompt - 提示词定义
+   * @param {string} prompt.description - 提示词描述
+   * @param {Array} prompt.arguments - 参数列表
+   * @param {Function} prompt.handler - 提示词处理函数
+   */
+  registerPrompt(name, prompt) {
+    this.prompts.set(name, {
+      name,
+      description: prompt.description || '',
+      arguments: prompt.arguments || [],
+      handler: prompt.handler
+    });
+    BotUtil.makeLog('debug', `MCP提示词已注册: ${name}`, 'MCPServer');
+  }
+
+  /**
+   * 处理MCP工具调用请求（符合MCP标准）
+   * 
+   * 返回格式说明：
+   * - 标准MCP格式：{ content: [{ type: 'text', text: string }], isError: boolean }
+   * - 工具handler返回的结构化数据会被转换为JSON字符串放入text字段
+   * - 如果工具返回{ success: false }，isError会被设置为true
+   * 
    * @param {Object} request - MCP请求
    * @param {string} request.name - 工具名称
    * @param {Object} request.arguments - 工具参数
-   * @returns {Promise<Object>} MCP响应
+   * @returns {Promise<Object>} MCP响应（符合MCP标准格式）
    */
   async handleToolCall(request) {
     const { name, arguments: args } = request;
 
     if (!this.tools.has(name)) {
       return {
-        error: {
-          code: 'TOOL_NOT_FOUND',
-          message: `工具未找到: ${name}`
-        },
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              error: {
+                code: -32601,
+                message: `工具未找到: ${name}`
+              }
+            })
+          }
+        ],
         isError: true
       };
     }
@@ -70,40 +133,302 @@ export class MCPServer {
     const tool = this.tools.get(name);
 
     try {
+      // 验证参数schema（如果提供）
+      if (tool.inputSchema && tool.inputSchema.properties) {
+        this.validateArguments(args || {}, tool.inputSchema);
+      }
+
+      // 调用工具handler
       const result = await tool.handler(args || {});
+      
+      // 格式化响应（符合MCP标准）
+      // 如果result已经是MCP标准格式（有content数组），直接返回
+      if (result && typeof result === 'object' && Array.isArray(result.content)) {
+        return {
+          content: result.content,
+          isError: result.isError || false
+        };
+      }
+      
+      // 否则将result转换为MCP标准格式
+      // 检查是否为错误结果（有success字段且为false）
+      const isError = result && typeof result === 'object' && result.success === false;
+      const resultData = result !== undefined && result !== null 
+        ? (typeof result === 'object' ? result : { result })
+        : { success: true };
       
       return {
         content: [
           {
             type: 'text',
-            text: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+            text: JSON.stringify(resultData, null, 2)
           }
         ],
-        isError: false
+        isError
       };
     } catch (error) {
       BotUtil.makeLog('error', `MCP工具调用失败[${name}]: ${error.message}`, 'MCPServer');
       
       return {
-        error: {
-          code: 'TOOL_EXECUTION_ERROR',
-          message: error.message
-        },
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              error: {
+                code: -32603,
+                message: error.message,
+                data: { tool: name }
+              }
+            })
+          }
+        ],
         isError: true
       };
     }
   }
 
   /**
-   * 获取所有可用工具列表
+   * 验证工具参数（基于JSON Schema）
+   * @param {Object} args - 实际参数
+   * @param {Object} schema - JSON Schema
+   */
+  validateArguments(args, schema) {
+    if (!schema.properties) return;
+
+    // 检查必需参数
+    if (schema.required) {
+      for (const required of schema.required) {
+        if (!(required in args)) {
+          throw new Error(`缺少必需参数: ${required}`);
+        }
+      }
+    }
+
+    // 验证参数类型
+    for (const [key, value] of Object.entries(args)) {
+      const propSchema = schema.properties[key];
+      if (propSchema) {
+        const expectedType = propSchema.type;
+        const actualType = Array.isArray(value) ? 'array' : typeof value;
+        
+        if (expectedType && actualType !== expectedType && expectedType !== 'object') {
+          throw new Error(`参数 ${key} 类型不匹配: 期望 ${expectedType}, 实际 ${actualType}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * 获取所有可用工具列表（符合MCP标准）
    * @returns {Array} 工具列表
    */
   listTools() {
     return Array.from(this.tools.values()).map(tool => ({
       name: tool.name,
       description: tool.description,
-      inputSchema: tool.inputSchema
+      inputSchema: tool.inputSchema || {
+        type: 'object',
+        properties: {},
+        required: []
+      }
     }));
+  }
+
+  /**
+   * 获取所有可用资源列表（符合MCP标准）
+   * @returns {Array} 资源列表
+   */
+  listResources() {
+    return Array.from(this.resources.values()).map(resource => ({
+      uri: resource.uri,
+      name: resource.name,
+      description: resource.description,
+      mimeType: resource.mimeType
+    }));
+  }
+
+  /**
+   * 获取资源内容
+   * @param {string} uri - 资源URI
+   * @returns {Promise<Object>} 资源内容
+   */
+  async getResource(uri) {
+    if (!this.resources.has(uri)) {
+      throw new Error(`资源未找到: ${uri}`);
+    }
+
+    const resource = this.resources.get(uri);
+    if (resource.handler) {
+      const content = await resource.handler();
+      return {
+        uri,
+        mimeType: resource.mimeType,
+        text: typeof content === 'string' ? content : JSON.stringify(content)
+      };
+    }
+
+    return {
+      uri,
+      mimeType: resource.mimeType,
+      text: ''
+    };
+  }
+
+  /**
+   * 获取所有可用提示词列表（符合MCP标准）
+   * @returns {Array} 提示词列表
+   */
+  listPrompts() {
+    return Array.from(this.prompts.values()).map(prompt => ({
+      name: prompt.name,
+      description: prompt.description,
+      arguments: prompt.arguments || []
+    }));
+  }
+
+  /**
+   * 获取提示词内容
+   * @param {string} name - 提示词名称
+   * @param {Object} args - 参数
+   * @returns {Promise<Object>} 提示词内容
+   */
+  async getPrompt(name, args = {}) {
+    if (!this.prompts.has(name)) {
+      throw new Error(`提示词未找到: ${name}`);
+    }
+
+    const prompt = this.prompts.get(name);
+    if (prompt.handler) {
+      const content = await prompt.handler(args);
+      return {
+        name,
+        description: prompt.description,
+        messages: Array.isArray(content.messages) 
+          ? content.messages 
+          : [{ role: 'user', content: typeof content === 'string' ? content : JSON.stringify(content) }]
+      };
+    }
+
+    return {
+      name,
+      description: prompt.description,
+      messages: []
+    };
+  }
+
+  /**
+   * 处理JSON-RPC请求（MCP标准）
+   * @param {Object} request - JSON-RPC请求
+   * @returns {Promise<Object>} JSON-RPC响应
+   */
+  async handleJSONRPC(request) {
+    const { jsonrpc, id, method, params } = request;
+
+    // 验证JSON-RPC版本
+    if (jsonrpc !== '2.0') {
+      return {
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code: -32600,
+          message: 'Invalid Request: jsonrpc must be "2.0"'
+        }
+      };
+    }
+
+    try {
+      let result;
+
+      switch (method) {
+        case 'initialize':
+          result = await this.handleInitialize(params);
+          this.initialized = true;
+          break;
+
+        case 'tools/list':
+          result = { tools: this.listTools() };
+          break;
+
+        case 'tools/call':
+          if (!params || !params.name) {
+            throw new Error('工具名称不能为空');
+          }
+          result = await this.handleToolCall({
+            name: params.name,
+            arguments: params.arguments || {}
+          });
+          break;
+
+        case 'resources/list':
+          result = { resources: this.listResources() };
+          break;
+
+        case 'resources/read':
+          if (!params || !params.uri) {
+            throw new Error('资源URI不能为空');
+          }
+          result = await this.getResource(params.uri);
+          break;
+
+        case 'prompts/list':
+          result = { prompts: this.listPrompts() };
+          break;
+
+        case 'prompts/get':
+          if (!params || !params.name) {
+            throw new Error('提示词名称不能为空');
+          }
+          result = await this.getPrompt(params.name, params.arguments || {});
+          break;
+
+        default:
+          return {
+            jsonrpc: '2.0',
+            id,
+            error: {
+              code: -32601,
+              message: `Method not found: ${method}`
+            }
+          };
+      }
+
+      return {
+        jsonrpc: '2.0',
+        id,
+        result
+      };
+    } catch (error) {
+      BotUtil.makeLog('error', `MCP JSON-RPC处理失败[${method}]: ${error.message}`, 'MCPServer');
+      
+      return {
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code: -32603,
+          message: error.message
+        }
+      };
+    }
+  }
+
+  /**
+   * 处理initialize请求
+   * @param {Object} params - 初始化参数
+   * @returns {Object} 初始化响应
+   */
+  async handleInitialize(params) {
+    return {
+      protocolVersion: this.serverInfo.protocolVersion,
+      capabilities: {
+        tools: {},
+        resources: {},
+        prompts: {}
+      },
+      serverInfo: {
+        name: this.serverInfo.name,
+        version: this.serverInfo.version
+      }
+    };
   }
 
   /**

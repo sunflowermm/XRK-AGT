@@ -67,7 +67,7 @@ export default class DatabaseStream extends AIStream {
     // 保存知识（优化：支持多行内容）
     this.registerFunction('save_knowledge', {
       description: '保存知识到知识库',
-      prompt: () => `[保存知识:知识库名:内容] - 保存知识到指定知识库，内容可以是文本或JSON，支持多行内容${getKnowledgePrompt()}`,
+      prompt: () => `[保存知识:knowledgeBase:content] - 保存知识到指定知识库，内容可以是文本或JSON，支持多行内容${getKnowledgePrompt()}`,
       parser: (text, context) => {
         const match = text.match(/\[保存知识:([^:]+):([^\]]+)\]/);
         if (!match) {
@@ -78,14 +78,12 @@ export default class DatabaseStream extends AIStream {
           cleanText: text.replace(/\[保存知识:[^\]]+\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
-        const { db, content } = params || {};
+      handler: async (params = {}, context = {}) => {
+        const { db, content } = params;
         if (!db || !content) return;
 
         await this.saveKnowledge(db, content, context);
-        if (context.workflowId) {
-          await this.storeNote(context.workflowId, `已保存知识到知识库: ${db}`, 'database', true);
-        }
+        await this.storeNoteIfWorkflow(context, `已保存知识到知识库: ${db}`, 'database', true);
         BotUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
       },
       enabled: true
@@ -94,7 +92,7 @@ export default class DatabaseStream extends AIStream {
     // 查询知识（简化版：支持关键词和条件查询）
     this.registerFunction('query_knowledge', {
       description: '从知识库查询知识',
-      prompt: () => `[查询知识:知识库名:关键词] - 从指定知识库查询知识，支持关键词搜索${getKnowledgePrompt()}`,
+      prompt: () => `[查询知识:knowledgeBase:keyword] - 从指定知识库查询知识，支持关键词搜索${getKnowledgePrompt()}`,
       parser: (text, context) => {
         const match = text.match(/\[查询知识:([^:]+):([^\]]+)\]/);
         if (!match) {
@@ -105,16 +103,13 @@ export default class DatabaseStream extends AIStream {
           cleanText: text.replace(/\[查询知识:[^\]]+\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
-        const { db, keyword } = params || {};
+      handler: async (params = {}, context = {}) => {
+        const { db, keyword } = params;
         if (!db) return;
 
         const results = await this.queryKnowledge(db, keyword, context);
-        if (context.workflowId) {
-          await this.storeNote(context.workflowId, `从知识库 ${db} 查询到 ${results.length} 条知识`, 'database', true);
-        }
-        // 将查询结果注入到context中，供后续步骤使用
-        if (context && results.length > 0) {
+        await this.storeNoteIfWorkflow(context, `从知识库 ${db} 查询到 ${results.length} 条知识`, 'database', true);
+        if (results.length > 0) {
           context.knowledgeResults = results;
         }
         BotUtil.makeLog('info', `[${this.name}] 查询知识库: ${db}，找到 ${results.length} 条`, 'DatabaseStream');
@@ -135,11 +130,9 @@ export default class DatabaseStream extends AIStream {
           cleanText: text.replace(/\[列出知识库\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         const dbs = await this.listDatabases(context);
-        if (context.workflowId) {
-          await this.storeNote(context.workflowId, `列出知识库，共 ${dbs.length} 个`, 'database', true);
-        }
+        await this.storeNoteIfWorkflow(context, `列出知识库，共 ${dbs.length} 个`, 'database', true);
       },
       enabled: true
     });
@@ -147,7 +140,7 @@ export default class DatabaseStream extends AIStream {
     // 删除知识（简化版：支持ID或条件删除）
     this.registerFunction('delete_knowledge', {
       description: '从知识库删除知识',
-      prompt: `[删除知识:知识库名:ID或条件] - 从指定知识库删除知识，支持ID或条件删除`,
+      prompt: `[删除知识:knowledgeBase:condition] - 从指定知识库删除知识，支持ID或条件删除`,
       parser: (text, context) => {
         const match = text.match(/\[删除知识:([^:]+):([^\]]+)\]/);
         if (!match) {
@@ -158,14 +151,12 @@ export default class DatabaseStream extends AIStream {
           cleanText: text.replace(/\[删除知识:[^\]]+\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
-        const { db, condition } = params || {};
+      handler: async (params = {}, context = {}) => {
+        const { db, condition } = params;
         if (!db) return;
 
         const count = await this.deleteKnowledge(db, condition, context);
-        if (context.workflowId) {
-          await this.storeNote(context.workflowId, `从知识库 ${db} 删除了 ${count} 条知识`, 'database', true);
-        }
+        await this.storeNoteIfWorkflow(context, `从知识库 ${db} 删除了 ${count} 条知识`, 'database', true);
       },
       enabled: true
     });
@@ -205,29 +196,21 @@ export default class DatabaseStream extends AIStream {
       const textContent = typeof record.content === 'string' 
         ? record.content 
         : JSON.stringify(record);
-      const embedding = await this.generateEmbedding(textContent);
-      if (embedding && Array.isArray(embedding)) {
-        record.embedding = embedding;
+      try {
+        const embedding = await this.generateEmbedding(textContent);
+        if (embedding && Array.isArray(embedding)) {
+          record.embedding = embedding;
+        }
+      } catch (error) {
+        BotUtil.makeLog('debug', `[${this.name}] 生成embedding失败，将异步生成: ${error.message}`, 'DatabaseStream');
+        // 异步生成 embedding（不阻塞主流程）
+        this.generateEmbeddingAsync(record, db, textContent).catch(() => {});
       }
     }
     
     records.push(record);
-    
     await fs.writeFile(dbFile, JSON.stringify(records, null, 2), 'utf8');
     this.databases.set(db, records);
-    
-    // 异步生成 embedding（不阻塞主流程）
-    if (this.embeddingConfig.enabled && this.embeddingReady && !record.embedding) {
-      const textContent = typeof record.content === 'string' 
-        ? record.content 
-        : JSON.stringify(record);
-      this.generateEmbedding(textContent).then(embedding => {
-        if (embedding && Array.isArray(embedding)) {
-          record.embedding = embedding;
-          this.saveEmbeddingAsync(record, db).catch(() => {});
-        }
-      }).catch(() => {});
-    }
     
     BotUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
   }
@@ -312,6 +295,21 @@ export default class DatabaseStream extends AIStream {
   }
 
   /**
+   * 异步生成并保存 embedding（不阻塞主流程）
+   */
+  async generateEmbeddingAsync(record, db, textContent) {
+    try {
+      const embedding = await this.generateEmbedding(textContent);
+      if (embedding && Array.isArray(embedding)) {
+        record.embedding = embedding;
+        await this.saveEmbeddingAsync(record, db);
+      }
+    } catch (error) {
+      BotUtil.makeLog('debug', `[${this.name}] 异步生成embedding失败: ${error.message}`, 'DatabaseStream');
+    }
+  }
+
+  /**
    * 异步保存 embedding（不阻塞主流程）
    */
   async saveEmbeddingAsync(record, db) {
@@ -326,7 +324,7 @@ export default class DatabaseStream extends AIStream {
         this.databases.set(db, records);
       }
     } catch (error) {
-      // 静默失败，不影响主流程
+      BotUtil.makeLog('debug', `[${this.name}] 保存embedding失败: ${error.message}`, 'DatabaseStream');
     }
   }
 

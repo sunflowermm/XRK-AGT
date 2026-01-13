@@ -10,11 +10,9 @@ import { BaseTools } from '#utils/base-tools.js';
 import si from 'systeminformation';
 import fetch from 'node-fetch';
 
-// 仅在需要的平台上做判断，避免无意义的常量
 const IS_WINDOWS = process.platform === 'win32';
 const execAsync = promisify(exec);
 
-// 统一的命令执行函数
 const execCommand = (command, options = {}, needOutput = false) => {
   return new Promise((resolve, reject) => {
     exec(command, { ...options, encoding: 'utf8' }, (error, stdout, stderr) => {
@@ -27,10 +25,6 @@ const execCommand = (command, options = {}, needOutput = false) => {
   });
 };
 
-/**
- * 桌面助手工作流
- * 提供系统操作、文件管理、信息查询等实用功能
- */
 export default class DesktopStream extends AIStream {
 
   constructor() {
@@ -121,9 +115,98 @@ export default class DesktopStream extends AIStream {
     return false;
   }
 
+  /**
+   * 统一参数获取：支持多种参数名（兼容MCP工具和内部调用）
+   */
+  getParam(params, ...keys) {
+    if (!params) return undefined;
+    for (const key of keys) {
+      if (params[key] !== undefined && params[key] !== null) {
+        return params[key];
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * 统一文件名安全处理
+   */
+  sanitizeFileName(fileName) {
+    if (!fileName) return '';
+    return fileName.replace(/[<>:"/\\|?*]/g, '_');
+  }
+
+  /**
+   * 统一错误响应格式
+   */
+  errorResponse(code, message) {
+    return {
+      success: false,
+      error: { code, message }
+    };
+  }
+
+  /**
+   * 统一成功响应格式
+   */
+  successResponse(data) {
+    return {
+      success: true,
+      data: {
+        ...data,
+        timestamp: Date.now()
+      }
+    };
+  }
+
+  /**
+   * 统一解析JSON数据（支持字符串和对象）
+   */
+  parseJsonData(data) {
+    if (typeof data === 'string') {
+      try {
+        return JSON.parse(data);
+      } catch (e) {
+        throw new Error(`JSON数据解析失败: ${e.message}`);
+      }
+    }
+    return data;
+  }
+
+  /**
+   * 统一Excel数据格式转换：将各种格式转换为统一的sheets格式
+   */
+  normalizeExcelData(data) {
+    // 格式1: sheets格式 { sheets: [{ name: "...", data: [[...], [...]] }] }
+    if (typeof data === 'object' && !Array.isArray(data) && data.sheets && Array.isArray(data.sheets)) {
+      return data.sheets;
+    }
+    // 格式2: 二维数组格式 [[header1, header2], [value1, value2], ...]
+    if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
+      return [{ name: 'Sheet1', data }];
+    }
+    // 格式3: 对象数组格式 [{header1: value1, header2: value2}, ...]
+    if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && !Array.isArray(data[0])) {
+      const headers = Object.keys(data[0]);
+      const rows = data.map(row => headers.map(header => row[header]));
+      return [{ name: 'Sheet1', data: [headers, ...rows] }];
+    }
+    // 格式4: headers/rows格式 { headers: [...], rows: [[...], [...]] }
+    if (typeof data === 'object' && !Array.isArray(data) && data.headers && data.rows) {
+      return [{ name: 'Sheet1', data: [data.headers, ...data.rows] }];
+    }
+    // 格式5: 单个对象，转换为数组
+    if (typeof data === 'object' && !Array.isArray(data)) {
+      const headers = Object.keys(data);
+      const values = headers.map(header => data[header]);
+      return [{ name: 'Sheet1', data: [headers, values] }];
+    }
+    throw new Error('不支持的数据格式。支持格式：1) sheets格式 2) 二维数组 3) 对象数组 4) headers/rows格式');
+  }
+
   registerAllFunctions() {
     this.registerFunction('show_desktop', {
-      description: '回到桌面',
+      description: '回到桌面 - 最小化所有窗口显示桌面（仅限Windows系统）。适用场景：用户想要清空屏幕、查看桌面文件、需要干净的工作环境、或准备进行截屏等操作时使用。',
       prompt: `[回桌面] - 帮用户切换到桌面`,
       parser: (text, context) => {
         if (!text.includes('[回桌面]')) {
@@ -134,7 +217,7 @@ export default class DesktopStream extends AIStream {
           cleanText: text.replace(/\[回桌面\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '回桌面功能')) return;
 
         try {
@@ -167,10 +250,10 @@ export default class DesktopStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '打开系统工具功能')) return;
 
-        const tool = params?.tool;
+        const { tool } = params;
         if (!tool) return;
 
         const toolNames = { notepad: '记事本', calc: '计算器', taskmgr: '任务管理器' };
@@ -196,7 +279,7 @@ export default class DesktopStream extends AIStream {
           cleanText: text.replace(/\[截屏\]|\[截图\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         try {
           const screenshot = (await import('screenshot-desktop')).default;
 
@@ -215,15 +298,20 @@ export default class DesktopStream extends AIStream {
             throw new Error('截屏文件为空');
           }
 
-          if (context.e) {
-            await context.e.reply([
-              { type: 'image', data: { file: screenshotPath } }
-            ]);
-          }
+          // 存储到上下文
+          context.screenshotPath = screenshotPath;
+          context.screenshotSize = stats.size;
 
           BotUtil.makeLog('info', `截图成功: ${screenshotPath} (${stats.size} bytes)`, 'DesktopStream');
+          
+          return this.successResponse({
+            filePath: screenshotPath,
+            fileName: filename,
+            size: stats.size
+          });
         } catch (err) {
           BotUtil.makeLog('error', `[desktop] 截屏失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('SCREENSHOT_FAILED', err.message);
         }
       },
       enabled: true
@@ -241,7 +329,7 @@ export default class DesktopStream extends AIStream {
           cleanText: text.replace(/\[锁屏\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '锁屏功能')) return;
 
         try {
@@ -265,7 +353,7 @@ export default class DesktopStream extends AIStream {
           cleanText: text.replace(/\[系统信息\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         try {
           // 使用systeminformation库获取系统信息（跨平台）
           const [cpu, mem] = await Promise.all([
@@ -297,7 +385,7 @@ export default class DesktopStream extends AIStream {
 
     this.registerFunction('open_browser', {
       description: '打开浏览器访问网页',
-      prompt: `[打开网页:网址] - 在浏览器中打开指定网页，例如：[打开网页:https://www.baidu.com]`,
+      prompt: `[打开网页:url] - 在浏览器中打开指定网页，例如：[打开网页:https://www.baidu.com]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -317,8 +405,8 @@ export default class DesktopStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
-        const url = params?.url;
+      handler: async (params = {}, context = {}) => {
+        const url = this.getParam(params, 'url');
         if (!url) return;
 
         const commands = {
@@ -362,7 +450,7 @@ export default class DesktopStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '关机/重启功能')) return;
 
         const commands = {
@@ -372,7 +460,7 @@ export default class DesktopStream extends AIStream {
           cancel: { cmd: 'shutdown /a' }
         };
 
-        const action = params?.action;
+        const { action } = params;
         const config = commands[action];
         if (!config) return;
 
@@ -393,7 +481,7 @@ export default class DesktopStream extends AIStream {
 
     this.registerFunction('create_folder', {
       description: '在桌面创建文件夹',
-      prompt: `[创建文件夹:文件夹名] - 在桌面创建指定名称的文件夹，例如：[创建文件夹:新建文件夹]`,
+      prompt: `[创建文件夹:folderName] - 在桌面创建指定名称的文件夹，例如：[创建文件夹:新建文件夹]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -413,15 +501,15 @@ export default class DesktopStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '创建文件夹功能')) return;
 
-        const folderName = params?.folderName;
+        const { folderName } = params;
         if (!folderName) return;
 
         try {
           const workspace = this.getWorkspace();
-          const safeName = folderName.replace(/[<>:"/\\|?*]/g, '_');
+          const safeName = this.sanitizeFileName(folderName);
           const folderPath = path.join(workspace, safeName);
 
           // 使用Node.js创建文件夹
@@ -447,7 +535,7 @@ export default class DesktopStream extends AIStream {
           cleanText: text.replace(/\[打开资源管理器\]|\[打开文件夹\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         const commands = {
           win32: 'explorer',
           darwin: 'open .',
@@ -476,7 +564,7 @@ export default class DesktopStream extends AIStream {
           cleanText: text.replace(/\[磁盘空间\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         try {
           // 使用systeminformation库获取磁盘空间（跨平台）
           const fsSize = await si.fsSize();
@@ -502,7 +590,7 @@ export default class DesktopStream extends AIStream {
     // 执行PowerShell命令（支持错误重试）
     this.registerFunction('execute_powershell', {
       description: '执行PowerShell命令（工作区：桌面）',
-      prompt: `[执行命令:PowerShell命令] - 在工作区（桌面）执行PowerShell命令，例如：[执行命令:Get-ChildItem -Path "$env:USERPROFILE\\Desktop" -Filter "*.docx"]`,
+      prompt: `[执行命令:command] - 在工作区（桌面）执行PowerShell命令，例如：[执行命令:Get-ChildItem -Path "$env:USERPROFILE\\Desktop" -Filter "*.docx"]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -522,10 +610,10 @@ export default class DesktopStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '执行PowerShell命令')) return;
 
-        const command = params?.command;
+        const { command } = params;
         if (!command) return;
 
         try {
@@ -563,7 +651,7 @@ export default class DesktopStream extends AIStream {
           cleanText: text.replace(/\[列出桌面文件\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '列出桌面文件')) return;
 
         try {
@@ -621,7 +709,7 @@ export default class DesktopStream extends AIStream {
     // 新增：打开软件（通过快捷方式或程序名）
     this.registerFunction('open_application', {
       description: '打开应用程序',
-      prompt: `[打开软件:软件名] - 打开指定的软件，例如：[打开软件:微信] 或 [打开软件:notepad.exe]`,
+      prompt: `[打开软件:appName] - 打开指定的软件，例如：[打开软件:微信] 或 [打开软件:notepad.exe]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -641,10 +729,10 @@ export default class DesktopStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '打开软件')) return;
 
-        const appName = params?.appName;
+        const { appName } = params;
         if (!appName) return;
 
         try {
@@ -688,8 +776,8 @@ export default class DesktopStream extends AIStream {
 
     // 新增：生成Word文档
     this.registerFunction('create_word_document', {
-      description: '创建Word文档',
-      prompt: `[生成Word:文件名:内容] - 创建Word文档，例如：[生成Word:报告.docx:这是文档内容]`,
+      description: '创建Word文档 - 根据指定内容创建格式化的Word文档（.docx），支持标题、段落、表格等格式。适用于创建报告、笔记、文档等场景。',
+      prompt: `[生成Word:fileName:content] - 创建Word文档，例如：[生成Word:报告.docx:这是文档内容]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -710,10 +798,12 @@ export default class DesktopStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
-        const fileName = params?.fileName;
-        const content = params?.content;
-        if (!fileName || !content) return;
+      handler: async (params = {}, context = {}) => {
+        const fileName = this.getParam(params, 'fileName', 'filename');
+        const content = params.content;
+        
+        if (!fileName) throw new Error('文件名不能为空');
+        if (!content) throw new Error('内容不能为空');
 
         try {
           // 动态导入docx库
@@ -721,26 +811,20 @@ export default class DesktopStream extends AIStream {
           const { Document, Packer, Paragraph, TextRun } = docxModule;
 
           const workspace = this.getWorkspace();
-          const safeFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
+          const safeFileName = this.sanitizeFileName(fileName);
           const filePath = path.join(workspace, safeFileName.endsWith('.docx') ? safeFileName : `${safeFileName}.docx`);
 
           // 将内容按换行符分割成段落
-          // 保留空行（如果原内容中有空行）
           const lines = content.split(/\n/);
           const docParagraphs = lines.map(line =>
             new Paragraph({
-              children: [new TextRun(line || ' ')] // 空行用空格代替
+              children: [new TextRun(line || ' ')]
             })
           );
 
           // 创建Word文档
           const doc = new Document({
-            sections: [
-              {
-                properties: {},
-                children: docParagraphs
-              }
-            ]
+            sections: [{ properties: {}, children: docParagraphs }]
           });
 
           // 生成并保存文档
@@ -754,16 +838,16 @@ export default class DesktopStream extends AIStream {
           }
 
           context.createdWordDoc = filePath;
-
-          // 发送成功消息
-          if (context.e) {
-            await context.e.reply(`✅ Word文档已生成：${safeFileName}`);
-          }
-
           BotUtil.makeLog('info', `Word文档生成成功: ${filePath} (${stats.size} bytes)`, 'DesktopStream');
+          
+          return this.successResponse({
+            filePath,
+            fileName: safeFileName,
+            size: stats.size
+          });
         } catch (err) {
           BotUtil.makeLog('error', `Word文档生成失败: ${err.message}`, 'DesktopStream');
-          this.handleError(context, err, '生成Word文档');
+          return this.errorResponse('WORD_GENERATION_FAILED', err.message);
         }
       },
       enabled: true
@@ -772,7 +856,7 @@ export default class DesktopStream extends AIStream {
     // 生成Excel文档（只接收JSON数组格式，不做文本解析）
     this.registerFunction('create_excel_document', {
       description: '创建Excel文档',
-      prompt: `[生成Excel:文件名:JSON数组] - 创建Excel文档，数据必须是JSON数组格式，例如：[生成Excel:数据表.xlsx:[{"姓名":"张三","年龄":25},{"姓名":"李四","年龄":30}]]`,
+      prompt: `[生成Excel:fileName:jsonData] - 创建Excel文档，数据必须是JSON数组格式，例如：[生成Excel:数据表.xlsx:[{"姓名":"张三","年龄":25},{"姓名":"李四","年龄":30}]]`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -882,94 +966,110 @@ export default class DesktopStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
-        const fileName = params?.fileName;
-        const data = params?.data;
-        if (!fileName || !data) return;
-
-        if (!Array.isArray(data)) {
-          throw new Error('数据必须是数组格式');
-        }
+      handler: async (params = {}, context = {}) => {
+        const fileName = this.getParam(params, 'fileName', 'filename');
+        let data = this.getParam(params, 'data', 'jsonData');
+        
+        if (!fileName) throw new Error('文件名不能为空');
+        if (!data) throw new Error('数据不能为空');
 
         try {
+          // 解析JSON数据
+          data = this.parseJsonData(data);
+          
+          // 统一数据格式
+          const sheets = this.normalizeExcelData(data);
+
           // 动态导入exceljs库
           const ExcelJSModule = await import('exceljs');
           const ExcelJS = ExcelJSModule.default || ExcelJSModule;
 
-          // 使用工作区路径（桌面）
           const workspace = this.getWorkspace();
-          const safeFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
+          const safeFileName = this.sanitizeFileName(fileName);
           const filePath = path.join(workspace, safeFileName.endsWith('.xlsx') ? safeFileName : `${safeFileName}.xlsx`);
 
-          // 创建工作簿和工作表
           const workbook = new ExcelJS.Workbook();
-          const worksheet = workbook.addWorksheet('Sheet1');
+          let totalRowCount = 0;
 
-          if (data.length > 0) {
-            // 获取表头（从第一条数据的键）
-            const headers = Object.keys(data[0]);
+          // 处理每个工作表
+          for (const sheetInfo of sheets) {
+            const sheetName = sheetInfo.name || 'Sheet1';
+            const sheetData = sheetInfo.data;
+            
+            if (!Array.isArray(sheetData) || sheetData.length === 0) {
+              continue;
+            }
 
-            // 设置表头样式
-            worksheet.columns = headers.map(header => ({
-              header: header,
-              key: header,
+            const worksheet = workbook.addWorksheet(sheetName);
+            const headers = sheetData[0];
+            
+            if (!Array.isArray(headers)) {
+              throw new Error('表头必须是数组格式');
+            }
+
+            // 设置表头
+            worksheet.columns = headers.map((header, index) => ({
+              header: String(header || `列${index + 1}`),
+              key: `col${index}`,
               width: 15
             }));
 
-            // 设置表头行样式
+            // 设置表头样式
             const headerRow = worksheet.getRow(1);
             headerRow.font = { bold: true };
-            headerRow.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFD3D3D3' }
-            };
+            headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
             headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
             // 添加数据行
-            data.forEach((rowData, index) => {
-              const row = worksheet.addRow(rowData);
-              row.alignment = { vertical: 'middle', horizontal: 'left' };
-            });
+            for (let i = 1; i < sheetData.length; i++) {
+              const rowData = sheetData[i];
+              if (!Array.isArray(rowData)) continue;
+              
+              const paddedRow = [...rowData];
+              while (paddedRow.length < headers.length) {
+                paddedRow.push('');
+              }
+              
+              worksheet.addRow(paddedRow).alignment = { vertical: 'middle', horizontal: 'left' };
+            }
 
             // 自动调整列宽
             worksheet.columns.forEach(column => {
-              if (column.header) {
-                let maxLength = column.header.length;
-                column.eachCell({ includeEmpty: false }, (cell) => {
-                  const cellValue = cell.value ? String(cell.value) : '';
-                  if (cellValue.length > maxLength) {
-                    maxLength = cellValue.length;
-                  }
-                });
-                column.width = Math.min(Math.max(maxLength + 2, 10), 50);
-              }
+              if (!column.header) return;
+              let maxLength = column.header.length;
+              column.eachCell({ includeEmpty: false }, (cell) => {
+                const cellValue = String(cell.value || '');
+                if (cellValue.length > maxLength) maxLength = cellValue.length;
+              });
+              column.width = Math.min(Math.max(maxLength + 2, 10), 50);
             });
-          } else {
-            // 数据为空
-            worksheet.addRow(['数据为空']);
+
+            totalRowCount += Math.max(0, sheetData.length - 1);
+          }
+
+          // 如果没有工作表，创建空工作表
+          if (workbook.worksheets.length === 0) {
+            workbook.addWorksheet('Sheet1').addRow(['数据为空']);
           }
 
           // 保存文件
           await workbook.xlsx.writeFile(filePath);
 
-          // 验证文件是否生成
-          try {
-            await fs.access(filePath);
-            context.createdExcelDoc = filePath;
-
-            // 发送成功消息
-            if (context.e) {
-              await context.e.reply(`✅ Excel文件已生成：${safeFileName}`);
-            }
-
-            BotUtil.makeLog('info', `Excel文件生成成功: ${filePath}`, 'DesktopStream');
-          } catch (fileErr) {
-            throw new Error(`Excel文件未生成：${fileErr.message}`);
-          }
+          // 验证文件
+          const stats = await fs.stat(filePath);
+          context.createdExcelDoc = filePath;
+          BotUtil.makeLog('info', `Excel文件生成成功: ${filePath}`, 'DesktopStream');
+          
+          return this.successResponse({
+            filePath,
+            fileName: safeFileName,
+            size: stats.size,
+            rowCount: totalRowCount,
+            sheetCount: workbook.worksheets.length
+          });
         } catch (err) {
           BotUtil.makeLog('error', `Excel生成失败: ${err.message}`, 'DesktopStream');
-          this.handleError(context, err, '生成Excel文档');
+          return this.errorResponse('EXCEL_GENERATION_FAILED', err.message);
         }
       },
       enabled: true
@@ -988,7 +1088,7 @@ export default class DesktopStream extends AIStream {
           cleanText: text.replace(/\[清理进程\]/g, '').trim()
         };
       },
-      handler: async (params, context) => {
+      handler: async (params = {}, context = {}) => {
         const result = await this.tools.cleanupProcesses();
         context.processesCleaned = result.killed || [];
       },
@@ -997,7 +1097,7 @@ export default class DesktopStream extends AIStream {
 
     this.registerFunction('start_workflow', {
       description: '启动多步骤工作流',
-      prompt: `[启动工作流:目标描述] - 启动一个多步骤工作流，AI会自动规划步骤并执行，例如：[启动工作流:帮我打开微信并发送消息给张三]`,
+      prompt: `[启动工作流:goal] - 启动一个多步骤工作流，AI会自动规划步骤并执行，例如：[启动工作流:帮我打开微信并发送消息给张三]`,
       // 仅允许顶层调用，工作流内部会被过滤掉
       onlyTopLevel: true,
       parser: (text, context) => {
@@ -1015,8 +1115,8 @@ export default class DesktopStream extends AIStream {
           cleanText: functions.length > 0 ? text.replace(reg, '').trim() : text
         };
       },
-      handler: async (params, context) => {
-        const goal = params?.goal;
+      handler: async (params = {}, context = {}) => {
+        const { goal } = params;
         if (!goal || !this.workflowManager) return;
 
         // 禁止在已有工作流内部再次启动新的工作流，避免嵌套和重复创建
@@ -1042,8 +1142,8 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
     this.registerFunction('stock_quote', {
-      description: '查询单只A股实时行情，并把结果记录到当前工作流的笔记中',
-      prompt: `[股票:代码] - 查询单只A股实时行情并写入工作流笔记，例如：[股票:600519]、[股票:000001]，只能是股票代码，不能是中文字符，并且如果执行之后会自动写进笔记`,
+      description: '查询单只A股实时行情，返回结构化数据（价格、涨跌、涨跌幅等），结果会自动记录到工作流笔记中',
+      prompt: `[股票:stockCode] - 查询单只A股实时行情，返回结构化数据，例如：[股票:600519]、[股票:000001]，只能是6位股票代码`,
       parser: (text, context) => {
         const functions = [];
         let cleanText = text;
@@ -1063,30 +1163,33 @@ export default class DesktopStream extends AIStream {
 
         return { functions, cleanText };
       },
-      handler: async (params, context) => {
-        const code = params?.code;
-        const e = context?.e;
-        const workflowId = context?.workflowId;
+      handler: async (params = {}, context = {}) => {
+        const code = (this.getParam(params, 'code', 'stockCode') || '').trim();
+        const { workflowId } = context;
 
-        if (!code) return;
+        // 验证股票代码格式（6位数字）
+        if (!code) {
+          return this.errorResponse('INVALID_PARAM', '股票代码不能为空');
+        }
+
+        if (!/^\d{6}$/.test(code)) {
+          return this.errorResponse('INVALID_PARAM', `股票代码格式错误：${code}，应为6位数字（如：600519、000001）`);
+        }
 
         try {
           const stockData = await this.fetchStockQuote(code);
 
-          if (!stockData) {
-            if (e) {
-              await e.reply(`没有查询到股票 ${code} 的有效行情数据，请确认代码是否正确。`);
-              await BotUtil.sleep(300);
-            }
+          if (!stockData || !stockData.name) {
+            const errorMsg = `股票代码 ${code} 不存在或数据无效`;
             if (workflowId) {
               await this.storeNote(
                 workflowId,
-                `【股票查询失败】\n代码：${code}\n原因：未获取到有效数据`,
+                `【股票查询失败】\n代码：${code}\n原因：${errorMsg}`,
                 'stock',
                 true
               );
             }
-            return;
+            return this.errorResponse('STOCK_NOT_FOUND', errorMsg);
           }
 
           const {
@@ -1102,54 +1205,58 @@ export default class DesktopStream extends AIStream {
             time
           } = stockData;
 
-          const summary =
-            `${name}（${code}）当前价格：${current.toFixed(2)}，` +
-            `涨跌：${parseFloat(change).toFixed(2)}（${parseFloat(changePercent).toFixed(2)}%）`;
+          // 统一计算数值，避免重复解析
+          const changeValue = parseFloat(change) || 0;
+          const changePercentValue = parseFloat(changePercent) || 0;
 
-          if (e) {
-            await e.reply(
-              `${summary}\n` +
-              `今开：${open.toFixed(2)}，昨收：${preClose.toFixed(2)}，` +
-              `最高：${high.toFixed(2)}，最低：${low.toFixed(2)}\n` +
-              (date && time ? `数据时间：${date} ${time}` : '')
-            );
-            await BotUtil.sleep(300);
-          }
+          // 返回结构化数据
+          const result = this.successResponse({
+            code,
+            name,
+            price: current,
+            change: changeValue,
+            changePercent: changePercentValue,
+            open,
+            preClose,
+            high,
+            low,
+            date,
+            time
+          });
 
+          // 在工作流中记录笔记（供后续步骤使用）
           if (workflowId) {
             const noteContent =
               `【股票行情查询】\n` +
               `代码：${code}\n名称：${name}\n` +
               `当前价：${current.toFixed(2)}\n` +
-              `涨跌：${parseFloat(change).toFixed(2)}（${parseFloat(changePercent).toFixed(2)}%）\n` +
+              `涨跌：${changeValue.toFixed(2)}（${changePercentValue.toFixed(2)}%）\n` +
               `今开：${open.toFixed(2)}  昨收：${preClose.toFixed(2)}\n` +
               `最高：${high.toFixed(2)}  最低：${low.toFixed(2)}\n` +
               (date && time ? `数据时间：${date} ${time}\n` : '') +
               `（本条笔记由股票信息工作流自动生成，供后续多步工作流分析与决策使用）`;
 
             await this.storeNote(workflowId, noteContent, 'stock', true);
-            context.stockNoteStored = true;
           }
+
+          return result;
         } catch (error) {
           BotUtil.makeLog(
             'error',
-            `[example] 股票行情查询异常(${code}): ${error.message}`,
-            'StockExampleStream'
+            `股票行情查询异常(${code}): ${error.message}`,
+            'DesktopStream'
           );
 
-          if (context?.e) {
-            await context.e.reply(`查询股票 ${code} 行情时发生异常，请稍后再试。`);
-            await BotUtil.sleep(300);
-          }
-
-          if (context?.workflowId) {
+          if (workflowId) {
             await this.storeNote(
-              context.workflowId,
+              workflowId,
               `【股票查询异常】\n代码：${code}\n错误：${error.message}`,
               'stock',
               true
             );
           }
+
+          return this.errorResponse('STOCK_QUERY_FAILED', error.message);
         }
       },
       enabled: true
@@ -1161,16 +1268,15 @@ export default class DesktopStream extends AIStream {
    * 优先使用iconv-lite，如果不可用则使用兼容方案
    */
   decodeGBKResponse(buffer) {
-    // 优先使用iconv-lite解码GBK
     try {
       const iconv = require('iconv-lite');
       return iconv.decode(buffer, 'gbk');
-    } catch (e) {
+    } catch {
       // 如果iconv-lite不可用，尝试使用TextDecoder
       try {
         const decoder = new TextDecoder('gbk', { fatal: false });
         return decoder.decode(buffer);
-      } catch (e2) {
+      } catch {
         // 最后使用binary编码（兼容方案，可能无法完全正确解码）
         BotUtil.makeLog('warn', '股票数据解码：使用binary编码，名称可能显示异常，建议安装iconv-lite', 'DesktopStream');
         return buffer.toString('binary');
@@ -1179,114 +1285,109 @@ export default class DesktopStream extends AIStream {
   }
 
   /**
+   * 获取股票代码前缀（用于新浪API）
+   * @param {string} code - 6位股票代码
+   * @returns {string} 带前缀的代码（如 sh600941、sz000001）
+   */
+  _getStockPrefix(code) {
+    if (code.startsWith('6')) return `sh${code}`;
+    if (code.startsWith('0') || code.startsWith('3')) return `sz${code}`;
+    return `sh${code}`; // 默认上海
+  }
+
+  /**
+   * 解析股票数据
+   * @param {string} data - API返回的原始数据
+   * @param {string} prefixedCode - 带前缀的股票代码（如 sh600941）
+   * @returns {Object|null} 解析后的股票数据
+   */
+  _parseStockData(data, prefixedCode) {
+    try {
+      const match = data.match(/="(.+)"/);
+      if (!match?.[1]) {
+        return null;
+      }
+
+      const fields = match[1].split(',');
+      if (fields.length < 32) {
+        return null;
+      }
+
+      // 解析股票名称（处理GBK编码）
+      let name = (fields[0] || '').trim();
+      if (!name || /^\d+$/.test(name)) {
+        // 如果名称为空或是纯数字，使用股票代码
+        name = prefixedCode.replace(/^(sh|sz)/, '') || '未知';
+      } else if (/[\u4e00-\u9fa5]/.test(name)) {
+        // 包含中文，清理特殊字符
+        name = name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s\-\(\)（）]/g, '').trim();
+      }
+
+      // 解析价格数据
+      const preClose = parseFloat(fields[2]) || 0;
+      const current = parseFloat(fields[3]) || 0;
+      const change = preClose > 0 ? current - preClose : 0;
+      const changePercent = preClose > 0 ? (change / preClose) * 100 : 0;
+
+      return {
+        code: prefixedCode,
+        name,
+        open: parseFloat(fields[1]) || 0,
+        preClose,
+        current,
+        high: parseFloat(fields[4]) || 0,
+        low: parseFloat(fields[5]) || 0,
+        buy: parseFloat(fields[6]) || 0,
+        sell: parseFloat(fields[7]) || 0,
+        volume: parseInt(fields[8]) || 0,
+        amount: parseFloat(fields[9]) || 0,
+        change: change.toFixed(2),
+        changePercent: changePercent.toFixed(2),
+        date: fields[30] || '',
+        time: fields[31] || ''
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * 获取股票行情数据
-   * 优化：改进GBK解码和名称解析
+   * @param {string} code - 6位股票代码
+   * @returns {Promise<Object|null>} 股票数据对象
    */
   async fetchStockQuote(code) {
     const SINA_API = 'https://hq.sinajs.cn/list=';
-    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const REQUEST_DELAY = 300; // 请求延时（毫秒），避免频率过高
+    const REQUEST_TIMEOUT = 10000; // 请求超时（毫秒）
 
-    // 获取股票代码前缀（ES6箭头函数）
-    const getStockPrefix = (c) => {
-      if (c.startsWith('6')) return `sh${c}`;
-      if (c.startsWith('0') || c.startsWith('3')) return `sz${c}`;
-      return `sh${c}`;
-    };
-
-    const parseStockData = (data, rawCode) => {
-      try {
-        const match = data.match(/="(.+)"/);
-        if (!match || !match[1]) {
-          return null;
-        }
-
-        const fields = match[1].split(',');
-
-        // 个股完整版
-        // 优化名称解析：正确处理GBK编码的中文名称
-        let name = fields[0] || '';
-        
-        if (name) {
-          name = name.trim();
-          
-          // 检查名称是否包含中文字符
-          const hasChinese = /[\u4e00-\u9fa5]/.test(name);
-          
-          if (hasChinese) {
-            // 如果包含中文，说明解码成功，只清理特殊字符
-            name = name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s\-\(\)（）]/g, '').trim();
-          } else {
-            // 如果不包含中文，可能是解码失败，尝试重新解码
-            // 或者名称本身就是英文/数字（如ETF、LOF等）
-            // 先检查是否是纯数字（可能是代码）
-            if (/^\d+$/.test(name)) {
-              // 如果是纯数字，说明名称字段可能是代码，使用代码作为名称
-              name = rawCode.replace(/^(sh|sz)/, '') || '未知';
-            } else {
-              // 否则保留原始名称（可能是英文名称）
-              name = name.trim();
-            }
-          }
-        } else {
-          // 如果名称为空，使用股票代码
-          name = rawCode.replace(/^(sh|sz)/, '') || '未知';
-        }
-
-        return {
-          code: rawCode,
-          name: name,
-          open: parseFloat(fields[1]) || 0,
-          preClose: parseFloat(fields[2]) || 0,
-          current: parseFloat(fields[3]) || 0,
-          high: parseFloat(fields[4]) || 0,
-          low: parseFloat(fields[5]) || 0,
-          buy: parseFloat(fields[6]) || 0,
-          sell: parseFloat(fields[7]) || 0,
-          volume: parseInt(fields[8]) || 0,
-          amount: parseFloat(fields[9]) || 0,
-          change: (parseFloat(fields[3]) - parseFloat(fields[2])).toFixed(2),
-          changePercent: (
-            ((parseFloat(fields[3]) - parseFloat(fields[2])) / parseFloat(fields[2])) *
-            100
-          ).toFixed(2),
-          date: fields[30] || '',
-          time: fields[31] || ''
-        };
-      } catch {
-        return null;
-      }
-    };
-
-    const stockCode = getStockPrefix(code);
-    const url = SINA_API + stockCode;
+    const prefixedCode = this._getStockPrefix(code);
+    const url = `${SINA_API}${prefixedCode}`;
 
     // 适当延时，避免频率过高
-    await delay(300);
+    await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY));
 
     const response = await fetch(url, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         Referer: 'https://finance.sina.com.cn',
         Accept: '*/*',
         'Accept-Language': 'zh-CN,zh;q=0.9',
         Connection: 'keep-alive'
       },
-      timeout: 10000
+      timeout: REQUEST_TIMEOUT
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
     }
 
-    // 获取响应数据，新浪API返回的是GBK编码
+    // 获取响应数据并解码GBK编码
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    
-    // 步骤1: 解码GBK编码的响应数据
     const text = this.decodeGBKResponse(buffer);
-    
-    return parseStockData(text, stockCode);
+
+    return this._parseStockData(text, prefixedCode);
   }
 
   /**
