@@ -51,20 +51,20 @@ graph TB
     subgraph NodeJS["Node.js主服务端"]
         B --> C["工作流系统"]
         B --> D["插件系统"]
-        C --> E["Python服务代理"]
+        C --> E["Python服务<br/>代理"]
         D --> E
         E --> F["HTTP客户端<br/>本地调用"]
     end
     
-    subgraph Python["Python子服务端<br/>（内部服务，不对外暴露）"]
+    subgraph Python["Python子服务端<br/>内部服务<br/>不对外暴露"]
         F --> G["FastAPI路由"]
         G --> H["RAG引擎"]
         G --> I["LLM服务"]
         G --> J["向量数据库"]
         
-        H --> K["LangChain 0.3+"]
+        H --> K["LangChain<br/>0.3+"]
         H --> L["LlamaIndex"]
-        I --> M["API优先<br/>OpenAI/VolcEngine"]
+        I --> M["API优先<br/>OpenAI<br/>VolcEngine"]
         I --> N["本地降级<br/>Ollama"]
         J --> O["ChromaDB"]
         J --> P["FAISS"]
@@ -106,7 +106,7 @@ sequenceDiagram
 
 ```mermaid
 graph TB
-    subgraph Before["迁移前<br/>Node.js端冗余"]
+    subgraph Before["迁移前<br/>Node.js端<br/>冗余"]
         A1["Embedding生成<br/>BM25算法<br/>~200行"]
         A2["向量检索<br/>Redis存储<br/>~150行"]
         A3["文档处理<br/>基础功能<br/>~100行"]
@@ -117,7 +117,7 @@ graph TB
     subgraph After["迁移后<br/>精简架构"]
         B1["工作流系统<br/>业务逻辑<br/>保留"]
         B2["插件系统<br/>保留"]
-        B3["Python服务代理<br/>新增"]
+        B3["Python服务<br/>代理新增"]
         B4["LangChain RAG<br/>向量数据库<br/>Python端"]
         B5["LangChain Agent<br/>工具调用<br/>Python端"]
     end
@@ -920,20 +920,20 @@ performance:
 ```mermaid
 graph TB
     subgraph Detection["资源检测"]
-        A["检测CPU/内存/GPU"] --> B{"性能评估"}
+        A["检测CPU<br/>内存<br/>GPU"] --> B{"性能评估"}
         B -->|低端| C["Low Tier<br/><4GB RAM<br/>无GPU"]
         B -->|中端| D["Medium Tier<br/>4-16GB RAM<br/>可选GPU"]
         B -->|高端| E["High Tier<br/>>16GB RAM<br/>高性能GPU"]
     end
     
     subgraph Allocation["资源分配"]
-        C --> F["LLM: API优先<br/>Embedding: API<br/>向量: ChromaDB CPU<br/>检索: top_k=3"]
-        D --> G["LLM: API优先<br/>Embedding: API<br/>向量: ChromaDB<br/>检索: top_k=5"]
-        E --> H["LLM: API优先<br/>Embedding: API<br/>向量: FAISS GPU<br/>检索: top_k=10"]
+        C --> F["LLM: API优先<br/>Embedding: API<br/>向量: ChromaDB CPU<br/>检索: top_k=3<br/>并发: 2"]
+        D --> G["LLM: API优先<br/>Embedding: API<br/>向量: ChromaDB<br/>检索: top_k=5<br/>并发: 5"]
+        E --> H["LLM: API优先<br/>Embedding: API<br/>向量: FAISS GPU<br/>检索: top_k=10<br/>并发: 10"]
     end
     
     subgraph Fallback["降级策略"]
-        F --> I["API不可用时<br/>降级到本地Ollama"]
+        F --> I["API不可用时<br/>降级到本地<br/>Ollama"]
         G --> I
         H --> I
     end
@@ -1444,22 +1444,22 @@ vectorstore = Chroma(
 ```mermaid
 graph TB
     subgraph NodeJS2["Node.js主服务端<br/>精简后"]
-        A["工作流系统"] --> E["Python服务代理"]
+        A["工作流系统"] --> E["Python服务<br/>代理"]
         B["插件系统"] --> E
         C["事件系统"] --> A
         C --> B
         E --> F["HTTP客户端<br/>本地调用"]
     end
     
-    subgraph Python2["Python子服务端<br/>内部服务，不对外暴露"]
+    subgraph Python2["Python子服务端<br/>内部服务<br/>不对外暴露"]
         F --> G["FastAPI路由"]
         G --> H["RAG服务"]
         G --> I["LLM服务"]
         G --> J["向量数据库"]
         
-        H --> K["LangChain RAG"]
+        H --> K["LangChain<br/>RAG"]
         H --> L["ChromaDB"]
-        I --> M["Ollama/OpenAI"]
+        I --> M["API优先<br/>本地降级"]
         J --> L
     end
     
