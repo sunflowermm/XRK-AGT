@@ -1,4 +1,4 @@
-# XRK-AGT 未来架构规划（2025）
+# XRK-AGT 未来架构规划（2026）
 
 ## 📋 目录
 
@@ -17,13 +17,13 @@
 
 1. **高性能内服务调用**：Python作为子服务端，仅面向Node.js主服务端，不暴露给外部，专注优化延迟实现0延迟响应
 2. **简化插件开发**：插件通过Bot对象直接调用Python服务，无需关心底层实现
-3. **利用Python AI生态**：集成2025年最新的Python AI工具和框架（LangChain、Ollama等）
+3. **利用Python AI生态**：集成2026年最新的Python AI工具和框架（LangChain、Ollama等）
 4. **代码精简**：删除Node.js端冗余的AI功能代码，迁移到Python端
 5. **提升性能**：使用LangChain Agent减少多轮AI调用，利用RAG等成熟技术
 
 ### 问题现状
 
-- ❌ 当前AI无法使用MCP协议，需要多轮调用
+- ⚠️ 当前AI部分功能无法使用MCP协议，需要多轮调用（正在完善MCP支持）
 - ❌ RAG等AI功能在Node端生态不成熟（BM25算法效果差）
 - ❌ Node.js端有大量冗余的Embedding和向量检索代码
 - ❌ 代码分散，维护困难
@@ -156,12 +156,12 @@ graph TB
 
 ## 技术栈升级
 
-### Python子服务端（2025新特性）
+### Python子服务端（2026新特性）
 
 #### 1. 核心框架
 
 ```python
-# FastAPI 0.115+ (2025最新)
+# FastAPI 0.115+ (2026最新)
 - 异步性能优化
 - 更好的类型提示支持
 - WebSocket增强
@@ -175,7 +175,7 @@ graph TB
 #### 2. AI/ML框架
 
 ```python
-# LangChain 0.3+ (2025)
+# LangChain 0.3+ (2026)
 - LangGraph: 工作流编排
 - LangServe: API服务化
 - LangChain Expression Language (LCEL)
@@ -807,7 +807,7 @@ gantt
     title 迁移计划
     dateFormat  YYYY-MM-DD
     section 基础设施
-    Python服务端框架搭建    :a1, 2025-01-15, 3d
+    Python服务端框架搭建    :a1, 2026-01-15, 3d
     HTTP代理接口实现        :a2, after a1, 2d
     Bot对象扩展            :a3, after a1, 2d
     section RAG服务
@@ -1482,7 +1482,7 @@ gantt
     title 迁移时间表
     dateFormat  YYYY-MM-DD
     section 阶段1：基础设施
-    FastAPI框架搭建        :a1, 2025-01-15, 2d
+    FastAPI框架搭建        :a1, 2026-01-15, 2d
     HTTP代理接口实现       :a2, after a1, 1d
     Bot对象扩展           :a3, after a1, 1d
     section 阶段2：LangChain集成
@@ -1663,5 +1663,5 @@ subserver/pyserver/
 ---
 
 **文档版本**: 2.0  
-**最后更新**: 2025-01-13  
+**最后更新**: 2026-01-13  
 **维护者**: XRK-AGT Team
