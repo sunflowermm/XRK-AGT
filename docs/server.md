@@ -2,6 +2,8 @@
 
 > XRK-AGT 的 Server 层是系统的核心业务层，提供统一的 HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务、安全中间件等能力，支持快速搭建各种通讯协议的客户端或服务端。
 
+> **注意**：本文档中所有 `{端口}` 或 `localhost:{端口}` 的占位符表示实际端口号，由启动配置决定（通过 `bot.run({ port: 端口号 })` 指定）。HTTP端口由启动时指定，HTTPS端口默认为2538（可配置）。
+
 ## 📋 快速导航
 
 - [返回文档首页](../完整文档.md)
@@ -221,10 +223,10 @@ flowchart TB
 **端口说明**：
 
 - **HTTP端口**：核心HTTP服务（端口由启动配置决定）
-- **HTTPS端口**（可选）：HTTPS服务（端口由启动配置决定）
+- **HTTPS端口**（可选）：HTTPS服务（端口由启动配置决定，默认2538）
 - **反向代理端口**（80/443，可选）：多域名代理服务
   - HTTP代理 :80 → 转发到核心服务（端口由配置决定）
-  - HTTPS代理 :443 → 转发到核心服务 :2538
+  - HTTPS代理 :443 → 转发到核心服务（端口由配置决定）
 
 **端口架构流程**：
 ```
@@ -279,7 +281,7 @@ sequenceDiagram
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| 核心HTTP端口 | 由配置决定 | 内部服务端口，启动时指定 |
+| 核心HTTP端口 | 由启动配置决定 | 内部服务端口，通过 `bot.run({ port: 端口号 })` 指定 |
 | 核心HTTPS端口 | 2538 | 内部服务端口，可配置 |
 | 代理HTTP端口 | 80 | 反向代理端口，需要root权限 |
 | 代理HTTPS端口 | 443 | 反向代理端口，需要root权限 |
@@ -433,7 +435,7 @@ proxy:
         certificate:
           key: "/path/to/xrkk.cc.key"
           cert: "/path/to/xrkk.cc.cert"
-      target: "http://localhost:{端口}"  # 端口由启动配置决定
+      target: "http://localhost:{端口}"
 ```
 
 #### 2. SNI（Server Name Indication）
@@ -590,7 +592,7 @@ static:
 ### 开箱即用的Web控制台
 
 - **零配置**：`core/system-Core/www/xrk/` 目录自动提供Web控制台
-- **访问路径**：`/<目录名>`（如 `/xrk`，具体端口由启动配置决定）
+- **访问路径**：`/<目录名>`（如 `/xrk`）
 - **功能完整**：API测试、配置管理、插件管理、设备管理等
 
 ---
@@ -709,7 +711,7 @@ class OneBotv11Tasker {
 
 ```javascript
 // 客户端连接示例
-const ws = new WebSocket('ws://localhost:{端口}/OneBotv11');  // 端口由启动配置决定
+const ws = new WebSocket('ws://localhost:{端口}/OneBotv11');
 ws.on('open', () => {
   console.log('WebSocket连接成功');
 });
@@ -719,7 +721,7 @@ ws.on('open', () => {
 
 ```javascript
 // 使用fetch调用API
-const response = await fetch('http://localhost:{端口}/api/status', {  // 端口由启动配置决定
+const response = await fetch('http://localhost:{端口}/api/status', {
   headers: {
     'X-API-Key': 'your-api-key'
   }
@@ -742,8 +744,8 @@ server:
 
 # 启动
 node app
-# 访问: http://localhost:{端口}  # 端口由启动配置决定
-# Web控制台: http://localhost:{端口}/xrk  # 端口由启动配置决定
+# 访问: http://localhost:{端口}
+# Web控制台: http://localhost:{端口}/xrk
 ```
 
 ### 2. 启用HTTPS（10分钟）
@@ -773,7 +775,7 @@ proxy:
         certificate:
           key: "/path/to/xrkk.cc.key"
           cert: "/path/to/xrkk.cc.cert"
-      target: "http://localhost:{端口}"  # 端口由启动配置决定
+      target: "http://localhost:{端口}"
 ```
 
 ### 4. 搭建WebSocket服务端
@@ -800,7 +802,7 @@ export default class MyWebSocketTasker {
 }
 ```
 
-**访问**：`ws://localhost:{端口}/myws`  # 端口由启动配置决定
+**访问**：`ws://localhost:{端口}/myws`
 
 ### 5. 搭建HTTP API服务端
 
@@ -821,7 +823,7 @@ export default {
 };
 ```
 
-**访问**：`http://localhost:{端口}/api/my-endpoint`  # 端口由启动配置决定
+**访问**：`http://localhost:{端口}/api/my-endpoint`
 
 ### 6. 搭建TCP/UDP服务端
 
@@ -875,7 +877,7 @@ proxy:
         certificate:
           key: "/path/to/xrkk.cc.key"
           cert: "/path/to/xrkk.cc.cert"
-      target: "http://localhost:{端口}"  # 端口由启动配置决定
+      target: "http://localhost:{端口}"
       rewritePath:
         from: "/api"
         to: "/"
