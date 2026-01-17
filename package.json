@@ -2,7 +2,7 @@
   "name": "xrk-agt",
   "version": "1.0.0",
   "author": "Xrkseek",
-  "description": "Integrated Bot",
+  "description": "多平台、多Tasker、工作流驱动型智能体平台 - Multi-platform, multi-Tasker, workflow-driven intelligent agent platform",
   "main": "app.js",
   "type": "module",
   "engines": {
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/sunflowermm/XRK-AGT.git"
   },
   "license": "MIT",
   "keywords": [

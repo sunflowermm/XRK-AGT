@@ -11,27 +11,57 @@ RUN apk add --no-cache \
     freetype \
     harfbuzz \
     ttf-freefont \
+    wget \
+    curl \
   && npm install -g pnpm
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml* ./
+# 复制依赖文件
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
 
+# 设置Puppeteer环境变量
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
+# 安装依赖（利用Docker层缓存）
 RUN pnpm install --frozen-lockfile || pnpm install
 
+# 复制源代码
 COPY . .
 
-RUN mkdir -p logs data data/bots data/backups config config/default_config data/server_bots resources www
+# 创建必要的目录
+RUN mkdir -p \
+    logs \
+    data \
+    data/bots \
+    data/backups \
+    data/server_bots \
+    data/configs \
+    data/uploads \
+    data/media \
+    config \
+    config/default_config \
+    config/server_config \
+    resources \
+    www \
+    trash
 
 ENV NODE_ENV=production \
-    NODE_OPTIONS="--no-warnings --no-deprecation"
+    NODE_OPTIONS="--no-warnings --no-deprecation" \
+    XRK_SERVER_PORT=2537
 
+# 暴露常用端口（实际使用端口由环境变量 XRK_SERVER_PORT 控制）
 EXPOSE 2537 2538 80 443
 
+# 健康检查（端口由运行时环境变量决定，entrypoint脚本会处理）
+# 注意：HEALTHCHECK在构建时无法使用环境变量，需要在运行时通过entrypoint脚本处理
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:2537/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
+  CMD wget --no-verbose --tries=1 --spider http://localhost:2537/health || exit 1
 
-CMD ["node", "--no-warnings", "--no-deprecation", "app.js"]
+# 使用entrypoint脚本支持动态端口
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["node", "--no-warnings", "--no-deprecation", "start.js", "server"]

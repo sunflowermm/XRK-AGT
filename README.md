@@ -145,63 +145,6 @@ flowchart TB
 
 ---
 
-## 架构总览图（核心组件关系）
-
-```mermaid
-flowchart TB
-    subgraph Clients["外部客户端"]
-      QQ["QQ / OneBotv11"]
-      WeChat["ComWeChat 等"]
-      WebUI["XRK Web 控制台"]
-      ThirdAPI["第三方调用方"]
-    end
-
-    subgraph Protocol["协议转换"]
-      ProtocolConv["协议转换层"]
-    end
-
-    subgraph Core["XRK-AGT 核心"]
-      Express["HTTP/HTTPS/WS 服务<br/>src/bot.js"]
-      Taskers["任务层<br/>core/tasker"]
-      EventSystem["事件系统<br/>core/events"]
-      PluginsLoader["插件加载器<br/>src/infrastructure/plugins"]
-      ApiLoader["API 加载器<br/>src/infrastructure/http"]
-      Plugins["业务插件<br/>core/plugin"]
-      HttpApis["HTTP API<br/>core/http"]
-      AIStream["AI 工作流基类<br/>src/infrastructure/aistream"]
-      Renderer["渲染器基类<br/>src/infrastructure/renderer"]
-      Config["配置系统<br/>src/infrastructure/commonconfig"]
-      Redis[("Redis")]
-      MongoDB[("MongoDB")]
-    end
-
-    QQ -->|WS| ProtocolConv
-    WeChat -->|WS/HTTP| ProtocolConv
-    WebUI -->|HTTP/WS| Express
-    ThirdAPI -->|HTTP/WS| Express
-    
-    ProtocolConv --> Taskers
-    Taskers -->|Bot.em 事件| EventSystem
-    EventSystem -->|去重/标记| PluginsLoader
-    Express --> ApiLoader
-    ApiLoader --> HttpApis
-    PluginsLoader --> Plugins
-    Plugins --> AIStream
-    Plugins --> Renderer
-    Plugins --> Config
-    Plugins --> Redis
-    Plugins --> MongoDB
-    HttpApis --> AIStream
-    HttpApis --> Renderer
-    HttpApis --> Config
-    
-    style Clients fill:#E6F3FF
-    style Protocol fill:#FFE6CC
-    style Core fill:#90EE90
-```
-
----
-
 ## 模块一览表（按层次分类）
 
 ### 运行核心层
@@ -341,6 +284,30 @@ graph TD
 
 ## 快速开始（5 分钟跑起来）
 
+### 🐳 Docker 部署（推荐）
+
+如果你熟悉 Docker，可以使用 Docker 快速部署：
+
+```bash
+# 使用 Docker Compose（默认端口 2537）
+docker-compose up -d
+
+# 使用自定义端口
+XRK_SERVER_PORT=8080 docker-compose up -d
+
+# 查看日志
+docker-compose logs -f xrk-agt
+```
+
+**详细 Docker 部署指南**：参见 [`docs/docker.md`](docs/docker.md)
+
+> **提示**：
+> - Docker 部署支持通过环境变量 `XRK_SERVER_PORT` 指定端口，默认为 2537
+> - 修改端口时需要同时修改 `docker-compose.yml` 中的端口映射和环境变量
+> - 支持多实例运行，每个实例使用不同端口
+
+### 本地部署
+
 **快速开始流程图**:
 
 ```mermaid
@@ -455,7 +422,7 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
 
 ### 快速配置
 
-1. 启动 XRK-AGT：`npm start`
+1. 启动 XRK-AGT：`node app` 或 `node start.js`
 2. 配置 Cursor 的 `mcp.json`：
 ```json
 {
@@ -478,9 +445,7 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
 - 工作流管理（多步骤任务自动化）
 
 详细文档：
-- [Cursor 快速开始](./docs/cursor-quick-start.md)
-- [MCP 集成指南](./docs/README-MCP.md)
-- [完整 MCP 文档](./docs/mcp-guide.md)
+- [完整 MCP 文档](./docs/mcp-guide.md) - MCP 协议完整指南，包含工具注册、外部平台连接等
 
 ## 📚 完整文档导航
 
@@ -520,7 +485,7 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
 
 #### 📖 其他核心文档
 
-#### 运行核心与基础设施
+##### 运行核心与基础设施
 - [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)：项目整体架构与目录结构详细说明
 - [`docs/bot.md`](docs/bot.md)：Bot 主类详细文档
 - **[`docs/server.md`](docs/server.md)** - **Server 服务器架构文档** ⭐ 新
@@ -529,36 +494,39 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
   - 端口运行逻辑与配置
   - 平台SDK适配度
   - 快速搭建各种通讯协议
+- **[`docs/docker.md`](docs/docker.md)** - **Docker 部署指南** ⭐ 新
+  - Docker Compose 快速部署
+  - 端口配置与多实例运行
+  - 数据持久化与健康检查
+  - 生产环境建议
 
-#### 任务层与事件系统
+##### 任务层与事件系统
 - [`docs/tasker-base-spec.md`](docs/tasker-base-spec.md)：Tasker 底层规范（事件生成器规范）
 - [`docs/tasker-onebotv11.md`](docs/tasker-onebotv11.md)：OneBot Tasker 详细文档
 - [`docs/tasker-loader.md`](docs/tasker-loader.md)：Tasker 加载器文档
 - [`docs/事件系统标准化文档.md`](docs/事件系统标准化文档.md)：事件系统详细说明
 - [`docs/事件监听器开发指南.md`](docs/事件监听器开发指南.md)：事件监听器开发指南
 
-#### 插件系统
+##### 插件系统
 - [`docs/plugin-base.md`](docs/plugin-base.md)：插件基类详细文档
 - [`docs/plugins-loader.md`](docs/plugins-loader.md)：插件加载器详细文档
 
-#### HTTP/API
+##### HTTP/API
 - [`docs/http-api.md`](docs/http-api.md)：HTTP API 基类文档
 - [`docs/api-loader.md`](docs/api-loader.md)：API 加载器文档
 
-#### AI 工作流
+##### AI 工作流
 - **[`docs/工作流系统完整文档.md`](docs/工作流系统完整文档.md)**：工作流系统完整文档（推荐）
 - [`docs/工作流开发文档.md`](docs/工作流开发文档.md)：工作流开发文档（补充）
 - [`docs/aistream.md`](docs/aistream.md)：AI 工作流基类详细文档
 
-#### 配置与渲染
+##### 配置与渲染
 - [`docs/config-base.md`](docs/config-base.md)：配置系统详细文档
 - [`docs/renderer.md`](docs/renderer.md)：渲染系统详细文档
 
-#### 工具类
+##### 工具类
 - [`docs/botutil.md`](docs/botutil.md)：工具类详细文档
 - [`docs/app-dev.md`](docs/app-dev.md)：应用开发详细文档
-
----
 
 ---
 

@@ -14,6 +14,7 @@ logs/
 # 运行时数据（通过 volume 挂载）
 data/
 !data/configs/
+# 注意：data/server_bots/ 和 data/configs/ 会在运行时生成，通过volume挂载
 
 # 临时文件
 trash/
@@ -60,12 +61,20 @@ desktop.ini
 Dockerfile*
 docker-compose*.yml
 .dockerignore
+docker-entrypoint.sh
+docker.sh
 
 # 其他
 *.md
 !README.md
+!PROJECT_OVERVIEW.md
 LICENSE
 .prettierrc*
 .eslintrc*
 .editorconfig
 
+# 子服务器（Python服务器等，如果需要可以单独构建）
+subserver/
+
+# 调试文件
+debug.js
