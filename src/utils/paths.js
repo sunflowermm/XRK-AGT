@@ -21,7 +21,6 @@ const _baseDirs = [
   _logs,
   _config,
   _data,
-  path.join(_data, 'importsJson'),
   path.join(_data, 'server_bots'),
   path.join(_data, 'uploads'),
   path.join(_data, 'media'),

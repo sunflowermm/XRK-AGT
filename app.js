@@ -87,10 +87,6 @@ class BootstrapLogger {
     this.logFile = path.join('./logs', 'bootstrap.log');
   }
 
-  async ensureLogDir() {
-    await fs.mkdir('./logs', { recursive: true });
-  }
-
   async log(message, level = 'INFO') {
     const timestamp = new Date().toISOString();
     const logMessage = `[${timestamp}] [${level}] ${message}\n`;
@@ -297,7 +293,7 @@ class Bootstrap {
     try {
       await fs.access(importsDir);
     } catch {
-      await this.logger.log('importsJson目录不存在，跳过动态imports加载');
+      // 目录不存在时跳过，不创建空目录
       return;
     }
 
@@ -334,7 +330,6 @@ class Bootstrap {
   }
 
   async initialize() {
-    await this.logger.ensureLogDir();
     await this.environmentValidator.validate();
     
     const packageJsonPath = path.join(process.cwd(), 'package.json');

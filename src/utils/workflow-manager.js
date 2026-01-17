@@ -1984,12 +1984,7 @@ ${funcPrompts.map(p => `- ${p}`).join('\n')}
 
     const debugDir = path.join(paths.data, 'debug');
     // 确保 debug 目录存在
-    try {
-      const fs = await import('fs/promises');
-      await fs.mkdir(debugDir, { recursive: true });
-    } catch (err) {
-      BotUtil.makeLog('error', `创建 debug 目录失败: ${err.message}`, 'WorkflowManager');
-    }
+    await BotUtil.mkdir(debugDir);
     
     const filePath = path.join(debugDir, `workflow-${workflow.id}.json`);
 

@@ -13,12 +13,7 @@ const uploadDir = path.join(paths.data, 'uploads');
 const mediaDir = path.join(paths.data, 'media');
 const fileMap = new Map();
 
-// 确保目录存在（防御性编程，模块加载时可能早于 ensureBaseDirs 调用）
-for (const dir of [uploadDir, mediaDir]) {
-  if (!fsSync.existsSync(dir)) {
-    fsSync.mkdirSync(dir, { recursive: true });
-  }
-}
+// 目录已在 paths.ensureBaseDirs() 中创建，无需重复创建
 
 /**
  * 解析multipart/form-data

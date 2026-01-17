@@ -30,10 +30,7 @@ export default class GPTGodVisionClient {
 
     this.endpoint = `${this.baseUrl}/chat/completions`;
     this.tempImageDir = path.join(process.cwd(), 'data/temp/ai_images');
-
-    if (!fs.existsSync(this.tempImageDir)) {
-      fs.mkdirSync(this.tempImageDir, { recursive: true });
-    }
+    // 目录在使用时按需创建，无需在构造函数中创建
   }
 
   /**
@@ -124,6 +121,11 @@ export default class GPTGodVisionClient {
 
     const filename = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}.png`;
     const filePath = path.join(this.tempImageDir, filename);
+
+    // 确保目录存在（按需创建）
+    if (!fs.existsSync(this.tempImageDir)) {
+      fs.mkdirSync(this.tempImageDir, { recursive: true });
+    }
 
     await streamPipeline(response.body, fs.createWriteStream(filePath));
     return filePath;

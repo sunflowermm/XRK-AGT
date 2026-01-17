@@ -772,7 +772,6 @@ export default class Bot extends EventEmitter {
     
     // /media 路由映射到 data/media
     const mediaDir = path.join(paths.data, 'media');
-    fsSync.mkdirSync(mediaDir, { recursive: true });
     this.express.use('/media', (req, res, next) => {
       if (this._checkHeadersSent(res, next)) return;
       express.static(mediaDir, staticOptions)(req, res, next);
@@ -780,7 +779,6 @@ export default class Bot extends EventEmitter {
     
     // /uploads 路由映射到 data/uploads
     const uploadsDir = path.join(paths.data, 'uploads');
-    fsSync.mkdirSync(uploadsDir, { recursive: true });
     this.express.use('/uploads', (req, res, next) => {
       if (this._checkHeadersSent(res, next)) return;
       express.static(uploadsDir, staticOptions)(req, res, next);

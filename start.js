@@ -4,6 +4,7 @@ import os from 'os';
 import { spawnSync } from 'child_process';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
+import paths from './src/utils/paths.js';
 
 process.setMaxListeners(30);
 let globalSignalHandler = null;
@@ -60,10 +61,6 @@ class Logger {
     this.queue = [];
   }
 
-  async ensureLogDir() {
-    await fs.mkdir(PATHS.LOGS, { recursive: true });
-  }
-
   async log(message, level = 'INFO') {
     const timestamp = new Date().toISOString();
     const logMessage = `[${timestamp}] [${level}] ${message}\n`;
@@ -107,12 +104,6 @@ class Logger {
 class BaseManager {
   constructor(logger) {
     this.logger = logger;
-  }
-
-  async ensureDirectories() {
-    for (const dir of [PATHS.LOGS, PATHS.SERVER_BOTS]) {
-      await fs.mkdir(dir, { recursive: true }).catch(() => {});
-    }
   }
 }
 
@@ -760,8 +751,7 @@ async function main() {
   const menuManager = new MenuManager(serverManager, pm2Manager);
   const dependencyChecker = new DependencyChecker(logger);
   
-  await serverManager.ensureDirectories();
-  await logger.ensureLogDir();
+  await paths.ensureBaseDirs(fs);
   await dependencyChecker.check();
   
   const envPort = process.env.XRK_SERVER_PORT;
@@ -793,7 +783,6 @@ export default main;
 
 main().catch(async (error) => {
   const logger = new Logger();
-  await logger.ensureLogDir();
   await logger.error(`启动失败: ${error.message}\n${error.stack}`);
   
   if (globalSignalHandler) {

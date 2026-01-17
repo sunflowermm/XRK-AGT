@@ -285,7 +285,7 @@ export default class DesktopStream extends AIStream {
 
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
           const screenshotDir = path.join(paths.trash, 'screenshot');
-          await fs.mkdir(screenshotDir, { recursive: true });
+          // screenshot 目录已在 ensureBaseDirs 中创建，无需重复创建
 
           const filename = `screenshot_${timestamp}.png`;
           const screenshotPath = path.join(screenshotDir, filename);

@@ -58,6 +58,9 @@ class Cfg {
    * 获取当前配置目录路径
    */
   getConfigDir() {
+    if (!this._port || isNaN(this._port)) {
+      return null;
+    }
     return path.join(this.PATHS.SERVER_BOTS, String(this._port));
   }
 
@@ -70,7 +73,8 @@ class Cfg {
     bot = { ...defbot, ...bot };
 
     bot.platform = 2;
-    bot.data_dir = this.getConfigDir();
+    const configDir = this.getConfigDir();
+    bot.data_dir = configDir || this.PATHS.SERVER_BOTS;
     bot.server = bot.server || {};
     bot.server.port = this._port;
 
@@ -293,7 +297,13 @@ class Cfg {
 
     if (this.config[key]) return this.config[key];
 
-    const file = path.join(this.getConfigDir(), `${name}.yaml`);
+    const configDir = this.getConfigDir();
+    if (!configDir) {
+      // 如果没有有效端口，直接返回默认配置
+      return this.getdefSet(name);
+    }
+
+    const file = path.join(configDir, `${name}.yaml`);
 
     if (fs.existsSync(file)) {
       try {
@@ -361,8 +371,14 @@ class Cfg {
    * @param {object} data - 要保存的数据
    */
   setConfig(name, data) {
+    const configDir = this.getConfigDir();
+    if (!configDir) {
+      logger?.error?.('[配置保存失败] 无效的端口号');
+      return false;
+    }
+
     const key = `server.${this._port}.${name}`;
-    const file = path.join(this.getConfigDir(), `${name}.yaml`);
+    const file = path.join(configDir, `${name}.yaml`);
 
     try {
       // 更新内存中的配置

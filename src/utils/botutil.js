@@ -1021,7 +1021,7 @@ export default class BotUtil {
     const tempDir = paths.trash;
 
     try {
-      await BotUtil.mkdir(tempDir);
+      // trash 目录已在 ensureBaseDirs 中创建，无需重复创建
       const filename = ulid();
       const filePath = path.join(tempDir, filename);
       await fs.writeFile(filePath, buffer);
@@ -1118,7 +1118,7 @@ export default class BotUtil {
 
     try {
       const mediaDir = path.join(paths.data, "media");
-      await BotUtil.mkdir(mediaDir);
+      // media 目录已在 ensureBaseDirs 中创建，无需重复创建
 
       let fileBuffer;
       let fileName = options.name || ulid();

@@ -12,12 +12,7 @@ const tempDir = path.join(paths.data, "stdin");
 const mediaDir = path.join(paths.data, "media");
 const pluginsLoader = (await import("#infrastructure/plugins/loader.js")).default;
 
-// 确保目录存在（防御性编程，模块加载时可能早于 ensureBaseDirs 调用）
-for (const dir of [tempDir, mediaDir]) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
+// 目录已在 paths.ensureBaseDirs() 中创建，无需重复创建
 
 // 统一的清理函数，避免代码重复
 const cleanupTempFiles = () => {
