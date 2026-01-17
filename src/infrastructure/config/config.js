@@ -38,19 +38,33 @@ class Cfg {
     if (!this._port) return;
 
     const serverConfigDir = this.getConfigDir();
+    if (!serverConfigDir) return;
 
-    if (!fs.existsSync(serverConfigDir)) {
-      fs.mkdirSync(serverConfigDir, { recursive: true });
+    // recursive: true 会自动处理已存在的目录
+    fs.mkdirSync(serverConfigDir, { recursive: true });
 
-      const defaultConfigDir = this.PATHS.DEFAULT_CONFIG;
-      const files = fs.readdirSync(defaultConfigDir)
+    // 只在目录为空时复制默认配置
+    try {
+      const files = fs.readdirSync(serverConfigDir);
+      if (files.length > 0) return; // 目录已有文件，跳过复制
+    } catch {
+      // 目录不存在，继续复制
+    }
 
-      for (let file of files) {
-        fs.copyFileSync(
-          path.join(defaultConfigDir, file),
-          path.join(serverConfigDir, file)
-        );
+    const defaultConfigDir = this.PATHS.DEFAULT_CONFIG;
+    try {
+      const defaultFiles = fs.readdirSync(defaultConfigDir);
+      for (let file of defaultFiles) {
+        const targetPath = path.join(serverConfigDir, file);
+        if (!fs.existsSync(targetPath)) {
+          fs.copyFileSync(
+            path.join(defaultConfigDir, file),
+            targetPath
+          );
+        }
       }
+    } catch {
+      // 默认配置目录不存在，忽略
     }
   }
 
@@ -121,9 +135,8 @@ class Cfg {
       }
 
       if (serverDir) {
-        if (!fs.existsSync(serverDir)) {
-          fs.mkdirSync(serverDir, { recursive: true });
-        }
+        // recursive: true 会自动处理已存在的目录
+        fs.mkdirSync(serverDir, { recursive: true });
 
         if (fs.existsSync(serverFile)) {
           try {
@@ -320,10 +333,9 @@ class Cfg {
           const defaultConfig = YAML.parse(fs.readFileSync(defaultFile, 'utf8'));
           this.config[key] = defaultConfig;
 
+          // recursive: true 会自动处理已存在的目录
           const dir = path.dirname(file);
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
+          fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(file, YAML.stringify(defaultConfig), 'utf8');
         } catch (error) {
           logger?.error?.(`[默认配置复制失败][${name}]`, error);
@@ -384,11 +396,9 @@ class Cfg {
       // 更新内存中的配置
       this.config[key] = data;
 
-      // 确保目录存在
+      // 确保目录存在（recursive: true 会自动处理已存在的情况）
       const dir = path.dirname(file);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
+      fs.mkdirSync(dir, { recursive: true });
 
       // 写入文件
       fs.writeFileSync(file, YAML.stringify(data), 'utf8');

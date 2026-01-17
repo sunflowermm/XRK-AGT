@@ -89,9 +89,8 @@ class ScreenshotManager {
         if (!this.dbInstance) {
             try {
                 const dbDir = path.dirname(DB_PATH);
-                if (!fs.existsSync(dbDir)) {
-                    fs.mkdirSync(dbDir, { recursive: true });
-                }
+                // recursive: true 会自动处理已存在的目录
+                fs.mkdirSync(dbDir, { recursive: true });
                 
                 this.dbInstance = await open({
                     filename: DB_PATH,
@@ -603,9 +602,8 @@ const manager = new ScreenshotManager();
 export async function takeScreenshot(target, imageName, config = {}) {
     const finalConfig = { ...DEFAULT_CONFIG, ...config };
     
-    if (!fs.existsSync(OUTPUT_BASE_PATH)) {
-        fs.mkdirSync(OUTPUT_BASE_PATH, { recursive: true });
-    }
+    // recursive: true 会自动处理已存在的目录
+    fs.mkdirSync(OUTPUT_BASE_PATH, { recursive: true });
     
     for (let retryAttempt = 0; retryAttempt <= finalConfig.retryCount; retryAttempt++) {
         try {

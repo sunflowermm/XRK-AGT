@@ -250,12 +250,10 @@ export default class ConfigBase {
         await this.backup();
       }
 
-      // 确保目录存在
+      // 确保目录存在（recursive: true 会自动处理已存在的情况）
       const filePath = this._resolveFilePath();
       const dir = path.dirname(filePath);
-      if (!fsSync.existsSync(dir)) {
-        await fs.mkdir(dir, { recursive: true });
-      }
+      await fs.mkdir(dir, { recursive: true });
 
       // 序列化数据
       let content;

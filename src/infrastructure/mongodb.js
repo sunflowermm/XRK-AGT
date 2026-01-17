@@ -100,9 +100,8 @@ async function attemptMongoStart(retryCount) {
     const dbPath = path.join(process.cwd(), 'data', 'mongodb')
     const logPath = path.join(dbPath, 'mongodb.log')
     
-    if (!fs.existsSync(dbPath)) {
-      fs.mkdirSync(dbPath, { recursive: true })
-    }
+    // 确保目录存在（recursive: true 会自动处理已存在的情况）
+    fs.mkdirSync(dbPath, { recursive: true })
     
     const archOptions = await getArchitectureOptions()
     const forkFlag = process.platform === 'win32' ? '' : '--fork'

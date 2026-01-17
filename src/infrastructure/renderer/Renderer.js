@@ -20,13 +20,12 @@ export default class Renderer {
   }
 
   createDir(dirname) {
-    if (fs.existsSync(dirname)) {
-      return true
-    } else {
-      if (this.createDir(path.dirname(dirname))) {
-        fs.mkdirSync(dirname)
-        return true
-      }
+    // 使用 recursive: true 简化递归创建逻辑
+    try {
+      fs.mkdirSync(dirname, { recursive: true });
+      return true;
+    } catch {
+      return false;
     }
   }
 
