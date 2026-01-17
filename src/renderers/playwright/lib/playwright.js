@@ -1,5 +1,4 @@
 import Renderer from "#infrastructure/renderer/Renderer.js";
-import os from "node:os";
 import lodash from "lodash";
 import playwright from "playwright";
 import cfg from "#infrastructure/config/config.js";
@@ -37,7 +36,6 @@ export default class PlaywrightRenderer extends Renderer {
     this.healthCheckInterval = config.healthCheckInterval ?? rendererCfg.healthCheckInterval ?? 120000;
     this.maxRetries = config.maxRetries ?? rendererCfg.maxRetries ?? 3;
     this.retryDelay = config.retryDelay ?? rendererCfg.retryDelay ?? 2000;
-    this.memoryThreshold = config.memoryThreshold ?? rendererCfg.memoryThreshold ?? 1024;
     this.maxConcurrent = config.maxConcurrent ?? rendererCfg.maxConcurrent ?? 3;
 
     this.config = {
@@ -93,25 +91,6 @@ export default class PlaywrightRenderer extends Renderer {
     process.on("SIGTERM", () => this.cleanup());
   }
 
-  /**
-   * Retrieve system MAC address for browser instance identification
-   */
-  async getMac() {
-    let macAddr = "000000000000";
-    try {
-      const network = os.networkInterfaces();
-      for (const key in network) {
-        for (const iface of network[key]) {
-          if (iface.mac && iface.mac !== "00:00:00:00:00:00") {
-            return iface.mac.replace(/:/g, "");
-          }
-        }
-      }
-    } catch (e) {
-      BotUtil.makeLog("error", `Failed to get MAC address: ${e.message}`, "PlaywrightRenderer");
-    }
-    return macAddr;
-  }
 
   /**
    * Attempt to connect to existing browser instance with retry logic
@@ -277,7 +256,7 @@ export default class PlaywrightRenderer extends Renderer {
     const savePath = this.dealTpl(name, data);
     if (!savePath) return false;
 
-    const filePath = path.join(paths.root, savePath);
+    const filePath = path.join(paths.root, lodash.trimStart(savePath, "."));
     if (!fs.existsSync(filePath)) {
       BotUtil.makeLog("error", `HTML file does not exist: ${filePath}`, "PlaywrightRenderer");
       return false;

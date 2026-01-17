@@ -50,8 +50,8 @@ flowchart TB
     
     subgraph Core["核心服务层"]
         Express["Express应用<br/>中间件容器"]
-        HTTPServer["HTTP服务器<br/>:2537"]
-        HTTPSServer["HTTPS服务器<br/>:2538可选"]
+        HTTPServer["HTTP服务器<br/>{端口}"]
+        HTTPSServer["HTTPS服务器<br/>{端口}可选"]
         WSServer["WebSocket服务器<br/>协议升级"]
     end
     
@@ -200,17 +200,17 @@ flowchart TB
     end
     
     subgraph Core["核心服务层"]
-        HTTP2537[HTTP服务器<br/>:2537]
-        HTTPS2538[HTTPS服务器<br/>:2538可选]
+        HTTPPort[HTTP服务器<br/>{端口}]
+        HTTPSPort[HTTPS服务器<br/>{端口}可选]
         WS[WebSocket服务器]
     end
     
     User -->|HTTP| HTTP80
     User -->|HTTPS| HTTPS443
-    HTTP80 -->|转发| HTTP2537
-    HTTPS443 -->|转发| HTTPS2538
-    User -->|直接访问| HTTP2537
-    User -->|直接访问| HTTPS2538
+    HTTP80 -->|转发| HTTPPort
+    HTTPS443 -->|转发| HTTPSPort
+    User -->|直接访问| HTTPPort
+    User -->|直接访问| HTTPSPort
     User -->|WebSocket| WS
     
     style User fill:#E6F3FF
@@ -220,10 +220,10 @@ flowchart TB
 
 **端口说明**：
 
-- **HTTP端口**（默认2537）：核心HTTP服务
-- **HTTPS端口**（默认2538，可选）：HTTPS服务
+- **HTTP端口**：核心HTTP服务（端口由启动配置决定）
+- **HTTPS端口**（可选）：HTTPS服务（端口由启动配置决定）
 - **反向代理端口**（80/443，可选）：多域名代理服务
-  - HTTP代理 :80 → 转发到核心服务 :2537
+  - HTTP代理 :80 → 转发到核心服务（端口由配置决定）
   - HTTPS代理 :443 → 转发到核心服务 :2538
 
 **端口架构流程**：
@@ -231,12 +231,12 @@ flowchart TB
 互联网用户
   ↓
 反向代理层（可选）
-  ├─ HTTP代理 :80 → 转发到核心服务 :2537
-  └─ HTTPS代理 :443 → 转发到核心服务 :2538
+  ├─ HTTP代理 :80 → 转发到核心服务（端口由配置决定）
+  └─ HTTPS代理 :443 → 转发到核心服务（端口由配置决定）
   ↓
 核心服务层
-  ├─ HTTP服务器 :2537（实际端口，自动检测）
-  └─ HTTPS服务器 :2538（实际端口，自动检测）
+  ├─ HTTP服务器（实际端口由配置决定，自动检测）
+  └─ HTTPS服务器（实际端口由配置决定，自动检测）
   ↓
 业务处理
 ```
@@ -249,7 +249,7 @@ flowchart TB
 sequenceDiagram
     participant User as 用户
     participant Proxy as 反向代理<br/>:80/:443
-    participant Core as 核心服务<br/>:2537/:2538
+    participant Core as 核心服务<br/>{HTTP端口}/{HTTPS端口}
     participant Business as 业务处理
     
     User->>Proxy: HTTP/HTTPS请求
@@ -266,7 +266,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User as 用户
-    participant Core as 核心服务<br/>:2537/:2538
+    participant Core as 核心服务<br/>{HTTP端口}/{HTTPS端口}
     participant Business as 业务处理
     
     User->>Core: 直接HTTP/HTTPS请求
@@ -279,7 +279,7 @@ sequenceDiagram
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| 核心HTTP端口 | 2537 | 内部服务端口，可配置 |
+| 核心HTTP端口 | 由配置决定 | 内部服务端口，启动时指定 |
 | 核心HTTPS端口 | 2538 | 内部服务端口，可配置 |
 | 代理HTTP端口 | 80 | 反向代理端口，需要root权限 |
 | 代理HTTPS端口 | 443 | 反向代理端口，需要root权限 |
@@ -290,7 +290,7 @@ sequenceDiagram
 
 #### 1. 核心服务端口
 
-- **HTTP端口**：默认 `2537`，可通过配置修改
+- **HTTP端口**：由启动配置决定，可通过 `bot.run({ port: 端口号 })` 指定
 - **HTTPS端口**：默认 `2538`，需要启用HTTPS
 - **实际端口**：系统会自动检测并选择可用端口
 
@@ -408,7 +408,7 @@ flowchart TB
     E --> F[负载均衡器]
     F --> G[健康检查器]
     G --> H[后端服务]
-    H --> I[本地服务 :2537]
+    H --> I[本地服务（端口由配置决定）]
     H --> J[远程服务1 :3000]
     H --> K[远程服务2 :3001]
     
@@ -433,7 +433,7 @@ proxy:
         certificate:
           key: "/path/to/xrkk.cc.key"
           cert: "/path/to/xrkk.cc.cert"
-      target: "http://localhost:2537"
+      target: "http://localhost:{端口}"  # 端口由启动配置决定
 ```
 
 #### 2. SNI（Server Name Indication）
@@ -589,8 +589,8 @@ static:
 
 ### 开箱即用的Web控制台
 
-- **零配置**：`www/xrk/` 目录自动提供Web控制台
-- **访问路径**：`http://localhost:2537/xrk/`
+- **零配置**：`core/system-Core/www/xrk/` 目录自动提供Web控制台
+- **访问路径**：`/<目录名>`（如 `/xrk`，具体端口由启动配置决定）
 - **功能完整**：API测试、配置管理、插件管理、设备管理等
 
 ---
@@ -689,7 +689,7 @@ auth:
 #### 1. OneBot v11 (oicq/icqq)
 
 ```javascript
-// core/tasker/OneBotv11.js
+// core/system-Core/tasker/OneBotv11.js
 import { createClient } from 'oicq';
 
 class OneBotv11Tasker {
@@ -709,7 +709,7 @@ class OneBotv11Tasker {
 
 ```javascript
 // 客户端连接示例
-const ws = new WebSocket('ws://localhost:2537/OneBotv11');
+const ws = new WebSocket('ws://localhost:{端口}/OneBotv11');  // 端口由启动配置决定
 ws.on('open', () => {
   console.log('WebSocket连接成功');
 });
@@ -719,7 +719,7 @@ ws.on('open', () => {
 
 ```javascript
 // 使用fetch调用API
-const response = await fetch('http://localhost:2537/api/status', {
+const response = await fetch('http://localhost:{端口}/api/status', {  // 端口由启动配置决定
   headers: {
     'X-API-Key': 'your-api-key'
   }
@@ -742,8 +742,8 @@ server:
 
 # 启动
 node app
-# 访问: http://localhost:2537
-# Web控制台: http://localhost:2537/xrk/
+# 访问: http://localhost:{端口}  # 端口由启动配置决定
+# Web控制台: http://localhost:{端口}/xrk  # 端口由启动配置决定
 ```
 
 ### 2. 启用HTTPS（10分钟）
@@ -773,13 +773,13 @@ proxy:
         certificate:
           key: "/path/to/xrkk.cc.key"
           cert: "/path/to/xrkk.cc.cert"
-      target: "http://localhost:2537"
+      target: "http://localhost:{端口}"  # 端口由启动配置决定
 ```
 
 ### 4. 搭建WebSocket服务端
 
 ```javascript
-// core/tasker/MyWebSocketTasker.js
+// core/my-core/tasker/MyWebSocketTasker.js
 export default class MyWebSocketTasker {
   id = 'myws'
   name = 'MyWebSocket'
@@ -800,12 +800,12 @@ export default class MyWebSocketTasker {
 }
 ```
 
-**访问**：`ws://localhost:2537/myws`
+**访问**：`ws://localhost:{端口}/myws`  # 端口由启动配置决定
 
 ### 5. 搭建HTTP API服务端
 
 ```javascript
-// core/http/myapi.js
+// core/my-core/http/myapi.js
 export default {
   name: 'my-api',
   priority: 100,
@@ -821,12 +821,12 @@ export default {
 };
 ```
 
-**访问**：`http://localhost:2537/api/my-endpoint`
+**访问**：`http://localhost:{端口}/api/my-endpoint`  # 端口由启动配置决定
 
 ### 6. 搭建TCP/UDP服务端
 
 ```javascript
-// core/tasker/MyTCPTasker.js
+// core/my-core/tasker/MyTCPTasker.js
 import net from 'net';
 
 export default class MyTCPTasker {
@@ -875,7 +875,7 @@ proxy:
         certificate:
           key: "/path/to/xrkk.cc.key"
           cert: "/path/to/xrkk.cc.cert"
-      target: "http://localhost:2537"
+      target: "http://localhost:{端口}"  # 端口由启动配置决定
       rewritePath:
         from: "/api"
         to: "/"

@@ -2790,6 +2790,10 @@ export default class AIStream {
     }
   }
 
+  /**
+   * 获取工作流描述信息（标准化注册方法）
+   * @returns {Object} 工作流描述信息
+   */
   getInfo() {
     return {
       name: this.name,
@@ -2811,6 +2815,14 @@ export default class AIStream {
         permission: f.permission
       }))
     };
+  }
+
+  /**
+   * 获取工作流描述信息（别名，兼容性）
+   * @returns {Object} 工作流描述信息
+   */
+  getDescriptor() {
+    return this.getInfo();
   }
 
   /**
@@ -2854,13 +2866,13 @@ export default class AIStream {
       try {
         let auxStream = StreamLoader.getStream(streamName);
         
-        // 如果stream不存在，尝试创建
+        // 如果stream不存在，尝试通过 StreamLoader 获取类并创建
         if (!auxStream) {
-          const StreamClass = await this.loadAuxiliaryStreamClass(streamName);
+          const StreamClass = StreamLoader.getStreamClass(streamName);
           if (StreamClass) {
             auxStream = new StreamClass();
             await auxStream.init();
-            StreamLoader.registerStream(streamName, auxStream);
+            StreamLoader.streams.set(streamName, auxStream);
           }
         }
         
@@ -2886,27 +2898,6 @@ export default class AIStream {
     }
   }
 
-  /**
-   * 加载辅助工作流类（简化调用方式）
-   */
-  async loadAuxiliaryStreamClass(streamName) {
-    try {
-      const streamMap = {
-        'memory': () => import('#core/stream/memory.js'),
-        'database': () => import('#core/stream/database.js'),
-        'todo': () => import('#core/stream/todo.js')
-      };
-      
-      const loader = streamMap[streamName];
-      if (loader) {
-        const module = await loader();
-        return module.default;
-      }
-    } catch (error) {
-      BotUtil.makeLog('error', `加载辅助工作流类 ${streamName} 失败: ${error.message}`, 'AIStream');
-    }
-    return null;
-  }
 
   /**
    * 提取问题文本

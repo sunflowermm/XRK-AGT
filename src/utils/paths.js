@@ -1,5 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +32,42 @@ const _baseDirs = [
   path.join(_trash, 'html')
 ];
 
+/**
+ * 获取所有 core 目录
+ * @returns {Promise<Array<string>>} core 目录路径数组
+ */
+async function getCoreDirs() {
+  try {
+    // core 目录应该始终存在，但如果没有创建，返回空数组
+    const entries = await fs.readdir(_core, { withFileTypes: true });
+    return entries
+      .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+      .map(entry => path.join(_core, entry.name));
+  } catch {
+    // 目录不存在时返回空数组（开发者可能还没创建 core 目录）
+    return [];
+  }
+}
+
+/**
+ * 获取所有 core 中指定子目录的路径
+ * @param {string} subDir - 子目录名（如 'plugin', 'tasker'）
+ * @returns {Promise<Array<string>>} 子目录路径数组
+ */
+async function getCoreSubDirs(subDir) {
+  const coreDirs = await getCoreDirs();
+  const subDirs = [];
+  
+  for (const coreDir of coreDirs) {
+    const subDirPath = path.join(coreDir, subDir);
+    if (existsSync(subDirPath)) {
+      subDirs.push(subDirPath);
+    }
+  }
+  
+  return subDirs;
+}
+
 export default {
   root: _root,
   src: _src,
@@ -42,17 +80,20 @@ export default {
   renderers: _renderers,
   resources: _resources,
   
-  // sub-directories
-  coreTasker: path.join(_core, 'tasker'),
-  coreHttp: path.join(_core, 'http'),
-  coreEvents: path.join(_core, 'events'),
-  coreStream: path.join(_core, 'stream'),
-  coreCommonConfig: path.join(_core, 'commonconfig'),
-  
   configDefault: path.join(_config, 'default_config'),
   
   dataServerBots: path.join(_data, 'server_bots'),
   dataModels: path.join(_data, 'models'),
+
+  /**
+   * 获取所有 core 目录
+   */
+  getCoreDirs,
+
+  /**
+   * 获取所有 core 中指定子目录的路径
+   */
+  getCoreSubDirs,
 
   /**
    * 确保核心目录结构存在

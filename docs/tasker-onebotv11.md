@@ -204,7 +204,7 @@ flowchart TB
 Tasker在模块加载时自动注册：
 
 ```javascript
-// core/tasker/OneBotv11.js
+// core/system-Core/tasker/OneBotv11.js
 Bot.tasker.push(new OneBotv11Tasker())
 ```
 

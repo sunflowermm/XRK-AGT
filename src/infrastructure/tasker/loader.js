@@ -1,13 +1,14 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { existsSync } from 'node:fs'
 import paths from '#utils/paths.js'
 import BotUtil from '#utils/botutil.js'
 
 // Tasker 加载器
 class TaskerLoader {
   constructor() {
-    this.baseDir = paths.coreTasker
+    this.baseDir = null // 不再使用固定路径，改为动态扫描
     this.loggerNs = 'TaskerLoader'
   }
 
@@ -64,19 +65,33 @@ class TaskerLoader {
 
   async getAdapterFiles() {
     try {
-      const dirents = await fs.readdir(this.baseDir, { withFileTypes: true })
-      return dirents
-        .filter(dirent => dirent.isFile() && dirent.name.endsWith('.js'))
-        .map(dirent => ({
-          name: dirent.name,
-          href: pathToFileURL(path.join(this.baseDir, dirent.name)).href
-        }))
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        BotUtil.makeLog('warn', `Tasker 目录不存在: ${this.baseDir}`, this.loggerNs)
-        return []
+      const files = []
+      const coreDirs = await paths.getCoreDirs()
+      
+      for (const coreDir of coreDirs) {
+        const taskerDir = path.join(coreDir, 'tasker')
+        if (!existsSync(taskerDir)) continue
+        
+        try {
+          const dirents = await fs.readdir(taskerDir, { withFileTypes: true })
+          for (const dirent of dirents) {
+            if (dirent.isFile() && dirent.name.endsWith('.js')) {
+              files.push({
+                name: dirent.name,
+                href: pathToFileURL(path.join(taskerDir, dirent.name)).href,
+                core: path.basename(coreDir)
+              })
+            }
+          }
+        } catch (error) {
+          BotUtil.makeLog('warn', `读取 tasker 目录失败: ${taskerDir}`, this.loggerNs)
+        }
       }
-      throw error
+      
+      return files
+    } catch (error) {
+      BotUtil.makeLog('error', `获取 tasker 文件列表失败`, this.loggerNs, error)
+      return []
     }
   }
 }

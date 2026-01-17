@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import lodash from 'lodash';
 import HttpApi from './http.js';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
@@ -41,18 +42,15 @@ class ApiLoader {
     const startTime = Date.now();
     BotUtil.makeLog('info', '开始加载API模块...', 'ApiLoader');
     
-    // API目录路径
-    const apiDir = paths.coreHttp;
+    // 获取所有 core 目录下的 http 目录
+    const apiDirs = await paths.getCoreSubDirs('http');
     
-    // 确保目录存在
-    await fs.mkdir(apiDir, { recursive: true });
-    
-    // 读取所有JS文件
-    const files = await this.getApiFiles(apiDir);
-    
-    // 加载每个API文件
-    for (const file of files) {
-      await this.loadApi(file);
+    // 加载每个API目录
+    for (const apiDir of apiDirs) {
+      const files = await this.getApiFiles(apiDir);
+      for (const file of files) {
+        await this.loadApi(file);
+      }
     }
     
     // 按优先级排序
@@ -100,10 +98,23 @@ class ApiLoader {
    */
   async loadApi(filePath) {
     try {
-      // 获取相对路径作为key
-      const key = path.relative(paths.coreHttp, filePath)
-        .replace(/\\/g, '/')
-        .replace(/\.js$/, '');
+      // 获取相对路径作为key（从 core 目录开始）
+      // 例如: core/system-Core/http/ai.js -> system-Core/http/ai
+      const coreDirs = await paths.getCoreDirs()
+      let key = null
+      
+      for (const coreDir of coreDirs) {
+        if (filePath.startsWith(coreDir)) {
+          const relativePath = path.relative(coreDir, filePath)
+          key = relativePath.replace(/\\/g, '/').replace(/\.js$/, '')
+          break
+        }
+      }
+      
+      if (!key) {
+        // 如果找不到对应的 core 目录，使用文件名作为 key
+        key = path.basename(filePath, '.js')
+      }
       
       // 如果已加载，先卸载
       if (this.apis.has(key)) {
@@ -170,7 +181,7 @@ class ApiLoader {
       BotUtil.makeLog('debug', `加载API模块: ${apiInstance.name || key}`, 'ApiLoader');
       return true;
     } catch (error) {
-      BotUtil.makeLog('error', `加载API失败: ${filePath}`, 'ApiLoader', error);
+      BotUtil.makeLog('error', `加载API失败: ${filePath} - ${error.message}`, 'ApiLoader', error);
       return false;
     }
   }
@@ -391,42 +402,102 @@ class ApiLoader {
       return;
     }
     
-    const apiDir = paths.coreHttp;
+    // 获取所有 core 目录下的 http 目录
+    const apiDirs = await paths.getCoreSubDirs('http');
+    
+    if (apiDirs.length === 0) {
+      BotUtil.makeLog('debug', '未找到 http 目录，跳过文件监视', 'ApiLoader');
+      return;
+    }
     
     try {
       const { watch } = await import('chokidar');
       
-      this.watcher.api = watch(apiDir, {
+      this.watcher.api = watch(apiDirs, {
         ignored: /(^|[\/\\])\../,
         persistent: true,
         ignoreInitial: true
       });
       
       this.watcher.api
-        .on('add', filePath => {
-          BotUtil.makeLog('info', `检测到新文件: ${filePath}`, 'ApiLoader');
-          this.loadApi(filePath).then(() => {
+        .on('add', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath);
+            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+
+            BotUtil.makeLog('info', `检测到新文件: ${fileName}`, 'ApiLoader');
+            await this.loadApi(filePath);
             this.sortByPriority();
+            
             if (this.app && this.bot) {
-              const key = path.relative(apiDir, filePath).replace(/\\/g, '/').replace(/\.js$/, '');
-              const api = this.apis.get(key);
-              if (api && typeof api.init === 'function') {
-                api.init(this.app, this.bot);
+              // 重新计算 key
+              const coreDirs = await paths.getCoreDirs()
+              let key = null
+              for (const coreDir of coreDirs) {
+                if (filePath.startsWith(coreDir)) {
+                  const relativePath = path.relative(coreDir, filePath)
+                  key = relativePath.replace(/\\/g, '/').replace(/\.js$/, '')
+                  break
+                }
+              }
+              if (key) {
+                const api = this.apis.get(key);
+                if (api && typeof api.init === 'function') {
+                  await api.init(this.app, this.bot);
+                }
               }
             }
-          });
-        })
-        .on('change', filePath => {
-          const key = path.relative(apiDir, filePath).replace(/\\/g, '/').replace(/\.js$/, '');
-          BotUtil.makeLog('info', `检测到文件变更: ${key}`, 'ApiLoader');
-          this.changeApi(key);
-        })
-        .on('unlink', filePath => {
-          const key = path.relative(apiDir, filePath).replace(/\\/g, '/').replace(/\.js$/, '');
-          BotUtil.makeLog('info', `检测到文件删除: ${key}`, 'ApiLoader');
-          this.unloadApi(key);
-          this.sortByPriority();
-        });
+          } catch (error) {
+            BotUtil.makeLog('error', '处理新增API失败', 'ApiLoader', error);
+          }
+        }, 500))
+        .on('change', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath);
+            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+
+            // 重新计算 key
+            const coreDirs = await paths.getCoreDirs()
+            let key = null
+            for (const coreDir of coreDirs) {
+              if (filePath.startsWith(coreDir)) {
+                const relativePath = path.relative(coreDir, filePath)
+                key = relativePath.replace(/\\/g, '/').replace(/\.js$/, '')
+                break
+              }
+            }
+            if (key) {
+              BotUtil.makeLog('info', `检测到文件变更: ${key}`, 'ApiLoader');
+              await this.changeApi(key);
+            }
+          } catch (error) {
+            BotUtil.makeLog('error', '处理API变更失败', 'ApiLoader', error);
+          }
+        }, 500))
+        .on('unlink', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath);
+            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+
+            // 重新计算 key
+            const coreDirs = await paths.getCoreDirs()
+            let key = null
+            for (const coreDir of coreDirs) {
+              if (filePath.startsWith(coreDir)) {
+                const relativePath = path.relative(coreDir, filePath)
+                key = relativePath.replace(/\\/g, '/').replace(/\.js$/, '')
+                break
+              }
+            }
+            if (key) {
+              BotUtil.makeLog('info', `检测到文件删除: ${key}`, 'ApiLoader');
+              await this.unloadApi(key);
+            }
+            this.sortByPriority();
+          } catch (error) {
+            BotUtil.makeLog('error', '处理API删除失败', 'ApiLoader', error);
+          }
+        }, 500));
       
       BotUtil.makeLog('info', '文件监视已启动', 'ApiLoader');
     } catch (error) {

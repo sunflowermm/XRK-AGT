@@ -1,12 +1,14 @@
 ## TaskerLoader 文档（src/infrastructure/tasker/loader.js）
 
-`TaskerLoader` 负责从 `core/tasker` 目录动态加载各类 Tasker（事件生成器，如 QQ OneBotv11、企业微信等），并与 `Bot` 主类配合，为整个系统提供统一的事件入口。
+`TaskerLoader` 负责从所有 `core/*/tasker` 目录动态加载各类 Tasker（事件生成器，如 QQ OneBotv11、企业微信等），并与 `Bot` 主类配合，为整个系统提供统一的事件入口。
 
 ---
 
 ## 职责与定位
 
-- 扫描 `paths.coreTasker`（即 `core/tasker`）目录中的所有 `.js` 文件。
+> **注意**：框架支持多 core 模块架构。`TaskerLoader` 会自动扫描所有 `core/*/tasker` 目录，加载其中的所有 Tasker。
+
+- 扫描所有 `core/*/tasker` 目录中的所有 `.js` 文件（如 `core/system-Core/tasker/`、`core/my-core/tasker/` 等）。
 - 使用 `import()` 动态载入 Tasker 模块。
 - 通过 Tasker 内部代码将自身注册到：
   - `Bot.tasker`：Tasker 列表。
@@ -20,8 +22,9 @@
 
 ## 关键属性
 
-- `this.baseDir`：Tasker 所在目录，来自 `paths.coreTasker`。
 - `this.loggerNs`：日志命名空间，固定为 `'TaskerLoader'`。
+
+> **注意**：`TaskerLoader` 不再使用固定的 `baseDir`，而是动态扫描所有 core 目录下的 `tasker` 子目录。
 
 ---
 
@@ -33,7 +36,7 @@
 flowchart TB
     A[TaskerLoader.load] --> B[初始化summary统计对象]
     B --> C[getTaskerFiles扫描目录]
-    C --> D[读取core/tasker目录]
+    C --> D[读取所有core/*/tasker目录]
     D --> E[筛选.js文件]
     E --> F[转换为file://URL]
     F --> G[批量动态导入]
@@ -54,7 +57,7 @@ flowchart TB
 **步骤说明**：
 
 1. 初始化统计对象 `summary`（scanned/loaded/failed/registered/errors）
-2. 调用 `getTaskerFiles()` 扫描 `core/tasker` 目录，筛选 `.js` 文件
+2. 调用 `getTaskerFiles()` 扫描所有 `core/*/tasker` 目录，筛选 `.js` 文件
 3. 批量导入：对每个文件执行 `await import(href)`
 4. 统计注册数量：检查 `bot.tasker.length` 的增量
 5. 输出总结日志
@@ -79,7 +82,7 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    subgraph TaskerFile["Tasker文件<br/>core/tasker/OneBotv11.js"]
+    subgraph TaskerFile["Tasker文件<br/>core/*/tasker/OneBotv11.js"]
         A[模块顶层执行<br/>Bot.tasker.push]
         B[Tasker类实现<br/>load方法]
         C[WebSocket处理<br/>message方法]
@@ -126,7 +129,7 @@ flowchart TB
 ## 扩展与调试建议
 
 - **新增 Tasker**
-  - 在 `core/tasker` 中新建 `XXX.js`。
+  - 在任意 core 目录的 `tasker` 子目录中新建 `XXX.js`（如 `core/my-core/tasker/MyTasker.js`）。
   - 在文件内：
     - 通过 `Bot.tasker.push(new XXXTasker())` 注册 Tasker。
     - 在 `load()` 中向 `Bot.wsf` 映射对应 WebSocket 路径。

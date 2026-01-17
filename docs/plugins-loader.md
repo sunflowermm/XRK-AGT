@@ -4,14 +4,16 @@
 
 `PluginsLoader` 是 XRK-AGT 的 **插件调度核心**，负责：
 
-- 扫描并加载 `core/plugin` 目录中的插件。
+- 扫描并加载所有 `core/*/plugin` 目录中的插件。
+
+> **注意**：框架支持多 core 模块架构。`PluginsLoader` 会自动扫描所有 `core/*/plugin` 目录，加载其中的所有插件。
 - 管理插件规则匹配、权限检查、上下文处理、冷却与节流。
 - 处理多种事件源（普通消息、设备事件、STDIN/API 事件）。
 - 维护定时任务、事件订阅与全局事件历史。
 
 ### 扩展特性
 
-- ✅ **自动发现**：自动扫描 `core/plugin/` 目录
+- ✅ **自动发现**：自动扫描所有 `core/*/plugin/` 目录
 - ✅ **批量加载**：支持批量并发加载（batchSize=10）
 - ✅ **热重载**：支持文件监听和自动重载
 - ✅ **错误隔离**：单个插件加载失败不影响其他插件
@@ -75,11 +77,11 @@ flowchart TB
 
 - 若不是刷新且已经加载过插件，则直接返回
 - 记录加载开始时间，重置内部状态（priority/extended/task）
-- 调用 `getPlugins()` 扫描 `core/plugin` 目录
+- 调用 `getPlugins()` 扫描所有 `core/*/plugin` 目录
 - 分批（batchSize = 10）并发导入插件
 - 调用后续处理函数完成初始化
 
-> 插件开发者只需要在 `core/plugin` 下新建目录与 JS 文件，即可被自动发现和加载
+> 插件开发者只需要在任意 core 目录的 `plugin` 子目录下新建 JS 文件（如 `core/my-core/plugin/my-plugin.js`），即可被自动发现和加载
 
 ### 2. `importPlugin(file, packageErr)`
 
@@ -333,7 +335,7 @@ async handleMessage(e) {
 
 1. **插件加载检查**：
    - 查看插件是否被 `checkDisable` 或黑白名单过滤
-   - 检查插件文件是否正确放置在 `core/plugin/` 目录
+   - 检查插件文件是否正确放置在 `core/*/plugin/` 目录
    - 查看加载日志，确认插件是否成功加载
 
 2. **事件处理检查**：

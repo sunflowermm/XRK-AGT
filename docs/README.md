@@ -66,9 +66,12 @@ flowchart TB
 
 - **运行核心层** (`src/bot.js`) - 系统入口，统一管理所有组件
 - **基础设施层（辅助层）** (`src/infrastructure/`) - 提供基类、加载器、工具，不包含业务逻辑
-- **任务层（Tasker）** (`core/tasker/`) - 协议转换，生成统一事件
-- **事件系统** (`core/events/`) - 事件标准化和预处理
-- **业务层** (`core/plugin/`, `core/http/`, `core/stream/`) - 具体业务实现
+- **核心模块层（Core）** (`core/*/`) - 每个 core 是一个独立的模块，包含：
+  - **任务层（Tasker）** (`core/*/tasker/`) - 协议转换，生成统一事件
+  - **事件系统** (`core/*/events/`) - 事件标准化和预处理
+  - **业务层** (`core/*/plugin/`, `core/*/http/`, `core/*/stream/`) - 具体业务实现
+  - **配置层** (`core/*/commonconfig/`) - 配置管理
+  - **静态资源** (`core/*/www/`) - 静态文件，自动挂载到 `/core/{coreName}/*`
 
 详细说明请参考 [项目概览](../PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
 
@@ -166,30 +169,56 @@ flowchart TB
 
 ## 📖 典型开发路径
 
+### 创建自己的 Core 模块
+
+框架支持多 core 模块架构，每个 core 是一个独立的模块：
+
+1. **创建 core 目录**：在 `core/` 目录下创建新的 core 目录（如 `core/my-core/`）
+
+2. **创建子目录结构**（可选，根据需要创建）：
+   - `plugin/` - 业务插件
+   - `tasker/` - 任务层（协议适配器）
+   - `events/` - 事件监听器
+   - `http/` - HTTP API
+   - `stream/` - AI 工作流
+   - `commonconfig/` - 配置管理
+   - `www/` - 静态资源（可选，会自动挂载到 `/core/{coreName}/*`）
+     - 每个 `www/<目录名>` 会自动挂载到 `/<目录名>`（避免路径冲突）
+
+3. **package.json 支持**（可选）：
+   - 可以在 core 目录下创建 `package.json` 来管理该 core 的依赖
+   - 在项目根目录执行 `pnpm install` 时，会自动安装所有 core 的依赖
+   - 框架支持 pnpm workspace，core 目录会自动加入 workspace
+
+4. **放置扩展文件**：
+   - 将扩展文件放置到对应的子目录中
+   - 框架会自动扫描并加载所有 core 目录
+   - 不同 core 的资源可以相互使用（如 core A 的 plugin 可以使用 core B 的 tasker）
+
 ### 编写一个简单指令插件
 
 1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 中的架构层次说明
 2. 阅读 **[Bot 主类](bot.md)** 与 **[插件基类](plugin-base.md)**
-3. 参考 `core/plugin/example` 目录中的示例，在 `core/plugin` 下新建自己的插件目录与 JS 文件
+3. 在任意 core 目录的 `plugin/` 子目录下新建插件 JS 文件（如 `core/my-core/plugin/my-plugin.js`）
 
 ### 新增一个 API 接口
 
 1. 阅读 **[HTTP API 基类](http-api.md)** 与 **[API 加载器](api-loader.md)**
-2. 在 `core/http` 目录中新建一个 `.js` 文件，导出一个符合 `HttpApi` 结构的对象或类
+2. 在任意 core 目录的 `http/` 子目录下新建一个 `.js` 文件，导出一个符合 `HttpApi` 结构的对象或类
 3. 重启或等待 `ApiLoader` 热重载，使用浏览器或 Postman 验证新接口
 
 ### 接入新的 IM 平台（创建新 Tasker）
 
 1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 了解架构层次
 2. 阅读 **[Tasker 加载器](tasker-loader.md)** 与 **[Tasker 底层规范](tasker-base-spec.md)**
-3. 参考 **[OneBotv11 Tasker](tasker-onebotv11.md)**，在 `core/tasker` 中编写新 Tasker 文件
-4. 阅读 **[事件监听器开发指南](事件监听器开发指南.md)**，创建对应的事件监听器
+3. 参考 **[OneBotv11 Tasker](tasker-onebotv11.md)**，在任意 core 目录的 `tasker/` 子目录中编写新 Tasker 文件
+4. 阅读 **[事件监听器开发指南](事件监听器开发指南.md)**，在对应 core 的 `events/` 子目录中创建事件监听器
 5. 确保对外暴露统一的事件结构（`post_type/message_type/notice_type` 等），这样可以复用现有插件
 
 ### 创建新的 AI 工作流
 
 1. 阅读 **[AI Stream](aistream.md)** 了解基类设计
-2. 在 `core/stream` 目录中创建新的工作流文件
+2. 在任意 core 目录的 `stream/` 子目录中创建新的工作流文件
 3. 基于 `AIStream` 实现自定义工作流逻辑
 4. 在插件或 API 中调用新工作流
 

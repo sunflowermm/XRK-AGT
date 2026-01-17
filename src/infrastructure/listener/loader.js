@@ -1,4 +1,5 @@
 import fs from "node:fs/promises"
+import path from "node:path"
 import lodash from "lodash"
 import TaskerLoader from "#infrastructure/tasker/loader.js"
 import BotUtil from "#utils/botutil.js";
@@ -18,11 +19,12 @@ class ListenerLoader {
     let eventCount = 0
     
     try {
-      const eventsDir = paths.coreEvents
-      try {
-        await fs.access(eventsDir)
-      } catch {
-        BotUtil.makeLog('warn', `事件目录不存在: ${eventsDir}，跳过加载`, 'ListenerLoader');
+      // 获取所有 core 目录下的 events 目录
+      const eventsDirs = await paths.getCoreSubDirs('events')
+      
+      // 如果没有 events 目录，说明开发者可能不开发事件监听器，这是正常的
+      if (eventsDirs.length === 0) {
+        BotUtil.makeLog('info', `未找到事件目录，跳过加载`, 'ListenerLoader');
         BotUtil.makeLog('info', `加载监听事件[${eventCount}个]`, 'ListenerLoader');
         if (process.argv.includes("server")) {
           await this.loadAdapters();
@@ -30,40 +32,49 @@ class ListenerLoader {
         return;
       }
       
-      const files = await fs.readdir(eventsDir)
-      const eventFiles = files.filter(file => file.endsWith(".js"))
-      
-      for (const file of eventFiles) {
-        BotUtil.makeLog('debug', `加载监听事件: ${file}`, 'ListenerLoader');
+      // 加载所有 events 目录中的文件
+      for (const eventsDir of eventsDirs) {
         try {
-          const listener = await import(`#core/events/${file}`)
-          if (!listener.default) continue
+          const files = await fs.readdir(eventsDir)
+          const eventFiles = files.filter(file => file.endsWith(".js"))
           
-          const instance = new listener.default()
-          // 将全局 bot 注入监听器实例，避免依赖未初始化的全局 Bot
-          instance.bot = this.bot
-          
-          // 新的事件系统：onebot.js和device.js使用init方法
-          if (typeof instance.init === 'function') {
-            await instance.init()
-            eventCount++
-          } else {
-            // 向后兼容旧的事件监听器
-            const on = instance.once ? "once" : "on"
+          for (const file of eventFiles) {
+            BotUtil.makeLog('debug', `加载监听事件: ${file}`, 'ListenerLoader');
+            try {
+              const filePath = path.join(eventsDir, file)
+              const relativePath = path.relative(paths.root, filePath)
+              const listener = await import(`../../../${relativePath.replace(/\\/g, '/')}`)
+              if (!listener.default) continue
+              
+              const instance = new listener.default()
+              // 将全局 bot 注入监听器实例，避免依赖未初始化的全局 Bot
+              instance.bot = this.bot
+              
+              // 新的事件系统：onebot.js和device.js使用init方法
+              if (typeof instance.init === 'function') {
+                await instance.init()
+                eventCount++
+              } else {
+                // 向后兼容旧的事件监听器
+                const on = instance.once ? "once" : "on"
 
-            if (lodash.isArray(instance.event)) {
-              instance.event.forEach((type) => {
-                const handler = instance[type] ? type : "execute"
-                this.bot[on](instance.prefix + type, instance[handler].bind(instance))
-              })
-            } else {
-              const handler = instance[instance.event] ? instance.event : "execute"
-              this.bot[on](instance.prefix + instance.event, instance[handler].bind(instance))
+                if (lodash.isArray(instance.event)) {
+                  instance.event.forEach((type) => {
+                    const handler = instance[type] ? type : "execute"
+                    this.bot[on](instance.prefix + type, instance[handler].bind(instance))
+                  })
+                } else {
+                  const handler = instance[instance.event] ? instance.event : "execute"
+                  this.bot[on](instance.prefix + instance.event, instance[handler].bind(instance))
+                }
+                eventCount++
+              }
+            } catch (err) {
+              BotUtil.makeLog('error', `监听事件加载错误: ${file}`, 'ListenerLoader', err);
             }
-            eventCount++
           }
         } catch (err) {
-          BotUtil.makeLog('error', `监听事件加载错误: ${file}`, 'ListenerLoader', err);
+          BotUtil.makeLog('warn', `读取事件目录失败: ${eventsDir}`, 'ListenerLoader');
         }
       }
     } catch (error) {

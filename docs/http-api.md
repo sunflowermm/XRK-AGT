@@ -9,14 +9,14 @@
 - API 启用/停用与重载逻辑
 - 全局中间件支持
 
-所有位于 `core/http` 下的 API 模块都可以：
+所有位于 `core/*/http` 目录下的 API 模块都可以：
 
 - **直接导出对象（推荐）**：由 `ApiLoader` 自动包装为 `HttpApi` 实例
 - **继承 HttpApi 类**：手动控制初始化逻辑，适合复杂场景
 
 ### 扩展特性
 
-- ✅ **零配置扩展**：放置到 `core/http/` 目录即可自动加载
+- ✅ **零配置扩展**：放置到任意 `core/*/http/` 目录即可自动加载
 - ✅ **标准化接口**：统一的基类和接口规范
 - ✅ **灵活路由**：支持REST API和WebSocket
 - ✅ **中间件支持**：支持全局和路由级中间件
@@ -283,10 +283,10 @@ ws: {
 
 ### 方式1：对象导出（推荐）
 
-在 `core/http` 下新建 `example.js`：
+在任意 `core/*/http` 目录下新建 `example.js`（如 `core/my-core/http/example.js`）：
 
 ```javascript
-// core/http/example.js
+// core/my-core/http/example.js
 export default {
   name: 'example-api',
   dsc: '示例 API',
@@ -359,7 +359,7 @@ export default {
 ### 方式2：继承HttpApi类
 
 ```javascript
-// core/http/advanced-api.js
+// core/my-core/http/advanced-api.js
 import HttpApi from '#infrastructure/http/http.js';
 
 export default class AdvancedAPI extends HttpApi {
@@ -395,7 +395,7 @@ export default class AdvancedAPI extends HttpApi {
 ### 方式3：调用工作流系统
 
 ```javascript
-// core/http/ai-chat-api.js
+// core/my-core/http/ai-chat-api.js
 import StreamLoader from '#infrastructure/aistream/loader.js';
 
 export default {
@@ -445,7 +445,7 @@ export default {
 };
 ```
 
-放入 `core/http` 后，`ApiLoader` 会在启动时自动加载并注册上述路由与 WebSocket。
+放入任意 `core/*/http` 目录后，`ApiLoader` 会在启动时自动加载并注册上述路由与 WebSocket。
 
 ---
 

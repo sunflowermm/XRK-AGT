@@ -895,7 +895,7 @@ MCP服务器内置了4个核心工具，符合MCP 1.0标准：
 #### 方式1：在工作流中注册（推荐）
 
 ```javascript
-// core/stream/my-stream.js
+// core/my-core/stream/my-stream.js
 export default class MyStream extends AIStream {
   async init() {
     await super.init();
@@ -946,10 +946,10 @@ mcpServer.registerTool('custom_tool', {
 
 ```bash
 # 获取工具列表
-curl http://localhost:2537/api/mcp/tools
+curl http://localhost:{端口}/api/mcp/tools  # 端口由启动配置决定
 
-# 调用工具（JSON-RPC标准）
-curl -X POST http://localhost:2537/api/mcp/jsonrpc \
+# 调用工具（JSON-RPC标准，端口由启动配置决定）
+curl -X POST http://localhost:{端口}/api/mcp/jsonrpc \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -962,7 +962,7 @@ curl -X POST http://localhost:2537/api/mcp/jsonrpc \
   }'
 
 # 调用工具（兼容旧版RESTful API）
-curl -X POST http://localhost:2537/api/mcp/tools/call \
+curl -X POST http://localhost:{端口}/api/mcp/tools/call \  # 端口由启动配置决定
   -H "Content-Type: application/json" \
   -d '{"name": "system.info", "arguments": {}}'
 ```
@@ -979,7 +979,7 @@ curl -X POST http://localhost:2537/api/mcp/tools/call \
 aistream: {
   mcp: {
     enabled: true,        // 启用MCP服务
-    port: 2537,          // HTTP服务端口（使用主服务器端口）
+    port: 端口号,          // HTTP服务端口（使用主服务器端口，由启动配置决定）
     autoRegister: true   // 自动注册所有工作流工具
   }
 }
@@ -990,7 +990,7 @@ aistream: {
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `enabled` | boolean | `true` | 是否启用MCP服务 |
-| `port` | number | `2537` | HTTP服务端口（使用主服务器端口） |
+| `port` | number | 由启动配置决定 | HTTP服务端口（使用主服务器端口） |
 | `autoRegister` | boolean | `true` | 是否自动注册所有工作流工具 |
 
 ---
@@ -1011,7 +1011,7 @@ Cursor 支持三种传输方式连接 MCP 服务器：
 {
   "mcpServers": {
     "xrk-agt": {
-      "url": "http://localhost:2537/api/mcp/jsonrpc",
+      "url": "http://localhost:{端口}/api/mcp/jsonrpc",  // 端口由启动配置决定
       "transport": "http",
       "description": "XRK-AGT MCP服务器 - 提供工作流工具和系统功能"
     }
@@ -1027,7 +1027,7 @@ Cursor 支持三种传输方式连接 MCP 服务器：
 {
   "mcpServers": {
     "xrk-agt": {
-      "url": "http://localhost:2537/api/mcp/connect",
+      "url": "http://localhost:{端口}/api/mcp/connect",  // 端口由启动配置决定
       "transport": "sse",
       "description": "XRK-AGT MCP服务器 - SSE连接"
     }
@@ -1043,7 +1043,7 @@ Cursor 支持三种传输方式连接 MCP 服务器：
 {
   "mcpServers": {
     "xrk-agt": {
-      "url": "ws://localhost:2537/mcp/ws",
+      "url": "ws://localhost:{端口}/mcp/ws",  // 端口由启动配置决定
       "transport": "websocket",
       "description": "XRK-AGT MCP服务器 - WebSocket连接"
     }
@@ -1057,13 +1057,13 @@ Cursor 支持三种传输方式连接 MCP 服务器：
 
 ```bash
 # 健康检查
-curl http://localhost:2537/api/mcp/health
+curl http://localhost:{端口}/api/mcp/health  # 端口由启动配置决定
 
-# 获取工具列表（RESTful）
-curl http://localhost:2537/api/mcp/tools
+# 获取工具列表（RESTful，端口由启动配置决定）
+curl http://localhost:{端口}/api/mcp/tools
 
-# 调用工具（JSON-RPC）
-curl -X POST http://localhost:2537/api/mcp/jsonrpc \
+# 调用工具（JSON-RPC，端口由启动配置决定）
+curl -X POST http://localhost:{端口}/api/mcp/jsonrpc \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -1076,7 +1076,7 @@ curl -X POST http://localhost:2537/api/mcp/jsonrpc \
 
 **连接失败**：
 1. 检查 XRK-AGT 服务器是否正在运行
-2. 确认端口号是否正确（默认2537）
+2. 确认端口号是否正确（端口由启动配置决定）
 3. 检查防火墙设置
 
 **工具调用失败**：

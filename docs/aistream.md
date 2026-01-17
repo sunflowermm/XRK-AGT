@@ -8,7 +8,7 @@
 
 ### 扩展特性
 
-- ✅ **零配置扩展**：放置到 `core/stream/` 目录即可自动加载
+- ✅ **零配置扩展**：放置到任意 `core/*/stream/` 目录即可自动加载
 - ✅ **函数注册系统**：支持动态prompt和复杂解析
 - ✅ **Embedding模式**：支持本地（BM25）和远程（API）两种模式
 - ✅ **工作流合并**：支持功能合并和组合
@@ -77,8 +77,8 @@ classDiagram
 # 是否启用工作流系统
 enabled: true
 
-# 工作流目录路径（相对于项目根目录）
-streamDir: "core/stream"
+# 工作流目录路径（已废弃，框架自动扫描所有 core/*/stream 目录）
+# streamDir: "core/stream"
 
 # 工作流全局设置
 global:

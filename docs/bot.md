@@ -33,7 +33,7 @@ import Bot from './src/bot.js';
 const bot = new Bot();
 
 // 启动服务
-await bot.run({ port: 2537 });
+await bot.run({ port: 端口号 });  // 端口号由开发者指定
 
 // 监听启动事件
 bot.on('online', ({ url, apis }) => {
@@ -59,7 +59,7 @@ process.on('SIGINT', async () => {
 ### 在 HTTP API 中使用
 
 ```javascript
-// core/http/myapi.js
+// core/my-core/http/myapi.js
 export default {
   name: 'my-api',
   routes: [
@@ -110,7 +110,7 @@ graph TB
 | 职责模块 | 说明 |
 |---------|------|
 | **服务入口** | Express 应用、HTTP/HTTPS 服务器、静态文件服务、基础中间件 |
-| **API 与 WebSocket** | 动态加载 `core/http` 下的 API 模块，管理 WebSocket 连接与路径路由 |
+| **API 与 WebSocket** | 动态加载所有 `core/*/http` 目录下的 API 模块，管理 WebSocket 连接与路径路由 |
 | **Tasker 与多 Bot** | 管理 Tasker 实例，按账号/设备 ID 管理子 Bot |
 | **认证与安全** | API Key 生成/验证、白名单、本地连接、同源 Cookie 认证 |
 | **事件系统** | 统一事件入口 `Bot.em()`，事件准备与增强，逐级事件派发 |
@@ -192,7 +192,7 @@ const result = await bot.em('stdin.message', {
 #### `run(options)` / `closeServer()` / `getServerUrl()` / `getLocalIpAddress()`
 
 ```javascript
-await bot.run({ port: 2537 });
+await bot.run({ port: 端口号 });  // 端口号由开发者指定
 await bot.closeServer();
 const url = bot.getServerUrl();
 const ipInfo = await bot.getLocalIpAddress();
@@ -522,7 +522,7 @@ sequenceDiagram
 ### 注册 WebSocket 处理器
 
 ```javascript
-// core/tasker/MyTasker.js
+// core/my-core/tasker/MyTasker.js
 export default class MyTasker {
   id = 'mytasker';
   path = 'mytasker';
@@ -540,7 +540,7 @@ export default class MyTasker {
   }
 }
 
-// 客户端连接: ws://localhost:2537/mytasker
+// 客户端连接: ws://localhost:{端口}/mytasker  // 端口由启动配置决定
 ```
 
 ### WebSocket 心跳

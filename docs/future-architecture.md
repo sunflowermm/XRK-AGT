@@ -94,8 +94,8 @@ graph TB
 - **框架**: Express/Fastify
 - **语言**: JavaScript/TypeScript
 - **核心**: 插件系统、工作流引擎、Tasker 协议层
-- **端口**: 2537 (HTTP, 默认), 2538 (HTTPS, 可选)
-- **说明**: 当前版本默认端口为 2537/2538，可通过配置修改
+- **端口**: 由启动配置决定（HTTP/HTTPS）
+- **说明**: 端口在启动时通过 `bot.run({ port: 端口号 })` 指定，可通过配置修改
 
 ### Python 子服务端 (FastAPI)
 - **框架**: FastAPI + Uvicorn

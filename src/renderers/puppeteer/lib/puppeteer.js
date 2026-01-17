@@ -1,5 +1,4 @@
 import Renderer from "#infrastructure/renderer/Renderer.js";
-import os from "node:os";
 import lodash from "lodash";
 import puppeteer from "puppeteer";
 import cfg from "#infrastructure/config/config.js";
@@ -33,7 +32,6 @@ export default class PuppeteerRenderer extends Renderer {
     this.restartNum = config.restartNum ?? rendererCfg.restartNum ?? 100;
     this.renderNum = 0;
     this.puppeteerTimeout = config.puppeteerTimeout ?? rendererCfg.puppeteerTimeout ?? 120000;
-    this.memoryThreshold = config.memoryThreshold ?? rendererCfg.memoryThreshold ?? 1024;
     this.maxConcurrent = config.maxConcurrent ?? rendererCfg.maxConcurrent ?? 3;
 
     this.config = {
@@ -71,25 +69,6 @@ export default class PuppeteerRenderer extends Renderer {
     process.on("SIGTERM", () => this.cleanup());
   }
 
-  /**
-   * Retrieve system MAC address for browser instance identification
-   */
-  async getMac() {
-    let macAddr = "000000000000";
-    try {
-      const network = os.networkInterfaces();
-      for (const key in network) {
-        for (const iface of network[key]) {
-          if (iface.mac && iface.mac !== "00:00:00:00:00:00") {
-            return iface.mac.replace(/:/g, "");
-          }
-        }
-      }
-    } catch (e) {
-      BotUtil.makeLog("error", `Failed to get MAC address: ${e.message}`, "PuppeteerRenderer");
-    }
-    return macAddr;
-  }
 
   /**
    * Initialize browser instance with connection reuse
@@ -233,11 +212,11 @@ export default class PuppeteerRenderer extends Renderer {
     const savePath = this.dealTpl(name, data);
     if (!savePath) return false;
 
-    const filePath = path.join(paths.root, lodash.trim(savePath, "."));
-    if (!fs.existsSync(filePath)) {
-      BotUtil.makeLog("error", `HTML file does not exist: ${filePath}`, "PuppeteerRenderer");
-      return false;
-    }
+      const filePath = path.join(paths.root, lodash.trimStart(savePath, "."));
+      if (!fs.existsSync(filePath)) {
+        BotUtil.makeLog("error", `HTML file does not exist: ${filePath}`, "PuppeteerRenderer");
+        return false;
+      }
 
     let ret = [];
     let page = null;

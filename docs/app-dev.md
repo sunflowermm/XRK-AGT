@@ -5,7 +5,7 @@
 本篇文档说明：
 
 - 整体启动流程（`app.js` → `start.js` → `src/bot.js`）
-- 如何扩展 Web 前端（`www/xrk` 控制台）
+- 如何扩展 Web 前端（`core/system-Core/www/xrk` 控制台，访问路径：`/xrk`）
 - 如何让前端与后端 API、插件、渲染器、工作流协同工作
 - **完整的技术栈整合方案**：插件系统 + 工作流系统 + HTTP API + 渲染器 + 配置系统 + 事件系统
 
@@ -22,9 +22,9 @@ flowchart TD
   Bootstrap --> Start["import ./start.js"]
   Start --> Bot["创建 Bot 实例<br/>src/bot.js"]
   Bot --> Http["初始化 HTTP/HTTPS/WS 服务"]
-  Bot --> Taskers["加载 Tasker<br/>core/tasker"]
-  Bot --> Plugins["加载插件<br/>core/plugin"]
-  Bot --> ApiLoader["加载 HTTP API<br/>core/http"]
+  Bot --> Taskers["加载 Tasker<br/>core/*/tasker"]
+  Bot --> Plugins["加载插件<br/>core/*/plugin"]
+  Bot --> ApiLoader["加载 HTTP API<br/>core/*/http"]
   Bot --> Renderers["初始化渲染器<br/>src/renderers"]
   Bot --> Online["触发 online / ready 事件"]
 ```
@@ -36,7 +36,7 @@ flowchart TD
 | 引导器 | `app.js` | 检查依赖与环境、安装缺失依赖、加载动态 `imports`，最后启动 `start.js` |
 | 主程序入口 | `start.js` | 实际创建 `Bot` 实例、加载配置、监听事件、启动 HTTP/WS 服务 |
 | 运行核心 | `src/bot.js` | 封装 HTTP/HTTPS/WebSocket、中间件、认证、Tasker/插件/API 装载 |
-| Web 前端 | `www/xrk/index.html` / `www/xrk/app.js` | XRK Web 控制台，包含系统状态、API 调试、配置管理前端 |
+| Web 前端 | `core/system-Core/www/xrk/index.html` / `core/system-Core/www/xrk/app.js` | XRK Web 控制台，包含系统状态、API 调试、配置管理前端<br/>访问路径：`/<目录名>`（如 `/xrk`） |
 
 ---
 
@@ -140,9 +140,11 @@ flowchart LR
 
 ---
 
-## Web 控制台（www/xrk）与 API 交互
+## Web 控制台（core/system-Core/www/xrk）与 API 交互
 
-`www/xrk/index.html` + `www/xrk/app.js` 实现了一个单页控制台，核心功能包括：
+**访问路径**：`/<目录名>`（如 `/xrk`，具体端口由启动配置决定）
+
+`core/system-Core/www/xrk/index.html` + `core/system-Core/www/xrk/app.js` 实现了一个单页控制台，核心功能包括：
 
 - 系统状态监控（通过 HTTP API 拉取指标）。
 - API 调试页面（动态加载可用 API 列表）。
@@ -153,8 +155,8 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
-  participant FE as 前端 www/xrk/app.js
-  participant Http as HTTP API(core/http)
+  participant FE as 前端 core/system-Core/www/xrk/app.js
+  participant Http as HTTP API(core/*/http)
   participant Bot as Bot
   participant Cfg as cfg(Config)
 
@@ -182,8 +184,8 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A[创建API文件<br/>core/http/config-manager.js] --> B[使用ConfigBase读写配置]
-    B --> C[前端注册路由<br/>www/xrk/app.js]
+    A[创建API文件<br/>core/*/http/config-manager.js] --> B[使用ConfigBase读写配置]
+    B --> C[前端注册路由<br/>core/system-Core/www/xrk/app.js]
     C --> D[使用fetch调用API]
     D --> E[渲染表单并提交]
     
@@ -193,8 +195,8 @@ flowchart LR
 ```
 
 **步骤**:
-1. **后台 API**: 在 `core/http` 创建 API，使用 `ConfigBase` 子类读写配置
-2. **前端页面**: 在 `www/xrk/app.js` 注册路由，使用 `fetch` 调用 API
+1. **后台 API**: 在任意 `core/*/http` 目录创建 API，使用 `ConfigBase` 子类读写配置
+2. **前端页面**: 在 `core/system-Core/www/xrk/app.js` 注册路由，使用 `fetch` 调用 API
 
 ### 2. 在前端触发某个插件功能
 
@@ -257,7 +259,7 @@ XRK-AGT 提供了完整的技术栈，开发者可以灵活组合使用：
 
 ```mermaid
 flowchart TB
-    subgraph Frontend["前端层（www/xrk）"]
+    subgraph Frontend["前端层（core/system-Core/www/xrk）"]
         FE1[Web控制台<br/>单页应用]
         FE2[API调试界面]
         FE3[配置管理界面]
@@ -329,7 +331,7 @@ flowchart TB
 **技术栈**：插件 + 工作流 + LLM
 
 ```javascript
-// 1. 创建插件（core/plugin/chat.js）
+// 1. 创建插件（core/my-core/plugin/chat.js）
 export default class ChatPlugin extends plugin {
   constructor() {
     super({
@@ -361,7 +363,7 @@ export default class ChatPlugin extends plugin {
 **技术栈**：插件 + 工作流 + TODO系统 + 记忆系统
 
 ```javascript
-// 1. 创建插件（core/plugin/assistant.js）
+// 1. 创建插件（core/my-core/plugin/assistant.js）
 export default class AssistantPlugin extends plugin {
   constructor() {
     super({
@@ -396,7 +398,7 @@ export default class AssistantPlugin extends plugin {
 **技术栈**：前端 + HTTP API + 工作流 + 渲染器
 
 ```javascript
-// 1. 创建HTTP API（core/http/ai-chat.js）
+// 1. 创建HTTP API（core/my-core/http/ai-chat.js）
 import StreamLoader from '#infrastructure/aistream/loader.js';
 
 export default {
@@ -442,7 +444,7 @@ export default {
   ]
 };
 
-// 2. 前端调用（www/xrk/app.js）
+// 2. 前端调用（core/system-Core/www/xrk/app.js）
 async function sendMessage(message) {
   const response = await fetch('/api/ai/chat', {
     method: 'POST',
@@ -461,7 +463,7 @@ async function sendMessage(message) {
 **技术栈**：插件 + 工作流 + 渲染器 + HTTP API
 
 ```javascript
-// 1. 创建插件（core/plugin/report.js）
+// 1. 创建插件（core/my-core/plugin/report.js）
 export default class ReportPlugin extends plugin {
   constructor() {
     super({
@@ -532,7 +534,7 @@ export default {
 **技术栈**：Tasker + 插件 + 工作流 + 事件系统
 
 ```javascript
-// 1. 创建跨平台插件（core/plugin/unified.js）
+// 1. 创建跨平台插件（core/my-core/plugin/unified.js）
 export default class UnifiedPlugin extends plugin {
   constructor() {
     super({
@@ -582,7 +584,7 @@ flowchart TB
     A["确定应用需求"] --> B["选择技术栈组合"]
     B --> C["设计数据流"]
     C --> D["实现后端逻辑<br/>插件/API/工作流"]
-    D --> E["实现前端界面<br/>www/xrk"]
+    D --> E["实现前端界面<br/>core/system-Core/www/xrk"]
     E --> F["集成测试"]
     F --> G["部署上线"]
     

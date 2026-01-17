@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
+import lodash from 'lodash';
+import chokidar from 'chokidar';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 
@@ -16,8 +18,11 @@ class ConfigLoader {
     /** 加载状态 */
     this.loaded = false;
     
-    /** 配置目录路径 */
-    this.configDir = paths.coreCommonConfig;
+    /** 配置目录路径（不再使用固定路径） */
+    this.configDir = null;
+    
+    /** 文件监视器 */
+    this.watcher = null;
   }
 
   /**
@@ -29,18 +34,15 @@ class ConfigLoader {
       const startTime = Date.now();
       BotUtil.makeLog('info', '开始加载配置管理器...', 'ConfigLoader');
 
-      // 确保配置目录存在
-      if (!fsSync.existsSync(this.configDir)) {
-        await fs.mkdir(this.configDir, { recursive: true });
-        BotUtil.makeLog('debug', '配置目录已创建', 'ConfigLoader');
-      }
+      // 获取所有 core 目录下的 commonconfig 目录
+      const configDirs = await paths.getCoreSubDirs('commonconfig');
 
-      // 获取所有配置文件
-      const files = await this._getConfigFiles(this.configDir);
-
-      // 加载每个配置
-      for (const file of files) {
-        await this._loadConfig(file);
+      // 加载每个配置目录
+      for (const configDir of configDirs) {
+        const files = await this._getConfigFiles(configDir);
+        for (const file of files) {
+          await this._loadConfig(file);
+        }
       }
 
       this.loaded = true;
@@ -129,7 +131,7 @@ class ConfigLoader {
       BotUtil.makeLog('debug', `加载配置: ${configInstance.displayName || key}`, 'ConfigLoader');
       return true;
     } catch (error) {
-      BotUtil.makeLog('error', `加载配置失败: ${filePath}`, 'ConfigLoader', error);
+      BotUtil.makeLog('error', `加载配置失败: ${filePath} - ${error.message}`, 'ConfigLoader', error);
       return false;
     }
   }
@@ -174,9 +176,19 @@ class ConfigLoader {
    */
   async reload(name) {
     try {
-      const configPath = path.join(this.configDir, `${name}.js`);
+      // 查找配置文件
+      const configDirs = await paths.getCoreSubDirs('commonconfig');
+      let configPath = null;
       
-      if (!fsSync.existsSync(configPath)) {
+      for (const configDir of configDirs) {
+        const filePath = path.join(configDir, `${name}.js`);
+        if (fsSync.existsSync(filePath)) {
+          configPath = filePath;
+          break;
+        }
+      }
+      
+      if (!configPath) {
         throw new Error(`配置文件不存在: ${name}`);
       }
 
@@ -200,6 +212,81 @@ class ConfigLoader {
       }
     }
     BotUtil.makeLog('debug', '已清除所有配置缓存', 'ConfigLoader');
+  }
+
+  /**
+   * 启用文件监视（热加载）
+   * @param {boolean} enable - 是否启用
+   */
+  async watch(enable = true) {
+    if (!enable) {
+      if (this.watcher) {
+        await this.watcher.close();
+        this.watcher = null;
+      }
+      return;
+    }
+
+    if (this.watcher) return;
+
+    try {
+      // 监视所有 core 目录下的 commonconfig 子目录
+      const configDirs = await paths.getCoreSubDirs('commonconfig');
+      
+      if (configDirs.length === 0) {
+        BotUtil.makeLog('debug', '未找到 commonconfig 目录，跳过文件监视', 'ConfigLoader');
+        return;
+      }
+      
+      this.watcher = chokidar.watch(configDirs, {
+        ignored: /(^|[\/\\])\../,
+        persistent: true,
+        ignoreInitial: true,
+        awaitWriteFinish: {
+          stabilityThreshold: 300,
+          pollInterval: 100
+        }
+      });
+
+      this.watcher
+        .on('add', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath);
+            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+
+            BotUtil.makeLog('info', `检测到新配置文件: ${fileName}`, 'ConfigLoader');
+            await this._loadConfig(filePath);
+          } catch (error) {
+            BotUtil.makeLog('error', '处理新增配置失败', 'ConfigLoader', error);
+          }
+        }, 500))
+        .on('change', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath);
+            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+
+            const key = path.basename(filePath, '.js');
+            BotUtil.makeLog('info', `检测到配置文件变更: ${key}`, 'ConfigLoader');
+            await this.reload(key);
+          } catch (error) {
+            BotUtil.makeLog('error', '处理配置变更失败', 'ConfigLoader', error);
+          }
+        }, 500))
+        .on('unlink', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath);
+            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+
+            const key = path.basename(filePath, '.js');
+            BotUtil.makeLog('info', `检测到配置文件删除: ${key}`, 'ConfigLoader');
+            this.configs.delete(key);
+          } catch (error) {
+            BotUtil.makeLog('error', '处理配置删除失败', 'ConfigLoader', error);
+          }
+        }, 500));
+    } catch (error) {
+      BotUtil.makeLog('error', '启动配置文件监视失败', 'ConfigLoader', error);
+    }
   }
 }
 

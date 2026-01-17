@@ -2,7 +2,7 @@
 
 > **可扩展性**：ApiLoader是HTTP/API系统的核心加载器，自动发现和加载所有API模块。API开发者只需将API放置到对应目录，无需任何配置。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
-`ApiLoader` 负责从 `core/http` 目录动态加载所有 HTTP API 模块，并完成：
+`ApiLoader` 负责从所有 `core/*/http` 目录动态加载所有 HTTP API 模块，并完成：
 
 - API 实例化与优先级排序。
 - 将路由与 WebSocket 处理器注册到 Express 与 Bot。
@@ -10,7 +10,7 @@
 
 ### 扩展特性
 
-- ✅ **自动发现**：自动扫描 `core/http/` 目录（支持递归）
+- ✅ **自动发现**：自动扫描所有 `core/*/http/` 目录（支持递归）
 - ✅ **灵活导出**：支持类导出和对象导出两种方式
 - ✅ **热重载**：支持文件监听和自动重载
 - ✅ **错误隔离**：单个API加载失败不影响其他API
@@ -35,7 +35,7 @@
 
 ```mermaid
 flowchart TB
-    A["ApiLoader.load"] --> B["确保core/http目录存在"]
+    A["ApiLoader.load"] --> B["扫描所有core/*/http目录"]
     B --> C["getApiFiles递归扫描"]
     C --> D["收集.js文件<br/>跳过.和_开头"]
     D --> E["遍历每个文件"]
@@ -65,8 +65,8 @@ flowchart TB
 
 **步骤说明**：
 
-1. 确保 `paths.coreHttp` 目录存在
-2. 调用 `getApiFiles` 递归扫描，收集 `.js` 文件
+1. 调用 `paths.getCoreSubDirs('http')` 获取所有 `core/*/http` 目录
+2. 调用 `getApiFiles` 递归扫描每个目录，收集 `.js` 文件
 3. 对每个文件调用 `loadApi`：
    - 生成相对路径 key
    - 动态导入模块并实例化
@@ -273,13 +273,13 @@ if (api) {
 
 ### 新增 API 模块
 
-1. **创建文件**：在 `core/http` 下创建新的 `.js` 文件
+1. **创建文件**：在任意 `core/*/http` 目录下创建新的 `.js` 文件（如 `core/my-core/http/my-api.js`）
 2. **导出配置**：按 `docs/http-api.md` 中的推荐方式导出 `default`
 3. **自动加载**：`ApiLoader` 会在启动或文件变更时自动加载
 
 **示例**：
 ```javascript
-// core/http/my-api.js
+// core/my-core/http/my-api.js
 export default {
   name: 'my-api',
   dsc: '我的API',

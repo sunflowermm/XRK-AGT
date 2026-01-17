@@ -1,0 +1,155 @@
+import StreamLoader from '#infrastructure/aistream/loader.js';
+import cfg from '#infrastructure/config/config.js';
+import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
+import { InputValidator } from '#utils/input-validator.js';
+import { HttpResponse } from '#utils/http-utils.js';
+
+function parseOptionalJson(raw) {
+  if (!raw && raw !== 0) return null;
+  try {
+    if (typeof raw === 'string') {
+      return JSON.parse(raw);
+    }
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+export default {
+  name: 'ai-stream',
+  dsc: 'AI 流式输出（SSE）',
+  priority: 80,
+  routes: [
+    {
+      method: 'GET',
+      path: '/api/ai/stream',
+      handler: async (req, res) => {
+        try {
+          // 输入验证
+          const prompt = InputValidator.sanitizeText((req.query.prompt || '').toString(), 10000);
+          if (!prompt.trim()) {
+            return HttpResponse.validationError(res, '缺少 prompt 参数');
+          }
+
+          const persona = (req.query.persona || '').toString();
+          const workflowName = (req.query.workflow || 'chat').toString().trim() || 'chat';
+          const profileKey = (req.query.profile || req.query.llm || req.query.model || '').toString().trim() || undefined;
+          const contextObj = parseOptionalJson(req.query.context);
+          const metadata = parseOptionalJson(req.query.meta);
+
+          const fallbackStream = StreamLoader.getStream('chat') || StreamLoader.getStream('device');
+          const stream = StreamLoader.getStream(workflowName) || fallbackStream;
+          if (!stream) {
+            return HttpResponse.error(res, new Error('工作流未加载'), 500, 'ai.stream');
+          }
+
+          // SSE 头
+          res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
+          res.flushHeaders?.();
+
+          const messages = await stream.buildChatContext(null, {
+            text: prompt,
+            persona,
+            context: contextObj,
+            metadata
+          });
+
+          const llmOverrides = {
+            ...stream.config,
+            workflow: workflowName,
+            persona,
+            profile: profileKey
+          };
+
+          const executionContext = {
+            e: null,
+            question: {
+              text: prompt,
+              persona,
+              context: contextObj,
+              metadata
+            },
+            config: llmOverrides
+          };
+
+          let acc = '';
+          const finalText = await stream.callAIStream(
+            messages,
+            llmOverrides,
+            (delta) => {
+              acc += delta;
+              res.write(`data: ${JSON.stringify({ delta, workflow: stream.name })}\n\n`);
+            },
+            {
+              enableFunctionCalling: true,
+              context: executionContext
+            }
+          );
+
+          // 通知前端流结束，同时附带清洗后的文本（如果有）
+          res.write(
+            `data: ${JSON.stringify({
+              done: true,
+              workflow: stream.name,
+              text: finalText || acc
+            })}\n\n`
+          );
+          res.end();
+        } catch (e) {
+          errorHandler.handle(e, { context: 'ai.stream', code: ErrorCodes.SYSTEM_ERROR });
+          try {
+            res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+          } catch {}
+          res.end();
+        }
+      }
+    },
+    {
+      method: 'GET',
+      path: '/api/ai/models',
+      handler: HttpResponse.asyncHandler(async (_req, res) => {
+        const llm = cfg.aistream?.llm;
+        if (!llm) {
+          return HttpResponse.notFound(res, '未找到 LLM 配置');
+        }
+
+        const defaults = llm.defaults || {};
+        const profiles = Object.entries(llm.profiles || llm.models || {}).map(([key, value]) => ({
+          key,
+          label: value.label || key,
+          description: value.description || '',
+          tags: value.tags || [],
+          model: value.model || defaults.model,
+          baseUrl: value.baseUrl || defaults.baseUrl,
+          maxTokens: value.maxTokens || defaults.maxTokens,
+          temperature: value.temperature ?? defaults.temperature,
+          hasApiKey: Boolean(value.apiKey || defaults.apiKey),
+          capabilities: value.capabilities || value.tags || []
+        }));
+
+        const workflows = Object.entries(llm.workflows || {}).map(([key, value]) => ({
+          key,
+          label: value.label || key,
+          description: value.description || '',
+          profile: value.profile || null,
+          persona: value.persona || null,
+          uiHidden: Boolean(value.uiHidden)
+        }));
+
+        HttpResponse.success(res, {
+          enabled: llm.enabled !== false,
+          defaultProfile: llm.defaultProfile || llm.defaultModel || profiles[0]?.key || null,
+          defaultWorkflow: llm.defaultWorkflow || llm.defaultProfile || workflows[0]?.key || null,
+          persona: llm.persona || '',
+          profiles,
+          workflows
+        });
+      }, 'ai.models')
+    }
+  ]
+};
+
+

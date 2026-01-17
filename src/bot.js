@@ -332,10 +332,23 @@ export default class Bot extends EventEmitter {
       const httpsConfig = cfg.server.https || {};
       const tlsConfig = httpsConfig.tls || {};
       
+      // 优化 CA 证书加载
+      let caCert = undefined;
+      if (cert.ca) {
+        try {
+          if (fsSync.statSync(cert.ca).isFile()) {
+            caCert = await fs.readFile(cert.ca);
+            BotUtil.makeLog('debug', `已加载CA证书：${cert.ca}`, '代理');
+          }
+        } catch (error) {
+          BotUtil.makeLog('debug', `CA证书文件不存在或无法访问：${cert.ca}，跳过`, '代理');
+        }
+      }
+      
       const context = tls.createSecureContext({
         key: await fs.readFile(cert.key),
         cert: await fs.readFile(cert.cert),
-        ca: cert.ca && fsSync.existsSync(cert.ca) ? await fs.readFile(cert.ca) : undefined,
+        ca: caCert,
         minVersion: tlsConfig.minVersion || 'TLSv1.2',
         honorCipherOrder: true
       });
@@ -505,7 +518,7 @@ export default class Bot extends EventEmitter {
    * 初始化中间件和路由
    * 按照nginx风格的路由匹配顺序：精确匹配 > 前缀匹配 > 正则匹配 > 默认
    */
-  _initializeMiddlewareAndRoutes() {
+  async _initializeMiddlewareAndRoutes() {
     // ========== 第一阶段：全局中间件（所有请求） ==========
     // 1. 请求追踪和基础信息
     this.express.use((req, res, next) => {
@@ -614,7 +627,7 @@ export default class Bot extends EventEmitter {
     // 注意：静态文件服务应该在API路由之后，避免拦截API请求
     // API路由在ApiLoader.register中注册，会通过优先级确保在静态文件服务之前
     // 静态文件服务已经添加了 /api/ 路径跳过逻辑，确保不会拦截API请求
-    this._setupStaticServing();
+    await this._setupStaticServing();
   }
 
   /**
@@ -759,9 +772,7 @@ export default class Bot extends EventEmitter {
     
     // /media 路由映射到 data/media
     const mediaDir = path.join(paths.data, 'media');
-    if (!fsSync.existsSync(mediaDir)) {
-      fsSync.mkdirSync(mediaDir, { recursive: true });
-    }
+    fsSync.mkdirSync(mediaDir, { recursive: true });
     this.express.use('/media', (req, res, next) => {
       if (this._checkHeadersSent(res, next)) return;
       express.static(mediaDir, staticOptions)(req, res, next);
@@ -769,9 +780,7 @@ export default class Bot extends EventEmitter {
     
     // /uploads 路由映射到 data/uploads
     const uploadsDir = path.join(paths.data, 'uploads');
-    if (!fsSync.existsSync(uploadsDir)) {
-      fsSync.mkdirSync(uploadsDir, { recursive: true });
-    }
+    fsSync.mkdirSync(uploadsDir, { recursive: true });
     this.express.use('/uploads', (req, res, next) => {
       if (this._checkHeadersSent(res, next)) return;
       express.static(uploadsDir, staticOptions)(req, res, next);
@@ -779,10 +788,32 @@ export default class Bot extends EventEmitter {
   }
 
   /**
+   * 创建静态文件服务选项
+   * @returns {Object} express.static 选项
+   */
+  _createStaticOptions() {
+    return {
+      index: cfg.server.static.index || ['index.html', 'index.htm'],
+      dotfiles: 'deny',
+      extensions: cfg.server.static.extensions || false,
+      fallthrough: true,
+      maxAge: cfg.server.static.cacheTime || '1d',
+      etag: true,
+      lastModified: true,
+      immutable: cfg.server.static.immutable !== false,
+      setHeaders: (res, filePath) => {
+        if (!res.headersSent) {
+          this._setStaticHeaders(res, filePath);
+        }
+      }
+    };
+  }
+
+  /**
    * 静态文件服务配置
    * 使用条件中间件，只处理非API请求
    */
-  _setupStaticServing() {
+  async _setupStaticServing() {
     // 目录索引（仅对静态文件）
     this.express.use((req, res, next) => {
       if (req.path.startsWith('/api/')) {
@@ -795,7 +826,63 @@ export default class Bot extends EventEmitter {
     // 静态文件安全中间件（已优化，跳过API）
     this.express.use(this._staticSecurityMiddleware.bind(this));
     
-    // 静态文件服务（条件匹配）
+    // 挂载所有 core/*/www 目录及其子目录
+    const coreDirs = await paths.getCoreDirs();
+    const staticOptions = this._createStaticOptions();
+    const mountedPaths = new Set(); // 用于检测路径冲突
+    
+    for (const coreDir of coreDirs) {
+      const wwwDir = path.join(coreDir, 'www');
+      const coreName = path.basename(coreDir);
+      
+      // 检查 www 目录是否存在
+      try {
+        const stat = fsSync.statSync(wwwDir);
+        if (!stat.isDirectory()) continue;
+      } catch {
+        continue;
+      }
+      
+      // 挂载 core/*/www 到 /core/{coreName}/*
+      const coreMountPath = `/core/${coreName}`;
+      if (!mountedPaths.has(coreMountPath)) {
+        this.express.use(coreMountPath, express.static(wwwDir, staticOptions));
+        mountedPaths.add(coreMountPath);
+        BotUtil.makeLog('info', `挂载静态资源: ${coreMountPath} -> ${wwwDir}`, 'Bot');
+      }
+      
+      // 扫描 www 下的子目录，挂载到根路径（避免冲突）
+      try {
+        const entries = fsSync.readdirSync(wwwDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const subDirName = entry.name;
+            const subDirPath = path.join(wwwDir, subDirName);
+            const mountPath = `/${subDirName}`;
+            
+            // 检查路径冲突（排除已保留的路径）
+            const reservedPaths = ['api', 'core', 'media', 'uploads', 'File'];
+            if (reservedPaths.includes(subDirName)) {
+              BotUtil.makeLog('warn', `跳过保留路径: ${mountPath} (core: ${coreName})`, 'Bot');
+              continue;
+            }
+            
+            if (mountedPaths.has(mountPath)) {
+              BotUtil.makeLog('warn', `路径冲突，跳过: ${mountPath} (core: ${coreName})，已被其他core占用`, 'Bot');
+              continue;
+            }
+            
+            this.express.use(mountPath, express.static(subDirPath, staticOptions));
+            mountedPaths.add(mountPath);
+            BotUtil.makeLog('info', `挂载子目录: ${mountPath} -> ${subDirPath} (core: ${coreName})`, 'Bot');
+          }
+        }
+      } catch (error) {
+        BotUtil.makeLog('debug', `扫描 www 子目录失败: ${wwwDir} - ${error.message}`, 'Bot');
+      }
+    }
+    
+    // 主 www 目录静态文件服务（根路径）
     this.express.use((req, res, next) => {
       if (req.path.startsWith('/api/')) {
         return next();
@@ -805,28 +892,9 @@ export default class Bot extends EventEmitter {
       
       const staticRoot = req.staticRoot || paths.www;
       
-      if (!fsSync.existsSync(staticRoot)) {
-        fsSync.mkdirSync(staticRoot, { recursive: true });
-      }
+      // 确保目录存在（recursive: true 会自动处理已存在的情况）
+      fsSync.mkdirSync(staticRoot, { recursive: true });
       
-      const staticOptions = {
-        index: cfg.server.static.index || ['index.html', 'index.htm'],
-        dotfiles: 'deny',
-        extensions: cfg.server.static.extensions || false,
-        fallthrough: true,
-        maxAge: cfg.server.static.cacheTime || '1d',
-        etag: true,
-        lastModified: true,
-        immutable: cfg.server.static.immutable !== false, // 静态资源不可变
-        setHeaders: (res, filePath) => {
-          // 确保在设置头部前检查响应状态
-          if (!res.headersSent) {
-            this._setStaticHeaders(res, filePath);
-          }
-        }
-      };
-      
-      // 使用express.static，Node.js会自动使用sendfile优化
       express.static(staticRoot, staticOptions)(req, res, next);
     });
   }
@@ -853,20 +921,31 @@ export default class Bot extends EventEmitter {
     const staticRoot = req.staticRoot || paths.www;
     const dirPath = path.join(staticRoot, req.path);
     
-    if (fsSync.existsSync(dirPath) && fsSync.statSync(dirPath).isDirectory()) {
-      const indexFiles = cfg.server.static.index || ['index.html', 'index.htm'];
-      
-      for (const indexFile of indexFiles) {
-        const indexPath = path.join(dirPath, indexFile);
-        if (fsSync.existsSync(indexPath)) {
-          const redirectUrl = req.path + '/';
-          BotUtil.makeLog('debug', `目录重定向：${req.path} → ${redirectUrl}`, '服务器');
-          if (!res.headersSent) {
-            return res.redirect(301, redirectUrl);
+    // 使用 try-catch 优化性能，避免重复的 existsSync 检查
+    try {
+      const stat = fsSync.statSync(dirPath);
+      if (stat.isDirectory()) {
+        const indexFiles = cfg.server.static.index || ['index.html', 'index.htm'];
+        
+        for (const indexFile of indexFiles) {
+          const indexPath = path.join(dirPath, indexFile);
+          try {
+            if (fsSync.statSync(indexPath).isFile()) {
+              const redirectUrl = req.path + '/';
+              BotUtil.makeLog('debug', `目录重定向：${req.path} → ${redirectUrl}`, '服务器');
+              if (!res.headersSent) {
+                return res.redirect(301, redirectUrl);
+              }
+              return;
+            }
+          } catch {
+            // 文件不存在，继续检查下一个
+            continue;
           }
-          return;
         }
       }
+    } catch {
+      // 目录不存在，继续下一个中间件
     }
     
     next();
@@ -979,15 +1058,20 @@ export default class Bot extends EventEmitter {
     const staticRoot = req.staticRoot || paths.www;
     const faviconPath = path.join(staticRoot, 'favicon.ico');
     
-    if (fsSync.existsSync(faviconPath)) {
-      if (!res.headersSent) {
-        res.set({
-          'Content-Type': 'image/x-icon',
-          'Cache-Control': 'public, max-age=604800'
-        });
-        return res.sendFile(faviconPath);
+    // 使用 try-catch 优化性能
+    try {
+      if (fsSync.statSync(faviconPath).isFile()) {
+        if (!res.headersSent) {
+          res.set({
+            'Content-Type': 'image/x-icon',
+            'Cache-Control': 'public, max-age=604800'
+          });
+          return res.sendFile(faviconPath);
+        }
+        return;
       }
-      return;
+    } catch {
+      // 文件不存在，返回 204
     }
     
     if (!res.headersSent) {
@@ -1004,15 +1088,20 @@ export default class Bot extends EventEmitter {
     const staticRoot = req.staticRoot || paths.www;
     const robotsPath = path.join(staticRoot, 'robots.txt');
     
-    if (fsSync.existsSync(robotsPath)) {
-      if (!res.headersSent) {
-        res.set({
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'public, max-age=86400'
-        });
-        return res.sendFile(robotsPath);
+    // 使用 try-catch 优化性能
+    try {
+      if (fsSync.statSync(robotsPath).isFile()) {
+        if (!res.headersSent) {
+          res.set({
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'public, max-age=86400'
+          });
+          return res.sendFile(robotsPath);
+        }
+        return;
       }
-      return;
+    } catch {
+      // 文件不存在，使用默认内容
     }
     
     const defaultRobots = `User-agent: *
@@ -1172,11 +1261,17 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     const apiKeyPath = path.join(paths.root,
       apiKeyConfig.file || 'config/server_config/api_key.json');
     
-    if (fsSync.existsSync(apiKeyPath)) {
-      const keyData = JSON.parse(await fs.readFile(apiKeyPath, 'utf8'));
-      this.apiKey = keyData.key;
-      BotUtil.apiKey = this.apiKey;
-      return this.apiKey;
+    // 使用 try-catch 优化性能，避免重复的 existsSync 检查
+    try {
+      if (fsSync.statSync(apiKeyPath).isFile()) {
+        const keyData = JSON.parse(await fs.readFile(apiKeyPath, 'utf8'));
+        this.apiKey = keyData.key;
+        BotUtil.apiKey = this.apiKey;
+        BotUtil.makeLog('debug', '从文件加载API密钥', '服务器');
+        return this.apiKey;
+      }
+    } catch {
+      // 文件不存在，生成新密钥
     }
     
     const keyLength = apiKeyConfig.length || 64;
@@ -2006,12 +2101,23 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         throw new Error("HTTPS已启用但未配置证书");
       }
       
-      if (!fsSync.existsSync(cert.key)) {
-        throw new Error(`HTTPS密钥文件不存在：${cert.key}`);
+      // 使用 try-catch 优化性能，提供更详细的错误信息
+      try {
+        const keyStat = fsSync.statSync(cert.key);
+        if (!keyStat.isFile()) {
+          throw new Error(`HTTPS密钥路径不是文件：${cert.key}`);
+        }
+      } catch (error) {
+        throw new Error(`HTTPS密钥文件不存在或无法访问：${cert.key} - ${error.message}`);
       }
       
-      if (!fsSync.existsSync(cert.cert)) {
-        throw new Error(`HTTPS证书文件不存在：${cert.cert}`);
+      try {
+        const certStat = fsSync.statSync(cert.cert);
+        if (!certStat.isFile()) {
+          throw new Error(`HTTPS证书路径不是文件：${cert.cert}`);
+        }
+      } catch (error) {
+        throw new Error(`HTTPS证书文件不存在或无法访问：${cert.cert} - ${error.message}`);
       }
       
       httpsOptions = {
@@ -2020,8 +2126,16 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         allowHTTP1: true
       };
       
-      if (cert.ca && fsSync.existsSync(cert.ca)) {
-        httpsOptions.ca = await fs.readFile(cert.ca);
+      // 优化 CA 证书加载
+      if (cert.ca) {
+        try {
+          if (fsSync.statSync(cert.ca).isFile()) {
+            httpsOptions.ca = await fs.readFile(cert.ca);
+            BotUtil.makeLog('debug', `已加载CA证书：${cert.ca}`, '服务器');
+          }
+        } catch (error) {
+          BotUtil.makeLog('debug', `CA证书文件不存在或无法访问：${cert.ca}，跳过`, '服务器');
+        }
       }
     }
     
@@ -2116,11 +2230,16 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         const staticRoot = req.staticRoot || paths.www;
         const custom404Path = path.join(staticRoot, '404.html');
         
-        if (fsSync.existsSync(custom404Path)) {
-          res.status(404).sendFile(custom404Path);
-        } else {
-          res.redirect(defaultRoute);
+        // 使用 try-catch 优化性能
+        try {
+          if (fsSync.statSync(custom404Path).isFile()) {
+            res.status(404).sendFile(custom404Path);
+            return;
+          }
+        } catch {
+          // 文件不存在，重定向到默认路由
         }
+        res.redirect(defaultRoute);
       } else {
         res.status(404).json({
           error: '未找到',
@@ -2433,7 +2552,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     }
     
     // 初始化中间件和路由
-    this._initializeMiddlewareAndRoutes();
+    await this._initializeMiddlewareAndRoutes();
     
     // 注册API
     await ApiLoader.register(this.express, this);

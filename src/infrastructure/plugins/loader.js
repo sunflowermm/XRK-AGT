@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
+import paths from '#utils/paths.js'
 import lodash from 'lodash'
 import os from 'os'
 import cfg from '../config/config.js'
@@ -22,7 +23,7 @@ class PluginsLoader {
     this.priority = []
     this.extended = []
     this.task = []
-    this.dir = 'core/plugin'
+    this.dir = 'core' // 改为扫描所有 core 目录
     this.watcher = {}
     this.cooldowns = {
       group: new Map(),
@@ -729,30 +730,27 @@ class PluginsLoader {
 
   async getPlugins() {
     try {
-      const files = await fs.readdir(this.dir, { withFileTypes: true })
       const ret = []
-
-      for (const dir of files) {
-        if (!dir.isDirectory()) continue
-        const dirPath = `${this.dir}/${dir.name}`
-
-        if (existsSync(`${dirPath}/index.js`)) {
-          ret.push({
-            name: dir.name,
-            path: `../../../${dirPath}/index.js`
-          })
-          continue
-        }
-
-        const apps = await fs.readdir(dirPath, { withFileTypes: true })
-        for (const app of apps) {
-          if (!app.isFile() || !app.name.endsWith('.js')) continue
-          const key = `${dir.name}/${app.name}`
-          ret.push({
-            name: key,
-            path: `../../../${dirPath}/${app.name}`
-          })
-          this.watch(dir.name, app.name)
+      const coreDirs = await paths.getCoreDirs()
+      
+      for (const coreDir of coreDirs) {
+        const pluginDir = path.join(coreDir, 'plugin')
+        if (!existsSync(pluginDir)) continue
+        
+        try {
+          const files = await fs.readdir(pluginDir, { withFileTypes: true })
+          for (const file of files) {
+            if (!file.isFile() || !file.name.endsWith('.js')) continue
+            const relativePath = path.relative(paths.root, path.join(pluginDir, file.name))
+            ret.push({
+              name: file.name,
+              path: `../../../${relativePath.replace(/\\/g, '/')}`,
+              core: path.basename(coreDir)
+            })
+          }
+        } catch (error) {
+          logger.error(`获取插件文件列表失败: ${pluginDir}`)
+          logger.error(error)
         }
       }
       return ret
@@ -1389,8 +1387,26 @@ class PluginsLoader {
 
   async changePlugin(key) {
     try {
+      // 查找插件文件路径
+      const coreDirs = await paths.getCoreDirs()
+      let pluginPath = null
+      
+      for (const coreDir of coreDirs) {
+        const filePath = path.join(coreDir, 'plugin', key)
+        if (existsSync(filePath)) {
+          pluginPath = filePath
+          break
+        }
+      }
+      
+      if (!pluginPath) {
+        logger.error(`插件文件未找到: ${key}`)
+        return
+      }
+      
       const timestamp = moment().format('x')
-      let app = await import(`../../../${this.dir}/${key}?${timestamp}`)
+      const relativePath = path.relative(paths.root, pluginPath)
+      let app = await import(`../../../${relativePath.replace(/\\/g, '/')}?${timestamp}`)
       app = app.apps ? { ...app.apps } : app
 
       Object.values(app).forEach(p => {
@@ -1437,47 +1453,42 @@ class PluginsLoader {
     }
   }
 
-  watch(dirName, appName) {
-    const watchKey = `${dirName}.${appName}`
-    if (this.watcher[watchKey]) return
-
-    const file = `./${this.dir}/${dirName}/${appName}`
-
-    try {
-      const watcher = chokidar.watch(file, {
-        persistent: true,
-        ignoreInitial: true,
-        awaitWriteFinish: {
-          stabilityThreshold: 300,
-          pollInterval: 100
-        }
-      })
-
-      const key = `${dirName}/${appName}`
-
-      watcher.on('change', lodash.debounce(() => {
-        logger.mark(`[修改插件][${dirName}][${appName}]`)
-        this.changePlugin(key)
-      }, 500))
-
-      watcher.on('error', error => {
-        logger.error(`文件监听错误 [${watchKey}]`)
-        logger.error(error)
-      })
-
-      this.watcher[watchKey] = watcher
-      this.watchDir(dirName)
-    } catch (error) {
-      logger.error(`设置文件监听失败 [${watchKey}]`)
-      logger.error(error)
+  /**
+   * 启用文件监视（热加载）
+   * @param {boolean} enable - 是否启用
+   */
+  async watch(enable = true) {
+    if (!enable) {
+      if (this.watcher.dir) {
+        await this.watcher.dir.close()
+        delete this.watcher.dir
+      }
+      logger.debug('插件文件监视已停止')
+      return
     }
-  }
 
-  watchDir(dirName) {
-    if (this.watcher[dirName]) return
+    if (this.watcher.dir) {
+      logger.debug('插件文件监视已启动')
+      return
+    }
 
     try {
-      const watcher = chokidar.watch(`./${this.dir}/${dirName}/`, {
+      // 监视所有 core 目录下的 plugin 子目录
+      const coreDirs = await paths.getCoreDirs()
+      const pluginDirs = []
+      for (const coreDir of coreDirs) {
+        const pluginDir = path.join(coreDir, 'plugin')
+        if (existsSync(pluginDir)) {
+          pluginDirs.push(pluginDir)
+        }
+      }
+      
+      if (pluginDirs.length === 0) {
+        logger.debug('未找到 plugin 目录，跳过文件监视')
+        return
+      }
+      
+      const watcher = chokidar.watch(pluginDirs, {
         ignored: /(^|[\/\\])\../,
         persistent: true,
         ignoreInitial: true,
@@ -1487,65 +1498,73 @@ class PluginsLoader {
         }
       })
 
-      setTimeout(() => {
-        watcher.on('add', lodash.debounce(async (filePath) => {
+      watcher
+        .on('add', lodash.debounce(async (filePath) => {
           try {
-            const appName = path.basename(filePath)
-            if (!appName.endsWith('.js')) return
+            const fileName = path.basename(filePath)
+            if (!fileName.endsWith('.js')) return
 
-            const key = `${dirName}/${appName}`
-            logger.mark(`[新增插件][${dirName}][${appName}]`)
+            const key = fileName
+            logger.mark(`[新增插件][${key}]`)
 
+            const relativePath = path.relative(paths.root, filePath)
             await this.importPlugin({
               name: key,
-              path: `../../../${this.dir}/${key}?${moment().format('X')}`
+              path: `../../../${relativePath.replace(/\\/g, '/')}?${moment().format('X')}`
             }, [])
 
             this.sortPlugins()
             this.identifyDefaultMsgHandlers()
-            this.watch(dirName, appName)
           } catch (error) {
             logger.error('处理新增插件失败')
             logger.error(error)
           }
         }, 500))
 
-        watcher.on('unlink', lodash.debounce(async (filePath) => {
+        .on('change', lodash.debounce(async (filePath) => {
           try {
-            const appName = path.basename(filePath)
-            if (!appName.endsWith('.js')) return
+            const fileName = path.basename(filePath)
+            if (!fileName.endsWith('.js')) return
 
-            const key = `${dirName}/${appName}`
-            const watchKey = `${dirName}.${appName}`
-
-            logger.mark(`[删除插件][${dirName}][${appName}]`)
-
-            this.priority = this.priority.filter(p => p.key !== key)
-            this.extended = this.extended.filter(p => p.key !== key)
-            this.identifyDefaultMsgHandlers()
-
-            if (this.watcher[watchKey]) {
-              this.watcher[watchKey].close()
-              delete this.watcher[watchKey]
-            }
+            const key = fileName
+            logger.mark(`[修改插件][${key}]`)
+            await this.changePlugin(key)
           } catch (error) {
-            logger.error('处理删除插件失败')
+            logger.error('处理插件修改失败')
             logger.error(error)
           }
         }, 500))
 
-        watcher.on('error', error => {
-          logger.error(`目录监听错误 [${dirName}]`)
+        .on('unlink', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath)
+            if (!fileName.endsWith('.js')) return
+
+            const key = fileName
+            logger.mark(`[删除插件][${key}]`)
+
+            this.priority = this.priority.filter(p => p.key !== key)
+            this.extended = this.extended.filter(p => p.key !== key)
+            this.identifyDefaultMsgHandlers()
+          } catch (error) {
+            logger.error('处理插件删除失败')
+            logger.error(error)
+          }
+        }, 500))
+
+        .on('error', error => {
+          logger.error('插件文件监视错误')
           logger.error(error)
         })
-      }, 10000)
 
-      this.watcher[dirName] = watcher
+      this.watcher.dir = watcher
+      logger.debug('插件文件监视已启动')
     } catch (error) {
-      logger.error(`设置目录监听失败 [${dirName}]`)
+      logger.error('启动插件文件监视失败')
       logger.error(error)
     }
   }
+
 
   async emit(eventType, eventData) {
     try {
@@ -1661,52 +1680,6 @@ class PluginsLoader {
     }
   }
 
-  /**
-   * 获取动态批次大小（根据内存使用情况）
-   */
-  getDynamicBatchSize() {
-    try {
-      const totalMemory = os.totalmem()
-      const freeMemory = os.freemem()
-      const memoryUsage = (totalMemory - freeMemory) / totalMemory
-      
-      if (memoryUsage > 0.8) return 5  // 内存紧张时减小批次
-      if (memoryUsage > 0.6) return 8
-      return 10  // 默认批次
-    } catch (error) {
-      // debug: 获取内存信息失败不影响加载
-      logger.debug(`获取内存信息失败，使用默认批次大小: ${error.message}`)
-      return 10
-    }
-  }
-
-  /**
-   * 分析插件加载性能
-   */
-  analyzePluginPerformance() {
-    try {
-      const slowPlugins = this.pluginLoadStats.plugins
-        .filter(p => p.loadTime > 1000)
-        .sort((a, b) => b.loadTime - a.loadTime)
-      
-      if (slowPlugins.length > 0) {
-        // warn: 性能问题需要关注
-        logger.warn(`发现 ${slowPlugins.length} 个加载较慢的插件:`)
-        slowPlugins.slice(0, 5).forEach(p => {
-          logger.warn(`  - ${p.name}: ${p.loadTime}ms`)
-        })
-      }
-      
-      // debug: 性能统计是技术细节
-      const avgLoadTime = this.pluginLoadStats.plugins.length > 0
-        ? this.pluginLoadStats.plugins.reduce((sum, p) => sum + p.loadTime, 0) / this.pluginLoadStats.plugins.length
-        : 0
-      logger.debug(`平均插件加载时间: ${avgLoadTime.toFixed(2)}ms`)
-    } catch (error) {
-      // debug: 性能分析失败不影响加载
-      logger.debug(`性能分析失败: ${error.message}`)
-    }
-  }
 }
 
 export default new PluginsLoader()

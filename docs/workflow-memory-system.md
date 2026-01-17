@@ -104,7 +104,7 @@ flowchart TB
 #### 步骤2：插件触发工作流
 
 ```javascript
-// core/plugin/example/xxx.js
+// core/my-core/plugin/xxx.js
 const stream = StreamLoader.getStream('chat');
 const response = await stream.process(this.e, question, {
   mergeStreams: ['desktop'],  // 合并desktop工作流

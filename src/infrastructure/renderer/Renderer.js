@@ -2,47 +2,16 @@ import template from 'art-template'
 import chokidar from 'chokidar'
 import path from 'node:path'
 import fs from 'node:fs'
+import os from 'node:os'
 
 /**
  * 渲染器基类
- * 
  * 提供HTML模板渲染、图片生成等功能的统一接口。
- * 支持模板文件监听、自动重载、资源路径处理等。
- * 
- * @abstract
- * @class Renderer
- * @example
- * // 创建自定义渲染器
- * export default class MyRenderer extends Renderer {
- *   constructor(config) {
- *     super({
- *       id: 'my-renderer',
- *       type: 'image',
- *       render: 'renderImage'
- *     });
- *   }
- *   
- *   async renderImage(data) {
- *     // 渲染逻辑
- *     return imagePath;
- *   }
- * }
  */
 export default class Renderer {
-  /**
-   * 渲染器构造函数
-   * 
-   * @param {Object} data - 渲染器配置
-   * @param {string} data.id - 渲染器唯一标识符（必填）
-   * @param {string} data.type - 渲染器类型（如'image'、'html'等）
-   * @param {string} data.render - 渲染方法名称（默认为'render'）
-   */
   constructor(data) {
-    /** 渲染器ID */
     this.id = data.id || 'renderer'
-    /** 渲染器类型 */
     this.type = data.type || 'image'
-    /** 渲染器入口 */
     this.render = this[data.render || 'render']
     this.dir = './trash/html'
     this.html = {}
@@ -50,7 +19,6 @@ export default class Renderer {
     this.createDir(this.dir)
   }
 
-  /** 创建文件夹 */
   createDir(dirname) {
     if (fs.existsSync(dirname)) {
       return true
@@ -62,12 +30,10 @@ export default class Renderer {
     }
   }
 
-  /** 模板 */
   dealTpl(name, data) {
     let { tplFile, saveId = name } = data
     let savePath = `./trash/html/${name}/${saveId}.html`
 
-    /** 读取html模板 */
     if (!this.html[tplFile]) {
       this.createDir(`./trash/html/${name}`)
 
@@ -82,11 +48,7 @@ export default class Renderer {
     }
 
     data.resPath = `./resources/`
-
-    /** 替换模板 */
     let tmpHtml = template.render(this.html[tplFile], data)
-
-    /** 保存模板 */
     fs.writeFileSync(savePath, tmpHtml)
 
     logger.debug(`[图片生成][使用模板] ${savePath}`)
@@ -94,7 +56,6 @@ export default class Renderer {
     return savePath
   }
 
-  /** 监听配置文件 */
   watch(tplFile) {
     if (this.watcher[tplFile]) return
 
@@ -105,5 +66,35 @@ export default class Renderer {
     })
 
     this.watcher[tplFile] = watcher
+  }
+
+  async getMac() {
+    let macAddr = "000000000000";
+    try {
+      const network = os.networkInterfaces();
+      for (const key in network) {
+        for (const iface of network[key]) {
+          if (iface.mac && iface.mac !== "00:00:00:00:00:00") {
+            return iface.mac.replace(/:/g, "");
+          }
+        }
+      }
+    } catch (e) {
+      if (typeof logger !== 'undefined') {
+        logger.error(`获取MAC地址失败: ${e.message}`);
+      }
+    }
+    return macAddr;
+  }
+
+  getInfo() {
+    return {
+      id: this.id,
+      type: this.type
+    };
+  }
+
+  getDescriptor() {
+    return this.getInfo();
   }
 }

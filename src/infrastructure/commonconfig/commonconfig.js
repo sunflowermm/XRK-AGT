@@ -534,18 +534,36 @@ export default class ConfigBase {
   }
 
   /**
-   * 获取配置结构（用于前端渲染表单）
-   * @returns {Object}
+   * 获取配置描述信息（标准化注册方法）
+   * @returns {Object} 配置描述信息
    */
-  getStructure() {
+  getInfo() {
     return {
       name: this.name,
       displayName: this.displayName,
       description: this.description,
       filePath: this.filePath,
-      fileType: this.fileType,
+      fileType: this.fileType
+    };
+  }
+
+  /**
+   * 获取配置结构（用于前端渲染表单）
+   * @returns {Object} 配置结构信息（包含schema）
+   */
+  getStructure() {
+    return {
+      ...this.getInfo(),
       schema: this.schema
     };
+  }
+
+  /**
+   * 获取配置描述信息（别名，兼容性）
+   * @returns {Object} 配置描述信息
+   */
+  getDescriptor() {
+    return this.getInfo();
   }
 
   /**

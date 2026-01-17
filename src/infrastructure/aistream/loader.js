@@ -1,12 +1,12 @@
 import path from 'path';
 import { pathToFileURL } from 'url';
 import fs from 'fs';
+import lodash from 'lodash';
+import chokidar from 'chokidar';
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
 import { MCPServer } from '#utils/mcp-server.js';
-
-const STREAMS_DIR = paths.coreStream;
 
 /**
  * AI工作流加载器
@@ -17,6 +17,7 @@ class StreamLoader {
     this.streams = new Map();
     this.streamClasses = new Map();
     this.loaded = false;
+    this.watcher = null;
     this.loadStats = {
       streams: [],
       totalLoadTime: 0,
@@ -48,15 +49,27 @@ class StreamLoader {
 
       BotUtil.makeLog('info', '开始加载工作流...', 'StreamLoader');
 
-      // 确保目录存在
-      if (!fs.existsSync(STREAMS_DIR)) {
-        fs.mkdirSync(STREAMS_DIR, { recursive: true });
-        BotUtil.makeLog('debug', '创建工作流目录', 'StreamLoader');
+      // 获取所有 core 目录下的 stream 目录
+      const streamDirs = await paths.getCoreSubDirs('stream');
+      
+      // 如果没有 stream 目录，说明开发者可能不开发工作流，这是正常的
+      if (streamDirs.length === 0) {
+        BotUtil.makeLog('info', '未找到工作流目录，跳过加载', 'StreamLoader');
+        this.loaded = true;
+        return;
       }
 
-      // 获取所有工作流文件（兼容Windows路径分隔符）
-      const pattern = path.posix.join(STREAMS_DIR.replace(/\\/g, '/'), '*.js');
-      const files = await BotUtil.glob(pattern);
+      // 获取所有工作流文件
+      const files = [];
+      for (const streamDir of streamDirs) {
+        try {
+          const pattern = path.posix.join(streamDir.replace(/\\/g, '/'), '*.js');
+          const dirFiles = await BotUtil.glob(pattern);
+          files.push(...dirFiles);
+        } catch (error) {
+          BotUtil.makeLog('warn', `读取工作流目录失败: ${streamDir}`, 'StreamLoader');
+        }
+      }
       
       if (files.length === 0) {
         BotUtil.makeLog('warn', '未找到工作流文件', 'StreamLoader');
@@ -544,6 +557,11 @@ class StreamLoader {
   async cleanupAll() {
     BotUtil.makeLog('info', '🧹 清理资源...', 'StreamLoader');
     
+    if (this.watcher) {
+      await this.watcher.close();
+      this.watcher = null;
+    }
+    
     for (const stream of this.streams.values()) {
       if (typeof stream.cleanup === 'function') {
         await stream.cleanup().catch(() => {});
@@ -555,6 +573,102 @@ class StreamLoader {
     this.loaded = false;
 
     BotUtil.makeLog('success', '✅ 清理完成', 'StreamLoader');
+  }
+
+  /**
+   * 启用文件监视（热加载）
+   * @param {boolean} enable - 是否启用
+   */
+  async watch(enable = true) {
+    if (!enable) {
+      if (this.watcher) {
+        await this.watcher.close();
+        this.watcher = null;
+      }
+      return;
+    }
+
+    if (this.watcher) return;
+
+    // 获取所有 core 目录下的 stream 目录
+    const streamDirs = await paths.getCoreSubDirs('stream');
+    
+    if (streamDirs.length === 0) {
+      BotUtil.makeLog('debug', '未找到 stream 目录，跳过文件监视', 'StreamLoader');
+      return;
+    }
+
+    try {
+      this.watcher = chokidar.watch(streamDirs, {
+        ignored: /(^|[\/\\])\../,
+        persistent: true,
+        ignoreInitial: true,
+        awaitWriteFinish: {
+          stabilityThreshold: 300,
+          pollInterval: 100
+        }
+      });
+
+      this.watcher
+        .on('add', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath);
+            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+
+            BotUtil.makeLog('info', `检测到新工作流: ${fileName}`, 'StreamLoader');
+            await this.loadStreamClass(filePath);
+            await this.applyEmbeddingConfig(cfg.aistream?.embedding || {});
+            await this.initMCP();
+          } catch (error) {
+            BotUtil.makeLog('error', '处理新增工作流失败', 'StreamLoader', error);
+          }
+        }, 500))
+        .on('change', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath);
+            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+
+            const streamName = path.basename(filePath, '.js');
+            BotUtil.makeLog('info', `检测到工作流变更: ${streamName}`, 'StreamLoader');
+            
+            // 先清理旧的工作流
+            const oldStream = this.streams.get(streamName);
+            if (oldStream && typeof oldStream.cleanup === 'function') {
+              await oldStream.cleanup().catch(() => {});
+            }
+            this.streams.delete(streamName);
+            this.streamClasses.delete(streamName);
+            
+            // 重新加载
+            await this.loadStreamClass(filePath);
+            await this.applyEmbeddingConfig(cfg.aistream?.embedding || {});
+            await this.initMCP();
+          } catch (error) {
+            BotUtil.makeLog('error', '处理工作流变更失败', 'StreamLoader', error);
+          }
+        }, 500))
+        .on('unlink', lodash.debounce(async (filePath) => {
+          try {
+            const fileName = path.basename(filePath);
+            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+
+            const streamName = path.basename(filePath, '.js');
+            BotUtil.makeLog('info', `检测到工作流删除: ${streamName}`, 'StreamLoader');
+            
+            const stream = this.streams.get(streamName);
+            if (stream && typeof stream.cleanup === 'function') {
+              await stream.cleanup().catch(() => {});
+            }
+            this.streams.delete(streamName);
+            this.streamClasses.delete(streamName);
+            await this.initMCP();
+          } catch (error) {
+            BotUtil.makeLog('error', '处理工作流删除失败', 'StreamLoader', error);
+          }
+        }, 500));
+    } catch (error) {
+      BotUtil.makeLog('error', '启动工作流文件监视失败', 'StreamLoader', error);
+    }
   }
 
   /**

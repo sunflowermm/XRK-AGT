@@ -1398,7 +1398,7 @@ vectorstore = Chroma(
 
 #### 1. 工作流系统（必须保留）
 
-**位置**: `core/workflow-manager.js`
+**位置**: `src/utils/workflow-manager.js`
 
 **保留原因**：
 - ✅ 业务逻辑层任务规划
