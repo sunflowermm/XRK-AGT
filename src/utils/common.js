@@ -75,11 +75,9 @@ export const makeForwardMsg = (e, msg = [], dec = '', nm = [], msgsscr = false) 
     ?? Bot.makeForwardMsg?.(forwardMsg)
 }
 
-// 保持向后兼容
 export default { 
   sleep, 
   replyPrivate, 
-  relpyPrivate: replyPrivate, // 修复拼写错误但保持兼容
   downFile, 
   makeForwardMsg 
 }

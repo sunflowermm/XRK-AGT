@@ -65,24 +65,17 @@ class ConfigLoader {
    * @private
    */
   async _getConfigFiles(dir) {
-    const files = [];
-    
     try {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith('.js')) {
-          // 跳过以 . 或 _ 开头的文件
-          if (!entry.name.startsWith('.') && !entry.name.startsWith('_')) {
-            files.push(path.join(dir, entry.name));
-          }
-        }
-      }
+      const { FileLoader } = await import('#utils/file-loader.js');
+      return FileLoader.readFiles(dir, {
+        ext: '.js',
+        recursive: false,
+        ignore: ['.', '_']
+      });
     } catch (error) {
       BotUtil.makeLog('error', `读取配置目录失败: ${dir}`, 'ConfigLoader', error);
+      return [];
     }
-    
-    return files;
   }
 
   /**

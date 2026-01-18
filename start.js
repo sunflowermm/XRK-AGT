@@ -400,25 +400,9 @@ class ServerManager extends BaseManager {
     const startTime = Date.now();
     
     while (restartCount < CONFIG.MAX_RESTARTS) {
-      const nodeArgs = getNodeArgs();
-      const entryScript = path.join(process.cwd(), 'start.js');
-      const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
-      
       await this.logger.log(`启动进程 (尝试 ${restartCount + 1}/${CONFIG.MAX_RESTARTS})`);
       
-      const cleanEnv = Object.assign({}, process.env, {
-        XRK_SELECTED_MODE: 'server',
-        XRK_SERVER_PORT: port.toString()
-      });
-      
-      const result = spawnSync(process.argv[0], startArgs, {
-        stdio: 'inherit',
-        windowsHide: true,
-        env: cleanEnv,
-        detached: false
-      });
-      
-      const exitCode = result.status || 0;
+      const exitCode = await this.runServerProcess(port);
       await this.logger.log(`进程退出，状态码: ${exitCode}`);
       
       if (exitCode === 0 || exitCode === 255) {
@@ -428,7 +412,6 @@ class ServerManager extends BaseManager {
       
       const waitTime = this.calculateRestartDelay(Date.now() - startTime, restartCount);
       await this.logger.warning(`将在 ${waitTime / 1000} 秒后重启`);
-      
       await new Promise(resolve => setTimeout(resolve, waitTime));
       restartCount++;
     }
@@ -436,11 +419,30 @@ class ServerManager extends BaseManager {
     await this.logger.error(`达到最大重启次数 (${CONFIG.MAX_RESTARTS})，停止重启`);
   }
 
+  async runServerProcess(port) {
+    const nodeArgs = getNodeArgs();
+    const entryScript = path.join(process.cwd(), 'start.js');
+    const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
+    
+    const cleanEnv = {
+      ...process.env,
+      XRK_SELECTED_MODE: 'server',
+      XRK_SERVER_PORT: port.toString()
+    };
+    
+    const result = spawnSync(process.argv[0], startArgs, {
+      stdio: 'inherit',
+      windowsHide: true,
+      env: cleanEnv,
+      detached: false
+    });
+    
+    return result.status || 0;
+  }
+
   calculateRestartDelay(runTime, restartCount) {
     if (runTime < 10000 && restartCount > 2) {
-      return restartCount > 5 
-        ? CONFIG.RESTART_DELAYS.LONG 
-        : CONFIG.RESTART_DELAYS.MEDIUM;
+      return restartCount > 5 ? CONFIG.RESTART_DELAYS.LONG : CONFIG.RESTART_DELAYS.MEDIUM;
     }
     return CONFIG.RESTART_DELAYS.SHORT;
   }

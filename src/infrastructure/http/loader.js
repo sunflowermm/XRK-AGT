@@ -69,28 +69,35 @@ class ApiLoader {
    * @returns {Promise<Array>} 文件路径数组
    */
   async getApiFiles(dir) {
-    const files = [];
+    const { FileLoader } = await import('#utils/file-loader.js');
+    return FileLoader.readFiles(dir, {
+      ext: '.js',
+      recursive: true,
+      ignore: ['.', '_']
+    });
+  }
+  
+  /**
+   * 计算API的key（从文件路径）
+   * @param {string} filePath - 文件路径
+   * @returns {Promise<string>} API key
+   */
+  async getApiKey(filePath) {
+    const coreDirs = await paths.getCoreDirs();
+    const normalizedPath = path.normalize(filePath);
     
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      
-      if (entry.isDirectory()) {
-        // 递归读取子目录
-        const subFiles = await this.getApiFiles(fullPath);
-        files.push(...subFiles);
-      } else if (entry.isFile() && entry.name.endsWith('.js')) {
-        // 跳过以.或_开头的文件
-        if (!entry.name.startsWith('.') && !entry.name.startsWith('_')) {
-          files.push(fullPath);
-        }
+    for (const coreDir of coreDirs) {
+      const normalizedCoreDir = path.normalize(coreDir);
+      if (normalizedPath.startsWith(normalizedCoreDir)) {
+        const relativePath = path.relative(normalizedCoreDir, normalizedPath);
+        return relativePath.replace(/\\/g, '/').replace(/\.js$/, '');
       }
     }
     
-    return files;
+    // 如果找不到对应的 core 目录，使用文件名作为 key
+    return path.basename(filePath, '.js');
   }
-  
+
   /**
    * 加载单个API文件
    * @param {string} filePath - 文件路径
@@ -98,23 +105,7 @@ class ApiLoader {
    */
   async loadApi(filePath) {
     try {
-      // 获取相对路径作为key（从 core 目录开始）
-      // 例如: core/system-Core/http/ai.js -> system-Core/http/ai
-      const coreDirs = await paths.getCoreDirs()
-      let key = null
-      
-      for (const coreDir of coreDirs) {
-        if (filePath.startsWith(coreDir)) {
-          const relativePath = path.relative(coreDir, filePath)
-          key = relativePath.replace(/\\/g, '/').replace(/\.js$/, '')
-          break
-        }
-      }
-      
-      if (!key) {
-        // 如果找不到对应的 core 目录，使用文件名作为 key
-        key = path.basename(filePath, '.js')
-      }
+      const key = await this.getApiKey(filePath);
       
       // 如果已加载，先卸载
       if (this.apis.has(key)) {
@@ -314,16 +305,41 @@ class ApiLoader {
    */
   async changeApi(key) {
     const api = this.apis.get(key);
-    if (!api) {
+    if (!api || !api.filePath) {
       BotUtil.makeLog('warn', `API不存在: ${key}`, 'ApiLoader');
+      // 如果API不存在但文件存在，尝试直接加载
+      const apiDirs = await paths.getCoreSubDirs('http');
+      for (const apiDir of apiDirs) {
+        const files = await this.getApiFiles(apiDir);
+        const file = files.find(f => {
+          const fileKey = path.relative(apiDir, f).replace(/\\/g, '/').replace(/\.js$/, '');
+          return fileKey === key || path.basename(f, '.js') === key;
+        });
+        if (file) {
+          BotUtil.makeLog('info', `尝试重新加载API: ${key}`, 'ApiLoader');
+          await this.loadApi(file);
+          this.sortByPriority();
+          const newApi = this.apis.get(await this.getApiKey(file));
+          if (newApi && this.app && this.bot && typeof newApi.init === 'function') {
+            await newApi.init(this.app, this.bot);
+          }
+          return true;
+        }
+      }
       return false;
     }
     
     try {
       BotUtil.makeLog('info', `重载API: ${api.name || key}`, 'ApiLoader');
       
+      // 保存文件路径
+      const filePath = api.filePath;
+      
+      // 先卸载
+      await this.unloadApi(key);
+      
       // 重新加载文件
-      await this.loadApi(api.filePath);
+      await this.loadApi(filePath);
       
       // 重新排序
       this.sortByPriority();
@@ -426,25 +442,14 @@ class ApiLoader {
             if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
 
             BotUtil.makeLog('info', `检测到新文件: ${fileName}`, 'ApiLoader');
+            const key = await this.getApiKey(filePath);
             await this.loadApi(filePath);
             this.sortByPriority();
             
             if (this.app && this.bot) {
-              // 重新计算 key
-              const coreDirs = await paths.getCoreDirs()
-              let key = null
-              for (const coreDir of coreDirs) {
-                if (filePath.startsWith(coreDir)) {
-                  const relativePath = path.relative(coreDir, filePath)
-                  key = relativePath.replace(/\\/g, '/').replace(/\.js$/, '')
-                  break
-                }
-              }
-              if (key) {
-                const api = this.apis.get(key);
-                if (api && typeof api.init === 'function') {
-                  await api.init(this.app, this.bot);
-                }
+              const api = this.apis.get(key);
+              if (api && typeof api.init === 'function') {
+                await api.init(this.app, this.bot);
               }
             }
           } catch (error) {
@@ -456,20 +461,9 @@ class ApiLoader {
             const fileName = path.basename(filePath);
             if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
 
-            // 重新计算 key
-            const coreDirs = await paths.getCoreDirs()
-            let key = null
-            for (const coreDir of coreDirs) {
-              if (filePath.startsWith(coreDir)) {
-                const relativePath = path.relative(coreDir, filePath)
-                key = relativePath.replace(/\\/g, '/').replace(/\.js$/, '')
-                break
-              }
-            }
-            if (key) {
-              BotUtil.makeLog('info', `检测到文件变更: ${key}`, 'ApiLoader');
-              await this.changeApi(key);
-            }
+            const key = await this.getApiKey(filePath);
+            BotUtil.makeLog('info', `检测到文件变更: ${key}`, 'ApiLoader');
+            await this.changeApi(key);
           } catch (error) {
             BotUtil.makeLog('error', '处理API变更失败', 'ApiLoader', error);
           }
@@ -479,20 +473,9 @@ class ApiLoader {
             const fileName = path.basename(filePath);
             if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
 
-            // 重新计算 key
-            const coreDirs = await paths.getCoreDirs()
-            let key = null
-            for (const coreDir of coreDirs) {
-              if (filePath.startsWith(coreDir)) {
-                const relativePath = path.relative(coreDir, filePath)
-                key = relativePath.replace(/\\/g, '/').replace(/\.js$/, '')
-                break
-              }
-            }
-            if (key) {
-              BotUtil.makeLog('info', `检测到文件删除: ${key}`, 'ApiLoader');
-              await this.unloadApi(key);
-            }
+            const key = await this.getApiKey(filePath);
+            BotUtil.makeLog('info', `检测到文件删除: ${key}`, 'ApiLoader');
+            await this.unloadApi(key);
             this.sortByPriority();
           } catch (error) {
             BotUtil.makeLog('error', '处理API删除失败', 'ApiLoader', error);

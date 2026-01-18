@@ -1,6 +1,5 @@
 import path from 'path';
 import { pathToFileURL } from 'url';
-import fs from 'fs';
 import lodash from 'lodash';
 import chokidar from 'chokidar';
 import BotUtil from '#utils/botutil.js';
@@ -609,52 +608,35 @@ class StreamLoader {
         }
       });
 
-      this.watcher
-        .on('add', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath);
-            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+      const isValidFile = (filePath) => {
+        const fileName = path.basename(filePath);
+        return fileName.endsWith('.js') && !fileName.startsWith('.') && !fileName.startsWith('_');
+      };
 
-            BotUtil.makeLog('info', `检测到新工作流: ${fileName}`, 'StreamLoader');
+      const handleStreamChange = async (filePath, eventType) => {
+        try {
+          if (!isValidFile(filePath)) return;
+
+          const streamName = path.basename(filePath, '.js');
+          
+          if (eventType === 'add') {
+            BotUtil.makeLog('info', `检测到新工作流: ${streamName}`, 'StreamLoader');
             await this.loadStreamClass(filePath);
             await this.applyEmbeddingConfig(cfg.aistream?.embedding || {});
             await this.initMCP();
-          } catch (error) {
-            BotUtil.makeLog('error', '处理新增工作流失败', 'StreamLoader', error);
-          }
-        }, 500))
-        .on('change', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath);
-            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
-
-            const streamName = path.basename(filePath, '.js');
+          } else if (eventType === 'change') {
             BotUtil.makeLog('info', `检测到工作流变更: ${streamName}`, 'StreamLoader');
-            
-            // 先清理旧的工作流
             const oldStream = this.streams.get(streamName);
             if (oldStream && typeof oldStream.cleanup === 'function') {
               await oldStream.cleanup().catch(() => {});
             }
             this.streams.delete(streamName);
             this.streamClasses.delete(streamName);
-            
-            // 重新加载
             await this.loadStreamClass(filePath);
             await this.applyEmbeddingConfig(cfg.aistream?.embedding || {});
             await this.initMCP();
-          } catch (error) {
-            BotUtil.makeLog('error', '处理工作流变更失败', 'StreamLoader', error);
-          }
-        }, 500))
-        .on('unlink', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath);
-            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
-
-            const streamName = path.basename(filePath, '.js');
+          } else if (eventType === 'unlink') {
             BotUtil.makeLog('info', `检测到工作流删除: ${streamName}`, 'StreamLoader');
-            
             const stream = this.streams.get(streamName);
             if (stream && typeof stream.cleanup === 'function') {
               await stream.cleanup().catch(() => {});
@@ -662,10 +644,16 @@ class StreamLoader {
             this.streams.delete(streamName);
             this.streamClasses.delete(streamName);
             await this.initMCP();
-          } catch (error) {
-            BotUtil.makeLog('error', '处理工作流删除失败', 'StreamLoader', error);
           }
-        }, 500));
+        } catch (error) {
+          BotUtil.makeLog('error', `处理工作流${eventType}失败`, 'StreamLoader', error);
+        }
+      };
+
+      this.watcher
+        .on('add', lodash.debounce((filePath) => handleStreamChange(filePath, 'add'), 500))
+        .on('change', lodash.debounce((filePath) => handleStreamChange(filePath, 'change'), 500))
+        .on('unlink', lodash.debounce((filePath) => handleStreamChange(filePath, 'unlink'), 500));
     } catch (error) {
       BotUtil.makeLog('error', '启动工作流文件监视失败', 'StreamLoader', error);
     }

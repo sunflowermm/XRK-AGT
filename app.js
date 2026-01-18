@@ -5,13 +5,8 @@ import paths from '#utils/paths.js';
 
 function execAsync(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
-    const { timeout, maxBuffer, ...spawnOptions } = options;
-    const maxBufferSize = maxBuffer || 1024 * 1024 * 10;
-
-    const child = spawn(command, args, {
-      ...spawnOptions,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    const { timeout, maxBuffer = 1024 * 1024 * 10, ...spawnOptions } = options;
+    const child = spawn(command, args, { ...spawnOptions, stdio: ['ignore', 'pipe', 'pipe'] });
 
     let stdout = '';
     let stderr = '';
@@ -24,31 +19,33 @@ function execAsync(command, args = [], options = {}) {
       }
     };
 
+    const killChild = () => {
+      try {
+        child.kill('SIGTERM');
+      } catch {}
+    };
+
+    const createError = (message, code) => {
+      const error = new Error(message);
+      error.code = code;
+      error.stdout = stdout;
+      error.stderr = stderr;
+      return error;
+    };
+
     if (timeout) {
       timeoutId = setTimeout(() => {
-        try {
-          child.kill('SIGTERM');
-        } catch {}
+        killChild();
         cleanup();
-        const error = new Error(`Command timed out after ${timeout}ms`);
-        error.code = 'TIMEOUT';
-        error.stdout = stdout;
-        error.stderr = stderr;
-        reject(error);
+        reject(createError(`Command timed out after ${timeout}ms`, 'TIMEOUT'));
       }, timeout);
     }
 
     const checkBuffer = () => {
-      if (stdout.length > maxBufferSize || stderr.length > maxBufferSize) {
-        try {
-          child.kill('SIGTERM');
-        } catch {}
+      if (stdout.length > maxBuffer || stderr.length > maxBuffer) {
+        killChild();
         cleanup();
-        const error = new Error(`Command output exceeded maxBuffer size of ${maxBufferSize} bytes`);
-        error.code = 'MAXBUFFER';
-        error.stdout = stdout;
-        error.stderr = stderr;
-        reject(error);
+        reject(createError(`Command output exceeded maxBuffer size of ${maxBuffer} bytes`, 'MAXBUFFER'));
       }
     };
 
@@ -70,11 +67,7 @@ function execAsync(command, args = [], options = {}) {
     child.on('close', (code) => {
       cleanup();
       if (code !== 0) {
-        const error = new Error(`Command failed with exit code ${code}`);
-        error.code = code;
-        error.stdout = stdout;
-        error.stderr = stderr;
-        reject(error);
+        reject(createError(`Command failed with exit code ${code}`, code));
       } else {
         resolve({ stdout, stderr });
       }
@@ -143,7 +136,7 @@ class DependencyManager {
   }
 
   async getMissingDependencies(dependencies, nodeModulesPath) {
-    const depNames = Object.keys(dependencies).filter(dep => dep !== 'md5' && dep !== 'oicq');
+    const depNames = Object.keys(dependencies).filter(dep => !['md5', 'oicq'].includes(dep));
     const results = await Promise.all(
       depNames.map(dep => this.isDependencyInstalled(dep, nodeModulesPath))
     );
@@ -151,12 +144,11 @@ class DependencyManager {
   }
 
   async installDependencies(missingDeps) {
-    await this.logger.warning(`发现 ${missingDeps.length} 个缺失的依赖`);
-    await this.logger.log(`缺失的依赖: ${missingDeps.join(', ')}`);
+    await this.logger.warning(`发现 ${missingDeps.length} 个缺失的依赖: ${missingDeps.join(', ')}`);
     await this.logger.log('使用 pnpm 安装依赖...');
     
     try {
-      const { stdout, stderr } = await execAsync('pnpm', ['install'], {
+      const { stderr } = await execAsync('pnpm', ['install'], {
         maxBuffer: 1024 * 1024 * 10,
         timeout: 300000
       });
@@ -190,72 +182,103 @@ class DependencyManager {
   }
 
   async ensurePluginDependencies(rootDir = process.cwd()) {
-    const pluginGlobs = ['core', 'renderers'];
-    const dirs = [];
+    const baseDirs = ['core', 'renderers'];
+    const pluginDirs = [];
 
-    await Promise.all(
-      pluginGlobs.map(async (base) => {
-        const dir = path.join(rootDir, base);
-        try {
-          const entries = await fs.readdir(dir, { withFileTypes: true });
-          entries.forEach(d => d.isDirectory() && dirs.push(path.join(dir, d.name)));
-        } catch {}
-      })
-    );
-
-    await Promise.all(
-      dirs.map(async (d) => {
-        const pkgPath = path.join(d, 'package.json');
-        const nodeModulesPath = path.join(d, 'node_modules');
-        
-        try {
-          await fs.access(pkgPath);
-        } catch {
-          return;
-        }
-
-        let pkg;
-        try {
-          pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'));
-        } catch (e) {
-          await this.logger.warning(`插件 package.json 无法解析: ${pkgPath} (${e.message})`);
-          return;
-        }
-
-        const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-        const depNames = Object.keys(deps);
-        if (depNames.length === 0) return;
-
-        const results = await Promise.all(
-          depNames.map(async (dep) => {
-            try {
-              const p = path.join(nodeModulesPath, dep);
-              const s = await fs.stat(p);
-              return s.isDirectory();
-            } catch {
-              return false;
-            }
-          })
-        );
-        const missing = depNames.filter((_, i) => !results[i]);
-
-        if (missing.length > 0) {
-          await this.logger.warning(`插件依赖缺失 [${d}]: ${missing.join(', ')}`);
-          try {
-            await this.logger.log(`为插件安装依赖 (pnpm): ${d}`);
-            await execAsync('pnpm', ['install'], {
-              cwd: d,
-              maxBuffer: 1024 * 1024 * 16,
-              timeout: 10 * 60 * 1000
-            });
-            await this.logger.success(`插件依赖安装完成: ${d}`);
-          } catch (err) {
-            await this.logger.error(`插件依赖安装失败: ${d} (${err.message})`);
-            throw err;
+    for (const base of baseDirs) {
+      const dir = path.join(rootDir, base);
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            pluginDirs.push(path.join(dir, entry.name));
           }
         }
+      } catch {
+        continue;
+      }
+    }
+
+    for (const pluginDir of pluginDirs) {
+      await this.checkPluginDependencies(pluginDir);
+    }
+  }
+
+  async checkPluginDependencies(pluginDir) {
+    const pkgPath = path.join(pluginDir, 'package.json');
+    
+    try {
+      await fs.access(pkgPath);
+    } catch {
+      return;
+    }
+
+    let pkg;
+    try {
+      pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'));
+    } catch (e) {
+      await this.logger.warning(`无法解析 package.json: ${pkgPath} (${e.message})`);
+      return;
+    }
+
+    await this.validatePackageImports(pkg, pluginDir, pkgPath);
+
+    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+    const depNames = Object.keys(deps);
+    if (depNames.length === 0) return;
+
+    const missing = await this.findMissingDependencies(depNames, path.join(pluginDir, 'node_modules'));
+    if (missing.length === 0) return;
+
+    await this.installPluginDependencies(pluginDir, missing);
+  }
+
+  async validatePackageImports(pkg, pluginDir, pkgPath) {
+    if (!pkg.imports || typeof pkg.imports !== 'object') {
+      await this.logger.warning(`package.json 缺少 imports 字段: ${pkgPath}`);
+      return;
+    }
+
+    const required = ['#utils/*', '#infrastructure/*'];
+    const hasRequired = required.some(pattern => {
+      const prefix = pattern.replace('/*', '');
+      return Object.keys(pkg.imports).some(key => key.startsWith(prefix));
+    });
+
+    if (!hasRequired) {
+      await this.logger.warning(`package.json imports 配置可能不完整: ${pkgPath}`);
+    }
+  }
+
+  async findMissingDependencies(depNames, nodeModulesPath) {
+    const results = await Promise.all(
+      depNames.map(async (dep) => {
+        try {
+          const depPath = path.join(nodeModulesPath, dep);
+          const stats = await fs.stat(depPath);
+          return stats.isDirectory();
+        } catch {
+          return false;
+        }
       })
     );
+    return depNames.filter((_, i) => !results[i]);
+  }
+
+  async installPluginDependencies(pluginDir, missing) {
+    await this.logger.warning(`依赖缺失 [${pluginDir}]: ${missing.join(', ')}`);
+    try {
+      await this.logger.log(`安装依赖 (pnpm): ${pluginDir}`);
+      await execAsync('pnpm', ['install'], {
+        cwd: pluginDir,
+        maxBuffer: 1024 * 1024 * 16,
+        timeout: 10 * 60 * 1000
+      });
+      await this.logger.success(`依赖安装完成: ${pluginDir}`);
+    } catch (err) {
+      await this.logger.error(`依赖安装失败: ${pluginDir} (${err.message})`);
+      throw err;
+    }
   }
 }
 
@@ -290,19 +313,16 @@ class Bootstrap {
 
   async loadDynamicImports(packageJsonPath) {
     const importsDir = path.join(process.cwd(), 'data', 'importsJson');
+    
     try {
       await fs.access(importsDir);
     } catch {
-      // 目录不存在时跳过，不创建空目录
       return;
     }
 
     const files = await fs.readdir(importsDir);
     const jsonFiles = files.filter(file => file.endsWith('.json'));
-
-    if (jsonFiles.length === 0) {
-      return;
-    }
+    if (jsonFiles.length === 0) return;
 
     const importDataArray = await Promise.all(
       jsonFiles.map(async (file) => {
@@ -319,10 +339,7 @@ class Bootstrap {
     );
 
     const mergedImports = Object.assign({}, ...importDataArray);
-
-    if (Object.keys(mergedImports).length === 0) {
-      return;
-    }
+    if (Object.keys(mergedImports).length === 0) return;
 
     const packageJson = await this.dependencyManager.parsePackageJson(packageJsonPath);
     packageJson.imports = { ...(packageJson.imports || {}), ...mergedImports };

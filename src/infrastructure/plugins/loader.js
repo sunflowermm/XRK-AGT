@@ -1473,19 +1473,11 @@ class PluginsLoader {
     }
 
     try {
-      // 监视所有 core 目录下的 plugin 子目录
-      const coreDirs = await paths.getCoreDirs()
-      const pluginDirs = []
-      for (const coreDir of coreDirs) {
-        const pluginDir = path.join(coreDir, 'plugin')
-        if (existsSync(pluginDir)) {
-          pluginDirs.push(pluginDir)
-        }
-      }
+      const pluginDirs = await paths.getCoreSubDirs('plugin');
       
       if (pluginDirs.length === 0) {
-        logger.debug('未找到 plugin 目录，跳过文件监视')
-        return
+        logger.debug('未找到 plugin 目录，跳过文件监视');
+        return;
       }
       
       const watcher = chokidar.watch(pluginDirs, {
@@ -1496,72 +1488,50 @@ class PluginsLoader {
           stabilityThreshold: 300,
           pollInterval: 100
         }
-      })
+      });
 
-      watcher
-        .on('add', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath)
-            if (!fileName.endsWith('.js')) return
+      const handleFileChange = async (filePath, eventType) => {
+        try {
+          const fileName = path.basename(filePath);
+          if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
 
-            const key = fileName
-            logger.mark(`[新增插件][${key}]`)
-
-            const relativePath = path.relative(paths.root, filePath)
+          const key = fileName;
+          
+          if (eventType === 'add') {
+            logger.mark(`[新增插件][${key}]`);
+            const relativePath = path.relative(paths.root, filePath);
             await this.importPlugin({
               name: key,
               path: `../../../${relativePath.replace(/\\/g, '/')}?${moment().format('X')}`
-            }, [])
-
-            this.sortPlugins()
-            this.identifyDefaultMsgHandlers()
-          } catch (error) {
-            logger.error('处理新增插件失败')
-            logger.error(error)
+            }, []);
+            this.sortPlugins();
+            this.identifyDefaultMsgHandlers();
+          } else if (eventType === 'change') {
+            logger.mark(`[修改插件][${key}]`);
+            await this.changePlugin(key);
+          } else if (eventType === 'unlink') {
+            logger.mark(`[删除插件][${key}]`);
+            this.priority = this.priority.filter(p => p.key !== key);
+            this.extended = this.extended.filter(p => p.key !== key);
+            this.identifyDefaultMsgHandlers();
           }
-        }, 500))
+        } catch (error) {
+          logger.error(`处理插件${eventType}失败: ${error.message}`);
+        }
+      };
 
-        .on('change', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath)
-            if (!fileName.endsWith('.js')) return
+      watcher
+        .on('add', lodash.debounce((filePath) => handleFileChange(filePath, 'add'), 500))
+        .on('change', lodash.debounce((filePath) => handleFileChange(filePath, 'change'), 500))
+        .on('unlink', lodash.debounce((filePath) => handleFileChange(filePath, 'unlink'), 500))
+        .on('error', (error) => {
+          logger.error('插件文件监视错误', error);
+        });
 
-            const key = fileName
-            logger.mark(`[修改插件][${key}]`)
-            await this.changePlugin(key)
-          } catch (error) {
-            logger.error('处理插件修改失败')
-            logger.error(error)
-          }
-        }, 500))
-
-        .on('unlink', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath)
-            if (!fileName.endsWith('.js')) return
-
-            const key = fileName
-            logger.mark(`[删除插件][${key}]`)
-
-            this.priority = this.priority.filter(p => p.key !== key)
-            this.extended = this.extended.filter(p => p.key !== key)
-            this.identifyDefaultMsgHandlers()
-          } catch (error) {
-            logger.error('处理插件删除失败')
-            logger.error(error)
-          }
-        }, 500))
-
-        .on('error', error => {
-          logger.error('插件文件监视错误')
-          logger.error(error)
-        })
-
-      this.watcher.dir = watcher
-      logger.debug('插件文件监视已启动')
+      this.watcher.dir = watcher;
+      logger.debug('插件文件监视已启动');
     } catch (error) {
-      logger.error('启动插件文件监视失败')
-      logger.error(error)
+      logger.error('启动插件文件监视失败', error);
     }
   }
 
