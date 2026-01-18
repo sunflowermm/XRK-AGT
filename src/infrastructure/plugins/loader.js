@@ -429,12 +429,12 @@ class PluginsLoader {
       const contexts = { ...plugin.getContext(), ...plugin.getContext(false, true) }
       if (lodash.isEmpty(contexts)) continue
 
-      for (const fnc in contexts) {
-        if (typeof plugin[fnc] === 'function') {
-          try {
-            const ret = await plugin[fnc](contexts[fnc])
-            if (ret !== 'continue' && ret !== false) return true
-          } catch (error) {
+        for (const fnc in contexts) {
+          if (typeof plugin[fnc] === 'function') {
+            try {
+              const ret = await plugin[fnc](contexts[fnc])
+              if (ret !== 'continue' && ret !== false) return true
+            } catch (error) {
             errorHandler.handle(error, { context: 'handleContext', pluginName: plugin.name, fnc, code: ErrorCodes.PLUGIN_EXECUTION_FAILED }, true)
             logger.error(`上下文方法 ${fnc} 执行错误`, error)
           }
@@ -993,7 +993,7 @@ class PluginsLoader {
     const now = Date.now()
     for (const [key, time] of this.eventThrottle) {
       if (now - time > 60000) this.eventThrottle.delete(key)
-    }
+      }
     for (const [key, time] of this.msgThrottle) {
       if (now - time > 5000) this.msgThrottle.delete(key)
     }
@@ -1008,7 +1008,7 @@ class PluginsLoader {
       const cooldownMap = this.cooldowns[cooldownType]
       if (cooldownMap instanceof Map) {
         for (const [key, time] of cooldownMap) {
-          if (now - time > 300000) {
+        if (now - time > 300000) {
             cooldownMap.delete(key)
           }
         }

@@ -492,7 +492,7 @@ sequenceDiagram
   - 通过全局 `Bot`：
     - 访问子 Bot：`Bot[e.self_id]` / `Bot[e.device_id]`。
     - 调用 HTTP API：`await Bot.callRoute('/api/xxx', {...})`，让插件与 HTTP 复用相同业务能力。
-    - 使用渲染器：`Bot.renderer?.puppeteer` 生成图片后通过 `e.reply` 发送。
+    - 使用渲染器：`RendererLoader.getRenderer('puppeteer')` 生成图片后通过 `e.reply` 发送。
   - 通过全局 `redis`：
     - 存储跨会话状态、统计信息或长生命周期数据。
   - 通过 `ConfigBase` 子类暴露的 HTTP 接口，插件也可以间接读写配置（不建议直接 import 配置类，优先复用 HTTP API）。

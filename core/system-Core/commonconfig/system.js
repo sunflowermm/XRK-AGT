@@ -230,27 +230,27 @@ export default class SystemConfig extends ConfigBase {
               component: 'SubForm',
               fields: {
                 chromiumPath: {
-                  type: 'string',
-                  label: 'chromium路径',
-                  description: 'chromium其他路径，默认无需填写',
-                  default: '',
-                  component: 'Input'
-                },
+              type: 'string',
+              label: 'chromium路径',
+              description: 'chromium其他路径，默认无需填写',
+              default: '',
+              component: 'Input'
+            },
                 puppeteerWs: {
-                  type: 'string',
-                  label: 'puppeteer接口地址',
-                  description: 'puppeteer接口地址，默认无需填写',
-                  default: '',
-                  component: 'Input'
-                },
+              type: 'string',
+              label: 'puppeteer接口地址',
+              description: 'puppeteer接口地址，默认无需填写',
+              default: '',
+              component: 'Input'
+            },
                 puppeteerTimeout: {
-                  type: 'number',
-                  label: 'puppeteer截图超时时间',
+              type: 'number',
+              label: 'puppeteer截图超时时间',
                   description: 'puppeteer截图超时时间（毫秒，0表示使用默认值）',
-                  min: 0,
-                  default: 0,
-                  component: 'InputNumber'
-                },
+              min: 0,
+              default: 0,
+              component: 'InputNumber'
+            },
                 renderer: {
                   type: 'string',
                   label: '渲染后端',

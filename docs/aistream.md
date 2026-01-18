@@ -93,7 +93,7 @@ cache:
   maxSize: 100            # 最大缓存条数
 
 # LLM 工厂运营商选择（gptgod / volcengine / xiaomimimo）
-# 文本 LLM 配置分别位于 data/server_bots/{port}/god.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml
+# 文本 LLM 配置分别位于 data/server_bots/{port}/god.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml（工厂配置，不随端口变化）
 llm:
   Provider: gptgod        # LLM 提供商
   timeout: 360000         # LLM请求超时时间（毫秒），默认360000（6分钟）
@@ -109,13 +109,13 @@ vision:
   Provider: gptgod
 
 # ASR 工厂运营商选择
-# 详细配置位于 data/server_bots/{port}/volcengine_asr.yaml
+# 详细配置位于 data/server_bots/volcengine_asr.yaml（工厂配置，全局，不随端口变化）
 asr:
   Provider: volcengine
   workflow: device        # ASR识别结果调用的工作流名称
 
 # TTS 工厂运营商选择
-# 详细配置位于 data/server_bots/{port}/volcengine_tts.yaml
+# 详细配置位于 data/server_bots/volcengine_tts.yaml（工厂配置，全局，不随端口变化）
 tts:
   Provider: volcengine
   onlyForASR: true        # 是否只有ASR触发才有TTS
@@ -183,17 +183,17 @@ emotions:
 LLM 配置通过 `llm.Provider` 指定，支持的提供商：
 
 - **gptgod**：GPTGod 提供商（默认）
-  - 配置文件：`data/server_bots/{port}/god.yaml`
+  - 配置文件：`data/server_bots/god.yaml`（工厂配置，全局，不随端口变化）
   - 支持标准 OpenAI Chat Completions 协议
   
 - **volcengine**：火山引擎豆包大模型
-  - 配置文件：`data/server_bots/{port}/volcengine_llm.yaml`
+  - 配置文件：`data/server_bots/volcengine_llm.yaml`（工厂配置，全局，不随端口变化）
   - 接口地址：`https://ark.cn-beijing.volces.com/api/v3`
   - 支持的模型：`doubao-pro-4k`、`doubao-pro-32k`、`doubao-lite-4k` 等
   - 详细文档：https://www.volcengine.com/docs/82379
 
 - **xiaomimimo**：小咪咪莫提供商
-  - 配置文件：`data/server_bots/{port}/xiaomimimo_llm.yaml`
+  - 配置文件：`data/server_bots/xiaomimimo_llm.yaml`（工厂配置，全局，不随端口变化）
 
 > **注意**：LLM 的详细配置（如 `baseUrl`、`apiKey`、`model` 等）位于各自的配置文件中，不在 `aistream.yaml` 中。
 

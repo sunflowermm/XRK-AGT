@@ -96,12 +96,16 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-  Default["config/default_config/*.yaml"] -->|初次复制| ServerCfg["data/server_bots/{port}/*.yaml"]
-  ServerCfg --> Cfg["getConfig(name)"]
+  Default["config/default_config/*.yaml"] -->|初次复制| GlobalCfg["data/server_bots/*.yaml<br/>全局配置"]
+  Default -->|初次复制| ServerCfg["data/server_bots/{port}/*.yaml<br/>服务器配置"]
+  GlobalCfg --> Cfg["getGlobalConfig(name)"]
+  ServerCfg --> Cfg2["getServerConfig(name)"]
   Cfg --> Cache["内存缓存"]
+  Cfg2 --> Cache
   Cache --> Bot["Bot.run()<br/>global.cfg = Cfg"]
   
   style Default fill:#E6F3FF
+  style GlobalCfg fill:#FFE6CC
   style ServerCfg fill:#FFE6CC
   style Bot fill:#90EE90
 ```
@@ -226,7 +230,7 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     A[前端请求] --> B[HTTP API<br/>/api/render/report]
-    B --> C[Bot.renderer.puppeteer]
+    B --> C[RendererLoader.getRenderer]
     C --> D[renderImage]
     D --> E[生成图片]
     E --> F[返回Base64/路径]
@@ -238,7 +242,7 @@ flowchart TB
 ```
 
 **步骤**:
-1. 创建渲染API，使用 `Bot.renderer` 生成图片
+1. 创建渲染API，使用 `RendererLoader.getRenderer()` 生成图片
 2. 前端调用API并展示返回的图片
 
 ---
@@ -482,7 +486,8 @@ export default class ReportPlugin extends plugin {
     });
     
     // 使用渲染器生成图片
-    const renderer = Bot.renderer?.puppeteer;
+    import RendererLoader from '#infrastructure/renderer/loader.js';
+    const renderer = RendererLoader.getRenderer('puppeteer');
     if (renderer) {
       const imagePath = await renderer.renderImage({
         template: 'report-template',

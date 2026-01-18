@@ -114,9 +114,11 @@ sequenceDiagram
 **典型插件代码片段：**
 
 ```js
-// 假设在插件方法中 (this.e 为当前事件，Bot 为全局实例)
-const renderer = Bot.renderer?.puppeteer; // 或 playwright
-if (!renderer) {
+// 假设在插件方法中 (this.e 为当前事件)
+import RendererLoader from '#infrastructure/renderer/loader.js';
+
+const renderer = RendererLoader.getRenderer('puppeteer'); // 或 'playwright'
+if (!renderer || !renderer.id) {
   await this.reply('渲染器未启用或未配置');
   return;
 }
@@ -149,7 +151,7 @@ await this.reply(img);
     - 使用 `dealTpl` 生成 HTML 文件。
     - 调用 Puppeteer/Playwright 打开该 HTML，并按需要截图。
     - 返回图片路径或 Buffer。
-  - 通过各自的 `index.js` 暴露工厂函数，在系统初始化时由 `cfg.renderer` + `Bot` 组合创建实例并挂到 `Bot.renderer`。
+  - 通过各自的 `index.js` 暴露工厂函数，在系统初始化时由 `RendererLoader` 自动加载并管理。
 
 ---
 
@@ -182,9 +184,9 @@ export default function (config) {
 ```
 
 2. **配置与启用**
-   - 在 `config/default_config/renderers/myrenderer.yaml` 中添加默认配置。
-   - 在 `server.yaml` 中开启对应渲染器或在前端配置页面中勾选。
-   - 重启服务后，`Bot.renderer.myrenderer` 即可使用。
+   - 在 `src/renderers/myrenderer/config_default.yaml` 中添加默认配置。
+   - 在 `data/server_bots/{port}/renderers/myrenderer/config.yaml` 中添加服务器特定配置（可选）。
+   - 重启服务后，通过 `RendererLoader.getRenderer('myrenderer')` 即可使用。
 
 3. **在插件中调用**
    - 参考上文「如何在插件中直接使用渲染器」中的示例。

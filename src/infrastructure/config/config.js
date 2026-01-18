@@ -86,19 +86,19 @@ class Cfg {
    */
   ensureServerConfigDir() {
     if (!this._port) return;
-    
+
     const serverConfigDir = this.getConfigDir();
     if (!serverConfigDir) return;
-    
+
     fs.mkdirSync(serverConfigDir, { recursive: true });
-    
+
     // 只在目录为空时复制默认配置
     try {
       if (fs.readdirSync(serverConfigDir).length > 0) return;
     } catch {
       // 目录不存在，继续复制
     }
-    
+
     try {
       const defaultFiles = fs.readdirSync(this.PATHS.DEFAULT_CONFIG);
       for (const file of defaultFiles) {
@@ -107,8 +107,8 @@ class Cfg {
             configName.startsWith('god_') || 
             configName.includes('volcengine_') || 
             configName.includes('xiaomimimo_')) {
-          const targetPath = path.join(serverConfigDir, file);
-          if (!fs.existsSync(targetPath)) {
+        const targetPath = path.join(serverConfigDir, file);
+        if (!fs.existsSync(targetPath)) {
             fs.copyFileSync(path.join(this.PATHS.DEFAULT_CONFIG, file), targetPath);
           }
         }
@@ -164,25 +164,25 @@ class Cfg {
     
     const file = path.join(configDir, `${name}.yaml`);
     const defaultFile = path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`);
-    
-    let config = {};
-    
+
+      let config = {};
+
     if (fs.existsSync(file)) {
-      try {
+        try {
         config = YAML.parse(fs.readFileSync(file, 'utf8'));
         this.watch(file, name, key);
-      } catch (error) {
+        } catch (error) {
         logger?.error(`[服务器配置解析失败][${file}]`, error);
-      }
+        }
     } else if (fs.existsSync(defaultFile)) {
       try {
         config = YAML.parse(fs.readFileSync(defaultFile, 'utf8'));
         fs.mkdirSync(configDir, { recursive: true });
         fs.writeFileSync(file, YAML.stringify(config), 'utf8');
         this.watch(file, name, key);
-      } catch (error) {
+          } catch (error) {
         logger?.error(`[默认配置复制失败][${name}]`, error);
-      }
+          }
     }
     
     return this.config[key] = config;
@@ -216,7 +216,7 @@ class Cfg {
 
   get notice() {
     return this.getGlobalConfig('notice');
-  }
+    }
 
   get mongodb() {
     return this.getGlobalConfig('mongodb');
@@ -224,7 +224,7 @@ class Cfg {
 
   get redis() {
     return this.getGlobalConfig('redis');
-  }
+    }
 
   get db() {
     return this.getGlobalConfig('db');
@@ -253,7 +253,7 @@ class Cfg {
   // ========================================
   // 工厂配置 getters
   // ========================================
-
+  
   get god() {
     return this.getServerConfig('god');
   }
@@ -261,7 +261,7 @@ class Cfg {
   get god_vision() {
     return this.getServerConfig('god_vision');
   }
-
+  
   get volcengine_llm() {
     return this.getServerConfig('volcengine_llm');
   }
@@ -273,11 +273,11 @@ class Cfg {
   get xiaomimimo_llm() {
     return this.getServerConfig('xiaomimimo_llm');
   }
-
+  
   get volcengine_asr() {
     return this.getServerConfig('volcengine_asr');
   }
-
+  
   get volcengine_tts() {
     return this.getServerConfig('volcengine_tts');
   }
@@ -342,7 +342,7 @@ class Cfg {
     
     const key = `renderer.${this._port}.${type}`;
     if (this.config[key]) return this.config[key];
-    
+
     const serverDir = path.join(this.getConfigDir(), 'renderers', type);
     const serverFile = path.join(serverDir, 'config.yaml');
     
@@ -368,7 +368,7 @@ class Cfg {
         fs.mkdirSync(serverDir, { recursive: true });
         fs.writeFileSync(serverFile, YAML.stringify(config), 'utf8');
         this.watch(serverFile, `renderer.${type}`, key);
-      } catch (error) {
+        } catch (error) {
         logger?.error(`[渲染器配置创建失败][${type}]`, error);
       }
     }
@@ -419,11 +419,11 @@ class Cfg {
       logger?.error('[配置保存失败] 无效的端口号');
       return false;
     }
-    
+
     const file = path.join(configDir, `${name}.yaml`);
     const key = isGlobal ? `global.${name}` : `server.${this._port}.${name}`;
     const configType = isGlobal ? '全局' : '服务器';
-    
+
     try {
       this.config[key] = data;
       fs.mkdirSync(configDir, { recursive: true });

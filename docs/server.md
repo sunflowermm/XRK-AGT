@@ -41,7 +41,7 @@ flowchart TB
         Mobile["移动端应用"]
         ThirdAPI["第三方API调用"]
         WSClient["WebSocket客户端"]
-        SDK["平台SDK<br/>OneBot/ComWeChat等"]
+        SDK["平台SDK<br/>OneBot等"]
     end
     
     subgraph Proxy["反向代理层（可选）"]
@@ -679,7 +679,6 @@ auth:
 |----------|---------|--------|------|------------|
 | **OneBot v11** | `oicq` / `icqq` | ⭐⭐⭐⭐⭐ | 完全支持，官方推荐 | QQ机器人开发 |
 | **OneBot v11** | `go-cqhttp` | ⭐⭐⭐⭐⭐ | 通过WebSocket连接 | 稳定生产环境 |
-| **ComWeChat** | 自定义SDK | ⭐⭐⭐⭐ | 支持，需要配置 | 微信机器人 |
 | **WebSocket** | `ws` | ⭐⭐⭐⭐⭐ | 原生支持 | 实时通讯 |
 | **HTTP/HTTPS** | `express` | ⭐⭐⭐⭐⭐ | 核心框架 | REST API |
 | **gRPC** | `@grpc/grpc-js` | ⭐⭐⭐ | 需要额外配置 | 微服务架构 |

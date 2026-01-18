@@ -1,6 +1,6 @@
 ## TaskerLoader 文档（src/infrastructure/tasker/loader.js）
 
-`TaskerLoader` 负责从所有 `core/*/tasker` 目录动态加载各类 Tasker（事件生成器，如 QQ OneBotv11、企业微信等），并与 `Bot` 主类配合，为整个系统提供统一的事件入口。
+`TaskerLoader` 负责从所有 `core/*/tasker` 目录动态加载各类 Tasker（事件生成器，如 QQ OneBotv11 等），并与 `Bot` 主类配合，为整个系统提供统一的事件入口。
 
 ---
 

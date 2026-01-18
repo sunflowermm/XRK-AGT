@@ -320,7 +320,7 @@ async chat(messages, overrides = {}) {
 
 ### 运营商配置（仅工厂读取）
 
-工厂从 `config/default_config/aistream.yaml` 以及各自的 LLM/识图配置文件中读取配置：
+工厂从 `config/default_config/aistream.yaml`（全局配置）以及各自的 LLM/识图配置文件中读取配置（工厂配置均为全局，不随端口变化）：
 
 ```yaml
 llm:
@@ -329,12 +329,12 @@ llm:
 vision:
   Provider: gptgod
 
-# 文本 LLM 工厂配置（举例：data/server_bots/{port}/god.yaml）
+# 文本 LLM 工厂配置（举例：data/server_bots/god.yaml，全局配置，不随端口变化）
 baseUrl: https://api.gptgod.online/v1
 apiKey: "..."
 chatModel: gemini-exp-1114
 
-# 识图工厂配置（举例：data/server_bots/{port}/god_vision.yaml）
+# 识图工厂配置（举例：data/server_bots/god_vision.yaml，全局配置，不随端口变化）
 baseUrl: https://api.gptgod.online/v1
 apiKey: "..."
 fileUploadUrl: https://api.gptgod.online/v1/files

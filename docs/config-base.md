@@ -63,7 +63,7 @@ flowchart LR
 - `name` / `displayName` / `description`：基础元数据。
 - `filePath`：
   - 字符串：相对于项目根目录 `paths.root` 的路径，如 `config/server.yaml`。
-  - 函数：动态路径函数 `(cfg) => 'data/server_bots/' + cfg._port + '/server.yaml'`。
+  - 函数：动态路径函数 `(cfg) => 'data/server_bots/' + (cfg.port || cfg._port) + '/server.yaml'`。
 - `fileType`：`'yaml'` / `'json'`。
 - `schema`：结构定义。
 
@@ -191,13 +191,13 @@ export default class ServerConfig extends ConfigBase {
       name: 'server',
       displayName: '服务器配置',
       description: 'HTTP/HTTPS 端口、域名、代理、CORS 等',
-      filePath: (cfg) => `data/server_bots/${cfg._port}/server.yaml`,
+      filePath: (cfg) => `data/server_bots/${cfg.port || cfg._port}/server.yaml`,
       fileType: 'yaml',
       schema: {
         required: ['server'],
         fields: {
           server: { type: 'object' },
-          'server.port': { type: 'number', min: 1, max: 65535 },
+          'server.server.port': { type: 'number', min: 1, max: 65535 },
           'server.host': { type: 'string', pattern: '^.+$' }
         }
       }
