@@ -1,4 +1,6 @@
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
+import path from 'path';
+import paths from '#utils/paths.js';
 
 /**
  * 系统配置管理
@@ -2526,8 +2528,8 @@ export default class SystemConfig extends ConfigBase {
         displayName: '渲染器配置',
         description: '浏览器渲染器配置，包括Puppeteer和Playwright的详细设置。配置文件位置：data/server_bots/{port}/renderers/{type}/config.yaml',
         filePath: (cfg) => {
-          // 渲染器配置是动态的，每个类型有独立的配置文件
-          // 这里返回一个占位路径，实际路径由config.js的getRendererConfig方法处理
+          // 渲染器配置使用multiFile机制处理多个子文件
+          // 这里返回占位路径，实际路径由multiFile.getFilePath处理
           const port = cfg?.port ?? cfg?._port;
           if (!port) {
             throw new Error('SystemConfig: 渲染器配置需要端口号');
@@ -2535,6 +2537,21 @@ export default class SystemConfig extends ConfigBase {
           return `data/server_bots/${port}/renderers/{type}/config.yaml`;
         },
         fileType: 'yaml',
+        // 多文件配置：一个配置包含多个子文件
+        multiFile: {
+          keys: ['puppeteer', 'playwright'],
+          getFilePath: (key) => {
+            const cfg = global.cfg;
+            const port = cfg?.port ?? cfg?._port;
+            if (!port) {
+              throw new Error('SystemConfig: 渲染器配置需要端口号');
+            }
+            return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
+          },
+          getDefaultFilePath: (key) => {
+            return path.join(paths.renderers, key, 'config_default.yaml');
+          }
+        },
         schema: {
           fields: {
             puppeteer: {
@@ -2546,8 +2563,8 @@ export default class SystemConfig extends ConfigBase {
                 headless: {
                   type: 'string',
                   label: '无头模式',
-                  description: '"new" 为新 headless 模式，false 为有头模式',
-                  enum: ['new', 'old', false],
+                  description: '"new" 为新 headless 模式，"false" 为有头模式',
+                  enum: ['new', 'old', 'false'],
                   default: 'new',
                   component: 'Select'
                 },

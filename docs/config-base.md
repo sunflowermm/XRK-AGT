@@ -1,6 +1,6 @@
 ## ConfigBase 文档（src/infrastructure/commonconfig/commonconfig.js）
 
-> **可扩展性**：ConfigBase是配置系统的核心基类。通过继承ConfigBase，开发者可以快速创建自定义配置类，支持动态路径、Schema验证等高级特性。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+> **可扩展性**：ConfigBase是配置系统的核心基类。通过继承ConfigBase，开发者可以快速创建自定义配置类，支持动态路径、Schema验证、多文件配置等高级特性。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
 `ConfigBase` 是 XRK-AGT 的 **配置管理基类**，用于统一处理：
 
@@ -9,6 +9,7 @@
 - 路径解析（支持动态路径）。
 - 基于 schema 的基础验证。
 - 按路径读写（支持对象与数组）。
+- 多文件配置（一个配置包含多个子文件，如 renderer 包含 puppeteer 和 playwright）。
 
 具体的配置类型（如 server 配置、设备配置等）会继承此类，并在相应模块中定义。
 
@@ -19,6 +20,7 @@
 - ✅ **配置缓存**：自动缓存，提升性能
 - ✅ **自动备份**：写入时自动备份
 - ✅ **路径操作**：支持点号路径和数组下标
+- ✅ **多文件配置**：支持一个配置包含多个子文件（如 renderer 包含 puppeteer 和 playwright）
 
 ---
 
@@ -39,6 +41,7 @@ flowchart LR
 | | `filePath` | 相对路径字符串或动态路径函数 `(cfg) => 'config/server_8086.yaml'` |
 | | `fileType` | `'yaml'` 或 `'json'`（默认 `'yaml'`） |
 | | `schema` | 结构化校验规则（必填项、字段类型、范围等） |
+| | `multiFile` | 多文件配置定义（可选，见下方说明） |
 | **内部字段** | `fullPath` | 当 `filePath` 是字符串时预先计算的绝对路径 |
 | | `_cache/_cacheTime/_cacheTTL` | 读缓存与缓存有效期（默认为 5 秒） |
 | **文件相关方法** | `_resolveFilePath()` | 根据 `filePath` / `global.cfg` 动态计算实际路径 |
@@ -64,8 +67,10 @@ flowchart LR
 - `filePath`：
   - 字符串：相对于项目根目录 `paths.root` 的路径，如 `config/server.yaml`。
   - 函数：动态路径函数 `(cfg) => 'data/server_bots/' + (cfg.port || cfg._port) + '/server.yaml'`。
+  - 注意：对于多文件配置，`filePath` 可以是占位路径，实际路径由 `multiFile.getFilePath` 处理。
 - `fileType`：`'yaml'` / `'json'`。
 - `schema`：结构定义。
+- `multiFile`：多文件配置定义（可选），见下方「多文件配置」章节。
 
 路径解析：
 
@@ -79,31 +84,145 @@ flowchart LR
 
 ---
 
+## 多文件配置（multiFile）
+
+`ConfigBase` 支持一个配置包含多个子文件的情况，例如渲染器配置包含 `puppeteer` 和 `playwright` 两个独立的配置文件。
+
+### 使用场景
+
+当配置需要按类型或分类拆分为多个文件时，可以使用 `multiFile` 特性：
+
+- **渲染器配置**：`puppeteer` 和 `playwright` 分别存储在独立的文件中
+- **工厂配置**：不同提供商的配置可以分别存储
+- **其他分类配置**：任何需要按分类拆分的配置
+
+### 配置方式
+
+在构造函数的 `metadata` 中添加 `multiFile` 对象：
+
+```javascript
+{
+  name: 'renderer',
+  displayName: '渲染器配置',
+  filePath: (cfg) => `data/server_bots/${cfg.port}/renderers/{type}/config.yaml`, // 占位路径
+  fileType: 'yaml',
+  multiFile: {
+    // 定义多个文件的键名
+    keys: ['puppeteer', 'playwright'],
+    
+    // 根据键名获取实际文件路径
+    getFilePath: (key) => {
+      const cfg = global.cfg;
+      const port = cfg?.port ?? cfg?._port;
+      return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
+    },
+    
+    // 可选：获取默认配置文件路径（用于合并默认配置）
+    getDefaultFilePath: (key) => {
+      return path.join(paths.renderers, key, 'config_default.yaml');
+    }
+  },
+  schema: {
+    fields: {
+      puppeteer: { type: 'object', ... },
+      playwright: { type: 'object', ... }
+    }
+  }
+}
+```
+
+### 工作原理
+
+1. **读取**：
+   - `read()` 方法会检测到 `multiFile` 配置
+   - 依次读取每个 `key` 对应的文件（先读取默认配置，再读取实际配置并合并）
+   - 返回格式：`{ puppeteer: {...}, playwright: {...} }`
+
+2. **写入**：
+   - `write()` 方法会检测到 `multiFile` 配置
+   - 根据传入的数据对象，分别写入每个 `key` 对应的文件
+   - 数据格式：`{ puppeteer: {...}, playwright: {...} }`
+
+3. **扁平化**：
+   - `flattenData()` 会自动处理多文件配置的嵌套结构
+   - 将 `{ puppeteer: { headless: 'new' } }` 扁平化为 `{ 'puppeteer.headless': 'new' }`
+   - 前端可以通过扁平化的路径进行编辑
+
+4. **展开**：
+   - `expandFlatData()` 会将扁平化数据展开为嵌套结构
+   - 将 `{ 'puppeteer.headless': 'new' }` 展开为 `{ puppeteer: { headless: 'new' } }`
+
+### 示例：渲染器配置
+
+```javascript
+// core/system-Core/commonconfig/system.js
+renderer: {
+  name: 'renderer',
+  displayName: '渲染器配置',
+  filePath: (cfg) => {
+    const port = cfg?.port ?? cfg?._port;
+    if (!port) throw new Error('SystemConfig: 渲染器配置需要端口号');
+    return `data/server_bots/${port}/renderers/{type}/config.yaml`;
+  },
+  fileType: 'yaml',
+  multiFile: {
+    keys: ['puppeteer', 'playwright'],
+    getFilePath: (key) => {
+      const cfg = global.cfg;
+      const port = cfg?.port ?? cfg?._port;
+      return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
+    },
+    getDefaultFilePath: (key) => {
+      return path.join(paths.renderers, key, 'config_default.yaml');
+    }
+  },
+  schema: {
+    fields: {
+      puppeteer: { type: 'object', ... },
+      playwright: { type: 'object', ... }
+    }
+  }
+}
+```
+
+### 优势
+
+- **无需特殊类**：不需要为每个多文件配置创建特殊类，统一使用 `ConfigBase`
+- **可扩展**：添加新的多文件配置只需在 metadata 中定义 `multiFile`
+- **统一接口**：与单文件配置使用相同的 API（`read`、`write`、`flattenData` 等）
+- **前端兼容**：扁平化后的数据格式与单文件配置一致，前端无需特殊处理
+
+---
+
 ## 读取与写入（文件级）
 
 ### exists()
 
-- 调用 `_resolveFilePath()` 获取路径并尝试 `fs.access`。
+- **多文件配置**：若定义了 `multiFile`，检查至少一个子文件或默认文件存在。
+- **单文件配置**：调用 `_resolveFilePath()` 获取路径并尝试 `fs.access`。
 - 返回 `true/false` 表示文件是否存在。
 
 ### read(useCache = true)
 
 1. 若启用缓存且未过期，直接返回 `_cache`。
-2. 若文件不存在，抛出错误。
-3. 根据 `fileType` 解析内容：
+2. **多文件配置**：若定义了 `multiFile`，调用 `_readMultiFile()` 读取所有子文件并合并。
+3. **单文件配置**：若文件不存在，抛出错误。
+4. 根据 `fileType` 解析内容：
    - `yaml`：`yaml.parse(content)`。
    - `json`：`JSON.parse(content)`。
-4. 更新 `_cache` 与 `_cacheTime`，返回数据对象。
+5. 更新 `_cache` 与 `_cacheTime`，返回数据对象。
 
 ### write(data, { backup = true, validate = true } = {})
 
-1. 若 `validate` 为 `true`，先调用 `validate(data)`。
-2. 若 `backup` 为 `true` 且文件存在，调用 `backup()`。
-3. 确保目录存在。
-4. 按 `fileType` 序列化：
-   - YAML：`yaml.stringify(data, { indent: 2, lineWidth: 0 })`。
-   - JSON：`JSON.stringify(data, null, 2)`。
-5. 写入文件并更新 `_cache` 与 `_cacheTime`。
+1. **多文件配置**：若定义了 `multiFile`，调用 `_writeMultiFile()` 分别写入每个子文件。
+2. **单文件配置**：
+   - 若 `validate` 为 `true`，先调用 `validate(data)`。
+   - 若 `backup` 为 `true` 且文件存在，调用 `backup()`。
+   - 确保目录存在。
+   - 按 `fileType` 序列化：
+     - YAML：`yaml.stringify(data, { indent: 2, lineWidth: 0 })`。
+     - JSON：`JSON.stringify(data, null, 2)`。
+   - 写入文件并更新 `_cache` 与 `_cacheTime`。
 
 ### backup()
 
@@ -181,6 +300,8 @@ flowchart LR
 
 ## 使用示例（子类）
 
+### 单文件配置示例
+
 ```js
 // 示例：定义一个 server 配置类
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
@@ -204,6 +325,81 @@ export default class ServerConfig extends ConfigBase {
     });
   }
 }
+```
+
+### 多文件配置示例
+
+```js
+// 示例：定义一个渲染器配置类（多文件配置）
+import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
+import path from 'path';
+import paths from '#utils/paths.js';
+
+export default class RendererConfig extends ConfigBase {
+  constructor() {
+    super({
+      name: 'renderer',
+      displayName: '渲染器配置',
+      description: '浏览器渲染器配置，包括 Puppeteer 和 Playwright',
+      filePath: (cfg) => {
+        // 占位路径，实际路径由 multiFile.getFilePath 处理
+        const port = cfg?.port ?? cfg?._port;
+        return `data/server_bots/${port}/renderers/{type}/config.yaml`;
+      },
+      fileType: 'yaml',
+      // 多文件配置定义
+      multiFile: {
+        keys: ['puppeteer', 'playwright'],
+        getFilePath: (key) => {
+          const cfg = global.cfg;
+          const port = cfg?.port ?? cfg?._port;
+          return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
+        },
+        getDefaultFilePath: (key) => {
+          return path.join(paths.renderers, key, 'config_default.yaml');
+        }
+      },
+      schema: {
+        fields: {
+          puppeteer: {
+            type: 'object',
+            label: 'Puppeteer配置',
+            component: 'SubForm',
+            fields: {
+              headless: { type: 'string', enum: ['new', 'old', 'false'], default: 'new' },
+              chromiumPath: { type: 'string', default: '' }
+            }
+          },
+          playwright: {
+            type: 'object',
+            label: 'Playwright配置',
+            component: 'SubForm',
+            fields: {
+              browserType: { type: 'string', enum: ['chromium', 'firefox', 'webkit'], default: 'chromium' },
+              headless: { type: 'boolean', default: true }
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+// 使用方式与单文件配置完全相同
+const rendererConfig = new RendererConfig();
+
+// 读取：返回 { puppeteer: {...}, playwright: {...} }
+const data = await rendererConfig.read();
+
+// 写入：传入 { puppeteer: {...}, playwright: {...} }
+await rendererConfig.write({
+  puppeteer: { headless: 'new', chromiumPath: '' },
+  playwright: { browserType: 'chromium', headless: true }
+});
+
+// 扁平化：自动处理嵌套结构
+const flat = rendererConfig.flattenData(data);
+// 返回：{ 'puppeteer.headless': 'new', 'puppeteer.chromiumPath': '', ... }
 ```
 
 ## API 速查（2024-12）

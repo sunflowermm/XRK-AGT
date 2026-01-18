@@ -116,7 +116,7 @@ flowchart TB
 
 ### ⚙️ 配置与工具
 
-- **[配置基类](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写等
+- **[配置基类](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写、多文件配置等
 - **[渲染器](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
 - **[工具类](botutil.md)** - 工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
 

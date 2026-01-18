@@ -54,6 +54,8 @@ export default class ConfigBase {
     this.filePath = metadata.filePath || '';
     this.fileType = metadata.fileType || 'yaml';
     this.schema = metadata.schema || {};
+    // 多文件配置支持：用于处理一个配置包含多个文件的情况（如renderer包含puppeteer和playwright）
+    this.multiFile = metadata.multiFile || null;
 
     // 严格校验：在构造阶段即校验 schema 的默认值与类型一致性，避免运行期回退逻辑
     this._assertSchemaStrict(this.schema);
@@ -173,6 +175,30 @@ export default class ConfigBase {
    * @returns {Promise<boolean>}
    */
   async exists() {
+    // 多文件配置：检查至少一个文件存在
+    if (this.multiFile) {
+      const { keys, getFilePath, getDefaultFilePath } = this.multiFile;
+      for (const key of keys) {
+        const filePath = getFilePath(key);
+        try {
+          await fs.access(filePath);
+          return true;
+        } catch {
+          // 继续检查下一个
+        }
+      }
+      // 检查默认文件
+      if (getDefaultFilePath) {
+        for (const key of keys) {
+          const defaultFilePath = getDefaultFilePath(key);
+          if (defaultFilePath && fsSync.existsSync(defaultFilePath)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
     const filePath = this._resolveFilePath();
     try {
       await fs.access(filePath);
@@ -193,13 +219,17 @@ export default class ConfigBase {
       return this._cache;
     }
 
+    // 多文件配置处理
+    if (this.multiFile) {
+      return await this._readMultiFile();
+    }
+
     // 检查文件是否存在
     if (!await this.exists()) {
       throw new Error(`配置文件不存在: ${this.filePath || this._resolveFilePath()}`);
     }
     
     try {
-
       // 读取文件内容
       const filePath = this._resolveFilePath();
       const content = await fs.readFile(filePath, 'utf8');
@@ -226,6 +256,58 @@ export default class ConfigBase {
   }
 
   /**
+   * 读取多文件配置
+   * @private
+   * @returns {Promise<Object>}
+   */
+  async _readMultiFile() {
+    const { keys, getFilePath, getDefaultFilePath } = this.multiFile;
+    if (!keys || !Array.isArray(keys) || !getFilePath || typeof getFilePath !== 'function') {
+      throw new Error(`多文件配置定义不完整: ${this.name}`);
+    }
+
+    const result = {};
+
+    for (const key of keys) {
+      const filePath = getFilePath(key);
+      const defaultFilePath = getDefaultFilePath ? getDefaultFilePath(key) : null;
+      
+      let config = {};
+      
+      // 先读取默认配置（如果存在）
+      if (defaultFilePath && fsSync.existsSync(defaultFilePath)) {
+        try {
+          const content = await fs.readFile(defaultFilePath, 'utf8');
+          config = this.fileType === 'yaml' ? yaml.parse(content) : JSON.parse(content) || {};
+        } catch (error) {
+          BotUtil.makeLog('warn', `读取默认配置失败 [${this.name}/${key}]: ${error.message}`, 'ConfigBase');
+        }
+      }
+      
+      // 再读取实际配置（覆盖默认配置）
+      if (fsSync.existsSync(filePath)) {
+        try {
+          const content = await fs.readFile(filePath, 'utf8');
+          const fileConfig = this.fileType === 'yaml' ? yaml.parse(content) : JSON.parse(content);
+          if (fileConfig) {
+            config = { ...config, ...fileConfig };
+          }
+        } catch (error) {
+          BotUtil.makeLog('warn', `读取配置失败 [${this.name}/${key}]: ${error.message}`, 'ConfigBase');
+        }
+      }
+      
+      result[key] = config;
+    }
+
+    // 更新缓存
+    this._cache = result;
+    this._cacheTime = Date.now();
+
+    return result;
+  }
+
+  /**
    * 写入配置文件
    * @param {Object} data - 配置数据
    * @param {Object} options - 写入选项
@@ -234,6 +316,11 @@ export default class ConfigBase {
    * @returns {Promise<boolean>}
    */
   async write(data, options = {}) {
+    // 多文件配置处理
+    if (this.multiFile) {
+      return await this._writeMultiFile(data, options);
+    }
+
     const { backup = true, validate = true } = options;
 
     try {
@@ -280,6 +367,72 @@ export default class ConfigBase {
       return true;
     } catch (error) {
       BotUtil.makeLog('error', `写入配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
+      throw error;
+    }
+  }
+
+  /**
+   * 写入多文件配置
+   * @private
+   * @param {Object} data - 配置数据，格式：{ key1: {...}, key2: {...} }
+   * @param {Object} options - 写入选项
+   * @returns {Promise<boolean>}
+   */
+  async _writeMultiFile(data, options = {}) {
+    const { backup = true, validate = true } = options;
+    const { keys, getFilePath } = this.multiFile;
+
+    try {
+      // 验证数据
+      if (validate) {
+        const validation = await this.validate(data);
+        if (!validation.valid) {
+          throw new Error(`配置验证失败: ${validation.errors.join(', ')}`);
+        }
+      }
+
+      // 分别写入每个文件
+      for (const key of keys) {
+        if (!data[key]) continue;
+
+        const filePath = getFilePath(key);
+        const dir = path.dirname(filePath);
+
+        // 备份原文件
+        if (backup && fsSync.existsSync(filePath)) {
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+          const backupPath = `${filePath}.backup.${timestamp}`;
+          await fs.copyFile(filePath, backupPath);
+        }
+
+        // 确保目录存在
+        await fs.mkdir(dir, { recursive: true });
+
+        // 序列化并写入
+        let content;
+        if (this.fileType === 'yaml') {
+          content = yaml.stringify(data[key], {
+            indent: 2,
+            lineWidth: 0,
+            minContentWidth: 0
+          });
+        } else if (this.fileType === 'json') {
+          content = JSON.stringify(data[key], null, 2);
+        } else {
+          throw new Error(`不支持的文件类型: ${this.fileType}`);
+        }
+
+        await fs.writeFile(filePath, content, 'utf8');
+      }
+
+      // 更新缓存
+      this._cache = data;
+      this._cacheTime = Date.now();
+
+      BotUtil.makeLog('info', `多文件配置已保存 [${this.name}]`, 'ConfigBase');
+      return true;
+    } catch (error) {
+      BotUtil.makeLog('error', `写入多文件配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
       throw error;
     }
   }
