@@ -221,8 +221,6 @@ class DependencyManager {
       return;
     }
 
-    await this.validatePackageImports(pkg, pluginDir, pkgPath);
-
     const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
     const depNames = Object.keys(deps);
     if (depNames.length === 0) return;
@@ -231,23 +229,6 @@ class DependencyManager {
     if (missing.length === 0) return;
 
     await this.installPluginDependencies(pluginDir, missing);
-  }
-
-  async validatePackageImports(pkg, pluginDir, pkgPath) {
-    if (!pkg.imports || typeof pkg.imports !== 'object') {
-      await this.logger.warning(`package.json 缺少 imports 字段: ${pkgPath}`);
-      return;
-    }
-
-    const required = ['#utils/*', '#infrastructure/*'];
-    const hasRequired = required.some(pattern => {
-      const prefix = pattern.replace('/*', '');
-      return Object.keys(pkg.imports).some(key => key.startsWith(prefix));
-    });
-
-    if (!hasRequired) {
-      await this.logger.warning(`package.json imports 配置可能不完整: ${pkgPath}`);
-    }
   }
 
   async findMissingDependencies(depNames, nodeModulesPath) {

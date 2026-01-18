@@ -838,10 +838,18 @@ class PluginsLoader {
         const tasks = Array.isArray(plugin.task) ? plugin.task : [plugin.task]
         tasks.forEach(t => {
           if (t?.cron && t.fnc) {
+            // 如果 fnc 是字符串，从插件实例中获取对应的函数
+            let fnc = t.fnc
+            if (typeof fnc === 'string' && typeof plugin[fnc] === 'function') {
+              fnc = plugin[fnc].bind(plugin)
+            } else if (typeof fnc !== 'function') {
+              logger.warn(`定时任务 ${t.name || plugin.name} 的 fnc 不是函数或函数名无效，已跳过`)
+              return
+            }
             this.task.push({
               name: t.name || plugin.name,
               cron: t.cron,
-              fnc: t.fnc,
+              fnc,
               log: t.log !== false
             })
           }
