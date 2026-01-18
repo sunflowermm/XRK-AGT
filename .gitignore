@@ -82,3 +82,7 @@ out/
 
 config/server_config/
 trash/
+
+# Core modules (exclude system-Core)
+core/*
+!core/system-Core/
