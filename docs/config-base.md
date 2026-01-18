@@ -235,7 +235,7 @@ export default class ServerConfig extends ConfigBase {
    - `array` 的元素类型与 schema `itemType` 一致。
    - `enum`/`Select` 值必须来自 enum 列表。
    - 仅当字段声明 `nullable: true` 时可传 `null`。
-5. 默认值来源 `config/default_config/*.yaml`，已经全部按正确类型写入（如 `masterQQ: []`），可直接作为 `reset` 或表单初始值使用。
+5. 默认值来源 `config/default_config/*.yaml`，已经全部按正确类型写入（如 `master.qq: []`），可直接作为 `reset` 或表单初始值使用。
 
 ### Schema 元信息（驱动可视化组件）
 

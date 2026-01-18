@@ -76,12 +76,13 @@ export default function setLog() {
   fixWindowsUTF8()
 
   // 获取配置的颜色方案
-  const selectedScheme = COLOR_SCHEMES[cfg.bot?.log_color] || COLOR_SCHEMES.default
-  const selectedTimestampColors = TIMESTAMP_SCHEMES[cfg.bot?.log_color] || TIMESTAMP_SCHEMES.default
+  const logCfg = cfg.agt?.logging || {};
+  const selectedScheme = COLOR_SCHEMES[logCfg.color] || COLOR_SCHEMES.default
+  const selectedTimestampColors = TIMESTAMP_SCHEMES[logCfg.color] || TIMESTAMP_SCHEMES.default
 
   // 创建日志轮转流
-  const fileStream = createRotatingStream(LOGGER_CONFIG.MAIN_LOG_PREFIX, cfg.bot?.log_max_days)
-  const traceStream = createRotatingStream(LOGGER_CONFIG.TRACE_LOG_PREFIX, cfg.bot?.log_trace_days)
+  const fileStream = createRotatingStream(LOGGER_CONFIG.MAIN_LOG_PREFIX, logCfg.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS)
+  const traceStream = createRotatingStream(LOGGER_CONFIG.TRACE_LOG_PREFIX, logCfg.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS)
 
   // 创建 Pino 实例
   const pinoLogger = pino(
@@ -105,7 +106,7 @@ export default function setLog() {
   let cleanupJob = null
 
   const canLog = (level) => {
-    const configLevel = cfg.bot?.log_level || 'info'
+    const configLevel = cfg.agt?.logging?.level || 'info'
     const targetLevel = LOG_STYLES[level]?.level || 30
     const configLevelValue = LOG_STYLES[configLevel]?.level || 30
     return targetLevel >= configLevelValue
@@ -150,7 +151,7 @@ export default function setLog() {
    * @returns {string} 日志头部文本
    */
   function getLogHeader() {
-    const headerText = cfg.bot?.log_align ? `[${cfg.bot.log_align}]` : '[XRKYZ]'
+    const headerText = cfg.agt?.logging?.align ? `[${cfg.agt.logging.align}]` : '[XRKYZ]'
     return createGradientText(headerText)
   }
 
@@ -688,11 +689,11 @@ export default function setLog() {
         loggerType: 'pino',
         loggerVersion: '9.x',
         nodeVersion: process.version,
-        logLevel: cfg.bot?.log_level || 'info',
+        logLevel: cfg.agt?.logging?.level || 'info',
         logDir: LOGGER_CONFIG.LOG_DIR,
         cleanupSchedule: 'Daily at 3 AM',
-        mainLogAge: `${cfg.bot?.log_max_days || LOGGER_CONFIG.DEFAULT_MAX_DAYS} days`,
-        traceLogAge: `${cfg.bot?.log_trace_days || LOGGER_CONFIG.DEFAULT_TRACE_DAYS} day(s)`,
+        mainLogAge: `${cfg.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS} days`,
+        traceLogAge: `${cfg.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS} day(s)`,
         logFiles: {
           main: `${LOGGER_CONFIG.MAIN_LOG_PREFIX}.yyyy-MM-dd.log`,
           trace: `${LOGGER_CONFIG.TRACE_LOG_PREFIX}.yyyy-MM-dd.log`
@@ -709,8 +710,8 @@ export default function setLog() {
      * @returns {Promise<number>} 删除的文件数
      */
     cleanLogs: async function (days, includeTrace = true) {
-      const mainDays = days || cfg.bot?.log_max_days || LOGGER_CONFIG.DEFAULT_MAX_DAYS
-      const traceDays = cfg.bot?.log_trace_days || LOGGER_CONFIG.DEFAULT_TRACE_DAYS
+      const mainDays = days || cfg.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS
+      const traceDays = cfg.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS
       const now = Date.now()
 
       try {
@@ -890,8 +891,8 @@ function createRotatingStream(prefix, maxDays) {
  * @param {Object} logger - Logger 实例
  */
 async function cleanExpiredLogs(logger) {
-  const mainLogMaxAge = cfg.bot?.log_max_days || LOGGER_CONFIG.DEFAULT_MAX_DAYS
-  const traceLogMaxAge = cfg.bot?.log_trace_days || LOGGER_CONFIG.DEFAULT_TRACE_DAYS
+  const mainLogMaxAge = cfg.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS
+  const traceLogMaxAge = cfg.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS
   const now = Date.now()
 
   try {

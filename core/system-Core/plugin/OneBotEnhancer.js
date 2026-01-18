@@ -175,17 +175,21 @@ export default class OneBotEnhancer extends EnhancerBase {
 
   applyConfigPolicies(e) {
     try {
-      const otherCfg = cfg.getOther() || {}
+      const chatbotCfg = cfg.chatbot || {}
       const {
-        blackQQ = [],
-        whiteQQ = [],
-        blackGroup = [],
-        whiteGroup = [],
-        disablePrivate = false,
-        disableMsg = '私聊功能已禁用',
-        disableAdopt = [],
-        disableGuildMsg = false
-      } = otherCfg
+        blacklist = {},
+        whitelist = {},
+        privateChat = {},
+        guild = {}
+      } = chatbotCfg
+      const blackQQ = blacklist?.qq || []
+      const whiteQQ = whitelist?.qq || []
+      const blackGroup = blacklist?.groups || []
+      const whiteGroup = whitelist?.groups || []
+      const disablePrivate = privateChat?.enabled === false
+      const disableMsg = privateChat?.disableMsg || '私聊功能已禁用'
+      const disableAdopt = privateChat?.disableAdopt || []
+      const disableGuildMsg = guild?.disableMsg === true
 
       const toStr = (v) => (v === undefined || v === null ? '' : String(v))
       const inList = (list, id) =>

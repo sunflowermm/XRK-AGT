@@ -21,12 +21,13 @@ export class sendLog extends plugin {
     })
 
     // 从cfg配置读取，充分利用配置系统
-    const botCfg = cfg.bot || {}
-    this.lineNum = botCfg.log_send_default_lines || 120
-    this.maxNum = botCfg.log_send_max_lines || 1000
-    this.logDir = botCfg.log_dir || "logs"
-    this.maxPerForward = botCfg.log_send_max_per_forward || 30
-    this.maxLineLength = botCfg.log_send_max_line_length || 300
+    const agtCfg = cfg.agt || {}
+    const logSendCfg = agtCfg.logging?.send || {}
+    this.lineNum = logSendCfg.defaultLines || 120
+    this.maxNum = logSendCfg.maxLines || 1000
+    this.logDir = agtCfg.logging?.dir || "logs"
+    this.maxPerForward = logSendCfg.maxPerForward || 30
+    this.maxLineLength = logSendCfg.maxLineLength || 300
     
     this.levelConfig = {
       ERROR: { emoji: "❌", color: "red" },
@@ -387,7 +388,8 @@ export class sendLog extends plugin {
 
   buildUsageInfo() {
     const platformInfo = logger.platform?.() || {}
-    const botCfg = cfg.bot || {}
+    const agtCfg = cfg.agt || {}
+    const logCfg = agtCfg.logging || {}
     
     return [
       "💡 命令说明:",
@@ -403,9 +405,9 @@ export class sendLog extends plugin {
       `• 最大显示: ${this.maxNum}条`,
       `• 每批最多: ${this.maxPerForward}条`,
       `• 单条限制: ${this.maxLineLength}字符`,
-      `• 主日志保留: ${platformInfo.mainLogAge || botCfg.log_max_days || '3天'}`,
-      `• 追踪日志保留: ${platformInfo.traceLogAge || botCfg.log_trace_days || '1天'}`,
-      `• 日志等级: ${botCfg.log_level || 'info'}`,
+      `• 主日志保留: ${platformInfo.mainLogAge || logCfg.maxDays || '30天'}`,
+      `• 追踪日志保留: ${platformInfo.traceLogAge || logCfg.traceDays || '1天'}`,
+      `• 日志等级: ${logCfg.level || 'info'}`,
       `• 日志目录: ${this.logDir}`
     ].join("\n")
   }

@@ -112,8 +112,9 @@ flowchart LR
 | `PATHS.SERVER_BOTS` | 每个端口的服务器配置目录 `data/server_bots/{port}` |
 | `getConfigDir()` | 当前端口的配置根目录，例如 `data/server_bots/2537` |
 | `getConfig(name)` | 读取 `{configDir}/{name}.yaml`，若不存在则从默认配置复制一份 |
-| `getdefSet(name)` | 仅读取默认配置 `default_config/{name}.yaml` |
-| `bot/other/redis/server/device/db/monitor` | 常用配置的快捷访问器 |
+| `getGlobalConfig(name)` | 读取全局配置 `data/server_bots/{name}.yaml`（不随端口变化） |
+| `getServerConfig(name)` | 读取服务器配置 `data/server_bots/{port}/{name}.yaml`（随端口变化） |
+| `agt/chatbot/group/server/device/monitor/notice/mongodb/redis/db/aistream` | 常用配置的快捷访问器 |
 | `renderer` | 合并 `renderers/{type}/config_default.yaml` 与 `data/server_bots/{port}/renderers/{type}/config.yaml` |
 | `setConfig(name, data)` | 写回 `{name}.yaml`，并更新内存缓存 |
 | `watch(file, name, key)` | 监听配置变更，自动清除缓存，触发 `change_{name}` 钩子 |

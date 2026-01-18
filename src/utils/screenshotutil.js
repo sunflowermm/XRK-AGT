@@ -22,7 +22,7 @@ const MAX_IDLE_TIME = 3600000;
 const DEFAULT_IMAGE_PATH = path.join(paths.renderers, '截图失败.jpg');
 
 function getRenderer() {
-  const rendererName = cfg.renderer?.name || 'puppeteer';
+  const rendererName = cfg.agt?.browser?.renderer || 'puppeteer';
   return RendererLoader.getRenderer(rendererName);
 }
 
@@ -561,7 +561,7 @@ const DEFAULT_CONFIG = {
     height: null,
     quality: 100,
     type: 'jpeg',
-    deviceScaleFactor: cfg.bot?.screen_shot_quality || 1,
+    deviceScaleFactor: 1,
     selector: null,
     waitForSelector: null,
     waitForTimeout: null,

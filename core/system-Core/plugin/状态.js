@@ -20,10 +20,11 @@ export class stattools extends plugin {
     })
     
     // 从cfg读取配置
-    const botCfg = cfg.bot || {}
-    this.showNetworkInfo = botCfg.status_show_network !== false
-    this.showProcessInfo = botCfg.status_show_process !== false
-    this.showDiskInfo = botCfg.status_show_disk !== false
+    const agtCfg = cfg.agt || {}
+    const statusCfg = agtCfg.status || {}
+    this.showNetworkInfo = statusCfg.showNetwork !== false
+    this.showProcessInfo = statusCfg.showProcess !== false
+    this.showDiskInfo = statusCfg.showDisk !== false
   }
 
   formatFileSize(bytes) {
@@ -153,8 +154,8 @@ export class stattools extends plugin {
         `  Node版本：${nodeVersion}`,
         `  插件数量：${pluginCount}个`,
         `  定时任务：${taskCount}个`,
-        `  日志等级：${cfg.bot?.log_level || 'info'}`,
-        `  日志目录：${cfg.bot?.log_dir || 'logs'}`
+        `  日志等级：${cfg.agt?.logging?.level || 'info'}`,
+        `  日志目录：${cfg.agt?.logging?.dir || 'logs'}`
       ].flat()
 
       if (this.showNetworkInfo) {

@@ -33,25 +33,23 @@ class RendererLoader {
     }
 
     const entries = await fs.readdir(baseDir, { withFileTypes: true });
-    const subFolders = entries.filter(d => d.isDirectory());
-    for (const subFolder of subFolders) {
-      const name = subFolder.name
-      try {
-        await this._loadRenderer(name, baseDir)
-      } catch (err) {
-        BotUtil.makeLog('error', `渲染器加载失败: ${name} - ${err.message}`, 'RendererLoader', err);
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        try {
+          await this._loadRenderer(entry.name, baseDir)
+        } catch (err) {
+          BotUtil.makeLog('error', `渲染器加载失败: ${entry.name} - ${err.message}`, 'RendererLoader', err);
+        }
       }
     }
   }
 
   async _loadRenderer(name, baseDir) {
     const indexJs = path.join(baseDir, name, "index.js")
-    const configFile = path.join(baseDir, name, "config.yaml")
+    if (!fsSync.existsSync(indexJs)) return
 
-    if (!fs.existsSync(indexJs)) return
-
+    const rendererCfg = cfg.getRendererConfig(name) || {}
     const rendererFn = (await import(pathToFileURL(indexJs).href)).default
-    const rendererCfg = fs.existsSync(configFile) ? yaml.parse(fs.readFileSync(configFile, "utf8")) : {}
     const renderer = rendererFn(rendererCfg)
 
     if (!renderer.id || !renderer.type || !renderer.render || !lodash.isFunction(renderer.render)) {
@@ -62,7 +60,7 @@ class RendererLoader {
     return true
   }
 
-  getRenderer(name = cfg.renderer?.name || "puppeteer") {
+  getRenderer(name = cfg.agt?.browser?.renderer || "puppeteer") {
     return this.renderers.get(name) || {}
   }
 

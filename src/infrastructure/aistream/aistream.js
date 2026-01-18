@@ -2158,8 +2158,8 @@ export default class AIStream {
    * 获取重试配置（从aistream.yaml读取，增强版：指数退避）
    */
   getRetryConfig() {
-    const runtime = (cfg && cfg.aistream) ? cfg.aistream : {};
-    const llm = (runtime && runtime.llm) ? runtime.llm : {};
+    const runtime = cfg.aistream || {};
+    const llm = runtime.llm || {};
     const retryConfig = llm.retry || {};
     return {
       enabled: retryConfig.enabled !== false, // 默认启用
@@ -2573,10 +2573,10 @@ export default class AIStream {
   resolveLLMConfig(apiConfig = {}) {
     // 使用安全的配置读取，确保有默认值
     const merged = { ...this.config, ...apiConfig };
-    const runtime = (cfg && cfg.aistream) ? cfg.aistream : {};
-    const llm = (runtime && runtime.llm) ? runtime.llm : {};
-    const vision = (runtime && runtime.vision) ? runtime.vision : {};
-    const global = (runtime && runtime.global) ? runtime.global : {};
+    const runtime = cfg.aistream || {};
+    const llm = runtime.llm || {};
+    const vision = runtime.vision || {};
+    const global = runtime.global || {};
 
     // Provider配置：优先级 apiConfig > llm.Provider > 默认值
     const provider = merged.provider || llm.Provider || 'gptgod';
@@ -2610,7 +2610,7 @@ export default class AIStream {
       const fallbackProvider = 'gptgod';
       const fallbackConfigKey = llmConfigMap[fallbackProvider] || 'god';
       // 安全读取配置，确保cfg存在
-      const fallbackConfig = (cfg && cfg[fallbackConfigKey] && typeof cfg[fallbackConfigKey] === 'object') 
+      const fallbackConfig = (cfg[fallbackConfigKey] && typeof cfg[fallbackConfigKey] === 'object') 
         ? cfg[fallbackConfigKey] 
         : {};
       return {
@@ -2624,14 +2624,14 @@ export default class AIStream {
 
     // 动态获取 LLM 配置（安全读取）
     const llmConfigKey = llmConfigMap[provider];
-    const providerConfig = (llmConfigKey && cfg && cfg[llmConfigKey] && typeof cfg[llmConfigKey] === 'object') 
+    const providerConfig = (llmConfigKey && cfg[llmConfigKey] && typeof cfg[llmConfigKey] === 'object') 
       ? cfg[llmConfigKey] 
       : {};
 
     // 动态获取 Vision 配置（一个工厂一个配置文件，安全读取）
     let visionConfig = {};
     const visionConfigKey = visionConfigMap[visionProvider];
-    if (visionConfigKey && cfg && cfg[visionConfigKey] && typeof cfg[visionConfigKey] === 'object') {
+    if (visionConfigKey && cfg[visionConfigKey] && typeof cfg[visionConfigKey] === 'object') {
       visionConfig = cfg[visionConfigKey];
     }
 

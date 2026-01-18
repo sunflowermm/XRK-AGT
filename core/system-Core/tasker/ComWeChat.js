@@ -205,7 +205,7 @@ Bot.tasker.push(new class ComWeChatTasker {
   }
 
   async getGroupMemberMap(data) {
-    if (!cfg.bot.cache_group_member)
+    if (!cfg.agt?.system?.cacheGroupMember)
       return this.getGroupMap(data)
     for (const [group_id] of await this.getGroupMap(data)) {
       if (group_id === "filehelper")

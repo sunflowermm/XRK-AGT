@@ -230,7 +230,7 @@ class StreamLoader {
     }
 
     // 列出工作流（仅在debug模式下）
-    if (cfg?.debug) {
+    if (cfg.aistream?.global?.debug) {
       this.listStreamsQuiet();
     }
   }

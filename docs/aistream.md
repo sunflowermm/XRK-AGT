@@ -69,7 +69,7 @@ classDiagram
 - `temperature`、`maxTokens`、`topP`、`presencePenalty`、`frequencyPenalty` 等
 - 运行时可在插件中额外传入 `apiConfig` 覆盖部分字段
 
-### 运行时配置来源（`config/default_config/aistream.yaml`）
+### 运行时配置来源（`data/server_bots/aistream.yaml` - 全局配置）
 
 `cfg.aistream` 会在 `AIStream` 和设备管理模块中统一读取，实际配置结构：
 

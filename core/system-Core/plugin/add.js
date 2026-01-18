@@ -51,12 +51,12 @@ export class add extends plugin {
       ]
     })
 
-    const botCfg = cfg.bot || {}
-    const otherCfg = cfg.getOther() || {}
-    this.path = otherCfg.message_data_path || botCfg.data_dir || "data/messageJson/"
-    this.bannedWordsPath = otherCfg.banned_words_path || "data/bannedWords/"
-    this.bannedImagesPath = otherCfg.banned_images_path || "data/bannedWords/images/"
-    this.configPath = otherCfg.banned_config_path || "data/bannedWords/config/"
+    const agtCfg = cfg.agt || {}
+    const filesCfg = agtCfg.files || {}
+    this.path = filesCfg.messageDataPath || "data/messageJson/"
+    this.bannedWordsPath = filesCfg.bannedWordsPath || "data/bannedWords/"
+    this.bannedImagesPath = filesCfg.bannedImagesPath || "data/bannedWords/images/"
+    this.configPath = filesCfg.bannedConfigPath || "data/bannedWords/config/"
   }
 
   async init() {
@@ -98,7 +98,7 @@ export class add extends plugin {
     if (bannedWordsMap[groupId]) return
     
     // 从cfg读取默认配置
-    const groupCfg = cfg.getGroup(this.e?.self_id || '', groupId)
+    const groupCfg = cfg.getGroup(groupId)
     bannedWordsMap[groupId] = {
       exact: new Set(),
       fuzzy: new Set(),
@@ -809,7 +809,7 @@ export class add extends plugin {
       return false
     }
 
-    const groupCfg = cfg.getGroup(this.e.self_id, this.group_id)
+    const groupCfg = cfg.getGroup(this.group_id)
     
     if (groupCfg.addLimit == 2) {
       this.reply("暂无权限，只有主人才能操作")
@@ -839,7 +839,7 @@ export class add extends plugin {
   trimAlias(msg) {
     if (!msg) return msg
     
-    const groupCfg = cfg.getGroup(this.e.self_id, this.group_id)
+    const groupCfg = cfg.getGroup(this.group_id)
     let alias = groupCfg.botAlias
     if (!alias) return msg
     
@@ -1005,7 +1005,7 @@ export class add extends plugin {
     }
 
     logger.mark(`[发送消息]${this.e.logText}[${this.keyWord}]`)
-    const groupCfg = cfg.getGroup(this.e.self_id, this.group_id)
+    const groupCfg = cfg.getGroup(this.group_id)
     return this.reply(msgToSend, Boolean(groupCfg.addReply), {
       at: Boolean(groupCfg.addAt),
       recallMsg: groupCfg.addRecall

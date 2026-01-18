@@ -35,12 +35,13 @@ export class update extends plugin {
     })
 
     // 从cfg读取配置，充分利用配置系统
-    const botCfg = cfg.bot || {}
-    this.typeName = botCfg.update_type_name || 'XRK-AGT'
-    this.autoUpdateXRK = botCfg.update_auto_update_xrk !== false
-    this.sleepBetween = botCfg.update_sleep_between || 1500
-    this.restartDelay = botCfg.update_restart_delay || 2000
-    this.logLines = botCfg.update_log_lines || 100
+    const agtCfg = cfg.agt || {}
+    const updateCfg = agtCfg.update || {}
+    this.typeName = updateCfg.typeName || 'XRK-AGT'
+    this.autoUpdateXRK = updateCfg.autoUpdateXrk !== false
+    this.sleepBetween = updateCfg.sleepBetween || 1500
+    this.restartDelay = updateCfg.restartDelay || 2000
+    this.logLines = updateCfg.logLines || 100
     
     this.messages = []
     this.xrkPlugins = [

@@ -1,0 +1,121 @@
+# ============================================
+# XRK-AGT 全局配置
+# ============================================
+# 此配置文件为全局配置，不随服务器端口变化
+# 位置：config/new_config/agt.yaml
+# 包含：日志、浏览器、渲染器、文件系统、系统行为等全局设置
+
+# ----------------------------------------
+# 日志配置
+# ----------------------------------------
+logging:
+  # 日志等级: trace, debug, info, warn, fatal, mark, error, off
+  # mark 时只显示执行命令，不显示聊天记录
+  level: info
+  
+  # 日志头内容自定义，例如: "MYBOT" 将显示 [MYBOT]
+  align: "XRKAGT"
+  
+  # 日志头颜色方案，可选: 'default', 'scheme1', 'scheme2', 'scheme3', 'scheme4', 'scheme5', 'scheme6', 'scheme7'
+  color: 'default'
+  
+  # 日志ID长度（默认16个字符）
+  idLength: 20
+  
+  # ID显示时的美化字符（用于填充空白）
+  idFiller: '.'  # 可选: '·', '─', '•', '═', '»', '→'
+  
+  # 日志对象检查配置
+  object:
+    depth: 10
+    colors: true
+    showHidden: true
+    showProxy: true
+    getters: true
+    breakLength: 100
+    maxArrayLength: 100
+    maxStringLength: 1000
+  
+  # 日志目录
+  dir: "logs"
+  
+  # 日志保留天数配置
+  maxDays: 30    # 主日志保留天数
+  traceDays: 1   # trace日志保留天数
+  
+  # 日志发送插件配置
+  send:
+    defaultLines: 120      # 默认发送日志行数
+    maxLines: 1000         # 最大发送日志行数
+    maxPerForward: 30      # 每条转发消息最大行数
+    maxLineLength: 300     # 单行日志最大长度
+
+# ----------------------------------------
+# 浏览器/渲染器配置
+# ----------------------------------------
+browser:
+  # chromium 其他路径
+  chromiumPath: ""
+  
+  # puppeteer 接口地址
+  puppeteerWs: ""
+  
+  # puppeteer 截图超时时间（毫秒，0表示使用默认值）
+  puppeteerTimeout: 0
+  
+  # 渲染后端, 默认为 puppeteer
+  # 可选: puppeteer, playwright
+  renderer: puppeteer
+
+# ----------------------------------------
+# 文件系统配置
+# ----------------------------------------
+files:
+  # 监听文件变化
+  watch: true
+  
+  # 文件 URL 有效时间（分钟）
+  urlTime: 60
+  
+  # 文件 URL 访问次数限制
+  urlTimes: 5
+  
+  # 数据路径配置
+  messageDataPath: "data/messageJson/"      # 消息数据存储路径
+  bannedWordsPath: "data/bannedWords/"      # 违禁词存储路径
+  bannedImagesPath: "data/bannedWords/images/"  # 违禁图片存储路径
+  bannedConfigPath: "data/bannedWords/config/"  # 违禁词配置路径
+
+# ----------------------------------------
+# 系统行为配置
+# ----------------------------------------
+system:
+  # 自动把 / 换成 #
+  '/→#': true
+  
+  # 群聊和频道中过滤自己的消息
+  ignoreSelf: true
+  
+  # 上线推送通知的冷却时间（秒）
+  onlineMsgExp: 86400
+  
+  # 缓存群成员列表
+  cacheGroupMember: true
+
+# ----------------------------------------
+# 状态插件配置
+# ----------------------------------------
+status:
+  showNetwork: true    # 是否显示网络信息
+  showProcess: true    # 是否显示进程信息
+  showDisk: true       # 是否显示磁盘信息
+
+# ----------------------------------------
+# 更新插件配置
+# ----------------------------------------
+update:
+  autoUpdateXrk: true  # 是否自动更新XRK插件
+  sleepBetween: 1500    # 更新间隔时间（毫秒）
+  restartDelay: 2000    # 更新后重启延迟（毫秒）
+  typeName: "XRK-AGT"   # 更新类型名称
+  logLines: 100         # 更新日志显示行数

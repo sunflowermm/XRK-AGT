@@ -479,20 +479,21 @@ export default class BotUtil {
    * @returns {string} 格式化的日志 ID
    */
   static makeLogID(id) {
-    const cacheKey = `logid_${id}_${cfg.bot?.log_color}_${cfg.bot?.log_id_filler}`;
+    const logCfg = cfg.agt?.logging || {};
+    const cacheKey = `logid_${id}_${logCfg.color || 'default'}_${logCfg.idFiller || '·'}`;
     const cached = BotUtil.cache(cacheKey);
     if (cached) return cached;
 
-    const targetLength = cfg.bot?.log_id_length || 16;
-    const filler = cfg.bot?.log_id_filler || '·';
-    const currentTheme = cfg.bot?.log_color || 'default';
+    const targetLength = logCfg.idLength || 16;
+    const filler = logCfg.idFiller || '·';
+    const currentTheme = logCfg.color || 'default';
     const chalkInstance = chalk || logger?.chalk;
 
-    if (!id && !cfg.bot?.log_align) {
+    if (!id && !logCfg.align) {
       return BotUtil.cache(cacheKey, "", 60000);
     }
 
-    const idStr = id ? String(id) : (cfg.bot?.log_align || "XRKYZ");
+    const idStr = id ? String(id) : (logCfg.align || "XRKYZ");
     const displayWidth = BotUtil.#getDisplayWidth(idStr);
 
     // 纯文本模式（没有 chalk）
@@ -628,7 +629,7 @@ export default class BotUtil {
     const validLevels = ["trace", "debug", "info", "warn", "error", "fatal", "mark", "success", "tip"];
     level = validLevels.includes(level) ? level : "info";
 
-    const configLogLevel = cfg.bot?.log_level || "info";
+    const configLogLevel = cfg.agt?.logging?.level || "info";
     const levelPriorities = {
       "trace": 0,
       "debug": 1,
@@ -662,7 +663,7 @@ export default class BotUtil {
         logParts.push(String(item));
       } else if (typeof item === "object") {
         try {
-          const objectOptions = cfg.bot?.log_object || {};
+          const objectOptions = cfg.agt?.logging?.object || {};
           const inspectOptions = {
             depth: objectOptions.depth || 10,
             colors: false,
@@ -1109,8 +1110,8 @@ export default class BotUtil {
   static async fileToUrl(file, opts = {}) {
     const options = {
       name: opts.name || null,
-      time: (cfg.bot?.file_to_url_time || 10) * 60000,
-      times: cfg.bot?.file_to_url_times || 1,
+      time: ((cfg.agt?.files?.urlTime || 60) * 60000),
+      times: cfg.agt?.files?.urlTimes || 5,
       returnPath: opts.returnPath === true,
       baseUrl: opts.baseUrl,
       fetchOptions: opts.fetchOptions
@@ -1173,7 +1174,8 @@ export default class BotUtil {
 
       setTimeout(() => BotUtil.rm(destPath).catch(() => { }), options.time);
 
-      const baseUrl = options.baseUrl || cfg.server?.server?.url || `http://localhost:${cfg.server?.server?.port || 8086}`;
+      const port = cfg.port || 8086;
+      const baseUrl = options.baseUrl || cfg.server?.server?.url || `http://localhost:${port}`;
       const url = `${baseUrl}/media/${finalFileName}`;
 
       if (options.returnPath) {
