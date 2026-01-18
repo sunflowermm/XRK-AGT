@@ -241,42 +241,36 @@ class ConfigLoader {
         }
       });
 
-      this.watcher
-        .on('add', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath);
-            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+      const isValidFile = (filePath) => {
+        const fileName = path.basename(filePath);
+        return fileName.endsWith('.js') && !fileName.startsWith('.') && !fileName.startsWith('_');
+      };
 
-            BotUtil.makeLog('info', `检测到新配置文件: ${fileName}`, 'ConfigLoader');
+      const handleConfigChange = async (filePath, eventType) => {
+        try {
+          if (!isValidFile(filePath)) return;
+
+          const key = path.basename(filePath, '.js');
+          
+          if (eventType === 'add') {
+            BotUtil.makeLog('info', `检测到新配置文件: ${key}`, 'ConfigLoader');
             await this._loadConfig(filePath);
-          } catch (error) {
-            BotUtil.makeLog('error', '处理新增配置失败', 'ConfigLoader', error);
-          }
-        }, 500))
-        .on('change', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath);
-            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
-
-            const key = path.basename(filePath, '.js');
+          } else if (eventType === 'change') {
             BotUtil.makeLog('info', `检测到配置文件变更: ${key}`, 'ConfigLoader');
             await this.reload(key);
-          } catch (error) {
-            BotUtil.makeLog('error', '处理配置变更失败', 'ConfigLoader', error);
-          }
-        }, 500))
-        .on('unlink', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath);
-            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
-
-            const key = path.basename(filePath, '.js');
+          } else if (eventType === 'unlink') {
             BotUtil.makeLog('info', `检测到配置文件删除: ${key}`, 'ConfigLoader');
             this.configs.delete(key);
-          } catch (error) {
-            BotUtil.makeLog('error', '处理配置删除失败', 'ConfigLoader', error);
           }
-        }, 500));
+        } catch (error) {
+          BotUtil.makeLog('error', `处理配置${eventType}失败`, 'ConfigLoader', error);
+        }
+      };
+
+      this.watcher
+        .on('add', lodash.debounce((filePath) => handleConfigChange(filePath, 'add'), 500))
+        .on('change', lodash.debounce((filePath) => handleConfigChange(filePath, 'change'), 500))
+        .on('unlink', lodash.debounce((filePath) => handleConfigChange(filePath, 'unlink'), 500));
     } catch (error) {
       BotUtil.makeLog('error', '启动配置文件监视失败', 'ConfigLoader', error);
     }

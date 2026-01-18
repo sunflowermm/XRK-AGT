@@ -729,36 +729,31 @@ class PluginsLoader {
   }
 
   async getPlugins() {
-    try {
-      const ret = []
-      const coreDirs = await paths.getCoreDirs()
-      
-      for (const coreDir of coreDirs) {
-        const pluginDir = path.join(coreDir, 'plugin')
-        if (!existsSync(pluginDir)) continue
-        
-        try {
-          const files = await fs.readdir(pluginDir, { withFileTypes: true })
-          for (const file of files) {
-            if (!file.isFile() || !file.name.endsWith('.js')) continue
-            const relativePath = path.relative(paths.root, path.join(pluginDir, file.name))
-            ret.push({
-              name: file.name,
-              path: `../../../${relativePath.replace(/\\/g, '/')}`,
-              core: path.basename(coreDir)
-            })
-          }
-        } catch (error) {
-          logger.error(`获取插件文件列表失败: ${pluginDir}`)
-          logger.error(error)
+    const ret = [];
+    const { FileLoader } = await import('#utils/file-loader.js');
+    const pluginDirs = await FileLoader.getCoreSubDirs('plugin');
+    
+    for (const pluginDir of pluginDirs) {
+      try {
+        const files = await FileLoader.readFiles(pluginDir, {
+          ext: '.js',
+          recursive: false,
+          ignore: ['.', '_']
+        });
+        const coreDir = path.dirname(pluginDir);
+        for (const filePath of files) {
+          const relativePath = path.relative(paths.root, filePath);
+          ret.push({
+            name: path.basename(filePath),
+            path: `../../../${relativePath.replace(/\\/g, '/')}`,
+            core: path.basename(coreDir)
+          });
         }
+      } catch (error) {
+        logger.error(`获取插件文件列表失败: ${pluginDir}`, error);
       }
-      return ret
-    } catch (error) {
-      logger.error('获取插件文件列表失败')
-      logger.error(error)
-      return []
     }
+    return ret;
   }
   /**
    * 获取插件加载统计信息
@@ -1388,61 +1383,48 @@ class PluginsLoader {
   async changePlugin(key) {
     try {
       // 查找插件文件路径
-      const coreDirs = await paths.getCoreDirs()
-      let pluginPath = null
+      const { FileLoader } = await import('#utils/file-loader.js');
+      const pluginDirs = await FileLoader.getCoreSubDirs('plugin');
+      let pluginPath = null;
       
-      for (const coreDir of coreDirs) {
-        const filePath = path.join(coreDir, 'plugin', key)
+      for (const pluginDir of pluginDirs) {
+        const filePath = path.join(pluginDir, `${key}.js`);
         if (existsSync(filePath)) {
-          pluginPath = filePath
-          break
+          pluginPath = filePath;
+          break;
         }
       }
       
       if (!pluginPath) {
-        logger.error(`插件文件未找到: ${key}`)
-        return
+        logger.error(`插件文件未找到: ${key}`);
+        return;
       }
       
-      const timestamp = moment().format('x')
-      const relativePath = path.relative(paths.root, pluginPath)
-      let app = await import(`../../../${relativePath.replace(/\\/g, '/')}?${timestamp}`)
-      app = app.apps ? { ...app.apps } : app
+      const timestamp = moment().format('x');
+      const relativePath = path.relative(paths.root, pluginPath);
+      let app = await import(`../../../${relativePath.replace(/\\/g, '/')}?${timestamp}`);
+      app = app.apps ? { ...app.apps } : app;
 
       Object.values(app).forEach(p => {
-        if (!p?.prototype) return
-
-        const plugin = new p()
-        const ruleTemplates = this.prepareRuleTemplates(plugin.rule || [])
-        this.applyRuleTemplates(plugin, ruleTemplates)
-
-        const update = (arr) => {
-          const index = arr.findIndex(item =>
-            item.key === key && item.name === plugin.name
-          )
-
-          if (index !== -1) {
-            const priority = plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50)
-
-            arr[index] = {
-              ...arr[index],
-              class: p,
-              plugin,
-              priority,
-              bypassThrottle: plugin.bypassThrottle === true,
-              taskers: this.buildAdapterSet(plugin),
-              ruleTemplates,
-              bypassRules: this.collectBypassRules(ruleTemplates)
-            }
-          }
-        }
-
-        if (plugin.priority === 'extended') {
-          update(this.extended)
-        } else {
-          update(this.priority)
-        }
-      })
+        if (!p?.prototype) return;
+        const plugin = new p();
+        const ruleTemplates = this.prepareRuleTemplates(plugin.rule || []);
+        this.applyRuleTemplates(plugin, ruleTemplates);
+        const priority = plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50);
+        const targetArray = plugin.priority === 'extended' ? this.extended : this.priority;
+        const index = targetArray.findIndex(item => item.key === key && item.name === plugin.name);
+        if (index === -1) return;
+        targetArray[index] = {
+          ...targetArray[index],
+          class: p,
+          plugin,
+          priority,
+          bypassThrottle: plugin.bypassThrottle === true,
+          taskers: this.buildAdapterSet(plugin),
+          ruleTemplates,
+          bypassRules: this.collectBypassRules(ruleTemplates)
+        };
+      });
 
       this.sortPlugins()
       this.identifyDefaultMsgHandlers()

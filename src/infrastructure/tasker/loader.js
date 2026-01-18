@@ -73,18 +73,21 @@ class TaskerLoader {
         if (!existsSync(taskerDir)) continue
         
         try {
-          const dirents = await fs.readdir(taskerDir, { withFileTypes: true })
-          for (const dirent of dirents) {
-            if (dirent.isFile() && dirent.name.endsWith('.js')) {
-              files.push({
-                name: dirent.name,
-                href: pathToFileURL(path.join(taskerDir, dirent.name)).href,
-                core: path.basename(coreDir)
-              })
-            }
+          const { FileLoader } = await import('#utils/file-loader.js');
+          const taskerFiles = await FileLoader.readFiles(taskerDir, {
+            ext: '.js',
+            recursive: false,
+            ignore: ['.', '_']
+          });
+          for (const filePath of taskerFiles) {
+            files.push({
+              name: path.basename(filePath),
+              href: pathToFileURL(filePath).href,
+              core: path.basename(coreDir)
+            });
           }
         } catch (error) {
-          BotUtil.makeLog('warn', `读取 tasker 目录失败: ${taskerDir}`, this.loggerNs)
+          BotUtil.makeLog('warn', `读取 tasker 目录失败: ${taskerDir}`, this.loggerNs);
         }
       }
       

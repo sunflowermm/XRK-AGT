@@ -1,4 +1,5 @@
-import fs from "node:fs"
+import fs from "node:fs/promises"
+import fsSync from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import yaml from "yaml"
@@ -26,12 +27,13 @@ class RendererLoader {
 
   async load() {
     const baseDir = paths.renderers
-    if (!fs.existsSync(baseDir)) {
+    if (!fsSync.existsSync(baseDir)) {
       BotUtil.makeLog('warn', `渲染器目录不存在: ${baseDir}，跳过加载`, 'RendererLoader');
       return
     }
 
-    const subFolders = fs.readdirSync(baseDir, { withFileTypes: true }).filter(d => d.isDirectory())
+    const entries = await fs.readdir(baseDir, { withFileTypes: true });
+    const subFolders = entries.filter(d => d.isDirectory());
     for (const subFolder of subFolders) {
       const name = subFolder.name
       try {
@@ -80,7 +82,7 @@ class RendererLoader {
     if (this.watcher) return
 
     const baseDir = paths.renderers
-    if (!fs.existsSync(baseDir)) return
+    if (!fsSync.existsSync(baseDir)) return
 
     try {
       this.watcher = chokidar.watch(baseDir, {
@@ -93,35 +95,30 @@ class RendererLoader {
         }
       })
 
-      this.watcher
-        .on('addDir', lodash.debounce(async (dirPath) => {
-          try {
-            const name = path.basename(dirPath)
-            await this._loadRenderer(name, baseDir)
-          } catch (error) {
-            BotUtil.makeLog('error', '处理新增渲染器失败', 'RendererLoader', error);
-          }
-        }, 500))
-        .on('change', lodash.debounce(async (filePath) => {
-          try {
-            const dirName = path.basename(path.dirname(filePath))
-            const fileName = path.basename(filePath)
-            
+      const handleRendererChange = async (filePath, eventType) => {
+        try {
+          if (eventType === 'addDir') {
+            const name = path.basename(filePath);
+            await this._loadRenderer(name, baseDir);
+          } else if (eventType === 'change') {
+            const dirName = path.basename(path.dirname(filePath));
+            const fileName = path.basename(filePath);
             if (fileName === 'index.js' || fileName === 'config.yaml') {
-              await this._loadRenderer(dirName, baseDir)
+              await this._loadRenderer(dirName, baseDir);
             }
-          } catch (error) {
-            BotUtil.makeLog('error', '处理渲染器变更失败', 'RendererLoader', error);
+          } else if (eventType === 'unlinkDir') {
+            const name = path.basename(filePath);
+            this.renderers.delete(name);
           }
-        }, 500))
-        .on('unlinkDir', lodash.debounce(async (dirPath) => {
-          try {
-            const name = path.basename(dirPath)
-            this.renderers.delete(name)
-          } catch (error) {
-            BotUtil.makeLog('error', '处理渲染器删除失败', 'RendererLoader', error);
-          }
-        }, 500))
+        } catch (error) {
+          BotUtil.makeLog('error', `处理渲染器${eventType}失败`, 'RendererLoader', error);
+        }
+      };
+
+      this.watcher
+        .on('addDir', lodash.debounce((dirPath) => handleRendererChange(dirPath, 'addDir'), 500))
+        .on('change', lodash.debounce((filePath) => handleRendererChange(filePath, 'change'), 500))
+        .on('unlinkDir', lodash.debounce((dirPath) => handleRendererChange(dirPath, 'unlinkDir'), 500))
     } catch (error) {
       BotUtil.makeLog('error', '启动渲染器文件监视失败', 'RendererLoader', error);
     }
