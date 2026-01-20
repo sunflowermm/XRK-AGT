@@ -1,0 +1,570 @@
+{
+  "apiGroups": [
+    {
+      "id": "core",
+      "title": "核心系统",
+      "apis": [
+        {
+          "id": "system-status",
+          "method": "GET",
+          "path": "/api/status",
+          "title": "系统状态",
+          "description": "获取系统运行状态、机器人信息和适配器列表"
+        },
+        {
+          "id": "system-status-detail",
+          "method": "GET",
+          "path": "/api/system/status",
+          "title": "系统状态详情",
+          "description": "获取系统状态详细信息"
+        },
+        {
+          "id": "system-overview",
+          "method": "GET",
+          "path": "/api/system/overview",
+          "title": "系统概览",
+          "description": "获取仪表盘面板、工作流与网络统计数据",
+          "queryParams": [
+            {
+              "name": "withHistory",
+              "label": "包含历史网络数据",
+              "type": "select",
+              "options": [
+                { "value": "0", "label": "否" },
+                { "value": "1", "label": "是" }
+              ],
+              "defaultValue": "1"
+            }
+          ]
+        },
+        {
+          "id": "system-config",
+          "method": "GET",
+          "path": "/api/config",
+          "title": "系统配置",
+          "description": "获取系统配置信息（需要授权）"
+        },
+        {
+          "id": "health-check",
+          "method": "GET",
+          "path": "/api/health",
+          "title": "健康检查",
+          "description": "检查系统各服务的健康状态"
+        }
+      ]
+    },
+    {
+      "id": "bot",
+      "title": "机器人管理",
+      "apis": [
+        {
+          "id": "bot-list",
+          "method": "GET",
+          "path": "/api/bots",
+          "title": "机器人列表",
+          "description": "获取所有已连接的机器人"
+        },
+        {
+          "id": "bot-friends",
+          "method": "GET",
+          "path": "/api/bot/:uin/friends",
+          "title": "好友列表",
+          "description": "获取指定机器人的好友列表",
+          "pathParams": {
+            "uin": {
+              "label": "机器人UIN",
+              "placeholder": "123456789",
+              "hint": "机器人的唯一标识"
+            }
+          }
+        },
+        {
+          "id": "bot-groups",
+          "method": "GET",
+          "path": "/api/bot/:uin/groups",
+          "title": "群组列表",
+          "description": "获取指定机器人的群组列表",
+          "pathParams": {
+            "uin": {
+              "label": "机器人UIN",
+              "placeholder": "123456789"
+            }
+          }
+        },
+        {
+          "id": "bot-control",
+          "method": "POST",
+          "path": "/api/bot/:uin/control",
+          "title": "控制机器人",
+          "description": "执行机器人控制命令",
+          "pathParams": {
+            "uin": {
+              "label": "机器人UIN",
+              "placeholder": "123456789"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "action",
+              "label": "操作类型",
+              "type": "select",
+              "required": true,
+              "options": [
+                { "value": "shutdown", "label": "关机" },
+                { "value": "startup", "label": "开机" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "message",
+      "title": "消息系统",
+      "apis": [
+        {
+          "id": "message-send",
+          "method": "POST",
+          "path": "/api/message/send",
+          "title": "发送消息",
+          "description": "向好友或群组发送消息",
+          "bodyParams": [
+            {
+              "name": "bot_id",
+              "label": "机器人ID",
+              "type": "text",
+              "placeholder": "留空使用默认机器人"
+            },
+            {
+              "name": "type",
+              "label": "消息类型",
+              "type": "select",
+              "required": true,
+              "options": [
+                { "value": "private", "label": "私聊" },
+                { "value": "group", "label": "群聊" }
+              ]
+            },
+            {
+              "name": "target_id",
+              "label": "目标ID",
+              "type": "text",
+              "required": true,
+              "placeholder": "好友QQ或群号"
+            },
+            {
+              "name": "message",
+              "label": "消息内容",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "输入消息内容",
+              "defaultValue": "你好，这是一条测试消息！"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stdin",
+      "title": "标准输入",
+      "apis": [
+        {
+          "id": "stdin-command",
+          "method": "POST",
+          "path": "/api/stdin/command",
+          "title": "发送命令",
+          "description": "通过标准输入发送命令到机器人系统",
+          "bodyParams": [
+            {
+              "name": "command",
+              "label": "命令内容",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "输入命令",
+              "defaultValue": "help"
+            },
+            {
+              "name": "user_info",
+              "label": "用户信息",
+              "type": "json",
+              "placeholder": "{\"user_id\": \"123456\"}",
+              "defaultValue": "{\n  \"user_id\": \"123456\",\n  \"nickname\": \"测试用户\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "stdin-event",
+          "method": "POST",
+          "path": "/api/stdin/event",
+          "title": "触发事件",
+          "description": "创建自定义事件触发插件响应",
+          "bodyParams": [
+            {
+              "name": "event_type",
+              "label": "事件类型",
+              "type": "text",
+              "required": true,
+              "placeholder": "message",
+              "defaultValue": "message"
+            },
+            {
+              "name": "content",
+              "label": "事件内容",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"message\": \"测试\"}",
+              "defaultValue": "{\n  \"message\": \"测试事件\",\n  \"user_id\": \"123456\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "stdin-status",
+          "method": "GET",
+          "path": "/api/stdin/status",
+          "title": "Stdin状态",
+          "description": "获取标准输入处理器的状态信息"
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "title": "AI 功能",
+      "apis": [
+        {
+          "id": "ai-stream",
+          "method": "GET",
+          "path": "/api/ai/stream",
+          "title": "AI 流式对话",
+          "description": "通过 SSE 获取 AI 流式回复",
+          "queryParams": [
+            {
+              "name": "prompt",
+              "label": "提示词",
+              "type": "text",
+              "required": true,
+              "placeholder": "你好"
+            },
+            {
+              "name": "persona",
+              "label": "人设",
+              "type": "text",
+              "placeholder": "AI 人设设置"
+            },
+            {
+              "name": "workflow",
+              "label": "工作流名称",
+              "type": "text",
+              "placeholder": "chat",
+              "defaultValue": "chat"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "config",
+      "title": "配置管理",
+      "apis": [
+        {
+          "id": "config-list",
+          "method": "GET",
+          "path": "/api/config/list",
+          "title": "配置列表",
+          "description": "获取所有配置文件列表"
+        },
+        {
+          "id": "config-read",
+          "method": "GET",
+          "path": "/api/config/:name/read",
+          "title": "读取配置",
+          "description": "读取指定配置文件的内容",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot"
+            }
+          },
+          "queryParams": [
+            {
+              "name": "path",
+              "label": "配置路径",
+              "type": "text",
+              "placeholder": "log_level"
+            }
+          ]
+        },
+        {
+          "id": "config-write",
+          "method": "POST",
+          "path": "/api/config/:name/write",
+          "title": "写入配置",
+          "description": "写入配置到指定文件",
+          "pathParams": {
+            "name": {
+              "label": "配置名称",
+              "placeholder": "bot"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "data",
+              "label": "配置数据",
+              "type": "json",
+              "required": true,
+              "placeholder": "{\"log_level\": \"info\"}"
+            },
+            {
+              "name": "backup",
+              "label": "是否备份",
+              "type": "select",
+              "options": [
+                { "value": "true", "label": "是" },
+                { "value": "false", "label": "否" }
+              ],
+              "defaultValue": "true"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "device",
+      "title": "设备管理",
+      "apis": [
+        {
+          "id": "device-register",
+          "method": "POST",
+          "path": "/api/device/register",
+          "title": "注册设备",
+          "description": "注册新的物联网设备到系统",
+          "bodyParams": [
+            {
+              "name": "device_id",
+              "label": "设备ID",
+              "type": "text",
+              "required": true,
+              "placeholder": "DEVICE_001"
+            },
+            {
+              "name": "device_type",
+              "label": "设备类型",
+              "type": "text",
+              "required": true,
+              "placeholder": "sensor"
+            },
+            {
+              "name": "device_name",
+              "label": "设备名称",
+              "type": "text",
+              "placeholder": "温度传感器"
+            },
+            {
+              "name": "capabilities",
+              "label": "设备能力",
+              "type": "json",
+              "placeholder": "[\"temperature\"]",
+              "defaultValue": "[\"temperature\", \"humidity\"]"
+            }
+          ]
+        },
+        {
+          "id": "device-list",
+          "method": "GET",
+          "path": "/api/devices",
+          "title": "设备列表",
+          "description": "获取所有注册的物联网设备"
+        },
+        {
+          "id": "device-detail",
+          "method": "GET",
+          "path": "/api/device/:deviceId",
+          "title": "设备详情",
+          "description": "获取指定设备的详细信息",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "DEVICE_001"
+            }
+          }
+        },
+        {
+          "id": "device-ai",
+          "method": "POST",
+          "path": "/api/device/:deviceId/ai",
+          "title": "设备AI回复",
+          "description": "触发设备工作流，执行AI并驱动表情/TTS",
+          "pathParams": {
+            "deviceId": {
+              "label": "设备ID",
+              "placeholder": "webclient"
+            }
+          },
+          "bodyParams": [
+            {
+              "name": "text",
+              "label": "问题/文本",
+              "type": "textarea",
+              "required": true,
+              "placeholder": "你好"
+            },
+            {
+              "name": "workflow",
+              "label": "工作流",
+              "type": "text",
+              "placeholder": "device",
+              "defaultValue": "device"
+            },
+            {
+              "name": "persona",
+              "label": "人设（可选）",
+              "type": "text",
+              "placeholder": "例如：客服助理"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "file",
+      "title": "文件管理",
+      "apis": [
+        {
+          "id": "file-upload",
+          "method": "POST",
+          "path": "/api/file/upload",
+          "title": "上传文件",
+          "description": "上传文件到服务器"
+        },
+        {
+          "id": "file-get",
+          "method": "GET",
+          "path": "/api/file/:id",
+          "title": "获取文件",
+          "description": "通过文件ID获取文件内容",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id"
+            }
+          }
+        },
+        {
+          "id": "file-delete",
+          "method": "DELETE",
+          "path": "/api/file/:id",
+          "title": "删除文件",
+          "description": "删除已上传的文件",
+          "pathParams": {
+            "id": {
+              "label": "文件ID",
+              "placeholder": "file_id"
+            }
+          }
+        },
+        {
+          "id": "file-list",
+          "method": "GET",
+          "path": "/api/files",
+          "title": "文件列表",
+          "description": "获取所有已上传的文件列表"
+        }
+      ]
+    },
+    {
+      "id": "plugin",
+      "title": "插件管理",
+      "apis": [
+        {
+          "id": "plugin-list",
+          "method": "GET",
+          "path": "/api/plugins",
+          "title": "插件列表",
+          "description": "获取所有已加载的插件信息"
+        },
+        {
+          "id": "plugin-summary",
+          "method": "GET",
+          "path": "/api/plugins/summary",
+          "title": "插件概览",
+          "description": "单次返回插件列表及统计数据"
+        },
+        {
+          "id": "plugin-reload",
+          "method": "POST",
+          "path": "/api/plugin/:key/reload",
+          "title": "重载插件",
+          "description": "重新加载指定插件",
+          "pathParams": {
+            "key": {
+              "label": "插件标识",
+              "placeholder": "example-plugin"
+            }
+          }
+        },
+        {
+          "id": "plugin-tasks",
+          "method": "GET",
+          "path": "/api/plugins/tasks",
+          "title": "定时任务",
+          "description": "获取所有插件的定时任务列表"
+        }
+      ]
+    }
+  ],
+  "examples": {
+    "bot-friends": {
+      "path_uin": "123456789"
+    },
+    "bot-groups": {
+      "path_uin": "123456789"
+    },
+    "bot-control": {
+      "path_uin": "123456789",
+      "action": "shutdown"
+    },
+    "message-send": {
+      "type": "group",
+      "target_id": "123456789",
+      "message": "你好，这是一条测试消息！"
+    },
+    "stdin-command": {
+      "command": "#帮助",
+      "user_info": "{\n  \"user_id\": \"123456\",\n  \"nickname\": \"测试用户\"\n}"
+    },
+    "device-register": {
+      "device_id": "SENSOR_001",
+      "device_type": "sensor",
+      "device_name": "温湿度传感器",
+      "capabilities": "[\"temperature\", \"humidity\"]"
+    },
+    "device-ai": {
+      "path_deviceId": "webclient",
+      "text": "你好"
+    },
+    "plugin-reload": {
+      "path_key": "genshin"
+    }
+  },
+  "quickActions": [
+    {
+      "icon": "💬",
+      "text": "AI 聊天",
+      "action": "ai-chat"
+    },
+    {
+      "icon": "⚙️",
+      "text": "配置管理",
+      "apiId": "config-manager"
+    },
+    {
+      "icon": "📡",
+      "text": "设备管理",
+      "apiId": "device-list"
+    },
+    {
+      "icon": "🧩",
+      "text": "插件管理",
+      "apiId": "plugin-list"
+    }
+  ]
+}

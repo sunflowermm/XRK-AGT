@@ -70,5 +70,4 @@ commonconfig/**
 *.psd
 *.map
 
-!www
-www/**
+!www/
