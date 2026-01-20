@@ -104,7 +104,7 @@ class Cfg {
       for (const file of defaultFiles) {
         const configName = path.basename(file, '.yaml');
         if (this.SERVER_CONFIGS.includes(configName) || 
-            configName.startsWith('god_') || 
+            configName.startsWith('gptgod_') ||
             configName.includes('volcengine_') || 
             configName.includes('xiaomimimo_')) {
         const targetPath = path.join(serverConfigDir, file);
@@ -254,12 +254,12 @@ class Cfg {
   // 工厂配置 getters
   // ========================================
   
-  get god() {
-    return this.getServerConfig('god');
+  get gptgod_llm() {
+    return this.getServerConfig('gptgod_llm');
   }
 
-  get god_vision() {
-    return this.getServerConfig('god_vision');
+  get gptgod_vision() {
+    return this.getServerConfig('gptgod_vision');
   }
   
   get volcengine_llm() {

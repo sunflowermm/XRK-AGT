@@ -3,21 +3,21 @@ import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 /**
  * GPTGod LLM 工厂配置管理（文本）
  * 仅管理 GPTGod 大语言模型（聊天）相关配置
- * 识图配置已经拆分到单独的 god_vision.yaml / god_vision.js
- * 支持前端编辑，配置文件位于 data/server_bots/{port}/god.yaml
+ * 识图配置已经拆分到单独的 gptgod_vision.yaml / gptgod_vision.js
+ * 支持前端编辑，配置文件位于 data/server_bots/{port}/gptgod_llm.yaml
  */
-export default class GodConfig extends ConfigBase {
+export default class GPTGodLLMConfig extends ConfigBase {
   constructor() {
     super({
-      name: 'god',
+      name: 'gptgod_llm',
       displayName: 'GPTGod LLM 工厂配置（文本）',
       description: 'GPTGod 大语言模型文本聊天配置，包括 API 参数和聊天模型选择',
       filePath: (cfg) => {
         const port = cfg?._port ?? cfg?.server?.server?.port;
         if (!port) {
-          throw new Error(`GodConfig: 未提供端口，无法解析路径`);
+          throw new Error(`GPTGodLLMConfig: 未提供端口，无法解析路径`);
         }
-        return `data/server_bots/${port}/god.yaml`;
+        return `data/server_bots/${port}/gptgod_llm.yaml`;
       },
       fileType: 'yaml',
       schema: {
@@ -45,7 +45,7 @@ export default class GodConfig extends ConfigBase {
             default: 'gemini-exp-1114',
             component: 'Input'
           },
-          
+
           // API 参数配置
           temperature: {
             type: 'number',
@@ -99,7 +99,7 @@ export default class GodConfig extends ConfigBase {
             default: 30000,
             component: 'InputNumber'
           },
-          
+
           // 接口路径配置
           path: {
             type: 'string',

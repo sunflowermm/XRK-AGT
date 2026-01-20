@@ -93,7 +93,7 @@ cache:
   maxSize: 100            # 最大缓存条数
 
 # LLM 工厂运营商选择（gptgod / volcengine / xiaomimimo）
-# 文本 LLM 配置分别位于 data/server_bots/{port}/god.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml（工厂配置，不随端口变化）
+# 文本 LLM 配置分别位于 data/server_bots/{port}/gptgod_llm.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml（工厂配置，不随端口变化）
 llm:
   Provider: gptgod        # LLM 提供商
   timeout: 360000         # LLM请求超时时间（毫秒），默认360000（6分钟）
@@ -104,7 +104,7 @@ llm:
     retryOn: ["timeout", "network", "5xx"]  # 重试条件
 
 # 识图工厂运营商选择（gptgod / volcengine）
-# 一个工厂一个配置文件：god_vision.yaml、volcengine_vision.yaml
+# 一个工厂一个配置文件：gptgod_vision.yaml、volcengine_vision.yaml
 vision:
   Provider: gptgod
 
@@ -189,7 +189,7 @@ LLM 配置通过 `llm.Provider` 指定，支持动态扩展的提供商系统：
 
 **现有提供商示例**：
 - **gptgod**：GPTGod 提供商（默认）
-  - 配置文件：`data/server_bots/god.yaml`
+  - 配置文件：`data/server_bots/gptgod_llm.yaml`
   - 支持标准 OpenAI Chat Completions 协议
   
 - **volcengine**：火山引擎豆包大模型

@@ -1921,7 +1921,7 @@ export default class SystemConfig extends ConfigBase {
             llm: {
               type: 'object',
               label: 'LLM工厂运营商选择',
-              description: '详细配置位于 data/server_bots/{port}/god.yaml / volcengine_llm.yaml / xiaomimimo_llm.yaml',
+              description: '详细配置位于 data/server_bots/{port}/gptgod_llm.yaml / volcengine_llm.yaml / xiaomimimo_llm.yaml',
               component: 'SubForm',
               fields: {
                 Provider: {
@@ -1981,7 +1981,7 @@ export default class SystemConfig extends ConfigBase {
             vision: {
               type: 'object',
               label: '识图工厂运营商选择',
-              description: '配置文件：god_vision.yaml / volcengine_vision.yaml。工作流不直接调用识图工厂，而是由 LLM 在检测到图片时调用。',
+              description: '配置文件：gptgod_vision.yaml / volcengine_vision.yaml。工作流不直接调用识图工厂，而是由 LLM 在检测到图片时调用。',
               component: 'SubForm',
               fields: {
                 Provider: {

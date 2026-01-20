@@ -153,7 +153,7 @@ flowchart LR
 - 构建符合运营商 API 格式的消息并调用 LLM API
 
 **识图工厂职责**：
-- 读取各自识图工厂配置（`god_vision.yaml`、`volcengine_vision.yaml` 等）
+- 读取各自识图工厂配置（`gptgod_vision.yaml`、`volcengine_vision.yaml` 等）
 - 针对不同运营商执行下载/上传/vision 模型调用，输出纯文本描述
 - 对上只暴露统一接口（如 `recognizeImages`），不与工作流直接耦合
 
@@ -364,12 +364,12 @@ llm:
 vision:
   Provider: gptgod
 
-# 文本 LLM 工厂配置（举例：data/server_bots/god.yaml，全局配置，不随端口变化）
+# 文本 LLM 工厂配置（举例：data/server_bots/gptgod_llm.yaml，全局配置，不随端口变化）
 baseUrl: https://api.gptgod.online/v1
 apiKey: "..."
 chatModel: gemini-exp-1114
 
-# 识图工厂配置（举例：data/server_bots/god_vision.yaml，全局配置，不随端口变化）
+# 识图工厂配置（举例：data/server_bots/gptgod_vision.yaml，全局配置，不随端口变化）
 baseUrl: https://api.gptgod.online/v1
 apiKey: "..."
 fileUploadUrl: https://api.gptgod.online/v1/files

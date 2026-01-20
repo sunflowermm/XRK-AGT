@@ -6,20 +6,20 @@ import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
  * - 文件上传地址
  * - 识图模型（visionModel）
  * - Vision 接口的参数与超时
- * 配置文件位于 data/server_bots/{port}/god_vision.yaml
+ * 配置文件位于 data/server_bots/{port}/gptgod_vision.yaml
  */
-export default class GodVisionConfig extends ConfigBase {
+export default class GPTGodVisionConfig extends ConfigBase {
   constructor() {
     super({
-      name: 'god_vision',
+      name: 'gptgod_vision',
       displayName: 'GPTGod 识图工厂配置',
       description: 'GPTGod 识图能力配置，包括文件上传与 vision 模型等参数',
       filePath: (cfg) => {
         const port = cfg?._port ?? cfg?.server?.server?.port;
         if (!port) {
-          throw new Error(`GodVisionConfig: 未提供端口，无法解析路径`);
+          throw new Error(`GPTGodVisionConfig: 未提供端口，无法解析路径`);
         }
-        return `data/server_bots/${port}/god_vision.yaml`;
+        return `data/server_bots/${port}/gptgod_vision.yaml`;
       },
       fileType: 'yaml',
       schema: {
@@ -123,5 +123,4 @@ export default class GodVisionConfig extends ConfigBase {
     });
   }
 }
-
 
