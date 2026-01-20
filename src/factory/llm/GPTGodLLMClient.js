@@ -155,7 +155,10 @@ export default class GPTGodLLMClient {
    * @returns {Promise<string>} 完整的 AI 回复文本
    */
   async chatStream(messages, onChunk, overrides = {}) {
-    const body = this.buildBody(messages, { ...overrides, stream: true });
+    // 转换messages，处理图片识图（经由 VisionFactory）
+    const transformedMessages = await this.transformMessages(messages);
+    
+    const body = this.buildBody(transformedMessages, { ...overrides, stream: true });
     const headers = this.buildHeaders();
 
     const resp = await fetch(this.endpoint, {

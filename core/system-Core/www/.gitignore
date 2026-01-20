@@ -4,4 +4,3 @@ xrk/**
 !xrk/api-config.json
 !xrk/styles.css
 !xrk/app.js
-!xrk/img/bg.png

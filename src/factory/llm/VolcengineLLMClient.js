@@ -151,7 +151,7 @@ export default class VolcengineLLMClient {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
       body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides })),
-      signal: this.config.timeout ? AbortSignal.timeout(this.config.timeout) : undefined
+      signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
     });
 
     if (!response.ok) {
@@ -169,11 +169,14 @@ export default class VolcengineLLMClient {
    * 流式调用
    */
   async chatStream(messages, onDelta, overrides = {}) {
+    // 转换messages，处理图片（经由 VisionFactory 抽离识图能力）
+    const transformedMessages = await this.transformMessages(messages);
+
     const response = await fetch(this.endpoint, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(this.buildBody(messages, { ...overrides, stream: true })),
-      signal: this.config.timeout ? AbortSignal.timeout(this.config.timeout) : undefined
+      body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
+      signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
     });
 
     if (!response.ok || !response.body) {

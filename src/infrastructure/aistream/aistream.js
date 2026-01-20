@@ -1294,23 +1294,15 @@ export default class AIStream {
    * @returns {Object}
    */
   resolveLLMConfig(apiConfig = {}) {
-    const merged = { ...this.config, ...apiConfig };
     const runtime = cfg.aistream || {};
     const llm = runtime.llm || {};
     const vision = runtime.vision || {};
     const global = runtime.global || {};
 
     // 获取提供商名称（支持从多个来源获取）
-    const provider = (merged.provider || llm.provider || llm.Provider || '').toLowerCase();
-    const visionProvider = (merged.visionProvider || vision.provider || vision.Provider || provider).toLowerCase();
+    const provider = (apiConfig.provider || this.config.provider || llm.provider || llm.Provider || '').toLowerCase();
+    const visionProvider = (apiConfig.visionProvider || this.config.visionProvider || vision.provider || vision.Provider || provider).toLowerCase();
     
-    // 解析超时配置（支持多级回退）
-    const timeout = merged.timeout || 
-                    (llm.timeout && typeof llm.timeout === 'number' ? llm.timeout : null) ||
-                    (global.maxTimeout && typeof global.maxTimeout === 'number' ? global.maxTimeout : null) ||
-                    (this.config && this.config.timeout && typeof this.config.timeout === 'number' ? this.config.timeout : null) ||
-                    360000;
-
     // 动态获取提供商配置（从配置系统）
     const providerConfig = this.getProviderConfig(provider, llm);
     const visionConfig = this.getProviderConfig(visionProvider, vision, true);
@@ -1321,9 +1313,23 @@ export default class AIStream {
       throw new Error(`不支持的LLM提供商: ${provider}`);
     }
 
+    // 解析超时配置（支持多级回退）
+    const timeout = apiConfig.timeout || 
+                    this.config.timeout ||
+                    (llm.timeout && typeof llm.timeout === 'number' ? llm.timeout : null) ||
+                    (global.maxTimeout && typeof global.maxTimeout === 'number' ? global.maxTimeout : null) ||
+                    360000;
+
+    // 合并配置：优先使用providerConfig中的apiKey，避免被空值覆盖
     const finalConfig = {
       ...providerConfig,
-      ...merged,
+      ...this.config,
+      ...apiConfig,
+      // 确保apiKey不被空值或空字符串覆盖
+      apiKey: (apiConfig.apiKey && apiConfig.apiKey.trim()) || 
+              (providerConfig.apiKey && providerConfig.apiKey.trim()) || 
+              (this.config.apiKey && this.config.apiKey.trim()) || 
+              undefined,
       provider,
       visionProvider,
       visionConfig,
@@ -1343,14 +1349,6 @@ export default class AIStream {
   getProviderConfig(provider, runtimeConfig = {}, isVision = false) {
     if (!provider) return {};
 
-    // 优先从运行时配置获取
-    if (runtimeConfig.config && typeof runtimeConfig.config === 'object') {
-      const providerSpecificConfig = runtimeConfig.config[provider];
-      if (providerSpecificConfig && typeof providerSpecificConfig === 'object') {
-        return providerSpecificConfig;
-      }
-    }
-
     // 从全局配置获取（支持命名约定：{provider}_llm 或 {provider}_vision）
     const configKey = isVision 
       ? `${provider}_vision` 
@@ -1360,9 +1358,12 @@ export default class AIStream {
       return cfg[configKey];
     }
 
-    // 尝试直接使用提供商名称作为配置键
-    if (cfg[provider] && typeof cfg[provider] === 'object') {
-      return cfg[provider];
+    // 优先从运行时配置获取
+    if (runtimeConfig.config && typeof runtimeConfig.config === 'object') {
+      const providerSpecificConfig = runtimeConfig.config[provider];
+      if (providerSpecificConfig && typeof providerSpecificConfig === 'object') {
+        return providerSpecificConfig;
+      }
     }
 
     return {};
