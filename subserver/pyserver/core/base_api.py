@@ -29,17 +29,11 @@ class BaseAPI:
         self.priority = priority
         self.enabled = enabled
         self.routes: List[Dict[str, Any]] = []
-        self.middleware: List[Callable] = []
         self._registered = False
     
     def register_routes(self, app: FastAPI):
         """注册路由到 FastAPI 应用，子类应重写此方法"""
         logger.warning(f"[BaseAPI] {self.name} 未实现 register_routes 方法")
-    
-    def register_middleware(self, app: FastAPI):
-        """注册中间件到 FastAPI 应用"""
-        for middleware in self.middleware:
-            app.middleware("http")(middleware)
     
     async def init(self, app: FastAPI):
         """初始化钩子，子类可重写此方法实现自定义初始化逻辑"""
@@ -52,8 +46,6 @@ class BaseAPI:
             return
         
         try:
-            if self.middleware:
-                self.register_middleware(app)
             self.register_routes(app)
             await self.init(app)
             self._registered = True
@@ -85,7 +77,6 @@ def create_api_from_dict(data: Dict[str, Any]) -> BaseAPI:
                 enabled=data.get("enabled", True)
             )
             self._data = data
-            self.middleware = data.get("middleware", [])
         
         def register_routes(self, app: FastAPI):
             """从字典配置注册路由"""

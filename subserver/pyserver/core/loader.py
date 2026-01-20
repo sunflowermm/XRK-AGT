@@ -1,4 +1,4 @@
-"""API 加载器，自动加载 apis 目录下的所有 API 模块"""
+"""API 加载器，自动加载 apis 目录下的所有 API 组"""
 import importlib
 import importlib.util
 import inspect
@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI
 import logging
-from functools import lru_cache
 
 from .base_api import BaseAPI, create_api_from_dict
 
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class ApiLoader:
-    """API 加载器（单例模式）"""
+    """API 加载器（单例模式），支持多组结构"""
     
     _instance: Optional['ApiLoader'] = None
     _apis: List[BaseAPI] = []
@@ -27,18 +26,12 @@ class ApiLoader:
             cls._instance._loaded = False
         return cls._instance
     
-    @staticmethod
-    @lru_cache(maxsize=1)
-    def _get_apis_dir() -> Path:
-        """获取 apis 目录（缓存）"""
-        apis_dir = Path(__file__).parent.parent / "apis"
-        apis_dir.mkdir(exist_ok=True)
-        return apis_dir
-    
     @property
     def apis_dir(self) -> Path:
         """获取 apis 目录"""
-        return self._get_apis_dir()
+        apis_dir = Path(__file__).parent.parent / "apis"
+        apis_dir.mkdir(exist_ok=True)
+        return apis_dir
     
     @classmethod
     async def load_all(cls, app: FastAPI):
@@ -52,31 +45,52 @@ class ApiLoader:
         cls._loaded = True
     
     async def _load_apis(self, app: FastAPI):
-        """加载所有 API 模块"""
+        """加载所有 API 组"""
         logger.info(f"📂 扫描 API 目录: {self.apis_dir}")
         
-        api_files = [f for f in self.apis_dir.glob("*.py") if not f.name.startswith("_")]
+        # 获取所有子目录（API组，排除以_开头的目录）
+        api_groups = [
+            d for d in self.apis_dir.iterdir()
+            if d.is_dir() and not d.name.startswith("_")
+        ]
         
-        if not api_files:
-            logger.warning("未找到 API 文件")
+        if not api_groups:
+            logger.warning("未找到 API 组目录")
             return
         
-        logger.info(f"发现 {len(api_files)} 个 API 文件")
+        logger.info(f"发现 {len(api_groups)} 个 API 组")
         
         loaded_count = 0
-        for api_file in api_files:
-            try:
-                await self._load_api_file(api_file, app)
-                loaded_count += 1
-            except Exception as e:
-                logger.error(f"加载 API 文件失败: {api_file.name} - {e}", exc_info=True)
+        failed_count = 0
+        
+        for group_dir in api_groups:
+            group_name = group_dir.name
+            logger.debug(f"加载 API 组: {group_name}")
+            
+            # 获取组内所有 Python 文件（排除以_开头的文件和__pycache__）
+            api_files = [
+                f for f in group_dir.glob("*.py")
+                if not f.name.startswith("_")
+            ]
+            
+            if not api_files:
+                logger.debug(f"  API 组 {group_name} 无文件，跳过")
+                continue
+            
+            for api_file in api_files:
+                try:
+                    await self._load_api_file(api_file, group_name, app)
+                    loaded_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"加载 API 文件失败: {group_name}/{api_file.name} - {e}", exc_info=True)
         
         self._apis.sort(key=lambda x: x.priority, reverse=True)
-        logger.info(f"✅ 共加载 {loaded_count}/{len(api_files)} 个 API")
+        logger.info(f"✅ 共加载 {loaded_count} 个 API，失败 {failed_count} 个")
     
-    async def _load_api_file(self, api_file: Path, app: FastAPI):
+    async def _load_api_file(self, api_file: Path, group_name: str, app: FastAPI):
         """加载单个 API 文件"""
-        module_name = f"apis.{api_file.stem}"
+        module_name = f"apis.{group_name}.{api_file.stem}"
         
         spec = importlib.util.spec_from_file_location(module_name, api_file)
         if spec is None or spec.loader is None:
@@ -98,7 +112,7 @@ class ApiLoader:
         
         await api.startup(app)
         self._apis.append(api)
-        logger.debug(f"✅ 加载 API: {api.name} (优先级: {api.priority})")
+        logger.debug(f"✅ 加载 API: {api.name} (组: {group_name}, 优先级: {api.priority})")
     
     @classmethod
     def get_api_list(cls) -> List[Dict[str, Any]]:

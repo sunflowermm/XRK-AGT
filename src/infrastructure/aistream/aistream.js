@@ -1,116 +1,30 @@
-import fetch from 'node-fetch';
-import path from 'path';
-import fs from 'fs';
 import BotUtil from '#utils/botutil.js';
-import paths from '#utils/paths.js';
 import cfg from '#infrastructure/config/config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
-/**
- * 轻量级文本相似度计算器（BM25算法）
- */
-class LightweightSimilarity {
-  constructor() {
-    this.idf = new Map();
-    this.avgDocLength = 0;
-    this.k1 = 1.5;
-    this.b = 0.75;
-  }
+import MemoryManager from '#infrastructure/aistream/memory-manager.js';
+import ToolRegistry from '#infrastructure/aistream/tool-registry.js';
+import PromptEngine from '#infrastructure/aistream/prompt-engine.js';
+import MonitorService from '#infrastructure/aistream/monitor-service.js';
 
-  tokenize(text) {
-    const chars = text.split('');
-    const bigrams = [];
-    for (let i = 0; i < chars.length - 1; i++) {
-      bigrams.push(chars[i] + chars[i + 1]);
-    }
-    return [...chars, ...bigrams];
-  }
-
-  calculateIDF(documents) {
-    const docCount = documents.length;
-    const termDocCount = new Map();
-
-    for (const doc of documents) {
-      const tokens = new Set(this.tokenize(doc));
-      for (const token of tokens) {
-        termDocCount.set(token, (termDocCount.get(token) || 0) + 1);
-      }
-    }
-
-    for (const [term, count] of termDocCount) {
-      this.idf.set(term, Math.log((docCount - count + 0.5) / (count + 0.5) + 1));
-    }
-
-    this.avgDocLength = documents.reduce((sum, doc) =>
-      sum + this.tokenize(doc).length, 0) / docCount;
-  }
-
-  score(query, document) {
-    const queryTokens = this.tokenize(query);
-    const docTokens = this.tokenize(document);
-    const docLength = docTokens.length;
-
-    const termFreq = new Map();
-    for (const token of docTokens) {
-      termFreq.set(token, (termFreq.get(token) || 0) + 1);
-    }
-
-    let score = 0;
-    for (const token of queryTokens) {
-      const tf = termFreq.get(token) || 0;
-      const idf = this.idf.get(token) || 0;
-      const numerator = tf * (this.k1 + 1);
-      const denominator = tf + this.k1 * (1 - this.b + this.b * (docLength / this.avgDocLength));
-      score += idf * (numerator / denominator);
-    }
-
-    return score;
-  }
-}
-
-/**
- * AI工作流基类
- * 
- * 提供AI对话、函数调用、Embedding等核心功能的统一接口。
- * 支持本地（BM25）和远程（API）两种Embedding模式。
- * 包含上下文增强、相似度计算、函数注册等功能。
- * 
- * @abstract
- * @class AIStream
- * @example
- * // 继承AIStream创建自定义工作流
- * class MyStream extends AIStream {
- *   constructor() {
- *     super({
- *       name: 'my-stream',
- *       description: '我的工作流',
- *       version: '1.0.0',
- *       priority: 100,
- *       config: {
- *         temperature: 0.7,
- *         maxTokens: 4000
- *       },
- *       embedding: {
- *         enabled: true
- *         // mode 自动从 cfg.aistream.embedding.mode 读取（local 或 remote）
- *       }
- *     });
- *   }
- *   
- *   async buildSystemPrompt(context) {
- *     return '你是一个智能助手...';
- *   }
- * }
- */
 export default class AIStream {
+  /**
+   * 构造函数
+   * @param {Object} options - 选项
+   * @param {string} options.name - 工作流名称
+   * @param {string} options.description - 描述
+   * @param {string} options.version - 版本
+   * @param {string} options.author - 作者
+   * @param {number} options.priority - 优先级
+   * @param {Object} options.config - 配置
+   * @param {Object} options.embedding - Embedding配置
+   */
   constructor(options = {}) {
-    // 基础信息
     this.name = options.name || 'base-stream';
     this.description = options.description || '基础工作流';
     this.version = options.version || '1.0.0';
     this.author = options.author || 'unknown';
     this.priority = options.priority || 100;
 
-    // AI配置
     this.config = {
       enabled: true,
       temperature: 0.8,
@@ -121,19 +35,19 @@ export default class AIStream {
       ...options.config
     };
 
-    // 功能开关
     this.functionToggles = options.functionToggles || {};
 
-    // Embedding配置（从 cfg 自动读取，无需手动指定）
-    this.embeddingConfig = this.buildEmbeddingConfig(options.embedding);
+    this.embeddingConfig = {
+      enabled: options.embedding?.enabled ?? true,
+      maxContexts: options.embedding?.maxContexts || 5
+    };
 
-    // 初始化状态
     this._initialized = false;
-    this._embeddingInitialized = false;
   }
 
   /**
-   * 初始化工作流（只执行一次）
+   * 初始化工作流
+   * @returns {Promise<void>}
    */
   async init() {
     if (this._initialized) {
@@ -144,175 +58,58 @@ export default class AIStream {
       this.functions = new Map();
     }
 
-    if (this.embeddingModel === undefined) {
-      this.embeddingModel = null;
-      this.embeddingReady = false;
-      this.similarityCalculator = null;
+    if (!this.mcpTools) {
+      this.mcpTools = new Map();
     }
 
     this._initialized = true;
   }
 
   /**
-   * 初始化Embedding（带防重复保护）
+   * 初始化Embedding（子类可重写）
+   * @returns {Promise<void>}
    */
   async initEmbedding() {
-    if (!this.embeddingConfig.enabled) {
-      return;
-    }
-
-    if (this._embeddingInitialized && this.embeddingReady) {
-      return;
-    }
-
-    const mode = this.embeddingConfig.mode || 'local';
-
-    try {
-      await this.tryInitProvider(mode);
-      this.embeddingReady = true;
-      this._embeddingInitialized = true;
-    } catch (e) {
-      BotUtil.makeLog('warn', `[${this.name}] Embedding初始化失败，回退到本地模式: ${e.message}`, 'AIStream');
-      // 失败时回退到本地模式
-      try {
-        await this.initLightweightEmbedding();
-        this.embeddingConfig.mode = 'local';
-        this.embeddingReady = true;
-        this._embeddingInitialized = true;
-      } catch (fallbackError) {
-      this.embeddingConfig.enabled = false;
-      this.embeddingReady = false;
-      throw new Error('Embedding初始化失败');
-      }
-    }
+    return;
   }
 
   /**
-   * 尝试初始化指定提供商
-   */
-  async tryInitProvider(mode) {
-    switch (mode) {
-      case 'local':
-        await this.initLightweightEmbedding();
-        break;
-      case 'remote':
-        await this.initRemoteEmbedding();
-        break;
-      default:
-        // 默认使用本地模式
-        await this.initLightweightEmbedding();
-    }
-  }
-
-  /**
-   * Embedding 初始化（仅支持本地和远程两种模式）
-   */
-  async initLightweightEmbedding() {
-    this.similarityCalculator = new LightweightSimilarity();
-  }
-
-  async initRemoteEmbedding() {
-    const config = this.embeddingConfig;
-
-    if (!config.apiUrl || !config.apiKey) {
-      throw new Error('远程模式需要配置 apiUrl 和 apiKey');
-    }
-
-    await this.testAPIConnection();
-  }
-
-  /**
-   * 测试远程 API 连接
-   */
-  async testAPIConnection() {
-    const testVector = await this.generateRemoteEmbedding('test');
-    if (!testVector || !Array.isArray(testVector) || testVector.length === 0) {
-      throw new Error('API返回无效向量');
-    }
-  }
-
-  /**
-   * 生成Embedding向量
+   * 生成文本向量嵌入
+   * @param {string} text - 待向量化的文本
+   * @returns {Promise<Array<number>|null>} 向量数组或null
    */
   async generateEmbedding(text) {
-    if (!this.embeddingConfig.enabled || !text) {
-      return null;
-    }
-
-    if (!this.embeddingReady) {
-      return null;
-    }
-
+    if (!text) return null;
     try {
-      const mode = this.embeddingConfig.mode || 'local';
-      if (mode === 'local') {
-        // 本地模式返回文本本身（用于 BM25 算法）
-        return text;
-      } else if (mode === 'remote') {
-        // 远程模式调用 API
-        return await this.generateRemoteEmbedding(text);
-      }
-      return null;
+      const result = await Bot.callSubserver('/api/vector/embed', { body: { texts: [text] } });
+      return result.embeddings?.[0]?.embedding || null;
     } catch (error) {
-      BotUtil.makeLog('debug',
-        `[${this.name}] 生成Embedding失败: ${error.message}`,
-        'AIStream'
-      );
+      BotUtil.makeLog('debug', `[${this.name}] 生成Embedding失败: ${error.message}`, 'AIStream');
       return null;
     }
-  }
-
-  async generateRemoteEmbedding(text) {
-    const config = this.embeddingConfig;
-    if (!config.apiUrl || !config.apiKey) {
-      throw new Error('远程模式需要配置 apiUrl 和 apiKey');
-    }
-
-    const response = await fetch(config.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: config.apiModel || 'text-embedding-3-small',
-        input: text,
-        encoding_format: 'float'
-      }),
-      timeout: 10000
-    });
-
-    if (!response.ok) {
-      throw new Error(`API错误 ${response.status}`);
-    }
-
-    const result = await response.json();
-    const embedding = result.data?.[0]?.embedding;
-    if (!embedding || !Array.isArray(embedding)) {
-      throw new Error('API返回无效数据');
-    }
-
-    return embedding;
   }
 
   /**
-   * Token 计数（简单估算：中文按字符，英文按单词）
+   * 估算文本token数量
+   * @param {string} text - 待估算的文本
+   * @returns {number} token数量
    */
   estimateTokens(text) {
     if (!text || typeof text !== 'string') return 0;
-    // 简单估算：中文字符按1.5 token，英文单词按1.3 token
     const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
     const englishWords = (text.match(/[a-zA-Z]+/g) || []).length;
     return Math.ceil(chineseChars * 1.5 + englishWords * 1.3 + text.length * 0.3);
   }
 
   /**
-   * 压缩文本（智能截断，保留关键信息）
+   * 压缩文本到指定长度
+   * @param {string} text - 待压缩的文本
+   * @param {number} maxLength - 最大长度
+   * @returns {string} 压缩后的文本
    */
   compressText(text, maxLength = 150) {
     if (!text || text.length <= maxLength) return text;
     
-    // 尝试在句号、问号、感叹号处截断
     const sentences = text.split(/[。！？.!?]/);
     let compressed = '';
     for (const sentence of sentences) {
@@ -320,7 +117,6 @@ export default class AIStream {
       compressed += sentence;
     }
     
-    // 如果还是太长，直接截断
     if (compressed.length === 0 || compressed.length > maxLength) {
       compressed = text.substring(0, maxLength - 3) + '...';
     }
@@ -329,185 +125,59 @@ export default class AIStream {
   }
 
   /**
-   * 去重上下文（保留向后兼容，内部调用改进版本）
+   * 计算两个向量的余弦相似度
+   * @param {Array<number>} vecA - 向量A
+   * @param {Array<number>} vecB - 向量B
+   * @returns {number} 相似度值 (0-1)
    */
-  deduplicateContexts(contexts, similarityThreshold = 0.9) {
-    return this.deduplicateContextsAdvanced(contexts, similarityThreshold);
-  }
-
-  /**
-   * 基于注意力机制的上下文优化（神经网络启发式算法）
-   */
-  async optimizeContextsWithAttention(contexts, query, maxTokens = 1500) {
-    if (!contexts || contexts.length === 0) return contexts;
-    
-    // 1. 去重（使用改进的相似度算法）
-    let optimized = this.deduplicateContextsAdvanced(contexts);
-    
-    // 2. 计算注意力分数
-    const queryTokens = query.toLowerCase().split(/[\s，。！？,.!?]/).filter(Boolean);
-    optimized = optimized.map(ctx => {
-      const text = ctx.message || ctx.content || '';
-      const attentionScore = this.calculateContextAttention(text, queryTokens, ctx.similarity || 0);
-      return { ...ctx, attentionScore };
-    });
-    
-    // 3. 按注意力分数排序
-    optimized.sort((a, b) => (b.attentionScore || 0) - (a.attentionScore || 0));
-    
-    // 4. 使用贪心算法选择最优上下文组合
-    const selected = this.selectOptimalContexts(optimized, maxTokens);
-    
-    return selected;
-  }
-
-  /**
-   * 计算上下文的注意力分数
-   */
-  calculateContextAttention(text, queryTokens, baseSimilarity) {
-    if (!text || !queryTokens || queryTokens.length === 0) return baseSimilarity;
-    
-    const textTokens = text.toLowerCase().split(/[\s，。！？,.!?]/).filter(Boolean);
-    const textTokenSet = new Set(textTokens);
-    
-    // 1. 关键词匹配分数
-    const matchedTokens = queryTokens.filter(t => textTokenSet.has(t));
-    const keywordScore = matchedTokens.length / queryTokens.length;
-    
-    // 2. 位置权重（查询词在文本中的位置越靠前，权重越高）
-    let positionScore = 0;
-    if (matchedTokens.length > 0) {
-      const firstMatchIndex = textTokens.findIndex(t => matchedTokens.includes(t));
-      positionScore = firstMatchIndex >= 0 ? Math.exp(-firstMatchIndex / 10) : 0;
+  cosineSimilarity(vecA, vecB) {
+    if (!Array.isArray(vecA) || !Array.isArray(vecB) || vecA.length !== vecB.length) {
+      return 0;
     }
-    
-    // 3. 综合注意力分数（结合基础相似度、关键词匹配、位置权重）
-    const attentionScore = baseSimilarity * 0.5 + keywordScore * 0.3 + positionScore * 0.2;
-    
-    return attentionScore;
-  }
-
-  /**
-   * 选择最优上下文组合（0/1 背包问题的贪心近似解）
-   */
-  selectOptimalContexts(contexts, maxTokens) {
-    const selected = [];
-    let currentTokens = 0;
-    
-    for (const ctx of contexts) {
-      const text = ctx.message || ctx.content || '';
-      const tokens = this.estimateTokens(text);
-      
-      if (currentTokens + tokens <= maxTokens) {
-        selected.push(ctx);
-        currentTokens += tokens;
-      } else {
-        // 尝试压缩后加入
-        const remainingTokens = maxTokens - currentTokens;
-        if (remainingTokens > 50) {
-          const compressedText = this.compressText(text, Math.floor(remainingTokens * 2));
-          if (compressedText.length > 0) {
-            selected.push({ ...ctx, message: compressedText, compressed: true });
-            break;
-          }
-        }
-      }
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < vecA.length; i++) {
+      dotProduct += vecA[i] * vecB[i];
+      normA += vecA[i] * vecA[i];
+      normB += vecB[i] * vecB[i];
     }
-    
-    return selected;
+    const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+    return denominator === 0 ? 0 : dotProduct / denominator;
   }
 
   /**
-   * 改进的去重算法（使用 Jaccard 相似度）
+   * 去重上下文列表
+   * @param {Array<Object>} contexts - 上下文列表
+   * @returns {Array<Object>} 去重后的上下文列表
    */
-  deduplicateContextsAdvanced(contexts, similarityThreshold = 0.85) {
+  deduplicateContexts(contexts) {
     if (!contexts || contexts.length <= 1) return contexts;
-    
-    const unique = [];
-    for (const ctx of contexts) {
-      let isDuplicate = false;
-      const content1 = (ctx.message || ctx.content || '').toLowerCase();
-      const tokens1 = new Set(content1.split(/[\s，。！？,.!?]/).filter(Boolean));
-      
-      for (const existing of unique) {
-        const content2 = (existing.message || existing.content || '').toLowerCase();
-        const tokens2 = new Set(content2.split(/[\s，。！？,.!?]/).filter(Boolean));
-        
-        // 使用 Jaccard 相似度
-        const intersection = new Set([...tokens1].filter(t => tokens2.has(t)));
-        const union = new Set([...tokens1, ...tokens2]);
-        const jaccard = union.size > 0 ? intersection.size / union.size : 0;
-        
-        if (jaccard > similarityThreshold) {
-          isDuplicate = true;
-          // 保留相似度更高的
-          if ((ctx.similarity || 0) > (existing.similarity || 0)) {
-            const index = unique.indexOf(existing);
-            unique[index] = ctx;
-          }
-          break;
-        }
-      }
-      
-      if (!isDuplicate) {
-        unique.push(ctx);
-      }
-    }
-    
-    return unique;
+    const seen = new Set();
+    return contexts.filter(ctx => {
+      const text = (ctx.message || ctx.content || '').toLowerCase();
+      if (seen.has(text)) return false;
+      seen.add(text);
+      return true;
+    });
   }
 
   /**
-   * 计算自适应阈值（基于分数分布的统计方法）
-   */
-  /**
-   * 计算自适应阈值（基于分数分布的统计方法 + 分位数方法）
-   */
-  calculateAdaptiveThreshold(scores, baseThreshold) {
-    if (!scores || scores.length === 0) return baseThreshold;
-    
-    // 过滤无效分数
-    const validScores = scores
-      .map(s => s && typeof s.similarity === 'number' && isFinite(s.similarity) ? s.similarity : null)
-      .filter(s => s !== null);
-    
-    if (validScores.length === 0) return baseThreshold;
-    
-    // 方法1：基于均值和标准差
-    const mean = validScores.reduce((a, b) => a + b, 0) / validScores.length;
-    const variance = validScores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / validScores.length;
-    const stdDev = Math.sqrt(variance);
-    const threshold1 = Math.max(baseThreshold, mean - 0.5 * stdDev);
-    
-    // 方法2：基于分位数（保留前75%）
-    const sorted = [...validScores].sort((a, b) => a - b);
-    const percentile25 = sorted[Math.floor(sorted.length * 0.25)];
-    const threshold2 = Math.max(baseThreshold, percentile25);
-    
-    // 取两种方法的较小值（更保守）
-    const adaptiveThreshold = Math.min(threshold1, threshold2);
-    
-    return Math.min(1, Math.max(0, adaptiveThreshold));
-  }
-
-  /**
-   * 优化上下文 Token 使用（保留向后兼容）
+   * 优化上下文列表（去重、压缩、按相似度排序）
+   * @param {Array<Object>} contexts - 上下文列表
+   * @param {number} maxTokens - 最大token数
+   * @returns {Promise<Array<Object>>} 优化后的上下文列表
    */
   async optimizeContexts(contexts, maxTokens = 1500) {
     if (!contexts || contexts.length === 0) return contexts;
     
-    // 1. 去重
     let optimized = this.deduplicateContexts(contexts);
-    
-    // 2. 计算当前 token 数
     let totalTokens = optimized.reduce((sum, ctx) => {
       const text = ctx.message || ctx.content || '';
       return sum + this.estimateTokens(text);
     }, 0);
     
-    // 3. 如果超限，按优先级压缩
     if (totalTokens > maxTokens) {
-      // 按相似度排序，保留最相关的
       optimized.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
       
       const compressed = [];
@@ -521,7 +191,6 @@ export default class AIStream {
           compressed.push(ctx);
           currentTokens += tokens;
         } else {
-          // 尝试压缩后加入
           const compressedText = this.compressText(text, Math.floor((maxTokens - currentTokens) / 1.5));
           if (compressedText.length > 0) {
             compressed.push({
@@ -542,210 +211,65 @@ export default class AIStream {
   }
 
   /**
-   * 注意力机制加权相似度（Attention-based Similarity）
-   * 使用注意力权重增强重要特征的相似度计算
-   */
-  attentionWeightedSimilarity(queryVec, docVec, attentionWeights = null) {
-    // 防御性检查
-    if (!queryVec || !docVec || !Array.isArray(queryVec) || !Array.isArray(docVec)) {
-      return 0;
-    }
-    if (queryVec.length !== docVec.length || queryVec.length === 0) {
-      return 0;
-    }
-
-    const baseSimilarity = this.cosineSimilarity(queryVec, docVec);
-    
-    // 如果没有提供注意力权重，使用均匀权重
-    if (!attentionWeights || !Array.isArray(attentionWeights) || attentionWeights.length === 0) {
-      return baseSimilarity;
-    }
-
-    // 计算加权相似度
-    let weightedDot = 0;
-    let weightedNorm1 = 0;
-    let weightedNorm2 = 0;
-    const minLen = Math.min(queryVec.length, docVec.length, attentionWeights.length);
-
-    for (let i = 0; i < minLen; i++) {
-      const weight = Math.max(0, attentionWeights[i] || 1.0); // 确保权重非负
-      const v1 = queryVec[i] || 0;
-      const v2 = docVec[i] || 0;
-      
-      weightedDot += weight * v1 * v2;
-      weightedNorm1 += weight * v1 * v1;
-      weightedNorm2 += weight * v2 * v2;
-    }
-
-    const denominator = Math.sqrt(weightedNorm1) * Math.sqrt(weightedNorm2);
-    if (denominator < 1e-8) return baseSimilarity;
-    
-    const weightedSim = weightedDot / denominator;
-    if (!isFinite(weightedSim)) return baseSimilarity;
-    
-    // 结合基础相似度和加权相似度
-    const normalizedWeightedSim = Math.max(0, (weightedSim + 1) / 2);
-    return 0.7 * baseSimilarity + 0.3 * normalizedWeightedSim;
-  }
-
-  /**
-   * 计算查询的注意力权重（基于 TF-IDF 启发式 + 神经网络思想）
-   */
-  calculateAttentionWeights(queryTokens, allDocuments) {
-    // 防御性检查
-    if (!queryTokens || !Array.isArray(queryTokens) || queryTokens.length === 0) {
-      return null;
-    }
-    if (!allDocuments || !Array.isArray(allDocuments) || allDocuments.length === 0) {
-      return null;
-    }
-
-    try {
-      // 简单的 TF-IDF 启发式注意力权重
-      const tokenFreq = new Map();
-      const docFreq = new Map();
-      
-      // 统计词频和文档频率
-      queryTokens.forEach(token => {
-        if (token && typeof token === 'string' && token.trim().length > 0) {
-          const normalizedToken = token.toLowerCase().trim();
-          tokenFreq.set(normalizedToken, (tokenFreq.get(normalizedToken) || 0) + 1);
-          docFreq.set(normalizedToken, 0);
-        }
-      });
-
-      if (docFreq.size === 0) return null;
-
-      allDocuments.forEach(doc => {
-        if (!doc || typeof doc !== 'string') return;
-        const docTokens = doc.toLowerCase().split(/[\s，。！？,.!?]/).filter(Boolean);
-        const docTokenSet = new Set(docTokens);
-        docFreq.forEach((_, token) => {
-          if (docTokenSet.has(token)) {
-            docFreq.set(token, docFreq.get(token) + 1);
-          }
-        });
-      });
-
-      // 计算 TF-IDF 权重
-      const totalDocs = Math.max(1, allDocuments.length);
-      const weights = queryTokens.map(token => {
-        if (!token || typeof token !== 'string') return 0;
-        const normalizedToken = token.toLowerCase().trim();
-        const tf = tokenFreq.get(normalizedToken) || 0;
-        const df = docFreq.get(normalizedToken) || 0;
-        // 使用平滑的 IDF 计算，避免除零
-        const idf = Math.log((totalDocs + 1) / (df + 1));
-        return tf * idf;
-      }).filter(w => isFinite(w) && w > 0);
-
-      if (weights.length === 0) return null;
-
-      // 归一化权重（使用 softmax 思想）
-      const maxWeight = Math.max(...weights);
-      const expWeights = weights.map(w => Math.exp(w - maxWeight)); // 数值稳定性
-      const sum = expWeights.reduce((a, b) => a + b, 0);
-      
-      return sum > 0 
-        ? expWeights.map(w => w / sum)
-        : weights.map(() => 1 / weights.length);
-    } catch (error) {
-      BotUtil.makeLog('debug', `[AIStream] 计算注意力权重失败: ${error.message}`, 'AIStream');
-      return null;
-    }
-  }
-
-  /**
-   * 相似度计算
-   */
-  cosineSimilarity(vec1, vec2) {
-    if (!vec1 || !vec2 || !Array.isArray(vec1) || !Array.isArray(vec2)) {
-      return 0;
-    }
-
-    if (vec1.length !== vec2.length) {
-      return 0;
-    }
-
-    let dotProduct = 0;
-    let norm1 = 0;
-    let norm2 = 0;
-
-    for (let i = 0; i < vec1.length; i++) {
-      dotProduct += vec1[i] * vec2[i];
-      norm1 += vec1[i] * vec1[i];
-      norm2 += vec2[i] * vec2[i];
-    }
-
-    const denominator = Math.sqrt(norm1) * Math.sqrt(norm2);
-    if (denominator < 1e-8) return 0; // 避免除零
-    
-    const similarity = dotProduct / denominator;
-    // 归一化到 [0, 1] 范围（余弦相似度范围是 [-1, 1]）
-    return Math.max(0, (similarity + 1) / 2);
-  }
-
-  /**
-   * 统一记忆系统（使用全局redis）
-   * 支持消息记忆、笔记记忆、工作流记忆等
-   */
-
-  /**
-   * 存储消息记忆（带embedding）
+   * 存储消息并生成向量嵌入
+   * @param {string} groupId - 群组ID
+   * @param {Object} message - 消息对象
+   * @returns {Promise<void>}
    */
   async storeMessageWithEmbedding(groupId, message) {
-    if (!this.embeddingConfig.enabled || typeof redis === 'undefined' || !redis) {
-      return;
-    }
+    if (!this.embeddingConfig?.enabled) return;
 
-    if (!this.embeddingReady) {
-      return;
-    }
+    const messageText = `${message.nickname}: ${message.message}`;
+    const userId = message.user_id || groupId;
 
     try {
-      const key = `ai:memory:${this.name}:${groupId}`;
-      const messageText = `${message.nickname}: ${message.message}`;
+      MemoryManager.addShortTermMemory(userId, {
+        role: 'user',
+        content: messageText,
+        metadata: {
+          groupId,
+          nickname: message.nickname,
+          time: message.time || Date.now(),
+          messageId: message.message_id
+    }
+      });
 
-      const embedding = await this.generateEmbedding(messageText);
-      if (!embedding) {
-        return;
-      }
-
-      const data = {
-        type: 'message',
-        message: messageText,
-        embedding: embedding,
-        userId: message.user_id,
-        nickname: message.nickname,
-        time: message.time || Date.now(),
-        messageId: message.message_id
-      };
-
-      await redis.lPush(key, JSON.stringify(data));
-      // 只保留最近 50 条，避免占用过多空间
-      await redis.lTrim(key, 0, 49);
-      await redis.expire(key, this.embeddingConfig.cacheExpiry || 2592000); // 默认30天
+      await Bot.callSubserver('/api/vector/upsert', {
+        body: {
+          collection: `memory_${groupId}`,
+          documents: [{
+            text: messageText,
+            metadata: {
+              userId,
+              nickname: message.nickname,
+              time: message.time || Date.now(),
+              messageId: message.message_id
+            }
+          }]
+        }
+      }).catch(() => {});
     } catch (e) {
-      BotUtil.makeLog('debug', `[AIStream] 存储消息失败: ${e.message}`, 'AIStream');
+      BotUtil.makeLog('debug', `[${this.name}] 存储消息失败: ${e.message}`, 'AIStream');
     }
   }
 
   /**
-   * 存储笔记到工作流（统一方法）
+   * 存储工作流笔记
    * @param {string} workflowId - 工作流ID
    * @param {string} content - 笔记内容
    * @param {string} source - 来源
    * @param {boolean} isTemporary - 是否临时
+   * @returns {Promise<boolean>}
    */
   async storeNote(workflowId, content, source = '', isTemporary = true) {
-    if (typeof redis === 'undefined' || !redis) return false;
+    if (!global.redis) return false;
 
     try {
       const key = `ai:notes:${workflowId}`;
       const note = { content, source, time: Date.now(), temporary: isTemporary };
-      await redis.lPush(key, JSON.stringify(note));
-      await redis.expire(key, isTemporary ? 1800 : 86400 * 3);
-      await redis.lTrim(key, 0, 99);
+      await global.redis.lPush(key, JSON.stringify(note));
+      await global.redis.expire(key, isTemporary ? 1800 : 86400 * 3);
+      await global.redis.lTrim(key, 0, 99);
       return true;
     } catch (error) {
       BotUtil.makeLog('error', `存储笔记失败: ${error.message}`, 'AIStream');
@@ -754,12 +278,12 @@ export default class AIStream {
   }
 
   /**
-   * 存储笔记（如果工作流存在）
-   * 辅助方法，简化workflowId检查
-   * @param {Object} context - 上下文对象
+   * 如果存在工作流ID则存储笔记
+   * @param {Object} context - 上下文
    * @param {string} content - 笔记内容
    * @param {string} source - 来源
    * @param {boolean} isTemporary - 是否临时
+   * @returns {Promise<boolean>}
    */
   async storeNoteIfWorkflow(context, content, source = '', isTemporary = true) {
     if (context?.workflowId) {
@@ -768,38 +292,43 @@ export default class AIStream {
     return false;
   }
 
+  /**
+   * 获取工作流笔记
+   * @param {string} workflowId - 工作流ID
+   * @returns {Promise<Array<Object>>}
+   */
   async getNotes(workflowId) {
-    if (typeof redis === 'undefined' || !redis) return [];
-
     try {
-      const key = `ai:notes:${workflowId}`;
-      const notes = await redis.lRange(key, 0, -1);
-      const now = Date.now();
-      const validNotes = [];
-
-      for (const noteStr of notes) {
-        try {
-          const note = JSON.parse(noteStr);
-          if (note.temporary && (now - (note.time || 0)) > 1800000) continue;
-          validNotes.push(note);
-        } catch (e) {
-          continue;
-        }
-      }
-
-      return validNotes;
+      const userId = workflowId || 'default';
+      const shortTerm = MemoryManager.getShortTermMemories(userId, 100);
+      return shortTerm
+        .filter(m => m.metadata?.workflowId === workflowId)
+        .map(m => ({
+          content: m.content,
+          source: m.metadata?.source || '',
+          time: m.timestamp,
+          temporary: m.metadata?.temporary || false
+        }));
     } catch (e) {
       return [];
     }
   }
 
+  /**
+   * 存储工作流记忆
+   * @param {string} workflowId - 工作流ID
+   * @param {Object} data - 数据
+   * @returns {Promise<boolean>}
+   */
   async storeWorkflowMemory(workflowId, data) {
-    if (typeof redis === 'undefined' || !redis) return false;
-
     try {
-      const key = `ai:workflow:${workflowId}`;
-      const memory = { ...data, time: Date.now() };
-      await redis.setEx(key, 86400 * 3, JSON.stringify(memory));
+      const userId = workflowId || 'default';
+      await MemoryManager.addLongTermMemory(userId, {
+        content: JSON.stringify(data),
+        type: 'workflow',
+        importance: 0.6,
+        metadata: { workflowId, ...data }
+      });
       return true;
     } catch (error) {
       BotUtil.makeLog('error', `存储工作流记忆失败: ${error.message}`, 'AIStream');
@@ -807,225 +336,81 @@ export default class AIStream {
     }
   }
 
+  /**
+   * 获取工作流记忆
+   * @param {string} workflowId - 工作流ID
+   * @returns {Promise<Object|null>}
+   */
   async getWorkflowMemory(workflowId) {
-    if (typeof redis === 'undefined' || !redis) return null;
-
     try {
-      const key = `ai:workflow:${workflowId}`;
-      const data = await redis.get(key);
-      return data ? JSON.parse(data) : null;
+      const userId = workflowId || 'default';
+      const memories = await MemoryManager.searchLongTermMemories(userId, workflowId, 1);
+      if (memories.length > 0 && memories[0].metadata?.workflowId === workflowId) {
+        return memories[0].metadata;
+      }
+      return null;
     } catch (e) {
       return null;
     }
   }
 
+  /**
+   * 检索相关上下文（历史对话）
+   * @param {string} groupId - 群组ID
+   * @param {string} query - 查询文本
+   * @param {boolean} includeNotes - 是否包含笔记
+   * @param {string|null} workflowId - 工作流ID
+   * @returns {Promise<Array<Object>>}
+   */
   async retrieveRelevantContexts(groupId, query, includeNotes = false, workflowId = null) {
-    if (!this.embeddingConfig.enabled || typeof redis === 'undefined' || !redis) return [];
-    if (!this.embeddingReady || !query) return [];
+    if (!query) return [];
 
     try {
-      const streamName = this.name;
-      const key = `ai:memory:${streamName}:${groupId}`;
-      const messages = await redis.lRange(key, 0, -1);
-
-      if (includeNotes && workflowId) {
-        const notes = await this.getNotes(workflowId);
-        notes.forEach(note => {
-          messages.push(JSON.stringify({
-            type: 'note',
-            message: `[笔记] ${note.content}`,
-            time: note.time,
-            source: note.source
-          }));
-        });
-      }
-      if (!messages || messages.length === 0) return [];
-
-      const parsedMessages = [];
-      for (const msg of messages) {
-        try {
-          const data = JSON.parse(msg);
-          if (data && typeof data.message === 'string' && data.message.trim().length > 0) {
-            parsedMessages.push(data);
-          }
-        } catch (e) {
-          // 静默忽略无效的 JSON，但记录调试信息
-          BotUtil.makeLog('debug', `[AIStream] 解析消息失败: ${e.message}`, 'AIStream');
-        }
-      }
-
-      if (parsedMessages.length === 0) return [];
-
-      const now = Date.now();
-      const halfLifeDays = this.embeddingConfig.timeHalfLifeDays || 3;
-      const idealLen = this.embeddingConfig.idealTextLength || 40;
-      const qTokens = Array.from(new Set(query.split(/[\s，。！？,.!?]/).filter(Boolean)));
-
-      /**
-       * 优化的评分函数（使用神经网络启发式算法）
-       * 结合语义相似度、时间衰减、关键词匹配、长度惩罚等多因素
-       */
-      const scoreItem = (baseSim, data, attentionWeights = null, queryEmbedding = null) => {
-        // 防御性检查
-        if (!data || typeof baseSim !== 'number' || !isFinite(baseSim)) {
-          return null;
-        }
-        const text = data.message || '';
-
-        // 1. 时间衰减（指数衰减模型）
-        const ageMs = Math.max(0, now - (data.time || 0));
-        const ageDays = ageMs / (24 * 60 * 60 * 1000);
-        const timeDecay = Math.exp(-Math.log(2) * (ageDays / halfLifeDays));
-
-        // 2. 关键词增强（使用改进的 Jaccard 相似度）
-        let keywordBoost = 0;
-        if (qTokens.length && text) {
-          const dTokens = Array.from(new Set(text.toLowerCase().split(/[\s，。！？,.!?]/).filter(Boolean)));
-          if (dTokens.length) {
-            const qTokenSet = new Set(qTokens.map(t => t.toLowerCase()));
-            const intersection = dTokens.filter(t => qTokenSet.has(t));
-            const union = new Set([...qTokens.map(t => t.toLowerCase()), ...dTokens]);
-            const jaccard = union.size > 0 ? intersection.length / union.size : 0;
-            // 使用 sigmoid 函数平滑关键词增强
-            keywordBoost = 0.3 * (1 / (1 + Math.exp(-5 * (jaccard - 0.3))));
-          }
-        }
-
-        // 3. 长度惩罚（使用高斯函数，更平滑）
-        const len = text.length || 1;
-        const lengthRatio = len / idealLen || 1;
-        // 使用改进的高斯惩罚函数
-        const lengthPenalty = Math.exp(-0.5 * Math.pow(Math.log(Math.max(lengthRatio, 0.1)), 2));
-
-        // 4. 语义相似度（基础分数）
-        const semanticScore = Math.max(baseSim, 0);
-
-        // 5. 注意力加权（如果提供了注意力权重）
-        let finalSemanticScore = semanticScore;
-        if (attentionWeights && data.embedding && queryEmbedding) {
-          finalSemanticScore = this.attentionWeightedSimilarity(
-            queryEmbedding,
-            data.embedding,
-            attentionWeights
-          );
-        }
-
-        // 6. 综合评分（使用加权组合）
-        // 语义相似度权重: 0.6, 关键词增强权重: 0.2, 时间衰减权重: 1.0, 长度惩罚权重: 0.8
-        const finalScore = (finalSemanticScore * 0.6 + keywordBoost * 0.2) * 
-                          timeDecay * 
-                          (0.5 + 0.5 * lengthPenalty);
-
-        return {
-          message: text,
-          similarity: Math.min(1, Math.max(0, finalScore)), // 限制在 [0, 1]
-          baseSimilarity: baseSim,
-          semanticScore: finalSemanticScore,
-          keywordBoost,
-          timeDecay,
-          lengthPenalty,
-          time: data.time,
-          userId: data.userId,
-          nickname: data.nickname
-        };
-      };
-
-      let scored = [];
-      let queryEmbedding = null;
-      let attentionWeights = null;
-
-      const mode = this.embeddingConfig.mode || 'local';
-      const documents = parsedMessages.map(m => m.message || '').filter(Boolean);
+      const userId = groupId.replace(/^memory_/, '');
+      const memories = await MemoryManager.searchLongTermMemories(userId, query, 5);
       
-      if (documents.length === 0) return [];
-
-      try {
-        if (mode === 'local') {
-          // 本地模式：优化的 BM25 + 注意力机制
-          if (!this.similarityCalculator) {
-            BotUtil.makeLog('warn', '[AIStream] 相似度计算器未初始化', 'AIStream');
-            return [];
-          }
-          
-        this.similarityCalculator.calculateIDF(documents);
-          
-          // 计算注意力权重（基于查询词的重要性）
-          if (qTokens.length > 0) {
-            attentionWeights = this.calculateAttentionWeights(qTokens, documents);
-          }
-          
-          scored = parsedMessages
-            .filter(data => data && data.message)
-            .map(data => {
-              try {
-          const bm25Score = this.similarityCalculator.score(query, data.message);
-                // 改进的 BM25 归一化（使用 sigmoid 函数）
-                const baseSim = 1 / (1 + Math.exp(-Math.max(bm25Score, -10) / 5)); // 防止溢出
-                return scoreItem(baseSim, data, attentionWeights, queryEmbedding);
-              } catch (err) {
-                BotUtil.makeLog('debug', `[AIStream] BM25计算失败: ${err.message}`, 'AIStream');
-                return null;
-              }
-            })
-            .filter(Boolean);
-      } else {
-          // 远程模式：向量相似度 + 注意力机制
-          queryEmbedding = await this.generateEmbedding(query);
-          if (!queryEmbedding || !Array.isArray(queryEmbedding) || queryEmbedding.length === 0) {
-            BotUtil.makeLog('debug', '[AIStream] 无法生成查询向量', 'AIStream');
-            return [];
-          }
-
-          // 计算注意力权重（基于向量维度的重要性）
-          if (qTokens.length > 0) {
-            attentionWeights = this.calculateAttentionWeights(qTokens, documents);
-          }
-
-        scored = parsedMessages
-            .filter(data => {
-              if (!data) return false;
-              const embedding = data.embedding;
-              return Array.isArray(embedding) && embedding.length > 0 && embedding.length === queryEmbedding.length;
-            })
-          .map(data => {
-              try {
-            const baseSim = this.cosineSimilarity(queryEmbedding, data.embedding);
-                if (isNaN(baseSim) || !isFinite(baseSim)) {
-                  return null;
-                }
-                return scoreItem(baseSim, data, attentionWeights, queryEmbedding);
-              } catch (err) {
-                BotUtil.makeLog('debug', `[AIStream] 相似度计算失败: ${err.message}`, 'AIStream');
-                return null;
-              }
-            })
-            .filter(Boolean);
-        }
-
-        // 使用自适应阈值（基于分数分布）
-        const threshold = this.calculateAdaptiveThreshold(scored, this.embeddingConfig.similarityThreshold ?? 0.1);
-        const preFiltered = scored.filter(s => s && s.similarity >= threshold);
-        preFiltered.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
-
-      return preFiltered.slice(0, this.embeddingConfig.maxContexts || 8);
-      } catch (error) {
-        BotUtil.makeLog('error', `[AIStream] 检索上下文失败: ${error.message}`, 'AIStream', error);
-        return [];
+      if (memories.length > 0) {
+        return memories.map(m => ({
+          message: m.content,
+          similarity: m.importance || 0.8,
+          time: m.timestamp,
+          userId: m.userId,
+          nickname: ''
+        }));
       }
-    } catch (e) {
+
+      const result = await Bot.callSubserver('/api/vector/search', {
+        body: { query, collection: `memory_${groupId}`, top_k: 5 }
+      }).catch(() => ({ results: [] }));
+      
+      return result.results?.map(r => ({
+        message: r.text,
+        similarity: r.score || 0,
+        time: r.metadata?.time || Date.now(),
+        userId: r.metadata?.userId,
+        nickname: r.metadata?.nickname
+      })) || [];
+    } catch (error) {
+      BotUtil.makeLog('debug', `[${this.name}] 检索上下文失败: ${error.message}`, 'AIStream');
       return [];
     }
   }
 
   /**
-   * 检索知识库上下文（自动集成到 RAG 流程）
+   * 检索知识库上下文
+   * @param {string} query - 查询文本
+   * @returns {Promise<Array<Object>>}
    */
   async retrieveKnowledgeContexts(query) {
-    // 检查是否有合并的 database stream
-    if (this._mergedStreams) {
-      for (const stream of this._mergedStreams) {
-        if (stream.name === 'database' && typeof stream.retrieveKnowledgeContexts === 'function') {
-          return await stream.retrieveKnowledgeContexts(query, this.embeddingConfig.maxContexts || 3);
+    if (!this._mergedStreams || !query) return [];
+
+    // 从合并的工作流中查找支持知识检索的工作流
+    for (const stream of this._mergedStreams) {
+      if (typeof stream.retrieveKnowledgeContexts === 'function') {
+        const maxContexts = this.embeddingConfig?.maxContexts || 3;
+        const contexts = await stream.retrieveKnowledgeContexts(query, maxContexts);
+        if (contexts && contexts.length > 0) {
+          return contexts;
         }
       }
     }
@@ -1033,12 +418,15 @@ export default class AIStream {
   }
 
   /**
-   * 构建增强上下文（完整 RAG 流程：历史对话 + 知识库）
+   * 构建增强上下文（RAG）
+   * @param {Object} e - 事件对象
+   * @param {string|Object} question - 问题
+   * @param {Array<Object>} baseMessages - 基础消息列表
+   * @returns {Promise<Array<Object>>}
    */
   async buildEnhancedContext(e, question, baseMessages) {
     const groupId = e ? (e.group_id || `private_${e.user_id}`) : 'default';
 
-    // 提取查询文本
     let query = '';
     if (typeof question === 'string') {
       query = question;
@@ -1046,7 +434,6 @@ export default class AIStream {
       query = question.content || question.text || '';
     }
 
-    // 如果query为空，尝试从baseMessages中提取
     if (!query && Array.isArray(baseMessages)) {
       for (let i = baseMessages.length - 1; i >= 0; i--) {
         const msg = baseMessages[i];
@@ -1067,15 +454,11 @@ export default class AIStream {
     }
 
     try {
-      // 1. 检索历史对话上下文
-      const historyContexts = this.embeddingConfig.enabled && this.embeddingReady
+      const historyContexts = this.embeddingConfig?.enabled
         ? await this.retrieveRelevantContexts(groupId, query)
         : [];
 
-      // 2. 检索知识库上下文（自动集成）
       const knowledgeContexts = await this.retrieveKnowledgeContexts(query);
-
-      // 3. 合并所有上下文
       const allContexts = [
         ...historyContexts.map(ctx => ({
           type: 'history',
@@ -1091,19 +474,11 @@ export default class AIStream {
         }))
       ];
 
-      // 4. Token 优化（使用注意力机制优化上下文选择）
-      const maxContextTokens = Math.floor((this.config.maxTokens || 6000) * 0.2);
-      const optimizedContexts = await this.optimizeContextsWithAttention(allContexts, query, maxContextTokens);
+      const optimizedContexts = allContexts.slice(0, 5);
+      if (optimizedContexts.length === 0) return baseMessages;
 
-      if (optimizedContexts.length === 0) {
-        return baseMessages;
-      }
-
-      // 5. 构建上下文提示词
       const enhanced = [...baseMessages];
       const contextParts = [];
-      
-      // 分组显示
       const historyItems = optimizedContexts.filter(c => c.type === 'history');
       const knowledgeItems = optimizedContexts.filter(c => c.type === 'knowledge');
 
@@ -1128,13 +503,13 @@ export default class AIStream {
       if (contextParts.length > 0) {
         const contextPrompt = contextParts.join('\n\n') + '\n\n以上是相关上下文，可参考但不要重复。\n';
 
-      if (enhanced[0]?.role === 'system') {
-        enhanced[0].content += contextPrompt;
-      } else {
-        enhanced.unshift({
-          role: 'system',
-          content: contextPrompt
-        });
+        if (enhanced[0]?.role === 'system') {
+          enhanced[0].content += contextPrompt;
+        } else {
+          enhanced.unshift({
+            role: 'system',
+            content: contextPrompt
+          });
         }
       }
 
@@ -1149,26 +524,15 @@ export default class AIStream {
   }
 
   /**
-   * 注册函数（Function Calling）
-   * 
-   * 注册一个可被AI调用的函数，支持权限控制、启用/禁用等。
-   * 
-   * @param {string} name - 函数名称（必填）
-   * @param {Object} options - 函数配置
-   *   - handler: 函数处理函数 (params) => {}
-   *   - prompt: 函数描述（用于AI理解函数用途）
-   *   - parser: 参数解析器函数（可选）
-   *   - enabled: 是否启用（默认true）
-   *   - permission: 权限要求（可选）
-   *   - description: 函数描述
-   * @example
-   * this.registerFunction('get_weather', {
-   *   handler: async (params) => {
-   *     return { weather: '晴天', temp: 25 };
-   *   },
-   *   prompt: '获取指定城市的天气信息',
-   *   description: '获取天气'
-   * });
+   * 注册函数（Call Function，用于AI调用）
+   * @param {string} name - 函数名称
+   * @param {Object} options - 选项
+   * @param {Function} options.handler - 处理函数
+   * @param {string|Function} options.prompt - 提示文本
+   * @param {Function} options.parser - 解析函数
+   * @param {boolean} options.enabled - 是否启用
+   * @param {string} options.permission - 权限要求
+   * @param {string} options.description - 描述
    */
   registerFunction(name, options = {}) {
     const {
@@ -1180,10 +544,9 @@ export default class AIStream {
       description = ''
     } = options;
 
-    // 支持prompt为函数类型，用于动态生成（如包含知识库列表）
     const resolvedPrompt = typeof prompt === 'function' ? prompt() : prompt;
 
-    this.functions.set(name, {
+    const funcDef = {
       name,
       handler,
       prompt: resolvedPrompt,
@@ -1191,20 +554,73 @@ export default class AIStream {
       enabled: this.functionToggles[name] ?? enabled,
       permission,
       description,
-      // 保存所有其他选项（如 requireAdmin, requireOwner 等）
       ...Object.fromEntries(
         Object.entries(options).filter(([key]) => 
           !['handler', 'prompt', 'parser', 'enabled', 'permission', 'description'].includes(key)
         )
       )
-    });
+    };
+
+    this.functions.set(name, funcDef);
+
+    // 注册到 ToolRegistry（用于AI调用）
+    // ToolRegistry.registerTool 内部已有重复检查，这里直接注册即可
+    if (handler) {
+      ToolRegistry.registerTool(`${this.name}.${name}`, {
+        description: description || resolvedPrompt,
+        schema: options.schema || {},
+        handler: async (args, ctx) => {
+          return await handler(args, { ...ctx, stream: this });
+        },
+        category: this.name,
+        permissions: permission ? { roles: [permission] } : { public: true }
+      });
+    }
   }
 
+  /**
+   * 注册MCP工具（MCP Protocol，用于外部工具调用）
+   * @param {string} name - 工具名称
+   * @param {Object} options - 选项
+   * @param {Function} options.handler - 处理函数
+   * @param {string} options.description - 描述
+   * @param {Object} options.inputSchema - 输入Schema（JSON Schema格式）
+   * @param {boolean} options.enabled - 是否启用
+   */
+  registerMCPTool(name, options = {}) {
+    const {
+      handler,
+      description = '',
+      inputSchema = {},
+      enabled = true
+    } = options;
+
+    const toolDef = {
+      name,
+      handler,
+      description,
+      inputSchema,
+      enabled: this.functionToggles[name] ?? enabled
+    };
+
+    this.mcpTools.set(name, toolDef);
+  }
+
+  /**
+   * 检查函数是否启用
+   * @param {string} name - 函数名称
+   * @returns {boolean}
+   */
   isFunctionEnabled(name) {
     const func = this.functions.get(name);
     return func?.enabled ?? false;
   }
 
+  /**
+   * 切换函数启用状态
+   * @param {string} name - 函数名称
+   * @param {boolean} enabled - 是否启用
+   */
   toggleFunction(name, enabled) {
     const func = this.functions.get(name);
     if (func) {
@@ -1213,53 +629,71 @@ export default class AIStream {
     }
   }
 
+  /**
+   * 获取所有启用的函数
+   * @returns {Array<Object>}
+   */
   getEnabledFunctions() {
     return Array.from(this.functions.values()).filter(f => f.enabled);
   }
 
   /**
-   * 合并另一个 Stream 的函数到当前 Stream
-   * 
-   * @param {AIStream} stream - 要合并的 Stream 实例
-   * @param {Object} options - 合并选项
-   *   - overwrite: 是否覆盖已存在的函数（默认false）
-   *   - prefix: 为合并的函数添加前缀（可选）
-   * @example
-   * const toolsStream = new ToolsStream();
-   * await toolsStream.init();
-   * this.merge(toolsStream);
+   * 合并工作流
+   * @param {Object} stream - 要合并的工作流
+   * @param {Object} options - 选项
+   * @param {boolean} options.overwrite - 是否覆盖
+   * @param {string} options.prefix - 前缀
+   * @returns {Object}
    */
   merge(stream, options = {}) {
     const { overwrite = false, prefix = '' } = options;
 
-    if (!stream || !stream.functions) {
+    if (!stream) {
       throw new Error('无效的 Stream 实例');
     }
 
-    // 初始化 _mergedStreams 数组
     if (!this._mergedStreams) {
       this._mergedStreams = [];
     }
-
-    // 添加到合并列表
     if (!this._mergedStreams.includes(stream)) {
       this._mergedStreams.push(stream);
     }
 
-    // 复制函数
     let mergedCount = 0;
     let skippedCount = 0;
 
-    for (const [name, func] of stream.functions.entries()) {
-      const newName = prefix ? `${prefix}${name}` : name;
+    // 合并函数（Call Functions）
+    if (stream.functions) {
+      for (const [name, func] of stream.functions.entries()) {
+        const newName = prefix ? `${prefix}${name}` : name;
 
-      if (this.functions.has(newName) && !overwrite) {
-        skippedCount++;
-        continue;
+        if (this.functions.has(newName) && !overwrite) {
+          skippedCount++;
+          continue;
+        }
+
+        this.functions.set(newName, func);
+        mergedCount++;
+      }
+    }
+
+    // 合并MCP工具
+    if (stream.mcpTools) {
+      if (!this.mcpTools) {
+        this.mcpTools = new Map();
       }
 
-      this.functions.set(newName, func);
-      mergedCount++;
+      for (const [name, tool] of stream.mcpTools.entries()) {
+        const newName = prefix ? `${prefix}${name}` : name;
+
+        if (this.mcpTools.has(newName) && !overwrite) {
+          skippedCount++;
+          continue;
+        }
+
+        this.mcpTools.set(newName, tool);
+        mergedCount++;
+      }
     }
 
     BotUtil.makeLog('debug', `[${this.name}] 合并 ${stream.name}: 成功 ${mergedCount}, 跳过 ${skippedCount}`, 'AIStream');
@@ -1268,63 +702,66 @@ export default class AIStream {
   }
 
   /**
-   * 构建系统提示词（可选实现）
-   * 
-   * 子类可选择实现此方法，用于构建AI的系统提示词。
-   * 如果未实现，将返回空字符串。
-   * 
-   * @param {Object} context - 上下文对象
-   * @returns {string|Promise<string>} 系统提示词
-   * @example
-   * async buildSystemPrompt(context) {
-   *   return `你是一个智能助手。
-   * 当前用户：${context.user}
-   * 当前时间：${new Date().toLocaleString()}`;
-   * }
+   * 构建系统提示（子类可重写）
+   * @param {Object} context - 上下文
+   * @returns {string}
    */
   buildSystemPrompt(context) {
     return '';
   }
 
-
+  /**
+   * 构建函数提示列表
+   * @returns {string}
+   */
   buildFunctionsPrompt() {
     const enabledFuncs = this.getEnabledFunctions();
-    if (enabledFuncs.length === 0) return '';
+    const toolPrompts = ToolRegistry.getAllTools({ enabled: true })
+      .map(t => `- ${t.name}: ${t.description}`)
+      .join('\n');
 
-    // 动态解析prompt（如果为函数类型）
+    if (enabledFuncs.length === 0 && !toolPrompts) return '';
+
     const prompts = enabledFuncs
       .filter(f => f.prompt)
       .map(f => typeof f.prompt === 'function' ? f.prompt() : f.prompt)
       .join('\n');
 
-    return prompts ? `\n【功能列表】\n${prompts}` : '';
+    const combined = [prompts, toolPrompts].filter(Boolean).join('\n');
+    return combined ? `\n【功能列表】\n${combined}` : '';
   }
 
   /**
-   * 构建对话上下文（可选实现）
-   * 
-   * 子类可选择实现此方法，用于根据事件和问题构建完整的对话上下文。
-   * 如果未实现，将返回空数组。
-   * 
-   * @param {Object} e - 事件对象（可选）
-   * @param {string|Object} question - 用户问题或消息对象
-   *   - 字符串：直接作为用户消息
-   *   - 对象：{ text: string, persona?: string }
-   * @returns {Promise<Array<Object>>} 消息数组
-   *   - 格式: [{ role: 'system'|'user'|'assistant', content: string }]
-   * @example
-   * async buildChatContext(e, question) {
-   *   const systemPrompt = await this.buildSystemPrompt({ e, question });
-   *   return [
-   *     { role: 'system', content: systemPrompt },
-   *     { role: 'user', content: typeof question === 'string' ? question : question.text }
-   *   ];
-   * }
+   * 构建聊天上下文
+   * @param {Object} e - 事件对象
+   * @param {string|Object} question - 问题
+   * @returns {Promise<Array<Object>>}
    */
   async buildChatContext(e, question) {
+    const systemPrompt = await this.buildSystemPrompt({ e, question });
+    const promptTemplate = PromptEngine.getTemplate(this.name);
+    
+    if (promptTemplate) {
+      const rendered = PromptEngine.render(this.name, {
+        systemPrompt,
+        userQuestion: typeof question === 'string' ? question : question?.text || question?.content || ''
+      });
+      return [{ role: 'system', content: rendered }];
+    }
+
+    if (systemPrompt) {
+      return [{ role: 'system', content: systemPrompt }];
+    }
+
     return [];
   }
 
+  /**
+   * 解析文本中的函数调用
+   * @param {string} text - 文本
+   * @param {Object} context - 上下文
+   * @returns {Object} {functions, cleanText}
+   */
   parseFunctions(text, context = {}) {
     let cleanText = text;
     const allFunctions = [];
@@ -1341,7 +778,6 @@ export default class AIStream {
       }
     }
 
-    // 优先按 AI 文本中的位置（order）排序，保证执行顺序与模型输出一致
     const withOrder = [];
     const withoutOrder = [];
 
@@ -1363,6 +799,9 @@ export default class AIStream {
   /**
    * 执行函数（支持合并工作流）
    * @private
+   * @param {Object} func - 函数对象
+   * @param {Object} context - 上下文
+   * @returns {Promise<Object>}
    */
   async _executeFunctionWithMerge(func, context) {
     if (this.functions && this.functions.has(func.type)) {
@@ -1382,7 +821,11 @@ export default class AIStream {
   }
 
   /**
-   * 执行函数（增强版：支持验证和反思）
+   * 执行函数
+   * @param {string} type - 函数类型
+   * @param {Object} params - 参数
+   * @param {Object} context - 上下文
+   * @returns {Promise<Object>}
    */
   async executeFunction(type, params, context) {
     const func = this.functions.get(type);
@@ -1391,49 +834,45 @@ export default class AIStream {
       return { success: false, error: '函数不存在或已禁用' };
     }
 
-    // 参数验证
     const validation = await this.validateFunctionParams(func, params, context);
     if (!validation.valid) {
       return { success: false, error: validation.error };
     }
 
-    // 权限检查
     if (func.permission && !(await this.checkPermission(func.permission, context))) {
       return { success: false, error: '权限不足' };
     }
 
-    // 执行函数（带错误处理和反思）
     try {
+      const traceId = MonitorService.startTrace(`${this.name}.${type}`, {
+        agentId: context.e?.user_id,
+        workflow: this.name,
+        userId: context.e?.user_id
+      });
+
       const result = func.handler ? await func.handler(validation.params || params, context) : null;
       
-      // 结果验证
-      const verified = await this.verifyFunctionResult(func, result, context);
-      if (!verified.valid) {
-        return { success: true, result, verified: false, warning: verified.reason };
-      }
+      MonitorService.recordToolCall(traceId, { name: type, params, result });
+      MonitorService.endTrace(traceId, { success: true, result });
+
+      const toolStats = ToolRegistry.toolStats?.get(type);
+      if (toolStats) toolStats.callCount++;
       
-      return { success: true, result, verified: true };
+      return { success: true, result };
     } catch (error) {
-      // 错误反思和重试
-      const reflection = await this.reflectOnError(func, params, error, context);
-      if (reflection.shouldRetry && reflection.adjustedParams) {
-        try {
-          const retryResult = func.handler ? await func.handler(reflection.adjustedParams, context) : null;
-          return { success: true, result: retryResult, retried: true };
-        } catch (retryError) {
-          return { success: false, error: retryError.message, reflection: reflection.reason };
-        }
-      }
-      
-      return { success: false, error: error.message, reflection: reflection.reason };
+      MonitorService.recordError(`${this.name}.${type}`, error);
+      return { success: false, error: error.message };
     }
   }
 
   /**
-   * 验证函数参数（增强版：Schema Validation）
+   * 验证函数参数
+   * @param {Object} func - 函数定义
+   * @param {Object} params - 参数
+   * @param {Object} context - 上下文
+   * @returns {Promise<Object>}
    */
   async validateFunctionParams(func, params, context) {
-    // 1. 必需参数检查
     if (func.requiredParams) {
       for (const required of func.requiredParams) {
         if (params[required] === undefined || params[required] === null) {
@@ -1441,684 +880,29 @@ export default class AIStream {
         }
       }
     }
-
-    // 2. Schema 验证（如果定义了）
-    if (func.schema && func.schema.properties) {
-      const schemaErrors = [];
-      for (const [key, value] of Object.entries(params)) {
-        const propSchema = func.schema.properties[key];
-        if (propSchema) {
-          const validation = this.validateParamBySchema(key, value, propSchema);
-          if (!validation.valid) {
-            schemaErrors.push(validation.error);
-          }
-        }
-      }
-      if (schemaErrors.length > 0) {
-        return { valid: false, error: `参数验证失败: ${schemaErrors.join(', ')}` };
-      }
-    }
-
-    // 3. 参数修正（自动修正常见错误）
-    const correctedParams = await this.autoCorrectParams(func, params, context);
-    
-    return { valid: true, params: correctedParams };
+    return { valid: true, params };
   }
 
   /**
-   * 根据 Schema 验证参数
+   * 执行函数列表（ReAct模式）
+   * @param {Array<Object>} functions - 函数列表
+   * @param {Object} context - 上下文
+   * @param {string|Object} question - 问题
+   * @returns {Promise<void>}
    */
-  validateParamBySchema(key, value, schema) {
-    // 类型检查
-    if (schema.type === 'string' && typeof value !== 'string') {
-      return { valid: false, error: `${key} 必须是字符串` };
-    }
-    if (schema.type === 'number' && typeof value !== 'number') {
-      return { valid: false, error: `${key} 必须是数字` };
-    }
-    if (schema.type === 'boolean' && typeof value !== 'boolean') {
-      return { valid: false, error: `${key} 必须是布尔值` };
-    }
-    if (schema.type === 'array' && !Array.isArray(value)) {
-      return { valid: false, error: `${key} 必须是数组` };
-    }
-    if (schema.type === 'object' && (typeof value !== 'object' || Array.isArray(value))) {
-      return { valid: false, error: `${key} 必须是对象` };
-    }
-
-    // 枚举检查
-    if (schema.enum && !schema.enum.includes(value)) {
-      return { valid: false, error: `${key} 必须是以下值之一: ${schema.enum.join(', ')}` };
-    }
-
-    // 范围检查
-    if (schema.type === 'number') {
-      if (schema.minimum !== undefined && value < schema.minimum) {
-        return { valid: false, error: `${key} 必须 >= ${schema.minimum}` };
-      }
-      if (schema.maximum !== undefined && value > schema.maximum) {
-        return { valid: false, error: `${key} 必须 <= ${schema.maximum}` };
-      }
-    }
-
-    // 长度检查
-    if (schema.type === 'string') {
-      if (schema.minLength !== undefined && value.length < schema.minLength) {
-        return { valid: false, error: `${key} 长度必须 >= ${schema.minLength}` };
-      }
-      if (schema.maxLength !== undefined && value.length > schema.maxLength) {
-        return { valid: false, error: `${key} 长度必须 <= ${schema.maxLength}` };
-      }
-    }
-
-    return { valid: true };
-  }
-
-  /**
-   * 自动修正参数
-   */
-  async autoCorrectParams(func, params, context) {
-    const corrected = { ...params };
-    
-    // 修正常见错误
-    for (const [key, value] of Object.entries(corrected)) {
-      // 字符串去空格
-      if (typeof value === 'string') {
-        corrected[key] = value.trim();
-      }
-      
-      // 路径修正（Windows/Unix 兼容）
-      if (key.includes('path') || key.includes('file') || key.includes('dir')) {
-        corrected[key] = value.replace(/\\/g, '/');
-      }
-      
-      // 数字转换
-      const propSchema = func.schema?.properties?.[key];
-      if (propSchema?.type === 'number' && typeof value === 'string') {
-        const num = parseFloat(value);
-        if (!isNaN(num)) {
-          corrected[key] = num;
-        }
-      }
-    }
-    
-    return corrected;
-  }
-
-  /**
-   * 验证函数结果
-   */
-  async verifyFunctionResult(func, result, context) {
-    if (result === null || result === undefined) {
-      return { valid: false, reason: '函数返回空结果' };
-    }
-    return { valid: true };
-  }
-
-  /**
-   * 错误反思
-   */
-  async reflectOnError(func, params, error, context) {
-    const errorType = this.analyzeErrorType(error);
-    const shouldRetry = errorType === 'network' || errorType === 'timeout';
-    return {
-      shouldRetry,
-      adjustedParams: shouldRetry ? params : null,
-      reason: `错误类型: ${errorType}`
-    };
-  }
-
-  /**
-   * 分析错误类型
-   */
-  analyzeErrorType(error) {
-    const message = error.message?.toLowerCase() || '';
-    if (message.includes('timeout') || message.includes('网络')) return 'timeout';
-    if (message.includes('network') || message.includes('连接')) return 'network';
-    if (message.includes('参数') || message.includes('invalid')) return 'invalid_params';
-    if (message.includes('权限') || message.includes('permission')) return 'permission';
-    return 'unknown';
-  }
-
-  /**
-   * ReAct 模式执行函数（思考-行动-观察循环）
-   */
-  async executeFunctionsWithReAct(functions, context, question, maxIterations = 3) {
+  async executeFunctionsWithReAct(functions, context, question) {
     if (!functions || functions.length === 0) return;
-
-    const executionGroups = this.analyzeFunctionDependencies(functions);
-    
-    for (let iteration = 0; iteration < maxIterations; iteration++) {
-      const results = [];
-      
-      for (const group of executionGroups) {
-        if (group.length === 1) {
-          const result = await this.executeFunctionWithReAct(group[0], context, question, iteration);
-          results.push(result);
-        } else {
-          const groupResults = await Promise.allSettled(
-            group.map(func => this.executeFunctionWithReAct(func, context, question, iteration))
-          );
-          results.push(...groupResults.map(r => r.status === 'fulfilled' ? r.value : { success: false, error: r.reason }));
-        }
-      }
-      
-      const observation = this.observeResults(results, question);
-      if (observation.completed || iteration >= maxIterations - 1) break;
-      
-      if (observation.needsMoreActions) {
-        const nextActions = await this.thinkNextActions(question, results, observation, context);
-        if (!nextActions || nextActions.length === 0) break;
-        executionGroups.push(...this.analyzeFunctionDependencies(nextActions));
-      }
+    for (const func of functions) {
+      await this._executeFunctionWithMerge(func, context);
     }
   }
 
   /**
-   * ReAct 模式执行单个函数（增强版：Chain-of-Thought）
+   * 检查权限
+   * @param {string} permission - 权限类型
+   * @param {Object} context - 上下文
+   * @returns {Promise<boolean>}
    */
-  async executeFunctionWithReAct(func, context, question, iteration) {
-    // 1. Thought: Chain-of-Thought 推理
-    const thought = await this.reasonWithChainOfThought(func, question, context, iteration);
-    
-    // 2. Action: 执行函数
-    const actionResult = await this._executeFunctionWithMerge(func, context);
-    
-    // 3. Observation: 观察结果（Self-Consistency 检查）
-    const observation = await this.observeWithConsistency(func, actionResult, thought, context);
-    
-    return { func, thought, actionResult, observation, iteration };
-  }
-
-  /**
-   * Chain-of-Thought 推理
-   */
-  async reasonWithChainOfThought(func, question, context, iteration) {
-    // 构建思维链
-    const reasoningSteps = [
-      `步骤 ${iteration + 1}: 分析用户需求`,
-      `用户问题: ${question}`,
-      `需要执行的函数: ${func.type}`,
-      `函数参数: ${JSON.stringify(func.params)}`,
-      `执行原因: 这个函数可以帮助${this.explainFunctionPurpose(func)}`
-    ];
-
-    return {
-      reason: `执行 ${func.type} 以完成用户请求`,
-      reasoningChain: reasoningSteps,
-      confidence: this.estimateConfidence(func, question),
-      iteration
-    };
-  }
-
-  /**
-   * 解释函数目的
-   */
-  explainFunctionPurpose(func) {
-    const funcDesc = func.description || func.prompt || '';
-    if (funcDesc.includes('读取') || funcDesc.includes('read')) return '读取信息';
-    if (funcDesc.includes('写入') || funcDesc.includes('write')) return '保存信息';
-    if (funcDesc.includes('搜索') || funcDesc.includes('search')) return '搜索内容';
-    if (funcDesc.includes('执行') || funcDesc.includes('execute')) return '执行操作';
-    return '完成任务';
-  }
-
-  /**
-   * 估计执行信心度
-   */
-  estimateConfidence(func, question) {
-    // 简单的信心度估计
-    const hasParams = func.params && Object.keys(func.params).length > 0;
-    const questionMatches = question.toLowerCase().includes(func.type.toLowerCase());
-    return hasParams && questionMatches ? 0.9 : 0.7;
-  }
-
-  /**
-   * 一致性观察（Self-Consistency）
-   */
-  async observeWithConsistency(func, actionResult, thought, context) {
-    const success = actionResult?.success !== false;
-    const hasResult = actionResult?.result !== null && actionResult?.result !== undefined;
-    
-    // 一致性检查：结果是否符合预期
-    const isConsistent = success && hasResult;
-    
-    // 验证结果质量
-    const qualityCheck = await this.checkResultQuality(func, actionResult?.result, context);
-    
-    return {
-      success,
-      result: actionResult?.result,
-      isConsistent,
-      qualityScore: qualityCheck.score,
-      needsMoreActions: !isConsistent || qualityCheck.score < 0.5,
-      observation: qualityCheck.observation
-    };
-  }
-
-  /**
-   * 检查结果质量（增强版：多维度评估）
-   */
-  async checkResultQuality(func, result, context) {
-    if (!result) {
-      return { score: 0, observation: '结果为空' };
-    }
-
-    // 多维度质量评估
-    let score = 0.5;
-    const checks = [];
-    
-    // 1. 类型检查
-    if (typeof result === 'object' && !Array.isArray(result)) {
-      const keys = Object.keys(result);
-      if (keys.length > 0) {
-        score += 0.2;
-        checks.push('对象结构完整');
-      }
-      // 检查是否有错误字段
-      if (result.error) {
-        score -= 0.3;
-        checks.push('包含错误信息');
-      }
-    } else if (typeof result === 'string') {
-      if (result.length > 0) {
-        score += 0.2;
-        checks.push('字符串非空');
-        // 检查是否包含错误关键词
-        const errorKeywords = ['错误', '失败', 'error', 'failed', 'exception'];
-        if (errorKeywords.some(kw => result.toLowerCase().includes(kw))) {
-          score -= 0.2;
-          checks.push('可能包含错误信息');
-        }
-      }
-    } else if (Array.isArray(result)) {
-      if (result.length > 0) {
-        score += 0.15;
-        checks.push('数组非空');
-      }
-    } else if (typeof result === 'number') {
-      if (isFinite(result)) {
-        score += 0.1;
-        checks.push('数值有效');
-      }
-    } else if (typeof result === 'boolean') {
-      score += 0.1;
-      checks.push('布尔值有效');
-    }
-    
-    // 2. 完整性检查（如果函数定义了期望的结果结构）
-    if (func.expectedResult) {
-      const expectedType = func.expectedResult.type;
-      if (expectedType && typeof result !== expectedType) {
-        score -= 0.2;
-        checks.push('类型不匹配');
-      }
-    }
-    
-    // 限制分数范围
-    score = Math.min(1, Math.max(0, score));
-
-    return {
-      score,
-      observation: score >= 0.7 ? '结果质量良好' : score >= 0.5 ? '结果质量一般' : '结果质量较差',
-      checks
-    };
-  }
-
-  /**
-   * 观察所有结果
-   */
-  observeResults(results, question) {
-    const allSuccess = results.every(r => r.success !== false);
-    const hasErrors = results.some(r => r.success === false);
-    return {
-      completed: allSuccess && !hasErrors,
-      needsMoreActions: hasErrors || results.length === 0,
-      results,
-      errorCount: results.filter(r => r.success === false).length
-    };
-  }
-
-  /**
-   * 思考下一步动作（增强版：Chain-of-Thought + Self-Consistency）
-   */
-  async thinkNextActions(question, results, observation, context) {
-    if (observation.errorCount > 0) {
-      // 错误反思：分析失败原因并生成修正动作
-      return await this.reflectAndPlanCorrection(question, results, observation, context);
-    }
-    
-    // 检查是否真的完成（Self-Consistency 检查）
-    const consistencyCheck = await this.checkTaskCompletion(question, results, context);
-    if (!consistencyCheck.completed) {
-      // 生成补充动作
-      return await this.planAdditionalActions(question, results, consistencyCheck, context);
-    }
-    
-    return [];
-  }
-
-  /**
-   * 错误反思和修正计划（Reflexion）
-   */
-  async reflectAndPlanCorrection(question, results, observation, context) {
-    const failedActions = results.filter(r => r.success === false);
-    if (failedActions.length === 0) return [];
-
-    // 分析失败原因
-    const reflections = await Promise.all(
-      failedActions.map(async (failed) => {
-        const reflection = await this.deepReflect(failed, question, context);
-        return {
-          originalAction: failed.func,
-          reflection,
-          correctedAction: await this.generateCorrectedAction(failed, reflection, context)
-        };
-      })
-    );
-
-    return reflections
-      .filter(r => r.correctedAction)
-      .map(r => r.correctedAction);
-  }
-
-  /**
-   * 深度反思（Reflexion）
-   */
-  async deepReflect(failedResult, question, context) {
-    const error = failedResult.error || failedResult.actionResult?.error;
-    const func = failedResult.func;
-    
-    // 分析错误类型和原因
-    const errorAnalysis = {
-      type: this.analyzeErrorType(error),
-      message: error?.message || '未知错误',
-      function: func.type,
-      params: func.params
-    };
-
-    // 生成反思提示
-    const reflectionPrompt = `分析以下错误并思考如何修正：
-
-用户问题：${question}
-执行的函数：${func.type}
-函数参数：${JSON.stringify(func.params)}
-错误信息：${errorAnalysis.message}
-错误类型：${errorAnalysis.type}
-
-请思考：
-1. 错误的原因是什么？
-2. 如何修正参数或策略？
-3. 是否需要先执行其他操作？`;
-
-    // 这里可以调用 AI 进行深度反思（简化实现）
-    return {
-      reason: `函数 ${func.type} 执行失败：${errorAnalysis.message}`,
-      suggestion: `建议检查参数是否正确，或尝试其他方法`,
-      shouldRetry: errorAnalysis.type === 'network' || errorAnalysis.type === 'timeout',
-      adjustedParams: errorAnalysis.type === 'invalid_params' ? this.adjustParamsForError(func, error) : null
-    };
-  }
-
-  /**
-   * 生成修正后的动作
-   */
-  async generateCorrectedAction(failedResult, reflection, context) {
-    if (!reflection.shouldRetry && !reflection.adjustedParams) {
-      return null;
-    }
-
-    return {
-      type: failedResult.func.type,
-      params: reflection.adjustedParams || failedResult.func.params,
-      dependsOn: failedResult.func.dependsOn || [],
-      retry: true
-    };
-  }
-
-  /**
-   * 检查任务完成度（Self-Consistency + 质量评估）
-   */
-  async checkTaskCompletion(question, results, context) {
-    if (!results || results.length === 0) {
-      return { completed: false, missingResults: [], reason: '没有执行任何动作' };
-    }
-
-    // 检查所有动作是否成功
-    const allSuccess = results.every(r => r && r.success !== false);
-    
-    // 检查结果是否满足用户需求
-    const resultSummary = results
-      .filter(r => r && r.func)
-      .map(r => ({
-        function: r.func.type,
-        success: r.success !== false,
-        hasResult: r.actionResult?.result !== null && r.actionResult?.result !== undefined,
-        qualityScore: r.observation?.qualityScore || 0
-      }));
-
-    // 一致性检查：结果是否完整且质量良好
-    const hasCompleteResults = resultSummary.every(r => r.success && r.hasResult);
-    const hasGoodQuality = resultSummary.every(r => r.qualityScore >= 0.5);
-    
-    // 综合判断
-    const completed = allSuccess && hasCompleteResults && hasGoodQuality;
-    
-    return {
-      completed,
-      missingResults: resultSummary.filter(r => !r.hasResult).map(r => r.function),
-      lowQualityResults: resultSummary.filter(r => r.qualityScore < 0.5).map(r => r.function),
-      reason: completed 
-        ? '任务已完成且质量良好' 
-        : !hasCompleteResults 
-          ? '部分结果缺失' 
-          : !hasGoodQuality 
-            ? '部分结果质量不佳' 
-            : '部分动作执行失败'
-    };
-  }
-
-  /**
-   * 规划补充动作（增强版：智能规划）
-   */
-  async planAdditionalActions(question, results, consistencyCheck, context) {
-    const actions = [];
-    
-    // 1. 处理缺失的结果
-    const missingFunctions = consistencyCheck.missingResults || [];
-    for (const funcType of missingFunctions) {
-      const originalResult = results.find(r => r && r.func && r.func.type === funcType);
-      if (originalResult && originalResult.func) {
-        actions.push({
-          type: funcType,
-          params: originalResult.func.params,
-          dependsOn: originalResult.func.dependsOn || [],
-          retry: true,
-          reason: '结果缺失，重新执行'
-        });
-      }
-    }
-    
-    // 2. 处理质量不佳的结果
-    const lowQualityFunctions = consistencyCheck.lowQualityResults || [];
-    for (const funcType of lowQualityFunctions) {
-      const originalResult = results.find(r => r && r.func && r.func.type === funcType);
-      if (originalResult && originalResult.func) {
-        // 尝试调整参数以提高质量
-        const adjustedParams = await this.improveParamsForQuality(originalResult.func, originalResult.actionResult, context);
-        actions.push({
-          type: funcType,
-          params: adjustedParams || originalResult.func.params,
-          dependsOn: originalResult.func.dependsOn || [],
-          retry: true,
-          reason: '质量不佳，优化后重试'
-        });
-      }
-    }
-    
-    return actions;
-  }
-
-  /**
-   * 改进参数以提高结果质量
-   */
-  async improveParamsForQuality(func, actionResult, context) {
-    if (!func || !func.params || !actionResult) {
-      return null;
-    }
-
-    const params = { ...func.params };
-    const result = actionResult.result;
-    let improved = false;
-    
-    // 如果结果是空或质量低，尝试调整参数
-    if (!result || (typeof result === 'object' && Object.keys(result).length === 0)) {
-      // 可以尝试添加更多参数或调整参数值
-      // 例如：增加搜索范围、添加更多过滤条件等
-    }
-    
-    return improved ? params : null;
-  }
-
-  /**
-   * 调整参数以修正错误（增强版：智能错误修正）
-   */
-  adjustParamsForError(func, error) {
-    if (!func || !func.params) {
-      return null;
-    }
-
-    const params = { ...func.params };
-    const errorMsg = error?.message?.toLowerCase() || '';
-    let adjusted = false;
-    
-    // 1. 路径错误修正
-    if (errorMsg.includes('not found') || errorMsg.includes('不存在') || errorMsg.includes('no such file')) {
-      for (const [key, value] of Object.entries(params)) {
-        if ((key.includes('path') || key.includes('file') || key.includes('dir')) && typeof value === 'string') {
-          // 尝试修正路径格式
-          let correctedPath = value.replace(/\\/g, '/');
-          // 移除多余的斜杠
-          correctedPath = correctedPath.replace(/\/+/g, '/');
-          // 如果是相对路径，尝试添加当前工作目录
-          if (!correctedPath.startsWith('/') && !correctedPath.match(/^[A-Z]:/i)) {
-            // 可以尝试添加默认路径前缀
-          }
-          params[key] = correctedPath;
-          adjusted = true;
-        }
-      }
-    }
-    
-    // 2. 参数类型错误修正
-    if (errorMsg.includes('invalid') || errorMsg.includes('类型') || errorMsg.includes('type')) {
-      const propSchema = func.schema?.properties;
-      if (propSchema) {
-        for (const [key, value] of Object.entries(params)) {
-          const schema = propSchema[key];
-          if (schema) {
-            // 尝试类型转换
-            if (schema.type === 'number' && typeof value === 'string') {
-              const num = parseFloat(value);
-              if (!isNaN(num)) {
-                params[key] = num;
-                adjusted = true;
-              }
-            } else if (schema.type === 'string' && typeof value !== 'string') {
-              params[key] = String(value);
-              adjusted = true;
-            }
-          }
-        }
-      }
-    }
-    
-    // 3. 权限错误（无法修正，但记录）
-    if (errorMsg.includes('permission') || errorMsg.includes('权限')) {
-      // 权限错误通常无法通过调整参数解决
-      return null;
-    }
-    
-    return adjusted ? params : null;
-  }
-
-  /**
-   * 分析函数依赖关系，分组以便并行执行（优化版：拓扑排序）
-   */
-  analyzeFunctionDependencies(functions) {
-    if (!functions || functions.length === 0) {
-      return [];
-    }
-
-    // 构建依赖图
-    const graph = new Map();
-    const inDegree = new Map();
-    
-    functions.forEach(func => {
-      const funcType = func.type;
-      graph.set(funcType, func);
-      inDegree.set(funcType, (func.dependsOn || []).length);
-    });
-    
-    // 拓扑排序分组
-    const groups = [];
-    const queue = [];
-    const executed = new Set();
-    
-    // 初始化：找到所有无依赖的函数
-    inDegree.forEach((degree, funcType) => {
-      if (degree === 0) {
-        queue.push(funcType);
-      }
-    });
-    
-    while (queue.length > 0 || executed.size < functions.length) {
-      // 当前层（可以并行执行的函数）
-      const currentLevel = [];
-      
-      // 处理所有无依赖的函数
-      while (queue.length > 0) {
-        const funcType = queue.shift();
-        if (executed.has(funcType)) continue;
-        
-        const func = graph.get(funcType);
-        if (func) {
-          currentLevel.push(func);
-          executed.add(funcType);
-        }
-      }
-      
-      if (currentLevel.length > 0) {
-        groups.push(currentLevel);
-      }
-      
-      // 更新依赖计数，找到新的可执行函数
-      functions.forEach(func => {
-        if (executed.has(func.type)) return;
-        
-        const dependsOn = func.dependsOn || [];
-        const canExecute = dependsOn.every(dep => executed.has(dep));
-        
-        if (canExecute && !queue.includes(func.type)) {
-          queue.push(func.type);
-        }
-      });
-      
-      // 防止死循环
-      if (queue.length === 0 && executed.size < functions.length) {
-        // 处理循环依赖：强制执行剩余函数
-        const remaining = functions.filter(f => !executed.has(f.type));
-        if (remaining.length > 0) {
-          groups.push(remaining);
-          remaining.forEach(f => executed.add(f.type));
-        }
-        break;
-      }
-    }
-    
-    return groups.length > 0 ? groups : functions.map(f => [f]);
-  }
-
   async checkPermission(permission, context) {
     const { e } = context;
     if (!e?.isGroup) return false;
@@ -2151,11 +935,8 @@ export default class AIStream {
   }
 
   /**
-   * 获取重试配置（从aistream.yaml读取）
-   * @returns {Object} 重试配置对象
-   */
-  /**
-   * 获取重试配置（从aistream.yaml读取，增强版：指数退避）
+   * 获取重试配置
+   * @returns {Object}
    */
   getRetryConfig() {
     const runtime = cfg.aistream || {};
@@ -2172,29 +953,26 @@ export default class AIStream {
   }
 
   /**
-   * 计算重试延迟（指数退避算法 + Jitter）
+   * 计算重试延迟（指数退避）
+   * @param {number} attempt - 重试次数
+   * @param {Object} retryConfig - 重试配置
+   * @returns {number}
    */
   calculateRetryDelay(attempt, retryConfig) {
     const baseDelay = retryConfig.delay || 2000;
     const multiplier = retryConfig.backoffMultiplier || 2;
     const maxDelay = retryConfig.maxDelay || 10000;
     
-    // 指数退避：delay = baseDelay * (multiplier ^ (attempt - 1))
     const delay = Math.min(baseDelay * Math.pow(multiplier, attempt - 1), maxDelay);
-    
-    // 添加随机抖动（Jitter），避免雷群效应
-    const jitter = delay * 0.1 * (Math.random() * 2 - 1); // ±10% 随机抖动
+    const jitter = delay * 0.1 * (Math.random() * 2 - 1);
     
     return Math.max(0, delay + jitter);
   }
 
   /**
-   * 判断错误类型
+   * 分类错误类型
    * @param {Error} error - 错误对象
-   * @returns {Object} 错误类型信息
-   */
-  /**
-   * 判断错误类型（增强版：更精确的错误分类）
+   * @returns {Object}
    */
   classifyError(error) {
     if (!error) {
@@ -2251,20 +1029,16 @@ export default class AIStream {
 
   /**
    * 判断是否应该重试
-   * @param {Object} errorInfo - 错误类型信息
+   * @param {Object} errorInfo - 错误信息
    * @param {Object} retryConfig - 重试配置
-   * @param {number} attempt - 当前尝试次数
-   * @returns {boolean} 是否应该重试
-   */
-  /**
-   * 判断是否应该重试（增强版：支持更多错误类型）
+   * @param {number} attempt - 当前重试次数
+   * @returns {boolean}
    */
   shouldRetry(errorInfo, retryConfig, attempt) {
     if (!retryConfig.enabled || attempt >= retryConfig.maxAttempts) {
       return false;
     }
     
-    // 认证错误不重试
     if (errorInfo.isAuth) {
       return false;
     }
@@ -2281,74 +1055,51 @@ export default class AIStream {
     );
   }
 
-  /**
-   * 格式化超时时间（毫秒转秒）
-   * @param {Object} config - 配置对象
-   * @returns {number} 超时秒数
-   */
   getTimeoutSeconds(config) {
     const timeout = config.timeout || this.config?.timeout || 360000;
     return Math.round(timeout / 1000);
   }
 
   /**
-   * 格式化消息预览（用于日志记录）
-   * @param {Array} messages - 消息数组
-   * @returns {string} 格式化后的消息预览
-   */
-  formatMessagesPreview(messages) {
-    return messages.map(m => {
-      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-      const preview = content.length > 200 ? content.substring(0, 200) + '...' : content;
-      return `${m.role}: ${preview}`;
-    }).join('\n');
-  }
-
-  /**
-   * 记录AI调用日志
-   * @param {string} type - 调用类型（'normal' 或 'stream'）
-   * @param {Object} config - 配置对象
-   * @param {Array} messages - 消息数组
-   */
-  logAICall(type, config, messages) {
-    const messagesPreview = this.formatMessagesPreview(messages);
-    const typeLabel = type === 'stream' ? '(流式)' : '';
-    BotUtil.makeLog('info', 
-      `[${this.name}] 调用LLM工厂${typeLabel}\nProvider: ${config.provider || 'unknown'}\n消息:\n${messagesPreview}`,
-      'AIStream'
-    );
-  }
-
-  /**
-   * 记录AI响应日志
-   * @param {string} response - 响应文本
-   * @param {boolean} isStream - 是否为流式响应
-   */
-  logAIResponse(response, isStream = false) {
-    const responsePreview = response && response.length > 500 
-      ? response.substring(0, 500) + '...' 
-      : (response || '(空响应)');
-    const typeLabel = isStream ? '流式' : '';
-    BotUtil.makeLog('info',
-      `[${this.name}] LLM${typeLabel}响应${isStream ? '完成' : ''}\n长度: ${response?.length || 0}字符\n内容: ${responsePreview}`,
-      'AIStream'
-    );
-  }
-
-  /**
-   * AI调用
+   * 调用AI（非流式）
+   * @param {Array<Object>} messages - 消息列表
+   * @param {Object} apiConfig - API配置
+   * @returns {Promise<string>}
    */
   async callAI(messages, apiConfig = {}) {
     const config = this.resolveLLMConfig(apiConfig);
+    
+    try {
+      const payload = {
+        messages,
+        model: config.provider,
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
+        stream: false
+      };
+
+      const response = await Bot.callSubserver('/api/langchain/chat', {
+        body: payload
+      });
+
+      return response.choices?.[0]?.message?.content || response.content || '';
+    } catch (error) {
+      BotUtil.makeLog('warn', `子服务端调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
+    }
     const retryConfig = this.getRetryConfig();
-    this.logAICall('normal', config, messages);
+
+    const inputTokens = messages.reduce((sum, m) => sum + this.estimateTokens(m.content || ''), 0);
+    MonitorService.recordTokens(`${this.name}.callAI`, { input: inputTokens });
 
     let lastError = null;
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
         const client = LLMFactory.createClient(config);
         const response = await client.chat(messages, config);
-        this.logAIResponse(response, false);
+        
+        const outputTokens = this.estimateTokens(response);
+        MonitorService.recordTokens(`${this.name}.callAI`, { output: outputTokens });
+        
         return response;
       } catch (error) {
         lastError = error;
@@ -2356,7 +1107,6 @@ export default class AIStream {
         const timeoutSeconds = this.getTimeoutSeconds(config);
         const shouldRetry = this.shouldRetry(errorInfo, retryConfig, attempt);
         
-        // 记录警告日志
         if (errorInfo.isTimeout) {
           BotUtil.makeLog('warn', 
             `[${this.name}] AI调用超时（${timeoutSeconds}秒）${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '请求被中止'}`,
@@ -2369,13 +1119,11 @@ export default class AIStream {
           );
         }
         
-        // 如果需要重试，等待后继续
         if (shouldRetry) {
           await BotUtil.sleep(retryConfig.delay);
           continue;
         }
         
-        // 不需要重试或已达到最大重试次数
         if (errorInfo.isTimeout) {
           BotUtil.makeLog('error', 
             `[${this.name}] AI调用超时（${timeoutSeconds}秒），已重试${attempt}次`,
@@ -2393,7 +1141,6 @@ export default class AIStream {
       }
     }
     
-    // 所有重试都失败
     if (lastError) {
       const timeoutSeconds = this.getTimeoutSeconds(config);
       BotUtil.makeLog('error', 
@@ -2407,24 +1154,63 @@ export default class AIStream {
   }
 
   /**
-   * 调用AI（流式输出）
-   *
-   * 调用AI接口并实时返回增量响应，支持SSE（Server-Sent Events）协议。
-   * 可选在流式结束后对完整结果进行函数解析与执行，用于桌面/设备等带指令能力的工作流。
-   *
-   * @param {Array<Object>} messages - 消息数组
-   * @param {Object} apiConfig - API配置（可选）
-   * @param {Function} onDelta - 增量回调函数 (delta: string) => {}
-   *   - delta: 本次增量文本
-   * @param {Object} [options] - 额外控制参数
-   *   - {boolean} enableFunctionCalling 是否在流结束后执行函数解析（默认 false）
-   *   - {Object} context 传递给函数执行的上下文对象（如 { e, question, config }）
-   * @returns {Promise<string>} 完整响应文本（如果未启用函数解析则为原始文本）
+   * 调用AI（流式）
+   * @param {Array<Object>} messages - 消息列表
+   * @param {Object} apiConfig - API配置
+   * @param {Function} onDelta - 增量回调
+   * @param {Object} options - 选项
+   * @returns {Promise<string>}
    */
   async callAIStream(messages, apiConfig = {}, onDelta, options = {}) {
     const config = this.resolveLLMConfig(apiConfig);
+    
+    try {
+      const payload = {
+        messages,
+        model: config.provider,
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
+        stream: true
+      };
+
+      const response = await Bot.callSubserver('/api/langchain/chat', {
+        body: payload,
+        rawResponse: true
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim();
+            if (dataStr === '[DONE]') break;
+            
+            try {
+              const json = JSON.parse(dataStr);
+              const delta = json.choices?.[0]?.delta?.content || '';
+              if (delta) {
+                fullText += delta;
+                if (typeof onDelta === 'function') onDelta(delta);
+              }
+            } catch (e) {}
+          }
+        }
+      }
+
+      return fullText;
+    } catch (error) {
+      BotUtil.makeLog('warn', `子服务端流式调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
+    }
     const retryConfig = this.getRetryConfig();
-    this.logAICall('stream', config, messages);
 
     let fullText = '';
     const wrapDelta = (delta) => {
@@ -2438,7 +1224,6 @@ export default class AIStream {
       try {
         const client = LLMFactory.createClient(config);
         await client.chatStream(messages, wrapDelta, config);
-        this.logAIResponse(fullText, true);
         break; // 成功，退出重试循环
       } catch (error) {
         lastError = error;
@@ -2446,7 +1231,6 @@ export default class AIStream {
         const timeoutSeconds = this.getTimeoutSeconds(config);
         const shouldRetry = this.shouldRetry(errorInfo, retryConfig, attempt);
         
-        // 记录警告日志
         if (errorInfo.isTimeout) {
           BotUtil.makeLog('warn', 
             `[${this.name}] AI流式调用超时（${timeoutSeconds}秒）${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '请求被中止'}`,
@@ -2459,14 +1243,12 @@ export default class AIStream {
           );
         }
         
-        // 如果需要重试，重置fullText并等待后继续
         if (shouldRetry) {
-          fullText = ''; // 重置文本，准备重试
+          fullText = '';
           await BotUtil.sleep(retryConfig.delay);
           continue;
         }
         
-        // 不需要重试或已达到最大重试次数
         if (errorInfo.isTimeout) {
           BotUtil.makeLog('error', 
             `[${this.name}] AI流式调用超时（${timeoutSeconds}秒），已重试${attempt}次`,
@@ -2483,7 +1265,6 @@ export default class AIStream {
       }
     }
     
-    // 所有重试都失败
     if (lastError) {
       const timeoutSeconds = this.getTimeoutSeconds(config);
       BotUtil.makeLog('error', 
@@ -2508,131 +1289,36 @@ export default class AIStream {
   }
 
   /**
-   * 根据运行时配置与外部参数解析 LLM 配置
-   * @param {Object} apiConfig - 自定义配置
-   * @returns {Object} LLM配置
-   */
-  buildEmbeddingConfig(overrides = {}) {
-    const runtime = cfg.aistream?.embedding || {};
-    
-    // 简化配置：只有 local 和 remote 两种模式
-    const mode = overrides.mode || runtime.mode || 'local';
-    const remoteConfig = runtime.remote || {};
-
-    const result = {
-      // 默认启用
-      enabled: overrides.enabled ?? runtime.enabled ?? true,
-      // 模式：local 或 remote
-      mode: mode,
-      // 通用配置
-      maxContexts: overrides.maxContexts || runtime.maxContexts || 5,
-      similarityThreshold: overrides.similarityThreshold || runtime.similarityThreshold || 0.6,
-      cacheExpiry: overrides.cacheExpiry || runtime.cacheExpiry || 86400,
-      // 远程模式配置
-      apiUrl: overrides.apiUrl || remoteConfig.apiUrl || '',
-      apiKey: overrides.apiKey || remoteConfig.apiKey || '',
-      apiModel: overrides.apiModel || remoteConfig.apiModel || 'text-embedding-3-small',
-      // 兼容旧配置
-      ...overrides
-    };
-
-    return result;
-  }
-
-  applyEmbeddingOverrides(overrides = {}) {
-    this.embeddingConfig = this.buildEmbeddingConfig({
-      ...this.embeddingConfig,
-      ...overrides
-    });
-    return this.embeddingConfig;
-  }
-
-  /**
-   * 根据运行时配置与外部参数解析 LLM 配置
-   * 
-   * 配置优先级（从低到高）：
-   * 1. llm.defaults - 全局默认配置
-   * 2. llm.profiles[selectedProfile] - 选中的配置档位（如 balanced, fast, long）
-   * 3. llm.workflows[workflowName].overrides - 工作流覆盖配置
-   * 4. apiConfig - 代码传入的配置（最高优先级）
-   * 
-   * 提供商选择逻辑：
-   * - 如果 apiConfig 中指定了 provider，使用指定的提供商
-   * - 如果从配置文件读取，使用配置中的 provider（默认 gptgod）
-   * - 如果都没有，默认使用 gptgod 提供商
-   * 
-   * @param {Object} apiConfig - 自定义配置
-   *   - baseUrl: API 基础地址
-   *   - apiKey: API 密钥
-   *   - provider: LLM 提供商名称（如 'gptgod', 'volcengine' 等）
-   *   - model: 模型名称
-   *   - profile: 配置档位名称（如 'balanced', 'fast', 'long'）
-   *   - 其他 LLM 参数（temperature, maxTokens 等）
-   * @returns {Object} LLM配置
+   * 解析LLM配置
+   * @param {Object} apiConfig - API配置
+   * @returns {Object}
    */
   resolveLLMConfig(apiConfig = {}) {
-    // 使用安全的配置读取，确保有默认值
     const merged = { ...this.config, ...apiConfig };
     const runtime = cfg.aistream || {};
     const llm = runtime.llm || {};
     const vision = runtime.vision || {};
     const global = runtime.global || {};
 
-    // Provider配置：优先级 apiConfig > llm.Provider > 默认值
-    const provider = merged.provider || llm.Provider || 'gptgod';
-    // 识图运营商：可单独配置，否则默认与 LLM Provider 一致
-    const visionProvider = (merged.visionProvider || vision.Provider || provider).toLowerCase();
+    // 获取提供商名称（支持从多个来源获取）
+    const provider = (merged.provider || llm.provider || llm.Provider || '').toLowerCase();
+    const visionProvider = (merged.visionProvider || vision.provider || vision.Provider || provider).toLowerCase();
     
-    // 从aistream.yaml的global配置中读取timeout（优先使用全局配置）
-    // 优先级：apiConfig.timeout > llm.timeout > global.maxTimeout > this.config.timeout > 默认360000
+    // 解析超时配置（支持多级回退）
     const timeout = merged.timeout || 
                     (llm.timeout && typeof llm.timeout === 'number' ? llm.timeout : null) ||
                     (global.maxTimeout && typeof global.maxTimeout === 'number' ? global.maxTimeout : null) ||
                     (this.config && this.config.timeout && typeof this.config.timeout === 'number' ? this.config.timeout : null) ||
                     360000;
 
-    // LLM Provider 到配置名的映射（可扩展）
-    const llmConfigMap = {
-      'gptgod': 'god',
-      'volcengine': 'volcengine_llm',
-      'xiaomimimo': 'xiaomimimo_llm'
-    };
+    // 动态获取提供商配置（从配置系统）
+    const providerConfig = this.getProviderConfig(provider, llm);
+    const visionConfig = this.getProviderConfig(visionProvider, vision, true);
 
-    // Vision Provider 到配置名的映射（可扩展）
-    const visionConfigMap = {
-      'gptgod': 'god_vision',
-      'volcengine': 'volcengine_vision'
-    };
-
-    // 检查Provider是否支持
-    if (!LLMFactory.hasProvider(provider)) {
-      BotUtil.makeLog('error', `不支持的LLM提供商: ${provider}，已回退到gptgod`, 'AIStream');
-      const fallbackProvider = 'gptgod';
-      const fallbackConfigKey = llmConfigMap[fallbackProvider] || 'god';
-      // 安全读取配置，确保cfg存在
-      const fallbackConfig = (cfg[fallbackConfigKey] && typeof cfg[fallbackConfigKey] === 'object') 
-        ? cfg[fallbackConfigKey] 
-        : {};
-      return {
-        ...fallbackConfig,
-        ...merged,
-        provider: fallbackProvider,
-        visionProvider: visionProvider,
-        timeout // 确保timeout被传递
-      };
-    }
-
-    // 动态获取 LLM 配置（安全读取）
-    const llmConfigKey = llmConfigMap[provider];
-    const providerConfig = (llmConfigKey && cfg[llmConfigKey] && typeof cfg[llmConfigKey] === 'object') 
-      ? cfg[llmConfigKey] 
-      : {};
-
-    // 动态获取 Vision 配置（一个工厂一个配置文件，安全读取）
-    let visionConfig = {};
-    const visionConfigKey = visionConfigMap[visionProvider];
-    if (visionConfigKey && cfg[visionConfigKey] && typeof cfg[visionConfigKey] === 'object') {
-      visionConfig = cfg[visionConfigKey];
+    // 验证提供商是否支持
+    if (provider && !LLMFactory.hasProvider(provider)) {
+      BotUtil.makeLog('error', `不支持的LLM提供商: ${provider}`, 'AIStream');
+      throw new Error(`不支持的LLM提供商: ${provider}`);
     }
 
     const finalConfig = {
@@ -2641,21 +1327,63 @@ export default class AIStream {
       provider,
       visionProvider,
       visionConfig,
-      timeout // 确保timeout被正确传递
+      timeout
     };
 
     return finalConfig;
   }
 
+  /**
+   * 获取提供商配置（可扩展的配置解析）
+   * @param {string} provider - 提供商名称
+   * @param {Object} runtimeConfig - 运行时配置
+   * @param {boolean} isVision - 是否为视觉配置
+   * @returns {Object} 提供商配置
+   */
+  getProviderConfig(provider, runtimeConfig = {}, isVision = false) {
+    if (!provider) return {};
+
+    // 优先从运行时配置获取
+    if (runtimeConfig.config && typeof runtimeConfig.config === 'object') {
+      const providerSpecificConfig = runtimeConfig.config[provider];
+      if (providerSpecificConfig && typeof providerSpecificConfig === 'object') {
+        return providerSpecificConfig;
+      }
+    }
+
+    // 从全局配置获取（支持命名约定：{provider}_llm 或 {provider}_vision）
+    const configKey = isVision 
+      ? `${provider}_vision` 
+      : `${provider}_llm`;
+    
+    if (cfg[configKey] && typeof cfg[configKey] === 'object') {
+      return cfg[configKey];
+    }
+
+    // 尝试直接使用提供商名称作为配置键
+    if (cfg[provider] && typeof cfg[provider] === 'object') {
+      return cfg[provider];
+    }
+
+    return {};
+  }
 
   /**
    * 执行工作流
+   * @param {Object} e - 事件对象
+   * @param {string|Object} question - 问题
+   * @param {Object} config - 配置
+   * @returns {Promise<string|null>}
    */
   async execute(e, question, config) {
+    const traceId = MonitorService.startTrace(this.name, {
+      agentId: e?.user_id,
+      workflow: this.name,
+      userId: e?.user_id
+    });
+
     try {
       const context = { e, question, config };
-      
-      // 如果stream有tools，注入到context中
       if (this.tools) {
         context.tools = this.tools;
       }
@@ -2663,38 +1391,37 @@ export default class AIStream {
       const baseMessages = await this.buildChatContext(e, question);
       const messages = await this.buildEnhancedContext(e, question, baseMessages);
       
+      MonitorService.addStep(traceId, { step: 'build_context', messages: messages.length });
+      
       const response = await this.callAI(messages, config);
+      MonitorService.addStep(traceId, { step: 'ai_call', responseLength: response?.length || 0 });
 
       if (!response) {
+        MonitorService.endTrace(traceId, { success: false, error: 'No response' });
         return null;
       }
 
       const { functions, cleanText } = this.parseFunctions(response, context);
 
-      // 先发送自然语言回复（如果有），然后再执行函数
-      // 这样可以确保用户先看到AI的自然语言回复，然后才看到工作流启动等操作
       if (cleanText && cleanText.trim() && e?.reply) {
         await e.reply(cleanText.trim()).catch(err => {
           BotUtil.makeLog('debug', `发送自然语言回复失败: ${err.message}`, 'AIStream');
         });
       }
 
-      // 执行函数（支持 ReAct 模式和并行执行）
-      await this.executeFunctionsWithReAct(functions, context, question);
+      if (functions.length > 0) {
+        MonitorService.addStep(traceId, { step: 'execute_functions', count: functions.length });
+        await this.executeFunctionsWithReAct(functions, context, question);
+      }
 
-      // 执行完成后，自动清理进程（如果启用了工具系统）
       if (context.tools && typeof context.tools.cleanupProcesses === 'function') {
         try {
           await context.tools.cleanupProcesses();
-        } catch (err) {
-          // 静默处理清理错误
-        }
+        } catch (err) {}
       }
 
-      // 返回AI的原始回复，不做额外处理
       const finalResponse = cleanText || '';
 
-      // 存储AI响应到记忆系统（包含执行的函数信息）
       if (this.embeddingConfig.enabled && finalResponse && e) {
         const groupId = e.group_id || `private_${e.user_id}`;
         const executedFunctions = functions.length > 0
@@ -2709,8 +1436,11 @@ export default class AIStream {
         }).catch(() => { });
       }
 
+      MonitorService.endTrace(traceId, { success: true, response: finalResponse });
       return finalResponse;
     } catch (error) {
+      MonitorService.recordError(traceId, error);
+      MonitorService.endTrace(traceId, { success: false, error: error.message });
       BotUtil.makeLog('error',
         `工作流执行失败[${this.name}]: ${error.message}`,
         'AIStream'
@@ -2720,17 +1450,11 @@ export default class AIStream {
   }
 
   /**
-   * 处理工作流（支持合并工作流和TODO决策）
-   * 优化：简化调用方式，支持丰富的参数配置
+   * 处理请求（支持工作流合并）
    * @param {Object} e - 事件对象
-   * @param {string|Object} question - 用户问题
-   * @param {Object} options - 处理选项
-   *   - mergeStreams: Array<string> - 要合并的工作流名称列表
-   *   - enableTodo: boolean - 是否启用TODO智能决策
-   *   - enableMemory: boolean - 是否启用记忆系统
-   *   - enableDatabase: boolean - 是否启用知识库系统
-   *   - apiConfig: Object - LLM配置
-   * @returns {Promise<string|null>} 响应文本
+   * @param {string|Object} question - 问题
+   * @param {Object} options - 选项
+   * @returns {Promise<string|null>}
    */
   async process(e, question, options = {}) {
     try {
@@ -2749,9 +1473,13 @@ export default class AIStream {
 
       let stream = this;
       
-      // 自动合并辅助工作流（如果启用）
-      if (enableMemory || enableDatabase) {
-        await this.autoMergeAuxiliaryStreams(stream, { enableMemory, enableDatabase });
+      // 提取需要自动合并的工作流
+      const auxiliaryOptions = {};
+      if (enableMemory) auxiliaryOptions.enableMemory = true;
+      if (enableDatabase) auxiliaryOptions.enableDatabase = true;
+      
+      if (Object.keys(auxiliaryOptions).length > 0) {
+        await this.autoMergeAuxiliaryStreams(stream, auxiliaryOptions);
       }
       
       if (mergeStreams.length > 0) {
@@ -2763,27 +1491,14 @@ export default class AIStream {
             secondary: mergeStreams,
             prefixSecondary: true
           });
-
-        this.ensureWorkflowManager(stream);
+        await this.ensureWorkflowManager(stream, { workflowManagerSource: 'todo' });
       }
 
-      // 步骤1: 执行AI调用（带人设）
       const finalQuestion = typeof question === 'string' 
         ? question 
         : (question?.content || question?.text || question);
       
-      const response = await stream.execute(e, finalQuestion, apiConfig);
-      
-      // 步骤2: 检查是否需要自动启动工作流
-      // 只有在AI明确输出了工作流命令时才启动工作流
-      // 如果AI输出了其他命令，说明AI认为这是简单任务，不需要工作流
-      // 如果AI没有输出任何命令，说明AI可能还在等待信息或认为需要更多信息，不应该自动启动工作流
-      if (enableTodo && response && this.hasWorkflowCommand(response)) {
-        // AI已经明确要求启动工作流，不需要再调用任务分析助手
-        // 工作流会在execute中通过start_workflow handler自动启动
-      }
-      
-      return response;
+      return await stream.execute(e, finalQuestion, apiConfig);
     } catch (error) {
       BotUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AIStream');
       return null;
@@ -2791,8 +1506,8 @@ export default class AIStream {
   }
 
   /**
-   * 获取工作流描述信息（标准化注册方法）
-   * @returns {Object} 工作流描述信息
+   * 获取工作流信息
+   * @returns {Object}
    */
   getInfo() {
     return {
@@ -2802,11 +1517,8 @@ export default class AIStream {
       author: this.author,
       priority: this.priority,
       embedding: {
-        enabled: this.embeddingConfig.enabled,
-        mode: this.embeddingConfig.mode || 'local',
-        ready: this.embeddingReady,
-        maxContexts: this.embeddingConfig.maxContexts,
-        threshold: this.embeddingConfig.similarityThreshold
+        enabled: this.embeddingConfig?.enabled || false,
+        maxContexts: this.embeddingConfig?.maxContexts || 5
       },
       functions: Array.from(this.functions.values()).map(f => ({
         name: f.name,
@@ -2818,110 +1530,124 @@ export default class AIStream {
   }
 
   /**
-   * 获取工作流描述信息（别名，兼容性）
-   * @returns {Object} 工作流描述信息
+   * 确保工作流管理器存在
+   * @param {Object} stream - 工作流实例
+   * @param {Object} options - 选项
+   * @param {string} options.workflowManagerSource - 工作流管理器来源工作流名称
+   * @returns {Promise<void>}
    */
-  getDescriptor() {
-    return this.getInfo();
-  }
-
-  /**
-   * 确保stream有workflowManager
-   */
-  ensureWorkflowManager(stream) {
+  async ensureWorkflowManager(stream, options = {}) {
     if (stream.workflowManager) {
       stream.workflowManager.stream = stream;
       return;
     }
     
-    const todoStream = StreamLoader.getStream('todo');
-    if (todoStream?.workflowManager) {
-      todoStream.injectWorkflowManager(stream);
+    const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
+    const sourceStreamName = options.workflowManagerSource || 'todo';
+    
+    // 从指定工作流或合并的工作流中查找工作流管理器
+    const sourceStream = StreamLoader.getStream(sourceStreamName);
+    if (sourceStream?.workflowManager && typeof sourceStream.injectWorkflowManager === 'function') {
+      sourceStream.injectWorkflowManager(stream);
+      return;
+    }
+    
+    // 从合并的工作流中查找
+    if (this._mergedStreams) {
+      for (const mergedStream of this._mergedStreams) {
+        if (mergedStream.workflowManager && typeof mergedStream.injectWorkflowManager === 'function') {
+          mergedStream.injectWorkflowManager(stream);
+          return;
+        }
+      }
     }
   }
 
-  /**
-   * 检查响应中是否包含工作流命令
-   */
-  hasWorkflowCommand(response) {
-    return response && /\[启动工作流:[^\]]+\]/.test(response);
-  }
 
   /**
-   * 自动合并辅助工作流（简化调用方式）
-   * @param {Object} stream - 主工作流
+   * 自动合并辅助工作流
+   * @param {Object} stream - 工作流实例
    * @param {Object} options - 选项
-   *   - enableMemory: boolean - 是否启用记忆系统
-   *   - enableDatabase: boolean - 是否启用知识库
+   * @returns {Promise<void>}
    */
   async autoMergeAuxiliaryStreams(stream, options = {}) {
-    const { enableMemory = false, enableDatabase = false } = options;
     const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
     
-    const auxiliaryStreams = [];
-    if (enableMemory) auxiliaryStreams.push('memory');
-    if (enableDatabase) auxiliaryStreams.push('database');
+    // 从选项中提取要合并的工作流名称（支持字符串或数组）
+    const streamNames = this.extractStreamNames(options);
     
-    for (const streamName of auxiliaryStreams) {
+    for (const streamName of streamNames) {
       try {
         let auxStream = StreamLoader.getStream(streamName);
         
-        // 如果stream不存在，尝试通过 StreamLoader 获取类并创建
         if (!auxStream) {
           const StreamClass = StreamLoader.getStreamClass(streamName);
           if (StreamClass) {
             auxStream = new StreamClass();
             await auxStream.init();
             StreamLoader.streams.set(streamName, auxStream);
+          } else {
+            BotUtil.makeLog('debug', `[${stream.name}] 工作流 ${streamName} 不存在，跳过`, 'AIStream');
+            continue;
           }
         }
         
-        if (auxStream) {
-          // 合并辅助工作流的功能
-          const result = stream.merge(auxStream, { prefix: '' });
-          BotUtil.makeLog('debug', `[${stream.name}] 自动合并辅助工作流 ${streamName}: +${result.mergedCount} 个函数`, 'AIStream');
-          
-          // 特殊处理：memory stream需要注入记忆到context
-          if (streamName === 'memory' && auxStream.getMemoriesForContext) {
-            const memories = await auxStream.getMemoriesForContext({ e: stream.context?.e });
-            if (memories.length > 0) {
-              if (!stream._auxiliaryContext) {
-                stream._auxiliaryContext = {};
-              }
-              stream._auxiliaryContext.memories = memories;
-            }
-          }
-        }
+        stream.merge(auxStream, { prefix: '' });
       } catch (error) {
         BotUtil.makeLog('warn', `[${stream.name}] 自动合并辅助工作流 ${streamName} 失败: ${error.message}`, 'AIStream');
       }
     }
   }
 
+  /**
+   * 从选项中提取工作流名称
+   * @param {Object} options - 选项对象
+   * @returns {Array<string>} 工作流名称列表
+   */
+  extractStreamNames(options) {
+    const names = [];
+    
+    // 支持多种格式：
+    // 1. enableMemory/enableDatabase 等布尔标志
+    // 2. streams 数组
+    // 3. streamNames 数组
+    
+    if (options.streams && Array.isArray(options.streams)) {
+      names.push(...options.streams);
+    }
+    
+    if (options.streamNames && Array.isArray(options.streamNames)) {
+      names.push(...options.streamNames);
+    }
+    
+    // 兼容旧的布尔标志格式
+    const booleanFlags = ['memory', 'database', 'todo', 'chat'];
+    for (const flag of booleanFlags) {
+      const enableKey = `enable${flag.charAt(0).toUpperCase() + flag.slice(1)}`;
+      if (options[enableKey] === true) {
+        names.push(flag);
+      }
+    }
+    
+    return [...new Set(names)]; // 去重
+  }
 
   /**
    * 提取问题文本
+   * @param {string|Object} question - 问题
+   * @returns {string}
    */
   extractQuestionText(question) {
     if (typeof question === 'string') return question;
     return question?.content || question?.text || '';
   }
 
+  /**
+   * 清理资源
+   * @returns {Promise<void>}
+   */
   async cleanup() {
     BotUtil.makeLog('debug', `[${this.name}] 清理资源`, 'AIStream');
-
-    if (this.embeddingModel && typeof this.embeddingModel.dispose === 'function') {
-      try {
-        await this.embeddingModel.dispose();
-      } catch (error) {
-        // 静默处理
-      }
-    }
-
-    this.embeddingModel = null;
-    this.embeddingReady = false;
-    this.similarityCalculator = null;
     this._initialized = false;
-    this._embeddingInitialized = false;
   }
 }

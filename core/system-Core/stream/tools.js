@@ -11,7 +11,11 @@ const IS_WINDOWS = process.platform === 'win32';
 
 /**
  * 基础工具工作流
- * 提供read/grep/write/run四大核心工具
+ * 
+ * 功能分类：
+ * - MCP工具（返回JSON）：read（读取文件）、grep（搜索文本）
+ * - Call Function（执行操作）：write（写入文件）、run（执行命令）、note（记录笔记）
+ * 
  * 这些是智能体的基础武器，所有工作流都可以使用
  */
 export default class ToolsStream extends AIStream {
@@ -40,37 +44,27 @@ export default class ToolsStream extends AIStream {
   async init() {
     await super.init();
     this.registerAllFunctions();
-    BotUtil.makeLog('info', `[${this.name}] 基础工具工作流已初始化，注册了 ${this.functions.size} 个函数`, 'ToolsStream');
-    BotUtil.makeLog('info', `[${this.name}] 函数列表: ${Array.from(this.functions.keys()).join(', ')}`, 'ToolsStream');
   }
 
   registerAllFunctions() {
-    // 1. READ - 读取文件
-    this.registerFunction('read', {
-      description: '读取文件内容',
-      prompt: `[读取:filePath] - 读取文件内容，例如：[读取:易忘信息.txt]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[(?:读取|read):([^\]]+)\]/gi;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const filePath = (match[1] || '').trim();
-          if (filePath) {
-            functions.push({ type: 'read', params: { filePath } });
+    // MCP工具：读取文件（返回JSON结果）
+    this.registerMCPTool('read', {
+      description: '读取文件内容，返回文件路径和内容',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: {
+            type: 'string',
+            description: '文件路径，例如：易忘信息.txt'
           }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
+        },
+        required: ['filePath']
       },
-      handler: async (params = {}, context = {}) => {
-        const { filePath } = params;
-        if (!filePath) return;
+      handler: async (args = {}, context = {}) => {
+        const { filePath } = args;
+        if (!filePath) {
+          return { success: false, error: '文件路径不能为空' };
+        }
 
         let result = await this.tools.readFile(filePath);
         
@@ -79,41 +73,76 @@ export default class ToolsStream extends AIStream {
         }
 
         if (result.success) {
-          await this.handleReadSuccess(result, context);
-        } else {
-          await this.handleReadFailure(filePath, result, context);
+          // 存储到上下文
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.fileContent = result.content;
+            context.stream.context.filePath = result.path;
+            context.stream.context.fileName = path.basename(result.path);
+            context.stream.context.fileSearchResult = {
+              found: true,
+              fileName: path.basename(result.path),
+              path: result.path,
+              content: result.content
+            };
+          }
+
+          // 在工作流中记录笔记
+          await this.storeNoteIfWorkflow(context, 
+            `【文件读取结果】\n已读取文件：${path.basename(result.path)}\n文件路径：${result.path}\n\n【完整文件内容】\n${result.content}`, 
+            'read', true
+          );
+
+          return {
+            success: true,
+            data: {
+              filePath: result.path,
+              fileName: path.basename(result.path),
+              content: result.content,
+              size: result.content.length
+            }
+          };
         }
+        
+        const error = result.error || `未找到文件: ${filePath}`;
+        if (context.stream) {
+          context.stream.context = context.stream.context || {};
+          context.stream.context.fileError = error;
+          context.stream.context.fileSearchResult = {
+            found: false,
+            fileName: filePath,
+            path: null,
+            error
+          };
+        }
+        await this.storeNoteIfWorkflow(context, `【文件读取失败】\n文件：${filePath}\n错误：${error}`, 'read', true);
+        return { success: false, error };
       },
       enabled: true
     });
 
-    // 2. GREP - 搜索文本
-    this.registerFunction('grep', {
-      description: '在文件中搜索文本',
-      prompt: `[搜索:keyword:filePath] - 搜索文本，例如：[搜索:错误:app.log] 或 [搜索:错误]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[(?:搜索|grep):([^:]+)(?::([^\]]+))?\]/gi;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const pattern = (match[1] || '').trim();
-          const filePath = match[2] ? match[2].trim() : null;
-          if (pattern) {
-            functions.push({ type: 'grep', params: { pattern, filePath } });
+    // MCP工具：搜索文本（返回JSON结果）
+    this.registerMCPTool('grep', {
+      description: '在文件中搜索文本，返回匹配结果',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pattern: {
+            type: 'string',
+            description: '搜索关键词'
+          },
+          filePath: {
+            type: 'string',
+            description: '文件路径（可选），如果不指定则搜索所有文件'
           }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
+        },
+        required: ['pattern']
       },
-      handler: async (params = {}, context = {}) => {
-        const { pattern, filePath } = params;
-        if (!pattern) return;
+      handler: async (args = {}, context = {}) => {
+        const { pattern, filePath } = args;
+        if (!pattern) {
+          return { success: false, error: '搜索关键词不能为空' };
+        }
 
         const result = await this.tools.grep(pattern, filePath, {
           caseSensitive: false,
@@ -122,15 +151,40 @@ export default class ToolsStream extends AIStream {
         });
 
         if (result.success) {
-          await this.handleGrepSuccess(result, pattern, filePath, context);
-        } else {
-          await this.handleGrepFailure(pattern, context);
+          // 存储到上下文
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.grepResults = result.matches;
+            context.stream.context.grepPattern = pattern;
+          }
+
+          // 在工作流中记录笔记
+          const matchesText = this.formatGrepMatches(result.matches);
+          const noteContent = `【搜索结果】\n关键词：${pattern}\n${filePath ? `文件：${filePath}\n` : ''}找到 ${result.matches.length} 个匹配项：\n${matchesText}${result.matches.length > 20 ? '\n...(结果已截断)' : ''}`;
+          await this.storeNoteIfWorkflow(context, noteContent, 'grep', true);
+
+          return {
+            success: true,
+            data: {
+              pattern,
+              filePath: filePath || null,
+              matches: result.matches,
+              count: result.matches.length
+            }
+          };
         }
+        
+        if (context.stream) {
+          context.stream.context = context.stream.context || {};
+          context.stream.context.grepError = `搜索失败: ${pattern}`;
+        }
+        await this.storeNoteIfWorkflow(context, `【搜索失败】\n关键词：${pattern}\n错误：搜索失败`, 'grep', true);
+        return { success: false, error: `搜索失败: ${pattern}` };
       },
       enabled: true
     });
 
-    // 3. WRITE - 写入文件
+    // Call Function：写入文件（执行操作，不返回JSON）
     this.registerFunction('write', {
       description: '写入文件',
       prompt: `[写入:filePath:content] - 写入文件，例如：[写入:test.txt:这是内容]`,
@@ -169,7 +223,7 @@ export default class ToolsStream extends AIStream {
       enabled: true
     });
 
-    // 4. RUN - 执行命令
+    // Call Function：执行命令（执行操作，不返回JSON）
     this.registerFunction('run', {
       description: '执行命令',
       prompt: `[执行:command] - 执行命令，例如：[执行:ls -la] 或 [执行:Get-ChildItem]`,
@@ -211,7 +265,7 @@ export default class ToolsStream extends AIStream {
       enabled: true
     });
 
-    // 5. NOTE - 记录笔记（工作流专用）
+    // Call Function：记录笔记（执行操作，仅在工作流中可用）
     this.registerFunction('note', {
       description: '记录笔记到工作流',
       prompt: `[笔记:content] - 记录笔记到工作流，例如：[笔记:重要信息]`,
@@ -262,68 +316,11 @@ export default class ToolsStream extends AIStream {
   }
 
   /**
-   * 处理读取成功
-   */
-  async handleReadSuccess(result, context) {
-    const fileName = path.basename(result.path);
-    
-    context.fileContent = result.content;
-    context.filePath = result.path;
-    context.fileName = fileName;
-    context.fileSearchResult = {
-      found: true,
-      fileName,
-      path: result.path,
-      content: result.content
-    };
-    
-    const noteContent = `【文件读取结果】\n已读取文件：${fileName}\n文件路径：${result.path}\n\n【完整文件内容】\n${result.content}`;
-    await this.storeNoteIfWorkflow(context, noteContent, 'read', true);
-  }
-
-  /**
-   * 处理读取失败
-   */
-  async handleReadFailure(filePath, result, context) {
-    const error = result.error || `未找到文件: ${filePath}`;
-    
-    context.fileError = error;
-    context.fileSearchResult = {
-      found: false,
-      fileName: filePath,
-      path: null,
-      error
-    };
-    
-    await this.storeNoteIfWorkflow(context, `【文件读取失败】\n文件：${filePath}\n错误：${error}`, 'read', true);
-  }
-
-  /**
-   * 处理搜索成功
-   */
-  async handleGrepSuccess(result, pattern, filePath, context) {
-    context.grepResults = result.matches;
-    context.grepPattern = pattern;
-    
-    const matchesText = this.formatGrepMatches(result.matches);
-    const noteContent = `【搜索结果】\n关键词：${pattern}\n${filePath ? `文件：${filePath}\n` : ''}找到 ${result.matches.length} 个匹配项：\n${matchesText}${result.matches.length > 20 ? '\n...(结果已截断)' : ''}`;
-    await this.storeNoteIfWorkflow(context, noteContent, 'grep', true);
-  }
-
-  /**
    * 格式化搜索匹配结果
    */
   formatGrepMatches(matches) {
     if (matches.length === 0) return '未找到匹配项';
     return matches.slice(0, 20).map(m => `${m.file}:${m.line}: ${m.content}`).join('\n');
-  }
-
-  /**
-   * 处理搜索失败
-   */
-  async handleGrepFailure(pattern, context) {
-    context.grepError = `搜索失败: ${pattern}`;
-    await this.storeNoteIfWorkflow(context, `【搜索失败】\n关键词：${pattern}\n错误：搜索失败`, 'grep', true);
   }
 
   /**
@@ -400,18 +397,19 @@ export default class ToolsStream extends AIStream {
 
   buildSystemPrompt(context) {
     return `【基础工具工作流】
-提供read/grep/write/run四大核心工具。
+提供write/run/note核心工具。
 
 【可用命令】
-1. [读取:文件路径] - 读取文件内容
-2. [搜索:关键词:文件路径(可选)] - 搜索文本
-3. [写入:文件路径:内容] - 写入文件
-4. [执行:命令] - 执行命令
-5. [笔记:内容] - 记录笔记（仅在工作流中可用）
+1. [写入:文件路径:内容] - 写入文件
+2. [执行:命令] - 执行命令
+3. [笔记:内容] - 记录笔记（仅在工作流中可用）
+
+【文件读取功能】
+- 文件读取(read)和搜索(grep)功能已移至MCP工具（tools.read, tools.grep），可通过MCP协议调用
+- 在工作流中，这些工具的结果会自动存到笔记
+- 后续步骤可通过笔记查看之前的结果
 
 【工作流笔记】
-- read和grep的结果会自动存到笔记
-- 后续步骤可通过笔记查看之前的结果
 - 使用[笔记:内容]手动记录信息`;
   }
 }

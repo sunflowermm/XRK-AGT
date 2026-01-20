@@ -2,6 +2,7 @@
 # AI工作流配置（全局配置）
 # ============================================
 # 此配置文件为AI工作流系统配置，不随服务器端口变化
+# 位置：data/server_bots/aistream.yaml
 
 # ----------------------------------------
 # 工作流系统开关
@@ -19,10 +20,8 @@ streamDir: "core/stream"
 global:
   # 最大执行超时时间（毫秒）
   maxTimeout: 360000
-  
   # 是否启用调试日志
   debug: false
-  
   # 并发执行限制
   maxConcurrent: 5
 
@@ -32,21 +31,19 @@ global:
 cache:
   # 是否启用缓存
   enabled: true
-  
   # 缓存过期时间（秒）
   ttl: 300
-  
   # 最大缓存条数
   maxSize: 100
 
 # ----------------------------------------
 # LLM 工厂运营商选择
 # ----------------------------------------
-# 文本 LLM 配置分别位于 data/server_bots/{port}/god.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml
+# 详细配置位于 data/server_bots/{port}/god.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml
 llm:
+  # LLM运营商：gptgod、volcengine、xiaomimimo
   Provider: gptgod
   # LLM请求超时时间（毫秒），默认360000（6分钟）
-  # 如果请求超过此时间，会触发"operation was aborted"错误
   timeout: 360000
   # LLM请求重试配置
   retry:
@@ -56,15 +53,16 @@ llm:
     maxAttempts: 3
     # 重试延迟（毫秒）
     delay: 2000
-    # 重试条件：哪些错误应该重试（timeout/network/5xx/all）
+    # 重试条件：timeout（超时）、network（网络错误）、5xx（服务器错误）、all（所有错误）
     retryOn: ["timeout", "network", "5xx"]
 
 # ----------------------------------------
 # 识图工厂运营商选择
 # ----------------------------------------
-# 一个工厂一个配置文件：god_vision.yaml、volcengine_vision.yaml
+# 详细配置位于 data/server_bots/{port}/god_vision.yaml、volcengine_vision.yaml
 # 注意：工作流不直接调用识图工厂，而是由 LLM 在检测到图片时调用
 vision:
+  # 识图运营商：gptgod、volcengine
   Provider: gptgod
 
 # ----------------------------------------
@@ -72,8 +70,9 @@ vision:
 # ----------------------------------------
 # 详细配置位于 data/server_bots/{port}/volcengine_asr.yaml
 asr:
+  # ASR运营商：volcengine
   Provider: volcengine
-  # ASR识别结果调用的工作流名称（工作流内部会自动选择LLM工厂）
+  # ASR识别结果调用的工作流名称
   workflow: device
 
 # ----------------------------------------
@@ -81,6 +80,7 @@ asr:
 # ----------------------------------------
 # 详细配置位于 data/server_bots/{port}/volcengine_tts.yaml
 tts:
+  # TTS运营商：volcengine
   Provider: volcengine
   # 是否只有ASR触发才有TTS（false表示所有消息事件都能触发TTS）
   onlyForASR: true
@@ -88,15 +88,16 @@ tts:
 # ----------------------------------------
 # Embedding 配置
 # ----------------------------------------
-# 简化：仅支持本地和远程两种模式
+# 向量检索配置，用于工作流上下文检索
 embedding:
+  # 是否启用向量检索
   enabled: true
-  mode: local  # local: 本地 lightweight 算法 | remote: 远程 API 接口
-  # 本地模式配置（lightweight BM25算法，无需额外配置）
-  # 远程模式配置（标准 OpenAI 兼容接口）
+  # 模式：local（本地BM25算法）或 remote（远程API接口）
+  mode: local
+  # 远程模式配置（mode为remote时生效）
   remote:
-    apiUrl: ""      # API 地址，如 https://api.openai.com/v1/embeddings
-    apiKey: ""      # API 密钥
+    apiUrl: ""      # API地址，如 https://api.openai.com/v1/embeddings
+    apiKey: ""      # API密钥
     apiModel: "text-embedding-3-small"  # 模型名称
   # 通用配置
   maxContexts: 5              # 最大上下文条数
@@ -104,46 +105,55 @@ embedding:
   cacheExpiry: 86400          # 缓存时长（秒）
 
 # ----------------------------------------
-# 设备运行参数
+# MCP 服务配置
 # ----------------------------------------
-device:
-  heartbeatInterval: 30
-  heartbeatTimeout: 180
-  commandTimeout: 10000
-  maxDevices: 100
-  maxLogsPerDevice: 100
-  messageQueueSize: 100
-  wsPingIntervalMs: 30000
-  wsPongTimeoutMs: 10000
-  wsReconnectDelayMs: 2000
-  wsMaxReconnectAttempts: 5
-  enableDetailedLogs: true
-  enablePerformanceLogs: true
-  audioSaveDir: "./data/wav"
+# Model Context Protocol (MCP) 服务配置，用于工具调用和跨平台集成
+mcp:
+  # 是否启用MCP服务
+  enabled: true
+  # 是否自动从工作流中收集并注册MCP工具
+  autoRegister: true
 
 # ----------------------------------------
-# 表情映射
+# Python子服务端配置
 # ----------------------------------------
-emotions:
-  keywords:
-    开心: happy
-    伤心: sad
-    生气: angry
-    惊讶: surprise
-    爱: love
-    酷: cool
-    睡觉: sleep
-    思考: think
-    眨眼: wink
-    大笑: laugh
-  supported:
-    - happy
-    - sad
-    - angry
-    - surprise
-    - love
-    - cool
-    - sleep
-    - think
-    - wink
-    - laugh
+# 子服务端提供向量化、数据处理等服务
+subserver:
+  # 子服务端地址
+  host: "127.0.0.1"
+  # 子服务端端口
+  port: 8000
+  # 请求超时时间（毫秒）
+  timeout: 30000
+
+# ----------------------------------------
+# 设备运行参数
+# ----------------------------------------
+# 设备管理相关配置，用于设备连接和运行
+device:
+  # 心跳间隔（秒）
+  heartbeatInterval: 30
+  # 心跳超时（秒）
+  heartbeatTimeout: 180
+  # 命令超时（毫秒）
+  commandTimeout: 10000
+  # 最大设备数量
+  maxDevices: 100
+  # 单设备日志上限
+  maxLogsPerDevice: 100
+  # 指令队列上限
+  messageQueueSize: 100
+  # WebSocket Ping间隔（毫秒）
+  wsPingIntervalMs: 30000
+  # WebSocket Pong超时（毫秒）
+  wsPongTimeoutMs: 10000
+  # WebSocket重连延迟（毫秒）
+  wsReconnectDelayMs: 2000
+  # WebSocket最大重连次数
+  wsMaxReconnectAttempts: 5
+  # 是否启用详细日志
+  enableDetailedLogs: true
+  # 是否启用性能日志
+  enablePerformanceLogs: true
+  # 音频保存目录
+  audioSaveDir: "./data/wav"

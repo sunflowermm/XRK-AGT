@@ -15,9 +15,7 @@ import VisionFactory from '../vision/VisionFactory.js';
 export default class VolcengineLLMClient {
   constructor(config = {}) {
     this.config = config;
-    // 火山引擎默认接口地址
     this.endpoint = this.normalizeEndpoint(config);
-    this.timeout = config.timeout || 360000;
   }
 
   /**
@@ -68,46 +66,17 @@ export default class VolcengineLLMClient {
    * 火山引擎的 API 格式与 OpenAI 兼容
    */
   buildBody(messages, overrides = {}) {
-    const {
-      model,
-      temperature,
-      maxTokens,
-      topP,
-      presencePenalty,
-      frequencyPenalty,
-      stream,
-      extraPayload
-    } = overrides;
-
     const body = {
-      model: model || this.config.model || 'doubao-pro-4k',
+      model: this.config.model || 'doubao-pro-4k',
       messages,
-      temperature: temperature ?? this.config.temperature ?? 0.8,
-      max_tokens: maxTokens ?? this.config.maxTokens ?? this.config.max_tokens ?? 2000,
-      stream: stream ?? false
+      temperature: this.config.temperature ?? 0.8,
+      max_tokens: this.config.maxTokens ?? this.config.max_tokens ?? 2000,
+      stream: overrides.stream ?? false
     };
 
-    // 可选参数
-    if (topP !== undefined || this.config.topP !== undefined) {
-      body.top_p = topP ?? this.config.topP ?? 0.9;
-    }
-    
-    if (presencePenalty !== undefined || this.config.presencePenalty !== undefined) {
-      body.presence_penalty = presencePenalty ?? this.config.presencePenalty ?? 0.6;
-    }
-    
-    if (frequencyPenalty !== undefined || this.config.frequencyPenalty !== undefined) {
-      body.frequency_penalty = frequencyPenalty ?? this.config.frequencyPenalty ?? 0.6;
-    }
-
-    // 合并额外配置
-    if (this.config.body) {
-      Object.assign(body, this.config.body);
-    }
-    
-    if (extraPayload) {
-      Object.assign(body, extraPayload);
-    }
+    if (this.config.topP !== undefined) body.top_p = this.config.topP;
+    if (this.config.presencePenalty !== undefined) body.presence_penalty = this.config.presencePenalty;
+    if (this.config.frequencyPenalty !== undefined) body.frequency_penalty = this.config.frequencyPenalty;
 
     return body;
   }
@@ -182,7 +151,7 @@ export default class VolcengineLLMClient {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
       body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides })),
-      signal: AbortSignal.timeout(this.timeout)
+      signal: this.config.timeout ? AbortSignal.timeout(this.config.timeout) : undefined
     });
 
     if (!response.ok) {
@@ -199,12 +168,12 @@ export default class VolcengineLLMClient {
   /**
    * 流式调用
    */
-  async stream(messages, overrides = {}, onDelta) {
+  async chatStream(messages, onDelta, overrides = {}) {
     const response = await fetch(this.endpoint, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
       body: JSON.stringify(this.buildBody(messages, { ...overrides, stream: true })),
-      signal: AbortSignal.timeout(this.timeout)
+      signal: this.config.timeout ? AbortSignal.timeout(this.config.timeout) : undefined
     });
 
     if (!response.ok || !response.body) {

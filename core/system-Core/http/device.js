@@ -123,14 +123,21 @@ const getAsrConfig = () => resolveProvider('asr');
 const getSystemConfig = () =>
     ensureConfig(getAistreamConfig().device, 'aistream.device');
 
-const getEmotionKeywords = () => {
-    const emotions = ensureConfig(getAistreamConfig().emotions, 'aistream.emotions');
-    return ensureConfig(emotions.keywords, 'aistream.emotions.keywords');
-};
+// 设备支持的表情列表（硬编码，无需配置）
+const SUPPORTED_EMOTIONS = ['happy', 'sad', 'angry', 'surprise', 'love', 'cool', 'sleep', 'think', 'wink', 'laugh'];
 
-const getSupportedEmotions = () => {
-    const emotions = ensureConfig(getAistreamConfig().emotions, 'aistream.emotions');
-    return ensureConfig(emotions.supported, 'aistream.emotions.supported');
+// 表情关键词映射（中文 -> 表情代码）
+const EMOTION_KEYWORDS = {
+    '开心': 'happy',
+    '伤心': 'sad',
+    '生气': 'angry',
+    '惊讶': 'surprise',
+    '爱': 'love',
+    '酷': 'cool',
+    '睡觉': 'sleep',
+    '思考': 'think',
+    '眨眼': 'wink',
+    '大笑': 'laugh'
 };
 
 // ==================== 全局存储 ====================
@@ -641,11 +648,9 @@ class DeviceManager {
             // 显示表情
             if (aiResult.emotion) {
                 try {
-                    const emotionKeywords = getEmotionKeywords();
-                    const supportedEmotions = getSupportedEmotions();
-                    let emotionCode = emotionKeywords[aiResult.emotion] || aiResult.emotion;
-                    if (!supportedEmotions.includes(emotionCode)) {
-                        throw new Error(`未知表情: ${aiResult.emotion}`);
+                    const emotionCode = EMOTION_KEYWORDS[aiResult.emotion] || aiResult.emotion;
+                    if (!SUPPORTED_EMOTIONS.includes(emotionCode)) {
+                        throw new Error(`未知表情: ${emotionCode}`);
                     }
                     await deviceBot.emotion(emotionCode);
                     BotUtil.makeLog('info', `✓ [设备] 表情: ${emotionCode}`, deviceId);
@@ -1085,8 +1090,8 @@ class DeviceManager {
             clearLogs: () => deviceLogs.set(deviceId, []),
 
             sendMsg: async (msg) => {
-                const emotionKeywords = getEmotionKeywords();
-                for (const [keyword, emotion] of Object.entries(emotionKeywords)) {
+                // 检测消息中的表情关键词
+                for (const [keyword, emotion] of Object.entries(EMOTION_KEYWORDS)) {
                     if (msg.includes(keyword)) {
                         return await this.sendCommand(
                             deviceId,
@@ -1146,8 +1151,7 @@ class DeviceManager {
                 ),
 
             emotion: async (emotionName) => {
-                const supportedEmotions = getSupportedEmotions();
-                if (!supportedEmotions.includes(emotionName)) {
+                if (!SUPPORTED_EMOTIONS.includes(emotionName)) {
                     throw new Error(`未知表情: ${emotionName}`);
                 }
                 return await this.sendCommand(

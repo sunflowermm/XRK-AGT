@@ -51,7 +51,7 @@ sequenceDiagram
     Stream->>Stream: buildChatContext + buildEnhancedContext
     Stream->>LLM: callAI（第1次AI调用）
     LLM-->>Stream: 响应包含[启动工作流:目标]
-    Stream->>Stream: parseFunctions + hasWorkflowCommand
+    Stream->>Stream: parseFunctions（检测工作流命令）
     Stream->>Manager: 检测到工作流命令
     Manager->>LLM: decideWorkflowMode（第2次AI调用）
     LLM-->>Manager: 复杂任务，需要TODO

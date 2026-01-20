@@ -1,23 +1,45 @@
-# 火山引擎 TTS 工厂配置
-# 用于配置火山引擎语音合成（TTS）功能
+# ============================================
+# 火山引擎 TTS 工厂配置（随端口变化）
+# ============================================
+# 此配置文件为火山引擎语音合成（TTS）配置，每个端口有独立的配置
+# 位置：data/server_bots/{port}/volcengine_tts.yaml
 
+# ----------------------------------------
 # WebSocket 连接配置
-wsUrl: wss://openspeech.bytedance.com/api/v3/tts/bidirection
+# ----------------------------------------
+# WebSocket连接地址
+wsUrl: "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
+# 应用密钥
 appKey: ""
+# 访问密钥
 accessKey: ""
-resourceId: seed-tts-2.0
+# 资源ID
+resourceId: "seed-tts-2.0"
 
+# ----------------------------------------
 # 语音参数配置
-voiceType: zh_female_vv_uranus_bigtts
-encoding: pcm
+# ----------------------------------------
+# 语音类型
+voiceType: "zh_female_vv_uranus_bigtts"
+# 编码格式
+encoding: "pcm"
+# 采样率（Hz）
 sampleRate: 16000
 
+# ----------------------------------------
 # 语音效果配置
+# ----------------------------------------
+# 语速（-500到500）
 speechRate: 5
+# 音量（-500到500）
 loudnessRate: 0
-emotion: happy
+# 情感（happy、sad、angry等）
+emotion: "happy"
 
+# ----------------------------------------
 # 分片配置
+# ----------------------------------------
+# 分片大小（毫秒）
 chunkMs: 128
+# 分片延迟（毫秒）
 chunkDelayMs: 5
-

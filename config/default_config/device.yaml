@@ -1,9 +1,9 @@
 # ============================================
 # 设备管理配置（全局配置）
 # ============================================
-# 此配置文件为设备管理的核心参数，支持扩展性架构
-# 所有时间单位均为秒，除非特别注明
-# 请确保配置值合理，以避免系统异常
+# 此配置文件为设备管理的核心参数，不随服务器端口变化
+# 位置：data/server_bots/device.yaml
+# 注意：所有时间单位均为秒，除非特别注明
 
 # ----------------------------------------
 # 心跳配置
@@ -11,9 +11,8 @@
 heartbeat:
   # 心跳发送间隔（秒），用于检测设备在线状态
   interval: 30
-  
   # 心跳超时时间（秒），超过此时间视为设备离线
-  timeout: 1800  # 默认: 1800（30分钟）
+  timeout: 1800
 
 # ----------------------------------------
 # 容量限制配置
@@ -21,10 +20,8 @@ heartbeat:
 limits:
   # 系统支持的最大设备数量
   maxDevices: 100
-  
   # 每个设备存储的最大日志条数，超过将自动截断
   maxLogsPerDevice: 100
-  
   # 每个设备存储的最大数据条数，超过将自动移除最早数据
   maxDataPerDevice: 50
 
@@ -34,7 +31,6 @@ limits:
 command:
   # 命令执行超时时间（毫秒），超过视为超时
   timeout: 5000
-  
   # 命令批量发送的最大数量，用于优化性能
   batchSize: 100
 
@@ -44,13 +40,10 @@ command:
 websocket:
   # WebSocket Ping间隔（毫秒）
   pingInterval: 30000
-  
   # WebSocket Pong超时（毫秒）
   pongTimeout: 10000
-  
   # WebSocket重连延迟（毫秒）
   reconnectDelay: 2000
-  
   # WebSocket最大重连尝试次数
   maxReconnectAttempts: 5
 
@@ -67,7 +60,6 @@ messageQueue:
 logging:
   # 是否启用详细日志
   enableDetailedLogs: true
-  
   # 是否启用性能日志
   enablePerformanceLogs: true
 

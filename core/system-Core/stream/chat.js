@@ -26,6 +26,16 @@ function randomRange(min, max) {
 
 /**
  * 聊天工作流
+ * 
+ * 功能分类：
+ * - MCP工具（返回JSON）：getGroupInfoEx（获取群信息ex）、getAtAllRemain（获取@全体剩余）、getBanList（获取禁言列表）
+ * - Call Function（执行操作）：
+ *   - 互动功能：poke（戳一戳）、emojiReaction（表情回应）、thumbUp（点赞）、sign（签到）
+ *   - 群管理：mute/unmute（禁言/解禁）、muteAll/unmuteAll（全员禁言）、setCard（改名片）、setGroupName（改群名）
+ *   - 权限管理：setAdmin/unsetAdmin（设置/取消管理员）、setTitle（设置头衔）、kick（踢人）
+ *   - 消息管理：setEssence/removeEssence（设置/取消精华）、announce（群公告）、recall（撤回）、setGroupTodo（群代办）
+ *   - 消息格式：at（@某人）、reply（回复消息）
+ * 
  * 支持表情包、群管理、表情回应等功能
  */
 export default class ChatStream extends AIStream {
@@ -103,12 +113,15 @@ export default class ChatStream extends AIStream {
 
   /**
    * 注册所有功能
+   * 
+   * MCP工具：getGroupInfoEx, getAtAllRemain, getBanList（返回JSON，不出现在prompt中）
+   * Call Function：所有互动和群管理功能（出现在prompt中，供AI调用）
    */
   registerAllFunctions() {
-    // 1. 表情包（作为消息段的一部分，不在parseFunctions中处理）
+    // 表情包（作为消息段的一部分，不在parseFunctions中处理）
     // 表情包标记会在parseCQToSegments中解析，保持顺序
 
-    // 2. @功能
+    // Call Function：@功能（消息格式，不返回JSON）
     this.registerFunction('at', {
       description: '@某人',
       prompt: `[CQ:at,qq=QQ号] - @某人`,
@@ -118,7 +131,7 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // 3. 戳一戳（已禁用）
+    // Call Function：戳一戳（执行操作，不返回JSON）
     this.registerFunction('poke', {
       description: '戳一戳',
       prompt: `[CQ:poke,qq=QQ号] - 戳一戳某人`,
@@ -155,7 +168,7 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // 4. 回复
+    // Call Function：回复消息（消息格式，不返回JSON）
     this.registerFunction('reply', {
       description: '回复消息',
       prompt: `[CQ:reply,id=消息ID] - 回复指定消息
@@ -167,7 +180,7 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // 5. 表情回应
+    // Call Function：表情回应（执行操作，不返回JSON）
     this.registerFunction('emojiReaction', {
       description: '表情回应',
       prompt: `[回应:消息ID:表情类型] - 给指定消息添加表情回应
@@ -240,7 +253,7 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // 6. 点赞
+    // Call Function：点赞（执行操作，不返回JSON）
     this.registerFunction('thumbUp', {
       description: '点赞',
       prompt: `[点赞:QQ号:次数] - 给某人点赞（1-50次）`,
@@ -281,7 +294,7 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // 7. 签到
+    // Call Function：签到（执行操作，不返回JSON）
     this.registerFunction('sign', {
       description: '群签到',
       prompt: `[签到] - 执行群签到`,
@@ -313,7 +326,7 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // 8. 禁言
+    // Call Function：禁言（执行操作，不返回JSON）
     this.registerFunction('mute', {
       description: '禁言群成员',
       prompt: `[禁言:QQ号:时长] - 禁言某人（时长单位：秒，最大2592000秒/30天）
@@ -353,7 +366,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 9. 解禁
+    // Call Function：解禁（执行操作，不返回JSON）
     this.registerFunction('unmute', {
       description: '解除禁言',
       prompt: `[解禁:QQ号] - 解除某人的禁言`,
@@ -391,7 +404,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 10. 全员禁言
+    // Call Function：全员禁言（执行操作，不返回JSON）
     this.registerFunction('muteAll', {
       description: '全员禁言',
       prompt: `[全员禁言] - 开启全员禁言`,
@@ -424,7 +437,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 11. 解除全员禁言
+    // Call Function：解除全员禁言（执行操作，不返回JSON）
     this.registerFunction('unmuteAll', {
       description: '解除全员禁言',
       prompt: `[解除全员禁言] - 关闭全员禁言`,
@@ -457,7 +470,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 12. 改群名片
+    // Call Function：改群名片（执行操作，不返回JSON）
     this.registerFunction('setCard', {
       description: '修改群名片',
       prompt: `[改名片:QQ号:新名片] - 修改某人的群名片
@@ -496,7 +509,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 13. 改群名
+    // Call Function：改群名（执行操作，不返回JSON）
     this.registerFunction('setGroupName', {
       description: '修改群名',
       prompt: `[改群名:新群名] - 修改当前群的群名
@@ -535,7 +548,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 14. 设置管理员
+    // Call Function：设置管理员（执行操作，不返回JSON）
     this.registerFunction('setAdmin', {
       description: '设置管理员',
       prompt: `[设管:QQ号] - 设置某人为管理员`,
@@ -573,7 +586,7 @@ export default class ChatStream extends AIStream {
       requireOwner: true
     });
 
-    // 15. 取消管理员
+    // Call Function：取消管理员（执行操作，不返回JSON）
     this.registerFunction('unsetAdmin', {
       description: '取消管理员',
       prompt: `[取管:QQ号] - 取消某人的管理员`,
@@ -611,7 +624,7 @@ export default class ChatStream extends AIStream {
       requireOwner: true
     });
 
-    // 16. 设置头衔
+    // Call Function：设置头衔（执行操作，不返回JSON）
     this.registerFunction('setTitle', {
       description: '设置专属头衔',
       prompt: `[头衔:QQ号:头衔名:时长] - 设置某人的专属头衔
@@ -655,7 +668,7 @@ export default class ChatStream extends AIStream {
       requireOwner: true
     });
 
-    // 17. 踢人
+    // Call Function：踢人（执行操作，不返回JSON）
     this.registerFunction('kick', {
       description: '踢出群成员',
       prompt: `[踢人:QQ号] - 踢出某人
@@ -697,7 +710,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 18. 设置精华消息
+    // Call Function：设置精华消息（执行操作，不返回JSON）
     this.registerFunction('setEssence', {
       description: '设置精华消息',
       prompt: `[设精华:消息ID] - 将指定消息设为精华
@@ -758,7 +771,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 19. 取消精华消息
+    // Call Function：取消精华消息（执行操作，不返回JSON）
     this.registerFunction('removeEssence', {
       description: '取消精华消息',
       prompt: `[取消精华:消息ID] - 取消指定消息的精华状态
@@ -813,7 +826,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 20. 发送群公告
+    // Call Function：发送群公告（执行操作，不返回JSON）
     this.registerFunction('announce', {
       description: '发送群公告',
       prompt: `[群公告:内容] - 发送群公告
@@ -897,7 +910,7 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // 21. 撤回消息
+    // Call Function：撤回消息（执行操作，不返回JSON）
     this.registerFunction('recall', {
       description: '撤回消息',
       prompt: `[撤回:消息ID] - 撤回指定消息
@@ -1009,113 +1022,103 @@ export default class ChatStream extends AIStream {
       requirePermissionCheck: true
     });
 
-    // 22. 获取群信息ex（新增）
-    this.registerFunction('getGroupInfoEx', {
-      description: '获取群详细信息ex',
-      prompt: `[获取群信息ex] - 获取群的扩展详细信息（包括更多群信息）`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        
-        if (text.includes('[获取群信息ex]')) {
-          functions.push({ 
-            type: 'getGroupInfoEx', 
-            params: {}, 
-            order: text.indexOf('[获取群信息ex]')
-          });
-          cleanText = text.replace(/\[获取群信息ex\]/g, '').trim();
-        }
-        
-        return { functions, cleanText };
+    // MCP工具：获取群信息ex（返回JSON结果）
+    this.registerMCPTool('getGroupInfoEx', {
+      description: '获取群的扩展详细信息（包括更多群信息）',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
       },
-      handler: async (params, context) => {
-        if (!context.e?.isGroup) return;
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '此功能仅在群聊中可用' };
+        }
         
         try {
           const group = context.e.group;
           if (group && typeof group.getInfoEx === 'function') {
             const info = await group.getInfoEx();
             BotUtil.makeLog('debug', `获取群信息ex成功: ${JSON.stringify(info)}`, 'ChatStream');
+            return {
+              success: true,
+              data: info
+            };
           }
+          return { success: false, error: 'API不可用' };
         } catch (error) {
           BotUtil.makeLog('warn', `获取群信息ex失败: ${error.message}`, 'ChatStream');
+          return { success: false, error: error.message };
         }
       },
       enabled: true
     });
 
-    // 23. 获取@全体成员剩余次数（新增）
-    this.registerFunction('getAtAllRemain', {
-      description: '获取@全体成员剩余次数',
-      prompt: `[获取@全体剩余] - 获取群@全体成员的剩余次数`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        
-        if (text.includes('[获取@全体剩余]')) {
-          functions.push({ 
-            type: 'getAtAllRemain', 
-            params: {}, 
-            order: text.indexOf('[获取@全体剩余]')
-          });
-          cleanText = text.replace(/\[获取@全体剩余\]/g, '').trim();
-        }
-        
-        return { functions, cleanText };
+    // MCP工具：获取@全体成员剩余次数（返回JSON结果）
+    this.registerMCPTool('getAtAllRemain', {
+      description: '获取群@全体成员的剩余次数',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
       },
-      handler: async (params, context) => {
-        if (!context.e?.isGroup) return;
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '此功能仅在群聊中可用' };
+        }
         
         try {
           const group = context.e.group;
           if (group && typeof group.getAtAllRemain === 'function') {
             const remain = await group.getAtAllRemain();
             BotUtil.makeLog('debug', `@全体成员剩余次数: ${JSON.stringify(remain)}`, 'ChatStream');
+            return {
+              success: true,
+              data: remain
+            };
           }
+          return { success: false, error: 'API不可用' };
         } catch (error) {
           BotUtil.makeLog('warn', `获取@全体剩余次数失败: ${error.message}`, 'ChatStream');
+          return { success: false, error: error.message };
         }
       },
       enabled: true
     });
 
-    // 24. 获取群禁言列表（新增）
-    this.registerFunction('getBanList', {
-      description: '获取群禁言列表',
-      prompt: `[获取禁言列表] - 获取当前被禁言的成员列表`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        
-        if (text.includes('[获取禁言列表]')) {
-          functions.push({ 
-            type: 'getBanList', 
-            params: {}, 
-            order: text.indexOf('[获取禁言列表]')
-          });
-          cleanText = text.replace(/\[获取禁言列表\]/g, '').trim();
-        }
-        
-        return { functions, cleanText };
+    // MCP工具：获取群禁言列表（返回JSON结果）
+    this.registerMCPTool('getBanList', {
+      description: '获取当前被禁言的成员列表',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
       },
-      handler: async (params, context) => {
-        if (!context.e?.isGroup) return;
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '此功能仅在群聊中可用' };
+        }
         
         try {
           const group = context.e.group;
           if (group && typeof group.getBanList === 'function') {
             const banList = await group.getBanList();
             BotUtil.makeLog('debug', `群禁言列表: ${JSON.stringify(banList)}`, 'ChatStream');
+            return {
+              success: true,
+              data: banList
+            };
           }
+          return { success: false, error: 'API不可用' };
         } catch (error) {
           BotUtil.makeLog('warn', `获取禁言列表失败: ${error.message}`, 'ChatStream');
+          return { success: false, error: error.message };
         }
       },
-      enabled: true,
-      requireAdmin: true
+      enabled: true
     });
 
-    // 25. 设置群代办
+    // Call Function：设置群代办（执行操作，不返回JSON）
     this.registerFunction('setGroupTodo', {
       description: '设置群代办',
       prompt: `[群代办:消息ID] - 将指定消息设为群代办
@@ -1319,18 +1322,18 @@ export default class ChatStream extends AIStream {
   }
 
   /**
-   * 构建功能列表提示（优化版）
-   * 清晰说明功能列表的作用、使用方式和执行机制
+   * 构建功能列表提示
+   * 注意：只包含 Call Function 的 prompt，MCP 工具不会出现在这里
    * 根据权限自动过滤功能
    */
   buildFunctionsPrompt(context = {}) {
     const { botRole = '成员' } = context;
     
-    // 获取所有启用的函数
+    // 只获取 Call Function（MCP 工具不会出现在 prompt 中）
     const enabledFuncs = this.getEnabledFunctions();
     if (enabledFuncs.length === 0) return '';
 
-    // 根据权限过滤函数
+    // 根据权限过滤 Call Function
     const filteredFuncs = enabledFuncs.filter(func => {
       // 如果函数需要管理员权限
       if (func.requireAdmin) {

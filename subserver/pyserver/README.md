@@ -16,7 +16,12 @@ uv run xrk
 
 - **API 文档**: http://localhost:8000/docs
 - **健康检查**: http://localhost:8000/health
-- **示例 API**: http://localhost:8000/api/example/ping
+- **API 列表**: http://localhost:8000/api/list
+
+## 🔌 主要 API
+
+- **LangChain 服务**: `/api/langchain/chat` - LangChain聊天接口，支持MCP工具调用
+- **向量服务**: `/api/vector/embed`, `/api/vector/search`, `/api/vector/upsert` - 向量化、检索、入库
 
 ## 🔧 配置
 
@@ -28,7 +33,22 @@ HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 
 ## 📝 开发 API
 
-在 `apis/` 目录下创建文件：
+### 多组结构
+
+`apis/` 目录支持多组结构，每个子目录是一个独立的 API 组：
+
+```
+apis/
+  langchain/       # LangChain服务
+    langchain_service.py
+    agent.py
+  vector/          # 向量服务
+    vector_service.py
+```
+
+### 创建 API
+
+在任意 API 组目录下创建 Python 文件：
 
 ```python
 from fastapi import Request
@@ -39,6 +59,10 @@ async def handler(request: Request):
 
 default = {
     "name": "my-api",
-    "routes": [{"method": "GET", "path": "/api/my", "handler": handler}]
+    "description": "我的 API",
+    "priority": 100,
+    "routes": [
+        {"method": "GET", "path": "/api/my", "handler": handler}
+    ]
 }
 ```

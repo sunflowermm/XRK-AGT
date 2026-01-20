@@ -1,28 +1,55 @@
-# 火山引擎 ASR 工厂配置
-# 用于配置火山引擎语音识别（ASR）功能
+# ============================================
+# 火山引擎 ASR 工厂配置（随端口变化）
+# ============================================
+# 此配置文件为火山引擎语音识别（ASR）配置，每个端口有独立的配置
+# 位置：data/server_bots/{port}/volcengine_asr.yaml
 
+# ----------------------------------------
 # WebSocket 连接配置
-wsUrl: wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
+# ----------------------------------------
+# WebSocket连接地址
+wsUrl: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+# 应用密钥
 appKey: ""
+# 访问密钥
 accessKey: ""
-resourceId: volc.bigasr.sauc.duration
+# 资源ID
+resourceId: "volc.bigasr.sauc.duration"
 
+# ----------------------------------------
 # 功能开关配置
+# ----------------------------------------
+# 是否启用逆文本标准化（ITN）
 enableItn: true
+# 是否启用标点符号
 enablePunc: true
+# 是否启用说话人分离（DDC）
 enableDdc: false
+# 是否显示话语
 showUtterances: true
+# 是否启用加速文本
 enableAccelerateText: true
 
+# ----------------------------------------
 # 结果类型配置
-resultType: full
+# ----------------------------------------
+# 结果类型：full（完整结果）
+resultType: "full"
 
+# ----------------------------------------
 # 参数配置
+# ----------------------------------------
+# 加速分数
 accelerateScore: 15
+# 是否持久化WebSocket连接
 persistentWs: true
+# 空闲关闭时间（毫秒）
 idleCloseMs: 6000
+# 结束窗口大小
 endWindowSize: 350
+# 强制转语音时间（毫秒）
 forceToSpeechTime: 500
+# 最大音频缓冲区大小（秒）
 maxAudioBufferSize: 30
+# ASR最终文本等待时间（毫秒）
 asrFinalTextWaitMs: 1200
-

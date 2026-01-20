@@ -23,7 +23,6 @@ export default class TodoStream extends AIStream {
   async init() {
     await super.init();
     this.workflowManager = new WorkflowManager(this);
-    BotUtil.makeLog('info', `[${this.name}] TODO工作流插件已初始化`, 'TodoStream');
   }
 
   /**

@@ -7,6 +7,11 @@ import os from 'os';
 
 /**
  * 知识库工作流插件（数据库）
+ * 
+ * 功能分类：
+ * - MCP工具（返回JSON）：query_knowledge（查询知识）、list_knowledge（列出知识库）
+ * - Call Function（执行操作）：save_knowledge（保存知识）、delete_knowledge（删除知识）
+ * 
  * 作为智能体的重要组成部分，提供知识存储、检索、管理功能
  * 支持快速调用，简化参数，便于AI和开发者使用
  */
@@ -34,25 +39,19 @@ export default class DatabaseStream extends AIStream {
   async init() {
     await super.init();
     
-    // 初始化 Embedding（用于向量检索）
-    try {
-      await this.initEmbedding();
-    } catch (error) {
-      BotUtil.makeLog('warn', `[${this.name}] Embedding初始化失败，将使用关键词搜索`, 'DatabaseStream');
-    }
-    
     // 确保知识库目录存在
     await fs.mkdir(this.dbDir, { recursive: true });
 
     // 注册知识库相关功能（简化调用方式）
     this.registerAllFunctions();
 
-    BotUtil.makeLog('info', `[${this.name}] 知识库工作流已初始化`, 'DatabaseStream');
   }
 
   /**
    * 注册所有知识库相关功能
-   * 优化：prompt字段动态包含可用知识库列表
+   * 
+   * MCP工具：query_knowledge, list_knowledge（返回JSON，不出现在prompt中）
+   * Call Function：save_knowledge, delete_knowledge（出现在prompt中，供AI调用）
    */
   registerAllFunctions() {
     // 动态获取可用知识库列表
@@ -64,7 +63,7 @@ export default class DatabaseStream extends AIStream {
       return dbList;
     };
 
-    // 保存知识（优化：支持多行内容）
+    // Call Function：保存知识（执行操作，不返回JSON）
     this.registerFunction('save_knowledge', {
       description: '保存知识到知识库',
       prompt: () => `[保存知识:knowledgeBase:content] - 保存知识到指定知识库，内容可以是文本或JSON，支持多行内容${getKnowledgePrompt()}`,
@@ -89,55 +88,86 @@ export default class DatabaseStream extends AIStream {
       enabled: true
     });
 
-    // 查询知识（简化版：支持关键词和条件查询）
-    this.registerFunction('query_knowledge', {
-      description: '从知识库查询知识',
-      prompt: () => `[查询知识:knowledgeBase:keyword] - 从指定知识库查询知识，支持关键词搜索${getKnowledgePrompt()}`,
-      parser: (text, context) => {
-        const match = text.match(/\[查询知识:([^:]+):([^\]]+)\]/);
-        if (!match) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'query_knowledge', params: { db: match[1], keyword: match[2] } }],
-          cleanText: text.replace(/\[查询知识:[^\]]+\]/g, '').trim()
-        };
+    // MCP工具：查询知识（返回JSON结果）
+    this.registerMCPTool('query_knowledge', {
+      description: '从知识库查询知识，支持关键词搜索',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          db: {
+            type: 'string',
+            description: '知识库名称'
+          },
+          keyword: {
+            type: 'string',
+            description: '搜索关键词'
+          }
+        },
+        required: ['db']
       },
-      handler: async (params = {}, context = {}) => {
-        const { db, keyword } = params;
-        if (!db) return;
+      handler: async (args = {}, context = {}) => {
+        const { db, keyword } = args;
+        if (!db) {
+          return { success: false, error: '知识库名称不能为空' };
+        }
 
         const results = await this.queryKnowledge(db, keyword, context);
-        await this.storeNoteIfWorkflow(context, `从知识库 ${db} 查询到 ${results.length} 条知识`, 'database', true);
-        if (results.length > 0) {
-          context.knowledgeResults = results;
+        
+        // 在工作流中记录笔记
+        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
+        if (workflowId && context.stream) {
+          await context.stream.storeNote(workflowId, `从知识库 ${db} 查询到 ${results.length} 条知识`, 'database', true);
         }
-        BotUtil.makeLog('info', `[${this.name}] 查询知识库: ${db}，找到 ${results.length} 条`, 'DatabaseStream');
-      },
-      enabled: true
-    });
 
-    // 列出知识库
-    this.registerFunction('list_knowledge', {
-      description: '列出所有知识库',
-      prompt: () => `[列出知识库] - 列出所有可用的知识库${getKnowledgePrompt()}`,
-      parser: (text, context) => {
-        if (!text.includes('[列出知识库]')) {
-          return { functions: [], cleanText: text };
+        if (context.stream) {
+          context.stream.context = context.stream.context || {};
+          context.stream.context.knowledgeResults = results;
         }
+
+        BotUtil.makeLog('info', `[${this.name}] 查询知识库: ${db}，找到 ${results.length} 条`, 'DatabaseStream');
+
         return {
-          functions: [{ type: 'list_knowledge', params: {} }],
-          cleanText: text.replace(/\[列出知识库\]/g, '').trim()
+          success: true,
+          data: {
+            db,
+            keyword: keyword || '*',
+            results,
+            count: results.length
+          }
         };
       },
-      handler: async (params = {}, context = {}) => {
+      enabled: true
+    });
+
+    // MCP工具：列出知识库（返回JSON结果）
+    this.registerMCPTool('list_knowledge', {
+      description: '列出所有可用的知识库',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
         const dbs = await this.listDatabases(context);
-        await this.storeNoteIfWorkflow(context, `列出知识库，共 ${dbs.length} 个`, 'database', true);
+        
+        // 在工作流中记录笔记
+        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
+        if (workflowId && context.stream) {
+          await context.stream.storeNote(workflowId, `列出知识库，共 ${dbs.length} 个`, 'database', true);
+        }
+
+        return {
+          success: true,
+          data: {
+            databases: dbs,
+            count: dbs.length
+          }
+        };
       },
       enabled: true
     });
 
-    // 删除知识（简化版：支持ID或条件删除）
+    // Call Function：删除知识（执行操作，不返回JSON）
     this.registerFunction('delete_knowledge', {
       description: '从知识库删除知识',
       prompt: `[删除知识:knowledgeBase:condition] - 从指定知识库删除知识，支持ID或条件删除`,
@@ -233,8 +263,8 @@ export default class DatabaseStream extends AIStream {
       return records;
     }
     
-    // 如果启用 embedding 且已就绪，使用向量检索
-    if (this.embeddingConfig.enabled && this.embeddingReady) {
+    // 如果启用 embedding，使用向量检索
+    if (this.embeddingConfig.enabled) {
       return await this.queryKnowledgeWithEmbedding(records, keyword, db);
     }
     
@@ -332,7 +362,7 @@ export default class DatabaseStream extends AIStream {
    * 自动检索相关知识库内容（用于 RAG）
    */
   async retrieveKnowledgeContexts(query, maxResults = 5) {
-    if (!query || !this.embeddingConfig.enabled || !this.embeddingReady) {
+    if (!query || !this.embeddingConfig.enabled) {
       return [];
     }
 

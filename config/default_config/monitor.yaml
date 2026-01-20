@@ -2,6 +2,7 @@
 # 系统监控配置（全局配置）
 # ============================================
 # 此配置文件为系统监控相关配置，不随服务器端口变化
+# 位置：data/server_bots/monitor.yaml
 
 # ----------------------------------------
 # 监控总开关
@@ -17,81 +18,115 @@ interval: 120000
 # 浏览器进程监控
 # ----------------------------------------
 browser:
+  # 是否启用浏览器监控
   enabled: true
-  maxInstances: 5              # 最大浏览器实例数
-  memoryThreshold: 90          # 内存阈值（%）触发清理
-  reserveNewest: true          # 保留最新打开的实例
+  # 最大浏览器实例数
+  maxInstances: 5
+  # 内存阈值（%），超过此值触发清理
+  memoryThreshold: 90
+  # 是否保留最新打开的实例
+  reserveNewest: true
 
 # ----------------------------------------
 # 系统内存监控
 # ----------------------------------------
 memory:
+  # 是否启用内存监控
   enabled: true
-  systemThreshold: 85          # 系统内存阈值（%）
-  nodeThreshold: 85            # Node堆内存阈值（%）
-  autoOptimize: true           # 自动优化
-  gcInterval: 600000           # GC最小间隔（毫秒）
-  
+  # 系统内存阈值（%）
+  systemThreshold: 85
+  # Node堆内存阈值（%）
+  nodeThreshold: 85
+  # 是否自动优化
+  autoOptimize: true
+  # GC最小间隔（毫秒）
+  gcInterval: 600000
   # 内存泄漏检测
   leakDetection:
-    enabled: true              # 启用泄漏检测
-    threshold: 0.1             # 10%增长视为潜在泄漏
-    checkInterval: 300000      # 检查间隔（毫秒，5分钟）
+    # 是否启用泄漏检测
+    enabled: true
+    # 泄漏阈值（10%增长视为潜在泄漏）
+    threshold: 0.1
+    # 检查间隔（毫秒）
+    checkInterval: 300000
 
 # ----------------------------------------
 # CPU监控
 # ----------------------------------------
 cpu:
+  # 是否启用CPU监控
   enabled: true
-  threshold: 90                # CPU使用率阈值（%）
-  checkDuration: 30000         # CPU检查持续时间（毫秒）
+  # CPU使用率阈值（%）
+  threshold: 90
+  # CPU检查持续时间（毫秒）
+  checkDuration: 30000
 
 # ----------------------------------------
 # 优化策略
 # ----------------------------------------
 optimize:
-  aggressive: false            # 激进模式（更频繁清理）
-  autoRestart: false           # 严重时自动重启
-  restartThreshold: 95         # 重启阈值（%）
+  # 是否启用激进模式（更频繁清理）
+  aggressive: false
+  # 严重时是否自动重启
+  autoRestart: false
+  # 重启阈值（%）
+  restartThreshold: 95
 
 # ----------------------------------------
 # 报告配置
 # ----------------------------------------
 report:
+  # 是否启用报告
   enabled: true
-  interval: 3600000            # 报告间隔（毫秒）
+  # 报告间隔（毫秒）
+  interval: 3600000
 
 # ----------------------------------------
 # 磁盘优化
 # ----------------------------------------
 disk:
+  # 是否启用磁盘优化
   enabled: true
-  cleanupTemp: true            # 清理临时文件
-  cleanupLogs: true            # 清理日志文件
-  tempMaxAge: 86400000         # 临时文件最大年龄（毫秒，1天）
-  logMaxAge: 604800000         # 日志文件最大年龄（毫秒，7天）
-  maxLogSize: 104857600        # 单个日志文件最大大小（字节，100MB）
+  # 是否清理临时文件
+  cleanupTemp: true
+  # 是否清理日志文件
+  cleanupLogs: true
+  # 临时文件最大年龄（毫秒）
+  tempMaxAge: 86400000
+  # 日志文件最大年龄（毫秒）
+  logMaxAge: 604800000
+  # 单个日志文件最大大小（字节）
+  maxLogSize: 104857600
 
 # ----------------------------------------
 # 网络优化
 # ----------------------------------------
 network:
+  # 是否启用网络优化
   enabled: true
-  maxConnections: 1000         # 最大连接数阈值
-  cleanupIdle: true            # 清理空闲连接
+  # 最大连接数阈值
+  maxConnections: 1000
+  # 是否清理空闲连接
+  cleanupIdle: true
 
 # ----------------------------------------
 # 进程优化
 # ----------------------------------------
 process:
+  # 是否启用进程优化
   enabled: true
-  priority: normal              # 进程优先级: low, normal, high
-  nice: 0                       # Linux nice值 (-20到19)
+  # 进程优先级：low、normal、high
+  priority: normal
+  # Linux nice值（-20到19）
+  nice: 0
 
 # ----------------------------------------
 # 系统级优化
 # ----------------------------------------
 system:
+  # 是否启用系统优化
   enabled: true
-  clearCache: true              # 清理系统缓存
-  optimizeCPU: true             # 优化CPU调度
+  # 是否清理系统缓存
+  clearCache: true
+  # 是否优化CPU调度
+  optimizeCPU: true

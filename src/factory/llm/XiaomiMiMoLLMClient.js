@@ -124,62 +124,22 @@ export default class XiaomiMiMoLLMClient {
    * 构建请求体（OpenAI 兼容格式）
    */
   buildBody(messages, overrides = {}) {
-    const {
-      model,
-      temperature,
-      maxTokens,
-      topP,
-      frequencyPenalty,
-      presencePenalty,
-      stream,
-      extraBody,
-      thinkingType,
-      tool_choice,
-      tools,
-      response_format
-    } = overrides;
-
     const body = {
-      model: model || this.config.chatModel || this.config.model || 'mimo-v2-flash',
+      model: this.config.chatModel || this.config.model || 'mimo-v2-flash',
       messages,
-      temperature: temperature ?? this.config.temperature ?? 0.3,
-      max_completion_tokens: maxTokens ?? this.config.maxTokens ?? 1024,
-      top_p: topP ?? this.config.topP ?? 0.95,
-      stream: stream ?? false,
-      stop: overrides.stop ?? this.config.stop ?? null,
-      frequency_penalty: frequencyPenalty ?? this.config.frequencyPenalty ?? 0,
-      presence_penalty: presencePenalty ?? this.config.presencePenalty ?? 0
+      temperature: this.config.temperature ?? 0.3,
+      max_completion_tokens: this.config.maxTokens ?? 1024,
+      top_p: this.config.topP ?? 0.95,
+      stream: overrides.stream ?? false,
+      frequency_penalty: this.config.frequencyPenalty ?? 0,
+      presence_penalty: this.config.presencePenalty ?? 0
     };
 
-    // 思维链配置：映射为 thinking.type
-    const finalThinkingType = thinkingType ?? this.config.thinkingType;
-    if (finalThinkingType) {
-      body.thinking = { type: finalThinkingType };
-    }
-
-    // 工具调用相关参数
-    const finalToolChoice = tool_choice ?? this.config.toolChoice;
-    if (finalToolChoice) {
-      body.tool_choice = finalToolChoice;
-    }
-    const finalTools = tools ?? this.config.tools;
-    if (finalTools) {
-      body.tools = finalTools;
-    }
-
-    // 响应格式（例如强制 JSON 输出）
-    const finalResponseFormat = response_format ?? this.config.response_format;
-    if (finalResponseFormat) {
-      body.response_format = finalResponseFormat;
-    }
-
-    // 合并额外 body 配置（如 thinking 开关等）
-    if (this.config.extraBody && typeof this.config.extraBody === 'object') {
-      Object.assign(body, this.config.extraBody);
-    }
-    if (extraBody && typeof extraBody === 'object') {
-      Object.assign(body, extraBody);
-    }
+    if (this.config.stop !== undefined) body.stop = this.config.stop;
+    if (this.config.thinkingType !== undefined) body.thinking = { type: this.config.thinkingType };
+    if (this.config.toolChoice !== undefined) body.tool_choice = this.config.toolChoice;
+    if (this.config.tools !== undefined) body.tools = this.config.tools;
+    if (this.config.response_format !== undefined) body.response_format = this.config.response_format;
 
     return body;
   }

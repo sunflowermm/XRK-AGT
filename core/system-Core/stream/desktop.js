@@ -9,6 +9,7 @@ import os from 'os';
 import { BaseTools } from '#utils/base-tools.js';
 import si from 'systeminformation';
 import fetch from 'node-fetch';
+import StreamLoader from '#infrastructure/aistream/loader.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 const execAsync = promisify(exec);
@@ -25,6 +26,21 @@ const execCommand = (command, options = {}, needOutput = false) => {
   });
 };
 
+/**
+ * 桌面与通用助手工作流
+ * 
+ * 功能分类：
+ * - MCP工具（返回JSON）：
+ *   - 信息读取：screenshot（截屏）、system_info（系统信息）、disk_space（磁盘空间）、list_desktop_files（列出桌面文件）
+ *   - 文档生成：create_word_document（生成Word）、create_excel_document（生成Excel）
+ *   - 数据查询：stock_quote（股票行情）
+ * - Call Function（执行操作）：
+ *   - 系统操作：show_desktop（回桌面）、open_system_tool（打开系统工具）、lock_screen（锁屏）、power_control（电源控制）
+ *   - 文件操作：create_folder（创建文件夹）、open_explorer（打开资源管理器）、open_application（打开应用）
+ *   - 网络操作：open_browser（打开浏览器）
+ *   - 命令执行：execute_powershell（执行PowerShell）、cleanup_processes（清理进程）
+ *   - 工作流：start_workflow（启动工作流）
+ */
 export default class DesktopStream extends AIStream {
 
   constructor() {
@@ -65,26 +81,15 @@ export default class DesktopStream extends AIStream {
   async init() {
     await super.init();
 
-    try {
-      await this.initEmbedding();
-    } catch (error) {
-      // Embedding初始化失败，继续运行
-    }
 
     // 先注册自己的函数
     this.registerAllFunctions();
-    BotUtil.makeLog('info', `[${this.name}] 注册函数完成: ${this.functions.size} 个`, 'DesktopStream');
 
-    // 合并 ToolsStream（提供 read/grep/write/run 核心工具）
-    try {
-      const ToolsStream = (await import('./tools.js')).default;
-      const toolsStream = new ToolsStream();
-      await toolsStream.init();
-
-      const result = this.merge(toolsStream);
-      BotUtil.makeLog('info', `[${this.name}] 已合并 ToolsStream: +${result.mergedCount} 个函数，总计: ${this.functions.size} 个`, 'DesktopStream');
-    } catch (error) {
-      BotUtil.makeLog('error', `[${this.name}] 合并 ToolsStream 失败: ${error.message}`, 'DesktopStream');
+    // 合并 ToolsStream（提供 write/run/note 核心工具，read/grep已移至MCP工具）
+    // 注意：从 StreamLoader 获取已存在的实例，避免重复初始化导致重复注册
+    const toolsStream = StreamLoader.getStream('tools');
+    if (toolsStream) {
+      this.merge(toolsStream);
     }
 
     // 启动进程清理监控（每30秒检查一次）
@@ -101,7 +106,6 @@ export default class DesktopStream extends AIStream {
       }, 30000);
     }
 
-    BotUtil.makeLog('info', `[${this.name}] 工作流已初始化`, 'DesktopStream');
   }
 
   handleError(context, error, operation) {
@@ -204,7 +208,14 @@ export default class DesktopStream extends AIStream {
     throw new Error('不支持的数据格式。支持格式：1) sheets格式 2) 二维数组 3) 对象数组 4) headers/rows格式');
   }
 
+  /**
+   * 注册所有功能
+   * 
+   * MCP工具：screenshot, system_info, disk_space, list_desktop_files, create_word_document, create_excel_document, stock_quote（返回JSON，不出现在prompt中）
+   * Call Function：所有系统操作、文件操作、命令执行功能（出现在prompt中，供AI调用）
+   */
   registerAllFunctions() {
+    // Call Function：回到桌面（执行操作）
     this.registerFunction('show_desktop', {
       description: '回到桌面 - 最小化所有窗口显示桌面（仅限Windows系统）。适用场景：用户想要清空屏幕、查看桌面文件、需要干净的工作环境、或准备进行截屏等操作时使用。',
       prompt: `[回桌面] - 帮用户切换到桌面`,
@@ -229,6 +240,7 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
+    // Call Function：打开系统工具（执行操作）
     this.registerFunction('open_system_tool', {
       description: '打开常用系统工具',
       prompt: `[打开记事本] [打开计算器] [任务管理器] - 在电脑上打开对应的系统工具`,
@@ -267,25 +279,20 @@ export default class DesktopStream extends AIStream {
       },
       enabled: true
     });
-    this.registerFunction('screenshot', {
-      description: '截屏',
-      prompt: `[截屏] 或 [截图] - 截取当前屏幕`,
-      parser: (text, context) => {
-        if (!text.includes('[截屏]') && !text.includes('[截图]')) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'screenshot', params: {} }],
-          cleanText: text.replace(/\[截屏\]|\[截图\]/g, '').trim()
-        };
+    // MCP工具：截屏（返回JSON结果）
+    this.registerMCPTool('screenshot', {
+      description: '截取当前屏幕，返回截图文件路径和大小',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
       },
-      handler: async (params = {}, context = {}) => {
+      handler: async (args = {}, context = {}) => {
         try {
           const screenshot = (await import('screenshot-desktop')).default;
 
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
           const screenshotDir = path.join(paths.trash, 'screenshot');
-          // screenshot 目录已在 ensureBaseDirs 中创建，无需重复创建
 
           const filename = `screenshot_${timestamp}.png`;
           const screenshotPath = path.join(screenshotDir, filename);
@@ -299,8 +306,11 @@ export default class DesktopStream extends AIStream {
           }
 
           // 存储到上下文
-          context.screenshotPath = screenshotPath;
-          context.screenshotSize = stats.size;
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.screenshotPath = screenshotPath;
+            context.stream.context.screenshotSize = stats.size;
+          }
 
           BotUtil.makeLog('info', `截图成功: ${screenshotPath} (${stats.size} bytes)`, 'DesktopStream');
           
@@ -317,6 +327,7 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
+    // Call Function：锁屏（执行操作）
     this.registerFunction('lock_screen', {
       description: '锁定电脑屏幕',
       prompt: `[锁屏] - 锁定电脑屏幕`,
@@ -341,19 +352,15 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    this.registerFunction('system_info', {
-      description: '查看系统信息',
-      prompt: `[系统信息] - 查看电脑的 CPU、内存使用情况`,
-      parser: (text, context) => {
-        if (!text.includes('[系统信息]')) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'system_info', params: {} }],
-          cleanText: text.replace(/\[系统信息\]/g, '').trim()
-        };
+    // MCP工具：查看系统信息（返回JSON结果）
+    this.registerMCPTool('system_info', {
+      description: '查看电脑的 CPU、内存使用情况',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
       },
-      handler: async (params = {}, context = {}) => {
+      handler: async (args = {}, context = {}) => {
         try {
           // 使用systeminformation库获取系统信息（跨平台）
           const [cpu, mem] = await Promise.all([
@@ -367,7 +374,7 @@ export default class DesktopStream extends AIStream {
           const memUsed = mem.used / 1024 / 1024 / 1024; // GB
           const memUsedPercent = ((memUsed / memTotal) * 100).toFixed(1);
 
-          context.systemInfo = {
+          const systemInfo = {
             cpu: `${cpuUsage}%`,
             memory: {
               usedPercent: `${memUsedPercent}%`,
@@ -376,13 +383,22 @@ export default class DesktopStream extends AIStream {
               usedGB: `${memUsed.toFixed(2)}GB`
             }
           };
+
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.systemInfo = systemInfo;
+          }
+
+          return this.successResponse(systemInfo);
         } catch (err) {
-          this.handleError(context, err, '获取系统信息');
+          BotUtil.makeLog('error', `[desktop] 获取系统信息失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('SYSTEM_INFO_FAILED', err.message);
         }
       },
       enabled: true
     });
 
+    // Call Function：打开浏览器（执行操作）
     this.registerFunction('open_browser', {
       description: '打开浏览器访问网页',
       prompt: `[打开网页:url] - 在浏览器中打开指定网页，例如：[打开网页:https://www.baidu.com]`,
@@ -426,6 +442,7 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
+    // Call Function：电源控制（执行操作）
     this.registerFunction('power_control', {
       description: '关机或重启电脑',
       prompt: `[关机] - 关闭电脑（1分钟后）\n[立即关机] - 立即关闭电脑\n[重启] - 重启电脑（1分钟后）\n[取消关机] - 取消关机或重启`,
@@ -479,6 +496,7 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
+    // Call Function：创建文件夹（执行操作）
     this.registerFunction('create_folder', {
       description: '在桌面创建文件夹',
       prompt: `[创建文件夹:folderName] - 在桌面创建指定名称的文件夹，例如：[创建文件夹:新建文件夹]`,
@@ -523,6 +541,7 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
+    // Call Function：打开资源管理器（执行操作）
     this.registerFunction('open_explorer', {
       description: '打开文件管理器',
       prompt: `[打开资源管理器] 或 [打开文件夹] - 打开文件资源管理器`,
@@ -552,19 +571,15 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    this.registerFunction('disk_space', {
-      description: '查看磁盘空间',
-      prompt: `[磁盘空间] - 查看各磁盘的使用情况`,
-      parser: (text, context) => {
-        if (!text.includes('[磁盘空间]')) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'disk_space', params: {} }],
-          cleanText: text.replace(/\[磁盘空间\]/g, '').trim()
-        };
+    // MCP工具：查看磁盘空间（返回JSON结果）
+    this.registerMCPTool('disk_space', {
+      description: '查看各磁盘的使用情况',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
       },
-      handler: async (params = {}, context = {}) => {
+      handler: async (args = {}, context = {}) => {
         try {
           // 使用systeminformation库获取磁盘空间（跨平台）
           const fsSize = await si.fsSize();
@@ -576,18 +591,34 @@ export default class DesktopStream extends AIStream {
             const freeGB = (disk.size - disk.used) / 1024 / 1024 / 1024; // GB
             const usedPercent = ((disk.used / disk.size) * 100).toFixed(1);
 
-            disks.push(`${disk.mount} ${usedPercent}% 已用 (${freeGB.toFixed(2)}GB / ${totalGB.toFixed(2)}GB 可用)`);
+            disks.push({
+              mount: disk.mount,
+              usedPercent: parseFloat(usedPercent),
+              freeGB: parseFloat(freeGB.toFixed(2)),
+              totalGB: parseFloat(totalGB.toFixed(2)),
+              usedGB: parseFloat(usedGB.toFixed(2)),
+              display: `${disk.mount} ${usedPercent}% 已用 (${freeGB.toFixed(2)}GB / ${totalGB.toFixed(2)}GB 可用)`
+            });
           }
 
-          context.diskSpace = disks.length > 0 ? disks : null;
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.diskSpace = disks.length > 0 ? disks.map(d => d.display) : null;
+          }
+
+          return this.successResponse({
+            disks,
+            count: disks.length
+          });
         } catch (err) {
-          this.handleError(context, err, '获取磁盘空间');
+          BotUtil.makeLog('error', `[desktop] 获取磁盘空间失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('DISK_SPACE_FAILED', err.message);
         }
       },
       enabled: true
     });
 
-    // 执行PowerShell命令（支持错误重试）
+    // Call Function：执行PowerShell命令（执行操作）
     this.registerFunction('execute_powershell', {
       description: '执行PowerShell命令（工作区：桌面）',
       prompt: `[执行命令:command] - 在工作区（桌面）执行PowerShell命令，例如：[执行命令:Get-ChildItem -Path "$env:USERPROFILE\\Desktop" -Filter "*.docx"]`,
@@ -638,21 +669,18 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // 新增：列出桌面文件
-    this.registerFunction('list_desktop_files', {
+    // MCP工具：列出桌面文件（返回JSON结果）
+    this.registerMCPTool('list_desktop_files', {
       description: '列出桌面上的文件和快捷方式',
-      prompt: `[列出桌面文件] - 查看桌面上的所有文件和快捷方式`,
-      parser: (text, context) => {
-        if (!text.includes('[列出桌面文件]')) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'list_desktop_files', params: {} }],
-          cleanText: text.replace(/\[列出桌面文件\]/g, '').trim()
-        };
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
       },
-      handler: async (params = {}, context = {}) => {
-        if (!this.requireWindows(context, '列出桌面文件')) return;
+      handler: async (args = {}, context = {}) => {
+        if (!IS_WINDOWS) {
+          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
+        }
 
         try {
           const workspace = this.getWorkspace();
@@ -674,10 +702,14 @@ export default class DesktopStream extends AIStream {
             }
           }
 
-          context.desktopFiles = fileList;
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.desktopFiles = fileList;
+          }
 
-          // 在多步工作流中，将桌面文件列表写入笔记，供后续步骤和其他插件读取
-          if (context.workflowId && Array.isArray(fileList) && fileList.length > 0) {
+          // 在工作流中记录笔记
+          const workflowId = context.workflowId || (context.stream?.context?.workflowId);
+          if (workflowId && context.stream && Array.isArray(fileList) && fileList.length > 0) {
             const lines = fileList.map((item, index) => {
               const sizeText = typeof item.size === 'number'
                 ? ` (${(item.size / 1024).toFixed(1)} KB)`
@@ -686,8 +718,8 @@ export default class DesktopStream extends AIStream {
             }).join('\n');
 
             try {
-              await this.storeNote(
-                context.workflowId,
+              await context.stream.storeNote(
+                workflowId,
                 `【桌面文件列表】\n工作区：${workspace}\n共 ${fileList.length} 个项目：\n${lines}`,
                 'list_desktop_files',
                 true
@@ -696,17 +728,24 @@ export default class DesktopStream extends AIStream {
               // 记笔记失败不影响主流程
             }
           }
+
+          return this.successResponse({
+            workspace,
+            files: fileList,
+            count: fileList.length
+          });
         } catch (err) {
-          this.handleError(context, err, '列出桌面文件');
+          BotUtil.makeLog('error', `[desktop] 列出桌面文件失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('LIST_FILES_FAILED', err.message);
         }
       },
       enabled: true
     });
 
-    // 注意：read/grep/write/run已移至tools工作流，这里不再重复注册
-    // desktop工作流会与tools工作流合并，自动获得这些功能
+    // 注意：read/grep已移至MCP工具（tools.read, tools.grep），write/run/note已移至tools工作流
+    // desktop工作流会与tools工作流合并，自动获得write/run/note功能
 
-    // 新增：打开软件（通过快捷方式或程序名）
+    // Call Function：打开应用（执行操作）
     this.registerFunction('open_application', {
       description: '打开应用程序',
       prompt: `[打开软件:appName] - 打开指定的软件，例如：[打开软件:微信] 或 [打开软件:notepad.exe]`,
@@ -774,33 +813,26 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // 新增：生成Word文档
-    this.registerFunction('create_word_document', {
-      description: '创建Word文档 - 根据指定内容创建格式化的Word文档（.docx），支持标题、段落、表格等格式。适用于创建报告、笔记、文档等场景。',
-      prompt: `[生成Word:fileName:content] - 创建Word文档，例如：[生成Word:报告.docx:这是文档内容]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[生成Word:([^:]+):([^\]]+)\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const fileName = (match[1] || '').trim();
-          const content = (match[2] || '').trim();
-          if (fileName && content) {
-            functions.push({ type: 'create_word_document', params: { fileName, content } });
+    // MCP工具：生成Word文档（返回JSON结果）
+    this.registerMCPTool('create_word_document', {
+      description: '创建Word文档，根据指定内容创建格式化的Word文档（.docx），支持标题、段落、表格等格式',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          fileName: {
+            type: 'string',
+            description: '文件名（包含.docx扩展名）'
+          },
+          content: {
+            type: 'string',
+            description: '文档内容（支持多行）'
           }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
+        },
+        required: ['fileName', 'content']
       },
-      handler: async (params = {}, context = {}) => {
-        const fileName = this.getParam(params, 'fileName', 'filename');
-        const content = params.content;
+      handler: async (args = {}, context = {}) => {
+        const fileName = this.getParam(args, 'fileName', 'filename');
+        const content = args.content;
         
         if (!fileName) throw new Error('文件名不能为空');
         if (!content) throw new Error('内容不能为空');
@@ -837,7 +869,11 @@ export default class DesktopStream extends AIStream {
             throw new Error('Word文档文件为空');
           }
 
-          context.createdWordDoc = filePath;
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.createdWordDoc = filePath;
+          }
+
           BotUtil.makeLog('info', `Word文档生成成功: ${filePath} (${stats.size} bytes)`, 'DesktopStream');
           
           return this.successResponse({
@@ -853,122 +889,26 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // 生成Excel文档（只接收JSON数组格式，不做文本解析）
-    this.registerFunction('create_excel_document', {
-      description: '创建Excel文档',
-      prompt: `[生成Excel:fileName:jsonData] - 创建Excel文档，数据必须是JSON数组格式，例如：[生成Excel:数据表.xlsx:[{"姓名":"张三","年龄":25},{"姓名":"李四","年龄":30}]]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-
-        // 使用更智能的匹配方式，能够处理JSON数组中包含的]字符
-        const pattern = /\[生成Excel:([^:]+):/g;
-        let match;
-        const matches = [];
-
-        // 先找到所有[生成Excel:的位置
-        while ((match = pattern.exec(text)) !== null) {
-          matches.push({
-            start: match.index,
-            fileName: match[1].trim(),
-            dataStart: match.index + match[0].length
-          });
-        }
-
-        // 对每个匹配，尝试解析JSON数组（从后往前处理，避免索引问题）
-        const toRemove = [];
-        for (let i = matches.length - 1; i >= 0; i--) {
-          const m = matches[i];
-          const afterColon = text.slice(m.dataStart);
-
-          // 尝试找到完整的JSON数组（从[开始到匹配的]结束）
-          let bracketCount = 0;
-          let jsonEnd = -1;
-          let inString = false;
-          let escapeNext = false;
-
-          for (let j = 0; j < afterColon.length; j++) {
-            const char = afterColon[j];
-
-            if (escapeNext) {
-              escapeNext = false;
-              continue;
-            }
-
-            if (char === '\\') {
-              escapeNext = true;
-              continue;
-            }
-
-            if (char === '"') {
-              inString = !inString;
-              continue;
-            }
-
-            if (inString) continue;
-
-            if (char === '[') {
-              bracketCount++;
-            } else if (char === ']') {
-              bracketCount--;
-              if (bracketCount === 0) {
-                // 找到了JSON数组的结束位置
-                jsonEnd = j + 1;
-                break;
-              }
-            }
+    // MCP工具：生成Excel文档（返回JSON结果）
+    this.registerMCPTool('create_excel_document', {
+      description: '创建Excel文档，数据必须是JSON数组格式',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          fileName: {
+            type: 'string',
+            description: '文件名（包含.xlsx扩展名）'
+          },
+          data: {
+            type: 'array',
+            description: '数据数组，支持多种格式：1) 二维数组 [[header1, header2], [value1, value2]] 2) 对象数组 [{header1: value1, header2: value2}] 3) sheets格式 {sheets: [{name: "Sheet1", data: [[...]]}]}'
           }
-
-          if (jsonEnd > 0) {
-            // jsonEnd是JSON数组结束的位置（包括]），需要检查后面是否还有命令结束符]
-            let commandEnd = jsonEnd;
-            if (afterColon[jsonEnd] === ']') {
-              commandEnd = jsonEnd + 1;
-            }
-
-            // 提取JSON数组字符串（不包括命令结束符]）
-            const dataStr = afterColon.slice(0, jsonEnd).trim();
-            if (dataStr.startsWith('[') && dataStr.endsWith(']')) {
-              try {
-                const data = JSON.parse(dataStr);
-                if (!Array.isArray(data)) {
-                  continue;
-                }
-                functions.push({
-                  type: 'create_excel_document',
-                  params: { fileName: m.fileName, data },
-                  order: m.start
-                });
-
-                // 记录需要移除的部分（从后往前处理，所以索引不会变化）
-                toRemove.push({
-                  start: m.start,
-                  end: m.dataStart + commandEnd
-                });
-              } catch (e) {
-                // JSON解析失败，跳过
-                BotUtil.makeLog('debug', `Excel命令JSON解析失败: ${e.message}`, 'DesktopStream');
-              }
-            }
-          }
-        }
-
-        // 从后往前移除匹配的部分，避免索引变化
-        if (toRemove.length > 0) {
-          let result = text;
-          // 按start位置从大到小排序，从后往前移除
-          toRemove.sort((a, b) => b.start - a.start);
-          for (const remove of toRemove) {
-            result = result.slice(0, remove.start) + result.slice(remove.end);
-          }
-          cleanText = result.trim();
-        }
-
-        return { functions, cleanText };
+        },
+        required: ['fileName', 'data']
       },
-      handler: async (params = {}, context = {}) => {
-        const fileName = this.getParam(params, 'fileName', 'filename');
-        let data = this.getParam(params, 'data', 'jsonData');
+      handler: async (args = {}, context = {}) => {
+        const fileName = this.getParam(args, 'fileName');
+        let data = this.getParam(args, 'data');
         
         if (!fileName) throw new Error('文件名不能为空');
         if (!data) throw new Error('数据不能为空');
@@ -1057,7 +997,12 @@ export default class DesktopStream extends AIStream {
 
           // 验证文件
           const stats = await fs.stat(filePath);
-          context.createdExcelDoc = filePath;
+          
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.createdExcelDoc = filePath;
+          }
+
           BotUtil.makeLog('info', `Excel文件生成成功: ${filePath}`, 'DesktopStream');
           
           return this.successResponse({
@@ -1075,7 +1020,8 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // 自动清理无用进程（在执行函数后调用）
+
+    // Call Function：清理进程（执行操作）
     this.registerFunction('cleanup_processes', {
       description: '清理无用进程',
       prompt: `[清理进程] - 清理已注册的无用进程`,
@@ -1095,6 +1041,7 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
+    // Call Function：启动工作流（执行操作）
     this.registerFunction('start_workflow', {
       description: '启动多步骤工作流',
       prompt: `[启动工作流:goal] - 启动一个多步骤工作流，AI会自动规划步骤并执行，例如：[启动工作流:帮我打开微信并发送消息给张三]`,
@@ -1141,31 +1088,22 @@ export default class DesktopStream extends AIStream {
       },
       enabled: true
     });
-    this.registerFunction('stock_quote', {
+    // MCP工具：查询股票行情（返回JSON结果）
+    this.registerMCPTool('stock_quote', {
       description: '查询单只A股实时行情，返回结构化数据（价格、涨跌、涨跌幅等），结果会自动记录到工作流笔记中',
-      prompt: `[股票:stockCode] - 查询单只A股实时行情，返回结构化数据，例如：[股票:600519]、[股票:000001]，只能是6位股票代码`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[(?:股票|stock):(\d{6})\]/gi;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const code = (match[1] || '').trim();
-          if (code) {
-            functions.push({ type: 'stock_quote', params: { code } });
+      inputSchema: {
+        type: 'object',
+        properties: {
+          code: {
+            type: 'string',
+            description: '6位股票代码，例如：600519、000001'
           }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
+        },
+        required: ['code']
       },
-      handler: async (params = {}, context = {}) => {
-        const code = (this.getParam(params, 'code', 'stockCode') || '').trim();
-        const { workflowId } = context;
+      handler: async (args = {}, context = {}) => {
+        const code = (this.getParam(args, 'code', 'stockCode') || '').trim();
+        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
 
         // 验证股票代码格式（6位数字）
         if (!code) {
@@ -1181,14 +1119,14 @@ export default class DesktopStream extends AIStream {
 
           if (!stockData || !stockData.name) {
             const errorMsg = `股票代码 ${code} 不存在或数据无效`;
-            if (workflowId) {
-              await this.storeNote(
-                workflowId,
-                `【股票查询失败】\n代码：${code}\n原因：${errorMsg}`,
-                'stock',
-                true
-              );
-            }
+          if (workflowId && context.stream) {
+            await context.stream.storeNote(
+              workflowId,
+              `【股票查询失败】\n代码：${code}\n原因：${errorMsg}`,
+              'stock',
+              true
+            );
+          }
             return this.errorResponse('STOCK_NOT_FOUND', errorMsg);
           }
 
@@ -1225,7 +1163,7 @@ export default class DesktopStream extends AIStream {
           });
 
           // 在工作流中记录笔记（供后续步骤使用）
-          if (workflowId) {
+          if (workflowId && context.stream) {
             const noteContent =
               `【股票行情查询】\n` +
               `代码：${code}\n名称：${name}\n` +
@@ -1236,7 +1174,7 @@ export default class DesktopStream extends AIStream {
               (date && time ? `数据时间：${date} ${time}\n` : '') +
               `（本条笔记由股票信息工作流自动生成，供后续多步工作流分析与决策使用）`;
 
-            await this.storeNote(workflowId, noteContent, 'stock', true);
+            await context.stream.storeNote(workflowId, noteContent, 'stock', true);
           }
 
           return result;
@@ -1247,8 +1185,8 @@ export default class DesktopStream extends AIStream {
             'DesktopStream'
           );
 
-          if (workflowId) {
-            await this.storeNote(
+          if (workflowId && context.stream) {
+            await context.stream.storeNote(
               workflowId,
               `【股票查询异常】\n代码：${code}\n错误：${error.message}`,
               'stock',
@@ -1391,22 +1329,22 @@ export default class DesktopStream extends AIStream {
   }
 
   /**
-   * 构建功能列表提示（优化版）
-   * 清晰说明功能列表的作用、使用方式和执行机制
+   * 构建功能列表提示
+   * 注意：只包含 Call Function 的 prompt，MCP 工具不会出现在这里
    */
   buildFunctionsPrompt() {
-    // 合并所有stream的prompt（功能都合并了，prompt也应该合并）
+    // 只获取 Call Function（MCP 工具不会出现在 prompt 中）
     const enabledFuncs = this.getEnabledFunctions();
     if (enabledFuncs.length === 0) return '';
 
-    // 合并所有stream的prompt
+    // 合并所有 Call Function 的 prompt
     const prompts = enabledFuncs
       .filter(f => f.prompt)
       .map(f => f.prompt);
 
     if (prompts.length === 0) return '';
 
-    // 动态解析prompt（如果为函数类型）
+    // 动态解析 prompt（如果为函数类型）
     const resolvedPrompts = prompts.map(p => typeof p === 'function' ? p() : p);
 
     return `【可执行命令列表】
@@ -1466,20 +1404,20 @@ ${persona}
 工作区：${workspace}
 - 文件操作默认在此目录进行
 
-【核心工具】（read/grep/write/run）
-- [读取:文件路径] - 读取文件（工作流中会自动存笔记）
-- [搜索:关键词:文件路径(可选)] - 搜索文本（工作流中会自动存笔记）
+【核心工具】（write/run/note）
 - [写入:文件路径:内容] - 写入文件
 - [执行:命令] - 执行命令
 - [笔记:内容] - 记录笔记（仅在工作流中可用）
 
+【信息读取功能】
+- 文件读取(read)、搜索(grep)、系统信息、磁盘空间、桌面文件列表等功能已移至MCP工具
+- 可通过MCP协议调用：tools.read, tools.grep, desktop.system_info, desktop.disk_space, desktop.list_desktop_files
+- 在工作流中，这些工具的结果会自动存到笔记
+
 【Excel操作】
-- [生成Excel:文件名:JSON数组] - 创建Excel，数据必须是JSON数组格式
-- 示例：[{"列1":"值1","列2":"值2"},{"列1":"值3","列2":"值4"}]
+- Excel文档生成功能已移至MCP工具（desktop.create_excel_document），可通过MCP协议调用
 
 【工作流笔记】
-- read和grep的结果会自动存到笔记
-- 后续步骤可通过"工作流笔记"查看之前步骤的结果
 - 使用[笔记:内容]手动记录信息
    ${fileContext ? fileContext : ''}
 【时间】

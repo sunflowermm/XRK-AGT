@@ -1,11 +1,17 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
+import MemoryManager from '#infrastructure/aistream/memory-manager.js';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
 
 /**
  * 记忆系统工作流插件
+ * 
+ * 功能分类：
+ * - MCP工具（返回JSON）：query_memory（查询记忆）、list_memories（列出记忆）
+ * - Call Function（执行操作）：save_memory（保存记忆）、delete_memory（删除记忆）
+ * 
  * 提供长期记忆功能，支持记忆的存储、查询、删除
  */
 export default class MemoryStream extends AIStream {
@@ -32,12 +38,6 @@ export default class MemoryStream extends AIStream {
   async init() {
     await super.init();
     
-    try {
-      await this.initEmbedding();
-    } catch (error) {
-      BotUtil.makeLog('warn', `[${this.name}] Embedding初始化失败，记忆功能可能受限`, 'MemoryStream');
-    }
-
     // 确保记忆目录存在
     await fs.mkdir(this.memoryDir, { recursive: true });
 
@@ -47,27 +47,20 @@ export default class MemoryStream extends AIStream {
     // 加载记忆数据
     await this.loadMemories();
 
-    BotUtil.makeLog('info', `[${this.name}] 记忆系统已初始化，已加载 ${this.memories.size} 条记忆`, 'MemoryStream');
   }
 
   /**
    * 注册所有记忆相关功能
-   * 优化：prompt字段动态包含记忆信息
+   * 
+   * MCP工具：query_memory, list_memories（返回JSON，不出现在prompt中）
+   * Call Function：save_memory, delete_memory（出现在prompt中，供AI调用）
    */
   registerAllFunctions() {
-    // 动态获取记忆信息
-    const getMemoryPrompt = () => {
-      const memories = this.getMemoriesForPrompt({ e: this.context?.e });
-      if (memories.length > 0) {
-        return `\n当前记忆：${memories.map(m => `#${m.id}: ${m.content.slice(0, 30)}...`).join('、')}`;
-      }
-      return '';
-    };
 
-    // 保存长期记忆
+    // Call Function：保存长期记忆（执行操作，不返回JSON）
     this.registerFunction('save_memory', {
       description: '保存长期记忆',
-      prompt: () => `[长期记忆:content] - 保存一条长期记忆，内容会被持久化存储${getMemoryPrompt()}`,
+      prompt: `[长期记忆:content] - 保存一条长期记忆，内容会被持久化存储`,
       parser: (text, context) => {
         const match = text.match(/\[长期记忆:([^\]]+)\]/);
         if (!match) {
@@ -89,35 +82,53 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
-    // 查询记忆
-    this.registerFunction('query_memory', {
-      description: '查询长期记忆',
-      prompt: () => `[查询记忆:keyword] - 根据关键词查询相关记忆${getMemoryPrompt()}`,
-      parser: (text, context) => {
-        const match = text.match(/\[查询记忆:([^\]]+)\]/);
-        if (!match) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'query_memory', params: { keyword: match[1] } }],
-          cleanText: text.replace(/\[查询记忆:[^\]]+\]/g, '').trim()
-        };
+    // MCP工具：查询记忆（返回JSON结果）
+    this.registerMCPTool('query_memory', {
+      description: '根据关键词查询相关记忆，返回记忆列表',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          keyword: {
+            type: 'string',
+            description: '搜索关键词'
+          }
+        },
+        required: ['keyword']
       },
-      handler: async (params = {}, context = {}) => {
-        const { keyword } = params;
-        if (!keyword) return;
+      handler: async (args = {}, context = {}) => {
+        const { keyword } = args;
+        if (!keyword) {
+          return { success: false, error: '关键词不能为空' };
+        }
 
         const memories = await this.queryMemories(keyword, context);
-        await this.storeNoteIfWorkflow(context, `查询记忆 "${keyword}"，找到 ${memories.length} 条相关记忆`, 'memory', true);
-        if (memories.length > 0) {
-          context.memoryResults = memories;
+        
+        // 在工作流中记录笔记
+        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
+        if (workflowId && context.stream) {
+          await context.stream.storeNote(workflowId, `查询记忆 "${keyword}"，找到 ${memories.length} 条相关记忆`, 'memory', true);
         }
+
+        if (context.stream) {
+          context.stream.context = context.stream.context || {};
+          context.stream.context.memoryResults = memories;
+        }
+
         BotUtil.makeLog('info', `[${this.name}] 查询记忆 "${keyword}"，找到 ${memories.length} 条`, 'MemoryStream');
+
+        return {
+          success: true,
+          data: {
+            keyword,
+            memories,
+            count: memories.length
+          }
+        };
       },
       enabled: true
     });
 
-    // 删除记忆
+    // Call Function：删除记忆（执行操作，不返回JSON）
     this.registerFunction('delete_memory', {
       description: '删除长期记忆',
       prompt: `[删除记忆:index] - 根据序号删除指定的记忆`,
@@ -142,23 +153,32 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
-    // 列出记忆
-    this.registerFunction('list_memories', {
-      description: '列出所有记忆',
-      prompt: `[列出记忆] - 列出所有保存的长期记忆`,
-      parser: (text, context) => {
-        if (!text.includes('[列出记忆]')) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'list_memories', params: {} }],
-          cleanText: text.replace(/\[列出记忆\]/g, '').trim()
-        };
+    // MCP工具：列出记忆（返回JSON结果）
+    this.registerMCPTool('list_memories', {
+      description: '列出所有保存的长期记忆',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
       },
-      handler: async (params = {}, context = {}) => {
+      handler: async (args = {}, context = {}) => {
         const memories = await this.listMemories(context);
-        await this.storeNoteIfWorkflow(context, `列出所有记忆，共 ${memories.length} 条`, 'memory', true);
+        
+        // 在工作流中记录笔记
+        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
+        if (workflowId && context.stream) {
+          await context.stream.storeNote(workflowId, `列出所有记忆，共 ${memories.length} 条`, 'memory', true);
+        }
+
         BotUtil.makeLog('info', `[${this.name}] 列出记忆，共 ${memories.length} 条`, 'MemoryStream');
+
+        return {
+          success: true,
+          data: {
+            memories,
+            count: memories.length
+          }
+        };
       },
       enabled: true
     });
@@ -182,15 +202,23 @@ export default class MemoryStream extends AIStream {
    * 保存记忆
    */
   async saveMemory(content, context) {
-    const memoryId = Date.now();
     const userId = this.getUserId(context);
-    const scene = this.getScene(context);
     
+    const memoryId = await MemoryManager.addLongTermMemory(userId, {
+      content,
+      type: 'fact',
+      importance: 0.7,
+      metadata: {
+        scene: this.getScene(context),
+        source: this.name
+      }
+    });
+
     const memory = {
       id: memoryId,
       content,
       userId,
-      scene,
+      scene: this.getScene(context),
       timestamp: Date.now(),
       createdAt: new Date().toISOString()
     };
@@ -206,16 +234,20 @@ export default class MemoryStream extends AIStream {
    */
   async queryMemories(keyword, context) {
     const userId = this.getUserId(context);
-    const scene = this.getScene(context);
     
-    const results = [];
-    for (const memory of this.memories.values()) {
-      if (memory.userId === userId && memory.scene === scene) {
-        if (memory.content.includes(keyword)) {
-          results.push(memory);
-        }
-      }
-    }
+    const memories = await MemoryManager.searchLongTermMemories(userId, keyword, 10);
+    
+    const scene = this.getScene(context);
+    const results = memories
+      .filter(m => m.metadata?.scene === scene || !scene)
+      .map(m => ({
+        id: m.id,
+        content: m.content,
+        userId: m.userId,
+        scene: m.metadata?.scene || 'default',
+        timestamp: m.timestamp,
+        createdAt: new Date(m.timestamp).toISOString()
+      }));
     
     return results.sort((a, b) => b.timestamp - a.timestamp);
   }
@@ -231,6 +263,7 @@ export default class MemoryStream extends AIStream {
       return false;
     }
 
+    MemoryManager.deleteLongTermMemory(userId, id);
     this.memories.delete(id);
     await this.deleteMemoryFile(id);
     
@@ -345,14 +378,18 @@ export default class MemoryStream extends AIStream {
     const userId = this.getUserId(context);
     const scene = this.getScene(context);
     
-    const memories = [];
-    for (const memory of this.memories.values()) {
-      if (memory.userId === userId && memory.scene === scene) {
-        memories.push(memory);
-      }
-    }
+    const memories = await MemoryManager.searchLongTermMemories(userId, '', 10);
     
-    return memories.sort((a, b) => b.timestamp - a.timestamp).slice(0, 10); // 最多返回10条
+    return memories
+      .filter(m => m.metadata?.scene === scene || !scene)
+      .map(m => ({
+        id: m.id,
+        content: m.content,
+        userId: m.userId,
+        scene: m.metadata?.scene || 'default',
+        timestamp: m.timestamp
+      }))
+      .sort((a, b) => b.timestamp - a.timestamp);
   }
 
   /**
@@ -363,20 +400,30 @@ export default class MemoryStream extends AIStream {
   }
 
   /**
-   * 获取记忆用于prompt展示（用于在主工作流的buildFunctionsPrompt中展示）
+   * 获取记忆用于prompt展示
+   * 注意：此方法用于在主工作流中展示记忆信息，不用于MCP工具
    */
-  getMemoriesForPrompt(context) {
+  async getMemoriesForPrompt(context) {
     const userId = this.getUserId(context);
     const scene = this.getScene(context);
     
-    const memories = [];
-    for (const memory of this.memories.values()) {
-      if (memory.userId === userId && memory.scene === scene) {
-        memories.push(memory);
-      }
-    }
+    const shortTerm = MemoryManager.getShortTermMemories(userId, 5);
+    const longTerm = await MemoryManager.searchLongTermMemories(userId, '', 5);
     
-    return memories.sort((a, b) => b.timestamp - a.timestamp).slice(0, 5); // 最多展示5条
+    return [
+      ...shortTerm.map(m => ({
+        id: m.id,
+        content: m.content,
+        timestamp: m.timestamp
+      })),
+      ...longTerm
+        .filter(m => m.metadata?.scene === scene || !scene)
+        .map(m => ({
+          id: m.id,
+          content: m.content,
+          timestamp: m.timestamp
+        }))
+    ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
   }
 
   async buildChatContext(e, question) {

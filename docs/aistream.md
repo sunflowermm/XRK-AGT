@@ -10,15 +10,15 @@
 
 - ✅ **零配置扩展**：放置到任意 `core/*/stream/` 目录即可自动加载
 - ✅ **函数注册系统**：支持动态prompt和复杂解析
-- ✅ **Embedding模式**：支持本地（BM25）和远程（API）两种模式
+- ✅ **向量服务集成**：统一通过子服务端向量服务进行文本向量化和检索
 - ✅ **工作流合并**：支持功能合并和组合
-- ✅ **上下文增强**：自动上下文检索和增强
+- ✅ **上下文增强**：自动上下文检索和增强（RAG流程）
 - ✅ **热重载支持**：修改代码后自动重载
 
-- 调用外部 Chat Completion API（如 OpenAI 兼容接口）。
-- Embedding 支持（本地 BM25 算法 / 远程 API 接口）。
-- 相似度检索与历史上下文增强。
-- 函数调用（Function Calling）与权限控制。
+- 调用 LLM API（优先使用子服务端LangChain接口，失败时回退到LLM工厂）
+- 向量服务支持（通过子服务端 `/api/vector/*` 接口）
+- 相似度检索与历史上下文增强
+- 函数调用（Function Calling）与权限控制
 
 所有自定义 AI 工作流都应继承此类，可选择实现 `buildSystemPrompt` 与 `buildChatContext`。
 
@@ -120,14 +120,9 @@ tts:
   Provider: volcengine
   onlyForASR: true        # 是否只有ASR触发才有TTS
 
-# Embedding 配置（简化：仅支持本地和远程两种模式）
+# Embedding 配置（统一使用子服务端向量服务）
 embedding:
-  enabled: true
-  mode: local             # local: 本地 BM25 算法 | remote: 远程 API 接口
-  remote:                 # 远程模式配置（mode: remote 时使用）
-    apiUrl: ""            # API 地址，如 https://api.openai.com/v1/embeddings
-    apiKey: ""            # API 密钥
-    apiModel: "text-embedding-3-small"  # 模型名称
+  enabled: true           # 是否启用向量检索
   maxContexts: 5          # 最大上下文条数
   similarityThreshold: 0.6  # 相似度阈值
   cacheExpiry: 86400      # 缓存时长（秒）
@@ -180,129 +175,144 @@ emotions:
 
 ### LLM 提供商配置
 
-LLM 配置通过 `llm.Provider` 指定，支持的提供商：
+LLM 配置通过 `llm.Provider` 指定，支持动态扩展的提供商系统：
 
+**配置解析机制**：
+- 优先从运行时配置获取：`llm.config[providerName]`
+- 从全局配置获取：`cfg[providerName]_llm` 或 `cfg[providerName]`
+- 支持命名约定：`{providerName}_llm` 或 `{providerName}_vision`
+
+**添加新提供商**：
+1. 在 `LLMFactory` 中注册提供商工厂函数
+2. 创建配置文件：`data/server_bots/{providerName}_llm.yaml`
+3. 在 `aistream.yaml` 中设置 `llm.Provider: {providerName}`
+
+**现有提供商示例**：
 - **gptgod**：GPTGod 提供商（默认）
-  - 配置文件：`data/server_bots/god.yaml`（工厂配置，全局，不随端口变化）
+  - 配置文件：`data/server_bots/god.yaml`
   - 支持标准 OpenAI Chat Completions 协议
   
 - **volcengine**：火山引擎豆包大模型
-  - 配置文件：`data/server_bots/volcengine_llm.yaml`（工厂配置，全局，不随端口变化）
+  - 配置文件：`data/server_bots/volcengine_llm.yaml`
   - 接口地址：`https://ark.cn-beijing.volces.com/api/v3`
-  - 支持的模型：`doubao-pro-4k`、`doubao-pro-32k`、`doubao-lite-4k` 等
-  - 详细文档：https://www.volcengine.com/docs/82379
 
 - **xiaomimimo**：小咪咪莫提供商
-  - 配置文件：`data/server_bots/xiaomimimo_llm.yaml`（工厂配置，全局，不随端口变化）
+  - 配置文件：`data/server_bots/xiaomimimo_llm.yaml`
 
-> **注意**：LLM 的详细配置（如 `baseUrl`、`apiKey`、`model` 等）位于各自的配置文件中，不在 `aistream.yaml` 中。
+> **注意**：
+> - LLM 的详细配置（如 `baseUrl`、`apiKey`、`model` 等）位于各自的配置文件中
+> - 基类不再硬编码提供商映射，支持动态扩展
+> - 不支持的提供商会抛出错误，不再静默回退
 
 ### Embedding 配置 `this.embeddingConfig`
 
-Embedding 配置会自动从 `cfg.aistream.embedding` 读取：
+Embedding 配置会自动从 `cfg.aistream.embedding` 读取，**统一使用子服务端向量服务**：
 
 - `enabled`：是否启用向量检索（从 `cfg.aistream.embedding.enabled` 读取，默认 `true`）
-- `mode`：`local`（本地 BM25）或 `remote`（远程 API，从 `cfg.aistream.embedding.mode` 读取，默认 `local`）
 - `maxContexts`：最多拼接多少条历史上下文（从 `cfg.aistream.embedding.maxContexts` 读取，默认 `5`）
 - `similarityThreshold`：相似度阈值（从 `cfg.aistream.embedding.similarityThreshold` 读取，默认 `0.6`）
 - `cacheExpiry`：Redis 缓存过期时间（从 `cfg.aistream.embedding.cacheExpiry` 读取，默认 `86400` 秒）
-- 远程模式配置（`mode: remote` 时，从 `cfg.aistream.embedding.remote` 读取）：
-  - `apiUrl`：API 地址（如 `https://api.openai.com/v1/embeddings`）
-  - `apiKey`：API 密钥
-  - `apiModel`：模型名称（默认 `text-embedding-3-small`）
 
-> **注意**：工作流构造函数中只需设置 `embedding: { enabled: true }`，其他配置会自动从 `cfg.aistream.embedding` 读取。
+**向量服务接口**（子服务端）：
+- `POST /api/vector/embed` - 文本向量化
+- `POST /api/vector/search` - 向量检索
+- `POST /api/vector/upsert` - 向量入库
+
+> **注意**：工作流构造函数中只需设置 `embedding: { enabled: true }`，其他配置会自动从 `cfg.aistream.embedding` 读取。向量服务由子服务端统一提供，无需额外配置。
 
 ---
 
 ## 生命周期与初始化
 
-**初始化流程**:
+**工作流加载流程**（StreamLoader）：
 
 ```mermaid
 flowchart TB
-    A["AIStream.init"] --> B["初始化functions Map"]
-    B --> C["初始化Embedding字段"]
-    C --> D{"是否启用Embedding"}
-    D -->|是| E["initEmbedding"]
-    D -->|否| F["初始化完成"]
-    E --> G{"选择mode<br/>从cfg读取"}
-    G -->|local| H["initLightweightEmbedding<br/>BM25算法<br/>零依赖"]
-    G -->|remote| I["initRemoteEmbedding<br/>远程API接口<br/>需要apiUrl+apiKey"]
-    H --> J{"初始化是否成功"}
-    I --> J
-    J -->|失败| K["降级到local模式<br/>自动回退"]
-    J -->|成功| F
-    K --> F
+    A["StreamLoader.load()"] --> B["扫描 core/*/stream 目录"]
+    B --> C["加载工作流类文件"]
+    C --> D["实例化工作流"]
+    D --> E["调用 stream.init()"]
+    E --> F["应用 Embedding 配置"]
+    F --> G["初始化 MCP 服务"]
+    G --> H["注册 MCP 工具<br/>（仅注册 registerMCPTool）"]
+    H --> I["加载完成"]
     
     style A fill:#E6F3FF
     style E fill:#FFE6CC
-    style F fill:#90EE90
-    style K fill:#FFB6C1
+    style I fill:#90EE90
 ```
 
 **步骤说明**：
 
-- `init()` - 基本初始化（仅执行一次）
+- `StreamLoader.load()` - 工作流加载器统一加载
+  - 扫描所有 `core/*/stream/` 目录下的 `.js` 文件
+  - 动态导入并实例化工作流类
+  - 调用每个工作流的 `init()` 方法
+  - 统一应用 Embedding 配置（从 `cfg.aistream.embedding` 读取）
+  - 初始化 MCP 服务并注册所有 MCP 工具（`registerMCPTool` 注册的工具）
+  - **注意**：`registerFunction` 注册的 Call Function 不会注册为 MCP 工具，只出现在 AI prompt 中
+
+- `init()` - 工作流基本初始化（仅执行一次）
   - 初始化函数映射 `this.functions = new Map()`
   - 初始化与 Embedding 相关的内部字段
-- `initEmbedding()` - Embedding 初始化
-  - 根据 `embeddingConfig.mode` 选择本地（`local`）或远程（`remote`）模式
-  - 本地模式：使用 BM25 算法，无需额外配置
-  - 远程模式：调用外部 API，需要配置 `apiUrl`、`apiKey`、`apiModel`
-  - 若远程模式初始化失败，会自动回退到本地模式
+  - 子类可重写此方法进行自定义初始化
 
-> 通常由工作流加载器在系统启动时统一初始化，插件只需假定可用即可
+> 通常由工作流加载器在系统启动时统一初始化，插件只需通过 `StreamLoader.getStream(name)` 获取工作流实例即可
 
 ---
 
 ## Embedding 与上下文增强
 
-**Embedding处理流程**:
+**向量服务调用流程**:
 
 ```mermaid
 sequenceDiagram
     participant Stream as AIStream
-    participant Embedding as Embedding Provider
+    participant Subserver as 子服务端
+    participant VectorDB as 向量数据库
     participant Redis as Redis存储
     participant LLM as LLM调用
     participant Knowledge as 知识库
     
     Stream->>Stream: storeMessageWithEmbedding
-    Stream->>Embedding: generateEmbedding(text)
-    Note over Embedding: local模式: 返回文本<br/>remote模式: 调用API生成向量
-    Embedding-->>Stream: 返回向量/文本
-    Stream->>Redis: 存储消息+向量<br/>key: ai:memory:name:groupId
+    Stream->>Subserver: POST /api/vector/embed<br/>文本向量化
+    Subserver-->>Stream: 返回向量数组
+    Stream->>Subserver: POST /api/vector/upsert<br/>向量入库
+    Subserver->>VectorDB: 存储向量
+    Stream->>Redis: 存储消息元数据<br/>key: ai:memory:name:groupId
     
     Stream->>Stream: buildEnhancedContext
     Stream->>Stream: retrieveRelevantContexts<br/>检索历史对话
     Stream->>Redis: 读取历史消息
     Redis-->>Stream: 返回消息列表
-    Stream->>Embedding: 计算相似度<br/>local: BM25算法<br/>remote: 余弦相似度
-    Embedding-->>Stream: 返回相关上下文<br/>带相似度分数
+    Stream->>Subserver: POST /api/vector/search<br/>向量检索
+    Subserver->>VectorDB: 相似度搜索
+    VectorDB-->>Subserver: 返回相关文档
+    Subserver-->>Stream: 返回相关上下文<br/>带相似度分数
     
     Stream->>Knowledge: retrieveKnowledgeContexts<br/>检索知识库
     Knowledge-->>Stream: 返回知识库上下文
     
-    Stream->>Stream: optimizeContextsWithAttention<br/>注意力机制优化
+    Stream->>Stream: optimizeContexts<br/>优化上下文选择
     Stream->>LLM: 调用LLM<br/>包含增强上下文
 ```
 
 **核心方法**：
 
-- `generateEmbedding(text)` - 根据模式生成向量或返回文本
-  - 本地模式（`mode: 'local'`）：返回文本本身（用于BM25算法）
-  - 远程模式（`mode: 'remote'`）：调用API生成向量
-- `storeMessageWithEmbedding(groupId, message)` - 存储消息到Redis（key: `ai:memory:${name}:${groupId}`）
+- `generateEmbedding(text)` - 调用子服务端向量化接口
+  - 调用 `POST /api/vector/embed` 生成文本向量
+  - 返回向量数组或 `null`（失败时）
+- `storeMessageWithEmbedding(groupId, message)` - 存储消息到向量数据库和Redis
+  - 调用 `POST /api/vector/upsert` 存储向量到向量数据库
+  - 存储消息元数据到Redis（key: `ai:memory:${name}:${groupId}`）
 - `retrieveRelevantContexts(groupId, query, includeNotes, workflowId)` - 检索相关上下文
-  - 本地模式：使用BM25算法计算相似度
-  - 远程模式：使用余弦相似度计算向量相似度
-  - 支持时间衰减、关键词增强、长度惩罚等多因素评分
-  - 使用注意力机制优化上下文选择
+  - 优先使用 `MemoryManager` 检索长期记忆
+  - 调用 `POST /api/vector/search` 进行向量相似度检索
+  - 返回相关上下文列表（带相似度分数）
 - `buildEnhancedContext(e, question, baseMessages)` - 构建增强上下文（完整RAG流程）
   - 自动检索历史对话上下文（如果启用Embedding）
   - 自动检索知识库上下文（如果合并了database stream）
-  - 合并所有上下文，使用注意力机制优化选择
+  - 合并所有上下文，使用 `optimizeContexts` 优化选择
   - 构建上下文提示词，附加到 `baseMessages` 开头
 
 ---
@@ -336,14 +346,27 @@ flowchart TB
 
 **核心方法**：
 
-- `registerFunction(name, options)` - 注册函数
-  - `handler` - 实际执行函数
-  - `prompt` - 系统提示说明
+- `registerFunction(name, options)` - 注册 Call Function（供 AI 内部调用）
+  - `handler` - 实际执行函数（不返回 JSON）
+  - `prompt` - 系统提示说明（会出现在 AI prompt 中）
   - `parser` - 解析AI输出中的函数调用
   - `enabled` - 是否启用
   - `permission` - 权限标识
-- `parseFunctions(text, context)` - 解析函数调用，返回函数列表和清洗后的文本
-- `executeFunction(type, params, context)` - 执行函数，检查权限后调用handler
+  - **特点**：出现在 AI prompt 中，供 AI 直接调用，不返回结构化数据
+
+- `registerMCPTool(name, options)` - 注册 MCP 工具（供外部系统调用）
+  - `description` - 工具描述
+  - `inputSchema` - JSON Schema 格式的输入参数定义
+  - `handler` - 工具处理函数（返回 JSON 格式结果）
+  - `enabled` - 是否启用
+  - **特点**：返回结构化 JSON 数据，不会出现在 AI prompt 中，通过 MCP 协议调用
+
+- `parseFunctions(text, context)` - 解析函数调用，返回函数列表和清洗后的文本（仅解析 Call Function）
+- `executeFunction(type, params, context)` - 执行函数，检查权限后调用handler（仅执行 Call Function）
+
+**功能分类**：
+- **MCP 工具**：读取信息类功能（read, grep, query_memory, system_info 等），返回 JSON，不出现在 prompt 中
+- **Call Function**：执行操作类功能（write, run, save_memory, show_desktop 等），出现在 prompt 中，供 AI 调用
 
 ---
 
@@ -370,28 +393,64 @@ flowchart TB
 
 详细的 LLM 调用流程、消息格式规范和工厂处理逻辑，请参考：[LLM 工作流文档](./llm-workflow.md)
 
-### 基础方法
+### 完整调用流程
+
+**工作流执行流程**:
+
+```mermaid
+flowchart TB
+    A["插件调用 stream.process()"] --> B["buildChatContext<br/>构建基础消息"]
+    B --> C["buildEnhancedContext<br/>RAG流程：检索历史+知识库"]
+    C --> D["callAI<br/>调用LLM"]
+    D --> E{"子服务端可用?"}
+    E -->|是| F["POST /api/langchain/chat<br/>子服务端LangChain接口"]
+    E -->|否| G["LLMFactory.createClient()<br/>直接调用LLM工厂"]
+    F --> H["POST /api/v1/chat/completions<br/>主服务端v1接口<br/>LLM工厂统一接口"]
+    H --> I["LLMFactory.createClient()<br/>创建LLM客户端"]
+    G --> I
+    I --> J["调用LLM提供商API<br/>gptgod/volcengine等"]
+    J --> K["解析响应"]
+    K --> L["parseFunctions<br/>解析函数调用"]
+    L --> M["发送自然语言回复"]
+    M --> N["executeFunctionsWithReAct<br/>执行函数"]
+    N --> O["storeMessageWithEmbedding<br/>存储到记忆系统"]
+    O --> P["返回结果"]
+    
+    style A fill:#E6F3FF
+    style D fill:#FFE6CC
+    style H fill:#FFD700
+    style P fill:#90EE90
+```
+
+### 核心方法
 
 - `callAI(messages, apiConfig = {})`
-  - 以非流式方式调用兼容 OpenAI 的 `/chat/completions` 接口。
-  - 组合 `this.config` 与 `apiConfig`，支持覆盖 `model/baseUrl/apiKey` 等。
-  - 底层由 `LLMFactory` 创建具体客户端（如 `gptgod`、`volcengine`）。
-  - **注意：** 工厂负责读取运营商配置，工作流只需传入 messages。
+  - 以非流式方式调用AI接口
+  - **优先调用子服务端LangChain接口** (`POST /api/langchain/chat`)
+  - 子服务端内部调用主服务端的 `/api/v1/chat/completions`（LLM工厂提供的统一接口）
+  - 如果子服务端不可用，直接调用LLM工厂（`LLMFactory.createClient()`）
+  - 组合 `this.config` 与 `apiConfig`，支持覆盖 `model/baseUrl/apiKey` 等
+  - 支持重试机制（超时、网络错误、5xx错误等）
+  - **注意：** 工厂负责读取运营商配置，工作流只需传入 messages
 
-- `callAIStream(messages, apiConfig = {}, onDelta)`
-  - 使用 `stream: true` 方式调用 Chat Completion。
-  - 逐行解析 `data: ...` SSE 流，将增量文本通过 `onDelta(delta)` 回调返回。
+- `callAIStream(messages, apiConfig = {}, onDelta, options = {})`
+  - 使用 `stream: true` 方式调用AI接口
+  - **优先调用子服务端LangChain接口** (`POST /api/langchain/chat`)
+  - 子服务端内部调用主服务端的 `/api/v1/chat/completions`（LLM工厂提供的统一接口）
+  - 如果子服务端不可用，直接调用LLM工厂（`LLMFactory.createClient()`）
+  - 逐行解析 `data: ...` SSE 流，将增量文本通过 `onDelta(delta)` 回调返回
+  - 支持函数调用（`enableFunctionCalling: true`）
 
 - `execute(e, question, config)`
-  - 接收插件传入的事件对象、用户问题和LLM配置。
+  - 接收插件传入的事件对象、用户问题和LLM配置
   - 构建基础上下文：`buildChatContext(e, question)` - 将事件和问题转换为消息数组
-  - 增强上下文：`buildEnhancedContext(e, question, baseMessages)` - 自动检索历史对话和知识库
-  - 调用 `callAI(messages, config)` 获取回复文本。
-  - 调用 `parseFunctions(response, context)` 解析函数调用。
-  - 先发送自然语言回复（如果有 `cleanText`）。
+  - 增强上下文：`buildEnhancedContext(e, question, baseMessages)` - 自动检索历史对话和知识库（RAG流程）
+  - 调用 `callAI(messages, config)` 获取回复文本（优先使用子服务端LangChain）
+  - 调用 `parseFunctions(response, context)` 解析函数调用
+  - 先发送自然语言回复（如果有 `cleanText`）
   - 执行函数：`executeFunctionsWithReAct(functions, context, question)` - 使用ReAct模式
-  - 如启用 Embedding，则将 Bot 回复写入 Redis 以备后续检索。
-  - 返回清洗后的文本 `cleanText`。
+  - 如启用 Embedding，则将 Bot 回复写入向量数据库和Redis以备后续检索
+  - 返回清洗后的文本 `cleanText`
 
 **参数**：
 - `e`: 事件对象（可选）
@@ -401,8 +460,8 @@ flowchart TB
 **返回值**：`Promise<string|null>` - 清洗后的AI回复文本
 
 - `process(e, question, options = {})`
-  - 工作流处理的简化入口，支持工作流合并、TODO决策、记忆系统等高级功能。
-  - 内部调用 `execute`，但提供了更丰富的参数选项。
+  - 工作流处理的简化入口，支持工作流合并、TODO决策、记忆系统等高级功能
+  - 内部调用 `execute`，但提供了更丰富的参数选项
 
 **参数**：
 - `e`: 事件对象
@@ -465,12 +524,22 @@ await stream.process(e, question, {
 2. **工作流职责**：
    - 构建消息上下文（`buildChatContext`）
    - 增强上下文（`buildEnhancedContext` - RAG流程）
-   - 调用LLM工厂（`callAI`）
+   - 调用LLM（优先子服务端LangChain，不可用时直接调用LLM工厂）
    - 解析和执行函数调用（`parseFunctions` + `executeFunctionsWithReAct`）
-   - 存储到记忆系统（`storeMessageWithEmbedding`）
+   - 存储到记忆系统（`storeMessageWithEmbedding` - 调用子服务端向量服务）
    - 自动发送回复
 
-3. **工厂职责**：
+3. **子服务端职责**：
+   - 提供LangChain服务（`/api/langchain/chat`）- 内部调用主服务端 `/api/v1/chat/completions`
+   - 提供向量服务（`/api/vector/*`）
+   - 支持MCP工具调用
+
+4. **主服务端v1接口职责**：
+   - 提供统一的LLM调用接口（`/api/v1/chat/completions`）
+   - 内部调用LLM工厂（`LLMFactory.createClient()`）
+   - 支持OpenAI兼容格式
+
+5. **工厂职责**：
    - 处理图片识别（VisionFactory）
    - 调用LLM API（LLMFactory）
    - 读取运营商配置

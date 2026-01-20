@@ -50,35 +50,17 @@ export default class GPTGodLLMClient {
    * 构建请求体
    */
   buildBody(messages, overrides = {}) {
-    const {
-      model,
-      temperature,
-      maxTokens,
-      topP,
-      presencePenalty,
-      frequencyPenalty,
-      stream
-    } = overrides;
-
     const body = {
-      model: model || this.config.chatModel || 'gemini-exp-1114',
+      model: this.config.chatModel || 'gemini-exp-1114',
       messages,
-      temperature: temperature ?? this.config.temperature ?? 0.8,
-      max_tokens: maxTokens ?? this.config.maxTokens ?? 6000,
-      stream: stream ?? false
+      temperature: this.config.temperature ?? 0.8,
+      max_tokens: this.config.maxTokens ?? 6000,
+      stream: overrides.stream ?? false
     };
 
-    if (topP !== undefined || this.config.topP !== undefined) {
-      body.top_p = topP ?? this.config.topP ?? 0.9;
-    }
-    
-    if (presencePenalty !== undefined || this.config.presencePenalty !== undefined) {
-      body.presence_penalty = presencePenalty ?? this.config.presencePenalty ?? 0.6;
-    }
-    
-    if (frequencyPenalty !== undefined || this.config.frequencyPenalty !== undefined) {
-      body.frequency_penalty = frequencyPenalty ?? this.config.frequencyPenalty ?? 0.6;
-    }
+    if (this.config.topP !== undefined) body.top_p = this.config.topP;
+    if (this.config.presencePenalty !== undefined) body.presence_penalty = this.config.presencePenalty;
+    if (this.config.frequencyPenalty !== undefined) body.frequency_penalty = this.config.frequencyPenalty;
 
     return body;
   }
@@ -135,7 +117,6 @@ export default class GPTGodLLMClient {
     return transformed;
   }
 
-  // 调试保存请求数据的函数在生产环境中已不再使用，避免频繁写入调试文件和多余日志
 
   /**
    * 聊天（非流式）

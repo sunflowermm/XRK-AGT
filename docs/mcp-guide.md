@@ -479,16 +479,23 @@ flowchart TB
     E --> F["创建MCPServer实例"]
     F --> G["registerMCP"]
     G --> H["遍历所有工作流"]
-    H --> I["收集functions"]
-    I --> J["生成工具Schema"]
+    H --> I["收集mcpTools<br/>（registerMCPTool注册的工具）"]
+    I --> J["直接使用inputSchema"]
     J --> K["注册为MCP工具"]
     K --> L["工具可用"]
     
     style E fill:#90EE90
     style F fill:#90EE90
+    style I fill:#FFD700
     style K fill:#FFD700
     style L fill:#87CEEB
 ```
+
+**重要说明**：
+- 只有通过 `registerMCPTool` 注册的工具才会注册为 MCP 工具
+- `registerFunction` 注册的 Call Function **不会**注册为 MCP 工具，只出现在 AI prompt 中
+- MCP 工具必须定义 `inputSchema`（JSON Schema 格式）
+- Call Function 使用 `prompt` 字段，通过 `parser` 解析
 
 ### 工具命名规则
 
@@ -497,99 +504,181 @@ flowchart TB
 - **核心工具**：直接使用工具名
   - 例如：`system.info`、`time.now`、`util.uuid`、`util.hash`
 
-### 工具Schema生成
+### MCP 工具注册方式
 
-系统自动从工作流函数的`prompt`中提取参数信息，生成JSON Schema：
-
-```mermaid
-flowchart LR
-    A["工作流函数定义"] --> B["解析prompt参数"]
-    B --> C["验证参数名格式"]
-    C --> D["生成JSON Schema"]
-    D --> E["创建MCP工具定义"]
-    E --> F["注册到MCPServer"]
-    
-    style A fill:#E6F3FF
-    style C fill:#FFE6CC
-    style D fill:#FFE6CC
-    style F fill:#E6FFE6
-```
-
-**标准格式**：
+**方式1：使用 registerMCPTool（推荐）**
 
 ```javascript
-// 工作流函数定义（参数名必须使用英文）
-this.registerFunction('read', {
-  prompt: '[读取:filePath] - 读取文件内容，例如：[读取:易忘信息.txt]',
-  handler: async (params, context) => {
-    const { filePath } = params;
-    // 直接使用英文参数名
-  }
-});
-
-// 自动生成的MCP工具
-{
-  name: 'tools.read',
-  description: '读取文件内容',
+// 注册 MCP 工具（返回 JSON，不出现在 prompt 中）
+this.registerMCPTool('read', {
+  description: '读取文件内容，返回文件路径和内容',
   inputSchema: {
     type: 'object',
     properties: {
       filePath: {
         type: 'string',
-        description: 'filePath'
+        description: '文件路径，例如：易忘信息.txt'
       }
     },
     required: ['filePath']
-  }
-}
-```
-
-**参数命名规范**：
-- ✅ 使用英文：`filePath`, `keyword`, `command`
-- ❌ 禁止中文：`文件路径`, `关键词`, `命令`
-
-### 工具注册标准
-
-#### 核心原则
-
-1. **参数名必须使用英文**：符合 JSON Schema 规范，只能包含字母、数字、下划线
-2. **直接映射**：MCP 参数名直接传递给内部 handler，无需转换
-3. **标准化格式**：prompt 格式统一为 `[操作:paramName]`
-
-#### Prompt 格式标准
-
-**基本格式**：
-```
-[操作:paramName] - 描述，例如：[操作:example]
-```
-
-**多参数格式**：
-```
-[操作:param1:param2] - 描述，例如：[操作:value1:value2]
-```
-
-#### 工具注册示例
-
-**示例1：单参数工具**
-```javascript
-this.registerFunction('read', {
-  description: '读取文件内容',
-  prompt: `[读取:filePath] - 读取文件内容，例如：[读取:易忘信息.txt]`,
-  handler: async (params, context) => {
-    const { filePath } = params || {};
-    // filePath 直接来自 MCP 调用
+  },
+  handler: async (args = {}, context = {}) => {
+    const { filePath } = args;
+    // 返回 JSON 格式结果
+    return {
+      success: true,
+      data: {
+        filePath: result.path,
+        content: result.content
+      }
+    };
   },
   enabled: true
 });
 ```
 
-**示例2：多参数工具**
+**方式2：使用 registerFunction（已废弃，仅用于 Call Function）**
+
+`registerFunction` 现在**仅用于注册 Call Function**（供 AI 内部调用），不会注册为 MCP 工具。
+
+```javascript
+// Call Function（出现在 prompt 中，不返回 JSON）
+this.registerFunction('write', {
+  description: '写入文件',
+  prompt: `[写入:filePath:content] - 写入文件，例如：[写入:test.txt:这是内容]`,
+  parser: (text, context) => {
+    // 解析文本中的命令格式
+    const match = text.match(/\[写入:([^:]+):([^\]]+)\]/);
+    if (!match) {
+      return { functions: [], cleanText: text };
+    }
+    return {
+      functions: [{ type: 'write', params: { filePath: match[1], content: match[2] } }],
+      cleanText: text.replace(/\[写入:[^\]]+\]/g, '').trim()
+    };
+  },
+  handler: async (params = {}, context = {}) => {
+    // 执行操作，不返回 JSON
+    const { filePath, content } = params;
+    // ...
+  },
+  enabled: true
+});
+```
+
+**功能分类**：
+- **MCP 工具**（`registerMCPTool`）：读取信息类功能，返回 JSON，不出现在 prompt 中
+  - 例如：`read`, `grep`, `query_memory`, `system_info`, `disk_space`
+- **Call Function**（`registerFunction`）：执行操作类功能，出现在 prompt 中，供 AI 调用
+  - 例如：`write`, `run`, `save_memory`, `show_desktop`, `mute`
+
+### 工具注册标准
+
+#### 核心原则
+
+1. **MCP 工具**：使用 `registerMCPTool`，必须定义 `inputSchema`（JSON Schema 格式）
+2. **Call Function**：使用 `registerFunction`，使用 `prompt` 字段，通过 `parser` 解析
+3. **功能分类**：
+   - 读取信息类 → MCP 工具（返回 JSON）
+   - 执行操作类 → Call Function（出现在 prompt 中）
+
+#### MCP 工具注册示例
+
+**示例1：单参数 MCP 工具**
+```javascript
+this.registerMCPTool('read', {
+  description: '读取文件内容，返回文件路径和内容',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      filePath: {
+        type: 'string',
+        description: '文件路径，例如：易忘信息.txt'
+      }
+    },
+    required: ['filePath']
+  },
+  handler: async (args = {}, context = {}) => {
+    const { filePath } = args;
+    // 返回 JSON 格式结果
+    return {
+      success: true,
+      data: {
+        filePath: result.path,
+        content: result.content
+      }
+    };
+  },
+  enabled: true
+});
+```
+
+**示例2：多参数 MCP 工具**
+```javascript
+this.registerMCPTool('grep', {
+  description: '在文件中搜索文本，返回匹配结果',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      pattern: {
+        type: 'string',
+        description: '搜索关键词'
+      },
+      filePath: {
+        type: 'string',
+        description: '文件路径（可选），如果不指定则搜索所有文件'
+      }
+    },
+    required: ['pattern']
+  },
+  handler: async (args = {}, context = {}) => {
+    const { pattern, filePath } = args;
+    // 返回 JSON 格式结果
+    return {
+      success: true,
+      data: {
+        pattern,
+        filePath: filePath || null,
+        matches: result.matches,
+        count: result.matches.length
+      }
+    };
+  },
+  enabled: true
+});
+```
+
+#### Call Function 注册示例
+
+**示例：写入文件（Call Function）**
 ```javascript
 this.registerFunction('write', {
   description: '写入文件',
   prompt: `[写入:filePath:content] - 写入文件，例如：[写入:test.txt:这是内容]`,
-  handler: async (params, context) => {
-    const { filePath, content } = params || {};
+  parser: (text, context) => {
+    const functions = [];
+    let cleanText = text;
+    const reg = /\[(?:写入|write):([^:]+):([^\]]+)\]/g;
+    let match;
+
+    while ((match = reg.exec(text)) !== null) {
+      const filePath = (match[1] || '').trim();
+      const content = (match[2] || '').trim();
+      if (filePath && content) {
+        functions.push({ type: 'write', params: { filePath, content } });
+      }
+    }
+
+    if (functions.length > 0) {
+      cleanText = text.replace(reg, '').trim();
+    }
+
+    return { functions, cleanText };
+  },
+  handler: async (params = {}, context = {}) => {
+    const { filePath, content } = params;
+    // 执行操作，不返回 JSON
+    // 结果通过 context 传递
   },
   enabled: true
 });
@@ -608,25 +697,25 @@ this.registerFunction('write', {
 | 股票代码 | `stockCode` | 股票代码 |
 | 知识库名 | `knowledgeBase` | 知识库名称 |
 
-#### Schema 自动生成
-
-`buildMCPInputSchema()` 方法会自动从 prompt 中提取参数名：
-
-1. 匹配所有 `[操作:param]` 格式
-2. 提取冒号后的参数名
-3. 验证参数名格式（必须是英文标识符）
-4. 生成 JSON Schema
-
-**参数名提取规则**：
-- ✅ 提取：`filePath`, `keyword`, `command`
-- ❌ 忽略：`易忘信息.txt`, `ls -la`, `错误`（示例值）
-
 #### 注意事项
 
-1. **参数名一致性**：prompt 中的参数名必须与 handler 中使用的参数名一致
-2. **示例值位置**：示例值放在描述中，不要放在参数位置
-3. **参数顺序**：多参数时，顺序要明确
-4. **可选参数**：在 handler 中使用默认值处理可选参数
+1. **MCP 工具**：
+   - 必须使用 `registerMCPTool` 注册
+   - 必须定义 `inputSchema`（JSON Schema 格式）
+   - 必须返回 JSON 格式结果（`{success: true, data: {...}}` 或 `{success: false, error: '...'}`）
+   - 不会出现在 AI prompt 中
+   - 通过 MCP 协议调用
+
+2. **Call Function**：
+   - 使用 `registerFunction` 注册
+   - 使用 `prompt` 字段（会出现在 AI prompt 中）
+   - 使用 `parser` 解析文本中的命令格式
+   - 不返回 JSON，结果通过 `context` 传递
+   - 供 AI 内部调用
+
+3. **功能分类建议**：
+   - 读取信息类（read, grep, query_memory, system_info 等）→ MCP 工具
+   - 执行操作类（write, run, save_memory, show_desktop 等）→ Call Function
 
 ---
 
@@ -892,7 +981,7 @@ MCP服务器内置了4个核心工具，符合MCP 1.0标准：
 
 ### 1. 开发自定义MCP工具
 
-#### 方式1：在工作流中注册（推荐）
+#### 方式1：在工作流中使用 registerMCPTool（推荐）
 
 ```javascript
 // core/my-core/stream/my-stream.js
@@ -900,14 +989,36 @@ export default class MyStream extends AIStream {
   async init() {
     await super.init();
     
-    // 注册函数（自动注册为MCP工具）
-    this.registerFunction('my_tool', {
+    // 注册 MCP 工具（返回 JSON，不出现在 prompt 中）
+    this.registerMCPTool('my_tool', {
       description: '我的自定义工具',
-      prompt: '[我的工具:参数1:参数2]',
-      handler: async (params, context) => {
-        // 工具逻辑
-        return { result: 'success' };
-      }
+      inputSchema: {
+        type: 'object',
+        properties: {
+          param1: {
+            type: 'string',
+            description: '参数1'
+          },
+          param2: {
+            type: 'string',
+            description: '参数2（可选）'
+          }
+        },
+        required: ['param1']
+      },
+      handler: async (args = {}, context = {}) => {
+        const { param1, param2 } = args;
+        // 返回 JSON 格式结果
+        return {
+          success: true,
+          data: {
+            result: 'success',
+            param1,
+            param2: param2 || null
+          }
+        };
+      },
+      enabled: true
     });
   }
 }

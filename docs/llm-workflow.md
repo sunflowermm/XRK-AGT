@@ -11,25 +11,35 @@ flowchart TB
     subgraph Plugin["插件层"]
         A[插件监听事件]
         B[提取消息内容]
-        C[构建messages数组]
+        C[调用工作流 process]
     end
     
     subgraph Stream["工作流层"]
-        D[接收messages]
-        E[合并历史消息]
-        F[增强上下文<br/>embedding检索]
+        D[buildChatContext<br/>构建基础消息]
+        E[buildEnhancedContext<br/>RAG流程：检索历史+知识库]
+        F[callAI<br/>调用LLM]
+    end
+    
+    subgraph Subserver["子服务端层"]
+        G{子服务端可用?}
+        H[LangChain服务<br/>/api/langchain/chat]
+        I[向量服务<br/>/api/vector/*]
+    end
+    
+    subgraph V1["主服务端v1接口"]
+        J[/api/v1/chat/completions<br/>LLM工厂统一接口]
     end
     
     subgraph Factory["工厂层"]
-        G[LLM工厂]
-        H{是否有图片?}
-        I[识图工厂<br/>VisionFactory]
-        J[调用LLM提供商API]
+        K[LLM工厂]
+        L{是否有图片?}
+        M[识图工厂<br/>VisionFactory]
+        N[调用LLM提供商API]
     end
     
     subgraph Provider["提供商层"]
-        K[GPTGod/Volcengine/MiMo]
-        L[Vision提供商]
+        O[GPTGod/Volcengine/MiMo]
+        P[Vision提供商]
     end
     
     A --> B
@@ -38,15 +48,22 @@ flowchart TB
     D --> E
     E --> F
     F --> G
-    G --> H
-    H -->|有图片| I
-    H -->|无图片| J
-    I --> L
-    L --> J
+    G -->|是| H
+    G -->|否| K
+    H --> J
     J --> K
+    K --> L
+    L -->|有图片| M
+    L -->|无图片| N
+    M --> P
+    P --> N
+    N --> O
+    E --> I
     
     style Plugin fill:#E6F3FF
     style Stream fill:#FFE6CC
+    style Subserver fill:#FFD700
+    style V1 fill:#FFA500
     style Factory fill:#90EE90
     style Provider fill:#87CEEB
 ```
@@ -103,11 +120,28 @@ flowchart LR
 ### 工作流 (Workflow/Stream)
 
 **职责**：
-- 接收插件传入的 `messages` 数组
-- 合并消息历史（从内部存储获取）
-- 增强上下文（embedding 检索）
-- 执行 AI 返回的函数调用
-- 存储 Bot 回复到历史记录
+- 接收插件传入的事件和问题
+- 构建基础消息上下文（`buildChatContext`）
+- 增强上下文（`buildEnhancedContext` - RAG流程：调用子服务端向量服务检索历史对话和知识库）
+- 调用LLM（优先子服务端LangChain，失败时回退到LLM工厂）
+- 解析和执行 AI 返回的函数调用
+- 存储 Bot 回复到记忆系统（调用子服务端向量服务）
+
+### 子服务端 (Subserver)
+
+**子服务端职责**：
+- 提供 LangChain 服务（`POST /api/langchain/chat`）- 内部调用主服务端 `/api/v1/chat/completions`（LLM工厂统一接口）
+- 提供向量服务（`POST /api/vector/embed`、`/api/vector/search`、`/api/vector/upsert`）
+- 统一管理向量数据库（ChromaDB）和模型（SentenceTransformers）
+- 支持MCP工具调用
+
+### 主服务端v1接口
+
+**v1接口职责**：
+- 提供统一的LLM调用接口（`POST /api/v1/chat/completions`）
+- 内部调用LLM工厂（`LLMFactory.createClient()`）
+- 支持OpenAI兼容格式
+- 支持流式和非流式调用
 
 ### LLM 工厂 (LLMFactory) 与 识图工厂 (VisionFactory)
 
@@ -236,7 +270,8 @@ async execute(e, question, config) {
   // 增强上下文（RAG流程：历史对话 + 知识库）
   const messages = await this.buildEnhancedContext(e, question, baseMessages);
   
-  // 调用 LLM 工厂
+  // 调用 LLM（优先子服务端LangChain，不可用时直接调用LLM工厂）
+  // 子服务端内部调用主服务端 /api/v1/chat/completions（LLM工厂统一接口）
   const response = await this.callAI(messages, config);
   
   // 解析函数调用
@@ -394,9 +429,10 @@ async buildEnhancedContext(e, question, baseMessages) {
 ### 上下文检索机制
 
 1. **历史对话检索**：
-   - 使用Embedding相似度检索（本地BM25或远程向量相似度）
+   - 优先使用 `MemoryManager` 检索长期记忆
+   - 调用子服务端向量服务（`POST /api/vector/search`）进行向量相似度检索
    - 支持时间衰减、关键词增强、长度惩罚等多因素评分
-   - 使用注意力机制优化上下文选择
+   - 使用 `optimizeContexts` 优化上下文选择
 
 2. **知识库检索**：
    - 自动检查是否有合并的 `database` stream

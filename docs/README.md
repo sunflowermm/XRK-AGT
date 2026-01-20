@@ -113,6 +113,7 @@ flowchart TB
 - **[记忆系统文档](workflow-memory-system.md)** - 工作流记忆系统详细文档
 - **[MCP完整指南](mcp-guide.md)** - MCP工具注册与连接
 - **[AI Stream](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强
+- **[Stream 插件功能分类](../core/system-Core/stream/README.md)** - Stream 插件功能分类说明（MCP 工具 vs Call Function）
 
 ### ⚙️ 配置与工具
 

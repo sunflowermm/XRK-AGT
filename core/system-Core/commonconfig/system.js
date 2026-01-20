@@ -2068,70 +2068,33 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
-            embedding: {
+            subserver: {
               type: 'object',
-              label: 'Embedding 向量检索',
-              description: '语义检索和上下文增强相关配置（简化：仅支持本地和远程两种模式）',
+              label: 'Python子服务端配置',
+              description: 'Python子服务端地址配置，提供向量化、数据处理等服务',
               component: 'SubForm',
               fields: {
-                enabled: {
-                  type: 'boolean',
-                  label: '启用 Embedding',
-                  component: 'Switch',
-                  default: true
-                },
-                mode: {
+                host: {
                   type: 'string',
-                  label: '模式',
-                  component: 'Select',
-                  enum: ['local', 'remote'],
-                  default: 'local',
-                  description: '本地模式使用轻量级 BM25 算法，无需额外配置；远程模式使用标准 OpenAI 兼容接口'
+                  label: '服务地址',
+                  component: 'Input',
+                  default: '127.0.0.1',
+                  placeholder: '127.0.0.1'
                 },
-                maxContexts: {
+                port: {
                   type: 'number',
-                  label: '最大上下文条数',
+                  label: '服务端口',
                   component: 'InputNumber',
-                  default: 5
+                  default: 8000,
+                  min: 1024,
+                  max: 65535
                 },
-                similarityThreshold: {
+                timeout: {
                   type: 'number',
-                  label: '相似度阈值',
+                  label: '请求超时（毫秒）',
                   component: 'InputNumber',
-                  default: 0.6
-                },
-                cacheExpiry: {
-                  type: 'number',
-                  label: '缓存时长 (秒)',
-                  component: 'InputNumber',
-                  default: 86400
-                },
-                remote: {
-                      type: 'object',
-                  label: '远程模式配置',
-                      component: 'SubForm',
-                      fields: {
-                    apiUrl: {
-                      type: 'string',
-                      label: 'API 地址',
-                      component: 'Input',
-                      placeholder: 'https://api.openai.com/v1/embeddings',
-                      description: '标准 OpenAI 兼容接口地址'
-                    },
-                    apiKey: {
-                      type: 'string',
-                      label: 'API 密钥',
-                      component: 'Input',
-                      inputType: 'password'
-                    },
-                    apiModel: {
-                      type: 'string',
-                      label: '模型名称',
-                      component: 'Input',
-                      default: 'text-embedding-3-small',
-                      placeholder: 'text-embedding-3-small'
-                    }
-                  }
+                  default: 30000,
+                  min: 1000
                 }
               }
             },
@@ -2156,37 +2119,6 @@ export default class SystemConfig extends ConfigBase {
                 audioSaveDir: { type: 'string', label: '音频保存目录', component: 'Input', default: './data/wav' }
               }
             },
-            emotions: {
-              type: 'object',
-              label: '表情映射',
-              description: '表情关键词映射和支持的表情列表',
-              component: 'SubForm',
-              fields: {
-                keywords: {
-                  type: 'object',
-                  label: '关键词映射',
-                  component: 'SubForm',
-                  fields: {
-                    '开心': { type: 'string', label: '开心', component: 'Input' },
-                    '伤心': { type: 'string', label: '伤心', component: 'Input' },
-                    '生气': { type: 'string', label: '生气', component: 'Input' },
-                    '惊讶': { type: 'string', label: '惊讶', component: 'Input' },
-                    '爱': { type: 'string', label: '爱', component: 'Input' },
-                    '酷': { type: 'string', label: '酷', component: 'Input' },
-                    '睡觉': { type: 'string', label: '睡觉', component: 'Input' },
-                    '思考': { type: 'string', label: '思考', component: 'Input' },
-                    '眨眼': { type: 'string', label: '眨眼', component: 'Input' },
-                    '大笑': { type: 'string', label: '大笑', component: 'Input' }
-                  }
-                },
-                supported: {
-                  type: 'array',
-                  label: '支持的表情列表',
-                  component: 'ArrayForm',
-                  itemType: 'string'
-                }
-              }
-            }
           }
         }
       },

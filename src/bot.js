@@ -122,8 +122,45 @@ export default class Bot extends EventEmitter {
     this._initHttpServer();
     this._setupSignalHandlers();
     this.generateApiKey();
+    this._initSubServer();
     
     return this._createProxy();
+  }
+
+  _initSubServer() {
+    const config = cfg.aistream?.subserver || {};
+    const host = config.host || '127.0.0.1';
+    const port = config.port || 8000;
+    const timeout = config.timeout || 30000;
+    this._subserverBaseUrl = `http://${host}:${port}`;
+    this._subserverTimeout = timeout;
+
+    this.callSubserver = async (path, options = {}) => {
+      const { method = 'POST', body, signal, rawResponse } = options;
+      const url = `${this._subserverBaseUrl}${path}`;
+      
+      try {
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined,
+          signal: signal || AbortSignal.timeout(this._subserverTimeout)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        if (rawResponse) {
+          return response;
+        }
+        
+        return await response.json();
+      } catch (error) {
+        BotUtil.makeLog('debug', `子服务端调用失败 [${path}]: ${error.message}`, 'Bot');
+        throw error;
+      }
+    };
   }
   /**
    * 静态方法版本的makeError

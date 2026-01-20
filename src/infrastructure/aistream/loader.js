@@ -319,11 +319,8 @@ class StreamLoader {
     return true;
   }
 
-  /**
-   * 获取工作流
-   */
   getStream(name) {
-    return this.streams.get(name);
+    return this.streams.get(name) || null;
   }
 
   getStreamClass(name) {
@@ -335,11 +332,11 @@ class StreamLoader {
   }
 
   getEnabledStreams() {
-    return this.getAllStreams().filter(s => s.config.enabled);
+    return this.getAllStreams().filter(s => s.config?.enabled !== false);
   }
 
   getStreamsByPriority() {
-    return this.getAllStreams().sort((a, b) => a.priority - b.priority);
+    return this.getAllStreams().sort((a, b) => (a.priority || 100) - (b.priority || 100));
   }
 
   /**
@@ -410,7 +407,7 @@ class StreamLoader {
       return this.streams.get(mergedName);
     }
 
-    // 构建合并实例：克隆主工作流的原型和核心属性，独立的functions集合
+    // 构建合并实例：克隆主工作流的原型和核心属性，独立的functions和mcpTools集合
     const merged = Object.create(Object.getPrototypeOf(mainStream));
     Object.assign(merged, mainStream);
     merged.name = mergedName;
@@ -419,8 +416,9 @@ class StreamLoader {
     merged.secondaryStreams = secondaryStreams.map(s => s.name);
     merged._mergedStreams = [mainStream, ...secondaryStreams];
     merged.functions = new Map();
+    merged.mcpTools = new Map();
 
-    const adopt = (source, isPrimary) => {
+    const adoptFunctions = (source, isPrimary) => {
       if (!source.functions) return;
       for (const [fname, fconfig] of source.functions.entries()) {
         const newName = (!isPrimary && prefixSecondary) ? `${source.name}.${fname}` : fname;
@@ -433,9 +431,24 @@ class StreamLoader {
       }
     };
 
-    adopt(mainStream, true);
+    const adoptMCPTools = (source, isPrimary) => {
+      if (!source.mcpTools) return;
+      for (const [tname, tconfig] of source.mcpTools.entries()) {
+        const newName = (!isPrimary && prefixSecondary) ? `${source.name}.${tname}` : tname;
+        if (merged.mcpTools.has(newName)) continue; // 避免冲突覆盖
+        merged.mcpTools.set(newName, {
+          ...tconfig,
+          source: source.name,
+          primary: isPrimary
+        });
+      }
+    };
+
+    adoptFunctions(mainStream, true);
+    adoptMCPTools(mainStream, true);
     for (const s of secondaryStreams) {
-      adopt(s, false);
+      adoptFunctions(s, false);
+      adoptMCPTools(s, false);
     }
 
     this.streams.set(mergedName, merged);
@@ -663,58 +676,52 @@ class StreamLoader {
    * 注册MCP工具（统一入口，避免重复注册）
    * 
    * 功能：
-   * - 遍历所有stream的函数，注册为MCP工具
-   * - 工具名称格式：streamName.functionName（避免冲突）
-   * - 使用stream.executeFunction统一处理验证、权限检查等
-   * - 返回格式：直接返回executeFunction的result字段（结构化数据）
-   * - 自动去重，避免重复注册合并的函数
+   * - 遍历所有stream的MCP工具，注册到MCP服务器
+   * - 工具名称格式：streamName.toolName（避免冲突）
+   * - 使用stream.executeMCPTool统一处理验证、权限检查等
+   * - 返回格式：直接返回handler的结果
+   * - 自动去重，避免重复注册合并的工具
    * 
    * @param {MCPServer} mcpServer - MCP服务器实例
    */
   registerMCP(mcpServer) {
     if (!mcpServer) return;
 
-    const registeredTools = new Set(); // 用于去重
+    const registeredTools = new Set();
     let registeredCount = 0;
 
     for (const stream of this.streams.values()) {
-      if (!stream?.functions || stream.functions.size === 0) continue;
+      if (!stream?.mcpTools || stream.mcpTools.size === 0) continue;
 
-      for (const [funcName, func] of stream.functions.entries()) {
-        if (!func?.enabled || !mcpServer.registerTool) continue;
+      for (const [toolName, tool] of stream.mcpTools.entries()) {
+        if (!tool?.enabled || !mcpServer.registerTool) continue;
 
-        // 工具名称：streamName.functionName（避免冲突）
-        const toolName = stream.name !== 'mcp' ? `${stream.name}.${funcName}` : funcName;
+        const fullToolName = stream.name !== 'mcp' ? `${stream.name}.${toolName}` : toolName;
         
-        // 检查是否已注册（避免重复注册合并的函数）
-        if (registeredTools.has(toolName)) {
-          BotUtil.makeLog('debug', `MCP工具已存在，跳过: ${toolName}`, 'StreamLoader');
+        if (registeredTools.has(fullToolName)) {
+          BotUtil.makeLog('debug', `MCP工具已存在，跳过: ${fullToolName}`, 'StreamLoader');
           continue;
         }
 
-        const inputSchema = this.buildMCPInputSchema(func);
-
-        mcpServer.registerTool(toolName, {
-          description: func.description || func.prompt || `执行${funcName}操作`,
-          inputSchema,
+        mcpServer.registerTool(fullToolName, {
+          description: tool.description || `执行${toolName}操作`,
+          inputSchema: tool.inputSchema || {},
           handler: async (args) => {
             const context = { e: args.e || null, question: null };
             
             try {
-              // 使用stream的executeFunction方法，统一处理验证、权限检查等
-              // executeFunction返回格式: { success: boolean, result: any, error?: string, verified?: boolean }
-              const result = await stream.executeFunction(funcName, args, context);
-              
-              // 统一返回格式：直接返回result字段（结构化数据），如果没有result则返回整个对象
-              return result?.result !== undefined ? result.result : result;
+              if (tool.handler) {
+                return await tool.handler(args, { ...context, stream });
+              }
+              return { error: 'Handler not found' };
             } catch (error) {
-              BotUtil.makeLog('error', `MCP工具调用失败[${toolName}]: ${error.message}`, 'StreamLoader');
+              BotUtil.makeLog('error', `MCP工具调用失败[${fullToolName}]: ${error.message}`, 'StreamLoader');
               throw error;
             }
           }
         });
 
-        registeredTools.add(toolName);
+        registeredTools.add(fullToolName);
         registeredCount++;
       }
     }
@@ -743,92 +750,10 @@ class StreamLoader {
     this.registerMCP(this.mcpServer);
   }
 
-  /**
-   * 构建MCP输入schema
-   * 从prompt中提取参数名，参数名必须使用英文（符合MCP规范）
-   * prompt格式: [操作:paramName] - 描述，例如：[操作:example]
-   * 
-   * 特殊参数类型映射：
-   * - jsonData/data: object类型（支持对象数组或headers/rows格式）
-   * - filePath/fileName/filename: string类型
-   * - command: string类型
-   */
-  buildMCPInputSchema(func) {
-    const schema = {
-      type: 'object',
-      properties: {},
-      required: []
-    };
-
-    if (!func.prompt || typeof func.prompt !== 'string') {
-      return schema;
-    }
-
-    const paramMatches = func.prompt.match(/\[([^\]]+)\]/g);
-    if (!paramMatches) {
-      return schema;
-    }
-
-    const seenParams = new Set();
-    
-    // 参数类型映射表
-    const paramTypeMap = {
-      jsonData: 'object',
-      data: 'object',
-      filePath: 'string',
-      fileName: 'string',
-      filename: 'string',
-      command: 'string',
-      content: 'string',
-      keyword: 'string',
-      pattern: 'string'
-    };
-    
-    // 参数描述映射表
-    const paramDescMap = {
-      jsonData: 'Excel数据，可以是对象数组或包含headers/rows的对象',
-      data: '数据，可以是对象数组或包含headers/rows的对象',
-      filePath: '文件路径',
-      fileName: '文件名',
-      filename: '文件名',
-      command: '要执行的命令',
-      content: '文件内容',
-      keyword: '搜索关键词',
-      pattern: '搜索模式'
-    };
-
-    paramMatches.forEach(match => {
-      const content = match.replace(/[\[\]]/g, '');
-      const parts = content.split(':');
-      
-      if (parts.length < 2) return;
-      
-      for (let i = 1; i < parts.length; i++) {
-        const paramName = parts[i].trim();
-        
-        if (!paramName || paramName.length === 0) continue;
-        
-        // 只处理符合MCP规范的参数名（英文、下划线、数字）
-        if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(paramName) && !seenParams.has(paramName)) {
-          seenParams.add(paramName);
-          
-          const paramType = paramTypeMap[paramName] || 'string';
-          const paramDesc = paramDescMap[paramName] || paramName;
-          
-          schema.properties[paramName] = {
-            type: paramType,
-            description: paramDesc
-          };
-          schema.required.push(paramName);
-        }
-      }
-    });
-
-    return schema;
-  }
 
   /**
    * 注入工作流管理器到streams
+   * @param {Object} stream - 工作流实例
    */
   injectWorkflowManagerToStreams(stream) {
     if (this.isTodoStream(stream)) {
@@ -841,6 +766,8 @@ class StreamLoader {
 
   /**
    * 判断是否为todo stream
+   * @param {Object} stream - 工作流实例
+   * @returns {boolean}
    */
   isTodoStream(stream) {
     return stream.name === 'todo' && stream.workflowManager;
@@ -848,6 +775,7 @@ class StreamLoader {
 
   /**
    * 注入到已存在的streams
+   * @param {Object} todoStream - TODO工作流实例
    */
   injectToExistingStreams(todoStream) {
     for (const existingStream of this.streams.values()) {
@@ -859,6 +787,8 @@ class StreamLoader {
 
   /**
    * 判断是否应该注入
+   * @param {Object} stream - 工作流实例
+   * @returns {boolean}
    */
   shouldInject(stream) {
     return stream.name !== 'todo' && !stream.workflowManager;
@@ -866,6 +796,7 @@ class StreamLoader {
 
   /**
    * 从todo stream注入
+   * @param {Object} stream - 工作流实例
    */
   injectFromTodoStream(stream) {
     if (stream.name === 'todo') return;
