@@ -52,8 +52,8 @@ flowchart TB
     
     subgraph Core["核心服务层"]
         Express["Express应用<br/>中间件容器"]
-        HTTPServer["HTTP服务器<br/>{端口}"]
-        HTTPSServer["HTTPS服务器<br/>{端口}可选"]
+        HTTPServer["HTTP服务器<br/>(端口)"]
+        HTTPSServer["HTTPS服务器<br/>(端口)可选"]
         WSServer["WebSocket服务器<br/>协议升级"]
     end
     
@@ -202,8 +202,8 @@ flowchart TB
     end
     
     subgraph Core["核心服务层"]
-        HTTPPort[HTTP服务器<br/>{端口}]
-        HTTPSPort[HTTPS服务器<br/>{端口}可选]
+        HTTPPort["HTTP服务器<br/>(端口)"]
+        HTTPSPort["HTTPS服务器<br/>(端口)可选"]
         WS[WebSocket服务器]
     end
     

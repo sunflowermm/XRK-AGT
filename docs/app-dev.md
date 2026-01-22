@@ -97,7 +97,7 @@ flowchart TB
 ```mermaid
 flowchart LR
   Default["config/default_config/*.yaml"] -->|初次复制| GlobalCfg["data/server_bots/*.yaml<br/>全局配置"]
-  Default -->|初次复制| ServerCfg["data/server_bots/{port}/*.yaml<br/>服务器配置"]
+  Default -->|初次复制| ServerCfg["data/server_bots/(端口)/*.yaml<br/>服务器配置"]
   GlobalCfg --> Cfg["getGlobalConfig(name)"]
   ServerCfg --> Cfg2["getServerConfig(name)"]
   Cfg --> Cache["内存缓存"]

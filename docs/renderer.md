@@ -86,7 +86,7 @@ constructor(data = {})
 
 ```mermaid
 flowchart LR
-    A["dealTpl(name, data)"] --> B["计算输出路径<br/>./trash/html/${name}/${saveId}.html"]
+    A["dealTpl(name, data)"] --> B["计算输出路径<br/>./trash/html/name/saveId.html"]
     B --> C{"模板已缓存?"}
     C -->|否| D["读取模板文件"]
     C -->|是| E["使用缓存"]

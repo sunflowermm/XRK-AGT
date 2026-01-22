@@ -137,7 +137,7 @@ flowchart LR
     Config -->|写入| Puppeteer
     Config -->|写入| Playwright
     
-    Config -->|返回| Result["{ puppeteer: {...}, playwright: {...} }"]
+    Config -->|返回| Result["合并对象<br/>puppeteer + playwright"]
     
     style Config fill:#90EE90
     style Puppeteer fill:#E6F3FF
