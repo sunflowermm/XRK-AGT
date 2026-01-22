@@ -46,16 +46,16 @@ sequenceDiagram
     participant Notes as 笔记系统
     
     User->>Plugin: 发送复杂任务
-    Plugin->>Stream: process(e, question, {enableTodo: true})
+    Plugin->>Stream: process(e, question, enableTodo=true)
     Stream->>Stream: execute(e, question, config)
     Stream->>Stream: buildChatContext + buildEnhancedContext
-    Stream->>LLM: callAI（第1次AI调用）
-    LLM-->>Stream: 响应包含[启动工作流:目标]
-    Stream->>Stream: parseFunctions（检测工作流命令）
+    Stream->>LLM: callAI第1次AI调用
+    LLM-->>Stream: 响应包含启动工作流目标
+    Stream->>Stream: parseFunctions检测工作流命令
     Stream->>Manager: 检测到工作流命令
-    Manager->>LLM: decideWorkflowMode（第2次AI调用）
+    Manager->>LLM: decideWorkflowMode第2次AI调用
     LLM-->>Manager: 复杂任务，需要TODO
-    Manager->>LLM: 规划TODO列表（第3次AI调用）
+    Manager->>LLM: 规划TODO列表第3次AI调用
     LLM-->>Manager: TODO列表
     Manager->>Manager: createWorkflow()
     

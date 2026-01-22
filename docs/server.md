@@ -123,7 +123,7 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     participant Client as 客户端
-    participant Proxy as 反向代理（可选）
+    participant Proxy as 反向代理可选
     participant Server as 核心服务
     participant Middleware as 中间件层
     participant Route as 路由层
@@ -251,7 +251,7 @@ flowchart TB
 sequenceDiagram
     participant User as 用户
     participant Proxy as 反向代理<br/>:80/:443
-    participant Core as 核心服务<br/>{HTTP端口}/{HTTPS端口}
+    participant Core as 核心服务<br/>(HTTP端口)/(HTTPS端口)
     participant Business as 业务处理
     
     User->>Proxy: HTTP/HTTPS请求
@@ -268,7 +268,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User as 用户
-    participant Core as 核心服务<br/>{HTTP端口}/{HTTPS端口}
+    participant Core as 核心服务<br/>(HTTP端口)/(HTTPS端口)
     participant Business as 业务处理
     
     User->>Core: 直接HTTP/HTTPS请求
@@ -496,12 +496,12 @@ sequenceDiagram
     participant Handler as 路径处理器
     
     Client->>Server: HTTP Upgrade请求
-    Server->>Auth: 检查认证（同HTTP）
+    Server->>Auth: 检查认证同HTTP
     Auth->>Server: 认证通过
-    Server->>Path: 查找路径处理器（Bot.wsf[path]）
+    Server->>Path: 查找路径处理器Bot.wsf
     Path->>Handler: 调用处理器
     Handler->>Client: WebSocket连接建立
-    Client<->Handler: 双向通信（持续）
+    Client<->Handler: 双向通信持续
 ```
 
 ### WebSocket 注册

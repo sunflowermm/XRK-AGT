@@ -116,7 +116,7 @@ sequenceDiagram
     API-->>Client: JSON响应
 
     Note over Client,Tool: 工具调用流程
-    Client->>API: POST /api/mcp/tools/call<br/>{name: "tool_name", arguments: {...}}
+    Client->>API: POST /api/mcp/tools/call<br/>JSON请求体
     API->>Server: handleToolCall(request)
     Server->>Tool: 执行工具handler
     Tool-->>Server: 执行结果
