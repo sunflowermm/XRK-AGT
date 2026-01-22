@@ -4,21 +4,28 @@
 # 此配置文件为火山引擎豆包大语言模型配置，每个端口有独立的配置
 # 位置：data/server_bots/{port}/volcengine_llm.yaml
 # 注意：仅文本模型，识图配置已拆分到 volcengine_vision.yaml
+# 火山引擎 API 文档：https://www.volcengine.com/docs/82379
+# 火山引擎兼容 OpenAI SDK，使用标准 Chat Completions API
 
 # ----------------------------------------
 # API 基础配置
 # ----------------------------------------
-# API基础地址
+# API基础地址（完整路径：https://ark.{region}.volces.com/api/v3）
+# 注意：baseUrl 应包含 /api/v3，path 只需包含 /chat/completions
 baseUrl: "https://ark.cn-beijing.volces.com/api/v3"
-# API密钥
+# API密钥（从火山引擎控制台获取：https://console.volcengine.com/ark）
 apiKey: ""
-# 区域（region）
+# 区域（region），支持：cn-beijing（北京）、cn-shanghai（上海）等
+# 如果设置了 region，会自动构建对应的 baseUrl
 region: "cn-beijing"
+# 接口路径（OpenAI 兼容格式）
+# 完整端点：{baseUrl}/chat/completions
+path: "/chat/completions"
 
 # ----------------------------------------
 # 模型配置
 # ----------------------------------------
-# 文本聊天模型
+# 文本聊天模型（支持：doubao-pro-4k、doubao-pro-32k、doubao-lite-4k 等）
 chatModel: "doubao-pro-4k"
 
 # ----------------------------------------
@@ -30,11 +37,9 @@ temperature: 0.8
 maxTokens: 4000
 # Top-p采样（0-1）
 topP: 0.9
+# 存在惩罚（-2.0到2.0），控制模型重复已出现的内容
+presencePenalty: 0
+# 频率惩罚（-2.0到2.0），控制模型重复高频词汇
+frequencyPenalty: 0
 # 请求超时时间（毫秒）
 timeout: 360000
-
-# ----------------------------------------
-# 接口路径配置
-# ----------------------------------------
-# 聊天完成接口路径
-path: "/chat/completions"

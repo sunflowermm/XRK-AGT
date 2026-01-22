@@ -48,6 +48,8 @@ export default class GPTGodLLMClient {
 
   /**
    * 构建请求体
+   * GPTGod API 兼容 OpenAI Chat Completions 格式
+   * 支持所有标准参数：temperature、max_tokens、top_p、presence_penalty、frequency_penalty
    */
   buildBody(messages, overrides = {}) {
     const body = {
@@ -58,6 +60,7 @@ export default class GPTGodLLMClient {
       stream: overrides.stream ?? false
     };
 
+    // 可选参数（仅在配置时添加）
     if (this.config.topP !== undefined) body.top_p = this.config.topP;
     if (this.config.presencePenalty !== undefined) body.presence_penalty = this.config.presencePenalty;
     if (this.config.frequencyPenalty !== undefined) body.frequency_penalty = this.config.frequencyPenalty;

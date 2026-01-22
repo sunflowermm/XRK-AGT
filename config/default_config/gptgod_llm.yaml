@@ -4,6 +4,7 @@
 # 此配置文件为 GPTGod 大语言模型配置，每个端口有独立的配置
 # 位置：data/server_bots/{port}/gptgod_llm.yaml
 # 注意：仅文本模型，识图配置已拆分到 gptgod_vision.yaml
+# GPTGod API 兼容 OpenAI Chat Completions 格式
 
 # ----------------------------------------
 # API 基础配置
@@ -12,11 +13,13 @@
 baseUrl: "https://api.gptgod.online/v1"
 # API密钥
 apiKey: ""
+# 接口路径
+path: "/chat/completions"
 
 # ----------------------------------------
 # 模型配置
 # ----------------------------------------
-# 文本聊天模型
+# 文本聊天模型（支持：gemini-exp-1114 等）
 chatModel: "gemini-exp-1114"
 
 # ----------------------------------------
@@ -28,15 +31,9 @@ temperature: 0.8
 maxTokens: 6000
 # Top-p采样（0-1）
 topP: 0.9
-# 存在惩罚（-2.0到2.0）
+# 存在惩罚（-2.0到2.0），控制模型重复已出现的内容
 presencePenalty: 0.6
-# 频率惩罚（-2.0到2.0）
+# 频率惩罚（-2.0到2.0），控制模型重复高频词汇
 frequencyPenalty: 0.6
 # 请求超时时间（毫秒）
 timeout: 360000
-
-# ----------------------------------------
-# 接口路径配置
-# ----------------------------------------
-# 聊天完成接口路径
-path: "/chat/completions"

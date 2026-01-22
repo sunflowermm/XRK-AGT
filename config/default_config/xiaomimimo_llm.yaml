@@ -4,6 +4,7 @@
 # 此配置文件为小米MiMo大语言模型配置，每个端口有独立的配置
 # 位置：data/server_bots/{port}/xiaomimimo_llm.yaml
 # 注意：仅文本模型，不包含识图逻辑
+# 小米 MiMo API 兼容 OpenAI Chat Completions 格式
 
 # ----------------------------------------
 # API 基础配置
@@ -12,11 +13,15 @@
 baseUrl: "https://api.xiaomimimo.com/v1"
 # API密钥
 apiKey: ""
+# 认证方式（api-key 或 bearer）
+authMode: "api-key"
+# 接口路径
+path: "/chat/completions"
 
 # ----------------------------------------
 # 模型配置
 # ----------------------------------------
-# 文本聊天模型
+# 文本聊天模型（支持：mimo-v2-flash、mimo-v2 等）
 chatModel: "mimo-v2-flash"
 
 # ----------------------------------------
@@ -24,19 +29,27 @@ chatModel: "mimo-v2-flash"
 # ----------------------------------------
 # 温度参数（0-2），值越高越随机
 temperature: 0.3
-# 最大输出token数
+# 最大输出token数（注意：MiMo 使用 max_completion_tokens）
 maxTokens: 1024
 # Top-p采样（0-1）
 topP: 0.95
-# 频率惩罚（-2.0到2.0）
-frequencyPenalty: 0
 # 存在惩罚（-2.0到2.0）
 presencePenalty: 0
+# 频率惩罚（-2.0到2.0）
+frequencyPenalty: 0
 # 请求超时时间（毫秒）
 timeout: 360000
 
 # ----------------------------------------
-# 接口路径配置
+# 高级参数配置（可选）
 # ----------------------------------------
-# 聊天完成接口路径（OpenAI兼容格式）
-path: "/chat/completions"
+# 停止序列（字符串数组）
+# stop: []
+# 思考类型（用于推理模型）
+# thinkingType: null
+# 工具选择模式（auto、none 或对象）
+# toolChoice: null
+# 工具定义列表
+# tools: null
+# 响应格式（json_object 等）
+# response_format: null

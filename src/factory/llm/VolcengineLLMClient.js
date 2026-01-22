@@ -5,12 +5,16 @@ import VisionFactory from '../vision/VisionFactory.js';
  * 火山引擎豆包大模型客户端
  * 
  * 火山引擎豆包大模型 API 文档：
- * - 接口地址：https://ark.cn-beijing.volces.com/api/v3
+ * - 接口地址：https://ark.{region}.volces.com/api/v3/chat/completions
  * - 认证方式：Bearer Token（API Key）
  * - 支持的模型：doubao-pro-4k、doubao-pro-32k、doubao-lite-4k 等
  * - 详细文档：https://www.volcengine.com/docs/82379
+ * - 兼容 OpenAI SDK：完全兼容 OpenAI Chat Completions API 格式
  * 
- * 注意：火山引擎的 API 格式与 OpenAI 兼容，但部分参数名称可能不同
+ * 注意：
+ * - baseUrl 应包含 /api/v3（如：https://ark.cn-beijing.volces.com/api/v3）
+ * - path 为 /chat/completions
+ * - 最终端点：{baseUrl}{path} = https://ark.cn-beijing.volces.com/api/v3/chat/completions
  */
 export default class VolcengineLLMClient {
   constructor(config = {}) {
@@ -64,16 +68,18 @@ export default class VolcengineLLMClient {
   /**
    * 构建请求体
    * 火山引擎的 API 格式与 OpenAI 兼容
+   * 支持所有标准参数：temperature、max_tokens、top_p、presence_penalty、frequency_penalty
    */
   buildBody(messages, overrides = {}) {
     const body = {
-      model: this.config.model || 'doubao-pro-4k',
+      model: this.config.chatModel || this.config.model || 'doubao-pro-4k',
       messages,
       temperature: this.config.temperature ?? 0.8,
-      max_tokens: this.config.maxTokens ?? this.config.max_tokens ?? 2000,
+      max_tokens: this.config.maxTokens ?? 4000,
       stream: overrides.stream ?? false
     };
 
+    // 可选参数（仅在配置时添加）
     if (this.config.topP !== undefined) body.top_p = this.config.topP;
     if (this.config.presencePenalty !== undefined) body.presence_penalty = this.config.presencePenalty;
     if (this.config.frequencyPenalty !== undefined) body.frequency_penalty = this.config.frequencyPenalty;

@@ -1072,7 +1072,7 @@ export default class AIStream {
     try {
       const payload = {
         messages,
-        model: config.provider,
+        model: config.chatModel || config.model || config.provider,
         temperature: config.temperature,
         max_tokens: config.maxTokens,
         stream: false
@@ -1167,7 +1167,7 @@ export default class AIStream {
     try {
       const payload = {
         messages,
-        model: config.provider,
+        model: config.chatModel || config.model || config.provider,
         temperature: config.temperature,
         max_tokens: config.maxTokens,
         stream: true
@@ -1289,7 +1289,7 @@ export default class AIStream {
   }
 
   /**
-   * 解析LLM配置
+   * 解析LLM配置（标准化配置合并）
    * @param {Object} apiConfig - API配置
    * @returns {Object}
    */
@@ -1320,7 +1320,8 @@ export default class AIStream {
                     (global.maxTimeout && typeof global.maxTimeout === 'number' ? global.maxTimeout : null) ||
                     360000;
 
-    // 合并配置：优先使用providerConfig中的apiKey，避免被空值覆盖
+    // 标准化配置合并：优先级 apiConfig > this.config > providerConfig
+    // 确保关键字段（apiKey、chatModel、visionModel）不被空值覆盖
     const finalConfig = {
       ...providerConfig,
       ...this.config,
@@ -1330,6 +1331,9 @@ export default class AIStream {
               (providerConfig.apiKey && providerConfig.apiKey.trim()) || 
               (this.config.apiKey && this.config.apiKey.trim()) || 
               undefined,
+      // 确保模型名称正确传递（支持 chatModel 和 model 两种字段名）
+      model: apiConfig.model || apiConfig.chatModel || this.config.model || this.config.chatModel || providerConfig.chatModel || providerConfig.model,
+      chatModel: apiConfig.chatModel || this.config.chatModel || providerConfig.chatModel || apiConfig.model || this.config.model || providerConfig.model,
       provider,
       visionProvider,
       visionConfig,
@@ -1340,9 +1344,9 @@ export default class AIStream {
   }
 
   /**
-   * 获取提供商配置（可扩展的配置解析）
+   * 获取提供商配置（标准化配置解析）
    * @param {string} provider - 提供商名称
-   * @param {Object} runtimeConfig - 运行时配置
+   * @param {Object} runtimeConfig - 运行时配置（已废弃，保留以兼容旧代码）
    * @param {boolean} isVision - 是否为视觉配置
    * @returns {Object} 提供商配置
    */
@@ -1356,14 +1360,6 @@ export default class AIStream {
     
     if (cfg[configKey] && typeof cfg[configKey] === 'object') {
       return cfg[configKey];
-    }
-
-    // 优先从运行时配置获取
-    if (runtimeConfig.config && typeof runtimeConfig.config === 'object') {
-      const providerSpecificConfig = runtimeConfig.config[provider];
-      if (providerSpecificConfig && typeof providerSpecificConfig === 'object') {
-        return providerSpecificConfig;
-      }
     }
 
     return {};

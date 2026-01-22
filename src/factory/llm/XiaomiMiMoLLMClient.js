@@ -122,6 +122,8 @@ export default class XiaomiMiMoLLMClient {
 
   /**
    * 构建请求体（OpenAI 兼容格式）
+   * 小米 MiMo API 使用 max_completion_tokens 而非 max_tokens
+   * 支持高级参数：stop、thinking、tool_choice、tools、response_format
    */
   buildBody(messages, overrides = {}) {
     const body = {
@@ -135,6 +137,7 @@ export default class XiaomiMiMoLLMClient {
       presence_penalty: this.config.presencePenalty ?? 0
     };
 
+    // 高级可选参数（仅在配置时添加）
     if (this.config.stop !== undefined) body.stop = this.config.stop;
     if (this.config.thinkingType !== undefined) body.thinking = { type: this.config.thinkingType };
     if (this.config.toolChoice !== undefined) body.tool_choice = this.config.toolChoice;

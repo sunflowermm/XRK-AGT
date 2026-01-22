@@ -177,10 +177,11 @@ emotions:
 
 LLM 配置通过 `llm.Provider` 指定，支持动态扩展的提供商系统：
 
-**配置解析机制**：
-- 优先从运行时配置获取：`llm.config[providerName]`
-- 从全局配置获取：`cfg[providerName]_llm` 或 `cfg[providerName]`
-- 支持命名约定：`{providerName}_llm` 或 `{providerName}_vision`
+**配置解析机制**（标准化配置合并）：
+- 从全局配置获取：`cfg[providerName]_llm`（支持命名约定：`{providerName}_llm`）
+- 配置合并优先级：`apiConfig` > `this.config` > `providerConfig`
+- 模型名称支持：`chatModel` 和 `model` 两种字段名（自动映射）
+- 关键字段保护：`apiKey`、`chatModel` 等不会被空值覆盖
 
 **添加新提供商**：
 1. 在 `LLMFactory` 中注册提供商工厂函数
@@ -190,17 +191,22 @@ LLM 配置通过 `llm.Provider` 指定，支持动态扩展的提供商系统：
 **现有提供商示例**：
 - **gptgod**：GPTGod 提供商（默认）
   - 配置文件：`data/server_bots/gptgod_llm.yaml`
+  - 模型字段：`chatModel`（如 `gemini-exp-1114`）
   - 支持标准 OpenAI Chat Completions 协议
   
 - **volcengine**：火山引擎豆包大模型
   - 配置文件：`data/server_bots/volcengine_llm.yaml`
+  - 模型字段：`chatModel`（如 `doubao-pro-4k`）
   - 接口地址：`https://ark.cn-beijing.volces.com/api/v3`
 
 - **xiaomimimo**：小咪咪莫提供商
   - 配置文件：`data/server_bots/xiaomimimo_llm.yaml`
+  - 模型字段：`chatModel`（如 `mimo-v2-flash`）
 
-> **注意**：
-> - LLM 的详细配置（如 `baseUrl`、`apiKey`、`model` 等）位于各自的配置文件中
+> **重要提示**：
+> - LLM 的详细配置（如 `baseUrl`、`apiKey`、`chatModel` 等）位于各自的配置文件中
+> - 配置文件中使用 `chatModel` 字段指定模型名称（如 `volcengine_llm.yaml` 中的 `chatModel: doubao-pro-4k`）
+> - 系统会自动将 `chatModel` 映射到 `model` 字段，确保所有 LLM 客户端都能正确获取模型名称
 > - 基类不再硬编码提供商映射，支持动态扩展
 > - 不支持的提供商会抛出错误，不再静默回退
 
