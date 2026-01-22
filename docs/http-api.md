@@ -53,7 +53,7 @@ classDiagram
     
     HttpApi "1" --> "*" Route : contains
     
-    note for HttpApi "所有core/http下的API模块<br/>都可以导出对象或继承HttpApi"
+    note for HttpApi "所有core/*/http下的API模块<br/>都可以导出对象或继承HttpApi"
 ```
 
 **构造参数**：

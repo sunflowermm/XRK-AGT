@@ -273,7 +273,7 @@ XRK-AGT/
 │   │   ├── http/            # HTTP API基础设施
 │   │   ├── aistream/        # AI工作流基础设施
 │   │   ├── renderer/        # 渲染器基础设施
-│   │   ├── commonconfig/    # 配置系统基础设施
+│   │   ├── commonconfig/    # 配置系统基础设施（ConfigBase基类）
 │   │   └── config/          # 配置加载器
 │   ├── utils/               # 工具函数
 │   │   ├── botutil.js       # 核心工具类
@@ -283,13 +283,17 @@ XRK-AGT/
 │   ├── modules/             # 业务模块
 │   └── renderers/           # 渲染实现（Puppeteer/Playwright）
 │
-├── core/                     # 业务层与任务层
-│   ├── tasker/              # 任务层（协议转换）
-│   ├── events/              # 事件系统
-│   ├── plugin/              # 业务插件
-│   ├── http/                # HTTP API
-│   ├── stream/              # 工作流
-│   └── commonconfig/        # 业务配置
+├── core/                     # 业务层与任务层（Core开发时代）
+│   ├── system-Core/         # 系统核心模块（示例）
+│   │   ├── plugin/          # 业务插件目录
+│   │   ├── tasker/          # 任务层目录
+│   │   ├── events/          # 事件系统目录
+│   │   ├── http/            # HTTP API目录
+│   │   ├── stream/          # 工作流目录
+│   │   ├── commonconfig/    # 配置管理（可选，仅当需要配置文件时使用）
+│   │   └── www/             # 静态资源（可选）
+│   │       └── <目录名>/    # ⚠️ 必须创建子目录，挂载到 /<目录名>/*
+│   └── my-core/             # 自定义core模块
 │
 ├── config/                   # 配置文件
 │   ├── default_config/      # 默认配置
@@ -313,11 +317,12 @@ XRK-AGT/
 - **`src/bot.js`**：Bot主类，系统核心运行时
 - **`src/infrastructure/`**：基础设施层，提供基类和加载器
 - **`src/utils/http-business.js`**：HTTP业务层，提供重定向、CDN、反向代理增强功能
-- **`core/tasker/`**：任务层，协议转换
-- **`core/events/`**：事件系统，事件标准化和预处理
-- **`core/plugin/`**：业务插件实现
-- **`core/http/`**：HTTP API实现
-- **`core/stream/`**：AI工作流实现
+- **`core/*/tasker/`**：任务层，协议转换（Core开发时代：通过业务目录组织）
+- **`core/*/events/`**：事件系统，事件标准化和预处理
+- **`core/*/plugin/`**：业务插件实现
+- **`core/*/http/`**：HTTP API实现
+- **`core/*/stream/`**：AI工作流实现
+- **`core/*/www/`**：静态资源（⚠️ 必须创建子目录，避免与根目录www冲突）
 
 ---
 
@@ -517,7 +522,10 @@ flowchart LR
 4. **事件监听器扩展** (`core/events/`) - 基类：`src/infrastructure/listener/base.js`
 5. **HTTP API扩展** (`core/http/`) - 基类：`src/infrastructure/http/http.js`
 6. **渲染器扩展** (`src/renderers/`) - 基类：`src/infrastructure/renderer/Renderer.js`
-7. **配置扩展** (`core/commonconfig/`) - 基类：`src/infrastructure/commonconfig/commonconfig.js`
+7. **配置扩展** (`core/*/commonconfig/`) - 基类：`src/infrastructure/commonconfig/commonconfig.js`（`ConfigBase`）
+   - ⚠️ **仅当需要配置文件时使用**：只有需要配置文件的 core 才创建此目录
+   - **重要说明**：`commonconfig` 是目录名，真正的基类是 `ConfigBase`
+   - 配置类需要继承 `ConfigBase` 并放置在 `core/*/commonconfig/` 目录
 
 **详细说明**：参见 [`docs/框架可扩展性指南.md`](docs/框架可扩展性指南.md)
 

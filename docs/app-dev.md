@@ -36,7 +36,7 @@ flowchart TD
 | 引导器 | `app.js` | 检查依赖与环境、安装缺失依赖、加载动态 `imports`，最后启动 `start.js` |
 | 主程序入口 | `start.js` | 实际创建 `Bot` 实例、加载配置、监听事件、启动 HTTP/WS 服务 |
 | 运行核心 | `src/bot.js` | 封装 HTTP/HTTPS/WebSocket、中间件、认证、Tasker/插件/API 装载 |
-| Web 前端 | `core/system-Core/www/xrk/index.html` / `core/system-Core/www/xrk/app.js` | XRK Web 控制台，包含系统状态、API 调试、配置管理前端<br/>访问路径：`/<目录名>`（如 `/xrk`） |
+| Web 前端 | `core/system-Core/www/xrk/index.html` / `core/system-Core/www/xrk/app.js` | XRK Web 控制台，包含系统状态、API 调试、配置管理前端<br/>访问路径：`/<目录名>/*`（如 `/xrk/*`）<br/>**说明**：`www/` 下可以创建子目录，子目录自动挂载到 `/<目录名>/*` |
 
 ---
 
@@ -273,19 +273,19 @@ flowchart TB
     
     subgraph Backend["后端层"]
         subgraph API["HTTP API层"]
-            API1[REST API<br/>core/http]
+            API1[REST API<br/>core/*/http]
             API2[WebSocket<br/>实时通信]
             API3[MCP协议<br/>工具调用]
         end
         
         subgraph Plugin["插件系统"]
-            P1[业务插件<br/>core/plugin]
-            P2[事件监听器<br/>core/events]
+            P1[业务插件<br/>core/*/plugin]
+            P2[事件监听器<br/>core/*/events]
             P3[定时任务<br/>Cron调度]
         end
         
         subgraph Workflow["工作流系统"]
-            W1[AIStream基类<br/>core/stream]
+            W1[AIStream基类<br/>core/*/stream]
             W2[函数调用<br/>Function Calling]
             W3[上下文增强<br/>RAG流程]
             W4[记忆系统<br/>Redis存储]

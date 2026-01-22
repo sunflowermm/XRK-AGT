@@ -70,8 +70,8 @@ flowchart TB
   - **任务层（Tasker）** (`core/*/tasker/`) - 协议转换，生成统一事件
   - **事件系统** (`core/*/events/`) - 事件标准化和预处理
   - **业务层** (`core/*/plugin/`, `core/*/http/`, `core/*/stream/`) - 具体业务实现
-  - **配置层** (`core/*/commonconfig/`) - 配置管理
-  - **静态资源** (`core/*/www/`) - 静态文件，自动挂载到 `/core/{coreName}/*`
+  - **配置层** (`core/*/commonconfig/`) - 配置管理（⚠️ 仅当需要配置文件时使用）
+  - **静态资源** (`core/*/www/<目录名>/`) - 静态文件（⚠️ 必须创建子目录，挂载到 `/<目录名>/*`）
 
 详细说明请参考 [项目概览](../PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
 
@@ -108,7 +108,6 @@ flowchart TB
   - 记忆系统与工作流合并机制
   - MCP工具注册
   - 最佳实践与常见问题
-- **[工作流开发文档](工作流开发文档.md)** - 工作流开发文档（补充）
 - **[复杂任务示例](workflow-complex-task-example.md)** - 复杂任务完整调用流程模拟
 - **[记忆系统文档](workflow-memory-system.md)** - 工作流记忆系统详细文档
 - **[MCP完整指南](mcp-guide.md)** - MCP工具注册与连接
@@ -172,29 +171,31 @@ flowchart TB
 
 ### 创建自己的 Core 模块
 
-框架支持多 core 模块架构，每个 core 是一个独立的模块：
+> **Core开发时代**：现在所有业务都在 `core/` 目录下开发，每个 core 是一个独立的业务模块。core 根目录不再直接写业务代码，而是通过业务目录（如 `plugin/`、`tasker/` 等）来组织代码，方便业务分割和集成。
+
+**完整指南**：详见 **[框架可扩展性指南 - Core 模块开发](框架可扩展性指南.md#core-模块开发)** ⭐ 推荐
+
+**快速步骤**：
 
 1. **创建 core 目录**：在 `core/` 目录下创建新的 core 目录（如 `core/my-core/`）
 
-2. **创建子目录结构**（可选，根据需要创建）：
-   - `plugin/` - 业务插件
+2. **创建业务目录**（根据需要创建）：
+   - `plugin/` - 业务插件（继承 `plugin` 基类）
    - `tasker/` - 任务层（协议适配器）
-   - `events/` - 事件监听器
-   - `http/` - HTTP API
-   - `stream/` - AI 工作流
-   - `commonconfig/` - 配置管理
-   - `www/` - 静态资源（可选，会自动挂载到 `/core/{coreName}/*`）
-     - 每个 `www/<目录名>` 会自动挂载到 `/<目录名>`（避免路径冲突）
+   - `events/` - 事件监听器（继承 `EventListener` 基类）
+   - `http/` - HTTP API（继承 `HttpApi` 基类）
+   - `stream/` - AI 工作流（继承 `AIStream` 基类）
+   - `commonconfig/` - 配置管理（继承 `ConfigBase` 基类，⚠️ 仅当需要配置文件时使用）
+   - `www/<目录名>/` - 静态资源（⚠️ 必须创建子目录，子目录自动挂载到 `/<目录名>/*`，避免与根目录 `www/` 冲突）
 
-3. **package.json 支持**（可选）：
-   - 可以在 core 目录下创建 `package.json` 来管理该 core 的依赖
-   - 在项目根目录执行 `pnpm install` 时，会自动安装所有 core 的依赖
-   - 框架支持 pnpm workspace，core 目录会自动加入 workspace
-
-4. **放置扩展文件**：
-   - 将扩展文件放置到对应的子目录中
+3. **编写业务代码**：
+   - 继承对应基类，实现业务逻辑
+   - 使用别名路径（`#` 前缀）导入框架模块
    - 框架会自动扫描并加载所有 core 目录
-   - 不同 core 的资源可以相互使用（如 core A 的 plugin 可以使用 core B 的 tasker）
+
+4. **配置依赖**（可选）：
+   - 在 core 目录下创建 `package.json` 管理独立依赖
+   - 执行 `pnpm install` 时自动安装所有 core 的依赖
 
 ### 编写一个简单指令插件
 

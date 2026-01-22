@@ -78,7 +78,7 @@ classDiagram
 enabled: true
 
 # 工作流目录路径（已废弃，框架自动扫描所有 core/*/stream 目录）
-# streamDir: "core/stream"
+# streamDir: "core/*/stream"
 
 # 工作流全局设置
 global:

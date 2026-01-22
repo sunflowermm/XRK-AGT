@@ -180,7 +180,7 @@ flowchart TB
 flowchart TB
     A["watch启用"] --> B{"enable参数"}
     B -->|false| C["关闭所有watcher<br/>清理资源"]
-    B -->|true| D["chokidar.watch监视core/http<br/>递归监视子目录"]
+    B -->|true| D["chokidar.watch监视core/*/http<br/>递归监视子目录"]
     D --> E["监听文件事件"]
     E --> F{"事件类型"}
     F -->|add新增| G["loadApi加载新API"]
