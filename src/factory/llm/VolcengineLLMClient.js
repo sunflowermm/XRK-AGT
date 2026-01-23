@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import VisionFactory from '../vision/VisionFactory.js';
+import { MCPToolAdapter } from './mcp-tool-adapter.js';
 
 /**
  * 火山引擎豆包大模型客户端
@@ -69,6 +70,7 @@ export default class VolcengineLLMClient {
    * 构建请求体
    * 火山引擎的 API 格式与 OpenAI 兼容
    * 支持所有标准参数：temperature、max_tokens、top_p、presence_penalty、frequency_penalty
+   * 支持工具调用：tools、tool_choice、parallel_tool_calls
    */
   buildBody(messages, overrides = {}) {
     const body = {
@@ -83,6 +85,26 @@ export default class VolcengineLLMClient {
     if (this.config.topP !== undefined) body.top_p = this.config.topP;
     if (this.config.presencePenalty !== undefined) body.presence_penalty = this.config.presencePenalty;
     if (this.config.frequencyPenalty !== undefined) body.frequency_penalty = this.config.frequencyPenalty;
+
+    // 工具调用支持：从MCP获取工具列表
+    const enableTools = this.config.enableTools !== false && MCPToolAdapter.hasTools();
+    if (enableTools && !overrides.tools) {
+      const tools = MCPToolAdapter.convertMCPToolsToOpenAI();
+      if (tools.length > 0) {
+        body.tools = tools;
+        // 工具调用模式：auto（自动）、none（禁用）、required（必须）
+        body.tool_choice = this.config.toolChoice || 'auto';
+        // 是否允许多个工具并行调用（豆包支持）
+        if (this.config.parallelToolCalls !== undefined) {
+          body.parallel_tool_calls = this.config.parallelToolCalls;
+        }
+      }
+    } else if (overrides.tools !== undefined) {
+      // 允许外部覆盖工具配置
+      body.tools = overrides.tools;
+      if (overrides.tool_choice !== undefined) body.tool_choice = overrides.tool_choice;
+      if (overrides.parallel_tool_calls !== undefined) body.parallel_tool_calls = overrides.parallel_tool_calls;
+    }
 
     return body;
   }
@@ -147,37 +169,68 @@ export default class VolcengineLLMClient {
   }
 
   /**
-   * 非流式调用
+   * 非流式调用（支持工具调用）
    */
   async chat(messages, overrides = {}) {
     // 转换messages，处理图片（经由 VisionFactory 抽离识图能力）
     const transformedMessages = await this.transformMessages(messages);
 
-    const response = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides })),
-      signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
-    });
+    // 支持多轮工具调用
+    const maxToolRounds = this.config.maxToolRounds || 5;
+    let currentMessages = [...transformedMessages];
+    let round = 0;
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`火山引擎 LLM 请求失败: ${response.status} ${response.statusText}${errorText ? ` | ${errorText}` : ''}`);
+    while (round < maxToolRounds) {
+      const response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
+        body: JSON.stringify(this.buildBody(currentMessages, { ...overrides })),
+        signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`火山引擎 LLM 请求失败: ${response.status} ${response.statusText}${errorText ? ` | ${errorText}` : ''}`);
+      }
+
+      const result = await response.json();
+      const choice = result.choices?.[0];
+      if (!choice) break;
+
+      const message = choice.message;
+      
+      // 检查是否有工具调用
+      if (message.tool_calls && Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+        // 添加助手消息（包含tool_calls）
+        currentMessages.push(message);
+        
+        // 调用MCP工具并获取结果
+        const toolResults = await MCPToolAdapter.handleToolCalls(message.tool_calls);
+        
+        // 添加工具结果消息
+        currentMessages.push(...toolResults);
+        
+        round++;
+        continue;
+      }
+
+      // 没有工具调用，返回最终结果
+      return message.content || '';
     }
 
-    const result = await response.json();
-    
-    // 火山引擎返回格式与 OpenAI 兼容
-    return result.choices?.[0]?.message?.content || '';
+    // 达到最大轮次，返回最后一条消息
+    const lastMessage = currentMessages[currentMessages.length - 1];
+    return lastMessage?.content || '';
   }
 
   /**
-   * 流式调用
+   * 流式调用（支持工具调用）
    */
   async chatStream(messages, onDelta, overrides = {}) {
     // 转换messages，处理图片（经由 VisionFactory 抽离识图能力）
     const transformedMessages = await this.transformMessages(messages);
 
+    // 流式模式下工具调用支持有限，主要处理内容流
     const response = await fetch(this.endpoint, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
@@ -193,6 +246,7 @@ export default class VolcengineLLMClient {
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
+    let toolCalls = [];
 
     while (true) {
       const { value, done } = await reader.read();
@@ -214,9 +268,31 @@ export default class VolcengineLLMClient {
         
         try {
           const json = JSON.parse(payload);
-          const delta = json.choices?.[0]?.delta?.content || '';
-          if (delta && typeof onDelta === 'function') {
-            onDelta(delta);
+          const choice = json.choices?.[0];
+          if (!choice) continue;
+
+          const delta = choice.delta || {};
+          
+          // 处理内容流
+          if (delta.content && typeof onDelta === 'function') {
+            onDelta(delta.content);
+          }
+
+          // 处理工具调用（流式模式下工具调用可能分块返回）
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              if (tc.index !== undefined) {
+                if (!toolCalls[tc.index]) {
+                  toolCalls[tc.index] = { id: tc.id, function: { name: '', arguments: '' }, type: 'function' };
+                }
+                if (tc.function?.name) {
+                  toolCalls[tc.index].function.name += tc.function.name;
+                }
+                if (tc.function?.arguments) {
+                  toolCalls[tc.index].function.arguments += tc.function.arguments;
+                }
+              }
+            }
           }
         } catch {
           // 忽略解析错误，继续读取

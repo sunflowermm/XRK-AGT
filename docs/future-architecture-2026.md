@@ -730,7 +730,7 @@ export default class xxx extends plugin {
 
     // 2. 调用工作流的process方法
     await stream.process(this.e, question, {
-      enableTodo: true,        // 启用TODO工作流
+      // enableTodo 已移除（Node 多步工作流已删除）
       enableMemory: true,      // 启用记忆系统
       enableDatabase: true     // 启用知识库
     });
@@ -759,7 +759,7 @@ sequenceDiagram
     
     Note over Workflow: 工作流内部处理
     Workflow->>Workflow: 构建系统提示词
-    Workflow->>Workflow: 合并辅助工作流<br/>memory/database/todo
+    Workflow->>Workflow: 合并辅助工作流<br/>memory/database
     Workflow->>Workflow: 构建函数提示词
     Workflow->>Python: 调用LLM<br/>生成回复
     Python-->>Workflow: 返回AI回复
@@ -1396,18 +1396,14 @@ vectorstore = Chroma(
 
 ### ✅ 保留的Node.js端代码
 
-#### 1. 工作流系统（必须保留）
+#### 1. Stream 工作流系统（已简化）
 
-**位置**: `src/utils/workflow-manager.js`
+**位置**: `core/system-Core/stream/`
 
-**保留原因**：
-- ✅ 业务逻辑层任务规划
-- ✅ 状态管理和持久化
-- ✅ 多平台集成（QQ等）
-- ✅ 错误处理和重试
-
-**但需要修改**：
-- 🔄 工作流步骤可以调用LangChain Agent
+**说明**：
+- ✅ Node 侧 Stream 仅负责单次对话 + MCP 工具调用
+- ✅ 复杂多步编排已移至 Python 子服务端（LangChain/LangGraph）
+- ✅ Stream 支持合并 memory/database 等辅助流
 
 #### 2. 插件系统（必须保留）
 
@@ -1538,7 +1534,6 @@ src/
 └── bot.js                       # 保留：Bot主类
 
 core/
-├── workflow-manager.js          # 保留：工作流系统
 ├── stream/
 │   ├── desktop.js              # 保留：桌面工具
 │   ├── tools.js                # 保留：基础工具
@@ -1600,7 +1595,7 @@ subserver/pyserver/
 
 | 模块 | 代码位置 | 保留原因 |
 |------|---------|---------|
-| **工作流系统** | `core/workflow-manager.js` | 业务逻辑规划、状态管理 |
+| **Stream 工作流** | `core/system-Core/stream/` | 单次对话 + MCP 工具调用（复杂多步已移至 Python） |
 | **插件系统** | `src/infrastructure/plugins/` | 功能模块化、生命周期管理 |
 | **事件系统** | `src/infrastructure/listener/` | 事件驱动架构 |
 | **工具注册** | `src/infrastructure/aistream/loader.js` | 工具注册机制 |

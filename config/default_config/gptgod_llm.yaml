@@ -37,3 +37,9 @@ presencePenalty: 0.6
 frequencyPenalty: 0.6
 # 请求超时时间（毫秒）
 timeout: 360000
+
+# ----------------------------------------
+# Tool Calling
+# ----------------------------------------
+# GPTGod 官方不保证支持 tool calling，本项目默认禁用
+enableTools: false

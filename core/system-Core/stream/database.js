@@ -114,10 +114,6 @@ export default class DatabaseStream extends AIStream {
         const results = await this.queryKnowledge(db, keyword, context);
         
         // 在工作流中记录笔记
-        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
-        if (workflowId && context.stream) {
-          await context.stream.storeNote(workflowId, `从知识库 ${db} 查询到 ${results.length} 条知识`, 'database', true);
-        }
 
         if (context.stream) {
           context.stream.context = context.stream.context || {};
@@ -151,10 +147,6 @@ export default class DatabaseStream extends AIStream {
         const dbs = await this.listDatabases(context);
         
         // 在工作流中记录笔记
-        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
-        if (workflowId && context.stream) {
-          await context.stream.storeNote(workflowId, `列出知识库，共 ${dbs.length} 个`, 'database', true);
-        }
 
         return {
           success: true,

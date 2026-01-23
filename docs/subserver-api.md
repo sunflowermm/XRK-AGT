@@ -3,12 +3,9 @@
 ## 概述
 
 XRK-AGT Python子服务端提供AI生态相关的服务，包括：
-- **LangChain集成**：通过主服务v1接口实现，支持MCP工具调用
+- **LangChain集成**：通过主服务v3接口实现，支持MCP工具调用
 - **向量服务**：文本向量化、向量检索、向量数据库管理
-- **工具服务**：代码执行、数据分析、网络爬虫、文件处理
-- **模型服务**：模型推理、模型管理
-- **评估服务**：模型评估、对比、基准测试
-- **数据管道**：数据预处理、分块、质量评估
+- **（规划中）更多 Python AI 生态能力**：仅在实现后再写入文档，避免文档与代码脱节
 
 ## 架构设计
 
@@ -16,17 +13,41 @@ XRK-AGT Python子服务端提供AI生态相关的服务，包括：
 主服务端 (Node.js)
     ↓ HTTP调用
 子服务端 (Python FastAPI)
-    ├─ LangChain服务 → 调用主服务端 /api/v1/chat/completions
+    ├─ LangChain服务 → 调用主服务端 /api/v3/chat/completions
     ├─ 向量服务 → ChromaDB + SentenceTransformers
-    ├─ 工具服务 → 专业工具集合
-    └─ 其他服务
+    └─ （规划中）更多 Python AI 生态能力
 ```
 
 ## LangChain服务
 
 ### POST /api/langchain/chat
 
-LangChain聊天接口，使用主服务v1接口作为LLM provider，支持MCP工具调用。
+LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工具调用。
+
+#### 子服务端的职责（为什么需要它）
+
+子服务端存在的目的不是“再包一层转发”，而是承接 **Python AI 生态** 能力，并与主服务端建立清晰分工：
+
+- **主服务端（Node.js）负责**
+  - **统一 LLM Provider 入口**：`POST /api/v3/chat/completions`（伪造 OpenAI Chat 协议，供 LangChain/外部生态调用）
+  - **厂商直连 & 工厂选择**：根据 `model(=provider)` 从配置选择运营商与真实模型ID
+  - **MCP 工具注入/执行**：把工作流注册的 MCP tools 注入到厂商 tool calling 协议，并执行多轮 tool_calls，最终返回 `assistant.content`
+
+- **子服务端（Python FastAPI）负责**
+  - **LangChain/LangGraph Agent 编排**：多步规划、工具选择策略、状态机等（`/api/langchain/chat`）
+  - **向量/RAG 能力**：embedding、向量库、检索与入库（`/api/vector/*`）
+  - **承接 Python 生态**：后续可扩展更多 AI 生态能力（数据管道、评估等），但 LLM 统一调用仍通过主服务 v3
+
+#### 与主服务端的连接方式
+
+- 子服务端调用主服务端：`POST /api/v3/chat/completions`
+- **必填三字段**：
+  - `messages`: OpenAI messages
+  - `model`: 运营商/provider（如 `volcengine` / `xiaomimimo` / `gptgod`）
+  - `apiKey`: 访问主服务端 v3 的鉴权 key（Bot 启动生成），**不是厂商 key**
+
+> 约定说明：主服务端 v3 是“伪 OpenAI 入口”，为了让 LangChain/社区生态能直接对接。
+> 但它**只保证** `assistant.content`（或 SSE chunk 的 `delta.content`）输出；工具调用细节由主服务端内部处理，不向外暴露。
 
 **请求参数**：
 ```json
@@ -34,34 +55,35 @@ LangChain聊天接口，使用主服务v1接口作为LLM provider，支持MCP工
   "messages": [
     {"role": "user", "content": "你好"}
   ],
-  "model": "gpt-3.5-turbo",
+  "model": "gptgod",
+  "apiKey": "主服务端Bot启动生成的访问鉴权key（非厂商key）",
   "temperature": 0.8,
   "max_tokens": 2000,
   "stream": false,
-  "provider": "gptgod",
-  "use_tools": true
+  "enableTools": true
 }
 ```
 
 **响应格式**（非流式）：
 ```json
 {
+  "id": "chatcmpl_xxx",
+  "object": "chat.completion",
+  "created": 1700000000,
   "choices": [
     {
       "message": {
+        "role": "assistant",
         "content": "你好！"
       }
     }
   ],
-  "usage": {
-    "total_tokens": 10
-  },
-  "model": "gpt-3.5-turbo",
-  "tools": [...]
+  "usage": null,
+  "model": "gptgod"
 }
 ```
 
-**流式响应**：返回SSE格式的流式数据。
+**流式响应**：SSE（每行一个 `data: {...}`，最后以 `data: [DONE]` 结束）。
 
 ### GET /api/langchain/models
 
@@ -206,8 +228,8 @@ const result = await Bot.callSubserver('/api/vector/search', {
 子服务端通过HTTP调用主服务端：
 
 ```python
-# 调用主服务v1接口
-v1_url = f"{main_server_url}/api/v1/chat/completions"
+# 调用主服务v3接口
+v3_url = f"{main_server_url}/api/v3/chat/completions"
 response = await client.post(v1_url, json=payload)
 
 # 获取MCP工具

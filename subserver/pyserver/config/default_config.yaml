@@ -20,23 +20,27 @@ api:
   auto_load: true      # 自动加载 apis 目录下的 API
   api_dir: "apis"      # API 目录名称
 
-# 主服务端连接配置（子服务端会调用主服务端的 v1 与 MCP 接口）
+# 主服务端连接配置（子服务端会调用主服务端的 v3 与 MCP 接口）
 main_server:
   host: "127.0.0.1"
   port: 1234           # 主服务端端口（默认 1234）
   timeout: 300         # 请求超时时间（秒）
+  api_key: ""          # 主服务端 v3 接口访问鉴权（Bot 启动生成的 apiKey），用于调用 /api/v3/chat/completions
 
 # LangChain 服务配置
 langchain:
   enabled: true        # 是否启用 LangChain Agent
-  max_steps: 6         # Agent 最大执行步数
+  max_steps: 6         # Agent 最大执行步数（低配建议 3-4，高配可 8+）
+  max_tools: 40        # 注入给规划模型的工具数量上限（过多会拖慢且更易幻觉）
   verbose: false       # 是否输出详细日志
+  request_timeout: 60  # 单次LLM请求超时（秒）
 
 # 向量服务配置
 vector:
   model: "paraphrase-multilingual-MiniLM-L12-v2"  # 嵌入模型名称
   dimension: 384      # 向量维度
   persist_dir: "data/subserver/vector_db"  # 向量数据库持久化目录
+  default_collection: "default"  # 默认collection
 
 # 日志配置
 logging:

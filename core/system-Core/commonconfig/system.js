@@ -2065,6 +2065,32 @@ export default class SystemConfig extends ConfigBase {
                   description: '自动从工作流中收集并注册MCP工具',
                   default: true,
                   component: 'Switch'
+                },
+                remote: {
+                  type: 'object',
+                  label: '外部MCP连接（扩展）',
+                  description: '用于未来桥接外部MCP服务器的工具到本系统（仅配置占位）',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用外部MCP',
+                      default: false,
+                      component: 'Switch'
+                    },
+                    servers: {
+                      type: 'array',
+                      label: '外部MCP服务器列表',
+                      description: '每项包含 name/url，可选 headers（后续桥接实现使用）',
+                      component: 'ArrayForm',
+                      itemType: 'object',
+                      fields: {
+                        name: { type: 'string', label: '名称', component: 'Input' },
+                        url: { type: 'string', label: 'URL', component: 'Input' },
+                        headers: { type: 'object', label: 'Headers', component: 'SubForm', fields: {} }
+                      }
+                    }
+                  }
                 }
               }
             },

@@ -1,10 +1,10 @@
 # AIStream 文档
 
 > **文件位置**: `src/infrastructure/aistream/aistream.js`  
-> **完整文档**：请参考 **[工作流系统完整文档](工作流系统完整文档.md)** - 包含系统概述、架构设计、执行流程等完整内容。  
+> Node 侧“多步工作流/WorkflowManager/TODO”已移除；复杂多步编排请使用 Python 子服务端（LangChain/LangGraph）。本文档描述的是 Node 侧 `AIStream` 基类与 LLM/MCP 集成方式。
 > **可扩展性**：AIStream是工作流系统的核心扩展点。通过继承AIStream，开发者可以快速创建自定义工作流。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
-`AIStream` 是 XRK-AGT 中的 **AI 工作流基类**，用于封装 LLM 调用、向量服务、函数调用、上下文增强等功能。
+`AIStream` 是 XRK-AGT 中的 **AI 工作流基类**，用于封装 LLM 调用、向量服务、上下文增强等能力（工具调用由 LLM 工厂的 tool calling + MCP 统一处理）。
 
 ### 扩展特性
 
@@ -31,8 +31,6 @@ flowchart TB
         BuildCtx["buildChatContext<br/>构建基础消息"]
         Enhance["buildEnhancedContext<br/>RAG流程：检索历史+知识库"]
         CallAI["callAI<br/>调用LLM"]
-        ParseFunc["parseFunctions<br/>解析函数调用"]
-        Execute["executeFunctionsWithReAct<br/>执行函数"]
         Store["storeMessageWithEmbedding<br/>存储到记忆系统"]
     end
     
@@ -158,7 +156,7 @@ constructor(options = {})
 |------|------|
 | `generateEmbedding(text)` | 调用子服务端 `/api/vector/embed` 生成文本向量 |
 | `storeMessageWithEmbedding(groupId, message)` | 存储消息到向量数据库和Redis（key: `ai:memory:${name}:${groupId}`） |
-| `retrieveRelevantContexts(groupId, query, includeNotes, workflowId)` | 检索相关上下文（优先使用MemoryManager，再调用向量检索） |
+| `retrieveRelevantContexts(groupId, query)` | 检索相关上下文（优先使用MemoryManager，再调用向量检索） |
 | `buildEnhancedContext(e, question, baseMessages)` | 构建增强上下文（完整RAG流程：历史对话 + 知识库） |
 
 **向量服务接口**（子服务端）：
@@ -170,13 +168,10 @@ constructor(options = {})
 
 ## 函数调用
 
-**核心方法**：
+AIStream **不再解析/执行**任何 “文本函数调用 / ReAct”。
 
-| 方法 | 说明 |
-|------|------|
-| `parseFunctions(text, context)` | 解析函数调用，返回函数列表和清洗后的文本（仅解析 Call Function） |
-| `executeFunction(type, params, context)` | 执行函数，检查权限后调用handler（仅执行 Call Function） |
-| `executeFunctionsWithReAct(functions, context, question)` | 使用ReAct模式执行函数列表 |
+- **MCP 工具调用**：由 LLMFactory（各厂商 tool calling 协议）+ `MCPToolAdapter` 内部完成多轮 `tool_calls` → 返回最终 `assistant.content`。
+- **Call Function（本地注册函数）**：仍可在 stream 内部按需调用（例如特殊业务逻辑），但不推荐让模型通过“文本协议”来触发。
 
 **功能分类**：
 - **MCP 工具**：读取信息类功能（read, grep, query_memory等），返回 JSON，不出现在 prompt 中
@@ -199,15 +194,13 @@ sequenceDiagram
     Stream->>Stream: buildEnhancedContext(e, question)
     Stream->>Subserver: POST /api/langchain/chat
     alt 子服务端可用
-        Subserver->>LLM: POST /api/v1/chat/completions
+        Subserver->>LLM: POST /api/v3/chat/completions
         LLM-->>Subserver: 返回响应
         Subserver-->>Stream: 返回结果
     else 子服务端不可用
         Stream->>LLM: 直接调用LLM工厂
         LLM-->>Stream: 返回响应
     end
-    Stream->>Stream: parseFunctions(response)
-    Stream->>Stream: executeFunctionsWithReAct(functions)
     Stream->>Vector: POST /api/vector/upsert
     Stream-->>Plugin: 返回结果
 ```
@@ -218,12 +211,11 @@ sequenceDiagram
 |------|------|
 | `callAI(messages, apiConfig)` | 非流式调用AI接口（优先子服务端LangChain，失败时回退到LLM工厂） |
 | `callAIStream(messages, apiConfig, onDelta, options)` | 流式调用AI接口，通过 `onDelta` 回调返回增量文本 |
-| `execute(e, question, config)` | 执行工作流：构建上下文 → 调用LLM → 解析函数 → 执行函数 → 存储记忆 |
-| `process(e, question, options)` | 工作流处理入口，支持工作流合并、TODO决策、记忆系统等 |
+| `execute(e, question, config)` | 执行：构建上下文 → 调用LLM（含 MCP tool calling）→ 存储记忆 |
+| `process(e, question, options)` | 工作流处理入口（单次对话 + MCP 工具调用；复杂多步编排在 Python 子服务端） |
 
 **process 方法参数**：
 - `mergeStreams` - 要合并的工作流名称列表
-- `enableTodo` - 是否启用TODO智能决策（默认 `false`）
 - `enableMemory` - 是否启用记忆系统（默认 `false`）
 - `enableDatabase` - 是否启用知识库系统（默认 `false`）
 - `apiConfig` - LLM配置（可选，会与 `this.config` 合并）
@@ -232,12 +224,8 @@ sequenceDiagram
 1. `buildChatContext` - 构建基础消息数组
 2. `buildEnhancedContext` - RAG流程：检索历史对话和知识库
 3. `callAI` - 调用LLM（优先子服务端LangChain）
-4. `parseFunctions` - 解析函数调用
-5. `executeFunctionsWithReAct` - 执行函数（ReAct模式）
-6. `storeMessageWithEmbedding` - 存储到记忆系统
-7. 自动发送回复（插件不需要再次调用 `reply()`）
-
-> **详细文档**：LLM调用流程、消息格式规范请参考 [LLM 工作流文档](./llm-workflow.md)
+4. `storeMessageWithEmbedding` - 存储到记忆系统
+5. 自动发送回复（插件不需要再次调用 `reply()`）
 
 ---
 
@@ -249,7 +237,6 @@ const stream = this.getStream('chat');
 await stream.process(e, e.msg, {
   enableMemory: true,      // 启用记忆系统
   enableDatabase: true,   // 启用知识库
-  enableTodo: false       // 是否启用TODO工作流
 });
 // 注意：工作流内部已发送回复，不需要再次调用 reply()
 ```
@@ -258,8 +245,8 @@ await stream.process(e, e.msg, {
 
 ## 相关文档
 
-- **[工作流系统完整文档](工作流系统完整文档.md)** - 工作流系统详细文档
-- **[LLM工作流文档](llm-workflow.md)** - LLM调用流程和消息格式规范
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
+- **[子服务端 API](subserver-api.md)** - LangChain + 向量服务 + 与主服务 v3 的衔接
+- **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 
 

@@ -649,7 +649,7 @@ flowchart TB
 
 - **[Bot主类](docs/bot.md)** - Bot主类详细文档
 - **[插件系统](docs/plugin-base.md)** - 插件基类和加载器
-- **[工作流系统](docs/工作流系统完整文档.md)** - AI工作流完整文档
+- **[AIStream 文档](docs/aistream.md)** - Node 单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）
 - **[HTTP API](docs/http-api.md)** - HTTP API基类文档
 
 ---

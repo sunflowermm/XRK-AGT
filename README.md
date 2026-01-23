@@ -453,20 +453,9 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
 - **[`docs/完整文档.md`](docs/完整文档.md)** - 整合了所有核心文档，推荐从这里开始
 - **[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)** - 项目整体架构与目录结构详细说明
 
-#### 🤖 AI工作流系统（重点）
-- **[`docs/工作流系统完整文档.md`](docs/工作流系统完整文档.md)** - **工作流系统完整文档** ⭐ 推荐
-  - 系统概述与核心架构
-  - 工作流执行流程（简单任务和复杂任务）
-  - 工作流管理器详解
-  - 工作流开发指南
-  - 记忆系统与工作流合并机制
-  - MCP工具注册
-  - 最佳实践与常见问题
-- **[`docs/工作流开发文档.md`](docs/工作流开发文档.md)** - **工作流开发文档**（补充）
-  - 开发细节和代码示例
-  - 创建核心工作流和辅助工作流
-  - 函数注册详解
-  - 业务逻辑说明
+#### 🤖 AI 对话/工具（Node）& 智能体/RAG（Python）
+- **[`docs/aistream.md`](docs/aistream.md)** - Node 侧单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）
+- **[`docs/subserver-api.md`](docs/subserver-api.md)** - Python 子服务端（LangChain/LangGraph + 向量服务）与主服务 v3 的衔接
 - **[`docs/mcp-guide.md`](docs/mcp-guide.md)** - **MCP (Model Context Protocol) 完整指南** ⭐
   - MCP概述与架构图
   - MCP服务器与HTTP API
@@ -516,9 +505,8 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
 - [`docs/api-loader.md`](docs/api-loader.md)：API 加载器文档
 
 ##### AI 工作流
-- **[`docs/工作流系统完整文档.md`](docs/工作流系统完整文档.md)**：工作流系统完整文档（推荐）
-- [`docs/工作流开发文档.md`](docs/工作流开发文档.md)：工作流开发文档（补充）
-- [`docs/aistream.md`](docs/aistream.md)：AI 工作流基类详细文档
+- [`docs/aistream.md`](docs/aistream.md)：AIStream（Node 单次对话 + MCP 工具调用）
+- [`docs/subserver-api.md`](docs/subserver-api.md)：子服务端 API（LangChain/LangGraph + 向量服务）
 
 ##### 配置与渲染
 - [`docs/config-base.md`](docs/config-base.md)：配置系统详细文档

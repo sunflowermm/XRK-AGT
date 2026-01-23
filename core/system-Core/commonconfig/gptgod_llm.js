@@ -107,6 +107,13 @@ export default class GPTGodLLMConfig extends ConfigBase {
             description: 'API 接口路径，默认为 /chat/completions',
             default: '/chat/completions',
             component: 'Input'
+          },
+          enableTools: {
+            type: 'boolean',
+            label: '启用工具调用',
+            description: 'GPTGod 官方不保证支持 tool calling，本项目默认关闭',
+            default: false,
+            component: 'Switch'
           }
         }
       }

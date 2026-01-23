@@ -39,7 +39,7 @@ const execCommand = (command, options = {}, needOutput = false) => {
  *   - 文件操作：create_folder（创建文件夹）、open_explorer（打开资源管理器）、open_application（打开应用）
  *   - 网络操作：open_browser（打开浏览器）
  *   - 命令执行：execute_powershell（执行PowerShell）、cleanup_processes（清理进程）
- *   - 工作流：start_workflow（启动工作流）
+ *   - （已移除）多步工作流：start_workflow
  */
 export default class DesktopStream extends AIStream {
 
@@ -707,27 +707,6 @@ export default class DesktopStream extends AIStream {
             context.stream.context.desktopFiles = fileList;
           }
 
-          // 在工作流中记录笔记
-          const workflowId = context.workflowId || (context.stream?.context?.workflowId);
-          if (workflowId && context.stream && Array.isArray(fileList) && fileList.length > 0) {
-            const lines = fileList.map((item, index) => {
-              const sizeText = typeof item.size === 'number'
-                ? ` (${(item.size / 1024).toFixed(1)} KB)`
-                : '';
-              return `${index + 1}. [${item.type}] ${item.name}${sizeText}`;
-            }).join('\n');
-
-            try {
-              await context.stream.storeNote(
-                workflowId,
-                `【桌面文件列表】\n工作区：${workspace}\n共 ${fileList.length} 个项目：\n${lines}`,
-                'list_desktop_files',
-                true
-              );
-            } catch {
-              // 记笔记失败不影响主流程
-            }
-          }
 
           return this.successResponse({
             workspace,
@@ -1041,56 +1020,9 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：启动工作流（执行操作）
-    this.registerFunction('start_workflow', {
-      description: '启动多步骤工作流',
-      prompt: `[启动工作流:goal] - 启动一个多步骤工作流，AI会自动规划步骤并执行，例如：[启动工作流:帮我打开微信并发送消息给张三]`,
-      // 仅允许顶层调用，工作流内部会被过滤掉
-      onlyTopLevel: true,
-      parser: (text, context) => {
-        const functions = [];
-        const reg = /\[启动工作流:([^\]]+)\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const goal = (match[1] || '').trim();
-          if (goal) functions.push({ type: 'start_workflow', params: { goal } });
-        }
-
-        return {
-          functions,
-          cleanText: functions.length > 0 ? text.replace(reg, '').trim() : text
-        };
-      },
-      handler: async (params = {}, context = {}) => {
-        const { goal } = params;
-        if (!goal || !this.workflowManager) return;
-
-        // 禁止在已有工作流内部再次启动新的工作流，避免嵌套和重复创建
-        if (context.workflowId) {
-          BotUtil.makeLog('warn', `[start_workflow] 已忽略工作流内部请求："${goal}"（工作流ID: ${context.workflowId}）`, 'DesktopStream');
-          try {
-            await this.storeNote(context.workflowId, `已忽略嵌套工作流请求："${goal}"（当前已在工作流中）`, 'start_workflow', true);
-          } catch {
-            // 忽略笔记失败
-          }
-          return;
-        }
-
-        // 注意：自然语言回复已经在execute中发送了，这里不需要重复发送
-        // 直接启动工作流
-        try {
-          const workflowId = await this.createWorkflowFromGoal(context.e, goal);
-          context.workflowId = workflowId;
-        } catch (err) {
-          BotUtil.makeLog('error', `启动工作流失败: ${err.message}`, 'DesktopStream');
-        }
-      },
-      enabled: true
-    });
     // MCP工具：查询股票行情（返回JSON结果）
     this.registerMCPTool('stock_quote', {
-      description: '查询单只A股实时行情，返回结构化数据（价格、涨跌、涨跌幅等），结果会自动记录到工作流笔记中',
+      description: '查询单只A股实时行情，返回结构化数据（价格、涨跌、涨跌幅等）',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1103,7 +1035,6 @@ export default class DesktopStream extends AIStream {
       },
       handler: async (args = {}, context = {}) => {
         const code = (this.getParam(args, 'code', 'stockCode') || '').trim();
-        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
 
         // 验证股票代码格式（6位数字）
         if (!code) {
@@ -1119,14 +1050,6 @@ export default class DesktopStream extends AIStream {
 
           if (!stockData || !stockData.name) {
             const errorMsg = `股票代码 ${code} 不存在或数据无效`;
-          if (workflowId && context.stream) {
-            await context.stream.storeNote(
-              workflowId,
-              `【股票查询失败】\n代码：${code}\n原因：${errorMsg}`,
-              'stock',
-              true
-            );
-          }
             return this.errorResponse('STOCK_NOT_FOUND', errorMsg);
           }
 
@@ -1162,20 +1085,6 @@ export default class DesktopStream extends AIStream {
             time
           });
 
-          // 在工作流中记录笔记（供后续步骤使用）
-          if (workflowId && context.stream) {
-            const noteContent =
-              `【股票行情查询】\n` +
-              `代码：${code}\n名称：${name}\n` +
-              `当前价：${current.toFixed(2)}\n` +
-              `涨跌：${changeValue.toFixed(2)}（${changePercentValue.toFixed(2)}%）\n` +
-              `今开：${open.toFixed(2)}  昨收：${preClose.toFixed(2)}\n` +
-              `最高：${high.toFixed(2)}  最低：${low.toFixed(2)}\n` +
-              (date && time ? `数据时间：${date} ${time}\n` : '') +
-              `（本条笔记由股票信息工作流自动生成，供后续多步工作流分析与决策使用）`;
-
-            await context.stream.storeNote(workflowId, noteContent, 'stock', true);
-          }
 
           return result;
         } catch (error) {
@@ -1185,14 +1094,6 @@ export default class DesktopStream extends AIStream {
             'DesktopStream'
           );
 
-          if (workflowId && context.stream) {
-            await context.stream.storeNote(
-              workflowId,
-              `【股票查询异常】\n代码：${code}\n错误：${error.message}`,
-              'stock',
-              true
-            );
-          }
 
           return this.errorResponse('STOCK_QUERY_FAILED', error.message);
         }
@@ -1360,17 +1261,9 @@ ${resolvedPrompts.join('\n')}
 示例：
 - "[打开计算器]好的，马上帮你打开计算器，这样你就可以算账啦~" → 执行打开计算器+回复文本
 - "[回桌面]没问题，帮你回到桌面，这样找文件更方便" → 执行回桌面+回复文本
-- "[启动工作流:帮我打开微信]好的，我来帮你规划并执行这个任务" → 启动多步骤工作流
 
 【重要规则】
-1. 格式完全匹配，参数完整，必须同时回复文本内容，不要只执行功能不回复
-2. 【关键】启动工作流规则：
-   - 只能输出一个[启动工作流:目标]命令
-   - 启动工作流时，绝对禁止同时执行其他命令（如[股票:代码]、[回桌面]、[截屏]等）
-   - 正确示例：[启动工作流:帮我回桌面然后再截图]好的，我来帮你完成这个任务
-   - 错误示例：[股票:600941][启动工作流:查询股票并生成表格]（禁止同时执行）
-   - 工作流启动后会自动执行所有步骤，不需要手动执行其他命令
-   - 如果用户要求多步骤任务，必须使用[启动工作流:目标]，不要手动执行每一步`;
+1. 格式完全匹配，参数完整，必须同时回复文本内容，不要只执行功能不回复`;
   }
 
   buildSystemPrompt(context) {
@@ -1383,18 +1276,9 @@ ${resolvedPrompts.join('\n')}
     const isMaster = e?.isMaster === true;
     const workspace = this.getWorkspace();
 
-    // 优先从workflow context中获取文件内容（工作流场景）
-    // 如果是在工作流中，workflowId会在context中
     let fileContent = context.fileContent;
     let fileSearchResult = context.fileSearchResult;
     let commandOutput = context.commandOutput;
-
-    const workflowContext = this.getWorkflowContext(context);
-    if (workflowContext) {
-      fileContent = workflowContext.fileContent || fileContent;
-      fileSearchResult = workflowContext.fileSearchResult || fileSearchResult;
-      commandOutput = workflowContext.commandOutput || commandOutput;
-    }
 
     const fileContext = this.buildFileContext(fileSearchResult, fileContent, commandOutput, context);
 
@@ -1407,7 +1291,7 @@ ${persona}
 【核心工具】（write/run/note）
 - [写入:文件路径:内容] - 写入文件
 - [执行:命令] - 执行命令
-- [笔记:内容] - 记录笔记（仅在工作流中可用）
+- [笔记:内容] - 记录笔记（可选）
 
 【信息读取功能】
 - 文件读取(read)、搜索(grep)、系统信息、磁盘空间、桌面文件列表等功能已移至MCP工具
@@ -1417,9 +1301,7 @@ ${persona}
 【Excel操作】
 - Excel文档生成功能已移至MCP工具（desktop.create_excel_document），可通过MCP协议调用
 
-【工作流笔记】
-- 使用[笔记:内容]手动记录信息
-   ${fileContext ? fileContext : ''}
+${fileContext ? `【上下文】\n${fileContext}\n` : ''}
 【时间】
 ${now}
 ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操作。\n\n' : ''}${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【规则】
@@ -1427,17 +1309,7 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
 2. 优先使用功能函数执行操作
 3. 文件操作默认在工作区进行
 4. 如果找到文件内容，请在回复中直接告知用户内容
-5. 【关键】启动工作流规则：
-   - 只能输出一个[启动工作流:目标]命令
-   - 启动工作流时，只输出[启动工作流:目标]和自然语言回复
-   - 绝对禁止在启动工作流时同时执行其他命令（如[股票:代码]、[回桌面]等）
-   - 工作流启动后会自动执行所有步骤，不需要手动执行
-   - 如果用户要求多步骤任务，必须使用[启动工作流:目标]，不要手动执行每一步
-
-【任务类型判断】
-- 简单任务：只需要一个操作即可完成，例如"查询股票"、"回到桌面"、"读取文件"
-- 复杂任务：需要多个步骤才能完成，例如"查股票然后生成表格"、"读取多个文件并合并"
-- 对于复杂任务，必须使用[启动工作流:目标]启动工作流，让系统自动执行所有步骤`;
+`;
   }
 
   async buildChatContext(e, question) {
@@ -1483,44 +1355,6 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
     });
 
     return messages;
-  }
-
-  /**
-   * 从目标创建工作流
-   */
-  async createWorkflowFromGoal(e, goal) {
-    // 先创建 workflow 对象（但不执行），以便记录决策步骤
-    const workflowId = `workflow_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-    const tempWorkflow = this.workflowManager.createWorkflowObject(workflowId, goal, [], e);
-
-    // 使用临时 workflow 对象记录决策步骤
-    // 注意：任务分析助手不应该发送自然语言回复，只用于判断
-    const decision = await this.workflowManager.decideWorkflowMode(e, goal, tempWorkflow);
-    
-    const todos = decision.todos.length > 0
-      ? decision.todos
-      : await this.workflowManager.generateInitialTodos(goal, tempWorkflow);
-
-    // 创建正式的工作流，并合并决策步骤
-    const finalWorkflowId = await this.workflowManager.createWorkflow(e, goal, todos);
-    const finalWorkflow = this.workflowManager.getWorkflow(finalWorkflowId);
-
-    // 将临时 workflow 的决策步骤复制到正式 workflow
-    if (finalWorkflow && tempWorkflow.decisionSteps) {
-      finalWorkflow.decisionSteps = tempWorkflow.decisionSteps;
-    }
-
-    return finalWorkflowId;
-  }
-
-  /**
-   * 获取工作流上下文
-   */
-  getWorkflowContext(context) {
-    if (!context.workflowId || !this.workflowManager) return null;
-
-    const workflow = this.workflowManager.getWorkflow(context.workflowId);
-    return workflow?.context || null;
   }
 
   /**

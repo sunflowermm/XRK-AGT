@@ -89,11 +89,11 @@ async def chat_handler(request: Request):
     """LangChain聊天接口"""
     data = await request.json()
     messages = data.get("messages", [])
-    model = data.get("model", "gpt-3.5-turbo")
+    # 约定：model 字段传“运营商/provider”（如 volcengine/xiaomimimo/gptgod），以适配主服务端 v3 伪造接口
+    model = data.get("model", "gptgod")
     temperature = data.get("temperature", 0.8)
     max_tokens = data.get("max_tokens", 2000)
     stream = data.get("stream", False)
-    provider = data.get("provider")
     use_tools = data.get("use_tools", True)
     
     if not messages or not isinstance(messages, list):
@@ -101,17 +101,18 @@ async def chat_handler(request: Request):
     
     main_url = get_main_server_url()
     timeout = get_timeout()
+    main_api_key = config.get("main_server.api_key", "")
     
     payload = {"messages": messages, "model": model, "temperature": temperature, "max_tokens": max_tokens, "stream": stream}
-    if provider:
-        payload["provider"] = provider
+    if main_api_key:
+        payload["apiKey"] = main_api_key
     
     if stream:
         # 流式响应
         client = await get_http_client()
-        v1_url = f"{main_url}/api/v1/chat/completions"
+        v3_url = f"{main_url}/api/v3/chat/completions"
         try:
-            async with client.stream("POST", v1_url, json=payload, timeout=timeout) as response:
+            async with client.stream("POST", v3_url, json=payload, timeout=timeout) as response:
                 if response.status_code != 200:
                     error_text = await response.aread()
                     raise HTTPException(status_code=response.status_code, detail=f"主服务调用失败: {error_text.decode()}")
@@ -137,7 +138,7 @@ async def chat_handler(request: Request):
             try:
                 deps = AgentDeps(
                     main_server_url=main_url,
-                    provider_or_model=(provider or model),
+                    provider_or_model=model,
                     temperature=temperature,
                     max_tokens=max_tokens,
                     max_steps=int(config.get("langchain.max_steps", 6) or 6),
@@ -145,20 +146,21 @@ async def chat_handler(request: Request):
                     use_tools=True,
                     get_mcp_tools=get_mcp_tools,
                     call_mcp_tool=call_mcp_tool,
-                    timeout=int(timeout),
+                    timeout=int(config.get("langchain.request_timeout", timeout) or timeout),
+                    max_tools=int(config.get("langchain.max_tools", 40) or 40),
                 )
                 final_text = await run_agent(messages=messages, deps=deps)
                 return {
                     "choices": [{"message": {"content": final_text}}],
                     "usage": {"total_tokens": 0},
-                    "model": provider or model
+                    "model": model
                 }
             except Exception as e:
                 logger.error(f"LangChain Agent执行失败，回退到直接调用: {e}", exc_info=True)
                 # Agent失败时回退到直接调用
         
         try:
-            result = await call_main_server_json("POST", "/api/v1/chat/completions", json_data=payload, timeout=60)
+            result = await call_main_server_json("POST", "/api/v3/chat/completions", json_data=payload, timeout=60)
             return result
         except httpx.TimeoutException:
             raise HTTPException(status_code=504, detail="调用主服务超时")
@@ -171,7 +173,7 @@ async def chat_handler(request: Request):
 async def models_handler(request: Request):
     """获取可用模型列表（从主服务端获取）"""
     try:
-        result = await call_main_server_json("GET", "/api/v1/models", timeout=30)
+        result = await call_main_server_json("GET", "/api/v3/models", timeout=30)
         return result
     except httpx.TimeoutException:
         logger.error(f"[langchain] 获取模型列表超时")

@@ -72,7 +72,7 @@ async def call_main_server(
     
     Args:
         method: HTTP方法（GET, POST等）
-        path: API路径（如 /api/v1/chat/completions）
+        path: API路径（如 /api/v3/chat/completions）
         json_data: JSON请求体（可选）
         params: URL参数（可选）
         timeout: 超时时间（秒，可选，默认使用配置值）

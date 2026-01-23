@@ -254,115 +254,12 @@ export default class AIStream {
   }
 
   /**
-   * 存储工作流笔记
-   * @param {string} workflowId - 工作流ID
-   * @param {string} content - 笔记内容
-   * @param {string} source - 来源
-   * @param {boolean} isTemporary - 是否临时
-   * @returns {Promise<boolean>}
-   */
-  async storeNote(workflowId, content, source = '', isTemporary = true) {
-    if (!global.redis) return false;
-
-    try {
-      const key = `ai:notes:${workflowId}`;
-      const note = { content, source, time: Date.now(), temporary: isTemporary };
-      await global.redis.lPush(key, JSON.stringify(note));
-      await global.redis.expire(key, isTemporary ? 1800 : 86400 * 3);
-      await global.redis.lTrim(key, 0, 99);
-      return true;
-    } catch (error) {
-      BotUtil.makeLog('error', `存储笔记失败: ${error.message}`, 'AIStream');
-      return false;
-    }
-  }
-
-  /**
-   * 如果存在工作流ID则存储笔记
-   * @param {Object} context - 上下文
-   * @param {string} content - 笔记内容
-   * @param {string} source - 来源
-   * @param {boolean} isTemporary - 是否临时
-   * @returns {Promise<boolean>}
-   */
-  async storeNoteIfWorkflow(context, content, source = '', isTemporary = true) {
-    if (context?.workflowId) {
-      return await this.storeNote(context.workflowId, content, source, isTemporary);
-    }
-    return false;
-  }
-
-  /**
-   * 获取工作流笔记
-   * @param {string} workflowId - 工作流ID
-   * @returns {Promise<Array<Object>>}
-   */
-  async getNotes(workflowId) {
-    try {
-      const userId = workflowId || 'default';
-      const shortTerm = MemoryManager.getShortTermMemories(userId, 100);
-      return shortTerm
-        .filter(m => m.metadata?.workflowId === workflowId)
-        .map(m => ({
-          content: m.content,
-          source: m.metadata?.source || '',
-          time: m.timestamp,
-          temporary: m.metadata?.temporary || false
-        }));
-    } catch (e) {
-      return [];
-    }
-  }
-
-  /**
-   * 存储工作流记忆
-   * @param {string} workflowId - 工作流ID
-   * @param {Object} data - 数据
-   * @returns {Promise<boolean>}
-   */
-  async storeWorkflowMemory(workflowId, data) {
-    try {
-      const userId = workflowId || 'default';
-      await MemoryManager.addLongTermMemory(userId, {
-        content: JSON.stringify(data),
-        type: 'workflow',
-        importance: 0.6,
-        metadata: { workflowId, ...data }
-      });
-      return true;
-    } catch (error) {
-      BotUtil.makeLog('error', `存储工作流记忆失败: ${error.message}`, 'AIStream');
-      return false;
-    }
-  }
-
-  /**
-   * 获取工作流记忆
-   * @param {string} workflowId - 工作流ID
-   * @returns {Promise<Object|null>}
-   */
-  async getWorkflowMemory(workflowId) {
-    try {
-      const userId = workflowId || 'default';
-      const memories = await MemoryManager.searchLongTermMemories(userId, workflowId, 1);
-      if (memories.length > 0 && memories[0].metadata?.workflowId === workflowId) {
-        return memories[0].metadata;
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /**
    * 检索相关上下文（历史对话）
    * @param {string} groupId - 群组ID
    * @param {string} query - 查询文本
-   * @param {boolean} includeNotes - 是否包含笔记
-   * @param {string|null} workflowId - 工作流ID
    * @returns {Promise<Array<Object>>}
    */
-  async retrieveRelevantContexts(groupId, query, includeNotes = false, workflowId = null) {
+  async retrieveRelevantContexts(groupId, query) {
     if (!query) return [];
 
     try {
@@ -757,70 +654,6 @@ export default class AIStream {
   }
 
   /**
-   * 解析文本中的函数调用
-   * @param {string} text - 文本
-   * @param {Object} context - 上下文
-   * @returns {Object} {functions, cleanText}
-   */
-  parseFunctions(text, context = {}) {
-    let cleanText = text;
-    const allFunctions = [];
-
-    for (const func of this.functions.values()) {
-      if (!func.enabled || !func.parser) continue;
-
-      const result = func.parser(cleanText, context);
-      if (result.functions && result.functions.length > 0) {
-        allFunctions.push(...result.functions);
-      }
-      if (result.cleanText !== undefined) {
-        cleanText = result.cleanText;
-      }
-    }
-
-    const withOrder = [];
-    const withoutOrder = [];
-
-    for (const fn of allFunctions) {
-      if (typeof fn.order === 'number') {
-        withOrder.push(fn);
-      } else {
-        withoutOrder.push(fn);
-      }
-    }
-
-    withOrder.sort((a, b) => a.order - b.order);
-    const orderedFunctions = withOrder.concat(withoutOrder);
-
-    return { functions: orderedFunctions, cleanText };
-  }
-
-
-  /**
-   * 执行函数（支持合并工作流）
-   * @private
-   * @param {Object} func - 函数对象
-   * @param {Object} context - 上下文
-   * @returns {Promise<Object>}
-   */
-  async _executeFunctionWithMerge(func, context) {
-    if (this.functions && this.functions.has(func.type)) {
-      return await this.executeFunction(func.type, func.params, context);
-    }
-
-    if (this._mergedStreams) {
-      for (const mergedStream of this._mergedStreams) {
-        if (mergedStream.functions && mergedStream.functions.has(func.type)) {
-          return await mergedStream.executeFunction(func.type, func.params, context);
-        }
-      }
-    }
-
-    BotUtil.makeLog('warn', `函数未找到: ${func.type}`, 'AIStream');
-    return { success: false, error: `函数未找到: ${func.type}` };
-  }
-
-  /**
    * 执行函数
    * @param {string} type - 函数类型
    * @param {Object} params - 参数
@@ -881,20 +714,6 @@ export default class AIStream {
       }
     }
     return { valid: true, params };
-  }
-
-  /**
-   * 执行函数列表（ReAct模式）
-   * @param {Array<Object>} functions - 函数列表
-   * @param {Object} context - 上下文
-   * @param {string|Object} question - 问题
-   * @returns {Promise<void>}
-   */
-  async executeFunctionsWithReAct(functions, context, question) {
-    if (!functions || functions.length === 0) return;
-    for (const func of functions) {
-      await this._executeFunctionWithMerge(func, context);
-    }
   }
 
   /**
@@ -1061,34 +880,35 @@ export default class AIStream {
   }
 
   /**
-   * 调用AI（非流式）
+   * 调用AI（非流式，支持tool calling）
    * @param {Array<Object>} messages - 消息列表
    * @param {Object} apiConfig - API配置
    * @returns {Promise<string>}
    */
   async callAI(messages, apiConfig = {}) {
     const config = this.resolveLLMConfig(apiConfig);
-    
+    const retryConfig = this.getRetryConfig();
+
+    // 优先使用 Python 子服务端（更优渥的生态），失败再回退到 NodeJS LLMFactory
     try {
       const payload = {
         messages,
         model: config.chatModel || config.model || config.provider,
+        provider: config.provider,
         temperature: config.temperature,
         max_tokens: config.maxTokens,
         stream: false
       };
-
-      const response = await Bot.callSubserver('/api/langchain/chat', {
-        body: payload
-      });
-
-      return response.choices?.[0]?.message?.content || response.content || '';
+      const response = await Bot.callSubserver('/api/langchain/chat', { body: payload });
+      return response?.choices?.[0]?.message?.content || response?.content || '';
     } catch (error) {
       BotUtil.makeLog('warn', `子服务端调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
     }
-    const retryConfig = this.getRetryConfig();
 
-    const inputTokens = messages.reduce((sum, m) => sum + this.estimateTokens(m.content || ''), 0);
+    const inputTokens = messages.reduce((sum, m) => {
+      const content = typeof m.content === 'string' ? m.content : (m.content?.text || '');
+      return sum + this.estimateTokens(content);
+    }, 0);
     MonitorService.recordTokens(`${this.name}.callAI`, { input: inputTokens });
 
     let lastError = null;
@@ -1104,112 +924,45 @@ export default class AIStream {
       } catch (error) {
         lastError = error;
         const errorInfo = this.classifyError(error);
-        const timeoutSeconds = this.getTimeoutSeconds(config);
         const shouldRetry = this.shouldRetry(errorInfo, retryConfig, attempt);
         
-        if (errorInfo.isTimeout) {
-          BotUtil.makeLog('warn', 
-            `[${this.name}] AI调用超时（${timeoutSeconds}秒）${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '请求被中止'}`,
-            'AIStream'
-          );
-        } else {
-          BotUtil.makeLog('warn', 
-            `[${this.name}] AI调用失败${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '未知错误'}`,
-            'AIStream'
-          );
-        }
-        
         if (shouldRetry) {
-          await BotUtil.sleep(retryConfig.delay);
+          const delay = this.calculateRetryDelay(attempt, retryConfig);
+          BotUtil.makeLog('warn', 
+            `[${this.name}] AI调用失败，${attempt}/${retryConfig.maxAttempts}次重试中: ${error.message}`,
+            'AIStream'
+          );
+          await BotUtil.sleep(delay);
           continue;
         }
         
-        if (errorInfo.isTimeout) {
-          BotUtil.makeLog('error', 
-            `[${this.name}] AI调用超时（${timeoutSeconds}秒），已重试${attempt}次`,
-            'AIStream'
-          );
-          throw new Error(`AI调用超时（${timeoutSeconds}秒），已重试${attempt}次，请稍后重试`);
-        }
-        
+        // 不再重试，抛出错误
         BotUtil.makeLog('error', 
-          `[${this.name}] AI调用失败: ${error.message || '未知错误'}`,
+          `[${this.name}] AI调用失败: ${error.message}`,
           'AIStream'
         );
-        
-        return null;
+        throw error;
       }
     }
     
-    if (lastError) {
-      const timeoutSeconds = this.getTimeoutSeconds(config);
-      BotUtil.makeLog('error', 
-        `[${this.name}] AI调用失败，已重试${retryConfig.maxAttempts}次: ${lastError.message || '未知错误'}`,
-        'AIStream'
-      );
-      throw new Error(`AI调用失败，已重试${retryConfig.maxAttempts}次，请检查网络连接或稍后重试`);
-    }
-    
-    return null;
+    // 所有重试都失败
+    BotUtil.makeLog('error', 
+      `[${this.name}] AI调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`,
+      'AIStream'
+    );
+    throw new Error(`AI调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`);
   }
 
   /**
-   * 调用AI（流式）
+   * 调用AI（流式，支持tool calling）
    * @param {Array<Object>} messages - 消息列表
    * @param {Object} apiConfig - API配置
    * @param {Function} onDelta - 增量回调
-   * @param {Object} options - 选项
+   * @param {Object} options - 选项（已废弃enableFunctionCalling，tool calling由LLM客户端自动处理）
    * @returns {Promise<string>}
    */
   async callAIStream(messages, apiConfig = {}, onDelta, options = {}) {
     const config = this.resolveLLMConfig(apiConfig);
-    
-    try {
-      const payload = {
-        messages,
-        model: config.chatModel || config.model || config.provider,
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        stream: true
-      };
-
-      const response = await Bot.callSubserver('/api/langchain/chat', {
-        body: payload,
-        rawResponse: true
-      });
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6).trim();
-            if (dataStr === '[DONE]') break;
-            
-            try {
-              const json = JSON.parse(dataStr);
-              const delta = json.choices?.[0]?.delta?.content || '';
-              if (delta) {
-                fullText += delta;
-                if (typeof onDelta === 'function') onDelta(delta);
-              }
-            } catch (e) {}
-          }
-        }
-      }
-
-      return fullText;
-    } catch (error) {
-      BotUtil.makeLog('warn', `子服务端流式调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
-    }
     const retryConfig = this.getRetryConfig();
 
     let fullText = '';
@@ -1219,73 +972,83 @@ export default class AIStream {
       if (typeof onDelta === 'function') onDelta(delta);
     };
 
+    // 优先使用 Python 子服务端流式（SSE透传），失败再回退到 NodeJS LLMFactory
+    try {
+      const payload = {
+        messages,
+        model: config.chatModel || config.model || config.provider,
+        provider: config.provider,
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
+        stream: true
+      };
+      const response = await Bot.callSubserver('/api/langchain/chat', {
+        body: payload,
+        rawResponse: true
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const dataStr = line.slice(6).trim();
+          if (dataStr === '[DONE]') return fullText;
+          try {
+            const json = JSON.parse(dataStr);
+            const delta = json?.choices?.[0]?.delta?.content || '';
+            if (delta) wrapDelta(delta);
+          } catch {}
+        }
+      }
+      return fullText;
+    } catch (error) {
+      BotUtil.makeLog('warn', `子服务端流式调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
+      fullText = '';
+    }
+
     let lastError = null;
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
         const client = LLMFactory.createClient(config);
         await client.chatStream(messages, wrapDelta, config);
-        break; // 成功，退出重试循环
+        return fullText; // 成功，返回结果
       } catch (error) {
         lastError = error;
         const errorInfo = this.classifyError(error);
-        const timeoutSeconds = this.getTimeoutSeconds(config);
         const shouldRetry = this.shouldRetry(errorInfo, retryConfig, attempt);
         
-        if (errorInfo.isTimeout) {
-          BotUtil.makeLog('warn', 
-            `[${this.name}] AI流式调用超时（${timeoutSeconds}秒）${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '请求被中止'}`,
-            'AIStream'
-          );
-        } else {
-          BotUtil.makeLog('warn', 
-            `[${this.name}] AI流式调用失败${shouldRetry ? `，正在重试 (${attempt}/${retryConfig.maxAttempts})` : ''}: ${error.message || '未知错误'}`,
-            'AIStream'
-          );
-        }
-        
         if (shouldRetry) {
+          const delay = this.calculateRetryDelay(attempt, retryConfig);
+          BotUtil.makeLog('warn', 
+            `[${this.name}] AI流式调用失败，${attempt}/${retryConfig.maxAttempts}次重试中: ${error.message}`,
+            'AIStream'
+          );
           fullText = '';
-          await BotUtil.sleep(retryConfig.delay);
+          await BotUtil.sleep(delay);
           continue;
         }
         
-        if (errorInfo.isTimeout) {
-          BotUtil.makeLog('error', 
-            `[${this.name}] AI流式调用超时（${timeoutSeconds}秒），已重试${attempt}次`,
-            'AIStream'
-          );
-          throw new Error(`AI流式调用超时（${timeoutSeconds}秒），已重试${attempt}次，请稍后重试`);
-        }
-        
+        // 不再重试，抛出错误
         BotUtil.makeLog('error', 
-          `[${this.name}] AI流式调用失败: ${error.message || '未知错误'}`,
+          `[${this.name}] AI流式调用失败: ${error.message}`,
           'AIStream'
         );
         throw error;
       }
     }
     
-    if (lastError) {
-      const timeoutSeconds = this.getTimeoutSeconds(config);
-      BotUtil.makeLog('error', 
-        `[${this.name}] AI流式调用失败，已重试${retryConfig.maxAttempts}次: ${lastError.message || '未知错误'}`,
-        'AIStream'
-      );
-      throw new Error(`AI流式调用失败，已重试${retryConfig.maxAttempts}次，请检查网络连接或稍后重试`);
-    }
-
-    if (!options.enableFunctionCalling || !fullText) {
-      return fullText;
-    }
-
-    const context = options.context || {};
-    const { functions, cleanText } = this.parseFunctions(fullText, context);
-
-    for (const func of functions) {
-      await this.executeFunction(func.type, func.params, context);
-    }
-
-    return cleanText || fullText;
+    // 所有重试都失败
+    BotUtil.makeLog('error', 
+      `[${this.name}] AI流式调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`,
+      'AIStream'
+    );
+    throw new Error(`AI流式调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`);
   }
 
   /**
@@ -1297,72 +1060,55 @@ export default class AIStream {
     const runtime = cfg.aistream || {};
     const llm = runtime.llm || {};
     const vision = runtime.vision || {};
-    const global = runtime.global || {};
 
-    // 获取提供商名称（支持从多个来源获取）
+    // 获取提供商名称
     const provider = (apiConfig.provider || this.config.provider || llm.provider || llm.Provider || '').toLowerCase();
     const visionProvider = (apiConfig.visionProvider || this.config.visionProvider || vision.provider || vision.Provider || provider).toLowerCase();
     
-    // 动态获取提供商配置（从配置系统）
+    // 获取提供商配置
     const providerConfig = this.getProviderConfig(provider, llm);
     const visionConfig = this.getProviderConfig(visionProvider, vision, true);
 
     // 验证提供商是否支持
     if (provider && !LLMFactory.hasProvider(provider)) {
-      BotUtil.makeLog('error', `不支持的LLM提供商: ${provider}`, 'AIStream');
       throw new Error(`不支持的LLM提供商: ${provider}`);
     }
 
-    // 解析超时配置（支持多级回退）
-    const timeout = apiConfig.timeout || 
-                    this.config.timeout ||
-                    (llm.timeout && typeof llm.timeout === 'number' ? llm.timeout : null) ||
-                    (global.maxTimeout && typeof global.maxTimeout === 'number' ? global.maxTimeout : null) ||
-                    360000;
+    // 解析超时配置
+    const timeout = apiConfig.timeout || this.config.timeout || llm.timeout || 360000;
 
-    // 标准化配置合并：优先级 apiConfig > this.config > providerConfig
-    // 确保关键字段（apiKey、chatModel、visionModel）不被空值覆盖
+    // 配置合并：优先级 apiConfig > this.config > providerConfig
     const finalConfig = {
       ...providerConfig,
       ...this.config,
       ...apiConfig,
-      // 确保apiKey不被空值或空字符串覆盖
-      apiKey: (apiConfig.apiKey && apiConfig.apiKey.trim()) || 
-              (providerConfig.apiKey && providerConfig.apiKey.trim()) || 
-              (this.config.apiKey && this.config.apiKey.trim()) || 
-              undefined,
-      // 确保模型名称正确传递（支持 chatModel 和 model 两种字段名）
+      // 确保关键字段不被空值覆盖
+      apiKey: apiConfig.apiKey?.trim() || providerConfig.apiKey?.trim() || this.config.apiKey?.trim() || undefined,
       model: apiConfig.model || apiConfig.chatModel || this.config.model || this.config.chatModel || providerConfig.chatModel || providerConfig.model,
       chatModel: apiConfig.chatModel || this.config.chatModel || providerConfig.chatModel || apiConfig.model || this.config.model || providerConfig.model,
       provider,
       visionProvider,
       visionConfig,
-      timeout
+      timeout,
+      // 启用tool calling（默认启用）
+      enableTools: apiConfig.enableTools !== false
     };
 
     return finalConfig;
   }
 
   /**
-   * 获取提供商配置（标准化配置解析）
+   * 获取提供商配置
    * @param {string} provider - 提供商名称
-   * @param {Object} runtimeConfig - 运行时配置（已废弃，保留以兼容旧代码）
+   * @param {Object} runtimeConfig - 运行时配置（已废弃，保留以兼容）
    * @param {boolean} isVision - 是否为视觉配置
    * @returns {Object} 提供商配置
    */
   getProviderConfig(provider, runtimeConfig = {}, isVision = false) {
     if (!provider) return {};
 
-    // 从全局配置获取（支持命名约定：{provider}_llm 或 {provider}_vision）
-    const configKey = isVision 
-      ? `${provider}_vision` 
-      : `${provider}_llm`;
-    
-    if (cfg[configKey] && typeof cfg[configKey] === 'object') {
-      return cfg[configKey];
-    }
-
-    return {};
+    const configKey = isVision ? `${provider}_vision` : `${provider}_llm`;
+    return cfg[configKey] || {};
   }
 
   /**
@@ -1398,17 +1144,11 @@ export default class AIStream {
         return null;
       }
 
-      const { functions, cleanText } = this.parseFunctions(response, context);
-
-      if (cleanText && cleanText.trim() && e?.reply) {
-        await e.reply(cleanText.trim()).catch(err => {
-          BotUtil.makeLog('debug', `发送自然语言回复失败: ${err.message}`, 'AIStream');
+      // tool calling现在由LLM客户端自动处理，无需手动解析函数调用
+      if (response && response.trim() && e?.reply) {
+        await e.reply(response.trim()).catch(err => {
+          BotUtil.makeLog('debug', `发送回复失败: ${err.message}`, 'AIStream');
         });
-      }
-
-      if (functions.length > 0) {
-        MonitorService.addStep(traceId, { step: 'execute_functions', count: functions.length });
-        await this.executeFunctionsWithReAct(functions, context, question);
       }
 
       if (context.tools && typeof context.tools.cleanupProcesses === 'function') {
@@ -1417,24 +1157,19 @@ export default class AIStream {
         } catch (err) {}
       }
 
-      const finalResponse = cleanText || '';
-
-      if (this.embeddingConfig.enabled && finalResponse && e) {
+      if (this.embeddingConfig.enabled && response && e) {
         const groupId = e.group_id || `private_${e.user_id}`;
-        const executedFunctions = functions.length > 0
-          ? `[执行了: ${functions.map(f => f.type).join(', ')}] `
-          : '';
         this.storeMessageWithEmbedding(groupId, {
           user_id: e.self_id,
           nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
-          message: `${executedFunctions}${finalResponse}`,
+          message: response,
           message_id: Date.now().toString(),
           time: Date.now()
         }).catch(() => { });
       }
 
-      MonitorService.endTrace(traceId, { success: true, response: finalResponse });
-      return finalResponse;
+      MonitorService.endTrace(traceId, { success: true, response });
+      return response;
     } catch (error) {
       MonitorService.recordError(traceId, error);
       MonitorService.endTrace(traceId, { success: false, error: error.message });
@@ -1457,14 +1192,13 @@ export default class AIStream {
     try {
       const {
         mergeStreams = [],
-        enableTodo = false,
         enableMemory = false,
         enableDatabase = false,
         ...apiConfig
       } = options;
 
       let StreamLoader = null;
-      if (mergeStreams.length > 0 || enableTodo || enableMemory || enableDatabase) {
+      if (mergeStreams.length > 0 || enableMemory || enableDatabase) {
         StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
       }
 
@@ -1488,7 +1222,6 @@ export default class AIStream {
             secondary: mergeStreams,
             prefixSecondary: true
           });
-        await this.ensureWorkflowManager(stream, { workflowManagerSource: 'todo' });
       }
 
       const finalQuestion = typeof question === 'string' 
@@ -1525,41 +1258,6 @@ export default class AIStream {
       }))
     };
   }
-
-  /**
-   * 确保工作流管理器存在
-   * @param {Object} stream - 工作流实例
-   * @param {Object} options - 选项
-   * @param {string} options.workflowManagerSource - 工作流管理器来源工作流名称
-   * @returns {Promise<void>}
-   */
-  async ensureWorkflowManager(stream, options = {}) {
-    if (stream.workflowManager) {
-      stream.workflowManager.stream = stream;
-      return;
-    }
-    
-    const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
-    const sourceStreamName = options.workflowManagerSource || 'todo';
-    
-    // 从指定工作流或合并的工作流中查找工作流管理器
-    const sourceStream = StreamLoader.getStream(sourceStreamName);
-    if (sourceStream?.workflowManager && typeof sourceStream.injectWorkflowManager === 'function') {
-      sourceStream.injectWorkflowManager(stream);
-      return;
-    }
-    
-    // 从合并的工作流中查找
-    if (this._mergedStreams) {
-      for (const mergedStream of this._mergedStreams) {
-        if (mergedStream.workflowManager && typeof mergedStream.injectWorkflowManager === 'function') {
-          mergedStream.injectWorkflowManager(stream);
-          return;
-        }
-      }
-    }
-  }
-
 
   /**
    * 自动合并辅助工作流
@@ -1618,7 +1316,7 @@ export default class AIStream {
     }
     
     // 兼容旧的布尔标志格式
-    const booleanFlags = ['memory', 'database', 'todo', 'chat'];
+    const booleanFlags = ['memory', 'database', 'chat'];
     for (const flag of booleanFlags) {
       const enableKey = `enable${flag.charAt(0).toUpperCase() + flag.slice(1)}`;
       if (options[enableKey] === true) {

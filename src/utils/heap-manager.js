@@ -1,6 +1,5 @@
 /**
  * 最小堆实现
- * 用于高效管理工作流清理优先级
  * 基于堆排序算法，时间复杂度 O(log n)
  */
 export class MinHeap {
@@ -149,100 +148,4 @@ export class MinHeap {
   }
 }
 
-/**
- * 工作流清理优先级管理器
- * 使用最小堆按清理时间排序，高效管理待清理的工作流
- */
-export class WorkflowCleanupManager {
-  constructor() {
-    // 使用最小堆，按清理时间排序（最早的需要先清理）
-    this.cleanupHeap = new MinHeap((a, b) => a.cleanupTime - b.cleanupTime);
-    this.workflowMap = new Map(); // workflowId -> heap entry
-  }
-
-  /**
-   * 添加工作流到清理队列
-   * @param {string} workflowId - 工作流ID
-   * @param {number} completedAt - 完成时间戳
-   * @param {number} cleanupDelay - 清理延迟（毫秒）
-   */
-  scheduleCleanup(workflowId, completedAt, cleanupDelay = 30000) {
-    const cleanupTime = completedAt + cleanupDelay;
-    
-    // 如果已存在，更新清理时间
-    if (this.workflowMap.has(workflowId)) {
-      this.remove(workflowId);
-    }
-
-    const entry = { workflowId, completedAt, cleanupTime };
-    this.cleanupHeap.insert(entry);
-    this.workflowMap.set(workflowId, entry);
-  }
-
-  /**
-   * 从清理队列移除工作流
-   */
-  remove(workflowId) {
-    const entry = this.workflowMap.get(workflowId);
-    if (!entry) return false;
-
-    this.workflowMap.delete(workflowId);
-    return this.cleanupHeap.remove(e => e.workflowId === workflowId);
-  }
-
-  /**
-   * 获取需要清理的工作流（已到清理时间）
-   * @param {number} currentTime - 当前时间戳
-   * @returns {Array<string>} 需要清理的工作流ID列表
-   */
-  getWorkflowsToCleanup(currentTime = Date.now()) {
-    const toCleanup = [];
-
-    while (!this.cleanupHeap.isEmpty()) {
-      const entry = this.cleanupHeap.peek();
-      
-      // 如果最早的工作流还没到清理时间，停止
-      if (entry.cleanupTime > currentTime) {
-        break;
-      }
-
-      // 提取并记录
-      const extracted = this.cleanupHeap.extractMin();
-      if (extracted) {
-        toCleanup.push(extracted.workflowId);
-        this.workflowMap.delete(extracted.workflowId);
-      }
-    }
-
-    return toCleanup;
-  }
-
-  /**
-   * 获取下一个清理时间（用于定时器）
-   */
-  getNextCleanupTime(currentTime = Date.now()) {
-    const entry = this.cleanupHeap.peek();
-    if (!entry) return null;
-    
-    return Math.max(0, entry.cleanupTime - currentTime);
-  }
-
-  /**
-   * 清空所有清理任务
-   */
-  clear() {
-    this.cleanupHeap.clear();
-    this.workflowMap.clear();
-  }
-
-  /**
-   * 获取统计信息
-   */
-  getStats() {
-    return {
-      pendingCleanups: this.cleanupHeap.size(),
-      nextCleanup: this.getNextCleanupTime()
-    };
-  }
-}
 

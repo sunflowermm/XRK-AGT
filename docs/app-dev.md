@@ -382,7 +382,7 @@ export default class AssistantPlugin extends plugin {
     const desktopStream = this.getStream('desktop');
     await desktopStream.process(e, e.msg, {
       mergeStreams: ['tools'],      // 合并工具工作流
-      enableTodo: true,             // 启用TODO智能决策
+      // enableTodo 已移除（Node 多步工作流已删除），复杂多步编排请使用 Python 子服务端
       enableMemory: true,           // 启用记忆系统
       enableDatabase: true          // 启用知识库
     });
@@ -482,7 +482,7 @@ export default class ReportPlugin extends plugin {
     // 调用工作流分析数据
     const stream = this.getStream('desktop');
     const analysis = await stream.process(e, '分析数据并生成报表', {
-      enableTodo: true
+      // enableTodo 已移除
     });
     
     // 使用渲染器生成图片
@@ -576,7 +576,7 @@ export default class UnifiedPlugin extends plugin {
 | 应用类型 | 推荐技术栈 | 核心组件 |
 |---------|-----------|---------|
 | **简单对话** | 插件 + 工作流 | `chat` stream + `enableMemory` |
-| **复杂任务** | 插件 + 工作流 + TODO | `desktop` stream + `enableTodo` |
+| **复杂任务** | 插件 + 子服务端 Agent | Python 子服务端（LangChain/LangGraph） |
 | **Web应用** | 前端 + HTTP API + 工作流 | REST API + `process()` |
 | **数据可视化** | 插件 + 工作流 + 渲染器 | `Renderer` + 模板系统 |
 | **多平台** | Tasker + 插件 + 事件系统 | 通用事件监听 |
@@ -632,7 +632,7 @@ flowchart TB
 
 - **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：整体架构与运行逻辑
 - **[框架可扩展性指南](框架可扩展性指南.md)**：完整的扩展能力说明
-- **[工作流系统完整文档](工作流系统完整文档.md)**：工作流系统详细文档
+- **[AIStream 文档](aistream.md)**：Node 侧单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）
 - **[插件基类文档](plugin-base.md)**：插件基类完整API
 - **[AIStream文档](aistream.md)**：AIStream基类完整API
 - **[Bot文档](bot.md)**：Bot生命周期、中间件与认证

@@ -73,6 +73,8 @@ flowchart TB
   - **配置层** (`core/*/commonconfig/`) - 配置管理（⚠️ 仅当需要配置文件时使用）
   - **静态资源** (`core/*/www/<目录名>/`) - 静态文件（⚠️ 必须创建子目录，挂载到 `/<目录名>/*`）
 
+> **重要澄清**：本项目的“业务实现”都应该放在 `core/*/(plugin|http|stream)` 下；`src/*` 主要是基础设施/工厂/通用能力，**不要把业务 API/工作流写进 `src`**（否则会破坏多 core 扩展机制）。
+
 详细说明请参考 [项目概览](../PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
 
 ### 🔌 插件系统
@@ -100,16 +102,7 @@ flowchart TB
 
 ### 🤖 AI 工作流
 
-- **[工作流系统完整文档](工作流系统完整文档.md)** - **工作流系统完整文档** ⭐ 推荐
-  - 系统概述与核心架构
-  - 工作流执行流程（简单任务和复杂任务）
-  - 工作流管理器详解
-  - 工作流开发指南
-  - 记忆系统与工作流合并机制
-  - MCP工具注册
-  - 最佳实践与常见问题
-- **[复杂任务示例](workflow-complex-task-example.md)** - 复杂任务完整调用流程模拟
-- **[记忆系统文档](workflow-memory-system.md)** - 工作流记忆系统详细文档
+- **说明**：Node 侧“多步工作流/WorkflowManager/TODO”已移除；复杂 Agent 编排请使用 **Python 子服务端（LangChain/LangGraph）**，主服务端提供统一的 **v3 LLM Provider** 与 **MCP 工具注入/执行**。
 - **[MCP完整指南](mcp-guide.md)** - MCP工具注册与连接
 - **[AI Stream](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强
 - **[Stream 插件功能分类](../core/system-Core/stream/README.md)** - Stream 插件功能分类说明（MCP 工具 vs Call Function）
@@ -135,7 +128,7 @@ flowchart TB
 3. **[插件基类](plugin-base.md)** - 学习插件基类与规则/上下文用法
 4. **[插件加载器](plugins-loader.md)** - 了解事件如何流转到插件
 5. **[事件系统](事件系统标准化文档.md)** - 了解事件命名规范和监听方式
-6. **[工作流系统完整文档](工作流系统完整文档.md)** - 需要使用 AI 工作流时再阅读
+6. **[AI Stream](aistream.md)** - 了解 AI 调用与上下文增强（复杂多步编排在子服务端）
 
 ### Tasker 开发者（任务层/事件生成器开发者）
 

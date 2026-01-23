@@ -118,7 +118,7 @@ export default class ChatStream extends AIStream {
    * Call Function：所有互动和群管理功能（出现在prompt中，供AI调用）
    */
   registerAllFunctions() {
-    // 表情包（作为消息段的一部分，不在parseFunctions中处理）
+    // 表情包（作为消息段的一部分，不在工具调用/函数解析中处理）
     // 表情包标记会在parseCQToSegments中解析，保持顺序
 
     // Call Function：@功能（消息格式，不返回JSON）
@@ -1567,36 +1567,14 @@ ${isGlobalTrigger ?
       if (!response) {
         return null;
       }
-      
-      // 解析功能和文本
-      const { functions, cleanText } = this.parseFunctions(response, context);
-      
-      // 先发送自然语言回复（如果有），然后再执行函数
-      // 这样可以确保用户先看到AI的自然语言回复，然后才看到工作流启动等操作
-      let naturalLanguageSent = false;
-      if (cleanText && cleanText.trim()) {
-        // 立即发送自然语言回复
-        await this.sendMessages(e, cleanText.trim());
-        naturalLanguageSent = true;
+
+      // 工具调用由 LLM 工厂（tool calling + MCP）内部完成，这里只负责发送最终文本
+      const text = (response || '').toString().trim();
+      if (text) {
+        await this.sendMessages(e, text);
+        this.recordAIResponse(e, text, []);
       }
-      
-      // 执行所有功能（记录到历史）
-      const executedFunctions = [];
-      for (const func of functions) {
-        try {
-          await this.executeFunction(func.type, func.params, context);
-          executedFunctions.push(func.type);
-        } catch (error) {
-          BotUtil.makeLog('error', `函数执行失败[${func.type}]: ${error.message}`, 'ChatStream');
-        }
-      }
-      
-      // 记录AI响应到历史（包含执行的函数信息）
-      if (naturalLanguageSent) {
-        this.recordAIResponse(e, cleanText, executedFunctions);
-      }
-      
-      return naturalLanguageSent ? cleanText : '';
+      return text || '';
     } catch (error) {
       BotUtil.makeLog('error', 
         `工作流执行失败[${this.name}]: ${error.message}`, 
@@ -1699,7 +1677,7 @@ ${isGlobalTrigger ?
                 segments.push(seg.image(paramObj.file));
               }
               break;
-            // poke等其他不支持整合的CQ码已在parseFunctions中处理
+            // poke等其他不支持整合的CQ码：当前忽略或由下游按需扩展
           }
         }
       }

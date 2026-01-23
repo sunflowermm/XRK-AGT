@@ -90,6 +90,36 @@ export default class VolcengineLLMConfig extends ConfigBase {
             description: 'API 接口路径',
             default: '/chat/completions',
             component: 'Input'
+          },
+          enableTools: {
+            type: 'boolean',
+            label: '启用工具调用',
+            description: '开启后会自动注入 MCP 工具列表（无需手写 tools）',
+            default: true,
+            component: 'Switch'
+          },
+          toolChoice: {
+            type: 'string',
+            label: '工具选择模式',
+            description: 'tool_choice（auto/none/required），豆包支持',
+            default: 'auto',
+            component: 'Input'
+          },
+          parallelToolCalls: {
+            type: 'boolean',
+            label: '并行工具调用',
+            description: 'parallel_tool_calls（豆包支持）',
+            default: true,
+            component: 'Switch'
+          },
+          maxToolRounds: {
+            type: 'number',
+            label: '最大工具轮次',
+            description: '多轮 tool calling 的最大轮次',
+            min: 1,
+            max: 20,
+            default: 5,
+            component: 'InputNumber'
           }
         }
       }

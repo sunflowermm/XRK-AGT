@@ -52,7 +52,6 @@ stream/**
 !stream/device.js
 !stream/desktop.js
 !stream/memory.js
-!stream/todo.js
 !stream/tools.js
 !stream/database.js
 

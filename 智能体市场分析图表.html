@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能体市场分析图表</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+
+        .chart-container {
+            margin-bottom: 50px;
+            padding: 20px;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            position: relative;
+        }
+
+        .chart-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+            margin-bottom: 15px;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .download-btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .info-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .info-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .info-box li {
+            padding: 5px 0;
+            color: #555;
+        }
+
+        .info-box li:before {
+            content: "• ";
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        @media print {
+            .download-btn {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>智能体市场分析图表集</h1>
+
+        <!-- 图表1: 市场规模预测 -->
+        <div class="chart-container" id="chart1-container">
+            <div class="chart-title">全球与中国智能体市场规模预测（2024-2028）</div>
+            <div class="chart-wrapper">
+                <canvas id="marketSizeChart"></canvas>
+            </div>
+            <div class="btn-group">
+                <button class="download-btn" onclick="downloadChart('marketSizeChart', '市场规模预测.png')">
+                    📥 下载PNG
+                </button>
+                <button class="download-btn" onclick="downloadChartHighRes('marketSizeChart', '市场规模预测-高清.png')">
+                    📥 下载高清PNG
+                </button>
+            </div>
+        </div>
+
+        <!-- 图表2: 中小企业痛点分析 -->
+        <div class="chart-container" id="chart2-container">
+            <div class="chart-title">中小企业智能体转型痛点分析</div>
+            <div class="chart-wrapper">
+                <canvas id="painPointsChart"></canvas>
+            </div>
+            <div class="btn-group">
+                <button class="download-btn" onclick="downloadChart('painPointsChart', '中小企业痛点分析.png')">
+                    📥 下载PNG
+                </button>
+                <button class="download-btn" onclick="downloadChartHighRes('painPointsChart', '中小企业痛点分析-高清.png')">
+                    📥 下载高清PNG
+                </button>
+            </div>
+        </div>
+
+        <!-- 图表3: 政策支持时间线 -->
+        <div class="chart-container" id="chart3-container">
+            <div class="chart-title">智能体产业政策支持时间线</div>
+            <div class="chart-wrapper">
+                <canvas id="policyChart"></canvas>
+            </div>
+            <div class="btn-group">
+                <button class="download-btn" onclick="downloadChart('policyChart', '政策支持时间线.png')">
+                    📥 下载PNG
+                </button>
+                <button class="download-btn" onclick="downloadChartHighRes('policyChart', '政策支持时间线-高清.png')">
+                    📥 下载高清PNG
+                </button>
+            </div>
+        </div>
+
+        <!-- 图表4: 市场增长趋势对比 -->
+        <div class="chart-container" id="chart4-container">
+            <div class="chart-title">智能体市场增长率对比（年复合增长率）</div>
+            <div class="chart-wrapper">
+                <canvas id="growthRateChart"></canvas>
+            </div>
+            <div class="btn-group">
+                <button class="download-btn" onclick="downloadChart('growthRateChart', '市场增长率对比.png')">
+                    📥 下载PNG
+                </button>
+                <button class="download-btn" onclick="downloadChartHighRes('growthRateChart', '市场增长率对比-高清.png')">
+                    📥 下载高清PNG
+                </button>
+            </div>
+        </div>
+
+        <!-- 图表5: 应用场景分布 -->
+        <div class="chart-container" id="chart5-container">
+            <div class="chart-title">智能体应用场景分布</div>
+            <div class="chart-wrapper">
+                <canvas id="scenarioChart"></canvas>
+            </div>
+            <div class="btn-group">
+                <button class="download-btn" onclick="downloadChart('scenarioChart', '应用场景分布.png')">
+                    📥 下载PNG
+                </button>
+                <button class="download-btn" onclick="downloadChartHighRes('scenarioChart', '应用场景分布-高清.png')">
+                    📥 下载高清PNG
+                </button>
+            </div>
+        </div>
+
+        <!-- AI生成配图说明 -->
+        <div class="info-box">
+            <h3>🤖 AI生成配图需求清单</h3>
+            <ul>
+                <li><strong>背景装饰图1</strong>：科技感蓝色渐变背景，带粒子效果，尺寸1920x1080，透明或白色背景，用于PPT背景</li>
+                <li><strong>背景装饰图2</strong>：橙色科技网格背景，现代感设计，尺寸1920x1080，透明背景PNG格式</li>
+                <li><strong>图标集合</strong>：智能体相关图标（机器人、AI大脑、数据流、云服务），每个图标单独文件，透明背景PNG，尺寸512x512</li>
+                <li><strong>装饰元素</strong>：科技线条、数据可视化装饰元素，透明背景，尺寸随意，用于图表周围装饰</li>
+                <li><strong>标题背景</strong>：深蓝色科技感标题背景条，带光效，尺寸1920x200，透明背景PNG</li>
+                <li><strong>分割线装饰</strong>：蓝色和橙色渐变的科技感分割线，透明背景，宽度1920px，高度50px</li>
+            </ul>
+            <p style="margin-top: 10px; color: #666; font-size: 14px;">
+                <strong>提示</strong>：所有配图建议使用与图表一致的蓝色(#667eea, #4a90e2)和橙色(#ff6b6b, #ffa500)色系，保持整体视觉统一。
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // 配色方案（与PPT一致）
+        const colors = {
+            blue: '#4a90e2',      // 蓝色（全球市场）
+            orange: '#ff6b6b',    // 橙色（中国市场）
+            lightBlue: '#87ceeb',
+            lightOrange: '#ffa500',
+            gradientBlue: 'rgba(74, 144, 226, 0.2)',
+            gradientOrange: 'rgba(255, 107, 107, 0.2)'
+        };
+
+        // 图表1: 市场规模预测
+        const marketSizeCtx = document.getElementById('marketSizeChart').getContext('2d');
+        const marketSizeChart = new Chart(marketSizeCtx, {
+            type: 'line',
+            data: {
+                labels: ['2024', '2025', '2026', '2027', '2028'],
+                datasets: [{
+                    label: '全球市场($B)',
+                    data: [45, 60, 75, 90, 110],
+                    borderColor: colors.blue,
+                    backgroundColor: colors.gradientBlue,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 6,
+                    pointBackgroundColor: colors.blue,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }, {
+                    label: '中国市场($B)',
+                    data: [10, 15, 22, 28, 35],
+                    borderColor: colors.orange,
+                    backgroundColor: colors.gradientOrange,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 6,
+                    pointBackgroundColor: colors.orange,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            padding: 20
+                        }
+                    },
+                    title: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '市场规模 (十亿美元)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '年份',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+
+        // 图表2: 中小企业痛点分析
+        const painPointsCtx = document.getElementById('painPointsChart').getContext('2d');
+        const painPointsChart = new Chart(painPointsCtx, {
+            type: 'bar',
+            data: {
+                labels: ['算力成本高', '技术人才缺乏', '技术适配难', '业务流程复杂', '资金投入大'],
+                datasets: [{
+                    label: '痛点严重程度 (%)',
+                    data: [85, 78, 72, 68, 65],
+                    backgroundColor: [
+                        colors.blue,
+                        colors.orange,
+                        colors.lightBlue,
+                        colors.lightOrange,
+                        '#95a5a6'
+                    ],
+                    borderColor: [
+                        colors.blue,
+                        colors.orange,
+                        colors.lightBlue,
+                        colors.lightOrange,
+                        '#95a5a6'
+                    ],
+                    borderWidth: 2,
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: '严重程度 (%)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+
+        // 图表3: 政策支持时间线
+        const policyCtx = document.getElementById('policyChart').getContext('2d');
+        const policyChart = new Chart(policyCtx, {
+            type: 'bar',
+            data: {
+                labels: ['2024 Q1', '2024 Q2', '2024 Q3', '2024 Q4', '2025 Q1', '2025 Q2'],
+                datasets: [{
+                    label: '政策支持力度',
+                    data: [60, 70, 75, 85, 90, 95],
+                    backgroundColor: colors.blue,
+                    borderColor: colors.blue,
+                    borderWidth: 2,
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    annotation: {
+                        annotations: {
+                            line1: {
+                                type: 'line',
+                                yMin: 70,
+                                yMax: 70,
+                                borderColor: colors.orange,
+                                borderWidth: 2,
+                                borderDash: [5, 5],
+                                label: {
+                                    content: '2027年目标: 70%普及率',
+                                    enabled: true,
+                                    position: 'end'
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: '支持力度指数',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+
+        // 图表4: 市场增长率对比
+        const growthRateCtx = document.getElementById('growthRateChart').getContext('2d');
+        const growthRateChart = new Chart(growthRateCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['全球市场增长率', '中国市场增长率', '其他地区'],
+                datasets: [{
+                    data: [25, 30, 20],
+                    backgroundColor: [
+                        colors.blue,
+                        colors.orange,
+                        '#95a5a6'
+                    ],
+                    borderColor: '#fff',
+                    borderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'right',
+                        labels: {
+                            font: {
+                                size: 14
+                            },
+                            padding: 15
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // 图表5: 应用场景分布
+        const scenarioCtx = document.getElementById('scenarioChart').getContext('2d');
+        const scenarioChart = new Chart(scenarioCtx, {
+            type: 'radar',
+            data: {
+                labels: ['智能制造', '智能客服', '智能办公', '智能教育', '智能医疗', '智能金融'],
+                datasets: [{
+                    label: '应用成熟度',
+                    data: [85, 90, 75, 70, 65, 80],
+                    backgroundColor: colors.gradientBlue,
+                    borderColor: colors.blue,
+                    borderWidth: 3,
+                    pointBackgroundColor: colors.blue,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5
+                }, {
+                    label: '市场潜力',
+                    data: [90, 85, 80, 85, 90, 88],
+                    backgroundColor: colors.gradientOrange,
+                    borderColor: colors.orange,
+                    borderWidth: 3,
+                    pointBackgroundColor: colors.orange,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: {
+                                size: 14
+                            },
+                            padding: 20
+                        }
+                    }
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    }
+                }
+            }
+        });
+
+        // 下载图表函数
+        function downloadChart(canvasId, filename) {
+            const canvas = document.getElementById(canvasId);
+            const url = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = url;
+            link.click();
+        }
+
+        // 下载高清图表函数
+        function downloadChartHighRes(canvasId, filename) {
+            const canvas = document.getElementById(canvasId);
+            const chart = Chart.getChart(canvasId);
+            
+            // 保存原始尺寸
+            const originalWidth = canvas.width;
+            const originalHeight = canvas.height;
+            
+            // 设置高清尺寸（2倍）
+            const scale = 2;
+            canvas.width = originalWidth * scale;
+            canvas.height = originalHeight * scale;
+            
+            // 重新渲染图表
+            chart.resize();
+            
+            // 下载
+            setTimeout(() => {
+                const url = canvas.toDataURL('image/png', 1.0);
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = url;
+                link.click();
+                
+                // 恢复原始尺寸
+                canvas.width = originalWidth;
+                canvas.height = originalHeight;
+                chart.resize();
+            }, 100);
+        }
+
+        // 下载整个容器（包含标题和按钮区域）
+        function downloadFullContainer(containerId, filename) {
+            const container = document.getElementById(containerId);
+            html2canvas(container, {
+                backgroundColor: '#ffffff',
+                scale: 2,
+                logging: false
+            }).then(canvas => {
+                const url = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = url;
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>

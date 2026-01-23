@@ -149,23 +149,6 @@ export class InputValidator {
     }
   }
 
-  /**
-   * 验证工作流ID
-   */
-  static validateWorkflowId(workflowId) {
-    if (!workflowId || typeof workflowId !== 'string') {
-      throw new BotError('工作流ID必须是字符串', ErrorCodes.INVALID_INPUT);
-    }
-
-    if (!/^workflow_\d+_[a-z0-9]+$/.test(workflowId)) {
-      throw new BotError(
-        `无效的工作流ID格式: ${workflowId}`,
-        ErrorCodes.INVALID_INPUT
-      );
-    }
-
-    return workflowId;
-  }
 
   /**
    * 清理和验证文本输入

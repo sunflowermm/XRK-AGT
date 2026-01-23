@@ -41,15 +41,9 @@ frequencyPenalty: 0
 timeout: 360000
 
 # ----------------------------------------
-# 高级参数配置（可选）
+# Tool Calling（由系统自动注入 MCP tools，无需手写 tools 列表）
 # ----------------------------------------
-# 停止序列（字符串数组）
-# stop: []
-# 思考类型（用于推理模型）
-# thinkingType: null
-# 工具选择模式（auto、none 或对象）
-# toolChoice: null
-# 工具定义列表
-# tools: null
-# 响应格式（json_object 等）
-# response_format: null
+enableTools: true
+toolChoice: "auto"
+maxToolRounds: 5
+

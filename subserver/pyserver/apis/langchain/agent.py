@@ -2,12 +2,12 @@
 LangGraph-based agent runner.
 
 设计目标：
-- 兼容主服务端 OpenAI-兼容 v1 接口（不要求支持 tools/tool_calls）。
+- 兼容主服务端 OpenAI-兼容 v3 接口（不要求支持 tools/tool_calls）。
 - 使用 LangGraph 做“规划->调用工具->观察->再规划”的状态机编排（社区主流做法）。
 - 工具来源：主服务端 MCP（/api/mcp/tools + /api/mcp/tools/call）
 
 注意：
-- 因为主服务端 v1 目前不实现 OpenAI 的原生 tools 语义，这里采用“JSON 决策协议”：
+- 因为主服务端不要求在此处实现 OpenAI 的原生 tools 语义，这里采用“JSON 决策协议”：
   LLM 只输出 JSON：{"type":"tool","name":"x.y","args":{...}} 或 {"type":"final","final":"..."}
 """
 
@@ -125,7 +125,7 @@ def _validate_decision(obj: Dict[str, Any], tool_names: List[str]) -> Tuple[str,
 
 class AgentDeps:
     """依赖注入容器，用于 run_agent 函数。"""
-    def __init__(self, main_server_url: str, provider_or_model: str, temperature: float, max_tokens: int, max_steps: int, verbose: bool, use_tools: bool, get_mcp_tools: Any, call_mcp_tool: Any, timeout: int = 60):
+    def __init__(self, main_server_url: str, provider_or_model: str, temperature: float, max_tokens: int, max_steps: int, verbose: bool, use_tools: bool, get_mcp_tools: Any, call_mcp_tool: Any, timeout: int = 60, max_tools: int = 40):
         self.main_server_url = main_server_url
         self.provider_or_model = provider_or_model
         self.temperature = temperature
@@ -136,6 +136,7 @@ class AgentDeps:
         self.get_mcp_tools = get_mcp_tools
         self.call_mcp_tool = call_mcp_tool
         self.timeout = timeout
+        self.max_tools = max_tools
 
 async def run_agent(messages: list, deps: AgentDeps) -> str:
     question = _extract_text(messages)
@@ -146,6 +147,9 @@ async def run_agent(messages: list, deps: AgentDeps) -> str:
     if deps.use_tools:
         try:
             tools = _compact_tools(await deps.get_mcp_tools())
+            # 限制工具数量：保证低配快速响应、减少长prompt带来的延迟与幻觉
+            if deps.max_tools and isinstance(deps.max_tools, int) and deps.max_tools > 0:
+                tools = tools[:deps.max_tools]
         except Exception as e:
             logger.warning(f"获取MCP工具失败: {e}，继续执行但无工具可用")
             tools = []
@@ -154,7 +158,7 @@ async def run_agent(messages: list, deps: AgentDeps) -> str:
     # 配置 LLM 客户端，添加超时和错误处理
     # 注意：timeout参数应该是秒数，但ChatOpenAI可能期望的是float或int
     llm = ChatOpenAI(
-        base_url=f"{deps.main_server_url}/api/v1",
+        base_url=f"{deps.main_server_url}/api/v3",
         api_key="xrk-agt",
         model=deps.provider_or_model,
         temperature=deps.temperature,

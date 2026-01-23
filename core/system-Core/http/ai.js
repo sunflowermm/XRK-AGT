@@ -1,5 +1,7 @@
 import StreamLoader from '#infrastructure/aistream/loader.js';
 import cfg from '#infrastructure/config/config.js';
+import LLMFactory from '#factory/llm/LLMFactory.js';
+import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
@@ -16,11 +18,135 @@ function parseOptionalJson(raw) {
   }
 }
 
+async function handleChatCompletionsV3(req, res) {
+  const body = req.body || {};
+  const messages = Array.isArray(body.messages) ? body.messages : null;
+  if (!messages) {
+    return HttpResponse.validationError(res, 'messages 参数无效');
+  }
+
+  // v3 为“对外伪造的 OpenAI 兼容入口”，这里的 apiKey 是访问鉴权（Bot 启动生成的 key），不是厂商 apiKey。
+  const accessKey = (body.apiKey || '').toString().trim();
+
+  if (!accessKey || accessKey !== BotUtil.apiKey) {
+    return HttpResponse.unauthorized(res, 'apiKey 无效');
+  }
+
+  const streamFlag = Boolean(body.stream);
+
+  // /api/v3/chat/completions：对外提供“类 ChatGPT 协议”的统一 LLM 调用入口（给子服务端/生态使用）
+  // - 不走工作流/StreamLoader（避免子服务端->主服务端->子服务端递归链路）
+  // - 只按 cfg.aistream.llm.defaults / profiles 合并得到工厂参数
+  // - 约定：body.model 填运营商(provider)，其余字段自由覆盖配置；body.apiKey 仅用于访问鉴权
+  const llm = cfg.aistream?.llm || {};
+  const defaults = llm.defaults || {};
+  const profiles = llm.profiles || llm.models || {};
+
+  const providerKey = (body.model || '').toString().trim();
+  const profile = profiles[providerKey] || {};
+
+  const llmConfig = {
+    ...defaults,
+    ...profile,
+    ...(typeof body === 'object' ? body : {})
+  };
+
+  if (providerKey && LLMFactory.hasProvider(providerKey)) {
+    llmConfig.provider = providerKey;
+  }
+
+  // 清理协议字段，避免误入 LLM 参数
+  delete llmConfig.messages;
+  delete llmConfig.stream;
+  delete llmConfig.apiKey; // 访问鉴权字段，不允许覆盖厂商 apiKey（厂商 apiKey 只从配置读取）
+  // 重新补回配置内的厂商 apiKey（defaults/profile）
+  llmConfig.apiKey = (profile.apiKey || defaults.apiKey || '').toString().trim() || undefined;
+  const client = LLMFactory.createClient(llmConfig);
+
+  if (!streamFlag) {
+    const text = await client.chat(messages, llmConfig);
+    const now = Math.floor(Date.now() / 1000);
+    res.json({
+      id: `chatcmpl_${Date.now()}`,
+      object: 'chat.completion',
+      created: now,
+      model: llmConfig.provider || llmConfig.model || llmConfig.chatModel || 'unknown',
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: text || '' },
+          finish_reason: 'stop'
+        }
+      ],
+      usage: null
+    });
+    return;
+  }
+
+  // SSE（OpenAI chunk 格式）
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const now = Math.floor(Date.now() / 1000);
+  const id = `chatcmpl_${Date.now()}`;
+  await client.chatStream(messages, (delta) => {
+    res.write(
+      `data: ${JSON.stringify({
+        id,
+        object: 'chat.completion.chunk',
+        created: now,
+        model: llmConfig.provider || llmConfig.model || llmConfig.chatModel || 'unknown',
+        choices: [{ index: 0, delta: { content: delta || '' }, finish_reason: null }]
+      })}\n\n`
+    );
+  }, llmConfig);
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+
+function handleModelsV3(_req, res) {
+  const llm = cfg.aistream?.llm;
+  const defaults = llm?.defaults || {};
+  const profiles = llm?.profiles || llm?.models || {};
+  const data = Object.entries(profiles).map(([key, value]) => ({
+    id: value.model || defaults.model || key,
+    object: 'model',
+    owned_by: value.provider || defaults.provider || 'xrk-agt',
+    meta: {
+      key,
+      label: value.label || key,
+      description: value.description || '',
+      tags: value.tags || [],
+      baseUrl: value.baseUrl || defaults.baseUrl
+    }
+  }));
+
+  res.json({ object: 'list', data });
+}
+
 export default {
   name: 'ai-stream',
   dsc: 'AI 流式输出（SSE）',
   priority: 80,
   routes: [
+    /**
+     * OpenAI 兼容 Chat Completions（主服务端统一入口，v3）
+     *
+     * 注意：工具调用（tool calling）由 NodeJS LLM 工厂 & MCP 自动处理；
+     * 本接口返回的 message.content 为最终文本结果（不返回中间 tool_calls 细节）。
+     */
+    {
+      method: 'POST',
+      path: '/api/v3/chat/completions',
+      handler: HttpResponse.asyncHandler(handleChatCompletionsV3, 'ai.v3.chat.completions')
+    },
+    {
+      method: 'GET',
+      path: '/api/v3/models',
+      handler: HttpResponse.asyncHandler(handleModelsV3, 'ai.v3.models')
+    },
     {
       method: 'GET',
       path: '/api/ai/stream',
@@ -84,7 +210,6 @@ export default {
               res.write(`data: ${JSON.stringify({ delta, workflow: stream.name })}\n\n`);
             },
             {
-              enableFunctionCalling: true,
               context: executionContext
             }
           );

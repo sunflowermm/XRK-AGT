@@ -113,7 +113,7 @@ async def search_handler(request: Request):
     try:
         data = await request.json()
         query = data.get("query")
-        collection = data.get("collection", "default")
+        collection = data.get("collection") or config.get("vector.default_collection", "default")
         top_k = data.get("top_k", 5)
         
         if not query or not isinstance(query, str):
@@ -171,7 +171,7 @@ async def upsert_handler(request: Request):
     """向量入库接口"""
     try:
         data = await request.json()
-        collection = data.get("collection", "default")
+        collection = data.get("collection") or config.get("vector.default_collection", "default")
         documents = data.get("documents", [])
         
         if not documents or not isinstance(documents, list):
@@ -203,12 +203,22 @@ async def upsert_handler(request: Request):
         metadatas = [doc.get("metadata", {}) if isinstance(doc, dict) else {} 
                     for doc in documents]
         
-        coll.add(
-            embeddings=embeddings,
-            documents=texts,
-            ids=ids,
-            metadatas=metadatas
-        )
+        # 使用 upsert，避免重复 id 导致异常（更适合长期运行与增量更新）
+        if hasattr(coll, "upsert"):
+            coll.upsert(
+                embeddings=embeddings,
+                documents=texts,
+                ids=ids,
+                metadatas=metadatas
+            )
+        else:
+            # 兼容旧版本 chromadb
+            coll.add(
+                embeddings=embeddings,
+                documents=texts,
+                ids=ids,
+                metadatas=metadatas
+            )
         
         return {
             "success": True,
@@ -241,6 +251,17 @@ default = {
             "method": "POST",
             "path": "/api/vector/upsert",
             "handler": upsert_handler
+        },
+        {
+            "method": "GET",
+            "path": "/api/vector/health",
+            "handler": lambda _req: {
+                "success": True,
+                "vector_db": bool(get_vector_client()),
+                "embedding_model": bool(get_embedding_model()),
+                "persist_dir": str(resolve_path(config.get(\"vector.persist_dir\", \"data/subserver/vector_db\"))),
+                "model": config.get(\"vector.model\", \"paraphrase-multilingual-MiniLM-L12-v2\"),
+            }
         }
     ]
 }

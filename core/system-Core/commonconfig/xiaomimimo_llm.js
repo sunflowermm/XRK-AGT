@@ -123,6 +123,22 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             description: 'OpenAI 兼容聊天接口路径，默认为 /chat/completions',
             default: '/chat/completions',
             component: 'Input'
+          },
+          enableTools: {
+            type: 'boolean',
+            label: '启用工具调用',
+            description: '开启后会自动注入 MCP 工具列表（无需手写 tools）',
+            default: true,
+            component: 'Switch'
+          },
+          maxToolRounds: {
+            type: 'number',
+            label: '最大工具轮次',
+            description: '多轮 tool calling 的最大轮次',
+            min: 1,
+            max: 20,
+            default: 5,
+            component: 'InputNumber'
           }
         }
       }

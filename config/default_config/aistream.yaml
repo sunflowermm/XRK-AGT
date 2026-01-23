@@ -113,6 +113,11 @@ mcp:
   enabled: true
   # 是否自动从工作流中收集并注册MCP工具
   autoRegister: true
+  # 外部MCP连接（可选）：用于未来把外部MCP服务器的工具桥接进本系统
+  # 注意：这是扩展配置占位，具体桥接逻辑由后续实现决定
+  remote:
+    enabled: false
+    servers: []
 
 # ----------------------------------------
 # Python子服务端配置

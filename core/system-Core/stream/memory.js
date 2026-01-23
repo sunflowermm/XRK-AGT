@@ -104,10 +104,6 @@ export default class MemoryStream extends AIStream {
         const memories = await this.queryMemories(keyword, context);
         
         // 在工作流中记录笔记
-        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
-        if (workflowId && context.stream) {
-          await context.stream.storeNote(workflowId, `查询记忆 "${keyword}"，找到 ${memories.length} 条相关记忆`, 'memory', true);
-        }
 
         if (context.stream) {
           context.stream.context = context.stream.context || {};
@@ -165,10 +161,6 @@ export default class MemoryStream extends AIStream {
         const memories = await this.listMemories(context);
         
         // 在工作流中记录笔记
-        const workflowId = context.workflowId || (context.stream?.context?.workflowId);
-        if (workflowId && context.stream) {
-          await context.stream.storeNote(workflowId, `列出所有记忆，共 ${memories.length} 条`, 'memory', true);
-        }
 
         BotUtil.makeLog('info', `[${this.name}] 列出记忆，共 ${memories.length} 条`, 'MemoryStream');
 

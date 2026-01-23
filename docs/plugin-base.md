@@ -242,7 +242,7 @@ async test(e) {
     await chatStream.process(e, e.msg, {
       enableMemory: true,      // 启用记忆系统
       enableDatabase: true,   // 启用知识库
-      enableTodo: false       // 是否启用TODO工作流
+      // enableTodo 已移除（Node 多步工作流已删除）
     });
     // 注意：工作流内部已经发送了回复，不需要再次调用 reply()
   } catch (error) {
@@ -257,7 +257,7 @@ async complexTask(e) {
   
   await desktopStream.process(e, e.msg, {
     mergeStreams: ['tools'],  // 合并tools工作流
-    enableTodo: true,         // 启用TODO智能决策
+    // enableTodo 已移除（Node 多步工作流已删除）
     enableMemory: true,       // 启用记忆系统
     enableDatabase: true      // 启用知识库
   });
@@ -363,5 +363,5 @@ export default class MyPlugin extends plugin {
 ## 相关文档
 
 - **[插件加载器](plugins-loader.md)** - 插件自动加载和热重载机制
-- **[工作流系统完整文档](工作流系统完整文档.md)** - AI工作流详细文档
+- **[AIStream 文档](aistream.md)** - Node 侧单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南

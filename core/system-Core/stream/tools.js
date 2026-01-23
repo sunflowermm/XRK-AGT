@@ -265,38 +265,6 @@ export default class ToolsStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：记录笔记（执行操作，仅在工作流中可用）
-    this.registerFunction('note', {
-      description: '记录笔记到工作流',
-      prompt: `[笔记:content] - 记录笔记到工作流，例如：[笔记:重要信息]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[(?:笔记|note):([^\]]+)\]/gi;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const content = (match[1] || '').trim();
-          if (content && context.workflowId) {
-            functions.push({ type: 'note', params: { content } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
-      handler: async (params = {}, context = {}) => {
-        const { content } = params;
-        if (!content || !context.workflowId) return;
-
-        await this.storeNote(context.workflowId, content, 'note', true);
-        context.noteStored = true;
-      },
-      enabled: true
-    });
   }
 
   /**

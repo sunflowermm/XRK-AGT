@@ -43,3 +43,15 @@ presencePenalty: 0
 frequencyPenalty: 0
 # 请求超时时间（毫秒）
 timeout: 360000
+
+# ----------------------------------------
+# Tool Calling（由系统自动注入 MCP tools，无需手写 tools 列表）
+# ----------------------------------------
+# 是否启用工具调用（默认启用）
+enableTools: true
+# 工具选择模式：auto / none / required（豆包支持）
+toolChoice: "auto"
+# 是否允许并行工具调用（豆包支持）
+parallelToolCalls: true
+# 多轮工具调用最大轮次
+maxToolRounds: 5
