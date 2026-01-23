@@ -14,6 +14,7 @@ import Runtime from './runtime.js'
 import { segment } from '#oicq'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { EventDeduplicator, IntelligentCache, PluginMatcher } from '#utils/neural-algorithms.js'
+import { EventNormalizer } from '#utils/event-normalizer.js'
 
 global.plugin = plugin
 global.segment = segment
@@ -165,29 +166,28 @@ class PluginsLoader {
   }
 
   normalizeEventPayload(e) {
-    e.tasker = String(e.tasker || e.tasker_name || 'unknown').toLowerCase()
+    if (!e) return
     
-    // message数组标准化（EventNormalizer已处理，这里仅确保类型）
-    if (!Array.isArray(e.message)) {
-      e.message = e.message ? [e.message] : []
-    }
+    // 使用 EventNormalizer 统一标准化
+    EventNormalizer.normalizeBase(e, {
+      defaultPostType: e.message_type || e.notice_type || e.request_type || e.event_type || 'message',
+      defaultMessageType: e.group_id ? 'group' : 'private',
+      defaultUserId: e.user_id
+    })
     
-    // 初始化字段（msg由parseMessage重新构建，这里清空）
-    e.raw_message ||= ''
-    e.msg = '' // 清空，由parseMessage重新构建
-    if (!e.sender) e.sender = {}
+    // 标准化消息字段
+    EventNormalizer.normalizeMessage(e)
+    
+    // 标准化群组字段
+    EventNormalizer.normalizeGroup(e)
+    
+    // 初始化扩展字段（msg由parseMessage重新构建，这里清空）
+    e.msg = ''
     e.img = []
     e.video = []
     e.audio = []
-
-    // 标准化post_type和message_type
-    if (!e.post_type) {
-      e.post_type = e.message_type || e.notice_type || e.request_type || e.event_type || 'message'
-    }
-    if (e.post_type === 'message' && !e.message_type) {
-      e.message_type = e.group_id ? 'group' : 'private'
-    }
-
+    
+    // 提取纯文本
     e.plainText = this.extractMessageText(e)
   }
 
@@ -221,6 +221,8 @@ class PluginsLoader {
   }
 
   setupEventProps(e) {
+    if (!e) return
+    
     // sender信息已由EventNormalizer和增强插件处理，这里仅补充device_name
     if (!e.sender) e.sender = {}
     if (!e.sender.nickname && e.device_name) {
@@ -228,9 +230,10 @@ class PluginsLoader {
       e.sender.card = e.sender.card || e.sender.nickname
     }
     
-    // logText由增强插件优先设置
+    // logText由增强插件优先设置，这里作为兜底
     if (!e.logText || e.logText.includes('未知')) {
-      e.logText = `[${e.tasker || '未知'}][${e.user_id || '未知'}]`
+      const scope = e.group_id ? `group:${e.group_id}` : (e.user_id || '未知')
+      e.logText = `[${e.tasker || '未知'}][${scope}]`
     }
   }
 
@@ -284,14 +287,24 @@ class PluginsLoader {
   }
 
   async runPlugins(e, isExtended = false) {
+    if (!e) return false
+    
     try {
+      // 扩展插件（enhancer）在 isExtended=true 时执行
+      // 普通插件在 isExtended=false 时执行，且排除 enhancer
       const plugins = await this.initPlugins(e, isExtended, !isExtended ? (meta) => meta.isEnhancer !== true : null)
 
-      if (isExtended) return await this.processPlugins(plugins, e, true)
+      // 扩展插件直接处理规则
+      if (isExtended) {
+        return await this.processPlugins(plugins, e, true)
+      }
 
+      // 普通插件：先执行 accept 检查
       for (const plugin of plugins) {
         try {
           const res = await plugin.accept(e)
+          
+          // 处理需要重新解析消息的情况
           if (e._needReparse) {
             delete e._needReparse
             e.img = []
@@ -300,7 +313,11 @@ class PluginsLoader {
             e.msg = ''
             await this.parseMessage(e)
           }
+          
+          // 如果插件返回 'return'，停止处理
           if (res === 'return') return true
+          
+          // 如果插件返回 false，跳过该插件
           if (res === false) continue
         } catch (error) {
           errorHandler.handle(error, { context: 'runPlugins', pluginName: plugin.name, code: ErrorCodes.PLUGIN_EXECUTION_FAILED }, true)
@@ -308,11 +325,15 @@ class PluginsLoader {
         }
       }
 
+      // 处理上下文和限流（非设备事件）
       if (!e.isDevice) {
         if (await this.handleContext(plugins, e)) return true
-        if (!plugins.some(p => p.bypassThrottle === true)) this.setLimit(e)
+        if (!plugins.some(p => p.bypassThrottle === true)) {
+          this.setLimit(e)
+        }
       }
 
+      // 处理插件规则
       return await this.processPlugins(plugins, e, false)
     } catch (error) {
       errorHandler.handle(error, { context: 'runPlugins', code: ErrorCodes.PLUGIN_EXECUTION_FAILED }, true)
@@ -322,19 +343,28 @@ class PluginsLoader {
   }
 
   async initPlugins(e, isExtended = false, filterFn = null) {
+    if (!e) return []
+    
     const pluginList = isExtended ? this.extended : this.priority
     const activePlugins = []
 
     for (const p of pluginList) {
+      // 跳过无效插件
       if (!p?.class || (filterFn && !filterFn(p))) continue
 
       try {
+        // 创建插件实例
         const plugin = new p.class(e)
         plugin.e = e
+        
+        // 应用规则模板
         this.applyRuleTemplates(plugin, p.ruleTemplates)
+        
+        // 包装 accept 方法（包含适配器检查）
         plugin.accept = this.wrapPluginAccept(plugin, p)
         plugin.bypassThrottle = p.bypassThrottle
 
+        // 检查插件是否启用且事件匹配
         if (this.checkDisable(plugin) && this.filtEvent(e, plugin)) {
           activePlugins.push(plugin)
         }
@@ -387,35 +417,46 @@ class PluginsLoader {
   }
 
   async processRules(plugins, e) {
-    if (!Array.isArray(plugins)) return false
+    if (!Array.isArray(plugins) || !e) return false
 
     for (const plugin of plugins) {
-      if (!plugin?.rule) continue
+      if (!plugin?.rule || !Array.isArray(plugin.rule)) continue
 
-      for (const v of plugin.rule) {
-        if (v.event && !this.filtEvent(e, v)) continue
-        if (!this.pluginMatcher.matchRule(v, e).matched) continue
+      for (const rule of plugin.rule) {
+        // 检查事件类型匹配
+        if (rule.event && !this.filtEvent(e, rule)) continue
+        
+        // 检查规则匹配（使用智能匹配器）
+        const matchResult = this.pluginMatcher.matchRule(rule, e)
+        if (!matchResult.matched) continue
 
-        e.logFnc = `[${plugin.name}][${v.fnc}]`
-        if (v.log !== false) {
+        // 设置日志函数标识
+        e.logFnc = `[${plugin.name}][${rule.fnc}]`
+        
+        // 记录日志（如果未禁用）
+        if (rule.log !== false) {
           logger.info(`${e.logFnc}${e.logText} ${lodash.truncate(e.msg || '', { length: 100 })}`)
         }
 
-        if (!this.filtPermission(e, v)) return true
+        // 检查权限
+        if (!this.filtPermission(e, rule)) return true
 
+        // 执行插件函数
         try {
           const start = Date.now()
-          if (typeof plugin[v.fnc] === 'function') {
-            const res = await plugin[v.fnc](e)
+          const fnc = plugin[rule.fnc]
+          
+          if (typeof fnc === 'function') {
+            const res = await fnc.call(plugin, e)
             if (res !== false) {
-              if (v.log !== false) {
+              if (rule.log !== false) {
                 logger.mark(`${e.logFnc}${e.logText} 处理完成 ${Date.now() - start}ms`)
               }
               return true
             }
           }
         } catch (error) {
-          errorHandler.handle(error, { context: 'processRules', pluginName: plugin.name, rule: v.fnc })
+          errorHandler.handle(error, { context: 'processRules', pluginName: plugin.name, rule: rule.fnc })
         }
       }
     }
@@ -466,10 +507,14 @@ class PluginsLoader {
   }
 
   initEvent(e) {
+    if (!e) return
+    
+    // 确保 self_id 存在
     if (!e.self_id) {
       e.self_id = e.device_id || (e.tasker && e.tasker !== 'unknown' ? e.tasker : Bot.uin?.[0])
     }
 
+    // 确保 bot 对象存在
     if (!e.bot) {
       const identity = e.device_id || e.self_id
       Object.defineProperty(e, 'bot', {
@@ -479,50 +524,70 @@ class PluginsLoader {
       })
     }
 
+    // 确保 event_id 存在（如果 EventNormalizer 未设置）
     if (!e.event_id) {
       const postType = e.post_type || 'unknown'
       const randomId = Math.random().toString(36).substr(2, 9)
       e.event_id = `${e.tasker || 'event'}_${postType}_${Date.now()}_${randomId}`
     }
 
+    // 统计接收事件
     this.count(e, 'receive')
   }
 
   async preCheck(e, hasBypassPlugin = false) {
+    if (!e) return false
+    
     try {
-      if (e.isDevice) return true
-      if ((e.tasker || '').toLowerCase() === 'stdin') return true
-
-      const botUin = e.self_id || Bot.uin?.[0]
-      // 关键修复：不同适配器/平台可能把ID解析成 string/number，严格相等会失效
-      // 这里统一用字符串比较，确保 ignore_self 在 Linux/Windows 行为一致
-      const sameId = String(e.user_id ?? '') === String(botUin ?? '')
-      if (cfg.agt?.system?.ignoreSelf !== false && sameId) {
-        return false
+      // 设备和stdin事件跳过检查
+      if (e.isDevice || (e.tasker || '').toLowerCase() === 'stdin') {
+        return true
       }
 
+      const botUin = e.self_id || Bot.uin?.[0]
+      
+      // 检查是否忽略自己发送的消息
+      if (cfg.agt?.system?.ignoreSelf !== false) {
+        const sameId = String(e.user_id ?? '') === String(botUin ?? '')
+        if (sameId) return false
+      }
+
+      // 开机命令特殊处理
       if (/^#开机$/.test(e.plainText || '')) {
         const masterQQ = cfg.master?.[e.self_id] || cfg.masterQQ || []
         const masters = Array.isArray(masterQQ) ? masterQQ : [masterQQ]
-        if (masters.some(id => String(e.user_id) === String(id))) return true
+        if (masters.some(id => String(e.user_id) === String(id))) {
+          return true
+        }
       }
 
+      // 检查关机状态
       const shutdownStatus = await redis.get(`Yz:shutdown:${botUin}`)
       if (shutdownStatus === 'true') {
-        logger.debug(`[关机状态] 忽略消息: ${msg}`)
+        logger.debug(`[关机状态] 忽略消息: ${e.plainText || ''}`)
         return false
       }
 
+      // 检查黑白名单（统一字符串比较）
       const chatbot = cfg.chatbot || {}
-      const blacklist = chatbot.blacklist || {}
-      const whitelist = chatbot.whitelist || {}
+      const { blacklist = {}, whitelist = {} } = chatbot
       const groupId = String(e.group_id || '')
       const userId = String(e.user_id || '')
       
-      if (blacklist.groups?.includes(groupId) || blacklist.qq?.includes(userId)) return false
-      if (whitelist.groups?.length && !whitelist.groups.includes(groupId)) return false
-      if (whitelist.qq?.length && !whitelist.qq.includes(userId)) return false
+      // 黑名单检查
+      if (blacklist.groups?.includes(groupId) || blacklist.qq?.includes(userId)) {
+        return false
+      }
+      
+      // 白名单检查（如果配置了白名单）
+      if (whitelist.groups?.length && !whitelist.groups.includes(groupId)) {
+        return false
+      }
+      if (whitelist.qq?.length && !whitelist.qq.includes(userId)) {
+        return false
+      }
 
+      // bypass插件跳过限流检查
       if (hasBypassPlugin) return true
 
       return this.checkLimit(e)
@@ -951,13 +1016,22 @@ class PluginsLoader {
 
 
   checkDisable(p) {
-    if (!p?.e) return !!p
+    if (!p) return false
+    
+    // 如果没有事件对象，直接返回插件本身的有效性
+    if (!p.e) return !!p
+    
+    // 设备和私聊事件不检查群组配置
     if (p.e.isDevice || !p.e.group_id) return true
 
+    // 检查群组配置
     const groupCfg = cfg.getGroup(p.e.group_id) || {}
     const { disable = [], enable = [] } = groupCfg
 
+    // 如果在禁用列表中，返回 false
     if (disable.includes(p.name)) return false
+    
+    // 如果配置了启用列表，检查是否在列表中
     return enable.length === 0 || enable.includes(p.name)
   }
 
@@ -1202,12 +1276,22 @@ class PluginsLoader {
     }
   }
 
+  /**
+   * 热更新插件
+   * @param {string} key - 插件文件名（不含扩展名）
+   */
   async changePlugin(key) {
+    if (!key) {
+      logger.error('热更新插件: 缺少插件key')
+      return
+    }
+    
     try {
       const { FileLoader } = await import('#utils/file-loader.js')
       const pluginDirs = await FileLoader.getCoreSubDirs('plugin')
       let pluginPath = null
       
+      // 查找插件文件
       for (const pluginDir of pluginDirs) {
         const filePath = path.join(pluginDir, `${key}.js`)
         if (existsSync(filePath)) {
@@ -1221,20 +1305,26 @@ class PluginsLoader {
         return
       }
       
+      // 使用时间戳强制重新加载
       const timestamp = moment().format('x')
       const relativePath = path.relative(paths.root, pluginPath)
       let app = await import(`../../../${relativePath.replace(/\\/g, '/')}?${timestamp}`)
       app = app.apps ? { ...app.apps } : app
 
-      Object.values(app).forEach(p => {
-        if (!p?.prototype) return
+      // 更新插件元数据
+      let updatedCount = 0
+      for (const p of Object.values(app)) {
+        if (!p?.prototype) continue
+        
         const plugin = new p()
         const ruleTemplates = this.prepareRuleTemplates(plugin.rule || [])
-        this.applyRuleTemplates(plugin, ruleTemplates)
         const priority = plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50)
         const targetArray = plugin.priority === 'extended' ? this.extended : this.priority
+        
+        // 查找并更新插件
         const index = targetArray.findIndex(item => item.key === key && item.name === plugin.name)
-        if (index === -1) return
+        if (index === -1) continue
+        
         targetArray[index] = {
           ...targetArray[index],
           class: p,
@@ -1245,12 +1335,18 @@ class PluginsLoader {
           ruleTemplates,
           bypassRules: this.collectBypassRules(ruleTemplates)
         }
-      })
+        updatedCount++
+      }
 
-      this.sortPlugins()
-      this.identifyDefaultMsgHandlers()
-      logger.mark(`[热更新插件][${key}]`)
+      if (updatedCount > 0) {
+        this.sortPlugins()
+        this.identifyDefaultMsgHandlers()
+        logger.mark(`[热更新插件][${key}] 更新了 ${updatedCount} 个插件实例`)
+      } else {
+        logger.warn(`[热更新插件][${key}] 未找到匹配的插件实例`)
+      }
     } catch (error) {
+      errorHandler.handle(error, { context: 'changePlugin', pluginKey: key, code: ErrorCodes.PLUGIN_LOAD_FAILED }, true)
       logger.error(`热更新插件错误: ${key}`, error)
     }
   }

@@ -12,19 +12,32 @@ export default class EventListener {
     this.plugins = PluginsLoader
   }
   
+  /**
+   * 执行事件处理
+   * @param {Object} e - 事件对象
+   */
   async execute(e) {
+    if (!e) return
     this.plugins.deal(e)
   }
 
+  /**
+   * 获取监听器信息
+   * @returns {Object} 监听器描述信息
+   */
   getInfo() {
     return {
       prefix: this.prefix,
       event: this.event,
       once: this.once
-    };
+    }
   }
 
+  /**
+   * 获取描述符（别名方法）
+   * @returns {Object} 监听器描述信息
+   */
   getDescriptor() {
-    return this.getInfo();
+    return this.getInfo()
   }
 }

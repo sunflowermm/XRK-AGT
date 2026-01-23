@@ -1,7 +1,8 @@
 import BotUtil from '#utils/botutil.js'
+import { EventNormalizer } from '#utils/event-normalizer.js'
 
 /**
- * Tasker 基类（原适配器 Adapter 基类）
+ * Tasker 基类
  * 提供标准化的 Bot 实例创建和事件处理
  */
 export class TaskerBase {
@@ -18,6 +19,10 @@ export class TaskerBase {
    */
   static createBotInstance(options, bot) {
     const { id, name, type, info = {}, tasker } = options
+    
+    if (!id || !bot) {
+      throw new Error('TaskerBase.createBotInstance: 缺少必要参数')
+    }
     
     // 确保uin列表包含此Bot
     if (!bot.uin.includes(id)) {
@@ -63,10 +68,6 @@ export class TaskerBase {
       _initializing: false
     }
     
-    // tasker 特定属性由各自实现自行设置，这里不处理
-    // OneBot 特定方法在 onebot.js 中注册
-    // Device 和 Stdin 特定属性由对应 tasker 设置
-    
     // 保存到Bot实例
     bot[id] = botInstance
     
@@ -74,8 +75,8 @@ export class TaskerBase {
   }
   
   /**
-   * 创建标准化的事件对象（仅包含所有 tasker 通用的基础属性）
-   * tasker 特定的属性（如 isGroup、isPrivate、friend、group 等）由增强插件处理
+   * 创建标准化的事件对象
+   * 使用 EventNormalizer 统一标准化逻辑
    * 
    * @param {Object} options - 事件选项
    * @param {string} options.post_type - 事件类型 (message/notice/request)
@@ -88,45 +89,59 @@ export class TaskerBase {
   static createEvent(options, bot) {
     const { post_type, tasker_type, self_id, data = {} } = options
     
+    if (!bot) {
+      throw new Error('TaskerBase.createEvent: bot 参数必需')
+    }
+    
     // 获取Bot实例
     const botInstance = bot[self_id] || bot
     
-    // 创建标准化事件对象（只包含通用属性）
+    // 创建基础事件对象
     const event = {
       // 基础属性
       post_type: post_type || 'message',
-      self_id,
+      self_id: self_id || botInstance.self_id,
       time: Math.floor(Date.now() / 1000),
-      event_id: `${tasker_type || 'event'}_${post_type || 'message'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       
-      // tasker 信息（通用）
+      // tasker 信息
       tasker: tasker_type || '',
       
       // Bot实例
       bot: botInstance,
       
-      // 消息相关（通用，所有适配器都可能有的）
+      // 消息相关
       message: data.message || [],
       raw_message: data.raw_message || '',
       msg: '',
       
-      // 用户相关（通用）
+      // 用户相关
       user_id: data.user_id || null,
       sender: data.sender || {},
       
-      // 群组相关（通用字段，不设置isGroup/isPrivate，由增强插件处理）
+      // 群组相关
       group_id: data.group_id || null,
       
-      // 设备相关（通用字段）
+      // 设备相关
       device_id: data.device_id || null,
       device_name: data.device_name || null,
       event_type: data.event_type || post_type,
       
-      // 回复方法（通用，由bot.js的prepareEvent设置）
-      reply: null,
-      
       // 原始数据
       ...data
+    }
+    
+    // 使用 EventNormalizer 统一标准化
+    EventNormalizer.normalize(event, {
+      defaultPostType: post_type,
+      defaultMessageType: data.message_type,
+      defaultSubType: data.sub_type,
+      defaultUserId: data.user_id
+    })
+    
+    // 确保 event_id 存在
+    if (!event.event_id) {
+      const randomId = Math.random().toString(36).substr(2, 9)
+      event.event_id = `${tasker_type || 'event'}_${event.post_type}_${Date.now()}_${randomId}`
     }
     
     return event
@@ -139,6 +154,8 @@ export class TaskerBase {
    * @param {Object} bot - Bot主实例
    */
   static emitEvent(adapter_type, event, bot) {
+    if (!event || !bot) return
+    
     const { post_type, event_type } = event
     
     // 构建事件名称
