@@ -181,19 +181,19 @@ export default class VolcengineLLMClient {
     let round = 0;
 
     while (round < maxToolRounds) {
-      const response = await fetch(this.endpoint, {
-        method: 'POST',
-        headers: this.buildHeaders(overrides.headers),
+    const response = await fetch(this.endpoint, {
+      method: 'POST',
+      headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(this.buildBody(currentMessages, { ...overrides })),
-        signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
-      });
+      signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(`火山引擎 LLM 请求失败: ${response.status} ${response.statusText}${errorText ? ` | ${errorText}` : ''}`);
-      }
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`火山引擎 LLM 请求失败: ${response.status} ${response.statusText}${errorText ? ` | ${errorText}` : ''}`);
+    }
 
-      const result = await response.json();
+    const result = await response.json();
       const choice = result.choices?.[0];
       if (!choice) break;
 

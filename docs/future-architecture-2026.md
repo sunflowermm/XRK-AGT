@@ -697,88 +697,66 @@ class ApiLoader:
 
 以 `xxx.js` 插件为例，展示插件如何调用工作流系统：
 
-**文件**: `core/plugin/example/xxx.js`
+**文件**: `core/system-Core/stream/desktop.js`（示例伪代码）
 
 ```javascript
-import StreamLoader from '#infrastructure/aistream/loader.js';
+export default class desktopStream extends AIStream {
+  async execute(e, question, config) {
+    // 1. 构建上下文（system + user）
+    const messages = await this.buildChatContext(e, question);
+    const enhanced = await this.buildEnhancedContext(e, question, messages);
 
-export default class xxx extends plugin {
-  constructor() {
-    super({
-      name: "XXX工作流",
-      event: "message",
-      priority: 1000,
-      rule: [
-        {
-          reg: "^xxx",
-          fnc: "triggerWorkflow",
-          permission: 'master'
-        }
-      ]
-    });
-  }
+    // 2. 调用 AI（优先子服务端 LangChain，失败回退到 LLM 工厂）
+    const text = await this.callAI(enhanced, config);
 
-  async triggerWorkflow() {
-    const question = this.e.msg.trim().substring(3).trim();
-    if (!question) {
-      return this.reply('请输入要询问的内容');
+    // 3. 发送回复 & 记忆
+    if (text) {
+      await this.sendMessages(e, text);
+      await this.storeMessageWithEmbedding(e.group_id || e.user_id, {
+        role: 'assistant',
+        content: text
+      });
     }
-
-    // 1. 获取工作流实例
-    const stream = StreamLoader.getStream('desktop');
-    if (!stream) return this.reply('工作流未加载');
-
-    // 2. 调用工作流的process方法
-    await stream.process(this.e, question, {
-      // enableTodo 已移除（Node 多步工作流已删除）
-      enableMemory: true,      // 启用记忆系统
-      enableDatabase: true     // 启用知识库
-    });
-
-    return true;
   }
 }
 ```
 
-#### 3.2 插件调用工作流的流程图
+#### 3.2 插件调用 AIStream 的流程图（单轮 + MCP 工具，智能体在 Python）
 
 ```mermaid
 sequenceDiagram
     participant User as 用户
-    participant Plugin as xxx.js插件
-    participant StreamLoader as StreamLoader
-    participant Workflow as desktop工作流
-    participant Python as Python服务<br/>RAG/LLM
+    participant Plugin as xxx.js 插件
+    participant Stream as desktop Stream<br/>(AIStream)
+    participant Py as Python 子服务端<br/>LangChain/LangGraph
+    participant LLM as LLM 工厂<br/>v3 + MCP
     
-    User->>Plugin: 发送消息<br/>"xxx查询股票"
-    Plugin->>Plugin: 规则匹配<br/>reg: "^xxx"
-    Plugin->>Plugin: 提取问题<br/>"查询股票"
-    Plugin->>StreamLoader: getStream<br/>('desktop')
-    StreamLoader-->>Plugin: 返回工作流实例
-    Plugin->>Workflow: stream.process<br/>(e, question, options)
+    User->>Plugin: 发送消息<br/>"xxx 查询股票"
+    Plugin->>Plugin: 规则匹配 & 提取问题
+    Plugin->>Stream: stream.execute(e, question, options)
     
-    Note over Workflow: 工作流内部处理
-    Workflow->>Workflow: 构建系统提示词
-    Workflow->>Workflow: 合并辅助工作流<br/>memory/database
-    Workflow->>Workflow: 构建函数提示词
-    Workflow->>Python: 调用LLM<br/>生成回复
-    Python-->>Workflow: 返回AI回复
-    Workflow->>Workflow: 解析函数调用<br/>如[股票:688270]
-    Workflow->>Workflow: 执行函数
-    Workflow->>Python: 调用RAG查询<br/>如需要
-    Python-->>Workflow: 返回RAG结果
-    Workflow->>User: 发送最终回复
-    
-    Note over Plugin: 工作流内部已发送回复<br/>插件无需再次调用reply()
+    Note over Stream: Node 侧单次对话 + 上下文增强
+    Stream->>Stream: buildChatContext / buildEnhancedContext
+    Stream->>Py: 可选：调用 /api/langchain/chat<br/>（需要智能体/多步推理时）
+    alt 子服务端可用
+        Py->>LLM: POST /api/v3/chat/completions<br/>（伪 OpenAI 协议）
+        LLM-->>Py: 返回最终文本
+        Py-->>Stream: 返回最终文本
+    else 子服务端不可用
+        Stream->>LLM: 直接调用 LLMFactory.chat / chatStream
+        LLM-->>Stream: 返回最终文本
+    end
+    Note over LLM: 内部完成 MCP 工具注入与 tool_calls 多轮执行
+    Stream->>User: sendMessages(e, text)
+    Stream->>Stream: storeMessageWithEmbedding<br/>写入记忆/向量
 ```
 
 #### 3.3 关键要点
 
-1. **插件获取工作流**：通过 `StreamLoader.getStream(name)` 获取工作流实例
-2. **调用process方法**：使用 `stream.process(e, question, options)` 统一接口
-3. **自动合并辅助工作流**：通过 `enableMemory`、`enableDatabase` 等选项自动合并
-4. **回复机制**：工作流内部已处理回复发送，插件无需再次调用 `reply()`
-5. **错误处理**：插件应检查工作流是否存在，并提供友好的错误提示
+1. **插件只关心 `stream.execute`**：不再操心多步工作流、TODO、笔记等概念
+2. **工具调用统一走 LLM 工厂 + MCP**：Node 侧不再解析“文本函数调用”，tool_calls 由厂商协议负责
+3. **多步智能体/RAG 统一放在 Python 子服务端**：Node 只跑“单轮 + MCP 工具”，复杂编排走 `/api/langchain/chat`
+4. **v3 入口职责清晰**：`/api/v3/chat/completions` 仅做“伪 OpenAI” 转发 + 鉴权，不承载业务逻辑
 
 #### 3.4 插件调用Python服务的示例
 
