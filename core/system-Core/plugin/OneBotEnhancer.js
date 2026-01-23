@@ -5,74 +5,31 @@ import EnhancerBase from '#infrastructure/plugins/enhancer-base.js'
 export default class OneBotEnhancer extends EnhancerBase {
   constructor() {
     super({
-      name: 'OneBot事件增强',
+      name: 'OneBot',
       dsc: '为OneBot事件挂载特定属性',
-      event: 'onebot.*'
+      event: 'onebot.*',
+      tasker: 'onebot',
+      priority: 100 // 设置较高优先级，确保先执行
     })
   }
 
   isTargetEvent(e, taskerName) {
-    if (taskerName.includes('onebot')) return true
-    if (e.isOneBot && !['stdin', 'api', 'device'].includes(taskerName)) return true
-    return false
-  }
-
-  isOneBotEvent(taskerName, e) {
-    if (taskerName.includes('onebot')) return true
-    if (e.isOneBot && !['stdin', 'api', 'device'].includes(taskerName)) return true
-    return false
+    return taskerName.includes('onebot') && !['stdin', 'api', 'device'].includes(taskerName)
   }
 
   enhanceEvent(e) {
-    if (!e.bot) return
+    super.enhanceEvent(e) // 设置 isOnebot, tasker 和 logText
 
     e.isPrivate = e.message_type === 'private' || (!e.group_id && e.user_id)
     e.isGroup = e.message_type === 'group' || !!e.group_id
 
-    if (e.user_id && !e.friend && e.bot.pickFriend) {
-      try {
-        Object.defineProperty(e, "friend", {
-          get() { return e.bot.pickFriend(e.user_id) },
-          configurable: true,
-          enumerable: false
-        })
-      } catch (error) {
-        // 静默失败
-      }
-    }
+    // 绑定机器人实体
+    this.bindBotEntities(e)
 
-    if (e.group_id && !e.group && e.bot.pickGroup) {
-      try {
-        Object.defineProperty(e, "group", {
-          get() { return e.bot.pickGroup(e.group_id) },
-          configurable: true,
-          enumerable: false
-        })
-        
-        if (!e.group_name && e.group?.name) {
-          e.group_name = e.group.name
-        } else if (!e.group_name && e.group?.group_name) {
-          e.group_name = e.group.group_name
-        }
-      } catch (error) {
-        // 静默失败
-      }
-    }
-
-    if (e.group_id && e.user_id && !e.member && e.bot.pickMember) {
-      try {
-        Object.defineProperty(e, "member", {
-          get() { return e.bot.pickMember(e.group_id, e.user_id) },
-          configurable: true,
-          enumerable: false
-        })
-      } catch (error) {
-        // 静默失败
-      }
-    }
-
+    // 处理@消息
     this.processAtProperties(e)
 
+    // 确保sender信息
     if (e.user_id) {
       if (!e.sender) e.sender = { user_id: e.user_id }
       
@@ -92,6 +49,8 @@ export default class OneBotEnhancer extends EnhancerBase {
   }
 
   setupReply(e) {
+    if (e.reply) return // 如果已经设置过reply，则跳过
+
     let sendMethod = null
     if (e.group?.sendMsg) {
       sendMethod = e.group.sendMsg.bind(e.group)
@@ -220,14 +179,12 @@ export default class OneBotEnhancer extends EnhancerBase {
         }
       }
       
-      const isPrivate =
-        e.isPrivate ||
+      const isPrivate = e.isPrivate ||
         (!e.group_id && (e.message_type === 'private' || (!e.message_type && !e.group_id)))
 
       if (disablePrivate && isPrivate && !e.isMaster) {
         const text = String(e.msg || e.plainText || e.raw_message || '')
-        const adopted =
-          Array.isArray(disableAdopt) &&
+        const adopted = Array.isArray(disableAdopt) &&
           disableAdopt.filter(Boolean).some((key) => text.includes(String(key)))
 
         if (!adopted) {

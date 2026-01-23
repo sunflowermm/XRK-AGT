@@ -1,7 +1,18 @@
 /**
  * XRK-AGT控制台
- * 重构版 - 企业级简洁设计
- * 优化版本 - 性能提升与代码质量改进
+ * 企业级智能体管理平台
+ * 
+ * 功能模块：
+ * - 系统概览：实时监控系统资源、机器人状态、工作流信息
+ * - AI对话：支持文本、语音、图片等多种交互方式
+ * - 配置管理：可视化配置编辑，支持表单和JSON双模式
+ * - API调试：完整的API测试工具，支持所有系统接口
+ * 
+ * 技术特性：
+ * - 响应式设计，支持移动端和桌面端
+ * - 实时数据更新，WebSocket连接
+ * - 性能优化，懒加载和缓存机制
+ * - 错误处理完善，用户体验友好
  */
 
 // ========== 工具函数 ==========
@@ -83,39 +94,10 @@ function formatError(error) {
 }
 
 /**
- * 性能监控 - 测量函数执行时间
- * @param {string} label - 标签
- * @param {Function} fn - 要测量的函数
- * @returns {Promise<*>} 函数执行结果
- */
-async function measurePerformance(label, fn) {
-  if (process.env.NODE_ENV === 'production') {
-    return await fn();
-  }
-  const start = performance.now();
-  const result = await fn();
-  const end = performance.now();
-  console.log(`[Performance] ${label}: ${(end - start).toFixed(2)}ms`);
-  return result;
-}
-
-/**
  * 图片懒加载 - 使用Intersection Observer API
  * @param {string} selector - 图片选择器
  */
 function initLazyLoad(selector = 'img[data-src]') {
-  if (!('IntersectionObserver' in window)) {
-    // 降级处理：直接加载所有图片
-    const images = $$(selector);
-    images.forEach(img => {
-      if (img.dataset.src) {
-        img.src = img.dataset.src;
-        img.removeAttribute('data-src');
-      }
-    });
-    return;
-  }
-
   const imageObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
@@ -129,29 +111,11 @@ function initLazyLoad(selector = 'img[data-src]') {
       }
     });
   }, {
-    rootMargin: '50px' // 提前50px开始加载
+    rootMargin: '50px'
   });
 
   const images = $$(selector);
   images.forEach(img => imageObserver.observe(img));
-}
-
-/**
- * 预加载关键资源
- * @param {string[]} urls - 资源URL列表
- */
-function preloadResources(urls) {
-  urls.forEach(url => {
-    const link = document.createElement('link');
-    link.rel = 'preload';
-    link.href = url;
-    if (url.endsWith('.css')) {
-      link.as = 'style';
-    } else if (url.endsWith('.js')) {
-      link.as = 'script';
-    }
-    document.head.appendChild(link);
-  });
 }
 
 class App {
@@ -235,12 +199,9 @@ class App {
     // 使用节流优化定时器，避免页面不可见时执行
     // 每60秒刷新一次系统状态（仅在首页且页面可见时）
     this._statusUpdateTimer = setInterval(() => {
-      if (this.currentPage === 'home' && !document.hidden) {
-        this.loadSystemStatus().catch(err => {
-          // 静默处理错误，避免控制台噪音
-          if (err.name !== 'AbortError' && err.name !== 'TimeoutError') {
-            console.warn('定时刷新系统状态失败:', err);
-          }
+      if (this.currentPage === 'home' && !document.hidden && !this._statusLoading) {
+        this.loadSystemStatus().catch(() => {
+          // 错误已在loadSystemStatus内部处理，这里静默忽略
         });
       }
     }, 60000);
@@ -286,7 +247,6 @@ class App {
   }
 
   bindEvents() {
-    // 使用工具函数优化DOM查询
     const menuBtn = $('#menuBtn');
     const sidebarClose = $('#sidebarClose');
     const overlay = $('#overlay');
@@ -295,38 +255,35 @@ class App {
     const saveApiKeyBtn = $('#saveApiKeyBtn');
     const apiKey = $('#apiKey');
     const apiKeyToggleBtn = $('#apiKeyToggleBtn');
+    const navContainer = $('#navMenu');
     
-    // 侧边栏 - 使用事件委托优化
-    menuBtn?.addEventListener('click', () => this.toggleSidebar());
-    sidebarClose?.addEventListener('click', () => this.closeSidebar());
-    overlay?.addEventListener('click', () => this.closeSidebar());
+    // 侧边栏控制
+    menuBtn.addEventListener('click', () => this.toggleSidebar());
+    sidebarClose.addEventListener('click', () => this.closeSidebar());
+    overlay.addEventListener('click', () => this.closeSidebar());
     
-    // API列表返回按钮
-    apiListBackBtn?.addEventListener('click', () => {
+    // API列表返回
+    apiListBackBtn.addEventListener('click', () => {
       const navMenu = $('#navMenu');
       const apiListContainer = $('#apiListContainer');
-      if (navMenu && apiListContainer) {
         navMenu.style.display = 'flex';
         apiListContainer.style.display = 'none';
-      }
     });
     
     // 主题切换
-    themeToggle?.addEventListener('click', () => this.toggleTheme());
+    themeToggle.addEventListener('click', () => this.toggleTheme());
     
-    // API Key - 使用防抖优化
-    const debouncedSaveApiKey = debounce(() => this.saveApiKey(), 500);
-    saveApiKeyBtn?.addEventListener('click', () => this.saveApiKey());
-    apiKey?.addEventListener('keypress', (e) => {
+    // API Key管理
+    saveApiKeyBtn.addEventListener('click', () => this.saveApiKey());
+    apiKey.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         this.saveApiKey();
       }
     });
+    apiKeyToggleBtn.addEventListener('click', () => this.toggleApiKeyBox());
     
-    // 导航 - 使用事件委托优化性能
-    const navContainer = $('#navMenu');
-    if (navContainer) {
+    // 导航菜单 - 事件委托
       navContainer.addEventListener('click', (e) => {
         const navItem = e.target.closest('.nav-item');
         if (navItem) {
@@ -335,7 +292,6 @@ class App {
           if (page) this.navigateTo(page);
         }
       });
-    }
     
     // 快捷键
     document.addEventListener('keydown', (e) => {
@@ -344,23 +300,16 @@ class App {
         this.executeRequest();
       }
     });
-    
-    // API Key 切换按钮
-    apiKeyToggleBtn?.addEventListener('click', () => this.toggleApiKeyBox());
   }
   
   toggleApiKeyBox() {
-    const apiKeyBox = $('#apiKeyBox');
-    if (apiKeyBox) {
-      apiKeyBox.classList.toggle('show');
-    }
+    $('#apiKeyBox').classList.toggle('show');
   }
 
   loadSettings() {
     const savedKey = localStorage.getItem('apiKey');
-    const apiKeyInput = $('#apiKey');
-    if (savedKey && apiKeyInput) {
-      apiKeyInput.value = savedKey;
+    if (savedKey) {
+      $('#apiKey').value = savedKey;
     }
     
     const storedTheme = localStorage.getItem('theme');
@@ -374,35 +323,25 @@ class App {
   }
 
   detectSystemTheme() {
-    try {
-      if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-        return 'dark';
-      }
-    } catch {}
-    return 'light';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
 
   enableSystemThemeSync() {
-    if (!window.matchMedia || this._systemThemeWatcher) return;
+    if (this._systemThemeWatcher) return;
     const mql = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = (event) => {
       if (!localStorage.getItem('theme')) {
         this.applyTheme(event.matches ? 'dark' : 'light');
       }
     };
-    if (mql.addEventListener) {
       mql.addEventListener('change', handler);
-    } else {
-      mql.addListener?.(handler);
-    }
     this._systemThemeWatcher = { mql, handler };
   }
 
   disableSystemThemeSync() {
     if (!this._systemThemeWatcher) return;
     const { mql, handler } = this._systemThemeWatcher;
-    mql.removeEventListener?.('change', handler);
-    mql.removeListener?.(handler);
+    mql.removeEventListener('change', handler);
     this._systemThemeWatcher = null;
   }
 
@@ -424,40 +363,29 @@ class App {
   }
 
   toggleSidebar() {
-    const sidebar = $('#sidebar');
-    const overlay = $('#overlay');
-    sidebar?.classList.toggle('open');
-    overlay?.classList.toggle('show');
+    $('#sidebar').classList.toggle('open');
+    $('#overlay').classList.toggle('show');
   }
 
   openSidebar() {
-    const sidebar = $('#sidebar');
-    const overlay = $('#overlay');
-    sidebar?.classList.add('open');
-    overlay?.classList.add('show');
+    $('#sidebar').classList.add('open');
+    $('#overlay').classList.add('show');
   }
 
   closeSidebar() {
-    const sidebar = $('#sidebar');
-    const overlay = $('#overlay');
-    sidebar?.classList.remove('open');
-    overlay?.classList.remove('show');
+    $('#sidebar').classList.remove('open');
+    $('#overlay').classList.remove('show');
   }
 
   saveApiKey() {
-    const apiKeyInput = $('#apiKey');
-    const key = apiKeyInput?.value?.trim();
+    const key = $('#apiKey').value.trim();
     if (!key) {
       this.showToast('请输入 API Key', 'warning');
       return;
     }
-    try {
       localStorage.setItem('apiKey', key);
       this.showToast('API Key 已保存', 'success');
       this.checkConnection();
-    } catch (error) {
-      this.showToast('保存失败: ' + formatError(error), 'error');
-    }
   }
 
   getHeaders() {
@@ -468,12 +396,15 @@ class App {
   }
 
   async checkConnection() {
+    // 防止重复请求
+    if (this._connectionChecking) return;
+    this._connectionChecking = true;
+    
     try {
-      // 使用兼容的超时处理
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
       
-      const res = await fetch(`${this.serverUrl}/api/health`, { 
+      const res = await fetch(`${this.serverUrl}/api/status`, { 
         headers: this.getHeaders(),
         signal: controller.signal
       });
@@ -483,14 +414,14 @@ class App {
       const status = $('#connectionStatus');
       if (!status) return;
       
-      if (res.ok) {
+      if (res && res.ok) {
         status.classList.add('online');
         const statusText = status.querySelector('.status-text');
         if (statusText) statusText.textContent = '已连接';
       } else {
         status.classList.remove('online');
         const statusText = status.querySelector('.status-text');
-        if (statusText) statusText.textContent = '未授权';
+        if (statusText) statusText.textContent = res ? '未授权' : '连接失败';
       }
     } catch (error) {
       const status = $('#connectionStatus');
@@ -502,6 +433,8 @@ class App {
         const isTimeout = error.name === 'AbortError' || error.name === 'TimeoutError';
         statusText.textContent = isTimeout ? '连接超时' : '连接失败';
       }
+    } finally {
+      this._connectionChecking = false;
     }
   }
 
@@ -766,23 +699,21 @@ class App {
   _loadHomeDataCache() {
     try {
       const cached = localStorage.getItem('homeDataCache');
-      if (cached) {
+      if (!cached) return null;
+      
         const data = JSON.parse(cached);
-        // 检查缓存是否过期（5分钟）
         const cacheTime = data._cacheTime || 0;
-        if (Date.now() - cacheTime < 5 * 60 * 1000) {
+      const CACHE_TTL = 5 * 60 * 1000; // 5分钟
+      
+      if (Date.now() - cacheTime < CACHE_TTL) {
           return data;
-        }
       }
     } catch (e) {
-      // 静默处理缓存解析错误
+      console.warn('[缓存] 加载失败:', e);
     }
     return null;
   }
   
-  /**
-   * 保存首页数据到缓存
-   */
   _saveHomeDataCache(data) {
     try {
       const cacheData = {
@@ -792,7 +723,7 @@ class App {
       localStorage.setItem('homeDataCache', JSON.stringify(cacheData));
       this._homeDataCache = cacheData;
     } catch (e) {
-      // 静默处理缓存保存错误
+      console.warn('[缓存] 保存失败:', e);
     }
   }
 
@@ -801,11 +732,23 @@ class App {
    * 从后端获取系统概览数据，包括机器人、工作流、网络等信息
    */
   async loadSystemStatus() {
-    try {
+    // 防止重复请求
+    if (this._statusLoading) {
+      return this._statusLoadingPromise || Promise.resolve();
+    }
+    
+    this._statusLoading = true;
+    this._statusLoadingPromise = (async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
       const res = await fetch(`${this.serverUrl}/api/system/overview?withHistory=1`, { 
         headers: this.getHeaders(),
-        signal: AbortSignal.timeout(10000) // 10秒超时
+          signal: controller.signal
       });
+        
+        clearTimeout(timeoutId);
       
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -817,22 +760,26 @@ class App {
         throw new Error(data.error || '获取系统状态失败');
       }
       
-      // 保存最新数据
       this._latestSystem = data;
-      
-      // 保存到缓存
       this._saveHomeDataCache(data);
-      
-      // 平滑更新所有数据（使用统一方法）
       this._applyHomeData(data, false);
       
     } catch (e) {
-      // 降级处理：使用缓存数据渲染，避免页面空白
-      const cachedData = this._latestSystem || this._homeDataCache || {};
-      if (Object.keys(cachedData).length > 0) {
+        if (e.name !== 'AbortError' && e.name !== 'TimeoutError') {
+          console.warn('[系统状态] 加载失败:', e.message);
+        }
+        
+        const cachedData = this._latestSystem || this._homeDataCache;
+        if (cachedData) {
         this._applyHomeData(cachedData, true);
       }
+      } finally {
+        this._statusLoading = false;
+        this._statusLoadingPromise = null;
     }
+    })();
+    
+    return this._statusLoadingPromise;
   }
   
   renderBotsPanel(bots = []) {
@@ -853,12 +800,12 @@ class App {
         ${bots.map((bot, index) => `
           <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;${index < bots.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}transition:background var(--transition);cursor:pointer" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
             <div style="width:40px;height:40px;border-radius:16px;background:var(--bg-muted);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--primary)">
-              ${bot.nickname?.slice(0,2) || bot.uin?.slice(-2) || '??'}
+              ${(bot.nickname || '').slice(0,2) || (bot.uin || '').slice(-2) || '??'}
             </div>
                 <div style="flex:1;min-width:0;text-align:left">
               <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${this.escapeHtml(bot.nickname || bot.uin)}</div>
                   <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
-                    ${bot.tasker || '未知 Tasker'}${bot.device ? '' : ` · ${bot.stats?.friends || 0} 好友 · ${bot.stats?.groups || 0} 群组`}
+                    ${bot.tasker || '未知 Tasker'}${bot.device ? '' : ` · ${(bot.stats && bot.stats.friends) || 0} 好友 · ${(bot.stats && bot.stats.groups) || 0} 群组`}
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
@@ -875,32 +822,31 @@ class App {
           </div>
         `;
     
-    // 移除更新标记，触发过渡动画
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       botsInfo.removeAttribute('data-updating');
-    }, 50);
+    });
   }
   
   renderWorkflowInfo(workflows = {}, panels = {}) {
     const box = document.getElementById('workflowInfo');
     if (!box) return;
     
-    // 添加更新标记，用于CSS过渡
     box.setAttribute('data-updating', 'true');
-    // 优先使用 panels.workflows，其次使用 workflows
-    const workflowData = panels?.workflows || workflows;
-    const stats = workflowData?.stats || {};
-    const items = workflowData?.items || [];
-    const total = stats?.total ?? workflowData?.total ?? 0;
+    const workflowData = panels.workflows || workflows;
+    const stats = workflowData.stats || {};
+    const items = workflowData.items || [];
+    const total = stats.total ?? workflowData.total ?? 0;
+    
     if (!total && !items.length) {
       box.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无工作流数据</div>';
+      requestAnimationFrame(() => box.removeAttribute('data-updating'));
       return;
     }
     
-    const enabled = stats?.enabled ?? workflowData?.enabled ?? 0;
+    const enabled = stats.enabled ?? workflowData.enabled ?? 0;
     const totalCount = total;
-    const embeddingReady = stats?.embeddingReady ?? workflowData?.embeddingReady ?? 0;
-    const provider = stats?.provider ?? workflowData?.provider ?? '默认';
+    const embeddingReady = stats.embeddingReady ?? workflowData.embeddingReady ?? 0;
+    const provider = stats.provider ?? workflowData.provider ?? '默认';
     
     box.innerHTML = `
       <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center">
@@ -937,34 +883,47 @@ class App {
     
     // 添加更新标记，用于CSS过渡
     box.setAttribute('data-updating', 'true');
-    // 确保 network 是对象
-    const networkObj = network && typeof network === 'object' ? network : {};
-    const entries = Object.entries(networkObj);
+    const entries = Object.entries(network || {});
     if (!entries.length) {
-      box.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center">暂无网络信息</div>';
+      box.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.3;">
+            <path d="M21 16V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h14a2 2 0 002-2z"/>
+            <polyline points="23,6 13.5,15.5 8.5,10.5 1,18"/>
+            <polyline points="17,6 23,6 23,12"/>
+          </svg>
+          <p>暂无网络信息</p>
+        </div>
+      `;
+      requestAnimationFrame(() => box.removeAttribute('data-updating'));
       return;
     }
-    const rxSec = rates?.rxSec ?? rates?.rx ?? 0;
-    const txSec = rates?.txSec ?? rates?.tx ?? 0;
-    const rateText = `${Math.max(0, rxSec / 1024).toFixed(1)} KB/s ↓ · ${Math.max(0, txSec / 1024).toFixed(1)} KB/s ↑`;
+    
+    const rxSec = rates.rxSec ?? rates.rx ?? 0;
+    const txSec = rates.txSec ?? rates.tx ?? 0;
+    const rxFormatted = this.formatBytes(rxSec);
+    const txFormatted = this.formatBytes(txSec);
+    const rateText = `${rxFormatted}/s ↓ · ${txFormatted}/s ↑`;
+    
     box.innerHTML = `
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-align:center;line-height:1.4">${rateText}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-align:center;line-height:1.4;padding:8px;background:var(--bg-input);border-radius:var(--radius);border:1px solid var(--border)">
+        <span style="color:var(--primary);font-weight:600">${rateText}</span>
+      </div>
       ${entries.map(([name, info]) => {
-        const address = info?.address || '';
-        const mac = info?.mac || '';
+        const address = info.address || '';
+        const mac = info.mac || '';
         return `
-        <div style="padding:10px 0;border-bottom:1px solid var(--border)">
-          <div style="font-weight:600;color:var(--text-primary);text-align:center">${this.escapeHtml(name)}</div>
-          <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">IP: ${this.escapeHtml(address)}${mac ? ` · MAC: ${this.escapeHtml(mac)}` : ''}</div>
+        <div style="padding:12px;border-bottom:1px solid var(--border);transition:background var(--transition)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+          <div style="font-weight:600;color:var(--text-primary);text-align:center;margin-bottom:4px">${this.escapeHtml(name)}</div>
+          <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">
+            <span style="font-family:monospace">IP: ${this.escapeHtml(address)}</span>${mac ? ` <span style="font-family:monospace">· MAC: ${this.escapeHtml(mac)}</span>` : ''}
+          </div>
         </div>
       `;
       }).join('')}
     `;
     
-    // 移除更新标记，触发过渡动画
-    setTimeout(() => {
-      box.removeAttribute('data-updating');
-    }, 50);
+    requestAnimationFrame(() => box.removeAttribute('data-updating'));
   }
 
   renderMarkdown(text) {
@@ -1055,17 +1014,15 @@ class App {
           </div>
         `;
     } catch (e) {
-      // 降级处理：显示错误信息或使用空状态
       if (e.name === 'AbortError' || e.name === 'TimeoutError') {
         pluginsInfo.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center">加载超时</div>';
       } else {
-        console.warn('Failed to load plugins info:', e);
+        console.warn('[插件信息] 加载失败:', e);
         pluginsInfo.innerHTML = `<div style="color:var(--text-muted);padding:16px;text-align:center">加载失败：${this.escapeHtml(e.message || '未知错误')}</div>`;
       }
     } finally {
-      // 移除更新标记，触发过渡动画
       setTimeout(() => {
-        if (pluginsInfo) pluginsInfo.removeAttribute('data-updating');
+        pluginsInfo.removeAttribute('data-updating');
       }, 50);
     }
   }
@@ -1074,16 +1031,6 @@ class App {
     const { system } = data;
     const panels = data.panels || {};
     const metrics = panels.metrics || {};
-    
-    const formatUptime = (s) => {
-      if (!s || s === 0) return '0分钟';
-      const d = Math.floor(s / 86400);
-      const h = Math.floor((s % 86400) / 3600);
-      const m = Math.floor((s % 3600) / 60);
-      if (d > 0) return `${d}天 ${h}小时`;
-      if (h > 0) return `${h}小时 ${m}分钟`;
-      return `${m}分钟`;
-    };
     
     // 更新统计卡片
     const cpuPercent = metrics.cpu ?? system?.cpu?.percent ?? 0;
@@ -1112,7 +1059,7 @@ class App {
     
     const uptimeEl = document.getElementById('uptimeValue');
     if (uptimeEl) {
-      uptimeEl.textContent = formatUptime(system?.uptime || data.bot?.uptime);
+      uptimeEl.textContent = this.formatTime((system && system.uptime) || (data.bot && data.bot.uptime) || 0);
     }
     
     // 更新网络历史：优先使用后端返回的实时数据
@@ -1151,7 +1098,6 @@ class App {
       }
     }
     
-    // 更新进程表
     const procTable = document.getElementById('processTable');
     if (procTable) {
       if (Array.isArray(data.processesTop5) && data.processesTop5.length > 0) {
@@ -1527,28 +1473,23 @@ class App {
 
   _loadChatHistory() {
     try {
-      return JSON.parse(localStorage.getItem('chatHistory') || '[]');
-    } catch { return []; }
+      const cached = localStorage.getItem('chatHistory');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      console.warn('[聊天历史] 加载失败:', e);
+      return [];
+    }
   }
 
   _saveChatHistory() {
     try {
-      // 保存最后200条记录，确保有足够空间
+      const MAX_HISTORY = 200;
       const historyToSave = Array.isArray(this._chatHistory) 
-        ? this._chatHistory.slice(-200) 
+        ? this._chatHistory.slice(-MAX_HISTORY) 
         : [];
       localStorage.setItem('chatHistory', JSON.stringify(historyToSave));
     } catch (e) {
-      console.warn('保存聊天记录失败:', e);
-      // 如果存储空间不足，尝试保存更少的记录
-      try {
-        const historyToSave = Array.isArray(this._chatHistory) 
-          ? this._chatHistory.slice(-100) 
-          : [];
-        localStorage.setItem('chatHistory', JSON.stringify(historyToSave));
-      } catch (e2) {
-        console.error('保存聊天记录失败（精简版）:', e2);
-      }
+      console.warn('[聊天历史] 保存失败:', e);
     }
   }
 
@@ -1694,10 +1635,6 @@ class App {
     return div;
   }
   
-  /**
-   * 添加带动画的聊天消息（兼容性方法）
-   * @deprecated 使用 appendChat(role, text, { withCopyBtn: true }) 替代
-   */
   appendChatWithAnimation(role, text, persist = true) {
     return this.appendChat(role, text, { persist, withCopyBtn: role === 'assistant' });
   }
@@ -1709,10 +1646,10 @@ class App {
    * @returns {HTMLElement|null} 创建的消息容器
    */
   appendSegments(segments, persist = true) {
-    if (!segments || segments.length === 0) return null;
+    if (!segments || segments.length === 0) return;
     
     const box = document.getElementById('chatMessages');
-    if (!box) return null;
+    if (!box) return;
     
     const div = document.createElement('div');
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1796,11 +1733,6 @@ class App {
           };
           videoContainer.appendChild(video);
           div.appendChild(videoContainer);
-        } else {
-          const fallback = document.createElement('div');
-          fallback.className = 'chat-media-placeholder';
-          fallback.textContent = '视频地址缺失';
-          div.appendChild(fallback);
         }
       } else if (seg.type === 'record') {
         // 音频段：先渲染之前的文本，再渲染音频
@@ -1827,11 +1759,6 @@ class App {
           };
           audioContainer.appendChild(audio);
           div.appendChild(audioContainer);
-        } else {
-          const fallback = document.createElement('div');
-          fallback.className = 'chat-media-placeholder small';
-          fallback.textContent = '音频地址缺失';
-          div.appendChild(fallback);
         }
       } else if (seg.type === 'at') {
         // @ 提及：显示为特殊样式，添加到文本中
@@ -1966,8 +1893,7 @@ class App {
       div.appendChild(textDiv);
     }
     
-    // 如果没有内容，不添加
-    if (div.children.length === 0) return null;
+    if (div.children.length === 0) return;
     
     box.appendChild(div);
     this.scrollToBottom();
@@ -2039,10 +1965,10 @@ class App {
 
   appendChatRecord(messages, title = '', description = '', persist = true) {
     const box = document.getElementById('chatMessages');
-    if (!box) return null;
+    if (!box) return;
 
     const messagesArray = Array.isArray(messages) ? messages : [messages];
-    if (messagesArray.length === 0) return null;
+    if (messagesArray.length === 0) return;
     
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const recordId = `record_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -2096,9 +2022,66 @@ class App {
   }
 
   escapeHtml(text) {
+    if (text == null) return '';
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = String(text);
     return div.innerHTML;
+  }
+
+  /**
+   * 格式化字节数
+   * @param {number} bytes - 字节数
+   * @returns {string} 格式化后的字符串
+   */
+  formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+  }
+
+  /**
+   * 格式化时间
+   * @param {number} seconds - 秒数
+   * @returns {string} 格式化后的时间字符串
+   */
+  formatTime(seconds) {
+    if (!seconds || seconds === 0) return '0秒';
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Number((seconds % 60).toFixed(2));
+    
+    const parts = [];
+    if (days > 0) parts.push(`${days}天`);
+    if (hours > 0) parts.push(`${hours}时`);
+    if (minutes > 0) parts.push(`${minutes}分`);
+    if (secs > 0 || parts.length === 0) parts.push(`${secs}秒`);
+    
+    return parts.join('');
+  }
+
+  /**
+   * 格式化数字（添加千分位）
+   * @param {number} num - 数字
+   * @returns {string} 格式化后的字符串
+   */
+  formatNumber(num) {
+    if (num == null || isNaN(num)) return '--';
+    return Number(num).toLocaleString('zh-CN');
+  }
+
+  /**
+   * 格式化百分比
+   * @param {number} value - 数值
+   * @param {number} total - 总数
+   * @returns {string} 格式化后的百分比字符串
+   */
+  formatPercent(value, total) {
+    if (!total || total === 0) return '0%';
+    const percent = (value / total) * 100;
+    return percent.toFixed(1) + '%';
   }
 
   clearChat() {
@@ -2358,8 +2341,17 @@ class App {
   renderConfigPlaceholder() {
     return `
       <div class="config-empty">
-        <h2>选择左侧配置开始</h2>
-        <p>支持表单 + JSON 双模式，所有提交均通过 ConfigBase schema 严格校验。</p>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 64px; height: 64px; margin: 0 auto 16px; opacity: 0.3;">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+        <h2 style="margin-bottom: 8px;">选择左侧配置开始</h2>
+        <p style="color: var(--text-muted); margin-bottom: 16px;">支持表单 + JSON 双模式，所有提交均通过 ConfigBase schema 严格校验。</p>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+          <span class="badge badge-info">表单模式</span>
+          <span class="badge badge-info">JSON 模式</span>
+          <span class="badge badge-info">实时校验</span>
+        </div>
       </div>
     `;
   }
@@ -2385,7 +2377,14 @@ class App {
     if (!list) return;
 
     if (!this._configState.list.length) {
-        list.innerHTML = '<div class="empty-state"><p>暂无配置</p></div>';
+      list.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.3;">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+          </svg>
+          <p>暂无配置</p>
+        </div>
+      `;
         return;
       }
       
@@ -2397,7 +2396,16 @@ class App {
     });
 
     if (!filtered.length) {
-      list.innerHTML = '<div class="empty-state"><p>没有符合条件的配置</p></div>';
+      list.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.3;">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <p>没有符合条件的配置</p>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">尝试调整搜索关键词</p>
+        </div>
+      `;
       return;
     }
 
@@ -2452,7 +2460,7 @@ class App {
     main.innerHTML = `
       <div class="empty-state">
         <div class="loading-spinner" style="margin:0 auto"></div>
-        <p style="margin-top:12px">加载配置详情...</p>
+        <p style="margin-top:12px; color: var(--text-secondary);">加载配置详情...</p>
           </div>
     `;
   }
@@ -2463,7 +2471,14 @@ class App {
 
     const entries = Object.entries(config.configs || {});
     if (!entries.length) {
-      main.innerHTML = '<div class="empty-state"><p>SystemConfig 未定义子配置</p></div>';
+      main.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.3;">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+          </svg>
+          <p>SystemConfig 未定义子配置</p>
+        </div>
+      `;
       return;
     }
 
@@ -2682,7 +2697,19 @@ class App {
 
   renderConfigFieldGroups() {
     if (!this._configState?.flatSchema?.length) {
-      return '<div class="empty-state"><p>该配置暂无扁平结构，可切换 JSON 模式编辑。</p></div>';
+      return `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.3;">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14,2 14,8 20,8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10,9 9,9 8,9"/>
+          </svg>
+          <p>该配置暂无扁平结构</p>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">可切换 JSON 模式编辑</p>
+        </div>
+      `;
     }
 
     // 构建字段树结构，支持多级分组
@@ -4255,15 +4282,7 @@ class App {
       return;
     }
     
-    let requestData;
-    try {
-      const jsonEditor = document.getElementById('jsonEditor');
-      const val = this.jsonEditor?.getValue() || jsonEditor?.value || '{}';
-      requestData = JSON.parse(val);
-    } catch (e) {
-      this.showToast('请求数据格式错误: ' + e.message, 'error');
-      return;
-    }
+    const requestData = this.buildRequestData();
     
     // 文件上传
     if (this.currentAPI.apiId === 'file-upload' && this.selectedFiles.length) {
@@ -4492,43 +4511,10 @@ class App {
     section.scrollIntoView({ behavior: 'smooth' });
   }
   
-  // 通用的复制到剪贴板方法（支持 HTTP 协议降级）
   copyToClipboard(text, successMsg = '已复制到剪贴板', errorMsg = '复制失败') {
-    if (navigator.clipboard && window.isSecureContext) {
-      // HTTPS 或 localhost 使用 Clipboard API
       navigator.clipboard.writeText(text)
         .then(() => this.showToast(successMsg, 'success'))
-        .catch(() => this.fallbackCopyText(text, successMsg, errorMsg));
-    } else {
-      // HTTP 协议使用降级方案
-      this.fallbackCopyText(text, successMsg, errorMsg);
-    }
-  }
-  
-  // 降级复制方案（适用于 HTTP 协议）
-  fallbackCopyText(text, successMsg, errorMsg) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    textarea.style.left = '-999999px';
-    textarea.style.top = '-999999px';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    
-    try {
-      const successful = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      if (successful) {
-        this.showToast(successMsg, 'success');
-      } else {
-        this.showToast(errorMsg, 'error');
-      }
-    } catch (err) {
-      document.body.removeChild(textarea);
-      this.showToast(errorMsg, 'error');
-    }
+      .catch(() => this.showToast(errorMsg, 'error'));
   }
 
   syntaxHighlight(json) {
@@ -4583,7 +4569,9 @@ class App {
     this._clearWsTimers();
     
     const apiKey = localStorage.getItem('apiKey') || '';
-    const wsUrl = this.serverUrl.replace(/^http/, 'ws') + '/device' + (apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '');
+    // 支持 ws 和 wss 协议
+    const protocol = this.serverUrl.startsWith('https') ? 'wss' : 'ws';
+    const wsUrl = `${protocol}://${this.serverUrl.replace(/^https?:\/\//, '')}/device${apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : ''}`;
     const deviceId = this.getWebUserId();
     
     try {
@@ -4592,6 +4580,8 @@ class App {
       this._deviceWs.onopen = () => {
         this._wsConnecting = false;
         this._deviceWs.device_id = deviceId;
+        
+        // 注册设备
         this._deviceWs.send(JSON.stringify({
           type: 'register',
           device_id: deviceId,
@@ -4615,7 +4605,7 @@ class App {
               }));
               this._lastHeartbeatAt = Date.now();
             } catch (e) {
-              console.warn('心跳发送失败:', e);
+              console.warn('[WebSocket] 心跳发送失败:', e);
             }
           }
         }, 30000);
@@ -4625,11 +4615,20 @@ class App {
         this._offlineCheckTimer = setInterval(() => {
           const lastActive = Math.max(this._lastHeartbeatAt || 0, this._lastWsMessageAt || 0);
           if (lastActive && Date.now() - lastActive > OFFLINE_TIMEOUT) {
+            console.warn('[WebSocket] 检测到长时间无响应，强制重连');
             this._deviceWs?.close();
             this._deviceWs = null;
             this.ensureDeviceWs();
           }
         }, 60000);
+        
+        // 更新连接状态
+        const status = $('#connectionStatus');
+        if (status) {
+          status.classList.add('online');
+          const statusText = status.querySelector('.status-text');
+          if (statusText) statusText.textContent = '已连接';
+        }
       };
       
       this._deviceWs.onmessage = (e) => {
@@ -4638,24 +4637,33 @@ class App {
           this._lastWsMessageAt = Date.now();
           this.handleWsMessage(data);
         } catch (e) {
-          console.warn('WebSocket消息解析失败:', e);
+          console.warn('[WebSocket] 消息解析失败:', e);
         }
       };
       
-      this._deviceWs.onclose = () => {
+      this._deviceWs.onclose = (event) => {
         this._wsConnecting = false;
         this._clearWsTimers();
         this._deviceWs = null;
-        setTimeout(() => this.ensureDeviceWs(), 5000);
+        
+        // 非正常关闭时，延迟重连
+        if (event.code !== 1000) {
+          const delay = event.code === 1006 ? 3000 : 5000; // 异常关闭时3秒重连，正常关闭时5秒
+          setTimeout(() => {
+            if (!this._deviceWs) {
+              this.ensureDeviceWs();
+            }
+          }, delay);
+        }
       };
       
       this._deviceWs.onerror = (e) => {
         this._wsConnecting = false;
-        console.warn('WebSocket错误:', e);
+        console.warn('[WebSocket] 连接错误:', e);
       };
     } catch (e) {
       this._wsConnecting = false;
-      console.warn('WebSocket连接失败:', e);
+      console.warn('[WebSocket] 连接失败:', e);
     }
   }
 
@@ -4664,11 +4672,36 @@ class App {
     const payloadText = (text || '').trim();
     if (!payloadText) return;
 
+    // 确保WebSocket连接
     this.ensureDeviceWs();
     const ws = this._deviceWs;
+    
+    // 如果连接未就绪，尝试等待一下
     if (ws?.readyState !== WebSocket.OPEN) {
-      this.showToast('设备通道未连接', 'warning');
+      if (ws?.readyState === WebSocket.CONNECTING) {
+        // 正在连接中，等待连接完成
+        const checkConnection = setInterval(() => {
+          if (ws?.readyState === WebSocket.OPEN) {
+            clearInterval(checkConnection);
+            this.sendDeviceMessage(text, meta);
+          } else if (ws?.readyState === WebSocket.CLOSED) {
+            clearInterval(checkConnection);
+            this.showToast('设备通道连接失败', 'error');
+          }
+        }, 500);
+        
+        // 5秒后超时
+        setTimeout(() => {
+          clearInterval(checkConnection);
+          if (ws?.readyState !== WebSocket.OPEN) {
+            this.showToast('设备通道连接超时', 'warning');
+          }
+        }, 5000);
+        return;
+      } else {
+        this.showToast('设备通道未连接，正在重连...', 'warning');
       return;
+      }
     }
 
     const deviceId = ws.device_id || this.getWebUserId();
@@ -4684,6 +4717,7 @@ class App {
       isMaster: true,
       meta: {
         persona: this.getCurrentPersona(),
+        workflow: this._chatSettings.workflow || 'device',
         source: meta.source || 'manual',
         ...meta.meta
       }
@@ -4748,11 +4782,15 @@ class App {
         this.renderASRStreaming(data.text, false);
         break;
       case 'asr_final': {
-        const finalText = data.text || '';
+        const finalText = (data.text || '').trim();
         this.renderASRStreaming(finalText, true);
         if (finalText) {
+          // 语音识别完成后，自动发送消息
           this.appendChat('user', finalText);
+          // 延迟发送，确保消息已显示
+          setTimeout(() => {
           this.sendDeviceMessage(finalText, { source: 'voice' });
+          }, 100);
         }
         break;
       }
@@ -4949,7 +4987,7 @@ class App {
       });
       
       this._micStream = stream;
-      this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      this._audioCtx = new AudioContext({ sampleRate: 16000 });
       
       const source = this._audioCtx.createMediaStreamSource(stream);
       const processor = this._audioCtx.createScriptProcessor(4096, 1, 1);

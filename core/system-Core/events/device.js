@@ -22,23 +22,27 @@ export default class DeviceEvent extends EventListenerBase {
     this.markAdapter(e, { isDevice: true })
     this.normalizeEvent(e)
     
+    // web客户端默认设置为主人
+    if (e.device_type === 'web' || e.isMaster === true) {
+      e.isMaster = true
+    }
+    
     await this.plugins.deal(e)
   }
 
   normalizeEvent(e) {
-    // 使用统一标准化器
     EventNormalizer.normalize(e, {
       defaultPostType: 'message',
       defaultMessageType: e.group_id ? 'group' : 'private',
       defaultUserId: e.device_id || e.user_id || 'device'
     })
     
-    // Device特有标准化
     EventNormalizer.normalizeDevice(e)
     
-    // 确保 sender.nickname（Device特有）
-    if (!e.sender.nickname) {
-      e.sender.nickname = e.sender.user_id || 'device'
+    // 补充device特有的sender信息（仅在未设置时）
+    if (!e.sender.nickname && e.device_name) {
+      e.sender.nickname = e.device_name
+      e.sender.card = e.sender.card || e.sender.nickname
     }
   }
 }

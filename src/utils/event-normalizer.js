@@ -12,29 +12,17 @@ export class EventNormalizer {
   static normalizeBase(e, options = {}) {
     if (!e) return e
 
-    // 确保 post_type
     e.post_type = e.post_type || options.defaultPostType || 'message'
-
-    // 确保 message_type
-    if (!e.message_type) {
-      e.message_type = options.defaultMessageType || (e.group_id ? 'group' : 'private')
-    }
-
-    // 确保 sender 对象
-    if (!e.sender) {
-      e.sender = {}
-    }
-    e.sender.user_id = e.sender.user_id || e.user_id || options.defaultUserId || 'unknown'
-    e.sender.nickname = e.sender.nickname || e.sender.user_id || 'unknown'
-    e.sender.card = e.sender.card || e.sender.nickname
-
-    // 确保时间戳
+    e.message_type = e.message_type || options.defaultMessageType || (e.group_id ? 'group' : 'private')
     e.time = e.time || Math.floor(Date.now() / 1000)
+    if (!e.sub_type && options.defaultSubType) e.sub_type = options.defaultSubType
 
-    // 确保 sub_type
-    if (!e.sub_type && options.defaultSubType) {
-      e.sub_type = options.defaultSubType
-    }
+    // 标准化 sender（仅在未设置时）
+    if (!e.sender) e.sender = {}
+    if (!e.sender.user_id) e.sender.user_id = e.user_id || options.defaultUserId || 'unknown'
+    if (!e.user_id) e.user_id = e.sender.user_id
+    if (!e.sender.nickname) e.sender.nickname = e.sender.card || e.sender.user_id || 'unknown'
+    if (!e.sender.card) e.sender.card = e.sender.nickname
 
     return e
   }
@@ -47,39 +35,26 @@ export class EventNormalizer {
   static normalizeMessage(e) {
     if (!e) return e
 
-    // 确保 message 是数组
+    // 标准化message数组
     if (!Array.isArray(e.message)) {
-      if (e.message) {
-        e.message = [{ type: 'text', text: String(e.message) }]
-      } else {
-        e.message = []
-      }
+      e.message = e.message ? [{ type: 'text', text: String(e.message) }] : []
     }
 
-    // 确保 raw_message 存在
-    if (!e.raw_message && Array.isArray(e.message) && e.message.length > 0) {
+    // 从message生成raw_message
+    if (!e.raw_message && e.message.length > 0) {
       e.raw_message = e.message
-        .map(seg => {
-          if (seg.type === 'text') return seg.text || ''
-          return `[${seg.type}]`
-        })
+        .map(seg => seg.type === 'text' ? (seg.text || '') : `[${seg.type}]`)
         .join('')
     }
 
-    // 确保 raw_message 至少是空字符串
-    if (!e.raw_message) {
-      e.raw_message = e.text || e.msg || e.command || ''
-    }
-
-    // 设置 msg 字段（插件系统需要）
-    if (!e.msg) {
-      e.msg = e.raw_message || e.text || e.command || ''
-    }
-
-    // 如果 command 存在但 raw_message 不存在，使用 command
+    // 处理command字段（仅设置raw_message，msg由parseMessage重新构建）
     if (e.command && !e.raw_message) {
       e.raw_message = e.command
-      e.msg = e.command
+    }
+
+    // 确保raw_message存在（msg由parseMessage从message数组构建）
+    if (!e.raw_message) {
+      e.raw_message = e.text || ''
     }
 
     return e
@@ -169,7 +144,9 @@ export class EventNormalizer {
   static normalizeStdin(e) {
     if (!e) return e
 
-    // Stdin 特有逻辑已在 normalizeBase 中处理
+    e.tasker = e.tasker || 'stdin'
+    e.isStdin = true
+
     return e
   }
 }

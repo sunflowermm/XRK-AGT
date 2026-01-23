@@ -167,14 +167,7 @@ export class StdinHandler {
   async processCommand(input, userInfo = {}) {
     try {
       // 解析JSON输入
-      if (typeof input === 'string') {
-        try { 
-          const parsed = JSON.parse(input);
-          input = parsed;
-        } catch {
-          // 不是JSON，保持原样
-        }
-      }
+
 
       // 处理消息数组
       if (Array.isArray(input)) {
@@ -395,14 +388,7 @@ export class StdinHandler {
   }
 
   async handleInput(input) {
-    let parsedInput = input;
-    try {
-      if (typeof input === 'string' && input.startsWith('[') && input.endsWith(']')) {
-        parsedInput = JSON.parse(input);
-      }
-    } catch {}
-    
-    await this.processCommand(parsedInput, { tasker: 'stdin' });
+    await this.processCommand(input, { tasker: 'stdin' });
     this.rl.prompt();
   }
 
@@ -461,7 +447,7 @@ export class StdinHandler {
       isStdin: true,
       message,
       raw_message,
-      msg: raw_message,
+      msg: '', // 由parseMessage重新构建，避免重复
       sender: {
         ...(userInfo.sender || {}),
         card: userInfo.sender?.card || nickname,

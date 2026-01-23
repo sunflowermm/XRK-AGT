@@ -3,9 +3,10 @@ import EnhancerBase from '#infrastructure/plugins/enhancer-base.js'
 export default class DeviceEnhancer extends EnhancerBase {
   constructor() {
     super({
-      name: 'device-enhancer',
+      name: 'Device',
       dsc: '设备事件属性补齐与日志标准化',
-      event: 'device.*'
+      event: 'device.*',
+      tasker: 'device'
     })
   }
 
@@ -14,10 +15,6 @@ export default class DeviceEnhancer extends EnhancerBase {
   }
 
   enhanceEvent(e) {
-    e.isDevice = true
-    e.tasker = 'device'
-    const deviceId = e.device_id || e.self_id || 'unknown'
-    const eventType = e.event_type || e.post_type || 'event'
-    this.ensureLogText(e, '设备', deviceId, eventType)
+    super.enhanceEvent(e) // 设置 isDevice, tasker 和 logText
   }
 }

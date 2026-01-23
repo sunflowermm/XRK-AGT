@@ -20,11 +20,13 @@ export default class StdinEvent extends EventListenerBase {
     this.markAdapter(e, { isStdin: true })
     this.normalizeEvent(e)
 
+    // 强制将 stdin 设置为主人
+    e.isMaster = true
+
     await this.plugins.deal(e)
   }
 
   normalizeEvent(e) {
-    // 使用统一标准化器
     EventNormalizer.normalize(e, {
       defaultPostType: 'message',
       defaultMessageType: 'private',
@@ -32,19 +34,11 @@ export default class StdinEvent extends EventListenerBase {
       defaultUserId: 'stdin'
     })
     
-    // Stdin特有标准化
     EventNormalizer.normalizeStdin(e)
     
-    // Stdin特有：处理command字段
-    if (e.command && !e.raw_message) {
-      e.raw_message = e.command
-      e.msg = e.command
-      e.message = e.message || [{ type: 'text', text: e.command }]
-    }
-    
-    // 确保sender.card（Stdin特有）
-    if (!e.sender.card) {
-      e.sender.card = e.sender.nickname
+    // 补充message数组（如果command存在但message为空）
+    if (e.command && (!Array.isArray(e.message) || e.message.length === 0)) {
+      e.message = [{ type: 'text', text: e.command }]
     }
   }
 }

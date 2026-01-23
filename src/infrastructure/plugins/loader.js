@@ -166,22 +166,35 @@ class PluginsLoader {
 
   normalizeEventPayload(e) {
     e.tasker = String(e.tasker || e.tasker_name || 'unknown').toLowerCase()
-    e.message = Array.isArray(e.message) ? e.message : (e.message ? [e.message] : [])
+    
+    // message数组标准化（EventNormalizer已处理，这里仅确保类型）
+    if (!Array.isArray(e.message)) {
+      e.message = e.message ? [e.message] : []
+    }
+    
+    // 初始化字段（msg由parseMessage重新构建，这里清空）
     e.raw_message ||= ''
-    e.sender ||= {}
+    e.msg = '' // 清空，由parseMessage重新构建
+    if (!e.sender) e.sender = {}
     e.img = []
     e.video = []
     e.audio = []
-    e.msg = ''
 
+    // 标准化post_type和message_type
     if (!e.post_type) {
-      e.post_type = e.message_type || e.notice_type || e.request_type || e.event_type || ''
+      e.post_type = e.message_type || e.notice_type || e.request_type || e.event_type || 'message'
+    }
+    if (e.post_type === 'message' && !e.message_type) {
+      e.message_type = e.group_id ? 'group' : 'private'
     }
 
     e.plainText = this.extractMessageText(e)
   }
 
   async parseMessage(e) {
+    // 重置msg，从message数组重新构建
+    e.msg = ''
+    
     for (const val of e.message) {
       if (!val?.type) continue
 
@@ -208,15 +221,23 @@ class PluginsLoader {
   }
 
   setupEventProps(e) {
-    // 基础sender信息
-    e.sender.nickname ||= e.sender.card || e.device_name || ''
-    e.sender.card ||= e.sender.nickname
-    if (!e.logText) {
+    // sender信息已由EventNormalizer和增强插件处理，这里仅补充device_name
+    if (!e.sender) e.sender = {}
+    if (!e.sender.nickname && e.device_name) {
+      e.sender.nickname = e.device_name
+      e.sender.card = e.sender.card || e.sender.nickname
+    }
+    
+    // logText由增强插件优先设置
+    if (!e.logText || e.logText.includes('未知')) {
       e.logText = `[${e.tasker || '未知'}][${e.user_id || '未知'}]`
     }
   }
 
   checkPermissions(e) {
+    // stdin和device(web)已在事件监听器中设置isMaster，跳过
+    if (e.isStdin || (e.isDevice && e.device_type === 'web')) return
+    
     const masterQQ = cfg.master?.[e.self_id] || cfg.masterQQ || []
     const masters = Array.isArray(masterQQ) ? masterQQ : [masterQQ]
     e.isMaster = masters.some(id => String(e.user_id) === String(id))
@@ -715,7 +736,8 @@ class PluginsLoader {
         bypassThrottle: plugin.bypassThrottle === true,
         taskers: this.buildAdapterSet(plugin),
         ruleTemplates,
-        bypassRules: this.collectBypassRules(ruleTemplates)
+        bypassRules: this.collectBypassRules(ruleTemplates),
+        isEnhancer: plugin instanceof (await import('./enhancer-base.js')).default
       }
 
       const targetArray = plugin.priority === 'extended' ? this.extended : this.priority
@@ -794,7 +816,7 @@ class PluginsLoader {
       ''
 
     // 构建可能的事件键（从具体到通用），适配任意新适配器
-    if (tasker) {
+    if (tasker && tasker !== 'unknown') {
       if (postType && detailType && subType) possibleEvents.push(`${tasker}.${postType}.${detailType}.${subType}`)
       if (postType && detailType) possibleEvents.push(`${tasker}.${postType}.${detailType}`)
       if (postType) possibleEvents.push(`${tasker}.${postType}`)
@@ -811,16 +833,19 @@ class PluginsLoader {
       genericEvents.push(postType)
     }
     
+    // 检查完全匹配
     for (const actualEvent of possibleEvents) {
       if (pluginEvent === actualEvent || this.matchEventPattern(pluginEvent, actualEvent)) {
         return true
       }
     }
     
+    // 检查通用事件匹配（如 'message' 匹配所有 message.* 事件）
     if (!pluginEvent.includes('.')) {
       return genericEvents.includes(pluginEvent)
     }
     
+    // 检查通配符匹配（如 'stdin.*' 或 'onebot.message.*'）
     const adapterPrefix = pluginEvent.split('.')[0]
     if (pluginEvent.endsWith('.*') || pluginEvent === adapterPrefix) {
       return possibleEvents.some(ev => ev.startsWith(`${adapterPrefix}.`) || ev === adapterPrefix)

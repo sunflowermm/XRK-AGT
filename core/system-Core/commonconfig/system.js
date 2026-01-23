@@ -77,8 +77,7 @@ export default class SystemConfig extends ConfigBase {
                 align: {
               type: 'string',
               label: '日志头内容',
-                  description: '日志头内容自定义显示，例如设置为"XRKAGT"将显示[XRKAGT]',
-                  default: 'XRKAGT',
+                  description: '日志头内容自定义显示',
               component: 'Input'
             },
                 color: {
@@ -384,51 +383,6 @@ export default class SystemConfig extends ConfigBase {
               component: 'Switch'
                 }
               }
-            },
-            update: {
-              type: 'object',
-              label: '更新插件配置',
-              component: 'SubForm',
-              fields: {
-                autoUpdateXrk: {
-              type: 'boolean',
-                  label: '自动更新XRK',
-              description: '更新插件是否自动更新XRK插件',
-              default: true,
-              component: 'Switch'
-            },
-                sleepBetween: {
-              type: 'number',
-                  label: '更新间隔时间',
-              description: '更新间隔时间（毫秒）',
-              min: 0,
-              default: 1500,
-              component: 'InputNumber'
-            },
-                restartDelay: {
-              type: 'number',
-                  label: '更新后重启延迟',
-              description: '更新后重启延迟（毫秒）',
-              min: 0,
-              default: 2000,
-              component: 'InputNumber'
-            },
-                typeName: {
-              type: 'string',
-                  label: '更新类型名称',
-              description: '更新类型名称',
-              default: 'XRK-AGT',
-              component: 'Input'
-            },
-                logLines: {
-              type: 'number',
-                  label: '更新日志行数',
-              description: '更新日志显示行数',
-              min: 1,
-              default: 100,
-              component: 'InputNumber'
-                }
-              }
             }
           }
         }
@@ -584,7 +538,6 @@ export default class SystemConfig extends ConfigBase {
                 name: {
                   type: 'string',
                   label: '服务器名称',
-                  default: 'XRK Server',
                   component: 'Input'
                 },
                 host: {
@@ -1124,7 +1077,7 @@ export default class SystemConfig extends ConfigBase {
                   type: 'array',
                   label: '白名单路径',
                   itemType: 'string',
-                  default: ['/', '/favicon.ico', '/health', '/status', '/robots.txt', '/xrk', '/media/*', '/uploads/*'],
+                  default: ['/', '/favicon.ico', '/health', '/status', '/robots.txt', '/media/*', '/uploads/*'],
                   component: 'Tags'
                 }
               }
@@ -1800,7 +1753,6 @@ export default class SystemConfig extends ConfigBase {
             database: {
               type: 'string',
               label: 'MongoDB数据库名称',
-              default: 'xrk_agt',
               component: 'Input'
             },
             options: {
@@ -2127,7 +2079,7 @@ export default class SystemConfig extends ConfigBase {
             device: {
               type: 'object',
               label: '设备运行参数',
-              description: 'XRK 设备连接和运行相关配置',
+              description: '设备连接和运行相关配置',
               component: 'SubForm',
               fields: {
                 heartbeatInterval: { type: 'number', label: '心跳间隔 (s)', component: 'InputNumber', default: 30 },

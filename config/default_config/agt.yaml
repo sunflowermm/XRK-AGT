@@ -109,17 +109,3 @@ status:
   # 是否显示磁盘信息
   showDisk: true
 
-# ----------------------------------------
-# 更新插件配置
-# ----------------------------------------
-update:
-  # 是否自动更新XRK插件
-  autoUpdateXrk: true
-  # 更新间隔时间（毫秒）
-  sleepBetween: 1500
-  # 更新后重启延迟（毫秒）
-  restartDelay: 2000
-  # 更新类型名称
-  typeName: "XRK-AGT"
-  # 更新日志显示行数
-  logLines: 100
