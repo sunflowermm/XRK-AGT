@@ -4,6 +4,23 @@ import lodash from "lodash"
 import moment from "moment"
 import cfg from '#infrastructure/config/config.js'
 
+// 模块级配置
+const levelConfig = {
+  ERROR: { emoji: "❌", color: "red" },
+  WARN: { emoji: "⚠️", color: "yellow" },
+  INFO: { emoji: "ℹ️", color: "blue" },
+  DEBUG: { emoji: "🔧", color: "cyan" },
+  TRACE: { emoji: "📝", color: "gray" },
+  FATAL: { emoji: "💀", color: "redBright" },
+  MARK: { emoji: "📌", color: "magenta" }
+}
+
+let lineNum = 120
+let maxNum = 1000
+let logDir = "logs"
+let maxPerForward = 30
+let maxLineLength = 300
+
 export class sendLog extends plugin {
   constructor() {
     super({
@@ -19,32 +36,26 @@ export class sendLog extends plugin {
         }
       ],
     })
+  }
 
+  async init() {
     // 从cfg配置读取，充分利用配置系统
     const agtCfg = cfg.agt || {}
     const logSendCfg = agtCfg.logging?.send || {}
-    this.lineNum = logSendCfg.defaultLines || 120
-    this.maxNum = logSendCfg.maxLines || 1000
-    this.logDir = agtCfg.logging?.dir || "logs"
-    this.maxPerForward = logSendCfg.maxPerForward || 30
-    this.maxLineLength = logSendCfg.maxLineLength || 300
-    
-    this.levelConfig = {
-      ERROR: { emoji: "❌", color: "red" },
-      WARN: { emoji: "⚠️", color: "yellow" },
-      INFO: { emoji: "ℹ️", color: "blue" },
-      DEBUG: { emoji: "🔧", color: "cyan" },
-      TRACE: { emoji: "📝", color: "gray" },
-      FATAL: { emoji: "💀", color: "redBright" },
-      MARK: { emoji: "📌", color: "magenta" }
-    }
+    lineNum = logSendCfg.defaultLines || 120
+    maxNum = logSendCfg.maxLines || 1000
+    logDir = agtCfg.logging?.dir || "logs"
+    maxPerForward = logSendCfg.maxPerForward || 30
+    maxLineLength = logSendCfg.maxLineLength || 300
   }
 
   async sendLog() {
     try {
       const match = this.e.msg.match(/^#(运行|错误|追踪|调试|trace|debug)?日志(\d+)?(.*)$/i)
+      if (!match) return false
+      
       const logType = this.normalizeLogType(match[1])
-      const lineNum = Math.min(parseInt(match[2]) || this.lineNum, this.maxNum)
+      const requestLineNum = Math.min(parseInt(match[2]) || lineNum, maxNum)
       const keyWord = match[3]?.trim() || ""
       
       const { logFile, filterLevel, logName } = await this.getLogConfig(logType)
@@ -53,33 +64,33 @@ export class sendLog extends plugin {
         return await this.replyError(`暂无${logName}文件`)
       }
 
-      const logs = await this.getLog(logFile, lineNum, keyWord, filterLevel)
+      const logs = await this.getLog(logFile, requestLineNum, keyWord, filterLevel)
       
       if (lodash.isEmpty(logs)) {
         const errorMsg = this.buildErrorMessage(logName, keyWord, filterLevel)
         return await this.replyError(errorMsg)
       }
 
-      await this.sendLogBatches(logs, logName, keyWord, lineNum, logFile, filterLevel)
+      await this.sendLogBatches(logs, logName, keyWord, requestLineNum, logFile, filterLevel)
       
       logger.info(`[sendLog] 成功发送${logName}，共${logs.length}条`)
       return true
       
     } catch (error) {
-      logger.error(`[sendLog] 发送日志失败:`, error)
+      logger.error(`[sendLog] 发送日志失败: ${error.message}`, error)
       await this.e.reply(`❌ 发送日志时发生错误: ${error.message}`)
       return false
     }
   }
 
-  async sendLogBatches(logs, logName, keyWord, lineNum, logFile, filterLevel) {
+  async sendLogBatches(logs, logName, keyWord, requestLineNum, logFile, filterLevel) {
     const timestamp = moment().format("YYYY-MM-DD HH:mm:ss")
     const fileName = path.basename(logFile)
-    const totalBatches = Math.ceil(logs.length / this.maxPerForward)
+    const totalBatches = Math.ceil(logs.length / maxPerForward)
     
     for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-      const startIdx = batchIndex * this.maxPerForward
-      const endIdx = Math.min(startIdx + this.maxPerForward, logs.length)
+      const startIdx = batchIndex * maxPerForward
+      const endIdx = Math.min(startIdx + maxPerForward, logs.length)
       const batchLogs = logs.slice(startIdx, endIdx)
       
       const forwardData = this.buildBatchForwardData(
@@ -161,17 +172,17 @@ export class sendLog extends plugin {
   }
 
   truncateLog(log) {
-    if (log.length <= this.maxLineLength) {
+    if (log.length <= maxLineLength) {
       return log
     }
-    return log.substring(0, this.maxLineLength - 3) + '...'
+    return log.substring(0, maxLineLength - 3) + '...'
   }
 
   extractLogLevel(logLine) {
     const levelMatch = logLine.match(/\[([A-Z]+)\]/i)
     if (levelMatch) {
       const level = levelMatch[1].toUpperCase()
-      const config = this.levelConfig[level]
+      const config = levelConfig[level]
       if (config) {
         return `${config.emoji} ${level}`
       }
@@ -231,40 +242,43 @@ export class sendLog extends plugin {
   async findLogFile(prefix = 'app') {
     try {
       const currentDate = moment().format("YYYY-MM-DD")
-      const todayLogFile = path.join(this.logDir, `${prefix}.${currentDate}.log`)
+      const todayLogFile = path.join(logDir, `${prefix}.${currentDate}.log`)
       
+      // 优先使用今天的日志文件
       try {
         await fs.access(todayLogFile)
         return todayLogFile
       } catch {
-        const files = await fs.readdir(this.logDir)
+        // 查找最近的日志文件
+        const files = await fs.readdir(logDir)
         const logFiles = files
           .filter(file => file.startsWith(`${prefix}.`) && file.endsWith('.log'))
           .sort((a, b) => b.localeCompare(a))
         
         if (logFiles.length > 0) {
-          return path.join(this.logDir, logFiles[0])
+          return path.join(logDir, logFiles[0])
         }
         
+        // 兼容旧格式（仅对app日志）
         if (prefix === 'app') {
           const oldFiles = files
             .filter(file => file.match(/^\d{4}-\d{2}-\d{2}\.log$/))
             .sort((a, b) => b.localeCompare(a))
           
           if (oldFiles.length > 0) {
-            return path.join(this.logDir, oldFiles[0])
+            return path.join(logDir, oldFiles[0])
           }
         }
         
         return null
       }
     } catch (error) {
-      logger.error(`[sendLog] 查找${prefix}日志文件失败:`, error)
+      logger.error(`[sendLog] 查找${prefix}日志文件失败: ${error.message}`, error)
       return null
     }
   }
 
-  async getLog(logFile, lineNum = 100, keyWord = "", filterLevel = null) {
+  async getLog(logFile, requestLineNum = 100, keyWord = "", filterLevel = null) {
     try {
       const content = await fs.readFile(logFile, "utf8")
       let lines = content.split("\n").filter(line => line.trim())
@@ -281,38 +295,36 @@ export class sendLog extends plugin {
         lines = lines.filter(line => line.toLowerCase().includes(lowerKeyword))
       }
 
-      // 限制数量
-      lines = lines.slice(-lineNum)
+      // 限制数量并反转顺序（最新在前）
+      lines = lines.slice(-requestLineNum).reverse()
 
-      // 反转顺序
-      lines.reverse()
-
-      return lines.map((line, idx) => this.formatLogLine(line, idx))
+      return lines.map((line) => this.formatLogLine(line))
       
     } catch (err) {
-      logger.error(`[sendLog] 读取日志文件失败: ${logFile}`, err)
+      logger.error(`[sendLog] 读取日志文件失败: ${logFile} - ${err.message}`, err)
       return []
     }
   }
 
-  formatLogLine(line, index) {
+  formatLogLine(line) {
     if (!line) return ""
     
-    // 先截断长度
-    let formattedLine = line
-    if (line.length > this.maxLineLength) {
-      formattedLine = line.substring(0, this.maxLineLength - 3) + '...'
-    }
+    // 截断长度
+    let formattedLine = line.length > maxLineLength
+      ? line.substring(0, maxLineLength - 3) + '...'
+      : line
     
+    // 添加级别emoji
     const levelMatch = formattedLine.match(/\[([A-Z]+)\]/i)
     if (levelMatch) {
       const level = levelMatch[1].toUpperCase()
-      const config = this.levelConfig[level]
+      const config = levelConfig[level]
       if (config) {
         return `${config.emoji} ${formattedLine}`
       }
     }
     
+    // 堆栈信息缩进
     if (formattedLine.includes('Stack:') || formattedLine.match(/^\s+at\s/)) {
       return `↳ ${formattedLine.trim()}`
     }
@@ -347,13 +359,13 @@ export class sendLog extends plugin {
       `📁 日志文件: ${fileName}`,
       `📊 记录条数: ${count}条`,
       `🔄 排序方式: 最新在前`,
-      `✂️ 单条限制: ${this.maxLineLength}字符`
+      `✂️ 单条限制: ${maxLineLength}字符`
     ].join("\n")
   }
 
   getTitleEmoji(logName, filterLevel) {
-    if (filterLevel && this.levelConfig[filterLevel]) {
-      return this.levelConfig[filterLevel].emoji
+    if (filterLevel && levelConfig[filterLevel]) {
+      return levelConfig[filterLevel].emoji
     }
     
     const emojiMap = {
@@ -379,8 +391,8 @@ export class sendLog extends plugin {
     
     lines.push(`✅ 匹配结果: ${count}条`)
     
-    if (count === this.maxNum) {
-      lines.push(`⚠️ 已达到显示上限(${this.maxNum}条)`)
+    if (count === maxNum) {
+      lines.push(`⚠️ 已达到显示上限(${maxNum}条)`)
     }
     
     return lines.join("\n")
@@ -393,7 +405,7 @@ export class sendLog extends plugin {
     
     return [
       "💡 命令说明:",
-      `• #日志 - 查看最近${this.lineNum}条日志`,
+      `• #日志 - 查看最近${lineNum}条日志`,
       "• #错误日志 - 仅显示ERROR级别",
       "• #调试日志 - 仅显示DEBUG级别",
       "• #追踪日志 - 查看trace日志",
@@ -401,18 +413,20 @@ export class sendLog extends plugin {
       "• #日志 关键词 - 搜索特定内容",
       "",
       "📊 系统配置:",
-      `• 默认显示: ${this.lineNum}条`,
-      `• 最大显示: ${this.maxNum}条`,
-      `• 每批最多: ${this.maxPerForward}条`,
-      `• 单条限制: ${this.maxLineLength}字符`,
+      `• 默认显示: ${lineNum}条`,
+      `• 最大显示: ${maxNum}条`,
+      `• 每批最多: ${maxPerForward}条`,
+      `• 单条限制: ${maxLineLength}字符`,
       `• 主日志保留: ${platformInfo.mainLogAge || logCfg.maxDays || '30天'}`,
       `• 追踪日志保留: ${platformInfo.traceLogAge || logCfg.traceDays || '1天'}`,
       `• 日志等级: ${logCfg.level || 'info'}`,
-      `• 日志目录: ${this.logDir}`
+      `• 日志目录: ${logDir}`
     ].join("\n")
   }
 
   async makeForwardMsg(e, msgList) {
+    if (!msgList || msgList.length === 0) return null
+    
     const msgs = msgList.map((msg, i) => ({
       message: msg.message,
       nickname: msg.nickname || "日志系统",
@@ -420,13 +434,18 @@ export class sendLog extends plugin {
       time: Math.floor(Date.now() / 1000) - (msgList.length - i) * 2
     }))
     
-    const makeForward = e.group.makeForwardMsg || 
-                       e.friend.makeForwardMsg || 
-                       e.bot.makeForwardMsg ||
-                       Bot.makeForwardMsg
-    
-    const context = e.group || e.friend || e.bot || Bot
-    return await makeForward.call(context, msgs)
+    try {
+      const makeForward = e.group?.makeForwardMsg || 
+                         e.friend?.makeForwardMsg || 
+                         e.bot?.makeForwardMsg ||
+                         Bot.makeForwardMsg
+      
+      const context = e.group || e.friend || e.bot || Bot
+      return await makeForward.call(context, msgs)
+    } catch (error) {
+      logger.error(`[sendLog] 生成转发消息失败: ${error.message}`, error)
+      return null
+    }
   }
 
   async replyError(errorMsg) {

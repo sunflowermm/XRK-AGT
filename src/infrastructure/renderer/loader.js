@@ -2,7 +2,6 @@ import fs from "node:fs/promises"
 import fsSync from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import yaml from "yaml"
 import lodash from "lodash"
 import chokidar from "chokidar"
 import cfg from "#infrastructure/config/config.js"
@@ -83,42 +82,50 @@ class RendererLoader {
     if (!fsSync.existsSync(baseDir)) return
 
     try {
-      this.watcher = chokidar.watch(baseDir, {
+      const { HotReloadBase } = await import('#utils/hot-reload-base.js')
+      const hotReload = new HotReloadBase({ loggerName: 'RendererLoader' })
+      
+      // 渲染器需要监视目录变化
+      const watcher = chokidar.watch(baseDir, {
         ignored: /(^|[\/\\])\../,
         persistent: true,
         ignoreInitial: true,
         awaitWriteFinish: {
           stabilityThreshold: 300,
           pollInterval: 100
-        }
-      })
+      }})
 
       const handleRendererChange = async (filePath, eventType) => {
         try {
           if (eventType === 'addDir') {
-            const name = path.basename(filePath);
-            await this._loadRenderer(name, baseDir);
+            const name = path.basename(filePath)
+            await this._loadRenderer(name, baseDir)
           } else if (eventType === 'change') {
-            const dirName = path.basename(path.dirname(filePath));
-            const fileName = path.basename(filePath);
+            const dirName = path.basename(path.dirname(filePath))
+            const fileName = path.basename(filePath)
             if (fileName === 'index.js' || fileName === 'config.yaml') {
-              await this._loadRenderer(dirName, baseDir);
+              await this._loadRenderer(dirName, baseDir)
             }
           } else if (eventType === 'unlinkDir') {
-            const name = path.basename(filePath);
-            this.renderers.delete(name);
+            const name = path.basename(filePath)
+            this.renderers.delete(name)
           }
         } catch (error) {
-          BotUtil.makeLog('error', `处理渲染器${eventType}失败`, 'RendererLoader', error);
+          BotUtil.makeLog('error', `处理渲染器${eventType}失败`, 'RendererLoader', error)
         }
-      };
+      }
 
-      this.watcher
+      watcher
         .on('addDir', lodash.debounce((dirPath) => handleRendererChange(dirPath, 'addDir'), 500))
         .on('change', lodash.debounce((filePath) => handleRendererChange(filePath, 'change'), 500))
         .on('unlinkDir', lodash.debounce((dirPath) => handleRendererChange(dirPath, 'unlinkDir'), 500))
+        .on('error', (error) => {
+          BotUtil.makeLog('error', '渲染器文件监视错误', 'RendererLoader', error)
+        })
+
+      this.watcher = watcher
     } catch (error) {
-      BotUtil.makeLog('error', '启动渲染器文件监视失败', 'RendererLoader', error);
+      BotUtil.makeLog('error', '启动渲染器文件监视失败', 'RendererLoader', error)
     }
   }
 }

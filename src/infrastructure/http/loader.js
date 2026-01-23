@@ -410,81 +410,57 @@ class ApiLoader {
       // 停止所有监视器
       for (const watcher of Object.values(this.watcher)) {
         if (watcher && typeof watcher.close === 'function') {
-          watcher.close();
+          watcher.close()
         }
       }
-      this.watcher = {};
-      BotUtil.makeLog('info', '文件监视已停止', 'ApiLoader');
-      return;
-    }
-    
-    // 获取所有 core 目录下的 http 目录
-    const apiDirs = await paths.getCoreSubDirs('http');
-    
-    if (apiDirs.length === 0) {
-      BotUtil.makeLog('debug', '未找到 http 目录，跳过文件监视', 'ApiLoader');
-      return;
+      this.watcher = {}
+      BotUtil.makeLog('info', '文件监视已停止', 'ApiLoader')
+      return
     }
     
     try {
-      const { watch } = await import('chokidar');
+      const { HotReloadBase } = await import('#utils/hot-reload-base.js')
+      const hotReload = new HotReloadBase({ loggerName: 'ApiLoader' })
       
-      this.watcher.api = watch(apiDirs, {
-        ignored: /(^|[\/\\])\../,
-        persistent: true,
-        ignoreInitial: true
-      });
-      
-      this.watcher.api
-        .on('add', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath);
-            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+      const apiDirs = await paths.getCoreSubDirs('http')
+      if (apiDirs.length === 0) {
+        BotUtil.makeLog('debug', '未找到 http 目录，跳过文件监视', 'ApiLoader')
+        return
+      }
 
-            BotUtil.makeLog('info', `检测到新文件: ${fileName}`, 'ApiLoader');
-            const key = await this.getApiKey(filePath);
-            await this.loadApi(filePath);
-            this.sortByPriority();
-            
-            if (this.app && this.bot) {
-              const api = this.apis.get(key);
-              if (api && typeof api.init === 'function') {
-                await api.init(this.app, this.bot);
-              }
+      await hotReload.watch(true, {
+        dirs: apiDirs,
+        onAdd: async (filePath) => {
+          const fileName = path.basename(filePath)
+          BotUtil.makeLog('info', `检测到新文件: ${fileName}`, 'ApiLoader')
+          const key = await this.getApiKey(filePath)
+          await this.loadApi(filePath)
+          this.sortByPriority()
+          
+          if (this.app && this.bot) {
+            const api = this.apis.get(key)
+            if (api && typeof api.init === 'function') {
+              await api.init(this.app, this.bot)
             }
-          } catch (error) {
-            BotUtil.makeLog('error', '处理新增API失败', 'ApiLoader', error);
           }
-        }, 500))
-        .on('change', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath);
-            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
+        },
+        onChange: async (filePath) => {
+          const key = await this.getApiKey(filePath)
+          BotUtil.makeLog('info', `检测到文件变更: ${key}`, 'ApiLoader')
+          await this.changeApi(key)
+        },
+        onUnlink: async (filePath) => {
+          const key = await this.getApiKey(filePath)
+          BotUtil.makeLog('info', `检测到文件删除: ${key}`, 'ApiLoader')
+          await this.unloadApi(key)
+          this.sortByPriority()
+        }
+      })
 
-            const key = await this.getApiKey(filePath);
-            BotUtil.makeLog('info', `检测到文件变更: ${key}`, 'ApiLoader');
-            await this.changeApi(key);
-          } catch (error) {
-            BotUtil.makeLog('error', '处理API变更失败', 'ApiLoader', error);
-          }
-        }, 500))
-        .on('unlink', lodash.debounce(async (filePath) => {
-          try {
-            const fileName = path.basename(filePath);
-            if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
-
-            const key = await this.getApiKey(filePath);
-            BotUtil.makeLog('info', `检测到文件删除: ${key}`, 'ApiLoader');
-            await this.unloadApi(key);
-            this.sortByPriority();
-          } catch (error) {
-            BotUtil.makeLog('error', '处理API删除失败', 'ApiLoader', error);
-          }
-        }, 500));
-      
-      BotUtil.makeLog('info', '文件监视已启动', 'ApiLoader');
+      this.watcher.api = hotReload.watcher
+      BotUtil.makeLog('info', '文件监视已启动', 'ApiLoader')
     } catch (error) {
-      BotUtil.makeLog('error', '启动文件监视失败', 'ApiLoader', error);
+      BotUtil.makeLog('error', '启动文件监视失败', 'ApiLoader', error)
     }
   }
 }

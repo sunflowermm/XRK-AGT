@@ -20,6 +20,7 @@ export default class OneBotEnhancer extends EnhancerBase {
   enhanceEvent(e) {
     super.enhanceEvent(e) // 设置 isOnebot, tasker 和 logText
 
+    // 设置消息类型标识（EventNormalizer已处理message_type，这里补充标识）
     e.isPrivate = e.message_type === 'private' || (!e.group_id && e.user_id)
     e.isGroup = e.message_type === 'group' || !!e.group_id
 
@@ -29,14 +30,14 @@ export default class OneBotEnhancer extends EnhancerBase {
     // 处理@消息
     this.processAtProperties(e)
 
-    // 确保sender信息
-    if (e.user_id) {
-      if (!e.sender) e.sender = { user_id: e.user_id }
-      
+    // 补充sender信息（EventNormalizer已处理基础字段，这里补充OneBot特有字段）
+    if (e.user_id && e.sender) {
+      // 优先使用friend的nickname
       if (e.friend?.nickname && !e.sender.nickname) {
         e.sender.nickname = e.friend.nickname
       }
       
+      // 群成员信息优先于friend
       if (e.member) {
         if (e.member.nickname && !e.sender.nickname) {
           e.sender.nickname = e.member.nickname
@@ -52,14 +53,23 @@ export default class OneBotEnhancer extends EnhancerBase {
     if (e.reply) return // 如果已经设置过reply，则跳过
 
     let sendMethod = null
-    if (e.group?.sendMsg) {
-      sendMethod = e.group.sendMsg.bind(e.group)
-    } else if (e.bot?.tasker?.sendGroupMsg && e.group_id) {
-      sendMethod = (msg) => e.bot.tasker.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
-    } else if (e.friend?.sendMsg) {
-      sendMethod = e.friend.sendMsg.bind(e.friend)
-    } else if (e.bot?.tasker?.sendFriendMsg && e.user_id) {
-      sendMethod = (msg) => e.bot.tasker.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
+    
+    // 优先使用群组发送方法
+    if (e.isGroup && e.group_id) {
+      if (e.group?.sendMsg) {
+        sendMethod = e.group.sendMsg.bind(e.group)
+      } else if (e.bot?.tasker?.sendGroupMsg) {
+        sendMethod = (msg) => e.bot.tasker.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
+      }
+    }
+    
+    // 私聊发送方法
+    if (!sendMethod && e.isPrivate && e.user_id) {
+      if (e.friend?.sendMsg) {
+        sendMethod = e.friend.sendMsg.bind(e.friend)
+      } else if (e.bot?.tasker?.sendFriendMsg) {
+        sendMethod = (msg) => e.bot.tasker.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
+      }
     }
 
     if (!sendMethod) return
@@ -70,11 +80,13 @@ export default class OneBotEnhancer extends EnhancerBase {
       try {
         let message = msg
 
+        // 处理引用回复
         if (quote && e.message_id) {
           const replySegment = { type: 'reply', data: { id: String(e.message_id) } }
           message = Array.isArray(message) ? [replySegment, ...message] : [replySegment, message]
         }
 
+        // 处理@消息
         if (data?.at && e.isGroup && e.user_id) {
           const atSegment = { type: 'at', data: { qq: String(e.user_id) } }
           message = Array.isArray(message) ? [atSegment, ...message] : [atSegment, message]
@@ -141,6 +153,7 @@ export default class OneBotEnhancer extends EnhancerBase {
         privateChat = {},
         guild = {}
       } = chatbotCfg
+      
       const blackQQ = blacklist?.qq || []
       const whiteQQ = whitelist?.qq || []
       const blackGroup = blacklist?.groups || []
@@ -150,6 +163,7 @@ export default class OneBotEnhancer extends EnhancerBase {
       const disableAdopt = privateChat?.disableAdopt || []
       const disableGuildMsg = guild?.disableMsg === true
 
+      // 统一字符串转换和比较
       const toStr = (v) => (v === undefined || v === null ? '' : String(v))
       const inList = (list, id) =>
         Array.isArray(list) && list.length > 0 && id && list.map(toStr).includes(toStr(id))
@@ -157,10 +171,12 @@ export default class OneBotEnhancer extends EnhancerBase {
       const groupId = toStr(e.group_id || '')
       const userId = toStr(e.user_id || '')
 
+      // 检查频道消息（guild）
       if (disableGuildMsg && groupId && groupId.includes('-') && !e.isMaster) {
         return 'return'
       }
       
+      // 检查群组黑白名单
       if (groupId) {
         if (inList(blackGroup, groupId) && !e.isMaster) {
           return 'return'
@@ -170,6 +186,7 @@ export default class OneBotEnhancer extends EnhancerBase {
         }
       }
       
+      // 检查用户黑白名单
       if (userId) {
         if (inList(blackQQ, userId) && !e.isMaster) {
           return 'return'
@@ -179,10 +196,8 @@ export default class OneBotEnhancer extends EnhancerBase {
         }
       }
       
-      const isPrivate = e.isPrivate ||
-        (!e.group_id && (e.message_type === 'private' || (!e.message_type && !e.group_id)))
-
-      if (disablePrivate && isPrivate && !e.isMaster) {
+      // 检查私聊功能
+      if (disablePrivate && e.isPrivate && !e.isMaster) {
         const text = String(e.msg || e.plainText || e.raw_message || '')
         const adopted = Array.isArray(disableAdopt) &&
           disableAdopt.filter(Boolean).some((key) => text.includes(String(key)))
@@ -190,7 +205,7 @@ export default class OneBotEnhancer extends EnhancerBase {
         if (!adopted) {
           try {
             if (typeof e.reply === 'function') {
-              e.reply(disableMsg || '私聊功能已禁用')
+              await e.reply(disableMsg)
             }
           } catch (err) {
             // 静默失败
@@ -207,19 +222,29 @@ export default class OneBotEnhancer extends EnhancerBase {
   }
 
   enforceReplyPolicy(e) {
+    // 非群组、设备、stdin事件跳过
     if (!e.group_id || e.isDevice || e.isStdin) return true
 
     const groupCfg = cfg.getGroup(e.group_id) || {}
     const onlyReplyAt = groupCfg.onlyReplyAt ?? 0
 
+    // 未启用或未配置别名，允许回复
     if (onlyReplyAt === 0 || !groupCfg.botAlias) return true
+    
+    // 主人权限或已使用别名或@了机器人，允许回复
     if (onlyReplyAt === 2 && e.isMaster) return true
     if (e.hasAlias) return true
     if (e.atBot === true) return true
 
+    // 其他情况跳过
     return 'return'
   }
 
+  /**
+   * 标准化别名列表
+   * @param {string|Array} alias - 别名或别名数组
+   * @returns {Array} 标准化后的别名数组
+   */
   normalizeAliasList(alias) {
     if (!alias) return []
     return Array.isArray(alias) ? alias.filter(Boolean) : [alias].filter(Boolean)

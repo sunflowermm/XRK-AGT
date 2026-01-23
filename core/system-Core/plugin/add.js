@@ -3,9 +3,16 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import lodash from "lodash"
 import crypto from "crypto"
+import { segment } from '#oicq'
 
 export const messageMap = {}
 export const bannedWordsMap = {}
+
+// 模块级配置变量
+let path = "data/messageJson/"
+let bannedWordsPath = "data/bannedWords/"
+let bannedImagesPath = "data/bannedWords/images/"
+let configPath = "data/bannedWords/config/"
 
 export class add extends plugin {
   constructor() {
@@ -50,21 +57,21 @@ export class add extends plugin {
         }
       ]
     })
-
-    const agtCfg = cfg.agt || {}
-    const filesCfg = agtCfg.files || {}
-    this.path = filesCfg.messageDataPath || "data/messageJson/"
-    this.bannedWordsPath = filesCfg.bannedWordsPath || "data/bannedWords/"
-    this.bannedImagesPath = filesCfg.bannedImagesPath || "data/bannedWords/images/"
-    this.configPath = filesCfg.bannedConfigPath || "data/bannedWords/config/"
   }
 
   async init() {
+    const agtCfg = cfg.agt || {}
+    const filesCfg = agtCfg.files || {}
+    path = filesCfg.messageDataPath || "data/messageJson/"
+    bannedWordsPath = filesCfg.bannedWordsPath || "data/bannedWords/"
+    bannedImagesPath = filesCfg.bannedImagesPath || "data/bannedWords/images/"
+    configPath = filesCfg.bannedConfigPath || "data/bannedWords/config/"
+    
     await Promise.all([
-      Bot.mkdir(this.path),
-      Bot.mkdir(this.bannedWordsPath),
-      Bot.mkdir(this.bannedImagesPath),
-      Bot.mkdir(this.configPath)
+      Bot.mkdir(path),
+      Bot.mkdir(bannedWordsPath),
+      Bot.mkdir(bannedImagesPath),
+      Bot.mkdir(configPath)
     ])
     await this.initAllBannedWords()
   }
@@ -84,21 +91,21 @@ export class add extends plugin {
   async initAllBannedWords() {
     try {
       const files = await fs.readdir(this.bannedWordsPath)
+      const jsonFiles = files.filter(f => f.endsWith('.json'))
       await Promise.all(
-        files.filter(f => f.endsWith('.json'))
-          .map(f => this.initBannedWords(f.replace('.json', '')))
+        jsonFiles.map(f => this.initBannedWords(f.replace('.json', '')))
       )
     } catch (err) {
-      logger.error(`初始化违禁词失败: ${err}`)
+      logger.error(`初始化违禁词失败: ${err.message}`, err)
     }
   }
 
   /** 初始化群组违禁词 */
   async initBannedWords(groupId) {
-    if (bannedWordsMap[groupId]) return
+    if (!groupId || bannedWordsMap[groupId]) return
     
     // 从cfg读取默认配置
-    const groupCfg = cfg.getGroup(groupId)
+    const groupCfg = cfg.getGroup(groupId) || {}
     bannedWordsMap[groupId] = {
       exact: new Set(),
       fuzzy: new Set(),
@@ -111,45 +118,63 @@ export class add extends plugin {
       }
     }
 
-    const filePath = `${this.bannedWordsPath}${groupId}.json`
+    const filePath = `${bannedWordsPath}${groupId}.json`
     if (!await Bot.fsStat(filePath)) return
 
     try {
       const data = JSON.parse(await fs.readFile(filePath, "utf8"))
       
-      data.exact?.forEach(word => bannedWordsMap[groupId].exact.add(word))
-      data.fuzzy?.forEach(word => bannedWordsMap[groupId].fuzzy.add(word))
-      data.images && Object.entries(data.images).forEach(([hash, info]) => 
-        bannedWordsMap[groupId].images.set(hash, info)
-      )
-      data.config && Object.assign(bannedWordsMap[groupId].config, data.config)
+      if (data.exact && Array.isArray(data.exact)) {
+        data.exact.forEach(word => bannedWordsMap[groupId].exact.add(word))
+      }
+      if (data.fuzzy && Array.isArray(data.fuzzy)) {
+        data.fuzzy.forEach(word => bannedWordsMap[groupId].fuzzy.add(word))
+      }
+      if (data.images && typeof data.images === 'object') {
+        Object.entries(data.images).forEach(([hash, info]) => {
+          bannedWordsMap[groupId].images.set(hash, info)
+        })
+      }
+      if (data.config && typeof data.config === 'object') {
+        Object.assign(bannedWordsMap[groupId].config, data.config)
+      }
       
       logger.info(`[违禁词] 成功加载群组 ${groupId} 的违禁词配置`)
     } catch (err) {
-      logger.error(`加载违禁词失败 ${filePath}: ${err}`)
+      logger.error(`加载违禁词失败 ${filePath}: ${err.message}`, err)
     }
   }
 
   /** 保存违禁词到文件 */
   async saveBannedWords(groupId) {
-    if (!bannedWordsMap[groupId]) return
+    if (!groupId || !bannedWordsMap[groupId]) return
     
-    const data = {
-      exact: Array.from(bannedWordsMap[groupId].exact),
-      fuzzy: Array.from(bannedWordsMap[groupId].fuzzy),
-      images: Object.fromEntries(bannedWordsMap[groupId].images),
-      config: bannedWordsMap[groupId].config
+    try {
+      const data = {
+        exact: Array.from(bannedWordsMap[groupId].exact),
+        fuzzy: Array.from(bannedWordsMap[groupId].fuzzy),
+        images: Object.fromEntries(bannedWordsMap[groupId].images),
+        config: bannedWordsMap[groupId].config
+      }
+      
+      await fs.writeFile(`${bannedWordsPath}${groupId}.json`, JSON.stringify(data, null, 2), 'utf8')
+    } catch (err) {
+      logger.error(`保存违禁词失败 ${groupId}: ${err.message}`, err)
     }
-    
-    await fs.writeFile(`${this.bannedWordsPath}${groupId}.json`, JSON.stringify(data, null, 2))
   }
 
   /** 获取身份信息 */
-  async getRoleInfo(groupId, userId) {
+  getRoleInfo(groupId, userId) {
+    if (!this.e.isGroup) {
+      return { role: 'member', roleName: '群员', isAdmin: false }
+    }
+    
     try {
-      if (!this.e.isGroup) return { role: 'member', roleName: '群员', isAdmin: false }
+      const member = this.e.group?.pickMember?.(userId)
+      if (!member) {
+        return { role: 'member', roleName: '群员', isAdmin: false }
+      }
       
-      const member = this.e.group.pickMember(userId)
       const role = member.role || 'member'
       const roleMap = { owner: '群主', admin: '管理员', member: '群员' }
       
@@ -158,7 +183,8 @@ export class add extends plugin {
         roleName: roleMap[role] || '群员',
         isAdmin: ['owner', 'admin'].includes(role)
       }
-    } catch {
+    } catch (error) {
+      logger.debug(`获取身份信息失败: ${error.message}`)
       return { role: 'member', roleName: '群员', isAdmin: false }
     }
   }
@@ -169,6 +195,10 @@ export class add extends plugin {
     if (!this.group_id || !this.checkAuth()) return false
 
     await this.initBannedWords(this.group_id)
+    
+    if (!bannedWordsMap[this.group_id]) {
+      return this.reply('❌ 违禁词配置未初始化')
+    }
     
     const action = this.e.msg.match(/违禁词(开启|关闭|状态)/)?.[1]
     const config = bannedWordsMap[this.group_id].config
@@ -185,9 +215,10 @@ export class add extends plugin {
       return this.reply('❌ 违禁词检测已关闭')
     }
     
+    // 显示状态
     const { exact, fuzzy, images } = bannedWordsMap[this.group_id]
     return this.reply([
-      `违禁词检测状态：${config.enabled ? '开启' : '关闭'}`,
+      `违禁词检测状态：${config.enabled ? '✅ 开启' : '❌ 关闭'}`,
       `禁言时长：${config.muteTime}分钟`,
       `模式：${config.warnOnly ? '仅警告' : '警告+禁言'}`,
       `精确违禁词：${exact.size}个`,
@@ -206,12 +237,18 @@ export class add extends plugin {
     
     await this.initBannedWords(this.group_id)
     
+    if (!bannedWordsMap[this.group_id]) {
+      return this.reply('❌ 违禁词配置未初始化')
+    }
+    
     const type = this.isFuzzy ? 'fuzzy' : 'exact'
     const typeName = this.isFuzzy ? '模糊' : '精确'
     const groupType = this.isGlobal ? '全局' : '群组'
     const count = bannedWordsMap[this.group_id][type].size
     
-    if (!count) return this.reply(`没有${groupType}${typeName}违禁词需要清空`)
+    if (!count) {
+      return this.reply(`没有${groupType}${typeName}违禁词需要清空`)
+    }
     
     bannedWordsMap[this.group_id][type].clear()
     await this.saveBannedWords(this.group_id)
@@ -234,6 +271,10 @@ export class add extends plugin {
     if (!this.checkAuth()) return false
     
     await this.initBannedWords(this.group_id)
+    
+    if (!bannedWordsMap[this.group_id]) {
+      return this.reply('❌ 违禁词配置未初始化')
+    }
 
     const word = this.e.msg.match(/增加(模糊)?违禁词(.*)/)?.[2]?.trim()
     
@@ -272,6 +313,8 @@ export class add extends plugin {
       await this.reply(await Bot.makeForwardArray(msg.flat()))
       return this.listBannedWords()
     }
+    
+    return false
   }
 
   /** 添加图片违禁词 */
@@ -280,7 +323,7 @@ export class add extends plugin {
       const hash = await this.getImageHash(imgUrl)
       if (!hash) return { success: false, error: '获取图片hash失败' }
       
-      const groupImgPath = `${this.bannedImagesPath}${groupId}/`
+      const groupImgPath = `${bannedImagesPath}${groupId}/`
       await Bot.mkdir(groupImgPath)
       
       const response = await fetch(imgUrl)
@@ -388,13 +431,20 @@ export class add extends plugin {
     if (!this.checkAuth()) return false
     
     await this.initBannedWords(this.group_id)
+    
+    if (!bannedWordsMap[this.group_id]) {
+      return this.reply('❌ 违禁词配置未初始化')
+    }
 
     const param = this.e.msg.match(/删除(模糊)?违禁词(.*)/)?.[2]?.trim()
-    if (!param) return this.reply("删除错误：没有指定违禁词或序号")
+    if (!param) {
+      return this.reply("删除错误：没有指定违禁词或序号")
+    }
 
     const groupType = this.isGlobal ? '全局' : '群组'
     const num = parseInt(param)
     
+    // 按序号删除
     if (!isNaN(num) && num > 0) {
       let deleted = false
       let deletedItem = ""
@@ -419,7 +469,11 @@ export class add extends plugin {
             const [hash, info] = imagesList[num - exactList.length - 1]
             deletedItem = `图片违禁词 (${info.desc})`
             bannedWordsMap[this.group_id].images.delete(hash)
-            try { await fs.unlink(info.path) } catch {}
+            try { 
+              await fs.unlink(info.path) 
+            } catch (err) {
+              logger.debug(`删除图片文件失败: ${err.message}`)
+            }
           }
           deleted = true
         }
@@ -432,6 +486,7 @@ export class add extends plugin {
       }
     }
     
+    // 按关键词删除
     const type = this.isFuzzy ? 'fuzzy' : 'exact'
     if (bannedWordsMap[this.group_id][type].has(param)) {
       bannedWordsMap[this.group_id][type].delete(param)
@@ -448,7 +503,9 @@ export class add extends plugin {
     this.isGlobal = this.e.msg.includes('全局')
     
     await this.getGroupId()
-    if (!this.group_id) return this.reply("请先在群内触发消息")
+    if (!this.group_id) {
+      return this.reply("请先在群内触发消息")
+    }
 
     await Promise.all([
       this.initBannedWords(this.group_id),
@@ -460,6 +517,10 @@ export class add extends plugin {
     
     if (!banned && (!globalBanned || this.group_id === 'global')) {
       return this.reply("暂无违禁词")
+    }
+    
+    if (!banned && this.group_id !== 'global') {
+      return this.reply("暂无群组违禁词")
     }
 
     const msg = []
@@ -568,13 +629,18 @@ export class add extends plugin {
     
     if (!bannedWordsMap[groupId]?.config?.enabled) return false
     
-    let violated = false, violationType = "", violatedWord = "", isGlobal = false
+    let violated = false
+    let violationType = ""
+    let violatedWord = ""
+    let isGlobal = false
     const text = (this.e.msg || this.e.raw_message || "").trim()
 
+    // 检查文字违禁词
     if (text) {
       for (const gid of [groupId, 'global']) {
         if (!bannedWordsMap[gid]) continue
         
+        // 先检查精确匹配
         for (const word of bannedWordsMap[gid].exact) {
           if (text === word) {
             violated = true
@@ -585,6 +651,7 @@ export class add extends plugin {
           }
         }
         
+        // 如果精确匹配未命中，检查模糊匹配
         if (!violated) {
           for (const word of bannedWordsMap[gid].fuzzy) {
             if (this.checkFuzzyMatch(text, word)) {
@@ -601,6 +668,7 @@ export class add extends plugin {
       }
     }
 
+    // 检查图片违禁词
     if (!violated && this.e.img?.length) {
       for (const img of this.e.img) {
         const hash = await this.getImageHash(img)
@@ -619,17 +687,19 @@ export class add extends plugin {
       }
     }
 
-    return violated && await this.handleViolation(violationType, violatedWord, isGlobal)
+    if (violated) {
+      return await this.handleViolation(violationType, violatedWord, isGlobal)
+    }
+    
+    return false
   }
 
   /** 处理违禁词触发 */
   async handleViolation(violationType, violatedWord, isGlobal = false) {
     const { group_id: groupId, user_id: userId } = this.e
     
-    const [userRole, botRole] = await Promise.all([
-      this.getRoleInfo(groupId, userId),
-      this.getRoleInfo(groupId, this.e.self_id)
-    ])
+    const userRole = this.getRoleInfo(groupId, userId)
+    const botRole = this.getRoleInfo(groupId, this.e.self_id)
     
     logger.info(`[违禁词检测] 用户 ${userId}(${userRole.roleName}) 触发${isGlobal ? '全局' : '群组'}${violationType}违禁词：${violatedWord}`)
     
@@ -659,8 +729,13 @@ export class add extends plugin {
   /** 通知主人违禁词触发 */
   async notifyMaster(groupId, userId, violationType, violatedWord, isGlobal, userRole) {
     try {
-      const member = this.e.group.pickMember(userId)
-      const nickname = member.card || member.nickname || `用户${userId}`
+      if (!this.e.isGroup || !this.e.group) {
+        logger.debug('非群组消息，跳过通知主人')
+        return
+      }
+      
+      const member = this.e.group.pickMember?.(userId)
+      const nickname = member?.card || member?.nickname || this.e.sender?.nickname || `用户${userId}`
       const avatar = `https://q1.qlogo.cn/g?b=qq&nk=${userId}&s=640`
       
       const groupName = this.e.group.group_name || `群${groupId}`
@@ -684,9 +759,8 @@ export class add extends plugin {
       ]
       
       await Bot.sendMasterMsg(notifyMsg)
-      
     } catch (err) {
-      logger.error(`通知主人失败: ${err}`)
+      logger.error(`通知主人失败: ${err.message}`, err)
     }
   }
 
@@ -793,10 +867,12 @@ export class add extends plugin {
 
     if (this.e.isGroup) {
       this.group_id = this.e.group_id
+      // 缓存群号到Redis（30天）
       redis.setEx(this.grpKey, 2592000, String(this.group_id))
       return
     }
 
+    // 从Redis获取缓存的群号
     this.group_id = await redis.get(this.grpKey)
   }
 
@@ -804,24 +880,27 @@ export class add extends plugin {
   checkAuth() {
     if (this.e.isMaster) return true
     
+    // 全局操作需要主人权限
     if (this.isGlobal) {
       this.reply("暂无权限，只有主人才能操作")
       return false
     }
 
-    const groupCfg = cfg.getGroup(this.group_id)
+    const groupCfg = cfg.getGroup(this.group_id) || {}
     
-    if (groupCfg.addLimit == 2) {
+    // addLimit: 2 = 仅主人, 1 = 管理员, 0 = 所有人
+    if (groupCfg.addLimit === 2) {
       this.reply("暂无权限，只有主人才能操作")
       return false
     }
     
-    if (groupCfg.addLimit == 1 && !this.e.member?.is_admin) {
+    if (groupCfg.addLimit === 1 && !this.e.member?.is_admin) {
       this.reply("暂无权限，只有管理员才能操作")
       return false
     }
 
-    if (groupCfg.addPrivate != 1 && !this.e.isGroup) {
+    // 私聊添加限制
+    if (groupCfg.addPrivate !== 1 && !this.e.isGroup) {
       this.reply("禁止私聊添加")
       return false
     }
@@ -839,12 +918,17 @@ export class add extends plugin {
   trimAlias(msg) {
     if (!msg) return msg
     
-    const groupCfg = cfg.getGroup(this.group_id)
-    let alias = groupCfg.botAlias
+    const groupCfg = cfg.getGroup(this.group_id) || {}
+    const alias = groupCfg.botAlias
     if (!alias) return msg
     
-    Array.isArray(alias) || (alias = [alias])
-    for (const name of alias) msg.startsWith(name) && (msg = lodash.trimStart(msg, name).trim())
+    const aliasList = Array.isArray(alias) ? alias : [alias]
+    for (const name of aliasList) {
+      if (msg.startsWith(name)) {
+        msg = lodash.trimStart(msg, name).trim()
+        break
+      }
+    }
     
     return msg
   }
@@ -921,29 +1005,40 @@ export class add extends plugin {
 
   /** 保存JSON */
   async saveJson() {
-    const obj = Object.fromEntries(messageMap[this.group_id])
-    await fs.writeFile(`${this.path}${this.group_id}.json`, JSON.stringify(obj, "", "\t"))
+    if (!this.group_id || !messageMap[this.group_id]) return
+    
+    try {
+      const obj = Object.fromEntries(messageMap[this.group_id])
+      await fs.writeFile(`${path}${this.group_id}.json`, JSON.stringify(obj, null, 2), 'utf8')
+    } catch (err) {
+      logger.error(`保存JSON失败 ${this.group_id}: ${err.message}`, err)
+    }
   }
 
   /** 保存文件 */
   async saveFile(data) {
+    if (!data || !data.url) return data.url
+    
     try {
       const file = await Bot.fileType({ ...data, file: data.url })
       if (Buffer.isBuffer(file.buffer)) {
         file.name = `${this.group_id}/${data.type}/${file.name}`
-        file.path = `${this.path}${file.name}`
+        file.path = `${path}${file.name}`
         await Bot.mkdir(path.dirname(file.path))
         await fs.writeFile(file.path, file.buffer)
         return file.name
       }
     } catch (err) {
-      logger.error(`保存文件失败: ${err}`)
+      logger.error(`保存文件失败: ${err.message}`, err)
     }
     return data.url
   }
 
   /** 获取关键词消息 */
   getKeyWordMsg(keyWord) {
+    if (!keyWord) return []
+    
+    // 先查找精确匹配
     const exactMessages = [
       ...(messageMap[this.group_id]?.get(keyWord) || []),
       ...(messageMap.global?.get(keyWord) || [])
@@ -951,8 +1046,14 @@ export class add extends plugin {
     
     if (exactMessages.length) return exactMessages
 
+    // 再查找模糊匹配
     const fuzzyMessages = []
-    for (const [key, messages] of [...(messageMap[this.group_id]?.entries() || []), ...(messageMap.global?.entries() || [])]) {
+    const allEntries = [
+      ...(messageMap[this.group_id]?.entries() || []),
+      ...(messageMap.global?.entries() || [])
+    ]
+    
+    for (const [key, messages] of allEntries) {
       if (key.startsWith('[模糊]')) {
         const fuzzyKey = key.substring(4)
         if (this.checkFuzzyMatch(keyWord, fuzzyKey)) {
@@ -999,8 +1100,8 @@ export class add extends plugin {
 
     const msgToSend = [...msg]
     for (const i in msgToSend) {
-      if (msgToSend[i].file && await Bot.fsStat(`${this.path}${msgToSend[i].file}`)) {
-        msgToSend[i] = { ...msgToSend[i], file: `${this.path}${msgToSend[i].file}` }
+      if (msgToSend[i].file && await Bot.fsStat(`${path}${msgToSend[i].file}`)) {
+        msgToSend[i] = { ...msgToSend[i], file: `${path}${msgToSend[i].file}` }
       }
     }
 
@@ -1017,14 +1118,18 @@ export class add extends plugin {
     if (messageMap[this.group_id]) return
     messageMap[this.group_id] = new Map()
 
-    const filePath = `${this.path}${this.group_id}.json`
+    const filePath = `${path}${this.group_id}.json`
     if (!await Bot.fsStat(filePath)) return
 
     try {
       const message = JSON.parse(await fs.readFile(filePath, "utf8"))
-      for (const i in message) messageMap[this.group_id].set(i, message[i])
+      for (const key in message) {
+        if (message.hasOwnProperty(key)) {
+          messageMap[this.group_id].set(key, message[key])
+        }
+      }
     } catch (err) {
-      logger.error(`JSON 格式错误：${filePath} ${err}`)
+      logger.error(`JSON 格式错误：${filePath} - ${err.message}`, err)
     }
   }
 
@@ -1033,14 +1138,18 @@ export class add extends plugin {
     if (messageMap.global) return
     messageMap.global = new Map()
 
-    const globalPath = `${this.path}global.json`
+    const globalPath = `${path}global.json`
     if (!await Bot.fsStat(globalPath)) return
 
     try {
       const message = JSON.parse(await fs.readFile(globalPath, "utf8"))
-      for (const i in message) messageMap.global.set(i, message[i])
+      for (const key in message) {
+        if (message.hasOwnProperty(key)) {
+          messageMap.global.set(key, message[key])
+        }
+      }
     } catch (err) {
-      logger.error(`JSON 格式错误：${globalPath} ${err}`)
+      logger.error(`JSON 格式错误：${globalPath} - ${err.message}`, err)
     }
   }
 
@@ -1059,7 +1168,7 @@ export class add extends plugin {
     
     Array.isArray(messages[0]) ? collectFiles(messages) : collectFiles([messages])
     
-    return Promise.allSettled(files.map(file => fs.rm(`${this.path}${file}`).catch(() => {})))
+    return Promise.allSettled(files.map(file => fs.rm(`${path}${file}`).catch(() => {})))
   }
 
   /** #删除 */

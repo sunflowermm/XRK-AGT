@@ -252,4 +252,41 @@ async preCheck(e, hasBypassPlugin = false) {
 
 **更新日期**：2026年1月24日  
 **优化人员**：AI Assistant  
-**版本**：1.0.0
+**版本**：1.1.0
+
+---
+
+## 后续优化（2026年1月24日）
+
+### Plugin开发规范修复
+
+1. **修复constructor中的状态变量问题**
+   - **问题**：plugin的constructor中不能用this定义状态变量，因为this会一直刷新
+   - **解决方案**：
+     - 将状态变量移到`init()`方法中初始化
+     - 或使用模块级变量（对于配置类变量）
+   
+2. **修复的插件**：
+   - `update.js`：将`this.updatedTargets`、`this.messages`、`this.isUp`、`this.oldCommitId`改为方法内局部变量
+   - `add.js`：将`this.path`、`this.bannedWordsPath`等改为模块级变量
+   - `sendLog.js`：将`this.lineNum`、`this.maxNum`等改为模块级变量
+   - `状态.js`：将`this.showNetworkInfo`等改为模块级变量
+   - `restart.js`：将`this.key`、`this.shutdownKey`改为模块级常量
+   - `模拟定时输入.js`：将`this.task`移到`init()`方法
+
+3. **删除未使用的模块导入**：
+   - `loader.js`：删除未使用的`lodash`导入（用原生方法替代）
+   - `restart.js`：删除未使用的`createRequire`导入
+   - `状态.js`：删除未使用的`createRequire`导入
+   - `远程指令.js`：删除未使用的`events`、`readline`导入（保留在getGlobalContext中供JS执行器使用）
+
+4. **代码优化**：
+   - 用原生方法替代lodash函数：`lodash.groupBy` → 原生循环，`lodash.truncate` → 原生substring，`lodash.isEmpty` → 原生判断，`lodash.orderBy` → 原生sort
+   - 删除JavaScriptExecutor中未使用的`this.maxOutputLength`和`this.executionMode`（改为从config读取）
+   - 删除`jsExecutor.setMode`的调用（执行模式从config读取）
+
+### 优化效果
+
+- **代码质量**：删除了约50行冗余代码和未使用的导入
+- **性能**：用原生方法替代lodash，减少依赖
+- **规范性**：所有plugin遵循constructor规范，状态变量正确初始化

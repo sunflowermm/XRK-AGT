@@ -1,8 +1,6 @@
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
-import lodash from 'lodash';
-import chokidar from 'chokidar';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 
@@ -214,65 +212,46 @@ class ConfigLoader {
   async watch(enable = true) {
     if (!enable) {
       if (this.watcher) {
-        await this.watcher.close();
-        this.watcher = null;
+        await this.watcher.close()
+        this.watcher = null
       }
-      return;
+      return
     }
 
-    if (this.watcher) return;
+    if (this.watcher) return
 
     try {
-      // 监视所有 core 目录下的 commonconfig 子目录
-      const configDirs = await paths.getCoreSubDirs('commonconfig');
+      const { HotReloadBase } = await import('#utils/hot-reload-base.js')
+      const hotReload = new HotReloadBase({ loggerName: 'ConfigLoader' })
       
+      const configDirs = await paths.getCoreSubDirs('commonconfig')
       if (configDirs.length === 0) {
-        BotUtil.makeLog('debug', '未找到 commonconfig 目录，跳过文件监视', 'ConfigLoader');
-        return;
+        BotUtil.makeLog('debug', '未找到 commonconfig 目录，跳过文件监视', 'ConfigLoader')
+        return
       }
-      
-      this.watcher = chokidar.watch(configDirs, {
-        ignored: /(^|[\/\\])\../,
-        persistent: true,
-        ignoreInitial: true,
-        awaitWriteFinish: {
-          stabilityThreshold: 300,
-          pollInterval: 100
+
+      await hotReload.watch(true, {
+        dirs: configDirs,
+        onAdd: async (filePath) => {
+          const key = hotReload.getFileKey(filePath)
+          BotUtil.makeLog('info', `检测到新配置文件: ${key}`, 'ConfigLoader')
+          await this._loadConfig(filePath)
+        },
+        onChange: async (filePath) => {
+          const key = hotReload.getFileKey(filePath)
+          BotUtil.makeLog('info', `检测到配置文件变更: ${key}`, 'ConfigLoader')
+          await this.reload(key)
+        },
+        onUnlink: async (filePath) => {
+          const key = hotReload.getFileKey(filePath)
+          BotUtil.makeLog('info', `检测到配置文件删除: ${key}`, 'ConfigLoader')
+          this.configs.delete(key)
         }
-      });
+      })
 
-      const isValidFile = (filePath) => {
-        const fileName = path.basename(filePath);
-        return fileName.endsWith('.js') && !fileName.startsWith('.') && !fileName.startsWith('_');
-      };
-
-      const handleConfigChange = async (filePath, eventType) => {
-        try {
-          if (!isValidFile(filePath)) return;
-
-          const key = path.basename(filePath, '.js');
-          
-          if (eventType === 'add') {
-            BotUtil.makeLog('info', `检测到新配置文件: ${key}`, 'ConfigLoader');
-            await this._loadConfig(filePath);
-          } else if (eventType === 'change') {
-            BotUtil.makeLog('info', `检测到配置文件变更: ${key}`, 'ConfigLoader');
-            await this.reload(key);
-          } else if (eventType === 'unlink') {
-            BotUtil.makeLog('info', `检测到配置文件删除: ${key}`, 'ConfigLoader');
-            this.configs.delete(key);
-          }
-        } catch (error) {
-          BotUtil.makeLog('error', `处理配置${eventType}失败`, 'ConfigLoader', error);
-        }
-      };
-
-      this.watcher
-        .on('add', lodash.debounce((filePath) => handleConfigChange(filePath, 'add'), 500))
-        .on('change', lodash.debounce((filePath) => handleConfigChange(filePath, 'change'), 500))
-        .on('unlink', lodash.debounce((filePath) => handleConfigChange(filePath, 'unlink'), 500));
+      this.watcher = hotReload.watcher
     } catch (error) {
-      BotUtil.makeLog('error', '启动配置文件监视失败', 'ConfigLoader', error);
+      BotUtil.makeLog('error', '启动配置文件监视失败', 'ConfigLoader', error)
     }
   }
 }

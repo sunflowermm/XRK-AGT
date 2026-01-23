@@ -1,20 +1,18 @@
-import fs from 'fs';
-import path from 'path';
-import YAML from 'yaml';
-import fetch from 'node-fetch';
-import { exec } from 'node:child_process';
-import moment from 'moment';
-import axios from 'axios';
-import crypto from 'crypto';
-import zlib from 'zlib';
-import querystring from 'querystring';
-import url from 'url';
-import stream from 'stream';
-import os from 'os';
-import events from 'events';
-import readline from 'readline';
-import vm from 'vm';
-import util from 'util';
+import fs from 'fs'
+import path from 'path'
+import YAML from 'yaml'
+import fetch from 'node-fetch'
+import { exec } from 'node:child_process'
+import moment from 'moment'
+import axios from 'axios'
+import crypto from 'crypto'
+import zlib from 'zlib'
+import querystring from 'querystring'
+import url from 'url'
+import stream from 'stream'
+import os from 'os'
+import vm from 'vm'
+import util from 'util'
 import common from '#utils/common.js'
 import cfg from '#infrastructure/config/config.js'
 import { 制作聊天记录 } from '#utils/botutil.js'
@@ -848,18 +846,12 @@ class ObjectInspector {
  * 增强的JavaScript执行器
  */
 class JavaScriptExecutor {
-  constructor() {
-    this.maxOutputLength = 5000;
-    this.executionMode = 'safe'; // safe, enhanced, sandbox
-  }
-
   /**
-   * 设置执行模式
+   * 设置执行模式（已废弃，使用config.get('jsExecutionMode')）
+   * @deprecated
    */
   setMode(mode) {
-    if (['safe', 'enhanced', 'sandbox'].includes(mode)) {
-      this.executionMode = mode;
-    }
+    // 已废弃，执行模式从config读取
   }
 
   /**
@@ -924,6 +916,7 @@ class JavaScriptExecutor {
 
       try {
         // 尝试使用 JSON.stringify
+        const maxOutputLength = config.get('maxOutputLength', 5000)
         const jsonStr = JSON.stringify(result, (key, value) => {
           if (typeof value === 'bigint') return value.toString() + 'n';
           if (typeof value === 'function') return '[Function]';
@@ -931,13 +924,14 @@ class JavaScriptExecutor {
           return value;
         }, 2);
         
-        if (jsonStr.length > this.maxOutputLength) {
-          return jsonStr.substring(0, this.maxOutputLength - 3) + '...';
+        if (jsonStr.length > maxOutputLength) {
+          return jsonStr.substring(0, maxOutputLength - 3) + '...';
         }
         return jsonStr;
       } catch (e) {
         // 无法JSON化的对象，使用 util.inspect
         try {
+          const maxOutputLength = config.get('maxOutputLength', 5000)
           const inspectStr = util.inspect(result, { 
             depth: 3, 
             colors: false, 
@@ -948,8 +942,8 @@ class JavaScriptExecutor {
             showHidden: false,
             customInspect: true
           });
-          if (inspectStr.length > this.maxOutputLength) {
-            return inspectStr.substring(0, this.maxOutputLength - 3) + '...';
+          if (inspectStr.length > maxOutputLength) {
+            return inspectStr.substring(0, maxOutputLength - 3) + '...';
           }
           return inspectStr;
         } catch (inspectError) {
@@ -1088,6 +1082,7 @@ class JavaScriptExecutor {
       clearTimeout,
       clearInterval,
       Promise,
+      EventEmitter: require('events').EventEmitter,
       __dirname: ROOT_PATH,
       __filename: configFile
     };
@@ -1715,12 +1710,6 @@ rj e.reply("Hello!")           // 发送消息`, true);
       config.set(key, value);
       await e.reply(`✅ 配置已更新: ${key} = ${value}`, true);
       
-      // 如果修改了JS执行模式，更新执行器
-      if (key === 'jsExecutionMode') {
-        jsExecutor.setMode(value);
-        await e.reply(`💡 JavaScript执行模式已切换到: ${value}`, true);
-      }
-      
       return true;
     }
 
@@ -1799,10 +1788,9 @@ rc help - 显示详细帮助`, true);
       querystring: querystring,
       url: url,
       stream: stream,
-      events: events,
-      readline: readline,
       vm: vm,
       Buffer: Buffer,
+      EventEmitter: require('events').EventEmitter,
       console: console,
       setTimeout: setTimeout,
       setInterval: setInterval,

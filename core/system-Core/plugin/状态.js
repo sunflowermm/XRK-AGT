@@ -1,10 +1,14 @@
 import os from 'os'
 import moment from 'moment'
 import * as si from 'systeminformation'
-import { createRequire } from 'module'
 import cfg from '#infrastructure/config/config.js'
 
 const require = createRequire(import.meta.url)
+
+// 模块级配置
+let showNetworkInfo = true
+let showProcessInfo = true
+let showDiskInfo = true
 
 export class stattools extends plugin {
   constructor() {
@@ -18,13 +22,15 @@ export class stattools extends plugin {
         fnc: 'status'
       }]
     })
-    
+  }
+
+  async init() {
     // 从cfg读取配置
     const agtCfg = cfg.agt || {}
     const statusCfg = agtCfg.status || {}
-    this.showNetworkInfo = statusCfg.showNetwork !== false
-    this.showProcessInfo = statusCfg.showProcess !== false
-    this.showDiskInfo = statusCfg.showDisk !== false
+    showNetworkInfo = statusCfg.showNetwork !== false
+    showProcessInfo = statusCfg.showProcess !== false
+    showDiskInfo = statusCfg.showDisk !== false
   }
 
   formatFileSize(bytes) {
@@ -83,7 +89,7 @@ export class stattools extends plugin {
         : (time.uptime || os.uptime())
       const botRuntime = this.formatTime(runtimeSeconds)
       
-        const loader = (await import('#infrastructure/plugins/loader.js')).default
+      const loader = (await import('#infrastructure/plugins/loader.js')).default
       const pluginCount = loader.priority.length + loader.extended.length
       const taskCount = loader.task.length
 
@@ -139,7 +145,7 @@ export class stattools extends plugin {
           `  可用：${this.formatFileSize(mainDisk.available)}`
         ].join('\n') : '  无磁盘信息',
         '',
-        this.showProcessInfo ? [
+        showProcessInfo ? [
           `● 进程信息`,
           `  总进程数：${processes.all}个`,
           `  运行中：${processes.running}个`,
@@ -158,7 +164,7 @@ export class stattools extends plugin {
         `  日志目录：${cfg.agt?.logging?.dir || 'logs'}`
       ].flat()
 
-      if (this.showNetworkInfo) {
+      if (showNetworkInfo) {
         msg.push('', `● 网络信息`)
         msg.push(`  接口名称：${activeNetwork.iface}`)
         msg.push(`  IPv4地址：${activeNetwork.ip4 || '无'}`)

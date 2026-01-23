@@ -2,12 +2,10 @@ import fs from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
 import paths from '#utils/paths.js'
-import lodash from 'lodash'
 import os from 'os'
 import cfg from '../config/config.js'
 import plugin from './plugin.js'
 import schedule from 'node-schedule'
-import chokidar from 'chokidar'
 import moment from 'moment'
 import Handler from './handler.js'
 import Runtime from './runtime.js'
@@ -403,7 +401,15 @@ class PluginsLoader {
 
     if (isExtended) return await this.processRules(plugins, e)
 
-    const pluginsByPriority = lodash.groupBy(plugins, 'priority')
+    // 按优先级分组
+    const pluginsByPriority = {}
+    for (const p of plugins) {
+      const priority = p.priority || 50
+      if (!pluginsByPriority[priority]) {
+        pluginsByPriority[priority] = []
+      }
+      pluginsByPriority[priority].push(p)
+    }
     const priorities = Object.keys(pluginsByPriority).map(Number).sort((a, b) => a - b)
 
     for (const priority of priorities) {
@@ -435,7 +441,9 @@ class PluginsLoader {
         
         // 记录日志（如果未禁用）
         if (rule.log !== false) {
-          logger.info(`${e.logFnc}${e.logText} ${lodash.truncate(e.msg || '', { length: 100 })}`)
+          const msg = e.msg || ''
+          const truncatedMsg = msg.length > 100 ? msg.substring(0, 97) + '...' : msg
+          logger.info(`${e.logFnc}${e.logText} ${truncatedMsg}`)
         }
 
         // 检查权限
@@ -489,7 +497,7 @@ class PluginsLoader {
       if (!plugin?.getContext) continue
 
       const contexts = { ...plugin.getContext(), ...plugin.getContext(false, true) }
-      if (lodash.isEmpty(contexts)) continue
+      if (!contexts || contexts.length === 0) continue
 
         for (const fnc in contexts) {
           if (typeof plugin[fnc] === 'function') {
@@ -857,8 +865,9 @@ class PluginsLoader {
   }
 
   sortPlugins() {
-    this.priority = lodash.orderBy(this.priority, ['priority'], ['asc'])
-    this.extended = lodash.orderBy(this.extended, ['priority'], ['asc'])
+    // 按优先级排序
+    this.priority.sort((a, b) => (a.priority || 50) - (b.priority || 50))
+    this.extended.sort((a, b) => (a.priority || 50) - (b.priority || 50))
   }
 
   filtEvent(e, v) {
@@ -1371,62 +1380,43 @@ class PluginsLoader {
     }
 
     try {
-      const pluginDirs = await paths.getCoreSubDirs('plugin');
+      const { HotReloadBase } = await import('#utils/hot-reload-base.js')
+      const hotReload = new HotReloadBase({ loggerName: 'PluginsLoader' })
       
+      const pluginDirs = await paths.getCoreSubDirs('plugin')
       if (pluginDirs.length === 0) {
-        logger.debug('未找到 plugin 目录，跳过文件监视');
-        return;
+        logger.debug('未找到 plugin 目录，跳过文件监视')
+        return
       }
-      
-      const watcher = chokidar.watch(pluginDirs, {
-        ignored: /(^|[\/\\])\../,
-        persistent: true,
-        ignoreInitial: true,
-        awaitWriteFinish: {
-          stabilityThreshold: 300,
-          pollInterval: 100
+
+      await hotReload.watch(true, {
+        dirs: pluginDirs,
+        onAdd: async (filePath) => {
+          const key = hotReload.getFileKey(filePath)
+          logger.mark(`[新增插件][${key}]`)
+          const relativePath = path.relative(paths.root, filePath)
+          await this.importPlugin({
+            name: key,
+            path: `../../../${relativePath.replace(/\\/g, '/')}?${moment().format('X')}`
+          }, [])
+          this.sortPlugins()
+          this.identifyDefaultMsgHandlers()
+        },
+        onChange: async (filePath) => {
+          const key = hotReload.getFileKey(filePath)
+          logger.mark(`[修改插件][${key}]`)
+          await this.changePlugin(key)
+        },
+        onUnlink: async (filePath) => {
+          const key = hotReload.getFileKey(filePath)
+          logger.mark(`[删除插件][${key}]`)
+          this.priority = this.priority.filter(p => p.key !== key)
+          this.extended = this.extended.filter(p => p.key !== key)
+          this.identifyDefaultMsgHandlers()
         }
       })
 
-      const handleFileChange = async (filePath, eventType) => {
-        try {
-          const fileName = path.basename(filePath);
-          if (!fileName.endsWith('.js') || fileName.startsWith('.') || fileName.startsWith('_')) return;
-
-          const key = fileName;
-          
-          if (eventType === 'add') {
-            logger.mark(`[新增插件][${key}]`);
-            const relativePath = path.relative(paths.root, filePath);
-            await this.importPlugin({
-              name: key,
-              path: `../../../${relativePath.replace(/\\/g, '/')}?${moment().format('X')}`
-            }, []);
-            this.sortPlugins();
-            this.identifyDefaultMsgHandlers();
-          } else if (eventType === 'change') {
-            logger.mark(`[修改插件][${key}]`);
-            await this.changePlugin(key);
-          } else if (eventType === 'unlink') {
-            logger.mark(`[删除插件][${key}]`);
-            this.priority = this.priority.filter(p => p.key !== key);
-            this.extended = this.extended.filter(p => p.key !== key);
-            this.identifyDefaultMsgHandlers();
-          }
-        } catch (error) {
-          logger.error(`处理插件${eventType}失败: ${error.message}`);
-        }
-      };
-
-      watcher
-        .on('add', lodash.debounce((filePath) => handleFileChange(filePath, 'add'), 500))
-        .on('change', lodash.debounce((filePath) => handleFileChange(filePath, 'change'), 500))
-        .on('unlink', lodash.debounce((filePath) => handleFileChange(filePath, 'unlink'), 500))
-        .on('error', (error) => {
-          logger.error('插件文件监视错误', error)
-        })
-
-      this.watcher.dir = watcher
+      this.watcher.dir = hotReload.watcher
       logger.debug('插件文件监视已启动')
     } catch (error) {
       logger.error('启动插件文件监视失败', error)
