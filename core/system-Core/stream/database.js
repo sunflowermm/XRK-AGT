@@ -63,26 +63,14 @@ export default class DatabaseStream extends AIStream {
       return dbList;
     };
 
-    // Call Function：保存知识（执行操作，不返回JSON）
+    // Call Function：保存知识（供内部调用）
     this.registerFunction('save_knowledge', {
       description: '保存知识到知识库',
-      prompt: () => `[保存知识:knowledgeBase:content] - 保存知识到指定知识库，内容可以是文本或JSON，支持多行内容${getKnowledgePrompt()}`,
-      parser: (text, context) => {
-        const match = text.match(/\[保存知识:([^:]+):([^\]]+)\]/);
-        if (!match) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'save_knowledge', params: { db: match[1], content: match[2] } }],
-          cleanText: text.replace(/\[保存知识:[^\]]+\]/g, '').trim()
-        };
-      },
       handler: async (params = {}, context = {}) => {
         const { db, content } = params;
         if (!db || !content) return;
 
         await this.saveKnowledge(db, content, context);
-        await this.storeNoteIfWorkflow(context, `已保存知识到知识库: ${db}`, 'database', true);
         BotUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
       },
       enabled: true
@@ -159,26 +147,14 @@ export default class DatabaseStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：删除知识（执行操作，不返回JSON）
+    // Call Function：删除知识（供内部调用）
     this.registerFunction('delete_knowledge', {
       description: '从知识库删除知识',
-      prompt: `[删除知识:knowledgeBase:condition] - 从指定知识库删除知识，支持ID或条件删除`,
-      parser: (text, context) => {
-        const match = text.match(/\[删除知识:([^:]+):([^\]]+)\]/);
-        if (!match) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'delete_knowledge', params: { db: match[1], condition: match[2] } }],
-          cleanText: text.replace(/\[删除知识:[^\]]+\]/g, '').trim()
-        };
-      },
       handler: async (params = {}, context = {}) => {
         const { db, condition } = params;
         if (!db) return;
 
         const count = await this.deleteKnowledge(db, condition, context);
-        await this.storeNoteIfWorkflow(context, `从知识库 ${db} 删除了 ${count} 条知识`, 'database', true);
       },
       enabled: true
     });

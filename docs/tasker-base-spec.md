@@ -52,7 +52,7 @@ classDiagram
 
 每个 Tasker 实例应该具备以下属性：
 
-- `id` - Tasker 唯一标识（如 'QQ', 'WeChat'）
+- `id` - Tasker 唯一标识（如 'QQ', 'custom-im'）
 - `name` - Tasker 名称（如 'OneBotv11', 'stdin'）
 - `path` - Tasker 路径
 

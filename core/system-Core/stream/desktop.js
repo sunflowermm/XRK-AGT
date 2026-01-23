@@ -211,23 +211,13 @@ export default class DesktopStream extends AIStream {
   /**
    * 注册所有功能
    * 
-   * MCP工具：screenshot, system_info, disk_space, list_desktop_files, create_word_document, create_excel_document, stock_quote（返回JSON，不出现在prompt中）
-   * Call Function：所有系统操作、文件操作、命令执行功能（出现在prompt中，供AI调用）
+   * MCP工具：screenshot, system_info, disk_space, list_desktop_files, create_word_document, create_excel_document, stock_quote（返回JSON）
+   * Call Function：所有系统操作、文件操作、命令执行功能（由系统通过工具调用协议自动触发）
    */
   registerAllFunctions() {
-    // Call Function：回到桌面（执行操作）
+    // Call Function：回到桌面（供内部调用）
     this.registerFunction('show_desktop', {
       description: '回到桌面 - 最小化所有窗口显示桌面（仅限Windows系统）。适用场景：用户想要清空屏幕、查看桌面文件、需要干净的工作环境、或准备进行截屏等操作时使用。',
-      prompt: `[回桌面] - 帮用户切换到桌面`,
-      parser: (text, context) => {
-        if (!text.includes('[回桌面]')) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'show_desktop', params: {} }],
-          cleanText: text.replace(/\[回桌面\]/g, '').trim()
-        };
-      },
       handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '回桌面功能')) return;
 
@@ -240,28 +230,9 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：打开系统工具（执行操作）
+    // Call Function：打开系统工具（供内部调用）
     this.registerFunction('open_system_tool', {
       description: '打开常用系统工具',
-      prompt: `[打开记事本] [打开计算器] [任务管理器] - 在电脑上打开对应的系统工具`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const toolMap = {
-          '[打开记事本]': { tool: 'notepad', name: '记事本' },
-          '[打开计算器]': { tool: 'calc', name: '计算器' },
-          '[任务管理器]': { tool: 'taskmgr', name: '任务管理器' }
-        };
-
-        for (const [pattern, { tool }] of Object.entries(toolMap)) {
-          if (text.includes(pattern)) {
-            functions.push({ type: 'open_system_tool', params: { tool } });
-            cleanText = cleanText.replace(new RegExp(pattern.replace(/[\[\]]/g, '\\$&'), 'g'), '').trim();
-          }
-        }
-
-        return { functions, cleanText };
-      },
       handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '打开系统工具功能')) return;
 
@@ -327,19 +298,9 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：锁屏（执行操作）
+    // Call Function：锁屏（供内部调用）
     this.registerFunction('lock_screen', {
       description: '锁定电脑屏幕',
-      prompt: `[锁屏] - 锁定电脑屏幕`,
-      parser: (text, context) => {
-        if (!text.includes('[锁屏]')) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'lock_screen', params: {} }],
-          cleanText: text.replace(/\[锁屏\]/g, '').trim()
-        };
-      },
       handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '锁屏功能')) return;
 
@@ -398,29 +359,9 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：打开浏览器（执行操作）
+    // Call Function：打开浏览器（供内部调用）
     this.registerFunction('open_browser', {
       description: '打开浏览器访问网页',
-      prompt: `[打开网页:url] - 在浏览器中打开指定网页，例如：[打开网页:https://www.baidu.com]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[打开网页:([^\]]+)\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const url = (match[1] || '').trim();
-          if (url) {
-            functions.push({ type: 'open_browser', params: { url } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
       handler: async (params = {}, context = {}) => {
         const url = this.getParam(params, 'url');
         if (!url) return;
@@ -442,31 +383,9 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：电源控制（执行操作）
+    // Call Function：电源控制（供内部调用）
     this.registerFunction('power_control', {
       description: '关机或重启电脑',
-      prompt: `[关机] - 关闭电脑（1分钟后）\n[立即关机] - 立即关闭电脑\n[重启] - 重启电脑（1分钟后）\n[取消关机] - 取消关机或重启`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-
-        const actions = {
-          '[立即关机]': 'shutdown_now',
-          '[关机]': 'shutdown',
-          '[重启]': 'restart',
-          '[取消关机]': 'cancel'
-        };
-
-        for (const [pattern, action] of Object.entries(actions)) {
-          if (text.includes(pattern)) {
-            functions.push({ type: 'power_control', params: { action } });
-            cleanText = cleanText.replace(new RegExp(pattern.replace(/[\[\]]/g, '\\$&'), 'g'), '').trim();
-            break;
-          }
-        }
-
-        return { functions, cleanText };
-      },
       handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '关机/重启功能')) return;
 
@@ -496,29 +415,9 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：创建文件夹（执行操作）
+    // Call Function：创建文件夹（供内部调用）
     this.registerFunction('create_folder', {
       description: '在桌面创建文件夹',
-      prompt: `[创建文件夹:folderName] - 在桌面创建指定名称的文件夹，例如：[创建文件夹:新建文件夹]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[创建文件夹:([^\]]+)\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const folderName = (match[1] || '').trim();
-          if (folderName) {
-            functions.push({ type: 'create_folder', params: { folderName } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
       handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '创建文件夹功能')) return;
 
@@ -541,19 +440,9 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：打开资源管理器（执行操作）
+    // Call Function：打开资源管理器（供内部调用）
     this.registerFunction('open_explorer', {
       description: '打开文件管理器',
-      prompt: `[打开资源管理器] 或 [打开文件夹] - 打开文件资源管理器`,
-      parser: (text, context) => {
-        if (!text.includes('[打开资源管理器]') && !text.includes('[打开文件夹]')) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'open_explorer', params: {} }],
-          cleanText: text.replace(/\[打开资源管理器\]|\[打开文件夹\]/g, '').trim()
-        };
-      },
       handler: async (params = {}, context = {}) => {
         const commands = {
           win32: 'explorer',
@@ -618,29 +507,9 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：执行PowerShell命令（执行操作）
+    // Call Function：执行PowerShell命令（供内部调用）
     this.registerFunction('execute_powershell', {
       description: '执行PowerShell命令（工作区：桌面）',
-      prompt: `[执行命令:command] - 在工作区（桌面）执行PowerShell命令，例如：[执行命令:Get-ChildItem -Path "$env:USERPROFILE\\Desktop" -Filter "*.docx"]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[执行命令:([^\]]+)\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const command = (match[1] || '').trim();
-          if (command) {
-            functions.push({ type: 'execute_powershell', params: { command } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
       handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '执行PowerShell命令')) return;
 
@@ -724,29 +593,9 @@ export default class DesktopStream extends AIStream {
     // 注意：read/grep已移至MCP工具（tools.read, tools.grep），write/run/note已移至tools工作流
     // desktop工作流会与tools工作流合并，自动获得write/run/note功能
 
-    // Call Function：打开应用（执行操作）
+    // Call Function：打开应用（供内部调用）
     this.registerFunction('open_application', {
       description: '打开应用程序',
-      prompt: `[打开软件:appName] - 打开指定的软件，例如：[打开软件:微信] 或 [打开软件:notepad.exe]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[打开软件:([^\]]+)\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const appName = (match[1] || '').trim();
-          if (appName) {
-            functions.push({ type: 'open_application', params: { appName } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
       handler: async (params = {}, context = {}) => {
         if (!this.requireWindows(context, '打开软件')) return;
 
@@ -1000,19 +849,9 @@ export default class DesktopStream extends AIStream {
     });
 
 
-    // Call Function：清理进程（执行操作）
+    // Call Function：清理进程（供内部调用）
     this.registerFunction('cleanup_processes', {
       description: '清理无用进程',
-      prompt: `[清理进程] - 清理已注册的无用进程`,
-      parser: (text, context) => {
-        if (!text.includes('[清理进程]')) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'cleanup_processes', params: {} }],
-          cleanText: text.replace(/\[清理进程\]/g, '').trim()
-        };
-      },
       handler: async (params = {}, context = {}) => {
         const result = await this.tools.cleanupProcesses();
         context.processesCleaned = result.killed || [];
@@ -1234,36 +1073,23 @@ export default class DesktopStream extends AIStream {
    * 注意：只包含 Call Function 的 prompt，MCP 工具不会出现在这里
    */
   buildFunctionsPrompt() {
-    // 只获取 Call Function（MCP 工具不会出现在 prompt 中）
+    // 只获取启用的 Call Function（MCP 工具不会出现在 prompt 中）
     const enabledFuncs = this.getEnabledFunctions();
     if (enabledFuncs.length === 0) return '';
 
-    // 合并所有 Call Function 的 prompt
-    const prompts = enabledFuncs
-      .filter(f => f.prompt)
-      .map(f => f.prompt);
+    // 只作为“能力说明”，不再约定任何特殊的文本命令格式
+    const lines = enabledFuncs
+      .filter(f => f.description)
+      .map(f => `- ${f.description}`);
 
-    if (prompts.length === 0) return '';
+    if (lines.length === 0) return '';
 
-    // 动态解析 prompt（如果为函数类型）
-    const resolvedPrompts = prompts.map(p => typeof p === 'function' ? p() : p);
+    return `【可用能力】
+你具备以下桌面/系统相关能力，这些能力会通过系统的工具调用协议（tool calling + MCP）自动触发。
+你只需要用自然语言思考和回答，不要在回复中设计特殊命令格式或人为添加标记。
 
-    return `【可执行命令列表】
-在回复中使用以下格式时，系统会自动解析并执行，然后从文本中移除命令格式。
-
-格式要求：精确匹配示例（类似正则），如[命令:参数1:参数2]。执行后命令格式会被移除，用户只看到普通文本。
-
-重要：使用命令时，必须在回复中包含自然对话内容，不要只执行功能不说话！可以多说几句作为捧哏、提醒或告诫，让对话更生动自然。
-
-可用命令：
-${resolvedPrompts.join('\n')}
-
-示例：
-- "[打开计算器]好的，马上帮你打开计算器，这样你就可以算账啦~" → 执行打开计算器+回复文本
-- "[回桌面]没问题，帮你回到桌面，这样找文件更方便" → 执行回桌面+回复文本
-
-【重要规则】
-1. 格式完全匹配，参数完整，必须同时回复文本内容，不要只执行功能不回复`;
+当用户的需求与下列能力相关时，请优先考虑调用相应工具来完成任务：
+${lines.join('\n')}`;
   }
 
   buildSystemPrompt(context) {

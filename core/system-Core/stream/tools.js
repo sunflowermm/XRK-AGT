@@ -87,12 +87,6 @@ export default class ToolsStream extends AIStream {
             };
           }
 
-          // 在工作流中记录笔记
-          await this.storeNoteIfWorkflow(context, 
-            `【文件读取结果】\n已读取文件：${path.basename(result.path)}\n文件路径：${result.path}\n\n【完整文件内容】\n${result.content}`, 
-            'read', true
-          );
-
           return {
             success: true,
             data: {
@@ -115,7 +109,6 @@ export default class ToolsStream extends AIStream {
             error
           };
         }
-        await this.storeNoteIfWorkflow(context, `【文件读取失败】\n文件：${filePath}\n错误：${error}`, 'read', true);
         return { success: false, error };
       },
       enabled: true
@@ -158,11 +151,6 @@ export default class ToolsStream extends AIStream {
             context.stream.context.grepPattern = pattern;
           }
 
-          // 在工作流中记录笔记
-          const matchesText = this.formatGrepMatches(result.matches);
-          const noteContent = `【搜索结果】\n关键词：${pattern}\n${filePath ? `文件：${filePath}\n` : ''}找到 ${result.matches.length} 个匹配项：\n${matchesText}${result.matches.length > 20 ? '\n...(结果已截断)' : ''}`;
-          await this.storeNoteIfWorkflow(context, noteContent, 'grep', true);
-
           return {
             success: true,
             data: {
@@ -178,36 +166,14 @@ export default class ToolsStream extends AIStream {
           context.stream.context = context.stream.context || {};
           context.stream.context.grepError = `搜索失败: ${pattern}`;
         }
-        await this.storeNoteIfWorkflow(context, `【搜索失败】\n关键词：${pattern}\n错误：搜索失败`, 'grep', true);
         return { success: false, error: `搜索失败: ${pattern}` };
       },
       enabled: true
     });
 
-    // Call Function：写入文件（执行操作，不返回JSON）
+    // Call Function：写入文件（供工具/内部调用）
     this.registerFunction('write', {
       description: '写入文件',
-      prompt: `[写入:filePath:content] - 写入文件，例如：[写入:test.txt:这是内容]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[(?:写入|write):([^:]+):([^\]]+)\]/g;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const filePath = (match[1] || '').trim();
-          const content = (match[2] || '').trim();
-          if (filePath && content) {
-            functions.push({ type: 'write', params: { filePath, content } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
       handler: async (params = {}, context = {}) => {
         const { filePath, content } = params;
         if (!filePath || !content) return;
@@ -223,29 +189,9 @@ export default class ToolsStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：执行命令（执行操作，不返回JSON）
+    // Call Function：执行命令（供工具/内部调用）
     this.registerFunction('run', {
       description: '执行命令',
-      prompt: `[执行:command] - 执行命令，例如：[执行:ls -la] 或 [执行:Get-ChildItem]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const reg = /\[(?:执行|run):([^\]]+)\]/gi;
-        let match;
-
-        while ((match = reg.exec(text)) !== null) {
-          const command = (match[1] || '').trim();
-          if (command) {
-            functions.push({ type: 'run', params: { command } });
-          }
-        }
-
-        if (functions.length > 0) {
-          cleanText = text.replace(reg, '').trim();
-        }
-
-        return { functions, cleanText };
-      },
       handler: async (params = {}, context = {}) => {
         if (!IS_WINDOWS) {
           context.commandError = 'run命令仅在Windows上支持';
@@ -296,7 +242,6 @@ export default class ToolsStream extends AIStream {
    */
   async handleWriteSuccess(result, context) {
     context.writeFileResult = { success: true, path: result.path };
-    await this.storeNoteIfWorkflow(context, `【文件写入成功】\n文件：${result.path}`, 'write', true);
   }
 
   /**
@@ -304,7 +249,6 @@ export default class ToolsStream extends AIStream {
    */
   async handleWriteFailure(filePath, result, context) {
     context.writeFileError = result.error;
-    await this.storeNoteIfWorkflow(context, `【文件写入失败】\n文件：${filePath}\n错误：${result.error}`, 'write', true);
   }
 
   /**
@@ -348,9 +292,6 @@ export default class ToolsStream extends AIStream {
   async handleCommandSuccess(command, output, context) {
     context.commandOutput = output;
     context.commandSuccess = true;
-    
-    const truncatedOutput = output.length > 1000 ? `${output.slice(0, 1000)}...` : output;
-    await this.storeNoteIfWorkflow(context, `【命令执行成功】\n命令：${command}\n输出：${truncatedOutput}`, 'run', true);
   }
 
   /**
@@ -360,25 +301,17 @@ export default class ToolsStream extends AIStream {
     context.commandError = err.message;
     context.commandSuccess = false;
     context.commandStderr = err.stderr || '';
-    await this.storeNoteIfWorkflow(context, `【命令执行失败】\n命令：${command}\n错误：${err.message}`, 'run', true);
   }
 
   buildSystemPrompt(context) {
-    return `【基础工具工作流】
-提供write/run/note核心工具。
+    return `【基础工具说明】
+你具备写入文件(write)、执行命令(run)、记录笔记(note)等能力。
+这些能力会在需要时通过系统的工具调用机制自动触发。
 
-【可用命令】
-1. [写入:文件路径:内容] - 写入文件
-2. [执行:命令] - 执行命令
-3. [笔记:内容] - 记录笔记（仅在工作流中可用）
-
-【文件读取功能】
-- 文件读取(read)和搜索(grep)功能已移至MCP工具（tools.read, tools.grep），可通过MCP协议调用
-- 在工作流中，这些工具的结果会自动存到笔记
-- 后续步骤可通过笔记查看之前的结果
-
-【工作流笔记】
-- 使用[笔记:内容]手动记录信息`;
+【能力提示】
+- 写入文件：根据上下文需要，把内容写入到指定文件
+- 执行命令：在工作区执行合适的命令（注意安全和权限）
+- 记录笔记：在复杂任务中，把阶段性结论或关键信息记录下来`;
   }
 }
 

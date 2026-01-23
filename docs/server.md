@@ -6,9 +6,9 @@
 
 ## 📋 快速导航
 
-- [返回文档首页](../完整文档.md)
-- [Bot主类文档](bot.md)
-- [HTTP API框架文档](../src/infrastructure/http/README.md)
+- [返回文档首页（docs/README.md）](README.md)
+- [Bot主类文档（docs/bot.md）](bot.md)
+- [HTTP API基类文档（docs/http-api.md）](http-api.md)
 - [项目总览](../PROJECT_OVERVIEW.md)
 
 ## 📑 目录

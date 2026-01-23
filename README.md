@@ -11,7 +11,7 @@ XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多平台、多Tasker、
 
 - 仅想**先跑起来**：直接看下面的「快速开始」
 - 想**了解整体架构**：先看「架构层次说明」和 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)
-- 想**做二次开发/写插件**：阅读 [`docs/完整文档.md`](docs/完整文档.md) - 整合了所有核心文档
+- 想**做二次开发/写插件**：阅读 [`docs/README.md`](docs/README.md) + 各子文档（原 `docs/完整文档.md` 内容已合并）
 
 ---
 
@@ -278,7 +278,7 @@ graph TD
 详细架构与对象说明请参见：
 
 - **项目主文档**：[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)
-- **完整文档**：[`docs/完整文档.md`](docs/完整文档.md) - 整合了所有核心文档和 API 参考
+- **文档中心**：[`docs/README.md`](docs/README.md) - 文档导航与各模块索引
 
 ---
 
@@ -446,12 +446,6 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
 
 详细文档：
 - [完整 MCP 文档](./docs/mcp-guide.md) - MCP 协议完整指南，包含工具注册、外部平台连接等
-
-## 📚 完整文档导航
-
-#### 🚀 快速开始
-- **[`docs/完整文档.md`](docs/完整文档.md)** - 整合了所有核心文档，推荐从这里开始
-- **[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)** - 项目整体架构与目录结构详细说明
 
 #### 🤖 AI 对话/工具（Node）& 智能体/RAG（Python）
 - **[`docs/aistream.md`](docs/aistream.md)** - Node 侧单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）

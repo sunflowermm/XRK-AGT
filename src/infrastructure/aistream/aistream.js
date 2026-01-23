@@ -654,69 +654,6 @@ export default class AIStream {
   }
 
   /**
-   * 执行函数
-   * @param {string} type - 函数类型
-   * @param {Object} params - 参数
-   * @param {Object} context - 上下文
-   * @returns {Promise<Object>}
-   */
-  async executeFunction(type, params, context) {
-    const func = this.functions.get(type);
-
-    if (!func || !func.enabled) {
-      return { success: false, error: '函数不存在或已禁用' };
-    }
-
-    const validation = await this.validateFunctionParams(func, params, context);
-    if (!validation.valid) {
-      return { success: false, error: validation.error };
-    }
-
-    if (func.permission && !(await this.checkPermission(func.permission, context))) {
-      return { success: false, error: '权限不足' };
-    }
-
-    try {
-      const traceId = MonitorService.startTrace(`${this.name}.${type}`, {
-        agentId: context.e?.user_id,
-        workflow: this.name,
-        userId: context.e?.user_id
-      });
-
-      const result = func.handler ? await func.handler(validation.params || params, context) : null;
-      
-      MonitorService.recordToolCall(traceId, { name: type, params, result });
-      MonitorService.endTrace(traceId, { success: true, result });
-
-      const toolStats = ToolRegistry.toolStats?.get(type);
-      if (toolStats) toolStats.callCount++;
-      
-      return { success: true, result };
-    } catch (error) {
-      MonitorService.recordError(`${this.name}.${type}`, error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * 验证函数参数
-   * @param {Object} func - 函数定义
-   * @param {Object} params - 参数
-   * @param {Object} context - 上下文
-   * @returns {Promise<Object>}
-   */
-  async validateFunctionParams(func, params, context) {
-    if (func.requiredParams) {
-      for (const required of func.requiredParams) {
-        if (params[required] === undefined || params[required] === null) {
-          return { valid: false, error: `缺少必需参数: ${required}` };
-        }
-      }
-    }
-    return { valid: true, params };
-  }
-
-  /**
    * 检查权限
    * @param {string} permission - 权限类型
    * @param {Object} context - 上下文
@@ -954,11 +891,10 @@ export default class AIStream {
   }
 
   /**
-   * 调用AI（流式，支持tool calling）
+   * 调用AI（流式）
    * @param {Array<Object>} messages - 消息列表
    * @param {Object} apiConfig - API配置
    * @param {Function} onDelta - 增量回调
-   * @param {Object} options - 选项（已废弃enableFunctionCalling，tool calling由LLM客户端自动处理）
    * @returns {Promise<string>}
    */
   async callAIStream(messages, apiConfig = {}, onDelta, options = {}) {
@@ -1066,8 +1002,8 @@ export default class AIStream {
     const visionProvider = (apiConfig.visionProvider || this.config.visionProvider || vision.provider || vision.Provider || provider).toLowerCase();
     
     // 获取提供商配置
-    const providerConfig = this.getProviderConfig(provider, llm);
-    const visionConfig = this.getProviderConfig(visionProvider, vision, true);
+    const providerConfig = this.getProviderConfig(provider);
+    const visionConfig = this.getProviderConfig(visionProvider, true);
 
     // 验证提供商是否支持
     if (provider && !LLMFactory.hasProvider(provider)) {
@@ -1100,11 +1036,10 @@ export default class AIStream {
   /**
    * 获取提供商配置
    * @param {string} provider - 提供商名称
-   * @param {Object} runtimeConfig - 运行时配置（已废弃，保留以兼容）
    * @param {boolean} isVision - 是否为视觉配置
    * @returns {Object} 提供商配置
    */
-  getProviderConfig(provider, runtimeConfig = {}, isVision = false) {
+  getProviderConfig(provider, isVision = false) {
     if (!provider) return {};
 
     const configKey = isVision ? `${provider}_vision` : `${provider}_llm`;
@@ -1301,12 +1236,11 @@ export default class AIStream {
    */
   extractStreamNames(options) {
     const names = [];
-    
+
     // 支持多种格式：
-    // 1. enableMemory/enableDatabase 等布尔标志
-    // 2. streams 数组
-    // 3. streamNames 数组
-    
+    // 1. streams 数组
+    // 2. streamNames 数组
+
     if (options.streams && Array.isArray(options.streams)) {
       names.push(...options.streams);
     }
@@ -1314,16 +1248,7 @@ export default class AIStream {
     if (options.streamNames && Array.isArray(options.streamNames)) {
       names.push(...options.streamNames);
     }
-    
-    // 兼容旧的布尔标志格式
-    const booleanFlags = ['memory', 'database', 'chat'];
-    for (const flag of booleanFlags) {
-      const enableKey = `enable${flag.charAt(0).toUpperCase() + flag.slice(1)}`;
-      if (options[enableKey] === true) {
-        names.push(flag);
-      }
-    }
-    
+
     return [...new Set(names)]; // 去重
   }
 

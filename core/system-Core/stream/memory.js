@@ -57,26 +57,14 @@ export default class MemoryStream extends AIStream {
    */
   registerAllFunctions() {
 
-    // Call Function：保存长期记忆（执行操作，不返回JSON）
+    // Call Function：保存长期记忆（供内部调用）
     this.registerFunction('save_memory', {
       description: '保存长期记忆',
-      prompt: `[长期记忆:content] - 保存一条长期记忆，内容会被持久化存储`,
-      parser: (text, context) => {
-        const match = text.match(/\[长期记忆:([^\]]+)\]/);
-        if (!match) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'save_memory', params: { content: match[1] } }],
-          cleanText: text.replace(/\[长期记忆:[^\]]+\]/g, '').trim()
-        };
-      },
       handler: async (params = {}, context = {}) => {
         const { content } = params;
         if (!content) return;
 
         const memoryId = await this.saveMemory(content, context);
-        await this.storeNoteIfWorkflow(context, `已保存长期记忆 #${memoryId}: ${content}`, 'memory', true);
         BotUtil.makeLog('info', `[${this.name}] 保存记忆 #${memoryId}: ${content.slice(0, 50)}...`, 'MemoryStream');
       },
       enabled: true
@@ -124,26 +112,14 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：删除记忆（执行操作，不返回JSON）
+    // Call Function：删除记忆（供内部调用）
     this.registerFunction('delete_memory', {
       description: '删除长期记忆',
-      prompt: `[删除记忆:index] - 根据序号删除指定的记忆`,
-      parser: (text, context) => {
-        const match = text.match(/\[删除记忆:(\d+)\]/);
-        if (!match) {
-          return { functions: [], cleanText: text };
-        }
-        return {
-          functions: [{ type: 'delete_memory', params: { id: parseInt(match[1]) } }],
-          cleanText: text.replace(/\[删除记忆:\d+\]/g, '').trim()
-        };
-      },
       handler: async (params = {}, context = {}) => {
         const { id } = params;
         if (!id) return;
 
         const success = await this.deleteMemory(id, context);
-        await this.storeNoteIfWorkflow(context, success ? `已删除记忆 #${id}` : `删除记忆 #${id} 失败`, 'memory', true);
         BotUtil.makeLog('info', `[${this.name}] ${success ? '删除' : '删除失败'}记忆 #${id}`, 'MemoryStream');
       },
       enabled: true

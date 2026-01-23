@@ -3,7 +3,7 @@
 > **更新日期**: 2025-12-26  
 > **Node.js 版本要求**: ≥ 24.12.0 (LTS)  
 > 本文档提供 XRK-AGT 项目的完整架构概览、目录结构说明和核心特性介绍。  
-> 如需快速开始，请查看 [README.md](README.md)；如需详细开发指南，请查看 [docs/完整文档.md](docs/完整文档.md)。
+> 如需快速开始，请查看 [README.md](README.md)；详细开发与扩展指南请结合 [docs/README.md](docs/README.md) 与各模块文档阅读。
 
 ## 📋 目录
 
@@ -640,7 +640,7 @@ flowchart TB
 
 ### 核心文档
 
-- **[完整文档](docs/完整文档.md)** - 整合了所有核心文档，推荐从这里开始
+- **[文档总览 (docs/README.md)](docs/README.md)** - 文档中心与各模块索引
 - **[Server服务器架构](docs/server.md)** - HTTP/HTTPS/WebSocket服务、反向代理详细说明
 - **[HTTP业务层](docs/http-business-layer.md)** - 重定向、CDN、反向代理增强功能
 - **[框架可扩展性指南](docs/框架可扩展性指南.md)** - 7大核心扩展点详解
@@ -658,7 +658,6 @@ flowchart TB
 
 - **GitHub仓库**: https://github.com/sunflowermm/XRK-AGT
 - **GitCode仓库**: https://gitcode.com/Xrkseek/XRK-AGT
-- **完整文档**: [`docs/完整文档.md`](docs/完整文档.md)
 
 ---
 

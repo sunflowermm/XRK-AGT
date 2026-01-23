@@ -121,40 +121,15 @@ export default class ChatStream extends AIStream {
     // 表情包（作为消息段的一部分，不在工具调用/函数解析中处理）
     // 表情包标记会在parseCQToSegments中解析，保持顺序
 
-    // Call Function：@功能（消息格式，不返回JSON）
+    // Call Function：@功能（供内部调用）
     this.registerFunction('at', {
       description: '@某人',
-      prompt: `[CQ:at,qq=QQ号] - @某人`,
-      parser: (text, context) => {
-        return { functions: [], cleanText: text };
-      },
       enabled: true
     });
 
-    // Call Function：戳一戳（执行操作，不返回JSON）
+    // Call Function：戳一戳（供内部调用）
     this.registerFunction('poke', {
       description: '戳一戳',
-      prompt: `[CQ:poke,qq=QQ号] - 戳一戳某人`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const pokeRegex = /\[CQ:poke,qq=(\d+)\]/g;
-        let match;
-        
-        while ((match = pokeRegex.exec(text))) {
-          functions.push({ 
-            type: 'poke', 
-            params: { qq: match[1] },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(pokeRegex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -168,45 +143,15 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：回复消息（消息格式，不返回JSON）
+    // Call Function：回复消息（供内部调用）
     this.registerFunction('reply', {
       description: '回复消息',
-      prompt: `[CQ:reply,id=消息ID] - 回复指定消息
-重要：消息ID必须从聊天记录中准确获取，格式为"消息ID:xxx"中的xxx部分
-示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 你好"，要回复这条消息，使用 [CQ:reply,id=1051113239]你的回复内容`,
-      parser: (text, context) => {
-        return { functions: [], cleanText: text };
-      },
       enabled: true
     });
 
-    // Call Function：表情回应（执行操作，不返回JSON）
+    // Call Function：表情回应（供内部调用）
     this.registerFunction('emojiReaction', {
       description: '表情回应',
-      prompt: `[回应:消息ID:表情类型] - 给指定消息添加表情回应
-重要：消息ID必须从聊天记录中准确获取，格式为"消息ID:xxx"中的xxx部分
-表情类型: 开心/惊讶/伤心/大笑/害怕/喜欢/爱心/生气
-示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 你好"，要回应这条消息，使用 [回应:1051113239:开心]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[回应:([^:]+):([^\]]+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'emojiReaction', 
-            params: { msgId: String(match[1]).trim(), emojiType: match[2].trim() },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (!context.e?.isGroup || !EMOJI_REACTIONS[params.emojiType]) {
           BotUtil.makeLog('debug', `表情回应失败: ${!context.e?.isGroup ? '非群聊' : '无效表情类型'}`, 'ChatStream');
@@ -253,30 +198,9 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：点赞（执行操作，不返回JSON）
+    // Call Function：点赞（供内部调用）
     this.registerFunction('thumbUp', {
       description: '点赞',
-      prompt: `[点赞:QQ号:次数] - 给某人点赞（1-50次）`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[点赞:(\d+):(\d+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'thumbUp', 
-            params: { qq: match[1], count: match[2] },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           const thumbCount = Math.min(parseInt(params.count) || 1, 50);
@@ -294,25 +218,9 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：签到（执行操作，不返回JSON）
+    // Call Function：签到（供内部调用）
     this.registerFunction('sign', {
       description: '群签到',
-      prompt: `[签到] - 执行群签到`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        
-        if (text.includes('[签到]')) {
-          functions.push({ 
-            type: 'sign', 
-            params: {}, 
-            order: text.indexOf('[签到]')
-          });
-          cleanText = text.replace(/\[签到\]/g, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -326,32 +234,9 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：禁言（执行操作，不返回JSON）
+    // Call Function：禁言（供内部调用）
     this.registerFunction('mute', {
       description: '禁言群成员',
-      prompt: `[禁言:QQ号:时长] - 禁言某人（时长单位：秒，最大2592000秒/30天）
-示例：[禁言:123456:600] 禁言10分钟`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[禁言:(\d+):(\d+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          const duration = Math.min(parseInt(match[2]), 2592000);
-          functions.push({ 
-            type: 'mute', 
-            params: { qq: match[1], duration },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -366,30 +251,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：解禁（执行操作，不返回JSON）
+    // Call Function：解禁（供内部调用）
     this.registerFunction('unmute', {
       description: '解除禁言',
-      prompt: `[解禁:QQ号] - 解除某人的禁言`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[解禁:(\d+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'unmute', 
-            params: { qq: match[1] },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -404,25 +268,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：全员禁言（执行操作，不返回JSON）
+    // Call Function：全员禁言（供内部调用）
     this.registerFunction('muteAll', {
       description: '全员禁言',
-      prompt: `[全员禁言] - 开启全员禁言`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        
-        if (text.includes('[全员禁言]')) {
-          functions.push({ 
-            type: 'muteAll', 
-            params: { enable: true },
-            order: text.indexOf('[全员禁言]')
-          });
-          cleanText = text.replace(/\[全员禁言\]/g, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -437,25 +285,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：解除全员禁言（执行操作，不返回JSON）
+    // Call Function：解除全员禁言（供内部调用）
     this.registerFunction('unmuteAll', {
       description: '解除全员禁言',
-      prompt: `[解除全员禁言] - 关闭全员禁言`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        
-        if (text.includes('[解除全员禁言]')) {
-          functions.push({ 
-            type: 'unmuteAll', 
-            params: { enable: false },
-            order: text.indexOf('[解除全员禁言]')
-          });
-          cleanText = text.replace(/\[解除全员禁言\]/g, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -470,31 +302,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：改群名片（执行操作，不返回JSON）
+    // Call Function：改群名片（供内部调用）
     this.registerFunction('setCard', {
       description: '修改群名片',
-      prompt: `[改名片:QQ号:新名片] - 修改某人的群名片
-示例：[改名片:123456:小明]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[改名片:(\d+):([^\]]+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'setCard', 
-            params: { qq: match[1], card: match[2] },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -509,31 +319,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：改群名（执行操作，不返回JSON）
+    // Call Function：改群名（供内部调用）
     this.registerFunction('setGroupName', {
       description: '修改群名',
-      prompt: `[改群名:新群名] - 修改当前群的群名
-示例：[改群名:快乐大家庭]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[改群名:([^\]]+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'setGroupName', 
-            params: { name: match[1] },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -548,30 +336,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：设置管理员（执行操作，不返回JSON）
+    // Call Function：设置管理员（供内部调用）
     this.registerFunction('setAdmin', {
       description: '设置管理员',
-      prompt: `[设管:QQ号] - 设置某人为管理员`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[设管:(\d+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'setAdmin', 
-            params: { qq: match[1], enable: true },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -586,30 +353,9 @@ export default class ChatStream extends AIStream {
       requireOwner: true
     });
 
-    // Call Function：取消管理员（执行操作，不返回JSON）
+    // Call Function：取消管理员（供内部调用）
     this.registerFunction('unsetAdmin', {
       description: '取消管理员',
-      prompt: `[取管:QQ号] - 取消某人的管理员`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[取管:(\d+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'unsetAdmin', 
-            params: { qq: match[1], enable: false },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -624,36 +370,9 @@ export default class ChatStream extends AIStream {
       requireOwner: true
     });
 
-    // Call Function：设置头衔（执行操作，不返回JSON）
+    // Call Function：设置头衔（供内部调用）
     this.registerFunction('setTitle', {
       description: '设置专属头衔',
-      prompt: `[头衔:QQ号:头衔名:时长] - 设置某人的专属头衔
-时长：-1为永久，单位秒
-示例：[头衔:123456:大佬:-1]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[头衔:(\d+):([^:]+):(-?\d+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'setTitle', 
-            params: { 
-              qq: match[1], 
-              title: match[2],
-              duration: parseInt(match[3])
-            },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -668,34 +387,9 @@ export default class ChatStream extends AIStream {
       requireOwner: true
     });
 
-    // Call Function：踢人（执行操作，不返回JSON）
+    // Call Function：踢人（供内部调用）
     this.registerFunction('kick', {
       description: '踢出群成员',
-      prompt: `[踢人:QQ号] - 踢出某人
-[踢人:QQ号:拒绝] - 踢出某人并拒绝再次加群`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[踢人:(\d+)(?::([^\]]+))?\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'kick', 
-            params: { 
-              qq: match[1],
-              reject: match[2] === '拒绝'
-            },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (context.e?.isGroup) {
           try {
@@ -710,32 +404,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：设置精华消息（执行操作，不返回JSON）
+    // Call Function：设置精华消息（供内部调用）
     this.registerFunction('setEssence', {
       description: '设置精华消息',
-      prompt: `[设精华:消息ID] - 将指定消息设为精华
-重要：消息ID必须从聊天记录中准确获取，格式为"消息ID:xxx"中的xxx部分
-示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 重要内容"，要设为精华，使用 [设精华:1051113239]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[设精华:([^\]]+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'setEssence', 
-            params: { msgId: String(match[1]).trim() },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (!context.e?.isGroup) {
           BotUtil.makeLog('debug', '设置精华失败: 非群聊', 'ChatStream');
@@ -771,32 +442,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：取消精华消息（执行操作，不返回JSON）
+    // Call Function：取消精华消息（供内部调用）
     this.registerFunction('removeEssence', {
       description: '取消精华消息',
-      prompt: `[取消精华:消息ID] - 取消指定消息的精华状态
-重要：消息ID必须从聊天记录中准确获取，格式为"消息ID:xxx"中的xxx部分
-示例：聊天记录显示"张三(123456)[消息ID:1051113239]: 内容"，要取消精华，使用 [取消精华:1051113239]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[取消精华:([^\]]+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'removeEssence', 
-            params: { msgId: String(match[1]).trim() },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (!context.e?.isGroup) {
           BotUtil.makeLog('debug', '取消精华失败: 非群聊', 'ChatStream');
@@ -826,35 +474,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：发送群公告（执行操作，不返回JSON）
+    // Call Function：发送群公告（供内部调用）
     this.registerFunction('announce', {
       description: '发送群公告',
-      prompt: `[群公告:内容] - 发送群公告
-[群公告:内容:图片路径] - 发送带图片的群公告
-示例：[群公告:重要通知：明天下午开会]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[群公告:([^:]+)(?::([^\]]+))?\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'announce', 
-            params: { 
-              content: match[1].trim(),
-              image: match[2] ? match[2].trim() : undefined
-            },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (!context.e?.isGroup) {
           BotUtil.makeLog('debug', '发送群公告失败: 非群聊', 'ChatStream');
@@ -910,34 +532,9 @@ export default class ChatStream extends AIStream {
       requireAdmin: true
     });
 
-    // Call Function：撤回消息（执行操作，不返回JSON）
+    // Call Function：撤回消息（供内部调用）
     this.registerFunction('recall', {
       description: '撤回消息',
-      prompt: `[撤回:消息ID] - 撤回指定消息
-注意：
-- 撤回别人的消息需要管理员权限
-- 撤回自己的消息需要在3分钟内
-示例：[撤回:1234567890]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[撤回:([^\]]+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'recall', 
-            params: { msgId: String(match[1]) },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (!context.e) return;
         
@@ -1118,32 +715,9 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：设置群代办（执行操作，不返回JSON）
+    // Call Function：设置群代办（供内部调用）
     this.registerFunction('setGroupTodo', {
       description: '设置群代办',
-      prompt: `[群代办:消息ID] - 将指定消息设为群代办
-重要：消息ID必须从聊天记录中准确获取，格式为"ID:xxx"中的xxx部分
-示例：聊天记录显示"张三(123456)[ID:1051113239]: 明天检查项目进度"，要设为群代办，使用 [群代办:1051113239]`,
-      parser: (text, context) => {
-        const functions = [];
-        let cleanText = text;
-        const regex = /\[群代办:([^\]]+)\]/g;
-        let match;
-        
-        while ((match = regex.exec(text))) {
-          functions.push({ 
-            type: 'setGroupTodo', 
-            params: { msgId: String(match[1]).trim() },
-            order: typeof match.index === 'number' ? match.index : text.indexOf(match[0])
-          });
-        }
-        
-        if (functions.length > 0) {
-          cleanText = text.replace(regex, '').trim();
-        }
-        
-        return { functions, cleanText };
-      },
       handler: async (params, context) => {
         if (!context.e?.isGroup) return;
         
@@ -1322,49 +896,36 @@ export default class ChatStream extends AIStream {
   }
 
   /**
-   * 构建功能列表提示
-   * 注意：只包含 Call Function 的 prompt，MCP 工具不会出现在这里
-   * 根据权限自动过滤功能
+   * 构建功能列表提示（仅用于向模型说明“具备哪些能力”，不约定任何特殊命令格式）
    */
   buildFunctionsPrompt(context = {}) {
     const { botRole = '成员' } = context;
-    
-    // 只获取 Call Function（MCP 工具不会出现在 prompt 中）
+
     const enabledFuncs = this.getEnabledFunctions();
     if (enabledFuncs.length === 0) return '';
 
-    // 根据权限过滤 Call Function
     const filteredFuncs = enabledFuncs.filter(func => {
-      // 如果函数需要管理员权限
       if (func.requireAdmin) {
         return botRole === '管理员' || botRole === '群主';
       }
-      // 如果函数需要群主权限
       if (func.requireOwner) {
         return botRole === '群主';
       }
-      // 其他函数所有角色都可以使用
       return true;
     });
 
-    if (filteredFuncs.length === 0) return '';
+    const lines = filteredFuncs
+      .filter(f => f.description)
+      .map(f => `- ${f.description}`);
 
-    const prompts = filteredFuncs
-      .filter(f => f.prompt)
-      .map(f => f.prompt);
+    if (lines.length === 0) return '';
 
-    // 动态解析prompt（如果为函数类型）
-    const resolvedPrompts = prompts.map(p => typeof p === 'function' ? p() : p);
+    return `【可用能力】
+你具备以下群聊相关辅助能力（例如 @ 成员、戳一戳、表情回应、管理操作等）。
+这些能力会通过系统的工具调用机制自动触发，你只需要专注于自然语言对话和决策，不要在回复中设计任何特殊命令格式。
 
-    if (resolvedPrompts.length === 0) return '';
-
-    return `【可执行命令列表】
-在回复中使用以下格式时，系统会自动解析并执行，然后从文本中移除命令格式。
-
-可用命令：
-${resolvedPrompts.join('\n')}
-
-注意：格式完全匹配，参数完整，执行后命令格式会被移除`;
+能力列表：
+${lines.join('\n')}`;
   }
 
   async buildSystemPrompt(context) {
