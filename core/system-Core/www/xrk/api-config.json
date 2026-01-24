@@ -264,7 +264,18 @@
           "method": "GET",
           "path": "/api/ai/models",
           "title": "AI 模型列表",
-          "description": "获取可用的 AI 模型和工作流列表"
+          "description": "获取可用的 AI 模型和工作流列表（支持 format=openai 参数返回 OpenAI 兼容格式）",
+          "queryParams": [
+            {
+              "name": "format",
+              "label": "返回格式",
+              "type": "select",
+              "options": [
+                { "value": "", "label": "详细格式（默认）" },
+                { "value": "openai", "label": "OpenAI 兼容格式" }
+              ]
+            }
+          ]
         },
         {
           "id": "v3-chat-completions",
@@ -304,13 +315,6 @@
               "defaultValue": "false"
             }
           ]
-        },
-        {
-          "id": "v3-models",
-          "method": "GET",
-          "path": "/api/v3/models",
-          "title": "模型列表",
-          "description": "获取可用的模型列表（OpenAI 兼容格式）"
         }
       ]
     },

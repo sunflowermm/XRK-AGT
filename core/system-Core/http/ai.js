@@ -106,43 +106,77 @@ async function handleChatCompletionsV3(req, res) {
   res.end();
 }
 
-function handleModelsV3(_req, res) {
-  // 获取所有可用的LLM提供商
-  const providers = LLMFactory.listProviders();
+async function handleModels(req, res) {
   const llm = cfg.aistream?.llm || {};
+  const providers = LLMFactory.listProviders();
   const defaultProvider = (llm.Provider || 'gptgod').toLowerCase();
+  const format = (req.query.format || '').toLowerCase();
   
-  // 构建模型列表，基于可用的提供商
-  const data = providers.map(provider => ({
-    id: provider,
-    object: 'model',
-    owned_by: 'xrk-agt',
-    meta: {
-      key: provider,
-      label: provider,
-      description: `LLM提供商: ${provider}`,
-      tags: [],
-      baseUrl: null
-    }
-  }));
-
-  // 如果没有可用提供商，至少返回默认提供商
-  if (data.length === 0 && defaultProvider) {
-    data.push({
-      id: defaultProvider,
+  // OpenAI 兼容格式（用于子服务端）
+  if (format === 'openai' || req.path === '/api/v3/models') {
+    const data = providers.map(provider => ({
+      id: provider,
       object: 'model',
       owned_by: 'xrk-agt',
       meta: {
-        key: defaultProvider,
-        label: defaultProvider,
-        description: `默认LLM提供商: ${defaultProvider}`,
+        key: provider,
+        label: provider,
+        description: `LLM提供商: ${provider}`,
         tags: [],
         baseUrl: null
       }
-    });
+    }));
+
+    if (data.length === 0 && defaultProvider) {
+      data.push({
+        id: defaultProvider,
+        object: 'model',
+        owned_by: 'xrk-agt',
+        meta: {
+          key: defaultProvider,
+          label: defaultProvider,
+          description: `默认LLM提供商: ${defaultProvider}`,
+          tags: [],
+          baseUrl: null
+        }
+      });
+    }
+
+    return res.json({ object: 'list', data });
   }
 
-  res.json({ object: 'list', data });
+  // 详细格式（用于前端，包含工作流信息）
+  const profiles = providers.map(provider => ({
+    key: provider,
+    label: provider,
+    description: `LLM提供商: ${provider}`,
+    tags: [],
+    model: null,
+    baseUrl: null,
+    maxTokens: null,
+    temperature: null,
+    hasApiKey: false,
+    capabilities: []
+  }));
+
+  const allStreams = StreamLoader.getStreamsByPriority();
+  const workflows = allStreams.map(stream => ({
+    key: stream.name,
+    label: stream.description || stream.name,
+    description: stream.description || '',
+    profile: null,
+    persona: null,
+    uiHidden: false
+  }));
+
+  return HttpResponse.success(res, {
+    enabled: llm.enabled !== false,
+    defaultProfile: defaultProvider,
+    defaultWorkflow: workflows[0]?.key || null,
+    persona: llm.persona || '',
+    profiles,
+    workflows
+  });
 }
 
 export default {
@@ -158,7 +192,12 @@ export default {
     {
       method: 'GET',
       path: '/api/v3/models',
-      handler: HttpResponse.asyncHandler(handleModelsV3, 'ai.v3.models')
+      handler: HttpResponse.asyncHandler(handleModels, 'ai.v3.models')
+    },
+    {
+      method: 'GET',
+      path: '/api/ai/models',
+      handler: HttpResponse.asyncHandler(handleModels, 'ai.models')
     },
     {
       method: 'GET',
@@ -240,51 +279,6 @@ export default {
           res.end();
         }
       }
-    },
-    {
-      method: 'GET',
-      path: '/api/ai/models',
-      handler: HttpResponse.asyncHandler(async (_req, res) => {
-        const llm = cfg.aistream?.llm || {};
-        
-        // 获取所有可用的LLM提供商
-        const providers = LLMFactory.listProviders();
-        const defaultProvider = (llm.Provider || 'gptgod').toLowerCase();
-        
-        // 构建提供商列表
-        const profiles = providers.map(provider => ({
-          key: provider,
-          label: provider,
-          description: `LLM提供商: ${provider}`,
-          tags: [],
-          model: null,
-          baseUrl: null,
-          maxTokens: null,
-          temperature: null,
-          hasApiKey: false,
-          capabilities: []
-        }));
-
-        // 获取所有可用的工作流
-        const allStreams = StreamLoader.getStreamsByPriority();
-        const workflows = allStreams.map(stream => ({
-          key: stream.name,
-          label: stream.description || stream.name,
-          description: stream.description || '',
-          profile: null,
-          persona: null,
-          uiHidden: false
-        }));
-
-        HttpResponse.success(res, {
-          enabled: llm.enabled !== false,
-          defaultProfile: defaultProvider,
-          defaultWorkflow: workflows[0]?.key || null,
-          persona: llm.persona || '',
-          profiles,
-          workflows
-        });
-      }, 'ai.models')
     }
   ]
 };
