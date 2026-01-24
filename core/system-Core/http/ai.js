@@ -36,29 +36,32 @@ async function handleChatCompletionsV3(req, res) {
 
   // /api/v3/chat/completions：对外提供“类 ChatGPT 协议”的统一 LLM 调用入口（给子服务端/生态使用）
   // - 不走工作流/StreamLoader（避免子服务端->主服务端->子服务端递归链路）
-  // - 只按 cfg.aistream.llm.defaults / profiles 合并得到工厂参数
   // - 约定：body.model 填运营商(provider)，其余字段自由覆盖配置；body.apiKey 仅用于访问鉴权
   const llm = cfg.aistream?.llm || {};
-  const defaults = llm.defaults || {};
-  const profiles = llm.profiles || llm.models || {};
-
   const providerKey = (body.model || '').toString().trim();
-  const profile = profiles[providerKey] || {};
 
+  // 构建LLM配置，优先使用body中的参数
   const llmConfig = {
-    ...defaults,
-    ...profile,
     ...(typeof body === 'object' ? body : {})
   };
 
+  // 设置provider
   if (providerKey && LLMFactory.hasProvider(providerKey)) {
-    llmConfig.provider = providerKey;
+    llmConfig.provider = providerKey.toLowerCase();
+  } else if (!llmConfig.provider && llm.Provider) {
+    // 如果没有指定provider，使用配置中的默认Provider
+    llmConfig.provider = llm.Provider.toLowerCase();
+  } else if (!llmConfig.provider) {
+    // 如果都没有，使用默认值
+    llmConfig.provider = 'gptgod';
   }
 
+  // 清理不需要的字段
   delete llmConfig.messages;
   delete llmConfig.stream;
   delete llmConfig.apiKey;
-  llmConfig.apiKey = (profile.apiKey || defaults.apiKey || '').toString().trim() || undefined;
+  
+  // apiKey 由 LLMFactory.createClient 从配置文件中读取
   const client = LLMFactory.createClient(llmConfig);
 
   if (!streamFlag) {
@@ -104,21 +107,40 @@ async function handleChatCompletionsV3(req, res) {
 }
 
 function handleModelsV3(_req, res) {
-  const llm = cfg.aistream?.llm;
-  const defaults = llm?.defaults || {};
-  const profiles = llm?.profiles || llm?.models || {};
-  const data = Object.entries(profiles).map(([key, value]) => ({
-    id: value.model || defaults.model || key,
+  // 获取所有可用的LLM提供商
+  const providers = LLMFactory.listProviders();
+  const llm = cfg.aistream?.llm || {};
+  const defaultProvider = (llm.Provider || 'gptgod').toLowerCase();
+  
+  // 构建模型列表，基于可用的提供商
+  const data = providers.map(provider => ({
+    id: provider,
     object: 'model',
-    owned_by: value.provider || defaults.provider || 'xrk-agt',
+    owned_by: 'xrk-agt',
     meta: {
-      key,
-      label: value.label || key,
-      description: value.description || '',
-      tags: value.tags || [],
-      baseUrl: value.baseUrl || defaults.baseUrl
+      key: provider,
+      label: provider,
+      description: `LLM提供商: ${provider}`,
+      tags: [],
+      baseUrl: null
     }
   }));
+
+  // 如果没有可用提供商，至少返回默认提供商
+  if (data.length === 0 && defaultProvider) {
+    data.push({
+      id: defaultProvider,
+      object: 'model',
+      owned_by: 'xrk-agt',
+      meta: {
+        key: defaultProvider,
+        label: defaultProvider,
+        description: `默认LLM提供商: ${defaultProvider}`,
+        tags: [],
+        baseUrl: null
+      }
+    });
+  }
 
   res.json({ object: 'list', data });
 }
@@ -154,8 +176,7 @@ export default {
           const contextObj = parseOptionalJson(req.query.context);
           const metadata = parseOptionalJson(req.query.meta);
 
-          const fallbackStream = StreamLoader.getStream('chat') || StreamLoader.getStream('device');
-          const stream = StreamLoader.getStream(workflowName) || fallbackStream;
+          const stream = StreamLoader.getStream(workflowName) || StreamLoader.getStream('chat') || StreamLoader.getStream('device');
           if (!stream) {
             return HttpResponse.error(res, new Error('工作流未加载'), 500, 'ai.stream');
           }
@@ -224,38 +245,41 @@ export default {
       method: 'GET',
       path: '/api/ai/models',
       handler: HttpResponse.asyncHandler(async (_req, res) => {
-        const llm = cfg.aistream?.llm;
-        if (!llm) {
-          return HttpResponse.notFound(res, '未找到 LLM 配置');
-        }
-
-        const defaults = llm.defaults || {};
-        const profiles = Object.entries(llm.profiles || llm.models || {}).map(([key, value]) => ({
-          key,
-          label: value.label || key,
-          description: value.description || '',
-          tags: value.tags || [],
-          model: value.model || defaults.model,
-          baseUrl: value.baseUrl || defaults.baseUrl,
-          maxTokens: value.maxTokens || defaults.maxTokens,
-          temperature: value.temperature ?? defaults.temperature,
-          hasApiKey: Boolean(value.apiKey || defaults.apiKey),
-          capabilities: value.capabilities || value.tags || []
+        const llm = cfg.aistream?.llm || {};
+        
+        // 获取所有可用的LLM提供商
+        const providers = LLMFactory.listProviders();
+        const defaultProvider = (llm.Provider || 'gptgod').toLowerCase();
+        
+        // 构建提供商列表
+        const profiles = providers.map(provider => ({
+          key: provider,
+          label: provider,
+          description: `LLM提供商: ${provider}`,
+          tags: [],
+          model: null,
+          baseUrl: null,
+          maxTokens: null,
+          temperature: null,
+          hasApiKey: false,
+          capabilities: []
         }));
 
-        const workflows = Object.entries(llm.workflows || {}).map(([key, value]) => ({
-          key,
-          label: value.label || key,
-          description: value.description || '',
-          profile: value.profile || null,
-          persona: value.persona || null,
-          uiHidden: Boolean(value.uiHidden)
+        // 获取所有可用的工作流
+        const allStreams = StreamLoader.getStreamsByPriority();
+        const workflows = allStreams.map(stream => ({
+          key: stream.name,
+          label: stream.description || stream.name,
+          description: stream.description || '',
+          profile: null,
+          persona: null,
+          uiHidden: false
         }));
 
         HttpResponse.success(res, {
           enabled: llm.enabled !== false,
-          defaultProfile: llm.defaultProfile || llm.defaultModel || profiles[0]?.key || null,
-          defaultWorkflow: llm.defaultWorkflow || llm.defaultProfile || workflows[0]?.key || null,
+          defaultProfile: defaultProvider,
+          defaultWorkflow: workflows[0]?.key || null,
           persona: llm.persona || '',
           profiles,
           workflows
