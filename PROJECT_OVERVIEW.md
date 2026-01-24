@@ -501,7 +501,7 @@ sequenceDiagram
         Redirect-->>Client: 重定向响应
     else 继续处理
         Bot->>CDN: CDN处理
-        opt 启用反向代理
+        alt 启用反向代理
             Bot->>Proxy: 负载均衡选择
             Proxy->>Proxy: 健康检查
             Proxy-->>Client: 转发响应
