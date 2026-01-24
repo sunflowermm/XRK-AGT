@@ -7,7 +7,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import common from "#utils/common.js"
 import cfg from "#infrastructure/config/config.js"
-import puppeteer from "#modules/puppeteer.js"
+import RendererLoader from "#infrastructure/renderer/loader.js"
+import { segment } from "#oicq"
 import Handler from "./handler.js";
 
 /**
@@ -135,7 +136,23 @@ export default class Runtime {
   }
 
   get puppeteer() {
-    return puppeteer
+    // 直接使用 Renderer，提供兼容接口
+    const renderer = RendererLoader.getRenderer()
+    return {
+      screenshot: async (name, data) => {
+        const img = await renderer.render(name, data)
+        return img ? segment.image(img) : img
+      },
+      screenshots: async (name, data) => {
+        data.multiPage = true
+        const imgs = await renderer.render(name, data) || []
+        const ret = []
+        for (const img of imgs) {
+          ret.push(img ? segment.image(img) : img)
+        }
+        return ret.length > 0 ? ret : false
+      }
+    }
   }
 
   /**
@@ -206,7 +223,9 @@ export default class Runtime {
     }
     
     // 截图
-    let base64 = await puppeteer.screenshot(`${plugin}/${normalizedPath}`, data)
+    const renderer = RendererLoader.getRenderer()
+    const img = await renderer.render(`${plugin}/${normalizedPath}`, data)
+    let base64 = img ? segment.image(img) : null
     if (cfg.retType === "base64") {
       return base64
     }

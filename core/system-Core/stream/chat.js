@@ -29,7 +29,7 @@ function randomRange(min, max) {
  * 
  * 功能分类：
  * - MCP工具（返回JSON）：getGroupInfoEx（获取群信息ex）、getAtAllRemain（获取@全体剩余）、getBanList（获取禁言列表）
- * - Call Function（执行操作）：
+ * 
  *   - 互动功能：poke（戳一戳）、emojiReaction（表情回应）、thumbUp（点赞）、sign（签到）
  *   - 群管理：mute/unmute（禁言/解禁）、muteAll/unmuteAll（全员禁言）、setCard（改名片）、setGroupName（改群名）
  *   - 权限管理：setAdmin/unsetAdmin（设置/取消管理员）、setTitle（设置头衔）、kick（踢人）
@@ -114,62 +114,115 @@ export default class ChatStream extends AIStream {
   /**
    * 注册所有功能
    * 
-   * MCP工具：getGroupInfoEx, getAtAllRemain, getBanList（返回JSON，不出现在prompt中）
-   * Call Function：所有互动和群管理功能（出现在prompt中，供AI调用）
+   * 所有功能都通过 MCP 工具提供
    */
   registerAllFunctions() {
     // 表情包（作为消息段的一部分，不在工具调用/函数解析中处理）
     // 表情包标记会在parseCQToSegments中解析，保持顺序
 
-    // Call Function：@功能（供内部调用）
-    this.registerFunction('at', {
+    // MCP工具：@功能
+    this.registerMCPTool('at', {
       description: '@某人',
-      enabled: true
-    });
-
-    // Call Function：戳一戳（供内部调用）
-    this.registerFunction('poke', {
-      description: '戳一戳',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.pokeMember(params.qq);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            // 静默失败
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '要@的用户QQ号'
           }
-        }
+        },
+        required: ['qq']
+      },
+      handler: async (args = {}, context = {}) => {
+        return { success: true, message: '已@用户', data: { qq: args.qq } };
       },
       enabled: true
     });
 
-    // Call Function：回复消息（供内部调用）
-    this.registerFunction('reply', {
-      description: '回复消息',
+    // MCP工具：戳一戳
+    this.registerMCPTool('poke', {
+      description: '戳一戳群成员',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '要戳的成员QQ号'
+          }
+        },
+        required: ['qq']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (context.e?.isGroup) {
+          try {
+            await context.e.group.pokeMember(args.qq);
+            await BotUtil.sleep(300);
+            return { success: true, message: '戳一戳成功', data: { qq: args.qq } };
+          } catch (error) {
+            return { success: false, error: error.message };
+          }
+        }
+        return { success: false, error: '非群聊环境' };
+      },
       enabled: true
     });
 
-    // Call Function：表情回应（供内部调用）
-    this.registerFunction('emojiReaction', {
-      description: '表情回应',
-      handler: async (params, context) => {
-        if (!context.e?.isGroup || !EMOJI_REACTIONS[params.emojiType]) {
-          BotUtil.makeLog('debug', `表情回应失败: ${!context.e?.isGroup ? '非群聊' : '无效表情类型'}`, 'ChatStream');
-          return;
+    // MCP工具：回复消息
+    this.registerMCPTool('reply', {
+      description: '回复消息',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          messageId: {
+            type: 'string',
+            description: '要回复的消息ID'
+          },
+          content: {
+            type: 'string',
+            description: '回复内容'
+          }
+        },
+        required: ['content']
+      },
+      handler: async (args = {}, context = {}) => {
+        return { success: true, message: '消息已回复', data: { content: args.content } };
+      },
+      enabled: true
+    });
+
+    // MCP工具：表情回应
+    this.registerMCPTool('emojiReaction', {
+      description: '对消息进行表情回应',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          msgId: {
+            type: 'string',
+            description: '消息ID'
+          },
+          emojiType: {
+            type: 'string',
+            description: '表情类型',
+            enum: ['like', 'love', 'laugh', 'wow', 'sad', 'angry']
+          }
+        },
+        required: ['msgId', 'emojiType']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup || !EMOJI_REACTIONS[args.emojiType]) {
+          return { success: false, error: !context.e?.isGroup ? '非群聊环境' : '无效表情类型' };
         }
         
-        const emojiIds = EMOJI_REACTIONS[params.emojiType];
+        const emojiIds = EMOJI_REACTIONS[args.emojiType];
         if (!emojiIds || emojiIds.length === 0) {
-          BotUtil.makeLog('debug', `表情回应失败: 表情类型${params.emojiType}无可用表情ID`, 'ChatStream');
-          return;
+          return { success: false, error: '表情类型无可用表情ID' };
         }
         
         const emojiId = Number(emojiIds[Math.floor(Math.random() * emojiIds.length)]);
-        const msgId = String(params.msgId || '').trim();
+        const msgId = String(args.msgId || '').trim();
         
         if (!msgId) {
-          BotUtil.makeLog('debug', '表情回应失败: 消息ID为空', 'ChatStream');
-          return;
+          return { success: false, error: '消息ID不能为空' };
         }
         
         try {
@@ -178,245 +231,403 @@ export default class ChatStream extends AIStream {
             const result = await group.setEmojiLike(msgId, emojiId, true);
             if (result !== null && result !== undefined) {
               await BotUtil.sleep(200);
-              BotUtil.makeLog('debug', `表情回应成功: 消息ID=${msgId}, 表情ID=${emojiId}`, 'ChatStream');
-            } else {
-              BotUtil.makeLog('warn', `表情回应API调用失败: 消息ID=${msgId}`, 'ChatStream');
+              return { success: true, message: '表情回应成功', data: { msgId, emojiId } };
             }
-          } else {
-            BotUtil.makeLog('warn', '表情回应功能不可用（API不存在）', 'ChatStream');
           }
+          return { success: false, error: '表情回应功能不可用' };
         } catch (error) {
-          // debug: 表情回应失败是技术细节，不影响业务流程
-          errorHandler.handle(
-            error,
-            { context: 'emojiReaction', msgId, code: ErrorCodes.SYSTEM_ERROR },
-            false // 不记录日志，因为已经用 debug 记录了
-          );
-          BotUtil.makeLog('debug', `表情回应失败: ${error.message}`, 'ChatStream');
+          return { success: false, error: error.message };
         }
       },
       enabled: true
     });
 
-    // Call Function：点赞（供内部调用）
-    this.registerFunction('thumbUp', {
-      description: '点赞',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          const thumbCount = Math.min(parseInt(params.count) || 1, 50);
-          try {
-            const member = context.e.group?.pickMember(params.qq);
-            if (member && typeof member.thumbUp === 'function') {
-              await member.thumbUp(thumbCount);
-            }
-            await BotUtil.sleep(300);
-          } catch (error) {
-            // 静默失败
+    // MCP工具：点赞
+    this.registerMCPTool('thumbUp', {
+      description: '给群成员点赞',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '要点赞的成员QQ号'
+          },
+          count: {
+            type: 'number',
+            description: '点赞次数（1-50）',
+            default: 1
           }
-        }
+        },
+        required: ['qq']
       },
-      enabled: true
-    });
-
-    // Call Function：签到（供内部调用）
-    this.registerFunction('sign', {
-      description: '群签到',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.sign();
-            await BotUtil.sleep(300);
-          } catch (error) {
-            // 静默失败
-          }
-        }
-      },
-      enabled: true
-    });
-
-    // Call Function：禁言（供内部调用）
-    this.registerFunction('mute', {
-      description: '禁言群成员',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.muteMember(params.qq, params.duration);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `禁言失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireAdmin: true
-    });
-
-    // Call Function：解禁（供内部调用）
-    this.registerFunction('unmute', {
-      description: '解除禁言',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.muteMember(params.qq, 0);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `解禁失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireAdmin: true
-    });
-
-    // Call Function：全员禁言（供内部调用）
-    this.registerFunction('muteAll', {
-      description: '全员禁言',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.muteAll(true);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `全员禁言失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireAdmin: true
-    });
-
-    // Call Function：解除全员禁言（供内部调用）
-    this.registerFunction('unmuteAll', {
-      description: '解除全员禁言',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.muteAll(false);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `解除全员禁言失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireAdmin: true
-    });
-
-    // Call Function：改群名片（供内部调用）
-    this.registerFunction('setCard', {
-      description: '修改群名片',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.setCard(params.qq, params.card);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `改名片失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireAdmin: true
-    });
-
-    // Call Function：改群名（供内部调用）
-    this.registerFunction('setGroupName', {
-      description: '修改群名',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.setName(params.name);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `改群名失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireAdmin: true
-    });
-
-    // Call Function：设置管理员（供内部调用）
-    this.registerFunction('setAdmin', {
-      description: '设置管理员',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.setAdmin(params.qq, true);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `设置管理员失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireOwner: true
-    });
-
-    // Call Function：取消管理员（供内部调用）
-    this.registerFunction('unsetAdmin', {
-      description: '取消管理员',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.setAdmin(params.qq, false);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `取消管理员失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireOwner: true
-    });
-
-    // Call Function：设置头衔（供内部调用）
-    this.registerFunction('setTitle', {
-      description: '设置专属头衔',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.setTitle(params.qq, params.title, params.duration);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `设置头衔失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireOwner: true
-    });
-
-    // Call Function：踢人（供内部调用）
-    this.registerFunction('kick', {
-      description: '踢出群成员',
-      handler: async (params, context) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.kickMember(params.qq, params.reject);
-            await BotUtil.sleep(300);
-          } catch (error) {
-            BotUtil.makeLog('warn', `踢人失败: ${error.message}`, 'ChatStream');
-          }
-        }
-      },
-      enabled: true,
-      requireAdmin: true
-    });
-
-    // Call Function：设置精华消息（供内部调用）
-    this.registerFunction('setEssence', {
-      description: '设置精华消息',
-      handler: async (params, context) => {
+      handler: async (args = {}, context = {}) => {
         if (!context.e?.isGroup) {
-          BotUtil.makeLog('debug', '设置精华失败: 非群聊', 'ChatStream');
-          return;
+          return { success: false, error: '非群聊环境' };
         }
         
-        const msgId = String(params.msgId || '').trim();
+        const thumbCount = Math.min(parseInt(args.count) || 1, 50);
+        try {
+          const member = context.e.group?.pickMember(args.qq);
+          if (member && typeof member.thumbUp === 'function') {
+            await member.thumbUp(thumbCount);
+            await BotUtil.sleep(300);
+            return { success: true, message: '点赞成功', data: { qq: args.qq, count: thumbCount } };
+          }
+          return { success: false, error: '点赞功能不可用' };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：签到
+    this.registerMCPTool('sign', {
+      description: '群签到',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.sign();
+          await BotUtil.sleep(300);
+          return { success: true, message: '签到成功' };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：禁言
+    this.registerMCPTool('mute', {
+      description: '禁言群成员',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '要禁言的成员QQ号'
+          },
+          duration: {
+            type: 'number',
+            description: '禁言时长（秒）'
+          }
+        },
+        required: ['qq', 'duration']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.muteMember(args.qq, args.duration);
+          await BotUtil.sleep(300);
+          return { success: true, message: '禁言成功', data: { qq: args.qq, duration: args.duration } };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：解禁
+    this.registerMCPTool('unmute', {
+      description: '解除禁言',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '要解禁的成员QQ号'
+          }
+        },
+        required: ['qq']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.muteMember(args.qq, 0);
+          await BotUtil.sleep(300);
+          return { success: true, message: '解禁成功', data: { qq: args.qq } };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：全员禁言
+    this.registerMCPTool('muteAll', {
+      description: '全员禁言',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.muteAll(true);
+          await BotUtil.sleep(300);
+          return { success: true, message: '全员禁言成功' };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：解除全员禁言
+    this.registerMCPTool('unmuteAll', {
+      description: '解除全员禁言',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.muteAll(false);
+          await BotUtil.sleep(300);
+          return { success: true, message: '解除全员禁言成功' };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：改群名片
+    this.registerMCPTool('setCard', {
+      description: '修改群名片',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '成员QQ号'
+          },
+          card: {
+            type: 'string',
+            description: '新名片'
+          }
+        },
+        required: ['qq', 'card']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.setCard(args.qq, args.card);
+          await BotUtil.sleep(300);
+          return { success: true, message: '修改名片成功', data: { qq: args.qq, card: args.card } };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：改群名
+    this.registerMCPTool('setGroupName', {
+      description: '修改群名',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: '新群名'
+          }
+        },
+        required: ['name']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.setName(args.name);
+          await BotUtil.sleep(300);
+          return { success: true, message: '修改群名成功', data: { name: args.name } };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：设置管理员
+    this.registerMCPTool('setAdmin', {
+      description: '设置管理员',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '成员QQ号'
+          }
+        },
+        required: ['qq']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.setAdmin(args.qq, true);
+          await BotUtil.sleep(300);
+          return { success: true, message: '设置管理员成功', data: { qq: args.qq } };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：取消管理员
+    this.registerMCPTool('unsetAdmin', {
+      description: '取消管理员',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '成员QQ号'
+          }
+        },
+        required: ['qq']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.setAdmin(args.qq, false);
+          await BotUtil.sleep(300);
+          return { success: true, message: '取消管理员成功', data: { qq: args.qq } };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：设置头衔
+    this.registerMCPTool('setTitle', {
+      description: '设置专属头衔',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '成员QQ号'
+          },
+          title: {
+            type: 'string',
+            description: '头衔名称'
+          },
+          duration: {
+            type: 'number',
+            description: '持续时间（秒）',
+            default: -1
+          }
+        },
+        required: ['qq', 'title']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.setTitle(args.qq, args.title, args.duration || -1);
+          await BotUtil.sleep(300);
+          return { success: true, message: '设置头衔成功', data: { qq: args.qq, title: args.title } };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：踢人
+    this.registerMCPTool('kick', {
+      description: '踢出群成员',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: {
+            type: 'string',
+            description: '要踢出的成员QQ号'
+          },
+          reject: {
+            type: 'boolean',
+            description: '是否拒绝再次申请',
+            default: false
+          }
+        },
+        required: ['qq']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        try {
+          await context.e.group.kickMember(args.qq, args.reject || false);
+          await BotUtil.sleep(300);
+          return { success: true, message: '踢出成员成功', data: { qq: args.qq } };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // MCP工具：设置精华消息
+    this.registerMCPTool('setEssence', {
+      description: '设置精华消息',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          msgId: {
+            type: 'string',
+            description: '消息ID'
+          }
+        },
+        required: ['msgId']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+        
+        const msgId = String(args.msgId || '').trim();
         if (!msgId) {
-          BotUtil.makeLog('debug', '设置精华失败: 消息ID为空', 'ChatStream');
-          return;
+          return { success: false, error: '消息ID不能为空' };
         }
         
         try {
@@ -424,37 +635,41 @@ export default class ChatStream extends AIStream {
           if (group && typeof group.setEssenceMessage === 'function') {
             await group.setEssenceMessage(msgId);
             await BotUtil.sleep(300);
-            BotUtil.makeLog('debug', `设置精华成功: 消息ID=${msgId}`, 'ChatStream');
+            return { success: true, message: '设置精华成功', data: { msgId } };
           } else if (context.e.bot && context.e.bot.sendApi) {
-            await context.e.bot.sendApi('set_essence_msg', {
-              message_id: msgId
-            });
+            await context.e.bot.sendApi('set_essence_msg', { message_id: msgId });
             await BotUtil.sleep(300);
-            BotUtil.makeLog('debug', `设置精华成功: 消息ID=${msgId}`, 'ChatStream');
-          } else {
-            BotUtil.makeLog('warn', '设置精华失败: API不可用', 'ChatStream');
+            return { success: true, message: '设置精华成功', data: { msgId } };
           }
+          return { success: false, error: 'API不可用' };
         } catch (error) {
-          BotUtil.makeLog('warn', `设置精华失败: ${error.message}`, 'ChatStream');
+          return { success: false, error: error.message };
         }
       },
-      enabled: true,
-      requireAdmin: true
+      enabled: true
     });
 
-    // Call Function：取消精华消息（供内部调用）
-    this.registerFunction('removeEssence', {
+    // MCP工具：取消精华消息
+    this.registerMCPTool('removeEssence', {
       description: '取消精华消息',
-      handler: async (params, context) => {
+      inputSchema: {
+        type: 'object',
+        properties: {
+          msgId: {
+            type: 'string',
+            description: '消息ID'
+          }
+        },
+        required: ['msgId']
+      },
+      handler: async (args = {}, context = {}) => {
         if (!context.e?.isGroup) {
-          BotUtil.makeLog('debug', '取消精华失败: 非群聊', 'ChatStream');
-          return;
+          return { success: false, error: '非群聊环境' };
         }
         
-        const msgId = String(params.msgId || '').trim();
+        const msgId = String(args.msgId || '').trim();
         if (!msgId) {
-          BotUtil.makeLog('debug', '取消精华失败: 消息ID为空', 'ChatStream');
-          return;
+          return { success: false, error: '消息ID不能为空' };
         }
         
         try {
@@ -462,81 +677,89 @@ export default class ChatStream extends AIStream {
           if (group && typeof group.removeEssenceMessage === 'function') {
             await group.removeEssenceMessage(msgId);
             await BotUtil.sleep(300);
-            BotUtil.makeLog('debug', `取消精华成功: 消息ID=${msgId}`, 'ChatStream');
-          } else {
-            BotUtil.makeLog('warn', '取消精华失败: API不可用', 'ChatStream');
+            return { success: true, message: '取消精华成功', data: { msgId } };
           }
+          return { success: false, error: 'API不可用' };
         } catch (error) {
-          BotUtil.makeLog('warn', `取消精华失败: ${error.message}`, 'ChatStream');
+          return { success: false, error: error.message };
         }
       },
-      enabled: true,
-      requireAdmin: true
+      enabled: true
     });
 
-    // Call Function：发送群公告（供内部调用）
-    this.registerFunction('announce', {
+    // MCP工具：发送群公告
+    this.registerMCPTool('announce', {
       description: '发送群公告',
-      handler: async (params, context) => {
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content: {
+            type: 'string',
+            description: '公告内容'
+          },
+          image: {
+            type: 'string',
+            description: '公告图片URL（可选）'
+          }
+        },
+        required: ['content']
+      },
+      handler: async (args = {}, context = {}) => {
         if (!context.e?.isGroup) {
-          BotUtil.makeLog('debug', '发送群公告失败: 非群聊', 'ChatStream');
-          return;
+          return { success: false, error: '非群聊环境' };
         }
         
-        const content = String(params.content || '').trim();
+        const content = String(args.content || '').trim();
         if (!content) {
-          BotUtil.makeLog('debug', '发送群公告失败: 内容为空', 'ChatStream');
-          return;
+          return { success: false, error: '公告内容不能为空' };
         }
         
         try {
           const group = context.e.group;
-          const image = params.image ? String(params.image).trim() : undefined;
+          const image = args.image ? String(args.image).trim() : undefined;
           
-          // 优先使用 tasker 的 sendNotice 方法
           if (group && typeof group.sendNotice === 'function') {
             const options = {};
             if (image) options.image = image;
-            
             const result = await group.sendNotice(content, options);
-            
             if (result !== null && result !== undefined) {
               await BotUtil.sleep(300);
-              BotUtil.makeLog('debug', `发送群公告成功: 群${context.e.group_id}`, 'ChatStream');
-            } else {
-              BotUtil.makeLog('warn', `发送群公告失败: API返回空结果`, 'ChatStream');
+              return { success: true, message: '发送群公告成功', data: { content } };
             }
           } else if (context.e.bot && context.e.bot.sendApi) {
-            // 降级方案：直接调用 sendApi
-            const apiParams = {
-              group_id: context.e.group_id,
-              content: content
-            };
+            const apiParams = { group_id: context.e.group_id, content };
             if (image) apiParams.image = image;
-            
             const result = await context.e.bot.sendApi('_send_group_notice', apiParams);
             if (result && result.status === 'ok') {
               await BotUtil.sleep(300);
-              BotUtil.makeLog('debug', `发送群公告成功: 群${context.e.group_id}`, 'ChatStream');
-            } else {
-              BotUtil.makeLog('warn', `发送群公告失败: API返回错误`, 'ChatStream');
+              return { success: true, message: '发送群公告成功', data: { content } };
             }
-          } else {
-            BotUtil.makeLog('warn', '发送群公告失败: API不可用', 'ChatStream');
           }
+          return { success: false, error: 'API不可用' };
         } catch (error) {
-          BotUtil.makeLog('warn', `发送群公告失败: ${error.message}`, 'ChatStream');
+          return { success: false, error: error.message };
         }
       },
-      enabled: true,
-      requireAdmin: true
+      enabled: true
     });
 
-    // Call Function：撤回消息（供内部调用）
-    this.registerFunction('recall', {
+    // MCP工具：撤回消息
+    this.registerMCPTool('recall', {
       description: '撤回消息',
-      handler: async (params, context) => {
-        if (!context.e) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          msgId: {
+            type: 'string',
+            description: '要撤回的消息ID'
+          }
+        },
+        required: ['msgId']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e) {
+          return { success: false, error: '事件对象不存在' };
+        }
         
         try {
           let canRecall = false;
@@ -544,16 +767,13 @@ export default class ChatStream extends AIStream {
           
           if (context.e.bot && context.e.bot.sendApi) {
             try {
-              messageInfo = await context.e.bot.sendApi('get_msg', {
-                message_id: params.msgId
-              });
+              messageInfo = await context.e.bot.sendApi('get_msg', { message_id: args.msgId });
             } catch (error) {
               // 忽略获取消息信息失败
             }
           }
           
           if (context.e.isGroup) {
-            // 群聊消息撤回逻辑
             const botRole = await this.getBotRole(context.e);
             const isAdmin = botRole === '管理员' || botRole === '群主';
             
@@ -569,17 +789,12 @@ export default class ChatStream extends AIStream {
               } else if (isAdmin) {
                 canRecall = true;
               } else {
-                BotUtil.makeLog('warn', 
-                  `无法撤回: ${isSelfMsg ? '消息已超过3分钟' : '需要管理员权限'}`, 
-                  'ChatStream'
-                );
-                return;
+                return { success: false, error: isSelfMsg ? '消息已超过3分钟' : '需要管理员权限' };
               }
             } else if (isAdmin) {
               canRecall = true;
             }
           } else {
-            // 私聊消息撤回逻辑
             if (messageInfo && messageInfo.data) {
               const msgData = messageInfo.data;
               const isSelfMsg = String(msgData.sender?.user_id) === String(context.e.self_id);
@@ -590,11 +805,7 @@ export default class ChatStream extends AIStream {
               if (isSelfMsg && timeDiff <= 180) {
                 canRecall = true;
               } else {
-                BotUtil.makeLog('warn', 
-                  `无法撤回私聊消息: ${isSelfMsg ? '已超过3分钟' : '不是自己的消息'}`, 
-                  'ChatStream'
-                );
-                return;
+                return { success: false, error: isSelfMsg ? '已超过3分钟' : '不是自己的消息' };
               }
             } else {
               canRecall = true;
@@ -603,20 +814,20 @@ export default class ChatStream extends AIStream {
           
           if (canRecall) {
             if (context.e.isGroup && context.e.group) {
-              await context.e.group.recallMsg(params.msgId);
+              await context.e.group.recallMsg(args.msgId);
             } else if (context.e.bot) {
-              await context.e.bot.sendApi('delete_msg', {
-                message_id: params.msgId
-              });
+              await context.e.bot.sendApi('delete_msg', { message_id: args.msgId });
             }
             await BotUtil.sleep(300);
+            return { success: true, message: '消息撤回成功', data: { msgId: args.msgId } };
           }
+          
+          return { success: false, error: '无法撤回消息' };
         } catch (error) {
-          BotUtil.makeLog('warn', `撤回消息失败: ${error.message}`, 'ChatStream');
+          return { success: false, error: error.message };
         }
       },
-      enabled: true,
-      requirePermissionCheck: true
+      enabled: true
     });
 
     // MCP工具：获取群信息ex（返回JSON结果）
@@ -715,16 +926,27 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：设置群代办（供内部调用）
-    this.registerFunction('setGroupTodo', {
+    // MCP工具：设置群代办
+    this.registerMCPTool('setGroupTodo', {
       description: '设置群代办',
-      handler: async (params, context) => {
-        if (!context.e?.isGroup) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          msgId: {
+            type: 'string',
+            description: '消息ID'
+          }
+        },
+        required: ['msgId']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!context.e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
         
-        const msgId = String(params.msgId || '').trim();
+        const msgId = String(args.msgId || '').trim();
         if (!msgId) {
-          BotUtil.makeLog('debug', '设置群代办失败: 消息ID为空', 'ChatStream');
-          return;
+          return { success: false, error: '消息ID不能为空' };
         }
         
         try {
@@ -735,19 +957,15 @@ export default class ChatStream extends AIStream {
             });
             if (result !== null && result !== undefined) {
               await BotUtil.sleep(300);
-              BotUtil.makeLog('debug', `设置群代办成功: 消息ID=${msgId}`, 'ChatStream');
-            } else {
-              BotUtil.makeLog('warn', `设置群代办失败: API返回空结果`, 'ChatStream');
+              return { success: true, message: '设置群代办成功', data: { msgId } };
             }
-          } else {
-            BotUtil.makeLog('warn', '设置群代办失败: API不可用', 'ChatStream');
           }
+          return { success: false, error: 'API不可用' };
         } catch (error) {
-          BotUtil.makeLog('warn', `设置群代办失败: ${error.message}`, 'ChatStream');
+          return { success: false, error: error.message };
         }
       },
-      enabled: true,
-      requireAdmin: true
+      enabled: true
     });
   }
 
@@ -935,9 +1153,6 @@ ${lines.join('\n')}`;
     const botRole = question?.botRole || await this.getBotRole(e);
     const dateStr = question?.dateStr || new Date().toLocaleString('zh-CN');
     
-    // 根据权限构建功能列表（权限过滤已在 buildFunctionsPrompt 中完成）
-    const functionsPrompt = this.buildFunctionsPrompt({ botRole });
-
     let embeddingHint = '';
     if (this.embeddingConfig?.enabled) {
       embeddingHint = '\n💡 系统会自动检索相关历史对话（通过子服务端向量服务）\n';
@@ -966,7 +1181,9 @@ ${embeddingHint}
 4. 适当使用表情包和互动功能
 5. 管理功能需谨慎使用，避免滥用
 
-${functionsPrompt}
+【工具说明】
+所有功能都通过MCP工具调用协议提供，包括：@成员、戳一戳、表情回应、群管理等。
+
 
 【重要限制】
 1. 每次回复最多一个表情包

@@ -70,7 +70,7 @@ const LOG_STYLES = {
  */
 export default function setLog() {
   // 确保日志目录存在
-  ensureLogDir()
+  // logs 目录已在启动时通过 paths.ensureBaseDirs() 创建，无需重复创建
 
   // 修复 Windows UTF-8 编码问题
   fixWindowsUTF8()
@@ -833,14 +833,6 @@ export default function setLog() {
   return logger
 }
 
-/**
- * 确保日志目录存在
- * 注意：logs 目录已在 paths.ensureBaseDirs() 中创建，此函数保留用于向后兼容
- */
-function ensureLogDir() {
-  // logs 目录已在启动时通过 paths.ensureBaseDirs() 创建，此处无需重复创建
-  // 保留函数定义以避免破坏现有调用
-}
 
 /**
  * 修复 Windows UTF-8 编码问题

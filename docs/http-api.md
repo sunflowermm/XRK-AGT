@@ -188,6 +188,19 @@ ws: {
 
 返回API信息对象，包含 `name`、`dsc`、`priority`、`routes`数量、`ws`数量、`enable`、`createTime`。
 
+**返回格式**：
+```javascript
+{
+  name: string,        // API名称
+  dsc: string,         // API描述
+  priority: number,    // 优先级
+  routes: number,      // 路由数量
+  ws: number,          // WebSocket处理器数量
+  enable: boolean,     // 是否启用
+  createTime: number   // 创建时间戳
+}
+```
+
 ### `start()` / `stop()` / `async reload(app, bot)`
 
 - `start()` - 启用API（设置 `enable = true`）

@@ -1,7 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
-import lodash from 'lodash';
 import HttpApi from './http.js';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
@@ -260,19 +259,16 @@ class ApiLoader {
       const apiPriority = getApiPriority(api);
       
       try {
-        const routeCountBefore = api.routes ? api.routes.length : 0;
-        const wsCountBefore = api.wsHandlers ? Object.keys(api.wsHandlers).length : 0;
+        const routeCount = api.routes ? api.routes.length : 0;
+        const wsCount = api.wsHandlers ? Object.keys(api.wsHandlers).length : 0;
         
         if (typeof api.init === 'function') {
-          const initResult = await api.init(app, bot);
-          if (initResult === false) {
-            BotUtil.makeLog('warn', `API初始化返回false: ${apiName}`, 'ApiLoader');
-          }
-        } else {
-          BotUtil.makeLog('warn', `API没有init方法: ${apiName}`, 'ApiLoader');
+          await api.init(app, bot);
         }
         
-        BotUtil.makeLog('info', `注册API: ${apiName} (优先级: ${apiPriority}, 路由: ${routeCountBefore}, WS: ${wsCountBefore})`, 'ApiLoader');
+        if (routeCount > 0 || wsCount > 0) {
+          BotUtil.makeLog('info', `注册API: ${apiName} (优先级: ${apiPriority}, 路由: ${routeCount}, WS: ${wsCount})`, 'ApiLoader');
+        }
       } catch (error) {
         BotUtil.makeLog('error', `注册API失败: ${apiName} - ${error.message}`, 'ApiLoader', error);
         // 继续处理下一个API，不中断整个注册过程

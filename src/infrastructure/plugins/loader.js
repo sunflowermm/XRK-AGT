@@ -34,8 +34,6 @@ class PluginsLoader {
     this.pluginCount = 0
     // 使用智能缓存替换简单数组
     this.eventHistoryCache = new IntelligentCache({ maxSize: 1000, ttl: 3600000 })
-    this.eventHistory = [] // 保留用于向后兼容
-    this.MAX_EVENT_HISTORY = 1000
     // 使用神经网络算法进行事件去重
     this.eventDeduplicator = new EventDeduplicator({ 
       similarityThreshold: 0.85, 
@@ -668,8 +666,9 @@ class PluginsLoader {
     }
 
     e.getEventHistory = (filter = {}) => {
-      // 使用统一的过滤方法，减少冗余代码
-      return this.filterEventHistory(this.eventHistory, filter)
+      // 从智能缓存获取事件历史
+      const allEntries = Array.from(this.eventHistoryCache.cache.values())
+      return this.filterEventHistory(allEntries, filter)
     }
   }
 
@@ -1165,10 +1164,7 @@ class PluginsLoader {
    * 统一的事件历史清理（使用智能缓存）
    */
   cleanupEventHistory() {
-    // 智能缓存会自动清理过期项
-    if (this.eventHistory.length > this.MAX_EVENT_HISTORY) {
-      this.eventHistory = this.eventHistory.slice(-this.MAX_EVENT_HISTORY)
-    }
+    // 智能缓存会自动清理过期项，无需手动清理
   }
 
   /**
@@ -1239,14 +1235,9 @@ class PluginsLoader {
       source: eventData.tasker || eventData.device_id || 'internal'
     }
 
-    // 同时存储到智能缓存和数组（向后兼容）
+    // 存储到智能缓存
     const cacheKey = `${eventType}:${historyEntry.event_id}`
     this.eventHistoryCache.set(cacheKey, historyEntry)
-    this.eventHistory.unshift(historyEntry)
-
-    if (this.eventHistory.length > this.MAX_EVENT_HISTORY * 1.5) {
-      this.eventHistory = this.eventHistory.slice(0, this.MAX_EVENT_HISTORY)
-    }
   }
 
   distributeToSubscribers(eventType, eventData) {
@@ -1643,7 +1634,7 @@ class PluginsLoader {
       this.msgThrottle.clear()
       this.eventThrottle.clear()
       this.eventSubscribers.clear()
-      this.eventHistory = []
+      this.eventHistoryCache.clear()
 
       logger.info('插件加载器已销毁')
     } catch (error) {

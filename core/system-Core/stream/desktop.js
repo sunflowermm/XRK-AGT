@@ -29,17 +29,14 @@ const execCommand = (command, options = {}, needOutput = false) => {
 /**
  * 桌面与通用助手工作流
  * 
- * 功能分类：
- * - MCP工具（返回JSON）：
- *   - 信息读取：screenshot（截屏）、system_info（系统信息）、disk_space（磁盘空间）、list_desktop_files（列出桌面文件）
- *   - 文档生成：create_word_document（生成Word）、create_excel_document（生成Excel）
- *   - 数据查询：stock_quote（股票行情）
- * - Call Function（执行操作）：
- *   - 系统操作：show_desktop（回桌面）、open_system_tool（打开系统工具）、lock_screen（锁屏）、power_control（电源控制）
- *   - 文件操作：create_folder（创建文件夹）、open_explorer（打开资源管理器）、open_application（打开应用）
- *   - 网络操作：open_browser（打开浏览器）
- *   - 命令执行：execute_powershell（执行PowerShell）、cleanup_processes（清理进程）
- *   - （已移除）多步工作流：start_workflow
+ * 所有功能都通过 MCP 工具提供：
+ * - 系统操作：show_desktop、open_system_tool、lock_screen、power_control
+ * - 文件操作：create_folder、open_explorer、open_application
+ * - 网络操作：open_browser
+ * - 命令执行：execute_powershell、cleanup_processes
+ * - 信息读取：screenshot、system_info、disk_space、list_desktop_files
+ * - 文档生成：create_word_document、create_excel_document
+ * - 数据查询：stock_quote
  */
 export default class DesktopStream extends AIStream {
 
@@ -143,14 +140,6 @@ export default class DesktopStream extends AIStream {
     return fileName.replace(/[<>:"/\\|?*]/g, '_');
   }
 
-  // errorResponse 和 successResponse 已移至基类，这里保留兼容性
-  errorResponse(code, message) {
-    return super.errorResponse(code, message);
-  }
-
-  successResponse(data) {
-    return super.successResponse(data);
-  }
 
   /**
    * 统一解析JSON数据（支持字符串和对象）
@@ -198,43 +187,68 @@ export default class DesktopStream extends AIStream {
   }
 
   /**
-   * 注册所有功能
-   * 
-   * MCP工具：screenshot, system_info, disk_space, list_desktop_files, create_word_document, create_excel_document, stock_quote（返回JSON）
-   * Call Function：所有系统操作、文件操作、命令执行功能（由系统通过工具调用协议自动触发）
+   * 注册所有MCP工具
    */
   registerAllFunctions() {
-    // Call Function：回到桌面（供内部调用）
-    this.registerFunction('show_desktop', {
+    // MCP工具：回到桌面
+    this.registerMCPTool('show_desktop', {
       description: '回到桌面 - 最小化所有窗口显示桌面（仅限Windows系统）。适用场景：用户想要清空屏幕、查看桌面文件、需要干净的工作环境、或准备进行截屏等操作时使用。',
-      handler: async (params = {}, context = {}) => {
-        if (!this.requireWindows(context, '回桌面功能')) return;
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!this.requireWindows(context, '回桌面功能')) {
+          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
+        }
 
         try {
           await execAsync('powershell -Command "(New-Object -ComObject shell.application).MinimizeAll()"', { timeout: 5000 });
+          return this.successResponse({ message: '已回到桌面' });
         } catch (err) {
-          this.handleError(err, '回桌面操作', context);
+          BotUtil.makeLog('error', `[desktop] 回桌面失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('SHOW_DESKTOP_FAILED', err.message);
         }
       },
       enabled: true
     });
 
-    // Call Function：打开系统工具（供内部调用）
-    this.registerFunction('open_system_tool', {
-      description: '打开常用系统工具',
-      handler: async (params = {}, context = {}) => {
-        if (!this.requireWindows(context, '打开系统工具功能')) return;
+    // MCP工具：打开系统工具
+    this.registerMCPTool('open_system_tool', {
+      description: '打开Windows系统内置工具。支持的工具：notepad（记事本）、calc（计算器）、taskmgr（任务管理器）。当用户要求打开记事本、计算器或任务管理器时使用此功能。注意：这是打开应用程序，不是创建文档文件。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tool: {
+            type: 'string',
+            description: '要打开的系统工具名称，可选值：notepad（记事本）、calc（计算器）、taskmgr（任务管理器）',
+            enum: ['notepad', 'calc', 'taskmgr']
+          }
+        },
+        required: ['tool']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!this.requireWindows(context, '打开系统工具功能')) {
+          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
+        }
 
-        const { tool } = params;
-        if (!tool) return;
+        const { tool } = args;
+        if (!tool) {
+          return this.errorResponse('INVALID_PARAM', '工具名称不能为空');
+        }
 
         const toolNames = { notepad: '记事本', calc: '计算器', taskmgr: '任务管理器' };
 
         try {
           await execCommand(`start "" ${tool}`, { shell: 'cmd.exe' });
-          context.executedTool = toolNames[tool] || '应用';
+          return this.successResponse({ 
+            message: `已打开${toolNames[tool] || '应用'}`,
+            tool: toolNames[tool] || tool
+          });
         } catch (err) {
-          this.handleError(err, '打开系统工具', context);
+          BotUtil.makeLog('error', `[desktop] 打开系统工具失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('OPEN_SYSTEM_TOOL_FAILED', err.message);
         }
       },
       enabled: true
@@ -287,16 +301,25 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：锁屏（供内部调用）
-    this.registerFunction('lock_screen', {
+    // MCP工具：锁屏
+    this.registerMCPTool('lock_screen', {
       description: '锁定电脑屏幕',
-      handler: async (params = {}, context = {}) => {
-        if (!this.requireWindows(context, '锁屏功能')) return;
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!this.requireWindows(context, '锁屏功能')) {
+          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
+        }
 
         try {
           await execCommand('rundll32.exe user32.dll,LockWorkStation');
+          return this.successResponse({ message: '屏幕已锁定' });
         } catch (err) {
-          this.handleError(err, '锁屏操作', context);
+          BotUtil.makeLog('error', `[desktop] 锁屏失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('LOCK_SCREEN_FAILED', err.message);
         }
       },
       enabled: true
@@ -348,12 +371,24 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：打开浏览器（供内部调用）
-    this.registerFunction('open_browser', {
+    // MCP工具：打开浏览器
+    this.registerMCPTool('open_browser', {
       description: '打开浏览器访问网页',
-      handler: async (params = {}, context = {}) => {
-        const url = this.getParam(params, 'url');
-        if (!url) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description: '要访问的网页URL，例如：https://www.baidu.com'
+          }
+        },
+        required: ['url']
+      },
+      handler: async (args = {}, context = {}) => {
+        const url = this.getParam(args, 'url');
+        if (!url) {
+          return this.errorResponse('INVALID_PARAM', 'URL不能为空');
+        }
 
         const commands = {
           win32: `start "" "${url}"`,
@@ -364,19 +399,33 @@ export default class DesktopStream extends AIStream {
         try {
           const command = commands[process.platform] || commands.linux;
           await execCommand(command, { shell: IS_WINDOWS ? 'cmd.exe' : undefined });
-          context.openedUrl = url;
+          return this.successResponse({ message: `已打开浏览器访问: ${url}`, url });
         } catch (err) {
-          this.handleError(err, '打开网页', context);
+          BotUtil.makeLog('error', `[desktop] 打开浏览器失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('OPEN_BROWSER_FAILED', err.message);
         }
       },
       enabled: true
     });
 
-    // Call Function：电源控制（供内部调用）
-    this.registerFunction('power_control', {
+    // MCP工具：电源控制
+    this.registerMCPTool('power_control', {
       description: '关机或重启电脑',
-      handler: async (params = {}, context = {}) => {
-        if (!this.requireWindows(context, '关机/重启功能')) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: '操作类型：shutdown（60秒后关机）、shutdown_now（立即关机）、restart（60秒后重启）、cancel（取消关机/重启）',
+            enum: ['shutdown', 'shutdown_now', 'restart', 'cancel']
+          }
+        },
+        required: ['action']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!this.requireWindows(context, '关机/重启功能')) {
+          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
+        }
 
         const commands = {
           shutdown: { cmd: 'shutdown /s /t 60', delay: 60 },
@@ -385,54 +434,83 @@ export default class DesktopStream extends AIStream {
           cancel: { cmd: 'shutdown /a' }
         };
 
-        const { action } = params;
+        const { action } = args;
+        if (!action) {
+          return this.errorResponse('INVALID_PARAM', '操作类型不能为空');
+        }
+
         const config = commands[action];
-        if (!config) return;
+        if (!config) {
+          return this.errorResponse('INVALID_PARAM', `不支持的操作类型: ${action}`);
+        }
 
         try {
           await execCommand(config.cmd);
-          context.powerAction = action;
-          if (config.delay !== undefined) {
-            context.powerDelay = config.delay;
-          }
+          return this.successResponse({ 
+            message: action === 'cancel' ? '已取消关机/重启' : `已执行${action}操作`,
+            action,
+            delay: config.delay
+          });
         } catch (err) {
-          if (action !== 'cancel') {
-            this.handleError(err, '电源控制操作', context);
-          }
+          BotUtil.makeLog('error', `[desktop] 电源控制失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('POWER_CONTROL_FAILED', err.message);
         }
       },
       enabled: true
     });
 
-    // Call Function：创建文件夹（供内部调用）
-    this.registerFunction('create_folder', {
+    // MCP工具：创建文件夹
+    this.registerMCPTool('create_folder', {
       description: '在桌面创建文件夹',
-      handler: async (params = {}, context = {}) => {
-        if (!this.requireWindows(context, '创建文件夹功能')) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          folderName: {
+            type: 'string',
+            description: '文件夹名称'
+          }
+        },
+        required: ['folderName']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!this.requireWindows(context, '创建文件夹功能')) {
+          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
+        }
 
-        const { folderName } = params;
-        if (!folderName) return;
+        const { folderName } = args;
+        if (!folderName) {
+          return this.errorResponse('INVALID_PARAM', '文件夹名称不能为空');
+        }
 
         try {
           const workspace = this.getWorkspace();
           const safeName = this.sanitizeFileName(folderName);
           const folderPath = path.join(workspace, safeName);
 
-          // 使用Node.js创建文件夹
           await fs.mkdir(folderPath, { recursive: true });
 
-          context.createdFolder = safeName;
+          return this.successResponse({ 
+            message: `已创建文件夹: ${safeName}`,
+            folderPath,
+            folderName: safeName
+          });
         } catch (err) {
-          this.handleError(err, '创建文件夹', context);
+          BotUtil.makeLog('error', `[desktop] 创建文件夹失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('CREATE_FOLDER_FAILED', err.message);
         }
       },
       enabled: true
     });
 
-    // Call Function：打开资源管理器（供内部调用）
-    this.registerFunction('open_explorer', {
+    // MCP工具：打开资源管理器
+    this.registerMCPTool('open_explorer', {
       description: '打开文件管理器',
-      handler: async (params = {}, context = {}) => {
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
         const commands = {
           win32: 'explorer',
           darwin: 'open .',
@@ -442,8 +520,10 @@ export default class DesktopStream extends AIStream {
         try {
           const command = commands[process.platform] || commands.linux;
           await execCommand(command);
+          return this.successResponse({ message: '已打开文件管理器' });
         } catch (err) {
-          this.handleError(err, '打开资源管理器', context);
+          BotUtil.makeLog('error', `[desktop] 打开资源管理器失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('OPEN_EXPLORER_FAILED', err.message);
         }
       },
       enabled: true
@@ -496,17 +576,30 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：执行PowerShell命令（供内部调用）
-    this.registerFunction('execute_powershell', {
+    // MCP工具：执行PowerShell命令
+    this.registerMCPTool('execute_powershell', {
       description: '执行PowerShell命令（工作区：桌面）',
-      handler: async (params = {}, context = {}) => {
-        if (!this.requireWindows(context, '执行PowerShell命令')) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          command: {
+            type: 'string',
+            description: '要执行的PowerShell命令'
+          }
+        },
+        required: ['command']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!this.requireWindows(context, '执行PowerShell命令')) {
+          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
+        }
 
-        const { command } = params;
-        if (!command) return;
+        const { command } = args;
+        if (!command) {
+          return this.errorResponse('INVALID_PARAM', '命令不能为空');
+        }
 
         try {
-          // 设置工作区为桌面
           const workspace = this.getWorkspace();
           const fullCommand = `cd "${workspace}"; ${command}`;
 
@@ -515,13 +608,17 @@ export default class DesktopStream extends AIStream {
             { maxBuffer: 10 * 1024 * 1024, cwd: workspace },
             true
           );
-          context.commandOutput = output.trim();
-          context.commandSuccess = true;
+
+          return this.successResponse({ 
+            message: '命令执行成功',
+            output: output.trim(),
+            command
+          });
         } catch (err) {
-          context.commandError = err.message;
-          context.commandSuccess = false;
-          context.commandStderr = err.stderr || '';
-          this.handleError(err, '执行PowerShell命令', context);
+          BotUtil.makeLog('error', `[desktop] 执行PowerShell命令失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('EXECUTE_POWERSHELL_FAILED', err.message, {
+            stderr: err.stderr || ''
+          });
         }
       },
       enabled: true
@@ -579,20 +676,30 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // 注意：read/grep已移至MCP工具（tools.read, tools.grep），write/run/note已移至tools工作流
-    // desktop工作流会与tools工作流合并，自动获得write/run/note功能
-
-    // Call Function：打开应用（供内部调用）
-    this.registerFunction('open_application', {
+    // MCP工具：打开应用
+    this.registerMCPTool('open_application', {
       description: '打开应用程序',
-      handler: async (params = {}, context = {}) => {
-        if (!this.requireWindows(context, '打开软件')) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          appName: {
+            type: 'string',
+            description: '要打开的应用程序名称或路径'
+          }
+        },
+        required: ['appName']
+      },
+      handler: async (args = {}, context = {}) => {
+        if (!this.requireWindows(context, '打开软件')) {
+          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
+        }
 
-        const { appName } = params;
-        if (!appName) return;
+        const { appName } = args;
+        if (!appName) {
+          return this.errorResponse('INVALID_PARAM', '应用程序名称不能为空');
+        }
 
         try {
-          // 先尝试在工作区查找快捷方式
           const workspace = this.getWorkspace();
           const files = await fs.readdir(workspace);
           let shortcutPath = null;
@@ -605,10 +712,13 @@ export default class DesktopStream extends AIStream {
           }
 
           if (shortcutPath) {
-            // 使用Node.js打开快捷方式（Windows可以直接用start命令）
             await execAsync(`start "" "${shortcutPath}"`, { shell: 'cmd.exe' });
+            return this.successResponse({ 
+              message: `已打开应用程序: ${appName}`,
+              appName,
+              shortcutPath
+            });
           } else {
-            // 尝试直接启动程序（使用spawn）
             try {
               const child = spawn(appName, [], {
                 detached: true,
@@ -617,14 +727,16 @@ export default class DesktopStream extends AIStream {
               });
               child.unref();
             } catch (e) {
-              // 如果spawn失败，使用cmd的start命令
               await execAsync(`start "" "${appName}"`, { shell: 'cmd.exe' });
             }
+            return this.successResponse({ 
+              message: `已打开应用程序: ${appName}`,
+              appName
+            });
           }
-
-          context.openedApp = appName;
         } catch (err) {
-          this.handleError(err, '打开软件', context);
+          BotUtil.makeLog('error', `[desktop] 打开应用程序失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('OPEN_APPLICATION_FAILED', err.message);
         }
       },
       enabled: true
@@ -632,7 +744,7 @@ export default class DesktopStream extends AIStream {
 
     // MCP工具：生成Word文档（返回JSON结果）
     this.registerMCPTool('create_word_document', {
-      description: '创建Word文档，根据指定内容创建格式化的Word文档（.docx），支持标题、段落、表格等格式',
+      description: '生成并保存Word文档文件（.docx格式）。根据提供的文件名和内容创建新的Word文档文件并保存到桌面。注意：这是创建文档文件，不是打开记事本应用程序。如果用户要求"打开记事本"，应使用open_system_tool工具，而不是此工具。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -838,12 +950,26 @@ export default class DesktopStream extends AIStream {
     });
 
 
-    // Call Function：清理进程（供内部调用）
-    this.registerFunction('cleanup_processes', {
+    // MCP工具：清理进程
+    this.registerMCPTool('cleanup_processes', {
       description: '清理无用进程',
-      handler: async (params = {}, context = {}) => {
-        const result = await this.tools.cleanupProcesses();
-        context.processesCleaned = result.killed || [];
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
+        try {
+          const result = await this.tools.cleanupProcesses();
+          return this.successResponse({ 
+            message: '进程清理完成',
+            killed: result.killed || [],
+            count: (result.killed || []).length
+          });
+        } catch (err) {
+          BotUtil.makeLog('error', `[desktop] 清理进程失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('CLEANUP_PROCESSES_FAILED', err.message);
+        }
       },
       enabled: true
     });
@@ -1086,7 +1212,6 @@ ${lines.join('\n')}`;
     const persona =
       (question && (question.persona || question.PERSONA)) ||
       '你是一个智能桌面助手，帮助用户完成文件操作、系统管理等任务。';
-    const functionsPrompt = this.buildFunctionsPrompt();
     const now = new Date().toLocaleString('zh-CN');
     const isMaster = e?.isMaster === true;
     const workspace = this.getWorkspace();
@@ -1103,25 +1228,22 @@ ${persona}
 工作区：${workspace}
 - 文件操作默认在此目录进行
 
-【核心工具】（write/run/note）
-- [写入:文件路径:内容] - 写入文件
-- [执行:命令] - 执行命令
-- [笔记:内容] - 记录笔记（可选）
-
-【信息读取功能】
-- 文件读取(read)、搜索(grep)、系统信息、磁盘空间、桌面文件列表等功能已移至MCP工具
-- 可通过MCP协议调用：tools.read, tools.grep, desktop.system_info, desktop.disk_space, desktop.list_desktop_files
-- 在工作流中，这些工具的结果会自动存到笔记
-
-【Excel操作】
-- Excel文档生成功能已移至MCP工具（desktop.create_excel_document），可通过MCP协议调用
+【工具说明】
+所有功能都通过MCP工具调用协议提供，包括：
+- 系统操作：show_desktop, open_system_tool, lock_screen, power_control
+- 文件操作：create_folder, open_explorer, open_application
+- 网络操作：open_browser
+- 命令执行：execute_powershell, cleanup_processes
+- 信息读取：screenshot, system_info, disk_space, list_desktop_files
+- 文档生成：create_word_document, create_excel_document
+- 数据查询：stock_quote
 
 ${fileContext ? `【上下文】\n${fileContext}\n` : ''}
 【时间】
 ${now}
-${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操作。\n\n' : ''}${functionsPrompt ? `${functionsPrompt}\n\n` : ''}【规则】
+${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操作。\n\n' : ''}【规则】
 1. 执行功能时必须回复文本内容，不要只执行不回复
-2. 优先使用功能函数执行操作
+2. 优先使用MCP工具执行操作
 3. 文件操作默认在工作区进行
 4. 如果找到文件内容，请在回复中直接告知用户内容
 `;

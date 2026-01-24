@@ -60,11 +60,9 @@ export const downFile = async (fileUrl, savePath, param = {}) => {
  * @param {Object} e - 消息事件
  * @param {Array|string} [msg=[]] - 消息数组
  * @param {string} [dec=''] - 转发描述
- * @param {Array} [nm=[]] - 未使用参数（保持兼容性）
- * @param {boolean} [msgsscr=false] - 未使用参数（保持兼容性）
  * @returns {*} 转发消息对象
  */
-export const makeForwardMsg = (e, msg = [], dec = '', nm = [], msgsscr = false) => {
+export const makeForwardMsg = (e, msg = [], dec = '') => {
   const messages = Array.isArray(msg) ? msg : [msg]
   const forwardMsg = dec 
     ? [{ message: dec }, ...messages.map(message => ({ message }))] 

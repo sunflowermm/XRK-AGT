@@ -26,12 +26,30 @@ export default {
         if (!mcpServer) return;
 
         try {
-          const response = await mcpServer.handleJSONRPC(req.body);
+          // 支持stream查询参数，用于过滤特定工作流的工具
+          const { stream } = req.query;
+          const response = await mcpServer.handleJSONRPC(req.body, { stream });
           res.json(response);
         } catch (error) {
           return HttpResponse.error(res, error, 500, 'mcp.jsonrpc');
         }
       }, 'mcp.jsonrpc')
+    },
+    {
+      method: 'POST',
+      path: '/api/mcp/jsonrpc/:stream',
+      handler: HttpResponse.asyncHandler(async (req, res) => {
+        const mcpServer = requireMCP(res);
+        if (!mcpServer) return;
+
+        try {
+          const { stream } = req.params;
+          const response = await mcpServer.handleJSONRPC(req.body, { stream });
+          res.json(response);
+        } catch (error) {
+          return HttpResponse.error(res, error, 500, 'mcp.jsonrpc.stream');
+        }
+      }, 'mcp.jsonrpc.stream')
     },
     {
       method: 'GET',
@@ -40,9 +58,43 @@ export default {
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
-        const tools = mcpServer.listTools();
-        HttpResponse.success(res, { tools, count: tools.length });
+        const { stream } = req.query;
+        const tools = stream ? mcpServer.listTools(stream) : mcpServer.listTools();
+        HttpResponse.success(res, { tools, count: tools.length, stream: stream || 'all' });
       }, 'mcp.tools')
+    },
+    {
+      method: 'GET',
+      path: '/api/mcp/tools/streams',
+      handler: HttpResponse.asyncHandler(async (req, res) => {
+        const mcpServer = requireMCP(res);
+        if (!mcpServer) return;
+
+        const streams = mcpServer.listStreams();
+        const groups = mcpServer.listToolsByStream();
+        
+        HttpResponse.success(res, { 
+          streams,
+          groups,
+          count: streams.length
+        });
+      }, 'mcp.tools.streams')
+    },
+    {
+      method: 'GET',
+      path: '/api/mcp/tools/stream/:streamName',
+      handler: HttpResponse.asyncHandler(async (req, res) => {
+        const { streamName } = req.params;
+        const mcpServer = requireMCP(res);
+        if (!mcpServer) return;
+
+        const tools = mcpServer.listTools(streamName);
+        HttpResponse.success(res, { 
+          stream: streamName,
+          tools, 
+          count: tools.length 
+        });
+      }, 'mcp.tools.stream')
     },
     {
       method: 'POST',

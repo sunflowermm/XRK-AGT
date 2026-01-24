@@ -12,11 +12,11 @@ const IS_WINDOWS = process.platform === 'win32';
 /**
  * 基础工具工作流
  * 
- * 功能分类：
- * - MCP工具（返回JSON）：read（读取文件）、grep（搜索文本）
- * - Call Function（执行操作）：write（写入文件）、run（执行命令）、note（记录笔记）
- * 
- * 这些是智能体的基础武器，所有工作流都可以使用
+ * 所有功能都通过 MCP 工具提供：
+ * - read（读取文件）
+ * - grep（搜索文本）
+ * - write（写入文件）
+ * - run（执行命令）
  */
 export default class ToolsStream extends AIStream {
   constructor() {
@@ -171,41 +171,100 @@ export default class ToolsStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：写入文件（供工具/内部调用）
-    this.registerFunction('write', {
-      description: '写入文件',
-      handler: async (params = {}, context = {}) => {
-        const { filePath, content } = params;
-        if (!filePath || !content) return;
+    // MCP工具：写入文件
+    this.registerMCPTool('write', {
+      description: '写入文件内容',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: {
+            type: 'string',
+            description: '文件路径'
+          },
+          content: {
+            type: 'string',
+            description: '文件内容'
+          }
+        },
+        required: ['filePath', 'content']
+      },
+      handler: async (args = {}, context = {}) => {
+        const { filePath, content } = args;
+        if (!filePath || !content) {
+          return { success: false, error: '文件路径和内容不能为空' };
+        }
 
         const result = await this.tools.writeFile(filePath, content);
         
         if (result.success) {
-          await this.handleWriteSuccess(result, context);
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.writeFileResult = { success: true, path: result.path };
+          }
+          return {
+            success: true,
+            data: {
+              filePath: result.path,
+              message: '文件写入成功'
+            }
+          };
         } else {
-          await this.handleWriteFailure(filePath, result, context);
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.writeFileError = result.error;
+          }
+          return { success: false, error: result.error };
         }
       },
       enabled: true
     });
 
-    // Call Function：执行命令（供工具/内部调用）
-    this.registerFunction('run', {
-      description: '执行命令',
-      handler: async (params = {}, context = {}) => {
+    // MCP工具：执行命令
+    this.registerMCPTool('run', {
+      description: '执行命令（工作区：桌面）',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          command: {
+            type: 'string',
+            description: '要执行的命令'
+          }
+        },
+        required: ['command']
+      },
+      handler: async (args = {}, context = {}) => {
         if (!IS_WINDOWS) {
-          context.commandError = 'run命令仅在Windows上支持';
-          return;
+          return { success: false, error: 'run命令仅在Windows上支持' };
         }
 
-        const { command } = params;
-        if (!command) return;
+        const { command } = args;
+        if (!command) {
+          return { success: false, error: '命令不能为空' };
+        }
 
         try {
           const output = await this.executeCommand(command);
-          await this.handleCommandSuccess(command, output, context);
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.commandOutput = output;
+            context.stream.context.commandSuccess = true;
+          }
+          return {
+            success: true,
+            data: {
+              command,
+              output,
+              message: '命令执行成功'
+            }
+          };
         } catch (err) {
-          await this.handleCommandFailure(command, err, context);
+          if (context.stream) {
+            context.stream.context = context.stream.context || {};
+            context.stream.context.commandError = err.message;
+            context.stream.context.commandSuccess = false;
+            context.stream.context.commandStderr = err.stderr || '';
+          }
+          return { success: false, error: err.message, stderr: err.stderr || '' };
         }
       },
       enabled: true
@@ -305,13 +364,11 @@ export default class ToolsStream extends AIStream {
 
   buildSystemPrompt(context) {
     return `【基础工具说明】
-你具备写入文件(write)、执行命令(run)、记录笔记(note)等能力。
-这些能力会在需要时通过系统的工具调用机制自动触发。
-
-【能力提示】
-- 写入文件：根据上下文需要，把内容写入到指定文件
-- 执行命令：在工作区执行合适的命令（注意安全和权限）
-- 记录笔记：在复杂任务中，把阶段性结论或关键信息记录下来`;
+所有功能都通过MCP工具调用协议提供，包括：
+- read：读取文件内容
+- grep：在文件中搜索文本
+- write：写入文件内容
+- run：执行命令（工作区：桌面）`;
   }
 }
 

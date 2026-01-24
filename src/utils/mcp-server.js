@@ -217,10 +217,30 @@ export class MCPServer {
 
   /**
    * 获取所有可用工具列表（符合MCP标准）
+   * @param {string} streamName - 可选：工作流名称，如果提供则只返回该工作流的工具
    * @returns {Array} 工具列表
    */
-  listTools() {
-    return Array.from(this.tools.values()).map(tool => ({
+  listTools(streamName = null) {
+    const tools = Array.from(this.tools.values());
+    
+    // 如果指定了工作流名称，只返回该工作流的工具
+    if (streamName) {
+      const prefix = `${streamName}.`;
+      return tools
+        .filter(tool => tool.name.startsWith(prefix))
+        .map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema || {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }));
+    }
+    
+    // 返回所有工具
+    return tools.map(tool => ({
       name: tool.name,
       description: tool.description,
       inputSchema: tool.inputSchema || {
@@ -229,6 +249,52 @@ export class MCPServer {
         required: []
       }
     }));
+  }
+
+  /**
+   * 获取所有工作流分组
+   * @returns {Object} 工作流分组，格式：{ streamName: [tools...] }
+   */
+  listToolsByStream() {
+    const groups = {};
+    
+    for (const tool of this.tools.values()) {
+      const parts = tool.name.split('.');
+      if (parts.length >= 2) {
+        const streamName = parts[0];
+        if (!groups[streamName]) {
+          groups[streamName] = [];
+        }
+        groups[streamName].push({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema || {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        });
+      }
+    }
+    
+    return groups;
+  }
+
+  /**
+   * 获取工作流列表
+   * @returns {Array} 工作流名称列表
+   */
+  listStreams() {
+    const streams = new Set();
+    
+    for (const tool of this.tools.values()) {
+      const parts = tool.name.split('.');
+      if (parts.length >= 2) {
+        streams.add(parts[0]);
+      }
+    }
+    
+    return Array.from(streams);
   }
 
   /**
@@ -316,10 +382,13 @@ export class MCPServer {
   /**
    * 处理JSON-RPC请求（MCP标准）
    * @param {Object} request - JSON-RPC请求
+   * @param {Object} options - 选项
+   * @param {string} options.stream - 可选：工作流名称，用于过滤工具
    * @returns {Promise<Object>} JSON-RPC响应
    */
-  async handleJSONRPC(request) {
+  async handleJSONRPC(request, options = {}) {
     const { jsonrpc, id, method, params } = request;
+    const { stream } = options;
 
     // 验证JSON-RPC版本
     if (jsonrpc !== '2.0') {
@@ -343,7 +412,8 @@ export class MCPServer {
           break;
 
         case 'tools/list':
-          result = { tools: this.listTools() };
+          // 支持按工作流过滤工具
+          result = { tools: stream ? this.listTools(stream) : this.listTools() };
           break;
 
         case 'tools/call':

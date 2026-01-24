@@ -9,7 +9,7 @@
 ### 扩展特性
 
 - ✅ **零配置扩展**：放置到任意 `core/*/stream/` 目录即可自动加载
-- ✅ **函数注册系统**：支持 Call Function 和 MCP 工具注册
+- ✅ **函数注册系统**：统一使用 MCP 工具注册
 - ✅ **向量服务集成**：统一通过子服务端向量服务进行文本向量化和检索
 - ✅ **工作流合并**：支持功能合并和组合
 - ✅ **上下文增强**：自动上下文检索和增强（RAG流程）
@@ -34,7 +34,7 @@ flowchart TB
         Enhance["buildEnhancedContext<br/>RAG流程：检索历史+知识库"]
         CallAI["callAI/callAIStream<br/>调用LLM"]
         Store["storeMessageWithEmbedding<br/>存储到记忆系统"]
-        Register["registerFunction<br/>registerMCPTool<br/>注册工具"]
+        Register["registerMCPTool<br/>注册MCP工具"]
     end
     
     subgraph Subserver["Python子服务端"]
@@ -131,7 +131,7 @@ classDiagram
         +functions: Map
         +mcpTools: Map
         +init()
-        +registerFunction(name, options)
+        +registerMCPTool(name, options)
         +registerMCPTool(name, options)
         +buildSystemPrompt(context)
         +buildChatContext(e, question)
@@ -235,9 +235,9 @@ constructor(options = {})
 - 初始化 MCP 工具映射 `this.mcpTools = new Map()`
 - 子类可重写此方法进行自定义初始化
 
-### `registerFunction(name, options)`
+### `registerMCPTool(name, options)`
 
-注册 Call Function（供 AI 内部调用）。
+注册 MCP 工具（统一工具注册方式）。
 
 **参数**：
 - `name` - 函数名称
@@ -305,11 +305,7 @@ constructor(options = {})
 AIStream **不再解析/执行**任何 “文本函数调用 / ReAct”。
 
 - **MCP 工具调用**：由 LLMFactory（各厂商 tool calling 协议）+ `MCPToolAdapter` 内部完成多轮 `tool_calls` → 返回最终 `assistant.content`。
-- **Call Function（本地注册函数）**：仍可在 stream 内部按需调用（例如特殊业务逻辑），但不推荐让模型通过“文本协议”来触发。
-
-**功能分类**：
-- **MCP 工具**：读取信息类功能（read, grep, query_memory等），返回 JSON，不出现在 prompt 中
-- **Call Function**：执行操作类功能（write, run, save_memory等），出现在 prompt 中，供 AI 调用
+- **统一工具注册**：所有功能都通过 `registerMCPTool` 注册为 MCP 工具，返回标准 JSON 格式
 
 ---
 
@@ -498,9 +494,9 @@ await stream.callAIStream(messages, {}, (delta) => {
 
 ### 工具注册方法
 
-#### `registerFunction(name, options)`
+#### `registerMCPTool(name, options)`
 
-注册Call Function（供AI内部调用）。
+注册MCP工具（统一工具注册方式）。
 
 **参数**：
 ```javascript

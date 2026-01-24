@@ -2,7 +2,6 @@ import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import MemoryManager from '#infrastructure/aistream/memory-manager.js';
-import ToolRegistry from '#infrastructure/aistream/tool-registry.js';
 import PromptEngine from '#infrastructure/aistream/prompt-engine.js';
 import MonitorService from '#infrastructure/aistream/monitor-service.js';
 
@@ -52,10 +51,6 @@ export default class AIStream {
   async init() {
     if (this._initialized) {
       return;
-    }
-
-    if (!this.functions) {
-      this.functions = new Map();
     }
 
     if (!this.mcpTools) {
@@ -421,61 +416,6 @@ export default class AIStream {
   }
 
   /**
-   * 注册函数（Call Function，用于AI调用）
-   * @param {string} name - 函数名称
-   * @param {Object} options - 选项
-   * @param {Function} options.handler - 处理函数
-   * @param {string|Function} options.prompt - 提示文本
-   * @param {Function} options.parser - 解析函数
-   * @param {boolean} options.enabled - 是否启用
-   * @param {string} options.permission - 权限要求
-   * @param {string} options.description - 描述
-   */
-  registerFunction(name, options = {}) {
-    const {
-      handler,
-      prompt = '',
-      parser = null,
-      enabled = true,
-      permission = null,
-      description = ''
-    } = options;
-
-    const resolvedPrompt = typeof prompt === 'function' ? prompt() : prompt;
-
-    const funcDef = {
-      name,
-      handler,
-      prompt: resolvedPrompt,
-      parser,
-      enabled: this.functionToggles[name] ?? enabled,
-      permission,
-      description,
-      ...Object.fromEntries(
-        Object.entries(options).filter(([key]) => 
-          !['handler', 'prompt', 'parser', 'enabled', 'permission', 'description'].includes(key)
-        )
-      )
-    };
-
-    this.functions.set(name, funcDef);
-
-    // 注册到 ToolRegistry（用于AI调用）
-    // ToolRegistry.registerTool 内部已有重复检查，这里直接注册即可
-    if (handler) {
-      ToolRegistry.registerTool(`${this.name}.${name}`, {
-        description: description || resolvedPrompt,
-        schema: options.schema || {},
-        handler: async (args, ctx) => {
-          return await handler(args, { ...ctx, stream: this });
-        },
-        category: this.name,
-        permissions: permission ? { roles: [permission] } : { public: true }
-      });
-    }
-  }
-
-  /**
    * 注册MCP工具（MCP Protocol，用于外部工具调用）
    * @param {string} name - 工具名称
    * @param {Object} options - 选项
@@ -503,36 +443,6 @@ export default class AIStream {
     this.mcpTools.set(name, toolDef);
   }
 
-  /**
-   * 检查函数是否启用
-   * @param {string} name - 函数名称
-   * @returns {boolean}
-   */
-  isFunctionEnabled(name) {
-    const func = this.functions.get(name);
-    return func?.enabled ?? false;
-  }
-
-  /**
-   * 切换函数启用状态
-   * @param {string} name - 函数名称
-   * @param {boolean} enabled - 是否启用
-   */
-  toggleFunction(name, enabled) {
-    const func = this.functions.get(name);
-    if (func) {
-      func.enabled = enabled;
-      this.functionToggles[name] = enabled;
-    }
-  }
-
-  /**
-   * 获取所有启用的函数
-   * @returns {Array<Object>}
-   */
-  getEnabledFunctions() {
-    return Array.from(this.functions.values()).filter(f => f.enabled);
-  }
 
   /**
    * 合并工作流
@@ -558,21 +468,6 @@ export default class AIStream {
 
     let mergedCount = 0;
     let skippedCount = 0;
-
-    // 合并函数（Call Functions）
-    if (stream.functions) {
-      for (const [name, func] of stream.functions.entries()) {
-        const newName = prefix ? `${prefix}${name}` : name;
-
-        if (this.functions.has(newName) && !overwrite) {
-          skippedCount++;
-          continue;
-        }
-
-        this.functions.set(newName, func);
-        mergedCount++;
-      }
-    }
 
     // 合并MCP工具
     if (stream.mcpTools) {
@@ -1061,11 +956,6 @@ export default class AIStream {
     });
 
     try {
-      const context = { e, question, config };
-      if (this.tools) {
-        context.tools = this.tools;
-      }
-      
       const baseMessages = await this.buildChatContext(e, question);
       const messages = await this.buildEnhancedContext(e, question, baseMessages);
       
@@ -1084,12 +974,6 @@ export default class AIStream {
         await e.reply(response.trim()).catch(err => {
           BotUtil.makeLog('debug', `发送回复失败: ${err.message}`, 'AIStream');
         });
-      }
-
-      if (context.tools && typeof context.tools.cleanupProcesses === 'function') {
-        try {
-          await context.tools.cleanupProcesses();
-        } catch (err) {}
       }
 
       if (this.embeddingConfig.enabled && response && e) {
@@ -1185,11 +1069,10 @@ export default class AIStream {
         enabled: this.embeddingConfig?.enabled || false,
         maxContexts: this.embeddingConfig?.maxContexts || 5
       },
-      functions: Array.from(this.functions.values()).map(f => ({
-        name: f.name,
-        description: f.description,
-        enabled: f.enabled,
-        permission: f.permission
+      mcpTools: Array.from(this.mcpTools.values()).map(t => ({
+        name: t.name,
+        description: t.description,
+        enabled: t.enabled
       }))
     };
   }

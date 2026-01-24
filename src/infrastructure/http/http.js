@@ -138,10 +138,6 @@ export default class HttpApi {
     };
   }
 
-  getDescriptor() {
-    return this.getInfo();
-  }
-
   start() {
     this.enable = true;
     BotUtil.makeLog('info', `[HttpApi] ${this.name} 已启用`, 'HttpApi');

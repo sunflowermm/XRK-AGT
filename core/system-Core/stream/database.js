@@ -8,12 +8,11 @@ import os from 'os';
 /**
  * 知识库工作流插件（数据库）
  * 
- * 功能分类：
- * - MCP工具（返回JSON）：query_knowledge（查询知识）、list_knowledge（列出知识库）
- * - Call Function（执行操作）：save_knowledge（保存知识）、delete_knowledge（删除知识）
- * 
- * 作为智能体的重要组成部分，提供知识存储、检索、管理功能
- * 支持快速调用，简化参数，便于AI和开发者使用
+ * 所有功能都通过 MCP 工具提供：
+ * - query_knowledge（查询知识）
+ * - list_knowledge（列出知识库）
+ * - save_knowledge（保存知识）
+ * - delete_knowledge（删除知识）
  */
 export default class DatabaseStream extends AIStream {
   constructor() {
@@ -49,29 +48,41 @@ export default class DatabaseStream extends AIStream {
 
   /**
    * 注册所有知识库相关功能
-   * 
-   * MCP工具：query_knowledge, list_knowledge（返回JSON，不出现在prompt中）
-   * Call Function：save_knowledge, delete_knowledge（出现在prompt中，供AI调用）
    */
   registerAllFunctions() {
-    // 动态获取可用知识库列表
-    const getKnowledgePrompt = () => {
-      const databases = this.getDatabasesSync();
-      const dbList = databases.length > 0 
-        ? `\n可用知识库：${databases.join('、')}`
-        : '\n提示：使用[保存知识:知识库名:内容]可创建新知识库';
-      return dbList;
-    };
-
-    // Call Function：保存知识（供内部调用）
-    this.registerFunction('save_knowledge', {
+    // MCP工具：保存知识
+    this.registerMCPTool('save_knowledge', {
       description: '保存知识到知识库',
-      handler: async (params = {}, context = {}) => {
-        const { db, content } = params;
-        if (!db || !content) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          db: {
+            type: 'string',
+            description: '知识库名称'
+          },
+          content: {
+            type: 'string',
+            description: '知识内容（支持文本或JSON格式）'
+          }
+        },
+        required: ['db', 'content']
+      },
+      handler: async (args = {}, context = {}) => {
+        const { db, content } = args;
+        if (!db || !content) {
+          return { success: false, error: '知识库名称和内容不能为空' };
+        }
 
         await this.saveKnowledge(db, content, context);
         BotUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
+        
+        return {
+          success: true,
+          data: {
+            db,
+            message: '知识保存成功'
+          }
+        };
       },
       enabled: true
     });
@@ -147,14 +158,40 @@ export default class DatabaseStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：删除知识（供内部调用）
-    this.registerFunction('delete_knowledge', {
+    // MCP工具：删除知识
+    this.registerMCPTool('delete_knowledge', {
       description: '从知识库删除知识',
-      handler: async (params = {}, context = {}) => {
-        const { db, condition } = params;
-        if (!db) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          db: {
+            type: 'string',
+            description: '知识库名称'
+          },
+          condition: {
+            type: 'string',
+            description: '删除条件：知识ID（数字）或条件（key=value格式），使用"*"删除所有'
+          }
+        },
+        required: ['db']
+      },
+      handler: async (args = {}, context = {}) => {
+        const { db, condition } = args;
+        if (!db) {
+          return { success: false, error: '知识库名称不能为空' };
+        }
 
-        const count = await this.deleteKnowledge(db, condition, context);
+        const count = await this.deleteKnowledge(db, condition || '*', context);
+        
+        return {
+          success: true,
+          data: {
+            db,
+            condition: condition || '*',
+            deletedCount: count,
+            message: `已删除 ${count} 条知识`
+          }
+        };
       },
       enabled: true
     });
@@ -432,7 +469,7 @@ export default class DatabaseStream extends AIStream {
   }
 
   /**
-   * 同步获取知识库列表（用于在主工作流的buildFunctionsPrompt中展示）
+   * 同步获取知识库列表
    */
   getDatabasesSync() {
     try {

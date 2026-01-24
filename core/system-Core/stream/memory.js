@@ -8,11 +8,11 @@ import os from 'os';
 /**
  * 记忆系统工作流插件
  * 
- * 功能分类：
- * - MCP工具（返回JSON）：query_memory（查询记忆）、list_memories（列出记忆）
- * - Call Function（执行操作）：save_memory（保存记忆）、delete_memory（删除记忆）
- * 
- * 提供长期记忆功能，支持记忆的存储、查询、删除
+ * 所有功能都通过 MCP 工具提供：
+ * - query_memory（查询记忆）
+ * - list_memories（列出记忆）
+ * - save_memory（保存记忆）
+ * - delete_memory（删除记忆）
  */
 export default class MemoryStream extends AIStream {
   constructor() {
@@ -51,21 +51,38 @@ export default class MemoryStream extends AIStream {
 
   /**
    * 注册所有记忆相关功能
-   * 
-   * MCP工具：query_memory, list_memories（返回JSON，不出现在prompt中）
-   * Call Function：save_memory, delete_memory（出现在prompt中，供AI调用）
    */
   registerAllFunctions() {
-
-    // Call Function：保存长期记忆（供内部调用）
-    this.registerFunction('save_memory', {
+    // MCP工具：保存长期记忆
+    this.registerMCPTool('save_memory', {
       description: '保存长期记忆',
-      handler: async (params = {}, context = {}) => {
-        const { content } = params;
-        if (!content) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content: {
+            type: 'string',
+            description: '记忆内容'
+          }
+        },
+        required: ['content']
+      },
+      handler: async (args = {}, context = {}) => {
+        const { content } = args;
+        if (!content) {
+          return { success: false, error: '记忆内容不能为空' };
+        }
 
         const memoryId = await this.saveMemory(content, context);
         BotUtil.makeLog('info', `[${this.name}] 保存记忆 #${memoryId}: ${content.slice(0, 50)}...`, 'MemoryStream');
+        
+        return {
+          success: true,
+          data: {
+            memoryId,
+            message: '记忆保存成功',
+            content: content.slice(0, 100)
+          }
+        };
       },
       enabled: true
     });
@@ -112,15 +129,35 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
-    // Call Function：删除记忆（供内部调用）
-    this.registerFunction('delete_memory', {
+    // MCP工具：删除记忆
+    this.registerMCPTool('delete_memory', {
       description: '删除长期记忆',
-      handler: async (params = {}, context = {}) => {
-        const { id } = params;
-        if (!id) return;
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: '记忆ID'
+          }
+        },
+        required: ['id']
+      },
+      handler: async (args = {}, context = {}) => {
+        const { id } = args;
+        if (!id) {
+          return { success: false, error: '记忆ID不能为空' };
+        }
 
         const success = await this.deleteMemory(id, context);
         BotUtil.makeLog('info', `[${this.name}] ${success ? '删除' : '删除失败'}记忆 #${id}`, 'MemoryStream');
+        
+        return {
+          success,
+          data: {
+            id,
+            message: success ? '记忆删除成功' : '记忆删除失败，可能不存在或无权限'
+          }
+        };
       },
       enabled: true
     });

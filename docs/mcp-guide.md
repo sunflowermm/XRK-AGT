@@ -187,17 +187,26 @@ sequenceDiagram
     Config-->>SL: mcp.enabled
     alt MCP已启用
         SL->>MCP: new MCPServer()
+        SL->>MCP: 清空旧工具（支持热重载）
         SL->>SL: registerMCP(mcpServer)
         loop 遍历所有工作流
-            SL->>Stream: 获取functions
-            Stream-->>SL: 函数列表
-            SL->>MCP: registerTool(name, toolDef)
+            SL->>Stream: 获取mcpTools
+            Stream-->>SL: MCP工具列表
+            loop 遍历工具
+                SL->>MCP: registerTool(streamName.toolName, toolDef)
+            end
         end
         MCP-->>SL: 初始化完成
+        SL->>SL: 标记initialized=true
     else MCP已禁用
         SL->>SL: 跳过初始化
     end
 ```
+
+**重要说明**：
+- MCP服务在系统启动时自动初始化
+- 支持热重载：工作流变更时自动重新注册工具
+- 工具按工作流分组：`{streamName}.{toolName}` 格式
 
 ### 工具注册
 
@@ -492,95 +501,142 @@ flowchart TB
 ```
 
 **重要说明**：
-- 只有通过 `registerMCPTool` 注册的工具才会注册为 MCP 工具
-- `registerFunction` 注册的 Call Function **不会**注册为 MCP 工具，只出现在 AI prompt 中
+- 所有工具都通过 `registerMCPTool` 注册为 MCP 工具
 - MCP 工具必须定义 `inputSchema`（JSON Schema 格式）
-- Call Function 使用 `prompt` 字段，通过 `parser` 解析
+- 所有工具都返回标准 JSON 格式：`{ success: true/false, data: {...}, error: {...} }`
 
 ### 工具命名规则
 
-- **工作流工具**：`{streamName}.{functionName}`
-  - 例如：`chat.send_message`、`desktop.open_application`
-- **核心工具**：直接使用工具名
-  - 例如：`system.info`、`time.now`、`util.uuid`、`util.hash`
+- **工作流工具**：`{streamName}.{toolName}`
+  - 例如：`desktop.show_desktop`、`desktop.open_system_tool`、`desktop.open_browser`
+  - 工具名称格式统一为 `工作流名.工具名`，便于分组管理
+
+### 工具分组
+
+MCP工具按工作流自动分组，支持按工作流调用：
+
+**获取所有工具**：
+```bash
+GET /api/mcp/tools
+```
+
+**获取指定工作流的工具**：
+```bash
+GET /api/mcp/tools?stream=desktop
+# 或
+GET /api/mcp/tools/stream/desktop
+```
+
+**获取所有工作流分组**：
+```bash
+GET /api/mcp/tools/streams
+```
+
+**JSON-RPC方式（支持按工作流过滤）**：
+```bash
+# 获取所有工具
+POST /api/mcp/jsonrpc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list"
+}
+
+# 获取指定工作流的工具（通过查询参数）
+POST /api/mcp/jsonrpc?stream=desktop
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list"
+}
+
+# 或使用路径参数
+POST /api/mcp/jsonrpc/desktop
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list"
+}
+```
+
+**MCP配置示例（只使用desktop工作流）**：
+```json
+{
+  "mcpServers": {
+    "xrk-agt-desktop": {
+      "url": "http://localhost:11451/api/mcp/jsonrpc/desktop",
+      "transport": "http",
+      "description": "XRK-AGT 桌面工作流 - 仅提供桌面操作工具"
+    }
+  }
+}
+```
+
+**MCP配置示例（使用所有工作流）**：
+```json
+{
+  "mcpServers": {
+    "xrk-agt": {
+      "url": "http://localhost:11451/api/mcp/jsonrpc",
+      "transport": "http",
+      "description": "XRK-AGT 智能助手服务器 - 提供所有工作流工具"
+    }
+  }
+}
+```
+
+响应格式：
+```json
+{
+  "success": true,
+  "data": {
+    "streams": ["desktop", "tools", "chat"],
+    "groups": {
+      "desktop": [
+        { "name": "desktop.show_desktop", "description": "...", "inputSchema": {...} },
+        { "name": "desktop.open_browser", "description": "...", "inputSchema": {...} }
+      ],
+      "tools": [
+        { "name": "tools.read", "description": "...", "inputSchema": {...} }
+      ]
+    },
+    "count": 3
+  }
+}
+```
 
 ### MCP 工具注册方式
 
-**方式1：使用 registerMCPTool（推荐）**
+所有工具都使用 `registerMCPTool` 注册：
 
 ```javascript
-// 注册 MCP 工具（返回 JSON，不出现在 prompt 中）
-this.registerMCPTool('read', {
-  description: '读取文件内容，返回文件路径和内容',
+// 注册 MCP 工具
+this.registerMCPTool('show_desktop', {
+  description: '回到桌面 - 最小化所有窗口显示桌面（仅限Windows系统）',
   inputSchema: {
     type: 'object',
-    properties: {
-      filePath: {
-        type: 'string',
-        description: '文件路径，例如：易忘信息.txt'
-      }
-    },
-    required: ['filePath']
+    properties: {},
+    required: []
   },
   handler: async (args = {}, context = {}) => {
-    const { filePath } = args;
-    // 返回 JSON 格式结果
-    return {
-      success: true,
-      data: {
-        filePath: result.path,
-        content: result.content
-      }
-    };
-  },
-  enabled: true
-});
-```
-
-**方式2：使用 registerFunction（仅用于 Call Function）**
-
-`registerFunction` **仅用于注册 Call Function**（供 AI 内部调用），不会注册为 MCP 工具。
-
-```javascript
-// Call Function（出现在 prompt 中，不返回 JSON）
-this.registerFunction('write', {
-  description: '写入文件',
-  prompt: `[写入:filePath:content] - 写入文件，例如：[写入:test.txt:这是内容]`,
-  parser: (text, context) => {
-    // 解析文本中的命令格式
-    const match = text.match(/\[写入:([^:]+):([^\]]+)\]/);
-    if (!match) {
-      return { functions: [], cleanText: text };
+    try {
+      await execAsync('powershell -Command "(New-Object -ComObject shell.application).MinimizeAll()"', { timeout: 5000 });
+      return this.successResponse({ message: '已回到桌面' });
+    } catch (err) {
+      return this.errorResponse('SHOW_DESKTOP_FAILED', err.message);
     }
-    return {
-      functions: [{ type: 'write', params: { filePath: match[1], content: match[2] } }],
-      cleanText: text.replace(/\[写入:[^\]]+\]/g, '').trim()
-    };
-  },
-  handler: async (params = {}, context = {}) => {
-    // 执行操作，不返回 JSON
-    const { filePath, content } = params;
-    // ...
   },
   enabled: true
 });
 ```
-
-**功能分类**：
-- **MCP 工具**（`registerMCPTool`）：读取信息类功能，返回 JSON，不出现在 prompt 中
-  - 例如：`read`, `grep`, `query_memory`, `system_info`, `disk_space`
-- **Call Function**（`registerFunction`）：执行操作类功能，出现在 prompt 中，供 AI 调用
-  - 例如：`write`, `run`, `save_memory`, `show_desktop`, `mute`
 
 ### 工具注册标准
 
 #### 核心原则
 
-1. **MCP 工具**：使用 `registerMCPTool`，必须定义 `inputSchema`（JSON Schema 格式）
-2. **Call Function**：使用 `registerFunction`，使用 `prompt` 字段，通过 `parser` 解析
-3. **功能分类**：
-   - 读取信息类 → MCP 工具（返回 JSON）
-   - 执行操作类 → Call Function（出现在 prompt 中）
+1. **统一使用 MCP 工具**：所有功能都通过 `registerMCPTool` 注册
+2. **必须定义 inputSchema**：使用 JSON Schema 格式定义参数
+3. **标准返回格式**：使用 `successResponse` 和 `errorResponse` 方法返回结果
 
 #### MCP 工具注册示例
 
@@ -648,42 +704,6 @@ this.registerMCPTool('grep', {
 });
 ```
 
-#### Call Function 注册示例
-
-**示例：写入文件（Call Function）**
-```javascript
-this.registerFunction('write', {
-  description: '写入文件',
-  prompt: `[写入:filePath:content] - 写入文件，例如：[写入:test.txt:这是内容]`,
-  parser: (text, context) => {
-    const functions = [];
-    let cleanText = text;
-    const reg = /\[(?:写入|write):([^:]+):([^\]]+)\]/g;
-    let match;
-
-    while ((match = reg.exec(text)) !== null) {
-      const filePath = (match[1] || '').trim();
-      const content = (match[2] || '').trim();
-      if (filePath && content) {
-        functions.push({ type: 'write', params: { filePath, content } });
-      }
-    }
-
-    if (functions.length > 0) {
-      cleanText = text.replace(reg, '').trim();
-    }
-
-    return { functions, cleanText };
-  },
-  handler: async (params = {}, context = {}) => {
-    const { filePath, content } = params;
-    // 执行操作，不返回 JSON
-    // 结果通过 context 传递
-  },
-  enabled: true
-});
-```
-
 #### 常见参数名参考
 
 | 用途 | 推荐参数名 | 说明 |
@@ -694,28 +714,16 @@ this.registerFunction('write', {
 | 内容 | `content` | 文本内容 |
 | URL | `url` | 网址 |
 | 应用名 | `appName` | 应用程序名称 |
-| 股票代码 | `stockCode` | 股票代码 |
-| 知识库名 | `knowledgeBase` | 知识库名称 |
+| 股票代码 | `code` | 股票代码 |
+| 知识库名 | `db` | 知识库名称 |
 
 #### 注意事项
 
-1. **MCP 工具**：
-   - 必须使用 `registerMCPTool` 注册
+1. **统一使用 MCP 工具**：
+   - 所有功能都通过 `registerMCPTool` 注册
    - 必须定义 `inputSchema`（JSON Schema 格式）
-   - 必须返回 JSON 格式结果（`{success: true, data: {...}}` 或 `{success: false, error: '...'}`）
-   - 不会出现在 AI prompt 中
-   - 通过 MCP 协议调用
-
-2. **Call Function**：
-   - 使用 `registerFunction` 注册
-   - 使用 `prompt` 字段（会出现在 AI prompt 中）
-   - 使用 `parser` 解析文本中的命令格式
-   - 不返回 JSON，结果通过 `context` 传递
-   - 供 AI 内部调用
-
-3. **功能分类建议**：
-   - 读取信息类（read, grep, query_memory, system_info 等）→ MCP 工具
-   - 执行操作类（write, run, save_memory, show_desktop 等）→ Call Function
+   - 必须返回标准 JSON 格式：`{success: true, data: {...}}` 或 `{success: false, error: '...'}`
+   - 通过 MCP 协议调用，支持按工作流分组
 
 ---
 

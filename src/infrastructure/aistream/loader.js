@@ -148,7 +148,7 @@ class StreamLoader {
         loadTime,
         success: true,
         priority: stream.priority,
-        functions: stream.functions?.size || 0
+        mcpTools: stream.mcpTools?.size || 0
       });
 
       BotUtil.makeLog('debug', `加载工作流: ${stream.name} v${stream.version} (${loadTime}ms)`, 'StreamLoader');
@@ -241,7 +241,7 @@ class StreamLoader {
     const streams = this.getStreamsByPriority();
     for (const stream of streams) {
       const status = stream.config.enabled ? '启用' : '禁用';
-      const funcCount = stream.functions?.size || 0;
+      const toolCount = stream.mcpTools?.size || 0;
       
       let embStatus = '';
       if (stream.embeddingConfig?.enabled) {
@@ -249,7 +249,7 @@ class StreamLoader {
       }
       
       BotUtil.makeLog('debug', 
-        `  ${stream.name} v${stream.version} (${funcCount}功能, ${status})${embStatus}`, 
+        `  ${stream.name} v${stream.version} (${toolCount}工具, ${status})${embStatus}`, 
         'StreamLoader'
       );
     }
@@ -340,8 +340,8 @@ class StreamLoader {
   getStats() {
     const total = this.streams.size;
     const enabled = this.getEnabledStreams().length;
-    const totalFunctions = this.getAllStreams().reduce(
-      (sum, s) => sum + (s.functions?.size || 0), 0
+    const totalTools = this.getAllStreams().reduce(
+      (sum, s) => sum + (s.mcpTools?.size || 0), 0
     );
     const embeddingEnabled = this.getAllStreams().filter(
       s => s.embeddingConfig?.enabled
@@ -354,7 +354,7 @@ class StreamLoader {
       total,
       enabled,
       disabled: total - enabled,
-      totalFunctions,
+      totalTools,
       embedding: {
         enabled: embeddingEnabled,
         ready: embeddingReady,
@@ -368,7 +368,7 @@ class StreamLoader {
   }
 
   /**
-   * 创建合并工作流（主工作流 + 副工作流，仅合并functions）
+   * 创建合并工作流（主工作流 + 副工作流，仅合并 mcpTools）
    */
   mergeStreams(options = {}) {
     const {
@@ -402,7 +402,7 @@ class StreamLoader {
       return this.streams.get(mergedName);
     }
 
-    // 构建合并实例：克隆主工作流的原型和核心属性，独立的functions和mcpTools集合
+    // 构建合并实例：克隆主工作流的原型和核心属性，独立的 mcpTools 集合
     const merged = Object.create(Object.getPrototypeOf(mainStream));
     Object.assign(merged, mainStream);
     merged.name = mergedName;
@@ -410,21 +410,7 @@ class StreamLoader {
     merged.primaryStream = mainStream.name;
     merged.secondaryStreams = secondaryStreams.map(s => s.name);
     merged._mergedStreams = [mainStream, ...secondaryStreams];
-    merged.functions = new Map();
     merged.mcpTools = new Map();
-
-    const adoptFunctions = (source, isPrimary) => {
-      if (!source.functions) return;
-      for (const [fname, fconfig] of source.functions.entries()) {
-        const newName = (!isPrimary && prefixSecondary) ? `${source.name}.${fname}` : fname;
-        if (merged.functions.has(newName)) continue; // 避免冲突覆盖
-        merged.functions.set(newName, {
-          ...fconfig,
-          source: source.name,
-          primary: isPrimary
-        });
-      }
-    };
 
     const adoptMCPTools = (source, isPrimary) => {
       if (!source.mcpTools) return;
@@ -439,10 +425,8 @@ class StreamLoader {
       }
     };
 
-    adoptFunctions(mainStream, true);
     adoptMCPTools(mainStream, true);
     for (const s of secondaryStreams) {
-      adoptFunctions(s, false);
       adoptMCPTools(s, false);
     }
 
@@ -596,23 +580,29 @@ class StreamLoader {
   }
 
   /**
-   * 注册MCP工具（统一入口，避免重复注册）
+   * 注册MCP工具（统一入口，支持热重载）
    * 
    * 功能：
    * - 遍历所有stream的MCP工具，注册到MCP服务器
-   * - 工具名称格式：streamName.toolName（避免冲突）
-   * - 使用stream.executeMCPTool统一处理验证、权限检查等
-   * - 返回格式：直接返回handler的结果
-   * - 自动去重，避免重复注册合并的工具
+   * - 工具名称格式：streamName.toolName（避免冲突，便于分组）
+   * - 自动去重，避免重复注册
+   * - 支持热重载，重新注册时先清空旧工具
    * 
    * @param {MCPServer} mcpServer - MCP服务器实例
    */
   registerMCP(mcpServer) {
     if (!mcpServer) return;
 
+    // 清空旧工具（支持热重载）
+    const existingTools = Array.from(mcpServer.tools.keys());
+    for (const toolName of existingTools) {
+      mcpServer.tools.delete(toolName);
+    }
+
     const registeredTools = new Set();
     let registeredCount = 0;
 
+    // 遍历所有工作流，注册工具
     for (const stream of this.streams.values()) {
       if (!stream?.mcpTools || stream.mcpTools.size === 0) continue;
 
@@ -634,12 +624,22 @@ class StreamLoader {
             
             try {
               if (tool.handler) {
-                return await tool.handler(args, { ...context, stream });
+                const result = await tool.handler(args, { ...context, stream });
+                // 确保返回标准格式
+                if (result === undefined || result === null) {
+                  return { success: true, message: '操作已执行' };
+                }
+                // 如果已经是标准格式，直接返回
+                if (typeof result === 'object' && (result.success !== undefined || result.error !== undefined)) {
+                  return result;
+                }
+                // 否则包装为标准格式
+                return { success: true, data: result };
               }
-              return { error: 'Handler not found' };
+              return { success: false, error: 'Handler not found' };
             } catch (error) {
               BotUtil.makeLog('error', `MCP工具调用失败[${fullToolName}]: ${error.message}`, 'StreamLoader');
-              throw error;
+              return { success: false, error: error.message };
             }
           }
         });
@@ -650,7 +650,7 @@ class StreamLoader {
     }
 
     this.mcpServer = mcpServer;
-    BotUtil.makeLog('info', `MCP服务已注册，共${registeredCount}个工具`, 'StreamLoader');
+    BotUtil.makeLog('info', `MCP工具已注册，共${registeredCount}个工具`, 'StreamLoader');
   }
 
   /**
@@ -669,8 +669,14 @@ class StreamLoader {
       BotUtil.makeLog('info', 'MCP服务器已创建', 'StreamLoader');
     }
 
-    // 注册所有工作流的工具
+    // 重新注册所有工作流的工具（支持热重载）
     this.registerMCP(this.mcpServer);
+    
+    // 标记MCP服务已初始化
+    if (this.mcpServer) {
+      this.mcpServer.initialized = true;
+      BotUtil.makeLog('info', `MCP服务已挂载，共${this.mcpServer.tools.size}个工具`, 'StreamLoader');
+    }
   }
 
 

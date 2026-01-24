@@ -847,14 +847,6 @@ class ObjectInspector {
  */
 class JavaScriptExecutor {
   /**
-   * 设置执行模式（已废弃，使用config.get('jsExecutionMode')）
-   * @deprecated
-   */
-  setMode(mode) {
-    // 已废弃，执行模式从config读取
-  }
-
-  /**
    * 格式化执行结果为字符串
    */
   formatResult(result, depth = 0, seen = new WeakSet()) {
