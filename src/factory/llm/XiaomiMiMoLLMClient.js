@@ -17,6 +17,8 @@ export default class XiaomiMiMoLLMClient {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout || 360000;
+    // 工具名称映射：规范化名称 -> 原始名称
+    this._toolNameMap = new Map();
   }
 
   /**
@@ -122,14 +124,110 @@ export default class XiaomiMiMoLLMClient {
   }
 
   /**
+   * 规范化工具名称以符合小米 MiMo API 要求
+   * 要求：只能包含 a-z、A-Z、0-9、下划线(_)和连字符(-)，最大长度64
+   * @param {string} originalName - 原始工具名称（可能包含点号等）
+   * @returns {string} 规范化后的名称
+   */
+  normalizeToolName(originalName) {
+    if (!originalName || typeof originalName !== 'string') return originalName;
+    
+    // 将点号替换为下划线，移除其他不符合要求的字符
+    let normalized = originalName
+      .replace(/\./g, '_')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .substring(0, 64);
+    
+    // 确保不以数字开头
+    if (/^\d/.test(normalized)) {
+      normalized = 'tool_' + normalized;
+    }
+    
+    // 存储映射关系
+    this._toolNameMap.set(normalized, originalName);
+    return normalized;
+  }
+
+  /**
+   * 将规范化的工具名称还原为原始名称
+   * @param {string} normalizedName - 规范化后的名称
+   * @returns {string} 原始工具名称
+   */
+  denormalizeToolName(normalizedName) {
+    return this._toolNameMap.get(normalizedName) || normalizedName;
+  }
+
+  /**
+   * 规范化工具列表中的名称
+   * @param {Array} tools - 工具列表
+   * @returns {Array} 规范化后的工具列表
+   */
+  normalizeTools(tools) {
+    if (!Array.isArray(tools)) return tools;
+    return tools.map(tool => {
+      if (tool?.type === 'function' && tool.function?.name) {
+        return {
+          ...tool,
+          function: { ...tool.function, name: this.normalizeToolName(tool.function.name) }
+        };
+      }
+      return tool;
+    });
+  }
+
+  /**
+   * 规范化消息数组中的 tool_calls
+   * @param {Array} messages - 消息数组
+   * @returns {Array} 规范化后的消息数组
+   */
+  normalizeMessages(messages) {
+    if (!Array.isArray(messages)) return messages;
+    return messages.map(msg => {
+      if (msg.tool_calls?.length > 0) {
+        return {
+          ...msg,
+          tool_calls: msg.tool_calls.map(tc => ({
+            ...tc,
+            function: tc.function?.name
+              ? { ...tc.function, name: this.normalizeToolName(tc.function.name) }
+              : tc.function
+          }))
+        };
+      }
+      return msg;
+    });
+  }
+
+  /**
+   * 还原工具调用中的名称
+   * @param {Array} toolCalls - 工具调用列表
+   * @returns {Array} 还原后的工具调用列表
+   */
+  denormalizeToolCalls(toolCalls) {
+    if (!Array.isArray(toolCalls)) return toolCalls;
+    return toolCalls.map(tc => {
+      if (tc.function?.name) {
+        return {
+          ...tc,
+          function: { ...tc.function, name: this.denormalizeToolName(tc.function.name) }
+        };
+      }
+      return tc;
+    });
+  }
+
+  /**
    * 构建请求体（OpenAI 兼容格式）
    * 小米 MiMo API 使用 max_completion_tokens 而非 max_tokens
    * 支持高级参数：stop、thinking、tool_choice、tools、response_format
    */
   buildBody(messages, overrides = {}) {
+    // 规范化消息中的 tool_calls（多轮工具调用时需要）
+    const normalizedMessages = this.normalizeMessages(messages);
+    
     const body = {
       model: this.config.chatModel || this.config.model || 'mimo-v2-flash',
-      messages,
+      messages: normalizedMessages,
       temperature: this.config.temperature ?? 0.3,
       max_completion_tokens: this.config.maxTokens ?? 1024,
       top_p: this.config.topP ?? 0.95,
@@ -138,28 +236,21 @@ export default class XiaomiMiMoLLMClient {
       presence_penalty: this.config.presencePenalty ?? 0
     };
 
-    // 高级可选参数（仅在配置时添加）
     if (this.config.stop !== undefined) body.stop = this.config.stop;
     if (this.config.thinkingType !== undefined) body.thinking = { type: this.config.thinkingType };
     if (this.config.response_format !== undefined) body.response_format = this.config.response_format;
 
-    // 工具调用支持：从MCP获取工具列表
+    // 工具调用支持
     const enableTools = this.config.enableTools !== false && MCPToolAdapter.hasTools();
-    if (enableTools && !overrides.tools && this.config.tools === undefined) {
-      const tools = MCPToolAdapter.convertMCPToolsToOpenAI();
-      if (tools.length > 0) {
-        body.tools = tools;
-        body.tool_choice = this.config.toolChoice || 'auto';
-      }
-    } else {
-      // 允许外部覆盖工具配置
-      if (overrides.tools !== undefined) {
-        body.tools = overrides.tools;
-        if (overrides.tool_choice !== undefined) body.tool_choice = overrides.tool_choice;
-      } else if (this.config.tools !== undefined) {
-        body.tools = this.config.tools;
-        if (this.config.toolChoice !== undefined) body.tool_choice = this.config.toolChoice;
-      }
+    let tools = overrides.tools ?? this.config.tools;
+    
+    if (!tools && enableTools) {
+      tools = MCPToolAdapter.convertMCPToolsToOpenAI();
+    }
+    
+    if (tools?.length > 0) {
+      body.tools = this.normalizeTools(tools);
+      body.tool_choice = overrides.tool_choice ?? this.config.toolChoice ?? 'auto';
     }
 
     return body;
@@ -172,15 +263,11 @@ export default class XiaomiMiMoLLMClient {
    * @returns {Promise<string>} - 回复文本
    */
   async chat(messages, overrides = {}) {
-    // 转换消息格式，经由 VisionFactory 抽离识图能力
     const transformedMessages = await this.transformMessages(messages);
-
-    // 支持多轮工具调用
     const maxToolRounds = this.config.maxToolRounds || 5;
     let currentMessages = [...transformedMessages];
-    let round = 0;
 
-    while (round < maxToolRounds) {
+    for (let round = 0; round < maxToolRounds; round++) {
       const resp = await fetch(this.endpoint, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
@@ -194,33 +281,21 @@ export default class XiaomiMiMoLLMClient {
       }
 
       const data = await resp.json();
-      const choice = data?.choices?.[0];
-      if (!choice) break;
+      const message = data?.choices?.[0]?.message;
+      if (!message) break;
 
-      const message = choice.message;
-      
-      // 检查是否有工具调用
-      if (message.tool_calls && Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
-        // 添加助手消息（包含tool_calls）
-        currentMessages.push(message);
-        
-        // 调用MCP工具并获取结果
-        const toolResults = await MCPToolAdapter.handleToolCalls(message.tool_calls);
-        
-        // 添加工具结果消息
-        currentMessages.push(...toolResults);
-        
-        round++;
+      if (message.tool_calls?.length > 0) {
+        // 还原工具名称用于调用 MCP 工具
+        const denormalizedToolCalls = this.denormalizeToolCalls(message.tool_calls);
+        currentMessages.push({ ...message, tool_calls: denormalizedToolCalls });
+        currentMessages.push(...await MCPToolAdapter.handleToolCalls(denormalizedToolCalls));
         continue;
       }
 
-      // 没有工具调用，返回最终结果
       return message.content || '';
     }
 
-    // 达到最大轮次，返回最后一条消息
-    const lastMessage = currentMessages[currentMessages.length - 1];
-    return lastMessage?.content || '';
+    return currentMessages[currentMessages.length - 1]?.content || '';
   }
 
   /**
@@ -231,9 +306,7 @@ export default class XiaomiMiMoLLMClient {
    * @returns {Promise<void>}
    */
   async chatStream(messages, onDelta, overrides = {}) {
-    // 转换消息格式，经由 VisionFactory 抽离识图能力
     const transformedMessages = await this.transformMessages(messages);
-
     const resp = await fetch(this.endpoint, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
@@ -248,9 +321,8 @@ export default class XiaomiMiMoLLMClient {
 
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
-    let toolCalls = [];
-
     const reader = resp.body.getReader();
+
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -262,47 +334,20 @@ export default class XiaomiMiMoLLMClient {
         const line = buffer.slice(0, idx).trim();
         buffer = buffer.slice(idx + 1);
 
-        if (!line || !line.startsWith('data:')) continue;
+        if (!line?.startsWith('data:')) continue;
 
         const payload = line.slice(5).trim();
-        if (payload === '[DONE]') {
-          return;
-        }
+        if (payload === '[DONE]') return;
 
         try {
-          const json = JSON.parse(payload);
-          const choice = json.choices?.[0];
-          if (!choice) continue;
-
-          const delta = choice.delta || {};
-          
-          // 处理内容流
-          if (delta.content && typeof onDelta === 'function') {
+          const delta = JSON.parse(payload).choices?.[0]?.delta;
+          if (delta?.content && typeof onDelta === 'function') {
             onDelta(delta.content);
           }
-
-          // 处理工具调用（流式模式下工具调用可能分块返回）
-          if (delta.tool_calls) {
-            for (const tc of delta.tool_calls) {
-              if (tc.index !== undefined) {
-                if (!toolCalls[tc.index]) {
-                  toolCalls[tc.index] = { id: tc.id, function: { name: '', arguments: '' }, type: 'function' };
-                }
-                if (tc.function?.name) {
-                  toolCalls[tc.index].function.name += tc.function.name;
-                }
-                if (tc.function?.arguments) {
-                  toolCalls[tc.index].function.arguments += tc.function.arguments;
-                }
-              }
-            }
-          }
         } catch {
-          // 忽略解析错误，继续读取
+          // 忽略解析错误
         }
       }
     }
   }
 }
-
-
