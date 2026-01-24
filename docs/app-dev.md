@@ -365,7 +365,7 @@ export default class ChatPlugin extends plugin {
 
 #### 方案2：复杂任务自动化应用
 
-**技术栈**：插件 + 工作流 + TODO系统 + 记忆系统
+**技术栈**：插件 + 工作流 + 子服务端 Agent + 记忆系统
 
 ```javascript
 // 1. 创建插件（core/my-core/plugin/assistant.js）
@@ -379,24 +379,28 @@ export default class AssistantPlugin extends plugin {
   }
   
   async assistant(e) {
+    // 简单任务：直接使用工作流
     const desktopStream = this.getStream('desktop');
     await desktopStream.process(e, e.msg, {
       mergeStreams: ['tools'],      // 合并工具工作流
-      // enableTodo 已移除（Node 多步工作流已删除），复杂多步编排请使用 Python 子服务端
       enableMemory: true,           // 启用记忆系统
       enableDatabase: true          // 启用知识库
     });
+    
+    // 复杂任务：调用 Python 子服务端（LangChain/LangGraph）
+    // 通过 Bot.callSubserver('/api/langchain/chat') 调用
   }
 }
 
 // 2. 工作流自动处理：
-//    - AI判断任务复杂度
-//    - 复杂任务：创建TODO工作流，逐步执行
 //    - 简单任务：直接执行
+//    - 复杂任务：调用 Python 子服务端进行多步编排
 //    - 自动记录笔记，传递上下文
 ```
 
-**应用场景**：智能办公助手、自动化脚本、任务编排
+**应用场景**：智能办公助手、自动化脚本、复杂任务编排
+
+> **注意**：Node 侧多步工作流（TODO系统）已移除，复杂多步编排请使用 Python 子服务端（LangChain/LangGraph）
 
 #### 方案3：Web控制台应用
 
@@ -481,8 +485,8 @@ export default class ReportPlugin extends plugin {
   async generateReport(e) {
     // 调用工作流分析数据
     const stream = this.getStream('desktop');
-    const analysis = await stream.process(e, '分析数据并生成报表', {
-      // enableTodo 已移除
+    await stream.process(e, '分析数据并生成报表', {
+      enableMemory: true
     });
     
     // 使用渲染器生成图片
@@ -576,7 +580,7 @@ export default class UnifiedPlugin extends plugin {
 | 应用类型 | 推荐技术栈 | 核心组件 |
 |---------|-----------|---------|
 | **简单对话** | 插件 + 工作流 | `chat` stream + `enableMemory` |
-| **复杂任务** | 插件 + 子服务端 Agent | Python 子服务端（LangChain/LangGraph） |
+| **复杂任务** | 插件 + 子服务端 Agent | Python 子服务端（LangChain/LangGraph）进行多步编排 |
 | **Web应用** | 前端 + HTTP API + 工作流 | REST API + `process()` |
 | **数据可视化** | 插件 + 工作流 + 渲染器 | `Renderer` + 模板系统 |
 | **多平台** | Tasker + 插件 + 事件系统 | 通用事件监听 |
@@ -610,7 +614,7 @@ flowchart TB
 
 2. **技术栈组合原则**：
    - 简单功能：直接使用插件 + 工作流
-   - 复杂功能：插件 + 工作流 + TODO系统
+   - 复杂功能：插件 + 工作流 + Python 子服务端（LangChain/LangGraph）
    - Web应用：前端 + HTTP API + 工作流
    - 数据展示：工作流 + 渲染器
 

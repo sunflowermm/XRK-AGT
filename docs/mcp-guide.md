@@ -537,9 +537,9 @@ this.registerMCPTool('read', {
 });
 ```
 
-**方式2：使用 registerFunction（已废弃，仅用于 Call Function）**
+**方式2：使用 registerFunction（仅用于 Call Function）**
 
-`registerFunction` 现在**仅用于注册 Call Function**（供 AI 内部调用），不会注册为 MCP 工具。
+`registerFunction` **仅用于注册 Call Function**（供 AI 内部调用），不会注册为 MCP 工具。
 
 ```javascript
 // Call Function（出现在 prompt 中，不返回 JSON）

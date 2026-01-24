@@ -27,13 +27,13 @@
   - 扫描插件目录并动态 `import` 插件模块。
   - 实例化插件、执行 `init()` 钩子。
   - 构建 `priority/extended/task/defaultMsgHandlers` 等内部结构。
-  - 支持热更新、文件新增/删除监听（优化了更新反馈）。
+  - 支持热更新、文件新增/删除监听
 
-- **事件分发与规则匹配（已优化）**
-  - 使用 `EventNormalizer` 统一标准化事件对象（`normalizeEventPayload`）。
-  - 对 `Bot.em` 派发的事件进行预处理（消息解析、权限、黑白名单）。
-  - 优化了插件匹配和执行流程，减少冗余判断。
-  - 支持「扩展插件 extended」与「普通插件」分组执行。
+- **事件分发与规则匹配**
+  - 使用 `EventNormalizer` 统一标准化事件对象（`normalizeEventPayload`）
+  - 对 `Bot.em` 派发的事件进行预处理（消息解析、权限、黑白名单）
+  - 插件匹配和执行流程优化，减少冗余判断
+  - 支持「扩展插件 extended」与「普通插件」分组执行
 
 - **定时任务与统计**
   - 基于 `node-schedule` 创建 Cron 定时任务。
@@ -84,20 +84,26 @@ flowchart TB
 
 > 插件开发者只需要在任意 core 目录的 `plugin` 子目录下新建 JS 文件（如 `core/my-core/plugin/my-plugin.js`），即可被自动发现和加载
 
-### 2. `importPlugin(file, packageErr)`
+### 2. `importPlugin(file, packageErr, skipInit)`
 
-- `await import(file.path)` 动态导入模块
+- `importPluginModule(file, packageErr)` 动态导入模块
 - 支持导出对象 `apps`（多插件聚合）或单一导出
-- 对每个导出的插件类调用 `loadPlugin(file, p)`
+- 对每个导出的插件类调用 `loadPlugin(file, PluginClass, skipInit)`
+- `skipInit` 参数用于热加载时跳过重复初始化
 
-### 3. `loadPlugin(file, p)`
+### 3. `loadPlugin(file, PluginClass, skipInit)`
+
+**核心优化**：
+- 提取了 `initializePlugin`、`registerPluginTasks`、`buildPluginMetadata`、`registerPluginHandlers` 等独立方法
+- 支持 `skipInit` 参数，热加载时可跳过重复初始化
+- 初始化超时从 5 秒优化为 3 秒
 
 ```mermaid
 flowchart LR
     A["loadPlugin"] --> B{"是否有prototype"}
     B -->|否| Z["忽略非类导出"]
     B -->|是| C["创建插件实例<br/>new p"]
-    C --> D["执行plugin.init<br/>5秒超时"]
+    C --> D["执行plugin.init<br/>3秒超时"]
     D --> E["标准化task"]
     E --> F["编译rule正则"]
     F --> G["构建插件描述"]
@@ -320,6 +326,48 @@ async handleMessage(e) {
 1. 插件通过 `this.getStream(name)` 获取工作流实例
 2. 调用 `stream.process(e, question, options)` 执行工作流
 3. 工作流内部自动处理回复发送，插件不需要再次调用 `reply()`
+
+---
+
+## 热加载系统
+
+PluginsLoader 支持完整的插件热加载功能，包括新增、修改和删除插件的自动处理。
+
+### 启用热加载
+
+```javascript
+// 在 Bot.run() 中自动启用
+await PluginsLoader.watch(true);
+```
+
+### 热加载流程
+
+**新增插件** (`onAdd`)：
+1. 检测到新文件时，自动加载插件
+2. 创建定时任务
+3. 重新排序和识别默认消息处理器
+4. 输出加载日志
+
+**修改插件** (`onChange`)：
+1. 先卸载旧插件（清理定时任务、Handler、事件订阅等）
+2. 使用时间戳强制重新加载模块
+3. 重新初始化插件（确保状态正确）
+4. 重新创建定时任务
+5. 重新排序和识别
+
+**删除插件** (`onUnlink`)：
+1. 清理定时任务（精确匹配插件键名）
+2. 清理插件数组（priority/extended）
+3. 清理 Handler（使用插件命名空间）
+4. 清理事件订阅（遍历所有订阅者）
+5. 重新识别默认消息处理器
+
+### 热加载优化
+
+- **资源清理**：卸载时完整清理所有相关资源，避免内存泄漏
+- **精确匹配**：使用插件键名（文件名）精确匹配，避免误删
+- **状态同步**：修改时重新初始化，确保插件状态正确
+- **错误隔离**：单个插件热加载失败不影响其他插件
 
 ---
 

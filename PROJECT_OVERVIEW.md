@@ -1,6 +1,6 @@
 # XRK-AGT 项目概览
 
-> **更新日期**: 2025-12-26  
+> **更新日期**: 2026-01-24  
 > **Node.js 版本要求**: ≥ 24.12.0 (LTS)  
 > 本文档提供 XRK-AGT 项目的完整架构概览、目录结构说明和核心特性介绍。  
 > 如需快速开始，请查看 [README.md](README.md)；详细开发与扩展指南请结合 [docs/README.md](docs/README.md) 与各模块文档阅读。
@@ -283,7 +283,7 @@ XRK-AGT/
 │   ├── modules/             # 业务模块
 │   └── renderers/           # 渲染实现（Puppeteer/Playwright）
 │
-├── core/                     # 业务层与任务层（Core开发时代）
+├── core/                     # 业务层与任务层
 │   ├── system-Core/         # 系统核心模块（示例）
 │   │   ├── plugin/          # 业务插件目录
 │   │   ├── tasker/          # 任务层目录
@@ -317,7 +317,7 @@ XRK-AGT/
 - **`src/bot.js`**：Bot主类，系统核心运行时
 - **`src/infrastructure/`**：基础设施层，提供基类和加载器
 - **`src/utils/http-business.js`**：HTTP业务层，提供重定向、CDN、反向代理增强功能
-- **`core/*/tasker/`**：任务层，协议转换（Core开发时代：通过业务目录组织）
+- **`core/*/tasker/`**：任务层，协议转换
 - **`core/*/events/`**：事件系统，事件标准化和预处理
 - **`core/*/plugin/`**：业务插件实现
 - **`core/*/http/`**：HTTP API实现
@@ -375,9 +375,9 @@ clearTimeout(timeout);
 
 ### 4. AsyncLocalStorage 优化
 
-**应用场景**：请求追踪、上下文传递（未来扩展）
+**应用场景**：请求追踪、上下文传递
 
-Node.js 24.12 对 AsyncLocalStorage 进行了性能优化，可在需要时用于请求追踪。
+Node.js 24.12 对 AsyncLocalStorage 进行了性能优化，提升异步上下文追踪性能。
 
 ### 5. V8 13.6 引擎特性
 
@@ -465,22 +465,22 @@ proxy:
 
 ```mermaid
 sequenceDiagram
-    participant Platform as 平台（QQ/微信）
+    participant Platform as 平台
     participant Tasker as Tasker层
     participant Event as 事件系统
     participant Plugin as 插件系统
     participant Stream as 工作流
-    participant Bot as Bot主类
     
     Platform->>Tasker: 接收消息
     Tasker->>Tasker: 协议转换
-    Tasker->>Bot: Bot.em触发事件
-    Bot->>Event: 事件监听器接收
+    Tasker->>Event: Bot.em触发事件
     Event->>Event: 去重/标准化
     Event->>Plugin: PluginsLoader.deal
     Plugin->>Plugin: 规则匹配
-    Plugin->>Stream: 调用工作流（可选）
-    Stream-->>Plugin: 返回结果
+    opt 需要AI处理
+        Plugin->>Stream: 调用工作流
+        Stream-->>Plugin: 返回结果
+    end
     Plugin-->>Platform: 回复消息
 ```
 
@@ -494,7 +494,6 @@ sequenceDiagram
     participant CDN as CDN管理器
     participant Proxy as 反向代理
     participant API as API路由
-    participant Business as 业务处理
     
     Client->>Bot: HTTP请求
     Bot->>Redirect: 检查重定向
@@ -502,15 +501,13 @@ sequenceDiagram
         Redirect-->>Client: 重定向响应
     else 继续处理
         Bot->>CDN: CDN处理
-        Bot->>Proxy: 反向代理（可选）
-        alt 需要代理
-            Proxy->>Business: 转发到上游
-            Business-->>Proxy: 响应
-            Proxy-->>Client: 返回响应
+        opt 启用反向代理
+            Bot->>Proxy: 负载均衡选择
+            Proxy->>Proxy: 健康检查
+            Proxy-->>Client: 转发响应
         else 本地处理
             Bot->>API: API路由匹配
-            API->>Business: 业务处理
-            Business-->>Client: 返回响应
+            API-->>Client: 返回响应
         end
     end
 ```
@@ -519,12 +516,16 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    A[启动应用] --> B[读取default_config]
-    B --> C[读取server_bots/{port}]
-    C --> D[合并配置]
-    D --> E[验证配置]
-    E --> F[应用配置]
-    F --> G[启动服务]
+    A["启动应用"] --> B["读取default_config"]
+    B --> C["读取server_bots配置"]
+    C --> D["合并配置"]
+    D --> E["验证配置"]
+    E --> F["应用配置"]
+    F --> G["启动服务"]
+    
+    style A fill:#E6F3FF
+    style B fill:#FFE6CC
+    style G fill:#90EE90
 ```
 
 ---
@@ -540,10 +541,10 @@ flowchart TB
 
 ### 框架优化
 
-1. **并行依赖检查**：使用`Promise.all`批量检查
-2. **并行插件依赖安装**：同时处理多个插件
-3. **批量日志写入**：优化日志队列刷新机制
-4. **高效端口扫描**：优化端口列表获取算法
+1. **并行加载**：使用`Promise.allSettled`批量加载插件、API、工作流
+2. **动态批次**：根据内存使用情况动态调整插件加载批次大小
+3. **热加载优化**：支持插件、API、配置的完整热加载，资源清理完善
+4. **缓存机制**：配置缓存、事件历史缓存，减少重复计算
 
 ---
 

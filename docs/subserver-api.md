@@ -253,8 +253,23 @@ response = await client.get(mcp_url)
 
 ### 配置加载流程
 
+```mermaid
+flowchart TB
+    A["启动应用"] --> B["读取default_config"]
+    B --> C["读取server_bots配置"]
+    C --> D["合并配置"]
+    D --> E["验证配置"]
+    E --> F["应用配置"]
+    F --> G["启动服务"]
+    
+    style A fill:#E6F3FF
+    style B fill:#FFE6CC
+    style G fill:#90EE90
+```
+
+**加载步骤**：
 1. 优先从 `data/subserver/config.yaml` 读取（用户配置）
-2. 如果不存在，从 `config/default_config.yaml` 复制并创建
+2. 如果不存在，从 `subserver/pyserver/config/default_config.yaml` 复制并创建
 3. 如果默认配置也不存在，使用内置默认配置
 
 ### 配置示例

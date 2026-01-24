@@ -241,8 +241,7 @@ async test(e) {
     // 调用工作流（推荐使用 process 方法）
     await chatStream.process(e, e.msg, {
       enableMemory: true,      // 启用记忆系统
-      enableDatabase: true,   // 启用知识库
-      // enableTodo 已移除（Node 多步工作流已删除）
+      enableDatabase: true     // 启用知识库
     });
     // 注意：工作流内部已经发送了回复，不需要再次调用 reply()
   } catch (error) {
@@ -257,10 +256,11 @@ async complexTask(e) {
   
   await desktopStream.process(e, e.msg, {
     mergeStreams: ['tools'],  // 合并tools工作流
-    // enableTodo 已移除（Node 多步工作流已删除）
     enableMemory: true,       // 启用记忆系统
     enableDatabase: true      // 启用知识库
   });
+  
+  // 复杂多步任务请使用 Python 子服务端（LangChain/LangGraph）
 }
 ```
 
