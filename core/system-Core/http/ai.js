@@ -55,11 +55,9 @@ async function handleChatCompletionsV3(req, res) {
     llmConfig.provider = providerKey;
   }
 
-  // 清理协议字段，避免误入 LLM 参数
   delete llmConfig.messages;
   delete llmConfig.stream;
-  delete llmConfig.apiKey; // 访问鉴权字段，不允许覆盖厂商 apiKey（厂商 apiKey 只从配置读取）
-  // 重新补回配置内的厂商 apiKey（defaults/profile）
+  delete llmConfig.apiKey;
   llmConfig.apiKey = (profile.apiKey || defaults.apiKey || '').toString().trim() || undefined;
   const client = LLMFactory.createClient(llmConfig);
 
@@ -83,7 +81,6 @@ async function handleChatCompletionsV3(req, res) {
     return;
   }
 
-  // SSE（OpenAI chunk 格式）
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -131,12 +128,6 @@ export default {
   dsc: 'AI 流式输出（SSE）',
   priority: 80,
   routes: [
-    /**
-     * OpenAI 兼容 Chat Completions（主服务端统一入口，v3）
-     *
-     * 注意：工具调用（tool calling）由 NodeJS LLM 工厂 & MCP 自动处理；
-     * 本接口返回的 message.content 为最终文本结果（不返回中间 tool_calls 细节）。
-     */
     {
       method: 'POST',
       path: '/api/v3/chat/completions',
@@ -152,7 +143,6 @@ export default {
       path: '/api/ai/stream',
       handler: async (req, res) => {
         try {
-          // 输入验证
           const prompt = InputValidator.sanitizeText((req.query.prompt || '').toString(), 10000);
           if (!prompt.trim()) {
             return HttpResponse.validationError(res, '缺少 prompt 参数');
@@ -170,7 +160,6 @@ export default {
             return HttpResponse.error(res, new Error('工作流未加载'), 500, 'ai.stream');
           }
 
-          // SSE 头
           res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
           res.setHeader('Cache-Control', 'no-cache');
           res.setHeader('Connection', 'keep-alive');
@@ -214,7 +203,6 @@ export default {
             }
           );
 
-          // 通知前端流结束，同时附带清洗后的文本（如果有）
           res.write(
             `data: ${JSON.stringify({
               done: true,
@@ -276,5 +264,3 @@ export default {
     }
   ]
 };
-
-
