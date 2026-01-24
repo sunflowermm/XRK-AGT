@@ -636,9 +636,8 @@ flowchart TB
 
 - **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：整体架构与运行逻辑
 - **[框架可扩展性指南](框架可扩展性指南.md)**：完整的扩展能力说明
-- **[AIStream 文档](aistream.md)**：Node 侧单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）
+- **[AIStream 文档](aistream.md)**：AIStream基类完整API（Node 侧单次对话 + MCP 工具调用，复杂多步在 Python 子服务端）
 - **[插件基类文档](plugin-base.md)**：插件基类完整API
-- **[AIStream文档](aistream.md)**：AIStream基类完整API
 - **[Bot文档](bot.md)**：Bot生命周期、中间件与认证
 - **[HTTP API文档](http-api.md)**：API定义与装载
 - **[配置系统文档](config-base.md)**：配置基类细节
