@@ -107,6 +107,11 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
 
 ## 向量服务
 
+**重要说明**：
+- 向量服务统一由子服务端提供，主服务端通过 `Bot.callSubserver('/api/vector/*')` 调用
+- 向量模型、维度等配置在子服务端配置文件（`data/subserver/config.yaml`）中设置
+- 主服务端无需配置向量模型相关参数
+
 ### POST /api/vector/embed
 
 文本向量化接口。

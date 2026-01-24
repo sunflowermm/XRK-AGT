@@ -35,8 +35,8 @@
 ```mermaid
 flowchart TB
     A[TaskerLoader.load] --> B[初始化summary统计对象]
-    B --> C[getTaskerFiles扫描目录]
-    C --> D[读取所有core/*/tasker目录]
+    B --> C[getAdapterFiles 扫描目录]
+    C --> D[getAdapterFiles 扫描 core/*/tasker]
     D --> E[筛选.js文件]
     E --> F[转换为file://URL]
     F --> G[批量动态导入]
@@ -57,7 +57,7 @@ flowchart TB
 **步骤说明**：
 
 1. 初始化统计对象 `summary`（scanned/loaded/failed/registered/errors）
-2. 调用 `getTaskerFiles()` 扫描所有 `core/*/tasker` 目录，筛选 `.js` 文件
+2. 调用 `getAdapterFiles()` 扫描所有 `core/*/tasker` 目录，筛选 `.js` 文件
 3. 批量导入：对每个文件执行 `await import(href)`
 4. 统计注册数量：检查 `bot.tasker.length` 的增量
 5. 输出总结日志
@@ -65,14 +65,12 @@ flowchart TB
 
 ---
 
-## 扫描逻辑：`getTaskerFiles()`
+## 扫描逻辑：`getAdapterFiles()`
 
-- 使用 `fs.readdir(this.baseDir, { withFileTypes: true })` 读取目录。
-- 过滤出「普通文件 + `.js` 扩展名」。
-- 为每个文件构造：
-  - `name`：文件名（如 `OneBotv11.js`）。
-  - `href`：完整 `file://` URL 路径，用于 `import(href)`。
-- 若目录不存在（`ENOENT`），输出告警日志并返回空数组。
+- 调用 `paths.getCoreDirs()` 获取所有 core 目录，遍历每个 `core/*/tasker` 子目录。
+- 使用 `FileLoader.readFiles(taskerDir, { ext: '.js', recursive: false })` 读取 `.js` 文件。
+- 为每个文件构造 `{ name, href, core }`：`name` 为文件名（如 `OneBotv11.js`），`href` 为 `file://` URL 供 `import(href)` 使用。
+- 若某 tasker 目录不存在或读取失败，跳过并打日志，不中断整体加载。
 
 ---
 

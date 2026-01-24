@@ -2,7 +2,7 @@
 
 欢迎来到 XRK-AGT 框架文档中心。
 
-> **主入口文档**：建议从 `PROJECT_OVERVIEW.md` + 本页开始阅读，原 `docs/完整文档.md` 已合并进这两份文档，不再单独维护。
+> **主入口文档**：建议从 [PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md) 与本页开始阅读。
 
 ---
 
@@ -10,9 +10,9 @@
 
 ### 🚀 快速开始
 
-**[项目概览 (PROJECT_OVERVIEW.md)](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构  
-**[Bot 主类文档 (docs/bot.md)](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等  
-**[框架可扩展性指南 (docs/框架可扩展性指南.md)](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明
+- **[项目概览 (PROJECT_OVERVIEW.md)](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
+- **[Bot 主类文档 (docs/bot.md)](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
+- **[框架可扩展性指南 (docs/框架可扩展性指南.md)](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明
 
 ### 🏗️ 架构层次
 
@@ -33,7 +33,7 @@ flowchart TB
 
     subgraph Infrastructure["基础设施层（辅助层）"]
         Loaders["加载器<br/>TaskerLoader/PluginsLoader<br/>ApiLoader/StreamLoader<br/>ListenerLoader"]
-        BaseClasses["基类库<br/>plugin/HttpApi/AIStream<br/>Renderer/ConfigBase/EventListener"]
+        BaseClasses["基类库<br/>plugin/HttpApi/AIStream<br/>Renderer/ConfigBase/EventListenerBase"]
     end
 
     subgraph Tasker["任务层（Tasker）"]
@@ -77,33 +77,26 @@ flowchart TB
 
 **层次说明**：
 
-- **运行核心层**（`src/bot.js`）：系统入口，统一管理 HTTP/HTTPS/WebSocket、反向代理和事件总线 `Bot.em`。
-- **基础设施层（辅助层）**（`src/infrastructure/`）：提供基类、加载器、HTTP 业务层、数据库客户端等通用能力，不包含业务逻辑。
-- **核心模块层（Core）**（`core/*/`）：按业务拆分的模块集合，内部再分为 `tasker/`、`events/`、`plugin/`、`http/`、`stream/`、`commonconfig/`、`www/` 等子目录。
+- **运行核心层**（`src/bot.js`）：系统入口，统一管理 HTTP/HTTPS/WebSocket、反向代理和事件总线 `Bot.em`
+- **基础设施层（辅助层）**（`src/infrastructure/`）：提供基类、加载器、HTTP 业务层、数据库客户端等通用能力，不包含业务逻辑
+- **核心模块层（Core）**（`core/*/`）：按业务拆分的模块集合，内部再分为 `tasker/`、`events/`、`plugin/`、`http/`、`stream/`、`commonconfig/`、`www/` 等子目录
 
-> **业务层定位说明**：`core/*/http/` + `core/*/www/` + `core/*/commonconfig/` 提供的是相对通用的 HTTP/API、前端静态资源和配置管理能力；除此之外，其余业务组合（尤其 `plugin/` + `stream/`）的设计重心是 **服务 chatbot 框架 / 对话机器人**，用于沉淀通用对话指令与 AI 能力，方便未来各种客户端快速对接同一套 chatbot 能力，而不是去围绕某个具体 IM/适配器去讲“典型应用场景”。
-
-> **重要澄清**：本项目的“业务实现”都应该放在 `core/*/(plugin|http|stream)` 下；`src/*` 主要是基础设施/工厂/通用能力，**不要把业务 API/工作流写进 `src`**（否则会破坏多 core 扩展机制）。
+> **重要说明**：本项目的"业务实现"都应该放在 `core/*/(plugin|http|stream)` 下；`src/*` 主要是基础设施/工厂/通用能力，**不要把业务 API/工作流写进 `src`**（否则会破坏多 core 扩展机制）。
 
 详细说明请参考 [项目概览](../PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
 
-### 🔌 插件系统
+### 🔌 插件与事件系统
 
 - **[插件基类 (docs/plugin-base.md)](plugin-base.md)** - 插件基类 `plugin` 的设计、规则匹配与上下文管理
 - **[插件加载器 (docs/plugins-loader.md)](plugins-loader.md)** - `PluginsLoader` 的插件加载、事件调度、冷却与节流机制
-- **[事件系统标准化文档 (docs/事件系统标准化文档.md)](事件系统标准化文档.md)** - 事件命名/字段责任/流程速览（精简版）
-- **[事件监听器开发指南 (docs/事件监听器开发指南.md)](事件监听器开发指南.md)** - 最小事件监听器模版与去重注意事项
+- **[事件系统标准化文档 (docs/事件系统标准化文档.md)](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程
+- **[事件监听器开发指南 (docs/事件监听器开发指南.md)](事件监听器开发指南.md)** - 最小事件监听器模版、去重与注册新监听器
 
 ### 🔄 Tasker 系统（任务层/事件生成器）
 
 - **[Tasker 加载器 (docs/tasker-loader.md)](tasker-loader.md)** - `TaskerLoader` 如何扫描并加载 Tasker（事件生成器）
 - **[Tasker 底层规范 (docs/tasker-base-spec.md)](tasker-base-spec.md)** - Tasker 基础接口规范
 - **[OneBotv11 Tasker (docs/tasker-onebotv11.md)](tasker-onebotv11.md)** - OneBotv11 Tasker 完整文档，包含全局对象说明和使用示例
-
-### 📡 事件系统
-
-- **[事件系统标准化文档 (docs/事件系统标准化文档.md)](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程
-- **[事件监听器开发指南 (docs/事件监听器开发指南.md)](事件监听器开发指南.md)** - 如何为框架注册新的事件监听器
 
 ### 🌐 HTTP/API 层
 
@@ -114,8 +107,7 @@ flowchart TB
 
 - **说明**：Node 侧“多步工作流/WorkflowManager/TODO”已移除；复杂 Agent 编排请使用 **Python 子服务端（LangChain/LangGraph）**，主服务端提供统一的 **v3 LLM Provider** 与 **MCP 工具注入/执行**。
 - **[MCP 完整指南 (docs/mcp-guide.md)](mcp-guide.md)** - MCP 工具注册与连接
-- **[AI Stream (docs/aistream.md)](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强
-- **[Stream 插件功能分类 (core/system-Core/stream/README.md)](../core/system-Core/stream/README.md)** - Stream 插件功能分类说明（MCP 工具 vs Call Function）
+- **[AI Stream (docs/aistream.md)](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
 
 ### ⚙️ 配置与工具
 
@@ -174,31 +166,9 @@ flowchart TB
 
 ### 创建自己的 Core 模块
 
-> **Core开发时代**：现在所有业务都在 `core/` 目录下开发，每个 core 是一个独立的业务模块。core 根目录不再直接写业务代码，而是通过业务目录（如 `plugin/`、`tasker/` 等）来组织代码，方便业务分割和集成。
+业务均在 `core/` 下按模块开发；每个 core 内含 `plugin/`、`tasker/`、`events/`、`http/`、`stream/`、`commonconfig/`、`www/<目录名>/` 等业务目录（按需创建）。继承对应基类、使用 `#` 别名导入、放置到约定目录即可自动加载。
 
-**完整指南**：详见 **[框架可扩展性指南 - Core 模块开发](框架可扩展性指南.md#core-模块开发)** ⭐ 推荐
-
-**快速步骤**：
-
-1. **创建 core 目录**：在 `core/` 目录下创建新的 core 目录（如 `core/my-core/`）
-
-2. **创建业务目录**（根据需要创建）：
-   - `plugin/` - 业务插件（继承 `plugin` 基类）
-   - `tasker/` - 任务层（协议适配器）
-   - `events/` - 事件监听器（继承 `EventListener` 基类）
-   - `http/` - HTTP API（继承 `HttpApi` 基类）
-   - `stream/` - AI 工作流（继承 `AIStream` 基类）
-   - `commonconfig/` - 配置管理（继承 `ConfigBase` 基类，⚠️ 仅当需要配置文件时使用）
-   - `www/<目录名>/` - 静态资源（⚠️ 必须创建子目录，子目录自动挂载到 `/<目录名>/*`，避免与根目录 `www/` 冲突）
-
-3. **编写业务代码**：
-   - 继承对应基类，实现业务逻辑
-   - 使用别名路径（`#` 前缀）导入框架模块
-   - 框架会自动扫描并加载所有 core 目录
-
-4. **配置依赖**（可选）：
-   - 在 core 目录下创建 `package.json` 管理独立依赖
-   - 执行 `pnpm install` 时自动安装所有 core 的依赖
+**完整流程与目录说明**：详见 **[框架可扩展性指南 - Core 模块开发](框架可扩展性指南.md#core-模块开发)** ⭐
 
 ### 编写一个简单指令插件
 
@@ -258,19 +228,6 @@ flowchart TB
 2. **全局对象访问**：始终通过 `Bot[self_id]` 访问 Bot 实例，不要直接使用 `e.bot`（除非确保已初始化）
 3. **事件命名**：遵循 `tasker.类型.子类型` 格式，如 `onebot.message.group.normal`
 4. **错误处理**：所有异步操作都应使用 try-catch，API 调用失败会抛出错误
-5. **文档更新**：本文档会持续更新，请定期查看最新版本
-
----
-
-## 📝 文档贡献
-
-如果发现文档错误或需要补充内容，请：
-
-1. 检查代码实现是否与文档一致
-2. 确保示例代码可以正常运行
-3. 避免无端引用不存在的对象或方法
-4. 提供完整、准确的说明
-5. 保持与架构层次的一致性
 
 ---
 

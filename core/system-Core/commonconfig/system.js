@@ -2076,27 +2076,6 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
-            device: {
-              type: 'object',
-              label: '设备运行参数',
-              description: '设备连接和运行相关配置',
-              component: 'SubForm',
-              fields: {
-                heartbeatInterval: { type: 'number', label: '心跳间隔 (s)', component: 'InputNumber', default: 30 },
-                heartbeatTimeout: { type: 'number', label: '心跳超时 (s)', component: 'InputNumber', default: 180 },
-                commandTimeout: { type: 'number', label: '命令超时 (ms)', component: 'InputNumber', default: 10000 },
-                maxDevices: { type: 'number', label: '最大设备数', component: 'InputNumber', default: 100 },
-                maxLogsPerDevice: { type: 'number', label: '单设备日志上限', component: 'InputNumber', default: 100 },
-                messageQueueSize: { type: 'number', label: '指令队列上限', component: 'InputNumber', default: 100 },
-                wsPingIntervalMs: { type: 'number', label: 'WS Ping 间隔(ms)', component: 'InputNumber', default: 30000 },
-                wsPongTimeoutMs: { type: 'number', label: 'WS Pong 超时(ms)', component: 'InputNumber', default: 10000 },
-                wsReconnectDelayMs: { type: 'number', label: 'WS 重连延迟(ms)', component: 'InputNumber', default: 2000 },
-                wsMaxReconnectAttempts: { type: 'number', label: 'WS 最大重连次数', component: 'InputNumber', default: 5 },
-                enableDetailedLogs: { type: 'boolean', label: '详细日志', component: 'Switch', default: true },
-                enablePerformanceLogs: { type: 'boolean', label: '性能日志', component: 'Switch', default: true },
-                audioSaveDir: { type: 'string', label: '音频保存目录', component: 'Input', default: './data/wav' }
-              }
-            },
           }
         }
       },

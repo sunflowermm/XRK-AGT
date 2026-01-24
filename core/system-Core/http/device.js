@@ -121,7 +121,7 @@ const getTtsConfig = () => resolveProvider('tts');
 const getAsrConfig = () => resolveProvider('asr');
 
 const getSystemConfig = () =>
-    ensureConfig(getAistreamConfig().device, 'aistream.device');
+    ensureConfig(cfg.device, 'device');
 
 // 设备支持的表情列表（硬编码，无需配置）
 const SUPPORTED_EMOTIONS = ['happy', 'sad', 'angry', 'surprise', 'love', 'cool', 'sleep', 'think', 'wink', 'laugh'];
@@ -196,7 +196,7 @@ class DeviceManager {
     constructor() {
         this.cleanupInterval = null;
         const systemConfig = getSystemConfig();
-        this.AUDIO_SAVE_DIR = systemConfig.audioSaveDir;
+        this.AUDIO_SAVE_DIR = systemConfig.audio?.saveDir || './data/wav';
         this.bot = null;
         this._deviceEventListener = null;
         this.initializeDirectories();
@@ -781,8 +781,9 @@ class DeviceManager {
         const logs = deviceLogs.get(deviceId) || [];
         logs.unshift(entry);
 
-        if (logs.length > systemConfig.maxLogsPerDevice) {
-            logs.length = systemConfig.maxLogsPerDevice;
+        const maxLogs = systemConfig.limits?.maxLogsPerDevice || 100;
+        if (logs.length > maxLogs) {
+            logs.length = maxLogs;
         }
 
         deviceLogs.set(deviceId, logs);
@@ -793,7 +794,7 @@ class DeviceManager {
             this.updateDeviceStats(deviceId, 'error');
         }
 
-        if (level !== 'debug' || systemConfig.enableDetailedLogs) {
+        if (level !== 'debug' || systemConfig.logging?.enableDetailedLogs) {
             const scope = device?.device_name || deviceId;
             const dedupWindow = Number(systemConfig.logDedupWindowMs) || DEFAULT_LOG_THROTTLE;
             logWithThrottle(
@@ -966,7 +967,7 @@ class DeviceManager {
             const now = Date.now();
             if (device && device.online) {
                 const timeSinceLastSeen = now - (device.last_seen || 0);
-                const timeout = systemConfig.heartbeatTimeout * 1000;
+                const timeout = (systemConfig.heartbeat?.timeout || 1800) * 1000;
                 
                 if (timeSinceLastSeen > timeout) {
                     this.handleDeviceDisconnect(deviceId, ws);
@@ -991,7 +992,7 @@ class DeviceManager {
                     // 忽略错误
                 }
             }
-        }, systemConfig.heartbeatInterval * 1000);
+        }, (systemConfig.heartbeat?.interval || 30) * 1000);
 
         ws.on('pong', () => {
             ws.isAlive = true;
@@ -1249,7 +1250,7 @@ class DeviceManager {
                 const timeout = setTimeout(() => {
                     commandCallbacks.delete(cmd.id);
                     resolve({ success: true, command_id: cmd.id, timeout: true });
-                }, systemConfig.commandTimeout);
+                }, systemConfig.command?.timeout || 5000);
 
                 commandCallbacks.set(cmd.id, (result) => {
                     clearTimeout(timeout);
@@ -1274,8 +1275,9 @@ class DeviceManager {
             queue.push(cmd);
         }
 
-        if (queue.length > systemConfig.messageQueueSize) {
-            queue.length = systemConfig.messageQueueSize;
+        const maxQueueSize = systemConfig.messageQueue?.size || 100;
+        if (queue.length > maxQueueSize) {
+            queue.length = maxQueueSize;
         }
 
         deviceCommands.set(deviceId, queue);
@@ -1751,7 +1753,7 @@ class DeviceManager {
     checkOfflineDevices(Bot) {
         const runtimeBot = this.getBot(Bot);
         const systemConfig = getSystemConfig();
-        const timeout = systemConfig.heartbeatTimeout * 1000;
+        const timeout = (systemConfig.heartbeat?.timeout || 1800) * 1000;
         const now = Date.now();
 
         for (const [id, device] of devices) {

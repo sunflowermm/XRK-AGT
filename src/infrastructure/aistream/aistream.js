@@ -607,26 +607,6 @@ export default class AIStream {
     return '';
   }
 
-  /**
-   * 构建函数提示列表
-   * @returns {string}
-   */
-  buildFunctionsPrompt() {
-    const enabledFuncs = this.getEnabledFunctions();
-    const toolPrompts = ToolRegistry.getAllTools({ enabled: true })
-      .map(t => `- ${t.name}: ${t.description}`)
-      .join('\n');
-
-    if (enabledFuncs.length === 0 && !toolPrompts) return '';
-
-    const prompts = enabledFuncs
-      .filter(f => f.prompt)
-      .map(f => typeof f.prompt === 'function' ? f.prompt() : f.prompt)
-      .join('\n');
-
-    const combined = [prompts, toolPrompts].filter(Boolean).join('\n');
-    return combined ? `\n【功能列表】\n${combined}` : '';
-  }
 
   /**
    * 构建聊天上下文
@@ -826,7 +806,7 @@ export default class AIStream {
     const config = this.resolveLLMConfig(apiConfig);
     const retryConfig = this.getRetryConfig();
 
-    // 优先使用 Python 子服务端（更优渥的生态），失败再回退到 NodeJS LLMFactory
+    // 优先使用 Python 子服务端（LangChain生态），失败时回退到 NodeJS LLMFactory
     try {
       const payload = {
         messages,
@@ -834,12 +814,16 @@ export default class AIStream {
         provider: config.provider,
         temperature: config.temperature,
         max_tokens: config.maxTokens,
-        stream: false
+        stream: false,
+        enableTools: config.enableTools !== false
       };
       const response = await Bot.callSubserver('/api/langchain/chat', { body: payload });
-      return response?.choices?.[0]?.message?.content || response?.content || '';
+      const content = response?.choices?.[0]?.message?.content || response?.content || '';
+      if (content) {
+        return content;
+      }
     } catch (error) {
-      BotUtil.makeLog('warn', `子服务端调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
+      BotUtil.makeLog('warn', `[${this.name}] 子服务端调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
     }
 
     const inputTokens = messages.reduce((sum, m) => {
@@ -908,7 +892,7 @@ export default class AIStream {
       if (typeof onDelta === 'function') onDelta(delta);
     };
 
-    // 优先使用 Python 子服务端流式（SSE透传），失败再回退到 NodeJS LLMFactory
+    // 优先使用 Python 子服务端流式（SSE透传），失败时回退到 NodeJS LLMFactory
     try {
       const payload = {
         messages,
@@ -916,12 +900,17 @@ export default class AIStream {
         provider: config.provider,
         temperature: config.temperature,
         max_tokens: config.maxTokens,
-        stream: true
+        stream: true,
+        enableTools: config.enableTools !== false
       };
       const response = await Bot.callSubserver('/api/langchain/chat', {
         body: payload,
         rawResponse: true
       });
+
+      if (!response || !response.body) {
+        throw new Error('子服务端响应无效');
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -929,22 +918,33 @@ export default class AIStream {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
+        
+        const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split('\n');
+        
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
+          if (!line.trim() || !line.startsWith('data: ')) continue;
+          
           const dataStr = line.slice(6).trim();
-          if (dataStr === '[DONE]') return fullText;
+          if (dataStr === '[DONE]') {
+            return fullText;
+          }
+          
           try {
             const json = JSON.parse(dataStr);
             const delta = json?.choices?.[0]?.delta?.content || '';
-            if (delta) wrapDelta(delta);
-          } catch {}
+            if (delta) {
+              wrapDelta(delta);
+            }
+          } catch (parseError) {
+            // 忽略JSON解析错误，继续处理下一行
+          }
         }
       }
+      
       return fullText;
     } catch (error) {
-      BotUtil.makeLog('warn', `子服务端流式调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
+      BotUtil.makeLog('warn', `[${this.name}] 子服务端流式调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
       fullText = '';
     }
 
@@ -1236,30 +1236,59 @@ export default class AIStream {
    */
   extractStreamNames(options) {
     const names = [];
-
-    // 支持多种格式：
-    // 1. streams 数组
-    // 2. streamNames 数组
-
+    // 支持 streams 或 streamNames 数组格式
     if (options.streams && Array.isArray(options.streams)) {
       names.push(...options.streams);
     }
-    
     if (options.streamNames && Array.isArray(options.streamNames)) {
       names.push(...options.streamNames);
     }
-
     return [...new Set(names)]; // 去重
   }
 
+
   /**
-   * 提取问题文本
-   * @param {string|Object} question - 问题
-   * @returns {string}
+   * 统一错误处理（子类可重写）
+   * @param {Error} error - 错误对象
+   * @param {string} operation - 操作名称
+   * @param {Object} context - 上下文
+   * @returns {Error} 处理后的错误
    */
-  extractQuestionText(question) {
-    if (typeof question === 'string') return question;
-    return question?.content || question?.text || '';
+  handleError(error, operation, context = {}) {
+    const errorMessage = error?.message || String(error);
+    BotUtil.makeLog('error', 
+      `[${this.name}] ${operation}失败: ${errorMessage}`, 
+      'AIStream'
+    );
+    return error;
+  }
+
+  /**
+   * 统一成功响应格式（用于MCP工具）
+   * @param {Object} data - 响应数据
+   * @returns {Object}
+   */
+  successResponse(data) {
+    return {
+      success: true,
+      data: {
+        ...data,
+        timestamp: Date.now()
+      }
+    };
+  }
+
+  /**
+   * 统一错误响应格式（用于MCP工具）
+   * @param {string} code - 错误代码
+   * @param {string} message - 错误消息
+   * @returns {Object}
+   */
+  errorResponse(code, message) {
+    return {
+      success: false,
+      error: { code, message }
+    };
   }
 
   /**

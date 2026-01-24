@@ -498,7 +498,7 @@ export default class ReportPlugin extends plugin {
   }
 }
 
-// 2. 创建HTTP API（core/http/report.js）
+// 2. 创建 HTTP API（core/my-core/http/report.js）
 export default {
   name: 'report-api',
   dsc: '报表生成API',

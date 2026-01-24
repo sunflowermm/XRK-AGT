@@ -190,7 +190,7 @@ export default class DatabaseStream extends AIStream {
     };
 
     // 如果启用 embedding，生成并缓存向量
-    if (this.embeddingConfig.enabled && this.embeddingReady) {
+    if (this.embeddingConfig.enabled) {
       const textContent = typeof record.content === 'string' 
         ? record.content 
         : JSON.stringify(record);
@@ -355,23 +355,7 @@ export default class DatabaseStream extends AIStream {
         });
       }
 
-      // 如果使用向量检索，按相似度排序
-      if (this.embeddingConfig.mode === 'remote') {
-        const queryEmbedding = await this.generateEmbedding(query);
-        if (queryEmbedding && Array.isArray(queryEmbedding)) {
-          for (const result of allResults) {
-            const recordEmbedding = result.record.embedding || 
-              await this.generateEmbedding(result.content);
-            if (recordEmbedding && Array.isArray(recordEmbedding)) {
-              result.similarity = this.cosineSimilarity(queryEmbedding, recordEmbedding);
-              if (!result.record.embedding) {
-                result.record.embedding = recordEmbedding; // 缓存
-              }
-            }
-          }
-          allResults.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
-        }
-      }
+      // 向量检索结果已按相似度排序（由子服务端处理）
 
       return allResults.slice(0, maxResults);
     } catch (error) {

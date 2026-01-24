@@ -3,8 +3,6 @@ import moment from 'moment'
 import * as si from 'systeminformation'
 import cfg from '#infrastructure/config/config.js'
 
-const require = createRequire(import.meta.url)
-
 // 模块级配置
 let showNetworkInfo = true
 let showProcessInfo = true

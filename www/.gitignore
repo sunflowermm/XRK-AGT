@@ -1,16 +1,3 @@
 *
 !.gitignore
-
-# Allow specific files
-!favicon.ico
-!index.html
-!robots.txt
 !使用本文件夹时请观看.txt
-
-!xrk
-xrk/**
-!xrk/index.html
-!xrk/api-config.json
-!xrk/styles.css
-!xrk/app.js
-!xrk/img/bg.png

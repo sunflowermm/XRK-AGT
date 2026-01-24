@@ -796,9 +796,9 @@ server:
 
 - [Server 服务器架构](server.md) - HTTP/HTTPS/WebSocket 服务详细说明
 - [HTTP业务层](http-business-layer.md) - 重定向、CDN、反向代理增强
-- [项目概览](PROJECT_OVERVIEW.md) - 项目整体架构
+- [项目概览](../PROJECT_OVERVIEW.md) - 项目整体架构
 - [插件系统](plugin-base.md) - 插件开发指南
-- [AIStream 文档](docs/aistream.md) - Node 侧单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）
+- [AIStream 文档](aistream.md) - Node 侧单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）
 
 ---
 

@@ -108,9 +108,12 @@ export default class DesktopStream extends AIStream {
 
   }
 
-  handleError(context, error, operation) {
-    BotUtil.makeLog('error', `[desktop] ${operation}失败: ${error.message}`, 'DesktopStream');
-    context.lastError = { operation, message: error.message };
+  handleError(error, operation, context = {}) {
+    const handled = super.handleError(error, operation, context);
+    if (context && typeof context === 'object') {
+      context.lastError = { operation, message: error?.message || String(error) };
+    }
+    return handled;
   }
 
   requireWindows(context, operation) {
@@ -140,27 +143,13 @@ export default class DesktopStream extends AIStream {
     return fileName.replace(/[<>:"/\\|?*]/g, '_');
   }
 
-  /**
-   * 统一错误响应格式
-   */
+  // errorResponse 和 successResponse 已移至基类，这里保留兼容性
   errorResponse(code, message) {
-    return {
-      success: false,
-      error: { code, message }
-    };
+    return super.errorResponse(code, message);
   }
 
-  /**
-   * 统一成功响应格式
-   */
   successResponse(data) {
-    return {
-      success: true,
-      data: {
-        ...data,
-        timestamp: Date.now()
-      }
-    };
+    return super.successResponse(data);
   }
 
   /**
@@ -224,7 +213,7 @@ export default class DesktopStream extends AIStream {
         try {
           await execAsync('powershell -Command "(New-Object -ComObject shell.application).MinimizeAll()"', { timeout: 5000 });
         } catch (err) {
-          this.handleError(context, err, '回桌面操作');
+          this.handleError(err, '回桌面操作', context);
         }
       },
       enabled: true
@@ -245,7 +234,7 @@ export default class DesktopStream extends AIStream {
           await execCommand(`start "" ${tool}`, { shell: 'cmd.exe' });
           context.executedTool = toolNames[tool] || '应用';
         } catch (err) {
-          this.handleError(context, err, '打开系统工具');
+          this.handleError(err, '打开系统工具', context);
         }
       },
       enabled: true
@@ -307,7 +296,7 @@ export default class DesktopStream extends AIStream {
         try {
           await execCommand('rundll32.exe user32.dll,LockWorkStation');
         } catch (err) {
-          this.handleError(context, err, '锁屏操作');
+          this.handleError(err, '锁屏操作', context);
         }
       },
       enabled: true
@@ -377,7 +366,7 @@ export default class DesktopStream extends AIStream {
           await execCommand(command, { shell: IS_WINDOWS ? 'cmd.exe' : undefined });
           context.openedUrl = url;
         } catch (err) {
-          this.handleError(context, err, '打开网页');
+          this.handleError(err, '打开网页', context);
         }
       },
       enabled: true
@@ -408,7 +397,7 @@ export default class DesktopStream extends AIStream {
           }
         } catch (err) {
           if (action !== 'cancel') {
-            this.handleError(context, err, '电源控制操作');
+            this.handleError(err, '电源控制操作', context);
           }
         }
       },
@@ -434,7 +423,7 @@ export default class DesktopStream extends AIStream {
 
           context.createdFolder = safeName;
         } catch (err) {
-          this.handleError(context, err, '创建文件夹');
+          this.handleError(err, '创建文件夹', context);
         }
       },
       enabled: true
@@ -454,7 +443,7 @@ export default class DesktopStream extends AIStream {
           const command = commands[process.platform] || commands.linux;
           await execCommand(command);
         } catch (err) {
-          this.handleError(context, err, '打开资源管理器');
+          this.handleError(err, '打开资源管理器', context);
         }
       },
       enabled: true
@@ -532,7 +521,7 @@ export default class DesktopStream extends AIStream {
           context.commandError = err.message;
           context.commandSuccess = false;
           context.commandStderr = err.stderr || '';
-          this.handleError(context, err, '执行PowerShell命令');
+          this.handleError(err, '执行PowerShell命令', context);
         }
       },
       enabled: true
@@ -635,7 +624,7 @@ export default class DesktopStream extends AIStream {
 
           context.openedApp = appName;
         } catch (err) {
-          this.handleError(context, err, '打开软件');
+          this.handleError(err, '打开软件', context);
         }
       },
       enabled: true

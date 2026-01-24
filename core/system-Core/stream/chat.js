@@ -939,8 +939,8 @@ ${lines.join('\n')}`;
     const functionsPrompt = this.buildFunctionsPrompt({ botRole });
 
     let embeddingHint = '';
-    if (this.embeddingConfig?.enabled && this.embeddingReady) {
-      embeddingHint = '\n💡 系统会自动检索相关历史对话\n';
+    if (this.embeddingConfig?.enabled) {
+      embeddingHint = '\n💡 系统会自动检索相关历史对话（通过子服务端向量服务）\n';
     }
 
     const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'AI助手';

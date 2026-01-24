@@ -22,7 +22,7 @@
 
 XRK-AGT 是向日葵工作室基于 **Node.js 24.12** 打造的多平台、多Tasker、工作流驱动型智能体平台，采用清晰的分层架构设计，支持：
 
-- **多平台消息接入**：OneBotv11 / ComWeChat / 自定义 Tasker
+- **多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
 - **插件工作流**：指令插件 + AI 工作流 (`AIStream`)
 - **Web 与 HTTP/API 服务**：内置 Web 控制台 + REST API + WebSocket
 - **HTTP业务层**：重定向、CDN支持、反向代理增强（负载均衡、健康检查）
@@ -127,7 +127,7 @@ flowchart TB
 flowchart TB
     subgraph Clients["外部客户端"]
         QQ["QQ / OneBotv11"]
-        WeChat["ComWeChat"]
+        IM["IM / Bot 平台"]
         WebUI["XRK Web 控制台"]
         ThirdAPI["第三方 API"]
     end
@@ -148,7 +148,7 @@ flowchart TB
     
     subgraph Tasker["任务层"]
         OneBot["OneBotv11"]
-        ComWeChat["ComWeChat"]
+        QBQ["QBQBot / GSUIDCORE"]
         Stdin["stdin"]
     end
     
@@ -165,7 +165,7 @@ flowchart TB
     end
     
     QQ --> OneBot
-    WeChat --> ComWeChat
+    IM --> QBQ
     WebUI --> Bot
     ThirdAPI --> Bot
     
@@ -177,11 +177,11 @@ flowchart TB
     Bot --> HTTPBusiness
     
     TaskerLoader --> OneBot
-    TaskerLoader --> ComWeChat
+    TaskerLoader --> QBQ
     TaskerLoader --> Stdin
     
     OneBot --> OneBotEvent
-    ComWeChat --> OneBotEvent
+    QBQ --> OneBotEvent
     Stdin --> StdinEvent
     
     OneBotEvent --> PluginsLoader
@@ -224,15 +224,15 @@ flowchart TB
 
 **特点**：不包含具体业务逻辑，只提供抽象和工具
 
-#### 3. 任务层（Tasker）(`core/tasker/`)
+#### 3. 任务层（Tasker）(`core/*/tasker/`)
 
-**职责**：对接各平台协议（QQ/微信/自定义），将平台消息转换为统一事件模型，通过 `Bot.em` 触发事件
+**职责**：对接各平台协议（QQ/IM/自定义），将平台消息转换为统一事件模型，通过 `Bot.em` 触发事件
 
-**包含**：`OneBotv11.js`、`ComWeChat.js`、`stdin.js`、自定义 Tasker
+**包含**：`OneBotv11.js`、`QBQBot.js`、`GSUIDCORE.js`、`stdin.js`、自定义 Tasker
 
 **特点**：事件生成器，负责协议转换
 
-#### 4. 事件系统 (`core/events/`)
+#### 4. 事件系统 (`core/*/events/`)
 
 **职责**：监听 `Bot.em` 事件，进行去重、标记、预处理，然后调用 `PluginsLoader.deal(e)` 分发到插件
 
@@ -240,14 +240,14 @@ flowchart TB
 
 **特点**：事件标准化和预处理层
 
-#### 5. 业务层 (`core/`)
+#### 5. 业务层 (`core/*/`)
 
 **职责**：实现具体业务逻辑
 
 **包含**：
-- **业务插件** (`core/plugin/`)：`enhancer/`、`example/`
-- **HTTP API** (`core/http/`)：具体的 REST/WebSocket API 实现
-- **工作流** (`core/stream/`)：基于 `AIStream` 的业务工作流实现
+- **业务插件** (`core/*/plugin/`)：指令插件、增强插件（Enhancer）等
+- **HTTP API** (`core/*/http/`)：REST/WebSocket API 实现
+- **工作流** (`core/*/stream/`)：基于 `AIStream` 的业务工作流实现
 
 **特点**：基于基础设施层的基类实现具体功能
 
@@ -297,7 +297,7 @@ XRK-AGT/
 │
 ├── config/                   # 配置文件
 │   ├── default_config/      # 默认配置
-│   └── server_config/       # 服务器配置
+│   └── server_config/       # API 密钥等（如 api_key.json）
 │
 ├── data/                     # 运行期数据
 │   ├── server_bots/          # 服务器Bot配置（按端口分目录）
@@ -449,85 +449,13 @@ proxy:
 
 ## 快速开始
 
-### 环境要求
-
-- **Node.js**: ≥ 24.12.0 (LTS)
-- **pnpm**: 最新版本
-- **Redis**: ≥ 5.0.0
-- **MongoDB**: ≥ 4.0.0 (可选)
-
-### 安装与运行
-
-```bash
-# 克隆项目
-git clone --depth=1 https://github.com/sunflowermm/XRK-AGT.git
-cd XRK-AGT
-
-# 安装依赖（仅支持pnpm）
-pnpm install
-
-# 运行
-node app
-```
-
-### 启动流程
-
-```mermaid
-sequenceDiagram
-    participant User as 用户
-    participant App as app.js
-    participant Bot as Bot主类
-    participant Loaders as 加载器
-    participant Services as 服务
-    
-    User->>App: node app
-    App->>App: 环境检查
-    App->>App: 依赖安装
-    App->>Bot: 创建Bot实例
-    Bot->>Loaders: 加载配置
-    Bot->>Loaders: 加载Tasker
-    Bot->>Loaders: 加载事件监听器
-    Bot->>Loaders: 加载插件
-    Bot->>Loaders: 加载API
-    Bot->>Services: 启动HTTP/HTTPS服务
-    Bot->>Services: 启动反向代理（可选）
-    Services-->>User: 服务就绪
-```
-
-**说明**：启动后可通过浏览器访问配置中的服务地址（默认2537端口），具体访问URL会在启动日志中打印。
+参见 [README.md](README.md) 的「快速开始」章节。
 
 ---
 
 ## 开发指南
 
-### 扩展开发流程
-
-```mermaid
-flowchart LR
-    A[确定扩展类型] --> B[选择对应基类]
-    B --> C[阅读基类文档]
-    C --> D[实现必要方法]
-    D --> E[放置到对应目录]
-    E --> F[自动加载生效]
-    
-    style A fill:#E6F3FF
-    style F fill:#90EE90
-```
-
-### 7大核心扩展点
-
-1. **插件扩展** (`core/plugin/`) - 基类：`src/infrastructure/plugins/plugin.js`
-2. **工作流扩展** (`core/stream/`) - 基类：`src/infrastructure/aistream/aistream.js`
-3. **Tasker扩展** (`core/tasker/`) - 规范：`docs/tasker-base-spec.md`
-4. **事件监听器扩展** (`core/events/`) - 基类：`src/infrastructure/listener/base.js`
-5. **HTTP API扩展** (`core/http/`) - 基类：`src/infrastructure/http/http.js`
-6. **渲染器扩展** (`src/renderers/`) - 基类：`src/infrastructure/renderer/Renderer.js`
-7. **配置扩展** (`core/*/commonconfig/`) - 基类：`src/infrastructure/commonconfig/commonconfig.js`（`ConfigBase`）
-   - ⚠️ **仅当需要配置文件时使用**：只有需要配置文件的 core 才创建此目录
-   - **重要说明**：`commonconfig` 是目录名，真正的基类是 `ConfigBase`
-   - 配置类需要继承 `ConfigBase` 并放置在 `core/*/commonconfig/` 目录
-
-**详细说明**：参见 [`docs/框架可扩展性指南.md`](docs/框架可扩展性指南.md)
+**7 大核心扩展点**（插件、工作流、Tasker、事件监听器、HTTP API、渲染器、配置）及扩展流程、目录与基类说明，详见 **[`docs/框架可扩展性指南.md`](docs/框架可扩展性指南.md)**。
 
 ---
 
@@ -638,19 +566,7 @@ flowchart TB
 
 ## 文档导航
 
-### 核心文档
-
-- **[文档总览 (docs/README.md)](docs/README.md)** - 文档中心与各模块索引
-- **[Server服务器架构](docs/server.md)** - HTTP/HTTPS/WebSocket服务、反向代理详细说明
-- **[HTTP业务层](docs/http-business-layer.md)** - 重定向、CDN、反向代理增强功能
-- **[框架可扩展性指南](docs/框架可扩展性指南.md)** - 7大核心扩展点详解
-
-### 开发文档
-
-- **[Bot主类](docs/bot.md)** - Bot主类详细文档
-- **[插件系统](docs/plugin-base.md)** - 插件基类和加载器
-- **[AIStream 文档](docs/aistream.md)** - Node 单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）
-- **[HTTP API](docs/http-api.md)** - HTTP API基类文档
+参见 [docs/README.md](docs/README.md)。
 
 ---
 

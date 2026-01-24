@@ -188,9 +188,8 @@ class StreamLoader {
       try {
         // 初始化Embedding
         await stream.initEmbedding();
-        const mode = stream.embeddingConfig.mode || 'local';
         BotUtil.makeLog('debug', 
-          `Embedding初始化: ${stream.name} - ${mode}`, 
+          `Embedding初始化: ${stream.name} - 由子服务端提供`, 
           'StreamLoader'
         );
         successCount++;
@@ -245,8 +244,8 @@ class StreamLoader {
       const funcCount = stream.functions?.size || 0;
       
       let embStatus = '';
-      if (stream.embeddingConfig?.enabled && stream.embeddingReady) {
-        embStatus = ` [${stream.embeddingConfig.mode || 'local'}]`;
+      if (stream.embeddingConfig?.enabled) {
+        embStatus = ' [子服务端]';
       }
       
       BotUtil.makeLog('debug', 
@@ -359,7 +358,7 @@ class StreamLoader {
       embedding: {
         enabled: embeddingEnabled,
         ready: embeddingReady,
-        mode: this.embeddingConfig?.mode || cfg.aistream?.embedding?.mode || 'local'
+        mode: 'subserver'
       },
       mcp: {
         toolCount: this.mcpServer?.tools?.size || 0
@@ -453,11 +452,11 @@ class StreamLoader {
 
 
   /**
-   * 检查Embedding依赖
+   * 检查Embedding依赖（已简化：统一由子服务端负责）
    */
   async checkEmbeddingDependencies() {
     const result = {
-      embedding: { mode: 'local', available: true },
+      embedding: { available: true },
       redis: false,
       errors: []
     };
@@ -465,26 +464,11 @@ class StreamLoader {
     BotUtil.makeLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'StreamLoader');
     BotUtil.makeLog('info', '【检查 Embedding 依赖】', 'StreamLoader');
 
-    // Embedding 模式检查（简化：只有 local 和 remote）
-    const embeddingConfig = cfg.aistream?.embedding || {};
-    const mode = embeddingConfig.mode || 'local';
-    
-    if (mode === 'local') {
-      BotUtil.makeLog('success', '├─ ✅ Embedding: 本地模式 (BM25)', 'StreamLoader');
-      result.embedding = { mode: 'local', available: true };
-    } else if (mode === 'remote') {
-      const hasRemoteConfig = !!(embeddingConfig.remote?.apiUrl && embeddingConfig.remote?.apiKey);
-      if (hasRemoteConfig) {
-        BotUtil.makeLog('success', '├─ ✅ Embedding: 远程模式 (API)', 'StreamLoader');
-        result.embedding = { mode: 'remote', available: true };
-    } else {
-        BotUtil.makeLog('warn', '├─ ❌ Embedding: 远程模式未配置', 'StreamLoader');
-        result.embedding = { mode: 'remote', available: false };
-        result.errors.push('远程 Embedding API 未配置');
-    }
-    }
+    // Embedding 统一由子服务端负责，只需检查子服务端是否可用
+    BotUtil.makeLog('success', '├─ ✅ Embedding: 由子服务端提供向量服务', 'StreamLoader');
+    result.embedding = { available: true };
 
-    // Redis
+    // Redis（用于短期记忆缓存）
     result.redis = !!global.redis;
     if (result.redis) {
       BotUtil.makeLog('success', '└─ ✅ Redis 可用', 'StreamLoader');
@@ -499,61 +483,23 @@ class StreamLoader {
   }
 
   /**
-   * 获取推荐配置
+   * 获取推荐配置（已简化：统一由子服务端负责）
    */
   async getRecommendedEmbeddingConfig() {
     const deps = await this.checkEmbeddingDependencies();
     
     const recommendations = {
-      available: [],
-      recommended: null,
-      instructions: []
+      available: ['subserver'],
+      recommended: 'subserver',
+      instructions: [
+        '✅ 向量服务由子服务端提供',
+        '  ├─ 统一通过子服务端向量服务接口',
+        '  └─ 配置位于子服务端配置文件'
+      ]
     };
 
-    if (deps.onnx && deps.redis) {
-      recommendations.available.push('onnx');
-      recommendations.recommended = 'onnx';
-      recommendations.instructions.push(
-        '🌟 ONNX Runtime（推荐）',
-        '  ├─ 高性能，纯JS',
-        '  └─ pnpm add onnxruntime-node -w'
-      );
-    }
-
-    if (deps.hf && deps.redis) {
-      recommendations.available.push('hf');
-      if (!recommendations.recommended) recommendations.recommended = 'hf';
-      recommendations.instructions.push(
-        '✅ Hugging Face API',
-        '  ├─ 零内存，免费',
-        '  └─ Token: https://huggingface.co/settings/tokens'
-      );
-    }
-
-    if (deps.fasttext && deps.redis) {
-      recommendations.available.push('fasttext');
-      if (!recommendations.recommended) recommendations.recommended = 'fasttext';
-    }
-
-    if (deps.api && deps.redis) {
-      recommendations.available.push('api');
-      if (!recommendations.recommended) recommendations.recommended = 'api';
-    }
-
-    if (deps.redis) {
-      recommendations.available.push('lightweight');
-      if (!recommendations.recommended) recommendations.recommended = 'lightweight';
-      recommendations.instructions.push(
-        '✅ Lightweight (BM25)',
-        '  ├─ 零依赖，零内存',
-        '  └─ 适合依赖安装失败时'
-      );
-    }
-
     if (!deps.redis) {
-      recommendations.instructions.unshift(
-        '❌ Redis 未启用（必需）'
-      );
+      recommendations.instructions.unshift('❌ Redis 未启用（用于短期记忆缓存）');
     }
 
     return recommendations;

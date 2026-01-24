@@ -4,6 +4,8 @@
 
 本文档说明 XRK-AGT 框架中导入路径的使用规则和迁移指南。
 
+> **当前状态**：`core/*` 下模块（如 `system-Core`）均无独立 `package.json`，统一使用根包 `#` 别名。若将来新增带 `package.json` 的独立 Core 包，则需按「独立 Core 包」一节使用相对路径。
+
 ## 导入路径规则
 
 ### 1. 项目根目录（主包）
@@ -26,39 +28,35 @@ import StreamLoader from '#infrastructure/aistream/loader.js';
 - `#modules/*` → `./src/modules/*`
 - `#factory/*` → `./src/factory/*`
 
-### 2. 独立 Core 包（如 Example-Core）
+### 2. 独立 Core 包（如 `core/my-core` 且自带 `package.json`）
 
-**独立 Core 包必须使用相对路径**，不能使用 `#imports` 别名。
+**自带 `package.json` 的 Core 包必须使用相对路径**，不能使用 `#` 别名。
 
-**原因**：
-- Node.js 的 `imports` 字段作用域限制在当前 `package.json` 所在的包内
-- 每个 Core 包有自己的 `package.json`，形成独立的包作用域
-- 跨包引用需要使用相对路径
+**原因**：Node.js 的 `imports` 作用域限于当前包；跨包引用需用相对路径。
 
 **路径规则**：
-- 从 `core/Example-Core/*` 导入 `src/utils/*`：`../../../src/utils/*`
-- 从 `core/Example-Core/*` 导入 `src/infrastructure/*`：`../../../src/infrastructure/*`
+- 从 `core/my-core/*` 导入 `src/utils/*`：`../../../src/utils/*`
+- 从 `core/my-core/*` 导入 `src/infrastructure/*`：`../../../src/infrastructure/*`
 
 **示例**：
 
 ```javascript
-// ✅ 正确：Example-Core 中使用相对路径
+// ✅ 正确：独立 Core 包中使用相对路径
 import BotUtil from '../../../src/utils/botutil.js';
 import StreamLoader from '../../../src/infrastructure/aistream/loader.js';
 import { HttpResponse } from '../../../src/utils/http-utils.js';
 
-// ❌ 错误：Example-Core 中不能使用 #imports
+// ❌ 错误：独立 Core 包中不能使用 # 别名
 import BotUtil from '#utils/botutil.js';
-import StreamLoader from '#infrastructure/aistream/loader.js';
 ```
 
 ### 3. 同一 Core 包内的导入
 
-同一 Core 包内的文件可以使用相对路径：
+同一 Core 包内使用相对路径：
 
 ```javascript
-// 在 core/Example-Core/plugin/example-workflow.js 中
-import ExampleTimer from './example-timer.js';  // ✅ 正确
+// 在 core/my-core/plugin/my-plugin.js 中
+import Other from './other.js';  // ✅ 正确
 ```
 
 ## 迁移检查清单
@@ -66,13 +64,13 @@ import ExampleTimer from './example-timer.js';  // ✅ 正确
 ### 从 #imports 迁移到相对路径
 
 1. **识别需要迁移的文件**
-   - 所有 `core/*/` 目录下的文件（除了 `core/system-Core`，它没有自己的 package.json）
-   - 检查文件中是否有 `import ... from '#utils/...'` 或 `import ... from '#infrastructure/...'`
+   - 仅限 **自带 `package.json`** 的 `core/*/` 目录（如 `core/my-core`）；`core/system-Core` 等无 `package.json` 的模块使用根包 `#` 别名，无需迁移
+   - 检查是否有 `import ... from '#utils/...'` 或 `import ... from '#infrastructure/...'`
 
 2. **计算相对路径**
-   - 确定源文件位置：`core/Example-Core/http/example-api.js`
-   - 确定目标位置：`src/utils/http-utils.js`
-   - 计算路径：`../../../src/utils/http-utils.js`
+   - 源文件：`core/my-core/http/my-api.js`
+   - 目标：`src/utils/http-utils.js`
+   - 路径：`../../../src/utils/http-utils.js`
 
 3. **更新导入语句**
    ```javascript
@@ -89,25 +87,17 @@ import ExampleTimer from './example-timer.js';  // ✅ 正确
 
 ## 常见问题
 
-### Q: 为什么 Example-Core 不能使用 #imports？
+### Q: 为什么自带 package.json 的 Core 不能使用 # 别名？
 
-**A**: Node.js 的 `imports` 字段遵循"最近的 package.json 优先"规则。当 Node 解析 `core/Example-Core/http/example-api.js` 中的 `#utils/...` 时，会先找到 `core/Example-Core/package.json`，如果这个文件没有定义 `#utils/*`，就会报错 `ERR_PACKAGE_IMPORT_NOT_DEFINED`。
+**A**: Node 按「最近 package.json」解析。`core/my-core/*` 下有 `package.json` 时，会先查该包；若未定义 `#utils/*` 等，会报 `ERR_PACKAGE_IMPORT_NOT_DEFINED`。
 
-### Q: system-Core 为什么可以使用根 package.json 的 imports？
+### Q: system-Core 为什么可以用根包的 # 别名？
 
-**A**: `core/system-Core` 目录下**没有**自己的 `package.json`，所以 Node 会继续向上查找，最终使用根目录的 `package.json` 中的 `imports` 配置。
+**A**: `core/system-Core` **无** `package.json`，Node 向上查找，最终用根 `package.json` 的 `imports`。
 
-### Q: 能否在 Example-Core 的 package.json 中定义 imports？
+### Q: 能否在独立 Core 的 package.json 里定义 imports 指向 src？
 
-**A**: 理论上可以，但 Node.js 的 `imports` 字段**不允许** target 使用 `../../` 这样的跨包路径。例如：
-```json
-{
-  "imports": {
-    "#utils/*": "../../src/utils/*"  // ❌ 无效：Invalid package target
-  }
-}
-```
-所以必须使用相对路径导入。
+**A**: 不行。Node 的 `imports` **不允许** target 使用 `../../` 等跨包路径，故须用相对路径导入。
 
 ## 最佳实践
 
@@ -118,6 +108,5 @@ import ExampleTimer from './example-timer.js';  // ✅ 正确
 
 ## 相关文件
 
-- `package.json` - 根包配置，定义 `#imports` 别名
-- `core/Example-Core/package.json` - Example-Core 包配置（不包含 imports）
-- `core/system-Core/` - 没有 package.json，使用根包的 imports
+- 根 `package.json`：定义 `#` 别名，供无独立 `package.json` 的 core（如 `system-Core`）使用
+- `core/my-core/package.json`（可选）：独立 Core 包配置；有则须用相对路径导入 `src/*`

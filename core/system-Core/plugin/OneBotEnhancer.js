@@ -144,7 +144,7 @@ export default class OneBotEnhancer extends EnhancerBase {
     }
   }
 
-  applyConfigPolicies(e) {
+  async applyConfigPolicies(e) {
     try {
       const chatbotCfg = cfg.chatbot || {}
       const {

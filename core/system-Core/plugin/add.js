@@ -3,13 +3,12 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import lodash from "lodash"
 import crypto from "crypto"
-import { segment } from '#oicq'
 
 export const messageMap = {}
 export const bannedWordsMap = {}
 
 // 模块级配置变量
-let path = "data/messageJson/"
+let messageDataPath = "data/messageJson/"
 let bannedWordsPath = "data/bannedWords/"
 let bannedImagesPath = "data/bannedWords/images/"
 let configPath = "data/bannedWords/config/"
@@ -62,13 +61,13 @@ export class add extends plugin {
   async init() {
     const agtCfg = cfg.agt || {}
     const filesCfg = agtCfg.files || {}
-    path = filesCfg.messageDataPath || "data/messageJson/"
+    messageDataPath = filesCfg.messageDataPath || "data/messageJson/"
     bannedWordsPath = filesCfg.bannedWordsPath || "data/bannedWords/"
     bannedImagesPath = filesCfg.bannedImagesPath || "data/bannedWords/images/"
     configPath = filesCfg.bannedConfigPath || "data/bannedWords/config/"
     
     await Promise.all([
-      Bot.mkdir(path),
+      Bot.mkdir(messageDataPath),
       Bot.mkdir(bannedWordsPath),
       Bot.mkdir(bannedImagesPath),
       Bot.mkdir(configPath)
@@ -90,7 +89,7 @@ export class add extends plugin {
   /** 初始化所有违禁词 */
   async initAllBannedWords() {
     try {
-      const files = await fs.readdir(this.bannedWordsPath)
+      const files = await fs.readdir(bannedWordsPath)
       const jsonFiles = files.filter(f => f.endsWith('.json'))
       await Promise.all(
         jsonFiles.map(f => this.initBannedWords(f.replace('.json', '')))
@@ -164,7 +163,7 @@ export class add extends plugin {
   }
 
   /** 获取身份信息 */
-  getRoleInfo(groupId, userId) {
+  getRoleInfo(_groupId, userId) {
     if (!this.e.isGroup) {
       return { role: 'member', roleName: '群员', isAdmin: false }
     }
@@ -541,7 +540,7 @@ export class add extends plugin {
       
       if (banned.images.size) {
         msg.push(`【群组图片违禁词】共${banned.images.size}个：`)
-        for (const [hash, info] of banned.images) {
+        for (const [, info] of banned.images) {
           msg.push(`${++totalNum}. ${info.desc}`)
           await Bot.fsStat(info.path) && msg.push(segment.image(info.path))
         }
@@ -564,7 +563,7 @@ export class add extends plugin {
       
       if (globalBanned.images.size) {
         msg.push(`【全局图片违禁词】共${globalBanned.images.size}个：`)
-        for (const [hash, info] of globalBanned.images) {
+        for (const [, info] of globalBanned.images) {
           msg.push(`G${++globalNum - totalNum}. ${info.desc}`)
           await Bot.fsStat(info.path) && msg.push(segment.image(info.path))
         }
@@ -588,7 +587,7 @@ export class add extends plugin {
       
       if (globalBanned.images.size) {
         msg.push(`【全局图片违禁词】共${globalBanned.images.size}个：`)
-        for (const [hash, info] of globalBanned.images) {
+        for (const [, info] of globalBanned.images) {
           msg.push(`${++totalNum}. ${info.desc}`)
           await Bot.fsStat(info.path) && msg.push(segment.image(info.path))
         }
@@ -1009,7 +1008,7 @@ export class add extends plugin {
     
     try {
       const obj = Object.fromEntries(messageMap[this.group_id])
-      await fs.writeFile(`${path}${this.group_id}.json`, JSON.stringify(obj, null, 2), 'utf8')
+      await fs.writeFile(`${messageDataPath}${this.group_id}.json`, JSON.stringify(obj, null, 2), 'utf8')
     } catch (err) {
       logger.error(`保存JSON失败 ${this.group_id}: ${err.message}`, err)
     }
@@ -1023,7 +1022,7 @@ export class add extends plugin {
       const file = await Bot.fileType({ ...data, file: data.url })
       if (Buffer.isBuffer(file.buffer)) {
         file.name = `${this.group_id}/${data.type}/${file.name}`
-        file.path = `${path}${file.name}`
+        file.path = `${messageDataPath}${file.name}`
         await Bot.mkdir(path.dirname(file.path))
         await fs.writeFile(file.path, file.buffer)
         return file.name
@@ -1100,8 +1099,8 @@ export class add extends plugin {
 
     const msgToSend = [...msg]
     for (const i in msgToSend) {
-      if (msgToSend[i].file && await Bot.fsStat(`${path}${msgToSend[i].file}`)) {
-        msgToSend[i] = { ...msgToSend[i], file: `${path}${msgToSend[i].file}` }
+      if (msgToSend[i].file && await Bot.fsStat(`${messageDataPath}${msgToSend[i].file}`)) {
+        msgToSend[i] = { ...msgToSend[i], file: `${messageDataPath}${msgToSend[i].file}` }
       }
     }
 
@@ -1118,7 +1117,7 @@ export class add extends plugin {
     if (messageMap[this.group_id]) return
     messageMap[this.group_id] = new Map()
 
-    const filePath = `${path}${this.group_id}.json`
+    const filePath = `${messageDataPath}${this.group_id}.json`
     if (!await Bot.fsStat(filePath)) return
 
     try {
@@ -1138,7 +1137,7 @@ export class add extends plugin {
     if (messageMap.global) return
     messageMap.global = new Map()
 
-    const globalPath = `${path}global.json`
+    const globalPath = `${messageDataPath}global.json`
     if (!await Bot.fsStat(globalPath)) return
 
     try {
@@ -1168,7 +1167,7 @@ export class add extends plugin {
     
     Array.isArray(messages[0]) ? collectFiles(messages) : collectFiles([messages])
     
-    return Promise.allSettled(files.map(file => fs.rm(`${path}${file}`).catch(() => {})))
+    return Promise.allSettled(files.map(file => fs.rm(`${messageDataPath}${file}`).catch(() => {})))
   }
 
   /** #删除 */

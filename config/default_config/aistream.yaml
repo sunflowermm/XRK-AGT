@@ -86,25 +86,6 @@ tts:
   onlyForASR: true
 
 # ----------------------------------------
-# Embedding 配置
-# ----------------------------------------
-# 向量检索配置，用于工作流上下文检索
-embedding:
-  # 是否启用向量检索
-  enabled: true
-  # 模式：local（本地BM25算法）或 remote（远程API接口）
-  mode: local
-  # 远程模式配置（mode为remote时生效）
-  remote:
-    apiUrl: ""      # API地址，如 https://api.openai.com/v1/embeddings
-    apiKey: ""      # API密钥
-    apiModel: "text-embedding-3-small"  # 模型名称
-  # 通用配置
-  maxContexts: 5              # 最大上下文条数
-  similarityThreshold: 0.6    # 相似度阈值
-  cacheExpiry: 86400          # 缓存时长（秒）
-
-# ----------------------------------------
 # MCP 服务配置
 # ----------------------------------------
 # Model Context Protocol (MCP) 服务配置，用于工具调用和跨平台集成
@@ -131,34 +112,3 @@ subserver:
   # 请求超时时间（毫秒）
   timeout: 30000
 
-# ----------------------------------------
-# 设备运行参数
-# ----------------------------------------
-# 设备管理相关配置，用于设备连接和运行
-device:
-  # 心跳间隔（秒）
-  heartbeatInterval: 30
-  # 心跳超时（秒）
-  heartbeatTimeout: 180
-  # 命令超时（毫秒）
-  commandTimeout: 10000
-  # 最大设备数量
-  maxDevices: 100
-  # 单设备日志上限
-  maxLogsPerDevice: 100
-  # 指令队列上限
-  messageQueueSize: 100
-  # WebSocket Ping间隔（毫秒）
-  wsPingIntervalMs: 30000
-  # WebSocket Pong超时（毫秒）
-  wsPongTimeoutMs: 10000
-  # WebSocket重连延迟（毫秒）
-  wsReconnectDelayMs: 2000
-  # WebSocket最大重连次数
-  wsMaxReconnectAttempts: 5
-  # 是否启用详细日志
-  enableDetailedLogs: true
-  # 是否启用性能日志
-  enablePerformanceLogs: true
-  # 音频保存目录
-  audioSaveDir: "./data/wav"

@@ -186,7 +186,7 @@ MessageSegment = {
 
 ```mermaid
 flowchart TB
-    A[模块加载<br/>core/tasker/OneBotv11.js] --> B[创建Tasker实例]
+    A[模块加载<br/>core/*/tasker/OneBotv11.js] --> B[创建Tasker实例]
     B --> C[Bot.tasker.push注册]
     C --> D[load方法初始化]
     D --> E[注册WebSocket路径<br/>Bot.wsf注册]
