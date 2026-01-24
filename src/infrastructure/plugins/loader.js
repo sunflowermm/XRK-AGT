@@ -22,7 +22,6 @@ class PluginsLoader {
     this.priority = []
     this.extended = []
     this.task = []
-    this.dir = 'core' // 改为扫描所有 core 目录
     this.watcher = {}
     this.cooldowns = {
       group: new Map(),
@@ -81,7 +80,7 @@ class PluginsLoader {
           batch.map(async (file) => {
             const pluginStartTime = Date.now()
             try {
-              await this.importPlugin(file, packageErr)
+              await this.importPlugin(file, packageErr, false)
               const loadTime = Date.now() - pluginStartTime
               this.pluginLoadStats.plugins.push({ name: file.name, loadTime, success: true })
             } catch (err) {
@@ -94,7 +93,6 @@ class PluginsLoader {
               })
               errorHandler.handle(err, { context: 'loadPlugin', pluginName: file.name }, true)
               logger.error(`插件加载失败: ${file.name}`, err)
-              return null
             }
           })
         )
@@ -497,14 +495,14 @@ class PluginsLoader {
       if (!plugin?.getContext) continue
 
       const contexts = { ...plugin.getContext(), ...plugin.getContext(false, true) }
-      if (!contexts || contexts.length === 0) continue
+      if (!contexts || Object.keys(contexts).length === 0) continue
 
-        for (const fnc in contexts) {
-          if (typeof plugin[fnc] === 'function') {
-            try {
-              const ret = await plugin[fnc](contexts[fnc])
-              if (ret !== 'continue' && ret !== false) return true
-            } catch (error) {
+      for (const fnc in contexts) {
+        if (typeof plugin[fnc] === 'function') {
+          try {
+            const ret = await plugin[fnc](contexts[fnc])
+            if (ret !== 'continue' && ret !== false) return true
+          } catch (error) {
             errorHandler.handle(error, { context: 'handleContext', pluginName: plugin.name, fnc, code: ErrorCodes.PLUGIN_EXECUTION_FAILED }, true)
             logger.error(`上下文方法 ${fnc} 执行错误`, error)
           }
@@ -729,117 +727,196 @@ class PluginsLoader {
       .map(rule => ({ reg: rule.reg }))
   }
 
-  async importPlugin(file, packageErr) {
+  /**
+   * 导入插件模块（统一入口）
+   * @param {Object} file - 文件信息
+   * @param {Array} packageErr - 包错误收集数组
+   * @returns {Promise<Object>} 导入的插件模块
+   */
+  async importPluginModule(file, packageErr) {
     try {
       let app = await import(file.path)
-      app = app.apps ? { ...app.apps } : app
-
-      const imports = []
-      for (const [key, value] of Object.entries(app)) {
-        imports.push(this.loadPlugin(file, value))
-      }
-      await Promise.allSettled(imports)
+      return app.apps ? { ...app.apps } : app
     } catch (error) {
       if (error.stack?.includes('Cannot find package')) {
         packageErr.push({ error, file })
       } else {
-        logger.error(`加载插件错误: ${file.name}`)
-        logger.error(error)
+        logger.error(`加载插件错误: ${file.name}`, error)
       }
+      return {}
     }
   }
 
   /**
-   * 加载单个插件类
-   * @param {Object} file - 文件信息
-   * @param {Function} p - 插件类
+   * 初始化插件实例（异步，不阻塞）
+   * @param {Object} plugin - 插件实例
+   * @returns {Promise<boolean>} 是否初始化成功
    */
-  async loadPlugin(file, p) {
+  async initializePlugin(plugin) {
+    if (!plugin?.init) return true
+
     try {
-      if (!p?.prototype) return
+      const initRes = await Promise.race([
+        plugin.init(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('init_timeout')), 3000))
+      ])
+      return initRes !== 'return'
+    } catch (err) {
+      logger.error(`插件 ${plugin.name} 初始化错误: ${err.message}`)
+      return false
+    }
+  }
+
+  /**
+   * 注册插件定时任务
+   * @param {Object} plugin - 插件实例
+   * @param {string} pluginName - 插件名称
+   * @param {string} pluginKey - 插件文件键名（用于卸载时匹配）
+   */
+  registerPluginTasks(plugin, pluginName, pluginKey) {
+    if (!plugin.task) return
+
+    const tasks = Array.isArray(plugin.task) ? plugin.task : [plugin.task]
+    tasks.forEach(t => {
+      if (!t?.cron || !t.fnc) return
+
+      let fnc = t.fnc
+      if (typeof fnc === 'string' && typeof plugin[fnc] === 'function') {
+        fnc = plugin[fnc].bind(plugin)
+      } else if (typeof fnc !== 'function') {
+        logger.warn(`定时任务 ${t.name || pluginName} 的 fnc 不是函数或函数名无效，已跳过`)
+        return
+      }
+
+      this.task.push({
+        name: pluginKey, // 使用插件键名，便于卸载时精确匹配
+        taskName: t.name || pluginName, // 保存原始任务名称用于日志
+        cron: t.cron,
+        fnc,
+        log: t.log !== false
+      })
+    })
+  }
+
+  /**
+   * 构建插件元数据（统一方法）
+   * @param {Object} file - 文件信息
+   * @param {Function} PluginClass - 插件类
+   * @param {Object} plugin - 插件实例
+   * @param {Array} ruleTemplates - 已准备的规则模板（必须传入）
+   * @returns {Promise<Object>} 插件元数据
+   */
+  async buildPluginMetadata(file, PluginClass, plugin, ruleTemplates) {
+    const { default: EnhancerBase } = await import('./enhancer-base.js')
+    
+    return {
+      class: PluginClass,
+      key: file.name,
+      name: plugin.name,
+      priority: plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50),
+      plugin,
+      bypassThrottle: plugin.bypassThrottle === true,
+      taskers: this.buildAdapterSet(plugin),
+      ruleTemplates,
+      bypassRules: this.collectBypassRules(ruleTemplates),
+      isEnhancer: plugin instanceof EnhancerBase
+    }
+  }
+
+  /**
+   * 注册插件处理器和事件订阅
+   * @param {Object} plugin - 插件实例
+   * @param {string} fileKey - 文件键名
+   */
+  registerPluginHandlers(plugin, fileKey) {
+    if (plugin.handler) {
+      Object.values(plugin.handler).forEach(handler => {
+        if (!handler) return
+        const { fn, key, priority } = handler
+        Handler.add({
+          ns: plugin.namespace || fileKey,
+          key,
+          self: plugin,
+          priority: priority ?? plugin.priority,
+          fn: plugin[fn]
+        })
+      })
+    }
+
+    if (plugin.eventSubscribe) {
+      Object.entries(plugin.eventSubscribe).forEach(([eventType, handler]) => {
+        if (typeof handler === 'function') {
+          const boundHandler = handler.bind(plugin)
+          boundHandler._pluginKey = fileKey // 标记插件键名，用于卸载时清理
+          this.subscribeEvent(eventType, boundHandler)
+        }
+      })
+    }
+  }
+
+  /**
+   * 加载单个插件类（优化后的核心方法）
+   * @param {Object} file - 文件信息
+   * @param {Function} PluginClass - 插件类
+   * @param {boolean} skipInit - 是否跳过初始化（用于热加载）
+   * @returns {Promise<Object|null>} 插件元数据或null
+   */
+  async loadPlugin(file, PluginClass, skipInit = false) {
+    try {
+      if (!PluginClass?.prototype) return null
 
       this.pluginCount++
-      const plugin = new p()
+      const plugin = new PluginClass()
 
       logger.debug(`加载插件实例 [${file.name}][${plugin.name}]`)
 
-      if (plugin.init) {
-        const initRes = await Promise.race([
-          plugin.init(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('init_timeout')), 5000))
-        ]).catch(err => {
-          logger.error(`插件 ${plugin.name} 初始化错误: ${err.message}`)
-          return 'return'
-        })
-
-        if (initRes === 'return') return
+      // 初始化插件（可跳过，用于热加载时避免重复初始化）
+      if (!skipInit) {
+        const initSuccess = await this.initializePlugin(plugin)
+        if (!initSuccess) return null
       }
 
-      if (plugin.task) {
-        const tasks = Array.isArray(plugin.task) ? plugin.task : [plugin.task]
-        tasks.forEach(t => {
-          if (t?.cron && t.fnc) {
-            // 如果 fnc 是字符串，从插件实例中获取对应的函数
-            let fnc = t.fnc
-            if (typeof fnc === 'string' && typeof plugin[fnc] === 'function') {
-              fnc = plugin[fnc].bind(plugin)
-            } else if (typeof fnc !== 'function') {
-              logger.warn(`定时任务 ${t.name || plugin.name} 的 fnc 不是函数或函数名无效，已跳过`)
-              return
-            }
-            this.task.push({
-              name: t.name || plugin.name,
-              cron: t.cron,
-              fnc,
-              log: t.log !== false
-            })
-          }
-        })
-      }
-
+      // 准备规则模板并应用
       const ruleTemplates = this.prepareRuleTemplates(plugin.rule || [])
       this.applyRuleTemplates(plugin, ruleTemplates)
 
-      const pluginData = {
-        class: p,
-        key: file.name,
-        name: plugin.name,
-        priority: plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50),
-        plugin,
-        bypassThrottle: plugin.bypassThrottle === true,
-        taskers: this.buildAdapterSet(plugin),
-        ruleTemplates,
-        bypassRules: this.collectBypassRules(ruleTemplates),
-        isEnhancer: plugin instanceof (await import('./enhancer-base.js')).default
-      }
+      // 注册定时任务（传入插件键名用于卸载时匹配）
+      this.registerPluginTasks(plugin, plugin.name, file.name)
 
+      // 构建插件元数据（传入已准备的规则模板）
+      const pluginData = await this.buildPluginMetadata(file, PluginClass, plugin, ruleTemplates)
+
+      // 添加到对应数组
       const targetArray = plugin.priority === 'extended' ? this.extended : this.priority
       targetArray.push(pluginData)
 
-      if (plugin.handler) {
-        Object.values(plugin.handler).forEach(handler => {
-          if (!handler) return
-          const { fn, key, priority } = handler
-          Handler.add({
-            ns: plugin.namespace || file.name,
-            key,
-            self: plugin,
-            priority: priority ?? plugin.priority,
-            fn: plugin[fn]
-          })
-        })
-      }
+      // 注册处理器和事件订阅
+      this.registerPluginHandlers(plugin, file.name)
 
-      if (plugin.eventSubscribe) {
-        Object.entries(plugin.eventSubscribe).forEach(([eventType, handler]) => {
-          if (typeof handler === 'function') {
-            this.subscribeEvent(eventType, handler.bind(plugin))
-          }
-        })
-      }
+      return pluginData
     } catch (error) {
       logger.error(`加载插件 ${file.name} 失败`, error)
+      return null
     }
+  }
+
+  /**
+   * 导入并加载插件文件（统一入口）
+   * @param {Object} file - 文件信息
+   * @param {Array} packageErr - 包错误收集数组
+   * @param {boolean} skipInit - 是否跳过初始化
+   * @returns {Promise<Array>} 加载的插件元数据数组
+   */
+  async importPlugin(file, packageErr, skipInit = false) {
+    const app = await this.importPluginModule(file, packageErr)
+    if (!app || Object.keys(app).length === 0) return []
+
+    const results = []
+    for (const [key, PluginClass] of Object.entries(app)) {
+      const pluginData = await this.loadPlugin(file, PluginClass, skipInit)
+      if (pluginData) results.push(pluginData)
+    }
+    return results
   }
 
   identifyDefaultMsgHandlers() {
@@ -1101,7 +1178,7 @@ class PluginsLoader {
     const now = Date.now()
     for (const [key, time] of this.eventThrottle) {
       if (now - time > 60000) this.eventThrottle.delete(key)
-      }
+    }
     for (const [key, time] of this.msgThrottle) {
       if (now - time > 5000) this.msgThrottle.delete(key)
     }
@@ -1116,7 +1193,7 @@ class PluginsLoader {
       const cooldownMap = this.cooldowns[cooldownType]
       if (cooldownMap instanceof Map) {
         for (const [key, time] of cooldownMap) {
-        if (now - time > 300000) {
+          if (now - time > 300000) {
             cooldownMap.delete(key)
           }
         }
@@ -1210,7 +1287,9 @@ class PluginsLoader {
     for (const task of this.task) {
       task.job?.cancel()
 
-      const name = `[${task.name}][${task.cron}]`
+      // 使用任务名称（如果有）或插件键名
+      const taskDisplayName = task.taskName || task.name
+      const name = `[${taskDisplayName}][${task.cron}]`
       if (created.has(name)) {
         logger.warn(`重复定时任务 ${name} 已跳过`)
         continue
@@ -1286,7 +1365,95 @@ class PluginsLoader {
   }
 
   /**
-   * 热更新插件
+   * 卸载插件（清理相关资源）
+   * @param {string} key - 插件文件名（不含扩展名）
+   */
+  unloadPlugin(key) {
+    // 清理定时任务（精确匹配插件键名）
+    this.task = this.task.filter(task => {
+      if (task.name === key) {
+        task.job?.cancel()
+        return false
+      }
+      return true
+    })
+
+    // 清理插件数组
+    const removedPlugins = []
+    this.priority = this.priority.filter(p => {
+      if (p.key === key) {
+        removedPlugins.push(p)
+        return false
+      }
+      return true
+    })
+    this.extended = this.extended.filter(p => {
+      if (p.key === key) {
+        removedPlugins.push(p)
+        return false
+      }
+      return true
+    })
+
+    // 清理 Handler（使用插件的命名空间）
+    for (const pluginData of removedPlugins) {
+      const namespace = pluginData.plugin?.namespace || key
+      Handler.del(namespace)
+    }
+
+    // 清理事件订阅（需要遍历所有订阅者找到对应的插件）
+    for (const [eventType, subscribers] of this.eventSubscribers) {
+      const filtered = subscribers.filter(sub => {
+        return !sub._pluginKey || sub._pluginKey !== key
+      })
+      if (filtered.length !== subscribers.length) {
+        this.eventSubscribers.set(eventType, filtered)
+      }
+    }
+
+    // 重新识别默认消息处理器
+    this.identifyDefaultMsgHandlers()
+  }
+
+  /**
+   * 查找插件文件路径
+   * @param {string} key - 插件文件名（不含扩展名）
+   * @returns {Promise<string|null>} 插件文件路径或null
+   */
+  async findPluginFilePath(key) {
+    try {
+      const { FileLoader } = await import('#utils/file-loader.js')
+      const pluginDirs = await FileLoader.getCoreSubDirs('plugin')
+      
+      for (const pluginDir of pluginDirs) {
+        const filePath = path.join(pluginDir, `${key}.js`)
+        if (existsSync(filePath)) {
+          return filePath
+        }
+      }
+      return null
+    } catch (error) {
+      logger.error(`查找插件文件失败: ${key}`, error)
+      return null
+    }
+  }
+
+  /**
+   * 构建插件文件对象（用于导入）
+   * @param {string} filePath - 文件绝对路径
+   * @param {string} key - 插件键名
+   * @returns {Object} 文件对象
+   */
+  buildPluginFileObject(filePath, key) {
+    const relativePath = path.relative(paths.root, filePath)
+    return {
+      name: key,
+      path: `../../../${relativePath.replace(/\\/g, '/')}?${Date.now()}`
+    }
+  }
+
+  /**
+   * 热更新插件（优化后的方法）
    * @param {string} key - 插件文件名（不含扩展名）
    */
   async changePlugin(key) {
@@ -1296,63 +1463,29 @@ class PluginsLoader {
     }
     
     try {
-      const { FileLoader } = await import('#utils/file-loader.js')
-      const pluginDirs = await FileLoader.getCoreSubDirs('plugin')
-      let pluginPath = null
-      
       // 查找插件文件
-      for (const pluginDir of pluginDirs) {
-        const filePath = path.join(pluginDir, `${key}.js`)
-        if (existsSync(filePath)) {
-          pluginPath = filePath
-          break
-        }
-      }
-      
+      const pluginPath = await this.findPluginFilePath(key)
       if (!pluginPath) {
         logger.error(`插件文件未找到: ${key}`)
         return
       }
       
-      // 使用时间戳强制重新加载
-      const timestamp = moment().format('x')
-      const relativePath = path.relative(paths.root, pluginPath)
-      let app = await import(`../../../${relativePath.replace(/\\/g, '/')}?${timestamp}`)
-      app = app.apps ? { ...app.apps } : app
-
-      // 更新插件元数据
-      let updatedCount = 0
-      for (const p of Object.values(app)) {
-        if (!p?.prototype) continue
-        
-        const plugin = new p()
-        const ruleTemplates = this.prepareRuleTemplates(plugin.rule || [])
-        const priority = plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50)
-        const targetArray = plugin.priority === 'extended' ? this.extended : this.priority
-        
-        // 查找并更新插件
-        const index = targetArray.findIndex(item => item.key === key && item.name === plugin.name)
-        if (index === -1) continue
-        
-        targetArray[index] = {
-          ...targetArray[index],
-          class: p,
-          plugin,
-          priority,
-          bypassThrottle: plugin.bypassThrottle === true,
-          taskers: this.buildAdapterSet(plugin),
-          ruleTemplates,
-          bypassRules: this.collectBypassRules(ruleTemplates)
-        }
-        updatedCount++
-      }
-
-      if (updatedCount > 0) {
+      // 先卸载旧插件
+      this.unloadPlugin(key)
+      
+      // 构建文件对象并重新加载插件（热加载时需要重新初始化，确保插件状态正确）
+      const file = this.buildPluginFileObject(pluginPath, key)
+      const loadedPlugins = await this.importPlugin(file, [], false)
+      
+      if (loadedPlugins.length > 0) {
+        // 重新创建定时任务
+        this.createTask()
+        // 重新排序和识别
         this.sortPlugins()
         this.identifyDefaultMsgHandlers()
-        logger.mark(`[热更新插件][${key}] 更新了 ${updatedCount} 个插件实例`)
+        logger.mark(`[热更新插件][${key}] 更新了 ${loadedPlugins.length} 个插件实例`)
       } else {
-        logger.warn(`[热更新插件][${key}] 未找到匹配的插件实例`)
+        logger.warn(`[热更新插件][${key}] 未成功加载任何插件实例`)
       }
     } catch (error) {
       errorHandler.handle(error, { context: 'changePlugin', pluginKey: key, code: ErrorCodes.PLUGIN_LOAD_FAILED }, true)
@@ -1394,13 +1527,19 @@ class PluginsLoader {
         onAdd: async (filePath) => {
           const key = hotReload.getFileKey(filePath)
           logger.mark(`[新增插件][${key}]`)
-          const relativePath = path.relative(paths.root, filePath)
-          await this.importPlugin({
-            name: key,
-            path: `../../../${relativePath.replace(/\\/g, '/')}?${moment().format('X')}`
-          }, [])
-          this.sortPlugins()
-          this.identifyDefaultMsgHandlers()
+          try {
+            const file = this.buildPluginFileObject(filePath, key)
+            const loadedPlugins = await this.importPlugin(file, [], false)
+            if (loadedPlugins.length > 0) {
+              this.createTask()
+              // initEventSystem 只需要初始化一次，不需要在热加载时重复调用
+              this.sortPlugins()
+              this.identifyDefaultMsgHandlers()
+              logger.mark(`[新增插件][${key}] 成功加载 ${loadedPlugins.length} 个插件实例`)
+            }
+          } catch (error) {
+            logger.error(`[新增插件][${key}] 加载失败`, error)
+          }
         },
         onChange: async (filePath) => {
           const key = hotReload.getFileKey(filePath)
@@ -1410,9 +1549,8 @@ class PluginsLoader {
         onUnlink: async (filePath) => {
           const key = hotReload.getFileKey(filePath)
           logger.mark(`[删除插件][${key}]`)
-          this.priority = this.priority.filter(p => p.key !== key)
-          this.extended = this.extended.filter(p => p.key !== key)
-          this.identifyDefaultMsgHandlers()
+          this.unloadPlugin(key)
+          logger.mark(`[删除插件][${key}] 已清理所有相关资源`)
         }
       })
 
