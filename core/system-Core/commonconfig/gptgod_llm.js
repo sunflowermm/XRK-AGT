@@ -111,7 +111,7 @@ export default class GPTGodLLMConfig extends ConfigBase {
           enableTools: {
             type: 'boolean',
             label: '启用工具调用',
-            description: 'GPTGod 官方不保证支持 tool calling，本项目默认关闭',
+            description: '是否启用工具调用功能',
             default: false,
             component: 'Switch'
           }

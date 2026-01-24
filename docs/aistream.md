@@ -212,9 +212,10 @@ constructor(options = {})
 - `subserver.timeout` - 请求超时时间（毫秒，默认 `30000`）
 
 **LLM提供商配置**：
-- 配置文件：`data/server_bots/{providerName}_llm.yaml`
-- 配置合并优先级：`apiConfig` > `this.config` > `providerConfig`
+- 配置文件：`data/server_bots/{port}/{providerName}_llm.yaml`
+- 配置合并优先级：`apiConfig` > `providerConfig` > `this.config` > 默认值
 - 支持动态扩展，无需修改基类代码
+- `enableTools`：控制是否启用工具调用，由各提供商配置决定
 
 **Embedding配置**：
 - 统一使用子服务端向量服务（`/api/vector/*`）
@@ -800,6 +801,7 @@ AIStream通过子服务端提供向量化服务（统一通过 `Bot.callSubserve
     "messages": [...],
     "model": "gpt-4",
     "provider": "gptgod",
+    "enableTools": false
     "temperature": 0.8,
     "max_tokens": 2000,
     "stream": false,

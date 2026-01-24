@@ -921,8 +921,8 @@ export default class AIStream {
       visionProvider,
       visionConfig,
       timeout,
-      // 启用tool calling（默认启用）
-      enableTools: apiConfig.enableTools !== false
+      // enableTools 合并：优先级 apiConfig > providerConfig > this.config > true（默认）
+      enableTools: apiConfig.enableTools ?? providerConfig.enableTools ?? this.config.enableTools ?? true
     };
 
     return finalConfig;

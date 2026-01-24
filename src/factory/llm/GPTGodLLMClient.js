@@ -50,7 +50,6 @@ export default class GPTGodLLMClient {
    * 构建请求体
    * GPTGod API 兼容 OpenAI Chat Completions 格式
    * 支持所有标准参数：temperature、max_tokens、top_p、presence_penalty、frequency_penalty
-   * 注意：GPTGod官方不支持tool calling功能
    */
   buildBody(messages, overrides = {}) {
     const body = {
