@@ -26,7 +26,6 @@ class SystemMonitor extends EventEmitter {
         this.isRunning = false;
         this.monitorInterval = null;
         this.reportInterval = null;
-        this.config = {};
         this.lastOptimizeTime = 0;
         this.browserCache = { data: [], timestamp: 0, ttl: 5000 };
         this.cpuHistory = [];
@@ -40,28 +39,19 @@ class SystemMonitor extends EventEmitter {
             baseline: null,
             growthRate: []
         };
-        // 资源追踪（仅用于监控，不实际追踪）
-        this.resourceTracking = {
-            timers: new Set(),
-            intervals: new Set()
-        };
-        // 磁盘I/O统计
-        this.diskIO = {
-            readOps: 0,
-            writeOps: 0,
-            lastCheck: 0
-        };
         // 网络连接统计
         this.networkStats = {
-            connections: 0,
-            lastCheck: 0
+            connections: 0
         };
         // 文件句柄统计
         this.fileHandles = {
             open: 0,
-            max: 0,
-            lastCheck: 0
+            max: 0
         };
+        // 数据库对象挂载（延迟初始化）
+        this.mongodb = null;
+        this.mongodbDb = null;
+        this.redis = null;
     }
 
     /**
@@ -73,7 +63,6 @@ class SystemMonitor extends EventEmitter {
         }
 
         // 合并配置，确保充分利用cfg.monitor，跨平台兼容
-        const platform = process.platform;
         this.config = {
             enabled: config?.enabled !== false,
             interval: config?.interval || 120000,
@@ -147,6 +136,9 @@ class SystemMonitor extends EventEmitter {
         this.leakDetection.threshold = leakConfig.threshold;
         this.leakDetection.checkInterval = leakConfig.checkInterval;
 
+        // 挂载数据库对象（延迟初始化）
+        this._initDatabase();
+
         // 延迟首次检查，确保日志播完后再开始
         // 使用setTimeout确保在下一个事件循环中执行，给日志输出足够时间
         const initialDelay = this.config.initialDelay || 15000; // 默认15秒延迟
@@ -190,6 +182,26 @@ class SystemMonitor extends EventEmitter {
     }
 
     /**
+     * 初始化数据库对象挂载
+     * @private
+     */
+    _initDatabase() {
+        try {
+            // 挂载 MongoDB（如果已初始化）
+            if (global.mongodb && global.mongodbDb) {
+                this.mongodb = global.mongodb;
+                this.mongodbDb = global.mongodbDb;
+            }
+            // 挂载 Redis（如果已初始化）
+            if (global.redis) {
+                this.redis = global.redis;
+            }
+        } catch (error) {
+            // 数据库未初始化，忽略
+        }
+    }
+
+    /**
      * 通用安全执行器，避免未定义Promise导致的.catch错误
      */
     async safeRun(task, label = '系统任务') {
@@ -204,7 +216,7 @@ class SystemMonitor extends EventEmitter {
      * 系统检查主任务（异步执行，不阻塞）
      */
     async checkSystem() {
-        if (!this.isRunning || !this.config.enabled) {
+        if (!this.isRunning || !this.config?.enabled) {
             return;
         }
 
@@ -392,9 +404,35 @@ class SystemMonitor extends EventEmitter {
                 if (line.includes('--type=') && !line.includes('--type=browser')) continue;
                 if (line.includes('Helper') || line.includes('renderer')) continue;
 
+                // 内联解析启动时间
+                let startTime = Date.now();
+                const timeStr = parts[1];
+                if (platform === 'win32') {
+                    if (timeStr && timeStr.length >= 14) {
+                        try {
+                            const year = parseInt(timeStr.substring(0, 4));
+                            const month = parseInt(timeStr.substring(4, 6)) - 1;
+                            const day = parseInt(timeStr.substring(6, 8));
+                            const hour = parseInt(timeStr.substring(8, 10));
+                            const minute = parseInt(timeStr.substring(10, 12));
+                            startTime = new Date(year, month, day, hour, minute).getTime();
+                        } catch (e) {
+                            // 使用默认值
+                        }
+                    }
+                } else {
+                    // Unix elapsed time
+                    const timeParts = timeStr.split(/[-:]/);
+                    if (timeParts.length === 2) {
+                        startTime = Date.now() - (parseInt(timeParts[0]) * 60 + parseInt(timeParts[1])) * 1000;
+                    } else if (timeParts.length === 3) {
+                        startTime = Date.now() - (parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseInt(timeParts[2])) * 1000;
+                    }
+                }
+
                 processes.push({
                     pid,
-                    startTime: this.parseStartTime(parts[1], platform),
+                    startTime,
                     command: line
                 });
             } catch (e) {
@@ -403,38 +441,6 @@ class SystemMonitor extends EventEmitter {
         }
 
         return processes.sort((a, b) => b.startTime - a.startTime);
-    }
-
-    /**
-     * 解析进程启动时间
-     */
-    parseStartTime(timeStr, platform) {
-        if (platform === 'win32') {
-            if (!timeStr || timeStr.length < 14) return Date.now();
-            try {
-                const year = parseInt(timeStr.substring(0, 4));
-                const month = parseInt(timeStr.substring(4, 6)) - 1;
-                const day = parseInt(timeStr.substring(6, 8));
-                const hour = parseInt(timeStr.substring(8, 10));
-                const minute = parseInt(timeStr.substring(10, 12));
-                return new Date(year, month, day, hour, minute).getTime();
-            } catch (e) {
-                return Date.now();
-            }
-        } else {
-            // Unix elapsed time
-            const now = Date.now();
-            const parts = timeStr.split(/[-:]/);
-            let totalMs = 0;
-
-            if (parts.length === 2) {
-                totalMs = (parseInt(parts[0]) * 60 + parseInt(parts[1])) * 1000;
-            } else if (parts.length === 3) {
-                totalMs = (parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2])) * 1000;
-            }
-
-            return now - totalMs;
-        }
     }
 
     /**
@@ -603,13 +609,7 @@ class SystemMonitor extends EventEmitter {
                     const parts = lines[0].trim().split(/\s+/);
                     const free = parseInt(parts[parts.length - 2]) || 0;
                     const total = parseInt(parts[parts.length - 1]) || 0;
-                    const used = total - free;
-                    diskUsage = {
-                        total,
-                        free,
-                        used,
-                        usedPercent: total > 0 ? (used / total * 100) : 0
-                    };
+                    diskUsage = this._calculateDiskUsage(total, free);
                 }
             } else {
                 const { stdout } = await execAsync('df -k /');
@@ -619,12 +619,7 @@ class SystemMonitor extends EventEmitter {
                     const total = parseInt(parts[1]) * 1024;
                     const used = parseInt(parts[2]) * 1024;
                     const free = parseInt(parts[3]) * 1024;
-                    diskUsage = {
-                        total,
-                        free,
-                        used,
-                        usedPercent: total > 0 ? (used / total * 100) : 0
-                    };
+                    diskUsage = this._calculateDiskUsage(total, free);
                 }
             }
 
@@ -634,9 +629,23 @@ class SystemMonitor extends EventEmitter {
                 used: 0,
                 usedPercent: 0
             };
-        } catch (error) {
+        } catch {
             return null;
         }
+    }
+
+    /**
+     * 计算磁盘使用情况
+     * @private
+     */
+    _calculateDiskUsage(total, free) {
+        const used = total - free;
+        return {
+            total,
+            free,
+            used,
+            usedPercent: total > 0 ? (used / total * 100) : 0
+        };
     }
 
     /**
@@ -652,35 +661,26 @@ class SystemMonitor extends EventEmitter {
                     const { stdout } = await execAsync('netstat -an | find /c "ESTABLISHED"');
                     connections = parseInt(stdout.trim()) || 0;
                 } catch (e) {
-                    // 降级方案：使用Node.js内置方法估算
-                    const netInterfaces = os.networkInterfaces();
-                    connections = Object.keys(netInterfaces).length * 10;
+                    connections = this._estimateNetworkConnections();
                 }
             } else if (platform === 'linux' || platform === 'darwin') {
                 try {
-                    // 尝试netstat，失败则尝试ss（Linux），最后降级
                     const { stdout } = await execAsync('netstat -an 2>/dev/null | grep ESTABLISHED | wc -l || ss -an 2>/dev/null | grep ESTAB | wc -l || echo 0');
                     connections = parseInt(stdout.trim()) || 0;
                 } catch (e) {
-                    // 降级方案
-                    const netInterfaces = os.networkInterfaces();
-                    connections = Object.keys(netInterfaces).length * 10;
+                    connections = this._estimateNetworkConnections();
                 }
             } else {
-                // 其他平台：使用估算值
-                const netInterfaces = os.networkInterfaces();
-                connections = Object.keys(netInterfaces).length * 10;
+                connections = this._estimateNetworkConnections();
             }
 
             this.networkStats.connections = connections;
-            this.networkStats.lastCheck = Date.now();
 
             return {
                 connections,
                 warning: connections > (this.config.network?.maxConnections || 1000)
             };
-        } catch (error) {
-            // 跨平台兼容：返回默认值
+        } catch {
             return {
                 connections: 0,
                 warning: false
@@ -689,67 +689,40 @@ class SystemMonitor extends EventEmitter {
     }
 
     /**
+     * 估算网络连接数（降级方案）
+     * @private
+     */
+    _estimateNetworkConnections() {
+        const netInterfaces = os.networkInterfaces();
+        return Object.keys(netInterfaces).length * 10;
+    }
+
+    /**
      * 文件句柄检查
      */
     async checkFileHandles() {
         try {
             const platform = process.platform;
+            const pid = process.pid;
             let openHandles = 0;
             let maxHandles = 0;
 
             if (platform === 'linux') {
-                const pid = process.pid;
-                try {
-                    const { stdout: limit } = await execAsync(`ulimit -n 2>/dev/null || echo 1024`);
-                    maxHandles = parseInt(limit.trim()) || 1024;
-                    
-                    try {
-                        const { stdout: lsof } = await execAsync(`lsof -p ${pid} 2>/dev/null | wc -l`);
-                        openHandles = parseInt(lsof.trim()) || 0;
-                    } catch (e) {
-                        // lsof不可用，使用/proc估算（Linux）
-                        try {
-                            const { stdout } = await execAsync(`ls /proc/${pid}/fd 2>/dev/null | wc -l`);
-                            openHandles = parseInt(stdout.trim()) || 0;
-                        } catch (e2) {
-                            openHandles = 0;
-                        }
-                    }
-                } catch (e) {
-                    maxHandles = 1024; // 默认值
-                }
+                maxHandles = await this._getFileHandleLimit() || 1024;
+                openHandles = await this._getLinuxFileHandles(pid) || 0;
             } else if (platform === 'win32') {
-                try {
-                    // Windows: 尝试使用handle.exe，失败则使用默认值
-                    const { stdout } = await execAsync(`handle.exe -p ${process.pid} 2>nul | find /c "File"`);
-                    openHandles = parseInt(stdout.trim()) || 0;
-                    maxHandles = 2048; // Windows默认
-                } catch (e) {
-                    // handle.exe 可能不存在，使用默认值
-                    maxHandles = 2048;
-                    openHandles = 0;
-                }
+                maxHandles = 2048;
+                openHandles = await this._getWindowsFileHandles(pid) || 0;
             } else if (platform === 'darwin') {
-                // macOS: 使用lsof
-                try {
-                    const { stdout: limit } = await execAsync(`ulimit -n 2>/dev/null || echo 1024`);
-                    maxHandles = parseInt(limit.trim()) || 1024;
-                    
-                    const { stdout: lsof } = await execAsync(`lsof -p ${process.pid} 2>/dev/null | wc -l`);
-                    openHandles = parseInt(lsof.trim()) || 0;
-                } catch (e) {
-                    maxHandles = 1024;
-                    openHandles = 0;
-                }
+                maxHandles = await this._getFileHandleLimit() || 1024;
+                openHandles = await this._getDarwinFileHandles(pid) || 0;
             } else {
-                // 其他平台：使用默认值
                 maxHandles = 1024;
                 openHandles = 0;
             }
 
             this.fileHandles.open = openHandles;
             this.fileHandles.max = maxHandles;
-            this.fileHandles.lastCheck = Date.now();
 
             return {
                 open: openHandles,
@@ -757,8 +730,65 @@ class SystemMonitor extends EventEmitter {
                 usagePercent: maxHandles > 0 ? (openHandles / maxHandles * 100) : 0,
                 warning: maxHandles > 0 && (openHandles / maxHandles) > 0.8
             };
-        } catch (error) {
+        } catch {
             return null;
+        }
+    }
+
+    /**
+     * 获取文件句柄限制
+     * @private
+     */
+    async _getFileHandleLimit() {
+        try {
+            const { stdout } = await execAsync(`ulimit -n 2>/dev/null || echo 1024`);
+            return parseInt(stdout.trim()) || 1024;
+        } catch {
+            return 1024;
+        }
+    }
+
+    /**
+     * 获取 Linux 文件句柄数
+     * @private
+     */
+    async _getLinuxFileHandles(pid) {
+        try {
+            const { stdout } = await execAsync(`lsof -p ${pid} 2>/dev/null | wc -l`);
+            return parseInt(stdout.trim()) || 0;
+        } catch {
+            try {
+                const { stdout } = await execAsync(`ls /proc/${pid}/fd 2>/dev/null | wc -l`);
+                return parseInt(stdout.trim()) || 0;
+            } catch {
+                return 0;
+            }
+        }
+    }
+
+    /**
+     * 获取 Windows 文件句柄数
+     * @private
+     */
+    async _getWindowsFileHandles(pid) {
+        try {
+            const { stdout } = await execAsync(`handle.exe -p ${pid} 2>nul | find /c "File"`);
+            return parseInt(stdout.trim()) || 0;
+        } catch {
+            return 0;
+        }
+    }
+
+    /**
+     * 获取 Darwin (macOS) 文件句柄数
+     * @private
+     */
+    async _getDarwinFileHandles(pid) {
+        try {
+            const { stdout } = await execAsync(`lsof -p ${pid} 2>/dev/null | wc -l`);
+            return parseInt(stdout.trim()) || 0;
+        } catch {
+            return 0;
         }
     }
 
@@ -787,17 +817,12 @@ class SystemMonitor extends EventEmitter {
                 await this.optimizeDisk();
             }
 
-            // 3. 网络优化（所有平台）
-            if (this.config.network?.enabled) {
-                await this.optimizeNetwork();
-            }
-
-            // 4. 系统级优化（平台特定）
+            // 3. 系统级优化（平台特定）
             if (this.config.system?.enabled) {
                 await this.optimizeSystemLevel();
             }
 
-            // 5. 进程优化（平台特定）
+            // 4. 进程优化（平台特定）
             if (this.config.process?.enabled) {
                 await this.optimizeProcess();
             }
@@ -971,51 +996,30 @@ class SystemMonitor extends EventEmitter {
     async clearSystemCache() {
         try {
             const platform = process.platform;
+            const cacheCommands = {
+                linux: ['sync', 'echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true'],
+                win32: ['ipconfig /flushdns'],
+                darwin: ['sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder 2>/dev/null || true']
+            };
 
-            if (platform === 'linux') {
-                // Linux: 清理页面缓存（需要root权限）
-                try {
-                    await execAsync('sync');
-                    await execAsync('echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true');
-                    logger.info('  ✓ 系统缓存已清理');
-                } catch (e) {
-                    // 权限不足，忽略
+            const commands = cacheCommands[platform];
+            if (commands) {
+                for (const cmd of commands) {
+                    try {
+                        await execAsync(cmd);
+                    } catch (e) {
+                        // 权限不足或命令失败，忽略
+                    }
                 }
-            } else if (platform === 'win32') {
-                // Windows: 清理DNS缓存
-                try {
-                    await execAsync('ipconfig /flushdns');
-                    logger.info('  ✓ DNS缓存已清理');
-                } catch (e) {
-                    // 忽略错误
-                }
-            } else if (platform === 'darwin') {
-                // macOS: 清理DNS缓存
-                try {
-                    await execAsync('sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder 2>/dev/null || true');
-                    logger.info('  ✓ DNS缓存已清理');
-                } catch (e) {
-                    // 权限不足，忽略
-                }
+                const messages = {
+                    linux: '  ✓ 系统缓存已清理',
+                    win32: '  ✓ DNS缓存已清理',
+                    darwin: '  ✓ DNS缓存已清理'
+                };
+                logger.info(messages[platform] || '  ✓ 缓存已清理');
             }
-        } catch (error) {
+        } catch {
             // 忽略错误
-        }
-    }
-
-    /**
-     * 网络优化
-     */
-    async optimizeNetwork() {
-        try {
-            // 检查并清理空闲连接
-            if (this.config.network?.cleanupIdle) {
-                // 这里可以添加具体的网络连接清理逻辑
-                // 例如清理HTTP keep-alive连接等
-                // 仅在需要时输出日志
-            }
-        } catch (error) {
-            logger.error(`网络优化失败: ${error.message}`);
         }
     }
 
@@ -1024,19 +1028,16 @@ class SystemMonitor extends EventEmitter {
      */
     async optimizeSystemLevel() {
         try {
-            const platform = process.platform;
-
-            // CPU优化（Linux）
-            if (this.config.system?.optimizeCPU && platform === 'linux') {
+            // CPU优化（仅 Linux）
+            if (this.config.system?.optimizeCPU && process.platform === 'linux') {
                 try {
-                    // 设置CPU调度策略（需要root权限）
-                    await execAsync('chrt -r -p 0 ' + process.pid + ' 2>/dev/null || true');
+                    await execAsync(`chrt -r -p 0 ${process.pid} 2>/dev/null || true`);
                     logger.info('  ✓ 已优化CPU调度策略');
-                } catch (e) {
+                } catch {
                     // 权限不足，忽略
                 }
             }
-        } catch (error) {
+        } catch {
             // 忽略错误
         }
     }
@@ -1102,21 +1103,12 @@ class SystemMonitor extends EventEmitter {
         logger.info(`Node堆内存: ${this.formatBytes(processMemory.heapUsed)} / ${this.formatBytes(heapStats.heap_size_limit)} (${((processMemory.heapUsed / heapStats.heap_size_limit) * 100).toFixed(1)}%)`);
         logger.info(`CPU负载: ${loadAvg[0].toFixed(2)} | 核心数: ${os.cpus().length}`);
         
-        if (disk) {
-            logger.info(`磁盘使用: ${this.formatBytes(disk.used)} / ${this.formatBytes(disk.total)} (${disk.usedPercent.toFixed(1)}%)`);
-        }
-        
-        if (network) {
-            logger.info(`网络连接: ${network.connections} 个`);
-        }
-        
-        if (fileHandles) {
-            logger.info(`文件句柄: ${fileHandles.open} / ${fileHandles.max} (${fileHandles.usagePercent.toFixed(1)}%)`);
-        }
-        
-        if (this.config.browser?.enabled && this.browserCache.data.length > 0) {
+        // 可选信息：仅在可用时显示
+        disk && logger.info(`磁盘使用: ${this.formatBytes(disk.used)} / ${this.formatBytes(disk.total)} (${disk.usedPercent.toFixed(1)}%)`);
+        network && logger.info(`网络连接: ${network.connections} 个`);
+        fileHandles && logger.info(`文件句柄: ${fileHandles.open} / ${fileHandles.max} (${fileHandles.usagePercent.toFixed(1)}%)`);
+        (this.config.browser?.enabled && this.browserCache.data.length > 0) && 
             logger.info(`浏览器进程: ${this.browserCache.data.length} 个`);
-        }
         
         logger.line();
     }
