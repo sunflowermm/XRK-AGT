@@ -7,19 +7,17 @@ LangGraph-based agent runner.
 - 工具来源：主服务端 MCP（/api/mcp/tools + /api/mcp/tools/call）
 
 注意：
-- 因为主服务端不要求在此处实现 OpenAI 的原生 tools 语义，这里采用“JSON 决策协议”：
-  LLM 只输出 JSON：{"type":"tool","name":"x.y","args":{...}} 或 {"type":"final","final":"..."}
+- v3 鉴权使用 body.apiKey（主服务端 Bot.apiKey），由 call_v3_chat 注入并传参。
+- LLM 采用“JSON 决策协议”：{"type":"tool","name":"x.y","args":{...}} 或 {"type":"final","final":"..."}
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List
 import json
 import re
 import logging
 
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, END
 
 logger = logging.getLogger(__name__)
@@ -108,10 +106,10 @@ def _extract_json_obj(text: str) -> Dict[str, Any]:
     return obj
 
 
-def _validate_decision(obj: Dict[str, Any], tool_names: List[str]) -> Tuple[str, Dict[str, Any]]:
+def _validate_decision(obj: Dict[str, Any], tool_names: List[str]):
     t = (obj.get("type") or "").strip().lower()
     if t == "final":
-        return ("final", {"final": str(obj.get("final") or "")})
+        return "final", {"final": str(obj.get("final") or "")}
     if t == "tool":
         name = str(obj.get("name") or "").strip()
         if tool_names and name not in tool_names:
@@ -119,14 +117,25 @@ def _validate_decision(obj: Dict[str, Any], tool_names: List[str]) -> Tuple[str,
         args = obj.get("args") or {}
         if not isinstance(args, dict):
             raise ValueError("args must be an object")
-        return ("tool", {"name": name, "args": args})
+        return "tool", {"name": name, "args": args}
     raise ValueError("type must be 'tool' or 'final'")
 
 
 class AgentDeps:
     """依赖注入容器，用于 run_agent 函数。"""
-    def __init__(self, main_server_url: str, provider_or_model: str, temperature: float, max_tokens: int, max_steps: int, verbose: bool, use_tools: bool, get_mcp_tools: Any, call_mcp_tool: Any, timeout: int = 60, max_tools: int = 40):
-        self.main_server_url = main_server_url
+    def __init__(
+        self,
+        provider_or_model: str,
+        temperature: float,
+        max_tokens: int,
+        max_steps: int,
+        verbose: bool,
+        use_tools: bool,
+        get_mcp_tools: Any,
+        call_mcp_tool: Any,
+        call_v3_chat: Callable[[str], Awaitable[str]],
+        max_tools: int = 40,
+    ):
         self.provider_or_model = provider_or_model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -135,7 +144,7 @@ class AgentDeps:
         self.use_tools = use_tools
         self.get_mcp_tools = get_mcp_tools
         self.call_mcp_tool = call_mcp_tool
-        self.timeout = timeout
+        self.call_v3_chat = call_v3_chat
         self.max_tools = max_tools
 
 async def run_agent(messages: list, deps: AgentDeps) -> str:
@@ -147,110 +156,83 @@ async def run_agent(messages: list, deps: AgentDeps) -> str:
     if deps.use_tools:
         try:
             tools = _compact_tools(await deps.get_mcp_tools())
-            # 限制工具数量：保证低配快速响应、减少长prompt带来的延迟与幻觉
-            if deps.max_tools and isinstance(deps.max_tools, int) and deps.max_tools > 0:
+            if deps.max_tools > 0:
                 tools = tools[:deps.max_tools]
-        except Exception as e:
-            logger.warning(f"获取MCP工具失败: {e}，继续执行但无工具可用")
-            tools = []
+        except Exception:
+            pass
     tool_names = [t["name"] for t in tools]
 
-    # 配置 LLM 客户端，添加超时和错误处理
-    # 注意：timeout参数应该是秒数，但ChatOpenAI可能期望的是float或int
-    llm = ChatOpenAI(
-        base_url=f"{deps.main_server_url}/api/v3",
-        api_key="xrk-agt",
-        model=deps.provider_or_model,
-        temperature=deps.temperature,
-        max_tokens=deps.max_tokens,
-        timeout=int(deps.timeout) if deps.timeout else 60,
-        max_retries=2,
-    )
-
     async def plan_node(state: AgentState) -> AgentState:
-        scratch = state.get("scratchpad") or ""
-        prompt = _build_decision_prompt(question, tools, scratch)
-        
+        """规划节点：调用LLM进行决策"""
+        prompt = _build_decision_prompt(question, tools, state.get("scratchpad", ""))
         try:
-            resp = await llm.ainvoke([HumanMessage(content=prompt)])
-            text = (getattr(resp, "content", None) or "").strip()
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"[agent.plan] LLM调用失败: {error_msg}")
-            # 如果LLM调用失败，返回错误信息作为最终答案
-            state["decision"] = {"kind": "final", "final": f"抱歉，AI调用失败: {error_msg}。请检查主服务端是否正常运行。"}
-            return state
-        
-        if deps.verbose:
-            logger.info(f"[agent.plan] raw={text[:500]}")
-        
-        try:
+            text = (await deps.call_v3_chat(prompt)).strip()
             obj = _extract_json_obj(text)
             kind, payload = _validate_decision(obj, tool_names)
-            state["decision"] = {"kind": kind, **payload}
+            return {"decision": {"kind": kind, **payload}}
         except Exception as e:
-            logger.error(f"[agent.plan] JSON解析失败: {e}, text={text[:200]}")
-            # JSON解析失败时，尝试将原始文本作为最终答案
-            state["decision"] = {"kind": "final", "final": text if text else "抱歉，AI返回格式异常。"}
-        
-        return state
+            logger.error(f"[agent.plan] 失败: {e}")
+            return {"decision": {"kind": "final", "final": f"处理失败: {str(e)[:100]}"}}
 
     async def act_node(state: AgentState) -> AgentState:
-        decision = state.get("decision") or {}
+        """执行节点：调用MCP工具"""
+        decision = state.get("decision", {})
         if decision.get("kind") != "tool":
-            return state
+            return {}
         name = decision.get("name")
-        args = decision.get("args") or {}
+        args = decision.get("args", {})
         result = await deps.call_mcp_tool(name, args)
-        obs = json.dumps(result, ensure_ascii=False)
-        scratch = state.get("scratchpad") or ""
-        scratch += f"\nCALL {name} args={json.dumps(args, ensure_ascii=False)}\nOBS {obs}\n"
-        state["scratchpad"] = scratch
-        state["last_tool"] = name
-        state["last_result"] = result
-        return state
+        scratch = state.get("scratchpad", "")
+        scratch += f"\nCALL {name} args={json.dumps(args, ensure_ascii=False)}\nOBS {json.dumps(result, ensure_ascii=False)}\n"
+        return {"scratchpad": scratch, "last_tool": name, "last_result": result}
 
     def route(state: AgentState) -> str:
-        decision = state.get("decision") or {}
-        if decision.get("kind") == "final":
-            return "final"
-        steps = int(state.get("steps") or 0)
-        if steps >= deps.max_steps:
-            return "final"
-        return "act"
+        """路由：tool->act, final->END, 其他->END"""
+        decision = state.get("decision", {})
+        kind = decision.get("kind")
+        steps = int(state.get("steps", 0))
+        
+        if kind == "tool" and steps < deps.max_steps:
+            return "act"
+        return "final"
 
-    async def bump_steps(state: AgentState) -> AgentState:
-        state["steps"] = int(state.get("steps") or 0) + 1
-        return state
+    async def check_max_steps(state: AgentState) -> AgentState:
+        """增加步骤计数，超限时强制结束"""
+        steps = int(state.get("steps", 0)) + 1
+        updates = {"steps": steps}
+        
+        if steps >= deps.max_steps:
+            updates["decision"] = {"kind": "final", "final": "已达到最大步骤限制。"}
+        
+        return updates
+
+    def route_after_check(state: AgentState) -> str:
+        return "final" if state.get("decision", {}).get("kind") == "final" else "plan"
 
     graph = StateGraph(AgentState)
     graph.add_node("plan", plan_node)
     graph.add_node("act", act_node)
-    graph.add_node("bump", bump_steps)
+    graph.add_node("check_steps", check_max_steps)
     graph.set_entry_point("plan")
     graph.add_conditional_edges("plan", route, {"act": "act", "final": END})
-    graph.add_edge("act", "bump")
-    graph.add_edge("bump", "plan")
+    graph.add_edge("act", "check_steps")
+    graph.add_conditional_edges("check_steps", route_after_check, {"plan": "plan", "final": END})
 
     app = graph.compile()
-
     init: AgentState = {"scratchpad": "", "steps": 0}
-    
-    try:
-        final_state = await app.ainvoke(init)
-    except Exception as e:
-        logger.error(f"[agent] graph执行失败: {e}", exc_info=True)
-        return f"抱歉，Agent执行失败: {str(e)}"
-    
-    # 处理 final_state 为 None 的情况
-    if not final_state:
-        logger.error("[agent] final_state 为 None")
-        return "抱歉，Agent执行异常，未返回有效结果。"
-    
-    decision = final_state.get("decision") or {}
-    if decision.get("kind") == "final":
-        return str(decision.get("final") or "")
 
-    # 达到上限：给一个可解释的兜底
-    return "已达到最大步骤限制，无法继续自动调用工具。请缩小问题或减少工具调用需求。"
+    current_state = init.copy()
+    async for chunk in app.astream(init):
+        for node_name, node_output in chunk.items():
+            if isinstance(node_output, dict) and not node_name.startswith("branch:"):
+                if "decision" in node_output:
+                    logger.info(f"[agent] {node_name} 设置 decision: {node_output['decision']}")
+                current_state.update(node_output)
+
+    decision = current_state.get("decision")
+    if not decision or not isinstance(decision, dict) or decision.get("kind") != "final":
+        logger.warning(f"[agent] decision无效: {decision}, state_keys={list(current_state.keys())}")
+        return "抱歉，Agent未产生有效决策。"
+    
+    return str(decision.get("final") or "抱歉，AI返回了空回复。")
 

@@ -9,64 +9,60 @@ import { HttpResponse } from '#utils/http-utils.js';
 function parseOptionalJson(raw) {
   if (!raw && raw !== 0) return null;
   try {
-    if (typeof raw === 'string') {
-      return JSON.parse(raw);
-    }
-    return raw;
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
   } catch {
     return null;
   }
 }
 
+/** 厂商 LLM 配置（与 aistream getProviderConfig 一致），body.apiKey 永不传入 LLM */
+function getProviderConfig(provider) {
+  if (!provider) return {};
+  const key = `${String(provider).toLowerCase()}_llm`;
+  return cfg[key] || {};
+}
+
 async function handleChatCompletionsV3(req, res) {
   const body = req.body || {};
   const messages = Array.isArray(body.messages) ? body.messages : null;
-  if (!messages) {
-    return HttpResponse.validationError(res, 'messages 参数无效');
-  }
+  if (!messages) return HttpResponse.validationError(res, 'messages 参数无效');
 
-  // v3 为“对外伪造的 OpenAI 兼容入口”，这里的 apiKey 是访问鉴权（Bot 启动生成的 key），不是厂商 apiKey。
-  const accessKey = (body.apiKey || '').toString().trim();
-
-  if (!accessKey || accessKey !== BotUtil.apiKey) {
-    return HttpResponse.unauthorized(res, 'apiKey 无效');
+  // 支持多种认证方式：body.apiKey、Authorization头部Bearer令牌
+  let accessKey = (body.apiKey || '').toString().trim();
+  if (!accessKey) {
+    const authHeader = (req.headers.authorization || '').toString().trim();
+    if (authHeader.startsWith('Bearer ')) {
+      accessKey = authHeader.substring(7).trim();
+    }
   }
+  if (!accessKey || accessKey !== BotUtil.apiKey) return HttpResponse.unauthorized(res, 'apiKey 无效');
 
   const streamFlag = Boolean(body.stream);
-
-  // /api/v3/chat/completions：对外提供“类 ChatGPT 协议”的统一 LLM 调用入口（给子服务端/生态使用）
-  // - 不走工作流/StreamLoader（避免子服务端->主服务端->子服务端递归链路）
-  // - 约定：body.model 填运营商(provider)，其余字段自由覆盖配置；body.apiKey 仅用于访问鉴权
   const llm = cfg.aistream?.llm || {};
-  const providerKey = (body.model || '').toString().trim();
-
-  // 构建LLM配置，优先使用body中的参数
-  const llmConfig = {
-    ...(typeof body === 'object' ? body : {})
-  };
-
-  // 设置provider
-  if (providerKey && LLMFactory.hasProvider(providerKey)) {
-    llmConfig.provider = providerKey.toLowerCase();
-  } else if (!llmConfig.provider && llm.Provider) {
-    // 如果没有指定provider，使用配置中的默认Provider
-    llmConfig.provider = llm.Provider.toLowerCase();
-  } else if (!llmConfig.provider) {
-    // 如果都没有，使用默认值
-    llmConfig.provider = 'gptgod';
+  let provider = (body.model || '').toString().trim().toLowerCase();
+  if (!provider || !LLMFactory.hasProvider(provider)) {
+    provider = (llm.Provider || 'gptgod').toLowerCase();
   }
 
-  // 清理不需要的字段
-  delete llmConfig.messages;
-  delete llmConfig.stream;
-  delete llmConfig.apiKey;
-  
-  // apiKey 由 LLMFactory.createClient 从配置文件中读取
+  const base = getProviderConfig(provider);
+  const llmConfig = {
+    ...base,
+    provider,
+    ...(body.temperature != null && { temperature: Number(body.temperature) }),
+    ...(body.max_tokens != null && { maxTokens: Number(body.max_tokens) })
+  };
+
   const client = LLMFactory.createClient(llmConfig);
 
   if (!streamFlag) {
     const text = await client.chat(messages, llmConfig);
     const now = Math.floor(Date.now() / 1000);
+    
+    // 估算 token 使用量（OpenAI 标准要求）
+    const promptText = messages.map(m => m.content || '').join('');
+    const promptTokens = Math.ceil(promptText.length / 4); // 粗略估算，1token≈4字符
+    const completionTokens = Math.ceil((text || '').length / 4);
+    
     res.json({
       id: `chatcmpl_${Date.now()}`,
       object: 'chat.completion',
@@ -75,11 +71,26 @@ async function handleChatCompletionsV3(req, res) {
       choices: [
         {
           index: 0,
-          message: { role: 'assistant', content: text || '' },
+          message: { 
+            role: 'assistant', 
+            content: text || '',
+            refusal: null // OpenAI 标准字段
+          },
+          logprobs: null, // OpenAI 标准字段
           finish_reason: 'stop'
         }
       ],
-      usage: null
+      usage: {
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: promptTokens + completionTokens,
+        completion_tokens_details: {
+          reasoning_tokens: 0,
+          accepted_prediction_tokens: 0,
+          rejected_prediction_tokens: 0
+        }
+      },
+      system_fingerprint: null // OpenAI 标准字段
     });
     return;
   }
@@ -91,17 +102,61 @@ async function handleChatCompletionsV3(req, res) {
 
   const now = Math.floor(Date.now() / 1000);
   const id = `chatcmpl_${Date.now()}`;
+  const modelName = llmConfig.provider || llmConfig.model || llmConfig.chatModel || 'unknown';
+  
+  let totalContent = '';
   await client.chatStream(messages, (delta) => {
+    totalContent += delta || '';
     res.write(
       `data: ${JSON.stringify({
         id,
         object: 'chat.completion.chunk',
         created: now,
-        model: llmConfig.provider || llmConfig.model || llmConfig.chatModel || 'unknown',
-        choices: [{ index: 0, delta: { content: delta || '' }, finish_reason: null }]
+        model: modelName,
+        system_fingerprint: null,
+        choices: [{
+          index: 0,
+          delta: { 
+            content: delta || '',
+            role: delta ? undefined : 'assistant' // 首个 chunk 包含 role
+          },
+          logprobs: null,
+          finish_reason: null
+        }]
       })}\n\n`
     );
   }, llmConfig);
+  
+  // 发送最终 chunk（包含 finish_reason 和 usage）
+  const promptText = messages.map(m => m.content || '').join('');
+  const promptTokens = Math.ceil(promptText.length / 4);
+  const completionTokens = Math.ceil(totalContent.length / 4);
+  
+  res.write(
+    `data: ${JSON.stringify({
+      id,
+      object: 'chat.completion.chunk',
+      created: now,
+      model: modelName,
+      system_fingerprint: null,
+      choices: [{
+        index: 0,
+        delta: {},
+        logprobs: null,
+        finish_reason: 'stop'
+      }],
+      usage: {
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: promptTokens + completionTokens,
+        completion_tokens_details: {
+          reasoning_tokens: 0,
+          accepted_prediction_tokens: 0,
+          rejected_prediction_tokens: 0
+        }
+      }
+    })}\n\n`
+  );
   res.write('data: [DONE]\n\n');
   res.end();
 }
@@ -111,37 +166,18 @@ async function handleModels(req, res) {
   const providers = LLMFactory.listProviders();
   const defaultProvider = (llm.Provider || 'gptgod').toLowerCase();
   const format = (req.query.format || '').toLowerCase();
-  
-  // OpenAI 兼容格式（用于子服务端）
+
   if (format === 'openai' || req.path === '/api/v3/models') {
-    const data = providers.map(provider => ({
-      id: provider,
+    const list = providers.length ? providers : (defaultProvider ? [defaultProvider] : []);
+    const now = Math.floor(Date.now() / 1000);
+    const data = list.map((p) => ({
+      id: p,
       object: 'model',
+      created: now,
       owned_by: 'xrk-agt',
-      meta: {
-        key: provider,
-        label: provider,
-        description: `LLM提供商: ${provider}`,
-        tags: [],
-        baseUrl: null
-      }
+      // 保留 meta 字段用于内部扩展，但符合 OpenAI 基本标准
+      meta: { key: p, label: p, description: `LLM提供商: ${p}`, tags: [], baseUrl: null }
     }));
-
-    if (data.length === 0 && defaultProvider) {
-      data.push({
-        id: defaultProvider,
-        object: 'model',
-        owned_by: 'xrk-agt',
-        meta: {
-          key: defaultProvider,
-          label: defaultProvider,
-          description: `默认LLM提供商: ${defaultProvider}`,
-          tags: [],
-          baseUrl: null
-        }
-      });
-    }
-
     return res.json({ object: 'list', data });
   }
 

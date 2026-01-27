@@ -1,7 +1,13 @@
 """XRK-AGT Python 子服务端
 提供AI生态相关服务，包括LangChain集成、向量服务、工具服务等
 """
+import asyncio
 import os
+
+# 在导入任何模块前禁用网络请求，仅使用本地缓存
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,38 +19,53 @@ from core.config import Config
 from core.logger import setup_logger
 from core.main_server_client import close_http_client
 
-# 初始化配置和日志（配置会自动从default_config.yaml复制到data/subserver/config.yaml）
 config = Config()
 logger = setup_logger(__name__)
+
+
+async def _warmup_vector():
+    """预热嵌入模型"""
+    try:
+        from apis.vector.vector_service import _load_embedding_model_async, get_embedding_model
+        await _load_embedding_model_async()
+        if get_embedding_model():
+            logger.info("  └ 📦 嵌入模型已预热")
+        else:
+            logger.warning("  └ ⚠️ 嵌入模型预热失败（可稍后按需加载）")
+    except Exception as e:
+        logger.warning("  └ ⚠️ 嵌入模型预热失败: %s", e)
+
+
+async def _warmup_mcp():
+    """预热 MCP 工具列表"""
+    await asyncio.sleep(1)
+    try:
+        from apis.langchain.langchain_service import get_mcp_tools
+        tools = await get_mcp_tools()
+        n = len(tools) if isinstance(tools, list) else 0
+        logger.info("  └ 🔧 MCP 工具已预热 · %d 个", n)
+    except Exception as e:
+        logger.warning("  └ ⚠️ MCP 工具预热失败: %s", e)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    logger.info("🚀 启动 XRK-AGT Python 子服务端...")
+    logger.info("🚀 启动 XRK-AGT Python 子服务端")
     try:
         await ApiLoader.load_all(app)
-        logger.info("✅ API 加载完成")
-        
-        # 预热MCP工具列表（后台任务）
-        async def warmup():
-            try:
-                from apis.langchain.langchain_service import get_mcp_tools
-                tools = await get_mcp_tools()
-                logger.info(f"✅ MCP工具列表预热完成: {len(tools)}个工具")
-            except Exception:
-                pass
-        
-        import asyncio
-        asyncio.create_task(warmup())
+        logger.info("🔄 预热嵌入模型与 MCP 工具...")
+        await asyncio.gather(_warmup_vector(), _warmup_mcp())
+        logger.info("──────────────────────────────────────")
+        logger.info("✅ 启动就绪 · 模型与 MCP 工具已就绪")
+        logger.info("──────────────────────────────────────")
     except Exception as e:
-        logger.error(f"❌ API 加载失败: {e}", exc_info=True)
+        logger.error("❌ 启动失败: %s", e, exc_info=True)
         raise
-    
+
     yield
-    
+
     logger.info("🛑 关闭服务...")
-    # 关闭HTTP客户端
     await close_http_client()
 
 
@@ -99,15 +120,18 @@ async def api_list():
 
 def main():
     """主入口函数"""
-    # 优先从环境变量读取，其次从配置文件读取
     host = os.getenv("HOST") or config.get("server.host", "0.0.0.0")
     port = int(os.getenv("PORT") or config.get("server.port", 8000))
     reload = os.getenv("RELOAD", "").lower() in ("true", "1") or config.get("server.reload", False)
     log_level = os.getenv("LOG_LEVEL") or config.get("server.log_level", "info")
-    
-    logger.info(f"🌐 服务启动在 http://{host}:{port}")
-    logger.info(f"📁 配置文件: {config.get_file_path()}")
-    logger.info(f"🔗 主服务端: http://{config.get('main_server.host', '127.0.0.1')}:{config.get('main_server.port', 1234)}")
+    main_host = config.get("main_server.host", "127.0.0.1")
+    main_port = config.get("main_server.port", 1234)
+
+    logger.info("──────────────────────────────────────")
+    logger.info("🌐 子服务端  http://%s:%s", host, port)
+    logger.info("📁 配置     %s", config.get_file_path())
+    logger.info("🔗 主服务端 http://%s:%s", main_host, main_port)
+    logger.info("──────────────────────────────────────")
     
     uvicorn.run(
         "main:app",

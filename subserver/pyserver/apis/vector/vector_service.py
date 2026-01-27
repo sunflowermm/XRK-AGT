@@ -1,267 +1,495 @@
-"""Vector Service - 向量服务
-提供向量化、向量检索、向量数据库管理等功能
-"""
-from fastapi import Request, HTTPException
+"""向量服务优化模块"""
+
+from typing import Optional, Dict, Any, List
+import asyncio
 import logging
+import time
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from functools import lru_cache
 import numpy as np
+from sentence_transformers import SentenceTransformer
+import chromadb
+from fastapi import Request, HTTPException
+
 from core.config import Config, resolve_path
 
 logger = logging.getLogger(__name__)
 config = Config()
 
 
-def _convert_to_list(emb):
-    """将 embedding 转换为列表格式（兼容 tensor、numpy array、list）"""
-    # 处理 PyTorch tensor
-    if hasattr(emb, 'cpu') and hasattr(emb, 'detach'):
-        emb = emb.cpu().detach().numpy()
-    # 处理 numpy array
-    if isinstance(emb, np.ndarray):
-        return emb.tolist()
-    # 处理其他可迭代对象
-    if hasattr(emb, '__iter__') and not isinstance(emb, (str, bytes)):
-        return [float(x) for x in emb]
-    # 如果是单个值，直接返回
-    return float(emb) if isinstance(emb, (int, float)) else emb
+@dataclass
+class EmbeddingResult:
+    """嵌入结果"""
 
-# 全局模型实例（延迟加载）
-_embedding_model = None
-_vector_client = None
+    text: str
+    embedding: List[float]
+    dimension: int
 
 
-def get_embedding_model():
-    """获取或创建嵌入模型实例（单例模式，从配置读取模型名称）"""
-    global _embedding_model
-    if _embedding_model is None:
+@dataclass
+class SearchResult:
+    """搜索结果"""
+
+    id: str
+    text: str
+    score: float
+    metadata: Dict[str, Any]
+
+
+class VectorService:
+    """优化后的向量服务"""
+
+    def __init__(self):
+        self._embedding_model: Optional[SentenceTransformer] = None
+        self._vector_client: Optional[chromadb.PersistentClient] = None
+        self._model_loading = False
+        self._model_load_lock: Optional[asyncio.Lock] = None
+        self._cache_enabled = config.get("vector.cache_enabled", True)
+        self._cache_ttl = config.get("vector.cache_ttl", 300)  # 5分钟缓存
+        self._embedding_cache: Dict[str, tuple] = {}
+        self._model_load_failed = False
+
+    @property
+    def model_load_lock(self) -> asyncio.Lock:
+        """获取模型加载锁"""
+        if self._model_load_lock is None:
+            self._model_load_lock = asyncio.Lock()
+        return self._model_load_lock
+
+    @lru_cache(maxsize=1024)
+    def _convert_to_list(self, emb: np.ndarray) -> List[float]:
+        """转换嵌入为列表格式（带缓存）"""
+        return emb.tolist() if isinstance(emb, np.ndarray) else [float(x) for x in emb]
+
+    def _get_cache_key(self, text: str) -> str:
+        """生成缓存键"""
+        return f"{hash(text)}_{config.get('vector.model', 'paraphrase-multilingual-MiniLM-L12-v2')}"
+
+    def _get_from_cache(self, text: str) -> Optional[List[float]]:
+        """从缓存获取嵌入"""
+        if not self._cache_enabled:
+            return None
+
+        key = self._get_cache_key(text)
+        if key in self._embedding_cache:
+            embedding, timestamp = self._embedding_cache[key]
+            if time.time() - timestamp < self._cache_ttl:
+                return embedding
+            else:
+                del self._embedding_cache[key]
+        return None
+
+    def _set_cache(self, text: str, embedding: List[float]):
+        """设置缓存"""
+        if not self._cache_enabled:
+            return
+
+        key = self._get_cache_key(text)
+        self._embedding_cache[key] = (embedding, time.time())
+
+        # 清理过期缓存
+        current_time = time.time()
+        expired_keys = [
+            k
+            for k, (_, ts) in self._embedding_cache.items()
+            if current_time - ts >= self._cache_ttl
+        ]
+        for k in expired_keys:
+            del self._embedding_cache[k]
+
+    async def load_embedding_model(self) -> bool:
+        """异步加载嵌入模型（优化版）"""
+        if self._embedding_model is not None or self._model_loading:
+            return self._embedding_model is not None
+
+        async with self.model_load_lock:
+            if self._embedding_model is not None or self._model_loading:
+                return self._embedding_model is not None
+
+            self._model_loading = True
+            try:
+                model_name = config.get(
+                    "vector.model", "paraphrase-multilingual-MiniLM-L12-v2"
+                )
+                device = config.get("vector.device", "cpu")
+                local_files_only = config.get("vector.local_files_only", True)
+
+                # 使用线程池异步加载模型
+                self._embedding_model = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: SentenceTransformer(
+                            model_name,
+                            device=device,
+                            local_files_only=local_files_only,
+                            cache_folder=str(
+                                resolve_path(
+                                    config.get(
+                                        "vector.cache_dir", "data/subserver/model_cache"
+                                    )
+                                )
+                            ),
+                        ),
+                    ),
+                    timeout=config.get("vector.load_timeout", 30.0),
+                )
+                logger.info("嵌入模型加载成功: %s (设备: %s)", model_name, device)
+                return True
+
+            except asyncio.TimeoutError:
+                logger.error("嵌入模型加载超时: %s", model_name)
+                self._embedding_model = False
+                return False
+            except Exception as e:
+                logger.error("嵌入模型加载失败: %s", e, exc_info=True)
+                self._embedding_model = False
+                return False
+            finally:
+                self._model_loading = False
+
+    def get_vector_client(self) -> Optional[chromadb.PersistentClient]:
+        """获取或创建向量数据库客户端（优化版）"""
+        if self._vector_client is None:
+            try:
+                persist_path = resolve_path(
+                    config.get("vector.persist_dir", "data/subserver/vector_db")
+                )
+                persist_path.mkdir(parents=True, exist_ok=True)
+
+                # 优化配置
+                self._vector_client = chromadb.PersistentClient(
+                    path=str(persist_path),
+                    settings=chromadb.config.Settings(
+                        allow_reset=config.get("vector.allow_reset", False),
+                        anonymized_telemetry=config.get(
+                            "vector.anonymized_telemetry", False
+                        ),
+                    ),
+                )
+                logger.debug("向量数据库客户端初始化成功")
+
+            except Exception as e:
+                logger.error("向量数据库初始化失败: %s", e, exc_info=True)
+                self._vector_client = False
+
+        return self._vector_client if self._vector_client is not False else None
+
+    @property
+    def embedding_model(self) -> Optional[SentenceTransformer]:
+        """获取嵌入模型实例"""
+        return self._embedding_model if self._embedding_model is not False else None
+
+    async def embed_texts(
+        self, texts: List[str], use_cache: bool = True
+    ) -> List[EmbeddingResult]:
+        """批量向量化文本（优化版）"""
+        if not texts:
+            return []
+
+        # 确保模型已加载
+        if not await self.load_embedding_model():
+            raise HTTPException(status_code=503, detail="向量化服务不可用")
+
+        results = []
+        texts_to_encode = []
+        indices_to_encode = []
+
+        # 检查缓存
+        if use_cache:
+            for i, text in enumerate(texts):
+                cached_embedding = self._get_from_cache(text)
+                if cached_embedding is not None:
+                    results.append(
+                        EmbeddingResult(
+                            text=text,
+                            embedding=cached_embedding,
+                            dimension=len(cached_embedding),
+                        )
+                    )
+                else:
+                    texts_to_encode.append(text)
+                    indices_to_encode.append(i)
+
+        # 编码未缓存的文本
+        if texts_to_encode:
+            try:
+                embeddings = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: self.embedding_model.encode(
+                        texts_to_encode,
+                        convert_to_numpy=True,
+                        show_progress_bar=False,
+                        batch_size=config.get("vector.batch_size", 32),
+                    ),
+                )
+
+                for i, (text, embedding) in enumerate(zip(texts_to_encode, embeddings)):
+                    embedding_list = self._convert_to_list(embedding)
+                    results.append(
+                        EmbeddingResult(
+                            text=text,
+                            embedding=embedding_list,
+                            dimension=len(embedding_list),
+                        )
+                    )
+
+                    # 更新缓存
+                    if use_cache:
+                        self._set_cache(text, embedding_list)
+
+            except Exception as e:
+                logger.error("文本向量化失败: %s", e, exc_info=True)
+                raise HTTPException(status_code=500, detail=f"文本向量化失败: {str(e)}")
+
+        # 按原始顺序排序结果
+        if use_cache and indices_to_encode:
+            sorted_results = [None] * len(texts)
+            cache_idx = 0
+            encode_idx = 0
+            for i in range(len(texts)):
+                if cache_idx < len(results) and results[cache_idx].text == texts[i]:
+                    sorted_results[i] = results[cache_idx]
+                    cache_idx += 1
+                else:
+                    sorted_results[i] = results[
+                        len(texts) - len(texts_to_encode) + encode_idx
+                    ]
+                    encode_idx += 1
+            results = sorted_results
+
+        return results
+
+    async def search_similar(
+        self, query: str, collection: str = None, top_k: int = 5
+    ) -> List[SearchResult]:
+        """向量相似度搜索（优化版）"""
+        if not query or not isinstance(query, str):
+            raise HTTPException(status_code=400, detail="查询文本不能为空")
+
+        collection = collection or config.get("vector.default_collection", "default")
+        top_k = max(1, min(top_k, config.get("vector.max_top_k", 100)))
+
+        client = self.get_vector_client()
+        if not client:
+            return []
+
+        # 获取查询嵌入
+        embed_results = await self.embed_texts([query])
+        if not embed_results:
+            return []
+
+        query_embedding = embed_results[0].embedding
+
         try:
-            from sentence_transformers import SentenceTransformer
-            model_name = config.get("vector.model", "paraphrase-multilingual-MiniLM-L12-v2")
-            _embedding_model = SentenceTransformer(model_name)
-            logger.info(f"嵌入模型加载成功: {model_name}")
-        except ImportError:
-            logger.warning("sentence_transformers未安装，向量化功能将不可用")
-            _embedding_model = False
+            coll = client.get_or_create_collection(collection)
+            results = coll.query(
+                query_embeddings=[query_embedding],
+                n_results=top_k,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            if not results.get("documents") or not results["documents"][0]:
+                return []
+
+            formatted_results = [
+                SearchResult(
+                    id=results["ids"][0][i] if results.get("ids") else f"doc_{i}",
+                    text=doc,
+                    score=round(
+                        max(
+                            0,
+                            1
+                            - (
+                                results["distances"][0][i]
+                                if results.get("distances")
+                                else 0.0
+                            ),
+                        ),
+                        4,
+                    ),
+                    metadata=results["metadatas"][0][i]
+                    if results.get("metadatas")
+                    else {},
+                )
+                for i, doc in enumerate(results["documents"][0])
+            ]
+
+            return formatted_results
+
         except Exception as e:
-            logger.error(f"嵌入模型加载失败: {e}", exc_info=True)
-            _embedding_model = False
-    return _embedding_model if _embedding_model is not False else None
+            logger.error("向量搜索失败: %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail=f"向量搜索失败: {str(e)}")
 
+    async def upsert_documents(
+        self, documents: List[Dict[str, Any]], collection: str = None
+    ) -> Dict[str, Any]:
+        """批量向量入库（优化版）"""
+        if not documents or not isinstance(documents, list):
+            raise HTTPException(status_code=400, detail="文档列表不能为空")
 
-def get_vector_client():
-    """获取或创建向量数据库客户端（单例模式，从配置读取持久化目录）"""
-    global _vector_client
-    if _vector_client is None:
+        collection = collection or config.get("vector.default_collection", "default")
+
+        client = self.get_vector_client()
+        if not client:
+            raise HTTPException(status_code=503, detail="向量数据库服务不可用")
+
+        # 提取文本
+        texts = []
+        ids = []
+        metadatas = []
+
+        for i, doc in enumerate(documents):
+            if isinstance(doc, dict):
+                text = doc.get("text", "").strip()
+                doc_id = doc.get("id", f"doc_{i}")
+                metadata = doc.get("metadata", {})
+            else:
+                text = str(doc).strip()
+                doc_id = f"doc_{i}"
+                metadata = {}
+
+            if not text:
+                continue
+
+            texts.append(text)
+            ids.append(doc_id)
+            metadatas.append(metadata)
+
+        if not texts:
+            raise HTTPException(status_code=400, detail="所有文档文本都为空")
+
+        # 批量向量化
+        embed_results = await self.embed_texts(texts)
+
         try:
-            import chromadb
-            persist_dir = config.get("vector.persist_dir", "data/subserver/vector_db")
-            # 转换为绝对路径
-            persist_path = resolve_path(persist_dir)
-            persist_path.mkdir(parents=True, exist_ok=True)
-            
-            _vector_client = chromadb.PersistentClient(path=str(persist_path))
-            logger.info(f"向量数据库客户端初始化成功: {persist_path}")
-        except ImportError:
-            logger.warning("chromadb未安装，向量检索功能将不可用")
-            _vector_client = False
+            coll = client.get_or_create_collection(collection)
+
+            embeddings = [result.embedding for result in embed_results]
+
+            # 使用 upsert 或 add
+            if hasattr(coll, "upsert"):
+                coll.upsert(
+                    embeddings=embeddings, documents=texts, ids=ids, metadatas=metadatas
+                )
+            else:
+                coll.add(
+                    embeddings=embeddings, documents=texts, ids=ids, metadatas=metadatas
+                )
+
+            return {
+                "success": True,
+                "collection": collection,
+                "inserted": len(texts),
+                "cached_results": len(self._embedding_cache),
+            }
+
         except Exception as e:
-            logger.error(f"向量数据库客户端初始化失败: {e}", exc_info=True)
-            _vector_client = False
-    return _vector_client if _vector_client is not False else None
+            logger.error("向量入库失败: %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail=f"向量入库失败: {str(e)}")
+
+    def get_health_status(self) -> Dict[str, Any]:
+        """获取服务健康状态"""
+        return {
+            "vector_db": bool(self.get_vector_client()),
+            "embedding_model": bool(self.embedding_model),
+            "model_loading": self._model_loading,
+            "cache_enabled": self._cache_enabled,
+            "cache_size": len(self._embedding_cache),
+            "persist_dir": str(
+                resolve_path(
+                    config.get("vector.persist_dir", "data/subserver/vector_db")
+                )
+            ),
+            "model": config.get(
+                "vector.model", "paraphrase-multilingual-MiniLM-L12-v2"
+            ),
+            "device": config.get("vector.device", "cpu"),
+        }
 
 
+# 全局服务实例
+vector_service = VectorService()
+
+
+# API处理函数
 async def embed_handler(request: Request):
     """向量化文本接口"""
-    try:
-        data = await request.json()
-        texts = data.get("texts", [])
-        
-        if not texts or not isinstance(texts, list):
-            raise HTTPException(status_code=400, detail="缺少texts参数或格式错误")
-        
-        model = get_embedding_model()
-        if model is None:
-            raise HTTPException(
-                status_code=503,
-                detail="向量化服务不可用，请安装sentence_transformers: pip install sentence-transformers"
-            )
-        
-        embeddings_list = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
-        
-        embeddings = []
-        for text, emb in zip(texts, embeddings_list):
-            emb_list = _convert_to_list(emb)
-            embeddings.append({
-                "text": text,
-                "embedding": emb_list,
-                "dimension": len(emb_list)
-            })
-        
-        return {
-            "success": True,
-            "embeddings": embeddings,
-            "count": len(embeddings)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"向量化接口异常: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    data = await request.json()
+    texts = data.get("texts", [])
+
+    if not texts or not isinstance(texts, list):
+        raise HTTPException(status_code=400, detail="缺少texts参数或格式错误")
+
+    results = await vector_service.embed_texts(texts)
+
+    return {
+        "success": True,
+        "embeddings": [
+            {
+                "text": result.text,
+                "embedding": result.embedding,
+                "dimension": result.dimension,
+            }
+            for result in results
+        ],
+        "count": len(results),
+        "cached": len([r for r in results if vector_service._get_from_cache(r.text)]),
+    }
 
 
 async def search_handler(request: Request):
     """向量检索接口"""
-    try:
-        data = await request.json()
-        query = data.get("query")
-        collection = data.get("collection") or config.get("vector.default_collection", "default")
-        top_k = data.get("top_k", 5)
-        
-        if not query or not isinstance(query, str):
-            raise HTTPException(status_code=400, detail="缺少query参数或格式错误")
-        
-        if not isinstance(collection, str):
-            raise HTTPException(status_code=400, detail="collection参数格式错误")
-        
-        if not isinstance(top_k, int) or top_k <= 0:
-            top_k = 5
-        
-        client = get_vector_client()
-        model = get_embedding_model()
-        
-        if client is None or model is None:
-            logger.warning("向量数据库或模型不可用，返回空结果")
-            return {
-                "success": True,
-                "results": [],
-                "count": 0,
-                "message": "向量数据库服务不可用"
+    data = await request.json()
+    query = data.get("query")
+    collection = data.get("collection")
+    top_k = max(1, min(int(data.get("top_k", 5)), 100))
+
+    if not query or not isinstance(query, str):
+        raise HTTPException(status_code=400, detail="缺少query参数或格式错误")
+
+    results = await vector_service.search_similar(query, collection, top_k)
+
+    return {
+        "success": True,
+        "results": [
+            {
+                "id": result.id,
+                "text": result.text,
+                "score": result.score,
+                "metadata": result.metadata,
             }
-        
-        coll = client.get_or_create_collection(collection)
-        query_embedding_raw = model.encode([query], convert_to_numpy=True, show_progress_bar=False)[0]
-        query_embedding = _convert_to_list(query_embedding_raw)
-        
-        results = coll.query(query_embeddings=[query_embedding], n_results=min(top_k, 100))
-        
-        formatted_results = []
-        if results.get('documents') and results['documents'][0]:
-            for i, doc in enumerate(results['documents'][0]):
-                distance = results['distances'][0][i] if results.get('distances') else 0.0
-                score = max(0, 1 - distance)
-                formatted_results.append({
-                    "id": results['ids'][0][i] if results.get('ids') else f"doc_{i}",
-                    "text": doc,
-                    "score": round(score, 4),
-                    "metadata": results['metadatas'][0][i] if results.get('metadatas') else {}
-                })
-        
-        return {
-            "success": True,
-            "results": formatted_results,
-            "count": len(formatted_results)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"向量检索接口异常: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+            for result in results
+        ],
+        "count": len(results),
+    }
 
 
 async def upsert_handler(request: Request):
     """向量入库接口"""
-    try:
-        data = await request.json()
-        collection = data.get("collection") or config.get("vector.default_collection", "default")
-        documents = data.get("documents", [])
-        
-        if not documents or not isinstance(documents, list):
-            raise HTTPException(status_code=400, detail="缺少documents参数或格式错误")
-        
-        if not isinstance(collection, str):
-            raise HTTPException(status_code=400, detail="collection参数格式错误")
-        
-        client = get_vector_client()
-        model = get_embedding_model()
-        
-        if client is None or model is None:
-            raise HTTPException(
-                status_code=503,
-                detail="向量数据库服务不可用，请安装chromadb和sentence_transformers"
-            )
-        
-        coll = client.get_or_create_collection(collection)
-        
-        texts = [doc.get("text", "") if isinstance(doc, dict) else str(doc) for doc in documents]
-        if not all(texts):
-            raise HTTPException(status_code=400, detail="文档文本不能为空")
-        
-        embeddings_raw = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
-        embeddings = [_convert_to_list(emb) for emb in embeddings_raw]
-        
-        ids = [doc.get("id", f"doc_{i}") if isinstance(doc, dict) else f"doc_{i}" 
-               for i, doc in enumerate(documents)]
-        metadatas = [doc.get("metadata", {}) if isinstance(doc, dict) else {} 
-                    for doc in documents]
-        
-        # 使用 upsert，避免重复 id 导致异常（更适合长期运行与增量更新）
-        if hasattr(coll, "upsert"):
-            coll.upsert(
-                embeddings=embeddings,
-                documents=texts,
-                ids=ids,
-                metadatas=metadatas
-            )
-        else:
-            # 兼容旧版本 chromadb
-            coll.add(
-                embeddings=embeddings,
-                documents=texts,
-                ids=ids,
-                metadatas=metadatas
-            )
-        
-        return {
-            "success": True,
-            "collection": collection,
-            "inserted": len(documents)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"向量入库接口异常: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    data = await request.json()
+    collection = data.get("collection")
+    documents = data.get("documents", [])
+
+    result = await vector_service.upsert_documents(documents, collection)
+    return result
 
 
 default = {
     "name": "vector-service",
-    "description": "向量服务",
+    "description": "优化后的向量服务",
     "priority": 100,
     "routes": [
-        {
-            "method": "POST",
-            "path": "/api/vector/embed",
-            "handler": embed_handler
-        },
-        {
-            "method": "POST",
-            "path": "/api/vector/search",
-            "handler": search_handler
-        },
-        {
-            "method": "POST",
-            "path": "/api/vector/upsert",
-            "handler": upsert_handler
-        },
+        {"method": "POST", "path": "/api/vector/embed", "handler": embed_handler},
+        {"method": "POST", "path": "/api/vector/search", "handler": search_handler},
+        {"method": "POST", "path": "/api/vector/upsert", "handler": upsert_handler},
         {
             "method": "GET",
             "path": "/api/vector/health",
             "handler": lambda _req: {
                 "success": True,
-                "vector_db": bool(get_vector_client()),
-                "embedding_model": bool(get_embedding_model()),
-                "persist_dir": str(resolve_path(config.get(\"vector.persist_dir\", \"data/subserver/vector_db\"))),
-                "model": config.get(\"vector.model\", \"paraphrase-multilingual-MiniLM-L12-v2\"),
-            }
-        }
-    ]
+                **vector_service.get_health_status(),
+            },
+        },
+    ],
 }

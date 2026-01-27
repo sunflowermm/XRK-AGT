@@ -55,9 +55,13 @@ export default class LLMFactory {
     const factory = providers.get(provider);
 
     if (!factory) {
+      Bot?.makeLog?.('error', `[LLMFactory] 不支持的提供商: ${provider}`);
       throw new Error(`不支持的LLM提供商: ${provider}`);
     }
 
-    return factory(config);
+    Bot?.makeLog?.('debug', `[LLMFactory] 创建客户端: provider=${provider}, temperature=${config.temperature}, maxTokens=${config.maxTokens}`);
+    const client = factory(config);
+    Bot?.makeLog?.('debug', `[LLMFactory] 客户端创建成功: ${client?.constructor?.name || 'unknown'}`);
+    return client;
   }
 }

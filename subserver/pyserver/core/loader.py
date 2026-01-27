@@ -37,7 +37,7 @@ class ApiLoader:
     async def load_all(cls, app: FastAPI):
         """加载所有 API"""
         if cls._loaded:
-            logger.warning("API 已加载，跳过")
+            logger.debug("API 已加载，跳过")
             return
         
         instance = cls()
@@ -46,47 +46,31 @@ class ApiLoader:
     
     async def _load_apis(self, app: FastAPI):
         """加载所有 API 组"""
-        logger.info(f"📂 扫描 API 目录: {self.apis_dir}")
-        
-        # 获取所有子目录（API组，排除以_开头的目录）
         api_groups = [
             d for d in self.apis_dir.iterdir()
             if d.is_dir() and not d.name.startswith("_")
         ]
-        
         if not api_groups:
             logger.warning("未找到 API 组目录")
             return
-        
-        logger.info(f"发现 {len(api_groups)} 个 API 组")
-        
+
         loaded_count = 0
         failed_count = 0
-        
         for group_dir in api_groups:
             group_name = group_dir.name
-            logger.debug(f"加载 API 组: {group_name}")
-            
-            # 获取组内所有 Python 文件（排除以_开头的文件和__pycache__）
-            api_files = [
-                f for f in group_dir.glob("*.py")
-                if not f.name.startswith("_")
-            ]
-            
+            api_files = [f for f in group_dir.glob("*.py") if not f.name.startswith("_")]
             if not api_files:
-                logger.debug(f"  API 组 {group_name} 无文件，跳过")
                 continue
-            
             for api_file in api_files:
                 try:
                     await self._load_api_file(api_file, group_name, app)
                     loaded_count += 1
                 except Exception as e:
                     failed_count += 1
-                    logger.error(f"加载 API 文件失败: {group_name}/{api_file.name} - {e}", exc_info=True)
-        
+                    logger.error("加载失败 %s/%s: %s", group_name, api_file.name, e, exc_info=True)
+
         self._apis.sort(key=lambda x: x.priority, reverse=True)
-        logger.info(f"✅ 共加载 {loaded_count} 个 API，失败 {failed_count} 个")
+        logger.info("📂 API 已加载 · %d 个（失败 %d）", loaded_count, failed_count)
     
     async def _load_api_file(self, api_file: Path, group_name: str, app: FastAPI):
         """加载单个 API 文件"""
@@ -112,7 +96,7 @@ class ApiLoader:
         
         await api.startup(app)
         self._apis.append(api)
-        logger.debug(f"✅ 加载 API: {api.name} (组: {group_name}, 优先级: {api.priority})")
+        logger.debug("加载 API: %s [%s]", api.name, group_name)
     
     @classmethod
     def get_api_list(cls) -> List[Dict[str, Any]]:
