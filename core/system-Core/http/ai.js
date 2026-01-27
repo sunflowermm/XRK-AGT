@@ -104,9 +104,35 @@ async function handleChatCompletionsV3(req, res) {
   const id = `chatcmpl_${Date.now()}`;
   const modelName = llmConfig.provider || llmConfig.model || llmConfig.chatModel || 'unknown';
   
-  let totalContent = '';
-  await client.chatStream(messages, (delta) => {
-    totalContent += delta || '';
+  try {
+    let totalContent = '';
+    await client.chatStream(messages, (delta) => {
+      totalContent += delta || '';
+      res.write(
+        `data: ${JSON.stringify({
+          id,
+          object: 'chat.completion.chunk',
+          created: now,
+          model: modelName,
+          system_fingerprint: null,
+          choices: [{
+            index: 0,
+            delta: { 
+              content: delta || '',
+              role: delta ? undefined : 'assistant' // 首个 chunk 包含 role
+            },
+            logprobs: null,
+            finish_reason: null
+          }]
+        })}\n\n`
+      );
+    }, llmConfig);
+    
+    // 发送最终 chunk（包含 finish_reason 和 usage）
+    const promptText = messages.map(m => m.content || '').join('');
+    const promptTokens = Math.ceil(promptText.length / 4);
+    const completionTokens = Math.ceil(totalContent.length / 4);
+    
     res.write(
       `data: ${JSON.stringify({
         id,
@@ -116,49 +142,48 @@ async function handleChatCompletionsV3(req, res) {
         system_fingerprint: null,
         choices: [{
           index: 0,
-          delta: { 
-            content: delta || '',
-            role: delta ? undefined : 'assistant' // 首个 chunk 包含 role
-          },
+          delta: {},
           logprobs: null,
-          finish_reason: null
-        }]
+          finish_reason: 'stop'
+        }],
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens,
+          completion_tokens_details: {
+            reasoning_tokens: 0,
+            accepted_prediction_tokens: 0,
+            rejected_prediction_tokens: 0
+          }
+        }
       })}\n\n`
     );
-  }, llmConfig);
-  
-  // 发送最终 chunk（包含 finish_reason 和 usage）
-  const promptText = messages.map(m => m.content || '').join('');
-  const promptTokens = Math.ceil(promptText.length / 4);
-  const completionTokens = Math.ceil(totalContent.length / 4);
-  
-  res.write(
-    `data: ${JSON.stringify({
-      id,
-      object: 'chat.completion.chunk',
-      created: now,
-      model: modelName,
-      system_fingerprint: null,
-      choices: [{
-        index: 0,
-        delta: {},
-        logprobs: null,
-        finish_reason: 'stop'
-      }],
-      usage: {
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        total_tokens: promptTokens + completionTokens,
-        completion_tokens_details: {
-          reasoning_tokens: 0,
-          accepted_prediction_tokens: 0,
-          rejected_prediction_tokens: 0
+    res.write('data: [DONE]\n\n');
+  } catch (error) {
+    // 在流模式下，使用SSE格式发送错误信息
+    res.write(
+      `data: ${JSON.stringify({
+        id,
+        object: 'chat.completion.chunk',
+        created: now,
+        model: modelName,
+        system_fingerprint: null,
+        choices: [{
+          index: 0,
+          delta: {},
+          logprobs: null,
+          finish_reason: 'error'
+        }],
+        error: {
+          message: error.message,
+          type: 'server_error'
         }
-      }
-    })}\n\n`
-  );
-  res.write('data: [DONE]\n\n');
-  res.end();
+      })}\n\n`
+    );
+    res.write('data: [DONE]\n\n');
+  } finally {
+    res.end();
+  }
 }
 
 async function handleModels(req, res) {
