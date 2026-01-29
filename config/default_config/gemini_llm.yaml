@@ -32,3 +32,10 @@ headers: {}
 # 额外请求体字段（原样合并到 payload 顶层；高级用法）
 extraBody: {}
 
+# 代理配置（可选）
+# 用于为 Gemini 请求配置 HTTP(S) 代理
+# 示例：
+# proxy:
+#   enabled: true
+#   url: "http://127.0.0.1:7890"
+proxy: {}

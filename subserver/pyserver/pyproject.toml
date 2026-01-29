@@ -18,9 +18,6 @@ dependencies = [
 [project.scripts]
 xrk = "main:main"
 
-[tool.uv]
-package = false
-
 [tool.setuptools]
 py-modules = ["main"]
 packages = ["apis", "core"]

@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
+import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 
 /**
  * Anthropic 官方 LLM 客户端（Messages API）
@@ -112,12 +113,15 @@ export default class AnthropicLLMClient {
 
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    const resp = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
-      signal: AbortSignal.timeout(this.timeout)
-    });
+    const resp = await fetch(
+      this.endpoint,
+      buildFetchOptionsWithProxy(this.config, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
+        body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
+        signal: AbortSignal.timeout(this.timeout)
+      })
+    );
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
@@ -134,12 +138,15 @@ export default class AnthropicLLMClient {
     const body = this.buildBody(transformedMessages, overrides);
     body.stream = true;
 
-    const resp = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeout)
-    });
+    const resp = await fetch(
+      this.endpoint,
+      buildFetchOptionsWithProxy(this.config, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeout)
+      })
+    );
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');

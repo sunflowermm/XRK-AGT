@@ -248,7 +248,7 @@ const result = await Bot.callSubserver('/api/vector/search', {
 ```python
 # 调用主服务v3接口
 v3_url = f"{main_server_url}/api/v3/chat/completions"
-response = await client.post(v1_url, json=payload)
+response = await client.post(v3_url, json=payload)
 
 # 获取MCP工具
 mcp_url = f"{main_server_url}/api/mcp/tools"
@@ -334,18 +334,25 @@ logging:
 - `to_dict()` - 获取完整配置字典
 - `reset_to_default()` - 重置为默认配置
 
-## 依赖安装
+## 依赖安装与运行（推荐使用 uv）
+
+> 子服务端已经使用 `pyproject.toml` + uv 管理依赖，推荐直接在 `subserver/pyserver` 目录下执行以下命令。
 
 ```bash
-# 向量服务依赖
-pip install sentence-transformers chromadb
+cd subserver/pyserver
 
-# HTTP客户端
-pip install httpx
+# 第一次或依赖变更后：安装/更新依赖
+uv sync
 
-# FastAPI
-pip install fastapi uvicorn
+# 启动子服务端
+uv run xrk
+
+# 如需修改绑定地址/端口，可通过环境变量覆盖
+HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 ```
+
+> 说明：`pyproject.toml` 中已定义了 `xrk = "main:main"` 的入口脚本，并启用了项目打包支持，
+> 因此 **不再需要额外执行 `uv pip install -e .`**，`uv sync` 之后可以直接 `uv run xrk`。
 
 ## 错误处理
 

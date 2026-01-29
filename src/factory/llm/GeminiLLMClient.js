@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
+import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 
 /**
  * Gemini 官方 LLM 客户端（Google Generative Language API）
@@ -112,12 +113,15 @@ export default class GeminiLLMClient {
 
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    const resp = await fetch(this.withKey(this.endpoint), {
-      method: 'POST',
-      headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(this.buildGeminiPayload(transformedMessages, overrides)),
-      signal: AbortSignal.timeout(this.timeout)
-    });
+    const resp = await fetch(
+      this.withKey(this.endpoint),
+      buildFetchOptionsWithProxy(this.config, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
+        body: JSON.stringify(this.buildGeminiPayload(transformedMessages, overrides)),
+        signal: AbortSignal.timeout(this.timeout)
+      })
+    );
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
@@ -135,12 +139,15 @@ export default class GeminiLLMClient {
     const url = new URL(this.withKey(baseUrl));
     url.searchParams.set('alt', 'sse');
 
-    const resp = await fetch(url.toString(), {
-      method: 'POST',
-      headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(this.buildGeminiPayload(transformedMessages, overrides)),
-      signal: AbortSignal.timeout(this.timeout)
-    });
+    const resp = await fetch(
+      url.toString(),
+      buildFetchOptionsWithProxy(this.config, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
+        body: JSON.stringify(this.buildGeminiPayload(transformedMessages, overrides)),
+        signal: AbortSignal.timeout(this.timeout)
+      })
+    );
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');

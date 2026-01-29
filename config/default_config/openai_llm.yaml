@@ -39,3 +39,8 @@ headers: {}
 # 额外请求体字段（可选，原样合并到 body 顶层）
 extraBody: {}
 
+# 代理配置（可选）
+# proxy:
+#   enabled: true
+#   url: "http://127.0.0.1:7890"
+proxy: {}

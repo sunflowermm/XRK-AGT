@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
+import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 
 /**
  * Azure OpenAI 官方 LLM 客户端（Chat Completions）
@@ -78,12 +79,15 @@ export default class AzureOpenAILLMClient {
     let currentMessages = [...transformedMessages];
 
     for (let round = 0; round < maxToolRounds; round++) {
-      const resp = await fetch(this.endpoint, {
-        method: 'POST',
-        headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildBody(currentMessages, { ...overrides })),
-        signal: AbortSignal.timeout(this.timeout)
-      });
+      const resp = await fetch(
+        this.endpoint,
+        buildFetchOptionsWithProxy(this.config, {
+          method: 'POST',
+          headers: this.buildHeaders(overrides.headers),
+          body: JSON.stringify(this.buildBody(currentMessages, { ...overrides })),
+          signal: AbortSignal.timeout(this.timeout)
+        })
+      );
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
@@ -108,12 +112,15 @@ export default class AzureOpenAILLMClient {
 
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    const resp = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
-      signal: AbortSignal.timeout(this.timeout)
-    });
+    const resp = await fetch(
+      this.endpoint,
+      buildFetchOptionsWithProxy(this.config, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
+        body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
+        signal: AbortSignal.timeout(this.timeout)
+      })
+    );
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');

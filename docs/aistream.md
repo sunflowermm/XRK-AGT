@@ -216,6 +216,12 @@ constructor(options = {})
 - 配置合并优先级：`apiConfig` > `providerConfig` > `this.config` > 默认值
 - 支持动态扩展，无需修改基类代码
 - `enableTools`：控制是否启用工具调用，由各提供商配置决定
+- `proxy`：可选代理配置，仅影响主服务端从 **本机到各厂商 LLM 接口** 的 HTTP 请求，不会修改系统全局代理  
+  - 对象形式：
+    - `proxy.enabled: true|false`：是否启用代理（默认为 `false`，未配置视为不启用）
+    - `proxy.url: "http://user:pass@host:port"`：标准 HTTP/HTTPS/SOCKS5 代理地址
+  - 简写形式：`proxy: "http://user:pass@host:port"`（等价于 `enabled: true` 且使用该地址）
+  - 仅支持标准代理协议；**vmess/vless 等订阅需由 Clash / sing-box 等独立客户端转换为 HTTP 代理后再由 `proxy.url` 指向**
 
 **关于 model（外部调用约定）**：
 - 对外 v3 入口 `POST /api/v3/chat/completions`：外部调用只需要把 `model` 填成 **provider（运营商）**（如 `openai` / `openai_compat` / `gemini` 等），**不需要**再填写真实模型名。

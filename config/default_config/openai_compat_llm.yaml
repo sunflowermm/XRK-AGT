@@ -39,3 +39,10 @@ headers: {}
 # 额外请求体字段（原样透传到下游；可用于第三方的扩展参数）
 extraBody: {}
 
+# 代理配置（可选）
+# 用于为第三方 OpenAI 兼容接口配置 HTTP(S) 代理
+# 示例：
+# proxy:
+#   enabled: true
+#   url: "http://127.0.0.1:7890"
+proxy: {}
