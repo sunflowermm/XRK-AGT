@@ -74,20 +74,15 @@ export default class GPTGodLLMClient {
    * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
    */
   async transformMessages(messages) {
-    const transformed = [];
+    if (!Array.isArray(messages)) return messages;
 
-    // 识图配置：由 AIStream.resolveLLMConfig 注入 visionProvider 和 visionConfig
     const visionProvider = (this.config.visionProvider || 'gptgod').toLowerCase();
     const visionConfig = this.config.visionConfig || {};
+    const visionClient = VisionFactory.hasProvider(visionProvider) && visionConfig.apiKey
+      ? VisionFactory.createClient({ provider: visionProvider, ...visionConfig })
+      : null;
 
-    let visionClient = null;
-    if (VisionFactory.hasProvider(visionProvider) && visionConfig.apiKey) {
-      visionClient = VisionFactory.createClient({
-        provider: visionProvider,
-        ...visionConfig
-      });
-    }
-
+    const transformed = [];
     for (const msg of messages) {
       const newMsg = { ...msg };
 
@@ -97,21 +92,21 @@ export default class GPTGodLLMClient {
         const replyImages = msg.content.replyImages || [];
         const allImages = [...replyImages, ...images];
 
-        if (!visionClient || allImages.length === 0) {
-          // 没有可用的识图客户端或没有图片，直接退化为仅文本
-          newMsg.content = text || '';
-        } else {
+        if (visionClient && allImages.length > 0) {
           const descList = await visionClient.recognizeImages(allImages);
-          const parts = [];
-
-          allImages.forEach((img, idx) => {
+          const parts = allImages.map((img, idx) => {
             const desc = descList[idx] || '识别失败';
             const prefix = replyImages.includes(img) ? '[回复图片:' : '[图片:';
-            parts.push(`${prefix}${desc}]`);
+            return `${prefix}${desc}]`;
           });
-
           newMsg.content = text + (parts.length ? ' ' + parts.join(' ') : '');
+        } else {
+          newMsg.content = text || '';
         }
+      } else if (newMsg.content && typeof newMsg.content === 'object') {
+        newMsg.content = newMsg.content.text || '';
+      } else if (newMsg.content == null) {
+        newMsg.content = '';
       }
 
       transformed.push(newMsg);
@@ -128,22 +123,17 @@ export default class GPTGodLLMClient {
    * @returns {Promise<string>} AI 回复文本
    */
   async chat(messages, overrides = {}) {
-    // 转换messages，处理图片识图（经由 VisionFactory）
     const transformedMessages = await this.transformMessages(messages);
-    
-    const body = this.buildBody(transformedMessages, overrides);
-    const headers = this.buildHeaders();
-
     const resp = await fetch(this.endpoint, {
       method: 'POST',
-      headers,
-      body: JSON.stringify(body),
+      headers: this.buildHeaders(overrides.headers),
+      body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
       signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
     });
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`API错误: ${resp.status} ${text}`);
+      throw new Error(`GPTGod LLM 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
     const data = await resp.json();
@@ -153,55 +143,54 @@ export default class GPTGodLLMClient {
   /**
    * 聊天（流式）
    * @param {Array} messages - 消息数组
-   * @param {Function} onChunk - 每个数据块的回调函数
+   * @param {Function} onDelta - 每个数据块的回调函数
    * @param {Object} overrides - 覆盖配置
-   * @returns {Promise<string>} 完整的 AI 回复文本
+   * @returns {Promise<void>}
    */
-  async chatStream(messages, onChunk, overrides = {}) {
-    // 转换messages，处理图片识图（经由 VisionFactory）
+  async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    
-    const body = this.buildBody(transformedMessages, { ...overrides, stream: true });
-    const headers = this.buildHeaders();
-
     const resp = await fetch(this.endpoint, {
       method: 'POST',
-      headers,
-      body: JSON.stringify(body),
+      headers: this.buildHeaders(overrides.headers),
+      body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
       signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
     });
 
-    if (!resp.ok) {
+    if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`API错误: ${resp.status} ${text}`);
+      throw new Error(`GPTGod LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
-    let fullText = '';
+    const reader = resp.body.getReader();
     const decoder = new TextDecoder('utf-8');
+    let buffer = '';
 
-    for await (const chunk of resp.body) {
-      const text = decoder.decode(chunk, { stream: true });
-      const lines = text.split('\n').filter(line => line.trim().startsWith('data:'));
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
 
-      for (const line of lines) {
-        const dataStr = line.replace(/^data:\s*/, '').trim();
-        if (dataStr === '[DONE]') continue;
-        if (!dataStr) continue;
+      buffer += decoder.decode(value, { stream: true });
+
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+
+        if (!line?.startsWith('data:')) continue;
+
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]') return;
 
         try {
-          const json = JSON.parse(dataStr);
-          const content = json?.choices?.[0]?.delta?.content;
-          if (content) {
-            fullText += content;
-            if (onChunk) onChunk(content);
+          const delta = JSON.parse(payload).choices?.[0]?.delta;
+          if (delta?.content && typeof onDelta === 'function') {
+            onDelta(delta.content);
           }
-        } catch (e) {
+        } catch {
           // 忽略解析错误
         }
       }
     }
-
-    return fullText;
   }
 
 }

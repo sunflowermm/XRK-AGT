@@ -71,47 +71,34 @@ export default class XiaomiMiMoLLMClient {
   async transformMessages(messages) {
     if (!Array.isArray(messages)) return messages;
 
-    const transformed = [];
-
-    // 识图配置：由 AIStream.resolveLLMConfig 注入 visionProvider 和 visionConfig
     const visionProvider = (this.config.visionProvider || this.config.provider || 'gptgod').toLowerCase();
     const visionConfig = this.config.visionConfig || {};
+    const visionClient = VisionFactory.hasProvider(visionProvider) && visionConfig.apiKey
+      ? VisionFactory.createClient({ provider: visionProvider, ...visionConfig })
+      : null;
 
-    let visionClient = null;
-    if (VisionFactory.hasProvider(visionProvider) && visionConfig.apiKey) {
-      visionClient = VisionFactory.createClient({
-        provider: visionProvider,
-        ...visionConfig
-      });
-    }
-
+    const transformed = [];
     for (const msg of messages) {
       const newMsg = { ...msg };
 
       if (msg.role === 'user' && msg.content && typeof msg.content === 'object') {
-        // 用户消息支持多模态：text + images/replyImages
         const text = msg.content.text || msg.content.content || '';
         const images = msg.content.images || [];
         const replyImages = msg.content.replyImages || [];
         const allImages = [...replyImages, ...images];
 
-        if (!visionClient || allImages.length === 0) {
-          // 没有可用的识图客户端或没有图片，直接退化为仅文本
-          newMsg.content = text || '';
-        } else {
+        if (visionClient && allImages.length > 0) {
           const descList = await visionClient.recognizeImages(allImages);
-          const parts = [];
-
-          allImages.forEach((img, idx) => {
+          const parts = allImages.map((img, idx) => {
             const desc = descList[idx] || '识别失败';
             const prefix = replyImages.includes(img) ? '[回复图片:' : '[图片:';
-            parts.push(`${prefix}${desc}]`);
+            return `${prefix}${desc}]`;
           });
-
           newMsg.content = text + (parts.length ? ' ' + parts.join(' ') : '');
+        } else {
+          newMsg.content = text || '';
         }
       } else if (newMsg.content && typeof newMsg.content === 'object') {
-        // 其他角色如果误传了对象，也退化为纯文本
         newMsg.content = newMsg.content.text || newMsg.content.content || '';
       } else if (newMsg.content == null) {
         newMsg.content = '';
@@ -258,9 +245,9 @@ export default class XiaomiMiMoLLMClient {
 
   /**
    * 非流式调用（支持工具调用）
-   * @param {Array} messages - OpenAI 风格 messages
-   * @param {Object} overrides - 临时覆盖参数
-   * @returns {Promise<string>} - 回复文本
+   * @param {Array} messages - 消息数组
+   * @param {Object} overrides - 覆盖配置
+   * @returns {Promise<string>} AI 回复文本
    */
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
@@ -285,7 +272,6 @@ export default class XiaomiMiMoLLMClient {
       if (!message) break;
 
       if (message.tool_calls?.length > 0) {
-        // 还原工具名称用于调用 MCP 工具
         const denormalizedToolCalls = this.denormalizeToolCalls(message.tool_calls);
         currentMessages.push({ ...message, tool_calls: denormalizedToolCalls });
         currentMessages.push(...await MCPToolAdapter.handleToolCalls(denormalizedToolCalls));
@@ -299,10 +285,10 @@ export default class XiaomiMiMoLLMClient {
   }
 
   /**
-   * 流式调用（支持工具调用）
-   * @param {Array} messages - OpenAI 风格 messages
-   * @param {Function} onDelta - (delta: string) => void
-   * @param {Object} overrides - 临时覆盖参数
+   * 流式调用
+   * @param {Array} messages - 消息数组
+   * @param {Function} onDelta - 每个数据块的回调函数
+   * @param {Object} overrides - 覆盖配置
    * @returns {Promise<void>}
    */
   async chatStream(messages, onDelta, overrides = {}) {
@@ -319,9 +305,9 @@ export default class XiaomiMiMoLLMClient {
       throw new Error(`小米 MiMo LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
+    const reader = resp.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
-    const reader = resp.body.getReader();
 
     while (true) {
       const { value, done } = await reader.read();

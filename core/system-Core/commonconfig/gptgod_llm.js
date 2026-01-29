@@ -114,6 +114,13 @@ export default class GPTGodLLMConfig extends ConfigBase {
             description: '是否启用工具调用功能',
             default: false,
             component: 'Switch'
+          },
+          enableStream: {
+            type: 'boolean',
+            label: '启用流式输出',
+            description: '是否启用流式输出（默认启用，所有运营商均支持）',
+            default: true,
+            component: 'Switch'
           }
         }
       }

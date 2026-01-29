@@ -94,6 +94,14 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             default: 0,
             component: 'InputNumber'
           },
+          stop: {
+            type: 'array',
+            label: '停止词',
+            description: '停止词列表，当生成包含这些词时停止',
+            itemType: 'string',
+            default: [],
+            component: 'Input'
+          },
           thinkingType: {
             type: 'string',
             label: '思维链模式',
@@ -101,6 +109,13 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             enum: ['enabled', 'disabled'],
             default: 'disabled',
             component: 'Select'
+          },
+          response_format: {
+            type: 'string',
+            label: '响应格式',
+            description: '响应格式，如 json_object',
+            default: '',
+            component: 'Input'
           },
           toolChoice: {
             type: 'string',
@@ -139,6 +154,13 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             max: 20,
             default: 5,
             component: 'InputNumber'
+          },
+          enableStream: {
+            type: 'boolean',
+            label: '启用流式输出',
+            description: '是否启用流式输出（默认启用，所有运营商均支持）',
+            default: true,
+            component: 'Switch'
           }
         }
       }

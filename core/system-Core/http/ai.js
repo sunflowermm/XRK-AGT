@@ -15,11 +15,23 @@ function parseOptionalJson(raw) {
   }
 }
 
-/** 厂商 LLM 配置（与 aistream getProviderConfig 一致），body.apiKey 永不传入 LLM */
 function getProviderConfig(provider) {
   if (!provider) return {};
   const key = `${String(provider).toLowerCase()}_llm`;
   return cfg[key] || {};
+}
+
+/** 提取消息文本内容（支持字符串和对象格式） */
+function extractMessageText(messages) {
+  return messages.map(m => {
+    const content = m.content;
+    return typeof content === 'string' ? content : (content?.text || '');
+  }).join('');
+}
+
+/** 计算 token 数量（粗略估算：1 token ≈ 4 字符） */
+function estimateTokens(text) {
+  return Math.ceil((text || '').length / 4);
 }
 
 async function handleChatCompletionsV3(req, res) {
@@ -46,53 +58,47 @@ async function handleChatCompletionsV3(req, res) {
 
   const base = getProviderConfig(provider);
   const llmConfig = {
-    ...base,
     provider,
+    ...base
+  };
+
+  if (streamFlag && base.enableStream === false) {
+    return HttpResponse.error(
+      res,
+      new Error(`提供商 ${provider} 的流式输出已禁用`),
+      400,
+      'ai.v3.chat.completions'
+    );
+  }
+
+  const client = LLMFactory.createClient(llmConfig);
+  const overrides = {
     ...(body.temperature != null && { temperature: Number(body.temperature) }),
     ...(body.max_tokens != null && { maxTokens: Number(body.max_tokens) })
   };
 
-  const client = LLMFactory.createClient(llmConfig);
-
   if (!streamFlag) {
-    const text = await client.chat(messages, llmConfig);
-    const now = Math.floor(Date.now() / 1000);
+    const text = await client.chat(messages, overrides);
+    const promptText = extractMessageText(messages);
+    const promptTokens = estimateTokens(promptText);
+    const completionTokens = estimateTokens(text);
     
-    // 估算 token 使用量（OpenAI 标准要求）
-    const promptText = messages.map(m => m.content || '').join('');
-    const promptTokens = Math.ceil(promptText.length / 4); // 粗略估算，1token≈4字符
-    const completionTokens = Math.ceil((text || '').length / 4);
-    
-    res.json({
+    return res.json({
       id: `chatcmpl_${Date.now()}`,
       object: 'chat.completion',
-      created: now,
+      created: Math.floor(Date.now() / 1000),
       model: llmConfig.provider || llmConfig.model || llmConfig.chatModel || 'unknown',
-      choices: [
-        {
-          index: 0,
-          message: { 
-            role: 'assistant', 
-            content: text || '',
-            refusal: null // OpenAI 标准字段
-          },
-          logprobs: null, // OpenAI 标准字段
-          finish_reason: 'stop'
-        }
-      ],
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: text || '' },
+        finish_reason: 'stop'
+      }],
       usage: {
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
-        total_tokens: promptTokens + completionTokens,
-        completion_tokens_details: {
-          reasoning_tokens: 0,
-          accepted_prediction_tokens: 0,
-          rejected_prediction_tokens: 0
-        }
-      },
-      system_fingerprint: null // OpenAI 标准字段
+        total_tokens: promptTokens + completionTokens
+      }
     });
-    return;
   }
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -106,80 +112,69 @@ async function handleChatCompletionsV3(req, res) {
   
   try {
     let totalContent = '';
+    let isFirstChunk = true;
+    
     await client.chatStream(messages, (delta) => {
-      totalContent += delta || '';
-      res.write(
-        `data: ${JSON.stringify({
+      if (delta) {
+        totalContent += delta;
+        const deltaObj = isFirstChunk 
+          ? { role: 'assistant', content: delta }
+          : { content: delta };
+        
+        res.write(`data: ${JSON.stringify({
           id,
           object: 'chat.completion.chunk',
           created: now,
           model: modelName,
-          system_fingerprint: null,
           choices: [{
             index: 0,
-            delta: { 
-              content: delta || '',
-              role: delta ? undefined : 'assistant' // 首个 chunk 包含 role
-            },
-            logprobs: null,
+            delta: deltaObj,
             finish_reason: null
           }]
-        })}\n\n`
-      );
-    }, llmConfig);
+        })}\n\n`);
+        
+        isFirstChunk = false;
+      }
+    }, overrides);
     
-    // 发送最终 chunk（包含 finish_reason 和 usage）
-    const promptText = messages.map(m => m.content || '').join('');
-    const promptTokens = Math.ceil(promptText.length / 4);
-    const completionTokens = Math.ceil(totalContent.length / 4);
+    const promptText = extractMessageText(messages);
+    const promptTokens = estimateTokens(promptText);
+    const completionTokens = estimateTokens(totalContent);
     
-    res.write(
-      `data: ${JSON.stringify({
-        id,
-        object: 'chat.completion.chunk',
-        created: now,
-        model: modelName,
-        system_fingerprint: null,
-        choices: [{
-          index: 0,
-          delta: {},
-          logprobs: null,
-          finish_reason: 'stop'
-        }],
-        usage: {
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-          total_tokens: promptTokens + completionTokens,
-          completion_tokens_details: {
-            reasoning_tokens: 0,
-            accepted_prediction_tokens: 0,
-            rejected_prediction_tokens: 0
-          }
-        }
-      })}\n\n`
-    );
+    res.write(`data: ${JSON.stringify({
+      id,
+      object: 'chat.completion.chunk',
+      created: now,
+      model: modelName,
+      choices: [{
+        index: 0,
+        delta: {},
+        finish_reason: 'stop'
+      }],
+      usage: {
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: promptTokens + completionTokens
+      }
+    })}\n\n`);
     res.write('data: [DONE]\n\n');
   } catch (error) {
-    // 在流模式下，使用SSE格式发送错误信息
-    res.write(
-      `data: ${JSON.stringify({
-        id,
-        object: 'chat.completion.chunk',
-        created: now,
-        model: modelName,
-        system_fingerprint: null,
-        choices: [{
-          index: 0,
-          delta: {},
-          logprobs: null,
-          finish_reason: 'error'
-        }],
-        error: {
-          message: error.message,
-          type: 'server_error'
-        }
-      })}\n\n`
-    );
+    res.write(`data: ${JSON.stringify({
+      id,
+      object: 'chat.completion.chunk',
+      created: now,
+      model: modelName,
+      choices: [{
+        index: 0,
+        delta: {},
+        finish_reason: null
+      }],
+      error: {
+        message: error.message || 'Internal server error',
+        type: 'server_error',
+        code: 'internal_error'
+      }
+    })}\n\n`);
     res.write('data: [DONE]\n\n');
   } finally {
     res.end();
@@ -195,18 +190,17 @@ async function handleModels(req, res) {
   if (format === 'openai' || req.path === '/api/v3/models') {
     const list = providers.length ? providers : (defaultProvider ? [defaultProvider] : []);
     const now = Math.floor(Date.now() / 1000);
-    const data = list.map((p) => ({
-      id: p,
-      object: 'model',
-      created: now,
-      owned_by: 'xrk-agt',
-      // 保留 meta 字段用于内部扩展，但符合 OpenAI 基本标准
-      meta: { key: p, label: p, description: `LLM提供商: ${p}`, tags: [], baseUrl: null }
-    }));
-    return res.json({ object: 'list', data });
+    return res.json({
+      object: 'list',
+      data: list.map((p) => ({
+        id: p,
+        object: 'model',
+        created: now,
+        owned_by: 'xrk-agt'
+      }))
+    });
   }
 
-  // 详细格式（用于前端，包含工作流信息）
   const profiles = providers.map(provider => ({
     key: provider,
     label: provider,

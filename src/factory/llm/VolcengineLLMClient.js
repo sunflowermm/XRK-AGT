@@ -21,6 +21,7 @@ export default class VolcengineLLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
+    this._timeout = config.timeout || 360000;
   }
 
   /**
@@ -46,6 +47,13 @@ export default class VolcengineLLMClient {
   }
 
   /**
+   * 获取超时时间
+   */
+  get timeout() {
+    return this._timeout || 360000;
+  }
+
+  /**
    * 构建请求头
    */
   buildHeaders(extra = {}) {
@@ -56,7 +64,8 @@ export default class VolcengineLLMClient {
     
     // 火山引擎使用 Bearer Token 认证
     if (this.config.apiKey) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+      const apiKey = String(this.config.apiKey).trim();
+      headers['Authorization'] = `Bearer ${apiKey}`;
     }
     
     if (this.config.headers) {
@@ -110,33 +119,20 @@ export default class VolcengineLLMClient {
   }
 
   /**
-   * 获取超时时间
-   */
-  get timeout() {
-    return this.config.timeout || 360_000;
-  }
-
-  /**
    * 通过识图工厂把图片转成文本描述，再交给文本模型处理
-   * 这样可以让 MiMo 等纯文本 LLM 也复用火山识图能力
-   * @param {Array} messages
-   * @returns {Promise<Array>}
+   * @param {Array} messages - 原始消息数组
+   * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
    */
   async transformMessages(messages) {
-    const transformed = [];
+    if (!Array.isArray(messages)) return messages;
 
-    // 识图配置：由 AIStream.resolveLLMConfig 注入 visionProvider 和 visionConfig
     const visionProvider = (this.config.visionProvider || 'volcengine').toLowerCase();
     const visionConfig = this.config.visionConfig || {};
+    const visionClient = VisionFactory.hasProvider(visionProvider) && visionConfig.apiKey
+      ? VisionFactory.createClient({ provider: visionProvider, ...visionConfig })
+      : null;
 
-    let visionClient = null;
-    if (VisionFactory.hasProvider(visionProvider) && visionConfig.apiKey) {
-      visionClient = VisionFactory.createClient({
-        provider: visionProvider,
-        ...visionConfig
-      });
-    }
-
+    const transformed = [];
     for (const msg of messages) {
       const newMsg = { ...msg };
 
@@ -146,20 +142,21 @@ export default class VolcengineLLMClient {
         const replyImages = msg.content.replyImages || [];
         const allImages = [...replyImages, ...images];
 
-        if (!visionClient || allImages.length === 0) {
-          newMsg.content = text || '';
-        } else {
+        if (visionClient && allImages.length > 0) {
           const descList = await visionClient.recognizeImages(allImages);
-          const parts = [];
-
-          allImages.forEach((img, idx) => {
+          const parts = allImages.map((img, idx) => {
             const desc = descList[idx] || '识别失败';
             const prefix = replyImages.includes(img) ? '[回复图片:' : '[图片:';
-            parts.push(`${prefix}${desc}]`);
+            return `${prefix}${desc}]`;
           });
-
           newMsg.content = text + (parts.length ? ' ' + parts.join(' ') : '');
+        } else {
+          newMsg.content = text || '';
         }
+      } else if (newMsg.content && typeof newMsg.content === 'object') {
+        newMsg.content = newMsg.content.text || '';
+      } else if (newMsg.content == null) {
+        newMsg.content = '';
       }
 
       transformed.push(newMsg);
@@ -170,132 +167,92 @@ export default class VolcengineLLMClient {
 
   /**
    * 非流式调用（支持工具调用）
+   * @param {Array} messages - 消息数组
+   * @param {Object} overrides - 覆盖配置
+   * @returns {Promise<string>} AI 回复文本
    */
   async chat(messages, overrides = {}) {
-    // 转换messages，处理图片（经由 VisionFactory 抽离识图能力）
     const transformedMessages = await this.transformMessages(messages);
-
-    // 支持多轮工具调用
     const maxToolRounds = this.config.maxToolRounds || 5;
     let currentMessages = [...transformedMessages];
-    let round = 0;
 
-    while (round < maxToolRounds) {
-    const response = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: this.buildHeaders(overrides.headers),
+    for (let round = 0; round < maxToolRounds; round++) {
+      const resp = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(this.buildBody(currentMessages, { ...overrides })),
-      signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
-    });
+        signal: AbortSignal.timeout(this.timeout)
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`火山引擎 LLM 请求失败: ${response.status} ${response.statusText}${errorText ? ` | ${errorText}` : ''}`);
-    }
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(`火山引擎 LLM 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      }
 
-    const result = await response.json();
-      const choice = result.choices?.[0];
-      if (!choice) break;
+      const result = await resp.json();
+      const message = result.choices?.[0]?.message;
+      if (!message) break;
 
-      const message = choice.message;
-      
-      // 检查是否有工具调用
-      if (message.tool_calls && Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
-        // 添加助手消息（包含tool_calls）
+      if (message.tool_calls?.length > 0) {
         currentMessages.push(message);
-        
-        // 调用MCP工具并获取结果
-        const toolResults = await MCPToolAdapter.handleToolCalls(message.tool_calls);
-        
-        // 添加工具结果消息
-        currentMessages.push(...toolResults);
-        
-        round++;
+        currentMessages.push(...await MCPToolAdapter.handleToolCalls(message.tool_calls));
         continue;
       }
 
-      // 没有工具调用，返回最终结果
       return message.content || '';
     }
 
-    // 达到最大轮次，返回最后一条消息
-    const lastMessage = currentMessages[currentMessages.length - 1];
-    return lastMessage?.content || '';
+    return currentMessages[currentMessages.length - 1]?.content || '';
   }
 
   /**
-   * 流式调用（支持工具调用）
+   * 流式调用
+   * @param {Array} messages - 消息数组
+   * @param {Function} onDelta - 每个数据块的回调函数
+   * @param {Object} overrides - 覆盖配置
+   * @returns {Promise<void>}
    */
   async chatStream(messages, onDelta, overrides = {}) {
-    // 转换messages，处理图片（经由 VisionFactory 抽离识图能力）
     const transformedMessages = await this.transformMessages(messages);
-
-    // 流式模式下工具调用支持有限，主要处理内容流
-    const response = await fetch(this.endpoint, {
+    const resp = await fetch(this.endpoint, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
       body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
-      signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
+      signal: AbortSignal.timeout(this.timeout)
     });
 
-    if (!response.ok || !response.body) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`火山引擎 LLM 流式请求失败: ${response.status} ${response.statusText}${errorText ? ` | ${errorText}` : ''}`);
+    if (!resp.ok || !resp.body) {
+      const text = await resp.text().catch(() => '');
+      throw new Error(`火山引擎 LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
-    const reader = response.body.getReader();
+    const reader = resp.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
-    let toolCalls = [];
 
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      
+
       buffer += decoder.decode(value, { stream: true });
 
       let idx;
       while ((idx = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, idx).trim();
         buffer = buffer.slice(idx + 1);
-        
-        if (!line || !line.startsWith('data:')) continue;
-        
-        const payload = line.slice(5).trim();
-        if (payload === '[DONE]') {
-          return;
-        }
-        
-        try {
-          const json = JSON.parse(payload);
-          const choice = json.choices?.[0];
-          if (!choice) continue;
 
-          const delta = choice.delta || {};
-          
-          // 处理内容流
-          if (delta.content && typeof onDelta === 'function') {
+        if (!line?.startsWith('data:')) continue;
+
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]') return;
+
+        try {
+          const delta = JSON.parse(payload).choices?.[0]?.delta;
+          if (delta?.content && typeof onDelta === 'function') {
             onDelta(delta.content);
           }
-
-          // 处理工具调用（流式模式下工具调用可能分块返回）
-          if (delta.tool_calls) {
-            for (const tc of delta.tool_calls) {
-              if (tc.index !== undefined) {
-                if (!toolCalls[tc.index]) {
-                  toolCalls[tc.index] = { id: tc.id, function: { name: '', arguments: '' }, type: 'function' };
-                }
-                if (tc.function?.name) {
-                  toolCalls[tc.index].function.name += tc.function.name;
-                }
-                if (tc.function?.arguments) {
-                  toolCalls[tc.index].function.arguments += tc.function.arguments;
-                }
-              }
-            }
-          }
         } catch {
-          // 忽略解析错误，继续读取
+          // 忽略解析错误
         }
       }
     }

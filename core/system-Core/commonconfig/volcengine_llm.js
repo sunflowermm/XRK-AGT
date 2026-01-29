@@ -76,6 +76,24 @@ export default class VolcengineLLMConfig extends ConfigBase {
             default: 0.9,
             component: 'InputNumber'
           },
+          presencePenalty: {
+            type: 'number',
+            label: 'Presence Penalty',
+            description: '存在惩罚（-2 到 2），控制模型重复已出现的内容',
+            min: -2,
+            max: 2,
+            default: 0,
+            component: 'InputNumber'
+          },
+          frequencyPenalty: {
+            type: 'number',
+            label: 'Frequency Penalty',
+            description: '频率惩罚（-2 到 2），控制模型重复高频词汇',
+            min: -2,
+            max: 2,
+            default: 0,
+            component: 'InputNumber'
+          },
           timeout: {
             type: 'number',
             label: '超时时间 (ms)',
@@ -120,6 +138,13 @@ export default class VolcengineLLMConfig extends ConfigBase {
             max: 20,
             default: 5,
             component: 'InputNumber'
+          },
+          enableStream: {
+            type: 'boolean',
+            label: '启用流式输出',
+            description: '是否启用流式输出（默认启用，所有运营商均支持）',
+            default: true,
+            component: 'Switch'
           }
         }
       }
