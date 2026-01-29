@@ -6,13 +6,36 @@ import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
+function pickFirst(obj, keys) {
+  for (const k of keys) {
+    if (Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== undefined && obj[k] !== null) return obj[k];
+  }
+  return undefined;
+}
+
 function parseOptionalJson(raw) {
-  if (!raw && raw !== 0) return null;
+  if (raw == null) return null;
+  if (typeof raw === 'object') return raw;
   try {
-    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return JSON.parse(String(raw));
   } catch {
     return null;
   }
+}
+
+function toNum(v) {
+  if (v == null || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function toBool(v) {
+  if (v == null || v === '') return undefined;
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toLowerCase();
+  if (s === 'true' || s === '1') return true;
+  if (s === 'false' || s === '0') return false;
+  return undefined;
 }
 
 function getProviderConfig(provider) {
@@ -40,7 +63,7 @@ async function handleChatCompletionsV3(req, res) {
   if (!messages) return HttpResponse.validationError(res, 'messages 参数无效');
 
   // 支持多种认证方式：body.apiKey、Authorization头部Bearer令牌
-  let accessKey = (body.apiKey || '').toString().trim();
+  let accessKey = (pickFirst(body, ['apiKey', 'api_key']) || '').toString().trim();
   if (!accessKey) {
     const authHeader = (req.headers.authorization || '').toString().trim();
     if (authHeader.startsWith('Bearer ')) {
@@ -49,12 +72,14 @@ async function handleChatCompletionsV3(req, res) {
   }
   if (!accessKey || accessKey !== BotUtil.apiKey) return HttpResponse.unauthorized(res, 'apiKey 无效');
 
-  const streamFlag = Boolean(body.stream);
+  const streamFlag = Boolean(pickFirst(body, ['stream']));
   const llm = cfg.aistream?.llm || {};
-  let provider = (body.model || '').toString().trim().toLowerCase();
-  if (!provider || !LLMFactory.hasProvider(provider)) {
-    provider = (llm.Provider || 'gptgod').toLowerCase();
-  }
+  const defaultProvider = (llm.Provider || 'gptgod').toLowerCase();
+  const bodyModel = (pickFirst(body, ['model']) || '').toString().trim().toLowerCase();
+
+  // 约定（对外接口）：
+  // - 外部调用只需要把 body.model 填成运营商 provider
+  const provider = (bodyModel && LLMFactory.hasProvider(bodyModel)) ? bodyModel : defaultProvider;
 
   const base = getProviderConfig(provider);
   const llmConfig = {
@@ -72,22 +97,78 @@ async function handleChatCompletionsV3(req, res) {
   }
 
   const client = LLMFactory.createClient(llmConfig);
-  const overrides = {
-    ...(body.temperature != null && { temperature: Number(body.temperature) }),
-    ...(body.max_tokens != null && { maxTokens: Number(body.max_tokens) })
-  };
+  // 有意义的别名兼容：同义字段统一传给各 provider client
+  const overrides = {};
+  const temperature = toNum(pickFirst(body, ['temperature']));
+  if (temperature !== undefined) overrides.temperature = temperature;
 
+  const maxTokens = toNum(pickFirst(body, ['max_tokens', 'maxTokens', 'max_completion_tokens', 'maxCompletionTokens']));
+  if (maxTokens !== undefined) {
+    overrides.max_tokens = maxTokens;
+    overrides.maxTokens = maxTokens;
+  }
+  const topP = toNum(pickFirst(body, ['top_p', 'topP']));
+  if (topP !== undefined) {
+    overrides.top_p = topP;
+    overrides.topP = topP;
+  }
+  const presencePenalty = toNum(pickFirst(body, ['presence_penalty', 'presencePenalty']));
+  if (presencePenalty !== undefined) {
+    overrides.presence_penalty = presencePenalty;
+    overrides.presencePenalty = presencePenalty;
+  }
+  const frequencyPenalty = toNum(pickFirst(body, ['frequency_penalty', 'frequencyPenalty']));
+  if (frequencyPenalty !== undefined) {
+    overrides.frequency_penalty = frequencyPenalty;
+    overrides.frequencyPenalty = frequencyPenalty;
+  }
+  const toolChoice = pickFirst(body, ['tool_choice', 'toolChoice']);
+  if (toolChoice !== undefined) overrides.tool_choice = toolChoice;
+  const parallel = toBool(pickFirst(body, ['parallel_tool_calls', 'parallelToolCalls']));
+  if (parallel !== undefined) {
+    overrides.parallel_tool_calls = parallel;
+    overrides.parallelToolCalls = parallel;
+  }
+  const tools = pickFirst(body, ['tools']);
+  if (tools !== undefined) overrides.tools = tools;
+
+  // 2026 常见扩展字段透传（兼容 OpenAI-like / vLLM / 本地推理）
+  const stop = pickFirst(body, ['stop']);
+  if (stop !== undefined) overrides.stop = stop;
+  const responseFormat = pickFirst(body, ['response_format', 'responseFormat']);
+  if (responseFormat !== undefined) overrides.response_format = responseFormat;
+  const streamOptions = pickFirst(body, ['stream_options', 'streamOptions']);
+  if (streamOptions !== undefined) overrides.stream_options = streamOptions;
+  const seed = toNum(pickFirst(body, ['seed']));
+  if (seed !== undefined) overrides.seed = seed;
+  const user = pickFirst(body, ['user']);
+  if (user !== undefined) overrides.user = user;
+  const n = toNum(pickFirst(body, ['n']));
+  if (n !== undefined) overrides.n = n;
+  const logitBias = pickFirst(body, ['logit_bias', 'logitBias']);
+  if (logitBias !== undefined) overrides.logit_bias = logitBias;
+  const logprobs = toBool(pickFirst(body, ['logprobs']));
+  if (logprobs !== undefined) overrides.logprobs = logprobs;
+  const topLogprobs = toNum(pickFirst(body, ['top_logprobs', 'topLogprobs']));
+  if (topLogprobs !== undefined) overrides.top_logprobs = topLogprobs;
+
+  const extraBody = parseOptionalJson(pickFirst(body, ['extraBody']));
+  if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;
+
+  // 对外接口约定：body.model 用作 provider，不承诺用它承载“真实模型名”的语义
   if (!streamFlag) {
     const text = await client.chat(messages, overrides);
     const promptText = extractMessageText(messages);
     const promptTokens = estimateTokens(promptText);
     const completionTokens = estimateTokens(text);
     
+    // 对外返回 model=provider
+    const responseModel = llmConfig.provider || 'unknown';
     return res.json({
       id: `chatcmpl_${Date.now()}`,
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
-      model: llmConfig.provider || llmConfig.model || llmConfig.chatModel || 'unknown',
+      model: responseModel,
       choices: [{
         index: 0,
         message: { role: 'assistant', content: text || '' },
@@ -108,7 +189,7 @@ async function handleChatCompletionsV3(req, res) {
 
   const now = Math.floor(Date.now() / 1000);
   const id = `chatcmpl_${Date.now()}`;
-  const modelName = llmConfig.provider || llmConfig.model || llmConfig.chatModel || 'unknown';
+  const modelName = llmConfig.provider || 'unknown';
   
   try {
     let totalContent = '';
@@ -117,9 +198,7 @@ async function handleChatCompletionsV3(req, res) {
     await client.chatStream(messages, (delta) => {
       if (delta) {
         totalContent += delta;
-        const deltaObj = isFirstChunk 
-          ? { role: 'assistant', content: delta }
-          : { content: delta };
+        const deltaObj = isFirstChunk ? { role: 'assistant', content: delta } : { content: delta };
         
         res.write(`data: ${JSON.stringify({
           id,
@@ -201,18 +280,32 @@ async function handleModels(req, res) {
     });
   }
 
-  const profiles = providers.map(provider => ({
-    key: provider,
-    label: provider,
-    description: `LLM提供商: ${provider}`,
-    tags: [],
-    model: null,
-    baseUrl: null,
-    maxTokens: null,
-    temperature: null,
-    hasApiKey: false,
-    capabilities: []
-  }));
+  const profiles = providers.map((provider) => {
+    const c = getProviderConfig(provider) || {};
+    const model = c.model || c.chatModel || null;
+    const baseUrl = c.baseUrl || null;
+    const maxTokens = c.maxTokens ?? c.max_tokens ?? null;
+    const temperature = c.temperature ?? null;
+    const hasApiKey = Boolean((c.apiKey || '').toString().trim());
+
+    const capabilities = [];
+    if (c.enableStream !== false) capabilities.push('stream');
+    if (c.enableTools === true) capabilities.push('tools');
+    if (c.visionProvider || c.visionConfig) capabilities.push('vision_proxy');
+
+    return {
+      key: provider,
+      label: provider,
+      description: `LLM提供商: ${provider}`,
+      tags: [],
+      model,
+      baseUrl,
+      maxTokens,
+      temperature,
+      hasApiKey,
+      capabilities
+    };
+  });
 
   const allStreams = StreamLoader.getStreamsByPriority();
   const workflows = allStreams.map(stream => ({
@@ -266,7 +359,9 @@ export default {
 
           const persona = (req.query.persona || '').toString();
           const workflowName = (req.query.workflow || 'chat').toString().trim() || 'chat';
-          const profileKey = (req.query.profile || req.query.llm || req.query.model || '').toString().trim() || undefined;
+          const profileKey = (req.query.profile || req.query.llm || '').toString().trim() || undefined;
+          const queryProvider = (req.query.provider || '').toString().trim().toLowerCase() || undefined;
+          const queryModel = (req.query.model || '').toString().trim().toLowerCase() || undefined;
           const contextObj = parseOptionalJson(req.query.context);
           const metadata = parseOptionalJson(req.query.meta);
 
@@ -293,6 +388,15 @@ export default {
             persona,
             profile: profileKey
           };
+
+          // 对外接口约定：query.model 通常填 provider；query.provider 仅作为可选字段
+          if (queryModel && LLMFactory.hasProvider(queryModel)) {
+            llmOverrides.provider = queryModel;
+          } else if (queryProvider && LLMFactory.hasProvider(queryProvider)) {
+            llmOverrides.provider = queryProvider;
+          } else if (profileKey && LLMFactory.hasProvider(profileKey.toLowerCase())) {
+            llmOverrides.provider = profileKey.toLowerCase();
+          }
 
           const executionContext = {
             e: null,

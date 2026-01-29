@@ -13,6 +13,7 @@ import stream from 'stream'
 import os from 'os'
 import vm from 'vm'
 import util from 'util'
+import { EventEmitter } from 'events'
 import common from '#utils/common.js'
 import cfg from '#infrastructure/config/config.js'
 import { 制作聊天记录 } from '#utils/botutil.js'
@@ -1782,7 +1783,7 @@ rc help - 显示详细帮助`, true);
       stream: stream,
       vm: vm,
       Buffer: Buffer,
-      EventEmitter: require('events').EventEmitter,
+      EventEmitter: EventEmitter,
       console: console,
       setTimeout: setTimeout,
       setInterval: setInterval,

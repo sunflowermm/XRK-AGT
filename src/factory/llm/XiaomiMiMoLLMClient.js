@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
-import VisionFactory from '../vision/VisionFactory.js';
-import { MCPToolAdapter } from './mcp-tool-adapter.js';
+import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
+import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 
 /**
  * 小米 MiMo LLM 客户端
@@ -69,45 +69,10 @@ export default class XiaomiMiMoLLMClient {
    * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
    */
   async transformMessages(messages) {
-    if (!Array.isArray(messages)) return messages;
-
-    const visionProvider = (this.config.visionProvider || this.config.provider || 'gptgod').toLowerCase();
-    const visionConfig = this.config.visionConfig || {};
-    const visionClient = VisionFactory.hasProvider(visionProvider) && visionConfig.apiKey
-      ? VisionFactory.createClient({ provider: visionProvider, ...visionConfig })
-      : null;
-
-    const transformed = [];
-    for (const msg of messages) {
-      const newMsg = { ...msg };
-
-      if (msg.role === 'user' && msg.content && typeof msg.content === 'object') {
-        const text = msg.content.text || msg.content.content || '';
-        const images = msg.content.images || [];
-        const replyImages = msg.content.replyImages || [];
-        const allImages = [...replyImages, ...images];
-
-        if (visionClient && allImages.length > 0) {
-          const descList = await visionClient.recognizeImages(allImages);
-          const parts = allImages.map((img, idx) => {
-            const desc = descList[idx] || '识别失败';
-            const prefix = replyImages.includes(img) ? '[回复图片:' : '[图片:';
-            return `${prefix}${desc}]`;
-          });
-          newMsg.content = text + (parts.length ? ' ' + parts.join(' ') : '');
-        } else {
-          newMsg.content = text || '';
-        }
-      } else if (newMsg.content && typeof newMsg.content === 'object') {
-        newMsg.content = newMsg.content.text || newMsg.content.content || '';
-      } else if (newMsg.content == null) {
-        newMsg.content = '';
-      }
-
-      transformed.push(newMsg);
-    }
-
-    return transformed;
+    return await transformMessagesWithVision(messages, this.config, {
+      defaultVisionProvider: 'gptgod',
+      allowProviderFallback: true
+    });
   }
 
   /**

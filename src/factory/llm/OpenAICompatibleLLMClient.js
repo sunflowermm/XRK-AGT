@@ -4,77 +4,83 @@ import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/ll
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 
 /**
- * GPTGod LLM 客户端
- * 支持聊天和识图功能
- * 
- * 识图说明（经由 VisionFactory 抽离）：
- * - LLM 本身不再直接下载/上传图片，而是把图片 URL / 本地路径交给识图工厂
- * - 识图工厂根据 aistream.yaml 中的 vision.Provider 选择运营商（如 gptgod）
- * - 识图结果拼接回 user 文本，兼容原有「[图片:描述]」格式
+ * OpenAI 兼容第三方 LLM 客户端（OpenAI-like / OpenAI-Compatible）
+ *
+ * 目标：
+ * - 用一个 provider 接入各种第三方“OpenAI 协议”接口（自定义 baseUrl/path/headers/认证/额外参数）
+ * - 保持与现有工作流消息结构兼容（图片 -> VisionFactory -> 文本描述）
+ * - 支持 MCP tool calling（OpenAI tools/tool_calls 协议）
+ *
+ * 常用配置：
+ * - baseUrl: 第三方 API base（例如 https://xxx.com/v1）
+ * - path: 默认 /chat/completions
+ * - apiKey: 密钥
+ * - authMode:
+ *   - bearer（默认）：Authorization: Bearer ${apiKey}
+ *   - api-key：api-key: ${apiKey}
+ *   - header：使用 authHeaderName 指定头名
+ * - authHeaderName: authMode=header 时使用（例如 X-Api-Key）
+ * - extraBody: 额外请求体字段（原样透传到下游）
  */
-export default class GPTGodLLMClient {
+export default class OpenAICompatibleLLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this.timeout = config.timeout || 360000;
+    this._timeout = config.timeout || 360000;
   }
 
-  /**
-   * 规范化端点地址
-   */
   normalizeEndpoint(config) {
-    const base = (config.baseUrl || 'https://api.gptgod.online/v1').replace(/\/+$/, '');
+    const base = (config.baseUrl || '').replace(/\/+$/, '');
     const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
+    if (!base) {
+      throw new Error('openai_compat: 未配置 baseUrl（第三方 OpenAI 兼容接口地址）');
+    }
     return `${base}${path}`;
   }
 
-  /**
-   * 构建请求头
-   */
+  get timeout() {
+    return this._timeout || 360000;
+  }
+
   buildHeaders(extra = {}) {
     const headers = {
       'Content-Type': 'application/json',
       ...extra
     };
-    
+
     if (this.config.apiKey) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+      const mode = String(this.config.authMode || 'bearer').toLowerCase();
+      const apiKey = String(this.config.apiKey).trim();
+      if (mode === 'api-key') {
+        headers['api-key'] = apiKey;
+      } else if (mode === 'header') {
+        const name = String(this.config.authHeaderName || '').trim();
+        if (!name) {
+          throw new Error('openai_compat: authMode=header 时必须提供 authHeaderName');
+        }
+        headers[name] = apiKey;
+      } else {
+        headers.Authorization = `Bearer ${apiKey}`;
+      }
     }
-    
+
     if (this.config.headers) {
       Object.assign(headers, this.config.headers);
     }
-    
+
     return headers;
   }
 
-  /**
-   * 构建请求体
-   * GPTGod API 兼容 OpenAI Chat Completions 格式
-   * 支持所有标准参数：temperature、max_tokens、top_p、presence_penalty、frequency_penalty
-   */
-  buildBody(messages, overrides = {}) {
-    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, (this.config.chatModel || this.config.model || 'gemini-exp-1114'));
-    applyOpenAITools(body, this.config, overrides);
-    return body;
-  }
-
-  /**
-   * 使用识图工厂处理消息中的图片，将图片转换为文本描述并拼接到 user 文本中
-   * @param {Array} messages - 原始消息数组
-   * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
-   */
   async transformMessages(messages) {
     return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'gptgod' });
   }
 
+  buildBody(messages, overrides = {}) {
+    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, 'gpt-4o-mini');
+    applyOpenAITools(body, this.config, overrides);
+    return body;
+  }
 
-  /**
-   * 聊天（非流式）
-   * @param {Array} messages - 消息数组，可能包含图片URL
-   * @param {Object} overrides - 覆盖配置
-   * @returns {Promise<string>} AI 回复文本
-   */
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const maxToolRounds = this.config.maxToolRounds || 5;
@@ -84,17 +90,17 @@ export default class GPTGodLLMClient {
       const resp = await fetch(this.endpoint, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildBody(currentMessages, overrides)),
-        signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
+        body: JSON.stringify(this.buildBody(currentMessages, { ...overrides })),
+        signal: AbortSignal.timeout(this.timeout)
       });
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
-        throw new Error(`GPTGod LLM 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+        throw new Error(`openai_compat 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
       }
 
-      const data = await resp.json();
-      const message = data?.choices?.[0]?.message;
+      const result = await resp.json();
+      const message = result?.choices?.[0]?.message;
       if (!message) break;
 
       if (message.tool_calls?.length > 0) {
@@ -109,25 +115,18 @@ export default class GPTGodLLMClient {
     return currentMessages[currentMessages.length - 1]?.content || '';
   }
 
-  /**
-   * 聊天（流式）
-   * @param {Array} messages - 消息数组
-   * @param {Function} onDelta - 每个数据块的回调函数
-   * @param {Object} overrides - 覆盖配置
-   * @returns {Promise<void>}
-   */
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const resp = await fetch(this.endpoint, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
       body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
-      signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
+      signal: AbortSignal.timeout(this.timeout)
     });
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`GPTGod LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw new Error(`openai_compat 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
     const reader = resp.body.getReader();
@@ -146,20 +145,19 @@ export default class GPTGodLLMClient {
         buffer = buffer.slice(idx + 1);
 
         if (!line?.startsWith('data:')) continue;
-
         const payload = line.slice(5).trim();
         if (payload === '[DONE]') return;
 
         try {
-          const delta = JSON.parse(payload).choices?.[0]?.delta;
+          const delta = JSON.parse(payload)?.choices?.[0]?.delta;
           if (delta?.content && typeof onDelta === 'function') {
             onDelta(delta.content);
           }
         } catch {
-          // 忽略解析错误
+          // ignore
         }
       }
     }
   }
-
 }
+

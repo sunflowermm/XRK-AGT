@@ -892,6 +892,21 @@ export default class AIStream {
     const llm = runtime.llm || {};
     const vision = runtime.vision || {};
 
+    const pickFirst = (...vals) => {
+      for (const v of vals) {
+        if (v !== undefined && v !== null) return v;
+      }
+      return undefined;
+    };
+    const pickTrimmed = (...vals) => {
+      for (const v of vals) {
+        if (v === undefined || v === null) continue;
+        const s = String(v).trim();
+        if (s) return s;
+      }
+      return undefined;
+    };
+
     // 获取提供商名称
     const provider = (apiConfig.provider || this.config.provider || llm.provider || llm.Provider || '').toLowerCase();
     const visionProvider = (apiConfig.visionProvider || this.config.visionProvider || vision.provider || vision.Provider || provider).toLowerCase();
@@ -906,23 +921,43 @@ export default class AIStream {
     }
 
     // 解析超时配置
-    const timeout = apiConfig.timeout || this.config.timeout || llm.timeout || 360000;
+    const timeout = apiConfig.timeout || apiConfig.timeoutMs || this.config.timeout || llm.timeout || 360000;
+
+    // 有意义的别名兼容：同义字段归一到内部字段（各厂商 client 再按自身协议映射）
+    const apiKey = pickTrimmed(apiConfig.apiKey, apiConfig.api_key, providerConfig.apiKey, providerConfig.api_key, this.config.apiKey, this.config.api_key);
+    const baseUrl = pickFirst(apiConfig.baseUrl, apiConfig.base_url, this.config.baseUrl, this.config.base_url, providerConfig.baseUrl, providerConfig.base_url);
+    const model = pickFirst(apiConfig.model, apiConfig.chatModel, this.config.model, this.config.chatModel, providerConfig.model, providerConfig.chatModel);
+    const chatModel = pickFirst(apiConfig.chatModel, this.config.chatModel, providerConfig.chatModel, apiConfig.model, this.config.model, providerConfig.model);
+
+    const maxTokens = pickFirst(
+      apiConfig.maxTokens, apiConfig.max_tokens, apiConfig.max_completion_tokens, apiConfig.maxCompletionTokens, apiConfig.maxCompletionTokens,
+      this.config.maxTokens, this.config.max_tokens,
+      providerConfig.maxTokens, providerConfig.max_tokens
+    );
+    const topP = pickFirst(apiConfig.topP, apiConfig.top_p, this.config.topP, this.config.top_p, providerConfig.topP, providerConfig.top_p);
+    const presencePenalty = pickFirst(apiConfig.presencePenalty, apiConfig.presence_penalty, this.config.presencePenalty, this.config.presence_penalty, providerConfig.presencePenalty, providerConfig.presence_penalty);
+    const frequencyPenalty = pickFirst(apiConfig.frequencyPenalty, apiConfig.frequency_penalty, this.config.frequencyPenalty, this.config.frequency_penalty, providerConfig.frequencyPenalty, providerConfig.frequency_penalty);
+    const enableTools = pickFirst(apiConfig.enableTools, apiConfig.enable_tools, providerConfig.enableTools, providerConfig.enable_tools, this.config.enableTools, this.config.enable_tools, true);
 
     // 配置合并：优先级 apiConfig > this.config > providerConfig
     const finalConfig = {
       ...providerConfig,
       ...this.config,
       ...apiConfig,
-      // 确保关键字段不被空值覆盖
-      apiKey: apiConfig.apiKey?.trim() || providerConfig.apiKey?.trim() || this.config.apiKey?.trim() || undefined,
-      model: apiConfig.model || apiConfig.chatModel || this.config.model || this.config.chatModel || providerConfig.chatModel || providerConfig.model,
-      chatModel: apiConfig.chatModel || this.config.chatModel || providerConfig.chatModel || apiConfig.model || this.config.model || providerConfig.model,
+      // 统一后的关键字段（同义字段兼容）
+      apiKey,
+      baseUrl,
+      model,
+      chatModel,
+      maxTokens,
+      topP,
+      presencePenalty,
+      frequencyPenalty,
       provider,
       visionProvider,
       visionConfig,
       timeout,
-      // enableTools 合并：优先级 apiConfig > providerConfig > this.config > true（默认）
-      enableTools: apiConfig.enableTools ?? providerConfig.enableTools ?? this.config.enableTools ?? true
+      enableTools
     };
 
     return finalConfig;

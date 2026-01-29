@@ -4,77 +4,74 @@ import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/ll
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 
 /**
- * GPTGod LLM 客户端
- * 支持聊天和识图功能
- * 
- * 识图说明（经由 VisionFactory 抽离）：
- * - LLM 本身不再直接下载/上传图片，而是把图片 URL / 本地路径交给识图工厂
- * - 识图工厂根据 aistream.yaml 中的 vision.Provider 选择运营商（如 gptgod）
- * - 识图结果拼接回 user 文本，兼容原有「[图片:描述]」格式
+ * Azure OpenAI 官方 LLM 客户端（Chat Completions）
+ *
+ * Azure 的关键差异：
+ * - endpoint 形如：https://{resource}.openai.azure.com
+ * - 路径包含 deployment：/openai/deployments/{deployment}/chat/completions
+ * - 必须带 api-version query：?api-version=2024-xx-xx
+ * - 认证默认用 header: api-key
+ *
+ * 说明：
+ * - 对外调用 model=provider 的约定下，deployment（真实模型）在 yaml 中配置
+ * - tool calling 使用 OpenAI tools/tool_calls 协议 + MCPToolAdapter 多轮执行
  */
-export default class GPTGodLLMClient {
+export default class AzureOpenAILLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this.timeout = config.timeout || 360000;
+    this._timeout = config.timeout || 360000;
   }
 
-  /**
-   * 规范化端点地址
-   */
   normalizeEndpoint(config) {
-    const base = (config.baseUrl || 'https://api.gptgod.online/v1').replace(/\/+$/, '');
-    const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
-    return `${base}${path}`;
+    const base = (config.baseUrl || '').replace(/\/+$/, '');
+    if (!base) throw new Error('azure_openai: 未配置 baseUrl（Azure endpoint）');
+
+    const deployment = encodeURIComponent(config.deployment || config.model || config.chatModel || '');
+    if (!deployment) throw new Error('azure_openai: 未配置 deployment（Azure 部署名）');
+
+    const path = (config.path || `/openai/deployments/${deployment}/chat/completions`).replace(/^\/?/, '/');
+    const apiVersion = (config.apiVersion || '2024-10-21').toString().trim();
+    const url = new URL(`${base}${path}`);
+    url.searchParams.set('api-version', apiVersion);
+    return url.toString();
   }
 
-  /**
-   * 构建请求头
-   */
+  get timeout() {
+    return this._timeout || 360000;
+  }
+
   buildHeaders(extra = {}) {
     const headers = {
       'Content-Type': 'application/json',
       ...extra
     };
-    
+
     if (this.config.apiKey) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+      headers['api-key'] = String(this.config.apiKey).trim();
     }
-    
+
     if (this.config.headers) {
       Object.assign(headers, this.config.headers);
     }
-    
+
     return headers;
   }
 
-  /**
-   * 构建请求体
-   * GPTGod API 兼容 OpenAI Chat Completions 格式
-   * 支持所有标准参数：temperature、max_tokens、top_p、presence_penalty、frequency_penalty
-   */
-  buildBody(messages, overrides = {}) {
-    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, (this.config.chatModel || this.config.model || 'gemini-exp-1114'));
-    applyOpenAITools(body, this.config, overrides);
-    return body;
-  }
-
-  /**
-   * 使用识图工厂处理消息中的图片，将图片转换为文本描述并拼接到 user 文本中
-   * @param {Array} messages - 原始消息数组
-   * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
-   */
   async transformMessages(messages) {
     return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'gptgod' });
   }
 
+  buildBody(messages, overrides = {}) {
+    // Azure endpoint/deployment 在 URL 中处理，这里复用 OpenAI-like body 生成逻辑即可
+    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, undefined);
+    // Azure 某些版本会忽略 model，但保留可增强兼容性；若为空则删除，避免下游严格校验
+    if (body.model === undefined) delete body.model;
 
-  /**
-   * 聊天（非流式）
-   * @param {Array} messages - 消息数组，可能包含图片URL
-   * @param {Object} overrides - 覆盖配置
-   * @returns {Promise<string>} AI 回复文本
-   */
+    applyOpenAITools(body, this.config, overrides);
+    return body;
+  }
+
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const maxToolRounds = this.config.maxToolRounds || 5;
@@ -84,17 +81,17 @@ export default class GPTGodLLMClient {
       const resp = await fetch(this.endpoint, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildBody(currentMessages, overrides)),
-        signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
+        body: JSON.stringify(this.buildBody(currentMessages, { ...overrides })),
+        signal: AbortSignal.timeout(this.timeout)
       });
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
-        throw new Error(`GPTGod LLM 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+        throw new Error(`Azure OpenAI 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
       }
 
-      const data = await resp.json();
-      const message = data?.choices?.[0]?.message;
+      const result = await resp.json();
+      const message = result?.choices?.[0]?.message;
       if (!message) break;
 
       if (message.tool_calls?.length > 0) {
@@ -109,25 +106,18 @@ export default class GPTGodLLMClient {
     return currentMessages[currentMessages.length - 1]?.content || '';
   }
 
-  /**
-   * 聊天（流式）
-   * @param {Array} messages - 消息数组
-   * @param {Function} onDelta - 每个数据块的回调函数
-   * @param {Object} overrides - 覆盖配置
-   * @returns {Promise<void>}
-   */
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const resp = await fetch(this.endpoint, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
       body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
-      signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
+      signal: AbortSignal.timeout(this.timeout)
     });
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`GPTGod LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw new Error(`Azure OpenAI 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
     const reader = resp.body.getReader();
@@ -146,20 +136,19 @@ export default class GPTGodLLMClient {
         buffer = buffer.slice(idx + 1);
 
         if (!line?.startsWith('data:')) continue;
-
         const payload = line.slice(5).trim();
         if (payload === '[DONE]') return;
 
         try {
-          const delta = JSON.parse(payload).choices?.[0]?.delta;
+          const delta = JSON.parse(payload)?.choices?.[0]?.delta;
           if (delta?.content && typeof onDelta === 'function') {
             onDelta(delta.content);
           }
         } catch {
-          // 忽略解析错误
+          // ignore
         }
       }
     }
   }
-
 }
+

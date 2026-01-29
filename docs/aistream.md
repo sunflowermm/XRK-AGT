@@ -43,7 +43,7 @@ flowchart TB
     end
     
     subgraph MainServer["主服务端"]
-        LLMFactory["LLM工厂<br/>gptgod/volcengine<br/>/api/v3/chat/completions"]
+        LLMFactory["LLM工厂<br/>gptgod/volcengine/xiaomimimo/openai/openai_compat/gemini/anthropic/azure_openai<br/>/api/v3/chat/completions"]
         MCP["MCP服务器<br/>工具调用协议"]
     end
     
@@ -206,7 +206,7 @@ constructor(options = {})
 工作流系统全局配置位于 `data/server_bots/aistream.yaml`：
 
 **关键配置项**：
-- `llm.Provider` - LLM提供商（`gptgod`/`volcengine`/`xiaomimimo`）
+- `llm.Provider` - LLM提供商（`gptgod`/`volcengine`/`xiaomimimo`/`openai`/`openai_compat`/`gemini`/`anthropic`/`azure_openai`）
 - `subserver.host` - 子服务端地址（默认 `127.0.0.1`）
 - `subserver.port` - 子服务端端口（默认 `8000`）
 - `subserver.timeout` - 请求超时时间（毫秒，默认 `30000`）
@@ -216,6 +216,10 @@ constructor(options = {})
 - 配置合并优先级：`apiConfig` > `providerConfig` > `this.config` > 默认值
 - 支持动态扩展，无需修改基类代码
 - `enableTools`：控制是否启用工具调用，由各提供商配置决定
+
+**关于 model（外部调用约定）**：
+- 对外 v3 入口 `POST /api/v3/chat/completions`：外部调用只需要把 `model` 填成 **provider（运营商）**（如 `openai` / `openai_compat` / `gemini` 等），**不需要**再填写真实模型名。
+- 真实模型名由 `{provider}_llm.yaml` 中的默认 `model`/`chatModel` 决定；你也可以通过工作流/内部配置覆盖，但外部调用不强制要求。
 
 **Embedding配置**：
 - 统一使用子服务端向量服务（`/api/vector/*`）
@@ -799,8 +803,7 @@ AIStream通过子服务端提供向量化服务（统一通过 `Bot.callSubserve
   ```json
   {
     "messages": [...],
-    "model": "gpt-4",
-    "provider": "gptgod",
+    "model": "gptgod",
     "enableTools": false
     "temperature": 0.8,
     "max_tokens": 2000,
@@ -808,6 +811,16 @@ AIStream通过子服务端提供向量化服务（统一通过 `Bot.callSubserve
     "enableTools": true
   }
   ```
+
+**参数别名兼容（同义字段）**：
+- `apiKey` ↔ `api_key`
+- `max_tokens` ↔ `maxTokens` ↔ `max_completion_tokens`
+- `top_p` ↔ `topP`
+- `presence_penalty` ↔ `presencePenalty`
+- `frequency_penalty` ↔ `frequencyPenalty`
+- `tool_choice` ↔ `toolChoice`
+- `parallel_tool_calls` ↔ `parallelToolCalls`
+- `extraBody`：可选扩展字段（对象或 JSON 字符串）
   
   **调用流程**：
   1. AIStream调用子服务端 `/api/langchain/chat`

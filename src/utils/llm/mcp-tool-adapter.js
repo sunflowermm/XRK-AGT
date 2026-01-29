@@ -1,26 +1,26 @@
 import StreamLoader from '#infrastructure/aistream/loader.js';
 
 /**
- * MCP工具适配器
- * 将MCP工具转换为OpenAI格式的tools数组，并处理tool_calls响应
+ * MCP 工具适配器
+ * - 将 MCP 工具转换为 OpenAI tools 数组格式
+ * - 处理 OpenAI tool_calls 响应：调用 MCP 工具并返回 role=tool 的消息列表
  */
 export class MCPToolAdapter {
   /**
-   * 获取MCP服务器实例
+   * 获取 MCP 服务器实例
+   * @returns {*}
    */
   static getMCPServer() {
     return StreamLoader.mcpServer;
   }
 
   /**
-   * 将MCP工具转换为OpenAI格式的tools数组
-   * @returns {Array} OpenAI格式的工具列表
+   * 将 MCP 工具转换为 OpenAI 格式的 tools 数组
+   * @returns {Array} OpenAI tools
    */
   static convertMCPToolsToOpenAI() {
     const mcpServer = this.getMCPServer();
-    if (!mcpServer) {
-      return [];
-    }
+    if (!mcpServer) return [];
 
     const mcpTools = mcpServer.listTools();
     return mcpTools.map(tool => ({
@@ -34,9 +34,9 @@ export class MCPToolAdapter {
   }
 
   /**
-   * 将JSON Schema转换为OpenAI格式的参数定义
-   * @param {Object} schema - JSON Schema格式
-   * @returns {Object} OpenAI格式的参数定义
+   * 将 JSON Schema 转换为 OpenAI function.parameters 定义
+   * @param {Object} schema - JSON Schema
+   * @returns {Object} OpenAI schema
    */
   static convertSchemaToOpenAI(schema) {
     if (!schema || typeof schema !== 'object') {
@@ -56,15 +56,8 @@ export class MCPToolAdapter {
           description: prop.description || ''
         };
 
-        // 处理枚举类型
-        if (prop.enum) {
-          result.properties[key].enum = prop.enum;
-        }
-
-        // 处理默认值
-        if (prop.default !== undefined) {
-          result.properties[key].default = prop.default;
-        }
+        if (prop.enum) result.properties[key].enum = prop.enum;
+        if (prop.default !== undefined) result.properties[key].default = prop.default;
       }
     }
 
@@ -72,58 +65,50 @@ export class MCPToolAdapter {
   }
 
   /**
-   * 处理tool_calls响应，调用MCP工具并返回结果
-   * @param {Array} toolCalls - 工具调用列表（OpenAI格式）
-   * @returns {Promise<Array>} 工具调用结果消息列表
+   * 处理 tool_calls：并行调用 MCP 工具并返回 tool 角色消息
+   * @param {Array} toolCalls - OpenAI tool_calls
+   * @returns {Promise<Array>} tool role messages
    */
   static async handleToolCalls(toolCalls) {
-    if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
-      return [];
-    }
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) return [];
 
     const mcpServer = this.getMCPServer();
     if (!mcpServer) {
       return toolCalls.map(tc => ({
         role: 'tool',
         tool_call_id: tc.id,
-        content: JSON.stringify({ 
-          success: false, 
-          error: 'MCP服务未启用' 
+        content: JSON.stringify({
+          success: false,
+          error: 'MCP服务未启用'
         })
       }));
     }
 
-    // 并行调用所有工具
     const promises = toolCalls.map(async (toolCall) => {
       try {
         const functionName = toolCall.function?.name;
         let argumentsObj = {};
 
-        // 解析arguments（可能是JSON字符串）
         if (toolCall.function?.arguments) {
           try {
             argumentsObj = typeof toolCall.function.arguments === 'string'
               ? JSON.parse(toolCall.function.arguments)
               : toolCall.function.arguments;
-          } catch (e) {
-            // 如果解析失败，使用原始值
+          } catch {
             argumentsObj = { raw: toolCall.function.arguments };
           }
         }
 
-        // 调用MCP工具
         const result = await mcpServer.handleToolCall({
           name: functionName,
           arguments: argumentsObj
         });
 
-        // 格式化响应
         const content = result.content?.[0]?.text || JSON.stringify(result);
-        
         return {
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: content
+          content
         };
       } catch (error) {
         return {
@@ -141,11 +126,12 @@ export class MCPToolAdapter {
   }
 
   /**
-   * 检查是否有可用的MCP工具
+   * 是否有可用 MCP 工具
    * @returns {boolean}
    */
   static hasTools() {
     const mcpServer = this.getMCPServer();
-    return mcpServer && mcpServer.tools && mcpServer.tools.size > 0;
+    return Boolean(mcpServer && mcpServer.tools && mcpServer.tools.size > 0);
   }
 }
+

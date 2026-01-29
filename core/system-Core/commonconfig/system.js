@@ -1873,13 +1873,13 @@ export default class SystemConfig extends ConfigBase {
             llm: {
               type: 'object',
               label: 'LLM工厂运营商选择',
-              description: '详细配置位于 data/server_bots/{port}/gptgod_llm.yaml / volcengine_llm.yaml / xiaomimimo_llm.yaml',
+              description: '详细配置位于 data/server_bots/{port}/*_llm.yaml（如 gptgod_llm / volcengine_llm / xiaomimimo_llm / openai_llm / openai_compat_llm / gemini_llm）',
               component: 'SubForm',
               fields: {
                 Provider: {
                   type: 'string',
                   label: 'LLM运营商',
-                  enum: ['gptgod', 'volcengine', 'xiaomimimo'],
+                  enum: ['gptgod', 'volcengine', 'xiaomimimo', 'openai', 'openai_compat', 'gemini', 'anthropic', 'azure_openai'],
                   default: 'gptgod',
                   component: 'Select'
                 },

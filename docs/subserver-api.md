@@ -30,7 +30,7 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
 
 - **主服务端（Node.js）负责**
   - **统一 LLM Provider 入口**：`POST /api/v3/chat/completions`（伪造 OpenAI Chat 协议，供 LangChain/外部生态调用）
-  - **厂商直连 & 工厂选择**：根据 `model(=provider)` 从配置选择运营商与真实模型ID
+  - **厂商直连 & 工厂选择**：根据 `model(=provider)` 选择运营商；无需传真实模型名
   - **MCP 工具注入/执行**：把工作流注册的 MCP tools 注入到厂商 tool calling 协议，并执行多轮 tool_calls，最终返回 `assistant.content`
 
 - **子服务端（Python FastAPI）负责**
@@ -41,10 +41,13 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
 #### 与主服务端的连接方式
 
 - 子服务端调用主服务端：`POST /api/v3/chat/completions`
-- **必填三字段**：
+- **必填字段**：
   - `messages`: OpenAI messages
-  - `model`: 运营商/provider（如 `volcengine` / `xiaomimimo` / `gptgod`）
-  - `apiKey`: 访问主服务端 v3 的鉴权 key（Bot 启动生成），**不是厂商 key**
+  - `model`: 运营商/provider（`gptgod` / `volcengine` / `xiaomimimo` / `openai` / `openai_compat` / `gemini` / `anthropic` / `azure_openai`）
+  - `apiKey`（或 `api_key`）: 访问主服务端 v3 的鉴权 key（Bot 启动生成），**不是厂商 key**
+
+- **说明**：
+  - 外部调用只需要填 `model=provider`，不需要填写“真实模型名”（会使用 `{provider}_llm.yaml` 的默认模型配置）
 
 > 约定说明：主服务端 v3 是“伪 OpenAI 入口”，为了让 LangChain/社区生态能直接对接。
 > 但它**只保证** `assistant.content`（或 SSE chunk 的 `delta.content`）输出；工具调用细节由主服务端内部处理，不向外暴露。
@@ -63,6 +66,16 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
   "enableTools": true
 }
 ```
+
+**参数别名兼容（同义字段）**：
+- `apiKey` ↔ `api_key`
+- `max_tokens` ↔ `maxTokens` ↔ `max_completion_tokens`（不同 OpenAI-like 生态常见写法）
+- `top_p` ↔ `topP`
+- `presence_penalty` ↔ `presencePenalty`
+- `frequency_penalty` ↔ `frequencyPenalty`
+- `tool_choice` ↔ `toolChoice`
+- `parallel_tool_calls` ↔ `parallelToolCalls`
+- `extraBody`：可选扩展字段（对象或 JSON 字符串），会下发给底层厂商客户端（是否生效取决于具体 provider）
 
 **响应格式**（非流式）：
 ```json

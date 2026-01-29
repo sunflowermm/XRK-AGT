@@ -1,0 +1,41 @@
+# ============================================
+# OpenAI 兼容第三方 LLM 配置（OpenAI-like / OpenAI-Compatible）
+# 文件位置：data/server_bots/{port}/openai_compat_llm.yaml
+# Provider: openai_compat
+# ============================================
+
+# 第三方 API Key
+apiKey: ""
+
+# 第三方 API 基础地址（必须配置）
+# 例：https://api.example.com/v1
+baseUrl: ""
+
+# Chat Completions 路径（多数为 /chat/completions）
+path: "/chat/completions"
+
+# 模型名称（OpenAI-like: model；第三方自定义）
+model: ""
+
+# 认证模式：
+# - bearer: Authorization: Bearer ${apiKey}
+# - api-key: api-key: ${apiKey}
+# - header: 使用 authHeaderName 作为头名
+authMode: "bearer"
+authHeaderName: ""
+
+# 生成参数
+temperature: 0.7
+maxTokens: 2048
+
+# 工具调用（MCP）
+enableTools: true
+toolChoice: "auto"
+maxToolRounds: 5
+
+# 额外请求头（可选）
+headers: {}
+
+# 额外请求体字段（原样透传到下游；可用于第三方的扩展参数）
+extraBody: {}
+

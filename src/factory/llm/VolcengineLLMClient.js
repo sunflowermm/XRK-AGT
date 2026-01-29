@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
-import VisionFactory from '../vision/VisionFactory.js';
-import { MCPToolAdapter } from './mcp-tool-adapter.js';
+import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
+import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
+import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 
 /**
  * 火山引擎豆包大模型客户端
@@ -82,39 +83,8 @@ export default class VolcengineLLMClient {
    * 支持工具调用：tools、tool_choice、parallel_tool_calls
    */
   buildBody(messages, overrides = {}) {
-    const body = {
-      model: this.config.chatModel || this.config.model || 'doubao-pro-4k',
-      messages,
-      temperature: this.config.temperature ?? 0.8,
-      max_tokens: this.config.maxTokens ?? 4000,
-      stream: overrides.stream ?? false
-    };
-
-    // 可选参数（仅在配置时添加）
-    if (this.config.topP !== undefined) body.top_p = this.config.topP;
-    if (this.config.presencePenalty !== undefined) body.presence_penalty = this.config.presencePenalty;
-    if (this.config.frequencyPenalty !== undefined) body.frequency_penalty = this.config.frequencyPenalty;
-
-    // 工具调用支持：从MCP获取工具列表
-    const enableTools = this.config.enableTools !== false && MCPToolAdapter.hasTools();
-    if (enableTools && !overrides.tools) {
-      const tools = MCPToolAdapter.convertMCPToolsToOpenAI();
-      if (tools.length > 0) {
-        body.tools = tools;
-        // 工具调用模式：auto（自动）、none（禁用）、required（必须）
-        body.tool_choice = this.config.toolChoice || 'auto';
-        // 是否允许多个工具并行调用（豆包支持）
-        if (this.config.parallelToolCalls !== undefined) {
-          body.parallel_tool_calls = this.config.parallelToolCalls;
-        }
-      }
-    } else if (overrides.tools !== undefined) {
-      // 允许外部覆盖工具配置
-      body.tools = overrides.tools;
-      if (overrides.tool_choice !== undefined) body.tool_choice = overrides.tool_choice;
-      if (overrides.parallel_tool_calls !== undefined) body.parallel_tool_calls = overrides.parallel_tool_calls;
-    }
-
+    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, (this.config.chatModel || this.config.model || 'doubao-pro-4k'));
+    applyOpenAITools(body, this.config, overrides);
     return body;
   }
 
@@ -124,45 +94,7 @@ export default class VolcengineLLMClient {
    * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
    */
   async transformMessages(messages) {
-    if (!Array.isArray(messages)) return messages;
-
-    const visionProvider = (this.config.visionProvider || 'volcengine').toLowerCase();
-    const visionConfig = this.config.visionConfig || {};
-    const visionClient = VisionFactory.hasProvider(visionProvider) && visionConfig.apiKey
-      ? VisionFactory.createClient({ provider: visionProvider, ...visionConfig })
-      : null;
-
-    const transformed = [];
-    for (const msg of messages) {
-      const newMsg = { ...msg };
-
-      if (msg.role === 'user' && msg.content && typeof msg.content === 'object') {
-        const text = msg.content.text || '';
-        const images = msg.content.images || [];
-        const replyImages = msg.content.replyImages || [];
-        const allImages = [...replyImages, ...images];
-
-        if (visionClient && allImages.length > 0) {
-          const descList = await visionClient.recognizeImages(allImages);
-          const parts = allImages.map((img, idx) => {
-            const desc = descList[idx] || '识别失败';
-            const prefix = replyImages.includes(img) ? '[回复图片:' : '[图片:';
-            return `${prefix}${desc}]`;
-          });
-          newMsg.content = text + (parts.length ? ' ' + parts.join(' ') : '');
-        } else {
-          newMsg.content = text || '';
-        }
-      } else if (newMsg.content && typeof newMsg.content === 'object') {
-        newMsg.content = newMsg.content.text || '';
-      } else if (newMsg.content == null) {
-        newMsg.content = '';
-      }
-
-      transformed.push(newMsg);
-    }
-
-    return transformed;
+    return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'volcengine' });
   }
 
   /**

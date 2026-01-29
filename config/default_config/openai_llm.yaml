@@ -1,0 +1,41 @@
+# ============================================
+# OpenAI 官方 LLM 配置（Chat Completions）
+# 文件位置：data/server_bots/{port}/openai_llm.yaml
+# Provider: openai
+# ============================================
+
+# OpenAI API Key
+apiKey: ""
+
+# API 基础地址（一般不需要改）
+baseUrl: "https://api.openai.com/v1"
+
+# Chat Completions 路径
+path: "/chat/completions"
+
+# 模型名称（OpenAI Chat Completions: model）
+model: "gpt-4o-mini"
+
+# 生成参数（内部会映射到 OpenAI 官方字段）
+temperature: 0.7
+maxTokens: 2048
+
+# 可选参数
+topP: 1.0
+presencePenalty: 0
+frequencyPenalty: 0
+
+# 工具调用（MCP）
+enableTools: true
+toolChoice: "auto"
+maxToolRounds: 5
+
+# 并行工具调用（若服务端不支持会忽略）
+parallelToolCalls: true
+
+# 额外请求头（可选）
+headers: {}
+
+# 额外请求体字段（可选，原样合并到 body 顶层）
+extraBody: {}
+

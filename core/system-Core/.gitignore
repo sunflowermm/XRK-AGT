@@ -65,6 +65,11 @@ commonconfig/**
 !commonconfig/volcengine_asr.js
 !commonconfig/volcengine_tts.js
 !commonconfig/xiaomimimo_llm.js
+!commonconfig/openai_llm.js
+!commonconfig/openai_compat_llm.js
+!commonconfig/gemini_llm.js
+!commonconfig/anthropic_llm.js
+!commonconfig/azure_openai_llm.js
 !commonconfig/tools.js
 *.psd
 *.map

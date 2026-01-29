@@ -103,10 +103,14 @@ class Cfg {
       const defaultFiles = fs.readdirSync(this.PATHS.DEFAULT_CONFIG);
       for (const file of defaultFiles) {
         const configName = path.basename(file, '.yaml');
-        if (this.SERVER_CONFIGS.includes(configName) || 
+        if (this.SERVER_CONFIGS.includes(configName) ||
             configName.startsWith('gptgod_') ||
-            configName.includes('volcengine_') || 
-            configName.includes('xiaomimimo_')) {
+            configName.includes('volcengine_') ||
+            configName.includes('xiaomimimo_') ||
+            configName.includes('openai_') ||
+            configName.includes('gemini_') ||
+            configName.includes('anthropic_') ||
+            configName.includes('azure_')) {
         const targetPath = path.join(serverConfigDir, file);
         if (!fs.existsSync(targetPath)) {
             fs.copyFileSync(path.join(this.PATHS.DEFAULT_CONFIG, file), targetPath);
@@ -272,6 +276,26 @@ class Cfg {
 
   get xiaomimimo_llm() {
     return this.getServerConfig('xiaomimimo_llm');
+  }
+
+  get openai_llm() {
+    return this.getServerConfig('openai_llm');
+  }
+
+  get openai_compat_llm() {
+    return this.getServerConfig('openai_compat_llm');
+  }
+
+  get gemini_llm() {
+    return this.getServerConfig('gemini_llm');
+  }
+
+  get anthropic_llm() {
+    return this.getServerConfig('anthropic_llm');
+  }
+
+  get azure_openai_llm() {
+    return this.getServerConfig('azure_openai_llm');
   }
   
   get volcengine_asr() {

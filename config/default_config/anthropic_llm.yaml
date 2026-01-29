@@ -1,0 +1,26 @@
+# ============================================
+# Anthropic 官方 LLM 配置（Claude / Messages API）
+# 文件位置：data/server_bots/{port}/anthropic_llm.yaml
+# Provider: anthropic
+# ============================================
+
+apiKey: ""
+
+baseUrl: "https://api.anthropic.com/v1"
+path: "/messages"
+
+# 真实模型名（示例）
+model: "claude-3-5-sonnet-latest"
+
+temperature: 0.7
+maxTokens: 2048
+
+# Anthropic 版本头（anthropic-version）
+anthropicVersion: "2023-06-01"
+
+# 工具调用：协议不同，默认关闭
+enableTools: false
+
+headers: {}
+extraBody: {}
+

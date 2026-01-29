@@ -1,0 +1,34 @@
+# ============================================
+# Azure OpenAI 官方 LLM 配置（Chat Completions）
+# 文件位置：data/server_bots/{port}/azure_openai_llm.yaml
+# Provider: azure_openai
+# ============================================
+
+apiKey: ""
+
+# Azure endpoint，例如：https://xxxx.openai.azure.com
+baseUrl: ""
+
+# Azure 部署名（deployment），必填
+deployment: ""
+
+# API 版本（会作为 ?api-version=...）
+apiVersion: "2024-10-21"
+
+# 可选：覆盖默认 path（通常无需改）
+path: ""
+
+temperature: 0.7
+maxTokens: 2048
+topP: 1.0
+presencePenalty: 0
+frequencyPenalty: 0
+
+# 工具调用（MCP）
+enableTools: true
+toolChoice: "auto"
+maxToolRounds: 5
+
+headers: {}
+extraBody: {}
+

@@ -41,7 +41,7 @@ cache:
 # ----------------------------------------
 # 详细配置位于 data/server_bots/{port}/gptgod_llm.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml
 llm:
-  # LLM运营商：gptgod、volcengine、xiaomimimo
+  # LLM运营商：gptgod、volcengine、xiaomimimo、openai、openai_compat、gemini、anthropic、azure_openai
   Provider: gptgod
   # LLM请求超时时间（毫秒），默认360000（6分钟）
   timeout: 360000
