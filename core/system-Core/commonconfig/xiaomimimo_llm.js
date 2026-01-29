@@ -100,7 +100,7 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             description: '停止词列表，当生成包含这些词时停止',
             itemType: 'string',
             default: [],
-            component: 'Input'
+            component: 'Tags'
           },
           thinkingType: {
             type: 'string',

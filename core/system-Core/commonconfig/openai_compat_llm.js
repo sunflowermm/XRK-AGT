@@ -159,6 +159,27 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
             description: '原样合并到请求 body 顶层（用于第三方扩展字段）',
             component: 'SubForm',
             fields: {}
+          },
+          proxy: {
+            type: 'object',
+            label: '代理配置',
+            description: '仅影响本机到第三方 OpenAI 兼容接口的 HTTP 请求，不修改系统全局代理；支持 http/https/socks5 标准代理地址',
+            component: 'SubForm',
+            fields: {
+              enabled: {
+                type: 'boolean',
+                label: '启用代理',
+                default: false,
+                component: 'Switch'
+              },
+              url: {
+                type: 'string',
+                label: '代理地址',
+                description: '例如：http://127.0.0.1:7890 或 http://user:pass@host:port',
+                default: '',
+                component: 'Input'
+              }
+            }
           }
         }
       }

@@ -36,7 +36,15 @@ export default {
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         if (!ensureAuthorized(req, res, Bot)) return;
 
-        const configList = global.ConfigManager.getList();
+        let configList = global.ConfigManager.getList() || [];
+        // 确保 system 配置排在第一位，其余按名称排序，提升前端展示的一致性
+        configList = configList.slice().sort((a, b) => {
+          if (a.name === 'system') return -1;
+          if (b.name === 'system') return 1;
+          const an = (a.displayName || a.name || '').toLowerCase();
+          const bn = (b.displayName || b.name || '').toLowerCase();
+          return an.localeCompare(bn, 'zh-CN');
+        });
         HttpResponse.success(res, {
           configs: configList,
           count: configList.length
