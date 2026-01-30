@@ -1,8 +1,9 @@
 # AIStream 文档
 
 > **文件位置**: `src/infrastructure/aistream/aistream.js`  
-> Node 侧“多步工作流/WorkflowManager/TODO”已移除；复杂多步编排请使用 Python 子服务端（LangChain/LangGraph）。本文档描述的是 Node 侧 `AIStream` 基类与 LLM/MCP 集成方式。
+> Node 侧"多步工作流/WorkflowManager/TODO"已移除；复杂多步编排请使用 Python 子服务端（LangChain/LangGraph）。本文档描述的是 Node 侧 `AIStream` 基类与 LLM/MCP 集成方式。
 > **可扩展性**：AIStream是工作流系统的核心扩展点。通过继承AIStream，开发者可以快速创建自定义工作流。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+> **相关文档**：关于 LLM/Vision/ASR/TTS 工厂系统的详细说明，请参考 **[工厂系统文档](factory.md)** 📖
 
 `AIStream` 是 XRK-AGT 中的 **AI 工作流基类**，用于封装 LLM 调用、向量服务、上下文增强等能力（工具调用由 LLM 工厂的 tool calling + MCP 统一处理）。
 
@@ -321,6 +322,8 @@ AIStream **不再解析/执行**任何 “文本函数调用 / ReAct”。
 ---
 
 ## LLM 调用
+
+> **提示**：关于 LLM 工厂的详细说明、支持的提供商列表、如何扩展新提供商等，请参考 **[工厂系统文档](factory.md)**。
 
 ```mermaid
 sequenceDiagram
@@ -916,6 +919,7 @@ MonitorService.endTrace(traceId, { success: true });
 ## 相关文档
 
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
+- **[工厂系统](factory.md)** - LLM/Vision/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 - **[子服务端 API](subserver-api.md)** - LangChain + 向量服务 + 与主服务 v3 的衔接
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 

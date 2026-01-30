@@ -105,15 +105,17 @@ flowchart TB
 
 ### 🤖 AI 工作流
 
-- **说明**：Node 侧“多步工作流/WorkflowManager/TODO”已移除；复杂 Agent 编排请使用 **Python 子服务端（LangChain/LangGraph）**，主服务端提供统一的 **v3 LLM Provider** 与 **MCP 工具注入/执行**。
+- **说明**：Node 侧"多步工作流/WorkflowManager/TODO"已移除；复杂 Agent 编排请使用 **Python 子服务端（LangChain/LangGraph）**，主服务端提供统一的 **v3 LLM Provider** 与 **MCP 工具注入/执行**。
 - **[MCP 完整指南 (docs/mcp-guide.md)](mcp-guide.md)** - MCP 工具注册与连接
 - **[AI Stream (docs/aistream.md)](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
+- **[工厂系统 (docs/factory.md)](factory.md)** - LLM/Vision/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 
 ### ⚙️ 配置与工具
 
 - **[配置基类 (docs/config-base.md)](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写、多文件配置等
 - **[渲染器 (docs/renderer.md)](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
 - **[工具类 (docs/botutil.md)](botutil.md)** - 工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
+- **[工厂系统 (docs/factory.md)](factory.md)** - 工厂系统文档，涵盖 LLM/Vision/ASR/TTS 工厂的使用、扩展与配置
 
 ### 📱 应用开发
 
@@ -152,7 +154,8 @@ flowchart TB
 
 1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解整体架构和目录结构
 2. **[配置基类](config-base.md)** - 理解配置读写与校验机制
-3. **[Bot 主类](bot.md)** - 了解服务端口、反向代理、CORS 与安全策略
+3. **[工厂系统](factory.md)** - 了解 AI 服务提供商的配置与管理
+4. **[Bot 主类](bot.md)** - 了解服务端口、反向代理、CORS 与安全策略
 
 ### 前端 / 渲染相关开发者
 
@@ -193,9 +196,18 @@ flowchart TB
 ### 创建新的 AI 工作流
 
 1. 阅读 **[AI Stream](aistream.md)** 了解基类设计
-2. 在任意 core 目录的 `stream/` 子目录中创建新的工作流文件
-3. 基于 `AIStream` 实现自定义工作流逻辑
-4. 在插件或 API 中调用新工作流
+2. 阅读 **[工厂系统](factory.md)** 了解如何选择和使用 LLM 提供商
+3. 在任意 core 目录的 `stream/` 子目录中创建新的工作流文件
+4. 基于 `AIStream` 实现自定义工作流逻辑
+5. 在插件或 API 中调用新工作流
+
+### 接入新的 AI 服务提供商
+
+1. 阅读 **[工厂系统](factory.md)** 了解工厂系统的设计和扩展方式
+2. 实现新的客户端类（遵循接口规范）
+3. 使用工厂的 `registerProvider()` 方法注册新提供商
+4. 创建对应的配置文件（如 `myprovider_llm.yaml`）
+5. 在配置管理界面中配置 API Key 等参数
 
 ---
 
