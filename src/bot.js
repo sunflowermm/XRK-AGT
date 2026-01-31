@@ -3136,7 +3136,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     const process = redis.process;
     delete redis.process;
     
-    await BotUtil.sleep(5000, redis.save().catch(() => { }));
+    await BotUtil.sleep(5000);
     return process.kill();
   }
 

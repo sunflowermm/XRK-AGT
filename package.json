@@ -1,6 +1,6 @@
 {
   "name": "xrk-agt",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Xrkseek",
   "description": "多平台、多Tasker、工作流驱动型智能体平台 - Multi-platform, multi-Tasker, workflow-driven intelligent agent platform",
   "main": "app.js",
@@ -45,7 +45,7 @@
     "chalk": "^5.4.1",
     "axios": "^1.13.4",
     "chokidar": "^5.0.0",
-    "inquirer": "^13.2.2",
+    "inquirer": "^8.2.5",
     "lodash": "^4.17.21",
     "pino": "^10.3.0",
     "md5": "^2.3.0",

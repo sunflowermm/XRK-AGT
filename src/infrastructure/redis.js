@@ -5,7 +5,6 @@ import { exec } from 'node:child_process'
 import os from 'node:os'
 import { createClient } from 'redis'
 
-// Redis客户端全局实例
 let globalClient = null
 
 /**
@@ -27,9 +26,7 @@ const REDIS_CONFIG = {
  * @returns {Promise<import('redis').RedisClientType>} Redis客户端实例
  */
 export default async function redisInit() {
-  if (globalClient && globalClient.isOpen) {
-    return globalClient
-  }
+  if (globalClient?.isOpen) return globalClient
 
   const redisUrl = buildRedisUrl(cfg.redis)
   const clientConfig = buildClientConfig(redisUrl)
@@ -60,7 +57,6 @@ export default async function redisInit() {
 
   globalClient = client
   global.redis = client
-  
   return client
 }
 
@@ -71,13 +67,7 @@ export default async function redisInit() {
  */
 function buildRedisUrl(redisConfig) {
   const { username = '', password = '', host, port, db } = redisConfig
-  
-  let auth = ''
-  if (username || password) {
-    const pass = password ? `:${password}` : ''
-    auth = `${username}${pass}@`
-  }
-  
+  const auth = (username || password) ? `${username}${password ? `:${password}` : ''}@` : ''
   return `redis://${auth}${host}:${port}/${db}`
 }
 
@@ -108,7 +98,6 @@ function createReconnectStrategy() {
       Math.pow(2, retries) * REDIS_CONFIG.RECONNECT_BASE_DELAY,
       REDIS_CONFIG.RECONNECT_MAX_DELAY
     )
-    BotUtil.makeLog('debug', `Redis重连策略: 第${retries + 1}次重连将在${delay}ms后执行`, 'Redis')
     return delay
   }
 }
@@ -120,16 +109,10 @@ function createReconnectStrategy() {
 function getOptimalPoolSize() {
   const cpuCount = os.cpus().length
   const memoryGB = os.totalmem() / (1024 ** 3)
+  const basePoolSize = Math.ceil(cpuCount * 3)
   
-  let poolSize = Math.ceil(cpuCount * 3)
-  
-  if (memoryGB < 2) {
-    poolSize = Math.min(poolSize, 5)
-  } else if (memoryGB < 4) {
-    poolSize = Math.min(poolSize, 10)
-  } else if (memoryGB < 8) {
-    poolSize = Math.min(poolSize, 20)
-  }
+  const memoryLimit = memoryGB < 2 ? 5 : memoryGB < 4 ? 10 : memoryGB < 8 ? 20 : Infinity
+  const poolSize = Math.min(basePoolSize, memoryLimit)
   
   const finalSize = Math.max(
     REDIS_CONFIG.MIN_POOL_SIZE,
@@ -137,7 +120,6 @@ function getOptimalPoolSize() {
   )
   
   BotUtil.makeLog('debug', `系统资源: CPU=${cpuCount}核, 内存=${memoryGB.toFixed(2)}GB, 连接池大小=${finalSize}`, 'Redis')
-  
   return finalSize
 }
 
@@ -150,14 +132,11 @@ async function attemptRedisStart(retryCount) {
 
   try {
     const archOptions = await getArchitectureOptions()
-    const redisConfig = '--save 900 1 --save 300 10 --daemonize yes'
-    const cmd = `redis-server ${redisConfig}${archOptions}`
+    const cmd = `redis-server --save 900 1 --save 300 10 --daemonize yes${archOptions}`
     
     BotUtil.makeLog('info', '尝试启动本地服务...', 'Redis')
     await execCommand(cmd)
-    
-    const waitTime = 2000 + retryCount * 1000
-    await common.sleep(waitTime)
+    await common.sleep(2000 + retryCount * 1000)
   } catch (err) {
     BotUtil.makeLog('debug', `启动失败: ${err.message}`, 'Redis')
   }
@@ -175,7 +154,6 @@ function handleFinalConnectionFailure(error, port) {
   if (process.env.NODE_ENV !== 'production') {
     BotUtil.makeLog('error', '手动启动: redis-server --daemonize yes', 'Redis')
   }
-  
   process.exit(1)
 }
 
@@ -187,16 +165,13 @@ function registerEventHandlers(client) {
   client.on('error', async (err) => {
     BotUtil.makeLog('error', err.message, 'Redis')
     
-    if (client._isReconnecting) return
+    if (client._isReconnecting || client.isOpen) return
     
     client._isReconnecting = true
-    
     try {
-      if (!client.isOpen) {
-        BotUtil.makeLog('info', '尝试重新连接...', 'Redis')
-        await client.connect()
-        BotUtil.makeLog('success', '重新连接成功', 'Redis')
-      }
+      BotUtil.makeLog('info', '尝试重新连接...', 'Redis')
+      await client.connect()
+      BotUtil.makeLog('success', '重新连接成功', 'Redis')
     } catch (reconnectErr) {
       BotUtil.makeLog('error', `重连失败: ${reconnectErr.message}`, 'Redis')
     } finally {
@@ -204,17 +179,9 @@ function registerEventHandlers(client) {
     }
   })
 
-  client.on('ready', () => {
-    BotUtil.makeLog('info', '就绪', 'Redis')
-  })
-
-  client.on('reconnecting', () => {
-    BotUtil.makeLog('info', '正在重新连接...', 'Redis')
-  })
-
-  client.on('end', () => {
-    BotUtil.makeLog('warn', '连接已关闭', 'Redis')
-  })
+  client.on('ready', () => BotUtil.makeLog('info', '就绪', 'Redis'))
+  client.on('reconnecting', () => BotUtil.makeLog('info', '正在重新连接...', 'Redis'))
+  client.on('end', () => BotUtil.makeLog('warn', '连接已关闭', 'Redis'))
 }
 
 /**
@@ -223,10 +190,9 @@ function registerEventHandlers(client) {
  */
 function startHealthCheck(client) {
   setInterval(async () => {
+    if (!client.isOpen) return
     try {
-      if (client.isOpen) {
-        await client.ping()
-      }
+      await client.ping()
     } catch (err) {
       BotUtil.makeLog('warn', `健康检查失败: ${err.message}`, 'Redis')
     }
@@ -243,25 +209,21 @@ async function getArchitectureOptions() {
   try {
     const { stdout: arch } = await execCommand('uname -m')
     const archType = arch.trim()
+    if (!archType.includes('aarch64') && !archType.includes('arm64')) return ''
     
-    if (archType.includes('aarch64') || archType.includes('arm64')) {
-      const { stdout: versionOutput } = await execCommand('redis-server -v')
-      const versionMatch = versionOutput.match(/v=(\d+)\.(\d+)/)
-      
-      if (versionMatch) {
-        const [, major, minor] = versionMatch
-        const majorVer = parseInt(major, 10)
-        const minorVer = parseInt(minor, 10)
-        
-        if (majorVer > 6 || (majorVer === 6 && minorVer >= 0)) {
-          return ' --ignore-warnings ARM64-COW-BUG'
-        }
-      }
+    const { stdout: versionOutput } = await execCommand('redis-server -v')
+    const versionMatch = versionOutput.match(/v=(\d+)\.(\d+)/)
+    if (!versionMatch) return ''
+    
+    const majorVer = parseInt(versionMatch[1], 10)
+    const minorVer = parseInt(versionMatch[2], 10)
+    
+    if (majorVer > 6 || (majorVer === 6 && minorVer >= 0)) {
+      return ' --ignore-warnings ARM64-COW-BUG'
     }
   } catch (err) {
     BotUtil.makeLog('debug', `检查系统架构失败: ${err.message}`, 'Redis')
   }
-  
   return ''
 }
 
@@ -275,8 +237,8 @@ function execCommand(cmd) {
     exec(cmd, (error, stdout, stderr) => {
       resolve({
         error,
-        stdout: stdout?.toString() || '',
-        stderr: stderr?.toString() || ''
+        stdout: (stdout || '').toString(),
+        stderr: (stderr || '').toString()
       })
     })
   })
@@ -288,25 +250,24 @@ function execCommand(cmd) {
  * @returns {string} 掩码后的URL
  */
 function maskRedisUrl(url) {
-  if (!url) {
-    return url
-  }
-  return url.replace(/:([^@:]+)@/, ':******@')
+  return url ? url.replace(/:([^@:]+)@/, ':******@') : url
 }
 
 /**
- * 优雅关闭Redis连接
+ * 优雅关闭Redis连接（静默模式，不输出日志）
  * @returns {Promise<void>}
  */
 export async function closeRedis() {
-  if (!globalClient || !globalClient.isOpen) return
+  if (!globalClient?.isOpen) return
+
+  globalClient.removeAllListeners('end')
 
   try {
     await globalClient.quit()
-    BotUtil.makeLog('info', '连接已关闭', 'Redis')
-  } catch (err) {
-    BotUtil.makeLog('error', `关闭失败: ${err.message}`, 'Redis')
-    await globalClient.disconnect()
+  } catch {
+    try {
+      await globalClient.disconnect()
+    } catch {}
   }
 }
 

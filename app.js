@@ -6,20 +6,11 @@ import paths from '#utils/paths.js';
 function execAsync(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
     const { timeout, maxBuffer = 1024 * 1024 * 10, ...spawnOptions } = options;
-    // 避免 DEP0190 警告：使用 shell 时，将命令和参数合并为字符串
-    const shellCommand = args.length > 0 
-      ? `${command} ${args.map(arg => {
-          // 简单转义：如果包含空格或特殊字符，用引号包裹
-          if (arg.includes(' ') || arg.includes('"') || arg.includes('&') || arg.includes('|')) {
-            return `"${arg.replace(/"/g, '\\"')}"`;
-          }
-          return arg;
-        }).join(' ')}`
-      : command;
     
-    const child = spawn(shellCommand, [], { 
+    // 避免 DEP0190 警告：不使用 shell，直接传递命令和参数
+    const child = spawn(command, args, { 
       ...spawnOptions, 
-      shell: true,
+      shell: false,
       stdio: ['ignore', 'pipe', 'pipe'] 
     });
 
@@ -91,8 +82,16 @@ function execAsync(command, args = [], options = {}) {
 }
 
 class BootstrapLogger {
-  constructor() {
+  static colors = {
+    INFO: '\x1b[36m',
+    SUCCESS: '\x1b[32m',
+    WARNING: '\x1b[33m',
+    ERROR: '\x1b[31m'
+  };
+
+  constructor(silent = false) {
     this.logFile = path.join('./logs', 'bootstrap.log');
+    this.silent = silent;
   }
 
   async log(message, level = 'INFO') {
@@ -101,13 +100,11 @@ class BootstrapLogger {
     
     try {
       await fs.appendFile(this.logFile, logMessage);
-      const colors = {
-        INFO: '\x1b[36m',
-        SUCCESS: '\x1b[32m',
-        WARNING: '\x1b[33m',
-        ERROR: '\x1b[31m'
-      };
-      console.log(`${colors[level] || ''}${message}\x1b[0m`);
+      // 静默模式下，只输出错误和成功信息
+      if (!this.silent || level === 'ERROR' || level === 'SUCCESS') {
+        const color = BootstrapLogger.colors[level] || '';
+        console.log(`${color}${message}\x1b[0m`);
+      }
     } catch (error) {
       console.error('日志写入失败:', error.message);
     }
@@ -150,30 +147,34 @@ class DependencyManager {
     }
   }
 
-  async getMissingDependencies(dependencies, nodeModulesPath) {
-    const depNames = Object.keys(dependencies);
+  async getMissingDependencies(depNames, nodeModulesPath) {
     const results = await Promise.all(
       depNames.map(dep => this.isDependencyInstalled(dep, nodeModulesPath))
     );
     return depNames.filter((_, i) => !results[i]);
   }
 
-  async installDependencies(missingDeps) {
-    await this.logger.warning(`发现 ${missingDeps.length} 个缺失的依赖`);
-    await this.logger.log('使用 pnpm 安装依赖...');
+  async installDependencies(missingDeps, cwd = process.cwd()) {
+    const isPlugin = cwd !== process.cwd();
+    const prefix = isPlugin ? `[${cwd}]` : '';
+    
+    await this.logger.warning(`${prefix}发现 ${missingDeps.length} 个缺失的依赖`);
+    await this.logger.log(`${prefix}使用 pnpm 安装依赖...`);
     
     try {
       await execAsync('pnpm', ['install'], {
-        maxBuffer: 1024 * 1024 * 10,
-        timeout: 300000,
+        cwd,
+        maxBuffer: isPlugin ? 1024 * 1024 * 16 : 1024 * 1024 * 10,
+        timeout: isPlugin ? 10 * 60 * 1000 : 300000,
         env: { ...process.env, CI: 'true' }
       });
-      await this.logger.success('依赖安装完成');
+      await this.logger.success(`${prefix}依赖安装完成`);
     } catch (error) {
       if (error.code === 'ENOENT') {
         throw new Error('pnpm 未安装，请先安装: npm install -g pnpm');
       }
-      throw new Error(`依赖安装失败: ${error.stderr || error.stdout || error.message}`);
+      const errorMsg = error.stderr || error.stdout || error.message;
+      throw new Error(`依赖安装失败${prefix}: ${errorMsg}`);
     }
   }
 
@@ -186,12 +187,14 @@ class DependencyManager {
         ...(packageJson.dependencies || {}),
         ...(packageJson.devDependencies || {})
       };
-      const missingDeps = await this.getMissingDependencies(allDependencies, nodeModulesPath);
+      const depNames = Object.keys(allDependencies);
+      const missingDeps = await this.getMissingDependencies(depNames, nodeModulesPath);
       if (missingDeps.length > 0) {
         await this.installDependencies(missingDeps);
       }
     } catch (error) {
-      await this.logger.error(`依赖检查失败: ${error.message}`);
+      const errorMsg = error.stack || error.message || String(error);
+      await this.logger.error(`依赖检查失败: ${errorMsg}`);
       throw error;
     }
   }
@@ -222,49 +225,33 @@ class DependencyManager {
   async checkPluginDependencies(pluginDir) {
     const pkgPath = path.join(pluginDir, 'package.json');
     
+    // 先检查文件是否存在，避免不必要的错误日志
     try {
       await fs.access(pkgPath);
     } catch {
-      return; // 没有 package.json，跳过
+      return; // 没有 package.json，直接跳过
     }
-
-    let pkg;
+    
     try {
-      pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'));
-    } catch (e) {
-      await this.logger.warning(`无法解析 package.json: ${pkgPath} (${e.message})`);
-      return;
-    }
+      const pkg = await this.parsePackageJson(pkgPath);
+      const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+      const depNames = Object.keys(deps);
+      if (depNames.length === 0) return;
 
-    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-    const depNames = Object.keys(deps);
-    if (depNames.length === 0) return;
-
-    const nodeModulesPath = path.join(pluginDir, 'node_modules');
-    const missing = await this.getMissingDependencies(
-      Object.fromEntries(depNames.map(name => [name, ''])),
-      nodeModulesPath
-    );
-    if (missing.length > 0) {
-      await this.installPluginDependencies(pluginDir, missing);
+      const nodeModulesPath = path.join(pluginDir, 'node_modules');
+      const missing = await this.getMissingDependencies(depNames, nodeModulesPath);
+      if (missing.length > 0) {
+        await this.installPluginDependencies(pluginDir, missing);
+      }
+    } catch (error) {
+      // 解析失败时才记录警告，只输出错误消息，不输出堆栈
+      const errorMsg = error.message || String(error);
+      await this.logger.warning(`无法解析 package.json: ${path.basename(pluginDir)} (${errorMsg})`);
     }
   }
 
   async installPluginDependencies(pluginDir, missing) {
-    await this.logger.warning(`依赖缺失 [${pluginDir}]: ${missing.join(', ')}`);
-    try {
-      await this.logger.log(`安装依赖 (pnpm): ${pluginDir}`);
-      await execAsync('pnpm', ['install'], {
-        cwd: pluginDir,
-        maxBuffer: 1024 * 1024 * 16,
-        timeout: 10 * 60 * 1000,
-        env: { ...process.env, CI: 'true' }
-      });
-      await this.logger.success(`依赖安装完成: ${pluginDir}`);
-    } catch (err) {
-      await this.logger.error(`依赖安装失败: ${pluginDir} (${err.message})`);
-      throw err;
-    }
+    await this.installDependencies(missing, pluginDir);
   }
 }
 
@@ -291,8 +278,8 @@ class EnvironmentValidator {
 }
 
 class Bootstrap {
-  constructor() {
-    this.logger = new BootstrapLogger();
+  constructor(silent = false) {
+    this.logger = new BootstrapLogger(silent);
     this.dependencyManager = new DependencyManager(this.logger);
     this.environmentValidator = new EnvironmentValidator(this.logger);
   }
@@ -349,9 +336,12 @@ class Bootstrap {
 
   async startMainApplication() {
     try {
+      // 在启动主程序前，确保所有日志输出完成
+      await new Promise(resolve => setImmediate(resolve));
       await import('./start.js');
     } catch (error) {
-      await this.logger.error(`主程序启动失败: ${error.message}`);
+      const errorMsg = error.stack || error.message || String(error);
+      await this.logger.error(`主程序启动失败: ${errorMsg}`);
       throw error;
     }
   }
@@ -361,9 +351,10 @@ class Bootstrap {
       await this.initialize();
       await this.startMainApplication();
     } catch (error) {
-      await this.logger.error(`引导失败: ${error.message}`);
+      const errorMsg = error.stack || error.message || String(error);
+      await this.logger.error(`引导失败: ${errorMsg}`);
       
-      if (error.message.includes('pnpm 未安装')) {
+      if (error.message && error.message.includes('pnpm 未安装')) {
         await this.logger.log('\n请先安装 pnpm: npm install -g pnpm');
       } else {
         await this.logger.log('\n请手动运行: pnpm install');
@@ -374,22 +365,28 @@ class Bootstrap {
   }
 }
 
+// 引导阶段使用静默模式，减少控制台输出
+const bootstrap = new Bootstrap(true);
+
+// 重用 bootstrap 实例的 logger 处理未捕获的异常
 process.on('uncaughtException', async (error) => {
-  const logger = new BootstrapLogger();
-  await logger.error(`未捕获的异常: ${error.message}\n${error.stack}`);
+  const errorMsg = error.stack || `${error.message}\n${error.stack || ''}`;
+  console.error('\n未捕获的异常:');
+  console.error(errorMsg);
+  await bootstrap.logger.error(`未捕获的异常: ${errorMsg}`);
   process.exit(1);
 });
 
 process.on('unhandledRejection', async (reason) => {
-  const logger = new BootstrapLogger();
   const errorMessage = reason instanceof Error 
-    ? `${reason.message}\n${reason.stack}` 
+    ? (reason.stack || `${reason.message}\n${reason.stack || ''}`)
     : String(reason);
-  await logger.error(`未处理的Promise拒绝: ${errorMessage}`);
+  console.error('\n未处理的Promise拒绝:');
+  console.error(errorMessage);
+  await bootstrap.logger.error(`未处理的Promise拒绝: ${errorMessage}`);
   process.exit(1);
 });
 
-const bootstrap = new Bootstrap();
 bootstrap.run();
 
 export default Bootstrap;

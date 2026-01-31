@@ -6,6 +6,17 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import paths from './src/utils/paths.js';
 
+// 修复 Windows UTF-8 编码问题
+if (process.platform === 'win32') {
+  try {
+    process.stdout.setEncoding('utf8');
+    process.stderr.setEncoding('utf8');
+    spawnSync('chcp', ['65001'], { stdio: 'ignore', shell: false });
+  } catch {
+    // 忽略错误
+  }
+}
+
 process.setMaxListeners(30);
 let globalSignalHandler = null;
 
@@ -115,6 +126,7 @@ class DependencyChecker extends BaseManager {
       this.checkNodeVersion()
     ]);
 
+    // 只记录到日志文件，不输出到控制台
     if (results.includes(false)) {
       await this.logger.warning('检测到缺失或异常的依赖，请根据提示安装后再试。');
     }
@@ -123,10 +135,11 @@ class DependencyChecker extends BaseManager {
   async checkBinary(cmd, args, label, optional = false) {
     // 使用 spawnSync 配合参数数组，避免 DEP0190 警告
     // 在 Windows 上会自动处理 .cmd/.bat 文件
-    const result = spawnSync(cmd, args, { encoding: 'utf8', shell: false });
+    const result = spawnSync(cmd, args, { encoding: 'utf8', shell: false, stdio: 'ignore' });
     const ok = result.status === 0;
     if (!ok) {
       const level = optional ? 'warning' : 'error';
+      // 只记录到日志文件，不输出到控制台
       await this.logger[level](`${label} 未检测到，请确认已全局安装并可在当前终端访问`);
     }
     return ok || optional;
@@ -324,17 +337,17 @@ class ServerManager extends BaseManager {
   }
 
   async addNewPort() {
-    const { port } = await inquirer.prompt({
+    const { port } = await inquirer.prompt([{
       type: 'input',
       name: 'port',
-      message: '请输入新的服务器端口号:',
+      message: chalk.bold('请输入新的服务器端口号:'),
       validate: (input) => {
         const portNum = parseInt(input);
         return !isNaN(portNum) && portNum > 0 && portNum < 65536
           ? true
-          : '请输入有效的端口号 (1-65535)';
+          : chalk.red('请输入有效的端口号 (1-65535)');
       }
-    });
+    }]);
     
     const portNum = parseInt(port);
     await this.ensurePortConfig(portNum);
@@ -528,7 +541,9 @@ class MenuManager {
   }
 
   async run() {
-    console.log(chalk.cyan('\n🤖 葵子多端口服务器管理系统\n'));
+    console.log(chalk.cyan.bold('\n╔═══════════════════════════════════════╗'));
+    console.log(chalk.cyan.bold('║       葵子多端口服务器管理系统        ║'));
+    console.log(chalk.cyan.bold('╚═══════════════════════════════════════╝\n'));
     
     let shouldExit = false;
     
@@ -538,10 +553,13 @@ class MenuManager {
         shouldExit = await this.handleMenuAction(selected);
       } catch (error) {
         if (error.isTtyError) {
-          console.error('无法在当前环境中渲染菜单');
+          console.error(chalk.red('无法在当前环境中渲染菜单'));
           break;
         }
-        await this.serverManager.logger.error(`菜单操作出错: ${error.message}`);
+        const errorMsg = error.stack || error.message || String(error);
+        console.error(chalk.red('\n菜单操作出错:'));
+        console.error(chalk.red(errorMsg));
+        await this.serverManager.logger.error(`菜单操作出错: ${errorMsg}`);
       }
     }
   }
@@ -551,24 +569,48 @@ class MenuManager {
     
     const choices = [
       ...availablePorts.map(port => ({
-        name: `${chalk.green('▶')} 启动服务器 (端口: ${chalk.yellow(port)})`,
-        value: { action: 'start_server', port }
+        name: chalk.green(`> 启动服务器 (端口: ${port})`),
+        value: { action: 'start_server', port },
+        short: `启动端口 ${port}`
       })),
-      { name: `${chalk.blue('+')} 添加新端口`, value: { action: 'add_port' } },
-      { name: `${chalk.red('🗑')} 删除端口配置`, value: { action: 'delete_port_config' } },
-      { name: `${chalk.magenta('⚙')} PM2管理`, value: { action: 'pm2_menu' } },
-      new inquirer.Separator(),
-      { name: `${chalk.red('✖')} 退出`, value: { action: 'exit' } }
+      { 
+        name: chalk.blue('+ 添加新端口'), 
+        value: { action: 'add_port' },
+        short: '添加新端口'
+      },
+      { 
+        name: chalk.yellow('- 删除端口配置'), 
+        value: { action: 'delete_port_config' },
+        short: '删除端口配置'
+      },
+      { 
+        name: chalk.cyan('* PM2管理'), 
+        value: { action: 'pm2_menu' },
+        short: 'PM2管理'
+      },
+      new inquirer.Separator(chalk.gray('─────────────────────────────')),
+      { 
+        name: chalk.red('X 退出'), 
+        value: { action: 'exit' },
+        short: '退出'
+      }
     ];
     
-    const { selected } = await inquirer.prompt({
+    if (choices.length === 0) {
+      choices.unshift({ 
+        name: chalk.blue('+ 添加新端口'), 
+        value: { action: 'add_port' },
+        short: '添加新端口'
+      });
+    }
+    
+    const { selected } = await inquirer.prompt([{
       type: 'list',
       name: 'selected',
-      message: '请选择操作:',
+      message: chalk.bold('请选择操作:'),
       choices,
-      loop: false,
-      pageSize: 10
-    });
+      pageSize: Math.min(choices.length, 10)
+    }]);
     
     return selected;
   }
@@ -592,7 +634,9 @@ class MenuManager {
         break;
         
       case 'exit':
-        console.log(chalk.cyan('\n再见！👋\n'));
+        console.log(chalk.cyan.bold('\n╔═══════════════════════════════════════╗'));
+        console.log(chalk.cyan.bold('║                再见！                 ║'));
+        console.log(chalk.cyan.bold('╚═══════════════════════════════════════╝\n'));
         if (globalSignalHandler) {
           await globalSignalHandler.cleanup();
         }
@@ -606,14 +650,14 @@ class MenuManager {
     const newPort = await this.serverManager.addNewPort();
     
     if (newPort) {
-      console.log(chalk.green(`✓ 端口 ${newPort} 已添加`));
+      console.log(chalk.green.bold(`+ 端口 ${newPort} 已添加`));
       
-      const { startNow } = await inquirer.prompt({
+      const { startNow } = await inquirer.prompt([{
         type: 'confirm',
         name: 'startNow',
-        message: `是否立即启动端口 ${newPort} 的服务器?`,
+        message: chalk.bold(`是否立即启动端口 ${newPort} 的服务器?`),
         default: true
-      });
+      }]);
       
       if (startNow) {
         await this.serverManager.startWithAutoRestart(newPort);
@@ -624,19 +668,19 @@ class MenuManager {
   async handleDeletePortConfig() {
     const ports = await this.serverManager.getAvailablePorts();
     if (ports.length === 0) {
-      console.log(chalk.yellow('⚠ 没有可删除的端口配置'));
+      console.log(chalk.yellow('! 没有可删除的端口配置'));
       return;
     }
 
     const port = await this.selectPort(ports, 'delete');
     if (!port) return;
 
-    const { confirm } = await inquirer.prompt({
+    const { confirm } = await inquirer.prompt([{
       type: 'confirm',
       name: 'confirm',
-      message: `确定删除端口 ${port} 的配置目录及相关PM2配置文件吗？`,
+      message: chalk.bold.yellow(`确定删除端口 ${port} 的配置目录及相关PM2配置文件吗？`),
       default: false
-    });
+    }]);
 
     if (confirm) {
       await this.serverManager.removePortConfig(port);
@@ -647,24 +691,24 @@ class MenuManager {
     const availablePorts = await this.serverManager.getAvailablePorts();
     
     if (availablePorts.length === 0) {
-      console.log(chalk.yellow('⚠ 没有可用的服务器端口'));
+      console.log(chalk.yellow('! 没有可用的服务器端口'));
       return;
     }
     
-    const { action } = await inquirer.prompt({
+    const { action } = await inquirer.prompt([{
       type: 'list',
       name: 'action',
-      message: 'PM2管理:',
+      message: chalk.bold('PM2管理:'),
       choices: [
-        { name: '启动服务器', value: 'start' },
-        { name: '查看日志', value: 'logs' },
-        { name: '停止进程', value: 'stop' },
-        { name: '重启进程', value: 'restart' },
-        new inquirer.Separator(),
-        { name: '返回主菜单', value: 'back' }
+        { name: chalk.green('> 启动服务器'), value: 'start', short: '启动服务器' },
+        { name: chalk.blue('? 查看日志'), value: 'logs', short: '查看日志' },
+        { name: chalk.yellow('- 停止进程'), value: 'stop', short: '停止进程' },
+        { name: chalk.cyan('* 重启进程'), value: 'restart', short: '重启进程' },
+        new inquirer.Separator(chalk.gray('─────────────────────────────')),
+        { name: chalk.gray('< 返回主菜单'), value: 'back', short: '返回主菜单' }
       ],
-      loop: false
-    });
+      pageSize: 10
+    }]);
     
     if (action === 'back') return;
     
@@ -684,20 +728,26 @@ class MenuManager {
     };
     
     const choices = availablePorts.map(port => ({
-      name: `端口 ${port}`,
-      value: port
+      name: chalk.cyan(`端口 ${port}`),
+      value: port,
+      short: `端口 ${port}`
     }));
     
     if (action === 'start') {
-      choices.push({ name: '添加新端口', value: 'add' });
+      choices.push({ 
+        name: chalk.blue('+ 添加新端口'), 
+        value: 'add',
+        short: '添加新端口'
+      });
     }
     
-    const { port } = await inquirer.prompt({
+    const { port } = await inquirer.prompt([{
       type: 'list',
       name: 'port',
-      message: actionMessages[action],
-      choices
-    });
+      message: chalk.bold(actionMessages[action] || '请选择端口:'),
+      choices,
+      pageSize: Math.min(choices.length, 10)
+    }]);
     
     if (port === 'add') {
       return await this.serverManager.addNewPort();
@@ -723,7 +773,10 @@ function getNodeArgs() {
 
 process.on('uncaughtException', async (error) => {
   const logger = new Logger();
-  await logger.error(`未捕获的异常: ${error.message}\n${error.stack}`);
+  const errorMsg = error.stack || `${error.message}\n${error.stack || ''}`;
+  console.error('\n未捕获的异常:');
+  console.error(errorMsg);
+  await logger.error(`未捕获的异常: ${errorMsg}`);
   
   if (globalSignalHandler) {
     await globalSignalHandler.cleanup();
@@ -735,9 +788,11 @@ process.on('uncaughtException', async (error) => {
 process.on('unhandledRejection', async (reason) => {
   const logger = new Logger();
   const errorMessage = reason instanceof Error 
-    ? `${reason.message}\n${reason.stack}` 
+    ? (reason.stack || `${reason.message}\n${reason.stack || ''}`)
     : String(reason);
   
+  console.error('\n未处理的Promise拒绝:');
+  console.error(errorMessage);
   await logger.error(`未处理的Promise拒绝: ${errorMessage}`);
 });
 
@@ -755,7 +810,14 @@ async function main() {
   const dependencyChecker = new DependencyChecker(logger);
   
   await paths.ensureBaseDirs(fs);
-  await dependencyChecker.check();
+  
+  // 静默检查依赖，只记录到日志文件
+  try {
+    await dependencyChecker.check();
+  } catch (error) {
+    // 依赖检查失败时仍然继续，只记录错误
+    await logger.error(`依赖检查失败: ${error.message}`);
+  }
   
   const envPort = process.env.XRK_SERVER_PORT;
   const commandArg = process.argv[2];
@@ -773,6 +835,11 @@ async function main() {
         await serverManager.stopServer(port);
         return;
     }
+  }
+  
+  // 显示菜单前清屏，确保界面干净
+  if (process.stdout.isTTY) {
+    process.stdout.write('\x1b[2J\x1b[H');
   }
   
   await menuManager.run();

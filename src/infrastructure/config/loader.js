@@ -1,7 +1,7 @@
 import cfg from "./config.js"
 import chalk from "chalk";
 import setLog from "#infrastructure/log.js";
-import redisInit from "#infrastructure/redis.js";
+import redisInit, { closeRedis } from "#infrastructure/redis.js";
 import mongodbInit from "#infrastructure/mongodb.js";
 import SystemMonitor from "#modules/systemmonitor.js";
 
@@ -26,12 +26,7 @@ class ProcessManager {
 
   async restart() {
     logger.mark(chalk.yellow("重启中..."));
-    if (global.redis) {
-      await global.redis.save().catch(() => {});
-    }
-    if (global.mongodb) {
-      await global.mongodb.close().catch(() => {});
-    }
+    await this.cleanup();
     if (Bot?.exit) {
       await Bot.exit().catch(() => {});
     }
@@ -88,11 +83,20 @@ class ProcessManager {
   }
 
   async cleanup() {
-    if (global.redis) {
-      await global.redis.save().catch(() => {});
+    try {
+      if (global.redis) {
+        await closeRedis();
+      }
+    } catch (error) {
+      // 忽略关闭错误
     }
-    if (global.mongodb) {
-      await global.mongodb.close().catch(() => {});
+    
+    try {
+      if (global.mongodb) {
+        await global.mongodb.close();
+      }
+    } catch (error) {
+      // 忽略关闭错误
     }
   }
 }
