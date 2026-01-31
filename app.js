@@ -6,7 +6,22 @@ import paths from '#utils/paths.js';
 function execAsync(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
     const { timeout, maxBuffer = 1024 * 1024 * 10, ...spawnOptions } = options;
-    const child = spawn(command, args, { ...spawnOptions, stdio: ['ignore', 'pipe', 'pipe'] });
+    // 避免 DEP0190 警告：使用 shell 时，将命令和参数合并为字符串
+    const shellCommand = args.length > 0 
+      ? `${command} ${args.map(arg => {
+          // 简单转义：如果包含空格或特殊字符，用引号包裹
+          if (arg.includes(' ') || arg.includes('"') || arg.includes('&') || arg.includes('|')) {
+            return `"${arg.replace(/"/g, '\\"')}"`;
+          }
+          return arg;
+        }).join(' ')}`
+      : command;
+    
+    const child = spawn(shellCommand, [], { 
+      ...spawnOptions, 
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe'] 
+    });
 
     let stdout = '';
     let stderr = '';
@@ -136,7 +151,7 @@ class DependencyManager {
   }
 
   async getMissingDependencies(dependencies, nodeModulesPath) {
-    const depNames = Object.keys(dependencies).filter(dep => !['md5', 'oicq'].includes(dep));
+    const depNames = Object.keys(dependencies);
     const results = await Promise.all(
       depNames.map(dep => this.isDependencyInstalled(dep, nodeModulesPath))
     );
@@ -144,21 +159,21 @@ class DependencyManager {
   }
 
   async installDependencies(missingDeps) {
-    await this.logger.warning(`发现 ${missingDeps.length} 个缺失的依赖: ${missingDeps.join(', ')}`);
+    await this.logger.warning(`发现 ${missingDeps.length} 个缺失的依赖`);
     await this.logger.log('使用 pnpm 安装依赖...');
     
     try {
-      const { stderr } = await execAsync('pnpm', ['install'], {
+      await execAsync('pnpm', ['install'], {
         maxBuffer: 1024 * 1024 * 10,
-        timeout: 300000
+        timeout: 300000,
+        env: { ...process.env, CI: 'true' }
       });
-      
-      if (stderr && !stderr.includes('warning')) {
-        await this.logger.warning(`安装警告: ${stderr}`);
-      }
       await this.logger.success('依赖安装完成');
     } catch (error) {
-      throw new Error(`依赖安装失败: ${error.message}`);
+      if (error.code === 'ENOENT') {
+        throw new Error('pnpm 未安装，请先安装: npm install -g pnpm');
+      }
+      throw new Error(`依赖安装失败: ${error.stderr || error.stdout || error.message}`);
     }
   }
 
@@ -210,7 +225,7 @@ class DependencyManager {
     try {
       await fs.access(pkgPath);
     } catch {
-      return;
+      return; // 没有 package.json，跳过
     }
 
     let pkg;
@@ -225,25 +240,14 @@ class DependencyManager {
     const depNames = Object.keys(deps);
     if (depNames.length === 0) return;
 
-    const missing = await this.findMissingDependencies(depNames, path.join(pluginDir, 'node_modules'));
-    if (missing.length === 0) return;
-
-    await this.installPluginDependencies(pluginDir, missing);
-  }
-
-  async findMissingDependencies(depNames, nodeModulesPath) {
-    const results = await Promise.all(
-      depNames.map(async (dep) => {
-        try {
-          const depPath = path.join(nodeModulesPath, dep);
-          const stats = await fs.stat(depPath);
-          return stats.isDirectory();
-        } catch {
-          return false;
-        }
-      })
+    const nodeModulesPath = path.join(pluginDir, 'node_modules');
+    const missing = await this.getMissingDependencies(
+      Object.fromEntries(depNames.map(name => [name, ''])),
+      nodeModulesPath
     );
-    return depNames.filter((_, i) => !results[i]);
+    if (missing.length > 0) {
+      await this.installPluginDependencies(pluginDir, missing);
+    }
   }
 
   async installPluginDependencies(pluginDir, missing) {
@@ -253,7 +257,8 @@ class DependencyManager {
       await execAsync('pnpm', ['install'], {
         cwd: pluginDir,
         maxBuffer: 1024 * 1024 * 16,
-        timeout: 10 * 60 * 1000
+        timeout: 10 * 60 * 1000,
+        env: { ...process.env, CI: 'true' }
       });
       await this.logger.success(`依赖安装完成: ${pluginDir}`);
     } catch (err) {
@@ -357,11 +362,12 @@ class Bootstrap {
       await this.startMainApplication();
     } catch (error) {
       await this.logger.error(`引导失败: ${error.message}`);
-      await this.logger.log('\n故障排除建议:');
-      await this.logger.log('1. 确保Node.js版本 >= 18.14.0');
-      await this.logger.log('2. 手动运行: pnpm install');
-      await this.logger.log('3. 检查网络连接');
-      await this.logger.log('4. 查看日志文件: ./logs/bootstrap.log');
+      
+      if (error.message.includes('pnpm 未安装')) {
+        await this.logger.log('\n请先安装 pnpm: npm install -g pnpm');
+      } else {
+        await this.logger.log('\n请手动运行: pnpm install');
+      }
       
       process.exit(1);
     }

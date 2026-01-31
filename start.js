@@ -324,7 +324,7 @@ class ServerManager extends BaseManager {
   }
 
   async addNewPort() {
-    const { port } = await inquirer.prompt([{
+    const { port } = await inquirer.prompt({
       type: 'input',
       name: 'port',
       message: '请输入新的服务器端口号:',
@@ -334,7 +334,7 @@ class ServerManager extends BaseManager {
           ? true
           : '请输入有效的端口号 (1-65535)';
       }
-    }]);
+    });
     
     const portNum = parseInt(port);
     await this.ensurePortConfig(portNum);
@@ -561,13 +561,14 @@ class MenuManager {
       { name: `${chalk.red('✖')} 退出`, value: { action: 'exit' } }
     ];
     
-    const { selected } = await inquirer.prompt([{
+    const { selected } = await inquirer.prompt({
       type: 'list',
       name: 'selected',
       message: '请选择操作:',
       choices,
-      loop: false
-    }]);
+      loop: false,
+      pageSize: 10
+    });
     
     return selected;
   }
@@ -607,12 +608,12 @@ class MenuManager {
     if (newPort) {
       console.log(chalk.green(`✓ 端口 ${newPort} 已添加`));
       
-      const { startNow } = await inquirer.prompt([{
+      const { startNow } = await inquirer.prompt({
         type: 'confirm',
         name: 'startNow',
         message: `是否立即启动端口 ${newPort} 的服务器?`,
         default: true
-      }]);
+      });
       
       if (startNow) {
         await this.serverManager.startWithAutoRestart(newPort);
@@ -630,12 +631,12 @@ class MenuManager {
     const port = await this.selectPort(ports, 'delete');
     if (!port) return;
 
-    const { confirm } = await inquirer.prompt([{
+    const { confirm } = await inquirer.prompt({
       type: 'confirm',
       name: 'confirm',
       message: `确定删除端口 ${port} 的配置目录及相关PM2配置文件吗？`,
       default: false
-    }]);
+    });
 
     if (confirm) {
       await this.serverManager.removePortConfig(port);
@@ -650,7 +651,7 @@ class MenuManager {
       return;
     }
     
-    const { action } = await inquirer.prompt([{
+    const { action } = await inquirer.prompt({
       type: 'list',
       name: 'action',
       message: 'PM2管理:',
@@ -663,7 +664,7 @@ class MenuManager {
         { name: '返回主菜单', value: 'back' }
       ],
       loop: false
-    }]);
+    });
     
     if (action === 'back') return;
     
@@ -691,12 +692,12 @@ class MenuManager {
       choices.push({ name: '添加新端口', value: 'add' });
     }
     
-    const { port } = await inquirer.prompt([{
+    const { port } = await inquirer.prompt({
       type: 'list',
       name: 'port',
       message: actionMessages[action],
       choices
-    }]);
+    });
     
     if (port === 'add') {
       return await this.serverManager.addNewPort();
