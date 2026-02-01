@@ -17,7 +17,7 @@
    创建 `.env` 文件（或修改 `docker-compose.yml`）：
    ```bash
    # .env
-   XRK_SERVER_PORT=2537
+   XRK_SERVER_PORT=8080
    ```
 
 3. **启动服务**
@@ -44,12 +44,12 @@ XRK-AGT 支持通过多种方式指定运行端口：
 在 `docker-compose.yml` 或 `.env` 文件中设置：
 ```yaml
 environment:
-  - XRK_SERVER_PORT=2537
+  - XRK_SERVER_PORT=8080
 ```
 
 或在启动时指定：
 ```bash
-XRK_SERVER_PORT=8080 docker-compose up -d
+XRK_SERVER_PORT=3000 docker-compose up -d
 ```
 
 ### 方式2：修改 docker-compose.yml
@@ -82,10 +82,11 @@ docker build -t xrk-agt:latest .
 ### 运行容器
 
 ```bash
-# 使用默认端口 2537
+# 使用默认端口 8080
 docker run -d \
   --name xrk-agt \
-  -p 2537:2537 \
+  -p 8080:8080 \
+  -e XRK_SERVER_PORT=8080 \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/config:/app/config \
@@ -95,8 +96,8 @@ docker run -d \
 # 使用自定义端口
 docker run -d \
   --name xrk-agt \
-  -p 8080:8080 \
-  -e XRK_SERVER_PORT=8080 \
+  -p 3000:3000 \
+  -e XRK_SERVER_PORT=3000 \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
   -v $(pwd)/config:/app/config \
@@ -123,11 +124,11 @@ docker ps
 # 查看详细健康状态
 docker inspect --format='{{.State.Health.Status}}' xrk-agt
 
-# 手动检查（使用容器内端口，默认2537）
-docker exec xrk-agt wget --spider http://localhost:2537/health
+# 手动检查（使用容器内端口，默认8080）
+docker exec xrk-agt wget --spider http://localhost:8080/health
 
 # 如果使用了自定义端口，需要指定正确的端口
-docker exec xrk-agt sh -c "wget --spider http://localhost:\${XRK_SERVER_PORT:-2537}/health"
+docker exec xrk-agt sh -c "wget --spider http://localhost:\${XRK_SERVER_PORT:-8080}/health"
 ```
 
 **注意**：健康检查使用容器内端口，与外部映射端口无关。如果修改了 `XRK_SERVER_PORT` 环境变量，健康检查会自动使用新端口。
@@ -145,9 +146,9 @@ services:
   xrk-agt:
     container_name: xrk-agt-1
     environment:
-      - XRK_SERVER_PORT=2537
+      - XRK_SERVER_PORT=8080
     ports:
-      - "2537:2537"
+      - "8080:8080"
 ```
 
 创建 `docker-compose.port2.yml`（用于第二个实例）：
@@ -157,9 +158,9 @@ services:
   xrk-agt:
     container_name: xrk-agt-2
     environment:
-      - XRK_SERVER_PORT=2538
+      - XRK_SERVER_PORT=8081
     ports:
-      - "2538:2538"
+      - "8081:8081"
     volumes:
       - ./data2:/app/data
       - ./logs2:/app/logs
@@ -178,10 +179,10 @@ docker-compose -f docker-compose.yml -f docker-compose.port2.yml up -d
 
 ```bash
 # 实例1
-docker run -d --name xrk-agt-1 -p 2537:2537 -e XRK_SERVER_PORT=2537 xrk-agt
+docker run -d --name xrk-agt-1 -p 8080:8080 -e XRK_SERVER_PORT=8080 xrk-agt
 
 # 实例2
-docker run -d --name xrk-agt-2 -p 2538:2538 -e XRK_SERVER_PORT=2538 xrk-agt
+docker run -d --name xrk-agt-2 -p 8081:8081 -e XRK_SERVER_PORT=8081 xrk-agt
 ```
 
 ## 环境变量
@@ -190,7 +191,7 @@ docker run -d --name xrk-agt-2 -p 2538:2538 -e XRK_SERVER_PORT=2538 xrk-agt
 |--------|------|--------|
 | `NODE_ENV` | 运行环境 | `production` |
 | `NODE_OPTIONS` | Node.js 选项 | `--no-warnings --no-deprecation` |
-| `XRK_SERVER_PORT` | 服务器端口 | `2537` |
+| `XRK_SERVER_PORT` | 服务器端口 | `8080` |
 
 ## 故障排查
 
@@ -227,12 +228,12 @@ docker exec xrk-agt ps aux
 docker port xrk-agt
 
 # 检查主机端口占用（Linux）
-netstat -tuln | grep 2537
+netstat -tuln | grep <端口>
 # 或使用 ss 命令
-ss -tuln | grep 2537
+ss -tuln | grep <端口>
 
 # 检查主机端口占用（Windows）
-netstat -ano | findstr :2537
+netstat -ano | findstr :<端口>
 ```
 
 ### 重启容器
@@ -266,8 +267,8 @@ docker-compose up -d
 
 **解决方法**：
 ```bash
-# 检查应用是否正常运行
-docker exec xrk-agt wget --spider http://localhost:2537/health
+# 检查应用是否正常运行（替换为实际端口）
+docker exec xrk-agt sh -c "wget --spider http://localhost:\${XRK_SERVER_PORT:-8080}/health"
 
 # 查看应用日志
 docker-compose logs xrk-agt | tail -50
@@ -298,7 +299,7 @@ server {
     server_name your-domain.com;
     
     location / {
-        proxy_pass http://localhost:2537;
+        proxy_pass http://localhost:8080;  # 替换为实际端口
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

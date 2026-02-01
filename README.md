@@ -42,7 +42,7 @@ XRK-AGT 采用清晰的分层架构设计，各层职责明确，便于扩展和
 如果你熟悉 Docker，可以使用 Docker 快速部署：
 
 ```bash
-# 使用 Docker Compose（默认端口 2537）
+# 使用 Docker Compose（端口可通过环境变量配置）
 docker-compose up -d
 
 # 使用自定义端口
@@ -55,7 +55,7 @@ docker-compose logs -f xrk-agt
 **详细 Docker 部署指南**：参见 [`docs/docker.md`](docs/docker.md)
 
 > **提示**：
-> - Docker 部署支持通过环境变量 `XRK_SERVER_PORT` 指定端口，默认为 2537
+> - Docker 部署支持通过环境变量 `XRK_SERVER_PORT` 指定端口
 > - 修改端口时需要同时修改 `docker-compose.yml` 中的端口映射和环境变量
 > - 支持多实例运行，每个实例使用不同端口
 
@@ -68,7 +68,7 @@ flowchart TB
     A["克隆项目"] --> B["安装依赖<br/>pnpm install"]
     B --> C["运行项目<br/>node app"]
     C --> D["首次登录<br/>按终端提示"]
-    D --> E["访问Web控制台<br/>默认2537端口"]
+    D --> E["访问Web控制台<br/>使用配置的端口"]
     E --> F["开始使用"]
     
     style A fill:#E6F3FF
@@ -107,7 +107,7 @@ pnpm install
 node app   # 或 node start.js
 ```
 
-启动后可通过浏览器访问配置中的服务地址（默认 2537 端口），具体访问 URL 会在启动日志中打印。
+启动后可通过浏览器访问配置中的服务地址，具体访问 URL 和端口会在启动日志中打印。
 
 ---
 
@@ -162,12 +162,12 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
 ### 快速配置
 
 1. 启动 XRK-AGT：`node app` 或 `node start.js`
-2. 配置 Cursor 的 `mcp.json`：
+2. 配置 Cursor 的 `mcp.json`（将端口替换为实际使用的端口）：
 ```json
 {
   "mcpServers": {
     "xrk-agt": {
-      "url": "http://localhost:2537/api/mcp/jsonrpc",
+      "url": "http://localhost:8080/api/mcp/jsonrpc",
       "transport": "http",
       "description": "XRK-AGT 智能助手服务器"
     }

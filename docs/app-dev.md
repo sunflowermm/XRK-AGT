@@ -114,7 +114,7 @@ flowchart LR
 |----------|------|
 | `PATHS.DEFAULT_CONFIG` | 默认配置目录 `config/default_config` |
 | `PATHS.SERVER_BOTS` | 每个端口的服务器配置目录 `data/server_bots/{port}` |
-| `getConfigDir()` | 当前端口的配置根目录，例如 `data/server_bots/2537` |
+| `getConfigDir()` | 当前端口的配置根目录，例如 `data/server_bots/8080` |
 | `getConfig(name)` | 读取 `{configDir}/{name}.yaml`，若不存在则从默认配置复制一份 |
 | `getGlobalConfig(name)` | 读取全局配置 `data/server_bots/{name}.yaml`（不随端口变化） |
 | `getServerConfig(name)` | 读取服务器配置 `data/server_bots/{port}/{name}.yaml`（随端口变化） |

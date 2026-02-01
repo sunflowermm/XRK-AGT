@@ -2537,8 +2537,8 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     const proxyConfig = cfg.server.proxy;
     this.proxyEnabled = proxyConfig?.enabled === true;
     
-    // 设置端口
-    this.actualPort = port || 2537;
+    // 设置端口（优先级：参数 > 环境变量 > 默认值8080）
+    this.actualPort = port || parseInt(process.env.XRK_SERVER_PORT, 10) || 8080;
     this.actualHttpsPort = this.actualPort + 1;
     
     if (this.proxyEnabled) {

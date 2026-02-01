@@ -4,7 +4,7 @@
 # 服务器配置
 server:
   host: "0.0.0.0"      # 监听地址
-  port: 8000           # 监听端口（默认 8000，避免与主服务端 2537 冲突）
+  port: 8000           # 监听端口（默认 8000，避免与主服务端端口冲突）
   reload: false        # 开发模式自动重载（生产环境设为 false）
   log_level: "info"    # 日志级别: debug, info, warning, error
 
@@ -12,7 +12,7 @@ server:
 cors:
   origins:
     - "*"               # 允许的源（生产环境建议指定具体域名）
-    # - "http://localhost:2537"  # 主服务端地址
+    # - "http://localhost:8080"  # 主服务端地址（根据实际端口配置）
     # - "https://yourdomain.com"
 
 # API 配置

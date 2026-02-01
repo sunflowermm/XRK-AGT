@@ -566,7 +566,7 @@ flowchart TB
     LB --> Health["健康检查器"]
     Health --> Backend["后端服务"]
     
-    Backend --> Backend1["本地服务<br/>:2537"]
+    Backend --> Backend1["本地服务<br/>:8080"]
     Backend --> Backend2["远程服务1<br/>:3000"]
     Backend --> Backend3["远程服务2<br/>:3001"]
     
@@ -649,7 +649,7 @@ const forwardArray = bot.makeForwardArray([
 ```javascript
 // 将文件转换为URL
 const url = await bot.fileToUrl('/path/to/file.jpg');
-// 返回: "http://localhost:2537/File/..."
+// 返回: "http://localhost:8080/File/..."  // 端口根据实际配置而定
 ```
 
 ### 错误处理

@@ -13,7 +13,7 @@ export DEBUG=false
 export NODE_OPTIONS="--no-warnings --no-deprecation"
 
 # 获取端口，优先级：命令行参数 > 环境变量 > 默认值
-PORT=${XRK_SERVER_PORT:-2537}
+PORT=${XRK_SERVER_PORT:-8080}
 if [ $# -ge 2 ] && [ "$1" = "server" ]; then
     PORT=$2
     shift 2

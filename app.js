@@ -231,17 +231,17 @@ class DependencyManager {
     } catch {
       return; // 没有 package.json，直接跳过
     }
-    
+
     try {
       const pkg = await this.parsePackageJson(pkgPath);
-      const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-      const depNames = Object.keys(deps);
-      if (depNames.length === 0) return;
+    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+    const depNames = Object.keys(deps);
+    if (depNames.length === 0) return;
 
-      const nodeModulesPath = path.join(pluginDir, 'node_modules');
+    const nodeModulesPath = path.join(pluginDir, 'node_modules');
       const missing = await this.getMissingDependencies(depNames, nodeModulesPath);
-      if (missing.length > 0) {
-        await this.installPluginDependencies(pluginDir, missing);
+    if (missing.length > 0) {
+      await this.installPluginDependencies(pluginDir, missing);
       }
     } catch (error) {
       // 解析失败时才记录警告，只输出错误消息，不输出堆栈
