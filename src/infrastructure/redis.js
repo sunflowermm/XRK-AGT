@@ -32,7 +32,7 @@ export default async function redisInit() {
   const clientConfig = buildClientConfig(redisUrl)
   let client = createClient(clientConfig)
   let retryCount = 0
-
+  
   while (retryCount < REDIS_CONFIG.MAX_RETRIES) {
     try {
       BotUtil.makeLog('info', `连接中 [${retryCount + 1}/${REDIS_CONFIG.MAX_RETRIES}]: ${maskRedisUrl(redisUrl)}`, 'Redis')
