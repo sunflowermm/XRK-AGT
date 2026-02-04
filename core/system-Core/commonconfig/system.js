@@ -1930,22 +1930,7 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
-            vision: {
-              type: 'object',
-              label: '识图工厂运营商选择',
-              description: '配置文件：gptgod_vision.yaml / volcengine_vision.yaml。工作流不直接调用识图工厂，而是由 LLM 在检测到图片时调用。',
-              component: 'SubForm',
-              fields: {
-                Provider: {
-                  type: 'string',
-                  label: '识图运营商',
-                  description: '如未配置则默认与 LLM Provider 一致',
-                  enum: ['gptgod', 'volcengine'],
-                  default: 'gptgod',
-                  component: 'Select'
-                }
-              }
-            },
+            // 识图能力已统一由各家 LLM 自身的多模态接口承担，这里不再单独暴露 Vision 工厂配置
             asr: {
               type: 'object',
               label: 'ASR工厂运营商选择',

@@ -59,9 +59,7 @@ stream/**
 commonconfig/**
 !commonconfig/system.js
 !commonconfig/gptgod_llm.js
-!commonconfig/gptgod_vision.js
 !commonconfig/volcengine_llm.js
-!commonconfig/volcengine_vision.js
 !commonconfig/volcengine_asr.js
 !commonconfig/volcengine_tts.js
 !commonconfig/xiaomimimo_llm.js

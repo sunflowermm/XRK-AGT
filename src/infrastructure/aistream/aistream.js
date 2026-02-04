@@ -890,7 +890,6 @@ export default class AIStream {
   resolveLLMConfig(apiConfig = {}) {
     const runtime = cfg.aistream || {};
     const llm = runtime.llm || {};
-    const vision = runtime.vision || {};
 
     const pickFirst = (...vals) => {
       for (const v of vals) {
@@ -907,13 +906,11 @@ export default class AIStream {
       return undefined;
     };
 
-    // 获取提供商名称
+    // 获取提供商名称（仅保留 LLM 提供商概念）
     const provider = (apiConfig.provider || this.config.provider || llm.provider || llm.Provider || '').toLowerCase();
-    const visionProvider = (apiConfig.visionProvider || this.config.visionProvider || vision.provider || vision.Provider || provider).toLowerCase();
-    
+
     // 获取提供商配置
     const providerConfig = this.getProviderConfig(provider);
-    const visionConfig = this.getProviderConfig(visionProvider, true);
 
     // 验证提供商是否支持
     if (provider && !LLMFactory.hasProvider(provider)) {
@@ -954,8 +951,6 @@ export default class AIStream {
       presencePenalty,
       frequencyPenalty,
       provider,
-      visionProvider,
-      visionConfig,
       timeout,
       enableTools
     };
@@ -965,14 +960,13 @@ export default class AIStream {
 
   /**
    * 获取提供商配置
-   * @param {string} provider - 提供商名称
-   * @param {boolean} isVision - 是否为视觉配置
+   * @param {string} provider - 提供商名称（LLM 提供商）
    * @returns {Object} 提供商配置
    */
-  getProviderConfig(provider, isVision = false) {
+  getProviderConfig(provider) {
     if (!provider) return {};
 
-    const configKey = isVision ? `${provider}_vision` : `${provider}_llm`;
+    const configKey = `${provider}_llm`;
     return cfg[configKey] || {};
   }
 

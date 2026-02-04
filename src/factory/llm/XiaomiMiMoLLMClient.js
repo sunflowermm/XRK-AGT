@@ -11,7 +11,7 @@ import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
  * - path: /chat/completions
  * - 认证头：api-key: $MIMO_API_KEY
  *
- * 模型本身是纯文本的，图片统一通过 VisionFactory 转成描述文本后再交给 MiMo 处理。
+ * 模型本身是纯文本的，图片由上游转为简单的占位文本后再交给 MiMo 处理（不再依赖独立的识图工厂）。
  */
 export default class XiaomiMiMoLLMClient {
   constructor(config = {}) {
@@ -64,16 +64,9 @@ export default class XiaomiMiMoLLMClient {
     return headers;
   }
 
-  /**
-   * 通过识图工厂把图片转成文本描述，再交给 MiMo 文本模型处理
-   * @param {Array} messages - 原始消息数组
-   * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
-   */
   async transformMessages(messages) {
-    return await transformMessagesWithVision(messages, this.config, {
-      defaultVisionProvider: 'gptgod',
-      allowProviderFallback: true
-    });
+    // MiMo 当前仅文本，退化为 text_only，占位拼接图片 URL / base64 方便调试
+    return await transformMessagesWithVision(messages, this.config, { mode: 'text_only' });
   }
 
   /**

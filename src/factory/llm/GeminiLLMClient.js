@@ -12,7 +12,7 @@ import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
  *
  * 注意：
  * - 这里实现的是“纯聊天 + 可选流式(SSE)输出”的最小闭环
- * - 为保持现有工作流消息结构兼容，图片统一通过 VisionFactory 转描述文本后拼接进 user 文本
+ * - 图片直接通过多模态 content（text + image_url/base64）传给 Gemini，由上游 `transformMessagesWithVision` 做统一结构转换
  * - MCP tool calling：Gemini 的 function calling 协议与 OpenAI 不同；本实现默认不注入 MCP tools（建议在配置中 enableTools=false）
  */
 export default class GeminiLLMClient {
@@ -52,7 +52,8 @@ export default class GeminiLLMClient {
   }
 
   async transformMessages(messages) {
-    return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'gptgod' });
+    // Gemini 官方多模态 API 与 OpenAI 风格相近，使用 openai 模式构造 content
+    return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
   /**

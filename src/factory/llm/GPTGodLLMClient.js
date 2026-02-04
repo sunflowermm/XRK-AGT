@@ -6,12 +6,8 @@ import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 
 /**
  * GPTGod LLM 客户端
- * 支持聊天和识图功能
- * 
- * 识图说明（经由 VisionFactory 抽离）：
- * - LLM 本身不再直接下载/上传图片，而是把图片 URL / 本地路径交给识图工厂
- * - 识图工厂根据 aistream.yaml 中的 vision.Provider 选择运营商（如 gptgod）
- * - 识图结果拼接回 user 文本，兼容原有「[图片:描述]」格式
+ * - 兼容 OpenAI Chat Completions
+ * - 支持直接在 messages 中携带多模态 content（text + image_url/base64）
  */
 export default class GPTGodLLMClient {
   constructor(config = {}) {
@@ -60,13 +56,9 @@ export default class GPTGodLLMClient {
     return body;
   }
 
-  /**
-   * 使用识图工厂处理消息中的图片，将图片转换为文本描述并拼接到 user 文本中
-   * @param {Array} messages - 原始消息数组
-   * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
-   */
   async transformMessages(messages) {
-    return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'gptgod' });
+    // GPTGod 直接支持多模态，按 OpenAI 风格构造 content 数组
+    return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
 

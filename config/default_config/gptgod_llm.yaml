@@ -3,7 +3,7 @@
 # ============================================
 # 此配置文件为 GPTGod 大语言模型配置，每个端口有独立的配置
 # 位置：data/server_bots/{port}/gptgod_llm.yaml
-# 注意：仅文本模型，识图配置已拆分到 gptgod_vision.yaml
+# 注意：多模态（含识图）直接由 LLM 模型自身完成，不再依赖独立的 gptgod_vision 工厂配置
 # GPTGod API 兼容 OpenAI Chat Completions 格式
 
 # ----------------------------------------

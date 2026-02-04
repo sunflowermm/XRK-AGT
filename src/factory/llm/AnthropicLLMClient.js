@@ -12,7 +12,7 @@ import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
  *
  * 说明：
  * - 这里按“外部调用 model=provider”的约定，仅在内部配置中使用 model/chatModel 指定真实模型
- * - 图片仍通过 VisionFactory 转成文本描述拼接到 user 内容（保持工作流消息结构不变）
+ * - 图片由上游统一转换为纯文本占位描述（不再通过独立的识图工厂），保证消息结构简单稳定
  * - Anthropic 工具调用协议不同，本实现默认不注入 MCP tools（建议 enableTools=false）
  */
 export default class AnthropicLLMClient {
@@ -53,7 +53,8 @@ export default class AnthropicLLMClient {
   }
 
   async transformMessages(messages) {
-    return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'gptgod' });
+    // Anthropic Messages API 当前主要为文本，这里使用 text_only 模式，保留图片占位信息
+    return await transformMessagesWithVision(messages, this.config, { mode: 'text_only' });
   }
 
   /**

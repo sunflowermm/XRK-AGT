@@ -3,7 +3,7 @@
 > **文件位置**: `src/factory/`  
 > **可扩展性**：工厂系统是 XRK-AGT 的核心扩展点之一。通过工厂模式，开发者可以轻松接入新的 AI 服务提供商，实现统一的多厂商支持。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
-XRK-AGT 采用**工厂模式**统一管理多种 AI 服务提供商，包括大语言模型（LLM）、识图（Vision）、语音识别（ASR）和语音合成（TTS）。工厂系统提供了统一的接口，屏蔽了不同厂商的 API 差异，让开发者可以轻松切换和扩展服务提供商。
+XRK-AGT 采用**工厂模式**统一管理多种 AI 服务提供商，包括大语言模型（LLM）、语音识别（ASR）和语音合成（TTS）。工厂系统提供了统一的接口，屏蔽了不同厂商的 API 差异，让开发者可以轻松切换和扩展服务提供商。多模态识图能力由各家 LLM 自身的多模态接口提供，不再通过单独的「识图工厂」转发。
 
 ### 核心特性
 
@@ -30,14 +30,12 @@ flowchart TB
     
     subgraph Factory["工厂层"]
         LLMFactory["LLMFactory<br/>大语言模型工厂"]
-        VisionFactory["VisionFactory<br/>识图工厂"]
         ASRFactory["ASRFactory<br/>语音识别工厂"]
         TTSFactory["TTSFactory<br/>语音合成工厂"]
     end
-    
+
     subgraph Providers["提供商实现"]
-        LLMProviders["LLM提供商<br/>gptgod/volcengine/xiaomimimo<br/>openai/gemini/anthropic/azure_openai"]
-        VisionProviders["识图提供商<br/>gptgod/volcengine"]
+        LLMProviders["LLM提供商（含多模态）<br/>gptgod/volcengine/xiaomimimo<br/>openai/gemini/anthropic/azure_openai"]
         ASRProviders["ASR提供商<br/>volcengine"]
         TTSProviders["TTS提供商<br/>volcengine"]
     end
@@ -152,71 +150,11 @@ class LLMClient {
 #### 特殊功能
 
 - **Tool Calling 支持**：所有 LLM 客户端都支持工具调用，通过 `MCPToolAdapter` 统一处理
-- **图片处理**：部分 LLM（如 GPTGod、Volcengine）支持图片输入，图片会通过 VisionFactory 转换为文本描述
-- **流式输出**：支持 Server-Sent Events (SSE) 流式响应
+- **多模态输入**：部分 LLM（如 GPTGod、Volcengine、OpenAI、Gemini、Azure OpenAI 等）直接支持图片输入，消息结构会通过 `transformMessagesWithVision` 统一转成各家兼容的 text + image_url（含 base64 data URL）格式。
 
 ---
 
-### 2. VisionFactory（识图工厂）
-
-**文件位置**: `src/factory/vision/VisionFactory.js`
-
-VisionFactory 负责管理图片识别服务提供商，将图片转换为文本描述。
-
-#### 支持的提供商
-
-| 提供商 | 标识符 | 说明 |
-|--------|--------|------|
-| GPTGod | `gptgod` | 通过文件上传 + vision 模型描述图片 |
-| 火山引擎 | `volcengine` | 使用豆包 vision 模型直接识图 |
-
-#### 重要说明
-
-⚠️ **工作流不会直接调用识图工厂**。只有 LLM 层（如 `GPTGodLLMClient`、`VolcengineLLMClient` 等）在检测到图片时，才会把图片 URL / 本地绝对路径交给识图工厂，由工厂路由到具体运营商。
-
-#### 基本用法
-
-```javascript
-import VisionFactory from '#factory/vision/VisionFactory.js';
-
-// 创建客户端
-const config = {
-  provider: 'gptgod',
-  apiKey: 'your-api-key',
-  visionModel: 'gpt-4-vision-preview',
-  baseUrl: 'https://api.gptgod.online/v1'
-};
-
-const client = VisionFactory.createClient(config);
-
-// 识别图片
-const imagePath = '/path/to/image.jpg';
-const description = await client.recognizeImage(
-  imagePath,
-  '请详细描述这张图片的内容'
-);
-console.log(description); // 图片描述文本
-```
-
-#### 客户端接口规范
-
-所有 Vision 客户端必须实现以下接口：
-
-```javascript
-class VisionClient {
-  /**
-   * 识别单张图片
-   * @param {string} imagePathOrUrl - 图片 URL 或本地绝对路径
-   * @param {string} prompt - 识图提示词
-   * @returns {Promise<string>} 图片描述文本
-   */
-  async recognizeImage(imagePathOrUrl, prompt = '请详细描述这张图片的内容') {}
-}
-```
-
----
-
-### 3. ASRFactory（语音识别工厂）
+### 2. ASRFactory（语音识别工厂）
 
 **文件位置**: `src/factory/asr/ASRFactory.js`
 
@@ -371,10 +309,6 @@ llm:
     enabled: true
     maxAttempts: 3
 
-# 识图工厂运营商选择
-vision:
-  Provider: gptgod  # 选择识图提供商
-
 # ASR 工厂运营商选择
 asr:
   Provider: volcengine  # 选择 ASR 提供商
@@ -438,18 +372,6 @@ const client = LLMFactory.createClient({
   provider: 'myprovider',
   apiKey: 'your-api-key',
   // ... 其他配置
-});
-```
-
-#### 示例：注册新的识图提供商
-
-```javascript
-import VisionFactory from '#factory/vision/VisionFactory.js';
-import MyCustomVisionClient from './MyCustomVisionClient.js';
-
-// 注册提供商
-VisionFactory.registerProvider('myvision', (config) => {
-  return new MyCustomVisionClient(config);
 });
 ```
 
@@ -534,41 +456,6 @@ class LLMFactory {
    *   - apiKey: API 密钥
    *   - 其他 LLM 参数
    * @returns {Object} LLM 客户端实例
-   */
-  static createClient(config = {})
-}
-```
-
-### VisionFactory
-
-```javascript
-class VisionFactory {
-  /**
-   * 注册自定义识图提供商
-   * @param {string} name - 提供商名称
-   * @param {Function} factoryFn - 工厂函数，接收 config 参数，返回 VisionClient 实例
-   */
-  static registerProvider(name, factoryFn)
-
-  /**
-   * 检查提供商是否存在
-   * @param {string} name - 提供商名称
-   * @returns {boolean} 是否存在
-   */
-  static hasProvider(name)
-
-  /**
-   * 列出所有已注册的识图提供商
-   * @returns {Array<string>} 提供商名称列表
-   */
-  static listProviders()
-
-  /**
-   * 创建识图客户端
-   * @param {Object} config
-   *   - provider: 运营商名称（如 'gptgod', 'volcengine'）
-   *   - 其他字段为各自运营商的识图配置
-   * @returns {Object} VisionClient 实例
    */
   static createClient(config = {})
 }
@@ -768,17 +655,12 @@ A:
 3. 创建对应的配置文件（如 `myprovider_llm.yaml`）
 4. 在 `aistream.yaml` 中设置新提供商
 
-### Q: VisionFactory 什么时候会被调用？
-
-A: VisionFactory 不会被工作流直接调用。只有当 LLM 客户端检测到消息中包含图片时，才会自动调用 VisionFactory 将图片转换为文本描述。
-
 ### Q: 如何查看当前支持的所有提供商？
 
 A: 使用工厂的 `listProviders()` 方法：
 
 ```javascript
 console.log(LLMFactory.listProviders());
-console.log(VisionFactory.listProviders());
 console.log(ASRFactory.listProviders());
 console.log(TTSFactory.listProviders());
 ```

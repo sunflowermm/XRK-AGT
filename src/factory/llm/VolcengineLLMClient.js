@@ -89,13 +89,9 @@ export default class VolcengineLLMClient {
     return body;
   }
 
-  /**
-   * 通过识图工厂把图片转成文本描述，再交给文本模型处理
-   * @param {Array} messages - 原始消息数组
-   * @returns {Promise<Array>} 转换后的消息数组（content 变为纯字符串）
-   */
   async transformMessages(messages) {
-    return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'volcengine' });
+    // 豆包 Chat Completions 支持 image_url，多模态走 openai 风格
+    return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
   /**

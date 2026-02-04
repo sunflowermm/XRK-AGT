@@ -291,7 +291,6 @@ async function handleModels(req, res) {
     const capabilities = [];
     if (c.enableStream !== false) capabilities.push('stream');
     if (c.enableTools === true) capabilities.push('tools');
-    if (c.visionProvider || c.visionConfig) capabilities.push('vision_proxy');
 
     return {
       key: provider,

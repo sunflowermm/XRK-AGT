@@ -1210,20 +1210,58 @@ ${isGlobalTrigger ?
     if (Array.isArray(question)) {
       return question;
     }
-    
+
     const messages = [];
     messages.push({
       role: 'system',
       content: await this.buildSystemPrompt({ e, question })
     });
-    
-    const userMessage = typeof question === 'string' ? question : 
-                       (question?.content || question?.text || '');
-    messages.push({
-      role: 'user',
-      content: userMessage
-    });
-    
+
+    // 基础文本
+    const text = typeof question === 'string'
+      ? question
+      : (question?.content || question?.text || '');
+
+    // 从事件中提取图片（OneBot 消息段）
+    const images = [];
+    const replyImages = [];
+
+    if (e && Array.isArray(e.message)) {
+      let inReplyRegion = false;
+      for (const seg of e.message) {
+        if (seg.type === 'reply') {
+          inReplyRegion = true;
+          continue;
+        }
+        if (seg.type === 'image') {
+          const url = seg.url || seg.data?.url || seg.data?.file;
+          if (!url) continue;
+          if (inReplyRegion) {
+            replyImages.push(url);
+          } else {
+            images.push(url);
+          }
+        }
+      }
+    }
+
+    // 若无图片，则仍然用纯文本，兼容旧逻辑
+    if (images.length === 0 && replyImages.length === 0) {
+      messages.push({
+        role: 'user',
+        content: text
+      });
+    } else {
+      messages.push({
+        role: 'user',
+        content: {
+          text: text || '',
+          images,
+          replyImages
+        }
+      });
+    }
+
     return messages;
   }
 
@@ -1303,12 +1341,26 @@ ${isGlobalTrigger ?
       
       // 当前消息单独显示
       if (currentMsgId !== '未知' && currentContent) {
-        mergedMessages.push({
-          role: 'user',
-          content: `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`
-        });
+        // 若原始内容包含图片结构，则保留图片，仅在 text 前加上当前消息标记
+        if (typeof userMessage.content === 'object' && userMessage.content !== null) {
+          const content = userMessage.content;
+          const baseText = content.text || content.content || currentContent;
+          mergedMessages.push({
+            role: 'user',
+            content: {
+              text: `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${baseText}`,
+              images: content.images || [],
+              replyImages: content.replyImages || []
+            }
+          });
+        } else {
+          mergedMessages.push({
+            role: 'user',
+            content: `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`
+          });
+        }
       } else if (currentContent) {
-        // 如果无法获取消息ID，使用原始消息格式
+        // 如果无法获取消息ID，使用原始消息格式（保留多模态结构）
         const content = userMessage.content;
         if (typeof content === 'object' && content.text) {
           mergedMessages.push({

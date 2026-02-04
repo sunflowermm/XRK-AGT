@@ -7,13 +7,11 @@ import { transformMessagesWithVision } from '../../utils/llm/message-transform.j
 /**
  * OpenAI 官方 LLM 客户端（Chat Completions）
  *
- * 默认：
- * - baseUrl: https://api.openai.com/v1
- * - path: /chat/completions
- * - 认证：Authorization: Bearer ${apiKey}
- *
- * 说明：
- * - 为了保持与现有工作流消息结构兼容，图片统一通过 VisionFactory 转描述文本再拼接进 user 内容
+ * - 默认：
+ *   - baseUrl: https://api.openai.com/v1
+ *   - path: /chat/completions
+ *   - 认证：Authorization: Bearer ${apiKey}
+ * - 支持多模态：messages[].content 可以是 text + image_url（含 base64 data URL）
  * - tool calling：使用 OpenAI tools/tool_calls 协议 + MCPToolAdapter 多轮执行
  */
 export default class OpenAILLMClient {
@@ -51,7 +49,8 @@ export default class OpenAILLMClient {
   }
 
   async transformMessages(messages) {
-    return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'gptgod' });
+    // OpenAI 官方多模态，使用 openai 模式，允许 base64 封装为 data URL
+    return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
   buildBody(messages, overrides = {}) {

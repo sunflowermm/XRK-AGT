@@ -60,7 +60,8 @@ export default class AzureOpenAILLMClient {
   }
 
   async transformMessages(messages) {
-    return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'gptgod' });
+    // Azure OpenAI 与 OpenAI Chat Completions 多模态协议兼容
+    return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
   buildBody(messages, overrides = {}) {

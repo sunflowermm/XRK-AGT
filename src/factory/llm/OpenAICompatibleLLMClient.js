@@ -9,7 +9,7 @@ import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
  *
  * 目标：
  * - 用一个 provider 接入各种第三方“OpenAI 协议”接口（自定义 baseUrl/path/headers/认证/额外参数）
- * - 保持与现有工作流消息结构兼容（图片 -> VisionFactory -> 文本描述）
+ * - 统一多模态消息结构：通过 `transformMessagesWithVision` 构造 text + image_url（含 base64 data URL）
  * - 支持 MCP tool calling（OpenAI tools/tool_calls 协议）
  *
  * 常用配置：
@@ -73,7 +73,8 @@ export default class OpenAICompatibleLLMClient {
   }
 
   async transformMessages(messages) {
-    return await transformMessagesWithVision(messages, this.config, { defaultVisionProvider: 'gptgod' });
+    // OpenAI 兼容第三方：假定支持 Chat Completions 多模态协议
+    return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
   buildBody(messages, overrides = {}) {

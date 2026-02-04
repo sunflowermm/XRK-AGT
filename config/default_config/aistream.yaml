@@ -57,15 +57,6 @@ llm:
     retryOn: ["timeout", "network", "5xx"]
 
 # ----------------------------------------
-# 识图工厂运营商选择
-# ----------------------------------------
-# 详细配置位于 data/server_bots/{port}/gptgod_vision.yaml、volcengine_vision.yaml
-# 注意：工作流不直接调用识图工厂，而是由 LLM 在检测到图片时调用
-vision:
-  # 识图运营商：gptgod、volcengine
-  Provider: gptgod
-
-# ----------------------------------------
 # ASR 工厂运营商选择
 # ----------------------------------------
 # 详细配置位于 data/server_bots/{port}/volcengine_asr.yaml
