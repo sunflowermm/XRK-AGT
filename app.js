@@ -368,7 +368,7 @@ class Bootstrap {
 // 引导阶段使用静默模式，减少控制台输出
 const bootstrap = new Bootstrap(true);
 
-// 重用 bootstrap 实例的 logger 处理未捕获的异常
+// 全局异常处理
 process.on('uncaughtException', async (error) => {
   const errorMsg = error.stack || `${error.message}\n${error.stack || ''}`;
   console.error('\n未捕获的异常:');
@@ -378,7 +378,7 @@ process.on('uncaughtException', async (error) => {
 });
 
 process.on('unhandledRejection', async (reason) => {
-  const errorMessage = reason instanceof Error 
+  const errorMessage = reason instanceof Error
     ? (reason.stack || `${reason.message}\n${reason.stack || ''}`)
     : String(reason);
   console.error('\n未处理的Promise拒绝:');

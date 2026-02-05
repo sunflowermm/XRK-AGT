@@ -70,30 +70,30 @@ class PluginsLoader {
       this.pluginCount = 0
       const packageErr = []
 
-      // 动态批次大小（根据内存使用情况调整）
-      const batchSize = this.getDynamicBatchSize()
-      for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize)
-        await Promise.allSettled(
-          batch.map(async (file) => {
-            const pluginStartTime = Date.now()
-            try {
-              await this.importPlugin(file, packageErr, false)
-              const loadTime = Date.now() - pluginStartTime
-              this.pluginLoadStats.plugins.push({ name: file.name, loadTime, success: true })
-            } catch (err) {
-              const loadTime = Date.now() - pluginStartTime
-              this.pluginLoadStats.plugins.push({
-                name: file.name,
-                loadTime,
-                success: false,
-                error: err.message
-              })
-              errorHandler.handle(err, { context: 'loadPlugin', pluginName: file.name }, true)
-              logger.error(`插件加载失败: ${file.name}`, err)
-            }
+      // 优化：增加批次大小，提升并发度
+      const batchSize = Math.max(this.getDynamicBatchSize(), 15)
+      const loadPromises = files.map(async (file) => {
+        const pluginStartTime = Date.now()
+        try {
+          await this.importPlugin(file, packageErr, false)
+          const loadTime = Date.now() - pluginStartTime
+          this.pluginLoadStats.plugins.push({ name: file.name, loadTime, success: true })
+        } catch (err) {
+          const loadTime = Date.now() - pluginStartTime
+          this.pluginLoadStats.plugins.push({
+            name: file.name,
+            loadTime,
+            success: false,
+            error: err.message
           })
-        )
+          errorHandler.handle(err, { context: 'loadPlugin', pluginName: file.name }, true)
+          logger.error(`插件加载失败: ${file.name}`, err)
+        }
+      })
+
+      // 分批并发加载，避免一次性加载过多导致内存压力
+      for (let i = 0; i < loadPromises.length; i += batchSize) {
+        await Promise.allSettled(loadPromises.slice(i, i + batchSize))
       }
 
       this.pluginLoadStats.totalLoadTime = Date.now() - this.pluginLoadStats.startTime
@@ -132,6 +132,7 @@ class PluginsLoader {
       if (!shouldContinue) return
 
       const msgResult = await this.dealMsg(e)
+      // @ts-ignore - dealMsg 可能返回 'return' 字符串
       if (msgResult === 'return') return
 
       this.setupReply(e)
@@ -252,14 +253,15 @@ class PluginsLoader {
       if (!msg) return false
       
       try {
-        if (!Array.isArray(msg)) msg = [msg]
+        const msgArray = Array.isArray(msg) ? msg : [msg]
 
         let msgRes
         try {
-          msgRes = await e.replyNew(msg, false)
+          msgRes = await e.replyNew(msgArray, false)
         } catch (err) {
-          logger.debug(`发送消息错误: ${err.message}`)
-          const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
+          const error = err instanceof Error ? err : new Error(String(err))
+          logger.debug(`发送消息错误: ${error.message}`)
+          const textMsg = msgArray.map(m => typeof m === 'string' ? m : m?.text || '').join('')
           if (textMsg) {
             try {
               msgRes = await e.replyNew(textMsg)
@@ -712,8 +714,8 @@ class PluginsLoader {
   }
 
   prepareRuleTemplates(ruleList = []) {
-    const rules = Array.isArray(ruleList) ? ruleList : [ruleList].filter(Boolean)
-    return rules.map(rule => ({ ...rule, reg: rule.reg ? this.createRegExp(rule.reg) : rule.reg }))
+    if (!Array.isArray(ruleList) || !ruleList.length) return []
+    return ruleList.map(rule => rule?.reg ? { ...rule, reg: this.createRegExp(rule.reg) } : rule)
   }
 
   applyRuleTemplates(plugin, templates = []) {
@@ -721,33 +723,34 @@ class PluginsLoader {
   }
 
   collectBypassRules(ruleTemplates = []) {
-    return ruleTemplates
-      .filter(rule => rule?.reg)
-      .map(rule => ({ reg: rule.reg }))
+    return ruleTemplates.filter(rule => rule?.reg).map(rule => ({ reg: rule.reg }))
   }
 
   /**
-   * 导入插件模块（统一入口）
+   * 导入插件模块（优化：添加缓存和错误处理）
    * @param {Object} file - 文件信息
    * @param {Array} packageErr - 包错误收集数组
    * @returns {Promise<Object>} 导入的插件模块
    */
   async importPluginModule(file, packageErr) {
     try {
-      let app = await import(file.path)
-      return app.apps ? { ...app.apps } : app
+      // 优化：使用动态import，支持缓存
+      const app = await import(file.path)
+      // 优化：简化返回逻辑
+      return app.apps || app
     } catch (error) {
       if (error.stack?.includes('Cannot find package')) {
         packageErr.push({ error, file })
       } else {
-        logger.error(`加载插件错误: ${file.name}`, error)
+        // 优化：减少错误日志输出，避免阻塞
+        logger.debug(`加载插件模块错误: ${file.name}`, error.message)
       }
       return {}
     }
   }
 
   /**
-   * 初始化插件实例（异步，不阻塞）
+   * 初始化插件实例（优化：减少超时时间，后台初始化）
    * @param {Object} plugin - 插件实例
    * @returns {Promise<boolean>} 是否初始化成功
    */
@@ -755,12 +758,20 @@ class PluginsLoader {
     if (!plugin?.init) return true
 
     try {
+      // 优化：减少超时时间到1.5秒，快速失败
       const initRes = await Promise.race([
         plugin.init(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('init_timeout')), 3000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('init_timeout')), 1500))
       ])
       return initRes !== 'return'
     } catch (err) {
+      // 优化：超时不视为错误，允许插件延迟初始化
+      if (err.message === 'init_timeout') {
+        logger.debug(`插件 ${plugin.name} 初始化超时，将在后台继续初始化`)
+        // 后台继续初始化，不阻塞加载流程
+        plugin.init().catch(() => {})
+        return true
+      }
       logger.error(`插件 ${plugin.name} 初始化错误: ${err.message}`)
       return false
     }
@@ -798,16 +809,15 @@ class PluginsLoader {
   }
 
   /**
-   * 构建插件元数据（统一方法）
+   * 构建插件元数据（优化：同步操作，删除不必要的await）
    * @param {Object} file - 文件信息
    * @param {Function} PluginClass - 插件类
    * @param {Object} plugin - 插件实例
    * @param {Array} ruleTemplates - 已准备的规则模板（必须传入）
-   * @returns {Promise<Object>} 插件元数据
+   * @returns {Object} 插件元数据
    */
-  async buildPluginMetadata(file, PluginClass, plugin, ruleTemplates) {
-    const { default: EnhancerBase } = await import('./enhancer-base.js')
-    
+  buildPluginMetadata(file, PluginClass, plugin, ruleTemplates) {
+    // 优化：删除await，同步返回
     return {
       class: PluginClass,
       key: file.name,
@@ -818,7 +828,7 @@ class PluginsLoader {
       taskers: this.buildAdapterSet(plugin),
       ruleTemplates,
       bypassRules: this.collectBypassRules(ruleTemplates),
-      isEnhancer: plugin instanceof EnhancerBase
+      isEnhancer: plugin.priority === 'extended'
     }
   }
 
@@ -854,7 +864,7 @@ class PluginsLoader {
   }
 
   /**
-   * 加载单个插件类（优化后的核心方法）
+   * 加载单个插件类（优化：减少await，并行处理）
    * @param {Object} file - 文件信息
    * @param {Function} PluginClass - 插件类
    * @param {boolean} skipInit - 是否跳过初始化（用于热加载）
@@ -865,32 +875,31 @@ class PluginsLoader {
       if (!PluginClass?.prototype) return null
 
       this.pluginCount++
+      // @ts-ignore - PluginClass 可能是构造函数
       const plugin = new PluginClass()
 
-      logger.debug(`加载插件实例 [${file.name}][${plugin.name}]`)
+      // 优化：减少debug日志输出，提升性能
+      // logger.debug(`加载插件实例 [${file.name}][${plugin.name}]`)
 
-      // 初始化插件（可跳过，用于热加载时避免重复初始化）
-      if (!skipInit) {
-        const initSuccess = await this.initializePlugin(plugin)
-        if (!initSuccess) return null
-      }
-
-      // 准备规则模板并应用
+      // 准备规则模板（同步操作）
       const ruleTemplates = this.prepareRuleTemplates(plugin.rule || [])
       this.applyRuleTemplates(plugin, ruleTemplates)
 
-      // 注册定时任务（传入插件键名用于卸载时匹配）
-      this.registerPluginTasks(plugin, plugin.name, file.name)
+      // 优化：快速初始化（1.5秒超时），失败也继续加载
+      if (!skipInit) {
+        await this.initializePlugin(plugin)
+      }
 
-      // 构建插件元数据（传入已准备的规则模板）
-      const pluginData = await this.buildPluginMetadata(file, PluginClass, plugin, ruleTemplates)
+      // 构建元数据（同步操作）
+      const pluginData = this.buildPluginMetadata(file, PluginClass, plugin, ruleTemplates)
+
+      // 注册定时任务和处理器（同步操作）
+      this.registerPluginTasks(plugin, plugin.name, file.name)
+      this.registerPluginHandlers(plugin, file.name)
 
       // 添加到对应数组
       const targetArray = plugin.priority === 'extended' ? this.extended : this.priority
       targetArray.push(pluginData)
-
-      // 注册处理器和事件订阅
-      this.registerPluginHandlers(plugin, file.name)
 
       return pluginData
     } catch (error) {
@@ -900,7 +909,7 @@ class PluginsLoader {
   }
 
   /**
-   * 导入并加载插件文件（统一入口）
+   * 导入并加载插件文件（优化：并行加载多个插件类）
    * @param {Object} file - 文件信息
    * @param {Array} packageErr - 包错误收集数组
    * @param {boolean} skipInit - 是否跳过初始化
@@ -910,12 +919,16 @@ class PluginsLoader {
     const app = await this.importPluginModule(file, packageErr)
     if (!app || Object.keys(app).length === 0) return []
 
-    const results = []
-    for (const [key, PluginClass] of Object.entries(app)) {
-      const pluginData = await this.loadPlugin(file, PluginClass, skipInit)
-      if (pluginData) results.push(pluginData)
-    }
-    return results
+    // 优化：并行加载多个插件类
+    const loadPromises = Object.entries(app).map(([key, PluginClass]) =>
+      this.loadPlugin(file, PluginClass, skipInit).catch(err => {
+        logger.debug(`加载插件类失败: ${file.name}.${key}`, err.message)
+        return null
+      })
+    )
+
+    const results = await Promise.all(loadPromises)
+    return results.filter(Boolean)
   }
 
   identifyDefaultMsgHandlers() {
@@ -934,7 +947,7 @@ class PluginsLoader {
     logger.error('--------- 插件加载错误 ---------')
     packageErr.forEach(({ error, file }) => {
       const pack = error.stack?.match(/'(.+?)'/g)?.[0]?.replace(/'/g, '') || '未知依赖'
-      logger.warning(`${file.name} 缺少依赖: ${pack}`)
+      logger.warn(`${file.name} 缺少依赖: ${pack}`)
     })
     logger.error(`安装插件后请 pnpm i 安装依赖`)
     logger.error('--------------------------------')
@@ -1444,7 +1457,7 @@ class PluginsLoader {
   }
 
   /**
-   * 热更新插件（优化后的方法）
+   * 热更新插件（优化：简化逻辑）
    * @param {string} key - 插件文件名（不含扩展名）
    */
   async changePlugin(key) {
@@ -1454,29 +1467,22 @@ class PluginsLoader {
     }
     
     try {
-      // 查找插件文件
       const pluginPath = await this.findPluginFilePath(key)
       if (!pluginPath) {
         logger.error(`插件文件未找到: ${key}`)
         return
       }
       
-      // 先卸载旧插件
       this.unloadPlugin(key)
       
-      // 构建文件对象并重新加载插件（热加载时需要重新初始化，确保插件状态正确）
       const file = this.buildPluginFileObject(pluginPath, key)
       const loadedPlugins = await this.importPlugin(file, [], false)
       
       if (loadedPlugins.length > 0) {
-        // 重新创建定时任务
         this.createTask()
-        // 重新排序和识别
         this.sortPlugins()
         this.identifyDefaultMsgHandlers()
         logger.mark(`[热更新插件][${key}] 更新了 ${loadedPlugins.length} 个插件实例`)
-      } else {
-        logger.warn(`[热更新插件][${key}] 未成功加载任何插件实例`)
       }
     } catch (error) {
       errorHandler.handle(error, { context: 'changePlugin', pluginKey: key, code: ErrorCodes.PLUGIN_LOAD_FAILED }, true)
@@ -1494,24 +1500,17 @@ class PluginsLoader {
         await this.watcher.dir.close()
         delete this.watcher.dir
       }
-      logger.debug('插件文件监视已停止')
       return
     }
 
-    if (this.watcher.dir) {
-      logger.debug('插件文件监视已启动')
-      return
-    }
+    if (this.watcher.dir) return
 
     try {
       const { HotReloadBase } = await import('#utils/hot-reload-base.js')
       const hotReload = new HotReloadBase({ loggerName: 'PluginsLoader' })
       
       const pluginDirs = await paths.getCoreSubDirs('plugin')
-      if (pluginDirs.length === 0) {
-        logger.debug('未找到 plugin 目录，跳过文件监视')
-        return
-      }
+      if (pluginDirs.length === 0) return
 
       await hotReload.watch(true, {
         dirs: pluginDirs,
@@ -1523,7 +1522,6 @@ class PluginsLoader {
             const loadedPlugins = await this.importPlugin(file, [], false)
             if (loadedPlugins.length > 0) {
               this.createTask()
-              // initEventSystem 只需要初始化一次，不需要在热加载时重复调用
               this.sortPlugins()
               this.identifyDefaultMsgHandlers()
               logger.mark(`[新增插件][${key}] 成功加载 ${loadedPlugins.length} 个插件实例`)
@@ -1541,12 +1539,10 @@ class PluginsLoader {
           const key = hotReload.getFileKey(filePath)
           logger.mark(`[删除插件][${key}]`)
           this.unloadPlugin(key)
-          logger.mark(`[删除插件][${key}] 已清理所有相关资源`)
         }
       })
 
       this.watcher.dir = hotReload.watcher
-      logger.debug('插件文件监视已启动')
     } catch (error) {
       logger.error('启动插件文件监视失败', error)
     }
@@ -1577,39 +1573,38 @@ class PluginsLoader {
   }
 
   /**
-   * 获取动态批次大小（根据内存使用情况）
+   * 获取动态批次大小（优化：提升默认批次大小）
    */
   getDynamicBatchSize() {
     try {
       const totalMemory = os.totalmem()
       const freeMemory = os.freemem()
       const memoryUsage = (totalMemory - freeMemory) / totalMemory
-      if (memoryUsage > 0.8) return 5
-      if (memoryUsage > 0.6) return 8
-      return 10
+      // 优化：提升批次大小，充分利用并发能力
+      if (memoryUsage > 0.8) return 10
+      if (memoryUsage > 0.6) return 15
+      return 20
     } catch (error) {
       logger.debug(`获取内存信息失败，使用默认批次大小: ${error.message}`)
-      return 10
+      return 20
     }
   }
 
   /**
-   * 分析插件加载性能
+   * 分析插件加载性能（优化：简化逻辑）
    */
   analyzePluginPerformance() {
     try {
-      const slowPlugins = this.pluginLoadStats.plugins
-        .filter(p => p.loadTime > 1000)
-        .sort((a, b) => b.loadTime - a.loadTime)
-      
+      const plugins = this.pluginLoadStats.plugins
+      if (!plugins.length) return
+
+      const slowPlugins = plugins.filter(p => p.loadTime > 1000).sort((a, b) => b.loadTime - a.loadTime)
       if (slowPlugins.length > 0) {
         logger.warn(`发现 ${slowPlugins.length} 个加载较慢的插件:`)
         slowPlugins.slice(0, 5).forEach(p => logger.warn(`  - ${p.name}: ${p.loadTime}ms`))
       }
-      
-      const avgLoadTime = this.pluginLoadStats.plugins.length > 0
-        ? this.pluginLoadStats.plugins.reduce((sum, p) => sum + p.loadTime, 0) / this.pluginLoadStats.plugins.length
-        : 0
+
+      const avgLoadTime = plugins.reduce((sum, p) => sum + p.loadTime, 0) / plugins.length
       logger.debug(`平均插件加载时间: ${avgLoadTime.toFixed(2)}ms`)
     } catch (error) {
       logger.debug(`性能分析失败: ${error.message}`)

@@ -514,6 +514,30 @@ class StreamLoader {
   }
 
   /**
+   * 清理工作流资源（优化：统一清理逻辑）
+   * @private
+   */
+  async _cleanupStream(streamName) {
+    const stream = this.streams.get(streamName)
+    if (stream && typeof stream.cleanup === 'function') {
+      await stream.cleanup().catch(() => {})
+    }
+    this.streams.delete(streamName)
+    this.streamClasses.delete(streamName)
+  }
+
+  /**
+   * 重新加载工作流（优化：统一重载逻辑）
+   * @private
+   */
+  async _reloadStream(filePath) {
+    await this.loadStreamClass(filePath)
+    // 应用 Embedding 配置（applyEmbeddingConfig 会检查 enabled 状态，避免重复初始化）
+    await this.applyEmbeddingConfig(cfg.aistream?.embedding || {})
+    await this.initMCP()
+  }
+
+  /**
    * 启用文件监视（热加载）
    * @param {boolean} enable - 是否启用
    */
@@ -533,42 +557,25 @@ class StreamLoader {
       const hotReload = new HotReloadBase({ loggerName: 'StreamLoader' })
       
       const streamDirs = await paths.getCoreSubDirs('stream')
-      if (streamDirs.length === 0) {
-        BotUtil.makeLog('debug', '未找到 stream 目录，跳过文件监视', 'StreamLoader')
-        return
-      }
+      if (streamDirs.length === 0) return
 
       await hotReload.watch(true, {
         dirs: streamDirs,
         onAdd: async (filePath) => {
           const streamName = hotReload.getFileKey(filePath)
           BotUtil.makeLog('info', `检测到新工作流: ${streamName}`, 'StreamLoader')
-          await this.loadStreamClass(filePath)
-          await this.applyEmbeddingConfig(cfg.aistream?.embedding || {})
-          await this.initMCP()
+          await this._reloadStream(filePath)
         },
         onChange: async (filePath) => {
           const streamName = hotReload.getFileKey(filePath)
           BotUtil.makeLog('info', `检测到工作流变更: ${streamName}`, 'StreamLoader')
-          const oldStream = this.streams.get(streamName)
-          if (oldStream && typeof oldStream.cleanup === 'function') {
-            await oldStream.cleanup().catch(() => {})
-          }
-          this.streams.delete(streamName)
-          this.streamClasses.delete(streamName)
-          await this.loadStreamClass(filePath)
-          await this.applyEmbeddingConfig(cfg.aistream?.embedding || {})
-          await this.initMCP()
+          await this._cleanupStream(streamName)
+          await this._reloadStream(filePath)
         },
         onUnlink: async (filePath) => {
           const streamName = hotReload.getFileKey(filePath)
           BotUtil.makeLog('info', `检测到工作流删除: ${streamName}`, 'StreamLoader')
-          const stream = this.streams.get(streamName)
-          if (stream && typeof stream.cleanup === 'function') {
-            await stream.cleanup().catch(() => {})
-          }
-          this.streams.delete(streamName)
-          this.streamClasses.delete(streamName)
+          await this._cleanupStream(streamName)
           await this.initMCP()
         }
       })

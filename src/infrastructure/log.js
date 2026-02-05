@@ -8,17 +8,16 @@ import fsPromises from 'node:fs/promises'
 import schedule from 'node-schedule'
 import { createStream } from 'rotating-file-stream'
 import { execSync } from 'node:child_process'
+import paths from '#utils/paths.js'
 
 /**
  * Logger 配置常量
  */
 const LOGGER_CONFIG = {
-  LOG_DIR: './logs',
   MAIN_LOG_PREFIX: 'app',
   TRACE_LOG_PREFIX: 'trace',
   ROTATION_INTERVAL: '1d',
-  COMPRESSION: 'gzip',
-  CLEANUP_TIME: '0 3 * * *', // 每天凌晨3点
+  CLEANUP_TIME: '0 3 * * *',
   DEFAULT_MAX_DAYS: 3,
   DEFAULT_TRACE_DAYS: 1
 }
@@ -69,22 +68,16 @@ const LOG_STYLES = {
  * @returns {Object} 全局 logger 对象
  */
 export default function setLog() {
-  // 确保日志目录存在
-  // logs 目录已在启动时通过 paths.ensureBaseDirs() 创建，无需重复创建
-
-  // 修复 Windows UTF-8 编码问题
   fixWindowsUTF8()
 
-  // 获取配置的颜色方案
-  const logCfg = cfg.agt?.logging || {};
+  const logDir = paths.logs || path.join(process.cwd(), 'logs')
+  const logCfg = cfg.agt?.logging || {}
   const selectedScheme = COLOR_SCHEMES[logCfg.color] || COLOR_SCHEMES.default
   const selectedTimestampColors = TIMESTAMP_SCHEMES[logCfg.color] || TIMESTAMP_SCHEMES.default
 
-  // 创建日志轮转流
-  const fileStream = createRotatingStream(LOGGER_CONFIG.MAIN_LOG_PREFIX, logCfg.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS)
-  const traceStream = createRotatingStream(LOGGER_CONFIG.TRACE_LOG_PREFIX, logCfg.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS)
+  const fileStream = createRotatingStream(logDir, LOGGER_CONFIG.MAIN_LOG_PREFIX, logCfg.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS)
+  const traceStream = createRotatingStream(logDir, LOGGER_CONFIG.TRACE_LOG_PREFIX, logCfg.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS)
 
-  // 创建 Pino 实例
   const pinoLogger = pino(
     {
       level: 'trace',
@@ -99,10 +92,7 @@ export default function setLog() {
     ])
   )
 
-  // 定时器存储
   const timers = new Map()
-
-  // 清理任务
   let cleanupJob = null
 
   const canLog = (level) => {
@@ -227,14 +217,11 @@ export default function setLog() {
         })
         .join(' ')
 
-      // 输出到控制台（带颜色）
       const consoleMessage = prefix + message
-
       if (canLog(level)) {
         console.log(consoleMessage)
       }
 
-      // 输出到文件（无颜色）
       const fileMessage = stripColors(message)
       const pinoLevel = level === 'mark' || level === 'success' || level === 'tip' || level === 'done' ? 'info' : level
 
@@ -247,11 +234,7 @@ export default function setLog() {
     }
   }
 
-  /**
-   * 全局 Logger 对象
-   */
   const logger = {
-    // 基础日志方法
     trace: createLogMethod('trace'),
     debug: createLogMethod('debug'),
     info: createLogMethod('info'),
@@ -260,7 +243,6 @@ export default function setLog() {
     fatal: createLogMethod('fatal'),
     mark: createLogMethod('mark'),
 
-    // Chalk 颜色工具
     chalk,
     red: (text) => chalk.red(text),
     green: (text) => chalk.green(text),
@@ -271,7 +253,6 @@ export default function setLog() {
     gray: (text) => chalk.gray(text),
     white: (text) => chalk.white(text),
 
-    // 渐变色工具
     xrkyzGradient: (text) => createGradientText(text, selectedScheme),
     rainbow: (text) => {
       const rainbowColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3']
@@ -279,9 +260,6 @@ export default function setLog() {
     },
     gradient: createGradientText,
 
-    /**
-     * 成功日志
-     */
     success: function (...args) {
       const prefix = createLogPrefix('success')
       const message = args
@@ -296,16 +274,10 @@ export default function setLog() {
       pinoLogger.info(stripColors(message))
     },
 
-    /**
-     * 警告日志（别名）
-     */
     warning: function (...args) {
       this.warn(...args)
     },
 
-    /**
-     * 提示日志
-     */
     tip: function (...args) {
       const prefix = createLogPrefix('tip')
       const message = args
@@ -326,7 +298,6 @@ export default function setLog() {
      */
     time: function (label = 'default') {
       timers.set(label, Date.now())
-      this.trace(`Timer started: ${label}`)
     },
 
     /**
@@ -659,7 +630,7 @@ export default function setLog() {
         }
         pinoLogger.trace({ data }, title ? `Table Data [${title}]` : 'Table Data')
       } else {
-        this.json(data)
+        this.json(data, title)
       }
     },
 
@@ -690,7 +661,7 @@ export default function setLog() {
         loggerVersion: '9.x',
         nodeVersion: process.version,
         logLevel: cfg.agt?.logging?.level || 'info',
-        logDir: LOGGER_CONFIG.LOG_DIR,
+        logDir: paths.logs || path.join(process.cwd(), 'logs'),
         cleanupSchedule: 'Daily at 3 AM',
         mainLogAge: `${cfg.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS} days`,
         traceLogAge: `${cfg.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS} day(s)`,
@@ -710,38 +681,7 @@ export default function setLog() {
      * @returns {Promise<number>} 删除的文件数
      */
     cleanLogs: async function (days, includeTrace = true) {
-      const mainDays = days || cfg.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS
-      const traceDays = cfg.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS
-      const now = Date.now()
-
-      try {
-        const files = await fsPromises.readdir(LOGGER_CONFIG.LOG_DIR)
-        let deletedCount = 0
-
-        for (const file of files) {
-          const filePath = path.join(LOGGER_CONFIG.LOG_DIR, file)
-          const stats = await fsPromises.stat(filePath)
-
-          let maxAgeMs
-          if (file.startsWith(`${LOGGER_CONFIG.TRACE_LOG_PREFIX}.`)) {
-            if (!includeTrace) continue
-            maxAgeMs = traceDays * 24 * 60 * 60 * 1000
-          } else {
-            maxAgeMs = mainDays * 24 * 60 * 60 * 1000
-          }
-
-          if (now - stats.mtime.getTime() > maxAgeMs) {
-            await fsPromises.unlink(filePath)
-            deletedCount++
-          }
-        }
-
-        this.info(`Manual cleanup completed, deleted ${deletedCount} expired log files`)
-        return deletedCount
-      } catch (err) {
-        this.error('Manual log cleanup failed:', err.message)
-        return 0
-      }
+      return await cleanExpiredLogs(this, days, includeTrace)
     },
 
     /**
@@ -751,8 +691,9 @@ export default function setLog() {
      */
     getTraceLogs: async function (lines = 100) {
       try {
+        const logDir = paths.logs || path.join(process.cwd(), 'logs')
         const currentDate = new Date().toISOString().split('T')[0]
-        const traceFile = path.join(LOGGER_CONFIG.LOG_DIR, `${LOGGER_CONFIG.TRACE_LOG_PREFIX}.${currentDate}.log`)
+        const traceFile = path.join(logDir, `${LOGGER_CONFIG.TRACE_LOG_PREFIX}.${currentDate}.log`)
 
         if (!fs.existsSync(traceFile)) {
           return null
@@ -779,7 +720,6 @@ export default function setLog() {
           cleanupJob = null
         }
 
-        // 关闭 Pino streams
         await new Promise((resolve) => {
           fileStream.end(() => {
             traceStream.end(() => {
@@ -788,46 +728,43 @@ export default function setLog() {
           })
         })
 
-        this.info('Logger shutdown completed')
+        this.debug('Logger shutdown completed')
       } catch (err) {
         console.error('Error during logger shutdown:', err)
       }
     }
   }
 
-  // 初始化清理任务
   cleanupJob = schedule.scheduleJob(LOGGER_CONFIG.CLEANUP_TIME, async () => {
-    logger.info('Starting scheduled log cleanup...')
     await cleanExpiredLogs(logger)
   })
 
-  // 启动时清理一次
   setTimeout(() => {
-    cleanExpiredLogs(logger).catch((err) => {
-      logger.error('Failed to clean logs on startup:', err.message)
-    })
+    cleanExpiredLogs(logger).catch(() => {})
   }, 5000)
 
-  // 处理进程退出
   process.on('exit', () => {
     if (cleanupJob) {
       cleanupJob.cancel()
     }
-    fileStream.end()
-    traceStream.end()
+    try {
+      if (fileStream && typeof fileStream.end === 'function') {
+        fileStream.end()
+      }
+      if (traceStream && typeof traceStream.end === 'function') {
+        traceStream.end()
+      }
+    } catch {}
   })
 
-  process.on('SIGINT', async () => {
+  const handleShutdown = async () => {
     await logger.shutdown()
     process.exit(0)
-  })
+  }
 
-  process.on('SIGTERM', async () => {
-    await logger.shutdown()
-    process.exit(0)
-  })
+  process.on('SIGINT', handleShutdown)
+  process.on('SIGTERM', handleShutdown)
 
-  // 设置全局 logger
   global.logger = logger
 
   return logger
@@ -840,38 +777,32 @@ export default function setLog() {
 function fixWindowsUTF8() {
   if (process.platform === 'win32') {
     try {
-      // 设置控制台代码页为 UTF-8
       process.stdout.setEncoding('utf8')
       process.stderr.setEncoding('utf8')
-
-      // 尝试执行 chcp 65001 (UTF-8)
       try {
         execSync('chcp 65001', { stdio: 'ignore' })
-      } catch {
-        // 忽略错误
-      }
-    } catch {
-      // 忽略错误
-    }
+      } catch {}
+    } catch {}
   }
 }
 
 /**
  * 创建日志轮转流
+ * @param {string} logDir - 日志目录路径
  * @param {string} prefix - 文件前缀
  * @param {number} maxDays - 最大保留天数
  * @returns {WritableStream} 轮转流
  */
-function createRotatingStream(prefix, maxDays) {
+function createRotatingStream(logDir, prefix, maxDays) {
   return createStream(
-    (time, index) => {
+    (time) => {
       if (!time) return `${prefix}.log`
-      const date = time.toISOString().split('T')[0]
+      const date = (time instanceof Date ? time : new Date(time)).toISOString().split('T')[0]
       return `${prefix}.${date}.log`
     },
     {
       interval: LOGGER_CONFIG.ROTATION_INTERVAL,
-      path: LOGGER_CONFIG.LOG_DIR,
+      path: logDir,
       maxFiles: maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS,
       compress: false
     }
@@ -881,63 +812,52 @@ function createRotatingStream(prefix, maxDays) {
 /**
  * 清理过期日志文件
  * @param {Object} logger - Logger 实例
+ * @param {number} [customDays] - 自定义保留天数（可选）
+ * @param {boolean} [includeTrace=true] - 是否包含 trace 日志
+ * @returns {Promise<number>} 删除的文件数
  */
-async function cleanExpiredLogs(logger) {
-  const mainLogMaxAge = cfg.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS
+async function cleanExpiredLogs(logger, customDays, includeTrace = true) {
+  const logDir = paths.logs || path.join(process.cwd(), 'logs')
+  const mainLogMaxAge = customDays || cfg.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS
   const traceLogMaxAge = cfg.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS
   const now = Date.now()
 
   try {
-    const files = await fsPromises.readdir(LOGGER_CONFIG.LOG_DIR)
+    const files = await fsPromises.readdir(logDir)
     let deletedCount = 0
 
     for (const file of files) {
-      const filePath = path.join(LOGGER_CONFIG.LOG_DIR, file)
+      const filePath = path.join(logDir, file)
+      const stats = await fsPromises.stat(filePath)
 
-      // 主日志文件
-      if (file.startsWith(`${LOGGER_CONFIG.MAIN_LOG_PREFIX}.`) && file.endsWith('.log')) {
-        const dateMatch = file.match(/app\.(\d{4}-\d{2}-\d{2})\.log/)
-        if (dateMatch) {
-          const fileDate = new Date(dateMatch[1])
-          const fileAge = now - fileDate.getTime()
-          const maxAgeMs = mainLogMaxAge * 24 * 60 * 60 * 1000
+      if (!file.endsWith('.log')) continue
 
-          if (fileAge > maxAgeMs) {
-            try {
-              await fsPromises.unlink(filePath)
-              deletedCount++
-              logger.debug(`Deleted expired log file: ${file}`)
-            } catch (err) {
-              logger.error(`Failed to delete log file: ${file}`, err.message)
-            }
-          }
-        }
+      let maxAgeMs
+      if (file.startsWith(`${LOGGER_CONFIG.TRACE_LOG_PREFIX}.`)) {
+        if (!includeTrace) continue
+        maxAgeMs = traceLogMaxAge * 24 * 60 * 60 * 1000
+      } else {
+        maxAgeMs = mainLogMaxAge * 24 * 60 * 60 * 1000
       }
-      // Trace 日志文件
-      else if (file.startsWith(`${LOGGER_CONFIG.TRACE_LOG_PREFIX}.`) && file.endsWith('.log')) {
-        const dateMatch = file.match(/trace\.(\d{4}-\d{2}-\d{2})\.log/)
-        if (dateMatch) {
-          const fileDate = new Date(dateMatch[1])
-          const fileAge = now - fileDate.getTime()
-          const maxAgeMs = traceLogMaxAge * 24 * 60 * 60 * 1000
 
-          if (fileAge > maxAgeMs) {
-            try {
-              await fsPromises.unlink(filePath)
-              deletedCount++
-              logger.debug(`Deleted expired trace log file: ${file}`)
-            } catch (err) {
-              logger.error(`Failed to delete trace log file: ${file}`, err.message)
-            }
-          }
+      if (now - stats.mtime.getTime() > maxAgeMs) {
+        try {
+          await fsPromises.unlink(filePath)
+          deletedCount++
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err))
+          logger.error(`Failed to delete log file: ${file}`, error.message)
         }
       }
     }
 
-    if (deletedCount > 0) {
-      logger.info(`Log cleanup completed, deleted ${deletedCount} expired files`)
+    if (deletedCount > 0 && logger) {
+      logger.debug(`Cleaned ${deletedCount} expired log files`)
     }
+    return deletedCount
   } catch (err) {
-    logger.error('Error cleaning expired logs:', err.message)
+    const error = err instanceof Error ? err : new Error(String(err))
+    logger.error('Error cleaning expired logs:', error.message)
+    return 0
   }
 }

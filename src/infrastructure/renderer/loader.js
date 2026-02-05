@@ -9,6 +9,9 @@ import Renderer from "./Renderer.js"
 import paths from "#utils/paths.js"
 import BotUtil from "#utils/botutil.js"
 
+// 注意：渲染器需要监视目录变化（addDir/unlinkDir），HotReloadBase只支持文件监视
+// 因此保留直接使用chokidar的方式
+
 // 暴露 Renderer 构造，仅一次
 global.Renderer = Renderer
 
@@ -85,7 +88,7 @@ class RendererLoader {
       const { HotReloadBase } = await import('#utils/hot-reload-base.js')
       const hotReload = new HotReloadBase({ loggerName: 'RendererLoader' })
       
-      // 渲染器需要监视目录变化
+      // 渲染器需要监视目录变化，使用chokidar直接监视目录
       const watcher = chokidar.watch(baseDir, {
         ignored: /(^|[\/\\])\../,
         persistent: true,
@@ -98,8 +101,7 @@ class RendererLoader {
       const handleRendererChange = async (filePath, eventType) => {
         try {
           if (eventType === 'addDir') {
-            const name = path.basename(filePath)
-            await this._loadRenderer(name, baseDir)
+            await this._loadRenderer(path.basename(filePath), baseDir)
           } else if (eventType === 'change') {
             const dirName = path.basename(path.dirname(filePath))
             const fileName = path.basename(filePath)
@@ -107,8 +109,7 @@ class RendererLoader {
               await this._loadRenderer(dirName, baseDir)
             }
           } else if (eventType === 'unlinkDir') {
-            const name = path.basename(filePath)
-            this.renderers.delete(name)
+            this.renderers.delete(path.basename(filePath))
           }
         } catch (error) {
           BotUtil.makeLog('error', `处理渲染器${eventType}失败`, 'RendererLoader', error)

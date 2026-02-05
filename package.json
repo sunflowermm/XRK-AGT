@@ -88,9 +88,15 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node app.js",
+    "debug": "node debug.js",
     "start:windows": "start.bat server",
     "start:unix": "./start.sh server",
-    "start:docker": "docker-compose up -d"
+    "start:docker": "docker-compose up -d",
+    "lint": "eslint . --ext .js,.mjs,.cjs",
+    "lint:fix": "eslint . --ext .js,.mjs,.cjs --fix",
+    "format": "prettier --write \"**/*.{js,mjs,cjs,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,cjs,json,md,yml,yaml}\"",
+    "type-check": "tsc --noEmit"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

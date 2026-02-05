@@ -225,10 +225,7 @@ class ConfigLoader {
       const hotReload = new HotReloadBase({ loggerName: 'ConfigLoader' })
       
       const configDirs = await paths.getCoreSubDirs('commonconfig')
-      if (configDirs.length === 0) {
-        BotUtil.makeLog('debug', '未找到 commonconfig 目录，跳过文件监视', 'ConfigLoader')
-        return
-      }
+      if (configDirs.length === 0) return
 
       await hotReload.watch(true, {
         dirs: configDirs,

@@ -6,7 +6,9 @@ import path from 'node:path'
 import { exec } from 'node:child_process'
 import { MongoClient } from 'mongodb'
 
+/** @type {import('mongodb').MongoClient | null} */
 let globalClient = null
+/** @type {import('mongodb').Db | null} */
 let globalDb = null
 
 const MONGODB_CONFIG = {
@@ -35,13 +37,14 @@ export default async function mongodbInit() {
       break
     } catch (err) {
       retryCount++
-      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${MONGODB_CONFIG.MAX_RETRIES}]: ${err.message}`, 'MongoDB')
+      const error = err instanceof Error ? err : new Error(String(err))
+      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${MONGODB_CONFIG.MAX_RETRIES}]: ${error.message}`, 'MongoDB')
 
       if (retryCount < MONGODB_CONFIG.MAX_RETRIES) {
         await attemptMongoStart(retryCount)
         client = new MongoClient(mongoUrl, clientOptions)
       } else {
-        handleFinalConnectionFailure(err, cfg.mongodb.port)
+        handleFinalConnectionFailure(error)
       }
     }
   }
@@ -52,14 +55,21 @@ export default async function mongodbInit() {
 
   globalClient = client
   globalDb = db
+  // @ts-ignore - 全局变量赋值
   global.mongodb = client
+  // @ts-ignore - 全局变量赋值
   global.mongodbDb = db
   
   return db
 }
 
 function buildMongoUrl(mongoConfig) {
-  const { username = '', password = '', host, port, database, options = {} } = mongoConfig
+  const username = mongoConfig?.username || ''
+  const password = mongoConfig?.password || ''
+  const host = mongoConfig?.host || '127.0.0.1'
+  const port = mongoConfig?.port || 27017
+  const database = mongoConfig?.database || 'xrk_agt'
+  const options = mongoConfig?.options || {}
   
   let auth = ''
   if (username || password) {
@@ -113,11 +123,12 @@ async function attemptMongoStart(retryCount) {
     const waitTime = 3000 + retryCount * 1000
     await common.sleep(waitTime)
   } catch (err) {
-    BotUtil.makeLog('debug', `启动失败: ${err.message}`, 'MongoDB')
+    const error = err instanceof Error ? err : new Error(String(err))
+    BotUtil.makeLog('debug', `启动失败: ${error.message}`, 'MongoDB')
   }
 }
 
-function handleFinalConnectionFailure(error, port) {
+function handleFinalConnectionFailure(error) {
   BotUtil.makeLog('error', `连接失败: ${error.message}`, 'MongoDB')
   BotUtil.makeLog('error', '请检查: 1)服务是否启动 2)配置是否正确 3)端口是否可用 4)网络是否正常', 'MongoDB')
   
@@ -131,8 +142,9 @@ function handleFinalConnectionFailure(error, port) {
 }
 
 function registerEventHandlers(client) {
-  client.on('serverHeartbeatFailed', (event) => {
-    BotUtil.makeLog('warn', `心跳失败: ${event.failure?.message || '未知错误'}`, 'MongoDB')
+  client.on('serverHeartbeatFailed', (/** @type {any} */ event) => {
+    const message = event?.failure?.message || '未知错误'
+    BotUtil.makeLog('warn', `心跳失败: ${message}`, 'MongoDB')
   })
 }
 
@@ -141,7 +153,8 @@ function startHealthCheck(client, db) {
     try {
       await db.admin().ping()
     } catch (err) {
-      BotUtil.makeLog('warn', `健康检查失败: ${err.message}`, 'MongoDB')
+      const error = err instanceof Error ? err : new Error(String(err))
+      BotUtil.makeLog('warn', `健康检查失败: ${error.message}`, 'MongoDB')
     }
   }, MONGODB_CONFIG.HEALTH_CHECK_INTERVAL)
 }
@@ -188,7 +201,8 @@ export async function closeMongodb() {
     globalClient = null
     globalDb = null
   } catch (err) {
-    BotUtil.makeLog('error', `关闭失败: ${err.message}`, 'MongoDB')
+    const error = err instanceof Error ? err : new Error(String(err))
+    BotUtil.makeLog('error', `关闭失败: ${error.message}`, 'MongoDB')
   }
 }
 

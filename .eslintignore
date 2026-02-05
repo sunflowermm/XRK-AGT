@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# Logs
+logs/
+*.log
+
+# Generated files
+*.lock
+pnpm-lock.yaml
+package-lock.json
+
+# Runtime data
+data/server_bots/
+data/importsJson/
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Coverage
+coverage/
+.nyc_output/
+
+# TypeScript
+*.d.ts
+
+# Config files
+*.config.js
+*.config.cjs
+*.config.mjs
+
+# Core modules (exclude system-Core)
+core/*
+!core/system-Core/

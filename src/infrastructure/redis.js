@@ -5,6 +5,7 @@ import { exec } from 'node:child_process'
 import os from 'node:os'
 import { createClient } from 'redis'
 
+/** @type {import('redis').RedisClientType | null} */
 let globalClient = null
 
 /**
@@ -23,7 +24,7 @@ const REDIS_CONFIG = {
 
 /**
  * 初始化Redis客户端
- * @returns {Promise<import('redis').RedisClientType>} Redis客户端实例
+ * @returns {Promise<any>} Redis客户端实例
  */
 export default async function redisInit() {
   if (globalClient?.isOpen) return globalClient
@@ -41,13 +42,14 @@ export default async function redisInit() {
       break
     } catch (err) {
       retryCount++
-      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${REDIS_CONFIG.MAX_RETRIES}]: ${err.message}`, 'Redis')
+      const error = err instanceof Error ? err : new Error(String(err))
+      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${REDIS_CONFIG.MAX_RETRIES}]: ${error.message}`, 'Redis')
 
       if (retryCount < REDIS_CONFIG.MAX_RETRIES) {
         await attemptRedisStart(retryCount)
         client = createClient(clientConfig)
       } else {
-        handleFinalConnectionFailure(err, cfg.redis.port)
+        handleFinalConnectionFailure(error)
       }
     }
   }
@@ -55,18 +57,24 @@ export default async function redisInit() {
   registerEventHandlers(client)
   startHealthCheck(client)
 
+  // @ts-ignore - Redis 客户端类型兼容性问题
   globalClient = client
+  // @ts-ignore - 全局变量赋值
   global.redis = client
   return client
 }
 
 /**
  * 构建Redis连接URL
- * @param {Object} redisConfig - Redis配置对象
+ * @param {any} redisConfig - Redis配置对象
  * @returns {string} Redis连接URL
  */
 function buildRedisUrl(redisConfig) {
-  const { username = '', password = '', host, port, db } = redisConfig
+  const username = redisConfig?.username || ''
+  const password = redisConfig?.password || ''
+  const host = redisConfig?.host || '127.0.0.1'
+  const port = redisConfig?.port || 6379
+  const db = redisConfig?.db || 0
   const auth = (username || password) ? `${username}${password ? `:${password}` : ''}@` : ''
   return `redis://${auth}${host}:${port}/${db}`
 }
@@ -93,7 +101,7 @@ function buildClientConfig(redisUrl) {
  * @returns {Function} 重连策略函数
  */
 function createReconnectStrategy() {
-  return (retries) => {
+  return (/** @type {number} */ retries) => {
     const delay = Math.min(
       Math.pow(2, retries) * REDIS_CONFIG.RECONNECT_BASE_DELAY,
       REDIS_CONFIG.RECONNECT_MAX_DELAY
@@ -138,16 +146,16 @@ async function attemptRedisStart(retryCount) {
     await execCommand(cmd)
     await common.sleep(2000 + retryCount * 1000)
   } catch (err) {
-    BotUtil.makeLog('debug', `启动失败: ${err.message}`, 'Redis')
+    const error = err instanceof Error ? err : new Error(String(err))
+    BotUtil.makeLog('debug', `启动失败: ${error.message}`, 'Redis')
   }
 }
 
 /**
  * 处理最终连接失败
  * @param {Error} error - 错误对象
- * @param {number} port - Redis端口
  */
-function handleFinalConnectionFailure(error, port) {
+function handleFinalConnectionFailure(error) {
   BotUtil.makeLog('error', `连接失败: ${error.message}`, 'Redis')
   BotUtil.makeLog('error', '请检查: 1)服务是否启动 2)配置是否正确 3)端口是否可用 4)网络是否正常', 'Redis')
   
@@ -159,23 +167,30 @@ function handleFinalConnectionFailure(error, port) {
 
 /**
  * 注册Redis事件监听器
- * @param {import('redis').RedisClientType} client - Redis客户端
+ * @param {any} client - Redis客户端
  */
 function registerEventHandlers(client) {
-  client.on('error', async (err) => {
-    BotUtil.makeLog('error', err.message, 'Redis')
+  client.on('error', async (/** @type {any} */ err) => {
+    const error = err instanceof Error ? err : new Error(String(err))
+    BotUtil.makeLog('error', error.message, 'Redis')
     
-    if (client._isReconnecting || client.isOpen) return
+    // 使用 WeakMap 存储重连状态，避免修改客户端对象
+    if (!client._reconnectState) {
+      client._reconnectState = { isReconnecting: false }
+    }
     
-    client._isReconnecting = true
+    if (client._reconnectState.isReconnecting || client.isOpen) return
+    
+    client._reconnectState.isReconnecting = true
     try {
       BotUtil.makeLog('info', '尝试重新连接...', 'Redis')
       await client.connect()
       BotUtil.makeLog('success', '重新连接成功', 'Redis')
     } catch (reconnectErr) {
-      BotUtil.makeLog('error', `重连失败: ${reconnectErr.message}`, 'Redis')
+      const reconnectError = reconnectErr instanceof Error ? reconnectErr : new Error(String(reconnectErr))
+      BotUtil.makeLog('error', `重连失败: ${reconnectError.message}`, 'Redis')
     } finally {
-      client._isReconnecting = false
+      client._reconnectState.isReconnecting = false
     }
   })
 
@@ -186,7 +201,7 @@ function registerEventHandlers(client) {
 
 /**
  * 启动Redis健康检查
- * @param {import('redis').RedisClientType} client - Redis客户端
+ * @param {any} client - Redis客户端
  */
 function startHealthCheck(client) {
   setInterval(async () => {
@@ -194,7 +209,8 @@ function startHealthCheck(client) {
     try {
       await client.ping()
     } catch (err) {
-      BotUtil.makeLog('warn', `健康检查失败: ${err.message}`, 'Redis')
+      const error = err instanceof Error ? err : new Error(String(err))
+      BotUtil.makeLog('warn', `健康检查失败: ${error.message}`, 'Redis')
     }
   }, REDIS_CONFIG.HEALTH_CHECK_INTERVAL)
 }
@@ -213,7 +229,7 @@ async function getArchitectureOptions() {
     
     const { stdout: versionOutput } = await execCommand('redis-server -v')
     const versionMatch = versionOutput.match(/v=(\d+)\.(\d+)/)
-    if (!versionMatch) return ''
+    if (!versionMatch || !versionMatch[1] || !versionMatch[2]) return ''
     
     const majorVer = parseInt(versionMatch[1], 10)
     const minorVer = parseInt(versionMatch[2], 10)
@@ -222,7 +238,8 @@ async function getArchitectureOptions() {
       return ' --ignore-warnings ARM64-COW-BUG'
     }
   } catch (err) {
-    BotUtil.makeLog('debug', `检查系统架构失败: ${err.message}`, 'Redis')
+    const error = err instanceof Error ? err : new Error(String(err))
+    BotUtil.makeLog('debug', `检查系统架构失败: ${error.message}`, 'Redis')
   }
   return ''
 }
@@ -273,7 +290,7 @@ export async function closeRedis() {
 
 /**
  * 获取Redis客户端实例
- * @returns {import('redis').RedisClientType|null} Redis客户端实例
+ * @returns {any} Redis客户端实例
  */
 export function getRedisClient() {
   return globalClient

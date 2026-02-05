@@ -228,7 +228,7 @@ class Cfg {
 
   get redis() {
     return this.getGlobalConfig('redis');
-    }
+  }
 
   get db() {
     return this.getGlobalConfig('db');
