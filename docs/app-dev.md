@@ -635,6 +635,7 @@ flowchart TB
 ## 进一步阅读
 
 - **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：整体架构与运行逻辑
+- **[system-Core 特性](system-core.md)**：system-Core 内置模块完整说明，包含Web控制台、所有HTTP API、工作流、插件和Tasker ⭐
 - **[框架可扩展性指南](框架可扩展性指南.md)**：完整的扩展能力说明
 - **[AIStream 文档](aistream.md)**：AIStream基类完整API（Node 侧单次对话 + MCP 工具调用，复杂多步在 Python 子服务端）
 - **[插件基类文档](plugin-base.md)**：插件基类完整API

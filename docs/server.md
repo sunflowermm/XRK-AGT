@@ -1339,6 +1339,9 @@ XRK-AGT 的 Server 层提供了：
 
 **相关文档**：
 - [HTTP业务层文档](http-business-layer.md) - 重定向、CDN、负载均衡详细说明
+- [Bot 主类文档](bot.md) - Bot 生命周期、中间件与认证
+- [system-Core 特性](system-core.md) - system-Core 内置模块完整说明 ⭐
 
 这使得 XRK-AGT 能够快速搭建各种通讯协议的客户端或服务端，是系统架构的核心优势之一。
 
+---*最后更新：2026-01-27*

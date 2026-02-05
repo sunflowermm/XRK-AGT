@@ -1,6 +1,6 @@
 # XRK-AGT 项目概览
 
-> **更新日期**: 2026-01-24  
+> **更新日期**: 2026-01-27  
 > **Node.js 版本要求**: ≥ 24.12.0 (LTS)  
 > 本文档提供 XRK-AGT 项目的完整架构概览、目录结构说明和核心特性介绍。  
 > 如需快速开始，请查看 [README.md](README.md)；详细开发与扩展指南请结合 [docs/README.md](docs/README.md) 与各模块文档阅读。
@@ -117,6 +117,17 @@ flowchart TB
 - **反向代理**：多域名 + SNI + HTTP/2 + 负载均衡
 - **安全与观测**：CORS / Helmet / 速率限制 / 请求日志
 - **资源管理**：自动清理临时文件，适合长期稳定运行
+
+### 6. system-Core 内置模块
+
+XRK-AGT 内置了完整的 system-Core 模块，提供开箱即用的功能：
+
+- **10个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、标准输入、数据编辑
+- **7个工作流**：50+个MCP工具，覆盖聊天、桌面、工具、记忆、知识库、设备、文档索引
+- **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
+- **Web控制台**：企业级管理界面（`/xrk/`），支持系统监控、API调试、配置管理
+
+详细说明请参考 [system-Core 特性文档](docs/system-core.md)。
 
 ---
 
@@ -285,15 +296,15 @@ XRK-AGT/
 │   └── renderers/           # 渲染实现（Puppeteer/Playwright）
 │
 ├── core/                     # 业务层与任务层
-│   ├── system-Core/         # 系统核心模块（示例）
-│   │   ├── plugin/          # 业务插件目录
-│   │   ├── tasker/          # 任务层目录
-│   │   ├── events/          # 事件系统目录
-│   │   ├── http/            # HTTP API目录
-│   │   ├── stream/          # 工作流目录
-│   │   ├── commonconfig/    # 配置管理（可选，仅当需要配置文件时使用）
-│   │   └── www/             # 静态资源（可选）
-│   │       └── <目录名>/    # ⚠️ 必须创建子目录，挂载到 /<目录名>/*
+│   ├── system-Core/         # 系统核心模块（内置，开箱即用）
+│   │   ├── plugin/          # 业务插件目录（增强器、功能插件）
+│   │   ├── tasker/          # 任务层目录（OneBotv11、GSUIDCORE、QBQBot、stdin）
+│   │   ├── events/          # 事件系统目录（onebot、device、stdin）
+│   │   ├── http/            # HTTP API目录（10个API模块）
+│   │   ├── stream/          # 工作流目录（7个工作流，50+个MCP工具）
+│   │   ├── commonconfig/    # 配置管理（system.js、LLM配置、工具配置）
+│   │   └── www/             # 静态资源（Web控制台 /xrk/）
+│   │       └── xrk/         # Web控制台前端（系统监控、API调试、配置管理）
 │   └── my-core/             # 自定义core模块
 │
 ├── config/                   # 配置文件
@@ -458,6 +469,8 @@ proxy:
 
 **7 大核心扩展点**（插件、工作流、Tasker、事件监听器、HTTP API、渲染器、配置）及扩展流程、目录与基类说明，详见 **[`docs/框架可扩展性指南.md`](docs/框架可扩展性指南.md)**。
 
+**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供10个HTTP API模块、7个工作流（50+个MCP工具）、4个Tasker和Web控制台。详见 **[`docs/system-core.md`](docs/system-core.md)**。
+
 ---
 
 ## 数据流向
@@ -570,6 +583,10 @@ flowchart TB
 
 参见 [docs/README.md](docs/README.md)。
 
+**重要文档**：
+- **[system-Core 特性文档](docs/system-core.md)** ⭐ - system-Core 内置模块完整说明
+- **[框架可扩展性指南](docs/框架可扩展性指南.md)** ⭐ - 7大扩展点、Core模块开发指南
+
 ---
 
 ## 相关资源
@@ -579,4 +596,4 @@ flowchart TB
 
 ---
 
-*本文档持续更新中，如有问题或建议，请提交Issue。*
+*最后更新：2026-01-27*

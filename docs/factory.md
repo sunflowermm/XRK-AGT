@@ -21,51 +21,62 @@ XRK-AGT 采用**工厂模式**统一管理多种 AI 服务提供商，包括大�
 ### 工厂系统架构图
 
 ```mermaid
-flowchart TB
-    subgraph App["应用层"]
-        AIStream["AIStream工作流"]
-        Device["设备服务"]
-        Plugin["插件"]
+flowchart LR
+    subgraph App["💼 应用层"]
+        direction TB
+        AIStream["🌊 AIStream工作流<br/>AI工作流基类"]
+        Device["🖥️ 设备服务<br/>ASR/TTS集成"]
+        Plugin["🔌 插件<br/>调用工作流"]
+        HTTPAPI["🌐 HTTP API<br/>/api/v3/chat/completions"]
     end
     
-    subgraph Factory["工厂层"]
-        LLMFactory["LLMFactory<br/>大语言模型工厂"]
-        ASRFactory["ASRFactory<br/>语音识别工厂"]
-        TTSFactory["TTSFactory<br/>语音合成工厂"]
+    subgraph Factory["🏭 工厂层"]
+        direction TB
+        LLMFactory["🤖 LLMFactory<br/>大语言模型工厂<br/>统一LLM接口"]
+        ASRFactory["🎤 ASRFactory<br/>语音识别工厂<br/>语音转文本"]
+        TTSFactory["🔊 TTSFactory<br/>语音合成工厂<br/>文本转语音"]
     end
 
-    subgraph Providers["提供商实现"]
-        LLMProviders["LLM提供商（含多模态）<br/>gptgod/volcengine/xiaomimimo<br/>openai/gemini/anthropic/azure_openai"]
-        ASRProviders["ASR提供商<br/>volcengine"]
-        TTSProviders["TTS提供商<br/>volcengine"]
+    subgraph Providers["🔌 提供商实现"]
+        direction TB
+        LLMProviders["📡 LLM提供商（含多模态）<br/>gptgod/volcengine/xiaomimimo<br/>openai/gemini/anthropic<br/>azure_openai/openai_compat"]
+        ASRProviders["🎙️ ASR提供商<br/>volcengine"]
+        TTSProviders["🔊 TTS提供商<br/>volcengine"]
     end
     
-    App -->|调用| Factory
-    Factory -->|路由| Providers
+    App -->|"调用"| Factory
+    Factory -->|"路由"| Providers
     
-    style App fill:#E6F3FF
-    style Factory fill:#90EE90
-    style Providers fill:#FFE6CC
+    style App fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+    style Factory fill:#50C878,stroke:#3FA060,stroke-width:3px,color:#fff
+    style Providers fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style LLMFactory fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style ASRFactory fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style TTSFactory fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
 ```
 
 ### 工厂调用流程
 
 ```mermaid
 sequenceDiagram
-    participant App as 应用层
-    participant Factory as 工厂类
-    participant Config as 配置系统
-    participant Provider as 提供商客户端
+    participant App as 💼 应用层
+    participant Factory as 🏭 工厂类
+    participant Config as ⚙️ 配置系统
+    participant Provider as 🔌 提供商客户端
     
-    App->>Config: 读取配置（选择提供商）
-    Config-->>App: 返回配置对象
-    App->>Factory: createClient(config)
-    Factory->>Factory: 根据 provider 选择工厂函数
-    Factory->>Provider: 创建客户端实例
-    Provider-->>Factory: 返回客户端
-    Factory-->>App: 返回客户端实例
-    App->>Provider: 调用服务方法
-    Provider-->>App: 返回结果
+    Note over App,Provider: 🔄 工厂调用流程
+    
+    App->>Config: 📖 读取配置<br/>选择提供商<br/>aistream.llm.Provider
+    Config-->>App: ✅ 返回配置对象<br/>provider配置
+    App->>Factory: 🏭 createClient(config)<br/>创建客户端
+    Factory->>Factory: 🔍 根据 provider 选择工厂函数<br/>LLMFactory.hasProvider()
+    Factory->>Provider: 📦 创建客户端实例<br/>new ProviderClient(config)
+    Provider-->>Factory: ✅ 返回客户端实例
+    Factory-->>App: 📤 返回客户端实例
+    App->>Provider: 📞 调用服务方法<br/>chat() / chatStream()
+    Provider-->>App: ✅ 返回结果<br/>AI响应文本
+    
+    Note over App: ✨ 调用完成
 ```
 
 ---
@@ -574,6 +585,50 @@ const ttsClient = TTSFactory.createClient(deviceId, ttsConfig, Bot);
 
 ### 场景 3：在 HTTP API 中使用工厂
 
+XRK-AGT 提供了标准的 AI HTTP API，位于 `core/system-Core/http/ai.js`：
+
+**OpenAI 兼容接口**（推荐用于外部调用）：
+```javascript
+// POST /api/v3/chat/completions
+// 完全兼容 OpenAI Chat Completions API
+const response = await fetch('http://localhost:8080/api/v3/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_API_KEY'
+  },
+  body: JSON.stringify({
+    model: 'gptgod',  // 使用 provider 名称
+    messages: [
+      { role: 'user', content: '你好' }
+    ],
+    stream: false  // 或 true 启用流式输出
+  })
+});
+```
+
+**自定义工作流接口**：
+```javascript
+// GET /api/ai/stream?prompt=你好&workflow=chat&profile=gptgod
+// SSE 流式输出，使用指定工作流
+const eventSource = new EventSource('http://localhost:8080/api/ai/stream?prompt=你好&workflow=chat');
+eventSource.onmessage = (e) => {
+  const data = JSON.parse(e.data);
+  console.log(data.delta);  // 流式输出片段
+};
+```
+
+**获取模型和工作流列表**：
+```javascript
+// GET /api/ai/models
+// 返回所有可用的 LLM 提供商和工作流
+const response = await fetch('http://localhost:8080/api/ai/models');
+const data = await response.json();
+console.log(data.profiles);   // LLM 提供商列表
+console.log(data.workflows);  // 工作流列表
+```
+
+**自定义 HTTP API 中使用工厂**：
 ```javascript
 import LLMFactory from '#factory/llm/LLMFactory.js';
 
@@ -671,12 +726,225 @@ A: 不是。每次调用 `createClient()` 都会创建新的客户端实例。�
 
 ---
 
+## AI HTTP API 路由
+
+XRK-AGT 提供了标准的 AI HTTP API，位于 `core/system-Core/http/ai.js`，支持 OpenAI 兼容接口和工作流调用。
+
+### OpenAI 兼容接口
+
+**POST `/api/v3/chat/completions`**
+
+完全兼容 OpenAI Chat Completions API，支持流式和非流式输出。
+
+**请求示例**（非流式）：
+```http
+POST /api/v3/chat/completions HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Authorization: Bearer YOUR_API_KEY
+
+{
+  "model": "gptgod",
+  "messages": [
+    { "role": "user", "content": "你好" }
+  ],
+  "stream": false,
+  "temperature": 0.7,
+  "max_tokens": 2000
+}
+```
+
+**响应示例**：
+```json
+{
+  "id": "chatcmpl_1703123456789",
+  "object": "chat.completion",
+  "created": 1703123456,
+  "model": "gptgod",
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "你好！有什么可以帮助你的吗？"
+    },
+    "finish_reason": "stop"
+  }],
+  "usage": {
+    "prompt_tokens": 2,
+    "completion_tokens": 10,
+    "total_tokens": 12
+  }
+}
+```
+
+**流式输出**（`stream: true`）：
+```http
+POST /api/v3/chat/completions HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer YOUR_API_KEY
+
+{
+  "model": "gptgod",
+  "messages": [{ "role": "user", "content": "你好" }],
+  "stream": true
+}
+```
+
+**响应**（Server-Sent Events）：
+```
+data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"gptgod","choices":[{"index":0,"delta":{"role":"assistant","content":"你"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"gptgod","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"gptgod","choices":[{"index":0,"delta":{},"finish_reason":"stop","usage":{...}}]}
+
+data: [DONE]
+```
+
+**重要说明**：
+- `model` 参数使用 provider 名称（如 `gptgod`、`volcengine`），不是真实模型名
+- 支持多种认证方式：`Authorization: Bearer TOKEN` 或 `body.apiKey`
+- 支持所有 OpenAI 兼容参数：`temperature`、`max_tokens`、`top_p`、`tools`、`tool_choice` 等
+- 流式输出需要提供商配置中 `enableStream: true`（默认启用）
+
+### 工作流接口
+
+**GET `/api/ai/stream`**
+
+使用指定工作流进行 SSE 流式输出，支持上下文增强和记忆系统。
+
+**请求示例**：
+```http
+GET /api/ai/stream?prompt=你好&workflow=chat&profile=gptgod&persona=助手 HTTP/1.1
+Host: localhost:8080
+```
+
+**查询参数**：
+
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `prompt` | string | 用户输入（必需） | - |
+| `workflow` | string | 工作流名称（chat/desktop/tools等） | `chat` |
+| `profile` / `llm` | string | LLM 提供商名称 | 配置默认值 |
+| `provider` / `model` | string | LLM 提供商名称（备用） | 配置默认值 |
+| `persona` | string | 角色设定 | - |
+| `context` | JSON | 上下文对象 | - |
+| `meta` | JSON | 元数据 | - |
+
+**响应**（Server-Sent Events）：
+```
+data: {"delta":"你","workflow":"chat"}
+
+data: {"delta":"好","workflow":"chat"}
+
+data: {"done":true,"workflow":"chat","text":"你好！有什么可以帮助你的吗？"}
+```
+
+### 模型和工作流列表
+
+**GET `/api/ai/models`**
+
+获取所有可用的 LLM 提供商和工作流列表。
+
+**请求示例**：
+```http
+GET /api/ai/models HTTP/1.1
+Host: localhost:8080
+```
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "data": {
+    "enabled": true,
+    "defaultProfile": "gptgod",
+    "defaultWorkflow": "chat",
+    "persona": "",
+    "profiles": [
+      {
+        "key": "gptgod",
+        "label": "gptgod",
+        "description": "LLM提供商: gptgod",
+        "model": "gemini-exp-1114",
+        "baseUrl": "https://api.gptgod.online/v1",
+        "maxTokens": 2000,
+        "temperature": 0.7,
+        "hasApiKey": true,
+        "capabilities": ["stream", "tools"]
+      }
+    ],
+    "workflows": [
+      {
+        "key": "chat",
+        "label": "智能聊天互动工作流",
+        "description": "智能聊天互动工作流",
+        "profile": null,
+        "persona": null,
+        "uiHidden": false
+      },
+      {
+        "key": "desktop",
+        "label": "桌面与通用助手工作流",
+        "description": "桌面与通用助手工作流",
+        "profile": null,
+        "persona": null,
+        "uiHidden": false
+      }
+    ]
+  }
+}
+```
+
+**GET `/api/v3/models`**
+
+OpenAI 格式的模型列表（用于兼容 OpenAI 客户端）。
+
+**请求示例**：
+```http
+GET /api/v3/models HTTP/1.1
+Host: localhost:8080
+```
+
+**响应示例**：
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "gptgod",
+      "object": "model",
+      "created": 1703123456,
+      "owned_by": "xrk-agt"
+    },
+    {
+      "id": "volcengine",
+      "object": "model",
+      "created": 1703123456,
+      "owned_by": "xrk-agt"
+    }
+  ]
+}
+```
+
+---
+
 ## 相关文档
 
 - **[AIStream 文档](aistream.md)** - 了解如何在 AIStream 中使用 LLM 工厂
 - **[配置基类文档](config-base.md)** - 了解配置系统的使用
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 了解如何扩展工厂系统
 - **[MCP 指南](mcp-guide.md)** - 了解工具调用机制
+- **[HTTP API 文档](http-api.md)** - 了解 HTTP API 基类
+
+---
+
+## 相关文档
+
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含AI服务API和所有工作流的实际实现 ⭐
+- **[AI Stream](aistream.md)** - AIStream 基类技术文档
+- **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
+- **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 
 ---
 

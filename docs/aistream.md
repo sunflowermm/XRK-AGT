@@ -25,99 +25,112 @@
 ### 系统架构图
 
 ```mermaid
-flowchart TB
-    subgraph Plugin["插件层"]
-        Call["stream.process(e, question)"]
+flowchart LR
+    subgraph Plugin["🔌 插件层"]
+        direction TB
+        Call["📞 stream.process(e, question)<br/>调用工作流"]
     end
     
-    subgraph AIStream["AIStream基类"]
-        BuildCtx["buildChatContext<br/>构建基础消息"]
-        Enhance["buildEnhancedContext<br/>RAG流程：检索历史+知识库"]
-        CallAI["callAI/callAIStream<br/>调用LLM"]
-        Store["storeMessageWithEmbedding<br/>存储到记忆系统"]
-        Register["registerMCPTool<br/>注册MCP工具"]
+    subgraph AIStream["🌊 AIStream基类"]
+        direction TB
+        BuildCtx["📝 buildChatContext<br/>构建基础消息"]
+        Enhance["🔍 buildEnhancedContext<br/>RAG流程：检索历史+知识库"]
+        CallAI["📡 callAI/callAIStream<br/>调用LLM"]
+        Store["💾 storeMessageWithEmbedding<br/>存储到记忆系统"]
+        Register["🔧 registerMCPTool<br/>注册MCP工具"]
     end
     
-    subgraph Subserver["Python子服务端"]
-        LangChain["LangChain服务<br/>/api/langchain/chat<br/>Agent编排+工具调用"]
-        VectorAPI["向量服务<br/>/api/vector/*<br/>embed/search/upsert"]
+    subgraph Subserver["🐍 Python子服务端"]
+        direction TB
+        LangChain["🌐 LangChain服务<br/>/api/langchain/chat<br/>Agent编排+工具调用"]
+        VectorAPI["📊 向量服务<br/>/api/vector/*<br/>embed/search/upsert"]
     end
     
-    subgraph MainServer["主服务端"]
-        LLMFactory["LLM工厂<br/>gptgod/volcengine/xiaomimimo/openai/openai_compat/gemini/anthropic/azure_openai<br/>/api/v3/chat/completions"]
-        MCP["MCP服务器<br/>工具调用协议"]
+    subgraph MainServer["⚙️ 主服务端"]
+        direction TB
+        LLMFactory["🤖 LLM工厂<br/>gptgod/volcengine/xiaomimimo<br/>openai/gemini/anthropic<br/>azure_openai/openai_compat"]
+        HTTPAPI["🌐 HTTP API<br/>/api/v3/chat/completions<br/>/api/ai/stream"]
+        MCP["🔧 MCP服务器<br/>工具调用协议"]
     end
     
-    subgraph Memory["记忆系统"]
-        ShortTerm["短期记忆<br/>MemoryManager"]
-        LongTerm["长期记忆<br/>向量检索"]
+    subgraph Memory["🧠 记忆系统"]
+        direction TB
+        ShortTerm["📝 短期记忆<br/>MemoryManager"]
+        LongTerm["🔍 长期记忆<br/>向量检索"]
     end
     
-    Plugin -->|调用| AIStream
-    AIStream -->|优先调用| LangChain
-    LangChain -->|调用| LLMFactory
-    LangChain -->|工具调用| MCP
-    AIStream -->|失败回退| LLMFactory
-    AIStream -->|向量检索| VectorAPI
-    AIStream -->|存储向量| VectorAPI
-    AIStream -->|注册工具| MCP
-    AIStream -->|读写| Memory
+    Plugin -->|"调用"| AIStream
+    AIStream -->|"优先调用"| LangChain
+    LangChain -->|"调用"| LLMFactory
+    LangChain -->|"工具调用"| MCP
+    AIStream -->|"失败回退"| LLMFactory
+    AIStream -->|"向量检索"| VectorAPI
+    AIStream -->|"存储向量"| VectorAPI
+    AIStream -->|"注册工具"| MCP
+    AIStream -->|"读写"| Memory
+    HTTPAPI -->|"使用"| LLMFactory
     
-    style Plugin fill:#E6F3FF
-    style AIStream fill:#90EE90
-    style Subserver fill:#FFE6CC
-    style MainServer fill:#FFD700
-    style Memory fill:#FFB6C1
-    style MCP fill:#DDA0DD
+    style Plugin fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+    style AIStream fill:#50C878,stroke:#3FA060,stroke-width:3px,color:#fff
+    style Subserver fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style MainServer fill:#FFD700,stroke:#CCAA00,stroke-width:3px,color:#000
+    style Memory fill:#FFB6C1,stroke:#FF69B4,stroke-width:2px
+    style MCP fill:#DDA0DD,stroke:#9370DB,stroke-width:2px
+    style LLMFactory fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style HTTPAPI fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
 ```
 
 ### 工作流执行流程图
 
 ```mermaid
 sequenceDiagram
-    participant Plugin as 插件
-    participant Stream as AIStream
-    participant Context as 上下文构建
-    participant Vector as 向量服务
-    participant LLM as LLM服务
-    participant Memory as 记忆系统
+    participant Plugin as 🔌 插件
+    participant Stream as 🌊 AIStream
+    participant Context as 📝 上下文构建
+    participant Vector as 📊 向量服务
+    participant LLM as 🤖 LLM服务
+    participant Memory as 🧠 记忆系统
     
-    Plugin->>Stream: process(e, question, options)
-    Stream->>Context: buildChatContext(e, question)
-    Context-->>Stream: baseMessages
+    Note over Plugin,Memory: 🔄 AIStream 工作流执行流程
     
-    alt 启用上下文增强
-        Stream->>Subserver: retrieveRelevantContexts(groupId, query)
-        Subserver->>Subserver: POST /api/vector/search
-        Subserver-->>Stream: historyContexts
-        Stream->>Stream: retrieveKnowledgeContexts(query)
-        Stream-->>Stream: knowledgeContexts
-        Stream->>Context: buildEnhancedContext(e, question, baseMessages)
-        Context-->>Stream: enhancedMessages
+    Plugin->>Stream: 📞 process(e, question, options)<br/>调用工作流
+    Stream->>Context: 📝 buildChatContext(e, question)<br/>构建基础消息
+    Context-->>Stream: ✅ baseMessages<br/>基础消息数组
+    
+    alt 🔍 启用上下文增强
+        Stream->>Vector: 🔍 retrieveRelevantContexts(groupId, query)<br/>检索历史上下文
+        Vector->>Vector: 📡 POST /api/vector/search<br/>向量搜索
+        Vector-->>Stream: 📋 historyContexts<br/>历史上下文
+        Stream->>Stream: 🔍 retrieveKnowledgeContexts(query)<br/>检索知识库
+        Stream-->>Stream: 📚 knowledgeContexts<br/>知识库上下文
+        Stream->>Context: 🔗 buildEnhancedContext(e, question, baseMessages)<br/>构建增强上下文
+        Context-->>Stream: ✨ enhancedMessages<br/>增强后的消息
     end
     
-    Stream->>Subserver: callAI(messages, apiConfig)
-    alt 子服务端可用
-        Subserver->>Subserver: POST /api/langchain/chat
-        Subserver->>MainServer: POST /api/v3/chat/completions
-        alt 需要工具调用
-            MainServer->>MCP: 执行MCP工具
-            MCP-->>MainServer: 工具结果
+    Stream->>LLM: 📡 callAI(messages, apiConfig)<br/>调用LLM
+    
+    alt 🐍 子服务端可用
+        LLM->>LLM: 🌐 POST /api/langchain/chat<br/>LangChain编排
+        LLM->>LLM: 📡 POST /api/v3/chat/completions<br/>调用LLM工厂
+        alt 🔧 需要工具调用
+            LLM->>LLM: 🔧 执行MCP工具<br/>工具调用
+            LLM-->>LLM: ✅ 工具结果
         end
-        MainServer-->>Subserver: LLM响应
-        Subserver-->>Stream: 最终响应
-    else 子服务端不可用
-        Stream->>MainServer: 直接调用LLMFactory
-        MainServer-->>Stream: LLM响应
+        LLM-->>Stream: ✅ LLM响应<br/>AI回复文本
+    else ⚙️ 子服务端不可用
+        Stream->>LLM: 📡 直接调用LLMFactory<br/>工厂模式
+        LLM-->>Stream: ✅ LLM响应<br/>AI回复文本
     end
     
-    alt 启用记忆存储
-        Stream->>Memory: storeMessageWithEmbedding(groupId, message)
-        Memory->>Subserver: POST /api/vector/upsert
-        Subserver-->>Memory: 存储成功
+    alt 💾 启用记忆存储
+        Stream->>Memory: 💾 storeMessageWithEmbedding(groupId, message)<br/>存储消息和向量
+        Memory->>Vector: 📡 POST /api/vector/upsert<br/>上传向量
+        Vector-->>Memory: ✅ 存储成功
     end
     
-    Stream-->>Plugin: response
+    Stream-->>Plugin: ✅ response<br/>返回最终响应
+    
+    Note over Plugin: ✨ 工作流执行完成
 ```
 
 ### 组件关系图
@@ -329,26 +342,33 @@ AIStream **不再解析/执行任何“文本函数调用 / ReAct”**，所有�
 
 ```mermaid
 sequenceDiagram
-    participant Plugin as 插件
-    participant Stream as AIStream
-    participant Subserver as 子服务端
-    participant LLM as LLM工厂
-    participant Vector as 向量服务
+    participant Plugin as 🔌 插件
+    participant Stream as 🌊 AIStream
+    participant Subserver as 🐍 Python子服务端
+    participant LLM as 🤖 LLM工厂
+    participant Vector as 📊 向量服务
     
-    Plugin->>Stream: process(e, question, options)
-    Stream->>Stream: buildChatContext(e, question)
-    Stream->>Stream: buildEnhancedContext(e, question)
-    Stream->>Subserver: POST /api/langchain/chat
-    alt 子服务端可用
-        Subserver->>LLM: POST /api/v3/chat/completions
-        LLM-->>Subserver: 返回响应
-        Subserver-->>Stream: 返回结果
-    else 子服务端不可用
-        Stream->>LLM: 直接调用LLM工厂
-        LLM-->>Stream: 返回响应
+    Note over Plugin,Vector: 🔄 LLM 调用流程
+    
+    Plugin->>Stream: 📞 process(e, question, options)<br/>调用工作流
+    Stream->>Stream: 📝 buildChatContext(e, question)<br/>构建基础消息
+    Stream->>Stream: 🔍 buildEnhancedContext(e, question)<br/>RAG增强上下文
+    Stream->>Subserver: 🌐 POST /api/langchain/chat<br/>LangChain编排
+    
+    alt 🐍 子服务端可用
+        Subserver->>LLM: 📡 POST /api/v3/chat/completions<br/>调用LLM工厂
+        LLM-->>Subserver: ✅ 返回响应<br/>AI回复文本
+        Subserver-->>Stream: ✅ 返回结果<br/>Agent处理结果
+    else ⚙️ 子服务端不可用
+        Stream->>LLM: 📡 直接调用LLM工厂<br/>LLMFactory.createClient()
+        LLM-->>Stream: ✅ 返回响应<br/>AI回复文本
     end
-    Stream->>Vector: POST /api/vector/upsert
-    Stream-->>Plugin: 返回结果
+    
+    Stream->>Vector: 💾 POST /api/vector/upsert<br/>存储消息向量
+    Vector-->>Stream: ✅ 存储成功
+    Stream-->>Plugin: ✅ 返回结果<br/>最终响应
+    
+    Note over Plugin: ✨ 调用完成
 ```
 
 **核心方法**：
@@ -377,37 +397,43 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant AIStream as AIStream
-    participant Subserver as Python子服务端
-    participant LangChain as LangChain Agent
-    participant MainServer as 主服务端v3
-    participant MCP as MCP服务器
-    participant Vector as 向量服务
+    participant AIStream as 🌊 AIStream
+    participant Subserver as 🐍 Python子服务端
+    participant LangChain as 🌐 LangChain Agent
+    participant MainServer as ⚙️ 主服务端v3
+    participant MCP as 🔧 MCP服务器
+    participant Vector as 📊 向量服务
     
-    Note over AIStream,Vector: LLM调用流程
-    AIStream->>Subserver: POST /api/langchain/chat
-    Subserver->>LangChain: 创建Agent并处理消息
-    LangChain->>MainServer: POST /api/v3/chat/completions
-    alt 需要工具调用
-        MainServer->>MCP: 执行MCP工具
-        MCP-->>MainServer: 工具结果
-        MainServer-->>LangChain: 包含工具结果的响应
-        LangChain->>MainServer: 再次调用（多轮对话）
+    Note over AIStream,Vector: 🔄 LLM调用流程（子服务端）
+    
+    AIStream->>Subserver: 🌐 POST /api/langchain/chat<br/>请求Agent处理
+    Subserver->>LangChain: 🤖 创建Agent并处理消息<br/>LangChain Agent
+    LangChain->>MainServer: 📡 POST /api/v3/chat/completions<br/>调用LLM工厂
+    
+    alt 🔧 需要工具调用
+        MainServer->>MCP: 🔧 执行MCP工具<br/>tools/call
+        MCP-->>MainServer: ✅ 工具结果<br/>JSON格式
+        MainServer-->>LangChain: 📤 包含工具结果的响应<br/>LLM响应+工具结果
+        LangChain->>MainServer: 📡 再次调用（多轮对话）<br/>继续Agent流程
     end
-    MainServer-->>LangChain: 最终LLM响应
-    LangChain-->>Subserver: Agent处理结果
-    Subserver-->>AIStream: 返回响应
     
-    Note over AIStream,Vector: 向量服务流程
-    AIStream->>Subserver: POST /api/vector/search
-    Subserver->>Vector: ChromaDB检索
-    Vector-->>Subserver: 检索结果
-    Subserver-->>AIStream: 返回上下文
+    MainServer-->>LangChain: ✅ 最终LLM响应<br/>AI回复文本
+    LangChain-->>Subserver: ✅ Agent处理结果<br/>最终响应
+    Subserver-->>AIStream: ✅ 返回响应<br/>工作流结果
     
-    AIStream->>Subserver: POST /api/vector/upsert
-    Subserver->>Vector: 存储向量
-    Vector-->>Subserver: 存储成功
-    Subserver-->>AIStream: 确认
+    Note over AIStream,Vector: 📊 向量服务流程
+    
+    AIStream->>Subserver: 🔍 POST /api/vector/search<br/>检索相关上下文
+    Subserver->>Vector: 📊 ChromaDB检索<br/>向量相似度搜索
+    Vector-->>Subserver: ✅ 检索结果<br/>相关上下文列表
+    Subserver-->>AIStream: 📋 返回上下文<br/>增强消息
+    
+    AIStream->>Subserver: 💾 POST /api/vector/upsert<br/>存储消息向量
+    Subserver->>Vector: 📊 存储向量<br/>ChromaDB upsert
+    Vector-->>Subserver: ✅ 存储成功
+    Subserver-->>AIStream: ✅ 确认<br/>存储完成
+    
+    Note over AIStream: ✨ 流程完成
 ```
 
 ---
@@ -833,6 +859,7 @@ MonitorService.endTrace(traceId, { success: true });
 
 ## 相关文档
 
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含7个工作流的实际实现（chat、desktop、tools、memory、database、device、doc-indexer） ⭐
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 - **[工厂系统](factory.md)** - LLM/Vision/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 - **[子服务端 API](subserver-api.md)** - LangChain + 向量服务 + 与主服务 v3 的衔接

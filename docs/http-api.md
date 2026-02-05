@@ -423,6 +423,7 @@ handler: async (req, res, bot) => {
 ## 相关文档
 
 - **[API加载器](api-loader.md)** - API自动加载和热重载机制
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含10个HTTP API模块的实际示例 ⭐
 - **[HTTP业务层](http-business-layer.md)** - 重定向、CDN、反向代理增强功能
 - **[Server服务器架构](server.md)** - 完整的服务器架构说明
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南

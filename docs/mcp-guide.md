@@ -1348,3 +1348,16 @@ XRK-AGT的MCP系统提供了：
 - ✅ **易于扩展**：支持自定义工具开发
 
 通过MCP协议，XRK-AGT可以轻松与Cursor、Claude、小智AI等外部AI平台集成，实现工具共享和跨平台协作。
+
+---
+
+## 相关文档
+
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含7个工作流和50+个MCP工具的实际实现 ⭐
+- **[AI Stream](aistream.md)** - AIStream 基类技术文档
+- **[工厂系统](factory.md)** - LLM/Vision/ASR/TTS 工厂系统
+- **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
+
+---
+
+*最后更新：2026-01-27*

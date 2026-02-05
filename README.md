@@ -1,14 +1,15 @@
 ## XRK-AGT v1.0.1
 
-> **最后更新**: 2026-01-24  
+> **最后更新**: 2026-01-27  
 > **跨平台支持**: Windows 10+ / Linux / macOS / Docker  
 > **Node.js 版本要求**: ≥ 24.12.0 (LTS)
 
 XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多平台、多Tasker、工作流驱动型智能体平台**，采用分层架构设计，支持：
 
-- **多平台消息接入**：OneBotv11 / IM / 自定义 Tasker
+- **多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
 - **插件工作流**：指令插件 + AI 工作流 (`AIStream`)
 - **Web 与 HTTP/API 服务**：内置 Web 控制台 + REST API + WebSocket
+- **system-Core 内置模块**：10个HTTP API模块、7个工作流（50+个MCP工具）、4个Tasker、企业级Web控制台
 - **渲染与截图**：基于 Puppeteer / Playwright 的页面渲染与图片输出
 
 **如果你是第一次接触本项目：**
@@ -110,10 +111,13 @@ flowchart TB
 - **事件系统**（`core/*/events/`）：对事件做去重、标准化与预处理，再分发到插件系统。
 - **业务层**（`core/*/(plugin|http|stream)/`）：具体业务实现，包括指令插件、HTTP API 与 AI 工作流。
 
+**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供开箱即用的功能。详见 [`docs/system-core.md`](docs/system-core.md)。
+
 若你想 **改造底层** 或 **做二次开发**，推荐顺序是：
 
 1. 阅读 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) 了解详细架构和目录结构
 2. 阅读 [`docs/README.md`](docs/README.md) 与对应模块文档深入具体基类和对象
+3. 参考 [`docs/system-core.md`](docs/system-core.md) 了解内置模块的实际实现
 
 ---
 
@@ -370,10 +374,11 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
 | 模块 | 文档 |
 |------|------|
 | 概览与运行 | [PROJECT_OVERVIEW](PROJECT_OVERVIEW.md)、[bot](docs/bot.md)、[server](docs/server.md)、[docker](docs/docker.md) |
+| system-Core | [system-Core 特性](docs/system-core.md) ⭐ - 内置模块完整说明（10个HTTP API、7个工作流、4个Tasker、Web控制台） |
 | 任务与事件 | [tasker-base-spec](docs/tasker-base-spec.md)、[tasker-onebotv11](docs/tasker-onebotv11.md)、[tasker-loader](docs/tasker-loader.md)、[事件系统标准化文档](docs/事件系统标准化文档.md)（包含事件监听器开发指南） |
 | 插件 | [plugin-base](docs/plugin-base.md)、[plugins-loader](docs/plugins-loader.md) |
 | HTTP/API | [http-api](docs/http-api.md)、[api-loader](docs/api-loader.md) |
-| AI / MCP | [aistream](docs/aistream.md)、[subserver-api](docs/subserver-api.md)、[mcp-guide](docs/mcp-guide.md) |
+| AI / MCP | [aistream](docs/aistream.md)、[factory](docs/factory.md)、[subserver-api](docs/subserver-api.md)、[mcp-guide](docs/mcp-guide.md) |
 | 配置与渲染 | [config-base](docs/config-base.md)、[renderer](docs/renderer.md) |
 | 工具与应用 | [botutil](docs/botutil.md)、[app-dev](docs/app-dev.md) |
 
