@@ -1,14 +1,13 @@
 #!/bin/sh
 set -e
 
-# XRK-AGT Docker 入口脚本
+# XRK-AGT Linux/macOS 启动脚本
 # 支持通过环境变量 XRK_SERVER_PORT 指定端口
 
 # 获取端口（环境变量优先，默认8080）
 PORT=${XRK_SERVER_PORT:-8080}
 
 # 如果提供了命令行参数，第一个参数应该是"server"，第二个参数是端口
-# CMD默认是["server"]，所以如果没有额外参数，使用环境变量中的端口
 if [ $# -ge 1 ] && [ "$1" = "server" ]; then
     # 如果提供了第二个参数，使用它作为端口
     if [ $# -ge 2 ]; then

@@ -1,6 +1,8 @@
 # Docker 部署指南
 
-本文档介绍如何使用 Docker 部署 XRK-AGT。
+本文档介绍如何使用 Docker 部署 XRK-AGT。XRK-AGT 完全支持跨平台部署，包括 Windows、Linux 和 macOS。
+
+> **跨平台支持**：所有路径处理均使用 Node.js 的 `path` 模块，确保跨平台兼容性。Docker 镜像基于 `node:24.12-alpine`，支持所有主流平台。
 
 ## 快速开始
 

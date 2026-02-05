@@ -36,11 +36,15 @@ classDiagram
         +reply(msg, quote, data)
         +getStream(name)
         +getAllStreams()
-        +init()
         +accept(e)
-        +setContext(type, isGroup, time)
+        +setContext(type, isGroup, time, timeoutMsg)
         +getContext(type, isGroup)
         +finish(type, isGroup)
+        +awaitContext(...)
+        +resolveContext(context)
+        +markNeedReparse()
+        +getDescriptor()
+        +getInfo()
     }
     
     class EventObject {
@@ -56,8 +60,9 @@ classDiagram
     
     Plugin --> EventObject : contains
     Plugin --> AIStream : uses
-    note for Plugin "所有业务插件继承plugin基类"
-    note for EventObject "运行时自动注入"
+    note for Plugin "所有业务插件继承plugin基类<br/>⚠️ constructor中不能定义状态变量<br/>使用模块级变量或init()方法"
+    note for EventObject "运行时自动注入<br/>由PluginsLoader.initPlugins注入"
+    note for AIStream "通过getStream()访问<br/>支持工作流合并"
 ```
 
 ### 标准化事件系统
@@ -67,23 +72,30 @@ classDiagram
 ```mermaid
 flowchart TB
     subgraph Events["事件类型"]
-        A["通用事件<br/>message/notice/request"]
-        B["特定事件<br/>onebot.message<br/>device.message"]
+        A["通用事件<br/>message/notice/request<br/>匹配所有来源"]
+        B["特定事件<br/>onebot.message<br/>device.message<br/>只匹配特定Tasker"]
     end
     
-    subgraph Plugin["插件匹配"]
-        C{"event属性"}
-        C -->|通用事件| D["匹配所有来源"]
-        C -->|特定事件| E["只匹配特定Tasker"]
+    subgraph Plugin["插件匹配机制"]
+        C{"event属性配置"}
+        C -->|通用事件| D["匹配所有来源<br/>跨平台兼容"]
+        C -->|特定事件| E["只匹配特定Tasker<br/>精确控制"]
+        C -->|通配符| F["onebot.*<br/>谨慎使用"]
     end
     
     A --> C
     B --> C
     
-    style A fill:#E6F3FF
-    style B fill:#FFE6CC
-    style D fill:#90EE90
-    style E fill:#87CEEB
+    D --> G["插件执行"]
+    E --> G
+    F --> G
+    
+    style A fill:#E6F3FF,stroke:#7AA7D9
+    style B fill:#FFE6CC,stroke:#D9A35D
+    style D fill:#90EE90,stroke:#6CB46C
+    style E fill:#87CEEB,stroke:#5A9FD4
+    style F fill:#FFB6C1,stroke:#D97BAF
+    style G fill:#DDA0DD,stroke:#A57BD9
 ```
 
 **通用事件监听（匹配所有来源）：**
@@ -173,22 +185,31 @@ export default class DevicePlugin extends plugin {
 ```mermaid
 sequenceDiagram
     participant User as 用户
-    participant Plugin as 插件
+    participant Plugin as 插件实例
     participant Context as 上下文系统
+    participant Timer as 超时定时器
     
-    User->>Plugin: 第一次命令
-    Plugin->>Context: setContext(type, time)
-    Context->>Context: 创建上下文桶<br/>设置超时定时器
+    User->>Plugin: 第一次命令<br/>#开始对话
+    Plugin->>Context: setContext(type, isGroup, time, timeoutMsg)
+    Context->>Context: 创建上下文桶<br/>存储状态数据
+    Context->>Timer: 设置超时定时器<br/>time秒后自动清理
     Context-->>Plugin: 上下文已设置
     Plugin-->>User: 等待输入...
     
-    User->>Plugin: 下一条消息
-    Plugin->>Context: getContext(type)
-    Context-->>Plugin: 返回上下文
-    Plugin->>Plugin: 使用上下文处理
-    Plugin->>Context: finish(type)
-    Context->>Context: 清除定时器和状态
-    Plugin-->>User: 返回结果
+    Note over User,Timer: 用户输入下一条消息
+    
+    User->>Plugin: 下一条消息<br/>输入内容
+    Plugin->>Context: getContext(type, isGroup)
+    Context-->>Plugin: 返回上下文数据
+    alt 上下文存在
+        Plugin->>Plugin: 使用上下文处理<br/>继续对话流程
+        Plugin->>Context: finish(type, isGroup)
+        Context->>Timer: 清除定时器
+        Context->>Context: 清理状态数据
+        Plugin-->>User: 返回处理结果
+    else 上下文不存在或已超时
+        Plugin-->>User: 操作已超时或无效
+    end
 ```
 
 **核心方法**：
@@ -337,11 +358,115 @@ export default class MyPlugin extends plugin {
 
 ## 最佳实践
 
-1. **命名与日志**：设置有意义的 `name` 与 `dsc`，高频触发的规则可将 `log` 设为 `false`
-2. **优先级**：Tasker增强插件使用 `priority: 1`，核心插件使用 `5000` 以上
-3. **accept方法**：Tasker增强插件在 `accept` 中挂载属性，使用 getter 延迟加载
-4. **上下文管理**：多轮对话时务必调用 `finish` 清理上下文，避免长期占用
-5. **错误处理**：调用工作流时使用 try-catch，提供友好错误提示
+### 1. 状态变量管理（重要）
+
+**⚠️ 重要**：插件的 `constructor` 会在每次热重载时重新执行，因此**不能在 constructor 中定义状态变量**。
+
+**正确做法**：
+
+```javascript
+// ✅ 正确方式1：使用模块级变量（推荐用于配置类变量）
+let config = {
+  path: './data/my-data.json',
+  maxRetries: 3
+};
+
+export default class MyPlugin extends plugin {
+  constructor() {
+    super({
+      name: 'my-plugin',
+      rule: [{ reg: '^#测试$', fnc: 'test' }]
+    });
+    // 不要在这里定义 this.state = {}
+  }
+
+  async test(e) {
+    // 使用模块级变量
+    const data = await readFile(config.path);
+  }
+}
+
+// ✅ 正确方式2：在 init() 方法中初始化状态
+export default class MyPlugin extends plugin {
+  constructor() {
+    super({
+      name: 'my-plugin',
+      rule: [{ reg: '^#测试$', fnc: 'test' }]
+    });
+    // 不要在这里定义 this.state = {}
+  }
+
+  async init() {
+    // 在 init() 中初始化状态变量
+    this.state = {
+      counter: 0,
+      lastUpdate: Date.now()
+    };
+  }
+
+  async test(e) {
+    this.state.counter++;
+    await this.reply(`计数: ${this.state.counter}`);
+  }
+}
+
+// ✅ 正确方式3：使用方法内局部变量（适合临时状态）
+export default class MyPlugin extends plugin {
+  async test(e) {
+    // 使用局部变量
+    const localState = {
+      startTime: Date.now(),
+      processed: false
+    };
+    
+    // 处理逻辑...
+  }
+}
+
+// ❌ 错误：在 constructor 中定义状态变量
+export default class MyPlugin extends plugin {
+  constructor() {
+    super({...});
+    this.state = {};        // ❌ 会被热重载刷新
+    this.counter = 0;       // ❌ 会被热重载刷新
+    this.path = './data';   // ❌ 会被热重载刷新
+  }
+}
+```
+
+**原因**：插件热重载时会重新执行 `constructor`，导致状态丢失。使用模块级变量或 `init()` 方法可以避免这个问题。
+
+### 2. 命名与日志
+
+- 设置有意义的 `name` 与 `dsc`，便于调试和管理
+- 高频触发的规则可将 `log` 设为 `false`，减少日志输出
+
+### 3. 优先级设置
+
+- Tasker增强插件使用 `priority: 1`，确保最先执行
+- 核心插件使用 `5000` 以上
+- 普通插件使用默认优先级 `5000`
+
+### 4. accept方法
+
+- Tasker增强插件在 `accept` 中挂载属性，使用 getter 延迟加载
+- 尽早返回，减少无效规则遍历
+
+### 5. 上下文管理
+
+- 多轮对话时务必调用 `finish` 清理上下文，避免长期占用
+- 设置合理的超时时间，避免上下文泄漏
+
+### 6. 错误处理
+
+- 调用工作流时使用 try-catch，提供友好错误提示
+- 异步操作都要有错误处理
+
+### 7. 依赖管理
+
+- 使用 `#` 别名导入，避免相对路径混乱
+- 删除未使用的导入，减少依赖体积
+- 优先使用原生方法，减少第三方依赖
 
 ---
 

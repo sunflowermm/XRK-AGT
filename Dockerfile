@@ -63,4 +63,5 @@ COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["node", "--no-warnings", "--no-deprecation", "start.js", "server"]
+# 默认以 server 模式启动，具体端口由 XRK_SERVER_PORT 或入口脚本决定
+CMD ["server"]

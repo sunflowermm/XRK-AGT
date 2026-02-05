@@ -35,6 +35,7 @@ XRK-AGT 是向日葵工作室基于 **Node.js 24.12** 打造的多平台、多Ta
 - **数据库**: Redis 5.0+, MongoDB 4.0+ (可选)
 - **渲染引擎**: Puppeteer / Playwright
 - **包管理**: pnpm (仅支持)
+- **跨平台支持**: Windows 10+ / Linux / macOS / Docker
 
 ---
 

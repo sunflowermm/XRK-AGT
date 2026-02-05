@@ -13,6 +13,7 @@
 - ✅ **自动备份**：写入时自动备份（`*.backup.时间戳`）
 - ✅ **路径操作**：支持点号路径和数组下标（`get/set/delete/append/remove`）
 - ✅ **多文件配置**：支持一个配置包含多个子文件（如 renderer 包含 puppeteer 和 playwright）
+- ✅ **Schema 严格检查**：在构造阶段校验 `default/enum/itemType` 与 `type` 是否匹配，错误会直接抛出，避免运行期才发现类型问题
 
 ---
 

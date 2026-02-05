@@ -5,7 +5,7 @@
 > **可扩展性**：AIStream是工作流系统的核心扩展点。通过继承AIStream，开发者可以快速创建自定义工作流。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 > **相关文档**：关于 LLM/Vision/ASR/TTS 工厂系统的详细说明，请参考 **[工厂系统文档](factory.md)** 📖
 
-`AIStream` 是 XRK-AGT 中的 **AI 工作流基类**，用于封装 LLM 调用、向量服务、上下文增强等能力（工具调用由 LLM 工厂的 tool calling + MCP 统一处理）。
+`AIStream` 是 XRK-AGT 中的 **AI 工作流基类**，用于封装 LLM 调用、向量服务、上下文增强等能力（工具调用由 LLM 工厂的 tool calling + MCP 统一处理，AIStream 本身**不再解析函数调用文本**）。
 
 ### 扩展特性
 
@@ -127,20 +127,41 @@ classDiagram
     class AIStream {
         +name: string
         +description: string
+        +version: string
+        +author: string
+        +priority: number
         +config: Object
         +embeddingConfig: Object
-        +functions: Map
         +mcpTools: Map
         +init()
-        +registerMCPTool(name, options)
-        +registerMCPTool(name, options)
+        +initEmbedding()
         +buildSystemPrompt(context)
         +buildChatContext(e, question)
         +buildEnhancedContext(e, question, baseMessages)
+        +generateEmbedding(text)
+        +retrieveRelevantContexts(groupId, query)
+        +retrieveKnowledgeContexts(query)
+        +optimizeContexts(contexts, maxTokens)
         +callAI(messages, apiConfig)
-        +callAIStream(messages, apiConfig, onDelta)
+        +callAIStream(messages, apiConfig, onDelta, options)
         +execute(e, question, config)
         +process(e, question, options)
+        +resolveLLMConfig(apiConfig)
+        +getProviderConfig(provider)
+        +checkPermission(permission, context)
+        +merge(stream, options)
+        +autoMergeAuxiliaryStreams(stream, options)
+        +extractStreamNames(options)
+        +classifyError(error)
+        +shouldRetry(errorInfo, retryConfig, attempt)
+        +getRetryConfig()
+        +calculateRetryDelay(attempt, retryConfig)
+        +getTimeoutSeconds(config)
+        +handleError(error, operation, context)
+        +successResponse(data)
+        +errorResponse(code, message)
+        +getInfo()
+        +cleanup()
     }
     
     class StreamLoader {
@@ -157,11 +178,6 @@ classDiagram
         +searchLongTermMemories(userId, query, limit)
     }
     
-    class ToolRegistry {
-        +registerTool(name, tool)
-        +getTool(name)
-        +callTool(name, args, context)
-    }
     
     class MonitorService {
         +startTrace(traceId, context)
@@ -171,14 +187,13 @@ classDiagram
     
     AIStream --> StreamLoader : 通过Loader加载
     AIStream --> MemoryManager : 使用记忆系统
-    AIStream --> ToolRegistry : 注册工具
     AIStream --> MonitorService : 监控追踪
     StreamLoader --> AIStream : 管理实例
 ```
 
 ---
 
-## 构造参数
+## 构造参数与基础配置
 
 ```javascript
 constructor(options = {})
@@ -243,36 +258,8 @@ constructor(options = {})
 初始化工作流（仅执行一次），由 `StreamLoader` 在加载时自动调用。
 
 **初始化内容**：
-- 初始化函数映射 `this.functions = new Map()`
-- 初始化 MCP 工具映射 `this.mcpTools = new Map()`
-- 子类可重写此方法进行自定义初始化
-
-### `registerMCPTool(name, options)`
-
-注册 MCP 工具（统一工具注册方式）。
-
-**参数**：
-- `name` - 函数名称
-- `options.handler` - 处理函数
-- `options.prompt` - 系统提示说明（会出现在 AI prompt 中）
-- `options.parser` - 解析AI输出中的函数调用
-- `options.enabled` - 是否启用
-- `options.permission` - 权限标识
-
-**特点**：出现在 AI prompt 中，供 AI 直接调用，不返回结构化数据
-
-### `registerMCPTool(name, options)`
-
-注册 MCP 工具（供外部系统调用）。
-
-**参数**：
-- `name` - 工具名称
-- `options.handler` - 工具处理函数（返回 JSON 格式结果）
-- `options.description` - 工具描述
-- `options.inputSchema` - JSON Schema 格式的输入参数定义
-- `options.enabled` - 是否启用
-
-**特点**：返回结构化 JSON 数据，不会出现在 AI prompt 中，通过 MCP 协议调用
+- 若尚未存在，则初始化 MCP 工具映射 `this.mcpTools = new Map()`
+- 子类可重写此方法进行自定义初始化（例如注册 MCP 工具）
 
 ### `buildSystemPrompt(context)` / `buildChatContext(e, question)`
 
@@ -312,12 +299,27 @@ constructor(options = {})
 
 ---
 
-## 函数调用
+## 函数调用与 MCP 工具
 
-AIStream **不再解析/执行**任何 “文本函数调用 / ReAct”。
+AIStream **不再解析/执行任何“文本函数调用 / ReAct”**，所有工具调用均通过 **LLM 工厂的 tool calling + MCP 协议** 完成：
 
-- **MCP 工具调用**：由 LLMFactory（各厂商 tool calling 协议）+ `MCPToolAdapter` 内部完成多轮 `tool_calls` → 返回最终 `assistant.content`。
-- **统一工具注册**：所有功能都通过 `registerMCPTool` 注册为 MCP 工具，返回标准 JSON 格式
+- **tool calls 多轮交互**：由 LLMFactory 及各提供商客户端内部处理 `tool_calls` 循环，最终返回整理好的 `assistant.content` 文本给 AIStream。
+- **MCP 工具注册**：AIStream 通过 `registerMCPTool(name, options)` 将工具注册到 `this.mcpTools`，供 MCP 服务器发现和调用。
+
+### `registerMCPTool(name, options)`
+
+注册 MCP 工具（供 MCP 协议调用的标准工具）。
+
+**参数**：
+- `name` - 工具名称
+- `options.handler` - 工具处理函数 `async (args, context) => {...}`，返回结构化结果
+- `options.description` - 工具描述
+- `options.inputSchema` - JSON Schema 格式的输入参数定义
+- `options.enabled` - 是否启用（可被 `functionToggles` 覆盖）
+
+> 工具返回值推荐使用 `successResponse(data)` / `errorResponse(code, message)` 进行包装：
+> - `successResponse(data)` → `{ success: true, data: { ...data, timestamp } }`
+> - `errorResponse(code, message)` → `{ success: false, error: { code, message } }`
 
 ---
 
@@ -506,82 +508,6 @@ await stream.callAIStream(messages, {}, (delta) => {
 
 **返回**：`Promise<Array>` - 增强后的消息数组
 
-### 工具注册方法
-
-#### `registerMCPTool(name, options)`
-
-注册MCP工具（统一工具注册方式）。
-
-**参数**：
-```javascript
-{
-  name: 'function_name',
-  handler: async (params, context) => {
-    // 处理逻辑
-  },
-  description: '函数描述（出现在prompt中）',
-  enabled: true,
-  permission: 'admin', // 可选：权限要求
-  parser: null // 可选：解析函数
-}
-```
-
-**示例**：
-```javascript
-this.registerFunction('save_note', {
-  description: '保存笔记到文件',
-  handler: async (params, context) => {
-    const { content } = params;
-    await fs.writeFile('note.txt', content);
-  },
-  enabled: true
-});
-```
-
-#### `registerMCPTool(name, options)`
-
-注册MCP工具（供外部系统调用）。
-
-**参数**：
-```javascript
-{
-  name: 'tool_name',
-  description: '工具描述',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      param1: { type: 'string', description: '参数1' }
-    },
-    required: ['param1']
-  },
-  handler: async (args, context) => {
-    return { success: true, data: {} };
-  },
-  enabled: true
-}
-```
-
-**示例**：
-```javascript
-this.registerMCPTool('read_file', {
-  description: '读取文件内容',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      filePath: { type: 'string', description: '文件路径' }
-    },
-    required: ['filePath']
-  },
-  handler: async (args, context) => {
-    const content = await fs.readFile(args.filePath, 'utf8');
-    return {
-      success: true,
-      data: { content, path: args.filePath }
-    };
-  }
-});
-```
-
 ### 上下文检索方法
 
 #### `async retrieveRelevantContexts(groupId, query)`
@@ -654,29 +580,19 @@ export default class MyStream extends AIStream {
 
   async init() {
     await super.init();
-    this.registerAllFunctions();
-  }
-
-  registerAllFunctions() {
-    // 注册Call Function
-    this.registerFunction('do_something', {
-      description: '执行某个操作',
-      handler: async (params, context) => {
-        // 处理逻辑
-      }
-    });
-
-    // 注册MCP工具
+    // 在此注册 MCP 工具等初始化逻辑
     this.registerMCPTool('get_info', {
       description: '获取信息',
       inputSchema: {
         type: 'object',
         properties: {
           key: { type: 'string' }
-        }
+        },
+        required: ['key']
       },
       handler: async (args, context) => {
-        return { success: true, data: {} };
+        // 返回统一结构
+        return this.successResponse({ value: `you asked for ${args.key}` });
       }
     });
   }
@@ -741,8 +657,7 @@ await stream.callAIStream(messages, {}, (delta) => {
 // 在desktop工作流中合并tools工作流
 async init() {
   await super.init();
-  this.registerAllFunctions();
-  
+
   const toolsStream = StreamLoader.getStream('tools');
   if (toolsStream) {
     this.merge(toolsStream);

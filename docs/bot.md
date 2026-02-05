@@ -24,36 +24,21 @@
 
 ## 快速开始
 
-### 基本使用
+### 推荐用法：通过启动脚本与全局 `Bot`
+
+在实际项目中，一般**不需要手动 `import Bot` 或 `new Bot()`**，而是通过 `node app` / `node start.js` 启动，框架会自动创建并挂载全局 `Bot` 实例：
+
+- 启动：`node app`（推荐）或 `node app server {端口}` / `node start.js server {端口}`
+- 运行时：
+  - 在插件 / Tasker / 事件监听器等代码中，直接使用全局 `Bot`（由启动脚本挂载）
+  - 在 HTTP API 中使用 `req.bot`（由 `HttpApi` 基类自动注入）
+
+插件、Tasker 等业务代码中直接使用全局对象：
 
 ```javascript
-import Bot from './src/bot.js';
-
-// 创建Bot实例
-const bot = new Bot();
-
-// 启动服务
-await bot.run({ port: 端口号 });  // 端口号由开发者指定
-
-// 监听启动事件
-bot.on('online', ({ url, apis }) => {
-  console.log(`服务器已启动: ${url}`);
-  console.log(`已加载 ${apis.length} 个API模块`);
-});
-
-// 触发事件
-bot.em('message.group.normal', {
-  self_id: '123456',
-  user_id: '789012',
-  group_id: '345678',
-  message: 'Hello World'
-});
-
-// 优雅关闭
-process.on('SIGINT', async () => {
-  await bot.closeServer();
-  process.exit(0);
-});
+// 在插件或 Tasker 中（全局 Bot 由启动脚本挂载，无需手动 import）
+const subBot = Bot['123456'];           // 访问子 Bot
+await subBot.sendMasterMsg('Hello');    // 发送消息给主人
 ```
 
 ### 在 HTTP API 中使用
@@ -125,7 +110,8 @@ graph TB
 
 ```mermaid
 flowchart TB
-    Start["new Bot()"] --> Init["初始化HTTP/WS/代理"]
+    Start["node app / start.js<br/>启动脚本"] --> Create["创建Bot实例<br/>（由启动脚本自动完成）"]
+    Create --> Init["初始化HTTP/WS/代理"]
     Init --> Run["bot.run(options)"]
     
     Run --> Load["并行加载模块<br/>Config/Stream/Plugin/API"]
@@ -138,8 +124,11 @@ flowchart TB
     Watch --> Online["触发online事件"]
     
     style Start fill:#E6F3FF
+    style Create fill:#E6F3FF
     style Online fill:#90EE90
 ```
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
+read_file
 
 ### 关闭流程
 

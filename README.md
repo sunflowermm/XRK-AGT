@@ -1,5 +1,9 @@
 ## XRK-AGT v1.0.1
 
+> **最后更新**: 2026-01-24  
+> **跨平台支持**: Windows 10+ / Linux / macOS / Docker  
+> **Node.js 版本要求**: ≥ 24.12.0 (LTS)
+
 XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多平台、多Tasker、工作流驱动型智能体平台**，采用分层架构设计，支持：
 
 - **多平台消息接入**：OneBotv11 / IM / 自定义 Tasker
@@ -19,14 +23,83 @@ XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多平台、多Tasker、
 
 XRK-AGT 采用清晰的分层架构设计，各层职责明确，便于扩展和维护。
 
+**一图总览：**
+
+```mermaid
+flowchart TB
+  %% 顶层：外部入口
+  subgraph Clients["外部入口"]
+    QQ["QQ / OneBotv11"]
+    IM["IM / 其它 Bot 平台"]
+    WebUI["XRK Web 控制台"]
+    ThirdAPI["第三方 HTTP 客户端"]
+  end
+
+  %% 运行核心
+  subgraph Runtime["运行核心层（src/bot.js）"]
+    Bot["Bot 主类<br/>HTTP / WS / 反向代理 / 事件总线"]
+  end
+
+  %% 基础设施
+  subgraph Infra["基础设施层（src/infrastructure）"]
+    Loaders["加载器<br/>Tasker / Plugins / API / Stream / Listener"]
+    Bases["基类库<br/>plugin / HttpApi / AIStream / Renderer / ConfigBase / EventListenerBase"]
+    HttpBiz["HTTP 业务层<br/>重定向 / CDN / 反向代理增强"]
+  end
+
+  %% Tasker + 事件
+  subgraph Tasker["任务层（core/*/tasker）"]
+    TOneBot["OneBotv11"]
+    TStdin["stdin / 自定义 Tasker"]
+  end
+
+  subgraph Events["事件系统（core/*/events）"]
+    EStd["事件监听器<br/>去重 / 标准化 / 分发"]
+  end
+
+  %% 业务
+  subgraph Business["业务层（core/*）"]
+    BPlugins["插件<br/>core/*/plugin"]
+    BHttp["HTTP API<br/>core/*/http"]
+    BStream["AI 工作流<br/>core/*/stream"]
+  end
+
+  %% 连接关系
+  QQ --> TOneBot
+  IM --> TOneBot
+  WebUI --> Bot
+  ThirdAPI --> Bot
+
+  Bot --> Loaders
+  Bot --> HttpBiz
+  Loaders --> Tasker
+  Loaders --> Events
+  Loaders --> Business
+
+  TOneBot --> EStd
+  TStdin --> EStd
+  EStd --> BPlugins
+  BPlugins --> BStream
+  BHttp --> BStream
+
+  %% 着色
+  style Clients fill:#E6F3FF,stroke:#7AA7D9
+  style Runtime fill:#FFE6CC,stroke:#D9A35D
+  style Infra fill:#E8F8E8,stroke:#6CB46C
+  style Tasker fill:#E6F0FF,stroke:#7B8ED9
+  style Events fill:#FFE6F0,stroke:#D97BAF
+  style Business fill:#F3E6FF,stroke:#A57BD9
+  style Bot fill:#FFD700,stroke:#C49A00,stroke-width:2px
+```
+
 **详细架构说明**：请参见 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
 
-**简要层次**：
-- **运行核心层** (`src/bot.js`)：统一管理 HTTP/HTTPS/WebSocket、中间件、认证、反向代理、事件总线
-- **基础设施层** (`src/infrastructure/`)：提供基类和加载器，不包含业务逻辑
-- **任务层** (`core/*/tasker/`)：协议转换，生成统一事件
-- **事件系统** (`core/*/events/`)：事件标准化和预处理
-- **业务层** (`core/*/plugin/`、`core/*/http/`、`core/*/stream/`)：具体业务实现
+**文字版分层摘要：**
+- **运行核心层**（`src/bot.js`）：统一管理 HTTP/HTTPS/WebSocket、中间件、认证、反向代理、事件总线 `Bot.em`。
+- **基础设施层**（`src/infrastructure/`）：提供基类、加载器、HTTP 业务层和数据库客户端，不包含业务逻辑。
+- **任务层**（`core/*/tasker/`）：对接各协议，将平台消息转换为统一事件结构。
+- **事件系统**（`core/*/events/`）：对事件做去重、标准化与预处理，再分发到插件系统。
+- **业务层**（`core/*/(plugin|http|stream)/`）：具体业务实现，包括指令插件、HTTP API 与 AI 工作流。
 
 若你想 **改造底层** 或 **做二次开发**，推荐顺序是：
 
@@ -101,13 +174,50 @@ pnpm install
 > 支持多开窗口登录，模仿 QQ 客户端的多实例处理方式，保证多 Bot 回复的兼容性。   
 > API 密钥等配置位于 `config/server_config/`，主配置与 Bot 配置位于 `data/server_bots/`，便于迁移。
 
-启动脚本：
+**启动方式（跨平台支持）**：
 
-```sh
-node app   # 或 node start.js
+**Windows:**
+```cmd
+REM 方式1：使用 app.js（推荐，自动检查依赖）
+node app
+
+REM 方式2：使用启动脚本
+start.bat server 8080
+
+REM 方式3：直接使用 start.js
+node start.js server 8080
+```
+
+**Linux/macOS:**
+```bash
+# 方式1：使用 app.js（推荐，自动检查依赖）
+node app
+
+# 方式2：使用启动脚本（需要先添加执行权限）
+chmod +x start.sh
+./start.sh server 8080
+
+# 方式3：直接使用 start.js
+node start.js server 8080
+```
+
+**Docker:**
+```bash
+# 使用 Docker Compose（推荐）
+docker-compose up -d
+
+# 或使用 Dockerfile
+docker build -t xrk-agt .
+docker run -d -p 8080:8080 -e XRK_SERVER_PORT=8080 xrk-agt
 ```
 
 启动后可通过浏览器访问配置中的服务地址，具体访问 URL 和端口会在启动日志中打印。
+
+**端口配置**：
+- 默认端口：8080
+- 通过环境变量指定：`XRK_SERVER_PORT=3000 node app`
+- 通过命令行参数指定：`node start.js server 3000`
+- Docker 环境：通过 `docker-compose.yml` 或环境变量配置
 
 ---
 
@@ -194,7 +304,7 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可以在 Cursor 等 AI �
 | 模块 | 文档 |
 |------|------|
 | 概览与运行 | [PROJECT_OVERVIEW](PROJECT_OVERVIEW.md)、[bot](docs/bot.md)、[server](docs/server.md)、[docker](docs/docker.md) |
-| 任务与事件 | [tasker-base-spec](docs/tasker-base-spec.md)、[tasker-onebotv11](docs/tasker-onebotv11.md)、[tasker-loader](docs/tasker-loader.md)、[事件系统](docs/事件系统标准化文档.md)、[事件监听器](docs/事件监听器开发指南.md) |
+| 任务与事件 | [tasker-base-spec](docs/tasker-base-spec.md)、[tasker-onebotv11](docs/tasker-onebotv11.md)、[tasker-loader](docs/tasker-loader.md)、[事件系统标准化文档](docs/事件系统标准化文档.md)（包含事件监听器开发指南） |
 | 插件 | [plugin-base](docs/plugin-base.md)、[plugins-loader](docs/plugins-loader.md) |
 | HTTP/API | [http-api](docs/http-api.md)、[api-loader](docs/api-loader.md) |
 | AI / MCP | [aistream](docs/aistream.md)、[subserver-api](docs/subserver-api.md)、[mcp-guide](docs/mcp-guide.md) |

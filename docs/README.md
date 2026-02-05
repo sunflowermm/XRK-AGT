@@ -12,7 +12,7 @@
 
 - **[项目概览 (PROJECT_OVERVIEW.md)](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
 - **[Bot 主类文档 (docs/bot.md)](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
-- **[框架可扩展性指南 (docs/框架可扩展性指南.md)](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明
+- **[框架可扩展性指南 (docs/框架可扩展性指南.md)](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范 ⭐
 
 ### 🏗️ 架构层次
 
@@ -89,8 +89,7 @@ flowchart TB
 
 - **[插件基类 (docs/plugin-base.md)](plugin-base.md)** - 插件基类 `plugin` 的设计、规则匹配与上下文管理
 - **[插件加载器 (docs/plugins-loader.md)](plugins-loader.md)** - `PluginsLoader` 的插件加载、事件调度、冷却与节流机制
-- **[事件系统标准化文档 (docs/事件系统标准化文档.md)](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程
-- **[事件监听器开发指南 (docs/事件监听器开发指南.md)](事件监听器开发指南.md)** - 最小事件监听器模版、去重与注册新监听器
+- **[事件系统标准化文档 (docs/事件系统标准化文档.md)](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程、事件监听器开发指南
 
 ### 🔄 Tasker 系统（任务层/事件生成器）
 
@@ -129,10 +128,11 @@ flowchart TB
 
 1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解整体架构和分层设计
 2. **[Bot 主类](bot.md)** - 了解整体运行环境与事件来源
-3. **[插件基类](plugin-base.md)** - 学习插件基类与规则/上下文用法
-4. **[插件加载器](plugins-loader.md)** - 了解事件如何流转到插件
-5. **[事件系统](事件系统标准化文档.md)** - 了解事件命名规范和监听方式
-6. **[AI Stream](aistream.md)** - 了解 AI 调用与上下文增强（复杂多步编排在子服务端）
+3. **[框架可扩展性指南](框架可扩展性指南.md)** - 学习扩展开发的最佳实践和代码质量规范 ⭐
+4. **[插件基类](plugin-base.md)** - 学习插件基类与规则/上下文用法
+5. **[插件加载器](plugins-loader.md)** - 了解事件如何流转到插件
+6. **[事件系统标准化文档](事件系统标准化文档.md)** - 了解事件命名规范、监听器开发和监听方式
+7. **[AI Stream](aistream.md)** - 了解 AI 调用与上下文增强（复杂多步编排在子服务端）
 
 ### Tasker 开发者（任务层/事件生成器开发者）
 
@@ -140,7 +140,7 @@ flowchart TB
 2. **[Tasker 加载器](tasker-loader.md)** - 了解 Tasker 是如何被框架加载的
 3. **[Tasker 底层规范](tasker-base-spec.md)** - 了解 Tasker 基础接口规范
 4. **[OneBotv11 Tasker](tasker-onebotv11.md)** - 参考成熟实现，学习事件转译与对象封装方式
-5. **[事件监听器开发指南](事件监听器开发指南.md)** - 学习如何创建新的事件监听器
+5. **[事件系统标准化文档](事件系统标准化文档.md)** - 学习如何创建新的事件监听器（包含开发指南）
 6. **[Bot 主类](bot.md)** - 理解 Tasker 与 `Bot` 的交互点（`Bot.tasker` / `Bot.wsf` / `Bot.em`）
 
 ### 后端/API 开发者
@@ -190,7 +190,7 @@ flowchart TB
 1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 了解架构层次
 2. 阅读 **[Tasker 加载器](tasker-loader.md)** 与 **[Tasker 底层规范](tasker-base-spec.md)**
 3. 参考 **[OneBotv11 Tasker](tasker-onebotv11.md)**，在任意 core 目录的 `tasker/` 子目录中编写新 Tasker 文件
-4. 阅读 **[事件监听器开发指南](事件监听器开发指南.md)**，在对应 core 的 `events/` 子目录中创建事件监听器
+4. 阅读 **[事件系统标准化文档](事件系统标准化文档.md)** 中的"事件监听器开发指南"章节，在对应 core 的 `events/` 子目录中创建事件监听器
 5. 确保对外暴露统一的事件结构（`post_type/message_type/notice_type` 等），这样可以复用现有插件
 
 ### 创建新的 AI 工作流
@@ -240,6 +240,7 @@ flowchart TB
 2. **全局对象访问**：始终通过 `Bot[self_id]` 访问 Bot 实例，不要直接使用 `e.bot`（除非确保已初始化）
 3. **事件命名**：遵循 `tasker.类型.子类型` 格式，如 `onebot.message.group.normal`
 4. **错误处理**：所有异步操作都应使用 try-catch，API 调用失败会抛出错误
+5. **Bot 实例创建**：不要手动 `import Bot` 或 `new Bot()`，通过 `node app` / `node start.js` 启动，框架会自动创建并挂载全局 `Bot` 实例
 
 ---
 
@@ -251,4 +252,14 @@ flowchart TB
 
 ---
 
-*最后更新：2025-12-26*
+*最后更新：2026-01-24*
+
+## 🌍 跨平台支持
+
+XRK-AGT 完全支持 Windows、Linux 和 macOS 平台：
+
+- **Windows**: 使用 `start.bat` 或直接运行 `node app`
+- **Linux/macOS**: 使用 `start.sh` 或直接运行 `node app`
+- **Docker**: 使用 `docker-compose.yml` 或 `Dockerfile`，支持所有平台
+
+所有路径处理均使用 Node.js 的 `path` 模块，确保跨平台兼容性。启动脚本支持通过环境变量 `XRK_SERVER_PORT` 或命令行参数指定端口。

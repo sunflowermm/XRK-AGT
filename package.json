@@ -87,7 +87,10 @@
   },
   "scripts": {
     "start": "node app.js",
-    "dev": "node app.js"
+    "dev": "node app.js",
+    "start:windows": "start.bat server",
+    "start:unix": "./start.sh server",
+    "start:docker": "docker-compose up -d"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
