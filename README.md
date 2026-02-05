@@ -1,4 +1,4 @@
-## XRK-AGT v1.0.1
+## XRK-AGT v1.0.2
 
 > **最后更新**: 2026-02-06  
 > **跨平台支持**: Windows 10+ / Linux / macOS / Docker  
