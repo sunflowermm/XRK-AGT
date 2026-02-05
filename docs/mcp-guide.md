@@ -269,11 +269,28 @@ const result = await mcpServer.handleToolCall({
 
 ### API端点
 
+**标准 JSON-RPC 接口（推荐）**：
+
 | 端点 | 方法 | 说明 | 请求格式 | 响应格式 |
 |------|------|------|----------|----------|
-| `/api/mcp/tools` | GET | 获取所有可用工具列表 | - | `{success: true, tools: [...], count: N}` |
-| `/api/mcp/tools/call` | POST | 调用MCP工具 | `{name: "tool_name", arguments: {...}}` | `{success: true, content: [...], isError: false}` |
+| `/api/mcp/jsonrpc` | POST | JSON-RPC标准接口 | `{jsonrpc: "2.0", id: 1, method: "...", params: {...}}` | `{jsonrpc: "2.0", id: 1, result: {...}}` |
+| `/api/mcp/jsonrpc/:stream` | POST | 按工作流过滤的JSON-RPC | 同上，路径参数指定工作流 | 同上 |
+
+**RESTful API（兼容旧版）**：
+
+| 端点 | 方法 | 说明 | 请求格式 | 响应格式 |
+|------|------|------|----------|----------|
+| `/api/mcp/tools` | GET | 获取所有可用工具列表 | `?stream=desktop`（可选） | `{success: true, tools: [...], count: N}` |
+| `/api/mcp/tools/streams` | GET | 获取工作流分组 | - | `{success: true, streams: [...], groups: {...}, count: N}` |
+| `/api/mcp/tools/stream/:streamName` | GET | 获取指定工作流的工具 | - | `{success: true, stream: "...", tools: [...], count: N}` |
+| `/api/mcp/tools/:name` | GET | 获取单个工具详情 | - | `{success: true, tool: {...}}` |
+| `/api/mcp/tools/call` | POST | 调用MCP工具（兼容旧版） | `{name: "tool_name", arguments: {...}}` | `{success: true, content: [...], isError: false}` |
+| `/api/mcp/resources` | GET | 获取资源列表 | - | `{success: true, resources: [...], count: N}` |
+| `/api/mcp/resources/:uri` | GET | 获取资源内容 | - | `{success: true, resource: {...}}` |
+| `/api/mcp/prompts` | GET | 获取提示词列表 | - | `{success: true, prompts: [...], count: N}` |
+| `/api/mcp/prompts/:name` | POST | 获取提示词内容 | `{arguments: {...}}` | `{success: true, prompt: {...}}` |
 | `/api/mcp/connect` | GET | SSE连接（Server-Sent Events） | - | `text/event-stream` |
+| `/api/mcp/health` | GET | 健康检查 | - | `{success: true, status: "healthy", toolsCount: N, ...}` |
 | `/mcp/ws` | WS | WebSocket连接 | JSON消息 | JSON响应 |
 
 ### 工具列表查询
@@ -315,9 +332,11 @@ Host: your-server:port
 
 ### 工具调用
 
+**方式1：JSON-RPC标准（推荐）**
+
 **请求**：
 ```http
-POST /api/mcp/tools/call HTTP/1.1
+POST /api/mcp/jsonrpc HTTP/1.1
 Host: your-server:port
 Content-Type: application/json
 
@@ -335,6 +354,49 @@ Content-Type: application/json
 **成功响应**：
 ```json
 {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"platform\":\"win32\",\"arch\":\"x64\",\"nodeVersion\":\"v24.12.0\",...}"
+      }
+    ],
+    "isError": false
+  }
+}
+```
+
+**错误响应**：
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32601,
+    "message": "工具未找到: invalid_tool"
+  }
+}
+```
+
+**方式2：RESTful API（兼容旧版）**
+
+**请求**：
+```http
+POST /api/mcp/tools/call HTTP/1.1
+Host: your-server:port
+Content-Type: application/json
+
+{
+  "name": "system.info",
+  "arguments": {}
+}
+```
+
+**成功响应**：
+```json
+{
   "success": true,
   "content": [
     {
@@ -342,7 +404,12 @@ Content-Type: application/json
       "text": "{\"platform\":\"win32\",\"arch\":\"x64\",...}"
     }
   ],
-  "isError": false
+  "isError": false,
+  "metadata": {
+    "tool": "system.info",
+    "duration": "15ms",
+    "timestamp": 1703123456789
+  }
 }
 ```
 
@@ -479,31 +546,36 @@ const ws = new WebSocket('ws://your-server:port/mcp/ws');
 ### 自动注册流程
 
 ```mermaid
-flowchart TB
-    A["系统启动"] --> B["StreamLoader.load"]
-    B --> C["加载所有工作流"]
-    C --> D{"检查MCP配置"}
-    D -->|enabled=true| E["initMCP"]
-    D -->|enabled=false| Z["跳过MCP初始化"]
-    E --> F["创建MCPServer实例"]
-    F --> G["registerMCP"]
-    G --> H["遍历所有工作流"]
-    H --> I["收集mcpTools<br/>（registerMCPTool注册的工具）"]
-    I --> J["直接使用inputSchema"]
-    J --> K["注册为MCP工具"]
-    K --> L["工具可用"]
+flowchart LR
+    Start([🚀 系统启动]) --> Load["📚 StreamLoader.load<br/>加载所有工作流"]
+    Load --> Check{"🔍 检查MCP配置<br/>aistream.mcp.enabled"}
     
-    style E fill:#90EE90
-    style F fill:#90EE90
-    style I fill:#FFD700
-    style K fill:#FFD700
-    style L fill:#87CEEB
+    Check -->|"✅ enabled=true"| Init["⚙️ initMCP<br/>初始化MCP服务"]
+    Check -->|"❌ enabled=false"| Skip["⏭️ 跳过MCP初始化"]
+    
+    Init --> Create["📦 创建MCPServer实例<br/>new MCPServer()"]
+    Create --> Register["📝 registerMCP<br/>注册所有工作流工具"]
+    
+    Register --> Loop["🔄 遍历所有工作流<br/>core/system-Core/stream/*"]
+    Loop --> Collect["📋 收集mcpTools<br/>registerMCPTool注册的工具"]
+    Collect --> Schema["✅ 使用inputSchema<br/>JSON Schema格式"]
+    Schema --> RegisterTool["📝 注册为MCP工具<br/>streamName.toolName"]
+    RegisterTool --> Available([✅ 工具可用<br/>可通过API调用])
+    
+    style Start fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Init fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Create fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Collect fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style RegisterTool fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Available fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 **重要说明**：
 - 所有工具都通过 `registerMCPTool` 注册为 MCP 工具
 - MCP 工具必须定义 `inputSchema`（JSON Schema 格式）
 - 所有工具都返回标准 JSON 格式：`{ success: true/false, data: {...}, error: {...} }`
+- 工具命名格式：`{streamName}.{toolName}`（如 `desktop.show_desktop`）
+- 支持热重载：工作流变更时自动重新注册工具
 
 ### 工具命名规则
 
@@ -732,62 +804,81 @@ this.registerMCPTool('grep', {
 XRK-AGT的MCP服务支持多种连接方式，方便不同平台的AI系统接入：
 
 ```mermaid
-flowchart TB
-    subgraph Platforms["外部AI平台"]
-        XiaoZhi["小智AI<br/>HTTP API"]
+flowchart LR
+    subgraph Platforms["🌐 外部AI平台"]
+        direction TB
+        Cursor["Cursor<br/>HTTP JSON-RPC"]
         Claude["Claude<br/>MCP协议"]
-        Doubao["豆包<br/>WebSocket"]
+        XiaoZhi["小智AI<br/>HTTP API"]
         Other["其他平台<br/>标准接口"]
     end
     
-    subgraph Connections["连接方式"]
-        HTTP["HTTP REST API<br/>/api/mcp/tools"]
-        WS["WebSocket<br/>/mcp/ws"]
-        SSE["Server-Sent Events<br/>/api/mcp/connect"]
+    subgraph Connections["🔌 连接方式"]
+        direction TB
+        JSONRPC["📡 JSON-RPC<br/>/api/mcp/jsonrpc<br/>标准MCP协议"]
+        REST["🌐 REST API<br/>/api/mcp/tools<br/>兼容旧版"]
+        WS["🔌 WebSocket<br/>/mcp/ws<br/>双向通信"]
+        SSE["📨 SSE<br/>/api/mcp/connect<br/>实时推送"]
     end
     
-    subgraph Server["MCP服务器"]
-        Tools["工具注册表"]
+    subgraph Server["⚙️ MCP服务器"]
+        direction TB
+        Tools["📋 工具注册表<br/>system-Core工作流"]
+        Resources["📦 资源管理"]
+        Prompts["💬 提示词管理"]
     end
     
-    XiaoZhi --> HTTP
-    Claude --> HTTP
+    Cursor --> JSONRPC
+    Claude --> JSONRPC
     Claude --> WS
-    Doubao --> WS
-    Other --> HTTP
+    XiaoZhi --> REST
+    Other --> JSONRPC
     Other --> WS
     Other --> SSE
     
-    HTTP --> Tools
+    JSONRPC --> Tools
+    REST --> Tools
     WS --> Tools
     SSE --> Tools
     
-    style Platforms fill:#E6F3FF
-    style Connections fill:#FFE6CC
-    style Server fill:#90EE90
+    Tools --> Resources
+    Tools --> Prompts
     
-    style Platforms fill:#E6F3FF
-    style Connections fill:#FFE6CC
-    style Server fill:#E6FFE6
+    style Platforms fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+    style Connections fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Server fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Tools fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
 ```
 
-### 小智AI连接
+### Cursor连接（推荐）
 
-小智AI支持通过HTTP API调用MCP工具：
+Cursor支持HTTP JSON-RPC传输，配置简单：
 
-```python
-import requests
+**配置位置**：`~/.cursor/mcp.json` 或项目根目录的 `.cursor/mcp.json`
 
-# 获取工具列表
-response = requests.get('http://your-server:port/api/mcp/tools')
-tools = response.json()['tools']
+```json
+{
+  "mcpServers": {
+    "xrk-agt": {
+      "url": "http://localhost:8080/api/mcp/jsonrpc",
+      "transport": "http",
+      "description": "XRK-AGT 智能助手服务器 - 提供所有工作流工具"
+    }
+  }
+}
+```
 
-# 调用工具
-result = requests.post('http://your-server:port/api/mcp/tools/call', json={
-    'name': 'system.info',
-    'arguments': {}
-})
-print(result.json())
+**按工作流配置**（仅使用桌面工具）：
+```json
+{
+  "mcpServers": {
+    "xrk-agt-desktop": {
+      "url": "http://localhost:8080/api/mcp/jsonrpc/desktop",
+      "transport": "http",
+      "description": "XRK-AGT 桌面工作流 - 仅提供桌面操作工具"
+    }
+  }
+}
 ```
 
 ### Claude连接
@@ -798,27 +889,51 @@ Claude支持MCP协议，可以通过配置文件连接：
 {
   "mcpServers": {
     "xrk-agt": {
-      "command": "node",
-      "args": ["path/to/mcp-client.js"],
-      "env": {
-        "MCP_SERVER_URL": "http://your-server:port/api/mcp"
-      }
+      "url": "http://your-server:port/api/mcp/jsonrpc",
+      "transport": "http",
+      "description": "XRK-AGT MCP服务器"
     }
   }
 }
 ```
 
-### 豆包连接
+### 其他平台连接示例
 
-豆包可以通过WebSocket连接：
+**Python客户端（使用JSON-RPC）**：
+```python
+import requests
 
+# 获取工具列表
+response = requests.post('http://your-server:port/api/mcp/jsonrpc', json={
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list"
+})
+tools = response.json()['result']['tools']
+
+# 调用工具
+result = requests.post('http://your-server:port/api/mcp/jsonrpc', json={
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+        "name": "system.info",
+        "arguments": {}
+    }
+})
+print(result.json())
+```
+
+**WebSocket连接示例**：
 ```python
 import websocket
 import json
 
 def on_message(ws, message):
     data = json.loads(message)
-    if data['type'] == 'tools_list':
+    if data.get('jsonrpc') == '2.0':
+        print('JSON-RPC响应:', data)
+    elif data.get('type') == 'tools_list':
         print('工具列表:', data['tools'])
 
 ws = websocket.WebSocketApp(
@@ -826,26 +941,22 @@ ws = websocket.WebSocketApp(
     on_message=on_message
 )
 
-# 获取工具列表
-ws.send(json.dumps({'type': 'list_tools'}))
-
-# 调用工具（标准JSON-RPC格式）
+# 获取工具列表（JSON-RPC格式）
 ws.send(json.dumps({
     'jsonrpc': '2.0',
     'id': 1,
+    'method': 'tools/list'
+}))
+
+# 调用工具（JSON-RPC格式）
+ws.send(json.dumps({
+    'jsonrpc': '2.0',
+    'id': 2,
     'method': 'tools/call',
     'params': {
         'name': 'system.info',
         'arguments': {}
     }
-}))
-
-# 或使用兼容旧版格式
-ws.send(json.dumps({
-    'type': 'call_tool',
-    'requestId': 'req_1',
-    'name': 'system.info',
-    'arguments': {}
 }))
 
 ws.run_forever()
@@ -855,47 +966,42 @@ ws.run_forever()
 
 ## 核心工具
 
-MCP服务器内置了4个核心工具，符合MCP 1.0标准：
+MCP服务器内置了4个跨平台核心工具，符合MCP 1.0标准：
 
 ### 1. system.info
 
 获取系统信息（操作系统、CPU、内存、平台等）
 
+**工具名称**：`system.info`
+
 **参数**：
 ```json
 {
-  "detail": false  // 可选，是否返回详细信息
+  "detail": false  // 可选，是否返回详细信息（默认false）
 }
 ```
 
-**示例**（JSON-RPC）：
+**返回示例**：
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "tools/call",
-  "params": {
-    "name": "system.info",
-    "arguments": {
-      "detail": true
-    }
-  }
-}
-```
-
-**返回**：
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "content": [
-      {
-        "type": "text",
-        "text": "{\"platform\":\"win32\",\"arch\":\"x64\",\"nodeVersion\":\"v24.12.0\",\"hostname\":\"DESKTOP-XXX\",\"cpu\":{\"cores\":8,\"model\":\"...\"},\"memory\":{\"total\":\"16GB\",\"free\":\"8GB\",\"used\":\"8GB\",\"usage\":50},\"uptime\":{\"seconds\":86400,\"hours\":24,\"days\":1}}"
-      }
-    ],
-    "isError": false
+  "platform": "win32",
+  "arch": "x64",
+  "nodeVersion": "v24.12.0",
+  "hostname": "DESKTOP-XXX",
+  "cpu": {
+    "cores": 8,
+    "model": "Intel Core i7-9700K"
+  },
+  "memory": {
+    "total": "16GB",
+    "free": "8GB",
+    "used": "8GB",
+    "usage": 50
+  },
+  "uptime": {
+    "seconds": 86400,
+    "hours": 24,
+    "days": 1
   }
 }
 ```
@@ -904,26 +1010,26 @@ MCP服务器内置了4个核心工具，符合MCP 1.0标准：
 
 获取当前时间信息（支持多种格式和时区）
 
+**工具名称**：`time.now`
+
 **参数**：
 ```json
 {
-  "format": "locale",  // iso, locale, timestamp, unix
-  "timezone": "Asia/Shanghai"  // 可选
+  "format": "locale",  // iso, locale, timestamp, unix（默认locale）
+  "timezone": "Asia/Shanghai"  // 可选，时区名称
 }
 ```
 
-**示例**：
+**返回示例**（format: "locale"）：
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": 2,
-  "method": "tools/call",
-  "params": {
-    "name": "time.now",
-    "arguments": {
-      "format": "iso"
-    }
-  }
+  "format": "locale",
+  "time": "2024/1/24 14:30:00",
+  "date": "2024/1/24",
+  "timeOnly": "14:30:00",
+  "timestamp": 1706082600000,
+  "unix": 1706082600,
+  "iso": "2024-01-24T06:30:00.000Z"
 }
 ```
 
@@ -931,27 +1037,35 @@ MCP服务器内置了4个核心工具，符合MCP 1.0标准：
 
 生成UUID（通用唯一标识符）
 
+**工具名称**：`util.uuid`
+
 **参数**：
 ```json
 {
-  "version": "v4",  // UUID版本
-  "count": 1  // 生成数量（1-100）
+  "version": "v4",  // UUID版本（仅支持v4）
+  "count": 1  // 生成数量（1-100，默认1）
 }
 ```
 
-**示例**：
+**返回示例**：
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": 3,
-  "method": "tools/call",
-  "params": {
-    "name": "util.uuid",
-    "arguments": {
-      "version": "v4",
-      "count": 5
-    }
-  }
+  "version": "v4",
+  "count": 1,
+  "uuids": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**批量生成示例**（count: 5）：
+```json
+{
+  "version": "v4",
+  "count": 5,
+  "uuids": [
+    "550e8400-e29b-41d4-a716-446655440000",
+    "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    ...
+  ]
 }
 ```
 
@@ -959,27 +1073,22 @@ MCP服务器内置了4个核心工具，符合MCP 1.0标准：
 
 计算字符串或数据的哈希值（支持多种算法）
 
+**工具名称**：`util.hash`
+
 **参数**：
 ```json
 {
-  "data": "Hello World",
-  "algorithm": "sha256"  // md5, sha1, sha256, sha512
+  "data": "Hello World",  // 必需，要计算哈希的数据
+  "algorithm": "sha256"  // md5, sha1, sha256, sha512（默认sha256）
 }
 ```
 
-**示例**：
+**返回示例**：
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": 4,
-  "method": "tools/call",
-  "params": {
-    "name": "util.hash",
-    "arguments": {
-      "data": "Hello World",
-      "algorithm": "sha256"
-    }
-  }
+  "algorithm": "sha256",
+  "hash": "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e",
+  "length": 64
 }
 ```
 
@@ -1090,27 +1199,31 @@ curl -X POST http://localhost:{端口}/api/mcp/tools/call \  # 端口由启动�
 
 ## 配置说明
 
-### MCP配置
+### MCP服务配置
 
-在 `core/commonconfig/system.js` 中配置：
+**配置文件位置**：`data/server_bots/aistream.yaml` 或通过Web控制台配置
 
-```javascript
-aistream: {
-  mcp: {
-    enabled: true,        // 启用MCP服务
-    port: 端口号,          // HTTP服务端口（使用主服务器端口，由启动配置决定）
-    autoRegister: true   // 自动注册所有工作流工具
-  }
-}
+**配置示例**：
+```yaml
+aistream:
+  mcp:
+    enabled: true        # 是否启用MCP服务（默认true）
+    autoRegister: true   # 是否自动注册所有工作流工具（默认true）
+    # port: 可选，默认使用HTTP API端口（由启动配置决定）
 ```
 
-### 配置项说明
+**配置项说明**：
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `enabled` | boolean | `true` | 是否启用MCP服务 |
-| `port` | number | 由启动配置决定 | HTTP服务端口（使用主服务器端口） |
 | `autoRegister` | boolean | `true` | 是否自动注册所有工作流工具 |
+| `port` | number | 由启动配置决定 | HTTP服务端口（可选，默认使用主服务器端口） |
+
+**重要说明**：
+- MCP服务使用主HTTP服务器的端口，无需单独配置端口
+- 端口由启动时的 `bot.run({ port: 端口号 })` 决定
+- 可通过Web控制台的"AI Stream"配置页面修改MCP设置
 
 ---
 
@@ -1174,15 +1287,18 @@ Cursor 支持三种传输方式连接 MCP 服务器：
 
 ### 测试连接
 
+**健康检查**：
 ```bash
-# 健康检查
-curl http://localhost:{端口}/api/mcp/health  # 端口由启动配置决定
+curl http://localhost:8080/api/mcp/health
+```
 
-# 获取工具列表（RESTful，端口由启动配置决定）
-curl http://localhost:{端口}/api/mcp/tools
+**获取工具列表**：
+```bash
+# RESTful API
+curl http://localhost:8080/api/mcp/tools
 
-# 调用工具（JSON-RPC，端口由启动配置决定）
-curl -X POST http://localhost:{端口}/api/mcp/jsonrpc \
+# JSON-RPC标准
+curl -X POST http://localhost:8080/api/mcp/jsonrpc \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -1191,22 +1307,27 @@ curl -X POST http://localhost:{端口}/api/mcp/jsonrpc \
   }'
 ```
 
+> **注意**：端口号（8080）由启动配置决定，请替换为实际使用的端口。
+
 ### 故障排除
 
 **连接失败**：
-1. 检查 XRK-AGT 服务器是否正在运行
+1. 检查 XRK-AGT 服务器是否正在运行（查看启动日志）
 2. 确认端口号是否正确（端口由启动配置决定）
 3. 检查防火墙设置
+4. 验证MCP服务是否启用（`aistream.mcp.enabled: true`）
 
 **工具调用失败**：
-1. 查看服务器日志
-2. 验证工具名称是否正确
+1. 查看服务器日志（`logs/app.log`）
+2. 验证工具名称是否正确（格式：`{streamName}.{toolName}`）
 3. 检查参数格式是否符合 JSON Schema
+4. 使用 `/api/mcp/tools/:name` 查看工具详情
 
 **Cursor 无法识别 MCP 服务器**：
-1. 确认配置文件路径正确
+1. 确认配置文件路径正确（`~/.cursor/mcp.json` 或项目根目录 `.cursor/mcp.json`）
 2. 重启 Cursor
 3. 检查 JSON 格式是否正确
+4. 验证URL是否可访问（浏览器打开 `http://localhost:8080/api/mcp/health`）
 
 ## 协议版本
 
