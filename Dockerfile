@@ -50,6 +50,15 @@ RUN mkdir -p \
 ENV NODE_ENV=production \
     NODE_OPTIONS="--no-warnings --no-deprecation"
 
+# 创建非 root 用户（安全建议）
+# 注意：使用 volume 挂载时，确保宿主机目录权限允许容器用户访问
+RUN addgroup -g 1000 xrk && \
+    adduser -D -u 1000 -G xrk xrk && \
+    chown -R xrk:xrk /app
+
+# 切换到非 root 用户
+USER xrk
+
 # 暴露常用端口（实际使用端口由环境变量 XRK_SERVER_PORT 控制）
 EXPOSE 80 443 8080 3000 5000
 
