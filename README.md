@@ -28,40 +28,46 @@ XRK-AGT 采用清晰的分层架构设计，各层职责明确，便于扩展和
 ```mermaid
 flowchart TB
   %% 顶层：外部入口
-  subgraph Clients["外部入口"]
-    QQ["QQ / OneBotv11"]
-    IM["IM / 其它 Bot 平台"]
-    WebUI["XRK Web 控制台"]
-    ThirdAPI["第三方 HTTP 客户端"]
+  subgraph Clients["👥 外部入口"]
+    direction LR
+    QQ["📱 QQ / OneBotv11"]
+    IM["💬 IM / 其它 Bot 平台"]
+    WebUI["🌐 XRK Web 控制台"]
+    ThirdAPI["🔌 第三方 HTTP 客户端"]
   end
 
   %% 运行核心
-  subgraph Runtime["运行核心层（src/bot.js）"]
-    Bot["Bot 主类<br/>HTTP / WS / 反向代理 / 事件总线"]
+  subgraph Runtime["⚙️ 运行核心层（src/bot.js）"]
+    direction TB
+    Bot["🤖 Bot 主类<br/>🌐 HTTP / 🔌 WS<br/>🔄 反向代理 / 📢 事件总线"]
   end
 
   %% 基础设施
-  subgraph Infra["基础设施层（src/infrastructure）"]
-    Loaders["加载器<br/>Tasker / Plugins / API / Stream / Listener"]
-    Bases["基类库<br/>plugin / HttpApi / AIStream / Renderer / ConfigBase / EventListenerBase"]
-    HttpBiz["HTTP 业务层<br/>重定向 / CDN / 反向代理增强"]
+  subgraph Infra["🏗️ 基础设施层（src/infrastructure）"]
+    direction TB
+    Loaders["📚 加载器<br/>Tasker / Plugins<br/>API / Stream / Listener"]
+    Bases["📦 基类库<br/>plugin / HttpApi<br/>AIStream / Renderer<br/>ConfigBase / EventListenerBase"]
+    HttpBiz["💼 HTTP 业务层<br/>🔄 重定向 / 🌍 CDN<br/>⚖️ 反向代理增强"]
   end
 
   %% Tasker + 事件
-  subgraph Tasker["任务层（core/*/tasker）"]
-    TOneBot["OneBotv11"]
-    TStdin["stdin / 自定义 Tasker"]
+  subgraph Tasker["📡 任务层（core/*/tasker）"]
+    direction TB
+    TOneBot["📱 OneBotv11"]
+    TStdin["⌨️ stdin / 自定义 Tasker"]
   end
 
-  subgraph Events["事件系统（core/*/events）"]
-    EStd["事件监听器<br/>去重 / 标准化 / 分发"]
+  subgraph Events["📢 事件系统（core/*/events）"]
+    direction TB
+    EStd["👂 事件监听器<br/>去重 / 标准化 / 分发"]
   end
 
   %% 业务
-  subgraph Business["业务层（core/*）"]
-    BPlugins["插件<br/>core/*/plugin"]
-    BHttp["HTTP API<br/>core/*/http"]
-    BStream["AI 工作流<br/>core/*/stream"]
+  subgraph Business["💼 业务层（core/*）"]
+    direction LR
+    BPlugins["🔌 插件<br/>core/*/plugin"]
+    BHttp["📡 HTTP API<br/>core/*/http"]
+    BStream["🌊 AI 工作流<br/>core/*/stream"]
   end
 
   %% 连接关系
@@ -83,13 +89,16 @@ flowchart TB
   BHttp --> BStream
 
   %% 着色
-  style Clients fill:#E6F3FF,stroke:#7AA7D9
-  style Runtime fill:#FFE6CC,stroke:#D9A35D
-  style Infra fill:#E8F8E8,stroke:#6CB46C
-  style Tasker fill:#E6F0FF,stroke:#7B8ED9
-  style Events fill:#FFE6F0,stroke:#D97BAF
-  style Business fill:#F3E6FF,stroke:#A57BD9
-  style Bot fill:#FFD700,stroke:#C49A00,stroke-width:2px
+  style Clients fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+  style Runtime fill:#FFA500,stroke:#CC8400,stroke-width:3px,color:#fff
+  style Infra fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+  style Tasker fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
+  style Events fill:#FFB6C1,stroke:#FF69B4,stroke-width:2px
+  style Business fill:#DDA0DD,stroke:#9370DB,stroke-width:2px
+  style Bot fill:#FFD700,stroke:#C49A00,stroke-width:3px,color:#000
+  style Loaders fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+  style Bases fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+  style HttpBiz fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
 ```
 
 **详细架构说明**：请参见 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
@@ -137,16 +146,21 @@ docker-compose logs -f xrk-agt
 **快速开始流程图**:
 
 ```mermaid
-flowchart TB
-    A["克隆项目"] --> B["安装依赖<br/>pnpm install"]
-    B --> C["运行项目<br/>node app"]
-    C --> D["首次登录<br/>按终端提示"]
-    D --> E["访问Web控制台<br/>使用配置的端口"]
-    E --> F["开始使用"]
+flowchart LR
+    Start([🚀 开始]) --> Clone["📥 克隆项目<br/>git clone"]
+    Clone --> Install["📦 安装依赖<br/>pnpm install"]
+    Install --> Run["▶️ 运行项目<br/>node app"]
+    Run --> Login["🔐 首次登录<br/>按终端提示<br/>配置API密钥"]
+    Login --> Access["🌐 访问Web控制台<br/>使用配置的端口<br/>http://localhost:8080"]
+    Access --> Use([✅ 开始使用<br/>创建插件/工作流])
     
-    style A fill:#E6F3FF
-    style B fill:#FFE6CC
-    style F fill:#90EE90
+    style Start fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Clone fill:#E6F3FF,stroke:#2E5C8A,stroke-width:2px
+    style Install fill:#FFE6CC,stroke:#CC8400,stroke-width:2px
+    style Run fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Login fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Access fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Use fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 ### 克隆项目

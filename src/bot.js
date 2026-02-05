@@ -116,7 +116,12 @@ export default class Bot extends EventEmitter {
     this.domainConfigs = new Map();
     this.sslContexts = new Map();
     
-    this.httpBusiness = new HTTPBusinessLayer(cfg.server);
+    // HTTP业务层初始化（企业级网络服务核心）
+    // 注意：此时cfg.server可能还未加载，会在run()方法中重新初始化
+    this.httpBusiness = new HTTPBusinessLayer(cfg.server || {});
+    
+    // 基类挂载：将HTTP业务层方法挂载到Bot实例，方便直接调用
+    this._mountHttpBusinessMethods();
     
     this.ApiLoader = ApiLoader;
     this._initHttpServer();
@@ -227,9 +232,24 @@ export default class Bot extends EventEmitter {
   }
 
   _initHttpServer() {
-    this.server = http.createServer(this.express)
+    // HTTP服务器配置（优化性能）
+    const serverOptions = {
+      keepAlive: true,
+      keepAliveInitialDelay: 1000,
+      maxHeadersCount: 2000,
+      maxRequestsPerSocket: 0, // 0 = 无限制（适合长连接）
+      timeout: 120000, // 2分钟超时
+      headersTimeout: 60000 // 1分钟头部超时
+    };
+    
+    this.server = http.createServer(serverOptions, this.express)
       .on("error", err => this._handleServerError(err, false))
-      .on("upgrade", this.wsConnect.bind(this));
+      .on("upgrade", this.wsConnect.bind(this))
+      .on("connection", (socket) => {
+        // 设置socket超时
+        socket.setTimeout(120000);
+        socket.setKeepAlive(true, 1000);
+      });
   }
 
   _handleServerError(err, isHttps) {
@@ -285,58 +305,52 @@ export default class Bot extends EventEmitter {
       }
       
       if (domainConfig.target) {
+        // 提取客户端IP（考虑CDN代理）
+        const clientIP = this._extractClientIP(req);
+        
         const upstream = this.httpBusiness.selectProxyUpstream(
           hostname,
-          domainConfig.loadBalance || 'round-robin'
+          domainConfig.loadBalance || 'round-robin',
+          clientIP
         );
         
         const targetUrl = upstream?.url || domainConfig.target;
+        const configWithTarget = { ...domainConfig, target: targetUrl };
         
-        let middleware = this.proxyMiddlewares.get(`${domainConfig.domain}-${targetUrl}`);
-        if (!middleware) {
-          const configWithUpstream = { ...domainConfig, target: targetUrl };
-          middleware = this._createProxyMiddleware(configWithUpstream);
-          this.proxyMiddlewares.set(`${domainConfig.domain}-${targetUrl}`, middleware);
-        }
-        return middleware(req, res, next);
+        // 使用统一的代理请求处理方法
+        return this._handleProxyRequest(req, res, next, configWithTarget, hostname, targetUrl);
       }
       
       // 默认代理到本地服务
       const targetPort = this.actualPort;
-      const proxyOptions = {
-        target: `http://127.0.0.1:${targetPort}`,
-        changeOrigin: true,
-        ws: domainConfig.ws !== false,
-        secure: false,
-        logLevel: 'warn',
-        onError: (err, req, res) => {
-          errorHandler.handle(
-            err,
-            { context: 'proxy', hostname, code: ErrorCodes.NETWORK_ERROR },
-            true
-          );
-          BotUtil.makeLog('error', `代理错误 [${hostname}]: ${err.message}`, '代理');
-          
-          this.httpBusiness.markProxyFailure(hostname, `http://127.0.0.1:${targetPort}`);
-          
-          if (!res.headersSent) {
-            res.status(502).json({
-              error: '网关错误',
-              message: '无法连接到上游服务器',
-              upstream: `http://127.0.0.1:${targetPort}`
-            });
-          }
-        }
+      const targetUrl = `http://127.0.0.1:${targetPort}`;
+      
+      // 使用统一的代理中间件创建方法
+      const defaultConfig = {
+        ...domainConfig,
+        target: targetUrl,
+        domain: hostname
       };
       
-      const proxy = createProxyMiddleware(proxyOptions);
-      return proxy(req, res, next);
+      return this._handleProxyRequest(req, res, next, defaultConfig, hostname, targetUrl);
     });
     
-    // 创建HTTP代理服务器
-    this.proxyServer = http.createServer(this.proxyApp);
+    // 创建HTTP代理服务器（优化配置）
+    const proxyServerOptions = {
+      keepAlive: true,
+      keepAliveInitialDelay: 1000,
+      maxHeadersCount: 2000,
+      timeout: 120000,
+      headersTimeout: 60000
+    };
+    
+    this.proxyServer = http.createServer(proxyServerOptions, this.proxyApp);
     this.proxyServer.on("error", err => {
       BotUtil.makeLog("error", `HTTP代理服务器错误：${err.message}`, '代理');
+    });
+    this.proxyServer.on("connection", (socket) => {
+      socket.setTimeout(120000);
+      socket.setKeepAlive(true, 1000);
     });
     
     // 如果有HTTPS域名，创建HTTPS代理服务器
@@ -356,43 +370,27 @@ export default class Bot extends EventEmitter {
       if (!domainConfig.ssl?.enabled || !domainConfig.ssl?.certificate) continue;
       
       const cert = domainConfig.ssl.certificate;
-      if (!cert.key || !cert.cert) {
-        BotUtil.makeLog("warn", `域名 ${domainConfig.domain} 缺少证书配置`, '代理');
-        continue;
+      
+      try {
+        // 使用统一的证书加载方法
+        const httpsOptions = await this._loadSSLCertificate(cert, `代理域名 ${domainConfig.domain}`);
+        
+        const httpsConfig = cfg.server.https || {};
+        const tlsConfig = httpsConfig.tls || {};
+        
+        const context = tls.createSecureContext({
+          ...httpsOptions,
+          minVersion: tlsConfig.minVersion || 'TLSv1.2',
+          honorCipherOrder: true,
+          sessionIdContext: `xrk-agt-proxy-${domainConfig.domain}`
+        });
+        
+        this.sslContexts.set(domainConfig.domain, context);
+        this.domainConfigs.set(domainConfig.domain, domainConfig);
+        BotUtil.makeLog("info", `✓ 加载SSL证书：${domainConfig.domain}`, '代理');
+      } catch (error) {
+        BotUtil.makeLog("error", `加载域名 ${domainConfig.domain} 的SSL证书失败：${error.message}`, '代理');
       }
-      
-      if (!fsSync.existsSync(cert.key) || !fsSync.existsSync(cert.cert)) {
-        BotUtil.makeLog("warn", `域名 ${domainConfig.domain} 的证书文件不存在`, '代理');
-        continue;
-      }
-      
-      const httpsConfig = cfg.server.https || {};
-      const tlsConfig = httpsConfig.tls || {};
-      
-      // 优化 CA 证书加载
-      let caCert = undefined;
-      if (cert.ca) {
-        try {
-          if (fsSync.statSync(cert.ca).isFile()) {
-            caCert = await fs.readFile(cert.ca);
-            BotUtil.makeLog('debug', `已加载CA证书：${cert.ca}`, '代理');
-          }
-        } catch (error) {
-          BotUtil.makeLog('debug', `CA证书文件不存在或无法访问：${cert.ca}，跳过`, '代理');
-        }
-      }
-      
-      const context = tls.createSecureContext({
-        key: await fs.readFile(cert.key),
-        cert: await fs.readFile(cert.cert),
-        ca: caCert,
-        minVersion: tlsConfig.minVersion || 'TLSv1.2',
-        honorCipherOrder: true
-      });
-      
-      this.sslContexts.set(domainConfig.domain, context);
-      this.domainConfigs.set(domainConfig.domain, domainConfig);
-      BotUtil.makeLog("info", `✓ 加载SSL证书：${domainConfig.domain}`, '代理');
     }
   }
 
@@ -401,6 +399,11 @@ export default class Bot extends EventEmitter {
    * 支持HTTP/2和SNI多域名
    */
   async _createHttpsProxyServer() {
+    if (this.sslContexts.size === 0) {
+      BotUtil.makeLog("warn", "没有可用的SSL证书，跳过HTTPS代理服务器创建", '代理');
+      return;
+    }
+    
     const [firstDomain] = this.sslContexts.keys();
     const domainConfig = this.domainConfigs.get(firstDomain);
     
@@ -413,15 +416,30 @@ export default class Bot extends EventEmitter {
     const httpsConfig = cfg.server.https || {};
     const tlsConfig = httpsConfig.tls || {};
     
-    const httpsOptions = {
-      key: await fs.readFile(cert.key),
-      cert: await fs.readFile(cert.cert),
-      ca: cert.ca && fsSync.existsSync(cert.ca) ? await fs.readFile(cert.ca) : undefined,
-      minVersion: tlsConfig.minVersion || 'TLSv1.2',
-      honorCipherOrder: true,
-      SNICallback: (servername, cb) => {
-        const context = this.sslContexts.get(servername) || this._findWildcardContext(servername);
+    // 使用统一的证书加载方法（获取默认证书用于SNI回调）
+    let httpsOptions;
+    try {
+      httpsOptions = await this._loadSSLCertificate(cert, `HTTPS代理服务器（默认证书）`);
+    } catch (error) {
+      BotUtil.makeLog("error", `加载默认SSL证书失败：${error.message}`, '代理');
+      return;
+    }
+    
+    // 添加TLS配置
+    httpsOptions.minVersion = tlsConfig.minVersion || 'TLSv1.2';
+    httpsOptions.honorCipherOrder = true;
+    httpsOptions.keepAlive = true;
+    httpsOptions.keepAliveInitialDelay = 1000;
+    
+    // SNI回调：根据域名选择对应的SSL上下文
+    httpsOptions.SNICallback = (servername, cb) => {
+      const context = this.sslContexts.get(servername) || this._findWildcardContext(servername);
+      if (context) {
         cb(null, context);
+      } else {
+        // 如果没有找到对应的证书，使用默认证书
+        BotUtil.makeLog('debug', `未找到域名 ${servername} 的SSL证书，使用默认证书`, '代理');
+        cb(null, null);
       }
     };
     
@@ -445,10 +463,12 @@ export default class Bot extends EventEmitter {
   }
 
   /**
-   * 创建域名专用代理中间件
+   * 创建代理选项（统一方法）
+   * @param {Object} domainConfig - 域名配置
+   * @returns {Object} 代理选项
    */
-  _createProxyMiddleware(domainConfig) {
-    const proxyOptions = {
+  _createProxyOptions(domainConfig) {
+    return {
       target: domainConfig.target,
       changeOrigin: true,
       ws: domainConfig.ws !== false,
@@ -459,47 +479,186 @@ export default class Bot extends EventEmitter {
       logLevel: 'warn',
       
       onProxyReq: (proxyReq, req, res) => {
-        // 添加自定义请求头
-        if (domainConfig.headers?.request) {
-          for (const [key, value] of Object.entries(domainConfig.headers.request)) {
-            proxyReq.setHeader(key, value);
-          }
-        }
+        this._handleProxyRequestStart(proxyReq, req, domainConfig);
       },
       
       onProxyRes: (proxyRes, req, res) => {
-        // 添加自定义响应头
-        if (domainConfig.headers?.response) {
-          for (const [key, value] of Object.entries(domainConfig.headers.response)) {
-            res.setHeader(key, value);
-          }
-        }
+        this._handleProxyResponse(proxyRes, req, res, domainConfig);
       },
       
-        onError: (err, req, res) => {
-          BotUtil.makeLog('error', `代理错误 [${domainConfig.domain}]: ${err.message}`, '代理');
-          
-          if (domainConfig.target) {
-            this.httpBusiness.markProxyFailure(domainConfig.domain, domainConfig.target);
-          }
-          
-          if (!res.headersSent) {
-          res.status(502).json({
-            error: '网关错误',
-            message: '代理服务器错误',
-            domain: domainConfig.domain,
-            target: domainConfig.target
-          });
-        }
-      }
+      onError: (err, req, res) => {
+        this._handleProxyError(err, req, res, domainConfig);
+      },
+      
+      // 路径重写规则
+      ...(domainConfig.pathRewrite && typeof domainConfig.pathRewrite === 'object' 
+        ? { pathRewrite: domainConfig.pathRewrite } 
+        : {})
     };
+  }
+
+  /**
+   * 创建域名专用代理中间件
+   * @param {Object} domainConfig - 域名配置
+   * @returns {Function} 代理中间件
+   */
+  _createProxyMiddleware(domainConfig) {
+    const proxyOptions = this._createProxyOptions(domainConfig);
+    return createProxyMiddleware(proxyOptions);
+  }
+
+  /**
+   * 处理代理请求（统一入口）
+   * @param {Object} req - Express请求对象
+   * @param {Object} res - Express响应对象
+   * @param {Function} next - Express next函数
+   * @param {Object} domainConfig - 域名配置
+   * @param {string} hostname - 主机名
+   * @param {string} targetUrl - 目标URL
+   */
+  _handleProxyRequest(req, res, next, domainConfig, hostname, targetUrl) {
+    // 增加连接数统计
+    this._manageProxyConnection(hostname, targetUrl, 'increment');
     
-    // 路径重写规则
-    if (domainConfig.pathRewrite && typeof domainConfig.pathRewrite === 'object') {
-      proxyOptions.pathRewrite = domainConfig.pathRewrite;
+    // 请求完成后减少连接数
+    res.on('finish', () => {
+      this._manageProxyConnection(hostname, targetUrl, 'decrement');
+    });
+    
+    // 创建或获取代理中间件
+    const middleware = this._getOrCreateProxyMiddleware(domainConfig, targetUrl);
+    return middleware(req, res, next);
+  }
+
+  /**
+   * 获取或创建代理中间件（带缓存）
+   * @param {Object} domainConfig - 域名配置
+   * @param {string} targetUrl - 目标URL
+   * @returns {Function} 代理中间件
+   */
+  _getOrCreateProxyMiddleware(domainConfig, targetUrl) {
+    const cacheKey = `${domainConfig.domain}-${targetUrl}`;
+    let middleware = this.proxyMiddlewares.get(cacheKey);
+    
+    if (!middleware) {
+      const configWithTarget = { ...domainConfig, target: targetUrl };
+      middleware = this._createProxyMiddleware(configWithTarget);
+      this.proxyMiddlewares.set(cacheKey, middleware);
     }
     
-    return createProxyMiddleware(proxyOptions);
+    return middleware;
+  }
+
+  /**
+   * 管理代理连接数（统一方法）
+   * @param {string} domain - 域名
+   * @param {string} targetUrl - 目标URL
+   * @param {string} operation - 操作：'increment' 或 'decrement'
+   */
+  _manageProxyConnection(domain, targetUrl, operation) {
+    if (operation === 'increment') {
+      this.httpBusiness.proxyManager.incrementConnections(domain, targetUrl);
+    } else if (operation === 'decrement') {
+      this.httpBusiness.proxyManager.decrementConnections(domain, targetUrl);
+    }
+  }
+
+  /**
+   * 处理代理请求开始（统一回调）
+   * @param {Object} proxyReq - 代理请求对象
+   * @param {Object} req - Express请求对象
+   * @param {Object} domainConfig - 域名配置
+   */
+  _handleProxyRequestStart(proxyReq, req, domainConfig) {
+    // 记录请求开始时间
+    req._proxyStartTime = Date.now();
+    
+    // 添加自定义请求头
+    if (domainConfig.headers?.request) {
+      for (const [key, value] of Object.entries(domainConfig.headers.request)) {
+        proxyReq.setHeader(key, value);
+      }
+    }
+    
+    // 传递真实客户端IP
+    const clientIP = this._extractClientIP(req);
+    proxyReq.setHeader('X-Forwarded-For', clientIP);
+    proxyReq.setHeader('X-Real-IP', clientIP);
+    
+    // 添加请求ID用于追踪
+    if (req.requestId) {
+      proxyReq.setHeader('X-Request-Id', req.requestId);
+    }
+  }
+
+  /**
+   * 处理代理响应（统一回调）
+   * @param {Object} proxyRes - 代理响应对象
+   * @param {Object} req - Express请求对象
+   * @param {Object} res - Express响应对象
+   * @param {Object} domainConfig - 域名配置
+   */
+  _handleProxyResponse(proxyRes, req, res, domainConfig) {
+    const startTime = req._proxyStartTime || Date.now();
+    const responseTime = Date.now() - startTime;
+    
+    // 添加自定义响应头
+    if (domainConfig.headers?.response) {
+      for (const [key, value] of Object.entries(domainConfig.headers.response)) {
+        res.setHeader(key, value);
+      }
+    }
+    
+    // 记录响应时间
+    res.setHeader('X-Response-Time', `${responseTime}ms`);
+    
+    // 请求完成时减少连接数并记录统计
+    res.on('finish', () => {
+      const targetUrl = domainConfig.target;
+      if (targetUrl) {
+        this._manageProxyConnection(domainConfig.domain, targetUrl, 'decrement');
+        // 记录成功请求
+        this.httpBusiness.proxyManager.markUpstreamSuccess(domainConfig.domain, targetUrl, responseTime);
+      }
+    });
+  }
+
+  /**
+   * 处理代理错误（统一回调）
+   * @param {Error} err - 错误对象
+   * @param {Object} req - Express请求对象
+   * @param {Object} res - Express响应对象
+   * @param {Object} domainConfig - 域名配置
+   */
+  _handleProxyError(err, req, res, domainConfig) {
+    const hostname = domainConfig.domain || req.hostname || 'unknown';
+    const targetUrl = domainConfig.target || 'unknown';
+    
+    // 统一错误处理
+    errorHandler.handle(
+      err,
+      { context: 'proxy', hostname, code: ErrorCodes.NETWORK_ERROR },
+      true
+    );
+    
+    BotUtil.makeLog('error', `代理错误 [${hostname}]: ${err.message}`, '代理');
+    
+    // 标记失败并减少连接数
+    if (domainConfig.target) {
+      this.httpBusiness.markProxyFailure(domainConfig.domain, targetUrl);
+      this._manageProxyConnection(domainConfig.domain, targetUrl, 'decrement');
+    }
+    
+    // 返回错误响应
+    if (!res.headersSent) {
+      res.status(502).json({
+        error: '网关错误',
+        message: '代理服务器错误',
+        domain: domainConfig.domain || hostname,
+        target: targetUrl,
+        requestId: req.requestId || null
+      });
+    }
   }
 
   /**
@@ -549,6 +708,79 @@ export default class Bot extends EventEmitter {
       }
     }
     return null;
+  }
+
+  /**
+   * 挂载HTTP业务层方法到Bot实例（基类挂载）
+   * 使HTTP业务层的方法可以直接通过bot实例调用
+   */
+  _mountHttpBusinessMethods() {
+    // 挂载代理管理器方法
+    if (this.httpBusiness?.proxyManager) {
+      this.selectProxyUpstream = (domain, algorithm, clientIP) => {
+        return this.httpBusiness.proxyManager.selectUpstream(domain, algorithm, clientIP);
+      };
+      
+      this.getProxyStats = () => {
+        return this.httpBusiness.proxyManager.getStats();
+      };
+    }
+    
+    // 挂载CDN管理器方法
+    if (this.httpBusiness?.cdnManager) {
+      this.isCDNRequest = (req) => {
+        return this.httpBusiness.cdnManager.isCDNRequest(req);
+      };
+      
+      this.setCDNHeaders = (res, filePath, req) => {
+        return this.httpBusiness.cdnManager.setCDNHeaders(res, filePath, req);
+      };
+    }
+    
+    // 挂载重定向管理器方法
+    if (this.httpBusiness?.redirectManager) {
+      this.handleRedirect = (req, res) => {
+        return this.httpBusiness.redirectManager.check(req, res);
+      };
+    }
+  }
+
+  /**
+   * 重新初始化HTTP业务层（配置加载后调用）
+   */
+  _reinitHttpBusiness() {
+    // 重新创建HTTP业务层实例（使用最新配置）
+    this.httpBusiness = new HTTPBusinessLayer(cfg.server || {});
+    // 重新挂载方法
+    this._mountHttpBusinessMethods();
+  }
+
+  /**
+   * 提取客户端真实IP（考虑CDN和代理）
+   * @param {Object} req - Express请求对象
+   * @returns {string} 客户端IP
+   */
+  _extractClientIP(req) {
+    // 检查CDN头部（优先）
+    const cdnInfo = this.httpBusiness.cdnManager.isCDNRequest(req);
+    if (cdnInfo?.ip) {
+      return cdnInfo.ip;
+    }
+    
+    // 检查X-Forwarded-For（代理链）
+    const forwardedFor = req.headers['x-forwarded-for'];
+    if (forwardedFor) {
+      // 取第一个IP（最原始的客户端IP）
+      return forwardedFor.split(',')[0].trim();
+    }
+    
+    // 检查X-Real-IP（Nginx等）
+    if (req.headers['x-real-ip']) {
+      return req.headers['x-real-ip'];
+    }
+    
+    // 使用Express的IP（已考虑trust proxy）
+    return req.ip || req.connection?.remoteAddress || '0.0.0.0';
   }
 
   /**
@@ -2117,6 +2349,57 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   }
 
   /**
+   * 统一加载SSL证书（避免重复代码）
+   * @param {Object} certConfig - 证书配置对象
+   * @param {string} context - 上下文名称（用于日志）
+   * @returns {Promise<Object>} HTTPS选项对象
+   */
+  async _loadSSLCertificate(certConfig, context = '服务器') {
+    if (!certConfig?.key || !certConfig?.cert) {
+      throw new Error(`${context}：证书配置不完整，需要key和cert`);
+    }
+    
+    // 验证文件存在性
+    try {
+      const keyStat = fsSync.statSync(certConfig.key);
+      if (!keyStat.isFile()) {
+        throw new Error(`${context}：密钥路径不是文件：${certConfig.key}`);
+      }
+    } catch (error) {
+      throw new Error(`${context}：密钥文件不存在或无法访问：${certConfig.key} - ${error.message}`);
+    }
+    
+    try {
+      const certStat = fsSync.statSync(certConfig.cert);
+      if (!certStat.isFile()) {
+        throw new Error(`${context}：证书路径不是文件：${certConfig.cert}`);
+      }
+    } catch (error) {
+      throw new Error(`${context}：证书文件不存在或无法访问：${certConfig.cert} - ${error.message}`);
+    }
+    
+    const httpsOptions = {
+      key: await fs.readFile(certConfig.key),
+      cert: await fs.readFile(certConfig.cert),
+      allowHTTP1: true
+    };
+    
+    // 加载CA证书（可选）
+    if (certConfig.ca) {
+      try {
+        if (fsSync.statSync(certConfig.ca).isFile()) {
+          httpsOptions.ca = await fs.readFile(certConfig.ca);
+          BotUtil.makeLog('debug', `${context}：已加载CA证书：${certConfig.ca}`, context);
+        }
+      } catch (error) {
+        BotUtil.makeLog('debug', `${context}：CA证书文件不存在或无法访问：${certConfig.ca}，跳过`, context);
+      }
+    }
+    
+    return httpsOptions;
+  }
+
+  /**
    * 加载HTTPS服务器
    * 支持HTTP/2和现代TLS配置
    */
@@ -2130,65 +2413,22 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     let httpsOptions = {};
     
     if (httpsConfig?.certificate) {
-      const cert = httpsConfig.certificate;
-      
-      if (!cert.key || !cert.cert) {
-        throw new Error("HTTPS已启用但未配置证书");
-      }
-      
-      // 使用 try-catch 优化性能，提供更详细的错误信息
-      try {
-        const keyStat = fsSync.statSync(cert.key);
-        if (!keyStat.isFile()) {
-          throw new Error(`HTTPS密钥路径不是文件：${cert.key}`);
-        }
-      } catch (error) {
-        throw new Error(`HTTPS密钥文件不存在或无法访问：${cert.key} - ${error.message}`);
-      }
-      
-      try {
-        const certStat = fsSync.statSync(cert.cert);
-        if (!certStat.isFile()) {
-          throw new Error(`HTTPS证书路径不是文件：${cert.cert}`);
-        }
-      } catch (error) {
-        throw new Error(`HTTPS证书文件不存在或无法访问：${cert.cert} - ${error.message}`);
-      }
-      
-      httpsOptions = {
-        key: await fs.readFile(cert.key),
-        cert: await fs.readFile(cert.cert),
-        allowHTTP1: true
-      };
-      
-      // 优化 CA 证书加载
-      if (cert.ca) {
-        try {
-          if (fsSync.statSync(cert.ca).isFile()) {
-            httpsOptions.ca = await fs.readFile(cert.ca);
-            BotUtil.makeLog('debug', `已加载CA证书：${cert.ca}`, '服务器');
-          }
-        } catch (error) {
-          BotUtil.makeLog('debug', `CA证书文件不存在或无法访问：${cert.ca}，跳过`, '服务器');
-        }
-      }
+      httpsOptions = await this._loadSSLCertificate(httpsConfig.certificate, 'HTTPS服务器');
     }
     
     const tlsConfig = httpsConfig?.tls || {};
     
-    if (tlsConfig.minVersion) {
-      httpsOptions.minVersion = tlsConfig.minVersion;
-    } else {
-      httpsOptions.minVersion = 'TLSv1.2';
-    }
-    
+    // TLS版本配置
+    httpsOptions.minVersion = tlsConfig.minVersion || 'TLSv1.2';
     if (tlsConfig.maxVersion) {
       httpsOptions.maxVersion = tlsConfig.maxVersion;
     }
     
+    // 密码套件配置（现代安全配置）
     if (tlsConfig.ciphers) {
       httpsOptions.ciphers = tlsConfig.ciphers;
     } else {
+      // 默认使用现代密码套件（优先ECDHE，支持前向保密）
       httpsOptions.ciphers = [
         'ECDHE-ECDSA-AES128-GCM-SHA256',
         'ECDHE-RSA-AES128-GCM-SHA256',
@@ -2200,7 +2440,13 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     }
     
     httpsOptions.honorCipherOrder = true;
-    httpsOptions.secureProtocol = 'TLSv1_2_method';
+    
+    // Keep-Alive配置（提升性能）
+    httpsOptions.keepAlive = true;
+    httpsOptions.keepAliveInitialDelay = 1000;
+    
+    // 会话复用（TLS Session Tickets）
+    httpsOptions.sessionIdContext = 'xrk-agt-server';
     
     if (tlsConfig.http2 === true) {
       try {
@@ -2532,6 +2778,9 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   async run(options = {}) {
     const { port } = options;
     const startTime = Date.now();
+    
+    // 重新初始化HTTP业务层（确保使用最新配置）
+    this._reinitHttpBusiness();
     
     // 初始化配置
     const proxyConfig = cfg.server.proxy;

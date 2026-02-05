@@ -27,28 +27,36 @@ HTTP业务层（`HTTPBusinessLayer`）是XRK-AGT框架的核心HTTP功能模块�
 ### 架构设计
 
 ```mermaid
-flowchart TB
-    Request["HTTP请求"] --> Business["HTTP业务层<br/>HTTPBusinessLayer"]
+flowchart LR
+    Request["🌐 HTTP请求<br/>进入业务层"] --> Business["💼 HTTP业务层<br/>HTTPBusinessLayer<br/>统一管理"]
     
-    Business --> Redirect["重定向管理器<br/>RedirectManager"]
-    Business --> CDN["CDN管理器<br/>CDNManager"]
-    Business --> Proxy["反向代理管理器<br/>ProxyManager"]
+    Business --> Redirect["🔄 重定向管理器<br/>RedirectManager<br/>规则匹配"]
+    Business --> CDN["🌍 CDN管理器<br/>CDNManager<br/>回源识别"]
+    Business --> Proxy["⚖️ 反向代理管理器<br/>ProxyManager<br/>负载均衡"]
     
-    Redirect -->|匹配规则| RedirectAction["执行重定向<br/>301/302/307/308"]
-    CDN -->|设置头部| CDNHeaders["CDN响应头<br/>Cache-Control等"]
-    CDN -->|生成URL| CDNUrl["CDN资源URL<br/>cdn.example.com"]
-    Proxy -->|负载均衡| LoadBalance["选择上游服务器<br/>轮询/加权/最少连接"]
-    Proxy -->|健康检查| HealthCheck["故障转移<br/>自动切换"]
+    Redirect -->|"匹配规则"| RedirectAction["📍 执行重定向<br/>301/302/307/308<br/>Location头"]
+    CDN -->|"设置头部"| CDNHeaders["📋 CDN响应头<br/>Cache-Control<br/>ETag/CDN-Cache-Control"]
+    CDN -->|"生成URL"| CDNUrl["🔗 CDN资源URL<br/>cdn.example.com<br/>HTTPS协议"]
+    Proxy -->|"负载均衡"| LoadBalance["⚖️ 选择上游服务器<br/>6种算法<br/>智能路由"]
+    Proxy -->|"健康检查"| HealthCheck["🏥 故障转移<br/>自动切换<br/>健康监控"]
     
-    RedirectAction --> Response["返回响应"]
+    RedirectAction --> Response["✅ 返回响应<br/>HTTP状态码<br/>响应数据"]
     CDNHeaders --> Response
     CDNUrl --> Response
     LoadBalance --> Response
     HealthCheck --> Response
     
-    style Request fill:#E6F3FF
-    style Business fill:#FFE6CC
-    style Response fill:#90EE90
+    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Business fill:#FFA500,stroke:#CC8400,stroke-width:3px,color:#fff
+    style Redirect fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style CDN fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Proxy fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style RedirectAction fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
+    style CDNHeaders fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style CDNUrl fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
+    style LoadBalance fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
+    style HealthCheck fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
+    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 **流程说明**：请求首先进入HTTP业务层，依次经过重定向检查、CDN处理、反向代理路由，最终返回响应。HTTP业务层在Bot的中间件链中，位于请求体解析之后、路由匹配之前。
@@ -179,21 +187,25 @@ proxy:
 
 ```mermaid
 sequenceDiagram
-    participant Client as 客户端
-    participant Server as 服务器
-    participant Redirect as 重定向管理器
-    participant Rules as 重定向规则
+    participant Client as 👤 客户端
+    participant Server as 🌐 服务器
+    participant Redirect as 🔄 重定向管理器
+    participant Rules as 📋 重定向规则
     
-    Client->>Server: GET /old-path
-    Server->>Redirect: 检查重定向规则
-    Redirect->>Rules: 匹配规则（优先级排序）
-    Rules-->>Redirect: 找到匹配规则
-    Redirect->>Redirect: 生成目标URL
-    Redirect->>Redirect: 保留查询参数（可选）
-    Redirect->>Server: 返回重定向响应
-    Server->>Client: 301/302 Location: /new-path
-    Client->>Server: GET /new-path
-    Server->>Client: 200 OK
+    Note over Client,Server: 🔄 HTTP重定向流程
+    
+    Client->>Server: 📨 GET /old-path<br/>请求旧路径
+    Server->>Redirect: 🔍 检查重定向规则<br/>遍历规则列表
+    Redirect->>Rules: 📋 匹配规则<br/>优先级排序<br/>精确匹配优先
+    Rules-->>Redirect: ✅ 找到匹配规则<br/>from: /old-path<br/>to: /new-path
+    Redirect->>Redirect: 🔗 生成目标URL<br/>构建完整URL
+    Redirect->>Redirect: 📝 保留查询参数<br/>?key=value（可选）
+    Redirect->>Server: 📤 返回重定向响应<br/>status: 301/302
+    Server->>Client: 📥 301/302 Location: /new-path<br/>重定向响应
+    Client->>Server: 📨 GET /new-path<br/>自动跟随重定向
+    Server->>Client: ✅ 200 OK<br/>返回新路径内容
+    
+    Note over Client: ✅ 重定向完成
 ```
 
 **说明**：重定向规则按优先级排序，精确匹配优先于通配符匹配。
@@ -244,13 +256,27 @@ CDN管理器提供静态资源CDN支持，包括CDN回源识别、缓存控制�
 
 ```mermaid
 flowchart LR
-    A[请求静态资源] --> B{是否为CDN请求}
-    B -->|是| C[设置CDN头部]
-    B -->|否| D[正常处理]
-    C --> E[生成CDN URL]
-    E --> F[设置缓存控制]
-    F --> G[返回响应]
-    D --> G
+    Request["🌐 请求静态资源<br/>CSS/JS/图片/字体"] --> Check{"🔍 是否为CDN请求?<br/>检查请求头<br/>x-cdn-request<br/>cf-connecting-ip"}
+    
+    Check -->|"✅ 是"| CDNHeaders["📋 设置CDN头部<br/>Cache-Control<br/>CDN-Cache-Control<br/>ETag"]
+    
+    Check -->|"❌ 否"| Normal["⚙️ 正常处理<br/>标准HTTP响应"]
+    
+    CDNHeaders --> CDNUrl["🔗 生成CDN URL<br/>cdn.example.com/path<br/>HTTPS协议"]
+    
+    CDNUrl --> CacheControl["⏱️ 设置缓存控制<br/>静态资源: 1年<br/>图片: 7天<br/>其他: 1小时"]
+    
+    CacheControl --> Response["✅ 返回响应<br/>带CDN头部"]
+    
+    Normal --> Response
+    
+    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Check fill:#FFD700,stroke:#CCAA00,stroke-width:3px,color:#000
+    style CDNHeaders fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style CDNUrl fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style CacheControl fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Normal fill:#95A5A6,stroke:#7F8C8D,stroke-width:2px,color:#fff
+    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 **说明**：CDN请求通过请求头识别（如`x-cdn-request`、`cf-connecting-ip`等），自动设置CDN相关响应头。
@@ -302,23 +328,52 @@ cdn:
 ### 负载均衡架构
 
 ```mermaid
-flowchart TB
-    A[客户端请求] --> B[反向代理管理器]
-    B --> C{负载均衡算法}
-    C -->|轮询| D[轮询选择]
-    C -->|加权| E[加权选择]
-    C -->|最少连接| F[最少连接选择]
-    D --> G[上游服务器1]
-    E --> G
-    E --> H[上游服务器2]
-    F --> I[上游服务器3]
-    G --> J{健康检查}
-    H --> J
-    I --> J
-    J -->|健康| K[转发请求]
-    J -->|不健康| L[故障转移]
-    L --> K
-    K --> M[返回响应]
+flowchart LR
+    Client["👤 客户端请求<br/>HTTP/HTTPS"] --> Proxy["🔄 反向代理管理器<br/>ProxyManager"]
+    
+    Proxy --> Algorithm{"⚖️ 负载均衡算法<br/>选择策略"}
+    
+    Algorithm -->|"1️⃣ 轮询"| RoundRobin["🔄 轮询选择<br/>Round-Robin<br/>依次分配"]
+    Algorithm -->|"2️⃣ 加权"| Weighted["⚖️ 加权选择<br/>Weighted<br/>按权重分配"]
+    Algorithm -->|"3️⃣ 最少连接"| LeastConn["🔌 最少连接<br/>Least-Connections<br/>选择连接数最少"]
+    Algorithm -->|"4️⃣ IP哈希"| IPHash["🔐 IP哈希<br/>IP-Hash<br/>会话保持"]
+    Algorithm -->|"5️⃣ 一致性哈希"| ConsistentHash["🔗 一致性哈希<br/>Consistent-Hash<br/>动态扩缩容"]
+    Algorithm -->|"6️⃣ 最少响应时间"| LeastTime["⚡ 最少响应时间<br/>Least-Response-Time<br/>性能优先"]
+    
+    RoundRobin --> Server1["🌐 上游服务器1<br/>:3001"]
+    Weighted --> Server1
+    Weighted --> Server2["🌐 上游服务器2<br/>:3002"]
+    LeastConn --> Server3["🌐 上游服务器3<br/>:3003"]
+    IPHash --> Server1
+    ConsistentHash --> Server2
+    LeastTime --> Server1
+    
+    Server1 --> HealthCheck{"🏥 健康检查<br/>检查服务器状态"}
+    Server2 --> HealthCheck
+    Server3 --> HealthCheck
+    
+    HealthCheck -->|"✅ 健康"| Forward["➡️ 转发请求<br/>到选中服务器"]
+    HealthCheck -->|"❌ 不健康"| Failover["🔄 故障转移<br/>选择其他服务器"]
+    
+    Failover --> Forward
+    Forward --> Response["✅ 返回响应<br/>给客户端"]
+    
+    style Client fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Proxy fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Algorithm fill:#FFD700,stroke:#CCAA00,stroke-width:3px,color:#000
+    style RoundRobin fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
+    style Weighted fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style LeastConn fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style IPHash fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
+    style ConsistentHash fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
+    style LeastTime fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
+    style Server1 fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style Server2 fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style Server3 fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style HealthCheck fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style Forward fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style Failover fill:#E67E22,stroke:#D35400,stroke-width:2px,color:#fff
+    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 **说明**：负载均衡支持三种算法，自动健康检查确保请求分发到健康的服务器。
@@ -361,6 +416,39 @@ target:
 loadBalance: "least-connections"
 ```
 
+#### 4. IP Hash（IP哈希）
+
+基于客户端IP的哈希值分配请求，相同IP总是路由到同一服务器，适合会话保持。
+
+```yaml
+target:
+  - "http://localhost:3001"
+  - "http://localhost:3002"
+loadBalance: "ip-hash"
+```
+
+#### 5. 一致性哈希（Consistent Hash）
+
+当服务器列表变化时，最小化重新路由，适合动态扩缩容场景。
+
+```yaml
+target:
+  - "http://localhost:3001"
+  - "http://localhost:3002"
+loadBalance: "consistent-hash"
+```
+
+#### 6. 最少响应时间（Least Response Time）
+
+选择响应时间最短的服务器，适合性能敏感场景。
+
+```yaml
+target:
+  - "http://localhost:3001"
+  - "http://localhost:3002"
+loadBalance: "least-response-time"
+```
+
 ### 健康检查流程
 
 ```mermaid
@@ -393,7 +481,16 @@ proxy:
     enabled: true
     interval: 30000      # 检查间隔：30秒
     maxFailures: 3       # 最大失败次数：3次
+    timeout: 5000       # 健康检查超时：5秒
+    cacheTime: 5000      # 结果缓存时间：5秒（减少频繁检查）
+    path: "/health"     # 自定义健康检查路径（可选）
 ```
+
+**特性**：
+- **并行检查**：所有上游服务器并行检查，提升效率
+- **结果缓存**：健康检查结果缓存，避免频繁请求
+- **自定义路径**：支持为每个上游服务器配置自定义健康检查URL
+- **详细指标**：记录响应时间、失败次数等指标
 
 ### 故障转移
 
@@ -468,9 +565,20 @@ proxy:
 |-------|------|------|------|
 | enabled | boolean | 否 | 是否启用CDN（默认false） |
 | domain | string | 否 | CDN域名 |
+| type | string | 否 | CDN类型：general, cloudflare, aliyun, tencent, aws, baidu, qiniu, ucloud（默认general） |
 | staticPrefix | string | 否 | 静态资源前缀（默认"/static"） |
 | https | boolean | 否 | 是否使用HTTPS（默认true） |
 | cacheControl | object | 否 | 缓存控制配置 |
+
+**CDN类型说明**：
+- `general`：通用CDN（默认）
+- `cloudflare`：Cloudflare CDN（自动识别cf-*头部）
+- `aliyun`：阿里云CDN（自动识别ali-*头部）
+- `tencent`：腾讯云CDN（自动识别x-qcloud-*头部）
+- `aws`：AWS CloudFront（自动识别x-amz-*头部）
+- `baidu`：百度云CDN
+- `qiniu`：七牛云CDN
+- `ucloud`：UCloud CDN
 
 #### 反向代理配置（proxy）
 
@@ -481,6 +589,96 @@ proxy:
 | httpsPort | number | 否 | HTTPS端口（默认443） |
 | healthCheck | object | 否 | 健康检查配置 |
 | domains | array | 否 | 域名配置列表 |
+
+**健康检查配置（healthCheck）**：
+
+| 配置项 | 类型 | 必填 | 说明 |
+|-------|------|------|------|
+| enabled | boolean | 否 | 是否启用健康检查（默认false） |
+| interval | number | 否 | 检查间隔（毫秒，默认30000） |
+| maxFailures | number | 否 | 最大失败次数（默认3） |
+| timeout | number | 否 | 健康检查超时（毫秒，默认5000） |
+| cacheTime | number | 否 | 结果缓存时间（毫秒，默认5000） |
+| path | string | 否 | 自定义健康检查路径（默认/health） |
+
+**域名配置（domains）**：
+
+| 配置项 | 类型 | 必填 | 说明 |
+|-------|------|------|------|
+| domain | string | 是 | 域名 |
+| target | string/array | 否 | 目标服务器（字符串或数组） |
+| loadBalance | string | 否 | 负载均衡算法：round-robin, weighted, least-connections, ip-hash, consistent-hash, least-response-time |
+| healthUrl | string | 否 | 自定义健康检查URL（覆盖全局配置） |
+| ssl | object | 否 | SSL证书配置 |
+| rewritePath | object | 否 | 路径重写规则 |
+
+#### 性能优化配置（performance）
+
+| 配置项 | 类型 | 必填 | 说明 |
+|-------|------|------|------|
+| keepAlive | object | 否 | Keep-Alive配置 |
+| http2Push | object | 否 | HTTP/2 Server Push配置 |
+| connectionPool | object | 否 | 连接池配置 |
+
+**Keep-Alive配置**：
+
+| 配置项 | 类型 | 必填 | 说明 |
+|-------|------|------|------|
+| enabled | boolean | 否 | 是否启用Keep-Alive（默认true） |
+| initialDelay | number | 否 | 初始延迟（毫秒，默认1000） |
+| timeout | number | 否 | 超时时间（毫秒，默认120000） |
+
+**HTTP/2 Push配置**：
+
+| 配置项 | 类型 | 必填 | 说明 |
+|-------|------|------|------|
+| enabled | boolean | 否 | 是否启用HTTP/2 Push（默认false） |
+| criticalAssets | array | 否 | 关键资源列表（自动推送） |
+
+**连接池配置**：
+
+| 配置项 | 类型 | 必填 | 说明 |
+|-------|------|------|------|
+| maxSockets | number | 否 | 每个主机的最大socket数（默认50） |
+| maxFreeSockets | number | 否 | 空闲socket的最大数量（默认10） |
+| timeout | number | 否 | socket超时时间（毫秒，默认30000） |
+
+---
+
+## 企业级特性
+
+### 1. 智能负载均衡
+
+支持6种负载均衡算法，根据场景自动选择最优策略：
+
+- **轮询（Round-Robin）**：简单均匀分配
+- **加权轮询（Weighted）**：根据服务器权重分配
+- **最少连接（Least-Connections）**：优先选择连接数最少的服务器
+- **IP哈希（IP-Hash）**：基于客户端IP分配，适合会话保持
+- **一致性哈希（Consistent-Hash）**：服务器变化时最小化重新路由
+- **最少响应时间（Least-Response-Time）**：选择响应最快的服务器
+
+### 2. 健康检查与故障转移
+
+- **并行健康检查**：所有上游服务器并行检查，提升效率
+- **结果缓存**：健康检查结果缓存，减少频繁请求
+- **自动故障转移**：服务器故障时自动切换，确保服务可用
+- **详细指标**：记录响应时间、失败次数等指标
+
+### 3. CDN智能识别
+
+自动识别主流CDN类型，优化缓存策略和头部设置：
+
+- Cloudflare、阿里云、腾讯云、AWS CloudFront等
+- 智能提取真实客户端IP
+- 优化CDN特定响应头
+
+### 4. 性能优化
+
+- **Keep-Alive**：减少连接开销
+- **HTTP/2支持**：提升HTTPS性能
+- **连接池管理**：优化socket复用
+- **响应压缩**：支持brotli压缩（Node.js 24+）
 
 ---
 

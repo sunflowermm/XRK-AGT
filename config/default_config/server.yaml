@@ -41,6 +41,12 @@ proxy:
     interval: 30000
     # 最大失败次数（超过后标记为不健康）
     maxFailures: 3
+    # 健康检查超时时间（毫秒）
+    timeout: 5000
+    # 健康检查结果缓存时间（毫秒，减少频繁检查）
+    cacheTime: 5000
+    # 自定义健康检查路径（可选，默认 /health）
+    # path: "/health"
   # 域名配置列表
   # 每个域名可以有不同的配置和处理方式
   # 注意：
@@ -61,10 +67,25 @@ proxy:
         #   key: "/path/to/xrkk.cc.key"
         #   cert: "/path/to/xrkk.cc.cert"
         #   ca: ""  # CA证书链（可选）
-      # 目标服务器（如果需要代理到其他服务）
+      # 目标服务器（支持字符串或数组，数组时启用负载均衡）
+      # 字符串：单个目标服务器
+      # 数组：多个服务器，支持负载均衡
       # 不配置则直接提供静态文件服务
       # 例如：仅做静态站，交给CDN调用本机80端口，则可不配置target
       # target: "http://localhost:3000"
+      # 负载均衡配置示例：
+      # target:
+      #   - url: "http://localhost:3001"
+      #     weight: 3  # 权重（用于weighted算法）
+      #     healthUrl: "http://localhost:3001/health"  # 自定义健康检查URL
+      #   - url: "http://localhost:3002"
+      #     weight: 1
+      # 负载均衡算法（可选）
+      # 可选值：round-robin（轮询）、weighted（加权轮询）、least-connections（最少连接）、
+      #        ip-hash（IP哈希）、consistent-hash（一致性哈希）、least-response-time（最少响应时间）
+      # loadBalance: "round-robin"
+      # 自定义健康检查路径（可选，覆盖全局配置）
+      # healthUrl: "http://localhost:3000/custom-health"
     # 仅通过CDN做HTTPS、在本机只做HTTP反代的示例：
     # - domain: "cdn.example.com"
     #   # 不需要ssl段，也不需要证书，CDN直接回源到本机httpPort
@@ -295,11 +316,36 @@ cdn:
   staticPrefix: "/static"
   # 是否使用HTTPS CDN
   https: true
+  # CDN类型（可选，用于优化CDN特定头部）
+  # 可选值：cloudflare、aliyun、tencent、aws、baidu、qiniu、ucloud、general
+  # type: "general"
   # CDN缓存控制配置（秒）
   cacheControl:
     static: 31536000    # CSS/JS/字体文件：1年
     images: 604800      # 图片文件：7天
     default: 3600        # 其他文件：1小时
+
+# ----------------------------------------
+# 性能优化配置
+# ----------------------------------------
+performance:
+  # Keep-Alive配置
+  keepAlive:
+    enabled: true
+    initialDelay: 1000  # 初始延迟（毫秒）
+    timeout: 120000     # 超时时间（毫秒）
+  # HTTP/2 Server Push（需要HTTP/2支持）
+  http2Push:
+    enabled: false
+    # 关键资源列表（自动推送）
+    criticalAssets:
+      - "/static/css/main.css"
+      - "/static/js/main.js"
+  # 连接池配置
+  connectionPool:
+    maxSockets: 50      # 每个主机的最大socket数
+    maxFreeSockets: 10  # 空闲socket的最大数量
+    timeout: 30000      # socket超时时间（毫秒）
 
 # ----------------------------------------
 # 其他配置

@@ -36,36 +36,56 @@
 
 ```mermaid
 flowchart TB
-    subgraph Clients["客户端层"]
-        Browser["浏览器/Web前端"]
-        Mobile["移动端应用"]
-        ThirdAPI["第三方API调用"]
-        WSClient["WebSocket客户端"]
-        SDK["平台SDK<br/>OneBot等"]
+    subgraph Clients["👥 客户端层"]
+        direction LR
+        Browser["🌐 浏览器/Web前端"]
+        Mobile["📱 移动端应用"]
+        ThirdAPI["🔌 第三方API调用"]
+        WSClient["💻 WebSocket客户端"]
+        SDK["📦 平台SDK<br/>OneBot等"]
     end
     
-    subgraph Proxy["反向代理层（可选）"]
-        HTTPProxy["HTTP代理服务器<br/>:80"]
-        HTTPSProxy["HTTPS代理服务器<br/>:443 + SNI"]
-        DomainRoute["域名路由与路径重写"]
+    subgraph Proxy["🔄 反向代理层（可选）"]
+        direction TB
+        HTTPProxy["🌐 HTTP代理服务器<br/>:80端口"]
+        HTTPSProxy["🔒 HTTPS代理服务器<br/>:443端口 + SNI"]
+        DomainRoute["📍 域名路由与路径重写<br/>多域名支持"]
     end
     
-    subgraph Core["核心服务层"]
-        Express["Express应用<br/>中间件容器"]
-        HTTPServer["HTTP服务器<br/>(端口)"]
-        HTTPSServer["HTTPS服务器<br/>(端口)可选"]
-        WSServer["WebSocket服务器<br/>协议升级"]
+    subgraph Core["⚙️ 核心服务层"]
+        direction TB
+        Express["📦 Express应用<br/>中间件容器"]
+        HTTPServer["🌐 HTTP服务器<br/>动态端口"]
+        HTTPSServer["🔒 HTTPS服务器<br/>动态端口（可选）"]
+        WSServer["🔌 WebSocket服务器<br/>协议升级"]
     end
     
-    subgraph Middleware["中间件层（按顺序）"]
-        Track["请求追踪<br/>requestId"]
-        Compression["响应压缩<br/>Compression"]
-        Helmet["安全头<br/>Helmet"]
-        CORS["CORS跨域处理"]
-        Logging["请求日志"]
-        RateLimit["速率限制"]
-        BodyParser["请求体解析"]
-        Redirect["重定向检查<br/>HTTP业务层"]
+    subgraph Middleware["🛠️ 中间件层（按顺序）"]
+        direction LR
+        Track["📝 请求追踪<br/>requestId"]
+        Compression["🗜️ 响应压缩<br/>Compression"]
+        Helmet["🛡️ 安全头<br/>Helmet"]
+        CORS["🌍 CORS跨域处理"]
+        Logging["📊 请求日志"]
+        RateLimit["🚦 速率限制"]
+        BodyParser["📦 请求体解析"]
+        Redirect["🔄 重定向检查<br/>HTTP业务层"]
+    end
+    
+    subgraph Routes["🔍 路由层（按优先级）"]
+        direction TB
+        SystemRoute["🔧 系统路由<br/>/status /health /metrics"]
+        FileRoute["📁 文件服务路由<br/>/File/*"]
+        APIRoute["📡 API路由<br/>/api/*"]
+        MediaRoute["💾 数据静态服务<br/>/media /uploads"]
+        StaticRoute["📄 静态文件服务<br/>/www/*"]
+    end
+    
+    subgraph Business["💼 业务层"]
+        direction LR
+        Plugins["🔌 插件系统<br/>PluginsLoader"]
+        Streams["🌊 工作流系统<br/>StreamLoader"]
+        Taskers["⚙️ Tasker层<br/>TaskerLoader"]
     end
     
     Browser --> HTTPProxy
@@ -88,65 +108,65 @@ flowchart TB
     RateLimit --> BodyParser
     BodyParser --> Redirect
     
-    style Clients fill:#E6F3FF
-    style Proxy fill:#FFE6CC
-    style Core fill:#90EE90
-    style Middleware fill:#87CEEB
-    
-    subgraph Routes["路由层（按优先级）"]
-        SystemRoute[系统路由<br/>/status /health]
-        FileRoute[文件服务路由<br/>/File]
-        APIRoute[API路由<br/>/api/*]
-        MediaRoute[数据静态服务<br/>/media /uploads]
-        StaticRoute[静态文件服务<br/>/www/*]
-    end
-    
-    subgraph Business["业务层"]
-        Plugins[插件系统<br/>PluginsLoader]
-        Streams[工作流系统<br/>StreamLoader]
-        Taskers[Tasker层<br/>TaskerLoader]
-    end
-    
     Clients --> Proxy
     Proxy --> Core
     Core --> Middleware
     Middleware --> Routes
     Routes --> Business
     
-    style Clients fill:#E6F3FF
-    style Core fill:#FFE6CC
-    style Business fill:#90EE90
+    style Browser fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+    style Mobile fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style ThirdAPI fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
+    style WSClient fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
+    style SDK fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
+    style HTTPProxy fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style HTTPSProxy fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style DomainRoute fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Express fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style HTTPServer fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style HTTPSServer fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style WSServer fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style SystemRoute fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style FileRoute fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style APIRoute fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
+    style MediaRoute fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
+    style StaticRoute fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
+    style Plugins fill:#E67E22,stroke:#D35400,stroke-width:2px,color:#fff
+    style Streams fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style Taskers fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
 ```
 
 ### 数据流向
 
 ```mermaid
 sequenceDiagram
-    participant Client as 客户端
-    participant Proxy as 反向代理可选
-    participant Server as 核心服务
-    participant Middleware as 中间件层
-    participant Route as 路由层
-    participant Business as 业务层
+    participant Client as 👤 客户端
+    participant Proxy as 🔄 反向代理（可选）
+    participant Server as ⚙️ 核心服务
+    participant Middleware as 🛠️ 中间件层
+    participant Route as 🔍 路由层
+    participant Business as 💼 业务层
     
-    Note over Client,Business: HTTP请求流程
-    Client->>Proxy: HTTP/HTTPS请求
-    Proxy->>Server: 转发请求
-    Server->>Middleware: 中间件处理
-    Middleware->>Route: 路由匹配
-    Route->>Business: 业务处理
-    Business-->>Route: 返回响应
-    Route-->>Middleware: 响应
-    Middleware-->>Server: 响应
-    Server-->>Proxy: 响应
-    Proxy-->>Client: 响应
+    Note over Client,Business: 🌐 HTTP请求流程
     
-    Note over Client,Business: WebSocket流程
-    Client->>Server: HTTP升级请求
-    Server->>Server: WebSocket协议升级
-    Server->>Route: 路径路由
-    Route->>Business: Tasker处理
-    Business->>Business: 双向通信（持续）
+    Client->>Proxy: 📨 HTTP/HTTPS请求<br/>GET /api/users
+    Proxy->>Server: ➡️ 转发请求<br/>域名路由/路径重写
+    Server->>Middleware: 🛠️ 中间件处理<br/>压缩/安全头/CORS/日志/限流
+    Middleware->>Route: 🔍 路由匹配<br/>系统/API/静态文件
+    Route->>Business: 💼 业务处理<br/>执行具体逻辑
+    Business-->>Route: ✅ 返回响应<br/>JSON数据
+    Route-->>Middleware: 📤 响应数据
+    Middleware-->>Server: 📤 响应数据
+    Server-->>Proxy: 📤 响应数据
+    Proxy-->>Client: 📥 返回响应<br/>HTTP 200 OK
+    
+    Note over Client,Business: 🔌 WebSocket流程
+    
+    Client->>Server: 📨 HTTP升级请求<br/>Upgrade: websocket
+    Server->>Server: 🔄 WebSocket协议升级<br/>101 Switching Protocols
+    Server->>Route: 📍 路径路由<br/>查找Bot.wsf[path]
+    Route->>Business: ⚙️ Tasker处理<br/>WebSocket处理器
+    Business<->Business: 💬 双向通信（持续）<br/>实时消息交换
 ```
 
 ---
@@ -191,33 +211,43 @@ sequenceDiagram
 ### 端口架构
 
 ```mermaid
-flowchart TB
-    subgraph Internet["互联网用户"]
-        User[用户请求]
+flowchart LR
+    subgraph Internet["🌐 互联网用户"]
+        User["👤 用户请求<br/>HTTP/HTTPS/WebSocket"]
     end
     
-    subgraph Proxy["反向代理层（可选）"]
-        HTTP80[HTTP代理<br/>:80]
-        HTTPS443[HTTPS代理<br/>:443 + SNI]
+    subgraph Proxy["🔄 反向代理层（可选）"]
+        direction TB
+        HTTP80["🌐 HTTP代理<br/>:80端口"]
+        HTTPS443["🔒 HTTPS代理<br/>:443端口 + SNI"]
+        DomainRoute["📍 域名路由<br/>路径重写"]
     end
     
-    subgraph Core["核心服务层"]
-        HTTPPort["HTTP服务器<br/>(端口)"]
-        HTTPSPort["HTTPS服务器<br/>(端口)可选"]
-        WS[WebSocket服务器]
+    subgraph Core["⚙️ 核心服务层"]
+        direction TB
+        HTTPPort["🌐 HTTP服务器<br/>动态端口"]
+        HTTPSPort["🔒 HTTPS服务器<br/>动态端口（可选）"]
+        WS["🔌 WebSocket服务器<br/>协议升级"]
     end
     
-    User -->|HTTP| HTTP80
-    User -->|HTTPS| HTTPS443
-    HTTP80 -->|转发| HTTPPort
-    HTTPS443 -->|转发| HTTPSPort
-    User -->|直接访问| HTTPPort
-    User -->|直接访问| HTTPSPort
-    User -->|WebSocket| WS
+    User -->|"HTTP请求"| HTTP80
+    User -->|"HTTPS请求"| HTTPS443
+    User -.->|"直接访问"| HTTPPort
+    User -.->|"直接访问"| HTTPSPort
+    User -->|"WebSocket升级"| WS
     
-    style User fill:#E6F3FF
-    style Proxy fill:#FFE6CC
-    style Core fill:#90EE90
+    HTTP80 -->|"转发请求"| HTTPPort
+    HTTPS443 -->|"转发请求"| HTTPSPort
+    DomainRoute --> HTTP80
+    DomainRoute --> HTTPS443
+    
+    style User fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style HTTP80 fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style HTTPS443 fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style HTTPPort fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style HTTPSPort fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style WS fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style DomainRoute fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
 ```
 
 **端口说明**：
@@ -249,32 +279,40 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
-    participant Proxy as 反向代理<br/>:80/:443
-    participant Core as 核心服务<br/>(HTTP端口)/(HTTPS端口)
-    participant Business as 业务处理
+    participant User as 👤 用户
+    participant Proxy as 🔄 反向代理<br/>:80/:443
+    participant Core as ⚙️ 核心服务<br/>(HTTP端口)/(HTTPS端口)
+    participant Business as 💼 业务处理
     
-    User->>Proxy: HTTP/HTTPS请求
-    Proxy->>Proxy: 域名路由与路径重写
-    Proxy->>Core: 转发到核心服务
-    Core->>Business: 业务处理
-    Business-->>Core: 返回响应
-    Core-->>Proxy: 响应
-    Proxy-->>User: 返回响应
+    Note over User,Business: 🌐 HTTP/HTTPS请求流程
+    
+    User->>Proxy: 📨 HTTP/HTTPS请求<br/>GET /api/users
+    Proxy->>Proxy: 📍 域名路由<br/>✏️ 路径重写<br/>/api → /
+    Proxy->>Core: ➡️ 转发到核心服务<br/>http://localhost:8080/users
+    Core->>Business: ⚙️ 业务处理<br/>执行API逻辑
+    Business-->>Core: ✅ 返回响应<br/>JSON数据
+    Core-->>Proxy: 📤 响应数据
+    Proxy-->>User: 📥 返回响应<br/>HTTP 200 OK
+    
+    Note over User: ✅ 请求完成
 ```
 
 **直接访问时**:
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
-    participant Core as 核心服务<br/>(HTTP端口)/(HTTPS端口)
-    participant Business as 业务处理
+    participant User as 👤 用户
+    participant Core as ⚙️ 核心服务<br/>(HTTP端口)/(HTTPS端口)
+    participant Business as 💼 业务处理
     
-    User->>Core: 直接HTTP/HTTPS请求
-    Core->>Business: 业务处理
-    Business-->>Core: 返回响应
-    Core-->>User: 直接返回响应
+    Note over User,Business: 🌐 直接访问流程（无代理）
+    
+    User->>Core: 📨 直接HTTP/HTTPS请求<br/>GET http://localhost:8080/api/status
+    Core->>Business: ⚙️ 业务处理<br/>执行API逻辑
+    Business-->>Core: ✅ 返回响应<br/>JSON数据
+    Core-->>User: 📥 直接返回响应<br/>HTTP 200 OK
+    
+    Note over User: ✅ 请求完成（更快，无代理开销）
 ```
 
 ### 端口配置关系表
@@ -305,19 +343,31 @@ sequenceDiagram
 #### 3. 端口检测逻辑
 
 ```mermaid
-flowchart TB
-    A["读取配置端口号"] --> B["尝试绑定端口"]
-    B --> C{"端口是否可用"}
-    C -->|可用| D["绑定成功"]
-    C -->|被占用| E["自动递增端口号"]
-    E --> F["重新尝试绑定"]
-    F --> C
-    D --> G["记录实际使用端口"]
-    G --> H["输出访问URL"]
+flowchart LR
+    Start([🚀 启动服务器]) --> Read["📖 读取配置端口号<br/>从配置文件或参数"]
+    Read --> Try["🔌 尝试绑定端口<br/>server.listen(port)"]
+    Try --> Check{"❓ 端口是否可用?"}
     
-    style A fill:#E6F3FF
-    style C fill:#FFE6CC
-    style H fill:#90EE90
+    Check -->|✅ 可用| Success["✅ 绑定成功<br/>记录端口号"]
+    Check -->|❌ 被占用| Increment["➕ 自动递增端口号<br/>port = port + 1"]
+    
+    Increment --> Retry["🔄 重新尝试绑定"]
+    Retry --> Check
+    
+    Success --> Record["📝 记录实际使用端口<br/>this.actualPort = port"]
+    Record --> Output["📢 输出访问URL<br/>http://host:port"]
+    Output --> End([✨ 启动完成])
+    
+    style Start fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Read fill:#E6F3FF,stroke:#2E5C8A,stroke-width:2px
+    style Try fill:#FFE6CC,stroke:#CC8400,stroke-width:2px
+    style Check fill:#FFD700,stroke:#CCAA00,stroke-width:3px,color:#000
+    style Success fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Increment fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Retry fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
+    style Record fill:#DDA0DD,stroke:#9370DB,stroke-width:2px
+    style Output fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style End fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
 ```
 
 **检测步骤**：
@@ -377,22 +427,33 @@ https:
 ### 中间件执行顺序
 
 ```mermaid
-flowchart TD
-    Request["HTTP请求"] --> Track["1. 请求追踪<br/>requestId/startTime"]
-    Track --> Compress["2. 响应压缩<br/>Compression<br/>支持brotli"]
-    Compress --> Helmet["3. 安全头<br/>Helmet<br/>X-Content-Type-Options等"]
-    Helmet --> CORS["4. CORS处理<br/>跨域/预检请求"]
-    CORS --> Logging["5. 请求日志<br/>记录请求/响应时间"]
-    Logging --> RateLimit["6. 速率限制<br/>全局/API限流"]
-    RateLimit --> BodyParser["7. 请求体解析<br/>JSON/URL-Encoded/Raw"]
-    BodyParser --> Redirect["8. 重定向检查<br/>HTTP业务层"]
-    Redirect --> Routes["9. 路由匹配<br/>系统路由/API/静态文件"]
-    Routes --> Auth["10. 认证中间件<br/>白名单/本地/API Key"]
-    Auth --> Handler["业务处理"]
-    Handler --> Response["返回响应"]
+flowchart LR
+    Request["🌐 HTTP请求<br/>进入服务器"] --> Track["1️⃣ 请求追踪<br/>📝 requestId<br/>⏱️ startTime"]
+    Track --> Compress["2️⃣ 响应压缩<br/>🗜️ Compression<br/>✨ 支持brotli"]
+    Compress --> Helmet["3️⃣ 安全头<br/>🛡️ Helmet<br/>🔒 X-Content-Type-Options"]
+    Helmet --> CORS["4️⃣ CORS处理<br/>🌍 跨域<br/>✅ 预检请求"]
+    CORS --> Logging["5️⃣ 请求日志<br/>📊 记录请求<br/>⏱️ 响应时间"]
+    Logging --> RateLimit["6️⃣ 速率限制<br/>🚦 全局限流<br/>⚡ API限流"]
+    RateLimit --> BodyParser["7️⃣ 请求体解析<br/>📦 JSON<br/>📋 URL-Encoded"]
+    BodyParser --> Redirect["8️⃣ 重定向检查<br/>🔄 HTTP业务层<br/>📍 路径匹配"]
+    Redirect --> Routes["9️⃣ 路由匹配<br/>🔍 系统路由<br/>📡 API路由"]
+    Routes --> Auth["🔟 认证中间件<br/>✅ 白名单<br/>🔑 API Key"]
+    Auth --> Handler["⚙️ 业务处理<br/>处理请求逻辑"]
+    Handler --> Response["✅ 返回响应<br/>HTTP状态码<br/>响应数据"]
     
-    style Request fill:#E6F3FF
-    style Response fill:#90EE90
+    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Track fill:#E6F3FF,stroke:#2E5C8A,stroke-width:2px
+    style Compress fill:#FFE6CC,stroke:#CC8400,stroke-width:2px
+    style Helmet fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style CORS fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
+    style Logging fill:#DDA0DD,stroke:#9370DB,stroke-width:2px
+    style RateLimit fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style BodyParser fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style Redirect fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Routes fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Auth fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Handler fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 ---
@@ -402,21 +463,50 @@ flowchart TD
 ### 反向代理架构
 
 ```mermaid
-flowchart TB
-    A[互联网用户] --> B[反向代理服务器]
-    B --> C[域名路由器]
-    C --> D[SNI证书选择器]
-    D --> E[路径重写器]
-    E --> F[负载均衡器]
-    F --> G[健康检查器]
-    G --> H[后端服务]
-    H --> I[本地服务（端口由配置决定）]
-    H --> J[远程服务1 :3000]
-    H --> K[远程服务2 :3001]
+flowchart LR
+    subgraph Internet["🌐 互联网"]
+        User["👤 用户请求<br/>HTTP/HTTPS"]
+    end
     
-    style A fill:#E6F3FF
-    style B fill:#FFE6CC
-    style H fill:#90EE90
+    subgraph Proxy["🔄 反向代理服务器"]
+        direction TB
+        DomainRoute["📍 域名路由器<br/>多域名支持"]
+        SNI["🔐 SNI证书选择器<br/>自动选择SSL证书"]
+        PathRewrite["✏️ 路径重写器<br/>from → to"]
+        LoadBalance["⚖️ 负载均衡器<br/>6种算法"]
+        HealthCheck["🏥 健康检查器<br/>故障转移"]
+    end
+    
+    subgraph Backend["⚙️ 后端服务"]
+        direction TB
+        Local["🏠 本地服务<br/>动态端口"]
+        Remote1["🌐 远程服务1<br/>:3000"]
+        Remote2["🌐 远程服务2<br/>:3001"]
+    end
+    
+    User -->|"请求"| DomainRoute
+    DomainRoute --> SNI
+    SNI --> PathRewrite
+    PathRewrite --> LoadBalance
+    LoadBalance --> HealthCheck
+    HealthCheck -->|"转发"| Local
+    HealthCheck -->|"转发"| Remote1
+    HealthCheck -->|"转发"| Remote2
+    
+    Local -->|"响应"| HealthCheck
+    Remote1 -->|"响应"| HealthCheck
+    Remote2 -->|"响应"| HealthCheck
+    HealthCheck -->|"返回"| User
+    
+    style User fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style DomainRoute fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style SNI fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style PathRewrite fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style LoadBalance fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style HealthCheck fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Local fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
+    style Remote1 fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style Remote2 fill:#98FB98,stroke:#3CB371,stroke-width:2px
 ```
 
 **说明**：请求经过域名路由、SSL证书选择、路径重写、负载均衡和健康检查后，转发到后端服务。
@@ -473,35 +563,47 @@ rewritePath:
 ### WebSocket 架构
 
 ```mermaid
-flowchart TD
-    Client["WebSocket客户端"] --> Upgrade["HTTP Upgrade请求<br/>GET /path HTTP/1.1<br/>Upgrade: websocket"]
-    Upgrade --> Server["HTTP服务器<br/>监听upgrade事件"]
-    Server --> Auth["认证检查<br/>同HTTP认证机制"]
-    Auth --> PathCheck["路径检查<br/>Bot.wsf[path]"]
-    PathCheck --> Handler["路径处理器<br/>/OneBotv11 → OneBotv11 Handler<br/>/device → Device Handler<br/>/custom → 自定义 Handler"]
-    Handler --> WS["WebSocket连接建立<br/>双向通信"]
+flowchart LR
+    Client["💻 WebSocket客户端<br/>浏览器/应用"] --> Upgrade["🔄 HTTP Upgrade请求<br/>GET /path HTTP/1.1<br/>Upgrade: websocket<br/>Connection: Upgrade"]
+    Upgrade --> Server["🌐 HTTP服务器<br/>监听upgrade事件<br/>server.on('upgrade')"]
+    Server --> Auth["🔐 认证检查<br/>✅ 同HTTP认证机制<br/>🔑 API Key验证"]
+    Auth -->|"认证通过"| PathCheck["📍 路径检查<br/>查找Bot.wsf[path]<br/>匹配处理器"]
+    PathCheck -->|"找到处理器"| Handler["⚙️ 路径处理器<br/>/OneBotv11 → OneBot Handler<br/>/device → Device Handler<br/>/custom → 自定义 Handler"]
+    Handler --> WS["🔌 WebSocket连接建立<br/>双向通信<br/>实时数据交换"]
     
-    style Client fill:#E6F3FF
-    style WS fill:#90EE90
+    WS -.->|"持续通信"| Client
+    
+    style Client fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Upgrade fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Server fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Auth fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style PathCheck fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Handler fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style WS fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 ### WebSocket 连接流程
 
 ```mermaid
 sequenceDiagram
-    participant Client as WebSocket客户端
-    participant Server as HTTP服务器
-    participant Auth as 认证检查
-    participant Path as 路径路由
-    participant Handler as 路径处理器
+    participant Client as 💻 WebSocket客户端
+    participant Server as 🌐 HTTP服务器
+    participant Auth as 🔐 认证检查
+    participant Path as 📍 路径路由
+    participant Handler as ⚙️ 路径处理器
     
-    Client->>Server: HTTP Upgrade请求
-    Server->>Auth: 检查认证同HTTP
-    Auth->>Server: 认证通过
-    Server->>Path: 查找路径处理器Bot.wsf
-    Path->>Handler: 调用处理器
-    Handler->>Client: WebSocket连接建立
-    Client<->Handler: 双向通信持续
+    Note over Client,Handler: 🔌 WebSocket连接建立流程
+    
+    Client->>Server: 📨 HTTP Upgrade请求<br/>GET /ws HTTP/1.1<br/>Upgrade: websocket<br/>Connection: Upgrade
+    Server->>Auth: 🔍 检查认证<br/>同HTTP认证机制<br/>API Key验证
+    Auth->>Server: ✅ 认证通过<br/>允许连接
+    Server->>Path: 🔎 查找路径处理器<br/>Bot.wsf['/ws']
+    Path->>Handler: ⚙️ 调用处理器<br/>注册的WebSocket处理函数
+    Handler->>Client: 🔌 WebSocket连接建立<br/>101 Switching Protocols
+    
+    Note over Client,Handler: 🔄 双向通信开始
+    
+    Client<->Handler: 💬 双向通信持续<br/>实时消息交换<br/>心跳保持连接
 ```
 
 ### WebSocket 注册
@@ -528,50 +630,89 @@ Bot.wsf['OneBotv11'].push((ws, ...args) => {
 ### 静态文件服务架构
 
 ```mermaid
-flowchart TD
-    Request["HTTP请求"] --> CheckAPI{是否为/api/*?}
-    CheckAPI -->|是| APIRoute["API路由处理<br/>跳过静态服务"]
-    CheckAPI -->|否| SystemRoute["系统路由<br/>/status /health /metrics<br/>/robots.txt /favicon.ico"]
-    SystemRoute --> FileRoute["文件服务路由<br/>/File/*"]
-    FileRoute --> Auth["认证中间件"]
-    Auth --> DataStatic["数据静态服务<br/>/media → data/media<br/>/uploads → data/uploads"]
-    DataStatic --> Static["静态文件服务<br/>/www/* → www/<br/>/ → index.html"]
-    Static --> NotFound["404处理"]
+flowchart LR
+    Request["🌐 HTTP请求<br/>进入服务器"] --> CheckAPI{"❓ 是否为<br/>/api/*?"}
     
-    style Request fill:#E6F3FF
-    style APIRoute fill:#90EE90
-    style NotFound fill:#FF6B6B
+    CheckAPI -->|"✅ 是"| APIRoute["📡 API路由处理<br/>跳过静态服务<br/>直接处理API"]
+    
+    CheckAPI -->|"❌ 否"| SystemRoute["🔧 系统路由<br/>/status 状态<br/>/health 健康检查<br/>/metrics 指标<br/>/robots.txt<br/>/favicon.ico"]
+    
+    SystemRoute --> FileRoute["📁 文件服务路由<br/>/File/*<br/>文件下载/上传"]
+    
+    FileRoute --> Auth["🔐 认证中间件<br/>白名单检查<br/>API Key验证"]
+    
+    Auth -->|"认证通过"| DataStatic["💾 数据静态服务<br/>/media → data/media<br/>/uploads → data/uploads<br/>用户上传文件"]
+    
+    DataStatic --> Static["📄 静态文件服务<br/>/www/* → www目录<br/>/ → index.html<br/>自动查找首页"]
+    
+    Static --> NotFound["❌ 404处理<br/>未找到资源<br/>返回错误页面"]
+    
+    APIRoute --> Response["✅ 返回响应"]
+    NotFound --> Response
+    
+    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style CheckAPI fill:#FFD700,stroke:#CCAA00,stroke-width:3px,color:#000
+    style APIRoute fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
+    style SystemRoute fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style FileRoute fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Auth fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
+    style DataStatic fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
+    style Static fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
+    style NotFound fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
+    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 ### 静态文件服务优先级
 
 ```mermaid
-graph TD
-    Request["HTTP请求"] --> Priority1["1. 系统路由<br/>精确匹配<br/>/status /health /metrics"]
-    Request --> Priority2["2. 文件服务<br/>/File/*"]
-    Request --> Priority3["3. API路由<br/>/api/*<br/>最高优先级"]
-    Request --> Priority4["4. 认证中间件<br/>白名单/本地/API Key"]
-    Request --> Priority5["5. 数据静态服务<br/>/media /uploads<br/>映射到data目录"]
-    Request --> Priority6["6. 静态文件服务<br/>/www/* /<br/>映射到www目录"]
-    Request --> Priority7["7. 404处理"]
+flowchart TB
+    Request["🌐 HTTP请求"] --> Priority1["1️⃣ 系统路由<br/>🔧 精确匹配<br/>/status /health /metrics"]
+    Request --> Priority2["2️⃣ 文件服务<br/>📁 /File/*"]
+    Request --> Priority3["3️⃣ API路由<br/>📡 /api/*<br/>⭐ 最高优先级"]
+    Request --> Priority4["4️⃣ 认证中间件<br/>🔐 白名单/本地/API Key"]
+    Request --> Priority5["5️⃣ 数据静态服务<br/>💾 /media /uploads<br/>映射到data目录"]
+    Request --> Priority6["6️⃣ 静态文件服务<br/>📄 /www/* /<br/>映射到www目录"]
+    Request --> Priority7["7️⃣ 404处理<br/>❌ 未找到资源"]
     
-    Priority1 --> Match1{匹配?}
-    Priority2 --> Match2{匹配?}
-    Priority3 --> Match3{匹配?}
-    Priority4 --> Match4{通过?}
-    Priority5 --> Match5{匹配?}
-    Priority6 --> Match6{匹配?}
-    Priority7 --> Match7[处理]
+    Priority1 --> Match1{"✅ 匹配?"}
+    Priority2 --> Match2{"✅ 匹配?"}
+    Priority3 --> Match3{"✅ 匹配?"}
+    Priority4 --> Match4{"✅ 通过?"}
+    Priority5 --> Match5{"✅ 匹配?"}
+    Priority6 --> Match6{"✅ 匹配?"}
+    Priority7 --> Match7["⚙️ 处理404"]
     
-    Match1 -->|是| Handler1[处理]
-    Match2 -->|是| Handler2[处理]
-    Match3 -->|是| Handler3[处理]
-    Match4 -->|是| Handler4[继续]
-    Match5 -->|是| Handler5[处理]
-    Match6 -->|是| Handler6[处理]
+    Match1 -->|"是"| Handler1["✅ 处理响应"]
+    Match2 -->|"是"| Handler2["✅ 处理响应"]
+    Match3 -->|"是"| Handler3["✅ 处理响应"]
+    Match4 -->|"是"| Handler4["➡️ 继续下一层"]
+    Match5 -->|"是"| Handler5["✅ 处理响应"]
+    Match6 -->|"是"| Handler6["✅ 处理响应"]
     
-    style Request fill:#E6F3FF
-    style Handler3 fill:#90EE90
+    Handler1 --> Response["📤 返回响应"]
+    Handler2 --> Response
+    Handler3 --> Response
+    Handler4 --> Priority5
+    Handler5 --> Response
+    Handler6 --> Response
+    Match7 --> Response
+    
+    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Priority1 fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style Priority2 fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Priority3 fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
+    style Priority4 fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
+    style Priority5 fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
+    style Priority6 fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
+    style Priority7 fill:#95A5A6,stroke:#7F8C8D,stroke-width:2px,color:#fff
+    style Match1 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Match2 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Match3 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Match4 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Match5 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Match6 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Handler3 fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
+    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 ### 静态文件配置
@@ -602,21 +743,31 @@ static:
 ### 安全中间件栈
 
 ```mermaid
-flowchart TD
-    Request["HTTP请求"] --> Track["请求追踪<br/>requestId"]
-    Track --> Compress["响应压缩<br/>减少传输"]
-    Compress --> Helmet["Helmet安全头<br/>X-Content-Type-Options<br/>X-Frame-Options<br/>HSTS等"]
-    Helmet --> CORS["CORS跨域<br/>Access-Control-Allow-Origin<br/>预检请求处理"]
-    CORS --> Logging["请求日志<br/>X-Request-Id<br/>X-Response-Time"]
-    Logging --> RateLimit["速率限制<br/>防止恶意请求<br/>全局/API限流"]
-    RateLimit --> BodyParser["请求体解析<br/>JSON/URL-encoded/Raw<br/>大小限制"]
-    BodyParser --> Redirect["重定向检查<br/>HTTP业务层"]
-    Redirect --> Routes["路由匹配"]
-    Routes --> Auth["API认证<br/>白名单/本地/API Key"]
-    Auth --> Handler["业务处理"]
+flowchart LR
+    Request["🌐 HTTP请求<br/>进入服务器"] --> Track["📝 请求追踪<br/>生成requestId<br/>记录startTime"]
+    Track --> Compress["🗜️ 响应压缩<br/>减少传输带宽<br/>支持brotli/gzip"]
+    Compress --> Helmet["🛡️ Helmet安全头<br/>X-Content-Type-Options<br/>X-Frame-Options<br/>HSTS等"]
+    Helmet --> CORS["🌍 CORS跨域<br/>Access-Control-Allow-Origin<br/>预检请求处理<br/>OPTIONS方法"]
+    CORS --> Logging["📊 请求日志<br/>X-Request-Id追踪<br/>X-Response-Time统计"]
+    Logging --> RateLimit["🚦 速率限制<br/>防止恶意请求<br/>全局/API限流<br/>IP级别控制"]
+    RateLimit --> BodyParser["📦 请求体解析<br/>JSON/URL-encoded/Raw<br/>大小限制保护"]
+    BodyParser --> Redirect["🔄 重定向检查<br/>HTTP业务层<br/>301/302/307/308"]
+    Redirect --> Routes["🔍 路由匹配<br/>系统/API/静态文件<br/>优先级排序"]
+    Routes --> Auth["🔐 API认证<br/>白名单检查<br/>本地IP验证<br/>API Key验证"]
+    Auth --> Handler["⚙️ 业务处理<br/>执行具体逻辑<br/>返回业务数据"]
     
-    style Request fill:#E6F3FF
-    style Handler fill:#90EE90
+    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Track fill:#E6F3FF,stroke:#2E5C8A,stroke-width:2px
+    style Compress fill:#FFE6CC,stroke:#CC8400,stroke-width:2px
+    style Helmet fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style CORS fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
+    style Logging fill:#DDA0DD,stroke:#9370DB,stroke-width:2px
+    style RateLimit fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style BodyParser fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style Redirect fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Routes fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Auth fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Handler fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 ### 1. Helmet 安全头
@@ -869,6 +1020,12 @@ proxy:
   enabled: true
   httpPort: 80
   httpsPort: 443
+  healthCheck:
+    enabled: true
+    interval: 30000      # 检查间隔（毫秒）
+    maxFailures: 3       # 最大失败次数
+    timeout: 5000        # 健康检查超时（毫秒）
+    cacheTime: 5000      # 结果缓存时间（毫秒）
   domains:
     - domain: "xrkk.cc"
       ssl:
@@ -876,7 +1033,16 @@ proxy:
         certificate:
           key: "/path/to/xrkk.cc.key"
           cert: "/path/to/xrkk.cc.cert"
+      # 单个目标服务器
       target: "http://localhost:{端口}"
+      # 或多个服务器（启用负载均衡）
+      # target:
+      #   - url: "http://localhost:3001"
+      #     weight: 3
+      #     healthUrl: "http://localhost:3001/health"
+      #   - url: "http://localhost:3002"
+      #     weight: 1
+      # loadBalance: "weighted"  # 负载均衡算法
       rewritePath:
         from: "/api"
         to: "/"
@@ -935,6 +1101,34 @@ rateLimit:
   api:
     windowMs: 60000
     max: 60
+
+# CDN配置
+cdn:
+  enabled: true
+  domain: "cdn.example.com"
+  type: "cloudflare"  # CDN类型：general, cloudflare, aliyun, tencent, aws等
+  staticPrefix: "/static"
+  https: true
+  cacheControl:
+    static: 31536000    # CSS/JS/字体文件：1年
+    images: 604800      # 图片文件：7天
+    default: 3600        # 其他文件：1小时
+
+# 性能优化配置
+performance:
+  keepAlive:
+    enabled: true
+    initialDelay: 1000
+    timeout: 120000
+  http2Push:
+    enabled: false
+    criticalAssets:
+      - "/static/css/main.css"
+      - "/static/js/main.js"
+  connectionPool:
+    maxSockets: 50
+    maxFreeSockets: 10
+    timeout: 30000
 ```
 
 ---
@@ -974,6 +1168,41 @@ XRK-AGT方案：
 - 多域名支持（SNI）
 - 路径重写
 - WebSocket代理
+- 6种负载均衡算法
+- 智能健康检查与故障转移
+- 企业级监控与统计
+
+### 4. 企业级代码架构
+
+**代码优化**：
+- **统一代理处理**：所有代理请求通过统一入口处理，减少代码重复
+- **基类挂载**：HTTP业务层方法挂载到Bot实例，方便直接调用
+- **连接管理**：统一的连接数管理方法，自动追踪和清理
+- **错误处理**：统一的错误处理回调，提供详细的错误信息
+- **请求追踪**：完整的请求生命周期追踪，支持性能分析
+
+**基类挂载示例**：
+```javascript
+// HTTP业务层方法已挂载到Bot实例
+const bot = new Bot();
+
+// 直接调用挂载的方法
+const stats = bot.getProxyStats();
+const isCDN = bot.isCDNRequest(req);
+bot.setCDNHeaders(res, filePath, req);
+bot.handleRedirect(req, res);
+```
+
+**代理处理流程**：
+```
+请求 → _handleProxyRequest (统一入口)
+  → _getOrCreateProxyMiddleware (获取/创建中间件)
+  → _createProxyMiddleware (创建中间件)
+  → _createProxyOptions (统一选项创建)
+  → onProxyReq: _handleProxyRequestStart (统一请求处理)
+  → onProxyRes: _handleProxyResponse (统一响应处理)
+  → onError: _handleProxyError (统一错误处理)
+```
 - 负载均衡（轮询/加权/最少连接）
 - 健康检查和故障转移
 - 无需额外Nginx配置

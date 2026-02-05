@@ -609,6 +609,29 @@ export default class SystemConfig extends ConfigBase {
                       min: 1,
                       default: 3,
                       component: 'InputNumber'
+                    },
+                    timeout: {
+                      type: 'number',
+                      label: '健康检查超时',
+                      description: '健康检查超时时间（毫秒）',
+                      min: 1000,
+                      default: 5000,
+                      component: 'InputNumber'
+                    },
+                    cacheTime: {
+                      type: 'number',
+                      label: '结果缓存时间',
+                      description: '健康检查结果缓存时间（毫秒），减少频繁检查',
+                      min: 0,
+                      default: 5000,
+                      component: 'InputNumber'
+                    },
+                    path: {
+                      type: 'string',
+                      label: '健康检查路径',
+                      description: '自定义健康检查路径（可选，默认/health）',
+                      component: 'Input',
+                      placeholder: '/health'
                     }
                   }
                 },
@@ -635,8 +658,24 @@ export default class SystemConfig extends ConfigBase {
                     target: {
                       type: 'string',
                       label: '目标服务器',
+                      description: '单个服务器URL，或数组形式配置多个服务器启用负载均衡',
                       component: 'Input',
                       placeholder: 'http://localhost:3000'
+                    },
+                    loadBalance: {
+                      type: 'string',
+                      label: '负载均衡算法',
+                      description: '当target为数组时生效',
+                      enum: ['round-robin', 'weighted', 'least-connections', 'ip-hash', 'consistent-hash', 'least-response-time'],
+                      default: 'round-robin',
+                      component: 'Select'
+                    },
+                    healthUrl: {
+                      type: 'string',
+                      label: '自定义健康检查URL',
+                      description: '覆盖全局健康检查路径',
+                      component: 'Input',
+                      placeholder: 'http://localhost:3000/custom-health'
                     },
                     ssl: {
                       type: 'object',
@@ -785,6 +824,14 @@ export default class SystemConfig extends ConfigBase {
                   label: '使用HTTPS',
                   default: true,
                   component: 'Switch'
+                },
+                type: {
+                  type: 'string',
+                  label: 'CDN类型',
+                  description: '用于优化CDN特定头部',
+                  enum: ['general', 'cloudflare', 'aliyun', 'tencent', 'aws', 'baidu', 'qiniu', 'ucloud'],
+                  default: 'general',
+                  component: 'Select'
                 },
                 cacheControl: {
                   type: 'object',
@@ -1246,6 +1293,94 @@ export default class SystemConfig extends ConfigBase {
                   itemType: 'string',
                   default: ['/health', '/favicon.ico', '/robots.txt'],
                   component: 'Tags'
+                }
+              }
+            },
+            performance: {
+              type: 'object',
+              label: '性能优化配置',
+              component: 'SubForm',
+              fields: {
+                keepAlive: {
+                  type: 'object',
+                  label: 'Keep-Alive配置',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用Keep-Alive',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    initialDelay: {
+                      type: 'number',
+                      label: '初始延迟',
+                      description: '初始延迟（毫秒）',
+                      min: 0,
+                      default: 1000,
+                      component: 'InputNumber'
+                    },
+                    timeout: {
+                      type: 'number',
+                      label: '超时时间',
+                      description: '超时时间（毫秒）',
+                      min: 1000,
+                      default: 120000,
+                      component: 'InputNumber'
+                    }
+                  }
+                },
+                http2Push: {
+                  type: 'object',
+                  label: 'HTTP/2 Server Push',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用HTTP/2 Push',
+                      description: '需要HTTP/2支持',
+                      default: false,
+                      component: 'Switch'
+                    },
+                    criticalAssets: {
+                      type: 'array',
+                      label: '关键资源列表',
+                      description: '自动推送的关键资源',
+                      itemType: 'string',
+                      component: 'Tags',
+                      default: []
+                    }
+                  }
+                },
+                connectionPool: {
+                  type: 'object',
+                  label: '连接池配置',
+                  component: 'SubForm',
+                  fields: {
+                    maxSockets: {
+                      type: 'number',
+                      label: '最大Socket数',
+                      description: '每个主机的最大socket数',
+                      min: 1,
+                      default: 50,
+                      component: 'InputNumber'
+                    },
+                    maxFreeSockets: {
+                      type: 'number',
+                      label: '最大空闲Socket数',
+                      min: 1,
+                      default: 10,
+                      component: 'InputNumber'
+                    },
+                    timeout: {
+                      type: 'number',
+                      label: 'Socket超时时间',
+                      description: 'socket超时时间（毫秒）',
+                      min: 1000,
+                      default: 30000,
+                      component: 'InputNumber'
+                    }
+                  }
                 }
               }
             },

@@ -69,15 +69,16 @@ export default {
 `Bot` 类是 XRK-AGT 的核心运行时对象，统一管理以下功能：
 
 ```mermaid
-graph TB
-    subgraph Bot["Bot 核心类"]
-        Service["服务入口<br/>Express/HTTP/HTTPS/静态文件"]
-        API["API与WebSocket<br/>动态加载/路径路由"]
-        Tasker["Tasker与多Bot<br/>实例管理/子Bot聚合"]
-        Auth["认证与安全<br/>API Key/白名单/本地连接"]
-        Event["事件系统<br/>统一入口/逐级派发"]
-        Business["HTTP业务层<br/>重定向/CDN/负载均衡"]
-        Resource["资源管理<br/>临时文件/优雅关闭"]
+flowchart TB
+    subgraph Bot["🤖 Bot 核心类"]
+        direction LR
+        Service["🌐 服务入口<br/>Express/HTTP/HTTPS<br/>静态文件服务"]
+        API["📡 API与WebSocket<br/>动态加载<br/>路径路由"]
+        Tasker["⚙️ Tasker与多Bot<br/>实例管理<br/>子Bot聚合"]
+        Auth["🔐 认证与安全<br/>API Key验证<br/>白名单/本地连接"]
+        Event["📢 事件系统<br/>统一入口<br/>逐级派发"]
+        Business["💼 HTTP业务层<br/>重定向/CDN<br/>负载均衡"]
+        Resource["📦 资源管理<br/>临时文件清理<br/>优雅关闭"]
     end
     
     Service --> API
@@ -87,9 +88,14 @@ graph TB
     Business --> Service
     Resource --> Service
     
-    style Bot fill:#E6F3FF
-    style Service fill:#FFE6CC
-    style Event fill:#90EE90
+    style Bot fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Service fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style API fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Tasker fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Auth fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
+    style Event fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
+    style Business fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style Resource fill:#95A5A6,stroke:#7F8C8D,stroke-width:2px,color:#fff
 ```
 
 | 职责模块 | 说明 |
@@ -109,23 +115,32 @@ graph TB
 ### 启动流程
 
 ```mermaid
-flowchart TB
-    Start["node app / start.js<br/>启动脚本"] --> Create["创建Bot实例<br/>（由启动脚本自动完成）"]
-    Create --> Init["初始化HTTP/WS/代理"]
-    Init --> Run["bot.run(options)"]
+flowchart LR
+    Start([🚀 node app / start.js<br/>启动脚本]) --> Create["📦 创建Bot实例<br/>（由启动脚本自动完成）<br/>new Bot()"]
+    Create --> Init["⚙️ 初始化HTTP/WS/代理<br/>_initHttpServer()<br/>_initProxyApp()"]
+    Init --> Run["▶️ bot.run(options)<br/>传入端口配置"]
     
-    Run --> Load["并行加载模块<br/>Config/Stream/Plugin/API"]
-    Load --> Middleware["初始化中间件与路由"]
-    Middleware --> Register["注册API路由"]
-    Register --> Server["启动HTTP/HTTPS服务器"]
-    Server --> Proxy["启动反向代理（可选）"]
-    Proxy --> Listener["加载事件监听器"]
-    Listener --> Watch["启动API热重载"]
-    Watch --> Online["触发online事件"]
+    Run --> Load["📚 并行加载模块<br/>Config/Stream/Plugin/API<br/>Promise.allSettled()"]
+    Load --> Middleware["🛠️ 初始化中间件与路由<br/>压缩/安全头/CORS<br/>日志/限流/解析"]
+    Middleware --> Register["📝 注册API路由<br/>ApiLoader.register()"]
+    Register --> Server["🌐 启动HTTP/HTTPS服务器<br/>server.listen()"]
+    Server --> Proxy["🔄 启动反向代理（可选）<br/>startProxyServers()"]
+    Proxy --> Listener["👂 加载事件监听器<br/>ListenerLoader.load()"]
+    Listener --> Watch["🔄 启动API热重载<br/>ApiLoader.watch()"]
+    Watch --> Online([✅ 触发online事件<br/>服务器就绪])
     
-    style Start fill:#E6F3FF
-    style Create fill:#E6F3FF
-    style Online fill:#90EE90
+    style Start fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Create fill:#E6F3FF,stroke:#2E5C8A,stroke-width:2px
+    style Init fill:#FFE6CC,stroke:#CC8400,stroke-width:2px
+    style Run fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Load fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
+    style Middleware fill:#DDA0DD,stroke:#9370DB,stroke-width:2px
+    style Register fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style Server fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Proxy fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Listener fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Watch fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
+    style Online fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
 read_file
@@ -134,17 +149,21 @@ read_file
 
 ```mermaid
 sequenceDiagram
-    participant Signal as 信号处理器
-    participant Bot as Bot实例
-    participant Server as HTTP/HTTPS服务器
-    participant Redis as Redis客户端
+    participant Signal as 🛑 信号处理器
+    participant Bot as 🤖 Bot实例
+    participant Server as 🌐 HTTP/HTTPS服务器
+    participant Redis as 💾 Redis客户端
     
-    Signal->>Bot: SIGINT/SIGTERM
-    Bot->>Bot: 停止WebSocket心跳
-    Bot->>Server: 关闭所有服务器
-    Bot->>Bot: 停止定时清理任务
-    Bot->>Redis: 保存并关闭Redis
-    Bot->>Signal: 优雅关闭完成
+    Note over Signal,Redis: 🔄 优雅关闭流程
+    
+    Signal->>Bot: 📨 SIGINT/SIGTERM<br/>Ctrl+C 或 kill命令
+    Bot->>Bot: ⏹️ 停止WebSocket心跳<br/>clearInterval()
+    Bot->>Server: 🔒 关闭所有服务器<br/>server.close()
+    Bot->>Bot: 🧹 停止定时清理任务<br/>clearInterval()
+    Bot->>Redis: 💾 保存并关闭Redis<br/>redisExit()
+    Bot->>Signal: ✅ 优雅关闭完成<br/>process.exit(0)
+    
+    Note over Signal: ✨ 服务器已安全关闭
 ```
 
 ---
@@ -220,22 +239,27 @@ const result = await bot.callRoute('/api/status', {
 Bot 支持**逐级事件派发**，事件名从具体到抽象依次触发：
 
 ```mermaid
-flowchart TD
-    Trigger["触发事件<br/>message.group.normal"] --> Level1["1. message.group.normal<br/>精确匹配"]
-    Level1 --> Level2["2. message.group<br/>父级匹配"]
-    Level2 --> Level3["3. message<br/>根级匹配"]
+flowchart LR
+    Trigger(["📢 触发事件<br/>message.group.normal"]) --> Level1["1️⃣ message.group.normal<br/>✅ 精确匹配<br/>最高优先级"]
+    Level1 --> Level2["2️⃣ message.group<br/>✅ 父级匹配<br/>次优先级"]
+    Level2 --> Level3["3️⃣ message<br/>✅ 根级匹配<br/>最低优先级"]
     
-    Level1 --> Listener1["监听器1<br/>处理群普通消息"]
-    Level2 --> Listener2["监听器2<br/>处理所有群消息"]
-    Level3 --> Listener3["监听器3<br/>处理所有消息"]
+    Level1 --> Listener1["👂 监听器1<br/>处理群普通消息<br/>精确处理"]
+    Level2 --> Listener2["👂 监听器2<br/>处理所有群消息<br/>通用处理"]
+    Level3 --> Listener3["👂 监听器3<br/>处理所有消息<br/>全局处理"]
     
-    style Trigger fill:#E6F3FF
-    style Level1 fill:#FFE6CC
-    style Level2 fill:#FFE6CC
-    style Level3 fill:#FFE6CC
-    style Listener1 fill:#90EE90
-    style Listener2 fill:#90EE90
-    style Listener3 fill:#90EE90
+    Listener1 --> Response["✅ 响应"]
+    Listener2 --> Response
+    Listener3 --> Response
+    
+    style Trigger fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Level1 fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style Level2 fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Level3 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Listener1 fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
+    style Listener2 fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Listener3 fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 **示例**：
@@ -316,27 +340,34 @@ sequenceDiagram
 Bot 通过 `_createProxy()` 暴露为**多 Bot 聚合代理**，统一访问子 Bot、BotUtil 静态方法和 Bot 自身属性：
 
 ```mermaid
-graph TB
-    subgraph Proxy["Bot 聚合代理"]
-        Access1["Bot[self_id]<br/>访问子Bot"]
-        Access2["Bot.pickFriend()<br/>BotUtil静态方法"]
-        Access3["Bot.express<br/>Bot自身属性"]
+flowchart LR
+    subgraph Proxy["🤖 Bot 聚合代理"]
+        direction TB
+        Access1["🔑 Bot[self_id]<br/>访问子Bot<br/>Bot['123456']"]
+        Access2["🔧 Bot.pickFriend()<br/>BotUtil静态方法<br/>工具函数"]
+        Access3["📦 Bot.express<br/>Bot自身属性<br/>Express应用"]
     end
     
-    subgraph Bots["子Bot集合"]
-        SubBot1["Bot['123456']<br/>OneBotv11账号"]
-        SubBot2["Bot['device_001']<br/>设备Bot"]
-        SubBot3["Bot.stdin<br/>命令行入口"]
+    subgraph Bots["👥 子Bot集合"]
+        direction TB
+        SubBot1["📱 Bot['123456']<br/>OneBotv11账号<br/>QQ机器人"]
+        SubBot2["🖥️ Bot['device_001']<br/>设备Bot<br/>设备管理"]
+        SubBot3["⌨️ Bot.stdin<br/>命令行入口<br/>stdin处理"]
     end
     
-    Access1 --> SubBot1
-    Access1 --> SubBot2
-    Access1 --> SubBot3
-    Access2 --> Bots
-    Access3 --> Proxy
+    Access1 -->|"访问"| SubBot1
+    Access1 -->|"访问"| SubBot2
+    Access1 -->|"访问"| SubBot3
+    Access2 -->|"调用"| Bots
+    Access3 -->|"使用"| Proxy
     
-    style Proxy fill:#E6F3FF
-    style Bots fill:#FFE6CC
+    style Proxy fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Access1 fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Access2 fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Access3 fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style SubBot1 fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style SubBot2 fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style SubBot3 fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
 ```
 
 **使用示例**：
@@ -398,56 +429,80 @@ classDiagram
 ### 请求处理流程
 
 ```mermaid
-flowchart TD
-    Request["HTTP请求"] --> Track["1. 请求追踪<br/>requestId"]
-    Track --> Compress["2. 响应压缩<br/>Compression"]
-    Compress --> Helmet["3. 安全头<br/>Helmet"]
-    Helmet --> CORS["4. CORS处理"]
-    CORS --> Log["5. 请求日志"]
-    Log --> RateLimit["6. 速率限制"]
-    RateLimit --> BodyParser["7. 请求体解析"]
-    BodyParser --> Redirect["8. 重定向检查<br/>HTTP业务层"]
-    Redirect --> Route["9. 路由匹配"]
-    Route --> Auth["10. 认证中间件"]
-    Auth --> Handler["业务处理"]
-    Handler --> Response["返回响应"]
+flowchart LR
+    Request["🌐 HTTP请求<br/>进入服务器"] --> Track["1️⃣ 请求追踪<br/>📝 requestId<br/>⏱️ startTime"]
+    Track --> Compress["2️⃣ 响应压缩<br/>🗜️ Compression<br/>✨ 支持brotli"]
+    Compress --> Helmet["3️⃣ 安全头<br/>🛡️ Helmet<br/>🔒 X-Content-Type-Options"]
+    Helmet --> CORS["4️⃣ CORS处理<br/>🌍 跨域<br/>✅ 预检请求"]
+    CORS --> Log["5️⃣ 请求日志<br/>📊 记录请求<br/>⏱️ 响应时间"]
+    Log --> RateLimit["6️⃣ 速率限制<br/>🚦 全局限流<br/>⚡ API限流"]
+    RateLimit --> BodyParser["7️⃣ 请求体解析<br/>📦 JSON<br/>📋 URL-Encoded"]
+    BodyParser --> Redirect["8️⃣ 重定向检查<br/>🔄 HTTP业务层<br/>📍 路径匹配"]
+    Redirect --> Route["9️⃣ 路由匹配<br/>🔍 系统路由<br/>📡 API路由"]
+    Route --> Auth["🔟 认证中间件<br/>✅ 白名单<br/>🔑 API Key"]
+    Auth --> Handler["⚙️ 业务处理<br/>处理请求逻辑"]
+    Handler --> Response["✅ 返回响应<br/>HTTP状态码<br/>响应数据"]
     
-    style Request fill:#E6F3FF
-    style Response fill:#90EE90
+    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Track fill:#E6F3FF,stroke:#2E5C8A,stroke-width:2px
+    style Compress fill:#FFE6CC,stroke:#CC8400,stroke-width:2px
+    style Helmet fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style CORS fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
+    style Log fill:#DDA0DD,stroke:#9370DB,stroke-width:2px
+    style RateLimit fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style BodyParser fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style Redirect fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style Route fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Auth fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Handler fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 ### 路由优先级
 
 ```mermaid
-graph TD
-    Request["HTTP请求"] --> Priority1["1. 系统路由<br/>/status /health /metrics"]
-    Request --> Priority2["2. 文件服务<br/>/File/*"]
-    Request --> Priority3["3. API路由<br/>/api/*"]
-    Request --> Priority4["4. 数据静态服务<br/>/media/* /uploads/*"]
-    Request --> Priority5["5. 静态文件服务<br/>/www/* /"]
-    Request --> Priority6["6. 404处理"]
+flowchart TB
+    Request(["🌐 HTTP请求"]) --> Priority1["1️⃣ 系统路由<br/>🔧 /status /health /metrics<br/>精确匹配"]
+    Request --> Priority2["2️⃣ 文件服务<br/>📁 /File/*<br/>文件下载/上传"]
+    Request --> Priority3["3️⃣ API路由<br/>📡 /api/*<br/>⭐ 最高优先级"]
+    Request --> Priority4["4️⃣ 数据静态服务<br/>💾 /media/* /uploads/*<br/>映射到data目录"]
+    Request --> Priority5["5️⃣ 静态文件服务<br/>📄 /www/* /<br/>映射到www目录"]
+    Request --> Priority6["6️⃣ 404处理<br/>❌ 未找到资源"]
     
-    Priority1 --> Match1{匹配?}
-    Priority2 --> Match2{匹配?}
-    Priority3 --> Match3{匹配?}
-    Priority4 --> Match4{匹配?}
-    Priority5 --> Match5{匹配?}
-    Priority6 --> Match6{匹配?}
+    Priority1 --> Match1{"✅ 匹配?"}
+    Priority2 --> Match2{"✅ 匹配?"}
+    Priority3 --> Match3{"✅ 匹配?"}
+    Priority4 --> Match4{"✅ 匹配?"}
+    Priority5 --> Match5{"✅ 匹配?"}
+    Priority6 --> Match6["⚙️ 处理404"]
     
-    Match1 -->|是| Handler1[处理]
-    Match2 -->|是| Handler2[处理]
-    Match3 -->|是| Handler3[处理]
-    Match4 -->|是| Handler4[处理]
-    Match5 -->|是| Handler5[处理]
-    Match6 -->|是| Handler6[处理]
+    Match1 -->|"是"| Handler1["✅ 处理响应"]
+    Match2 -->|"是"| Handler2["✅ 处理响应"]
+    Match3 -->|"是"| Handler3["✅ 处理响应"]
+    Match4 -->|"是"| Handler4["✅ 处理响应"]
+    Match5 -->|"是"| Handler5["✅ 处理响应"]
     
-    style Request fill:#E6F3FF
-    style Handler1 fill:#90EE90
-    style Handler2 fill:#90EE90
-    style Handler3 fill:#90EE90
-    style Handler4 fill:#90EE90
-    style Handler5 fill:#90EE90
-    style Handler6 fill:#90EE90
+    Handler1 --> Response["📤 返回响应"]
+    Handler2 --> Response
+    Handler3 --> Response
+    Handler4 --> Response
+    Handler5 --> Response
+    Match6 --> Response
+    
+    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Priority1 fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style Priority2 fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Priority3 fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
+    style Priority4 fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
+    style Priority5 fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
+    style Priority6 fill:#95A5A6,stroke:#7F8C8D,stroke-width:2px,color:#fff
+    style Match1 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Match2 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Match3 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Match4 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Match5 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style Handler3 fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
+    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
 ### 认证机制
@@ -455,20 +510,28 @@ graph TD
 Bot 支持多级认证，按优先级依次检查：
 
 ```mermaid
-flowchart TD
-    Request["HTTP请求"] --> Check1["1. 白名单路径<br/>完全免认证"]
-    Check1 -->|通过| Allow[允许访问]
-    Check1 -->|未通过| Check2["2. 本地连接<br/>127.0.0.1/localhost/私有IP"]
-    Check2 -->|通过| Allow
-    Check2 -->|未通过| Check3["3. 同源Cookie<br/>xrk_ui Cookie"]
-    Check3 -->|通过| Allow
-    Check3 -->|未通过| Check4["4. API Key<br/>X-API-Key请求头"]
-    Check4 -->|通过| Allow
-    Check4 -->|未通过| Deny[拒绝访问<br/>401/403]
+flowchart LR
+    Request(["🌐 HTTP请求"]) --> Check1["1️⃣ 白名单路径<br/>✅ 完全免认证<br/>/ /health /status"]
     
-    style Request fill:#E6F3FF
-    style Allow fill:#90EE90
-    style Deny fill:#FF6B6B
+    Check1 -->|"✅ 通过"| Allow(["✅ 允许访问<br/>继续处理"])
+    Check1 -->|"❌ 未通过"| Check2["2️⃣ 本地连接<br/>🏠 127.0.0.1<br/>localhost<br/>私有IP"]
+    
+    Check2 -->|"✅ 通过"| Allow
+    Check2 -->|"❌ 未通过"| Check3["3️⃣ 同源Cookie<br/>🍪 xrk_ui Cookie<br/>前端认证"]
+    
+    Check3 -->|"✅ 通过"| Allow
+    Check3 -->|"❌ 未通过"| Check4["4️⃣ API Key<br/>🔑 X-API-Key请求头<br/>API认证"]
+    
+    Check4 -->|"✅ 通过"| Allow
+    Check4 -->|"❌ 未通过"| Deny(["❌ 拒绝访问<br/>401 Unauthorized<br/>403 Forbidden"])
+    
+    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Check1 fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
+    style Check2 fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
+    style Check3 fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Check4 fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
+    style Allow fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
+    style Deny fill:#E74C3C,stroke:#C0392B,stroke-width:3px,color:#fff
 ```
 
 **配置示例**：
@@ -494,18 +557,23 @@ auth:
 
 ```mermaid
 sequenceDiagram
-    participant Client as WebSocket客户端
-    participant Bot as Bot.wsConnect
-    participant Auth as 认证检查
-    participant Handler as 路径处理器
+    participant Client as 💻 WebSocket客户端
+    participant Bot as 🤖 Bot.wsConnect
+    participant Auth as 🔐 认证检查
+    participant Handler as ⚙️ 路径处理器
     
-    Client->>Bot: HTTP Upgrade请求
-    Bot->>Auth: 检查认证（同HTTP）
-    Auth->>Bot: 认证通过
-    Bot->>Bot: 查找路径处理器（Bot.wsf[path]）
-    Bot->>Handler: 调用处理器
-    Handler->>Client: WebSocket连接建立
-    Client<->Handler: 双向通信
+    Note over Client,Handler: 🔌 WebSocket连接建立流程
+    
+    Client->>Bot: 📨 HTTP Upgrade请求<br/>GET /ws HTTP/1.1<br/>Upgrade: websocket<br/>Connection: Upgrade
+    Bot->>Auth: 🔍 检查认证<br/>同HTTP认证机制<br/>API Key验证
+    Auth->>Bot: ✅ 认证通过<br/>允许连接
+    Bot->>Bot: 🔎 查找路径处理器<br/>Bot.wsf['/ws']<br/>匹配处理器
+    Bot->>Handler: ⚙️ 调用处理器<br/>注册的WebSocket处理函数
+    Handler->>Client: 🔌 WebSocket连接建立<br/>101 Switching Protocols
+    
+    Note over Client,Handler: 🔄 双向通信开始
+    
+    Client<->Handler: 💬 双向通信<br/>实时消息交换<br/>心跳保持连接
 ```
 
 ### 注册 WebSocket 处理器
@@ -546,22 +614,50 @@ Bot 自动管理 WebSocket 心跳检测：
 ### 反向代理架构
 
 ```mermaid
-flowchart TB
-    Client["客户端请求"] --> Proxy["反向代理服务器<br/>:80/:443"]
-    Proxy --> Domain["域名路由器"]
-    Domain --> SNI["SNI证书选择器"]
-    SNI --> Rewrite["路径重写器"]
-    Rewrite --> LB["负载均衡器<br/>轮询/加权/最少连接"]
-    LB --> Health["健康检查器"]
-    Health --> Backend["后端服务"]
+flowchart LR
+    subgraph Internet["🌐 互联网"]
+        Client["👤 客户端请求<br/>HTTP/HTTPS"]
+    end
     
-    Backend --> Backend1["本地服务<br/>:8080"]
-    Backend --> Backend2["远程服务1<br/>:3000"]
-    Backend --> Backend3["远程服务2<br/>:3001"]
+    subgraph Proxy["🔄 反向代理服务器"]
+        direction TB
+        Domain["📍 域名路由器<br/>多域名支持"]
+        SNI["🔐 SNI证书选择器<br/>自动选择SSL证书"]
+        Rewrite["✏️ 路径重写器<br/>from → to"]
+        LB["⚖️ 负载均衡器<br/>6种算法"]
+        Health["🏥 健康检查器<br/>故障转移"]
+    end
     
-    style Client fill:#E6F3FF
-    style Proxy fill:#FFE6CC
-    style Backend fill:#90EE90
+    subgraph Backend["⚙️ 后端服务"]
+        direction TB
+        Backend1["🏠 本地服务<br/>:8080"]
+        Backend2["🌐 远程服务1<br/>:3000"]
+        Backend3["🌐 远程服务2<br/>:3001"]
+    end
+    
+    Client --> Domain
+    Domain --> SNI
+    SNI --> Rewrite
+    Rewrite --> LB
+    LB --> Health
+    Health -->|"转发"| Backend1
+    Health -->|"转发"| Backend2
+    Health -->|"转发"| Backend3
+    
+    Backend1 -->|"响应"| Health
+    Backend2 -->|"响应"| Health
+    Backend3 -->|"响应"| Health
+    Health -->|"返回"| Client
+    
+    style Client fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Domain fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
+    style SNI fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
+    style Rewrite fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
+    style LB fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Health fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
+    style Backend1 fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
+    style Backend2 fill:#98FB98,stroke:#3CB371,stroke-width:2px
+    style Backend3 fill:#98FB98,stroke:#3CB371,stroke-width:2px
 ```
 
 ### 反向代理特性
