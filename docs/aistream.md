@@ -859,7 +859,7 @@ MonitorService.endTrace(traceId, { success: true });
 
 ## 相关文档
 
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含7个工作流的实际实现（chat、desktop、tools、memory、database、device、doc-indexer） ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含6个工作流的实际实现（chat、desktop、tools、memory、database、device） ⭐
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 - **[工厂系统](factory.md)** - LLM/Vision/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 - **[子服务端 API](subserver-api.md)** - LangChain + 向量服务 + 与主服务 v3 的衔接

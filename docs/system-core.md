@@ -6,7 +6,7 @@
 system-Core 是 XRK-AGT 的内置核心模块，提供了开箱即用的完整功能集，包括：
 
 - ✅ **10个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、标准输入、数据编辑
-- ✅ **7个工作流**：聊天、桌面、工具、记忆、知识库、设备、文档索引
+- ✅ **6个工作流**：聊天、桌面、工具、记忆、知识库、设备
 - ✅ **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
 - ✅ **Web控制台**：企业级管理界面，支持系统监控、API调试、配置管理
 
@@ -228,7 +228,7 @@ system-Core 提供了10个HTTP API模块，覆盖系统管理的各个方面：
 
 ## 工作流（Stream）
 
-system-Core 提供了7个工作流，共50+个MCP工具：
+system-Core 提供了6个工作流，共53个MCP工具：
 
 ```mermaid
 flowchart LR
@@ -240,7 +240,6 @@ flowchart LR
         Memory["🧠 memory工作流<br/>4个MCP工具<br/>长期记忆管理"]
         Database["📚 database工作流<br/>4个MCP工具<br/>知识库管理"]
         Device["📱 device工作流<br/>设备AI交互"]
-        DocIndexer["📄 doc-indexer工作流<br/>文档索引"]
     end
     
     style Streams fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
@@ -250,7 +249,6 @@ flowchart LR
     style Memory fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
     style Database fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
     style Device fill:#95A5A6,stroke:#7F8C8D,stroke-width:2px,color:#fff
-    style DocIndexer fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
 ```
 
 ### 1. chat 工作流
@@ -350,14 +348,6 @@ flowchart LR
 - 设备AI交互
 - ASR/TTS集成
 - 连续对话支持
-
-### 7. doc-indexer 工作流
-
-**文件**: `core/system-Core/stream/doc-indexer.js`
-
-**特性**：
-- 文档索引
-- 向量化存储
 
 ---
 
@@ -558,7 +548,7 @@ system-Core 提供了完整的配置管理功能：
 system-Core 是 XRK-AGT 的核心模块，提供了：
 
 - ✅ **10个HTTP API模块**：覆盖系统管理、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、标准输入、数据编辑
-- ✅ **7个工作流**：50+个MCP工具，覆盖聊天、桌面、工具、记忆、知识库、设备、文档索引
+- ✅ **6个工作流**：53个MCP工具，覆盖聊天、桌面、工具、记忆、知识库、设备
 - ✅ **4个Tasker**：支持OneBotv11、GSUIDCORE、QBQBot、stdin
 - ✅ **Web控制台**：企业级管理界面，支持系统监控、API调试、配置管理
 - ✅ **完整配置系统**：支持多种配置类型，Schema验证，可视化编辑
