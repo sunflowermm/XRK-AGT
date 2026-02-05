@@ -327,3 +327,7 @@ this.httpBusiness.proxyManager.incrementConnections(domain, targetUrl);
 4. **开发体验**：基类挂载，简化API，易于使用
 
 这些优化使XRK-AGT的网络服务达到了企业级应用的标准，可以满足生产环境的需求。
+
+---
+
+*最后更新：2026-02-06*

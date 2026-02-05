@@ -865,4 +865,6 @@ MonitorService.endTrace(traceId, { success: true });
 - **[子服务端 API](subserver-api.md)** - LangChain + 向量服务 + 与主服务 v3 的衔接
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 
+---
 
+*最后更新：2026-02-06*

@@ -427,3 +427,7 @@ handler: async (req, res, bot) => {
 - **[HTTP业务层](http-business-layer.md)** - 重定向、CDN、反向代理增强功能
 - **[Server服务器架构](server.md)** - 完整的服务器架构说明
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
+
+---
+
+*最后更新：2026-02-06*
