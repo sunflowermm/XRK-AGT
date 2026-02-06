@@ -20,6 +20,7 @@ export default class AnthropicLLMClient {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout || 360000;
+    this._imageCache = new Map();
   }
 
   normalizeEndpoint(config) {
@@ -53,8 +54,77 @@ export default class AnthropicLLMClient {
   }
 
   async transformMessages(messages) {
-    // Anthropic Messages API 当前主要为文本，这里使用 text_only 模式，保留图片占位信息
-    return await transformMessagesWithVision(messages, this.config, { mode: 'text_only' });
+    // 统一为 OpenAI 风格多模态 content（text + image_url），再转换为 Anthropic 的 content blocks
+    return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
+  }
+
+  getServerPublicUrl() {
+    try {
+      const base = globalThis.Bot?.url;
+      return base ? String(base).replace(/\/+$/, '') : '';
+    } catch {
+      return '';
+    }
+  }
+
+  normalizeToAbsoluteUrl(url) {
+    const u = String(url || '').trim();
+    if (!u) return '';
+    if (u.startsWith('data:')) return u;
+    if (/^https?:\/\//i.test(u)) return u;
+
+    const base = this.getServerPublicUrl();
+    if (base && u.startsWith('/')) return `${base}${u}`;
+    return u;
+  }
+
+  _parseDataUrl(dataUrl) {
+    const raw = String(dataUrl || '').trim();
+    const m = raw.match(/^data:([^;]+);base64,(.*)$/i);
+    if (!m) return null;
+    return { media_type: m[1], data: m[2] };
+  }
+
+  async _toAnthropicImageBlock(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return null;
+
+    if (raw.startsWith('data:')) {
+      const parsed = this._parseDataUrl(raw);
+      if (!parsed?.data) return null;
+      return {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: parsed.media_type || 'image/png',
+          data: parsed.data
+        }
+      };
+    }
+
+    const abs = this.normalizeToAbsoluteUrl(raw);
+    const now = Date.now();
+    const cached = this._imageCache.get(abs);
+    if (cached && (now - cached.ts) < 5 * 60 * 1000) {
+      return cached.block;
+    }
+
+    const resp = await fetch(abs, { signal: AbortSignal.timeout(30000) });
+    if (!resp.ok) return null;
+
+    const media_type = resp.headers.get('content-type') || 'image/png';
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const block = {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type,
+        data: buf.toString('base64')
+      }
+    };
+
+    this._imageCache.set(abs, { ts: now, block });
+    return block;
   }
 
   /**
@@ -68,16 +138,35 @@ export default class AnthropicLLMClient {
 
     for (const m of messages || []) {
       const role = (m.role || '').toLowerCase();
-      const text = (typeof m.content === 'string' ? m.content : (m.content?.text || m.content?.content || '')).toString();
-      if (!text) continue;
-
       if (role === 'system') {
-        systemTexts.push(text);
+        const text = (typeof m.content === 'string' ? m.content : (m.content?.text || m.content?.content || '')).toString();
+        if (text) systemTexts.push(text);
         continue;
       }
+
+      const blocks = [];
+      if (typeof m.content === 'string') {
+        const text = m.content.toString();
+        if (text) blocks.push({ type: 'text', text });
+      } else if (Array.isArray(m.content)) {
+        for (const p of m.content) {
+          if (p?.type === 'text' && p.text) {
+            blocks.push({ type: 'text', text: String(p.text) });
+          } else if (p?.type === 'image_url' && p.image_url?.url) {
+            // 这里保持同步结构，实际转换在 chat/chatStream 前进行（buildBody 是纯构建函数）
+            blocks.push({ type: '__image_url__', url: String(p.image_url.url) });
+          }
+        }
+      } else if (m.content && typeof m.content === 'object') {
+        const text = (m.content.text || m.content.content || '').toString();
+        if (text) blocks.push({ type: 'text', text });
+      }
+
+      if (blocks.length === 0) continue;
+
       anthMessages.push({
         role: role === 'assistant' ? 'assistant' : 'user',
-        content: text
+        content: blocks
       });
     }
 
@@ -114,12 +203,30 @@ export default class AnthropicLLMClient {
 
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
+
+    // 把占位的 image_url block 转成 Anthropic image block（需要 async fetch/base64）
+    const body = this.buildBody(transformedMessages, overrides);
+    for (const msg of body.messages || []) {
+      if (!Array.isArray(msg.content)) continue;
+      const newBlocks = [];
+      for (const b of msg.content) {
+        if (b?.type === '__image_url__' && b.url) {
+          const imgBlock = await this._toAnthropicImageBlock(b.url);
+          if (imgBlock) newBlocks.push(imgBlock);
+          else newBlocks.push({ type: 'text', text: `[图片:${String(b.url)}]` });
+        } else if (b?.type === 'text') {
+          newBlocks.push({ type: 'text', text: String(b.text || '') });
+        }
+      }
+      msg.content = newBlocks.filter(x => x && (x.type === 'text' ? (x.text || '').toString().trim() : true));
+    }
+
     const resp = await fetch(
       this.endpoint,
       buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeout)
       })
     );
@@ -137,6 +244,22 @@ export default class AnthropicLLMClient {
     // Anthropic 支持 SSE：stream=true
     const transformedMessages = await this.transformMessages(messages);
     const body = this.buildBody(transformedMessages, overrides);
+
+    // 把占位的 image_url block 转成 Anthropic image block（需要 async fetch/base64）
+    for (const msg of body.messages || []) {
+      if (!Array.isArray(msg.content)) continue;
+      const newBlocks = [];
+      for (const b of msg.content) {
+        if (b?.type === '__image_url__' && b.url) {
+          const imgBlock = await this._toAnthropicImageBlock(b.url);
+          if (imgBlock) newBlocks.push(imgBlock);
+          else newBlocks.push({ type: 'text', text: `[图片:${String(b.url)}]` });
+        } else if (b?.type === 'text') {
+          newBlocks.push({ type: 'text', text: String(b.text || '') });
+        }
+      }
+      msg.content = newBlocks.filter(x => x && (x.type === 'text' ? (x.text || '').toString().trim() : true));
+    }
     body.stream = true;
 
     const resp = await fetch(

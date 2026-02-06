@@ -13,7 +13,11 @@ export default class GPTGodLLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this.timeout = config.timeout || 360000;
+    this._timeout = config.timeout || 360000;
+  }
+
+  get timeout() {
+    return this._timeout || 360000;
   }
 
   /**
@@ -35,7 +39,7 @@ export default class GPTGodLLMClient {
     };
     
     if (this.config.apiKey) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+      headers.Authorization = `Bearer ${String(this.config.apiKey).trim()}`;
     }
     
     if (this.config.headers) {
@@ -61,6 +65,45 @@ export default class GPTGodLLMClient {
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
+  async _consumeSSE(resp, onDelta) {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE：以空行分隔事件（兼容多行 data:）
+      let sep;
+      while ((sep = buffer.indexOf('\n\n')) >= 0) {
+        const chunk = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+
+        const dataLines = chunk
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.startsWith('data:'))
+          .map(l => l.slice(5).trim());
+
+        if (!dataLines.length) continue;
+        const payload = dataLines.join('\n');
+        if (payload === '[DONE]') return;
+
+        try {
+          const delta = JSON.parse(payload)?.choices?.[0]?.delta;
+          if (delta?.content && typeof onDelta === 'function') {
+            onDelta(delta.content);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
 
   /**
    * 聊天（非流式）
@@ -80,7 +123,7 @@ export default class GPTGodLLMClient {
           method: 'POST',
           headers: this.buildHeaders(overrides.headers),
           body: JSON.stringify(this.buildBody(currentMessages, overrides)),
-          signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
+          signal: AbortSignal.timeout(this.timeout)
         })
       );
 
@@ -120,7 +163,7 @@ export default class GPTGodLLMClient {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
-        signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined
+        signal: AbortSignal.timeout(this.timeout)
       })
     );
 
@@ -128,37 +171,7 @@ export default class GPTGodLLMClient {
       const text = await resp.text().catch(() => '');
       throw new Error(`GPTGod LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      let idx;
-      while ((idx = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 1);
-
-        if (!line?.startsWith('data:')) continue;
-
-        const payload = line.slice(5).trim();
-        if (payload === '[DONE]') return;
-
-        try {
-          const delta = JSON.parse(payload).choices?.[0]?.delta;
-          if (delta?.content && typeof onDelta === 'function') {
-            onDelta(delta.content);
-          }
-        } catch {
-          // 忽略解析错误
-        }
-      }
-    }
+    await this._consumeSSE(resp, onDelta);
   }
 
 }

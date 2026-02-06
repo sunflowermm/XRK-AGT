@@ -20,6 +20,7 @@ export default class GeminiLLMClient {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout || 360000;
+    this._inlineDataCache = new Map();
   }
 
   normalizeEndpoint(config) {
@@ -52,7 +53,7 @@ export default class GeminiLLMClient {
   }
 
   async transformMessages(messages) {
-    // Gemini 官方多模态 API 与 OpenAI 风格相近，使用 openai 模式构造 content
+    // 统一为 OpenAI 风格的多模态 content（text + image_url），再转成 Gemini parts
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
@@ -61,23 +62,103 @@ export default class GeminiLLMClient {
    * - role: user/assistant/system
    * - Gemini: contents[{role:'user'|'model', parts:[{text}]}]
    */
-  buildGeminiPayload(messages, overrides = {}) {
+  getServerPublicUrl() {
+    try {
+      const base = globalThis.Bot?.url;
+      return base ? String(base).replace(/\/+$/, '') : '';
+    } catch {
+      return '';
+    }
+  }
+
+  normalizeToAbsoluteUrl(url) {
+    const u = String(url || '').trim();
+    if (!u) return '';
+    if (u.startsWith('data:')) return u;
+    if (/^https?:\/\//i.test(u)) return u;
+
+    const base = this.getServerPublicUrl();
+    if (base && u.startsWith('/')) return `${base}${u}`;
+    return u;
+  }
+
+  _parseDataUrl(dataUrl) {
+    const raw = String(dataUrl || '').trim();
+    const m = raw.match(/^data:([^;]+);base64,(.*)$/i);
+    if (!m) return null;
+    return { mimeType: m[1], data: m[2] };
+  }
+
+  async _toInlineData(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return null;
+
+    // data URL 直接解析
+    if (raw.startsWith('data:')) {
+      const parsed = this._parseDataUrl(raw);
+      if (!parsed?.data) return null;
+      return { inlineData: { mimeType: parsed.mimeType || 'image/png', data: parsed.data } };
+    }
+
+    const abs = this.normalizeToAbsoluteUrl(raw);
+    const now = Date.now();
+    const cached = this._inlineDataCache.get(abs);
+    if (cached && (now - cached.ts) < 5 * 60 * 1000) {
+      return cached.part;
+    }
+
+    // Gemini 官方多模态最稳的方式是 inlineData(base64)，这里对 URL 做一次下载转码（失败则回退占位文本）
+    const resp = await fetch(abs, { signal: AbortSignal.timeout(30000) });
+    if (!resp.ok) return null;
+
+    const mimeType = resp.headers.get('content-type') || 'image/png';
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const part = { inlineData: { mimeType, data: buf.toString('base64') } };
+    this._inlineDataCache.set(abs, { ts: now, part });
+    return part;
+  }
+
+  async buildGeminiPayload(messages, overrides = {}) {
     const systemTexts = [];
     const contents = [];
 
     for (const m of messages || []) {
       const role = (m.role || '').toLowerCase();
-      const text = (typeof m.content === 'string' ? m.content : (m.content?.text || m.content?.content || '')).toString();
-      if (!text) continue;
-
       if (role === 'system') {
-        systemTexts.push(text);
+        const text = (typeof m.content === 'string' ? m.content : (m.content?.text || m.content?.content || '')).toString();
+        if (text) systemTexts.push(text);
         continue;
       }
 
+      const parts = [];
+      if (typeof m.content === 'string') {
+        const text = m.content.toString();
+        if (text) parts.push({ text });
+      } else if (Array.isArray(m.content)) {
+        // OpenAI 多模态 content 数组：[{type:'text',text},{type:'image_url',image_url:{url}}]
+        for (const p of m.content) {
+          if (p?.type === 'text' && p.text) {
+            parts.push({ text: String(p.text) });
+          } else if (p?.type === 'image_url' && p.image_url?.url) {
+            const inlinePart = await this._toInlineData(p.image_url.url);
+            if (inlinePart) {
+              parts.push(inlinePart);
+            } else {
+              // 下载/解析失败：回退为可读占位（避免整条消息丢失）
+              parts.push({ text: `[图片:${String(p.image_url.url)}]` });
+            }
+          }
+        }
+      } else if (m.content && typeof m.content === 'object') {
+        // 兼容少数场景：{text, content}
+        const text = (m.content.text || m.content.content || '').toString();
+        if (text) parts.push({ text });
+      }
+
+      if (parts.length === 0) continue;
       contents.push({
         role: role === 'assistant' ? 'model' : 'user',
-        parts: [{ text }]
+        parts
       });
     }
 
@@ -119,7 +200,7 @@ export default class GeminiLLMClient {
       buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildGeminiPayload(transformedMessages, overrides)),
+        body: JSON.stringify(await this.buildGeminiPayload(transformedMessages, overrides)),
         signal: AbortSignal.timeout(this.timeout)
       })
     );
@@ -145,7 +226,7 @@ export default class GeminiLLMClient {
       buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildGeminiPayload(transformedMessages, overrides)),
+        body: JSON.stringify(await this.buildGeminiPayload(transformedMessages, overrides)),
         signal: AbortSignal.timeout(this.timeout)
       })
     );

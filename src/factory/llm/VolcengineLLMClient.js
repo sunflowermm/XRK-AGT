@@ -1,5 +1,4 @@
 import fetch from 'node-fetch';
-import FormData from 'form-data';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
@@ -25,12 +24,11 @@ export default class VolcengineLLMClient {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout || 360000;
+    this._dataUrlCache = new Map();
   }
 
   /**
-   * 获取基础 URL（公共逻辑）
-   * 火山引擎支持多个区域，可以通过 region 配置指定区域
-   * 支持的区域：cn-beijing（北京）、cn-shanghai（上海）等
+   * 获取基础 URL
    */
   getBaseUrl() {
     const config = this.config;
@@ -47,13 +45,6 @@ export default class VolcengineLLMClient {
     const base = this.getBaseUrl();
     const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
     return `${base}${path}`;
-  }
-
-  /**
-   * 获取文件上传端点
-   */
-  getFileUploadEndpoint() {
-    return `${this.getBaseUrl()}/files`;
   }
 
   /**
@@ -98,146 +89,91 @@ export default class VolcengineLLMClient {
   }
 
   /**
-   * 上传文件到火山引擎
-   * @param {Buffer} buffer - 文件数据 Buffer
-   * @param {string} mimeType - MIME 类型，如 'image/png'
-   * @param {string} filename - 文件名
-   * @returns {Promise<string>} file_id
-   */
-  async uploadFile(buffer, mimeType = 'image/png', filename = 'image.png') {
-    if (!Buffer.isBuffer(buffer)) {
-      throw new Error('文件数据必须是 Buffer 类型');
-    }
-
-    const uploadUrl = this.getFileUploadEndpoint();
-    const formData = new FormData();
-    formData.append('file', buffer, {
-      filename: filename,
-      contentType: mimeType
-    });
-    formData.append('purpose', 'user_data');
-
-    // 构建请求头，移除 Content-Type（FormData 会自动设置）
-    const headers = { ...this.buildHeaders() };
-    delete headers['Content-Type'];
-    Object.assign(headers, formData.getHeaders());
-    
-    const resp = await fetch(
-      uploadUrl,
-      buildFetchOptionsWithProxy(this.config, {
-        method: 'POST',
-        headers,
-        body: formData,
-        signal: AbortSignal.timeout(this.timeout)
-      })
-    );
-
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => '');
-      throw new Error(`火山引擎文件上传失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
-    }
-
-    const result = await resp.json();
-    const fileId = result.id;
-    
-    if (!fileId) {
-      throw new Error('火山引擎文件上传响应中缺少 file_id');
-    }
-
-    return fileId;
-  }
-
-  /**
-   * 将图片 URL/base64 转换为 file_id
-   * @param {string} imageUrl - 图片 URL 或 base64 data URL
-   * @returns {Promise<string>} file_id
-   */
-  async convertImageToFileId(imageUrl) {
-    if (!imageUrl || typeof imageUrl !== 'string') {
-      throw new Error('无效的图片 URL');
-    }
-
-    let buffer;
-    let mimeType = 'image/png';
-    let filename = 'image.png';
-
-    // HTTP/HTTPS URL：下载图片
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      const resp = await fetch(imageUrl, {
-        signal: AbortSignal.timeout(30000)
-      });
-      if (!resp.ok) {
-        throw new Error(`下载图片失败: ${resp.status} ${resp.statusText}`);
-      }
-      const arrayBuffer = await resp.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-      mimeType = resp.headers.get('content-type') || mimeType;
-      filename = imageUrl.split('/').pop() || filename;
-    }
-    // base64 data URL：解析并提取数据
-    else if (imageUrl.startsWith('data:')) {
-      const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
-      if (!match) {
-        throw new Error('无效的 data URL 格式');
-      }
-      mimeType = match[1];
-      const base64Data = match[2];
-      buffer = Buffer.from(base64Data, 'base64');
-      const ext = mimeType.split('/')[1] || 'png';
-      filename = `image.${ext}`;
-    }
-    // 纯 base64 字符串
-    else {
-      buffer = Buffer.from(imageUrl, 'base64');
-    }
-
-    return await this.uploadFile(buffer, mimeType, filename);
-  }
-
-  /**
    * 转换消息，将图片转换为火山引擎的 file_id 格式
-   * 火山引擎不支持直接传 base64，必须先上传文件获取 file_id
+   * 注意：火山引擎 Chat Completions 多模态仅支持 `text` / `image_url` / `video_url`，
+   * 且 `image_url.url` 仅支持 base64(data URL) 或 http/https URL。
+   * 因此这里直接走 OpenAI 风格多模态转换即可（不再做 file_id 上传/转换）。
    */
   async transformMessages(messages) {
-    if (!Array.isArray(messages)) return messages;
-
-    // 先统一转换为 OpenAI 格式（处理对象格式等）
+    // 统一为 OpenAI 风格多模态（text + image_url）
     const openaiMessages = await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
 
-    const transformed = [];
-    
+    // 关键补丁：云端模型无法访问本机 127.0.0.1/localhost 等 URL
+    // 对“本地/相对”图片 URL，服务端先下载转成 base64 data URL，再发送给火山引擎
     for (const msg of openaiMessages) {
-      // 只处理用户消息中的图片数组
-      if (msg.role === 'user' && Array.isArray(msg.content)) {
-        const contentParts = [];
-        
-        for (const part of msg.content) {
-          if (part.type === 'text') {
-            contentParts.push(part);
-          } else if (part.type === 'image_url' && part.image_url?.url) {
-            // 上传图片获取 file_id
-            try {
-              const fileId = await this.convertImageToFileId(part.image_url.url);
-              contentParts.push({ type: 'image', content: { file_id: fileId } });
-            } catch (error) {
-              Bot.makeLog?.('warn', `[VolcengineLLMClient] 图片上传失败，跳过: ${error.message}`);
-            }
-          } else if (part.type === 'image' && part.content?.file_id) {
-            // 已经是火山引擎格式，直接保留
-            contentParts.push(part);
-          }
+      if (msg?.role !== 'user') continue;
+      if (!Array.isArray(msg.content)) continue;
+
+      for (const part of msg.content) {
+        if (part?.type === 'image_url' && part.image_url?.url) {
+          part.image_url.url = await this.maybeConvertToDataUrl(part.image_url.url);
         }
-        
-        // 简化：只有文本时转为字符串
-        msg.content = contentParts.length === 1 && contentParts[0].type === 'text' 
-          ? contentParts[0].text 
-          : contentParts.length > 0 ? contentParts : '';
       }
-      
-      transformed.push(msg);
     }
-    
-    return transformed;
+
+    return openaiMessages;
+  }
+
+  getServerPublicUrl() {
+    // Bot.url 是系统内用于拼装静态资源 URL 的基准（core/system-Core/http/files.js 也在用）
+    // 这里仅作为“把相对 URL 变成可 fetch 的绝对 URL”使用
+    try {
+      const base = globalThis.Bot?.url;
+      return base ? String(base).replace(/\/+$/, '') : '';
+    } catch {
+      return '';
+    }
+  }
+
+  normalizeToAbsoluteUrl(url) {
+    const u = String(url || '').trim();
+    if (!u) return '';
+    if (u.startsWith('data:')) return u;
+    if (/^https?:\/\//i.test(u)) return u;
+
+    const base = this.getServerPublicUrl();
+    if (base && u.startsWith('/')) return `${base}${u}`;
+    return u; // 兜底：保持原样
+  }
+
+  isLocalLikeUrl(absUrl) {
+    try {
+      const u = new URL(absUrl);
+      return u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '0.0.0.0';
+    } catch {
+      return false;
+    }
+  }
+
+  async maybeConvertToDataUrl(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return raw;
+    if (raw.startsWith('data:')) return raw;
+
+    const abs = this.normalizeToAbsoluteUrl(raw);
+    // 仅在“本机/相对资源”时转 data URL，避免无谓扩大请求体
+    if (!this.isLocalLikeUrl(abs) && /^https?:\/\//i.test(abs)) {
+      return abs;
+    }
+
+    // cache（5分钟）
+    const now = Date.now();
+    const cached = this._dataUrlCache.get(abs);
+    if (cached && (now - cached.ts) < 5 * 60 * 1000) {
+      return cached.dataUrl;
+    }
+
+    const resp = await fetch(abs, { signal: AbortSignal.timeout(30000) });
+    if (!resp.ok) {
+      // 下载失败则退回原 URL（让上游决定如何处理）
+      return abs;
+    }
+
+    const mime = resp.headers.get('content-type') || 'image/png';
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+    this._dataUrlCache.set(abs, { ts: now, dataUrl });
+    return dataUrl;
   }
 
   /**
@@ -283,6 +219,45 @@ export default class VolcengineLLMClient {
     return currentMessages[currentMessages.length - 1]?.content || '';
   }
 
+  async _consumeSSE(resp, onDelta) {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE：以空行分隔事件（兼容多行 data:）
+      let sep;
+      while ((sep = buffer.indexOf('\n\n')) >= 0) {
+        const chunk = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+
+        const dataLines = chunk
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.startsWith('data:'))
+          .map(l => l.slice(5).trim());
+
+        if (!dataLines.length) continue;
+        const payload = dataLines.join('\n');
+        if (payload === '[DONE]') return;
+
+        try {
+          const delta = JSON.parse(payload).choices?.[0]?.delta;
+          if (delta?.content && typeof onDelta === 'function') {
+            onDelta(delta.content);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
   /**
    * 流式调用
    * @param {Array} messages - 消息数组
@@ -306,37 +281,7 @@ export default class VolcengineLLMClient {
       const text = await resp.text().catch(() => '');
       throw new Error(`火山引擎 LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      let idx;
-      while ((idx = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 1);
-
-        if (!line?.startsWith('data:')) continue;
-
-        const payload = line.slice(5).trim();
-        if (payload === '[DONE]') return;
-
-        try {
-          const delta = JSON.parse(payload).choices?.[0]?.delta;
-          if (delta?.content && typeof onDelta === 'function') {
-            onDelta(delta.content);
-          }
-        } catch {
-          // 忽略解析错误
-        }
-      }
-    }
+    await this._consumeSSE(resp, onDelta);
   }
 
 }

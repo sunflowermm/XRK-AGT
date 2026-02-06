@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { existsSync } from 'node:fs'
@@ -8,7 +7,6 @@ import BotUtil from '#utils/botutil.js'
 // Tasker 加载器
 class TaskerLoader {
   constructor() {
-    this.baseDir = null // 不再使用固定路径，改为动态扫描
     this.loggerNs = 'TaskerLoader'
   }
 

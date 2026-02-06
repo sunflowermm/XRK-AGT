@@ -1,4 +1,3 @@
-import BotUtil from '#utils/botutil.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
 
 /**

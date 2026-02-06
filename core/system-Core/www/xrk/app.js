@@ -125,6 +125,8 @@ class App {
     this.currentAPI = null;
     this.apiConfig = null;
     this.selectedFiles = [];
+    // 统一管理 blob: objectURL，避免预览失效/内存泄漏（跨端更稳定）
+    this._objectUrls = new Set();
     this.jsonEditor = null;
     this._charts = {};
     this._metricsHistory = { 
@@ -211,7 +213,65 @@ class App {
       if (this._statusUpdateTimer) {
         clearInterval(this._statusUpdateTimer);
       }
+      // 释放所有 blob: objectURL（避免长会话或多次预览导致的内存泄漏）
+      this._revokeAllObjectUrls();
     });
+  }
+
+  /**
+   * 从 DataTransfer 中提取文件（兼容不同浏览器/客户端：items 与 files）
+   * @param {DataTransfer} dt
+   * @returns {File[]}
+   */
+  _extractFilesFromDataTransfer(dt) {
+    try {
+      if (!dt) return [];
+      const out = [];
+      const items = Array.from(dt.items || []);
+      if (items.length) {
+        for (const it of items) {
+          if (it && it.kind === 'file') {
+            const f = it.getAsFile?.();
+            if (f) out.push(f);
+          }
+        }
+      }
+      if (!out.length && dt.files && dt.files.length) {
+        return Array.from(dt.files);
+      }
+      return out;
+    } catch {
+      try {
+        return Array.from(dt?.files || []);
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  _safeRevokeObjectURL(url) {
+    if (!url) return;
+    try { URL.revokeObjectURL(url); } catch {}
+    try { this._objectUrls?.delete(url); } catch {}
+  }
+
+  _createTrackedObjectURL(file) {
+    try {
+      const url = URL.createObjectURL(file);
+      this._objectUrls?.add(url);
+      return url;
+    } catch {
+      return '';
+    }
+  }
+
+  _revokeAllObjectUrls() {
+    try {
+      for (const url of this._objectUrls || []) {
+        try { URL.revokeObjectURL(url); } catch {}
+      }
+      this._objectUrls?.clear?.();
+    } catch {}
   }
 
   async loadAPIConfig() {
@@ -1489,6 +1549,24 @@ class App {
         this.handleImageSelect(e.target.files);
       });
     }
+
+    // 拖拽图片到聊天区：跨端兼容（Chrome/Edge/Safari/WebView）
+    const chatContainer = document.querySelector('.chat-container');
+    if (chatContainer) {
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+        chatContainer.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+      });
+      chatContainer.addEventListener('drop', (e) => {
+        const dropped = this._extractFilesFromDataTransfer(e.dataTransfer);
+        const images = dropped.filter(f => f?.type?.startsWith('image/'));
+        if (images.length) {
+          this.handleImageSelect(images);
+        }
+      });
+    }
   }
   
 
@@ -2111,6 +2189,8 @@ class App {
   }
 
   clearChat() {
+    // 清空聊天时同步释放所有 blob 预览 URL，避免内存累积
+    this._revokeAllObjectUrls();
     this._chatHistory = [];
     this._saveChatHistory();
     const box = document.getElementById('chatMessages');
@@ -2147,23 +2227,82 @@ class App {
         this.showToast(`图片 ${file.name} 超过 10MB 限制`, 'warning');
         continue;
       }
-      
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target.result;
-        this._selectedImages.push({
-          file: file,
-          dataUrl: dataUrl,
-          id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        });
-        this.updateImagePreview();
-      };
-      reader.readAsDataURL(file);
+
+      // 预览使用 objectURL，避免 base64 转换带来的卡顿/内存占用
+      const previewUrl = this._createTrackedObjectURL(file);
+      this._selectedImages.push({
+        file,
+        previewUrl,
+        id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      });
+      this.updateImagePreview();
     }
     
     // 清空文件输入，允许重复选择同一文件
     const imageInput = document.getElementById('chatImageInput');
     if (imageInput) imageInput.value = '';
+  }
+
+  /**
+   * 压缩/缩放图片（减少上传体积与多模态 token 消耗，提高响应速度）
+   * @returns {Promise<File>}
+   */
+  async compressImageFile(file) {
+    try {
+      if (!file || !file.type?.startsWith('image/')) return file;
+
+      // 小图直接走原图（避免无谓的重新编码）
+      const SOFT_LIMIT = 900 * 1024; // ~900KB
+      if (file.size <= SOFT_LIMIT) return file;
+
+      const maxDim = 1280;
+      const quality = 0.82;
+      const url = URL.createObjectURL(file);
+
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = url;
+      });
+
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      if (!w || !h) {
+        URL.revokeObjectURL(url);
+        return file;
+      }
+
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      const targetW = Math.max(1, Math.round(w * scale));
+      const targetH = Math.max(1, Math.round(h * scale));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        return file;
+      }
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+
+      const blob = await new Promise((resolve) => {
+        // 统一转 jpeg（更小）；如果你更喜欢 webp，可改成 image/webp
+        canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
+      });
+
+      URL.revokeObjectURL(url);
+      if (!blob) return file;
+
+      // 如果压缩后反而更大，就用原图
+      if (blob.size >= file.size) return file;
+
+      const name = (file.name || 'image').replace(/\.(png|jpg|jpeg|webp|bmp)$/i, '');
+      return new File([blob], `${name}.jpg`, { type: 'image/jpeg' });
+    } catch {
+      return file;
+    }
   }
   
   /**
@@ -2183,7 +2322,7 @@ class App {
     previewContainer.innerHTML = this._selectedImages.map((img, index) => {
       return `
       <div class="chat-image-preview-item" data-img-id="${img.id}">
-        <img src="${img.dataUrl}" alt="预览">
+        <img src="${img.previewUrl}" alt="预览">
         <button class="chat-image-preview-remove" data-img-id="${img.id}" title="移除">×</button>
       </div>
     `;
@@ -2203,6 +2342,11 @@ class App {
    */
   removeImagePreview(imgId) {
     if (!this._selectedImages) return;
+    // 释放 objectURL，避免内存泄漏
+    const item = this._selectedImages.find(img => img.id === imgId);
+    if (item?.previewUrl) {
+      this._safeRevokeObjectURL(item.previewUrl);
+    }
     this._selectedImages = this._selectedImages.filter(img => img.id !== imgId);
     this.updateImagePreview();
   }
@@ -2210,7 +2354,17 @@ class App {
   /**
    * 清空图片预览
    */
-  clearImagePreview() {
+  clearImagePreview(options = {}) {
+    const keepUrls = options?.keepUrls instanceof Set
+      ? options.keepUrls
+      : (Array.isArray(options?.keepUrls) ? new Set(options.keepUrls) : null);
+    // 释放所有 objectURL
+    (this._selectedImages || []).forEach(img => {
+      if (img?.previewUrl) {
+        if (keepUrls && keepUrls.has(img.previewUrl)) return;
+        this._safeRevokeObjectURL(img.previewUrl);
+      }
+    });
     this._selectedImages = [];
     this.updateImagePreview();
   }
@@ -2228,16 +2382,25 @@ class App {
     try {
       // 显示用户消息（包含文本和图片）
       if (text) {
-        this.appendChat('user', text);
+      this.appendChat('user', text);
       }
       
       // 显示图片
+      const keepPreviewUrls = new Set();
       for (const img of images) {
-        this.appendUserImageMessage(img.dataUrl, true);
+        // 关键修复：聊天区显示与缩略图预览使用不同的 objectURL，避免 clearImagePreview revoke 导致聊天图片失效
+        let displayUrl = this._createTrackedObjectURL(img.file);
+        if (!displayUrl) {
+          // 极端兼容：createObjectURL 不可用时，退回预览 URL，并避免立即 revoke
+          displayUrl = img.previewUrl;
+          if (displayUrl) keepPreviewUrls.add(displayUrl);
+        }
+        // 不强制持久化（避免把 blob: 写进 localStorage）
+        this.appendSegments([{ type: 'image', url: displayUrl }], false, 'user');
       }
       
       // 清空图片预览
-      this.clearImagePreview();
+      this.clearImagePreview({ keepUrls: keepPreviewUrls });
       
       // 发送消息到后端
       await this.sendChatMessageWithImages(text, images);
@@ -2259,48 +2422,58 @@ class App {
       return;
     }
 
+    // 正确链路：Web -> 先走 system-Core 现成路由上传图片 -> 再通过 WS 注册到后端的 tasker/plugin 聊天
     const apiKey = localStorage.getItem('apiKey') || '';
-    const formData = new FormData();
-    
-    // 构建 messages
-    formData.append('messages', JSON.stringify([{
-      role: 'user',
-      content: text || ''
-    }]));
-    // 不要写死 provider，默认跟随后端 defaultProfile（/api/ai/models 返回）
-    const provider = (this._llmOptions?.defaultProfile || '').toString().trim();
-    if (provider) {
-      formData.append('model', provider);
+
+    // 1) 上传图片到 system-Core：/api/file/upload
+    const uploadFd = new FormData();
+    for (const img of images) {
+      uploadFd.append('file', await this.compressImageFile(img.file));
     }
-    formData.append('stream', 'false');
-    if (apiKey) {
-      formData.append('apiKey', apiKey);
+
+    const uploadResp = await fetch(`${this.serverUrl}/api/file/upload`, {
+      method: 'POST',
+      headers: apiKey ? { 'X-API-Key': apiKey } : undefined,
+      body: uploadFd
+    });
+
+    if (!uploadResp.ok) {
+      const raw = await uploadResp.text().catch(() => '');
+      let msg = uploadResp.statusText || '图片上传失败';
+      try {
+        const j = raw ? JSON.parse(raw) : null;
+        msg = j?.message || j?.error || msg;
+      } catch {}
+      throw new Error(msg);
     }
-    
-    // 添加图片文件（字段名 'images'）
-    images.forEach(img => formData.append('images', img.file));
-    
-    try {
-      const response = await fetch(`${this.serverUrl}/api/v3/chat/completions`, {
-        method: 'POST',
-        headers: { 'X-API-Key': apiKey },
-        body: formData
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(errorData.message || '请求失败');
-      }
-      
-      const data = await response.json();
-      const assistantMessage = data.choices?.[0]?.message?.content || '';
-      if (assistantMessage) {
-        this.appendChat('assistant', assistantMessage);
-      }
-    } catch (e) {
-      console.error('发送带图片的消息失败:', e);
-      throw e;
+
+    const uploadData = await uploadResp.json().catch(() => null);
+    const urls = [];
+    if (uploadData?.data?.file_url) urls.push(uploadData.data.file_url);
+    if (Array.isArray(uploadData?.data?.files)) {
+      uploadData.data.files.forEach(f => f?.file_url && urls.push(f.file_url));
     }
+    // 兼容：有些返回把数据放在顶层
+    if (uploadData?.file_url) urls.push(uploadData.file_url);
+    if (Array.isArray(uploadData?.files)) {
+      uploadData.files.forEach(f => f?.file_url && urls.push(f.file_url));
+    }
+
+    if (urls.length === 0) {
+      throw new Error('图片上传成功但未返回可用的 file_url');
+    }
+
+    // 2) 通过 WS 发送 OneBot-like segments，让后端 chat 工作流识别图片
+    const segments = [];
+    if ((text || '').trim()) {
+      segments.push({ type: 'text', text: (text || '').trim() });
+    }
+    urls.forEach((u) => {
+      segments.push({ type: 'image', url: u, data: { url: u, file: u } });
+    });
+
+    // 关键：sendDeviceMessage 会把 meta.message 放到 payload.message，后端 http/device.js 会将其作为 e.message
+    this.sendDeviceMessage(text || ' ', { source: 'manual', message: segments });
   }
   
   /**
@@ -4282,7 +4455,7 @@ class App {
       });
     });
     
-    area?.addEventListener('drop', (e) => this.handleFiles(e.dataTransfer.files));
+    area?.addEventListener('drop', (e) => this.handleFiles(this._extractFilesFromDataTransfer(e.dataTransfer)));
   }
 
   handleFiles(files) {
@@ -4904,6 +5077,9 @@ class App {
       user_id: userId,
       text: payloadText,
       isMaster: true,
+      // 可选：OneBot-like segments，用于携带图片/视频/音频等多模态输入
+      // 若不传，则后端会使用 text 自动构造 [{type:'text',text}]
+      message: Array.isArray(meta.message) ? meta.message : undefined,
       meta: {
         persona: this.getCurrentPersona(),
         workflow: this._chatSettings.workflow || 'device',

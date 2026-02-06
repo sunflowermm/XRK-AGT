@@ -1261,6 +1261,18 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
       ? question
       : (question?.content || question?.text || '');
 
+    // 从事件中提取图片（OneBot segments / device segments）
+    // Web 客户端通过 WS -> http/device.js 会把 payload.message 作为 e.message 透传到工作流
+    const images = [];
+    if (e && Array.isArray(e.message)) {
+      for (const seg of e.message) {
+        if (!seg || typeof seg !== 'object') continue;
+        if (seg.type !== 'image') continue;
+        const url = seg.url || seg.data?.url || seg.data?.file;
+        if (url) images.push(url);
+      }
+    }
+
     const userName =
       question?.userName ||
       question?.username ||
@@ -1286,10 +1298,21 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
       }).catch(() => { });
     }
 
-    messages.push({
-      role: 'user',
-      content: `${prefix}${text}`
-    });
+    // 多模态：若存在图片，则按 {text, images} 结构交给 LLM 工厂统一转各家协议
+    if (images.length > 0) {
+      messages.push({
+        role: 'user',
+        content: {
+          text: `${prefix}${text}`,
+          images
+        }
+      });
+    } else {
+      messages.push({
+        role: 'user',
+        content: `${prefix}${text}`
+      });
+    }
 
     return messages;
   }

@@ -246,6 +246,45 @@ export default class XiaomiMiMoLLMClient {
     return currentMessages[currentMessages.length - 1]?.content || '';
   }
 
+  async _consumeSSE(resp, onDelta) {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE：以空行分隔事件（兼容多行 data:）
+      let sep;
+      while ((sep = buffer.indexOf('\n\n')) >= 0) {
+        const chunk = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+
+        const dataLines = chunk
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.startsWith('data:'))
+          .map(l => l.slice(5).trim());
+
+        if (!dataLines.length) continue;
+        const payload = dataLines.join('\n');
+        if (payload === '[DONE]') return;
+
+        try {
+          const delta = JSON.parse(payload).choices?.[0]?.delta;
+          if (delta?.content && typeof onDelta === 'function') {
+            onDelta(delta.content);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
   /**
    * 流式调用
    * @param {Array} messages - 消息数组
@@ -269,36 +308,6 @@ export default class XiaomiMiMoLLMClient {
       const text = await resp.text().catch(() => '');
       throw new Error(`小米 MiMo LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      let idx;
-      while ((idx = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 1);
-
-        if (!line?.startsWith('data:')) continue;
-
-        const payload = line.slice(5).trim();
-        if (payload === '[DONE]') return;
-
-        try {
-          const delta = JSON.parse(payload).choices?.[0]?.delta;
-          if (delta?.content && typeof onDelta === 'function') {
-            onDelta(delta.content);
-          }
-        } catch {
-          // 忽略解析错误
-        }
-      }
-    }
+    await this._consumeSSE(resp, onDelta);
   }
 }
