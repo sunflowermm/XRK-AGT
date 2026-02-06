@@ -204,9 +204,26 @@ system-Core 提供了10个HTTP API模块，覆盖系统管理的各个方面：
 **WebSocket**: `/stdin` - 监听stdin命令和输出
 
 **特性**：
-- 命令执行（支持JSON响应）
-- 事件触发
-- WebSocket实时通信
+- 命令执行（支持 JSON 结构化响应）
+- 事件触发（可直接向 `PluginsLoader` 及各 Tasker 派发标准事件）
+- WebSocket 实时通信（订阅 stdin 命令与输出）
+
+#### stdin 用户与会话模型
+
+stdin 体系由 **Tasker + HTTP API + 增强插件** 共同组成：
+
+- **虚拟 Bot 注册**（`core/system-Core/tasker/stdin.js`）  
+  - 启动时构造一个内置 Bot：`Bot.stdin` / `Bot['stdin']`，账号固定为 `uin = 'stdin'`，昵称默认为 `StdinBot`。  
+  - 该 Bot 提供 `sendMsg/runCommand/pickFriend/pickGroup/fileToUrl` 等方法，使控制台/HTTP 请求与普通 QQ/设备消息在插件层表现一致。
+- **用户身份与注册方式**：  
+  - 控制台输入：`StdinHandler.createEvent()` 默认使用 `user_id = 'stdin'`、`nickname = 'stdin'`，并将 `role` 设为 `master`，等价于「本机超级管理员」。  
+  - HTTP 接口：  
+    - `/api/stdin/command` 与 `/api/stdin/event` 接收 `user_info` 参数（`user_id/nickname/group_id/role/avatar` 等），由后端传入 `createEvent()`，动态注册/模拟一个用户或群成员。  
+    - 若不传 `user_info`，则同样默认视为 `master` 身份，方便脚本调用。  
+  - 事件增强：`StdinEnhancer` 插件基于 `EventNormalizer` 统一补齐 `isStdin/tasker/logText` 等字段，使所有 stdin/API 事件在插件业务层表现为标准化事件对象。
+
+> 通过上述设计，**stdin 用户不需要在数据库单独注册**：  
+> 控制台与 HTTP 请求会在 Tasker 层即时构造事件和虚拟用户，并在插件层以统一方式处理。
 
 ### 10. 数据编辑API (`write.js`)
 
@@ -353,7 +370,7 @@ flowchart LR
 
 ## 插件（Plugin）
 
-system-Core 提供了多个内置插件：
+system-Core 提供了一组内置插件，分别承担「协议增强」与「运维/管理/示例业务」等职责：
 
 ```mermaid
 flowchart LR
@@ -368,23 +385,80 @@ flowchart LR
     style Functions fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
 ```
 
-### 增强器插件
+### 增强器插件（协议/事件增强）
 
-- **OneBotEnhancer** - OneBotv11增强器
-- **OPQEnhancer** - OPQ增强器
-- **DeviceEnhancer** - 设备增强器
-- **StdinEnhancer** - 标准输入增强器
+- **OneBotEnhancer**  
+  - OneBotv11 事件增强插件（位于 `core/system-Core/plugin/OneBotEnhancer.js`）  
+  - 负责为 OneBot 事件挂载 `isOneBot/isPrivate/isGroup/friend/group/member` 等属性，并统一日志格式、别名与 onlyReplyAt 策略。
+- **OPQEnhancer**  
+  - OPQ 协议增强插件，补齐 OPQ 事件的 Tasker 特定字段与日志文本。
+- **DeviceEnhancer**  
+  - 设备事件增强插件（`DeviceEnhancer.js`），使用 `EventNormalizer.normalizeDevice` 标准化设备事件字段，并统一 `isDevice/tasker/logText` 等属性。
+- **StdinEnhancer**  
+  - STDIN/API 事件增强插件（`StdinEnhancer.js`），使用 `EventNormalizer.normalizeStdin` 标准化从控制台或 `/api/stdin/*` 进入的事件，统一 `isStdin/tasker` 标记和日志。
 
-### 功能插件
+> 增强器插件本身**不直接实现业务命令**，而是为后续所有业务插件提供「更干净、一致的事件对象」。
 
-- **add** - 添加功能
-- **restart** - 重启功能
-- **update** - 更新功能
-- **sendLog** - 发送日志
-- **状态** - 状态查询
-- **远程指令** - 远程命令执行
-- **主动复读** - 主动复读功能
-- **模拟定时输入** - 定时输入模拟
+### 功能插件（运维与示例业务）
+
+- **add** (`add.js`)  
+  - 消息模板与违禁词管理插件：支持 `#添加/#删除` 消息、`#违禁词` 增删查、全局/群级精确与模糊违禁词、图片违禁词，以及违禁词开关、禁言策略等。
+- **restart** (`restart.js`)  
+  - 进程级重启与启停插件：提供 `#重启/#关机/#开机` 命令，通过 Redis 记录重启上下文与关机标记，并在需要时调用 `process.exit(1)` 触发守护进程重启。
+- **update** (`update.js`)  
+  - 项目与 Core 更新插件：支持 `#更新/#强制更新` 指定 Core 或整仓库，`#全部更新/#静默全部更新` 批量更新 `core/*` 与项目根目录，自动拉取 Git 日志并在更新后联动 `restart` 插件重启。
+- **sendLog** (`sendLog.js`)  
+  - 运行日志发送插件：通过 `#日志/#错误日志/#追踪日志/#debug日志` 等命令，按级别/关键词筛选最近日志文件，分批生成转发消息发到群/私聊，支持通过配置调整每批行数、总行数与单行最大长度。
+- **状态**（`状态.js`，类名 `stattools`）  
+  - 系统状态查询插件：`#状态` 查看 CPU/内存/磁盘、进程、网络信息，以及 Bot 运行时长、插件/定时任务数量、日志配置等（内部使用 `systeminformation` 库收集数据）。
+- **远程指令** (`远程指令.js`)  
+  - 远程命令与调试终端插件：基于 `config/cmd/tools.yaml` 权限配置，提供安全包裹的命令执行、JS 调试、输出截断与落盘等能力，属于高权限「远程运维工具」。
+- **主动复读** (`主动复读.js`)  
+  - 复读示例插件：`#复读` 后进入上下文，下一条消息会被完整复读并在指定时间后自动撤回，演示 `setContext/finish` 的典型用法。
+- **模拟定时输入** (`模拟定时输入.js`)  
+  - 定时 STDIN 模拟插件：每天固定时间（如 12:00）构造模拟 `stdin` 事件，通过 `PluginsLoader.deal()` 触发插件系统执行预设命令（例如 `#你是谁`），用于演示和测试定时任务 + 业务链路。
+
+> 以上功能插件均构建在 `plugin` 基类与 `PluginsLoader` 之上，**不修改底层基础设施代码**；你可以在 `core/system-Core/plugin/` 中参考这些实现，编写自己的业务插件。
+
+---
+
+## 业务层与插件架构
+
+在 `system-Core` 中，**绝大部分业务逻辑都通过插件业务层实现**，而不是写在底层基础设施里：
+
+- **业务承载位置**：
+  - `core/system-Core/plugin/*.js`：具体业务插件（命令、管理功能、日志、状态查询等）
+  - `src/infrastructure/plugins/plugin.js`：插件基类，定义统一的业务接口（规则、任务、事件订阅、上下文、工作流集成等）
+  - `src/infrastructure/plugins/loader.js`：`PluginsLoader`，作为插件业务层的调度核心
+- **分层关系（自下而上）**：
+  1. **Tasker 层**（如 `core/system-Core/tasker/OneBotv11.js`）将平台消息转换为统一事件
+  2. **事件监听层**（`core/system-Core/events/*.js`）去重并分发到插件系统
+  3. **插件业务层**（`PluginsLoader` + 各业务插件）完成规则匹配、权限控制、上下文与工作流调用
+  4. **HTTP / Web 控制台** 只作为入口和管理界面，不直接承载业务
+
+### 插件业务层职责总览
+
+- **统一事件入口**：所有来自 OneBot、设备、STDIN/API 的事件，都会最终进入 `PluginsLoader.deal(e)`，在这里完成标准化、预检查与限流。
+- **业务规则执行**：
+  - 通过插件 `rule` 配置实现命令/关键词/正则匹配
+  - 使用 `accept(e)` 做前置过滤（如别名、权限、来源筛选）
+  - 支持按优先级分组执行、默认处理器与上下文回调
+- **跨模块协作**：
+  - 插件通过 `getStream()` 调用 AI 工作流（chat/desktop/tools/memory/database/device）
+  - 通过事件订阅机制与其他插件/Tasker 协同（详见 `plugins-loader.md` 与 `事件系统标准化文档`）
+- **运行时能力**：
+  - 冷却 / 节流（按用户、群、设备维度）
+  - 黑白名单与响应策略（如仅在被 @ 或带前缀时响应）
+  - 定时任务（基于 `node-schedule`）与执行统计
+
+> **结论**：在 `system-Core` 中，**“业务层 = 插件业务层 + AI 工作流”**。  
+> 优先将业务写成插件 + 工作流，HTTP 仅作为暴露能力与管理入口。
+
+更多插件业务层细节请参考：
+
+- `docs/plugin-base.md` - 插件基类与业务插件开发
+- `docs/plugins-loader.md` - 插件加载、匹配与执行流程
+- `docs/事件系统标准化文档.md` - 事件命名规范与字段责任边界
 
 ---
 
@@ -469,37 +543,32 @@ flowchart LR
     style APIDebug fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
 ```
 
-**核心功能**：
+**核心功能模块与后端能力映射**：
 
-1. **系统概览**
-   - 实时监控系统资源（CPU、内存、网络）
-   - 机器人状态和统计
-   - 工作流信息
-   - 24小时历史数据
+1. **系统概览**  
+   - 实时监控系统资源（CPU、内存、网络流量）、Bot 在线状态和运行时长。  
+   - 展示工作流加载情况、插件数量与定时任务统计（对应 `core.js` 和 `plugin.js` 的统计接口）。  
+   - 支持查看最近 24 小时的系统指标曲线（通过 `/api/system/status` 与 `/api/system/overview`）。
 
-2. **AI对话**
-   - 文本对话
-   - 语音输入/输出（ASR/TTS）
-   - 图片识别
-   - 多工作流切换
+2. **AI对话**  
+   - 提供统一的聊天界面，支持文本输入、ASR 语音输入与图片上传识别。  
+   - 底层通过 `/api/v3/chat/completions` 与 `/api/ai/stream` 调用工作流（chat/desktop/tools/...），支持在前端切换不同工作流与人格预设。  
+   - 支持查看原始请求/响应与 token 消耗，便于调试工作流与 LLM 配置。
 
-3. **配置管理**
-   - 可视化配置编辑
-   - 表单模式（基于Schema）
-   - JSON模式（直接编辑）
-   - 配置验证和备份
+3. **配置管理**  
+   - 基于 `config.js` HTTP 模块的 `/api/config/*` 路由，提供「表单模式（Schema 驱动）」与「JSON 模式」双视图。  
+   - 支持一键备份/恢复、子配置路径编辑（如只编辑某个 core 的配置子树）、Schema 校验与缓存清理。  
+   - 典型配置包括：system 配置、各 LLM 提供商配置、ASR/TTS、工具与 aistream 配置等。
 
-4. **API调试**
-   - 完整的API测试工具
-   - 支持所有系统接口
-   - 请求/响应查看
-   - WebSocket测试
+4. **API调试**  
+   - 内置简易 API Client，可以直接选择 system-Core 暴露的所有 HTTP 路由进行调用（包括插件管理、设备管理、stdin 接口等）。  
+   - 支持填写请求体、Header、鉴权参数，查看响应 JSON / 原始文本，以及 WebSocket 调试（如 `/stdin` 频道）。  
+   - 适合调试自定义 Core 的 HTTP 接口、验证配置与工作流集成是否正确。
 
-**技术特性**：
-- 响应式设计（支持移动端和桌面端）
-- 实时数据更新（WebSocket连接）
-- 性能优化（懒加载和缓存机制）
-- 错误处理完善
+**前端特性**：
+- 响应式布局：适配桌面与移动端浏览器，侧边导航 + 顶部状态栏结构。  
+- 实时性：通过 WebSocket 与轮询结合，实时刷新系统状态面板与 stdin 输出等信息。  
+- 性能与体验：路由级懒加载、错误边界与统一 Toast 提示，尽量减少页面阻塞。
 
 ---
 
