@@ -4368,8 +4368,8 @@ class App {
         ${pathParams.map(p => {
           const cfg = api.pathParams[p] || {};
           return `<div class="form-group">
-            <label class="form-label">${cfg.label || p} <span style="color:var(--danger)">*</span></label>
-            <input type="text" class="form-input" id="path_${p}" placeholder="${cfg.placeholder || ''}" data-request-field="1">
+            <label class="form-label">${this.escapeHtml(cfg.label || p)} <span style="color:var(--danger)">*</span></label>
+            <input type="text" class="form-input" id="path_${this.escapeHtml(p)}" placeholder="${this.escapeHtml(cfg.placeholder || '')}" data-request-field="1">
           </div>`;
         }).join('')}
       </div>`;
@@ -4462,6 +4462,7 @@ class App {
   renderParamInput(param) {
     const required = param.required ? '<span style="color:var(--danger)">*</span>' : '';
     let input = '';
+    const placeholder = this.escapeHtml(param.placeholder || '');
     
     switch (param.type) {
       case 'select':
@@ -4469,21 +4470,21 @@ class App {
           <option value="">请选择</option>
           ${param.options.map(o => {
             const selected = (param.defaultValue !== undefined && String(o.value) === String(param.defaultValue)) ? ' selected' : '';
-            return `<option value="${o.value}"${selected}>${o.label}</option>`;
+            return `<option value="${this.escapeHtml(o.value)}"${selected}>${this.escapeHtml(o.label)}</option>`;
           }).join('')}
         </select>`;
         break;
       case 'textarea':
       case 'json':
-        input = `<textarea class="form-input" id="${param.name}" placeholder="${param.placeholder || ''}" data-request-field="1">${param.defaultValue || ''}</textarea>`;
+        input = `<textarea class="form-input" id="${this.escapeHtml(param.name)}" placeholder="${placeholder}" data-request-field="1">${this.escapeHtml(param.defaultValue || '')}</textarea>`;
         break;
       default:
-        input = `<input type="${param.type || 'text'}" class="form-input" id="${param.name}" placeholder="${param.placeholder || ''}" value="${param.defaultValue || ''}" data-request-field="1">`;
+        input = `<input type="${this.escapeHtml(param.type || 'text')}" class="form-input" id="${this.escapeHtml(param.name)}" placeholder="${placeholder}" value="${this.escapeHtml(param.defaultValue || '')}" data-request-field="1">`;
     }
     
     return `<div class="form-group">
-      <label class="form-label">${param.label} ${required}</label>
-      ${param.hint ? `<p class="config-field-hint">${param.hint}</p>` : ''}
+      <label class="form-label">${this.escapeHtml(param.label)} ${required}</label>
+      ${param.hint ? `<p class="config-field-hint">${this.escapeHtml(param.hint)}</p>` : ''}
       ${input}
     </div>`;
   }
