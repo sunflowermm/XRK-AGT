@@ -196,7 +196,7 @@ class SystemMonitor extends EventEmitter {
             if (global.redis) {
                 this.redis = global.redis;
             }
-        } catch (error) {
+        } catch {
             // 数据库未初始化，忽略
         }
     }
@@ -380,7 +380,7 @@ class SystemMonitor extends EventEmitter {
         try {
             const { stdout } = await execAsync(command);
             return this.parseBrowserProcesses(stdout, platform);
-        } catch (error) {
+        } catch {
             return [];
         }
     }
@@ -416,7 +416,7 @@ class SystemMonitor extends EventEmitter {
                             const hour = parseInt(timeStr.substring(8, 10));
                             const minute = parseInt(timeStr.substring(10, 12));
                             startTime = new Date(year, month, day, hour, minute).getTime();
-                        } catch (e) {
+                        } catch {
                             // 使用默认值
                         }
                     }
@@ -435,7 +435,7 @@ class SystemMonitor extends EventEmitter {
                     startTime,
                     command: line
                 });
-            } catch (e) {
+            } catch {
                 continue;
             }
         }
@@ -617,7 +617,6 @@ class SystemMonitor extends EventEmitter {
                 if (lines.length > 1) {
                     const parts = lines[1].trim().split(/\s+/);
                     const total = parseInt(parts[1]) * 1024;
-                    const used = parseInt(parts[2]) * 1024;
                     const free = parseInt(parts[3]) * 1024;
                     diskUsage = this._calculateDiskUsage(total, free);
                 }
@@ -660,14 +659,14 @@ class SystemMonitor extends EventEmitter {
                 try {
                     const { stdout } = await execAsync('netstat -an | find /c "ESTABLISHED"');
                     connections = parseInt(stdout.trim()) || 0;
-                } catch (e) {
+                } catch {
                     connections = this._estimateNetworkConnections();
                 }
             } else if (platform === 'linux' || platform === 'darwin') {
                 try {
                     const { stdout } = await execAsync('netstat -an 2>/dev/null | grep ESTABLISHED | wc -l || ss -an 2>/dev/null | grep ESTAB | wc -l || echo 0');
                     connections = parseInt(stdout.trim()) || 0;
-                } catch (e) {
+                } catch {
                     connections = this._estimateNetworkConnections();
                 }
             } else {
@@ -796,7 +795,7 @@ class SystemMonitor extends EventEmitter {
      * 优化系统（跨平台兼容）
      * 确保在日志播完之后才开始第一次清理
      */
-    async optimizeSystem(status) {
+    async optimizeSystem(_status) {
         const now = Date.now();
         const gcInterval = this.config.memory?.gcInterval || 600000;
 
@@ -919,21 +918,21 @@ class SystemMonitor extends EventEmitter {
                     const files = await fs.readdir(dir, { withFileTypes: true });
                     for (const file of files) {
                         if (file.isFile()) {
-                            const filePath = path.join(dir, file.name);
-                            try {
-                                const stats = await fs.stat(filePath);
-                                if (now - stats.mtimeMs > maxAge) {
-                                    const size = stats.size;
-                                    await fs.unlink(filePath);
-                                    cleaned++;
-                                    freed += size;
-                                }
-                            } catch (e) {
-                                // 忽略错误
-                            }
+                    const filePath = path.join(dir, file.name);
+                    try {
+                        const stats = await fs.stat(filePath);
+                        if (now - stats.mtimeMs > maxAge) {
+                            const size = stats.size;
+                            await fs.unlink(filePath);
+                            cleaned++;
+                            freed += size;
+                        }
+                    } catch {
+                        // 忽略错误
+                    }
                         }
                     }
-                } catch (e) {
+                } catch {
                     // 目录不存在，忽略
                 }
             }
@@ -974,7 +973,7 @@ class SystemMonitor extends EventEmitter {
                             cleaned++;
                             freed += size;
                         }
-                    } catch (e) {
+                    } catch {
                         // 忽略错误
                     }
                 }
@@ -982,7 +981,7 @@ class SystemMonitor extends EventEmitter {
                 if (cleaned > 0) {
                     logger.info(`  ✓ 清理日志: ${cleaned} 个，释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
                 }
-            } catch (e) {
+            } catch {
                 // 日志目录不存在，忽略
             }
         } catch (error) {
@@ -1007,7 +1006,7 @@ class SystemMonitor extends EventEmitter {
                 for (const cmd of commands) {
                     try {
                         await execAsync(cmd);
-                    } catch (e) {
+                    } catch {
                         // 权限不足或命令失败，忽略
                     }
                 }
@@ -1057,7 +1056,7 @@ class SystemMonitor extends EventEmitter {
                     try {
                         process.setPriority(nice);
                         logger.info(`  ✓ 已设置进程优先级 (nice: ${nice})`);
-                    } catch (e) {
+                    } catch {
                         // 权限不足，忽略
                     }
                 }
@@ -1072,11 +1071,11 @@ class SystemMonitor extends EventEmitter {
                 try {
                     await execAsync(`wmic process where processid=${process.pid} set priority="${winPriority}"`);
                     logger.info(`  ✓ 已设置进程优先级 (${priority})`);
-                } catch (e) {
+                } catch {
                     // 忽略错误
                 }
             }
-        } catch (error) {
+        } catch {
             // 忽略错误
         }
     }

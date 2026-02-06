@@ -79,7 +79,7 @@ export class BaseTools {
             }
           }
         }
-      } catch (error) {
+      } catch {
         // 忽略权限错误等
       }
     };
@@ -94,7 +94,6 @@ export class BaseTools {
   async grep(pattern, filePath = null, options = {}) {
     const {
       caseSensitive = false,
-      lineNumbers = true,
       maxResults = 100
     } = options;
 
@@ -119,7 +118,7 @@ export class BaseTools {
         }
 
         return matches;
-      } catch (error) {
+      } catch {
         return [];
       }
     };
@@ -196,8 +195,7 @@ export class BaseTools {
   async executeCommand(command, options = {}) {
     const {
       cwd = this.workspace,
-      timeout = 30000,
-      registerProcess = true
+      timeout = 30000
     } = options;
 
     try {
@@ -241,7 +239,7 @@ export class BaseTools {
         await execAsync(`taskkill /F /PID ${pid}`, { timeout: 5000 });
         killed.push(pid);
         this.processRegistry.delete(pid);
-      } catch (error) {
+      } catch {
         // 进程可能已结束
         this.processRegistry.delete(pid);
       }

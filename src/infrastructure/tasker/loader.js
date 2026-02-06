@@ -77,14 +77,14 @@ class TaskerLoader {
             recursive: false,
             ignore: ['.', '_']
           });
-          for (const filePath of taskerFiles) {
+      for (const filePath of taskerFiles) {
             files.push({
               name: path.basename(filePath),
               href: pathToFileURL(filePath).href,
               core: path.basename(coreDir)
             });
           }
-        } catch (error) {
+        } catch {
           BotUtil.makeLog('warn', `读取 tasker 目录失败: ${taskerDir}`, this.loggerNs);
         }
       }

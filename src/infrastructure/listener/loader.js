@@ -72,7 +72,7 @@ class ListenerLoader {
               BotUtil.makeLog('error', `监听事件加载错误: ${file}`, 'ListenerLoader', err);
             }
           }
-        } catch (err) {
+        } catch {
           BotUtil.makeLog('warn', `读取事件目录失败: ${eventsDir}`, 'ListenerLoader');
         }
       }

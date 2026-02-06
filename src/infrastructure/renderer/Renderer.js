@@ -37,7 +37,7 @@ export default class Renderer {
 
       try {
         this.html[tplFile] = fs.readFileSync(tplFile, 'utf8')
-      } catch (error) {
+      } catch {
         logger.error(`加载html错误：${tplFile}`)
         return false
       }

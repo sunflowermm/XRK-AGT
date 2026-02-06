@@ -560,7 +560,7 @@ export default class AIStream {
         default:
           return true;
       }
-    } catch (error) {
+    } catch {
       return false;
     }
   }

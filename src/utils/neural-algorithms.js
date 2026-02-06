@@ -134,7 +134,7 @@ export class EventDeduplicator {
     const eventId = event.event_id || fingerprint;
 
     // 快速检查：相同指纹
-    for (const [id, record] of this.recentEvents.entries()) {
+    for (const [, record] of this.recentEvents.entries()) {
       if (record.fingerprint === fingerprint) {
         const timeDiff = now - record.timestamp;
         if (timeDiff < this.timeWindow) {
@@ -146,7 +146,7 @@ export class EventDeduplicator {
     // 慢速检查：相似度匹配
     const content = event.plainText || event.raw_message || event.msg || '';
     if (content.length > 10) { // 只对较长文本进行相似度检查
-      for (const [id, record] of this.recentEvents.entries()) {
+      for (const [, record] of this.recentEvents.entries()) {
         const recordContent = record.event.plainText || record.event.raw_message || record.event.msg || '';
         if (recordContent.length > 10) {
           const timeDiff = now - record.timestamp;
@@ -299,7 +299,7 @@ export class IntelligentCache {
    * 计算键的访问价值（基于访问频率和最近访问时间）
    * 使用简单的加权评分
    */
-  calculateValue(entry, key) {
+  calculateValue(entry, _key) {
     const now = Date.now();
     const timeSinceLastAccess = now - (entry.lastAccess || entry.timestamp);
     const accessCount = entry.accessCount || 1;

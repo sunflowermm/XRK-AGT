@@ -400,7 +400,7 @@ export default class BotUtil {
         }
         try {
           return JSON.stringify(data);
-        } catch (e) {
+        } catch {
           return "[Object]";
         }
       default:
@@ -677,14 +677,14 @@ export default class BotUtil {
 
           try {
             logParts.push(util.inspect(item, inspectOptions));
-          } catch (e) {
+          } catch {
             logParts.push(JSON.stringify(item, BotUtil.getCircularReplacer(), 2));
           }
-        } catch (e) {
+        } catch {
           try {
             logParts.push(JSON.stringify(item, BotUtil.getCircularReplacer()));
-          } catch (err) {
-            logParts.push(`[Object: ${err.message}]`);
+          } catch {
+            logParts.push("[Object]");
           }
         }
       } else {
@@ -712,7 +712,7 @@ export default class BotUtil {
       } else {
         console.log(`[${level.toUpperCase()}] ${logMessage}`);
       }
-    } catch (e) {
+    } catch {
       console.log(`[${level.toUpperCase()}] ${logMessage}`);
     }
 
@@ -865,9 +865,9 @@ export default class BotUtil {
     if (!filePath) return false;
 
     try {
-      await fs.access(filePath, fsSync.constants.F_OK);
+      await fs.access(filePath, fsSync.constants.FOK);
       return true;
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -883,11 +883,11 @@ export default class BotUtil {
       try {
         const { default: fastGlob } = await import('fast-glob');
         BotUtil.#globLib = fastGlob;
-      } catch (e) {
+      } catch {
         try {
           const { glob } = await import('glob');
           BotUtil.#globLib = glob;
-        } catch (e) {
+        } catch {
           throw new Error("无法加载 glob 库");
         }
       }
@@ -964,7 +964,7 @@ export default class BotUtil {
         const buffer = Buffer.from(dataStr.slice(9), "base64");
         return opts.size && buffer.length > opts.size ?
           await BotUtil.#saveBufferToTempFile(buffer) : buffer;
-      } catch (e) {
+      } catch {
         return Buffer.alloc(0);
       }
     }
@@ -1004,7 +1004,7 @@ export default class BotUtil {
         const buffer = await fs.readFile(filePath);
         return opts.size && buffer.length > opts.size ?
           `file://${path.resolve(filePath)}` : buffer;
-      } catch (e) {
+      } catch {
         return Buffer.alloc(0);
       }
     }
@@ -1030,7 +1030,7 @@ export default class BotUtil {
       setTimeout(() => BotUtil.rm(filePath).catch(() => { }), 60000);
 
       return `file://${path.resolve(filePath)}`;
-    } catch (e) {
+    } catch {
       return `data:application/octet-stream;base64,${buffer.toString('base64')}`;
     }
   }
@@ -1162,7 +1162,7 @@ export default class BotUtil {
         try {
           const fileType = await fileTypeFromBuffer(fileBuffer);
           fileName += `.${fileType?.ext || 'file'}`;
-        } catch (e) {
+        } catch {
           fileName += '.file';
         }
       }
@@ -1576,7 +1576,7 @@ export default class BotUtil {
         const simpleMessage = typeof messages[0] === 'string' ? messages[0] : '[复杂消息]';
         await e.reply(`${title || '消息'}: ${simpleMessage}${messages.length > 1 ? ' (还有更多)' : ''}`);
         return true;
-      } catch (e) {
+      } catch {
         return false;
       }
     }
@@ -1639,7 +1639,7 @@ export default class BotUtil {
 
         await e.reply(`${title ? `【${title}】\n` : ''}${firstMsg}${messages.length > 1 ? '\n(消息太长，已省略)' : ''}`);
         return true;
-      } catch (e) {
+      } catch {
         return false;
       }
     }

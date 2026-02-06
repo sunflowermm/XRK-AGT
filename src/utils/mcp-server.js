@@ -107,7 +107,6 @@ export class MCPServer {
    */
   async handleToolCall(request) {
     const { name, arguments: args } = request;
-    const startTime = Date.now();
 
     if (!this.tools.has(name)) {
       return {
@@ -483,7 +482,7 @@ export class MCPServer {
    * @param {Object} params - 初始化参数
    * @returns {Object} 初始化响应
    */
-  async handleInitialize(params) {
+  async handleInitialize(_params) {
     return {
       protocolVersion: this.serverInfo.protocolVersion,
       capabilities: {

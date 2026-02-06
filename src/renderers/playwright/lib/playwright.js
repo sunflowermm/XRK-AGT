@@ -121,7 +121,8 @@ export default class PlaywrightRenderer extends Renderer {
         try {
           await redis.del(this.browserMacKey);
           BotUtil.makeLog("info", "Cleaned up invalid browser instance record", "PlaywrightRenderer");
-        } catch (e) {}
+        } catch {
+        }
       }
       return null;
     }
@@ -131,15 +132,15 @@ export default class PlaywrightRenderer extends Renderer {
    * Initialize browser instance with connection reuse and health monitoring
    */
   async browserInit() {
-    if (this.browser) {
-      try {
-        this.browser.contexts();
-        return this.browser;
-      } catch (e) {
-        BotUtil.makeLog("warn", `Existing browser instance invalid: ${e.message}`, "PlaywrightRenderer");
-        this.browser = null;
+      if (this.browser) {
+        try {
+          this.browser.contexts();
+          return this.browser;
+        } catch (e) {
+          BotUtil.makeLog("warn", `Existing browser instance invalid: ${e.message}`, "PlaywrightRenderer");
+          this.browser = null;
+        }
       }
-    }
 
     if (this.lock) {
       let waitTime = 0;
@@ -164,7 +165,8 @@ export default class PlaywrightRenderer extends Renderer {
       if (this.browserMacKey) {
         try {
           wsEndpoint = await redis.get(this.browserMacKey);
-        } catch (e) {}
+        } catch {
+        }
       }
       if (!wsEndpoint && this.config.wsEndpoint) {
         wsEndpoint = this.config.wsEndpoint;
@@ -202,11 +204,12 @@ export default class PlaywrightRenderer extends Renderer {
         BotUtil.makeLog("warn", `${this.browserType} instance disconnected`, "PlaywrightRenderer");
         this.browser = null;
         
-        if (this.browserMacKey) {
-          try {
-            await redis.del(this.browserMacKey);
-          } catch (e) {}
+      if (this.browserMacKey) {
+        try {
+          await redis.del(this.browserMacKey);
+        } catch {
         }
+      }
         
         if (!this.isClosing) {
           await this.restart(true);
@@ -398,12 +401,14 @@ export default class PlaywrightRenderer extends Renderer {
       if (page) {
         try {
           await page.close({ runBeforeUnload: false });
-        } catch (e) {}
+        } catch {
+        }
       }
       if (context) {
         try {
           await context.close();
-        } catch (e) {}
+        } catch {
+        }
       }
       this.shoting = this.shoting.filter(item => item !== name);
     }

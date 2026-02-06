@@ -62,7 +62,7 @@ export default class EnhancerBase extends plugin {
    * 设置回复方法
    * @param {Object} e - 事件对象
    */
-  setupReply(e) {
+  setupReply(_e) {
     // 子类实现
   }
 
@@ -71,7 +71,7 @@ export default class EnhancerBase extends plugin {
    * @param {Object} e - 事件对象
    * @returns {string|boolean} 返回 'return' 表示跳过，false 表示拒绝，true 表示继续
    */
-  applyConfigPolicies(e) {
+  applyConfigPolicies(_e) {
     // 子类实现
     return true
   }
@@ -80,7 +80,7 @@ export default class EnhancerBase extends plugin {
    * 应用别名
    * @param {Object} e - 事件对象
    */
-  applyAlias(e) {
+  applyAlias(_e) {
     // 子类实现
   }
 
@@ -89,7 +89,7 @@ export default class EnhancerBase extends plugin {
    * @param {Object} e - 事件对象
    * @returns {string|boolean} 返回 'return' 表示跳过
    */
-  enforceReplyPolicy(e) {
+  enforceReplyPolicy(_e) {
     // 子类实现
     return true
   }
@@ -149,7 +149,7 @@ export default class EnhancerBase extends plugin {
         configurable: true,
         enumerable: false
       })
-    } catch (error) {
+    } catch {
       // 静默失败
     }
   }
@@ -158,7 +158,7 @@ export default class EnhancerBase extends plugin {
    * 处理@属性
    * @param {Object} e - 事件对象
    */
-  processAtProperties(e) {
+  processAtProperties(_e) {
     // 子类实现
   }
 

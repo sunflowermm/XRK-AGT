@@ -204,7 +204,7 @@ export default class Runtime {
     }
 
     // 让扩展添加自己的渲染数据
-    for (const [name, ext] of Object.entries(this._extensions)) {
+    for (const [, ext] of Object.entries(this._extensions)) {
       if (ext && typeof ext.enhanceRenderData === 'function') {
         data = await ext.enhanceRenderData(data, plugin, path) || data
       }

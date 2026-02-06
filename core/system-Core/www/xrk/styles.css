@@ -1941,6 +1941,7 @@ select.form-input {
   flex-direction: column;
   gap: 20px;
   height: fit-content;
+  max-height: calc(100vh - 80px);
   min-width: 0; /* 避免侧栏在极端内容下撑破 grid，导致整体横移 */
   contain: layout paint;
 }
@@ -1988,6 +1989,11 @@ select.form-input {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: 4px;
+  max-height: calc(100vh - 220px);
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .config-item {

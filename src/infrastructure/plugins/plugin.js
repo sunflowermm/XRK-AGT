@@ -298,7 +298,7 @@ export default class plugin {
    * 前置检查方法，可通过重写实现自定义检查逻辑
    * @returns {Promise<boolean|string>} true-通过 false-跳过 'return'-停止
    */
-  async accept(e) {
+  async accept(_e) {
     return true
   }
 

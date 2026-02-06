@@ -2700,10 +2700,10 @@ class App {
     const searchInput = document.getElementById('configSearchInput');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
-        if (!this._configState) return;
-        this._configState.filter = e.target.value.trim().toLowerCase();
-        this.renderConfigList();
-      });
+      if (!this._configState) return;
+      this._configState.filter = e.target.value.trim().toLowerCase();
+      this.renderConfigList();
+    });
     }
 
     // 配置列表事件委托：只绑定一次，避免每次重绘重复绑定
@@ -3055,14 +3055,6 @@ class App {
     this.bindConfigJsonEvents();
     this.bindArrayObjectEvents();
     this.bindDynamicCollectionEvents();
-
-    // 体验优化：优先聚焦第一个可编辑表单控件，便于键盘用户直接开始输入
-    const firstInput = main.querySelector(
-      '#configFormWrapper input, #configFormWrapper select, #configFormWrapper textarea'
-    );
-    if (firstInput && typeof firstInput.focus === 'function') {
-      firstInput.focus();
-    }
   }
 
   renderSystemPathBadge(child) {
@@ -4328,14 +4320,14 @@ class App {
         `).join('')}
       </div>
     `).join('');
-
+    
     // 事件委托：避免为每个 API 条目重复绑定监听器
     container.onclick = (e) => {
       const item = e.target?.closest?.('.api-item');
       if (!item || !container.contains(item)) return;
-      container.querySelectorAll('.api-item').forEach(i => i.classList.remove('active'));
-      item.classList.add('active');
-      this.selectAPI(item.dataset.id);
+        container.querySelectorAll('.api-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        this.selectAPI(item.dataset.id);
     };
   }
 
@@ -4438,7 +4430,7 @@ class App {
       
       <div id="responseSection"></div>
     `;
-
+    
     // 事件链收敛：一个 click 入口 + 输入事件委托，避免重复绑定和 setTimeout
     section.onclick = (e) => {
       const t = e.target;
@@ -4457,12 +4449,12 @@ class App {
       const t = e.target;
       if (t?.matches?.('[data-request-field="1"]')) this.updateJSONPreview();
     };
-
-    // 文件上传设置
-    if (apiId === 'file-upload') {
-      this.setupFileUpload();
-    }
-
+      
+      // 文件上传设置
+      if (apiId === 'file-upload') {
+        this.setupFileUpload();
+      }
+    
     // 初始化JSON编辑器（只做“请求预览”，只读，避免误操作）
     this.initJSONEditor().then(() => this.updateJSONPreview());
   }

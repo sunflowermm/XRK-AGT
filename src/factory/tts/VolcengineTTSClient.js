@@ -517,7 +517,7 @@ export default class VolcengineTTSClient {
                 } else {
                     this.ws.terminate();
                 }
-            } catch (e) {
+            } catch {
                 // 忽略错误
             }
             this.ws = null;

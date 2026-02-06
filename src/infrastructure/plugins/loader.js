@@ -508,7 +508,7 @@ class PluginsLoader {
     return false
   }
 
-  async handleContext(plugins, e) {
+  async handleContext(plugins, _e) {
     if (!Array.isArray(plugins)) return false
 
     for (const plugin of plugins) {
