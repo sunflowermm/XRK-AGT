@@ -20,20 +20,6 @@ import { 制作聊天记录 } from '#utils/botutil.js'
 
 const ROOT_PATH = process.cwd();
 
-const configFile = path.join(ROOT_PATH, 'config', 'cmd', 'tools.yaml');
-const config = new ToolsConfig(configFile);
-const terminal = new TerminalHandler();
-const history = new CommandHistory(config.get('maxHistory', 100));
-const inspector = new ObjectInspector({
-  maxDepth: config.get('maxObjectDepth', 4),
-  circularDetection: config.get('circularDetection', true),
-  showPrototype: true,
-  showGettersSetters: true,
-  showFunctions: true,
-  maxArrayItems: 30,
-  maxStringLength: 200
-});
-
 /**
  * 工具配置管理类
  */
@@ -1217,7 +1203,19 @@ class JavaScriptExecutor {
 }
 
 // 初始化组件：config/terminal/history/inspector 在模块加载时构建一次即可（常量单例）
-
+const configFile = path.join(ROOT_PATH, 'config', 'cmd', 'tools.yaml');
+const config = new ToolsConfig(configFile);
+const terminal = new TerminalHandler();
+const history = new CommandHistory(config.get('maxHistory', 100));
+const inspector = new ObjectInspector({
+  maxDepth: config.get('maxObjectDepth', 4),
+  circularDetection: config.get('circularDetection', true),
+  showPrototype: true,
+  showGettersSetters: true,
+  showFunctions: true,
+  maxArrayItems: 30,
+  maxStringLength: 200
+});
 const jsExecutor = new JavaScriptExecutor();
 
 /**
@@ -1225,6 +1223,7 @@ const jsExecutor = new JavaScriptExecutor();
  */
 export class EnhancedTools extends plugin {
   constructor() {
+    const permission = config.get('permission', 'master');
     super({
       name: '终端工具',
       dsc: '执行终端命令和JavaScript代码',
@@ -1234,40 +1233,54 @@ export class EnhancedTools extends plugin {
         {
           reg: /^rx\s*([\s\S]*?)$/i,
           fnc: 'runTerminalXRK',
-          permission: config.get('permission'),
+          permission,
         },
         {
           reg: /^rh\s*([\s\S]*?)$/i,
           fnc: 'runTerminalhome',
-          permission: config.get('permission'),
+          permission,
         },
         {
           reg: /^roj\s*([\s\S]*?)$/i,
           fnc: 'runJavaScript',
-          permission: config.get('permission'),
+          permission,
         },
         {
           reg: /^roi\s*([\s\S]*?)$/i,
           fnc: 'inspectObject',
-          permission: config.get('permission'),
+          permission,
         },
         {
           reg: /^rj\s*([\s\S]*?)$/i,
           fnc: 'quickEvaluate',
-          permission: config.get('permission'),
+          permission,
         },
         {
           reg: /^rrl\s*(\w*)\s*(\d*)\s*$/i,
           fnc: 'showHistory',
-          permission: config.get('permission'),
+          permission,
         },
         {
           reg: /^rc\s*([\s\S]*?)$/i,
           fnc: 'configTool',
-          permission: config.get('permission'),
+          permission,
         },
       ],
     });
+  }
+
+  /** 检查命令是否在黑名单中 */
+  async checkBlacklist(e, cmd) {
+    if (!config.get('blacklist', true)) return false;
+    const banList = config.get('ban', []);
+    for (const bannedCmd of banList) {
+      if (cmd.includes(bannedCmd)) {
+        await e.reply(`❌ 命令 "${cmd}" 包含禁用关键词 "${bannedCmd}"`, true);
+        logger.debug(`已拦截黑名单命令: ${cmd}`);
+        return true;
+      }
+    }
+    return false;
   }
 
   /** 执行终端命令（项目目录） */
@@ -1275,16 +1288,7 @@ export class EnhancedTools extends plugin {
     const msg = e.msg.replace(/^rx\s*/i, '').trim();
     if (!msg) return false;
 
-    if (config.get('blacklist', true)) {
-      const banList = config.get('ban', []);
-      for (const bannedCmd of banList) {
-        if (msg.includes(bannedCmd)) {
-          await e.reply(`❌ 命令 "${msg}" 包含禁用关键词 "${bannedCmd}"`, true);
-          logger.debug(`已拦截黑名单命令: ${msg}`);
-          return true;
-        }
-      }
-    }
+    if (await this.checkBlacklist(e, msg)) return true;
 
     try {
       const options = {
@@ -1319,16 +1323,7 @@ export class EnhancedTools extends plugin {
     const msg = e.msg.replace(/^rh\s*/i, '').trim();
     if (!msg) return false;
 
-    if (config.get('blacklist', true)) {
-      const banList = config.get('ban', []);
-      for (const bannedCmd of banList) {
-        if (msg.includes(bannedCmd)) {
-          await e.reply(`❌ 命令 "${msg}" 包含禁用关键词 "${bannedCmd}"`, true);
-          logger.debug(`已拦截黑名单命令: ${msg}`);
-          return true;
-        }
-      }
-    }
+    if (await this.checkBlacklist(e, msg)) return true;
 
     try {
       const homePath = process.env.HOME || os.homedir();
@@ -1699,9 +1694,16 @@ rj e.reply("Hello!")           // 发送消息`, true);
     }
 
     if (cmd === 'reset') {
-      fs.unlinkSync(config.configPath);
-      config = new ToolsConfig(configFile);
-      await e.reply('✅ 配置已重置为默认值', true);
+      try {
+        if (fs.existsSync(config.configPath)) {
+          fs.unlinkSync(config.configPath);
+        }
+        config.config = {};
+        config.loadConfig();
+        await e.reply('✅ 配置已重置为默认值', true);
+      } catch (error) {
+        await e.reply(`❌ 重置配置失败: ${error.message}`, true);
+      }
       return true;
     }
 
