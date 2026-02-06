@@ -386,11 +386,11 @@ Bot.tasker.push(
                   });
                 }
               }
-            } catch (err) {
+            } catch {
             }
           }
         }
-      } catch (err) {
+      } catch {
       }
 
       return array;
@@ -2422,7 +2422,7 @@ Bot.tasker.push(
           case "message_sent":
             try {
               Bot.em("onebot.message_sent", data)
-            } catch (err) {
+            } catch {
               // 静默失败，避免影响主链路
             }
             return true

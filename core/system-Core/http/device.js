@@ -376,7 +376,7 @@ class DeviceManager {
                         }
                     }
                 }
-            } catch (e) { }
+            } catch { }
         };
         this.bot.on('device', this._deviceEventListener);
     }
@@ -679,7 +679,9 @@ class DeviceManager {
                         text: session.finalText
                     }));
                 }
-            } catch (e) { }
+            } catch {
+                // 忽略发送失败，交由重试/心跳机制处理
+            }
 
             // 处理AI响应（ASR识别结果调用工作流，工作流自动选择LLM工厂，结果交给TTS）
             if (session.finalText.trim()) {
@@ -1078,7 +1080,7 @@ class DeviceManager {
                 } else {
                     oldWs.terminate();
                 }
-            } catch (e) {
+            } catch {
                 // 忽略错误
             }
         }
@@ -1119,7 +1121,7 @@ class DeviceManager {
                         type: 'heartbeat_request',
                         timestamp: Date.now()
                     }));
-                } catch (e) {
+                } catch {
                     // 忽略错误
                 }
             }
@@ -1263,7 +1265,9 @@ class DeviceManager {
                     };
                     try {
                         ws.send(JSON.stringify({ type: 'command', command: cmd }));
-                    } catch (e) { }
+                    } catch {
+                        // 忽略发送失败，让调用方按需重试
+                    }
                 }
             },
 
@@ -1437,7 +1441,7 @@ class DeviceManager {
         const runtimeBot = this.getBot(Bot);
         try {
             const { type, device_id, ...payload } = data;
-            let deviceId = device_id || ws.device_id || 'unknown';
+            const deviceId = device_id || ws.device_id || 'unknown';
             
 
 
@@ -1465,7 +1469,7 @@ class DeviceManager {
                         type: 'error',
                         message: '设备未注册。请先发送 register 消息。'
                     }));
-                } catch (e) {}
+                } catch {}
                 return;
             }
 
@@ -1670,7 +1674,7 @@ class DeviceManager {
                                 }
                                 
                                 // 处理 segments：转换文件路径为 web URL，支持转发消息
-                                segments = segments.map((seg, idx) => {
+                                segments = segments.map((seg, _idx) => {
                                     // 字符串类型：转换为 text segment（防御性处理）
                                     if (typeof seg === 'string') {
                                         return { type: 'text', text: seg };
@@ -1867,7 +1871,7 @@ class DeviceManager {
                     type: 'error',
                     message: e.message
                 }));
-            } catch (sendErr) {
+            } catch {
                 // 忽略发送错误
             }
         }
@@ -1884,30 +1888,31 @@ class DeviceManager {
         const now = Date.now();
 
         for (const [id, device] of devices) {
-            if (device.online && now - device.last_seen > timeout) {
-                const ws = deviceWebSockets.get(id);
+            if (!device.online || now - device.last_seen <= timeout) continue;
 
-                if (ws) {
-                    this.handleDeviceDisconnect(id, ws);
-                } else {
-                    device.online = false;
+            const ws = deviceWebSockets.get(id);
 
-                    BotUtil.makeLog('info',
-                        `🔴 [设备离线] ${device.device_name} (${id})`,
-                        device.device_name
-                    );
-
-                    runtimeBot.em('device.offline', {
-                        post_type: 'device',
-                        event_type: 'offline',
-                        device_id: id,
-                        device_type: device.device_type,
-                        device_name: device.device_name,
-                        self_id: id,
-                        time: Math.floor(Date.now() / 1000)
-                    });
-                }
+            if (ws) {
+                this.handleDeviceDisconnect(id, ws);
+                continue;
             }
+
+            device.online = false;
+
+            BotUtil.makeLog('info',
+                `🔴 [设备离线] ${device.device_name} (${id})`,
+                device.device_name
+            );
+
+            runtimeBot.em('device.offline', {
+                post_type: 'device',
+                event_type: 'offline',
+                device_id: id,
+                device_type: device.device_type,
+                device_name: device.device_name,
+                self_id: id,
+                time: Math.floor(Date.now() / 1000)
+            });
         }
     }
 
@@ -1971,7 +1976,7 @@ export default {
         {
             method: 'POST',
             path: '/api/device/:deviceId/ai',
-            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+            handler: HttpResponse.asyncHandler(async (req, res, _Bot) => {
                     const deviceId = req.params.deviceId;
                     const { text, workflow, persona, profile, llm, model, llmProfile } = req.body || {};
                     if (!text || !String(text).trim()) {
@@ -2060,8 +2065,7 @@ export default {
                         return HttpResponse.validationError(res, '无效的文件路径');
                         }
 
-                        const fullPath = path.join(paths.trash, filePath);
-                    const normalizedPath = InputValidator.validatePath(filePath, paths.trash);
+                        const normalizedPath = InputValidator.validatePath(filePath, paths.trash);
 
                         if (!fs.existsSync(normalizedPath)) {
                         return HttpResponse.notFound(res, '文件不存在');
@@ -2097,7 +2101,7 @@ export default {
                         let filePath;
                         try {
                             filePath = Buffer.from(fileId, 'base64url').toString('utf8');
-                        } catch (e) {
+                        } catch {
                         return HttpResponse.validationError(res, '无效的文件ID');
                         }
 
@@ -2223,7 +2227,7 @@ export default {
                         if (client) {
                             client.endUtterance().catch(() => { });
                         }
-                    } catch (e) {
+                    } catch {
                         // 忽略错误
                     }
                     asrSessions.delete(sessionId);
@@ -2234,7 +2238,9 @@ export default {
         // 订阅ASR结果事件：更新会话finalText并转发中间结果到前端
         try {
             deviceManager.attachDeviceEventBridge(deviceManager.getBot());
-        } catch (e) { }
+        } catch {
+            // 忽略挂接失败，通常是 Bot 尚未完全初始化
+        }
     },
 
     destroy() {
@@ -2243,7 +2249,7 @@ export default {
             clearInterval(deviceManager.cleanupInterval);
         }
 
-        for (const [id, ws] of deviceWebSockets) {
+        for (const [, ws] of deviceWebSockets) {
             try {
                 clearInterval(ws.heartbeatTimer);
                 if (ws.readyState === 1) {
@@ -2251,23 +2257,23 @@ export default {
                 } else {
                     ws.terminate();
                 }
-            } catch (e) {
+            } catch {
                 // 忽略错误
             }
         }
 
-        for (const [deviceId, client] of asrClients) {
+        for (const [, client] of asrClients) {
             try {
                 client.destroy();
-            } catch (e) {
+            } catch {
                 // 忽略错误
             }
         }
 
-        for (const [deviceId, client] of ttsClients) {
+        for (const [, client] of ttsClients) {
             try {
                 client.destroy();
-            } catch (e) {
+            } catch {
                 // 忽略错误
             }
         }

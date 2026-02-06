@@ -207,7 +207,7 @@ export default class OneBotEnhancer extends EnhancerBase {
             if (typeof e.reply === 'function') {
               await e.reply(disableMsg)
             }
-          } catch (err) {
+          } catch {
             // 静默失败
           }
           return 'return'

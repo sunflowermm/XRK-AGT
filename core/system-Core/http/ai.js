@@ -137,9 +137,9 @@ function estimateTokens(text) {
 
 async function handleChatCompletionsV3(req, res) {
   const contentType = req.headers['content-type'] || '';
-  let body = req.body || {};
+  const body = req.body || {};
   let messages = Array.isArray(body.messages) ? body.messages : null;
-  let uploadedImages = [];
+  const uploadedImages = [];
 
   // 支持 multipart/form-data 格式（图片上传）
   if (contentType.includes('multipart/form-data')) {
@@ -150,7 +150,7 @@ async function handleChatCompletionsV3(req, res) {
       if (fields.messages) {
         try {
           messages = JSON.parse(fields.messages);
-        } catch (e) {
+        } catch (_e) {
           return HttpResponse.validationError(res, 'messages 字段格式无效');
         }
       }

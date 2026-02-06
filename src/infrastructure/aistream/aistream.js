@@ -167,7 +167,7 @@ export default class AIStream {
     if (!contexts || contexts.length === 0) return contexts;
     
     let optimized = this.deduplicateContexts(contexts);
-    let totalTokens = optimized.reduce((sum, ctx) => {
+    const totalTokens = optimized.reduce((sum, ctx) => {
       const text = ctx.message || ctx.content || '';
       return sum + this.estimateTokens(text);
     }, 0);
@@ -498,7 +498,7 @@ export default class AIStream {
    * @param {Object} context - 上下文
    * @returns {string}
    */
-  buildSystemPrompt(context) {
+  buildSystemPrompt(_context) {
     return '';
   }
 
@@ -545,7 +545,7 @@ export default class AIStream {
       if (member) {
         try {
           info = await member.getInfo();
-        } catch (e) {
+        } catch {
           info = null;
         }
       }
@@ -776,7 +776,7 @@ export default class AIStream {
    * @param {Function} onDelta - 增量回调
    * @returns {Promise<string>}
    */
-  async callAIStream(messages, apiConfig = {}, onDelta, options = {}) {
+  async callAIStream(messages, apiConfig = {}, onDelta, _options = {}) {
     const config = this.resolveLLMConfig(apiConfig);
     const retryConfig = this.getRetryConfig();
 
@@ -831,7 +831,7 @@ export default class AIStream {
             if (delta) {
               wrapDelta(delta);
             }
-          } catch (parseError) {
+          } catch {
             // 忽略JSON解析错误，继续处理下一行
           }
         }
@@ -1166,7 +1166,7 @@ export default class AIStream {
    * @param {Object} context - 上下文
    * @returns {Error} 处理后的错误
    */
-  handleError(error, operation, context = {}) {
+  handleError(error, operation, _context = {}) {
     const errorMessage = error?.message || String(error);
     BotUtil.makeLog('error', 
       `[${this.name}] ${operation}失败: ${errorMessage}`, 

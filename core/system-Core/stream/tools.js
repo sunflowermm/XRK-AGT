@@ -1,5 +1,4 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
-import BotUtil from '#utils/botutil.js';
 import path from 'path';
 import os from 'os';
 import { BaseTools } from '#utils/base-tools.js';
@@ -362,7 +361,7 @@ export default class ToolsStream extends AIStream {
     context.commandStderr = err.stderr || '';
   }
 
-  buildSystemPrompt(context) {
+  buildSystemPrompt(_context) {
     return `【基础工具说明】
 所有功能都通过MCP工具调用协议提供，包括：
 - read：读取文件内容

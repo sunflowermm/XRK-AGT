@@ -7,7 +7,7 @@ const EXCLUDE_KEYS = new Set([
   'url'
 ]);
 
-export function collectBotInventory(Bot, { includeDevices = true } = {}) {
+export function collectBotInventory(Bot, { includeDevices: _includeDevices = true } = {}) {
   if (!Bot || typeof Bot !== 'object') {
     return [];
   }

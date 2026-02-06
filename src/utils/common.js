@@ -1,6 +1,5 @@
 import { pipeline } from 'node:stream/promises'
 import fetch from 'node-fetch'
-import fs from 'node:fs/promises'
 import path from 'node:path'
 import BotUtil from './botutil.js'
 

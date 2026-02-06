@@ -85,9 +85,6 @@ class RendererLoader {
     if (!fsSync.existsSync(baseDir)) return
 
     try {
-      const { HotReloadBase } = await import('#utils/hot-reload-base.js')
-      const hotReload = new HotReloadBase({ loggerName: 'RendererLoader' })
-      
       // 渲染器需要监视目录变化，使用chokidar直接监视目录
       const watcher = chokidar.watch(baseDir, {
         ignored: /(^|[\/\\])\../,

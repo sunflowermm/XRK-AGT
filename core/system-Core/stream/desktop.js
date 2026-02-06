@@ -14,7 +14,7 @@ import StreamLoader from '#infrastructure/aistream/loader.js';
 const IS_WINDOWS = process.platform === 'win32';
 const execAsync = promisify(exec);
 
-const execCommand = (command, options = {}, needOutput = false) => {
+const execCommand = (command, options = {}) => {
   return new Promise((resolve, reject) => {
     exec(command, { ...options, encoding: 'utf8' }, (error, stdout, stderr) => {
       if (error) {
@@ -97,7 +97,7 @@ export default class DesktopStream extends AIStream {
             /explorer/i, /System/i, /winlogon/i, /csrss/i, /smss/i,
             /svchost/i, /dwm/i, /wininit/i
           ]);
-        } catch (err) {
+        } catch {
           // 静默处理清理错误
         }
       }, 30000);
@@ -113,7 +113,7 @@ export default class DesktopStream extends AIStream {
     return handled;
   }
 
-  requireWindows(context, operation) {
+  requireWindows(context, _operation) {
     if (IS_WINDOWS) return true;
     context.windowsOnly = true;
     return false;
@@ -198,7 +198,7 @@ export default class DesktopStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!this.requireWindows(context, '回桌面功能')) {
           return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
         }
@@ -228,7 +228,7 @@ export default class DesktopStream extends AIStream {
         },
         required: ['tool']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!this.requireWindows(context, '打开系统工具功能')) {
           return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
         }
@@ -261,7 +261,7 @@ export default class DesktopStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         try {
           const screenshot = (await import('screenshot-desktop')).default;
 
@@ -309,7 +309,7 @@ export default class DesktopStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!this.requireWindows(context, '锁屏功能')) {
           return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
         }
@@ -333,7 +333,7 @@ export default class DesktopStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         try {
           // 使用systeminformation库获取系统信息（跨平台）
           const [cpu, mem] = await Promise.all([
@@ -384,7 +384,7 @@ export default class DesktopStream extends AIStream {
         },
         required: ['url']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args = {}, _context = {}) => {
         const url = this.getParam(args, 'url');
         if (!url) {
           return this.errorResponse('INVALID_PARAM', 'URL不能为空');
@@ -422,7 +422,7 @@ export default class DesktopStream extends AIStream {
         },
         required: ['action']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!this.requireWindows(context, '关机/重启功能')) {
           return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
         }
@@ -472,7 +472,7 @@ export default class DesktopStream extends AIStream {
         },
         required: ['folderName']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!this.requireWindows(context, '创建文件夹功能')) {
           return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
         }
@@ -510,7 +510,7 @@ export default class DesktopStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, _context = {}) => {
         const commands = {
           win32: 'explorer',
           darwin: 'open .',
@@ -537,7 +537,7 @@ export default class DesktopStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         try {
           // 使用systeminformation库获取磁盘空间（跨平台）
           const fsSize = await si.fsSize();
@@ -605,8 +605,7 @@ export default class DesktopStream extends AIStream {
 
           const output = await execCommand(
             `powershell -NoProfile -ExecutionPolicy Bypass -Command "${fullCommand.replace(/"/g, '\\"')}"`,
-            { maxBuffer: 10 * 1024 * 1024, cwd: workspace },
-            true
+            { maxBuffer: 10 * 1024 * 1024, cwd: workspace }
           );
 
           return this.successResponse({ 
@@ -632,7 +631,7 @@ export default class DesktopStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!IS_WINDOWS) {
           return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
         }
@@ -652,7 +651,7 @@ export default class DesktopStream extends AIStream {
                 type: isShortcut ? '快捷方式' : (stats.isDirectory() ? '文件夹' : '文件'),
                 size: stats.isFile() ? stats.size : null
               });
-            } catch (e) {
+            } catch {
               // 忽略无法访问的文件
             }
           }
@@ -726,7 +725,7 @@ export default class DesktopStream extends AIStream {
                 shell: true
               });
               child.unref();
-            } catch (e) {
+            } catch {
               await execAsync(`start "" "${appName}"`, { shell: 'cmd.exe' });
             }
             return this.successResponse({ 
@@ -958,7 +957,7 @@ export default class DesktopStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, _context = {}) => {
         try {
           const result = await this.tools.cleanupProcesses();
           return this.successResponse({ 
@@ -987,7 +986,7 @@ export default class DesktopStream extends AIStream {
         },
         required: ['code']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args = {}, _context = {}) => {
         const code = (this.getParam(args, 'code', 'stockCode') || '').trim();
 
         // 验证股票代码格式（6位数字）
@@ -1216,9 +1215,9 @@ ${lines.join('\n')}`;
     const isMaster = e?.isMaster === true;
     const workspace = this.getWorkspace();
 
-    let fileContent = context.fileContent;
-    let fileSearchResult = context.fileSearchResult;
-    let commandOutput = context.commandOutput;
+    const fileContent = context.fileContent;
+    const fileSearchResult = context.fileSearchResult;
+    const commandOutput = context.commandOutput;
 
     const fileContext = this.buildFileContext(fileSearchResult, fileContent, commandOutput, context);
 

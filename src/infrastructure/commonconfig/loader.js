@@ -1,4 +1,3 @@
-import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import BotUtil from '#utils/botutil.js';
@@ -99,7 +98,7 @@ class ConfigLoader {
       if (typeof module.default === 'function') {
         try {
           configInstance = new module.default();
-        } catch (e) {
+        } catch {
           BotUtil.makeLog('warn', `无法实例化配置模块: ${key}`, 'ConfigLoader');
           return false;
         }

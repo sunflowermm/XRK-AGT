@@ -669,7 +669,7 @@ class App {
   /**
    * 应用首页数据（支持缓存数据平滑过渡）
    */
-  _applyHomeData(data, isCache = false) {
+  _applyHomeData(data) {
     if (!data) return;
     
     // 更新系统状态（包括统计卡片和图表）- 缓存数据也要显示
@@ -1985,7 +1985,6 @@ class App {
     this._applyMessageEnter(div, persist);
     
     if (persist) {
-      const textContent = allText.join('').trim();
       const normalizedSegments = segments.map(s => {
         if (typeof s === 'string') return { type: 'text', text: s };
         return s;
@@ -2303,7 +2302,7 @@ class App {
     }
     
     previewContainer.style.display = 'flex';
-    previewContainer.innerHTML = this._selectedImages.map((img, index) => {
+    previewContainer.innerHTML = this._selectedImages.map((img) => {
       return `
       <div class="chat-image-preview-item" data-img-id="${img.id}">
         <img src="${img.previewUrl}" alt="预览">
@@ -2314,7 +2313,7 @@ class App {
     
     // 绑定移除按钮事件
     previewContainer.querySelectorAll('.chat-image-preview-remove').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', () => {
         const imgId = btn.getAttribute('data-img-id');
         this.removeImagePreview(imgId);
       });
@@ -3840,11 +3839,73 @@ class App {
     });
   }
 
-  addDynamicCollectionEntry(collectionName) {
+  async showPromptDialog(message) {
+    return new Promise(resolve => {
+      const id = 'xrkPromptDialog';
+      let modal = document.getElementById(id);
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = id;
+        modal.className = 'xrk-prompt-modal';
+        modal.innerHTML = `
+          <div class="xrk-prompt-backdrop"></div>
+          <div class="xrk-prompt-dialog">
+            <div class="xrk-prompt-message"></div>
+            <input class="xrk-prompt-input" type="text" />
+            <div class="xrk-prompt-actions">
+              <button type="button" class="xrk-prompt-cancel">取消</button>
+              <button type="button" class="xrk-prompt-ok">确定</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+
+      const backdrop = modal.querySelector('.xrk-prompt-backdrop');
+      const msgEl = modal.querySelector('.xrk-prompt-message');
+      const input = modal.querySelector('.xrk-prompt-input');
+      const okBtn = modal.querySelector('.xrk-prompt-ok');
+      const cancelBtn = modal.querySelector('.xrk-prompt-cancel');
+
+      const cleanup = (value) => {
+        modal.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        backdrop.removeEventListener('click', onCancel);
+        input.removeEventListener('keydown', onKeydown);
+        resolve(value);
+      };
+
+      const onOk = () => cleanup(input.value);
+      const onCancel = () => cleanup(null);
+      const onKeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          onOk();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          onCancel();
+        }
+      };
+
+      msgEl.textContent = message || '';
+      input.value = '';
+      modal.style.display = 'flex';
+      input.focus();
+
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      backdrop.addEventListener('click', onCancel);
+      input.addEventListener('keydown', onKeydown);
+    });
+  }
+
+  async addDynamicCollectionEntry(collectionName) {
     if (!this._configState) return;
     const collection = this._configState.dynamicCollectionsMeta.find(col => col.name === collectionName);
     if (!collection) return;
-    const key = (prompt(collection.keyPlaceholder || '请输入键') || '').trim();
+
+    const key = (await this.showPromptDialog(collection.keyPlaceholder || '请输入键'))?.trim();
     if (!key) return;
     const existing = this.getValueFromObject(this._configState.rawObject || {}, collection.basePath || '');
     if (existing && Object.prototype.hasOwnProperty.call(existing, key)) {
@@ -5181,7 +5242,7 @@ class App {
       }
       case 'reply': {
         // 处理 segments：device.js 已标准化格式
-        let segments = Array.isArray(data.segments) ? data.segments : [];
+        const segments = Array.isArray(data.segments) ? data.segments : [];
         if (segments.length === 0 && data.text) {
           segments.push({ type: 'text', text: data.text });
         }
@@ -5474,4 +5535,4 @@ class App {
 }
 
 // 初始化应用
-const app = new App();
+new App();

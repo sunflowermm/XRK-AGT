@@ -65,7 +65,7 @@ export default class OneBotEvent extends EventListenerBase {
     
     // 作为备用方案，尝试使用 group 或 friend 的 sendMsg
     // 注意：此时 group 和 friend 可能还未设置（由 OneBotEnhancer 设置）
-    e.reply = async (msg = '', quote = false, data = {}) => {
+    e.reply = async (msg = '', _quote = false, _data = {}) => {
       if (!msg) return false
       try {
         // 优先使用 group 的 sendMsg（群聊）

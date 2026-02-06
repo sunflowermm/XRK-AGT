@@ -10,7 +10,7 @@ import paths from "#utils/paths.js";
 
 const tempDir = path.join(paths.data, "stdin");
 const mediaDir = path.join(paths.data, "media");
-const pluginsLoader = (await import("#infrastructure/plugins/loader.js")).default;
+await import("#infrastructure/plugins/loader.js");
 
 // 目录已在 paths.ensureBaseDirs() 中创建，无需重复创建
 
@@ -30,7 +30,7 @@ const cleanupTempFiles = () => {
             fs.unlinkSync(filePath);
             cleaned++;
           }
-        } catch (err) {
+        } catch {
           // 忽略单个文件错误
         }
       });
@@ -104,7 +104,7 @@ export class StdinHandler {
         }),
         getGroupArray: () => [],
         getFriendArray: () => [],
-        fileToUrl: async (filePath, opts = {}) => {
+        fileToUrl: async (filePath, _opts = {}) => {
           try {
             if (typeof filePath === 'string' && filePath.startsWith('http')) {
               return filePath;
@@ -571,7 +571,7 @@ export class StdinHandler {
 
 }
 
-const stdinHandler = new StdinHandler();
+new StdinHandler();
 
 export default {
   name: 'stdin',

@@ -478,7 +478,7 @@ export default class Bot extends EventEmitter {
       secure: false,
       logLevel: 'warn',
       
-      onProxyReq: (proxyReq, req, res) => {
+      onProxyReq: (proxyReq, req) => {
         this._handleProxyRequestStart(proxyReq, req, domainConfig);
       },
       
@@ -995,12 +995,12 @@ export default class Bot extends EventEmitter {
       
       // 拦截 writeHead 和 end 方法，在响应发送前设置响应时间头
       const originalWriteHead = res.writeHead;
-      res.writeHead = function(statusCode, statusMessage, headers) {
+      res.writeHead = function(...args) {
         const duration = Date.now() - start;
         if (!res.headersSent) {
           res.setHeader('X-Response-Time', `${duration}ms`);
         }
-        return originalWriteHead.apply(this, arguments);
+        return originalWriteHead.apply(this, args);
       };
       
       // 如果使用 res.send/res.json 等，它们会调用 writeHead
@@ -1946,7 +1946,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
           deadConnections.push(id);
           try {
             conn.terminate();
-          } catch (err) {
+          } catch {
             // 忽略已关闭的连接
           }
           continue;
@@ -1957,7 +1957,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
           try {
             conn.isAlive = false;
             conn.ping();
-          } catch (err) {
+          } catch {
             deadConnections.push(id);
           }
         } else {
@@ -2104,13 +2104,13 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       });
       
       // 连接关闭处理
-      conn.on("close", (code, reason) => {
+      conn.on("close", (code) => {
         BotUtil.makeLog("debug", `WebSocket断开：${req.url} [${connectionId}] 代码: ${code}`, '服务器');
         this._wsConnections.delete(connectionId);
       });
       
       // 消息处理（增强，使用 Node.js 24 Error.isError()）
-      conn.on("message", (msg, isBinary) => {
+      conn.on("message", (msg) => {
         try {
           conn.lastPing = Date.now(); // 更新活跃时间
           const logMsg = Buffer.isBuffer(msg) && msg.length > 1024 ?
@@ -2214,7 +2214,6 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       this.actualPort = serverInfo.port;
     }
     
-    const protocol = isHttps ? 'https' : 'http';
     const serverType = isHttps ? 'HTTPS' : 'HTTP';
     
     // 启动信息在汇总中显示，这里只记录日志
@@ -2391,7 +2390,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
           httpsOptions.ca = await fs.readFile(certConfig.ca);
           BotUtil.makeLog('debug', `${context}：已加载CA证书：${certConfig.ca}`, context);
         }
-      } catch (error) {
+      } catch {
         BotUtil.makeLog('debug', `${context}：CA证书文件不存在或无法访问：${certConfig.ca}，跳过`, context);
       }
     }
@@ -2568,10 +2567,10 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     this._stopWebSocketHeartbeat();
     
     // 关闭所有WebSocket连接
-    for (const [id, conn] of this._wsConnections.entries()) {
+    for (const [, conn] of this._wsConnections.entries()) {
       try {
         conn.terminate();
-      } catch (err) {
+      } catch {
         // 忽略已关闭的连接
       }
     }
@@ -2680,7 +2679,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   /**
    * 检查是否为虚拟网卡
    */
-  _isVirtualInterface(name, mac) {
+  _isVirtualInterface(name) {
     const virtualPatterns = [
       /^(docker|br-|veth|virbr|vnet)/i,
       /^(vmnet|vmware)/i,
@@ -2752,7 +2751,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
             return ip;
           }
         }
-      } catch (error) {
+      } catch {
         // 继续尝试下一个API
         continue;
       }
@@ -2833,6 +2832,28 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     
     if (apiResult.status === 'rejected') {
       BotUtil.makeLog('error', `API加载失败: ${apiResult.reason?.message}`, '服务器');
+    }
+
+    // 启用各 Loader 的目录热加载：新增 / 修改 / 删除文件时自动生效
+    try {
+      // 配置热加载（core/*/commonconfig）
+      await ConfigLoader.watch(true);
+    } catch (err) {
+      BotUtil.makeLog('error', `配置热加载启动失败: ${err?.message}`, '服务器');
+    }
+
+    try {
+      // 工作流热加载（core/*/stream）
+      await StreamLoader.watch(true);
+    } catch (err) {
+      BotUtil.makeLog('error', `工作流热加载启动失败: ${err?.message}`, '服务器');
+    }
+
+    try {
+      // 插件热加载（core/*/plugin）
+      await PluginsLoader.watch(true);
+    } catch (err) {
+      BotUtil.makeLog('error', `插件热加载启动失败: ${err?.message}`, '服务器');
     }
     
     // 初始化中间件和路由

@@ -258,7 +258,7 @@ class PluginsLoader {
     e.replyNew = e.reply
     
     // 设置通用reply方法，特定适配器的增强功能由适配器增强插件处理
-    e.reply = async (msg = '', quote = false, data = {}) => {
+    e.reply = async (msg = '', _quote = false, _data = {}) => {
       if (!msg) return false
       
       try {

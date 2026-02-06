@@ -142,7 +142,7 @@ export default class DatabaseStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         const dbs = await this.listDatabases(context);
         
         // 在工作流中记录笔记
@@ -200,7 +200,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 保存知识（自动处理文本或JSON，并生成 embedding）
    */
-  async saveKnowledge(db, content, context) {
+  async saveKnowledge(db, content, _context) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
     
     let records = [];
@@ -253,7 +253,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 查询知识（支持向量检索和关键词搜索）
    */
-  async queryKnowledge(db, keyword, context) {
+  async queryKnowledge(db, keyword, _context) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
     
     let records = [];
@@ -404,7 +404,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 列出所有知识库
    */
-  async listDatabases(context) {
+  async listDatabases(_context) {
     try {
       const files = await fs.readdir(this.dbDir);
       return files
@@ -418,7 +418,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 删除知识（简化版：支持ID或条件）
    */
-  async deleteKnowledge(db, condition, context) {
+  async deleteKnowledge(db, condition, _context) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
     
     let records = [];
@@ -464,7 +464,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 构建系统提示（辅助工作流，合并时不会被调用）
    */
-  buildSystemPrompt(context) {
+  buildSystemPrompt(_context) {
     return '知识库工作流插件，为其他工作流提供知识存储和检索能力。';
   }
 
@@ -482,7 +482,7 @@ export default class DatabaseStream extends AIStream {
     }
   }
 
-  async buildChatContext(e, question) {
+  async buildChatContext(_e, _question) {
     return [];
   }
 

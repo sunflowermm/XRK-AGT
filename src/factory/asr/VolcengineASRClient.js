@@ -212,7 +212,7 @@ export default class VolcengineASRClient {
             }
 
             return null;
-        } catch (e) {
+        } catch {
             return null;
         }
     }
@@ -231,7 +231,7 @@ export default class VolcengineASRClient {
                     this.ws.ping();
                     this._startPongTimer();
                 }
-            } catch (e) {
+            } catch {
                 // 忽略错误
             }
         }, this.config.wsPingIntervalMs || 30000);
@@ -259,7 +259,7 @@ export default class VolcengineASRClient {
             if (this.ws) {
                 try {
                     this.ws.terminate();
-                } catch (e) {
+                } catch {
                     // 忽略错误
                 }
             }
@@ -560,7 +560,7 @@ export default class VolcengineASRClient {
             );
             try {
                 await this.endUtterance();
-            } catch (e) {
+            } catch {
                 // 忽略错误
             }
         }
@@ -665,7 +665,7 @@ export default class VolcengineASRClient {
         if (this.currentUtterance && !this.currentUtterance.ending) {
             try {
                 await this.endUtterance();
-            } catch (e) {
+            } catch {
                 // 忽略错误
             }
         }
@@ -680,7 +680,7 @@ export default class VolcengineASRClient {
                 } else {
                     this.ws.terminate();
                 }
-            } catch (e) {
+            } catch {
                 // 忽略错误
             }
             this.ws = null;

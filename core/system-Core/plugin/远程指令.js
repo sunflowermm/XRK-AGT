@@ -20,11 +20,19 @@ import { 制作聊天记录 } from '#utils/botutil.js'
 
 const ROOT_PATH = process.cwd();
 
-let configFile = path.join(ROOT_PATH, 'config', 'cmd', 'tools.yaml');
-let config;
-let terminal;
-let history;
-let inspector;
+const configFile = path.join(ROOT_PATH, 'config', 'cmd', 'tools.yaml');
+const config = new ToolsConfig(configFile);
+const terminal = new TerminalHandler();
+const history = new CommandHistory(config.get('maxHistory', 100));
+const inspector = new ObjectInspector({
+  maxDepth: config.get('maxObjectDepth', 4),
+  circularDetection: config.get('circularDetection', true),
+  showPrototype: true,
+  showGettersSetters: true,
+  showFunctions: true,
+  maxArrayItems: 30,
+  maxStringLength: 200
+});
 
 /**
  * 工具配置管理类
@@ -185,7 +193,7 @@ class TerminalHandler {
 
     return new Promise(async (resolve) => {
       const startTime = Date.now();
-      let chunkedOutput = [];
+      const chunkedOutput = [];
       const command = exec(this.formatPrompt(cmd), {
         ...options,
         maxBuffer: 10 * 1024 * 1024
@@ -716,7 +724,7 @@ class ObjectInspector {
             let protoProps = [];
             try {
               protoProps = Object.getOwnPropertyNames(proto);
-            } catch (protoPropsError) {
+            } catch {
               // 静默处理
             }
 
@@ -735,12 +743,12 @@ class ObjectInspector {
                     });
                   }
                 }
-              } catch (protoError) {
+              } catch {
                 // 跳过原型属性错误
               }
             }
           }
-        } catch (protoAccessError) {
+        } catch {
           // 静默处理
         }
       }
@@ -766,7 +774,7 @@ class ObjectInspector {
       if (arrowMatch) return arrowMatch[1] || arrowMatch[2] || '';
       const paramsMatch = funcStr.match(/^\s*(?:async\s*)?function(?:\s+\w+)?\s*\(([^)]*)\)/);
       return paramsMatch ? paramsMatch[1] : '';
-    } catch (error) {
+    } catch (_error) {
       return '(无法解析参数)';
     }
   }
@@ -921,7 +929,7 @@ class JavaScriptExecutor {
           return jsonStr.substring(0, maxOutputLength - 3) + '...';
         }
         return jsonStr;
-      } catch (e) {
+    } catch (_e) {
         // 无法JSON化的对象，使用 util.inspect
         try {
           const maxOutputLength = config.get('maxOutputLength', 5000)
@@ -939,7 +947,7 @@ class JavaScriptExecutor {
             return inspectStr.substring(0, maxOutputLength - 3) + '...';
           }
           return inspectStr;
-        } catch (inspectError) {
+        } catch (_inspectError) {
           // 最后的备选方案
           return `[${result.constructor?.name || 'Object'}]`;
         }
@@ -1054,8 +1062,6 @@ class JavaScriptExecutor {
    * 执行JavaScript代码 - 增强模式
    */
   async executeEnhanced(code, globalContext) {
-    const features = this.analyzeCode(code);
-    
     // 创建一个更宽松的执行环境
     const script = new vm.Script(`
       (async function() {
@@ -1210,21 +1216,7 @@ class JavaScriptExecutor {
   }
 }
 
-/**
- * 初始化组件
- */
-config = new ToolsConfig(configFile);
-terminal = new TerminalHandler();
-history = new CommandHistory(config.get('maxHistory', 100));
-inspector = new ObjectInspector({
-  maxDepth: config.get('maxObjectDepth', 4),
-  circularDetection: config.get('circularDetection', true),
-  showPrototype: true,
-  showGettersSetters: true,
-  showFunctions: true,
-  maxArrayItems: 30,
-  maxStringLength: 200,
-});
+// 初始化组件：config/terminal/history/inspector 在模块加载时构建一次即可（常量单例）
 
 const jsExecutor = new JavaScriptExecutor();
 
@@ -1280,7 +1272,7 @@ export class EnhancedTools extends plugin {
 
   /** 执行终端命令（项目目录） */
   async runTerminalXRK(e) {
-    let msg = e.msg.replace(/^rx\s*/i, '').trim();
+    const msg = e.msg.replace(/^rx\s*/i, '').trim();
     if (!msg) return false;
 
     if (config.get('blacklist', true)) {
@@ -1324,7 +1316,7 @@ export class EnhancedTools extends plugin {
 
   /** 执行终端命令（用户主目录） */
   async runTerminalhome(e) {
-    let msg = e.msg.replace(/^rh\s*/i, '').trim();
+    const msg = e.msg.replace(/^rh\s*/i, '').trim();
     if (!msg) return false;
 
     if (config.get('blacklist', true)) {
@@ -1372,7 +1364,7 @@ export class EnhancedTools extends plugin {
    * 特点：支持复杂代码结构，完整错误栈追踪，可选执行模式
    */
   async runJavaScript(e) {
-    let code = e.msg.replace(/^roj\s*/i, '').trim();
+    const code = e.msg.replace(/^roj\s*/i, '').trim();
     if (!code) {
       await e.reply(`📝 roj - 完整JavaScript执行器
 支持：多行代码、async/await、类定义、复杂逻辑
@@ -1440,7 +1432,7 @@ roj const arr = [1,2,3];
    * 特点：显示对象所有属性、方法、原型链，支持循环引用检测
    */
   async inspectObject(e) {
-    let code = e.msg.replace(/^roi\s*/i, '').trim();
+    const code = e.msg.replace(/^roi\s*/i, '').trim();
     if (!code) {
       await e.reply(`🔍 roi - 对象深度检查器
 功能：详细分析对象结构、属性、方法、原型链
@@ -1498,7 +1490,7 @@ roi new Date()          // 检查日期对象`, true);
    * 特点：快速执行单行表达式，自动返回结果，适合快速测试
    */
   async quickEvaluate(e) {
-    let expression = e.msg.replace(/^rj\s*/i, '').trim();
+    const expression = e.msg.replace(/^rj\s*/i, '').trim();
     if (!expression) {
       await e.reply(`⚡ rj - 快速表达式计算器
 功能：快速执行单行表达式和简单计算
@@ -1582,9 +1574,9 @@ rj e.reply("Hello!")           // 发送消息`, true);
 
   /** 显示历史记录 */
   async showHistory(e) {
-    let match = /^rrl\s*(\w*)\s*(\d*)\s*$/i.exec(e.msg);
-    let type = match[1]?.toLowerCase() || '';
-    let limit = match[2] ? parseInt(match[2]) : 10;
+    const match = /^rrl\s*(\w*)\s*(\d*)\s*$/i.exec(e.msg);
+    const type = match[1]?.toLowerCase() || '';
+    const limit = match[2] ? parseInt(match[2]) : 10;
 
     if (type === 'clear' || type === 'c') {
       const result = history.clear();
@@ -1635,7 +1627,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
 
   /** 配置工具 */
   async configTool(e) {
-    let cmd = e.msg.replace(/^rc\s*/i, '').trim().toLowerCase();
+    const cmd = e.msg.replace(/^rc\s*/i, '').trim().toLowerCase();
 
     if (!cmd || cmd === 'show' || cmd === 'list') {
       const configData = config.config;
@@ -1690,7 +1682,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
         } else if (value.startsWith('{') && value.endsWith('}')) {
           value = JSON.parse(value);
         }
-      } catch (error) {
+      } catch (_error) {
         // 保持原值
       }
 

@@ -310,7 +310,7 @@ export class sendLog extends plugin {
     if (!line) return ""
     
     // 截断长度
-    let formattedLine = line.length > maxLineLength
+    const formattedLine = line.length > maxLineLength
       ? line.substring(0, maxLineLength - 3) + '...'
       : line
     

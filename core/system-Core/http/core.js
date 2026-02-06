@@ -5,15 +5,14 @@ import { promisify } from 'util';
 import cfg from '#infrastructure/config/config.js';
 import StreamLoader from '#infrastructure/aistream/loader.js';
 import { collectBotInventory, summarizeBots } from '#infrastructure/http/utils/botInventory.js';
-import BotUtil from '#utils/botutil.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
 const execAsync = promisify(exec);
 
 let __lastNetSample = null;
 let __netSampler = null;
-let __netHist = []; // 长期历史（按分钟）
-let __netRecent = []; // 近期数据（每3-5秒一个点，用于图表显示）
+const __netHist = []; // 长期历史（按分钟）
+const __netRecent = []; // 近期数据（每3-5秒一个点，用于图表显示）
 const NET_HISTORY_LIMIT = 24 * 60; // 24小时，每分钟一个点
 const NET_RECENT_LIMIT = 60; // 最近60个点，用于实时图表
 const NET_SAMPLE_MS = 3_000; // 每3秒采样一次
@@ -55,11 +54,11 @@ let __procTimer = null;
  * Windows网络流量采样（优化版，Windows Server优先使用累计值方法）
  */
 async function __sampleNetWindows() {
-  let lastError = null;
+  let _lastError = null;
   
   // 方法1: 使用Get-NetAdapterStatistics（PowerShell，累计值，Windows Server最准确）
   try {
-    const { stdout, stderr } = await execAsync(
+    const { stdout } = await execAsync(
       'powershell -NoProfile -Command "$adapters = Get-NetAdapterStatistics | Where-Object { $_.InterfaceDescription -notlike \"*Loopback*\" -and $_.InterfaceDescription -notlike \"*Teredo*\" -and $_.InterfaceDescription -notlike \"*isatap*\" -and $_.InterfaceDescription -notlike \"*Virtual*\" }; if ($adapters) { $rx = ($adapters | Measure-Object -Property ReceivedBytes -Sum).Sum; $tx = ($adapters | Measure-Object -Property SentBytes -Sum).Sum; \"$rx|$tx\" } else { \"0|0\" }"',
       { timeout: 5000, maxBuffer: 1024 * 1024 }
     );
@@ -70,10 +69,10 @@ async function __sampleNetWindows() {
       // 返回结果，即使为0也返回（可能是真实值）
       return { rxBytes, txBytes, method: 'Get-NetAdapterStatistics' };
     } else {
-      lastError = `Get-NetAdapterStatistics输出格式错误: ${stdout.substring(0, 100)}`;
+      _lastError = `Get-NetAdapterStatistics输出格式错误: ${stdout.substring(0, 100)}`;
     }
   } catch (e) {
-    lastError = `Get-NetAdapterStatistics失败: ${e.message}`;
+    _lastError = `Get-NetAdapterStatistics失败: ${e.message}`;
   }
 
   // 方法2: 使用Get-Counter（PowerShell，速率值，需要转换为累计值）
@@ -89,10 +88,10 @@ async function __sampleNetWindows() {
       // 返回速率值，后续会转换为累计值
       return { rxRate, txRate, method: 'Get-Counter' };
     } else {
-      lastError = `Get-Counter输出格式错误: ${stdout.substring(0, 100)}`;
+      _lastError = `Get-Counter输出格式错误: ${stdout.substring(0, 100)}`;
     }
   } catch (e) {
-    lastError = `Get-Counter失败: ${e.message}`;
+    _lastError = `Get-Counter失败: ${e.message}`;
   }
 
   // 方法3: 使用wmic（Windows Management Instrumentation，兼容性最好）
@@ -117,7 +116,7 @@ async function __sampleNetWindows() {
       return { rxRate, txRate, method: 'wmic' };
     }
   } catch (e) {
-    lastError = `wmic失败: ${e.message}`;
+    _lastError = `wmic失败: ${e.message}`;
   }
   
   return null;
@@ -145,7 +144,7 @@ async function __sampleNetUnix() {
             return { rxBytes, txBytes, method: '/proc/net/dev' };
           }
         }
-      } catch (e) {
+      } catch (_e) {
         // 降级方案
       }
     } else if (platform === 'darwin') {
@@ -163,13 +162,13 @@ async function __sampleNetUnix() {
             return { rxBytes, txBytes, method: 'netstat -ib' };
           }
         }
-      } catch (e) {
+      } catch (_e) {
         // 降级方案
       }
     }
 
     return null;
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 }
@@ -182,7 +181,6 @@ async function __sampleNetOnce() {
     const platform = process.platform;
     const now = Date.now();
     let rxBytes = 0, txBytes = 0;
-    let rxRate = 0, txRate = 0;
     let method = 'systeminformation';
     let isValid = false;
 
@@ -245,7 +243,7 @@ async function __sampleNetOnce() {
           isValid = true;
         }
       }
-    } catch (e) {
+    } catch (_e) {
       // systeminformation失败，使用原生方法作为降级方案
       isValid = false;
     }
@@ -297,7 +295,7 @@ async function __sampleNetOnce() {
                 method = 'systeminformation-fallback';
                 isValid = true;
               }
-            } catch (e) {
+            } catch (_e) {
               // 忽略错误，继续使用fallback逻辑
             }
           }
@@ -391,7 +389,7 @@ async function __sampleNetOnce() {
     }
     
     __lastNetSample = { ts: now, rx: rxBytes, tx: txBytes };
-  } catch (error) {
+  } catch {
     // 静默处理错误
   }
 }
@@ -674,7 +672,7 @@ export default {
   name: 'core',
   dsc: '核心系统API',
   priority: 200,
-  init: async (app, Bot) => {
+  init: async (_app, _Bot) => {
     __ensureNetSampler();
     __ensureSysSamplers();
   },
@@ -730,7 +728,7 @@ export default {
     {
       method: 'GET',
       path: '/api/config',
-      handler: async (req, res, Bot) => {
+      handler: async (req, res, _Bot) => {
         function serialize(obj, seen = new WeakSet()) {
           if (typeof obj === 'function') {
             return obj.toString();
@@ -769,7 +767,7 @@ export default {
           if (redis && typeof redis.ping === 'function') {
             redisOk = await redis.ping().then(() => true).catch(() => false);
           }
-        } catch (e) {
+        } catch (_e) {
           // redis 不可用，忽略
         }
         

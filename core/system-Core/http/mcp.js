@@ -21,7 +21,7 @@ export default {
     {
       method: 'POST',
       path: '/api/mcp/jsonrpc',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (_req, res) => {
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -214,7 +214,7 @@ export default {
         try {
           const resource = await mcpServer.getResource(decodeURIComponent(uri));
           HttpResponse.success(res, { resource });
-        } catch (error) {
+        } catch {
           return HttpResponse.notFound(res, `资源未找到: ${uri}`);
         }
       }, 'mcp.resource.read')
@@ -242,7 +242,7 @@ export default {
         try {
           const prompt = await mcpServer.getPrompt(name, args || {});
           HttpResponse.success(res, { prompt });
-        } catch (error) {
+        } catch {
           return HttpResponse.notFound(res, `提示词未找到: ${name}`);
         }
       }, 'mcp.prompt.get')
@@ -269,7 +269,7 @@ export default {
   ],
 
   ws: {
-    '/mcp/ws': (ws, req) => {
+    '/mcp/ws': (ws, _req) => {
       BotUtil.makeLog('info', 'MCP WebSocket连接已建立', 'MCPApi');
 
       const mcpServer = getMCPServer();

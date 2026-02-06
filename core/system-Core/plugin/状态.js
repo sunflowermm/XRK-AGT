@@ -6,7 +6,6 @@ import cfg from '#infrastructure/config/config.js'
 // 模块级配置
 let showNetworkInfo = true
 let showProcessInfo = true
-let showDiskInfo = true
 
 export class stattools extends plugin {
   constructor() {
@@ -28,7 +27,6 @@ export class stattools extends plugin {
     const statusCfg = agtCfg.status || {}
     showNetworkInfo = statusCfg.showNetwork !== false
     showProcessInfo = statusCfg.showProcess !== false
-    showDiskInfo = statusCfg.showDisk !== false
   }
 
   formatFileSize(bytes) {
@@ -49,7 +47,7 @@ export class stattools extends plugin {
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = Math.floor(seconds % 60)
     
-    let result = []
+    const result = []
     if (days > 0) result.push(`${days}天`)
     if (hours > 0) result.push(`${hours}小时`)
     if (minutes > 0) result.push(`${minutes}分钟`)

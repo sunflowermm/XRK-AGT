@@ -2,7 +2,6 @@
  * Monitor Service - 监控服务
  * 负责Agent执行追踪、性能指标、错误追踪、成本分析等
  */
-import BotUtil from '#utils/botutil.js';
 import EventEmitter from 'events';
 
 export class MonitorService extends EventEmitter {

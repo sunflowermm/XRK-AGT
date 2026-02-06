@@ -55,7 +55,7 @@ ${persona}
     return messages;
   }
 
-  async execute(deviceId, question, apiConfig, deviceInfo = {}, persona = '') {
+  async execute(deviceId, question, apiConfig, _deviceInfo = {}, persona = '') {
     try {
       const messages = await this.buildChatContext(null, { text: question, persona });
       const response = await this.callAI(messages, apiConfig);

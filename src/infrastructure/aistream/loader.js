@@ -63,7 +63,7 @@ class StreamLoader {
           const pattern = path.posix.join(streamDir.replace(/\\/g, '/'), '*.js');
           const dirFiles = await BotUtil.glob(pattern);
           files.push(...dirFiles);
-        } catch (error) {
+        } catch {
           BotUtil.makeLog('warn', `读取工作流目录失败: ${streamDir}`, 'StreamLoader');
         }
       }
@@ -297,7 +297,7 @@ class StreamLoader {
         try {
           await stream.initEmbedding();
           successCount++;
-        } catch (err) {
+        } catch {
           failCount++;
         }
       } else if (stream.embeddingReady) {

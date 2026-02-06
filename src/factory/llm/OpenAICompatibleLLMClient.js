@@ -125,7 +125,7 @@ export default class OpenAICompatibleLLMClient {
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const maxToolRounds = this.config.maxToolRounds || 5;
-    let currentMessages = [...transformedMessages];
+    const currentMessages = [...transformedMessages];
 
     for (let round = 0; round < maxToolRounds; round++) {
       const resp = await fetch(

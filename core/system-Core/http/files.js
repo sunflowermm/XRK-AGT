@@ -1,6 +1,5 @@
 import path from 'path';
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import { ulid } from 'ulid';
 import crypto from 'crypto';
 import paths from '#utils/paths.js';
@@ -84,7 +83,7 @@ export default {
     {
       method: 'POST',
       path: '/api/file/upload',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, _Bot) => {
         if (!Bot.checkApiAuthorization(req)) {
           return HttpResponse.forbidden(res, 'Unauthorized');
         }
@@ -177,7 +176,7 @@ export default {
     {
       method: 'GET',
       path: '/api/file/:id',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, _Bot) => {
         // 输入验证
         const { id } = req.params;
         if (!id || typeof id !== 'string' || id.length > 50) {
@@ -289,7 +288,7 @@ export default {
     }
   ],
 
-  init(app, Bot) {
+  init() {
     // 定期清理过期文件
     setInterval(async () => {
       const now = Date.now();

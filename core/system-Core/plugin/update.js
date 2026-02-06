@@ -5,7 +5,7 @@ import common from '#utils/common.js'
 import { Restart } from './restart.js'
 
 const require = createRequire(import.meta.url)
-const { exec, execSync } = require('child_process')
+const { execSync } = require('child_process')
 
 let uping = false
 
@@ -45,7 +45,7 @@ export class update extends plugin {
     uping = true
     const updatedTargets = new Set()
     let isUp = false
-    let oldCommitId = null
+    const oldCommitId = null
     
     try {
       const targetName = (this.e.msg.replace(/#(强制)?更新/, '').trim()) || ''
@@ -189,7 +189,7 @@ export class update extends plugin {
     const updatedTargets = new Set()
     const messages = []
     let isUp = false
-    let oldCommitId = null
+    const oldCommitId = null
 
     const isSilent = /^#静默全部(强制)?更新$/.test(this.e.msg)
     const originalReply = this.reply
@@ -264,7 +264,7 @@ export class update extends plugin {
       const logLines = logAll.trim().split('\n')
       const log = []
       
-      for (let str of logLines) {
+      for (const str of logLines) {
         const parts = str.split('||')
         if (oldCommitId && parts[0] === oldCommitId) break
         if (parts[1]?.includes('Merge branch')) continue

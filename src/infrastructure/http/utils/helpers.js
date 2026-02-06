@@ -120,7 +120,7 @@ export async function extractRequestBody(req) {
         } else {
           resolve({});
         }
-      } catch (error) {
+      } catch {
         reject(new Error('无效的JSON格式'));
       }
     });

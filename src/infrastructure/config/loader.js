@@ -87,7 +87,7 @@ class ProcessManager {
       if (global.redis) {
         await closeRedis();
       }
-    } catch (error) {
+    } catch {
       // 忽略关闭错误
     }
     
@@ -95,7 +95,7 @@ class ProcessManager {
       if (global.mongodb) {
         await global.mongodb.close();
       }
-    } catch (error) {
+    } catch {
       // 忽略关闭错误
     }
   }

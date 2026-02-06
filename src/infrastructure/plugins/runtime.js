@@ -217,15 +217,15 @@ export default class Runtime {
     
     // 保存模板数据（开发模式）
     if (process.argv.includes("dev")) {
-      let saveDir = await Bot.mkdir(`trash/ViewData/${plugin}`)
-      let file = `${saveDir}/${data._htmlPath.split("/").join("_")}.json`
+      const saveDir = await Bot.mkdir(`trash/ViewData/${plugin}`)
+      const file = `${saveDir}/${data._htmlPath.split("/").join("_")}.json`
       await fs.writeFile(file, JSON.stringify(data))
     }
     
     // 截图
     const renderer = RendererLoader.getRenderer()
     const img = await renderer.render(`${plugin}/${normalizedPath}`, data)
-    let base64 = img ? segment.image(img) : null
+    const base64 = img ? segment.image(img) : null
     if (cfg.retType === "base64") {
       return base64
     }

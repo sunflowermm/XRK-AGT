@@ -6,7 +6,6 @@ import BotUtil from '#utils/botutil.js';
 import EventEmitter from 'events';
 import fs from 'fs/promises';
 import path from 'path';
-import paths from '#utils/paths.js';
 
 export class PromptEngine extends EventEmitter {
   constructor() {
@@ -231,7 +230,7 @@ export class PromptEngine extends EventEmitter {
       let templateContent = '';
       let variables = [];
       let version = '1.0.0';
-      let metadata = {};
+      const metadata = {};
 
       let inContent = false;
       for (const line of lines) {

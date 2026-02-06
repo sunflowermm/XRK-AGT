@@ -6,7 +6,6 @@ import chokidar from 'chokidar'
 import lodash from 'lodash'
 import path from 'path'
 import BotUtil from '#utils/botutil.js'
-import paths from '#utils/paths.js'
 
 export class HotReloadBase {
   constructor(options = {}) {

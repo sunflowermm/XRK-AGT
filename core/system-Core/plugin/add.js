@@ -1256,7 +1256,7 @@ export class add extends plugin {
     this.isGlobal = this.e.msg.includes("全局")
 
     let page = 1
-    let pageSize = 50
+    const pageSize = 50
     let type = "list"
 
     await this.getGroupId()
@@ -1280,7 +1280,7 @@ export class add extends plugin {
     const entries = []
     let num = 0
     
-    for (let [k, v] of list) {
+    for (const [k, v] of list) {
       const displayKey = k.startsWith('[模糊]') ? k.substring(4) + '(模糊)' : k
       if (type === "search" && !displayKey.includes(search)) continue
       entries.push({ key: displayKey, originalKey: k, val: v, num: ++num })
@@ -1291,7 +1291,7 @@ export class add extends plugin {
 
     entries.reverse()
 
-    let displayEntries = type === "list" ? this.pagination(page, pageSize, entries) : entries
+    const displayEntries = type === "list" ? this.pagination(page, pageSize, entries) : entries
 
     const msg = []
     const title = type === "search" 

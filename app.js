@@ -28,7 +28,9 @@ function execAsync(command, args = [], options = {}) {
     const killChild = () => {
       try {
         child.kill('SIGTERM');
-      } catch {}
+      } catch {
+        // ignore
+      }
     };
 
     const createError = (message, code) => {

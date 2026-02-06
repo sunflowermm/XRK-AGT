@@ -105,7 +105,7 @@ export default class ChatStream extends AIStream {
         ChatStream.emotionImages[emotion] = imageFiles.map(file => 
           path.join(emotionDir, file)
         );
-      } catch (error) {
+      } catch {
         ChatStream.emotionImages[emotion] = [];
       }
     }
@@ -133,7 +133,7 @@ export default class ChatStream extends AIStream {
         },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args = {}, _context = {}) => {
         return { success: true, message: '已@用户', data: { qq: args.qq } };
       },
       enabled: true
@@ -184,7 +184,7 @@ export default class ChatStream extends AIStream {
         },
         required: ['content']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args = {}, _context = {}) => {
         return { success: true, message: '消息已回复', data: { content: args.content } };
       },
       enabled: true
@@ -260,7 +260,7 @@ export default class ChatStream extends AIStream {
         },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '非群聊环境' };
         }
@@ -289,7 +289,7 @@ export default class ChatStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '非群聊环境' };
         }
@@ -322,7 +322,7 @@ export default class ChatStream extends AIStream {
         },
         required: ['qq', 'duration']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '非群聊环境' };
         }
@@ -375,7 +375,7 @@ export default class ChatStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '非群聊环境' };
         }
@@ -399,7 +399,7 @@ export default class ChatStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '非群聊环境' };
         }
@@ -768,7 +768,7 @@ export default class ChatStream extends AIStream {
           if (context.e.bot && context.e.bot.sendApi) {
             try {
               messageInfo = await context.e.bot.sendApi('get_msg', { message_id: args.msgId });
-            } catch (error) {
+            } catch {
               // 忽略获取消息信息失败
             }
           }
@@ -838,7 +838,7 @@ export default class ChatStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '此功能仅在群聊中可用' };
         }
@@ -870,7 +870,7 @@ export default class ChatStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '此功能仅在群聊中可用' };
         }
@@ -902,7 +902,7 @@ export default class ChatStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '此功能仅在群聊中可用' };
         }
@@ -1391,7 +1391,6 @@ ${isGlobalTrigger ?
       messages = await this.buildEnhancedContext(e, query, messages);
       
       // 调用AI获取响应
-      const context = { e, question: null, config };
       const response = await this.callAI(messages, config);
       
       if (!response) {

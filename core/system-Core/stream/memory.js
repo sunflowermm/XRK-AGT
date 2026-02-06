@@ -170,7 +170,7 @@ export default class MemoryStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (_args = {}, context = {}) => {
         const memories = await this.listMemories(context);
         
         // 在工作流中记录笔记
@@ -400,7 +400,7 @@ export default class MemoryStream extends AIStream {
   /**
    * 构建系统提示（辅助工作流，合并时不会被调用）
    */
-  buildSystemPrompt(context) {
+  buildSystemPrompt(_context) {
     return '记忆系统插件，为其他工作流提供记忆能力。';
   }
 
@@ -431,7 +431,7 @@ export default class MemoryStream extends AIStream {
     ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
   }
 
-  async buildChatContext(e, question) {
+  async buildChatContext(_e, _question) {
     return [];
   }
 

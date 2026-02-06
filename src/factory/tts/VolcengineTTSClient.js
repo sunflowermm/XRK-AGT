@@ -207,7 +207,7 @@ export default class VolcengineTTSClient {
                     try {
                         const payloadStr = payload.toString('utf-8');
                         payloadObj = JSON.parse(payloadStr);
-                    } catch (parseErr) {
+                    } catch {
                         // 忽略解析错误
                     }
                 }

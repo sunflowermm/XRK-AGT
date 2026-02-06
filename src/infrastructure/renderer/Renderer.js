@@ -1,6 +1,5 @@
 import template from 'art-template'
 import chokidar from 'chokidar'
-import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
 
@@ -30,8 +29,8 @@ export default class Renderer {
   }
 
   dealTpl(name, data) {
-    let { tplFile, saveId = name } = data
-    let savePath = `./trash/html/${name}/${saveId}.html`
+    const { tplFile, saveId = name } = data
+    const savePath = `./trash/html/${name}/${saveId}.html`
 
     if (!this.html[tplFile]) {
       this.createDir(`./trash/html/${name}`)
@@ -47,7 +46,7 @@ export default class Renderer {
     }
 
     data.resPath = `./resources/`
-    let tmpHtml = template.render(this.html[tplFile], data)
+    const tmpHtml = template.render(this.html[tplFile], data)
     fs.writeFileSync(savePath, tmpHtml)
 
     logger.debug(`[图片生成][使用模板] ${savePath}`)
@@ -68,7 +67,7 @@ export default class Renderer {
   }
 
   async getMac() {
-    let macAddr = "000000000000";
+    const macAddr = "000000000000";
     try {
       const network = os.networkInterfaces();
       for (const key in network) {
