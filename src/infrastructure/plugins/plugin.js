@@ -159,6 +159,36 @@ export default class plugin {
     return StreamLoader.getAllStreams();
   }
 
+  /**
+   * 标准化的结果收集接口
+   * - 插件方法可选择调用，用于向上层返回结构化结果
+   * - 结果会挂在当前事件对象的 `_pluginResults` 数组上
+   */
+  pushResult(payload) {
+    if (!this.e) return null
+
+    if (!Array.isArray(this.e._pluginResults)) {
+      this.e._pluginResults = []
+    }
+
+    const entry = {
+      plugin: this.name,
+      method: this.e._currentRuleFnc || '',
+      payload
+    }
+
+    this.e._pluginResults.push(entry)
+    return entry
+  }
+
+  /**
+   * 读取当前事件上已收集到的所有插件结果
+   */
+  getResults() {
+    if (!this.e || !Array.isArray(this.e._pluginResults)) return []
+    return this.e._pluginResults
+  }
+
   reply(msg = "", quote = false, data = {}) {
     if (!this.e || !msg) return false
     

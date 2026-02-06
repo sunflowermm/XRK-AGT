@@ -19,6 +19,8 @@
   --bg-sidebar: #ffffff;
   --bg-input: #f1f5f9;
   --bg-hover: #f1f5f9;
+  --bg-secondary: var(--bg-body);
+  --bg-subtle: var(--bg-input);
 
   /* 文字颜色 */
   --text-primary: #0f172a;
@@ -1671,25 +1673,7 @@ select.form-input {
   word-break: break-word;
 }
 
-/* Markdown 和 Raw 内容样式优化 */
-.chat-markdown {
-  padding: 12px;
-  margin: 8px 0;
-  background: var(--bg-subtle);
-  border-radius: var(--radius-sm);
-  line-height: 1.6;
-}
-
-.chat-raw {
-  padding: 12px;
-  margin: 8px 0;
-  background: var(--bg-subtle);
-  border-radius: var(--radius-sm);
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
+/* Markdown 和 Raw 内容样式：上方已有定义，这里避免重复 */
 
 .chat-message.user {
   align-self: flex-end;
@@ -1958,6 +1942,7 @@ select.form-input {
   gap: 20px;
   height: fit-content;
   min-width: 0; /* 避免侧栏在极端内容下撑破 grid，导致整体横移 */
+  contain: layout paint;
 }
 
 .config-sidebar-header h1 {
@@ -2062,6 +2047,7 @@ select.form-input {
   border-radius: var(--radius-lg);
   padding: 28px;
   min-height: 480px;
+  contain: layout paint;
 }
 
 @media (max-width: 720px) {
@@ -2658,6 +2644,7 @@ select.form-input {
   overflow: hidden;
   max-width: 100%;
   box-sizing: border-box;
+  contain: layout paint;
 }
 
 .request-info-header {
@@ -2865,6 +2852,7 @@ select.form-input {
   overflow: hidden;
   max-width: 100%;
   box-sizing: border-box;
+  contain: layout paint;
 }
 
 .response-content pre {

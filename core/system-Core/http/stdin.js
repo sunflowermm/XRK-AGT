@@ -55,7 +55,6 @@ export default {
         const { command, user_info = {} } = req.body;
         // 默认以 JSON 形式返回插件输出，除非显式传入 json=false
         const wantJson = String(req.body?.json ?? req.query?.json ?? 'true').toLowerCase() === 'true';
-        const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
         
         if (!command) {
           return HttpResponse.validationError(res, 'Command is required');
@@ -65,7 +64,7 @@ export default {
 
         // JSON 模式：通过 Bot.callStdin 收集本次命令触发的所有插件输出
         if (wantJson) {
-          const result = await Bot.callStdin(command, { user_info, timeout });
+          const result = await Bot.callStdin(command, { user_info });
           return res.json(result);
         }
 

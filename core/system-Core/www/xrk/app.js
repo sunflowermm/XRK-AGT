@@ -4267,14 +4267,15 @@ class App {
         `).join('')}
       </div>
     `).join('');
-    
-    container.querySelectorAll('.api-item').forEach(item => {
-      item.addEventListener('click', () => {
-        container.querySelectorAll('.api-item').forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
-        this.selectAPI(item.dataset.id);
-      });
-    });
+
+    // 事件委托：避免为每个 API 条目重复绑定监听器
+    container.onclick = (e) => {
+      const item = e.target?.closest?.('.api-item');
+      if (!item || !container.contains(item)) return;
+      container.querySelectorAll('.api-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      this.selectAPI(item.dataset.id);
+    };
   }
 
   selectAPI(apiId) {
@@ -4285,6 +4286,7 @@ class App {
     }
     
     this.currentAPI = { method: api.method, path: api.path, apiId };
+    this._lastJsonPreview = null;
     
     // 在移动端，选择API后关闭侧边栏
     if (window.innerWidth <= 768) {
@@ -4314,7 +4316,7 @@ class App {
           const cfg = api.pathParams[p] || {};
           return `<div class="form-group">
             <label class="form-label">${cfg.label || p} <span style="color:var(--danger)">*</span></label>
-            <input type="text" class="form-input" id="path_${p}" placeholder="${cfg.placeholder || ''}" data-param-type="path">
+            <input type="text" class="form-input" id="path_${p}" placeholder="${cfg.placeholder || ''}" data-request-field="1">
           </div>`;
         }).join('')}
       </div>`;
@@ -4375,46 +4377,33 @@ class App {
       
       <div id="responseSection"></div>
     `;
-    
-    // 等待DOM更新后绑定事件
-    setTimeout(() => {
-      const executeBtn = document.getElementById('executeBtn');
-      const fillExampleBtn = document.getElementById('fillExampleBtn');
-      const formatJsonBtn = document.getElementById('formatJsonBtn');
-      const copyJsonBtn = document.getElementById('copyJsonBtn');
-      
-      if (executeBtn) {
-        executeBtn.addEventListener('click', () => this.executeRequest());
-      }
-      
-      if (fillExampleBtn) {
-        fillExampleBtn.addEventListener('click', () => this.fillExample());
-      }
-      
-      if (formatJsonBtn) {
-        formatJsonBtn.addEventListener('click', () => this.formatJSON());
-      }
-      
-      if (copyJsonBtn) {
-        copyJsonBtn.addEventListener('click', () => this.copyJSON());
-      }
-      
-      // 文件上传设置
-      if (apiId === 'file-upload') {
-        this.setupFileUpload();
-      }
-    
-    // 监听输入变化
-    section.querySelectorAll('input, textarea, select').forEach(el => {
-      el.addEventListener('input', () => this.updateJSONPreview());
-        el.addEventListener('change', () => this.updateJSONPreview());
-    });
-    
-      // 初始化JSON编辑器
-      this.initJSONEditor().then(() => {
-    this.updateJSONPreview();
-      });
-    }, 0);
+
+    // 事件链收敛：一个 click 入口 + 输入事件委托，避免重复绑定和 setTimeout
+    section.onclick = (e) => {
+      const t = e.target;
+      if (!t) return;
+      if (t.id === 'executeBtn') return this.executeRequest();
+      if (t.id === 'fillExampleBtn') return this.fillExample();
+      if (t.id === 'formatJsonBtn') return this.formatJSON();
+      if (t.id === 'copyJsonBtn') return this.copyJSON();
+    };
+
+    section.oninput = (e) => {
+      const t = e.target;
+      if (t?.matches?.('[data-request-field="1"]')) this.updateJSONPreview();
+    };
+    section.onchange = (e) => {
+      const t = e.target;
+      if (t?.matches?.('[data-request-field="1"]')) this.updateJSONPreview();
+    };
+
+    // 文件上传设置
+    if (apiId === 'file-upload') {
+      this.setupFileUpload();
+    }
+
+    // 初始化JSON编辑器（只做“请求预览”，只读，避免误操作）
+    this.initJSONEditor().then(() => this.updateJSONPreview());
   }
 
   renderParamInput(param) {
@@ -4423,17 +4412,20 @@ class App {
     
     switch (param.type) {
       case 'select':
-        input = `<select class="form-input" id="${param.name}" data-param-type="body">
+        input = `<select class="form-input" id="${param.name}" data-request-field="1">
           <option value="">请选择</option>
-          ${param.options.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
+          ${param.options.map(o => {
+            const selected = (param.defaultValue !== undefined && String(o.value) === String(param.defaultValue)) ? ' selected' : '';
+            return `<option value="${o.value}"${selected}>${o.label}</option>`;
+          }).join('')}
         </select>`;
         break;
       case 'textarea':
       case 'json':
-        input = `<textarea class="form-input" id="${param.name}" placeholder="${param.placeholder || ''}" data-param-type="body">${param.defaultValue || ''}</textarea>`;
+        input = `<textarea class="form-input" id="${param.name}" placeholder="${param.placeholder || ''}" data-request-field="1">${param.defaultValue || ''}</textarea>`;
         break;
       default:
-        input = `<input type="${param.type || 'text'}" class="form-input" id="${param.name}" placeholder="${param.placeholder || ''}" value="${param.defaultValue || ''}" data-param-type="body">`;
+        input = `<input type="${param.type || 'text'}" class="form-input" id="${param.name}" placeholder="${param.placeholder || ''}" value="${param.defaultValue || ''}" data-request-field="1">`;
     }
     
     return `<div class="form-group">
@@ -4510,11 +4502,18 @@ class App {
   updateJSONPreview() {
     if (!this.currentAPI) return;
     const data = this.buildRequestData();
+    const next = JSON.stringify(data, null, 2);
+    if (this._lastJsonPreview === next) return;
+    this._lastJsonPreview = next;
     const textarea = document.getElementById('jsonEditor');
     if (textarea && !this.jsonEditor) {
-      textarea.value = JSON.stringify(data, null, 2);
+      const top = textarea.scrollTop;
+      textarea.value = next;
+      textarea.scrollTop = top;
     } else if (this.jsonEditor) {
-      this.jsonEditor.setValue(JSON.stringify(data, null, 2));
+      const scroll = this.jsonEditor.getScrollInfo();
+      this.jsonEditor.setValue(next);
+      this.jsonEditor.scrollTo(null, scroll.top);
     }
   }
 
@@ -4534,7 +4533,9 @@ class App {
     const query = {};
     api?.queryParams?.forEach(p => {
       const val = document.getElementById(p.name)?.value;
-      if (val) query[p.name] = val;
+      if (!val) return;
+      if (p.defaultValue !== undefined && String(val) === String(p.defaultValue)) return; // 删去冗余默认参数
+      query[p.name] = val;
     });
     if (Object.keys(query).length) data.query = query;
     
@@ -4542,13 +4543,14 @@ class App {
     const body = {};
     api?.bodyParams?.forEach(p => {
       const el = document.getElementById(p.name);
-      let val = el?.value;
-      if (val) {
+      const rawVal = el?.value;
+      if (!rawVal) return;
+      if (p.defaultValue !== undefined && String(rawVal) === String(p.defaultValue)) return; // 删去冗余默认参数
+      let val = rawVal;
         if (p.type === 'json') {
           try { val = JSON.parse(val); } catch {}
         }
         body[p.name] = val;
-      }
     });
     if (Object.keys(body).length) data.body = body;
     
@@ -4570,7 +4572,8 @@ class App {
       theme,
       lineNumbers: true,
       lineWrapping: true,
-      matchBrackets: true
+      matchBrackets: true,
+      readOnly: true
     });
   }
 
@@ -4641,8 +4644,7 @@ class App {
     }
     
     Object.entries(example).forEach(([key, val]) => {
-      const id = key.startsWith('path_') ? key : key;
-      const el = document.getElementById(id);
+      const el = document.getElementById(key);
       if (el) el.value = typeof val === 'object' ? JSON.stringify(val, null, 2) : val;
     });
     

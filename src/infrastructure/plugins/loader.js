@@ -145,6 +145,15 @@ class PluginsLoader {
     } catch (error) {
       errorHandler.handle(error, { context: 'deal', event: e?.logText, code: ErrorCodes.PLUGIN_EXECUTION_FAILED }, true)
       logger.error('处理事件错误', error)
+    } finally {
+      // 如果事件携带完成回调，则在插件链路结束后触发（用于 HTTP/STDIN 收集结果）
+      try {
+        if (e && typeof e._onDone === 'function') {
+          const fn = e._onDone
+          delete e._onDone
+          fn(e)
+        }
+      } catch {}
     }
   }
 
@@ -254,6 +263,9 @@ class PluginsLoader {
       
       try {
         const msgArray = Array.isArray(msg) ? msg : [msg]
+        // 记录本次回复内容（用于按事件聚合返回），不影响实际发送
+        if (!Array.isArray(e._replyOutputs)) e._replyOutputs = []
+        e._replyOutputs.push(msgArray)
 
         let msgRes
         try {
@@ -453,7 +465,15 @@ class PluginsLoader {
           const fnc = plugin[rule.fnc]
           
           if (typeof fnc === 'function') {
-            const res = await fnc.call(plugin, e)
+            // 标记当前正在执行的插件方法，便于结果收集与调试
+            e._currentRuleFnc = rule.fnc
+            let res
+            try {
+              res = await fnc.call(plugin, e)
+            } finally {
+              delete e._currentRuleFnc
+            }
+
             if (res !== false) {
               if (rule.log !== false) {
                 logger.mark(`${e.logFnc}${e.logText} 处理完成 ${Date.now() - start}ms`)

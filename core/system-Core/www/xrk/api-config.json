@@ -201,12 +201,6 @@
                 { "value": "false", "label": "否（仅返回基础执行结果）" }
               ],
               "defaultValue": "true"
-            },
-            {
-              "name": "timeout",
-              "label": "等待超时（毫秒）",
-              "type": "number",
-              "placeholder": "5000"
             }
           ]
         },
@@ -368,13 +362,16 @@
             "name": {
               "label": "配置名称",
               "placeholder": "bot"
-            },
-            "path": {
+            }
+          },
+          "queryParams": [
+            {
+              "name": "path",
               "label": "配置路径",
               "type": "text",
               "placeholder": "log_level"
             }
-          }
+          ]
         },
         {
           "id": "config-read",
@@ -740,7 +737,6 @@
     "stdin-command": {
       "command": "#更新",
       "json": true,
-      "timeout": 8000,
       "user_info": {
         "user_id": "web_api_user",
         "nickname": "Web API 用户"

@@ -3197,33 +3197,54 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     if (!stdinHandler?.processCommand) {
       throw this.makeError('stdin handler not initialized', 'StdinUnavailable');
     }
-    
-    // 扩展性更好的做法：以一次命令执行为边界收集输出，而不是用时间窗口
-    const outputs = [];
-    const handler = (payload) => {
-      outputs.push(payload);
-    };
 
-    this.on('stdin.output', handler);
-
-    try {
-      const result = await stdinHandler.processCommand(command, {
-        ...user_info,
-        tasker: user_info.tasker || 'api'
-      });
-
-      if (!outputs.length) return result;
-      if (outputs.length === 1) return outputs[0];
-
-      // 合并多条输出：content 合并，其它字段以最后一条为准
-      const base = outputs[outputs.length - 1] || {};
-      const allContent = outputs
-        .map(o => Array.isArray(o?.content) ? o.content : [])
-        .flat();
-      return { ...base, content: allContent };
-    } finally {
-      this.off('stdin.output', handler);
+    const info = {
+      ...user_info,
+      tasker: user_info.tasker || 'api'
     }
+
+    // 以“插件链路执行完成”为边界收集结果：由 PluginsLoader.deal 在 finally 中回调 _onDone
+    if (typeof stdinHandler.createEvent === 'function') {
+      const event = stdinHandler.createEvent(command, info)
+
+      const done = new Promise((resolve) => {
+        event._onDone = resolve
+      })
+
+      this._cascadeEmit('stdin.message', event)
+
+      const finishedEvent = await Promise.race([
+        done,
+        new Promise((resolve) => setTimeout(() => resolve(event), timeout))
+      ])
+
+      // 优先返回结构化的插件结果（如果插件调用了 pushResult）
+      const results = Array.isArray(finishedEvent?._pluginResults) ? finishedEvent._pluginResults : []
+
+      // 同时将 reply() 过程中发送的消息聚合回传，便于 API 调试直接显示
+      const outputs = Array.isArray(finishedEvent?._replyOutputs) ? finishedEvent._replyOutputs : []
+      const content = outputs.flat().filter(Boolean)
+
+      if (results.length) {
+        return {
+          event_id: finishedEvent.event_id,
+          results,
+          output: {
+            nickname: 'stdin',
+            content,
+            user_info: info
+          }
+        }
+      }
+
+      // 没有 pushResult 时，兼容旧行为：返回聚合后的 stdout（如果有），否则回退基础结果
+      if (content.length) {
+        return { nickname: 'stdin', content, user_info: info }
+      }
+    }
+
+    // 兜底：走原始 stdin 命令处理器
+    return await stdinHandler.processCommand(command, info)
   }
   
   /**
@@ -3337,30 +3358,24 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   }
   
   async _emitAndCollect(name, data, timeout = 5000) {
-    // 保持与 callStdin 一致：以一次事件触发过程为边界收集 stdin.output
-    const outputs = [];
-    const handler = (payload) => {
-      outputs.push(payload);
-    };
+    // 兼容历史行为：对“普通 emit”只提供一个有限的收集能力
+    // 若调用方希望严格按插件链路结束收集，请走 callStdin（或在事件对象上设置 _onDone）
+    const outputs = []
+    const handler = (payload) => outputs.push(payload)
 
-    this.on('stdin.output', handler);
-
+    this.on('stdin.output', handler)
     try {
-      this._cascadeEmit(name, data);
+      this._cascadeEmit(name, data)
+      await BotUtil.sleep(timeout)
 
-      // 等待固定超时，期间如果业务侧主动回复多次，一并收集
-      await BotUtil.sleep(timeout);
+      if (!outputs.length) return null
+      if (outputs.length === 1) return outputs[0]
 
-      if (!outputs.length) return null;
-      if (outputs.length === 1) return outputs[0];
-
-      const base = outputs[outputs.length - 1] || {};
-      const allContent = outputs
-        .map(o => Array.isArray(o?.content) ? o.content : [])
-        .flat();
-      return { ...base, content: allContent };
+      const base = outputs[outputs.length - 1] || {}
+      const allContent = outputs.flatMap(o => Array.isArray(o?.content) ? o.content : [])
+      return { ...base, content: allContent }
     } finally {
-      this.off('stdin.output', handler);
+      this.off('stdin.output', handler)
     }
   }
 
