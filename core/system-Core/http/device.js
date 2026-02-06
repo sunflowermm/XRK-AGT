@@ -160,6 +160,120 @@ function shouldLogConnection(remote) {
     connectionLogTracker.set(remote, now);
     return true;
 }
+
+/**
+ * 判断字符串是否为十六进制形式（用于兼容老版本 hex 音频流）
+ * @param {string} str
+ * @returns {boolean}
+ */
+function isHexString(str) {
+    if (typeof str !== 'string') return false;
+    const s = str.trim();
+    return !!s && s.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(s);
+}
+
+/**
+ * 统一解码 ASR 音频负载，兼容多种热门音频流表示方式：
+ * - 旧版：data 为 PCM16LE 的 hex 字符串
+ * - 扩展：data 为 base64 字符串（可选前缀 base64:）
+ * - 扩展：data 为 ArrayBuffer / Uint8Array / Buffer
+ * - 扩展：data 为 number[]，表示 PCM 采样（支持 float[-1,1] 或 int16）
+ * - 扩展：audio 对象包装：{ audio: { data, encoding, format, ... } }
+ *
+ * 注意：这里仅做“容器”兼容（hex / base64 / 数组等），真实编码仍假定为 PCM。
+ * 复杂编码（如 opus/webm）请在设备侧或独立网关解码为 PCM 后再上传。
+ *
+ * @param {Object} payload - WebSocket 上报原始数据
+ * @param {string} deviceId - 设备ID（用于日志）
+ * @returns {Buffer} PCM 音频 Buffer（可能为空）
+ */
+function decodeAsrAudioPayload(payload, deviceId) {
+    try {
+        if (!payload || typeof payload !== 'object') return Buffer.alloc(0);
+
+        const audio = payload.audio || {};
+        const encoding = (audio.encoding || payload.encoding || '').toString().toLowerCase();
+
+        let raw = audio.data;
+        if (raw == null) raw = payload.data;
+        if (raw == null) raw = payload.audioData;
+
+        if (raw == null) return Buffer.alloc(0);
+
+        // 已经是 Buffer
+        if (Buffer.isBuffer(raw)) return raw;
+
+        // ArrayBuffer / TypedArray
+        if (raw instanceof ArrayBuffer) {
+            return Buffer.from(new Uint8Array(raw));
+        }
+        if (ArrayBuffer.isView && ArrayBuffer.isView(raw)) {
+            return Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength);
+        }
+
+        // 数组：视为 PCM 采样值
+        if (Array.isArray(raw)) {
+            const samples = raw.map(v => Number.isFinite(v) ? v : 0);
+            if (!samples.length) return Buffer.alloc(0);
+
+            // 简单判断是否为 float 采样
+            const hasFloat = samples.some(v => Math.abs(v) <= 1 && !Number.isInteger(v));
+            const buf = Buffer.allocUnsafe(samples.length * 2);
+            for (let i = 0; i < samples.length; i++) {
+                let s = samples[i];
+                if (hasFloat) {
+                    // float [-1,1] -> int16
+                    s = Math.max(-1, Math.min(1, s));
+                    s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+                s = Math.max(-32768, Math.min(32767, s | 0));
+                buf.writeInt16LE(s, i * 2);
+            }
+            return buf;
+        }
+
+        // 字符串：hex / base64
+        if (typeof raw === 'string') {
+            const s = raw.trim();
+            if (!s) return Buffer.alloc(0);
+
+            // 显式声明 hex / pcm_hex，或符合 hex 形态时按 hex 解析
+            if (!encoding || encoding === 'hex' || encoding === 'pcm_hex') {
+                if (isHexString(s)) {
+                    return Buffer.from(s, 'hex');
+                }
+            }
+
+            // 其他情况按 base64 处理（支持前缀 base64:）
+            const b64 = s.startsWith('base64:') ? s.slice(7) : s;
+            try {
+                return Buffer.from(b64, 'base64');
+            } catch (e) {
+                BotUtil.makeLog(
+                    'error',
+                    `❌ [ASR] base64 音频解码失败: ${e.message}`,
+                    deviceId
+                );
+                return Buffer.alloc(0);
+            }
+        }
+
+        BotUtil.makeLog(
+            'warn',
+            '[ASR] 收到无法识别的音频数据类型，已忽略该分片',
+            deviceId
+        );
+        return Buffer.alloc(0);
+    } catch (e) {
+        BotUtil.makeLog(
+            'error',
+            `❌ [ASR] 解码音频数据异常: ${e.message}`,
+            deviceId
+        );
+        return Buffer.alloc(0);
+    }
+}
+
 const asrClients = new Map();
 const ttsClients = new Map();
 const asrSessions = new Map();
@@ -322,7 +436,21 @@ class DeviceManager {
      */
     async handleASRSessionStart(deviceId, data) {
         try {
-            const { session_id, sample_rate, bits, channels, session_number } = data;
+            const {
+                session_id,
+                sample_rate,
+                bits,
+                channels,
+                session_number,
+                // 兼容多端传入的音频格式/编码字段
+                audio_format,
+                audio_codec,
+                format,
+                codec,
+                model,
+                model_name,
+                asr_model
+            } = data;
             const asrConfig = getAsrConfig();
 
             BotUtil.makeLog('info',
@@ -344,13 +472,15 @@ class DeviceManager {
                 lastChunkTime: Date.now(),
                 totalChunks: 0,
                 totalBytes: 0,
-                audioBuffers: [],
                 asrStarted: false,
                 endingChunks: 0,
                 earlyEndSent: false,
                 finalText: null,
                 finalDuration: 0,
-                finalTextSetAt: null
+                finalTextSetAt: null,
+                maxWaitMs: typeof asrConfig.asrFinalTextWaitMs === 'number'
+                    ? Math.max(0, asrConfig.asrFinalTextWaitMs)
+                    : 3000
             });
 
             const client = this._getASRClient(deviceId, asrConfig);
@@ -358,7 +488,11 @@ class DeviceManager {
                 await client.beginUtterance(session_id, {
                     sample_rate,
                     bits,
-                    channels
+                    channels,
+                    // 允许各端根据自身上报音频格式/编码/模型名
+                    format: audio_format || format,
+                    codec: audio_codec || codec,
+                    modelName: model_name || model || asr_model
                 });
                 asrSessions.get(session_id).asrStarted = true;
             } catch (e) {
@@ -388,7 +522,7 @@ class DeviceManager {
      */
     async handleASRAudioChunk(deviceId, data) {
         try {
-            const { session_id, chunk_index, data: audioHex, vad_state } = data;
+            const { session_id, chunk_index, vad_state } = data;
             const asrConfig = getAsrConfig();
 
             if (!asrConfig.enabled) {
@@ -400,12 +534,12 @@ class DeviceManager {
                 return { success: false, error: '会话不存在' };
             }
 
-            const audioBuf = Buffer.from(audioHex, 'hex');
+            // 兼容多种热门音频流表示：hex / base64 / ArrayBuffer / 数组等
+            const audioBuf = decodeAsrAudioPayload(data, deviceId);
 
             session.totalChunks++;
             session.totalBytes += audioBuf.length;
             session.lastChunkTime = Date.now();
-            session.audioBuffers.push(audioBuf);
 
             if (session.asrStarted && (vad_state === 'active' || vad_state === 'ending')) {
                 const client = this._getASRClient(deviceId, asrConfig);
@@ -423,16 +557,12 @@ class DeviceManager {
                                 deviceId
                             );
 
-                            setTimeout(async () => {
-                                try {
-                                    await client.endUtterance();
-                                } catch (e) {
-                                    BotUtil.makeLog('error',
-                                        `❌ [ASR] 提前结束失败: ${e.message}`,
-                                        deviceId
-                                    );
-                                }
-                            }, 50);
+                            client.endUtterance().catch((e) => {
+                                BotUtil.makeLog('error',
+                                    `❌ [ASR] 提前结束失败: ${e.message}`,
+                                    deviceId
+                                );
+                            });
                         }
                     } else {
                         session.endingChunks = 0;
@@ -519,7 +649,9 @@ class DeviceManager {
      * @private
      */
     async _waitForFinalTextAsync(deviceId, session) {
-        const maxWaitMs = 3000;  // 最多等待3秒（减少等待时间）
+        const maxWaitMs = typeof session.maxWaitMs === 'number' && session.maxWaitMs > 0
+            ? session.maxWaitMs
+            : 3000;  // 默认最多等待3秒（可通过配置调整）
         const checkIntervalMs = 50;
         let waitCount = 0;
         const maxChecks = Math.ceil(maxWaitMs / checkIntervalMs);
@@ -657,7 +789,6 @@ class DeviceManager {
                 } catch (e) {
                     BotUtil.makeLog('error', `❌ [设备] 表情显示失败: ${e.message}`, deviceId);
                 }
-                await new Promise(r => setTimeout(r, 500));
             }
 
             // 播放TTS（只有ASR触发或配置允许时才播放）
@@ -1716,10 +1847,6 @@ class DeviceManager {
                     runtimeBot.em('device', deviceEventData);
                     break;
                 }
-
-                case 'heartbeat_response':
-                    // 心跳响应，不需要处理，静默忽略
-                    break;
 
                 default:
                     // 只对非心跳类型的未知消息发送错误

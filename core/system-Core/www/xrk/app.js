@@ -1553,20 +1553,60 @@ class App {
     // 拖拽图片到聊天区：跨端兼容（Chrome/Edge/Safari/WebView）
     const chatContainer = document.querySelector('.chat-container');
     if (chatContainer) {
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
-        chatContainer.addEventListener(evt, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        });
-      });
-      chatContainer.addEventListener('drop', (e) => {
-        const dropped = this._extractFilesFromDataTransfer(e.dataTransfer);
-        const images = dropped.filter(f => f?.type?.startsWith('image/'));
-        if (images.length) {
+      this._bindDropArea(chatContainer, {
+        onDragStateChange: (active) => {
+          try { chatContainer.classList.toggle('is-dragover', Boolean(active)); } catch {}
+        },
+        onFiles: (files) => {
+          const images = (files || []).filter(f => f?.type?.startsWith('image/'));
+          if (!images.length) return;
           this.handleImageSelect(images);
+          this.showToast(`已添加 ${images.length} 张图片，点击发送即可上传`, 'success');
         }
       });
     }
+  }
+
+  /**
+   * 统一绑定拖拽投放区域（减少冗余事件绑定）
+   * @param {HTMLElement} el
+   * @param {Object} options
+   * @param {(active:boolean)=>void} [options.onDragStateChange]
+   * @param {(files:File[])=>void} options.onFiles
+   */
+  _bindDropArea(el, options = {}) {
+    if (!el || typeof options.onFiles !== 'function') return;
+
+    let dragDepth = 0;
+    const setActive = (active) => {
+      if (typeof options.onDragStateChange === 'function') {
+        try { options.onDragStateChange(active); } catch {}
+      }
+    };
+
+    const prevent = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    el.addEventListener('dragenter', (e) => {
+      prevent(e);
+      dragDepth++;
+      setActive(true);
+    });
+    el.addEventListener('dragover', prevent);
+    el.addEventListener('dragleave', (e) => {
+      prevent(e);
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) setActive(false);
+    });
+    el.addEventListener('drop', (e) => {
+      prevent(e);
+      dragDepth = 0;
+      setActive(false);
+      const dropped = this._extractFilesFromDataTransfer(e.dataTransfer);
+      options.onFiles(dropped);
+    });
   }
   
 
@@ -1801,7 +1841,8 @@ class App {
             img.alt = '图片加载失败';
           };
           
-          img.addEventListener('click', () => this.showImagePreview(url));
+          // 使用当前 src 打开预览，避免后续更新 src（如从 blob: 替换为服务器 URL）时预览仍指向旧地址
+          img.addEventListener('click', () => this.showImagePreview(img.currentSrc || img.src));
           imgContainer.appendChild(img);
           div.appendChild(imgContainer);
         }
@@ -2387,6 +2428,7 @@ class App {
       
       // 显示图片
       const keepPreviewUrls = new Set();
+      const pendingImageNodes = [];
       for (const img of images) {
         // 关键修复：聊天区显示与缩略图预览使用不同的 objectURL，避免 clearImagePreview revoke 导致聊天图片失效
         let displayUrl = this._createTrackedObjectURL(img.file);
@@ -2396,14 +2438,35 @@ class App {
           if (displayUrl) keepPreviewUrls.add(displayUrl);
         }
         // 不强制持久化（避免把 blob: 写进 localStorage）
-        this.appendSegments([{ type: 'image', url: displayUrl }], false, 'user');
+        const node = this.appendSegments([{ type: 'image', url: displayUrl }], false, 'user');
+        const imgEl = node?.querySelector?.('img.chat-image') || node?.querySelector?.('img');
+        pendingImageNodes.push({ node, imgEl, displayUrl });
       }
       
       // 清空图片预览
       this.clearImagePreview({ keepUrls: keepPreviewUrls });
       
       // 发送消息到后端
-      await this.sendChatMessageWithImages(text, images);
+      const uploadedUrls = await this.sendChatMessageWithImages(text, images);
+
+      // 上传成功：用服务器 URL 替换本地 blob 预览，并持久化到 chatHistory（这样切页面/刷新都能恢复图片）
+      if (Array.isArray(uploadedUrls) && uploadedUrls.length > 0) {
+        for (let i = 0; i < pendingImageNodes.length; i++) {
+          const u = uploadedUrls[i];
+          if (!u) continue;
+          const item = pendingImageNodes[i];
+          try {
+            if (item?.imgEl) item.imgEl.src = u;
+          } catch {}
+          // 替换后即可释放临时 blob（如果是 blob:），避免内存累积
+          if (item?.displayUrl && String(item.displayUrl).startsWith('blob:')) {
+            this._safeRevokeObjectURL(item.displayUrl);
+          }
+          // 持久化：使用服务器 URL（避免把 blob: 写进 localStorage）
+          this._chatHistory.push({ role: 'user', segments: [{ type: 'image', url: u }], ts: Date.now() + i });
+        }
+        this._saveChatHistory();
+      }
       
       // 确保滚动到底部
       this.scrollToBottom();
@@ -2419,7 +2482,7 @@ class App {
     if (images.length === 0) {
       // 没有图片，使用原来的方式发送
       this.sendDeviceMessage(text, { source: 'manual' });
-      return;
+      return [];
     }
 
     // 正确链路：Web -> 先走 system-Core 现成路由上传图片 -> 再通过 WS 注册到后端的 tasker/plugin 聊天
@@ -2474,6 +2537,7 @@ class App {
 
     // 关键：sendDeviceMessage 会把 meta.message 放到 payload.message，后端 http/device.js 会将其作为 e.message
     this.sendDeviceMessage(text || ' ', { source: 'manual', message: segments });
+    return urls;
   }
   
   /**
@@ -4448,14 +4512,14 @@ class App {
     area?.addEventListener('click', () => input?.click());
     input?.addEventListener('change', (e) => this.handleFiles(e.target.files));
     
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
-      area?.addEventListener(evt, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+    if (area) {
+      this._bindDropArea(area, {
+        onDragStateChange: (active) => {
+          try { area.classList.toggle('is-dragover', Boolean(active)); } catch {}
+        },
+        onFiles: (files) => this.handleFiles(files)
       });
-    });
-    
-    area?.addEventListener('drop', (e) => this.handleFiles(this._extractFilesFromDataTransfer(e.dataTransfer)));
+    }
   }
 
   handleFiles(files) {
@@ -5417,9 +5481,7 @@ class App {
           vad_state: 'ending',
           data: ''
         }));
-        
-        await new Promise(r => setTimeout(r, 1000));
-        
+
         this._deviceWs.send(JSON.stringify({
           type: 'asr_session_stop',
           device_id: 'webclient',

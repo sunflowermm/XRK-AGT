@@ -235,7 +235,7 @@ export default class VolcengineTTSClient {
         const chunkMs = Math.max(5, Math.min(512, this.config.chunkMs || 40));
         const bytesPerMs = (sr * 2) / 1000;
         const chunkBytes = Math.max(2, Math.floor((bytesPerMs * chunkMs) / 2) * 2);
-        const delayMs = Math.max(0, this.config.chunkDelayMs || 0);
+        const delayMs = 0; // 为了最低端到端延迟，禁用额外分片延迟
         return (async () => {
             for (let offset = 0; offset < audioData.length; offset += chunkBytes) {
                 const slice = audioData.slice(offset, Math.min(offset + chunkBytes, audioData.length));
@@ -418,9 +418,10 @@ export default class VolcengineTTSClient {
     /**
      * 合成文本
      * @param {string} text - 要合成的文本
+     * @param {Object} [options] - 可选参数（覆盖配置，兼容官方文档扩展字段）
      * @returns {Promise<boolean>} - 合成结果
      */
-    async synthesize(text) {
+    async synthesize(text, options = {}) {
         if (!text || text.trim() === '') {
             BotUtil.makeLog('warn', '[TTS] 文本为空', this.deviceId);
             return false;
@@ -431,19 +432,30 @@ export default class VolcengineTTSClient {
 
             this.currentSessionId = uuidv4();
 
+            const voiceType = options.voiceType || this.config.voiceType;
+            const encoding = options.encoding || this.config.encoding;
+            const sampleRate = options.sampleRate || this.config.sampleRate;
+            const speechRate = options.speechRate ?? this.config.speechRate;
+            const loudnessRate = options.loudnessRate ?? this.config.loudnessRate;
+            const emotion = options.emotion || this.config.emotion;
+            const audioParamsExtra = options.audioParams || {};
+            const reqParamsExtra = options.reqParams || {};
+
             const sessionPayload = {
                 user: {
                     uid: this.deviceId
                 },
                 req_params: {
-                    speaker: this.config.voiceType,
+                    speaker: voiceType,
                     audio_params: {
-                        format: this.config.encoding,
-                        sample_rate: this.config.sampleRate,
-                        speech_rate: this.config.speechRate,
-                        loudness_rate: this.config.loudnessRate,
-                        emotion: this.config.emotion
-                    }
+                        format: encoding,
+                        sample_rate: sampleRate,
+                        speech_rate: speechRate,
+                        loudness_rate: loudnessRate,
+                        emotion,
+                        ...audioParamsExtra
+                    },
+                    ...reqParamsExtra
                 }
             };
 
@@ -453,8 +465,6 @@ export default class VolcengineTTSClient {
                 sessionPayload
             );
             this.ws.send(startSessionFrame);
-
-            await new Promise(resolve => setTimeout(resolve, 100));
 
             const taskPayload = {
                 req_params: {

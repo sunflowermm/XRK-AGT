@@ -1015,6 +1015,28 @@ select.form-input {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
+  position: relative;
+}
+
+.chat-container.is-dragover {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+.chat-container.is-dragover::after {
+  content: "松开即可添加图片";
+  position: absolute;
+  inset: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border-radius: var(--radius-md);
+  border: 2px dashed var(--primary);
+  background: rgba(14, 165, 233, 0.08);
+  color: var(--primary-dark);
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 .chat-header {
@@ -2916,6 +2938,12 @@ body.dark .json-boolean { color: #f87171; }
 .file-upload:hover {
   border-color: var(--primary);
   background: var(--primary-50);
+}
+
+.file-upload.is-dragover {
+  border-color: var(--primary);
+  background: var(--primary-50);
+  box-shadow: 0 0 0 3px var(--primary-100);
 }
 
 .file-upload-icon {

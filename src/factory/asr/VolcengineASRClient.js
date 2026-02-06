@@ -48,7 +48,6 @@ export default class VolcengineASRClient {
         // 性能指标
         this.performanceMetrics = {
             firstResultTime: null,
-            totalProcessingTime: 0,
             audioStartTime: null
         };
     }
@@ -92,29 +91,45 @@ export default class VolcengineASRClient {
      * @private
      */
     _fullClientRequest(audioInfo) {
+        const cfg = this.config || {};
+
+        // 音频参数：以外部传入为主，配置仅作为默认值，字段名对齐火山官方 audio 配置
+        const audioFormat = audioInfo?.format || cfg.format || 'pcm';
+        const audioCodec = audioInfo?.codec || cfg.codec || 'raw';
+        const rate = audioInfo?.rate || cfg.sampleRate || 16000;
+        const bits = audioInfo?.bits || cfg.bits || 16;
+        const channel = audioInfo?.channel || cfg.channel || cfg.channels || 1;
+        const audioOptions = audioInfo?.audioOptions || {};
+
+        // request 参数：允许按会话传入 modelName，其次才用配置
+        const modelName = audioInfo?.modelName || cfg.modelName || 'bigmodel';
+        const requestOptions = audioInfo?.requestOptions || {};
+
         const payload = {
             user: {
                 uid: this.deviceId,
                 platform: 'ESP32-S3'
             },
             audio: {
-                format: 'pcm',
-                codec: 'raw',
-                rate: audioInfo?.rate || 16000,
-                bits: audioInfo?.bits || 16,
-                channel: audioInfo?.channel || 1,
+                format: audioFormat,
+                codec: audioCodec,
+                rate,
+                bits,
+                channel,
+                ...audioOptions
             },
             request: {
-                model_name: 'bigmodel',
-                enable_itn: this.config.enableItn,
-                enable_punc: this.config.enablePunc,
-                enable_ddc: this.config.enableDdc,
-                show_utterances: this.config.showUtterances,
-                result_type: this.config.resultType,
-                enable_accelerate_text: this.config.enableAccelerateText,
-                accelerate_score: this.config.accelerateScore,
-                end_window_size: this.config.endWindowSize,
-                force_to_speech_time: this.config.forceToSpeechTime,
+                model_name: modelName,
+                enable_itn: cfg.enableItn,
+                enable_punc: cfg.enablePunc,
+                enable_ddc: cfg.enableDdc,
+                show_utterances: cfg.showUtterances,
+                result_type: cfg.resultType,
+                enable_accelerate_text: cfg.enableAccelerateText,
+                accelerate_score: cfg.accelerateScore,
+                end_window_size: cfg.endWindowSize,
+                force_to_speech_time: cfg.forceToSpeechTime,
+                ...requestOptions
             }
         };
 
@@ -548,7 +563,6 @@ export default class VolcengineASRClient {
             } catch (e) {
                 // 忽略错误
             }
-            await new Promise(r => setTimeout(r, 50));
         }
 
         await this._ensureConnected();
@@ -556,7 +570,6 @@ export default class VolcengineASRClient {
 
         this.performanceMetrics = {
             firstResultTime: null,
-            totalProcessingTime: 0,
             audioStartTime: Date.now()
         };
 
@@ -571,7 +584,10 @@ export default class VolcengineASRClient {
         const fullReq = this._fullClientRequest({
             rate: audioInfo?.sample_rate || 16000,
             bits: audioInfo?.bits || 16,
-            channel: audioInfo?.channels || 1
+            channel: audioInfo?.channels || 1,
+            format: audioInfo?.format,
+            codec: audioInfo?.codec,
+            modelName: audioInfo?.modelName
         });
 
         this.ws.send(fullReq);
