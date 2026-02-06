@@ -74,12 +74,13 @@ export default [
     rules: {
       // 目标：定位“空引用 / 未使用函数(变量) / 明显无效代码”，避免被纯格式规则淹没
       'no-unreachable': 'error',
-      'no-empty': ['warn', { allowEmptyCatch: true }],
+      'no-empty': ['error', { allowEmptyCatch: true }],
       'no-extra-semi': 'error',
       'no-constant-condition': 'warn',
 
+      // 未使用变量：作为 error 处理，配合代码规范强制 0 warning
       'no-unused-vars': [
-        'warn',
+        'error',
         {
           argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',
@@ -87,8 +88,8 @@ export default [
         }
       ],
       'no-console': 'off',
-      'no-debugger': 'warn',
-      'no-alert': 'warn',
+      'no-debugger': 'error',
+      'no-alert': 'error',
 
       // 明确冗余倾向
       'prefer-const': 'error',
