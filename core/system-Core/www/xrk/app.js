@@ -1418,6 +1418,14 @@ class App {
               <line x1="8" y1="23" x2="16" y2="23"/>
             </svg>
           </button>
+          <button class="image-upload-btn" id="imageUploadBtn" title="上传图片">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </button>
+          <input type="file" class="chat-image-input" id="chatImageInput" accept="image/*" multiple style="display: none;">
           <input type="text" class="chat-input" id="chatInput" placeholder="输入消息...">
           <button class="chat-send-btn" id="chatSendBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1426,6 +1434,7 @@ class App {
             </svg>
           </button>
         </div>
+        <div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>
       </div>
     `;
     
@@ -1447,6 +1456,8 @@ class App {
     const input = document.getElementById('chatInput');
     const micBtn = document.getElementById('micBtn');
     const clearBtn = document.getElementById('clearChatBtn');
+    const imageUploadBtn = document.getElementById('imageUploadBtn');
+    const imageInput = document.getElementById('chatImageInput');
     
     if (sendBtn) {
       sendBtn.addEventListener('click', () => this.sendChatMessage());
@@ -1467,6 +1478,16 @@ class App {
     
     if (clearBtn) {
       clearBtn.addEventListener('click', () => this.clearChat());
+    }
+    
+    if (imageUploadBtn && imageInput) {
+      imageUploadBtn.addEventListener('click', () => {
+        imageInput.click();
+      });
+      
+      imageInput.addEventListener('change', (e) => {
+        this.handleImageSelect(e.target.files);
+      });
     }
   }
   
@@ -1548,9 +1569,10 @@ class App {
             this.appendChatRecord(m.messages || [], m.title || '', m.description || '', false);
           } else if (m.segments && Array.isArray(m.segments)) {
             // 支持 segments 格式（文本和图片混合）
-            this.appendSegments(m.segments, false);
+            this.appendSegments(m.segments, false, m.role || 'assistant');
           } else if (m.type === 'image' && m.url) {
-            this.appendImageMessage(m.url, false);
+            // 兼容仅图片的历史
+            this.appendSegments([{ type: 'image', url: m.url }], false, m.role || 'assistant');
           } else if (m.role && m.text) {
             this.appendChat(m.role, m.text, { persist: false });
           }
@@ -1645,7 +1667,7 @@ class App {
    * @param {boolean} persist - 是否持久化到历史记录
    * @returns {HTMLElement|null} 创建的消息容器
    */
-  appendSegments(segments, persist = true) {
+  appendSegments(segments, persist = true, role = 'assistant') {
     if (!segments || segments.length === 0) return;
     
     const box = document.getElementById('chatMessages');
@@ -1654,7 +1676,7 @@ class App {
     const div = document.createElement('div');
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     div.id = messageId;
-    div.className = 'chat-message assistant message-enter';
+    div.className = `chat-message ${role === 'user' ? 'user' : 'assistant'} message-enter`;
     div.dataset.messageId = messageId;
     
     const textParts = [];
@@ -1907,7 +1929,7 @@ class App {
         return s;
       });
       this._chatHistory.push({ 
-        role: 'assistant', 
+        role: role === 'user' ? 'user' : 'assistant', 
         segments: normalizedSegments,
         ts: Date.now() 
       });
@@ -1918,7 +1940,11 @@ class App {
   }
 
   appendImageMessage(url, persist = true) {
-    return this.appendSegments([{ type: 'image', url }], persist);
+    return this.appendSegments([{ type: 'image', url }], persist, 'assistant');
+  }
+
+  appendUserImageMessage(url, persist = true) {
+    return this.appendSegments([{ type: 'image', url }], persist, 'user');
   }
 
   showImagePreview(url) {
@@ -2097,20 +2123,183 @@ class App {
     }
   }
 
+  /**
+   * 处理图片选择
+   */
+  handleImageSelect(files) {
+    if (!files || files.length === 0) return;
+    
+    const previewContainer = document.getElementById('chatImagePreview');
+    if (!previewContainer) return;
+    
+    // 存储选中的图片
+    this._selectedImages = this._selectedImages || [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith('image/')) {
+        this.showToast('只能上传图片文件', 'warning');
+        continue;
+      }
+      
+      // 检查文件大小（限制为 10MB）
+      if (file.size > 10 * 1024 * 1024) {
+        this.showToast(`图片 ${file.name} 超过 10MB 限制`, 'warning');
+        continue;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        this._selectedImages.push({
+          file: file,
+          dataUrl: dataUrl,
+          id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        });
+        this.updateImagePreview();
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    // 清空文件输入，允许重复选择同一文件
+    const imageInput = document.getElementById('chatImageInput');
+    if (imageInput) imageInput.value = '';
+  }
+  
+  /**
+   * 更新图片预览
+   */
+  updateImagePreview() {
+    const previewContainer = document.getElementById('chatImagePreview');
+    if (!previewContainer) return;
+    
+    if (!this._selectedImages || this._selectedImages.length === 0) {
+      previewContainer.style.display = 'none';
+      previewContainer.innerHTML = '';
+      return;
+    }
+    
+    previewContainer.style.display = 'flex';
+    previewContainer.innerHTML = this._selectedImages.map((img, index) => {
+      return `
+      <div class="chat-image-preview-item" data-img-id="${img.id}">
+        <img src="${img.dataUrl}" alt="预览">
+        <button class="chat-image-preview-remove" data-img-id="${img.id}" title="移除">×</button>
+      </div>
+    `;
+    }).join('');
+    
+    // 绑定移除按钮事件
+    previewContainer.querySelectorAll('.chat-image-preview-remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const imgId = btn.getAttribute('data-img-id');
+        this.removeImagePreview(imgId);
+      });
+    });
+  }
+  
+  /**
+   * 移除图片预览
+   */
+  removeImagePreview(imgId) {
+    if (!this._selectedImages) return;
+    this._selectedImages = this._selectedImages.filter(img => img.id !== imgId);
+    this.updateImagePreview();
+  }
+  
+  /**
+   * 清空图片预览
+   */
+  clearImagePreview() {
+    this._selectedImages = [];
+    this.updateImagePreview();
+  }
+
   async sendChatMessage() {
     const input = document.getElementById('chatInput');
-    const text = input?.value?.trim();
-    if (!text) return;
+    const text = input?.value?.trim() || '';
+    const images = this._selectedImages || [];
+    
+    // 如果没有文本也没有图片，不发送
+    if (!text && images.length === 0) return;
     
     input.value = '';
     
     try {
-      this.appendChat('user', text);
-      this.sendDeviceMessage(text, { source: 'manual' });
+      // 显示用户消息（包含文本和图片）
+      if (text) {
+        this.appendChat('user', text);
+      }
+      
+      // 显示图片
+      for (const img of images) {
+        this.appendUserImageMessage(img.dataUrl, true);
+      }
+      
+      // 清空图片预览
+      this.clearImagePreview();
+      
+      // 发送消息到后端
+      await this.sendChatMessageWithImages(text, images);
+      
       // 确保滚动到底部
       this.scrollToBottom();
     } catch (e) {
       this.showToast('发送失败: ' + e.message, 'error');
+    }
+  }
+  
+  /**
+   * 发送带图片的消息到后端
+   */
+  async sendChatMessageWithImages(text, images) {
+    if (images.length === 0) {
+      // 没有图片，使用原来的方式发送
+      this.sendDeviceMessage(text, { source: 'manual' });
+      return;
+    }
+
+    const apiKey = localStorage.getItem('apiKey') || '';
+    const formData = new FormData();
+    
+    // 构建 messages
+    formData.append('messages', JSON.stringify([{
+      role: 'user',
+      content: text || ''
+    }]));
+    // 不要写死 provider，默认跟随后端 defaultProfile（/api/ai/models 返回）
+    const provider = (this._llmOptions?.defaultProfile || '').toString().trim();
+    if (provider) {
+      formData.append('model', provider);
+    }
+    formData.append('stream', 'false');
+    if (apiKey) {
+      formData.append('apiKey', apiKey);
+    }
+    
+    // 添加图片文件（字段名 'images'）
+    images.forEach(img => formData.append('images', img.file));
+    
+    try {
+      const response = await fetch(`${this.serverUrl}/api/v3/chat/completions`, {
+        method: 'POST',
+        headers: { 'X-API-Key': apiKey },
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(errorData.message || '请求失败');
+      }
+      
+      const data = await response.json();
+      const assistantMessage = data.choices?.[0]?.message?.content || '';
+      if (assistantMessage) {
+        this.appendChat('assistant', assistantMessage);
+      }
+    } catch (e) {
+      console.error('发送带图片的消息失败:', e);
+      throw e;
     }
   }
   

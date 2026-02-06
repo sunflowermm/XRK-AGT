@@ -6,6 +6,84 @@ import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
+/**
+ * 解析 multipart/form-data
+ */
+async function parseMultipartData(req) {
+  return new Promise((resolve, reject) => {
+    const contentType = req.headers['content-type'] || '';
+    const boundaryMatch = contentType.match(/boundary=([^;]+)/);
+    if (!boundaryMatch) {
+      reject(new Error('No boundary found'));
+      return;
+    }
+    const boundary = boundaryMatch[1];
+
+    let data = Buffer.alloc(0);
+    const files = [];
+    const fields = {};
+
+    req.on('data', chunk => {
+      data = Buffer.concat([data, chunk]);
+    });
+
+    req.on('end', () => {
+      try {
+        const parts = data.toString('binary').split(`--${boundary}`);
+        
+        for (const part of parts) {
+          if (!part.trim() || part.trim() === '--') continue;
+          
+          if (part.includes('Content-Disposition: form-data')) {
+            const nameMatch = part.match(/name="([^"]+)"/);
+            const filenameMatch = part.match(/filename="([^"]+)"/);
+            
+            if (filenameMatch) {
+              // 文件字段
+              const filename = filenameMatch[1];
+              const contentTypeMatch = part.match(/Content-Type: ([^\r\n]+)/);
+              const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream';
+              
+              const headerEndIndex = part.indexOf('\r\n\r\n');
+              if (headerEndIndex !== -1) {
+                const fileStart = headerEndIndex + 4;
+                const fileEnd = part.lastIndexOf('\r\n');
+                const fileContent = Buffer.from(part.substring(fileStart, fileEnd), 'binary');
+                
+                files.push({
+                  fieldname: nameMatch ? nameMatch[1] : 'file',
+                  originalname: filename,
+                  mimetype: contentType,
+                  buffer: fileContent,
+                  size: fileContent.length
+                });
+              }
+            } else if (nameMatch) {
+              // 普通字段
+              const fieldName = nameMatch[1];
+              const headerEndIndex = part.indexOf('\r\n\r\n');
+              if (headerEndIndex !== -1) {
+                const fieldStart = headerEndIndex + 4;
+                const fieldEnd = part.lastIndexOf('\r\n');
+                // 注意：part 是 binary 字符串（latin1），直接 substring 会导致中文等 UTF-8 字符出现乱码
+                // 这里用 Buffer 按 binary 取回原始字节，再按 utf8 解码文本字段
+                const fieldBuf = Buffer.from(part.substring(fieldStart, fieldEnd), 'binary');
+                fields[fieldName] = fieldBuf.toString('utf8');
+              }
+            }
+          }
+        }
+        
+        resolve({ files, fields });
+      } catch (e) {
+        reject(e);
+      }
+    });
+
+    req.on('error', reject);
+  });
+}
+
 function pickFirst(obj, keys) {
   for (const k of keys) {
     if (Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== undefined && obj[k] !== null) return obj[k];
@@ -58,9 +136,88 @@ function estimateTokens(text) {
 }
 
 async function handleChatCompletionsV3(req, res) {
-  const body = req.body || {};
-  const messages = Array.isArray(body.messages) ? body.messages : null;
-  if (!messages) return HttpResponse.validationError(res, 'messages 参数无效');
+  const contentType = req.headers['content-type'] || '';
+  let body = req.body || {};
+  let messages = Array.isArray(body.messages) ? body.messages : null;
+  let uploadedImages = [];
+
+  // 支持 multipart/form-data 格式（图片上传）
+  if (contentType.includes('multipart/form-data')) {
+    try {
+      const { files, fields } = await parseMultipartData(req);
+      
+      // 解析 JSON 字段
+      if (fields.messages) {
+        try {
+          messages = JSON.parse(fields.messages);
+        } catch (e) {
+          return HttpResponse.validationError(res, 'messages 字段格式无效');
+        }
+      }
+      
+      // 解析其他字段
+      if (fields.model) body.model = fields.model;
+      if (fields.stream) body.stream = fields.stream === 'true';
+      if (fields.apiKey) body.apiKey = fields.apiKey;
+      if (fields.api_key) body.api_key = fields.api_key;
+      if (fields.temperature) body.temperature = fields.temperature;
+      if (fields.max_tokens) body.max_tokens = fields.max_tokens;
+      if (fields.maxTokens) body.maxTokens = fields.maxTokens;
+      
+      // 处理上传的图片（字段名可以是 'images' 或 'file'）
+      if (files && files.length > 0) {
+        for (const file of files) {
+          if (file.mimetype?.startsWith('image/')) {
+            const base64 = file.buffer.toString('base64');
+            uploadedImages.push(`data:${file.mimetype};base64,${base64}`);
+          }
+        }
+      }
+    } catch (e) {
+      return HttpResponse.error(res, new Error(`解析 multipart/form-data 失败: ${e.message}`), 400, 'ai.v3.chat.completions');
+    }
+  }
+  
+  if (!messages || !Array.isArray(messages)) {
+    return HttpResponse.validationError(res, 'messages 参数无效');
+  }
+  
+  // 如果有上传的图片，将图片添加到最后一条用户消息中
+  if (uploadedImages.length > 0) {
+    const imageParts = uploadedImages.map(img => ({
+      type: 'image_url',
+      image_url: { url: img }
+    }));
+
+    if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+      const lastMessage = messages[messages.length - 1];
+      // 兼容多种 content 形态：
+      // - string: 转为 [text, ...images]
+      // - array(OpenAI multimodal): 直接 push images
+      // - object({text, images, replyImages}): 追加到 images
+      if (Array.isArray(lastMessage.content)) {
+        lastMessage.content.push(...imageParts);
+      } else if (typeof lastMessage.content === 'string') {
+        const text = lastMessage.content.trim();
+        lastMessage.content = text ? [{ type: 'text', text }, ...imageParts] : imageParts;
+      } else if (lastMessage.content && typeof lastMessage.content === 'object') {
+        const c = lastMessage.content;
+        const text = (c.text || c.content || '').toString().trim();
+        const images = Array.isArray(c.images) ? c.images : [];
+        // 这里把上传后的 dataURL 直接追加到 images，后续由各 provider 的 transformMessagesWithVision 统一转协议
+        c.text = text;
+        c.images = [...images, ...uploadedImages];
+        lastMessage.content = c;
+      } else {
+        lastMessage.content = imageParts;
+      }
+    } else {
+      messages.push({
+        role: 'user',
+        content: imageParts
+      });
+    }
+  }
 
   // 支持多种认证方式：body.apiKey、Authorization头部Bearer令牌
   let accessKey = (pickFirst(body, ['apiKey', 'api_key']) || '').toString().trim();
@@ -69,6 +226,10 @@ async function handleChatCompletionsV3(req, res) {
     if (authHeader.startsWith('Bearer ')) {
       accessKey = authHeader.substring(7).trim();
     }
+  }
+  // 兼容 Web 控制台常见写法：X-API-Key
+  if (!accessKey) {
+    accessKey = (req.headers['x-api-key'] || '').toString().trim();
   }
   if (!accessKey || accessKey !== BotUtil.apiKey) return HttpResponse.unauthorized(res, 'apiKey 无效');
 
