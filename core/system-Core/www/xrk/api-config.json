@@ -190,7 +190,23 @@
               "name": "user_info",
               "label": "用户信息",
               "type": "json",
-              "placeholder": "{\"user_id\": \"123456\"}"
+              "placeholder": "{\"user_id\": \"web_api_user\"}"
+            },
+            {
+              "name": "json",
+              "label": "返回JSON结果",
+              "type": "select",
+              "options": [
+                { "value": "true", "label": "是（按插件输出结构化返回）" },
+                { "value": "false", "label": "否（仅返回基础执行结果）" }
+              ],
+              "defaultValue": "true"
+            },
+            {
+              "name": "timeout",
+              "label": "等待超时（毫秒）",
+              "type": "number",
+              "placeholder": "5000"
             }
           ]
         },
@@ -697,6 +713,14 @@
     }
   ],
   "examples": {
+    "system-status": {},
+    "system-status-detail": {},
+    "system-overview": {
+      "withHistory": "1"
+    },
+    "system-config": {},
+    "health-check": {},
+
     "bot-friends": {
       "path_uin": "123456789"
     },
@@ -712,21 +736,117 @@
       "target_id": "123456789",
       "message": "你好，这是一条测试消息！"
     },
+
     "stdin-command": {
-      "command": "#帮助"
+      "command": "#更新",
+      "json": true,
+      "timeout": 8000,
+      "user_info": {
+        "user_id": "web_api_user",
+        "nickname": "Web API 用户"
+      }
     },
+    "stdin-event": {
+      "event_type": "message",
+      "content": {
+        "message": [
+          { "type": "text", "text": "你好" }
+        ]
+      },
+      "user_info": {
+        "user_id": "web_api_user",
+        "nickname": "Web API 用户"
+      }
+    },
+    "stdin-status": {},
+
+    "ai-stream": {
+      "prompt": "你好",
+      "workflow": "chat",
+      "persona": "你是一个友好的助手"
+    },
+    "ai-models": {
+      "format": "openai"
+    },
+    "v3-chat-completions": {
+      "apiKey": "demo-key",
+      "messages": [
+        { "role": "user", "content": "你好" }
+      ],
+      "model": "gptgod",
+      "stream": "false"
+    },
+
+    "config-list": {},
+    "config-structure": {
+      "path_name": "system"
+    },
+    "config-flat-structure": {
+      "path_name": "system",
+      "path": "log_level"
+    },
+    "config-read": {
+      "path_name": "system",
+      "path": "log_level"
+    },
+    "config-write": {
+      "path_name": "system",
+      "data": {
+        "log_level": "info"
+      },
+      "path": "log_level",
+      "backup": "true"
+    },
+    "config-batch-set": {
+      "path_name": "system",
+      "flat": {
+        "log_level": "info"
+      }
+    },
+
     "device-register": {
       "device_id": "SENSOR_001",
       "device_type": "sensor",
       "device_name": "温湿度传感器"
     },
+    "device-list": {},
+    "device-detail": {
+      "path_deviceId": "SENSOR_001"
+    },
     "device-ai": {
       "path_deviceId": "webclient",
       "text": "你好"
     },
+
+    "file-upload": {},
+    "file-get": {
+      "path_id": "example-file-id",
+      "download": "false"
+    },
+    "file-delete": {
+      "path_id": "example-file-id"
+    },
+    "file-list": {},
+
+    "plugin-list": {},
+    "plugin-summary": {},
     "plugin-reload": {
       "path_key": "example-plugin"
-    }
+    },
+    "plugin-tasks": {},
+    "plugin-stats": {},
+
+    "mcp-tools": {
+      "stream": "chat"
+    },
+    "mcp-tools-streams": {},
+    "mcp-tools-call": {
+      "name": "chat.screenshot",
+      "arguments": {
+        "prompt": "当前屏幕截图"
+      }
+    },
+    "mcp-health": {}
   },
   "quickActions": [
     {

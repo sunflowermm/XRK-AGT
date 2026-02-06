@@ -17,37 +17,6 @@
 
 // ========== 工具函数 ==========
 /**
- * 防抖函数 - 延迟执行，在连续触发时只执行最后一次
- * @param {Function} fn - 要执行的函数
- * @param {number} delay - 延迟时间（毫秒）
- * @returns {Function} 防抖后的函数
- */
-function debounce(fn, delay = 300) {
-  let timer = null;
-  return function(...args) {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), delay);
-  };
-}
-
-/**
- * 节流函数 - 限制执行频率，在指定时间内只执行一次
- * @param {Function} fn - 要执行的函数
- * @param {number} delay - 间隔时间（毫秒）
- * @returns {Function} 节流后的函数
- */
-function throttle(fn, delay = 300) {
-  let lastTime = 0;
-  return function(...args) {
-    const now = Date.now();
-    if (now - lastTime >= delay) {
-      lastTime = now;
-      fn.apply(this, args);
-    }
-  };
-}
-
-/**
  * 安全的DOM查询 - 避免重复查询
  * @param {string} selector - CSS选择器
  * @param {Element} context - 查询上下文，默认为document
@@ -65,32 +34,6 @@ function $(selector, context = document) {
  */
 function $$(selector, context = document) {
   return context.querySelectorAll(selector);
-}
-
-/**
- * 安全的JSON解析
- * @param {string} str - JSON字符串
- * @param {*} defaultValue - 解析失败时的默认值
- * @returns {*} 解析结果或默认值
- */
-function safeJsonParse(str, defaultValue = null) {
-  try {
-    return JSON.parse(str);
-  } catch {
-    return defaultValue;
-  }
-}
-
-/**
- * 格式化错误信息
- * @param {Error|string} error - 错误对象或字符串
- * @returns {string} 格式化的错误信息
- */
-function formatError(error) {
-  if (typeof error === 'string') return error;
-  if (error?.message) return error.message;
-  if (error?.toString) return error.toString();
-  return '未知错误';
 }
 
 /**
@@ -2755,11 +2698,25 @@ class App {
       </div>
     `;
     
-    document.getElementById('configSearchInput')?.addEventListener('input', (e) => {
-      if (!this._configState) return;
-      this._configState.filter = e.target.value.trim().toLowerCase();
-      this.renderConfigList();
-    });
+    const searchInput = document.getElementById('configSearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        if (!this._configState) return;
+        this._configState.filter = e.target.value.trim().toLowerCase();
+        this.renderConfigList();
+      });
+    }
+
+    // 配置列表事件委托：只绑定一次，避免每次重绘重复绑定
+    const listContainer = document.getElementById('configList');
+    if (listContainer) {
+      listContainer.addEventListener('click', (e) => {
+        const item = e.target.closest('.config-item');
+        if (!item || !this._configState) return;
+        const name = item.dataset.name;
+        if (name) this.selectConfig(name);
+      });
+    }
 
     this.loadConfigList();
   }
@@ -2848,14 +2805,16 @@ class App {
           </div>
     `;
     }).join('');
-      
-      list.querySelectorAll('.config-item').forEach(item => {
-      item.addEventListener('click', () => this.selectConfig(item.dataset.name));
-    });
   }
 
   selectConfig(name, child = null) {
     if (!this._configState) return;
+    
+    // 若选择与当前相同的配置和子项，避免重复渲染导致的抖动
+    if (this._configState.selected?.name === name && (child || null) === this._configState.selectedChild) {
+      return;
+    }
+
     const config = this._configState.list.find(cfg => cfg.name === name);
     if (!config) return;
 
@@ -2870,25 +2829,12 @@ class App {
     this._configState.jsonText = '';
     this._configState.jsonDirty = false;
 
-    this.renderConfigMainSkeleton();
-
     if (config.name === 'system' && !child) {
       this.renderSystemConfigChooser(config);
       return;
     }
 
     this.loadSelectedConfigDetail();
-  }
-
-  renderConfigMainSkeleton() {
-    const main = document.getElementById('configMain');
-    if (!main) return;
-    main.innerHTML = `
-      <div class="empty-state">
-        <div class="loading-spinner" style="margin:0 auto"></div>
-        <p style="margin-top:12px; color: var(--text-secondary);">加载配置详情...</p>
-          </div>
-    `;
   }
 
   renderSystemConfigChooser(config) {
@@ -3110,6 +3056,14 @@ class App {
     this.bindConfigJsonEvents();
     this.bindArrayObjectEvents();
     this.bindDynamicCollectionEvents();
+
+    // 体验优化：优先聚焦第一个可编辑表单控件，便于键盘用户直接开始输入
+    const firstInput = main.querySelector(
+      '#configFormWrapper input, #configFormWrapper select, #configFormWrapper textarea'
+    );
+    if (firstInput && typeof firstInput.focus === 'function') {
+      firstInput.focus();
+    }
   }
 
   renderSystemPathBadge(child) {

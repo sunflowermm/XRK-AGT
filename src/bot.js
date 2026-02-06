@@ -3198,14 +3198,32 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       throw this.makeError('stdin handler not initialized', 'StdinUnavailable');
     }
     
-    const waitOutput = this._waitForStdinOutput(timeout);
-    const result = await stdinHandler.processCommand(command, {
-      ...user_info,
-      tasker: user_info.tasker || 'api'
-    });
-    
-    const output = await waitOutput;
-    return output || result;
+    // 扩展性更好的做法：以一次命令执行为边界收集输出，而不是用时间窗口
+    const outputs = [];
+    const handler = (payload) => {
+      outputs.push(payload);
+    };
+
+    this.on('stdin.output', handler);
+
+    try {
+      const result = await stdinHandler.processCommand(command, {
+        ...user_info,
+        tasker: user_info.tasker || 'api'
+      });
+
+      if (!outputs.length) return result;
+      if (outputs.length === 1) return outputs[0];
+
+      // 合并多条输出：content 合并，其它字段以最后一条为准
+      const base = outputs[outputs.length - 1] || {};
+      const allContent = outputs
+        .map(o => Array.isArray(o?.content) ? o.content : [])
+        .flat();
+      return { ...base, content: allContent };
+    } finally {
+      this.off('stdin.output', handler);
+    }
   }
   
   /**
@@ -3319,30 +3337,31 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   }
   
   async _emitAndCollect(name, data, timeout = 5000) {
-    const waitOutput = this._waitForStdinOutput(timeout);
-    this._cascadeEmit(name, data);
-    return await waitOutput;
-  }
-  
-  _waitForStdinOutput(timeout = 5000) {
-    return new Promise(resolve => {
-      const timer = setTimeout(() => {
-        cleanup();
-        resolve(null);
-      }, timeout);
-      
-      const handler = (payload) => {
-        cleanup();
-        resolve(payload);
-      };
-      
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.off('stdin.output', handler);
-      };
-      
-      this.once('stdin.output', handler);
-    });
+    // 保持与 callStdin 一致：以一次事件触发过程为边界收集 stdin.output
+    const outputs = [];
+    const handler = (payload) => {
+      outputs.push(payload);
+    };
+
+    this.on('stdin.output', handler);
+
+    try {
+      this._cascadeEmit(name, data);
+
+      // 等待固定超时，期间如果业务侧主动回复多次，一并收集
+      await BotUtil.sleep(timeout);
+
+      if (!outputs.length) return null;
+      if (outputs.length === 1) return outputs[0];
+
+      const base = outputs[outputs.length - 1] || {};
+      const allContent = outputs
+        .map(o => Array.isArray(o?.content) ? o.content : [])
+        .flat();
+      return { ...base, content: allContent };
+    } finally {
+      this.off('stdin.output', handler);
+    }
   }
 
   /**

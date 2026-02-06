@@ -53,7 +53,8 @@ export default {
         }
 
         const { command, user_info = {} } = req.body;
-        const wantJson = String(req.body?.json ?? req.query?.json ?? '').toLowerCase() === 'true';
+        // 默认以 JSON 形式返回插件输出，除非显式传入 json=false
+        const wantJson = String(req.body?.json ?? req.query?.json ?? 'true').toLowerCase() === 'true';
         const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
         
         if (!command) {
@@ -61,11 +62,14 @@ export default {
         }
 
         user_info.tasker = 'api';
-        
-        const result = wantJson && typeof Bot.callStdin === 'function'
-          ? await Bot.callStdin(command, { user_info, timeout })
-          : await stdinHandler.processCommand(command, user_info);
-        
+
+        // JSON 模式：通过 Bot.callStdin 收集本次命令触发的所有插件输出
+        if (wantJson) {
+          const result = await Bot.callStdin(command, { user_info, timeout });
+          return res.json(result);
+        }
+
+        const result = await stdinHandler.processCommand(command, user_info);
         res.json(result);
       }, 'stdin.command')
     },
@@ -85,7 +89,7 @@ export default {
         }
 
         const { event_type = 'message', content, user_info = {} } = req.body;
-        const wantJson = String(req.body?.json ?? req.query?.json ?? '').toLowerCase() === 'true';
+        const wantJson = String(req.body?.json ?? req.query?.json ?? 'true').toLowerCase() === 'true';
         const timeout = Number(req.body?.timeout || req.query?.timeout) || 5000;
         
         user_info.tasker = 'api';
