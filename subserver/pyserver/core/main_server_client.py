@@ -1,6 +1,17 @@
 """主服务端客户端工具模块
-统一管理主服务端连接、URL获取、HTTP请求等
-支持连接池优化、重试机制
+
+统一管理主服务端连接、URL 获取、HTTP 请求等。
+
+功能：
+- HTTP 客户端单例管理（连接池优化）
+- 自动处理 Docker 环境下的服务名解析
+- 代理环境变量临时禁用（避免影响模型下载）
+- 统一的错误处理和日志记录
+
+特性：
+- 连接池复用，提升性能
+- 自动重试机制
+- 支持超时配置
 """
 
 import httpx
@@ -48,7 +59,7 @@ def get_timeout() -> float:
 async def get_http_client() -> httpx.AsyncClient:
     """获取HTTP客户端实例（单例模式，禁用代理）"""
     global _http_client
-    if _http_client is None:
+    if not _http_client:
         _http_client = httpx.AsyncClient(
             timeout=get_timeout(),
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
@@ -60,7 +71,7 @@ async def get_http_client() -> httpx.AsyncClient:
 async def close_http_client():
     """关闭HTTP客户端"""
     global _http_client
-    if _http_client is not None:
+    if _http_client:
         await _http_client.aclose()
         _http_client = None
 
@@ -93,9 +104,9 @@ async def call_main_server(
             )
         finally:
             # 恢复代理环境变量（用于模型下载）
-            if old_http_proxy is not None:
+            if old_http_proxy:
                 os.environ["HTTP_PROXY"] = old_http_proxy
-            if old_https_proxy is not None:
+            if old_https_proxy:
                 os.environ["HTTPS_PROXY"] = old_https_proxy
         if response.status_code >= 400:
             logger.error(f"主服务端响应错误 [{method} {path}]: {response.status_code} - {response.text[:500]}")

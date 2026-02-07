@@ -1,11 +1,22 @@
-"""向量服务优化模块"""
+"""向量服务模块
+
+提供文本向量化、向量检索和向量入库功能。
+
+主要功能：
+- 文本向量化：使用 SentenceTransformer 模型将文本转换为向量
+- 向量检索：基于向量相似度进行语义搜索
+- 向量入库：批量存储文档向量到 ChromaDB
+
+特性：
+- 异步模型加载，支持重试机制
+- 嵌入结果缓存，提升性能
+- 自动管理向量数据库连接
+"""
 
 from typing import Optional, Dict, Any, List
 import asyncio
 import logging
-import os
 import time
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -40,7 +51,11 @@ class SearchResult:
 
 
 class VectorService:
-    """优化后的向量服务"""
+    """向量服务类
+    
+    提供文本向量化、向量检索和向量入库功能。
+    支持模型懒加载、结果缓存和自动重试机制。
+    """
 
     def __init__(self):
         self._embedding_model: Optional[SentenceTransformer] = None
@@ -101,57 +116,99 @@ class VectorService:
             del self._embedding_cache[k]
 
     async def load_embedding_model(self) -> bool:
-        """异步加载嵌入模型（优化版）"""
-        if self._embedding_model is not None or self._model_loading:
-            return self._embedding_model is not None
+        """异步加载嵌入模型（优化版，带重试机制）"""
+        if self._embedding_model is not None:
+            return True
+        if self._model_loading:
+            return False
 
         async with self.model_load_lock:
-            if self._embedding_model is not None or self._model_loading:
-                return self._embedding_model is not None
+            if self._embedding_model is not None:
+                return True
+            if self._model_loading:
+                return False
 
             self._model_loading = True
             try:
-                model_name = config.get(
-                    "vector.model", "paraphrase-multilingual-MiniLM-L12-v2"
-                )
+                model_name = config.get("vector.model", "paraphrase-multilingual-MiniLM-L12-v2")
                 device = config.get("vector.device", "cpu")
                 
-                # 使用统一的缓存目录解析逻辑
                 from core.config import get_model_cache_dir
                 cache_dir = get_model_cache_dir()
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 cache_dir_str = str(cache_dir)
 
-                local_files_only = config.get("vector.local_files_only", False)
                 load_timeout = config.get("vector.load_timeout", 300.0)
+                max_retries = config.get("vector.load_retries", 3)
                 
-                try:
-                    self._embedding_model = await asyncio.wait_for(
-                        asyncio.get_event_loop().run_in_executor(
-                            None,
-                            lambda: SentenceTransformer(
+                model_cache_path = cache_dir / "models--" + model_name.replace("/", "--")
+                snapshots_dir = model_cache_path / "snapshots"
+                has_local_model = model_cache_path.exists() and snapshots_dir.exists() and any(snapshots_dir.iterdir())
+                local_files_only = has_local_model or config.get("vector.local_files_only", False)
+                
+                if has_local_model:
+                    logger.info("使用本地模型缓存: %s", model_name)
+                
+                last_error = None
+                error_type = None
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        def _load_model():
+                            import os
+                            os.environ.setdefault("HF_HOME", cache_dir_str)
+                            os.environ.setdefault("HF_HUB_CACHE", cache_dir_str)
+                            return SentenceTransformer(
                                 model_name,
                                 device=device,
                                 local_files_only=local_files_only,
                                 cache_folder=cache_dir_str,
-                            ),
-                        ),
-                        timeout=load_timeout,
-                    )
-                    return True
-                except asyncio.TimeoutError:
-                    logger.error("嵌入模型加载超时: %s", model_name)
-                    self._embedding_model = False
-                    return False
-                except Exception as e:
-                    error_msg = str(e)
-                    if "local_files_only" in error_msg.lower() or "not found" in error_msg.lower():
-                        logger.error("嵌入模型加载失败: %s", error_msg)
-                        logger.error("请确保模型文件已完整下载到缓存目录: %s", cache_dir_str)
-                    else:
-                        logger.error("嵌入模型加载失败: %s", error_msg, exc_info=True)
-                    self._embedding_model = False
-                    return False
+                            )
+                        
+                        self._embedding_model = await asyncio.wait_for(
+                            asyncio.get_event_loop().run_in_executor(None, _load_model),
+                            timeout=load_timeout,
+                        )
+                        
+                        if self._embedding_model:
+                            logger.info("嵌入模型加载成功: %s", model_name)
+                            return True
+                        raise RuntimeError("模型加载返回 None")
+                            
+                    except asyncio.TimeoutError:
+                        last_error = f"超时 ({load_timeout}s)"
+                        error_type = "timeout"
+                        if attempt < max_retries:
+                            await asyncio.sleep(2 ** attempt)
+                        continue
+                    except Exception as e:
+                        last_error = str(e)
+                        error_msg = last_error.lower()
+                        
+                        if any(kw in error_msg for kw in ["client has been closed", "connection", "network"]):
+                            error_type = "network"
+                            if attempt < max_retries:
+                                await asyncio.sleep(2 ** attempt)
+                                continue
+                        elif "local_files_only" in error_msg or "not found" in error_msg:
+                            error_type = "not_found"
+                            break
+                        else:
+                            error_type = "unknown"
+                            if attempt < max_retries:
+                                await asyncio.sleep(2 ** attempt)
+                                continue
+                            break
+                
+                if error_type == "network":
+                    logger.warning("嵌入模型下载失败（网络错误）: %s", model_name)
+                elif error_type == "not_found":
+                    logger.warning("嵌入模型未找到: %s", model_name)
+                else:
+                    logger.warning("嵌入模型加载失败: %s", model_name)
+                
+                self._model_load_failed = True
+                return False
+                
             finally:
                 self._model_loading = False
 
@@ -164,7 +221,6 @@ class VectorService:
                 )
                 persist_path.mkdir(parents=True, exist_ok=True)
 
-                # 优化配置
                 self._vector_client = chromadb.PersistentClient(
                     path=str(persist_path),
                     settings=chromadb.config.Settings(
@@ -174,18 +230,17 @@ class VectorService:
                         ),
                     ),
                 )
-                logger.debug("向量数据库客户端初始化成功")
 
             except Exception as e:
                 logger.error("向量数据库初始化失败: %s", e, exc_info=True)
-                self._vector_client = False
+                self._vector_client = None
 
-        return self._vector_client if self._vector_client is not False else None
+        return self._vector_client
 
     @property
     def embedding_model(self) -> Optional[SentenceTransformer]:
         """获取嵌入模型实例"""
-        return self._embedding_model if self._embedding_model is not False else None
+        return self._embedding_model
 
     async def embed_texts(
         self, texts: List[str], use_cache: bool = True
@@ -194,17 +249,14 @@ class VectorService:
         if not texts:
             return []
 
-        # 确保模型已加载
         if not await self.load_embedding_model():
             raise HTTPException(status_code=503, detail="向量化服务不可用")
 
         results = []
         texts_to_encode = []
-        indices_to_encode = []
 
-        # 检查缓存
         if use_cache:
-            for i, text in enumerate(texts):
+            for text in texts:
                 cached_embedding = self._get_from_cache(text)
                 if cached_embedding is not None:
                     results.append(
@@ -216,20 +268,18 @@ class VectorService:
                     )
                 else:
                     texts_to_encode.append(text)
-                    indices_to_encode.append(i)
 
-        # 编码未缓存的文本
         if texts_to_encode:
             try:
-                embeddings = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: self.embedding_model.encode(
+                def _encode_texts():
+                    return self.embedding_model.encode(
                         texts_to_encode,
                         convert_to_numpy=True,
                         show_progress_bar=False,
                         batch_size=config.get("vector.batch_size", 32),
-                    ),
-                )
+                    )
+                
+                embeddings = await asyncio.get_event_loop().run_in_executor(None, _encode_texts)
 
                 for i, (text, embedding) in enumerate(zip(texts_to_encode, embeddings)):
                     embedding_list = self._convert_to_list(embedding)
@@ -241,29 +291,13 @@ class VectorService:
                         )
                     )
 
-                    # 更新缓存
                     if use_cache:
                         self._set_cache(text, embedding_list)
 
             except Exception as e:
-                logger.error("文本向量化失败: %s", e, exc_info=True)
-                raise HTTPException(status_code=500, detail=f"文本向量化失败: {str(e)}")
-
-        # 按原始顺序排序结果
-        if use_cache and indices_to_encode:
-            sorted_results = [None] * len(texts)
-            cache_idx = 0
-            encode_idx = 0
-            for i in range(len(texts)):
-                if cache_idx < len(results) and results[cache_idx].text == texts[i]:
-                    sorted_results[i] = results[cache_idx]
-                    cache_idx += 1
-                else:
-                    sorted_results[i] = results[
-                        len(texts) - len(texts_to_encode) + encode_idx
-                    ]
-                    encode_idx += 1
-            results = sorted_results
+                error_msg = str(e)[:200]
+                logger.error("文本向量化失败: %s", error_msg)
+                raise HTTPException(status_code=500, detail=f"文本向量化失败: {error_msg}")
 
         return results
 
@@ -271,7 +305,7 @@ class VectorService:
         self, query: str, collection: str = None, top_k: int = 5
     ) -> List[SearchResult]:
         """向量相似度搜索（优化版）"""
-        if not query or not isinstance(query, str):
+        if not isinstance(query, str) or not query.strip():
             raise HTTPException(status_code=400, detail="查询文本不能为空")
 
         collection = collection or config.get("vector.default_collection", "default")
@@ -281,7 +315,6 @@ class VectorService:
         if not client:
             return []
 
-        # 获取查询嵌入
         embed_results = await self.embed_texts([query])
         if not embed_results:
             return []
@@ -296,52 +329,43 @@ class VectorService:
                 include=["documents", "metadatas", "distances"],
             )
 
-            if not results.get("documents") or not results["documents"][0]:
+            documents = results.get("documents", [[]])[0]
+            if not documents:
                 return []
+
+            ids = results.get("ids", [[]])[0]
+            distances = results.get("distances", [[]])[0]
+            metadatas = results.get("metadatas", [[]])[0]
 
             formatted_results = [
                 SearchResult(
-                    id=results["ids"][0][i] if results.get("ids") else f"doc_{i}",
+                    id=ids[i] if i < len(ids) else f"doc_{i}",
                     text=doc,
-                    score=round(
-                        max(
-                            0,
-                            1
-                            - (
-                                results["distances"][0][i]
-                                if results.get("distances")
-                                else 0.0
-                            ),
-                        ),
-                        4,
-                    ),
-                    metadata=results["metadatas"][0][i]
-                    if results.get("metadatas")
-                    else {},
+                    score=round(max(0, 1 - (distances[i] if i < len(distances) else 0.0)), 4),
+                    metadata=metadatas[i] if i < len(metadatas) else {},
                 )
-                for i, doc in enumerate(results["documents"][0])
+                for i, doc in enumerate(documents)
             ]
 
             return formatted_results
 
         except Exception as e:
-            logger.error("向量搜索失败: %s", e, exc_info=True)
-            raise HTTPException(status_code=500, detail=f"向量搜索失败: {str(e)}")
+            error_msg = str(e)[:200]
+            logger.error("向量搜索失败: %s", error_msg)
+            raise HTTPException(status_code=500, detail=f"向量搜索失败: {error_msg}")
 
     async def upsert_documents(
         self, documents: List[Dict[str, Any]], collection: str = None
     ) -> Dict[str, Any]:
         """批量向量入库（优化版）"""
-        if not documents or not isinstance(documents, list):
+        if not isinstance(documents, list) or not documents:
             raise HTTPException(status_code=400, detail="文档列表不能为空")
 
         collection = collection or config.get("vector.default_collection", "default")
-
         client = self.get_vector_client()
         if not client:
             raise HTTPException(status_code=503, detail="向量数据库服务不可用")
 
-        # 提取文本
         texts = []
         ids = []
         metadatas = []
@@ -366,15 +390,12 @@ class VectorService:
         if not texts:
             raise HTTPException(status_code=400, detail="所有文档文本都为空")
 
-        # 批量向量化
         embed_results = await self.embed_texts(texts)
 
         try:
             coll = client.get_or_create_collection(collection)
-
             embeddings = [result.embedding for result in embed_results]
 
-            # 使用 upsert 或 add
             if hasattr(coll, "upsert"):
                 coll.upsert(
                     embeddings=embeddings, documents=texts, ids=ids, metadatas=metadatas
@@ -392,15 +413,24 @@ class VectorService:
             }
 
         except Exception as e:
-            logger.error("向量入库失败: %s", e, exc_info=True)
-            raise HTTPException(status_code=500, detail=f"向量入库失败: {str(e)}")
+            error_msg = str(e)[:200]
+            logger.error("向量入库失败: %s", error_msg)
+            raise HTTPException(status_code=500, detail=f"向量入库失败: {error_msg}")
 
     def get_health_status(self) -> Dict[str, Any]:
         """获取服务健康状态"""
+        from core.config import get_model_cache_dir
+        cache_dir = get_model_cache_dir()
+        model_name = config.get("vector.model", "paraphrase-multilingual-MiniLM-L12-v2")
+        model_cache_path = cache_dir / "models--" + model_name.replace("/", "--")
+        snapshots_dir = model_cache_path / "snapshots"
+        model_cached = model_cache_path.exists() and snapshots_dir.exists() and any(snapshots_dir.iterdir())
+        
         return {
             "vector_db": bool(self.get_vector_client()),
             "embedding_model": bool(self.embedding_model),
             "model_loading": self._model_loading,
+            "model_cached": model_cached,
             "cache_enabled": self._cache_enabled,
             "cache_size": len(self._embedding_cache),
             "persist_dir": str(
@@ -408,9 +438,8 @@ class VectorService:
                     config.get("vector.persist_dir", "data/subserver/vector_db")
                 )
             ),
-            "model": config.get(
-                "vector.model", "paraphrase-multilingual-MiniLM-L12-v2"
-            ),
+            "model": model_name,
+            "model_cache_path": str(model_cache_path) if model_cached else None,
             "device": config.get("vector.device", "cpu"),
         }
 
@@ -425,7 +454,7 @@ async def embed_handler(request: Request):
     data = await request.json()
     texts = data.get("texts", [])
 
-    if not texts or not isinstance(texts, list):
+    if not isinstance(texts, list) or not texts:
         raise HTTPException(status_code=400, detail="缺少texts参数或格式错误")
 
     results = await vector_service.embed_texts(texts)
@@ -441,7 +470,6 @@ async def embed_handler(request: Request):
             for result in results
         ],
         "count": len(results),
-        "cached": len([r for r in results if vector_service._get_from_cache(r.text)]),
     }
 
 
@@ -452,7 +480,7 @@ async def search_handler(request: Request):
     collection = data.get("collection")
     top_k = max(1, min(int(data.get("top_k", 5)), 100))
 
-    if not query or not isinstance(query, str):
+    if not isinstance(query, str) or not query.strip():
         raise HTTPException(status_code=400, detail="缺少query参数或格式错误")
 
     results = await vector_service.search_similar(query, collection, top_k)

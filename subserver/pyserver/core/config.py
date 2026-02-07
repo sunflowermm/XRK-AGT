@@ -1,5 +1,17 @@
-"""配置管理模块，支持 YAML 配置文件和环境变量
-参考主服务端配置系统，实现default配置和data目录复制机制
+"""配置管理模块
+
+支持 YAML 配置文件和环境变量，参考主服务端配置系统。
+
+功能：
+- 自动从默认配置复制到数据目录
+- 支持点号分隔的嵌套配置键
+- 配置缓存机制，提升读取性能
+- 统一的路径解析逻辑
+
+配置加载流程：
+1. 优先从 data/subserver/config.yaml 读取（用户配置）
+2. 如果不存在，从 config/default_config.yaml 复制并创建
+3. 如果默认配置也不存在，使用内置默认配置
 """
 
 import yaml
@@ -7,7 +19,7 @@ import shutil
 import os
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +69,7 @@ def get_model_cache_dir() -> Path:
     Returns:
         模型缓存目录Path对象
     """
-    from .config import Config
+    # 延迟导入避免循环依赖
     _config = Config()
     cache_dir_rel = _config.get("vector.cache_dir", "data/subserver/model_cache")
     if cache_dir_rel.startswith("data/subserver/"):

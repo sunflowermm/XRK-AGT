@@ -1,4 +1,19 @@
-"""API 加载器，自动加载 apis 目录下的所有 API 组"""
+"""API 加载器模块
+
+自动扫描并加载 apis 目录下的所有 API 组。
+
+功能：
+- 自动发现 apis 目录下的 API 组
+- 支持字典配置和类继承两种 API 定义方式
+- 按优先级排序注册 API
+- 单例模式，确保只加载一次
+
+API 组结构：
+apis/
+  group_name/
+    api_file.py  # 导出 default 字典或 BaseAPI 子类
+"""
+
 import importlib
 import importlib.util
 import inspect

@@ -1,4 +1,18 @@
-"""LangChain Service - LangChain集成服务"""
+"""LangChain 集成服务模块
+
+提供 LangChain Agent 集成，支持 MCP 工具调用和流式/非流式聊天。
+
+主要功能：
+- LangChain Agent 聊天：支持工具调用和流式响应
+- MCP 工具集成：自动获取和调用主服务端的 MCP 工具
+- 模型列表：从主服务端获取可用模型列表
+
+特性：
+- 支持流式和非流式响应
+- MCP 工具列表缓存（60秒）
+- 自动回退机制：Agent 失败时回退到直接调用
+"""
+
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse
 from core.config import Config
@@ -93,7 +107,7 @@ async def chat_handler(request: Request):
 
     main_url = get_main_server_url()
     timeout = get_timeout()
-    main_api_key = (data.get("apiKey") or config.get("main_server.api_key", "") or "").strip()
+    main_api_key = (data.get("apiKey") or config.get("main_server.api_key", "")).strip()
 
     if stream:
         payload = _v3_payload(messages, model, temperature, max_tokens, True, main_api_key)
@@ -127,13 +141,13 @@ async def chat_handler(request: Request):
                 provider_or_model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                max_steps=int(config.get("langchain.max_steps", 6) or 6),
-                verbose=bool(config.get("langchain.verbose", False)),
+                max_steps=config.get("langchain.max_steps", 6),
+                verbose=config.get("langchain.verbose", False),
                 use_tools=True,
                 get_mcp_tools=get_mcp_tools,
                 call_mcp_tool=call_mcp_tool,
                 call_v3_chat=lambda p: _call_v3_chat(p, model, temperature, max_tokens, main_api_key, timeout),
-                max_tools=int(config.get("langchain.max_tools", 40) or 40),
+                max_tools=config.get("langchain.max_tools", 40),
             )
             final_text = await run_agent(messages=messages, deps=deps)
             return {"choices": [{"message": {"content": final_text}}], "usage": {"total_tokens": 0}, "model": model}

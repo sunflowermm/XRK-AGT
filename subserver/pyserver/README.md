@@ -1,6 +1,13 @@
 # XRK-AGT Python 子服务端
 
-基于 FastAPI 的高性能独立服务。
+基于 FastAPI 的高性能独立服务，提供 AI 生态相关能力。
+
+## 功能特性
+
+- **LangChain 集成**：支持 Agent 编排和 MCP 工具调用
+- **向量服务**：文本向量化、向量检索和向量数据库管理
+- **高性能**：异步模型加载、结果缓存、连接池优化
+- **易于扩展**：模块化 API 设计，支持多组结构
 
 ## 🚀 快速开始
 
@@ -36,11 +43,26 @@ Python 子服务端内部会调用主服务端的 `POST /api/v3/chat/completions
 
 ## 🔧 配置
 
-编辑 `config.yaml` 或使用环境变量：
+### 配置文件位置
+
+- **默认配置**：`config/default_config.yaml`（模板文件，不应修改）
+- **用户配置**：`data/subserver/config.yaml`（首次启动时自动从默认配置复制）
+
+### 环境变量
+
+支持通过环境变量覆盖配置：
 
 ```bash
 HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 ```
+
+### 主要配置项
+
+- `server.host` / `server.port`：服务监听地址和端口
+- `main_server.host` / `main_server.port`：主服务端连接地址
+- `vector.model`：向量化模型名称
+- `vector.cache_enabled`：是否启用嵌入结果缓存
+- `langchain.enabled`：是否启用 LangChain Agent
 
 ## 📝 开发 API
 

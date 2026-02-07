@@ -1,4 +1,16 @@
-"""HTTP API 基类"""
+"""HTTP API 基类模块
+
+提供统一的 API 接口结构，支持字典配置和类继承两种方式。
+
+主要功能：
+- BaseAPI：API 基类，提供统一的注册和初始化接口
+- create_api_from_dict：从字典配置创建 API 实例
+
+使用方式：
+1. 继承 BaseAPI 类
+2. 使用字典配置（推荐）：在 API 文件中导出 default 字典
+"""
+
 from typing import List, Dict, Callable, Any
 from fastapi import FastAPI, Request, HTTPException
 import logging
@@ -104,13 +116,15 @@ def create_api_from_dict(data: Dict[str, Any]) -> BaseAPI:
         async def init(self, app: FastAPI):
             """执行自定义初始化钩子"""
             init_hook = self._data.get("init")
-            if init_hook and callable(init_hook):
-                if inspect.iscoroutinefunction(init_hook):
-                    await init_hook(app)
-                else:
-                    result = init_hook(app)
-                    if inspect.isawaitable(result):
-                        await result
+            if not (init_hook and callable(init_hook)):
+                return
+            
+            if inspect.iscoroutinefunction(init_hook):
+                await init_hook(app)
+            else:
+                result = init_hook(app)
+                if inspect.isawaitable(result):
+                    await result
         
         def _wrap_handler(self, handler: Callable) -> Callable:
             """包装处理器以支持错误处理"""

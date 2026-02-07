@@ -30,7 +30,8 @@ RUN for i in 1 2 3; do \
     done && \
     (mv /root/.cargo/bin/uv /usr/local/bin/uv 2>/dev/null || \
      mv /root/.local/bin/uv /usr/local/bin/uv 2>/dev/null || true) || \
-    pip3 install --no-cache-dir uv
+    pip3 install --no-cache-dir uv && \
+    rm -rf /root/.cargo /root/.local
 
 WORKDIR /app
 
@@ -57,10 +58,8 @@ RUN if command -v /usr/local/bin/uv >/dev/null 2>&1; then \
         .venv/bin/pip install --no-cache-dir fastapi "uvicorn[standard]" httpx pyyaml sentence-transformers chromadb langchain langchain-openai langgraph && \
         .venv/bin/pip cache purge; \
     fi && \
-    # 清理 Python 缓存
     find .venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
-    find .venv -type f -name "*.pyc" -delete 2>/dev/null || true && \
-    find .venv -type f -name "*.pyo" -delete 2>/dev/null || true
+    find .venv -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete 2>/dev/null || true
 
 WORKDIR /app
 
@@ -108,7 +107,8 @@ RUN apt-get clean && \
 RUN curl --connect-timeout 10 --max-time 60 -LsSf https://astral.sh/uv/install.sh | sh && \
     (mv /root/.cargo/bin/uv /usr/local/bin/uv 2>/dev/null || \
      mv /root/.local/bin/uv /usr/local/bin/uv 2>/dev/null || true) || \
-    (pip3 install --no-cache-dir uv && pip3 cache purge) || true
+    (pip3 install --no-cache-dir uv && pip3 cache purge) || true && \
+    rm -rf /root/.cargo /root/.local
 
 WORKDIR /app
 
@@ -131,7 +131,7 @@ RUN mkdir -p \
     config config/default_config config/server_config \
     resources www trash && \
     find . \( \
-        -type d \( -name ".git" -o -name "__pycache__" \) -o \
+        -type d \( -name ".git" -o -name "__pycache__" -o -name ".pytest_cache" -o -name ".mypy_cache" \) -o \
         -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.log" -o -name ".DS_Store" -o -name "Thumbs.db" \) \
     \) -delete 2>/dev/null || true
 

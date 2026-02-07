@@ -1,7 +1,20 @@
 """XRK-AGT Python 子服务端
-提供AI生态相关服务，包括LangChain集成、向量服务、工具服务等
+
+提供 AI 生态相关服务，包括 LangChain 集成、向量服务、工具服务等。
+
+主要服务：
+- LangChain 服务：支持 Agent 和 MCP 工具调用
+- 向量服务：文本向量化、向量检索和入库
+- 工具服务：MCP 工具集成
+
+启动流程：
+1. 设置代理环境（HuggingFace 模型下载）
+2. 加载所有 API 模块
+3. 预热嵌入模型和 MCP 工具
+4. 启动 FastAPI 服务
 """
 import asyncio
+import logging
 import os
 
 import uvicorn
@@ -21,16 +34,21 @@ logger = setup_logger(__name__)
 
 def _ensure_protocol(url: str, default: str = "http") -> str:
     """确保 URL 包含协议前缀"""
-    if not url or not url.strip():
+    if not url or not (url := url.strip()):
         return ""
-    url = url.strip()
     if url.startswith(("http://", "https://", "socks5://")):
         return url
     return f"{default}://{url}"
 
 
 def _setup_proxy_environment():
-    """设置 HuggingFace 缓存目录和代理配置"""
+    """设置 HuggingFace 缓存目录和代理配置，禁用冗余日志"""
+    # 禁用 huggingface_hub 和 transformers 的 HTTP 请求日志
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+    logging.getLogger("transformers").setLevel(logging.WARNING)
+    logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+    
     from core.config import get_model_cache_dir
     cache_dir = get_model_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -39,19 +57,28 @@ def _setup_proxy_environment():
     os.environ["HF_HUB_CACHE"] = cache_dir_str
     
     if os.getenv("HF_HUB_OFFLINE") != "1":
-        proxies = {
-            "HTTP_PROXY": _ensure_protocol(os.getenv("HTTP_PROXY") or config.get("proxy.http_proxy", "")),
-            "HTTPS_PROXY": _ensure_protocol(os.getenv("HTTPS_PROXY") or config.get("proxy.https_proxy", "")),
-            "HF_ENDPOINT": _ensure_protocol(os.getenv("HF_ENDPOINT") or config.get("proxy.hf_endpoint", ""), "https"),
-        }
+        # 优先使用环境变量，其次使用配置文件
+        http_proxy = os.getenv("HTTP_PROXY") or config.get("proxy.http_proxy", "")
+        https_proxy = os.getenv("HTTPS_PROXY") or config.get("proxy.https_proxy", "")
+        hf_endpoint = os.getenv("HF_ENDPOINT") or config.get("proxy.hf_endpoint", "")
         
-        for key, value in proxies.items():
+        # 设置代理环境变量（大小写版本）
+        for key, value in [
+            ("HTTP_PROXY", _ensure_protocol(http_proxy)),
+            ("HTTPS_PROXY", _ensure_protocol(https_proxy)),
+            ("http_proxy", _ensure_protocol(http_proxy)),
+            ("https_proxy", _ensure_protocol(https_proxy)),
+            ("HF_ENDPOINT", _ensure_protocol(hf_endpoint, "https")),
+        ]:
             if value:
                 os.environ[key] = value
             else:
                 os.environ.pop(key, None)
         
-        os.environ["NO_PROXY"] = os.getenv("NO_PROXY") or "127.0.0.1,localhost,xrk-agt,redis,mongodb"
+        # 设置 NO_PROXY
+        no_proxy = os.getenv("NO_PROXY") or "127.0.0.1,localhost,xrk-agt,redis,mongodb"
+        os.environ["NO_PROXY"] = no_proxy
+        os.environ["no_proxy"] = no_proxy
 
 
 async def _warmup_vector():
@@ -60,10 +87,9 @@ async def _warmup_vector():
         from apis.vector.vector_service import vector_service
         if await vector_service.load_embedding_model():
             logger.info("  └ 📦 嵌入模型已预热")
-        else:
-            logger.warning("  └ ⚠️ 嵌入模型预热失败（可稍后按需加载）")
+        # 错误已在 load_embedding_model 中记录，这里不再重复
     except Exception as e:
-        logger.warning("  └ ⚠️ 嵌入模型预热失败: %s", e)
+        logger.warning("  └ ⚠️ 嵌入模型预热异常: %s", str(e)[:100])
 
 
 async def _warmup_mcp():
@@ -72,8 +98,7 @@ async def _warmup_mcp():
     try:
         from apis.langchain.langchain_service import get_mcp_tools
         tools = await get_mcp_tools()
-        n = len(tools) if isinstance(tools, list) else 0
-        logger.info("  └ 🔧 MCP 工具已预热 · %d 个", n)
+        logger.info("  └ 🔧 MCP 工具已预热 · %d 个", len(tools))
     except Exception as e:
         logger.warning("  └ ⚠️ MCP 工具预热失败: %s", e)
 

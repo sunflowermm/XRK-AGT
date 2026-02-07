@@ -152,9 +152,10 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
 ```
 
 **技术实现**：
-- 使用 `sentence-transformers` 库
-- 模型：`paraphrase-multilingual-MiniLM-L12-v2`
+- 使用 `sentence-transformers` 库进行文本向量化
+- 默认模型：`paraphrase-multilingual-MiniLM-L12-v2`（384维）
 - 支持多语言文本向量化
+- 内置缓存机制，提升重复文本处理性能
 
 ### POST /api/vector/search
 
@@ -186,9 +187,10 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
 ```
 
 **技术实现**：
-- 使用 `ChromaDB` 作为向量数据库
-- 支持集合（collection）管理
-- 返回相似度分数（0-1）
+- 使用 `ChromaDB` 作为持久化向量数据库
+- 支持集合（collection）管理，可按业务场景隔离数据
+- 返回相似度分数（0-1），分数越高表示越相似
+- 支持元数据过滤和检索
 
 ### POST /api/vector/upsert
 
