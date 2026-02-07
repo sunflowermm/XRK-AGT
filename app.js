@@ -332,21 +332,24 @@ class Bootstrap {
 const bootstrap = new Bootstrap(true);
 
 // 全局异常处理
-process.on('uncaughtException', async (error) => {
-  const errorMsg = error.stack || `${error.message}\n${error.stack || ''}`;
-  console.error('\n未捕获的异常:');
+const formatError = (error, prefix) => {
+  const errorMsg = error instanceof Error
+    ? (error.stack || `${error.message}\n${error.stack || ''}`)
+    : String(error);
+  console.error(`\n${prefix}:`);
   console.error(errorMsg);
+  return errorMsg;
+};
+
+process.on('uncaughtException', async (error) => {
+  const errorMsg = formatError(error, '未捕获的异常');
   await bootstrap.logger.error(`未捕获的异常: ${errorMsg}`);
   process.exit(1);
 });
 
 process.on('unhandledRejection', async (reason) => {
-  const errorMessage = reason instanceof Error
-    ? (reason.stack || `${reason.message}\n${reason.stack || ''}`)
-    : String(reason);
-  console.error('\n未处理的Promise拒绝:');
-  console.error(errorMessage);
-  await bootstrap.logger.error(`未处理的Promise拒绝: ${errorMessage}`);
+  const errorMsg = formatError(reason, '未处理的Promise拒绝');
+  await bootstrap.logger.error(`未处理的Promise拒绝: ${errorMsg}`);
   process.exit(1);
 });
 

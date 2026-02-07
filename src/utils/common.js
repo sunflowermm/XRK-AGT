@@ -1,7 +1,7 @@
 import { pipeline } from 'node:stream/promises'
 import fetch from 'node-fetch'
 import path from 'node:path'
-import fs from 'node:fs'
+import { existsSync, createWriteStream } from 'node:fs'
 import BotUtil from './botutil.js'
 
 /**
@@ -46,7 +46,6 @@ export const downFile = async (fileUrl, savePath, param = {}) => {
     await BotUtil.mkdir(path.dirname(savePath))
     logger?.debug?.(`[下载文件] ${fileUrl}`)
     const response = await fetch(fileUrl, param)
-    const { createWriteStream } = await import('node:fs')
     await pipeline(response.body, createWriteStream(savePath))
     return true
   } catch (err) {
@@ -78,7 +77,7 @@ export const makeForwardMsg = (e, msg = [], dec = '') => {
  * @returns {boolean} 是否为 Docker 环境
  */
 export const isDockerEnvironment = () => {
-  return process.env.DOCKER_CONTAINER === '1' || fs.existsSync('/.dockerenv')
+  return process.env.DOCKER_CONTAINER === '1' || existsSync('/.dockerenv')
 }
 
 /**

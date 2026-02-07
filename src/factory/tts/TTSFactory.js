@@ -5,25 +5,25 @@
  */
 
 import VolcengineTTSClient from './VolcengineTTSClient.js';
+import BaseFactory from '../BaseFactory.js';
 
 const providers = new Map([
     ['volcengine', (deviceId, config, Bot) => new VolcengineTTSClient(deviceId, config, Bot)]
 ]);
 
+const baseFactory = new BaseFactory(providers, 'TTS');
+
 export default class TTSFactory {
     static registerProvider(name, factoryFn) {
-        if (!name || typeof factoryFn !== 'function') {
-            throw new Error('注册TTS提供商时必须提供名称和工厂函数');
-        }
-        providers.set(name.toLowerCase(), factoryFn);
+        baseFactory.registerProvider(name, factoryFn);
     }
 
     static listProviders() {
-        return Array.from(providers.keys());
+        return baseFactory.listProviders();
     }
 
     static isProviderSupported(provider) {
-        return providers.has((provider || '').toLowerCase());
+        return baseFactory.isProviderSupported(provider);
     }
 
     static createClient(deviceId, config = {}, Bot) {
@@ -32,7 +32,7 @@ export default class TTSFactory {
         }
 
         const provider = (config.provider || 'volcengine').toLowerCase();
-        const factory = providers.get(provider);
+        const factory = baseFactory.providers.get(provider);
         if (!factory) {
             throw new Error(`不支持的TTS提供商: ${provider}`);
         }

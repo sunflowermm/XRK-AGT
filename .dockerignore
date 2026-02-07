@@ -5,11 +5,15 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .pnpm-store/
+.npm/
+.yarn/
+.pnp.*
 
 # 日志文件
 logs/
 *.log
 *.log.txt
+*.log.*
 
 # 运行时数据（通过 volume 挂载）
 data/
@@ -19,7 +23,11 @@ data/
 # 临时文件
 trash/
 temp/
+tmp/
 *.tmp
+*.temp
+*.cache
+.cache/
 
 # 开发工具
 .vscode/
@@ -27,57 +35,134 @@ temp/
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
 
 # Git
 .git/
 .gitignore
 .gitattributes
+.gitmodules
+.gitkeep
 
-# 文档（可选，如需要文档可删除此项）
-# docs/
+# 文档（排除文档以减小镜像大小）
+docs/
+*.md
+!README.md
+!PROJECT_OVERVIEW.md
 
 # 测试文件
 test/
 tests/
+__tests__/
 *.test.js
+*.test.ts
 *.spec.js
+*.spec.ts
+coverage/
+.nyc_output/
+*.test.*
+*.spec.*
 
 # 构建产物
 dist/
 build/
+out/
 *.map
+*.min.js
+*.min.css
+.next/
+.nuxt/
+.vuepress/dist/
 
 # 环境变量文件
 .env
 .env.local
 .env.*.local
+.env.development
+.env.test
+.env.production
 
 # 操作系统文件
 .DS_Store
 Thumbs.db
 desktop.ini
+*.lnk
+$RECYCLE.BIN/
 
 # Docker 相关（保留构建所需文件，只排除不需要的文件）
 # 注意：Dockerfile、docker-compose.yml、docker-entrypoint.sh 需要保留用于构建
 .dockerignore
+docker-compose.override.yml
+*.dockerfile
 
-# 其他
-*.md
-!README.md
-!PROJECT_OVERVIEW.md
-LICENSE
+# 配置文件（开发用）
 .prettierrc*
 .eslintrc*
 .editorconfig
+.editorconfig.*
+.eslintignore
+.prettierignore
+tsconfig.json
+jsconfig.json
+jest.config.*
+babel.config.*
+webpack.config.*
+rollup.config.*
 
 # 子服务器（排除不需要的文件，但保留源代码和依赖文件）
 subserver/**/__pycache__/
 subserver/**/*.pyc
+subserver/**/*.pyo
+subserver/**/*.pyd
 subserver/**/.venv/
+subserver/**/venv/
+subserver/**/env/
+subserver/**/ENV/
 subserver/**/data/
 subserver/**/logs/
 subserver/**/*.egg-info/
 subserver/**/uv.lock
+subserver/**/.pytest_cache/
+subserver/**/.mypy_cache/
+subserver/**/.ruff_cache/
+subserver/**/htmlcov/
+subserver/**/.coverage
+
+# Python 相关
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.hypothesis/
 
 # 调试文件
 debug.js
+*.debug.js
+*.debug.ts
+
+# 其他
+LICENSE
+CHANGELOG*
+HISTORY*
+CONTRIBUTING*
+AUTHORS*
+.circleci/
+.travis.yml
+.github/
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+*.swo
+*.swp
+*~
