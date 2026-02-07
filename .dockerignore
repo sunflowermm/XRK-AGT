@@ -60,7 +60,6 @@ desktop.ini
 # Docker 相关（保留构建所需文件，只排除不需要的文件）
 # 注意：Dockerfile、docker-compose.yml、docker-entrypoint.sh 需要保留用于构建
 .dockerignore
-docker.sh
 
 # 其他
 *.md

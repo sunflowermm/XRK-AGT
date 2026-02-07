@@ -62,10 +62,7 @@ USER xrk
 # 暴露常用端口（实际使用端口由环境变量 XRK_SERVER_PORT 控制）
 EXPOSE 80 443 8080 3000 5000
 
-# 健康检查（端口由运行时环境变量决定，entrypoint脚本会处理）
-# 注意：HEALTHCHECK在构建时无法使用环境变量，需要在运行时通过entrypoint脚本处理
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD sh -c "wget --no-verbose --tries=1 --spider http://localhost:${XRK_SERVER_PORT:-8080}/health || exit 1"
+# 注意：健康检查在 docker-compose.yml 中配置，支持动态端口
 
 # 使用entrypoint脚本支持动态端口
 COPY docker-entrypoint.sh /usr/local/bin/

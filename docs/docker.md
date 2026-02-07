@@ -18,12 +18,17 @@
    cd XRK-AGT
    ```
 
-2. **配置端口（可选）**
+2. **自定义端口（可选，默认8080）**
    
-   创建 `.env` 文件（或修改 `docker-compose.yml`）：
+   创建 `.env` 文件设置自定义端口：
    ```bash
    # .env
-   XRK_SERVER_PORT=8080
+   XRK_SERVER_PORT=3000  # 自定义端口，例如 3000
+   ```
+   
+   或通过环境变量设置：
+   ```bash
+   XRK_SERVER_PORT=3000 docker-compose up -d
    ```
 
 3. **启动服务**
@@ -54,41 +59,55 @@
    
    **注意**：使用 `docker-compose down` 会停止并删除容器，但保留数据卷。如需同时删除数据卷，使用 `docker-compose down -v`。
 
-## 端口配置
+## 自定义端口
 
-XRK-AGT 支持通过多种方式指定运行端口：
+XRK-AGT 完全支持自定义端口，所有配置（端口映射、环境变量、健康检查）都会自动使用 `XRK_SERVER_PORT` 环境变量。
 
-### 方式1：环境变量（推荐）
+### 方式1：使用 .env 文件（推荐）
 
-在 `docker-compose.yml` 或 `.env` 文件中设置：
-```yaml
-environment:
-  - XRK_SERVER_PORT=8080
+在项目根目录创建 `.env` 文件：
+```bash
+# .env
+XRK_SERVER_PORT=3000  # 设置自定义端口
 ```
 
-或在启动时指定：
+启动服务：
 ```bash
+docker-compose up -d
+```
+
+### 方式2：环境变量
+
+在启动时通过环境变量设置：
+```bash
+# Linux/macOS
 XRK_SERVER_PORT=3000 docker-compose up -d
+
+# Windows PowerShell
+$env:XRK_SERVER_PORT=3000; docker-compose up -d
+
+# Windows CMD
+set XRK_SERVER_PORT=3000 && docker-compose up -d
 ```
 
-### 方式2：修改 docker-compose.yml
+### 方式3：使用 docker run
 
-直接修改 `docker-compose.yml` 中的端口映射和环境变量：
-```yaml
-ports:
-  - "8080:8080"  # 修改端口映射
-environment:
-  - XRK_SERVER_PORT=8080  # 同时修改环境变量
-```
-
-**重要提示**：修改端口时，必须同时修改 `ports` 和 `environment` 中的 `XRK_SERVER_PORT`，两者必须一致。
-
-### 方式3：命令行参数
-
-使用 `docker run` 时：
 ```bash
-docker run -e XRK_SERVER_PORT=8080 -p 8080:8080 xrk-agt
+docker run -d \
+  --name xrk-agt \
+  -p 3000:3000 \
+  -e XRK_SERVER_PORT=3000 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/config:/app/config \
+  -v $(pwd)/resources:/app/resources \
+  xrk-agt:latest
 ```
+
+**说明**：
+- 默认端口：`8080`
+- 端口映射、环境变量、健康检查都会自动使用 `XRK_SERVER_PORT` 环境变量
+- 无需手动修改 `docker-compose.yml` 中的端口配置
 
 ## 使用 Dockerfile 构建
 
@@ -102,20 +121,21 @@ docker build -t xrk-agt:latest .
 - 基础镜像：`node:24.12-alpine`
 - 包含依赖：Python3、make、g++、git、bash、Chromium（用于 Puppeteer）
 - 包管理器：pnpm（全局安装）
-- 健康检查：自动配置，使用环境变量端口
+- 端口：完全支持通过 `XRK_SERVER_PORT` 环境变量自定义
 - 安全：使用非 root 用户（`xrk`，UID 1000）运行容器
 
 ### 运行容器
 
 **重要**：XRK-AGT 需要 Redis 服务。使用 `docker run` 时需要：
 
-1. **使用外部 Redis**（推荐）：
+1. **使用外部 Redis**：
 ```bash
-# 使用默认端口 8080，连接到外部 Redis
+# 使用自定义端口（例如 3000），连接到外部 Redis
+# 注意：-p 和 -e XRK_SERVER_PORT 必须使用相同的端口
 docker run -d \
   --name xrk-agt \
-  -p 8080:8080 \
-  -e XRK_SERVER_PORT=8080 \
+  -p 3000:3000 \
+  -e XRK_SERVER_PORT=3000 \
   -e REDIS_HOST=your-redis-host \
   -e REDIS_PORT=6379 \
   -v $(pwd)/data:/app/data \
@@ -137,9 +157,9 @@ docker run -d \
 主服务提供 HTTP/HTTPS/WebSocket 服务、AI 工作流、MCP 工具等功能。
 
 **端口配置**：
-- 默认端口：8080（可通过 `XRK_SERVER_PORT` 环境变量修改）
+- 默认端口：`8080`（通过 `XRK_SERVER_PORT` 环境变量自定义）
 - 健康检查端点：`/health`
-- 支持端口：80、443、8080、3000、5000（在 Dockerfile 中已暴露）
+- 支持任意端口（Dockerfile 中已暴露常用端口：80、443、8080、3000、5000）
 
 ### Redis 服务
 
@@ -192,84 +212,66 @@ docker exec xrk-agt wget --spider http://localhost:8080/health
 docker exec xrk-agt sh -c "wget --spider http://localhost:\${XRK_SERVER_PORT:-8080}/health"
 ```
 
-**注意**：健康检查使用容器内端口，与外部映射端口无关。如果修改了 `XRK_SERVER_PORT` 环境变量，健康检查会自动使用新端口。
+**说明**：
+- 健康检查自动使用 `XRK_SERVER_PORT` 环境变量指定的端口
+- 使用 `docker-compose` 时，健康检查会自动适配自定义端口
+- 使用 `docker run` 时，确保 `-e XRK_SERVER_PORT` 与 `-p` 端口映射一致
 
-## 多端口运行
+## 多实例运行
 
-XRK-AGT 支持在同一主机上运行多个实例，每个实例使用不同端口：
+在同一主机上运行多个实例，每个实例使用不同端口：
 
-### 方式1：使用 docker-compose 覆盖文件（推荐）
+### 方式1：使用不同的 .env 文件
 
-创建 `docker-compose.override.yml`（用于第一个实例）：
-```yaml
-version: '3.8'
-services:
-  xrk-agt:
-    container_name: xrk-agt-1
-    environment:
-      - XRK_SERVER_PORT=8080
-    ports:
-      - "8080:8080"
-```
-
-创建 `docker-compose.port2.yml`（用于第二个实例）：
-```yaml
-version: '3.8'
-services:
-  xrk-agt:
-    container_name: xrk-agt-2
-    environment:
-      - XRK_SERVER_PORT=8081
-    ports:
-      - "8081:8081"
-    volumes:
-      - ./data2:/app/data
-      - ./logs2:/app/logs
-```
-
-启动多个实例：
-```bash
-# 启动第一个实例（使用默认配置）
-docker-compose up -d
-
-# 启动第二个实例（使用覆盖文件）
-docker-compose -f docker-compose.yml -f docker-compose.port2.yml up -d
-```
-
-### 方式2：使用 docker run
-
-**注意**：使用 `docker run` 时需要手动启动 Redis 服务，或使用外部 Redis。
+为每个实例创建不同的目录和 `.env` 文件：
 
 ```bash
-# 先启动 Redis（如果使用外部 Redis，可跳过）
-docker run -d --name redis -p 6379:6379 redis:7-alpine
+# 实例1
+mkdir instance1 && cd instance1
+echo "XRK_SERVER_PORT=8080" > .env
+docker-compose -f ../docker-compose.yml up -d
 
-# 实例1（需要连接到 Redis）
+# 实例2
+mkdir instance2 && cd instance2
+echo "XRK_SERVER_PORT=8081" > .env
+docker-compose -f ../docker-compose.yml up -d
+```
+
+### 方式2：使用环境变量
+
+```bash
+# 实例1（端口8080）
+cd /path/to/project
+XRK_SERVER_PORT=8080 docker-compose up -d
+
+# 实例2（端口8081，需要不同的数据目录）
+cd /path/to/project2
+XRK_SERVER_PORT=8081 docker-compose up -d
+```
+
+### 方式3：使用 docker run
+
+```bash
+# 实例1
 docker run -d \
   --name xrk-agt-1 \
   -p 8080:8080 \
   -e XRK_SERVER_PORT=8080 \
-  --link redis:redis \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/logs:/app/logs \
-  -v $(pwd)/config:/app/config \
-  -v $(pwd)/resources:/app/resources \
+  -v $(pwd)/data1:/app/data \
+  -v $(pwd)/logs1:/app/logs \
   xrk-agt:latest
 
-# 实例2（需要连接到 Redis）
+# 实例2
 docker run -d \
   --name xrk-agt-2 \
   -p 8081:8081 \
   -e XRK_SERVER_PORT=8081 \
-  --link redis:redis \
   -v $(pwd)/data2:/app/data \
   -v $(pwd)/logs2:/app/logs \
-  -v $(pwd)/config:/app/config \
-  -v $(pwd)/resources:/app/resources \
   xrk-agt:latest
 ```
 
-**推荐**：多实例部署建议使用 `docker-compose`，自动管理 Redis 连接和网络。
+**注意**：每个实例需要独立的 Redis 服务或使用外部 Redis。
 
 ## 环境变量
 
@@ -371,7 +373,7 @@ docker-compose up -d
 
 **解决方法**：
 ```bash
-# 检查应用是否正常运行（替换为实际端口）
+# 检查应用是否正常运行（自动使用环境变量端口）
 docker exec xrk-agt sh -c "wget --spider http://localhost:\${XRK_SERVER_PORT:-8080}/health"
 
 # 查看应用日志
