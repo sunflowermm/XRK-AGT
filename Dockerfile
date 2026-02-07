@@ -3,18 +3,23 @@
 # ============================================
 FROM node:24.12-slim AS builder
 
-# 安装构建依赖（仅在构建阶段需要）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-dev \
-    python3-venv \
-    python3-pip \
-    build-essential \
-    git \
-    wget \
-    curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+# 安装构建依赖（仅在构建阶段需要，带重试机制和超时设置）
+RUN apt-get clean && \
+    for i in 1 2 3 4; do \
+        apt-get update -o Acquire::http::Timeout=30 -o Acquire::ftp::Timeout=30 && \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            python3 \
+            python3-dev \
+            python3-venv \
+            python3-pip \
+            build-essential \
+            git \
+            wget \
+            curl \
+        && break || (echo "尝试 $i/4 失败，5秒后重试..." && sleep 5); \
+    done && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
 
 # 安装 pnpm
 RUN npm install -g npm@latest pnpm
@@ -64,35 +69,40 @@ WORKDIR /app
 # ============================================
 FROM node:24.12-slim AS runtime
 
-# 安装运行时依赖（移除构建工具）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-venv \
-    wget \
-    curl \
-    chromium \
-    chromium-sandbox \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    xdg-utils \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && rm -rf /tmp/* /var/tmp/*
+# 安装运行时依赖（移除构建工具，带重试机制和超时设置）
+RUN apt-get clean && \
+    for i in 1 2 3 4; do \
+        apt-get update -o Acquire::http::Timeout=30 -o Acquire::ftp::Timeout=30 && \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            python3 \
+            python3-venv \
+            wget \
+            curl \
+            chromium \
+            chromium-sandbox \
+            fonts-liberation \
+            libappindicator3-1 \
+            libasound2 \
+            libatk-bridge2.0-0 \
+            libatk1.0-0 \
+            libcups2 \
+            libdbus-1-3 \
+            libdrm2 \
+            libgbm1 \
+            libgtk-3-0 \
+            libnspr4 \
+            libnss3 \
+            libx11-xcb1 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            xdg-utils \
+        && break || (echo "尝试 $i/4 失败，5秒后重试..." && sleep 5); \
+    done && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean && \
+    rm -rf /tmp/* /var/tmp/*
 
 # 安装 uv（仅运行时需要，使用更轻量的方式）
 RUN curl --connect-timeout 10 --max-time 60 -LsSf https://astral.sh/uv/install.sh | sh && \
