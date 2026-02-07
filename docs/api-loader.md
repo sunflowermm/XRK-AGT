@@ -1,14 +1,29 @@
-## ApiLoader 文档（src/infrastructure/http/loader.js）
+# ApiLoader 文档
 
+> **文件位置**: `src/infrastructure/http/loader.js`  
 > **可扩展性**：ApiLoader是HTTP/API系统的核心加载器，自动发现和加载所有API模块。API开发者只需将API放置到对应目录，无需任何配置。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
 `ApiLoader` 负责从所有 `core/*/http` 目录动态加载所有 HTTP API 模块，并完成：
 
-- API 实例化与优先级排序。
-- 将路由与 WebSocket 处理器注册到 Express 与 Bot。
-- 监控 API 文件变更，实现热加载。
+- API 实例化与优先级排序
+- 将路由与 WebSocket 处理器注册到 Express 与 Bot
+- 监控 API 文件变更，实现热加载
 
-### 扩展特性
+## 📋 目录
+
+- [扩展特性](#扩展特性)
+- [核心属性](#核心属性)
+- [加载流程](#加载流程)
+- [注册流程](#注册流程)
+- [单个 API 重载](#单个-api-重载)
+- [文件监视与热加载](#文件监视与热加载)
+- [API 信息获取](#api-信息获取)
+- [使用建议](#使用建议)
+- [相关文档](#相关文档)
+
+---
+
+## 扩展特性
 
 - ✅ **自动发现**：自动扫描所有 `core/*/http/` 目录（支持递归）
 - ✅ **灵活导出**：支持类导出和对象导出两种方式
@@ -80,23 +95,18 @@ sequenceDiagram
     participant API as HttpApi实例
     
     Bot->>Loader: register(app, bot)
-    Loader->>Loader: 保存app和bot引用
-    Loader->>Express: 注册全局中间件<br/>注入req.bot和req.apiLoader
-    loop 按优先级遍历API（降序）
-        Loader->>Loader: 检查API有效性<br/>检查enable状态
+    Loader->>Loader: 保存引用
+    Loader->>Express: 注册全局中间件
+    loop 按优先级遍历API
+        Loader->>Loader: 检查有效性
         alt API有效且启用
             Loader->>API: api.init(app, bot)
-            API->>API: 挂载全局中间件
-            API->>Express: registerRoutes注册HTTP路由
-            API->>Bot: registerWebSocketHandlers注册WS
-            API->>API: 执行initHook（如果存在）
-            API-->>Loader: 返回true
-            Loader->>Loader: 记录注册日志
-        else API无效或禁用
-            Loader->>Loader: 跳过API
+            API->>Express: 注册HTTP路由
+            API->>Bot: 注册WebSocket
+            API->>API: 执行initHook
         end
     end
-    Loader->>Express: 添加/api/* 404兜底处理<br/>排除代理路由
+    Loader->>Express: 添加404处理
     Loader-->>Bot: 注册完成
 ```
 
@@ -138,10 +148,10 @@ flowchart TB
     I --> J
     J --> K["返回true"]
     
-    style A fill:#E6F3FF
-    style E fill:#FFE6CC
-    style K fill:#90EE90
-    style C fill:#FFB6C1
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style K fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style C fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
 ```
 
 **步骤说明**：

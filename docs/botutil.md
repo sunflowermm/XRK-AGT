@@ -318,6 +318,16 @@ const date = BotUtil.formatDate(new Date(), 'YYYY-MM-DD HH:mm:ss');
   - Tasker在大量网络/文件转换场景中复用 `Buffer/fileType/fileToUrl`。
   - `ApiLoader` 与自定义 API 通过 `makeLog` 与 `getTimeDiff` 进行监控与审计。
 
-> 推荐做法：在需要「基础设施能力」时优先使用 `BotUtil` 封装的方法，而不是在插件或业务代码中直接操作 Node.js 底层 API，以保证行为一致、易于维护和统一审计。
+> **推荐做法**：在需要「基础设施能力」时优先使用 `BotUtil` 封装的方法，而不是在插件或业务代码中直接操作 Node.js 底层 API，以保证行为一致、易于维护和统一审计。
 
+---
 
+## 相关文档
+
+- **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
+- **[Bot 主类文档](bot.md)** - Bot 类的完整说明
+- **[插件基类文档](plugin-base.md)** - 插件开发指南
+
+---
+
+*最后更新：2026-02-06*
