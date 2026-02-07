@@ -320,9 +320,10 @@ username: ""      # 可选
 password: ""      # 可选
 ```
 
-**修改 Redis 配置**：
-1. 启动容器后，编辑 `data/server_bots/redis.yaml`
-2. 重启容器使配置生效：`docker-compose restart xrk-agt`
+**自动配置说明**：
+- Docker 环境启动时会自动检测并配置 Redis/MongoDB 连接地址
+- 首次启动会自动将配置文件中的 `127.0.0.1` 替换为 Docker 服务名
+- 无需手动修改配置文件即可正常运行
 
 ## 故障排查
 
