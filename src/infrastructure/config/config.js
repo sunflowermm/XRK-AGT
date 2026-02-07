@@ -103,6 +103,13 @@ class Cfg {
       const defaultFiles = fs.readdirSync(this.PATHS.DEFAULT_CONFIG);
       for (const file of defaultFiles) {
         const configName = path.basename(file, '.yaml');
+        
+        // 排除全局配置文件，只复制服务器配置和工厂配置
+        if (this.GLOBAL_CONFIGS.includes(configName)) {
+          continue; // 跳过全局配置文件
+        }
+        
+        // 复制服务器配置和工厂配置
         if (this.SERVER_CONFIGS.includes(configName) ||
             configName.startsWith('gptgod_') ||
             configName.includes('volcengine_') ||
@@ -111,8 +118,8 @@ class Cfg {
             configName.includes('gemini_') ||
             configName.includes('anthropic_') ||
             configName.includes('azure_')) {
-        const targetPath = path.join(serverConfigDir, file);
-        if (!fs.existsSync(targetPath)) {
+          const targetPath = path.join(serverConfigDir, file);
+          if (!fs.existsSync(targetPath)) {
             fs.copyFileSync(path.join(this.PATHS.DEFAULT_CONFIG, file), targetPath);
           }
         }
@@ -153,6 +160,12 @@ class Cfg {
    * @param {string} name - 配置名称
    */
   getServerConfig(name) {
+    // 安全检查：如果传入的是全局配置名称，记录警告并返回空对象
+    if (this.GLOBAL_CONFIGS.includes(name)) {
+      logger?.warn(`[配置警告] ${name} 是全局配置，应使用 getGlobalConfig() 或 cfg.${name} 访问`);
+      return {};
+    }
+    
     const key = `server.${this._port}.${name}`;
     if (this.config[key]) return this.config[key];
     
@@ -169,24 +182,24 @@ class Cfg {
     const file = path.join(configDir, `${name}.yaml`);
     const defaultFile = path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`);
 
-      let config = {};
+    let config = {};
 
     if (fs.existsSync(file)) {
-        try {
+      try {
         config = YAML.parse(fs.readFileSync(file, 'utf8'));
         this.watch(file, name, key);
-        } catch (error) {
+      } catch (error) {
         logger?.error(`[服务器配置解析失败][${file}]`, error);
-        }
+      }
     } else if (fs.existsSync(defaultFile)) {
       try {
         config = YAML.parse(fs.readFileSync(defaultFile, 'utf8'));
         fs.mkdirSync(configDir, { recursive: true });
         fs.writeFileSync(file, YAML.stringify(config), 'utf8');
         this.watch(file, name, key);
-          } catch (error) {
+      } catch (error) {
         logger?.error(`[默认配置复制失败][${name}]`, error);
-          }
+      }
     }
     
     return this.config[key] = config;

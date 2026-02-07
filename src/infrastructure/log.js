@@ -787,6 +787,56 @@ function fixWindowsUTF8() {
 }
 
 /**
+ * 简单的文件日志工具（用于日志系统初始化之前）
+ * @param {string} logFile - 日志文件路径
+ * @param {boolean} silent - 是否静默模式（不输出到控制台）
+ * @returns {Object} 日志工具对象
+ */
+export function createSimpleLogger(logFile, silent = false) {
+  const colors = {
+    INFO: '\x1b[36m',
+    SUCCESS: '\x1b[32m',
+    WARNING: '\x1b[33m',
+    ERROR: '\x1b[31m',
+    RESET: '\x1b[0m'
+  }
+
+  async function writeLog(message, level = 'INFO') {
+    const timestamp = new Date().toISOString()
+    const logMessage = `[${timestamp}] [${level}] ${message}\n`
+    
+    try {
+      // 确保日志目录存在
+      const logDir = path.dirname(logFile)
+      await fsPromises.mkdir(logDir, { recursive: true })
+      
+      // 写入文件
+      await fsPromises.appendFile(logFile, logMessage, 'utf8')
+      
+      // 输出到控制台（除非静默模式）
+      if (!silent || level === 'ERROR' || level === 'SUCCESS') {
+        const color = colors[level] || ''
+        console.log(`${color}${message}${colors.RESET}`)
+      }
+    } catch (error) {
+      // 文件写入失败时，至少输出到控制台
+      console.error(`日志写入失败 [${level}]: ${error.message}`)
+      if (!silent) {
+        console.log(message)
+      }
+    }
+  }
+
+  return {
+    log: (message, level = 'INFO') => writeLog(message, level),
+    info: (message) => writeLog(message, 'INFO'),
+    success: (message) => writeLog(message, 'SUCCESS'),
+    warning: (message) => writeLog(message, 'WARNING'),
+    error: (message) => writeLog(message, 'ERROR')
+  }
+}
+
+/**
  * 创建日志轮转流
  * @param {string} logDir - 日志目录路径
  * @param {string} prefix - 文件前缀
@@ -830,12 +880,35 @@ async function cleanExpiredLogs(logger, customDays, includeTrace = true) {
       const filePath = path.join(logDir, file)
       const stats = await fsPromises.stat(filePath)
 
+      // 跳过非日志文件（只处理 .log 文件）
       if (!file.endsWith('.log')) continue
 
+      // 删除冗余的 .log.txt 文件（旧代码遗留）
+      if (file.endsWith('.log.txt')) {
+        try {
+          await fsPromises.unlink(filePath)
+          deletedCount++
+          if (logger) {
+            logger.debug(`Deleted redundant log file: ${file}`)
+          }
+          continue
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err))
+          if (logger) {
+            logger.error(`Failed to delete redundant log file: ${file}`, error.message)
+          }
+          continue
+        }
+      }
+
+      // 处理正常的日志文件
       let maxAgeMs
       if (file.startsWith(`${LOGGER_CONFIG.TRACE_LOG_PREFIX}.`)) {
         if (!includeTrace) continue
         maxAgeMs = traceLogMaxAge * 24 * 60 * 60 * 1000
+      } else if (file === 'bootstrap.log' || file === 'restart.log') {
+        // bootstrap.log 和 restart.log 保留更长时间（默认7天）
+        maxAgeMs = 7 * 24 * 60 * 60 * 1000
       } else {
         maxAgeMs = mainLogMaxAge * 24 * 60 * 60 * 1000
       }
@@ -846,18 +919,22 @@ async function cleanExpiredLogs(logger, customDays, includeTrace = true) {
           deletedCount++
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err))
-          logger.error(`Failed to delete log file: ${file}`, error.message)
+          if (logger) {
+            logger.error(`Failed to delete log file: ${file}`, error.message)
+          }
         }
       }
     }
 
     if (deletedCount > 0 && logger) {
-      logger.debug(`Cleaned ${deletedCount} expired log files`)
+      logger.debug(`Cleaned ${deletedCount} expired/redundant log files`)
     }
     return deletedCount
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err))
-    logger.error('Error cleaning expired logs:', error.message)
+    if (logger) {
+      logger.error('Error cleaning expired logs:', error.message)
+    }
     return 0
   }
 }

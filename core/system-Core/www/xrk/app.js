@@ -1599,6 +1599,8 @@ class App {
         // 检查是否已经恢复过（通过比较第一条消息的时间戳）
         const firstMsg = box.querySelector('.chat-message');
         if (firstMsg && firstMsg.dataset.messageId) {
+          // 直接滚动到底部，无需动画
+          box.scrollTop = box.scrollHeight;
           this._isRestoringHistory = false;
           return;
         }
@@ -1645,9 +1647,10 @@ class App {
       // 恢复完成后，恢复内存中的历史记录（不保存，因为已经存在localStorage中）
       this._chatHistory = originalHistory;
       
-      // 延迟滚动，确保DOM渲染完成
+      // 直接设置滚动位置到底部，无需动画
+      // 使用单次 requestAnimationFrame 确保 DOM 更新完成
       requestAnimationFrame(() => {
-        this.scrollToBottom();
+        box.scrollTop = box.scrollHeight;
       });
     } finally {
       // 恢复完成，清除标志
@@ -2490,16 +2493,12 @@ class App {
     const box = document.getElementById('chatMessages');
     if (!box) return;
     
-    // 使用双重 requestAnimationFrame 确保 DOM 完全更新后再滚动
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (smooth) {
-          box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
-        } else {
-          box.scrollTop = box.scrollHeight;
-        }
-      });
-    });
+    // 直接设置滚动位置，无需冗余的延迟
+    if (smooth) {
+      box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+    } else {
+      box.scrollTop = box.scrollHeight;
+    }
   }
 
   /**

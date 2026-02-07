@@ -1170,8 +1170,7 @@ select.form-input {
   /* 确保消息不会超出容器 */
   min-width: 0;
   box-sizing: border-box;
-  /* 优化滚动体验 */
-  scroll-behavior: smooth;
+  /* 移除默认平滑滚动，避免切换页面时的动画 */
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }

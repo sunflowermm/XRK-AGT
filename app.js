@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
 import paths from '#utils/paths.js';
+import { createSimpleLogger } from './src/infrastructure/log.js';
 
 function execAsync(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
@@ -83,47 +84,6 @@ function execAsync(command, args = [], options = {}) {
   });
 }
 
-class BootstrapLogger {
-  static colors = {
-    INFO: '\x1b[36m',
-    SUCCESS: '\x1b[32m',
-    WARNING: '\x1b[33m',
-    ERROR: '\x1b[31m'
-  };
-
-  constructor(silent = false) {
-    this.logFile = path.join('./logs', 'bootstrap.log');
-    this.silent = silent;
-  }
-
-  async log(message, level = 'INFO') {
-    const timestamp = new Date().toISOString();
-    const logMessage = `[${timestamp}] [${level}] ${message}\n`;
-    
-    try {
-      await fs.appendFile(this.logFile, logMessage);
-      // 静默模式下，只输出错误和成功信息
-      if (!this.silent || level === 'ERROR' || level === 'SUCCESS') {
-        const color = BootstrapLogger.colors[level] || '';
-        console.log(`${color}${message}\x1b[0m`);
-      }
-    } catch (error) {
-      console.error('日志写入失败:', error.message);
-    }
-  }
-
-  async success(message) {
-    await this.log(message, 'SUCCESS');
-  }
-
-  async warning(message) {
-    await this.log(message, 'WARNING');
-  }
-
-  async error(message) {
-    await this.log(message, 'ERROR');
-  }
-}
 
 class DependencyManager {
   constructor(logger) {
@@ -281,7 +241,8 @@ class EnvironmentValidator {
 
 class Bootstrap {
   constructor(silent = false) {
-    this.logger = new BootstrapLogger(silent);
+    const logFile = path.join('./logs', 'bootstrap.log');
+    this.logger = createSimpleLogger(logFile, silent);
     this.dependencyManager = new DependencyManager(this.logger);
     this.environmentValidator = new EnvironmentValidator(this.logger);
   }

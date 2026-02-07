@@ -62,86 +62,234 @@ flowchart TD
 
 ---
 
-## commonconfig / 配置体系与前后端联动
+## 配置系统（cfg 对象）
 
-XRK-AGT 的配置体系分为两层：
+XRK-AGT 的配置系统采用**全局配置 + 端口配置**的分离设计，通过 `cfg` 对象统一管理。
+
+### 配置架构
 
 ```mermaid
 flowchart TB
-    subgraph ConfigLayer["配置层"]
-        A[文件级配置<br/>Cfg<br/>commonconfig]
-        B[对象级配置<br/>ConfigBase子类]
+    subgraph Default["默认配置"]
+        D1["config/default_config/*.yaml"]
     end
     
-    subgraph Usage["使用方式"]
-        C[Bot.run<br/>global.cfg]
-        D[HTTP API<br/>配置读写]
-        E[前端表单<br/>动态配置]
+    subgraph Global["全局配置<br/>data/server_bots/"]
+        G1["agt.yaml"]
+        G2["device.yaml"]
+        G3["monitor.yaml"]
+        G4["notice.yaml"]
+        G5["mongodb.yaml"]
+        G6["redis.yaml"]
+        G7["db.yaml"]
+        G8["aistream.yaml"]
     end
     
-    A --> C
-    A --> D
-    B --> D
-    B --> E
-    D --> E
+    subgraph Server["端口配置<br/>data/server_bots/{port}/"]
+        S1["server.yaml"]
+        S2["chatbot.yaml"]
+        S3["group.yaml"]
+        S4["gptgod_llm.yaml"]
+        S5["volcengine_llm.yaml"]
+        S6["其他工厂配置..."]
+    end
     
-    style A fill:#E6F3FF
-    style B fill:#FFE6CC
-    style E fill:#90EE90
+    subgraph Cfg["cfg 对象<br/>global.cfg"]
+        C1["getGlobalConfig()"]
+        C2["getServerConfig()"]
+        C3["快捷访问器"]
+    end
+    
+    D1 -->|首次启动复制| Global
+    D1 -->|首次启动复制| Server
+    Global --> C1
+    Server --> C2
+    C1 --> C3
+    C2 --> C3
+    C3 --> Bot["Bot.run()<br/>global.cfg"]
+    
+    style Default fill:#E6F3FF
+    style Global fill:#90EE90
+    style Server fill:#FFE6CC
+    style Cfg fill:#FFD700
+    style Bot fill:#87CEEB
 ```
 
-### 1. Cfg（src/infrastructure/config/config.js）
+### 配置分类
 
-`Cfg` 负责「**每个端口一份服务器配置**」的拆分与缓存：
+#### 1. 全局配置（不随端口变化）
+
+全局配置存储在 `data/server_bots/` 根目录，所有端口实例共享：
+
+| 配置名称 | 文件路径 | 说明 |
+|---------|---------|------|
+| `agt` | `data/server_bots/agt.yaml` | AGT 主配置 |
+| `device` | `data/server_bots/device.yaml` | 设备配置 |
+| `monitor` | `data/server_bots/monitor.yaml` | 监控配置 |
+| `notice` | `data/server_bots/notice.yaml` | 通知配置 |
+| `mongodb` | `data/server_bots/mongodb.yaml` | MongoDB 连接配置 |
+| `redis` | `data/server_bots/redis.yaml` | Redis 连接配置 |
+| `db` | `data/server_bots/db.yaml` | 数据库配置 |
+| `aistream` | `data/server_bots/aistream.yaml` | AI 工作流全局配置 |
+
+**使用方式**：
+```javascript
+// 通过快捷访问器
+const agtConfig = cfg.agt;
+const redisConfig = cfg.redis;
+
+// 或通过方法
+const deviceConfig = cfg.getGlobalConfig('device');
+```
+
+#### 2. 端口配置（随端口变化）
+
+端口配置存储在 `data/server_bots/{port}/` 目录，每个端口实例独立：
+
+| 配置名称 | 文件路径 | 说明 |
+|---------|---------|------|
+| `server` | `data/server_bots/{port}/server.yaml` | 服务器配置（端口、代理等） |
+| `chatbot` | `data/server_bots/{port}/chatbot.yaml` | 聊天机器人配置 |
+| `group` | `data/server_bots/{port}/group.yaml` | 群组配置 |
+| `gptgod_llm` | `data/server_bots/{port}/gptgod_llm.yaml` | GPTGod LLM 配置 |
+| `volcengine_llm` | `data/server_bots/{port}/volcengine_llm.yaml` | 火山引擎 LLM 配置 |
+| `其他工厂配置` | `data/server_bots/{port}/*.yaml` | 其他 LLM/ASR/TTS 提供商配置 |
+
+**使用方式**：
+```javascript
+// 通过快捷访问器
+const serverConfig = cfg.server;
+const chatbotConfig = cfg.chatbot;
+
+// 或通过方法
+const groupConfig = cfg.getServerConfig('group');
+```
+
+### cfg 对象 API
+
+#### 核心方法
+
+| 方法 | 说明 | 示例 |
+|------|------|------|
+| `getGlobalConfig(name)` | 获取全局配置 | `cfg.getGlobalConfig('agt')` |
+| `getServerConfig(name)` | 获取端口配置 | `cfg.getServerConfig('server')` |
+| `getConfig(name)` | 自动判断全局/端口配置 | `cfg.getConfig('agt')` → 全局<br/>`cfg.getConfig('server')` → 端口 |
+| `setConfig(name, data)` | 保存配置（自动判断类型） | `cfg.setConfig('server', {...})` |
+| `getConfigDir()` | 获取当前端口配置目录 | `data/server_bots/8080` |
+| `getGlobalConfigDir()` | 获取全局配置目录 | `data/server_bots` |
+| `getRendererConfig(type)` | 获取渲染器配置 | `cfg.getRendererConfig('puppeteer')` |
+| `watch(file, name, key)` | 监听配置变更 | 自动调用，无需手动使用 |
+
+#### 快捷访问器
+
+**全局配置访问器**：
+- `cfg.agt` - AGT 配置
+- `cfg.device` - 设备配置
+- `cfg.monitor` - 监控配置
+- `cfg.notice` - 通知配置
+- `cfg.mongodb` - MongoDB 配置
+- `cfg.redis` - Redis 配置
+- `cfg.db` - 数据库配置
+- `cfg.aistream` - AI 工作流配置
+
+**端口配置访问器**：
+- `cfg.server` - 服务器配置
+- `cfg.chatbot` - 聊天机器人配置
+- `cfg.group` - 群组配置
+- `cfg.gptgod_llm` - GPTGod LLM 配置
+- `cfg.volcengine_llm` - 火山引擎 LLM 配置
+- `cfg.renderer` - 渲染器配置（合并 puppeteer + playwright）
+
+**便捷方法**：
+- `cfg.masterQQ` - 获取主人 QQ 号列表
+- `cfg.master` - 获取主人映射对象
+- `cfg.getGroup(groupId)` - 获取群组配置
+- `cfg.port` - 获取当前端口号（只读）
+
+### 配置加载流程
 
 ```mermaid
-flowchart LR
-  Default["config/default_config/*.yaml"] -->|初次复制| GlobalCfg["data/server_bots/*.yaml<br/>全局配置"]
-  Default -->|初次复制| ServerCfg["data/server_bots/(端口)/*.yaml<br/>服务器配置"]
-  GlobalCfg --> Cfg["getGlobalConfig(name)"]
-  ServerCfg --> Cfg2["getServerConfig(name)"]
-  Cfg --> Cache["内存缓存"]
-  Cfg2 --> Cache
-  Cache --> Bot["Bot.run()<br/>global.cfg = Cfg"]
-  
-  style Default fill:#E6F3FF
-  style GlobalCfg fill:#FFE6CC
-  style ServerCfg fill:#FFE6CC
-  style Bot fill:#90EE90
+sequenceDiagram
+    participant Bot as Bot.run()
+    participant Cfg as cfg 对象
+    participant File as 文件系统
+    
+    Bot->>Cfg: 初始化（读取端口参数）
+    Cfg->>File: 检查全局配置目录
+    Cfg->>File: 检查端口配置目录
+    File-->>Cfg: 目录不存在，创建并复制默认配置
+    Bot->>Cfg: 访问 cfg.server
+    Cfg->>File: 读取 data/server_bots/{port}/server.yaml
+    File-->>Cfg: 返回配置内容
+    Cfg->>Cfg: 缓存到内存
+    Cfg-->>Bot: 返回配置对象
+    Bot->>Bot: 使用配置启动服务
 ```
 
-| 方法/属性 | 说明 |
-|----------|------|
-| `PATHS.DEFAULT_CONFIG` | 默认配置目录 `config/default_config` |
-| `PATHS.SERVER_BOTS` | 每个端口的服务器配置目录 `data/server_bots/{port}` |
-| `getConfigDir()` | 当前端口的配置根目录，例如 `data/server_bots/8080` |
-| `getConfig(name)` | 读取 `{configDir}/{name}.yaml`，若不存在则从默认配置复制一份 |
-| `getGlobalConfig(name)` | 读取全局配置 `data/server_bots/{name}.yaml`（不随端口变化） |
-| `getServerConfig(name)` | 读取服务器配置 `data/server_bots/{port}/{name}.yaml`（随端口变化） |
-| `agt/chatbot/group/server/device/monitor/notice/mongodb/redis/db/aistream` | 常用配置的快捷访问器 |
-| `renderer` | 合并 `renderers/{type}/config_default.yaml` 与 `data/server_bots/{port}/renderers/{type}/config.yaml` |
-| `setConfig(name, data)` | 写回 `{name}.yaml`，并更新内存缓存 |
-| `watch(file, name, key)` | 监听配置变更，自动清除缓存，触发 `change_{name}` 钩子 |
+### 配置使用示例
 
-> Web 前端配置界面通常通过调用 HTTP API 修改某一类配置，然后由 API 内部调用 `cfg.setConfig(name, data)` 完成写回。
+```javascript
+// 在插件中使用配置
+export default class MyPlugin extends plugin {
+  constructor() {
+    super({ name: '示例插件' });
+  }
+  
+  async onMessage(e) {
+    // 读取端口配置
+    const serverConfig = cfg.server;
+    const chatbotConfig = cfg.chatbot;
+    
+    // 读取全局配置
+    const redisConfig = cfg.redis;
+    const aistreamConfig = cfg.aistream;
+    
+    // 读取群组配置
+    const groupConfig = cfg.getGroup(e.group_id);
+    
+    // 使用配置
+    if (groupConfig.enabled) {
+      // 处理逻辑
+    }
+  }
+}
 
-### 2. ConfigBase（src/infrastructure/commonconfig/commonconfig.js）
+// 在 HTTP API 中使用配置
+export default {
+  name: 'config-api',
+  routes: [{
+    method: 'GET',
+    path: '/api/config/server',
+    handler: async (req, res) => {
+      // 读取配置
+      const serverConfig = cfg.server;
+      res.json({ success: true, data: serverConfig });
+    }
+  }, {
+    method: 'POST',
+    path: '/api/config/server',
+    handler: async (req, res) => {
+      // 保存配置
+      const success = cfg.setConfig('server', req.body);
+      res.json({ success, message: success ? '保存成功' : '保存失败' });
+    }
+  }]
+};
+```
 
-`ConfigBase` 提供面向对象、可校验的配置操作 API，便于在后台接口/插件中精细控制配置项：
+### ConfigBase（高级配置管理）
+
+`ConfigBase` 提供面向对象、可校验的配置操作 API，适用于需要 Schema 验证、自动备份等高级特性的场景：
 
 | 能力 | 方法 | 说明 |
 |------|------|------|
 | 文件访问 | `read()/write()/exists()/backup()` | 带缓存的 YAML/JSON 读写与自动备份 |
-| 路径操作 | `get/set/delete/append/remove` | 基于「点号 + 数组下标」的读写 API，适合 Web 表单联动 |
+| 路径操作 | `get/set/delete/append/remove` | 基于「点号 + 数组下标」的读写 API |
 | 合并与重置 | `merge()/reset()` | 深度合并、恢复默认配置 |
-| 校验 | `validate(data)` | 按 `schema` 验证字段类型、范围、枚举、自定义规则 |
+| 校验 | `validate(data)` | 按 `schema` 验证字段类型、范围、枚举 |
 | 结构导出 | `getStructure()` | 供前端生成「动态表单」所需的字段元数据 |
 
-前端与后端的一般协作方式：
-
-- 前端通过 API 获取 `getStructure()` 与当前配置内容 → 渲染配置表单。
-- 用户在 Web 界面修改后提交 → API 内部基于 `ConfigBase.set/merge` 写回。
-- 写入时自动校验；失败则 API 返回错误信息供前端提示。
+**详细文档**：参见 [ConfigBase 文档](config-base.md)
 
 ---
 
@@ -160,20 +308,25 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
-  participant FE as 前端 core/system-Core/www/xrk/app.js
-  participant Http as HTTP API(core/*/http)
-  participant Bot as Bot
-  participant Cfg as cfg(Config)
+    participant FE as 前端<br/>Web控制台
+    participant API as HTTP API<br/>core/*/http
+    participant Bot as Bot实例
+    participant Cfg as cfg对象
 
-  FE->>Http: GET /api/system/status
-  Http->>Bot: 访问 Bot 运行信息
-  Http->>Cfg: 读取 server/monitor 配置
-  Http-->>FE: 返回状态数据(JSON)
+    Note over FE,Cfg: 读取系统状态
+    FE->>API: GET /api/system/status
+    API->>Bot: 获取运行信息
+    API->>Cfg: 读取 server/monitor 配置
+    Cfg-->>API: 返回配置数据
+    Bot-->>API: 返回运行信息
+    API-->>FE: 返回状态数据(JSON)
 
-  FE->>Http: POST /api/config/save
-  Http->>Cfg: setConfig('server', newData)
-  Cfg-->>Http: 写入成功/失败
-  Http-->>FE: 返回结果，前端提示用户
+    Note over FE,Cfg: 保存配置
+    FE->>API: POST /api/config/server/write
+    API->>Cfg: setConfig('server', newData)
+    Cfg->>Cfg: 保存到文件并更新缓存
+    Cfg-->>API: 返回成功/失败
+    API-->>FE: 返回结果，前端提示用户
 ```
 
 前端开发者需要关注：
@@ -188,15 +341,17 @@ sequenceDiagram
 ### 1. 新增一个「配置管理」页面
 
 ```mermaid
-flowchart LR
-    A[创建API文件<br/>core/*/http/config-manager.js] --> B[使用ConfigBase读写配置]
-    B --> C[前端注册路由<br/>core/system-Core/www/xrk/app.js]
-    C --> D[使用fetch调用API]
-    D --> E[渲染表单并提交]
+flowchart TB
+    A[1. 创建API文件<br/>core/*/http/config-manager.js] --> B[2. 使用cfg对象或ConfigBase<br/>读写配置]
+    B --> C[3. 前端注册路由<br/>core/system-Core/www/xrk/app.js]
+    C --> D[4. 使用fetch调用API]
+    D --> E[5. 渲染表单并提交]
+    E --> F[6. API保存配置<br/>cfg.setConfig()]
     
     style A fill:#E6F3FF
     style B fill:#FFE6CC
     style E fill:#90EE90
+    style F fill:#87CEEB
 ```
 
 **步骤**:
@@ -213,12 +368,13 @@ sequenceDiagram
     participant Plugin as 插件
     
     FE->>API: POST /api/plugins/run-task
-    API->>API: 构造事件对象e
-    API->>Bot: 触发事件或调用插件
-    Bot->>Plugin: 执行插件方法
-    Plugin-->>Bot: 返回结果
-    Bot-->>API: 处理结果
-    API-->>FE: 返回JSON响应
+    API->>API: 构造事件对象 e
+    API->>Bot: 触发事件或调用插件方法
+    Bot->>Plugin: 执行插件业务逻辑
+    Plugin->>Plugin: 处理消息/调用工作流
+    Plugin-->>Bot: 返回处理结果
+    Bot-->>API: 返回结果数据
+    API-->>FE: 返回 JSON 响应
 ```
 
 **步骤**:
@@ -230,14 +386,15 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     A[前端请求] --> B[HTTP API<br/>/api/render/report]
-    B --> C[RendererLoader.getRenderer]
-    C --> D[renderImage]
-    D --> E[生成图片]
-    E --> F[返回Base64/路径]
+    B --> C[RendererLoader.getRenderer<br/>获取渲染器实例]
+    C --> D[renderer.renderImage<br/>渲染图片]
+    D --> E[生成图片文件]
+    E --> F[返回Base64或文件路径]
     F --> G[前端展示图片]
     
     style A fill:#E6F3FF
     style C fill:#FFE6CC
+    style D fill:#FFD700
     style G fill:#90EE90
 ```
 

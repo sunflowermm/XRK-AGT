@@ -1,4 +1,5 @@
 import { promises as fs } from 'fs';
+import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
 import { spawnSync } from 'child_process';
@@ -19,6 +20,13 @@ if (process.platform === 'win32') {
 
 process.setMaxListeners(30);
 let globalSignalHandler = null;
+
+// 统一的清理函数
+async function cleanup() {
+  if (globalSignalHandler) {
+    await globalSignalHandler.cleanup();
+  }
+}
 
 const PATHS = {
   LOGS: './logs',
@@ -65,51 +73,13 @@ async function copyFileIfMissing(source, target) {
   }
 }
 
-class Logger {
-  constructor() {
-    this.logFile = path.join(PATHS.LOGS, 'restart.log');
-    this.isWriting = false;
-    this.queue = [];
-  }
+// 使用统一的简单日志工具
+import { createSimpleLogger } from './src/infrastructure/log.js';
 
-  async log(message, level = 'INFO') {
-    const timestamp = new Date().toISOString();
-    const logMessage = `[${timestamp}] [${level}] ${message}\n`;
-    this.queue.push(logMessage);
-    
-    if (!this.isWriting) {
-      await this.flushQueue();
-    }
-  }
-
-  async flushQueue() {
-    if (this.queue.length === 0 || this.isWriting) return;
-    
-    this.isWriting = true;
-    const BATCH_SIZE = 100;
-    const messages = this.queue.splice(0, BATCH_SIZE);
-    
-    try {
-      await fs.appendFile(this.logFile, messages.join(''));
-    } catch {} finally {
-      this.isWriting = false;
-      if (this.queue.length > 0) {
-        setImmediate(() => this.flushQueue());
-      }
-    }
-  }
-
-  async error(message) {
-    await this.log(message, 'ERROR');
-  }
-
-  async success(message) {
-    await this.log(message, 'SUCCESS');
-  }
-
-  async warning(message) {
-    await this.log(message, 'WARNING');
-  }
+// 创建统一的日志实例
+function getLogger() {
+  const logFile = path.join(PATHS.LOGS, 'restart.log');
+  return createSimpleLogger(logFile, false);
 }
 
 class BaseManager {
@@ -118,48 +88,21 @@ class BaseManager {
   }
 }
 
-class DependencyChecker extends BaseManager {
-  async check() {
-    const results = await Promise.all([
-      this.checkBinary('pm2', ['--version'], 'PM2'),
-      this.checkBinary('pnpm', ['--version'], 'pnpm', true),
-      this.checkNodeVersion()
-    ]);
-
-    // 只记录到日志文件，不输出到控制台
-    if (results.includes(false)) {
-      await this.logger.warning('检测到缺失或异常的依赖，请根据提示安装后再试。');
-    }
-  }
-
-  async checkBinary(cmd, args, label, optional = false) {
-    // 使用 spawnSync 配合参数数组，避免 DEP0190 警告
-    // 在 Windows 上会自动处理 .cmd/.bat 文件
-    const result = spawnSync(cmd, args, { encoding: 'utf8', shell: false, stdio: 'ignore' });
-    const ok = result.status === 0;
-    if (!ok) {
-      const level = optional ? 'warning' : 'error';
-      // 只记录到日志文件，不输出到控制台
-      await this.logger[level](`${label} 未检测到，请确认已全局安装并可在当前终端访问`);
-    }
-    return ok || optional;
-  }
-
-  async checkNodeVersion() {
-    const major = parseInt(process.versions.node.split('.')[0], 10);
-    const ok = Number.isFinite(major) && major >= 18;
-    if (!ok) {
-      await this.logger.warning(`当前 Node.js 版本过低 (${process.versions.node})，建议 >= 18.x`);
-    }
-    return ok;
-  }
-}
 
 class PM2Manager extends BaseManager {
   getPM2Path() {
-    return process.platform === 'win32' 
-      ? 'pm2' 
+    // 优先使用本地 node_modules 中的 PM2
+    const localPm2Path = process.platform === 'win32'
+      ? path.join(process.cwd(), 'node_modules', 'pm2', 'bin', 'pm2.cmd')
       : path.join(process.cwd(), 'node_modules', 'pm2', 'bin', 'pm2');
+    
+    // 检查本地是否存在
+    if (fsSync.existsSync(localPm2Path)) {
+      return localPm2Path;
+    }
+    
+    // 回退到全局 PM2
+    return 'pm2';
   }
 
   getProcessName(port) {
@@ -171,7 +114,9 @@ class PM2Manager extends BaseManager {
     let cmdCommand = pm2Path;
     let cmdArgs = [command, ...args];
     
-    if (process.platform === 'win32') {
+    // Windows 上，如果使用全局 PM2，需要通过 cmd /c 调用
+    // 如果使用本地 PM2 路径，直接执行即可
+    if (process.platform === 'win32' && pm2Path === 'pm2') {
       cmdCommand = 'cmd';
       cmdArgs = ['/c', 'pm2', command, ...args];
     }
@@ -179,7 +124,6 @@ class PM2Manager extends BaseManager {
     await this.logger.log(`执行PM2命令: ${command} ${args.join(' ')}`);
     
     // 使用参数数组传递，避免 DEP0190 警告
-    // Windows 上已通过 cmd /c 处理，无需额外启用 shell
     const result = spawnSync(cmdCommand, cmdArgs, {
       stdio: 'inherit',
       windowsHide: true,
@@ -194,43 +138,13 @@ class PM2Manager extends BaseManager {
     } else {
       await this.logger.error(`PM2 ${command} ${processName} 失败，状态码: ${result.status}`);
       
-      if (process.platform === 'win32' && command === 'start') {
-        await this.tryAlternativeStartMethod(args);
-      }
     }
     
     return success;
   }
 
-  async tryAlternativeStartMethod(args) {
-    try {
-      // 使用参数数组传递，避免 DEP0190 警告
-      const npmWhich = spawnSync('npm', ['bin', '-g'], {
-        encoding: 'utf8',
-        shell: false
-      });
-      
-      if (npmWhich.stdout) {
-        const globalPath = npmWhich.stdout.trim();
-        const absolutePm2Path = path.join(globalPath, 'pm2.cmd');
-        
-        // 使用参数数组传递，避免 DEP0190 警告
-        const retryResult = spawnSync(absolutePm2Path, ['start', ...args], {
-          stdio: 'inherit',
-          windowsHide: true,
-          shell: false
-        });
-        
-        if (retryResult.status === 0) {
-          await this.logger.success('PM2替代方法启动成功');
-        }
-      }
-    } catch (error) {
-      await this.logger.error(`PM2替代方法失败: ${error.message}`);
-    }
-  }
 
-  async createConfig(port, mode) {
+  async createConfig(port) {
     const processName = this.getProcessName(port);
     const nodeArgs = getNodeArgs();
     const pm2Config = {
@@ -246,7 +160,6 @@ class PM2Manager extends BaseManager {
       error_file: `./logs/pm2_server_error_${port}.log`,
       env: {
         NODE_ENV: 'production',
-        XRK_SELECTED_MODE: mode,
         XRK_SERVER_PORT: port.toString()
       }
     };
@@ -271,7 +184,7 @@ class PM2Manager extends BaseManager {
     const processName = this.getProcessName(port);
     const commandMap = {
       start: async () => {
-        const { configPath, cleanup } = await this.createConfig(port, 'server');
+        const { configPath, cleanup } = await this.createConfig(port);
         const ok = await this.executePM2Command('start', [configPath], processName);
         await cleanup();
         return ok;
@@ -300,10 +213,10 @@ class ServerManager extends BaseManager {
     return path.join(PATHS.SERVER_BOTS, String(port));
   }
 
-  async ensurePortConfig(port) {
+  async ensurePortConfig(port, silent = false) {
     const portDir = this.getPortDir(port);
     await fs.mkdir(portDir, { recursive: true });
-    await this.copyDefaultConfigs(portDir);
+    await this.copyDefaultConfigs(portDir, silent);
     return portDir;
   }
 
@@ -355,7 +268,7 @@ class ServerManager extends BaseManager {
     return portNum;
   }
 
-  async copyDefaultConfigs(targetDir) {
+  async copyDefaultConfigs(targetDir, silent = false) {
     try {
       const defaultConfigFiles = await fs.readdir(PATHS.DEFAULT_CONFIG);
       const created = [];
@@ -369,32 +282,35 @@ class ServerManager extends BaseManager {
         }
       }
       
-      const suffix = created.length ? ` (新建: ${created.join(', ')})` : '';
-      await this.logger.success(`配置文件已就绪: ${targetDir}${suffix}`);
+      // 只在创建了新文件时输出日志
+      if (!silent && created.length > 0) {
+        await this.logger.success(`配置文件已就绪: ${targetDir} (新建: ${created.join(', ')})`);
+      } else if (!silent && !fsSync.existsSync(path.join(targetDir, 'server.yaml'))) {
+        // 如果连 server.yaml 都不存在，说明是全新配置，输出日志
+        await this.logger.success(`配置文件已就绪: ${targetDir}`);
+      }
+      // 配置已存在时，静默处理，不输出日志
     } catch (error) {
       await this.logger.error(`创建配置文件失败: ${error.message}\n${error.stack}`);
     }
   }
 
   async startServerMode(port) {
-    await this.logger.log(`启动葵子服务器，端口: ${port}`);
-    global.selectedMode = 'server';
-    await this.ensurePortConfig(port);
+    // 检查是否跳过配置检查（用于自动重启场景，避免重复日志）
+    const skipConfigCheck = process.env.XRK_SKIP_CONFIG_CHECK === '1';
+    
+    if (!skipConfigCheck) {
+      await this.logger.log(`启动葵子服务器，端口: ${port}`);
+      await this.ensurePortConfig(port);
+    }
     
     try {
-      const originalArgv = [...process.argv];
-      process.argv = [originalArgv[0], originalArgv[1], 'server', port.toString()];
-      
       const { default: BotClass } = await import('./src/bot.js');
-      
-      if (global.Bot) {
-        delete global.Bot;
-      }
-      
-      global.Bot = new BotClass();
-      await global.Bot.run({ port });
-      
-      process.argv = originalArgv;
+      const bot = new BotClass();
+      // 设置全局 Bot 实例，供插件、API 等使用
+      global.Bot = bot;
+      globalThis.Bot = bot;
+      await bot.run({ port });
     } catch (error) {
       await this.logger.error(`服务器模式启动失败: ${error.message}\n${error.stack}`);
       throw error;
@@ -402,7 +318,7 @@ class ServerManager extends BaseManager {
   }
 
   async startWithAutoRestart(port) {
-    global.selectedMode = 'server';
+    // 确保配置就绪（只输出一次日志）
     await this.ensurePortConfig(port);
     
     if (!this.signalHandler.isSetup) {
@@ -413,34 +329,38 @@ class ServerManager extends BaseManager {
     const startTime = Date.now();
     
     while (restartCount < CONFIG.MAX_RESTARTS) {
-      await this.logger.log(`启动进程 (尝试 ${restartCount + 1}/${CONFIG.MAX_RESTARTS})`);
+      if (restartCount > 0) {
+        await this.logger.log(`重启进程 (尝试 ${restartCount + 1}/${CONFIG.MAX_RESTARTS})`);
+      }
       
-      const exitCode = await this.runServerProcess(port);
-      await this.logger.log(`进程退出，状态码: ${exitCode}`);
+      const exitCode = await this.runServerProcess(port, restartCount > 0);
       
       if (exitCode === 0 || exitCode === 255) {
         await this.logger.log('正常退出');
         return;
       }
       
+      await this.logger.log(`进程退出，状态码: ${exitCode}`);
       const waitTime = this.calculateRestartDelay(Date.now() - startTime, restartCount);
-      await this.logger.warning(`将在 ${waitTime / 1000} 秒后重启`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      if (waitTime > 0) {
+        await this.logger.warning(`将在 ${waitTime / 1000} 秒后重启`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
       restartCount++;
     }
     
     await this.logger.error(`达到最大重启次数 (${CONFIG.MAX_RESTARTS})，停止重启`);
   }
 
-  async runServerProcess(port) {
+  async runServerProcess(port, skipConfigCheck = false) {
     const nodeArgs = getNodeArgs();
     const entryScript = path.join(process.cwd(), 'start.js');
     const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
     
     const cleanEnv = {
       ...process.env,
-      XRK_SELECTED_MODE: 'server',
-      XRK_SERVER_PORT: port.toString()
+      XRK_SERVER_PORT: port.toString(),
+      XRK_SKIP_CONFIG_CHECK: skipConfigCheck ? '1' : '0'
     };
     
     const result = spawnSync(process.argv[0], startArgs, {
@@ -637,9 +557,7 @@ class MenuManager {
         console.log(chalk.cyan.bold('\n╔═══════════════════════════════════════╗'));
         console.log(chalk.cyan.bold('║                再见！                 ║'));
         console.log(chalk.cyan.bold('╚═══════════════════════════════════════╝\n'));
-        if (globalSignalHandler) {
-          await globalSignalHandler.cleanup();
-        }
+        await cleanup();
         return true;
     }
     
@@ -772,21 +690,17 @@ function getNodeArgs() {
 }
 
 process.on('uncaughtException', async (error) => {
-  const logger = new Logger();
+  const logger = getLogger();
   const errorMsg = error.stack || `${error.message}\n${error.stack || ''}`;
   console.error('\n未捕获的异常:');
   console.error(errorMsg);
   await logger.error(`未捕获的异常: ${errorMsg}`);
-  
-  if (globalSignalHandler) {
-    await globalSignalHandler.cleanup();
-  }
-  
+  await cleanup();
   process.exit(1);
 });
 
 process.on('unhandledRejection', async (reason) => {
-  const logger = new Logger();
+  const logger = getLogger();
   const errorMessage = reason instanceof Error 
     ? (reason.stack || `${reason.message}\n${reason.stack || ''}`)
     : String(reason);
@@ -797,67 +711,48 @@ process.on('unhandledRejection', async (reason) => {
 });
 
 process.on('exit', async () => {
-  if (globalSignalHandler) {
-    await globalSignalHandler.cleanup();
-  }
+  await cleanup();
 });
 
 async function main() {
-  const logger = new Logger();
+  const logger = getLogger();
+  await paths.ensureBaseDirs(fs);
+  
+  const commandArg = process.argv[2];
+  const portArg = process.argv[3] || process.env.XRK_SERVER_PORT;
+  const port = portArg && !isNaN(parseInt(portArg)) ? parseInt(portArg) : null;
+  
+  // 处理命令行参数启动
+  if (commandArg === 'server' && port) {
+    const serverManager = new ServerManager(logger, null);
+    await serverManager.startServerMode(port);
+    return;
+  }
+  
+  if (commandArg === 'stop' && port) {
+    const serverManager = new ServerManager(logger, null);
+    await serverManager.stopServer(port);
+    return;
+  }
+  
+  // 显示交互式菜单
   const pm2Manager = new PM2Manager(logger);
   const serverManager = new ServerManager(logger, pm2Manager);
   const menuManager = new MenuManager(serverManager, pm2Manager);
-  const dependencyChecker = new DependencyChecker(logger);
   
-  await paths.ensureBaseDirs(fs);
-  
-  // 静默检查依赖，只记录到日志文件
-  try {
-    await dependencyChecker.check();
-  } catch (error) {
-    // 依赖检查失败时仍然继续，只记录错误
-    await logger.error(`依赖检查失败: ${error.message}`);
-  }
-  
-  const envPort = process.env.XRK_SERVER_PORT;
-  const commandArg = process.argv[2];
-  const portArg = process.argv[3] || envPort;
-  
-  if (commandArg && portArg && !isNaN(parseInt(portArg))) {
-    const port = parseInt(portArg);
-    
-    switch (commandArg) {
-      case 'server':
-        await serverManager.startServerMode(port);
-        return;
-        
-      case 'stop':
-        await serverManager.stopServer(port);
-        return;
-    }
-  }
-  
-  // 显示菜单前清屏，确保界面干净
   if (process.stdout.isTTY) {
     process.stdout.write('\x1b[2J\x1b[H');
   }
   
   await menuManager.run();
-  
-  if (globalSignalHandler) {
-    await globalSignalHandler.cleanup();
-  }
+  await cleanup();
 }
 
 export default main;
 
 main().catch(async (error) => {
-  const logger = new Logger();
+  const logger = getLogger();
   await logger.error(`启动失败: ${error.message}\n${error.stack}`);
-  
-  if (globalSignalHandler) {
-    await globalSignalHandler.cleanup();
-  }
-  
+  await cleanup();
   process.exit(1);
 });

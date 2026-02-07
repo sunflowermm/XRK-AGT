@@ -24,7 +24,7 @@ flowchart TB
     subgraph App["应用层"]
         API["HTTP API"]
         Plugin["插件"]
-        Web["Web管理"]
+        Web["Web管理界面"]
     end
     
     subgraph ConfigBase["ConfigBase基类"]
@@ -33,21 +33,24 @@ flowchart TB
         Get["get(keyPath)<br/>路径读取"]
         Set["set(keyPath, value)<br/>路径写入"]
         Validate["validate()<br/>Schema验证"]
+        Cache["配置缓存<br/>5秒TTL"]
     end
     
     subgraph File["文件系统"]
         YAML["YAML文件"]
         JSON["JSON文件"]
-        Backup["备份文件<br/>*.backup.*"]
+        Backup["备份文件<br/>*.backup.时间戳"]
     end
     
     App -->|调用| ConfigBase
     ConfigBase -->|读写| File
     ConfigBase -->|自动备份| Backup
+    ConfigBase -->|缓存| Cache
     
     style App fill:#E6F3FF
     style ConfigBase fill:#90EE90
     style File fill:#FFE6CC
+    style Cache fill:#FFD700
 ```
 
 ---
@@ -126,23 +129,29 @@ constructor(metadata = {})
 `ConfigBase` 支持一个配置包含多个子文件的情况（如 renderer 包含 puppeteer 和 playwright）。
 
 ```mermaid
-flowchart LR
-    subgraph MultiFile["多文件配置"]
-        Config["RendererConfig"]
+flowchart TB
+    subgraph MultiFile["多文件配置示例"]
+        Config["RendererConfig<br/>ConfigBase子类"]
+        Default["默认配置<br/>renderers/*/config_default.yaml"]
+        User["用户配置<br/>data/server_bots/{port}/renderers/*/config.yaml"]
+    end
+    
+    subgraph Files["配置文件"]
         Puppeteer["puppeteer.yaml"]
         Playwright["playwright.yaml"]
     end
     
-    Config -->|读取| Puppeteer
-    Config -->|读取| Playwright
-    Config -->|写入| Puppeteer
-    Config -->|写入| Playwright
-    
-    Config -->|返回| Result["合并对象<br/>puppeteer + playwright"]
+    Config -->|读取| Default
+    Config -->|读取| User
+    Default -->|合并| Puppeteer
+    User -->|合并| Puppeteer
+    Default -->|合并| Playwright
+    User -->|合并| Playwright
+    Config -->|返回| Result["合并对象<br/>{puppeteer: {...}, playwright: {...}}"]
     
     style Config fill:#90EE90
-    style Puppeteer fill:#E6F3FF
-    style Playwright fill:#E6F3FF
+    style Default fill:#E6F3FF
+    style User fill:#FFE6CC
     style Result fill:#FFD700
 ```
 
@@ -177,14 +186,14 @@ flowchart LR
 ```mermaid
 flowchart TB
     A["validate(data)"] --> B{"检查required字段"}
-    B -->|缺失| C["返回错误"]
-    B -->|存在| D{"检查字段类型"}
+    B -->|缺失| C["返回错误<br/>{valid: false, errors: [...]}"]
+    B -->|存在| D{"检查字段类型<br/>string/number/boolean/array/object"}
     D -->|类型错误| C
-    D -->|类型正确| E{"检查范围/格式"}
+    D -->|类型正确| E{"检查范围/格式<br/>min/max/pattern/enum"}
     E -->|不符合| C
     E -->|符合| F{"customValidate存在?"}
     F -->|是| G["执行自定义验证"]
-    F -->|否| H["返回成功"]
+    F -->|否| H["返回成功<br/>{valid: true}"]
     G -->|失败| C
     G -->|成功| H
     
