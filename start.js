@@ -735,7 +735,15 @@ async function main() {
     return;
   }
   
-  // 显示交互式菜单
+  // Docker 环境或非 TTY 环境，直接启动服务器模式
+  if (process.env.DOCKER_CONTAINER === '1' || !process.stdout.isTTY) {
+    const defaultPort = parseInt(process.env.XRK_SERVER_PORT || '8080', 10);
+    const serverManager = new ServerManager(logger, null);
+    await serverManager.startServerMode(defaultPort);
+    return;
+  }
+  
+  // 显示交互式菜单（仅限 TTY 环境）
   const pm2Manager = new PM2Manager(logger);
   const serverManager = new ServerManager(logger, pm2Manager);
   const menuManager = new MenuManager(serverManager, pm2Manager);

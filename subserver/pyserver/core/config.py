@@ -150,10 +150,18 @@ class Config:
             "api": {"auto_load": True, "api_dir": "apis"},
             "main_server": {"host": "127.0.0.1", "port": 1234, "timeout": 300},
             "langchain": {"enabled": True, "max_steps": 6, "verbose": False},
+            "proxy": {
+                "http_proxy": "",
+                "https_proxy": "",
+                "hf_endpoint": "",
+            },
             "vector": {
                 "model": "paraphrase-multilingual-MiniLM-L12-v2",
                 "dimension": 384,
                 "persist_dir": "data/subserver/vector_db",
+                "cache_dir": "data/subserver/model_cache",
+                "local_files_only": False,
+                "load_timeout": 300,  # 模型加载超时时间（秒）
             },
             "logging": {
                 "level": "info",

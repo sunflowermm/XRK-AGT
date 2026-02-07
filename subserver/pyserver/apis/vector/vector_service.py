@@ -3,6 +3,7 @@
 from typing import Optional, Dict, Any, List
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -113,7 +114,22 @@ class VectorService:
                     "vector.model", "paraphrase-multilingual-MiniLM-L12-v2"
                 )
                 device = config.get("vector.device", "cpu")
-                local_files_only = config.get("vector.local_files_only", True)
+                local_files_only = config.get("vector.local_files_only", False)
+                cache_dir_rel = config.get("vector.cache_dir", "data/subserver/model_cache")
+                from core.config import get_data_root
+                from pathlib import Path
+                
+                if cache_dir_rel.startswith("data/subserver/"):
+                    cache_dir = get_data_root() / cache_dir_rel.replace("data/subserver/", "")
+                else:
+                    cache_dir = Path(resolve_path(cache_dir_rel))
+                
+                cache_dir_str = str(cache_dir)
+                os.makedirs(cache_dir_str, exist_ok=True)
+
+                load_timeout = config.get("vector.load_timeout", 300.0)
+                logger.info("加载嵌入模型: %s (设备: %s, 缓存目录: %s, 超时: %ds)", 
+                           model_name, device, cache_dir_str, int(load_timeout))
 
                 # 使用线程池异步加载模型
                 self._embedding_model = await asyncio.wait_for(
@@ -123,16 +139,10 @@ class VectorService:
                             model_name,
                             device=device,
                             local_files_only=local_files_only,
-                            cache_folder=str(
-                                resolve_path(
-                                    config.get(
-                                        "vector.cache_dir", "data/subserver/model_cache"
-                                    )
-                                )
-                            ),
+                            cache_folder=cache_dir_str,
                         ),
                     ),
-                    timeout=config.get("vector.load_timeout", 30.0),
+                    timeout=load_timeout,
                 )
                 logger.info("嵌入模型加载成功: %s (设备: %s)", model_name, device)
                 return True

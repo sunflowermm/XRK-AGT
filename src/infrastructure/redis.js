@@ -1,5 +1,5 @@
 import cfg from './config/config.js'
-import common from '#utils/common.js'
+import common, { normalizeHost } from '#utils/common.js'
 import BotUtil from '#utils/botutil.js'
 import { exec } from 'node:child_process'
 import os from 'node:os'
@@ -72,7 +72,7 @@ export default async function redisInit() {
 function buildRedisUrl(redisConfig) {
   const username = redisConfig?.username || ''
   const password = redisConfig?.password || ''
-  const host = redisConfig?.host || '127.0.0.1'
+  const host = normalizeHost(redisConfig?.host || '127.0.0.1', 'redis')
   const port = redisConfig?.port || 6379
   const db = redisConfig?.db || 0
   const auth = (username || password) ? `${username}${password ? `:${password}` : ''}@` : ''

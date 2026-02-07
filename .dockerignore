@@ -70,8 +70,14 @@ LICENSE
 .eslintrc*
 .editorconfig
 
-# 子服务器（Python服务器等，如果需要可以单独构建）
-subserver/
+# 子服务器（排除不需要的文件，但保留源代码和依赖文件）
+subserver/**/__pycache__/
+subserver/**/*.pyc
+subserver/**/.venv/
+subserver/**/data/
+subserver/**/logs/
+subserver/**/*.egg-info/
+subserver/**/uv.lock
 
 # 调试文件
 debug.js

@@ -35,11 +35,20 @@ langchain:
   verbose: false       # 是否输出详细日志
   request_timeout: 60  # 单次LLM请求超时（秒）
 
+# 代理配置（用于 HuggingFace 模型下载）
+proxy:
+  http_proxy: ""      # HTTP 代理地址（如: http://127.0.0.1:7890）
+  https_proxy: ""     # HTTPS 代理地址（如: http://127.0.0.1:7890）
+  hf_endpoint: ""     # HuggingFace 镜像地址（如: https://hf-mirror.com）
+
 # 向量服务配置
 vector:
   model: "paraphrase-multilingual-MiniLM-L12-v2"  # 嵌入模型名称
   dimension: 384      # 向量维度
   persist_dir: "data/subserver/vector_db"  # 向量数据库持久化目录
+  cache_dir: "data/subserver/model_cache"  # 模型缓存目录
+  local_files_only: false  # 允许从网络下载模型（本地找不到时自动下载）
+  load_timeout: 300   # 模型加载超时时间（秒，默认 300，Docker 环境建议增加）
   default_collection: "default"  # 默认collection
 
 # 日志配置

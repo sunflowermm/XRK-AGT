@@ -1,6 +1,7 @@
 import { pipeline } from 'node:stream/promises'
 import fetch from 'node-fetch'
 import path from 'node:path'
+import fs from 'node:fs'
 import BotUtil from './botutil.js'
 
 /**
@@ -72,9 +73,33 @@ export const makeForwardMsg = (e, msg = [], dec = '') => {
     ?? Bot.makeForwardMsg?.(forwardMsg)
 }
 
+/**
+ * 检测是否为 Docker 环境
+ * @returns {boolean} 是否为 Docker 环境
+ */
+export const isDockerEnvironment = () => {
+  return process.env.DOCKER_CONTAINER === '1' || fs.existsSync('/.dockerenv')
+}
+
+/**
+ * 规范化主机地址（移除引号，处理 Docker 服务名）
+ * @param {string} host - 原始主机地址
+ * @param {string} serviceName - Docker 服务名（如 'redis', 'mongodb'）
+ * @returns {string} 规范化后的主机地址
+ */
+export const normalizeHost = (host, serviceName) => {
+  const hostStr = String(host).replace(/^["']|["']$/g, '')
+  if (!isDockerEnvironment() && hostStr === serviceName) {
+    return '127.0.0.1'
+  }
+  return hostStr
+}
+
 export default { 
   sleep, 
   replyPrivate, 
   downFile, 
-  makeForwardMsg 
+  makeForwardMsg,
+  isDockerEnvironment,
+  normalizeHost
 }

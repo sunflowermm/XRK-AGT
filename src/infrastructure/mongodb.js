@@ -1,5 +1,5 @@
 import cfg from './config/config.js'
-import common from '#utils/common.js'
+import common, { normalizeHost } from '#utils/common.js'
 import BotUtil from '#utils/botutil.js'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -66,7 +66,7 @@ export default async function mongodbInit() {
 function buildMongoUrl(mongoConfig) {
   const username = mongoConfig?.username || ''
   const password = mongoConfig?.password || ''
-  const host = mongoConfig?.host || '127.0.0.1'
+  const host = normalizeHost(mongoConfig?.host || '127.0.0.1', 'mongodb')
   const port = mongoConfig?.port || 27017
   const database = mongoConfig?.database || 'xrk_agt'
   const options = mongoConfig?.options || {}

@@ -29,7 +29,8 @@ async def get_mcp_tools():
         tools = result.get("tools", []) if isinstance(result, dict) else []
         _mcp_tools_cache = {"tools": tools, "timestamp": time.time()}
         return tools
-    except Exception:
+    except Exception as e:
+        logger.warning(f"获取MCP工具列表失败: {e}")
         return _mcp_tools_cache["tools"]
 
 
