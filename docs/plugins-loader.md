@@ -86,23 +86,23 @@ flowchart TB
     A["PluginsLoader.load"] --> B{"是否已加载"}
     B -->|是且非刷新| Z["直接返回"]
     B -->|否或刷新| C["重置内部状态"]
-    C --> D["getPlugins扫描目录"]
-    D --> E["分批并发导入插件<br/>batchSize=10"]
-    E --> F["importPlugin动态导入"]
-    F --> G["loadPlugin创建实例"]
+    C --> D["扫描目录"]
+    D --> E["分批并发导入"]
+    E --> F["动态导入"]
+    F --> G["创建实例"]
     G --> H{"priority类型"}
     H -->|extended| I["归类到extended"]
     H -->|普通| J["归类到priority"]
-    I --> K["处理handler和eventSubscribe"]
+    I --> K["处理handler"]
     J --> K
-    K --> L["createTask创建定时任务"]
-    L --> M["initEventSystem初始化事件系统"]
-    M --> N["sortPlugins按优先级排序"]
+    K --> L["创建定时任务"]
+    L --> M["初始化事件系统"]
+    M --> N["按优先级排序"]
     N --> O["加载完成"]
     
-    style A fill:#E6F3FF
-    style G fill:#FFE6CC
-    style O fill:#90EE90
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style G fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style O fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
 ```
 
 ### 1. `load(isRefresh = false)`
@@ -130,11 +130,11 @@ flowchart TB
 - 初始化超时从 5 秒优化为 3 秒
 
 ```mermaid
-flowchart LR
+flowchart TB
     A["loadPlugin"] --> B{"是否有prototype"}
     B -->|否| Z["忽略非类导出"]
-    B -->|是| C["创建插件实例<br/>new p"]
-    C --> D["执行plugin.init<br/>3秒超时"]
+    B -->|是| C["创建插件实例"]
+    C --> D["执行plugin.init"]
     D --> E["标准化task"]
     E --> F["编译rule正则"]
     F --> G["构建插件描述"]
@@ -145,9 +145,9 @@ flowchart LR
     J --> K
     K --> L["处理eventSubscribe"]
     
-    style A fill:#E6F3FF
-    style C fill:#FFE6CC
-    style K fill:#90EE90
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style C fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style K fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
 ```
 
 ---
@@ -160,24 +160,24 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    A["deal入口"] --> B["initEvent补全属性"]
-    B --> C{"是否为特殊事件"}
-    C -->|是| D["dealSpecialEvent处理"]
-    C -->|否| E["checkBypassPlugins检查"]
-    E --> F["preCheck前置检查"]
+    A["deal入口"] --> B["补全属性"]
+    B --> C{"特殊事件?"}
+    C -->|是| D["特殊处理"]
+    C -->|否| E["检查bypass"]
+    E --> F["前置检查"]
     F --> G{"检查结果"}
     G -->|失败| Z["跳过处理"]
-    G -->|通过| H["dealMsg解析消息"]
-    H --> I["setupReply包装回复"]
-    I --> J["Runtime.init运行时初始化"]
-    J --> K["runPlugins扩展插件"]
-    K --> L["runPlugins普通插件"]
+    G -->|通过| H["解析消息"]
+    H --> I["包装回复"]
+    I --> J["运行时初始化"]
+    J --> K["执行扩展插件"]
+    K --> L["执行普通插件"]
     L --> M["处理完成"]
     
-    style A fill:#E6F3FF
-    style F fill:#FFE6CC
-    style M fill:#90EE90
-    style Z fill:#FFB6C1
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style F fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style M fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style Z fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
 ```
 
 **步骤说明**：

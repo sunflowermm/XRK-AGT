@@ -3,12 +3,21 @@
 > **文件位置**: `core/system-Core/`  
 > **说明**：system-Core 是 XRK-AGT 的内置核心模块，提供了完整的系统功能、HTTP API、工作流、插件和 Web 控制台。
 
+## 📖 概述
+
 system-Core 是 XRK-AGT 的内置核心模块，提供了开箱即用的完整功能集，包括：
 
 - ✅ **10个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、标准输入、数据编辑
-- ✅ **6个工作流**：聊天、桌面、工具、记忆、知识库、设备
+- ✅ **6个工作流**：聊天、桌面、工具、记忆、知识库、设备（共53个MCP工具）
 - ✅ **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
 - ✅ **Web控制台**：企业级管理界面，支持系统监控、API调试、配置管理
+
+### 功能特点
+
+- **零配置启动**：所有功能开箱即用，无需额外配置
+- **自动加载**：所有模块通过加载器自动发现和注册
+- **统一接口**：所有API遵循统一的接口规范
+- **完整文档**：每个模块都有详细的API文档和使用说明
 
 ---
 
@@ -248,24 +257,23 @@ stdin 体系由 **Tasker + HTTP API + 增强插件** 共同组成：
 system-Core 提供了6个工作流，共53个MCP工具：
 
 ```mermaid
-flowchart LR
-    subgraph Streams["🌊 工作流（Stream）"]
-        direction TB
-        Chat["💬 chat工作流<br/>24个MCP工具<br/>群管理/互动功能"]
-        Desktop["🖥️ desktop工作流<br/>17个MCP工具<br/>桌面操作/文档生成"]
-        Tools["🔧 tools工作流<br/>4个MCP工具<br/>基础工具集"]
-        Memory["🧠 memory工作流<br/>4个MCP工具<br/>长期记忆管理"]
-        Database["📚 database工作流<br/>4个MCP工具<br/>知识库管理"]
+flowchart TB
+    subgraph Streams["🌊 工作流系统"]
+        Chat["💬 chat工作流<br/>24个MCP工具"]
+        Desktop["🖥️ desktop工作流<br/>17个MCP工具"]
+        Tools["🔧 tools工作流<br/>4个MCP工具"]
+        Memory["🧠 memory工作流<br/>4个MCP工具"]
+        Database["📚 database工作流<br/>4个MCP工具"]
         Device["📱 device工作流<br/>设备AI交互"]
     end
     
-    style Streams fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
-    style Chat fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
-    style Desktop fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
-    style Tools fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
-    style Memory fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
-    style Database fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
-    style Device fill:#95A5A6,stroke:#7F8C8D,stroke-width:2px,color:#fff
+    style Streams fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style Chat fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style Desktop fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style Tools fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    style Memory fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
+    style Database fill:#E0F2F1,stroke:#00695C,stroke-width:2px
+    style Device fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
 ```
 
 ### 1. chat 工作流
@@ -286,6 +294,14 @@ flowchart LR
 - ✅ 完整的群管理功能
 - ✅ 消息历史缓存（5分钟自动清理）
 
+**使用示例**：
+```javascript
+// 在插件中调用 chat 工作流的 MCP 工具
+const stream = await this.getStream('chat');
+// 通过 MCP 工具调用群管理功能
+// 例如：at、mute、setAdmin 等
+```
+
 ### 2. desktop 工作流
 
 **文件**: `core/system-Core/stream/desktop.js`  
@@ -305,6 +321,14 @@ flowchart LR
 - Windows系统优化
 - 自动进程清理（每30秒）
 - 工作区：桌面目录
+
+**使用示例**：
+```javascript
+// 在插件中调用 desktop 工作流
+const stream = await this.getStream('desktop');
+// 通过 MCP 工具调用桌面操作
+// 例如：screenshot、open_browser、execute_powershell 等
+```
 
 ### 3. tools 工作流
 
@@ -340,6 +364,19 @@ flowchart LR
 - 向量检索支持
 - 记忆目录：`~/.xrk/memory`
 
+**使用场景**：
+- 保存用户偏好和习惯
+- 记录重要对话内容
+- 跨会话信息持久化
+
+**使用示例**：
+```javascript
+// 在插件中调用 memory 工作流
+const stream = await this.getStream('memory');
+// 通过 MCP 工具管理长期记忆
+// query_memory、save_memory、list_memories、delete_memory
+```
+
 ### 5. database 工作流
 
 **文件**: `core/system-Core/stream/database.js`  
@@ -355,6 +392,19 @@ flowchart LR
 - 知识库管理
 - 关键词搜索
 - 向量检索支持
+
+**使用场景**：
+- 企业知识库管理
+- 文档检索和问答
+- 专业知识存储
+
+**使用示例**：
+```javascript
+// 在插件中调用 database 工作流
+const stream = await this.getStream('database');
+// 通过 MCP 工具管理知识库
+// query_knowledge、save_knowledge、list_knowledge、delete_knowledge
+```
 
 ### 6. device 工作流
 
@@ -499,6 +549,17 @@ flowchart LR
 **特性**：
 - ✅ GSUIDCORE协议支持
 - ✅ 事件转换
+- ✅ 与GSUIDCORE框架无缝集成
+- ✅ 支持多种消息类型
+
+**配置示例**：
+```yaml
+# config/server_config/gsuidcore.yaml
+bots:
+  - uin: "123456789"
+    name: "GSUIDCORE机器人"
+    api_url: "http://127.0.0.1:5700"
+```
 
 ### 3. QBQBot Tasker
 
@@ -507,6 +568,17 @@ flowchart LR
 **特性**：
 - ✅ QBQBot协议支持
 - ✅ 事件转换
+- ✅ 与QBQBot框架集成
+- ✅ 支持HTTP API调用
+
+**配置示例**：
+```yaml
+# config/server_config/qbqbot.yaml
+bots:
+  - uin: "123456789"
+    name: "QBQBot机器人"
+    api_url: "http://127.0.0.1:5700"
+```
 
 ### 4. stdin Tasker
 
@@ -516,6 +588,29 @@ flowchart LR
 - ✅ 标准输入处理
 - ✅ 命令执行
 - ✅ 事件触发
+- ✅ 虚拟Bot支持
+- ✅ HTTP API集成
+
+**使用场景**：
+- 控制台命令执行
+- 脚本自动化
+- 测试和调试
+- 远程控制
+
+**使用示例**：
+```bash
+# 通过HTTP API发送命令
+curl -X POST http://localhost:8080/api/stdin/command \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "#状态",
+    "user_info": {
+      "user_id": "admin",
+      "nickname": "管理员",
+      "role": "master"
+    }
+  }'
+```
 
 ---
 
@@ -569,6 +664,40 @@ flowchart LR
 - 响应式布局：适配桌面与移动端浏览器，侧边导航 + 顶部状态栏结构。  
 - 实时性：通过 WebSocket 与轮询结合，实时刷新系统状态面板与 stdin 输出等信息。  
 - 性能与体验：路由级懒加载、错误边界与统一 Toast 提示，尽量减少页面阻塞。
+
+**访问方式**：
+- 本地访问：`http://localhost:8080/xrk/`
+- 远程访问：`http://your-server-ip:8080/xrk/`
+- 需要认证：首次访问需要登录，或使用 API Key 认证
+
+**功能模块详解**：
+
+1. **系统概览**
+   - 实时监控：CPU、内存、磁盘、网络流量
+   - 历史数据：24小时系统指标曲线图
+   - Bot状态：在线机器人列表、运行时长
+   - 工作流统计：已加载工作流数量、MCP工具数量
+   - 插件统计：已加载插件数量、定时任务数量
+
+2. **AI对话**
+   - 多工作流支持：可切换不同的工作流（chat/desktop/tools等）
+   - 多模态输入：支持文本、图片、语音输入
+   - 流式输出：实时显示AI回复内容
+   - 调试模式：查看原始请求/响应、token消耗
+
+3. **配置管理**
+   - 表单模式：基于Schema的可视化表单编辑
+   - JSON模式：直接编辑JSON配置
+   - 配置验证：实时验证配置格式和内容
+   - 一键备份：配置修改前自动备份
+   - 子配置编辑：支持编辑SystemConfig的子配置
+
+4. **API调试**
+   - 接口列表：自动发现所有HTTP API接口
+   - 请求构建：可视化构建HTTP请求
+   - 响应查看：格式化显示JSON响应
+   - WebSocket调试：支持WebSocket连接测试
+   - 历史记录：保存最近调用的API请求
 
 ---
 

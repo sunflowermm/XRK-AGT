@@ -1,6 +1,19 @@
-## BotUtil 工具类文档（src/utils/botutil.js）
+# BotUtil 工具类文档
 
-`BotUtil` 是 XRK-AGT 的核心工具类，提供 **日志封装、缓存管理、文件系统操作、网络请求、批处理与重试、时间和大小格式化、消息辅助等** 能力，被 `Bot`、Tasker、插件和 API 广泛使用。
+> **文件位置**: `src/utils/botutil.js`  
+> **说明**：`BotUtil` 是 XRK-AGT 的核心工具类，提供 **日志封装、缓存管理、文件系统操作、网络请求、批处理与重试、时间和大小格式化、消息辅助等** 能力，被 `Bot`、Tasker、插件和 API 广泛使用。
+
+## 📋 目录
+
+- [基本信息](#基本信息)
+- [Map 与缓存管理](#map-与缓存管理)
+- [日志与字符串工具](#日志与字符串工具)
+- [文件系统操作](#文件系统操作)
+- [网络请求](#网络请求)
+- [批处理与重试](#批处理与重试)
+- [时间与大小格式化](#时间与大小格式化)
+- [消息辅助](#消息辅助)
+- [使用示例](#使用示例)
 
 ---
 
@@ -46,20 +59,19 @@ classDiagram
         +getMany(keys)
         +cleanExpired()
         +destroy()
-        +maxSize
-        +ttl
     }
     
     class MemoryCache {
-        +Map存储
         +TTL过期
+        +自动清理
     }
     
-    BotUtil --> ExtendedMap : creates
-    BotUtil --> MemoryCache : uses
+    BotUtil --> ExtendedMap : 创建
+    BotUtil --> MemoryCache : 使用
     
-    note for ExtendedMap "支持TTL、LRU驱逐<br/>批量操作能力"
-    note for MemoryCache "轻量级KV缓存<br/>用于日志ID格式化等"
+    style BotUtil fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style ExtendedMap fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style MemoryCache fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
 ```
 
 ### 扩展 Map：`getMap` 与 `deleteMap`
@@ -133,8 +145,6 @@ classDiagram
 | `exec(cmd, opts?)` | 执行系统命令（字符串或 `[cmd, ...args]`），捕获 stdout/stderr，并输出日志 |
 | `sleep(time, promise?)` | 延迟一段时间，或与另一个 Promise 竞争超时 |
 | `promiseEvent(emitter, event, errorEvent?, timeout?)` | 等待 EventEmitter 上的事件，支持错误事件和超时 |
-| `retry(func, options?)` | 按次数/延迟/指数退避重试异步函数 |
-| `batch(items, handler, options?)` | 按批次和并发度处理一组任务，支持进度回调 |
 
 ---
 
@@ -173,6 +183,123 @@ classDiagram
 
 - `makemsg(e, messages, title, description)`：代理到 `BotUtil.makeMsg`。  
 - `制作聊天记录(e, messages, title, description)`：代理到 `BotUtil.makeChatRecord`。
+
+---
+
+## 使用示例
+
+### 缓存管理
+
+```javascript
+import BotUtil from '#utils/botutil.js';
+
+// 获取命名Map（带TTL和LRU）
+const cache = BotUtil.getMap('my-cache', {
+  maxSize: 1000,
+  ttl: 3600000  // 1小时
+});
+
+// 批量写入
+cache.setMany([
+  ['key1', 'value1'],
+  ['key2', 'value2']
+]);
+
+// 批量读取
+const values = cache.getMany(['key1', 'key2']);
+
+// 轻量缓存
+BotUtil.cache('key', 'value', 60000);  // 缓存1分钟
+const value = BotUtil.cache('key');    // 获取缓存
+```
+
+### 文件操作
+
+```javascript
+// 读取文件
+const content = await BotUtil.readFile('config.yaml');
+
+// 写入文件（自动创建目录）
+await BotUtil.writeFile('data/output.txt', 'content');
+
+// 检查文件是否存在
+if (await BotUtil.fileExists('data/file.txt')) {
+  // 文件存在
+}
+
+// 文件转URL（用于发送图片等）
+const url = await BotUtil.fileToUrl(buffer, {
+  name: 'image.png',
+  ttl: 3600000
+});
+```
+
+### 网络请求
+
+```javascript
+// 带重试的HTTP请求
+const response = await BotUtil.retry(
+  async () => {
+    const res = await fetch('https://api.example.com/data');
+    if (!res.ok) throw new Error('Request failed');
+    return res.json();
+  },
+  {
+    maxRetries: 3,
+    delay: 1000,
+    exponential: true
+  }
+);
+```
+
+### 批处理
+
+```javascript
+// 批量处理任务
+const items = [1, 2, 3, 4, 5];
+const results = await BotUtil.batch(
+  items,
+  async (item) => {
+    // 处理单个item
+    return await processItem(item);
+  },
+  {
+    batchSize: 2,      // 每批2个
+    concurrency: 3,    // 并发3个
+    onProgress: (current, total) => {
+      console.log(`进度: ${current}/${total}`);
+    }
+  }
+);
+```
+
+### 日志输出
+
+```javascript
+// 生成日志ID
+const logId = BotUtil.makeLogID('123456');
+// 输出: [123456] (带颜色)
+
+// 输出日志
+BotUtil.makeLog('info', '这是一条信息', '123456');
+BotUtil.makeLog('error', '错误信息', '123456', true);  // 包含堆栈
+```
+
+### 时间格式化
+
+```javascript
+// 时间差格式化
+const diff = BotUtil.getTimeDiff(startTime, endTime);
+// 输出: "2天 3小时 15分钟 30秒"
+
+// 文件大小格式化
+const size = BotUtil.formatFileSize(1024 * 1024 * 5);
+// 输出: "5.00 MB"
+
+// 日期格式化
+const date = BotUtil.formatDate(new Date(), 'YYYY-MM-DD HH:mm:ss');
+// 输出: "2026-02-06 12:30:45"
+```
 
 ---
 

@@ -38,66 +38,44 @@
 
 ```mermaid
 flowchart TB
-    subgraph External["外部AI平台"]
+    subgraph External["👥 外部AI平台"]
         XiaoZhi["小智AI"]
         Claude["Claude"]
         Doubao["豆包"]
     end
 
-    subgraph XRKAGT["XRK-AGT系统"]
-        subgraph Streams["工作流层"]
-            ChatStream["chat工作流<br/>聊天功能"]
-            DesktopStream["desktop工作流<br/>桌面操作"]
-            DeviceStream["device工作流<br/>设备控制"]
-        end
-
-        subgraph MCPServer["MCP服务器"]
-            ToolRegistry["工具注册表<br/>MCPServer.tools"]
-            CoreTools["核心工具<br/>system.info<br/>time.now<br/>util.uuid<br/>util.hash"]
-        end
-
-        subgraph HTTPAPI["HTTP API层"]
-            GETTools["GET /api/mcp/tools<br/>获取工具列表"]
-            POSTCall["POST /api/mcp/tools/call<br/>调用工具"]
-            SSEConnect["GET /api/mcp/connect<br/>SSE连接"]
-            WSConnect["WS /mcp/ws<br/>WebSocket连接"]
-        end
-
-        StreamLoader["StreamLoader<br/>工作流加载器"]
+    subgraph Streams["🌊 工作流层"]
+        ChatStream["chat工作流"]
+        DesktopStream["desktop工作流"]
+        DeviceStream["device工作流"]
     end
 
-    ChatStream --> ToolRegistry
-    DesktopStream --> ToolRegistry
-    DeviceStream --> ToolRegistry
-    StreamLoader --> ChatStream
-    StreamLoader --> DesktopStream
-    StreamLoader --> DeviceStream
-    ToolRegistry --> GETTools
-    ToolRegistry --> POSTCall
-    ToolRegistry --> SSEConnect
-    ToolRegistry --> WSConnect
-    XiaoZhi --> GETTools
-    Claude --> POSTCall
-    Doubao --> WSConnect
-    
-    style External fill:#E6F3FF
-    style Streams fill:#FFE6CC
-    style MCPServer fill:#90EE90
-    style HTTPAPI fill:#87CEEB
-    DesktopStream -->|自动注册| ToolRegistry
-    DeviceStream -->|自动注册| ToolRegistry
-    CoreTools -->|内置工具| ToolRegistry
+    subgraph MCPServer["🔧 MCP服务器"]
+        ToolRegistry["工具注册表"]
+        CoreTools["核心工具"]
+    end
 
-    StreamLoader -->|initMCP| MCPServer
-    MCPServer -->|工具列表| HTTPAPI
+    subgraph HTTPAPI["🌐 HTTP API层"]
+        GETTools["GET /api/mcp/tools"]
+        POSTCall["POST /api/mcp/tools/call"]
+        SSEConnect["GET /api/mcp/connect"]
+        WSConnect["WS /mcp/ws"]
+    end
 
-    XiaoZhi -->|HTTP/WS| HTTPAPI
-    Claude -->|HTTP/WS| HTTPAPI
-    Doubao -->|HTTP/WS| HTTPAPI
+    StreamLoader["StreamLoader<br/>工作流加载器"]
 
-    HTTPAPI -->|调用工具| MCPServer
-    MCPServer -->|执行结果| HTTPAPI
-    HTTPAPI -->|返回结果| External
+    External --> HTTPAPI
+    StreamLoader --> Streams
+    Streams --> MCPServer
+    MCPServer --> HTTPAPI
+    HTTPAPI --> MCPServer
+    MCPServer --> Streams
+
+    style External fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style Streams fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style MCPServer fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style HTTPAPI fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    style StreamLoader fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
 ```
 
 ### 数据流图

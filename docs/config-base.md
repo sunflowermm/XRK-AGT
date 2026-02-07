@@ -14,6 +14,8 @@
 - ✅ **路径操作**：支持点号路径和数组下标（`get/set/delete/append/remove`）
 - ✅ **多文件配置**：支持一个配置包含多个子文件（如 renderer 包含 puppeteer 和 playwright）
 - ✅ **Schema 严格检查**：在构造阶段校验 `default/enum/itemType` 与 `type` 是否匹配，错误会直接抛出，避免运行期才发现类型问题
+- ✅ **扁平化支持**：支持配置扁平化，便于前端编辑
+- ✅ **类型安全**：完整的类型定义和验证，减少配置错误
 
 ---
 
@@ -28,29 +30,29 @@ flowchart TB
     end
     
     subgraph ConfigBase["ConfigBase基类"]
-        Read["read()<br/>读取配置"]
-        Write["write()<br/>写入配置"]
-        Get["get(keyPath)<br/>路径读取"]
-        Set["set(keyPath, value)<br/>路径写入"]
-        Validate["validate()<br/>Schema验证"]
-        Cache["配置缓存<br/>5秒TTL"]
+        Read["读取配置"]
+        Write["写入配置"]
+        Get["路径读取"]
+        Set["路径写入"]
+        Validate["Schema验证"]
+        Cache["配置缓存"]
     end
     
     subgraph File["文件系统"]
         YAML["YAML文件"]
         JSON["JSON文件"]
-        Backup["备份文件<br/>*.backup.时间戳"]
+        Backup["备份文件"]
     end
     
-    App -->|调用| ConfigBase
-    ConfigBase -->|读写| File
-    ConfigBase -->|自动备份| Backup
-    ConfigBase -->|缓存| Cache
+    App --> ConfigBase
+    ConfigBase --> File
+    ConfigBase --> Backup
+    ConfigBase --> Cache
     
-    style App fill:#E6F3FF
-    style ConfigBase fill:#90EE90
-    style File fill:#FFE6CC
-    style Cache fill:#FFD700
+    style App fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style ConfigBase fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style File fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style Cache fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
 ```
 
 ---
@@ -130,29 +132,33 @@ constructor(metadata = {})
 
 ```mermaid
 flowchart TB
-    subgraph MultiFile["多文件配置示例"]
-        Config["RendererConfig<br/>ConfigBase子类"]
-        Default["默认配置<br/>renderers/*/config_default.yaml"]
-        User["用户配置<br/>data/server_bots/{port}/renderers/*/config.yaml"]
+    subgraph Config["RendererConfig"]
+        Base["ConfigBase子类"]
     end
     
-    subgraph Files["配置文件"]
-        Puppeteer["puppeteer.yaml"]
-        Playwright["playwright.yaml"]
+    subgraph Default["默认配置"]
+        DefPuppeteer["puppeteer.yaml"]
+        DefPlaywright["playwright.yaml"]
     end
     
-    Config -->|读取| Default
-    Config -->|读取| User
-    Default -->|合并| Puppeteer
-    User -->|合并| Puppeteer
-    Default -->|合并| Playwright
-    User -->|合并| Playwright
-    Config -->|返回| Result["合并对象<br/>{puppeteer: {...}, playwright: {...}}"]
+    subgraph User["用户配置"]
+        UserPuppeteer["puppeteer.yaml"]
+        UserPlaywright["playwright.yaml"]
+    end
     
-    style Config fill:#90EE90
-    style Default fill:#E6F3FF
-    style User fill:#FFE6CC
-    style Result fill:#FFD700
+    subgraph Result["合并结果"]
+        Merged["{puppeteer: {...}, playwright: {...}}"]
+    end
+    
+    Base --> Default
+    Base --> User
+    Default --> Merged
+    User --> Merged
+    
+    style Config fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style Default fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style User fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style Result fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
 ```
 
 **配置方式**：
@@ -186,20 +192,20 @@ flowchart TB
 ```mermaid
 flowchart TB
     A["validate(data)"] --> B{"检查required字段"}
-    B -->|缺失| C["返回错误<br/>{valid: false, errors: [...]}"]
-    B -->|存在| D{"检查字段类型<br/>string/number/boolean/array/object"}
+    B -->|缺失| C["返回错误"]
+    B -->|存在| D{"检查字段类型"}
     D -->|类型错误| C
-    D -->|类型正确| E{"检查范围/格式<br/>min/max/pattern/enum"}
+    D -->|类型正确| E{"检查范围/格式"}
     E -->|不符合| C
-    E -->|符合| F{"customValidate存在?"}
+    E -->|符合| F{"自定义验证?"}
     F -->|是| G["执行自定义验证"]
-    F -->|否| H["返回成功<br/>{valid: true}"]
+    F -->|否| H["返回成功"]
     G -->|失败| C
     G -->|成功| H
     
-    style A fill:#E6F3FF
-    style H fill:#90EE90
-    style C fill:#FFB6C1
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style H fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style C fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
 ```
 
 `validate(data)` 提供轻量、可扩展的校验机制：
@@ -276,12 +282,36 @@ await config.write({ puppeteer: {...}, playwright: {...} });
 
 Web 前端可通过 HTTP API 调用 `ConfigBase` 子类的方法：
 
-- `GET /api/config/:name/read?path=...` - 读取配置
-- `POST /api/config/:name/batch-set` - 批量扁平写入
-- `GET /api/config/:name/flat-structure` - 获取扁平化结构
-- `POST /api/config/:name/validate` - 校验配置
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/config/:name/read` | GET | 读取配置（支持 `path` 参数读取子配置） |
+| `/api/config/:name/batch-set` | POST | 批量扁平写入 |
+| `/api/config/:name/flat-structure` | GET | 获取扁平化结构（用于前端表单） |
+| `/api/config/:name/validate` | POST | 校验配置 |
+| `/api/config/:name/write` | POST | 写入配置 |
+| `/api/config/:name/backup` | POST | 备份配置 |
 
-详见 [HTTP API 文档](http-api.md) 和配置管理相关 API。
+**使用示例**：
+```javascript
+// 前端调用示例
+// 读取配置
+const response = await fetch('/api/config/server/read');
+const data = await response.json();
+
+// 批量设置配置（扁平化）
+await fetch('/api/config/server/batch-set', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    flat: {
+      'server.host': '0.0.0.0',
+      'server.port': 8080
+    }
+  })
+});
+```
+
+详见 [system-Core 配置管理API](system-core.md#3-配置管理api-configjs) 和 [HTTP API 文档](http-api.md)。
 
 ---
 

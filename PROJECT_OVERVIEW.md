@@ -44,51 +44,46 @@ XRK-AGT 是向日葵工作室基于 **Node.js 24.12** 打造的多平台、多Ta
 
 ```mermaid
 flowchart TB
-    subgraph Runtime["运行核心层"]
-        Bot["Bot主类<br/>src/bot.js<br/>统一管理所有组件"]
+    subgraph Runtime["⚙️ 运行核心层"]
+        Bot["🤖 Bot主类<br/>统一管理所有组件"]
     end
     
-    subgraph Infrastructure["基础设施层（辅助层）"]
-        Loaders["加载器<br/>TaskerLoader/PluginsLoader<br/>ApiLoader/StreamLoader"]
-        BaseClasses["基类库<br/>plugin/HttpApi/AIStream<br/>Renderer/ConfigBase"]
-        HTTPBusiness["HTTP业务层<br/>重定向/CDN/反向代理增强"]
+    subgraph Infrastructure["🏗️ 基础设施层"]
+        Loaders["📚 加载器"]
+        BaseClasses["📦 基类库"]
+        HTTPBusiness["💼 HTTP业务层"]
     end
     
-    subgraph Tasker["任务层（Tasker）"]
+    subgraph Tasker["📡 任务层"]
         Taskers["各平台Tasker<br/>协议转换"]
     end
     
-    subgraph Events["事件系统"]
+    subgraph Events["📢 事件系统"]
         Listeners["事件监听器<br/>去重/标准化"]
     end
     
-    subgraph Business["业务层"]
-        Plugins["业务插件"]
-        APIs["HTTP API"]
-        Streams["工作流"]
+    subgraph Business["💼 业务层"]
+        Plugins["🔌 业务插件"]
+        APIs["📡 HTTP API"]
+        Streams["🌊 工作流"]
     end
     
-    Bot --> Loaders
-    Bot --> HTTPBusiness
-    Loaders --> Taskers
-    Loaders --> Listeners
-    Loaders --> Plugins
-    Loaders --> APIs
-    Loaders --> Streams
-    Taskers --> Listeners
-    Listeners --> Plugins
+    Bot --> Infrastructure
+    Infrastructure --> Tasker
+    Infrastructure --> Events
+    Infrastructure --> Business
+    Tasker --> Events
+    Events --> Business
     
-    style Runtime fill:#E6F3FF
-    style Infrastructure fill:#FFE6CC
-    style Tasker fill:#90EE90
-    style Events fill:#87CEEB
-    style Business fill:#FFB6C1
+    style Runtime fill:#FFF3E0,stroke:#F57C00,stroke-width:3px
+    style Infrastructure fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style Tasker fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
+    style Events fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
+    style Business fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    style Bot fill:#FFF9C4,stroke:#F9A825,stroke-width:3px
 ```
 
-**架构优势**：
-- 清晰的层次划分，职责明确
-- 基础设施与业务分离，易于维护
-- 基于基类设计，便于扩展
+**架构优势**：清晰的层次划分、基础设施与业务分离、基于基类设计便于扩展
 
 ### 2. Node.js 24.12 新特性应用
 

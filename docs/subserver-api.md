@@ -7,6 +7,14 @@ XRK-AGT Python子服务端提供AI生态相关的服务，包括：
 - **向量服务**：文本向量化、向量检索、向量数据库管理
 - **（规划中）更多 Python AI 生态能力**：仅在实现后再写入文档，避免文档与代码脱节
 
+### 核心优势
+
+- ✅ **Python AI生态**：充分利用Python丰富的AI库（LangChain、sentence-transformers、ChromaDB等）
+- ✅ **统一接口**：通过HTTP API与主服务端通信，接口清晰简洁
+- ✅ **自动部署**：Docker构建时自动包含子服务端，无需手动配置
+- ✅ **高性能**：向量服务内置缓存，支持批量处理
+- ✅ **可扩展**：易于扩展新的Python AI能力
+
 ## 架构设计
 
 ```
@@ -156,6 +164,33 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
 - 默认模型：`paraphrase-multilingual-MiniLM-L12-v2`（384维）
 - 支持多语言文本向量化
 - 内置缓存机制，提升重复文本处理性能
+- 首次加载模型时会自动下载（支持代理配置）
+
+**性能优化**：
+- LRU缓存：相同文本直接返回缓存结果
+- 批量处理：支持一次处理多个文本，提升效率
+- 模型懒加载：首次使用时才加载模型，减少启动时间
+
+**使用示例**：
+```javascript
+// 在主服务端调用向量化接口
+const result = await Bot.callSubserver('/api/vector/embed', {
+  body: {
+    texts: ['你好', '世界', 'XRK-AGT']
+  }
+});
+
+// 结果
+// {
+//   success: true,
+//   embeddings: [
+//     { text: '你好', embedding: [0.1, 0.2, ...], dimension: 384 },
+//     { text: '世界', embedding: [0.3, 0.4, ...], dimension: 384 },
+//     { text: 'XRK-AGT', embedding: [0.5, 0.6, ...], dimension: 384 }
+//   ],
+//   count: 3
+// }
+```
 
 ### POST /api/vector/search
 
@@ -191,6 +226,34 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
 - 支持集合（collection）管理，可按业务场景隔离数据
 - 返回相似度分数（0-1），分数越高表示越相似
 - 支持元数据过滤和检索
+- 数据持久化到本地文件系统
+
+**使用场景**：
+- 记忆检索：根据用户问题检索相关历史对话
+- 知识库检索：在知识库中查找相关信息
+- 相似内容推荐：基于向量相似度推荐相关内容
+
+**使用示例**：
+```javascript
+// 在主服务端调用向量检索
+const result = await Bot.callSubserver('/api/vector/search', {
+  body: {
+    query: '用户偏好设置',
+    collection: 'memory_group123',
+    top_k: 5
+  }
+});
+
+// 结果按相似度排序，score 越高越相关
+// {
+//   success: true,
+//   results: [
+//     { id: 'doc_1', text: '用户喜欢使用深色模式', score: 0.95, metadata: {} },
+//     { id: 'doc_2', text: '用户偏好简洁界面', score: 0.87, metadata: {} }
+//   ],
+//   count: 2
+// }
+```
 
 ### POST /api/vector/upsert
 

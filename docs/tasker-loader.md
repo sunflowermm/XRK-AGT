@@ -34,24 +34,22 @@
 
 ```mermaid
 flowchart TB
-    A[TaskerLoader.load] --> B[初始化summary统计对象]
-    B --> C[getAdapterFiles 扫描目录]
-    C --> D[getAdapterFiles 扫描 core/*/tasker]
-    D --> E[筛选.js文件]
-    E --> F[转换为file://URL]
-    F --> G[批量动态导入]
-    G --> H{import结果}
-    H -->|成功| I[summary.loaded++]
-    H -->|失败| J[summary.failed++<br/>记录错误]
-    I --> K[统计注册数量<br/>bot.tasker.length]
-    J --> K
-    K --> L[输出加载日志]
-    L --> M[返回summary]
+    A["TaskerLoader.load"] --> B["初始化统计对象"]
+    B --> C["扫描core/*/tasker"]
+    C --> D["筛选.js文件"]
+    D --> E["批量动态导入"]
+    E --> F{"导入结果"}
+    F -->|成功| G["统计加载成功"]
+    F -->|失败| H["记录错误"]
+    G --> I["统计注册数量"]
+    H --> I
+    I --> J["输出日志"]
+    J --> K["返回summary"]
     
-    style A fill:#E6F3FF
-    style G fill:#FFE6CC
-    style M fill:#90EE90
-    style J fill:#FFB6C1
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style K fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style H fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
 ```
 
 **步骤说明**：
@@ -126,17 +124,65 @@ flowchart TB
 
 ## 扩展与调试建议
 
-- **新增 Tasker**
-  - 在任意 core 目录的 `tasker` 子目录中新建 `XXX.js`（如 `core/my-core/tasker/MyTasker.js`）。
-  - 在文件内：
-    - 通过 `Bot.tasker.push(new XXXTasker())` 注册 Tasker。
-    - 在 `load()` 中向 `Bot.wsf` 映射对应 WebSocket 路径。
-    - 在 `message()` 中解析上报并调用 `Bot.em`。
-  - 重启或通过相应命令触发 Tasker 重载后，`TaskerLoader.load()` 会自动发现。
+### 新增 Tasker
 
-- **调试加载问题**
-  - 查看启动日志中 `TaskerLoader` 名下的输出。
-  - 若 `failed > 0`，可从 `summary.errors` 或控制台日志中找到对应错误。
-  - 注意 Tasker 文件必须是 ES Module（`export` 语法），并确保所有依赖可用。
+**步骤**：
+1. 在任意 core 目录的 `tasker` 子目录中新建 `XXX.js`（如 `core/my-core/tasker/MyTasker.js`）
+2. 在文件内：
+   - 通过 `Bot.tasker.push(new XXXTasker())` 注册 Tasker
+   - 在 `load()` 中向 `Bot.wsf` 映射对应 WebSocket 路径
+   - 在 `message()` 中解析上报并调用 `Bot.em`
+3. 重启或通过相应命令触发 Tasker 重载后，`TaskerLoader.load()` 会自动发现
+
+**代码示例**：
+```javascript
+// core/my-core/tasker/MyTasker.js
+export default class MyTasker {
+  constructor() {
+    this.id = 'mytasker';
+    this.name = 'MyTasker';
+  }
+
+  async load() {
+    // 注册 WebSocket 路径
+    Bot.wsf['/ws/mytasker'] = (ws, req) => {
+      ws.on('message', (msg) => this.message(msg, ws));
+    };
+  }
+
+  async message(wsMessage, ws) {
+    const data = JSON.parse(wsMessage);
+    // 转换为统一事件格式
+    const e = {
+      tasker: 'mytasker',
+      post_type: 'message',
+      message_type: 'group',
+      user_id: data.user_id,
+      group_id: data.group_id,
+      msg: data.message,
+      time: Date.now()
+    };
+    // 触发事件
+    Bot.em('mytasker.message.group.normal', e);
+  }
+}
+
+// 注册 Tasker
+Bot.tasker.push(new MyTasker());
+```
+
+### 调试加载问题
+
+- 查看启动日志中 `TaskerLoader` 名下的输出
+- 若 `failed > 0`，可从 `summary.errors` 或控制台日志中找到对应错误
+- 注意 Tasker 文件必须是 ES Module（`export` 语法），并确保所有依赖可用
+
+---
+
+## 相关文档
+
+- **[Tasker 底层规范](tasker-base-spec.md)** - Tasker 基础接口规范
+- **[OneBotv11 Tasker](tasker-onebotv11.md)** - OneBotv11 Tasker 完整实现示例
+- **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 
 

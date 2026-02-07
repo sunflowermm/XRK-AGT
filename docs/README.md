@@ -20,66 +20,51 @@ XRK-AGT 采用清晰的分层架构，各层职责如下：
 
 ```mermaid
 flowchart TB
-    subgraph Clients["👥 外部客户端 / Chatbot 入口"]
-        direction LR
-        QQ["📱 QQ / OneBotv11"]
-        ChatbotClient["💬 Chatbot 客户端<br/>Bot 平台"]
-        WebUI["🌐 XRK Web 控制台"]
-        ThirdAPI["🔌 第三方 API 调用"]
+    subgraph Clients["👥 外部客户端"]
+        QQ["📱 QQ/OneBotv11"]
+        Chatbot["💬 Chatbot客户端"]
+        WebUI["🌐 Web控制台"]
+        API["🔌 HTTP客户端"]
     end
 
     subgraph Runtime["⚙️ 运行核心层"]
-        direction TB
-        Bot["🤖 Bot 主类<br/>src/bot.js<br/>统一管理所有组件<br/>HTTP/WS/事件总线"]
+        Bot["🤖 Bot主类<br/>HTTP/WS/事件总线"]
     end
 
-    subgraph Infrastructure["🏗️ 基础设施层（辅助层）"]
-        direction TB
-        Loaders["📚 加载器<br/>TaskerLoader<br/>PluginsLoader<br/>ApiLoader<br/>StreamLoader<br/>ListenerLoader"]
-        BaseClasses["📦 基类库<br/>plugin/HttpApi/AIStream<br/>Renderer/ConfigBase<br/>EventListenerBase"]
+    subgraph Infrastructure["🏗️ 基础设施层"]
+        Loaders["📚 加载器"]
+        BaseClasses["📦 基类库"]
     end
 
-    subgraph Tasker["📡 任务层（Tasker）"]
-        direction TB
-        Taskers["各平台 Tasker<br/>📱 OneBotv11<br/>⌨️ stdin<br/>🔧 自定义"]
+    subgraph Tasker["📡 任务层"]
+        Taskers["各平台Tasker<br/>协议转换"]
     end
 
     subgraph Events["📢 事件系统"]
-        direction TB
-        Listeners["👂 事件监听器<br/>onebot/device/stdin<br/>去重/标准化/分发"]
+        Listeners["事件监听器<br/>去重/标准化/分发"]
     end
 
     subgraph Business["💼 业务层"]
-        direction LR
-        Plugins["🔌 业务插件<br/>core/*/plugin/"]
-        APIs["📡 HTTP API<br/>core/*/http/"]
-        Streams["🌊 工作流<br/>core/*/stream/"]
+        Plugins["🔌 业务插件"]
+        APIs["📡 HTTP API"]
+        Streams["🌊 工作流"]
     end
 
-    QQ --> Taskers
-    ChatbotClient --> Bot
-    WebUI --> Bot
-    ThirdAPI --> Bot
+    Clients --> Bot
+    Bot --> Infrastructure
+    Infrastructure --> Tasker
+    Infrastructure --> Events
+    Infrastructure --> Business
+    Tasker --> Events
+    Events --> Business
 
-    Bot --> Loaders
-    Bot --> BaseClasses
-    Loaders --> Taskers
-    Loaders --> Listeners
-    Loaders --> Plugins
-    Loaders --> APIs
-    Loaders --> Streams
-    Taskers --> Listeners
-    Listeners --> Plugins
-
-    style Clients fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
-    style Runtime fill:#FFA500,stroke:#CC8400,stroke-width:3px,color:#fff
-    style Infrastructure fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
-    style Tasker fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
-    style Events fill:#FFB6C1,stroke:#FF69B4,stroke-width:2px
-    style Business fill:#DDA0DD,stroke:#9370DB,stroke-width:2px
-    style Bot fill:#FFD700,stroke:#C49A00,stroke-width:3px,color:#000
-    style Loaders fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
-    style BaseClasses fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
+    style Clients fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style Runtime fill:#FFF3E0,stroke:#F57C00,stroke-width:3px
+    style Infrastructure fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style Tasker fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
+    style Events fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
+    style Business fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    style Bot fill:#FFF9C4,stroke:#F9A825,stroke-width:3px
 ```
 
 **层次说明**：
@@ -264,12 +249,3 @@ flowchart TB
 
 *最后更新：2026-02-06*
 
-## 🌍 跨平台支持
-
-XRK-AGT 完全支持 Windows、Linux 和 macOS 平台：
-
-- **Windows**: 使用 `start.bat` 或直接运行 `node app`
-- **Linux/macOS**: 使用 `start.sh` 或直接运行 `node app`
-- **Docker**: 使用 `docker-compose.yml` 或 `Dockerfile`，支持所有平台
-
-所有路径处理均使用 Node.js 的 `path` 模块，确保跨平台兼容性。启动脚本支持通过环境变量 `XRK_SERVER_PORT` 或命令行参数指定端口。

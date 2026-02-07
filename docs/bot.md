@@ -71,14 +71,13 @@ export default {
 ```mermaid
 flowchart TB
     subgraph Bot["🤖 Bot 核心类"]
-        direction LR
-        Service["🌐 服务入口<br/>Express/HTTP/HTTPS<br/>静态文件服务"]
-        API["📡 API与WebSocket<br/>动态加载<br/>路径路由"]
-        Tasker["⚙️ Tasker与多Bot<br/>实例管理<br/>子Bot聚合"]
-        Auth["🔐 认证与安全<br/>API Key验证<br/>白名单/本地连接"]
-        Event["📢 事件系统<br/>统一入口<br/>逐级派发"]
-        Business["💼 HTTP业务层<br/>重定向/CDN<br/>负载均衡"]
-        Resource["📦 资源管理<br/>临时文件清理<br/>优雅关闭"]
+        Service["🌐 服务入口"]
+        API["📡 API与WebSocket"]
+        Tasker["⚙️ Tasker与多Bot"]
+        Auth["🔐 认证与安全"]
+        Event["📢 事件系统"]
+        Business["💼 HTTP业务层"]
+        Resource["📦 资源管理"]
     end
     
     Service --> API
@@ -88,14 +87,14 @@ flowchart TB
     Business --> Service
     Resource --> Service
     
-    style Bot fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
-    style Service fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
-    style API fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
-    style Tasker fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
-    style Auth fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
-    style Event fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
-    style Business fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
-    style Resource fill:#95A5A6,stroke:#7F8C8D,stroke-width:2px,color:#fff
+    style Bot fill:#E3F2FD,stroke:#1976D2,stroke-width:3px
+    style Service fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style API fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    style Tasker fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style Auth fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
+    style Event fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
+    style Business fill:#E0F2F1,stroke:#00695C,stroke-width:2px
+    style Resource fill:#F1F8E9,stroke:#558B2F,stroke-width:2px
 ```
 
 | 职责模块 | 说明 |

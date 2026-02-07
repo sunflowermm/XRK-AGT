@@ -37,76 +37,45 @@
 ```mermaid
 flowchart TB
     subgraph Clients["👥 客户端层"]
-        direction LR
         Browser["🌐 浏览器/Web前端"]
         Mobile["📱 移动端应用"]
-        ThirdAPI["🔌 第三方API调用"]
+        ThirdAPI["🔌 第三方API"]
         WSClient["💻 WebSocket客户端"]
-        SDK["📦 平台SDK<br/>OneBot等"]
     end
     
     subgraph Proxy["🔄 反向代理层（可选）"]
-        direction TB
-        HTTPProxy["🌐 HTTP代理服务器<br/>:80端口"]
-        HTTPSProxy["🔒 HTTPS代理服务器<br/>:443端口 + SNI"]
-        DomainRoute["📍 域名路由与路径重写<br/>多域名支持"]
+        HTTPProxy["HTTP代理 :80"]
+        HTTPSProxy["HTTPS代理 :443"]
+        DomainRoute["域名路由"]
     end
     
     subgraph Core["⚙️ 核心服务层"]
-        direction TB
-        Express["📦 Express应用<br/>中间件容器"]
-        HTTPServer["🌐 HTTP服务器<br/>动态端口"]
-        HTTPSServer["🔒 HTTPS服务器<br/>动态端口（可选）"]
-        WSServer["🔌 WebSocket服务器<br/>协议升级"]
+        Express["Express应用"]
+        HTTPServer["HTTP服务器"]
+        HTTPSServer["HTTPS服务器"]
+        WSServer["WebSocket服务器"]
     end
     
-    subgraph Middleware["🛠️ 中间件层（按顺序）"]
-        direction LR
-        Track["📝 请求追踪<br/>requestId"]
-        Compression["🗜️ 响应压缩<br/>Compression"]
-        Helmet["🛡️ 安全头<br/>Helmet"]
-        CORS["🌍 CORS跨域处理"]
-        Logging["📊 请求日志"]
-        RateLimit["🚦 速率限制"]
-        BodyParser["📦 请求体解析"]
-        Redirect["🔄 重定向检查<br/>HTTP业务层"]
+    subgraph Middleware["🛠️ 中间件层"]
+        Track["请求追踪"]
+        Compression["响应压缩"]
+        Helmet["安全头"]
+        CORS["CORS处理"]
+        Logging["请求日志"]
+        RateLimit["速率限制"]
     end
     
-    subgraph Routes["🔍 路由层（按优先级）"]
-        direction TB
-        SystemRoute["🔧 系统路由<br/>/status /health /metrics"]
-        FileRoute["📁 文件服务路由<br/>/File/*"]
-        APIRoute["📡 API路由<br/>/api/*"]
-        MediaRoute["💾 数据静态服务<br/>/media /uploads"]
-        StaticRoute["📄 静态文件服务<br/>/www/*"]
+    subgraph Routes["🔍 路由层"]
+        SystemRoute["系统路由"]
+        APIRoute["API路由"]
+        StaticRoute["静态文件"]
     end
     
     subgraph Business["💼 业务层"]
-        direction LR
-        Plugins["🔌 插件系统<br/>PluginsLoader"]
-        Streams["🌊 工作流系统<br/>StreamLoader"]
-        Taskers["⚙️ Tasker层<br/>TaskerLoader"]
+        Plugins["🔌 插件系统"]
+        Streams["🌊 工作流系统"]
+        Taskers["📡 Tasker层"]
     end
-    
-    Browser --> HTTPProxy
-    Mobile --> HTTPSProxy
-    ThirdAPI --> Express
-    WSClient --> WSServer
-    SDK --> Express
-    
-    HTTPProxy --> HTTPServer
-    HTTPSProxy --> HTTPSServer
-    DomainRoute --> HTTPProxy
-    DomainRoute --> HTTPSProxy
-    
-    Express --> Track
-    Track --> Compression
-    Compression --> Helmet
-    Helmet --> CORS
-    CORS --> Logging
-    Logging --> RateLimit
-    RateLimit --> BodyParser
-    BodyParser --> Redirect
     
     Clients --> Proxy
     Proxy --> Core
@@ -114,26 +83,12 @@ flowchart TB
     Middleware --> Routes
     Routes --> Business
     
-    style Browser fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
-    style Mobile fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
-    style ThirdAPI fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
-    style WSClient fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
-    style SDK fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
-    style HTTPProxy fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
-    style HTTPSProxy fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
-    style DomainRoute fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
-    style Express fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
-    style HTTPServer fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
-    style HTTPSServer fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
-    style WSServer fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
-    style SystemRoute fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
-    style FileRoute fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
-    style APIRoute fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
-    style MediaRoute fill:#1ABC9C,stroke:#16A085,stroke-width:2px,color:#fff
-    style StaticRoute fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
-    style Plugins fill:#E67E22,stroke:#D35400,stroke-width:2px,color:#fff
-    style Streams fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
-    style Taskers fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
+    style Clients fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style Proxy fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style Core fill:#E8F5E9,stroke:#388E3C,stroke-width:3px
+    style Middleware fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    style Routes fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
+    style Business fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
 ```
 
 ### 数据流向

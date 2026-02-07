@@ -21,18 +21,18 @@
 ```mermaid
 flowchart TB
     subgraph Plugin["插件"]
-        Call["renderer.renderImage()"]
+        Call["调用渲染器"]
     end
     
     subgraph Renderer["Renderer基类"]
-        DealTpl["dealTpl()<br/>渲染模板"]
-        Cache["模板缓存<br/>this.html"]
-        Watch["文件监听<br/>chokidar"]
+        DealTpl["渲染模板"]
+        Cache["模板缓存"]
+        Watch["文件监听"]
     end
     
     subgraph Template["模板系统"]
-        HTML["HTML模板<br/>resources/html/*.html"]
-        ArtTemplate["art-template<br/>模板引擎"]
+        HTML["HTML模板"]
+        ArtTemplate["art-template"]
     end
     
     subgraph Engine["浏览器引擎"]
@@ -40,16 +40,15 @@ flowchart TB
         Playwright["Playwright"]
     end
     
-    Plugin -->|调用| Renderer
-    Renderer -->|读取| Template
-    Renderer -->|渲染| ArtTemplate
-    Renderer -->|生成HTML| Engine
-    Engine -->|截图| Output["图片/HTML/PDF"]
+    Plugin --> Renderer
+    Renderer --> Template
+    Renderer --> Engine
+    Engine --> Output["图片/HTML/PDF"]
     
-    style Plugin fill:#E6F3FF
-    style Renderer fill:#90EE90
-    style Template fill:#FFE6CC
-    style Engine fill:#87CEEB
+    style Plugin fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style Renderer fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style Template fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style Engine fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
 ```
 
 ---
@@ -85,22 +84,22 @@ constructor(data = {})
 将模板 + 数据渲染为 HTML 文件并返回路径。
 
 ```mermaid
-flowchart LR
-    A["dealTpl(name, data)"] --> B["计算输出路径<br/>./trash/html/name/saveId.html"]
+flowchart TB
+    A["dealTpl(name, data)"] --> B["计算输出路径"]
     B --> C{"模板已缓存?"}
     C -->|否| D["读取模板文件"]
     C -->|是| E["使用缓存"]
     D --> F["缓存模板内容"]
     F --> G["监听文件变动"]
     G --> E
-    E --> H["设置resPath<br/>./resources/"]
+    E --> H["设置resPath"]
     H --> I["art-template渲染"]
     I --> J["写入HTML文件"]
     J --> K["返回文件路径"]
     
-    style A fill:#E6F3FF
-    style I fill:#90EE90
-    style K fill:#FFD700
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style I fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    style K fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
 ```
 
 **参数**：
@@ -191,6 +190,22 @@ export default function (config) {
 2. **静态资源**：通过 `resPath` 引用静态资源（JS/CSS 放在相邻目录）
 3. **前后端协作**：前端关注模板与样式，后端通过 `dealTpl` 传入数据对象
 4. **复杂交互**：图表、动画等在前端 JS 中完成，渲染器负责首屏渲染和截图
+5. **性能优化**：模板文件监听自动清理缓存，修改后立即生效
+6. **错误处理**：渲染失败时返回错误信息，便于调试
+
+## 常见问题
+
+### Q: 模板文件修改后不生效？
+
+A: 检查文件监听是否正常工作，或手动调用 `renderer.clearCache()` 清理缓存。
+
+### Q: 如何引用静态资源？
+
+A: 在模板中使用 `{{resPath}}` 变量，会自动设置为 `./resources/` 路径。
+
+### Q: 支持哪些模板引擎？
+
+A: 目前使用 `art-template`，支持标准模板语法和自定义函数。
 
 ---
 

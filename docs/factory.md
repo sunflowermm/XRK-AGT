@@ -91,16 +91,21 @@ LLMFactory 负责管理所有大语言模型服务提供商，支持多种 LLM A
 
 #### 支持的提供商
 
-| 提供商 | 标识符 | 说明 | 接口地址 |
-|--------|--------|------|----------|
-| GPTGod | `gptgod` | GPTGod 大语言模型，支持识图功能 | `https://api.gptgod.online/v1` |
-| 火山引擎 | `volcengine` | 火山引擎豆包大模型 | `https://ark.cn-beijing.volces.com/api/v3` |
-| 小米 MiMo | `xiaomimimo` | 兼容 OpenAI API 的 MiMo 大语言模型（仅文本） | `https://api.xiaomimimo.com/v1` |
-| OpenAI | `openai` | OpenAI Chat Completions | `https://api.openai.com/v1` |
-| Gemini | `gemini` | Google Generative Language API | `https://generativelanguage.googleapis.com/v1beta` |
-| OpenAI 兼容 | `openai_compat` | 任意 OpenAI-like Chat Completions（可自定义 baseUrl） | 可配置 |
-| Anthropic | `anthropic` | Claude Messages API | `https://api.anthropic.com/v1` |
-| Azure OpenAI | `azure_openai` | Azure OpenAI（deployment + api-version 体系） | 可配置 |
+| 提供商 | 标识符 | 说明 | 接口地址 | 多模态支持 |
+|--------|--------|------|----------|-----------|
+| GPTGod | `gptgod` | GPTGod 大语言模型，支持识图功能 | `https://api.gptgod.online/v1` | ✅ 支持 |
+| 火山引擎 | `volcengine` | 火山引擎豆包大模型 | `https://ark.cn-beijing.volces.com/api/v3` | ✅ 支持 |
+| 小米 MiMo | `xiaomimimo` | 兼容 OpenAI API 的 MiMo 大语言模型（仅文本） | `https://api.xiaomimimo.com/v1` | ❌ 不支持 |
+| OpenAI | `openai` | OpenAI Chat Completions | `https://api.openai.com/v1` | ✅ 支持 |
+| Gemini | `gemini` | Google Generative Language API | `https://generativelanguage.googleapis.com/v1beta` | ✅ 支持 |
+| OpenAI 兼容 | `openai_compat` | 任意 OpenAI-like Chat Completions（可自定义 baseUrl） | 可配置 | 取决于后端 |
+| Anthropic | `anthropic` | Claude Messages API | `https://api.anthropic.com/v1` | ✅ 支持 |
+| Azure OpenAI | `azure_openai` | Azure OpenAI（deployment + api-version 体系） | 可配置 | ✅ 支持 |
+
+**多模态说明**：
+- 多模态能力由各家 LLM 自身的多模态接口提供
+- 支持图片识别、图片理解等功能
+- 通过 `messages` 数组中的 `image_url` 字段传递图片
 
 #### 基本用法
 

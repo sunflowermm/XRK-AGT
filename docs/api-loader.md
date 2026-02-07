@@ -37,32 +37,22 @@
 
 ```mermaid
 flowchart TB
-    A["ApiLoader.load"] --> B["扫描所有core/*/http目录"]
-    B --> C["getApiFiles递归扫描"]
-    C --> D["收集.js文件<br/>跳过.和_开头"]
-    D --> E["遍历每个文件"]
-    E --> F["loadApi加载单个API"]
-    F --> G["生成相对路径key"]
-    G --> H{"key是否已存在"}
-    H -->|是| I["unloadApi卸载旧API"]
-    H -->|否| J["构建file://URL"]
+    A["ApiLoader.load"] --> B["扫描core/*/http目录"]
+    B --> C["收集.js文件"]
+    C --> D["遍历文件"]
+    D --> E["loadApi加载"]
+    E --> F["动态导入模块"]
+    F --> G{"导出类型"}
+    G -->|类| H["实例化类"]
+    G -->|对象| I["包装为HttpApi"]
+    H --> J["校验并存储"]
     I --> J
-    J --> K["动态导入模块"]
-    K --> L{"导出类型"}
-    L -->|类| M["new module.default"]
-    L -->|对象| N["new HttpApi包装"]
-    M --> O["校验routes数组"]
-    N --> O
-    O --> P["确保getInfo方法存在"]
-    P --> Q["存入apis Map"]
-    Q --> R["sortByPriority排序"]
-    R --> S["过滤enable=false"]
-    S --> T["按priority排序"]
-    T --> U["loaded=true"]
+    J --> K["按优先级排序"]
+    K --> L["标记已加载"]
     
-    style A fill:#E6F3FF
-    style F fill:#FFE6CC
-    style U fill:#90EE90
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style L fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
 ```
 
 **步骤说明**：
@@ -181,25 +171,25 @@ flowchart TB
 ```mermaid
 flowchart TB
     A["watch启用"] --> B{"enable参数"}
-    B -->|false| C["关闭所有watcher<br/>清理资源"]
-    B -->|true| D["chokidar.watch监视core/*/http<br/>递归监视子目录"]
+    B -->|false| C["关闭所有watcher"]
+    B -->|true| D["监视core/*/http"]
     D --> E["监听文件事件"]
     E --> F{"事件类型"}
-    F -->|add新增| G["loadApi加载新API"]
-    F -->|change修改| H["changeApi热重载"]
-    F -->|unlink删除| I["unloadApi卸载API"]
-    G --> J["sortByPriority排序"]
+    F -->|add| G["加载新API"]
+    F -->|change| H["热重载"]
+    F -->|unlink| I["卸载API"]
+    G --> J["重新排序"]
     H --> J
     I --> J
-    J --> K{"是否有app/bot"}
-    K -->|是| L["调用init即时挂载<br/>重新注册路由和WS"]
-    K -->|否| M["等待register时挂载"]
+    J --> K{"已注册?"}
+    K -->|是| L["重新注册"]
+    K -->|否| M["等待注册"]
     L --> N["热加载完成"]
     M --> N
     
-    style A fill:#E6F3FF
-    style E fill:#FFE6CC
-    style N fill:#90EE90
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    style N fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
 ```
 
 **事件处理**：
