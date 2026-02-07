@@ -50,6 +50,21 @@ def resolve_path(path_str: str, base: Optional[Path] = None) -> Path:
     return base / path_str
 
 
+def get_model_cache_dir() -> Path:
+    """
+    获取模型缓存目录路径（统一路径解析逻辑）
+
+    Returns:
+        模型缓存目录Path对象
+    """
+    from .config import Config
+    _config = Config()
+    cache_dir_rel = _config.get("vector.cache_dir", "data/subserver/model_cache")
+    if cache_dir_rel.startswith("data/subserver/"):
+        return get_data_root() / cache_dir_rel.replace("data/subserver/", "")
+    return resolve_path(cache_dir_rel)
+
+
 class Config:
     """配置管理器
 

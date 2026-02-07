@@ -20,47 +20,21 @@ logger = setup_logger(__name__)
 
 
 def _setup_proxy_environment():
-    """设置代理和缓存环境变量（用于 HuggingFace 模型下载）"""
-    from core.config import get_data_root
-    from pathlib import Path
-    
-    # 设置代理（仅当代理存在时设置，用于模型下载）
-    http_proxy = os.getenv("HTTP_PROXY") or os.getenv("http_proxy") or config.get("proxy.http_proxy", "")
-    https_proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy") or config.get("proxy.https_proxy", "")
-    hf_endpoint = os.getenv("HF_ENDPOINT") or config.get("proxy.hf_endpoint", "")
-    
-    # 设置 NO_PROXY，排除本地服务
-    no_proxy = os.getenv("NO_PROXY") or os.getenv("no_proxy") or "127.0.0.1,localhost,xrk-agt,redis,mongodb"
-    for key in ["NO_PROXY", "no_proxy"]:
-        os.environ[key] = no_proxy
-    
-    if http_proxy:
-        for key in ["HTTP_PROXY", "http_proxy"]:
-            os.environ[key] = http_proxy
-        logger.info("设置 HTTP 代理: %s", http_proxy)
-    
-    if https_proxy:
-        for key in ["HTTPS_PROXY", "https_proxy"]:
-            os.environ[key] = https_proxy
-        logger.info("设置 HTTPS 代理: %s", https_proxy)
-    
-    if hf_endpoint:
-        os.environ["HF_ENDPOINT"] = hf_endpoint
-        logger.info("设置 HuggingFace 镜像: %s", hf_endpoint)
-    
-    # 设置 HuggingFace 缓存目录
-    cache_dir_rel = config.get("vector.cache_dir", "data/subserver/model_cache")
-    if cache_dir_rel.startswith("data/subserver/"):
-        cache_dir = get_data_root() / cache_dir_rel.replace("data/subserver/", "")
-    else:
-        from core.config import resolve_path
-        cache_dir = Path(resolve_path(cache_dir_rel))
-    
-    os.makedirs(cache_dir, exist_ok=True)
+    """设置 HuggingFace 缓存目录（离线模式）"""
+    from core.config import get_model_cache_dir
+    cache_dir = get_model_cache_dir()
+    cache_dir.mkdir(parents=True, exist_ok=True)
     cache_dir_str = str(cache_dir)
     os.environ["HF_HOME"] = cache_dir_str
     os.environ["HF_HUB_CACHE"] = cache_dir_str
-    logger.info("设置 HuggingFace 缓存目录: %s", cache_dir_str)
+    
+    # 确保离线模式已设置
+    if os.getenv("HF_HUB_OFFLINE") != "1":
+        os.environ["HF_HUB_OFFLINE"] = "1"
+    
+    # 清除所有代理配置（离线模式不需要）
+    for key in ["HTTP_PROXY", "HTTPS_PROXY", "HF_ENDPOINT"]:
+        os.environ.pop(key, None)
 
 
 async def _warmup_vector():

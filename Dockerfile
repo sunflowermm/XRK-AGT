@@ -31,11 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrandr2 \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g pnpm
+    && npm install -g npm@latest pnpm
 
-# 安装 uv（带重试机制）
+# 安装 uv（带重试机制和超时设置）
 RUN for i in 1 2 3; do \
-        curl -LsSf https://astral.sh/uv/install.sh | sh && break || sleep 2; \
+        curl --connect-timeout 10 --max-time 60 -LsSf https://astral.sh/uv/install.sh | sh && break || sleep 3; \
     done && \
     (mv /root/.cargo/bin/uv /usr/local/bin/uv 2>/dev/null || \
      mv /root/.local/bin/uv /usr/local/bin/uv 2>/dev/null || true) || \
@@ -65,9 +65,10 @@ RUN if command -v /usr/local/bin/uv >/dev/null 2>&1; then \
         python3 -m venv .venv && \
         .venv/bin/pip install --no-cache-dir fastapi "uvicorn[standard]" httpx pyyaml sentence-transformers chromadb langchain langchain-openai langgraph; \
     fi
+
 WORKDIR /app
 
-# 创建必要的目录并设置权限
+# 创建必要的目录
 RUN mkdir -p \
     logs data data/bots data/backups data/server_bots data/configs \
     data/uploads data/media data/subserver \
@@ -75,7 +76,10 @@ RUN mkdir -p \
     resources www trash
 
 ENV NODE_ENV=production \
-    NODE_OPTIONS="--no-warnings --no-deprecation"
+    NODE_OPTIONS="--no-warnings --no-deprecation" \
+    HF_HUB_OFFLINE=1 \
+    HF_HOME=/app/data/subserver/model_cache \
+    HF_HUB_CACHE=/app/data/subserver/model_cache
 
 # 创建非 root 用户并设置权限
 RUN groupadd -g 10000 xrk && \

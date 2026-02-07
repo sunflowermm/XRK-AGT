@@ -1,3 +1,10 @@
+# 忽略所有文件，但保留模型缓存目录
 *
-!.gitignore
+
+# 不忽略模型缓存目录（允许模型文件加入仓库）
+!subserver/
+!subserver/model_cache/
+!subserver/model_cache/**
+
+# 不忽略其他必要的配置文件
 !instruct.txt

@@ -8,6 +8,11 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
+
+# 在导入任何 HuggingFace 相关库之前，确保离线模式已设置
+if os.getenv("HF_HUB_OFFLINE") != "1":
+    os.environ["HF_HUB_OFFLINE"] = "1"
+
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import chromadb
@@ -114,47 +119,48 @@ class VectorService:
                     "vector.model", "paraphrase-multilingual-MiniLM-L12-v2"
                 )
                 device = config.get("vector.device", "cpu")
-                local_files_only = config.get("vector.local_files_only", False)
-                cache_dir_rel = config.get("vector.cache_dir", "data/subserver/model_cache")
-                from core.config import get_data_root
-                from pathlib import Path
                 
-                if cache_dir_rel.startswith("data/subserver/"):
-                    cache_dir = get_data_root() / cache_dir_rel.replace("data/subserver/", "")
-                else:
-                    cache_dir = Path(resolve_path(cache_dir_rel))
-                
+                # 使用统一的缓存目录解析逻辑
+                from core.config import get_model_cache_dir
+                cache_dir = get_model_cache_dir()
+                cache_dir.mkdir(parents=True, exist_ok=True)
                 cache_dir_str = str(cache_dir)
-                os.makedirs(cache_dir_str, exist_ok=True)
 
+                local_files_only = config.get("vector.local_files_only", False)
                 load_timeout = config.get("vector.load_timeout", 300.0)
-                logger.info("加载嵌入模型: %s (设备: %s, 缓存目录: %s, 超时: %ds)", 
-                           model_name, device, cache_dir_str, int(load_timeout))
+                
+                logger.info("加载嵌入模型: %s (设备: %s, 缓存目录: %s, local_files_only: %s, 超时: %ds)", 
+                           model_name, device, cache_dir_str, local_files_only, int(load_timeout))
 
                 # 使用线程池异步加载模型
-                self._embedding_model = await asyncio.wait_for(
-                    asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda: SentenceTransformer(
-                            model_name,
-                            device=device,
-                            local_files_only=local_files_only,
-                            cache_folder=cache_dir_str,
+                try:
+                    self._embedding_model = await asyncio.wait_for(
+                        asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: SentenceTransformer(
+                                model_name,
+                                device=device,
+                                local_files_only=local_files_only,
+                                cache_folder=cache_dir_str,
+                            ),
                         ),
-                    ),
-                    timeout=load_timeout,
-                )
-                logger.info("嵌入模型加载成功: %s (设备: %s)", model_name, device)
-                return True
-
-            except asyncio.TimeoutError:
-                logger.error("嵌入模型加载超时: %s", model_name)
-                self._embedding_model = False
-                return False
-            except Exception as e:
-                logger.error("嵌入模型加载失败: %s", e, exc_info=True)
-                self._embedding_model = False
-                return False
+                        timeout=load_timeout,
+                    )
+                    logger.info("嵌入模型加载成功: %s (设备: %s)", model_name, device)
+                    return True
+                except asyncio.TimeoutError:
+                    logger.error("嵌入模型加载超时: %s", model_name)
+                    self._embedding_model = False
+                    return False
+                except Exception as e:
+                    error_msg = str(e)
+                    if "local_files_only" in error_msg.lower() or "not found" in error_msg.lower():
+                        logger.error("嵌入模型加载失败: %s", error_msg)
+                        logger.error("请确保模型文件已完整下载到缓存目录: %s", cache_dir_str)
+                    else:
+                        logger.error("嵌入模型加载失败: %s", error_msg, exc_info=True)
+                    self._embedding_model = False
+                    return False
             finally:
                 self._model_loading = False
 

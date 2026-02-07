@@ -80,11 +80,8 @@ async def call_main_server(
     request_timeout = timeout if timeout is not None else get_timeout()
 
     try:
-        # 主服务端连接不使用代理（临时清除代理环境变量）
         old_http_proxy = os.environ.pop("HTTP_PROXY", None)
         old_https_proxy = os.environ.pop("HTTPS_PROXY", None)
-        old_http_proxy_lower = os.environ.pop("http_proxy", None)
-        old_https_proxy_lower = os.environ.pop("https_proxy", None)
         try:
             response = await client.request(
                 method=method,
@@ -96,14 +93,10 @@ async def call_main_server(
             )
         finally:
             # 恢复代理环境变量（用于模型下载）
-            if old_http_proxy:
+            if old_http_proxy is not None:
                 os.environ["HTTP_PROXY"] = old_http_proxy
-            if old_https_proxy:
+            if old_https_proxy is not None:
                 os.environ["HTTPS_PROXY"] = old_https_proxy
-            if old_http_proxy_lower:
-                os.environ["http_proxy"] = old_http_proxy_lower
-            if old_https_proxy_lower:
-                os.environ["https_proxy"] = old_https_proxy_lower
         if response.status_code >= 400:
             logger.error(f"主服务端响应错误 [{method} {path}]: {response.status_code} - {response.text[:500]}")
         return response
