@@ -329,8 +329,6 @@ await fetch('/api/config/server/batch-set', {
 
 ---
 
----
-
 ## 相关文档
 
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
