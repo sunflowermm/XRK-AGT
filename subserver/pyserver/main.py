@@ -19,8 +19,18 @@ config = Config()
 logger = setup_logger(__name__)
 
 
+def _ensure_protocol(url: str, default: str = "http") -> str:
+    """确保 URL 包含协议前缀"""
+    if not url or not url.strip():
+        return ""
+    url = url.strip()
+    if url.startswith(("http://", "https://", "socks5://")):
+        return url
+    return f"{default}://{url}"
+
+
 def _setup_proxy_environment():
-    """设置 HuggingFace 缓存目录（离线模式）"""
+    """设置 HuggingFace 缓存目录和代理配置"""
     from core.config import get_model_cache_dir
     cache_dir = get_model_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -28,13 +38,20 @@ def _setup_proxy_environment():
     os.environ["HF_HOME"] = cache_dir_str
     os.environ["HF_HUB_CACHE"] = cache_dir_str
     
-    # 确保离线模式已设置
     if os.getenv("HF_HUB_OFFLINE") != "1":
-        os.environ["HF_HUB_OFFLINE"] = "1"
-    
-    # 清除所有代理配置（离线模式不需要）
-    for key in ["HTTP_PROXY", "HTTPS_PROXY", "HF_ENDPOINT"]:
-        os.environ.pop(key, None)
+        proxies = {
+            "HTTP_PROXY": _ensure_protocol(os.getenv("HTTP_PROXY") or config.get("proxy.http_proxy", "")),
+            "HTTPS_PROXY": _ensure_protocol(os.getenv("HTTPS_PROXY") or config.get("proxy.https_proxy", "")),
+            "HF_ENDPOINT": _ensure_protocol(os.getenv("HF_ENDPOINT") or config.get("proxy.hf_endpoint", ""), "https"),
+        }
+        
+        for key, value in proxies.items():
+            if value:
+                os.environ[key] = value
+            else:
+                os.environ.pop(key, None)
+        
+        os.environ["NO_PROXY"] = os.getenv("NO_PROXY") or "127.0.0.1,localhost,xrk-agt,redis,mongodb"
 
 
 async def _warmup_vector():

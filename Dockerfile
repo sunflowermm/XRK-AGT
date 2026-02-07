@@ -77,7 +77,6 @@ RUN mkdir -p \
 
 ENV NODE_ENV=production \
     NODE_OPTIONS="--no-warnings --no-deprecation" \
-    HF_HUB_OFFLINE=1 \
     HF_HOME=/app/data/subserver/model_cache \
     HF_HUB_CACHE=/app/data/subserver/model_cache
 

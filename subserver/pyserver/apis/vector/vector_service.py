@@ -9,10 +9,6 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 
-# 在导入任何 HuggingFace 相关库之前，确保离线模式已设置
-if os.getenv("HF_HUB_OFFLINE") != "1":
-    os.environ["HF_HUB_OFFLINE"] = "1"
-
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import chromadb
@@ -129,10 +125,6 @@ class VectorService:
                 local_files_only = config.get("vector.local_files_only", False)
                 load_timeout = config.get("vector.load_timeout", 300.0)
                 
-                logger.info("加载嵌入模型: %s (设备: %s, 缓存目录: %s, local_files_only: %s, 超时: %ds)", 
-                           model_name, device, cache_dir_str, local_files_only, int(load_timeout))
-
-                # 使用线程池异步加载模型
                 try:
                     self._embedding_model = await asyncio.wait_for(
                         asyncio.get_event_loop().run_in_executor(
@@ -146,7 +138,6 @@ class VectorService:
                         ),
                         timeout=load_timeout,
                     )
-                    logger.info("嵌入模型加载成功: %s (设备: %s)", model_name, device)
                     return True
                 except asyncio.TimeoutError:
                     logger.error("嵌入模型加载超时: %s", model_name)
