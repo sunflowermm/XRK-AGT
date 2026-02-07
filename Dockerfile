@@ -2,6 +2,8 @@ FROM node:24.12-alpine
 
 RUN apk add --no-cache \
     python3 \
+    python3-dev \
+    py3-setuptools \
     make \
     g++ \
     git \
@@ -20,54 +22,35 @@ WORKDIR /app
 # 复制依赖文件
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
 
-# 设置Puppeteer环境变量
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-# 安装依赖（利用Docker层缓存）
+# 安装依赖
 RUN pnpm install --frozen-lockfile || pnpm install
 
 # 复制源代码
 COPY . .
 
-# 创建必要的目录
+# 创建必要的目录并设置权限
 RUN mkdir -p \
-    logs \
-    data \
-    data/bots \
-    data/backups \
-    data/server_bots \
-    data/configs \
-    data/uploads \
-    data/media \
-    config \
-    config/default_config \
-    config/server_config \
-    resources \
-    www \
-    trash
+    logs data data/bots data/backups data/server_bots data/configs \
+    data/uploads data/media config config/default_config config/server_config \
+    resources www trash
 
 ENV NODE_ENV=production \
     NODE_OPTIONS="--no-warnings --no-deprecation"
 
-# 创建非 root 用户（安全建议）
-# 注意：使用 volume 挂载时，确保宿主机目录权限允许容器用户访问
-RUN addgroup -g 1000 xrk && \
-    adduser -D -u 1000 -G xrk xrk && \
+# 创建非 root 用户并设置权限
+RUN addgroup -g 10000 xrk && \
+    adduser -D -u 10000 -G xrk xrk && \
+    sed -i 's/\r$//' /app/docker-entrypoint.sh && \
+    chmod +x /app/docker-entrypoint.sh && \
     chown -R xrk:xrk /app
 
 # 切换到非 root 用户
 USER xrk
 
-# 暴露常用端口（实际使用端口由环境变量 XRK_SERVER_PORT 控制）
 EXPOSE 80 443 8080 3000 5000
 
-# 注意：健康检查在 docker-compose.yml 中配置，支持动态端口
-
-# 使用entrypoint脚本支持动态端口
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-ENTRYPOINT ["docker-entrypoint.sh"]
-# 默认以 server 模式启动，具体端口由 XRK_SERVER_PORT 或入口脚本决定
+ENTRYPOINT ["/bin/sh", "/app/docker-entrypoint.sh"]
 CMD ["server"]

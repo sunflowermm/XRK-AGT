@@ -36,9 +36,10 @@
    docker-compose up -d
    ```
    
-   这将启动两个服务：
+   这将启动三个服务：
    - `xrk-agt`: XRK-AGT 主服务
    - `redis`: Redis 缓存服务（XRK-AGT 依赖）
+   - `mongodb`: MongoDB 数据库服务（XRK-AGT 依赖）
 
 4. **查看日志**
    ```bash
@@ -50,6 +51,9 @@
    
    # 查看Redis日志
    docker-compose logs -f redis
+   
+   # 查看MongoDB日志
+   docker-compose logs -f mongodb
    ```
 
 5. **停止服务**
@@ -122,7 +126,7 @@ docker build -t xrk-agt:latest .
 - 包含依赖：Python3、make、g++、git、bash、Chromium（用于 Puppeteer）
 - 包管理器：pnpm（全局安装）
 - 端口：完全支持通过 `XRK_SERVER_PORT` 环境变量自定义
-- 安全：使用非 root 用户（`xrk`，UID 1000）运行容器
+- 安全：使用非 root 用户（`xrk`，UID 10000）运行容器
 
 ### 运行容器
 
@@ -146,9 +150,12 @@ docker run -d \
 ```
 
 2. **使用 Docker Compose**（推荐）：
-   使用 `docker-compose.yml` 自动管理 Redis 服务，无需手动配置。
+   使用 `docker-compose.yml` 自动管理所有服务，无需手动配置。
 
-**注意**：修改 `data/server_bots/redis.yaml` 中的 `host` 为 Redis 服务地址（Docker 网络中使用服务名 `redis`）。
+**自动配置**：
+- Docker 环境会自动检测并配置 Redis/MongoDB 连接地址
+- 首次启动时会自动将配置文件中的 `127.0.0.1` 替换为 Docker 服务名
+- 无需手动修改配置文件
 
 ## 服务说明
 
@@ -173,13 +180,31 @@ XRK-AGT 依赖 Redis 进行缓存和短期记忆存储。`docker-compose.yml` �
 - 数据卷：`redis-data`（持久化存储）
 
 **连接配置**：
-- 在 Docker 环境中，XRK-AGT 会自动连接到 `redis:6379`（通过 Docker 网络）
-- 如需修改 Redis 配置，编辑 `data/server_bots/redis.yaml`：
-  ```yaml
-  host: "redis"  # Docker 服务名
-  port: 6379
-  db: 0
-  ```
+- Docker 环境自动配置：启动脚本会自动检测并配置为 `redis`（Docker 服务名）
+- 本地环境：使用 `127.0.0.1` 或 `localhost`
+- 手动修改：编辑 `data/server_bots/redis.yaml`（仅在需要自定义时）
+
+### MongoDB 服务
+
+XRK-AGT 依赖 MongoDB 进行数据存储。`docker-compose.yml` 已自动配置 MongoDB 服务。
+
+**MongoDB 配置**：
+- 镜像：`mongo:8.0`
+- 端口：27017（容器内部，不对外暴露）
+- 数据持久化：数据存储在 `mongodb-data` volume
+- 认证：可通过环境变量 `MONGO_ROOT_USERNAME` 和 `MONGO_ROOT_PASSWORD` 设置（可选）
+
+**连接配置**：
+- Docker 环境自动配置：启动脚本会自动检测并配置为 `mongodb`（Docker 服务名）
+- 连接字符串格式：`mongodb://mongodb:27017/xrk-agt`
+- 手动修改：编辑 `data/server_bots/mongodb.yaml`（仅在需要自定义时）
+
+**配置 MongoDB 认证（可选）**：
+在 `.env` 文件中设置：
+```bash
+MONGO_ROOT_USERNAME=admin
+MONGO_ROOT_PASSWORD=your-secure-password
+```
 
 ## 数据持久化
 
@@ -408,7 +433,37 @@ cat data/server_bots/redis.yaml
 - Docker Compose 环境：确保 `host: "redis"`（使用服务名）
 - 外部 Redis：修改 `host` 为实际 Redis 地址
 
-#### 4. 数据丢失
+#### 4. MongoDB 连接失败
+
+**错误信息**：`MongoDB连接失败` 或 `MongoDB 不可用`
+
+**可能原因**：
+- MongoDB 服务未启动
+- MongoDB 配置不正确
+- 网络连接问题
+- 认证信息错误
+
+**解决方法**：
+```bash
+# 检查 MongoDB 服务状态
+docker-compose ps mongodb
+
+# 查看 MongoDB 日志
+docker-compose logs mongodb
+
+# 测试 MongoDB 连接
+docker exec xrk-mongodb mongosh --eval "db.adminCommand('ping')"
+
+# 如果启用了认证，测试连接
+docker exec xrk-mongodb mongosh -u admin -p your-password --eval "db.adminCommand('ping')"
+```
+
+**配置 MongoDB**：
+- Docker Compose 环境：确保连接字符串使用服务名 `mongodb`
+- 外部 MongoDB：修改连接字符串为实际 MongoDB 地址
+- 启用认证：在 `.env` 文件中设置 `MONGO_ROOT_USERNAME` 和 `MONGO_ROOT_PASSWORD`
+
+#### 5. 数据丢失
 
 **原因**：未正确挂载 volume
 
@@ -508,13 +563,13 @@ docker exec xrk-redis redis-cli SAVE
 docker cp xrk-redis:/data/dump.rdb ./backup/redis-$(date +%Y%m%d).rdb
 ```
 
-### 7. 安全建议
+### 8. 安全建议
 
-- ✅ **非 root 用户**：Dockerfile 中已配置使用非 root 用户（`xrk`，UID 1000）运行容器
+- ✅ **非 root 用户**：Dockerfile 中已配置使用非 root 用户（`xrk`，UID 10000）运行容器
 - ✅ **权限管理**：使用 volume 挂载时，确保宿主机目录权限允许容器用户访问
   ```bash
   # Linux/macOS：设置目录权限（可选，通常不需要）
-  chown -R 1000:1000 ./data ./logs ./config ./resources
+  chown -R 10000:10000 ./data ./logs ./config ./resources
   
   # 或使用更宽松的权限（不推荐用于生产环境）
   chmod -R 755 ./data ./logs ./config ./resources

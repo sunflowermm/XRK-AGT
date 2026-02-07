@@ -2,25 +2,25 @@
 set -e
 
 # XRK-AGT Docker 入口脚本
-# 支持通过环境变量 XRK_SERVER_PORT 指定端口
+# 自动检测 Docker 环境并配置 Redis/MongoDB 连接
+
+if [ -f /.dockerenv ] || [ -n "${DOCKER_CONTAINER:-}" ]; then
+    # 自动配置 Redis 和 MongoDB 使用 Docker 服务名
+    [ -f /app/data/server_bots/redis.yaml ] && \
+        sed -i 's/host: "127.0.0.1"/host: "redis"/g; s/host: 127.0.0.1/host: "redis"/g' /app/data/server_bots/redis.yaml 2>/dev/null || true
+    
+    [ -f /app/data/server_bots/mongodb.yaml ] && \
+        sed -i 's/host: "127.0.0.1"/host: "mongodb"/g; s/host: 127.0.0.1/host: "mongodb"/g' /app/data/server_bots/mongodb.yaml 2>/dev/null || true
+fi
 
 # 获取端口（环境变量优先，默认8080）
 PORT=${XRK_SERVER_PORT:-8080}
 
-# 如果提供了命令行参数，第一个参数应该是"server"，第二个参数是端口
-# CMD默认是["server"]，所以如果没有额外参数，使用环境变量中的端口
+# 处理启动参数
 if [ $# -ge 1 ] && [ "$1" = "server" ]; then
-    # 如果提供了第二个参数，使用它作为端口
-    if [ $# -ge 2 ]; then
-        PORT=$2
-        shift 2
-        exec node --no-warnings --no-deprecation start.js server "$PORT" "$@"
-    else
-        # 只有"server"参数，使用环境变量中的端口
-        shift
-        exec node --no-warnings --no-deprecation start.js server "$PORT" "$@"
-    fi
+    [ $# -ge 2 ] && PORT=$2
+    shift
+    exec node --no-warnings --no-deprecation start.js server "$PORT" "$@"
 else
-    # 没有"server"参数，直接传递所有参数（兼容其他启动方式）
     exec node --no-warnings --no-deprecation start.js "$@"
 fi
