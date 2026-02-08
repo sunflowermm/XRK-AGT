@@ -21,7 +21,7 @@ export default {
     {
       method: 'POST',
       path: '/api/mcp/jsonrpc',
-      handler: HttpResponse.asyncHandler(async (_req, res) => {
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
