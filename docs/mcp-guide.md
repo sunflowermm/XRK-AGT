@@ -1,6 +1,6 @@
 # MCP (Model Context Protocol) 完整指南
 
-## 📚 目录导航
+## 📚 目录
 
 - [MCP概述](#mcp概述)
 - [MCP架构图](#mcp架构图)

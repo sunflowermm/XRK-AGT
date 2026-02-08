@@ -1,9 +1,34 @@
 # Docker 部署指南
 
-> **最后更新**: 2026-02-07  
-> **跨平台支持**: Windows 10+ / Linux / macOS
+> **文件位置**：`docker-compose.yml`、`Dockerfile`  
+> **适用场景**：使用 Docker 容器化部署 XRK-AGT，支持 Windows 10+ / Linux / macOS
 
-本文档介绍如何使用 Docker 部署 XRK-AGT。
+本文档介绍如何使用 Docker 部署 XRK-AGT，包括主服务端、Python 子服务端、Redis 和 MongoDB 的容器化部署。
+
+### 扩展特性
+
+- ✅ **一键部署**：Docker Compose 一键启动所有服务
+- ✅ **自动构建**：自动构建 Python 子服务端，无需手动配置
+- ✅ **数据持久化**：支持数据、日志、配置的持久化存储
+- ✅ **代理支持**：支持配置代理加速模型下载
+- ✅ **健康检查**：内置健康检查机制，确保服务正常运行
+
+---
+
+## 📚 目录
+
+- [概述](#概述)
+- [快速开始](#快速开始)
+- [Docker 构建说明](#docker-构建说明)
+- [代理配置](#代理配置)
+- [数据持久化](#数据持久化)
+- [自动配置](#自动配置)
+- [环境变量](#环境变量)
+- [故障排查](#故障排查)
+- [生产环境建议](#生产环境建议)
+- [相关文档](#相关文档)
+
+---
 
 ## 概述
 
@@ -464,6 +489,15 @@ curl -f http://localhost:8000/health || exit 1
 - ✅ 为 Redis/MongoDB 设置密码
 - ✅ 使用 secrets 管理敏感信息
 - ✅ 定期更新基础镜像
+
+---
+
+## 相关文档
+
+- **[子服务端 API 文档](subserver-api.md)** - Python 子服务端的 API 说明
+- **[Bot 主类文档](bot.md)** - Bot 主类说明，包含 HTTP/WebSocket 服务
+- **[应用开发指南](app-dev.md)** - 应用开发完整指南
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块说明
 
 ---
 

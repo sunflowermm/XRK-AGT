@@ -16,6 +16,21 @@ XRK-AGT 采用**工厂模式**统一管理多种 AI 服务提供商，包括大�
 
 ---
 
+## 📚 目录
+
+- [架构概览](#架构概览)
+- [工厂类型](#工厂类型)
+- [配置说明](#配置说明)
+- [扩展工厂](#扩展工厂)
+- [工厂方法参考](#工厂方法参考)
+- [使用场景](#使用场景)
+- [最佳实践](#最佳实践)
+- [常见问题](#常见问题)
+- [AI HTTP API 路由](#ai-http-api-路由)
+- [相关文档](#相关文档)
+
+---
+
 ## 架构概览
 
 ### 工厂系统架构图
@@ -936,19 +951,11 @@ Host: localhost:8080
 
 ## 相关文档
 
-- **[AIStream 文档](aistream.md)** - 了解如何在 AIStream 中使用 LLM 工厂
-- **[配置基类文档](config-base.md)** - 了解配置系统的使用
-- **[框架可扩展性指南](框架可扩展性指南.md)** - 了解如何扩展工厂系统
-- **[MCP 指南](mcp-guide.md)** - 了解工具调用机制
-- **[HTTP API 文档](http-api.md)** - 了解 HTTP API 基类
-
----
-
-## 相关文档
-
 - **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含AI服务API和所有工作流的实际实现 ⭐
-- **[AI Stream](aistream.md)** - AIStream 基类技术文档
+- **[AIStream 文档](aistream.md)** - AIStream 基类技术文档，了解如何在 AIStream 中使用 LLM 工厂
+- **[配置基类文档](config-base.md)** - 了解配置系统的使用
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
+- **[HTTP API 文档](http-api.md)** - 了解 HTTP API 基类
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 
 ---

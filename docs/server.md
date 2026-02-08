@@ -11,7 +11,7 @@
 - [HTTP API基类文档（docs/http-api.md）](http-api.md)
 - [项目总览](../PROJECT_OVERVIEW.md)
 
-## 📑 目录
+## 📚 目录
 
 - [架构总览](#架构总览)
 - [核心特性](#核心特性)
@@ -1292,12 +1292,17 @@ XRK-AGT 的 Server 层提供了：
 ✅ **HTTP业务层功能** - 重定向、CDN支持、反向代理增强  
 ✅ **快速搭建能力** - 5-15分钟搭建各种服务  
 
-**相关文档**：
-- [HTTP业务层文档](http-business-layer.md) - 重定向、CDN、负载均衡详细说明
-- [Bot 主类文档](bot.md) - Bot 生命周期、中间件与认证
-- [system-Core 特性](system-core.md) - system-Core 内置模块完整说明 ⭐
-
 这使得 XRK-AGT 能够快速搭建各种通讯协议的客户端或服务端，是系统架构的核心优势之一。
+
+---
+
+## 相关文档
+
+- **[HTTP业务层文档](http-business-layer.md)** - 重定向、CDN、负载均衡详细说明
+- **[Bot 主类文档](bot.md)** - Bot 生命周期、中间件与认证
+- **[HTTP API 基类文档](http-api.md)** - HTTP API 基类说明
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明 ⭐
+- **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 
 ---
 
