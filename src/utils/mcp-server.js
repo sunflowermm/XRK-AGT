@@ -482,7 +482,7 @@ export class MCPServer {
    * @param {Object} params - 初始化参数
    * @returns {Object} 初始化响应
    */
-  async handleInitialize(_params) {
+  async handleInitialize() {
     return {
       protocolVersion: this.serverInfo.protocolVersion,
       capabilities: {

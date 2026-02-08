@@ -21,14 +21,14 @@ export default class AzureOpenAILLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout || 360000;
+    this._timeout = config.timeout ?? 360000;
   }
 
   normalizeEndpoint(config) {
-    const base = (config.baseUrl || '').replace(/\/+$/, '');
+    const base = (config.baseUrl ?? '').replace(/\/+$/, '');
     if (!base) throw new Error('azure_openai: 未配置 baseUrl（Azure endpoint）');
 
-    const deployment = encodeURIComponent(config.deployment || config.model || config.chatModel || '');
+    const deployment = encodeURIComponent(config.deployment ?? config.model ?? config.chatModel ?? '');
     if (!deployment) throw new Error('azure_openai: 未配置 deployment（Azure 部署名）');
 
     const path = (config.path || `/openai/deployments/${deployment}/chat/completions`).replace(/^\/?/, '/');
@@ -39,7 +39,7 @@ export default class AzureOpenAILLMClient {
   }
 
   get timeout() {
-    return this._timeout || 360000;
+    return this._timeout ?? 360000;
   }
 
   buildHeaders(extra = {}) {

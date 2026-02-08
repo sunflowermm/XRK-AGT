@@ -613,7 +613,7 @@ export class ProxyManager {
         healthy: upstream.healthy,
         timestamp: upstream.lastCheck
       });
-    } catch (_err) {
+    } catch {
       upstream.failCount++;
       upstream.healthy = upstream.failCount < (this.config.healthCheck?.maxFailures || 3);
       upstream.lastCheck = Date.now();

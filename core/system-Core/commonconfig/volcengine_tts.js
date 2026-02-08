@@ -12,7 +12,7 @@ export default class VolcengineTTSConfig extends ConfigBase {
       displayName: '火山引擎 TTS 工厂配置',
       description: '火山引擎文本转语音（TTS）配置',
       filePath: (cfg) => {
-        const port = cfg?._port ?? cfg?.server?.server?.port;
+        const port = cfg?.port ?? cfg?._port;
         if (!port) {
           throw new Error(`VolcengineTTSConfig: 未提供端口，无法解析路径`);
         }

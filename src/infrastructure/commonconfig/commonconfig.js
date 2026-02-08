@@ -48,14 +48,14 @@ export default class ConfigBase {
    * @param {Object} metadata.schema - 配置结构定义（用于验证）
    */
   constructor(metadata = {}) {
-    this.name = metadata.name || 'config';
-    this.displayName = metadata.displayName || this.name;
-    this.description = metadata.description || '';
-    this.filePath = metadata.filePath || '';
-    this.fileType = metadata.fileType || 'yaml';
-    this.schema = metadata.schema || {};
+    this.name = metadata.name ?? 'config';
+    this.displayName = metadata.displayName ?? this.name;
+    this.description = metadata.description ?? '';
+    this.filePath = metadata.filePath ?? '';
+    this.fileType = metadata.fileType ?? 'yaml';
+    this.schema = metadata.schema ?? {};
     // 多文件配置支持：用于处理一个配置包含多个文件的情况（如renderer包含puppeteer和playwright）
-    this.multiFile = metadata.multiFile || null;
+    this.multiFile = metadata.multiFile ?? null;
 
     // 严格校验：在构造阶段即校验 schema 的默认值与类型一致性，避免运行期回退逻辑
     this._assertSchemaStrict(this.schema);
@@ -88,7 +88,7 @@ export default class ConfigBase {
     const check = (fields) => {
       for (const [key, fs] of Object.entries(fields)) {
         // 校验 default 与 type
-        if (Object.prototype.hasOwnProperty.call(fs, 'default')) {
+        if (Object.hasOwn(fs, 'default')) {
           const def = fs.default;
           const t = fs.type;
           if (t === 'number' && !(typeof def === 'number')) {
@@ -108,7 +108,7 @@ export default class ConfigBase {
           }
         }
         // 校验 enum 与 default
-        if (fs.enum && Object.prototype.hasOwnProperty.call(fs, 'default')) {
+        if (fs.enum && Object.hasOwn(fs, 'default')) {
           const def = fs.default;
           // 对于数组类型，要求每个默认值都在 enum 中
           if (fs.type === 'array' && Array.isArray(def)) {
@@ -278,7 +278,7 @@ export default class ConfigBase {
       if (defaultFilePath && fsSync.existsSync(defaultFilePath)) {
         try {
           const content = await fs.readFile(defaultFilePath, 'utf8');
-          config = this.fileType === 'yaml' ? yaml.parse(content) : JSON.parse(content) || {};
+          config = this.fileType === 'yaml' ? yaml.parse(content) : JSON.parse(content);
         } catch (error) {
           BotUtil.makeLog('warn', `读取默认配置失败 [${this.name}/${key}]: ${error.message}`, 'ConfigBase');
         }
@@ -744,10 +744,10 @@ export default class ConfigBase {
     if (!schema || !schema.fields) return result;
     for (const [key, fs] of Object.entries(schema.fields)) {
       if (fs.type === 'object') {
-        result[key] = this.buildDefaultFromSchema({ fields: fs.fields || {} });
+        result[key] = this.buildDefaultFromSchema({ fields: fs.fields ?? {} });
       } else if (fs.type === 'array') {
         result[key] = Array.isArray(fs.default) ? [...fs.default] : [];
-      } else if (Object.prototype.hasOwnProperty.call(fs, 'default')) {
+      } else if (Object.hasOwn(fs, 'default')) {
         result[key] = fs.default;
       }
     }
@@ -762,7 +762,7 @@ export default class ConfigBase {
     for (const [key, fs] of Object.entries(schema.fields)) {
       const path = prefix ? `${prefix}.${key}` : key;
       if (fs.type === 'object') {
-        list.push(...this.getFlatSchema(path, { fields: fs.fields || {} }));
+        list.push(...this.getFlatSchema(path, { fields: fs.fields ?? {} }));
       } else if (fs.type === 'array' && fs.itemType === 'object' && fs.itemSchema?.fields) {
         // 仅描述数组元素的结构，不枚举索引
         list.push({ path, type: 'array<object>', component: fs.component, meta: { ...fs } });
@@ -790,7 +790,7 @@ export default class ConfigBase {
 
   expandFlatData(flat) {
     const data = {};
-    for (const [path, value] of Object.entries(flat || {})) {
+    for (const [path, value] of Object.entries(flat ?? {})) {
       this._setValueByPath(data, path, value);
     }
     return data;
@@ -873,7 +873,7 @@ export default class ConfigBase {
       return;
     }
 
-    const fields = schema.fields || {};
+    const fields = schema.fields ?? {};
     for (const [key, childSchema] of Object.entries(fields)) {
       const childPath = `${path}.${key}`;
       let childValue = value[key];
@@ -946,7 +946,7 @@ export default class ConfigBase {
 
     if ((expectedType === 'object' || expectedType === 'map') && this._isObject(value)) {
       const clone = { ...value };
-      const fields = schema.fields || {};
+      const fields = schema.fields ?? {};
       for (const [key, childSchema] of Object.entries(fields)) {
         if (clone[key] !== undefined) {
           clone[key] = this._normalizeValueBySchema(clone[key], childSchema);
@@ -979,7 +979,7 @@ export default class ConfigBase {
       }
 
       if (current === undefined) {
-        return undefined;
+        return;
       }
     }
 

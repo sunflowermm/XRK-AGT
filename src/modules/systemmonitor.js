@@ -795,7 +795,7 @@ class SystemMonitor extends EventEmitter {
      * 优化系统（跨平台兼容）
      * 确保在日志播完之后才开始第一次清理
      */
-    async optimizeSystem(_status) {
+    async optimizeSystem() {
         const now = Date.now();
         const gcInterval = this.config.memory?.gcInterval || 600000;
 

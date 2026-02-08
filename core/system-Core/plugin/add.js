@@ -163,7 +163,7 @@ export class add extends plugin {
   }
 
   /** 获取身份信息 */
-  getRoleInfo(_groupId, userId) {
+  getRoleInfo(userId) {
     if (!this.e.isGroup) {
       return { role: 'member', roleName: '群员', isAdmin: false }
     }
@@ -697,8 +697,8 @@ export class add extends plugin {
   async handleViolation(violationType, violatedWord, isGlobal = false) {
     const { group_id: groupId, user_id: userId } = this.e
     
-    const userRole = this.getRoleInfo(groupId, userId)
-    const botRole = this.getRoleInfo(groupId, this.e.self_id)
+    const userRole = this.getRoleInfo(userId)
+    const botRole = this.getRoleInfo(this.e.self_id)
     
     logger.info(`[违禁词检测] 用户 ${userId}(${userRole.roleName}) 触发${isGlobal ? '全局' : '群组'}${violationType}违禁词：${violatedWord}`)
     
@@ -1123,9 +1123,7 @@ export class add extends plugin {
     try {
       const message = JSON.parse(await fs.readFile(filePath, "utf8"))
       for (const key in message) {
-        if (message.hasOwnProperty(key)) {
-          messageMap[this.group_id].set(key, message[key])
-        }
+        messageMap[this.group_id].set(key, message[key])
       }
     } catch (err) {
       logger.error(`JSON 格式错误：${filePath} - ${err.message}`, err)
@@ -1143,9 +1141,7 @@ export class add extends plugin {
     try {
       const message = JSON.parse(await fs.readFile(globalPath, "utf8"))
       for (const key in message) {
-        if (message.hasOwnProperty(key)) {
-          messageMap.global.set(key, message[key])
-        }
+        messageMap.global.set(key, message[key])
       }
     } catch (err) {
       logger.error(`JSON 格式错误：${globalPath} - ${err.message}`, err)

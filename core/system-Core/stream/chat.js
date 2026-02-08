@@ -4,8 +4,7 @@ import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 
-const _path = process.cwd();
-const EMOTIONS_DIR = path.join(_path, 'resources/aiimages');
+const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 const EMOTION_TYPES = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
 
 // 表情回应映射
@@ -120,7 +119,6 @@ export default class ChatStream extends AIStream {
     // 表情包（作为消息段的一部分，不在工具调用/函数解析中处理）
     // 表情包标记会在parseCQToSegments中解析，保持顺序
 
-    // MCP工具：@功能
     this.registerMCPTool('at', {
       description: '@某人',
       inputSchema: {
@@ -139,7 +137,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：戳一戳
     this.registerMCPTool('poke', {
       description: '戳一戳群成员',
       inputSchema: {
@@ -167,7 +164,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：回复消息
     this.registerMCPTool('reply', {
       description: '回复消息',
       inputSchema: {
@@ -190,7 +186,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：表情回应
     this.registerMCPTool('emojiReaction', {
       description: '对消息进行表情回应',
       inputSchema: {
@@ -219,7 +214,7 @@ export default class ChatStream extends AIStream {
         }
         
         const emojiId = Number(emojiIds[Math.floor(Math.random() * emojiIds.length)]);
-        const msgId = String(args.msgId || '').trim();
+        const msgId = String(args.msgId ?? '').trim();
         
         if (!msgId) {
           return { success: false, error: '消息ID不能为空' };
@@ -242,7 +237,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：点赞
     this.registerMCPTool('thumbUp', {
       description: '给群成员点赞',
       inputSchema: {
@@ -260,7 +254,7 @@ export default class ChatStream extends AIStream {
         },
         required: ['qq']
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '非群聊环境' };
         }
@@ -281,7 +275,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：签到
     this.registerMCPTool('sign', {
       description: '群签到',
       inputSchema: {
@@ -305,7 +298,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：禁言
     this.registerMCPTool('mute', {
       description: '禁言群成员',
       inputSchema: {
@@ -322,7 +314,7 @@ export default class ChatStream extends AIStream {
         },
         required: ['qq', 'duration']
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (args = {}, context = {}) => {
         if (!context.e?.isGroup) {
           return { success: false, error: '非群聊环境' };
         }
@@ -338,7 +330,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：解禁
     this.registerMCPTool('unmute', {
       description: '解除禁言',
       inputSchema: {
@@ -367,7 +358,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：全员禁言
     this.registerMCPTool('muteAll', {
       description: '全员禁言',
       inputSchema: {
@@ -391,7 +381,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：解除全员禁言
     this.registerMCPTool('unmuteAll', {
       description: '解除全员禁言',
       inputSchema: {
@@ -415,7 +404,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：改群名片
     this.registerMCPTool('setCard', {
       description: '修改群名片',
       inputSchema: {
@@ -448,7 +436,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：改群名
     this.registerMCPTool('setGroupName', {
       description: '修改群名',
       inputSchema: {
@@ -477,7 +464,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：设置管理员
     this.registerMCPTool('setAdmin', {
       description: '设置管理员',
       inputSchema: {
@@ -506,7 +492,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：取消管理员
     this.registerMCPTool('unsetAdmin', {
       description: '取消管理员',
       inputSchema: {
@@ -535,7 +520,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：设置头衔
     this.registerMCPTool('setTitle', {
       description: '设置专属头衔',
       inputSchema: {
@@ -573,7 +557,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：踢人
     this.registerMCPTool('kick', {
       description: '踢出群成员',
       inputSchema: {
@@ -607,7 +590,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：设置精华消息
     this.registerMCPTool('setEssence', {
       description: '设置精华消息',
       inputSchema: {
@@ -625,7 +607,7 @@ export default class ChatStream extends AIStream {
           return { success: false, error: '非群聊环境' };
         }
         
-        const msgId = String(args.msgId || '').trim();
+        const msgId = String(args.msgId ?? '').trim();
         if (!msgId) {
           return { success: false, error: '消息ID不能为空' };
         }
@@ -649,7 +631,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：取消精华消息
     this.registerMCPTool('removeEssence', {
       description: '取消精华消息',
       inputSchema: {
@@ -667,7 +648,7 @@ export default class ChatStream extends AIStream {
           return { success: false, error: '非群聊环境' };
         }
         
-        const msgId = String(args.msgId || '').trim();
+        const msgId = String(args.msgId ?? '').trim();
         if (!msgId) {
           return { success: false, error: '消息ID不能为空' };
         }
@@ -687,7 +668,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：发送群公告
     this.registerMCPTool('announce', {
       description: '发送群公告',
       inputSchema: {
@@ -709,7 +689,7 @@ export default class ChatStream extends AIStream {
           return { success: false, error: '非群聊环境' };
         }
         
-        const content = String(args.content || '').trim();
+        const content = String(args.content ?? '').trim();
         if (!content) {
           return { success: false, error: '公告内容不能为空' };
         }
@@ -743,7 +723,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：撤回消息
     this.registerMCPTool('recall', {
       description: '撤回消息',
       inputSchema: {
@@ -830,7 +809,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：获取群信息ex（返回JSON结果）
     this.registerMCPTool('getGroupInfoEx', {
       description: '获取群的扩展详细信息（包括更多群信息）',
       inputSchema: {
@@ -862,7 +840,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：获取@全体成员剩余次数（返回JSON结果）
     this.registerMCPTool('getAtAllRemain', {
       description: '获取群@全体成员的剩余次数',
       inputSchema: {
@@ -894,7 +871,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：获取群禁言列表（返回JSON结果）
     this.registerMCPTool('getBanList', {
       description: '获取当前被禁言的成员列表',
       inputSchema: {
@@ -926,7 +902,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：设置群代办
     this.registerMCPTool('setGroupTodo', {
       description: '设置群代办',
       inputSchema: {
@@ -944,7 +919,7 @@ export default class ChatStream extends AIStream {
           return { success: false, error: '非群聊环境' };
         }
         
-        const msgId = String(args.msgId || '').trim();
+        const msgId = String(args.msgId ?? '').trim();
         if (!msgId) {
           return { success: false, error: '消息ID不能为空' };
         }
@@ -1220,7 +1195,7 @@ ${isGlobalTrigger ?
     // 基础文本
     const text = typeof question === 'string'
       ? question
-      : (question?.content || question?.text || '');
+      : (question?.content ?? question?.text ?? '');
 
     // 从事件中提取图片（OneBot 消息段）
     const images = [];
@@ -1295,7 +1270,7 @@ ${isGlobalTrigger ?
     const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
     const currentContent = typeof userMessage.content === 'string' 
       ? userMessage.content 
-      : (userMessage.content?.text || '');
+      : (userMessage.content?.text ?? '');
     
     // 格式化单条消息
     const formatMessage = (msg) => {
@@ -1398,7 +1373,7 @@ ${isGlobalTrigger ?
       }
 
       // 工具调用由 LLM 工厂（tool calling + MCP）内部完成，这里只负责发送最终文本
-      const text = (response || '').toString().trim();
+      const text = (response ?? '').toString().trim();
       if (text) {
         await this.sendMessages(e, text);
         this.recordAIResponse(e, text, []);

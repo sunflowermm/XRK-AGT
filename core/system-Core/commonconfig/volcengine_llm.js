@@ -13,7 +13,7 @@ export default class VolcengineLLMConfig extends ConfigBase {
       displayName: '火山引擎 LLM 工厂配置（文本）',
       description: '火山引擎豆包大语言模型文本聊天配置',
       filePath: (cfg) => {
-        const port = cfg?._port ?? cfg?.server?.server?.port;
+        const port = cfg?.port ?? cfg?._port;
         if (!port) {
           throw new Error(`VolcengineLLMConfig: 未提供端口，无法解析路径`);
         }

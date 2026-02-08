@@ -50,7 +50,6 @@ export default class DatabaseStream extends AIStream {
    * 注册所有知识库相关功能
    */
   registerAllFunctions() {
-    // MCP工具：保存知识
     this.registerMCPTool('save_knowledge', {
       description: '保存知识到知识库',
       inputSchema: {
@@ -67,13 +66,13 @@ export default class DatabaseStream extends AIStream {
         },
         required: ['db', 'content']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args = {}, _context = {}) => {
         const { db, content } = args;
         if (!db || !content) {
           return { success: false, error: '知识库名称和内容不能为空' };
         }
 
-        await this.saveKnowledge(db, content, context);
+        await this.saveKnowledge(db, content);
         BotUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
         
         return {
@@ -87,7 +86,6 @@ export default class DatabaseStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：查询知识（返回JSON结果）
     this.registerMCPTool('query_knowledge', {
       description: '从知识库查询知识，支持关键词搜索',
       inputSchema: {
@@ -110,7 +108,7 @@ export default class DatabaseStream extends AIStream {
           return { success: false, error: '知识库名称不能为空' };
         }
 
-        const results = await this.queryKnowledge(db, keyword, context);
+        const results = await this.queryKnowledge(db, keyword);
         
         // 在工作流中记录笔记
 
@@ -134,7 +132,6 @@ export default class DatabaseStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：列出知识库（返回JSON结果）
     this.registerMCPTool('list_knowledge', {
       description: '列出所有可用的知识库',
       inputSchema: {
@@ -142,8 +139,8 @@ export default class DatabaseStream extends AIStream {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
-        const dbs = await this.listDatabases(context);
+      handler: async (_args = {}, _context = {}) => {
+        const dbs = await this.listDatabases();
         
         // 在工作流中记录笔记
 
@@ -158,7 +155,6 @@ export default class DatabaseStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：删除知识
     this.registerMCPTool('delete_knowledge', {
       description: '从知识库删除知识',
       inputSchema: {
@@ -175,13 +171,13 @@ export default class DatabaseStream extends AIStream {
         },
         required: ['db']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args = {}, _context = {}) => {
         const { db, condition } = args;
         if (!db) {
           return { success: false, error: '知识库名称不能为空' };
         }
 
-        const count = await this.deleteKnowledge(db, condition || '*', context);
+        const count = await this.deleteKnowledge(db, condition || '*');
         
         return {
           success: true,
@@ -200,7 +196,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 保存知识（自动处理文本或JSON，并生成 embedding）
    */
-  async saveKnowledge(db, content, _context) {
+  async saveKnowledge(db, content) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
     
     let records = [];
@@ -253,7 +249,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 查询知识（支持向量检索和关键词搜索）
    */
-  async queryKnowledge(db, keyword, _context) {
+  async queryKnowledge(db, keyword) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
     
     let records = [];
@@ -404,7 +400,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 列出所有知识库
    */
-  async listDatabases(_context) {
+  async listDatabases() {
     try {
       const files = await fs.readdir(this.dbDir);
       return files
@@ -418,7 +414,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 删除知识（简化版：支持ID或条件）
    */
-  async deleteKnowledge(db, condition, _context) {
+  async deleteKnowledge(db, condition) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
     
     let records = [];
@@ -464,7 +460,7 @@ export default class DatabaseStream extends AIStream {
   /**
    * 构建系统提示（辅助工作流，合并时不会被调用）
    */
-  buildSystemPrompt(_context) {
+  buildSystemPrompt() {
     return '知识库工作流插件，为其他工作流提供知识存储和检索能力。';
   }
 
@@ -482,7 +478,7 @@ export default class DatabaseStream extends AIStream {
     }
   }
 
-  async buildChatContext(_e, _question) {
+  async buildChatContext() {
     return [];
   }
 

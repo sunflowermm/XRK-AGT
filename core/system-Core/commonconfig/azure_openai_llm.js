@@ -11,7 +11,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
       displayName: 'Azure OpenAI LLM 工厂配置（官方）',
       description: 'Azure OpenAI Chat Completions 配置（deployment + api-version）',
       filePath: (cfg) => {
-        const port = cfg?._port ?? cfg?.server?.server?.port;
+        const port = cfg?.port ?? cfg?._port;
         if (!port) throw new Error('AzureOpenAILLMConfig: 未提供端口，无法解析路径');
         return `data/server_bots/${port}/azure_openai_llm.yaml`;
       },

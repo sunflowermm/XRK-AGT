@@ -498,7 +498,7 @@ export default class AIStream {
    * @param {Object} context - 上下文
    * @returns {string}
    */
-  buildSystemPrompt(_context) {
+  buildSystemPrompt() {
     return '';
   }
 
@@ -895,7 +895,7 @@ export default class AIStream {
       for (const v of vals) {
         if (v !== undefined && v !== null) return v;
       }
-      return undefined;
+      return;
     };
     const pickTrimmed = (...vals) => {
       for (const v of vals) {
@@ -903,7 +903,7 @@ export default class AIStream {
         const s = String(v).trim();
         if (s) return s;
       }
-      return undefined;
+      return;
     };
 
     // 获取提供商名称（仅保留 LLM 提供商概念）
@@ -1166,7 +1166,7 @@ export default class AIStream {
    * @param {Object} context - 上下文
    * @returns {Error} 处理后的错误
    */
-  handleError(error, operation, _context = {}) {
+  handleError(error, operation) {
     const errorMessage = error?.message || String(error);
     BotUtil.makeLog('error', 
       `[${this.name}] ${operation}失败: ${errorMessage}`, 

@@ -93,9 +93,9 @@ class App {
     this._llmOptions = { profiles: [], defaultProfile: '' };
     this._chatSettings = {
       workflow: 'device',
-      persona: localStorage.getItem('chatPersona') || ''
+      persona: localStorage.getItem('chatPersona') ?? ''
     };
-    this._webUserId = localStorage.getItem('webUserId') || 'webclient';
+    this._webUserId = localStorage.getItem('webUserId') ?? 'webclient';
     this._activeEventSource = null;
     this._asrBubble = null;
     this._asrSessionId = null;
@@ -170,7 +170,7 @@ class App {
     try {
       if (!dt) return [];
       const out = [];
-      const items = Array.from(dt.items || []);
+      const items = Array.from(dt.items ?? []);
       if (items.length) {
         for (const it of items) {
           if (it && it.kind === 'file') {
@@ -185,7 +185,7 @@ class App {
       return out;
     } catch {
       try {
-        return Array.from(dt?.files || []);
+        return Array.from(dt?.files ?? []);
       } catch {
         return [];
       }
@@ -210,7 +210,7 @@ class App {
 
   _revokeAllObjectUrls() {
     try {
-      for (const url of this._objectUrls || []) {
+      for (const url of this._objectUrls ?? []) {
         try { URL.revokeObjectURL(url); } catch {}
       }
       this._objectUrls?.clear?.();
@@ -238,9 +238,9 @@ class App {
       }
       this._llmOptions = {
         enabled: data.enabled !== false,
-        defaultProfile: data.defaultProfile || '',
-        profiles: data.profiles || [],
-        workflows: data.workflows || []
+        defaultProfile: data.defaultProfile ?? '',
+        profiles: data.profiles ?? [],
+        workflows: data.workflows ?? []
       };
 
       this._chatSettings.workflow = 'desktop';
@@ -676,9 +676,9 @@ class App {
     this.updateSystemStatus(data);
     
     // 更新各个面板（平滑过渡）
-    this.renderBotsPanel(data.bots || []);
-    this.renderWorkflowInfo(data.workflows || {}, data.panels || {});
-    this.renderNetworkInfo(data.system?.network || {}, data.system?.netRates || {});
+    this.renderBotsPanel(data.bots ?? []);
+    this.renderWorkflowInfo(data.workflows ?? {}, data.panels ?? {});
+    this.renderNetworkInfo(data.system?.network ?? {}, data.system?.netRates ?? {});
   }
   
   /**
@@ -806,7 +806,7 @@ class App {
               ${(bot.nickname || '').slice(0,2) || (bot.uin || '').slice(-2) || '??'}
             </div>
                 <div style="flex:1;min-width:0;text-align:left">
-              <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${this.escapeHtml(bot.nickname || bot.uin)}</div>
+              <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:14px;text-align:left">${this.escapeHtml(bot.nickname ?? bot.uin)}</div>
                   <div style="font-size:12px;color:var(--text-muted);line-height:1.4;text-align:left">
                     ${bot.tasker || '未知 Tasker'}${bot.device ? '' : ` · ${(bot.stats && bot.stats.friends) || 0} 好友 · ${(bot.stats && bot.stats.groups) || 0} 群组`}
                   </div>
@@ -835,9 +835,9 @@ class App {
     if (!box) return;
     
     box.setAttribute('data-updating', 'true');
-    const workflowData = panels.workflows || workflows;
-    const stats = workflowData.stats || {};
-    const items = workflowData.items || [];
+    const workflowData = panels.workflows ?? workflows;
+    const stats = workflowData.stats ?? {};
+    const items = workflowData.items ?? [];
     const total = stats.total ?? workflowData.total ?? 0;
     
     if (!total && !items.length) {
@@ -871,8 +871,8 @@ class App {
         <ul style="margin:8px 0 0;padding:0;list-style:none">
           ${items.map(item => `
             <li style="padding:8px 0;border-bottom:1px solid var(--border)">
-              <div style="font-weight:600;color:var(--text-primary)">${this.escapeHtml(item.name || 'workflow')}</div>
-              <div style="font-size:12px;color:var(--text-muted)">${this.escapeHtml(item.description || '')}</div>
+              <div style="font-weight:600;color:var(--text-primary)">${this.escapeHtml(item.name ?? 'workflow')}</div>
+              <div style="font-size:12px;color:var(--text-muted)">${this.escapeHtml(item.description ?? '')}</div>
             </li>
           `).join('')}
         </ul>
@@ -886,7 +886,7 @@ class App {
     
     // 添加更新标记，用于CSS过渡
     box.setAttribute('data-updating', 'true');
-    const entries = Object.entries(network || {});
+    const entries = Object.entries(network ?? {});
     if (!entries.length) {
       box.innerHTML = `
         <div class="empty-state">
@@ -913,8 +913,8 @@ class App {
         <span style="color:var(--primary);font-weight:600">${rateText}</span>
       </div>
       ${entries.map(([name, info]) => {
-        const address = info.address || '';
-        const mac = info.mac || '';
+        const address = info.address ?? '';
+        const mac = info.mac ?? '';
         return `
         <div style="padding:12px;border-bottom:1px solid var(--border);transition:background var(--transition)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
           <div style="font-weight:600;color:var(--text-primary);text-align:center;margin-bottom:4px">${this.escapeHtml(name)}</div>
@@ -988,9 +988,9 @@ class App {
       const data = await res.json();
       
       if (!data.success) {
-        throw new Error(data.message || data.error || '获取插件信息失败');
+        throw new Error(data.message ?? data.error ?? '获取插件信息失败');
       }
-      const summary = data.summary || {};
+      const summary = data.summary ?? {};
       const totalPlugins = summary.totalPlugins || (data.plugins?.length || 0);
       const pluginsWithRules = summary.withRules || 0;
       const pluginsWithTasks = summary.withTasks || summary.taskCount || 0;
@@ -1032,8 +1032,8 @@ class App {
 
   updateSystemStatus(data) {
     const { system } = data;
-    const panels = data.panels || {};
-    const metrics = panels.metrics || {};
+    const panels = data.panels ?? {};
+    const metrics = panels.metrics ?? {};
     
     // 更新统计卡片
     const cpuPercent = metrics.cpu ?? system?.cpu?.percent ?? 0;
@@ -1066,7 +1066,7 @@ class App {
     }
     
     // 更新网络历史：优先使用后端返回的实时数据
-    const netRecent = system?.netRecent || [];
+    const netRecent = system?.netRecent ?? [];
     const currentRxSec = Math.max(0, Number(metrics.net?.rxSec ?? system?.netRates?.rxSec ?? 0)) / 1024;
     const currentTxSec = Math.max(0, Number(metrics.net?.txSec ?? system?.netRates?.txSec ?? 0)) / 1024;
     
@@ -1446,7 +1446,6 @@ class App {
     
     // 初始化聊天状态
     this.initChatControls();
-    // 注意：restoreChatHistory 内部会重新加载历史记录，这里不需要重复加载
     this.restoreChatHistory();
     this.ensureDeviceWs();
   }
@@ -1501,7 +1500,7 @@ class App {
           try { chatContainer.classList.toggle('is-dragover', Boolean(active)); } catch {}
         },
         onFiles: (files) => {
-          const images = (files || []).filter(f => f?.type?.startsWith('image/'));
+          const images = (files ?? []).filter(f => f?.type?.startsWith('image/'));
           if (!images.length) return;
           this.handleImageSelect(images);
           this.showToast(`已添加 ${images.length} 张图片，点击发送即可上传`, 'success');
@@ -1629,7 +1628,7 @@ class App {
       sortedHistory.forEach(m => {
         try {
           if (m.type === 'chat-record' || (m.type === 'record' && m.messages)) {
-            this.appendChatRecord(m.messages || [], m.title || '', m.description || '', false);
+            this.appendChatRecord(m.messages ?? [], m.title ?? '', m.description ?? '', false);
           } else if (m.segments && Array.isArray(m.segments)) {
             // 支持 segments 格式（文本和图片混合）
             this.appendSegments(m.segments, false, m.role || 'assistant');
@@ -1753,7 +1752,7 @@ class App {
         allText.push(seg);
       } else if (seg.type === 'text') {
         // 文本段：device.js 已标准化为 seg.text
-        const text = seg.text || '';
+        const text = seg.text ?? '';
         if (text.trim()) {
           textParts.push(text);
           allText.push(text);
@@ -1849,8 +1848,8 @@ class App {
         }
       } else if (seg.type === 'at') {
         // @ 提及：显示为特殊样式，添加到文本中
-        const qq = seg.qq || seg.user_id || '';
-        const name = seg.name || '';
+        const qq = seg.qq ?? seg.user_id ?? '';
+        const name = seg.name ?? '';
         const atText = name ? `@${name}` : (qq ? `@${qq}` : '@未知用户');
         const atHtml = `<span class="chat-at" data-qq="${this.escapeHtml(String(qq))}" data-name="${this.escapeHtml(name)}">${this.escapeHtml(atText)}</span>`;
         textParts.push(atHtml);
@@ -1903,7 +1902,7 @@ class App {
           textParts.length = 0;
         }
         
-        const content = seg.data || seg.markdown || seg.raw || '';
+        const content = seg.data ?? seg.markdown ?? seg.raw ?? '';
         if (content) {
           const contentDiv = document.createElement('div');
           contentDiv.className = seg.type === 'markdown' ? 'chat-markdown' : 'chat-raw';
@@ -1927,8 +1926,8 @@ class App {
           buttons.forEach((btn, idx) => {
             const button = document.createElement('button');
             button.className = 'chat-button';
-            button.textContent = btn.text || btn.label || `按钮${idx + 1}`;
-            button.title = btn.tooltip || '';
+            button.textContent = btn.text ?? btn.label ?? `按钮${idx + 1}`;
+            button.title = btn.tooltip ?? '';
             if (btn.action || btn.onClick) {
               button.addEventListener('click', () => {
                 if (typeof btn.onClick === 'function') {
@@ -2098,8 +2097,8 @@ class App {
       const recordData = {
         role: 'assistant',
         type: 'record',
-        title: title || '',
-        description: description || '',
+        title: title ?? '',
+        description: description ?? '',
         messages: messagesArray,
         ts: Date.now(),
         recordId
@@ -2199,7 +2198,7 @@ class App {
     if (!previewContainer) return;
     
     // 存储选中的图片
-    this._selectedImages = this._selectedImages || [];
+    this._selectedImages = this._selectedImages ?? [];
     
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -2345,7 +2344,7 @@ class App {
       ? options.keepUrls
       : (Array.isArray(options?.keepUrls) ? new Set(options.keepUrls) : null);
     // 释放所有 objectURL
-    (this._selectedImages || []).forEach(img => {
+    (this._selectedImages ?? []).forEach(img => {
       if (img?.previewUrl) {
         if (keepUrls && keepUrls.has(img.previewUrl)) return;
         this._safeRevokeObjectURL(img.previewUrl);
@@ -2357,8 +2356,8 @@ class App {
 
   async sendChatMessage() {
     const input = document.getElementById('chatInput');
-    const text = input?.value?.trim() || '';
-    const images = this._selectedImages || [];
+    const text = input?.value?.trim() ?? '';
+    const images = this._selectedImages ?? [];
     
     // 如果没有文本也没有图片，不发送
     if (!text && images.length === 0) return;
@@ -2473,8 +2472,8 @@ class App {
 
     // 2) 通过 WS 发送 OneBot-like segments，让后端 chat 工作流识别图片
     const segments = [];
-    if ((text || '').trim()) {
-      segments.push({ type: 'text', text: (text || '').trim() });
+    if ((text ?? '').trim()) {
+      segments.push({ type: 'text', text: (text ?? '').trim() });
     }
     urls.forEach((u) => {
       segments.push({ type: 'image', url: u, data: { url: u, file: u } });
@@ -2514,7 +2513,7 @@ class App {
    * @returns {string} 人设文本
    */
   getCurrentPersona() {
-    return this._chatSettings.persona?.trim() || '';
+    return this._chatSettings.persona?.trim() ?? '';
   }
 
   /**
@@ -2743,9 +2742,9 @@ class App {
       const res = await fetch(`${this.serverUrl}/api/config/list`, { headers: this.getHeaders() });
       if (!res.ok) throw new Error('获取配置列表失败');
       const data = await res.json();
-      if (!data.success) throw new Error(data.message || '接口返回失败');
+      if (!data.success) throw new Error(data.message ?? '接口返回失败');
       if (!this._configState) return;
-      this._configState.list = data.configs || [];
+      this._configState.list = data.configs ?? [];
       this.renderConfigList();
     } catch (e) {
       if (list) list.innerHTML = `<div class="empty-state"><p>加载失败: ${e.message}</p></div>`;
@@ -2772,7 +2771,7 @@ class App {
     const keyword = this._configState.filter;
     const filtered = this._configState.list.filter(cfg => {
       if (!keyword) return true;
-      const text = `${cfg.name} ${cfg.displayName || ''} ${cfg.description || ''}`.toLowerCase();
+      const text = `${cfg.name} ${cfg.displayName ?? ''} ${cfg.description ?? ''}`.toLowerCase();
       return text.includes(keyword);
     });
 
@@ -2792,7 +2791,7 @@ class App {
 
     list.innerHTML = filtered.map(cfg => {
       const title = this.escapeHtml(cfg.displayName || cfg.name);
-      const desc = this.escapeHtml(cfg.description || cfg.filePath || '');
+      const desc = this.escapeHtml(cfg.description ?? cfg.filePath ?? '');
       return `
       <div class="config-item ${this._configState.selected?.name === cfg.name ? 'active' : ''}" data-name="${this.escapeHtml(cfg.name)}">
         <div class="config-item-meta">
@@ -2839,7 +2838,7 @@ class App {
     const main = document.getElementById('configMain');
     if (!main) return;
 
-    const entries = Object.entries(config.configs || {});
+    const entries = Object.entries(config.configs ?? {});
     if (!entries.length) {
       main.innerHTML = `
         <div class="empty-state">
@@ -2856,7 +2855,7 @@ class App {
       <div class="config-main-header">
         <div>
           <h2>${this.escapeHtml(config.displayName || config.name)}</h2>
-          <p>${this.escapeHtml(config.description || '')}</p>
+          <p>${this.escapeHtml(config.description ?? '')}</p>
           </div>
         </div>
       <div class="config-grid">
@@ -2864,7 +2863,7 @@ class App {
           <div class="config-subcard" data-child="${this.escapeHtml(key)}">
             <div>
               <div class="config-subcard-title">${this.escapeHtml(meta.displayName || key)}</div>
-              <p class="config-subcard-desc">${this.escapeHtml(meta.description || '')}</p>
+              <p class="config-subcard-desc">${this.escapeHtml(meta.description ?? '')}</p>
           </div>
             <span class="config-tag">${this.escapeHtml(`system/${key}`)}</span>
           </div>
@@ -2896,15 +2895,15 @@ class App {
 
       const flatStruct = await flatStructRes.json();
       const flatData = await flatDataRes.json();
-      if (!flatStruct.success) throw new Error(flatStruct.message || '结构接口异常');
-      if (!flatData.success) throw new Error(flatData.message || '数据接口异常');
+      if (!flatStruct.success) throw new Error(flatStruct.message ?? '结构接口异常');
+      if (!flatData.success) throw new Error(flatData.message ?? '数据接口异常');
 
-      const schemaList = (flatStruct.flat || []).filter(field => field.path);
-      const values = flatData.flat || {};
+      const schemaList = (flatStruct.flat ?? []).filter(field => field.path);
+      const values = flatData.flat ?? {};
 
-      const activeSchema = this.extractActiveSchema(structure, name, child) || { fields: {} };
+      const activeSchema = this.extractActiveSchema(structure, name, child) ?? { fields: {} };
       this._configState.activeSchema = activeSchema;
-      this._configState.structureMeta = activeSchema.meta || {};
+      this._configState.structureMeta = activeSchema.meta ?? {};
       this._configState.arraySchemaMap = this.buildArraySchemaIndex(activeSchema);
       this._configState.dynamicCollectionsMeta = this.buildDynamicCollectionsMeta(activeSchema);
       this._configState.flatSchema = schemaList;
@@ -2947,9 +2946,9 @@ class App {
     if (name === 'system') {
       if (!child) return null;
       const target = structure.configs?.[child];
-      return target?.schema || { fields: target?.fields || {} };
+      return target?.schema ?? { fields: target?.fields ?? {} };
     }
-    return structure.schema || { fields: structure.fields || {} };
+    return structure.schema ?? { fields: structure.fields ?? {} };
   }
 
   buildArraySchemaIndex(schema, prefix = '', map = {}) {
@@ -2957,7 +2956,7 @@ class App {
     for (const [key, fieldSchema] of Object.entries(schema.fields)) {
       const path = prefix ? `${prefix}.${key}` : key;
       if (fieldSchema.type === 'array' && fieldSchema.itemType === 'object') {
-        const subFields = fieldSchema.itemSchema?.fields || fieldSchema.fields || {};
+        const subFields = fieldSchema.itemSchema?.fields ?? fieldSchema.fields ?? {};
         map[path] = subFields;
       }
       if ((fieldSchema.type === 'object' || fieldSchema.type === 'map') && fieldSchema.fields) {
@@ -2968,12 +2967,12 @@ class App {
   }
 
   buildDynamicCollectionsMeta(schema) {
-    const collections = schema?.meta?.collections || [];
+    const collections = schema?.meta?.collections ?? [];
     return collections.map(item => {
       const template = this.getSchemaNodeByPath(item.valueTemplatePath, schema);
       return {
         ...item,
-        valueFields: template?.fields || {}
+        valueFields: template?.fields ?? {}
       };
     });
   }
@@ -2982,10 +2981,10 @@ class App {
     const normalized = { ...values };
     if (!Array.isArray(flatSchema)) return normalized;
     flatSchema.forEach(field => {
-      if (!Object.prototype.hasOwnProperty.call(normalized, field.path)) return;
+      if (!Object.hasOwn(normalized, field.path)) return;
       normalized[field.path] = this.normalizeFieldValue(
         normalized[field.path],
-        field.meta || {},
+        field.meta ?? {},
         field.type
       );
     });
@@ -3013,9 +3012,9 @@ class App {
     const dirtyCount = Object.keys(this._configState.dirty).length;
     const saveDisabled = mode === 'form' ? dirtyCount === 0 : !this._configState.jsonDirty;
 
-    const title = this.escapeHtml(selected.displayName || selected.name);
+    const title = this.escapeHtml(selected.displayName ?? selected.name);
     const childLabel = selectedChild ? ` / ${this.escapeHtml(selectedChild)}` : '';
-    const descText = this.escapeHtml(selectedChild && selected.configs ? selected.configs[selectedChild]?.description || '' : selected.description || '');
+    const descText = this.escapeHtml(selectedChild && selected.configs ? selected.configs[selectedChild]?.description ?? '' : selected.description ?? '');
 
     main.innerHTML = `
       <div class="config-main-header">
@@ -3099,20 +3098,20 @@ class App {
     
     // 第一遍：识别所有 SubForm 类型的字段
     flatSchema.forEach(field => {
-      const meta = field.meta || {};
-      const component = (meta.component || '').toLowerCase();
+      const meta = field.meta ?? {};
+      const component = (meta.component ?? '').toLowerCase();
       if (component === 'subform' || (field.type === 'object' && meta.component !== 'json')) {
         subFormFields.set(field.path, {
-          label: meta.label || field.path.split('.').pop() || field.path,
-          description: meta.description || '',
-          group: meta.group || null
+          label: meta.label ?? field.path.split('.').pop() ?? field.path,
+          description: meta.description ?? '',
+          group: meta.group ?? null
         });
       }
     });
     
     // 第二遍：构建字段树
     flatSchema.forEach(field => {
-      const meta = field.meta || {};
+      const meta = field.meta ?? {};
       const path = field.path;
       const parts = path.split('.');
       
@@ -3242,7 +3241,7 @@ class App {
   renderFieldTree(tree) {
     return Object.entries(tree).map(([groupKey, group]) => {
       const groupLabel = this.formatGroupLabel(groupKey);
-      const groupDesc = group.fields[0]?.meta?.groupDesc || '';
+      const groupDesc = group.fields[0]?.meta?.groupDesc ?? '';
       const totalFields = group.fields.length + Object.values(group.subGroups).reduce((sum, sg) => sum + sg.fields.length, 0);
       
       // 渲染子分组（SubForm），子分组内的字段也需要按分组显示
@@ -3308,7 +3307,7 @@ class App {
     const groups = new Map();
     
     fields.forEach(field => {
-      const meta = field.meta || {};
+      const meta = field.meta ?? {};
       const groupKey = meta.group || '默认';
       
       if (!groups.has(groupKey)) {
@@ -3321,7 +3320,7 @@ class App {
   }
 
   renderConfigField(field) {
-    const meta = field.meta || {};
+    const meta = field.meta ?? {};
     const path = field.path;
     const value = this._configState.values[path];
     const dirty = this._configState.dirty[path];
@@ -3343,18 +3342,18 @@ class App {
   }
 
   renderConfigControl(field, value, inputId) {
-    const meta = field.meta || {};
-    const component = meta.component || field.component || this.mapTypeToComponent(field.type);
-    const dataset = `data-field="${this.escapeHtml(field.path)}" data-component="${component || ''}" data-type="${field.type}"`;
+    const meta = field.meta ?? {};
+    const component = meta.component ?? field.component ?? this.mapTypeToComponent(field.type);
+    const dataset = `data-field="${this.escapeHtml(field.path)}" data-component="${component ?? ''}" data-type="${field.type}"`;
     const disabled = meta.readonly ? 'disabled' : '';
-    const placeholder = this.escapeHtml(meta.placeholder || '');
+    const placeholder = this.escapeHtml(meta.placeholder ?? '');
 
     const normalizeOptions = (options = []) => options.map(opt => {
       if (typeof opt === 'object') return opt;
       return { label: opt, value: opt };
     });
 
-    const lowerComponent = (component || '').toLowerCase();
+    const lowerComponent = (component ?? '').toLowerCase();
     const isArrayObject = field.type === 'array<object>' || (lowerComponent === 'arrayform' && meta.itemType === 'object');
     if (isArrayObject) {
       return this.renderArrayObjectControl(field, Array.isArray(value) ? value : [], meta);
@@ -3369,7 +3368,7 @@ class App {
           </label>
         `;
       case 'select': {
-        const opts = normalizeOptions(meta.enum || meta.options || []);
+        const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
         const current = value ?? '';
         return `
           <select class="form-input" id="${inputId}" ${dataset} ${disabled}>
@@ -3378,7 +3377,7 @@ class App {
         `;
       }
       case 'multiselect': {
-        const opts = normalizeOptions(meta.enum || meta.options || []);
+        const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
         const current = Array.isArray(value) ? value.map(v => String(v)) : [];
         return `
           <select class="form-input" id="${inputId}" multiple ${dataset} data-control="multiselect" ${disabled}>
@@ -3388,7 +3387,7 @@ class App {
         `;
       }
       case 'tags': {
-        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value || ''));
+        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value ?? ''));
         return `
           <textarea class="form-input" rows="3" id="${inputId}" ${dataset} data-control="tags" placeholder="每行一个值" ${disabled}>${text}</textarea>
           <p class="config-field-hint">将文本拆分为数组</p>
@@ -3432,7 +3431,7 @@ class App {
   renderConfigJsonPanel() {
     return `
       <div class="config-json-panel">
-        <textarea id="configJsonTextarea" rows="20">${this.escapeHtml(this._configState?.jsonText || '')}</textarea>
+        <textarea id="configJsonTextarea" rows="20">${this.escapeHtml(this._configState?.jsonText ?? '')}</textarea>
         <div class="config-json-actions">
           <button class="btn btn-secondary" id="configJsonFormatBtn">格式化</button>
           <p class="config-field-hint">JSON 模式会覆盖整份配置，提交前请仔细校验。</p>
@@ -3442,10 +3441,10 @@ class App {
   }
 
   renderArrayObjectControl(field, items = [], meta = {}) {
-    const subFields = this._configState.arraySchemaMap[field.path] || meta.itemSchema?.fields || meta.fields || {};
-    const itemLabel = meta.itemLabel || '条目';
+    const subFields = this._configState.arraySchemaMap[field.path] ?? meta.itemSchema?.fields ?? meta.fields ?? {};
+    const itemLabel = meta.itemLabel ?? '条目';
     const body = items.length
-      ? items.map((item, idx) => this.renderArrayObjectItem(field.path, subFields, item || {}, idx, itemLabel)).join('')
+      ? items.map((item, idx) => this.renderArrayObjectItem(field.path, subFields, item ?? {}, idx, itemLabel)).join('')
       : `<div class="config-field-hint">暂无${this.escapeHtml(itemLabel)}，点击下方按钮新增。</div>`;
 
     return `
@@ -3475,7 +3474,7 @@ class App {
   }
 
   renderArrayObjectFields(parentPath, fields, itemValue, index, basePath = '') {
-    return Object.entries(fields || {}).map(([key, schema]) => {
+    return Object.entries(fields ?? {}).map(([key, schema]) => {
       const relPath = basePath ? `${basePath}.${key}` : key;
       const templatePath = `${parentPath}[].${relPath}`;
       const value = this.getNestedValue(itemValue, relPath);
@@ -3483,7 +3482,7 @@ class App {
         return `
           <div class="array-object-subgroup">
             <div class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</div>
-            ${this.renderArrayObjectFields(parentPath, schema.fields, value || {}, index, relPath)}
+            ${this.renderArrayObjectFields(parentPath, schema.fields, value ?? {}, index, relPath)}
           </div>
         `;
       }
@@ -3499,7 +3498,7 @@ class App {
   }
 
   renderArrayObjectFieldControl(parentPath, relPath, templatePath, schema, value, index) {
-    const component = (schema.component || this.mapTypeToComponent(schema.type) || '').toLowerCase();
+    const component = (schema.component ?? this.mapTypeToComponent(schema.type) ?? '').toLowerCase();
     const dataset = `data-array-parent="${this.escapeHtml(parentPath)}" data-array-index="${index}" data-object-path="${this.escapeHtml(relPath)}" data-template-path="${this.escapeHtml(templatePath)}" data-component="${component}" data-type="${schema.type}"`;
 
     const normalizeOptions = (options = []) => options.map(opt => (typeof opt === 'object' ? opt : { label: opt, value: opt }));
@@ -3513,7 +3512,7 @@ class App {
           </label>
         `;
       case 'select': {
-        const opts = normalizeOptions(schema.enum || schema.options || []);
+        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
         const current = value ?? '';
         return `
           <select class="form-input" ${dataset}>
@@ -3522,7 +3521,7 @@ class App {
         `;
       }
       case 'multiselect': {
-        const opts = normalizeOptions(schema.enum || schema.options || []);
+        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
         const current = Array.isArray(value) ? value.map(v => String(v)) : [];
         return `
           <select class="form-input" multiple ${dataset} data-control="multiselect">
@@ -3531,7 +3530,7 @@ class App {
         `;
       }
       case 'tags': {
-        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value || ''));
+        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value ?? ''));
         return `<textarea class="form-input" rows="3" ${dataset} data-control="tags" placeholder="每行一个值">${text}</textarea>`;
       }
       case 'textarea':
@@ -3553,7 +3552,7 @@ class App {
   }
 
   renderDynamicCollections() {
-    const collections = this._configState?.dynamicCollectionsMeta || [];
+    const collections = this._configState?.dynamicCollectionsMeta ?? [];
     if (!collections.length) return '';
     return `
       <div class="dynamic-collections">
@@ -3572,8 +3571,8 @@ class App {
       <div class="config-group">
         <div class="config-group-header">
           <div>
-            <h3>${this.escapeHtml(collection.label || collection.name)}</h3>
-            <p>${this.escapeHtml(collection.description || '')}</p>
+            <h3>${this.escapeHtml(collection.label ?? collection.name)}</h3>
+            <p>${this.escapeHtml(collection.description ?? '')}</p>
           </div>
           <button type="button" class="btn btn-secondary" data-action="collection-add" data-collection="${this.escapeHtml(collection.name)}">
             新增${this.escapeHtml(collection.keyLabel || '项')}
@@ -3594,24 +3593,24 @@ class App {
           <span>${this.escapeHtml(collection.keyLabel || '键')}：${this.escapeHtml(entry.key)}</span>
         </div>
         <div class="array-object-card-body">
-          ${this.renderDynamicFields(collection, collection.valueFields || {}, entry.value || {}, entry.key)}
+          ${this.renderDynamicFields(collection, collection.valueFields ?? {}, entry.value ?? {}, entry.key)}
         </div>
       </div>
     `;
   }
 
   getDynamicCollectionEntries(collection) {
-    const source = this.getValueFromObject(this._configState?.rawObject || {}, collection.basePath || '');
-    const exclude = new Set(collection.excludeKeys || []);
-    return Object.entries(source || {})
+    const source = this.getValueFromObject(this._configState?.rawObject ?? {}, collection.basePath ?? '');
+    const exclude = new Set(collection.excludeKeys ?? []);
+    return Object.entries(source ?? {})
       .filter(([key]) => !exclude.has(key))
       .map(([key, value]) => ({ key, value }));
   }
 
   renderDynamicFields(collection, fields, value, entryKey, basePath = '') {
-    return Object.entries(fields || {}).map(([key, schema]) => {
+    return Object.entries(fields ?? {}).map(([key, schema]) => {
       const relPath = basePath ? `${basePath}.${key}` : key;
-      const templatePathBase = collection.valueTemplatePath || '';
+      const templatePathBase = collection.valueTemplatePath ?? '';
       const templatePath = this.normalizeTemplatePath(templatePathBase ? `${templatePathBase}.${relPath}` : relPath);
       const fieldValue = this.getNestedValue(value, relPath);
 
@@ -3619,12 +3618,12 @@ class App {
         return `
           <div class="array-object-subgroup">
             <div class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</div>
-            ${this.renderDynamicFields(collection, schema.fields, fieldValue || {}, entryKey, relPath)}
+            ${this.renderDynamicFields(collection, schema.fields, fieldValue ?? {}, entryKey, relPath)}
           </div>
         `;
       }
 
-      const dataset = `data-collection="${this.escapeHtml(collection.name)}" data-entry-key="${this.escapeHtml(entryKey)}" data-object-path="${this.escapeHtml(relPath)}" data-template-path="${this.escapeHtml(templatePath)}" data-component="${(schema.component || '').toLowerCase()}" data-type="${schema.type}"`;
+      const dataset = `data-collection="${this.escapeHtml(collection.name)}" data-entry-key="${this.escapeHtml(entryKey)}" data-object-path="${this.escapeHtml(relPath)}" data-template-path="${this.escapeHtml(templatePath)}" data-component="${(schema.component ?? '').toLowerCase()}" data-type="${schema.type}"`;
       return `
         <div class="array-object-field">
           <label>${this.escapeHtml(schema.label || key)}</label>
@@ -3636,7 +3635,7 @@ class App {
   }
 
   renderDynamicFieldControl(dataset, schema, value) {
-    const component = (schema.component || this.mapTypeToComponent(schema.type) || '').toLowerCase();
+    const component = (schema.component ?? this.mapTypeToComponent(schema.type) ?? '').toLowerCase();
     const normalizeOptions = (options = []) => options.map(opt => (typeof opt === 'object' ? opt : { label: opt, value: opt }));
 
     switch (component) {
@@ -3648,7 +3647,7 @@ class App {
           </label>
         `;
       case 'select': {
-        const opts = normalizeOptions(schema.enum || schema.options || []);
+        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
         const current = value ?? '';
         return `
           <select class="form-input" ${dataset}>
@@ -3657,7 +3656,7 @@ class App {
         `;
       }
       case 'multiselect': {
-        const opts = normalizeOptions(schema.enum || schema.options || []);
+        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
         const current = Array.isArray(value) ? value.map(v => String(v)) : [];
         return `
           <select class="form-input" multiple ${dataset} data-control="multiselect">
@@ -3666,7 +3665,7 @@ class App {
         `;
       }
       case 'tags': {
-        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value || ''));
+        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value ?? ''));
         return `<textarea class="form-input" rows="3" ${dataset} data-control="tags">${text}</textarea>`;
       }
       case 'textarea':
@@ -3756,11 +3755,11 @@ class App {
     const parentPath = target.dataset.arrayParent;
     const index = parseInt(target.dataset.arrayIndex, 10);
     const objectPath = target.dataset.objectPath;
-    const templatePath = this.normalizeTemplatePath(target.dataset.templatePath || '');
-    const fieldDef = this.getFlatFieldDefinition(templatePath) || {};
-    const meta = fieldDef.meta || {};
-    const type = fieldDef.type || target.dataset.type || '';
-    const component = (target.dataset.component || '').toLowerCase();
+    const templatePath = this.normalizeTemplatePath(target.dataset.templatePath ?? '');
+    const fieldDef = this.getFlatFieldDefinition(templatePath) ?? {};
+    const meta = fieldDef.meta ?? {};
+    const type = fieldDef.type ?? target.dataset.type ?? '';
+    const component = (target.dataset.component ?? '').toLowerCase();
 
     let value;
     if (component === 'switch') {
@@ -3788,7 +3787,7 @@ class App {
 
   addArrayObjectItem(path) {
     if (!this._configState) return;
-    const subFields = this._configState.arraySchemaMap[path] || {};
+    const subFields = this._configState.arraySchemaMap[path] ?? {};
     const template = this.buildDefaultsFromFields(subFields);
     const list = Array.isArray(this._configState.values[path]) ? this._cloneValue(this._configState.values[path]) : [];
     list.push(template);
@@ -3879,7 +3878,7 @@ class App {
         }
       };
 
-      msgEl.textContent = message || '';
+      msgEl.textContent = message ?? '';
       input.value = '';
       modal.style.display = 'flex';
       input.focus();
@@ -3898,13 +3897,13 @@ class App {
 
     const key = (await this.showPromptDialog(collection.keyPlaceholder || '请输入键'))?.trim();
     if (!key) return;
-    const existing = this.getValueFromObject(this._configState.rawObject || {}, collection.basePath || '');
-    if (existing && Object.prototype.hasOwnProperty.call(existing, key)) {
+    const existing = this.getValueFromObject(this._configState.rawObject ?? {}, collection.basePath ?? '');
+    if (existing && Object.hasOwn(existing, key)) {
       this.showToast('该键已存在', 'warning');
       return;
     }
     const defaults = this.buildDefaultsFromFields(collection.valueFields);
-    const prefix = this.combinePath(collection.basePath || '', key);
+    const prefix = this.combinePath(collection.basePath ?? '', key);
     Object.entries(defaults).forEach(([fieldKey, fieldValue]) => {
       const fullPath = this.combinePath(prefix, fieldKey);
       this.setConfigFieldValue(fullPath, fieldValue);
@@ -3947,7 +3946,7 @@ class App {
     }
 
     value = this.normalizeFieldValue(value, meta, type);
-    const prefix = this.combinePath(collection.basePath || '', key);
+    const prefix = this.combinePath(collection.basePath ?? '', key);
     const fullPath = this.combinePath(prefix, objectPath);
     this.setConfigFieldValue(fullPath, value);
   }
@@ -3957,8 +3956,8 @@ class App {
     const path = target.dataset.field;
     const component = (target.dataset.component || '').toLowerCase();
     const fieldDef = this.getFlatFieldDefinition(path);
-    const meta = fieldDef?.meta || {};
-    const type = fieldDef?.type || target.dataset.type || '';
+    const meta = fieldDef?.meta ?? {};
+    const type = fieldDef?.type ?? target.dataset.type ?? '';
 
     let value;
     if (component === 'switch') {
@@ -4083,7 +4082,7 @@ class App {
 
   async postBatchSet(flat) {
     if (!this._configState?.selected) throw new Error('未选择配置');
-    if (!Object.keys(flat || {}).length) throw new Error('未检测到改动');
+    if (!Object.keys(flat ?? {}).length) throw new Error('未检测到改动');
     const { name } = this._configState.selected;
     const body = { flat, backup: true, validate: true };
     if (this._configState.selectedChild) body.path = this._configState.selectedChild;
@@ -4099,7 +4098,7 @@ class App {
   }
 
   mapTypeToComponent(type) {
-    switch ((type || '').toLowerCase()) {
+    switch ((type ?? '').toLowerCase()) {
       case 'boolean': return 'Switch';
       case 'number': return 'InputNumber';
       default: return 'Input';
@@ -4112,7 +4111,7 @@ class App {
   }
 
   normalizeFieldValue(value, meta, typeHint) {
-    const type = (meta.type || typeHint || '').toLowerCase();
+    const type = (meta.type ?? typeHint ?? '').toLowerCase();
     if (type === 'number') return value === null || value === '' ? null : Number(value);
     if (type === 'boolean') {
       if (typeof value === 'string') {
@@ -4129,7 +4128,7 @@ class App {
   }
 
   castValue(value, type) {
-    switch ((type || '').toLowerCase()) {
+    switch ((type ?? '').toLowerCase()) {
       case 'number': return Number(value);
       case 'boolean': return value === 'true' || value === true;
       default: return value;
@@ -4174,7 +4173,7 @@ class App {
         } else {
           result[key] = Array.isArray(schema.default) ? [...schema.default] : [];
         }
-      } else if (Object.prototype.hasOwnProperty.call(schema, 'default')) {
+      } else if (Object.hasOwn(schema, 'default')) {
         result[key] = this._cloneValue(schema.default);
       } else {
         result[key] = schema.type === 'number' ? 0 : schema.type === 'boolean' ? false : '';
@@ -4259,7 +4258,7 @@ class App {
 
   _cloneFlat(data) {
     const clone = {};
-    Object.entries(data || {}).forEach(([k, v]) => {
+    Object.entries(data ?? {}).forEach(([k, v]) => {
       clone[k] = this._cloneValue(v);
     });
     return clone;
@@ -4356,7 +4355,7 @@ class App {
     welcome.style.display = 'none';
     section.style.display = 'block';
     
-    const pathParams = (api.path.match(/:(\w+)/g) || []).map(p => p.slice(1));
+    const pathParams = (api.path.match(/:(\w+)/g) ?? []).map(p => p.slice(1));
     
     let paramsHTML = '';
     
@@ -4365,10 +4364,10 @@ class App {
       paramsHTML += `<div class="api-form-section">
         <h3 class="api-form-section-title">路径参数</h3>
         ${pathParams.map(p => {
-          const cfg = api.pathParams[p] || {};
+          const cfg = api.pathParams[p] ?? {};
           return `<div class="form-group">
             <label class="form-label">${this.escapeHtml(cfg.label || p)} <span style="color:var(--danger)">*</span></label>
-            <input type="text" class="form-input" id="path_${this.escapeHtml(p)}" placeholder="${this.escapeHtml(cfg.placeholder || '')}" data-request-field="1">
+            <input type="text" class="form-input" id="path_${this.escapeHtml(p)}" placeholder="${this.escapeHtml(cfg.placeholder ?? '')}" data-request-field="1">
           </div>`;
         }).join('')}
       </div>`;
@@ -4587,7 +4586,7 @@ class App {
     api?.queryParams?.forEach(p => {
       const val = document.getElementById(p.name)?.value;
       if (!val) return;
-      if (p.defaultValue !== undefined && String(val) === String(p.defaultValue)) return; // 删去冗余默认参数
+      if (p.defaultValue !== undefined && String(val) === String(p.defaultValue)) return;
       query[p.name] = val;
     });
     if (Object.keys(query).length) data.query = query;
@@ -4598,7 +4597,7 @@ class App {
       const el = document.getElementById(p.name);
       const rawVal = el?.value;
       if (!rawVal) return;
-      if (p.defaultValue !== undefined && String(rawVal) === String(p.defaultValue)) return; // 删去冗余默认参数
+      if (p.defaultValue !== undefined && String(rawVal) === String(p.defaultValue)) return;
       let val = rawVal;
         if (p.type === 'json') {
           try { val = JSON.parse(val); } catch {}

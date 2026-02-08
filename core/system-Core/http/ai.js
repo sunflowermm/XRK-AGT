@@ -86,9 +86,9 @@ async function parseMultipartData(req) {
 
 function pickFirst(obj, keys) {
   for (const k of keys) {
-    if (Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== undefined && obj[k] !== null) return obj[k];
+    if (Object.hasOwn(obj, k) && obj[k] !== undefined && obj[k] !== null) return obj[k];
   }
-  return undefined;
+  return;
 }
 
 function parseOptionalJson(raw) {
@@ -102,18 +102,18 @@ function parseOptionalJson(raw) {
 }
 
 function toNum(v) {
-  if (v == null || v === '') return undefined;
+  if (v == null || v === '') return;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 }
 
 function toBool(v) {
-  if (v == null || v === '') return undefined;
+  if (v == null || v === '') return;
   if (typeof v === 'boolean') return v;
   const s = String(v).trim().toLowerCase();
   if (s === 'true' || s === '1') return true;
   if (s === 'false' || s === '0') return false;
-  return undefined;
+  return;
 }
 
 function getProviderConfig(provider) {
@@ -150,7 +150,7 @@ async function handleChatCompletionsV3(req, res) {
       if (fields.messages) {
         try {
           messages = JSON.parse(fields.messages);
-        } catch (_e) {
+        } catch {
           return HttpResponse.validationError(res, 'messages 字段格式无效');
         }
       }

@@ -15,7 +15,7 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
       displayName: 'OpenAI 兼容 LLM 工厂配置（第三方）',
       description: '第三方 OpenAI-like Chat Completions 配置（文本），支持 MCP 工具调用',
       filePath: (cfg) => {
-        const port = cfg?._port ?? cfg?.server?.server?.port;
+        const port = cfg?.port ?? cfg?._port;
         if (!port) {
           throw new Error('OpenAICompatibleLLMConfig: 未提供端口，无法解析路径');
         }

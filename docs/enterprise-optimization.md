@@ -1,9 +1,6 @@
 # 企业级网络服务优化文档
 
-> **文件位置**：`src/bot.js`、`src/utils/http-business.js`  
-> **说明**：本文档说明 XRK-AGT 服务端网络服务的企业级优化，包括代码重构、架构优化、性能提升等方面
-
-本文档说明 XRK-AGT 服务端网络服务的企业级优化，包括代码重构、架构优化、性能提升等方面。
+> **文件位置**：`src/bot.js`、`src/utils/http-business.js`
 
 ### 扩展特性
 

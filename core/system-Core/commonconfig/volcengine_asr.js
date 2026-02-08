@@ -12,7 +12,7 @@ export default class VolcengineASRConfig extends ConfigBase {
       displayName: '火山引擎 ASR 工厂配置',
       description: '火山引擎语音转文本（ASR）配置',
       filePath: (cfg) => {
-        const port = cfg?._port ?? cfg?.server?.server?.port;
+        const port = cfg?.port ?? cfg?._port;
         if (!port) {
           throw new Error(`VolcengineASRConfig: 未提供端口，无法解析路径`);
         }

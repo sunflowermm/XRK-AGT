@@ -44,7 +44,7 @@ export default class BaseFactory {
    * @returns {*} 客户端实例
    * @throws {Error} 如果提供商不存在
    */
-  createClient(...args) {
+  createClient(..._args) {
     throw new Error('子类必须实现 createClient 方法');
   }
 }

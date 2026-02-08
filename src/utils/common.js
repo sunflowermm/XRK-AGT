@@ -23,7 +23,7 @@ export const replyPrivate = async (userId, msg, uin = Bot.uin) => {
     return await Bot[uin].pickUser(targetId).sendMsg(msg)
   } catch (err) {
     logger?.mark?.(err)
-    return undefined
+    return
   }
 }
 

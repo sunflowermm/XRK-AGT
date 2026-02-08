@@ -27,11 +27,11 @@ export default class OpenAICompatibleLLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout || 360000;
+    this._timeout = config.timeout ?? 360000;
   }
 
   normalizeEndpoint(config) {
-    const base = (config.baseUrl || '').replace(/\/+$/, '');
+    const base = (config.baseUrl ?? '').replace(/\/+$/, '');
     const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
     if (!base) {
       throw new Error('openai_compat: 未配置 baseUrl（第三方 OpenAI 兼容接口地址）');
@@ -40,7 +40,7 @@ export default class OpenAICompatibleLLMClient {
   }
 
   get timeout() {
-    return this._timeout || 360000;
+    return this._timeout ?? 360000;
   }
 
   buildHeaders(extra = {}) {
@@ -55,7 +55,7 @@ export default class OpenAICompatibleLLMClient {
       if (mode === 'api-key') {
         headers['api-key'] = apiKey;
       } else if (mode === 'header') {
-        const name = String(this.config.authHeaderName || '').trim();
+        const name = String(this.config.authHeaderName ?? '').trim();
         if (!name) {
           throw new Error('openai_compat: authMode=header 时必须提供 authHeaderName');
         }

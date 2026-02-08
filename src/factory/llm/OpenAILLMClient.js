@@ -18,7 +18,7 @@ export default class OpenAILLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout || 360000;
+    this._timeout = config.timeout ?? 360000;
   }
 
   normalizeEndpoint(config) {
@@ -28,7 +28,7 @@ export default class OpenAILLMClient {
   }
 
   get timeout() {
-    return this._timeout || 360000;
+    return this._timeout ?? 360000;
   }
 
   buildHeaders(extra = {}) {

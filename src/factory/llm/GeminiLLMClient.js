@@ -19,7 +19,7 @@ export default class GeminiLLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout || 360000;
+    this._timeout = config.timeout ?? 360000;
     this._inlineDataCache = new Map();
   }
 
@@ -34,7 +34,7 @@ export default class GeminiLLMClient {
   }
 
   get timeout() {
-    return this._timeout || 360000;
+    return this._timeout ?? 360000;
   }
 
   buildHeaders(extra = {}) {
@@ -72,7 +72,7 @@ export default class GeminiLLMClient {
   }
 
   normalizeToAbsoluteUrl(url) {
-    const u = String(url || '').trim();
+    const u = String(url ?? '').trim();
     if (!u) return '';
     if (u.startsWith('data:')) return u;
     if (/^https?:\/\//i.test(u)) return u;
@@ -83,14 +83,14 @@ export default class GeminiLLMClient {
   }
 
   _parseDataUrl(dataUrl) {
-    const raw = String(dataUrl || '').trim();
+    const raw = String(dataUrl ?? '').trim();
     const m = raw.match(/^data:([^;]+);base64,(.*)$/i);
     if (!m) return null;
     return { mimeType: m[1], data: m[2] };
   }
 
   async _toInlineData(url) {
-    const raw = String(url || '').trim();
+    const raw = String(url ?? '').trim();
     if (!raw) return null;
 
     // data URL 直接解析
@@ -122,10 +122,10 @@ export default class GeminiLLMClient {
     const systemTexts = [];
     const contents = [];
 
-    for (const m of messages || []) {
-      const role = (m.role || '').toLowerCase();
+    for (const m of messages ?? []) {
+      const role = (m.role ?? '').toLowerCase();
       if (role === 'system') {
-        const text = (typeof m.content === 'string' ? m.content : (m.content?.text || m.content?.content || '')).toString();
+        const text = (typeof m.content === 'string' ? m.content : (m.content?.text ?? m.content?.content ?? '')).toString();
         if (text) systemTexts.push(text);
         continue;
       }
@@ -151,7 +151,7 @@ export default class GeminiLLMClient {
         }
       } else if (m.content && typeof m.content === 'object') {
         // 兼容少数场景：{text, content}
-        const text = (m.content.text || m.content.content || '').toString();
+        const text = (m.content.text ?? m.content.content ?? '').toString();
         if (text) parts.push({ text });
       }
 
@@ -166,7 +166,7 @@ export default class GeminiLLMClient {
       contents,
       generationConfig: {
         temperature: overrides.temperature ?? this.config.temperature ?? 0.7,
-        maxOutputTokens: overrides.maxTokens ?? overrides.max_tokens ?? this.config.maxTokens ?? this.config.max_tokens ?? 2048,
+        maxOutputTokens: (overrides.maxTokens ?? overrides.max_tokens) ?? (this.config.maxTokens ?? this.config.max_tokens) ?? 2048,
         ...(((overrides.topP ?? this.config.topP) !== undefined) ? { topP: (overrides.topP ?? this.config.topP) } : {}),
         ...(((overrides.topK ?? this.config.topK) !== undefined && (overrides.topK ?? this.config.topK)) ? { topK: (overrides.topK ?? this.config.topK) } : {})
       }
@@ -190,7 +190,7 @@ export default class GeminiLLMClient {
     // generateContent: candidates[0].content.parts[].text
     const parts = json?.candidates?.[0]?.content?.parts;
     if (!Array.isArray(parts)) return '';
-    return parts.map(p => p?.text || '').join('');
+    return parts.map(p => p?.text ?? '').join('');
   }
 
   async chat(messages, overrides = {}) {

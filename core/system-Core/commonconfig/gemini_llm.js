@@ -15,7 +15,7 @@ export default class GeminiLLMConfig extends ConfigBase {
       displayName: 'Gemini LLM 工厂配置（官方）',
       description: 'Google Generative Language API 配置（文本）',
       filePath: (cfg) => {
-        const port = cfg?._port ?? cfg?.server?.server?.port;
+        const port = cfg?.port ?? cfg?._port;
         if (!port) {
           throw new Error('GeminiLLMConfig: 未提供端口，无法解析路径');
         }

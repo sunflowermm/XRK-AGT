@@ -102,7 +102,7 @@ class HandlerManager {
    * @param {Object} e - 事件对象
    * @param {*} args - 额外参数
    */
-  async callAll(_key, _e, _args) {
+  async callAll() {
     // 功能暂时禁用
     // return this.call(key, e, args, true)
   }

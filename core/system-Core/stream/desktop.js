@@ -21,7 +21,7 @@ const execCommand = (command, options = {}) => {
         error.stderr = stderr;
         return reject(error);
       }
-      resolve(stdout || '');
+      resolve(stdout ?? '');
     });
   });
 };
@@ -63,7 +63,6 @@ export default class DesktopStream extends AIStream {
       ? path.join(os.homedir(), 'Desktop')
       : path.join(os.homedir(), 'Desktop');
 
-    // 初始化统一工具系统
     this.tools = new BaseTools(this.workspace);
     this.processCleanupInterval = null;
   }
@@ -79,17 +78,13 @@ export default class DesktopStream extends AIStream {
     await super.init();
 
 
-    // 先注册自己的函数
     this.registerAllFunctions();
 
-    // 合并 ToolsStream（提供 write/run/note 核心工具，read/grep已移至MCP工具）
-    // 注意：从 StreamLoader 获取已存在的实例，避免重复初始化导致重复注册
     const toolsStream = StreamLoader.getStream('tools');
     if (toolsStream) {
       this.merge(toolsStream);
     }
 
-    // 启动进程清理监控（每30秒检查一次）
     if (IS_WINDOWS) {
       this.processCleanupInterval = setInterval(async () => {
         try {
@@ -98,7 +93,6 @@ export default class DesktopStream extends AIStream {
             /svchost/i, /dwm/i, /wininit/i
           ]);
         } catch {
-          // 静默处理清理错误
         }
       }, 30000);
     }
@@ -123,13 +117,13 @@ export default class DesktopStream extends AIStream {
    * 统一参数获取：支持多种参数名（兼容MCP工具和内部调用）
    */
   getParam(params, ...keys) {
-    if (!params) return undefined;
+    if (!params) return;
     for (const key of keys) {
       if (params[key] !== undefined && params[key] !== null) {
         return params[key];
       }
     }
-    return undefined;
+    return;
   }
 
   /**
@@ -159,25 +153,20 @@ export default class DesktopStream extends AIStream {
    * 统一Excel数据格式转换：将各种格式转换为统一的sheets格式
    */
   normalizeExcelData(data) {
-    // 格式1: sheets格式 { sheets: [{ name: "...", data: [[...], [...]] }] }
     if (typeof data === 'object' && !Array.isArray(data) && data.sheets && Array.isArray(data.sheets)) {
       return data.sheets;
     }
-    // 格式2: 二维数组格式 [[header1, header2], [value1, value2], ...]
     if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
       return [{ name: 'Sheet1', data }];
     }
-    // 格式3: 对象数组格式 [{header1: value1, header2: value2}, ...]
     if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && !Array.isArray(data[0])) {
       const headers = Object.keys(data[0]);
       const rows = data.map(row => headers.map(header => row[header]));
       return [{ name: 'Sheet1', data: [headers, ...rows] }];
     }
-    // 格式4: headers/rows格式 { headers: [...], rows: [[...], [...]] }
     if (typeof data === 'object' && !Array.isArray(data) && data.headers && data.rows) {
       return [{ name: 'Sheet1', data: [data.headers, ...data.rows] }];
     }
-    // 格式5: 单个对象，转换为数组
     if (typeof data === 'object' && !Array.isArray(data)) {
       const headers = Object.keys(data);
       const values = headers.map(header => data[header]);
@@ -190,7 +179,6 @@ export default class DesktopStream extends AIStream {
    * 注册所有MCP工具
    */
   registerAllFunctions() {
-    // MCP工具：回到桌面
     this.registerMCPTool('show_desktop', {
       description: '回到桌面 - 最小化所有窗口显示桌面（仅限Windows系统）。适用场景：用户想要清空屏幕、查看桌面文件、需要干净的工作环境、或准备进行截屏等操作时使用。',
       inputSchema: {
@@ -214,7 +202,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：打开系统工具
     this.registerMCPTool('open_system_tool', {
       description: '打开Windows系统内置工具。支持的工具：notepad（记事本）、calc（计算器）、taskmgr（任务管理器）。当用户要求打开记事本、计算器或任务管理器时使用此功能。注意：这是打开应用程序，不是创建文档文件。',
       inputSchema: {
@@ -228,7 +215,7 @@ export default class DesktopStream extends AIStream {
         },
         required: ['tool']
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (args = {}, context = {}) => {
         if (!this.requireWindows(context, '打开系统工具功能')) {
           return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
         }
@@ -253,7 +240,6 @@ export default class DesktopStream extends AIStream {
       },
       enabled: true
     });
-    // MCP工具：截屏（返回JSON结果）
     this.registerMCPTool('screenshot', {
       description: '截取当前屏幕，返回截图文件路径和大小',
       inputSchema: {
@@ -279,7 +265,6 @@ export default class DesktopStream extends AIStream {
             throw new Error('截屏文件为空');
           }
 
-          // 存储到上下文
           if (context.stream) {
             context.stream.context = context.stream.context || {};
             context.stream.context.screenshotPath = screenshotPath;
@@ -301,7 +286,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：锁屏
     this.registerMCPTool('lock_screen', {
       description: '锁定电脑屏幕',
       inputSchema: {
@@ -325,7 +309,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：查看系统信息（返回JSON结果）
     this.registerMCPTool('system_info', {
       description: '查看电脑的 CPU、内存使用情况',
       inputSchema: {
@@ -342,9 +325,9 @@ export default class DesktopStream extends AIStream {
           ]);
 
           const cpuUsage = cpu.currentLoad ? cpu.currentLoad.toFixed(1) : '0.0';
-          const memTotal = mem.total / 1024 / 1024 / 1024; // GB
-          const memFree = mem.free / 1024 / 1024 / 1024; // GB
-          const memUsed = mem.used / 1024 / 1024 / 1024; // GB
+          const memTotal = mem.total / 1024 / 1024 / 1024;
+          const memFree = mem.free / 1024 / 1024 / 1024;
+          const memUsed = mem.used / 1024 / 1024 / 1024;
           const memUsedPercent = ((memUsed / memTotal) * 100).toFixed(1);
 
           const systemInfo = {
@@ -371,7 +354,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：打开浏览器
     this.registerMCPTool('open_browser', {
       description: '打开浏览器访问网页',
       inputSchema: {
@@ -408,7 +390,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：电源控制
     this.registerMCPTool('power_control', {
       description: '关机或重启电脑',
       inputSchema: {
@@ -422,7 +403,7 @@ export default class DesktopStream extends AIStream {
         },
         required: ['action']
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (args = {}, context = {}) => {
         if (!this.requireWindows(context, '关机/重启功能')) {
           return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
         }
@@ -459,7 +440,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：创建文件夹
     this.registerMCPTool('create_folder', {
       description: '在桌面创建文件夹',
       inputSchema: {
@@ -472,7 +452,7 @@ export default class DesktopStream extends AIStream {
         },
         required: ['folderName']
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (args = {}, context = {}) => {
         if (!this.requireWindows(context, '创建文件夹功能')) {
           return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
         }
@@ -502,7 +482,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：打开资源管理器
     this.registerMCPTool('open_explorer', {
       description: '打开文件管理器',
       inputSchema: {
@@ -529,7 +508,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：查看磁盘空间（返回JSON结果）
     this.registerMCPTool('disk_space', {
       description: '查看各磁盘的使用情况',
       inputSchema: {
@@ -576,7 +554,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：执行PowerShell命令
     this.registerMCPTool('execute_powershell', {
       description: '执行PowerShell命令（工作区：桌面）',
       inputSchema: {
@@ -623,7 +600,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：列出桌面文件（返回JSON结果）
     this.registerMCPTool('list_desktop_files', {
       description: '列出桌面上的文件和快捷方式',
       inputSchema: {
@@ -652,7 +628,6 @@ export default class DesktopStream extends AIStream {
                 size: stats.isFile() ? stats.size : null
               });
             } catch {
-              // 忽略无法访问的文件
             }
           }
 
@@ -675,7 +650,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：打开应用
     this.registerMCPTool('open_application', {
       description: '打开应用程序',
       inputSchema: {
@@ -741,7 +715,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：生成Word文档（返回JSON结果）
     this.registerMCPTool('create_word_document', {
       description: '生成并保存Word文档文件（.docx格式）。根据提供的文件名和内容创建新的Word文档文件并保存到桌面。注意：这是创建文档文件，不是打开记事本应用程序。如果用户要求"打开记事本"，应使用open_system_tool工具，而不是此工具。',
       inputSchema: {
@@ -817,7 +790,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：生成Excel文档（返回JSON结果）
     this.registerMCPTool('create_excel_document', {
       description: '创建Excel文档，数据必须是JSON数组格式',
       inputSchema: {
@@ -906,7 +878,7 @@ export default class DesktopStream extends AIStream {
               if (!column.header) return;
               let maxLength = column.header.length;
               column.eachCell({ includeEmpty: false }, (cell) => {
-                const cellValue = String(cell.value || '');
+                const cellValue = String(cell.value ?? '');
                 if (cellValue.length > maxLength) maxLength = cellValue.length;
               });
               column.width = Math.min(Math.max(maxLength + 2, 10), 50);
@@ -949,7 +921,6 @@ export default class DesktopStream extends AIStream {
     });
 
 
-    // MCP工具：清理进程
     this.registerMCPTool('cleanup_processes', {
       description: '清理无用进程',
       inputSchema: {
@@ -973,7 +944,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：查询股票行情（返回JSON结果）
     this.registerMCPTool('stock_quote', {
       description: '查询单只A股实时行情，返回结构化数据（价格、涨跌、涨跌幅等）',
       inputSchema: {
@@ -987,7 +957,7 @@ export default class DesktopStream extends AIStream {
         required: ['code']
       },
       handler: async (args = {}, _context = {}) => {
-        const code = (this.getParam(args, 'code', 'stockCode') || '').trim();
+        const code = (this.getParam(args, 'code', 'stockCode') ?? '').trim();
 
         // 验证股票代码格式（6位数字）
         if (!code) {
@@ -1106,7 +1076,7 @@ export default class DesktopStream extends AIStream {
       }
 
       // 解析股票名称（处理GBK编码）
-      let name = (fields[0] || '').trim();
+      let name = (fields[0] ?? '').trim();
       if (!name || /^\d+$/.test(name)) {
         // 如果名称为空或是纯数字，使用股票代码
         name = prefixedCode.replace(/^(sh|sz)/, '') || '未知';
@@ -1258,7 +1228,7 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
 
     const text = typeof question === 'string'
       ? question
-      : (question?.content || question?.text || '');
+      : (question?.content ?? question?.text ?? '');
 
     // 从事件中提取图片（OneBot segments / device segments）
     // Web 客户端通过 WS -> http/device.js 会把 payload.message 作为 e.message 透传到工作流

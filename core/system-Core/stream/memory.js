@@ -53,7 +53,6 @@ export default class MemoryStream extends AIStream {
    * 注册所有记忆相关功能
    */
   registerAllFunctions() {
-    // MCP工具：保存长期记忆
     this.registerMCPTool('save_memory', {
       description: '保存长期记忆',
       inputSchema: {
@@ -87,7 +86,6 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：查询记忆（返回JSON结果）
     this.registerMCPTool('query_memory', {
       description: '根据关键词查询相关记忆，返回记忆列表',
       inputSchema: {
@@ -129,7 +127,6 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：删除记忆
     this.registerMCPTool('delete_memory', {
       description: '删除长期记忆',
       inputSchema: {
@@ -162,7 +159,6 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：列出记忆（返回JSON结果）
     this.registerMCPTool('list_memories', {
       description: '列出所有保存的长期记忆',
       inputSchema: {
@@ -400,7 +396,7 @@ export default class MemoryStream extends AIStream {
   /**
    * 构建系统提示（辅助工作流，合并时不会被调用）
    */
-  buildSystemPrompt(_context) {
+  buildSystemPrompt() {
     return '记忆系统插件，为其他工作流提供记忆能力。';
   }
 
@@ -431,7 +427,7 @@ export default class MemoryStream extends AIStream {
     ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
   }
 
-  async buildChatContext(_e, _question) {
+  async buildChatContext() {
     return [];
   }
 

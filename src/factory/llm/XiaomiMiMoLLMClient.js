@@ -17,7 +17,7 @@ export default class XiaomiMiMoLLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout || 360000;
+    this._timeout = config.timeout ?? 360000;
     // 工具名称映射：规范化名称 -> 原始名称
     this._toolNameMap = new Map();
   }
@@ -35,7 +35,7 @@ export default class XiaomiMiMoLLMClient {
    * 获取超时时间
    */
   get timeout() {
-    return this._timeout || 360000;
+    return this._timeout ?? 360000;
   }
 
   /**

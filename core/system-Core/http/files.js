@@ -83,7 +83,7 @@ export default {
     {
       method: 'POST',
       path: '/api/file/upload',
-      handler: HttpResponse.asyncHandler(async (req, res, _Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         if (!Bot.checkApiAuthorization(req)) {
           return HttpResponse.forbidden(res, 'Unauthorized');
         }
@@ -176,7 +176,7 @@ export default {
     {
       method: 'GET',
       path: '/api/file/:id',
-      handler: HttpResponse.asyncHandler(async (req, res, _Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         // 输入验证
         const { id } = req.params;
         if (!id || typeof id !== 'string' || id.length > 50) {

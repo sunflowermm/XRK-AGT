@@ -12,7 +12,7 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
       displayName: '小米 MiMo LLM 工厂配置',
       description: '小米 MiMo 大语言模型配置（仅文本，无识图逻辑）',
       filePath: (cfg) => {
-        const port = cfg?._port ?? cfg?.server?.server?.port;
+        const port = cfg?.port ?? cfg?._port;
         if (!port) {
           throw new Error('XiaomiMiMoLLMConfig: 未提供端口，无法解析路径');
         }

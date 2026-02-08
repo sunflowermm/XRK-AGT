@@ -388,7 +388,7 @@ class PluginsLoader {
   normalizeAdapterList(taskers) {
     if (!taskers) return []
     return (Array.isArray(taskers) ? taskers : [taskers])
-      .map(item => String(item || '').toLowerCase())
+      .map(item => String(item ?? '').toLowerCase())
       .filter(Boolean)
   }
 
@@ -508,7 +508,7 @@ class PluginsLoader {
     return false
   }
 
-  async handleContext(plugins, _e) {
+  async handleContext(plugins) {
     if (!Array.isArray(plugins)) return false
 
     for (const plugin of plugins) {
@@ -597,8 +597,8 @@ class PluginsLoader {
       // 检查黑白名单（统一字符串比较）
       const chatbot = cfg.chatbot || {}
       const { blacklist = {}, whitelist = {} } = chatbot
-      const groupId = String(e.group_id || '')
-      const userId = String(e.user_id || '')
+      const groupId = String(e.group_id ?? '')
+      const userId = String(e.user_id ?? '')
       
       // 黑名单检查
       if (blacklist.groups?.includes(groupId) || blacklist.qq?.includes(userId)) {
@@ -781,7 +781,7 @@ class PluginsLoader {
       // 优化：减少超时时间到1.5秒，快速失败
       const initRes = await Promise.race([
         plugin.init(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('init_timeout')), 1500))
+        new Promise((resolve, reject) => setTimeout(() => reject(new Error('init_timeout')), 1500))
       ])
       return initRes !== 'return'
     } catch (err) {

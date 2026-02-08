@@ -13,7 +13,7 @@ export default class GPTGodLLMConfig extends ConfigBase {
       displayName: 'GPTGod LLM 工厂配置（文本）',
       description: 'GPTGod 大语言模型文本聊天配置，包括 API 参数和聊天模型选择',
       filePath: (cfg) => {
-        const port = cfg?._port ?? cfg?.server?.server?.port;
+        const port = cfg?.port ?? cfg?._port;
         if (!port) {
           throw new Error(`GPTGodLLMConfig: 未提供端口，无法解析路径`);
         }

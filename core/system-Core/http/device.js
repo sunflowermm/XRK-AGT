@@ -1674,7 +1674,7 @@ class DeviceManager {
                                 }
                                 
                                 // 处理 segments：转换文件路径为 web URL，支持转发消息
-                                segments = segments.map((seg, _idx) => {
+                                segments = segments.map((seg) => {
                                     // 字符串类型：转换为 text segment（防御性处理）
                                     if (typeof seg === 'string') {
                                         return { type: 'text', text: seg };
@@ -1976,7 +1976,7 @@ export default {
         {
             method: 'POST',
             path: '/api/device/:deviceId/ai',
-            handler: HttpResponse.asyncHandler(async (req, res, _Bot) => {
+            handler: HttpResponse.asyncHandler(async (req, res) => {
                     const deviceId = req.params.deviceId;
                     const { text, workflow, persona, profile, llm, model, llmProfile } = req.body || {};
                     if (!text || !String(text).trim()) {
@@ -2024,7 +2024,7 @@ export default {
             path: '/api/device/:deviceId/asr/sessions',
             handler: HttpResponse.asyncHandler(async (req, res) => {
                 const sessions = Array.from(asrSessions.entries())
-                    .filter(([_, s]) => s.deviceId === req.params.deviceId)
+                    .filter(([, s]) => s.deviceId === req.params.deviceId)
                     .map(([sid, s]) => ({
                         session_id: sid,
                         device_id: s.deviceId,

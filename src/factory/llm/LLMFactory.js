@@ -55,7 +55,7 @@ export default class LLMFactory {
    * @returns {boolean} 是否存在
    */
   static hasProvider(name) {
-    return providers.has((name || '').toLowerCase());
+    return providers.has((name ?? '').toLowerCase());
   }
 
   /**

@@ -132,7 +132,7 @@ class InitManager {
       }
     }, 100);
 
-    this.systemMonitor.on('critical', async ({ type, status: _status }) => {
+    this.systemMonitor.on('critical', async ({ type }) => {
       logger.error(`系统资源严重不足: ${type}`);
       if (monitorConfig.optimize?.autoRestart) {
         logger.error('将在5秒后重启...');

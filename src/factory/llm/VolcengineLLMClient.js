@@ -23,7 +23,7 @@ export default class VolcengineLLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout || 360000;
+    this._timeout = config.timeout ?? 360000;
     this._dataUrlCache = new Map();
   }
 
@@ -51,7 +51,7 @@ export default class VolcengineLLMClient {
    * 获取超时时间
    */
   get timeout() {
-    return this._timeout || 360000;
+    return this._timeout ?? 360000;
   }
 
   /**
@@ -126,7 +126,7 @@ export default class VolcengineLLMClient {
   }
 
   normalizeToAbsoluteUrl(url) {
-    const u = String(url || '').trim();
+    const u = String(url ?? '').trim();
     if (!u) return '';
     if (u.startsWith('data:')) return u;
     if (/^https?:\/\//i.test(u)) return u;
@@ -146,7 +146,7 @@ export default class VolcengineLLMClient {
   }
 
   async maybeConvertToDataUrl(url) {
-    const raw = String(url || '').trim();
+    const raw = String(url ?? '').trim();
     if (!raw) return raw;
     if (raw.startsWith('data:')) return raw;
 

@@ -1475,7 +1475,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         }
 
         // 3. 最后透明代理到 BotUtil 的静态方法/属性（仅限自有属性，避免 Function 原型污染）
-        if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(BotUtil, prop)) {
+        if (typeof prop === 'string' && Object.hasOwn(BotUtil, prop)) {
           const utilValue = BotUtil[prop];
           if (utilValue !== undefined) {
             return typeof utilValue === 'function'
@@ -1496,7 +1496,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       has: (target, prop) => {
         if (Reflect.has(target, prop)) return true;
         if (prop in botMap) return true;
-        if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(BotUtil, prop)) {
+        if (typeof prop === 'string' && Object.hasOwn(BotUtil, prop)) {
           return true;
         }
         return false;
@@ -1643,7 +1643,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     
     // ========== 同源Cookie认证（前端UI） ==========
     try {
-      const cookies = String(req.headers.cookie || '');
+      const cookies = String(req.headers.cookie ?? '');
       const hasUiCookie = /(?:^|;\s*)xrk_ui=1(?:;|$)/.test(cookies);
       if (hasUiCookie) {
         const origin = req.headers.origin || '';
@@ -3160,7 +3160,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
           .filter(r => r?.path && r?.method)
           .map(r => ({
             api: apiName,
-            method: String(r.method || '').toUpperCase(),
+            method: String(r.method ?? '').toUpperCase(),
             path: r.path,
             name: r.name || r.id || '',
             desc: r.dsc || r.title || r.description || apiDesc

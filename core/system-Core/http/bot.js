@@ -78,7 +78,7 @@ export default {
             if (Array.isArray(parsed)) {
               processedMessage = parsed;
             }
-          } catch (_e) {
+          } catch {
             processedMessage = message;
           }
         }

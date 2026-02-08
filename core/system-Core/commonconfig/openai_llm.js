@@ -15,7 +15,7 @@ export default class OpenAILLMConfig extends ConfigBase {
       displayName: 'OpenAI LLM 工厂配置（官方）',
       description: 'OpenAI Chat Completions 配置（文本），支持 MCP 工具调用',
       filePath: (cfg) => {
-        const port = cfg?._port ?? cfg?.server?.server?.port;
+        const port = cfg?.port ?? cfg?._port;
         if (!port) {
           throw new Error('OpenAILLMConfig: 未提供端口，无法解析路径');
         }

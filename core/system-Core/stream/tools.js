@@ -46,7 +46,6 @@ export default class ToolsStream extends AIStream {
   }
 
   registerAllFunctions() {
-    // MCP工具：读取文件（返回JSON结果）
     this.registerMCPTool('read', {
       description: '读取文件内容，返回文件路径和内容',
       inputSchema: {
@@ -72,7 +71,6 @@ export default class ToolsStream extends AIStream {
         }
 
         if (result.success) {
-          // 存储到上下文
           if (context.stream) {
             context.stream.context = context.stream.context || {};
             context.stream.context.fileContent = result.content;
@@ -113,7 +111,6 @@ export default class ToolsStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：搜索文本（返回JSON结果）
     this.registerMCPTool('grep', {
       description: '在文件中搜索文本，返回匹配结果',
       inputSchema: {
@@ -143,7 +140,6 @@ export default class ToolsStream extends AIStream {
         });
 
         if (result.success) {
-          // 存储到上下文
           if (context.stream) {
             context.stream.context = context.stream.context || {};
             context.stream.context.grepResults = result.matches;
@@ -170,7 +166,6 @@ export default class ToolsStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：写入文件
     this.registerMCPTool('write', {
       description: '写入文件内容',
       inputSchema: {
@@ -218,7 +213,6 @@ export default class ToolsStream extends AIStream {
       enabled: true
     });
 
-    // MCP工具：执行命令
     this.registerMCPTool('run', {
       description: '执行命令（工作区：桌面）',
       inputSchema: {
@@ -322,7 +316,7 @@ export default class ToolsStream extends AIStream {
       shell: IS_WINDOWS ? 'cmd.exe' : undefined
     });
     
-    return (stdout || '').trim();
+    return (stdout ?? '').trim();
   }
 
   /**
@@ -361,7 +355,7 @@ export default class ToolsStream extends AIStream {
     context.commandStderr = err.stderr || '';
   }
 
-  buildSystemPrompt(_context) {
+  buildSystemPrompt() {
     return `【基础工具说明】
 所有功能都通过MCP工具调用协议提供，包括：
 - read：读取文件内容

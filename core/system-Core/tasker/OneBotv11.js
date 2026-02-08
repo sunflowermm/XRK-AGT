@@ -1883,7 +1883,7 @@ Bot.tasker.push(
     attachRelationAccessors(data) {
       if (!data.bot) return
 
-      const hasOwn = prop => Object.prototype.hasOwnProperty.call(data, prop)
+      const hasOwn = prop => Object.hasOwn(data, prop)
 
       if (data.user_id && !hasOwn("friend") && typeof data.bot.pickFriend === "function") {
         this.defineEventProperty(data, "friend", () => data.bot.pickFriend(data.user_id))

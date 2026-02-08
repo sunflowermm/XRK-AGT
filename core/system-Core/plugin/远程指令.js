@@ -760,7 +760,7 @@ class ObjectInspector {
       if (arrowMatch) return arrowMatch[1] || arrowMatch[2] || '';
       const paramsMatch = funcStr.match(/^\s*(?:async\s*)?function(?:\s+\w+)?\s*\(([^)]*)\)/);
       return paramsMatch ? paramsMatch[1] : '';
-    } catch (_error) {
+    } catch {
       return '(无法解析参数)';
     }
   }
@@ -915,7 +915,7 @@ class JavaScriptExecutor {
           return jsonStr.substring(0, maxOutputLength - 3) + '...';
         }
         return jsonStr;
-    } catch (_e) {
+    } catch {
         // 无法JSON化的对象，使用 util.inspect
         try {
           const maxOutputLength = config.get('maxOutputLength', 5000)
@@ -933,7 +933,7 @@ class JavaScriptExecutor {
             return inspectStr.substring(0, maxOutputLength - 3) + '...';
           }
           return inspectStr;
-        } catch (_inspectError) {
+        } catch {
           // 最后的备选方案
           return `[${result.constructor?.name || 'Object'}]`;
         }
@@ -1677,7 +1677,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
         } else if (value.startsWith('{') && value.endsWith('}')) {
           value = JSON.parse(value);
         }
-      } catch (_error) {
+      } catch {
         // 保持原值
       }
 

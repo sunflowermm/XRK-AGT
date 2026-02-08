@@ -2,8 +2,6 @@ import { MCPToolAdapter } from './mcp-tool-adapter.js';
 
 /**
  * OpenAI-like Chat Completions 参数归一化工具
- * - 统一处理常见生成参数与扩展字段透传
- * - 统一注入 MCP tools（保持向后兼容：不改变既有默认行为）
  */
 
 /**
@@ -15,10 +13,10 @@ import { MCPToolAdapter } from './mcp-tool-adapter.js';
  */
 function pick(overrides, config, keys) {
   for (const k of keys) {
-    if (overrides && Object.prototype.hasOwnProperty.call(overrides, k) && overrides[k] !== undefined) return overrides[k];
-    if (config && Object.prototype.hasOwnProperty.call(config, k) && config[k] !== undefined) return config[k];
+    if (overrides && Object.hasOwn(overrides, k) && overrides[k] !== undefined) return overrides[k];
+    if (config && Object.hasOwn(config, k) && config[k] !== undefined) return config[k];
   }
-  return undefined;
+  return;
 }
 
 /**
@@ -54,15 +52,12 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
     stream: pick(overrides, config, ['stream']) ?? false
   };
 
-  // OpenAI Chat Completions 标准字段：max_tokens（部分供应商也支持 max_completion_tokens，但这里不强行写入）
   if (maxTokens !== undefined) body.max_tokens = maxTokens;
 
   applyOptionalFields(body, overrides, config, [
     { to: 'top_p', from: ['topP', 'top_p'] },
     { to: 'presence_penalty', from: ['presencePenalty', 'presence_penalty'] },
     { to: 'frequency_penalty', from: ['frequencyPenalty', 'frequency_penalty'] },
-
-    // 常见扩展字段（不同供应商可能部分忽略，但透传能增强兼容性）
     { to: 'stop', from: ['stop'] },
     { to: 'response_format', from: ['response_format', 'responseFormat'] },
     { to: 'stream_options', from: ['stream_options', 'streamOptions'] },
@@ -74,7 +69,6 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
     { to: 'top_logprobs', from: ['top_logprobs', 'topLogprobs'] }
   ]);
 
-  // 额外自定义参数透传：config.extraBody + overrides.extraBody
   const extraBody = pick(overrides, config, ['extraBody']);
   if (config.extraBody && typeof config.extraBody === 'object') Object.assign(body, config.extraBody);
   if (extraBody && typeof extraBody === 'object') Object.assign(body, extraBody);
@@ -92,8 +86,7 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
 export function applyOpenAITools(body, config = {}, overrides = {}) {
   const enableTools = config.enableTools !== false && MCPToolAdapter.hasTools();
 
-  // 外部显式传 tools（允许覆盖/禁用）
-  if (Object.prototype.hasOwnProperty.call(overrides, 'tools')) {
+  if (Object.hasOwn(overrides, 'tools')) {
     if (overrides.tools) body.tools = overrides.tools;
     if (overrides.tool_choice !== undefined) body.tool_choice = overrides.tool_choice;
     if (overrides.parallel_tool_calls !== undefined) body.parallel_tool_calls = overrides.parallel_tool_calls;
@@ -106,7 +99,6 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
   if (!tools.length) return body;
 
   body.tools = tools;
-  // tool_choice 允许字符串或对象（如指定 function/name）
   body.tool_choice = overrides.tool_choice ?? config.toolChoice ?? 'auto';
   const parallel = pick(overrides, config, ['parallelToolCalls', 'parallel_tool_calls']);
   if (parallel !== undefined) body.parallel_tool_calls = parallel;

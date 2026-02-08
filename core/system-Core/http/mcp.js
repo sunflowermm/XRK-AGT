@@ -269,7 +269,7 @@ export default {
   ],
 
   ws: {
-    '/mcp/ws': (ws, _req) => {
+    '/mcp/ws': (ws) => {
       BotUtil.makeLog('info', 'MCP WebSocket连接已建立', 'MCPApi');
 
       const mcpServer = getMCPServer();

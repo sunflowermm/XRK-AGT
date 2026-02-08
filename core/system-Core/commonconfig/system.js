@@ -23,26 +23,19 @@ export default class SystemConfig extends ConfigBase {
 
     // 全局配置列表（不随端口变化，存储在server_bots/根目录）
     const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'notice', 'mongodb', 'redis', 'db', 'aistream'];
-    
-    // 服务器配置列表（随端口变化，存储在server_bots/{port}/）
-    const SERVER_CONFIGS = ['server', 'chatbot', 'group'];
 
+    // 辅助函数：获取端口号
+    const getPort = (cfg) => cfg?.port ?? cfg?._port;
+    
     // 辅助函数：生成配置路径
     const getConfigPath = (configName) => {
       return (cfg) => {
         if (GLOBAL_CONFIGS.includes(configName)) {
           // 全局配置存储在server_bots/根目录
           return `data/server_bots/${configName}.yaml`;
-        } else if (SERVER_CONFIGS.includes(configName)) {
-          // 服务器配置存储在server_bots/{port}/
-          const port = cfg?.port ?? cfg?._port;
-        if (!port) {
-            throw new Error(`SystemConfig: 服务器配置 ${configName} 需要端口号`);
-        }
-        return `data/server_bots/${port}/${configName}.yaml`;
         } else {
-          // 工厂配置等，默认使用服务器配置路径
-          const port = cfg?.port ?? cfg?._port;
+          // 服务器配置和工厂配置存储在server_bots/{port}/
+          const port = getPort(cfg);
           if (!port) {
             throw new Error(`SystemConfig: 配置 ${configName} 需要端口号`);
           }
@@ -2539,7 +2532,7 @@ export default class SystemConfig extends ConfigBase {
         filePath: (cfg) => {
           // 渲染器配置使用multiFile机制处理多个子文件
           // 这里返回占位路径，实际路径由multiFile.getFilePath处理
-          const port = cfg?.port ?? cfg?._port;
+          const port = getPort(cfg);
           if (!port) {
             throw new Error('SystemConfig: 渲染器配置需要端口号');
           }
@@ -2551,7 +2544,7 @@ export default class SystemConfig extends ConfigBase {
           keys: ['puppeteer', 'playwright'],
           getFilePath: (key) => {
             const cfg = global.cfg;
-            const port = cfg?.port ?? cfg?._port;
+            const port = getPort(cfg);
             if (!port) {
               throw new Error('SystemConfig: 渲染器配置需要端口号');
             }

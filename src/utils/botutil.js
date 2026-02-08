@@ -1403,9 +1403,7 @@ export default class BotUtil {
     cache.set(obj, clonedObj);
 
     for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
-        clonedObj[key] = BotUtil.deepClone(obj[key], cache);
-      }
+      clonedObj[key] = BotUtil.deepClone(obj[key], cache);
     }
 
     return clonedObj;
@@ -1494,7 +1492,7 @@ export default class BotUtil {
       const isDevice = e.isDevice || e.tasker === 'device' || e.post_type === 'device';
 
       if (isDevice && e.reply) {
-        const descText = Array.isArray(description) ? description.join(' | ') : (typeof description === 'string' ? description : String(description || ''));
+        const descText = Array.isArray(description) ? description.join(' | ') : (typeof description === 'string' ? description : String(description ?? ''));
         
         // 对于web客户端，使用转发消息格式发送聊天记录
         const bot = e.bot || {};
@@ -1523,7 +1521,7 @@ export default class BotUtil {
         if (forwardMessages.length === 0) {
           // 如果没有有效消息，降级为普通文本消息
           const firstMsg = messages[0];
-          const text = typeof firstMsg === 'string' ? firstMsg : (firstMsg?.message || firstMsg?.content || String(firstMsg || ''));
+          const text = typeof firstMsg === 'string' ? firstMsg : (firstMsg?.message ?? firstMsg?.content ?? String(firstMsg ?? ''));
           if (text && text.trim()) {
             return await e.reply(text.trim());
           }

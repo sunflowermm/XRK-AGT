@@ -19,7 +19,7 @@ export default class AnthropicLLMClient {
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout || 360000;
+    this._timeout = config.timeout ?? 360000;
     this._imageCache = new Map();
   }
 
@@ -30,7 +30,7 @@ export default class AnthropicLLMClient {
   }
 
   get timeout() {
-    return this._timeout || 360000;
+    return this._timeout ?? 360000;
   }
 
   buildHeaders(extra = {}) {
@@ -68,7 +68,7 @@ export default class AnthropicLLMClient {
   }
 
   normalizeToAbsoluteUrl(url) {
-    const u = String(url || '').trim();
+    const u = String(url ?? '').trim();
     if (!u) return '';
     if (u.startsWith('data:')) return u;
     if (/^https?:\/\//i.test(u)) return u;
@@ -79,14 +79,14 @@ export default class AnthropicLLMClient {
   }
 
   _parseDataUrl(dataUrl) {
-    const raw = String(dataUrl || '').trim();
+    const raw = String(dataUrl ?? '').trim();
     const m = raw.match(/^data:([^;]+);base64,(.*)$/i);
     if (!m) return null;
     return { media_type: m[1], data: m[2] };
   }
 
   async _toAnthropicImageBlock(url) {
-    const raw = String(url || '').trim();
+    const raw = String(url ?? '').trim();
     if (!raw) return null;
 
     if (raw.startsWith('data:')) {
@@ -136,10 +136,10 @@ export default class AnthropicLLMClient {
     const systemTexts = [];
     const anthMessages = [];
 
-    for (const m of messages || []) {
-      const role = (m.role || '').toLowerCase();
+    for (const m of messages ?? []) {
+      const role = (m.role ?? '').toLowerCase();
       if (role === 'system') {
-        const text = (typeof m.content === 'string' ? m.content : (m.content?.text || m.content?.content || '')).toString();
+        const text = (typeof m.content === 'string' ? m.content : (m.content?.text ?? m.content?.content ?? '')).toString();
         if (text) systemTexts.push(text);
         continue;
       }
@@ -158,7 +158,7 @@ export default class AnthropicLLMClient {
           }
         }
       } else if (m.content && typeof m.content === 'object') {
-        const text = (m.content.text || m.content.content || '').toString();
+        const text = (m.content.text ?? m.content.content ?? '').toString();
         if (text) blocks.push({ type: 'text', text });
       }
 
@@ -171,7 +171,7 @@ export default class AnthropicLLMClient {
     }
 
     const temperature = overrides.temperature ?? this.config.temperature ?? 0.7;
-    const maxTokens = overrides.maxTokens ?? overrides.max_tokens ?? this.config.maxTokens ?? this.config.max_tokens ?? 2048;
+    const maxTokens = (overrides.maxTokens ?? overrides.max_tokens) ?? (this.config.maxTokens ?? this.config.max_tokens) ?? 2048;
 
     const body = {
       model: overrides.model || overrides.chatModel || this.config.model || this.config.chatModel || 'claude-3-5-sonnet-latest',
@@ -198,7 +198,7 @@ export default class AnthropicLLMClient {
     // Anthropic: content: [{type:'text', text:'...'}]
     const parts = json?.content;
     if (!Array.isArray(parts)) return '';
-    return parts.map(p => (p?.type === 'text' ? (p.text || '') : '')).join('');
+    return parts.map(p => (p?.type === 'text' ? (p.text ?? '') : '')).join('');
   }
 
   async chat(messages, overrides = {}) {
@@ -206,7 +206,7 @@ export default class AnthropicLLMClient {
 
     // 把占位的 image_url block 转成 Anthropic image block（需要 async fetch/base64）
     const body = this.buildBody(transformedMessages, overrides);
-    for (const msg of body.messages || []) {
+    for (const msg of body.messages ?? []) {
       if (!Array.isArray(msg.content)) continue;
       const newBlocks = [];
       for (const b of msg.content) {
@@ -215,10 +215,10 @@ export default class AnthropicLLMClient {
           if (imgBlock) newBlocks.push(imgBlock);
           else newBlocks.push({ type: 'text', text: `[图片:${String(b.url)}]` });
         } else if (b?.type === 'text') {
-          newBlocks.push({ type: 'text', text: String(b.text || '') });
+          newBlocks.push({ type: 'text', text: String(b.text ?? '') });
         }
       }
-      msg.content = newBlocks.filter(x => x && (x.type === 'text' ? (x.text || '').toString().trim() : true));
+      msg.content = newBlocks.filter(x => x && (x.type === 'text' ? (x.text ?? '').toString().trim() : true));
     }
 
     const resp = await fetch(
@@ -246,7 +246,7 @@ export default class AnthropicLLMClient {
     const body = this.buildBody(transformedMessages, overrides);
 
     // 把占位的 image_url block 转成 Anthropic image block（需要 async fetch/base64）
-    for (const msg of body.messages || []) {
+    for (const msg of body.messages ?? []) {
       if (!Array.isArray(msg.content)) continue;
       const newBlocks = [];
       for (const b of msg.content) {
@@ -255,10 +255,10 @@ export default class AnthropicLLMClient {
           if (imgBlock) newBlocks.push(imgBlock);
           else newBlocks.push({ type: 'text', text: `[图片:${String(b.url)}]` });
         } else if (b?.type === 'text') {
-          newBlocks.push({ type: 'text', text: String(b.text || '') });
+          newBlocks.push({ type: 'text', text: String(b.text ?? '') });
         }
       }
-      msg.content = newBlocks.filter(x => x && (x.type === 'text' ? (x.text || '').toString().trim() : true));
+      msg.content = newBlocks.filter(x => x && (x.type === 'text' ? (x.text ?? '').toString().trim() : true));
     }
     body.stream = true;
 
@@ -302,7 +302,7 @@ export default class AnthropicLLMClient {
         try {
           const json = JSON.parse(payload);
           // 常见：type=content_block_delta / message_delta
-          const deltaText = json?.delta?.text || json?.content_block?.text || '';
+          const deltaText = json?.delta?.text ?? json?.content_block?.text ?? '';
           if (deltaText && typeof onDelta === 'function') onDelta(deltaText);
         } catch {
           // ignore
