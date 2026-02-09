@@ -872,12 +872,15 @@ export default class ConfigBase {
     }
 
     const fields = schema.fields ?? {};
+    const requiredFields = Array.isArray(schema.required) ? schema.required : [];
     for (const [key, childSchema] of Object.entries(fields)) {
       const childPath = `${path}.${key}`;
       let childValue = value[key];
 
+      const isRequired = requiredFields.includes(key) || childSchema?.required === true;
       if (childValue === undefined) {
-        if (childSchema?.nullable === true) continue;
+        // 对于未标记为必填的字段，允许缺失（按“存在就是存在，不存在就略过”的规则）
+        if (!isRequired || childSchema?.nullable === true) continue;
         errors.push(`字段 ${childPath} 不允许为空`);
         continue;
       }
