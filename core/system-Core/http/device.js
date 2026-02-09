@@ -107,26 +107,33 @@ const getLLMSettings = ({ workflow, persona, profile } = {}) => {
 };
 
 /**
- * 解析多提供商通用配置段（目前用于 TTS）。
- * 结构要求：
- * aistream.tts: {
- *   enabled?: boolean,
- *   providers: { [name]: { ... } },
- *   defaultProvider: string
- * }
+ * TTS 配置：单工厂模式，只选择运营商，配置来自 volcengine_tts.yaml。
+ * 配置来源：
+ * - aistream.tts.Provider 用于选择运营商（volcengine）
+ * - 具体 TTS 连接参数来自 volcengine_tts.yaml（cfg.volcengine_tts）
  */
-const resolveProvider = (sectionName) => {
-    const section = ensureConfig(getAistreamConfig()[sectionName], `aistream.${sectionName}`);
+const getTtsConfig = () => {
+    const aistream = getAistreamConfig();
+    const section = aistream.tts || {};
+
     if (section.enabled === false) {
         return { enabled: false };
     }
-    const providers = ensureConfig(section.providers, `aistream.${sectionName}.providers`);
-    const key = ensureConfig(section.defaultProvider, `aistream.${sectionName}.defaultProvider`);
-    const providerConfig = ensureConfig(providers[key], `aistream.${sectionName}.providers.${key}`);
-    return { enabled: true, provider: key, ...providerConfig };
-};
 
-const getTtsConfig = () => resolveProvider('tts');
+    const provider = (section.Provider || section.provider || 'volcengine').toLowerCase();
+
+    if (provider !== 'volcengine') {
+        throw new Error(`不支持的TTS提供商: ${provider}`);
+    }
+
+    const baseConfig = ensureConfig(cfg.volcengine_tts, 'volcengine_tts');
+
+    return {
+        enabled: true,
+        provider,
+        ...baseConfig
+    };
+};
 
 /**
  * ASR 配置：单工厂模式，只选择运营商，识别结果直接返回文本。

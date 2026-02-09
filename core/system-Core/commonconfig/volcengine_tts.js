@@ -46,7 +46,7 @@ export default class VolcengineTTSConfig extends ConfigBase {
           resourceId: {
             type: 'string',
             label: '资源 ID',
-            description: '火山引擎 TTS 资源 ID（如 seed-tts-2.0），用于V3双向流式接口',
+            description: '火山引擎 TTS 资源 ID（用于V3双向流式接口，必须与音色类型匹配，否则会报错"resource ID is mismatched with speaker related resource"。常见值：seed-tts-2.0 或其他，请根据音色在控制台查看对应的resourceId）',
             default: 'seed-tts-2.0',
             component: 'Input'
           },
@@ -55,7 +55,7 @@ export default class VolcengineTTSConfig extends ConfigBase {
           voiceType: {
             type: 'string',
             label: '音色类型',
-            description: 'TTS 音色类型（对应文档的voice_type字段，如 zh_female_vv_uranus_bigtts），参考大模型音色列表',
+            description: 'TTS 音色类型（对应文档的voice_type字段，如 zh_female_vv_uranus_bigtts），参考大模型音色列表。注意：必须与resourceId匹配，否则会报错"resource ID is mismatched with speaker related resource"',
             default: 'zh_female_vv_uranus_bigtts',
             component: 'Input'
           },

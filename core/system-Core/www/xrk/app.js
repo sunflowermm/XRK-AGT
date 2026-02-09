@@ -54,6 +54,11 @@ class App {
     this._micActive = false;
     this._ttsQueue = [];
     this._ttsPlaying = false;
+    this._ttsPending = false;
+    this._ttsAudioContext = null;
+    this._ttsAudioQueue = [];
+    this._ttsNextPlayTime = 0;
+    this._ttsNeedsRecheck = false;
     this._configState = null;
     this._schemaCache = {};
     this._llmOptions = { profiles: [], defaultProfile: '' };
@@ -1451,14 +1456,14 @@ class App {
     
     this._bindChatEvents();
     if (!isVoiceMode) {
-      this.initChatControls();
+    this.initChatControls();
     }
     if (isVoiceMode) {
       await this.loadLlmOptions();
     }
     this.restoreChatHistory();
     if (isVoiceMode || !isAIMode) {
-      this.ensureDeviceWs();
+    this.ensureDeviceWs();
     }
   }
 
@@ -1836,13 +1841,13 @@ class App {
     if (!Array.isArray(currentHistory) || currentHistory.length === 0) {
       if (box.children.length === 0) return;
       box.innerHTML = '';
-      return;
-    }
+          return;
+        }
     
     if (box.children.length > 0) {
-      return;
-    }
-    
+        return;
+      }
+      
     this._isRestoringHistory = true;
     
     try {
@@ -1867,7 +1872,7 @@ class App {
       });
       
       box.style.overflow = originalOverflow;
-      box.scrollTop = box.scrollHeight;
+        box.scrollTop = box.scrollHeight;
     } finally {
       this._isRestoringHistory = false;
     }
@@ -1876,10 +1881,10 @@ class App {
   _applyMessageEnter(div, animate = true) {
     if (!div || this._isRestoringHistory) return;
     if (!animate) {
-      div.classList.add('message-enter-active');
+        div.classList.add('message-enter-active');
     } else {
       requestAnimationFrame(() => {
-        div.classList.add('message-enter-active');
+      div.classList.add('message-enter-active');
       });
     }
   }
@@ -1926,7 +1931,7 @@ class App {
     box.appendChild(div);
     
     if (!this._isRestoringHistory) {
-      this.scrollToBottom();
+    this.scrollToBottom();
     }
     
     this._applyMessageEnter(div, persist);
@@ -2382,7 +2387,7 @@ class App {
     box.appendChild(div);
     
     if (!this._isRestoringHistory) {
-      this.scrollToBottom();
+    this.scrollToBottom();
     }
     
     this._applyMessageEnter(div, persist);
@@ -2490,9 +2495,9 @@ class App {
     box.appendChild(div);
     
     if (!this._isRestoringHistory) {
-      this.scrollToBottom();
+    this.scrollToBottom();
     }
-    
+
     this._applyMessageEnter(div, persist);
 
     // 保存到聊天历史（仅在需要持久化时）
@@ -3078,7 +3083,6 @@ class App {
       let fullText = '';
       let hasError = false;
       let streamEnded = false;
-      let ttsText = '';
 
       while (!streamEnded) {
         const { done, value } = await reader.read();
@@ -3122,7 +3126,6 @@ class App {
           const delta = json.choices?.[0]?.delta?.content || '';
           if (delta) {
             fullText += delta;
-            ttsText += delta;
             
             if (!assistantMsg) {
               const box = document.getElementById('chatMessages');
@@ -3146,11 +3149,6 @@ class App {
             
             this.updateVoiceEmotion('💬');
             this.scrollToBottom(true);
-            
-            if (ttsText.length >= 20 || (delta.match(/[。！？\n]/) && ttsText.length >= 10)) {
-              this._sendTTSChunk(ttsText).catch(() => {});
-              ttsText = '';
-            }
           }
 
           if (json.choices?.[0]?.finish_reason) {
@@ -3167,10 +3165,8 @@ class App {
             existingContent.textContent = fullText;
           }
           
-          if (ttsText) {
-            this._sendTTSChunk(ttsText).catch(() => {});
-          } else if (fullText) {
-            this._sendTTSChunk(fullText).catch(() => {});
+          if (fullText.trim()) {
+            this._sendTTSChunk(fullText.trim()).catch(() => {});
           }
           
           this.updateVoiceEmotion('😊');
@@ -3200,7 +3196,9 @@ class App {
 
   async _sendTTSChunk(text) {
     if (!text || !text.trim()) return;
+    if (this._ttsPending) return;
     
+    this._ttsPending = true;
     try {
       await fetch(`${this.serverUrl}/api/device/tts`, {
         method: 'POST',
@@ -3212,8 +3210,234 @@ class App {
           text: text.trim()
         })
       });
+      await new Promise(resolve => setTimeout(resolve, 100));
     } catch (e) {
       // 静默失败，不影响主流程
+    } finally {
+      this._ttsPending = false;
+    }
+  }
+
+  _playTTSAudio(hexData) {
+    if (!hexData || typeof hexData !== 'string') return;
+    
+    const receiveTime = performance.now();
+    
+    try {
+      if (!this._ttsAudioContext) {
+        this._ttsAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+          sampleRate: 16000
+        });
+        console.log('[TTS调试] 创建AudioContext，采样率:', this._ttsAudioContext.sampleRate, '状态:', this._ttsAudioContext.state);
+      }
+      
+      // 如果AudioContext被暂停，尝试恢复
+      if (this._ttsAudioContext.state === 'suspended') {
+        this._ttsAudioContext.resume().catch(e => {
+          console.warn('[TTS调试] AudioContext恢复失败:', e);
+        });
+      }
+      
+      // 优化hex解码：使用更高效的方法
+      const hexLen = hexData.length;
+      const bytes = new Uint8Array(hexLen / 2);
+      for (let i = 0; i < hexLen; i += 2) {
+        bytes[i / 2] = parseInt(hexData.slice(i, i + 2), 16);
+      }
+      if (bytes.length === 0) return;
+      
+      const processStart = performance.now();
+      const sampleCount = bytes.length / 2;
+      const pcmData = new Int16Array(sampleCount);
+      
+      // 优化PCM转换：使用DataView提高性能
+      const view = new DataView(bytes.buffer);
+      for (let i = 0; i < sampleCount; i++) {
+        pcmData[i] = view.getInt16(i * 2, true); // little-endian
+      }
+      
+      const sampleRate = 16000;
+      const audioBuffer = this._ttsAudioContext.createBuffer(1, sampleCount, sampleRate);
+      const channelData = audioBuffer.getChannelData(0);
+      
+      // 优化归一化：使用批量操作
+      const scale = 1.0 / 32768.0;
+      for (let i = 0; i < sampleCount; i++) {
+        channelData[i] = pcmData[i] * scale;
+      }
+      
+      const processTime = performance.now() - processStart;
+      const duration = audioBuffer.duration;
+      const queueLength = this._ttsAudioQueue.length;
+      
+      console.log(`[TTS调试] 接收音频块: hex长度=${hexData.length}, bytes=${bytes.length}, PCM样本=${sampleCount}, 时长=${duration.toFixed(3)}s, 处理耗时=${processTime.toFixed(2)}ms, 队列长度=${queueLength}, 接收时间=${receiveTime.toFixed(2)}`);
+      
+      this._ttsAudioQueue.push(audioBuffer);
+      
+      // 如果队列累积过多，主动触发合并播放
+      if (this._ttsPlaying && this._ttsAudioQueue.length > 5) {
+        // 如果正在播放但队列过长，标记需要重新评估播放策略
+        this._ttsNeedsRecheck = true;
+      }
+      
+      if (!this._ttsPlaying) {
+        this._ttsPlaying = true;
+        this._ttsNeedsRecheck = false;
+        console.log('[TTS调试] 开始播放，队列长度:', this._ttsAudioQueue.length);
+        this._scheduleNextPlay();
+      }
+    } catch (e) {
+      console.error('[TTS调试] 音频处理失败:', e);
+    }
+  }
+  
+  _scheduleNextPlay() {
+    // 智能选择播放策略：根据队列长度决定是否合并
+    if (this._ttsAudioQueue.length === 0) {
+      this._ttsPlaying = false;
+      this._ttsNextPlayTime = 0;
+      console.log('[TTS调试] 播放完成，队列为空');
+      return;
+    }
+    
+    // 队列长度>=3时使用合并播放，否则单个播放
+    if (this._ttsAudioQueue.length >= 3) {
+      this._playMergedChunks();
+    } else {
+      this._playNextTTSChunk();
+    }
+  }
+  
+  _playMergedChunks() {
+    if (this._ttsAudioQueue.length === 0) {
+      this._scheduleNextPlay();
+      return;
+    }
+    
+    try {
+      const sampleRate = 16000;
+      let totalLength = 0;
+      const buffers = [];
+      // 动态调整合并策略：队列越长，合并越多
+      const queueLen = this._ttsAudioQueue.length;
+      const maxMerge = Math.min(queueLen, queueLen > 10 ? 12 : 8);
+      const targetDuration = queueLen > 8 ? 0.8 : 0.5; // 队列长时合并更多时长
+      
+      while (this._ttsAudioQueue.length > 0 && buffers.length < maxMerge) {
+        const buf = this._ttsAudioQueue.shift();
+        buffers.push(buf);
+        totalLength += buf.length;
+        // 如果达到目标时长且至少合并了2个块，或者队列剩余不多，就停止合并
+        if ((totalLength / sampleRate >= targetDuration && buffers.length >= 2) || 
+            (this._ttsAudioQueue.length <= 2 && buffers.length >= 2)) {
+          break;
+        }
+      }
+      
+      // 如果只合并了1个块，直接播放
+      if (buffers.length === 1) {
+        const audioBuffer = buffers[0];
+        const source = this._ttsAudioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(this._ttsAudioContext.destination);
+        
+        const currentTime = this._ttsAudioContext.currentTime;
+        const minBufferTime = 0.005;
+        const startTime = Math.max(currentTime + minBufferTime, this._ttsNextPlayTime);
+        const duration = audioBuffer.duration;
+        const delay = startTime - currentTime;
+        const queueLength = this._ttsAudioQueue.length;
+        
+        console.log(`[TTS调试] 播放音频块: 时长=${duration.toFixed(3)}s, 当前时间=${currentTime.toFixed(3)}s, 开始时间=${startTime.toFixed(3)}s, 延迟=${(delay * 1000).toFixed(2)}ms, 剩余队列=${queueLength}`);
+        
+        source.onended = () => {
+          console.log(`[TTS调试] 音频块播放结束，剩余队列=${this._ttsAudioQueue.length}`);
+          this._scheduleNextPlay();
+        };
+        
+        source.start(startTime);
+        this._ttsNextPlayTime = startTime + duration;
+        return;
+      }
+      
+      // 合并多个块
+      const mergedBuffer = this._ttsAudioContext.createBuffer(1, totalLength, sampleRate);
+      const mergedData = mergedBuffer.getChannelData(0);
+      let offset = 0;
+      
+      for (const buf of buffers) {
+        const data = buf.getChannelData(0);
+        mergedData.set(data, offset);
+        offset += data.length;
+      }
+      
+      const source = this._ttsAudioContext.createBufferSource();
+      source.buffer = mergedBuffer;
+      source.connect(this._ttsAudioContext.destination);
+      
+      const currentTime = this._ttsAudioContext.currentTime;
+      const minBufferTime = 0.005;
+      const startTime = Math.max(currentTime + minBufferTime, this._ttsNextPlayTime);
+      const duration = mergedBuffer.duration;
+      const delay = startTime - currentTime;
+      const queueLength = this._ttsAudioQueue.length;
+      
+      console.log(`[TTS调试] 合并播放: 合并${buffers.length}个块, 总时长=${duration.toFixed(3)}s, 当前时间=${currentTime.toFixed(3)}s, 开始时间=${startTime.toFixed(3)}s, 延迟=${(delay * 1000).toFixed(2)}ms, 剩余队列=${queueLength}`);
+      
+      source.onended = () => {
+        console.log(`[TTS调试] 合并块播放结束，剩余队列=${this._ttsAudioQueue.length}`);
+        this._scheduleNextPlay();
+      };
+      
+      source.start(startTime);
+      this._ttsNextPlayTime = startTime + duration;
+    } catch (e) {
+      console.error('[TTS调试] 合并播放失败:', e);
+      this._scheduleNextPlay();
+    }
+  }
+  
+  _playNextTTSChunk() {
+    if (this._ttsAudioQueue.length === 0) {
+      this._scheduleNextPlay();
+      return;
+    }
+    
+    try {
+      const audioBuffer = this._ttsAudioQueue.shift();
+      const source = this._ttsAudioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this._ttsAudioContext.destination);
+      
+      const currentTime = this._ttsAudioContext.currentTime;
+      // 添加最小缓冲时间（5ms），确保播放流畅
+      const minBufferTime = 0.005;
+      const startTime = Math.max(currentTime + minBufferTime, this._ttsNextPlayTime);
+      const duration = audioBuffer.duration;
+      const delay = startTime - currentTime;
+      const queueLength = this._ttsAudioQueue.length;
+      
+      console.log(`[TTS调试] 播放音频块: 时长=${duration.toFixed(3)}s, 当前时间=${currentTime.toFixed(3)}s, 开始时间=${startTime.toFixed(3)}s, 延迟=${(delay * 1000).toFixed(2)}ms, 剩余队列=${queueLength}`);
+      
+      source.onended = () => {
+        console.log(`[TTS调试] 音频块播放结束，剩余队列=${this._ttsAudioQueue.length}`);
+        // 检查是否需要重新评估播放策略（队列可能累积了）
+        if (this._ttsNeedsRecheck && this._ttsAudioQueue.length >= 3) {
+          this._ttsNeedsRecheck = false;
+          this._playMergedChunks();
+        } else {
+          this._scheduleNextPlay();
+        }
+      };
+      
+      source.start(startTime);
+      this._ttsNextPlayTime = startTime + duration;
+    } catch (e) {
+      console.error('[TTS调试] 音频播放失败:', e);
+      this._ttsPlaying = false;
+      this._ttsAudioQueue = [];
+      this._ttsNextPlayTime = 0;
+      this._ttsNeedsRecheck = false;
     }
   }
 
@@ -6035,7 +6259,7 @@ class App {
         if (this._chatMode === 'voice') {
           this.updateVoiceStatus(`识别中: ${data.text || ''}`);
         } else {
-          this.renderASRStreaming(data.text, false);
+        this.renderASRStreaming(data.text, false);
         }
         break;
       case 'asr_final': {
@@ -6048,7 +6272,7 @@ class App {
             });
           }
         } else {
-          this.renderASRStreaming(finalText, true);
+        this.renderASRStreaming(finalText, true);
         }
         break;
       }
@@ -6168,10 +6392,11 @@ class App {
         }
         break;
       case 'command':
-        if (data.command === 'display' && data.parameters?.text) {
+        if (data.command?.command === 'play_tts_audio' && data.command?.parameters?.audio_data) {
+          this._playTTSAudio(data.command.parameters.audio_data);
+        } else if (data.command === 'display' && data.parameters?.text) {
           this.appendChat('assistant', data.parameters.text, { persist: true, withCopyBtn: true });
-        }
-        if (data.command === 'display_emotion' && data.parameters?.emotion) {
+        } else if (data.command === 'display_emotion' && data.parameters?.emotion) {
           this.updateEmotionDisplay(data.parameters.emotion);
         }
         break;
@@ -6183,8 +6408,8 @@ class App {
     if (!input) return;
 
     const finalText = (text || '').trim();
-    
-    if (done) {
+
+      if (done) {
       if (finalText) {
         input.value = finalText;
         input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -6192,7 +6417,7 @@ class App {
     } else {
       input.value = finalText || '';
       input.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+      }
   }
 
   async toggleMic() {
@@ -6333,7 +6558,7 @@ class App {
           data: hex
         }));
       }
-      
+
       this._audioProcessor?.disconnect();
       this._micStream?.getTracks().forEach(t => t.stop());
       await this._audioCtx?.close().catch(() => {});
