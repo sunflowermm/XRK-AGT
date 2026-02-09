@@ -46,6 +46,7 @@ class App {
     this._eventChatHistory = this._loadChatHistory('event');
     this._aiChatHistory = this._loadChatHistory('ai');
     this._isRestoringHistory = false;
+    this._chatMessagesCache = { event: null, ai: null };
     this._chatStreamState = { running: false, source: null };
     this._deviceWs = null;
     this._wsConnecting = false;
@@ -1410,6 +1411,93 @@ class App {
     }
   }
 
+  async _switchChatMode(mode) {
+    const isAIMode = mode === 'ai';
+    const box = document.getElementById('chatMessages');
+    if (!box) {
+      await this.renderChat();
+      return;
+    }
+    
+    const sidebar = document.querySelector('.chat-sidebar');
+    const headerTitle = document.querySelector('.chat-header-title span:last-child');
+    const imageInput = document.getElementById('chatImageInput');
+    const modeBtns = document.querySelectorAll('.chat-mode-btn');
+    
+    modeBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    
+    if (headerTitle) {
+      headerTitle.textContent = isAIMode ? 'AI 对话' : 'Event 对话';
+    }
+    
+    if (imageInput) {
+      imageInput.setAttribute('accept', isAIMode ? 'image/*' : 'image/*,video/*,audio/*');
+    }
+    
+    if (isAIMode) {
+      const aiSettings = await this._renderAISettings();
+      if (sidebar && !sidebar.querySelector('.ai-settings-panel')) {
+        const settingsDiv = document.createElement('div');
+        settingsDiv.innerHTML = aiSettings;
+        sidebar.appendChild(settingsDiv.firstElementChild);
+      }
+      this._bindChatEvents();
+      this.initChatControls();
+    } else {
+      const aiSettingsPanel = sidebar?.querySelector('.ai-settings-panel');
+      if (aiSettingsPanel) {
+        aiSettingsPanel.remove();
+      }
+      this.ensureDeviceWs();
+    }
+    
+    const cached = this._chatMessagesCache[mode];
+    if (cached?.html) {
+      box.style.overflow = 'hidden';
+      box.innerHTML = cached.html;
+      box.style.overflow = '';
+      box.scrollTop = cached.scrollTop || box.scrollHeight;
+      return;
+    }
+    
+    const history = mode === 'ai' ? this._aiChatHistory : this._eventChatHistory;
+    if (!Array.isArray(history) || history.length === 0) {
+      box.innerHTML = '';
+      return;
+    }
+    
+    box.style.overflow = 'hidden';
+    box.innerHTML = '';
+    this._isRestoringHistory = true;
+    
+    const sortedHistory = [...history].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    sortedHistory.forEach(m => {
+      try {
+        if (m.type === 'chat-record' || (m.type === 'record' && m.messages)) {
+          this.appendChatRecord(m.messages ?? [], m.title ?? '', m.description ?? '', false);
+        } else if (m.segments && Array.isArray(m.segments)) {
+          this.appendSegments(m.segments, false, m.role || 'assistant');
+        } else if (m.type === 'image' && m.url) {
+          this.appendSegments([{ type: 'image', url: m.url }], false, m.role || 'assistant');
+        } else if (m.role && m.text) {
+          this.appendChat(m.role, m.text, { persist: false, mcpTools: m.mcpTools, messageId: m.id });
+        }
+      } catch (e) {}
+    });
+    
+    this._isRestoringHistory = false;
+    box.style.overflow = '';
+    box.scrollTop = box.scrollHeight;
+    
+    this._chatMessagesCache[mode] = {
+      scrollTop: box.scrollTop,
+      scrollHeight: box.scrollHeight,
+      html: box.innerHTML
+    };
+  }
+
   async _renderAISettings() {
     await this.loadLlmOptions();
     const providers = (this._llmOptions?.profiles || []).map(p => ({
@@ -1472,9 +1560,20 @@ class App {
     document.querySelectorAll('.chat-mode-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const mode = btn.dataset.mode;
+        if (this._chatMode === mode) return;
+        
+        const box = document.getElementById('chatMessages');
+        if (box) {
+          this._chatMessagesCache[this._chatMode] = {
+            scrollTop: box.scrollTop,
+            scrollHeight: box.scrollHeight,
+            html: box.innerHTML
+          };
+        }
+        
         this._chatMode = mode;
         localStorage.setItem('chatMode', mode);
-        await this.renderChat();
+        await this._switchChatMode(mode);
       });
     });
 
@@ -1621,6 +1720,15 @@ class App {
         : [];
       const key = this._chatMode === 'ai' ? 'aiChatHistory' : 'eventChatHistory';
       localStorage.setItem(key, JSON.stringify(historyToSave));
+      
+      const box = document.getElementById('chatMessages');
+      if (box) {
+        this._chatMessagesCache[this._chatMode] = {
+          scrollTop: box.scrollTop,
+          scrollHeight: box.scrollHeight,
+          html: box.innerHTML
+        };
+      }
     } catch (e) {
       console.warn('[聊天历史] 保存失败:', e);
     }
@@ -1631,23 +1739,24 @@ class App {
     if (!box) return;
     
     if (this._isRestoringHistory) return;
+    
+    const currentHistory = this._getCurrentChatHistory();
+    if (!Array.isArray(currentHistory) || currentHistory.length === 0) {
+      if (box.children.length === 0) return;
+      box.innerHTML = '';
+      return;
+    }
+    
+    if (box.children.length > 0) {
+      return;
+    }
+    
     this._isRestoringHistory = true;
     
     try {
-      const loadedHistory = this._loadChatHistory(this._chatMode);
+      const originalOverflow = box.style.overflow;
+      box.style.overflow = 'hidden';
       
-      if (this._chatMode === 'ai') {
-        this._aiChatHistory = loadedHistory;
-      } else {
-        this._eventChatHistory = loadedHistory;
-      }
-      
-      const currentHistory = this._getCurrentChatHistory();
-      if (!Array.isArray(currentHistory) || currentHistory.length === 0) {
-        return;
-      }
-      
-      box.innerHTML = '';
       const sortedHistory = [...currentHistory].sort((a, b) => (a.ts || 0) - (b.ts || 0));
       sortedHistory.forEach(m => {
         try {
@@ -1665,6 +1774,7 @@ class App {
         }
       });
       
+      box.style.overflow = originalOverflow;
       box.scrollTop = box.scrollHeight;
     } finally {
       this._isRestoringHistory = false;
@@ -1717,7 +1827,7 @@ class App {
     box.appendChild(div);
     
     if (!this._isRestoringHistory) {
-    this.scrollToBottom();
+      this.scrollToBottom();
     }
     
     this._applyMessageEnter(div, persist);
@@ -2172,9 +2282,8 @@ class App {
     
     box.appendChild(div);
     
-    // 恢复历史时不滚动，由 restoreChatHistory 统一处理
     if (!this._isRestoringHistory) {
-    this.scrollToBottom();
+      this.scrollToBottom();
     }
     
     this._applyMessageEnter(div, persist);
@@ -2281,12 +2390,10 @@ class App {
     div.innerHTML = content;
     box.appendChild(div);
     
-    // 恢复历史时不滚动，由 restoreChatHistory 统一处理
     if (!this._isRestoringHistory) {
-    this.scrollToBottom();
+      this.scrollToBottom();
     }
-
-    // 统一的入场动画协议
+    
     this._applyMessageEnter(div, persist);
 
     // 保存到聊天历史（仅在需要持久化时）
