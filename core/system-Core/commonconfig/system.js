@@ -2051,7 +2051,7 @@ export default class SystemConfig extends ConfigBase {
             asr: {
               type: 'object',
               label: 'ASR工厂运营商选择',
-              description: '详细配置位于 data/server_bots/{port}/volcengine_asr.yaml。ASR识别结果会调用工作流。',
+              description: '详细配置位于 data/server_bots/{port}/volcengine_asr.yaml。ASR识别结果直接返回文本。',
               component: 'SubForm',
               fields: {
                 Provider: {
@@ -2060,29 +2060,6 @@ export default class SystemConfig extends ConfigBase {
                   enum: ['volcengine'],
                   default: 'volcengine',
                   component: 'Select'
-                },
-                workflow: {
-                  type: 'string',
-                  label: '工作流名称',
-                  description: 'ASR识别结果调用的工作流名称',
-                  default: 'device',
-                  component: 'Select',
-                  options: async () => {
-                    try {
-                      const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
-                      const streams = StreamLoader.getStreamsByPriority();
-                      return streams.map(s => ({ value: s.name, label: s.description || s.name }));
-                    } catch {
-                      return [
-                        { value: 'chat', label: '聊天工作流' },
-                        { value: 'device', label: '设备工作流' },
-                        { value: 'desktop', label: '桌面工作流' },
-                        { value: 'tools', label: '工具工作流' },
-                        { value: 'memory', label: '记忆工作流' },
-                        { value: 'database', label: '知识库工作流' }
-                      ];
-                    }
-                  }
                 }
               }
             },

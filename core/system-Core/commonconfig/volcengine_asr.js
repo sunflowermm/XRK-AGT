@@ -32,14 +32,14 @@ export default class VolcengineASRConfig extends ConfigBase {
           appKey: {
             type: 'string',
             label: 'App Key',
-            description: '火山引擎应用 Key',
+            description: '火山引擎控制台获取的APP ID',
             default: '',
             component: 'Input'
           },
           accessKey: {
             type: 'string',
             label: 'Access Key',
-            description: '火山引擎访问密钥',
+            description: '火山引擎控制台获取的Access Token（不是Secret Key）',
             default: '',
             component: 'InputPassword'
           },

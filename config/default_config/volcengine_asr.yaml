@@ -9,11 +9,11 @@
 # ----------------------------------------
 # WebSocket连接地址
 wsUrl: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
-# 应用密钥
+# APP ID（火山引擎控制台获取的APP ID）
 appKey: ""
-# 访问密钥
+# Access Token（火山引擎控制台获取的Access Token，不是Secret Key）
 accessKey: ""
-# 资源ID
+# 资源ID（volc.bigasr.sauc.duration 或 volc.seedasr.sauc.duration）
 resourceId: "volc.bigasr.sauc.duration"
 
 # ----------------------------------------

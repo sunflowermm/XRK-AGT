@@ -106,6 +106,15 @@ const getLLMSettings = ({ workflow, persona, profile } = {}) => {
     };
 };
 
+/**
+ * 解析多提供商通用配置段（目前用于 TTS）。
+ * 结构要求：
+ * aistream.tts: {
+ *   enabled?: boolean,
+ *   providers: { [name]: { ... } },
+ *   defaultProvider: string
+ * }
+ */
 const resolveProvider = (sectionName) => {
     const section = ensureConfig(getAistreamConfig()[sectionName], `aistream.${sectionName}`);
     if (section.enabled === false) {
@@ -118,7 +127,35 @@ const resolveProvider = (sectionName) => {
 };
 
 const getTtsConfig = () => resolveProvider('tts');
-const getAsrConfig = () => resolveProvider('asr');
+
+/**
+ * ASR 配置：单工厂模式，只选择运营商，识别结果直接返回文本。
+ * 配置来源：
+ * - aistream.asr.Provider 用于选择运营商（volcengine）
+ * - 具体 ASR 连接参数来自 volcengine_asr.yaml（cfg.volcengine_asr）
+ */
+const getAsrConfig = () => {
+    const aistream = getAistreamConfig();
+    const section = aistream.asr || {};
+
+    if (section.enabled === false) {
+        return { enabled: false };
+    }
+
+    const provider = (section.Provider || section.provider || 'volcengine').toLowerCase();
+
+    if (provider !== 'volcengine') {
+        throw new Error(`不支持的ASR提供商: ${provider}`);
+    }
+
+    const baseConfig = ensureConfig(cfg.volcengine_asr, 'volcengine_asr');
+
+    return {
+        enabled: true,
+        provider,
+        ...baseConfig
+    };
+};
 
 const getSystemConfig = () =>
     ensureConfig(cfg.device, 'device');
@@ -682,13 +719,6 @@ class DeviceManager {
             } catch {
                 // 忽略发送失败，交由重试/心跳机制处理
             }
-
-            // 处理AI响应（ASR识别结果调用工作流，工作流自动选择LLM工厂，结果交给TTS）
-            if (session.finalText.trim()) {
-                await this._processAIResponse(deviceId, session.finalText, {
-                    fromASR: true
-                });
-            }
         } else {
             BotUtil.makeLog('warn',
                 `⚠️ [ASR] 等待最终结果超时(${maxWaitMs}ms)`,
@@ -732,10 +762,8 @@ class DeviceManager {
                 return;
             }
 
-            // 从配置或options中读取工作流名称
-            const aistreamConfig = getAistreamConfig();
-            const asrConfig = aistreamConfig.asr || {};
-            const workflowName = options.workflow || asrConfig.workflow || 'device';
+            // ASR识别结果直接返回文本，不调用工作流
+            const workflowName = options.workflow || 'device';
 
             const streamName = workflowName || 'device';
             const deviceStream = StreamLoader.getStream(streamName) || StreamLoader.getStream('device');

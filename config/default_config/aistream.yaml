@@ -63,8 +63,6 @@ llm:
 asr:
   # ASR运营商：volcengine
   Provider: volcengine
-  # ASR识别结果调用的工作流名称
-  workflow: device
 
 # ----------------------------------------
 # TTS 工厂运营商选择

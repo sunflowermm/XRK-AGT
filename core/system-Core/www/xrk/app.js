@@ -5727,15 +5727,6 @@ class App {
       case 'asr_final': {
         const finalText = (data.text || '').trim();
         this.renderASRStreaming(finalText, true);
-        if (finalText) {
-          if (this._chatMode === 'ai') {
-            this.sendAIMessage(finalText, []);
-          } else {
-            this.appendChat('user', finalText, { source: 'voice' });
-          this.sendDeviceMessage(finalText, { source: 'voice' });
-            this.scrollToBottom();
-          }
-        }
         break;
       }
       case 'reply': {
@@ -5865,47 +5856,20 @@ class App {
   }
 
   renderASRStreaming(text = '', done = false) {
-    const box = document.getElementById('chatMessages');
-    if (!box) return;
+    const input = document.getElementById('chatInput');
+    if (!input) return;
 
     const finalText = (text || '').trim();
-    let bubble = this._asrBubble;
-
-    if (!bubble) {
-      if (done) {
-        if (finalText) this.appendChat('user', finalText);
-        return;
+    
+    if (done) {
+      if (finalText) {
+        input.value = finalText;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
       }
-      bubble = document.createElement('div');
-      bubble.className = 'chat-message user asr-streaming';
-      bubble.innerHTML = `
-        <span class="chat-stream-icon">🎙</span>
-        <span class="chat-stream-text"></span>
-      `;
-      box.appendChild(bubble);
-      this._asrBubble = bubble;
-    }
-
-    const textNode = bubble.querySelector('.chat-stream-text') || bubble;
-
-    if (!done) {
-      bubble.classList.add('streaming');
-      textNode.textContent = finalText || '正在聆听...';
     } else {
-      bubble.classList.remove('streaming', 'asr-streaming');
-      if (!finalText) {
-        bubble.remove();
-      } else {
-        textNode.textContent = finalText;
-        if (this._chatMode === 'event') {
-          this._getCurrentChatHistory().push({ role: 'user', text: finalText, ts: Date.now(), source: 'voice' });
-        this._saveChatHistory();
-        }
-      }
-      this._asrBubble = null;
+      input.value = finalText || '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     }
-
-    this.scrollToBottom();
   }
 
   async toggleMic() {
