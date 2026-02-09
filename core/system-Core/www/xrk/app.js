@@ -3136,24 +3136,16 @@ class App {
 
       // 如果是某个 SubForm 的子字段，但父级没有自定义 group，
       // 则优先按父级的顶层字段分组（例如 proxy.healthCheck.* 都归到 proxy 这一组），
-      // 避免再额外生成 “Proxy - HealthCheck” 这类重复的大组。
+      // 避免再额外生成 "Proxy - HealthCheck" 这类重复的大组。
       if (parentSubFormPath && !groupKey) {
         const top = parentSubFormPath.split('.')[0];
         groupKey = top || parentSubFormPath;
       }
       
       // 如果还是没有 group，根据路径确定
+      // 统一使用路径的第一部分作为分组，避免重复分组
       if (!groupKey) {
-        if (parts.length === 1) {
-          // 顶级字段，使用字段名作为分组
-          groupKey = parts[0];
-        } else if (parts.length === 2) {
-          // 二级字段，使用第一部分作为分组
-          groupKey = parts[0];
-        } else {
-          // 更深层的字段，使用前两部分作为分组
-          groupKey = parts.slice(0, 2).join('.');
-        }
+        groupKey = parts[0];
       }
       
       // 格式化分组键
@@ -3180,14 +3172,17 @@ class App {
         tree[groupKey].subGroups[parentSubFormPath].fields.push(field);
       } else if (subFormFields.has(path)) {
         // 这是 SubForm 字段本身，如果有子字段则不在顶级显示
+        // 数组类型的字段（如 domains[]）也不在顶级显示，因为它们的子字段会通过数组项渲染
         const hasChildren = flatSchema.some(f => f.path.startsWith(path + '.'));
-        if (!hasChildren) {
-          // 没有子字段，作为普通字段显示
+        const isArrayType = field.type === 'array' || (meta.component ?? '').toLowerCase() === 'arrayform';
+        if (!hasChildren && !isArrayType) {
+          // 没有子字段且不是数组类型，作为普通字段显示
           if (!tree[groupKey]) {
             tree[groupKey] = { fields: [], subGroups: {} };
           }
           tree[groupKey].fields.push(field);
         }
+        // 数组类型和有子字段的 SubForm 都不在顶级显示，避免重复
       } else {
         // 普通字段，直接添加到分组
         if (!tree[groupKey]) {
@@ -3206,17 +3201,11 @@ class App {
   formatGroupKey(key) {
     if (!key) return '其他';
     
-    // 如果包含点，说明是嵌套路径，取最后一部分
+    // 如果包含点，说明是嵌套路径，只取第一部分作为分组
+    // 避免生成 "Proxy - Domains" 这样的重复标题
     if (key.includes('.')) {
       const parts = key.split('.');
-      // 对于 llm.defaults 这样的路径，返回 "LLM 默认参数"
-      if (parts.length === 2) {
-        const [parent, child] = parts;
-        const parentLabel = this.getFieldLabel(parent);
-        const childLabel = this.getFieldLabel(child);
-        return `${parentLabel} - ${childLabel}`;
-      }
-      return this.getFieldLabel(parts[parts.length - 1]);
+      return this.getFieldLabel(parts[0]);
     }
     
     return this.getFieldLabel(key);
@@ -3256,15 +3245,14 @@ class App {
       const subGroupsHtml = Object.entries(group.subGroups).map(([subPath, subGroup]) => {
         // 对子分组内的字段进行分组
         const subFieldGroups = this.groupFieldsByMeta(subGroup.fields);
+        const hasMultipleGroups = subFieldGroups.size > 1;
         
         const subFieldsHtml = Array.from(subFieldGroups.entries()).map(([subGroupKey, subFields]) => {
-          const subGroupLabel = this.formatGroupLabel(subGroupKey);
-          
           return `
             <div class="config-subgroup-section">
-              ${subFieldGroups.size > 1 ? `
+              ${hasMultipleGroups ? `
                 <div class="config-subgroup-section-header">
-                  <h5>${this.escapeHtml(subGroupLabel)}</h5>
+                  <h5>${this.escapeHtml(this.formatGroupLabel(subGroupKey))}</h5>
                 </div>
               ` : ''}
               <div class="config-field-grid">
@@ -3410,16 +3398,8 @@ class App {
       case 'inputpassword':
         return `<input type="password" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
       case 'subform': {
-        // SubForm 类型：检查是否有子字段，如果有则展开显示，否则显示 JSON 编辑器
-        const subFields = this.getSubFormFields(field.path);
-        if (subFields && subFields.length > 0) {
-          // 有子字段，在 renderFieldTree 中已经展开显示，这里返回空
-          // 但为了兼容，我们返回一个占位符提示
-          return `<div class="config-subform-placeholder">
-            <p class="config-field-hint">该配置项已展开显示在下方分组中</p>
-          </div>`;
-        }
-        // 没有子字段，使用 JSON 编辑器
+        // SubForm 类型：如果没有子字段，使用 JSON 编辑器
+        // 注意：有子字段的 SubForm 会在 renderFieldTree 中展开显示，不会调用此函数
         return `
           <textarea class="form-input" rows="4" id="${inputId}" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled}>${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>
           <p class="config-field-hint">以 JSON 形式编辑该字段</p>
@@ -3614,7 +3594,7 @@ class App {
   }
 
   getDynamicCollectionEntries(collection) {
-    const source = this.getValueFromObject(this._configState?.rawObject ?? {}, collection.basePath ?? '');
+    const source = this.getNestedValue(this._configState?.rawObject ?? {}, collection.basePath ?? '');
     const exclude = new Set(collection.excludeKeys ?? []);
     return Object.entries(source ?? {})
       .filter(([key]) => !exclude.has(key))
@@ -3911,7 +3891,7 @@ class App {
 
     const key = (await this.showPromptDialog(collection.keyPlaceholder || '请输入键'))?.trim();
     if (!key) return;
-    const existing = this.getValueFromObject(this._configState.rawObject ?? {}, collection.basePath ?? '');
+    const existing = this.getNestedValue(this._configState.rawObject ?? {}, collection.basePath ?? '');
     if (existing && Object.hasOwn(existing, key)) {
       this.showToast('该键已存在', 'warning');
       return;
@@ -4157,20 +4137,6 @@ class App {
     return this._configState.flatSchema.find(field => this.normalizeTemplatePath(field.path) === normalized);
   }
 
-  /**
-   * 获取 SubForm 的子字段
-   */
-  getSubFormFields(parentPath) {
-    if (!this._configState?.flatSchema) return null;
-    return this._configState.flatSchema.filter(field => {
-      const fieldPath = field.path;
-      // 检查是否是父路径的直接子字段
-      if (!fieldPath.startsWith(parentPath + '.')) return false;
-      const relativePath = fieldPath.substring(parentPath.length + 1);
-      // 只返回直接子字段（不包含更深层的字段）
-      return !relativePath.includes('.');
-    });
-  }
 
   normalizeTemplatePath(path = '') {
     return path.replace(/\[\d+\]/g, '[]');
@@ -4194,11 +4160,6 @@ class App {
       }
     });
     return result;
-  }
-
-  getValueFromObject(obj, path = '') {
-    if (!path) return obj;
-    return path.split('.').reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : undefined), obj);
   }
 
   getNestedValue(obj = {}, path = '') {
