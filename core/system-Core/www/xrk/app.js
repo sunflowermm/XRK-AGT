@@ -3113,6 +3113,13 @@ class App {
     flatSchema.forEach(field => {
       const meta = field.meta ?? {};
       const path = field.path;
+      
+      // 过滤掉数组模板路径字段（如 proxy.domains[].domain），这些字段只应该在数组项中显示
+      // 模板路径包含 []，表示这是数组项的字段模板，不应该作为独立字段显示
+      if (path.includes('[]')) {
+        return; // 跳过数组模板字段，避免重复显示
+      }
+      
       const parts = path.split('.');
       
       // 智能确定分组键：
@@ -3171,18 +3178,31 @@ class App {
         
         tree[groupKey].subGroups[parentSubFormPath].fields.push(field);
       } else if (subFormFields.has(path)) {
-        // 这是 SubForm 字段本身，如果有子字段则不在顶级显示
-        // 数组类型的字段（如 domains[]）也不在顶级显示，因为它们的子字段会通过数组项渲染
-        const hasChildren = flatSchema.some(f => f.path.startsWith(path + '.'));
-        const isArrayType = field.type === 'array' || (meta.component ?? '').toLowerCase() === 'arrayform';
-        if (!hasChildren && !isArrayType) {
-          // 没有子字段且不是数组类型，作为普通字段显示
+        // 这是 SubForm 字段本身
+        const isArrayType = field.type === 'array' || field.type === 'array<object>' || (meta.component ?? '').toLowerCase() === 'arrayform';
+        
+        if (isArrayType) {
+          // 数组类型字段应该显示（通过 renderArrayObjectControl），子字段通过数组项渲染
           if (!tree[groupKey]) {
             tree[groupKey] = { fields: [], subGroups: {} };
           }
           tree[groupKey].fields.push(field);
+        } else {
+          // 非数组类型的 SubForm：如果有子字段则不在顶级显示（会在 subGroups 中显示）
+          // 检查是否有非模板路径的子字段（排除包含 [] 的模板路径）
+          const hasChildren = flatSchema.some(f => {
+            const childPath = f.path;
+            return childPath.startsWith(path + '.') && !childPath.includes('[]');
+          });
+          if (!hasChildren) {
+            // 没有子字段，作为普通字段显示
+            if (!tree[groupKey]) {
+              tree[groupKey] = { fields: [], subGroups: {} };
+            }
+            tree[groupKey].fields.push(field);
+          }
+          // 有子字段的 SubForm 在 subGroups 中显示，避免重复
         }
-        // 数组类型和有子字段的 SubForm 都不在顶级显示，避免重复
       } else {
         // 普通字段，直接添加到分组
         if (!tree[groupKey]) {
