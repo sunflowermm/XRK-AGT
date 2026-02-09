@@ -217,7 +217,7 @@ export default {
         }
 
         // 验证数据
-        if (data === undefined || data === null) {
+        if (data === undefined) {
           BotUtil.makeLog('warn', `配置数据为空 [${configName}]`, 'ConfigAPI');
         }
 

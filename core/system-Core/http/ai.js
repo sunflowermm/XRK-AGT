@@ -86,7 +86,7 @@ async function parseMultipartData(req) {
 
 function pickFirst(obj, keys) {
   for (const k of keys) {
-    if (Object.hasOwn(obj, k) && obj[k] !== undefined && obj[k] !== null) return obj[k];
+    if (Object.hasOwn(obj, k) && obj[k] !== undefined) return obj[k];
   }
   return;
 }

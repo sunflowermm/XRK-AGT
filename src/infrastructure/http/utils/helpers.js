@@ -70,12 +70,12 @@ export function validateRequest(req, schema) {
   for (const [field, rules] of Object.entries(schema)) {
     const value = body[field] ?? query[field] ?? params[field];
     
-    if (rules.required && (value === undefined || value === null || value === '')) {
+    if (rules.required && (value === undefined || value === '')) {
       errors.push(`字段 ${field} 是必需的`);
       continue;
     }
     
-    if (value !== undefined && value !== null && rules.type) {
+    if (value !== undefined && rules.type) {
       const actualType = Array.isArray(value) ? 'array' : typeof value;
       if (actualType !== rules.type) {
         errors.push(`字段 ${field} 类型错误，期望 ${rules.type}，实际 ${actualType}`);
@@ -83,7 +83,7 @@ export function validateRequest(req, schema) {
       }
     }
     
-    if (value !== undefined && value !== null && rules.validator) {
+    if (value !== undefined && rules.validator) {
       const result = rules.validator(value);
       if (result !== true) {
         errors.push(result || `字段 ${field} 验证失败`);
@@ -290,7 +290,7 @@ export function extractQueryParams(req, defaults = {}) {
   const params = { ...defaults };
   
   for (const [key, value] of Object.entries(req.query || {})) {
-    if (value !== undefined && value !== null && value !== '') {
+    if (value !== undefined && value !== '') {
       params[key] = value;
     }
   }

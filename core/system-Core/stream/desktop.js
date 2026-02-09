@@ -119,7 +119,7 @@ export default class DesktopStream extends AIStream {
   getParam(params, ...keys) {
     if (!params) return;
     for (const key of keys) {
-      if (params[key] !== undefined && params[key] !== null) {
+      if (params[key] !== undefined) {
         return params[key];
       }
     }

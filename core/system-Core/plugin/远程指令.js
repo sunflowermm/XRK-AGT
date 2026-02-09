@@ -394,10 +394,19 @@ class ObjectInspector {
   }
 
   inspect(obj, name = 'Object') {
-    if (obj === null || obj === undefined) {
+    if (obj === undefined) {
       return {
         name,
-        type: obj === null ? 'null' : 'undefined',
+        type: 'undefined',
+        value: String(obj),
+        properties: [],
+        methods: [],
+      };
+    }
+    if (obj === null) {
+      return {
+        name,
+        type: 'null',
         value: String(obj),
         properties: [],
         methods: [],

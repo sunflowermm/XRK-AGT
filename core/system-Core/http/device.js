@@ -39,7 +39,7 @@ import {
 } from '#utils/deviceutil.js';
 
 const ensureConfig = (value, path) => {
-    if (value === undefined || value === null) {
+    if (value === undefined) {
         throw new Error(`设备配置缺失: ${path}`);
     }
     return value;

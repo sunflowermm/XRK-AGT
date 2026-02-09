@@ -45,7 +45,7 @@ export class BotError extends Error {
     this.code = code;
     this.context = context;
     this.timestamp = Date.now();
-    this.stack = this.stack || Error.captureStackTrace?.(this, BotError);
+    Error.captureStackTrace?.(this, BotError);
   }
 
   /**
@@ -62,9 +62,7 @@ export class BotError extends Error {
       { ...context, original: error }
     );
     
-    if (error.stack) {
-      botError.stack = error.stack;
-    }
+    if (error.stack) botError.stack = error.stack;
     
     return botError;
   }
@@ -175,8 +173,7 @@ export class ErrorHandler {
    */
   logError(error) {
     const severity = error.getSeverity();
-    const level = severity === 'critical' ? 'error' : 
-                  severity === 'high' ? 'error' : 
+    const level = ['critical', 'high'].includes(severity) ? 'error' : 
                   severity === 'medium' ? 'warn' : 'info';
     
     const logMessage = `[${error.code}] ${error.message}`;
@@ -186,7 +183,6 @@ export class ErrorHandler {
     
     BotUtil.makeLog(level, chalk.red(`✗ ${logMessage}${contextStr}`), 'ErrorHandler');
     
-    // 严重错误记录堆栈
     if (severity === 'critical' && error.stack) {
       BotUtil.makeLog('debug', chalk.gray(error.stack), 'ErrorHandler');
     }
@@ -197,7 +193,7 @@ export class ErrorHandler {
    */
   attemptRecovery(error) {
     const strategy = this.recoveryStrategies.get(error.code);
-    if (strategy && typeof strategy === 'function') {
+    if (typeof strategy === 'function') {
       try {
         return strategy(error);
       } catch (recoveryError) {
@@ -207,7 +203,6 @@ export class ErrorHandler {
         );
       }
     }
-    return null;
   }
 
   /**
@@ -228,15 +223,18 @@ export class ErrorHandler {
       topErrors: []
     };
 
+    const getSeverityByCode = (code) => {
+      const numCode = Number(code);
+      if (numCode >= 4000) return 'critical';
+      if (numCode >= 3000) return 'high';
+      if (numCode >= 2000) return 'medium';
+      return 'low';
+    };
+
     for (const [code, stats] of this.errorStats.entries()) {
       report.totalErrors += stats.count;
       report.byCode[code] = stats;
-      
-      // 根据错误码判断严重程度
-      const severity = code >= 4000 ? 'critical' : 
-                       code >= 3000 ? 'high' : 
-                       code >= 2000 ? 'medium' : 'low';
-      report.bySeverity[severity] += stats.count;
+      report.bySeverity[getSeverityByCode(code)] += stats.count;
     }
 
     // 获取最常见的错误

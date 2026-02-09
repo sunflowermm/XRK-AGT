@@ -84,31 +84,31 @@ export default class ConfigBase {
    * - object 的 fields 递归校验
    */
   _assertSchemaStrict(schema) {
-    if (!schema || !schema.fields) return;
+    if (!schema?.fields) return;
     const check = (fields) => {
       for (const [key, fs] of Object.entries(fields)) {
         // 校验 default 与 type
-        if (Object.hasOwn(fs, 'default')) {
+        if (fs.default !== undefined) {
           const def = fs.default;
           const t = fs.type;
-          if (t === 'number' && !(typeof def === 'number')) {
+          if (t === 'number' && typeof def !== 'number') {
             throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 number`);
           }
-          if (t === 'string' && !(typeof def === 'string')) {
+          if (t === 'string' && typeof def !== 'string') {
             throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 string`);
           }
-          if (t === 'boolean' && !(typeof def === 'boolean')) {
+          if (t === 'boolean' && typeof def !== 'boolean') {
             throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 boolean`);
           }
           if (t === 'array' && !Array.isArray(def)) {
             throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 array`);
           }
-          if (t === 'object' && (def !== undefined) && (def !== null) && (typeof def !== 'object' || Array.isArray(def))) {
+          if (t === 'object' && (typeof def !== 'object' || Array.isArray(def))) {
             throw new Error(`配置(${this.name}).schema 字段 ${key} 的 default 必须为 object`);
           }
         }
         // 校验 enum 与 default
-        if (fs.enum && Object.hasOwn(fs, 'default')) {
+        if (fs.enum && fs.default !== undefined) {
           const def = fs.default;
           // 对于数组类型，要求每个默认值都在 enum 中
           if (fs.type === 'array' && Array.isArray(def)) {
@@ -644,7 +644,7 @@ export default class ConfigBase {
           value = this._normalizeValueBySchema(value, fieldSchema);
           data[field] = value;
 
-          if (value === null || value === undefined) {
+          if (value === undefined) {
             if (fieldSchema.nullable === true) continue;
             errors.push(`字段 ${fieldPath} 不允许为空`);
             continue;
@@ -741,13 +741,13 @@ export default class ConfigBase {
 
   buildDefaultFromSchema(schema = this.schema) {
     const result = {};
-    if (!schema || !schema.fields) return result;
+    if (!schema?.fields) return result;
     for (const [key, fs] of Object.entries(schema.fields)) {
       if (fs.type === 'object') {
         result[key] = this.buildDefaultFromSchema({ fields: fs.fields ?? {} });
       } else if (fs.type === 'array') {
         result[key] = Array.isArray(fs.default) ? [...fs.default] : [];
-      } else if (Object.hasOwn(fs, 'default')) {
+      } else {
         result[key] = fs.default;
       }
     }
@@ -758,7 +758,7 @@ export default class ConfigBase {
 
   getFlatSchema(prefix = '', schema = this.schema) {
     const list = [];
-    if (!schema || !schema.fields) return list;
+    if (!schema?.fields) return list;
     for (const [key, fs] of Object.entries(schema.fields)) {
       const path = prefix ? `${prefix}.${key}` : key;
       if (fs.type === 'object') {
@@ -776,7 +776,7 @@ export default class ConfigBase {
 
   flattenData(obj, prefix = '') {
     const out = {};
-    if (!obj || typeof obj !== 'object') return out;
+    if (typeof obj !== 'object' || obj === null) return out;
     for (const [k, v] of Object.entries(obj)) {
       const path = prefix ? `${prefix}.${k}` : k;
       if (v && typeof v === 'object' && !Array.isArray(v)) {
@@ -843,13 +843,13 @@ export default class ConfigBase {
 
     if (!schema.itemType) return;
 
-    const itemSchema = schema.itemSchema || (schema.fields ? { fields: schema.fields } : {});
+    const itemSchema = schema.itemSchema || { fields: schema.fields ?? {} };
 
     value.forEach((item, idx) => {
       const itemPath = `${path}[${idx}]`;
       const expectedType = schema.itemType;
-
-      const normalizedItem = this._normalizeValueBySchema(item, { ...itemSchema, type: expectedType });
+      const itemSchemaWithType = { ...itemSchema, type: expectedType };
+      const normalizedItem = this._normalizeValueBySchema(item, itemSchemaWithType);
       value[idx] = normalizedItem;
 
       if (!this._checkType(normalizedItem, expectedType)) {
@@ -857,12 +857,10 @@ export default class ConfigBase {
         return;
       }
 
-      this._runFieldValidators(normalizedItem, { ...itemSchema, type: expectedType }, itemPath, errors);
+      this._runFieldValidators(normalizedItem, itemSchemaWithType, itemPath, errors);
 
       if ((expectedType === 'object' || expectedType === 'map') && (itemSchema.fields || schema.fields)) {
-        const nestedSchema = { ...itemSchema, type: expectedType };
-        if (!nestedSchema.fields && schema.fields) nestedSchema.fields = schema.fields;
-        this._validateObjectField(normalizedItem, nestedSchema, itemPath, errors);
+        this._validateObjectField(normalizedItem, { ...itemSchemaWithType, fields: itemSchema.fields ?? schema.fields }, itemPath, errors);
       }
     });
   }
@@ -878,8 +876,8 @@ export default class ConfigBase {
       const childPath = `${path}.${key}`;
       let childValue = value[key];
 
-      if (childValue === undefined || childValue === null) {
-        if (childSchema?.nullable === true || childValue === undefined) continue;
+      if (childValue === undefined) {
+        if (childSchema?.nullable === true) continue;
         errors.push(`字段 ${childPath} 不允许为空`);
         continue;
       }
@@ -905,14 +903,11 @@ export default class ConfigBase {
   }
 
   _normalizeValueBySchema(value, schema = {}) {
-    if (value === undefined) return value;
+    if (value === undefined) return;
     const expectedType = schema.type;
 
     if (expectedType === 'string') {
-      if (typeof value !== 'string' && value !== null && value !== undefined) {
-        return String(value);
-      }
-      return value;
+      return typeof value === 'string' ? value : String(value);
     }
 
     if (expectedType === 'number') {
@@ -936,9 +931,9 @@ export default class ConfigBase {
     }
 
     if (expectedType === 'array') {
-      let arr = Array.isArray(value) ? [...value] : (value === undefined || value === null ? [] : [value]);
+      let arr = Array.isArray(value) ? [...value] : (value == null ? [] : [value]);
       if (schema.itemType) {
-        const itemSchema = schema.itemSchema || (schema.fields ? { fields: schema.fields } : {});
+        const itemSchema = schema.itemSchema || { fields: schema.fields ?? {} };
         arr = arr.map(item => this._normalizeValueBySchema(item, { ...itemSchema, type: schema.itemType }));
       }
       return arr;
@@ -959,6 +954,15 @@ export default class ConfigBase {
   }
 
   /**
+   * 解析数组索引键
+   * @private
+   */
+  _parseArrayKey(key) {
+    const match = key.match(/^(.+?)\[(\d+)\]$/);
+    return match ? { arrayKey: match[1], index: parseInt(match[2]) } : null;
+  }
+
+  /**
    * 通过路径获取值
    * @private
    */
@@ -969,18 +973,11 @@ export default class ConfigBase {
     let current = obj;
 
     for (const key of keys) {
-      // 处理数组索引，如 domains[0]
-      const arrayMatch = key.match(/^(.+?)\[(\d+)\]$/);
-      if (arrayMatch) {
-        const [, arrayKey, index] = arrayMatch;
-        current = current?.[arrayKey]?.[parseInt(index)];
-      } else {
-        current = current?.[key];
-      }
-
-      if (current === undefined) {
-        return;
-      }
+      const parsed = this._parseArrayKey(key);
+      current = parsed 
+        ? current?.[parsed.arrayKey]?.[parsed.index]
+        : current?.[key];
+      if (current === undefined) return;
     }
 
     return current;
@@ -995,30 +992,23 @@ export default class ConfigBase {
     let current = obj;
 
     for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
-      
-      // 处理数组索引
-      const arrayMatch = key.match(/^(.+?)\[(\d+)\]$/);
-      if (arrayMatch) {
-        const [, arrayKey, index] = arrayMatch;
-        if (!current[arrayKey]) current[arrayKey] = [];
-        if (!current[arrayKey][index]) current[arrayKey][index] = {};
-        current = current[arrayKey][index];
+      const parsed = this._parseArrayKey(keys[i]);
+      if (parsed) {
+        current[parsed.arrayKey] ||= [];
+        current[parsed.arrayKey][parsed.index] ||= {};
+        current = current[parsed.arrayKey][parsed.index];
       } else {
-        if (!current[key]) current[key] = {};
-        current = current[key];
+        current[keys[i]] ||= {};
+        current = current[keys[i]];
       }
     }
 
-    const lastKey = keys[keys.length - 1];
-    const arrayMatch = lastKey.match(/^(.+?)\[(\d+)\]$/);
-    
-    if (arrayMatch) {
-      const [, arrayKey, index] = arrayMatch;
-      if (!current[arrayKey]) current[arrayKey] = [];
-      current[arrayKey][parseInt(index)] = value;
+    const lastParsed = this._parseArrayKey(keys[keys.length - 1]);
+    if (lastParsed) {
+      current[lastParsed.arrayKey] ||= [];
+      current[lastParsed.arrayKey][lastParsed.index] = value;
     } else {
-      current[lastKey] = value;
+      current[keys[keys.length - 1]] = value;
     }
   }
 
@@ -1031,27 +1021,18 @@ export default class ConfigBase {
     let current = obj;
 
     for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
-      const arrayMatch = key.match(/^(.+?)\[(\d+)\]$/);
-      
-      if (arrayMatch) {
-        const [, arrayKey, index] = arrayMatch;
-        current = current[arrayKey]?.[parseInt(index)];
-      } else {
-        current = current[key];
-      }
-
+      const parsed = this._parseArrayKey(keys[i]);
+      current = parsed 
+        ? current[parsed.arrayKey]?.[parsed.index]
+        : current[keys[i]];
       if (!current) return;
     }
 
-    const lastKey = keys[keys.length - 1];
-    const arrayMatch = lastKey.match(/^(.+?)\[(\d+)\]$/);
-    
-    if (arrayMatch) {
-      const [, arrayKey, index] = arrayMatch;
-      current[arrayKey]?.splice(parseInt(index), 1);
+    const lastParsed = this._parseArrayKey(keys[keys.length - 1]);
+    if (lastParsed) {
+      current[lastParsed.arrayKey]?.splice(lastParsed.index, 1);
     } else {
-      delete current[lastKey];
+      delete current[keys[keys.length - 1]];
     }
   }
 
@@ -1064,15 +1045,9 @@ export default class ConfigBase {
 
     if (this._isObject(target) && this._isObject(source)) {
       Object.keys(source).forEach(key => {
-        if (this._isObject(source[key])) {
-          if (!(key in target)) {
-            output[key] = source[key];
-          } else {
-            output[key] = this._deepMerge(target[key], source[key]);
-          }
-        } else {
-          output[key] = source[key];
-        }
+        output[key] = this._isObject(source[key]) && (key in target)
+          ? this._deepMerge(target[key], source[key])
+          : source[key];
       });
     }
 

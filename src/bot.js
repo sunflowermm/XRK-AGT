@@ -1477,14 +1477,11 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         // 3. 最后透明代理到 BotUtil 的静态方法/属性（仅限自有属性，避免 Function 原型污染）
         if (typeof prop === 'string' && Object.hasOwn(BotUtil, prop)) {
           const utilValue = BotUtil[prop];
-          if (utilValue !== undefined) {
-            return typeof utilValue === 'function'
-              ? utilValue.bind(BotUtil)
-              : utilValue;
-          }
+          return typeof utilValue === 'function'
+            ? utilValue.bind(BotUtil)
+            : utilValue;
         }
 
-        return undefined;
       },
       set: (target, prop, value, receiver) => {
         if (isBotEntry(prop, value)) {
@@ -1494,12 +1491,9 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         return Reflect.set(target, prop, value, receiver);
       },
       has: (target, prop) => {
-        if (Reflect.has(target, prop)) return true;
-        if (prop in botMap) return true;
-        if (typeof prop === 'string' && Object.hasOwn(BotUtil, prop)) {
-          return true;
-        }
-        return false;
+        return Reflect.has(target, prop) || 
+               prop in botMap || 
+               (typeof prop === 'string' && Object.hasOwn(BotUtil, prop));
       },
       ownKeys: (target) => {
         return Reflect.ownKeys(target);
@@ -1508,7 +1502,6 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         if (Reflect.has(target, prop)) {
           return Reflect.getOwnPropertyDescriptor(target, prop);
         }
-        return undefined;
       }
     });
   }
@@ -3319,7 +3312,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     const url = new URL(routePath, baseUrl || this.getServerUrl());
     if (query && typeof query === 'object') {
       for (const [k, v] of Object.entries(query)) {
-        if (v === undefined || v === null) continue;
+        if (v === undefined) continue;
         url.searchParams.append(k, v);
       }
     }
@@ -3408,14 +3401,13 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     const masterQQs = cfg.masterQQ;
     const results = {};
     
-    for (let i = 0; i < masterQQs.length; i++) {
-      const user_id = masterQQs[i];
+    for (const [i, user_id] of masterQQs.entries()) {
       const pickFn = this.pickFriend || this.pickUser;
       const friend = pickFn.call(this, user_id);
       results[user_id] = await friend.sendMsg(msg);
       BotUtil.makeLog("debug", `已发送消息给主人 ${user_id}`, '服务器');
       
-      i < masterQQs.length - 1 && await BotUtil.sleep(sleep);
+      if (i < masterQQs.length - 1) await BotUtil.sleep(sleep);
     }
     
     return results;

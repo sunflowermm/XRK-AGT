@@ -893,13 +893,13 @@ export default class AIStream {
 
     const pickFirst = (...vals) => {
       for (const v of vals) {
-        if (v !== undefined && v !== null) return v;
+        if (v !== undefined) return v;
       }
       return;
     };
     const pickTrimmed = (...vals) => {
       for (const v of vals) {
-        if (v === undefined || v === null) continue;
+        if (v === undefined) continue;
         const s = String(v).trim();
         if (s) return s;
       }

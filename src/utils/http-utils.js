@@ -208,7 +208,7 @@ export class HttpResponse {
       }
     }
 
-    if (request.method === undefined || typeof request.method !== 'string') {
+    if (typeof request.method !== 'string') {
       return {
         code: -32600,
         message: 'Invalid Request: method is required and must be a string'

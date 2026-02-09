@@ -633,11 +633,11 @@ class StreamLoader {
               if (tool.handler) {
                 const result = await tool.handler(args, { ...context, stream });
                 // 确保返回标准格式
-                if (result === undefined || result === null) {
+                if (result === undefined) {
                   return { success: true, message: '操作已执行' };
                 }
                 // 如果已经是标准格式，直接返回
-                if (typeof result === 'object' && (result.success !== undefined || result.error !== undefined)) {
+                if (typeof result === 'object' && ('success' in result || 'error' in result)) {
                   return result;
                 }
                 // 否则包装为标准格式

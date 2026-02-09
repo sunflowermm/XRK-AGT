@@ -342,7 +342,7 @@ class Cfg {
    */
   get master() {
     const masters = {};
-    if (typeof Bot !== 'undefined' && Bot.uin) {
+    if (Bot.uin) {
       const masterList = this.masterQQ.map(qq => String(qq));
       Bot.uin.forEach(botUin => {
         masters[botUin] = masterList;

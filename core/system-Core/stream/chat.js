@@ -224,7 +224,7 @@ export default class ChatStream extends AIStream {
           const group = context.e.group;
           if (group && typeof group.setEmojiLike === 'function') {
             const result = await group.setEmojiLike(msgId, emojiId, true);
-            if (result !== null && result !== undefined) {
+            if (result !== undefined) {
               await BotUtil.sleep(200);
               return { success: true, message: '表情回应成功', data: { msgId, emojiId } };
             }
@@ -702,7 +702,7 @@ export default class ChatStream extends AIStream {
             const options = {};
             if (image) options.image = image;
             const result = await group.sendNotice(content, options);
-            if (result !== null && result !== undefined) {
+            if (result !== undefined) {
               await BotUtil.sleep(300);
               return { success: true, message: '发送群公告成功', data: { content } };
             }
@@ -930,7 +930,7 @@ export default class ChatStream extends AIStream {
               group_id: context.e.group_id,
               message_id: msgId
             });
-            if (result !== null && result !== undefined) {
+            if (result !== undefined) {
               await BotUtil.sleep(300);
               return { success: true, message: '设置群代办成功', data: { msgId } };
             }

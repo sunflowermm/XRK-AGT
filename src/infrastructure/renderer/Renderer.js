@@ -78,9 +78,7 @@ export default class Renderer {
         }
       }
     } catch (e) {
-      if (typeof logger !== 'undefined') {
-        logger.error(`获取MAC地址失败: ${e.message}`);
-      }
+      logger.error(`获取MAC地址失败: ${e.message}`);
     }
     return macAddr;
   }

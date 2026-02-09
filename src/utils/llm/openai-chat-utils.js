@@ -13,8 +13,8 @@ import { MCPToolAdapter } from './mcp-tool-adapter.js';
  */
 function pick(overrides, config, keys) {
   for (const k of keys) {
-    if (overrides && Object.hasOwn(overrides, k) && overrides[k] !== undefined) return overrides[k];
-    if (config && Object.hasOwn(config, k) && config[k] !== undefined) return config[k];
+    if (overrides?.[k] !== undefined) return overrides[k];
+    if (config?.[k] !== undefined) return config[k];
   }
   return;
 }

@@ -27,8 +27,8 @@ Bot.tasker.push(
       this.echo.set(echo, cache)
       const timeout = setTimeout(() => {
         cache.reject(Bot.makeError("请求超时", request, { timeout: this.timeout }))
-        Bot.makeLog("error", ["请求超时", request], data.self_id)
-        ws.terminate()
+        Bot.makeLog("warn", [`API调用超时: ${action}`, request], data.self_id)
+        this.echo.delete(echo)
       }, this.timeout)
 
       return cache.promise
@@ -40,6 +40,10 @@ Bot.tasker.push(
               get: (target, prop) => target.data[prop] ?? target[prop],
             })
             : data
+        })
+        .catch(err => {
+          Bot.makeLog("warn", [`API调用失败: ${action}`, err.message], data.self_id)
+          throw err
         })
         .finally(() => {
           clearTimeout(timeout)
@@ -161,9 +165,6 @@ Bot.tasker.push(
       return data.bot.sendApi("send_poke", {
         group_id: data.group_id,
         user_id: Number(user_id)
-      }).catch(err => {
-        Bot.makeLog("warn", `戳一戳API调用失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -191,8 +192,15 @@ Bot.tasker.push(
       Bot.makeLog("info", `撤回消息：${message_id}`, data.self_id)
       if (!Array.isArray(message_id)) message_id = [message_id]
       const msgs = []
-      for (const i of message_id)
-        msgs.push(await data.bot.sendApi("delete_msg", { message_id: i }).catch(i => i))
+      for (const id of message_id) {
+        try {
+          const result = await data.bot.sendApi("delete_msg", { message_id: id })
+          msgs.push(result)
+        } catch (err) {
+          Bot.makeLog("warn", `撤回消息失败: ${err.message}`, data.self_id)
+          msgs.push(null)
+        }
+      }
       return msgs
     }
 
@@ -318,7 +326,7 @@ Bot.tasker.push(
       const friendArray = await this.getFriendArray(data);
       if (Array.isArray(friendArray)) {
         for (const item of friendArray) {
-          if (item && item.user_id !== undefined) {
+          if (item?.user_id !== undefined) {
             array.push(item.user_id);
           }
         }
@@ -331,7 +339,7 @@ Bot.tasker.push(
       const friendArray = await this.getFriendArray(data);
       if (Array.isArray(friendArray)) {
         for (const i of friendArray) {
-          if (i && i.user_id !== undefined) {
+          if (i?.user_id !== undefined) {
             map.set(i.user_id, i);
           }
         }
@@ -401,7 +409,7 @@ Bot.tasker.push(
       const groupArray = await this.getGroupArray(data);
       if (Array.isArray(groupArray)) {
         for (const item of groupArray) {
-          if (item && item.group_id !== undefined) {
+          if (item?.group_id !== undefined) {
             array.push(item.group_id);
           }
         }
@@ -414,7 +422,7 @@ Bot.tasker.push(
       const groupArray = await this.getGroupArray(data);
       if (Array.isArray(groupArray)) {
         for (const i of groupArray) {
-          if (i && i.group_id !== undefined) {
+          if (i?.group_id !== undefined) {
             map.set(i.group_id, i);
           }
         }
@@ -457,7 +465,7 @@ Bot.tasker.push(
       const memberArray = await this.getMemberArray(data);
       if (Array.isArray(memberArray)) {
         for (const item of memberArray) {
-          if (item && item.user_id !== undefined) {
+          if (item?.user_id !== undefined) {
             array.push(item.user_id);
           }
         }
@@ -470,7 +478,7 @@ Bot.tasker.push(
       const memberArray = await this.getMemberArray(data);
       if (Array.isArray(memberArray)) {
         for (const i of memberArray) {
-          if (i && i.user_id !== undefined) {
+          if (i?.user_id !== undefined) {
             map.set(i.user_id, i);
           }
         }
@@ -563,12 +571,25 @@ Bot.tasker.push(
       }
     }
 
+    async getGuildChannelList(data) {
+      const array = [];
+      const channelArray = await this.getGuildChannelArray(data);
+      if (Array.isArray(channelArray)) {
+        for (const item of channelArray) {
+          if (item?.channel_id !== undefined) {
+            array.push(item.channel_id);
+          }
+        }
+      }
+      return array;
+    }
+
     async getGuildChannelMap(data) {
       const map = new Map();
       const channelArray = await this.getGuildChannelArray(data);
       if (Array.isArray(channelArray)) {
         for (const i of channelArray) {
-          if (i && i.channel_id !== undefined) {
+          if (i?.channel_id !== undefined) {
             map.set(i.channel_id, i);
           }
         }
@@ -615,7 +636,7 @@ Bot.tasker.push(
       const memberArray = await this.getGuildMemberArray(data);
       if (Array.isArray(memberArray)) {
         for (const item of memberArray) {
-          if (item && item.user_id !== undefined) {
+          if (item?.user_id !== undefined) {
             array.push(item.user_id);
           }
         }
@@ -628,7 +649,7 @@ Bot.tasker.push(
       const memberArray = await this.getGuildMemberArray(data);
       if (Array.isArray(memberArray)) {
         for (const i of memberArray) {
-          if (i && i.user_id !== undefined) {
+          if (i?.user_id !== undefined) {
             map.set(i.user_id, i);
           }
         }
@@ -646,9 +667,6 @@ Bot.tasker.push(
         user_id: data.user_id,
       });
     }
-
-    // ========== 其他方法保持不变 ==========
-
     setProfile(data, profile) {
       Bot.makeLog("info", `设置资料：${Bot.String(profile)}`, data.self_id)
       return data.bot.sendApi("set_qq_profile", profile)
@@ -732,9 +750,6 @@ Bot.tasker.push(
       Bot.makeLog("info", "群打卡", `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_sign", {
         group_id: data.group_id,
-      }).catch(err => {
-        Bot.makeLog("warn", `群打卡API调用失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -929,58 +944,37 @@ Bot.tasker.push(
 
     setEmojiLike(data, message_id, emoji_id, set = true) {
       Bot.makeLog("info", `设置表情回应：${emoji_id} (${set ? '贴' : '取消'})`, `${data.self_id} => ${data.group_id}, ${message_id}`, true)
-      try {
-        return data.bot.sendApi("set_msg_emoji_like", {
+      return data.bot.sendApi("set_msg_emoji_like", {
         message_id: String(message_id),
-          emoji_id: Number(emoji_id),
-          set: Boolean(set)
-        }).catch(err => {
-          Bot.makeLog("warn", `表情回应API调用失败: ${err.message}`, data.self_id)
-          return null
-        })
-      } catch (error) {
-        Bot.makeLog("warn", `表情回应功能不可用: ${error.message}`, data.self_id)
-        return Promise.resolve(null)
-      }
+        emoji_id: Number(emoji_id),
+        set: Boolean(set)
+      })
     }
 
-    // ========== 群聊相关新增 API ==========
     
     setGroupKickMembers(data, user_ids) {
       Bot.makeLog("info", `批量踢出群成员：${user_ids.length}人`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("set_group_kick_members", {
         group_id: data.group_id,
         user_ids: Array.isArray(user_ids) ? user_ids : [user_ids]
-      }).catch(err => {
-        Bot.makeLog("warn", `批量踢出群成员失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     getGroupInfoEx(data) {
       return data.bot.sendApi("get_group_info_ex", {
         group_id: data.group_id
-      }).catch(err => {
-        Bot.makeLog("warn", `获取群信息ex失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     getGroupAtAllRemain(data) {
       return data.bot.sendApi("get_group_at_all_remain", {
         group_id: data.group_id
-      }).catch(err => {
-        Bot.makeLog("warn", `获取@全体成员剩余次数失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     getGroupBanList(data) {
       return data.bot.sendApi("get_group_ban_list", {
         group_id: data.group_id
-      }).catch(err => {
-        Bot.makeLog("warn", `获取群禁言列表失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -989,9 +983,6 @@ Bot.tasker.push(
       return data.bot.sendApi("set_group_todo", {
         group_id: data.group_id,
         content
-      }).catch(err => {
-        Bot.makeLog("warn", `设置群代办失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1000,9 +991,6 @@ Bot.tasker.push(
       return data.bot.sendApi("set_group_remark", {
         group_id: data.group_id,
         remark
-      }).catch(err => {
-        Bot.makeLog("warn", `设置群备注失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1011,9 +999,6 @@ Bot.tasker.push(
       return data.bot.sendApi("set_group_add_option", {
         group_id: data.group_id,
         option
-      }).catch(err => {
-        Bot.makeLog("warn", `设置群添加选项失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1022,27 +1007,18 @@ Bot.tasker.push(
       return data.bot.sendApi("set_group_bot_add_option", {
         group_id: data.group_id,
         option
-      }).catch(err => {
-        Bot.makeLog("warn", `设置群机器人添加选项失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     getGroupSystemMsg(data) {
       return data.bot.sendApi("get_group_system_msg", {
         group_id: data.group_id
-      }).catch(err => {
-        Bot.makeLog("warn", `获取群系统消息失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     getGroupFilterSystemMsg(data) {
       return data.bot.sendApi("get_group_filter_system_msg", {
         group_id: data.group_id
-      }).catch(err => {
-        Bot.makeLog("warn", `获取群过滤系统消息失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1051,9 +1027,6 @@ Bot.tasker.push(
       return data.bot.sendApi("set_group_search", {
         group_id: data.group_id,
         enable: Boolean(enable)
-      }).catch(err => {
-        Bot.makeLog("warn", `设置群搜索失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1087,10 +1060,7 @@ Bot.tasker.push(
       if (is_show_edit_card !== undefined) params.is_show_edit_card = is_show_edit_card
       if (tip_window_type !== undefined) params.tip_window_type = tip_window_type
       
-      return data.bot.sendApi("_send_group_notice", params).catch(err => {
-        Bot.makeLog("warn", `发送群公告失败: ${err.message}`, data.self_id)
-        return null
-      })
+      return data.bot.sendApi("_send_group_notice", params)
     }
 
     /**
@@ -1102,9 +1072,6 @@ Bot.tasker.push(
       Bot.makeLog("info", `获取群公告`, `${data.self_id} => ${data.group_id}`, true)
       return data.bot.sendApi("_get_group_notice", {
         group_id: data.group_id
-      }).catch(err => {
-        Bot.makeLog("warn", `获取群公告失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1119,13 +1086,9 @@ Bot.tasker.push(
       return data.bot.sendApi("_delete_group_notice", {
         group_id: data.group_id,
         notice_id: String(notice_id)
-      }).catch(err => {
-        Bot.makeLog("warn", `删除群公告失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
-    // ========== 文件相关新增 API ==========
 
     moveGroupFile(data, file_id, busid, folder_id) {
       Bot.makeLog("info", `移动群文件：${file_id}`, `${data.self_id} => ${data.group_id}`, true)
@@ -1134,9 +1097,6 @@ Bot.tasker.push(
         file_id,
         busid,
         folder_id
-      }).catch(err => {
-        Bot.makeLog("warn", `移动群文件失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1147,9 +1107,6 @@ Bot.tasker.push(
         file_id,
         busid,
         name
-      }).catch(err => {
-        Bot.makeLog("warn", `重命名群文件失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1159,9 +1116,6 @@ Bot.tasker.push(
         group_id: data.group_id,
         file_id,
         busid
-      }).catch(err => {
-        Bot.makeLog("warn", `转存为永久文件失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1170,18 +1124,12 @@ Bot.tasker.push(
         url,
         thread_count,
         headers
-      }).catch(err => {
-        Bot.makeLog("warn", `下载文件到缓存目录失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     clearCache(data) {
       Bot.makeLog("info", "清空缓存", data.self_id)
-      return data.bot.sendApi("clear_cache", {}).catch(err => {
-        Bot.makeLog("warn", `清空缓存失败: ${err.message}`, data.self_id)
-        return null
-      })
+      return data.bot.sendApi("clear_cache", {})
     }
 
     deleteGroupFileFolder(data, folder_id) {
@@ -1189,9 +1137,6 @@ Bot.tasker.push(
       return data.bot.sendApi("delete_group_file_folder", {
         group_id: data.group_id,
         folder_id
-      }).catch(err => {
-        Bot.makeLog("warn", `删除群文件夹失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1200,9 +1145,6 @@ Bot.tasker.push(
         user_id: data.user_id,
         file_id,
         busid
-      }).catch(err => {
-        Bot.makeLog("warn", `获取私聊文件链接失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1210,71 +1152,46 @@ Bot.tasker.push(
       return data.bot.sendApi("get_file_info", {
         file_id,
         busid
-      }).catch(err => {
-        Bot.makeLog("warn", `获取文件信息失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
-    // ========== 账号相关新增 API ==========
 
     setMsgRead(data, message_id) {
       return data.bot.sendApi("set_msg_read", {
         message_id
-      }).catch(err => {
-        Bot.makeLog("warn", `设置消息已读失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     setPrivateMsgRead(data, user_id) {
       return data.bot.sendApi("set_private_msg_read", {
         user_id
-      }).catch(err => {
-        Bot.makeLog("warn", `设置私聊已读失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     setGroupMsgRead(data, group_id) {
       return data.bot.sendApi("set_group_msg_read", {
         group_id
-      }).catch(err => {
-        Bot.makeLog("warn", `设置群聊已读失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     getRecentContactList(data) {
-      return data.bot.sendApi("get_recent_contact_list", {}).catch(err => {
-        Bot.makeLog("warn", `获取最近消息列表失败: ${err.message}`, data.self_id)
-        return null
-      })
+      return data.bot.sendApi("get_recent_contact_list", {})
     }
 
     getUserStatus(data, user_id) {
       return data.bot.sendApi("get_user_status", {
         user_id
-      }).catch(err => {
-        Bot.makeLog("warn", `获取用户状态失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     getStatus(data) {
-      return data.bot.sendApi("get_status", {}).catch(err => {
-        Bot.makeLog("warn", `获取状态失败: ${err.message}`, data.self_id)
-        return null
-      })
+      return data.bot.sendApi("get_status", {})
     }
 
     setOnlineStatus(data, status) {
       Bot.makeLog("info", `设置在线状态：${status}`, data.self_id)
       return data.bot.sendApi("set_online_status", {
         status
-      }).catch(err => {
-        Bot.makeLog("warn", `设置在线状态失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1283,9 +1200,6 @@ Bot.tasker.push(
       return data.bot.sendApi("set_custom_online_status", {
         text,
         face
-      }).catch(err => {
-        Bot.makeLog("warn", `设置自定义在线状态失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1294,29 +1208,19 @@ Bot.tasker.push(
       return data.bot.sendApi("set_friend_remark", {
         user_id,
         remark
-      }).catch(err => {
-        Bot.makeLog("warn", `设置好友备注失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
-    // ========== 个人操作新增 API ==========
 
     async ocrImage(data, image) {
       return data.bot.sendApi("ocr_image", {
         image: await this.makeFile(image)
-      }).catch(err => {
-        Bot.makeLog("warn", `OCR图片识别失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     translateEnToZh(data, text) {
       return data.bot.sendApi("translate_en_to_zh", {
         text
-      }).catch(err => {
-        Bot.makeLog("warn", `英译中失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
@@ -1324,69 +1228,44 @@ Bot.tasker.push(
       return data.bot.sendApi("set_input_status", {
         user_id,
         typing: Boolean(typing)
-      }).catch(err => {
-        Bot.makeLog("warn", `设置输入状态失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     getAiVoicePerson(data) {
-      return data.bot.sendApi("get_ai_voice_person", {}).catch(err => {
-        Bot.makeLog("warn", `获取AI语音人物失败: ${err.message}`, data.self_id)
-        return null
-      })
+      return data.bot.sendApi("get_ai_voice_person", {})
     }
 
     getAiVoice(data, text, person) {
       return data.bot.sendApi("get_ai_voice", {
         text,
         person
-      }).catch(err => {
-        Bot.makeLog("warn", `获取AI语音失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     clickButton(data, button_id) {
       return data.bot.sendApi("click_button", {
         button_id
-      }).catch(err => {
-        Bot.makeLog("warn", `点击按钮失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
-    // ========== 系统操作新增 API ==========
 
     getPacketStatus(data) {
-      return data.bot.sendApi("get_packet_status", {}).catch(err => {
-        Bot.makeLog("warn", `获取packet状态失败: ${err.message}`, data.self_id)
-        return null
-      })
+      return data.bot.sendApi("get_packet_status", {})
     }
 
     sendCustomPacket(data, packet) {
       return data.bot.sendApi("send_custom_packet", {
         packet
-      }).catch(err => {
-        Bot.makeLog("warn", `发送自定义组包失败: ${err.message}`, data.self_id)
-        return null
       })
     }
 
     getBotAccountRange(data) {
-      return data.bot.sendApi("get_bot_account_range", {}).catch(err => {
-        Bot.makeLog("warn", `获取机器人账号范围失败: ${err.message}`, data.self_id)
-        return null
-      })
+      return data.bot.sendApi("get_bot_account_range", {})
     }
 
     logout(data) {
       Bot.makeLog("info", "账号退出", data.self_id)
-      return data.bot.sendApi("logout", {}).catch(err => {
-        Bot.makeLog("warn", `账号退出失败: ${err.message}`, data.self_id)
-        return null
-      })
+      return data.bot.sendApi("logout", {})
     }
 
     /**
@@ -1702,89 +1581,130 @@ Bot.tasker.push(
 
       if (!Bot.uin.includes(self_id)) Bot.uin.push(self_id)
 
-      data.bot.sendApi("_set_model_show", {
-        model: data.bot.model,
-        model_show: data.bot.model,
-      }).catch(() => {})
+      try {
+        await data.bot.sendApi("_set_model_show", {
+          model: data.bot.model,
+          model_show: data.bot.model,
+        })
+      } catch {
+        // 忽略模型显示设置失败
+      }
 
       try {
-        data.bot.info = (await data.bot.sendApi("get_login_info").catch(i => i.error)).data || {}
+        const loginInfo = await data.bot.sendApi("get_login_info")
+        data.bot.info = loginInfo?.data || {}
+      } catch (err) {
+        Bot.makeLog("warn", `获取登录信息失败: ${err.message}`, self_id)
+        data.bot.info = {}
+      }
+
+      try {
+        const versionInfo = await data.bot.sendApi("get_version_info")
         data.bot.version = {
-          ...(await data.bot.sendApi("get_version_info").catch(i => i.error)).data,
+          ...(versionInfo?.data || {}),
           id: this.id,
           name: this.name,
           get version() {
             return this.app_full_name || `${this.app_name} v${this.app_version}`
           },
         }
+      } catch (err) {
+        Bot.makeLog("warn", `获取版本信息失败: ${err.message}`, self_id)
+        data.bot.version = {
+          id: this.id,
+          name: this.name,
+          get version() {
+            return `${this.name} unknown`
+          },
+        }
+      }
 
-        Bot.makeLog("mark", `${this.name}(${this.id}) ${data.bot.version.version} 已连接`, self_id)
-        Bot.em(`connect.${self_id}`, data)
-        
-        data.bot._initializing = true
-        setImmediate(async () => {
+      Bot.makeLog("mark", `${this.name}(${this.id}) ${data.bot.version.version} 已连接`, self_id)
+      Bot.em(`connect.${self_id}`, data)
+      
+      data.bot._initializing = true
+      setImmediate(async () => {
+        try {
           try {
-            data.bot.guild_info = (
-              await data.bot.sendApi("get_guild_service_profile").catch(i => i.error)
-            ).data
-            data.bot.clients = (await data.bot.sendApi("get_online_clients").catch(i => i.error)).clients
+            const guildProfile = await data.bot.sendApi("get_guild_service_profile")
+            data.bot.guild_info = guildProfile?.data
+          } catch (err) {
+            Bot.makeLog("debug", `获取频道资料失败: ${err.message}`, self_id)
+          }
 
-            // 获取cookies
-            if ((data.bot.cookies["qun.qq.com"] = (
-              await data.bot.sendApi("get_cookies", { domain: "qun.qq.com" }).catch(i => i.error)
-            ).cookies)) {
-              for (const i of [
+          try {
+            const clients = await data.bot.sendApi("get_online_clients")
+            data.bot.clients = clients?.clients
+          } catch (err) {
+            Bot.makeLog("debug", `获取在线客户端失败: ${err.message}`, self_id)
+          }
+
+          // 获取cookies
+          try {
+            const qunCookies = await data.bot.sendApi("get_cookies", { domain: "qun.qq.com" })
+            if (qunCookies?.cookies) {
+              data.bot.cookies["qun.qq.com"] = qunCookies.cookies
+              
+              const domains = [
                 "aq", "connect", "docs", "game", "gamecenter", "haoma", "id", "kg", 
                 "mail", "mma", "office", "openmobile", "qqweb", "qzone", "ti", "v", "vip", "y",
-              ]) {
-                const domain = `${i}.qq.com`
-                data.bot.cookies[domain] = await data.bot
-                  .sendApi("get_cookies", { domain })
-                  .then(i => i.cookies)
-                  .catch(i => i.error)
+              ]
+              
+              for (const domainPrefix of domains) {
+                const domain = `${domainPrefix}.qq.com`
+                try {
+                  const result = await data.bot.sendApi("get_cookies", { domain })
+                  if (result?.cookies) {
+                    data.bot.cookies[domain] = result.cookies
+                  }
+                } catch (err) {
+                  Bot.makeLog("debug", `获取 ${domain} cookies 失败: ${err.message}`, self_id)
+                }
               }
             }
-            data.bot.bkn = (await data.bot.sendApi("get_csrf_token").catch(i => i.error)).token
-
-            // 加载好友列表
-            try {
-              await data.bot.getFriendMap()
-              Bot.makeLog("debug", `好友列表加载完成`, self_id)
-            } catch (err) {
-              Bot.makeLog("warn", `获取好友列表失败: ${err.message}`, self_id)
-              if (!(data.bot.fl instanceof Map)) {
-                data.bot.fl = new Map()
-              }
-            }
-
-            // 加载群和群成员列表
-            try {
-              await data.bot.getGroupMemberMap()
-              Bot.makeLog("debug", `群列表和成员列表加载完成`, self_id)
-            } catch (err) {
-              Bot.makeLog("warn", `获取群成员列表失败: ${err.message}`, self_id)
-              if (!(data.bot.gml instanceof Map)) {
-                data.bot.gml = new Map()
-              }
-            }
-
-            data.bot._ready = true
-            data.bot._initializing = false
-            Bot.em(`ready.${self_id}`, data)
-            
           } catch (err) {
-            Bot.makeLog("error", `后台数据加载失败: ${err.message}`, self_id)
-            data.bot._ready = true
-            data.bot._initializing = false
+            Bot.makeLog("warn", `获取cookies失败: ${err.message}`, self_id)
           }
-        })
-        
-      } catch (err) {
-        Bot.makeLog("error", `Bot初始化失败: ${err.message}`, self_id)
-        data.bot._ready = true
-        data.bot._initializing = false
-        Bot.em(`connect.${self_id}`, data)
-      }
+
+          try {
+            const csrfToken = await data.bot.sendApi("get_csrf_token")
+            data.bot.bkn = csrfToken?.token
+          } catch (err) {
+            Bot.makeLog("debug", `获取CSRF token失败: ${err.message}`, self_id)
+          }
+
+          // 加载好友列表
+          try {
+            await data.bot.getFriendMap()
+            Bot.makeLog("debug", `好友列表加载完成`, self_id)
+          } catch (err) {
+            Bot.makeLog("warn", `获取好友列表失败: ${err.message}`, self_id)
+            if (!(data.bot.fl instanceof Map)) {
+              data.bot.fl = new Map()
+            }
+          }
+
+          // 加载群和群成员列表
+          try {
+            await data.bot.getGroupMemberMap()
+            Bot.makeLog("debug", `群列表和成员列表加载完成`, self_id)
+          } catch (err) {
+            Bot.makeLog("warn", `获取群成员列表失败: ${err.message}`, self_id)
+            if (!(data.bot.gml instanceof Map)) {
+              data.bot.gml = new Map()
+            }
+          }
+
+          data.bot._ready = true
+          data.bot._initializing = false
+          Bot.em(`ready.${self_id}`, data)
+          
+        } catch (err) {
+          Bot.makeLog("error", `后台数据加载失败: ${err.message}`, self_id)
+          data.bot._ready = true
+          data.bot._initializing = false
+        }
+      })
     }
 
     /**
@@ -2112,7 +2032,6 @@ Bot.tasker.push(
             message: [{ ...data.file, type: "file" }],
             raw_message: `[文件：${data.file.name}]`,
           }
-          // 只触发最具体的事件，事件监听器会处理
           Bot.em("onebot.message", fileEventData)
           break
         case "group_ban":
@@ -2227,7 +2146,6 @@ Bot.tasker.push(
             message: [{ ...data.file, type: "file" }],
             raw_message: `[文件：${data.file.name}]`,
           }
-          // 只触发最具体的事件，事件监听器会处理
           Bot.em("onebot.message", offlineFileEventData)
           break
         case "client_status":
@@ -2321,7 +2239,6 @@ Bot.tasker.push(
       data.tasker = 'onebot'
       data.isOneBot = true
       
-      // 只触发最具体的事件，事件监听器会处理
       const onebotNoticeEvent = `onebot.${data.post_type}`
       Bot.em(onebotNoticeEvent, data)
     }
@@ -2362,7 +2279,6 @@ Bot.tasker.push(
       data.tasker = 'onebot'
       data.isOneBot = true
       
-      // 只触发最具体的事件，事件监听器会处理
       const onebotRequestEvent = `onebot.${data.post_type}`
       Bot.em(onebotRequestEvent, data)
     }
@@ -2423,7 +2339,6 @@ Bot.tasker.push(
             try {
               Bot.em("onebot.message_sent", data)
             } catch {
-              // 静默失败，避免影响主链路
             }
             return true
         }
