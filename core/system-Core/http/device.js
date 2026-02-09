@@ -499,6 +499,24 @@ class DeviceManager {
                 return { success: false, error: 'ASR未启用' };
             }
 
+            const client = this._getASRClient(deviceId, asrConfig);
+            
+            if (client.currentUtterance && !client.currentUtterance.ending) {
+                BotUtil.makeLog('warn',
+                    `⚠️ [ASR] 已有活跃会话，先结束: ${client.currentUtterance.sessionId}`,
+                    deviceId
+                );
+                try {
+                    await client.endUtterance();
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                } catch (e) {
+                    BotUtil.makeLog('warn',
+                        `⚠️ [ASR] 结束旧会话失败: ${e.message}`,
+                        deviceId
+                    );
+                }
+            }
+            
             asrSessions.set(session_id, {
                 deviceId,
                 sample_rate,
@@ -520,13 +538,11 @@ class DeviceManager {
                     : 3000
             });
 
-            const client = this._getASRClient(deviceId, asrConfig);
             try {
                 await client.beginUtterance(session_id, {
                     sample_rate,
                     bits,
                     channels,
-                    // 允许各端根据自身上报音频格式/编码/模型名
                     format: audio_format || format,
                     codec: audio_codec || codec,
                     modelName: model_name || model || asr_model
@@ -537,6 +553,7 @@ class DeviceManager {
                     `❌ [ASR] 启动utterance失败: ${e.message}`,
                     deviceId
                 );
+                asrSessions.delete(session_id);
                 return { success: false, error: e.message };
             }
 
@@ -2082,6 +2099,37 @@ export default {
                         total_size: recordings.reduce((s, r) => s + r.size, 0)
                     });
             }, 'device.asr.recordings')
+        },
+
+        {
+            method: 'POST',
+            path: '/api/device/tts',
+            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+                const { device_id, text } = req.body || {};
+                if (!text || !String(text).trim()) {
+                    return HttpResponse.validationError(res, '缺少文本内容');
+                }
+                if (!device_id) {
+                    return HttpResponse.validationError(res, '缺少设备ID');
+                }
+
+                const ttsConfig = getTtsConfig();
+                if (!ttsConfig.enabled) {
+                    return HttpResponse.error(res, new Error('TTS未启用'), 400, 'device.tts');
+                }
+
+                try {
+                    const ttsClient = deviceManager._getTTSClient(device_id, ttsConfig);
+                    const success = await ttsClient.synthesize(String(text).trim());
+                    if (success) {
+                        HttpResponse.success(res, { message: 'TTS合成已启动' });
+                    } else {
+                        HttpResponse.error(res, new Error('TTS合成失败'), 500, 'device.tts');
+                    }
+                } catch (e) {
+                    HttpResponse.error(res, e, 500, 'device.tts');
+                }
+            }, 'device.tts')
         },
 
         {

@@ -3,37 +3,38 @@
 # ============================================
 # 此配置文件为火山引擎语音合成（TTS）配置，每个端口有独立的配置
 # 位置：data/server_bots/{port}/volcengine_tts.yaml
+# 参考文档：豆包语音 - 大模型语音合成API
 
 # ----------------------------------------
 # WebSocket 连接配置
 # ----------------------------------------
-# WebSocket连接地址
+# WebSocket连接地址（V3双向流式接口）
 wsUrl: "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
-# 应用密钥
+# 应用 ID（对应控制台的 APP ID，对应文档的appid字段）
 appKey: ""
-# 访问密钥
+# 访问令牌（对应控制台的 Access Token，对应文档的access_token字段）
 accessKey: ""
-# 资源ID
+# 资源 ID（用于V3双向流式接口，如 seed-tts-2.0）
 resourceId: "seed-tts-2.0"
 
 # ----------------------------------------
 # 语音参数配置
 # ----------------------------------------
-# 语音类型
+# 音色类型（对应文档的voice_type字段，参考大模型音色列表）
 voiceType: "zh_female_vv_uranus_bigtts"
-# 编码格式
+# 编码格式（对应文档的encoding字段：pcm、mp3、wav、ogg_opus，注意：wav不支持流式）
 encoding: "pcm"
-# 采样率（Hz）
+# 采样率（对应文档的rate字段，单位Hz，默认24000，可选8000、16000）
 sampleRate: 16000
 
 # ----------------------------------------
 # 语音效果配置
 # ----------------------------------------
-# 语速（-500到500）
+# 语速（V3双向流式接口：-500到500，对应V1接口的speed_ratio范围0.1-2）
 speechRate: 5
-# 音量（-500到500）
+# 音量（V3双向流式接口：-500到500，对应V1接口的loudness_ratio范围0.5-2）
 loudnessRate: 0
-# 情感（happy、sad、angry等）
+# 音色情感（对应文档的emotion字段，如happy、sad、angry等，仅部分音色支持设置情感，详见大模型音色列表-多情感音色）
 emotion: "happy"
 
 # ----------------------------------------

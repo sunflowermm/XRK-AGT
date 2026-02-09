@@ -161,19 +161,19 @@ export default class VolcengineLLMClient {
     
     while (round < maxToolRounds) {
       resp = await fetch(
-        this.endpoint,
-        buildFetchOptionsWithProxy(this.config, {
-          method: 'POST',
-          headers: this.buildHeaders(overrides.headers),
+      this.endpoint,
+      buildFetchOptionsWithProxy(this.config, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
           body: JSON.stringify(this.buildBody(currentMessages, { ...overrides, stream: true })),
-          signal: AbortSignal.timeout(this.timeout)
-        })
-      );
+        signal: AbortSignal.timeout(this.timeout)
+      })
+    );
 
-      if (!resp.ok || !resp.body) {
-        const text = await resp.text().catch(() => '');
-        throw new Error(`火山引擎 LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
-      }
+    if (!resp.ok || !resp.body) {
+      const text = await resp.text().catch(() => '');
+      throw new Error(`火山引擎 LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+    }
       
       const toolCallsCollector = {
         toolCalls: [],

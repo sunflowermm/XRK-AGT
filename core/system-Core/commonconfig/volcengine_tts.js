@@ -25,28 +25,28 @@ export default class VolcengineTTSConfig extends ConfigBase {
           wsUrl: {
             type: 'string',
             label: 'WebSocket 地址',
-            description: '火山引擎 TTS WebSocket 服务地址',
+            description: '火山引擎 TTS WebSocket 服务地址（V3双向流式接口：wss://openspeech.bytedance.com/api/v3/tts/bidirection）',
             default: 'wss://openspeech.bytedance.com/api/v3/tts/bidirection',
             component: 'Input'
           },
           appKey: {
             type: 'string',
-            label: 'App Key',
-            description: '火山引擎应用 Key',
+            label: 'App ID',
+            description: '火山引擎应用 ID (对应控制台的 APP ID)',
             default: '',
             component: 'Input'
           },
           accessKey: {
             type: 'string',
-            label: 'Access Key',
-            description: '火山引擎访问密钥',
+            label: 'Access Token',
+            description: '火山引擎访问令牌 (对应控制台的 Access Token)',
             default: '',
             component: 'InputPassword'
           },
           resourceId: {
             type: 'string',
             label: '资源 ID',
-            description: '火山引擎 TTS 资源 ID',
+            description: '火山引擎 TTS 资源 ID（如 seed-tts-2.0），用于V3双向流式接口',
             default: 'seed-tts-2.0',
             component: 'Input'
           },
@@ -54,24 +54,24 @@ export default class VolcengineTTSConfig extends ConfigBase {
           // 语音参数配置
           voiceType: {
             type: 'string',
-            label: '声音类型',
-            description: 'TTS 声音类型（如 zh_female_vv_uranus_bigtts）',
+            label: '音色类型',
+            description: 'TTS 音色类型（对应文档的voice_type字段，如 zh_female_vv_uranus_bigtts），参考大模型音色列表',
             default: 'zh_female_vv_uranus_bigtts',
             component: 'Input'
           },
           encoding: {
             type: 'string',
             label: '音频编码',
-            description: '音频编码格式（pcm、mp3 等）',
-            enum: ['pcm', 'mp3', 'wav'],
+            description: '音频编码格式（对应文档的encoding字段：pcm、mp3、wav、ogg_opus），注意：wav不支持流式',
+            enum: ['pcm', 'mp3', 'wav', 'ogg_opus'],
             default: 'pcm',
             component: 'Select'
           },
           sampleRate: {
             type: 'number',
             label: '采样率',
-            description: '音频采样率（Hz）',
-            enum: [8000, 16000, 24000, 44100, 48000],
+            description: '音频采样率（对应文档的rate字段，单位Hz，默认24000，可选8000、16000）',
+            enum: [8000, 16000, 24000],
             default: 16000,
             component: 'Select'
           },
@@ -80,7 +80,7 @@ export default class VolcengineTTSConfig extends ConfigBase {
           speechRate: {
             type: 'number',
             label: '语速',
-            description: '语音播放速度（-500 到 500）',
+            description: '语音播放速度（V3双向流式接口：-500 到 500，对应V1接口的speed_ratio范围0.1-2）',
             min: -500,
             max: 500,
             default: 5,
@@ -89,7 +89,7 @@ export default class VolcengineTTSConfig extends ConfigBase {
           loudnessRate: {
             type: 'number',
             label: '音量',
-            description: '语音音量（-500 到 500）',
+            description: '语音音量（V3双向流式接口：-500 到 500，对应V1接口的loudness_ratio范围0.5-2）',
             min: -500,
             max: 500,
             default: 0,
@@ -97,8 +97,8 @@ export default class VolcengineTTSConfig extends ConfigBase {
           },
           emotion: {
             type: 'string',
-            label: '情绪',
-            description: '语音情绪类型（如 happy、sad、neutral）',
+            label: '音色情感',
+            description: '音色情感（对应文档的emotion字段，如happy、sad、angry等），仅部分音色支持设置情感，详见大模型音色列表-多情感音色',
             enum: ['happy', 'sad', 'neutral', 'angry', 'surprise'],
             default: 'happy',
             component: 'Select'

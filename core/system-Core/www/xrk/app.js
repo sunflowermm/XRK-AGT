@@ -45,8 +45,9 @@ class App {
     };
     this._eventChatHistory = this._loadChatHistory('event');
     this._aiChatHistory = this._loadChatHistory('ai');
+    this._voiceChatHistory = this._loadChatHistory('voice');
     this._isRestoringHistory = false;
-    this._chatMessagesCache = { event: null, ai: null };
+    this._chatMessagesCache = { event: null, ai: null, voice: null };
     this._chatStreamState = { running: false, source: null };
     this._deviceWs = null;
     this._wsConnecting = false;
@@ -65,9 +66,12 @@ class App {
     };
     this._webUserId = localStorage.getItem('webUserId') ?? 'webclient';
     this._activeEventSource = null;
-    this._asrBubble = null;
     this._asrSessionId = null;
     this._asrChunkIndex = 0;
+    this._audioBuffer = [];
+    this._audioBufferTimer = null;
+    this._micStarting = false;
+    this._micStopping = false;
     this._systemThemeWatcher = null;
     this.theme = 'light';
     this._chatPendingTimer = null;
@@ -1338,9 +1342,10 @@ class App {
   async renderChat() {
     const content = document.getElementById('content');
     const isAIMode = this._chatMode === 'ai';
+    const isVoiceMode = this._chatMode === 'voice';
     const aiSettings = isAIMode ? await this._renderAISettings() : '';
     content.innerHTML = `
-      <div class="chat-container">
+      <div class="chat-container ${isVoiceMode ? 'voice-mode' : ''}">
         <div class="chat-sidebar">
           <div class="chat-mode-selector">
             <button class="chat-mode-btn ${this._chatMode === 'event' ? 'active' : ''}" data-mode="event">
@@ -1348,6 +1353,15 @@ class App {
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
               </svg>
               <span>Event</span>
+            </button>
+            <button class="chat-mode-btn ${this._chatMode === 'voice' ? 'active' : ''}" data-mode="voice">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+                <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+              <span>Voice</span>
             </button>
             <button class="chat-mode-btn ${this._chatMode === 'ai' ? 'active' : ''}" data-mode="ai">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1360,6 +1374,19 @@ class App {
           ${aiSettings}
         </div>
         <div class="chat-main">
+        ${isVoiceMode ? `
+          <div class="voice-chat-center">
+            <div class="voice-emotion-display" id="voiceEmotionIcon">😊</div>
+            <div class="voice-status" id="voiceStatus">点击麦克风开始对话</div>
+            <button class="voice-clear-btn" id="voiceClearBtn" title="清空聊天记录">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+              </svg>
+              <span>清空</span>
+            </button>
+          </div>
+        ` : `
         <div class="chat-header">
           <div class="chat-header-title">
             <span class="emotion-display" id="emotionIcon">😊</span>
@@ -1372,8 +1399,26 @@ class App {
         <div class="chat-settings">
           <span class="chat-stream-status" id="chatStreamStatus">空闲</span>
         </div>
-        <div class="chat-messages" id="chatMessages"></div>
+        `}
+        <div class="chat-messages ${isVoiceMode ? 'voice-messages' : ''}" id="chatMessages"></div>
         <div class="chat-input-area">
+          ${isVoiceMode ? `
+          <button class="voice-mic-btn" id="micBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+              <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+          <input type="text" class="voice-input" id="voiceInput" placeholder="或直接输入文字...">
+          <button class="voice-send-btn" id="voiceSendBtn" title="发送并触发TTS">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22,2 15,22 11,13 2,9"/>
+            </svg>
+          </button>
+          ` : `
           <button class="mic-btn" id="micBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
@@ -1397,22 +1442,36 @@ class App {
               <polygon points="22,2 15,22 11,13 2,9"/>
             </svg>
           </button>
+          `}
         </div>
-        <div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>
+        ${!isVoiceMode ? `<div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>` : ''}
         </div>
       </div>
     `;
     
     this._bindChatEvents();
-    this.initChatControls();
+    if (!isVoiceMode) {
+      this.initChatControls();
+    }
+    if (isVoiceMode) {
+      await this.loadLlmOptions();
+    }
     this.restoreChatHistory();
-    if (!isAIMode) {
-    this.ensureDeviceWs();
+    if (isVoiceMode || !isAIMode) {
+      this.ensureDeviceWs();
     }
   }
 
-  async _switchChatMode(mode) {
+  async _switchChatMode(mode, oldMode = null) {
     const isAIMode = mode === 'ai';
+    const isVoiceMode = mode === 'voice';
+    const wasVoiceMode = oldMode === 'voice' || document.querySelector('.voice-chat-center') !== null;
+    
+    if (isVoiceMode || wasVoiceMode) {
+      await this.renderChat();
+      return;
+    }
+    
     const box = document.getElementById('chatMessages');
     if (!box) {
       await this.renderChat();
@@ -1445,6 +1504,7 @@ class App {
       }
       this._bindChatEvents();
       this.initChatControls();
+      this.ensureDeviceWs();
     } else {
       const aiSettingsPanel = sidebar?.querySelector('.ai-settings-panel');
       if (aiSettingsPanel) {
@@ -1562,9 +1622,10 @@ class App {
         const mode = btn.dataset.mode;
         if (this._chatMode === mode) return;
         
+        const oldMode = this._chatMode;
         const box = document.getElementById('chatMessages');
         if (box) {
-          this._chatMessagesCache[this._chatMode] = {
+          this._chatMessagesCache[oldMode] = {
             scrollTop: box.scrollTop,
             scrollHeight: box.scrollHeight,
             html: box.innerHTML
@@ -1573,7 +1634,7 @@ class App {
         
         this._chatMode = mode;
         localStorage.setItem('chatMode', mode);
-        await this._switchChatMode(mode);
+        await this._switchChatMode(mode, oldMode);
       });
     });
 
@@ -1625,6 +1686,35 @@ class App {
     
     if (clearBtn) {
       clearBtn.addEventListener('click', () => this.clearChat());
+    }
+    
+    if (this._chatMode === 'voice') {
+      const voiceClearBtn = document.getElementById('voiceClearBtn');
+      if (voiceClearBtn) {
+        voiceClearBtn.addEventListener('click', () => this.clearChat());
+      }
+      
+      const voiceInput = document.getElementById('voiceInput');
+      const voiceSendBtn = document.getElementById('voiceSendBtn');
+      
+      if (voiceInput && voiceSendBtn) {
+        voiceSendBtn.addEventListener('click', () => {
+          const text = voiceInput.value.trim();
+          if (text) {
+            this.sendVoiceMessage(text).catch(e => {
+              this.showToast(`发送失败: ${e.message}`, 'error');
+            });
+            voiceInput.value = '';
+          }
+        });
+        
+        voiceInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            voiceSendBtn.click();
+          }
+        });
+      }
     }
     
     if (imageUploadBtn && imageInput) {
@@ -1697,12 +1787,14 @@ class App {
   
 
   _getCurrentChatHistory() {
-    return this._chatMode === 'ai' ? this._aiChatHistory : this._eventChatHistory;
+    if (this._chatMode === 'ai') return this._aiChatHistory;
+    if (this._chatMode === 'voice') return this._voiceChatHistory;
+    return this._eventChatHistory;
   }
 
   _loadChatHistory(mode) {
     try {
-      const key = mode === 'ai' ? 'aiChatHistory' : 'eventChatHistory';
+      const key = mode === 'ai' ? 'aiChatHistory' : mode === 'voice' ? 'voiceChatHistory' : 'eventChatHistory';
       const cached = localStorage.getItem(key);
       return cached ? JSON.parse(cached) : [];
     } catch (e) {
@@ -1718,7 +1810,7 @@ class App {
       const historyToSave = Array.isArray(history) 
         ? history.slice(-MAX_HISTORY) 
         : [];
-      const key = this._chatMode === 'ai' ? 'aiChatHistory' : 'eventChatHistory';
+      const key = this._chatMode === 'ai' ? 'aiChatHistory' : this._chatMode === 'voice' ? 'voiceChatHistory' : 'eventChatHistory';
       localStorage.setItem(key, JSON.stringify(historyToSave));
       
       const box = document.getElementById('chatMessages');
@@ -1793,6 +1885,7 @@ class App {
   }
 
   appendChat(role, text, options = {}) {
+    const isVoiceMode = this._chatMode === 'voice';
     const { persist = true, mcpTools = null, messageId = null, source = null } = options;
     
     const msgId = messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1810,19 +1903,25 @@ class App {
     if (!box) return null;
     
     const div = document.createElement('div');
-    div.className = `chat-message ${role}${this._isRestoringHistory ? '' : ' message-enter'}`;
+    div.className = `chat-message ${role}${isVoiceMode ? ' voice-message' : ''}${this._isRestoringHistory ? '' : ' message-enter'}`;
     div.dataset.messageId = msgId;
     div.dataset.role = role;
     const contentDiv = document.createElement('div');
     contentDiv.className = 'chat-content';
-    contentDiv.innerHTML = this.renderMarkdown(text);
+    if (isVoiceMode) {
+      contentDiv.textContent = text;
+    } else {
+      contentDiv.innerHTML = this.renderMarkdown(text);
+    }
     div.appendChild(contentDiv);
     
     if (mcpTools && Array.isArray(mcpTools) && mcpTools.length > 0) {
       this._addMCPToolsInfo(div, mcpTools);
     }
     
-    this._addMessageActions(div, role, text, msgId);
+    if (!isVoiceMode) {
+      this._addMessageActions(div, role, text, msgId);
+    }
     
     box.appendChild(div);
     
@@ -2484,11 +2583,10 @@ class App {
     this._saveChatHistory();
     const box = document.getElementById('chatMessages');
     if (box) box.innerHTML = '';
-    try {
-      const key = this._chatMode === 'ai' ? 'aiChatHistory' : 'eventChatHistory';
-      localStorage.removeItem(key);
-    } catch (e) {
-      console.warn('清空聊天记录失败:', e);
+    this._chatMessagesCache[this._chatMode] = null;
+    if (this._chatMode === 'voice') {
+      this.updateVoiceEmotion('😊');
+      this.updateVoiceStatus('点击麦克风开始对话');
     }
   }
 
@@ -2922,6 +3020,218 @@ class App {
     } catch (error) {
       this.showToast(`AI 请求失败: ${error.message}`, 'error');
       this.clearChatStreamState();
+    }
+  }
+
+  async sendVoiceMessage(text) {
+    if (this._chatStreamState.running) return;
+    
+    try {
+      this.appendChat('user', text);
+      
+      const messages = [];
+      const history = this._getCurrentChatHistory().filter(m => m.role && m.text && m.role !== 'system');
+      history.forEach(m => {
+        messages.push({ role: m.role, content: m.text });
+      });
+
+      const apiKey = localStorage.getItem('apiKey') || BotUtil.apiKey || '';
+      const provider = this._chatSettings.provider || this._llmOptions?.defaultProfile || '';
+
+      const requestBody = {
+        messages,
+        stream: true,
+        apiKey: apiKey
+      };
+      
+      if (provider) {
+        requestBody.model = provider;
+      }
+
+      this._chatStreamState = { running: true, source: 'voice' };
+      this.updateVoiceStatus('AI 思考中...');
+      this.updateVoiceEmotion('🤔');
+
+      const response = await fetch(`${this.serverUrl}/api/v3/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
+      }
+
+      if (!response.body) {
+        throw new Error('响应体为空');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let assistantMsg = null;
+      let fullText = '';
+      let hasError = false;
+      let streamEnded = false;
+      let ttsText = '';
+
+      while (!streamEnded) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          streamEnded = true;
+          break;
+        }
+
+        const rawChunk = decoder.decode(value, { stream: true });
+        buffer += rawChunk;
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim() || !line.startsWith('data: ')) continue;
+          
+          const data = line.slice(6).trim();
+          
+          if (data === '[DONE]') {
+            streamEnded = true;
+            break;
+          }
+
+          let json;
+          try {
+            json = JSON.parse(data);
+          } catch (e) {
+            continue;
+          }
+
+          if (json.error) {
+            hasError = true;
+            const msg = json.error.message || 'AI 请求失败';
+            this.showToast(`AI 请求失败: ${msg}`, 'error');
+            streamEnded = true;
+            break;
+          }
+
+          const delta = json.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            fullText += delta;
+            ttsText += delta;
+            
+            if (!assistantMsg) {
+              const box = document.getElementById('chatMessages');
+              assistantMsg = document.createElement('div');
+              assistantMsg.className = 'chat-message assistant streaming voice-message message-enter';
+              assistantMsg.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              assistantMsg.dataset.role = 'assistant';
+              box.appendChild(assistantMsg);
+              this._applyMessageEnter(assistantMsg, false);
+            }
+            
+            const existingContent = assistantMsg.querySelector('.chat-content');
+            if (existingContent) {
+              existingContent.textContent = fullText;
+            } else {
+              const contentDiv = document.createElement('div');
+              contentDiv.className = 'chat-content';
+              contentDiv.textContent = fullText;
+              assistantMsg.appendChild(contentDiv);
+            }
+            
+            this.updateVoiceEmotion('💬');
+            this.scrollToBottom(true);
+            
+            if (ttsText.length >= 20 || (delta.match(/[。！？\n]/) && ttsText.length >= 10)) {
+              this._sendTTSChunk(ttsText).catch(() => {});
+              ttsText = '';
+            }
+          }
+
+          if (json.choices?.[0]?.finish_reason) {
+            streamEnded = true;
+            break;
+          }
+        }
+      }
+
+        if (!hasError && assistantMsg && fullText) {
+          assistantMsg.classList.remove('streaming');
+          const existingContent = assistantMsg.querySelector('.chat-content');
+          if (existingContent) {
+            existingContent.textContent = fullText;
+          }
+          
+          if (ttsText) {
+            this._sendTTSChunk(ttsText).catch(() => {});
+          } else if (fullText) {
+            this._sendTTSChunk(fullText).catch(() => {});
+          }
+          
+          this.updateVoiceEmotion('😊');
+          this.updateVoiceStatus('对话完成');
+          
+          const messageId = assistantMsg.dataset.messageId;
+          this._getCurrentChatHistory().push({ role: 'assistant', text: fullText, ts: Date.now(), id: messageId });
+          this._saveChatHistory();
+          this.scrollToBottom();
+        }
+      
+      this.clearChatStreamState();
+      setTimeout(() => {
+        this.updateVoiceStatus('点击麦克风开始对话');
+      }, 2000);
+    } catch (error) {
+      this.showToast(`AI 请求失败: ${error.message}`, 'error');
+      this.updateVoiceEmotion('😢');
+      this.updateVoiceStatus('出错了，请重试');
+      this.clearChatStreamState();
+      setTimeout(() => {
+        this.updateVoiceStatus('点击麦克风开始对话');
+        this.updateVoiceEmotion('😊');
+      }, 3000);
+    }
+  }
+
+  async _sendTTSChunk(text) {
+    if (!text || !text.trim()) return;
+    
+    try {
+      await fetch(`${this.serverUrl}/api/device/tts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          device_id: this._webUserId,
+          text: text.trim()
+        })
+      });
+    } catch (e) {
+      // 静默失败，不影响主流程
+    }
+  }
+
+  updateVoiceStatus(text) {
+    const statusEl = document.getElementById('voiceStatus');
+    if (statusEl) {
+      statusEl.textContent = text;
+    }
+  }
+
+  updateVoiceEmotion(emotion) {
+    const emotionEl = document.getElementById('voiceEmotionIcon');
+    if (emotionEl) {
+      emotionEl.textContent = emotion;
+      emotionEl.style.animation = 'none';
+      setTimeout(() => {
+        emotionEl.style.animation = 'pulse 0.5s ease';
+      }, 10);
     }
   }
 
@@ -5722,11 +6032,24 @@ class App {
         this._lastWsMessageAt = Date.now();
         break;
       case 'asr_interim':
-        this.renderASRStreaming(data.text, false);
+        if (this._chatMode === 'voice') {
+          this.updateVoiceStatus(`识别中: ${data.text || ''}`);
+        } else {
+          this.renderASRStreaming(data.text, false);
+        }
         break;
       case 'asr_final': {
         const finalText = (data.text || '').trim();
-        this.renderASRStreaming(finalText, true);
+        if (this._chatMode === 'voice') {
+          if (finalText && !this._chatStreamState.running) {
+            this.updateVoiceStatus('AI 思考中...');
+            this.sendVoiceMessage(finalText).catch(e => {
+              this.showToast(`语音处理失败: ${e.message}`, 'error');
+            });
+          }
+        } else {
+          this.renderASRStreaming(finalText, true);
+        }
         break;
       }
       case 'reply': {
@@ -5873,6 +6196,8 @@ class App {
   }
 
   async toggleMic() {
+    if (this._micStarting || this._micStopping) return;
+    
     if (this._micActive) {
       await this.stopMic();
     } else {
@@ -5881,7 +6206,16 @@ class App {
   }
 
   async startMic() {
+    if (this._micActive || this._micStarting) return;
+    
+    this._micStarting = true;
     try {
+      if (this._asrSessionId || this._micActive) {
+        this._micActive = true;
+        await this.stopMic();
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      
       await this.ensureDeviceWs();
       
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -5901,6 +6235,7 @@ class App {
       this._asrSessionId = sessionId;
       this._asrChunkIndex = 0;
       this._micActive = true;
+      this._audioBuffer = [];
       
       document.getElementById('micBtn')?.classList.add('recording');
       
@@ -5913,6 +6248,30 @@ class App {
         channels: 1
       }));
       
+      const sendBufferedAudio = () => {
+        if (!this._micActive || this._audioBuffer.length === 0) return;
+        
+        const combined = new Int16Array(this._audioBuffer.reduce((sum, buf) => sum + buf.length, 0));
+        let offset = 0;
+        for (const buf of this._audioBuffer) {
+          combined.set(buf, offset);
+          offset += buf.length;
+        }
+        
+        const hex = Array.from(new Uint8Array(combined.buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        this._deviceWs?.send(JSON.stringify({
+          type: 'asr_audio_chunk',
+          device_id: 'webclient',
+          session_id: sessionId,
+          chunk_index: this._asrChunkIndex++,
+          vad_state: 'active',
+          data: hex
+        }));
+        
+        this._audioBuffer = [];
+      };
+      
       processor.onaudioprocess = (e) => {
         if (!this._micActive) return;
         
@@ -5923,38 +6282,63 @@ class App {
           pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
         
-        const hex = Array.from(new Uint8Array(pcm16.buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        this._audioBuffer.push(pcm16);
         
-        this._deviceWs?.send(JSON.stringify({
-          type: 'asr_audio_chunk',
-          device_id: 'webclient',
-          session_id: sessionId,
-          chunk_index: this._asrChunkIndex++,
-          vad_state: 'active',
-          data: hex
-        }));
+        if (!this._audioBufferTimer) {
+          this._audioBufferTimer = setInterval(sendBufferedAudio, 150);
+        }
       };
     } catch (e) {
       this.showToast('麦克风启动失败: ' + e.message, 'error');
+      this._micActive = false;
+      this._asrSessionId = null;
+      if (this._micStream) {
+        this._micStream.getTracks().forEach(t => t.stop());
+        this._micStream = null;
+      }
+      if (this._audioCtx) {
+        await this._audioCtx.close().catch(() => {});
+        this._audioCtx = null;
+      }
+    } finally {
+      this._micStarting = false;
     }
   }
 
   async stopMic() {
+    if (this._micStopping) return;
+    if (!this._micActive && !this._asrSessionId) return;
+    
+    this._micStopping = true;
     try {
-      this._audioProcessor?.disconnect();
-      this._micStream?.getTracks().forEach(t => t.stop());
-      await this._audioCtx?.close().catch(() => {});
+      if (this._audioBufferTimer) {
+        clearInterval(this._audioBufferTimer);
+        this._audioBufferTimer = null;
+      }
       
-      if (this._asrSessionId && this._deviceWs) {
+      if (this._audioBuffer.length > 0 && this._deviceWs && this._asrSessionId) {
+        const combined = new Int16Array(this._audioBuffer.reduce((sum, buf) => sum + buf.length, 0));
+        let offset = 0;
+        for (const buf of this._audioBuffer) {
+          combined.set(buf, offset);
+          offset += buf.length;
+        }
+        const hex = Array.from(new Uint8Array(combined.buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
         this._deviceWs.send(JSON.stringify({
           type: 'asr_audio_chunk',
           device_id: 'webclient',
           session_id: this._asrSessionId,
           chunk_index: this._asrChunkIndex++,
           vad_state: 'ending',
-          data: ''
+          data: hex
         }));
-
+      }
+      
+      this._audioProcessor?.disconnect();
+      this._micStream?.getTracks().forEach(t => t.stop());
+      await this._audioCtx?.close().catch(() => {});
+      
+      if (this._asrSessionId && this._deviceWs) {
         this._deviceWs.send(JSON.stringify({
           type: 'asr_session_stop',
           device_id: 'webclient',
@@ -5968,6 +6352,8 @@ class App {
       this._micStream = null;
       this._audioProcessor = null;
       this._asrSessionId = null;
+      this._audioBuffer = [];
+      this._micStopping = false;
     }
   }
 
