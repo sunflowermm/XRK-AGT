@@ -47,6 +47,7 @@ export async function transformMessagesWithVision(messages, config = {}, options
       let url = String(img).trim();
       if (!url) continue;
 
+      // 裸 base64 统一包装为 data URL，其余保持为原始字符串（由各 LLM 客户端自行决定是否转为 base64）
       if (allowBase64 && isProbablyBase64(url) && !url.startsWith('data:')) {
         url = `data:${defaultMime};base64,${url}`;
       }

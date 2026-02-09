@@ -1,8 +1,8 @@
-import fetch from 'node-fetch';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
+import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
 
 /**
  * 火山引擎豆包大模型客户端
@@ -24,7 +24,6 @@ export default class VolcengineLLMClient {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
-    this._dataUrlCache = new Map();
   }
 
   /**
@@ -96,84 +95,7 @@ export default class VolcengineLLMClient {
    */
   async transformMessages(messages) {
     // 统一为 OpenAI 风格多模态（text + image_url）
-    const openaiMessages = await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
-
-    // 关键补丁：云端模型无法访问本机 127.0.0.1/localhost 等 URL
-    // 对“本地/相对”图片 URL，服务端先下载转成 base64 data URL，再发送给火山引擎
-    for (const msg of openaiMessages) {
-      if (msg?.role !== 'user') continue;
-      if (!Array.isArray(msg.content)) continue;
-
-      for (const part of msg.content) {
-        if (part?.type === 'image_url' && part.image_url?.url) {
-          part.image_url.url = await this.maybeConvertToDataUrl(part.image_url.url);
-        }
-      }
-    }
-
-    return openaiMessages;
-  }
-
-  getServerPublicUrl() {
-    // Bot.url 是系统内用于拼装静态资源 URL 的基准（core/system-Core/http/files.js 也在用）
-    // 这里仅作为“把相对 URL 变成可 fetch 的绝对 URL”使用
-    try {
-      const base = globalThis.Bot?.url;
-      return base ? String(base).replace(/\/+$/, '') : '';
-    } catch {
-      return '';
-    }
-  }
-
-  normalizeToAbsoluteUrl(url) {
-    const u = String(url ?? '').trim();
-    if (!u) return '';
-    if (u.startsWith('data:')) return u;
-    if (/^https?:\/\//i.test(u)) return u;
-
-    const base = this.getServerPublicUrl();
-    if (base && u.startsWith('/')) return `${base}${u}`;
-    return u; // 兜底：保持原样
-  }
-
-  isLocalLikeUrl(absUrl) {
-    try {
-      const u = new URL(absUrl);
-      return u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '0.0.0.0';
-    } catch {
-      return false;
-    }
-  }
-
-  async maybeConvertToDataUrl(url) {
-    const raw = String(url ?? '').trim();
-    if (!raw) return raw;
-    if (raw.startsWith('data:')) return raw;
-
-    const abs = this.normalizeToAbsoluteUrl(raw);
-    // 仅在“本机/相对资源”时转 data URL，避免无谓扩大请求体
-    if (!this.isLocalLikeUrl(abs) && /^https?:\/\//i.test(abs)) {
-      return abs;
-    }
-
-    // cache（5分钟）
-    const now = Date.now();
-    const cached = this._dataUrlCache.get(abs);
-    if (cached && (now - cached.ts) < 5 * 60 * 1000) {
-      return cached.dataUrl;
-    }
-
-    const resp = await fetch(abs, { signal: AbortSignal.timeout(30000) });
-    if (!resp.ok) {
-      // 下载失败则退回原 URL（让上游决定如何处理）
-      return abs;
-    }
-
-    const mime = resp.headers.get('content-type') || 'image/png';
-    const buf = Buffer.from(await resp.arrayBuffer());
-    const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
-    this._dataUrlCache.set(abs, { ts: now, dataUrl });
-    return dataUrl;
+    return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
   /**
@@ -184,6 +106,7 @@ export default class VolcengineLLMClient {
    */
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
+    await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const maxToolRounds = this.config.maxToolRounds || 5;
     const currentMessages = [...transformedMessages];
 

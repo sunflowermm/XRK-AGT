@@ -1,8 +1,8 @@
-import fetch from 'node-fetch';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
+import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
 
 /**
  * GPTGod LLM 客户端
@@ -113,6 +113,7 @@ export default class GPTGodLLMClient {
    */
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
+    await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const maxToolRounds = this.config.maxToolRounds || 5;
     const currentMessages = [...transformedMessages];
 
@@ -157,6 +158,7 @@ export default class GPTGodLLMClient {
    */
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
+    await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const resp = await fetch(
       this.endpoint,
       buildFetchOptionsWithProxy(this.config, {

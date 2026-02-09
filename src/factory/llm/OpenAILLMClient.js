@@ -1,8 +1,8 @@
-import fetch from 'node-fetch';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
+import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
 
 /**
  * OpenAI 官方 LLM 客户端（Chat Completions）
@@ -100,6 +100,7 @@ export default class OpenAILLMClient {
 
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
+    await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const maxToolRounds = this.config.maxToolRounds || 5;
     const currentMessages = [...transformedMessages];
 
@@ -137,6 +138,7 @@ export default class OpenAILLMClient {
 
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
+    await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const resp = await fetch(
       this.endpoint,
       buildFetchOptionsWithProxy(this.config, {

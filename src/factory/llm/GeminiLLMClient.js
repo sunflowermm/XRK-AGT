@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
+import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
 
 /**
  * Gemini 官方 LLM 客户端（Google Generative Language API）
@@ -20,7 +21,6 @@ export default class GeminiLLMClient {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
-    this._inlineDataCache = new Map();
   }
 
   normalizeEndpoint(config) {
@@ -57,65 +57,14 @@ export default class GeminiLLMClient {
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  /**
-   * OpenAI-like messages -> Gemini contents
-   * - role: user/assistant/system
-   * - Gemini: contents[{role:'user'|'model', parts:[{text}]}]
-   */
-  getServerPublicUrl() {
-    try {
-      const base = globalThis.Bot?.url;
-      return base ? String(base).replace(/\/+$/, '') : '';
-    } catch {
-      return '';
-    }
-  }
-
-  normalizeToAbsoluteUrl(url) {
-    const u = String(url ?? '').trim();
-    if (!u) return '';
-    if (u.startsWith('data:')) return u;
-    if (/^https?:\/\//i.test(u)) return u;
-
-    const base = this.getServerPublicUrl();
-    if (base && u.startsWith('/')) return `${base}${u}`;
-    return u;
-  }
-
-  _parseDataUrl(dataUrl) {
-    const raw = String(dataUrl ?? '').trim();
-    const m = raw.match(/^data:([^;]+);base64,(.*)$/i);
-    if (!m) return null;
-    return { mimeType: m[1], data: m[2] };
-  }
-
   async _toInlineData(url) {
     const raw = String(url ?? '').trim();
     if (!raw) return null;
 
-    // data URL 直接解析
-    if (raw.startsWith('data:')) {
-      const parsed = this._parseDataUrl(raw);
-      if (!parsed?.data) return null;
-      return { inlineData: { mimeType: parsed.mimeType || 'image/png', data: parsed.data } };
-    }
-
-    const abs = this.normalizeToAbsoluteUrl(raw);
-    const now = Date.now();
-    const cached = this._inlineDataCache.get(abs);
-    if (cached && (now - cached.ts) < 5 * 60 * 1000) {
-      return cached.part;
-    }
-
-    // Gemini 官方多模态最稳的方式是 inlineData(base64)，这里对 URL 做一次下载转码（失败则回退占位文本）
-    const resp = await fetch(abs, { signal: AbortSignal.timeout(30000) });
-    if (!resp.ok) return null;
-
-    const mimeType = resp.headers.get('content-type') || 'image/png';
-    const buf = Buffer.from(await resp.arrayBuffer());
-    const part = { inlineData: { mimeType, data: buf.toString('base64') } };
-    this._inlineDataCache.set(abs, { ts: now, part });
-    return part;
+    // Gemini 官方多模态最稳的方式是 inlineData(base64)：统一使用公共工具下载并转码
+    const info = await fetchAsBase64(raw, { timeoutMs: this.timeout });
+    if (!info || !info.base64) return null;
+    return { inlineData: { mimeType: info.mimeType || 'image/png', data: info.base64 } };
   }
 
   async buildGeminiPayload(messages, overrides = {}) {

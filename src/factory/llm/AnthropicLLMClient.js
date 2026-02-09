@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
+import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
 
 /**
  * Anthropic 官方 LLM 客户端（Messages API）
@@ -20,7 +21,6 @@ export default class AnthropicLLMClient {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
-    this._imageCache = new Map();
   }
 
   normalizeEndpoint(config) {
@@ -58,72 +58,21 @@ export default class AnthropicLLMClient {
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  getServerPublicUrl() {
-    try {
-      const base = globalThis.Bot?.url;
-      return base ? String(base).replace(/\/+$/, '') : '';
-    } catch {
-      return '';
-    }
-  }
-
-  normalizeToAbsoluteUrl(url) {
-    const u = String(url ?? '').trim();
-    if (!u) return '';
-    if (u.startsWith('data:')) return u;
-    if (/^https?:\/\//i.test(u)) return u;
-
-    const base = this.getServerPublicUrl();
-    if (base && u.startsWith('/')) return `${base}${u}`;
-    return u;
-  }
-
-  _parseDataUrl(dataUrl) {
-    const raw = String(dataUrl ?? '').trim();
-    const m = raw.match(/^data:([^;]+);base64,(.*)$/i);
-    if (!m) return null;
-    return { media_type: m[1], data: m[2] };
-  }
-
   async _toAnthropicImageBlock(url) {
     const raw = String(url ?? '').trim();
     if (!raw) return null;
 
-    if (raw.startsWith('data:')) {
-      const parsed = this._parseDataUrl(raw);
-      if (!parsed?.data) return null;
-      return {
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: parsed.media_type || 'image/png',
-          data: parsed.data
-        }
-      };
-    }
+    const info = await fetchAsBase64(raw, { timeoutMs: this.timeout });
+    if (!info || !info.base64) return null;
 
-    const abs = this.normalizeToAbsoluteUrl(raw);
-    const now = Date.now();
-    const cached = this._imageCache.get(abs);
-    if (cached && (now - cached.ts) < 5 * 60 * 1000) {
-      return cached.block;
-    }
-
-    const resp = await fetch(abs, { signal: AbortSignal.timeout(30000) });
-    if (!resp.ok) return null;
-
-    const media_type = resp.headers.get('content-type') || 'image/png';
-    const buf = Buffer.from(await resp.arrayBuffer());
     const block = {
       type: 'image',
       source: {
         type: 'base64',
-        media_type,
-        data: buf.toString('base64')
+        media_type: info.mimeType || 'image/png',
+        data: info.base64
       }
     };
-
-    this._imageCache.set(abs, { ts: now, block });
     return block;
   }
 
