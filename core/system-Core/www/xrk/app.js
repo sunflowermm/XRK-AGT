@@ -3478,10 +3478,16 @@ class App {
       const relPath = basePath ? `${basePath}.${key}` : key;
       const templatePath = `${parentPath}[].${relPath}`;
       const value = this.getNestedValue(itemValue, relPath);
-      if ((schema.type === 'object' || schema.type === 'map') && schema.fields) {
+      const component = (schema.component ?? '').toLowerCase();
+      const isSubForm = component === 'subform';
+      const isNestedObject = (schema.type === 'object' || schema.type === 'map') && schema.fields;
+      
+      // SubForm 类型或嵌套对象类型：展开显示子字段
+      if ((isSubForm || isNestedObject) && schema.fields) {
         return `
           <div class="array-object-subgroup">
             <div class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</div>
+            ${schema.description ? `<p class="config-field-hint">${this.escapeHtml(schema.description)}</p>` : ''}
             ${this.renderArrayObjectFields(parentPath, schema.fields, value ?? {}, index, relPath)}
           </div>
         `;
