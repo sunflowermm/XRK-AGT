@@ -396,9 +396,10 @@ async function handleChatCompletionsV3(req, res) {
     let totalContent = '';
     let isFirstChunk = true;
     let chunkCount = 0;
+    let mcpTools = [];
     
     // 流式回调：所有工厂统一通过 onDelta 返回“纯文本增量”，这里封装成 OpenAI 风格 SSE 事件
-    const streamCallback = (delta) => {
+    const streamCallback = (delta, metadata = {}) => {
       if (delta && typeof delta === 'string') {
         totalContent += delta;
         chunkCount++;
@@ -416,14 +417,17 @@ async function handleChatCompletionsV3(req, res) {
           }]
         };
         
+        if (metadata && metadata.mcp_tools && Array.isArray(metadata.mcp_tools) && metadata.mcp_tools.length > 0) {
+          mcpTools = metadata.mcp_tools;
+          chunkData.mcp_tools = mcpTools;
+        }
+        
         const chunkStr = `data: ${JSON.stringify(chunkData)}\n\n`;
         
-        // 调试日志：每10个 chunk 记录一次，避免日志过多
         if (chunkCount % 10 === 1 || chunkCount <= 3) {
           BotUtil.makeLog('debug', `[v3/chat/completions] 发送chunk #${chunkCount}: delta长度=${delta.length}, 总长度=${totalContent.length}`, 'ai.v3.stream');
         }
         
-        // 立即写入并flush，确保实时流式输出
         try {
           res.write(chunkStr);
           if (typeof res.flush === 'function') {
@@ -435,6 +439,19 @@ async function handleChatCompletionsV3(req, res) {
         }
         
         isFirstChunk = false;
+      } else if (delta === '' && metadata && metadata.mcp_tools && Array.isArray(metadata.mcp_tools) && metadata.mcp_tools.length > 0) {
+        mcpTools = metadata.mcp_tools;
+        const mcpData = {
+          id,
+          object: 'chat.completion.chunk',
+          created: now,
+          model: modelName,
+          mcp_tools: mcpTools
+        };
+        res.write(`data: ${JSON.stringify(mcpData)}\n\n`);
+        if (typeof res.flush === 'function') {
+          res.flush();
+        }
       } else {
         BotUtil.makeLog('warn', `[v3/chat/completions] 收到无效delta: type=${typeof delta}, value=${String(delta).substring(0, 50)}`, 'ai.v3.stream');
       }
@@ -442,8 +459,18 @@ async function handleChatCompletionsV3(req, res) {
     
     BotUtil.makeLog('info', `[v3/chat/completions] 调用client.chatStream开始`, 'ai.v3.stream');
     
-    // 调用工厂的chatStream方法，确保所有工厂都能完整流式输出
     await client.chatStream(messages, streamCallback, overrides);
+    
+    if (mcpTools.length > 0) {
+      const mcpData = {
+        id,
+        object: 'chat.completion.chunk',
+        created: now,
+        model: modelName,
+        mcp_tools: mcpTools
+      };
+      res.write(`data: ${JSON.stringify(mcpData)}\n\n`);
+    }
     
     BotUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总chunks=${chunkCount}, 总长度=${totalContent.length}`, 'ai.v3.stream');
     
@@ -563,13 +590,13 @@ async function handleModels(req, res) {
       return (stream.mcpTools?.size || 0) > 0;
     })
     .map(stream => ({
-      key: stream.name,
-      label: stream.description || stream.name,
-      description: stream.description || '',
-      profile: null,
-      persona: null,
-      uiHidden: false
-    }));
+    key: stream.name,
+    label: stream.description || stream.name,
+    description: stream.description || '',
+    profile: null,
+    persona: null,
+    uiHidden: false
+  }));
 
   return HttpResponse.success(res, {
     enabled: llm.enabled !== false,

@@ -1274,54 +1274,161 @@ select.form-input {
   51%, 100% { opacity: 0.3; }
 }
 
-.chat-copy-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0;
-  cursor: pointer;
-  opacity: 0;
-  transition: all 0.2s ease;
+.chat-message-actions {
   display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.chat-action-btn {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-sm);
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
-.chat-message.user .chat-copy-btn {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.4);
+.chat-action-btn:hover {
+  background: var(--primary-50);
+  border-color: var(--primary);
+  color: var(--primary-dark);
 }
 
-.chat-message.assistant .chat-copy-btn {
-  background: var(--bg-card);
+.chat-action-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+  flex-shrink: 0;
 }
 
-.chat-message:hover .chat-copy-btn {
-  opacity: 1;
+.chat-action-btn span {
+  font-size: 13px;
 }
 
 .chat-copy-btn:hover {
-  background: var(--primary-50);
-  border-color: var(--primary);
-  transform: scale(1.1);
-  box-shadow: var(--shadow);
+  color: var(--primary);
 }
 
-.chat-copy-btn svg {
-  width: 14px;
-  height: 14px;
-  stroke-width: 2;
+.chat-delete-btn:hover {
+  color: var(--danger);
+}
+
+.chat-regen-btn:hover {
+  color: var(--info);
+}
+
+.chat-mcp-tools {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.chat-mcp-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.chat-mcp-header:hover {
+  background: var(--bg-hover);
+}
+
+.chat-mcp-icon {
+  font-size: 16px;
+}
+
+.chat-mcp-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-secondary);
 }
 
-.chat-copy-btn:hover svg {
+.chat-mcp-toggle {
+  background: none;
+  border: none;
   color: var(--primary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s ease;
+}
+
+.chat-mcp-toggle:hover {
+  background: var(--primary-50);
+}
+
+.chat-mcp-content {
+  padding: 0 12px 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.chat-mcp-tool-item {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
+}
+
+.chat-mcp-tool-item:first-child {
+  margin-top: 0;
+}
+
+.chat-mcp-tool-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.chat-mcp-tool-section {
+  margin-top: 10px;
+}
+
+.chat-mcp-tool-section:first-of-type {
+  margin-top: 0;
+}
+
+.chat-mcp-tool-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.chat-mcp-tool-code {
+  font-size: 12px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  background: var(--bg-body);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  overflow-x: auto;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .chat-message.message-enter {

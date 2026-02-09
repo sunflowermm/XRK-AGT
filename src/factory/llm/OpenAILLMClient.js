@@ -110,19 +110,19 @@ export default class OpenAILLMClient {
     
     while (round < maxToolRounds) {
       resp = await fetch(
-        this.endpoint,
-        buildFetchOptionsWithProxy(this.config, {
-          method: 'POST',
-          headers: this.buildHeaders(overrides.headers),
+      this.endpoint,
+      buildFetchOptionsWithProxy(this.config, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
           body: JSON.stringify(this.buildBody(currentMessages, { ...overrides, stream: true })),
-          signal: AbortSignal.timeout(this.timeout)
-        })
-      );
+        signal: AbortSignal.timeout(this.timeout)
+      })
+    );
 
-      if (!resp.ok || !resp.body) {
-        const text = await resp.text().catch(() => '');
-        throw new Error(`OpenAI LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
-      }
+    if (!resp.ok || !resp.body) {
+      const text = await resp.text().catch(() => '');
+      throw new Error(`OpenAI LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+    }
       
       const toolCallsCollector = {
         toolCalls: [],
@@ -145,6 +145,16 @@ export default class OpenAILLMClient {
         const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
         const toolResults = await MCPToolAdapter.handleToolCalls(toolCallsCollector.toolCalls, { streams });
         currentMessages.push(...toolResults);
+        
+        const mcpTools = toolCallsCollector.toolCalls.map((tc, idx) => ({
+          name: tc.function?.name || `工具${idx + 1}`,
+          arguments: tc.function?.arguments || {},
+          result: toolResults[idx]?.content || ''
+        }));
+        
+        if (typeof onDelta === 'function') {
+          onDelta('', { mcp_tools: mcpTools });
+        }
         
         round++;
         if (round >= maxToolRounds) {

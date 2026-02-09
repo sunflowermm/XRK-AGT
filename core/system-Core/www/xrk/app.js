@@ -105,8 +105,7 @@ class App {
     });
     this._statusUpdateTimer = setInterval(() => {
       if (this.currentPage === 'home' && !document.hidden && !this._statusLoading) {
-        this.loadSystemStatus().catch(() => {
-        });
+        this.loadSystemStatus().catch(() => {});
       }
     }, 60000);
     
@@ -430,13 +429,13 @@ class App {
       }
     }
     
-    switch (page) {
-      case 'home': this.renderHome(); break;
-      case 'chat': this.renderChat(); break;
-      case 'config': this.renderConfig(); break;
-      case 'api': this.renderAPI(); break;
-      default: this.renderHome();
-    }
+      switch (page) {
+        case 'home': this.renderHome(); break;
+        case 'chat': this.renderChat(); break;
+        case 'config': this.renderConfig(); break;
+        case 'api': this.renderAPI(); break;
+        default: this.renderHome();
+      }
     
     if (location.hash !== `#/${page}`) {
       location.hash = `#/${page}`;
@@ -1360,45 +1359,45 @@ class App {
           ${aiSettings}
         </div>
         <div class="chat-main">
-          <div class="chat-header">
-            <div class="chat-header-title">
-              <span class="emotion-display" id="emotionIcon">😊</span>
+        <div class="chat-header">
+          <div class="chat-header-title">
+            <span class="emotion-display" id="emotionIcon">😊</span>
               <span>${isAIMode ? 'AI 对话' : 'Event 对话'}</span>
-            </div>
-            <div class="chat-header-actions">
-              <button class="btn btn-sm btn-secondary" id="clearChatBtn">清空</button>
-            </div>
           </div>
-          <div class="chat-settings">
-            <span class="chat-stream-status" id="chatStreamStatus">空闲</span>
+          <div class="chat-header-actions">
+            <button class="btn btn-sm btn-secondary" id="clearChatBtn">清空</button>
           </div>
-          <div class="chat-messages" id="chatMessages"></div>
-          <div class="chat-input-area">
-            <button class="mic-btn" id="micBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-                <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-            </button>
-            <button class="image-upload-btn" id="imageUploadBtn" title="上传图片">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-            </button>
+        </div>
+        <div class="chat-settings">
+          <span class="chat-stream-status" id="chatStreamStatus">空闲</span>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-area">
+          <button class="mic-btn" id="micBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+              <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+          <button class="image-upload-btn" id="imageUploadBtn" title="上传图片">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </button>
             <input type="file" class="chat-image-input" id="chatImageInput" accept="${isAIMode ? 'image/*' : 'image/*,video/*,audio/*'}" multiple style="display: none;">
-            <input type="text" class="chat-input" id="chatInput" placeholder="输入消息...">
-            <button class="chat-send-btn" id="chatSendBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22,2 15,22 11,13 2,9"/>
-              </svg>
-            </button>
-          </div>
-          <div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>
+          <input type="text" class="chat-input" id="chatInput" placeholder="输入消息...">
+          <button class="chat-send-btn" id="chatSendBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22,2 15,22 11,13 2,9"/>
+            </svg>
+          </button>
+        </div>
+        <div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>
         </div>
       </div>
     `;
@@ -1407,7 +1406,7 @@ class App {
     this.initChatControls();
     this.restoreChatHistory();
     if (!isAIMode) {
-      this.ensureDeviceWs();
+    this.ensureDeviceWs();
     }
   }
 
@@ -1659,40 +1658,41 @@ class App {
           } else if (m.type === 'image' && m.url) {
             this.appendSegments([{ type: 'image', url: m.url }], false, m.role || 'assistant');
           } else if (m.role && m.text) {
-            this.appendChat(m.role, m.text, { persist: false });
+            this.appendChat(m.role, m.text, { persist: false, mcpTools: m.mcpTools, messageId: m.id });
           }
         } catch (e) {
-          console.warn('恢复聊天历史项失败:', e, m);
+          // 忽略恢复失败的历史项
         }
       });
       
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          box.scrollTop = box.scrollHeight;
-        });
-      });
+      box.scrollTop = box.scrollHeight;
     } finally {
       this._isRestoringHistory = false;
     }
   }
 
   _applyMessageEnter(div, animate = true) {
-    if (!div) return;
-    if (animate) {
+    if (!div || this._isRestoringHistory) return;
+    if (!animate) {
+      div.classList.add('message-enter-active');
+    } else {
       requestAnimationFrame(() => {
         div.classList.add('message-enter-active');
       });
-    } else {
-      div.classList.add('message-enter-active');
     }
   }
 
   appendChat(role, text, options = {}) {
-    const { persist = true, withCopyBtn = false } = options;
+    const { persist = true, mcpTools = null, messageId = null, source = null } = options;
+    
+    const msgId = messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     if (persist) {
       const history = this._getCurrentChatHistory();
-      history.push({ role, text, ts: Date.now() });
+      const historyItem = { role, text, ts: Date.now(), id: msgId };
+      if (mcpTools) historyItem.mcpTools = mcpTools;
+      if (source) historyItem.source = source;
+      history.push(historyItem);
       this._saveChatHistory();
     }
     
@@ -1700,18 +1700,24 @@ class App {
     if (!box) return null;
     
     const div = document.createElement('div');
-    div.className = `chat-message ${role} message-enter`;
-    div.innerHTML = this.renderMarkdown(text);
+    div.className = `chat-message ${role}${this._isRestoringHistory ? '' : ' message-enter'}`;
+    div.dataset.messageId = msgId;
+    div.dataset.role = role;
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'chat-content';
+    contentDiv.innerHTML = this.renderMarkdown(text);
+    div.appendChild(contentDiv);
     
-    if (role === 'assistant' && text && withCopyBtn) {
-      this._addCopyButton(div, text);
+    if (mcpTools && Array.isArray(mcpTools) && mcpTools.length > 0) {
+      this._addMCPToolsInfo(div, mcpTools);
     }
+    
+    this._addMessageActions(div, role, text, msgId);
     
     box.appendChild(div);
     
-    // 恢复历史时不滚动，由 restoreChatHistory 统一处理
     if (!this._isRestoringHistory) {
-      this.scrollToBottom();
+    this.scrollToBottom();
     }
     
     this._applyMessageEnter(div, persist);
@@ -1719,20 +1725,195 @@ class App {
     return div;
   }
   
-  _addCopyButton(msgElement, text) {
-    if (!msgElement || !text || msgElement.querySelector('.chat-copy-btn')) return;
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'chat-copy-btn';
-    copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
-    copyBtn.title = '复制';
-    copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(text).then(() => {
-        this.showToast('已复制到剪贴板', 'success');
-      }).catch(() => {
-        this.showToast('复制失败', 'error');
+  _addMessageActions(msgElement, role, text, messageId) {
+    if (!msgElement) return;
+    
+    const actionsContainer = document.createElement('div');
+    actionsContainer.className = 'chat-message-actions';
+    
+    if (text && text.trim()) {
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'chat-action-btn chat-copy-btn';
+      copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg><span>复制</span>';
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(text).then(() => {
+          this.showToast('已复制到剪贴板', 'success');
+        }).catch(() => {
+          this.showToast('复制失败', 'error');
+        });
       });
+      actionsContainer.appendChild(copyBtn);
+    }
+    
+    if (role === 'user') {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'chat-action-btn chat-delete-btn';
+      deleteBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg><span>撤回</span>';
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._deleteMessage(messageId);
+      });
+      actionsContainer.appendChild(deleteBtn);
+    } else if (role === 'assistant') {
+      const regenBtn = document.createElement('button');
+      regenBtn.className = 'chat-action-btn chat-regen-btn';
+      regenBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 003.51 15M3.51 9a9 9 0 0016.98 6"/></svg><span>重新生成</span>';
+      regenBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._regenerateMessage(messageId);
+      });
+      actionsContainer.appendChild(regenBtn);
+    }
+    
+    if (actionsContainer.children.length > 0) {
+      msgElement.appendChild(actionsContainer);
+    }
+  }
+  
+  _addMCPToolsInfo(msgElement, mcpTools) {
+    if (!msgElement || !Array.isArray(mcpTools) || mcpTools.length === 0) return;
+    
+    if (msgElement.querySelector('.chat-mcp-tools')) {
+      return;
+    }
+    
+    const mcpContainer = document.createElement('div');
+    mcpContainer.className = 'chat-mcp-tools';
+    
+    const header = document.createElement('div');
+    header.className = 'chat-mcp-header';
+    header.innerHTML = `<span class="chat-mcp-icon">🔧</span><span class="chat-mcp-title">使用了 ${mcpTools.length} 个 MCP 工具</span><button class="chat-mcp-toggle">展开</button>`;
+    
+    const content = document.createElement('div');
+    content.className = 'chat-mcp-content';
+    content.style.display = 'none';
+    
+    mcpTools.forEach((tool, index) => {
+      const toolItem = document.createElement('div');
+      toolItem.className = 'chat-mcp-tool-item';
+      
+      const toolName = tool.name || tool.function?.name || `工具 ${index + 1}`;
+      const toolArgs = tool.arguments || tool.function?.arguments || {};
+      const toolResult = tool.result || tool.content || '';
+      
+      let argsText = '';
+      try {
+        argsText = typeof toolArgs === 'string' ? toolArgs : JSON.stringify(toolArgs, null, 2);
+      } catch {
+        argsText = String(toolArgs);
+      }
+      
+      let resultText = '';
+      try {
+        if (typeof toolResult === 'string') {
+          try {
+            const parsed = JSON.parse(toolResult);
+            resultText = JSON.stringify(parsed, null, 2);
+          } catch {
+            resultText = toolResult;
+          }
+        } else {
+          resultText = JSON.stringify(toolResult, null, 2);
+        }
+      } catch {
+        resultText = String(toolResult);
+      }
+      
+      toolItem.innerHTML = `
+        <div class="chat-mcp-tool-name">${this._escapeHtml(toolName)}</div>
+        <div class="chat-mcp-tool-section">
+          <div class="chat-mcp-tool-label">参数:</div>
+          <pre class="chat-mcp-tool-code">${this._escapeHtml(argsText)}</pre>
+        </div>
+        <div class="chat-mcp-tool-section">
+          <div class="chat-mcp-tool-label">结果:</div>
+          <pre class="chat-mcp-tool-code">${this._escapeHtml(resultText)}</pre>
+        </div>
+      `;
+      
+      content.appendChild(toolItem);
     });
-    msgElement.appendChild(copyBtn);
+    
+    const toggleBtn = header.querySelector('.chat-mcp-toggle');
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isExpanded = content.style.display !== 'none';
+      content.style.display = isExpanded ? 'none' : 'block';
+      toggleBtn.textContent = isExpanded ? '展开' : '收起';
+    });
+    
+    mcpContainer.appendChild(header);
+    mcpContainer.appendChild(content);
+    msgElement.appendChild(mcpContainer);
+  }
+  
+  _escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  _deleteMessage(messageId) {
+    const box = document.getElementById('chatMessages');
+    if (!box) return;
+    
+    const msgElement = box.querySelector(`[data-message-id="${messageId}"]`);
+    if (!msgElement) return;
+    
+    const role = msgElement.dataset.role;
+    if (role !== 'user') {
+      this.showToast('只能撤回自己发送的消息', 'warning');
+      return;
+    }
+    
+    msgElement.remove();
+    
+    const history = this._getCurrentChatHistory();
+    const index = history.findIndex(m => m.id === messageId);
+    if (index >= 0) {
+      history.splice(index, 1);
+      this._saveChatHistory();
+    }
+    
+    this.showToast('消息已撤回', 'success');
+  }
+  
+  _regenerateMessage(messageId) {
+    const box = document.getElementById('chatMessages');
+    if (!box) return;
+    
+    const msgElement = box.querySelector(`[data-message-id="${messageId}"]`);
+    if (!msgElement) return;
+    
+    const role = msgElement.dataset.role;
+    if (role !== 'assistant') {
+      this.showToast('只能重新生成 AI 回复', 'warning');
+      return;
+    }
+    
+    const history = this._getCurrentChatHistory();
+    const assistantIndex = history.findIndex(m => m.id === messageId);
+    if (assistantIndex < 0) return;
+    
+    const userIndex = assistantIndex - 1;
+    if (userIndex < 0 || history[userIndex].role !== 'user') {
+      this.showToast('找不到对应的用户消息', 'warning');
+      return;
+    }
+    
+    msgElement.remove();
+    history.splice(assistantIndex, 1);
+    this._saveChatHistory();
+    
+    const userMessage = history[userIndex];
+    const userText = userMessage.text || '';
+    
+    if (userText.trim()) {
+      this.sendAIMessage(userText, []);
+    }
+    
+    this.showToast('正在重新生成...', 'info');
   }
 
   /**
@@ -1750,7 +1931,7 @@ class App {
     const div = document.createElement('div');
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     div.id = messageId;
-    div.className = `chat-message ${role === 'user' ? 'user' : 'assistant'} message-enter`;
+    div.className = `chat-message ${role === 'user' ? 'user' : 'assistant'}${this._isRestoringHistory ? '' : ' message-enter'}`;
     div.dataset.messageId = messageId;
     
     const textParts = [];
@@ -1993,7 +2174,7 @@ class App {
     
     // 恢复历史时不滚动，由 restoreChatHistory 统一处理
     if (!this._isRestoringHistory) {
-      this.scrollToBottom();
+    this.scrollToBottom();
     }
     
     this._applyMessageEnter(div, persist);
@@ -2003,7 +2184,7 @@ class App {
         if (typeof s === 'string') return { type: 'text', text: s };
         return s;
       });
-      this._chatHistory.push({ 
+      this._getCurrentChatHistory().push({ 
         role: role === 'user' ? 'user' : 'assistant', 
         segments: normalizedSegments,
         ts: Date.now() 
@@ -2075,7 +2256,7 @@ class App {
     const recordId = `record_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const div = document.createElement('div');
     div.id = messageId;
-    div.className = 'chat-message assistant chat-record message-enter';
+    div.className = `chat-message assistant chat-record${this._isRestoringHistory ? '' : ' message-enter'}`;
     div.dataset.recordId = recordId;
     div.dataset.messageId = messageId;
 
@@ -2102,9 +2283,9 @@ class App {
     
     // 恢复历史时不滚动，由 restoreChatHistory 统一处理
     if (!this._isRestoringHistory) {
-      this.scrollToBottom();
+    this.scrollToBottom();
     }
-    
+
     // 统一的入场动画协议
     this._applyMessageEnter(div, persist);
 
@@ -2389,31 +2570,27 @@ class App {
   async sendEventMessage(text, images) {
     try {
       if (text) {
-        this.appendChat('user', text);
+      this.appendChat('user', text);
       }
       
+      if (images.length > 0) {
       const keepPreviewUrls = new Set();
       const pendingImageNodes = [];
       for (const img of images) {
         let displayUrl = this._createTrackedObjectURL(img.file);
         if (!displayUrl) {
-          // 极端兼容：createObjectURL 不可用时，退回预览 URL，并避免立即 revoke
           displayUrl = img.previewUrl;
           if (displayUrl) keepPreviewUrls.add(displayUrl);
         }
-        // 不强制持久化（避免把 blob: 写进 localStorage）
         const node = this.appendSegments([{ type: 'image', url: displayUrl }], false, 'user');
         const imgEl = node?.querySelector?.('img.chat-image') || node?.querySelector?.('img');
         pendingImageNodes.push({ node, imgEl, displayUrl });
       }
       
-      // 清空图片预览
       this.clearImagePreview({ keepUrls: keepPreviewUrls });
       
-      // 发送消息到后端
       const uploadedUrls = await this.sendChatMessageWithImages(text, images);
 
-      // 上传成功：用服务器 URL 替换本地 blob 预览，并持久化到 chatHistory（这样切页面/刷新都能恢复图片）
       if (Array.isArray(uploadedUrls) && uploadedUrls.length > 0) {
         for (let i = 0; i < pendingImageNodes.length; i++) {
           const u = uploadedUrls[i];
@@ -2422,17 +2599,17 @@ class App {
           try {
             if (item?.imgEl) item.imgEl.src = u;
           } catch {}
-          // 替换后即可释放临时 blob（如果是 blob:），避免内存累积
           if (item?.displayUrl && String(item.displayUrl).startsWith('blob:')) {
             this._safeRevokeObjectURL(item.displayUrl);
           }
-          // 持久化：使用服务器 URL（避免把 blob: 写进 localStorage）
-          this._getCurrentChatHistory().push({ role: 'user', segments: [{ type: 'image', url: u }], ts: Date.now() + i });
+            this._getCurrentChatHistory().push({ role: 'user', segments: [{ type: 'image', url: u }], ts: Date.now() + i });
         }
         this._saveChatHistory();
+        }
+      } else if (text) {
+        await this.sendChatMessageWithImages(text, []);
       }
       
-      // 确保滚动到底部
       this.scrollToBottom();
     } catch (e) {
       this.showToast('发送失败: ' + e.message, 'error');
@@ -2507,12 +2684,6 @@ class App {
       this.updateChatStatus('AI 生成中...');
       this.setChatInteractionState(true);
 
-      console.log('[前端] 开始发送AI请求:', { 
-        url: `${this.serverUrl}/api/v3/chat/completions`,
-        provider: requestBody.model,
-        messagesCount: requestBody.messages?.length || 0,
-        hasWorkflow: !!requestBody.workflow
-      });
 
       const response = await fetch(`${this.serverUrl}/api/v3/chat/completions`, {
         method: 'POST',
@@ -2524,14 +2695,12 @@ class App {
         body: JSON.stringify(requestBody)
       });
 
-      if (!response.ok) {
+        if (!response.ok) {
         const errorText = await response.text().catch(() => '');
-        console.error('[前端] HTTP错误:', { status: response.status, errorText });
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
       }
 
       if (!response.body) {
-        console.error('[前端] 响应体为空');
         throw new Error('响应体为空');
       }
 
@@ -2542,6 +2711,7 @@ class App {
       let fullText = '';
       let hasError = false;
       let streamEnded = false;
+      let mcpTools = [];
 
       while (!streamEnded) {
         const { done, value } = await reader.read();
@@ -2571,17 +2741,22 @@ class App {
           try {
             json = JSON.parse(data);
           } catch (e) {
-            console.warn('[前端] 解析 SSE JSON 失败:', { error: e.message, data: data.substring(0, 200) });
             continue;
           }
 
           if (json.error) {
             hasError = true;
             const msg = json.error.message || 'AI 请求失败';
-            console.error('[前端] 收到错误:', json.error);
             this.showToast(`AI 请求失败: ${msg}`, 'error');
             streamEnded = true;
             break;
+          }
+
+          if (json.mcp_tools && Array.isArray(json.mcp_tools) && json.mcp_tools.length > 0) {
+            mcpTools = json.mcp_tools;
+            if (assistantMsg) {
+              this._addMCPToolsInfo(assistantMsg, mcpTools);
+            }
           }
 
           const delta = json.choices?.[0]?.delta?.content || '';
@@ -2591,10 +2766,24 @@ class App {
               const box = document.getElementById('chatMessages');
               assistantMsg = document.createElement('div');
               assistantMsg.className = 'chat-message assistant streaming message-enter';
+              assistantMsg.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              assistantMsg.dataset.role = 'assistant';
               box.appendChild(assistantMsg);
               this._applyMessageEnter(assistantMsg, false);
             }
-            assistantMsg.innerHTML = this.renderMarkdown(fullText);
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'chat-content';
+            contentDiv.innerHTML = this.renderMarkdown(fullText);
+            const existingContent = assistantMsg.querySelector('.chat-content');
+            if (existingContent) {
+              existingContent.replaceWith(contentDiv);
+            } else {
+              assistantMsg.innerHTML = '';
+              assistantMsg.appendChild(contentDiv);
+            }
+            if (mcpTools.length > 0) {
+              this._addMCPToolsInfo(assistantMsg, mcpTools);
+            }
             this.scrollToBottom(true);
           }
 
@@ -2607,16 +2796,23 @@ class App {
 
       if (!hasError && assistantMsg && fullText) {
         assistantMsg.classList.remove('streaming');
-        assistantMsg.innerHTML = this.renderMarkdown(fullText);
-        this._addCopyButton(assistantMsg, fullText);
-        this._getCurrentChatHistory().push({ role: 'assistant', text: fullText, ts: Date.now() });
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'chat-content';
+        contentDiv.innerHTML = this.renderMarkdown(fullText);
+        assistantMsg.innerHTML = '';
+        assistantMsg.appendChild(contentDiv);
+        if (mcpTools.length > 0) {
+          this._addMCPToolsInfo(assistantMsg, mcpTools);
+        }
+        this._addMessageActions(assistantMsg, 'assistant', fullText, assistantMsg.dataset.messageId);
+        const messageId = assistantMsg.dataset.messageId;
+        this._getCurrentChatHistory().push({ role: 'assistant', text: fullText, ts: Date.now(), id: messageId, mcpTools: mcpTools.length > 0 ? mcpTools : undefined });
         this._saveChatHistory();
       }
       
       this.clearChatStreamState();
       this.clearImagePreview();
     } catch (error) {
-      console.error('[前端] AI请求异常:', { error: error.message, stack: error.stack });
       this.showToast(`AI 请求失败: ${error.message}`, 'error');
       this.clearChatStreamState();
     }
@@ -2744,7 +2940,9 @@ class App {
     
     if (input) {
       input.disabled = streaming;
-      input.placeholder = streaming ? 'AI 正在处理...' : '输入消息...';
+      input.placeholder = streaming 
+        ? (this._chatMode === 'ai' ? 'AI 正在处理...' : '正在处理...')
+        : (this._chatMode === 'ai' ? '输入消息...' : '输入消息或发送语音...');
     }
     if (sendBtn) {
       sendBtn.disabled = streaming;
@@ -3205,7 +3403,7 @@ class App {
     const reloadBtn = document.getElementById('configReloadBtn');
     if (reloadBtn) {
       reloadBtn.replaceWith(reloadBtn.cloneNode(true));
-      document.getElementById('configReloadBtn')?.addEventListener('click', () => this.loadSelectedConfigDetail());
+    document.getElementById('configReloadBtn')?.addEventListener('click', () => this.loadSelectedConfigDetail());
     }
     main.querySelectorAll('.config-mode-toggle button').forEach(btn => {
       btn.addEventListener('click', () => this.switchConfigMode(btn.dataset.mode));
@@ -3213,7 +3411,7 @@ class App {
     const saveBtn = document.getElementById('configSaveBtn');
     if (saveBtn) {
       saveBtn.replaceWith(saveBtn.cloneNode(true)); // 克隆节点移除旧的事件监听器
-      document.getElementById('configSaveBtn')?.addEventListener('click', () => this.saveConfigChanges());
+    document.getElementById('configSaveBtn')?.addEventListener('click', () => this.saveConfigChanges());
     }
 
     this.bindConfigFieldEvents();
@@ -4447,7 +4645,7 @@ class App {
         return false;
       }
       try {
-        return JSON.stringify(a) === JSON.stringify(b);
+      return JSON.stringify(a) === JSON.stringify(b);
       } catch (e) {
         // JSON.stringify 失败时（如循环引用），使用严格相等
         console.warn('isSameValue JSON.stringify 失败:', e);
@@ -5423,12 +5621,13 @@ class App {
         const finalText = (data.text || '').trim();
         this.renderASRStreaming(finalText, true);
         if (finalText) {
-          // 语音识别完成后，自动发送消息
-          this.appendChat('user', finalText);
-          // 延迟发送，确保消息已显示
-          setTimeout(() => {
+          if (this._chatMode === 'ai') {
+            this.sendAIMessage(finalText, []);
+          } else {
+            this.appendChat('user', finalText, { source: 'voice' });
           this.sendDeviceMessage(finalText, { source: 'voice' });
-          }, 100);
+            this.scrollToBottom();
+          }
         }
         break;
       }
@@ -5449,10 +5648,7 @@ class App {
             .filter(text => text.trim());
           
           if (messages.length > 0) {
-            const recordDiv = this.appendChatRecord(messages, data.title || '', data.description || '');
-            if (recordDiv) {
-              requestAnimationFrame(() => recordDiv.classList.add('message-enter-active'));
-            }
+            this.appendChatRecord(messages, data.title || '', data.description || '', true);
           }
           
           // 媒体文件单独显示（图片/视频/音频）
@@ -5460,13 +5656,11 @@ class App {
             if (seg.type === 'image') {
               this.appendImageMessage(seg.url, true);
             } else {
-              // 视频和音频通过 appendSegments 渲染
               this.appendSegments([seg], true);
             }
           });
         } else {
-          // 按顺序渲染 segments（保持文本和图片的混合顺序）
-          this.appendSegments(segments, true);
+          this.appendSegments(segments, true, 'assistant');
         }
         break;
       }
@@ -5515,10 +5709,7 @@ class App {
           }).filter(text => text && text.trim());
           
           if (messages.length > 0) {
-            const recordDiv = this.appendChatRecord(messages, data.title || '', data.description || '');
-            if (recordDiv) {
-              requestAnimationFrame(() => recordDiv.classList.add('message-enter-active'));
-            }
+            this.appendChatRecord(messages, data.title || '', data.description || '', true);
           }
         }
         break;
@@ -5599,8 +5790,10 @@ class App {
         bubble.remove();
       } else {
         textNode.textContent = finalText;
-        this._getCurrentChatHistory().push({ role: 'user', text: finalText, ts: Date.now(), source: 'voice' });
+        if (this._chatMode === 'event') {
+          this._getCurrentChatHistory().push({ role: 'user', text: finalText, ts: Date.now(), source: 'voice' });
         this._saveChatHistory();
+        }
       }
       this._asrBubble = null;
     }
