@@ -963,6 +963,28 @@ export default class SystemConfig extends ConfigBase {
                   default: false,
                   component: 'Switch'
                 },
+                cache: {
+                  type: 'object',
+                  label: '缓存配置',
+                  component: 'SubForm',
+                  fields: {
+                    static: {
+                      type: 'number',
+                      label: '静态资源缓存（秒）',
+                      description: 'CSS/JS/字体文件',
+                      min: 0,
+                      default: 86400,
+                      component: 'InputNumber'
+                    },
+                    images: {
+                      type: 'number',
+                      label: '图片缓存（秒）',
+                      min: 0,
+                      default: 604800,
+                      component: 'InputNumber'
+                    }
+                  }
+                },
                 cacheTime: {
                   type: 'string',
                   label: '缓存时间',
@@ -986,39 +1008,6 @@ export default class SystemConfig extends ConfigBase {
                       type: 'boolean',
                       label: '启用Helmet',
                       default: true,
-                      component: 'Switch'
-                    }
-                  }
-                },
-                hsts: {
-                  type: 'object',
-                  label: 'HSTS配置',
-                  component: 'SubForm',
-                  fields: {
-                    enabled: {
-                      type: 'boolean',
-                      label: '启用HSTS',
-                      default: false,
-                      component: 'Switch'
-                    },
-                    maxAge: {
-                      type: 'number',
-                      label: '有效期',
-                      description: '有效期（秒），31536000 = 1年',
-                      min: 0,
-                      default: 31536000,
-                      component: 'InputNumber'
-                    },
-                    includeSubDomains: {
-                      type: 'boolean',
-                      label: '包含子域名',
-                      default: true,
-                      component: 'Switch'
-                    },
-                    preload: {
-                      type: 'boolean',
-                      label: '允许预加载',
-                      default: false,
                       component: 'Switch'
                     }
                   }

@@ -3133,6 +3133,14 @@ class App {
           break;
         }
       }
+
+      // 如果是某个 SubForm 的子字段，但父级没有自定义 group，
+      // 则优先按父级的顶层字段分组（例如 proxy.healthCheck.* 都归到 proxy 这一组），
+      // 避免再额外生成 “Proxy - HealthCheck” 这类重复的大组。
+      if (parentSubFormPath && !groupKey) {
+        const top = parentSubFormPath.split('.')[0];
+        groupKey = top || parentSubFormPath;
+      }
       
       // 如果还是没有 group，根据路径确定
       if (!groupKey) {
