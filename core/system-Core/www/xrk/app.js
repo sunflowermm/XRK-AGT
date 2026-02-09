@@ -2910,8 +2910,8 @@ class App {
 
       const normalizedValues = this.normalizeIncomingFlatValues(schemaList, values);
       this._configState.values = normalizedValues;
-      this._configState.original = this._cloneFlat(normalizedValues);
       this._configState.rawObject = this.unflattenObject(normalizedValues);
+      this._configState.original = this._cloneFlat(normalizedValues);
       this._configState.jsonText = JSON.stringify(this._configState.rawObject, null, 2);
       this._configState.dirty = {};
       this._configState.jsonDirty = false;
@@ -3043,11 +3043,19 @@ class App {
       ${this.renderDynamicCollections()}
     `;
 
-    document.getElementById('configReloadBtn')?.addEventListener('click', () => this.loadSelectedConfigDetail());
+    const reloadBtn = document.getElementById('configReloadBtn');
+    if (reloadBtn) {
+      reloadBtn.replaceWith(reloadBtn.cloneNode(true));
+      document.getElementById('configReloadBtn')?.addEventListener('click', () => this.loadSelectedConfigDetail());
+    }
     main.querySelectorAll('.config-mode-toggle button').forEach(btn => {
       btn.addEventListener('click', () => this.switchConfigMode(btn.dataset.mode));
     });
-    document.getElementById('configSaveBtn')?.addEventListener('click', () => this.saveConfigChanges());
+    const saveBtn = document.getElementById('configSaveBtn');
+    if (saveBtn) {
+      saveBtn.replaceWith(saveBtn.cloneNode(true)); // 克隆节点移除旧的事件监听器
+      document.getElementById('configSaveBtn')?.addEventListener('click', () => this.saveConfigChanges());
+    }
 
     this.bindConfigFieldEvents();
     this.bindConfigJsonEvents();
@@ -3372,7 +3380,8 @@ class App {
     const lowerComponent = (component ?? '').toLowerCase();
     const isArrayObject = field.type === 'array<object>' || (lowerComponent === 'arrayform' && meta.itemType === 'object');
     if (isArrayObject) {
-      return this.renderArrayObjectControl(field, Array.isArray(value) ? value : [], meta);
+      const arrayValue = Array.isArray(value) ? value : (this.getNestedValue(this._configState?.rawObject ?? {}, field.path) ?? []);
+      return this.renderArrayObjectControl(field, arrayValue, meta);
     }
 
     switch (lowerComponent) {
@@ -3451,8 +3460,10 @@ class App {
   renderArrayObjectControl(field, items = [], meta = {}) {
     const subFields = this._configState.arraySchemaMap[field.path] ?? meta.itemSchema?.fields ?? meta.fields ?? {};
     const itemLabel = meta.itemLabel ?? '条目';
-    const body = items.length
-      ? items.map((item, idx) => this.renderArrayObjectItem(field.path, subFields, item ?? {}, idx, itemLabel)).join('')
+    const fullItems = Array.isArray(items) && items.length > 0 ? items : 
+      (this.getNestedValue(this._configState?.rawObject ?? {}, field.path) ?? []);
+    const body = fullItems.length
+      ? fullItems.map((item, idx) => this.renderArrayObjectItem(field.path, subFields, item ?? {}, idx, itemLabel)).join('')
       : `<div class="config-field-hint">暂无${this.escapeHtml(itemLabel)}，点击下方按钮新增。</div>`;
 
     return `
@@ -3485,18 +3496,26 @@ class App {
     return Object.entries(fields ?? {}).map(([key, schema]) => {
       const relPath = basePath ? `${basePath}.${key}` : key;
       const templatePath = `${parentPath}[].${relPath}`;
-      const value = this.getNestedValue(itemValue, relPath);
+      
+      // 优先从rawObject获取完整数据，确保嵌套对象（如SSL证书）正确显示
+      const fullPath = `${parentPath}.${index}.${relPath}`;
+      const rawValue = this.getNestedValue(this._configState?.rawObject ?? {}, fullPath);
+      const value = rawValue !== undefined ? rawValue : this.getNestedValue(itemValue, relPath);
+      
       const component = (schema.component ?? '').toLowerCase();
       const isSubForm = component === 'subform';
       const isNestedObject = (schema.type === 'object' || schema.type === 'map') && schema.fields;
       
       // SubForm 类型或嵌套对象类型：展开显示子字段
       if ((isSubForm || isNestedObject) && schema.fields) {
+        // 对于嵌套对象，也需要从rawObject获取完整数据
+        const nestedRawValue = this.getNestedValue(this._configState?.rawObject ?? {}, fullPath);
+        const nestedValue = nestedRawValue !== undefined ? nestedRawValue : (value ?? {});
         return `
           <div class="array-object-subgroup">
             <div class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</div>
             ${schema.description ? `<p class="config-field-hint">${this.escapeHtml(schema.description)}</p>` : ''}
-            ${this.renderArrayObjectFields(parentPath, schema.fields, value ?? {}, index, relPath)}
+            ${this.renderArrayObjectFields(parentPath, schema.fields, nestedValue, index, relPath)}
           </div>
         `;
       }
@@ -3705,11 +3724,9 @@ class App {
     const wrapper = document.getElementById('configFormWrapper');
     if (!wrapper) return;
     wrapper.querySelectorAll('[data-field]').forEach(el => {
+      // 对于checkbox使用change事件，其他使用input事件（input事件会在每次输入时触发，change只在失去焦点时触发）
       const evt = el.type === 'checkbox' ? 'change' : 'input';
       el.addEventListener(evt, () => this.handleConfigFieldChange(el));
-      if (evt !== 'change') {
-        el.addEventListener('change', () => this.handleConfigFieldChange(el));
-      }
     });
   }
 
@@ -3803,7 +3820,8 @@ class App {
     if (!this._configState) return;
     const subFields = this._configState.arraySchemaMap[path] ?? {};
     const template = this.buildDefaultsFromFields(subFields);
-    const list = Array.isArray(this._configState.values[path]) ? this._cloneValue(this._configState.values[path]) : [];
+    const rawArray = this.getNestedValue(this._configState.rawObject ?? {}, path);
+    const list = Array.isArray(rawArray) ? this._cloneValue(rawArray) : (Array.isArray(this._configState.values[path]) ? this._cloneValue(this._configState.values[path]) : []);
     list.push(template);
     this.setConfigFieldValue(path, list);
     this.renderConfigFormPanel();
@@ -3811,7 +3829,8 @@ class App {
 
   removeArrayObjectItem(path, index) {
     if (!this._configState) return;
-    const list = Array.isArray(this._configState.values[path]) ? this._cloneValue(this._configState.values[path]) : [];
+    const rawArray = this.getNestedValue(this._configState.rawObject ?? {}, path);
+    const list = Array.isArray(rawArray) ? this._cloneValue(rawArray) : (Array.isArray(this._configState.values[path]) ? this._cloneValue(this._configState.values[path]) : []);
     list.splice(index, 1);
     this.setConfigFieldValue(path, list);
     this.renderConfigFormPanel();
@@ -3819,13 +3838,23 @@ class App {
 
   updateArrayObjectValue(path, index, objectPath, value) {
     if (!this._configState) return;
-    const list = Array.isArray(this._configState.values[path]) ? this._cloneValue(this._configState.values[path]) : [];
-    if (!list[index] || typeof list[index] !== 'object') {
-      list[index] = {};
+    const currentArray = Array.isArray(this._configState.values[path]) 
+      ? this._cloneValue(this._configState.values[path]) 
+      : (() => {
+          const rawArray = this.getNestedValue(this._configState.rawObject ?? {}, path);
+          return Array.isArray(rawArray) ? this._cloneValue(rawArray) : [];
+        })();
+    
+    if (!currentArray[index] || typeof currentArray[index] !== 'object') {
+      currentArray[index] = {};
     }
-    const updated = this.setNestedValue(list[index], objectPath, value);
-    list[index] = updated;
-    this.setConfigFieldValue(path, list);
+    
+    const currentItem = this._cloneValue(currentArray[index]);
+    const updated = this.setNestedValue(currentItem, objectPath, value);
+    currentArray[index] = updated;
+    
+    this.setConfigFieldValue(path, this._cloneValue(currentArray));
+    this.updateConfigSaveButton();
   }
 
   bindDynamicCollectionEvents() {
@@ -4001,9 +4030,9 @@ class App {
   setConfigFieldValue(path, value) {
     if (!this._configState) return;
     this._configState.values[path] = value;
-    this.updateDirtyState(path, value);
     this._configState.rawObject = this.unflattenObject(this._configState.values);
     this._configState.jsonText = JSON.stringify(this._configState.rawObject, null, 2);
+    this.updateDirtyState(path, value);
     this.refreshConfigFieldUI(path);
   }
 
@@ -4018,22 +4047,25 @@ class App {
 
   updateDirtyState(path, value) {
     if (!this._configState) return;
-    const origin = this._configState.original[path];
-    if (this.isSameValue(origin, value)) delete this._configState.dirty[path];
-    else this._configState.dirty[path] = true;
+    const origin = this._cloneValue(this._configState.original[path]);
+    const valueClone = this._cloneValue(value);
+    const isSame = this.isSameValue(origin, valueClone);
+    if (isSame) {
+      delete this._configState.dirty[path];
+    } else {
+      this._configState.dirty[path] = true;
+    }
   }
 
   updateConfigSaveButton() {
     const btn = document.getElementById('configSaveBtn');
     if (!btn || !this._configState) return;
     const dirtyCount = Object.keys(this._configState.dirty).length;
-    if (this._configState.mode === 'form') {
-      btn.disabled = dirtyCount === 0;
-      btn.textContent = dirtyCount ? `保存（${dirtyCount}）` : '保存';
-    } else {
-      btn.disabled = !this._configState.jsonDirty;
-      btn.textContent = '保存（JSON）';
-    }
+    const isDisabled = this._configState.mode === 'form' ? dirtyCount === 0 : !this._configState.jsonDirty;
+    btn.disabled = isDisabled;
+    btn.textContent = this._configState.mode === 'form' 
+      ? (dirtyCount ? `保存（${dirtyCount}）` : '保存')
+      : '保存（JSON）';
   }
 
   switchConfigMode(mode) {
@@ -4245,8 +4277,23 @@ class App {
   }
 
   isSameValue(a, b) {
+    // 处理 null 和 undefined
+    if (a === null || a === undefined || b === null || b === undefined) {
+      return a === b;
+    }
+    // 处理对象和数组
     if (typeof a === 'object' || typeof b === 'object') {
-      return JSON.stringify(a) === JSON.stringify(b);
+      // 如果一个是数组另一个不是，直接返回 false
+      if (Array.isArray(a) !== Array.isArray(b)) {
+        return false;
+      }
+      try {
+        return JSON.stringify(a) === JSON.stringify(b);
+      } catch (e) {
+        // JSON.stringify 失败时（如循环引用），使用严格相等
+        console.warn('isSameValue JSON.stringify 失败:', e);
+        return a === b;
+      }
     }
     return a === b;
   }
