@@ -561,9 +561,9 @@ export default class AssistantPlugin extends plugin {
     // 简单任务：直接使用工作流
     const desktopStream = this.getStream('desktop');
     await desktopStream.process(e, e.msg, {
-      mergeStreams: ['tools'],      // 合并工具工作流
-      enableMemory: true,           // 启用记忆系统
-      enableDatabase: true          // 启用知识库
+      enableMemory: true,           // 整合记忆工具工作流
+      enableDatabase: true,         // 整合知识库工具工作流
+      enableTools: true            // 整合文件操作工具工作流
     });
     
     // 复杂任务：调用 Python 子服务端（LangChain/LangGraph）

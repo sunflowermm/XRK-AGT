@@ -5,10 +5,13 @@
 
 XRK-AGT 提供标准化的 **Model Context Protocol (MCP)** 服务，允许外部 AI 平台（如 Cursor、Claude Desktop、小智 AI）通过 HTTP 连接并调用系统工具。
 
+**协议版本**：2025-11-25（最新规范）  
+**参考文档**：https://modelcontextprotocol.io/specification/2025-11-25
+
 ### 扩展特性
 
 - ✅ **按工作流分组**：支持按工作流分组使用工具，灵活选择所需功能
-- ✅ **标准化协议**：遵循 MCP 标准，兼容主流 AI 平台
+- ✅ **标准化协议**：遵循 MCP 2025-11-25 标准，兼容主流 AI 平台
 - ✅ **自动工具注册**：工作流函数自动注册为 MCP 工具，无需手动配置
 - ✅ **多平台支持**：支持 Cursor、Claude Desktop、小智 AI 等平台
 - ✅ **灵活配置**：支持路径参数和查询参数两种配置方式
@@ -35,25 +38,30 @@ MCP 配置是连接外部 AI 平台与 XRK-AGT 工作流工具的桥梁：
 ```mermaid
 flowchart TB
     subgraph External["👥 外部AI平台"]
+        direction TB
         Cursor["Cursor IDE"]
         Claude["Claude Desktop"]
         XiaoZhi["小智AI"]
     end
 
     subgraph Config["⚙️ MCP配置"]
+        direction TB
         ConfigFile["配置文件<br/>mcpServers"]
     end
 
     subgraph XRK["XRK-AGT服务"]
+        direction TB
         MCPServer["MCP服务器<br/>HTTP/JSON-RPC"]
-        Streams["工作流层<br/>desktop/tools/chat等"]
+        Streams["工作流层<br/>主工作流+工具工作流"]
         Tools["工具注册表<br/>自动注册"]
     end
 
-    External --> Config
-    Config --> MCPServer
-    MCPServer --> Tools
-    Tools --> Streams
+    External -->|读取配置| Config
+    Config -->|连接| MCPServer
+    MCPServer -->|注册工具| Tools
+    Tools -->|提供工具| Streams
+    Streams -->|执行工具| MCPServer
+    MCPServer -->|返回结果| External
 
     style External fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
     style Config fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
@@ -116,15 +124,27 @@ XRK-AGT 支持两种方式指定工作流：
 
 XRK-AGT 提供以下工作流，每个工作流包含一组相关工具：
 
+### 主工作流（完整功能工作流）
+
 | 工作流 | 说明 | 主要工具 |
 |--------|------|----------|
-| `desktop` | 桌面操作工具 | `show_desktop`, `open_system_tool`, `open_browser`, `screenshot` 等 |
-| `tools` | 基础工具 | `read`, `grep`, `write`, `run` |
-| `chat` | 群聊功能 | `at`, `poke`, `mute`, `kick`, `setAdmin` 等 |
+| `chat` | 聊天工作流 | 群聊功能、消息处理等 |
+| `device` | 设备工作流 | 设备控制、语音识别等 |
+| `desktop` | 桌面工作流 | `show_desktop`, `open_system_tool`, `open_browser`, `screenshot` 等 |
+
+### 工具工作流（提供MCP工具）
+
+| 工作流 | 说明 | 主要工具 |
+|--------|------|----------|
+| `tools` | 文件操作工具 | `read`, `grep`, `write`, `create_file`, `delete_file`, `modify_file`, `list_files`, `run` |
 | `memory` | 记忆系统 | `query_memory`, `save_memory`, `list_memories`, `delete_memory` |
 | `database` | 知识库 | `query_knowledge`, `save_knowledge`, `list_knowledge`, `delete_knowledge` |
 
-> 详细工具列表和参数说明请参考 [MCP 完整指南](mcp-guide.md#system-core-工作流和工具)。
+**工作流使用说明**：
+- **主工作流**：通过 `mergeStreams` 参数合并，用于完整功能场景
+- **工具工作流**：通过 `enableMemory`、`enableDatabase`、`enableTools` 标志启用，自动整合到主工作流中
+
+> 详细工具列表和参数说明请参考 [MCP 完整指南](mcp-guide.md)。
 
 ---
 

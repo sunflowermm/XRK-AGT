@@ -76,7 +76,7 @@ export class StdinHandler {
         tasker: { id: 'stdin', name: '标准输入 tasker' },
         tasker_type: 'stdin',
         stat: { start_time: Date.now() / 1000 },
-        version: { id: 'stdin', name: 'StdinBot', version: '1.0.0' },
+        version: { id: 'stdin', name: 'StdinBot', version: '1.0.5' },
         config: { master: true },
         sendMsg: async (msg) => this.sendMsg(msg, 'stdin', { user_id: 'stdin' }),
         runCommand: async (command, options = {}) => Bot.callStdin

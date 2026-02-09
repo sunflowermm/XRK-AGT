@@ -4,6 +4,7 @@ import LLMFactory from '#factory/llm/LLMFactory.js';
 import MemoryManager from '#infrastructure/aistream/memory-manager.js';
 import PromptEngine from '#infrastructure/aistream/prompt-engine.js';
 import MonitorService from '#infrastructure/aistream/monitor-service.js';
+import { iterateSSE } from '#utils/llm/sse-utils.js';
 
 export default class AIStream {
   /**
@@ -20,7 +21,7 @@ export default class AIStream {
   constructor(options = {}) {
     this.name = options.name || 'base-stream';
     this.description = options.description || '基础工作流';
-    this.version = options.version || '1.0.0';
+    this.version = options.version || '1.0.5';
     this.author = options.author || 'unknown';
     this.priority = options.priority || 100;
 
@@ -713,6 +714,10 @@ export default class AIStream {
         stream: false,
         enableTools: config.enableTools !== false
       };
+      // 传递streams参数用于工具权限控制
+      if (config.streams && Array.isArray(config.streams)) {
+        payload.workflow = { workflows: config.streams };
+      }
       const response = await Bot.callSubserver('/api/langchain/chat', { body: payload });
       const content = response?.choices?.[0]?.message?.content || response?.content || '';
       if (content) {
@@ -732,7 +737,12 @@ export default class AIStream {
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
         const client = LLMFactory.createClient(config);
-        const response = await client.chat(messages, config);
+        // 传递streams参数给LLM客户端
+        const overrides = { ...config };
+        if (config.streams && Array.isArray(config.streams)) {
+          overrides.streams = config.streams;
+        }
+        const response = await client.chat(messages, overrides);
         
         const outputTokens = this.estimateTokens(response);
         MonitorService.recordTokens(`${this.name}.callAI`, { output: outputTokens });
@@ -799,6 +809,10 @@ export default class AIStream {
         stream: true,
         enableTools: config.enableTools !== false
       };
+      // 传递streams参数用于工具权限控制
+      if (config.streams && Array.isArray(config.streams)) {
+        payload.workflow = { workflows: config.streams };
+      }
       const response = await Bot.callSubserver('/api/langchain/chat', {
         body: payload,
         rawResponse: true
@@ -808,36 +822,16 @@ export default class AIStream {
         throw new Error('子服务端响应无效');
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (!line.trim() || !line.startsWith('data: ')) continue;
-          
-          const dataStr = line.slice(6).trim();
-          if (dataStr === '[DONE]') {
-            return fullText;
-          }
-          
-          try {
-            const json = JSON.parse(dataStr);
-            const delta = json?.choices?.[0]?.delta?.content || '';
-            if (delta) {
-              wrapDelta(delta);
-            }
-          } catch {
-            // 忽略JSON解析错误，继续处理下一行
-          }
+      for await (const { data } of iterateSSE(response)) {
+        try {
+          const json = JSON.parse(data);
+          const delta = json?.choices?.[0]?.delta?.content || '';
+          if (delta) wrapDelta(delta);
+        } catch {
+          // ignore
         }
       }
-      
+
       return fullText;
     } catch (error) {
       BotUtil.makeLog('warn', `[${this.name}] 子服务端流式调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
@@ -848,7 +842,12 @@ export default class AIStream {
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
         const client = LLMFactory.createClient(config);
-        await client.chatStream(messages, wrapDelta, config);
+        // 传递streams参数给LLM客户端
+        const overrides = { ...config };
+        if (config.streams && Array.isArray(config.streams)) {
+          overrides.streams = config.streams;
+        }
+        await client.chatStream(messages, wrapDelta, overrides);
         return fullText; // 成功，返回结果
       } catch (error) {
         lastError = error;
@@ -1067,26 +1066,26 @@ export default class AIStream {
         mergeStreams = [],
         enableMemory = false,
         enableDatabase = false,
+        enableTools = false,
         ...apiConfig
       } = options;
 
-      let StreamLoader = null;
-      if (mergeStreams.length > 0 || enableMemory || enableDatabase) {
-        StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
-      }
-
       let stream = this;
+      const StreamLoader = (mergeStreams.length > 0 || enableMemory || enableDatabase || enableTools)
+        ? (await import('#infrastructure/aistream/loader.js')).default
+        : null;
       
-      // 提取需要自动合并的工作流
-      const auxiliaryOptions = {};
-      if (enableMemory) auxiliaryOptions.enableMemory = true;
-      if (enableDatabase) auxiliaryOptions.enableDatabase = true;
-      
-      if (Object.keys(auxiliaryOptions).length > 0) {
-        await this.autoMergeAuxiliaryStreams(stream, auxiliaryOptions);
+      if (enableMemory || enableDatabase || enableTools) {
+        await this.autoMergeAuxiliaryStreams(stream, { enableMemory, enableDatabase, enableTools });
       }
       
+      // 构建streams列表：主工作流 + mergeStreams
+      const streams = [this.name];
       if (mergeStreams.length > 0) {
+        streams.push(...mergeStreams);
+      }
+      
+      if (mergeStreams.length > 0 && StreamLoader) {
         const mergedName = `${this.name}-${mergeStreams.join('-')}`;
         stream = StreamLoader.getStream(mergedName) ||
           StreamLoader.mergeStreams({
@@ -1097,7 +1096,11 @@ export default class AIStream {
           });
       }
 
-      // 直接把原始 question 传给目标工作流，保留结构化字段（如 persona、fromXXXWorkflow 等）
+      // 传递streams参数给LLM，用于工具权限控制
+      if (!apiConfig.streams) {
+        apiConfig.streams = streams;
+      }
+
       return await stream.execute(e, question, apiConfig);
     } catch (error) {
       BotUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AIStream');
@@ -1105,10 +1108,6 @@ export default class AIStream {
     }
   }
 
-  /**
-   * 获取工作流信息
-   * @returns {Object}
-   */
   getInfo() {
     return {
       name: this.name,
@@ -1128,16 +1127,8 @@ export default class AIStream {
     };
   }
 
-  /**
-   * 自动合并辅助工作流
-   * @param {Object} stream - 工作流实例
-   * @param {Object} options - 选项
-   * @returns {Promise<void>}
-   */
   async autoMergeAuxiliaryStreams(stream, options = {}) {
     const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
-    
-    // 从选项中提取要合并的工作流名称（支持字符串或数组）
     const streamNames = this.extractStreamNames(options);
     
     for (const streamName of streamNames) {
@@ -1163,31 +1154,14 @@ export default class AIStream {
     }
   }
 
-  /**
-   * 从选项中提取工作流名称
-   * @param {Object} options - 选项对象
-   * @returns {Array<string>} 工作流名称列表
-   */
   extractStreamNames(options) {
     const names = [];
-    // 支持 streams 或 streamNames 数组格式
-    if (options.streams && Array.isArray(options.streams)) {
-      names.push(...options.streams);
-    }
-    if (options.streamNames && Array.isArray(options.streamNames)) {
-      names.push(...options.streamNames);
-    }
-    return [...new Set(names)]; // 去重
+    if (options.enableMemory) names.push('memory');
+    if (options.enableDatabase) names.push('database');
+    if (options.enableTools) names.push('tools');
+    return [...new Set(names)];
   }
 
-
-  /**
-   * 统一错误处理（子类可重写）
-   * @param {Error} error - 错误对象
-   * @param {string} operation - 操作名称
-   * @param {Object} context - 上下文
-   * @returns {Error} 处理后的错误
-   */
   handleError(error, operation) {
     const errorMessage = error?.message || String(error);
     BotUtil.makeLog('error', 

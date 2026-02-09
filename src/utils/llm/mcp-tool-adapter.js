@@ -2,8 +2,11 @@ import StreamLoader from '#infrastructure/aistream/loader.js';
 
 /**
  * MCP 工具适配器
- * - 将 MCP 工具转换为 OpenAI tools 数组格式
- * - 处理 OpenAI tool_calls 响应：调用 MCP 工具并返回 role=tool 的消息列表
+ *
+ * 职责边界：
+ * - 将 StreamLoader 暴露的 MCP 工具转换为 OpenAI tools 数组格式，供各 LLM 工厂在构造请求体时注入
+ * - 在收到 OpenAI style tool_calls 时，实际调用 MCP 工具，并返回 role=tool 的消息列表
+ * - 基于 streams/allowedTools 做工具白名单过滤：保证“未通过接口声明的工具”不会被调用
  */
 export class MCPToolAdapter {
   /**
@@ -16,6 +19,11 @@ export class MCPToolAdapter {
 
   /**
    * 将 MCP 工具转换为 OpenAI 格式的 tools 数组
+   *
+   * 说明：
+   * - streams 白名单优先：只有在 streams 中声明的工作流，其下工具才会被注入
+   * - workflow 为旧的单工作流写法，仅在未显式提供 streams 时使用
+   * - 默认分支会排除 excludeStreams（如 chat），防止基础通用工作流的工具“泄漏”到所有会话
    *
    * @param {Object} options
    * @param {string|null} options.workflow - 单个工作流名称；若提供则仅注入该工作流下的工具
@@ -104,10 +112,19 @@ export class MCPToolAdapter {
 
   /**
    * 处理 tool_calls：并行调用 MCP 工具并返回 tool 角色消息
+   *
+   * 权限控制策略：
+   * - 若传入 options.allowedTools，则仅允许显式列出的工具被调用
+   * - 否则，若传入 options.streams，则会基于 streams 计算允许的工具白名单
+   * - 最终，任何不在白名单中的工具调用都会被拒绝，并返回一条失败的 tool 消息
+   *
    * @param {Array} toolCalls - OpenAI tool_calls
+   * @param {Object} options - 选项
+   * @param {Array<string>} options.allowedTools - 允许的工具名称列表（用于权限验证）
+   * @param {Array<string>} options.streams - 允许的工作流列表（用于权限验证）
    * @returns {Promise<Array>} tool role messages
    */
-  static async handleToolCalls(toolCalls) {
+  static async handleToolCalls(toolCalls, options = {}) {
     if (!Array.isArray(toolCalls) || toolCalls.length === 0) return [];
 
     const mcpServer = this.getMCPServer();
@@ -122,9 +139,35 @@ export class MCPToolAdapter {
       }));
     }
 
+    // 获取允许的工具列表（用于权限验证）
+    let allowedToolNames = null;
+    if (options.allowedTools && Array.isArray(options.allowedTools)) {
+      allowedToolNames = new Set(options.allowedTools);
+    } else if (options.streams && Array.isArray(options.streams)) {
+      // 根据streams获取允许的工具
+      const allowedTools = this.convertMCPToolsToOpenAI({
+        streams: options.streams,
+        excludeStreams: []
+      });
+      allowedToolNames = new Set(allowedTools.map(t => t.function.name));
+    }
+
     const promises = toolCalls.map(async (toolCall) => {
       try {
         const functionName = toolCall.function?.name;
+        
+        // 权限验证：如果指定了允许的工具列表，检查工具是否在允许列表中
+        if (allowedToolNames && !allowedToolNames.has(functionName)) {
+          return {
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({
+              success: false,
+              error: `工具 "${functionName}" 不在允许的工具列表中`
+            })
+          };
+        }
+        
         let argumentsObj = {};
 
         if (toolCall.function?.arguments) {

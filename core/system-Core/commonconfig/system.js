@@ -2066,7 +2066,23 @@ export default class SystemConfig extends ConfigBase {
                   label: '工作流名称',
                   description: 'ASR识别结果调用的工作流名称',
                   default: 'device',
-                  component: 'Input'
+                  component: 'Select',
+                  options: async () => {
+                    try {
+                      const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
+                      const streams = StreamLoader.getStreamsByPriority();
+                      return streams.map(s => ({ value: s.name, label: s.description || s.name }));
+                    } catch {
+                      return [
+                        { value: 'chat', label: '聊天工作流' },
+                        { value: 'device', label: '设备工作流' },
+                        { value: 'desktop', label: '桌面工作流' },
+                        { value: 'tools', label: '工具工作流' },
+                        { value: 'memory', label: '记忆工作流' },
+                        { value: 'database', label: '知识库工作流' }
+                      ];
+                    }
+                  }
                 }
               }
             },

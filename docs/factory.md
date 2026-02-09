@@ -180,8 +180,9 @@ class LLMClient {
 
 #### 特殊功能
 
-- **Tool Calling 支持**：所有 LLM 客户端都支持工具调用，通过 `MCPToolAdapter` 统一处理
-- **多模态输入**：部分 LLM（如 GPTGod、Volcengine、OpenAI、Gemini、Azure OpenAI 等）直接支持图片输入，消息结构会通过 `transformMessagesWithVision` 统一转成各家兼容的 text + image_url（含 base64 data URL）格式。
+- **Tool Calling 支持**：支持 OpenAI tools / tool_calls 协议的 LLM 客户端（如 GPTGod、Volcengine、OpenAI、Azure OpenAI、OpenAI-Compatible 等）都会将工具调用统一交给 `MCPToolAdapter` 处理。
+- **工作流作用域控制（streams）**：当通过 `/api/v3/chat/completions` 调用时，请求体中的 `workflow` 字段会被整理为 `streams` 白名单，LLM 工厂据此只注入这些工作流下的 MCP 工具，其它未在 `streams` 中声明的工具不会被注入和调用。
+- **多模态输入**：部分 LLM（如 GPTGod、Volcengine、OpenAI、Gemini、Azure OpenAI 等）直接支持图片输入，消息结构会通过 `transformMessagesWithVision` 统一转成各家兼容的 `text + image_url`（含 base64 data URL）格式。
 
 ---
 
@@ -822,10 +823,21 @@ data: [DONE]
 ```
 
 **重要说明**：
-- `model` 参数使用 provider 名称（如 `gptgod`、`volcengine`），不是真实模型名
-- 支持多种认证方式：`Authorization: Bearer TOKEN` 或 `body.apiKey`
-- 支持所有 OpenAI 兼容参数：`temperature`、`max_tokens`、`top_p`、`tools`、`tool_choice` 等
-- 流式输出需要提供商配置中 `enableStream: true`（默认启用）
+
+- `model` 参数使用 **provider 名称**（如 `gptgod`、`volcengine`、`openai`、`openai_compat`），不是真实模型名；真实模型由各 `*_llm` 配置文件中的 `model/chatModel` 决定。
+- 支持多种认证方式：`Authorization: Bearer TOKEN`、请求体 `apiKey` / `api_key`、以及 `X-API-Key` 头。
+- 支持常见 OpenAI 兼容参数：`temperature`、`max_tokens`、`top_p`、`tools`、`tool_choice`、`parallel_tool_calls`、`response_format`、`stream_options` 等。
+- 流式输出需要提供商配置中 `enableStream: true`（默认启用）；所有 provider 的 `chatStream` 都统一输出“纯文本增量”，由 `core/system-Core/http/ai.js` 封装为 SSE 事件。
+- **工具作用域控制（streams）**：
+  - 前端/调用方可以在请求体中提供 `workflow` 字段，例如：
+    ```json
+    {
+      "workflow": {
+        "workflows": ["chat", "desktop"]
+      }
+    }
+    ```
+  - 后端会将这些名称整理为 `streams` 白名单并透传给 LLM 工厂，再由 `MCPToolAdapter` 进行 MCP 工具过滤；未出现在 `streams` 中的工作流工具**不会被注入和调用**。
 
 ### 工作流接口
 
@@ -960,4 +972,4 @@ Host: localhost:8080
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-10*

@@ -51,7 +51,7 @@ export class TaskerBase {
       version: info.version || {
         id: type,
         name: name,
-        version: '1.0.0'
+        version: '1.0.5'
       },
       
       // 通用方法（所有 tasker 都支持）

@@ -7,7 +7,7 @@ import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
 /**
- * 解析 multipart/form-data
+ * 解析 multipart/form-data（仅用于 v3/chat/completions 图片上传场景）
  */
 async function parseMultipartData(req) {
   return new Promise((resolve, reject) => {
@@ -135,6 +135,16 @@ function estimateTokens(text) {
   return Math.ceil((text || '').length / 4);
 }
 
+/**
+ * OpenAI 兼容的 Chat Completions v3 接口
+ *
+ * 特性概览：
+ * - 路径：POST /api/v3/chat/completions
+ * - 支持 JSON 与 multipart/form-data（含图片上传，多模态对话）
+ * - 非流式：直接调用各 provider 的 client.chat，返回 OpenAI 风格响应
+ * - 流式：通过 client.chatStream + SSE 输出 chat.completion.chunk 事件，前端按 choices[0].delta.content 渲染
+ * - 工作流/工具：仅负责把前端选择的“带 MCP 工具的工作流”转换为 streams 透传给 LLM 工厂，用于工具白名单控制
+ */
 async function handleChatCompletionsV3(req, res) {
   const contentType = req.headers['content-type'] || '';
   const body = req.body || {};
@@ -219,7 +229,7 @@ async function handleChatCompletionsV3(req, res) {
     }
   }
 
-  // 支持多种认证方式：body.apiKey、Authorization头部Bearer令牌
+  // 支持多种认证方式：body.apiKey、Authorization Bearer 令牌、X-API-Key 头
   let accessKey = (pickFirst(body, ['apiKey', 'api_key']) || '').toString().trim();
   if (!accessKey) {
     const authHeader = (req.headers.authorization || '').toString().trim();
@@ -238,8 +248,6 @@ async function handleChatCompletionsV3(req, res) {
   const defaultProvider = (llm.Provider || 'gptgod').toLowerCase();
   const bodyModel = (pickFirst(body, ['model']) || '').toString().trim().toLowerCase();
 
-  // 约定（对外接口）：
-  // - 外部调用只需要把 body.model 填成运营商 provider
   const provider = (bodyModel && LLMFactory.hasProvider(bodyModel)) ? bodyModel : defaultProvider;
 
   const base = getProviderConfig(provider);
@@ -255,6 +263,29 @@ async function handleChatCompletionsV3(req, res) {
       400,
       'ai.v3.chat.completions'
     );
+  }
+
+  // 工作流配置仅用于限定 MCP 工具作用域：
+  // - 不在此处做“主/次工作流”或动态合并；那是 StreamLoader/工作流系统的职责
+  // - 仅将选中的工作流名称整理为 streams，透传给 LLMFactory，用于 tools 注入范围控制
+  const workflowConfig = pickFirst(body, ['workflow']);
+  let workflowStreams = null;
+  if (workflowConfig && typeof workflowConfig === 'object') {
+    const streams = [];
+
+    if (Array.isArray(workflowConfig.workflows)) {
+      streams.push(...workflowConfig.workflows.filter(Boolean));
+    }
+    if (Array.isArray(workflowConfig.streams)) {
+      streams.push(...workflowConfig.streams.filter(Boolean));
+    }
+    if (typeof workflowConfig.workflow === 'string' && workflowConfig.workflow.trim()) {
+      streams.push(workflowConfig.workflow.trim());
+    }
+
+    if (streams.length > 0) {
+      workflowStreams = [...new Set(streams)];
+    }
   }
 
   const client = LLMFactory.createClient(llmConfig);
@@ -293,7 +324,13 @@ async function handleChatCompletionsV3(req, res) {
   const tools = pickFirst(body, ['tools']);
   if (tools !== undefined) overrides.tools = tools;
 
-  // 2026 常见扩展字段透传（兼容 OpenAI-like / vLLM / 本地推理）
+  // 将前端选择的“带 MCP 工具的工作流”作为 streams 透传，
+  // 由 applyOpenAITools 在构造 OpenAI tools 时按 streams 白名单过滤
+  if (workflowStreams && workflowStreams.length > 0) {
+    overrides.streams = workflowStreams;
+  }
+
+  // 常见扩展字段透传（兼容 OpenAI-like / vLLM / 本地推理）
   const stop = pickFirst(body, ['stop']);
   if (stop !== undefined) overrides.stop = stop;
   const responseFormat = pickFirst(body, ['response_format', 'responseFormat']);
@@ -316,7 +353,6 @@ async function handleChatCompletionsV3(req, res) {
   const extraBody = parseOptionalJson(pickFirst(body, ['extraBody']));
   if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;
 
-  // 对外接口约定：body.model 用作 provider，不承诺用它承载“真实模型名”的语义
   if (!streamFlag) {
     const text = await client.chat(messages, overrides);
     const promptText = extractMessageText(messages);
@@ -343,25 +379,32 @@ async function handleChatCompletionsV3(req, res) {
     });
   }
 
+  // SSE 响应头：标准 Server-Sent Events 配置 + 关闭 Nginx 缓冲，确保实时流式输出
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
   res.flushHeaders?.();
 
   const now = Math.floor(Date.now() / 1000);
   const id = `chatcmpl_${Date.now()}`;
   const modelName = llmConfig.provider || 'unknown';
   
+  BotUtil.makeLog('info', `[v3/chat/completions] 开始流式输出: provider=${modelName}, id=${id}`, 'ai.v3.stream');
+  
   try {
     let totalContent = '';
     let isFirstChunk = true;
+    let chunkCount = 0;
     
-    await client.chatStream(messages, (delta) => {
-      if (delta) {
+    // 流式回调：所有工厂统一通过 onDelta 返回“纯文本增量”，这里封装成 OpenAI 风格 SSE 事件
+    const streamCallback = (delta) => {
+      if (delta && typeof delta === 'string') {
         totalContent += delta;
+        chunkCount++;
         const deltaObj = isFirstChunk ? { role: 'assistant', content: delta } : { content: delta };
         
-        res.write(`data: ${JSON.stringify({
+        const chunkData = {
           id,
           object: 'chat.completion.chunk',
           created: now,
@@ -371,17 +414,45 @@ async function handleChatCompletionsV3(req, res) {
             delta: deltaObj,
             finish_reason: null
           }]
-        })}\n\n`);
+        };
+        
+        const chunkStr = `data: ${JSON.stringify(chunkData)}\n\n`;
+        
+        // 调试日志：每10个 chunk 记录一次，避免日志过多
+        if (chunkCount % 10 === 1 || chunkCount <= 3) {
+          BotUtil.makeLog('debug', `[v3/chat/completions] 发送chunk #${chunkCount}: delta长度=${delta.length}, 总长度=${totalContent.length}`, 'ai.v3.stream');
+        }
+        
+        // 立即写入并flush，确保实时流式输出
+        try {
+          res.write(chunkStr);
+          if (typeof res.flush === 'function') {
+            res.flush();
+          }
+        } catch (writeError) {
+          BotUtil.makeLog('error', `[v3/chat/completions] 写入chunk失败: ${writeError.message}`, 'ai.v3.stream');
+          throw writeError;
+        }
         
         isFirstChunk = false;
+      } else {
+        BotUtil.makeLog('warn', `[v3/chat/completions] 收到无效delta: type=${typeof delta}, value=${String(delta).substring(0, 50)}`, 'ai.v3.stream');
       }
-    }, overrides);
+    };
     
+    BotUtil.makeLog('info', `[v3/chat/completions] 调用client.chatStream开始`, 'ai.v3.stream');
+    
+    // 调用工厂的chatStream方法，确保所有工厂都能完整流式输出
+    await client.chatStream(messages, streamCallback, overrides);
+    
+    BotUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总chunks=${chunkCount}, 总长度=${totalContent.length}`, 'ai.v3.stream');
+    
+    // 发送完成标记和统计信息
     const promptText = extractMessageText(messages);
     const promptTokens = estimateTokens(promptText);
     const completionTokens = estimateTokens(totalContent);
     
-    res.write(`data: ${JSON.stringify({
+    const finishData = {
       id,
       object: 'chat.completion.chunk',
       created: now,
@@ -396,10 +467,17 @@ async function handleChatCompletionsV3(req, res) {
         completion_tokens: completionTokens,
         total_tokens: promptTokens + completionTokens
       }
-    })}\n\n`);
+    };
+    
+    BotUtil.makeLog('debug', `[v3/chat/completions] 发送完成标记`, 'ai.v3.stream');
+    res.write(`data: ${JSON.stringify(finishData)}\n\n`);
     res.write('data: [DONE]\n\n');
+    BotUtil.makeLog('info', `[v3/chat/completions] 流式输出完成`, 'ai.v3.stream');
   } catch (error) {
-    res.write(`data: ${JSON.stringify({
+    BotUtil.makeLog('error', `[v3/chat/completions] 流式输出错误: ${error.message}, stack=${error.stack?.substring(0, 200)}`, 'ai.v3.stream');
+    
+    // 错误处理：发送错误信息并结束流
+    const errorData = {
       id,
       object: 'chat.completion.chunk',
       created: now,
@@ -414,9 +492,12 @@ async function handleChatCompletionsV3(req, res) {
         type: 'server_error',
         code: 'internal_error'
       }
-    })}\n\n`);
+    };
+    
+    res.write(`data: ${JSON.stringify(errorData)}\n\n`);
     res.write('data: [DONE]\n\n');
   } finally {
+    BotUtil.makeLog('debug', `[v3/chat/completions] 关闭响应流`, 'ai.v3.stream');
     res.end();
   }
 }
@@ -467,15 +548,28 @@ async function handleModels(req, res) {
     };
   });
 
+  // 仅暴露"带 MCP 工具"的基础工作流，用于前端多选控制 MCP 工具作用域
+  // 过滤掉动态创建的合并工作流（通过 StreamLoader.mergeStreams 创建的工作流会有 primaryStream 和 secondaryStreams 属性）
+  // 注意：基础工作流通过 merge() 方法合并工具时也会有 _mergedStreams，但不会有 primaryStream/secondaryStreams
   const allStreams = StreamLoader.getStreamsByPriority();
-  const workflows = allStreams.map(stream => ({
-    key: stream.name,
-    label: stream.description || stream.name,
-    description: stream.description || '',
-    profile: null,
-    persona: null,
-    uiHidden: false
-  }));
+  const workflows = allStreams
+    .filter(stream => {
+      // 过滤掉动态创建的合并工作流（通过 StreamLoader.mergeStreams 创建）
+      // 这些工作流会有 primaryStream 和 secondaryStreams 属性
+      if (stream.primaryStream || stream.secondaryStreams) {
+        return false;
+      }
+      // 只保留有 MCP 工具的工作流
+      return (stream.mcpTools?.size || 0) > 0;
+    })
+    .map(stream => ({
+      key: stream.name,
+      label: stream.description || stream.name,
+      description: stream.description || '',
+      profile: null,
+      persona: null,
+      uiHidden: false
+    }));
 
   return HttpResponse.success(res, {
     enabled: llm.enabled !== false,
@@ -525,7 +619,7 @@ export default {
           const contextObj = parseOptionalJson(req.query.context);
           const metadata = parseOptionalJson(req.query.meta);
 
-          const stream = StreamLoader.getStream(workflowName) || StreamLoader.getStream('chat') || StreamLoader.getStream('device');
+          const stream = StreamLoader.getStream(workflowName) || StreamLoader.getStream('chat');
           if (!stream) {
             return HttpResponse.error(res, new Error('工作流未加载'), 500, 'ai.stream');
           }

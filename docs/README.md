@@ -75,7 +75,7 @@ flowchart TB
 
 > **重要说明**：本项目的"业务实现"都应该放在 `core/*/(plugin|http|stream)` 下；`src/*` 主要是基础设施/工厂/通用能力，**不要把业务 API/工作流写进 `src`**（否则会破坏多 core 扩展机制）。
 
-**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供10个HTTP API模块、7个工作流（50+个MCP工具）、4个Tasker和Web控制台。详见 **[system-Core 特性文档](system-core.md)** ⭐。
+**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供10个HTTP API模块、6个工作流（50+个MCP工具）、4个Tasker和Web控制台。详见 **[system-Core 特性文档](system-core.md)** ⭐。
 
 详细说明请参考 [项目概览](../PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
 
@@ -247,5 +247,5 @@ flowchart TB
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-10*
 

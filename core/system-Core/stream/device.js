@@ -6,7 +6,7 @@ export default class DeviceStream extends AIStream {
     super({
       name: 'device',
       description: '设备工作流',
-      version: '1.0.0',
+      version: '1.0.5',
       author: 'XRK',
       priority: 5,
       config: {

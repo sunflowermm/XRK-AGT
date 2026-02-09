@@ -3,7 +3,7 @@ import os from 'os';
 
 /**
  * Model Context Protocol (MCP) 服务器实现
- * 符合MCP 1.0标准（2025），基于JSON-RPC 2.0协议
+ * 符合MCP 2025-11-25规范，基于JSON-RPC 2.0协议
  * 
  * 功能：
  * - 统一管理所有工作流的函数，作为MCP工具暴露给外部AI平台
@@ -11,8 +11,10 @@ import os from 'os';
  * - 提供标准化的工具注册、调用、错误处理机制
  * - 支持资源管理和提示词管理
  * 
- * 协议版本：MCP 1.0
+ * 协议版本：2025-11-25
  * 传输方式：stdio、SSE、HTTP
+ * 
+ * 参考：https://modelcontextprotocol.io/specification/2025-11-25
  */
 export class MCPServer {
   constructor(streamInstance = null) {
@@ -23,8 +25,8 @@ export class MCPServer {
     this.initialized = false; // 初始化状态
     this.serverInfo = {
       name: 'xrk-agt-mcp-server',
-      version: '1.0.0',
-      protocolVersion: '2024-11-05' // MCP协议版本
+      version: '1.0.5',
+      protocolVersion: '2025-11-25' // MCP协议版本（最新规范）
     };
     
     // 注册跨平台通用工具

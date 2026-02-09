@@ -3,6 +3,8 @@ import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
+import BotUtil from '../../utils/botutil.js';
+import { iterateSSE } from '../../utils/llm/sse-utils.js';
 
 /**
  * OpenAI 官方 LLM 客户端（Chat Completions）
@@ -59,45 +61,6 @@ export default class OpenAILLMClient {
     return body;
   }
 
-  async _consumeSSE(resp, onDelta) {
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // SSE：以空行分隔事件（兼容多行 data:）
-      let sep;
-      while ((sep = buffer.indexOf('\n\n')) >= 0) {
-        const chunk = buffer.slice(0, sep);
-        buffer = buffer.slice(sep + 2);
-
-        const dataLines = chunk
-          .split('\n')
-          .map(l => l.trim())
-          .filter(l => l.startsWith('data:'))
-          .map(l => l.slice(5).trim());
-
-        if (!dataLines.length) continue;
-        const payload = dataLines.join('\n');
-        if (payload === '[DONE]') return;
-
-        try {
-          const delta = JSON.parse(payload)?.choices?.[0]?.delta;
-          if (delta?.content && typeof onDelta === 'function') {
-            onDelta(delta.content);
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-  }
-
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
@@ -139,21 +102,113 @@ export default class OpenAILLMClient {
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
-    const resp = await fetch(
-      this.endpoint,
-      buildFetchOptionsWithProxy(this.config, {
-        method: 'POST',
-        headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
-        signal: AbortSignal.timeout(this.timeout)
-      })
-    );
+    
+    const maxToolRounds = this.config.maxToolRounds || 5;
+    let currentMessages = [...transformedMessages];
+    let round = 0;
+    let resp = null;
+    
+    while (round < maxToolRounds) {
+      resp = await fetch(
+        this.endpoint,
+        buildFetchOptionsWithProxy(this.config, {
+          method: 'POST',
+          headers: this.buildHeaders(overrides.headers),
+          body: JSON.stringify(this.buildBody(currentMessages, { ...overrides, stream: true })),
+          signal: AbortSignal.timeout(this.timeout)
+        })
+      );
 
-    if (!resp.ok || !resp.body) {
-      const text = await resp.text().catch(() => '');
-      throw new Error(`OpenAI LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      if (!resp.ok || !resp.body) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(`OpenAI LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      }
+      
+      const toolCallsCollector = {
+        toolCalls: [],
+        content: '',
+        finishReason: null
+      };
+      
+      await this._consumeSSEWithToolCalls(resp, onDelta, toolCallsCollector);
+      
+      if (toolCallsCollector.toolCalls.length > 0 && toolCallsCollector.finishReason === 'tool_calls') {
+        BotUtil.makeLog('info', `[OpenAILLMClient] 检测到工具调用，执行工具: ${toolCallsCollector.toolCalls.length}个`, 'LLMFactory');
+        
+        const toolCallMessage = {
+          role: 'assistant',
+          tool_calls: toolCallsCollector.toolCalls,
+          content: null
+        };
+        currentMessages.push(toolCallMessage);
+        
+        const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
+        const toolResults = await MCPToolAdapter.handleToolCalls(toolCallsCollector.toolCalls, { streams });
+        currentMessages.push(...toolResults);
+        
+        round++;
+        if (round >= maxToolRounds) {
+          BotUtil.makeLog('warn', `[OpenAILLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
+          break;
+        }
+        continue;
+      }
+      
+      if (toolCallsCollector.content || !toolCallsCollector.toolCalls.length) {
+        break;
+      }
+      
+      round++;
     }
-    await this._consumeSSE(resp, onDelta);
+  }
+  
+  async _consumeSSEWithToolCalls(resp, onDelta, collector) {
+    const toolCallsMap = new Map();
+    for await (const { data } of iterateSSE(resp)) {
+      try {
+        const json = JSON.parse(data);
+        const delta = json?.choices?.[0]?.delta;
+        const finishReason = json?.choices?.[0]?.finish_reason;
+
+        if (finishReason) {
+          collector.finishReason = finishReason;
+        }
+
+        if (delta?.content && typeof delta.content === 'string' && delta.content.length > 0) {
+          collector.content += delta.content;
+          if (typeof onDelta === 'function') onDelta(delta.content);
+        }
+
+        if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+          for (const tc of delta.tool_calls) {
+            const index = tc.index;
+            if (index === undefined || index === null) continue;
+
+            if (!toolCallsMap.has(index)) {
+              toolCallsMap.set(index, {
+                id: '',
+                type: 'function',
+                function: { name: '', arguments: '' }
+              });
+            }
+
+            const toolCall = toolCallsMap.get(index);
+            if (tc.id) toolCall.id = tc.id;
+            if (tc.function?.name) toolCall.function.name = tc.function.name;
+            if (tc.function?.arguments) {
+              toolCall.function.arguments += tc.function.arguments;
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (toolCallsMap.size > 0) {
+      const sortedIndices = Array.from(toolCallsMap.keys()).sort((a, b) => a - b);
+      collector.toolCalls = sortedIndices.map(index => toolCallsMap.get(index));
+    }
   }
 }
 

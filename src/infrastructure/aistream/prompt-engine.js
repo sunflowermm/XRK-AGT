@@ -30,7 +30,7 @@ export class PromptEngine extends EventEmitter {
       name,
       content: template.content || '',
       variables: template.variables || [],
-      version: template.version || '1.0.0',
+      version: template.version || '1.0.5',
       metadata: template.metadata || {},
       createdAt: Date.now(),
       updatedAt: Date.now()
@@ -229,7 +229,7 @@ export class PromptEngine extends EventEmitter {
       const lines = content.split('\n');
       let templateContent = '';
       let variables = [];
-      let version = '1.0.0';
+      let version = '1.0.5';
       const metadata = {};
 
       let inContent = false;

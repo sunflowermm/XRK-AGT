@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
+import { iterateSSE } from '../../utils/llm/sse-utils.js';
 
 /**
  * Gemini 官方 LLM 客户端（Google Generative Language API）
@@ -184,37 +185,19 @@ export default class GeminiLLMClient {
       const text = await resp.text().catch(() => '');
       throw new Error(`Gemini 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
     let emitted = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 1);
-
-        if (!line?.startsWith('data:')) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === '[DONE]') return;
-
-        try {
-          const json = JSON.parse(payload);
-          const full = this.extractTextFromResponse(json);
-          if (full && full.startsWith(emitted)) {
-            const delta = full.slice(emitted.length);
-            if (delta && typeof onDelta === 'function') onDelta(delta);
-            emitted = full;
-          }
-        } catch {
-          // ignore
+    for await (const { data } of iterateSSE(resp)) {
+      if (!data) continue;
+      try {
+        const json = JSON.parse(data);
+        const full = this.extractTextFromResponse(json);
+        if (full && full.startsWith(emitted)) {
+          const delta = full.slice(emitted.length);
+          if (delta && typeof onDelta === 'function') onDelta(delta);
+          emitted = full;
         }
+      } catch {
+        // ignore
       }
     }
   }

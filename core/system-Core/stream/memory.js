@@ -19,7 +19,7 @@ export default class MemoryStream extends AIStream {
     super({
       name: 'memory',
       description: '记忆系统工作流插件',
-      version: '1.0.0',
+      version: '1.0.5',
       author: 'XRK',
       priority: 1,
       config: {
@@ -105,14 +105,6 @@ export default class MemoryStream extends AIStream {
         }
 
         const memories = await this.queryMemories(keyword, context);
-        
-        // 在工作流中记录笔记
-
-        if (context.stream) {
-          context.stream.context = context.stream.context || {};
-          context.stream.context.memoryResults = memories;
-        }
-
         BotUtil.makeLog('info', `[${this.name}] 查询记忆 "${keyword}"，找到 ${memories.length} 条`, 'MemoryStream');
 
         return {
@@ -168,9 +160,6 @@ export default class MemoryStream extends AIStream {
       },
       handler: async (_args = {}, context = {}) => {
         const memories = await this.listMemories(context);
-        
-        // 在工作流中记录笔记
-
         BotUtil.makeLog('info', `[${this.name}] 列出记忆，共 ${memories.length} 条`, 'MemoryStream');
 
         return {

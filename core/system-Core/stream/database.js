@@ -109,14 +109,6 @@ export default class DatabaseStream extends AIStream {
         }
 
         const results = await this.queryKnowledge(db, keyword);
-        
-        // 在工作流中记录笔记
-
-        if (context.stream) {
-          context.stream.context = context.stream.context || {};
-          context.stream.context.knowledgeResults = results;
-        }
-
         BotUtil.makeLog('info', `[${this.name}] 查询知识库: ${db}，找到 ${results.length} 条`, 'DatabaseStream');
 
         return {
@@ -141,9 +133,6 @@ export default class DatabaseStream extends AIStream {
       },
       handler: async (_args = {}, _context = {}) => {
         const dbs = await this.listDatabases();
-        
-        // 在工作流中记录笔记
-
         return {
           success: true,
           data: {

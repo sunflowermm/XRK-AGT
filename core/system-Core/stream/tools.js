@@ -14,7 +14,11 @@ const IS_WINDOWS = process.platform === 'win32';
  * 所有功能都通过 MCP 工具提供：
  * - read（读取文件）
  * - grep（搜索文本）
- * - write（写入文件）
+ * - write（写入文件，覆盖）
+ * - create_file（创建新文件）
+ * - delete_file（删除文件）
+ * - modify_file（修改文件，支持替换/追加/插入）
+ * - list_files（列出目录文件）
  * - run（执行命令）
  */
 export default class ToolsStream extends AIStream {
@@ -22,7 +26,7 @@ export default class ToolsStream extends AIStream {
     super({
       name: 'tools',
       description: '基础工具工作流（read/grep/write/run）',
-      version: '1.0.0',
+      version: '1.0.5',
       author: 'XRK',
       priority: 200, // 高优先级，基础工具
       config: {
@@ -71,19 +75,6 @@ export default class ToolsStream extends AIStream {
         }
 
         if (result.success) {
-          if (context.stream) {
-            context.stream.context = context.stream.context || {};
-            context.stream.context.fileContent = result.content;
-            context.stream.context.filePath = result.path;
-            context.stream.context.fileName = path.basename(result.path);
-            context.stream.context.fileSearchResult = {
-              found: true,
-              fileName: path.basename(result.path),
-              path: result.path,
-              content: result.content
-            };
-          }
-
           return {
             success: true,
             data: {
@@ -95,18 +86,7 @@ export default class ToolsStream extends AIStream {
           };
         }
         
-        const error = result.error || `未找到文件: ${filePath}`;
-        if (context.stream) {
-          context.stream.context = context.stream.context || {};
-          context.stream.context.fileError = error;
-          context.stream.context.fileSearchResult = {
-            found: false,
-            fileName: filePath,
-            path: null,
-            error
-          };
-        }
-        return { success: false, error };
+        return { success: false, error: result.error || `未找到文件: ${filePath}` };
       },
       enabled: true
     });
@@ -140,12 +120,6 @@ export default class ToolsStream extends AIStream {
         });
 
         if (result.success) {
-          if (context.stream) {
-            context.stream.context = context.stream.context || {};
-            context.stream.context.grepResults = result.matches;
-            context.stream.context.grepPattern = pattern;
-          }
-
           return {
             success: true,
             data: {
@@ -157,17 +131,13 @@ export default class ToolsStream extends AIStream {
           };
         }
         
-        if (context.stream) {
-          context.stream.context = context.stream.context || {};
-          context.stream.context.grepError = `搜索失败: ${pattern}`;
-        }
         return { success: false, error: `搜索失败: ${pattern}` };
       },
       enabled: true
     });
 
     this.registerMCPTool('write', {
-      description: '写入文件内容',
+      description: '写入文件内容（如果文件存在则覆盖）',
       inputSchema: {
         type: 'object',
         properties: {
@@ -184,17 +154,13 @@ export default class ToolsStream extends AIStream {
       },
       handler: async (args = {}, context = {}) => {
         const { filePath, content } = args;
-        if (!filePath || !content) {
+        if (!filePath || content === undefined) {
           return { success: false, error: '文件路径和内容不能为空' };
         }
 
         const result = await this.tools.writeFile(filePath, content);
         
         if (result.success) {
-          if (context.stream) {
-            context.stream.context = context.stream.context || {};
-            context.stream.context.writeFileResult = { success: true, path: result.path };
-          }
           return {
             success: true,
             data: {
@@ -202,13 +168,211 @@ export default class ToolsStream extends AIStream {
               message: '文件写入成功'
             }
           };
-        } else {
-          if (context.stream) {
-            context.stream.context = context.stream.context || {};
-            context.stream.context.writeFileError = result.error;
-          }
-          return { success: false, error: result.error };
         }
+        
+        return { success: false, error: result.error };
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('create_file', {
+      description: '创建新文件',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: {
+            type: 'string',
+            description: '文件路径'
+          },
+          content: {
+            type: 'string',
+            description: '文件内容（可选，默认为空）'
+          }
+        },
+        required: ['filePath']
+      },
+      handler: async (args = {}, context = {}) => {
+        const { filePath, content = '' } = args;
+        if (!filePath) {
+          return { success: false, error: '文件路径不能为空' };
+        }
+
+        const fullPath = this.tools.resolvePath(filePath);
+        try {
+          const fs = await import('fs/promises');
+          await fs.mkdir(path.dirname(fullPath), { recursive: true });
+          await fs.writeFile(fullPath, content, 'utf8');
+          return {
+            success: true,
+            data: {
+              filePath: fullPath,
+              message: '文件创建成功'
+            }
+          };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('delete_file', {
+      description: '删除文件',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: {
+            type: 'string',
+            description: '文件路径'
+          }
+        },
+        required: ['filePath']
+      },
+      handler: async (args = {}, context = {}) => {
+        const { filePath } = args;
+        if (!filePath) {
+          return { success: false, error: '文件路径不能为空' };
+        }
+
+        const fullPath = this.tools.resolvePath(filePath);
+        try {
+          const fs = await import('fs/promises');
+          await fs.unlink(fullPath);
+          return {
+            success: true,
+            data: {
+              filePath: fullPath,
+              message: '文件删除成功'
+            }
+          };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('modify_file', {
+      description: '修改文件内容（支持追加、替换、插入）',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: {
+            type: 'string',
+            description: '文件路径'
+          },
+          content: {
+            type: 'string',
+            description: '要添加或替换的内容'
+          },
+          mode: {
+            type: 'string',
+            enum: ['replace', 'append', 'prepend'],
+            description: '修改模式: replace(替换全部), append(追加到末尾), prepend(插入到开头)',
+            default: 'replace'
+          },
+          lineNumber: {
+            type: 'integer',
+            description: '插入行号（仅在replace模式下有效，替换指定行）'
+          }
+        },
+        required: ['filePath', 'content']
+      },
+      handler: async (args = {}, context = {}) => {
+        const { filePath, content, mode = 'replace', lineNumber } = args;
+        if (!filePath || content === undefined) {
+          return { success: false, error: '文件路径和内容不能为空' };
+        }
+
+        const fullPath = this.tools.resolvePath(filePath);
+        try {
+          const fs = await import('fs/promises');
+          let fileContent = '';
+          
+          try {
+            fileContent = await fs.readFile(fullPath, 'utf8');
+          } catch {
+            if (mode === 'replace') {
+              fileContent = '';
+            } else {
+              return { success: false, error: '文件不存在，无法使用append或prepend模式' };
+            }
+          }
+
+          let newContent = '';
+          if (mode === 'replace') {
+            if (lineNumber !== undefined && lineNumber > 0) {
+              const lines = fileContent.split('\n');
+              if (lineNumber <= lines.length) {
+                lines[lineNumber - 1] = content;
+                newContent = lines.join('\n');
+              } else {
+                return { success: false, error: `行号 ${lineNumber} 超出文件行数 ${lines.length}` };
+              }
+            } else {
+              newContent = content;
+            }
+          } else if (mode === 'append') {
+            newContent = fileContent + (fileContent && !fileContent.endsWith('\n') ? '\n' : '') + content;
+          } else if (mode === 'prepend') {
+            newContent = content + (fileContent && !fileContent.startsWith('\n') ? '\n' : '') + fileContent;
+          }
+
+          await fs.writeFile(fullPath, newContent, 'utf8');
+          return {
+            success: true,
+            data: {
+              filePath: fullPath,
+              mode,
+              message: `文件${mode === 'replace' ? '替换' : mode === 'append' ? '追加' : '插入'}成功`
+            }
+          };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('list_files', {
+      description: '列出目录中的文件',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          dirPath: {
+            type: 'string',
+            description: '目录路径（可选，默认为工作区）'
+          },
+          includeHidden: {
+            type: 'boolean',
+            description: '是否包含隐藏文件',
+            default: false
+          },
+          type: {
+            type: 'string',
+            enum: ['all', 'files', 'dirs'],
+            description: '文件类型过滤: all(全部), files(仅文件), dirs(仅目录)',
+            default: 'all'
+          }
+        },
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
+        const { dirPath = null, includeHidden = false, type = 'all' } = args;
+        const result = await this.tools.listDir(dirPath, { includeHidden, type });
+        
+        if (result.success) {
+          return {
+            success: true,
+            data: {
+              path: result.path,
+              items: result.items,
+              count: result.items.length
+            }
+          };
+        }
+        
+        return { success: false, error: result.error };
       },
       enabled: true
     });
@@ -237,11 +401,6 @@ export default class ToolsStream extends AIStream {
 
         try {
           const output = await this.executeCommand(command);
-          if (context.stream) {
-            context.stream.context = context.stream.context || {};
-            context.stream.context.commandOutput = output;
-            context.stream.context.commandSuccess = true;
-          }
           return {
             success: true,
             data: {
@@ -251,12 +410,6 @@ export default class ToolsStream extends AIStream {
             }
           };
         } catch (err) {
-          if (context.stream) {
-            context.stream.context = context.stream.context || {};
-            context.stream.context.commandError = err.message;
-            context.stream.context.commandSuccess = false;
-            context.stream.context.commandStderr = err.stderr || '';
-          }
           return { success: false, error: err.message, stderr: err.stderr || '' };
         }
       },
@@ -265,9 +418,6 @@ export default class ToolsStream extends AIStream {
 
   }
 
-  /**
-   * 尝试搜索并读取文件
-   */
   async trySearchAndReadFile(filePath) {
     const searchResults = await this.tools.searchFiles(path.basename(filePath), {
       maxDepth: 2,
@@ -281,86 +431,37 @@ export default class ToolsStream extends AIStream {
     return await this.tools.readFile(searchResults[0]);
   }
 
-  /**
-   * 格式化搜索匹配结果
-   */
-  formatGrepMatches(matches) {
-    if (matches.length === 0) return '未找到匹配项';
-    return matches.slice(0, 20).map(m => `${m.file}:${m.line}: ${m.content}`).join('\n');
-  }
-
-  /**
-   * 处理写入成功
-   */
-  async handleWriteSuccess(result, context) {
-    context.writeFileResult = { success: true, path: result.path };
-  }
-
-  /**
-   * 处理写入失败
-   */
-  async handleWriteFailure(filePath, result, context) {
-    context.writeFileError = result.error;
-  }
-
-  /**
-   * 执行命令
-   */
   async executeCommand(command) {
-    const workspace = this.workspace;
-    const fullCommand = this.buildFullCommand(command, workspace);
-    
+    const fullCommand = this.buildFullCommand(command, this.workspace);
     const { stdout } = await execAsync(fullCommand, {
       maxBuffer: 10 * 1024 * 1024,
-      cwd: workspace,
+      cwd: this.workspace,
       shell: IS_WINDOWS ? 'cmd.exe' : undefined
     });
-    
     return (stdout ?? '').trim();
   }
 
-  /**
-   * 构建完整命令
-   */
   buildFullCommand(command, workspace) {
-    // 检测是否为PowerShell命令
     const isPowerShellCmd = /^(Get-|Set-|New-|Remove-|Test-|Invoke-|Start-|Stop-)/i.test(command);
-    
     if (IS_WINDOWS) {
-      if (isPowerShellCmd) {
-        // PowerShell命令需要用powershell执行
-        return `powershell -NoProfile -Command "Set-Location '${workspace}'; ${command.replace(/"/g, '`"')}"`;
-      }
-      // CMD命令
-      return `cd /d "${workspace}" && ${command}`;
+      return isPowerShellCmd
+        ? `powershell -NoProfile -Command "Set-Location '${workspace}'; ${command.replace(/"/g, '`"')}"`
+        : `cd /d "${workspace}" && ${command}`;
     }
-    
     return `cd "${workspace}" && ${command}`;
   }
 
-  /**
-   * 处理命令执行成功
-   */
-  async handleCommandSuccess(command, output, context) {
-    context.commandOutput = output;
-    context.commandSuccess = true;
-  }
-
-  /**
-   * 处理命令执行失败
-   */
-  async handleCommandFailure(command, err, context) {
-    context.commandError = err.message;
-    context.commandSuccess = false;
-    context.commandStderr = err.stderr || '';
-  }
 
   buildSystemPrompt() {
     return `【基础工具说明】
 所有功能都通过MCP工具调用协议提供，包括：
 - read：读取文件内容
 - grep：在文件中搜索文本
-- write：写入文件内容
+- write：写入文件内容（覆盖）
+- create_file：创建新文件
+- delete_file：删除文件
+- modify_file：修改文件内容（支持替换、追加、插入）
+- list_files：列出目录中的文件
 - run：执行命令（工作区：桌面）`;
   }
 }

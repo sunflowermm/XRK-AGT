@@ -1,45 +1,10 @@
-/**
- * XRK-AGT控制台
- * 企业级智能体管理平台
- * 
- * 功能模块：
- * - 系统概览：实时监控系统资源、机器人状态、工作流信息
- * - AI对话：支持文本、语音、图片等多种交互方式
- * - 配置管理：可视化配置编辑，支持表单和JSON双模式
- * - API调试：完整的API测试工具，支持所有系统接口
- * 
- * 技术特性：
- * - 响应式设计，支持移动端和桌面端
- * - 实时数据更新，WebSocket连接
- * - 性能优化，懒加载和缓存机制
- * - 错误处理完善，用户体验友好
- */
-
-// ========== 工具函数 ==========
-/**
- * 安全的DOM查询 - 避免重复查询
- * @param {string} selector - CSS选择器
- * @param {Element} context - 查询上下文，默认为document
- * @returns {Element|null} 找到的元素或null
- */
 function $(selector, context = document) {
   return context.querySelector(selector);
 }
 
-/**
- * 批量DOM查询
- * @param {string} selector - CSS选择器
- * @param {Element} context - 查询上下文，默认为document
- * @returns {NodeList} 找到的元素列表
- */
 function $$(selector, context = document) {
   return context.querySelectorAll(selector);
 }
-
-/**
- * 图片懒加载 - 使用Intersection Observer API
- * @param {string} selector - 图片选择器
- */
 function initLazyLoad(selector = 'img[data-src]') {
   const imageObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
@@ -68,7 +33,6 @@ class App {
     this.currentAPI = null;
     this.apiConfig = null;
     this.selectedFiles = [];
-    // 统一管理 blob: objectURL，避免预览失效/内存泄漏（跨端更稳定）
     this._objectUrls = new Set();
     this.jsonEditor = null;
     this._charts = {};
@@ -79,9 +43,9 @@ class App {
       _lastTimestamp: null,
       _lastUpdate: null
     };
-    this._chatHistory = this._loadChatHistory();
-    this._isRestoringHistory = false; // 防止重复恢复历史记录
-    // 聊天流状态默认初始化，避免渲染阶段空引用
+    this._eventChatHistory = this._loadChatHistory('event');
+    this._aiChatHistory = this._loadChatHistory('ai');
+    this._isRestoringHistory = false;
     this._chatStreamState = { running: false, source: null };
     this._deviceWs = null;
     this._wsConnecting = false;
@@ -91,9 +55,12 @@ class App {
     this._configState = null;
     this._schemaCache = {};
     this._llmOptions = { profiles: [], defaultProfile: '' };
+    this._chatMode = localStorage.getItem('chatMode') || 'event';
+    const savedWorkflows = localStorage.getItem('chatWorkflows');
     this._chatSettings = {
-      workflow: 'device',
-      persona: localStorage.getItem('chatPersona') ?? ''
+      workflows: savedWorkflows ? JSON.parse(savedWorkflows) : [],
+      persona: localStorage.getItem('chatPersona') || '',
+      provider: localStorage.getItem('chatProvider') || ''
     };
     this._webUserId = localStorage.getItem('webUserId') ?? 'webclient';
     this._activeEventSource = null;
@@ -103,23 +70,21 @@ class App {
     this._systemThemeWatcher = null;
     this.theme = 'light';
     this._chatPendingTimer = null;
-    this._chatQuickTimeout = null; // 快速超时，用于判断是否没有流被触发
+    this._chatQuickTimeout = null;
     this._heartbeatTimer = null;
-    this._lastHeartbeatAt = 0;     // 最近一次发送心跳的时间
-    this._lastWsMessageAt = 0;     // 最近一次收到 WS 消息的时间
-    this._offlineCheckTimer = null; // 前端兜底的离线检测（与后端30分钟规则对齐）
-    this._processedMessageIds = new Set(); // 消息去重集合
-    this._latestSystem = null; // 最新系统数据缓存
-    this._homeDataCache = this._loadHomeDataCache(); // 首页数据缓存
-    this._chartPluginsRegistered = false; // Chart 插件注册标记（避免重复注册）
+    this._lastHeartbeatAt = 0;
+    this._lastWsMessageAt = 0;
+    this._offlineCheckTimer = null;
+    this._processedMessageIds = new Set();
+    this._latestSystem = null;
+    this._homeDataCache = this._loadHomeDataCache();
+    this._chartPluginsRegistered = false;
     
     this.init();
   }
 
   async init() {
-    // 初始化懒加载
     initLazyLoad();
-    
     await this.loadAPIConfig();
     this.bindEvents();
     this.loadSettings();
@@ -128,35 +93,27 @@ class App {
     this.handleRoute();
     this.ensureDeviceWs();
     
-    // 统一事件监听器管理
     window.addEventListener('hashchange', () => this.handleRoute());
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
         this.checkConnection();
         this.ensureDeviceWs();
-        // 聊天页面：重新加载历史记录（restoreChatHistory 内部会处理去重）
         if (this.currentPage === 'chat') {
           this.restoreChatHistory();
         }
       }
     });
-    
-    // 使用节流优化定时器，避免页面不可见时执行
-    // 每60秒刷新一次系统状态（仅在首页且页面可见时）
     this._statusUpdateTimer = setInterval(() => {
       if (this.currentPage === 'home' && !document.hidden && !this._statusLoading) {
         this.loadSystemStatus().catch(() => {
-          // 错误已在loadSystemStatus内部处理，这里静默忽略
         });
       }
     }, 60000);
     
-    // 清理定时器（页面卸载时）
     window.addEventListener('beforeunload', () => {
       if (this._statusUpdateTimer) {
         clearInterval(this._statusUpdateTimer);
       }
-      // 释放所有 blob: objectURL（避免长会话或多次预览导致的内存泄漏）
       this._revokeAllObjectUrls();
     });
   }
@@ -243,7 +200,6 @@ class App {
         workflows: data.workflows ?? []
       };
 
-      this._chatSettings.workflow = 'desktop';
     } catch (e) {
       console.warn('未能加载 LLM 档位信息:', e.message || e);
     }
@@ -260,12 +216,10 @@ class App {
     const apiKeyToggleBtn = $('#apiKeyToggleBtn');
     const navContainer = $('#navMenu');
     
-    // 侧边栏控制
     menuBtn.addEventListener('click', () => this.toggleSidebar());
     sidebarClose.addEventListener('click', () => this.closeSidebar());
     overlay.addEventListener('click', () => this.closeSidebar());
     
-    // API列表返回
     apiListBackBtn.addEventListener('click', () => {
       const navMenu = $('#navMenu');
       const apiListContainer = $('#apiListContainer');
@@ -273,10 +227,8 @@ class App {
         apiListContainer.style.display = 'none';
     });
     
-    // 主题切换
     themeToggle.addEventListener('click', () => this.toggleTheme());
     
-    // API Key管理
     saveApiKeyBtn.addEventListener('click', () => this.saveApiKey());
     apiKey.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
@@ -286,7 +238,6 @@ class App {
     });
     apiKeyToggleBtn.addEventListener('click', () => this.toggleApiKeyBox());
     
-    // 导航菜单 - 事件委托
       navContainer.addEventListener('click', (e) => {
         const navItem = e.target.closest('.nav-item');
         if (navItem) {
@@ -296,7 +247,6 @@ class App {
         }
       });
     
-    // 快捷键
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && this.currentAPI) {
         e.preventDefault();
@@ -450,20 +400,17 @@ class App {
   navigateTo(page) {
     this.currentPage = page;
     
-    // 更新导航状态 - 使用批量DOM操作优化
     const navItems = $$('.nav-item');
     navItems.forEach(item => {
       item.classList.toggle('active', item.dataset.page === page);
     });
     
-    // 更新标题
     const titles = { home: '系统概览', chat: 'AI 对话', config: '配置管理', api: 'API 调试' };
     const headerTitle = $('#headerTitle');
     if (headerTitle) {
       headerTitle.textContent = titles[page] || page;
     }
     
-    // 侧边栏内容切换：API调试页面显示API列表，其他页面显示导航
     const navMenu = $('#navMenu');
     const apiListContainer = $('#apiListContainer');
     const isMobile = window.innerWidth <= 768;
@@ -483,26 +430,20 @@ class App {
       }
     }
     
-    // 渲染页面 - 使用requestAnimationFrame优化渲染性能
-    requestAnimationFrame(() => {
-      switch (page) {
-        case 'home': this.renderHome(); break;
-        case 'chat': this.renderChat(); break;
-        case 'config': this.renderConfig(); break;
-        case 'api': this.renderAPI(); break;
-        default: this.renderHome();
-      }
-    });
+    switch (page) {
+      case 'home': this.renderHome(); break;
+      case 'chat': this.renderChat(); break;
+      case 'config': this.renderConfig(); break;
+      case 'api': this.renderAPI(); break;
+      default: this.renderHome();
+    }
     
-    // 使用history API优化，避免不必要的hash变化
     if (location.hash !== `#/${page}`) {
       location.hash = `#/${page}`;
     }
   }
 
-  // ========== 首页 ==========
   async renderHome() {
-    // 销毁旧的图表实例 - 优化内存管理
     ['cpu', 'mem', 'net'].forEach(key => {
       if (this._charts[key]) {
         try {
@@ -516,7 +457,6 @@ class App {
     
     const content = $('#content');
     
-    // 渲染HTML结构
     content.innerHTML = `
       <div class="dashboard">
         <div class="dashboard-header">
@@ -1395,59 +1335,125 @@ class App {
   }
 
   // ========== 聊天 ==========
-  renderChat() {
+  async renderChat() {
     const content = document.getElementById('content');
+    const isAIMode = this._chatMode === 'ai';
+    const aiSettings = isAIMode ? await this._renderAISettings() : '';
     content.innerHTML = `
       <div class="chat-container">
-        <div class="chat-header">
-          <div class="chat-header-title">
-            <span class="emotion-display" id="emotionIcon">😊</span>
-            <span>AI 对话</span>
+        <div class="chat-sidebar">
+          <div class="chat-mode-selector">
+            <button class="chat-mode-btn ${this._chatMode === 'event' ? 'active' : ''}" data-mode="event">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+              <span>Event</span>
+            </button>
+            <button class="chat-mode-btn ${this._chatMode === 'ai' ? 'active' : ''}" data-mode="ai">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+              <span>AI</span>
+            </button>
           </div>
-          <div class="chat-header-actions">
-            <button class="btn btn-sm btn-secondary" id="clearChatBtn">清空</button>
+          ${aiSettings}
+        </div>
+        <div class="chat-main">
+          <div class="chat-header">
+            <div class="chat-header-title">
+              <span class="emotion-display" id="emotionIcon">😊</span>
+              <span>${isAIMode ? 'AI 对话' : 'Event 对话'}</span>
+            </div>
+            <div class="chat-header-actions">
+              <button class="btn btn-sm btn-secondary" id="clearChatBtn">清空</button>
+            </div>
           </div>
+          <div class="chat-settings">
+            <span class="chat-stream-status" id="chatStreamStatus">空闲</span>
+          </div>
+          <div class="chat-messages" id="chatMessages"></div>
+          <div class="chat-input-area">
+            <button class="mic-btn" id="micBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+                <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <button class="image-upload-btn" id="imageUploadBtn" title="上传图片">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </button>
+            <input type="file" class="chat-image-input" id="chatImageInput" accept="${isAIMode ? 'image/*' : 'image/*,video/*,audio/*'}" multiple style="display: none;">
+            <input type="text" class="chat-input" id="chatInput" placeholder="输入消息...">
+            <button class="chat-send-btn" id="chatSendBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22,2 15,22 11,13 2,9"/>
+              </svg>
+            </button>
+          </div>
+          <div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>
         </div>
-        <div class="chat-settings">
-          <span class="chat-stream-status" id="chatStreamStatus">空闲</span>
-        </div>
-        <div class="chat-messages" id="chatMessages"></div>
-        <div class="chat-input-area">
-          <button class="mic-btn" id="micBtn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-              <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-          </button>
-          <button class="image-upload-btn" id="imageUploadBtn" title="上传图片">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-          </button>
-          <input type="file" class="chat-image-input" id="chatImageInput" accept="image/*" multiple style="display: none;">
-          <input type="text" class="chat-input" id="chatInput" placeholder="输入消息...">
-          <button class="chat-send-btn" id="chatSendBtn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22,2 15,22 11,13 2,9"/>
-            </svg>
-          </button>
-        </div>
-        <div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>
       </div>
     `;
     
-    // 统一事件绑定
     this._bindChatEvents();
-    
-    // 初始化聊天状态
     this.initChatControls();
     this.restoreChatHistory();
-    this.ensureDeviceWs();
+    if (!isAIMode) {
+      this.ensureDeviceWs();
+    }
+  }
+
+  async _renderAISettings() {
+    await this.loadLlmOptions();
+    const providers = (this._llmOptions?.profiles || []).map(p => ({
+      value: p.key || p.provider || p.label || '',
+      label: p.label || p.key || p.provider || ''
+    })).filter(p => p.value);
+    
+    // 后端已仅返回“带 MCP 工具”的工作流，这里直接作为 MCP 工具工作流多选
+    const allWorkflows = (this._llmOptions?.workflows || []).map(w => ({
+      value: w.key || w.name || '',
+      label: w.label || w.description || w.key || w.name || ''
+    })).filter(w => w.value);
+    
+    const selectedWorkflows = Array.isArray(this._chatSettings.workflows) 
+      ? this._chatSettings.workflows 
+      : (this._chatSettings.workflow ? [this._chatSettings.workflow] : []);
+    
+    return `
+      <div class="ai-settings-panel">
+        <div class="ai-settings-section">
+          <label class="ai-settings-label">运营商</label>
+          <select id="aiProviderSelect" class="ai-settings-select">
+            <option value="">默认</option>
+            ${providers.map(p => `<option value="${p.value}" ${this._chatSettings.provider === p.value ? 'selected' : ''}>${p.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="ai-settings-section">
+          <label class="ai-settings-label">人设</label>
+          <textarea id="aiPersonaInput" class="ai-settings-textarea" placeholder="自定义人设...">${this._chatSettings.persona || ''}</textarea>
+        </div>
+        <div class="ai-settings-section">
+          <label class="ai-settings-label">MCP 工具工作流</label>
+          <div class="ai-settings-checkboxes">
+            ${allWorkflows.map(w => `
+              <label class="ai-settings-checkbox">
+                <input type="checkbox" id="workflow_${w.value}" value="${w.value}" ${selectedWorkflows.includes(w.value) ? 'checked' : ''}>
+                <span>${w.label}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
   }
   
   /**
@@ -1460,6 +1466,47 @@ class App {
     const clearBtn = document.getElementById('clearChatBtn');
     const imageUploadBtn = document.getElementById('imageUploadBtn');
     const imageInput = document.getElementById('chatImageInput');
+    if (imageInput) {
+      imageInput.setAttribute('accept', this._chatMode === 'ai' ? 'image/*' : 'image/*,video/*,audio/*');
+    }
+    
+    document.querySelectorAll('.chat-mode-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const mode = btn.dataset.mode;
+        this._chatMode = mode;
+        localStorage.setItem('chatMode', mode);
+        await this.renderChat();
+      });
+    });
+
+    if (this._chatMode === 'ai') {
+      const providerSelect = document.getElementById('aiProviderSelect');
+      const personaInput = document.getElementById('aiPersonaInput');
+
+      if (providerSelect) {
+        providerSelect.addEventListener('change', () => {
+          this._chatSettings.provider = providerSelect.value;
+          localStorage.setItem('chatProvider', providerSelect.value);
+        });
+      }
+
+      if (personaInput) {
+        personaInput.addEventListener('input', () => {
+          this._chatSettings.persona = personaInput.value;
+          localStorage.setItem('chatPersona', personaInput.value);
+        });
+      }
+
+      // MCP 工具工作流多选：仅控制 tools 注入作用域，不区分主 / 次
+      document.querySelectorAll('input[id^="workflow_"]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const workflows = Array.from(document.querySelectorAll('input[id^="workflow_"]:checked'))
+            .map(c => c.value);
+          this._chatSettings.workflows = workflows;
+          localStorage.setItem('chatWorkflows', JSON.stringify(workflows));
+        });
+      });
+    }
     
     if (sendBtn) {
       sendBtn.addEventListener('click', () => this.sendChatMessage());
@@ -1492,7 +1539,6 @@ class App {
       });
     }
 
-    // 拖拽图片到聊天区：跨端兼容（Chrome/Edge/Safari/WebView）
     const chatContainer = document.querySelector('.chat-container');
     if (chatContainer) {
       this._bindDropArea(chatContainer, {
@@ -1552,12 +1598,17 @@ class App {
   }
   
 
-  _loadChatHistory() {
+  _getCurrentChatHistory() {
+    return this._chatMode === 'ai' ? this._aiChatHistory : this._eventChatHistory;
+  }
+
+  _loadChatHistory(mode) {
     try {
-      const cached = localStorage.getItem('chatHistory');
+      const key = mode === 'ai' ? 'aiChatHistory' : 'eventChatHistory';
+      const cached = localStorage.getItem(key);
       return cached ? JSON.parse(cached) : [];
     } catch (e) {
-      console.warn('[聊天历史] 加载失败:', e);
+      console.warn(`[${mode}聊天历史] 加载失败:`, e);
       return [];
     }
   }
@@ -1565,75 +1616,47 @@ class App {
   _saveChatHistory() {
     try {
       const MAX_HISTORY = 200;
-      const historyToSave = Array.isArray(this._chatHistory) 
-        ? this._chatHistory.slice(-MAX_HISTORY) 
+      const history = this._getCurrentChatHistory();
+      const historyToSave = Array.isArray(history) 
+        ? history.slice(-MAX_HISTORY) 
         : [];
-      localStorage.setItem('chatHistory', JSON.stringify(historyToSave));
+      const key = this._chatMode === 'ai' ? 'aiChatHistory' : 'eventChatHistory';
+      localStorage.setItem(key, JSON.stringify(historyToSave));
     } catch (e) {
       console.warn('[聊天历史] 保存失败:', e);
     }
   }
 
-  /**
-   * 恢复聊天历史记录（防止重复恢复）
-   */
   restoreChatHistory() {
     const box = document.getElementById('chatMessages');
     if (!box) return;
     
-    // 防止重复恢复：如果已经有消息，且正在恢复中，直接返回
-    if (this._isRestoringHistory) {
-      return;
-    }
-    
-    // 标记正在恢复，防止重复调用
+    if (this._isRestoringHistory) return;
     this._isRestoringHistory = true;
     
     try {
-      // 从localStorage重新加载历史记录（确保是最新的）
-      const loadedHistory = this._loadChatHistory();
+      const loadedHistory = this._loadChatHistory(this._chatMode);
       
-      // 如果加载的历史记录与当前内存中的一致，且DOM已有内容，则不需要重复恢复
-      if (box.children.length > 0 && this._chatHistory.length === loadedHistory.length) {
-        // 检查是否已经恢复过（通过比较第一条消息的时间戳）
-        const firstMsg = box.querySelector('.chat-message');
-        if (firstMsg && firstMsg.dataset.messageId) {
-          // 直接滚动到底部，无需动画
-          box.scrollTop = box.scrollHeight;
-          this._isRestoringHistory = false;
-          return;
-        }
+      if (this._chatMode === 'ai') {
+        this._aiChatHistory = loadedHistory;
+      } else {
+        this._eventChatHistory = loadedHistory;
       }
       
-      // 清空现有内容，避免重复显示
-      box.innerHTML = '';
-      
-      // 更新内存中的历史记录
-      this._chatHistory = loadedHistory;
-      
-      // 确保聊天历史有效
-      if (!Array.isArray(this._chatHistory) || this._chatHistory.length === 0) {
-        this._isRestoringHistory = false;
+      const currentHistory = this._getCurrentChatHistory();
+      if (!Array.isArray(currentHistory) || currentHistory.length === 0) {
         return;
       }
       
-      // 按时间戳排序，确保顺序正确
-      const sortedHistory = [...this._chatHistory].sort((a, b) => (a.ts || 0) - (b.ts || 0));
-      
-      // 使用临时标志，防止恢复过程中触发保存
-      const originalHistory = [...this._chatHistory];
-      this._chatHistory = [];
-      
-      // 恢复历史时统一不做入场动画，直接渲染为最终状态，且不保存到历史记录
+      box.innerHTML = '';
+      const sortedHistory = [...currentHistory].sort((a, b) => (a.ts || 0) - (b.ts || 0));
       sortedHistory.forEach(m => {
         try {
           if (m.type === 'chat-record' || (m.type === 'record' && m.messages)) {
             this.appendChatRecord(m.messages ?? [], m.title ?? '', m.description ?? '', false);
           } else if (m.segments && Array.isArray(m.segments)) {
-            // 支持 segments 格式（文本和图片混合）
             this.appendSegments(m.segments, false, m.role || 'assistant');
           } else if (m.type === 'image' && m.url) {
-            // 兼容仅图片的历史
             this.appendSegments([{ type: 'image', url: m.url }], false, m.role || 'assistant');
           } else if (m.role && m.text) {
             this.appendChat(m.role, m.text, { persist: false });
@@ -1643,25 +1666,16 @@ class App {
         }
       });
       
-      // 恢复完成后，恢复内存中的历史记录（不保存，因为已经存在localStorage中）
-      this._chatHistory = originalHistory;
-      
-      // 直接设置滚动位置到底部，无需动画
-      // 使用单次 requestAnimationFrame 确保 DOM 更新完成
       requestAnimationFrame(() => {
-        box.scrollTop = box.scrollHeight;
+        requestAnimationFrame(() => {
+          box.scrollTop = box.scrollHeight;
+        });
       });
     } finally {
-      // 恢复完成，清除标志
       this._isRestoringHistory = false;
     }
   }
 
-  /**
-   * 统一处理消息入场动画
-   * @param {HTMLElement} div - 消息 DOM 元素
-   * @param {boolean} animate - 是否需要入场动画（历史恢复时为 false）
-   */
   _applyMessageEnter(div, animate = true) {
     if (!div) return;
     if (animate) {
@@ -1673,55 +1687,52 @@ class App {
     }
   }
 
-  /**
-   * 添加聊天消息（企业级统一方法）
-   * @param {string} role - 角色：'user' | 'assistant'
-   * @param {string} text - 消息文本
-   * @param {Object} options - 选项
-   * @param {boolean} options.persist - 是否持久化到历史记录
-   * @param {boolean} options.withCopyBtn - 是否为助手消息添加复制按钮
-   * @returns {HTMLElement|null} 创建的消息元素
-   */
   appendChat(role, text, options = {}) {
     const { persist = true, withCopyBtn = false } = options;
     
     if (persist) {
-      this._chatHistory.push({ role, text, ts: Date.now() });
+      const history = this._getCurrentChatHistory();
+      history.push({ role, text, ts: Date.now() });
       this._saveChatHistory();
     }
     
     const box = document.getElementById('chatMessages');
     if (!box) return null;
     
-    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const div = document.createElement('div');
-    div.id = messageId;
     div.className = `chat-message ${role} message-enter`;
-    div.dataset.messageId = messageId;
     div.innerHTML = this.renderMarkdown(text);
     
-    // 为助手消息添加复制按钮
     if (role === 'assistant' && text && withCopyBtn) {
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'chat-copy-btn';
-      copyBtn.innerHTML = '📋';
-      copyBtn.title = '复制';
-      copyBtn.onclick = (e) => {
-        e.stopPropagation();
-        this.copyToClipboard(text, '已复制到剪贴板', '复制失败');
-      };
-      div.appendChild(copyBtn);
+      this._addCopyButton(div, text);
     }
     
     box.appendChild(div);
-    this.scrollToBottom();
+    
+    // 恢复历史时不滚动，由 restoreChatHistory 统一处理
+    if (!this._isRestoringHistory) {
+      this.scrollToBottom();
+    }
+    
     this._applyMessageEnter(div, persist);
     
     return div;
   }
   
-  appendChatWithAnimation(role, text, persist = true) {
-    return this.appendChat(role, text, { persist, withCopyBtn: role === 'assistant' });
+  _addCopyButton(msgElement, text) {
+    if (!msgElement || !text || msgElement.querySelector('.chat-copy-btn')) return;
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'chat-copy-btn';
+    copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+    copyBtn.title = '复制';
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(text).then(() => {
+        this.showToast('已复制到剪贴板', 'success');
+      }).catch(() => {
+        this.showToast('复制失败', 'error');
+      });
+    });
+    msgElement.appendChild(copyBtn);
   }
 
   /**
@@ -1811,9 +1822,7 @@ class App {
           video.className = 'chat-video';
           video.preload = 'metadata';
           video.title = seg.name || '视频';
-          video.onloadedmetadata = () => {
-            // 视频加载完成后可以显示
-          };
+          video.onloadedmetadata = () => {};
           video.onerror = () => {
             videoContainer.innerHTML = '<div class="chat-media-placeholder">视频加载失败</div>';
           };
@@ -1821,7 +1830,6 @@ class App {
           div.appendChild(videoContainer);
         }
       } else if (seg.type === 'record') {
-        // 音频段：先渲染之前的文本，再渲染音频
         if (textParts.length > 0) {
           const textDiv = document.createElement('div');
           textDiv.className = 'chat-text';
@@ -1982,7 +1990,11 @@ class App {
     if (div.children.length === 0) return;
     
     box.appendChild(div);
-    this.scrollToBottom();
+    
+    // 恢复历史时不滚动，由 restoreChatHistory 统一处理
+    if (!this._isRestoringHistory) {
+      this.scrollToBottom();
+    }
     
     this._applyMessageEnter(div, persist);
     
@@ -2087,8 +2099,12 @@ class App {
 
     div.innerHTML = content;
     box.appendChild(div);
-    this.scrollToBottom();
-
+    
+    // 恢复历史时不滚动，由 restoreChatHistory 统一处理
+    if (!this._isRestoringHistory) {
+      this.scrollToBottom();
+    }
+    
     // 统一的入场动画协议
     this._applyMessageEnter(div, persist);
 
@@ -2103,7 +2119,7 @@ class App {
         ts: Date.now(),
         recordId
       };
-      this._chatHistory.push(recordData);
+      this._getCurrentChatHistory().push(recordData);
       this._saveChatHistory();
     }
     
@@ -2174,15 +2190,15 @@ class App {
   }
 
   clearChat() {
-    // 清空聊天时同步释放所有 blob 预览 URL，避免内存累积
     this._revokeAllObjectUrls();
-    this._chatHistory = [];
+    const history = this._getCurrentChatHistory();
+    history.length = 0;
     this._saveChatHistory();
     const box = document.getElementById('chatMessages');
     if (box) box.innerHTML = '';
-    // 确保localStorage也被清空
     try {
-      localStorage.removeItem('chatHistory');
+      const key = this._chatMode === 'ai' ? 'aiChatHistory' : 'eventChatHistory';
+      localStorage.removeItem(key);
     } catch (e) {
       console.warn('清空聊天记录失败:', e);
     }
@@ -2359,22 +2375,26 @@ class App {
     const text = input?.value?.trim() ?? '';
     const images = this._selectedImages ?? [];
     
-    // 如果没有文本也没有图片，不发送
     if (!text && images.length === 0) return;
     
     input.value = '';
     
+    if (this._chatMode === 'ai') {
+      await this.sendAIMessage(text, images);
+    } else {
+      await this.sendEventMessage(text, images);
+    }
+  }
+
+  async sendEventMessage(text, images) {
     try {
-      // 显示用户消息（包含文本和图片）
       if (text) {
-      this.appendChat('user', text);
+        this.appendChat('user', text);
       }
       
-      // 显示图片
       const keepPreviewUrls = new Set();
       const pendingImageNodes = [];
       for (const img of images) {
-        // 关键修复：聊天区显示与缩略图预览使用不同的 objectURL，避免 clearImagePreview revoke 导致聊天图片失效
         let displayUrl = this._createTrackedObjectURL(img.file);
         if (!displayUrl) {
           // 极端兼容：createObjectURL 不可用时，退回预览 URL，并避免立即 revoke
@@ -2407,7 +2427,7 @@ class App {
             this._safeRevokeObjectURL(item.displayUrl);
           }
           // 持久化：使用服务器 URL（避免把 blob: 写进 localStorage）
-          this._chatHistory.push({ role: 'user', segments: [{ type: 'image', url: u }], ts: Date.now() + i });
+          this._getCurrentChatHistory().push({ role: 'user', segments: [{ type: 'image', url: u }], ts: Date.now() + i });
         }
         this._saveChatHistory();
       }
@@ -2422,17 +2442,203 @@ class App {
   /**
    * 发送带图片的消息到后端
    */
+  async sendAIMessage(text, images) {
+    try {
+      if (text) {
+        this.appendChat('user', text);
+      }
+
+      const messages = [];
+      const history = this._getCurrentChatHistory().filter(m => m.role && m.text);
+      history.forEach(m => {
+        messages.push({ role: m.role, content: m.text });
+      });
+      messages.push({ role: 'user', content: text || '' });
+
+      if (images.length > 0) {
+        const imageParts = [];
+        for (const img of images) {
+          const compressed = await this.compressImageFile(img.file);
+          const base64 = await this.fileToBase64(compressed);
+          imageParts.push({
+            type: 'image_url',
+            image_url: { url: base64 }
+          });
+        }
+        const lastMsg = messages[messages.length - 1];
+        if (typeof lastMsg.content === 'string') {
+          lastMsg.content = [
+            { type: 'text', text: lastMsg.content },
+            ...imageParts
+          ];
+        } else if (Array.isArray(lastMsg.content)) {
+          lastMsg.content.push(...imageParts);
+        }
+      }
+
+      const apiKey = localStorage.getItem('apiKey') || BotUtil.apiKey || '';
+      const provider = this._chatSettings.provider || '';
+      const persona = this._chatSettings.persona || '';
+
+      const requestBody = {
+        model: provider || 'gptgod',
+        messages: persona ? [
+          { role: 'system', content: persona },
+          ...messages
+        ] : messages,
+        stream: true,
+        apiKey: apiKey
+      };
+
+      // AI 模式下，工作流只用于限定 MCP 工具作用域：
+      // - 这里的 workflows 实际表示“启用 MCP 工具的工作流列表”
+      // - API 端不再区分主/次工作流，仅按 streams 白名单注入 tools
+      const workflows = Array.isArray(this._chatSettings.workflows)
+        ? this._chatSettings.workflows.filter(Boolean)
+        : [];
+
+      if (workflows.length > 0) {
+        requestBody.workflow = {
+          workflows
+        };
+      }
+
+      this._chatStreamState = { running: true, source: 'ai' };
+      this.updateChatStatus('AI 生成中...');
+      this.setChatInteractionState(true);
+
+      console.log('[前端] 开始发送AI请求:', { 
+        url: `${this.serverUrl}/api/v3/chat/completions`,
+        provider: requestBody.model,
+        messagesCount: requestBody.messages?.length || 0,
+        hasWorkflow: !!requestBody.workflow
+      });
+
+      const response = await fetch(`${this.serverUrl}/api/v3/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error('[前端] HTTP错误:', { status: response.status, errorText });
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      if (!response.body) {
+        console.error('[前端] 响应体为空');
+        throw new Error('响应体为空');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let assistantMsg = null;
+      let fullText = '';
+      let hasError = false;
+      let streamEnded = false;
+
+      while (!streamEnded) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          streamEnded = true;
+          break;
+        }
+
+        const rawChunk = decoder.decode(value, { stream: true });
+        buffer += rawChunk;
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim() || !line.startsWith('data: ')) continue;
+          
+          const data = line.slice(6).trim();
+          
+          if (data === '[DONE]') {
+            streamEnded = true;
+            break;
+          }
+
+          let json;
+          try {
+            json = JSON.parse(data);
+          } catch (e) {
+            console.warn('[前端] 解析 SSE JSON 失败:', { error: e.message, data: data.substring(0, 200) });
+            continue;
+          }
+
+          if (json.error) {
+            hasError = true;
+            const msg = json.error.message || 'AI 请求失败';
+            console.error('[前端] 收到错误:', json.error);
+            this.showToast(`AI 请求失败: ${msg}`, 'error');
+            streamEnded = true;
+            break;
+          }
+
+          const delta = json.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            fullText += delta;
+            if (!assistantMsg) {
+              const box = document.getElementById('chatMessages');
+              assistantMsg = document.createElement('div');
+              assistantMsg.className = 'chat-message assistant streaming message-enter';
+              box.appendChild(assistantMsg);
+              this._applyMessageEnter(assistantMsg, false);
+            }
+            assistantMsg.innerHTML = this.renderMarkdown(fullText);
+            this.scrollToBottom(true);
+          }
+
+          if (json.choices?.[0]?.finish_reason) {
+            streamEnded = true;
+            break;
+          }
+        }
+      }
+
+      if (!hasError && assistantMsg && fullText) {
+        assistantMsg.classList.remove('streaming');
+        assistantMsg.innerHTML = this.renderMarkdown(fullText);
+        this._addCopyButton(assistantMsg, fullText);
+        this._getCurrentChatHistory().push({ role: 'assistant', text: fullText, ts: Date.now() });
+        this._saveChatHistory();
+      }
+      
+      this.clearChatStreamState();
+      this.clearImagePreview();
+    } catch (error) {
+      console.error('[前端] AI请求异常:', { error: error.message, stack: error.stack });
+      this.showToast(`AI 请求失败: ${error.message}`, 'error');
+      this.clearChatStreamState();
+    }
+  }
+
+  async fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   async sendChatMessageWithImages(text, images) {
     if (images.length === 0) {
-      // 没有图片，使用原来的方式发送
       this.sendDeviceMessage(text, { source: 'manual' });
       return [];
     }
 
-    // 正确链路：Web -> 先走 system-Core 现成路由上传图片 -> 再通过 WS 注册到后端的 tasker/plugin 聊天
     const apiKey = localStorage.getItem('apiKey') || '';
 
-    // 1) 上传图片到 system-Core：/api/file/upload
     const uploadFd = new FormData();
     for (const img of images) {
       uploadFd.append('file', await this.compressImageFile(img.file));
@@ -2460,7 +2666,6 @@ class App {
     if (Array.isArray(uploadData?.data?.files)) {
       uploadData.data.files.forEach(f => f?.file_url && urls.push(f.file_url));
     }
-    // 兼容：有些返回把数据放在顶层
     if (uploadData?.file_url) urls.push(uploadData.file_url);
     if (Array.isArray(uploadData?.files)) {
       uploadData.files.forEach(f => f?.file_url && urls.push(f.file_url));
@@ -2470,7 +2675,6 @@ class App {
       throw new Error('图片上传成功但未返回可用的 file_url');
     }
 
-    // 2) 通过 WS 发送 OneBot-like segments，让后端 chat 工作流识别图片
     const segments = [];
     if ((text ?? '').trim()) {
       segments.push({ type: 'text', text: (text ?? '').trim() });
@@ -2479,7 +2683,6 @@ class App {
       segments.push({ type: 'image', url: u, data: { url: u, file: u } });
     });
 
-    // 关键：sendDeviceMessage 会把 meta.message 放到 payload.message，后端 http/device.js 会将其作为 e.message
     this.sendDeviceMessage(text || ' ', { source: 'manual', message: segments });
     return urls;
   }
@@ -2585,55 +2788,11 @@ class App {
   cancelAIStream() {
     if (!this._chatStreamState.running) return;
     this.stopActiveStream();
-    this.renderStreamingMessage('', true);
+    const streamingMsg = document.querySelector('.chat-message.assistant.streaming');
+    if (streamingMsg) {
+      streamingMsg.remove();
+    }
     this.showToast('已中断 AI 输出', 'info');
-  }
-  
-  async streamAIResponse(prompt, options = {}) {
-    const text = prompt?.trim();
-    if (!text) return;
-
-    const { appendUser = false, source = 'manual', meta = {} } = options;
-    if (appendUser) {
-      this.appendChat('user', text);
-    }
-
-    // 统一走设备 WS，触发 message 事件
-    this.sendDeviceMessage(text, { source, meta });
-  }
-
-  renderStreamingMessage(text, done = false) {
-    const box = document.getElementById('chatMessages');
-    if (!box) return;
-    
-    let msg = box.querySelector('.chat-message.assistant.streaming');
-    if (!msg && !done) {
-      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      msg = document.createElement('div');
-      msg.id = messageId;
-      msg.className = 'chat-message assistant streaming';
-      msg.dataset.messageId = messageId;
-      box.appendChild(msg);
-    }
-    
-    if (!msg) return;
-    
-    msg.innerHTML = this.renderMarkdown(text);
-    
-    if (done) {
-      msg.classList.remove('streaming');
-      if (text) {
-        this._chatHistory.push({ role: 'assistant', text, ts: Date.now() });
-        this._saveChatHistory();
-      } else {
-        msg.remove();
-      }
-      this.updateChatStatus();
-    } else {
-      this.updateChatStatus(`AI 输出中 (${text.length} 字)`);
-    }
-    
-    this.scrollToBottom();
   }
 
   updateEmotionDisplay(emotion) {
@@ -5366,7 +5525,7 @@ class App {
       }
       case 'status':
         if (data.text) {
-          this.appendChatWithAnimation('system', data.text);
+          this.appendChat('system', data.text, { persist: true, withCopyBtn: false });
         }
         // 状态消息不中断聊天流程
         break;
@@ -5374,7 +5533,7 @@ class App {
         if (data.message) {
           this.showToast(data.message, 'error');
           // 错误时也显示在聊天中
-          this.appendChatWithAnimation('system', `错误: ${data.message}`);
+          this.appendChat('system', `错误: ${data.message}`, { persist: true, withCopyBtn: false });
         }
         this.clearChatStreamState();
         break;
@@ -5398,7 +5557,7 @@ class App {
         break;
       case 'command':
         if (data.command === 'display' && data.parameters?.text) {
-          this.appendChatWithAnimation('assistant', data.parameters.text);
+          this.appendChat('assistant', data.parameters.text, { persist: true, withCopyBtn: true });
         }
         if (data.command === 'display_emotion' && data.parameters?.emotion) {
           this.updateEmotionDisplay(data.parameters.emotion);
@@ -5440,7 +5599,7 @@ class App {
         bubble.remove();
       } else {
         textNode.textContent = finalText;
-        this._chatHistory.push({ role: 'user', text: finalText, ts: Date.now(), source: 'voice' });
+        this._getCurrentChatHistory().push({ role: 'user', text: finalText, ts: Date.now(), source: 'voice' });
         this._saveChatHistory();
       }
       this._asrBubble = null;

@@ -8,20 +8,15 @@ import AnthropicLLMClient from './AnthropicLLMClient.js';
 import AzureOpenAILLMClient from './AzureOpenAILLMClient.js';
 
 const providers = new Map([
-  // GPTGod 提供商：GPTGod 大语言模型，支持识图功能
-  // 接口地址：https://api.gptgod.online/v1
+  // GPTGod：默认内置提供商，支持多模态与流式输出
   ['gptgod', (config) => new GPTGodLLMClient(config)],
-  // 火山引擎提供商：火山引擎豆包大模型
-  // 接口地址：https://ark.cn-beijing.volces.com/api/v3
+  // 火山引擎豆包：兼容 OpenAI Chat Completions 风格（/api/v3/chat/completions）
   ['volcengine', (config) => new VolcengineLLMClient(config)],
-  // 小米 MiMo 提供商：兼容 OpenAI API 的 MiMo 大语言模型（仅文本）
-  // 接口地址：https://api.xiaomimimo.com/v1
+  // 小米 MiMo：兼容 OpenAI API 的 MiMo 大模型
   ['xiaomimimo', (config) => new XiaomiMiMoLLMClient(config)],
-  // OpenAI 官方提供商：OpenAI Chat Completions
-  // 接口地址：https://api.openai.com/v1
+  // OpenAI 官方：Chat Completions
   ['openai', (config) => new OpenAILLMClient(config)],
-  // Gemini 官方提供商：Google Generative Language API
-  // 接口地址：https://generativelanguage.googleapis.com/v1beta
+  // Google Gemini 官方：Generative Language API
   ['gemini', (config) => new GeminiLLMClient(config)],
   // OpenAI 兼容第三方：任意 OpenAI-like Chat Completions（可自定义 baseUrl/path/认证/额外参数）
   ['openai_compat', (config) => new OpenAICompatibleLLMClient(config)],

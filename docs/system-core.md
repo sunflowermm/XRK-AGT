@@ -144,14 +144,16 @@ system-Core 提供了10个HTTP API模块，覆盖系统管理的各个方面：
 
 **优先级**: 80
 
-提供AI聊天接口和工作流调用，详见 [工厂系统文档](factory.md#ai-http-api-路由)。
+提供 AI 聊天接口和工作流调用，详见 [工厂系统文档](factory.md#ai-http-api-路由)。
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/v3/chat/completions` | POST | OpenAI兼容的聊天接口 |
-| `/api/v3/models` | GET | 获取模型列表（OpenAI格式） |
-| `/api/ai/models` | GET | 获取模型和工作流列表 |
-| `/api/ai/stream` | GET | SSE流式输出（使用工作流） |
+| `/api/v3/chat/completions` | POST | OpenAI 兼容的聊天接口（支持 JSON 与 multipart/form-data，多模态 + 工具调用） |
+| `/api/v3/models` | GET | 获取模型列表（OpenAI 格式） |
+| `/api/ai/models` | GET | 获取模型和工作流列表（仅暴露“带 MCP 工具”的基础工作流，供前端多选） |
+| `/api/ai/stream` | GET | SSE 流式输出（使用工作流系统） |
+
+> `/api/v3/chat/completions` 会把前端选择的「带 MCP 工具的工作流」整理为 `streams` 白名单，并透传给 LLM 工厂和 MCP 工具适配器，确保只有这些工作流下的 MCP 工具会被注入和调用，避免“未在接口中声明的工具”被意外使用。
 
 ### 7. MCP服务API (`mcp.js`)
 

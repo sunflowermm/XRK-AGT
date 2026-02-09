@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
+import { iterateSSE } from '../../utils/llm/sse-utils.js';
 
 /**
  * Anthropic 官方 LLM 客户端（Messages API）
@@ -225,37 +226,31 @@ export default class AnthropicLLMClient {
       const text = await resp.text().catch(() => '');
       throw new Error(`Anthropic 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
+    for await (const { data } of iterateSSE(resp, { stopOnDone: false })) {
+      if (!data) continue;
+      try {
+        const json = JSON.parse(data);
+        const type = json?.type;
 
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // SSE：以空行分隔事件
-      let sep;
-      while ((sep = buffer.indexOf('\n\n')) >= 0) {
-        const chunk = buffer.slice(0, sep);
-        buffer = buffer.slice(sep + 2);
-
-        const lines = chunk.split('\n').map(l => l.trim()).filter(Boolean);
-        const dataLine = lines.find(l => l.startsWith('data:'));
-        if (!dataLine) continue;
-
-        const payload = dataLine.slice(5).trim();
-        if (!payload) continue;
-
-        try {
-          const json = JSON.parse(payload);
-          // 常见：type=content_block_delta / message_delta
-          const deltaText = json?.delta?.text ?? json?.content_block?.text ?? '';
-          if (deltaText && typeof onDelta === 'function') onDelta(deltaText);
-        } catch {
-          // ignore
+        // Anthropic Messages streaming 常见事件：
+        // - content_block_delta: { delta: { type: 'text_delta', text: '...' } }
+        // - content_block_start: { content_block: { type: 'text', text: '...' } }
+        // - message_delta / message_start / message_stop: 通常不含文本增量
+        let deltaText = '';
+        if (type === 'content_block_delta') {
+          deltaText = json?.delta?.text ?? '';
+        } else if (type === 'content_block_start') {
+          if (json?.content_block?.type === 'text') {
+            deltaText = json?.content_block?.text ?? '';
+          }
+        } else {
+          // 兼容少数实现直接把文本塞在 delta.text / content_block.text
+          deltaText = json?.delta?.text ?? json?.content_block?.text ?? '';
         }
+
+        if (deltaText && typeof onDelta === 'function') onDelta(deltaText);
+      } catch {
+        // ignore
       }
     }
   }

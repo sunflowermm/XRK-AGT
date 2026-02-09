@@ -228,8 +228,9 @@ async test(e) {
   try {
     // 调用工作流（推荐使用 process 方法）
     await chatStream.process(e, e.msg, {
-      enableMemory: true,      // 启用记忆系统
-      enableDatabase: true     // 启用知识库
+      enableMemory: true,      // 整合记忆工具工作流
+      enableDatabase: true,    // 整合知识库工具工作流
+      enableTools: true        // 整合文件操作工具工作流
     });
     // 注意：工作流内部已经发送了回复，不需要再次调用 reply()
   } catch (error) {
@@ -237,15 +238,16 @@ async test(e) {
   }
 }
 
-// 合并多个工作流
+// 合并主工作流 + 整合工具工作流
 async complexTask(e) {
-  const desktopStream = this.getStream('desktop');
-  if (!desktopStream) return;
+  const chatStream = this.getStream('chat');
+  if (!chatStream) return;
   
-  await desktopStream.process(e, e.msg, {
-    mergeStreams: ['tools'],  // 合并tools工作流
-    enableMemory: true,       // 启用记忆系统
-    enableDatabase: true      // 启用知识库
+  await chatStream.process(e, e.msg, {
+    mergeStreams: ['desktop'],  // 合并主工作流（chat + desktop）
+    enableMemory: true,          // 整合记忆工具工作流
+    enableDatabase: true,        // 整合知识库工具工作流
+    enableTools: true           // 整合文件操作工具工作流
   });
   
   // 复杂多步任务请使用 Python 子服务端（LangChain/LangGraph）

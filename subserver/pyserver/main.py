@@ -128,7 +128,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="XRK-AGT Python 子服务端",
     description="提供 RAG、ML 模型、向量化等服务",
-    version="1.0.0",
+    version="1.0.5",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -153,7 +153,7 @@ async def root():
     """根路径"""
     return {
         "name": "XRK-AGT Python 子服务端",
-        "version": "1.0.0",
+        "version": "1.0.5",
         "status": "running"
     }
 

@@ -1,6 +1,6 @@
-## XRK-AGT v1.0.2
+## XRK-AGT v1.0.5
 
-> **最后更新**: 2026-02-06  
+> **最后更新**: 2026-02-10  
 > **跨平台支持**: Windows 10+ / Linux / macOS / Docker  
 > **Node.js 版本要求**: ≥ 24.12.0 (LTS)
 
@@ -9,7 +9,7 @@ XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多平台、多Tasker、
 - **多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
 - **插件工作流**：指令插件 + AI 工作流 (`AIStream`)
 - **Web 与 HTTP/API 服务**：内置 Web 控制台 + REST API + WebSocket
-- **system-Core 内置模块**：10个HTTP API模块、7个工作流（50+个MCP工具）、4个Tasker、企业级Web控制台
+- **system-Core 内置模块**：10个HTTP API模块、6个工作流（50+个MCP工具）、4个Tasker、企业级Web控制台
 - **渲染与截图**：基于 Puppeteer / Playwright 的页面渲染与图片输出
 
 **如果你是第一次接触本项目：**
@@ -319,4 +319,4 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-10*

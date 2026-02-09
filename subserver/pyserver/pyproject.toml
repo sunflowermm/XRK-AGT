@@ -1,6 +1,6 @@
 [project]
 name = "xrk-agt-pyserver"
-version = "1.0.0"
+version = "1.0.5"
 description = "XRK-AGT Python 子服务端"
 requires-python = ">=3.10"
 dependencies = [

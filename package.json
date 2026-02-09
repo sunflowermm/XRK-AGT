@@ -1,6 +1,6 @@
 {
   "name": "xrk-agt",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "author": "Xrkseek",
   "description": "多平台、多Tasker、工作流驱动型智能体平台 - Multi-platform, multi-Tasker, workflow-driven intelligent agent platform",
   "main": "app.js",

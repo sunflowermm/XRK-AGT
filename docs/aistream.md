@@ -12,9 +12,14 @@
 - ✅ **零配置扩展**：放置到任意 `core/*/stream/` 目录即可自动加载
 - ✅ **函数注册系统**：统一使用 MCP 工具注册
 - ✅ **向量服务集成**：统一通过子服务端向量服务进行文本向量化和检索
-- ✅ **工作流合并**：支持功能合并和组合
+- ✅ **工作流合并**：支持主工作流合并和工具工作流整合
 - ✅ **上下文增强**：自动上下文检索和增强（RAG流程）
 - ✅ **热重载支持**：修改代码后自动重载
+
+### 工作流分类
+
+- **主工作流**：`device`、`chat`、`desktop`（完整功能工作流，通过 `mergeStreams` 合并）
+- **工具工作流**：`memory`、`database`、`tools`（提供MCP工具的工作流，通过标志启用）
 
 所有自定义 AI 工作流都应继承此类，可选择实现 `buildSystemPrompt` 与 `buildChatContext`。
 
@@ -45,43 +50,48 @@
 ```mermaid
 flowchart TB
     subgraph Plugin["🔌 插件层"]
-        Call["调用工作流"]
+        direction TB
+        Call["调用工作流<br/>process()"]
     end
     
     subgraph AIStream["🌊 AIStream基类"]
-        BuildCtx["构建基础消息"]
+        direction TB
+        BuildCtx["构建基础消息<br/>buildChatContext()"]
         Enhance["RAG流程<br/>检索历史+知识库"]
-        CallAI["调用LLM"]
+        CallAI["调用LLM<br/>callAI()"]
         Store["存储到记忆系统"]
-        Register["注册MCP工具"]
+        Register["注册MCP工具<br/>registerMCPTool()"]
     end
     
     subgraph Subserver["🐍 Python子服务端"]
+        direction TB
         LangChain["LangChain服务<br/>Agent编排+工具调用"]
         VectorAPI["向量服务<br/>embed/search/upsert"]
     end
     
     subgraph MainServer["⚙️ 主服务端"]
+        direction TB
         LLMFactory["LLM工厂<br/>多厂商支持"]
         HTTPAPI["HTTP API<br/>v3接口"]
         MCP["MCP服务器<br/>工具调用协议"]
     end
     
     subgraph Memory["🧠 记忆系统"]
+        direction TB
         ShortTerm["短期记忆"]
         LongTerm["长期记忆<br/>向量检索"]
     end
     
-    Call --> BuildCtx
-    BuildCtx --> Enhance
-    Enhance --> CallAI
-    CallAI --> LangChain
-    LangChain --> LLMFactory
-    LangChain --> MCP
-    CallAI --> VectorAPI
-    CallAI --> Store
-    Store --> Memory
-    Register --> MCP
+    Call -->|question| BuildCtx
+    BuildCtx -->|messages| Enhance
+    Enhance -->|enhanced| CallAI
+    CallAI -->|请求| LangChain
+    LangChain -->|调用| LLMFactory
+    LangChain -->|工具调用| MCP
+    CallAI -->|向量化| VectorAPI
+    CallAI -->|存储| Store
+    Store -->|保存| Memory
+    Register -->|注册| MCP
     
     style Plugin fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
     style AIStream fill:#E8F5E9,stroke:#388E3C,stroke-width:3px
@@ -218,7 +228,7 @@ constructor(options = {})
 |------|------|------|--------|
 | `name` | `string` | 工作流名称 | `'base-stream'` |
 | `description` | `string` | 描述 | `'基础工作流'` |
-| `version` | `string` | 版本号 | `'1.0.0'` |
+| `version` | `string` | 版本号 | `'1.0.5'` |
 | `author` | `string` | 作者标识 | `'unknown'` |
 | `priority` | `number` | 工作流优先级 | `100` |
 | `config` | `Object` | AI调用配置 | `{ enabled: true, temperature: 0.8, ... }` |
@@ -316,8 +326,9 @@ constructor(options = {})
 
 AIStream **不再解析/执行任何“文本函数调用 / ReAct”**，所有工具调用均通过 **LLM 工厂的 tool calling + MCP 协议** 完成：
 
-- **tool calls 多轮交互**：由 LLMFactory 及各提供商客户端内部处理 `tool_calls` 循环，最终返回整理好的 `assistant.content` 文本给 AIStream。
+- **tool calls 多轮交互**：由 `LLMFactory` 及各提供商客户端内部处理 `tool_calls` 循环，最终返回整理好的 `assistant.content` 文本给 AIStream；流式场景下，客户端一边向前端推送 `delta.content`，一边在遇到 `finish_reason = "tool_calls"` 时收集并执行 MCP 工具。
 - **MCP 工具注册**：AIStream 通过 `registerMCPTool(name, options)` 将工具注册到 `this.mcpTools`，供 MCP 服务器发现和调用。
+- **工作流工具作用域（streams）**：当通过 `/api/v3/chat/completions` 或子服务端间接调用 LLM 时，前端选择的工作流名称会被整理为 `streams` 白名单，传递给 LLM 客户端和 `MCPToolAdapter`，保证只有这些工作流下的工具可以被使用。
 
 ### `registerMCPTool(name, options)`
 
@@ -381,10 +392,15 @@ sequenceDiagram
 | `process(e, question, options)` | 工作流处理入口（单次对话 + MCP 工具调用；复杂多步编排在 Python 子服务端） |
 
 **process 方法参数**：
-- `mergeStreams` - 要合并的工作流名称列表
-- `enableMemory` - 是否启用记忆系统（默认 `false`）
-- `enableDatabase` - 是否启用知识库系统（默认 `false`）
+- `mergeStreams` - 要合并的主工作流名称列表（`device`、`chat`、`desktop`）
+- `enableMemory` - 是否启用记忆系统，自动整合 `memory` 工具工作流（默认 `false`）
+- `enableDatabase` - 是否启用知识库系统，自动整合 `database` 工具工作流（默认 `false`）
+- `enableTools` - 是否启用文件操作工具，自动整合 `tools` 工具工作流（默认 `false`）
 - `apiConfig` - LLM配置（可选，会与 `this.config` 合并）
+
+**工作流分类**：
+- **主工作流**：`device`、`chat`、`desktop`（通过 `mergeStreams` 合并）
+- **工具工作流**：`memory`、`database`、`tools`（通过标志启用）
 
 **调用流程**：
 1. `buildChatContext` - 构建基础消息数组
@@ -450,31 +466,46 @@ sequenceDiagram
 - `e` - 事件对象（QQ/IM/Chatbot 等消息事件）
 - `question` - 用户问题（字符串或对象）
 - `options` - 选项对象
-  - `mergeStreams` - 要合并的工作流名称数组
-  - `enableMemory` - 是否启用记忆系统（自动合并 `memory` 工作流）
-  - `enableDatabase` - 是否启用知识库系统（自动合并 `database` 工作流）
+  - `mergeStreams` - 要合并的主工作流名称数组（`device`、`chat`、`desktop`）
+  - `enableMemory` - 是否启用记忆系统（自动整合 `memory` 工具工作流）
+  - `enableDatabase` - 是否启用知识库系统（自动整合 `database` 工具工作流）
+  - `enableTools` - 是否启用文件操作工具（自动整合 `tools` 工具工作流）
   - `apiConfig` - LLM配置覆盖（provider, model, temperature等）
 
 **返回**：`Promise<string|null>` - AI回复文本
 
+**工作流分类**：
+- **主工作流**：`device`、`chat`、`desktop`（通过 `mergeStreams` 合并）
+- **工具工作流**：`memory`、`database`、`tools`（通过标志启用）
+
 **示例**：
 ```javascript
-// 基础调用
+// 基础调用（仅使用当前工作流）
 await stream.process(e, e.msg);
 
-// 启用记忆和知识库
+// 启用工具工作流（记忆、知识库、文件操作）
 await stream.process(e, e.msg, {
   enableMemory: true,
-  enableDatabase: true
+  enableDatabase: true,
+  enableTools: true
 });
 
-// 合并多个工作流
+// 合并主工作流（chat + desktop）
 await stream.process(e, e.msg, {
-  mergeStreams: ['tools', 'memory']
+  mergeStreams: ['desktop']
+});
+
+// 完整示例：主工作流 + 工具工作流
+await stream.process(e, e.msg, {
+  mergeStreams: ['desktop'],  // 合并主工作流
+  enableMemory: true,         // 整合工具工作流
+  enableDatabase: true,      // 整合工具工作流
+  enableTools: true          // 整合工具工作流
 });
 
 // 自定义LLM配置
 await stream.process(e, e.msg, {
+  enableMemory: true,
   apiConfig: {
     provider: 'gptgod',
     model: 'gpt-4',
@@ -594,7 +625,7 @@ export default class MyStream extends AIStream {
     super({
       name: 'my-stream',
       description: '我的自定义工作流',
-      version: '1.0.0',
+      version: '1.0.5',
       priority: 50,
       config: {
         temperature: 0.8,
@@ -655,9 +686,12 @@ await stream.process(e, e.msg, {
   enableDatabase: true
 });
 
-// 合并多个工作流
+// 合并主工作流 + 整合工具工作流
 await stream.process(e, e.msg, {
-  mergeStreams: ['tools', 'memory']
+  mergeStreams: ['desktop'],  // 合并主工作流
+  enableMemory: true,         // 整合工具工作流
+  enableDatabase: true,       // 整合工具工作流
+  enableTools: true          // 整合工具工作流
 });
 
 // 自定义LLM配置
