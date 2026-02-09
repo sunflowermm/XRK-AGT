@@ -707,8 +707,17 @@ proxy:
 ### 消息发送
 
 ```javascript
-// 发送消息给主人
+// 发送消息给主人（按配置的 masterQQ 逐个发送）
 await bot.sendMasterMsg('服务器已启动', 5000);
+
+// 发送好友消息（指定机器人）
+await bot.sendFriendMsg('3652962217', '123456789', '你好，这是测试消息');
+
+// 发送群消息（指定机器人）
+await bot.sendGroupMsg('3652962217', '1075364017', '群里好');
+
+// 不指定 botId 时，会自动选用一个已连接的机器人
+await bot.sendGroupMsg(null, '1075364017', '用默认机器人发送');
 ```
 
 ### 合并转发

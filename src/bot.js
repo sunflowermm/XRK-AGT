@@ -3426,6 +3426,116 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     return Promise.all(messages.map(({ message }) => send(message)));
   }
 
+  /**
+   * 选择一个用于发送消息的 Bot 实例
+   * - 优先使用显式传入的 botId
+   * - 否则使用 this.uin[0] / 第一个已连接的 Bot
+   */
+  _getBotForSend(botId = null) {
+    if (botId && this.bots && this.bots[botId]) {
+      return this.bots[botId];
+    }
+
+    const candidateId = this.uin?.[0] || Object.keys(this.bots || {})[0];
+    if (candidateId && this.bots && this.bots[candidateId]) {
+      return this.bots[candidateId];
+    }
+
+    return null;
+  }
+
+  /**
+   * 选取好友（兼容 OneBot / GSUID / QBQBot 等适配器）
+   * - 当未指定 botId 时，自动选择一个可用的 Bot
+   */
+  pickFriend(user_id, botId = null) {
+    const bot = this._getBotForSend(botId);
+    if (!bot || typeof bot.pickFriend !== 'function') {
+      throw new Error('当前没有可用的机器人，或不支持好友消息发送');
+    }
+    return bot.pickFriend(user_id);
+  }
+
+  /**
+   * 选取群聊（兼容 OneBot / GSUID / QBQBot 等适配器）
+   * - 当未指定 botId 时，自动选择一个可用的 Bot
+   */
+  pickGroup(group_id, botId = null) {
+    const bot = this._getBotForSend(botId);
+    if (!bot || typeof bot.pickGroup !== 'function') {
+      throw new Error('当前没有可用的机器人，或不支持群消息发送');
+    }
+    return bot.pickGroup(group_id);
+  }
+
+  /**
+   * 发送好友消息（供 HTTP 接口等统一调用）
+   * @param {string} botId 机器人 UIN/self_id
+   * @param {string|number} userId 好友 QQ / 用户 ID
+   * @param {any} msg 消息内容（字符串或消息数组）
+   * @returns {Promise<{message_id: string}>}
+   */
+  async sendFriendMsg(botId, userId, msg) {
+    const bot = this._getBotForSend(botId);
+    if (!bot) {
+      throw new Error(`机器人不存在或未连接: ${botId || 'default'}`);
+    }
+
+    // 优先走各 tasker 提供的 sendFriendMsg 能力
+    if (bot.tasker && typeof bot.tasker.sendFriendMsg === 'function') {
+      const data = {
+        self_id: bot.uin || bot.self_id || botId,
+        bot,
+        user_id: userId
+      };
+      return await bot.tasker.sendFriendMsg(data, msg);
+    }
+
+    // 兼容：通过 pickFriend().sendMsg 发送
+    if (typeof bot.pickFriend === 'function') {
+      const friend = bot.pickFriend(userId);
+      if (friend && typeof friend.sendMsg === 'function') {
+        return await friend.sendMsg(msg);
+      }
+    }
+
+    throw new Error('当前机器人不支持好友消息发送');
+  }
+
+  /**
+   * 发送群消息（供 HTTP 接口等统一调用）
+   * @param {string} botId 机器人 UIN/self_id
+   * @param {string|number} groupId 群号 / 目标 ID
+   * @param {any} msg 消息内容（字符串或消息数组）
+   * @returns {Promise<{message_id: string}>}
+   */
+  async sendGroupMsg(botId, groupId, msg) {
+    const bot = this._getBotForSend(botId);
+    if (!bot) {
+      throw new Error(`机器人不存在或未连接: ${botId || 'default'}`);
+    }
+
+    // 优先走各 tasker 提供的 sendGroupMsg 能力
+    if (bot.tasker && typeof bot.tasker.sendGroupMsg === 'function') {
+      const data = {
+        self_id: bot.uin || bot.self_id || botId,
+        bot,
+        group_id: groupId
+      };
+      return await bot.tasker.sendGroupMsg(data, msg);
+    }
+
+    // 兼容：通过 pickGroup().sendMsg 发送
+    if (typeof bot.pickGroup === 'function') {
+      const group = bot.pickGroup(groupId);
+      if (group && typeof group.sendMsg === 'function') {
+        return await group.sendMsg(msg);
+      }
+    }
+
+    throw new Error('当前机器人不支持群消息发送');
+  }
+
   async redisExit() {
     if (!(typeof redis === 'object' && redis.process)) return false;
     
