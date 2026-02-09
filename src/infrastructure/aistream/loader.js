@@ -599,6 +599,7 @@ class StreamLoader {
    */
   registerMCP(mcpServer) {
     if (!mcpServer) return;
+    const loader = this;
 
     // 清空旧工具（支持热重载）
     const existingTools = Array.from(mcpServer.tools.keys());
@@ -627,7 +628,20 @@ class StreamLoader {
           description: tool.description || `执行${toolName}操作`,
           inputSchema: tool.inputSchema || {},
           handler: async (args) => {
-            const context = { e: args.e || null, question: null };
+            const context = {
+              // 优先使用显式传入的 e，其次使用当前工作流执行时挂载的全局事件
+              e: args.e || loader.currentEvent || null,
+              question: null
+            };
+            try {
+              BotUtil.makeLog(
+                'debug',
+                `[MCP] 调用工具: ${fullToolName}, hasE=${Boolean(context.e)}, isGroup=${context.e?.isGroup}, msgType=${context.e?.message_type}, group_id=${context.e?.group_id}, user_id=${context.e?.user_id}, argKeys=${Object.keys(args || {}).join(',')}`,
+                'StreamLoader'
+              );
+            } catch {
+              // 日志失败直接忽略，避免影响工具执行
+            }
             
             try {
               if (tool.handler) {

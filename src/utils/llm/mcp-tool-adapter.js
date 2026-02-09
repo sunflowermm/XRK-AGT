@@ -16,13 +16,51 @@ export class MCPToolAdapter {
 
   /**
    * 将 MCP 工具转换为 OpenAI 格式的 tools 数组
+   *
+   * @param {Object} options
+   * @param {string|null} options.workflow - 单个工作流名称；若提供则仅注入该工作流下的工具
+   * @param {Array<string>} [options.streams] - 白名单工作流列表；优先级高于 workflow
+   * @param {Array<string>} [options.excludeStreams] - 黑名单工作流列表（如 ['chat']）
    * @returns {Array} OpenAI tools
    */
-  static convertMCPToolsToOpenAI() {
+  static convertMCPToolsToOpenAI(options = {}) {
+    const {
+      workflow = null,
+      streams = null,
+      excludeStreams = ['chat']
+    } = options || {};
+
     const mcpServer = this.getMCPServer();
     if (!mcpServer) return [];
 
-    const mcpTools = mcpServer.listTools();
+    let mcpTools;
+
+    // 1. 若显式传入 streams 白名单，则只保留这些前缀的工具
+    if (Array.isArray(streams) && streams.length > 0) {
+      // 明确指定多个工作流时：分别调用 listTools(stream) 再合并，避免受全局过滤影响
+      const uniq = new Map();
+      for (const s of streams.filter(Boolean)) {
+        const toolsOfStream = mcpServer.listTools(s);
+        for (const tool of toolsOfStream) {
+          if (!uniq.has(tool.name)) {
+            uniq.set(tool.name, tool);
+          }
+        }
+      }
+      mcpTools = Array.from(uniq.values());
+    } else if (workflow) {
+      // 2. 若指定单一 workflow，则直接用 listTools(workflow)
+      mcpTools = mcpServer.listTools(workflow);
+    } else {
+      // 3. 默认：所有工具，但排除黑名单工作流（如 chat）
+      const all = mcpServer.listTools();
+      const excludes = new Set((excludeStreams || []).filter(Boolean));
+      mcpTools = all.filter(tool => {
+        const prefix = String(tool.name).split('.')[0];
+        return !excludes.has(prefix);
+      });
+    }
+
     return mcpTools.map(tool => ({
       type: 'function',
       function: {

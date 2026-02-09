@@ -258,7 +258,8 @@ export default class AIStream {
     if (!query) return [];
 
     try {
-      const userId = groupId.replace(/^memory_/, '');
+      const groupIdStr = String(groupId || '');
+      const userId = groupIdStr.replace(/^memory_/, '');
       const memories = await MemoryManager.searchLongTermMemories(userId, query, 5);
       
       if (memories.length > 0) {
@@ -272,7 +273,7 @@ export default class AIStream {
       }
 
       const result = await Bot.callSubserver('/api/vector/search', {
-        body: { query, collection: `memory_${groupId}`, top_k: 5 }
+        body: { query, collection: `memory_${groupIdStr}`, top_k: 5 }
       }).catch(() => ({ results: [] }));
       
       return result.results?.map(r => ({
@@ -989,7 +990,31 @@ export default class AIStream {
       const messages = await this.buildEnhancedContext(e, question, baseMessages);
       
       MonitorService.addStep(traceId, { step: 'build_context', messages: messages.length });
-      
+
+      // 调试：打印给 LLM 的消息概要（所有工作流通用），方便查看最终 prompt 结构
+      try {
+        const preview = (messages || []).map((m, idx) => {
+          const role = m.role || `msg${idx}`;
+          let content = m.content;
+          if (typeof content === 'object') {
+            const text = content.text || content.content || '';
+            content = text;
+          }
+          return {
+            idx,
+            role,
+            text: String(content ?? '')
+          };
+        });
+        BotUtil.makeLog(
+          'debug',
+          `[AIStream.execute] LLM消息预览[${this.name}]: ${JSON.stringify(preview, null, 2)}`,
+          'AIStream'
+        );
+      } catch {
+        // 调试日志失败直接忽略
+      }
+
       const response = await this.callAI(messages, config);
       MonitorService.addStep(traceId, { step: 'ai_call', responseLength: response?.length || 0 });
 
@@ -1072,11 +1097,8 @@ export default class AIStream {
           });
       }
 
-      const finalQuestion = typeof question === 'string' 
-        ? question 
-        : (question?.content || question?.text || question);
-      
-      return await stream.execute(e, finalQuestion, apiConfig);
+      // 直接把原始 question 传给目标工作流，保留结构化字段（如 persona、fromXXXWorkflow 等）
+      return await stream.execute(e, question, apiConfig);
     } catch (error) {
       BotUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AIStream');
       return null;

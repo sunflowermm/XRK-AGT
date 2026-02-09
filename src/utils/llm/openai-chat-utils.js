@@ -95,7 +95,24 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
 
   if (!enableTools) return body;
 
-  const tools = MCPToolAdapter.convertMCPToolsToOpenAI();
+  // 工具作用域策略：
+  // - 若 overrides.streams 显式指定，优先使用（多工作流白名单）
+  // - 否则若有 workflow/config.workflow，则仅注入该工作流的工具
+  // - 若均未指定，则默认注入除 chat 之外的所有工作流工具
+  const workflow =
+    overrides.workflow ||
+    config.workflow ||
+    config.streamName || // 兼容可能存在的别名
+    null;
+
+  const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
+
+  const tools = MCPToolAdapter.convertMCPToolsToOpenAI({
+    workflow,
+    streams,
+    // 全局黑名单：不显式注入 chat 工作流工具（chat 只通过按 stream 过滤时使用）
+    excludeStreams: ['chat']
+  });
   if (!tools.length) return body;
 
   body.tools = tools;

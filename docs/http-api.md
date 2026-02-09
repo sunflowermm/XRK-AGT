@@ -301,11 +301,12 @@ export default class AdvancedAPI extends HttpApi {
 }
 ```
 
-### 方式3：调用工作流系统
+### 方式3：调用工作流系统（配合 HttpResponse）
 
 ```javascript
 // core/my-core/http/ai-chat-api.js
 import StreamLoader from '#infrastructure/aistream/loader.js';
+import { HttpResponse } from '#utils/http-utils.js';
 
 export default {
   name: 'ai-chat-api',
@@ -313,37 +314,24 @@ export default {
     {
       method: 'POST',
       path: '/api/ai/chat',
-      handler: async (req, res, bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res, bot) => {
         const { message, streamName = 'chat' } = req.body;
         const stream = StreamLoader.getStream(streamName);
-        
-        if (!stream) {
-          return res.status(404).json({
-            success: false,
-            message: '工作流未找到'
-          });
-        }
+        if (!stream) return HttpResponse.notFound(res, '工作流未找到');
         
         const e = {
           user_id: req.user?.id || 'web_user',
           msg: message,
           reply: async (msg) => {
-            res.json({ success: true, response: msg });
+            HttpResponse.success(res, { response: msg });
           }
         };
         
-        try {
-          await stream.process(e, message, {
-            enableMemory: true,
-            enableDatabase: true
-          });
-        } catch (error) {
-          res.status(500).json({
-            success: false,
-            message: error.message
-          });
-        }
-      }
+        await stream.process(e, message, {
+          enableMemory: true,
+          enableDatabase: true
+        });
+      }, 'ai-chat-api.chat')
     }
   ]
 };
@@ -361,22 +349,26 @@ export default {
 
 ### 常见集成模式
 
-**调用工作流系统**：
+**调用工作流系统（推荐配合 HttpResponse）**：
 ```javascript
 import StreamLoader from '#infrastructure/aistream/loader.js';
+import { HttpResponse } from '#utils/http-utils.js';
 
-handler: async (req, res, bot) => {
+handler: HttpResponse.asyncHandler(async (req, res, bot) => {
   const stream = StreamLoader.getStream('chat');
+  if (!stream) return HttpResponse.notFound(res, '工作流未找到');
+
   const e = {
     user_id: req.user?.id || 'web_user',
     msg: req.body.message,
-    reply: async (msg) => res.json({ success: true, response: msg })
+    reply: async (msg) => HttpResponse.success(res, { response: msg })
   };
+
   await stream.process(e, req.body.message, {
     enableMemory: true,
     enableDatabase: true
   });
-}
+}, 'chat-api.chat')
 ```
 
 **桥接到插件系统**：

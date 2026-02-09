@@ -131,35 +131,71 @@ export default class ChatStream extends AIStream {
         },
         required: ['qq']
       },
-      handler: async (args = {}, _context = {}) => {
-        return { success: true, message: '已@用户', data: { qq: args.qq } };
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        if (!e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
+        }
+
+        const qq = String(args.qq || '').trim();
+        if (!qq) {
+          return { success: false, error: 'QQ号不能为空' };
+        }
+
+        try {
+          const seg = global.segment || segment;
+          // 只执行 @，不附带多余文案，文案交给 LLM 正常回复
+          await e.reply([seg.at(qq)]);
+          await BotUtil.sleep(200);
+          // 返回给 LLM 的结果尽量直观，顺便提示不要对同一用户重复调用
+          return {
+            success: true,
+            message: `已在当前群聊中成功 @ 了 QQ=${qq} 的用户，如无特殊需要请不要再次对同一用户调用此工具。`,
+            data: { qq }
+          };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
       },
       enabled: true
     });
 
     this.registerMCPTool('poke', {
-      description: '戳一戳群成员',
+      description: '戳一戳群成员（qq 为空时默认戳当前说话用户）',
       inputSchema: {
         type: 'object',
         properties: {
           qq: {
             type: 'string',
-            description: '要戳的成员QQ号'
+            description: '要戳的成员QQ号（可选，默认是当前说话用户）'
           }
         },
-        required: ['qq']
+        required: []
       },
       handler: async (args = {}, context = {}) => {
-        if (context.e?.isGroup) {
-          try {
-            await context.e.group.pokeMember(args.qq);
-            await BotUtil.sleep(300);
-            return { success: true, message: '戳一戳成功', data: { qq: args.qq } };
-          } catch (error) {
-            return { success: false, error: error.message };
-          }
+        const e = context.e;
+        BotUtil.makeLog(
+          'debug',
+          `[chat.poke] 调用上下文: hasE=${Boolean(e)}, isGroup=${e?.isGroup}, message_type=${e?.message_type}, group_id=${e?.group_id}, user_id=${e?.user_id}`,
+          'ChatStream'
+        );
+        if (!e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
         }
-        return { success: false, error: '非群聊环境' };
+
+        // 如果没有显式给 qq，则默认戳当前触发指令的用户
+        const targetQq = String(args.qq || e.user_id || '').trim();
+        if (!targetQq) {
+          return { success: false, error: '无法确定要戳的成员QQ号' };
+        }
+
+        try {
+          await e.group.pokeMember(targetQq);
+          await BotUtil.sleep(300);
+          return { success: true, message: '戳一戳成功', data: { qq: targetQq } };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
       },
       enabled: true
     });
@@ -187,46 +223,81 @@ export default class ChatStream extends AIStream {
     });
 
     this.registerMCPTool('emojiReaction', {
-      description: '对消息进行表情回应',
+      description: '对某条群消息进行表情回应（默认回应最近一条他人消息）',
       inputSchema: {
         type: 'object',
         properties: {
           msgId: {
             type: 'string',
-            description: '消息ID'
+            description: '要回应的消息ID（可选，不填则自动选择最近一条消息）'
           },
           emojiType: {
             type: 'string',
-            description: '表情类型',
-            enum: ['like', 'love', 'laugh', 'wow', 'sad', 'angry']
+            description: '表情类型，可选：开心、惊讶、伤心、大笑、害怕、喜欢、爱心、生气',
+            enum: ['开心', '惊讶', '伤心', '大笑', '害怕', '喜欢', '爱心', '生气']
           }
         },
-        required: ['msgId', 'emojiType']
+        required: ['emojiType']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup || !EMOJI_REACTIONS[args.emojiType]) {
-          return { success: false, error: !context.e?.isGroup ? '非群聊环境' : '无效表情类型' };
+        const e = context.e;
+        BotUtil.makeLog(
+          'debug',
+          `[chat.emojiReaction] 调用上下文: hasE=${Boolean(e)}, isGroup=${e?.isGroup}, message_type=${e?.message_type}, group_id=${e?.group_id}, user_id=${e?.user_id}`,
+          'ChatStream'
+        );
+        if (!e?.isGroup) {
+          return { success: false, error: '非群聊环境' };
         }
-        
-        const emojiIds = EMOJI_REACTIONS[args.emojiType];
+
+        // 兼容英文枚举到内部中文映射
+        const typeMap = {
+          like: '喜欢',
+          love: '爱心',
+          laugh: '大笑',
+          wow: '惊讶',
+          sad: '伤心',
+          angry: '生气'
+        };
+        let emojiType = args.emojiType;
+        if (emojiType && typeMap[emojiType]) {
+          emojiType = typeMap[emojiType];
+        }
+
+        if (!EMOJI_REACTIONS[emojiType]) {
+          return { success: false, error: '无效表情类型' };
+        }
+
+        const emojiIds = EMOJI_REACTIONS[emojiType];
         if (!emojiIds || emojiIds.length === 0) {
           return { success: false, error: '表情类型无可用表情ID' };
         }
-        
-        const emojiId = Number(emojiIds[Math.floor(Math.random() * emojiIds.length)]);
-        const msgId = String(args.msgId ?? '').trim();
-        
-        if (!msgId) {
-          return { success: false, error: '消息ID不能为空' };
+
+        // 如果没有传 msgId，则尝试使用最近一条他人消息的 ID
+        let msgId = String(args.msgId ?? '').trim();
+        if (!msgId && e.group_id) {
+          const history = ChatStream.messageHistory.get(e.group_id) || [];
+          const lastOtherMsg = [...history].reverse().find(
+            m => String(m.user_id) !== String(e.self_id) && m.message_id
+          );
+          if (lastOtherMsg) {
+            msgId = String(lastOtherMsg.message_id);
+          }
         }
-        
+
+        if (!msgId) {
+          return { success: false, error: '找不到可回应的消息ID' };
+        }
+
+        const emojiId = Number(emojiIds[Math.floor(Math.random() * emojiIds.length)]);
+
         try {
-          const group = context.e.group;
+          const group = e.group;
           if (group && typeof group.setEmojiLike === 'function') {
             const result = await group.setEmojiLike(msgId, emojiId, true);
             if (result !== undefined) {
               await BotUtil.sleep(200);
-              return { success: true, message: '表情回应成功', data: { msgId, emojiId } };
+              return { success: true, message: '表情回应成功', data: { msgId, emojiId, emojiType } };
             }
           }
           return { success: false, error: '表情回应功能不可用' };
@@ -418,7 +489,7 @@ export default class ChatStream extends AIStream {
             description: '新名片'
           }
         },
-        required: ['qq', 'card']
+        required: ['card']
       },
       handler: async (args = {}, context = {}) => {
         if (!context.e?.isGroup) {
@@ -426,9 +497,22 @@ export default class ChatStream extends AIStream {
         }
         
         try {
-          await context.e.group.setCard(args.qq, args.card);
+          const e = context.e;
+          // 优先使用显式传入的 qq；否则：
+          // - 如果用户说的是“把你自己改成 X”，模型一般会把 qq 留空，这时默认修改机器人的名片
+          // - 如果没法判断，就回退到当前说话人
+          let targetQq = String(args.qq || '').trim();
+          if (!targetQq) {
+            // 优先理解为修改机器人自己的名片
+            targetQq = String(e.self_id || e.bot?.uin || '').trim() || String(e.user_id || '').trim();
+          }
+          if (!targetQq) {
+            return { success: false, error: '无法确定要修改名片的成员QQ号' };
+          }
+
+          await context.e.group.setCard(targetQq, args.card);
           await BotUtil.sleep(300);
-          return { success: true, message: '修改名片成功', data: { qq: args.qq, card: args.card } };
+          return { success: true, message: '修改名片成功', data: { qq: targetQq, card: args.card } };
         } catch (error) {
           return { success: false, error: error.message };
         }
@@ -918,6 +1002,7 @@ export default class ChatStream extends AIStream {
         if (!context.e?.isGroup) {
           return { success: false, error: '非群聊环境' };
         }
+        const e = context.e;
         
         const msgId = String(args.msgId ?? '').trim();
         if (!msgId) {
@@ -925,9 +1010,16 @@ export default class ChatStream extends AIStream {
         }
         
         try {
-          if (context.e.bot && context.e.bot.sendApi) {
-            const result = await context.e.bot.sendApi('set_group_todo', {
-              group_id: context.e.group_id,
+          // 权限校验：只有管理员/群主才允许设置群代办
+          const botRole = await this.getBotRole(e);
+          const isAdmin = botRole === '管理员' || botRole === '群主';
+          if (!isAdmin) {
+            return { success: false, error: '需要管理员或群主权限才能设置群代办' };
+          }
+
+          if (e.bot && e.bot.sendApi) {
+            const result = await e.bot.sendApi('set_group_todo', {
+              group_id: e.group_id,
               message_id: msgId
             });
             if (result !== undefined) {
@@ -936,6 +1028,134 @@ export default class ChatStream extends AIStream {
             }
           }
           return { success: false, error: 'API不可用' };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // 获取好友列表（QQ号、昵称、备注）
+    this.registerMCPTool('getFriendList', {
+      description: '获取当前机器人的好友列表（QQ号、昵称、备注）',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (_args = {}, context = {}) => {
+        const e = context.e;
+        const bot = e?.bot;
+        if (!bot || typeof bot.getFriendMap !== 'function') {
+          return { success: false, error: '当前适配器不支持获取好友列表' };
+        }
+
+        try {
+          const map = await bot.getFriendMap();
+          const friends = [];
+          if (map && typeof map.forEach === 'function') {
+            map.forEach((info, uid) => {
+              if (!uid) return;
+              const qq = String(uid);
+              const nickname = info?.nickname || '';
+              const remark = info?.remark || '';
+              friends.push({ qq, nickname, remark });
+            });
+          }
+
+          BotUtil.makeLog(
+            'debug',
+            `[chat.getFriendList] 好友数量: ${friends.length}`,
+            'ChatStream'
+          );
+
+          return {
+            success: true,
+            data: { friends }
+          };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    // 获取当前群成员列表（包含QQ号、昵称、名片、角色、是否管理员/群主）
+    this.registerMCPTool('getGroupMembers', {
+      description: '获取当前群成员列表（包含QQ号、昵称、名片、角色、是否管理员/群主）',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async (_args = {}, context = {}) => {
+        const e = context.e;
+        if (!e?.isGroup) {
+          return { success: false, error: '此功能仅在群聊中可用' };
+        }
+
+        const group = e.group;
+        if (!group) {
+          return { success: false, error: '群对象不存在' };
+        }
+
+        try {
+          // 优先使用 getMemberMap（包含完整信息）
+          let memberMap = null;
+          if (typeof group.getMemberMap === 'function') {
+            memberMap = await group.getMemberMap();
+          }
+
+          const members = [];
+
+          if (memberMap && typeof memberMap.forEach === 'function') {
+            memberMap.forEach((info, uid) => {
+              if (!uid) return;
+              const qq = String(uid);
+              const role = info?.role || 'member';
+              const is_owner = role === 'owner';
+              const is_admin = role === 'admin' || role === 'owner';
+              members.push({
+                qq,
+                nickname: info?.nickname || '',
+                card: info?.card || '',
+                role,
+                is_owner,
+                is_admin
+              });
+            });
+          } else if (typeof group.getMemberArray === 'function') {
+            // 兼容只提供成员数组的情况
+            const arr = await group.getMemberArray();
+            for (const info of Array.isArray(arr) ? arr : []) {
+              if (!info || info.user_id === undefined) continue;
+              const qq = String(info.user_id);
+              const role = info?.role || 'member';
+              const is_owner = role === 'owner';
+              const is_admin = role === 'admin' || role === 'owner';
+              members.push({
+                qq,
+                nickname: info?.nickname || '',
+                card: info?.card || '',
+                role,
+                is_owner,
+                is_admin
+              });
+            }
+          } else {
+            return { success: false, error: '当前适配器不支持获取群成员列表' };
+          }
+
+          BotUtil.makeLog(
+            'debug',
+            `[chat.getGroupMembers] 群 ${e.group_id} 成员数量: ${members.length}`,
+            'ChatStream'
+          );
+
+          return {
+            success: true,
+            data: { members }
+          };
         } catch (error) {
           return { success: false, error: error.message };
         }
@@ -1027,16 +1247,15 @@ export default class ChatStream extends AIStream {
         platform: e.platform || 'onebot' // 标识平台类型
       };
 
-      // 群聊内存历史（仅群聊）
+      // 群聊内存历史（仅群聊，最多保留50条）
       if (groupId && e.isGroup !== false) {
         if (!ChatStream.messageHistory.has(groupId)) {
           ChatStream.messageHistory.set(groupId, []);
         }
         const history = ChatStream.messageHistory.get(groupId);
         history.push(msgData);
-        // 限制历史记录数量，避免内存溢出
         if (history.length > 50) {
-          history.shift();
+          ChatStream.messageHistory.set(groupId, history.slice(-50));
         }
       }
 
@@ -1088,43 +1307,11 @@ export default class ChatStream extends AIStream {
     }
   }
 
-  /**
-   * 构建功能列表提示（仅用于向模型说明“具备哪些能力”，不约定任何特殊命令格式）
-   */
-  buildFunctionsPrompt(context = {}) {
-    const { botRole = '成员' } = context;
-
-    const enabledFuncs = this.getEnabledFunctions();
-    if (enabledFuncs.length === 0) return '';
-
-    const filteredFuncs = enabledFuncs.filter(func => {
-      if (func.requireAdmin) {
-        return botRole === '管理员' || botRole === '群主';
-      }
-      if (func.requireOwner) {
-        return botRole === '群主';
-      }
-      return true;
-    });
-
-    const lines = filteredFuncs
-      .filter(f => f.description)
-      .map(f => `- ${f.description}`);
-
-    if (lines.length === 0) return '';
-
-    return `【可用能力】
-你具备以下群聊相关辅助能力（例如 @ 成员、戳一戳、表情回应、管理操作等）。
-这些能力会通过系统的工具调用机制自动触发，你只需要专注于自然语言对话和决策，不要在回复中设计任何特殊命令格式。
-
-能力列表：
-${lines.join('\n')}`;
-  }
-
   async buildSystemPrompt(context) {
     const { e, question } = context;
-    const persona = question?.persona || '我是AI助手';
-    const isGlobalTrigger = question?.isGlobalTrigger || false;
+    const persona =
+      question?.persona ||
+      '你是在这个QQ群里的普通聊天助手，正常聊天、帮忙解决问题即可，不要刻意卖萌或重复固定话术。';
     const botRole = question?.botRole || await this.getBotRole(e);
     const dateStr = question?.dateStr || new Date().toLocaleString('zh-CN');
     
@@ -1133,52 +1320,31 @@ ${lines.join('\n')}`;
       embeddingHint = '\n💡 系统会自动检索相关历史对话（通过子服务端向量服务）\n';
     }
 
-    const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'AI助手';
+    const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot';
     const isMaster = e.isMaster === true;
     
-    return `【人设设定】
-${persona}
-
-【身份信息】
-名字：${botName} | QQ号：${e.self_id}${e.isGroup ? ` | 群号：${e.group_id} | 身份：${botRole}` : ''}
-${isMaster ? '⚠️ 现在跟你讲话的是主人，请对主人友好和尊重。' : ''}
-
-【时间信息】
-当前时间：${dateStr}
-
-【场景设定】
-${isGlobalTrigger ? '你闲来无事点开群聊，看到小伙伴们的发言，想表达一下自己的情绪和看法。' : '你被召唤回复，需要针对性地回答问题或提供帮助。'}
+    return `人设（最高优先级，请始终遵守）：${persona}
+身份：昵称=${botName}，QQ=${e.self_id}，群=${e.group_id}，角色=${botRole}${isMaster ? '（当前说话的是主人，可以稍微亲近一点，但不要过头）' : ''}
+时间：${dateStr}
 ${embeddingHint}
-【基础规则】
-1. 你是一个真实的QQ用户，不是AI助手
-2. 说话要自然、简洁、有个性
-3. 最多使用一个竖线分隔符(|)
-4. 适当使用表情包和互动功能
-5. 管理功能需谨慎使用，避免滥用
-
-【工具说明】
-所有功能都通过MCP工具调用协议提供，包括：@成员、戳一戳、表情回应、群管理等。
-
-
-【重要限制】
-1. 每次回复最多一个表情包
-2. 最多一个竖线(|)分隔
-3. @人前确认QQ号在群聊记录中
-4. 不要重复使用相同功能
-5. 管理操作要有正当理由
-
-【注意事项】
-${isGlobalTrigger ? 
-`1. 保持你的个性和人设，即使是表达情绪也要体现自己的特点
-2. 专注于表达情绪和感受，不要试图解决问题或给出建议
-3. 自然地使用"哦"、"行吧"、"我觉得"、"感觉"、"可能"等表达情绪的词
-4. 像真人一样随意聊天，不要显得像AI助手
-5. 可以使用表情回应等互动，但重点是表达情绪` : 
-`1. 回复要有针对性
-2. 积极互动
-3. 多使用表情回应
-4. 适当使用表情包
-5. 管理功能仅在必要时使用${isMaster ? '\n6. 对主人友好和尊重' : ''}`}`;
+说话风格：
+- 正常聊天或解决问题即可，回答紧贴用户内容。
+- 语言口语化、简洁，不要堆太多表情或套话。
+- 听不懂用户想干嘛时，用一句话简单确认，不要连续追问很多句。
+工具使用（必须遵守权限和安全）：
+- 需要群管/互动（@、戳一戳、改名片、禁言、踢人、设管理员、群代办等）时，直接调用对应工具完成，不要在回复里写指令或协议。
+- 修改群名片（setCard）时：
+  · “把你自己改成 X”→ 修改机器人自己的名片（QQ=${e.self_id}）。
+  · 明确 @ 某人或给出 QQ 时→ 修改那个人的名片。
+  · “把我改成 X”→ 修改当前说话人的名片（QQ=${e.user_id}）。
+- 禁言/解禁/踢人/设管理员等操作：
+  · 只有在用户明确提出、且理由合理（如刷屏、骂人）时才考虑执行。
+  · 如果当前机器人不是管理员或群主，只能礼貌说明权限不足，不要假装执行成功。
+- 设置群代办（setGroupTodo）等对全群有影响的操作，只在用户明确要求且语义清晰时执行，避免频繁创建无意义代办。
+回复要求：
+- 一次回复只做当前这一轮能完成的事。
+- 如果通过工具完成了操作，用很简短的话说明结果即可。
+- 在任何情况下，都不要违背上面的人设和权限约束。`;
   }
 
   async buildChatContext(e, question) {
@@ -1254,10 +1420,105 @@ ${isGlobalTrigger ?
     return '';
   }
 
-  mergeMessageHistory(messages, e) {
+  async syncHistoryFromAdapter(e) {
+    if (!e?.isGroup) return;
+    const groupId = e.group_id;
+    if (!groupId) return;
+
+    const group = e.group;
+    const getter =
+      (group && typeof group.getChatHistory === 'function' && group.getChatHistory) ||
+      (typeof e.getChatHistory === 'function' && e.getChatHistory) ||
+      null;
+    if (!getter) return;
+
+    try {
+      let rawHistory;
+      try {
+        // 优先使用 (message_seq, count, reverseOrder) 签名，message_seq 为空表示从最近开始
+        rawHistory = await getter(undefined, 50, true);
+      } catch {
+        // 兼容只接受 (count) 的实现
+        rawHistory = await getter(50);
+      }
+
+      const history = ChatStream.messageHistory.get(groupId) || [];
+      const existingIds = new Set(
+        history.map(msg => String(msg.message_id || msg.real_id || ''))
+      );
+
+      const newMessages = [];
+      for (const msg of Array.isArray(rawHistory) ? rawHistory : []) {
+        if (!msg || typeof msg !== 'object') continue;
+        const mid = msg.real_id || msg.message_id || msg.message_seq;
+        if (!mid) continue;
+        const idStr = String(mid);
+        if (existingIds.has(idStr)) continue;
+
+        const sender = msg.sender || {};
+        const segments = Array.isArray(msg.message) ? msg.message : [];
+
+        let text = '';
+        if (segments.length > 0) {
+          text = segments.map(seg => {
+            if (!seg || typeof seg !== 'object') return '';
+            switch (seg.type) {
+              case 'text':
+                return seg.text || '';
+              case 'image':
+                return '[图片]';
+              case 'face':
+                return '[表情]';
+              case 'reply':
+                return `[回复:${seg.id || ''}]`;
+              case 'at':
+                return `@${seg.qq || seg.user_id || ''}`;
+              default:
+                return '';
+            }
+          }).join('');
+        } else {
+          text = msg.raw_message || '';
+        }
+
+        const nickname = sender.card || sender.nickname || '未知';
+        newMessages.push({
+          user_id: msg.user_id ?? sender.user_id,
+          nickname,
+          message: text,
+          message_id: idStr,
+          time: msg.time || Date.now(),
+          platform: 'onebot'
+        });
+      }
+
+      if (newMessages.length > 0) {
+        const merged = history.concat(newMessages);
+        const limited = merged.length > 50 ? merged.slice(-50) : merged;
+        ChatStream.messageHistory.set(groupId, limited);
+
+        BotUtil.makeLog(
+          'debug',
+          `[ChatStream.syncHistoryFromAdapter] group=${groupId}, 原有=${history.length}, 新增=${newMessages.length}, 合并后=${limited.length}`,
+          'ChatStream'
+        );
+      }
+    } catch (error) {
+      BotUtil.makeLog(
+        'debug',
+        `[ChatStream.syncHistoryFromAdapter] 获取聊天记录失败: ${error.message}`,
+        'ChatStream'
+      );
+    }
+  }
+
+  async mergeMessageHistory(messages, e) {
     if (!e?.isGroup || messages.length < 2) {
       return messages;
     }
+
+    // 每次构建上下文前，同步一次外部聊天记录到内存缓存
+    await this.syncHistoryFromAdapter(e);
 
     const userMessage = messages[messages.length - 1];
     const isGlobalTrigger = userMessage.content?.isGlobalTrigger || false;
@@ -1356,14 +1617,55 @@ ${isGlobalTrigger ?
   }
 
   async execute(e, messages, config) {
+    let StreamLoader = null;
+    
     try {
       // 构建消息上下文
       if (!Array.isArray(messages)) {
         messages = await this.buildChatContext(e, messages);
       }
-      messages = this.mergeMessageHistory(messages, e);
+      messages = await this.mergeMessageHistory(messages, e);
       const query = Array.isArray(messages) ? this.extractQueryFromMessages(messages) : messages;
       messages = await this.buildEnhancedContext(e, query, messages);
+      
+      // 在调用 AI 之前，挂载当前事件，供 MCP 工具在本轮对话中获取上下文（群/私聊信息）
+      try {
+        StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
+        if (StreamLoader) {
+          StreamLoader.currentEvent = e || null;
+          BotUtil.makeLog(
+            'debug',
+            `[ChatStream.execute] 设置当前事件: isGroup=${e?.isGroup}, message_type=${e?.message_type}, group_id=${e?.group_id}, user_id=${e?.user_id}`,
+            'ChatStream'
+          );
+        }
+      } catch {
+        StreamLoader = null;
+      }
+      
+      // 打印给 LLM 的消息概要，便于调试 Prompt 结构（只截取前几百字符，避免刷屏）
+      try {
+        const preview = (messages || []).map((m, idx) => {
+          const role = m.role || `msg${idx}`;
+          let content = m.content;
+          if (typeof content === 'object') {
+            const text = content.text || content.content || '';
+            content = text;
+          }
+          return {
+            idx,
+            role,
+            text: String(content ?? '')
+          };
+        });
+        BotUtil.makeLog(
+          'debug',
+          `[ChatStream.execute] LLM消息预览: ${JSON.stringify(preview, null, 2)}`,
+          'ChatStream'
+        );
+      } catch {
+        // 调试日志失败直接忽略
+      }
       
       // 调用AI获取响应
       const response = await this.callAI(messages, config);
@@ -1385,6 +1687,11 @@ ${isGlobalTrigger ?
         'ChatStream'
       );
       return null;
+    } finally {
+      // 清理当前事件，避免影响其他工作流/请求
+      if (StreamLoader && StreamLoader.currentEvent === e) {
+        StreamLoader.currentEvent = null;
+      }
     }
   }
 
@@ -1553,14 +1860,14 @@ ${isGlobalTrigger ?
   }
 
   cleanupCache() {
-    const now = Date.now();
-    
     for (const [groupId, messages] of ChatStream.messageHistory.entries()) {
-      const filtered = messages.filter(msg => now - msg.time < 1800000);
-      if (filtered.length === 0) {
+      if (!messages || messages.length === 0) {
         ChatStream.messageHistory.delete(groupId);
-      } else {
-        ChatStream.messageHistory.set(groupId, filtered);
+        continue;
+      }
+      // 始终只保留最近50条消息
+      if (messages.length > 50) {
+        ChatStream.messageHistory.set(groupId, messages.slice(-50));
       }
     }
     

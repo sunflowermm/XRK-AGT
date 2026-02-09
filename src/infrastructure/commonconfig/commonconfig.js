@@ -763,10 +763,25 @@ export default class ConfigBase {
       const path = prefix ? `${prefix}.${key}` : key;
       if (fs.type === 'object') {
         list.push(...this.getFlatSchema(path, { fields: fs.fields ?? {} }));
-      } else if (fs.type === 'array' && fs.itemType === 'object' && fs.itemSchema?.fields) {
-        // 仅描述数组元素的结构，不枚举索引
-        list.push({ path, type: 'array<object>', component: fs.component, meta: { ...fs } });
-        list.push(...this.getFlatSchema(`${path}[]`, { fields: fs.itemSchema.fields }));
+      } else if (fs.type === 'array' && fs.itemType === 'object') {
+        // 数组<Object> 类型：始终为数组本身生成一条描述，
+        // 同时递归展开元素结构（无论使用 itemSchema 还是直接使用 fields 定义）
+        const itemFields = fs.itemSchema?.fields ?? fs.fields ?? {};
+
+        // 用单条记录描述整个数组字段（用于渲染 ArrayForm、保存时整体替换）
+        list.push({
+          path,
+          type: 'array<object>',
+          component: fs.component,
+          meta: { ...fs }
+        });
+
+        // 再为数组元素生成模板路径（xxx[]....），用于：
+        // - getFlatFieldDefinition / normalizeFieldValue 推断子字段类型
+        // - ArrayForm 子项的默认值生成与校验
+        if (Object.keys(itemFields).length > 0) {
+          list.push(...this.getFlatSchema(`${path}[]`, { fields: itemFields }));
+        }
       } else {
         list.push({ path, type: fs.type, component: fs.component, meta: { ...fs } });
       }

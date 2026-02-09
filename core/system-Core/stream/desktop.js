@@ -265,10 +265,26 @@ export default class DesktopStream extends AIStream {
             throw new Error('截屏文件为空');
           }
 
+          // 记录到当前工作流上下文，方便后续继续使用
           if (context.stream) {
             context.stream.context = context.stream.context || {};
             context.stream.context.screenshotPath = screenshotPath;
             context.stream.context.screenshotSize = stats.size;
+          }
+
+          // 如果是从 QQ 事件触发的，并且有 e，可直接把图片发回去
+          const e = context.e;
+          if (e && typeof e.reply === 'function') {
+            try {
+              const seg = global.segment || segment;
+              await e.reply([seg.image(screenshotPath)]);
+            } catch (err) {
+              BotUtil.makeLog(
+                'warn',
+                `[desktop.screenshot] 截图发送到会话失败: ${err.message}`,
+                'DesktopStream'
+              );
+            }
           }
 
           BotUtil.makeLog('info', `截图成功: ${screenshotPath} (${stats.size} bytes)`, 'DesktopStream');
@@ -1150,30 +1166,6 @@ export default class DesktopStream extends AIStream {
     const text = this.decodeGBKResponse(buffer);
 
     return this._parseStockData(text, prefixedCode);
-  }
-
-  /**
-   * 构建功能列表提示
-   * 注意：只包含 Call Function 的 prompt，MCP 工具不会出现在这里
-   */
-  buildFunctionsPrompt() {
-    // 只获取启用的 Call Function（MCP 工具不会出现在 prompt 中）
-    const enabledFuncs = this.getEnabledFunctions();
-    if (enabledFuncs.length === 0) return '';
-
-    // 只作为“能力说明”，不再约定任何特殊的文本命令格式
-    const lines = enabledFuncs
-      .filter(f => f.description)
-      .map(f => `- ${f.description}`);
-
-    if (lines.length === 0) return '';
-
-    return `【可用能力】
-你具备以下桌面/系统相关能力，这些能力会通过系统的工具调用协议（tool calling + MCP）自动触发。
-你只需要用自然语言思考和回答，不要在回复中设计特殊命令格式或人为添加标记。
-
-当用户的需求与下列能力相关时，请优先考虑调用相应工具来完成任务：
-${lines.join('\n')}`;
   }
 
   buildSystemPrompt(context) {

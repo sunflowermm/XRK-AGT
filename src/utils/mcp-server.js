@@ -221,7 +221,7 @@ export class MCPServer {
    */
   listTools(streamName = null) {
     const tools = Array.from(this.tools.values());
-    
+
     // 如果指定了工作流名称，只返回该工作流的工具
     if (streamName) {
       const prefix = `${streamName}.`;
@@ -237,17 +237,20 @@ export class MCPServer {
           }
         }));
     }
-    
-    // 返回所有工具
-    return tools.map(tool => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema || {
-        type: 'object',
-        properties: {},
-        required: []
-      }
-    }));
+
+    // 默认情况下，全局工具列表中隐藏 chat 工作流的 MCP 工具，
+    // 避免在标准 JSON-RPC 接口和 LLM 工具注入时暴露群管相关能力。
+    return tools
+      .filter(tool => !tool.name.startsWith('chat.'))
+      .map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema || {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }));
   }
 
   /**
