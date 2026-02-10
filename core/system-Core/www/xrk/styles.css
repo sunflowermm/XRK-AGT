@@ -9,7 +9,7 @@
   --primary: #0ea5e9;
   --primary-light: #38bdf8;
   --primary-dark: #0284c7;
-  --primary-50: rgba(14, 165, 233, 0.05);
+  --primary-50: rgba(7, 100, 143, 0.05);
   --primary-100: rgba(14, 165, 233, 0.1);
   --primary-200: rgba(14, 165, 233, 0.2);
 
@@ -1228,12 +1228,14 @@ select.form-input {
 
 .chat-message {
   flex: 0 0 auto;
-  max-width: 80%;
-  padding: 12px 16px;
+  /* 固定一个“理想最大宽度”，同时在小屏下仍保持百分比缩放 */
+  max-width: min(80%, 880px);
+  padding: 14px 20px; /* 留出更舒适的文字与气泡内边距 */
   border-radius: var(--radius-md);
   font-size: 14px;
   line-height: 1.6;
   position: relative;
+  min-width: 0; /* 防止 flex 子项内容撑破布局 */
   overflow-wrap: break-word;
   word-wrap: break-word;
   word-break: break-word;
@@ -1241,8 +1243,14 @@ select.form-input {
   transition: all 0.2s ease;
 }
 
+/* 统一聊天气泡内部文字与边缘的视觉间距 */
+.chat-message .chat-content {
+  margin: 2px 0;
+}
+
 .chat-message.user {
   align-self: flex-end;
+  margin-left: 40px;  /* 与左边保持一定呼吸感 */
   background: var(--primary);
   color: white;
   border-bottom-right-radius: 4px;
@@ -1250,6 +1258,7 @@ select.form-input {
 
 .chat-message.assistant {
   align-self: flex-start;
+  margin-right: 40px; /* 与右边保持一定呼吸感，防止紧贴边缘 */
   background: var(--bg-input);
   color: var(--text-primary);
   border-bottom-left-radius: 4px;
@@ -1644,10 +1653,210 @@ select.form-input {
 /* Markdown 和原始内容样式 */
 .chat-markdown {
   margin-top: 8px;
-  padding: 12px;
+  padding: 12px 14px;
   background: var(--bg-input);
   border-radius: var(--radius-md);
-  line-height: 1.6;
+  line-height: 1.7;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.chat-content.chat-markdown {
+  /* appendChat 里直接渲染 Markdown，不需要额外的卡片内边距 */
+  margin-top: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  /* 超长内容允许左右滑动，但不影响纵向布局 */
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.chat-markdown h2,
+.chat-markdown h3 {
+  margin: 8px 0 4px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-markdown h2 {
+  font-size: 16px;
+}
+
+.chat-markdown h3 {
+  font-size: 15px;
+}
+
+.chat-markdown p {
+  margin: 4px 0;
+}
+
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 4px 0 4px 20px;
+  padding-left: 16px;
+}
+
+.chat-markdown li {
+  margin: 2px 0;
+}
+
+.chat-markdown a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.chat-markdown a:hover {
+  text-decoration: underline;
+}
+
+.chat-markdown .md-hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 10px 0;
+}
+
+.chat-markdown .md-quote {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 60%, transparent);
+  border-radius: 8px;
+}
+
+.chat-markdown .md-quote-line {
+  margin: 2px 0;
+}
+
+.chat-markdown .md-task {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 6px;
+  accent-color: var(--primary);
+}
+
+.chat-markdown .md-img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  display: inline-block;
+}
+
+/* Markdown 表格（GitHub 风格简化版） */
+.chat-markdown .md-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.chat-markdown .md-table th,
+.chat-markdown .md-table td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.chat-markdown .md-table thead {
+  background: var(--bg-elevated);
+}
+
+.chat-markdown p,
+.chat-markdown li,
+.chat-markdown .md-quote-line {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chat-markdown .md-code {
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  max-width: 100%;
+}
+
+.chat-markdown .md-inline {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.md-mermaid {
+  margin: 8px auto;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  /* 在气泡内部自己带横向滚动条，允许内部图表宽度 > 气泡宽度 */
+  overflow-x: auto;
+  /* 自身宽度跟随气泡/容器，真正“超宽”交给内部 SVG 实现 */
+  width: 100%;
+  max-width: 100%;
+  display: block;
+}
+
+.md-mermaid .mermaid {
+  margin: 4px auto 0;
+  display: block;
+}
+
+.md-mermaid svg {
+  display: block;
+  max-width: none !important;
+  width: auto !important;
+}
+
+.md-mermaid-toolbar {
+  display: flex;
+  justify-content: flex-end;  /* 按钮固定在右上角，看起来更规整 */
+  margin-bottom: 4px;
+  width: 100%;                /* 按钮栏占满整行，再内部向右对齐 */
+}
+
+.md-mermaid-copy {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.md-mermaid-copy:hover {
+  background: var(--primary-100);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.md-mermaid-download {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-left: 6px;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.md-mermaid-download:hover {
+  background: var(--primary-100);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .chat-raw {
@@ -3688,6 +3897,37 @@ body.dark .json-boolean { color: #f87171; }
 .voice-send-btn svg {
   width: 20px;
   height: 20px;
+}
+
+.voice-tts-stop-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  box-shadow: var(--shadow-sm);
+  margin-right: 8px;
+}
+
+.voice-tts-stop-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: scale(1.05);
+}
+
+.voice-tts-stop-btn:active {
+  transform: scale(0.95);
+}
+
+.voice-tts-stop-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 @keyframes pulse {

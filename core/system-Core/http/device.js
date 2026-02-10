@@ -191,6 +191,9 @@ const deviceLogs = new Map();
 const deviceCommands = new Map();
 const commandCallbacks = new Map();
 const deviceStats = new Map();
+// 前端TTS队列状态（用于后端实时背压）
+// key: deviceId, value: { queueLen, playing, activeSources, ts }
+const ttsQueueStatus = new Map();
 
 const CONNECTION_LOG_WINDOW_MS = 2000;
 const connectionLogTracker = new Map();
@@ -396,7 +399,20 @@ class DeviceManager {
                 const session = asrSessions.get(sessionId);
                 if (session && session.deviceId === deviceId) {
                     if (isFinal) {
-                        session.finalText = text;
+                        // 累积最终文本，避免“前面识别出来、后面被覆盖掉”
+                        const prev = session.finalText || '';
+                        if (!prev) {
+                            session.finalText = text;
+                        } else if (text && text.startsWith(prev)) {
+                            // 引擎返回“到目前为止的整句”——直接使用更长的
+                            session.finalText = text;
+                        } else if (text && prev.startsWith(text)) {
+                            // 引擎返回的 text 比已有的短：保持更长的，不回退
+                            session.finalText = prev;
+                        } else if (text) {
+                            // 无法判断增量策略时，采用追加，宁可重复也不丢字
+                            session.finalText = prev + text;
+                        }
                         session.finalDuration = duration;
                         session.finalTextSetAt = Date.now();
                         const ws = deviceWebSockets.get(deviceId);
@@ -600,7 +616,20 @@ class DeviceManager {
 
             session.totalChunks++;
             session.totalBytes += audioBuf.length;
-            session.lastChunkTime = Date.now();
+            const now = Date.now();
+            const interval = session.lastChunkTime ? (now - session.lastChunkTime) : 0;
+            session.lastChunkTime = now;
+
+            const sr = session.sample_rate || 16000;
+            const duration = audioBuf.length > 0 ? (audioBuf.length / 2) / sr : 0;
+
+            // ASR后端调试日志：逐块统计，方便对比前端是否丢包
+            BotUtil.makeLog(
+                'debug',
+                `[ASR后端] 收到音频块 #${chunk_index}: 字节=${audioBuf.length}, 时长=${duration.toFixed(3)}s, 间隔=${interval}ms, ` +
+                `累计块数=${session.totalChunks}, 累计字节=${session.totalBytes}`,
+                deviceId
+            );
 
             if (session.asrStarted && (vad_state === 'active' || vad_state === 'ending')) {
                 const client = this._getASRClient(deviceId, asrConfig);
@@ -691,6 +720,28 @@ class DeviceManager {
 
             // ⭐ 关键改进：异步等待最终文本，不阻塞流程
             this._waitForFinalTextAsync(deviceId, session);
+
+            // ASR会话统计日志：用于与前端对比是否有丢包/时长偏差
+            try {
+                const elapsedMs = session.lastChunkTime && session.startTime
+                    ? (session.lastChunkTime - session.startTime)
+                    : 0;
+                const totalDuration = session.totalBytes > 0 && session.sample_rate
+                    ? (session.totalBytes / 2) / session.sample_rate
+                    : 0;
+                const avgChunkSize = session.totalChunks > 0
+                    ? Math.round(session.totalBytes / session.totalChunks)
+                    : 0;
+
+                BotUtil.makeLog(
+                    'info',
+                    `[ASR后端] 会话统计#${session_number}: 总块数=${session.totalChunks}, 总字节=${session.totalBytes}, ` +
+                    `平均块大小=${avgChunkSize}字节, 音频估算时长=${totalDuration.toFixed(3)}s, 接收耗时=${(elapsedMs / 1000).toFixed(3)}s`,
+                    deviceId
+                );
+            } catch {
+                // 忽略统计日志错误
+            }
 
             return { success: true };
 
@@ -1306,6 +1357,8 @@ class DeviceManager {
             sendCommand: async (cmd, params = {}, priority = 0) =>
                 await this.sendCommand(deviceId, cmd, params, priority),
 
+            // TTS音频发送：带后端背压（按 ws.bufferedAmount 排队/限速），避免一下子全发导致前端挤压/丢包
+            // 说明：这里不阻塞上游逻辑（保持接口兼容），但会在同一设备维度上串行发送
             sendAudioChunk: (hex) => {
                 const ws = deviceWebSockets.get(deviceId);
                 if (ws && ws.readyState === WebSocket.OPEN && typeof hex === 'string' && hex.length > 0) {
@@ -1318,11 +1371,56 @@ class DeviceManager {
                         timestamp: timestamp
                     };
                     try {
-                        ws.send(JSON.stringify({ type: 'command', command: cmd }));
-                        BotUtil.makeLog('debug',
-                            `[TTS传输] WebSocket发送: 字节=${bytes}, hex长度=${hex.length}, 时间戳=${timestamp}`,
-                            deviceId
-                        );
+                        // 初始化每个ws的发送链（串行化）
+                        if (!ws.__ttsSendChain) {
+                            ws.__ttsSendChain = Promise.resolve();
+                        }
+                        // 背压阈值：同时参考前端队列水位 + ws.bufferedAmount（双闭环）
+                        const MAX_BUFFERED = 512 * 1024; // 512KB
+                        const LOW_BUFFERED = 128 * 1024; // 128KB
+                        const WAIT_STEP_MS = 10;
+                        const MAX_WAIT_MS = 5000;
+                        // 前端队列安全水位（不丢包，靠后端控制让前端队列维持在此范围）
+                        const HIGH_WATER = 40;
+                        const LOW_WATER = 20;
+                        const STATUS_STALE_MS = 1200; // 认为前端状态过期的时间
+
+                        ws.__ttsSendChain = ws.__ttsSendChain.then(async () => {
+                            if (ws.readyState !== WebSocket.OPEN) return;
+
+                            const startWait = Date.now();
+                            while (ws.readyState === WebSocket.OPEN) {
+                                const status = ttsQueueStatus.get(deviceId);
+                                const statusFresh = status && (Date.now() - status.ts) <= STATUS_STALE_MS;
+                                const queueTooHigh = statusFresh && typeof status.queueLen === 'number' && status.queueLen >= HIGH_WATER;
+                                const bufferedTooHigh = ws.bufferedAmount > MAX_BUFFERED;
+
+                                if (!queueTooHigh && !bufferedTooHigh) break;
+                                if (Date.now() - startWait > MAX_WAIT_MS) break;
+                                await new Promise(r => setTimeout(r, WAIT_STEP_MS));
+
+                                // 如果前端队列从高水位回落到低水位附近，尽快放行
+                                if (statusFresh && status.queueLen <= LOW_WATER && ws.bufferedAmount <= LOW_BUFFERED) break;
+                            }
+
+                            // 如果 still 很大，再给一次短等待，避免尖峰
+                            if (ws.bufferedAmount > LOW_BUFFERED) {
+                                await new Promise(r => setTimeout(r, WAIT_STEP_MS));
+                            }
+
+                            ws.send(JSON.stringify({ type: 'command', command: cmd }));
+                            BotUtil.makeLog(
+                                'debug',
+                                (() => {
+                                    const status = ttsQueueStatus.get(deviceId);
+                                    const q = status ? status.queueLen : 'N/A';
+                                    return `[TTS传输] WebSocket发送(背压): 字节=${bytes}, hex长度=${hex.length}, 时间戳=${timestamp}, buffered=${ws.bufferedAmount}, 前端队列=${q}`;
+                                })(),
+                                deviceId
+                            );
+                        }).catch((e) => {
+                            BotUtil.makeLog('error', `[TTS传输] WebSocket发送队列异常: ${e.message}`, deviceId);
+                        });
                     } catch (e) {
                         BotUtil.makeLog('error', `[TTS传输] WebSocket发送失败: ${e.message}`, deviceId);
                     }
@@ -1568,6 +1666,16 @@ class DeviceManager {
                 case 'log': {
                     const { level = 'info', message, data: logData } = payload;
                     this.addDeviceLog(deviceId, level, message, logData);
+                    break;
+                }
+
+                // 前端TTS队列状态上报：用于后端实时限流/背压
+                case 'tts_queue_status': {
+                    const queueLen = Number(payload.queue_len ?? payload.queueLen ?? 0);
+                    const playing = payload.playing === true;
+                    const activeSources = Number(payload.active_sources ?? payload.activeSources ?? 0);
+                    const ts = Number(payload.ts ?? Date.now());
+                    ttsQueueStatus.set(deviceId, { queueLen, playing, activeSources, ts: Date.now(), clientTs: ts });
                     break;
                 }
 

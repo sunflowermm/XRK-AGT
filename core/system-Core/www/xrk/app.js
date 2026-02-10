@@ -5,6 +5,7 @@ function $(selector, context = document) {
 function $$(selector, context = document) {
   return context.querySelectorAll(selector);
 }
+
 function initLazyLoad(selector = 'img[data-src]') {
   const imageObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
@@ -57,7 +58,10 @@ class App {
     this._ttsAudioContext = null;
     this._ttsAudioQueue = [];
     this._ttsTextQueue = []; // TTS文本请求队列
+    // 用户是否主动点击“停止播报”——用于丢弃之后到达的音频块，避免还在疯狂播放
+    this._ttsStoppedManually = false;
     this._ttsSessionActive = false; // 当前是否有活跃的TTS Session
+    this._ttsSessionStartTime = null; // Session开始时间
     this._ttsNextPlayTime = 0;
     this._ttsActiveSources = []; // 跟踪活跃的播放源，用于资源管理
     this._ttsRetryTimer = null; // 播放重试定时器
@@ -74,6 +78,13 @@ class App {
       processedMessageCount: 0 // 已处理的消息计数
     };
     this._ttsSentTextLength = 0; // 已发送TTS的文本长度（用于增量发送）
+    this._ttsQueueWarned = false; // 队列接近上限是否已告警（避免重复日志）
+    // 前端TTS队列状态上报（用于后端实时背压）
+    this._ttsQueueReportTimer = null;
+    this._ttsLastQueueReportAt = 0;
+    this._ttsLastReportedQueueLen = -1;
+    this._ttsLastReportedPlaying = null;
+    this._ttsLastReportedActiveSources = -1;
     this._configState = null;
     this._schemaCache = {};
     this._llmOptions = { profiles: [], defaultProfile: '' };
@@ -86,10 +97,20 @@ class App {
     };
     this._webUserId = localStorage.getItem('webUserId') ?? 'webclient';
     this._activeEventSource = null;
+    // ASR相关状态
     this._asrSessionId = null;
     this._asrChunkIndex = 0;
     this._audioBuffer = [];
     this._audioBufferTimer = null;
+    this._preAudioBuffer = []; // 预缓冲：在录音开始前收集的音频
+    this._asrReady = false; // ASR是否已准备好接收音频
+    this._asrStats = {
+      totalChunks: 0,
+      totalBytes: 0,
+      totalSamples: 0,
+      sessionStartTime: null,
+      lastChunkTime: null
+    };
     this._micStarting = false;
     this._micStopping = false;
     this._systemThemeWatcher = null;
@@ -114,18 +135,17 @@ class App {
     this.bindEvents();
     this.loadSettings();
     await this.loadLlmOptions();
+    this._initMermaid();
     this.checkConnection();
     this.handleRoute();
     this.ensureDeviceWs();
     
     window.addEventListener('hashchange', () => this.handleRoute());
+    // 切回浏览器标签页时只做连接检查，不再强制刷新历史/回到底部，避免打断用户阅读
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
         this.checkConnection();
         this.ensureDeviceWs();
-        if (this.currentPage === 'chat') {
-          this.restoreChatHistory();
-        }
       }
     });
     this._statusUpdateTimer = setInterval(() => {
@@ -139,6 +159,171 @@ class App {
         clearInterval(this._statusUpdateTimer);
       }
       this._revokeAllObjectUrls();
+    });
+  }
+
+  _initMermaid() {
+    try {
+      if (!window.mermaid) return;
+      window.mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'loose',
+        theme: 'neutral'
+      });
+    } catch (e) {
+      console.warn('[Mermaid] 初始化失败:', e);
+    }
+  }
+
+  _renderMermaidIn(container) {
+    try {
+      if (!container || !window.mermaid) return;
+      const nodes = container.querySelectorAll('.mermaid');
+      if (!nodes.length) return;
+      const targets = Array.from(nodes).filter((n) => !n.dataset.mermaidRendered);
+      if (!targets.length) return;
+      targets.forEach((n) => { n.dataset.mermaidRendered = '1'; });
+      window.mermaid.init(undefined, targets);
+      this._bindMermaidToolbar(container);
+    } catch (e) {
+      console.warn('[Mermaid] 渲染失败:', e);
+    }
+  }
+
+  _bindMermaidToolbar(root) {
+    if (!root) return;
+    const wrappers = root.querySelectorAll('.md-mermaid');
+    if (!wrappers.length) return;
+
+    wrappers.forEach((wrap) => {
+      if (wrap.dataset._toolbarBound) return;
+      wrap.dataset._toolbarBound = '1';
+
+      const copyBtn = wrap.querySelector('.md-mermaid-copy');
+      const downloadBtn = wrap.querySelector('.md-mermaid-download');
+
+      // 复制 Mermaid 源码
+      if (copyBtn && navigator.clipboard) {
+        copyBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const raw = wrap.getAttribute('data-mermaid-raw') || '';
+          const text = raw
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&');
+          try {
+            await navigator.clipboard.writeText(text);
+            this.showToast('Mermaid 已复制到剪贴板', 'success');
+          } catch {
+            this.showToast('复制 Mermaid 失败', 'error');
+          }
+        });
+      }
+
+      // 下载高清 PNG
+      if (downloadBtn) {
+        downloadBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            const svg = wrap.querySelector('svg');
+            if (!svg) {
+              this.showToast('找不到图表内容', 'warning');
+              return;
+            }
+            // 为了避免导出不完整，使用 SVG 的 viewBox / 边界框精确计算尺寸
+            const cloned = svg.cloneNode(true);
+            let width = Number(cloned.getAttribute('width')) || 0;
+            let height = Number(cloned.getAttribute('height')) || 0;
+
+            const vb = cloned.viewBox && cloned.viewBox.baseVal;
+            if (vb && vb.width && vb.height) {
+              width = vb.width;
+              height = vb.height;
+              cloned.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.width} ${vb.height}`);
+            } else {
+              // 回退：用几何边界框
+              const bbox = svg.getBBox();
+              width = bbox.width;
+              height = bbox.height;
+              cloned.setAttribute('viewBox', `${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`);
+            }
+            if (!width || !height) {
+              this.showToast('图表尺寸异常，无法导出', 'error');
+              return;
+            }
+            cloned.setAttribute('width', String(width));
+            cloned.setAttribute('height', String(height));
+
+            const xml = new XMLSerializer().serializeToString(cloned);
+            const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+
+            // 优先尝试导出高清 PNG；如果被跨域安全策略阻止，则优雅回退为下载 SVG
+            const tryExportPng = () => new Promise((resolve, reject) => {
+              const url = URL.createObjectURL(svgBlob);
+              const img = new Image();
+              img.onload = () => {
+                try {
+                  const scale = 2; // 高清倍数
+                  const canvas = document.createElement('canvas');
+                  canvas.width = width * scale;
+                  canvas.height = height * scale;
+                  const ctx = canvas.getContext('2d');
+                  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+                  ctx.clearRect(0, 0, canvas.width, canvas.height);
+                  ctx.drawImage(img, 0, 0, width, height);
+                  URL.revokeObjectURL(url);
+
+                  try {
+                    canvas.toBlob((blob) => {
+                      if (!blob) {
+                        reject(new Error('toBlob 返回空 blob'));
+                        return;
+                      }
+                      const a = document.createElement('a');
+                      a.download = `mermaid-${Date.now()}.png`;
+                      a.href = URL.createObjectURL(blob);
+                      a.click();
+                      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+                      resolve(true);
+                    }, 'image/png');
+                  } catch (err) {
+                    // 例如 SecurityError: tainted canvas
+                    reject(err);
+                  }
+                } catch (err) {
+                  URL.revokeObjectURL(url);
+                  reject(err);
+                }
+              };
+              img.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error('Image 加载失败'));
+              };
+              img.src = url;
+            });
+
+            let exported = false;
+            try {
+              exported = await tryExportPng();
+            } catch {
+              exported = false;
+            }
+
+            // 如果 PNG 导出失败（如跨域导致 canvas 污染），回退为下载 SVG 源文件
+            if (!exported) {
+              const a = document.createElement('a');
+              const url = URL.createObjectURL(svgBlob);
+              a.download = `mermaid-${Date.now()}.svg`;
+              a.href = url;
+              a.click();
+              setTimeout(() => URL.revokeObjectURL(url), 2000);
+              this.showToast('PNG 导出受限，已改为下载 SVG 原图', 'warning');
+            }
+          } catch {
+            this.showToast('导出 PNG 失败', 'error');
+          }
+        });
+      }
     });
   }
 
@@ -900,33 +1085,243 @@ class App {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
-    let html = esc(text);
-
-    // code block ```
-    html = html.replace(/```([\s\S]*?)```/g, (_, code) => {
-      return `<pre class="md-code"><code>${esc(code)}</code></pre>`;
+    // GitHub 风格子集：先提取 fenced code blocks（支持 ```lang），避免被其它规则干扰
+    const blocks = [];
+    const withPlaceholders = String(text).replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) => {
+      const i = blocks.length;
+      blocks.push({ lang: (lang || '').toLowerCase(), code: String(code || '') });
+      return `@@MD_BLOCK_${i}@@`;
     });
 
-    // inline code `code`
-    html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="md-inline">${esc(code)}</code>`);
+    // 行级解析：支持列表分组/引用/分隔线/标题/段落/表格
+    const lines = withPlaceholders.split(/\r?\n/);
+    let out = '';
+    let inUl = false;
+    let inOl = false;
+    let inQuote = false;
+    let quoteBuf = [];
+    // 表格状态：inTable 表示当前是否在表格块内，tableRows 收集表头和行
+    let inTable = false;
+    let tableRows = [];
 
-    // headings (##, ###)
-    html = html.replace(/^###\s+(.*)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^##\s+(.*)$/gm, '<h2>$1</h2>');
+    const flushLists = () => {
+      if (inUl) { out += '</ul>'; inUl = false; }
+      if (inOl) { out += '</ol>'; inOl = false; }
+    };
+    const flushQuote = () => {
+      if (!inQuote) return;
+      const inner = quoteBuf.join('\n');
+      out += `<blockquote class="md-quote">${inner}</blockquote>`;
+      inQuote = false;
+      quoteBuf = [];
+    };
 
-    // bold **text**
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    const inline = (s) => {
+      let html = esc(s);
+      // 图片 ![alt](url)（先于链接）
+      html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '<img class="md-img" alt="$1" src="$2" loading="lazy">');
+      // 链接 [text](url)
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      // 删除线 ~~text~~
+      html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+      // 粗体 **text**
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      // 行内代码 `code`
+      html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="md-inline">${esc(code)}</code>`);
+      // 斜体 *text*（放在粗体后）
+      html = html.replace(/(^|[^\*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
+      // 任务列表 [ ] / [x]
+      html = html.replace(/^\s*\[( |x|X)\]\s+/g, (_, c) => {
+        const checked = String(c).toLowerCase() === 'x';
+        return `<input type="checkbox" class="md-task" ${checked ? 'checked' : ''} disabled> `;
+      });
+      return html;
+    };
 
-    // italic *text*
-    html = html.replace(/(^|[^\*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
+    const flushTable = () => {
+      if (!inTable || tableRows.length === 0) return;
+      const header = tableRows[0];
+      const bodyRows = tableRows.slice(1);
+      out += '<table class="md-table">';
+      if (header) {
+        out += '<thead><tr>';
+        header.cells.forEach((c) => {
+          out += `<th>${inline(c)}</th>`;
+        });
+        out += '</tr></thead>';
+      }
+      if (bodyRows.length) {
+        out += '<tbody>';
+        bodyRows.forEach((row) => {
+          out += '<tr>';
+          row.cells.forEach((c) => {
+            out += `<td>${inline(c)}</td>`;
+          });
+          out += '</tr>';
+        });
+        out += '</tbody>';
+      }
+      out += '</table>';
+      inTable = false;
+      tableRows = [];
+    };
 
-    // links [text](url)
-    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    for (let i = 0; i < lines.length; i++) {
+      const rawLine = lines[i];
+      const line = String(rawLine ?? '');
 
-    // simple line breaks
-    html = html.replace(/\n/g, '<br>');
+      // 空行：结束块
+      if (!line.trim()) {
+        flushQuote();
+        flushLists();
+        flushTable();
+        continue;
+      }
 
-    return html;
+      // 表格处理：匹配形如 | a | b | 的行，并检查下一行是否为 --- 分隔线
+      const tableRowMatch = line.match(/^\s*\|(.+)\|\s*$/);
+      if (tableRowMatch) {
+        const next = lines[i + 1] ?? '';
+        const dividerMatch = /^\s*\|?\s*:?-{2,}.*\|\s*$/.test(String(next));
+        // 表头 + 分隔线：开始一个表格
+        if (!inTable && dividerMatch) {
+          flushQuote();
+          flushLists();
+          flushTable();
+          const headerCells = tableRowMatch[1].split('|').map(c => c.trim());
+          tableRows.push({ header: true, cells: headerCells });
+          inTable = true;
+          i += 1; // 跳过分隔线行
+          continue;
+        }
+        // 已在表格中：追加数据行
+        if (inTable) {
+          const cells = tableRowMatch[1].split('|').map(c => c.trim());
+          tableRows.push({ header: false, cells });
+          continue;
+        }
+      } else if (inTable) {
+        // 表格结束，刷新为 HTML，再继续按照普通行处理当前行
+        flushTable();
+      }
+
+      // Mermaid / Code placeholders
+      const ph = line.trim().match(/^@@MD_BLOCK_(\d+)@@$/);
+      if (ph) {
+        flushQuote();
+        flushLists();
+        out += `@@MD_BLOCK_${ph[1]}@@`;
+        continue;
+      }
+
+      // 分隔线
+      if (/^\s*(---|___|\*\*\*)\s*$/.test(line)) {
+        flushQuote();
+        flushLists();
+        flushTable();
+        out += '<hr class="md-hr">';
+        continue;
+      }
+
+      // 引用 >
+      const quoteMatch = line.match(/^\s*>\s?(.*)$/);
+      if (quoteMatch) {
+        flushLists();
+        flushTable();
+        inQuote = true;
+        quoteBuf.push(`<div class="md-quote-line">${inline(quoteMatch[1])}</div>`);
+        continue;
+      }
+      flushQuote();
+
+      // 标题
+      const h3 = line.match(/^\s*###\s+(.*)$/);
+      if (h3) { flushLists(); out += `<h3>${inline(h3[1])}</h3>`; continue; }
+      const h2 = line.match(/^\s*##\s+(.*)$/);
+      if (h2) { flushLists(); out += `<h2>${inline(h2[1])}</h2>`; continue; }
+
+      // 无序列表
+      const ul = line.match(/^\s*[-*]\s+(.+)$/);
+      if (ul) {
+        if (inOl) { out += '</ol>'; inOl = false; }
+        flushTable();
+        if (!inUl) { out += '<ul class="md-list">'; inUl = true; }
+        out += `<li>${inline(ul[1])}</li>`;
+        continue;
+      }
+
+      // 有序列表
+      const ol = line.match(/^\s*\d+\.\s+(.+)$/);
+      if (ol) {
+        if (inUl) { out += '</ul>'; inUl = false; }
+        flushTable();
+        if (!inOl) { out += '<ol class="md-list">'; inOl = true; }
+        out += `<li>${inline(ol[1])}</li>`;
+        continue;
+      }
+
+      // 普通段落
+      flushLists();
+      flushTable();
+      out += `<p>${inline(line)}</p>`;
+    }
+
+    flushQuote();
+    flushLists();
+    flushTable();
+
+    // 回填 fenced blocks
+    out = out.replace(/@@MD_BLOCK_(\d+)@@/g, (_, idx) => {
+      const b = blocks[Number(idx)];
+      if (!b) return '';
+      const rawCode = b.code.replace(/\s+$/g, '');
+      const safeCode = esc(rawCode);
+      if (b.lang === 'mermaid') {
+        // 为每个 Mermaid 区块生成统一容器，样式由 .md-mermaid 控制
+        return `
+<div class="md-mermaid" data-mermaid-raw="${safeCode}">
+  <div class="md-mermaid-toolbar">
+    <button type="button" class="md-mermaid-copy">复制 Mermaid</button>
+    <button type="button" class="md-mermaid-download">下载 PNG</button>
+  </div>
+  <pre class="mermaid">${safeCode}</pre>
+</div>`.trim();
+      }
+      const langAttr = b.lang ? ` data-lang="${esc(b.lang)}"` : '';
+      return `<pre class="md-code"${langAttr}><code>${safeCode}</code></pre>`;
+    });
+
+    return out;
+  }
+
+  // 为TTS准备的纯文本：去掉Markdown标记，避免读出符号（#、*、` 等）
+  _stripMarkdownForTTS(text = '') {
+    if (!text) return '';
+    let s = String(text);
+    // 去掉代码块 ``` ```
+    s = s.replace(/```[\s\S]*?```/g, '');
+    // 链接 [text](url) -> text
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1');
+    // 图片 ![alt](url) -> alt
+    s = s.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1');
+    // 行首标题 # / ## / ### 等
+    s = s.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+    // 粗体/斜体 **text** / *text* / __text__ / _text_
+    s = s.replace(/\*\*([^*]+)\*\*/g, '$1');
+    s = s.replace(/(^|[^\*])\*([^*]+)\*(?!\*)/g, '$1$2');
+    s = s.replace(/__([^_]+)__/g, '$1');
+    s = s.replace(/(^|[^_])_([^_]+)_(?!_)/g, '$1$2');
+    // 行首列表符号 - * + 1. 等
+    s = s.replace(/^\s*[-*+]\s+/gm, '');
+    s = s.replace(/^\s*\d+\.\s+/gm, '');
+    // 引用 >
+    s = s.replace(/^\s*>+\s?/gm, '');
+    // 行内代码 `code`
+    s = s.replace(/`([^`]+)`/g, '$1');
+    // 多余空白压缩
+    s = s.replace(/[ \t]+/g, ' ');
+    s = s.replace(/\s*\n+\s*/g, ' ');
+    return s.trim();
   }
   
   /**
@@ -1423,7 +1818,7 @@ class App {
         <div class="chat-messages ${isVoiceMode ? 'voice-messages' : ''}" id="chatMessages"></div>
         <div class="chat-input-area">
           ${isVoiceMode ? `
-          <button class="voice-mic-btn" id="micBtn">
+          <button class="voice-mic-btn" id="micBtn" title="按住或点击说话">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
               <path d="M19 10v2a7 7 0 01-14 0v-2"/>
@@ -1432,6 +1827,11 @@ class App {
             </svg>
           </button>
           <input type="text" class="voice-input" id="voiceInput" placeholder="或直接输入文字...">
+          <button class="voice-tts-stop-btn" id="voiceTtsStopBtn" title="停止当前播报">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="6" width="12" height="12" rx="2" ry="2"/>
+            </svg>
+          </button>
           <button class="voice-send-btn" id="voiceSendBtn" title="发送并触发TTS">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="22" y1="2" x2="11" y2="13"/>
@@ -1716,6 +2116,7 @@ class App {
       
       const voiceInput = document.getElementById('voiceInput');
       const voiceSendBtn = document.getElementById('voiceSendBtn');
+      const voiceTtsStopBtn = document.getElementById('voiceTtsStopBtn');
       
       if (voiceInput && voiceSendBtn) {
         voiceSendBtn.addEventListener('click', () => {
@@ -1733,6 +2134,18 @@ class App {
             e.preventDefault();
             voiceSendBtn.click();
           }
+        });
+      }
+
+      // 语音对话模式下的“停止TTS”按钮：用户主动中断当前播报 & 取消后续AI回复
+      if (voiceTtsStopBtn) {
+        voiceTtsStopBtn.addEventListener('click', () => {
+          // 1）立即停止当前所有语音播放并清空TTS队列
+          this.stopTTS();
+          // 2）清理当前流式对话状态，避免后续增量再触发新的 TTS
+          this.clearChatStreamState();
+          // 3）语音状态提示
+          this.updateVoiceStatus('播报已停止');
         });
       }
     }
@@ -1852,16 +2265,15 @@ class App {
     if (this._isRestoringHistory) return;
     
     const currentHistory = this._getCurrentChatHistory();
+    // 没有历史：直接清空并返回
     if (!Array.isArray(currentHistory) || currentHistory.length === 0) {
-      if (box.children.length === 0) return;
       box.innerHTML = '';
-          return;
-        }
-    
-    if (box.children.length > 0) {
-        return;
-      }
-      
+      return;
+    }
+
+    // 已经有内容但不是在恢复流程中：清空后重新渲染
+    box.innerHTML = '';
+
     this._isRestoringHistory = true;
     
     try {
@@ -1886,7 +2298,8 @@ class App {
       });
       
       box.style.overflow = originalOverflow;
-        box.scrollTop = box.scrollHeight;
+      // 恢复历史后强制滚动到底部（含一次补滚，避免仅到 70%）
+      this.scrollToBottom(false);
     } finally {
       this._isRestoringHistory = false;
     }
@@ -1926,23 +2339,22 @@ class App {
     div.dataset.messageId = msgId;
     div.dataset.role = role;
     const contentDiv = document.createElement('div');
-    contentDiv.className = 'chat-content';
-    if (isVoiceMode) {
-      contentDiv.textContent = text;
-    } else {
-      contentDiv.innerHTML = this.renderMarkdown(text);
-    }
+    // 统一“MD 显示协议”：所有使用 renderMarkdown 的容器都带上 chat-markdown 样式域
+    contentDiv.className = 'chat-content chat-markdown';
+    // Voice / AI / Event 使用同一套 Markdown 渲染，保持显示一致
+    contentDiv.innerHTML = this.renderMarkdown(text);
     div.appendChild(contentDiv);
     
     if (mcpTools && Array.isArray(mcpTools) && mcpTools.length > 0) {
       this._addMCPToolsInfo(div, mcpTools);
     }
     
-    if (!isVoiceMode) {
-      this._addMessageActions(div, role, text, msgId);
-    }
+    // Voice 模式也需要基础操作（复制/撤回），体验保持一致
+    this._addMessageActions(div, role, text, msgId);
     
     box.appendChild(div);
+    // Mermaid：只对新增消息做局部渲染
+    this._renderMermaidIn(div);
     
     if (!this._isRestoringHistory) {
     this.scrollToBottom();
@@ -2181,7 +2593,8 @@ class App {
         // 图片段：先渲染之前的文本，再渲染图片
         if (textParts.length > 0) {
           const textDiv = document.createElement('div');
-          textDiv.className = 'chat-text';
+          // 统一“MD 显示协议”
+          textDiv.className = 'chat-text chat-markdown';
           textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
           div.appendChild(textDiv);
           textParts.length = 0;
@@ -2215,7 +2628,7 @@ class App {
         // 视频段：先渲染之前的文本，再渲染视频
         if (textParts.length > 0) {
           const textDiv = document.createElement('div');
-          textDiv.className = 'chat-text';
+          textDiv.className = 'chat-text chat-markdown';
           textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
           div.appendChild(textDiv);
           textParts.length = 0;
@@ -2241,7 +2654,7 @@ class App {
       } else if (seg.type === 'record') {
         if (textParts.length > 0) {
           const textDiv = document.createElement('div');
-          textDiv.className = 'chat-text';
+          textDiv.className = 'chat-text chat-markdown';
           textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
           div.appendChild(textDiv);
           textParts.length = 0;
@@ -2275,7 +2688,7 @@ class App {
         // 回复：显示为引用样式
         if (textParts.length > 0) {
           const textDiv = document.createElement('div');
-          textDiv.className = 'chat-text';
+          textDiv.className = 'chat-text chat-markdown';
           textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
           div.appendChild(textDiv);
           textParts.length = 0;
@@ -2290,7 +2703,7 @@ class App {
         // 文件：显示为下载链接
         if (textParts.length > 0) {
           const textDiv = document.createElement('div');
-          textDiv.className = 'chat-text';
+          textDiv.className = 'chat-text chat-markdown';
           textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
           div.appendChild(textDiv);
           textParts.length = 0;
@@ -2313,7 +2726,7 @@ class App {
         // Markdown 或原始内容：直接渲染
         if (textParts.length > 0) {
           const textDiv = document.createElement('div');
-          textDiv.className = 'chat-text';
+          textDiv.className = 'chat-text chat-markdown';
           textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
           div.appendChild(textDiv);
           textParts.length = 0;
@@ -2330,7 +2743,7 @@ class App {
         // 按钮：显示为交互按钮
         if (textParts.length > 0) {
           const textDiv = document.createElement('div');
-          textDiv.className = 'chat-text';
+          textDiv.className = 'chat-text chat-markdown';
           textDiv.innerHTML = this.renderMarkdown(textParts.join(''));
           div.appendChild(textDiv);
           textParts.length = 0;
@@ -2399,6 +2812,7 @@ class App {
     if (div.children.length === 0) return;
     
     box.appendChild(div);
+    this._renderMermaidIn(div);
     
     if (!this._isRestoringHistory) {
     this.scrollToBottom();
@@ -2507,6 +2921,8 @@ class App {
 
     div.innerHTML = content;
     box.appendChild(div);
+    // 记录卡片里也可能包含 Mermaid 图表，这里统一触发一次局部渲染
+    this._renderMermaidIn(div);
     
     if (!this._isRestoringHistory) {
     this.scrollToBottom();
@@ -2849,6 +3265,22 @@ class App {
         this.appendChat('user', text);
       }
 
+      // AI 模式下：图片既要用于识图，也要在聊天记录中显示
+      if (images.length > 0) {
+        try {
+          const urls = await this._uploadImagesCore(images);
+          if (Array.isArray(urls) && urls.length > 0) {
+            urls.forEach((u) => {
+              // 直接作为用户图片消息插入聊天记录
+              this.appendSegments([{ type: 'image', url: u }], true, 'user');
+            });
+          }
+        } catch (e) {
+          // 上传失败不影响后续识图（仍然走 base64），只提示一次
+          this.showToast(`图片上传失败: ${e.message}`, 'warning');
+        }
+      }
+
       const messages = [];
       const history = this._getCurrentChatHistory().filter(m => m.role && m.text);
       history.forEach(m => {
@@ -2881,12 +3313,29 @@ class App {
       const provider = this._chatSettings.provider || '';
       const persona = this._chatSettings.persona || '';
 
+      // 构造消息列表：历史 + 本次用户输入（可选人设）
+      let finalMessages = persona
+        ? [{ role: 'system', content: persona }, ...messages]
+        : [...messages];
+
+      // 如果本轮请求涉及 Mermaid/画图，额外补充一条系统提示，规范图表生成规则
+      const mermaidHintNeeded = /```mermaid|mermaid|gantt|flowchart|graph TD|sequenceDiagram|classDiagram/i.test(text || '');
+      if (mermaidHintNeeded) {
+        const mermaidRules = [
+          '你生成 Markdown + Mermaid 图表时必须严格遵守：',
+          '1. 每一张图使用单独的 ```mermaid 代码块，不要在一个代码块里混合多张图（例如 gantt 和 graph）。',
+          '2. gantt 图必须写在以 “gantt” 开头的代码块中，并包含：',
+          '   - 一行 dateFormat YYYY-MM-DD（紧跟在 gantt 后的几行内，不要乱顺序）。',
+          '   - 每个任务一行，ID 必须是英文或数字（如 a1、dev1），不能用中文或带空格；引用前置任务用 after ID。',
+          '3. 避免在 Mermaid 代码块外部继续追加同一张图的语法；如果要画第二张图，请新开一个 ```mermaid 代码块。',
+          '4. 如果只是解释图表含义，请把说明文字写在代码块外面。'
+        ].join('\n');
+        finalMessages.unshift({ role: 'system', content: mermaidRules });
+      }
+
       const requestBody = {
         model: provider || 'gptgod',
-        messages: persona ? [
-          { role: 'system', content: persona },
-          ...messages
-        ] : messages,
+        messages: finalMessages,
         stream: true,
         apiKey: apiKey
       };
@@ -2996,7 +3445,8 @@ class App {
               this._applyMessageEnter(assistantMsg, false);
             }
             const contentDiv = document.createElement('div');
-            contentDiv.className = 'chat-content';
+            // 与 appendChat 保持一致，统一 Markdown 显示协议
+            contentDiv.className = 'chat-content chat-markdown';
             contentDiv.innerHTML = this.renderMarkdown(fullText);
             const existingContent = assistantMsg.querySelector('.chat-content');
             if (existingContent) {
@@ -3021,7 +3471,7 @@ class App {
       if (!hasError && assistantMsg && fullText) {
         assistantMsg.classList.remove('streaming');
         const contentDiv = document.createElement('div');
-        contentDiv.className = 'chat-content';
+        contentDiv.className = 'chat-content chat-markdown';
         contentDiv.innerHTML = this.renderMarkdown(fullText);
         assistantMsg.innerHTML = '';
         assistantMsg.appendChild(contentDiv);
@@ -3032,6 +3482,9 @@ class App {
         const messageId = assistantMsg.dataset.messageId;
         this._getCurrentChatHistory().push({ role: 'assistant', text: fullText, ts: Date.now(), id: messageId, mcpTools: mcpTools.length > 0 ? mcpTools : undefined });
         this._saveChatHistory();
+
+        // 流式结束后一次性渲染 Mermaid，避免用户手动刷新
+        this._renderMermaidIn(assistantMsg);
       }
       
       this.clearChatStreamState();
@@ -3165,16 +3618,46 @@ class App {
             this.updateVoiceEmotion('💬');
             this.scrollToBottom(true);
             
-            // 提前发送TTS：当累积了一定文字（20个字符或遇到句号/问号/感叹号）时开始发送
+            // 提前发送TTS：优化分句逻辑，减少不必要的分句，支持英文标点与背压
             const currentText = fullText.trim();
-            const unsentLength = currentText.length - this._ttsSentTextLength;
-            const shouldSend = unsentLength >= 20 || 
-              /[。！？\n]/.test(currentText.slice(this._ttsSentTextLength));
+            const unsentText = currentText.slice(this._ttsSentTextLength);
+            const unsentForTTS = this._stripMarkdownForTTS(unsentText);
+            const unsentLength = unsentForTTS.length;
+            
+            // 中英文句尾标点（含 . ! ? 。！？）
+            const hasSentenceEnd = /[。！？.!?]/.test(unsentForTTS);
+            const hasNewline = /\n/.test(unsentForTTS);
+            const queueLen = (this._ttsAudioQueue && this._ttsAudioQueue.length) || 0;
+            const backpressure = queueLen >= 12; // 播放队列积压时减少发送
+            
+            // 分句策略（偏向“更快开口说话”，降低首句延迟）：
+            // 1. 无标点时：累积 35 字再发（减少等待，提升跟手感）
+            // 2. 有句尾标点：>=8 字即发
+            // 3. 有换行：>=6 字即发
+            // 4. 背压时：仅在有句尾/换行且足够长时发，或未发长度>=50 才发
+            const charThreshold = backpressure ? 50 : 35;
+            const shouldSend = (unsentLength >= charThreshold) ||
+              (hasSentenceEnd && unsentLength >= 8) ||
+              (hasNewline && unsentLength >= 6);
             
             if (shouldSend && currentText.length > this._ttsSentTextLength) {
-              const textToSend = currentText.slice(this._ttsSentTextLength);
+              let textToSend = unsentForTTS;
+              if (hasSentenceEnd && !hasNewline) {
+                const sentenceEndIndex = unsentForTTS.search(/[。！？.!?]/);
+                if (sentenceEndIndex >= 0) {
+                  textToSend = unsentForTTS.slice(0, sentenceEndIndex + 1);
+                }
+              } else if (hasNewline) {
+                const newlineIndex = unsentForTTS.indexOf('\n');
+                if (newlineIndex >= 0) {
+                  textToSend = unsentForTTS.slice(0, newlineIndex + 1);
+                }
+              }
+              
               if (textToSend.trim()) {
+                console.log(`[TTS前端] 分句决策: 未发送(语音)=${unsentLength}字, 有句号=${hasSentenceEnd}, 队列=${queueLen}, 发送${textToSend.length}字`);
                 this._sendTTSChunk(textToSend.trim()).catch(() => {});
+                // 以原始文本的已发送长度推进，保证后续 unsentText 计算正确
                 this._ttsSentTextLength = currentText.length;
               }
             }
@@ -3197,10 +3680,12 @@ class App {
           // 发送剩余的文本
           const currentText = fullText.trim();
           if (currentText.length > this._ttsSentTextLength) {
-            const remainingText = currentText.slice(this._ttsSentTextLength);
-            if (remainingText.trim()) {
-              this._sendTTSChunk(remainingText.trim()).catch(() => {});
+            const remaining = currentText.slice(this._ttsSentTextLength);
+            const ttsRemaining = this._stripMarkdownForTTS(remaining);
+            if (ttsRemaining.trim()) {
+              this._sendTTSChunk(ttsRemaining.trim()).catch(() => {});
             }
+            this._ttsSentTextLength = currentText.length;
           }
           
           this.updateVoiceEmotion('😊');
@@ -3231,6 +3716,10 @@ class App {
   async _sendTTSChunk(text) {
     if (!text || !text.trim()) return;
     
+    // 一旦有新的TTS文本要播报，认为进入新的会话，允许重新播放语音
+    this._ttsStoppedManually = false;
+    this._ttsDropLogged = false;
+
     // 将文本添加到队列
     this._ttsTextQueue.push(text.trim());
     
@@ -3246,28 +3735,41 @@ class App {
       return;
     }
 
-    // 合并队列中的文本（最多合并3个，避免文本过长）
+    // 合并队列中的文本：优化合并策略，减少Session数量
     const textsToMerge = [];
     let totalLength = 0;
-    const MAX_MERGE_COUNT = 3;
-    const MAX_LENGTH = 100; // 最多合并100个字符
+    const MAX_MERGE_COUNT = 5; // 增加合并数量，减少Session
+    const MAX_LENGTH = 150; // 增加最大长度，允许更长的文本合并
 
     while (this._ttsTextQueue.length > 0 && textsToMerge.length < MAX_MERGE_COUNT && totalLength < MAX_LENGTH) {
       const text = this._ttsTextQueue.shift();
       textsToMerge.push(text);
       totalLength += text.length;
+      
+      // 如果当前文本以句号/问号/感叹号结尾，且总长度已足够，可以停止合并
+      // 这样可以避免在标点符号处产生明显间隔
+      if (/[。！？]$/.test(text) && totalLength >= 30) {
+        break;
+      }
     }
 
-    const mergedText = textsToMerge.join('');
+    // 合并时在文本之间添加空格，避免连接处不自然
+    const mergedText = textsToMerge.join(' ').replace(/\s+/g, ' ').trim();
+    
     if (!mergedText.trim()) {
       // 如果合并后为空，继续处理队列
       this._processTTSQueue();
       return;
     }
+    
+    console.log(`[TTS前端] 处理队列: 合并${textsToMerge.length}块, ${mergedText.length}字`);
 
     // 标记Session为活跃状态
     this._ttsSessionActive = true;
+    this._ttsSessionStartTime = Date.now();
     this._ttsPending = true;
+    
+    console.log(`[TTS前端] 发起请求: ${mergedText.length}字`);
 
     try {
       await fetch(`${this.serverUrl}/api/device/tts`, {
@@ -3282,10 +3784,12 @@ class App {
       });
       await new Promise(resolve => setTimeout(resolve, 100));
     } catch (e) {
-      // 静默失败，不影响主流程
+      // 网络错误时，清理Session状态并重试
+      console.warn('[TTS前端] 请求失败:', e);
       this._ttsSessionActive = false;
+      this._ttsSessionStartTime = null;
       this._ttsPending = false;
-      // 继续处理队列
+      // 继续处理队列（自动重试）
       this._processTTSQueue();
     } finally {
       this._ttsPending = false;
@@ -3295,14 +3799,32 @@ class App {
 
   // 当TTS Session结束时调用（通过检测最后一个音频块或WebSocket消息）
   _onTTSSessionEnd() {
+    // 计算Session耗时（仅做简单统计，不再触发超时强制结束）
+    if (this._ttsSessionStartTime) {
+      const sessionDuration = Date.now() - this._ttsSessionStartTime;
+      console.log(`[TTS前端] Session结束: 耗时=${sessionDuration}ms, 剩余队列=${this._ttsTextQueue.length}`);
+      this._ttsSessionStartTime = null;
+    }
     this._ttsSessionActive = false;
     // 继续处理队列中的下一个请求
-    this._processTTSQueue();
+    if (this._ttsTextQueue.length > 0) {
+      this._processTTSQueue();
+    }
   }
 
   _playTTSAudio(hexData) {
     if (!hexData || typeof hexData !== 'string') {
       console.warn(`[TTS] 收到无效的hexData: ${hexData}, 类型=${typeof hexData}`);
+      return;
+    }
+
+    // 如果用户已经手动点击“停止播报”，则直接丢弃后续所有音频块，避免需要连点多次按钮
+    if (this._ttsStoppedManually) {
+      // 仅在首次丢弃时打日志，防止刷屏
+      if (!this._ttsDropLogged) {
+        this._ttsDropLogged = true;
+        console.warn('[TTS前端] 已收到用户手动停止指令，丢弃后续音频块');
+      }
       return;
     }
     
@@ -3385,19 +3907,34 @@ class App {
       // 如果是第一个块，记录Session开始时间并标记Session为活跃
       if (this._ttsStats.totalChunks === 1) {
         this._ttsStats.sessionStartTime = now;
-        this._ttsSessionActive = true; // 标记Session为活跃（收到第一个音频块时）
+        // 确保Session状态正确（可能在收到第一个块之前就已经标记为活跃）
+        if (!this._ttsSessionActive) {
+          this._ttsSessionActive = true;
+          this._ttsSessionStartTime = now;
+        }
       }
       
-      // 队列管理：如果队列过长（超过50个块），丢弃最旧的块，防止积压
-      const MAX_QUEUE_SIZE = 50;
-      if (this._ttsAudioQueue.length >= MAX_QUEUE_SIZE) {
-        // 丢弃队列中最旧的10%的块，保持队列在合理范围内
-        const dropCount = Math.floor(MAX_QUEUE_SIZE * 0.1);
-        this._ttsAudioQueue.splice(0, dropCount);
+      // 只在队列积压或接收间隔异常时输出日志
+       // 队列告警阈值（不丢弃）
+       const WARNING_QUEUE_SIZE = 32;
+      if (this._ttsAudioQueue.length > 20 || receiveInterval > 100) {
+        console.log(`[TTS前端] 音频块#${this._ttsStats.totalChunks}: 队列=${this._ttsAudioQueue.length}块, 接收间隔=${receiveInterval}ms`);
       }
+      
+       // 队列管理：不丢弃音频块（用户要求不丢包），仅告警提示积压
+       // 允许队列积压到 100 块；超过后继续积压，但会强告警（真正背压在后端发送侧做）
+       const HARD_MAX_QUEUE_SIZE = 100;
+       if (this._ttsAudioQueue.length >= HARD_MAX_QUEUE_SIZE) {
+         console.warn(`[TTS前端] ⚠️ 队列已达上限: ${this._ttsAudioQueue.length}/${HARD_MAX_QUEUE_SIZE}（不丢弃，等待后端背压/前端播放消化）`);
+       } else if (this._ttsAudioQueue.length >= WARNING_QUEUE_SIZE && !this._ttsQueueWarned) {
+         this._ttsQueueWarned = true;
+         console.warn(`[TTS前端] 队列接近上限: ${this._ttsAudioQueue.length}/${HARD_MAX_QUEUE_SIZE}`);
+       }
       
       // 加入队列尾部，确保不丢包且有序
       this._ttsAudioQueue.push(audioBuffer);
+      // 上报队列状态给后端做实时背压
+      this._reportTTSQueueStatus(false, 'enqueue');
       
       // 开始播放（只在第一次时启动）
       if (!this._ttsPlaying) {
@@ -3409,12 +3946,61 @@ class App {
       console.error('[TTS] 音频处理失败:', e);
     }
   }
+
+  // 上报前端TTS队列状态到后端（用于闭环背压）
+  _reportTTSQueueStatus(force = false, reason = '') {
+    try {
+      if (!this._deviceWs || this._deviceWs.readyState !== WebSocket.OPEN) return;
+      const now = Date.now();
+      const queueLen = (this._ttsAudioQueue && this._ttsAudioQueue.length) || 0;
+      const playing = this._ttsPlaying === true;
+      const activeSources = (this._ttsActiveSources && this._ttsActiveSources.length) || 0;
+
+      // 节流：默认 100ms 一次；但跨阈值/状态变化立即上报
+      const MIN_INTERVAL_MS = 100;
+      const HIGH_WATER = 40;
+      const LOW_WATER = 20;
+      const crossedHigh = queueLen >= HIGH_WATER && this._ttsLastReportedQueueLen < HIGH_WATER;
+      const crossedLow = queueLen <= LOW_WATER && this._ttsLastReportedQueueLen > LOW_WATER;
+      const stateChanged = (this._ttsLastReportedPlaying !== null && playing !== this._ttsLastReportedPlaying) ||
+        (this._ttsLastReportedActiveSources !== -1 && activeSources !== this._ttsLastReportedActiveSources);
+
+      if (!force && !crossedHigh && !crossedLow && !stateChanged && (now - this._ttsLastQueueReportAt) < MIN_INTERVAL_MS) {
+        if (!this._ttsQueueReportTimer) {
+          const wait = MIN_INTERVAL_MS - (now - this._ttsLastQueueReportAt);
+          this._ttsQueueReportTimer = setTimeout(() => {
+            this._ttsQueueReportTimer = null;
+            this._reportTTSQueueStatus(true, reason || 'throttle');
+          }, Math.max(0, wait));
+        }
+        return;
+      }
+
+      this._ttsLastQueueReportAt = now;
+      this._ttsLastReportedQueueLen = queueLen;
+      this._ttsLastReportedPlaying = playing;
+      this._ttsLastReportedActiveSources = activeSources;
+
+      this._deviceWs.send(JSON.stringify({
+        type: 'tts_queue_status',
+        device_id: this._webUserId,
+        queue_len: queueLen,
+        playing,
+        active_sources: activeSources,
+        ts: now,
+        reason
+      }));
+    } catch {
+      // 静默：不影响主流程
+    }
+  }
   
   _playNext() {
     // 防止重复调用：如果队列为空，停止播放并清理资源
     if (this._ttsAudioQueue.length === 0) {
       this._ttsPlaying = false;
       this._ttsNextPlayTime = 0;
+      this._reportTTSQueueStatus(false, 'queue_empty');
       // 注意：不清理 _ttsActiveSources，因为最后一个播放源可能还在播放
       // 等 onended 回调触发时会自动清理
       
@@ -3436,6 +4022,7 @@ class App {
         
         // Session结束，可以处理下一个TTS请求
         this._onTTSSessionEnd();
+        this._reportTTSQueueStatus(true, 'session_end');
         
         // 重置统计信息
         this._ttsStats = {
@@ -3455,68 +4042,28 @@ class App {
       return;
     }
     
-    // 防止重叠播放：检查上次播放是否已结束
+    // 严格顺序播放：只依赖 AudioContext 时间线与 onended，不再引入额外延迟/重试定时器
     const currentTime = this._ttsAudioContext.currentTime;
-    if (this._ttsNextPlayTime > 0 && currentTime < this._ttsNextPlayTime) {
-      // 上次播放还没结束，等待 onended 回调触发，不启动新播放
-      const remainingTime = (this._ttsNextPlayTime - currentTime) * 1000;
-      
-      // 如果队列积压过多（超过30个块），跳过等待，立即播放下一个，防止卡顿
-      if (this._ttsAudioQueue.length > 30) {
-        // 队列积压严重，调整播放时间，提前播放
-        this._ttsNextPlayTime = currentTime + 0.01; // 只等待10ms
-        // 继续执行播放逻辑
-      } else {
-        // 设置超时重试机制，防止播放卡住
-        // 如果等待时间超过预期时间+30ms，强制继续播放（减少容错时间，提高响应速度）
-        const maxWaitTime = Math.min(remainingTime + 30, 100); // 最多等待100ms
-        if (this._ttsRetryTimer) {
-          clearTimeout(this._ttsRetryTimer);
-        }
-        this._ttsRetryTimer = setTimeout(() => {
-          const checkTime = this._ttsAudioContext.currentTime;
-          if (checkTime >= this._ttsNextPlayTime || this._ttsAudioQueue.length > 0) {
-            this._ttsRetryTimer = null;
-            this._playNext();
-          }
-        }, maxWaitTime);
-        
-        return;
-      }
-    }
-    
-    // 清除重试定时器（如果存在）
-    if (this._ttsRetryTimer) {
-      clearTimeout(this._ttsRetryTimer);
-      this._ttsRetryTimer = null;
-    }
     
     try {
       // 从队列头部取出一个音频块（FIFO，确保有序）
       const audioBuffer = this._ttsAudioQueue.shift();
+      if (this._ttsAudioQueue.length < 15) {
+        this._ttsQueueWarned = false;
+      }
       const duration = audioBuffer.duration;
       
-      // 计算播放开始时间，确保不重叠
-      let startTime;
-      if (this._ttsNextPlayTime === 0) {
-        // 第一次播放，立即开始
-        startTime = currentTime;
-      } else {
-        // 后续播放：必须在上次播放结束后才开始
-        // 使用 Math.max 确保：如果上次已结束，立即开始；如果还没结束，等待到结束时间
-        startTime = Math.max(currentTime, this._ttsNextPlayTime);
-        
-        // 如果队列积压过多，缩短播放间隔，提高播放速度（最小间隔5ms）
-        if (this._ttsAudioQueue.length > 20 && startTime > currentTime) {
-          const gap = startTime - currentTime;
-          if (gap > 0.05) { // 如果间隔超过50ms，缩短到5ms
-            startTime = currentTime + 0.005;
-          }
-        }
-      }
+      // 计算播放开始时间：严格不重叠，按官方推荐写法排队到时间线
+      const startTime = this._ttsNextPlayTime === 0
+        ? currentTime
+        : Math.max(currentTime, this._ttsNextPlayTime);
       
       this._ttsStats.lastPlayTime = startTime;
       this._ttsStats.expectedNextPlayTime = startTime + duration;
+      
+      // 更新下次播放时间（在 start 之前更新，防止并发问题）
+      this._ttsNextPlayTime = startTime + duration;
+      this._reportTTSQueueStatus(false, 'dequeue');
       
       // 创建播放源
       const source = this._ttsAudioContext.createBufferSource();
@@ -3525,9 +4072,6 @@ class App {
       
       // 添加到活跃源列表，用于资源管理
       this._ttsActiveSources.push(source);
-      
-      // 更新下次播放时间（在 start 之前更新，防止并发问题）
-      this._ttsNextPlayTime = startTime + duration;
       
       // 播放结束后立即播放下一个（确保连续）
       source.onended = () => {
@@ -3563,17 +4107,10 @@ class App {
       // 开始播放
       source.start(startTime);
       
-      // 内存管理：如果队列过长，主动清理部分队列，防止积压
-      const WARNING_QUEUE_SIZE = 80;
-      const MAX_QUEUE_SIZE = 100;
-      if (this._ttsAudioQueue.length > WARNING_QUEUE_SIZE) {
-        console.warn('[TTS] 队列过长，可能存在性能问题，队列长度:', this._ttsAudioQueue.length);
-        // 如果超过最大限制，丢弃最旧的块
-        if (this._ttsAudioQueue.length > MAX_QUEUE_SIZE) {
-          const dropCount = this._ttsAudioQueue.length - MAX_QUEUE_SIZE;
-          this._ttsAudioQueue.splice(0, dropCount);
-        }
-      }
+       // 不丢弃：队列过长只告警；节流应由后端按 ws.bufferedAmount 背压控制
+       if (this._ttsAudioQueue.length > 100) {
+         console.warn('[TTS前端] ⚠️ 播放侧队列过长:', this._ttsAudioQueue.length, '（不丢弃）');
+       }
     } catch (e) {
       console.error('[TTS] 播放失败:', e);
       this._cleanupTTS();
@@ -3582,12 +4119,6 @@ class App {
   
   // 清理TTS资源，防止内存泄漏
   _cleanupTTS() {
-    // 清除重试定时器
-    if (this._ttsRetryTimer) {
-      clearTimeout(this._ttsRetryTimer);
-      this._ttsRetryTimer = null;
-    }
-    
     // 停止所有活跃的播放源
     for (const source of this._ttsActiveSources) {
       try {
@@ -3602,11 +4133,18 @@ class App {
     // 清空队列
     this._ttsAudioQueue = [];
     this._ttsTextQueue = []; // 清空文本队列
+    this._reportTTSQueueStatus(true, 'cleanup');
+    if (this._ttsQueueReportTimer) {
+      clearTimeout(this._ttsQueueReportTimer);
+      this._ttsQueueReportTimer = null;
+    }
     
     // 重置状态
     this._ttsPlaying = false;
     this._ttsNextPlayTime = 0;
     this._ttsSessionActive = false; // 重置Session状态
+    this._ttsSessionStartTime = null; // 重置Session开始时间
+    this._ttsQueueWarned = false;
     
     // 重置统计信息
     this._ttsStats = {
@@ -3626,7 +4164,16 @@ class App {
   
   // 停止TTS播放（外部调用）
   stopTTS() {
+    // 标记为用户手动停止：后续到达的音频块一律丢弃，直到下一次重新发起TTS
+    this._ttsStoppedManually = true;
+    this._ttsDropLogged = false;
     this._cleanupTTS();
+    // 主动上报一次队列状态，帮助后端更快感知到“已经停止”
+    try {
+      this._reportTTSQueueStatus(true, 'manual_stop');
+    } catch {
+      // 忽略上报错误
+    }
   }
 
   updateVoiceStatus(text) {
@@ -3656,12 +4203,8 @@ class App {
     });
   }
 
-  async sendChatMessageWithImages(text, images) {
-    if (images.length === 0) {
-      this.sendDeviceMessage(text, { source: 'manual' });
-      return [];
-    }
-
+  async _uploadImagesCore(images) {
+    if (!images || images.length === 0) return [];
     const apiKey = localStorage.getItem('apiKey') || '';
 
     const uploadFd = new FormData();
@@ -3700,6 +4243,17 @@ class App {
       throw new Error('图片上传成功但未返回可用的 file_url');
     }
 
+    return urls;
+  }
+
+  async sendChatMessageWithImages(text, images) {
+    if (images.length === 0) {
+      this.sendDeviceMessage(text, { source: 'manual' });
+      return [];
+    }
+
+    const urls = await this._uploadImagesCore(images);
+
     const segments = [];
     if ((text ?? '').trim()) {
       segments.push({ type: 'text', text: (text ?? '').trim() });
@@ -3720,12 +4274,18 @@ class App {
     const box = document.getElementById('chatMessages');
     if (!box) return;
     
-    // 直接设置滚动位置，无需冗余的延迟
-    if (smooth) {
-      box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
-    } else {
-      box.scrollTop = box.scrollHeight;
-    }
+    const doScroll = () => {
+      if (smooth && box.scrollTo) {
+        box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+      } else {
+        box.scrollTop = box.scrollHeight;
+      }
+    };
+
+    // 先立即滚一次
+    doScroll();
+    // 再在下一帧（布局/渲染完成后）补一次，避免只到 70%–80% 的问题
+    requestAnimationFrame(doScroll);
   }
 
   /**
@@ -6450,14 +7010,19 @@ class App {
         this._lastWsMessageAt = Date.now();
         break;
       case 'asr_interim':
-        if (this._chatMode === 'voice') {
-          this.updateVoiceStatus(`识别中: ${data.text || ''}`);
-        } else {
-        this.renderASRStreaming(data.text, false);
+        {
+          const text = data.text || '';
+          console.log(`[ASR前端] 中间结果: "${text}" session_id=${data.session_id || ''}`);
+          if (this._chatMode === 'voice') {
+            this.updateVoiceStatus(`识别中: ${text}`);
+          } else {
+            this.renderASRStreaming(text, false);
+          }
         }
         break;
       case 'asr_final': {
         const finalText = (data.text || '').trim();
+        console.log(`[ASR前端] 最终结果: "${finalText}" session_id=${data.session_id || ''}`);
         if (this._chatMode === 'voice') {
           if (finalText && !this._chatStreamState.running) {
             this.updateVoiceStatus('AI 思考中...');
@@ -6466,7 +7031,7 @@ class App {
             });
           }
         } else {
-        this.renderASRStreaming(finalText, true);
+          this.renderASRStreaming(finalText, true);
         }
         break;
       }
@@ -6612,20 +7177,20 @@ class App {
   }
 
   renderASRStreaming(text = '', done = false) {
-    const input = document.getElementById('chatInput');
-    if (!input) return;
-
     const finalText = (text || '').trim();
+    // 文本模式：把识别内容同步到主输入框（支持 MD，交由 renderMarkdown + 发送逻辑渲染）
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+      chatInput.value = finalText;
+      chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
 
-      if (done) {
-      if (finalText) {
-        input.value = finalText;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    } else {
-      input.value = finalText || '';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+    // 语音模式：同时把识别内容同步到 voiceInput，方便立刻回显再触发 TTS 播放
+    const voiceInput = document.getElementById('voiceInput');
+    if (voiceInput) {
+      voiceInput.value = finalText || '';
+      // 语音输入框主要做展示，不需要再触发额外的 input 事件
+    }
   }
 
   async toggleMic() {
@@ -6643,10 +7208,10 @@ class App {
     
     this._micStarting = true;
     try {
+      // 如果已有会话，先停止
       if (this._asrSessionId || this._micActive) {
-        this._micActive = true;
         await this.stopMic();
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
       
       await this.ensureDeviceWs();
@@ -6667,11 +7232,42 @@ class App {
       const sessionId = `sess_${Date.now()}`;
       this._asrSessionId = sessionId;
       this._asrChunkIndex = 0;
+      // 初始化ASR统计
+      this._asrStats = {
+        totalChunks: 0,
+        totalBytes: 0,
+        totalSamples: 0,
+        sessionStartTime: Date.now(),
+        lastChunkTime: null
+      };
       this._micActive = true;
       this._audioBuffer = [];
+      this._preAudioBuffer = []; // 预缓冲：在ASR准备好之前收集的音频
       
       document.getElementById('micBtn')?.classList.add('recording');
       
+      // 先启动音频处理，开始收集音频（预缓冲）
+      processor.onaudioprocess = (e) => {
+        if (!this._micActive) return;
+        const input = e.inputBuffer.getChannelData(0);
+        const pcm16 = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          const s = Math.max(-1, Math.min(1, input[i]));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        
+        // 使用预缓冲机制：同时存入预缓冲和正常缓冲，确保不丢失最开始的话
+        this._preAudioBuffer.push(pcm16);
+        // 限制预缓冲大小，避免内存问题（最多保存约3秒的音频，约30个块）
+        if (this._preAudioBuffer.length > 30) {
+          this._preAudioBuffer.shift(); // 移除最旧的
+        }
+        
+        // 同时存入正常缓冲（ASR准备好后使用）
+        this._audioBuffer.push(pcm16);
+      };
+      
+      // 发送会话启动请求
       this._deviceWs?.send(JSON.stringify({
         type: 'asr_session_start',
         device_id: 'webclient',
@@ -6681,18 +7277,38 @@ class App {
         channels: 1
       }));
       
+      // 优化：立即发送音频，不等待ASR确认（后端会缓存）
+      // 使用预缓冲机制确保不丢失最开始的话
       const sendBufferedAudio = () => {
-        if (!this._micActive || this._audioBuffer.length === 0) return;
+        if (!this._micActive) return;
         
-        const combined = new Int16Array(this._audioBuffer.reduce((sum, buf) => sum + buf.length, 0));
+        // 合并预缓冲和当前缓冲（确保不丢失最开始的话）
+        const allBuffers = [...this._preAudioBuffer, ...this._audioBuffer];
+        if (allBuffers.length === 0) return;
+        
+        // 清空预缓冲（已合并）
+        this._preAudioBuffer = [];
+        
+        const combined = new Int16Array(allBuffers.reduce((sum, buf) => sum + buf.length, 0));
         let offset = 0;
-        for (const buf of this._audioBuffer) {
+        for (const buf of allBuffers) {
           combined.set(buf, offset);
           offset += buf.length;
         }
         
         const hex = Array.from(new Uint8Array(combined.buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-        
+        const samples = combined.length;
+        const bytes = samples * 2;
+        const sr = 16000;
+        const duration = samples / sr;
+        const now = performance.now();
+        const last = this._asrStats.lastChunkTime;
+        const interval = last ? (now - last) : 0;
+        this._asrStats.lastChunkTime = now;
+        this._asrStats.totalChunks += 1;
+        this._asrStats.totalBytes += bytes;
+        this._asrStats.totalSamples += samples;
+
         this._deviceWs?.send(JSON.stringify({
           type: 'asr_audio_chunk',
           device_id: 'webclient',
@@ -6702,25 +7318,28 @@ class App {
           data: hex
         }));
         
+        console.log(
+          `[ASR前端] 发送音频块 #${this._asrChunkIndex}: 字节=${bytes}, 样本=${samples}, 时长=${duration.toFixed(3)}s,` +
+          ` 发送间隔=${interval.toFixed(2)}ms, 累计块数=${this._asrStats.totalChunks}, 累计字节=${this._asrStats.totalBytes}`
+        );
+        
         this._audioBuffer = [];
       };
       
-      processor.onaudioprocess = (e) => {
+      // 优化：立即开始发送音频（不等待ASR确认），使用预缓冲确保不丢失最开始的话
+      // 第一次立即发送预缓冲，然后使用更短的间隔（80ms，从150ms优化）
+      const startSending = () => {
         if (!this._micActive) return;
-        
-        const input = e.inputBuffer.getChannelData(0);
-        const pcm16 = new Int16Array(input.length);
-        for (let i = 0; i < input.length; i++) {
-          const s = Math.max(-1, Math.min(1, input[i]));
-          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-        
-        this._audioBuffer.push(pcm16);
+        this._asrReady = true; // 标记ASR已准备好
+        sendBufferedAudio(); // 立即发送预缓冲的音频（包含最开始的话）
         
         if (!this._audioBufferTimer) {
-          this._audioBufferTimer = setInterval(sendBufferedAudio, 150);
+          this._audioBufferTimer = setInterval(sendBufferedAudio, 80);
         }
       };
+      
+      // 立即开始发送（不等待），确保不丢失最开始的话
+      startSending();
     } catch (e) {
       this.showToast('麦克风启动失败: ' + e.message, 'error');
       this._micActive = false;
@@ -6744,19 +7363,33 @@ class App {
     
     this._micStopping = true;
     try {
-      if (this._audioBufferTimer) {
+        if (this._audioBufferTimer) {
         clearInterval(this._audioBufferTimer);
         this._audioBufferTimer = null;
       }
       
-      if (this._audioBuffer.length > 0 && this._deviceWs && this._asrSessionId) {
-        const combined = new Int16Array(this._audioBuffer.reduce((sum, buf) => sum + buf.length, 0));
+      // 发送剩余的音频（包括预缓冲）
+      const allBuffers = [...this._preAudioBuffer, ...this._audioBuffer];
+      if (allBuffers.length > 0 && this._deviceWs && this._asrSessionId) {
+        const combined = new Int16Array(allBuffers.reduce((sum, buf) => sum + buf.length, 0));
         let offset = 0;
-        for (const buf of this._audioBuffer) {
+        for (const buf of allBuffers) {
           combined.set(buf, offset);
           offset += buf.length;
         }
         const hex = Array.from(new Uint8Array(combined.buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const samples = combined.length;
+        const bytes = samples * 2;
+        const sr = 16000;
+        const duration = samples / sr;
+        const now = performance.now();
+        const last = this._asrStats.lastChunkTime;
+        const interval = last ? (now - last) : 0;
+        this._asrStats.lastChunkTime = now;
+        this._asrStats.totalChunks += 1;
+        this._asrStats.totalBytes += bytes;
+        this._asrStats.totalSamples += samples;
+
         this._deviceWs.send(JSON.stringify({
           type: 'asr_audio_chunk',
           device_id: 'webclient',
@@ -6765,6 +7398,11 @@ class App {
           vad_state: 'ending',
           data: hex
         }));
+        
+        console.log(
+          `[ASR前端] 发送结束块 #${this._asrChunkIndex}: 字节=${bytes}, 样本=${samples}, 时长=${duration.toFixed(3)}s,` +
+          ` 发送间隔=${interval.toFixed(2)}ms, 累计块数=${this._asrStats.totalChunks}, 累计字节=${this._asrStats.totalBytes}`
+        );
       }
 
       this._audioProcessor?.disconnect();
@@ -6772,10 +7410,16 @@ class App {
       await this._audioCtx?.close().catch(() => {});
       
       if (this._asrSessionId && this._deviceWs) {
+        const totalDuration = this._asrStats.totalSamples / 16000;
+        console.log(
+          `[ASR前端] 会话结束: session_id=${this._asrSessionId}, 总块数=${this._asrStats.totalChunks},` +
+          ` 总字节=${this._asrStats.totalBytes}, 估算时长=${totalDuration.toFixed(3)}s`
+        );
         this._deviceWs.send(JSON.stringify({
           type: 'asr_session_stop',
           device_id: 'webclient',
-          session_id: this._asrSessionId
+          session_id: this._asrSessionId,
+          duration: Number.isFinite(totalDuration) ? Number(totalDuration.toFixed(3)) : undefined
         }));
       }
     } finally {
@@ -6786,6 +7430,7 @@ class App {
       this._audioProcessor = null;
       this._asrSessionId = null;
       this._audioBuffer = [];
+      this._preAudioBuffer = [];
       this._micStopping = false;
     }
   }
