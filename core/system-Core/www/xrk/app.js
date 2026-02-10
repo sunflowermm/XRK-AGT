@@ -52,7 +52,6 @@ class App {
     this._deviceWs = null;
     this._wsConnecting = false;
     this._micActive = false;
-    this._ttsQueue = [];
     this._ttsPlaying = false;
     this._ttsPending = false;
     this._ttsAudioContext = null;
@@ -1802,7 +1801,6 @@ class App {
       options.onFiles(dropped);
     });
   }
-  
 
   _getCurrentChatHistory() {
     if (this._chatMode === 'ai') return this._aiChatHistory;
@@ -3233,14 +3231,14 @@ class App {
 
   _playTTSAudio(hexData) {
     if (!hexData || typeof hexData !== 'string') {
-      console.warn(`[TTS调试] 收到无效的hexData: ${hexData}, 类型=${typeof hexData}`);
+      console.warn(`[TTS] 收到无效的hexData: ${hexData}, 类型=${typeof hexData}`);
       return;
     }
     
     try {
       // 浏览器兼容性检查
       if (!window.AudioContext && !window.webkitAudioContext) {
-        console.error('[TTS调试] 浏览器不支持Web Audio API');
+        console.error('[TTS] 浏览器不支持Web Audio API');
         return;
       }
       
@@ -3248,25 +3246,24 @@ class App {
         this._ttsAudioContext = new (window.AudioContext || window.webkitAudioContext)({
           sampleRate: 16000 // 统一采样率为16kHz（ASR/TTS标准）
         });
-        console.log('[TTS调试] 创建AudioContext，采样率:', this._ttsAudioContext.sampleRate, '状态:', this._ttsAudioContext.state);
       }
       
       // 如果AudioContext被暂停，尝试恢复
       if (this._ttsAudioContext.state === 'suspended') {
         this._ttsAudioContext.resume().catch((e) => {
-          console.warn('[TTS调试] AudioContext恢复失败:', e);
+          console.warn('[TTS] AudioContext恢复失败:', e);
         });
       }
       
       // Hex解码
       const hexLen = hexData.length;
       if (hexLen === 0) {
-        console.warn(`[TTS调试] hexData为空，跳过处理`);
+        console.warn(`[TTS] hexData为空，跳过处理`);
         return;
       }
       
       if (hexLen % 2 !== 0) {
-        console.error(`[TTS调试] hexData长度不是偶数: ${hexLen}，可能导致解码错误`);
+        console.error(`[TTS] hexData长度不是偶数: ${hexLen}，可能导致解码错误`);
         return;
       }
       
@@ -3276,12 +3273,12 @@ class App {
           bytes[i / 2] = parseInt(hexData.slice(i, i + 2), 16);
         }
       } catch (e) {
-        console.error(`[TTS调试] hex解码失败: ${e.message}, hexData长度=${hexLen}`);
+        console.error(`[TTS] hex解码失败: ${e.message}, hexData长度=${hexLen}`);
         return;
       }
       
       if (bytes.length === 0) {
-        console.warn(`[TTS调试] 解码后字节数为0，跳过处理`);
+        console.warn(`[TTS] 解码后字节数为0，跳过处理`);
         return;
       }
       
@@ -3317,28 +3314,19 @@ class App {
       // 如果是第一个块，记录Session开始时间
       if (this._ttsStats.totalChunks === 1) {
         this._ttsStats.sessionStartTime = now;
-        console.log('[TTS调试] Session开始，准备接收音频数据');
       }
       
       // 加入队列尾部，确保不丢包且有序
-      const queueLengthBefore = this._ttsAudioQueue.length;
       this._ttsAudioQueue.push(audioBuffer);
-      const queueLengthAfter = this._ttsAudioQueue.length;
-      
-      // 检查接收间隔是否异常（间隔过短可能表示数据堆积）
-      const intervalWarning = receiveInterval > 0 && receiveInterval < 10 ? '⚠️间隔过短' : '';
-      
-      console.log(`[TTS调试] 接收音频块 #${this._ttsStats.totalChunks}: 时长=${duration.toFixed(3)}s, 字节=${bytes.length}, 接收间隔=${receiveInterval}ms ${intervalWarning}, 队列长度 ${queueLengthBefore} -> ${queueLengthAfter}, 累计时长=${this._ttsStats.totalDuration.toFixed(3)}s`);
       
       // 开始播放（只在第一次时启动）
       if (!this._ttsPlaying) {
         this._ttsPlaying = true;
         this._ttsNextPlayTime = 0; // 重置播放时间
-        console.log('[TTS调试] 开始播放，队列长度:', this._ttsAudioQueue.length);
         this._playNext();
       }
     } catch (e) {
-      console.error('[TTS调试] 音频处理失败:', e);
+      console.error('[TTS] 音频处理失败:', e);
     }
   }
   
@@ -3362,16 +3350,9 @@ class App {
         const processedCount = this._ttsStats.processedMessageCount;
         const lostMessages = wsMsgCount - processedCount;
         
-        console.log(`[TTS调试] ========== Session统计 ==========`);
-        console.log(`[TTS调试] WebSocket消息: 收到=${wsMsgCount}, 已处理=${processedCount}, 丢失=${lostMessages > 0 ? '⚠️' + lostMessages : '0'}`);
-        console.log(`[TTS调试] 前端接收: 总块数=${this._ttsStats.totalChunks}, 总字节=${this._ttsStats.totalBytes}, 平均块大小=${avgChunkSize}字节`);
-        console.log(`[TTS调试] 播放信息: 总播放时长=${playDuration}s, Session接收耗时=${sessionDuration}s`);
-        console.log(`[TTS调试] 性能指标: 接收速度=${(this._ttsStats.totalBytes / (parseFloat(sessionDuration) || 1)).toFixed(0)}字节/秒`);
-        console.log(`[TTS调试] =================================`);
         if (lostMessages > 0) {
-          console.error(`[TTS调试] ⚠️⚠️⚠️ 检测到消息丢失: WebSocket收到${wsMsgCount}条消息，但只处理了${processedCount}条，丢失${lostMessages}条！`);
+          console.error(`[TTS] 检测到消息丢失: WebSocket收到${wsMsgCount}条消息，但只处理了${processedCount}条，丢失${lostMessages}条`);
         }
-        console.log(`[TTS调试] ⚠️ 请对比后端日志，检查前后端块数、字节数是否一致（防止丢包）`);
         
         // 重置统计信息
         this._ttsStats = {
@@ -3386,8 +3367,6 @@ class App {
           wsMessageCount: 0,
           processedMessageCount: 0
         };
-      } else {
-        console.log('[TTS调试] 播放完成，队列为空，活跃源:', this._ttsActiveSources.length);
       }
       return;
     }
@@ -3397,7 +3376,6 @@ class App {
     if (this._ttsNextPlayTime > 0 && currentTime < this._ttsNextPlayTime) {
       // 上次播放还没结束，等待 onended 回调触发，不启动新播放
       const remainingTime = (this._ttsNextPlayTime - currentTime) * 1000;
-      console.log(`[TTS调试] 等待上次播放结束: 剩余时间=${remainingTime.toFixed(2)}ms, 当前时间=${currentTime.toFixed(3)}s, 上次结束时间=${this._ttsNextPlayTime.toFixed(3)}s, 队列长度=${this._ttsAudioQueue.length}`);
       
       // 设置超时重试机制，防止播放卡住
       // 如果等待时间超过预期时间+50ms，强制继续播放
@@ -3408,7 +3386,6 @@ class App {
       this._ttsRetryTimer = setTimeout(() => {
         const checkTime = this._ttsAudioContext.currentTime;
         if (checkTime >= this._ttsNextPlayTime || this._ttsAudioQueue.length > 0) {
-          console.log(`[TTS调试] 超时重试: 当前时间=${checkTime.toFixed(3)}s, 上次结束时间=${this._ttsNextPlayTime.toFixed(3)}s, 强制继续播放`);
           this._ttsRetryTimer = null;
           this._playNext();
         }
@@ -3439,34 +3416,6 @@ class App {
         startTime = Math.max(currentTime, this._ttsNextPlayTime);
       }
       
-      const delay = startTime - currentTime;
-      
-      // 计算播放间隔（当前播放开始时间 - 上次播放结束时间）
-      let playInterval = 0;
-      let playIntervalWarning = '';
-      if (this._ttsStats.expectedNextPlayTime !== null && this._ttsStats.expectedNextPlayTime > 0) {
-        // 播放间隔 = 当前开始时间 - 上次结束时间
-        // 如果间隔为0或很小，说明无缝衔接（正常）
-        // 如果间隔为负，说明可能重叠（异常）
-        // 如果间隔很大，说明有延迟（可能正常，也可能异常）
-        const actualInterval = (startTime - this._ttsStats.expectedNextPlayTime) * 1000; // 转换为毫秒
-        
-        // 检查播放间隔是否异常
-        if (actualInterval < -10) {
-          // 间隔为负且超过10ms，说明可能重叠
-          playIntervalWarning = '⚠️播放间隔为负，可能重叠！';
-        } else if (actualInterval > 50) {
-          // 间隔超过50ms，说明有延迟
-          playIntervalWarning = '⚠️播放间隔过长，可能有延迟！';
-        } else if (Math.abs(actualInterval) <= 10) {
-          // 间隔在±10ms内，说明无缝衔接（正常）
-          playIntervalWarning = '✓无缝衔接';
-        }
-        playInterval = actualInterval;
-      } else {
-        // 第一次播放，没有间隔
-        playIntervalWarning = '首次播放';
-      }
       this._ttsStats.lastPlayTime = startTime;
       this._ttsStats.expectedNextPlayTime = startTime + duration;
       
@@ -3480,8 +3429,6 @@ class App {
       
       // 更新下次播放时间（在 start 之前更新，防止并发问题）
       this._ttsNextPlayTime = startTime + duration;
-      
-      console.log(`[TTS调试] 播放: 时长=${duration.toFixed(3)}s, 当前时间=${currentTime.toFixed(3)}s, 开始时间=${startTime.toFixed(3)}s, 延迟=${(delay * 1000).toFixed(2)}ms, 播放间隔=${playInterval.toFixed(2)}ms ${playIntervalWarning}, 下次开始时间=${this._ttsNextPlayTime.toFixed(3)}s, 剩余队列=${this._ttsAudioQueue.length}, 活跃源=${this._ttsActiveSources.length}`);
       
       // 播放结束后立即播放下一个（确保连续）
       source.onended = () => {
@@ -3504,7 +3451,7 @@ class App {
       
       // 错误处理
       source.onerror = (e) => {
-        console.error('[TTS调试] 播放源错误:', e);
+        console.error('[TTS] 播放源错误:', e);
         // 从活跃源列表中移除
         const index = this._ttsActiveSources.indexOf(source);
         if (index > -1) {
@@ -3519,10 +3466,10 @@ class App {
       
       // 内存管理：如果队列过长，清理已播放的缓冲区（避免内存泄漏）
       if (this._ttsAudioQueue.length > 100) {
-        console.warn('[TTS调试] 队列过长，可能存在性能问题，队列长度:', this._ttsAudioQueue.length);
+        console.warn('[TTS] 队列过长，可能存在性能问题，队列长度:', this._ttsAudioQueue.length);
       }
     } catch (e) {
-      console.error('[TTS调试] 播放失败:', e);
+      console.error('[TTS] 播放失败:', e);
       this._cleanupTTS();
     }
   }
@@ -3567,7 +3514,6 @@ class App {
       processedMessageCount: 0
     };
     
-    console.log('[TTS调试] 资源已清理');
   }
   
   // 停止TTS播放（外部调用）
@@ -6244,19 +6190,9 @@ class App {
           const data = JSON.parse(e.data);
           this._lastWsMessageAt = Date.now();
           
-          // 记录所有command类型的消息，用于调试丢包问题
-          if (data.type === 'command') {
-            const cmdName = data.command?.command || data.command;
-            if (cmdName === 'play_tts_audio') {
-              const hexData = data.command?.parameters?.audio_data;
-              const bytes = hexData ? hexData.length / 2 : 0;
-              console.log(`[WebSocket] 收到TTS command消息: 类型=${data.type}, 命令=${cmdName}, 字节=${bytes}, 时间戳=${data.command?.timestamp || 'N/A'}`);
-            }
-          }
-          
           this.handleWsMessage(data);
         } catch (e) {
-          console.warn('[WebSocket] 消息解析失败:', e, '原始数据:', e.data?.substring(0, 100));
+          console.warn('[WebSocket] 消息解析失败:', e);
         }
       };
       
@@ -6542,25 +6478,21 @@ class App {
         }
         break;
       case 'command':
-        // 记录所有command消息，用于调试
         if (data.command?.command === 'play_tts_audio') {
           const hexData = data.command.parameters?.audio_data;
-          const bytes = hexData ? hexData.length / 2 : 0;
-          const timestamp = data.command.timestamp || 0;
           
           // 检查数据有效性
           if (!hexData || typeof hexData !== 'string' || hexData.length === 0) {
-            console.warn(`[TTS前端] 收到无效的音频数据: hexData=${hexData}, 类型=${typeof hexData}, command=${JSON.stringify(data.command).substring(0, 100)}`);
+            console.warn(`[TTS] 收到无效的音频数据`);
             return;
           }
           
           if (hexData.length % 2 !== 0) {
-            console.warn(`[TTS前端] 收到奇数长度的hex数据: 长度=${hexData.length}, 时间戳=${timestamp}`);
+            console.warn(`[TTS] 收到奇数长度的hex数据: 长度=${hexData.length}`);
             return;
           }
           
           this._ttsStats.wsMessageCount++;
-          console.log(`[TTS前端] 收到WebSocket消息 #${this._ttsStats.wsMessageCount}: 字节=${bytes}, hex长度=${hexData.length}, 时间戳=${timestamp}`);
           this._playTTSAudio(hexData);
         } else if (data.command === 'display' && data.parameters?.text) {
           this.appendChat('assistant', data.parameters.text, { persist: true, withCopyBtn: true });
