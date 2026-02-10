@@ -1309,16 +1309,28 @@ class DeviceManager {
             sendAudioChunk: (hex) => {
                 const ws = deviceWebSockets.get(deviceId);
                 if (ws && ws.readyState === WebSocket.OPEN && typeof hex === 'string' && hex.length > 0) {
+                    const bytes = hex.length / 2; // hex字符串长度 / 2 = 字节数
+                    const timestamp = Date.now();
                     const cmd = {
                         command: 'play_tts_audio',
                         parameters: { audio_data: hex },
                         priority: 1,
-                        timestamp: Date.now()
+                        timestamp: timestamp
                     };
                     try {
                         ws.send(JSON.stringify({ type: 'command', command: cmd }));
-                    } catch {
-                        // 忽略发送失败，让调用方按需重试
+                        BotUtil.makeLog('debug',
+                            `[TTS传输] WebSocket发送: 字节=${bytes}, hex长度=${hex.length}, 时间戳=${timestamp}`,
+                            deviceId
+                        );
+                    } catch (e) {
+                        BotUtil.makeLog('error', `[TTS传输] WebSocket发送失败: ${e.message}`, deviceId);
+                    }
+                } else {
+                    if (!ws) {
+                        BotUtil.makeLog('warn', `[TTS传输] WebSocket未找到设备: ${deviceId}`, deviceId);
+                    } else if (ws.readyState !== WebSocket.OPEN) {
+                        BotUtil.makeLog('warn', `[TTS传输] WebSocket未打开: ${deviceId}, 状态=${ws.readyState}`, deviceId);
                     }
                 }
             },

@@ -51,6 +51,9 @@ export default class VolcengineTTSClient {
         
         // 统计信息
         this.totalAudioBytes = 0;
+        this.audioChunkCount = 0; // 音频块计数器
+        this.lastChunkTime = null; // 最后一个块的时间戳
+        this.sessionStartTime = null; // Session开始时间
     }
 
     /**
@@ -231,20 +234,67 @@ export default class VolcengineTTSClient {
     _sendAudioToDevice(audioData) {
         const deviceBot = this.Bot[this.deviceId];
         if (!deviceBot || !audioData || audioData.length === 0) return Promise.resolve();
+        
         const sr = this.config.sampleRate || 16000;
         const chunkMs = Math.max(5, Math.min(512, this.config.chunkMs || 40));
         const bytesPerMs = (sr * 2) / 1000;
         const chunkBytes = Math.max(2, Math.floor((bytesPerMs * chunkMs) / 2) * 2);
         const delayMs = 0; // 为了最低端到端延迟，禁用额外分片延迟
+        
+        // 记录Session开始时间（如果是第一个音频数据）
+        if (this.sessionStartTime === null) {
+            this.sessionStartTime = Date.now();
+            this.audioChunkCount = 0;
+            BotUtil.makeLog('debug', `[TTS后端] Session开始，准备发送音频数据`, this.deviceId);
+        }
+        
         return (async () => {
+            const sendStartTime = Date.now();
+            let chunkOffset = 0;
+            
             for (let offset = 0; offset < audioData.length; offset += chunkBytes) {
                 const slice = audioData.slice(offset, Math.min(offset + chunkBytes, audioData.length));
                 const hex = slice.toString('hex');
-                try { deviceBot.sendAudioChunk(hex); } catch {}
+                const chunkIndex = ++this.audioChunkCount;
+                const now = Date.now();
+                
+                // 计算与上一个块的间隔
+                let interval = 0;
+                if (this.lastChunkTime) {
+                    interval = now - this.lastChunkTime;
+                }
+                this.lastChunkTime = now;
+                
+                // 计算音频时长（PCM 16bit mono）
+                const duration = (slice.length / 2) / sr;
+                
+                try {
+                    deviceBot.sendAudioChunk(hex);
+                    
+                    // 详细日志：块编号、字节数、时长、间隔
+                    // 累计字节 = 之前的总字节 + 当前数据包中已发送的字节
+                    const cumulativeBytes = this.totalAudioBytes + offset + slice.length;
+                    BotUtil.makeLog('debug',
+                        `[TTS后端] 发送音频块 #${chunkIndex}: 字节=${slice.length}, hex长度=${hex.length}, 时长=${duration.toFixed(3)}s, 间隔=${interval}ms, 累计字节=${cumulativeBytes}`,
+                        this.deviceId
+                    );
+                } catch (e) {
+                    BotUtil.makeLog('error', `[TTS后端] 发送音频块 #${chunkIndex} 失败: ${e.message}`, this.deviceId);
+                }
+                
+                chunkOffset += slice.length;
+                
                 if (delayMs > 0) {
                     await new Promise(r => setTimeout(r, delayMs));
                 }
             }
+            
+            this.totalAudioBytes += audioData.length;
+            const sendDuration = Date.now() - sendStartTime;
+            BotUtil.makeLog('debug',
+                `[TTS后端] 音频数据发送完成: 总字节=${audioData.length}, 分片数=${Math.ceil(audioData.length / chunkBytes)}, 发送耗时=${sendDuration}ms`,
+                this.deviceId
+            );
         })();
     }
 
@@ -388,6 +438,9 @@ export default class VolcengineTTSClient {
             case TTS_EVENTS.SESSION_STARTED:
                 this.sessionActive = true;
                 this.totalAudioBytes = 0;
+                this.audioChunkCount = 0;
+                this.lastChunkTime = null;
+                this.sessionStartTime = null;
                 BotUtil.makeLog('info',
                     `⚡ [TTS] Session已启动 (${msg.sessionId})`,
                     this.deviceId
@@ -396,10 +449,17 @@ export default class VolcengineTTSClient {
 
             case TTS_EVENTS.SESSION_FINISHED:
                 this.sessionActive = false;
+                const sessionDuration = this.sessionStartTime 
+                    ? ((Date.now() - this.sessionStartTime) / 1000).toFixed(2)
+                    : 'N/A';
                 BotUtil.makeLog('info',
-                    `✅ [TTS] Session已结束 (${this.totalAudioBytes} bytes)`,
+                    `✅ [TTS] Session已结束: 总块数=${this.audioChunkCount}, 总字节=${this.totalAudioBytes}, Session耗时=${sessionDuration}s`,
                     this.deviceId
                 );
+                // 重置统计
+                this.audioChunkCount = 0;
+                this.lastChunkTime = null;
+                this.sessionStartTime = null;
                 break;
 
             case TTS_EVENTS.TTS_SENTENCE_START:
