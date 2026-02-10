@@ -3731,12 +3731,6 @@ body.dark .json-boolean { color: #f87171; }
 
 .chat-container.voice-mode .chat-input-area {
   flex-shrink: 0;
-  padding: 20px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 
 .voice-chat-center {
@@ -3764,12 +3758,6 @@ body.dark .json-boolean { color: #f87171; }
 }
 
 .voice-messages {
-  max-height: 400px;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
   flex: 1;
   min-height: 0;
 }
