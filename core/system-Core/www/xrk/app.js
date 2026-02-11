@@ -2140,10 +2140,9 @@ class App {
       this._chatEventHandlers.get(element).push({ event, handler });
     };
     
-    // 聊天模式切换按钮 - 使用事件委托避免重复绑定
+    // 聊天模式切换按钮 - 使用事件委托（统一交给 _unbindChatEvents 管理，避免 dataset 标记导致失效）
     const modeSelector = document.querySelector('.chat-mode-selector');
-    if (modeSelector && !modeSelector.dataset._bound) {
-      modeSelector.dataset._bound = '1';
+    if (modeSelector) {
       const modeHandler = async (e) => {
         const btn = e.target.closest('.chat-mode-btn');
         if (!btn) return;
@@ -2188,10 +2187,9 @@ class App {
         safeBind(personaInput, 'input', personaHandler);
       }
 
-      // MCP 工具工作流多选：使用事件委托
+      // MCP 工具工作流多选：使用事件委托（交给 safeBind/_unbindChatEvents 管理，无需 dataset 标记）
       const workflowContainer = document.querySelector('.ai-settings-checkboxes');
-      if (workflowContainer && !workflowContainer.dataset._bound) {
-        workflowContainer.dataset._bound = '1';
+      if (workflowContainer) {
         const workflowHandler = () => {
           const workflows = Array.from(document.querySelectorAll('input[id^="workflow_"]:checked'))
             .map(c => c.value);
