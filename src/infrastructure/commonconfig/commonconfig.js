@@ -924,6 +924,7 @@ export default class ConfigBase {
     if (value === undefined) return;
     const expectedType = schema.type;
 
+    // ========= 基础标量类型自动转换 =========
     if (expectedType === 'string') {
       return typeof value === 'string' ? value : String(value);
     }
@@ -957,15 +958,41 @@ export default class ConfigBase {
       return arr;
     }
 
-    if ((expectedType === 'object' || expectedType === 'map') && this._isObject(value)) {
-      const clone = { ...value };
-      const fields = schema.fields ?? {};
-      for (const [key, childSchema] of Object.entries(fields)) {
-        if (clone[key] !== undefined) {
-          clone[key] = this._normalizeValueBySchema(clone[key], childSchema);
+    // ========= 对象 / Map 类型自动转换 =========
+    if (expectedType === 'object' || expectedType === 'map') {
+      let obj = value;
+
+      // 兼容 Textarea 等组件：如果传入的是字符串，尝试按 JSON 解析
+      // 典型场景：如 aistream.mcp.remote.servers[*].headers 字段，前端用 Textarea 输入 JSON
+      if (typeof obj === 'string') {
+        const trimmed = obj.trim();
+        // 空字符串视为“未填写”，交给上层必填规则处理（通常为可选字段）
+        if (!trimmed) {
+          return undefined;
+        }
+        // 形如 JSON 对象的字符串尝试解析
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (this._isObject(parsed)) {
+              obj = parsed;
+            }
+          } catch {
+            // 如果解析失败，保持原值交给后续类型检查报错，避免静默吞掉错误
+          }
         }
       }
-      return clone;
+
+      if (this._isObject(obj)) {
+        const clone = { ...obj };
+        const fields = schema.fields ?? {};
+        for (const [key, childSchema] of Object.entries(fields)) {
+          if (clone[key] !== undefined) {
+            clone[key] = this._normalizeValueBySchema(clone[key], childSchema);
+          }
+        }
+        return clone;
+      }
     }
 
     return value;
