@@ -79,7 +79,7 @@ export default class AzureOpenAILLMClient {
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
-    const maxToolRounds = this.config.maxToolRounds || 5;
+    const maxToolRounds = this.config.maxToolRounds || 7;
     const currentMessages = [...transformedMessages];
 
     for (let round = 0; round < maxToolRounds; round++) {
@@ -118,7 +118,7 @@ export default class AzureOpenAILLMClient {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     
-    const maxToolRounds = this.config.maxToolRounds || 5;
+    const maxToolRounds = this.config.maxToolRounds || 7;
     let currentMessages = [...transformedMessages];
     let round = 0;
     let resp = null;

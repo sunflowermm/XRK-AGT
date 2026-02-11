@@ -212,7 +212,7 @@ export default class XiaomiMiMoLLMClient {
    */
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    const maxToolRounds = this.config.maxToolRounds || 5;
+    const maxToolRounds = this.config.maxToolRounds || 7;
     const currentMessages = [...transformedMessages];
 
     for (let round = 0; round < maxToolRounds; round++) {
@@ -258,7 +258,7 @@ export default class XiaomiMiMoLLMClient {
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     
-    const maxToolRounds = this.config.maxToolRounds || 5;
+    const maxToolRounds = this.config.maxToolRounds || 7;
     let currentMessages = [...transformedMessages];
     let round = 0;
     let resp = null;

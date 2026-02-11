@@ -27,7 +27,8 @@ frequencyPenalty: 0
 # 工具调用（MCP）
 enableTools: true
 toolChoice: "auto"
-maxToolRounds: 5
+# 最大工具调用轮次（默认 7，给模型一定的纠错空间，仍有限制防止死循环）
+maxToolRounds: 7
 
 # 并行工具调用（若服务端不支持会忽略）
 parallelToolCalls: true

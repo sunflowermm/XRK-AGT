@@ -128,6 +128,13 @@ export class MCPServer {
     }
 
     const tool = this.tools.get(name);
+    const isRemote = name.startsWith('remote-mcp.');
+
+    BotUtil.makeLog(
+      'info',
+      `MCP 工具调用开始: ${name}${isRemote ? ' (remote)' : ''}`,
+      'MCPServer'
+    );
 
     try {
       // 验证参数schema（如果提供）
@@ -149,6 +156,12 @@ export class MCPServer {
       
       // 检查是否为错误结果
       const isError = result && typeof result === 'object' && result.success === false;
+
+      BotUtil.makeLog(
+        isError ? 'warn' : 'info',
+        `MCP 工具调用完成: ${name}${isRemote ? ' (remote)' : ''}, isError=${isError}`,
+        'MCPServer'
+      );
       
       // 直接返回结果，不做增强（AI无法使用MCP，增强逻辑无用）
       return {

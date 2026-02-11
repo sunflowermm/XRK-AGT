@@ -53,8 +53,8 @@ enableTools: true
 toolChoice: "auto"
 # 是否允许并行工具调用（豆包支持）
 parallelToolCalls: true
-# 多轮工具调用最大轮次
-maxToolRounds: 5
+# 多轮工具调用最大轮次（默认 7，给模型一定的纠错空间，仍有限制防止死循环）
+maxToolRounds: 7
 
 # ----------------------------------------
 # Stream 流式输出配置

@@ -1,5 +1,6 @@
 import StreamLoader from '#infrastructure/aistream/loader.js';
 import cfg from '#infrastructure/config/config.js';
+import BotUtil from '#utils/botutil.js';
 
 /**
  * MCP 工具适配器
@@ -180,12 +181,17 @@ export class MCPToolAdapter {
       allowedToolNames = new Set(allowedTools.map(t => t.function.name));
     }
 
-    const promises = toolCalls.map(async (toolCall) => {
+    const promises = toolCalls.map(async (toolCall, index) => {
       try {
         const functionName = toolCall.function?.name;
         
         // 权限验证：如果指定了允许的工具列表，检查工具是否在允许列表中
         if (allowedToolNames && !allowedToolNames.has(functionName)) {
+          BotUtil.makeLog(
+            'warn',
+            `MCP 工具调用被拒绝（不在白名单）: ${functionName}`,
+            'MCPToolAdapter'
+          );
           return {
             role: 'tool',
             tool_call_id: toolCall.id,
@@ -208,12 +214,34 @@ export class MCPToolAdapter {
           }
         }
 
+        const argPreview = (() => {
+          try {
+            const s = JSON.stringify(argumentsObj);
+            return s.length > 500 ? `${s.slice(0, 500)}...` : s;
+          } catch {
+            return '[unserializable arguments]';
+          }
+        })();
+
+        BotUtil.makeLog(
+          'info',
+          `MCP 工具调用开始: #${index + 1} name=${functionName}, args=${argPreview}`,
+          'MCPToolAdapter'
+        );
+
         const result = await mcpServer.handleToolCall({
           name: functionName,
           arguments: argumentsObj
         });
 
         const content = result.content?.[0]?.text || JSON.stringify(result);
+
+        BotUtil.makeLog(
+          'info',
+          `MCP 工具调用完成: #${index + 1} name=${functionName}, isError=${Boolean(result.isError)}`,
+          'MCPToolAdapter'
+        );
+
         return {
           role: 'tool',
           tool_call_id: toolCall.id,
