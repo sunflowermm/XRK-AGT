@@ -95,8 +95,8 @@ async def chat_handler(request: Request):
     """LangChain聊天接口"""
     data = await request.json()
     messages = data.get("messages", [])
-    # 约定：model 字段传“运营商/provider”（如 volcengine/xiaomimimo/gptgod），以适配主服务端 v3 伪造接口
-    model = data.get("model", "gptgod")
+    # 约定：model 字段传"运营商/provider"（如 volcengine/xiaomimimo/openai），以适配主服务端 v3 伪造接口
+    model = data.get("model", "volcengine")
     temperature = data.get("temperature", 0.8)
     max_tokens = data.get("max_tokens", 2000)
     stream = data.get("stream", False)

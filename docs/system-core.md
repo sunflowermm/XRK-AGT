@@ -717,7 +717,6 @@ system-Core 提供了完整的配置管理功能：
    - 安全配置
 
 2. **LLM提供商配置**
-   - `gptgod_llm.js`
    - `volcengine_llm.js`
    - `xiaomimimo_llm.js`
    - `openai_llm.js`

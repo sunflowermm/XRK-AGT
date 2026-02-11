@@ -117,10 +117,15 @@ function toBool(v) {
 }
 
 function getProviderConfig(provider) {
-  if (!provider) return {};
-  const key = `${String(provider).toLowerCase()}_llm`;
-  return cfg[key] || {};
+  return provider ? (cfg[`${provider.toLowerCase()}_llm`] || {}) : {};
 }
+
+const getDefaultProvider = () => {
+  const llm = cfg.aistream?.llm;
+  return (llm?.Provider || llm?.provider || '').toString().trim().toLowerCase();
+};
+
+const trimLower = (v) => (v || '').toString().trim().toLowerCase();
 
 /** 提取消息文本内容（支持字符串和对象格式） */
 function extractMessageText(messages) {
@@ -230,10 +235,10 @@ async function handleChatCompletionsV3(req, res) {
   }
 
   // 支持多种认证方式：body.apiKey、Authorization Bearer 令牌、X-API-Key 头
-  let accessKey = (pickFirst(body, ['apiKey', 'api_key']) || '').toString().trim();
+  let accessKey = pickFirst(body, ['apiKey', 'api_key']);
   if (!accessKey) {
-    const authHeader = (req.headers.authorization || '').toString().trim();
-    if (authHeader.startsWith('Bearer ')) {
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.startsWith('Bearer ') || authHeader.startsWith('bearer ')) {
       accessKey = authHeader.substring(7).trim();
     }
   }
@@ -241,14 +246,21 @@ async function handleChatCompletionsV3(req, res) {
   if (!accessKey) {
     accessKey = (req.headers['x-api-key'] || '').toString().trim();
   }
+  // 统一转成字符串并去除首尾空格后比较（不转小写，保持原始大小写）
+  accessKey = (accessKey || '').toString().trim();
   if (!accessKey || accessKey !== BotUtil.apiKey) return HttpResponse.unauthorized(res, 'apiKey 无效');
 
   const streamFlag = Boolean(pickFirst(body, ['stream']));
-  const llm = cfg.aistream?.llm || {};
-  const defaultProvider = (llm.Provider || 'gptgod').toLowerCase();
-  const bodyModel = (pickFirst(body, ['model']) || '').toString().trim().toLowerCase();
-
-  const provider = (bodyModel && LLMFactory.hasProvider(bodyModel)) ? bodyModel : defaultProvider;
+  const bodyModel = trimLower(pickFirst(body, ['model']));
+  const defaultProvider = getDefaultProvider();
+  
+  const provider = (bodyModel && LLMFactory.hasProvider(bodyModel)) 
+    ? bodyModel 
+    : (defaultProvider && LLMFactory.hasProvider(defaultProvider) ? defaultProvider : null);
+  
+  if (!provider) {
+    return HttpResponse.error(res, new Error(`未指定有效的LLM提供商，请在 aistream.yaml 中配置 llm.Provider`), 400, 'ai.v3.chat.completions');
+  }
 
   const base = getProviderConfig(provider);
   const llmConfig = {
@@ -265,90 +277,58 @@ async function handleChatCompletionsV3(req, res) {
     );
   }
 
-  // 工作流配置仅用于限定 MCP 工具作用域：
-  // - 不在此处做“主/次工作流”或动态合并；那是 StreamLoader/工作流系统的职责
-  // - 仅将选中的工作流名称整理为 streams，透传给 LLMFactory，用于 tools 注入范围控制
   const workflowConfig = pickFirst(body, ['workflow']);
-  let workflowStreams = null;
-  if (workflowConfig && typeof workflowConfig === 'object') {
+  const workflowStreams = workflowConfig && typeof workflowConfig === 'object' ? (() => {
     const streams = [];
-
-    if (Array.isArray(workflowConfig.workflows)) {
-      streams.push(...workflowConfig.workflows.filter(Boolean));
-    }
-    if (Array.isArray(workflowConfig.streams)) {
-      streams.push(...workflowConfig.streams.filter(Boolean));
-    }
-    if (typeof workflowConfig.workflow === 'string' && workflowConfig.workflow.trim()) {
-      streams.push(workflowConfig.workflow.trim());
-    }
-
-    if (streams.length > 0) {
-      workflowStreams = [...new Set(streams)];
-    }
-  }
+    if (Array.isArray(workflowConfig.workflows)) streams.push(...workflowConfig.workflows.filter(Boolean));
+    if (Array.isArray(workflowConfig.streams)) streams.push(...workflowConfig.streams.filter(Boolean));
+    if (typeof workflowConfig.workflow === 'string' && workflowConfig.workflow.trim()) streams.push(workflowConfig.workflow.trim());
+    return streams.length ? [...new Set(streams)] : null;
+  })() : null;
 
   const client = LLMFactory.createClient(llmConfig);
-  // 有意义的别名兼容：同义字段统一传给各 provider client
   const overrides = {};
-  const temperature = toNum(pickFirst(body, ['temperature']));
-  if (temperature !== undefined) overrides.temperature = temperature;
+  const addNum = (key, ...aliases) => {
+    const v = toNum(pickFirst(body, [key, ...aliases]));
+    if (v !== undefined) {
+      overrides[key] = v;
+      if (aliases.length) overrides[aliases[0]] = v;
+    }
+  };
+  const addVal = (key, ...aliases) => {
+    const v = pickFirst(body, [key, ...aliases]);
+    if (v !== undefined) {
+      overrides[key] = v;
+      if (aliases.length) overrides[aliases[0]] = v;
+    }
+  };
+  const addBool = (key, ...aliases) => {
+    const v = toBool(pickFirst(body, [key, ...aliases]));
+    if (v !== undefined) {
+      overrides[key] = v;
+      if (aliases.length) overrides[aliases[0]] = v;
+    }
+  };
 
-  const maxTokens = toNum(pickFirst(body, ['max_tokens', 'maxTokens', 'max_completion_tokens', 'maxCompletionTokens']));
-  if (maxTokens !== undefined) {
-    overrides.max_tokens = maxTokens;
-    overrides.maxTokens = maxTokens;
-  }
-  const topP = toNum(pickFirst(body, ['top_p', 'topP']));
-  if (topP !== undefined) {
-    overrides.top_p = topP;
-    overrides.topP = topP;
-  }
-  const presencePenalty = toNum(pickFirst(body, ['presence_penalty', 'presencePenalty']));
-  if (presencePenalty !== undefined) {
-    overrides.presence_penalty = presencePenalty;
-    overrides.presencePenalty = presencePenalty;
-  }
-  const frequencyPenalty = toNum(pickFirst(body, ['frequency_penalty', 'frequencyPenalty']));
-  if (frequencyPenalty !== undefined) {
-    overrides.frequency_penalty = frequencyPenalty;
-    overrides.frequencyPenalty = frequencyPenalty;
-  }
-  const toolChoice = pickFirst(body, ['tool_choice', 'toolChoice']);
-  if (toolChoice !== undefined) overrides.tool_choice = toolChoice;
-  const parallel = toBool(pickFirst(body, ['parallel_tool_calls', 'parallelToolCalls']));
-  if (parallel !== undefined) {
-    overrides.parallel_tool_calls = parallel;
-    overrides.parallelToolCalls = parallel;
-  }
-  const tools = pickFirst(body, ['tools']);
-  if (tools !== undefined) overrides.tools = tools;
-
-  // 将前端选择的“带 MCP 工具的工作流”作为 streams 透传，
-  // 由 applyOpenAITools 在构造 OpenAI tools 时按 streams 白名单过滤
-  if (workflowStreams && workflowStreams.length > 0) {
-    overrides.streams = workflowStreams;
-  }
-
-  // 常见扩展字段透传（兼容 OpenAI-like / vLLM / 本地推理）
-  const stop = pickFirst(body, ['stop']);
-  if (stop !== undefined) overrides.stop = stop;
-  const responseFormat = pickFirst(body, ['response_format', 'responseFormat']);
-  if (responseFormat !== undefined) overrides.response_format = responseFormat;
-  const streamOptions = pickFirst(body, ['stream_options', 'streamOptions']);
-  if (streamOptions !== undefined) overrides.stream_options = streamOptions;
-  const seed = toNum(pickFirst(body, ['seed']));
-  if (seed !== undefined) overrides.seed = seed;
-  const user = pickFirst(body, ['user']);
-  if (user !== undefined) overrides.user = user;
-  const n = toNum(pickFirst(body, ['n']));
-  if (n !== undefined) overrides.n = n;
-  const logitBias = pickFirst(body, ['logit_bias', 'logitBias']);
-  if (logitBias !== undefined) overrides.logit_bias = logitBias;
-  const logprobs = toBool(pickFirst(body, ['logprobs']));
-  if (logprobs !== undefined) overrides.logprobs = logprobs;
-  const topLogprobs = toNum(pickFirst(body, ['top_logprobs', 'topLogprobs']));
-  if (topLogprobs !== undefined) overrides.top_logprobs = topLogprobs;
+  addNum('temperature');
+  addNum('max_tokens', 'maxTokens', 'max_completion_tokens', 'maxCompletionTokens');
+  addNum('top_p', 'topP');
+  addNum('presence_penalty', 'presencePenalty');
+  addNum('frequency_penalty', 'frequencyPenalty');
+  addVal('tool_choice', 'toolChoice');
+  addBool('parallel_tool_calls', 'parallelToolCalls');
+  addVal('tools');
+  addVal('stop');
+  addVal('response_format', 'responseFormat');
+  addVal('stream_options', 'streamOptions');
+  addNum('seed');
+  addVal('user');
+  addNum('n');
+  addVal('logit_bias', 'logitBias');
+  addBool('logprobs');
+  addNum('top_logprobs', 'topLogprobs');
+  
+  if (workflowStreams?.length) overrides.streams = workflowStreams;
 
   const extraBody = parseOptionalJson(pickFirst(body, ['extraBody']));
   if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;
@@ -532,7 +512,7 @@ async function handleChatCompletionsV3(req, res) {
 async function handleModels(req, res) {
   const llm = cfg.aistream?.llm || {};
   const providers = LLMFactory.listProviders();
-  const defaultProvider = (llm.Provider || 'gptgod').toLowerCase();
+  const defaultProvider = getDefaultProvider();
   const format = (req.query.format || '').toLowerCase();
 
   if (format === 'openai' || req.path === '/api/v3/models') {
@@ -549,54 +529,35 @@ async function handleModels(req, res) {
     });
   }
 
-  const profiles = providers.map((provider) => {
-    const c = getProviderConfig(provider) || {};
-    const model = c.model || c.chatModel || null;
-    const baseUrl = c.baseUrl || null;
-    const maxTokens = c.maxTokens ?? c.max_tokens ?? null;
-    const temperature = c.temperature ?? null;
-    const hasApiKey = Boolean((c.apiKey || '').toString().trim());
-
-    const capabilities = [];
-    if (c.enableStream !== false) capabilities.push('stream');
-    if (c.enableTools === true) capabilities.push('tools');
-
+  const profiles = providers.map(provider => {
+    const c = getProviderConfig(provider);
     return {
       key: provider,
       label: provider,
       description: `LLM提供商: ${provider}`,
       tags: [],
-      model,
-      baseUrl,
-      maxTokens,
-      temperature,
-      hasApiKey,
-      capabilities
+      model: c.model || c.chatModel || null,
+      baseUrl: c.baseUrl || null,
+      maxTokens: c.maxTokens ?? c.max_tokens ?? null,
+      temperature: c.temperature ?? null,
+      hasApiKey: Boolean((c.apiKey || '').toString().trim()),
+      capabilities: [
+        ...(c.enableStream !== false ? ['stream'] : []),
+        ...(c.enableTools === true ? ['tools'] : [])
+      ]
     };
   });
 
-  // 仅暴露"带 MCP 工具"的基础工作流，用于前端多选控制 MCP 工具作用域
-  // 过滤掉动态创建的合并工作流（通过 StreamLoader.mergeStreams 创建的工作流会有 primaryStream 和 secondaryStreams 属性）
-  // 注意：基础工作流通过 merge() 方法合并工具时也会有 _mergedStreams，但不会有 primaryStream/secondaryStreams
-  const allStreams = StreamLoader.getStreamsByPriority();
-  const workflows = allStreams
-    .filter(stream => {
-      // 过滤掉动态创建的合并工作流（通过 StreamLoader.mergeStreams 创建）
-      // 这些工作流会有 primaryStream 和 secondaryStreams 属性
-      if (stream.primaryStream || stream.secondaryStreams) {
-        return false;
-      }
-      // 只保留有 MCP 工具的工作流
-      return (stream.mcpTools?.size || 0) > 0;
-    })
-    .map(stream => ({
-    key: stream.name,
-    label: stream.description || stream.name,
-    description: stream.description || '',
-    profile: null,
-    persona: null,
-    uiHidden: false
-  }));
+  const workflows = StreamLoader.getStreamsByPriority()
+    .filter(s => !s.primaryStream && !s.secondaryStreams && (s.mcpTools?.size || 0) > 0)
+    .map(s => ({
+      key: s.name,
+      label: s.description || s.name,
+      description: s.description || '',
+      profile: null,
+      persona: null,
+      uiHidden: false
+    }));
 
   return HttpResponse.success(res, {
     enabled: llm.enabled !== false,
@@ -639,10 +600,10 @@ export default {
           }
 
           const persona = (req.query.persona || '').toString();
-          const workflowName = (req.query.workflow || 'chat').toString().trim() || 'chat';
-          const profileKey = (req.query.profile || req.query.llm || '').toString().trim() || undefined;
-          const queryProvider = (req.query.provider || '').toString().trim().toLowerCase() || undefined;
-          const queryModel = (req.query.model || '').toString().trim().toLowerCase() || undefined;
+          const workflowName = trimLower(req.query.workflow) || 'chat';
+          const profileKey = trimLower(req.query.profile || req.query.llm) || undefined;
+          const queryProvider = trimLower(req.query.provider) || undefined;
+          const queryModel = trimLower(req.query.model) || undefined;
           const contextObj = parseOptionalJson(req.query.context);
           const metadata = parseOptionalJson(req.query.meta);
 
@@ -675,8 +636,8 @@ export default {
             llmOverrides.provider = queryModel;
           } else if (queryProvider && LLMFactory.hasProvider(queryProvider)) {
             llmOverrides.provider = queryProvider;
-          } else if (profileKey && LLMFactory.hasProvider(profileKey.toLowerCase())) {
-            llmOverrides.provider = profileKey.toLowerCase();
+          } else if (profileKey && LLMFactory.hasProvider(profileKey)) {
+            llmOverrides.provider = profileKey;
           }
 
           const executionContext = {

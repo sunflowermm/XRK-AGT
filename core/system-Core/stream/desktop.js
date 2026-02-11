@@ -370,6 +370,78 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
+    this.registerMCPTool('get_time', {
+      description: '获取当前时间信息（支持多种格式和时区）',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          format: {
+            type: 'string',
+            enum: ['iso', 'locale', 'timestamp', 'unix'],
+            description: '时间格式: iso(ISO 8601), locale(本地格式), timestamp(毫秒时间戳), unix(秒时间戳)',
+            default: 'locale'
+          },
+          timezone: {
+            type: 'string',
+            description: '时区（可选，例如: Asia/Shanghai, America/New_York）'
+          }
+        },
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
+        try {
+          const { format = 'locale', timezone } = args;
+          const now = new Date();
+          const options = timezone ? { timeZone: timezone } : {};
+
+          let result;
+          switch (format) {
+            case 'iso':
+              result = {
+                format: 'iso',
+                time: now.toISOString(),
+                timestamp: now.getTime(),
+                unix: Math.floor(now.getTime() / 1000)
+              };
+              break;
+            case 'timestamp':
+              result = {
+                format: 'timestamp',
+                timestamp: now.getTime(),
+                unix: Math.floor(now.getTime() / 1000),
+                iso: now.toISOString()
+              };
+              break;
+            case 'unix':
+              result = {
+                format: 'unix',
+                unix: Math.floor(now.getTime() / 1000),
+                timestamp: now.getTime(),
+                iso: now.toISOString()
+              };
+              break;
+            case 'locale':
+            default:
+              result = {
+                format: 'locale',
+                time: now.toLocaleString('zh-CN', options),
+                date: now.toLocaleDateString('zh-CN', options),
+                timeOnly: now.toLocaleTimeString('zh-CN', options),
+                timestamp: now.getTime(),
+                unix: Math.floor(now.getTime() / 1000),
+                iso: now.toISOString()
+              };
+          }
+
+          return this.successResponse(result);
+        } catch (err) {
+          BotUtil.makeLog('error', `[desktop] 获取时间失败: ${err.message}`, 'DesktopStream');
+          return this.errorResponse('GET_TIME_FAILED', err.message);
+        }
+      },
+      enabled: true
+    });
+
     this.registerMCPTool('open_browser', {
       description: '打开浏览器访问网页',
       inputSchema: {

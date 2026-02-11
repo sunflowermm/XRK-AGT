@@ -111,7 +111,7 @@ flowchart TB
         S1["server.yaml"]
         S2["chatbot.yaml"]
         S3["group.yaml"]
-        S4["gptgod_llm.yaml"]
+        S4["volcengine_llm.yaml"]
         S5["volcengine_llm.yaml"]
         S6["其他工厂配置..."]
     end
@@ -173,7 +173,6 @@ const deviceConfig = cfg.getGlobalConfig('device');
 | `server` | `data/server_bots/{port}/server.yaml` | 服务器配置（端口、代理等） |
 | `chatbot` | `data/server_bots/{port}/chatbot.yaml` | 聊天机器人配置 |
 | `group` | `data/server_bots/{port}/group.yaml` | 群组配置 |
-| `gptgod_llm` | `data/server_bots/{port}/gptgod_llm.yaml` | GPTGod LLM 配置 |
 | `volcengine_llm` | `data/server_bots/{port}/volcengine_llm.yaml` | 火山引擎 LLM 配置 |
 | `其他工厂配置` | `data/server_bots/{port}/*.yaml` | 其他 LLM/ASR/TTS 提供商配置 |
 
@@ -218,7 +217,6 @@ const groupConfig = cfg.getServerConfig('group');
 - `cfg.server` - 服务器配置
 - `cfg.chatbot` - 聊天机器人配置
 - `cfg.group` - 群组配置
-- `cfg.gptgod_llm` - GPTGod LLM 配置
 - `cfg.volcengine_llm` - 火山引擎 LLM 配置
 - `cfg.renderer` - 渲染器配置（合并 puppeteer + playwright）
 
@@ -479,7 +477,7 @@ flowchart TB
     end
     
     subgraph External["外部服务"]
-        E1[LLM提供商<br/>GPTGod/Volcengine]
+        E1[LLM提供商<br/>Volcengine/OpenAI]
         E2[Redis<br/>缓存/存储]
         E3[数据库<br/>可选]
     end

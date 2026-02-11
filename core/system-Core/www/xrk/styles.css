@@ -1228,14 +1228,13 @@ select.form-input {
 
 .chat-message {
   flex: 0 0 auto;
-  /* 固定一个“理想最大宽度”，同时在小屏下仍保持百分比缩放 */
   max-width: min(80%, 880px);
-  padding: 14px 20px; /* 留出更舒适的文字与气泡内边距 */
+  padding: 14px 20px;
   border-radius: var(--radius-md);
   font-size: 14px;
   line-height: 1.6;
   position: relative;
-  min-width: 0; /* 防止 flex 子项内容撑破布局 */
+  min-width: 0;
   overflow-wrap: break-word;
   word-wrap: break-word;
   word-break: break-word;
@@ -1321,14 +1320,7 @@ select.form-input {
 
 .chat-action-btn span {
   font-size: 13px;
-}
-
-.chat-copy-btn:hover {
-  color: var(--primary);
-}
-
-.chat-delete-btn:hover {
-  color: var(--danger);
+  line-height: 1;
 }
 
 .chat-regen-btn:hover {
@@ -1537,28 +1529,67 @@ select.form-input {
 /* 音频容器和样式 */
 .chat-audio-container {
   margin-top: 8px;
-  display: inline-block;
+  display: block;
   width: 100%;
-  max-width: 400px;
-  padding: 8px;
+  min-width: 300px;
+  max-width: 100%;
+  padding: 4px;
   background: var(--bg-input);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .chat-audio {
   width: 100%;
-  height: 36px;
+  min-width: 0;
+  height: 54px;
   outline: none;
+  display: block;
+  background: transparent;
+  box-sizing: border-box;
 }
 
 .chat-audio::-webkit-media-controls-panel {
-  background-color: transparent;
+  background-color: var(--bg-input);
+  display: flex;
+  align-items: center;
+  padding: 0;
+  overflow: hidden;
 }
 
 .chat-audio::-webkit-media-controls-play-button {
-  background-color: var(--primary);
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.chat-audio::-webkit-media-controls-timeline {
+  flex: 1;
+  margin: 0 4px;
+  min-width: 200px;
+}
+
+.chat-audio::-webkit-media-controls-current-time-display,
+.chat-audio::-webkit-media-controls-time-remaining-display {
+  color: var(--text-primary);
+  font-size: 11px;
+  margin: 0 2px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.chat-audio::-webkit-media-controls-mute-button {
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.chat-audio::-webkit-media-controls-volume-slider {
+  display: none !important;
 }
 
 /* @ 提及样式 */
@@ -1658,7 +1689,7 @@ select.form-input {
   border-radius: var(--radius-md);
   line-height: 1.7;
   font-size: 14px;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .chat-content.chat-markdown {
@@ -1721,7 +1752,7 @@ select.form-input {
   margin: 8px 0;
   padding: 8px 12px;
   border-left: 3px solid var(--border);
-  background: color-mix(in srgb, var(--bg-elevated) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 60%, transparent);
   border-radius: 8px;
 }
 
@@ -1741,7 +1772,7 @@ select.form-input {
   max-width: 100%;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: var(--bg-input);
   display: inline-block;
 }
 
@@ -1761,7 +1792,7 @@ select.form-input {
 }
 
 .chat-markdown .md-table thead {
-  background: var(--bg-elevated);
+  background: var(--bg-input);
 }
 
 .chat-markdown p,
@@ -1774,7 +1805,7 @@ select.form-input {
 .chat-markdown .md-code {
   margin: 6px 0;
   padding: 8px 10px;
-  background: var(--bg-elevated);
+  background: var(--bg-input);
   border-radius: var(--radius-sm);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
@@ -1786,7 +1817,7 @@ select.form-input {
 .chat-markdown .md-inline {
   padding: 1px 4px;
   border-radius: 4px;
-  background: var(--bg-elevated);
+  background: var(--bg-input);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
@@ -1796,7 +1827,7 @@ select.form-input {
   margin: 8px auto;
   padding: 12px 14px;
   border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   /* 在气泡内部自己带横向滚动条，允许内部图表宽度 > 气泡宽度 */
   overflow-x: auto;
@@ -1873,9 +1904,6 @@ select.form-input {
 /* 媒体文件通用样式 */
 .chat-image-container,
 .chat-video-container,
-.chat-audio-container {
-  transition: transform 0.2s, opacity 0.3s ease;
-}
 
 .chat-image-container:hover,
 .chat-video-container:hover {
@@ -2213,10 +2241,6 @@ select.form-input {
   animation: pulse 1.5s infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
 
 .chat-image-preview {
   display: flex;
@@ -2241,6 +2265,43 @@ select.form-input {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.chat-file-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: var(--bg-input);
+  gap: 4px;
+}
+
+.chat-file-preview-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.chat-file-preview-info {
+  width: 100%;
+  text-align: center;
+  overflow: hidden;
+}
+
+.chat-file-preview-name {
+  font-size: 11px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.chat-file-preview-size {
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 .chat-image-preview-remove {
@@ -3423,9 +3484,6 @@ body.dark .json-boolean { color: #f87171; }
     display: flex;
   }
   
-  .fab {
-    display: flex;
-  }
   
   .header {
     padding: 0 16px;
@@ -3638,6 +3696,36 @@ body.dark .json-boolean { color: #f87171; }
   color: var(--text-secondary);
 }
 
+.ai-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.ai-settings-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary-200);
+  color: var(--primary);
+}
+
+.ai-settings-btn:active {
+  transform: scale(0.98);
+}
+
+.ai-settings-btn svg {
+  flex-shrink: 0;
+}
+
 .chat-main {
   flex: 1;
   display: flex;
@@ -3682,10 +3770,6 @@ body.dark .json-boolean { color: #f87171; }
     padding: 14px 16px;
   }
   
-  .config-icon {
-    width: 40px;
-    height: 40px;
-  }
   
   .config-name {
     font-size: 14px;
@@ -3696,7 +3780,6 @@ body.dark .json-boolean { color: #f87171; }
 @media print {
   .sidebar,
   .header,
-  .fab,
   .toast-container,
   .overlay {
     display: none !important;
@@ -3855,7 +3938,7 @@ body.dark .json-boolean { color: #f87171; }
 
 .voice-input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-alpha);
+  box-shadow: 0 0 0 3px var(--primary-100);
 }
 
 .voice-send-btn {
@@ -3891,7 +3974,7 @@ body.dark .json-boolean { color: #f87171; }
   width: 44px;
   height: 44px;
   border-radius: var(--radius-md);
-  background: var(--surface-elevated);
+  background: var(--bg-input);
   color: var(--text-muted);
   border: none;
   display: flex;
@@ -3904,8 +3987,8 @@ body.dark .json-boolean { color: #f87171; }
 }
 
 .voice-tts-stop-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+  background: var(--bg-hover);
+  color: var(--text-primary);
   transform: scale(1.05);
 }
 
@@ -3925,6 +4008,6 @@ body.dark .json-boolean { color: #f87171; }
   }
   50% {
     transform: scale(1.05);
-    opacity: 0.9;
+    opacity: 0.7;
   }
 }

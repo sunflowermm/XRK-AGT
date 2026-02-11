@@ -39,10 +39,10 @@ cache:
 # ----------------------------------------
 # LLM 工厂运营商选择
 # ----------------------------------------
-# 详细配置位于 data/server_bots/{port}/gptgod_llm.yaml、volcengine_llm.yaml、xiaomimimo_llm.yaml
+# 详细配置位于 data/server_bots/{port}/volcengine_llm.yaml、xiaomimimo_llm.yaml、openai_llm.yaml 等
 llm:
-  # LLM运营商：gptgod、volcengine、xiaomimimo、openai、openai_compat、gemini、anthropic、azure_openai
-  Provider: gptgod
+  # LLM运营商：volcengine、xiaomimimo、openai、openai_compat、gemini、anthropic、azure_openai
+  Provider: volcengine
   # LLM请求超时时间（毫秒），默认360000（6分钟）
   timeout: 360000
   # LLM请求重试配置
@@ -83,11 +83,40 @@ mcp:
   enabled: true
   # 是否自动从工作流中收集并注册MCP工具
   autoRegister: true
-  # 外部MCP连接（可选）：用于未来把外部MCP服务器的工具桥接进本系统
-  # 注意：这是扩展配置占位，具体桥接逻辑由后续实现决定
+  # 外部MCP连接（可选）：用于桥接外部MCP服务器的工具到本系统
+  # 支持多种协议（stdio/HTTP/SSE/WebSocket），兼容Claude Desktop等平台的MCP配置
   remote:
     enabled: false
-    servers: []
+    # 已选中的MCP服务器（多选，从servers列表中选择）
+    selected: []
+    # 远程MCP服务器定义列表
+    # 每个服务器配置支持多种格式：
+    # 1. stdio协议（command/args）：用于通过命令行启动的MCP服务器
+    # 2. HTTP/SSE/WebSocket协议（url/transport）：用于通过HTTP连接的MCP服务器
+    servers:
+      # 必应中文搜索 MCP 服务器示例（stdio协议）
+      # 让 AI 助手能够使用必应搜索引擎实时获取网络信息
+      # - name: bing-search
+      #   # Windows系统使用cmd启动
+      #   command: cmd
+      #   args:
+      #     - /c
+      #     - npx
+      #     - -y
+      #     - bing-cn-mcp
+      # 
+      # macOS/Linux系统使用npx直接启动
+      # - name: bing-search
+      #   command: npx
+      #   args:
+      #     - -y
+      #     - bing-cn-mcp
+      # 
+      # HTTP格式示例（HTTP协议）
+      # - name: custom-mcp
+      #   url: http://localhost:3000/mcp
+      #   transport: http
+      #   headers: '{"Authorization":"Bearer token"}'
 
 # ----------------------------------------
 # Python子服务端配置

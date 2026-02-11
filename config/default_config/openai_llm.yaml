@@ -18,12 +18,13 @@ model: "gpt-4o-mini"
 
 # 生成参数（内部会映射到 OpenAI 官方字段）
 temperature: 0.7
-maxTokens: 2048
-
-# 可选参数
+maxTokens: 4096
 topP: 1.0
 presencePenalty: 0
 frequencyPenalty: 0
+
+# 请求超时时间（毫秒）
+timeout: 360000
 
 # 工具调用（MCP）
 enableTools: true
@@ -32,6 +33,10 @@ maxToolRounds: 5
 
 # 并行工具调用（若服务端不支持会忽略）
 parallelToolCalls: true
+
+# Stream 流式输出配置
+# 是否启用流式输出（默认启用）
+enableStream: true
 
 # 额外请求头（可选）
 headers: {}

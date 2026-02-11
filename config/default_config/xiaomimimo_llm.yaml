@@ -28,9 +28,9 @@ chatModel: "mimo-v2-flash"
 # API 参数配置
 # ----------------------------------------
 # 温度参数（0-2），值越高越随机
-temperature: 0.3
+temperature: 0.7
 # 最大输出token数（注意：MiMo 使用 max_completion_tokens）
-maxTokens: 1024
+maxTokens: 4096
 # Top-p采样（0-1）
 topP: 0.95
 # 存在惩罚（-2.0到2.0）
@@ -46,6 +46,8 @@ timeout: 360000
 enableTools: true
 toolChoice: "auto"
 maxToolRounds: 5
+# 是否允许并行工具调用（若服务端不支持会忽略）
+parallelToolCalls: true
 
 # ----------------------------------------
 # Stream 流式输出配置

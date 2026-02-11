@@ -714,8 +714,7 @@ export default class AIStream {
         stream: false,
         enableTools: config.enableTools !== false
       };
-      // 传递streams参数用于工具权限控制
-      if (config.streams && Array.isArray(config.streams)) {
+      if (config.streams?.length) {
         payload.workflow = { workflows: config.streams };
       }
       const response = await Bot.callSubserver('/api/langchain/chat', { body: payload });
@@ -737,11 +736,7 @@ export default class AIStream {
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
         const client = LLMFactory.createClient(config);
-        // 传递streams参数给LLM客户端
         const overrides = { ...config };
-        if (config.streams && Array.isArray(config.streams)) {
-          overrides.streams = config.streams;
-        }
         const response = await client.chat(messages, overrides);
         
         const outputTokens = this.estimateTokens(response);
@@ -780,6 +775,7 @@ export default class AIStream {
     throw new Error(`AI调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`);
   }
 
+
   /**
    * 调用AI（流式）
    * @param {Array<Object>} messages - 消息列表
@@ -809,8 +805,7 @@ export default class AIStream {
         stream: true,
         enableTools: config.enableTools !== false
       };
-      // 传递streams参数用于工具权限控制
-      if (config.streams && Array.isArray(config.streams)) {
+      if (config.streams?.length) {
         payload.workflow = { workflows: config.streams };
       }
       const response = await Bot.callSubserver('/api/langchain/chat', {
@@ -842,11 +837,7 @@ export default class AIStream {
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
         const client = LLMFactory.createClient(config);
-        // 传递streams参数给LLM客户端
         const overrides = { ...config };
-        if (config.streams && Array.isArray(config.streams)) {
-          overrides.streams = config.streams;
-        }
         await client.chatStream(messages, wrapDelta, overrides);
         return fullText; // 成功，返回结果
       } catch (error) {
@@ -888,60 +879,34 @@ export default class AIStream {
    * @returns {Object}
    */
   resolveLLMConfig(apiConfig = {}) {
-    const runtime = cfg.aistream || {};
-    const llm = runtime.llm || {};
-
-    const pickFirst = (...vals) => {
-      for (const v of vals) {
-        if (v !== undefined) return v;
-      }
-      return;
-    };
-    const pickTrimmed = (...vals) => {
-      for (const v of vals) {
-        if (v === undefined) continue;
-        const s = String(v).trim();
-        if (s) return s;
-      }
-      return;
+    const llm = cfg.aistream?.llm || {};
+    const pick = (...vals) => vals.find(v => v !== undefined);
+    const pickTrim = (...vals) => {
+      const v = vals.find(v => v !== undefined);
+      return v ? String(v).trim() : undefined;
     };
 
-    // 获取提供商名称（仅保留 LLM 提供商概念）
-    const provider = (apiConfig.provider || this.config.provider || llm.provider || llm.Provider || '').toLowerCase();
-
-    // 获取提供商配置
-    const providerConfig = this.getProviderConfig(provider);
-
-    // 验证提供商是否支持
+    const provider = (apiConfig.provider || this.config.provider || llm.Provider || llm.provider || '').toLowerCase();
     if (provider && !LLMFactory.hasProvider(provider)) {
       throw new Error(`不支持的LLM提供商: ${provider}`);
     }
 
-    // 解析超时配置
-    const timeout = apiConfig.timeout || apiConfig.timeoutMs || this.config.timeout || llm.timeout || 360000;
+    const providerConfig = this.getProviderConfig(provider);
+    const timeout = pick(apiConfig.timeout, apiConfig.timeoutMs, this.config.timeout, llm.timeout, 360000);
+    const apiKey = pickTrim(apiConfig.apiKey, apiConfig.api_key, providerConfig.apiKey, providerConfig.api_key, this.config.apiKey, this.config.api_key);
+    const baseUrl = pick(apiConfig.baseUrl, apiConfig.base_url, this.config.baseUrl, this.config.base_url, providerConfig.baseUrl, providerConfig.base_url);
+    const model = pick(apiConfig.model, apiConfig.chatModel, this.config.model, this.config.chatModel, providerConfig.model, providerConfig.chatModel);
+    const chatModel = pick(apiConfig.chatModel, this.config.chatModel, providerConfig.chatModel, apiConfig.model, this.config.model, providerConfig.model);
+    const maxTokens = pick(apiConfig.maxTokens, apiConfig.max_tokens, apiConfig.max_completion_tokens, apiConfig.maxCompletionTokens, this.config.maxTokens, this.config.max_tokens, providerConfig.maxTokens, providerConfig.max_tokens);
+    const topP = pick(apiConfig.topP, apiConfig.top_p, this.config.topP, this.config.top_p, providerConfig.topP, providerConfig.top_p);
+    const presencePenalty = pick(apiConfig.presencePenalty, apiConfig.presence_penalty, this.config.presencePenalty, this.config.presence_penalty, providerConfig.presencePenalty, providerConfig.presence_penalty);
+    const frequencyPenalty = pick(apiConfig.frequencyPenalty, apiConfig.frequency_penalty, this.config.frequencyPenalty, this.config.frequency_penalty, providerConfig.frequencyPenalty, providerConfig.frequency_penalty);
+    const enableTools = pick(apiConfig.enableTools, apiConfig.enable_tools, providerConfig.enableTools, providerConfig.enable_tools, this.config.enableTools, this.config.enable_tools, true);
 
-    // 有意义的别名兼容：同义字段归一到内部字段（各厂商 client 再按自身协议映射）
-    const apiKey = pickTrimmed(apiConfig.apiKey, apiConfig.api_key, providerConfig.apiKey, providerConfig.api_key, this.config.apiKey, this.config.api_key);
-    const baseUrl = pickFirst(apiConfig.baseUrl, apiConfig.base_url, this.config.baseUrl, this.config.base_url, providerConfig.baseUrl, providerConfig.base_url);
-    const model = pickFirst(apiConfig.model, apiConfig.chatModel, this.config.model, this.config.chatModel, providerConfig.model, providerConfig.chatModel);
-    const chatModel = pickFirst(apiConfig.chatModel, this.config.chatModel, providerConfig.chatModel, apiConfig.model, this.config.model, providerConfig.model);
-
-    const maxTokens = pickFirst(
-      apiConfig.maxTokens, apiConfig.max_tokens, apiConfig.max_completion_tokens, apiConfig.maxCompletionTokens, apiConfig.maxCompletionTokens,
-      this.config.maxTokens, this.config.max_tokens,
-      providerConfig.maxTokens, providerConfig.max_tokens
-    );
-    const topP = pickFirst(apiConfig.topP, apiConfig.top_p, this.config.topP, this.config.top_p, providerConfig.topP, providerConfig.top_p);
-    const presencePenalty = pickFirst(apiConfig.presencePenalty, apiConfig.presence_penalty, this.config.presencePenalty, this.config.presence_penalty, providerConfig.presencePenalty, providerConfig.presence_penalty);
-    const frequencyPenalty = pickFirst(apiConfig.frequencyPenalty, apiConfig.frequency_penalty, this.config.frequencyPenalty, this.config.frequency_penalty, providerConfig.frequencyPenalty, providerConfig.frequency_penalty);
-    const enableTools = pickFirst(apiConfig.enableTools, apiConfig.enable_tools, providerConfig.enableTools, providerConfig.enable_tools, this.config.enableTools, this.config.enable_tools, true);
-
-    // 配置合并：优先级 apiConfig > this.config > providerConfig
-    const finalConfig = {
+    return {
       ...providerConfig,
       ...this.config,
       ...apiConfig,
-      // 统一后的关键字段（同义字段兼容）
       apiKey,
       baseUrl,
       model,
@@ -954,8 +919,6 @@ export default class AIStream {
       timeout,
       enableTools
     };
-
-    return finalConfig;
   }
 
   /**
@@ -964,10 +927,7 @@ export default class AIStream {
    * @returns {Object} 提供商配置
    */
   getProviderConfig(provider) {
-    if (!provider) return {};
-
-    const configKey = `${provider}_llm`;
-    return cfg[configKey] || {};
+    return provider ? (cfg[`${provider}_llm`] || {}) : {};
   }
 
   /**

@@ -1,4 +1,5 @@
 import StreamLoader from '#infrastructure/aistream/loader.js';
+import cfg from '#infrastructure/config/config.js';
 
 /**
  * MCP 工具适配器
@@ -6,7 +7,8 @@ import StreamLoader from '#infrastructure/aistream/loader.js';
  * 职责边界：
  * - 将 StreamLoader 暴露的 MCP 工具转换为 OpenAI tools 数组格式，供各 LLM 工厂在构造请求体时注入
  * - 在收到 OpenAI style tool_calls 时，实际调用 MCP 工具，并返回 role=tool 的消息列表
- * - 基于 streams/allowedTools 做工具白名单过滤：保证“未通过接口声明的工具”不会被调用
+ * - 基于 streams/allowedTools 做工具白名单过滤：保证"未通过接口声明的工具"不会被调用
+ * - 自动合并远程 MCP 工具：无论指定什么工作流，都会自动添加已启用的远程 MCP 工具
  */
 export class MCPToolAdapter {
   /**
@@ -23,7 +25,8 @@ export class MCPToolAdapter {
    * 说明：
    * - streams 白名单优先：只有在 streams 中声明的工作流，其下工具才会被注入
    * - workflow 为旧的单工作流写法，仅在未显式提供 streams 时使用
-   * - 默认分支会排除 excludeStreams（如 chat），防止基础通用工作流的工具“泄漏”到所有会话
+   * - 默认分支会排除 excludeStreams（如 chat），防止基础通用工作流的工具"泄漏"到所有会话
+   * - 自动合并远程 MCP：无论指定什么工作流，都会自动添加已启用的远程 MCP 工具
    *
    * @param {Object} options
    * @param {string|null} options.workflow - 单个工作流名称；若提供则仅注入该工作流下的工具
@@ -67,6 +70,31 @@ export class MCPToolAdapter {
         const prefix = String(tool.name).split('.')[0];
         return !excludes.has(prefix);
       });
+    }
+
+    // 自动合并远程 MCP 工具（无论是否指定工作流，都会添加）
+    const remoteConfig = cfg.aistream?.mcp?.remote || {};
+    if (remoteConfig.enabled && Array.isArray(remoteConfig.servers)) {
+      const { selected = [], servers = [] } = remoteConfig;
+      const selectedNames = Array.isArray(selected) && selected.length > 0 
+        ? new Set(selected.map(s => String(s).trim()).filter(Boolean))
+        : null;
+      
+      const toolMap = new Map(mcpTools.map(t => [t.name, t]));
+      
+      for (const server of servers) {
+        const serverName = String(server.name || '').trim();
+        if (!serverName || (selectedNames && !selectedNames.has(serverName))) continue;
+        
+        const remoteTools = mcpServer.listTools(`remote-mcp.${serverName}`);
+        for (const tool of remoteTools) {
+          if (!toolMap.has(tool.name)) {
+            toolMap.set(tool.name, tool);
+          }
+        }
+      }
+      
+      mcpTools = Array.from(toolMap.values());
     }
 
     return mcpTools.map(tool => ({

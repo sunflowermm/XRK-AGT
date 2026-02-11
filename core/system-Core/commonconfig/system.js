@@ -1990,14 +1990,14 @@ export default class SystemConfig extends ConfigBase {
             llm: {
               type: 'object',
               label: 'LLM工厂运营商选择',
-              description: '详细配置位于 data/server_bots/{port}/*_llm.yaml（如 gptgod_llm / volcengine_llm / xiaomimimo_llm / openai_llm / openai_compat_llm / gemini_llm）',
+              description: '详细配置位于 data/server_bots/{port}/*_llm.yaml（如 volcengine_llm / xiaomimimo_llm / openai_llm / openai_compat_llm / gemini_llm / anthropic_llm / azure_openai_llm）',
               component: 'SubForm',
               fields: {
                 Provider: {
                   type: 'string',
                   label: 'LLM运营商',
-                  enum: ['gptgod', 'volcengine', 'xiaomimimo', 'openai', 'openai_compat', 'gemini', 'anthropic', 'azure_openai'],
-                  default: 'gptgod',
+                  enum: ['volcengine', 'xiaomimimo', 'openai', 'openai_compat', 'gemini', 'anthropic', 'azure_openai'],
+                  default: 'volcengine',
                   component: 'Select'
                 },
                 timeout: {
@@ -2115,26 +2115,92 @@ export default class SystemConfig extends ConfigBase {
                 },
                 remote: {
                   type: 'object',
-                  label: '外部MCP连接（扩展）',
-                  description: '用于未来桥接外部MCP服务器的工具到本系统（仅配置占位）',
+                  label: '远程MCP连接',
+                  description: '配置外部MCP服务器，支持多种协议（stdio/HTTP/SSE/WebSocket），兼容Claude Desktop配置格式',
                   component: 'SubForm',
                   fields: {
                     enabled: {
                       type: 'boolean',
-                      label: '启用外部MCP',
+                      label: '启用远程MCP',
                       default: false,
                       component: 'Switch'
                     },
+                    // 选中的远程MCP服务器（多选）
+                    selected: {
+                      type: 'array',
+                      label: '已选中的MCP服务器',
+                      description: '从可用服务器列表中选择要启用的MCP服务器（多选）',
+                      component: 'ArrayForm',
+                      itemType: 'string',
+                      fields: {
+                        value: { 
+                          type: 'string', 
+                          label: '服务器名称', 
+                          component: 'Input',
+                          description: '输入服务器名称（需在servers列表中已定义）'
+                        }
+                      }
+                    },
+                    // 服务器定义列表
                     servers: {
                       type: 'array',
-                      label: '外部MCP服务器列表',
-                      description: '每项包含 name/url，可选 headers（后续桥接实现使用）',
+                      label: 'MCP服务器定义',
+                      description: '定义所有可用的远程MCP服务器，支持原生JSON格式（command/args）和HTTP格式（url/transport）',
                       component: 'ArrayForm',
                       itemType: 'object',
                       fields: {
-                        name: { type: 'string', label: '名称', component: 'Input' },
-                        url: { type: 'string', label: 'URL', component: 'Input' },
-                        headers: { type: 'object', label: 'Headers', component: 'SubForm', fields: {} }
+                        name: { 
+                          type: 'string', 
+                          label: '服务器名称', 
+                          description: 'MCP服务器唯一标识（必填）',
+                          component: 'Input',
+                          required: true
+                        },
+                        // 原生JSON格式（command/args）- 用于stdio协议
+                        command: { 
+                          type: 'string', 
+                          label: '命令', 
+                          description: '启动MCP服务器的命令（如 npx、cmd、node 等，用于stdio协议）',
+                          component: 'Input'
+                        },
+                        args: {
+                          type: 'array',
+                          label: '命令参数',
+                          description: '命令的参数列表（如 ["-y", "bing-cn-mcp"]）',
+                          component: 'ArrayForm',
+                          itemType: 'string',
+                          fields: {
+                            value: { type: 'string', label: '参数', component: 'Input' }
+                          }
+                        },
+                        // HTTP格式（url/transport）- 用于HTTP/SSE/WebSocket协议
+                        url: { 
+                          type: 'string', 
+                          label: 'URL', 
+                          description: 'MCP服务器的HTTP地址（如 http://localhost:3000/mcp，用于HTTP/SSE/WebSocket协议）',
+                          component: 'Input'
+                        },
+                        transport: {
+                          type: 'string',
+                          label: '传输方式',
+                          description: '传输协议类型（仅HTTP格式需要）',
+                          enum: ['http', 'sse', 'websocket'],
+                          default: 'http',
+                          component: 'Select'
+                        },
+                        headers: { 
+                          type: 'object', 
+                          label: 'HTTP Headers', 
+                          description: 'HTTP请求头（仅HTTP格式需要，格式：{"Authorization":"Bearer token"}）',
+                          component: 'Textarea'
+                        },
+                        // 原生JSON配置（直接存储JSON字符串，用于复杂配置，优先级最高）
+                        config: {
+                          type: 'string',
+                          label: '原生JSON配置',
+                          description: '直接存储完整JSON配置字符串（如：{"command":"npx","args":["-y","bing-cn-mcp"]}），优先级高于单独字段',
+                          component: 'Textarea'
+                        }
                       }
                     }
                   }

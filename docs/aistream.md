@@ -245,7 +245,7 @@ constructor(options = {})
 工作流系统全局配置位于 `data/server_bots/aistream.yaml`：
 
 **关键配置项**：
-- `llm.Provider` - LLM提供商（`gptgod`/`volcengine`/`xiaomimimo`/`openai`/`openai_compat`/`gemini`/`anthropic`/`azure_openai`）
+- `llm.Provider` - LLM提供商（`volcengine`/`xiaomimimo`/`openai`/`openai_compat`/`gemini`/`anthropic`/`azure_openai`）
 - `subserver.host` - 子服务端地址（默认 `127.0.0.1`）
 - `subserver.port` - 子服务端端口（默认 `8000`）
 - `subserver.timeout` - 请求超时时间（毫秒，默认 `30000`）
@@ -507,7 +507,7 @@ await stream.process(e, e.msg, {
 await stream.process(e, e.msg, {
   enableMemory: true,
   apiConfig: {
-    provider: 'gptgod',
+    provider: 'volcengine',
     model: 'gpt-4',
     temperature: 0.7
   }
@@ -697,7 +697,7 @@ await stream.process(e, e.msg, {
 // 自定义LLM配置
 await stream.process(e, e.msg, {
   apiConfig: {
-    provider: 'gptgod',
+    provider: 'volcengine',
     model: 'gpt-4',
     temperature: 0.7
   }
@@ -787,7 +787,7 @@ AIStream通过子服务端提供向量化服务（统一通过 `Bot.callSubserve
   ```json
   {
     "messages": [...],
-    "model": "gptgod",
+    "model": "volcengine",
     "enableTools": false
     "temperature": 0.8,
     "max_tokens": 2000,

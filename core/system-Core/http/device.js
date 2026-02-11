@@ -28,6 +28,7 @@ import paths from '#utils/paths.js';
 import ASRFactory from '#factory/asr/ASRFactory.js';
 import TTSFactory from '#factory/tts/TTSFactory.js';
 import { HttpResponse } from '#utils/http-utils.js';
+import { InputValidator } from '#utils/input-validator.js';
 
 // ==================== 导入工具函数 ====================
 import {
@@ -1811,6 +1812,8 @@ class DeviceManager {
                                     return false;
                                 }
                                 
+                                BotUtil.makeLog('debug', `[reply] 收到输入: ${JSON.stringify(segmentsOrText)}`, deviceId);
+                                
                                 // 标准化输入：tasker 发送的 segments 格式
                                 let segments = [];
                                 let title = '';
@@ -1836,14 +1839,21 @@ class DeviceManager {
                                         segments = segmentsOrText.segments;
                                         title = segmentsOrText.title || '';
                                         description = segmentsOrText.description || '';
+                                    } else if (segmentsOrText.type && ['text', 'image', 'video', 'record', 'file', 'at', 'reply', 'raw', 'markdown'].includes(segmentsOrText.type)) {
+                                        // 单个 segment 对象（如 segment.record() 返回的对象）
+                                        BotUtil.makeLog('debug', `[reply] 识别为单个 segment: type=${segmentsOrText.type}, file=${segmentsOrText.file || segmentsOrText.data?.file || '无'}`, deviceId);
+                                        segments = [segmentsOrText];
                                     } else {
                                         // 单个对象：转换为 text segment
+                                        BotUtil.makeLog('debug', `[reply] 对象无 type 字段，转换为文本: ${JSON.stringify(segmentsOrText)}`, deviceId);
                                         segments = [{ type: 'text', text: String(segmentsOrText) }];
                                     }
                                 } else if (segmentsOrText) {
                                     // 字符串：转换为 text segment
                                     segments = [{ type: 'text', text: String(segmentsOrText) }];
                                 }
+                                
+                                BotUtil.makeLog('debug', `[reply] 标准化后 segments: ${JSON.stringify(segments)}`, deviceId);
                                 
                                 // 处理 segments：转换文件路径为 web URL，支持转发消息
                                 segments = segments.map((seg) => {
@@ -1888,15 +1898,24 @@ class DeviceManager {
                                     
                                     // 文件类型 segment（image/video/record/file）：转换文件路径为 URL
                                     if (['image', 'video', 'record', 'file'].includes(seg.type)) {
+                                        BotUtil.makeLog('debug', `[reply] 处理文件类型 segment: type=${seg.type}, url=${seg.url || '无'}, file=${seg.file || seg.data?.file || '无'}`, deviceId);
+                                        
                                         // 已有 url：直接使用
-                                        if (seg.url) return seg;
+                                        if (seg.url) {
+                                            BotUtil.makeLog('debug', `[reply] segment 已有 url，直接使用: ${seg.url}`, deviceId);
+                                            return seg;
+                                        }
 
                                         // 获取文件路径：支持 oicq 格式（seg.file）和标准格式（seg.data.file）
                                         const filePath = seg.file || seg.data?.file;
-                                        if (!filePath) return null;
+                                        if (!filePath) {
+                                            BotUtil.makeLog('warn', `[reply] ${seg.type} segment 缺少 file 路径`, deviceId);
+                                            return null;
+                                        }
 
                                         // 远程 URL（http/https/data）：直接使用
                                         if (/^https?:\/\//i.test(filePath) || filePath.startsWith('data:')) {
+                                            BotUtil.makeLog('debug', `[reply] 远程 URL，直接使用: ${filePath}`, deviceId);
                                             return {
                                                 type: seg.type,
                                                 url: filePath,
@@ -1923,6 +1942,7 @@ class DeviceManager {
                                             url = `/api/trash/${filePath.replace(/\\/g, '/')}`;
                                         }
 
+                                        BotUtil.makeLog('debug', `[reply] 本地路径转换为 URL: ${filePath} -> ${url}`, deviceId);
                                         return {
                                             type: seg.type,
                                             url,
@@ -1934,6 +1954,8 @@ class DeviceManager {
                                     // 其他类型 segment：直接返回
                                     return seg;
                                 }).filter(seg => seg !== null);
+                                
+                                BotUtil.makeLog('debug', `[reply] 处理后的 segments (${segments.length}个): ${JSON.stringify(segments)}`, deviceId);
                                 
                                 if (segments.length === 0) {
                                     BotUtil.makeLog('warn', `[回复消息] segments为空，无法发送`, deviceId);
@@ -2000,6 +2022,9 @@ class DeviceManager {
                                     if (seg.type === 'image') {
                                         return '[图片]';
                                     }
+                                    if (seg.type === 'record') {
+                                        return '[语音]';
+                                    }
                                     return '';
                                 }).join('');
                                 if (logText) {
@@ -2010,6 +2035,14 @@ class DeviceManager {
                                     }
                                 }
                                 
+                                BotUtil.makeLog('debug', `[reply] 发送 WebSocket 消息: type=${replyMsg.type}, segments=${replyMsg.segments?.length || 0}`, deviceId);
+                                if (replyMsg.segments) {
+                                    replyMsg.segments.forEach((seg, idx) => {
+                                        if (seg.type === 'record') {
+                                            BotUtil.makeLog('debug', `[reply] segment[${idx}]: type=record, url=${seg.url || '无'}, file=${seg.file || seg.data?.file || '无'}`, deviceId);
+                                        }
+                                    });
+                                }
                                 ws.send(JSON.stringify(replyMsg));
                                 return true;
                             } catch (err) {
@@ -2269,12 +2302,13 @@ export default {
                         }
 
                         const normalizedPath = InputValidator.validatePath(filePath, paths.trash);
+                        const resolvedPath = path.resolve(paths.trash, normalizedPath);
 
-                        if (!fs.existsSync(normalizedPath)) {
+                        if (!fs.existsSync(resolvedPath)) {
                         return HttpResponse.notFound(res, '文件不存在');
                         }
 
-                        const ext = path.extname(normalizedPath).toLowerCase();
+                        const ext = path.extname(resolvedPath).toLowerCase();
                         const contentTypeMap = {
                             '.png': 'image/png',
                             '.jpg': 'image/jpeg',
@@ -2288,7 +2322,7 @@ export default {
                         res.setHeader('Content-Type', contentType);
                         res.setHeader('Cache-Control', 'public, max-age=3600');
 
-                        fs.createReadStream(normalizedPath).pipe(res);
+                        fs.createReadStream(resolvedPath).pipe(res);
                 }, 'trash.file')
             },
             {

@@ -42,7 +42,6 @@ export class MCPServer {
    * @param {Function} tool.handler - 工具处理函数
    */
   registerTool(name, tool) {
-    // 检查是否已存在同名工具
     if (this.tools.has(name)) {
       BotUtil.makeLog('warn', `MCP工具已存在，将被覆盖: ${name}`, 'MCPServer');
     }
@@ -53,7 +52,6 @@ export class MCPServer {
       inputSchema: tool.inputSchema || {},
       handler: tool.handler
     });
-    BotUtil.makeLog('debug', `MCP工具已注册: ${name}`, 'MCPServer');
   }
 
   /**
@@ -710,8 +708,6 @@ export class MCPServer {
         };
       }
     });
-
-    BotUtil.makeLog('info', `已注册${this.tools.size}个MCP核心工具`, 'MCPServer');
   }
 }
 

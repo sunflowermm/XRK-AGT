@@ -68,7 +68,7 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
 - 子服务端调用主服务端：`POST /api/v3/chat/completions`
 - **必填字段**：
   - `messages`: OpenAI messages
-  - `model`: 运营商/provider（`gptgod` / `volcengine` / `xiaomimimo` / `openai` / `openai_compat` / `gemini` / `anthropic` / `azure_openai`）
+  - `model`: 运营商/provider（`volcengine` / `xiaomimimo` / `openai` / `openai_compat` / `gemini` / `anthropic` / `azure_openai`）
   - `apiKey`（或 `api_key`）: 访问主服务端 v3 的鉴权 key（Bot 启动生成），**不是厂商 key**
 
 - **说明**：
@@ -83,7 +83,7 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
   "messages": [
     {"role": "user", "content": "你好"}
   ],
-  "model": "gptgod",
+  "model": "volcengine",
   "apiKey": "主服务端Bot启动生成的访问鉴权key（非厂商key）",
   "temperature": 0.8,
   "max_tokens": 2000,
@@ -117,7 +117,7 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
     }
   ],
   "usage": null,
-  "model": "gptgod"
+  "model": "volcengine"
 }
 ```
 

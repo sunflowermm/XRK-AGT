@@ -54,7 +54,7 @@ flowchart LR
 
     subgraph Providers["🔌 提供商实现"]
         direction TB
-        LLMProviders["📡 LLM提供商（含多模态）<br/>gptgod/volcengine/xiaomimimo<br/>openai/gemini/anthropic<br/>azure_openai/openai_compat"]
+        LLMProviders["📡 LLM提供商（含多模态）<br/>volcengine/xiaomimimo/openai<br/>gemini/anthropic/azure_openai<br/>openai_compat"]
         ASRProviders["🎙️ ASR提供商<br/>volcengine"]
         TTSProviders["🔊 TTS提供商<br/>volcengine"]
     end
@@ -108,7 +108,6 @@ LLMFactory 负责管理所有大语言模型服务提供商，支持多种 LLM A
 
 | 提供商 | 标识符 | 说明 | 接口地址 | 多模态支持 |
 |--------|--------|------|----------|-----------|
-| GPTGod | `gptgod` | GPTGod 大语言模型，支持识图功能 | `https://api.gptgod.online/v1` | ✅ 支持 |
 | 火山引擎 | `volcengine` | 火山引擎豆包大模型 | `https://ark.cn-beijing.volces.com/api/v3` | ✅ 支持 |
 | 小米 MiMo | `xiaomimimo` | 兼容 OpenAI API 的 MiMo 大语言模型（仅文本） | `https://api.xiaomimimo.com/v1` | ❌ 不支持 |
 | OpenAI | `openai` | OpenAI Chat Completions | `https://api.openai.com/v1` | ✅ 支持 |
@@ -129,9 +128,9 @@ import LLMFactory from '#factory/llm/LLMFactory.js';
 
 // 创建客户端
 const config = {
-  provider: 'gptgod',  // 选择提供商
+  provider: 'volcengine',  // 选择提供商
   apiKey: 'your-api-key',
-  baseUrl: 'https://api.gptgod.online/v1',
+  baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
   temperature: 0.7,
   maxTokens: 2000
 };
@@ -180,9 +179,9 @@ class LLMClient {
 
 #### 特殊功能
 
-- **Tool Calling 支持**：支持 OpenAI tools / tool_calls 协议的 LLM 客户端（如 GPTGod、Volcengine、OpenAI、Azure OpenAI、OpenAI-Compatible 等）都会将工具调用统一交给 `MCPToolAdapter` 处理。
+- **Tool Calling 支持**：支持 OpenAI tools / tool_calls 协议的 LLM 客户端（如 Volcengine、OpenAI、Azure OpenAI、OpenAI-Compatible 等）都会将工具调用统一交给 `MCPToolAdapter` 处理。
 - **工作流作用域控制（streams）**：当通过 `/api/v3/chat/completions` 调用时，请求体中的 `workflow` 字段会被整理为 `streams` 白名单，LLM 工厂据此只注入这些工作流下的 MCP 工具，其它未在 `streams` 中声明的工具不会被注入和调用。
-- **多模态输入**：部分 LLM（如 GPTGod、Volcengine、OpenAI、Gemini、Azure OpenAI 等）直接支持图片输入，消息结构会通过 `transformMessagesWithVision` 统一转成各家兼容的 `text + image_url`（含 base64 data URL）格式。
+- **多模态输入**：部分 LLM（如 Volcengine、OpenAI、Gemini、Azure OpenAI 等）直接支持图片输入，消息结构会通过 `transformMessagesWithVision` 统一转成各家兼容的 `text + image_url`（含 base64 data URL）格式。
 
 ---
 
@@ -335,7 +334,7 @@ class TTSClient {
 ```yaml
 # LLM 工厂运营商选择
 llm:
-  Provider: gptgod  # 选择 LLM 提供商
+  Provider: volcengine  # 选择 LLM 提供商
   timeout: 360000
   retry:
     enabled: true
@@ -352,16 +351,15 @@ tts:
   onlyForASR: true
 ```
 
-#### gptgod_llm.yaml（提供商配置）
+#### volcengine_llm.yaml（提供商配置）
 
 ```yaml
-# GPTGod LLM 工厂配置
-enabled: true
+# 火山引擎 LLM 工厂配置
 apiKey: your-api-key
-baseUrl: https://api.gptgod.online/v1
-chatModel: gemini-exp-1114
-temperature: 0.7
-maxTokens: 2000
+baseUrl: https://ark.cn-beijing.volces.com/api/v3
+chatModel: doubao-pro-4k
+temperature: 0.8
+maxTokens: 4096
 ```
 
 ### 配置读取
@@ -483,7 +481,7 @@ class LLMFactory {
   /**
    * 创建 LLM 客户端
    * @param {Object} config - 配置对象
-   *   - provider: 提供商名称（如 'gptgod', 'volcengine'）
+   *   - provider: 提供商名称（如 'volcengine', 'openai'）
    *   - baseUrl: API 基础地址
    *   - apiKey: API 密钥
    *   - 其他 LLM 参数
@@ -619,7 +617,7 @@ const response = await fetch('http://localhost:8080/api/v3/chat/completions', {
     'Authorization': 'Bearer YOUR_API_KEY'
   },
   body: JSON.stringify({
-    model: 'gptgod',  // 使用 provider 名称
+    model: 'volcengine',  // 使用 provider 名称
     messages: [
       { role: 'user', content: '你好' }
     ],
@@ -630,7 +628,7 @@ const response = await fetch('http://localhost:8080/api/v3/chat/completions', {
 
 **自定义工作流接口**：
 ```javascript
-// GET /api/ai/stream?prompt=你好&workflow=chat&profile=gptgod
+// GET /api/ai/stream?prompt=你好&workflow=chat&profile=volcengine
 // SSE 流式输出，使用指定工作流
 const eventSource = new EventSource('http://localhost:8080/api/ai/stream?prompt=你好&workflow=chat');
 eventSource.onmessage = (e) => {
@@ -661,7 +659,7 @@ export default {
     
     // 根据请求选择提供商
     const config = {
-      provider: provider || 'gptgod',
+      provider: provider || 'volcengine',
       ...Bot.cfg[`${provider}_llm`]
     };
     
@@ -765,7 +763,7 @@ Content-Type: application/json
 Authorization: Bearer YOUR_API_KEY
 
 {
-  "model": "gptgod",
+  "model": "volcengine",
   "messages": [
     { "role": "user", "content": "你好" }
   ],
@@ -781,7 +779,7 @@ Authorization: Bearer YOUR_API_KEY
   "id": "chatcmpl_1703123456789",
   "object": "chat.completion",
   "created": 1703123456,
-  "model": "gptgod",
+  "model": "volcengine",
   "choices": [{
     "index": 0,
     "message": {
@@ -805,7 +803,7 @@ Content-Type: application/json
 Authorization: Bearer YOUR_API_KEY
 
 {
-  "model": "gptgod",
+  "model": "volcengine",
   "messages": [{ "role": "user", "content": "你好" }],
   "stream": true
 }
@@ -813,18 +811,18 @@ Authorization: Bearer YOUR_API_KEY
 
 **响应**（Server-Sent Events）：
 ```
-data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"gptgod","choices":[{"index":0,"delta":{"role":"assistant","content":"你"},"finish_reason":null}]}
+data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"volcengine","choices":[{"index":0,"delta":{"role":"assistant","content":"你"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"gptgod","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}
+data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"volcengine","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"gptgod","choices":[{"index":0,"delta":{},"finish_reason":"stop","usage":{...}}]}
+data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"volcengine","choices":[{"index":0,"delta":{},"finish_reason":"stop","usage":{...}}]}
 
 data: [DONE]
 ```
 
 **重要说明**：
 
-- `model` 参数使用 **provider 名称**（如 `gptgod`、`volcengine`、`openai`、`openai_compat`），不是真实模型名；真实模型由各 `*_llm` 配置文件中的 `model/chatModel` 决定。
+- `model` 参数使用 **provider 名称**（如 `volcengine`、`openai`、`openai_compat`），不是真实模型名；真实模型由各 `*_llm` 配置文件中的 `model/chatModel` 决定。
 - 支持多种认证方式：`Authorization: Bearer TOKEN`、请求体 `apiKey` / `api_key`、以及 `X-API-Key` 头。
 - 支持常见 OpenAI 兼容参数：`temperature`、`max_tokens`、`top_p`、`tools`、`tool_choice`、`parallel_tool_calls`、`response_format`、`stream_options` 等。
 - 流式输出需要提供商配置中 `enableStream: true`（默认启用）；所有 provider 的 `chatStream` 都统一输出“纯文本增量”，由 `core/system-Core/http/ai.js` 封装为 SSE 事件。
@@ -847,7 +845,7 @@ data: [DONE]
 
 **请求示例**：
 ```http
-GET /api/ai/stream?prompt=你好&workflow=chat&profile=gptgod&persona=助手 HTTP/1.1
+GET /api/ai/stream?prompt=你好&workflow=chat&profile=volcengine&persona=助手 HTTP/1.1
 Host: localhost:8080
 ```
 
@@ -890,16 +888,16 @@ Host: localhost:8080
   "success": true,
   "data": {
     "enabled": true,
-    "defaultProfile": "gptgod",
+    "defaultProfile": "volcengine",
     "defaultWorkflow": "chat",
     "persona": "",
     "profiles": [
       {
-        "key": "gptgod",
-        "label": "gptgod",
-        "description": "LLM提供商: gptgod",
-        "model": "gemini-exp-1114",
-        "baseUrl": "https://api.gptgod.online/v1",
+        "key": "volcengine",
+        "label": "volcengine",
+        "description": "LLM提供商: volcengine",
+        "model": "doubao-pro-4k",
+        "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
         "maxTokens": 2000,
         "temperature": 0.7,
         "hasApiKey": true,
@@ -944,7 +942,7 @@ Host: localhost:8080
   "object": "list",
   "data": [
     {
-      "id": "gptgod",
+      "id": "volcengine",
       "object": "model",
       "created": 1703123456,
       "owned_by": "xrk-agt"

@@ -1,4 +1,3 @@
-import GPTGodLLMClient from './GPTGodLLMClient.js';
 import VolcengineLLMClient from './VolcengineLLMClient.js';
 import XiaomiMiMoLLMClient from './XiaomiMiMoLLMClient.js';
 import OpenAILLMClient from './OpenAILLMClient.js';
@@ -8,8 +7,6 @@ import AnthropicLLMClient from './AnthropicLLMClient.js';
 import AzureOpenAILLMClient from './AzureOpenAILLMClient.js';
 
 const providers = new Map([
-  // GPTGod：默认内置提供商，支持多模态与流式输出
-  ['gptgod', (config) => new GPTGodLLMClient(config)],
   // 火山引擎豆包：兼容 OpenAI Chat Completions 风格（/api/v3/chat/completions）
   ['volcengine', (config) => new VolcengineLLMClient(config)],
   // 小米 MiMo：兼容 OpenAI API 的 MiMo 大模型
@@ -56,23 +53,25 @@ export default class LLMFactory {
   /**
    * 创建 LLM 客户端
    * @param {Object} config - 配置对象
-   *   - provider: 提供商名称（如 'gptgod', 'volcengine'）
+   *   - provider: 提供商名称（如 'volcengine', 'openai'），如果未提供则从 aistream.yaml 配置读取
    *   - baseUrl: API 基础地址
    *   - apiKey: API 密钥
    *   - 其他 LLM 参数
    * @returns {Object} LLM 客户端实例
    */
   static createClient(config = {}) {
-    const provider = (config.provider || 'gptgod').toLowerCase();
+    let provider = config.provider || (global.cfg?.aistream?.llm?.Provider || global.cfg?.aistream?.llm?.provider);
+    
+    if (!provider) {
+      throw new Error(`未指定LLM提供商，请在 aistream.yaml 中配置 llm.Provider`);
+    }
+    
+    provider = provider.toLowerCase();
     const factory = providers.get(provider);
-
     if (!factory) {
-      Bot.makeLog?.('error', `[LLMFactory] 不支持的提供商: ${provider}`);
       throw new Error(`不支持的LLM提供商: ${provider}`);
     }
 
-    const client = factory(config);
-    Bot.makeLog?.('debug', `[LLMFactory] 创建客户端成功: provider=${provider}, client=${client?.constructor?.name || 'unknown'}`);
-    return client;
+    return factory(config);
   }
 }

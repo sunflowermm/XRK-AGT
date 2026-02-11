@@ -2,6 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import HttpApi from './http.js';
 import BotUtil from '#utils/botutil.js';
+import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
 import { validateApiInstance, getApiPriority } from './utils/helpers.js';
 
@@ -167,7 +168,6 @@ class ApiLoader {
       // 存储API实例
       this.apis.set(key, apiInstance);
       
-      BotUtil.makeLog('debug', `加载API模块: ${apiInstance.name || key}`, 'ApiLoader');
       return true;
     } catch (error) {
       BotUtil.makeLog('error', `加载API失败: ${filePath} - ${error.message}`, 'ApiLoader', error);
@@ -231,8 +231,6 @@ class ApiLoader {
     this.app = app;
     this.bot = bot;
     
-    BotUtil.makeLog('info', '开始注册API路由...', 'ApiLoader');
-    
     // 全局中间件
     app.use((req, res, next) => {
       req.bot = bot;
@@ -240,22 +238,20 @@ class ApiLoader {
       next();
     });
     
+    let totalRoutes = 0;
+    let totalWS = 0;
+    let enabledCount = 0;
+    
     // 按优先级顺序初始化API
     for (const api of this.priority) {
-      // 严格检查API实例
       if (!api || typeof api !== 'object') {
         BotUtil.makeLog('warn', `发现无效的API实例，已跳过`, 'ApiLoader');
         continue;
       }
       
-      if (api.enable === false) {
-        const apiName = api.name || api.key || 'unknown';
-        BotUtil.makeLog('debug', `跳过API: ${apiName} (已禁用)`, 'ApiLoader');
-        continue;
-      }
+      if (api.enable === false) continue;
       
       const apiName = api.name || api.key || 'unknown';
-      const apiPriority = getApiPriority(api);
       
       try {
         const routeCount = api.routes ? api.routes.length : 0;
@@ -266,20 +262,22 @@ class ApiLoader {
         }
         
         if (routeCount > 0 || wsCount > 0) {
-          BotUtil.makeLog('info', `注册API: ${apiName} (优先级: ${apiPriority}, 路由: ${routeCount}, WS: ${wsCount})`, 'ApiLoader');
+          totalRoutes += routeCount;
+          totalWS += wsCount;
+          enabledCount++;
+          
+          if (cfg.aistream?.global?.debug) {
+            BotUtil.makeLog('debug', `注册API: ${apiName} (路由: ${routeCount}, WS: ${wsCount})`, 'ApiLoader');
+          }
         }
       } catch (error) {
         BotUtil.makeLog('error', `注册API失败: ${apiName} - ${error.message}`, 'ApiLoader', error);
-        // 继续处理下一个API，不中断整个注册过程
       }
     }
     
     // 404处理（排除代理路由，避免拦截 /api/god/*）
     app.use('/api/*', (req, res, next) => {
-      // 跳过代理路由，让代理中间件处理
-      if (req.path.startsWith('/api/god/')) {
-        return next();
-      }
+      if (req.path.startsWith('/api/god/')) return next();
       
       if (!res.headersSent) {
         res.status(404).json({
@@ -291,7 +289,7 @@ class ApiLoader {
       }
     });
     
-    BotUtil.makeLog('info', 'API路由注册完成', 'ApiLoader');
+    BotUtil.makeLog('info', `API路由注册完成: ${enabledCount}个模块, ${totalRoutes}个路由, ${totalWS}个WebSocket`, 'ApiLoader');
   }
   
   /**
@@ -409,7 +407,7 @@ class ApiLoader {
         }
       }
       this.watcher = {}
-      BotUtil.makeLog('info', '文件监视已停止', 'ApiLoader')
+      BotUtil.makeLog('debug', '文件监视已停止', 'ApiLoader')
       return
     }
     
@@ -427,7 +425,7 @@ class ApiLoader {
         dirs: apiDirs,
         onAdd: async (filePath) => {
           const fileName = path.basename(filePath)
-          BotUtil.makeLog('info', `检测到新文件: ${fileName}`, 'ApiLoader')
+          BotUtil.makeLog('debug', `检测到新文件: ${fileName}`, 'ApiLoader')
           const key = await this.getApiKey(filePath)
           await this.loadApi(filePath)
           this.sortByPriority()
@@ -441,19 +439,19 @@ class ApiLoader {
         },
         onChange: async (filePath) => {
           const key = await this.getApiKey(filePath)
-          BotUtil.makeLog('info', `检测到文件变更: ${key}`, 'ApiLoader')
+          BotUtil.makeLog('debug', `检测到文件变更: ${key}`, 'ApiLoader')
           await this.changeApi(key)
         },
         onUnlink: async (filePath) => {
           const key = await this.getApiKey(filePath)
-          BotUtil.makeLog('info', `检测到文件删除: ${key}`, 'ApiLoader')
+          BotUtil.makeLog('debug', `检测到文件删除: ${key}`, 'ApiLoader')
           await this.unloadApi(key)
           this.sortByPriority()
         }
       })
 
       this.watcher.api = hotReload.watcher
-      BotUtil.makeLog('info', '文件监视已启动', 'ApiLoader')
+      BotUtil.makeLog('debug', '文件监视已启动', 'ApiLoader')
     } catch (error) {
       BotUtil.makeLog('error', '启动文件监视失败', 'ApiLoader', error)
     }

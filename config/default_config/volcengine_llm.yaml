@@ -34,7 +34,7 @@ chatModel: "doubao-pro-4k"
 # 温度参数（0-2），值越高越随机
 temperature: 0.8
 # 最大输出token数
-maxTokens: 4000
+maxTokens: 4096
 # Top-p采样（0-1）
 topP: 0.9
 # 存在惩罚（-2.0到2.0），控制模型重复已出现的内容

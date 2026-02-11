@@ -37,7 +37,7 @@ Python 子服务端内部会调用主服务端的 `POST /api/v3/chat/completions
 
 - **base_url**：指向主服务端 `/api/v3`
 - **apiKey（访问鉴权）**：需要携带主服务端 `Bot.apiKey`（等价于 Node 侧 `BotUtil.apiKey`），用于访问 `/api/v3/chat/completions`。在子服务端配置 `main_server.api_key` 后会自动带上。
-- **model 字段约定**：这里填“运营商/provider”（例如 `volcengine` / `xiaomimimo` / `gptgod`）
+- **model 字段约定**：这里填"运营商/provider"（例如 `volcengine` / `xiaomimimo` / `openai`）
 - **真实模型ID**：由主服务端 `cfg.aistream.llm.defaults/profiles` 决定（也可在请求体内用自定义字段覆写，如 `chatModel`/`model` 等，以实际工厂实现为准）
 - **tool calling + MCP**：由主服务端 NodeJS LLMFactory 自动处理（会把 MCP tools 注入到厂商工具协议，并执行多轮工具调用），返回最终 `assistant.content`
 

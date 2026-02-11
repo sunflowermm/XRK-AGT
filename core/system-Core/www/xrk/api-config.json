@@ -312,7 +312,7 @@
               "name": "model",
               "label": "模型/提供商",
               "type": "text",
-              "placeholder": "gptgod"
+              "placeholder": "volcengine"
             },
             {
               "name": "stream",
@@ -769,7 +769,7 @@
       "messages": [
         { "role": "user", "content": "你好" }
       ],
-      "model": "gptgod",
+      "model": "volcengine",
       "stream": "false"
     },
 

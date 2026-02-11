@@ -111,7 +111,6 @@ class Cfg {
         
         // 复制服务器配置和工厂配置
         if (this.SERVER_CONFIGS.includes(configName) ||
-            configName.startsWith('gptgod_') ||
             configName.includes('volcengine_') ||
             configName.includes('xiaomimimo_') ||
             configName.includes('openai_') ||
@@ -271,20 +270,8 @@ class Cfg {
   // 工厂配置 getters
   // ========================================
   
-  get gptgod_llm() {
-    return this.getServerConfig('gptgod_llm');
-  }
-
-  get gptgod_vision() {
-    return this.getServerConfig('gptgod_vision');
-  }
-  
   get volcengine_llm() {
     return this.getServerConfig('volcengine_llm');
-  }
-
-  get volcengine_vision() {
-    return this.getServerConfig('volcengine_vision');
   }
 
   get xiaomimimo_llm() {

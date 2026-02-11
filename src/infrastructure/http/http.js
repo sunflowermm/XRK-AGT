@@ -37,10 +37,7 @@ export default class HttpApi {
   }
   
   registerRoutes(app, bot) {
-    if (!Array.isArray(this.routes) || this.routes.length === 0) {
-      BotUtil.makeLog('debug', `[HttpApi] ${this.name} 没有路由需要注册`, 'HttpApi');
-      return;
-    }
+    if (!Array.isArray(this.routes) || this.routes.length === 0) return;
     
     let registeredCount = 0;
     
@@ -69,9 +66,6 @@ export default class HttpApi {
       registeredCount++;
     }
     
-    if (registeredCount > 0) {
-      BotUtil.makeLog('info', `[HttpApi] ${this.name} 注册了 ${registeredCount} 个路由`, 'HttpApi');
-    }
   }
   
   wrapHandler(handler, bot) {

@@ -1,5 +1,6 @@
 import path from 'path';
 import { pathToFileURL } from 'url';
+import { spawn } from 'child_process';
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
@@ -13,6 +14,7 @@ class StreamLoader {
   constructor() {
     this.streams = new Map();
     this.streamClasses = new Map();
+    this.remoteMCPServers = new Map();
     this.loaded = false;
     this.watcher = null;
     this.loadStats = {
@@ -74,7 +76,6 @@ class StreamLoader {
         return;
       }
 
-      BotUtil.makeLog('debug', `发现 ${files.length} 个工作流文件`, 'StreamLoader');
 
       // 阶段1: 加载工作流类（不初始化Embedding）
       for (const file of files) {
@@ -84,7 +85,6 @@ class StreamLoader {
       // 阶段2: 应用Embedding配置（直接从 cfg 读取）
       const embeddingConfig = cfg.aistream?.embedding || {};
       if (embeddingConfig.enabled !== false) {
-        BotUtil.makeLog('debug', '配置Embedding...', 'StreamLoader');
         await this.applyEmbeddingConfig(embeddingConfig);
       }
 
@@ -151,7 +151,9 @@ class StreamLoader {
         mcpTools: stream.mcpTools?.size || 0
       });
 
-      BotUtil.makeLog('debug', `加载工作流: ${stream.name} v${stream.version} (${loadTime}ms)`, 'StreamLoader');
+      if (cfg.aistream?.global?.debug) {
+        BotUtil.makeLog('debug', `加载工作流: ${stream.name} v${stream.version} (${loadTime}ms)`, 'StreamLoader');
+      }
     } catch (error) {
       this.loadStats.failedStreams++;
       const loadTime = Date.now() - startTime;
@@ -188,10 +190,6 @@ class StreamLoader {
       try {
         // 初始化Embedding
         await stream.initEmbedding();
-        BotUtil.makeLog('debug', 
-          `Embedding初始化: ${stream.name} - 由子服务端提供`, 
-          'StreamLoader'
-        );
         successCount++;
       } catch (err) {
         failCount++;
@@ -203,10 +201,9 @@ class StreamLoader {
     }
 
     if (failCount > 0) {
-      BotUtil.makeLog('warn', 
-        `Embedding初始化: 成功${successCount}个, 失败${failCount}个`, 
-        'StreamLoader'
-      );
+      if (failCount > 0) {
+        BotUtil.makeLog('warn', `Embedding初始化: 成功${successCount}个, 失败${failCount}个`, 'StreamLoader');
+      }
     }
   }
 
@@ -563,18 +560,18 @@ class StreamLoader {
         dirs: streamDirs,
         onAdd: async (filePath) => {
           const streamName = hotReload.getFileKey(filePath)
-          BotUtil.makeLog('info', `检测到新工作流: ${streamName}`, 'StreamLoader')
+          BotUtil.makeLog('debug', `检测到新工作流: ${streamName}`, 'StreamLoader')
           await this._reloadStream(filePath)
         },
         onChange: async (filePath) => {
           const streamName = hotReload.getFileKey(filePath)
-          BotUtil.makeLog('info', `检测到工作流变更: ${streamName}`, 'StreamLoader')
+          BotUtil.makeLog('debug', `检测到工作流变更: ${streamName}`, 'StreamLoader')
           await this._cleanupStream(streamName)
           await this._reloadStream(filePath)
         },
         onUnlink: async (filePath) => {
           const streamName = hotReload.getFileKey(filePath)
-          BotUtil.makeLog('info', `检测到工作流删除: ${streamName}`, 'StreamLoader')
+          BotUtil.makeLog('debug', `检测到工作流删除: ${streamName}`, 'StreamLoader')
           await this._cleanupStream(streamName)
           await this.initMCP()
         }
@@ -619,10 +616,7 @@ class StreamLoader {
 
         const fullToolName = stream.name !== 'mcp' ? `${stream.name}.${toolName}` : toolName;
         
-        if (registeredTools.has(fullToolName)) {
-          BotUtil.makeLog('debug', `MCP工具已存在，跳过: ${fullToolName}`, 'StreamLoader');
-          continue;
-        }
+        if (registeredTools.has(fullToolName)) continue;
 
         mcpServer.registerTool(fullToolName, {
           description: tool.description || `执行${toolName}操作`,
@@ -633,16 +627,6 @@ class StreamLoader {
               e: args.e || loader.currentEvent || null,
               question: null
             };
-            try {
-              BotUtil.makeLog(
-                'debug',
-                `[MCP] 调用工具: ${fullToolName}, hasE=${Boolean(context.e)}, isGroup=${context.e?.isGroup}, msgType=${context.e?.message_type}, group_id=${context.e?.group_id}, user_id=${context.e?.user_id}, argKeys=${Object.keys(args || {}).join(',')}`,
-                'StreamLoader'
-              );
-            } catch {
-              // 日志失败直接忽略，避免影响工具执行
-            }
-            
             try {
               if (tool.handler) {
                 const result = await tool.handler(args, { ...context, stream });
@@ -671,7 +655,6 @@ class StreamLoader {
     }
 
     this.mcpServer = mcpServer;
-    BotUtil.makeLog('info', `MCP工具已注册，共${registeredCount}个工具`, 'StreamLoader');
   }
 
   /**
@@ -679,28 +662,242 @@ class StreamLoader {
    */
   async initMCP() {
     const mcpConfig = cfg.aistream?.mcp || {};
-    if (mcpConfig.enabled === false) {
-      BotUtil.makeLog('debug', 'MCP服务已禁用', 'StreamLoader');
-      return;
-    }
+    if (mcpConfig.enabled === false) return;
 
-    // 创建MCP服务器实例
     if (!this.mcpServer) {
       this.mcpServer = new MCPServer();
-      BotUtil.makeLog('info', 'MCP服务器已创建', 'StreamLoader');
     }
 
+    const beforeCount = this.mcpServer.tools.size;
+    
     // 重新注册所有工作流的工具（支持热重载）
     this.registerMCP(this.mcpServer);
+    const localCount = this.mcpServer.tools.size - beforeCount;
+    
+    // 加载远程MCP服务器（如果启用）
+    const loadedServers = await this.loadRemoteMCPServers();
     
     // 标记MCP服务已初始化
-    if (this.mcpServer) {
-      this.mcpServer.initialized = true;
-      BotUtil.makeLog('info', `MCP服务已挂载，共${this.mcpServer.tools.size}个工具`, 'StreamLoader');
+    this.mcpServer.initialized = true;
+    const remoteCount = this.mcpServer.tools.size - beforeCount - localCount;
+    const totalCount = this.mcpServer.tools.size;
+    
+    if (totalCount > 0) {
+      const parts = [];
+      if (localCount > 0) parts.push(`本地${localCount}个`);
+      if (remoteCount > 0) parts.push(`远程${remoteCount}个`);
+      const detail = parts.length > 0 ? `: ${parts.join(', ')}` : '';
+      BotUtil.makeLog('info', `MCP服务已挂载${detail}, 共${totalCount}个工具`, 'StreamLoader');
+    }
+  }
+
+  /**
+   * 获取远程MCP配置和选中的服务器名称集合
+   */
+  _getRemoteMCPConfig() {
+    const remoteConfig = cfg.aistream?.mcp?.remote || {};
+    if (!remoteConfig.enabled || !Array.isArray(remoteConfig.servers)) return null;
+    
+    const { selected = [], servers = [] } = remoteConfig;
+    const selectedNames = Array.isArray(selected) && selected.length > 0 
+      ? new Set(selected.map(s => String(s).trim()).filter(Boolean))
+      : null;
+    
+    return { servers, selectedNames };
+  }
+
+  /**
+   * 加载远程MCP服务器并注册工具
+   */
+  async loadRemoteMCPServers() {
+    if (!this.mcpServer) return;
+    
+    const config = this._getRemoteMCPConfig();
+    if (!config) return;
+
+    const { servers, selectedNames } = config;
+    const loadedServers = [];
+    
+    for (const serverConfig of servers) {
+      const serverName = String(serverConfig.name || '').trim();
+      if (!serverName || (selectedNames && !selectedNames.has(serverName))) continue;
+
+      try {
+        let serverConfigObj = serverConfig.config;
+        if (typeof serverConfigObj === 'string') {
+          try {
+            serverConfigObj = JSON.parse(serverConfigObj);
+          } catch {
+            BotUtil.makeLog('warn', `远程MCP服务器 ${serverName} 的config字段JSON解析失败`, 'StreamLoader');
+            continue;
+          }
+        }
+
+        if (!serverConfigObj) {
+          serverConfigObj = serverConfig.command 
+            ? { command: serverConfig.command, args: Array.isArray(serverConfig.args) ? serverConfig.args : [] }
+            : serverConfig.url 
+              ? { url: serverConfig.url, transport: serverConfig.transport || 'http', headers: serverConfig.headers || {} }
+              : null;
+          if (!serverConfigObj) continue;
+        }
+
+        await this._createRemoteMCPClient(serverName, serverConfigObj);
+        loadedServers.push(serverName);
+      } catch (error) {
+        BotUtil.makeLog('error', `加载远程MCP服务器 ${serverName} 失败: ${error.message}`, 'StreamLoader');
+      }
+    }
+    
+    return loadedServers;
+  }
+
+  /**
+   * 创建远程MCP客户端并注册工具
+   */
+  async _createRemoteMCPClient(serverName, config) {
+    if (config.command) {
+      // stdio协议：通过子进程启动MCP服务器
+      const child = spawn(config.command, config.args || [], { stdio: ['pipe', 'pipe', 'pipe'] });
+      this.remoteMCPServers.set(serverName, { type: 'stdio', process: child, config });
+      
+      // 发送initialize请求
+      const initRequest = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-11-25',
+          capabilities: {},
+          clientInfo: { name: 'xrk-agt', version: '1.0.0' }
+        }
+      };
+      
+      child.stdin.write(JSON.stringify(initRequest) + '\n');
+      
+      // 监听响应并注册工具
+      let buffer = '';
+      const responseHandler = (data) => {
+        buffer += data.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const response = JSON.parse(line);
+            
+            if (response.id === 1 && response.result) {
+              // 初始化成功后请求工具列表
+              child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }) + '\n');
+            } else if (response.id === 2 && response.result?.tools) {
+              this._registerRemoteTools(serverName, response.result.tools);
+              child.stdout.removeListener('data', responseHandler);
+            }
+          } catch {}
+        }
+      };
+      
+      child.stdout.on('data', responseHandler);
+      child.on('error', (error) => {
+        BotUtil.makeLog('error', `远程MCP服务器 ${serverName} 启动失败: ${error.message}`, 'StreamLoader');
+      });
+    } else if (config.url) {
+      // HTTP协议：通过HTTP请求获取工具
+      this.remoteMCPServers.set(serverName, { type: 'http', url: config.url, transport: config.transport, headers: config.headers, config });
+      await this._fetchRemoteTools(serverName, config);
+    }
+  }
+
+  /**
+   * 注册远程MCP工具到主MCP服务器
+   */
+  _registerRemoteTools(serverName, tools) {
+    if (!this.mcpServer || !Array.isArray(tools)) return;
+    
+    for (const tool of tools) {
+      this.mcpServer.registerTool(`remote-mcp.${serverName}.${tool.name}`, {
+        description: tool.description || '',
+        inputSchema: tool.inputSchema || {},
+        handler: (args) => this._callRemoteTool(serverName, tool.name, args)
+      });
     }
   }
 
 
+  /**
+   * 调用远程MCP工具
+   */
+  async _callRemoteTool(serverName, toolName, args) {
+    const server = this.remoteMCPServers.get(serverName);
+    if (!server) {
+      return { success: false, error: `远程MCP服务器 ${serverName} 未找到` };
+    }
+
+    const request = { jsonrpc: '2.0', id: Date.now(), method: 'tools/call', params: { name: toolName, arguments: args } };
+
+    if (server.type === 'stdio') {
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve({ success: false, error: '调用超时' }), 30000);
+        
+        let responseBuffer = '';
+        const handler = (data) => {
+          responseBuffer += data.toString();
+          const lines = responseBuffer.split('\n');
+          responseBuffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const response = JSON.parse(line);
+              if (response.id === request.id) {
+                clearTimeout(timeout);
+                server.process.stdout.removeListener('data', handler);
+                const text = response.result?.content?.[0]?.text;
+                resolve(text ? JSON.parse(text) : response.result);
+              }
+            } catch {}
+          }
+        };
+        
+        server.process.stdout.on('data', handler);
+        server.process.stdin.write(JSON.stringify(request) + '\n');
+      });
+    } else if (server.type === 'http') {
+      try {
+        const response = await BotUtil.fetch(server.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...server.headers },
+          body: JSON.stringify(request)
+        });
+        const data = await response.json();
+        const text = data.result?.content?.[0]?.text;
+        return text ? JSON.parse(text) : data.result;
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+  }
+
+  /**
+   * 通过HTTP获取远程工具列表
+   */
+  async _fetchRemoteTools(serverName, config) {
+    try {
+      const request = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
+      const response = await BotUtil.fetch(config.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(config.headers || {}) },
+        body: JSON.stringify(request)
+      });
+      const data = await response.json();
+      if (data.result?.tools) {
+        this._registerRemoteTools(serverName, data.result.tools);
+      }
+    } catch (error) {
+      BotUtil.makeLog('error', `获取远程MCP工具失败 ${serverName}: ${error.message}`, 'StreamLoader');
+    }
+  }
 }
 
 export default new StreamLoader();
