@@ -234,7 +234,16 @@ export class MCPToolAdapter {
           arguments: argumentsObj
         });
 
-        const content = result.content?.[0]?.text || JSON.stringify(result);
+        // 确保 content 始终是字符串，避免出现 undefined 传给 LLM
+        let content = result?.content?.[0]?.text;
+        if (typeof content !== 'string' || !content.length) {
+          try {
+            const fallback = result !== undefined && result !== null ? result : { success: true };
+            content = JSON.stringify(fallback);
+          } catch {
+            content = '{"success":false,"error":"MCPToolAdapter: 无法序列化工具返回值"}';
+          }
+        }
 
         BotUtil.makeLog(
           'info',

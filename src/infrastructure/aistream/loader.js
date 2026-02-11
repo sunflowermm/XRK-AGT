@@ -824,9 +824,35 @@ class StreamLoader {
     }
   }
 
+  /**
+   * 归一化远程 MCP 返回结果（stdio / HTTP 共用）
+   * @private
+   */
+  _normalizeRemoteMCPResult(rawResult) {
+    try {
+      const text = rawResult?.content?.[0]?.text;
+
+      if (typeof text === 'string' && text.trim().length > 0) {
+        // 优先尝试把 text 当作 JSON 解析；失败则当作原始字符串返回
+        try {
+          return JSON.parse(text);
+        } catch {
+          return { success: true, raw: text };
+        }
+      }
+
+      if (rawResult !== undefined) {
+        return rawResult;
+      }
+
+      return { success: false, error: '远程MCP返回空结果' };
+    } catch (e) {
+      return { success: false, error: `解析远程MCP响应失败: ${e.message || e}` };
+    }
+  }
 
   /**
-   * 调用远程MCP工具
+   * 调用远程MCP工具（stdio / HTTP）
    */
   async _callRemoteTool(serverName, toolName, args) {
     const server = this.remoteMCPServers.get(serverName);
@@ -834,7 +860,8 @@ class StreamLoader {
       return { success: false, error: `远程MCP服务器 ${serverName} 未找到` };
     }
 
-    const request = { jsonrpc: '2.0', id: Date.now(), method: 'tools/call', params: { name: toolName, arguments: args } };
+    const requestId = Date.now();
+    const request = { jsonrpc: '2.0', id: requestId, method: 'tools/call', params: { name: toolName, arguments: args } };
 
     if (server.type === 'stdio') {
       return new Promise((resolve) => {
@@ -850,13 +877,16 @@ class StreamLoader {
             if (!line.trim()) continue;
             try {
               const response = JSON.parse(line);
-              if (response.id === request.id) {
-                clearTimeout(timeout);
-                server.process.stdout.removeListener('data', handler);
-                const text = response.result?.content?.[0]?.text;
-                resolve(text ? JSON.parse(text) : response.result);
-              }
-            } catch {}
+              if (response.id !== requestId) continue;
+
+              clearTimeout(timeout);
+              server.process.stdout.removeListener('data', handler);
+
+              const finalResult = this._normalizeRemoteMCPResult(response.result);
+              resolve(finalResult);
+            } catch {
+              // 单行解析失败直接忽略，继续等待下一行
+            }
           }
         };
         
@@ -871,8 +901,7 @@ class StreamLoader {
           body: JSON.stringify(request)
         });
         const data = await response.json();
-        const text = data.result?.content?.[0]?.text;
-        return text ? JSON.parse(text) : data.result;
+        return this._normalizeRemoteMCPResult(data.result);
       } catch (error) {
         return { success: false, error: error.message };
       }
