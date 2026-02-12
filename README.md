@@ -203,14 +203,14 @@ node app
 
 # 方式2：使用启动脚本
 # Windows
-start.bat server 8080
+start.bat
 
 # Linux/macOS
 chmod +x start.sh
 ./start.sh server 8080
 
 # 方式3：直接使用 start.js
-node start.js server 8080
+node start server 8080
 ```
 
 **指定端口：**
