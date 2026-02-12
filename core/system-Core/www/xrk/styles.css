@@ -2330,6 +2330,7 @@ select.form-input {
 
 /* 配置管理 */
 .config-page {
+  /* 恢复为：左侧列表 + 右侧编辑区 的双栏布局 */
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 24px;
@@ -2602,15 +2603,10 @@ select.form-input {
 }
 
 .config-field-grid {
-  display: grid;
+  /* 配置项编辑区域强制单列布局，避免出现两三列卡片 */
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-}
-
-@media (max-width: 768px) {
-  .config-field-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* SubForm 嵌套分组样式 */
@@ -2861,6 +2857,7 @@ select.form-input {
 }
 
 .config-grid {
+  /* 子模块卡片继续使用自适应多列栅格布局 */
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px;
@@ -2979,15 +2976,10 @@ select.form-input {
 }
 
 .api-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* API 编辑也统一为单列布局，避免左右分栏 */
+  display: flex;
+  flex-direction: column;
   gap: 24px;
-}
-
-@media (max-width: 1024px) {
-  .api-form-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .api-form-section {
