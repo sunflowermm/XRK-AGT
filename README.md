@@ -1,10 +1,10 @@
 ## XRK-AGT v1.0.5
 
-> **最后更新**: 2026-02-10  
+> **最后更新**: 2026-02-12  
 > **跨平台支持**: Windows 10+ / Linux / macOS / Docker  
 > **Node.js 版本要求**: ≥ 24.12.0 (LTS)
 
-XRK-AGT 是向日葵工作室基于 Node.js 打造的 **多平台、多Tasker、工作流驱动型智能体平台**，采用分层架构设计，支持：
+XRK-AGT 是由向日葵开发，各个大学志同道合的学生联合研制，基于 Node.js 打造的 **多平台、多Tasker、工作流驱动型智能体平台**，采用分层架构设计，支持：
 
 - **多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
 - **插件工作流**：指令插件 + AI 工作流 (`AIStream`)
@@ -254,7 +254,7 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可在 Cursor 等 AI 编�
 | 模块 | 文档 |
 |------|------|
 | 概览与运行 | [项目概览](PROJECT_OVERVIEW.md)、[Bot 主类文档](docs/bot.md)、[Server 服务器架构文档](docs/server.md)、[Docker 部署指南](docs/docker.md) |
-| system-Core | [system-Core 特性文档](docs/system-core.md) ⭐ - 内置模块完整说明（10个HTTP API、7个工作流、4个Tasker、Web控制台） |
+| system-Core | [system-Core 特性文档](docs/system-core.md) ⭐ - 内置模块完整说明（10个HTTP API、6个工作流、4个Tasker、Web控制台） |
 | 任务与事件 | [Tasker 底层规范](docs/tasker-base-spec.md)、[OneBotv11 Tasker 文档](docs/tasker-onebotv11.md)、[Tasker 加载器文档](docs/tasker-loader.md)、[事件系统标准化文档](docs/事件系统标准化文档.md)（包含事件监听器开发指南） |
 | 插件 | [插件基类文档](docs/plugin-base.md)、[插件加载器文档](docs/plugins-loader.md) |
 | HTTP/API | [HTTP API 基类文档](docs/http-api.md)、[API 加载器文档](docs/api-loader.md) |
@@ -307,7 +307,7 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 
 ## 致谢
 
-- **向日葵工作室开发与测试团队**：持续打磨架构与运行稳定性
+- **大学联合研制团队**：持续打磨架构与运行稳定性
 - **所有提交 Issue / PR 的社区成员**：为 XRK-AGT 带来了真实场景的需求和改进建议
 - **开源生态中的优秀组件作者**：包括 Node.js、Redis、MongoDB、Puppeteer/Playwright 等，为本项目提供了坚实基础
 
@@ -319,4 +319,4 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 
 ---
 
-*最后更新：2026-02-10*
+*最后更新：2026-02-12*
