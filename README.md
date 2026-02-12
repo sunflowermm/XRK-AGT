@@ -116,8 +116,8 @@ pnpm install
 XRK_SERVER_PORT=8080
 
 # 代理配置（用于模型下载，可选）
-HTTP_PROXY=http://127.0.0.1:7890
-HTTPS_PROXY=http://127.0.0.1:7890
+HTTP_PROXY=http://host.docker.internal:7890
+HTTPS_PROXY=http://host.docker.internal:7890
 NO_PROXY=127.0.0.1,localhost
 
 # MongoDB 认证（可选）
@@ -253,14 +253,14 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可在 Cursor 等 AI 编�
 
 | 模块 | 文档 |
 |------|------|
-| 概览与运行 | [PROJECT_OVERVIEW](PROJECT_OVERVIEW.md)、[bot](docs/bot.md)、[server](docs/server.md)、[docker](docs/docker.md) |
-| system-Core | [system-Core 特性](docs/system-core.md) ⭐ - 内置模块完整说明（10个HTTP API、7个工作流、4个Tasker、Web控制台） |
-| 任务与事件 | [tasker-base-spec](docs/tasker-base-spec.md)、[tasker-onebotv11](docs/tasker-onebotv11.md)、[tasker-loader](docs/tasker-loader.md)、[事件系统标准化文档](docs/事件系统标准化文档.md)（包含事件监听器开发指南） |
-| 插件 | [plugin-base](docs/plugin-base.md)、[plugins-loader](docs/plugins-loader.md) |
-| HTTP/API | [http-api](docs/http-api.md)、[api-loader](docs/api-loader.md) |
-| AI / MCP | [aistream](docs/aistream.md)、[factory](docs/factory.md)、[subserver-api](docs/subserver-api.md)、[mcp-guide](docs/mcp-guide.md) |
-| 配置与渲染 | [config-base](docs/config-base.md)、[renderer](docs/renderer.md) |
-| 工具与应用 | [botutil](docs/botutil.md)、[app-dev](docs/app-dev.md) |
+| 概览与运行 | [项目概览](PROJECT_OVERVIEW.md)、[Bot 主类文档](docs/bot.md)、[Server 服务器架构文档](docs/server.md)、[Docker 部署指南](docs/docker.md) |
+| system-Core | [system-Core 特性文档](docs/system-core.md) ⭐ - 内置模块完整说明（10个HTTP API、7个工作流、4个Tasker、Web控制台） |
+| 任务与事件 | [Tasker 底层规范](docs/tasker-base-spec.md)、[OneBotv11 Tasker 文档](docs/tasker-onebotv11.md)、[Tasker 加载器文档](docs/tasker-loader.md)、[事件系统标准化文档](docs/事件系统标准化文档.md)（包含事件监听器开发指南） |
+| 插件 | [插件基类文档](docs/plugin-base.md)、[插件加载器文档](docs/plugins-loader.md) |
+| HTTP/API | [HTTP API 基类文档](docs/http-api.md)、[API 加载器文档](docs/api-loader.md) |
+| AI / MCP | [AIStream 工作流基类文档](docs/aistream.md)、[工厂系统文档](docs/factory.md)、[子服务端 API 文档](docs/subserver-api.md)、[MCP 完整指南](docs/mcp-guide.md) |
+| 配置与渲染 | [配置基类文档](docs/config-base.md)、[渲染器基类文档](docs/renderer.md) |
+| 工具与应用 | [BotUtil 工具类文档](docs/botutil.md)、[应用开发指南](docs/app-dev.md) |
 
 ---
 
@@ -315,7 +315,7 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 
 ## 许可证
 
-本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
+本项目由大学联合研制。详见 [LICENSE](LICENSE) 文件。
 
 ---
 

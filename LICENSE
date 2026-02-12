@@ -1,92 +1,22 @@
-XRK-AGT 开源使用许可协议（向日葵工作室）
+MIT License
 
-版本：1.0  
-版权所有 © 向日葵工作室及各贡献者
+Copyright (c) 2026 沈阳农业大学，浙江大学，西安工程大学，中国矿业大学，湖南理工大学，山东交通学院等联合创作
 
----
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-一、许可授予
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-在符合本许可条款的前提下，向日葵工作室授予您以下权利：
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-1. **使用权**  
-   您可以在任何环境中免费使用本软件及其文档，用于个人、学习、研究或商业目的。
-
-2. **复制与分发权**  
-   您可以复制、备份和分发本软件的完整未修改版本（包括源码与文档），但必须：
-   - 保留本许可协议全文；
-   - 保留原有的版权声明和向日葵工作室的署名信息。
-
-3. **修改与衍生作品权**  
-   您可以在遵守本协议的前提下对本软件进行修改、扩展或作为项目的一部分集成使用，但：
-   - 如公开分发修改版或衍生作品，需在显著位置标明“基于 XRK-AGT 修改/构建”；
-   - 不得以任何方式暗示向日葵工作室为您的修改版或衍生作品背书或承担责任。
-
----
-
-二、限制与义务
-
-1. **禁止去除署名**  
-   - 不得删除、篡改或隐藏本项目中关于向日葵工作室的署名、版权信息和原作者信息；
-   - 在二次分发或展示本项目时，应在 README、关于页或明显位置给出向日葵工作室的名称。
-
-2. **禁止滥用名义**  
-   - 未经向日葵工作室书面许可，禁止使用“向日葵工作室”“XRK-AGT”等名称、Logo 从事任何形式的商业推广、品牌宣传或具误导性的陈述。
-
-3. **责任自负**  
-   - 如您将本软件集成于自己的产品或服务中，应自行承担合规、风控、数据安全、内容审查等全部责任；
-   - 如因使用本软件导致的任何直接或间接损失，包括但不限于数据丢失、业务中断、法律纠纷等，均由您自行承担。
-
-4. **遵守法律法规**  
-   - 您在使用本软件时必须遵守所在地区与国家/地区的法律法规；
-   - 严禁将本软件用于任何违法、侵权、恶意攻击、刷量、骚扰等用途。
-
----
-
-三、第三方组件与版权
-
-1. 本项目可能引用第三方开源库或服务，这些部分仍然遵循其原本的开源协议与使用条款；  
-2. 使用本项目即表示您知晓并同意遵守这些第三方组件的授权协议；  
-3. 向日葵工作室对第三方组件不发表任何担保或承诺。
-
----
-
-四、无担保声明
-
-本软件及其文档以“现状（AS IS）”提供，不附带任何形式的明示或暗示担保，包括但不限于：
-
-1. 对适销性、特定用途适用性、稳定性、及时性、安全性或无错误的担保；  
-2. 对因软件缺陷、功能缺失、第三方不当使用等引发的任何损失或损害不承担责任；  
-3. 向日葵工作室及贡献者在任何情况下不对因使用或无法使用本软件所造成的任何直接、间接、偶然、特殊或后果性损害负责。
-
----
-
-五、协议变更与终止
-
-1. 向日葵工作室有权在不事先通知的情况下随时修改本许可协议的内容，新的协议版本一经在项目仓库或官网公布即自动生效；  
-2. 若您不同意更新后的许可条款，应立即停止使用本软件；继续使用即视为您接受新的条款；  
-3. 如您严重违反本协议条款，向日葵工作室有权随时终止授予您的许可，您应立即停止使用、复制与分发本软件。
-
----
-
-六、联系与贡献
-
-1. 如您希望：
-   - 获得额外的商业授权或定制支持；  
-   - 在协议允许范围外使用本项目；  
-   - 向项目贡献代码或文档；  
-   
-   请通过项目主页中提供的联系方式与向日葵工作室取得联系。
-
-2. 向日葵工作室保留对本项目名称、品牌以及整体方向的最终解释权。
-
----
-
-七、补充说明
-
-1. 本协议仅适用于 XRK-AGT 项目及其附带的官方文档；  
-2. 若本协议部分条款与您所在地区的强制性法律冲突，则应以当地法律为准，本协议的其他条款仍然有效；  
-3. 使用本软件即表示您已阅读、理解并同意受本许可协议全部条款的约束。
-
-
-由沈阳农业大学，浙江大学，西安工程大学，中国矿业大学，湖南理工大学，山东交通学院等联合创作

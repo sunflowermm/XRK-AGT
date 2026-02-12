@@ -10,9 +10,9 @@
 
 ### 🚀 快速开始
 
-- **[项目概览 (PROJECT_OVERVIEW.md)](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
-- **[Bot 主类文档 (docs/bot.md)](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
-- **[框架可扩展性指南 (docs/框架可扩展性指南.md)](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范 ⭐
+- **[项目概览](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
+- **[Bot 主类文档](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
+- **[框架可扩展性指南](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范 ⭐
 
 ### 🏗️ 架构层次
 
@@ -81,43 +81,43 @@ flowchart TB
 
 ### 🔌 插件与事件系统
 
-- **[插件基类 (docs/plugin-base.md)](plugin-base.md)** - 插件基类 `plugin` 的设计、规则匹配与上下文管理
-- **[插件加载器 (docs/plugins-loader.md)](plugins-loader.md)** - `PluginsLoader` 的插件加载、事件调度、冷却与节流机制
-- **[事件系统标准化文档 (docs/事件系统标准化文档.md)](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程、事件监听器开发指南
+- **[插件基类文档](plugin-base.md)** - 插件基类 `plugin` 的设计、规则匹配与上下文管理
+- **[插件加载器文档](plugins-loader.md)** - `PluginsLoader` 的插件加载、事件调度、冷却与节流机制
+- **[事件系统标准化文档](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程、事件监听器开发指南
 
 ### 🔄 Tasker 系统（任务层/事件生成器）
 
-- **[Tasker 加载器 (docs/tasker-loader.md)](tasker-loader.md)** - `TaskerLoader` 如何扫描并加载 Tasker（事件生成器）
-- **[Tasker 底层规范 (docs/tasker-base-spec.md)](tasker-base-spec.md)** - Tasker 基础接口规范
-- **[OneBotv11 Tasker (docs/tasker-onebotv11.md)](tasker-onebotv11.md)** - OneBotv11 Tasker 完整文档，包含全局对象说明和使用示例
+- **[Tasker 加载器文档](tasker-loader.md)** - `TaskerLoader` 如何扫描并加载 Tasker（事件生成器）
+- **[Tasker 底层规范](tasker-base-spec.md)** - Tasker 基础接口规范
+- **[OneBotv11 Tasker 文档](tasker-onebotv11.md)** - OneBotv11 Tasker 完整文档，包含全局对象说明和使用示例
 
 ### 🌐 HTTP/API 层
 
-- **[HTTP API 基类 (docs/http-api.md)](http-api.md)** - `HttpApi` 基类，统一路由、WebSocket 与中间件注册方式
-- **[API 加载器 (docs/api-loader.md)](api-loader.md)** - `ApiLoader` 的 API 自动加载、排序与热重载机制
-- **[Server 服务器架构 (docs/server.md)](server.md)** - HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务等完整说明
-- **[HTTP 业务层 (docs/http-business-layer.md)](http-business-layer.md)** - 重定向、CDN、反向代理增强、负载均衡等企业级功能
-- **[system-Core 特性 (docs/system-core.md)](system-core.md)** - system-Core 内置模块完整说明，包含所有HTTP API、工作流、插件和Web控制台 ⭐
+- **[HTTP API 基类文档](http-api.md)** - `HttpApi` 基类，统一路由、WebSocket 与中间件注册方式
+- **[API 加载器文档](api-loader.md)** - `ApiLoader` 的 API 自动加载、排序与热重载机制
+- **[Server 服务器架构文档](server.md)** - HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务等完整说明
+- **[HTTP 业务层文档](http-business-layer.md)** - 重定向、CDN、反向代理增强、负载均衡等企业级功能
+- **[system-Core 特性文档](system-core.md)** - system-Core 内置模块完整说明，包含所有HTTP API、工作流、插件和Web控制台 ⭐
 
 ### 🤖 AI 工作流
 
 - **说明**：Node 侧"多步工作流/WorkflowManager/TODO"已移除；复杂 Agent 编排请使用 **Python 子服务端（LangChain/LangGraph）**，主服务端提供统一的 **v3 LLM Provider** 与 **MCP 工具注入/执行**。
-- **[MCP 完整指南 (docs/mcp-guide.md)](mcp-guide.md)** - MCP 工具注册与连接
-- **[MCP 配置指南 (docs/mcp-config-guide.md)](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
-- **[AI Stream (docs/aistream.md)](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
-- **[工厂系统 (docs/factory.md)](factory.md)** - LLM/Vision/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
-- **[子服务端 API (docs/subserver-api.md)](subserver-api.md)** - Python 子服务端 API 文档，LangChain + 向量服务 + 与主服务 v3 的衔接
+- **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
+- **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
+- **[AIStream 工作流基类文档](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
+- **[工厂系统文档](factory.md)** - LLM/Vision/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
+- **[子服务端 API 文档](subserver-api.md)** - Python 子服务端 API 文档，LangChain + 向量服务 + 与主服务 v3 的衔接
 
 ### ⚙️ 配置与工具
 
-- **[配置基类 (docs/config-base.md)](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写、多文件配置等
-- **[渲染器 (docs/renderer.md)](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
-- **[工具类 (docs/botutil.md)](botutil.md)** - 工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
+- **[配置基类文档](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写、多文件配置等
+- **[渲染器基类文档](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
+- **[BotUtil 工具类文档](botutil.md)** - 工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
 
 ### 📱 应用开发
 
-- **[应用开发指南 (docs/app-dev.md)](app-dev.md)** - 应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）
-- **[Docker 部署指南 (docs/docker.md)](docker.md)** - Docker 容器化部署说明，包含 docker-compose 配置和使用指南
+- **[应用开发指南](app-dev.md)** - 应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）
+- **[Docker 部署指南](docker.md)** - Docker 容器化部署说明，包含 docker-compose 配置和使用指南
 
 ---
 
@@ -126,47 +126,47 @@ flowchart TB
 ### 插件开发者
 
 1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解整体架构和分层设计
-2. **[Bot 主类](bot.md)** - 了解整体运行环境与事件来源
+2. **[Bot 主类文档](bot.md)** - 了解整体运行环境与事件来源
 3. **[框架可扩展性指南](框架可扩展性指南.md)** - 学习扩展开发的最佳实践和代码质量规范 ⭐
-4. **[插件基类](plugin-base.md)** - 学习插件基类与规则/上下文用法
-5. **[插件加载器](plugins-loader.md)** - 了解事件如何流转到插件
+4. **[插件基类文档](plugin-base.md)** - 学习插件基类与规则/上下文用法
+5. **[插件加载器文档](plugins-loader.md)** - 了解事件如何流转到插件
 6. **[事件系统标准化文档](事件系统标准化文档.md)** - 了解事件命名规范、监听器开发和监听方式
-7. **[AI Stream](aistream.md)** - 了解 AI 调用与上下文增强（复杂多步编排在子服务端）
+7. **[AIStream 工作流基类文档](aistream.md)** - 了解 AI 调用与上下文增强（复杂多步编排在子服务端）
 
 ### Tasker 开发者（任务层/事件生成器开发者）
 
 1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次和 Tasker 定位
-2. **[Tasker 加载器](tasker-loader.md)** - 了解 Tasker 是如何被框架加载的
+2. **[Tasker 加载器文档](tasker-loader.md)** - 了解 Tasker 是如何被框架加载的
 3. **[Tasker 底层规范](tasker-base-spec.md)** - 了解 Tasker 基础接口规范
-4. **[OneBotv11 Tasker](tasker-onebotv11.md)** - 参考成熟实现，学习事件转译与对象封装方式
+4. **[OneBotv11 Tasker 文档](tasker-onebotv11.md)** - 参考成熟实现，学习事件转译与对象封装方式
 5. **[事件系统标准化文档](事件系统标准化文档.md)** - 学习如何创建新的事件监听器（包含开发指南）
-6. **[Bot 主类](bot.md)** - 理解 Tasker 与 `Bot` 的交互点（`Bot.tasker` / `Bot.wsf` / `Bot.em`）
+6. **[Bot 主类文档](bot.md)** - 理解 Tasker 与 `Bot` 的交互点（`Bot.tasker` / `Bot.wsf` / `Bot.em`）
 
 ### 后端/API 开发者
 
 1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次和 API 定位
-2. **[Bot 主类](bot.md)** - 了解 HTTP 服务器、认证、中间件栈
-3. **[HTTP API 基类](http-api.md)** - 学习如何定义一个新的 API 模块
-4. **[API 加载器](api-loader.md)** - 理解 API 模块如何被自动加载与热重载
-5. **[Server 服务器架构](server.md)** - 了解 HTTP/HTTPS/WebSocket 服务、反向代理等
-6. **[HTTP 业务层](http-business-layer.md)** - 了解重定向、CDN、负载均衡等企业级功能
+2. **[Bot 主类文档](bot.md)** - 了解 HTTP 服务器、认证、中间件栈
+3. **[HTTP API 基类文档](http-api.md)** - 学习如何定义一个新的 API 模块
+4. **[API 加载器文档](api-loader.md)** - 理解 API 模块如何被自动加载与热重载
+5. **[Server 服务器架构文档](server.md)** - 了解 HTTP/HTTPS/WebSocket 服务、反向代理等
+6. **[HTTP 业务层文档](http-business-layer.md)** - 了解重定向、CDN、负载均衡等企业级功能
 
 ### 运维 / 配置管理者
 
 1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解整体架构和目录结构
-2. **[配置基类](config-base.md)** - 理解配置读写与校验机制
-3. **[工厂系统](factory.md)** - 了解 AI 服务提供商的配置与管理
-4. **[Bot 主类](bot.md)** - 了解服务端口、反向代理、CORS 与安全策略
+2. **[配置基类文档](config-base.md)** - 理解配置读写与校验机制
+3. **[工厂系统文档](factory.md)** - 了解 AI 服务提供商的配置与管理
+4. **[Bot 主类文档](bot.md)** - 了解服务端口、反向代理、CORS 与安全策略
 5. **[Docker 部署指南](docker.md)** - Docker 容器化部署说明
-6. **[Server 服务器架构](server.md)** - 了解服务器配置和部署
+6. **[Server 服务器架构文档](server.md)** - 了解服务器配置和部署
 
 ### 前端 / 渲染相关开发者
 
 1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次
-2. **[渲染器](renderer.md)** - 了解 HTML 模板渲染与文件生成
+2. **[渲染器基类文档](renderer.md)** - 了解 HTML 模板渲染与文件生成
 3. **[应用开发指南](app-dev.md)** - 了解 Web 控制台开发
-4. **[HTTP API 基类](http-api.md)** - 了解后端 API 接口设计
-5. **[system-Core 特性](system-core.md)** - 了解内置 Web 控制台和 API
+4. **[HTTP API 基类文档](http-api.md)** - 了解后端 API 接口设计
+5. **[system-Core 特性文档](system-core.md)** - 了解内置 Web 控制台和 API
 
 ---
 
@@ -181,34 +181,34 @@ flowchart TB
 ### 编写一个简单指令插件
 
 1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 中的架构层次说明
-2. 阅读 **[Bot 主类](bot.md)** 与 **[插件基类](plugin-base.md)**
+2. 阅读 **[Bot 主类文档](bot.md)** 与 **[插件基类文档](plugin-base.md)**
 3. 在任意 core 目录的 `plugin/` 子目录下新建插件 JS 文件（如 `core/my-core/plugin/my-plugin.js`）
 
 ### 新增一个 API 接口
 
-1. 阅读 **[HTTP API 基类](http-api.md)** 与 **[API 加载器](api-loader.md)**
+1. 阅读 **[HTTP API 基类文档](http-api.md)** 与 **[API 加载器文档](api-loader.md)**
 2. 在任意 core 目录的 `http/` 子目录下新建一个 `.js` 文件，导出一个符合 `HttpApi` 结构的对象或类
 3. 重启或等待 `ApiLoader` 热重载，使用浏览器或 Postman 验证新接口
 
 ### 接入新的 IM 平台（创建新 Tasker）
 
 1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 了解架构层次
-2. 阅读 **[Tasker 加载器](tasker-loader.md)** 与 **[Tasker 底层规范](tasker-base-spec.md)**
-3. 参考 **[OneBotv11 Tasker](tasker-onebotv11.md)**，在任意 core 目录的 `tasker/` 子目录中编写新 Tasker 文件
+2. 阅读 **[Tasker 加载器文档](tasker-loader.md)** 与 **[Tasker 底层规范](tasker-base-spec.md)**
+3. 参考 **[OneBotv11 Tasker 文档](tasker-onebotv11.md)**，在任意 core 目录的 `tasker/` 子目录中编写新 Tasker 文件
 4. 阅读 **[事件系统标准化文档](事件系统标准化文档.md)** 中的"事件监听器开发指南"章节，在对应 core 的 `events/` 子目录中创建事件监听器
 5. 确保对外暴露统一的事件结构（`post_type/message_type/notice_type` 等），这样可以复用现有插件
 
 ### 创建新的 AI 工作流
 
-1. 阅读 **[AI Stream](aistream.md)** 了解基类设计
-2. 阅读 **[工厂系统](factory.md)** 了解如何选择和使用 LLM 提供商
+1. 阅读 **[AIStream 工作流基类文档](aistream.md)** 了解基类设计
+2. 阅读 **[工厂系统文档](factory.md)** 了解如何选择和使用 LLM 提供商
 3. 在任意 core 目录的 `stream/` 子目录中创建新的工作流文件
 4. 基于 `AIStream` 实现自定义工作流逻辑
 5. 在插件或 API 中调用新工作流
 
 ### 接入新的 AI 服务提供商
 
-1. 阅读 **[工厂系统](factory.md)** 了解工厂系统的设计和扩展方式
+1. 阅读 **[工厂系统文档](factory.md)** 了解工厂系统的设计和扩展方式
 2. 实现新的客户端类（遵循接口规范）
 3. 使用工厂的 `registerProvider()` 方法注册新提供商
 4. 创建对应的配置文件（如 `myprovider_llm.yaml`）
