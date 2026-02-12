@@ -19,16 +19,18 @@
 
 <!-- 第一排：沈阳农业大学 -->
 <div align="center">
-  <img src="resources/mdimg/沈阳农业大学-logo-2048px.png" alt="沈阳农业大学" width="120" height="120">
+  <img src="resources/mdimg/沈阳农业大学-logo-2048px.png" alt="沈阳农业大学" width="160" height="160">
 </div>
+
+<br>
 
 <!-- 第二排：其他五所大学 -->
 <div align="center">
-  <img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="100" height="100">
-  <img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" width="100" height="100">
-  <img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="100" height="100">
-  <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="100" height="100">
-  <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="100" height="100">
+  <img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="130" height="130" style="margin: 0 15px;">
+  <img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" width="130" height="130" style="margin: 0 15px;">
+  <img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="130" height="130" style="margin: 0 15px;">
+  <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="130" height="130" style="margin: 0 15px;">
+  <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin: 0 15px;">
 </div>
 
 </div>
