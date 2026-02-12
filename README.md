@@ -9,8 +9,6 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Docker-blue.svg)](https://github.com/sunflowermm/XRK-AGT)
 [![Version](https://img.shields.io/badge/version-1.0.5-orange.svg)](https://github.com/sunflowermm/XRK-AGT)
 
-**最后更新**: 2026-02-12 | **跨平台支持**: Windows 10+ / Linux / macOS / Docker | **Node.js 版本要求**: ≥ 24.12.0 (LTS)
-
 </div>
 
 <div align="center">
@@ -26,11 +24,15 @@
 
 <!-- 第二排：其他五所大学 -->
 <div align="center">
-  <img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="130" height="130" style="margin: 0 60px;">
-  <img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" width="130" height="130" style="margin: 0 60px;">
-  <img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="130" height="130" style="margin: 0 60px;">
-  <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="130" height="130" style="margin: 0 60px;">
-  <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin: 0 60px;">
+<table>
+<tr>
+<td align="center" width="20%"><img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="130" height="130"></td>
+<td align="center" width="20%"><img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" width="130" height="130"></td>
+<td align="center" width="20%"><img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="130" height="130"></td>
+<td align="center" width="20%"><img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="130" height="130"></td>
+<td align="center" width="20%"><img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="130" height="130"></td>
+</tr>
+</table>
 </div>
 
 </div>
@@ -62,8 +64,9 @@ XRK-AGT 是由向日葵开发，各个大学志同道合的学生联合研制，
 XRK-AGT 采用清晰的分层架构设计，各层职责明确，便于扩展和维护。
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph Clients["👥 外部入口"]
+        direction TB
         QQ["📱 QQ/OneBotv11"]
         IM["💬 IM平台"]
         WebUI["🌐 Web控制台"]
@@ -75,12 +78,14 @@ flowchart TB
     end
 
     subgraph Infra["🏗️ 基础设施层"]
+        direction TB
         Loaders["📚 加载器"]
         Bases["📦 基类库"]
         HttpBiz["💼 HTTP业务层"]
     end
 
     subgraph Tasker["📡 任务层"]
+        direction TB
         TOneBot["OneBotv11"]
         TStdin["stdin/自定义"]
     end
@@ -90,26 +95,27 @@ flowchart TB
     end
 
     subgraph Business["💼 业务层"]
+        direction TB
         Plugins["🔌 插件"]
         HttpAPI["📡 HTTP API"]
         Streams["🌊 AI工作流"]
     end
 
-    Clients --> Bot
-    Bot --> Infra
-    Infra --> Tasker
-    Infra --> Events
-    Infra --> Business
-    Tasker --> Events
-    Events --> Business
+    Clients -->|消息接入| Bot
+    Bot -->|核心服务| Infra
+    Infra -->|协议对接| Tasker
+    Infra -->|事件处理| Events
+    Infra -->|业务支撑| Business
+    Tasker -->|事件传递| Events
+    Events -->|事件分发| Business
 
-    style Clients fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
-    style Runtime fill:#FFF3E0,stroke:#F57C00,stroke-width:3px
-    style Infra fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
-    style Tasker fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
-    style Events fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
-    style Business fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
-    style Bot fill:#FFF9C4,stroke:#F9A825,stroke-width:3px
+    style Clients fill:#E3F2FD,stroke:#1976D2,stroke-width:3px,color:#000
+    style Runtime fill:#FFF3E0,stroke:#F57C00,stroke-width:4px,color:#000
+    style Infra fill:#E8F5E9,stroke:#388E3C,stroke-width:3px,color:#000
+    style Tasker fill:#E1F5FE,stroke:#0277BD,stroke-width:3px,color:#000
+    style Events fill:#FCE4EC,stroke:#C2185B,stroke-width:3px,color:#000
+    style Business fill:#F3E5F5,stroke:#7B1FA2,stroke-width:3px,color:#000
+    style Bot fill:#FFF9C4,stroke:#F9A825,stroke-width:4px,color:#000
 ```
 
 **分层说明**：
