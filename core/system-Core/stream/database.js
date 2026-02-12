@@ -50,63 +50,103 @@ export default class DatabaseStream extends AIStream {
    * 注册所有知识库相关功能
    */
   registerAllFunctions() {
+    /**
+     * 保存知识到知识库
+     * 
+     * @description 将知识保存到指定的知识库中。支持文本或JSON格式的内容，会自动生成embedding用于后续向量检索。
+     * 
+     * @param {string} db - 知识库名称（必填）
+     * @param {string} content - 知识内容，支持文本或JSON格式（必填）
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {Object} returns.data - 成功时的数据对象
+     * @returns {string} returns.data.db - 知识库名称
+     * @returns {string} returns.data.message - 操作结果消息
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * // 保存文本知识
+     * { db: "faq", content: "如何重置密码？点击登录页面的'忘记密码'链接" }
+     * 
+     * // 保存JSON知识
+     * { db: "products", content: '{"name": "产品A", "price": 100}' }
+     */
     this.registerMCPTool('save_knowledge', {
-      description: '保存知识到知识库',
+      description: '保存知识到知识库。支持文本或JSON格式，会自动生成embedding用于向量检索，可用于RAG。',
       inputSchema: {
         type: 'object',
         properties: {
           db: {
             type: 'string',
-            description: '知识库名称'
+            description: '知识库名称（如果不存在会自动创建）'
           },
           content: {
             type: 'string',
-            description: '知识内容（支持文本或JSON格式）'
+            description: '知识内容。可以是纯文本（如："如何重置密码？点击登录页面的忘记密码链接"）或JSON格式（如：\'{"name": "产品A", "price": 100, "description": "..."}\'）。系统会自动识别格式并处理。'
           }
         },
         required: ['db', 'content']
       },
       handler: async (args = {}, _context = {}) => {
         const { db, content } = args;
-        if (!db || !content) {
-          return { success: false, error: '知识库名称和内容不能为空' };
-        }
+        if (!db) return { success: false, error: '知识库名称不能为空' };
+        if (!content) return { success: false, error: '知识内容不能为空' };
 
         await this.saveKnowledge(db, content);
         BotUtil.makeLog('info', `[${this.name}] 保存知识到知识库: ${db}`, 'DatabaseStream');
         
         return {
           success: true,
-          data: {
-            db,
-            message: '知识保存成功'
-          }
+          data: { db, message: '知识保存成功' }
         };
       },
       enabled: true
     });
 
+    /**
+     * 查询知识库
+     * 
+     * @description 从指定知识库中查询知识，支持关键词搜索和向量检索（如果启用了embedding）。如果未指定关键词，返回所有知识。
+     * 
+     * @param {string} db - 知识库名称（必填）
+     * @param {string} [keyword] - 搜索关键词（可选，不指定则返回所有知识）
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {Object} returns.data - 成功时的数据对象
+     * @returns {string} returns.data.db - 知识库名称
+     * @returns {string} returns.data.keyword - 搜索的关键词（如果指定）
+     * @returns {Array} returns.data.results - 查询结果列表
+     * @returns {number} returns.data.count - 结果数量
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * // 关键词搜索
+     * { db: "faq", keyword: "密码" }
+     * 
+     * // 获取所有知识
+     * { db: "faq" }
+     */
     this.registerMCPTool('query_knowledge', {
-      description: '从知识库查询知识，支持关键词搜索',
+      description: '从知识库查询知识。当需要从知识库中查找信息、检索FAQ、查找产品信息、搜索文档内容时使用此工具。支持关键词搜索和向量检索（如果启用了embedding），可以找到语义相关的内容。如果未指定关键词，返回知识库中的所有知识。',
       inputSchema: {
         type: 'object',
         properties: {
           db: {
             type: 'string',
-            description: '知识库名称'
+            description: '知识库名称（必填）。要查询的知识库，例如："faq"、"products"、"docs"等。必须是一个已存在的知识库。'
           },
           keyword: {
             type: 'string',
-            description: '搜索关键词'
+            description: '搜索关键词（可选，支持语义搜索，不指定则返回所有知识）'
           }
         },
         required: ['db']
       },
       handler: async (args = {}, context = {}) => {
         const { db, keyword } = args;
-        if (!db) {
-          return { success: false, error: '知识库名称不能为空' };
-        }
+        if (!db) return { success: false, error: '知识库名称不能为空' };
 
         const results = await this.queryKnowledge(db, keyword);
         BotUtil.makeLog('info', `[${this.name}] 查询知识库: ${db}，找到 ${results.length} 条`, 'DatabaseStream');
@@ -124,8 +164,34 @@ export default class DatabaseStream extends AIStream {
       enabled: true
     });
 
+    /**
+     * 列出所有知识库
+     * 
+     * @description 列出系统中所有可用的知识库名称。
+     * 
+     * @param {} 无需参数
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {Object} returns.data - 成功时的数据对象
+     * @returns {Array} returns.data.databases - 知识库名称列表
+     * @returns {number} returns.data.count - 知识库数量
+     * 
+     * @example
+     * // 调用示例
+     * {}
+     * 
+     * // 返回示例
+     * {
+     *   success: true,
+     *   data: {
+     *     databases: ["faq", "products", "docs"],
+     *     count: 3
+     *   }
+     * }
+     */
     this.registerMCPTool('list_knowledge', {
-      description: '列出所有可用的知识库',
+      description: '列出所有可用的知识库。当需要查看系统中有哪些知识库、了解可用的知识库名称时使用此工具。返回所有已创建的知识库名称列表。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -144,8 +210,35 @@ export default class DatabaseStream extends AIStream {
       enabled: true
     });
 
+    /**
+     * 删除知识
+     * 
+     * @description 从知识库中删除知识。支持按ID删除、按条件删除或删除所有知识。
+     * 
+     * @param {string} db - 知识库名称（必填）
+     * @param {string} [condition] - 删除条件：知识ID（数字）、条件（key=value格式）或"*"（删除所有）
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {Object} returns.data - 成功时的数据对象
+     * @returns {string} returns.data.db - 知识库名称
+     * @returns {string} returns.data.condition - 使用的删除条件
+     * @returns {number} returns.data.deletedCount - 删除的知识数量
+     * @returns {string} returns.data.message - 操作结果消息
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * // 按ID删除
+     * { db: "faq", condition: "1234567890" }
+     * 
+     * // 按条件删除
+     * { db: "products", condition: "category=old" }
+     * 
+     * // 删除所有
+     * { db: "faq", condition: "*" }
+     */
     this.registerMCPTool('delete_knowledge', {
-      description: '从知识库删除知识',
+      description: '从知识库删除知识。当需要删除错误的知识、清理过时信息、清空知识库时使用此工具。支持按ID删除（精确删除）、按条件删除（key=value格式）或删除所有知识（condition="*"）。需要先通过 query_knowledge 获取知识ID。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -155,16 +248,14 @@ export default class DatabaseStream extends AIStream {
           },
           condition: {
             type: 'string',
-            description: '删除条件：知识ID（数字）或条件（key=value格式），使用"*"删除所有'
+            description: '删除条件。可以是：1) 知识ID（数字字符串，如"1234567890"）精确删除一条知识；2) 条件表达式（key=value格式，如"category=old"）删除匹配条件的知识；3) "*" 删除知识库中的所有知识。'
           }
         },
         required: ['db']
       },
       handler: async (args = {}, _context = {}) => {
         const { db, condition } = args;
-        if (!db) {
-          return { success: false, error: '知识库名称不能为空' };
-        }
+        if (!db) return { success: false, error: '知识库名称不能为空' };
 
         const count = await this.deleteKnowledge(db, condition || '*');
         

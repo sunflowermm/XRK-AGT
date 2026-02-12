@@ -270,11 +270,18 @@ class ServerManager extends BaseManager {
 
   async copyDefaultConfigs(targetDir, silent = false) {
     try {
+      const { GLOBAL_CONFIGS, isServerOrFactoryConfig } = await import('./src/infrastructure/config/config-constants.js');
+      
       const defaultConfigFiles = await fs.readdir(PATHS.DEFAULT_CONFIG);
       const created = [];
       
       for (const file of defaultConfigFiles) {
-        if (file.endsWith('.yaml') && file !== 'qq.yaml') {
+        if (!file.endsWith('.yaml') || file === 'qq.yaml') continue;
+        
+        const configName = path.basename(file, '.yaml');
+        if (GLOBAL_CONFIGS.includes(configName)) continue;
+        
+        if (isServerOrFactoryConfig(configName)) {
           const sourcePath = path.join(PATHS.DEFAULT_CONFIG, file);
           const targetPath = path.join(targetDir, file);
           const copied = await copyFileIfMissing(sourcePath, targetPath);
@@ -282,14 +289,11 @@ class ServerManager extends BaseManager {
         }
       }
       
-      // 只在创建了新文件时输出日志
       if (!silent && created.length > 0) {
         await this.logger.success(`配置文件已就绪: ${targetDir} (新建: ${created.join(', ')})`);
       } else if (!silent && !fsSync.existsSync(path.join(targetDir, 'server.yaml'))) {
-        // 如果连 server.yaml 都不存在，说明是全新配置，输出日志
         await this.logger.success(`配置文件已就绪: ${targetDir}`);
       }
-      // 配置已存在时，静默处理，不输出日志
     } catch (error) {
       await this.logger.error(`创建配置文件失败: ${error.message}\n${error.stack}`);
     }

@@ -1,6 +1,6 @@
-# PluginsLoader 文档
+# 插件加载器文档
 
-> **文件位置**: `src/infrastructure/plugins/loader.js`  
+> **文件位置**：`src/infrastructure/plugins/loader.js`  
 > **可扩展性**：PluginsLoader是插件系统的核心加载器，自动发现和加载所有插件。插件开发者只需将插件放置到对应目录，无需任何配置。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
 `PluginsLoader` 是 XRK-AGT 的 **插件调度核心**，负责：
@@ -403,4 +403,6 @@ await PluginsLoader.watch(true);
 - **[事件系统标准化文档](事件系统标准化文档.md)** - 事件命名与字段责任说明
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 
----*最后更新：2026-02-06*
+---
+
+*最后更新：2026-02-12*

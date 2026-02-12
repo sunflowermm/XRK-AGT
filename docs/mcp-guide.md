@@ -1,6 +1,8 @@
 # MCP (Model Context Protocol) 完整指南
 
 > **文件位置**：`src/utils/mcp-server.js`、`core/system-Core/http/mcp.js`  
+> **说明**：Model Context Protocol (MCP) 是一个开放协议，使LLM应用能够无缝集成外部数据源和工具。XRK-AGT实现了MCP服务器，允许外部AI平台（如Cursor、Claude、小智AI）通过HTTP/WebSocket连接并调用系统工具。  
+> **协议版本**：2025-11-25（最新规范）  
 > **相关文档**：关于工作流扩展的详细说明，请参考 **[AIStream文档](aistream.md)** 📖  
 > **配置指南**：关于外部平台连接配置，请参考 **[MCP配置指南](mcp-config-guide.md)** ⚙️
 
@@ -16,11 +18,6 @@
 ---
 
 ## MCP概述
-
-**Model Context Protocol (MCP)** 是一个开放协议，使LLM应用能够无缝集成外部数据源和工具。XRK-AGT实现了MCP服务器，允许外部AI平台（如Cursor、Claude、小智AI）通过HTTP/WebSocket连接并调用系统工具。
-
-**协议版本**：2025-11-25（最新规范）  
-**参考文档**：https://modelcontextprotocol.io/specification/2025-11-25
 
 ### 核心特性
 
@@ -581,17 +578,14 @@ A: 支持string、number、boolean、array、object等JSON Schema支持的所有
 
 ---
 
-## 更新日志
-
-### v1.0.5 (2025-02)
-- ✅ 更新MCP协议版本至 **2025-11-25**（最新规范）
-- ✅ 符合最新MCP规范要求
-- ✅ 更新文档和代码注释
-
 ---
 
 ## 相关文档
 
-- [MCP配置指南](./mcp-config-guide.md)
-- [工作流开发指南](./aistream.md)
-- [API文档](./http-api.md)
+- **[MCP配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
+- **[工作流开发指南](aistream.md)** - AIStream 基类技术文档
+- **[API文档](http-api.md)** - HTTP API 基类文档
+
+---
+
+*最后更新：2026-02-12*

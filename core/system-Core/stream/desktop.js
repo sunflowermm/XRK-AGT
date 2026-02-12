@@ -9,7 +9,6 @@ import os from 'os';
 import { BaseTools } from '#utils/base-tools.js';
 import si from 'systeminformation';
 import fetch from 'node-fetch';
-import StreamLoader from '#infrastructure/aistream/loader.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 const execAsync = promisify(exec);
@@ -33,8 +32,8 @@ const execCommand = (command, options = {}) => {
  * - 系统操作：show_desktop、open_system_tool、lock_screen、power_control
  * - 文件操作：create_folder、open_explorer、open_application
  * - 网络操作：open_browser
- * - 命令执行：execute_powershell、cleanup_processes
- * - 信息读取：screenshot、system_info、disk_space、list_desktop_files
+ * - 命令执行：cleanup_processes（注意：执行命令请使用 tools 工作流的 run 工具）
+ * - 信息读取：screenshot、system_info、disk_space（注意：列出文件请使用 tools 工作流的 list_files 工具）
  * - 文档生成：create_word_document、create_excel_document
  * - 数据查询：stock_quote
  */
@@ -59,9 +58,7 @@ export default class DesktopStream extends AIStream {
     });
 
     // 工作区：桌面目录（desktop工作流的默认工作区）
-    this.workspace = IS_WINDOWS
-      ? path.join(os.homedir(), 'Desktop')
-      : path.join(os.homedir(), 'Desktop');
+    this.workspace = path.join(os.homedir(), 'Desktop');
 
     this.tools = new BaseTools(this.workspace);
     this.processCleanupInterval = null;
@@ -76,14 +73,7 @@ export default class DesktopStream extends AIStream {
 
   async init() {
     await super.init();
-
-
     this.registerAllFunctions();
-
-    const toolsStream = StreamLoader.getStream('tools');
-    if (toolsStream) {
-      this.merge(toolsStream);
-    }
 
     if (IS_WINDOWS) {
       this.processCleanupInterval = setInterval(async () => {
@@ -99,13 +89,6 @@ export default class DesktopStream extends AIStream {
 
   }
 
-  handleError(error, operation, context = {}) {
-    const handled = super.handleError(error, operation, context);
-    if (context && typeof context === 'object') {
-      context.lastError = { operation, message: error?.message || String(error) };
-    }
-    return handled;
-  }
 
   requireWindows(context, _operation) {
     if (IS_WINDOWS) return true;
@@ -180,7 +163,7 @@ export default class DesktopStream extends AIStream {
    */
   registerAllFunctions() {
     this.registerMCPTool('show_desktop', {
-      description: '回到桌面 - 最小化所有窗口显示桌面（仅限Windows系统）。适用场景：用户想要清空屏幕、查看桌面文件、需要干净的工作环境、或准备进行截屏等操作时使用。',
+      description: '回到桌面（最小化所有窗口）。仅 Windows 系统支持。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -203,13 +186,13 @@ export default class DesktopStream extends AIStream {
     });
 
     this.registerMCPTool('open_system_tool', {
-      description: '打开Windows系统内置工具。支持的工具：notepad（记事本）、calc（计算器）、taskmgr（任务管理器）。当用户要求打开记事本、计算器或任务管理器时使用此功能。注意：这是打开应用程序，不是创建文档文件。',
+      description: '打开Windows系统内置工具。支持：notepad（记事本）、calc（计算器）、taskmgr（任务管理器）。仅 Windows 系统支持。',
       inputSchema: {
         type: 'object',
         properties: {
           tool: {
             type: 'string',
-            description: '要打开的系统工具名称，可选值：notepad（记事本）、calc（计算器）、taskmgr（任务管理器）',
+            description: '工具名称',
             enum: ['notepad', 'calc', 'taskmgr']
           }
         },
@@ -241,7 +224,7 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
     this.registerMCPTool('screenshot', {
-      description: '截取当前屏幕，返回截图文件路径和大小',
+      description: '截取屏幕截图。保存为PNG文件，QQ群聊中会自动发送。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -303,7 +286,7 @@ export default class DesktopStream extends AIStream {
     });
 
     this.registerMCPTool('lock_screen', {
-      description: '锁定电脑屏幕',
+      description: '锁定电脑屏幕。仅 Windows 系统支持。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -326,7 +309,7 @@ export default class DesktopStream extends AIStream {
     });
 
     this.registerMCPTool('system_info', {
-      description: '查看电脑的 CPU、内存使用情况',
+      description: '查看系统信息。返回CPU和内存使用情况。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -371,7 +354,7 @@ export default class DesktopStream extends AIStream {
     });
 
     this.registerMCPTool('get_time', {
-      description: '获取当前时间信息（支持多种格式和时区）',
+      description: '获取当前时间。支持多种格式（ISO、本地格式、时间戳、Unix时间戳）和时区设置。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -443,13 +426,13 @@ export default class DesktopStream extends AIStream {
     });
 
     this.registerMCPTool('open_browser', {
-      description: '打开浏览器访问网页',
+      description: '打开浏览器访问网页。在默认浏览器中打开指定的URL，支持跨平台。',
       inputSchema: {
         type: 'object',
         properties: {
           url: {
             type: 'string',
-            description: '要访问的网页URL，例如：https://www.baidu.com'
+            description: '网页URL（必须包含协议，如 https://）'
           }
         },
         required: ['url']
@@ -642,101 +625,6 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
 
-    this.registerMCPTool('execute_powershell', {
-      description: '执行PowerShell命令（工作区：桌面）',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          command: {
-            type: 'string',
-            description: '要执行的PowerShell命令'
-          }
-        },
-        required: ['command']
-      },
-      handler: async (args = {}, context = {}) => {
-        if (!this.requireWindows(context, '执行PowerShell命令')) {
-          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
-        }
-
-        const { command } = args;
-        if (!command) {
-          return this.errorResponse('INVALID_PARAM', '命令不能为空');
-        }
-
-        try {
-          const workspace = this.getWorkspace();
-          const fullCommand = `cd "${workspace}"; ${command}`;
-
-          const output = await execCommand(
-            `powershell -NoProfile -ExecutionPolicy Bypass -Command "${fullCommand.replace(/"/g, '\\"')}"`,
-            { maxBuffer: 10 * 1024 * 1024, cwd: workspace }
-          );
-
-          return this.successResponse({ 
-            message: '命令执行成功',
-            output: output.trim(),
-            command
-          });
-        } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 执行PowerShell命令失败: ${err.message}`, 'DesktopStream');
-          return this.errorResponse('EXECUTE_POWERSHELL_FAILED', err.message, {
-            stderr: err.stderr || ''
-          });
-        }
-      },
-      enabled: true
-    });
-
-    this.registerMCPTool('list_desktop_files', {
-      description: '列出桌面上的文件和快捷方式',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      handler: async (_args = {}, context = {}) => {
-        if (!IS_WINDOWS) {
-          return this.errorResponse('WINDOWS_ONLY', '此功能仅在Windows系统上可用');
-        }
-
-        try {
-          const workspace = this.getWorkspace();
-          const files = await fs.readdir(workspace);
-          const fileList = [];
-
-          for (const file of files) {
-            const filePath = path.join(workspace, file);
-            try {
-              const stats = await fs.stat(filePath);
-              const isShortcut = file.endsWith('.lnk');
-              fileList.push({
-                name: file,
-                type: isShortcut ? '快捷方式' : (stats.isDirectory() ? '文件夹' : '文件'),
-                size: stats.isFile() ? stats.size : null
-              });
-            } catch {
-            }
-          }
-
-          if (context.stream) {
-            context.stream.context = context.stream.context || {};
-            context.stream.context.desktopFiles = fileList;
-          }
-
-
-          return this.successResponse({
-            workspace,
-            files: fileList,
-            count: fileList.length
-          });
-        } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 列出桌面文件失败: ${err.message}`, 'DesktopStream');
-          return this.errorResponse('LIST_FILES_FAILED', err.message);
-        }
-      },
-      enabled: true
-    });
 
     this.registerMCPTool('open_application', {
       description: '打开应用程序',
@@ -1266,8 +1154,8 @@ ${persona}
 - 系统操作：show_desktop, open_system_tool, lock_screen, power_control
 - 文件操作：create_folder, open_explorer, open_application
 - 网络操作：open_browser
-- 命令执行：execute_powershell, cleanup_processes
-- 信息读取：screenshot, system_info, disk_space, list_desktop_files
+- 命令执行：cleanup_processes（注意：执行命令请使用 tools 工作流的 run 工具）
+- 信息读取：screenshot, system_info, disk_space（注意：列出文件请使用 tools 工作流的 list_files 工具）
 - 文档生成：create_word_document, create_excel_document
 - 数据查询：stock_quote
 

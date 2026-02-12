@@ -1,11 +1,9 @@
 # Docker 部署指南
 
 > **文件位置**：`docker-compose.yml`、`Dockerfile`  
-> **适用场景**：使用 Docker 容器化部署 XRK-AGT，支持 Windows 10+ / Linux / macOS
+> **说明**：本文档介绍如何使用 Docker 容器化部署 XRK-AGT，支持 Windows 10+ / Linux / macOS，包括主服务端、Python 子服务端、Redis 和 MongoDB 的容器化部署。
 
-本文档介绍如何使用 Docker 部署 XRK-AGT，包括主服务端、Python 子服务端、Redis 和 MongoDB 的容器化部署。
-
-### 扩展特性
+### 核心特性
 
 - ✅ **一键部署**：Docker Compose 一键启动所有服务
 - ✅ **自动构建**：自动构建 Python 子服务端，无需手动配置
@@ -501,4 +499,4 @@ curl -f http://localhost:8000/health || exit 1
 
 ---
 
-*最后更新：2026-02-07*
+*最后更新：2026-02-12*

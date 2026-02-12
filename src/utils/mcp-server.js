@@ -42,8 +42,10 @@ export class MCPServer {
    * @param {Function} tool.handler - 工具处理函数
    */
   registerTool(name, tool) {
-    if (this.tools.has(name)) {
-      BotUtil.makeLog('warn', `MCP工具已存在，将被覆盖: ${name}`, 'MCPServer');
+    // 静默覆盖已存在的工具（避免热重载时的重复警告）
+    // 工具注册前应该先清空旧工具，这里只记录调试信息
+    if (this.tools.has(name) && process.env.DEBUG_MCP_TOOLS) {
+      BotUtil.makeLog('debug', `MCP工具已存在，将被覆盖: ${name}`, 'MCPServer');
     }
     
     this.tools.set(name, {

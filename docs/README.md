@@ -95,25 +95,29 @@ flowchart TB
 
 - **[HTTP API 基类 (docs/http-api.md)](http-api.md)** - `HttpApi` 基类，统一路由、WebSocket 与中间件注册方式
 - **[API 加载器 (docs/api-loader.md)](api-loader.md)** - `ApiLoader` 的 API 自动加载、排序与热重载机制
+- **[Server 服务器架构 (docs/server.md)](server.md)** - HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务等完整说明
+- **[HTTP 业务层 (docs/http-business-layer.md)](http-business-layer.md)** - 重定向、CDN、反向代理增强、负载均衡等企业级功能
 - **[system-Core 特性 (docs/system-core.md)](system-core.md)** - system-Core 内置模块完整说明，包含所有HTTP API、工作流、插件和Web控制台 ⭐
 
 ### 🤖 AI 工作流
 
 - **说明**：Node 侧"多步工作流/WorkflowManager/TODO"已移除；复杂 Agent 编排请使用 **Python 子服务端（LangChain/LangGraph）**，主服务端提供统一的 **v3 LLM Provider** 与 **MCP 工具注入/执行**。
 - **[MCP 完整指南 (docs/mcp-guide.md)](mcp-guide.md)** - MCP 工具注册与连接
+- **[MCP 配置指南 (docs/mcp-config-guide.md)](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
 - **[AI Stream (docs/aistream.md)](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
 - **[工厂系统 (docs/factory.md)](factory.md)** - LLM/Vision/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
+- **[子服务端 API (docs/subserver-api.md)](subserver-api.md)** - Python 子服务端 API 文档，LangChain + 向量服务 + 与主服务 v3 的衔接
 
 ### ⚙️ 配置与工具
 
 - **[配置基类 (docs/config-base.md)](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写、多文件配置等
 - **[渲染器 (docs/renderer.md)](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
 - **[工具类 (docs/botutil.md)](botutil.md)** - 工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
-- **[工厂系统 (docs/factory.md)](factory.md)** - 工厂系统文档，涵盖 LLM/Vision/ASR/TTS 工厂的使用、扩展与配置
 
 ### 📱 应用开发
 
 - **[应用开发指南 (docs/app-dev.md)](app-dev.md)** - 应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）
+- **[Docker 部署指南 (docs/docker.md)](docker.md)** - Docker 容器化部署说明，包含 docker-compose 配置和使用指南
 
 ---
 
@@ -144,6 +148,8 @@ flowchart TB
 2. **[Bot 主类](bot.md)** - 了解 HTTP 服务器、认证、中间件栈
 3. **[HTTP API 基类](http-api.md)** - 学习如何定义一个新的 API 模块
 4. **[API 加载器](api-loader.md)** - 理解 API 模块如何被自动加载与热重载
+5. **[Server 服务器架构](server.md)** - 了解 HTTP/HTTPS/WebSocket 服务、反向代理等
+6. **[HTTP 业务层](http-business-layer.md)** - 了解重定向、CDN、负载均衡等企业级功能
 
 ### 运维 / 配置管理者
 
@@ -151,16 +157,20 @@ flowchart TB
 2. **[配置基类](config-base.md)** - 理解配置读写与校验机制
 3. **[工厂系统](factory.md)** - 了解 AI 服务提供商的配置与管理
 4. **[Bot 主类](bot.md)** - 了解服务端口、反向代理、CORS 与安全策略
+5. **[Docker 部署指南](docker.md)** - Docker 容器化部署说明
+6. **[Server 服务器架构](server.md)** - 了解服务器配置和部署
 
 ### 前端 / 渲染相关开发者
 
 1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次
 2. **[渲染器](renderer.md)** - 了解 HTML 模板渲染与文件生成
 3. **[应用开发指南](app-dev.md)** - 了解 Web 控制台开发
+4. **[HTTP API 基类](http-api.md)** - 了解后端 API 接口设计
+5. **[system-Core 特性](system-core.md)** - 了解内置 Web 控制台和 API
 
 ---
 
-## 📖 典型开发路径
+## 典型开发路径
 
 ### 创建自己的 Core 模块
 
@@ -204,6 +214,18 @@ flowchart TB
 4. 创建对应的配置文件（如 `myprovider_llm.yaml`）
 5. 在配置管理界面中配置 API Key 等参数
 
+### 配置外部 AI 平台连接（MCP）
+
+1. 阅读 **[MCP 配置指南](mcp-config-guide.md)** 了解如何配置 Cursor、Claude Desktop 等外部平台
+2. 阅读 **[MCP 完整指南](mcp-guide.md)** 了解 MCP 工具注册与连接机制
+3. 在外部平台配置文件中添加 XRK-AGT 的 MCP 服务器地址
+
+### 部署到生产环境
+
+1. 阅读 **[Docker 部署指南](docker.md)** 了解容器化部署
+2. 阅读 **[Server 服务器架构](server.md)** 了解服务器配置
+3. 阅读 **[HTTP 业务层](http-business-layer.md)** 了解反向代理、负载均衡等企业级功能
+
 ---
 
 ## 🔍 全局对象说明
@@ -239,7 +261,7 @@ flowchart TB
 
 ---
 
-## 🔗 相关资源
+## 相关资源
 
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 项目整体架构说明
 - **[GitHub 仓库](https://github.com/sunflowermm/XRK-AGT)** - 源代码仓库
@@ -247,5 +269,5 @@ flowchart TB
 
 ---
 
-*最后更新：2026-02-10*
+*最后更新：2026-02-12*
 

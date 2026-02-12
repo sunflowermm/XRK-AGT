@@ -111,6 +111,34 @@ export default class ChatStream extends AIStream {
   }
 
   /**
+   * 检查是否为群聊环境
+   * @param {Object} context - 上下文对象
+   * @returns {Object|null} 如果不是群聊返回错误对象，否则返回null
+   */
+  _requireGroup(context) {
+    if (!context.e?.isGroup) {
+      return { success: false, error: '非群聊环境' };
+    }
+    return null;
+  }
+
+  /**
+   * 统一错误处理包装器
+   * @param {Function} fn - 要执行的异步函数
+   * @param {number} [delay=300] - 执行后的延迟（毫秒）
+   * @returns {Promise<Object>} 返回结果对象
+   */
+  async _wrapHandler(fn, delay = 300) {
+    try {
+      const result = await fn();
+      if (delay > 0) await BotUtil.sleep(delay);
+      return result;
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * 注册所有功能
    * 
    * 所有功能都通过 MCP 工具提供
@@ -119,49 +147,84 @@ export default class ChatStream extends AIStream {
     // 表情包（作为消息段的一部分，不在工具调用/函数解析中处理）
     // 表情包标记会在parseCQToSegments中解析，保持顺序
 
+    /**
+     * @某人
+     * 
+     * @description 在群聊中@指定用户。此工具仅执行@操作，不附带文本内容，文本内容由LLM正常回复。
+     * 
+     * @param {string} qq - 要@的用户QQ号（必填）
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {string} returns.message - 操作结果消息
+     * @returns {Object} returns.data - 数据对象
+     * @returns {string} returns.data.qq - 被@的用户QQ号
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * { qq: "123456789" }
+     * 
+     * @note 此功能仅在群聊环境中可用。如无特殊需要，不要对同一用户重复调用。
+     */
     this.registerMCPTool('at', {
-      description: '@某人',
+      description: '@群成员。在群聊中@指定用户，仅执行@操作，不附带文本内容。仅群聊环境可用。',
       inputSchema: {
         type: 'object',
         properties: {
           qq: {
             type: 'string',
-            description: '要@的用户QQ号'
+            description: '要@的用户QQ号（必填）。例如："123456789"。必须是群内的成员QQ号。'
           }
         },
         required: ['qq']
       },
       handler: async (args = {}, context = {}) => {
-        const e = context.e;
-        if (!e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
 
         const qq = String(args.qq || '').trim();
         if (!qq) {
           return { success: false, error: 'QQ号不能为空' };
         }
 
-        try {
+        return this._wrapHandler(async () => {
           const seg = global.segment || segment;
-          // 只执行 @，不附带多余文案，文案交给 LLM 正常回复
-          await e.reply([seg.at(qq)]);
-          await BotUtil.sleep(200);
-          // 返回给 LLM 的结果尽量直观，顺便提示不要对同一用户重复调用
+          await context.e.reply([seg.at(qq)]);
           return {
             success: true,
             message: `已在当前群聊中成功 @ 了 QQ=${qq} 的用户，如无特殊需要请不要再次对同一用户调用此工具。`,
             data: { qq }
           };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        }, 200);
       },
       enabled: true
     });
 
+    /**
+     * 戳一戳群成员
+     * 
+     * @description 戳一戳指定的群成员。如果未指定QQ号，默认戳当前触发消息的用户。
+     * 
+     * @param {string} [qq] - 要戳的成员QQ号（可选，默认是当前说话用户）
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {string} returns.message - 操作结果消息
+     * @returns {Object} returns.data - 数据对象
+     * @returns {string} returns.data.qq - 被戳的用户QQ号
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * // 戳指定用户
+     * { qq: "123456789" }
+     * 
+     * // 戳当前说话用户
+     * {}
+     * 
+     * @note 此功能仅在群聊环境中可用
+     */
     this.registerMCPTool('poke', {
-      description: '戳一戳群成员（qq 为空时默认戳当前说话用户）',
+      description: '戳一戳群成员。如果未指定QQ号，默认戳当前触发消息的用户。仅群聊环境可用。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -173,29 +236,19 @@ export default class ChatStream extends AIStream {
         required: []
       },
       handler: async (args = {}, context = {}) => {
-        const e = context.e;
-        BotUtil.makeLog(
-          'debug',
-          `[chat.poke] 调用上下文: hasE=${Boolean(e)}, isGroup=${e?.isGroup}, message_type=${e?.message_type}, group_id=${e?.group_id}, user_id=${e?.user_id}`,
-          'ChatStream'
-        );
-        if (!e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
 
-        // 如果没有显式给 qq，则默认戳当前触发指令的用户
+        const e = context.e;
         const targetQq = String(args.qq || e.user_id || '').trim();
         if (!targetQq) {
           return { success: false, error: '无法确定要戳的成员QQ号' };
         }
 
-        try {
+        return this._wrapHandler(async () => {
           await e.group.pokeMember(targetQq);
-          await BotUtil.sleep(300);
           return { success: true, message: '戳一戳成功', data: { qq: targetQq } };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -223,7 +276,7 @@ export default class ChatStream extends AIStream {
     });
 
     this.registerMCPTool('emojiReaction', {
-      description: '对某条群消息进行表情回应（默认回应最近一条他人消息）',
+      description: '对群消息进行表情回应。支持：开心、惊讶、伤心、大笑、害怕、喜欢、爱心、生气。不指定消息ID时自动选择最近一条他人消息。仅群聊环境可用。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -233,7 +286,7 @@ export default class ChatStream extends AIStream {
           },
           emojiType: {
             type: 'string',
-            description: '表情类型，可选：开心、惊讶、伤心、大笑、害怕、喜欢、爱心、生气',
+            description: '表情类型（必填）。可选值：开心、惊讶、伤心、大笑、害怕、喜欢、爱心、生气。根据消息内容和用户意图选择合适的表情。',
             enum: ['开心', '惊讶', '伤心', '大笑', '害怕', '喜欢', '爱心', '生气']
           }
         },
@@ -326,22 +379,19 @@ export default class ChatStream extends AIStream {
         required: ['qq']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
         const thumbCount = Math.min(parseInt(args.count) || 1, 50);
-        try {
           const member = context.e.group?.pickMember(args.qq);
-          if (member && typeof member.thumbUp === 'function') {
-            await member.thumbUp(thumbCount);
-            await BotUtil.sleep(300);
-            return { success: true, message: '点赞成功', data: { qq: args.qq, count: thumbCount } };
-          }
+        if (!member || typeof member.thumbUp !== 'function') {
           return { success: false, error: '点赞功能不可用' };
-        } catch (error) {
-          return { success: false, error: error.message };
         }
+
+        return this._wrapHandler(async () => {
+          await member.thumbUp(thumbCount);
+          return { success: true, message: '点赞成功', data: { qq: args.qq, count: thumbCount } };
+        });
       },
       enabled: true
     });
@@ -354,23 +404,19 @@ export default class ChatStream extends AIStream {
         required: []
       },
       handler: async (_args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.sign();
-          await BotUtil.sleep(300);
           return { success: true, message: '签到成功' };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
 
     this.registerMCPTool('mute', {
-      description: '禁言群成员',
+      description: '禁言群成员。需要管理员或群主权限。仅群聊环境可用。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -386,17 +432,13 @@ export default class ChatStream extends AIStream {
         required: ['qq', 'duration']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.muteMember(args.qq, args.duration);
-          await BotUtil.sleep(300);
           return { success: true, message: '禁言成功', data: { qq: args.qq, duration: args.duration } };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -414,17 +456,13 @@ export default class ChatStream extends AIStream {
         required: ['qq']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.muteMember(args.qq, 0);
-          await BotUtil.sleep(300);
           return { success: true, message: '解禁成功', data: { qq: args.qq } };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -437,17 +475,13 @@ export default class ChatStream extends AIStream {
         required: []
       },
       handler: async (_args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.muteAll(true);
-          await BotUtil.sleep(300);
           return { success: true, message: '全员禁言成功' };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -460,23 +494,19 @@ export default class ChatStream extends AIStream {
         required: []
       },
       handler: async (_args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.muteAll(false);
-          await BotUtil.sleep(300);
           return { success: true, message: '解除全员禁言成功' };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
 
     this.registerMCPTool('setCard', {
-      description: '修改群名片',
+      description: '修改群名片。未指定QQ号时默认修改机器人自己的名片。需要管理员或群主权限。仅群聊环境可用。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -492,30 +522,22 @@ export default class ChatStream extends AIStream {
         required: ['card']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
           const e = context.e;
-          // 优先使用显式传入的 qq；否则：
-          // - 如果用户说的是“把你自己改成 X”，模型一般会把 qq 留空，这时默认修改机器人的名片
-          // - 如果没法判断，就回退到当前说话人
           let targetQq = String(args.qq || '').trim();
           if (!targetQq) {
-            // 优先理解为修改机器人自己的名片
             targetQq = String(e.self_id || e.bot?.uin || '').trim() || String(e.user_id || '').trim();
           }
           if (!targetQq) {
             return { success: false, error: '无法确定要修改名片的成员QQ号' };
           }
 
+        return this._wrapHandler(async () => {
           await context.e.group.setCard(targetQq, args.card);
-          await BotUtil.sleep(300);
           return { success: true, message: '修改名片成功', data: { qq: targetQq, card: args.card } };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -533,17 +555,13 @@ export default class ChatStream extends AIStream {
         required: ['name']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.setName(args.name);
-          await BotUtil.sleep(300);
           return { success: true, message: '修改群名成功', data: { name: args.name } };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -561,17 +579,13 @@ export default class ChatStream extends AIStream {
         required: ['qq']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.setAdmin(args.qq, true);
-          await BotUtil.sleep(300);
           return { success: true, message: '设置管理员成功', data: { qq: args.qq } };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -589,17 +603,13 @@ export default class ChatStream extends AIStream {
         required: ['qq']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.setAdmin(args.qq, false);
-          await BotUtil.sleep(300);
           return { success: true, message: '取消管理员成功', data: { qq: args.qq } };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -626,17 +636,13 @@ export default class ChatStream extends AIStream {
         required: ['qq', 'title']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.setTitle(args.qq, args.title, args.duration || -1);
-          await BotUtil.sleep(300);
           return { success: true, message: '设置头衔成功', data: { qq: args.qq, title: args.title } };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -659,17 +665,13 @@ export default class ChatStream extends AIStream {
         required: ['qq']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           await context.e.group.kickMember(args.qq, args.reject || false);
-          await BotUtil.sleep(300);
           return { success: true, message: '踢出成员成功', data: { qq: args.qq } };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -687,30 +689,25 @@ export default class ChatStream extends AIStream {
         required: ['msgId']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
         const msgId = String(args.msgId ?? '').trim();
         if (!msgId) {
           return { success: false, error: '消息ID不能为空' };
         }
         
-        try {
+        return this._wrapHandler(async () => {
           const group = context.e.group;
           if (group && typeof group.setEssenceMessage === 'function') {
             await group.setEssenceMessage(msgId);
-            await BotUtil.sleep(300);
             return { success: true, message: '设置精华成功', data: { msgId } };
-          } else if (context.e.bot && context.e.bot.sendApi) {
+          } else if (context.e.bot?.sendApi) {
             await context.e.bot.sendApi('set_essence_msg', { message_id: msgId });
-            await BotUtil.sleep(300);
             return { success: true, message: '设置精华成功', data: { msgId } };
           }
           return { success: false, error: 'API不可用' };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -728,26 +725,22 @@ export default class ChatStream extends AIStream {
         required: ['msgId']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
         const msgId = String(args.msgId ?? '').trim();
         if (!msgId) {
           return { success: false, error: '消息ID不能为空' };
         }
         
-        try {
+        return this._wrapHandler(async () => {
           const group = context.e.group;
           if (group && typeof group.removeEssenceMessage === 'function') {
             await group.removeEssenceMessage(msgId);
-            await BotUtil.sleep(300);
             return { success: true, message: '取消精华成功', data: { msgId } };
           }
           return { success: false, error: 'API不可用' };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -769,40 +762,33 @@ export default class ChatStream extends AIStream {
         required: ['content']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
         const content = String(args.content ?? '').trim();
         if (!content) {
           return { success: false, error: '公告内容不能为空' };
         }
         
-        try {
+        return this._wrapHandler(async () => {
           const group = context.e.group;
           const image = args.image ? String(args.image).trim() : undefined;
           
           if (group && typeof group.sendNotice === 'function') {
-            const options = {};
-            if (image) options.image = image;
-            const result = await group.sendNotice(content, options);
+            const result = await group.sendNotice(content, image ? { image } : {});
             if (result !== undefined) {
-              await BotUtil.sleep(300);
               return { success: true, message: '发送群公告成功', data: { content } };
             }
-          } else if (context.e.bot && context.e.bot.sendApi) {
+          } else if (context.e.bot?.sendApi) {
             const apiParams = { group_id: context.e.group_id, content };
             if (image) apiParams.image = image;
             const result = await context.e.bot.sendApi('_send_group_notice', apiParams);
-            if (result && result.status === 'ok') {
-              await BotUtil.sleep(300);
+            if (result?.status === 'ok') {
               return { success: true, message: '发送群公告成功', data: { content } };
             }
           }
           return { success: false, error: 'API不可用' };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -875,17 +861,18 @@ export default class ChatStream extends AIStream {
             }
           }
           
-          if (canRecall) {
+          if (!canRecall) {
+            return { success: false, error: '无法撤回消息' };
+          }
+
+          return this._wrapHandler(async () => {
             if (context.e.isGroup && context.e.group) {
               await context.e.group.recallMsg(args.msgId);
             } else if (context.e.bot) {
               await context.e.bot.sendApi('delete_msg', { message_id: args.msgId });
             }
-            await BotUtil.sleep(300);
             return { success: true, message: '消息撤回成功', data: { msgId: args.msgId } };
-          }
-          
-          return { success: false, error: '无法撤回消息' };
+          });
         } catch (error) {
           return { success: false, error: error.message };
         }
@@ -893,33 +880,47 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
+    /**
+     * 获取群的扩展详细信息
+     * 
+     * @description 获取当前群的扩展详细信息，包括更多群信息（如群等级、成员数上限等）。
+     * 
+     * @param {} 无需参数
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {Object} returns.data - 群的扩展信息对象
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * // 调用示例
+     * {}
+     * 
+     * @note 此功能仅在群聊环境中可用
+     */
     this.registerMCPTool('getGroupInfoEx', {
-      description: '获取群的扩展详细信息（包括更多群信息）',
+      description: '获取群的扩展详细信息（包括更多群信息）。此功能仅在群聊中可用。',
       inputSchema: {
         type: 'object',
         properties: {},
         required: []
       },
       handler: async (_args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '此功能仅在群聊中可用' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           const group = context.e.group;
           if (group && typeof group.getInfoEx === 'function') {
             const info = await group.getInfoEx();
             BotUtil.makeLog('debug', `获取群信息ex成功: ${JSON.stringify(info)}`, 'ChatStream');
-            return {
-              success: true,
-              data: info
-            };
+            return { success: true, data: info };
           }
           return { success: false, error: 'API不可用' };
-        } catch (error) {
+        }, 0).catch(error => {
           BotUtil.makeLog('warn', `获取群信息ex失败: ${error.message}`, 'ChatStream');
           return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -932,25 +933,21 @@ export default class ChatStream extends AIStream {
         required: []
       },
       handler: async (_args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '此功能仅在群聊中可用' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           const group = context.e.group;
           if (group && typeof group.getAtAllRemain === 'function') {
             const remain = await group.getAtAllRemain();
             BotUtil.makeLog('debug', `@全体成员剩余次数: ${JSON.stringify(remain)}`, 'ChatStream');
-            return {
-              success: true,
-              data: remain
-            };
+            return { success: true, data: remain };
           }
           return { success: false, error: 'API不可用' };
-        } catch (error) {
+        }, 0).catch(error => {
           BotUtil.makeLog('warn', `获取@全体剩余次数失败: ${error.message}`, 'ChatStream');
           return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -963,25 +960,21 @@ export default class ChatStream extends AIStream {
         required: []
       },
       handler: async (_args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '此功能仅在群聊中可用' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
-        try {
+        return this._wrapHandler(async () => {
           const group = context.e.group;
           if (group && typeof group.getBanList === 'function') {
             const banList = await group.getBanList();
             BotUtil.makeLog('debug', `群禁言列表: ${JSON.stringify(banList)}`, 'ChatStream');
-            return {
-              success: true,
-              data: banList
-            };
+            return { success: true, data: banList };
           }
           return { success: false, error: 'API不可用' };
-        } catch (error) {
+        }, 0).catch(error => {
           BotUtil.makeLog('warn', `获取禁言列表失败: ${error.message}`, 'ChatStream');
           return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -999,38 +992,33 @@ export default class ChatStream extends AIStream {
         required: ['msgId']
       },
       handler: async (args = {}, context = {}) => {
-        if (!context.e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
-        const e = context.e;
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
         
         const msgId = String(args.msgId ?? '').trim();
         if (!msgId) {
           return { success: false, error: '消息ID不能为空' };
         }
         
-        try {
-          // 权限校验：只有管理员/群主才允许设置群代办
+        return this._wrapHandler(async () => {
+          const e = context.e;
           const botRole = await this.getBotRole(e);
           const isAdmin = botRole === '管理员' || botRole === '群主';
           if (!isAdmin) {
             return { success: false, error: '需要管理员或群主权限才能设置群代办' };
           }
 
-          if (e.bot && e.bot.sendApi) {
+          if (e.bot?.sendApi) {
             const result = await e.bot.sendApi('set_group_todo', {
               group_id: e.group_id,
               message_id: msgId
             });
             if (result !== undefined) {
-              await BotUtil.sleep(300);
               return { success: true, message: '设置群代办成功', data: { msgId } };
             }
           }
           return { success: false, error: 'API不可用' };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        });
       },
       enabled: true
     });
@@ -1081,20 +1069,47 @@ export default class ChatStream extends AIStream {
     });
 
     // 获取当前群成员列表（包含QQ号、昵称、名片、角色、是否管理员/群主）
+    /**
+     * 获取群成员列表
+     * 
+     * @description 获取当前群的所有成员列表，包含QQ号、昵称、名片、角色、是否管理员/群主等信息。
+     * 
+     * @param {} 无需参数
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {Object} returns.data - 数据对象
+     * @returns {Array} returns.data.members - 成员列表，每个元素包含 { qq, nickname, card, role, is_owner, is_admin }
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * // 调用示例
+     * {}
+     * 
+     * // 返回示例
+     * {
+     *   success: true,
+     *   data: {
+     *     members: [
+     *       { qq: "123456789", nickname: "用户A", card: "名片", role: "owner", is_owner: true, is_admin: true }
+     *     ]
+     *   }
+     * }
+     * 
+     * @note 此功能仅在群聊环境中可用
+     */
     this.registerMCPTool('getGroupMembers', {
-      description: '获取当前群成员列表（包含QQ号、昵称、名片、角色、是否管理员/群主）',
+      description: '获取群成员列表。返回当前群的所有成员列表，包含QQ号、昵称、名片、角色等信息。仅群聊环境可用。',
       inputSchema: {
         type: 'object',
         properties: {},
         required: []
       },
       handler: async (_args = {}, context = {}) => {
-        const e = context.e;
-        if (!e?.isGroup) {
-          return { success: false, error: '此功能仅在群聊中可用' };
-        }
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
 
-        const group = e.group;
+        const group = context.e.group;
         if (!group) {
           return { success: false, error: '群对象不存在' };
         }

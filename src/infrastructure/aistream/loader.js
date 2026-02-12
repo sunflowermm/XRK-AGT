@@ -450,7 +450,9 @@ class StreamLoader {
     result.embedding = { available: true };
 
     // Redis（用于短期记忆缓存）
-    result.redis = !!global.redis;
+    const { getRedis } = await import('#infrastructure/database/index.js');
+    const redis = getRedis();
+    result.redis = !!redis;
     if (result.redis) {
       BotUtil.makeLog('success', '└─ ✅ Redis 可用', 'StreamLoader');
     } else {
@@ -598,12 +600,7 @@ class StreamLoader {
     if (!mcpServer) return;
     const loader = this;
 
-    // 清空旧工具（支持热重载）
-    const existingTools = Array.from(mcpServer.tools.keys());
-    for (const toolName of existingTools) {
-      mcpServer.tools.delete(toolName);
-    }
-
+    // 注意：工具清空在 initMCP 中统一处理，这里只注册本地工作流工具
     const registeredTools = new Set();
     let registeredCount = 0;
 
@@ -668,18 +665,22 @@ class StreamLoader {
       this.mcpServer = new MCPServer();
     }
 
-    const beforeCount = this.mcpServer.tools.size;
+    // 清空所有旧工具（包括远程MCP工具，支持热重载）
+    const existingTools = Array.from(this.mcpServer.tools.keys());
+    for (const toolName of existingTools) {
+      this.mcpServer.tools.delete(toolName);
+    }
     
-    // 重新注册所有工作流的工具（支持热重载）
+    // 重新注册所有工作流的工具
     this.registerMCP(this.mcpServer);
-    const localCount = this.mcpServer.tools.size - beforeCount;
+    const localCount = this.mcpServer.tools.size;
     
     // 加载远程MCP服务器（如果启用）
     const loadedServers = await this.loadRemoteMCPServers();
     
     // 标记MCP服务已初始化
     this.mcpServer.initialized = true;
-    const remoteCount = this.mcpServer.tools.size - beforeCount - localCount;
+    const remoteCount = this.mcpServer.tools.size - localCount;
     const totalCount = this.mcpServer.tools.size;
     
     if (totalCount > 0) {
@@ -816,7 +817,12 @@ class StreamLoader {
     if (!this.mcpServer || !Array.isArray(tools)) return;
     
     for (const tool of tools) {
-      this.mcpServer.registerTool(`remote-mcp.${serverName}.${tool.name}`, {
+      const toolName = `remote-mcp.${serverName}.${tool.name}`;
+      // 如果工具已存在，先删除再注册（避免重复警告）
+      if (this.mcpServer.tools.has(toolName)) {
+        this.mcpServer.tools.delete(toolName);
+      }
+      this.mcpServer.registerTool(toolName, {
         description: tool.description || '',
         inputSchema: tool.inputSchema || {},
         handler: (args) => this._callRemoteTool(serverName, tool.name, args)
@@ -879,8 +885,8 @@ class StreamLoader {
               const response = JSON.parse(line);
               if (response.id !== requestId) continue;
 
-              clearTimeout(timeout);
-              server.process.stdout.removeListener('data', handler);
+                clearTimeout(timeout);
+                server.process.stdout.removeListener('data', handler);
 
               const finalResult = this._normalizeRemoteMCPResult(response.result);
               resolve(finalResult);

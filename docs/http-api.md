@@ -1,6 +1,6 @@
-# HttpApi 文档
+# HTTP API 基类文档
 
-> **文件位置**: `src/infrastructure/http/http.js`  
+> **文件位置**：`src/infrastructure/http/http.js`  
 > **可扩展性**：HttpApi是HTTP/API系统的核心扩展点。通过继承HttpApi或导出对象，开发者可以快速创建自定义API，无需修改底层代码。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
 `HttpApi` 是 XRK-AGT 中的 **HTTP API 基类**，用于统一定义 REST 路由、WebSocket 处理器、中间件等。
@@ -9,7 +9,7 @@
 - **直接导出对象（推荐）**：由 `ApiLoader` 自动包装为 `HttpApi` 实例
 - **继承 HttpApi 类**：手动控制初始化逻辑，适合复杂场景
 
-### 扩展特性
+### 核心特性
 
 - ✅ **零配置扩展**：放置到任意 `core/*/http/` 目录即可自动加载
 - ✅ **标准化接口**：统一的基类和接口规范
@@ -422,4 +422,4 @@ handler: async (req, res, bot) => {
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-12*

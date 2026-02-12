@@ -1,14 +1,13 @@
 # MCP 配置指南
 
-> **文件位置**：本文档说明如何配置 Cursor、Claude Desktop 等外部平台连接 XRK-AGT 的 MCP 服务  
-> **快速参考**：XRK-AGT 支持按工作流分组使用 MCP 工具，可灵活选择所需工具集
+> **文件位置**：`core/system-Core/http/mcp.js`  
+> **说明**：本文档说明如何配置 Cursor、Claude Desktop 等外部平台连接 XRK-AGT 的 MCP 服务。XRK-AGT 支持按工作流分组使用 MCP 工具，可灵活选择所需工具集。  
+> **协议版本**：2025-11-25（最新规范）  
+> **参考文档**：https://modelcontextprotocol.io/specification/2025-11-25
 
 XRK-AGT 提供标准化的 **Model Context Protocol (MCP)** 服务，允许外部 AI 平台（如 Cursor、Claude Desktop、小智 AI）通过 HTTP 连接并调用系统工具。
 
-**协议版本**：2025-11-25（最新规范）  
-**参考文档**：https://modelcontextprotocol.io/specification/2025-11-25
-
-### 扩展特性
+### 核心特性
 
 - ✅ **按工作流分组**：支持按工作流分组使用工具，灵活选择所需功能
 - ✅ **标准化协议**：遵循 MCP 2025-11-25 标准，兼容主流 AI 平台
@@ -400,4 +399,4 @@ Content-Type: application/json
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-12*

@@ -757,7 +757,8 @@ export default {
         // 尝试获取 redis 实例（如果存在）
         let redisOk = false;
         try {
-          const redis = global.redis || Bot.redis;
+          const { getRedis } = await import('#infrastructure/database/index.js');
+          const redis = getRedis();
           if (redis && typeof redis.ping === 'function') {
             redisOk = await redis.ping().then(() => true).catch(() => false);
           }

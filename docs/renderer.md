@@ -1,6 +1,6 @@
-# Renderer 文档
+# 渲染器基类文档
 
-> **文件位置**: `src/infrastructure/renderer/Renderer.js`  
+> **文件位置**：`src/infrastructure/renderer/Renderer.js`  
 > **可扩展性**：Renderer是渲染系统的核心基类。通过继承Renderer，开发者可以快速创建自定义渲染器，支持HTML模板、图片生成等功能。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
 `Renderer` 是 XRK-AGT 中的 **渲染器基类**，用于统一 HTML 模板渲染、静态资源路径处理、模板文件监听等功能。
@@ -230,4 +230,4 @@ A: 目前使用 `art-template`，支持标准模板语法和自定义函数。
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-12*

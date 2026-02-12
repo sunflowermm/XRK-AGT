@@ -1,6 +1,6 @@
-# ApiLoader 文档
+# API 加载器文档
 
-> **文件位置**: `src/infrastructure/http/loader.js`  
+> **文件位置**：`src/infrastructure/http/loader.js`  
 > **可扩展性**：ApiLoader是HTTP/API系统的核心加载器，自动发现和加载所有API模块。API开发者只需将API放置到对应目录，无需任何配置。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
 `ApiLoader` 负责从所有 `core/*/http` 目录动态加载所有 HTTP API 模块，并完成：
@@ -367,4 +367,4 @@ export default {
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-12*

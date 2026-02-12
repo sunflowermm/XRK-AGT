@@ -178,8 +178,8 @@ function execCommand(cmd) {
     exec(cmd, (error, stdout, stderr) => {
       resolve({
         error,
-        stdout: stdout?.toString() || '',
-        stderr: stderr?.toString() || ''
+        stdout: (stdout || '').toString(),
+        stderr: (stderr || '').toString()
       })
     })
   })
@@ -205,5 +205,4 @@ export async function closeMongodb() {
     BotUtil.makeLog('error', `关闭失败: ${error.message}`, 'MongoDB')
   }
 }
-
 

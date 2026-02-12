@@ -1,7 +1,7 @@
 # 应用 & 前后端开发总览
 
 > **文件位置**：`app.js`、`start.js`、`core/system-Core/www/xrk/`  
-> **适用场景**：本文档面向应用开发者、前后端开发者、运维人员，提供完整的应用开发思路和技术栈整合方案
+> **说明**：本文档面向应用开发者、前后端开发者、运维人员，提供完整的应用开发思路和技术栈整合方案
 
 本篇文档说明：
 
@@ -10,7 +10,7 @@
 - 如何让前端与后端 API、插件、渲染器、工作流协同工作
 - **完整的技术栈整合方案**：插件系统 + 工作流系统 + HTTP API + 渲染器 + 配置系统 + 事件系统
 
-### 扩展特性
+### 核心特性
 
 - ✅ **引导流程**：自动环境检查、依赖安装、配置加载
 - ✅ **Web控制台**：内置Web管理界面，支持系统状态、API调试、配置管理
@@ -103,8 +103,7 @@ flowchart TB
         G4["notice.yaml"]
         G5["mongodb.yaml"]
         G6["redis.yaml"]
-        G7["db.yaml"]
-        G8["aistream.yaml"]
+        G7["aistream.yaml"]
     end
     
     subgraph Server["端口配置<br/>data/server_bots/{port}/"]
@@ -151,7 +150,6 @@ flowchart TB
 | `notice` | `data/server_bots/notice.yaml` | 通知配置 |
 | `mongodb` | `data/server_bots/mongodb.yaml` | MongoDB 连接配置 |
 | `redis` | `data/server_bots/redis.yaml` | Redis 连接配置 |
-| `db` | `data/server_bots/db.yaml` | 数据库配置 |
 | `aistream` | `data/server_bots/aistream.yaml` | AI 工作流全局配置 |
 
 **使用方式**：
@@ -210,7 +208,6 @@ const groupConfig = cfg.getServerConfig('group');
 - `cfg.notice` - 通知配置
 - `cfg.mongodb` - MongoDB 配置
 - `cfg.redis` - Redis 配置
-- `cfg.db` - 数据库配置
 - `cfg.aistream` - AI 工作流配置
 
 **端口配置访问器**：
@@ -823,4 +820,4 @@ flowchart TB
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-12*

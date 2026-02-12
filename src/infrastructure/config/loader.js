@@ -1,8 +1,7 @@
 import cfg from "./config.js"
 import chalk from "chalk";
 import setLog from "#infrastructure/log.js";
-import redisInit, { closeRedis } from "#infrastructure/redis.js";
-import mongodbInit from "#infrastructure/mongodb.js";
+import { initDatabases, closeDatabases } from "#infrastructure/database/index.js";
 import SystemMonitor from "#modules/systemmonitor.js";
 
 const CONFIG = {
@@ -84,17 +83,7 @@ class ProcessManager {
 
   async cleanup() {
     try {
-      if (global.redis) {
-        await closeRedis();
-      }
-    } catch {
-      // 忽略关闭错误
-    }
-    
-    try {
-      if (global.mongodb) {
-        await global.mongodb.close();
-      }
+      await closeDatabases();
     } catch {
       // 忽略关闭错误
     }
@@ -146,11 +135,8 @@ class InitManager {
     logger.mark(chalk.cyan("XRK-AGT 初始化中..."));
 
     this.setupEnvironment();
-    // 同时启动 Redis 和 MongoDB
-    await Promise.all([
-      redisInit(),
-      mongodbInit()
-    ]);
+    // 初始化数据库（MongoDB和Redis）
+    await initDatabases();
     await this.processManager.updateTitle();
     await this.startMonitoring();
     

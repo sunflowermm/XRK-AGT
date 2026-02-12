@@ -1389,37 +1389,6 @@ export default class SystemConfig extends ConfigBase {
         }
       },
 
-      db: {
-        name: 'db',
-        displayName: '数据库配置',
-        description: 'Sequelize数据库连接配置',
-        filePath: getConfigPath('db'),
-        fileType: 'yaml',
-        schema: {
-          required: ['dialect'],
-          fields: {
-            dialect: {
-              type: 'string',
-              label: '数据库类型',
-              enum: ['sqlite', 'mysql', 'mariadb', 'postgres', 'mssql', 'db2'],
-              default: 'sqlite',
-              component: 'Select'
-            },
-            storage: {
-              type: 'string',
-              label: 'SQLite文件地址',
-              default: 'data/db/data.db',
-              component: 'Input'
-            },
-            logging: {
-              type: 'boolean',
-              label: '日志输出',
-              default: false,
-              component: 'Switch'
-            }
-          }
-        }
-      },
 
       device: {
         name: 'device',

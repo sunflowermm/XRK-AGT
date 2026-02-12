@@ -137,7 +137,8 @@ class SystemMonitor extends EventEmitter {
         this.leakDetection.checkInterval = leakConfig.checkInterval;
 
         // 挂载数据库对象（延迟初始化）
-        this._initDatabase();
+        // 异步初始化数据库（不阻塞启动）
+        this._initDatabase().catch(() => {});
 
         // 延迟首次检查，确保日志播完后再开始
         // 使用setTimeout确保在下一个事件循环中执行，给日志输出足够时间
@@ -185,16 +186,21 @@ class SystemMonitor extends EventEmitter {
      * 初始化数据库对象挂载
      * @private
      */
-    _initDatabase() {
+    async _initDatabase() {
         try {
+            // 使用动态导入避免循环依赖
+            const { getMongoClient, getMongoDb, getRedis } = await import('#infrastructure/database/index.js');
             // 挂载 MongoDB（如果已初始化）
-            if (global.mongodb && global.mongodbDb) {
-                this.mongodb = global.mongodb;
-                this.mongodbDb = global.mongodbDb;
+            const mongoClient = getMongoClient();
+            const mongoDb = getMongoDb();
+            if (mongoClient && mongoDb) {
+                this.mongodb = mongoClient;
+                this.mongodbDb = mongoDb;
             }
             // 挂载 Redis（如果已初始化）
-            if (global.redis) {
-                this.redis = global.redis;
+            const redis = getRedis();
+            if (redis) {
+                this.redis = redis;
             }
         } catch {
             // 数据库未初始化，忽略

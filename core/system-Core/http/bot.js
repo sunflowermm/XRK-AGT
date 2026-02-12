@@ -136,7 +136,8 @@ export default {
           return HttpResponse.notFound(res, '机器人不存在');
         }
 
-        const redis = global.redis || Bot.redis;
+        const { getRedis } = await import('#infrastructure/database/index.js');
+        const redis = getRedis();
         if (!redis) {
           return HttpResponse.error(res, new Error('Redis未初始化'), 503, 'bot.control');
         }

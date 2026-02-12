@@ -5,7 +5,7 @@
 
 HTTP业务层（`HTTPBusinessLayer`）是XRK-AGT框架的核心HTTP功能模块，统一管理重定向、CDN支持和反向代理增强功能。
 
-### 扩展特性
+### 核心特性
 
 - ✅ **重定向管理**：配置化HTTP重定向规则（301/302/307/308）
 - ✅ **CDN支持**：静态资源CDN回源、缓存控制、CDN头部处理
@@ -813,8 +813,6 @@ class ProxyManager {
 
 ---
 
----
-
 ## 相关文档
 
 - **[Bot 主类文档](bot.md)** - HTTP/HTTPS/WebSocket 服务详细说明
@@ -823,4 +821,4 @@ class ProxyManager {
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-12*

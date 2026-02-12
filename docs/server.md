@@ -1,15 +1,8 @@
 # Server 服务器架构文档
 
-> XRK-AGT 的 Server 层是系统的核心业务层，提供统一的 HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务、安全中间件等能力，支持快速搭建各种通讯协议的客户端或服务端。
-
+> **文件位置**：`src/bot.js`  
+> **说明**：XRK-AGT 的 Server 层是系统的核心业务层，提供统一的 HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务、安全中间件等能力，支持快速搭建各种通讯协议的客户端或服务端。  
 > **注意**：本文档中所有 `{端口}` 或 `localhost:{端口}` 的占位符表示实际端口号，由启动配置决定（通过 `bot.run({ port: 端口号 })` 指定）。HTTP端口由启动时指定，HTTPS端口默认为2538（可配置）。
-
-## 📋 快速导航
-
-- [返回文档首页（docs/README.md）](README.md)
-- [Bot主类文档（docs/bot.md）](bot.md)
-- [HTTP API基类文档（docs/http-api.md）](http-api.md)
-- [项目总览](../PROJECT_OVERVIEW.md)
 
 ## 📚 目录
 
@@ -1306,4 +1299,4 @@ XRK-AGT 的 Server 层提供了：
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-12*

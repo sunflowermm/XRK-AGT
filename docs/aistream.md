@@ -1,13 +1,13 @@
-# AIStream 文档
+# AIStream 工作流基类文档
 
-> **文件位置**: `src/infrastructure/aistream/aistream.js`  
-> Node 侧"多步工作流/WorkflowManager/TODO"已移除；复杂多步编排请使用 Python 子服务端（LangChain/LangGraph）。本文档描述的是 Node 侧 `AIStream` 基类与 LLM/MCP 集成方式。
-> **可扩展性**：AIStream是工作流系统的核心扩展点。通过继承AIStream，开发者可以快速创建自定义工作流。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+> **文件位置**：`src/infrastructure/aistream/aistream.js`  
+> **说明**：Node 侧"多步工作流/WorkflowManager/TODO"已移除；复杂多步编排请使用 Python 子服务端（LangChain/LangGraph）。本文档描述的是 Node 侧 `AIStream` 基类与 LLM/MCP 集成方式。  
+> **可扩展性**：AIStream是工作流系统的核心扩展点。通过继承AIStream，开发者可以快速创建自定义工作流。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐  
 > **相关文档**：关于 LLM/Vision/ASR/TTS 工厂系统的详细说明，请参考 **[工厂系统文档](factory.md)** 📖
 
 `AIStream` 是 XRK-AGT 中的 **AI 工作流基类**，用于封装 LLM 调用、向量服务、上下文增强等能力（工具调用由 LLM 工厂的 tool calling + MCP 统一处理，AIStream 本身**不再解析函数调用文本**）。
 
-### 扩展特性
+### 核心特性
 
 - ✅ **零配置扩展**：放置到任意 `core/*/stream/` 目录即可自动加载
 - ✅ **函数注册系统**：统一使用 MCP 工具注册
@@ -605,10 +605,21 @@ await stream.callAIStream(messages, {}, (delta) => {
 
 **返回**：`Object` - `{ mergedCount, skippedCount }`
 
-**示例**：
+**注意**：`merge()` 方法主要用于框架内部的工作流合并机制。在实际开发中，**不建议在 `init()` 方法中主动合并工作流**，而应通过调用参数控制：
+
 ```javascript
-const toolsStream = StreamLoader.getStream('tools');
-this.merge(toolsStream, { prefix: 'tools.' });
+// ❌ 不推荐：在 init() 中主动合并
+async init() {
+  const toolsStream = StreamLoader.getStream('tools');
+  this.merge(toolsStream);
+}
+
+// ✅ 推荐：通过调用参数控制合并
+await stream.process(e, question, {
+  enableTools: true,      // 自动整合 tools 工作流
+  enableMemory: true,    // 自动整合 memory 工作流
+  enableDatabase: true   // 自动整合 database 工作流
+});
 ```
 
 ---
@@ -714,15 +725,13 @@ await stream.callAIStream(messages, {}, (delta) => {
 ### 工作流合并示例
 
 ```javascript
-// 在desktop工作流中合并tools工作流
-async init() {
-  await super.init();
-
-  const toolsStream = StreamLoader.getStream('tools');
-  if (toolsStream) {
-    this.merge(toolsStream);
-  }
-}
+// 工作流合并应通过调用参数控制，不需要在 init() 中主动合并
+// 调用时通过参数指定：
+await stream.process(e, question, {
+  enableTools: true,      // 自动整合 tools 工作流
+  enableMemory: true,    // 自动整合 memory 工作流
+  enableDatabase: true   // 自动整合 database 工作流
+});
 ```
 
 ---
@@ -901,4 +910,4 @@ MonitorService.endTrace(traceId, { success: true });
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-12*

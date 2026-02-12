@@ -8,7 +8,7 @@ XRK-AGT Python 子服务端提供 AI 生态相关的服务，包括：
 - **向量服务**：文本向量化、向量检索、向量数据库管理
 - **（规划中）更多 Python AI 生态能力**：仅在实现后再写入文档，避免文档与代码脱节
 
-### 扩展特性
+### 核心特性
 
 - ✅ **Python AI生态**：充分利用Python丰富的AI库（LangChain、sentence-transformers、ChromaDB等）
 - ✅ **统一接口**：通过HTTP API与主服务端通信，接口清晰简洁
@@ -464,4 +464,4 @@ HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-02-12*

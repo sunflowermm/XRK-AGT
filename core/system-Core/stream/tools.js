@@ -37,9 +37,7 @@ export default class ToolsStream extends AIStream {
       }
     });
 
-    this.workspace = IS_WINDOWS 
-      ? path.join(os.homedir(), 'Desktop')
-      : path.join(os.homedir(), 'Desktop');
+    this.workspace = path.join(os.homedir(), 'Desktop');
     
     this.tools = new BaseTools(this.workspace);
   }
@@ -51,22 +49,20 @@ export default class ToolsStream extends AIStream {
 
   registerAllFunctions() {
     this.registerMCPTool('read', {
-      description: '读取文件内容，返回文件路径和内容',
+      description: '读取文件内容。支持相对路径和绝对路径，文件不存在时自动在工作区搜索。',
       inputSchema: {
         type: 'object',
         properties: {
           filePath: {
             type: 'string',
-            description: '文件路径，例如：易忘信息.txt'
+            description: '文件路径（相对或绝对路径）'
           }
         },
         required: ['filePath']
       },
       handler: async (args = {}, context = {}) => {
         const { filePath } = args;
-        if (!filePath) {
-          return { success: false, error: '文件路径不能为空' };
-        }
+        if (!filePath) return { success: false, error: '文件路径不能为空' };
 
         let result = await this.tools.readFile(filePath);
         
@@ -92,7 +88,7 @@ export default class ToolsStream extends AIStream {
     });
 
     this.registerMCPTool('grep', {
-      description: '在文件中搜索文本，返回匹配结果',
+      description: '在文件中搜索文本。支持指定文件或工作区所有文件，不区分大小写。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -102,16 +98,14 @@ export default class ToolsStream extends AIStream {
           },
           filePath: {
             type: 'string',
-            description: '文件路径（可选），如果不指定则搜索所有文件'
+            description: '文件路径（可选，不指定则搜索所有文件）'
           }
         },
         required: ['pattern']
       },
       handler: async (args = {}, context = {}) => {
         const { pattern, filePath } = args;
-        if (!pattern) {
-          return { success: false, error: '搜索关键词不能为空' };
-        }
+        if (!pattern) return { success: false, error: '搜索关键词不能为空' };
 
         const result = await this.tools.grep(pattern, filePath, {
           caseSensitive: false,
@@ -137,7 +131,7 @@ export default class ToolsStream extends AIStream {
     });
 
     this.registerMCPTool('write', {
-      description: '写入文件内容（如果文件存在则覆盖）',
+      description: '写入文件内容（完全覆盖）。文件不存在时自动创建。如需追加请使用 modify_file。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -154,9 +148,8 @@ export default class ToolsStream extends AIStream {
       },
       handler: async (args = {}, context = {}) => {
         const { filePath, content } = args;
-        if (!filePath || content === undefined) {
-          return { success: false, error: '文件路径和内容不能为空' };
-        }
+        if (!filePath) return { success: false, error: '文件路径不能为空' };
+        if (content === undefined) return { success: false, error: '文件内容不能为空' };
 
         const result = await this.tools.writeFile(filePath, content);
         
@@ -176,7 +169,7 @@ export default class ToolsStream extends AIStream {
     });
 
     this.registerMCPTool('create_file', {
-      description: '创建新文件',
+      description: '创建新文件。自动创建不存在的目录，文件已存在时覆盖。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -186,16 +179,14 @@ export default class ToolsStream extends AIStream {
           },
           content: {
             type: 'string',
-            description: '文件内容（可选，默认为空）'
+            description: '初始内容（可选）'
           }
         },
         required: ['filePath']
       },
       handler: async (args = {}, context = {}) => {
         const { filePath, content = '' } = args;
-        if (!filePath) {
-          return { success: false, error: '文件路径不能为空' };
-        }
+        if (!filePath) return { success: false, error: '文件路径不能为空' };
 
         const fullPath = this.tools.resolvePath(filePath);
         try {
@@ -217,7 +208,7 @@ export default class ToolsStream extends AIStream {
     });
 
     this.registerMCPTool('delete_file', {
-      description: '删除文件',
+      description: '删除文件。此操作不可恢复，请谨慎使用。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -230,9 +221,7 @@ export default class ToolsStream extends AIStream {
       },
       handler: async (args = {}, context = {}) => {
         const { filePath } = args;
-        if (!filePath) {
-          return { success: false, error: '文件路径不能为空' };
-        }
+        if (!filePath) return { success: false, error: '文件路径不能为空' };
 
         const fullPath = this.tools.resolvePath(filePath);
         try {
@@ -253,7 +242,7 @@ export default class ToolsStream extends AIStream {
     });
 
     this.registerMCPTool('modify_file', {
-      description: '修改文件内容（支持追加、替换、插入）',
+      description: '修改文件内容。支持三种模式：replace（替换全部或指定行）、append（追加到末尾）、prepend（插入到开头）。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -268,12 +257,12 @@ export default class ToolsStream extends AIStream {
           mode: {
             type: 'string',
             enum: ['replace', 'append', 'prepend'],
-            description: '修改模式: replace(替换全部), append(追加到末尾), prepend(插入到开头)',
+            description: '修改模式：replace(替换全部或指定行)、append(追加到末尾)、prepend(插入到开头)',
             default: 'replace'
           },
           lineNumber: {
             type: 'integer',
-            description: '插入行号（仅在replace模式下有效，替换指定行）'
+            description: '行号（仅在replace模式下有效，从1开始）'
           }
         },
         required: ['filePath', 'content']
@@ -335,7 +324,7 @@ export default class ToolsStream extends AIStream {
     });
 
     this.registerMCPTool('list_files', {
-      description: '列出目录中的文件',
+      description: '列出目录中的文件和子目录。支持过滤文件类型和是否包含隐藏文件，默认列出工作区。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -351,7 +340,7 @@ export default class ToolsStream extends AIStream {
           type: {
             type: 'string',
             enum: ['all', 'files', 'dirs'],
-            description: '文件类型过滤: all(全部), files(仅文件), dirs(仅目录)',
+            description: '文件类型过滤：all(全部)、files(仅文件)、dirs(仅目录)',
             default: 'all'
           }
         },
@@ -378,13 +367,13 @@ export default class ToolsStream extends AIStream {
     });
 
     this.registerMCPTool('run', {
-      description: '执行命令（工作区：桌面）',
+      description: '执行系统命令。在工作区目录下执行，支持 Windows CMD 和 PowerShell 命令，仅 Windows 系统支持。',
       inputSchema: {
         type: 'object',
         properties: {
           command: {
             type: 'string',
-            description: '要执行的命令'
+            description: '要执行的命令（CMD 或 PowerShell）'
           }
         },
         required: ['command']

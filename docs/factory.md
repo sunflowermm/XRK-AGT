@@ -1,6 +1,6 @@
 # 工厂系统文档
 
-> **文件位置**: `src/factory/`  
+> **文件位置**：`src/factory/`  
 > **可扩展性**：工厂系统是 XRK-AGT 的核心扩展点之一。通过工厂模式，开发者可以轻松接入新的 AI 服务提供商，实现统一的多厂商支持。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 
 XRK-AGT 采用**工厂模式**统一管理多种 AI 服务提供商，包括大语言模型（LLM）、语音识别（ASR）和语音合成（TTS）。工厂系统提供了统一的接口，屏蔽了不同厂商的 API 差异，让开发者可以轻松切换和扩展服务提供商。多模态识图能力由各家 LLM 自身的多模态接口提供，不再通过单独的「识图工厂」转发。
@@ -100,7 +100,7 @@ sequenceDiagram
 
 ### 1. LLMFactory（大语言模型工厂）
 
-**文件位置**: `src/factory/llm/LLMFactory.js`
+**文件位置**：`src/factory/llm/LLMFactory.js`
 
 LLMFactory 负责管理所有大语言模型服务提供商，支持多种 LLM API 协议。
 
@@ -187,7 +187,7 @@ class LLMClient {
 
 ### 2. ASRFactory（语音识别工厂）
 
-**文件位置**: `src/factory/asr/ASRFactory.js`
+**文件位置**：`src/factory/asr/ASRFactory.js`
 
 ASRFactory 负责管理语音识别服务提供商，将语音转换为文本。
 
@@ -266,7 +266,7 @@ class ASRClient {
 
 ### 4. TTSFactory（语音合成工厂）
 
-**文件位置**: `src/factory/tts/TTSFactory.js`
+**文件位置**：`src/factory/tts/TTSFactory.js`
 
 TTSFactory 负责管理语音合成服务提供商，将文本转换为语音。
 
@@ -970,4 +970,4 @@ Host: localhost:8080
 
 ---
 
-*最后更新：2026-02-10*
+*最后更新：2026-02-12*

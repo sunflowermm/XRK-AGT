@@ -53,23 +53,39 @@ export default class MemoryStream extends AIStream {
    * 注册所有记忆相关功能
    */
   registerAllFunctions() {
+    /**
+     * 保存长期记忆
+     * 
+     * @description 将重要信息保存为长期记忆，支持跨会话持久化存储。记忆会与用户ID和场景关联。
+     * 
+     * @param {string} content - 记忆内容（必填）
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {Object} returns.data - 成功时的数据对象
+     * @returns {string} returns.data.memoryId - 记忆的唯一ID
+     * @returns {string} returns.data.message - 操作结果消息
+     * @returns {string} returns.data.content - 记忆内容的前100个字符（预览）
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * { content: "用户喜欢喝咖啡，不喜欢茶" }
+     */
     this.registerMCPTool('save_memory', {
-      description: '保存长期记忆',
+      description: '保存长期记忆。记忆会跨会话持久化存储，与用户ID和场景关联，可通过 query_memory 查询。',
       inputSchema: {
         type: 'object',
         properties: {
           content: {
             type: 'string',
-            description: '记忆内容'
+            description: '记忆内容（简洁明确，便于检索）'
           }
         },
         required: ['content']
       },
       handler: async (args = {}, context = {}) => {
         const { content } = args;
-        if (!content) {
-          return { success: false, error: '记忆内容不能为空' };
-        }
+        if (!content) return { success: false, error: '记忆内容不能为空' };
 
         const memoryId = await this.saveMemory(content, context);
         BotUtil.makeLog('info', `[${this.name}] 保存记忆 #${memoryId}: ${content.slice(0, 50)}...`, 'MemoryStream');
@@ -86,23 +102,39 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
+    /**
+     * 查询记忆
+     * 
+     * @description 根据关键词查询相关的长期记忆，支持语义搜索。返回匹配的记忆列表，按时间倒序排列。
+     * 
+     * @param {string} keyword - 搜索关键词（必填）
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {Object} returns.data - 成功时的数据对象
+     * @returns {string} returns.data.keyword - 搜索的关键词
+     * @returns {Array} returns.data.memories - 匹配的记忆列表，每个元素包含 { id, content, userId, scene, timestamp, createdAt }
+     * @returns {number} returns.data.count - 匹配的记忆数量
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * { keyword: "咖啡" }
+     */
     this.registerMCPTool('query_memory', {
-      description: '根据关键词查询相关记忆，返回记忆列表',
+      description: '查询长期记忆。根据关键词进行语义搜索，返回相关的记忆列表，按时间倒序排列。',
       inputSchema: {
         type: 'object',
         properties: {
           keyword: {
             type: 'string',
-            description: '搜索关键词'
+            description: '搜索关键词（支持语义搜索）'
           }
         },
         required: ['keyword']
       },
       handler: async (args = {}, context = {}) => {
         const { keyword } = args;
-        if (!keyword) {
-          return { success: false, error: '关键词不能为空' };
-        }
+        if (!keyword) return { success: false, error: '关键词不能为空' };
 
         const memories = await this.queryMemories(keyword, context);
         BotUtil.makeLog('info', `[${this.name}] 查询记忆 "${keyword}"，找到 ${memories.length} 条`, 'MemoryStream');
@@ -119,8 +151,25 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
+    /**
+     * 删除记忆
+     * 
+     * @description 根据记忆ID删除指定的长期记忆。只能删除当前用户的记忆。
+     * 
+     * @param {string} id - 记忆ID（必填）
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功删除
+     * @returns {Object} returns.data - 结果数据对象
+     * @returns {string} returns.data.id - 记忆ID
+     * @returns {string} returns.data.message - 操作结果消息
+     * @returns {string} returns.error - 失败时的错误信息
+     * 
+     * @example
+     * { id: "1234567890" }
+     */
     this.registerMCPTool('delete_memory', {
-      description: '删除长期记忆',
+      description: '删除长期记忆。根据记忆ID删除指定的记忆，只能删除当前用户的记忆。需要先通过 query_memory 或 list_memories 获取记忆ID。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -133,9 +182,7 @@ export default class MemoryStream extends AIStream {
       },
       handler: async (args = {}, context = {}) => {
         const { id } = args;
-        if (!id) {
-          return { success: false, error: '记忆ID不能为空' };
-        }
+        if (!id) return { success: false, error: '记忆ID不能为空' };
 
         const success = await this.deleteMemory(id, context);
         BotUtil.makeLog('info', `[${this.name}] ${success ? '删除' : '删除失败'}记忆 #${id}`, 'MemoryStream');
@@ -151,8 +198,34 @@ export default class MemoryStream extends AIStream {
       enabled: true
     });
 
+    /**
+     * 列出所有记忆
+     * 
+     * @description 列出当前用户在当前场景下保存的所有长期记忆，按时间倒序排列。
+     * 
+     * @param {} 无需参数
+     * 
+     * @returns {Object} 返回结果对象
+     * @returns {boolean} returns.success - 是否成功
+     * @returns {Object} returns.data - 成功时的数据对象
+     * @returns {Array} returns.data.memories - 记忆列表，每个元素包含 { id, content, userId, scene, timestamp, createdAt }
+     * @returns {number} returns.data.count - 记忆数量
+     * 
+     * @example
+     * // 调用示例
+     * {}
+     * 
+     * // 返回示例
+     * {
+     *   success: true,
+     *   data: {
+     *     memories: [...],
+     *     count: 5
+     *   }
+     * }
+     */
     this.registerMCPTool('list_memories', {
-      description: '列出所有保存的长期记忆',
+      description: '列出所有长期记忆。返回当前用户在当前场景下的所有记忆，按时间倒序排列。',
       inputSchema: {
         type: 'object',
         properties: {},
