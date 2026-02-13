@@ -70,30 +70,30 @@ class PluginsLoader {
       this.pluginCount = 0
       const packageErr = []
 
-      // 优化：增加批次大小，提升并发度
-      const batchSize = Math.max(this.getDynamicBatchSize(), 15)
-      const loadPromises = files.map(async (file) => {
-        const pluginStartTime = Date.now()
-        try {
-          await this.importPlugin(file, packageErr, false)
-          const loadTime = Date.now() - pluginStartTime
-          this.pluginLoadStats.plugins.push({ name: file.name, loadTime, success: true })
-        } catch (err) {
-          const loadTime = Date.now() - pluginStartTime
-          this.pluginLoadStats.plugins.push({
-            name: file.name,
-            loadTime,
-            success: false,
-            error: err.message
+      const batchSize = 10
+      for (let i = 0; i < files.length; i += batchSize) {
+        const batch = files.slice(i, i + batchSize)
+        await Promise.allSettled(
+          batch.map(async (file) => {
+            const pluginStartTime = Date.now()
+            try {
+              await this.importPlugin(file, packageErr, false)
+              const loadTime = Date.now() - pluginStartTime
+              this.pluginLoadStats.plugins.push({ name: file.name, loadTime, success: true })
+            } catch (err) {
+              const loadTime = Date.now() - pluginStartTime
+              this.pluginLoadStats.plugins.push({
+                name: file.name,
+                loadTime,
+                success: false,
+                error: err.message
+              })
+              errorHandler.handle(err, { context: 'loadPlugin', pluginName: file.name }, true)
+              logger.error(`插件加载失败: ${file.name}`, err)
+              return null
+            }
           })
-          errorHandler.handle(err, { context: 'loadPlugin', pluginName: file.name }, true)
-          logger.error(`插件加载失败: ${file.name}`, err)
-        }
-      })
-
-      // 分批并发加载，避免一次性加载过多导致内存压力
-      for (let i = 0; i < loadPromises.length; i += batchSize) {
-        await Promise.allSettled(loadPromises.slice(i, i + batchSize))
+        )
       }
 
       this.pluginLoadStats.totalLoadTime = Date.now() - this.pluginLoadStats.startTime
