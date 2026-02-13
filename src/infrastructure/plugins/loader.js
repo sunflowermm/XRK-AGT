@@ -695,31 +695,54 @@ class PluginsLoader {
   }
 
   async getPlugins() {
-    const ret = [];
-    const { FileLoader } = await import('#utils/file-loader.js');
-    const pluginDirs = await FileLoader.getCoreSubDirs('plugin');
-    
+    const ret = []
+    const { FileLoader } = await import('#utils/file-loader.js')
+    const pluginDirs = await FileLoader.getCoreSubDirs('plugin')
+
+    // 1. 加载各 core 下的插件文件
+    const coreDirs = new Set()
     for (const pluginDir of pluginDirs) {
       try {
         const files = await FileLoader.readFiles(pluginDir, {
           ext: '.js',
           recursive: false,
           ignore: ['.', '_']
-        });
-        const coreDir = path.dirname(pluginDir);
+        })
+        const coreDir = path.dirname(pluginDir)
+        coreDirs.add(coreDir)
+
         for (const filePath of files) {
-          const relativePath = path.relative(paths.root, filePath);
+          const relativePath = path.relative(paths.root, filePath)
           ret.push({
             name: path.basename(filePath),
             path: `../../../${relativePath.replace(/\\/g, '/')}`,
             core: path.basename(coreDir)
-          });
+          })
         }
       } catch (error) {
-        logger.error(`获取插件文件列表失败: ${pluginDir}`, error);
+        logger.error(`获取插件文件列表失败: ${pluginDir}`, error)
       }
     }
-    return ret;
+
+    // 2. 额外加载每个 core 根目录下的 index.js 作为入口
+    for (const coreDir of coreDirs) {
+      try {
+        const indexPath = path.join(coreDir, 'index.js')
+        if (!existsSync(indexPath)) continue
+
+        const relativePath = path.relative(paths.root, indexPath)
+        ret.push({
+          // 使用 core 名称避免多个 core 的 index.js 发生键名冲突
+          name: `${path.basename(coreDir)}-index.js`,
+          path: `../../../${relativePath.replace(/\\/g, '/')}`,
+          core: path.basename(coreDir)
+        })
+      } catch (error) {
+        logger.error(`加载 core 根目录 index.js 失败: ${coreDir}`, error)
+      }
+    }
+
+    return ret
   }
   /**
    * 获取插件加载统计信息
