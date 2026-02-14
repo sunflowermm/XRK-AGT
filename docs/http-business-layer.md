@@ -23,7 +23,7 @@ HTTP业务层（`HTTPBusinessLayer`）是XRK-AGT框架的核心HTTP功能模块�
 - [CDN支持](#cdn支持)
 - [反向代理增强](#反向代理增强)
 - [配置说明](#配置说明)
-- [Node.js 24.13新特性](#nodejs-2412新特性)
+- [Node.js 24.13新特性](#nodejs-2413新特性)
 - [最佳实践](#最佳实践)
 
 ---

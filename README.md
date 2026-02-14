@@ -61,9 +61,6 @@ XRK-AGT 是由向日葵开发，各个大学志同道合的学生联合研制，
 
 ---
 
-
----
-
 ## 🏗️ 架构层次说明
 
 XRK-AGT 采用清晰的分层架构设计，各层职责明确，便于扩展和维护。
@@ -170,7 +167,7 @@ XRK_SERVER_PORT=8080
 
 # 代理配置（用于模型下载，可选，填clash等开放的端口即可）
 HTTP_PROXY=http://host.docker.internal:7890
-HTTPS_PROXY=http://host.docker.internal:7890
+HTTPS_PROXY=https://host.docker.internal:7890
 NO_PROXY=127.0.0.1,localhost
 
 # MongoDB 认证（可选）
@@ -321,10 +318,10 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可在 Cursor 等 AI 编�
 
 ### Q: 如何配置代理？
 
-A: 在 `.env` 文件中配置：
+A: 在 `.env` 文件中配置(Docker)：
 ```bash
-HTTP_PROXY=http://127.0.0.1:7890
-HTTPS_PROXY=http://127.0.0.1:7890
+HTTP_PROXY=http://host.docker.internal:7890
+HTTPS_PROXY=https://host.docker.internal:7890
 ```
 
 ### Q: 如何修改服务端口？

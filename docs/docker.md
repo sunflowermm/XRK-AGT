@@ -56,8 +56,8 @@ cd XRK-AGT
 XRK_SERVER_PORT=8080
 
 # 代理配置（用于模型下载，可选）
-HTTP_PROXY=http://127.0.0.1:7890
-HTTPS_PROXY=http://127.0.0.1:7890
+HTTP_PROXY=http://host.docker.internal:7890
+HTTPS_PROXY=https://host.docker.internal:7890
 NO_PROXY=127.0.0.1,localhost,xrk-agt,redis,mongodb
 
 # MongoDB 认证（可选）
@@ -113,25 +113,16 @@ curl http://localhost:8000/health
 
 ### 自动构建子服务端
 
-Docker 构建过程会自动处理子服务端：
-
-1. **安装 Python 依赖**：自动安装 FastAPI、uvicorn、sentence-transformers、chromadb 等
-2. **配置虚拟环境**：自动创建 Python 虚拟环境并安装依赖
-3. **模型缓存配置**：自动配置 HuggingFace 模型缓存目录
-4. **代理支持**：自动配置代理环境变量（用于模型下载）
+Docker 构建时会自动安装 Python 依赖（FastAPI、uvicorn、sentence-transformers、chromadb 等）、配置虚拟环境与 HuggingFace 模型缓存，并支持代理环境变量用于模型下载。
 
 **构建阶段**（`Dockerfile`）：
-- 安装 Python 3 和构建工具
-- 安装 `uv`（Python 包管理器）
-- 创建 Python 虚拟环境并安装依赖
-- 清理构建缓存
+- 安装 Python 3 和构建工具、`uv` 包管理器
+- 创建 Python 虚拟环境并安装依赖，清理构建缓存
 
 **运行阶段**：
-- 复制构建好的虚拟环境
-- 配置环境变量和代理
-- 启动子服务端服务
+- 复制构建好的虚拟环境，配置环境变量和代理，启动子服务端服务
 
-> **注意**：首次启动时，子服务端会自动下载向量化模型（如果未缓存），可能需要一些时间。建议配置代理以加速下载。
+> **注意**：首次启动时，子服务端会自动下载向量化模型（若未缓存），可能需要较长时间，建议配置代理加速。
 
 ### Redis
 
@@ -282,11 +273,11 @@ docker-compose ps
 # 3. 进入容器检查
 docker exec -it xrk-agt sh
 # 在容器内检查服务是否正常运行
-curl http://localhost:8080/api/health
+curl http://localhost:8080/health
 
 # 4. 检查网络连接
 docker exec -it xrk-subserver sh
-curl http://xrk-agt:8080/api/health
+curl http://xrk-agt:8080/health
 ```
 
 **常见原因**：
@@ -339,7 +330,7 @@ docker-compose ps xrk-agt
 
 # 2. 检查网络连接
 docker exec -it xrk-subserver sh
-curl http://xrk-agt:8080/api/health
+curl http://xrk-agt:8080/health
 
 # 3. 检查环境变量
 docker exec xrk-subserver env | grep -i MAIN_SERVER
@@ -447,29 +438,23 @@ find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
 
 ### 4. 监控和日志
 
-**日志管理**：
-```bash
-# 配置日志轮转
-docker-compose.yml 中已配置日志驱动
-# 或使用外部日志收集工具（如 ELK Stack）
-```
+**日志**：`docker-compose.yml` 已配置日志驱动；生产环境可接入 ELK 等日志收集工具。
 
 **健康检查**：
 ```bash
 # 设置监控脚本
 #!/bin/bash
 # health-check.sh
-curl -f http://localhost:8080/api/health || exit 1
-curl -f http://localhost:8000/health || exit 1
+curl -f http://localhost:8080/health || exit 1
 ```
 
 ### 5. 安全建议
 
-- 使用强密码（MongoDB、Redis）
-- 配置防火墙规则
-- 定期更新镜像和依赖
+- 使用强密码（MongoDB、Redis），为 Redis/MongoDB 设置密码
+- 配置防火墙规则，限制 API 访问（使用 API Key 认证）
 - 使用 HTTPS（通过反向代理）
-- 限制 API 访问（使用 API Key 认证）
+- 定期更新镜像和依赖
+- 使用非 root 用户运行（Docker 已配置）、使用 secrets 管理敏感信息
 
 ### 6. 性能优化
 
@@ -477,13 +462,6 @@ curl -f http://localhost:8000/health || exit 1
 - 配置 Redis 持久化策略
 - 优化模型缓存（子服务端）
 - 使用 CDN 加速静态资源
-
-### 4. 安全建议
-
-- ✅ 使用非 root 用户运行（已配置）
-- ✅ 为 Redis/MongoDB 设置密码
-- ✅ 使用 secrets 管理敏感信息
-- ✅ 定期更新基础镜像
 
 ---
 

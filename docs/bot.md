@@ -787,8 +787,8 @@ export default {
   }]
 };
 
-// ❌ 不推荐：直接 import Bot
-import Bot from '#src/bot.js';  // 可能导致循环依赖
+// ❌ 不推荐：直接 import Bot（业务代码应使用全局 Bot，避免循环依赖）
+import Bot from './src/bot.js';
 ```
 
 ### 3. 子 Bot 访问

@@ -10,7 +10,7 @@
 - [核心特性](#核心特性)
 - [架构层次总览](#架构层次总览)
 - [目录结构详解](#目录结构详解)
-- [Node.js 24.13 新特性应用](#nodejs-2412-新特性应用)
+- [Node.js 24.13 新特性应用](#nodejs-2413-新特性应用)
 - [HTTP业务层功能](#http业务层功能)
 - [快速开始](#快速开始)
 - [开发指南](#开发指南)
@@ -117,7 +117,7 @@ flowchart TB
 XRK-AGT 内置了完整的 system-Core 模块，提供开箱即用的功能：
 
 - **10个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、标准输入、数据编辑
-- **7个工作流**：50+个MCP工具，覆盖聊天、桌面、工具、记忆、知识库、设备、文档索引
+- **6个工作流**：50+个MCP工具，覆盖聊天、桌面、工具、记忆、知识库、设备
 - **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
 - **Web控制台**：企业级管理界面（`/xrk/`），支持系统监控、API调试、配置管理
 
@@ -295,7 +295,7 @@ XRK-AGT/
 │   │   ├── tasker/          # 任务层目录（OneBotv11、GSUIDCORE、QBQBot、stdin）
 │   │   ├── events/          # 事件系统目录（onebot、device、stdin）
 │   │   ├── http/            # HTTP API目录（10个API模块）
-│   │   ├── stream/          # 工作流目录（7个工作流，50+个MCP工具）
+│   │   ├── stream/          # 工作流目录（6个工作流，50+个MCP工具）
 │   │   ├── commonconfig/    # 配置管理（system.js、LLM配置、工具配置）
 │   │   └── www/             # 静态资源（Web控制台 /xrk/）
 │   │       └── xrk/         # Web控制台前端（系统监控、API调试、配置管理）
@@ -463,7 +463,7 @@ proxy:
 
 **7 大核心扩展点**（插件、工作流、Tasker、事件监听器、HTTP API、渲染器、配置）及扩展流程、目录与基类说明，详见 **[`docs/框架可扩展性指南.md`](docs/框架可扩展性指南.md)**。
 
-**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供10个HTTP API模块、7个工作流（50+个MCP工具）、4个Tasker和Web控制台。详见 **[`docs/system-core.md`](docs/system-core.md)**。
+**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供10个HTTP API模块、6个工作流（50+个MCP工具）、4个Tasker和Web控制台。详见 **[`docs/system-core.md`](docs/system-core.md)**。
 
 ---
 
