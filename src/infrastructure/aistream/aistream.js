@@ -697,13 +697,12 @@ export default class AIStream {
    * 调用AI（非流式，支持tool calling）
    * @param {Array<Object>} messages - 消息列表
    * @param {Object} apiConfig - API配置
-   * @returns {Promise<string>}
+   * @returns {Promise<{ content: string, executedToolNames: string[] }>}
    */
   async callAI(messages, apiConfig = {}) {
     const config = this.resolveLLMConfig(apiConfig);
     const retryConfig = this.getRetryConfig();
 
-    // 优先使用 Python 子服务端（LangChain生态），失败时回退到 NodeJS LLMFactory
     try {
       const payload = {
         messages,
@@ -714,14 +713,10 @@ export default class AIStream {
         stream: false,
         enableTools: config.enableTools !== false
       };
-      if (config.streams?.length) {
-        payload.workflow = { workflows: config.streams };
-      }
+      if (config.streams?.length) payload.workflow = { workflows: config.streams };
       const response = await Bot.callSubserver('/api/langchain/chat', { body: payload });
       const content = response?.choices?.[0]?.message?.content || response?.content || '';
-      if (content) {
-        return content;
-      }
+      if (content) return { content, executedToolNames: [] };
     } catch (error) {
       BotUtil.makeLog('warn', `[${this.name}] 子服务端调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
     }
@@ -737,12 +732,11 @@ export default class AIStream {
       try {
         const client = LLMFactory.createClient(config);
         const overrides = { ...config };
-        const response = await client.chat(messages, overrides);
-        
-        const outputTokens = this.estimateTokens(response);
-        MonitorService.recordTokens(`${this.name}.callAI`, { output: outputTokens });
-        
-        return response;
+        const raw = await client.chat(messages, overrides);
+        const content = typeof raw === 'object' && raw?.content !== undefined ? raw.content : String(raw ?? '');
+        const executedToolNames = Array.isArray(raw?.executedToolNames) ? raw.executedToolNames : [];
+        MonitorService.recordTokens(`${this.name}.callAI`, { output: this.estimateTokens(content) });
+        return { content, executedToolNames };
       } catch (error) {
         lastError = error;
         const errorInfo = this.classifyError(error);
@@ -974,34 +968,33 @@ export default class AIStream {
         // 调试日志失败直接忽略
       }
 
-      const response = await this.callAI(messages, config);
-      MonitorService.addStep(traceId, { step: 'ai_call', responseLength: response?.length || 0 });
+      const { content: responseText } = await this.callAI(messages, config);
+      MonitorService.addStep(traceId, { step: 'ai_call', responseLength: responseText?.length || 0 });
 
-      if (!response) {
+      if (!responseText?.trim()) {
         MonitorService.endTrace(traceId, { success: false, error: 'No response' });
         return null;
       }
 
-      // tool calling现在由LLM客户端自动处理，无需手动解析函数调用
-      if (response && response.trim() && e?.reply) {
-        await e.reply(response.trim()).catch(err => {
+      if (e?.reply) {
+        await e.reply(responseText.trim()).catch(err => {
           BotUtil.makeLog('debug', `发送回复失败: ${err.message}`, 'AIStream');
         });
       }
 
-      if (this.embeddingConfig.enabled && response && e) {
+      if (this.embeddingConfig.enabled && e) {
         const groupId = e.group_id || `private_${e.user_id}`;
         this.storeMessageWithEmbedding(groupId, {
           user_id: e.self_id,
           nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
-          message: response,
+          message: responseText,
           message_id: Date.now().toString(),
           time: Date.now()
         }).catch(() => { });
       }
 
-      MonitorService.endTrace(traceId, { success: true, response });
-      return response;
+      MonitorService.endTrace(traceId, { success: true, response: responseText });
+      return responseText;
     } catch (error) {
       MonitorService.recordError(traceId, error);
       MonitorService.endTrace(traceId, { success: false, error: error.message });

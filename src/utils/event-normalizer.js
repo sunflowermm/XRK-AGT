@@ -132,6 +132,9 @@ export class EventNormalizer {
     if (e.post_type === 'device' && e.event_type === 'message') {
       e.post_type = 'message'
     }
+    // 与 QQ 私聊一致：设备会话视为“非群聊”，便于统一走 getChatHistory / 历史 key
+    e.isGroup = false
+    e.isPrivate = true
 
     return e
   }

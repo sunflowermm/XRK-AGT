@@ -94,6 +94,7 @@ export default class OpenAICompatibleLLMClient {
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const maxToolRounds = this.config.maxToolRounds || 7;
     const currentMessages = [...transformedMessages];
+    const executedToolNames = [];
 
     for (let round = 0; round < maxToolRounds; round++) {
       const resp = await fetch(
@@ -116,29 +117,34 @@ export default class OpenAICompatibleLLMClient {
       if (!message) break;
 
       if (message.tool_calls?.length > 0) {
+        for (const tc of message.tool_calls) {
+          const name = tc.function?.name;
+          if (name && !executedToolNames.includes(name)) executedToolNames.push(name);
+        }
         currentMessages.push(message);
-        currentMessages.push(...await MCPToolAdapter.handleToolCalls(message.tool_calls));
+        const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
+        currentMessages.push(...await MCPToolAdapter.handleToolCalls(message.tool_calls, { streams }));
         continue;
       }
 
-      return message.content || '';
+      const content = message.content || '';
+      return executedToolNames.length > 0 ? { content, executedToolNames } : content;
     }
 
-    return currentMessages[currentMessages.length - 1]?.content || '';
+    const lastContent = currentMessages[currentMessages.length - 1]?.content || '';
+    return executedToolNames.length > 0 ? { content: lastContent, executedToolNames } : lastContent;
   }
 
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     
-    // 检查是否需要处理工具调用
     const maxToolRounds = this.config.maxToolRounds || 7;
     let currentMessages = [...transformedMessages];
     let round = 0;
     let resp = null;
-    
+
     while (round < maxToolRounds) {
-      // 发起流式请求
       resp = await fetch(
         this.endpoint,
         buildFetchOptionsWithProxy(this.config, {
@@ -153,49 +159,42 @@ export default class OpenAICompatibleLLMClient {
         const text = await resp.text().catch(() => '');
         throw new Error(`openai_compat 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
       }
-      
-      // 收集工具调用信息
+
       const toolCallsCollector = {
         toolCalls: [],
         content: '',
         finishReason: null
       };
-      
+
       await this._consumeSSEWithToolCalls(resp, onDelta, toolCallsCollector);
-      
-      // 如果收集到了工具调用，执行工具调用并继续
+
       if (toolCallsCollector.toolCalls.length > 0 && toolCallsCollector.finishReason === 'tool_calls') {
         BotUtil.makeLog('info', `[OpenAICompatibleLLMClient] 检测到工具调用，执行工具: ${toolCallsCollector.toolCalls.length}个`, 'LLMFactory');
-        
-        // 构建工具调用消息
-        const toolCallMessage = {
+        currentMessages.push({
           role: 'assistant',
-          tool_calls: toolCallsCollector.toolCalls,
-          content: null
-        };
-        currentMessages.push(toolCallMessage);
-        
-        // 执行工具调用（传递streams参数用于权限验证）
+          content: toolCallsCollector.content || null,
+          tool_calls: toolCallsCollector.toolCalls
+        });
         const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
         const toolResults = await MCPToolAdapter.handleToolCalls(toolCallsCollector.toolCalls, { streams });
         currentMessages.push(...toolResults);
-        
-        // 继续下一轮
+
+        const mcpTools = toolCallsCollector.toolCalls.map((tc, idx) => ({
+          name: tc.function?.name || `工具${idx + 1}`,
+          arguments: tc.function?.arguments || {},
+          result: toolResults[idx]?.content ?? ''
+        }));
+        if (typeof onDelta === 'function') onDelta('', { mcp_tools: mcpTools });
+
         round++;
         if (round >= maxToolRounds) {
           BotUtil.makeLog('warn', `[OpenAICompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
           break;
         }
-        
-        // 继续循环，发起新的流式请求
         continue;
       }
-      
-      // 如果有内容输出，或者没有工具调用，结束
-      if (toolCallsCollector.content || !toolCallsCollector.toolCalls.length) {
-        break;
-      }
-      
+
+      if (toolCallsCollector.content || !toolCallsCollector.toolCalls.length) break;
       round++;
     }
   }
@@ -213,13 +212,11 @@ export default class OpenAICompatibleLLMClient {
           collector.finishReason = finishReason;
         }
 
-        // 处理文本内容
         if (delta?.content && typeof delta.content === 'string' && delta.content.length > 0) {
           collector.content += delta.content;
           if (typeof onDelta === 'function') onDelta(delta.content);
         }
 
-        // 收集工具调用（流式工具调用是分块的）
         if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
           for (const tc of delta.tool_calls) {
             const index = tc.index;
@@ -249,6 +246,9 @@ export default class OpenAICompatibleLLMClient {
     if (toolCallsMap.size > 0) {
       const sortedIndices = Array.from(toolCallsMap.keys()).sort((a, b) => a - b);
       collector.toolCalls = sortedIndices.map(index => toolCallsMap.get(index));
+      collector.toolCalls.forEach((tc, i) => {
+        if (!tc.id || typeof tc.id !== 'string') tc.id = `call_${i}_${(tc.function?.name || 'tool').replace(/\W/g, '_')}`;
+      });
       BotUtil.makeLog('info', `[OpenAICompatibleLLMClient] 收集到${collector.toolCalls.length}个工具调用`, 'LLMFactory');
     }
   }

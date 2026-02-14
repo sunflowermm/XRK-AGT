@@ -201,53 +201,34 @@ export default class ChatStream extends AIStream {
     });
 
     /**
-     * 戳一戳群成员
-     * 
-     * @description 戳一戳指定的群成员。如果未指定QQ号，默认戳当前触发消息的用户。
-     * 
-     * @param {string} [qq] - 要戳的成员QQ号（可选，默认是当前说话用户）
-     * 
-     * @returns {Object} 返回结果对象
-     * @returns {boolean} returns.success - 是否成功
-     * @returns {string} returns.message - 操作结果消息
-     * @returns {Object} returns.data - 数据对象
-     * @returns {string} returns.data.qq - 被戳的用户QQ号
-     * @returns {string} returns.error - 失败时的错误信息
-     * 
-     * @example
-     * // 戳指定用户
-     * { qq: "123456789" }
-     * 
-     * // 戳当前说话用户
-     * {}
-     * 
-     * @note 此功能仅在群聊环境中可用
+     * 戳一戳（群成员/好友/设备用户）
+     * 群聊走 group.pokeMember；私聊走 reply({ type:'poke', qq }) 或好友 API；设备/Web 走 reply 下发给前端展示。
      */
     this.registerMCPTool('poke', {
-      description: '戳一戳群成员。如果未指定QQ号，默认戳当前触发消息的用户。仅群聊环境可用。',
+      description: '戳一戳对方。未指定qq时默认当前触发消息的用户。群聊、私聊、设备会话均可用。',
       inputSchema: {
         type: 'object',
         properties: {
-          qq: {
-            type: 'string',
-            description: '要戳的成员QQ号（可选，默认是当前说话用户）'
-          }
+          qq: { type: 'string', description: '要戳的对象QQ/用户ID（可选，默认当前用户）' }
         },
         required: []
       },
       handler: async (args = {}, context = {}) => {
-        const groupCheck = this._requireGroup(context);
-        if (groupCheck) return groupCheck;
-
         const e = context.e;
-        const targetQq = String(args.qq || e.user_id || '').trim();
-        if (!targetQq) {
-          return { success: false, error: '无法确定要戳的成员QQ号' };
-        }
+        if (!e) return { success: false, error: '缺少事件上下文' };
+        const targetQq = String(args.qq || e.user_id || e.device_id || '').trim();
+        if (!targetQq) return { success: false, error: '无法确定要戳的对象' };
 
         return this._wrapHandler(async () => {
-          await e.group.pokeMember(targetQq);
-          return { success: true, message: '戳一戳成功', data: { qq: targetQq } };
+          if (e.isGroup === true && e.group?.pokeMember) {
+            await e.group.pokeMember(targetQq);
+            return { success: true, message: '戳一戳成功', data: { qq: targetQq } };
+          }
+          if (typeof e.reply === 'function') {
+            await e.reply({ type: 'poke', qq: targetQq });
+            return { success: true, message: '戳一戳成功', data: { qq: targetQq } };
+          }
+          return { success: false, error: '当前环境不支持戳一戳' };
         });
       },
       enabled: true
@@ -328,8 +309,9 @@ export default class ChatStream extends AIStream {
 
         // 如果没有传 msgId，则尝试使用最近一条他人消息的 ID
         let msgId = String(args.msgId ?? '').trim();
-        if (!msgId && e.group_id) {
-          const history = ChatStream.messageHistory.get(e.group_id) || [];
+        const historyKeyForEmoji = ChatStream.getEventHistoryKey(e);
+        if (!msgId && historyKeyForEmoji) {
+          const history = ChatStream.messageHistory.get(historyKeyForEmoji) || [];
           const lastOtherMsg = [...history].reverse().find(
             m => String(m.user_id) !== String(e.self_id) && m.message_id
           );
@@ -1232,20 +1214,9 @@ export default class ChatStream extends AIStream {
                       e.user?.name || e.user?.nickname || 
                       e.from?.name || '未知';
       
-      // 优先使用真实的消息ID，确保准确
-      // 优先级：message_id > real_id > messageId > id > source?.id
-      // 参考 tasker 层消息结构：message_id 和 real_id 都是有效的消息ID
+      // 优先使用真实的消息ID；若无则从回复段取被回复消息 ID 作兜底（与 e.getReply() 同源）
       let messageId = e.message_id || e.real_id || e.messageId || e.id || e.source?.id;
-      
-      // 如果消息ID不存在，尝试从消息段中提取（回复消息的ID）
-      if (!messageId && e.message && Array.isArray(e.message)) {
-        const replySeg = e.message.find(seg => seg.type === 'reply');
-        if (replySeg && replySeg.id) {
-          messageId = replySeg.id;
-        }
-      }
-      
-      // 如果仍然没有消息ID，使用时间戳作为临时ID（不推荐，但作为兜底）
+      if (!messageId) messageId = ChatStream.getReplySegmentId(e);
       if (!messageId) {
         messageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         BotUtil.makeLog('debug', `消息ID缺失，使用临时ID: ${messageId}`, 'ChatStream');
@@ -1305,21 +1276,18 @@ export default class ChatStream extends AIStream {
       message,
       message_id: Date.now().toString(),
       time: Date.now(),
-      platform: 'onebot'
+      platform: e.isDevice ? 'device' : 'onebot'
     };
     
-    if (e?.isGroup && e.group_id) {
-      const history = ChatStream.messageHistory.get(e.group_id) || [];
+    const historyKey = ChatStream.getEventHistoryKey(e);
+    if (historyKey) {
+      const history = ChatStream.messageHistory.get(historyKey) || [];
       history.push(msgData);
-      if (history.length > 50) {
-        history.shift();
-      }
+      if (history.length > 50) history.shift();
+      ChatStream.messageHistory.set(historyKey, history);
     }
-    
-    if (this.embeddingConfig?.enabled) {
-      const historyKey = e.group_id || `private_${e.user_id}`;
+    if (this.embeddingConfig?.enabled && historyKey)
       this.storeMessageWithEmbedding(historyKey, msgData).catch(() => {});
-    }
   }
 
   async buildSystemPrompt(context) {
@@ -1435,17 +1403,45 @@ ${embeddingHint}
     return '';
   }
 
-  async syncHistoryFromAdapter(e) {
-    if (!e?.isGroup) return;
-    const groupId = e.group_id;
-    if (!groupId) return;
+  /**
+   * 统一：根据事件得到历史缓存的 key（群=group_id，设备=device_${device_id}，私聊=private_${user_id}）
+   */
+  static getEventHistoryKey(e) {
+    if (!e) return null;
+    if (e.isGroup === true && e.group_id) return e.group_id;
+    if (e.isDevice === true && e.device_id) return `device_${e.device_id}`;
+    if (e.user_id) return `private_${e.user_id}`;
+    return null;
+  }
 
-    const group = e.group;
+  /**
+   * 从事件消息段中取“被回复消息”的 id（与 e.getReply() 同源，仅同步取 id）
+   * 插件需完整内容/媒体时请用 e.getReply()。
+   */
+  static getReplySegmentId(e) {
+    const seg = e?.message && Array.isArray(e.message) ? e.message.find(s => s && s.type === 'reply') : null;
+    return seg?.id ?? seg?.data?.id ?? null;
+  }
+
+  /**
+   * 统一：解析事件的聊天历史来源，供 syncHistoryFromAdapter / mergeMessageHistory 使用
+   * @returns {{ historyKey: string, getter: function } | null}
+   */
+  getHistorySource(e) {
+    const historyKey = ChatStream.getEventHistoryKey(e);
+    if (!historyKey) return null;
     const getter =
-      (group && typeof group.getChatHistory === 'function' && group.getChatHistory) ||
-      (typeof e.getChatHistory === 'function' && e.getChatHistory) ||
+      (e?.group && typeof e.group.getChatHistory === 'function' && e.group.getChatHistory) ||
+      (typeof e?.getChatHistory === 'function' && e.getChatHistory) ||
       null;
-    if (!getter) return;
+    if (!getter) return null;
+    return { historyKey, getter };
+  }
+
+  async syncHistoryFromAdapter(e) {
+    const source = this.getHistorySource(e);
+    if (!source) return;
+    const { historyKey, getter } = source;
 
     try {
       let rawHistory;
@@ -1457,7 +1453,7 @@ ${embeddingHint}
         rawHistory = await getter(50);
       }
 
-      const history = ChatStream.messageHistory.get(groupId) || [];
+      const history = ChatStream.messageHistory.get(historyKey) || [];
       const existingIds = new Set(
         history.map(msg => String(msg.message_id || msg.real_id || ''))
       );
@@ -1496,25 +1492,25 @@ ${embeddingHint}
           text = msg.raw_message || '';
         }
 
-        const nickname = sender.card || sender.nickname || '未知';
+        const nickname = sender.card || sender.nickname || msg.nickname || '未知';
         newMessages.push({
           user_id: msg.user_id ?? sender.user_id,
           nickname,
           message: text,
           message_id: idStr,
           time: msg.time || Date.now(),
-          platform: 'onebot'
+          platform: e.isDevice ? 'device' : 'onebot'
         });
       }
 
       if (newMessages.length > 0) {
         const merged = history.concat(newMessages);
         const limited = merged.length > 50 ? merged.slice(-50) : merged;
-        ChatStream.messageHistory.set(groupId, limited);
+        ChatStream.messageHistory.set(historyKey, limited);
 
         BotUtil.makeLog(
           'debug',
-          `[ChatStream.syncHistoryFromAdapter] group=${groupId}, 原有=${history.length}, 新增=${newMessages.length}, 合并后=${limited.length}`,
+          `[ChatStream.syncHistoryFromAdapter] key=${historyKey}, 原有=${history.length}, 新增=${newMessages.length}, 合并后=${limited.length}`,
           'ChatStream'
         );
       }
@@ -1528,38 +1524,32 @@ ${embeddingHint}
   }
 
   async mergeMessageHistory(messages, e) {
-    if (!e?.isGroup || messages.length < 2) {
-      return messages;
-    }
+    if (!e || messages.length < 2) return messages;
+    const source = this.getHistorySource(e);
+    if (!source) return messages;
 
-    // 每次构建上下文前，同步一次外部聊天记录到内存缓存
     await this.syncHistoryFromAdapter(e);
 
+    const { historyKey } = source;
+    const history = ChatStream.messageHistory.get(historyKey) || [];
     const userMessage = messages[messages.length - 1];
-    const isGlobalTrigger = userMessage.content?.isGlobalTrigger || false;
-    const history = ChatStream.messageHistory.get(e.group_id) || [];
-    
+    const isGlobalTrigger = e.isGroup === true && (userMessage.content?.isGlobalTrigger || false);
+
     const mergedMessages = [messages[0]];
-    
-    // 获取当前用户消息的 message_id
     const currentMsgId = e.message_id || e.real_id || e.messageId || e.id || e.source?.id || '未知';
     const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
-    const currentContent = typeof userMessage.content === 'string' 
-      ? userMessage.content 
+    const currentContent = typeof userMessage.content === 'string'
+      ? userMessage.content
       : (userMessage.content?.text ?? '');
-    
-    // 格式化单条消息
+
     const formatMessage = (msg) => {
       const msgId = msg.message_id || msg.real_id || '未知';
       return `${msg.nickname}(${msg.user_id})[ID:${msgId}]: ${msg.message}`;
     };
-    
-    // 过滤历史记录：排除当前消息（避免重复）
-    const filteredHistory = history.filter(msg => 
+
+    const filteredHistory = history.filter(msg =>
       String(msg.message_id) !== String(currentMsgId)
     );
-    
-    // 去重：按消息ID去重，保留最新的
     const uniqueHistory = [];
     const seenIds = new Set();
     for (let i = filteredHistory.length - 1; i >= 0; i--) {
@@ -1570,13 +1560,14 @@ ${embeddingHint}
         uniqueHistory.unshift(msg);
       }
     }
-    
+
+    const sectionLabel = historyKey.startsWith('device_') ? '[近期对话]' : '[群聊记录]';
     if (isGlobalTrigger) {
       const recentMessages = uniqueHistory.slice(-15);
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `[群聊记录]\n${recentMessages.map(formatMessage).join('\n')}\n\n你闲来无事点开群聊，看到这些发言。请根据你的个性和人设，自然地表达情绪和感受，不要试图解决问题。`
+          content: `${sectionLabel}\n${recentMessages.map(formatMessage).join('\n')}\n\n你闲来无事点开群聊，看到这些发言。请根据你的个性和人设，自然地表达情绪和感受，不要试图解决问题。`
         });
       }
     } else {
@@ -1586,45 +1577,31 @@ ${embeddingHint}
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `[群聊记录]\n${recentMessages.map(formatMessage).join('\n')}`
+          content: `${sectionLabel}\n${recentMessages.map(formatMessage).join('\n')}`
         });
       }
       
-      // 当前消息单独显示
-      if (currentMsgId !== '未知' && currentContent) {
-        // 若原始内容包含图片结构，则保留图片，仅在 text 前加上当前消息标记
-        if (typeof userMessage.content === 'object' && userMessage.content !== null) {
-          const content = userMessage.content;
-          const baseText = content.text || content.content || currentContent;
-          mergedMessages.push({
-            role: 'user',
-            content: {
-              text: `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${baseText}`,
-              images: content.images || [],
-              replyImages: content.replyImages || []
-            }
-          });
-        } else {
-          mergedMessages.push({
-            role: 'user',
-            content: `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`
-          });
-        }
-      } else if (currentContent) {
-        // 如果无法获取消息ID，使用原始消息格式（保留多模态结构）
+      // 当前消息：有 ID 时加 [当前消息] 前缀，否则保留多模态结构
+      if (!currentContent) {
+        // no-op
+      } else if (typeof userMessage.content === 'object' && userMessage.content !== null && userMessage.content.text) {
         const content = userMessage.content;
-        if (typeof content === 'object' && content.text) {
-          mergedMessages.push({
-            role: 'user',
-            content: {
-              text: content.text,
-              images: content.images || [],
-              replyImages: content.replyImages || []
-            }
-          });
-        } else {
-          mergedMessages.push(userMessage);
-        }
+        const prefix = currentMsgId !== '未知' ? `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ` : '';
+        mergedMessages.push({
+          role: 'user',
+          content: {
+            text: prefix ? `${prefix}${content.text || content.content || currentContent}` : (content.text || currentContent),
+            images: content.images || [],
+            replyImages: content.replyImages || []
+          }
+        });
+      } else if (currentMsgId !== '未知') {
+        mergedMessages.push({
+          role: 'user',
+          content: `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`
+        });
+      } else {
+        mergedMessages.push(userMessage);
       }
     }
     
@@ -1682,20 +1659,13 @@ ${embeddingHint}
         // 调试日志失败直接忽略
       }
       
-      // 调用AI获取响应
-      const response = await this.callAI(messages, config);
-      
-      if (!response) {
-        return null;
+      const { content: text, executedToolNames } = await this.callAI(messages, config);
+      const trimmed = (text ?? '').toString().trim();
+      if (trimmed) {
+        await this.sendMessages(e, trimmed, executedToolNames);
+        this.recordAIResponse(e, trimmed, executedToolNames);
       }
-
-      // 工具调用由 LLM 工厂（tool calling + MCP）内部完成，这里只负责发送最终文本
-      const text = (response ?? '').toString().trim();
-      if (text) {
-        await this.sendMessages(e, text);
-        this.recordAIResponse(e, text, []);
-      }
-      return text || '';
+      return trimmed || '';
     } catch (error) {
       BotUtil.makeLog('error', 
         `工作流执行失败[${this.name}]: ${error.message}`, 
@@ -1783,8 +1753,9 @@ ${embeddingHint}
             case 'at':
               if (paramObj.qq) {
                 // 验证QQ号是否在群聊记录中（如果是群聊）
-                if (e.isGroup) {
-                  const history = ChatStream.messageHistory.get(e.group_id) || [];
+                const atHistoryKey = ChatStream.getEventHistoryKey(e);
+                if (atHistoryKey) {
+                  const history = ChatStream.messageHistory.get(atHistoryKey) || [];
                   const userExists = history.some(msg => 
                     String(msg.user_id) === String(paramObj.qq)
                   );
@@ -1836,11 +1807,15 @@ ${embeddingHint}
     return { replyId, segments: mergedSegments };
   }
 
-  async sendMessages(e, cleanText) {
+  async sendMessages(e, cleanText, executedToolNames = []) {
     if (!cleanText || !cleanText.trim()) return;
 
+    const toolPrefix = executedToolNames.length > 0
+      ? `［使用了: ${executedToolNames.join('、')}］ `
+      : '';
     const messages = cleanText.split('|').map(m => m.trim()).filter(Boolean);
-    
+    if (toolPrefix && messages.length > 0) messages[0] = toolPrefix + messages[0];
+
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       if (!msg) continue;

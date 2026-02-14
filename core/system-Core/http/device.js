@@ -189,6 +189,40 @@ const EMOTION_KEYWORDS = {
 const devices = new Map();
 const deviceWebSockets = new Map();
 const deviceLogs = new Map();
+/** 按 deviceId 存储最近 N 条对话（用户+助手），供 getChatHistory 拉取并参与 LLM 上下文，单设备最多 50 条 */
+const deviceChatHistory = new Map();
+const DEVICE_CHAT_HISTORY_MAX = 50;
+
+function pushDeviceChatMessage(deviceId, { user_id, nickname, message, message_id, time }) {
+    if (!deviceId || message == null) return;
+    let list = deviceChatHistory.get(deviceId);
+    if (!list) {
+        list = [];
+        deviceChatHistory.set(deviceId, list);
+    }
+    const n = nickname || '用户';
+    const mid = message_id || `device_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    list.push({
+        user_id: user_id ?? deviceId,
+        nickname: n,
+        sender: { card: n, nickname: n },
+        message: String(message),
+        message_id: mid,
+        real_id: mid,
+        time: time ?? Math.floor(Date.now() / 1000),
+        raw_message: String(message)
+    });
+    if (list.length > DEVICE_CHAT_HISTORY_MAX) {
+        list.splice(0, list.length - DEVICE_CHAT_HISTORY_MAX);
+    }
+}
+
+function getDeviceChatHistory(deviceId, count = 20) {
+    const list = deviceChatHistory.get(deviceId);
+    if (!Array.isArray(list) || list.length === 0) return [];
+    const take = Math.min(Math.max(1, count), list.length);
+    return list.slice(-take);
+}
 const deviceCommands = new Map();
 const commandCallbacks = new Map();
 const deviceStats = new Map();
@@ -1786,6 +1820,16 @@ class DeviceManager {
                         isMaster
                     };
 
+                    const eventId = `device_message_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                    const now = Math.floor(Date.now() / 1000);
+                    pushDeviceChatMessage(deviceId, {
+                        user_id,
+                        nickname: messagePayload.sender?.nickname || messagePayload.sender?.card || 'web',
+                        message: text,
+                        message_id: eventId,
+                        time: now
+                    });
+
                     const deviceEventData = {
                         post_type: 'device',
                         event_type: 'message',
@@ -1796,8 +1840,9 @@ class DeviceManager {
                         self_id: deviceId,
                         user_id,
                         isMaster,
-                        time: Math.floor(Date.now() / 1000),
-                        event_id: `device_message_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        time: now,
+                        event_id: eventId,
+                        message_id: eventId,
                         tasker: 'device',
                         isDevice: true,
                         adapter_name: 'device',
@@ -1809,6 +1854,23 @@ class DeviceManager {
                         sender: messagePayload.sender,
                         channel: messagePayload.channel,
                         meta: messagePayload.meta,
+                        /** 与 QQ 一致：供 ChatStream.syncHistoryFromAdapter 拉取近期对话并参与 LLM 上下文。签名 (message_seq, count, reverseOrder) */
+                        getChatHistory: async (_message_seq, count = 20, _reverseOrder = true) =>
+                            getDeviceChatHistory(deviceId, count),
+                        /** 获取当前消息所回复的那条（从 message 中第一个 reply 段解析），便于插件处理媒体等 */
+                        getReply: async () => {
+                            const msg = messagePayload.message;
+                            const seg = Array.isArray(msg) ? msg.find(s => s && s.type === 'reply') : null;
+                            if (!seg) return null;
+                            return {
+                                id: seg.id ?? seg.message_id,
+                                message_id: seg.id ?? seg.message_id,
+                                text: seg.text ?? seg.content ?? '',
+                                raw_message: seg.text ?? seg.raw_message ?? seg.content ?? '',
+                                message: Array.isArray(seg.message) ? seg.message : [],
+                                sender: seg.sender
+                            };
+                        },
                         /**
                          * 回复消息到 web 客户端
                          * 
@@ -1917,7 +1979,10 @@ class DeviceManager {
                                     if (['reply', 'markdown', 'raw', 'button'].includes(seg.type)) {
                                         return seg;
                                     }
-                                    
+                                    // 戳一戳：与 chat 私聊/设备协议一致，原样下发给前端
+                                    if (seg.type === 'poke') {
+                                        return { type: 'poke', qq: seg.qq ?? seg.user_id ?? '' };
+                                    }
                                     // 文件类型 segment（image/video/record/file）：转换文件路径为 URL
                                     if (['image', 'video', 'record', 'file'].includes(seg.type)) {
                                         BotUtil.makeLog('debug', `[reply] 处理文件类型 segment: type=${seg.type}, url=${seg.url || '无'}, file=${seg.file || seg.data?.file || '无'}`, deviceId);
@@ -1998,7 +2063,7 @@ class DeviceManager {
                                     timestamp: Date.now(),
                                     message_id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
                                 };
-                                
+                                let replyTextForHistory = '';
                                 if (isForward) {
                                     // 转发消息：提取messages数组
                                     let forwardData = null;
@@ -2020,6 +2085,7 @@ class DeviceManager {
                                         replyMsg.messages = forwardData;
                                         if (title) replyMsg.title = title;
                                         if (description) replyMsg.description = description;
+                                        replyTextForHistory = title || description || `[转发消息 ${forwardData.length}条]`;
                                         BotUtil.makeLog('info', 
                                             `📨 [转发消息] ${forwardData.length}条消息${title ? ` - ${title}` : ''}`, 
                                             deviceId
@@ -2038,17 +2104,13 @@ class DeviceManager {
                                 if (description) replyMsg.description = description;
                                 
                                 const logText = segments.map(seg => {
-                                    if (seg.type === 'text') {
-                                        return seg.text || (seg.data && seg.data.text) || '';
-                                    }
-                                    if (seg.type === 'image') {
-                                        return '[图片]';
-                                    }
-                                    if (seg.type === 'record') {
-                                        return '[语音]';
-                                    }
+                                    if (seg.type === 'text') return seg.text || (seg.data && seg.data.text) || '';
+                                    if (seg.type === 'image') return '[图片]';
+                                    if (seg.type === 'record') return '[语音]';
+                                    if (seg.type === 'poke') return '[戳一戳]';
                                     return '';
                                 }).join('');
+                                replyTextForHistory = logText || '';
                                 if (logText) {
                                     BotUtil.makeLog('info', 
                                         `${title ? `【${title}】` : ''}${logText.substring(0, 500)}${logText.length > 500 ? '...' : ''}`, 
@@ -2066,6 +2128,15 @@ class DeviceManager {
                                     });
                                 }
                                 ws.send(JSON.stringify(replyMsg));
+                                if (replyTextForHistory) {
+                                    pushDeviceChatMessage(deviceId, {
+                                        user_id: 'assistant',
+                                        nickname: '助手',
+                                        message: replyTextForHistory,
+                                        message_id: replyMsg.message_id,
+                                        time: Math.floor(Date.now() / 1000)
+                                    });
+                                }
                                 return true;
                             } catch (err) {
                                 BotUtil.makeLog('error', `reply失败: ${err.message}`, deviceId);

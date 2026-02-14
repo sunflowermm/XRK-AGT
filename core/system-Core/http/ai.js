@@ -425,18 +425,6 @@ async function handleChatCompletionsV3(req, res) {
     BotUtil.makeLog('info', `[v3/chat/completions] 调用client.chatStream开始`, 'ai.v3.stream');
     
     await client.chatStream(messages, streamCallback, overrides);
-    
-    if (mcpTools.length > 0) {
-      const mcpData = {
-        id,
-        object: 'chat.completion.chunk',
-        created: now,
-        model: modelName,
-        mcp_tools: mcpTools
-      };
-      res.write(`data: ${JSON.stringify(mcpData)}\n\n`);
-    }
-    
     BotUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总chunks=${chunkCount}, 总长度=${totalContent.length}`, 'ai.v3.stream');
     
     // 发送完成标记和统计信息

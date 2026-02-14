@@ -66,6 +66,7 @@ export default class OpenAILLMClient {
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const maxToolRounds = this.config.maxToolRounds || 7;
     const currentMessages = [...transformedMessages];
+    const executedToolNames = [];
 
     for (let round = 0; round < maxToolRounds; round++) {
       const resp = await fetch(
@@ -88,15 +89,22 @@ export default class OpenAILLMClient {
       if (!message) break;
 
       if (message.tool_calls?.length > 0) {
+        for (const tc of message.tool_calls) {
+          const name = tc.function?.name;
+          if (name && !executedToolNames.includes(name)) executedToolNames.push(name);
+        }
         currentMessages.push(message);
-        currentMessages.push(...await MCPToolAdapter.handleToolCalls(message.tool_calls));
+        const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
+        currentMessages.push(...await MCPToolAdapter.handleToolCalls(message.tool_calls, { streams }));
         continue;
       }
 
-      return message.content || '';
+      const content = message.content || '';
+      return executedToolNames.length > 0 ? { content, executedToolNames } : content;
     }
 
-    return currentMessages[currentMessages.length - 1]?.content || '';
+    const lastContent = currentMessages[currentMessages.length - 1]?.content || '';
+    return executedToolNames.length > 0 ? { content: lastContent, executedToolNames } : lastContent;
   }
 
   async chatStream(messages, onDelta, overrides = {}) {
@@ -135,12 +143,11 @@ export default class OpenAILLMClient {
       if (toolCallsCollector.toolCalls.length > 0 && toolCallsCollector.finishReason === 'tool_calls') {
         BotUtil.makeLog('info', `[OpenAILLMClient] 检测到工具调用，执行工具: ${toolCallsCollector.toolCalls.length}个`, 'LLMFactory');
         
-        const toolCallMessage = {
+        currentMessages.push({
           role: 'assistant',
-          tool_calls: toolCallsCollector.toolCalls,
-          content: null
-        };
-        currentMessages.push(toolCallMessage);
+          content: toolCallsCollector.content || null,
+          tool_calls: toolCallsCollector.toolCalls
+        });
         
         const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
         const toolResults = await MCPToolAdapter.handleToolCalls(toolCallsCollector.toolCalls, { streams });

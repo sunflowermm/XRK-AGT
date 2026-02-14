@@ -4,6 +4,13 @@ import PluginsLoader from '#infrastructure/plugins/loader.js'
  * 事件监听基类
  * 提供通用的去重、事件ID生成与 tasker 标记能力
  * tasker 特有的属性应在各自监听器中调用 markAdapter 传入
+ *
+ * 标准事件接口（各适配器统一挂载，供工作流/插件使用）：
+ * - e.reply(segmentsOrText) : Promise<boolean>  回复当前会话
+ * - e.getReply?() : Promise<{ id, message_id?, sender?, message?, raw_message?, time?, text? }|null>  可选，获取当前消息所回复的那条（含媒体），便于插件处理
+ * - e.getChatHistory?(message_seq?, count?, reverseOrder?) : Promise<Array>  可选，拉取近期消息（群/私聊/设备）
+ * - e.message_id / e.event_id : 消息或事件唯一标识，用于历史去重
+ * - e.isGroup / e.isPrivate : 由 EventNormalizer 或适配器设置，设备会话为 isGroup=false, isPrivate=true
  */
 export default class EventListenerBase {
   constructor(adapterName = '') {

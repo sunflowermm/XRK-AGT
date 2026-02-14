@@ -120,6 +120,9 @@ Bot.tasker.push(
     }
 
     sendFriendMsg(data, msg) {
+      if (msg && typeof msg === 'object' && msg.type === "poke" && (msg.qq || msg.user_id)) {
+        return this.sendPoke(data, msg.qq || msg.user_id)
+      }
       return this.sendMsg(
         msg,
         message => {
@@ -161,11 +164,12 @@ Bot.tasker.push(
     }
 
     sendPoke(data, user_id) {
-      Bot.makeLog("info", `发送戳一戳：${user_id}`, `${data.self_id} => ${data.group_id}`, true)
-      return data.bot.sendApi("send_poke", {
-        group_id: data.group_id,
-        user_id: Number(user_id)
-      })
+      const target = Number(user_id)
+      const params = data.group_id
+        ? { group_id: data.group_id, user_id: target }
+        : { user_id: target }
+      Bot.makeLog("info", `发送戳一戳：${user_id}`, data.group_id ? `${data.self_id} => ${data.group_id}` : `${data.self_id} => ${data.user_id}`, true)
+      return data.bot.sendApi("send_poke", params)
     }
 
     sendGuildMsg(data, msg) {
@@ -1754,10 +1758,11 @@ Bot.tasker.push(
       data.sender = data.sender || {}
       data.sender.user_id = data.sender.user_id || data.user_id
       
-      // 事件访问器和回复兜底，避免插件未挂载时缺少方法
+      // 事件访问器、回复兜底、获取被回复消息（方便插件处理媒体等）
       this.attachRelationAccessors(data)
       this.attachReplyMethod(data)
-      
+      this.attachGetReply(data)
+
       // 适配器标识
       data.tasker = 'onebot'
       data.isOneBot = true
@@ -1864,6 +1869,35 @@ Bot.tasker.push(
       }
 
       data.reply = fromGroup() || fromFriend() || data.reply
+    }
+
+    /**
+     * 挂载 getReply：获取当前消息所回复的那条消息（含完整内容/媒体），便于插件处理
+     * @returns {Promise<{ id, message_id, sender?, message?, raw_message?, time? }|null>}
+     */
+    attachGetReply(data) {
+      if (typeof data.getReply === "function") return
+      data.getReply = async () => {
+        const seg = data.message?.find(s => s && s.type === "reply")
+        const id = seg?.id ?? seg?.data?.id
+        if (id == null) return null
+        const numId = Number(id)
+        const getter = data.group?.getMsg ?? data.friend?.getMsg
+        if (!getter) return { id: numId, message_id: numId, raw_message: "", message: [] }
+        try {
+          const msg = await getter(numId)
+          return {
+            id: msg.message_id ?? numId,
+            message_id: msg.message_id,
+            sender: msg.sender,
+            message: msg.message || [],
+            raw_message: msg.raw_message ?? "",
+            time: msg.time
+          }
+        } catch (e) {
+          return { id: numId, message_id: numId, raw_message: "", message: [] }
+        }
+      }
     }
 
     /**

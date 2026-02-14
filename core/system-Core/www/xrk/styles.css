@@ -1327,106 +1327,99 @@ select.form-input {
   color: var(--info);
 }
 
-.chat-mcp-tools {
+/* 消息内段落：文本与工具卡片按调用顺序穿插 */
+.chat-segment + .chat-segment {
   margin-top: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-input);
-  overflow: hidden;
 }
 
-.chat-mcp-header {
+.chat-segment-tools .chat-tool-block {
+  margin-top: 8px;
+}
+
+.chat-segment-tools .chat-tool-block:first-child {
+  margin-top: 0;
+}
+
+/* 工具卡片：在调用位置展示，标题为工具名 */
+.chat-tool-block {
+  border: 1px solid var(--primary-200);
+  border-radius: var(--radius-md);
+  background: var(--primary-50);
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.chat-tool-block-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 10px 12px;
   cursor: pointer;
   user-select: none;
   transition: background 0.2s ease;
 }
 
-.chat-mcp-header:hover {
-  background: var(--bg-hover);
+.chat-tool-block-header:hover {
+  background: rgba(255, 255, 255, 0.6);
 }
 
-.chat-mcp-icon {
+.chat-tool-block-icon {
   font-size: 16px;
 }
 
-.chat-mcp-title {
+.chat-tool-block-title {
   flex: 1;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.chat-mcp-toggle {
-  background: none;
-  border: none;
-  color: var(--primary);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  transition: background 0.2s ease;
-}
-
-.chat-mcp-toggle:hover {
-  background: var(--primary-50);
-}
-
-.chat-mcp-content {
-  padding: 0 12px 12px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.chat-mcp-tool-item {
-  margin-top: 12px;
-  padding: 12px;
-  background: var(--bg-card);
-  border-radius: var(--radius);
-  border: 1px solid var(--border-light);
-}
-
-.chat-mcp-tool-item:first-child {
-  margin-top: 0;
-}
-
-.chat-mcp-tool-name {
   font-weight: 600;
-  font-size: 14px;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-light);
+  color: var(--primary-dark);
+  word-break: break-all;
 }
 
-.chat-mcp-tool-section {
-  margin-top: 10px;
-}
-
-.chat-mcp-tool-section:first-of-type {
-  margin-top: 0;
-}
-
-.chat-mcp-tool-label {
+.chat-tool-block-toggle {
   font-size: 12px;
-  font-weight: 500;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.chat-tool-block-content {
+  padding: 10px 12px 12px;
+  max-height: 360px;
+  overflow-y: auto;
+  border-top: 1px solid var(--primary-200);
+}
+
+.chat-tool-block-content[hidden] {
+  display: none;
+}
+
+.chat-tool-block-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-tool-block-item-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-tool-block-label {
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-muted);
-  margin-bottom: 6px;
 }
 
-.chat-mcp-tool-code {
+.chat-tool-block-code {
   font-size: 12px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: 'Consolas', 'Monaco', monospace;
   background: var(--bg-body);
-  padding: 8px;
+  padding: 8px 10px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
   overflow-x: auto;
   color: var(--text-primary);
-  line-height: 1.5;
+  line-height: 1.45;
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1617,22 +1610,87 @@ select.form-input {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* 回复样式 */
+/* 引用/回复样式（回复=引用，与 e.getReply 协议一致） */
 .chat-reply {
   margin-top: 8px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: var(--bg-input);
-  border-left: 3px solid var(--primary);
-  border-radius: var(--radius-sm);
-  font-size: 0.9em;
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-md);
+  font-size: 13px;
   color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .chat-reply-content {
-  max-height: 100px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+.chat-message.user .chat-reply {
+  border-left-color: var(--primary-200);
+  background: var(--primary-50);
+}
+
+/* Event 输入区引用条 */
+.event-quote-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--primary-50);
+  border: 1px solid var(--primary-200);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.event-quote-label {
+  color: var(--primary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.event-quote-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.event-quote-cancel {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.event-quote-cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.chat-action-btn.chat-quote-btn {
+  color: var(--primary);
+}
+.chat-action-btn.chat-quote-btn:hover {
+  background: var(--primary-100);
 }
 
 /* 文件样式 */
@@ -2226,6 +2284,49 @@ select.form-input {
 .mic-btn:active,
 .image-upload-btn:active {
   transform: scale(0.95);
+}
+
+.poke-btn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+.poke-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary-200);
+  transform: scale(1.05);
+}
+.poke-btn:active {
+  transform: scale(0.95);
+}
+
+/* 戳一戳消息展示（与 chat 协议一致） */
+.chat-poke {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.chat-poke-icon {
+  font-size: 16px;
+}
+.chat-message.user .chat-poke {
+  background: var(--primary-100);
+  color: var(--primary);
 }
 
 .mic-btn svg,
