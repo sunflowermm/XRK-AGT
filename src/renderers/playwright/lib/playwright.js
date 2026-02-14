@@ -60,7 +60,7 @@ export default class PlaywrightRenderer extends Renderer {
     const vp = config.viewport ?? config.contextOptions?.viewport ?? {};
     this.contextOptions = config.contextOptions ?? {
       viewport: { width: vp.width ?? 1280, height: vp.height ?? 720 },
-      deviceScaleFactor: vp.deviceScaleFactor ?? 1,
+      deviceScaleFactor: vp.deviceScaleFactor ?? 2,
       bypassCSP: true,
       reducedMotion: "reduce",
     };
@@ -236,6 +236,7 @@ export default class PlaywrightRenderer extends Renderer {
 
     if (!await this.browserInit()) return false;
 
+    data._baseUrl = Renderer.toFileUrl(paths.root);
     const pageHeight = data.multiPageHeight ?? 4000;
     const savePath = this.dealTpl(name, data);
     if (!savePath) return false;
@@ -257,48 +258,9 @@ export default class PlaywrightRenderer extends Renderer {
       page = await context.newPage();
       if (!page) throw new Error("Failed to create page");
 
-      await page.route('**/*', (route) => {
-        const resourceType = route.request().resourceType();
-        if (['font', 'media'].includes(resourceType)) {
-          route.abort();
-        } else {
-          route.continue();
-        }
-      });
-
-      const pageGotoParams = lodash.extend(
-        { timeout: this.playwrightTimeout, waitUntil: "domcontentloaded" },
-        data.pageGotoParams || {}
-      );
-
-      await page.goto(`file://${filePath}`, pageGotoParams);
-
-      await page.evaluate(() => new Promise(resolve => {
-        const timeout = setTimeout(resolve, 800);
-        const images = Array.from(document.querySelectorAll("img"));
-        
-        if (images.length === 0) {
-          clearTimeout(timeout);
-          return resolve();
-        }
-        
-        let loaded = 0;
-        const checkComplete = () => {
-          loaded++;
-          if (loaded === images.length) {
-            clearTimeout(timeout);
-            resolve();
-          }
-        };
-        
-        images.forEach(img => {
-          if (img.complete) checkComplete();
-          else {
-            img.onload = checkComplete;
-            img.onerror = checkComplete;
-          }
-        });
-      }));
+      const gotoOpts = { timeout: this.playwrightTimeout, waitUntil: "load", ...data.pageGotoParams };
+      await page.goto(Renderer.toFileUrl(filePath), gotoOpts);
+      await page.evaluate(() => new Promise(r => setTimeout(r, 400)));
 
       const body = (await page.locator("#container").first()) || (await page.locator("body"));
       if (!body) throw new Error("Content element not found");

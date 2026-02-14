@@ -33,7 +33,7 @@ export default class PuppeteerRenderer extends Renderer {
     this.viewport = {
       width: vp.width ?? 1280,
       height: vp.height ?? 720,
-      deviceScaleFactor: vp.deviceScaleFactor ?? 1,
+      deviceScaleFactor: vp.deviceScaleFactor ?? 2,
     };
     this.config = {
       headless: config.headless ?? "new",
@@ -188,15 +188,16 @@ export default class PuppeteerRenderer extends Renderer {
 
     if (!await this.browserInit()) return false;
 
+    data._baseUrl = Renderer.toFileUrl(paths.root);
     const pageHeight = data.multiPageHeight ?? 4000;
     const savePath = this.dealTpl(name, data);
     if (!savePath) return false;
 
-      const filePath = path.join(paths.root, lodash.trimStart(savePath, "."));
-      if (!fs.existsSync(filePath)) {
-        BotUtil.makeLog("error", `HTML file does not exist: ${filePath}`, "PuppeteerRenderer");
-        return false;
-      }
+    const filePath = path.join(paths.root, lodash.trimStart(savePath, "."));
+    if (!fs.existsSync(filePath)) {
+      BotUtil.makeLog("error", `HTML file does not exist: ${filePath}`, "PuppeteerRenderer");
+      return false;
+    }
 
     let ret = [];
     let page = null;
@@ -207,53 +208,11 @@ export default class PuppeteerRenderer extends Renderer {
       page = await this.browser.newPage();
       if (!page) throw new Error("Failed to create page");
 
-      await page.setRequestInterception(true);
-      page.on('request', (request) => {
-        const resourceType = request.resourceType();
-        if (['font', 'media'].includes(resourceType)) {
-          request.abort();
-        } else {
-          request.continue();
-        }
-      });
-
       await page.setViewport(this.viewport);
 
-      const pageGotoParams = lodash.extend(
-        { timeout: this.puppeteerTimeout, waitUntil: "domcontentloaded" },
-        data.pageGotoParams || {}
-      );
-
-      const fileUrl = `file://${filePath}`;
-      BotUtil.makeLog("debug", `[${name}] Loading file: ${fileUrl}`, "PuppeteerRenderer");
-      await page.goto(fileUrl, pageGotoParams);
-
-      await page.evaluate(() => new Promise(resolve => {
-        const timeout = setTimeout(resolve, 800);
-        const images = document.querySelectorAll("img");
-        
-        if (images.length === 0) {
-          clearTimeout(timeout);
-          return resolve();
-        }
-        
-        let loaded = 0;
-        const checkComplete = () => {
-          loaded++;
-          if (loaded === images.length) {
-            clearTimeout(timeout);
-            resolve();
-          }
-        };
-        
-        images.forEach(img => {
-          if (img.complete) checkComplete();
-          else {
-            img.onload = checkComplete;
-            img.onerror = checkComplete;
-          }
-        });
-      }));
+      const gotoOpts = { timeout: this.puppeteerTimeout, waitUntil: "load", ...data.pageGotoParams };
+      await page.goto(Renderer.toFileUrl(filePath), gotoOpts);
+      await page.evaluate(() => new Promise(r => setTimeout(r, 400)));
 
       const body = (await page.$("#container")) || (await page.$("body"));
       if (!body) throw new Error("Content element not found");
@@ -326,10 +285,7 @@ export default class PuppeteerRenderer extends Renderer {
       BotUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, "PuppeteerRenderer");
       ret = [];
     } finally {
-      if (page) {
-        page.removeAllListeners('request');
-        await page.close().catch(() => {});
-      }
+      if (page) await page.close().catch(() => {});
       this.shoting = this.shoting.filter(item => item !== name);
     }
 

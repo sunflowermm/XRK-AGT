@@ -4,10 +4,20 @@ import fs from 'node:fs'
 import os from 'node:os'
 
 /**
+ * 将绝对路径转为 file:// URL（Windows 下用正斜杠，避免浏览器无法加载）
+ */
+function toFileUrl(absPath) {
+  const p = String(absPath).replace(/\\/g, '/');
+  return (p.startsWith('/') ? 'file://' : 'file:///') + p;
+}
+
+/**
  * 渲染器基类
  * 提供HTML模板渲染、图片生成等功能的统一接口。
  */
 export default class Renderer {
+  static toFileUrl = toFileUrl;
+
   constructor(data) {
     this.id = data.id || 'renderer'
     this.type = data.type || 'image'
@@ -51,7 +61,7 @@ export default class Renderer {
 
     logger.debug(`[图片生成][使用模板] ${savePath}`)
 
-    return savePath
+    return savePath;
   }
 
   watch(tplFile) {

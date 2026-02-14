@@ -19,7 +19,7 @@ export class MusicPlugin extends plugin {
   async searchMusic(e) {
     const keyword = (e.msg || '').replace(/^#点歌\s*/, '').trim()
     if (!keyword) {
-      await e.reply('请输入歌曲名，例：#点歌 青花瓷')
+      await e.reply('请输入歌曲名，例：#点歌青花瓷')
       return false
     }
 

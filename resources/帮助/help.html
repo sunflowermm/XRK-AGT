@@ -4,71 +4,74 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=800, initial-scale=1">
   <title>{{ title }}</title>
-  <!-- 国内可访问：jsDelivr CDN（国内有节点） -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.1.0/style.css">
+  <base href="{{ _baseUrl }}/">
   <style>
+    @font-face{
+      font-family:"Genshin";
+      src:url("resources/fonts/Genshin.ttf") format("truetype");
+      font-weight:400;
+      font-style:normal;
+      font-display:swap;
+    }
     *{box-sizing:border-box;margin:0;padding:0}
     body{
-      font-family:"LXGW WenKai","霞鹜文楷","PingFang SC","Hiragino Maru Gothic ProN","Microsoft YaHei UI","幼圆",sans-serif;
+      font-family:"Genshin","原神","PingFang SC","Microsoft YaHei UI",sans-serif;
       -webkit-font-smoothing:antialiased;
-      font-smoothing:antialiased;
       background:linear-gradient(145deg,#1a1b2e 0%,#16213e 50%,#0f3460 100%);
       min-height:100vh;
-      padding:28px 36px;
+      padding:40px 48px 56px;
       color:#e8e8e8;
       font-size:14px;
+      font-weight:400;
       line-height:1.52;
       letter-spacing:0.02em;
     }
     #container{max-width:728px;margin:0 auto}
-    .header{text-align:center;margin-bottom:24px}
+    .header{text-align:center;margin-bottom:32px}
     h1{
-      font-family:"LXGW WenKai","霞鹜文楷",sans-serif;
       font-size:26px;
-      font-weight:400;
+      font-weight:600;
       letter-spacing:0.08em;
       background:linear-gradient(90deg,#00d9ff,#00ff88);
       -webkit-background-clip:text;
       -webkit-text-fill-color:transparent;
       background-clip:text;
     }
-    .intro{font-size:13px;color:rgba(255,255,255,0.55);margin-top:8px;letter-spacing:0.04em}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 22px;margin-bottom:18px}
+    .intro{font-size:13px;font-weight:400;color:rgba(255,255,255,0.55);margin-top:8px;letter-spacing:0.04em}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px 28px;margin-bottom:32px}
     .card{
       background:rgba(255,255,255,0.07);
       border-radius:18px;
-      padding:18px 20px;
+      padding:20px 22px;
       border:1px solid rgba(255,255,255,0.1);
     }
     .card.full{grid-column:1/-1}
     .section-title{
-      font-family:"LXGW WenKai","霞鹜文楷",sans-serif;
       font-size:13px;
-      font-weight:400;
-      color:rgba(255,255,255,0.85);
+      font-weight:600;
+      color:rgba(255,255,255,0.9);
       letter-spacing:0.06em;
       margin-bottom:12px;
-      padding-bottom:6px;
+      padding-bottom:8px;
       border-bottom:1px solid rgba(255,255,255,0.12);
     }
     .item{
       display:flex;
       align-items:center;
-      padding:7px 0;
+      padding:6px 0;
       font-size:13px;
-      letter-spacing:0.02em;
+      font-weight:400;
     }
     .item .cmd{
-      font-family:"LXGW WenKai","霞鹜文楷",ui-monospace,monospace;
+      font-weight:500;
       color:#00d9ff;
-      font-weight:400;
       margin-right:12px;
       min-width:88px;
       font-size:12px;
       letter-spacing:0.03em;
     }
     .item .desc{color:rgba(255,255,255,0.86);flex:1}
-    .footer{text-align:center;font-size:12px;color:rgba(255,255,255,0.45);margin-top:18px;letter-spacing:0.03em}
+    .footer{text-align:center;font-size:12px;font-weight:400;color:rgba(255,255,255,0.45);margin-top:28px;padding-bottom:24px;letter-spacing:0.03em}
   </style>
 </head>
 <body>
