@@ -688,6 +688,8 @@ static:
 
 ## 安全与中间件
 
+**鉴权总览**：HTTP/WebSocket 鉴权由 Server 层统一处理（白名单、本地、同源 Cookie、API Key），业务路由不做重复校验。详见 **[鉴权与认证（AUTH.md）](AUTH.md)**。
+
 ### 安全中间件栈
 
 ```mermaid
@@ -754,6 +756,8 @@ rateLimit:
 ```
 
 ### 4. API 认证
+
+鉴权流程、API Key 携带方式、白名单与 WebSocket 说明见 **[AUTH.md](AUTH.md)**。
 
 ```yaml
 auth:

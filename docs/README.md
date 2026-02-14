@@ -96,6 +96,7 @@ flowchart TB
 - **[HTTP API 基类文档](http-api.md)** - `HttpApi` 基类，统一路由、WebSocket 与中间件注册方式
 - **[API 加载器文档](api-loader.md)** - `ApiLoader` 的 API 自动加载、排序与热重载机制
 - **[Server 服务器架构文档](server.md)** - HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务等完整说明
+- **[鉴权与认证（AUTH）](AUTH.md)** - 统一鉴权流程、API Key、白名单与业务层无鉴权约定
 - **[HTTP 业务层文档](http-business-layer.md)** - 重定向、CDN、反向代理增强、负载均衡等企业级功能
 - **[system-Core 特性文档](system-core.md)** - system-Core 内置模块完整说明，包含所有HTTP API、工作流、插件和Web控制台 ⭐
 

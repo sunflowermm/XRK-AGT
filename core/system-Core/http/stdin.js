@@ -42,15 +42,8 @@ export default {
       method: 'POST',
       path: '/api/stdin/command',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return HttpResponse.forbidden(res, 'Unauthorized');
-        }
-
         const stdinHandler = global.stdinHandler;
-        
-        if (!stdinHandler) {
-          return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.command');
-        }
+        if (!stdinHandler) return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.command');
 
         const { command, user_info = {} } = req.body;
         // 默认以 JSON 形式返回插件输出，除非显式传入 json=false
@@ -77,15 +70,8 @@ export default {
       method: 'POST',
       path: '/api/stdin/event',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return HttpResponse.forbidden(res, 'Unauthorized');
-        }
-
         const stdinHandler = global.stdinHandler;
-        
-        if (!stdinHandler) {
-          return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.event');
-        }
+        if (!stdinHandler) return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.event');
 
         const { event_type = 'message', content, user_info = {} } = req.body;
         const wantJson = String(req.body?.json ?? req.query?.json ?? 'true').toLowerCase() === 'true';

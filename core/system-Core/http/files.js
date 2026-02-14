@@ -84,92 +84,50 @@ export default {
       method: 'POST',
       path: '/api/file/upload',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return HttpResponse.forbidden(res, 'Unauthorized');
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) return HttpResponse.validationError(res, '请使用 multipart/form-data 格式上传文件');
+        const { files } = await parseMultipartData(req);
+        if (!files?.length) return HttpResponse.validationError(res, '没有文件');
+
+        const uploadedFiles = [];
+        for (const file of files) {
+          const fileId = ulid();
+          const ext = path.extname(file.originalname) || '.file';
+          const filename = `${fileId}${ext}`;
+          const isMedia = /\.(jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)$/i.test(ext);
+          const targetDir = isMedia ? mediaDir : uploadDir;
+          const safeFilename = InputValidator.validatePath(filename, targetDir);
+          const targetPath = path.join(targetDir, safeFilename);
+          await fs.writeFile(targetPath, file.buffer);
+          const hash = crypto.createHash('md5').update(file.buffer).digest('hex');
+          const fileInfo = {
+            id: fileId,
+            name: file.originalname,
+            path: targetPath,
+            url: `${Bot.url}/${isMedia ? 'media' : 'uploads'}/${filename}`,
+            download_url: `${Bot.url}/api/file/${fileId}?download=true`,
+            preview_url: isMedia ? `${Bot.url}/api/file/${fileId}` : null,
+            size: file.size,
+            mime: file.mimetype,
+            hash,
+            is_media: isMedia,
+            upload_time: Date.now()
+          };
+          fileMap.set(fileId, fileInfo);
+          uploadedFiles.push(fileInfo);
         }
 
-          const contentType = req.headers['content-type'] || '';
-          let files = [];
-          
-          if (contentType.includes('multipart/form-data')) {
-            const result = await parseMultipartData(req);
-            files = result.files;
-          } else {
-          return HttpResponse.validationError(res, '请使用 multipart/form-data 格式上传文件');
-          }
-
-          if (files.length === 0) {
-          return HttpResponse.validationError(res, '没有文件');
-          }
-
-          const uploadedFiles = [];
-
-          for (const file of files) {
-            const fileId = ulid();
-            const ext = path.extname(file.originalname) || '.file';
-            const filename = `${fileId}${ext}`;
-            
-            const isMedia = /\.(jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)$/i.test(ext);
-            const targetDir = isMedia ? mediaDir : uploadDir;
-            // 路径验证（防止路径遍历）
-            const safeFilename = InputValidator.validatePath(filename, targetDir);
-            const targetPath = path.join(targetDir, safeFilename);
-            
-            await fs.writeFile(targetPath, file.buffer);
-            
-            const hash = crypto.createHash('md5').update(file.buffer).digest('hex');
-            
-            const fileInfo = {
-              id: fileId,
-              name: file.originalname,
-              path: targetPath,
-              url: `${Bot.url}/${isMedia ? 'media' : 'uploads'}/${filename}`,
-              download_url: `${Bot.url}/api/file/${fileId}?download=true`,
-              preview_url: isMedia ? `${Bot.url}/api/file/${fileId}` : null,
-              size: file.size,
-              mime: file.mimetype,
-              hash: hash,
-              is_media: isMedia,
-              upload_time: Date.now()
-            };
-
-            fileMap.set(fileId, fileInfo);
-            uploadedFiles.push(fileInfo);
-          }
-
-          const results = uploadedFiles.map(fileInfo => ({
-            type: fileInfo.is_media ? 'image' : 'file',
-            data: [{
-              type: fileInfo.is_media ? 'image' : 'file',
-              url: fileInfo.url,
-              name: fileInfo.name,
-              size: fileInfo.size,
-              mime: fileInfo.mime,
-              download_url: fileInfo.download_url,
-              preview_url: fileInfo.preview_url
-            }]
-          }));
-
-          if (files.length === 1) {
-            const fileInfo = uploadedFiles[0];
-          HttpResponse.success(res, {
-              file_id: fileInfo.id,
-              file_url: fileInfo.url,
-              file_name: fileInfo.name,
-              results: results,
-              timestamp: Date.now()
-            });
-          } else {
-          HttpResponse.success(res, {
-              files: uploadedFiles.map(f => ({
-                file_id: f.id,
-                file_url: f.url,
-                file_name: f.name
-              })),
-              results: results,
-              timestamp: Date.now()
-            });
-          }
+        const results = uploadedFiles.map(f => ({
+          type: f.is_media ? 'image' : 'file',
+          data: [{ type: f.is_media ? 'image' : 'file', url: f.url, name: f.name, size: f.size, mime: f.mime, download_url: f.download_url, preview_url: f.preview_url }]
+        }));
+        const payload = {
+          files: uploadedFiles.map(f => ({ file_id: f.id, file_url: f.url, file_name: f.name })),
+          results,
+          timestamp: Date.now()
+        };
+        if (uploadedFiles.length === 1) Object.assign(payload, { file_id: uploadedFiles[0].id, file_url: uploadedFiles[0].url, file_name: uploadedFiles[0].name });
+        HttpResponse.success(res, payload);
       }, 'file.upload')
     },
 
@@ -212,17 +170,14 @@ export default {
           return HttpResponse.notFound(res, '文件不存在');
         }
 
-        // 路径验证
         InputValidator.validatePath(fileInfo.path, fileInfo.is_media ? mediaDir : uploadDir);
-          await fs.access(fileInfo.path);
-          
-          if (download === 'true') {
-            res.download(fileInfo.path, fileInfo.name);
-          } else {
-            res.setHeader('Content-Type', fileInfo.mime);
-            res.setHeader('Cache-Control', 'public, max-age=3600');
-            res.sendFile(fileInfo.path);
-          }
+        await fs.access(fileInfo.path);
+        if (download === 'true') res.download(fileInfo.path, fileInfo.name);
+        else {
+          res.setHeader('Content-Type', fileInfo.mime);
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+          res.sendFile(fileInfo.path);
+        }
       }, 'file.get')
     },
 
@@ -230,11 +185,6 @@ export default {
       method: 'DELETE',
       path: '/api/file/:id',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return HttpResponse.forbidden(res, 'Unauthorized');
-        }
-
-        // 输入验证
         const { id } = req.params;
         if (!id || typeof id !== 'string' || id.length > 50) {
           return HttpResponse.validationError(res, '无效的文件ID');
@@ -265,10 +215,6 @@ export default {
       method: 'GET',
       path: '/api/files',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return HttpResponse.forbidden(res, 'Unauthorized');
-        }
-
         const files = Array.from(fileMap.values()).map(f => ({
           id: f.id,
           name: f.name,

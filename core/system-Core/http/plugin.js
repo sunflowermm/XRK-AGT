@@ -30,19 +30,22 @@ function collectPluginEntries() {
 
 function buildPluginStats(plugins = []) {
   const stats = PluginsLoader.pluginLoadStats || {};
-  const extendedPlugins = PluginsLoader.extended || [];
   const taskList = PluginsLoader.task || [];
-
   return {
     totalPlugins: plugins.length,
     totalLoadTime: stats.totalLoadTime || 0,
     startTime: stats.startTime || 0,
     taskCount: taskList.length,
-    extendedCount: extendedPlugins.length,
+    extendedCount: (PluginsLoader.extended || []).length,
     withRules: plugins.filter(p => (p.rule || 0) > 0).length,
     withTasks: plugins.filter(p => p.task > 0).length,
     plugins: stats.plugins || []
   };
+}
+
+function getPluginsWithSummary() {
+  const plugins = collectPluginEntries();
+  return { plugins, summary: buildPluginStats(plugins) };
 }
 
 /**
@@ -68,8 +71,7 @@ export default {
       method: 'GET',
       path: '/api/plugins/summary',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        const plugins = collectPluginEntries();
-        const summary = buildPluginStats(plugins);
+        const { plugins, summary } = getPluginsWithSummary();
         HttpResponse.success(res, { summary, plugins });
       }, 'plugin.summary')
     },
@@ -107,10 +109,8 @@ export default {
       method: 'GET',
       path: '/api/plugins/stats',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        const plugins = collectPluginEntries();
-        HttpResponse.success(res, {
-          stats: buildPluginStats(plugins)
-        });
+        const { summary } = getPluginsWithSummary();
+        HttpResponse.success(res, { stats: summary });
       }, 'plugin.stats')
     }
   ]

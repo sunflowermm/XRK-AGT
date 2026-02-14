@@ -16,11 +16,9 @@ export default {
       method: 'GET',
       path: '/api/bots',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const includeDevicesRaw = String(req.query?.includeDevices ?? '').toLowerCase();
-        const includeDevices = includeDevicesRaw === '1' || includeDevicesRaw === 'true' || includeDevicesRaw === 'yes';
-        const bots = collectBotInventory(Bot, { includeDevices });
-        const payload = includeDevices ? bots : bots.filter(b => !b.device);
-        HttpResponse.success(res, { bots: payload });
+        const includeDevices = /^(1|true|yes)$/i.test(String(req.query?.includeDevices ?? ''));
+        const bots = collectBotInventory(Bot);
+        HttpResponse.success(res, { bots: includeDevices ? bots : bots.filter(b => !b.device) });
       }, 'bot.list')
     },
 
@@ -108,7 +106,7 @@ export default {
         };
 
         Bot.em('message.send', {
-          bot_id: bot_id ? bot_id : Bot.uin[0],
+          bot_id: bot_id || Bot.uin?.[0],
           type,
           target_id,
           message: processedMessage,
@@ -132,28 +130,19 @@ export default {
         const uin = InputValidator.validateUserId(req.params.uin);
         const { action } = req.body;
         
-        if (!Bot.bots[uin]) {
-          return HttpResponse.notFound(res, '机器人不存在');
-        }
-
+        if (!Bot.bots[uin]) return HttpResponse.notFound(res, '机器人不存在');
         const { getRedis } = await import('#infrastructure/database/index.js');
         const redis = getRedis();
-        if (!redis) {
-          return HttpResponse.error(res, new Error('Redis未初始化'), 503, 'bot.control');
+        if (!redis) return HttpResponse.error(res, new Error('Redis未初始化'), 503, 'bot.control');
+        if (action === 'shutdown') {
+          await redis.set(`AGT:shutdown:${uin}`, 'true');
+          return HttpResponse.success(res, null, '已关机');
         }
-
-        switch (action) {
-          case 'shutdown':
-            await redis.set(`AGT:shutdown:${uin}`, 'true');
-            HttpResponse.success(res, null, '已关机');
-            break;
-          case 'startup':
-            await redis.del(`AGT:shutdown:${uin}`);
-            HttpResponse.success(res, null, '已开机');
-            break;
-          default:
-            HttpResponse.validationError(res, '不支持的操作');
+        if (action === 'startup') {
+          await redis.del(`AGT:shutdown:${uin}`);
+          return HttpResponse.success(res, null, '已开机');
         }
+        return HttpResponse.validationError(res, '不支持的操作');
       }, 'bot.control')
     }
   ]

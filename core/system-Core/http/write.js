@@ -68,10 +68,6 @@ export default {
       method: 'GET',
       path: '/api/data/read',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return HttpResponse.forbidden(res, 'Unauthorized');
-        }
-
         const { filePath, encoding = 'utf8' } = req.query;
         
         if (!filePath) {
@@ -127,11 +123,7 @@ export default {
       method: 'POST',
       path: '/api/data/write',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        if (!Bot.checkApiAuthorization(req)) {
-          return HttpResponse.forbidden(res, 'Unauthorized');
-        }
-
-        const { 
+        const {
           filePath, 
           data, 
           format,

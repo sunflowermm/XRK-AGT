@@ -1554,8 +1554,35 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   }
 
   /**
-   * 认证中间件
-   * 采用nginx风格的location匹配：精确 > 前缀 > 正则 > 默认
+   * 判断路径是否在白名单内（供 HTTP 与 WebSocket 共用）
+   * @param {string} pathName - 路径，如 /status 或 device（会补前导 /）
+   * @param {string[]} whitelist - 白名单项，支持精确、前缀(*)、目录(/)匹配
+   */
+  _isPathWhitelisted(pathName, whitelist) {
+    const path = pathName.startsWith('/') ? pathName : `/${pathName}`;
+    for (const whitelistPath of whitelist) {
+      if (whitelistPath === path) return true;
+      try {
+        let pattern;
+        if (whitelistPath.endsWith('*')) {
+          pattern = new URLPattern({ pathname: `${whitelistPath.slice(0, -1)}*` });
+        } else if (whitelistPath.endsWith('/')) {
+          pattern = new URLPattern({ pathname: `${whitelistPath}*` });
+        } else {
+          pattern = new URLPattern({ pathname: whitelistPath });
+        }
+        if (pattern.test({ pathname: path })) return true;
+      } catch {
+        if (whitelistPath.endsWith('*') && path.startsWith(whitelistPath.slice(0, -1))) return true;
+        if (whitelistPath.endsWith('/') && path.startsWith(whitelistPath)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 认证中间件（HTTP）
+   * 顺序：快速路径 → 白名单 → 本地连接 → 同源 Cookie → /api/* 必须 API Key
    */
   _authMiddleware(req, res, next) {
     if (this._checkHeadersSent(res, next)) return;
@@ -1564,70 +1591,14 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     req.sid = `${req.protocol}://${req.hostname}:${req.socket.localPort}${req.originalUrl}`;
     
     const authConfig = cfg.server.auth || {};
-    const whitelist = authConfig.whitelist || [
-      '/', '/favicon.ico', '/health', '/status', '/robots.txt'
-    ];
+    const whitelist = authConfig.whitelist || ['/', '/favicon.ico', '/health', '/status', '/robots.txt'];
     
-    // ========== 快速路径检查（性能优化） ==========
-    // 1. 系统路由（已在前面精确匹配，这里作为兜底）
-    const systemRoutes = ['/status', '/health', '/robots.txt', '/favicon.ico'];
-    if (systemRoutes.includes(req.path)) {
-      return next();
-    }
+    if (this._isPathWhitelisted(req.path, whitelist)) return next();
     
-    // 2. 静态文件（通过扩展名判断，快速跳过）
     const isStaticFile = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i.test(req.path);
-    if (isStaticFile && !req.path.startsWith('/api/')) {
-      return next();
-    }
+    if (isStaticFile && !req.path.startsWith('/api/')) return next();
     
-    // ========== 白名单匹配（使用 Node.js 24 全局 URLPattern API） ==========
-    let isWhitelisted = false;
-    
-    for (const whitelistPath of whitelist) {
-      try {
-        // 精确匹配（最高优先级）
-        if (whitelistPath === req.path) {
-          isWhitelisted = true;
-          break;
-        }
-        
-        // 使用 URLPattern 进行模式匹配（Node.js 24+ 全局可用）
-        let pattern;
-        if (whitelistPath.endsWith('*')) {
-          // 前缀匹配：将 * 转换为 URLPattern 语法
-          const prefix = whitelistPath.slice(0, -1);
-          pattern = new URLPattern({ pathname: `${prefix}*` });
-        } else if (whitelistPath.endsWith('/')) {
-          // 目录匹配
-          pattern = new URLPattern({ pathname: `${whitelistPath}*` });
-        } else {
-          // 精确匹配
-          pattern = new URLPattern({ pathname: whitelistPath });
-        }
-        
-        if (pattern.test({ pathname: req.path })) {
-          isWhitelisted = true;
-          break;
-        }
-      } catch {
-        // 降级到传统匹配方式（兼容性）
-        if (whitelistPath.endsWith('*')) {
-          const prefix = whitelistPath.slice(0, -1);
-          if (req.path.startsWith(prefix)) {
-            isWhitelisted = true;
-            break;
-          }
-        } else if (whitelistPath.endsWith('/') && req.path.startsWith(whitelistPath)) {
-          isWhitelisted = true;
-          break;
-        }
-      }
-    }
-    
-    if (isWhitelisted) {
-      return next();
-    }
+    if (this._isLocalConnection(req.ip)) return next();
     
     // ========== 本地连接检查 ==========
     if (this._isLocalConnection(req.ip)) {
@@ -1657,7 +1628,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
       return next();
     }
     
-    // 对于API路径，必须通过认证
+    // 所有 /api/* 请求在此统一鉴权，业务路由（system-Core/http/*）无需再校验
     if (req.path.startsWith('/api/')) {
       if (!this._checkApiAuthorization(req)) {
         // 再次检查响应状态
@@ -2020,34 +1991,12 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     req.sid = `ws://${req.headers.host || `${req.socket.localAddress}:${req.socket.localPort}`}${req.url}`;
     req.query = Object.fromEntries(new URL(req.sid).searchParams.entries());
     
-    // WebSocket认证 - 使用相同的白名单和认证逻辑
+    // WebSocket 鉴权：与 HTTP 共用白名单 + 本地 + API Key 逻辑
     const authConfig = cfg.server.auth || {};
     const whitelist = authConfig.whitelist || [];
+    const pathForCheck = req.url.split("?")[0];
+    const isWhitelisted = this._isPathWhitelisted(pathForCheck, whitelist);
     
-    // 检查WebSocket路径是否在白名单中（使用 Node.js 24 URLPattern API）
-    const path = req.url.split("?")[0]; // 去除查询参数
-    const isWhitelisted = whitelist.some(whitelistPath => {
-      if (whitelistPath === path) return true;
-      try {
-        // 使用 URLPattern 进行模式匹配（Node.js 24+ 全局可用）
-        let pattern;
-        if (whitelistPath.endsWith('*')) {
-          const prefix = whitelistPath.slice(0, -1);
-          pattern = new URLPattern({ pathname: `${prefix}*` });
-        } else {
-          pattern = new URLPattern({ pathname: whitelistPath });
-        }
-        return pattern.test({ pathname: path });
-      } catch {
-        // 降级到传统匹配方式（兼容性）
-        if (whitelistPath.endsWith('*')) {
-          return path.startsWith(whitelistPath.slice(0, -1));
-        }
-        return false;
-      }
-    });
-    
-    // 如果不在白名单且不是本地连接，则需要认证
     if (!isWhitelisted && !this._isLocalConnection(req.socket.remoteAddress)) {
       if (authConfig.apiKey?.enabled !== false && !this._checkApiAuthorization(req)) {
         BotUtil.makeLog("error", `WebSocket认证失败：${req.url}`, '服务器');

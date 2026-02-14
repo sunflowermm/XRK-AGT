@@ -1,22 +1,9 @@
-const EXCLUDE_KEYS = new Set([
-  'port',
-  'apiKey',
-  'stdin',
-  'logger',
-  '_eventsCount',
-  'url'
-]);
+const EXCLUDE_KEYS = new Set(['port', 'apiKey', 'stdin', 'logger', '_eventsCount', 'url']);
 
-export function collectBotInventory(Bot, { includeDevices: _includeDevices = true } = {}) {
-  if (!Bot || typeof Bot !== 'object') {
-    return [];
-  }
-
-  // 统一从 Bot.bots 收集，所有子 Bot（账号 / 设备 / stdin 等）都通过 Bot 代理注册到这里
-  const merged = { ...(Bot.bots || {}) };
-
+export function collectBotInventory(Bot, { includeDevices = true } = {}) {
+  if (!Bot?.bots) return [];
   const list = [];
-  for (const [uin, bot] of Object.entries(merged)) {
+  for (const [uin, bot] of Object.entries(Bot.bots)) {
     if (!bot || typeof bot !== 'object' || EXCLUDE_KEYS.has(uin)) continue;
 
     if (bot.device_type) {
@@ -31,32 +18,20 @@ export function collectBotInventory(Bot, { includeDevices: _includeDevices = tru
       continue;
     }
 
-    const hasBasicInfo = bot.tasker || bot.nickname || bot.fl || bot.gl;
-    if (!hasBasicInfo) continue;
+    if (!bot.tasker && !bot.nickname && !bot.fl && !bot.gl) continue;
 
-    const avatarUrl = bot.avatar ||
-      (bot.tasker?.name === 'OneBotv11' && bot.uin
-        ? `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100`
-        : null);
-
+    const online = Boolean(bot.stat?.online ?? bot._ready);
     list.push({
       uin,
       device: false,
-      online: Boolean(bot.stat?.online),
+      online,
       nickname: bot.nickname || uin,
       tasker: bot.tasker?.name || 'unknown',
-      avatar: avatarUrl,
-      stats: {
-        friends: bot.fl?.size || 0,
-        groups: bot.gl?.size || 0
-      }
+      avatar: bot.avatar || (bot.uin && bot.tasker?.name === 'OneBotv11' ? `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100` : null),
+      stats: { friends: bot.fl?.size || 0, groups: bot.gl?.size || 0 }
     });
   }
-
-  return list.sort((a, b) => {
-    if (a.device !== b.device) return a.device ? 1 : -1;
-    return Number(b.online) - Number(a.online);
-  });
+  return list.sort((a, b) => (a.device !== b.device ? (a.device ? 1 : -1) : Number(b.online) - Number(a.online)));
 }
 
 export function summarizeBots(bots = []) {

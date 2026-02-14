@@ -234,22 +234,7 @@ async function handleChatCompletionsV3(req, res) {
     }
   }
 
-  // 支持多种认证方式：body.apiKey、Authorization Bearer 令牌、X-API-Key 头
-  let accessKey = pickFirst(body, ['apiKey', 'api_key']);
-  if (!accessKey) {
-    const authHeader = req.headers.authorization || '';
-    if (authHeader.startsWith('Bearer ') || authHeader.startsWith('bearer ')) {
-      accessKey = authHeader.substring(7).trim();
-    }
-  }
-  // 兼容 Web 控制台常见写法：X-API-Key
-  if (!accessKey) {
-    accessKey = (req.headers['x-api-key'] || '').toString().trim();
-  }
-  // 统一转成字符串并去除首尾空格后比较（不转小写，保持原始大小写）
-  accessKey = (accessKey || '').toString().trim();
-  if (!accessKey || accessKey !== BotUtil.apiKey) return HttpResponse.unauthorized(res, 'apiKey 无效');
-
+  // 鉴权由 src/bot.js _authMiddleware 统一处理，/api/* 到达此处已通过校验
   const streamFlag = Boolean(pickFirst(body, ['stream']));
   const bodyModel = trimLower(pickFirst(body, ['model']));
   const defaultProvider = getDefaultProvider();

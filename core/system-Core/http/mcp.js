@@ -7,10 +7,23 @@ const getMCPServer = () => StreamLoader.mcpServer;
 const requireMCP = (res) => {
   const mcpServer = getMCPServer();
   if (!mcpServer) {
-    return HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp');
+    HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp');
+    return null;
   }
   return mcpServer;
 };
+
+const jsonrpcHandler = HttpResponse.asyncHandler(async (req, res) => {
+  const mcpServer = requireMCP(res);
+  if (!mcpServer) return;
+  try {
+    const stream = req.params?.stream ?? req.query?.stream;
+    const response = await mcpServer.handleJSONRPC(req.body, { stream });
+    res.json(response);
+  } catch (error) {
+    HttpResponse.error(res, error, 500, 'mcp.jsonrpc');
+  }
+}, 'mcp.jsonrpc');
 
 export default {
   name: 'mcp',
@@ -21,35 +34,12 @@ export default {
     {
       method: 'POST',
       path: '/api/mcp/jsonrpc',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
-        const mcpServer = requireMCP(res);
-        if (!mcpServer) return;
-
-        try {
-          // 支持stream查询参数，用于过滤特定工作流的工具
-          const { stream } = req.query;
-          const response = await mcpServer.handleJSONRPC(req.body, { stream });
-          res.json(response);
-        } catch (error) {
-          return HttpResponse.error(res, error, 500, 'mcp.jsonrpc');
-        }
-      }, 'mcp.jsonrpc')
+      handler: jsonrpcHandler
     },
     {
       method: 'POST',
       path: '/api/mcp/jsonrpc/:stream',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
-        const mcpServer = requireMCP(res);
-        if (!mcpServer) return;
-
-        try {
-          const { stream } = req.params;
-          const response = await mcpServer.handleJSONRPC(req.body, { stream });
-          res.json(response);
-        } catch (error) {
-          return HttpResponse.error(res, error, 500, 'mcp.jsonrpc.stream');
-        }
-      }, 'mcp.jsonrpc.stream')
+      handler: jsonrpcHandler
     },
     {
       method: 'GET',
