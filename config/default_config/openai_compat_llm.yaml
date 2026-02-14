@@ -1,8 +1,8 @@
 # ============================================
-# OpenAI 兼容第三方 LLM 配置（OpenAI-like / OpenAI-Compatible）
-# 文件位置：data/server_bots/{port}/openai_compat_llm.yaml
-# Provider: openai_compat
+# OpenAI 兼容 LLM 配置（随端口变化）
 # ============================================
+# Provider: openai_compat。兼容 OpenAI 格式的第三方 API。
+# 位置：data/server_bots/{port}/openai_compat_llm.yaml
 
 # 第三方 API Key
 apiKey: ""

@@ -1,23 +1,24 @@
 # ============================================
 # 通知配置（全局配置）
 # ============================================
-# 此配置文件为通知推送相关配置，不随服务器端口变化
+# 全局配置，不随服务器端口变化。用于各类推送通知的 Token/Webhook，留空则不启用。
 # 位置：data/server_bots/notice.yaml
+# 包含：IYUU、Server 酱、飞书机器人。
 
 # ----------------------------------------
-# IYUU通知
+# IYUU
 # ----------------------------------------
-# IYUU通知服务Token (https://iyuu.cn/)
+# IYUU 通知服务 Token，见 https://iyuu.cn/
 iyuu: ""
 
 # ----------------------------------------
-# Server酱通知
+# Server 酱
 # ----------------------------------------
-# Server酱SendKey (https://sct.ftqq.com/)
+# SendKey，见 https://sct.ftqq.com/
 sct: ""
 
 # ----------------------------------------
-# 飞书自定义机器人Webhook
+# 飞书自定义机器人
 # ----------------------------------------
-# 飞书自定义机器人Webhook地址 (https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot)
+# Webhook 地址，见 https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot
 feishu_webhook: ""

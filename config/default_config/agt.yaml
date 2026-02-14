@@ -1,111 +1,85 @@
 # ============================================
-# XRK-AGT 全局配置
+# AGT 全局配置
 # ============================================
-# 此配置文件为全局配置，不随服务器端口变化
+# 全局配置，不随服务器端口变化。
 # 位置：data/server_bots/agt.yaml
-# 包含：日志、浏览器、渲染器、文件系统、系统行为等全局设置
+# 包含：日志、渲染器、文件系统、系统行为、状态插件等。
 
 # ----------------------------------------
 # 日志配置
 # ----------------------------------------
 logging:
-  # 日志等级：trace、debug、info、warn、fatal、mark、error、off
-  # mark时只显示执行命令，不显示聊天记录
+  # 日志等级：trace、debug、info、warn、fatal、mark、error、off（mark 时只显示执行命令，不显示聊天记录）
   level: info
-  # 日志头内容自定义，例如："MYBOT"将显示[MYBOT]
+  # 日志头内容，将显示为 [align]
   align: "XRKAGT"
-  # 日志头颜色方案：default、scheme1、scheme2、scheme3、scheme4、scheme5、scheme6、scheme7
+  # 日志头颜色方案：default、scheme1～scheme7
   color: default
-  # 日志ID长度（默认16个字符）
+  # 日志 ID 显示长度（字符数）
   idLength: 20
-  # ID显示时的美化字符（用于填充空白）
-  # 可选：.、·、─、•、═、»、→
+  # ID 空白填充字符，可选：.、·、─、•、═、»、→
   idFiller: "."
-  # 日志对象检查配置
+  # 日志对象序列化（console 输出对象时的选项）
   object:
-    # 检查深度
     depth: 10
-    # 是否彩色输出
     colors: true
-    # 是否显示隐藏属性
     showHidden: true
-    # 是否显示代理对象
     showProxy: true
-    # 是否显示getters
     getters: true
-    # 换行长度
     breakLength: 100
-    # 最大数组长度
     maxArrayLength: 100
-    # 最大字符串长度
     maxStringLength: 1000
-  # 日志目录
+  # 日志目录（相对于项目根）
   dir: "logs"
-  # 日志保留天数配置
-  maxDays: 30    # 主日志保留天数
-  traceDays: 1   # trace日志保留天数
-  # 日志发送插件配置
+  # 主日志 / trace 日志保留天数
+  maxDays: 30
+  traceDays: 1
+  # 日志发送插件：发送到群/私聊时的条数限制
   send:
-    # 默认发送日志行数
     defaultLines: 120
-    # 最大发送日志行数
     maxLines: 1000
-    # 每条转发消息最大行数
     maxPerForward: 30
-    # 单行日志最大长度
     maxLineLength: 300
 
 # ----------------------------------------
-# 浏览器/渲染器配置
+# 渲染器
 # ----------------------------------------
+# 渲染后端：puppeteer、playwright。详细配置见 data/server_bots/{port}/renderers/{type}/config.yaml
 browser:
-  # Chromium其他路径（可选）
-  chromiumPath: ""
-  # Puppeteer接口地址（可选）
-  puppeteerWs: ""
-  # Puppeteer截图超时时间（毫秒，0表示使用默认值）
-  puppeteerTimeout: 0
-  # 渲染后端：puppeteer、playwright
-  # 详细配置位于 data/server_bots/{port}/renderers/{type}/config.yaml
   renderer: puppeteer
 
 # ----------------------------------------
-# 文件系统配置
+# 文件系统
 # ----------------------------------------
 files:
-  # 是否监听文件变化
   watch: true
-  # 文件URL有效时间（分钟）
+  # 文件 URL 有效时间（分钟）、访问次数限制
   urlTime: 60
-  # 文件URL访问次数限制
   urlTimes: 5
-  # 数据路径配置
-  messageDataPath: "data/messageJson/"      # 消息数据存储路径
-  bannedWordsPath: "data/bannedWords/"      # 违禁词存储路径
-  bannedImagesPath: "data/bannedWords/images/"  # 违禁图片存储路径
-  bannedConfigPath: "data/bannedWords/config/"  # 违禁词配置路径
+  # 以下路径均相对于项目根：消息数据、违禁词、违禁图、违禁词配置
+  messageDataPath: "data/messageJson/"
+  bannedWordsPath: "data/bannedWords/"
+  bannedImagesPath: "data/bannedWords/images/"
+  bannedConfigPath: "data/bannedWords/config/"
 
 # ----------------------------------------
-# 系统行为配置
+# 系统行为
 # ----------------------------------------
 system:
-  # 自动把/换成#
+  # 指令中自动将 / 替换为 #
   '/→#': true
-  # 群聊和频道中过滤自己的消息
+  # 群聊/频道中是否过滤自己发出的消息
   ignoreSelf: true
-  # 上线推送通知的冷却时间（秒）
+  # 上线推送通知冷却时间（秒）
   onlineMsgExp: 86400
   # 是否缓存群成员列表
   cacheGroupMember: true
 
 # ----------------------------------------
-# 状态插件配置
+# 状态插件
 # ----------------------------------------
 status:
-  # 是否显示网络信息
   showNetwork: true
-  # 是否显示进程信息
   showProcess: true
-  # 是否显示磁盘信息
   showDisk: true
 

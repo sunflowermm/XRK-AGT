@@ -1,11 +1,9 @@
 # ============================================
-# 火山引擎 LLM 工厂配置（随端口变化）
+# 火山引擎 LLM 配置（随端口变化）
 # ============================================
-# 此配置文件为火山引擎豆包大语言模型配置，每个端口有独立的配置
+# 豆包大模型，兼容 OpenAI Chat Completions。多模态（含识图）由模型自身完成。
 # 位置：data/server_bots/{port}/volcengine_llm.yaml
-# 注意：多模态（含识图）直接由 LLM 模型自身完成，不再依赖独立的 volcengine_vision 工厂配置
-# 火山引擎 API 文档：https://www.volcengine.com/docs/82379
-# 火山引擎兼容 OpenAI SDK，使用标准 Chat Completions API
+# 文档：https://www.volcengine.com/docs/82379
 
 # ----------------------------------------
 # API 基础配置

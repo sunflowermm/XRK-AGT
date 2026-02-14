@@ -66,6 +66,14 @@ flowchart TB
 
 ---
 
+## 配置与加载
+
+- **渲染后端选择**：全局配置 `agt.browser.renderer`（`puppeteer` | `playwright`），决定 `getRenderer()` 使用的实现。
+- **按端口配置**：`data/server_bots/{port}/renderers/{type}/config.yaml`，缺省从 `src/renderers/{type}/config_default.yaml` 合并。
+- **加载方式**：`RendererLoader` 扫描 `src/renderers/` 下每个子目录，加载 `index.js` 并调用 `default(config)` 得到实例；配置来自 `cfg.getRendererConfig(type)`。
+
+---
+
 ## 构造参数
 
 ```javascript

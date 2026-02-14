@@ -1,70 +1,41 @@
-# 如需自定义，复制此文件为 config.yaml 进行配置
-# 更新配置后需要重启
+# ============================================
+# Playwright 渲染器默认配置
+# ============================================
+# 默认配置，实际生效配置由 data/server_bots/{port}/renderers/playwright/config.yaml 覆盖。
+# 自定义请复制到该路径为 config.yaml；更新后需重启。
 
-# 浏览器类型: chromium, firefox, webkit
-browserType: chromium
-
-# Chromium 路径（可选）
-chromiumPath:
-
-# 连接到远程浏览器（可选）
-wsEndpoint:
-
-# 无头模式
+# ----------------------------------------
+# 浏览器
+# ----------------------------------------
+browserType: chromium   # chromium、firefox、webkit
 headless: true
-
-# 浏览器启动参数
+chromiumPath:
+wsEndpoint:
 args:
-    - --disable-gpu
-    - --disable-software-rasterizer
-    - --disable-dev-shm-usage
-    - --no-sandbox
-    - --disable-setuid-sandbox
-    - --disable-extensions
-    - --disable-background-networking
-    - --disable-background-timer-throttling
-    - --disable-backgrounding-occluded-windows
-    - --disable-breakpad
-    - --disable-component-extensions-with-background-pages
-    - --disable-features=TranslateUI,BlinkGenPropertyTrees
-    - --disable-ipc-flooding-protection
-    - --disable-renderer-backgrounding
-    - --force-color-profile=srgb
-    - --metrics-recording-only
-    - --mute-audio
-    - --no-first-run
-    - --enable-automation
-    - --password-store=basic
-    - --use-mock-keychain
-    - --disable-blink-features=AutomationControlled
-    - --js-flags=--max-old-space-size=512
-    - --disable-accelerated-2d-canvas
-    - --disable-accelerated-jpeg-decoding
-    - --disable-accelerated-mjpeg-decode
-    - --disable-accelerated-video-decode
+  - --disable-gpu
+  - --no-sandbox
+  - --disable-dev-shm-usage
 
-# 截图超时时间（毫秒）
-playwrightTimeout: 120000
-
-# 健康检查间隔（毫秒）
-healthCheckInterval: 60000
-
-# 连接重试次数
+# ----------------------------------------
+# 截图与重试
+# ----------------------------------------
+playwrightTimeout: 120000   # 截图超时（毫秒）
+healthCheckInterval: 60000  # 健康检查间隔（毫秒）
 maxRetries: 3
+retryDelay: 2000            # 重试延迟（毫秒）
+restartNum: 150             # 截图次数达此后重启浏览器
 
-# 重试延迟（毫秒）
-retryDelay: 2000
-
-# 截图重启阈值
-restartNum: 150
-
-# 视口设置
+# ----------------------------------------
+# 视口
+# ----------------------------------------
 viewport:
   width: 1280
   height: 720
   deviceScaleFactor: 1
 
-# 上下文选项（可选）
+# ----------------------------------------
+# 上下文
+# ----------------------------------------
 contextOptions:
   bypassCSP: true
-  reducedMotion: "reduce"
+  reducedMotion: "reduce"   # reduce、no-preference

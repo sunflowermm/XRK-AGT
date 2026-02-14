@@ -34,32 +34,17 @@ export default class PuppeteerRenderer extends Renderer {
     this.puppeteerTimeout = config.puppeteerTimeout ?? rendererCfg.puppeteerTimeout ?? 120000;
     this.maxConcurrent = config.maxConcurrent ?? rendererCfg.maxConcurrent ?? 3;
 
+    const vp = config.viewport ?? rendererCfg.viewport ?? {};
+    this.viewport = {
+      width: vp.width ?? 1280,
+      height: vp.height ?? 720,
+      deviceScaleFactor: vp.deviceScaleFactor ?? 1,
+    };
     this.config = {
       headless: config.headless ?? rendererCfg.headless ?? "new",
-      args: config.args ?? rendererCfg.args ?? [
-        '--disable-gpu',
-        '--no-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-setuid-sandbox',
-        '--disable-web-security',
-        '--allow-file-access-from-files',
-        '--disable-infobars',
-        '--disable-notifications',
-        '--window-size=1920,1080',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-extensions',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--js-flags=--max-old-space-size=512',
-        '--disable-accelerated-2d-canvas',
-        '--disable-accelerated-jpeg-decoding',
-        '--disable-accelerated-mjpeg-decode',
-        '--disable-accelerated-video-decode',
-        '--disable-software-rasterizer',
-      ],
+      args: config.args ?? rendererCfg.args ?? ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'],
       executablePath: config.chromiumPath ?? rendererCfg.chromiumPath,
-      wsEndpoint: config.puppeteerWS ?? rendererCfg.wsEndpoint,
+      wsEndpoint: config.wsEndpoint ?? config.puppeteerWS ?? rendererCfg.wsEndpoint,
     };
 
     this.healthCheckTimer = null;
@@ -237,11 +222,7 @@ export default class PuppeteerRenderer extends Renderer {
         }
       });
 
-      await page.setViewport({
-        width: 1280,
-        height: 720,
-        deviceScaleFactor: 1,
-      });
+      await page.setViewport(this.viewport);
 
       const pageGotoParams = lodash.extend(
         { timeout: this.puppeteerTimeout, waitUntil: "domcontentloaded" },

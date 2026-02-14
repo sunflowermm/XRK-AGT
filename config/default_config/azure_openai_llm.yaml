@@ -1,8 +1,8 @@
 # ============================================
-# Azure OpenAI 官方 LLM 配置（Chat Completions）
-# 文件位置：data/server_bots/{port}/azure_openai_llm.yaml
-# Provider: azure_openai
+# Azure OpenAI LLM 配置（随端口变化）
 # ============================================
+# Provider: azure_openai。Chat Completions。
+# 位置：data/server_bots/{port}/azure_openai_llm.yaml
 
 apiKey: ""
 

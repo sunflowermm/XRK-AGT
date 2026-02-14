@@ -1,41 +1,29 @@
-# 如需自定义，复制此文件为 config.yaml 进行配置
-# 更新配置后需要重启
+# ============================================
+# Puppeteer 渲染器默认配置
+# ============================================
+# 默认配置，实际生效配置由 data/server_bots/{port}/renderers/puppeteer/config.yaml 覆盖。
+# 自定义请复制到该路径为 config.yaml；更新后需重启。
 
-# 无头模式 ("new" 为新 headless 模式)
-headless: "new"
-
-# Chromium 路径（可选）
-chromiumPath:
-
-# 连接到远程浏览器（可选）
-wsEndpoint:
-
-# 浏览器启动参数
+# ----------------------------------------
+# 浏览器
+# ----------------------------------------
+headless: "new"    # 无头模式：new、old、false
+chromiumPath:      # Chromium 可执行路径，留空用内置
+wsEndpoint:        # 远程浏览器 WS 地址，留空则本地启动
 args:
-    - --disable-gpu
-    - --no-sandbox
-    - --disable-dev-shm-usage
-    - --disable-setuid-sandbox
-    - --disable-web-security
-    - --allow-file-access-from-files
-    - --disable-infobars
-    - --disable-notifications
-    - --window-size=1920,1080
-    - --disable-blink-features=AutomationControlled
-    - --disable-extensions
-    - --disable-background-timer-throttling
-    - --disable-backgrounding-occluded-windows
-    - --disable-renderer-backgrounding
-    - --js-flags=--max-old-space-size=512
-    - --disable-accelerated-2d-canvas
-    - --disable-software-rasterizer
+  - --disable-gpu
+  - --no-sandbox
+  - --disable-dev-shm-usage
 
-# 截图超时时间（毫秒）
-puppeteerTimeout: 120000
+# ----------------------------------------
+# 截图与重启
+# ----------------------------------------
+puppeteerTimeout: 120000   # 截图超时（毫秒）
+restartNum: 150            # 截图次数达此后重启浏览器
 
-# 截图重启阈值
-restartNum: 150
-
+# ----------------------------------------
+# 视口
+# ----------------------------------------
 viewport:
   width: 1280
   height: 720

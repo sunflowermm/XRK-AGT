@@ -1,8 +1,8 @@
 # ============================================
-# Anthropic 官方 LLM 配置（Claude / Messages API）
-# 文件位置：data/server_bots/{port}/anthropic_llm.yaml
-# Provider: anthropic
+# Anthropic LLM 配置（随端口变化）
 # ============================================
+# Provider: anthropic。Claude / Messages API。
+# 位置：data/server_bots/{port}/anthropic_llm.yaml
 
 apiKey: ""
 

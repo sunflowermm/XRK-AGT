@@ -1,8 +1,8 @@
 # ============================================
-# OpenAI 官方 LLM 配置（Chat Completions）
-# 文件位置：data/server_bots/{port}/openai_llm.yaml
-# Provider: openai
+# OpenAI 官方 LLM 配置（随端口变化）
 # ============================================
+# Provider: openai。Chat Completions API。
+# 位置：data/server_bots/{port}/openai_llm.yaml
 
 # OpenAI API Key
 apiKey: ""

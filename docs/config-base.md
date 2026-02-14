@@ -179,17 +179,11 @@ flowchart TB
 ```javascript
 {
   name: 'renderer',
-  filePath: (cfg) => `data/server_bots/${cfg.port}/renderers/{type}/config.yaml`, // 占位路径
+  filePath: (cfg) => `data/server_bots/${cfg.port}/renderers/{type}/config.yaml`,
   multiFile: {
     keys: ['puppeteer', 'playwright'],
-    getFilePath: (key) => {
-      const cfg = global.cfg;
-      const port = cfg?.port ?? cfg?._port;
-      return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
-    },
-    getDefaultFilePath: (key) => {
-      return path.join(paths.renderers, key, 'config_default.yaml');
-    }
+    getFilePath: (key) => path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`),
+    getDefaultFilePath: (key) => path.join(paths.renderers, key, 'config_default.yaml')
   }
 }
 ```

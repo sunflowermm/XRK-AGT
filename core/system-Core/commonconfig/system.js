@@ -220,35 +220,13 @@ export default class SystemConfig extends ConfigBase {
             },
             browser: {
               type: 'object',
-              label: '浏览器/渲染器配置',
+              label: '渲染器',
               component: 'SubForm',
               fields: {
-                chromiumPath: {
-              type: 'string',
-              label: 'chromium路径',
-              description: 'chromium其他路径，默认无需填写',
-              default: '',
-              component: 'Input'
-            },
-                puppeteerWs: {
-              type: 'string',
-              label: 'puppeteer接口地址',
-              description: 'puppeteer接口地址，默认无需填写',
-              default: '',
-              component: 'Input'
-            },
-                puppeteerTimeout: {
-              type: 'number',
-              label: 'puppeteer截图超时时间',
-                  description: 'puppeteer截图超时时间（毫秒，0表示使用默认值）',
-              min: 0,
-              default: 0,
-              component: 'InputNumber'
-            },
                 renderer: {
                   type: 'string',
                   label: '渲染后端',
-                  description: '渲染后端选择，详细配置位于 data/server_bots/{port}/renderers/{type}/config.yaml',
+                  description: '详细配置: data/server_bots/{port}/renderers/{type}/config.yaml',
                   enum: ['puppeteer', 'playwright'],
                   default: 'puppeteer',
                   component: 'Select'
@@ -2545,253 +2523,79 @@ export default class SystemConfig extends ConfigBase {
       renderer: {
         name: 'renderer',
         displayName: '渲染器配置',
-        description: '浏览器渲染器配置，包括Puppeteer和Playwright的详细设置。配置文件位置：data/server_bots/{port}/renderers/{type}/config.yaml',
+        description: 'Puppeteer/Playwright 截图配置，路径: data/server_bots/{port}/renderers/{type}/config.yaml',
         filePath: (cfg) => {
-          // 渲染器配置使用multiFile机制处理多个子文件
-          // 这里返回占位路径，实际路径由multiFile.getFilePath处理
           const port = getPort(cfg);
-          if (!port) {
-            throw new Error('SystemConfig: 渲染器配置需要端口号');
-          }
+          if (!port) throw new Error('SystemConfig: 渲染器配置需要端口号');
           return `data/server_bots/${port}/renderers/{type}/config.yaml`;
         },
         fileType: 'yaml',
-        // 多文件配置：一个配置包含多个子文件
         multiFile: {
           keys: ['puppeteer', 'playwright'],
           getFilePath: (key) => {
-            const cfg = global.cfg;
-            const port = getPort(cfg);
-            if (!port) {
-              throw new Error('SystemConfig: 渲染器配置需要端口号');
-            }
+            const port = getPort(global.cfg);
+            if (!port) throw new Error('SystemConfig: 渲染器配置需要端口号');
             return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
           },
-          getDefaultFilePath: (key) => {
-            return path.join(paths.renderers, key, 'config_default.yaml');
-          }
+          getDefaultFilePath: (key) => path.join(paths.renderers, key, 'config_default.yaml')
         },
         schema: {
           fields: {
             puppeteer: {
               type: 'object',
-              label: 'Puppeteer配置',
-              description: 'Puppeteer渲染器配置，文件位置：data/server_bots/{port}/renderers/puppeteer/config.yaml',
+              label: 'Puppeteer',
               component: 'SubForm',
               fields: {
-                headless: {
-                  type: 'string',
-                  label: '无头模式',
-                  description: '"new" 为新 headless 模式，"false" 为有头模式',
-                  enum: ['new', 'old', 'false'],
-                  default: 'new',
-                  component: 'Select'
-                },
-                chromiumPath: {
-                  type: 'string',
-                  label: 'Chromium路径',
-                  description: 'Chromium可执行文件路径（可选）',
-                  default: '',
-                  component: 'Input'
-                },
-                wsEndpoint: {
-                  type: 'string',
-                  label: 'WebSocket端点',
-                  description: '连接到远程浏览器的WebSocket端点（可选）',
-                  default: '',
-                  component: 'Input'
-                },
-                args: {
-                  type: 'array',
-                  label: '浏览器启动参数',
-                  description: 'Chromium启动参数列表',
-                  itemType: 'string',
-                  default: [
-                    '--disable-gpu',
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage'
-                  ],
-                  component: 'Tags'
-                },
-                puppeteerTimeout: {
-                  type: 'number',
-                  label: '截图超时时间',
-                  description: '截图超时时间（毫秒）',
-                  min: 1000,
-                  default: 120000,
-                  component: 'InputNumber'
-                },
-                restartNum: {
-                  type: 'number',
-                  label: '重启阈值',
-                  description: '截图次数达到此值后重启浏览器',
-                  min: 1,
-                  default: 150,
-                  component: 'InputNumber'
-                },
+                headless: { type: 'string', label: '无头模式', enum: ['new', 'old', 'false'], default: 'new', component: 'Select' },
+                chromiumPath: { type: 'string', label: 'Chromium 路径', default: '', component: 'Input' },
+                wsEndpoint: { type: 'string', label: '远程 WS 地址', default: '', component: 'Input' },
+                args: { type: 'array', label: '启动参数', itemType: 'string', default: ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'], component: 'Tags' },
+                puppeteerTimeout: { type: 'number', label: '截图超时(ms)', min: 1000, default: 120000, component: 'InputNumber' },
+                restartNum: { type: 'number', label: 'N 次后重启', min: 1, default: 150, component: 'InputNumber' },
                 viewport: {
                   type: 'object',
-                  label: '视口设置',
+                  label: '视口',
                   component: 'SubForm',
                   fields: {
-                    width: {
-                      type: 'number',
-                      label: '宽度',
-                      min: 1,
-                      default: 1280,
-                      component: 'InputNumber'
-                    },
-                    height: {
-                      type: 'number',
-                      label: '高度',
-                      min: 1,
-                      default: 720,
-                      component: 'InputNumber'
-                    },
-                    deviceScaleFactor: {
-                      type: 'number',
-                      label: '设备缩放因子',
-                      min: 0.1,
-                      max: 5,
-                      default: 1,
-                      component: 'InputNumber'
-                    }
+                    width: { type: 'number', label: '宽', min: 1, default: 1280, component: 'InputNumber' },
+                    height: { type: 'number', label: '高', min: 1, default: 720, component: 'InputNumber' },
+                    deviceScaleFactor: { type: 'number', label: '缩放', min: 0.1, max: 5, default: 1, component: 'InputNumber' }
                   }
                 }
               }
             },
             playwright: {
               type: 'object',
-              label: 'Playwright配置',
-              description: 'Playwright渲染器配置，文件位置：data/server_bots/{port}/renderers/playwright/config.yaml',
+              label: 'Playwright',
               component: 'SubForm',
               fields: {
-                browserType: {
-                  type: 'string',
-                  label: '浏览器类型',
-                  description: 'Playwright支持的浏览器类型',
-                  enum: ['chromium', 'firefox', 'webkit'],
-                  default: 'chromium',
-                  component: 'Select'
-                },
-                headless: {
-                  type: 'boolean',
-                  label: '无头模式',
-                  default: true,
-                  component: 'Switch'
-                },
-                chromiumPath: {
-                  type: 'string',
-                  label: 'Chromium路径',
-                  description: 'Chromium可执行文件路径（可选）',
-                  default: '',
-                  component: 'Input'
-                },
-                wsEndpoint: {
-                  type: 'string',
-                  label: 'WebSocket端点',
-                  description: '连接到远程浏览器的WebSocket端点（可选）',
-                  default: '',
-                  component: 'Input'
-                },
-                args: {
-                  type: 'array',
-                  label: '浏览器启动参数',
-                  description: '浏览器启动参数列表',
-                  itemType: 'string',
-                  default: [
-                    '--disable-gpu',
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage'
-                  ],
-                  component: 'Tags'
-                },
-                playwrightTimeout: {
-                  type: 'number',
-                  label: '截图超时时间',
-                  description: '截图超时时间（毫秒）',
-                  min: 1000,
-                  default: 120000,
-                  component: 'InputNumber'
-                },
-                healthCheckInterval: {
-                  type: 'number',
-                  label: '健康检查间隔',
-                  description: '健康检查间隔（毫秒）',
-                  min: 1000,
-                  default: 60000,
-                  component: 'InputNumber'
-                },
-                maxRetries: {
-                  type: 'number',
-                  label: '最大重试次数',
-                  min: 0,
-                  default: 3,
-                  component: 'InputNumber'
-                },
-                retryDelay: {
-                  type: 'number',
-                  label: '重试延迟',
-                  description: '重试延迟（毫秒）',
-                  min: 100,
-                  default: 2000,
-                  component: 'InputNumber'
-                },
-                restartNum: {
-                  type: 'number',
-                  label: '重启阈值',
-                  description: '截图次数达到此值后重启浏览器',
-                  min: 1,
-                  default: 150,
-                  component: 'InputNumber'
-                },
+                browserType: { type: 'string', label: '浏览器', enum: ['chromium', 'firefox', 'webkit'], default: 'chromium', component: 'Select' },
+                headless: { type: 'boolean', label: '无头', default: true, component: 'Switch' },
+                chromiumPath: { type: 'string', label: 'Chromium 路径', default: '', component: 'Input' },
+                wsEndpoint: { type: 'string', label: '远程 WS 地址', default: '', component: 'Input' },
+                args: { type: 'array', label: '启动参数', itemType: 'string', default: ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'], component: 'Tags' },
+                playwrightTimeout: { type: 'number', label: '截图超时(ms)', min: 1000, default: 120000, component: 'InputNumber' },
+                healthCheckInterval: { type: 'number', label: '健康检查(ms)', min: 1000, default: 60000, component: 'InputNumber' },
+                maxRetries: { type: 'number', label: '重试次数', min: 0, default: 3, component: 'InputNumber' },
+                retryDelay: { type: 'number', label: '重试延迟(ms)', min: 100, default: 2000, component: 'InputNumber' },
+                restartNum: { type: 'number', label: 'N 次后重启', min: 1, default: 150, component: 'InputNumber' },
                 viewport: {
                   type: 'object',
-                  label: '视口设置',
+                  label: '视口',
                   component: 'SubForm',
                   fields: {
-                    width: {
-                      type: 'number',
-                      label: '宽度',
-                      min: 1,
-                      default: 1280,
-                      component: 'InputNumber'
-                    },
-                    height: {
-                      type: 'number',
-                      label: '高度',
-                      min: 1,
-                      default: 720,
-                      component: 'InputNumber'
-                    },
-                    deviceScaleFactor: {
-                      type: 'number',
-                      label: '设备缩放因子',
-                      min: 0.1,
-                      max: 5,
-                      default: 1,
-                      component: 'InputNumber'
-                    }
+                    width: { type: 'number', label: '宽', min: 1, default: 1280, component: 'InputNumber' },
+                    height: { type: 'number', label: '高', min: 1, default: 720, component: 'InputNumber' },
+                    deviceScaleFactor: { type: 'number', label: '缩放', min: 0.1, max: 5, default: 1, component: 'InputNumber' }
                   }
                 },
                 contextOptions: {
                   type: 'object',
-                  label: '上下文选项',
+                  label: '上下文',
                   component: 'SubForm',
                   fields: {
-                    bypassCSP: {
-                      type: 'boolean',
-                      label: '绕过CSP',
-                      default: true,
-                      component: 'Switch'
-                    },
-                    reducedMotion: {
-                      type: 'string',
-                      label: '减少动画',
-                      enum: ['reduce', 'no-preference'],
-                      default: 'reduce',
-                      component: 'Select'
-                    }
+                    bypassCSP: { type: 'boolean', label: '绕过 CSP', default: true, component: 'Switch' },
+                    reducedMotion: { type: 'string', label: '减少动画', enum: ['reduce', 'no-preference'], default: 'reduce', component: 'Select' }
                   }
                 }
               }
