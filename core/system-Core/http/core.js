@@ -556,7 +556,7 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
     }
   }
 
-  const bots = collectBotInventory(Bot, { includeDevices: true });
+  const bots = await collectBotInventory(Bot, { includeDevices: true });
   const workflowStats = StreamLoader.getStats();
   const workflowList = StreamLoader.getStreamsByPriority().map(stream => ({
     name: stream.name,

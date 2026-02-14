@@ -1942,12 +1942,8 @@ class App {
 
   async _switchChatMode(mode, oldMode = null) {
     this.clearChatStreamState();
-    const isAIMode = mode === 'ai';
-    const isVoiceMode = mode === 'voice';
-    const wasVoiceMode = oldMode === 'voice' || document.querySelector('.voice-chat-center') !== null;
-    const involvesEvent = mode === 'event' || oldMode === 'event';
-
-    if (isVoiceMode || wasVoiceMode || involvesEvent) {
+    const needFullRender = mode === 'voice' || oldMode === 'voice' || mode === 'event' || oldMode === 'event';
+    if (needFullRender) {
       if (mode !== 'event') this._clearEventReplyState();
       await this.renderChat();
       return;
@@ -1958,24 +1954,17 @@ class App {
       await this.renderChat();
       return;
     }
-    
+
+    const isAIMode = mode === 'ai';
     const sidebar = document.querySelector('.chat-sidebar');
     const headerTitle = document.querySelector('.chat-header-title span:last-child');
     const imageInput = document.getElementById('chatImageInput');
-    const modeBtns = document.querySelectorAll('.chat-mode-btn');
-    
-    modeBtns.forEach(btn => {
+    document.querySelectorAll('.chat-mode-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.mode === mode);
     });
-    
-    if (headerTitle) {
-      headerTitle.textContent = isAIMode ? 'AI 对话' : 'Event 对话';
-    }
-    
-    if (imageInput) {
-      imageInput.setAttribute('accept', isAIMode ? 'image/*' : 'image/*,video/*,audio/*');
-    }
-    
+    if (headerTitle) headerTitle.textContent = isAIMode ? 'AI 对话' : 'Event 对话';
+    if (imageInput) imageInput.setAttribute('accept', isAIMode ? 'image/*' : 'image/*,video/*,audio/*');
+
     if (isAIMode) {
       const aiSettings = await this._renderAISettings();
       if (sidebar && !sidebar.querySelector('.ai-settings-panel')) {
@@ -1984,24 +1973,19 @@ class App {
         sidebar.appendChild(settingsDiv.firstElementChild);
       }
       this.initChatControls();
-      this.ensureDeviceWs();
     } else {
-      const aiSettingsPanel = sidebar?.querySelector('.ai-settings-panel');
-      if (aiSettingsPanel) {
-        aiSettingsPanel.remove();
-      }
-      this.ensureDeviceWs();
+      sidebar?.querySelector('.ai-settings-panel')?.remove();
     }
-    
-    // 统一绑定事件（_bindChatEvents 内部已处理解绑和重复绑定）
+    this.ensureDeviceWs();
     this._bindChatEvents();
-    
+
     const cached = this._chatMessagesCache[mode];
     if (cached?.html) {
       box.style.overflow = 'hidden';
       box.innerHTML = cached.html;
       box.style.overflow = '';
-      box.scrollTop = cached.scrollTop || box.scrollHeight;
+      box.scrollTop = cached.scrollTop ?? box.scrollHeight;
+      this._chatMessagesCache[mode] = { scrollTop: box.scrollTop, scrollHeight: box.scrollHeight, html: box.innerHTML };
       return;
     }
     this._renderHistoryIntoBox(box, this._getChatHistoryByMode(mode));
@@ -2438,7 +2422,7 @@ class App {
     const box = document.getElementById('chatMessages');
     if (!box || this._isRestoringHistory) return;
     this._renderHistoryIntoBox(box, this._getCurrentChatHistory());
-    this.scrollToBottom(false);
+    requestAnimationFrame(() => this.scrollToBottom(false));
   }
 
   _applyMessageEnter(div, animate = true) {
@@ -2544,6 +2528,21 @@ class App {
       actionsContainer.appendChild(copyBtn);
     }
     
+    // 消息内包含图片时：保存图片（点开预览即可见，预览内可保存）
+    const msgImages = msgElement.querySelectorAll('.chat-image-container .chat-image');
+    if (msgImages.length > 0) {
+      const saveImgBtn = document.createElement('button');
+      saveImgBtn.className = 'chat-action-btn chat-save-image-btn';
+      saveImgBtn.title = '查看并保存图片';
+      saveImgBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>保存图片</span>';
+      saveImgBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const src = msgImages[0].currentSrc || msgImages[0].src;
+        if (src) this.showImagePreview(src);
+      });
+      actionsContainer.appendChild(saveImgBtn);
+    }
+
     // Event 模式：引用按钮（回复=引用，与后端 getReply 协议一致）
     if (this._isEventMode() && messageText) {
       const quoteBtn = document.createElement('button');
@@ -2980,8 +2979,35 @@ class App {
     return this.appendSegments([{ type: 'image', url }], persist, 'user');
   }
 
+  /** 下载图片：支持 data/blob/http(s)，跨域时 fetch 转 blob 再下载 */
+  async _downloadImage(url) {
+    if (!url) return;
+    const name = `image-${Date.now()}.png`;
+    try {
+      if (url.startsWith('data:') || url.startsWith('blob:')) {
+        const a = document.createElement('a');
+        a.download = name;
+        a.href = url;
+        a.click();
+        this.showToast('图片已保存', 'success');
+        return;
+      }
+      const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+      if (!res.ok) throw new Error(res.statusText);
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.download = name;
+      a.href = href;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(href), 2000);
+      this.showToast('图片已保存', 'success');
+    } catch (e) {
+      this.showToast('保存失败：' + (e.message || '无法下载'), 'error');
+    }
+  }
+
   showImagePreview(url) {
-    // 创建预览模态框
     let modal = document.getElementById('imagePreviewModal');
     if (!modal) {
       modal = document.createElement('div');
@@ -2991,25 +3017,29 @@ class App {
         <div class="image-preview-overlay"></div>
         <div class="image-preview-container">
           <button class="image-preview-close" aria-label="关闭">&times;</button>
+          <button class="image-preview-save" aria-label="保存">保存</button>
           <img class="image-preview-img" src="" alt="预览图片" />
         </div>
       `;
       document.body.appendChild(modal);
-      
-      // 点击遮罩层或关闭按钮关闭预览
-      modal.querySelector('.image-preview-overlay').addEventListener('click', () => this.closeImagePreview());
-      modal.querySelector('.image-preview-close').addEventListener('click', () => this.closeImagePreview());
-      
-      // ESC键关闭预览
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal.style.display === 'flex') {
-          this.closeImagePreview();
-        }
+      const overlay = modal.querySelector('.image-preview-overlay');
+      const closeBtn = modal.querySelector('.image-preview-close');
+      const saveBtn = modal.querySelector('.image-preview-save');
+      overlay.addEventListener('click', () => this.closeImagePreview());
+      closeBtn.addEventListener('click', () => this.closeImagePreview());
+      saveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const img = modal.querySelector('.image-preview-img');
+        const src = img?.currentSrc || img?.src;
+        if (src) this._downloadImage(src);
       });
+      const onEsc = (e) => {
+        if (e.key === 'Escape' && modal.style.display === 'flex') this.closeImagePreview();
+      };
+      document.addEventListener('keydown', onEsc);
     }
-    
     const img = modal.querySelector('.image-preview-img');
-    img.src = url;
+    if (img) img.src = url;
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
   }
@@ -4417,26 +4447,16 @@ class App {
     return urls;
   }
   
-  /**
-   * 滚动到底部（企业级统一方法）
-   * @param {boolean} smooth - 是否平滑滚动
-   */
+  /** 滚动到底部：最大滚动位置为 scrollHeight - clientHeight，否则会差一截 */
   scrollToBottom(smooth = false) {
     const box = document.getElementById('chatMessages');
     if (!box) return;
-    
-    const doScroll = () => {
-      if (smooth && box.scrollTo) {
-        box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
-      } else {
-        box.scrollTop = box.scrollHeight;
-      }
-    };
-
-    // 先立即滚一次
-    doScroll();
-    // 再在下一帧（布局/渲染完成后）补一次，避免只到 70%–80% 的问题
-    requestAnimationFrame(doScroll);
+    const top = Math.max(0, box.scrollHeight - box.clientHeight);
+    if (smooth && typeof box.scrollTo === 'function') {
+      box.scrollTo({ top, behavior: 'smooth' });
+    } else {
+      box.scrollTop = top;
+    }
   }
 
   /**

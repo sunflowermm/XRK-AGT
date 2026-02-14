@@ -1,9 +1,23 @@
 const EXCLUDE_KEYS = new Set(['port', 'apiKey', 'stdin', 'logger', '_eventsCount', 'url']);
 
-export function collectBotInventory(Bot, { includeDevices = true } = {}) {
+async function ensureBotFlGl(bot, uin) {
+  if (bot.device_type || typeof bot.getFriendMap !== 'function') return;
+  const needFl = !bot.fl || bot.fl.size === 0;
+  const needGl = !bot.gl || bot.gl.size === 0;
+  if (!needFl && !needGl) return;
+  try {
+    if (needFl) await bot.getFriendMap();
+  } catch {}
+  try {
+    if (needGl) await bot.getGroupMap();
+  } catch {}
+}
+
+export async function collectBotInventory(Bot, { includeDevices = true } = {}) {
   if (!Bot?.bots) return [];
   const list = [];
-  for (const [uin, bot] of Object.entries(Bot.bots)) {
+  const entries = Object.entries(Bot.bots);
+  for (const [uin, bot] of entries) {
     if (!bot || typeof bot !== 'object' || EXCLUDE_KEYS.has(uin)) continue;
 
     if (bot.device_type) {
@@ -20,6 +34,8 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
 
     if (!bot.tasker && !bot.nickname && !bot.fl && !bot.gl) continue;
 
+    await ensureBotFlGl(bot, uin);
+
     const online = Boolean(bot.stat?.online ?? bot._ready);
     list.push({
       uin,
@@ -28,7 +44,7 @@ export function collectBotInventory(Bot, { includeDevices = true } = {}) {
       nickname: bot.nickname || uin,
       tasker: bot.tasker?.name || 'unknown',
       avatar: bot.avatar || (bot.uin && bot.tasker?.name === 'OneBotv11' ? `https://q1.qlogo.cn/g?b=qq&nk=${bot.uin}&s=100` : null),
-      stats: { friends: bot.fl?.size || 0, groups: bot.gl?.size || 0 }
+      stats: { friends: bot.fl?.size ?? 0, groups: bot.gl?.size ?? 0 }
     });
   }
   return list.sort((a, b) => (a.device !== b.device ? (a.device ? 1 : -1) : Number(b.online) - Number(a.online)));

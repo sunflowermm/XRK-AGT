@@ -17,7 +17,7 @@ export default {
       path: '/api/bots',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         const includeDevices = /^(1|true|yes)$/i.test(String(req.query?.includeDevices ?? ''));
-        const bots = collectBotInventory(Bot);
+        const bots = await collectBotInventory(Bot);
         HttpResponse.success(res, { bots: includeDevices ? bots : bots.filter(b => !b.device) });
       }, 'bot.list')
     },
