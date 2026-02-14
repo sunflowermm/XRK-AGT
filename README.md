@@ -36,6 +36,7 @@
 </div>
 
 </div>
+### 联合研制工作室(我徒弟工作室)
 <!-- 第一排：沈阳农业大学 -->
 <div align="center">
   <img src="resources/mdimg/fengyun.png" alt="风云工作室" width="250" height="160">
