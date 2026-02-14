@@ -190,8 +190,6 @@ Bot.tasker.push(new MyTasker());
 
 ---
 
----
-
 ## 相关文档
 
 - **[Tasker 底层规范](tasker-base-spec.md)** - Tasker 基础接口规范

@@ -60,9 +60,6 @@ HTTP_PROXY=http://127.0.0.1:7890
 HTTPS_PROXY=http://127.0.0.1:7890
 NO_PROXY=127.0.0.1,localhost,xrk-agt,redis,mongodb
 
-# HuggingFace 镜像（可选，用于加速模型下载）
-HF_ENDPOINT=https://hf-mirror.com
-
 # MongoDB 认证（可选）
 MONGO_ROOT_USERNAME=admin
 MONGO_ROOT_PASSWORD=password

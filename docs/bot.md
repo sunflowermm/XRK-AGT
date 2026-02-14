@@ -342,15 +342,15 @@ Bot 通过 `_createProxy()` 暴露为**多 Bot 聚合代理**，统一访问子 
 flowchart LR
     subgraph Proxy["🤖 Bot 聚合代理"]
         direction TB
-        Access1["🔑 Bot[self_id]<br/>访问子Bot<br/>Bot['123456']"]
+        Access1("🔑 Bot[self_id]<br/>访问子Bot<br/>Bot.子账号")
         Access2["🔧 Bot.pickFriend()<br/>BotUtil静态方法<br/>工具函数"]
         Access3["📦 Bot.express<br/>Bot自身属性<br/>Express应用"]
     end
-    
+
     subgraph Bots["👥 子Bot集合"]
         direction TB
-        SubBot1["📱 Bot['123456']<br/>OneBotv11账号<br/>QQ机器人"]
-        SubBot2["🖥️ Bot['device_001']<br/>设备Bot<br/>设备管理"]
+        SubBot1("📱 Bot 子账号<br/>OneBotv11<br/>QQ机器人")
+        SubBot2("🖥️ Bot 设备<br/>设备Bot<br/>设备管理")
         SubBot3["⌨️ Bot.stdin<br/>命令行入口<br/>stdin处理"]
     end
     

@@ -266,6 +266,7 @@ flowchart TB
 
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 项目整体架构说明
 - **[GitHub 仓库](https://github.com/sunflowermm/XRK-AGT)** - 源代码仓库
+- **[Gitee 仓库](https://gitee.com/xrkseek/XRK-AGT)
 - **[GitCode 仓库](https://gitcode.com/Xrkseek/XRK-AGT)** - 国内镜像仓库
 
 ---

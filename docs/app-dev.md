@@ -95,8 +95,9 @@ flowchart TB
     subgraph Default["默认配置"]
         D1["config/default_config/*.yaml"]
     end
-    
-    subgraph Global["全局配置<br/>data/server_bots/"]
+
+    subgraph Global["全局配置"]
+        pathG["📁 data/server_bots/"]
         G1["agt.yaml"]
         G2["device.yaml"]
         G3["monitor.yaml"]
@@ -105,35 +106,37 @@ flowchart TB
         G6["redis.yaml"]
         G7["aistream.yaml"]
     end
-    
-    subgraph Server["端口配置<br/>data/server_bots/{port}/"]
+
+    subgraph Server["端口配置"]
+        pathS["📁 data/server_bots/port/"]
         S1["server.yaml"]
         S2["chatbot.yaml"]
         S3["group.yaml"]
         S4["volcengine_llm.yaml"]
-        S5["volcengine_llm.yaml"]
-        S6["其他工厂配置..."]
+        S5["其他工厂配置..."]
     end
-    
-    subgraph Cfg["cfg 对象<br/>global.cfg"]
-        C1["getGlobalConfig()"]
-        C2["getServerConfig()"]
+
+    subgraph Cfg["cfg 对象 · global.cfg"]
+        C1["getGlobalConfig"]
+        C2["getServerConfig"]
         C3["快捷访问器"]
     end
-    
+
     D1 -->|首次启动复制| Global
     D1 -->|首次启动复制| Server
     Global --> C1
     Server --> C2
     C1 --> C3
     C2 --> C3
-    C3 --> Bot["Bot.run()<br/>global.cfg"]
-    
+    C3 --> Bot["Bot.run · global.cfg"]
+
     style Default fill:#E6F3FF
-    style Global fill:#90EE90
-    style Server fill:#FFE6CC
-    style Cfg fill:#FFD700
-    style Bot fill:#87CEEB
+    style Global fill:#E8F5E9
+    style Server fill:#FFF3E0
+    style Cfg fill:#FFF9C4
+    style Bot fill:#E3F2FD
+    style pathG fill:#C8E6C9
+    style pathS fill:#FFE0B2
 ```
 
 ### 配置分类
@@ -363,8 +366,8 @@ flowchart TB
     B --> C[3. 前端注册路由<br/>core/system-Core/www/xrk/app.js]
     C --> D[4. 使用fetch调用API]
     D --> E[5. 渲染表单并提交]
-    E --> F[6. API保存配置<br/>cfg.setConfig()]
-    
+    E --> F(6. API保存配置<br/>cfg.setConfig)
+
     style A fill:#E6F3FF
     style B fill:#FFE6CC
     style E fill:#90EE90

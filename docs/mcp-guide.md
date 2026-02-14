@@ -578,8 +578,6 @@ A: 支持string、number、boolean、array、object等JSON Schema支持的所有
 
 ---
 
----
-
 ## 相关文档
 
 - **[MCP配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置

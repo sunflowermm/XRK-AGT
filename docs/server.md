@@ -513,9 +513,9 @@ rewritePath:
 ```mermaid
 flowchart LR
     Client["💻 WebSocket客户端<br/>浏览器/应用"] --> Upgrade["🔄 HTTP Upgrade请求<br/>GET /path HTTP/1.1<br/>Upgrade: websocket<br/>Connection: Upgrade"]
-    Upgrade --> Server["🌐 HTTP服务器<br/>监听upgrade事件<br/>server.on('upgrade')"]
+    Upgrade --> Server("🌐 HTTP服务器<br/>监听upgrade事件<br/>server.on('upgrade')")
     Server --> Auth["🔐 认证检查<br/>✅ 同HTTP认证机制<br/>🔑 API Key验证"]
-    Auth -->|"认证通过"| PathCheck["📍 路径检查<br/>查找Bot.wsf[path]<br/>匹配处理器"]
+    Auth -->|"认证通过"| PathCheck("📍 路径检查<br/>查找Bot.wsf[path]<br/>匹配处理器")
     PathCheck -->|"找到处理器"| Handler["⚙️ 路径处理器<br/>/OneBotv11 → OneBot Handler<br/>/device → Device Handler<br/>/custom → 自定义 Handler"]
     Handler --> WS["🔌 WebSocket连接建立<br/>双向通信<br/>实时数据交换"]
     
