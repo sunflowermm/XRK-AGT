@@ -1473,7 +1473,7 @@ Bot.tasker.push(
             return this.stat.packet_sent
           },
         },
-        model: "XRK Yunzai",
+        model: "XRK-AGT",
 
         info: {},
         get uin() {
@@ -1698,6 +1698,7 @@ Bot.tasker.push(
           data.bot._ready = true
           data.bot._initializing = false
           Bot.em(`ready.${self_id}`, data)
+          Bot.em('ready', { ...data, self_id: self_id, uin: self_id })
           
         } catch (err) {
           Bot.makeLog("error", `后台数据加载失败: ${err.message}`, self_id)

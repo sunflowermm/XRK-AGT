@@ -1355,6 +1355,28 @@ class DeviceManager {
                 );
             },
 
+            /** 以聊天回复形式发到 Web 客户端（Event/聊天窗口展示），与事件里的 reply 同格式 */
+            reply: async (segmentsOrText) => {
+                const ws = deviceWebSockets.get(deviceId);
+                if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+                try {
+                    const text = typeof segmentsOrText === 'string' ? segmentsOrText : (segmentsOrText?.segments?.[0]?.text ?? String(segmentsOrText ?? ''));
+                    const replyMsg = {
+                        type: 'reply',
+                        device_id: deviceId,
+                        channel: 'device',
+                        timestamp: Date.now(),
+                        message_id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        segments: [{ type: 'text', text }]
+                    };
+                    ws.send(JSON.stringify(replyMsg));
+                    return true;
+                } catch (err) {
+                    BotUtil.makeLog('error', `reply失败: ${err.message}`, deviceId);
+                    return false;
+                }
+            },
+
             sendCommand: async (cmd, params = {}, priority = 0) =>
                 await this.sendCommand(deviceId, cmd, params, priority),
 

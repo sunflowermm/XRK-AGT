@@ -822,7 +822,7 @@ export class add extends plugin {
 
   /** 群号key */
   get grpKey() {
-    return `Yz:group_id:${this.e.user_id}`
+    return `AGT:group_id:${this.e.user_id}`
   }
 
   /** #添加 */

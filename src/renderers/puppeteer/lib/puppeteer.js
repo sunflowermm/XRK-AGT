@@ -77,7 +77,7 @@ export default class PuppeteerRenderer extends Renderer {
 
       if (!this.mac) {
         this.mac = await this.getMac();
-        this.browserMacKey = `Yz:chromium:browserWSEndpoint:${this.mac}`;
+        this.browserMacKey = `AGT:chromium:browserWSEndpoint:${this.mac}`;
       }
 
       let browserWSEndpoint = null;

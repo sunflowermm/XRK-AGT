@@ -141,7 +141,7 @@ export default function setLog() {
    * @returns {string} 日志头部文本
    */
   function getLogHeader() {
-    const headerText = cfg.agt?.logging?.align ? `[${cfg.agt.logging.align}]` : '[XRKYZ]'
+    const headerText = cfg.agt?.logging?.align ? `[${cfg.agt.logging.align}]` : '[XRKAGT]'
     return createGradientText(headerText)
   }
 
@@ -253,7 +253,7 @@ export default function setLog() {
     gray: (text) => chalk.gray(text),
     white: (text) => chalk.white(text),
 
-    xrkyzGradient: (text) => createGradientText(text, selectedScheme),
+    xrkagtGradient: (text) => createGradientText(text, selectedScheme),
     rainbow: (text) => {
       const rainbowColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3']
       return createGradientText(text, rainbowColors)

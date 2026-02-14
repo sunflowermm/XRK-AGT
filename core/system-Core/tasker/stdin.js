@@ -472,7 +472,7 @@ export class StdinHandler {
     
     event.friend = {
       sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo),
-      recallMsg: () => logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`),
+      recallMsg: () => logger.mark(`${logger.xrkagtGradient(`[${nickname}]`)} 撤回消息`),
       makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg)
     }
     
@@ -482,7 +482,7 @@ export class StdinHandler {
     }
     
     event.recall = () => { 
-      logger.mark(`${logger.xrkyzGradient(`[${nickname}]`)} 撤回消息`)
+      logger.mark(`${logger.xrkagtGradient(`[${nickname}]`)} 撤回消息`)
       return true
     }
     

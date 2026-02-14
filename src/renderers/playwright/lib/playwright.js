@@ -158,7 +158,7 @@ export default class PlaywrightRenderer extends Renderer {
 
       if (!this.mac) {
         this.mac = await this.getMac();
-        this.browserMacKey = `Yz:${this.browserType}:browserURL:${this.mac}`;
+        this.browserMacKey = `AGT:${this.browserType}:browserURL:${this.mac}`;
       }
 
       let wsEndpoint = null;

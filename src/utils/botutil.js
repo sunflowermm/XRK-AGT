@@ -493,7 +493,7 @@ export default class BotUtil {
       return BotUtil.cache(cacheKey, "", 60000);
     }
 
-    const idStr = id ? String(id) : (logCfg.align || "XRKYZ");
+    const idStr = id ? String(id) : (logCfg.align || "XRKAGT");
     const displayWidth = BotUtil.#getDisplayWidth(idStr);
 
     // 纯文本模式（没有 chalk）

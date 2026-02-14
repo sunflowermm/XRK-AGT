@@ -588,7 +588,7 @@ class PluginsLoader {
       }
 
       // 检查关机状态
-      const shutdownStatus = await redis.get(`Yz:shutdown:${botUin}`)
+      const shutdownStatus = await redis.get(`AGT:shutdown:${botUin}`)
       if (shutdownStatus === 'true') {
         logger.debug(`[关机状态] 忽略消息: ${e.plainText || ''}`)
         return false
@@ -1377,7 +1377,7 @@ class PluginsLoader {
 
   async saveCount(type, groupId = '') {
     try {
-      const base = groupId ? `Yz:count:group:${groupId}:` : 'Yz:count:'
+      const base = groupId ? `AGT:count:group:${groupId}:` : 'AGT:count:'
       const dayKey = `${base}${type}:day:${moment().format('MMDD')}`
       const monthKey = `${base}${type}:month:${moment().month() + 1}`
       const keys = [dayKey, monthKey]
@@ -1403,8 +1403,8 @@ class PluginsLoader {
   async delCount() {
     try {
       await Promise.all([
-        redis.set('Yz:count:sendMsg:total', '0'),
-        redis.set('Yz:count:screenshot:total', '0')
+        redis.set('AGT:count:sendMsg:total', '0'),
+        redis.set('AGT:count:screenshot:total', '0')
       ])
     } catch (error) {
       logger.debug(`删除计数失败: ${error.message}`)

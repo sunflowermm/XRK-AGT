@@ -144,11 +144,11 @@ export default {
 
         switch (action) {
           case 'shutdown':
-            await redis.set(`Yz:shutdown:${uin}`, 'true');
+            await redis.set(`AGT:shutdown:${uin}`, 'true');
             HttpResponse.success(res, null, '已关机');
             break;
           case 'startup':
-            await redis.del(`Yz:shutdown:${uin}`);
+            await redis.del(`AGT:shutdown:${uin}`);
             HttpResponse.success(res, null, '已开机');
             break;
           default:
