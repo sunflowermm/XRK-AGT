@@ -16,6 +16,9 @@ plugin/**
 !plugin/sendLog.js
 !plugin/update.js
 !plugin/add.js
+!plugin/x.js
+!plugin/点歌.js
+!plugin/帮助.js
 
 !tasker
 tasker/**

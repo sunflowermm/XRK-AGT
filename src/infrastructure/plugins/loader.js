@@ -169,29 +169,23 @@ class PluginsLoader {
     }
   }
 
+  /** Tasker 事件链统一入口：基础 + 消息/群组 + 适配器扩展 */
   normalizeEventPayload(e) {
     if (!e) return
-    
-    // 使用 EventNormalizer 统一标准化
-    EventNormalizer.normalizeBase(e, {
-      defaultPostType: e.message_type || e.notice_type || e.request_type || e.event_type || 'message',
+    const options = {
+      defaultPostType: e.post_type || e.notice_type || e.message_type || e.request_type || e.event_type || 'message',
       defaultMessageType: e.group_id ? 'group' : 'private',
-      defaultUserId: e.user_id
-    })
-    
-    // 标准化消息字段
-    EventNormalizer.normalizeMessage(e)
-    
-    // 标准化群组字段
-    EventNormalizer.normalizeGroup(e)
-    
-    // 初始化扩展字段（msg由parseMessage重新构建，这里清空）
+      defaultUserId: e.user_id || e.device_id || e.sender?.user_id || 'unknown'
+    }
+    EventNormalizer.normalize(e, options)
+    if (e.isDevice) EventNormalizer.normalizeDevice(e)
+    if (e.isOneBot) EventNormalizer.normalizeOneBot(e, `onebot.${e.post_type || 'message'}`)
+    if (e.isStdin) EventNormalizer.normalizeStdin(e)
+    if (e.isOneBot && e.post_type === 'message') EventNormalizer.normalizeOneBotMessage(e)
     e.msg = ''
     e.img = []
     e.video = []
     e.audio = []
-    
-    // 提取纯文本
     e.plainText = this.extractMessageText(e)
   }
 
@@ -226,15 +220,7 @@ class PluginsLoader {
 
   setupEventProps(e) {
     if (!e) return
-    
-    // sender信息已由EventNormalizer和增强插件处理，这里仅补充device_name
     if (!e.sender) e.sender = {}
-    if (!e.sender.nickname && e.device_name) {
-      e.sender.nickname = e.device_name
-      e.sender.card = e.sender.card || e.sender.nickname
-    }
-    
-    // logText由增强插件优先设置，这里作为兜底
     if (!e.logText || e.logText.includes('未知')) {
       const scope = e.group_id ? `group:${e.group_id}` : (e.user_id || '未知')
       e.logText = `[${e.tasker || '未知'}][${scope}]`
@@ -258,7 +244,7 @@ class PluginsLoader {
     e.replyNew = e.reply
     
     // 设置通用reply方法，特定适配器的增强功能由适配器增强插件处理
-    e.reply = async (msg = '', _quote = false, _data = {}) => {
+    e.reply = async (msg = '') => {
       if (!msg) return false
       
       try {
@@ -333,12 +319,10 @@ class PluginsLoader {
         }
       }
 
-      // 处理上下文和限流（非设备事件）
-      if (!e.isDevice) {
-        if (await this.handleContext(plugins, e)) return true
-        if (!plugins.some(p => p.bypassThrottle === true)) {
-          this.setLimit(e)
-        }
+      // 上下文：所有事件都参与，便于点歌等“先发列表再等数字”在 device/web 下生效
+      if (await this.handleContext(plugins, e)) return true
+      if (!e.isDevice && !plugins.some(p => p.bypassThrottle === true)) {
+        this.setLimit(e)
       }
 
       // 处理插件规则

@@ -1640,14 +1640,22 @@ class DeviceManager {
         return { success: true, command_id: cmd.id, queued: queue.length };
     }
 
-    /**
-     * 处理设备事件
-     * @param {string} deviceId - 设备ID
-     * @param {string} eventType - 事件类型
-     * @param {Object} eventData - 事件数据
-     * @param {Object} Bot - Bot实例
-     * @returns {Promise<Object>} 处理结果
-     */
+    /** 标记设备活跃（OneBot 风格：心跳/消息/通知统一更新） */
+    markDeviceActive(ws, deviceId) {
+        if (ws) ws.isAlive = true; if (ws) ws.lastPong = Date.now();
+        const device = devices.get(deviceId);
+        if (device) {
+            device.last_seen = Date.now();
+            device.online = true;
+        }
+    }
+
+    /** 向 WebSocket 发送错误响应 */
+    sendWsError(ws, message) {
+        try {
+            ws.send(JSON.stringify({ type: 'error', message }));
+        } catch {}
+    }
 
     /**
      * 处理WebSocket消息
@@ -1661,34 +1669,21 @@ class DeviceManager {
         try {
             const { type, device_id, ...payload } = data;
             const deviceId = device_id || ws.device_id || 'unknown';
-            
 
-
-            // 只对非心跳类型的消息记录日志
+            const isWeb = deviceId === 'webclient' || String(deviceId).startsWith('webclient_');
             if (type !== 'heartbeat' && type !== 'heartbeat_response') {
-                logWithThrottle('info', `📨 [WebSocket] ${type}`, deviceId, `ws:${deviceId}:${type}`, 800);
+                const label = isWeb ? `收到 ${type}` : type;
+                logWithThrottle('info', `📨 [WebSocket] ${label}`, deviceId, `ws:${deviceId}:${type}`, 800);
             }
 
             if (!type) {
-                BotUtil.makeLog('error',
-                    `❌ [WebSocket] 消息格式错误，缺少type字段`,
-                    deviceId
-                );
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: '消息格式错误：缺少type字段'
-                }));
+                BotUtil.makeLog('error', `❌ [WebSocket] 消息格式错误，缺少type字段`, deviceId);
+                this.sendWsError(ws, '消息格式错误：缺少type字段');
                 return;
             }
-
             if (type !== 'register' && !devices.has(deviceId)) {
                 BotUtil.makeLog('warn', `[WebSocket] 收到来自未注册设备的消息 (type: ${type})`, deviceId);
-                try {
-                    ws.send(JSON.stringify({
-                        type: 'error',
-                        message: '设备未注册。请先发送 register 消息。'
-                    }));
-                } catch {}
+                this.sendWsError(ws, '设备未注册。请先发送 register 消息。');
                 return;
             }
 
@@ -1737,18 +1732,9 @@ class DeviceManager {
                 }
 
                 case 'heartbeat': {
-                    ws.isAlive = true;
-                    ws.lastPong = Date.now();
-
-                    const device = devices.get(deviceId);
-                    if (device) {
-                        device.last_seen = Date.now();
-                        device.online = true;
-                        if (payload.status) {
-                            device.status = payload.status;
-                        }
-                    }
-
+                    this.markDeviceActive(ws, deviceId);
+                    const hbDevice = devices.get(deviceId);
+                    if (hbDevice && payload.status) hbDevice.status = payload.status;
                     this.updateDeviceStats(deviceId, 'heartbeat');
 
                     const queued = deviceCommands.get(deviceId) || [];
@@ -1763,13 +1749,7 @@ class DeviceManager {
                 }
 
                 case 'heartbeat_response': {
-                    ws.isAlive = true;
-                    ws.lastPong = Date.now();
-                    const device = devices.get(deviceId);
-                    if (device) {
-                        device.last_seen = Date.now();
-                        device.online = true;
-                    }
+                    this.markDeviceActive(ws, deviceId);
                     this.updateDeviceStats(deviceId, 'heartbeat');
                     break;
                 }
@@ -1784,15 +1764,41 @@ class DeviceManager {
                     break;
                 }
 
+                case 'notice': {
+                    const device = devices.get(deviceId);
+                    if (!device) break;
+                    this.markDeviceActive(ws, deviceId);
+                    const notice_type = payload.notice_type || 'notify';
+                    const sub_type = payload.sub_type || '';
+                    const user_id = payload.user_id || payload.userId || deviceId;
+                    const now = Math.floor(Date.now() / 1000);
+                    const noticeEventData = {
+                        post_type: 'notice',
+                        notice_type: notice_type,
+                        sub_type: sub_type,
+                        device_id: deviceId,
+                        device_type: device.device_type,
+                        device_name: device.device_name,
+                        self_id: deviceId,
+                        user_id,
+                        isMaster: payload.isMaster === true || (payload.device_type === 'web' && user_id),
+                        time: now,
+                        event_id: `device_notice_${now}_${Math.random().toString(36).substr(2, 9)}`,
+                        tasker: 'device',
+                        isDevice: true,
+                        adapter_name: 'device',
+                        platform: 'device',
+                        bot: runtimeBot[deviceId]
+                    };
+                    runtimeBot.em('device.notice', noticeEventData);
+                    runtimeBot.em('device', noticeEventData);
+                    break;
+                }
+
                 case 'message': {
                     const device = devices.get(deviceId);
                     if (!device) break;
-
-                    // 更新 WebSocket 和设备的活跃状态
-                    ws.isAlive = true;
-                    ws.lastPong = Date.now();
-                    device.last_seen = Date.now();
-                    device.online = true;
+                    this.markDeviceActive(ws, deviceId);
                     device.stats.messages_received++;
                     this.updateDeviceStats(deviceId, 'message');
 
@@ -1855,7 +1861,7 @@ class DeviceManager {
                         channel: messagePayload.channel,
                         meta: messagePayload.meta,
                         /** 与 QQ 一致：供 ChatStream.syncHistoryFromAdapter 拉取近期对话并参与 LLM 上下文。签名 (message_seq, count, reverseOrder) */
-                        getChatHistory: async (_message_seq, count = 20, _reverseOrder = true) =>
+                        getChatHistory: (message_seq, count = 20, reverseOrder) =>
                             getDeviceChatHistory(deviceId, count),
                         /** 获取当前消息所回复的那条（从 message 中第一个 reply 段解析），便于插件处理媒体等 */
                         getReply: async () => {
@@ -1896,8 +1902,6 @@ class DeviceManager {
                                     return false;
                                 }
                                 
-                                BotUtil.makeLog('debug', `[reply] 收到输入: ${JSON.stringify(segmentsOrText)}`, deviceId);
-                                
                                 // 标准化输入：tasker 发送的 segments 格式
                                 let segments = [];
                                 let title = '';
@@ -1924,22 +1928,15 @@ class DeviceManager {
                                         title = segmentsOrText.title || '';
                                         description = segmentsOrText.description || '';
                                     } else if (segmentsOrText.type && ['text', 'image', 'video', 'record', 'file', 'at', 'reply', 'raw', 'markdown'].includes(segmentsOrText.type)) {
-                                        // 单个 segment 对象（如 segment.record() 返回的对象）
-                                        BotUtil.makeLog('debug', `[reply] 识别为单个 segment: type=${segmentsOrText.type}, file=${segmentsOrText.file || segmentsOrText.data?.file || '无'}`, deviceId);
                                         segments = [segmentsOrText];
                                     } else {
-                                        // 单个对象：转换为 text segment
-                                        BotUtil.makeLog('debug', `[reply] 对象无 type 字段，转换为文本: ${JSON.stringify(segmentsOrText)}`, deviceId);
                                         segments = [{ type: 'text', text: String(segmentsOrText) }];
                                     }
                                 } else if (segmentsOrText) {
-                                    // 字符串：转换为 text segment
                                     segments = [{ type: 'text', text: String(segmentsOrText) }];
                                 }
-                                
-                                BotUtil.makeLog('debug', `[reply] 标准化后 segments: ${JSON.stringify(segments)}`, deviceId);
-                                
-                                // 处理 segments：转换文件路径为 web URL，支持转发消息
+
+                                // 处理 segments：路径/Buffer 转 web URL
                                 segments = segments.map((seg) => {
                                     // 字符串类型：转换为 text segment（防御性处理）
                                     if (typeof seg === 'string') {
@@ -1983,67 +1980,35 @@ class DeviceManager {
                                     if (seg.type === 'poke') {
                                         return { type: 'poke', qq: seg.qq ?? seg.user_id ?? '' };
                                     }
-                                    // 文件类型 segment（image/video/record/file）：转换文件路径为 URL
+                                    // 文件类型：Buffer 转 data URL，路径转 web URL
                                     if (['image', 'video', 'record', 'file'].includes(seg.type)) {
-                                        BotUtil.makeLog('debug', `[reply] 处理文件类型 segment: type=${seg.type}, url=${seg.url || '无'}, file=${seg.file || seg.data?.file || '无'}`, deviceId);
-                                        
-                                        // 已有 url：直接使用
-                                        if (seg.url) {
-                                            BotUtil.makeLog('debug', `[reply] segment 已有 url，直接使用: ${seg.url}`, deviceId);
-                                            return seg;
-                                        }
-
-                                        // 获取文件路径：支持 oicq 格式（seg.file）和标准格式（seg.data.file）
+                                        if (seg.url) return seg;
                                         const filePath = seg.file || seg.data?.file;
-                                        if (!filePath) {
-                                            BotUtil.makeLog('warn', `[reply] ${seg.type} segment 缺少 file 路径`, deviceId);
+                                        if (Buffer.isBuffer(filePath)) {
+                                            const mime = seg.type === 'image' ? (filePath[0] === 0x89 && filePath[1] === 0x50 ? 'image/png' : 'image/jpeg') : seg.type === 'video' ? 'video/mp4' : 'application/octet-stream';
+                                            return { type: seg.type, url: `data:${mime};base64,${filePath.toString('base64')}`, data: {}, name: seg.name };
+                                        }
+                                        if (!filePath || typeof filePath !== 'string') {
+                                            BotUtil.makeLog('warn', `[reply] ${seg.type} segment 缺少 file 或 url`, deviceId);
                                             return null;
                                         }
-
-                                        // 远程 URL（http/https/data）：直接使用
                                         if (/^https?:\/\//i.test(filePath) || filePath.startsWith('data:')) {
-                                            BotUtil.makeLog('debug', `[reply] 远程 URL，直接使用: ${filePath}`, deviceId);
-                                            return {
-                                                type: seg.type,
-                                                url: filePath,
-                                                data: { file: filePath },
-                                                name: seg.name
-                                            };
+                                            return { type: seg.type, url: filePath, data: { file: filePath }, name: seg.name };
                                         }
-
-                                        // 转换本地路径为 web URL
                                         const normalizedPath = path.normalize(filePath);
                                         const trashPath = path.normalize(paths.trash);
-
-                                        let url;
-                                        if (normalizedPath.startsWith(trashPath)) {
-                                            // trash 目录：使用 trash API
-                                            const relativePath = path.relative(trashPath, normalizedPath).replace(/\\/g, '/');
-                                            url = `/api/trash/${relativePath}`;
-                                        } else if (path.isAbsolute(filePath)) {
-                                            // 绝对路径：使用通用文件服务
-                                            const fileId = Buffer.from(filePath, 'utf8').toString('base64url');
-                                            url = `/api/device/file/${fileId}`;
-                                        } else {
-                                            // 相对路径：使用 trash API
-                                            url = `/api/trash/${filePath.replace(/\\/g, '/')}`;
-                                        }
-
-                                        BotUtil.makeLog('debug', `[reply] 本地路径转换为 URL: ${filePath} -> ${url}`, deviceId);
-                                        return {
-                                            type: seg.type,
-                                            url,
-                                            data: { file: filePath },
-                                            name: seg.name
-                                        };
+                                        let url = normalizedPath.startsWith(trashPath)
+                                            ? `/api/trash/${path.relative(trashPath, normalizedPath).replace(/\\/g, '/')}`
+                                            : path.isAbsolute(filePath)
+                                                ? `/api/device/file/${Buffer.from(filePath, 'utf8').toString('base64url')}`
+                                                : `/api/trash/${filePath.replace(/\\/g, '/')}`;
+                                        return { type: seg.type, url, data: { file: filePath }, name: seg.name };
                                     }
                                     
                                     // 其他类型 segment：直接返回
                                     return seg;
                                 }).filter(seg => seg !== null);
-                                
-                                BotUtil.makeLog('debug', `[reply] 处理后的 segments (${segments.length}个): ${JSON.stringify(segments)}`, deviceId);
-                                
+
                                 if (segments.length === 0) {
                                     BotUtil.makeLog('warn', `[回复消息] segments为空，无法发送`, deviceId);
                                     return false;
@@ -2119,14 +2084,6 @@ class DeviceManager {
                                     }
                                 }
                                 
-                                BotUtil.makeLog('debug', `[reply] 发送 WebSocket 消息: type=${replyMsg.type}, segments=${replyMsg.segments?.length || 0}`, deviceId);
-                                if (replyMsg.segments) {
-                                    replyMsg.segments.forEach((seg, idx) => {
-                                        if (seg.type === 'record') {
-                                            BotUtil.makeLog('debug', `[reply] segment[${idx}]: type=record, url=${seg.url || '无'}, file=${seg.file || seg.data?.file || '无'}`, deviceId);
-                                        }
-                                    });
-                                }
                                 ws.send(JSON.stringify(replyMsg));
                                 if (replyTextForHistory) {
                                     pushDeviceChatMessage(deviceId, {
@@ -2160,18 +2117,8 @@ class DeviceManager {
                     }
             }
         } catch (e) {
-            BotUtil.makeLog('error',
-                `❌ [WebSocket] 处理消息失败: ${e.message}`,
-                ws.device_id
-            );
-            try {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: e.message
-                }));
-            } catch {
-                // 忽略发送错误
-            }
+            BotUtil.makeLog('error', `❌ [WebSocket] 处理消息失败: ${e.message}`, ws.device_id);
+            this.sendWsError(ws, e.message);
         }
     }
 

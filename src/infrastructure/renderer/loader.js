@@ -19,51 +19,66 @@ class RendererLoader {
   constructor() {
     this.renderers = new Map()
     this.watcher = null
+    this._loadPromise = null
   }
 
   static async init() {
-    const render = new RendererLoader()
-    await render.load()
-    return render
+    const loader = new RendererLoader()
+    await loader.load()
+    return loader
   }
 
   async load() {
+    if (this._loadPromise) return this._loadPromise
+    this._loadPromise = this._doLoad()
+    return this._loadPromise
+  }
+
+  async _doLoad() {
     const baseDir = paths.renderers
     if (!fsSync.existsSync(baseDir)) {
-      BotUtil.makeLog('warn', `渲染器目录不存在: ${baseDir}，跳过加载`, 'RendererLoader');
+      BotUtil.makeLog('warn', `渲染器目录不存在: ${baseDir}`, 'RendererLoader')
       return
     }
-
-    const entries = await fs.readdir(baseDir, { withFileTypes: true });
+    const entries = await fs.readdir(baseDir, { withFileTypes: true })
     for (const entry of entries) {
-      if (entry.isDirectory()) {
-        try {
-          await this._loadRenderer(entry.name, baseDir)
-        } catch (err) {
-          BotUtil.makeLog('error', `渲染器加载失败: ${entry.name} - ${err.message}`, 'RendererLoader', err);
-        }
+      if (!entry.isDirectory()) continue
+      try {
+        await this._loadRenderer(entry.name, baseDir)
+      } catch (err) {
+        BotUtil.makeLog('error', `渲染器加载失败: ${entry.name} - ${err.message}`, 'RendererLoader', err)
       }
     }
+    const loaded = [...this.renderers.keys()]
+    if (loaded.length) BotUtil.makeLog('info', `已加载渲染器: ${loaded.join(', ')}`, 'RendererLoader')
+    else BotUtil.makeLog('warn', '未加载任何渲染器，帮助页截图不可用', 'RendererLoader')
   }
 
   async _loadRenderer(name, baseDir) {
-    const indexJs = path.join(baseDir, name, "index.js")
+    const indexJs = path.join(baseDir, name, 'index.js')
     if (!fsSync.existsSync(indexJs)) return
-
     const rendererCfg = cfg.getRendererConfig(name) || {}
-    const rendererFn = (await import(pathToFileURL(indexJs).href)).default
-    const renderer = rendererFn(rendererCfg)
-
-    if (!renderer.id || !renderer.type || !renderer.render || !lodash.isFunction(renderer.render)) {
-      BotUtil.makeLog('warn', `渲染器配置无效: ${name}`, 'RendererLoader');
-      return false
+    const factory = (await import(pathToFileURL(indexJs).href)).default
+    const renderer = factory(rendererCfg)
+    if (!renderer?.id || !lodash.isFunction(renderer.render)) {
+      BotUtil.makeLog('warn', `渲染器无效(缺 id/render): ${name}`, 'RendererLoader')
+      return
     }
     this.renderers.set(renderer.id, renderer)
-    return true
   }
 
-  getRenderer(name = cfg.agt?.browser?.renderer || "puppeteer") {
-    return this.renderers.get(name) || {}
+  getRenderer(name = cfg.agt?.browser?.renderer || 'puppeteer') {
+    let r = this.renderers.get(name)
+    if (r && typeof r.render === 'function') return r
+    r = this.renderers.get('puppeteer') || this.renderers.get('playwright')
+    return r || {}
+  }
+
+  /** 若当前无可用渲染器则重新加载一次（解决初始化顺序导致未加载的问题） */
+  async ensureLoaded() {
+    if (this.renderers.size > 0) return
+    this._loadPromise = null
+    await this.load()
   }
 
   /**

@@ -2310,7 +2310,7 @@ class App {
       safeBind(pokeBtn, 'click', () => {
         const qq = this.getWebUserId();
         this.appendSegments([{ type: 'poke', qq }], true, 'user');
-        this.sendDeviceMessage('[戳一戳]', { source: 'manual', message: [{ type: 'poke', qq }], skipAppend: true });
+        this.sendDeviceNotice('notify', 'poke', { user_id: qq });
         this.scrollToBottom();
       });
     }
@@ -7078,53 +7078,50 @@ class App {
   }
 
 
+  _ensureDeviceWsReady() {
+    this.ensureDeviceWs();
+    const ws = this._deviceWs;
+    if (ws?.readyState === WebSocket.OPEN) return ws;
+    if (ws?.readyState !== WebSocket.CONNECTING) this.showToast('设备通道未连接，正在重连...', 'warning');
+    return null;
+  }
+
+  _devicePayloadBase() {
+    const ws = this._deviceWs;
+    return {
+      device_id: ws?.device_id || this.getWebUserId(),
+      device_type: 'web',
+      user_id: this.getWebUserId(),
+      isMaster: true
+    };
+  }
+
   sendDeviceMessage(text, meta = {}) {
     const payloadText = (text || '').trim();
     if (!payloadText) return;
 
-    // 确保WebSocket连接
-    this.ensureDeviceWs();
-    const ws = this._deviceWs;
-    
-    // 如果连接未就绪，尝试等待一下
-    if (ws?.readyState !== WebSocket.OPEN) {
-      if (ws?.readyState === WebSocket.CONNECTING) {
-        // 正在连接中，等待连接完成
-        const checkConnection = setInterval(() => {
-          if (ws?.readyState === WebSocket.OPEN) {
-            clearInterval(checkConnection);
+    let ws = this._ensureDeviceWsReady();
+    if (!ws) {
+      if (this._deviceWs?.readyState === WebSocket.CONNECTING) {
+        const t = setInterval(() => {
+          if (this._deviceWs?.readyState === WebSocket.OPEN) {
+            clearInterval(t);
             this.sendDeviceMessage(text, meta);
-          } else if (ws?.readyState === WebSocket.CLOSED) {
-            clearInterval(checkConnection);
+          } else if (this._deviceWs?.readyState === WebSocket.CLOSED) {
+            clearInterval(t);
             this.showToast('设备通道连接失败', 'error');
           }
         }, 500);
-        
-        // 5秒后超时
-        setTimeout(() => {
-          clearInterval(checkConnection);
-          if (ws?.readyState !== WebSocket.OPEN) {
-            this.showToast('设备通道连接超时', 'warning');
-          }
-        }, 5000);
-        return;
-      } else {
-        this.showToast('设备通道未连接，正在重连...', 'warning');
-      return;
+        setTimeout(() => { clearInterval(t); if (this._deviceWs?.readyState !== WebSocket.OPEN) this.showToast('设备通道连接超时', 'warning'); }, 5000);
       }
+      return;
     }
 
-    const deviceId = ws.device_id || this.getWebUserId();
-    const userId = this.getWebUserId();
-    
     const msg = {
+      ...this._devicePayloadBase(),
       type: 'message',
-      device_id: deviceId,
-      device_type: 'web',
       channel: 'web-chat',
-      user_id: userId,
       text: payloadText,
-      isMaster: true,
       message: Array.isArray(meta.message) ? meta.message : undefined,
       meta: {
         persona: this.getCurrentPersona(),
@@ -7170,6 +7167,19 @@ class App {
       this.showToast('发送失败: ' + e.message, 'error');
       this.clearChatStreamState();
     }
+  }
+
+  /** OneBot v11：通知类事件（如戳一戳）走 notice，不走 message */
+  sendDeviceNotice(notice_type, sub_type, payload = {}) {
+    const ws = this._ensureDeviceWsReady();
+    if (!ws) return;
+    ws.send(JSON.stringify({
+      ...this._devicePayloadBase(),
+      type: 'notice',
+      notice_type,
+      sub_type,
+      ...payload
+    }));
   }
 
   handleWsMessage(data) {

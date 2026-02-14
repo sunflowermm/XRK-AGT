@@ -3,7 +3,7 @@ import fs from 'fs';
 import chokidar from 'chokidar';
 import path from 'path';
 import paths from '#utils/paths.js';
-import { GLOBAL_CONFIGS, SERVER_CONFIGS, isServerOrFactoryConfig } from './config-constants.js';
+import { GLOBAL_CONFIGS, SERVER_CONFIGS } from './config-constants.js';
 
 /**
  * 配置管理类
@@ -182,40 +182,38 @@ class Cfg {
 
   getRendererConfig(type) {
     const defaultFile = path.join(this.PATHS.RENDERERS, type, 'config_default.yaml');
-    
     if (!this._port) {
       try {
-        return fs.existsSync(defaultFile) ? YAML.parse(fs.readFileSync(defaultFile, 'utf8')) : {};
+        const out = fs.existsSync(defaultFile) ? YAML.parse(fs.readFileSync(defaultFile, 'utf8')) : {};
+        logger?.debug?.(`[渲染器] port 未设置，仅用默认配置: ${type}`);
+        return out;
       } catch {
         return {};
       }
     }
-    
     const key = `renderer.${this._port}.${type}`;
     if (this.config[key]) return this.config[key];
-
     const serverDir = path.join(this.getConfigDir(), 'renderers', type);
     const serverFile = path.join(serverDir, 'config.yaml');
-    
     let config = {};
-    
     if (fs.existsSync(defaultFile)) {
       try {
         config = YAML.parse(fs.readFileSync(defaultFile, 'utf8'));
-      } catch (error) {
-        logger?.error(`[渲染器默认配置解析失败][${type}]`, error);
+      } catch (e) {
+        logger?.error?.(`[渲染器] 默认配置解析失败 [${type}]`, e);
       }
     }
-    
     if (fs.existsSync(serverFile)) {
       try {
         config = { ...config, ...YAML.parse(fs.readFileSync(serverFile, 'utf8')) };
         this.watch(serverFile, `renderer.${type}`, key);
-      } catch (error) {
-        logger?.error(`[渲染器服务器配置解析失败][${type}]`, error);
+        logger?.debug?.(`[渲染器] 已合并 ${type} 服务器配置: ${serverFile}`);
+      } catch (e) {
+        logger?.error?.(`[渲染器] 服务器配置解析失败 [${type}] ${serverFile}`, e);
       }
+    } else {
+      logger?.debug?.(`[渲染器] 无服务器覆盖: ${serverFile}`);
     }
-    
     return this.config[key] = config;
   }
 

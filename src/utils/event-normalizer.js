@@ -127,15 +127,14 @@ export class EventNormalizer {
    */
   static normalizeDevice(e) {
     if (!e) return e
-
-    // 标准化消息类型
-    if (e.post_type === 'device' && e.event_type === 'message') {
-      e.post_type = 'message'
-    }
-    // 与 QQ 私聊一致：设备会话视为“非群聊”，便于统一走 getChatHistory / 历史 key
+    if (e.post_type === 'device' && e.event_type === 'message') e.post_type = 'message'
     e.isGroup = false
     e.isPrivate = true
-
+    if (!e.sender) e.sender = {}
+    if (!e.sender.nickname && e.device_name) {
+      e.sender.nickname = e.device_name
+      e.sender.card = e.sender.card || e.sender.nickname
+    }
     return e
   }
 
@@ -146,10 +145,35 @@ export class EventNormalizer {
    */
   static normalizeStdin(e) {
     if (!e) return e
-
     e.tasker = e.tasker || 'stdin'
     e.isStdin = true
+    if (e.command && (!Array.isArray(e.message) || e.message.length === 0)) {
+      e.message = [{ type: 'text', text: e.command }]
+    }
+    return e
+  }
 
+  /** OneBot 消息事件：CQ 转 raw_message / msg，补全 self_id / user_id */
+  static normalizeOneBotMessage(e) {
+    if (!e || e.post_type !== 'message') return e
+    if (!e.raw_message && Array.isArray(e.message) && e.message.length > 0) {
+      e.raw_message = e.message
+        .map(seg => {
+          if (seg.type === 'text') return seg.text || ''
+          if (seg.type === 'at') return `[CQ:at,qq=${seg.qq || seg.user_id || ''}]`
+          if (seg.type === 'image') return `[CQ:image,file=${seg.url || seg.file || ''}]`
+          if (seg.type === 'face') return `[CQ:face,id=${seg.id || ''}]`
+          if (seg.type === 'reply') return `[CQ:reply,id=${seg.id || ''}]`
+          if (seg.type === 'record') return `[CQ:record,file=${seg.file || ''}]`
+          if (seg.type === 'video') return `[CQ:video,file=${seg.file || ''}]`
+          if (seg.type === 'file') return `[CQ:file,file=${seg.file || ''}]`
+          return `[${seg.type}]`
+        })
+        .join('')
+      if (!e.msg) e.msg = e.raw_message
+    }
+    if (!e.self_id && e.bot?.uin) e.self_id = e.bot.uin
+    if (!e.user_id && e.sender?.user_id) e.user_id = e.sender.user_id
     return e
   }
 }

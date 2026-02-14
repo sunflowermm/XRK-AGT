@@ -222,8 +222,11 @@ export default class Runtime {
       await fs.writeFile(file, JSON.stringify(data))
     }
     
-    // 截图
+    await RendererLoader.ensureLoaded()
     const renderer = RendererLoader.getRenderer()
+    if (!renderer || typeof renderer.render !== 'function') {
+      throw new Error('未加载到可用渲染器(puppeteer/playwright)，请检查 src/renderers 与 agt.browser.renderer')
+    }
     const img = await renderer.render(`${plugin}/${normalizedPath}`, data)
     const base64 = img ? segment.image(img) : null
     if (cfg.retType === "base64") {

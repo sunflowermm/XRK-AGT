@@ -1,17 +1,14 @@
 import Renderer from "#infrastructure/renderer/Renderer.js";
 import lodash from "lodash";
 import puppeteer from "puppeteer";
-import cfg from "#infrastructure/config/config.js";
 import fs from "node:fs";
 import path from "node:path";
 import BotUtil from "#utils/botutil.js";
 import paths from '#utils/paths.js';
 
-
-
 /**
- * Puppeteer-based browser renderer for screenshot generation
- * Supports browser instance reuse, memory management, and health monitoring
+ * Puppeteer-based browser renderer for screenshot generation.
+ * 配置由 RendererLoader 通过 getRendererConfig('puppeteer') 注入（默认 + data/server_bots/{port}/renderers/puppeteer/config.yaml）。
  */
 export default class PuppeteerRenderer extends Renderer {
   constructor(config = {}) {
@@ -27,24 +24,22 @@ export default class PuppeteerRenderer extends Renderer {
     this.mac = "";
     this.browserMacKey = null;
 
-    const rendererCfg = cfg.renderer?.puppeteer || {};
-    
-    this.restartNum = config.restartNum ?? rendererCfg.restartNum ?? 100;
+    this.restartNum = config.restartNum ?? 100;
     this.renderNum = 0;
-    this.puppeteerTimeout = config.puppeteerTimeout ?? rendererCfg.puppeteerTimeout ?? 120000;
-    this.maxConcurrent = config.maxConcurrent ?? rendererCfg.maxConcurrent ?? 3;
+    this.puppeteerTimeout = config.puppeteerTimeout ?? 120000;
+    this.maxConcurrent = config.maxConcurrent ?? 3;
 
-    const vp = config.viewport ?? rendererCfg.viewport ?? {};
+    const vp = config.viewport ?? {};
     this.viewport = {
       width: vp.width ?? 1280,
       height: vp.height ?? 720,
       deviceScaleFactor: vp.deviceScaleFactor ?? 1,
     };
     this.config = {
-      headless: config.headless ?? rendererCfg.headless ?? "new",
-      args: config.args ?? rendererCfg.args ?? ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'],
-      executablePath: config.chromiumPath ?? rendererCfg.chromiumPath,
-      wsEndpoint: config.wsEndpoint ?? config.puppeteerWS ?? rendererCfg.wsEndpoint,
+      headless: config.headless ?? "new",
+      args: config.args ?? ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'],
+      executablePath: config.chromiumPath,
+      wsEndpoint: config.wsEndpoint ?? config.puppeteerWS,
     };
 
     this.healthCheckTimer = null;

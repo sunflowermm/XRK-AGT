@@ -213,9 +213,9 @@ export default class plugin {
 
   conKey(isGroup = false) {
     const selfId = this.e?.self_id || ''
-    const targetId = isGroup ? 
-      (this.group_id || this.e?.group_id || '') : 
-      (this.user_id || this.e?.user_id || '')
+    const targetId = isGroup
+      ? (this.group_id || this.e?.group_id || '')
+      : (this.user_id || this.e?.user_id || this.e?.device_id || '')
     return `${this.name}.${selfId}.${targetId}`
   }
 

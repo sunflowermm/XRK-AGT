@@ -1,16 +1,14 @@
 import Renderer from "#infrastructure/renderer/Renderer.js";
 import lodash from "lodash";
 import playwright from "playwright";
-import cfg from "#infrastructure/config/config.js";
 import fs from "node:fs";
 import path from "node:path";
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 
-
 /**
- * Playwright-based browser renderer for screenshot generation
- * Supports browser instance reuse, memory management, and health monitoring
+ * Playwright-based browser renderer for screenshot generation.
+ * 配置由 RendererLoader 通过 getRendererConfig('playwright') 注入（默认 + data/server_bots/{port}/renderers/playwright/config.yaml）。
  */
 export default class PlaywrightRenderer extends Renderer {
   constructor(config = {}) {
@@ -27,61 +25,44 @@ export default class PlaywrightRenderer extends Renderer {
     this.mac = "";
     this.browserMacKey = null;
 
-    const rendererCfg = cfg.renderer?.playwright || {};
-    
-    this.restartNum = config.restartNum ?? rendererCfg.restartNum ?? 100;
+    this.restartNum = config.restartNum ?? 100;
     this.renderNum = 0;
-    this.browserType = config.browser ?? rendererCfg.browserType ?? "chromium";
-    this.playwrightTimeout = config.playwrightTimeout ?? rendererCfg.playwrightTimeout ?? 120000;
-    this.healthCheckInterval = config.healthCheckInterval ?? rendererCfg.healthCheckInterval ?? 120000;
-    this.maxRetries = config.maxRetries ?? rendererCfg.maxRetries ?? 3;
-    this.retryDelay = config.retryDelay ?? rendererCfg.retryDelay ?? 2000;
-    this.maxConcurrent = config.maxConcurrent ?? rendererCfg.maxConcurrent ?? 3;
+    this.browserType = config.browser ?? "chromium";
+    this.playwrightTimeout = config.playwrightTimeout ?? 120000;
+    this.healthCheckInterval = config.healthCheckInterval ?? 120000;
+    this.maxRetries = config.maxRetries ?? 3;
+    this.retryDelay = config.retryDelay ?? 2000;
+    this.maxConcurrent = config.maxConcurrent ?? 3;
 
+    const defaultArgs = [
+      "--disable-gpu", "--disable-software-rasterizer", "--disable-dev-shm-usage",
+      "--no-sandbox", "--disable-setuid-sandbox", "--disable-extensions",
+      "--disable-background-networking", "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows", "--disable-breakpad",
+      "--disable-component-extensions-with-background-pages",
+      "--disable-features=TranslateUI,BlinkGenPropertyTrees",
+      "--disable-ipc-flooding-protection", "--disable-renderer-backgrounding",
+      "--force-color-profile=srgb", "--metrics-recording-only", "--mute-audio",
+      "--no-first-run", "--enable-automation", "--password-store=basic",
+      "--use-mock-keychain", "--disable-blink-features=AutomationControlled",
+      "--js-flags=--max-old-space-size=512", "--disable-accelerated-2d-canvas",
+      "--disable-accelerated-jpeg-decoding", "--disable-accelerated-mjpeg-decode",
+      "--disable-accelerated-video-decode",
+    ];
     this.config = {
-      headless: config.headless ?? rendererCfg.headless ?? true,
-      args: config.args ?? rendererCfg.args ?? [
-        "--disable-gpu",
-        "--disable-software-rasterizer",
-        "--disable-dev-shm-usage",
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-extensions",
-        "--disable-background-networking",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-breakpad",
-        "--disable-component-extensions-with-background-pages",
-        "--disable-features=TranslateUI,BlinkGenPropertyTrees",
-        "--disable-ipc-flooding-protection",
-        "--disable-renderer-backgrounding",
-        "--force-color-profile=srgb",
-        "--metrics-recording-only",
-        "--mute-audio",
-        "--no-first-run",
-        "--enable-automation",
-        "--password-store=basic",
-        "--use-mock-keychain",
-        "--disable-blink-features=AutomationControlled",
-        "--js-flags=--max-old-space-size=512",
-        "--disable-accelerated-2d-canvas",
-        "--disable-accelerated-jpeg-decoding",
-        "--disable-accelerated-mjpeg-decode",
-        "--disable-accelerated-video-decode",
-      ],
-      channel: config.channel ?? rendererCfg.channel,
-      executablePath: config.chromiumPath ?? rendererCfg.chromiumPath,
-      wsEndpoint: config.playwrightWS ?? rendererCfg.wsEndpoint,
+      headless: config.headless ?? true,
+      args: config.args ?? defaultArgs,
+      channel: config.channel,
+      executablePath: config.chromiumPath,
+      wsEndpoint: config.wsEndpoint ?? config.playwrightWS,
     };
 
-    this.contextOptions = config.contextOptions ?? rendererCfg.contextOptions ?? {
-      viewport: { 
-        width: rendererCfg.viewport?.width ?? 1280, 
-        height: rendererCfg.viewport?.height ?? 720 
-      },
-      deviceScaleFactor: rendererCfg.viewport?.deviceScaleFactor ?? 1,
-      bypassCSP: rendererCfg.contextOptions?.bypassCSP ?? true,
-      reducedMotion: rendererCfg.contextOptions?.reducedMotion ?? "reduce",
+    const vp = config.viewport ?? config.contextOptions?.viewport ?? {};
+    this.contextOptions = config.contextOptions ?? {
+      viewport: { width: vp.width ?? 1280, height: vp.height ?? 720 },
+      deviceScaleFactor: vp.deviceScaleFactor ?? 1,
+      bypassCSP: true,
+      reducedMotion: "reduce",
     };
 
     this.healthCheckTimer = null;
