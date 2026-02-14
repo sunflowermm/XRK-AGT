@@ -74,7 +74,7 @@ flowchart TD
    - 解析根目录 `package.json`。
    - 检查 `dependencies + devDependencies` 对应的模块是否存在于 `node_modules`。
    - 若有缺失，自动选择可用的包管理器（`pnpm` → `npm` → `yarn`）执行 `install`。
-   - 同时扫描 `core/*` 与 `renderers/*` 子目录中的 `package.json`，为插件/渲染器单独安装依赖。
+   - 扫描 `core/*` 下含 `package.json` 的子核心目录，缺依赖则在该目录执行 `pnpm install`（渲染器在 `src/renderers/`，使用根依赖，不单独安装）。
 
 3. **动态 imports 合并**
    - 扫描 `data/importsJson/*.json`，收集所有 `imports` 字段。

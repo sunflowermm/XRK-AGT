@@ -19,9 +19,16 @@ if (process.platform === 'win32') {
 }
 
 process.setMaxListeners(30);
+
+const entry = process.argv[1];
+if (entry && path.basename(entry) === 'start.js') {
+  const appPath = path.resolve(process.cwd(), 'app.js');
+  const result = spawnSync(process.argv[0], [appPath, ...process.argv.slice(2)], { stdio: 'inherit', cwd: process.cwd() });
+  process.exit(result.status !== null ? result.status : 1);
+}
+
 let globalSignalHandler = null;
 
-// 统一的清理函数
 async function cleanup() {
   if (globalSignalHandler) {
     await globalSignalHandler.cleanup();
@@ -358,7 +365,7 @@ class ServerManager extends BaseManager {
 
   async runServerProcess(port, skipConfigCheck = false) {
     const nodeArgs = getNodeArgs();
-    const entryScript = path.join(process.cwd(), 'start.js');
+    const entryScript = path.join(process.cwd(), 'app.js');
     const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
     
     const cleanEnv = {

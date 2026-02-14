@@ -132,11 +132,16 @@ flowchart LR
 
 ### 📥 1. 克隆项目
 
+**请使用浅克隆以减小下载体积**（`--depth=1` 仅拉取最新提交）：
+
 ```bash
-# 使用 Github
+# Github
 git clone --depth=1 https://github.com/sunflowermm/XRK-AGT.git
 
-# 或使用 Gitcode
+# Gitee
+git clone --depth=1 https://gitee.com/xrkseek/XRK-AGT.git
+
+# Gitcode
 git clone --depth=1 https://gitcode.com/Xrkseek/XRK-AGT.git
 
 cd XRK-AGT
@@ -157,7 +162,7 @@ pnpm install
 # 主服务端口（默认 8080）
 XRK_SERVER_PORT=8080
 
-# 代理配置（用于模型下载，可选）
+# 代理配置（用于模型下载，可选，填clash等开放的端口即可）
 HTTP_PROXY=http://host.docker.internal:7890
 HTTPS_PROXY=http://host.docker.internal:7890
 NO_PROXY=127.0.0.1,localhost
@@ -198,10 +203,10 @@ docker-compose down
 
 **Windows/Linux/macOS:**
 ```bash
-# 方式1：使用 app.js（推荐，自动检查依赖）
-node app
+# 方式1：使用 app.js（推荐，自动检查依赖与环境后启动）
+node app.js
 
-# 方式2：使用启动脚本
+# 方式2：使用启动脚本（会先经 app.js 做依赖检查再启动）
 # Windows
 start.bat
 
@@ -209,16 +214,16 @@ start.bat
 chmod +x start.sh
 ./start.sh server 8080
 
-# 方式3：直接使用 start.js
-node start server 8080
+# 方式3：node start 会重定向到 app.js，同样会做依赖检查
+node start.js server 8080
 ```
 
 **指定端口：**
 ```bash
-# 方式1：环境变量
-XRK_SERVER_PORT=3000 node app
+# 环境变量
+XRK_SERVER_PORT=3000 node app.js
 
-# 方式2：命令行参数
+# 命令行参数
 node start.js server 3000
 ```
 
@@ -318,10 +323,7 @@ HTTPS_PROXY=http://127.0.0.1:7890
 
 ### Q: 如何修改服务端口？
 
-A: 三种方式：
-1. 环境变量：`XRK_SERVER_PORT=3000 node app`
-2. 命令行参数：`node start.js server 3000`
-3. 配置文件：修改 `data/server_bots/{port}/server.yaml`
+A: 环境变量 `XRK_SERVER_PORT=3000 node app.js`、命令行 `node start.js server 3000`，或修改 `data/server_bots/{port}/server.yaml`。
 
 ### Q: 如何开发自定义插件？
 
@@ -344,6 +346,8 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 - **提交 Issue**：报告 Bug 或提出功能建议
 - **提交 PR**：修复 Bug 或添加新功能
 - **完善文档**：改进文档内容，帮助其他开发者
+
+**维护者**：建议用户始终使用 `git clone --depth=1` 以减小下载体积。若需从历史中移除大文件以进一步减小仓库体积，可使用 [git-filter-repo](https://github.com/newren/git-filter-repo) 等工具清理后 force-push。
 
 ---
 

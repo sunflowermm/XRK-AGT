@@ -2,86 +2,31 @@ import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
 import paths from '#utils/paths.js';
-import { createSimpleLogger } from './src/infrastructure/log.js';
 
-function execAsync(command, args = [], options = {}) {
+function spawnSync(cmd, args, opts) {
   return new Promise((resolve, reject) => {
-    const { timeout, maxBuffer = 1024 * 1024 * 10, ...spawnOptions } = options;
-    
-    // 避免 DEP0190 警告：不使用 shell，直接传递命令和参数
-    const child = spawn(command, args, { 
-      ...spawnOptions, 
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'] 
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let timeoutId = null;
-
-    const cleanup = () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-    };
-
-    const killChild = () => {
-      try {
-        child.kill('SIGTERM');
-      } catch {
-        // ignore
-      }
-    };
-
-    const createError = (message, code) => {
-      const error = new Error(message);
-      error.code = code;
-      error.stdout = stdout;
-      error.stderr = stderr;
-      return error;
-    };
-
-    if (timeout) {
-      timeoutId = setTimeout(() => {
-        killChild();
-        cleanup();
-        reject(createError(`Command timed out after ${timeout}ms`, 'TIMEOUT'));
-      }, timeout);
-    }
-
-    const checkBuffer = () => {
-      if (stdout.length > maxBuffer || stderr.length > maxBuffer) {
-        killChild();
-        cleanup();
-        reject(createError(`Command output exceeded maxBuffer size of ${maxBuffer} bytes`, 'MAXBUFFER'));
-      }
-    };
-
-    child.stdout?.on('data', (data) => {
-      stdout += data.toString();
-      checkBuffer();
-    });
-
-    child.stderr?.on('data', (data) => {
-      stderr += data.toString();
-      checkBuffer();
-    });
-
-    child.on('error', (error) => {
-      cleanup();
-      reject(error);
-    });
-
-    child.on('close', (code) => {
-      cleanup();
-      if (code !== 0) {
-        reject(createError(`Command failed with exit code ${code}`, code));
-      } else {
-        resolve({ stdout, stderr });
-      }
-    });
+    const child = spawn(cmd, args, { ...opts, stdio: 'inherit' });
+    child.on('error', reject);
+    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`exit ${code}`))));
   });
+}
+
+function createBootstrapLogger(logFile) {
+  const colors = { INFO: '\x1b[36m', SUCCESS: '\x1b[32m', WARNING: '\x1b[33m', ERROR: '\x1b[31m', RESET: '\x1b[0m' };
+  async function write(message, level = 'INFO') {
+    const line = `[${new Date().toISOString()}] [${level}] ${message}\n`;
+    try {
+      await fs.mkdir(path.dirname(logFile), { recursive: true });
+      await fs.appendFile(logFile, line, 'utf8');
+    } catch {}
+    console.log(`${colors[level] || ''}${message}${colors.RESET}`);
+  }
+  return {
+    log: (msg) => write(msg, 'INFO'),
+    success: (msg) => write(msg, 'SUCCESS'),
+    warning: (msg) => write(msg, 'WARNING'),
+    error: (msg) => write(msg, 'ERROR')
+  };
 }
 
 
@@ -91,266 +36,127 @@ class DependencyManager {
   }
 
   async parsePackageJson(packageJsonPath) {
-    try {
-      const content = await fs.readFile(packageJsonPath, 'utf-8');
-      return JSON.parse(content);
-    } catch (error) {
-      throw new Error(`无法读取package.json: ${error.message}`);
-    }
-  }
-
-  async isDependencyInstalled(depName, nodeModulesPath) {
-    try {
-      const depPath = path.join(nodeModulesPath, depName);
-      const stats = await fs.stat(depPath);
-      return stats.isDirectory();
-    } catch {
-      return false;
-    }
+    const content = await fs.readFile(packageJsonPath, 'utf-8');
+    return JSON.parse(content);
   }
 
   async getMissingDependencies(depNames, nodeModulesPath) {
     const results = await Promise.all(
-      depNames.map(dep => this.isDependencyInstalled(dep, nodeModulesPath))
+      depNames.map(async dep => {
+        try {
+          const st = await fs.stat(path.join(nodeModulesPath, dep));
+          return st.isDirectory();
+        } catch { return false; }
+      })
     );
     return depNames.filter((_, i) => !results[i]);
   }
 
   async installDependencies(missingDeps, cwd = process.cwd()) {
-    const isPlugin = cwd !== process.cwd();
-    const prefix = isPlugin ? `[${cwd}]` : '';
-    
-    await this.logger.warning(`${prefix}发现 ${missingDeps.length} 个缺失的依赖`);
-    await this.logger.log(`${prefix}使用 pnpm 安装依赖...`);
-    
+    const prefix = cwd !== process.cwd() ? `[${path.basename(cwd)}] ` : '';
+    await this.logger.warning(`${prefix}发现 ${missingDeps.length} 个缺失依赖，使用 pnpm 安装...`);
+    await this.logger.log(`${prefix}正在安装依赖，若出现 DEP0190 警告可忽略，请稍候...`);
     try {
-      await execAsync('pnpm', ['install'], {
+      await spawnSync('pnpm', ['install'], {
         cwd,
-        maxBuffer: isPlugin ? 1024 * 1024 * 16 : 1024 * 1024 * 10,
-        timeout: isPlugin ? 10 * 60 * 1000 : 300000,
+        shell: true,
         env: { ...process.env, CI: 'true' }
       });
       await this.logger.success(`${prefix}依赖安装完成`);
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        throw new Error('pnpm 未安装，请先安装: npm install -g pnpm');
-      }
-      const errorMsg = error.stderr || error.stdout || error.message;
-      throw new Error(`依赖安装失败${prefix}: ${errorMsg}`);
+    } catch (e) {
+      if (e.code === 'ENOENT') throw new Error('pnpm 未安装或不在 PATH 中，请执行: npm install -g pnpm');
+      throw new Error(`依赖安装失败: ${e.message}`);
     }
   }
 
-  async checkAndInstall(config) {
-    const { packageJsonPath, nodeModulesPath } = config;
-    
-    try {
-      const packageJson = await this.parsePackageJson(packageJsonPath);
-      const allDependencies = {
-        ...(packageJson.dependencies || {}),
-        ...(packageJson.devDependencies || {})
-      };
-      const depNames = Object.keys(allDependencies);
-      const missingDeps = await this.getMissingDependencies(depNames, nodeModulesPath);
-      if (missingDeps.length > 0) {
-        await this.installDependencies(missingDeps);
-      }
-    } catch (error) {
-      const errorMsg = error.stack || error.message || String(error);
-      await this.logger.error(`依赖检查失败: ${errorMsg}`);
-      throw error;
-    }
+  async checkAndInstall(packageJsonPath, nodeModulesPath) {
+    const pkg = await this.parsePackageJson(packageJsonPath);
+    const depNames = Object.keys({ ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) });
+    if (depNames.length === 0) return;
+    const missing = await this.getMissingDependencies(depNames, nodeModulesPath);
+    if (missing.length > 0) await this.installDependencies(missing, path.dirname(packageJsonPath));
   }
 
   async ensurePluginDependencies(rootDir = process.cwd()) {
-    const baseDirs = ['core', 'renderers'];
-    const pluginDirs = [];
-
-    for (const base of baseDirs) {
-      const dir = path.join(rootDir, base);
+    const baseDir = path.join(rootDir, 'core');
+    let entries;
+    try { entries = await fs.readdir(baseDir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const dir = path.join(baseDir, entry.name);
+      const pkgPath = path.join(dir, 'package.json');
+      try { await fs.access(pkgPath); } catch { continue; }
       try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            pluginDirs.push(path.join(dir, entry.name));
-          }
-        }
-      } catch {
-        continue;
+        await this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'));
+      } catch (e) {
+        await this.logger.warning(`${path.relative(rootDir, dir)}: ${e.message}`);
       }
     }
-
-    for (const pluginDir of pluginDirs) {
-      await this.checkPluginDependencies(pluginDir);
-    }
-  }
-
-  async checkPluginDependencies(pluginDir) {
-    const pkgPath = path.join(pluginDir, 'package.json');
-    
-    // 先检查文件是否存在，避免不必要的错误日志
-    try {
-      await fs.access(pkgPath);
-    } catch {
-      return; // 没有 package.json，直接跳过
-    }
-
-    try {
-      const pkg = await this.parsePackageJson(pkgPath);
-    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-    const depNames = Object.keys(deps);
-    if (depNames.length === 0) return;
-
-    const nodeModulesPath = path.join(pluginDir, 'node_modules');
-      const missing = await this.getMissingDependencies(depNames, nodeModulesPath);
-    if (missing.length > 0) {
-      await this.installPluginDependencies(pluginDir, missing);
-      }
-    } catch (error) {
-      // 解析失败时才记录警告，只输出错误消息，不输出堆栈
-      const errorMsg = error.message || String(error);
-      await this.logger.warning(`无法解析 package.json: ${path.basename(pluginDir)} (${errorMsg})`);
-    }
-  }
-
-  async installPluginDependencies(pluginDir, missing) {
-    await this.installDependencies(missing, pluginDir);
   }
 }
 
-class EnvironmentValidator {
-  constructor(logger) {
-    this.logger = logger;
+async function validateEnvironment() {
+  const [major, minor] = process.version.slice(1).split('.').map(Number);
+  if (major < 18 || (major === 18 && minor < 14)) {
+    throw new Error(`Node.js 需 v18.14.0+，当前: ${process.version}`);
   }
-
-  async checkNodeVersion() {
-    const [major, minor] = process.version.slice(1).split('.').map(Number);
-    if (major < 18 || (major === 18 && minor < 14)) {
-      throw new Error(`Node.js版本过低: ${process.version}, 需要 v18.14.0 或更高版本`);
-    }
-  }
-
-  async checkRequiredDirectories() {
-    await paths.ensureBaseDirs(fs);
-  }
-
-  async validate() {
-    await this.checkNodeVersion();
-    await this.checkRequiredDirectories();
-  }
+  await paths.ensureBaseDirs(fs);
 }
 
 class Bootstrap {
-  constructor(silent = false) {
-    const logFile = path.join('./logs', 'bootstrap.log');
-    this.logger = createSimpleLogger(logFile, silent);
+  constructor() {
+    this.logger = createBootstrapLogger(path.join('./logs', 'bootstrap.log'));
     this.dependencyManager = new DependencyManager(this.logger);
-    this.environmentValidator = new EnvironmentValidator(this.logger);
   }
 
   async loadDynamicImports(packageJsonPath) {
     const importsDir = path.join(process.cwd(), 'data', 'importsJson');
-    
-    try {
-      await fs.access(importsDir);
-    } catch {
-      return;
-    }
-
-    const files = await fs.readdir(importsDir);
-    const jsonFiles = files.filter(file => file.endsWith('.json'));
-    if (jsonFiles.length === 0) return;
-
-    const importDataArray = await Promise.all(
-      jsonFiles.map(async (file) => {
-        const filePath = path.join(importsDir, file);
+    try { await fs.access(importsDir); } catch { return; }
+    const files = (await fs.readdir(importsDir)).filter(f => f.endsWith('.json'));
+    if (!files.length) return;
+    const merged = Object.assign({}, ...await Promise.all(
+      files.map(async (f) => {
         try {
-          const content = await fs.readFile(filePath, 'utf-8');
-          const data = JSON.parse(content);
+          const data = JSON.parse(await fs.readFile(path.join(importsDir, f), 'utf-8'));
           return (data.imports && typeof data.imports === 'object') ? data.imports : {};
-        } catch (e) {
-          await this.logger.warning(`无法解析 imports 文件: ${filePath} (${e.message})`);
-          return {};
-        }
+        } catch { return {}; }
       })
-    );
-
-    const mergedImports = Object.assign({}, ...importDataArray);
-    if (Object.keys(mergedImports).length === 0) return;
-
-    const packageJson = await this.dependencyManager.parsePackageJson(packageJsonPath);
-    packageJson.imports = { ...(packageJson.imports || {}), ...mergedImports };
-    await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+    ));
+    if (!Object.keys(merged).length) return;
+    const pkg = await this.dependencyManager.parsePackageJson(packageJsonPath);
+    pkg.imports = { ...(pkg.imports || {}), ...merged };
+    await fs.writeFile(packageJsonPath, JSON.stringify(pkg, null, 2));
   }
 
   async initialize() {
-    await this.environmentValidator.validate();
-    
-    const packageJsonPath = path.join(process.cwd(), 'package.json');
-    const nodeModulesPath = path.join(process.cwd(), 'node_modules');
-    
-    await this.dependencyManager.checkAndInstall({
-      packageJsonPath,
-      nodeModulesPath
-    });
-
-    await this.dependencyManager.ensurePluginDependencies(process.cwd());
-    await this.loadDynamicImports(packageJsonPath);
-  }
-
-  async startMainApplication() {
-    try {
-      // 在启动主程序前，确保所有日志输出完成
-      await new Promise(resolve => setImmediate(resolve));
-      await import('./start.js');
-    } catch (error) {
-      const errorMsg = error.stack || error.message || String(error);
-      await this.logger.error(`主程序启动失败: ${errorMsg}`);
-      throw error;
-    }
+    await validateEnvironment();
+    const root = process.cwd();
+    await this.dependencyManager.checkAndInstall(path.join(root, 'package.json'), path.join(root, 'node_modules'));
+    await this.dependencyManager.ensurePluginDependencies(root);
+    await this.loadDynamicImports(path.join(root, 'package.json'));
   }
 
   async run() {
     try {
       await this.initialize();
-      await this.startMainApplication();
-    } catch (error) {
-      const errorMsg = error.stack || error.message || String(error);
-      await this.logger.error(`引导失败: ${errorMsg}`);
-      
-      if (error.message && error.message.includes('pnpm 未安装')) {
-        await this.logger.log('\n请先安装 pnpm: npm install -g pnpm');
-      } else {
-        await this.logger.log('\n请手动运行: pnpm install');
-      }
-      
+      await new Promise(r => setImmediate(r));
+      await import('./start.js');
+    } catch (e) {
+      await this.logger.error(`引导失败: ${e.stack || e.message}`);
+      await this.logger.log('\n可尝试: pnpm install');
       process.exit(1);
     }
   }
 }
 
-// 引导阶段使用静默模式，减少控制台输出
-const bootstrap = new Bootstrap(true);
+const bootstrap = new Bootstrap();
 
-// 全局异常处理
-const formatError = (error, prefix) => {
-  const errorMsg = error instanceof Error
-    ? (error.stack || `${error.message}\n${error.stack || ''}`)
-    : String(error);
-  console.error(`\n${prefix}:`);
-  console.error(errorMsg);
-  return errorMsg;
-};
-
-process.on('uncaughtException', async (error) => {
-  const errorMsg = formatError(error, '未捕获的异常');
-  await bootstrap.logger.error(`未捕获的异常: ${errorMsg}`);
-  process.exit(1);
+process.on('uncaughtException', (err) => {
+  bootstrap.logger.error(`未捕获的异常: ${err?.stack || err?.message || err}`).then(() => process.exit(1));
 });
 
-process.on('unhandledRejection', async (reason) => {
-  const errorMsg = formatError(reason, '未处理的Promise拒绝');
-  await bootstrap.logger.error(`未处理的Promise拒绝: ${errorMsg}`);
-  process.exit(1);
+process.on('unhandledRejection', (reason) => {
+  bootstrap.logger.error(`未处理的 Promise 拒绝: ${reason?.stack || reason?.message || reason}`);
 });
 
 bootstrap.run();
