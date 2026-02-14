@@ -2710,7 +2710,8 @@ class App {
     if (m.type === 'chat-record' || (m.type === 'record' && m.messages)) {
       this.appendChatRecord(m.messages ?? [], m.title ?? '', m.description ?? '', false);
     } else if (m.segments && Array.isArray(m.segments)) {
-      this.appendSegments(m.segments, false, m.role || 'assistant', m.mcpTools?.length ? { mcpTools: m.mcpTools } : {});
+      const hasToolsInSegments = m.segments.some(s => s && s.type === 'tools');
+      this.appendSegments(m.segments, false, m.role || 'assistant', hasToolsInSegments ? {} : (m.mcpTools?.length ? { mcpTools: m.mcpTools } : {}));
     } else if (m.type === 'image' && m.url) {
       this.appendSegments([{ type: 'image', url: m.url }], false, m.role || 'assistant');
     } else if (m.role && m.text) {
@@ -2840,6 +2841,12 @@ class App {
         const atHtml = `<span class="chat-at" data-qq="${this.escapeHtml(String(qq))}" data-name="${this.escapeHtml(name)}">${this.escapeHtml(atText)}</span>`;
         textParts.push(atHtml);
         allText.push(atText);
+      } else if (seg.type === 'tools' && Array.isArray(seg.tools) && seg.tools.length > 0) {
+        this._flushTextParts(div, textParts);
+        const wrap = document.createElement('div');
+        wrap.className = 'chat-segment chat-segment-tools';
+        this._addToolBlocks(wrap, seg.tools);
+        div.appendChild(wrap);
       } else if (seg.type === 'reply') {
         // 回复：显示为引用样式
         if (textParts.length > 0) {
@@ -3716,7 +3723,10 @@ class App {
       if (!streamError && assistantMsg) {
         this._updateStreamingMarkdown(assistantMsg, (segments && segments.length) ? segments : fullText, (segments && segments.length) ? undefined : mcpTools);
         this._addMessageActions(assistantMsg, 'assistant', fullText, assistantMsg.dataset.messageId);
-        this._getCurrentChatHistory().push({ role: 'assistant', text: fullText, ts: Date.now(), id: assistantMsg.dataset.messageId, mcpTools: mcpTools?.length ? mcpTools : undefined });
+        const historyItem = { role: 'assistant', text: fullText, ts: Date.now(), id: assistantMsg.dataset.messageId };
+        if (segments && segments.length > 0) historyItem.segments = segments;
+        else if (mcpTools?.length) historyItem.mcpTools = mcpTools;
+        this._getCurrentChatHistory().push(historyItem);
         this._saveChatHistory();
         this._renderMermaidIn(assistantMsg);
       }
@@ -3815,7 +3825,10 @@ class App {
         this._renderMermaidIn(assistantMsg);
         this.updateVoiceEmotion('😊');
         this.updateVoiceStatus('对话完成');
-        this._getCurrentChatHistory().push({ role: 'assistant', text: fullText, ts: Date.now(), id: assistantMsg.dataset.messageId, mcpTools: mcpTools?.length ? mcpTools : undefined });
+        const historyItem = { role: 'assistant', text: fullText, ts: Date.now(), id: assistantMsg.dataset.messageId };
+        if (segments && segments.length > 0) historyItem.segments = segments;
+        else if (mcpTools?.length) historyItem.mcpTools = mcpTools;
+        this._getCurrentChatHistory().push(historyItem);
         this._saveChatHistory();
         this.scrollToBottom();
       }
