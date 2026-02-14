@@ -1,6 +1,6 @@
 # XRK-AGT 项目概览
 
-> **Node.js 版本要求**: ≥ 24.12.0 (LTS)  
+> **Node.js 版本要求**: ≥ 24.13.0 (LTS)  
 > 本文档提供 XRK-AGT 项目的完整架构概览、目录结构说明和核心特性介绍。  
 > 如需快速开始，请查看 [README.md](README.md)；详细开发与扩展指南请结合 [docs/README.md](docs/README.md) 与各模块文档阅读。
 
@@ -10,7 +10,7 @@
 - [核心特性](#核心特性)
 - [架构层次总览](#架构层次总览)
 - [目录结构详解](#目录结构详解)
-- [Node.js 24.12 新特性应用](#nodejs-2412-新特性应用)
+- [Node.js 24.13 新特性应用](#nodejs-2412-新特性应用)
 - [HTTP业务层功能](#http业务层功能)
 - [快速开始](#快速开始)
 - [开发指南](#开发指南)
@@ -19,7 +19,7 @@
 
 ## 项目简介
 
-XRK-AGT 是向日葵工作室基于 **Node.js 24.12** 打造的多平台、多Tasker、工作流驱动型智能体平台，采用清晰的分层架构设计，支持：
+XRK-AGT 是向日葵工作室基于 **Node.js 24.13** 打造的多平台、多Tasker、工作流驱动型智能体平台，采用清晰的分层架构设计，支持：
 
 - **多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
 - **插件工作流**：指令插件 + AI 工作流 (`AIStream`)
@@ -29,7 +29,7 @@ XRK-AGT 是向日葵工作室基于 **Node.js 24.12** 打造的多平台、多Ta
 
 ### 技术栈
 
-- **运行时**: Node.js 24.12.0+ (LTS)
+- **运行时**: Node.js 24.13.0+ (LTS)
 - **Web框架**: Express 4.x
 - **数据库**: Redis 5.0+, MongoDB 4.0+ (可选)
 - **渲染引擎**: Puppeteer / Playwright
@@ -85,7 +85,7 @@ flowchart TB
 
 **架构优势**：清晰的层次划分、基础设施与业务分离、基于基类设计便于扩展
 
-### 2. Node.js 24.12 新特性应用
+### 2. Node.js 24.13 新特性应用
 
 - **全局 URLPattern API**：无需导入，直接使用路径匹配
 - **Error.isError()**：可靠的错误类型判断
@@ -332,7 +332,7 @@ XRK-AGT/
 
 ---
 
-## Node.js 24.12 新特性应用
+## Node.js 24.13 新特性应用
 
 ### 1. 全局 URLPattern API
 
@@ -383,7 +383,7 @@ clearTimeout(timeout);
 
 **应用场景**：请求追踪、上下文传递
 
-Node.js 24.12 对 AsyncLocalStorage 进行了性能优化，提升异步上下文追踪性能。
+Node.js 24.13 对 AsyncLocalStorage 进行了性能优化，提升异步上下文追踪性能。
 
 ### 5. V8 13.6 引擎特性
 
@@ -540,7 +540,7 @@ flowchart TB
 
 ## 性能优化
 
-### Node.js 24.12 优化
+### Node.js 24.13 优化
 
 1. **V8 13.6 引擎**：提升JavaScript执行性能
 2. **AsyncLocalStorage优化**：提升异步上下文追踪性能

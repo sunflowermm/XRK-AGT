@@ -3,7 +3,7 @@
  * 提供重定向、CDN、反向代理增强等功能的统一实现
  * 
  * @module http-business
- * @description 使用Node.js 24.12新特性优化，提供完整的HTTP业务层能力
+ * @description 使用Node.js 24.13新特性优化，提供完整的HTTP业务层能力
  */
 
 import crypto from 'node:crypto';
@@ -22,7 +22,7 @@ export class RedirectManager {
   }
 
   /**
-   * 编译重定向规则（使用Node.js 24.12 URLPattern API）
+   * 编译重定向规则（使用Node.js 24.13 URLPattern API）
    */
   _compileRules() {
     const redirectConfig = this.config.redirects || [];

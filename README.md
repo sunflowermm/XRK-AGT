@@ -5,7 +5,7 @@
 **多平台、多Tasker、工作流驱动型智能体平台**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D24.12.0-brightgreen.svg)](https://nodejs.org/)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D24.13.0-brightgreen.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Docker-blue.svg)](https://github.com/sunflowermm/XRK-AGT)
 [![Version](https://img.shields.io/badge/version-1.0.5-orange.svg)](https://github.com/sunflowermm/XRK-AGT)
 
@@ -254,7 +254,7 @@ node start.js server 3000
 
 ### 💡 现代技术栈
 
-基于 Node.js 24.12 LTS，充分利用现代 JavaScript 特性：全局 URLPattern API、原生 fetch API、AsyncLocalStorage 优化等。
+基于 Node.js 24.13 LTS，充分利用现代 JavaScript 特性：全局 URLPattern API、原生 fetch API、AsyncLocalStorage 优化等。
 
 ### 🔧 7 大扩展点
 

@@ -178,7 +178,7 @@ export default class Bot extends EventEmitter {
   makeError(message, type = 'Error', details = {}) {
     let error;
 
-    // 使用Node.js 24.12 Error.isError()进行可靠的错误类型判断
+    // 使用Node.js 24.13 Error.isError()进行可靠的错误类型判断
     if (Error.isError ? Error.isError(message) : message instanceof Error) {
       error = message;
       if (type === 'Error' && error.type) {
