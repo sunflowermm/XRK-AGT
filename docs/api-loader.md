@@ -276,8 +276,9 @@ if (api) {
 ### 新增 API 模块
 
 1. **创建文件**：在任意 `core/*/http` 目录下创建新的 `.js` 文件（如 `core/my-core/http/my-api.js`）
-2. **导出配置**：按 `docs/http-api.md` 中的推荐方式导出 `default`
-3. **自动加载**：`ApiLoader` 会在启动或文件变更时自动加载
+2. **导出配置**：按 [HTTP API 基类文档](http-api.md) 中的推荐方式导出 `default`
+3. **自动加载**：`ApiLoader` 会在启动或文件变更时自动加载  
+4. **开发约定**：鉴权、响应格式、错误处理、参数校验等请遵循 [http-api.md - HTTP 业务层开发建议](http-api.md#http-业务层开发建议)
 
 **示例**：
 ```javascript

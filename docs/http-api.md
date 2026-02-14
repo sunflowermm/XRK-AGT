@@ -404,19 +404,92 @@ handler: async (req, res, bot) => {
 
 ---
 
-## 最佳实践
+## HTTP 业务层开发建议
 
-1. **业务逻辑分层**：业务逻辑沉淀在插件与工作流中，HTTP层提供入口和管理界面
-2. **统一错误处理**：使用 `{ success: false, message: string }` 格式，利用自动错误捕获
-3. **与前端协作**：统一使用JSON格式，提供清晰的API文档
-4. **性能优化**：合理使用中间件，异步操作使用 `async/await`
+以下建议适用于在 `core/*/http/` 下新增或维护 API 模块，与 system-Core 现有实现保持一致，便于维护和排查。
+
+### 1. 鉴权：不做重复校验
+
+- **所有以 `/api/` 开头的请求**在进入业务 handler 前，已由 Server 层（`src/bot.js` 的 `_authMiddleware`）完成鉴权（白名单 / 本地 / 同源 Cookie / API Key）。
+- **业务层只需做参数与业务逻辑**，不要在 handler 内再写 `checkApiAuthorization`、`ensureAuth` 或自行校验 API Key，否则属于冗余且易与全局逻辑不一致。
+- 详见 **[AUTH.md](AUTH.md)**。
+
+### 2. 响应格式：统一用 HttpResponse
+
+- **成功**：`HttpResponse.success(res, data, message)`，会输出 `{ success: true, message, ...data }`。
+- **错误**：`HttpResponse.error(res, error, statusCode, context)`、`HttpResponse.validationError(res, message)`、`HttpResponse.notFound(res, message)`、`HttpResponse.forbidden(res, message)` 等，格式统一为 `{ success: false, message, code }`。
+- **避免**在 handler 里直接 `res.status(200).json({ ... })` 或手写错误 JSON，以便日志与前端解析一致。
+
+### 3. Handler 包装与错误捕获
+
+- 所有异步 handler 建议用 **`HttpResponse.asyncHandler(handler, context)`** 包装，可自动捕获未处理异常并返回 500 + 统一错误体；`context` 用于日志（如 `'config.read'`、`'file.upload'`），便于排查。
+- 在 handler 内部：校验失败时 **尽早 `return HttpResponse.xxx(...)`**，避免继续执行导致重复写响应或逻辑混乱。
+
+```javascript
+import { HttpResponse } from '#utils/http-utils.js';
+
+routes: [
+  {
+    method: 'GET',
+    path: '/api/example/:id',
+    handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      const id = req.params.id;
+      if (!id) return HttpResponse.validationError(res, '缺少 id');
+      const item = await getItem(id);
+      if (!item) return HttpResponse.notFound(res, '资源不存在');
+      HttpResponse.success(res, { item });
+    }, 'example.get')
+  }
+]
+```
+
+### 4. 路由与命名约定
+
+- **路径**：以 `/api/` 开头，按资源或模块划分，如 `/api/config/:name/read`、`/api/bots`；同一资源的 CRUD 保持 REST 风格（GET 查、POST 增/写、PUT/PATCH 改、DELETE 删）。
+- **方法**：与语义一致（查询用 GET、修改用 POST/PUT、删除用 DELETE），避免用 GET 传敏感参数（走 query 易被记录）。
+- **asyncHandler 的 context**：建议 `'模块.动作'` 小写，如 `'config.read'`、`'plugin.reload'`，便于日志过滤。
+
+### 5. 参数与输入校验
+
+- **必填参数缺失**：直接 `return HttpResponse.validationError(res, '缺少 xxx 参数')`，不要继续执行业务。
+- **敏感或复杂输入**：使用 `InputValidator`（如 `validateUserId`、`validatePath`）做格式与安全校验，失败时同样返回 `validationError` 或 `forbidden`。
+- **从 `req` 取参**：`req.params`（路径）、`req.query`（查询）、`req.body`（体）；取前可做 `req.body || {}` 防止 undefined。
+
+### 6. 异步与性能
+
+- Handler 内 **一律使用 async/await**，避免在回调里忘记返回或错误未捕获。
+- **不要在 handler 内做长时间同步阻塞**（如大文件同步读、密集计算）；耗时操作放到异步流程或队列，必要时用 `init()` 里启动的定时器/Worker 处理。
+- 需要依赖 Bot、配置、数据库时，在 handler 内按需 `import` 或使用已注入的 `Bot`，避免在模块顶层执行副作用。
+
+### 7. 模块结构建议
+
+- 每个 API 模块导出 **`name`、`dsc`、`priority`、`routes`**；需要时加 `init`、`ws`、`middleware`。
+- **路由数组**保持扁平，单文件内路由不宜过多；若路由很多，可拆成多个 `core/*/http/*.js` 文件，用 `priority` 和 path 前缀区分。
+- 与配置、插件、工作流等交互时，优先使用框架提供的 **ConfigManager、PluginsLoader、StreamLoader** 等入口，避免直接读文件或维护多份状态。
+
+### 8. 参考实现
+
+- **配置类**：`core/system-Core/http/config.js`（统一 getConfig、resolveConfigInstance、无鉴权重复）。
+- **列表与控制**：`core/system-Core/http/bot.js`（collectBotInventory、参数校验、HttpResponse 统一返回）。
+- **文件与上传**：`core/system-Core/http/files.js`（multipart、路径校验、统一响应结构）。
+- **插件与统计**：`core/system-Core/http/plugin.js`（getPluginsWithSummary、避免 summary/stats 重复逻辑）。
+
+---
+
+## 最佳实践（小结）
+
+1. **业务逻辑分层**：业务逻辑沉淀在插件与工作流中，HTTP 层提供入口和管理界面。
+2. **统一响应与错误**：使用 `HttpResponse` 与 `asyncHandler`，保持 `{ success, message, code }` 等格式一致。
+3. **鉴权不重复**：依赖 Server 层统一鉴权，业务 handler 不校验 API Key。
+4. **与前端协作**：统一 JSON、必填/可选参数清晰，关键接口可在文档或 system-Core 说明中列出。
 
 ---
 
 ## 相关文档
 
-- **[API加载器](api-loader.md)** - API自动加载和热重载机制
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含10个HTTP API模块的实际示例 ⭐
+- **[API加载器](api-loader.md)** - API 自动加载和热重载机制
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 10 个 HTTP API 模块的实际示例 ⭐
+- **[鉴权与认证（AUTH）](AUTH.md)** - 统一鉴权流程与业务层不鉴权约定
 - **[HTTP业务层](http-business-layer.md)** - 重定向、CDN、反向代理增强功能
 - **[Server服务器架构](server.md)** - 完整的服务器架构说明
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
