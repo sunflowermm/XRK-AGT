@@ -141,7 +141,7 @@ class PluginsLoader {
       await this.runPlugins(e, true)
       const handled = await this.runPlugins(e, false)
 
-      if (!handled) logger.debug(`${e.logText} 暂无插件处理`)
+      if (!handled && e.post_type === 'message') logger.debug(`${e.logText} 暂无插件处理`)
     } catch (error) {
       errorHandler.handle(error, { context: 'deal', event: e?.logText, code: ErrorCodes.PLUGIN_EXECUTION_FAILED }, true)
       logger.error('处理事件错误', error)

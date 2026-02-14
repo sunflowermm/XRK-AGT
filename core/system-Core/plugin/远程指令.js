@@ -1534,7 +1534,19 @@ rj e.reply("Hello!")           // 发送消息`, true);
         // 复杂表达式使用完整执行
         result = await jsExecutor.execute(expression, globalContext, 'safe');
       }
-      
+
+      if (result.success && result.result != null && typeof result.result.then === 'function') {
+        try {
+          result.result = await result.result;
+          if (result.resultType === 'object' && result.result && typeof result.result === 'object') {
+            result.resultType = result.result.constructor?.name || 'object';
+          }
+        } catch (promiseErr) {
+          result.success = false;
+          result.error = promiseErr?.message || String(promiseErr);
+        }
+      }
+
       history.add(expression, 'javascript', result.success ? 0 : 1);
 
       if (result.success) {
