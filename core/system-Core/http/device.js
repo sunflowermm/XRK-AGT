@@ -23,14 +23,23 @@ import BotUtil from '#utils/botutil.js';
 import StreamLoader from '#infrastructure/aistream/loader.js';
 import fs from 'fs';
 import path from 'path';
-import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
 import ASRFactory from '#factory/asr/ASRFactory.js';
 import TTSFactory from '#factory/tts/TTSFactory.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import { InputValidator } from '#utils/input-validator.js';
-
-// ==================== 导入工具函数 ====================
+import {
+    getAistreamConfig,
+    getLLMSettings,
+    getTtsConfig,
+    getAsrConfig,
+    getSystemConfig
+} from '#utils/aistream-config.js';
+import {
+    SUPPORTED_EMOTIONS,
+    normalizeEmotionToDevice,
+    findEmotionFromKeywords
+} from '#utils/emotion-utils.js';
 import {
     initializeDirectories,
     validateDeviceRegistration,
@@ -38,152 +47,6 @@ import {
     hasCapability,
     getAudioFileList
 } from '#utils/deviceutil.js';
-
-const ensureConfig = (value, path) => {
-    if (value === undefined) {
-        throw new Error(`设备配置缺失: ${path}`);
-    }
-    return value;
-};
-
-const getAistreamConfig = () => ensureConfig(cfg.aistream, 'aistream');
-
-const getLLMSettings = ({ workflow, persona, profile } = {}) => {
-    const section = ensureConfig(getAistreamConfig().llm, 'aistream.llm');
-    if (section.enabled === false) {
-        return { enabled: false };
-    }
-
-    const defaults = section.defaults || {};
-    const workflows = section.workflows || {};
-    const profiles = ensureConfig(
-        section.profiles || section.models,
-        'aistream.llm.profiles'
-    );
-
-    const workflowKey =
-        workflow ||
-        section.defaultWorkflow ||
-        section.defaultModel ||
-        Object.keys(workflows)[0] ||
-        Object.keys(profiles)[0];
-
-    const workflowPreset = workflowKey ? workflows[workflowKey] : null;
-
-    const requestedProfile =
-        profile ||
-        workflowPreset?.profile ||
-        section.defaultProfile ||
-        section.defaultModel;
-
-    const profileKey = profiles[requestedProfile]
-        ? requestedProfile
-        : Object.keys(profiles)[0];
-
-    const selectedProfile = ensureConfig(
-        profiles[profileKey],
-        `aistream.llm.profiles.${profileKey}`
-    );
-
-    const overrides = workflowPreset?.overrides || {};
-    const personaResolved =
-        persona ??
-        workflowPreset?.persona ??
-        section.persona;
-
-    return {
-        enabled: true,
-        workflow: workflowKey,
-        workflowKey,
-        workflowLabel: workflowPreset?.label || workflowKey,
-        profile: profileKey,
-        profileKey,
-        profileLabel: selectedProfile.label || profileKey,
-        persona: personaResolved,
-        displayDelay: section.displayDelay,
-        ...defaults,
-        ...selectedProfile,
-        ...overrides
-    };
-};
-
-/**
- * TTS 配置：单工厂模式，只选择运营商，配置来自 volcengine_tts.yaml。
- * 配置来源：
- * - aistream.tts.Provider 用于选择运营商（volcengine）
- * - 具体 TTS 连接参数来自 volcengine_tts.yaml（cfg.volcengine_tts）
- */
-const getTtsConfig = () => {
-    const aistream = getAistreamConfig();
-    const section = aistream.tts || {};
-
-    if (section.enabled === false) {
-        return { enabled: false };
-    }
-
-    const provider = (section.Provider || section.provider || 'volcengine').toLowerCase();
-
-    if (provider !== 'volcengine') {
-        throw new Error(`不支持的TTS提供商: ${provider}`);
-    }
-
-    const baseConfig = ensureConfig(cfg.volcengine_tts, 'volcengine_tts');
-
-    return {
-        enabled: true,
-        provider,
-        ...baseConfig
-    };
-};
-
-/**
- * ASR 配置：单工厂模式，只选择运营商，识别结果直接返回文本。
- * 配置来源：
- * - aistream.asr.Provider 用于选择运营商（volcengine）
- * - 具体 ASR 连接参数来自 volcengine_asr.yaml（cfg.volcengine_asr）
- */
-const getAsrConfig = () => {
-    const aistream = getAistreamConfig();
-    const section = aistream.asr || {};
-
-    if (section.enabled === false) {
-        return { enabled: false };
-    }
-
-    const provider = (section.Provider || section.provider || 'volcengine').toLowerCase();
-
-    if (provider !== 'volcengine') {
-        throw new Error(`不支持的ASR提供商: ${provider}`);
-    }
-
-    const baseConfig = ensureConfig(cfg.volcengine_asr, 'volcengine_asr');
-
-    return {
-        enabled: true,
-        provider,
-        ...baseConfig
-    };
-};
-
-const getSystemConfig = () =>
-    ensureConfig(cfg.device, 'device');
-
-// 设备支持的表情列表（硬编码，无需配置）
-const SUPPORTED_EMOTIONS = ['happy', 'sad', 'angry', 'surprise', 'love', 'cool', 'sleep', 'think', 'wink', 'laugh'];
-
-// 表情关键词映射（中文 -> 表情代码）
-const EMOTION_KEYWORDS = {
-    '开心': 'happy',
-    '伤心': 'sad',
-    '生气': 'angry',
-    '惊讶': 'surprise',
-    '爱': 'love',
-    '酷': 'cool',
-    '睡觉': 'sleep',
-    '思考': 'think',
-    '眨眼': 'wink',
-    '大笑': 'laugh'
-};
 
 // ==================== 全局存储 ====================
 const devices = new Map();
@@ -243,11 +106,7 @@ function shouldLogConnection(remote) {
     return true;
 }
 
-/**
- * 判断字符串是否为十六进制形式（用于兼容老版本 hex 音频流）
- * @param {string} str
- * @returns {boolean}
- */
+/** 判断字符串是否为十六进制形式 */
 function isHexString(str) {
     if (typeof str !== 'string') return false;
     const s = str.trim();
@@ -255,19 +114,11 @@ function isHexString(str) {
 }
 
 /**
- * 统一解码 ASR 音频负载，兼容多种热门音频流表示方式：
- * - 旧版：data 为 PCM16LE 的 hex 字符串
- * - 扩展：data 为 base64 字符串（可选前缀 base64:）
- * - 扩展：data 为 ArrayBuffer / Uint8Array / Buffer
- * - 扩展：data 为 number[]，表示 PCM 采样（支持 float[-1,1] 或 int16）
- * - 扩展：audio 对象包装：{ audio: { data, encoding, format, ... } }
- *
- * 注意：这里仅做“容器”兼容（hex / base64 / 数组等），真实编码仍假定为 PCM。
- * 复杂编码（如 opus/webm）请在设备侧或独立网关解码为 PCM 后再上传。
- *
- * @param {Object} payload - WebSocket 上报原始数据
- * @param {string} deviceId - 设备ID（用于日志）
- * @returns {Buffer} PCM 音频 Buffer（可能为空）
+ * 解码 ASR 音频负载。支持：hex/base64 字符串、ArrayBuffer/TypedArray/Buffer、number[]（PCM 采样）。
+ * 支持 payload.data / payload.audio.data 及 audio 包装；编码假定为 PCM。
+ * @param {Object} payload - WebSocket 上报数据
+ * @param {string} deviceId - 设备ID（日志用）
+ * @returns {Buffer} PCM Buffer，失败或空则返回空 Buffer
  */
 function decodeAsrAudioPayload(payload, deviceId) {
     try {
@@ -537,7 +388,6 @@ class DeviceManager {
                 bits,
                 channels,
                 session_number,
-                // 兼容多端传入的音频格式/编码字段
                 audio_format,
                 audio_codec,
                 format,
@@ -646,7 +496,6 @@ class DeviceManager {
                 return { success: false, error: '会话不存在' };
             }
 
-            // 兼容多种热门音频流表示：hex / base64 / ArrayBuffer / 数组等
             const audioBuf = decodeAsrAudioPayload(data, deviceId);
 
             session.totalChunks++;
@@ -918,12 +767,9 @@ class DeviceManager {
             BotUtil.makeLog('info', `✅ [AI] 回复: ${aiResult.text || '(仅表情)'}`, deviceId);
 
             // 显示表情
-            if (aiResult.emotion) {
+            const emotionCode = normalizeEmotionToDevice(aiResult.emotion);
+            if (emotionCode) {
                 try {
-                    const emotionCode = EMOTION_KEYWORDS[aiResult.emotion] || aiResult.emotion;
-                    if (!SUPPORTED_EMOTIONS.includes(emotionCode)) {
-                        throw new Error(`未知表情: ${emotionCode}`);
-                    }
                     await deviceBot.emotion(emotionCode);
                     BotUtil.makeLog('info', `✓ [设备] 表情: ${emotionCode}`, deviceId);
                 } catch (e) {
@@ -933,7 +779,7 @@ class DeviceManager {
 
             // 播放TTS（只有ASR触发或配置允许时才播放）
             const ttsConfig = getTtsConfig();
-            const aistreamTtsConfig = aistreamConfig.tts || {};
+            const aistreamTtsConfig = getAistreamConfig().tts || {};
             const ttsOnlyForASR = aistreamTtsConfig.onlyForASR !== false; // 默认只有ASR触发才有TTS
 
             if (aiResult.text && ttsConfig.enabled) {
@@ -1362,18 +1208,10 @@ class DeviceManager {
             clearLogs: () => deviceLogs.set(deviceId, []),
 
             sendMsg: async (msg) => {
-                // 检测消息中的表情关键词
-                for (const [keyword, emotion] of Object.entries(EMOTION_KEYWORDS)) {
-                    if (msg.includes(keyword)) {
-                        return await this.sendCommand(
-                            deviceId,
-                            'display_emotion',
-                            { emotion },
-                            1
-                        );
-                    }
+                const emotion = findEmotionFromKeywords(msg);
+                if (emotion) {
+                    return await this.sendCommand(deviceId, 'display_emotion', { emotion }, 1);
                 }
-
                 return await this.sendCommand(
                     deviceId,
                     'display',
@@ -1415,18 +1253,13 @@ class DeviceManager {
                 await this.sendCommand(deviceId, cmd, params, priority),
 
             // TTS音频发送：带后端背压（按 ws.bufferedAmount 排队/限速），避免一下子全发导致前端挤压/丢包
-            // 说明：这里不阻塞上游逻辑（保持接口兼容），但会在同一设备维度上串行发送
+            // 同一设备维度串行发送，不阻塞上游
+            // 优先使用二进制传输（借鉴 xiaozhi）：hex 转 ArrayBuffer 直接发送，带宽约减半、解析更快
             sendAudioChunk: (hex) => {
                 const ws = deviceWebSockets.get(deviceId);
                 if (ws && ws.readyState === WebSocket.OPEN && typeof hex === 'string' && hex.length > 0) {
-                    const bytes = hex.length / 2; // hex字符串长度 / 2 = 字节数
-                    const timestamp = Date.now();
-                    const cmd = {
-                        command: 'play_tts_audio',
-                        parameters: { audio_data: hex },
-                        priority: 1,
-                        timestamp: timestamp
-                    };
+                    const bytes = hex.length / 2;
+
                     try {
                         // 初始化每个ws的发送链（串行化）
                         if (!ws.__ttsSendChain) {
@@ -1465,13 +1298,15 @@ class DeviceManager {
                                 await new Promise(r => setTimeout(r, WAIT_STEP_MS));
                             }
 
-                            ws.send(JSON.stringify({ type: 'command', command: cmd }));
+                            // xiaozhi 风格：纯二进制 TTS，稳定快速
+                            const buf = Buffer.from(hex, 'hex');
+                            ws.send(buf);
                             BotUtil.makeLog(
                                 'debug',
                                 (() => {
                                     const status = ttsQueueStatus.get(deviceId);
                                     const q = status ? status.queueLen : 'N/A';
-                                    return `[TTS传输] WebSocket发送(背压): 字节=${bytes}, hex长度=${hex.length}, 时间戳=${timestamp}, buffered=${ws.bufferedAmount}, 前端队列=${q}`;
+                                    return `[TTS传输] 二进制发送: 字节=${bytes}, buffered=${ws.bufferedAmount}, 前端队列=${q}`;
                                 })(),
                                 deviceId
                             );

@@ -1,5 +1,6 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
+import { parseEmotion } from '#utils/emotion-utils.js';
 
 export default class DeviceStream extends AIStream {
   constructor() {
@@ -57,30 +58,25 @@ ${persona}
 
   async execute(deviceId, question, apiConfig, persona = '') {
     try {
-      const messages = await this.buildChatContext(null, { text: question, persona });
-      const response = await this.callAI(messages, apiConfig);
-      if (!response) {
-        return null;
+      this._currentDeviceId = deviceId;
+      try {
+        const messages = await this.buildChatContext(null, { text: question, persona });
+        const response = await this.callAI(messages, apiConfig);
+        if (!response) {
+          return null;
+        }
+        const { emotion, cleanText } = parseEmotion(response?.content ?? response);
+        return {
+          text: cleanText || '',
+          emotion
+        };
+      } finally {
+        this._currentDeviceId = undefined;
       }
-      const { emotion, cleanText } = this.parseEmotion(response);
-      return {
-        text: cleanText || '',
-        emotion
-      };
     } catch (err) {
       BotUtil.makeLog('error', `设备工作流失败: ${err.message}`, 'DeviceStream');
       return null;
     }
   }
 
-  parseEmotion(text) {
-    const regex = /^\s*\[(开心|惊讶|伤心|大笑|害怕|生气)[\]\}]\s*/;
-    const match = regex.exec(text || '');
-    if (!match) {
-      return { emotion: null, cleanText: (text || '').trim() };
-    }
-    const emotion = match[1];
-    const cleanText = (text || '').replace(regex, '').trim();
-    return { emotion, cleanText };
-  }
 }

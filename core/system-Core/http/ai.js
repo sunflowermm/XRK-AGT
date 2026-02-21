@@ -1,88 +1,12 @@
 import StreamLoader from '#infrastructure/aistream/loader.js';
 import cfg from '#infrastructure/config/config.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
-
-/**
- * 解析 multipart/form-data（仅用于 v3/chat/completions 图片上传场景）
- */
-async function parseMultipartData(req) {
-  return new Promise((resolve, reject) => {
-    const contentType = req.headers['content-type'] || '';
-    const boundaryMatch = contentType.match(/boundary=([^;]+)/);
-    if (!boundaryMatch) {
-      reject(new Error('No boundary found'));
-      return;
-    }
-    const boundary = boundaryMatch[1];
-
-    let data = Buffer.alloc(0);
-    const files = [];
-    const fields = {};
-
-    req.on('data', chunk => {
-      data = Buffer.concat([data, chunk]);
-    });
-
-    req.on('end', () => {
-      try {
-        const parts = data.toString('binary').split(`--${boundary}`);
-        
-        for (const part of parts) {
-          if (!part.trim() || part.trim() === '--') continue;
-          
-          if (part.includes('Content-Disposition: form-data')) {
-            const nameMatch = part.match(/name="([^"]+)"/);
-            const filenameMatch = part.match(/filename="([^"]+)"/);
-            
-            if (filenameMatch) {
-              // 文件字段
-              const filename = filenameMatch[1];
-              const contentTypeMatch = part.match(/Content-Type: ([^\r\n]+)/);
-              const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream';
-              
-              const headerEndIndex = part.indexOf('\r\n\r\n');
-              if (headerEndIndex !== -1) {
-                const fileStart = headerEndIndex + 4;
-                const fileEnd = part.lastIndexOf('\r\n');
-                const fileContent = Buffer.from(part.substring(fileStart, fileEnd), 'binary');
-                
-                files.push({
-                  fieldname: nameMatch ? nameMatch[1] : 'file',
-                  originalname: filename,
-                  mimetype: contentType,
-                  buffer: fileContent,
-                  size: fileContent.length
-                });
-              }
-            } else if (nameMatch) {
-              // 普通字段
-              const fieldName = nameMatch[1];
-              const headerEndIndex = part.indexOf('\r\n\r\n');
-              if (headerEndIndex !== -1) {
-                const fieldStart = headerEndIndex + 4;
-                const fieldEnd = part.lastIndexOf('\r\n');
-                // 注意：part 是 binary 字符串（latin1），直接 substring 会导致中文等 UTF-8 字符出现乱码
-                // 这里用 Buffer 按 binary 取回原始字节，再按 utf8 解码文本字段
-                const fieldBuf = Buffer.from(part.substring(fieldStart, fieldEnd), 'binary');
-                fields[fieldName] = fieldBuf.toString('utf8');
-              }
-            }
-          }
-        }
-        
-        resolve({ files, fields });
-      } catch (e) {
-        reject(e);
-      }
-    });
-
-    req.on('error', reject);
-  });
-}
+import { parseMultipartData } from '#utils/multipart-parser.js';
 
 function pickFirst(obj, keys) {
   for (const k of keys) {
@@ -121,7 +45,7 @@ function getProviderConfig(provider) {
 }
 
 const getDefaultProvider = () => {
-  const llm = cfg.aistream?.llm;
+  const llm = getAistreamConfigOptional().llm;
   return (llm?.Provider || llm?.provider || '').toString().trim().toLowerCase();
 };
 
@@ -483,7 +407,7 @@ async function handleChatCompletionsV3(req, res) {
 }
 
 async function handleModels(req, res) {
-  const llm = cfg.aistream?.llm || {};
+  const llm = getAistreamConfigOptional().llm || {};
   const providers = LLMFactory.listProviders();
   const defaultProvider = getDefaultProvider();
   const format = (req.query.format || '').toLowerCase();

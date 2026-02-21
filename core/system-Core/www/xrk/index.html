@@ -142,10 +142,9 @@
     <!-- Toast 容器 -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <!-- Chart.js 延迟加载优化 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
-    <!-- Mermaid：用于渲染 ```mermaid``` 代码块 -->
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" defer></script>
+    <!-- Chart.js / Mermaid：同目录下 lib，与 xrk 同源避免 MIME 错误 -->
+    <script src="lib/chart.umd.min.js" defer></script>
+    <script src="lib/mermaid.min.js" defer></script>
     <!-- 主应用脚本 -->
     <script src="app.js" defer></script>
 </body>

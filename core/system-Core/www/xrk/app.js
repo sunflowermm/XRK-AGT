@@ -66,7 +66,8 @@ class App {
     this._ttsSessionStartTime = null; // Session开始时间
     this._ttsNextPlayTime = 0;
     this._ttsActiveSources = []; // 跟踪活跃的播放源，用于资源管理
-    this._ttsRetryTimer = null; // 播放重试定时器
+    this._ttsRetryTimer = null;
+    this._ttsPrebufferTimer = null; // 预缓冲定时器
     this._ttsStats = { // TTS统计信息
       totalChunks: 0,      // 接收的音频块总数
       totalBytes: 0,       // 接收的总字节数
@@ -1841,6 +1842,9 @@ class App {
         ${isVoiceMode ? `
           <div class="voice-chat-center">
             <div class="voice-emotion-display" id="voiceEmotionIcon">😊</div>
+            <div class="voice-wave" id="voiceWave">
+              ${Array(6).fill('<div class="voice-wave-bar"></div>').join('')}
+            </div>
             <div class="voice-status" id="voiceStatus">点击麦克风开始对话</div>
             <button class="voice-clear-btn" id="voiceClearBtn" title="清空聊天记录">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3968,12 +3972,13 @@ class App {
     }
   }
 
-  _playTTSAudio(hexData) {
-    if (!hexData || typeof hexData !== 'string') {
-      console.warn(`[TTS] 收到无效的hexData: ${hexData}, 类型=${typeof hexData}`);
-      return;
-    }
+  _handleBinaryTTS(arrayBuffer) {
+    if (!arrayBuffer || !(arrayBuffer instanceof ArrayBuffer) || arrayBuffer.byteLength === 0) return;
+    this._playTTSAudioFromBytes(new Uint8Array(arrayBuffer));
+  }
 
+  _playTTSAudioFromBytes(bytes) {
+    if (!bytes || bytes.length === 0) return;
     // 如果用户已经手动点击“停止播报”，则直接丢弃后续所有音频块，避免需要连点多次按钮
     if (this._ttsStoppedManually) {
       // 仅在首次丢弃时打日志，防止刷屏
@@ -4004,33 +4009,7 @@ class App {
         });
       }
       
-      // Hex解码
-      const hexLen = hexData.length;
-      if (hexLen === 0) {
-        console.warn(`[TTS] hexData为空，跳过处理`);
-        return;
-      }
-      
-      if (hexLen % 2 !== 0) {
-        console.error(`[TTS] hexData长度不是偶数: ${hexLen}，可能导致解码错误`);
-        return;
-      }
-      
-      const bytes = new Uint8Array(hexLen / 2);
-      try {
-        for (let i = 0; i < hexLen; i += 2) {
-          bytes[i / 2] = parseInt(hexData.slice(i, i + 2), 16);
-        }
-      } catch (e) {
-        console.error(`[TTS] hex解码失败: ${e.message}, hexData长度=${hexLen}`);
-        return;
-      }
-      
-      if (bytes.length === 0) {
-        console.warn(`[TTS] 解码后字节数为0，跳过处理`);
-        return;
-      }
-      
+      // 二进制 TTS（xiaozhi 风格）
       // PCM转换
       const sampleCount = bytes.length / 2;
       const view = new DataView(bytes.buffer);
@@ -4086,14 +4065,32 @@ class App {
       
       // 加入队列尾部，确保不丢包且有序
       this._ttsAudioQueue.push(audioBuffer);
-      // 上报队列状态给后端做实时背压
       this._reportTTSQueueStatus(false, 'enqueue');
       
-      // 开始播放（只在第一次时启动）
-      if (!this._ttsPlaying) {
+      // xiaozhi-web-client 风格：3 块或 200ms 预缓冲
+      const PREBUFFER_CHUNKS = 3;
+      const PREBUFFER_MS = 200;
+      const elapsed = this._ttsStats.sessionStartTime ? (Date.now() - this._ttsStats.sessionStartTime) : 0;
+      const prebufferReady = this._ttsAudioQueue.length >= PREBUFFER_CHUNKS || elapsed >= PREBUFFER_MS;
+      
+      if (!this._ttsPlaying && prebufferReady) {
+        clearTimeout(this._ttsPrebufferTimer);
+        this._ttsPrebufferTimer = null;
         this._ttsPlaying = true;
-        this._ttsNextPlayTime = 0; // 重置播放时间
+        this._ttsNextPlayTime = 0;
         this._playNext();
+      } else if (!this._ttsPlaying && this._ttsAudioQueue.length === 1 && elapsed < PREBUFFER_MS) {
+        // 单块时设定时器，200ms 后若仍无新块则开播，避免短语音卡住
+        const wait = PREBUFFER_MS - elapsed;
+        clearTimeout(this._ttsPrebufferTimer);
+        this._ttsPrebufferTimer = setTimeout(() => {
+          this._ttsPrebufferTimer = null;
+          if (!this._ttsPlaying && this._ttsAudioQueue.length > 0) {
+            this._ttsPlaying = true;
+            this._ttsNextPlayTime = 0;
+            this._playNext();
+          }
+        }, wait);
       }
     } catch (e) {
       console.error('[TTS] 音频处理失败:', e);
@@ -4218,42 +4215,37 @@ class App {
       this._ttsNextPlayTime = startTime + duration;
       this._reportTTSQueueStatus(false, 'dequeue');
       
-      // 创建播放源
+      // 创建播放源，加淡入淡出减少爆音（xiaozhi-web-client）
       const source = this._ttsAudioContext.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(this._ttsAudioContext.destination);
+      const gainNode = this._ttsAudioContext.createGain();
+      const fadeDuration = 0.005;
+      gainNode.gain.setValueAtTime(0, startTime);
+      gainNode.gain.linearRampToValueAtTime(1, startTime + fadeDuration);
+      gainNode.gain.setValueAtTime(1, startTime + duration - fadeDuration);
+      gainNode.gain.linearRampToValueAtTime(0, startTime + duration);
+      source.connect(gainNode);
+      gainNode.connect(this._ttsAudioContext.destination);
       
       // 添加到活跃源列表，用于资源管理
       this._ttsActiveSources.push(source);
       
       // 播放结束后立即播放下一个（确保连续）
       source.onended = () => {
-        // 从活跃源列表中移除
         const index = this._ttsActiveSources.indexOf(source);
-        if (index > -1) {
-          this._ttsActiveSources.splice(index, 1);
-        }
-        
-        // 释放资源：断开连接
+        if (index > -1) this._ttsActiveSources.splice(index, 1);
         try {
           source.disconnect();
-        } catch (e) {
-          // 忽略已断开的错误
-        }
-        
-        // 继续播放下一个
+          gainNode.disconnect();
+        } catch (e) { /* 忽略 */ }
         this._playNext();
       };
       
-      // 错误处理
       source.onerror = (e) => {
         console.error('[TTS] 播放源错误:', e);
-        // 从活跃源列表中移除
         const index = this._ttsActiveSources.indexOf(source);
-        if (index > -1) {
-          this._ttsActiveSources.splice(index, 1);
-        }
-        // 继续播放下一个，避免卡住
+        if (index > -1) this._ttsActiveSources.splice(index, 1);
+        try { source.disconnect(); gainNode.disconnect(); } catch (err) { /* 忽略 */ }
         this._playNext();
       };
       
@@ -4290,6 +4282,10 @@ class App {
     if (this._ttsQueueReportTimer) {
       clearTimeout(this._ttsQueueReportTimer);
       this._ttsQueueReportTimer = null;
+    }
+    if (this._ttsPrebufferTimer) {
+      clearTimeout(this._ttsPrebufferTimer);
+      this._ttsPrebufferTimer = null;
     }
     
     // 重置状态
@@ -4329,10 +4325,11 @@ class App {
     }
   }
 
-  updateVoiceStatus(text) {
+  updateVoiceStatus(text, recognizing = false) {
     const statusEl = document.getElementById('voiceStatus');
     if (statusEl) {
-      statusEl.textContent = text;
+      statusEl.textContent = text || '';
+      statusEl.classList.toggle('asr-recognizing', !!recognizing);
     }
   }
 
@@ -7005,6 +7002,7 @@ class App {
     
     try {
       this._deviceWs = new WebSocket(wsUrl);
+      this._deviceWs.binaryType = 'arraybuffer'; // xiaozhi 风格：二进制直接为 ArrayBuffer
       
       this._deviceWs.onopen = () => {
         this._wsConnecting = false;
@@ -7062,12 +7060,15 @@ class App {
       
       this._deviceWs.onmessage = (e) => {
         try {
-          const data = JSON.parse(e.data);
           this._lastWsMessageAt = Date.now();
-          
+          if (e.data instanceof ArrayBuffer) {
+            this._handleBinaryTTS(e.data);
+            return;
+          }
+          const data = JSON.parse(e.data);
           this.handleWsMessage(data);
-        } catch (e) {
-          console.warn('[WebSocket] 消息解析失败:', e);
+        } catch (err) {
+          console.warn('[WebSocket] 消息解析失败:', err);
         }
       };
       
@@ -7203,24 +7204,15 @@ class App {
   }
 
   handleWsMessage(data) {
-    // TTS音频消息不去重，因为每个音频块都是唯一的，必须全部处理
-    const isTTSAudio = data.type === 'command' && data.command?.command === 'play_tts_audio';
-    
-    if (!isTTSAudio) {
-      // 非TTS消息去重：使用event_id或timestamp+type作为唯一标识
-      const messageId = data.event_id || `${data.type}_${data.timestamp || Date.now()}_${JSON.stringify(data).slice(0, 50)}`;
-      if (this._processedMessageIds.has(messageId)) {
-        return; // 已处理过，跳过
-      }
-      this._processedMessageIds.add(messageId);
-      
-      // 限制去重集合大小，避免内存泄漏
-      if (this._processedMessageIds.size > 1000) {
-        const firstId = this._processedMessageIds.values().next().value;
-        this._processedMessageIds.delete(firstId);
-      }
+    // 消息去重（TTS 走二进制通道，不经过此处）
+    const messageId = data.event_id || `${data.type}_${data.timestamp || Date.now()}_${JSON.stringify(data).slice(0, 50)}`;
+    if (this._processedMessageIds.has(messageId)) return;
+    this._processedMessageIds.add(messageId);
+    if (this._processedMessageIds.size > 1000) {
+      const firstId = this._processedMessageIds.values().next().value;
+      this._processedMessageIds.delete(firstId);
     }
-    
+
     switch (data.type) {
       case 'heartbeat_request':
         if (this._deviceWs?.readyState === WebSocket.OPEN) {
@@ -7233,20 +7225,51 @@ class App {
       case 'heartbeat':
         this._lastWsMessageAt = Date.now();
         break;
-      case 'asr_interim':
-        {
-          const text = data.text || '';
-          console.log(`[ASR前端] 中间结果: "${text}" session_id=${data.session_id || ''}`);
+      case 'stt':
+        // xiaozhi 协议：STT 识别结果，等同 asr_final
+        if (data.text) {
+          const sttText = (data.text || '').trim();
           if (this._isVoiceMode()) {
-            this.updateVoiceStatus(`识别中: ${text}`);
+            if (sttText && !this._chatStreamState.running) {
+              this.updateVoiceStatus('AI 思考中...');
+              this.sendVoiceMessage(sttText).catch(e => {
+                this.showToast(`语音处理失败: ${e.message}`, 'error');
+              });
+            }
           } else {
-            this.renderASRStreaming(text, false);
+            this.renderASRStreaming(sttText, true);
           }
         }
         break;
+      case 'llm':
+        // xiaozhi 协议：LLM 回复 { text, emotion }
+        if (data.text) {
+          this.clearChatStreamState();
+          this.appendSegments([{ type: 'text', text: data.text }], true, 'assistant');
+          if (data.emotion && typeof this.updateEmotionDisplay === 'function') {
+            this.updateEmotionDisplay(data.emotion);
+          }
+        }
+        break;
+      case 'tts':
+        // xiaozhi 协议：TTS 状态 { state: 'start'|'stop' }
+        if (data.state === 'start') {
+          this.updateChatStatus('正在播放语音...');
+        } else if (data.state === 'stop') {
+          this.updateChatStatus();
+        }
+        break;
+      case 'asr_interim': {
+        const text = (data.text || '').trim();
+        if (this._isVoiceMode()) {
+          this.updateVoiceStatus(text ? `识别中: ${text}` : '正在聆听...', !!text);
+        } else {
+          this.renderASRStreaming(text, false);
+        }
+        break;
+      }
       case 'asr_final': {
         const finalText = (data.text || '').trim();
-        console.log(`[ASR前端] 最终结果: "${finalText}" session_id=${data.session_id || ''}`);
         if (this._isVoiceMode()) {
           if (finalText && !this._chatStreamState.running) {
             this.updateVoiceStatus('AI 思考中...');
@@ -7361,48 +7384,37 @@ class App {
           this.updateChatStatus();
         }
         break;
-      case 'command':
-        if (data.command?.command === 'play_tts_audio') {
-          const hexData = data.command.parameters?.audio_data;
-          
-          // 检查数据有效性
-          if (!hexData || typeof hexData !== 'string' || hexData.length === 0) {
-            console.warn(`[TTS] 收到无效的音频数据`);
-            return;
-          }
-          
-          if (hexData.length % 2 !== 0) {
-            console.warn(`[TTS] 收到奇数长度的hex数据: 长度=${hexData.length}`);
-            return;
-          }
-          
-          this._ttsStats.wsMessageCount++;
-          this._playTTSAudio(hexData);
-        } else if (data.command === 'display' && data.parameters?.text) {
+      case 'command': {
+        const cmd = data.command;
+        if (cmd?.command === 'display' && cmd?.parameters?.text) {
           const opts = { persist: true, withCopyBtn: true };
-          if (data.parameters.mcp_tools?.length) opts.mcpTools = data.parameters.mcp_tools;
-          this.appendChat('assistant', data.parameters.text, opts);
-        } else if (data.command === 'display_emotion' && data.parameters?.emotion) {
-          this.updateEmotionDisplay(data.parameters.emotion);
+          if (cmd.parameters.mcp_tools?.length) opts.mcpTools = cmd.parameters.mcp_tools;
+          this.appendChat('assistant', cmd.parameters.text, opts);
+        } else if (cmd?.command === 'display_emotion' && cmd?.parameters?.emotion) {
+          this.updateEmotionDisplay(cmd.parameters.emotion);
         }
         break;
+      }
     }
   }
 
   renderASRStreaming(text = '', done = false) {
-    const finalText = (text || '').trim();
-    // 文本模式：把识别内容同步到主输入框（支持 MD，交由 renderMarkdown + 发送逻辑渲染）
+    const t = (text || '').trim();
+    //  interim 时加闪烁光标，提升流式识别反馈感（xiaozhi 风格）
+    const displayText = done ? t : (t + ' |');
     const chatInput = document.getElementById('chatInput');
     if (chatInput) {
-      chatInput.value = finalText;
+      chatInput.value = displayText;
       chatInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
-
-    // 语音模式：同时把识别内容同步到 voiceInput，方便立刻回显再触发 TTS 播放
     const voiceInput = document.getElementById('voiceInput');
     if (voiceInput) {
-      voiceInput.value = finalText || '';
-      // 语音输入框主要做展示，不需要再触发额外的 input 事件
+      voiceInput.value = displayText;
+    }
+    if (!done && voiceInput) {
+      voiceInput.classList.add('asr-interim');
+    } else {
+      voiceInput?.classList.remove('asr-interim');
     }
   }
 
@@ -7430,22 +7442,89 @@ class App {
       await this.ensureDeviceWs();
       
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000, channelCount: 1 }
       });
       
       this._micStream = stream;
-      this._audioCtx = new AudioContext({ sampleRate: 16000 });
+      this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: 16000,
+        latencyHint: 'interactive'
+      });
       
       const source = this._audioCtx.createMediaStreamSource(stream);
-      const processor = this._audioCtx.createScriptProcessor(4096, 1, 1);
-      source.connect(processor);
-      processor.connect(this._audioCtx.destination);
-      this._audioProcessor = processor;
+      let processor = null;
+      const FRAME_SIZE = 960; // xiaozhi-web-client: 60ms @ 16kHz
       
+      if (this._audioCtx.audioWorklet) {
+        try {
+          const workletCode = `
+            class ASRAudioProcessor extends AudioWorkletProcessor {
+              constructor(o){super();const s=o.processorOptions?.bufferSize||960;this.buf=new Float32Array(s);this.i=0;}
+              process(inputs){
+                const in0=inputs[0]?.[0];if(!in0)return true;
+                for(let k=0;k<in0.length;k++){
+                  this.buf[this.i++]=in0[k];
+                  if(this.i>=this.buf.length){
+                    const pcm=new Int16Array(this.buf.length);
+                    for(let j=0;j<this.buf.length;j++){
+                      const v=Math.max(-1,Math.min(1,this.buf[j]));
+                      pcm[j]=v<0?v*32768:v*32767;
+                    }
+                    this.port.postMessage(pcm);this.i=0;
+                  }
+                }
+                return true;
+              }
+            }
+            registerProcessor('asr-audio-processor',ASRAudioProcessor);
+          `;
+          const blob = new Blob([workletCode], { type: 'application/javascript' });
+          const url = URL.createObjectURL(blob);
+          await this._audioCtx.audioWorklet.addModule(url);
+          URL.revokeObjectURL(url);
+          const workletNode = new AudioWorkletNode(this._audioCtx, 'asr-audio-processor', {
+            processorOptions: { bufferSize: FRAME_SIZE }
+          });
+          workletNode.port.onmessage = (e) => {
+            if (!this._micActive || !e.data) return;
+            const pcm = e.data instanceof Int16Array ? e.data : new Int16Array(e.data);
+            this._preAudioBuffer.push(pcm.slice());
+            if (this._preAudioBuffer.length > 30) this._preAudioBuffer.shift();
+            this._audioBuffer.push(pcm.slice());
+          };
+          const silent = this._audioCtx.createGain();
+          silent.gain.value = 0;
+          source.connect(workletNode);
+          workletNode.connect(silent);
+          silent.connect(this._audioCtx.destination);
+          processor = workletNode;
+        } catch (workletErr) {
+          console.warn('[ASR] AudioWorklet 不可用，使用 ScriptProcessor:', workletErr.message);
+        }
+      }
+      
+      if (!processor) {
+        processor = this._audioCtx.createScriptProcessor(2048, 1, 1);
+        source.connect(processor);
+        processor.connect(this._audioCtx.destination);
+        processor.onaudioprocess = (e) => {
+          if (!this._micActive) return;
+          const input = e.inputBuffer.getChannelData(0);
+          const pcm16 = new Int16Array(input.length);
+          for (let i = 0; i < input.length; i++) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
+          this._preAudioBuffer.push(pcm16);
+          if (this._preAudioBuffer.length > 30) this._preAudioBuffer.shift();
+          this._audioBuffer.push(pcm16);
+        };
+      }
+      
+      this._audioProcessor = processor;
       const sessionId = `sess_${Date.now()}`;
       this._asrSessionId = sessionId;
       this._asrChunkIndex = 0;
-      // 初始化ASR统计
       this._asrStats = {
         totalChunks: 0,
         totalBytes: 0,
@@ -7455,30 +7534,10 @@ class App {
       };
       this._micActive = true;
       this._audioBuffer = [];
-      this._preAudioBuffer = []; // 预缓冲：在ASR准备好之前收集的音频
-      
+      this._preAudioBuffer = [];
+      this.updateVoiceStatus('正在聆听...');
       document.getElementById('micBtn')?.classList.add('recording');
-      
-      // 先启动音频处理，开始收集音频（预缓冲）
-      processor.onaudioprocess = (e) => {
-        if (!this._micActive) return;
-        const input = e.inputBuffer.getChannelData(0);
-        const pcm16 = new Int16Array(input.length);
-        for (let i = 0; i < input.length; i++) {
-          const s = Math.max(-1, Math.min(1, input[i]));
-          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-        
-        // 使用预缓冲机制：同时存入预缓冲和正常缓冲，确保不丢失最开始的话
-        this._preAudioBuffer.push(pcm16);
-        // 限制预缓冲大小，避免内存问题（最多保存约3秒的音频，约30个块）
-        if (this._preAudioBuffer.length > 30) {
-          this._preAudioBuffer.shift(); // 移除最旧的
-        }
-        
-        // 同时存入正常缓冲（ASR准备好后使用）
-        this._audioBuffer.push(pcm16);
-      };
+      document.getElementById('voiceWave')?.classList.add('active');
       
       // 发送会话启动请求
       this._deviceWs?.send(JSON.stringify({
@@ -7531,30 +7590,31 @@ class App {
           data: hex
         }));
         
-        console.log(
-          `[ASR前端] 发送音频块 #${this._asrChunkIndex}: 字节=${bytes}, 样本=${samples}, 时长=${duration.toFixed(3)}s,` +
-          ` 发送间隔=${interval.toFixed(2)}ms, 累计块数=${this._asrStats.totalChunks}, 累计字节=${this._asrStats.totalBytes}`
-        );
         
         this._audioBuffer = [];
       };
       
-      // 优化：立即开始发送音频（不等待ASR确认），使用预缓冲确保不丢失最开始的话
-      // 第一次立即发送预缓冲，然后使用更短的间隔（80ms，从150ms优化）
+      // xiaozhi 风格：60ms 发送间隔，更快首包
       const startSending = () => {
         if (!this._micActive) return;
-        this._asrReady = true; // 标记ASR已准备好
-        sendBufferedAudio(); // 立即发送预缓冲的音频（包含最开始的话）
+        this._asrReady = true;
+        sendBufferedAudio();
         
         if (!this._audioBufferTimer) {
-          this._audioBufferTimer = setInterval(sendBufferedAudio, 80);
+          this._audioBufferTimer = setInterval(sendBufferedAudio, 60);
         }
       };
       
       // 立即开始发送（不等待），确保不丢失最开始的话
       startSending();
     } catch (e) {
-      this.showToast('麦克风启动失败: ' + e.message, 'error');
+      if (e.name === 'NotAllowedError') {
+        this.showToast('请允许访问麦克风', 'error');
+      } else if (e.name === 'NotFoundError') {
+        this.showToast('未找到麦克风设备', 'error');
+      } else {
+        this.showToast('麦克风启动失败: ' + (e.message || '未知错误'), 'error');
+      }
       this._micActive = false;
       this._asrSessionId = null;
       if (this._micStream) {
@@ -7612,10 +7672,6 @@ class App {
           data: hex
         }));
         
-        console.log(
-          `[ASR前端] 发送结束块 #${this._asrChunkIndex}: 字节=${bytes}, 样本=${samples}, 时长=${duration.toFixed(3)}s,` +
-          ` 发送间隔=${interval.toFixed(2)}ms, 累计块数=${this._asrStats.totalChunks}, 累计字节=${this._asrStats.totalBytes}`
-        );
       }
 
       this._audioProcessor?.disconnect();
@@ -7624,10 +7680,6 @@ class App {
       
       if (this._asrSessionId && this._deviceWs) {
         const totalDuration = this._asrStats.totalSamples / 16000;
-        console.log(
-          `[ASR前端] 会话结束: session_id=${this._asrSessionId}, 总块数=${this._asrStats.totalChunks},` +
-          ` 总字节=${this._asrStats.totalBytes}, 估算时长=${totalDuration.toFixed(3)}s`
-        );
         this._deviceWs.send(JSON.stringify({
           type: 'asr_session_stop',
           device_id: 'webclient',
@@ -7638,6 +7690,7 @@ class App {
     } finally {
       this._micActive = false;
       document.getElementById('micBtn')?.classList.remove('recording');
+      document.getElementById('voiceWave')?.classList.remove('active');
       this._audioCtx = null;
       this._micStream = null;
       this._audioProcessor = null;

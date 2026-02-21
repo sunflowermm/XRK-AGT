@@ -7,68 +7,13 @@ import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
+import { parseMultipartData } from '#utils/multipart-parser.js';
 
 const uploadDir = path.join(paths.data, 'uploads');
 const mediaDir = path.join(paths.data, 'media');
 const fileMap = new Map();
 
 // 目录已在 paths.ensureBaseDirs() 中创建，无需重复创建
-
-/**
- * 解析multipart/form-data
- */
-async function parseMultipartData(req) {
-  return new Promise((resolve, reject) => {
-    const boundary = req.headers['content-type'].split('boundary=')[1];
-    if (!boundary) {
-      reject(new Error('No boundary found'));
-      return;
-    }
-
-    let data = Buffer.alloc(0);
-    const files = [];
-
-    req.on('data', chunk => {
-      data = Buffer.concat([data, chunk]);
-    });
-
-    req.on('end', () => {
-      const parts = data.toString('binary').split(`--${boundary}`);
-      
-      for (const part of parts) {
-        if (part.includes('Content-Disposition: form-data')) {
-          const nameMatch = part.match(/name="([^"]+)"/);
-          const filenameMatch = part.match(/filename="([^"]+)"/);
-          
-          if (filenameMatch) {
-            const filename = filenameMatch[1];
-            const contentTypeMatch = part.match(/Content-Type: ([^\r\n]+)/);
-            const contentType = contentTypeMatch ? contentTypeMatch[1] : 'application/octet-stream';
-            
-            const headerEndIndex = part.indexOf('\r\n\r\n');
-            if (headerEndIndex !== -1) {
-              const fileStart = headerEndIndex + 4;
-              const fileEnd = part.lastIndexOf('\r\n');
-              const fileContent = Buffer.from(part.substring(fileStart, fileEnd), 'binary');
-              
-              files.push({
-                fieldname: nameMatch ? nameMatch[1] : 'file',
-                originalname: filename,
-                mimetype: contentType,
-                buffer: fileContent,
-                size: fileContent.length
-              });
-            }
-          }
-        }
-      }
-      
-      resolve({ files });
-    });
-
-    req.on('error', reject);
-  });
-}
 
 /**
  * 文件管理API

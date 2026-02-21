@@ -41,6 +41,12 @@ yarn-error.log*
 Thumbs.db
 desktop.ini
 
+# 备份/临时（避免冗余文件进仓）
+*.bak
+*.orig
+*.tmp
+*.temp
+
 # Runtime generated directories and files
 data/server_bots/
 data/models/

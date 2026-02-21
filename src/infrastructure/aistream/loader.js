@@ -2,8 +2,8 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { spawn } from 'child_process';
 import BotUtil from '#utils/botutil.js';
-import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import { MCPServer } from '#utils/mcp-server.js';
 
 /**
@@ -82,8 +82,8 @@ class StreamLoader {
         await this.loadStreamClass(file);
       }
 
-      // 阶段2: 应用Embedding配置（直接从 cfg 读取）
-      const embeddingConfig = cfg.aistream?.embedding || {};
+      // 阶段2: 应用 Embedding 配置
+      const embeddingConfig = getAistreamConfigOptional().embedding || {};
       if (embeddingConfig.enabled !== false) {
         await this.applyEmbeddingConfig(embeddingConfig);
       }
@@ -111,9 +111,6 @@ class StreamLoader {
     const startTime = Date.now();
 
     try {
-      // 确保文件路径正确转换为 URL（Windows 路径兼容）
-      // 使用 pathToFileURL 转换为 URL 对象，这是 Node.js 推荐的方式
-      // 可以正确处理 Windows 路径、特殊字符和编码问题
       const normalizedPath = path.resolve(file);
       const fileUrlObj = pathToFileURL(normalizedPath);
       // 添加时间戳避免缓存，使用 .href 获取字符串格式
@@ -151,7 +148,7 @@ class StreamLoader {
         mcpTools: stream.mcpTools?.size || 0
       });
 
-      if (cfg.aistream?.global?.debug) {
+      if (getAistreamConfigOptional().global?.debug) {
         BotUtil.makeLog('debug', `加载工作流: ${stream.name} v${stream.version} (${loadTime}ms)`, 'StreamLoader');
       }
     } catch (error) {
@@ -168,7 +165,7 @@ class StreamLoader {
    * 统一应用Embedding配置并初始化（从 cfg 读取）
    */
   async applyEmbeddingConfig(embeddingConfig = null) {
-    const config = embeddingConfig || cfg.aistream?.embedding || {};
+    const config = embeddingConfig || getAistreamConfigOptional().embedding || {};
     let successCount = 0;
     let failCount = 0;
 
@@ -200,11 +197,11 @@ class StreamLoader {
       }
     }
 
-    if (failCount > 0) {
-      if (failCount > 0) {
-        BotUtil.makeLog('warn', `Embedding初始化: 成功${successCount}个, 失败${failCount}个`, 'StreamLoader');
-      }
-    }
+    BotUtil.makeLog(
+      failCount > 0 ? 'warn' : 'debug',
+      `Embedding初始化: 成功${successCount}个, 失败${failCount}个`,
+      'StreamLoader'
+    );
   }
 
   /**
@@ -222,7 +219,7 @@ class StreamLoader {
     }
 
     // 列出工作流（仅在debug模式下）
-    if (cfg.aistream?.global?.debug) {
+    if (getAistreamConfigOptional().global?.debug) {
       this.listStreamsQuiet();
     }
   }
@@ -278,7 +275,7 @@ class StreamLoader {
    * 切换所有工作流的Embedding（从 cfg 读取配置）
    */
   async toggleAllEmbedding(enabled) {
-    const embeddingConfig = cfg.aistream?.embedding || {};
+    const embeddingConfig = getAistreamConfigOptional().embedding || {};
 
     BotUtil.makeLog('info', `🔄 ${enabled ? '启用' : '禁用'}Embedding...`, 'StreamLoader');
 
@@ -431,6 +428,13 @@ class StreamLoader {
     return merged;
   }
 
+  /** 为单个工作流注册 MCP 工具（供插件 init 等动态合并后调用） */
+  registerStreamTools(stream) {
+    if (!this.mcpServer || !stream?.mcpTools?.size) return;
+    for (const [toolName, tool] of stream.mcpTools.entries()) {
+      this._registerTool(this.mcpServer, stream, toolName, tool);
+    }
+  }
 
   /**
    * 检查Embedding依赖（已简化：统一由子服务端负责）
@@ -532,7 +536,7 @@ class StreamLoader {
   async _reloadStream(filePath) {
     await this.loadStreamClass(filePath)
     // 应用 Embedding 配置（applyEmbeddingConfig 会检查 enabled 状态，避免重复初始化）
-    await this.applyEmbeddingConfig(cfg.aistream?.embedding || {})
+    await this.applyEmbeddingConfig(getAistreamConfigOptional().embedding || {})
     await this.initMCP()
   }
 
@@ -585,72 +589,43 @@ class StreamLoader {
     }
   }
 
-  /**
-   * 注册MCP工具（统一入口，支持热重载）
-   * 
-   * 功能：
-   * - 遍历所有stream的MCP工具，注册到MCP服务器
-   * - 工具名称格式：streamName.toolName（避免冲突，便于分组）
-   * - 自动去重，避免重复注册
-   * - 支持热重载，重新注册时先清空旧工具
-   * 
-   * @param {MCPServer} mcpServer - MCP服务器实例
-   */
+  _registerTool(mcpServer, stream, toolName, tool) {
+    if (!tool?.enabled || !mcpServer?.registerTool) return false;
+    const fullToolName = stream.name !== 'mcp' ? `${stream.name}.${toolName}` : toolName;
+    const loader = this;
+    mcpServer.registerTool(fullToolName, {
+      description: tool.description || `执行${toolName}操作`,
+      inputSchema: tool.inputSchema || {},
+      handler: async (args) => {
+        const context = { e: args.e || loader.currentEvent || null, question: null };
+        try {
+          if (tool.handler) {
+            const result = await tool.handler(args, { ...context, stream });
+            if (result === undefined) return { success: true, message: '操作已执行' };
+            if (typeof result === 'object' && ('success' in result || 'error' in result)) return result;
+            return { success: true, data: result };
+          }
+          return { success: false, error: 'Handler not found' };
+        } catch (error) {
+          BotUtil.makeLog('error', `MCP工具调用失败[${fullToolName}]: ${error.message}`, 'StreamLoader');
+          return { success: false, error: error.message };
+        }
+      }
+    });
+    return true;
+  }
+
   registerMCP(mcpServer) {
     if (!mcpServer) return;
-    const loader = this;
-
-    // 注意：工具清空在 initMCP 中统一处理，这里只注册本地工作流工具
-    const registeredTools = new Set();
-    let registeredCount = 0;
-
-    // 遍历所有工作流，注册工具
+    const seen = new Set();
     for (const stream of this.streams.values()) {
-      if (!stream?.mcpTools || stream.mcpTools.size === 0) continue;
-
+      if (!stream?.mcpTools?.size) continue;
       for (const [toolName, tool] of stream.mcpTools.entries()) {
-        if (!tool?.enabled || !mcpServer.registerTool) continue;
-
-        const fullToolName = stream.name !== 'mcp' ? `${stream.name}.${toolName}` : toolName;
-        
-        if (registeredTools.has(fullToolName)) continue;
-
-        mcpServer.registerTool(fullToolName, {
-          description: tool.description || `执行${toolName}操作`,
-          inputSchema: tool.inputSchema || {},
-          handler: async (args) => {
-            const context = {
-              // 优先使用显式传入的 e，其次使用当前工作流执行时挂载的全局事件
-              e: args.e || loader.currentEvent || null,
-              question: null
-            };
-            try {
-              if (tool.handler) {
-                const result = await tool.handler(args, { ...context, stream });
-                // 确保返回标准格式
-                if (result === undefined) {
-                  return { success: true, message: '操作已执行' };
-                }
-                // 如果已经是标准格式，直接返回
-                if (typeof result === 'object' && ('success' in result || 'error' in result)) {
-                  return result;
-                }
-                // 否则包装为标准格式
-                return { success: true, data: result };
-              }
-              return { success: false, error: 'Handler not found' };
-            } catch (error) {
-              BotUtil.makeLog('error', `MCP工具调用失败[${fullToolName}]: ${error.message}`, 'StreamLoader');
-              return { success: false, error: error.message };
-            }
-          }
-        });
-
-        registeredTools.add(fullToolName);
-        registeredCount++;
+        const full = stream.name !== 'mcp' ? `${stream.name}.${toolName}` : toolName;
+        if (seen.has(full)) continue;
+        if (this._registerTool(mcpServer, stream, toolName, tool)) seen.add(full);
       }
     }
-
     this.mcpServer = mcpServer;
   }
 
@@ -658,14 +633,14 @@ class StreamLoader {
    * 初始化MCP服务（如果配置启用）
    */
   async initMCP() {
-    const mcpConfig = cfg.aistream?.mcp || {};
+    const mcpConfig = getAistreamConfigOptional().mcp || {};
     if (mcpConfig.enabled === false) return;
 
     if (!this.mcpServer) {
       this.mcpServer = new MCPServer();
     }
 
-    // 清空所有旧工具（包括远程MCP工具，支持热重载）
+    // 清空已注册工具（含远程 MCP，支持热重载）
     const existingTools = Array.from(this.mcpServer.tools.keys());
     for (const toolName of existingTools) {
       this.mcpServer.tools.delete(toolName);
@@ -696,7 +671,7 @@ class StreamLoader {
    * 获取远程MCP配置和选中的服务器名称集合
    */
   _getRemoteMCPConfig() {
-    const remoteConfig = cfg.aistream?.mcp?.remote || {};
+    const remoteConfig = getAistreamConfigOptional().mcp?.remote || {};
     if (!remoteConfig.enabled || !Array.isArray(remoteConfig.servers)) return null;
     
     const { selected = [], servers = [] } = remoteConfig;

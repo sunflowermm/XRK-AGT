@@ -1,5 +1,6 @@
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import MemoryManager from '#infrastructure/aistream/memory-manager.js';
 import PromptEngine from '#infrastructure/aistream/prompt-engine.js';
@@ -572,7 +573,7 @@ export default class AIStream {
    * @returns {Object}
    */
   getRetryConfig() {
-    const runtime = cfg.aistream || {};
+    const runtime = getAistreamConfigOptional();
     const llm = runtime.llm || {};
     const retryConfig = llm.retry || {};
     return {
@@ -873,7 +874,7 @@ export default class AIStream {
    * @returns {Object}
    */
   resolveLLMConfig(apiConfig = {}) {
-    const llm = cfg.aistream?.llm || {};
+    const llm = getAistreamConfigOptional().llm || {};
     const pick = (...vals) => vals.find(v => v !== undefined);
     const pickTrim = (...vals) => {
       const v = vals.find(v => v !== undefined);

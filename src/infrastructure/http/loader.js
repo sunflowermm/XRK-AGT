@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import HttpApi from './http.js';
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import paths from '#utils/paths.js';
 import { validateApiInstance, getApiPriority } from './utils/helpers.js';
 
@@ -266,7 +267,7 @@ class ApiLoader {
           totalWS += wsCount;
           enabledCount++;
           
-          if (cfg.aistream?.global?.debug) {
+          if (getAistreamConfigOptional().global?.debug) {
             BotUtil.makeLog('debug', `注册API: ${apiName} (路由: ${routeCount}, WS: ${wsCount})`, 'ApiLoader');
           }
         }

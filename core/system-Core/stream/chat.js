@@ -3,9 +3,9 @@ import fs from 'fs';
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
+import { PARSEABLE_EMOTIONS } from '#utils/emotion-utils.js';
 
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
-const EMOTION_TYPES = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
 
 // 表情回应映射
 const EMOJI_REACTIONS = {
@@ -93,7 +93,7 @@ export default class ChatStream extends AIStream {
    * 加载表情包
    */
   async loadEmotionImages() {
-    for (const emotion of EMOTION_TYPES) {
+    for (const emotion of PARSEABLE_EMOTIONS) {
       const emotionDir = path.join(EMOTIONS_DIR, emotion);
       try {
         await BotUtil.mkdir(emotionDir);
@@ -1698,9 +1698,8 @@ ${embeddingHint}
       text = text.replace(/\[CQ:reply,id=\d+\]/g, '').trim();
     }
     
-    // 使用正则匹配所有标记（CQ码和表情包标记），按顺序处理
-    // 匹配模式：CQ码 [CQ:type,params] 或表情包 [表情类型]
-    const combinedPattern = /(\[CQ:[^\]]+\]|\[(开心|惊讶|伤心|大笑|害怕|生气)\])/g;
+    const emotionGroup = PARSEABLE_EMOTIONS.join('|');
+    const combinedPattern = new RegExp(`(\\[CQ:[^\\]]+\\]|\\[(${emotionGroup})\\])`, 'g');
     const markers = [];
     let match;
     

@@ -231,9 +231,9 @@ export default class VolcengineTTSClient {
         }
     }
 
-    _sendAudioToDevice(audioData) {
+    async _sendAudioToDevice(audioData) {
         const deviceBot = this.Bot[this.deviceId];
-        if (!deviceBot || !audioData || audioData.length === 0) return Promise.resolve();
+        if (!deviceBot || !audioData || audioData.length === 0) return;
         
         const sr = this.config.sampleRate || 16000;
         const chunkMs = Math.max(5, Math.min(512, this.config.chunkMs || 40));
@@ -241,61 +241,26 @@ export default class VolcengineTTSClient {
         const chunkBytes = Math.max(2, Math.floor((bytesPerMs * chunkMs) / 2) * 2);
         const delayMs = 0; // 为了最低端到端延迟，禁用额外分片延迟
         
-        // 记录Session开始时间（如果是第一个音频数据）
         if (this.sessionStartTime === null) {
             this.sessionStartTime = Date.now();
             this.audioChunkCount = 0;
-            BotUtil.makeLog('debug', `[TTS后端] Session开始，准备发送音频数据`, this.deviceId);
         }
-        
-        return (async () => {
-            const sendStartTime = Date.now();
-            let chunkOffset = 0;
-            
-            for (let offset = 0; offset < audioData.length; offset += chunkBytes) {
-                const slice = audioData.slice(offset, Math.min(offset + chunkBytes, audioData.length));
-                const hex = slice.toString('hex');
-                const chunkIndex = ++this.audioChunkCount;
-                const now = Date.now();
-                
-                // 计算与上一个块的间隔
-                let interval = 0;
-                if (this.lastChunkTime) {
-                    interval = now - this.lastChunkTime;
+        for (let offset = 0; offset < audioData.length; offset += chunkBytes) {
+            const slice = audioData.slice(offset, Math.min(offset + chunkBytes, audioData.length));
+            const hex = slice.toString('hex');
+            this.audioChunkCount++;
+            try {
+                if (deviceBot.sendAudioChunk && typeof deviceBot.sendAudioChunk === 'function') {
+                    await deviceBot.sendAudioChunk(hex);
+                } else {
+                    BotUtil.makeLog('warn', `[TTS] sendAudioChunk 不可用`, this.deviceId);
                 }
-                this.lastChunkTime = now;
-                
-                // 计算音频时长（PCM 16bit mono）
-                const duration = (slice.length / 2) / sr;
-                
-                try {
-                    deviceBot.sendAudioChunk(hex);
-                    
-                    // 详细日志：块编号、字节数、时长、间隔
-                    // 累计字节 = 之前的总字节 + 当前数据包中已发送的字节
-                    const cumulativeBytes = this.totalAudioBytes + offset + slice.length;
-                    BotUtil.makeLog('debug',
-                        `[TTS后端] 发送音频块 #${chunkIndex}: 字节=${slice.length}, hex长度=${hex.length}, 时长=${duration.toFixed(3)}s, 间隔=${interval}ms, 累计字节=${cumulativeBytes}`,
-                        this.deviceId
-                    );
-                } catch (e) {
-                    BotUtil.makeLog('error', `[TTS后端] 发送音频块 #${chunkIndex} 失败: ${e.message}`, this.deviceId);
-                }
-                
-                chunkOffset += slice.length;
-                
-                if (delayMs > 0) {
-                    await new Promise(r => setTimeout(r, delayMs));
-                }
+            } catch (e) {
+                BotUtil.makeLog('error', `[TTS] 发送失败: ${e.message}`, this.deviceId);
             }
-            
-            this.totalAudioBytes += audioData.length;
-            const sendDuration = Date.now() - sendStartTime;
-            BotUtil.makeLog('debug',
-                `[TTS后端] 音频数据发送完成: 总字节=${audioData.length}, 分片数=${Math.ceil(audioData.length / chunkBytes)}, 发送耗时=${sendDuration}ms`,
-                this.deviceId
-            );
-        })();
+            if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+        }
+        this.totalAudioBytes += audioData.length;
     }
 
     /**
@@ -367,9 +332,13 @@ export default class VolcengineTTSClient {
 
                         if (msg.type === 'audio') {
                             this.totalAudioBytes += msg.data.length;
-                            this._sendAudioToDevice(msg.data).catch(e => {
-                                BotUtil.makeLog('error', `[TTS] 发送音频失败: ${e.message}`, this.deviceId);
-                            });
+                            (async () => {
+                                try {
+                                    await this._sendAudioToDevice(msg.data);
+                                } catch (e) {
+                                    BotUtil.makeLog('error', `[TTS] 发送音频失败: ${e.message}`, this.deviceId);
+                                }
+                            })();
                         }
                     });
 
@@ -564,6 +533,12 @@ export default class VolcengineTTSClient {
      * @returns {Promise<void>}
      */
     async destroy() {
+        // 清理统计信息
+        this.totalAudioBytes = 0;
+        this.audioChunkCount = 0;
+        this.lastChunkTime = null;
+        this.sessionStartTime = null;
+        
         if (this.ws) {
             try {
                 if (this.connected) {
@@ -586,5 +561,7 @@ export default class VolcengineTTSClient {
         this.connected = false;
         this.connecting = false;
         this.sessionActive = false;
+        this.currentSessionId = null;
+        this.connectionId = null;
     }
 }

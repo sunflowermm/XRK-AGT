@@ -3949,11 +3949,59 @@ body.dark .json-boolean { color: #f87171; }
   user-select: none;
 }
 
+.voice-wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  margin: 8px 0;
+  opacity: 0.3;
+  transition: opacity 0.2s;
+}
+.voice-wave.active {
+  opacity: 1;
+}
+.voice-wave-bar {
+  width: 4px;
+  height: 4px;
+  background: var(--primary);
+  border-radius: 2px;
+  animation: voice-wave-idle 1.2s ease-in-out infinite;
+}
+.voice-wave.active .voice-wave-bar {
+  animation: voice-wave-active 0.6s ease-in-out infinite;
+}
+.voice-wave-bar:nth-child(1) { animation-delay: 0ms; }
+.voice-wave-bar:nth-child(2) { animation-delay: 100ms; }
+.voice-wave-bar:nth-child(3) { animation-delay: 200ms; }
+.voice-wave-bar:nth-child(4) { animation-delay: 300ms; }
+.voice-wave-bar:nth-child(5) { animation-delay: 400ms; }
+.voice-wave-bar:nth-child(6) { animation-delay: 500ms; }
+@keyframes voice-wave-idle {
+  0%, 100% { height: 4px; }
+  50% { height: 8px; }
+}
+@keyframes voice-wave-active {
+  0%, 100% { height: 6px; }
+  50% { height: 20px; }
+}
+
 .voice-status {
   font-size: 16px;
   color: var(--text-secondary);
   text-align: center;
   margin-top: 16px;
+}
+
+.voice-status.asr-recognizing {
+  color: var(--primary);
+  animation: asr-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes asr-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .voice-messages {
@@ -4055,6 +4103,12 @@ body.dark .json-boolean { color: #f87171; }
 .voice-input:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+/* xiaozhi 风格：识别中的流式光标反馈 */
+.voice-input.asr-interim {
+  color: var(--text-primary);
+  caret-color: var(--primary);
 }
 
 .voice-send-btn {

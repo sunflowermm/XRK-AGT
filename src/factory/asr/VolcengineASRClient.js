@@ -355,6 +355,11 @@ export default class VolcengineASRClient {
                                         `⚡ [ASR性能] 总处理时间: ${totalTime}ms`,
                                         this.deviceId
                                     );
+                                    // 清除清理定时器（已收到最终结果）
+                                    if (this.currentUtterance._cleanupTimer) {
+                                        clearTimeout(this.currentUtterance._cleanupTimer);
+                                        this.currentUtterance._cleanupTimer = null;
+                                    }
                                 }
                                 this._armIdleTimer();
                             }
@@ -484,15 +489,9 @@ export default class VolcengineASRClient {
                 const sessionId = this.currentUtterance?.sessionId;
 
                 if (isLast) {
-                    BotUtil.makeLog('info',
-                        `✅ [ASR最终] "${text}" (${duration}ms)`,
-                        this.deviceId
-                    );
+                    BotUtil.makeLog('debug', `[ASR] 最终: "${text}"`, this.deviceId);
                 } else {
-                    BotUtil.makeLog('info',
-                        `⚡ [ASR中间] "${text}" (${duration}ms)`,
-                        this.deviceId
-                    );
+                    BotUtil.makeLog('debug', `[ASR] 中间: "${text}"`, this.deviceId);
                 }
 
                 // 发送事件
@@ -602,6 +601,7 @@ export default class VolcengineASRClient {
     sendAudio(audioBuf) {
         if (!this.ws || !this.connected) return false;
         if (!this.currentUtterance || this.currentUtterance.ending) return false;
+        if (!audioBuf || audioBuf.length === 0) return true; // 空数据不发送，但返回成功
 
         try {
             const frame = this._audioOnlyRequest(audioBuf, false);
@@ -636,11 +636,20 @@ export default class VolcengineASRClient {
             const sessionId = this.currentUtterance.sessionId;
             BotUtil.makeLog('info', `✓ [ASR会话] 结束: ${sessionId}`, this.deviceId);
 
-            setTimeout(() => {
+            // 使用 Promise 等待最终结果，而不是固定延迟
+            // 注意：这里不等待，让结果自然到达后清理
+            // 如果 3 秒后仍未清理，强制清理（防止内存泄漏）
+            const cleanupTimer = setTimeout(() => {
                 if (this.currentUtterance && this.currentUtterance.sessionId === sessionId) {
+                    BotUtil.makeLog('warn', `[ASR] 会话 ${sessionId} 超时未收到最终结果，强制清理`, this.deviceId);
                     this.currentUtterance = null;
                 }
-            }, 300);
+            }, 3000);
+            
+            // 保存清理定时器，在收到最终结果时清除
+            if (this.currentUtterance) {
+                this.currentUtterance._cleanupTimer = cleanupTimer;
+            }
 
             this._armIdleTimer();
             return true;
@@ -658,9 +667,16 @@ export default class VolcengineASRClient {
      * @returns {Promise<void>}
      */
     async destroy() {
+        // 清理所有定时器
         this._clearIdleTimer();
         this._clearPingTimer();
         this._clearPongTimer();
+        
+        // 清理会话清理定时器
+        if (this.currentUtterance?._cleanupTimer) {
+            clearTimeout(this.currentUtterance._cleanupTimer);
+            this.currentUtterance._cleanupTimer = null;
+        }
 
         if (this.currentUtterance && !this.currentUtterance.ending) {
             try {
@@ -672,6 +688,10 @@ export default class VolcengineASRClient {
 
         this.currentUtterance = null;
         this.sequence = 1;
+        this.performanceMetrics = {
+            firstResultTime: null,
+            audioStartTime: null
+        };
 
         if (this.ws) {
             try {

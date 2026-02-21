@@ -2,6 +2,7 @@ import template from 'art-template'
 import chokidar from 'chokidar'
 import fs from 'node:fs'
 import os from 'node:os'
+import BotUtil from '#utils/botutil.js'
 
 /**
  * 将绝对路径转为 file:// URL（Windows 下用正斜杠，避免浏览器无法加载）
@@ -48,7 +49,7 @@ export default class Renderer {
       try {
         this.html[tplFile] = fs.readFileSync(tplFile, 'utf8')
       } catch {
-        logger.error(`加载html错误：${tplFile}`)
+        BotUtil.makeLog('error', `加载html错误：${tplFile}`, 'Renderer')
         return false
       }
 
@@ -59,7 +60,7 @@ export default class Renderer {
     const tmpHtml = template.render(this.html[tplFile], data)
     fs.writeFileSync(savePath, tmpHtml)
 
-    logger.debug(`[图片生成][使用模板] ${savePath}`)
+    BotUtil.makeLog('debug', `[图片生成][使用模板] ${savePath}`, 'Renderer')
 
     return savePath;
   }
@@ -70,7 +71,7 @@ export default class Renderer {
     const watcher = chokidar.watch(tplFile)
     watcher.on('change', () => {
       delete this.html[tplFile]
-      logger.mark(`[修改html模板] ${tplFile}`)
+      BotUtil.makeLog('info', `[修改html模板] ${tplFile}`, 'Renderer')
     })
 
     this.watcher[tplFile] = watcher
@@ -88,7 +89,7 @@ export default class Renderer {
         }
       }
     } catch (e) {
-      logger.error(`获取MAC地址失败: ${e.message}`);
+      BotUtil.makeLog('error', `获取MAC地址失败: ${e.message}`, 'Renderer');
     }
     return macAddr;
   }

@@ -23,6 +23,7 @@ import Packageloader from "#infrastructure/config/loader.js";
 import StreamLoader from "#infrastructure/aistream/loader.js";
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import paths from '#utils/paths.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import HTTPBusinessLayer from '#utils/http-business.js';
@@ -133,7 +134,7 @@ export default class Bot extends EventEmitter {
   }
 
   _initSubServer() {
-    const config = cfg.aistream?.subserver || {};
+    const config = getAistreamConfigOptional().subserver || {};
     const host = config.host || '127.0.0.1';
     const port = config.port || 8000;
     const timeout = config.timeout || 30000;

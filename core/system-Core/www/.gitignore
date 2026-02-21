@@ -4,3 +4,6 @@ xrk/**
 !xrk/api-config.json
 !xrk/styles.css
 !xrk/app.js
+!xrk/lib
+!xrk/lib/chart.umd.min.js
+!xrk/lib/mermaid.min.js

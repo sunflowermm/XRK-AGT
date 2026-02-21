@@ -3,7 +3,10 @@ import fs from 'fs';
 import chokidar from 'chokidar';
 import path from 'path';
 import paths from '#utils/paths.js';
+import BotUtil from '#utils/botutil.js';
 import { GLOBAL_CONFIGS, SERVER_CONFIGS } from './config-constants.js';
+
+const LOG_TAG = 'Config';
 
 /**
  * 配置管理类
@@ -75,7 +78,7 @@ class Cfg {
         config = YAML.parse(fs.readFileSync(watchFile, 'utf8'));
         this.watch(watchFile, name, key);
       } catch (error) {
-        logger?.error(`[配置解析失败][${watchFile}]`, error);
+        BotUtil.makeLog('error', `[配置解析失败][${watchFile}] ${error?.message || error}`, LOG_TAG, true);
       }
     }
     
@@ -84,7 +87,7 @@ class Cfg {
 
   getServerConfig(name) {
     if (this.GLOBAL_CONFIGS.includes(name)) {
-      logger?.warn(`[配置警告] ${name} 是全局配置，应使用 getGlobalConfig() 或 cfg.${name} 访问`);
+      BotUtil.makeLog('warn', `[配置警告] ${name} 是全局配置，应使用 getGlobalConfig() 或 cfg.${name} 访问`, LOG_TAG);
       return {};
     }
     
@@ -110,14 +113,14 @@ class Cfg {
         config = YAML.parse(fs.readFileSync(file, 'utf8'));
         this.watch(file, name, key);
       } catch (error) {
-        logger?.error(`[服务器配置解析失败][${file}]`, error);
+        BotUtil.makeLog('error', `[服务器配置解析失败][${file}] ${error?.message || error}`, LOG_TAG, true);
       }
     } else if (fs.existsSync(defaultFile)) {
       try {
         config = YAML.parse(fs.readFileSync(defaultFile, 'utf8'));
-        logger?.warn(`[配置提示] ${name}.yaml 不存在，使用默认配置`);
+        BotUtil.makeLog('warn', `[配置提示] ${name}.yaml 不存在，使用默认配置`, LOG_TAG);
       } catch (error) {
-        logger?.error(`[默认配置读取失败][${name}]`, error);
+        BotUtil.makeLog('error', `[默认配置读取失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       }
     }
     
@@ -185,7 +188,7 @@ class Cfg {
     if (!this._port) {
       try {
         const out = fs.existsSync(defaultFile) ? YAML.parse(fs.readFileSync(defaultFile, 'utf8')) : {};
-        logger?.debug?.(`[渲染器] port 未设置，仅用默认配置: ${type}`);
+        BotUtil.makeLog('debug', `[渲染器] port 未设置，仅用默认配置: ${type}`, LOG_TAG);
         return out;
       } catch {
         return {};
@@ -200,19 +203,19 @@ class Cfg {
       try {
         config = YAML.parse(fs.readFileSync(defaultFile, 'utf8'));
       } catch (e) {
-        logger?.error?.(`[渲染器] 默认配置解析失败 [${type}]`, e);
+        BotUtil.makeLog('error', `[渲染器] 默认配置解析失败 [${type}] ${e?.message || e}`, LOG_TAG, true);
       }
     }
     if (fs.existsSync(serverFile)) {
       try {
         config = { ...config, ...YAML.parse(fs.readFileSync(serverFile, 'utf8')) };
         this.watch(serverFile, `renderer.${type}`, key);
-        logger?.debug?.(`[渲染器] 已合并 ${type} 服务器配置: ${serverFile}`);
+        BotUtil.makeLog('debug', `[渲染器] 已合并 ${type} 服务器配置: ${serverFile}`, LOG_TAG);
       } catch (e) {
-        logger?.error?.(`[渲染器] 服务器配置解析失败 [${type}] ${serverFile}`, e);
+        BotUtil.makeLog('error', `[渲染器] 服务器配置解析失败 [${type}] ${serverFile} ${e?.message || e}`, LOG_TAG, true);
       }
     } else {
-      logger?.debug?.(`[渲染器] 无服务器覆盖: ${serverFile}`);
+      BotUtil.makeLog('debug', `[渲染器] 无服务器覆盖: ${serverFile}`, LOG_TAG);
     }
     return this.config[key] = config;
   }
@@ -238,7 +241,7 @@ class Cfg {
     const isGlobal = this.GLOBAL_CONFIGS.includes(name);
     const configDir = isGlobal ? this.getGlobalConfigDir() : this.getConfigDir();
     if (!configDir) {
-      logger?.error('[配置保存失败] 无效的端口号');
+      BotUtil.makeLog('error', '[配置保存失败] 无效的端口号', LOG_TAG);
       return false;
     }
 
@@ -250,10 +253,10 @@ class Cfg {
       this.config[key] = data;
       fs.mkdirSync(configDir, { recursive: true });
       fs.writeFileSync(file, YAML.stringify(data), 'utf8');
-      logger.mark(`[保存${configType}配置文件][${name}]`);
+      BotUtil.makeLog('mark', `[保存${configType}配置文件][${name}]`, LOG_TAG);
       return true;
     } catch (error) {
-      logger.error(`[${configType}配置保存失败][${name}]`, error);
+      BotUtil.makeLog('error', `[${configType}配置保存失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return false;
     }
   }
@@ -268,7 +271,7 @@ class Cfg {
 
     watcher.on('change', () => {
       delete this.config[key];
-      logger.mark(`[修改配置文件][${name}]`);
+      BotUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
       this[`change_${name}`]?.();
     });
 
@@ -280,7 +283,7 @@ class Cfg {
       const log = await import('#infrastructure/log.js');
       log.default();
     } catch (error) {
-      logger?.error('[AGT配置变更处理失败]', error);
+      BotUtil.makeLog('error', `[AGT配置变更处理失败] ${error?.message || error}`, LOG_TAG, true);
     }
   }
 

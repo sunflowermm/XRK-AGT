@@ -1,21 +1,22 @@
-import { createInterface } from "readline";
-import fs from "fs";
-import os from "os";
-import { exec } from "child_process";
-import path from "path";
-import { ulid } from "ulid";
+/**
+ * 标准输入 Tasker
+ * 与 OneBotv11 / ExampleTasker 等一致：单类、id/name/path、load() 中初始化并注册 Bot.stdin
+ */
+import { createInterface } from 'readline';
+import fs from 'fs';
+import os from 'os';
+import { exec } from 'child_process';
+import path from 'path';
+import { ulid } from 'ulid';
 import crypto from 'crypto';
-import BotUtil from "#utils/botutil.js";
-import paths from "#utils/paths.js";
+import BotUtil from '#utils/botutil.js';
+import paths from '#utils/paths.js';
 
-const tempDir = path.join(paths.data, "stdin");
-const mediaDir = path.join(paths.data, "media");
-await import("#infrastructure/plugins/loader.js");
+const LOG_TAG = 'StdinTasker';
+const tempDir = path.join(paths.data, 'stdin');
+const mediaDir = path.join(paths.data, 'media');
 
-// 目录已在 paths.ensureBaseDirs() 中创建，无需重复创建
-
-// 统一的清理函数，避免代码重复
-const cleanupTempFiles = () => {
+function cleanupTempFiles() {
   try {
     const now = Date.now();
     let cleaned = 0;
@@ -31,43 +32,46 @@ const cleanupTempFiles = () => {
             cleaned++;
           }
         } catch {
-          // 忽略单个文件错误
+          // ignore
         }
       });
     }
     if (cleaned > 0) {
-      logger.debug(`已清理 ${cleaned} 个临时文件`);
+      BotUtil.makeLog('debug', `已清理 ${cleaned} 个临时文件`, LOG_TAG);
     }
   } catch (error) {
-    logger.error(`清理临时文件错误: ${error.message}`);
+    BotUtil.makeLog('error', `清理临时文件错误: ${error.message}`, LOG_TAG);
   }
-};
+}
 
-// 定时清理（每小时一次）
 setInterval(cleanupTempFiles, 3600000);
 
-export class StdinHandler {
+export default class StdinTasker {
+  id = 'stdin';
+  name = '标准输入';
+  path = 'stdin';
+  botId = 'stdin';
+
   constructor() {
-    if (global.stdinHandler) return global.stdinHandler;
-    
+    this.rl = null;
+  }
+
+  load() {
+    if (global.stdinHandler) return;
     this.rl = createInterface({
       input: process.stdin,
       output: process.stdout,
-      prompt: logger.gradient('> ', ['#3494E6', '#3498db', '#00b4d8', '#0077b6', '#023e8a'])
+      prompt: '> '
     });
-
-    this.botId = 'stdin';
     this.initStdinBot();
     this.setupListeners();
     global.stdinHandler = this;
+    this.rl.prompt();
   }
 
   initStdinBot() {
     if (!Bot.stdin) {
-      if (!Bot.uin.includes(this.botId)) {
-        Bot.uin.push(this.botId);
-      }
-
+      if (!Bot.uin.includes(this.botId)) Bot.uin.push(this.botId);
       const stdinBot = {
         uin: this.botId,
         self_id: this.botId,
@@ -106,19 +110,16 @@ export class StdinHandler {
         getFriendArray: () => [],
         fileToUrl: async (filePath, _opts = {}) => {
           try {
-            if (typeof filePath === 'string' && filePath.startsWith('http')) {
-              return filePath;
-            }
+            if (typeof filePath === 'string' && filePath.startsWith('http')) return filePath;
             const baseUrl = Bot.getServerUrl ? Bot.getServerUrl() : `http://localhost:${Bot.httpPort || 3000}`;
             return await this.processFileToUrl(filePath, baseUrl);
           } catch (err) {
-            logger.error(`文件转URL失败: ${err.message}`);
+            BotUtil.makeLog('error', `文件转URL失败: ${err.message}`, LOG_TAG);
             return '';
           }
         },
         _ready: true
       };
-
       Bot.stdin = stdinBot;
       Bot[this.botId] = stdinBot;
     }
@@ -126,10 +127,7 @@ export class StdinHandler {
 
   async processFileToUrl(filePath, baseUrl) {
     try {
-      let buffer;
-      let fileName;
-      let fileExt = 'file';
-
+      let buffer, fileName, fileExt = 'file';
       if (Buffer.isBuffer(filePath)) {
         buffer = filePath;
         const fileType = await BotUtil.fileType({ buffer });
@@ -140,123 +138,63 @@ export class StdinHandler {
           buffer = await fs.promises.readFile(filePath);
           fileName = path.basename(filePath);
           fileExt = path.extname(fileName).slice(1) || 'file';
-        } else {
-          throw new Error(`文件不存在: ${filePath}`);
-        }
+        } else throw new Error(`文件不存在: ${filePath}`);
       } else if (typeof filePath === 'object' && filePath.buffer) {
         buffer = filePath.buffer;
         fileName = filePath.name || `${ulid()}.${filePath.ext || 'file'}`;
         fileExt = filePath.ext || path.extname(fileName).slice(1) || 'file';
-      } else {
-        throw new Error('不支持的文件格式');
-      }
-
+      } else throw new Error('不支持的文件格式');
       fileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
       const targetPath = path.join(mediaDir, fileName);
       await fs.promises.writeFile(targetPath, buffer);
       const url = `${baseUrl}/media/${fileName}`;
-      logger.debug(`文件已保存: ${targetPath} -> ${url}`);
-      
+      BotUtil.makeLog('debug', `文件已保存: ${targetPath} -> ${url}`, LOG_TAG);
       return url;
     } catch (error) {
-      logger.error(`processFileToUrl错误: ${error.message}`);
+      BotUtil.makeLog('error', `processFileToUrl错误: ${error.message}`, LOG_TAG);
       throw error;
     }
   }
 
   async processCommand(input, userInfo = {}) {
     try {
-      // 解析JSON输入
-
-
-      // 处理消息数组
       if (Array.isArray(input)) {
-        logger.tag("收到消息数组", "命令", "green");
+        BotUtil.makeLog('info', '收到消息数组', LOG_TAG);
         const event = this.createEvent(input, userInfo);
         await this.handleEvent(event);
-        return { success: true, code: 200, message: "命令已处理", event_id: event.message_id, timestamp: Date.now() };
+        return { success: true, code: 200, message: '命令已处理', event_id: event.message_id, timestamp: Date.now() };
       }
-
       const trimmedInput = typeof input === 'string' ? input.trim() : '';
       if (!trimmedInput) {
-        return { 
-          success: true, 
-          code: 200, 
-          message: "空输入已忽略", 
-          timestamp: Date.now() 
-        };
+        return { success: true, code: 200, message: '空输入已忽略', timestamp: Date.now() };
       }
       const builtinCommands = {
-        "exit": () => ({ 
-          success: true, 
-          code: 200, 
-          message: "退出命令已接收", 
-          command: "exit" 
-        }),
-        "help": () => ({
+        exit: () => ({ success: true, code: 200, message: '退出命令已接收', command: 'exit' }),
+        help: () => ({
           success: true,
           code: 200,
-          message: "帮助信息",
-          command: "help",
-          commands: [
-            "exit: 退出程序", 
-            "help: 显示帮助", 
-            "clear: 清屏", 
-            "cleanup: 清理临时文件"
-          ]
+          message: '帮助信息',
+          command: 'help',
+          commands: ['exit: 退出程序', 'help: 显示帮助', 'clear: 清屏', 'cleanup: 清理临时文件']
         }),
-        "clear": () => ({ 
-          success: true, 
-          code: 200, 
-          message: "清屏命令已接收", 
-          command: "clear" 
-        }),
-        "cleanup": () => {
-          this.cleanupTempFiles();
-          return { 
-            success: true, 
-            code: 200, 
-            message: "临时文件清理完成", 
-            command: "cleanup" 
-          };
+        clear: () => ({ success: true, code: 200, message: '清屏命令已接收', command: 'clear' }),
+        cleanup: () => {
+          cleanupTempFiles();
+          return { success: true, code: 200, message: '临时文件清理完成', command: 'cleanup' };
         }
       };
-
-      const commandAliases = { 
-        "退出": "exit", 
-        "帮助": "help", 
-        "清屏": "clear", 
-        "清理": "cleanup" 
-      };
-      
+      const commandAliases = { 退出: 'exit', 帮助: 'help', 清屏: 'clear', 清理: 'cleanup' };
       const command = commandAliases[trimmedInput] || trimmedInput;
-
       if (builtinCommands[command]) {
-        return { 
-          ...builtinCommands[command](), 
-          timestamp: Date.now() 
-        };
+        return { ...builtinCommands[command](), timestamp: Date.now() };
       }
-
-      logger.tag(trimmedInput, "命令", "green");
+      BotUtil.makeLog('info', `[命令] ${trimmedInput}`, LOG_TAG);
       const event = this.createEvent(trimmedInput, userInfo);
       await this.handleEvent(event);
-      return {
-        success: true,
-        code: 200,
-        message: "命令已处理",
-        event_id: event.message_id,
-        timestamp: Date.now()
-      };
+      return { success: true, code: 200, message: '命令已处理', event_id: event.message_id, timestamp: Date.now() };
     } catch (error) {
-      logger.error(`处理命令错误: ${error.message}`);
-      return { 
-        success: false, 
-        code: 500, 
-        error: error.message, 
-        stack: error.stack, 
-        timestamp: Date.now() 
-      };
+      BotUtil.makeLog('error', `处理命令错误: ${error.message}`, LOG_TAG);
+      return { success: false, code: 500, error: error.message, stack: error.stack, timestamp: Date.now() };
     }
   }
 
@@ -267,11 +205,10 @@ export class StdinHandler {
   async processMessageContent(content) {
     if (!Array.isArray(content)) content = [content];
     const processed = [];
-
     for (const item of content) {
-      if (typeof item === "string") {
-        processed.push({ type: "text", text: item });
-      } else if (typeof item === "object" && item.type) {
+      if (typeof item === 'string') {
+        processed.push({ type: 'text', text: item });
+      } else if (typeof item === 'object' && item.type) {
         switch (item.type) {
           case 'image':
           case 'video':
@@ -286,7 +223,7 @@ export class StdinHandler {
             processed.push(item);
         }
       } else {
-        processed.push({ type: "text", text: String(item) });
+        processed.push({ type: 'text', text: String(item) });
       }
     }
     return processed;
@@ -294,24 +231,13 @@ export class StdinHandler {
 
   async processMediaFile(item) {
     try {
-      let buffer;
-      let fileName;
-      let fileExt = 'file';
-      let mimeType = 'application/octet-stream';
-
-      // 获取文件内容
+      let buffer, fileName, fileExt = 'file', mimeType = 'application/octet-stream';
       if (item.file || item.url || item.path) {
-        const fileInfo = await BotUtil.fileType({ 
-          file: item.file || item.url || item.path, 
-          name: item.name 
-        });
-        
+        const fileInfo = await BotUtil.fileType({ file: item.file || item.url || item.path, name: item.name });
         buffer = fileInfo.buffer;
         fileName = fileInfo.name || item.name;
         fileExt = fileInfo.type?.ext || 'file';
         mimeType = fileInfo.type?.mime || 'application/octet-stream';
-        
-        // 如果没有获取到buffer，尝试读取本地文件
         if (!buffer && item.path && fs.existsSync(item.path)) {
           buffer = await fs.promises.readFile(item.path);
           fileName = fileName || path.basename(item.path);
@@ -321,121 +247,60 @@ export class StdinHandler {
         buffer = item.buffer;
         fileName = item.name;
       }
-
       if (!buffer) {
-        logger.warn(`无法获取文件内容: ${JSON.stringify(item)}`);
+        BotUtil.makeLog('warn', `无法获取文件内容: ${JSON.stringify(item)}`, LOG_TAG);
         return item;
       }
-
-      if (!fileName) {
-        fileName = `${ulid()}.${fileExt}`;
-      } else {
+      if (!fileName) fileName = `${ulid()}.${fileExt}`;
+      else {
         fileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-        if (!path.extname(fileName) && fileExt !== 'file') {
-          fileName = `${fileName}.${fileExt}`;
-        }
+        if (!path.extname(fileName) && fileExt !== 'file') fileName = `${fileName}.${fileExt}`;
       }
-
       const filePath = path.join(mediaDir, fileName);
       await fs.promises.writeFile(filePath, buffer);
-      
       const baseUrl = Bot.getServerUrl ? Bot.getServerUrl() : `http://localhost:${Bot.httpPort || 3000}`;
       const fileUrl = `${baseUrl}/media/${fileName}`;
-
-      logger.debug(`媒体文件已保存: ${filePath} -> ${fileUrl}`);
-
-      // 如果是图片且设置了自动打开
-      if (item.type === 'image' && process.env.OPEN_IMAGES === 'true') {
-        this.openImageFile(filePath);
-      }
-
+      BotUtil.makeLog('debug', `媒体文件已保存: ${filePath} -> ${fileUrl}`, LOG_TAG);
+      if (item.type === 'image' && process.env.OPEN_IMAGES === 'true') this.openImageFile(filePath);
       const md5 = crypto.createHash('md5').update(buffer).digest('hex');
-
-      return { 
-        type: item.type,
-        file: fileUrl, 
-        url: fileUrl, 
-        path: path.resolve(filePath),
-        name: fileName,
-        size: buffer.length,
-        md5: md5,
-        mime: mimeType
-      };
+      return { type: item.type, file: fileUrl, url: fileUrl, path: path.resolve(filePath), name: fileName, size: buffer.length, md5, mime: mimeType };
     } catch (error) {
-      logger.error(`处理媒体文件错误: ${error.message}`);
+      BotUtil.makeLog('error', `处理媒体文件错误: ${error.message}`, LOG_TAG);
       return item;
     }
   }
 
   openImageFile(filePath) {
     try {
-      const commands = { 
-        "win32": `start "" "${filePath}"`, 
-        "darwin": `open "${filePath}"`, 
-        "linux": `xdg-open "${filePath}"` 
-      };
+      const commands = { win32: `start "" "${filePath}"`, darwin: `open "${filePath}"`, linux: `xdg-open "${filePath}"` };
       const platform = os.platform();
-      if (commands[platform]) {
-        exec(commands[platform]);
-      }
+      if (commands[platform]) exec(commands[platform]);
     } catch (error) {
-      logger.error(`打开图片失败: ${error.message}`);
+      BotUtil.makeLog('error', `打开图片失败: ${error.message}`, LOG_TAG);
     }
   }
 
   setupListeners() {
-    this.rl.on('line', async (input) => await this.handleInput(input));
-  }
-
-  async handleInput(input) {
-    await this.processCommand(input, { tasker: 'stdin' });
-    this.rl.prompt();
-  }
-
-  formatResultForConsole(result) {
-    if (!result.content) return '空结果';
-    
-    if (result.content.length === 1 && result.content[0].type === 'forward') {
-      return `转发消息: ${JSON.stringify(result.content[0].messages || result.content[0], null, 2)}`;
-    }
-    
-    const parts = [];
-    for (const item of result.content) {
-      if (item.type === 'text') {
-        parts.push(item.text);
-      } else if (item.type === 'image') {
-        parts.push(`[图片: ${item.name || '未命名'} - ${item.url}]`);
-      } else if (item.type === 'video') {
-        parts.push(`[视频: ${item.name || '未命名'} - ${item.url}]`);
-      } else if (item.type === 'audio') {
-        parts.push(`[音频: ${item.name || '未命名'} - ${item.url}]`);
-      } else if (item.type === 'file') {
-        parts.push(`[文件: ${item.name || '未命名'} - ${item.url}]`);
-      } else {
-        parts.push(`[${item.type}]`);
-      }
-    }
-    
-    return parts.join(' ');
+    this.rl.on('line', async (input) => {
+      await this.processCommand(input, { tasker: 'stdin' });
+      this.rl.prompt();
+    });
   }
 
   createEvent(input, userInfo = {}) {
-    const userId = userInfo.user_id || 'stdin'
-    const nickname = userInfo.nickname || userId
-    const time = Math.floor(Date.now() / 1000)
-    const messageId = `${userId}_${time}_${Math.floor(Math.random() * 10000)}`
-    const eventId = `stdin_${messageId}`
-
-    const message = Array.isArray(input) ? input : 
-                    (typeof input === 'string' && input ? [{ type: "text", text: input }] : [])
-    const raw_message = Array.isArray(input) ? 
-                        input.map(m => m.type === 'text' ? m.text : `[${m.type}]`).join('') : 
-                        (typeof input === 'string' ? input : '')
-
+    const userId = userInfo.user_id || 'stdin';
+    const nickname = userInfo.nickname || userId;
+    const time = Math.floor(Date.now() / 1000);
+    const messageId = `${userId}_${time}_${Math.floor(Math.random() * 10000)}`;
+    const eventId = `stdin_${messageId}`;
+    const message = Array.isArray(input) ? input : (typeof input === 'string' && input ? [{ type: 'text', text: input }] : []);
+    const raw_message = Array.isArray(input)
+      ? input.map(m => (m.type === 'text' ? m.text : `[${m.type}]`)).join('')
+      : (typeof input === 'string' ? input : '');
     const event = {
-      post_type: userInfo.post_type || "message",
-      message_type: userInfo.message_type || "private",
-      sub_type: userInfo.sub_type || "friend",
+      post_type: userInfo.post_type || 'message',
+      message_type: userInfo.message_type || 'private',
+      sub_type: userInfo.sub_type || 'friend',
       self_id: userInfo.self_id || this.botId,
       user_id: userId,
       time,
@@ -447,12 +312,12 @@ export class StdinHandler {
       isStdin: true,
       message,
       raw_message,
-      msg: '', // 由parseMessage重新构建，避免重复
+      msg: '',
       sender: {
         ...(userInfo.sender || {}),
         card: userInfo.sender?.card || nickname,
         nickname: userInfo.sender?.nickname || nickname,
-        role: userInfo.sender?.role || userInfo.role || "master",
+        role: userInfo.sender?.role || userInfo.role || 'master',
         user_id: userInfo.sender?.user_id || userId
       },
       bot: Bot.stdin || Bot[this.botId],
@@ -460,49 +325,38 @@ export class StdinHandler {
       isPrivate: !userInfo.group_id,
       isGroup: !!userInfo.group_id,
       toString: () => raw_message
-    }
-    
+    };
     if (userInfo.group_id) {
-      event.group_id = userInfo.group_id
-      event.group_name = userInfo.group_name || `群${userInfo.group_id}`
-      event.message_type = "group"
-      event.isGroup = true
-      event.isPrivate = false
+      event.group_id = userInfo.group_id;
+      event.group_name = userInfo.group_name || `群${userInfo.group_id}`;
+      event.message_type = 'group';
+      event.isGroup = true;
+      event.isPrivate = false;
     }
-    
     event.friend = {
       sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo),
-      recallMsg: () => logger.mark(`${logger.xrkagtGradient(`[${nickname}]`)} 撤回消息`),
+      recallMsg: () => BotUtil.makeLog('mark', `[${nickname}] 撤回消息`, LOG_TAG),
       makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg)
-    }
-    
-    event.member = { 
-      info: { user_id: userId, nickname, last_sent_time: time }, 
-      getAvatarUrl: () => userInfo.avatar || `https://q1.qlogo.cn/g?b=qq&s=0&nk=${userId}` 
-    }
-    
-    event.recall = () => { 
-      logger.mark(`${logger.xrkagtGradient(`[${nickname}]`)} 撤回消息`)
-      return true
-    }
-    
+    };
+    event.member = { info: { user_id: userId, nickname, last_sent_time: time }, getAvatarUrl: () => userInfo.avatar || `https://q1.qlogo.cn/g?b=qq&s=0&nk=${userId}` };
+    event.recall = () => {
+      BotUtil.makeLog('mark', `[${nickname}] 撤回消息`, LOG_TAG);
+      return true;
+    };
     event.group = {
       makeForwardMsg: async (forwardMsg) => this.makeForwardMsg(forwardMsg),
       sendMsg: async (msg) => this.sendMsg(msg, nickname, userInfo)
-    }
-
-    return event
+    };
+    return event;
   }
 
   async sendMsg(msg, nickname, userInfo = {}) {
     if (!msg) return { message_id: null, time: Date.now() / 1000 };
     if (!Array.isArray(msg)) msg = [msg];
-
     const textLogs = [];
     const processedItems = [];
-
     for (const item of msg) {
-      if (typeof item === "string") {
+      if (typeof item === 'string') {
         textLogs.push(item);
         processedItems.push({ type: 'text', text: item });
       } else if (item?.type) {
@@ -515,16 +369,9 @@ export class StdinHandler {
           processedItems.push(item);
         } else if (item.type === 'forward') {
           processedItems.push(item);
-          textLogs.push(`[转发消息]`);
+          textLogs.push('[转发消息]');
         } else {
-          const typeMap = {
-            'at': `[@${item.qq || item.id}]`,
-            'face': `[表情:${item.id}]`,
-            'poke': `[戳一戳:${item.id || item.qq}]`,
-            'xml': '[XML消息]',
-            'json': '[JSON消息]',
-            'task': `[任务:${item.data?.name || '未知'}]`
-          };
+          const typeMap = { at: `[@${item.qq || item.id}]`, face: `[表情:${item.id}]`, poke: `[戳一戳:${item.id || item.qq}]`, xml: '[XML消息]', json: '[JSON消息]', task: `[任务:${item.data?.name || '未知'}]` };
           textLogs.push(typeMap[item.type] || `[${item.type}]`);
           processedItems.push(item);
         }
@@ -534,49 +381,21 @@ export class StdinHandler {
         processedItems.push({ type: 'text', text });
       }
     }
-
     if (userInfo.tasker !== 'api' && textLogs.length > 0) {
-      logger.tag(textLogs.join("\n"), "输出", "blue");
+      BotUtil.makeLog('info', textLogs.join('\n'), LOG_TAG);
     }
-
-    Bot.em('stdin.output', {
-      nickname,
-      content: processedItems,
-      user_info: userInfo
-    });
-
-    return {
-      message_id: `${userInfo.user_id || 'stdin'}_${Date.now()}`,
-      content: processedItems,
-      time: Date.now() / 1000
-    };
+    Bot.em('stdin.output', { nickname, content: processedItems, user_info: userInfo });
+    return { message_id: `${userInfo.user_id || 'stdin'}_${Date.now()}`, content: processedItems, time: Date.now() / 1000 };
   }
 
   async makeForwardMsg(forwardMsg) {
     if (!Array.isArray(forwardMsg)) {
-      logger.error("转发消息必须是数组格式");
+      BotUtil.makeLog('error', '转发消息必须是数组格式', LOG_TAG);
       return [];
     }
-
-    logger.subtitle("收到转发消息");
-    logger.line('-', 40, 'cyan');
-    logger.mark(`转发消息内容: ${JSON.stringify(forwardMsg, null, 2)}`);
-    logger.line('-', 40, 'cyan');
+    BotUtil.makeLog('info', `收到转发消息: ${JSON.stringify(forwardMsg, null, 2)}`, LOG_TAG);
     return forwardMsg;
   }
-
-  cleanupTempFiles() {
-    cleanupTempFiles(); // 复用统一的清理函数
-  }
-
 }
 
-new StdinHandler();
-
-export default {
-  name: 'stdin',
-  desc: '标准输入',
-  event: 'message',
-  priority: 9999,
-  rule: () => false
-};
+Bot.tasker.push(new StdinTasker());

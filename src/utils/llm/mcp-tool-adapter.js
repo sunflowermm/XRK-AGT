@@ -1,5 +1,5 @@
 import StreamLoader from '#infrastructure/aistream/loader.js';
-import cfg from '#infrastructure/config/config.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import BotUtil from '#utils/botutil.js';
 
 /**
@@ -25,7 +25,7 @@ export class MCPToolAdapter {
    *
    * 说明：
    * - streams 白名单优先：只有在 streams 中声明的工作流，其下工具才会被注入
-   * - workflow 为旧的单工作流写法，仅在未显式提供 streams 时使用
+   * - workflow 为单工作流名，仅在未显式提供 streams 时使用
    * - 默认分支会排除 excludeStreams（如 chat），防止基础通用工作流的工具"泄漏"到所有会话
    * - 自动合并远程 MCP：无论指定什么工作流，都会自动添加已启用的远程 MCP 工具
    *
@@ -74,7 +74,7 @@ export class MCPToolAdapter {
     }
 
     // 自动合并远程 MCP 工具（无论是否指定工作流，都会添加）
-    const remoteConfig = cfg.aistream?.mcp?.remote || {};
+    const remoteConfig = getAistreamConfigOptional().mcp?.remote || {};
     if (remoteConfig.enabled && Array.isArray(remoteConfig.servers)) {
       const { selected = [], servers = [] } = remoteConfig;
       const selectedNames = Array.isArray(selected) && selected.length > 0 
