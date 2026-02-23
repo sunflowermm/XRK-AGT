@@ -1943,6 +1943,56 @@ class DeviceManager {
                     break;
                 }
 
+                // 约定：客户端发送 { type: 'data', data_type: 'xxx', data: {...} }
+                case 'data': {
+                    const device = devices.get(deviceId);
+                    if (!device) break;
+                    this.markDeviceActive(ws, deviceId);
+                    this.updateDeviceStats(deviceId, 'data');
+
+                    const dataType = payload.data_type || payload.dataType || payload.kind || 'data';
+                    const raw = payload.data;
+                    const dataPayload = (raw && typeof raw === 'object') ? raw : { value: raw };
+                    const user_id = payload.user_id || payload.userId || deviceId;
+                    const now = Math.floor(Date.now() / 1000);
+                    const eventId = `device_data_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+                    // 通用 data 事件：event_data 包含 data_type + dataPayload（展开），便于插件直接读取字段（如 beacons）
+                    const dataEvent = {
+                        post_type: 'device',
+                        event_type: 'data',
+                        device_id: deviceId,
+                        device_type: device.device_type,
+                        device_name: device.device_name,
+                        self_id: deviceId,
+                        user_id,
+                        time: now,
+                        event_id: eventId,
+                        tasker: 'device',
+                        isDevice: true,
+                        adapter_name: 'device',
+                        platform: 'device',
+                        bot: runtimeBot[deviceId],
+                        event_data: {
+                            data_type: dataType,
+                            ...dataPayload
+                        }
+                    };
+
+                    runtimeBot.em('device.data', dataEvent);
+                    runtimeBot.em('device', dataEvent);
+
+                    // 细分事件：device.<data_type>，event_data 仅为 dataPayload（保持最贴近原始上报）
+                    const typedEvent = {
+                        ...dataEvent,
+                        event_id: `${eventId}_${dataType}`,
+                        event_data: dataPayload,
+                        data_type: dataType
+                    };
+                    runtimeBot.em(`device.${dataType}`, typedEvent);
+                    break;
+                }
+
                 default:
                     // 只对非心跳类型的未知消息发送错误
                     if (type !== 'heartbeat_response') {
