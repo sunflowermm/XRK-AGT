@@ -11,6 +11,9 @@ class TaskerLoader {
   }
 
   async load(bot = Bot) {
+    global.Bot = bot;
+    globalThis.Bot = bot;
+
     const summary = {
       scanned: 0,
       loaded: 0,
@@ -34,12 +37,18 @@ class TaskerLoader {
         files.map(async ({ name, href }) => {
           try {
             BotUtil.makeLog('debug', `导入 tasker 文件: ${name}`, this.loggerNs)
-            await import(href)
+            const mod = await import(href)
+            if (typeof mod.register === 'function') {
+              await mod.register(bot)
+            }
             summary.loaded += 1
           } catch (err) {
             summary.failed += 1
             summary.errors.push({ name, message: err.message })
             BotUtil.makeLog('error', `导入 tasker 失败: ${name}`, this.loggerNs, err)
+            BotUtil.makeLog('warn', `[TaskerLoader] ${name} 错误: ${err.message}`, this.loggerNs)
+            if (err.stack) BotUtil.makeLog('warn', `[TaskerLoader] ${name} 堆栈:\n${err.stack}`, this.loggerNs)
+            if (err.cause) BotUtil.makeLog('warn', `[TaskerLoader] ${name} cause: ${err.cause?.message ?? String(err.cause)}`, this.loggerNs)
           }
         })
       )
