@@ -163,7 +163,8 @@ export default class Bot extends EventEmitter {
         
         return await response.json();
       } catch (error) {
-        BotUtil.makeLog('debug', `子服务端调用失败 [${path}]: ${error.message}`, 'Bot');
+        const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
+        BotUtil.makeLog('debug', `子服务端调用失败 [${path}]: ${error.message} url=${url}${cause}`, 'Bot');
         throw error;
       }
     };

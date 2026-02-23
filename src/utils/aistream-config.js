@@ -16,30 +16,51 @@ export const getAistreamConfig = () => ensureConfig(cfg.aistream, 'aistream');
 /** 可选读取：无 aistream 时返回 {}，供 loader/mcp/debug 等使用 */
 export const getAistreamConfigOptional = () => cfg.aistream ?? {};
 
+/**
+ * 获取 LLM 调用配置。底层工厂用 aistream.llm.Provider + cfg[Provider]_llm，不依赖 profiles。
+ * 有 profiles/models 时做工作流/预设合并；没有时直接用 llm 段（Provider、timeout、persona 等）。
+ */
 export const getLLMSettings = ({ workflow, persona, profile } = {}) => {
     const section = ensureConfig(getAistreamConfig().llm, 'aistream.llm');
     if (section.enabled === false) return { enabled: false };
 
+    const profiles = section.profiles || section.models;
+    const hasProfiles = profiles && typeof profiles === 'object' && Object.keys(profiles).length > 0;
+
+    if (!hasProfiles) {
+        const provider = (section.Provider || section.provider || '').toLowerCase();
+        return {
+            enabled: true,
+            workflow: workflow || section.defaultWorkflow || 'device',
+            workflowKey: workflow || 'device',
+            profile: null,
+            profileKey: null,
+            profileLabel: null,
+            persona: persona ?? section.persona,
+            displayDelay: section.displayDelay,
+            ...section.defaults,
+            ...section,
+            provider: provider || undefined
+        };
+    }
+
     const defaults = section.defaults || {};
     const workflows = section.workflows || {};
-    const profiles = ensureConfig(section.profiles || section.models, 'aistream.llm.profiles');
-
     const workflowKey =
         workflow ||
         section.defaultWorkflow ||
         section.defaultModel ||
         Object.keys(workflows)[0] ||
         Object.keys(profiles)[0];
-
     const workflowPreset = workflowKey ? workflows[workflowKey] : null;
     const requestedProfile =
         profile ||
         workflowPreset?.profile ||
         section.defaultProfile ||
         section.defaultModel;
-
     const profileKey = profiles[requestedProfile] ? requestedProfile : Object.keys(profiles)[0];
-    const selectedProfile = ensureConfig(profiles[profileKey], `aistream.llm.profiles.${profileKey}`);
+    const selectedProfile = profiles[profileKey];
+    if (!selectedProfile) return { enabled: false };
     const overrides = workflowPreset?.overrides || {};
     const personaResolved = persona ?? workflowPreset?.persona ?? section.persona;
 

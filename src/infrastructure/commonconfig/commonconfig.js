@@ -398,8 +398,9 @@ export default class ConfigBase {
         const filePath = getFilePath(key);
         const dir = path.dirname(filePath);
 
-        // 备份原文件
+        // 备份原文件（仅保留一份备份，先清理旧备份）
         if (backup && fsSync.existsSync(filePath)) {
+          await this._pruneBackups(filePath);
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
           const backupPath = `${filePath}.backup.${timestamp}`;
           await fs.copyFile(filePath, backupPath);
@@ -438,17 +439,39 @@ export default class ConfigBase {
   }
 
   /**
-   * 备份配置文件
+   * 删除该配置文件对应的旧备份，只保留一份备份（避免备份膨胀）
+   * @private
+   * @param {string} filePath - 配置文件路径（相对则基于项目根解析）
+   */
+  async _pruneBackups(filePath) {
+    try {
+      const resolved = path.isAbsolute(filePath) ? filePath : path.join(paths.root, filePath);
+      const dir = path.dirname(resolved);
+      const base = path.basename(resolved);
+      const prefix = `${base}.backup.`;
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isFile() && e.name.startsWith(prefix)) {
+          await fs.unlink(path.join(dir, e.name));
+          BotUtil.makeLog('debug', `已删除旧备份 [${this.name}]: ${e.name}`, 'ConfigBase');
+        }
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') BotUtil.makeLog('debug', `清理旧备份时忽略 [${this.name}]: ${err.message}`, 'ConfigBase');
+    }
+  }
+
+  /**
+   * 备份配置文件（仅保留一份备份，新备份前会删除旧备份）
    * @returns {Promise<string>} 备份文件路径
    */
   async backup() {
     try {
       const filePath = this._resolveFilePath();
+      await this._pruneBackups(filePath);
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
       const backupPath = `${filePath}.backup.${timestamp}`;
-      
       await fs.copyFile(filePath, backupPath);
-      
       BotUtil.makeLog('debug', `配置已备份 [${this.name}]: ${backupPath}`, 'ConfigBase');
       return backupPath;
     } catch (error) {

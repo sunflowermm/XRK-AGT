@@ -708,16 +708,18 @@ class PluginsLoader {
       }
     }
 
-    // 2. 额外加载每个 core 根目录下的 index.js 作为入口
-    for (const coreDir of coreDirs) {
+    // 2. 加载每个 core 根目录下的 index.js（含无 plugin/ 的 core，保证如 xiaozhi-Core 的 index 会被执行）
+    const allCoreDirs = await paths.getCoreDirs()
+    for (const coreDir of allCoreDirs) {
       try {
         const indexPath = path.join(coreDir, 'index.js')
         if (!existsSync(indexPath)) continue
 
         const relativePath = path.relative(paths.root, indexPath)
+        const name = `${path.basename(coreDir)}-index.js`
+        if (ret.some((p) => p.name === name)) continue
         ret.push({
-          // 使用 core 名称避免多个 core 的 index.js 发生键名冲突
-          name: `${path.basename(coreDir)}-index.js`,
+          name,
           path: `../../../${relativePath.replace(/\\/g, '/')}`,
           core: path.basename(coreDir)
         })

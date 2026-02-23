@@ -705,6 +705,7 @@ export default class AIStream {
     const retryConfig = this.getRetryConfig();
 
     try {
+      BotUtil.makeLog('debug', `[${this.name}] 尝试子服务端 /api/langchain/chat (stream=false)`, 'AIStream');
       const payload = {
         messages,
         model: config.chatModel || config.model || config.provider,
@@ -717,9 +718,14 @@ export default class AIStream {
       if (config.streams?.length) payload.workflow = { workflows: config.streams };
       const response = await Bot.callSubserver('/api/langchain/chat', { body: payload });
       const content = response?.choices?.[0]?.message?.content || response?.content || '';
-      if (content) return { content, executedToolNames: [] };
+      if (content) {
+        BotUtil.makeLog('debug', `[${this.name}] 子服务端 callAI 成功`, 'AIStream');
+        return { content, executedToolNames: [] };
+      }
     } catch (error) {
+      const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
       BotUtil.makeLog('warn', `[${this.name}] 子服务端调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
+      BotUtil.makeLog('debug', `[${this.name}] 子服务端失败详情: ${error.message}${cause}`, 'AIStream');
     }
 
     const inputTokens = messages.reduce((sum, m) => {
@@ -822,9 +828,12 @@ export default class AIStream {
         }
       }
 
+      BotUtil.makeLog('debug', `[${this.name}] 子服务端 callAIStream 成功`, 'AIStream');
       return fullText;
     } catch (error) {
+      const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
       BotUtil.makeLog('warn', `[${this.name}] 子服务端流式调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
+      BotUtil.makeLog('debug', `[${this.name}] 子服务端流式失败详情: ${error.message}${cause}`, 'AIStream');
       fullText = '';
     }
 

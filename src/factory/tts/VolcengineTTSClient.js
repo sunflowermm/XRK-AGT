@@ -1,6 +1,7 @@
 /**
  * 火山引擎TTS客户端（V3双向流式协议）
- * 实现文本转语音功能，支持实时流式合成
+ * 实现文本转语音功能，支持实时流式合成。
+ * 流式/Opus 场景必须请求 format=pcm，否则服务端可能返回 wav（多次 header）或 mp3，导致下游当 PCM 处理出错。
  */
 
 import WebSocket from 'ws';
@@ -51,9 +52,13 @@ export default class VolcengineTTSClient {
         
         // 统计信息
         this.totalAudioBytes = 0;
-        this.audioChunkCount = 0; // 音频块计数器
-        this.lastChunkTime = null; // 最后一个块的时间戳
-        this.sessionStartTime = null; // Session开始时间
+        this.audioChunkCount = 0;
+        this.lastChunkTime = null;
+        this.sessionStartTime = null;
+        this._sessionResolve = null;
+        this._sessionTimeout = null;
+        /** 串行化下发：保证多段 audio 按序送设备，避免与 xiaozhi Opus 编码/流控 乱序导致丢包 */
+        this._audioSendPromise = Promise.resolve();
     }
 
     /**
@@ -260,7 +265,6 @@ export default class VolcengineTTSClient {
             }
             if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
         }
-        this.totalAudioBytes += audioData.length;
     }
 
     /**
@@ -332,13 +336,10 @@ export default class VolcengineTTSClient {
 
                         if (msg.type === 'audio') {
                             this.totalAudioBytes += msg.data.length;
-                            (async () => {
-                                try {
-                                    await this._sendAudioToDevice(msg.data);
-                                } catch (e) {
-                                    BotUtil.makeLog('error', `[TTS] 发送音频失败: ${e.message}`, this.deviceId);
-                                }
-                            })();
+                            const data = msg.data;
+                            this._audioSendPromise = this._audioSendPromise
+                                .then(() => this._sendAudioToDevice(data))
+                                .catch(e => BotUtil.makeLog('error', `[TTS] 发送音频失败: ${e.message}`, this.deviceId));
                         }
                     });
 
@@ -418,17 +419,25 @@ export default class VolcengineTTSClient {
 
             case TTS_EVENTS.SESSION_FINISHED:
                 this.sessionActive = false;
-                const sessionDuration = this.sessionStartTime 
+                const sessionDuration = this.sessionStartTime
                     ? ((Date.now() - this.sessionStartTime) / 1000).toFixed(2)
                     : 'N/A';
                 BotUtil.makeLog('info',
                     `✅ [TTS] Session已结束: 总块数=${this.audioChunkCount}, 总字节=${this.totalAudioBytes}, Session耗时=${sessionDuration}s`,
                     this.deviceId
                 );
-                // 重置统计
                 this.audioChunkCount = 0;
                 this.lastChunkTime = null;
                 this.sessionStartTime = null;
+                setImmediate(() => {
+                    this._audioSendPromise.then(() => {
+                        if (this._sessionTimeout) { clearTimeout(this._sessionTimeout); this._sessionTimeout = null; }
+                        if (this._sessionResolve) { this._sessionResolve(); this._sessionResolve = null; }
+                    }).catch(() => {
+                        if (this._sessionTimeout) { clearTimeout(this._sessionTimeout); this._sessionTimeout = null; }
+                        if (this._sessionResolve) { this._sessionResolve(); this._sessionResolve = null; }
+                    });
+                });
                 break;
 
             case TTS_EVENTS.TTS_SENTENCE_START:
@@ -477,7 +486,7 @@ export default class VolcengineTTSClient {
                 req_params: {
                     speaker: voiceType,
                     audio_params: {
-                        format: encoding,
+                        format: (encoding || 'pcm').toLowerCase(),
                         sample_rate: sampleRate,
                         speech_rate: speechRate,
                         loudness_rate: loudnessRate,
@@ -520,12 +529,28 @@ export default class VolcengineTTSClient {
             );
             this.ws.send(finishFrame);
 
-            return true;
-
+            return new Promise((resolve) => {
+                this._sessionResolve = resolve;
+                this._sessionTimeout = setTimeout(() => {
+                    if (this._sessionResolve) {
+                        this._sessionResolve();
+                        this._sessionResolve = null;
+                    }
+                    this._sessionTimeout = null;
+                }, 30000);
+            });
         } catch (e) {
             BotUtil.makeLog('error', `❌ [TTS] 合成失败: ${e.message}`, this.deviceId);
-            return false;
+            return Promise.resolve();
         }
+    }
+
+    /**
+     * 等待当前会话已下发的音频全部送完（与 xiaozhi 串行下发配合，flush 前调用）
+     * @returns {Promise<void>}
+     */
+    async waitAudioSent() {
+        await this._audioSendPromise;
     }
 
     /**

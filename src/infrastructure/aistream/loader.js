@@ -424,6 +424,17 @@ class StreamLoader {
       adoptMCPTools(s, false);
     }
 
+    // 合并流执行时把 deviceId 同步到主/副流，避免 MCP 按名称调用 xiaozhi.xxx 时主工作流 _currentDeviceId 未设置导致 DEVICE_NOT_FOUND
+    const origExecute = merged.execute;
+    if (typeof origExecute === 'function') {
+      merged.execute = async function (deviceId, question, apiConfig, persona) {
+        for (const s of merged._mergedStreams || []) {
+          if (s) s._currentDeviceId = deviceId;
+        }
+        return origExecute.apply(this, arguments);
+      };
+    }
+
     this.streams.set(mergedName, merged);
     return merged;
   }

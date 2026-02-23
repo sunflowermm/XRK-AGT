@@ -683,7 +683,8 @@ class DeviceManager {
                 `⚠️ [ASR] 等待最终结果超时(${maxWaitMs}ms)`,
                 deviceId
             );
-            
+            BotUtil.makeLog('debug', `[ASR] 等待最终结果超时上下文: session_id=${session.session_id}`, deviceId);
+
             // 超时也要通知设备端，避免卡住
             await this._sendAIError(deviceId);
         }
