@@ -13,6 +13,14 @@ const requireMCP = (res) => {
   return mcpServer;
 };
 
+const setupSSEHeaders = (res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('X-Accel-Buffering', 'no');
+};
+
 const jsonrpcHandler = HttpResponse.asyncHandler(async (req, res) => {
   const mcpServer = requireMCP(res);
   if (!mcpServer) return;
@@ -35,6 +43,34 @@ export default {
       method: 'POST',
       path: '/api/mcp/jsonrpc',
       handler: jsonrpcHandler
+    },
+    {
+      method: 'GET',
+      path: '/api/mcp/jsonrpc',
+      handler: (req, res) => {
+        const mcpServer = requireMCP(res);
+        if (!mcpServer) return;
+
+        setupSSEHeaders(res);
+        res.write(': connected\n\n');
+
+        const heartbeat = setInterval(() => {
+          if (!res.writableEnded) {
+            res.write(`: heartbeat ${Date.now()}\n\n`);
+          }
+        }, 30000);
+
+        req.on('close', () => {
+          clearInterval(heartbeat);
+          if (!res.writableEnded) {
+            res.end();
+          }
+        });
+
+        req.on('error', () => {
+          clearInterval(heartbeat);
+        });
+      }
     },
     {
       method: 'POST',
@@ -122,11 +158,7 @@ export default {
       method: 'GET',
       path: '/api/mcp/connect',
       handler: (req, res) => {
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('X-Accel-Buffering', 'no');
+        setupSSEHeaders(res);
 
         const mcpServer = getMCPServer();
         const toolsCount = mcpServer ? mcpServer.tools.size : 0;
