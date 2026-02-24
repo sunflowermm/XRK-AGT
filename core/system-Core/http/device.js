@@ -1266,15 +1266,15 @@ class DeviceManager {
                         if (!ws.__ttsSendChain) {
                             ws.__ttsSendChain = Promise.resolve();
                         }
-                        // 背压阈值：同时参考前端队列水位 + ws.bufferedAmount（双闭环）
-                        const MAX_BUFFERED = 512 * 1024; // 512KB
-                        const LOW_BUFFERED = 128 * 1024; // 128KB
-                        const WAIT_STEP_MS = 10;
-                        const MAX_WAIT_MS = 5000;
-                        // 前端队列安全水位（不丢包，靠后端控制让前端队列维持在此范围）
-                        const HIGH_WATER = 40;
-                        const LOW_WATER = 20;
-                        const STATUS_STALE_MS = 1200; // 认为前端状态过期的时间
+                        // 背压阈值：更激进，尽量让前端队列保持很浅（嵌入式设备风格）
+                        const MAX_BUFFERED = 128 * 1024; // 再收紧到 128KB，减少浏览器端缓存
+                        const LOW_BUFFERED = 32 * 1024;   // 32KB 以下视为“安全”
+                        const WAIT_STEP_MS = 5;           // 更细颗粒轮询
+                        const MAX_WAIT_MS = 2000;         // 最多等待 2 秒，防止极端阻塞
+                        // 前端队列水位：控制在 4 帧左右（约 240ms）以内，更贴近嵌入式“几帧窗口”
+                        const HIGH_WATER = 4;
+                        const LOW_WATER = 1;
+                        const STATUS_STALE_MS = 800;      // 状态超过 800ms 视为过期，避免旧水位误判
 
                         ws.__ttsSendChain = ws.__ttsSendChain.then(async () => {
                             if (ws.readyState !== WebSocket.OPEN) return;

@@ -56,7 +56,6 @@ class App {
     this._wsConnecting = false;
     this._micActive = false;
     this._ttsPlaying = false;
-    this._ttsPending = false;
     this._ttsAudioContext = null;
     this._ttsAudioQueue = [];
     this._ttsTextQueue = []; // TTS文本请求队列
@@ -66,21 +65,14 @@ class App {
     this._ttsSessionStartTime = null; // Session开始时间
     this._ttsNextPlayTime = 0;
     this._ttsActiveSources = []; // 跟踪活跃的播放源，用于资源管理
-    this._ttsRetryTimer = null;
     this._ttsPrebufferTimer = null; // 预缓冲定时器
-    this._ttsStats = { // TTS统计信息
-      totalChunks: 0,      // 接收的音频块总数
-      totalBytes: 0,       // 接收的总字节数
-      totalDuration: 0,   // 总播放时长（秒）
-      sessionStartTime: null, // Session开始时间
-      lastChunkTime: null,    // 最后一个块接收时间
-      lastChunkReceiveTime: null, // 最后一个块接收的时间戳
-      lastPlayTime: null,      // 最后一次播放开始时间
-      expectedNextPlayTime: null, // 预期的下次播放时间
-      wsMessageCount: 0,      // WebSocket消息接收计数
-      processedMessageCount: 0 // 已处理的消息计数
+    this._ttsStats = {
+      totalChunks: 0,
+      totalBytes: 0,
+      totalDuration: 0,
+      sessionStartTime: null,
+      lastChunkTime: null
     };
-    this._ttsSentTextLength = 0; // 已发送TTS的文本长度（用于增量发送）
     this._ttsQueueWarned = false; // 队列接近上限是否已告警（避免重复日志）
     // 前端TTS队列状态上报（用于后端实时背压）
     this._ttsQueueReportTimer = null;
@@ -3771,6 +3763,10 @@ class App {
   }
 
   async sendVoiceMessage(text) {
+    // 新一轮语音对话前，如仍在播报则先停止，避免TTS队列排队导致体感“卡顿”
+    if (this._ttsPlaying || this._ttsSessionActive || (this._ttsAudioQueue && this._ttsAudioQueue.length > 0)) {
+      this.stopTTS();
+    }
     if (this._chatStreamState.running) return;
     
     try {
@@ -3809,38 +3805,12 @@ class App {
         body: JSON.stringify(requestBody)
       });
 
-      this._ttsSentTextLength = 0;
       let assistantMsg = null;
       const state = await this._parseV3Stream(response, {
         onDelta: (_d, s) => {
           if (!assistantMsg) assistantMsg = this._createStreamingMessage('voice-message');
           this._updateStreamingMarkdown(assistantMsg, [...(s.segments || []), { type: 'text', text: s.currentText ?? s.fullText ?? '' }]);
           this.updateVoiceEmotion('💬');
-          const currentText = (s.fullText || '').trim();
-          const unsentText = currentText.slice(this._ttsSentTextLength);
-          const unsentForTTS = this._stripMarkdownForTTS(unsentText);
-          const unsentLength = unsentForTTS.length;
-          const hasSentenceEnd = /[。！？.!?]/.test(unsentForTTS);
-          const hasNewline = /\n/.test(unsentForTTS);
-          const queueLen = (this._ttsAudioQueue && this._ttsAudioQueue.length) || 0;
-          const backpressure = queueLen >= 12;
-          const charThreshold = backpressure ? 50 : 35;
-          const shouldSend = (unsentLength >= charThreshold) || (hasSentenceEnd && unsentLength >= 8) || (hasNewline && unsentLength >= 6);
-          if (shouldSend && currentText.length > this._ttsSentTextLength) {
-            let textToSend = unsentForTTS;
-            if (hasSentenceEnd && !hasNewline) {
-              const idx = unsentForTTS.search(/[。！？.!?]/);
-              if (idx >= 0) textToSend = unsentForTTS.slice(0, idx + 1);
-            } else if (hasNewline) {
-              const idx = unsentForTTS.indexOf('\n');
-              if (idx >= 0) textToSend = unsentForTTS.slice(0, idx + 1);
-            }
-            const cleanText = this._stripMarkdownForTTS(textToSend.trim());
-            if (cleanText) {
-              this._sendTTSChunk(cleanText).catch(() => {});
-              this._ttsSentTextLength = currentText.length;
-            }
-          }
         },
         onError: (err) => this.showToast(`AI 请求失败: ${err.message}`, 'error')
       });
@@ -3850,11 +3820,10 @@ class App {
       this.clearChatStreamState();
       if (!streamError && assistantMsg) {
         this._updateStreamingMarkdown(assistantMsg, (segments && segments.length) ? segments : fullText, (segments && segments.length) ? undefined : mcpTools);
-        const currentText = fullText.trim();
-        if (currentText.length > this._ttsSentTextLength) {
-          const remaining = currentText.slice(this._ttsSentTextLength);
-          const ttsRemaining = this._stripMarkdownForTTS(remaining);
-          if (ttsRemaining.trim()) this._sendTTSChunk(ttsRemaining.trim()).catch(() => {});
+        const ttsText = this._stripMarkdownForTTS((fullText || '').toString()).trim();
+        if (ttsText) {
+          // 语音模式下：整句一次 TTS 合成，由云 TTS 自身流式下发音频
+          this._sendTTSChunk(ttsText).catch(() => {});
         }
         this._renderMermaidIn(assistantMsg);
         this.updateVoiceEmotion('😊');
@@ -3931,7 +3900,6 @@ class App {
     // 标记Session为活跃状态
     this._ttsSessionActive = true;
     this._ttsSessionStartTime = Date.now();
-    this._ttsPending = true;
 
     try {
       await fetch(`${this.serverUrl}/api/device/tts`, {
@@ -3950,11 +3918,9 @@ class App {
       console.warn('[TTS前端] 请求失败:', e);
       this._ttsSessionActive = false;
       this._ttsSessionStartTime = null;
-      this._ttsPending = false;
       // 继续处理队列（自动重试）
       this._processTTSQueue();
     } finally {
-      this._ttsPending = false;
       // Session状态由WebSocket消息控制，这里不重置
     }
   }
@@ -4024,24 +3990,15 @@ class App {
       // 获取音频时长
       const duration = audioBuffer.duration;
       
-      // 计算接收间隔
-      const now = Date.now();
-      let receiveInterval = 0;
-      if (this._ttsStats.lastChunkReceiveTime) {
-        receiveInterval = now - this._ttsStats.lastChunkReceiveTime;
-      }
-      this._ttsStats.lastChunkReceiveTime = now;
-      
-      // 更新统计信息
+      // 更新统计信息（仅做轻量统计，避免额外计算开销）
       this._ttsStats.totalChunks++;
       this._ttsStats.totalBytes += bytes.length;
       this._ttsStats.totalDuration += duration;
-      this._ttsStats.lastChunkTime = now;
-      this._ttsStats.processedMessageCount++;
+      this._ttsStats.lastChunkTime = Date.now();
       
       // 如果是第一个块，记录Session开始时间并标记Session为活跃
       if (this._ttsStats.totalChunks === 1) {
-        this._ttsStats.sessionStartTime = now;
+        this._ttsStats.sessionStartTime = this._ttsStats.lastChunkTime;
         // 确保Session状态正确（可能在收到第一个块之前就已经标记为活跃）
         if (!this._ttsSessionActive) {
           this._ttsSessionActive = true;
@@ -4067,9 +4024,9 @@ class App {
       this._ttsAudioQueue.push(audioBuffer);
       this._reportTTSQueueStatus(false, 'enqueue');
       
-      // xiaozhi-web-client 风格：3 块或 200ms 预缓冲
-      const PREBUFFER_CHUNKS = 3;
-      const PREBUFFER_MS = 200;
+      // 预缓冲：1 块或 ~80ms，尽量贴近“边到边播”的实时感
+      const PREBUFFER_CHUNKS = 1;
+      const PREBUFFER_MS = 80;
       const elapsed = this._ttsStats.sessionStartTime ? (Date.now() - this._ttsStats.sessionStartTime) : 0;
       const prebufferReady = this._ttsAudioQueue.length >= PREBUFFER_CHUNKS || elapsed >= PREBUFFER_MS;
       
@@ -4146,7 +4103,7 @@ class App {
   }
   
   _playNext() {
-    // 防止重复调用：如果队列为空，停止播放并清理资源
+      // 如果队列为空，停止播放并清理资源
     if (this._ttsAudioQueue.length === 0) {
       this._ttsPlaying = false;
       this._ttsNextPlayTime = 0;
@@ -4154,45 +4111,24 @@ class App {
       // 注意：不清理 _ttsActiveSources，因为最后一个播放源可能还在播放
       // 等 onended 回调触发时会自动清理
       
-      // 如果所有播放源都结束了，输出统计信息
+      // 如果所有播放源都结束了，Session 结束，可以处理下一个 TTS 请求
       if (this._ttsActiveSources.length === 0 && this._ttsStats.totalChunks > 0) {
-        const sessionDuration = this._ttsStats.lastChunkTime && this._ttsStats.sessionStartTime 
-          ? ((this._ttsStats.lastChunkTime - this._ttsStats.sessionStartTime) / 1000).toFixed(2)
-          : 'N/A';
-        const playDuration = this._ttsStats.totalDuration.toFixed(3);
-        const avgChunkSize = (this._ttsStats.totalBytes / this._ttsStats.totalChunks).toFixed(0);
-        
-        const wsMsgCount = this._ttsStats.wsMessageCount;
-        const processedCount = this._ttsStats.processedMessageCount;
-        const lostMessages = wsMsgCount - processedCount;
-        
-        if (lostMessages > 0) {
-          console.error(`[TTS] 检测到消息丢失: WebSocket收到${wsMsgCount}条消息，但只处理了${processedCount}条，丢失${lostMessages}条`);
-        }
-        
-        // Session结束，可以处理下一个TTS请求
         this._onTTSSessionEnd();
         this._reportTTSQueueStatus(true, 'session_end');
         
-        // 重置统计信息
+        // 轻量重置统计信息
         this._ttsStats = {
           totalChunks: 0,
           totalBytes: 0,
           totalDuration: 0,
           sessionStartTime: null,
-          lastChunkTime: null,
-          lastChunkReceiveTime: null,
-          lastPlayTime: null,
-          expectedNextPlayTime: null,
-          wsMessageCount: 0,
-          processedMessageCount: 0
+          lastChunkTime: null
         };
-        this._ttsSentTextLength = 0; // 重置已发送文本长度
       }
       return;
     }
     
-    // 严格顺序播放：只依赖 AudioContext 时间线与 onended，不再引入额外延迟/重试定时器
+    // 严格顺序播放：依赖 AudioContext 时间线与 onended，不引入额外延迟
     const currentTime = this._ttsAudioContext.currentTime;
     
     try {
@@ -4208,22 +4144,15 @@ class App {
         ? currentTime
         : Math.max(currentTime, this._ttsNextPlayTime);
       
-      this._ttsStats.lastPlayTime = startTime;
-      this._ttsStats.expectedNextPlayTime = startTime + duration;
-      
       // 更新下次播放时间（在 start 之前更新，防止并发问题）
       this._ttsNextPlayTime = startTime + duration;
       this._reportTTSQueueStatus(false, 'dequeue');
       
-      // 创建播放源，加淡入淡出减少爆音（xiaozhi-web-client）
+      // 创建播放源：使用恒定增益，避免每块音频首尾重复淡入淡出导致的卡顿 / 重读感
       const source = this._ttsAudioContext.createBufferSource();
       source.buffer = audioBuffer;
       const gainNode = this._ttsAudioContext.createGain();
-      const fadeDuration = 0.005;
-      gainNode.gain.setValueAtTime(0, startTime);
-      gainNode.gain.linearRampToValueAtTime(1, startTime + fadeDuration);
-      gainNode.gain.setValueAtTime(1, startTime + duration - fadeDuration);
-      gainNode.gain.linearRampToValueAtTime(0, startTime + duration);
+      gainNode.gain.setValueAtTime(1, startTime);
       source.connect(gainNode);
       gainNode.connect(this._ttsAudioContext.destination);
       
@@ -4301,14 +4230,8 @@ class App {
       totalBytes: 0,
       totalDuration: 0,
       sessionStartTime: null,
-      lastChunkTime: null,
-      lastChunkReceiveTime: null,
-      lastPlayTime: null,
-      expectedNextPlayTime: null,
-      wsMessageCount: 0,
-      processedMessageCount: 0
+      lastChunkTime: null
     };
-    this._ttsSentTextLength = 0; // 重置已发送文本长度
   }
   
   // 停止TTS播放（外部调用）
@@ -7433,6 +7356,10 @@ class App {
     
     this._micStarting = true;
     try {
+      // 开启麦克风前，如仍在播报则先停止，保证“说话即可打断播报”
+      if (this._ttsPlaying || this._ttsSessionActive || (this._ttsAudioQueue && this._ttsAudioQueue.length > 0)) {
+        this.stopTTS();
+      }
       // 如果已有会话，先停止
       if (this._asrSessionId || this._micActive) {
         await this.stopMic();
