@@ -73,28 +73,39 @@ export class MCPToolAdapter {
       });
     }
 
-    // 自动合并远程 MCP 工具（无论是否指定工作流，都会添加）
+    // 自动合并远程 MCP 工具（包括通过 aistream.yaml 或插件注册的服务器）
     const remoteConfig = getAistreamConfigOptional().mcp?.remote || {};
-    if (remoteConfig.enabled && Array.isArray(remoteConfig.servers)) {
-      const { selected = [], servers = [] } = remoteConfig;
-      const selectedNames = Array.isArray(selected) && selected.length > 0 
-        ? new Set(selected.map(s => String(s).trim()).filter(Boolean))
-        : null;
-      
+    const configuredServers = Array.isArray(remoteConfig.servers) ? remoteConfig.servers : [];
+    const configuredNames = new Set(
+      configuredServers
+        .map(s => String(s.name || '').trim())
+        .filter(Boolean)
+    );
+    const selectedNames = Array.isArray(remoteConfig.selected) && remoteConfig.selected.length > 0
+      ? new Set(remoteConfig.selected.map(s => String(s).trim()).filter(Boolean))
+      : null;
+
+    // 当前已加载的远程 MCP 服务器（包括插件式）
+    const remoteServers = StreamLoader.remoteMCPServers || new Map();
+    if (remoteServers.size > 0) {
       const toolMap = new Map(mcpTools.map(t => [t.name, t]));
-      
-      for (const server of servers) {
-        const serverName = String(server.name || '').trim();
-        if (!serverName || (selectedNames && !selectedNames.has(serverName))) continue;
-        
-        const remoteTools = mcpServer.listTools(`remote-mcp.${serverName}`);
+
+      for (const serverName of remoteServers.keys()) {
+        const name = String(serverName || '').trim();
+        if (!name) continue;
+
+        const isConfigured = configuredNames.has(name);
+        // 若在 aistream.yaml 中配置过，则遵守 selected 白名单；插件式服务器默认启用
+        if (isConfigured && selectedNames && !selectedNames.has(name)) continue;
+
+        const remoteTools = mcpServer.listTools(`remote-mcp.${name}`);
         for (const tool of remoteTools) {
           if (!toolMap.has(tool.name)) {
             toolMap.set(tool.name, tool);
           }
         }
       }
-      
+
       mcpTools = Array.from(toolMap.values());
     }
 

@@ -15,6 +15,8 @@ class StreamLoader {
     this.streams = new Map();
     this.streamClasses = new Map();
     this.remoteMCPServers = new Map();
+    this.mcpPluginServers = new Map();   // 由 stream 插件导出的 getMcpServers() 提供
+    this._loadedPluginServers = new Set();
     this.loaded = false;
     this.watcher = null;
     this.loadStats = {
@@ -137,6 +139,29 @@ class StreamLoader {
       // 保存
       this.streams.set(stream.name, stream);
       this.streamClasses.set(stream.name, StreamClass);
+
+      // 若模块导出 getMcpServers，则记录插件提供的远程 MCP 服务器配置（插件式 MCP）
+      if (typeof module.getMcpServers === 'function') {
+        try {
+          const servers = module.getMcpServers();
+          if (servers && typeof servers === 'object') {
+            const names = Object.keys(servers).filter(Boolean);
+            if (names.length > 0) {
+              BotUtil.makeLog(
+                'info',
+                `检测到 MCP 插件服务器: ${names.join(', ')} (来自 stream: ${stream.name})`,
+                'StreamLoader'
+              );
+              for (const [name, cfg] of Object.entries(servers)) {
+                if (!name) continue;
+                this.mcpPluginServers.set(String(name), cfg || {});
+              }
+            }
+          }
+        } catch (e) {
+          BotUtil.makeLog('warn', `加载 MCP 插件服务器失败: ${e.message}`, 'StreamLoader');
+        }
+      }
 
       const loadTime = Date.now() - startTime;
       this.loadStats.streams.push({
@@ -698,12 +723,27 @@ class StreamLoader {
    */
   async loadRemoteMCPServers() {
     if (!this.mcpServer) return;
-    
+
+    const loadedServers = [];
+
+    // 1) 先加载由 stream 插件提供的 MCP 服务器（安装插件即自动注册）
+    for (const [serverName, cfg] of this.mcpPluginServers.entries()) {
+      if (this._loadedPluginServers.has(serverName)) continue;
+      try {
+        await this._createRemoteMCPClient(serverName, cfg || {});
+        this._loadedPluginServers.add(serverName);
+        BotUtil.makeLog('info', `插件 MCP 服务器已加载: ${serverName}`, 'StreamLoader');
+        loadedServers.push(serverName);
+      } catch (error) {
+        BotUtil.makeLog('warn', `加载插件 MCP 服务器 ${serverName} 失败: ${error.message}`, 'StreamLoader');
+      }
+    }
+
+    // 2) 再加载 aistream.yaml 中配置的远程 MCP 服务器
     const config = this._getRemoteMCPConfig();
-    if (!config) return;
+    if (!config) return loadedServers;
 
     const { servers, selectedNames } = config;
-    const loadedServers = [];
     
     for (const serverConfig of servers) {
       const serverName = String(serverConfig.name || '').trim();
@@ -802,6 +842,7 @@ class StreamLoader {
   _registerRemoteTools(serverName, tools) {
     if (!this.mcpServer || !Array.isArray(tools)) return;
     
+    const before = this.mcpServer.tools.size;
     for (const tool of tools) {
       const toolName = `remote-mcp.${serverName}.${tool.name}`;
       // 如果工具已存在，先删除再注册（避免重复警告）
@@ -813,6 +854,10 @@ class StreamLoader {
         inputSchema: tool.inputSchema || {},
         handler: (args) => this._callRemoteTool(serverName, tool.name, args)
       });
+    }
+    const added = this.mcpServer.tools.size - before;
+    if (added > 0) {
+      BotUtil.makeLog('info', `远程 MCP 工具已注册: ${serverName} (${added}个)`, 'StreamLoader');
     }
   }
 
