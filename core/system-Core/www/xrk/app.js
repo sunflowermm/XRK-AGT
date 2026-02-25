@@ -425,6 +425,7 @@ class App {
     const apiListBackBtn = $('#apiListBackBtn');
     const themeToggle = $('#themeToggle');
     const saveApiKeyBtn = $('#saveApiKeyBtn');
+    const apiKeyForm = $('#apiKeyForm');
     const apiKey = $('#apiKey');
     const apiKeyToggleBtn = $('#apiKeyToggleBtn');
     const navContainer = $('#navMenu');
@@ -442,12 +443,15 @@ class App {
     
     themeToggle.addEventListener('click', () => this.toggleTheme());
     
-    saveApiKeyBtn.addEventListener('click', () => this.saveApiKey());
-    apiKey.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
+    if (apiKeyForm) {
+      apiKeyForm.addEventListener('submit', (e) => {
         e.preventDefault();
         this.saveApiKey();
-      }
+      });
+    }
+    saveApiKeyBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.saveApiKey();
     });
     apiKeyToggleBtn.addEventListener('click', () => this.toggleApiKeyBox());
     

@@ -360,6 +360,10 @@ body.dark .theme-btn .icon-moon { display: block; }
   gap: 12px;
 }
 
+.api-key-form {
+  margin: 0;
+}
+
 .api-key-box {
   display: flex;
   align-items: center;

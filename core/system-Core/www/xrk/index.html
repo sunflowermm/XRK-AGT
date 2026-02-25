@@ -115,10 +115,12 @@
                 </button>
                 <div class="header-title" id="headerTitle">系统概览</div>
                 <div class="header-actions">
-                    <div class="api-key-box" id="apiKeyBox">
-                        <input type="password" id="apiKey" placeholder="API Key" autocomplete="off">
-                        <button class="btn btn-sm" id="saveApiKeyBtn">保存</button>
-                    </div>
+                    <form id="apiKeyForm" class="api-key-form" autocomplete="off">
+                        <div class="api-key-box" id="apiKeyBox">
+                            <input type="password" id="apiKey" name="apiKey" placeholder="API Key" autocomplete="new-password">
+                            <button class="btn btn-sm" id="saveApiKeyBtn" type="submit">保存</button>
+                        </div>
+                    </form>
                     <button class="api-key-toggle-btn" id="apiKeyToggleBtn" title="显示/隐藏API Key输入">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
