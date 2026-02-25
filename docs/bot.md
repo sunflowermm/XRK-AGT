@@ -548,6 +548,19 @@ auth:
     - "/xrk"
 ```
 
+同源 Cookie 认证（用于 Web 控制台免 API Key）可通过 `uiCookie` 配置：
+
+```yaml
+uiCookie:
+  enabled: true
+  pathPrefix: "/xrk"
+  name: "xrk_ui"
+  value: "1"
+  sameSite: "lax"
+  httpOnly: true
+  maxAgeMs: 86400000
+```
+
 ---
 
 ## WebSocket 服务
@@ -602,7 +615,7 @@ export default class MyTasker {
 ### WebSocket 心跳
 
 Bot 自动管理 WebSocket 心跳检测：
-- 默认超时：60秒
+- 默认超时：60秒（可通过 `server.yaml` 的 `websocket.heartbeatTimeout` 配置）
 - 自动清理：断开超时连接
 - 统计信息：`getWebSocketStats()`
 

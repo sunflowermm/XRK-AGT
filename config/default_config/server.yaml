@@ -99,6 +99,11 @@ https:
   # 是否启用HTTPS服务（全局默认证书）
   # 注意：现在每个域名可以有自己的证书
   enabled: false
+  # HTTPS 端口（可选）
+  # - 不填写：默认使用 HTTP端口 + portOffset（portOffset 默认 1）
+  # - 填写具体端口：强制使用该端口（仅在未启用 proxy 时作为核心 HTTPS 端口）
+  # port: 8443
+  portOffset: 1
   # 默认SSL证书配置（当域名没有配置专用证书时使用）
   certificate:
     # 私钥文件路径（必需）
@@ -145,6 +150,32 @@ static:
   # 缓存总时间（适用于其他文件）
   # 支持格式：1d = 1天, 1h = 1小时
   cacheTime: "1d"
+  # data 目录静态文件缓存（/media, /uploads），默认更短，避免调试时缓存干扰
+  dataCacheTime: "1h"
+
+# ----------------------------------------
+# robots.txt 配置
+# ----------------------------------------
+robots:
+  # 是否启用 robots.txt 路由（默认启用；关闭后会返回 404 或交给静态文件）
+  enabled: true
+  # 如果提供 content，则完全覆盖默认生成逻辑（支持多行字符串）
+  # content: |
+  #   User-agent: *
+  #   Disallow: /
+  #   Sitemap: https://example.com/sitemap.xml
+  disallow:
+    - "/api/"
+    - "/config/"
+    - "/data/"
+    - "/lib/"
+    - "/plugins/"
+    - "/trash/"
+  allow:
+    - "/"
+  # 是否自动追加 Sitemap 行（默认 true，会使用 server.url 或自动检测的访问 URL）
+  autoSitemap: true
+  # sitemapPath: "/sitemap.xml"
 
 # ----------------------------------------
 # 安全配置
@@ -193,6 +224,25 @@ cors:
   credentials: false
   # 预检请求缓存时间（秒）
   maxAge: 86400
+  # 暴露给浏览器读取的响应头
+  exposeHeaders: ["X-Request-Id", "X-Response-Time"]
+
+# ----------------------------------------
+# UI 同源 Cookie 认证（Web 控制台）
+# ----------------------------------------
+uiCookie:
+  # 是否启用同源 Cookie 认证（用于 Web 控制台/同源前端免 API Key）
+  enabled: true
+  # 命中的路径前缀（默认 /xrk）
+  pathPrefix: "/xrk"
+  # Cookie 名称与值
+  name: "xrk_ui"
+  value: "1"
+  # Cookie 属性（默认 httpOnly + SameSite=Lax）
+  httpOnly: true
+  sameSite: "lax"
+  # 有效期（毫秒）
+  maxAgeMs: 86400000
 
 # ----------------------------------------
 # 认证配置
@@ -334,6 +384,13 @@ performance:
     enabled: true
     initialDelay: 1000  # 初始延迟（毫秒）
     timeout: 120000     # 超时时间（毫秒）
+  # HTTP/HTTPS 服务器底层参数（net/http server）
+  httpServer:
+    maxHeadersCount: 2000
+    maxRequestsPerSocket: 0
+    serverTimeout: 120000      # server.timeout（毫秒）
+    headersTimeout: 60000      # server.headersTimeout（毫秒）
+    socketTimeout: 120000      # socket.setTimeout（毫秒）
   # HTTP/2 Server Push（需要HTTP/2支持）
   http2Push:
     enabled: false
@@ -348,10 +405,59 @@ performance:
     timeout: 30000      # socket超时时间（毫秒）
 
 # ----------------------------------------
+# WebSocket 配置
+# ----------------------------------------
+websocket:
+  # 心跳检测
+  heartbeatInterval: 30000  # ping 间隔（毫秒）
+  heartbeatTimeout: 60000   # 超时（毫秒）
+  # 单条消息最大 payload（字节），默认 100MB
+  maxPayload: 104857600
+  # perMessageDeflate 压缩（ws）
+  perMessageDeflate:
+    enabled: true
+    zlibDeflateOptions:
+      chunkSize: 1024
+      memLevel: 7
+      level: 3
+    zlibInflateOptions:
+      chunkSize: 10240
+    clientNoContextTakeover: true
+    serverNoContextTakeover: true
+    serverMaxWindowBits: 10
+    concurrencyLimit: 10
+    threshold: 1024
+
+# ----------------------------------------
 # 其他配置
 # ----------------------------------------
 misc:
   # 是否自动检测公网IP（用于显示外网访问地址）
   detectPublicIP: true
+  # 公网 IP 查询接口列表（按顺序尝试）
+  publicIpApis:
+    - "https://ifconfig.me/ip"
+    - "https://api.ipify.org"
+    - "https://icanhazip.com"
+    - "https://ipinfo.io/ip"
+  publicIpTimeoutMs: 3000
+
+  # UDP 探测本机出口 IP（更快更准）；用于启动信息展示
+  udpProbe:
+    host: "223.5.5.5"
+    port: 80
+    timeoutMs: 3000
+
+  # trash 目录清理（临时文件）
+  trashCleanupIntervalMinutes: 60
+  trashMaxAgeHours: 24
+  trashPreserve:
+    - ".gitignore"
+    - "instruct.txt"
+
+  # 内部缓存（毫秒）
+  cache:
+    ttlMs: 60000
+
   # 404时的默认重定向路径
   defaultRoute: "/"

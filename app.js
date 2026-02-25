@@ -93,6 +93,74 @@ class DependencyManager {
       }
     }
   }
+
+  /**
+   * 检查所有 core/*-Core 下 www 根目录及一层子目录的前端依赖
+   * 规则：
+   * - 仅当同一目录下同时存在 package.json 和 sign.json 时，视为独立前端项目
+   * - 自动执行依赖检查与按需安装（与主工程、插件保持一致流程）
+   */
+  async ensureFrontendDependencies(rootDir = process.cwd()) {
+    const coreBase = path.join(rootDir, 'core');
+    let coreEntries;
+    try {
+      coreEntries = await fs.readdir(coreBase, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const coreEntry of coreEntries) {
+      if (!coreEntry.isDirectory()) continue;
+      const coreDir = path.join(coreBase, coreEntry.name);
+      const wwwDir = path.join(coreDir, 'www');
+
+      let wwwStat;
+      try {
+        wwwStat = await fs.stat(wwwDir);
+      } catch {
+        continue;
+      }
+      if (!wwwStat.isDirectory()) continue;
+
+      // 仅检查 www 根和一层子目录
+      const candidateDirs = [wwwDir];
+      try {
+        const subEntries = await fs.readdir(wwwDir, { withFileTypes: true });
+        for (const sub of subEntries) {
+          if (sub.isDirectory()) {
+            candidateDirs.push(path.join(wwwDir, sub.name));
+          }
+        }
+      } catch {
+        // 目录读取失败不影响整体流程
+      }
+
+      for (const dir of candidateDirs) {
+        const pkgPath = path.join(dir, 'package.json');
+        const signPath = path.join(dir, 'sign.json');
+
+        let hasPkg = false;
+        let hasSign = false;
+        try {
+          await fs.access(pkgPath);
+          hasPkg = true;
+        } catch {}
+        try {
+          await fs.access(signPath);
+          hasSign = true;
+        } catch {}
+
+        if (!hasPkg || !hasSign) continue;
+
+        try {
+          await this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'));
+        } catch (e) {
+          const rel = path.relative(rootDir, dir) || dir;
+          await this.logger.warning(`${rel}: ${e.message}`);
+        }
+      }
+    }
+  }
 }
 
 async function validateEnvironment() {
@@ -133,6 +201,7 @@ class Bootstrap {
     const root = process.cwd();
     await this.dependencyManager.checkAndInstall(path.join(root, 'package.json'), path.join(root, 'node_modules'));
     await this.dependencyManager.ensurePluginDependencies(root);
+    await this.dependencyManager.ensureFrontendDependencies(root);
     await this.loadDynamicImports(path.join(root, 'package.json'));
   }
 

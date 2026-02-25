@@ -2,7 +2,7 @@
 
 > **文件位置**：`src/bot.js`  
 > **说明**：XRK-AGT 的 Server 层是系统的核心服务层，提供统一的 HTTP/HTTPS/WebSocket 服务、反向代理、静态文件服务、安全中间件等能力，支持快速搭建各种通讯协议的客户端或服务端。  
-> **注意**：本文档中所有 `{端口}` 或 `localhost:{端口}` 的占位符表示实际端口号，由启动配置决定（通过 `bot.run({ port: 端口号 })` 指定）。HTTP端口由启动时指定，HTTPS端口默认为2538（可配置）。
+> **注意**：本文档中所有 `{端口}` 或 `localhost:{端口}` 的占位符表示实际端口号，由启动配置决定（通过 `bot.run({ port: 端口号 })` 指定）。HTTP 端口由启动时指定；**HTTPS 端口默认使用 `HTTP端口 + https.portOffset`（默认 1）**，也可通过 `https.port` 显式指定。
 
 ## 📚 目录
 
@@ -201,7 +201,7 @@ flowchart LR
 **端口说明**：
 
 - **HTTP端口**：核心HTTP服务（端口由启动配置决定）
-- **HTTPS端口**（可选）：HTTPS服务（端口由启动配置决定，默认2538）
+- **HTTPS端口**（可选）：HTTPS服务（默认 `HTTP端口 + https.portOffset`，`https.portOffset` 默认 1；也可用 `https.port` 显式指定）
 - **反向代理端口**（80/443，可选）：多域名代理服务
   - HTTP代理 :80 → 转发到核心服务（端口由配置决定）
   - HTTPS代理 :443 → 转发到核心服务（端口由配置决定）
@@ -268,7 +268,7 @@ sequenceDiagram
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | 核心HTTP端口 | 由启动配置决定 | 内部服务端口，通过 `bot.run({ port: 端口号 })` 指定 |
-| 核心HTTPS端口 | 2538 | 内部服务端口，可配置 |
+| 核心HTTPS端口 | HTTP端口 + 1 | 内部服务端口，可通过 `https.portOffset` 或 `https.port` 配置 |
 | 代理HTTP端口 | 80 | 反向代理端口，需要root权限 |
 | 代理HTTPS端口 | 443 | 反向代理端口，需要root权限 |
 | 实际HTTP端口 | 自动检测 | 如果配置端口被占用，自动递增 |
@@ -279,7 +279,7 @@ sequenceDiagram
 #### 1. 核心服务端口
 
 - **HTTP端口**：由启动配置决定，可通过 `bot.run({ port: 端口号 })` 指定
-- **HTTPS端口**：默认 `2538`，需要启用HTTPS
+- **HTTPS端口**：默认 `HTTP端口 + 1`（`https.portOffset` 默认 1），需要启用 HTTPS
 - **实际端口**：系统会自动检测并选择可用端口
 
 #### 2. 反向代理端口
@@ -552,6 +552,26 @@ sequenceDiagram
     Note over Client,Handler: 🔄 双向通信开始
     
     Client<->Handler: 💬 双向通信持续<br/>实时消息交换<br/>心跳保持连接
+```
+
+### WebSocket 配置（server.yaml）
+
+WebSocket 相关参数全部可通过 `data/server_bots/{端口}/server.yaml` 配置（默认值来自 `config/default_config/server.yaml`）：
+
+```yaml
+websocket:
+  heartbeatInterval: 30000  # ping 间隔（毫秒）
+  heartbeatTimeout: 60000   # 超时（毫秒）
+  maxPayload: 104857600     # 单条消息最大字节数（默认 100MB）
+  perMessageDeflate:
+    enabled: true
+    threshold: 1024
+    zlibDeflateOptions:
+      chunkSize: 1024
+      memLevel: 7
+      level: 3
+    zlibInflateOptions:
+      chunkSize: 10240
 ```
 
 ### WebSocket 注册
@@ -1026,6 +1046,10 @@ security:
   hiddenFiles:
     - "^\\..*"
     - "node_modules"
+
+# hiddenFiles 规则说明：
+# - 以 ^ 开头 / 以 $ 结尾 / 包含 \\ 等“正则特征”的字符串，会按正则表达式匹配
+# - 其他普通字符串按“字面包含”匹配（例如 ".env" 会按字面匹配，不会被当作正则）
 
 # CORS
 cors:

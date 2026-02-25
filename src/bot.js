@@ -27,6 +27,7 @@ import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import paths from '#utils/paths.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import HTTPBusinessLayer from '#utils/http-business.js';
+import FrontendLauncher from '#infrastructure/frontend/launcher.js';
 
 /**
  * Bot主类
@@ -70,25 +71,37 @@ export default class Bot extends EventEmitter {
     this.express = Object.assign(express(), { skip_auth: [], quiet: [] });
     this.server = null;
     this.httpsServer = null;
+    
+    // WebSocket 服务器配置：尽量全部由 server.yaml 驱动（保留默认值）
+    const wsConfig = cfg.server?.websocket || {};
+    const perMessageDeflateCfg = wsConfig?.perMessageDeflate || {};
+    const perMessageDeflateEnabled = perMessageDeflateCfg?.enabled !== false;
+    const perMessageDeflate = perMessageDeflateEnabled ? {
+      zlibDeflateOptions: {
+        chunkSize: Number(perMessageDeflateCfg?.zlibDeflateOptions?.chunkSize) || 1024,
+        memLevel: Number(perMessageDeflateCfg?.zlibDeflateOptions?.memLevel) || 7,
+        level: Number(perMessageDeflateCfg?.zlibDeflateOptions?.level) || 3
+      },
+      zlibInflateOptions: {
+        chunkSize: Number(perMessageDeflateCfg?.zlibInflateOptions?.chunkSize) || (10 * 1024)
+      },
+      clientNoContextTakeover: perMessageDeflateCfg?.clientNoContextTakeover !== false,
+      serverNoContextTakeover: perMessageDeflateCfg?.serverNoContextTakeover !== false,
+      serverMaxWindowBits: Number(perMessageDeflateCfg?.serverMaxWindowBits) || 10,
+      concurrencyLimit: Number(perMessageDeflateCfg?.concurrencyLimit) || 10,
+      threshold: Number(perMessageDeflateCfg?.threshold) || 1024
+    } : false;
+    
+    const maxPayload = Number(wsConfig?.maxPayload);
+    const maxPayloadBytes = Number.isFinite(maxPayload) && maxPayload > 0
+      ? maxPayload
+      : (100 * 1024 * 1024); // 100MB
+    
     this.wss = new WebSocketServer({ 
       noServer: true,
-      perMessageDeflate: {
-        zlibDeflateOptions: {
-          chunkSize: 1024,
-          memLevel: 7,
-          level: 3
-        },
-        zlibInflateOptions: {
-          chunkSize: 10 * 1024
-        },
-        clientNoContextTakeover: true,
-        serverNoContextTakeover: true,
-        serverMaxWindowBits: 10,
-        concurrencyLimit: 10,
-        threshold: 1024
-      },
-      maxPayload: 100 * 1024 * 1024, // 100MB
-      clientTracking: true
+      perMessageDeflate,
+      maxPayload: maxPayloadBytes,
+      clientTracking: wsConfig?.clientTracking !== false
     });
     this.wsf = Object.create(null);
     this.fs = Object.create(null);
@@ -99,7 +112,8 @@ export default class Bot extends EventEmitter {
     
     // 配置属性
     this.apiKey = '';
-    this._cache = BotUtil.getMap('core_cache', { ttl: 60000, autoClean: true });
+    const cacheTtl = Number(cfg.server?.misc?.cache?.ttlMs);
+    this._cache = BotUtil.getMap('core_cache', { ttl: (Number.isFinite(cacheTtl) && cacheTtl > 0) ? cacheTtl : 60000, autoClean: true });
     this._rateLimiters = new Map();
     this.httpPort = null;
     this.httpsPort = null;
@@ -130,10 +144,14 @@ export default class Bot extends EventEmitter {
     this.generateApiKey();
     this._initSubServer();
     
+    // 安全规则的编译缓存（避免每个请求重复解析）
+    this._compiledHiddenFileMatchers = null;
+    
     return this._createProxy();
   }
 
   _initSubServer() {
+    // 仅使用 aistream.yaml 中的 subserver 配置，避免重复配置源
     const config = getAistreamConfigOptional().subserver || {};
     const host = config.host || '127.0.0.1';
     const port = config.port || 8000;
@@ -234,14 +252,27 @@ export default class Bot extends EventEmitter {
   }
 
   _initHttpServer() {
+    // HTTP服务器配置：优先读取 server.yaml（performance.keepAlive / performance.httpServer）
+    const perfCfg = cfg.server?.performance || {};
+    const keepAliveCfg = perfCfg?.keepAlive || {};
+    const httpServerCfg = perfCfg?.httpServer || {};
+    
+    const keepAliveEnabled = keepAliveCfg?.enabled !== false;
+    const keepAliveInitialDelay = Number(keepAliveCfg?.initialDelay) || 1000;
+    const socketTimeout = Number(httpServerCfg?.socketTimeout) || Number(keepAliveCfg?.timeout) || 120000;
+    const serverTimeout = Number(httpServerCfg?.serverTimeout) || Number(keepAliveCfg?.timeout) || 120000;
+    const headersTimeout = Number(httpServerCfg?.headersTimeout) || 60000;
+    const maxHeadersCount = Number(httpServerCfg?.maxHeadersCount) || 2000;
+    const maxRequestsPerSocket = Number(httpServerCfg?.maxRequestsPerSocket);
+
     // HTTP服务器配置（优化性能）
     const serverOptions = {
-      keepAlive: true,
-      keepAliveInitialDelay: 1000,
-      maxHeadersCount: 2000,
-      maxRequestsPerSocket: 0, // 0 = 无限制（适合长连接）
-      timeout: 120000, // 2分钟超时
-      headersTimeout: 60000 // 1分钟头部超时
+      keepAlive: keepAliveEnabled,
+      keepAliveInitialDelay,
+      maxHeadersCount,
+      maxRequestsPerSocket: Number.isFinite(maxRequestsPerSocket) ? maxRequestsPerSocket : 0, // 0 = 无限制（适合长连接）
+      timeout: serverTimeout,
+      headersTimeout
     };
     
     this.server = http.createServer(serverOptions, this.express)
@@ -249,8 +280,8 @@ export default class Bot extends EventEmitter {
       .on("upgrade", this.wsConnect.bind(this))
       .on("connection", (socket) => {
         // 设置socket超时
-        socket.setTimeout(120000);
-        socket.setKeepAlive(true, 1000);
+        socket.setTimeout(socketTimeout);
+        socket.setKeepAlive(keepAliveEnabled, keepAliveInitialDelay);
       });
   }
 
@@ -338,12 +369,23 @@ export default class Bot extends EventEmitter {
     });
     
     // 创建HTTP代理服务器（优化配置）
+    const perfCfg = cfg.server?.performance || {};
+    const keepAliveCfg = perfCfg?.keepAlive || {};
+    const httpServerCfg = perfCfg?.httpServer || {};
+    
+    const keepAliveEnabled = keepAliveCfg?.enabled !== false;
+    const keepAliveInitialDelay = Number(keepAliveCfg?.initialDelay) || 1000;
+    const socketTimeout = Number(httpServerCfg?.socketTimeout) || Number(keepAliveCfg?.timeout) || 120000;
+    const serverTimeout = Number(httpServerCfg?.serverTimeout) || Number(keepAliveCfg?.timeout) || 120000;
+    const headersTimeout = Number(httpServerCfg?.headersTimeout) || 60000;
+    const maxHeadersCount = Number(httpServerCfg?.maxHeadersCount) || 2000;
+    
     const proxyServerOptions = {
-      keepAlive: true,
-      keepAliveInitialDelay: 1000,
-      maxHeadersCount: 2000,
-      timeout: 120000,
-      headersTimeout: 60000
+      keepAlive: keepAliveEnabled,
+      keepAliveInitialDelay,
+      maxHeadersCount,
+      timeout: serverTimeout,
+      headersTimeout
     };
     
     this.proxyServer = http.createServer(proxyServerOptions, this.proxyApp);
@@ -351,8 +393,8 @@ export default class Bot extends EventEmitter {
       BotUtil.makeLog("error", `HTTP代理服务器错误：${err.message}`, '代理');
     });
     this.proxyServer.on("connection", (socket) => {
-      socket.setTimeout(120000);
-      socket.setKeepAlive(true, 1000);
+      socket.setTimeout(socketTimeout);
+      socket.setKeepAlive(keepAliveEnabled, keepAliveInitialDelay);
     });
     
     // 如果有HTTPS域名，创建HTTPS代理服务器
@@ -430,8 +472,11 @@ export default class Bot extends EventEmitter {
     // 添加TLS配置
     httpsOptions.minVersion = tlsConfig.minVersion || 'TLSv1.2';
     httpsOptions.honorCipherOrder = true;
-    httpsOptions.keepAlive = true;
-    httpsOptions.keepAliveInitialDelay = 1000;
+    const keepAliveCfg = cfg.server?.performance?.keepAlive || {};
+    const keepAliveEnabled = keepAliveCfg?.enabled !== false;
+    const keepAliveInitialDelay = Number(keepAliveCfg?.initialDelay) || 1000;
+    httpsOptions.keepAlive = keepAliveEnabled;
+    httpsOptions.keepAliveInitialDelay = keepAliveInitialDelay;
     
     // SNI回调：根据域名选择对应的SSL上下文
     httpsOptions.SNICallback = (servername, cb) => {
@@ -790,6 +835,23 @@ export default class Bot extends EventEmitter {
    * 按照nginx风格的路由匹配顺序：精确匹配 > 前缀匹配 > 正则匹配 > 默认
    */
   async _initializeMiddlewareAndRoutes() {
+    // 预先获取前端挂载前缀，用于后续跳过业务重定向（sign.json + FrontendLauncher）
+    let frontendMountPrefixes = [];
+    try {
+      const apps = await FrontendLauncher.getApps();
+      if (apps && apps.size > 0) {
+        frontendMountPrefixes = Array.from(apps.values())
+          .map(app => app && app.config)
+          .filter(Boolean)
+          .map(cfgApp => {
+            const mountPath = (cfgApp.mountPath && String(cfgApp.mountPath).trim()) || `/${cfgApp.id}`;
+            return mountPath;
+          });
+      }
+    } catch {
+      frontendMountPrefixes = [];
+    }
+
     // ========== 第一阶段：全局中间件（所有请求） ==========
     // 1. 请求追踪和基础信息
     this.express.use((req, res, next) => {
@@ -851,6 +913,24 @@ export default class Bot extends EventEmitter {
     this._setupBodyParsers();
     
     this.express.use((req, res, next) => {
+      const baseSkipPrefixes = [
+        '/api/',
+        '/media/',
+        '/uploads/',
+        '/File',
+        '/core/'
+      ];
+
+      // 根路径始终不做业务重定向，避免与前端入口形成闭环
+      if (req.path === '/' || req.path === '') {
+        return next();
+      }
+
+      const redirectSkipPrefixes = baseSkipPrefixes.concat(frontendMountPrefixes || []);
+      if (redirectSkipPrefixes.some(p => req.path.startsWith(p))) {
+        return next();
+      }
+
       if (this.httpBusiness.handleRedirect(req, res)) {
         return;
       }
@@ -875,15 +955,34 @@ export default class Bot extends EventEmitter {
     
     // ========== 第六阶段：UI Cookie设置（同源前端） ==========
     this.express.use((req, res, next) => {
-      if (req.path.startsWith('/xrk') && !res.headersSent) {
+      const uiCookieCfg = cfg.server?.uiCookie || {};
+      const enabled = uiCookieCfg?.enabled !== false;
+      const pathPrefix = (uiCookieCfg?.pathPrefix && String(uiCookieCfg.pathPrefix).trim()) || '/xrk';
+      if (enabled && req.path.startsWith(pathPrefix) && !res.headersSent) {
         try {
-          res.cookie?.('xrk_ui', '1', {
-            httpOnly: true,
-            sameSite: 'lax',
-            maxAge: 86400000
+          const name = (uiCookieCfg?.name && String(uiCookieCfg.name)) || 'xrk_ui';
+          const value = (uiCookieCfg?.value !== undefined) ? String(uiCookieCfg.value) : '1';
+          const httpOnly = uiCookieCfg?.httpOnly !== false;
+          const sameSite = (uiCookieCfg?.sameSite && String(uiCookieCfg.sameSite).toLowerCase()) || 'lax';
+          const maxAgeMs = Number(uiCookieCfg?.maxAgeMs) || 86400000;
+          
+          res.cookie?.(name, value, {
+            httpOnly,
+            sameSite,
+            maxAge: maxAgeMs
           });
+          
           if (!res.cookie) {
-            res.setHeader('Set-Cookie', 'xrk_ui=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
+            const sameSiteHeader = sameSite === 'none' ? 'None' : (sameSite === 'strict' ? 'Strict' : 'Lax');
+            const maxAgeSec = Math.max(0, Math.floor(maxAgeMs / 1000));
+            const parts = [
+              `${name}=${encodeURIComponent(value)}`,
+              'Path=/',
+              httpOnly ? 'HttpOnly' : null,
+              `SameSite=${sameSiteHeader}`,
+              `Max-Age=${maxAgeSec}`
+            ].filter(Boolean);
+            res.setHeader('Set-Cookie', parts.join('; '));
           }
         } catch {}
       }
@@ -915,6 +1014,9 @@ export default class Bot extends EventEmitter {
       const config = corsConfig || {};
       const allowedOrigins = config.origins || ['*'];
       const origin = req.headers.origin;
+      const exposeHeaders = Array.isArray(config.exposeHeaders) && config.exposeHeaders.length
+        ? config.exposeHeaders.join(', ')
+        : 'X-Request-Id, X-Response-Time';
       
       // 处理预检请求（OPTIONS）
       if (req.method === 'OPTIONS') {
@@ -930,7 +1032,7 @@ export default class Bot extends EventEmitter {
         res.header('Access-Control-Max-Age',
           String(config.maxAge || 86400));
         res.header('Access-Control-Expose-Headers',
-          'X-Request-Id, X-Response-Time');
+          exposeHeaders);
         return res.sendStatus(204);
       }
       
@@ -946,7 +1048,7 @@ export default class Bot extends EventEmitter {
       res.header('Access-Control-Allow-Credentials',
         config.credentials ? 'true' : 'false');
       res.header('Access-Control-Expose-Headers',
-        'X-Request-Id, X-Response-Time');
+        exposeHeaders);
       
       if (config.maxAge) {
         res.header('Access-Control-Max-Age', String(config.maxAge));
@@ -1028,10 +1130,11 @@ export default class Bot extends EventEmitter {
    */
   _setupDataStaticServing() {
     // 统一的静态文件选项
+    const dataCacheTime = cfg.server?.static?.dataCacheTime || '1h';
     const staticOptions = {
       dotfiles: 'deny',
       fallthrough: false, // 不继续到下一个中间件，避免与 www 静态服务冲突
-      maxAge: '1h',
+      maxAge: dataCacheTime,
       etag: true,
       lastModified: true,
       setHeaders: (res, filePath) => {
@@ -1083,6 +1186,55 @@ export default class Bot extends EventEmitter {
    * 使用条件中间件，只处理非API请求
    */
   async _setupStaticServing() {
+    // ========== 动态前端开发代理（sign.json 声明的 dev server） ==========
+    try {
+      const apps = await FrontendLauncher.getApps();
+      if (apps && apps.size > 0) {
+        const devApps = Array.from(apps.values()).filter(app => app && app.config);
+
+        // 为每个前端项目注册入口代理：由 sign.json 的 proxy.mount 或 id 决定
+        for (const appInfo of devApps) {
+          const cfgApp = appInfo.config;
+          const mountPath = (cfgApp.mountPath && String(cfgApp.mountPath).trim()) || `/${cfgApp.id}`;
+          const target = `http://127.0.0.1:${cfgApp.port}`;
+
+          // 注意：由于 middleware 挂载在 mountPath 上，Express 会剥离前缀导致转发时变成 /
+          // 因此在代理层把 mountPath 前缀加回去，确保上游 dev server 实际收到的是 /example/*
+          const mountPrefix = mountPath.endsWith('/')
+            ? mountPath.slice(0, -1)
+            : mountPath;
+
+          const devProxy = createProxyMiddleware({
+            target,
+            changeOrigin: true,
+            ws: true,
+            logLevel: 'warn',
+            pathRewrite: (pathReq) => {
+              if (!pathReq) return `${mountPrefix}/`;
+              if (pathReq === '/') return `${mountPrefix}/`;
+              if (pathReq.startsWith('/')) return `${mountPrefix}${pathReq}`;
+              return `${mountPrefix}/${pathReq}`;
+            }
+          });
+
+          // 包一层日志，便于观察入口是否命中 dev 代理
+          this.express.use(mountPath, (req, res, next) => {
+            BotUtil.makeLog(
+              'debug',
+              `[前端入口] id=${cfgApp.id} mount=${mountPath} ${req.method} ${req.originalUrl}`,
+              'Frontend'
+            );
+            return devProxy(req, res, next);
+          });
+
+          BotUtil.makeLog('info', `注册前端开发入口: ${mountPath} -> ${target}`, 'Frontend');
+        }
+      }
+    } catch (e) {
+      BotUtil.makeLog('warn', `初始化前端开发代理失败: ${e.message}`, 'Frontend');
+    }
+
+    // ========== 目录索引与静态文件服务 ==========
     // 目录索引（仅对静态文件）
     this.express.use((req, res, next) => {
       if (req.path.startsWith('/api/')) {
@@ -1128,6 +1280,16 @@ export default class Bot extends EventEmitter {
             const subDirName = entry.name;
             const subDirPath = path.join(wwwDir, subDirName);
             const mountPath = `/${subDirName}`;
+            
+            // 如果子目录中存在 sign.json，视为动态前端工程目录，由 FrontendLauncher + HTTP 模块接管
+            // 此处不再挂静态子目录，避免暴露未构建的前端源码结构
+            try {
+              const signStat = fsSync.statSync(path.join(subDirPath, 'sign.json'));
+              if (signStat.isFile()) {
+                BotUtil.makeLog('info', `检测到前端 sign.json，跳过子目录静态挂载: ${mountPath} (core: ${coreName})`, 'Bot');
+                continue;
+              }
+            } catch {}
             
             // 检查路径冲突（排除已保留的路径）
             const reservedPaths = ['api', 'core', 'media', 'uploads', 'File'];
@@ -1291,31 +1453,66 @@ export default class Bot extends EventEmitter {
     
     if (this._checkHeadersSent(res, next)) return;
     
-    const normalizedPath = path.normalize(req.path);
+    // req.path 始终是 URL 路径（/ 分隔），在 Windows 下使用 path.normalize 会引入反斜杠导致规则失效
+    const normalizedPath = path.posix.normalize(req.path);
     
     if (normalizedPath.includes('..')) {
       return res.status(403).json({ error: '禁止访问' });
     }
     
-    const hiddenPatterns = cfg.server.security.hiddenFiles || [
-      /^\./, /\/\./, /node_modules/, /\.git/
-    ];
-    
-    const isHidden = hiddenPatterns.some(pattern => {
-      if (typeof pattern === 'string') {
-        return normalizedPath.includes(pattern);
-      }
-      if (pattern instanceof RegExp) {
-        return pattern.test(normalizedPath);
-      }
-      return false;
-    });
+    const isHidden = this._isHiddenStaticPath(normalizedPath);
     
     if (isHidden) {
       return res.status(404).json({ error: '未找到' });
     }
     
     next();
+  }
+
+  /**
+   * 判断静态路径是否命中隐藏规则（server.yaml: security.hiddenFiles）
+   * - 字符串规则：默认按“字面包含”匹配
+   * - 看起来像正则的字符串（包含 \\ 或以 ^ 开头 / 以 $ 结尾等）：按正则匹配
+   */
+  _isHiddenStaticPath(normalizedPath) {
+    if (!normalizedPath) return false;
+    if (!this._compiledHiddenFileMatchers) {
+      const raw = cfg.server?.security?.hiddenFiles;
+      const patterns = (Array.isArray(raw) && raw.length)
+        ? raw
+        : ['^\\..*', '/\\.', 'node_modules', '\\.git'];
+      
+      const compiled = [];
+      for (const p of patterns) {
+        if (p instanceof RegExp) {
+          compiled.push({ type: 'regex', value: p });
+          continue;
+        }
+        if (typeof p !== 'string') continue;
+        const s = p.trim();
+        if (!s) continue;
+        
+        const looksLikeRegex = s.startsWith('^') || s.endsWith('$') || s.includes('\\') || s.includes('[') || s.includes('(') || s.includes('|') || s.includes('.*');
+        if (looksLikeRegex) {
+          try {
+            compiled.push({ type: 'regex', value: new RegExp(s) });
+            continue;
+          } catch {
+            // 回退到字面包含
+          }
+        }
+        
+        compiled.push({ type: 'includes', value: s });
+      }
+      
+      this._compiledHiddenFileMatchers = compiled;
+    }
+    
+    return this._compiledHiddenFileMatchers.some(m => {
+      if (m.type === 'regex') return m.value.test(normalizedPath);
+      if (m.type === 'includes') return normalizedPath.includes(m.value);
+      return false;
+    });
   }
 
   /**
@@ -1354,6 +1551,12 @@ export default class Bot extends EventEmitter {
   async _handleRobotsTxt(req, res) {
     if (this._checkHeadersSent(res)) return;
     
+    const robotsCfg = cfg.server?.robots || {};
+    if (robotsCfg?.enabled === false) {
+      if (!res.headersSent) res.status(404).end();
+      return;
+    }
+    
     const staticRoot = req.staticRoot || paths.www;
     const robotsPath = path.join(staticRoot, 'robots.txt');
     
@@ -1373,16 +1576,28 @@ export default class Bot extends EventEmitter {
       // 文件不存在，使用默认内容
     }
     
-    const defaultRobots = `User-agent: *
-Disallow: /api/
-Disallow: /config/
-Disallow: /data/
-Disallow: /lib/
-Disallow: /plugins/
-Disallow: /trash/
-Allow: /
-
-Sitemap: ${this.getServerUrl()}/sitemap.xml`;
+    const contentOverride = typeof robotsCfg?.content === 'string' ? robotsCfg.content : '';
+    const disallow = Array.isArray(robotsCfg?.disallow) && robotsCfg.disallow.length
+      ? robotsCfg.disallow
+      : ['/api/', '/config/', '/data/', '/lib/', '/plugins/', '/trash/'];
+    const allow = Array.isArray(robotsCfg?.allow) && robotsCfg.allow.length
+      ? robotsCfg.allow
+      : ['/'];
+    const sitemapPath = (robotsCfg?.sitemapPath && String(robotsCfg.sitemapPath).trim()) || '/sitemap.xml';
+    const autoSitemap = robotsCfg?.autoSitemap !== false;
+    
+    const sitemapUrl = `${this.getServerUrl().replace(/\/$/, '')}${sitemapPath.startsWith('/') ? sitemapPath : `/${sitemapPath}`}`;
+    
+    let defaultRobots = contentOverride || [
+      'User-agent: *',
+      ...disallow.map(p => `Disallow: ${p}`),
+      ...allow.map(p => `Allow: ${p}`),
+      ''
+    ].join('\n');
+    
+    if (autoSitemap && !/^\s*Sitemap:/mi.test(defaultRobots)) {
+      defaultRobots = `${defaultRobots}\nSitemap: ${sitemapUrl}`;
+    }
     
     if (!res.headersSent) {
       res.set('Content-Type', 'text/plain; charset=utf-8');
@@ -1602,15 +1817,25 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     
     if (this._isLocalConnection(req.ip)) return next();
     
-    // ========== 本地连接检查 ==========
-    if (this._isLocalConnection(req.ip)) {
-      return next();
-    }
-    
     // ========== 同源Cookie认证（前端UI） ==========
     try {
+      const uiCookieCfg = cfg.server?.uiCookie || {};
+      const uiEnabled = uiCookieCfg?.enabled !== false;
+      const cookieName = (uiCookieCfg?.name && String(uiCookieCfg.name)) || 'xrk_ui';
+      const cookieValue = (uiCookieCfg?.value !== undefined) ? String(uiCookieCfg.value) : '1';
+      
       const cookies = String(req.headers.cookie ?? '');
-      const hasUiCookie = /(?:^|;\s*)xrk_ui=1(?:;|$)/.test(cookies);
+      const hasUiCookie = uiEnabled && cookies
+        .split(';')
+        .map(s => s.trim())
+        .some(kv => {
+          const eq = kv.indexOf('=');
+          if (eq === -1) return false;
+          const k = kv.slice(0, eq).trim();
+          const v = kv.slice(eq + 1).trim();
+          return k === cookieName && v === cookieValue;
+        });
+      
       if (hasUiCookie) {
         const origin = req.headers.origin || '';
         const referer = req.headers.referer || '';
@@ -2385,8 +2610,11 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     httpsOptions.honorCipherOrder = true;
     
     // Keep-Alive配置（提升性能）
-    httpsOptions.keepAlive = true;
-    httpsOptions.keepAliveInitialDelay = 1000;
+    const keepAliveCfg = cfg.server?.performance?.keepAlive || {};
+    const keepAliveEnabled = keepAliveCfg?.enabled !== false;
+    const keepAliveInitialDelay = Number(keepAliveCfg?.initialDelay) || 1000;
+    httpsOptions.keepAlive = keepAliveEnabled;
+    httpsOptions.keepAliveInitialDelay = keepAliveInitialDelay;
     
     // 会话复用（TLS Session Tickets）
     httpsOptions.sessionIdContext = 'xrk-agt-server';
@@ -2444,12 +2672,7 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
         });
       }
       
-      // 静态文件请求返回HTML或重定向
-      let defaultRoute = cfg.server.misc.defaultRoute || '/';
-      if (req.domainConfig?.defaultRoute) {
-        defaultRoute = req.domainConfig.defaultRoute;
-      }
-      
+      // 静态文件请求返回HTML
       if (req.accepts('html')) {
         const staticRoot = req.staticRoot || paths.www;
         const custom404Path = path.join(staticRoot, '404.html');
@@ -2461,9 +2684,11 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
             return;
           }
         } catch {
-          // 文件不存在，重定向到默认路由
+          // 文件不存在，继续走默认处理
         }
-        res.redirect(defaultRoute);
+
+        // 直接返回简单404页面，不再做默认路由重定向，避免与前端入口形成重定向闭环
+        res.status(404).send('404 Not Found');
       } else {
         res.status(404).json({
           error: '未找到',
@@ -2639,13 +2864,17 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
   async _getIpByUdp() {
     return new Promise((resolve, reject) => {
       const socket = dgram.createSocket('udp4');
+      const udpCfg = cfg.server?.misc?.udpProbe || {};
+      const probeHost = (udpCfg.host && String(udpCfg.host).trim()) || '223.5.5.5';
+      const probePort = Number(udpCfg.port) || 80;
+      const timeoutMs = Number(udpCfg.timeoutMs) || 3000;
       const timeout = setTimeout(() => {
         socket.close();
         reject(new Error('UDP超时'));
-      }, 3000);
+      }, timeoutMs);
       
       try {
-        socket.connect(80, '223.5.5.5', () => {
+        socket.connect(probePort, probeHost, () => {
           clearTimeout(timeout);
           const address = socket.address();
           socket.close();
@@ -2663,19 +2892,22 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
    * 获取公网IP（跨平台兼容）
    */
   async _getPublicIP() {
-    // 使用多个API服务，提高成功率
-    const apis = [
-      'https://ifconfig.me/ip',
-      'https://api.ipify.org',
-      'https://icanhazip.com',
-      'https://ipinfo.io/ip'
-    ];
+    // 使用多个API服务，提高成功率（可由 server.yaml 配置）
+    const apis = (Array.isArray(cfg.server?.misc?.publicIpApis) && cfg.server.misc.publicIpApis.length)
+      ? cfg.server.misc.publicIpApis
+      : [
+        'https://ifconfig.me/ip',
+        'https://api.ipify.org',
+        'https://icanhazip.com',
+        'https://ipinfo.io/ip'
+      ];
+    const timeoutMs = Number(cfg.server?.misc?.publicIpTimeoutMs) || 3000;
     
     // 尝试每个API，直到成功
     for (const apiUrl of apis) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
         
         const response = await fetch(apiUrl, {
           signal: controller.signal,
@@ -2731,7 +2963,13 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     
     // 设置端口（优先级：参数 > 环境变量 > 默认值8080）
     this.actualPort = port || parseInt(process.env.XRK_SERVER_PORT, 10) || 8080;
-    this.actualHttpsPort = this.actualPort + 1;
+    
+    const httpsCfg = cfg.server?.https || {};
+    const explicitHttpsPort = Number(httpsCfg.port);
+    const httpsPortOffset = Number(httpsCfg.portOffset);
+    this.actualHttpsPort = (Number.isFinite(explicitHttpsPort) && explicitHttpsPort > 0)
+      ? explicitHttpsPort
+      : (this.actualPort + (Number.isFinite(httpsPortOffset) ? httpsPortOffset : 1));
     
     if (this.proxyEnabled) {
       this.httpPort = proxyConfig.httpPort || 80;
@@ -2992,7 +3230,10 @@ Sitemap: ${this.getServerUrl()}/sitemap.xml`;
     if (!trashRoot) return;
 
     // 白名单：需要永久保留的文件/目录
-    const preserveList = new Set(['.gitignore', 'instruct.txt']);
+    const preserve = Array.isArray(cfg.server?.misc?.trashPreserve) && cfg.server.misc.trashPreserve.length
+      ? cfg.server.misc.trashPreserve
+      : ['.gitignore', 'instruct.txt'];
+    const preserveList = new Set(preserve);
 
     let entries;
     try {

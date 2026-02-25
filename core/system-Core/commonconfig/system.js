@@ -969,6 +969,61 @@ export default class SystemConfig extends ConfigBase {
                   description: '支持格式：1d = 1天, 1h = 1小时',
                   default: '1d',
                   component: 'Input'
+                },
+                dataCacheTime: {
+                  type: 'string',
+                  label: '数据目录缓存时间',
+                  description: 'data 目录静态文件缓存时间（如 /media, /uploads），默认 1 小时：1h',
+                  default: '1h',
+                  component: 'Input'
+                }
+              }
+            },
+            robots: {
+              type: 'object',
+              label: 'robots.txt 配置',
+              component: 'SubForm',
+              fields: {
+                enabled: {
+                  type: 'boolean',
+                  label: '启用 robots.txt 路由',
+                  default: true,
+                  component: 'Switch'
+                },
+                disallow: {
+                  type: 'array',
+                  label: 'Disallow 路径',
+                  description: '禁止爬虫访问的路径前缀，每行一个',
+                  itemType: 'string',
+                  default: ['/api/', '/config/', '/data/', '/lib/', '/plugins/', '/trash/'],
+                  component: 'Tags'
+                },
+                allow: {
+                  type: 'array',
+                  label: 'Allow 路径',
+                  description: '允许爬虫访问的路径前缀，每行一个',
+                  itemType: 'string',
+                  default: ['/'],
+                  component: 'Tags'
+                },
+                autoSitemap: {
+                  type: 'boolean',
+                  label: '自动追加 Sitemap 行',
+                  description: '为 robots.txt 自动追加 Sitemap: {url}/sitemap.xml',
+                  default: true,
+                  component: 'Switch'
+                },
+                sitemapPath: {
+                  type: 'string',
+                  label: 'Sitemap 路径',
+                  default: '/sitemap.xml',
+                  component: 'Input'
+                },
+                content: {
+                  type: 'string',
+                  label: '覆盖内容（可选）',
+                  description: '不为空时完全覆盖默认 robots.txt 内容',
+                  component: 'Textarea'
                 }
               }
             },
@@ -1045,6 +1100,14 @@ export default class SystemConfig extends ConfigBase {
                   min: 0,
                   default: 86400,
                   component: 'InputNumber'
+                },
+                exposeHeaders: {
+                  type: 'array',
+                  label: '暴露的响应头',
+                  description: 'Access-Control-Expose-Headers，允许前端 JS 读取的响应头列表',
+                  itemType: 'string',
+                  default: ['X-Request-Id', 'X-Response-Time'],
+                  component: 'Tags'
                 }
               }
             },
@@ -1086,6 +1149,58 @@ export default class SystemConfig extends ConfigBase {
                   itemType: 'string',
                   default: ['/', '/favicon.ico', '/health', '/status', '/robots.txt', '/media/*', '/uploads/*'],
                   component: 'Tags'
+                }
+              }
+            },
+            uiCookie: {
+              type: 'object',
+              label: 'UI 同源 Cookie 认证',
+              component: 'SubForm',
+              fields: {
+                enabled: {
+                  type: 'boolean',
+                  label: '启用 UI Cookie 认证',
+                  description: '用于 Web 控制台 / 同源前端免 API Key 访问',
+                  default: true,
+                  component: 'Switch'
+                },
+                pathPrefix: {
+                  type: 'string',
+                  label: '命中路径前缀',
+                  description: '仅当请求路径以此前缀开头时才设置/校验 UI Cookie',
+                  default: '/xrk',
+                  component: 'Input'
+                },
+                name: {
+                  type: 'string',
+                  label: 'Cookie 名称',
+                  default: 'xrk_ui',
+                  component: 'Input'
+                },
+                value: {
+                  type: 'string',
+                  label: 'Cookie 值',
+                  default: '1',
+                  component: 'Input'
+                },
+                httpOnly: {
+                  type: 'boolean',
+                  label: 'HttpOnly',
+                  default: true,
+                  component: 'Switch'
+                },
+                sameSite: {
+                  type: 'string',
+                  label: 'SameSite',
+                  enum: ['lax', 'strict', 'none'],
+                  default: 'lax',
+                  component: 'Select'
+                },
+                maxAgeMs: {
+                  type: 'number',
+                  label: '有效期（毫秒）',
+                  default: 86400000,
+                  component: 'InputNumber'
                 }
               }
             },
@@ -1341,6 +1456,53 @@ export default class SystemConfig extends ConfigBase {
                       component: 'InputNumber'
                     }
                   }
+                },
+                httpServer: {
+                  type: 'object',
+                  label: 'HTTP/HTTPS 底层参数',
+                  component: 'SubForm',
+                  fields: {
+                    maxHeadersCount: {
+                      type: 'number',
+                      label: '最大请求头数量',
+                      description: 'http(s).Server.maxHeadersCount',
+                      min: 0,
+                      default: 2000,
+                      component: 'InputNumber'
+                    },
+                    maxRequestsPerSocket: {
+                      type: 'number',
+                      label: '每个 Socket 最大请求数',
+                      description: '0 表示无限制（适合长连接）',
+                      min: 0,
+                      default: 0,
+                      component: 'InputNumber'
+                    },
+                    serverTimeout: {
+                      type: 'number',
+                      label: 'Server 超时时间',
+                      description: 'Server.timeout（毫秒），2 分钟=120000',
+                      min: 0,
+                      default: 120000,
+                      component: 'InputNumber'
+                    },
+                    headersTimeout: {
+                      type: 'number',
+                      label: 'Headers 超时时间',
+                      description: 'Server.headersTimeout（毫秒），1 分钟=60000',
+                      min: 0,
+                      default: 60000,
+                      component: 'InputNumber'
+                    },
+                    socketTimeout: {
+                      type: 'number',
+                      label: 'Socket 超时时间',
+                      description: 'socket.setTimeout（毫秒），2 分钟=120000',
+                      min: 0,
+                      default: 120000,
+                      component: 'InputNumber'
+                    }
+                  }
                 }
               }
             },
@@ -1360,6 +1522,87 @@ export default class SystemConfig extends ConfigBase {
                   label: '404重定向',
                   default: '/',
                   component: 'Input'
+                },
+                publicIpApis: {
+                  type: 'array',
+                  label: '公网 IP API 列表',
+                  description: '按顺序依次尝试的公网 IP 查询接口，每行一个 URL',
+                  itemType: 'string',
+                  default: ['https://ifconfig.me/ip', 'https://api.ipify.org', 'https://icanhazip.com', 'https://ipinfo.io/ip'],
+                  component: 'Tags'
+                },
+                publicIpTimeoutMs: {
+                  type: 'number',
+                  label: '公网 IP 请求超时',
+                  description: '每个公网 IP API 调用的超时时间（毫秒）',
+                  min: 100,
+                  default: 3000,
+                  component: 'InputNumber'
+                },
+                udpProbe: {
+                  type: 'object',
+                  label: 'UDP 探测配置',
+                  component: 'SubForm',
+                  fields: {
+                    host: {
+                      type: 'string',
+                      label: '探测目标主机',
+                      description: '用于 UDP 探测本机出口 IP 的远端地址',
+                      default: '223.5.5.5',
+                      component: 'Input'
+                    },
+                    port: {
+                      type: 'number',
+                      label: '探测目标端口',
+                      min: 1,
+                      max: 65535,
+                      default: 80,
+                      component: 'InputNumber'
+                    },
+                    timeoutMs: {
+                      type: 'number',
+                      label: '探测超时（毫秒）',
+                      min: 100,
+                      default: 3000,
+                      component: 'InputNumber'
+                    }
+                  }
+                },
+                trashCleanupIntervalMinutes: {
+                  type: 'number',
+                  label: 'trash 清理间隔（分钟）',
+                  min: 1,
+                  default: 60,
+                  component: 'InputNumber'
+                },
+                trashMaxAgeHours: {
+                  type: 'number',
+                  label: 'trash 最大保留时间（小时）',
+                  min: 1,
+                  default: 24,
+                  component: 'InputNumber'
+                },
+                trashPreserve: {
+                  type: 'array',
+                  label: 'trash 保留文件列表',
+                  description: '在 trash 目录中永久保留的文件/目录名称，每行一个',
+                  itemType: 'string',
+                  default: ['.gitignore', 'instruct.txt'],
+                  component: 'Tags'
+                },
+                cache: {
+                  type: 'object',
+                  label: '内部缓存',
+                  component: 'SubForm',
+                  fields: {
+                    ttlMs: {
+                      type: 'number',
+                      label: '默认缓存 TTL（毫秒）',
+                      min: 0,
+                      default: 60000,
+                      component: 'InputNumber'
+                    }
+                  }
                 }
               }
             }
