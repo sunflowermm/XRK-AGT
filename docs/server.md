@@ -13,6 +13,7 @@
 - [反向代理系统](#反向代理系统)
 - [WebSocket 支持](#websocket-支持)
 - [静态文件服务](#静态文件服务)
+- [前端工程接入（React/Vue 等）](#前端工程接入reactvue-等)
 - [安全与中间件](#安全与中间件)
 - [平台 SDK 适配度](#平台-sdk-适配度)
 - [快速搭建指南](#快速搭建指南)
@@ -705,6 +706,117 @@ static:
 - **功能完整**：API测试、配置管理、插件管理、设备管理等
 
 ---
+
+## 前端工程接入（React/Vue 等）
+
+本章用于说明：**AGT 并不只支持“静态网页”**。只要你的前端最终表现为：
+
+- **静态资源**（HTML/CSS/JS/图片）或
+- **一个可被反向代理的 HTTP 服务**（例如 Vite/webpack dev server、Next/Nuxt SSR 服务）
+
+就可以运行在 AGT 的 Server 体系内，并通过统一端口对外提供访问。
+
+### 接入方式总览
+
+- **方式 A：静态资源（零依赖）**
+  - **适用**：纯静态站点、打包后的 SPA（`dist/` / `build/`）
+  - **做法**：把构建产物放到 `core/*-Core/www/<你的目录>/` 下，由静态文件服务直接托管
+
+- **方式 B：开发态工程（自动拉起 dev server + 反向代理）**
+  - **适用**：React/Vue/Svelte 等 Vite 工程、webpack dev server、任意本地前端开发服务器
+  - **做法**：在 `core/*-Core/www/**/` 放置一个 `sign.json`，声明如何启动、端口、挂载路径；AGT 启动时会自动扫描并拉起该前端项目，然后把 `mount` 路径反代到对应端口
+
+- **方式 C：SSR/全栈前端（Next/Nuxt 等）**
+  - **适用**：Next.js / Nuxt / 自建 SSR
+  - **做法**：同样用 `sign.json` 拉起服务并反代；但需要额外配置框架的 `basePath` / `app.baseURL` / 资源前缀，确保在子路径挂载下资源不 404
+
+### `sign.json`（前端项目声明）说明
+
+放置位置：`core/*-Core/www/**/sign.json`
+
+核心字段（最小可用）：
+
+- **`enabled`**：是否启用该前端项目
+- **`id`**：前端项目 ID（也会用于默认挂载路径）
+- **`command` / `args`**：启动命令，例如 `pnpm dev`
+- **`port`**：dev server 监听端口
+- **`proxy.mount`**：挂载路径，例如 `/example`
+
+可选字段（推荐）：
+
+- **`cwd`**：启动工作目录（默认是 `sign.json` 所在目录）
+- **`env`**：注入给子进程的环境变量
+- **`autoRestart`**：异常退出时是否自动重启
+
+示例：
+
+```json
+{
+  "id": "example",
+  "name": "Example-Core 前端开发示例",
+  "enabled": true,
+  "command": "pnpm",
+  "args": ["dev"],
+  "port": 4173,
+  "proxy": { "mount": "/example" },
+  "env": { "BROWSER": "none" },
+  "autoRestart": true
+}
+```
+
+### 前端框架适配程度（推荐组合）
+
+> 适配程度含义：**✅ 无痛** / **🟡 需少量配置** / **🟠 需较多配置**。
+
+| 框架/类型 | 开发态（dev server + 反代） | 生产态（构建产物托管） | 备注 |
+|---|---|---|---|
+| **React（Vite）** | ✅ | ✅ | 推荐；路由需注意 `basename` |
+| **Vue（Vite）** | ✅ | ✅ | 推荐；Vue Router 需注意 `history base` |
+| **Svelte（Vite）** | ✅ | ✅ | 推荐；同类 Vite 工程通用 |
+| **React（CRA / webpack）** | 🟡 | ✅ | 子路径挂载时要处理资源路径与路由 base |
+| **Next.js（SSR）** | 🟠 | 🟡 | 需要 `basePath/assetPrefix`；HMR WS 可能绕过主服务直连 dev 端口 |
+| **Nuxt（SSR）** | 🟠 | 🟡 | 需要配置 baseURL 与静态资源前缀 |
+| **纯静态站** | 不需要 | ✅ | 放到 `www/` 目录即可 |
+
+### 子路径挂载的路由与资源路径建议
+
+当你把前端挂载到 `/example` 这类**非根路径**时，常见需要调整：
+
+- **前端路由 base**
+  - React Router：设置 `basename="/example"`
+  - Vue Router：设置 `history: createWebHistory('/example/')`
+  - Next：`basePath: '/example'`
+  - Nuxt：`app: { baseURL: '/example/' }`
+
+- **静态资源 base**
+  - Vite：一般保持默认即可；如果遇到资源路径问题，再考虑 `base`（取决于你的构建方式与路由策略）
+
+### 关于 Vite HMR 的 WebSocket “fallback” 提示
+
+你可能会看到类似：
+
+> `[vite] Direct websocket connection fallback ...`
+
+这通常表示：**HMR 的 WebSocket 无法通过主服务的反代链路建立**，Vite 会回退为直接连接 dev server 端口。它一般不影响页面显示。
+
+如需消除该提示/稳定 HMR，可选方案：
+
+- **方案 1（最简单）**：忽略提示（开发体验基本正常）
+- **方案 2**：直接打开 dev server 地址（如 `http://127.0.0.1:4173`）开发
+- **方案 3（Vite 配置）**：在 `vite.config.*` 中显式指定 HMR 端口，让客户端直接连 dev server：
+
+```js
+export default {
+  server: {
+    hmr: {
+      protocol: 'ws',
+      host: '127.0.0.1',
+      port: 4173,
+      clientPort: 4173
+    }
+  }
+}
+```
 
 ## 安全与中间件
 

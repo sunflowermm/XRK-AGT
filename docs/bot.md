@@ -141,8 +141,6 @@ flowchart LR
     style Watch fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
     style Online fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-read_file
 
 ### 关闭流程
 
