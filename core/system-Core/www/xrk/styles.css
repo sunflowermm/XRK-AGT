@@ -1114,7 +1114,10 @@ select.form-input {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* 保证主区域始终跟随白色卡片宽度，自适应屏幕且不撑破容器 */
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .chat-header {
@@ -4074,13 +4077,6 @@ body.dark .json-boolean { color: #f87171; }
 
 .ai-settings-btn svg {
   flex-shrink: 0;
-}
-
-.chat-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 @media (max-width: 768px) {
