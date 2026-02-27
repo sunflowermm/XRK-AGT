@@ -7,3 +7,12 @@ xrk/**
 !xrk/lib
 !xrk/lib/chart.umd.min.js
 !xrk/lib/mermaid.min.js
+!xrk/lib/codemirror
+!xrk/lib/codemirror/lib
+!xrk/lib/codemirror/lib/codemirror.min.js
+!xrk/lib/codemirror/lib/codemirror.min.css
+!xrk/lib/codemirror/theme
+!xrk/lib/codemirror/theme/monokai.min.css
+!xrk/lib/codemirror/mode
+!xrk/lib/codemirror/mode/javascript
+!xrk/lib/codemirror/mode/javascript/javascript.min.js

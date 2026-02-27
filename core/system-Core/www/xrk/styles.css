@@ -1815,6 +1815,7 @@ select.form-input {
 .chat-reply-content {
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3772,6 +3773,8 @@ body.dark .json-boolean { color: #f87171; }
 .data-table {
   width: 100%;
   border-collapse: collapse;
+  /* 固定列宽，配合单元格内换行，避免在窄屏下把父级卡片撑宽 */
+  table-layout: fixed;
 }
 
 .data-table th,
@@ -3779,6 +3782,9 @@ body.dark .json-boolean { color: #f87171; }
   padding: 12px 16px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  /* 进程名 / 请求路径 等长字符串在移动端会自动换行，不再溢出卡片 */
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .data-table th {

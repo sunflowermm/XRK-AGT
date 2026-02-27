@@ -3682,7 +3682,7 @@ class App {
         }
       }
 
-      const apiKey = localStorage.getItem('apiKey') || BotUtil.apiKey || '';
+      const apiKey = localStorage.getItem('apiKey') || '';
       const provider = this._chatSettings.provider || '';
       const persona = this._chatSettings.persona || '';
 
@@ -3791,7 +3791,7 @@ class App {
         messages.push({ role: m.role, content: m.text });
       });
 
-      const apiKey = localStorage.getItem('apiKey') || BotUtil.apiKey || '';
+      const apiKey = localStorage.getItem('apiKey') || '';
       const provider = this._chatSettings.provider || this._llmOptions?.defaultProfile || '';
 
       const requestBody = {
@@ -6903,7 +6903,7 @@ class App {
       document.head.appendChild(script);
     });
     
-    const base = 'https://cdn.jsdelivr.net/npm/codemirror@5.65.2';
+    const base = 'lib/codemirror';
     try {
       await loadCSS(`${base}/lib/codemirror.min.css`);
       await loadCSS(`${base}/theme/monokai.min.css`);
