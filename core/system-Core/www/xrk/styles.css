@@ -1258,6 +1258,22 @@ select.form-input {
   .chat-setting label {
     font-size: 11px;
   }
+
+  /* 移动端：强制聊天区域所有主要块级元素等宽于屏幕，防止某一模式把整体撑宽 */
+  .chat-container,
+  .chat-sidebar,
+  .chat-main,
+  .chat-messages,
+  .chat-input-area,
+  .voice-chat-center {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .voice-input {
+    max-width: 100%;
+  }
 }
 
 .emotion-display {
@@ -3869,51 +3885,36 @@ body.dark .json-boolean { color: #f87171; }
     min-height: 0;
   }
 
-  /* 移动端 Voice 模式：完全改成单列布局，避免左右两列相加把容器撑宽 */
-  .chat-container.voice-mode {
-    flex-direction: column;
-  }
-
-  .chat-container.voice-mode .chat-sidebar {
-    display: none;
-  }
-
-  .chat-container.voice-mode .chat-main {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  /* Voice 模式移动端适配：内容整体缩放并保持垂直居中 */
+  /* Voice 模式移动端适配：内容整体缩放 */
   .chat-container.voice-mode .chat-main {
     align-items: center;
     justify-content: center;
   }
-
+  
   .voice-chat-center {
-    width: 100%;
     max-width: 360px;
     padding: 24px 16px 16px;
     margin: 0 auto;
   }
-
+  
   .voice-emotion-display {
     font-size: 80px;
   }
-
+  
   .voice-status {
     font-size: 14px;
   }
-
+  
   .voice-mic-btn {
     width: 64px;
     height: 64px;
   }
-
+  
   .voice-mic-btn svg {
     width: 30px;
     height: 30px;
   }
-
+  
   .voice-clear-btn {
     margin-top: 16px;
     font-size: 13px;
