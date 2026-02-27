@@ -25,7 +25,7 @@ export default class VolcengineASRConfig extends ConfigBase {
           wsUrl: {
             type: 'string',
             label: 'WebSocket 地址',
-            description: '火山引擎 ASR WebSocket 服务地址',
+            description: '火山引擎 ASR WebSocket 服务地址（大模型异步接口），一般保持默认即可，如需切换区域/产品请按官方文档替换为对应的 wss 地址',
             default: 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async',
             component: 'Input'
           },

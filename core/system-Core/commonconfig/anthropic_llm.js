@@ -21,6 +21,7 @@ export default class AnthropicLLMConfig extends ConfigBase {
           baseUrl: {
             type: 'string',
             label: 'API 基础地址',
+            description: 'Anthropic Messages API 基础地址，官方为 https://api.anthropic.com/v1',
             default: 'https://api.anthropic.com/v1',
             component: 'Input'
           },

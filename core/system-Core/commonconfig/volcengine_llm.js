@@ -25,7 +25,7 @@ export default class VolcengineLLMConfig extends ConfigBase {
           baseUrl: {
             type: 'string',
             label: 'API 基础地址',
-            description: '火山引擎豆包 API 基础地址',
+            description: '火山引擎豆包 API 基础地址，通常以 /api/v3 结尾',
             default: 'https://ark.cn-beijing.volces.com/api/v3',
             component: 'Input'
           },

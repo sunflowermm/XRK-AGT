@@ -24,8 +24,20 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
             component: 'ArrayForm',
             itemType: 'object',
             fields: {
-              key: { type: 'string', label: '运营商标识（provider/model）', default: '', component: 'Input' },
-              label: { type: 'string', label: '展示名称', default: '', component: 'Input' },
+              key: {
+                type: 'string',
+                label: '运营商标识（provider/model）',
+                description: '用于在 aistream.llm.Provider 或前端下拉中引用的唯一 key，例如 volcengine、openai-cn、my-gateway',
+                default: '',
+                component: 'Input'
+              },
+              label: {
+                type: 'string',
+                label: '展示名称',
+                description: '给用户看的名称，例如「火山引擎·豆包」或「自建 OpenAI 网关」',
+                default: '',
+                component: 'Input'
+              },
               protocol: {
                 type: 'string',
                 label: '协议类型',
@@ -34,7 +46,13 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
                 default: 'openai',
                 component: 'Select'
               },
-              baseUrl: { type: 'string', label: 'API 基础地址', description: '如 https://api.openai.com/v1 或任意兼容网关', default: '', component: 'Input' },
+              baseUrl: {
+                type: 'string',
+                label: 'API 基础地址',
+                description: '完整的基础地址，通常以 /v1 结尾，例如 https://api.openai.com/v1 或任意兼容网关',
+                default: '',
+                component: 'Input'
+              },
               path: {
                 type: 'string',
                 label: '接口路径',
@@ -42,7 +60,13 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
                 default: '/chat/completions',
                 component: 'Input'
               },
-              apiKey: { type: 'string', label: 'API Key', default: '', component: 'InputPassword' },
+              apiKey: {
+                type: 'string',
+                label: 'API Key',
+                description: '下游厂商颁发的密钥，仅在 authMode=bearer/api-key 时生效',
+                default: '',
+                component: 'InputPassword'
+              },
               authMode: {
                 type: 'string',
                 label: '认证方式',
@@ -51,24 +75,147 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
                 default: 'bearer',
                 component: 'Select'
               },
-              authHeaderName: { type: 'string', label: '自定义认证头名', default: '', component: 'Input' },
-              model: { type: 'string', label: '下游模型名（model）', default: '', component: 'Input' },
-              temperature: { type: 'number', label: 'temperature', min: 0, max: 2, default: 0.7, component: 'InputNumber' },
-              maxCompletionTokens: { type: 'number', label: 'max_completion_tokens', min: 1, default: 4096, component: 'InputNumber' },
-              topP: { type: 'number', label: 'top_p', min: 0, max: 1, default: 1.0, component: 'InputNumber' },
-              presencePenalty: { type: 'number', label: 'presence_penalty', min: -2, max: 2, default: 0, component: 'InputNumber' },
-              frequencyPenalty: { type: 'number', label: 'frequency_penalty', min: -2, max: 2, default: 0, component: 'InputNumber' },
-              serviceTier: { type: 'string', label: 'service_tier', enum: ['auto', 'default', 'flex', 'scale', 'priority'], default: 'auto', component: 'Select' },
-              promptCacheKey: { type: 'string', label: 'prompt_cache_key', default: '', component: 'Input' },
-              promptCacheRetention: { type: 'string', label: 'prompt_cache_retention', enum: ['in-memory', '24h'], default: 'in-memory', component: 'Select' },
-              safetyIdentifier: { type: 'string', label: 'safety_identifier', default: '', component: 'Input' },
-              reasoningEffort: { type: 'string', label: 'reasoning_effort', enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'], default: 'medium', component: 'Select' },
-              timeout: { type: 'number', label: '超时时间(ms)', min: 1000, default: 360000, component: 'InputNumber' },
-              enableTools: { type: 'boolean', label: '启用工具调用（MCP）', default: true, component: 'Switch' },
-              toolChoice: { type: 'string', label: 'tool_choice', default: 'auto', component: 'Input' },
-              parallelToolCalls: { type: 'boolean', label: 'parallel_tool_calls', default: true, component: 'Switch' },
-              maxToolRounds: { type: 'number', label: '最大工具轮次', min: 1, max: 20, default: 7, component: 'InputNumber' },
-              enableStream: { type: 'boolean', label: '启用流式', default: true, component: 'Switch' },
+              authHeaderName: {
+                type: 'string',
+                label: '自定义认证头名',
+                description: '当 authMode=header 时使用该头名携带 API Key，例如 X-Api-Key',
+                default: '',
+                component: 'Input'
+              },
+              model: {
+                type: 'string',
+                label: '下游模型名（model）',
+                description: '下游实际模型标识，例如 gpt-4o、qwen3-vl-plus，具体取决于运营商控制台',
+                default: '',
+                component: 'Input'
+              },
+              temperature: {
+                type: 'number',
+                label: 'temperature',
+                description: '采样温度，0 越保守、2 越随机，推荐 0.5-1.0',
+                min: 0,
+                max: 2,
+                default: 0.7,
+                component: 'InputNumber'
+              },
+              maxCompletionTokens: {
+                type: 'number',
+                label: 'max_completion_tokens',
+                description: '单次回答允许使用的最大输出 tokens 数，过大可能被运营商拒绝',
+                min: 1,
+                default: 4096,
+                component: 'InputNumber'
+              },
+              topP: {
+                type: 'number',
+                label: 'top_p',
+                description: '核采样参数，越接近 1 结果越多样，一般与 temperature 二选一调整',
+                min: 0,
+                max: 1,
+                default: 1.0,
+                component: 'InputNumber'
+              },
+              presencePenalty: {
+                type: 'number',
+                label: 'presence_penalty',
+                description: '提升已出现话题的惩罚系数（-2~2），>0 时鼓励模型少重复说过的内容',
+                min: -2,
+                max: 2,
+                default: 0,
+                component: 'InputNumber'
+              },
+              frequencyPenalty: {
+                type: 'number',
+                label: 'frequency_penalty',
+                description: '提升高频词惩罚系数（-2~2），>0 时减少口头禅和词语重复',
+                min: -2,
+                max: 2,
+                default: 0,
+                component: 'InputNumber'
+              },
+              serviceTier: {
+                type: 'string',
+                label: 'service_tier',
+                description: '部分官方模型支持的服务等级，auto 通常即可，详见各家文档',
+                enum: ['auto', 'default', 'flex', 'scale', 'priority'],
+                default: 'auto',
+                component: 'Select'
+              },
+              promptCacheKey: {
+                type: 'string',
+                label: 'prompt_cache_key',
+                description: '用于复用厂商侧 Prompt 缓存的 key，相同 key 的调用可能命中缓存',
+                default: '',
+                component: 'Input'
+              },
+              promptCacheRetention: {
+                type: 'string',
+                label: 'prompt_cache_retention',
+                description: 'Prompt 缓存保存策略，in-memory 为进程内缓存，24h 为厂商侧 24 小时缓存',
+                enum: ['in-memory', '24h'],
+                default: 'in-memory',
+                component: 'Select'
+              },
+              safetyIdentifier: {
+                type: 'string',
+                label: 'safety_identifier',
+                description: '安全策略标识（如厂商预配置的安全档位 ID），留空则使用默认策略',
+                default: '',
+                component: 'Input'
+              },
+              reasoningEffort: {
+                type: 'string',
+                label: 'reasoning_effort',
+                description: '推理强度，仅支持推理型模型；越高越慢但思考更充分',
+                enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+                default: 'medium',
+                component: 'Select'
+              },
+              timeout: {
+                type: 'number',
+                label: '超时时间(ms)',
+                description: '单次调用允许的最大时长，建议不低于 60000，过低可能导致长回答被中断',
+                min: 1000,
+                default: 360000,
+                component: 'InputNumber'
+              },
+              enableTools: {
+                type: 'boolean',
+                label: '启用工具调用（MCP）',
+                description: '开启后会自动把 MCP 工具注入给该运营商支持的模型，无需手动写 tools',
+                default: true,
+                component: 'Switch'
+              },
+              toolChoice: {
+                type: 'string',
+                label: 'tool_choice',
+                description: '工具调用模式：auto/none/required，含义遵循 OpenAI Chat Completions 协议',
+                default: 'auto',
+                component: 'Input'
+              },
+              parallelToolCalls: {
+                type: 'boolean',
+                label: 'parallel_tool_calls',
+                description: '支持时允许模型一次并行触发多个工具，减少多轮往返延迟',
+                default: true,
+                component: 'Switch'
+              },
+              maxToolRounds: {
+                type: 'number',
+                label: '最大工具轮次',
+                description: '单次对话中允许 AI 触发工具的最大轮次，防止工具死循环',
+                min: 1,
+                max: 20,
+                default: 7,
+                component: 'InputNumber'
+              },
+              enableStream: {
+                type: 'boolean',
+                label: '启用流式',
+                description: '开启后使用 SSE 流式返回（前端 /api/ai/stream、/api/v3/chat/completions 可感知）',
+                default: true,
+                component: 'Switch'
+              },
               headers: { 
                 type: 'object', 
                 label: '额外请求头',

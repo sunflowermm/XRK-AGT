@@ -18,7 +18,7 @@ export default class ToolsConfig extends ConfigBase {
           permission: {
             type: 'string',
             label: '权限控制',
-            description: '可设置为master, admin, all',
+            description: '限制谁可以在终端执行命令：master=仅主人；admin=主人+管理员；all=所有人（不推荐线上开启）',
             enum: ['master', 'admin', 'all'],
             default: 'master',
             component: 'Select'
@@ -102,7 +102,7 @@ export default class ToolsConfig extends ConfigBase {
           printMode: {
             type: 'string',
             label: '打印模式',
-            description: '打印模式: full, simple',
+            description: '命令输出在聊天里的展示方式：full=完整结构化打印（含对象结构）；simple=只输出字符串内容，适合长日志',
             enum: ['full', 'simple'],
             default: 'full',
             component: 'Select'

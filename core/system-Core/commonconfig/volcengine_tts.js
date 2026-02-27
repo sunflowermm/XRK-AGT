@@ -98,7 +98,7 @@ export default class VolcengineTTSConfig extends ConfigBase {
           emotion: {
             type: 'string',
             label: '音色情感',
-            description: '音色情感（对应文档的emotion字段，如happy、sad、angry等），仅部分音色支持设置情感，详见大模型音色列表-多情感音色',
+            description: '音色情感（对应文档的 emotion 字段，如 happy、sad、angry 等），仅部分音色支持设置情感，详见大模型音色列表-多情感音色；不确定时可先用 happy/neutral 测试',
             enum: ['happy', 'sad', 'neutral', 'angry', 'surprise'],
             default: 'happy',
             component: 'Select'

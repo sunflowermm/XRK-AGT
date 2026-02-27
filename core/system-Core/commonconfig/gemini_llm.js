@@ -100,6 +100,7 @@ export default class GeminiLLMConfig extends ConfigBase {
           enableStream: {
             type: 'boolean',
             label: '启用流式输出',
+            description: '开启后优先使用 streamGenerateContent 流式接口，将增量内容推送到前端',
             default: true,
             component: 'Switch'
           },

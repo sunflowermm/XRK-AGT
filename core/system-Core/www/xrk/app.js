@@ -5396,8 +5396,11 @@ class App {
       case 'inputnumber':
       case 'number':
         return `<input type="number" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${meta.min ?? ''}" max="${meta.max ?? ''}" step="${meta.step ?? 'any'}" placeholder="${placeholder}" ${disabled}>`;
-      case 'inputpassword':
-        return `<input type="password" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      case 'inputpassword': {
+        // 为避免浏览器错误自动填充，将密码类配置字段显式关闭自动完成，并使用无意义的 name
+        const nofillName = `${inputId}-nofill`;
+        return `<input type="password" class="form-input" id="${inputId}" name="${this.escapeHtml(nofillName)}" autocomplete="new-password" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      }
       case 'subform': {
         // SubForm 类型：用于“自由对象/Map”场景（例如 headers/extraBody）。
         // 注意：有子字段的 SubForm 会在 renderFieldTree 中展开显示，不会走到这里。

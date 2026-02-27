@@ -113,7 +113,7 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
           response_format: {
             type: 'string',
             label: '响应格式',
-            description: '响应格式，如 json_object',
+            description: '响应格式，如 json_object；留空按默认文本模式返回',
             default: '',
             component: 'Input'
           },

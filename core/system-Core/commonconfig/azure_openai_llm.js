@@ -28,6 +28,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           apiKey: {
             type: 'string',
             label: 'API Key',
+            description: 'Azure OpenAI 资源访问密钥（必填），在 Azure 门户的「密钥和终结点」页面可以查看',
             default: '',
             component: 'InputPassword'
           },
@@ -41,6 +42,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           apiVersion: {
             type: 'string',
             label: 'api-version',
+            description: 'Azure OpenAI API 版本号，需要与当前环境支持的版本保持一致',
             default: '2024-10-21',
             component: 'Input'
           },
@@ -54,6 +56,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           temperature: {
             type: 'number',
             label: '温度',
+            description: '采样温度，0 越保守、2 越随机，推荐 0.5-1.0',
             min: 0,
             max: 2,
             default: 0.7,
@@ -62,6 +65,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           maxTokens: {
             type: 'number',
             label: '最大 Tokens（max_tokens）',
+            description: '单次回答允许使用的最大输出 tokens 数，过大可能被 Azure 拒绝',
             min: 1,
             default: 4096,
             component: 'InputNumber'
@@ -69,6 +73,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           topP: {
             type: 'number',
             label: 'Top P（top_p）',
+            description: '核采样参数，越接近 1 结果越多样，一般与 temperature 二选一调整',
             min: 0,
             max: 1,
             default: 1,
@@ -77,6 +82,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           presencePenalty: {
             type: 'number',
             label: 'Presence Penalty',
+            description: '存在惩罚（-2~2），>0 时鼓励模型少重复说过的内容',
             min: -2,
             max: 2,
             default: 0,
@@ -85,6 +91,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           frequencyPenalty: {
             type: 'number',
             label: 'Frequency Penalty',
+            description: '频率惩罚（-2~2），>0 时减少口头禅和高频词复读',
             min: -2,
             max: 2,
             default: 0,
@@ -93,24 +100,28 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           enableTools: {
             type: 'boolean',
             label: '启用工具调用（MCP）',
+            description: '开启后会自动把 MCP 工具映射为 Azure tools 字段，需确保部署的模型支持 tool_calls',
             default: true,
             component: 'Switch'
           },
           toolChoice: {
             type: 'string',
             label: '工具选择模式（tool_choice）',
+            description: '工具调用模式：auto/none/required 等，含义遵循 Azure Chat Completions 协议',
             default: 'auto',
             component: 'Input'
           },
           parallelToolCalls: {
             type: 'boolean',
             label: '并行工具调用（parallel_tool_calls）',
+            description: '支持时允许模型一次并行触发多个工具，减少多轮往返延迟',
             default: true,
             component: 'Switch'
           },
           maxToolRounds: {
             type: 'number',
             label: '最大工具轮次',
+            description: '单次对话中允许 AI 触发工具的最大轮次，防止工具死循环',
             min: 1,
             max: 20,
             default: 7,
@@ -119,6 +130,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           timeout: {
             type: 'number',
             label: '超时时间(ms)',
+            description: '单次调用允许的最大时长，建议不低于 60000，过低可能导致长回复被中断',
             min: 1000,
             default: 360000,
             component: 'InputNumber'
@@ -126,6 +138,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           enableStream: {
             type: 'boolean',
             label: '启用流式输出',
+            description: '开启后将使用 stream=true SSE 流式输出增量内容',
             default: true,
             component: 'Switch'
           },

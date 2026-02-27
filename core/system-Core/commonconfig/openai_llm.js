@@ -28,6 +28,7 @@ export default class OpenAILLMConfig extends ConfigBase {
           apiKey: {
             type: 'string',
             label: 'API Key',
+            description: 'OpenAI 官方或兼容网关颁发的密钥，必填，否则无法调用接口',
             default: '',
             component: 'InputPassword'
           },

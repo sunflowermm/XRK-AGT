@@ -16,7 +16,7 @@ export default class SystemConfig extends ConfigBase {
     super({
       name: 'system',
       displayName: '系统配置',
-      description: 'XRK-AGT 系统配置管理',
+      description: 'XRK-AGT 系统配置管理（日志/HTTP 服务器/设备/监控/LLM 工厂等都从这里拆分为子配置，前端可视化编辑时建议先从 agt/server/chatbot 入手）',
       filePath: '',
       fileType: 'yaml'
     });
@@ -1960,12 +1960,14 @@ export default class SystemConfig extends ConfigBase {
             host: {
               type: 'string',
               label: 'Redis地址',
+              description: 'Redis 实例的主机名或 IP，一般为 127.0.0.1 或 docker 容器名',
               default: '127.0.0.1',
               component: 'Input'
             },
             port: {
               type: 'number',
               label: 'Redis端口',
+              description: 'Redis 监听端口，默认 6379',
               min: 1,
               max: 65535,
               default: 6379,
@@ -1974,18 +1976,21 @@ export default class SystemConfig extends ConfigBase {
             username: {
               type: 'string',
               label: 'Redis用户名',
+              description: 'Redis 用户名（大多数单机环境可留空，仅启用 ACL/云服务时需要）',
               default: '',
               component: 'Input'
             },
             password: {
               type: 'string',
               label: 'Redis密码',
+              description: 'Redis 密码，留空表示无密码；生产环境建议务必设置',
               default: '',
               component: 'InputPassword'
             },
             db: {
               type: 'number',
               label: 'Redis数据库',
+              description: '逻辑库序号，默认 0，不同值相当于不同命名空间',
               min: 0,
               default: 0,
               component: 'InputNumber'
@@ -1998,13 +2003,14 @@ export default class SystemConfig extends ConfigBase {
                 connectionPoolSize: {
                   type: 'string',
                   label: '连接池大小',
-                  description: 'auto: 自动计算，或指定数字（3-50）',
+                  description: '连接池大小。auto 表示自动计算，也可填写具体数字（3-50）以限制并发连接数',
                   default: 'auto',
                   component: 'Input'
                 },
                 commandsQueueMaxLength: {
                   type: 'number',
                   label: '命令队列最大长度',
+                  description: '当 Redis 短暂不可用时最多排队多少条命令，超出将直接报错',
                   min: 1,
                   default: 5000,
                   component: 'InputNumber'
@@ -2012,9 +2018,10 @@ export default class SystemConfig extends ConfigBase {
                 connectTimeout: {
                   type: 'number',
                   label: '连接超时时间（毫秒）',
+                  description: '与 Redis 建立 TCP 连接的超时时间，单位毫秒',
                   min: 1000,
                   default: 10000,
-              component: 'InputNumber'
+                  component: 'InputNumber'
                 }
               }
             }
@@ -2034,12 +2041,14 @@ export default class SystemConfig extends ConfigBase {
             host: {
               type: 'string',
               label: 'MongoDB地址',
+              description: 'MongoDB 主机名或 IP，一般为 127.0.0.1 或 docker 容器名',
               default: '127.0.0.1',
               component: 'Input'
             },
             port: {
               type: 'number',
               label: 'MongoDB端口',
+              description: 'MongoDB 监听端口，默认 27017',
               min: 1,
               max: 65535,
               default: 27017,
@@ -2048,29 +2057,33 @@ export default class SystemConfig extends ConfigBase {
             username: {
               type: 'string',
               label: 'MongoDB用户名',
+              description: 'MongoDB 认证用户名，使用「用户名+密码」认证时填写',
               default: '',
               component: 'Input'
             },
             password: {
               type: 'string',
               label: 'MongoDB密码',
+              description: 'MongoDB 认证密码，与上方用户名配套使用',
               default: '',
               component: 'InputPassword'
             },
             database: {
               type: 'string',
               label: 'MongoDB数据库名称',
+              description: '默认连接的数据库名称，例如 xrk 或 admin',
               component: 'Input'
             },
             options: {
               type: 'object',
               label: 'MongoDB连接选项',
-              description: 'MongoDB连接选项（可选）',
+              description: 'MongoDB 连接池与超时等高级选项（可选，一般保持默认即可）',
               component: 'SubForm',
               fields: {
                 maxPoolSize: {
                   type: 'number',
                   label: '最大连接池大小',
+                  description: '连接池内允许的最大连接数，数值越大并发承载越高，但占用资源也越多',
                   min: 1,
                   default: 50,
                   component: 'InputNumber'
@@ -2078,6 +2091,7 @@ export default class SystemConfig extends ConfigBase {
                 minPoolSize: {
                   type: 'number',
                   label: '最小连接池大小',
+                  description: '连接池内长期保留的最小连接数',
                   min: 1,
                   default: 3,
                   component: 'InputNumber'
@@ -2085,6 +2099,7 @@ export default class SystemConfig extends ConfigBase {
                 connectTimeoutMS: {
                   type: 'number',
                   label: '连接超时时间(ms)',
+                  description: '与 MongoDB 建立连接的超时时间，单位毫秒',
                   min: 1000,
                   default: 10000,
                   component: 'InputNumber'
@@ -2092,6 +2107,7 @@ export default class SystemConfig extends ConfigBase {
                 serverSelectionTimeoutMS: {
                   type: 'number',
                   label: '服务器选择超时时间(ms)',
+                  description: '驱动在集群中选择可用节点的超时时间，超时会报 “server selection timed out”',
                   min: 1000,
                   default: 10000,
                   component: 'InputNumber'
@@ -2113,12 +2129,14 @@ export default class SystemConfig extends ConfigBase {
             enabled: {
               type: 'boolean',
               label: '启用工作流',
+              description: '关闭后将禁用所有基于 AIStream 的工作流（包括 Web 控制台和聊天里的 AI 功能）',
               default: true,
               component: 'Switch'
             },
             streamDir: {
               type: 'string',
               label: '工作流目录',
+              description: '工作流定义所在目录，相对项目根目录的路径',
               default: 'core/stream',
               component: 'Input'
             },
@@ -2137,12 +2155,14 @@ export default class SystemConfig extends ConfigBase {
                 debug: {
                   type: 'boolean',
                   label: '调试日志',
+                  description: '启用后会输出更详细的工作流调试日志，仅建议在开发/排错时打开',
                   default: false,
                   component: 'Switch'
                 },
                 maxConcurrent: {
                   type: 'number',
                   label: '并发执行限制',
+                  description: '同一时刻允许同时运行的工作流实例数量上限',
                   min: 1,
                   default: 5,
                   component: 'InputNumber'

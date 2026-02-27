@@ -346,8 +346,8 @@ async function handleChatCompletionsV3(req, res) {
           created: now,
           model: modelName,
           delta: isFirstChunk ? { role: 'assistant', content: delta } : { content: delta },
-          finishReason: null,
-          mcpTools: hasMcpTools ? metadata.mcp_tools : undefined
+          finishReason: null
+          // 工具结果统一通过“纯 mcp_tools chunk”下发，避免同一批工具在文本chunk和独立chunk中各出现一次
         }));
 
         isFirstChunk = false;

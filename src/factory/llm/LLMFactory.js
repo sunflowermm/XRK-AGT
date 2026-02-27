@@ -167,11 +167,20 @@ export default class LLMFactory {
     }
 
     const ClientClass = resolved._clientClass || OpenAICompatibleLLMClient;
+
+    // 避免上游传入的 undefined 字段（尤其是 baseUrl/apiKey）覆盖 provider 默认配置
+    const sanitizedConfig = {};
+    for (const [key, value] of Object.entries(config || {})) {
+      if (value !== undefined) {
+        sanitizedConfig[key] = value;
+      }
+    }
+
     const { _clientClass, ...clientConfig } = {
       ...resolved,
-      ...config,
+      ...sanitizedConfig,
       provider,
-      protocol: normalizeProtocol(config.protocol || resolved.protocol) || resolved.protocol
+      protocol: normalizeProtocol(sanitizedConfig.protocol || resolved.protocol) || resolved.protocol
     };
 
     return new ClientClass(clientConfig);
