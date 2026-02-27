@@ -3869,6 +3869,20 @@ body.dark .json-boolean { color: #f87171; }
     min-height: 0;
   }
 
+  /* 移动端 Voice 模式：完全改成单列布局，避免左右两列相加把容器撑宽 */
+  .chat-container.voice-mode {
+    flex-direction: column;
+  }
+
+  .chat-container.voice-mode .chat-sidebar {
+    display: none;
+  }
+
+  .chat-container.voice-mode .chat-main {
+    width: 100%;
+    max-width: 100%;
+  }
+
   /* Voice 模式移动端适配：内容整体缩放并保持垂直居中 */
   .chat-container.voice-mode .chat-main {
     align-items: center;
