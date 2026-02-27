@@ -12,13 +12,17 @@ export class XWorkflow extends plugin {
       event: 'message',
       priority: 1000,
       // 注意：区分大小写，只有小写 "x" 才触发
-      rule: [{ reg: /^x\s*/, fnc: 'triggerWorkflow', permission: 'master' }]
+      // 不再使用全局 permission 拦截，内部自行静默判断权限
+      rule: [{ reg: /^x\s*/, fnc: 'triggerWorkflow' }]
     });
   }
 
   async triggerWorkflow() {
+    // 仅主人可用：非主人静默返回，不回复“暂无权限”
+    if (!this.e?.isMaster) return false;
+
     const msg = (this.e?.msg ?? '').trim();
-    const questionText = msg.replace(/^x\s*/i, '').trim();
+    const questionText = msg.replace(/^x\s*/, '').trim();
     if (!questionText) return this.reply('请输入要询问的内容，例如：x表情回应一下');
 
     const stream = this.getStream('chat');
