@@ -29,6 +29,10 @@ import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import HTTPBusinessLayer from '#utils/http-business.js';
 import FrontendLauncher from '#infrastructure/frontend/launcher.js';
 
+// 鉴权与路径常量（与 server.auth 配置、静态资源规则一致，避免硬编码分散）
+const AUTH_API_PREFIX = '/api';
+const AUTH_STATIC_EXT_REGEX = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i;
+
 /**
  * Bot主类
  * 
@@ -868,8 +872,7 @@ export default class Bot extends EventEmitter {
           // 跳过压缩的情况
           if (req.headers['x-no-compression']) return false;
           
-          // API请求：只压缩JSON和文本
-          if (req.path.startsWith('/api/')) {
+          if (this._isApiPath(req.path)) {
             const contentType = res.getHeader('content-type') || '';
             return compression.filter(req, res) && 
                    (contentType.includes('json') || contentType.includes('text'));
@@ -915,19 +918,8 @@ export default class Bot extends EventEmitter {
     this._setupBodyParsers();
     
     this.express.use((req, res, next) => {
-      const baseSkipPrefixes = [
-        '/api/',
-        '/media/',
-        '/uploads/',
-        '/File',
-        '/core/'
-      ];
-
-      // 根路径始终不做业务重定向，避免与前端入口形成闭环
-      if (req.path === '/' || req.path === '') {
-        return next();
-      }
-
+      const baseSkipPrefixes = [AUTH_API_PREFIX + '/', '/media/', '/uploads/', '/File', '/core/'];
+      if (!req.path || req.path === '/') return next();
       const redirectSkipPrefixes = baseSkipPrefixes.concat(frontendMountPrefixes || []);
       if (redirectSkipPrefixes.some(p => req.path.startsWith(p))) {
         return next();
@@ -1238,11 +1230,8 @@ export default class Bot extends EventEmitter {
     }
 
     // ========== 目录索引与静态文件服务 ==========
-    // 目录索引（仅对静态文件）
     this.express.use((req, res, next) => {
-      if (req.path.startsWith('/api/')) {
-        return next();
-      }
+      if (this._isApiPath(req.path)) return next();
       if (this._checkHeadersSent(res, next)) return;
       this._directoryIndexMiddleware(req, res, next);
     });
@@ -1316,12 +1305,8 @@ export default class Bot extends EventEmitter {
       }
     }
     
-    // 主 www 目录静态文件服务（根路径）
     this.express.use((req, res, next) => {
-      if (req.path.startsWith('/api/')) {
-        return next();
-      }
-      
+      if (this._isApiPath(req.path)) return next();
       if (this._checkHeadersSent(res, next)) return;
       
       const staticRoot = req.staticRoot || paths.www;
@@ -1338,11 +1323,8 @@ export default class Bot extends EventEmitter {
    * 跳过API路由，只处理静态文件请求
    */
   _directoryIndexMiddleware(req, res, next) {
-    if (req.path.startsWith('/api/')) {
-      return next();
-    }
-    
-    // 如果响应已发送，直接跳过
+    if (this._isApiPath(req.path)) return next();
+    if (res.headersSent) return next();
     if (res.headersSent) {
       return next();
     }
@@ -1444,13 +1426,9 @@ export default class Bot extends EventEmitter {
     }
   }
 
-  /**
-   * 静态文件安全中间件
-   * nginx风格：只处理静态文件，不拦截API路由
-   * 重要：必须跳过所有 /api/ 开头的路径，确保API路由优先
-   */
+  /** 静态文件安全中间件：跳过 API 路径，仅对静态路径做规范化与隐藏规则校验 */
   _staticSecurityMiddleware(req, res, next) {
-    if (req.path.startsWith('/api/')) {
+    if (this._isApiPath(req.path)) {
       return next();
     }
     
@@ -1773,9 +1751,14 @@ export default class Bot extends EventEmitter {
     return this.apiKey;
   }
 
+  /** 是否为需 API 鉴权的路径（/api 或 /api/*） */
+  _isApiPath(path) {
+    return path === AUTH_API_PREFIX || path.startsWith(AUTH_API_PREFIX + '/');
+  }
+
   /**
-   * 单条白名单项是否匹配路径（供 _isPathWhitelisted 使用）
-   * 规则：精确匹配 | 通配 *（前缀匹配）| 目录 /（前缀匹配）
+   * 单条白名单项是否匹配路径
+   * 规则：精确 | 通配 *（前缀）| 目录 /（前缀）
    */
   _whitelistEntryMatches(path, w) {
     if (w === path) return true;
@@ -1787,20 +1770,16 @@ export default class Bot extends EventEmitter {
     return false;
   }
 
-  /**
-   * 判断路径是否在白名单内（HTTP / WebSocket 共用）
-   * 规则：精确、通配(*)、目录(/)；/api 及 /api/* 仅匹配白名单中以 /api 开头的项
-   */
+  /** 路径是否在白名单内（HTTP/WS 共用）；API 路径仅匹配白名单中以 /api 开头的项 */
   _isPathWhitelisted(pathName, whitelist) {
-    const path = pathName.startsWith('/') ? pathName : `/${pathName}`;
-    const isApi = path === '/api' || path.startsWith('/api/');
-    const list = isApi ? whitelist.filter(w => w.startsWith('/api')) : whitelist;
-    return list.some(w => this._whitelistEntryMatches(path, w));
+    const p = pathName.startsWith('/') ? pathName : `/${pathName}`;
+    const list = this._isApiPath(p) ? whitelist.filter(w => w.startsWith(AUTH_API_PREFIX)) : whitelist;
+    return list.some(w => this._whitelistEntryMatches(p, w));
   }
 
   /**
    * 认证中间件（HTTP）
-   * 顺序：白名单 → 静态(非/api) → 本地连接 → [可选]同源Cookie(仅当配置开启且满足条件) → API密钥 → /api/* 校验
+   * 顺序：白名单 → 静态(非 API) → 本地 → [可选]同源 Cookie → API Key 关闭 → /api 鉴权
    */
   _authMiddleware(req, res, next) {
     if (this._checkHeadersSent(res, next)) return;
@@ -1809,15 +1788,14 @@ export default class Bot extends EventEmitter {
     req.sid = `${req.protocol}://${req.hostname}:${req.socket.localPort}${req.originalUrl}`;
 
     const authConfig = cfg.server.auth || {};
-    const whitelist = authConfig.whitelist || ['/', '/favicon.ico', '/health', '/status', '/robots.txt'];
+    const whitelist = authConfig.whitelist;
 
     if (this._isPathWhitelisted(req.path, whitelist)) {
       BotUtil.makeLog('debug', `[Auth] 放行：白名单 path=${req.path}`, '认证');
       return next();
     }
 
-    const isStaticFile = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i.test(req.path);
-    if (isStaticFile && !req.path.startsWith('/api/')) {
+    if (AUTH_STATIC_EXT_REGEX.test(req.path) && !this._isApiPath(req.path)) {
       BotUtil.makeLog('debug', `[Auth] 放行：静态资源 path=${req.path}`, '认证');
       return next();
     }
@@ -1827,7 +1805,6 @@ export default class Bot extends EventEmitter {
       return next();
     }
 
-    // 同源 Cookie 放行：仅当配置显式开启且（公网同源免 Key 开启 + Cookie + 同源）时放行
     const uiCookieCfg = cfg.server?.uiCookie || {};
     if (uiCookieCfg.enabled === true && uiCookieCfg.allowPublicSameOrigin === true) {
       try {
@@ -1840,10 +1817,7 @@ export default class Bot extends EventEmitter {
           return kv.slice(0, eq).trim() === cookieName && kv.slice(eq + 1).trim() === cookieValue;
         });
         const serverUrl = this.getServerUrl();
-        const origin = req.headers.origin || '';
-        const referer = req.headers.referer || '';
-        const sameOrigin = (origin && serverUrl && origin.startsWith(serverUrl)) ||
-                          (referer && serverUrl && referer.startsWith(serverUrl));
+        const sameOrigin = [req.headers.origin, req.headers.referer].some(h => h && serverUrl && String(h).startsWith(serverUrl));
         if (hasUiCookie && sameOrigin) {
           BotUtil.makeLog('debug', `[Auth] 放行：同源 Cookie path=${req.path} ip=${req.ip}`, '认证');
           return next();
@@ -1856,10 +1830,9 @@ export default class Bot extends EventEmitter {
       return next();
     }
 
-    if (req.path.startsWith('/api/')) {
-      const ok = this._checkApiAuthorization(req);
-      if (!ok) {
-        BotUtil.makeLog('debug', `[Auth] 拒绝：/api/* 鉴权未通过 path=${req.path} ip=${req.ip}`, '认证');
+    if (this._isApiPath(req.path)) {
+      if (!this._checkApiAuthorization(req)) {
+        BotUtil.makeLog('debug', `[Auth] 拒绝：API 鉴权未通过 path=${req.path} ip=${req.ip}`, '认证');
         if (!res.headersSent) {
           res.status(401).json({
             success: false,
@@ -1871,7 +1844,7 @@ export default class Bot extends EventEmitter {
         }
         return;
       }
-      BotUtil.makeLog('debug', `[Auth] 放行：/api/* 鉴权通过 path=${req.path}`, '认证');
+      BotUtil.makeLog('debug', `[Auth] 放行：API 鉴权通过 path=${req.path}`, '认证');
     }
 
     next();
@@ -2012,7 +1985,7 @@ export default class Bot extends EventEmitter {
       },
       auth: {
         apiKeyEnabled: cfg.server?.auth?.apiKey?.enabled !== false,
-        whitelist: cfg.server?.auth?.whitelist || []
+        whitelist: cfg.server?.auth?.whitelist
       }
     };
     
@@ -2226,23 +2199,20 @@ export default class Bot extends EventEmitter {
     req.sid = `ws://${req.headers.host || `${req.socket.localAddress}:${req.socket.localPort}`}${req.url}`;
     req.query = Object.fromEntries(new URL(req.sid).searchParams.entries());
     
-    // WebSocket 鉴权：与 HTTP 共用白名单 + 本地 + API Key 逻辑
     const authConfig = cfg.server.auth || {};
-    const whitelist = authConfig.whitelist || [];
-    const pathForCheck = req.url.split("?")[0];
-    const isWhitelisted = this._isPathWhitelisted(pathForCheck, whitelist);
-    
+    const whitelist = authConfig.whitelist;
+    const pathStr = req.url.split('?')[0];
+    const isWhitelisted = this._isPathWhitelisted(pathStr, whitelist);
+
     if (!isWhitelisted && !this._isLocalConnection(req.socket.remoteAddress)) {
       if (authConfig.apiKey?.enabled !== false && !this._checkApiAuthorization(req)) {
-        BotUtil.makeLog("error", `WebSocket认证失败：${req.url}`, '服务器');
-        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        BotUtil.makeLog('error', `WebSocket认证失败：${req.url}`, '服务器');
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         return socket.destroy();
       }
     }
-    
-    // 解析WebSocket路径（去除查询参数和开头的斜杠）
-    const pathWithoutQuery = req.url.split("?")[0];
-    const wsPath = pathWithoutQuery.startsWith('/') ? pathWithoutQuery.slice(1) : pathWithoutQuery;
+
+    const wsPath = pathStr.startsWith('/') ? pathStr.slice(1) : pathStr;
     
     if (!wsPath || !(wsPath in this.wsf)) {
       BotUtil.makeLog("warn", `WebSocket路径未找到: ${req.url} (解析为: ${wsPath}), 可用路径: ${Object.keys(this.wsf).join(', ')}`, '服务器');
@@ -2670,7 +2640,7 @@ export default class Bot extends EventEmitter {
       if (this._checkHeadersSent(res)) return;
       
       // API请求返回JSON格式404
-      if (req.path.startsWith('/api/')) {
+      if (this._isApiPath(req.path)) {
         return res.status(404).json({
           success: false,
           error: '未找到',
@@ -2710,7 +2680,7 @@ export default class Bot extends EventEmitter {
     this.express.use((err, req, res, next) => {
       if (this._checkHeadersSent(res, next, err)) return;
       
-      const isApiRequest = req.path.startsWith('/api/');
+      const isApiRequest = this._isApiPath(req.path);
       
       BotUtil.makeLog('error', `请求错误 [${req.requestId || 'unknown'}]: ${err.message}`, '服务器', err);
       
@@ -3186,11 +3156,10 @@ export default class Bot extends EventEmitter {
       console.log(`    ${chalk.cyan('•')} API密钥：${chalk.white(this.apiKey)}`);
       console.log(chalk.gray(`    使用 X-API-Key 请求头进行认证`));
       
-      if (authConfig.whitelist?.length) {
-        console.log(`    ${chalk.cyan('•')} 白名单路径：${chalk.white(authConfig.whitelist.length + '个')}`);
-        authConfig.whitelist.forEach(path => {
-          console.log(`      ${chalk.gray('•')} ${chalk.gray(path)}`);
-        });
+      const effectiveWhitelist = authConfig.whitelist;
+      if (effectiveWhitelist.length) {
+        console.log(`    ${chalk.cyan('•')} 白名单路径：${chalk.white(effectiveWhitelist.length + '个')}`);
+        effectiveWhitelist.forEach(p => console.log(`      ${chalk.gray('•')} ${chalk.gray(p)}`));
       }
     }
     
