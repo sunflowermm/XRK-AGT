@@ -1924,21 +1924,6 @@ class App {
         </div>
         ${!isVoiceMode ? `<div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>` : ''}
         </div>
-      <div class="chat-debug-panel" id="chatDebugPanel">
-        <div class="chat-debug-header">
-          <span>Chat Layout Debug</span>
-          <div class="chat-debug-actions">
-            <label class="chat-debug-checkbox">
-              <input type="checkbox" id="chatDebugAutoLog" checked>
-              <span>自动记录切换</span>
-            </label>
-            <button type="button" class="chat-debug-btn" id="chatDebugSnapshotBtn">记录一次</button>
-            <button type="button" class="chat-debug-btn" id="chatDebugCopyBtn">复制全部</button>
-            <button type="button" class="chat-debug-btn chat-debug-clear" id="chatDebugClearBtn">清空</button>
-          </div>
-        </div>
-        <textarea id="chatDebugOutput" class="chat-debug-output" readonly placeholder="这里会实时记录：当前模式、视口宽度、.chat-container/.chat-sidebar/.chat-main 宽度、是否存在横向滚动等信息。"></textarea>
-      </div>
       </div>
     `;
     
@@ -1953,7 +1938,6 @@ class App {
       this.ensureDeviceWs();
     }
     this._bindChatEvents();
-    this._initChatDebugPanel();
   }
 
   async _switchChatMode(mode, oldMode = null) {
@@ -1994,7 +1978,6 @@ class App {
     }
     this.ensureDeviceWs();
     this._bindChatEvents();
-    this._logChatLayoutDebug(`switchChatMode: ${oldMode || 'none'} -> ${mode}`);
 
     const cached = this._chatMessagesCache[mode];
     if (cached?.html) {
@@ -2010,99 +1993,6 @@ class App {
     this._chatMessagesCache[mode] = { scrollTop: box.scrollTop, scrollHeight: box.scrollHeight, html: box.innerHTML };
   }
 
-  _initChatDebugPanel() {
-    try {
-      const panel = document.getElementById('chatDebugPanel');
-      const output = document.getElementById('chatDebugOutput');
-      const copyBtn = document.getElementById('chatDebugCopyBtn');
-      const clearBtn = document.getElementById('chatDebugClearBtn');
-      const snapshotBtn = document.getElementById('chatDebugSnapshotBtn');
-      const autoLogCheckbox = document.getElementById('chatDebugAutoLog');
-      if (!panel || !output) return;
-
-      const append = (text) => {
-        const ts = new Date().toISOString().split('T')[1].replace('Z', '');
-        output.value += `[${ts}] ${text}\n`;
-        output.scrollTop = output.scrollHeight;
-      };
-
-      this._chatDebugAppend = append;
-      this._chatDebugAutoLog = () => Boolean(autoLogCheckbox?.checked);
-
-      if (copyBtn) {
-        copyBtn.onclick = async () => {
-          const val = output.value || '';
-          try {
-            if (navigator.clipboard?.writeText) {
-              await navigator.clipboard.writeText(val);
-            } else {
-              output.focus();
-              output.select();
-              document.execCommand('copy');
-            }
-            append('[info] 已复制到剪贴板');
-          } catch (e) {
-            append(`[error] 复制失败: ${e.message || e}`);
-          }
-        };
-      }
-
-      if (clearBtn) {
-        clearBtn.onclick = () => {
-          output.value = '';
-        };
-      }
-
-      const snapshot = () => {
-        const mode = this._chatMode;
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        const docWidth = document.documentElement.scrollWidth;
-        const hasHScroll = docWidth > vw + 1;
-
-        const container = document.querySelector('.chat-container');
-        const sidebar = document.querySelector('.chat-sidebar');
-        const main = document.querySelector('.chat-main');
-
-        const rectInfo = (el) => {
-          if (!el) return 'null';
-          const r = el.getBoundingClientRect();
-          return `w=${Math.round(r.width)}, x=${Math.round(r.left)}, right=${Math.round(r.right)}`;
-        };
-
-        append(
-          `mode=${mode} | vw=${vw}, vh=${vh}, docW=${docWidth}, hasHScroll=${hasHScroll} ` +
-          `| container[${rectInfo(container)}] sidebar[${rectInfo(sidebar)}] main[${rectInfo(main)}]`
-        );
-      };
-
-      this._chatDebugSnapshot = snapshot;
-
-      if (snapshotBtn) {
-        snapshotBtn.onclick = snapshot;
-      }
-
-      snapshot();
-      window.addEventListener('resize', () => {
-        if (!this._chatDebugAutoLog || !this._chatDebugAutoLog()) return;
-        snapshot();
-      });
-    } catch (e) {
-      // 调试面板失败不影响正常功能
-      console.warn('[chatDebug] init failed', e);
-    }
-  }
-
-  _logChatLayoutDebug(message) {
-    try {
-      if (!this._chatDebugSnapshot || !this._chatDebugAppend) return;
-      if (!this._chatDebugAutoLog || !this._chatDebugAutoLog()) return;
-      this._chatDebugAppend(String(message));
-      this._chatDebugSnapshot();
-    } catch (e) {
-      console.warn('[chatDebug] log failed', e);
-    }
-  }
 
   /** 共用：将历史消息渲染到 chatMessages 容器，不处理缓存与滚动 */
   _renderHistoryIntoBox(box, history) {

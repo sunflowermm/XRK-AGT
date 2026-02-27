@@ -1066,15 +1066,12 @@ select.form-input {
   color: var(--text-muted);
 }
 
-/* 聊天页面 */
 .chat-container {
   display: flex;
-  /* 使用 min-height + dvh，避免在移动端浏览器地址栏变化时页面被“拉长” */
   min-height: calc(100vh - var(--header-height) - 32px);
   height: auto;
-  /* 始终限制在视口宽度内，防止内部卡片把整体容器横向撑大 */
   width: 100%;
-  max-width: min(1120px, 100vw); /* 桌面端统一宽度，同时不能超过视口 */
+  max-width: min(1120px, 100vw);
   box-sizing: border-box;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
@@ -1121,7 +1118,6 @@ select.form-input {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* 保证主区域始终跟随白色卡片宽度，自适应屏幕且不撑破容器 */
   min-width: 0;
   width: 100%;
   max-width: 100%;
@@ -1257,22 +1253,6 @@ select.form-input {
   
   .chat-setting label {
     font-size: 11px;
-  }
-
-  /* 移动端：强制聊天区域所有主要块级元素等宽于屏幕，防止某一模式把整体撑宽 */
-  .chat-container,
-  .chat-sidebar,
-  .chat-main,
-  .chat-messages,
-  .chat-input-area,
-  .voice-chat-center {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-
-  .voice-input {
-    max-width: 100%;
   }
 }
 
@@ -2089,10 +2069,7 @@ select.form-input {
   word-break: break-all;
 }
 
-/* 媒体文件通用样式 */
-.chat-image-container,
-.chat-video-container,
-
+/* 媒体文件通用样式（仅在悬停时轻微放大） */
 .chat-image-container:hover,
 .chat-video-container:hover {
   transform: scale(1.01);
@@ -2580,87 +2557,6 @@ select.form-input {
 .chat-image-preview-remove:hover {
   background: rgba(220, 53, 69, 0.8);
   transform: scale(1.1);
-}
-
-/* ======== 聊天调试面板（临时） ======== */
-.chat-debug-panel {
-  margin-top: 12px;
-  width: 100%;
-  max-width: 100%;
-  border-top: 1px dashed var(--border);
-  padding: 8px 10px 10px;
-  background: var(--bg-secondary);
-  box-sizing: border-box;
-}
-
-.chat-debug-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.chat-debug-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.chat-debug-btn {
-  padding: 3px 8px;
-  font-size: 11px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.chat-debug-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.chat-debug-btn.chat-debug-clear {
-  border-color: var(--danger-light);
-  color: var(--danger);
-}
-
-.chat-debug-checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.chat-debug-output {
-  width: 100%;
-  min-height: 80px;
-  max-height: 160px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
-  font-size: 11px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  padding: 6px 8px;
-  resize: vertical;
-  box-sizing: border-box;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  overflow: auto;
-}
-
-@media (max-width: 768px) {
-  .chat-debug-panel {
-    padding: 6px 6px 8px;
-  }
-
-  .chat-debug-output {
-    min-height: 100px;
-  }
 }
 
 /* 配置管理 */
@@ -3930,7 +3826,7 @@ body.dark .json-boolean { color: #f87171; }
   }
   
   .content {
-    padding: 16px;
+    padding: 16px 0;
     align-items: stretch; /* 移动端占满整行，而不是在中间留白 */
   }
   
@@ -3948,15 +3844,17 @@ body.dark .json-boolean { color: #f87171; }
   
   .chat-container {
     flex-direction: column;
-    width: 100%;
-    max-width: 100vw;
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    margin: 0 12px;
     height: auto;
-    min-height: calc(100dvh - var(--header-height) - 16px);
+    /* 使用布局视口高度，避免随可视视口(键盘/地址栏)剧烈抖动 */
+    min-height: calc(100vh - var(--header-height) - 16px);
   }
   
   .chat-sidebar {
     width: 100%;
-    max-height: 40vh;
+    max-height: 32vh;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
