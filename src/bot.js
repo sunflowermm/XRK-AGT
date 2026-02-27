@@ -1863,36 +1863,38 @@ export default class Bot extends EventEmitter {
 
   /**
    * 检查API授权
+   * 当 server.auth.apiKey.enabled 为 true 时，必须提供有效密钥；密钥未加载或缺失时一律拒绝
    */
   _checkApiAuthorization(req) {
     if (!req) return false;
-    
-    // 如果没有API密钥（认证被禁用），返回true
+
+    // 认证已启用但服务端尚未加载/生成密钥 → 拒绝，避免未鉴权放行
     if (!this.apiKey) {
-      return true;
+      BotUtil.makeLog("warn", "API 认证已启用但服务端密钥未加载，拒绝请求", '认证');
+      return false;
     }
-    
+
     const authKey = req.headers?.["x-api-key"] ??
       req.headers?.["authorization"]?.replace('Bearer ', '') ??
       req.query?.api_key ??
       req.body?.api_key;
-    
+
     if (!authKey) {
       BotUtil.makeLog("debug", `API认证失败：缺少密钥`, '认证');
       return false;
     }
-    
+
     try {
       const authKeyBuffer = Buffer.from(String(authKey));
       const apiKeyBuffer = Buffer.from(String(this.apiKey));
-      
+
       if (authKeyBuffer.length !== apiKeyBuffer.length) {
         BotUtil.makeLog("warn", `未授权访问来自 ${req.socket?.remoteAddress || req.ip}`, '认证');
         return false;
       }
-      
+
       return crypto.timingSafeEqual(authKeyBuffer, apiKeyBuffer);
-      
+
     } catch (error) {
       BotUtil.makeLog("error", `API认证错误：${error.message}`, '认证');
       return false;
@@ -3026,11 +3028,14 @@ export default class Bot extends EventEmitter {
     
     // 初始化中间件和路由
     await this._initializeMiddlewareAndRoutes();
-    
+
     // 注册API
     await ApiLoader.register(this.express, this);
     this._setupFinalHandlers();
-    
+
+    // 在监听前确保 API 密钥已加载/生成（鉴权启用时必须有 this.apiKey，否则 /api/* 一律拒绝）
+    await this.generateApiKey();
+
     // 启动HTTP/HTTPS服务器
     const originalHttpPort = this.httpPort;
     const originalHttpsPort = this.httpsPort;
