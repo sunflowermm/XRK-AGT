@@ -1813,12 +1813,21 @@ export default class Bot extends EventEmitter {
     const authConfig = cfg.server.auth || {};
     const whitelist = authConfig.whitelist || ['/', '/favicon.ico', '/health', '/status', '/robots.txt'];
 
-    if (this._isPathWhitelisted(req.path, whitelist)) return next();
+    if (this._isPathWhitelisted(req.path, whitelist)) {
+      BotUtil.makeLog('debug', `[Auth] 放行：白名单 path=${req.path}`, '认证');
+      return next();
+    }
 
     const isStaticFile = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i.test(req.path);
-    if (isStaticFile && !req.path.startsWith('/api/')) return next();
+    if (isStaticFile && !req.path.startsWith('/api/')) {
+      BotUtil.makeLog('debug', `[Auth] 放行：静态资源 path=${req.path}`, '认证');
+      return next();
+    }
 
-    if (this._isLocalConnection(req.ip)) return next();
+    if (this._isLocalConnection(req.ip)) {
+      BotUtil.makeLog('debug', `[Auth] 放行：本地/内网 ip=${req.ip} path=${req.path}`, '认证');
+      return next();
+    }
 
     // 同源 Cookie 放行：仅当配置显式开启且（公网同源免 Key 开启 + Cookie + 同源）时放行
     const uiCookieCfg = cfg.server?.uiCookie || {};
@@ -1837,14 +1846,22 @@ export default class Bot extends EventEmitter {
         const referer = req.headers.referer || '';
         const sameOrigin = (origin && serverUrl && origin.startsWith(serverUrl)) ||
                           (referer && serverUrl && referer.startsWith(serverUrl));
-        if (hasUiCookie && sameOrigin) return next();
+        if (hasUiCookie && sameOrigin) {
+          BotUtil.makeLog('debug', `[Auth] 放行：同源 Cookie path=${req.path} ip=${req.ip}`, '认证');
+          return next();
+        }
       } catch {}
     }
 
-    if (authConfig.apiKey?.enabled === false) return next();
+    if (authConfig.apiKey?.enabled === false) {
+      BotUtil.makeLog('debug', `[Auth] 放行：API Key 已禁用 path=${req.path}`, '认证');
+      return next();
+    }
 
     if (req.path.startsWith('/api/')) {
-      if (!this._checkApiAuthorization(req)) {
+      const ok = this._checkApiAuthorization(req);
+      if (!ok) {
+        BotUtil.makeLog('debug', `[Auth] 拒绝：/api/* 鉴权未通过 path=${req.path} ip=${req.ip}`, '认证');
         if (!res.headersSent) {
           res.status(401).json({
             success: false,
@@ -1856,6 +1873,7 @@ export default class Bot extends EventEmitter {
         }
         return;
       }
+      BotUtil.makeLog('debug', `[Auth] 放行：/api/* 鉴权通过 path=${req.path}`, '认证');
     }
 
     next();
@@ -1866,11 +1884,14 @@ export default class Bot extends EventEmitter {
    * 当 server.auth.apiKey.enabled 为 true 时，必须提供有效密钥；密钥未加载或缺失时一律拒绝
    */
   _checkApiAuthorization(req) {
-    if (!req) return false;
+    if (!req) {
+      BotUtil.makeLog('debug', '[Auth] _checkApiAuthorization: req 为空', '认证');
+      return false;
+    }
 
     // 认证已启用但服务端尚未加载/生成密钥 → 拒绝，避免未鉴权放行
     if (!this.apiKey) {
-      BotUtil.makeLog("warn", "API 认证已启用但服务端密钥未加载，拒绝请求", '认证');
+      BotUtil.makeLog('warn', '[Auth] API 认证已启用但服务端密钥未加载，拒绝请求', '认证');
       return false;
     }
 
@@ -1880,7 +1901,7 @@ export default class Bot extends EventEmitter {
       req.body?.api_key;
 
     if (!authKey) {
-      BotUtil.makeLog("debug", `API认证失败：缺少密钥`, '认证');
+      BotUtil.makeLog('debug', `[Auth] API 认证失败：缺少密钥 path=${req.path} ip=${req.ip}`, '认证');
       return false;
     }
 
@@ -1889,14 +1910,15 @@ export default class Bot extends EventEmitter {
       const apiKeyBuffer = Buffer.from(String(this.apiKey));
 
       if (authKeyBuffer.length !== apiKeyBuffer.length) {
-        BotUtil.makeLog("warn", `未授权访问来自 ${req.socket?.remoteAddress || req.ip}`, '认证');
+        BotUtil.makeLog('warn', `[Auth] 未授权：密钥长度不一致 path=${req.path} 来自 ${req.socket?.remoteAddress || req.ip}`, '认证');
         return false;
       }
 
-      return crypto.timingSafeEqual(authKeyBuffer, apiKeyBuffer);
-
+      const ok = crypto.timingSafeEqual(authKeyBuffer, apiKeyBuffer);
+      if (!ok) BotUtil.makeLog('debug', `[Auth] 未授权：密钥不匹配 path=${req.path} ip=${req.ip}`, '认证');
+      return ok;
     } catch (error) {
-      BotUtil.makeLog("error", `API认证错误：${error.message}`, '认证');
+      BotUtil.makeLog('error', `[Auth] API 认证异常：${error.message} path=${req.path}`, '认证');
       return false;
     }
   }

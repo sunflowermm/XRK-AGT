@@ -943,7 +943,8 @@ export default class SystemConfig extends ConfigBase {
                 },
                 cache: {
                   type: 'object',
-                  label: '缓存配置',
+                  label: '静态资源缓存',
+                  description: '静态文件服务的 HTTP 缓存（秒），用于 CSS/JS/图片等',
                   component: 'SubForm',
                   fields: {
                     static: {
@@ -1599,7 +1600,8 @@ export default class SystemConfig extends ConfigBase {
                 },
                 cache: {
                   type: 'object',
-                  label: '内部缓存',
+                  label: '内部缓存（内存 TTL）',
+                  description: '内存键值缓存的默认过期时间，与静态文件/HTTP 缓存无关',
                   component: 'SubForm',
                   fields: {
                     ttlMs: {
