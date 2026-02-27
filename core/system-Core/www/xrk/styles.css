@@ -3913,6 +3913,8 @@ body.dark .json-boolean { color: #f87171; }
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-card);

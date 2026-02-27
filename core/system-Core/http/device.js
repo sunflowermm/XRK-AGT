@@ -977,6 +977,14 @@ class DeviceManager {
         }
 
         const existedDevice = devices.get(device_id);
+        const systemConfig = getSystemConfig();
+        const now = Date.now();
+        const heartbeatTimeoutMs = (systemConfig.heartbeat?.timeout || 1800) * 1000;
+
+        // 若在心跳超时时间内重复 register，视为“心跳/快速重连”，避免频繁上下线事件与日志
+        const isWithinHeartbeatWindow = existedDevice
+          ? (now - (existedDevice.last_seen || 0)) <= heartbeatTimeoutMs
+          : false;
 
         const device = {
             device_id,
@@ -987,14 +995,16 @@ class DeviceManager {
             ip_address: ip_address || ws?.remoteAddress || ws?._socket?.remoteAddress || existedDevice?.ip_address,
             firmware_version,
             online: true,
-            last_seen: Date.now(),
-            registered_at: existedDevice?.registered_at || Date.now(),
+            last_seen: now,
+            registered_at: existedDevice?.registered_at || now,
             stats: existedDevice?.stats || {
                 messages_sent: 0,
                 messages_received: 0,
                 commands_executed: 0,
                 errors: 0,
-                reconnects: existedDevice ? existedDevice.stats.reconnects + 1 : 0
+                reconnects: existedDevice
+                  ? existedDevice.stats.reconnects + (isWithinHeartbeatWindow ? 0 : 1)
+                  : 0
             }
         };
 
@@ -1020,7 +1030,8 @@ class DeviceManager {
 
         const wasOffline = existedDevice ? existedDevice.online === false : false;
         const isFirstSeen = !existedDevice;
-        const shouldAnnounceOnline = isFirstSeen || wasOffline;
+        // 若短时间内重复注册（如前端自动重连），仅更新 last_seen，不再重复“上线”广播
+        const shouldAnnounceOnline = isFirstSeen || (wasOffline && !isWithinHeartbeatWindow);
 
         if (shouldAnnounceOnline) {
             BotUtil.makeLog('info',
