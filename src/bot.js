@@ -1774,30 +1774,28 @@ export default class Bot extends EventEmitter {
   }
 
   /**
-   * 判断路径是否在白名单内（供 HTTP 与 WebSocket 共用）
-   * 使用严格匹配，避免 /status 误匹配 /api/status：
-   * - 精确项（如 /status）：只匹配 path === 该项
-   * - 通配项（如 /media/*）：path 以该项去掉 * 为前缀
-   * - 目录项（如 /xrk/）：path 等于该项或以该项为前缀
-   * @param {string} pathName - 路径，如 /status 或 /api/status
-   * @param {string[]} whitelist - 白名单项，支持精确、前缀(*)、目录(/)匹配
+   * 单条白名单项是否匹配路径（供 _isPathWhitelisted 使用）
+   * 规则：精确匹配 | 通配 *（前缀匹配）| 目录 /（前缀匹配）
+   */
+  _whitelistEntryMatches(path, w) {
+    if (w === path) return true;
+    if (w.endsWith('*')) {
+      const prefix = w.slice(0, -1);
+      return path === prefix || path.startsWith(prefix);
+    }
+    if (w.endsWith('/')) return path === w || path.startsWith(w);
+    return false;
+  }
+
+  /**
+   * 判断路径是否在白名单内（HTTP / WebSocket 共用）
+   * 规则：精确、通配(*)、目录(/)；/api 及 /api/* 仅匹配白名单中以 /api 开头的项
    */
   _isPathWhitelisted(pathName, whitelist) {
     const path = pathName.startsWith('/') ? pathName : `/${pathName}`;
-    for (const w of whitelist) {
-      if (w === path) return true;
-      if (w.endsWith('*')) {
-        const prefix = w.slice(0, -1);
-        if (path === prefix || path.startsWith(prefix)) return true;
-        continue;
-      }
-      if (w.endsWith('/')) {
-        if (path === w || path.startsWith(w)) return true;
-        continue;
-      }
-      // 精确项：不再用 URLPattern，避免 /status 匹配到 /api/status
-    }
-    return false;
+    const isApi = path === '/api' || path.startsWith('/api/');
+    const list = isApi ? whitelist.filter(w => w.startsWith('/api')) : whitelist;
+    return list.some(w => this._whitelistEntryMatches(path, w));
   }
 
   /**
