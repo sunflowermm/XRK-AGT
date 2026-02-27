@@ -956,36 +956,37 @@ export default class Bot extends EventEmitter {
     // ========== 第六阶段：UI Cookie设置（同源前端） ==========
     this.express.use((req, res, next) => {
       const uiCookieCfg = cfg.server?.uiCookie || {};
-      const enabled = uiCookieCfg?.enabled !== false;
+      const enabled = uiCookieCfg?.enabled === true;
       const pathPrefix = (uiCookieCfg?.pathPrefix && String(uiCookieCfg.pathPrefix).trim()) || '/xrk';
-      if (enabled && req.path.startsWith(pathPrefix) && !res.headersSent) {
-        try {
-          const name = (uiCookieCfg?.name && String(uiCookieCfg.name)) || 'xrk_ui';
-          const value = (uiCookieCfg?.value !== undefined) ? String(uiCookieCfg.value) : '1';
-          const httpOnly = uiCookieCfg?.httpOnly !== false;
-          const sameSite = (uiCookieCfg?.sameSite && String(uiCookieCfg.sameSite).toLowerCase()) || 'lax';
-          const maxAgeMs = Number(uiCookieCfg?.maxAgeMs) || 86400000;
-          
-          res.cookie?.(name, value, {
-            httpOnly,
-            sameSite,
-            maxAge: maxAgeMs
-          });
-          
-          if (!res.cookie) {
-            const sameSiteHeader = sameSite === 'none' ? 'None' : (sameSite === 'strict' ? 'Strict' : 'Lax');
-            const maxAgeSec = Math.max(0, Math.floor(maxAgeMs / 1000));
-            const parts = [
-              `${name}=${encodeURIComponent(value)}`,
-              'Path=/',
-              httpOnly ? 'HttpOnly' : null,
-              `SameSite=${sameSiteHeader}`,
-              `Max-Age=${maxAgeSec}`
-            ].filter(Boolean);
-            res.setHeader('Set-Cookie', parts.join('; '));
-          }
-        } catch {}
+      if (!enabled || !req.path.startsWith(pathPrefix) || res.headersSent) {
+        return next();
       }
+      try {
+        const name = (uiCookieCfg?.name && String(uiCookieCfg.name)) || 'xrk_ui';
+        const value = (uiCookieCfg?.value !== undefined) ? String(uiCookieCfg.value) : '1';
+        const httpOnly = uiCookieCfg?.httpOnly !== false;
+        const sameSite = (uiCookieCfg?.sameSite && String(uiCookieCfg.sameSite).toLowerCase()) || 'lax';
+        const maxAgeMs = Number(uiCookieCfg?.maxAgeMs) || 86400000;
+
+        res.cookie?.(name, value, {
+          httpOnly,
+          sameSite,
+          maxAge: maxAgeMs
+        });
+
+        if (!res.cookie) {
+          const sameSiteHeader = sameSite === 'none' ? 'None' : (sameSite === 'strict' ? 'Strict' : 'Lax');
+          const maxAgeSec = Math.max(0, Math.floor(maxAgeMs / 1000));
+          const parts = [
+            `${name}=${encodeURIComponent(value)}`,
+            'Path=/',
+            httpOnly ? 'HttpOnly' : null,
+            `SameSite=${sameSiteHeader}`,
+            `Max-Age=${maxAgeSec}`
+          ].filter(Boolean);
+          res.setHeader('Set-Cookie', parts.join('; '));
+        }
+      } catch {}
       next();
     });
 
@@ -1799,66 +1800,49 @@ export default class Bot extends EventEmitter {
 
   /**
    * 认证中间件（HTTP）
-   * 顺序：快速路径 → 白名单 → 本地连接 → 同源 Cookie → /api/* 必须 API Key
+   * 顺序：白名单 → 静态(非/api) → 本地连接 → [可选]同源Cookie(仅当配置开启且满足条件) → API密钥 → /api/* 校验
    */
   _authMiddleware(req, res, next) {
     if (this._checkHeadersSent(res, next)) return;
-    
+
     req.rid = `${req.ip}:${req.socket.remotePort}`;
     req.sid = `${req.protocol}://${req.hostname}:${req.socket.localPort}${req.originalUrl}`;
-    
+
     const authConfig = cfg.server.auth || {};
     const whitelist = authConfig.whitelist || ['/', '/favicon.ico', '/health', '/status', '/robots.txt'];
-    
+
     if (this._isPathWhitelisted(req.path, whitelist)) return next();
-    
+
     const isStaticFile = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i.test(req.path);
     if (isStaticFile && !req.path.startsWith('/api/')) return next();
-    
+
     if (this._isLocalConnection(req.ip)) return next();
-    
-    // ========== 同源Cookie认证（前端UI） ==========
-    try {
-      const uiCookieCfg = cfg.server?.uiCookie || {};
-      const uiEnabled = uiCookieCfg?.enabled !== false;
-      const cookieName = (uiCookieCfg?.name && String(uiCookieCfg.name)) || 'xrk_ui';
-      const cookieValue = (uiCookieCfg?.value !== undefined) ? String(uiCookieCfg.value) : '1';
-      
-      const cookies = String(req.headers.cookie ?? '');
-      const hasUiCookie = uiEnabled && cookies
-        .split(';')
-        .map(s => s.trim())
-        .some(kv => {
+
+    // 同源 Cookie 放行：仅当配置显式开启且（公网同源免 Key 开启 + Cookie + 同源）时放行
+    const uiCookieCfg = cfg.server?.uiCookie || {};
+    if (uiCookieCfg.enabled === true && uiCookieCfg.allowPublicSameOrigin === true) {
+      try {
+        const cookieName = (uiCookieCfg?.name && String(uiCookieCfg.name)) || 'xrk_ui';
+        const cookieValue = (uiCookieCfg?.value !== undefined) ? String(uiCookieCfg.value) : '1';
+        const cookies = String(req.headers.cookie ?? '');
+        const hasUiCookie = cookies.split(';').map(s => s.trim()).some(kv => {
           const eq = kv.indexOf('=');
           if (eq === -1) return false;
-          const k = kv.slice(0, eq).trim();
-          const v = kv.slice(eq + 1).trim();
-          return k === cookieName && v === cookieValue;
+          return kv.slice(0, eq).trim() === cookieName && kv.slice(eq + 1).trim() === cookieValue;
         });
-      
-      if (hasUiCookie) {
+        const serverUrl = this.getServerUrl();
         const origin = req.headers.origin || '';
         const referer = req.headers.referer || '';
-        const host = req.headers.host || '';
-        const serverUrl = this.getServerUrl();
         const sameOrigin = (origin && serverUrl && origin.startsWith(serverUrl)) ||
-                           (referer && serverUrl && referer.startsWith(serverUrl)) ||
-                           (!origin && !referer && !!host);
-        if (sameOrigin) {
-          return next();
-        }
-      }
-    } catch {}
-
-    // ========== API密钥认证检查 ==========
-    if (authConfig.apiKey?.enabled === false) {
-      return next();
+                          (referer && serverUrl && referer.startsWith(serverUrl));
+        if (hasUiCookie && sameOrigin) return next();
+      } catch {}
     }
-    
-    // 所有 /api/* 请求在此统一鉴权，业务路由（system-Core/http/*）无需再校验
+
+    if (authConfig.apiKey?.enabled === false) return next();
+
     if (req.path.startsWith('/api/')) {
       if (!this._checkApiAuthorization(req)) {
-        // 再次检查响应状态
         if (!res.headersSent) {
           res.status(401).json({
             success: false,
@@ -1871,7 +1855,7 @@ export default class Bot extends EventEmitter {
         return;
       }
     }
-    
+
     next();
   }
 

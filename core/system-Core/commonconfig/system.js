@@ -1160,8 +1160,15 @@ export default class SystemConfig extends ConfigBase {
                 enabled: {
                   type: 'boolean',
                   label: '启用 UI Cookie 认证',
-                  description: '用于 Web 控制台 / 同源前端免 API Key 访问',
-                  default: true,
+                  description: '用于 Web 控制台 / 同源前端免 API Key 访问；不配置或关闭时不会设置 Cookie，公网必须使用 API Key',
+                  default: false,
+                  component: 'Switch'
+                },
+                allowPublicSameOrigin: {
+                  type: 'boolean',
+                  label: '公网同源免 Key',
+                  description: '仅在启用 UI Cookie 时生效：允许公网访问时凭同源 + Cookie 放行（不填 API Key）',
+                  default: false,
                   component: 'Switch'
                 },
                 pathPrefix: {
