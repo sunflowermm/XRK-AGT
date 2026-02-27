@@ -609,13 +609,19 @@ class App {
   }
 
   handleRoute() {
-    const hash = location.hash.replace(/^#\/?/, '') || 'home';
+    const hash = location.hash.replace(/^#\/?/, '') || (localStorage.getItem('lastPage') || 'home');
     const page = hash.split('?')[0];
     this.navigateTo(page);
   }
 
   navigateTo(page) {
     this.currentPage = page;
+    try {
+      document.body.dataset.page = page;
+    } catch {}
+    try {
+      localStorage.setItem('lastPage', page);
+    } catch {}
     
     const navItems = $$('.nav-item');
     navItems.forEach(item => {
@@ -647,13 +653,13 @@ class App {
       }
     }
     
-      switch (page) {
-        case 'home': this.renderHome(); break;
-        case 'chat': this.renderChat(); break;
-        case 'config': this.renderConfig(); break;
-        case 'api': this.renderAPI(); break;
-        default: this.renderHome();
-      }
+    switch (page) {
+      case 'home': this.renderHome(); break;
+      case 'chat': this.renderChat(); break;
+      case 'config': this.renderConfig(); break;
+      case 'api': this.renderAPI(); break;
+      default: this.renderHome();
+    }
     
     if (location.hash !== `#/${page}`) {
       location.hash = `#/${page}`;
@@ -1923,7 +1929,7 @@ class App {
           `}
         </div>
         ${!isVoiceMode ? `<div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>` : ''}
-        </div>
+        </div> <!-- .chat-main -->
       </div>
     `;
     
@@ -2423,7 +2429,10 @@ class App {
     const box = document.getElementById('chatMessages');
     if (!box || this._isRestoringHistory) return;
     this._renderHistoryIntoBox(box, this._getCurrentChatHistory());
-    requestAnimationFrame(() => this.scrollToBottom(false));
+    requestAnimationFrame(() => {
+      this.scrollToBottom(false);
+      this._updateChatDebugPanel('restoreChatHistory');
+    });
   }
 
   _applyMessageEnter(div, animate = true) {
@@ -2520,11 +2529,7 @@ class App {
       copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg><span>复制</span>';
       copyBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        navigator.clipboard.writeText(messageText).then(() => {
-          this.showToast('已复制到剪贴板', 'success');
-        }).catch(() => {
-          this.showToast('复制失败', 'error');
-        });
+        this.copyToClipboard(messageText, '已复制到剪贴板', '复制失败，请检查浏览器权限');
       });
       actionsContainer.appendChild(copyBtn);
     }
@@ -4512,25 +4517,36 @@ class App {
     const content = document.getElementById('content');
     if (!content) return;
 
-    this._configState = {
-      list: [],
-      filter: '',
-      selected: null,
-      selectedChild: null,
-      flatSchema: [],
-      activeSchema: null,
-      structureMeta: {},
-      arraySchemaMap: {},
-      dynamicCollectionsMeta: [],
-      values: {},
-      original: {},
-      rawObject: {},
-      dirty: {},
-      mode: 'form',
-      jsonText: '',
-      jsonDirty: false,
-      loading: false
-    };
+    // 如无现有状态则初始化，避免每次进入配置页都丢失已选项
+    if (!this._configState) {
+      this._configState = {
+        list: [],
+        filter: '',
+        selected: null,
+        selectedChild: null,
+        flatSchema: [],
+        activeSchema: null,
+        structureMeta: {},
+        arraySchemaMap: {},
+        dynamicCollectionsMeta: [],
+        values: {},
+        original: {},
+        rawObject: {},
+        dirty: {},
+        mode: 'form',
+        jsonText: '',
+        jsonDirty: false,
+        loading: false
+      };
+      // 从本地缓存恢复上次选中的配置
+      try {
+        const lastName = localStorage.getItem('lastConfigName') || '';
+        const lastChild = localStorage.getItem('lastConfigChild') || '';
+        if (lastName) {
+          this._configState.pendingSelect = { name: lastName, child: lastChild || null };
+        }
+      } catch {}
+    }
 
     content.innerHTML = `
       <div class="config-page">
@@ -4610,6 +4626,16 @@ class App {
       if (!this._configState) return;
       this._configState.list = data.configs ?? [];
       this.renderConfigList();
+
+      // 若存在待选中的配置（刷新后恢复）
+      if (this._configState.pendingSelect) {
+        const { name, child } = this._configState.pendingSelect;
+        const target = this._configState.list.find(cfg => cfg.name === name);
+        if (target) {
+          this.selectConfig(name, child || null);
+        }
+        this._configState.pendingSelect = null;
+      }
     } catch (e) {
       if (list) list.innerHTML = `<div class="empty-state"><p>加载失败: ${e.message}</p></div>`;
     }
@@ -4687,6 +4713,12 @@ class App {
     this._configState.rawObject = {};
     this._configState.dirty = {};
     this._configState.mode = 'form';
+
+    // 记住最近选中的配置，刷新后恢复
+    try {
+      localStorage.setItem('lastConfigName', name);
+      localStorage.setItem('lastConfigChild', child || '');
+    } catch {}
     this._configState.jsonText = '';
     this._configState.jsonDirty = false;
 
@@ -5343,7 +5375,15 @@ class App {
     const component = meta.component ?? field.component ?? this.mapTypeToComponent(field.type);
     const dataset = `data-field="${this.escapeHtml(field.path)}" data-component="${component ?? ''}" data-type="${field.type}"`;
     const disabled = meta.readonly ? 'disabled' : '';
-    const placeholder = this.escapeHtml(meta.placeholder ?? '');
+    const basePlaceholder = meta.placeholder ?? '';
+    const hasSchemaDefault = Object.hasOwn(field, 'default') || Object.hasOwn(meta, 'default');
+    const rawDefault = Object.hasOwn(meta, 'default') ? meta.default : field.default;
+    const defaultText = rawDefault === undefined || rawDefault === null ? '' : String(rawDefault);
+    const isEmptyValue = value === undefined || value === null || value === '';
+    // 当字段没有显式 placeholder 且当前值为空时，用 commonconfig 的 default 作为灰字提示
+    const effectivePlaceholder = basePlaceholder
+      || (isEmptyValue && hasSchemaDefault && defaultText ? `默认：${defaultText}` : '');
+    const placeholder = this.escapeHtml(effectivePlaceholder);
 
     const normalizeOptions = (options = []) => options.map(opt => {
       if (typeof opt === 'object') return opt;
@@ -6499,6 +6539,14 @@ class App {
         <div id="apiTestSection" style="display:none"></div>
       </div>
     `;
+
+    // 如果之前已选择过某个 API，刷新后自动恢复
+    try {
+      const lastApiId = localStorage.getItem('lastApiId');
+      if (lastApiId) {
+        this.selectAPI(lastApiId);
+      }
+    } catch {}
   }
 
   renderAPIGroups() {
@@ -6535,6 +6583,10 @@ class App {
     }
     
     this.currentAPI = { method: api.method, path: api.path, apiId };
+    // 记住最近选中的 API，刷新后恢复
+    try {
+      localStorage.setItem('lastApiId', apiId);
+    } catch {}
     this._lastJsonPreview = null;
     
     // 在移动端，选择API后关闭侧边栏
@@ -7070,9 +7122,9 @@ class App {
     ).join('');
     
     section.innerHTML = `
-      <div style="margin-top:32px">
+      <div class="api-response-wrapper">
         <!-- 请求头一览 -->
-        <div class="request-info-section">
+        <div class="request-info-section" id="requestInfoSection">
           <div class="request-info-header" id="requestInfoToggle">
             <h3 class="request-info-title">
               <span class="request-info-icon">▼</span>
@@ -7124,11 +7176,10 @@ class App {
       </div>
     `;
     
-    // 请求信息折叠/展开 - 使用事件委托避免重复绑定
-    const requestInfoSection = document.getElementById('requestInfoSection');
-    if (requestInfoSection && !requestInfoSection.dataset._bound) {
-      requestInfoSection.dataset._bound = '1';
-      requestInfoSection.addEventListener('click', (e) => {
+    // 请求信息折叠/展开 & 复制响应结果 - 使用事件委托避免重复绑定
+    if (section && !section.dataset._bound) {
+      section.dataset._bound = '1';
+      section.addEventListener('click', (e) => {
         const toggleBtn = e.target.closest('#requestInfoToggle');
         if (toggleBtn) {
           const content = document.getElementById('requestInfoContent');
@@ -7147,13 +7198,33 @@ class App {
       });
     }
     
-    section.scrollIntoView({ behavior: 'smooth' });
+    try {
+      if (window.innerWidth > 768) {
+        section.scrollIntoView({ behavior: 'smooth' });
+      }
+    } catch {}
   }
   
   copyToClipboard(text, successMsg = '已复制到剪贴板', errorMsg = '复制失败') {
-      navigator.clipboard.writeText(text)
-        .then(() => this.showToast(successMsg, 'success'))
-      .catch(() => this.showToast(errorMsg, 'error'));
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = String(text ?? '');
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-9999px';
+      ta.style.left = '-9999px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      const ok = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) {
+        this.showToast(successMsg, 'success');
+        return;
+      }
+    } catch {}
+    this.showToast(errorMsg, 'error');
   }
 
   syntaxHighlight(json) {

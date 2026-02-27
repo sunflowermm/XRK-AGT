@@ -446,10 +446,39 @@ body.dark .theme-btn .icon-moon { display: block; }
   padding: 24px;
   overflow-y: auto;
   overflow-x: hidden; /* 防止内部内容过长导致整体横向平移 */
-  /* 让页面内容在大屏上也以“卡片”形式居中显示 */
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* 让各业务页面容器自行控制最大宽度，这里默认拉伸占满可用宽度 */
+  align-items: stretch;
+}
+
+/* 聊天页：消息区内部滚动，输入框始终在视口底部上方 */
+body[data-page="chat"] .content {
+  padding: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+/* 聊天页整体高度锁定为一屏，由内部消息区滚动 */
+body[data-page="chat"] {
+  height: 100vh;
+  overflow: hidden;
+}
+
+body[data-page="chat"] .main {
+  height: 100vh;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+body[data-page="chat"] .chat-container {
+  /* 在聊天页中，聊天容器固定填满内容区，高度不随消息数量增长 */
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
 }
 
 /* API 列表容器 (在侧边栏内) */
@@ -733,7 +762,7 @@ body.dark .theme-btn .icon-moon { display: block; }
 }
 
 .form-input::placeholder {
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-muted) 80%, transparent);
 }
 
 textarea.form-input {
@@ -831,10 +860,14 @@ select.form-input {
 
 /* ======== 页面样式 ======== */
 
-/* 首页 - 系统概览 */
+/* 首页 - 系统概览：采用纵向 Flex 布局，避免 Grid 在小屏上按子元素 max-content 宽度拉伸轨道导致整体溢出 */
 .dashboard {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 24px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-header {
@@ -859,6 +892,7 @@ select.form-input {
 /* 统计卡片网格 */
 .stats-grid {
   display: grid;
+  /* 桌面端使用较宽的最小宽度；移动端在 media query 中覆盖，避免溢出 */
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
 }
@@ -924,9 +958,11 @@ select.form-input {
 
 /* 图表卡片 */
 .chart-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 16px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .chart-card {
@@ -936,6 +972,9 @@ select.form-input {
   padding: 20px;
   box-shadow: var(--shadow-sm);
   transition: box-shadow 0.2s ease;
+   /* 确保 padding + 边框 不会把卡片整体宽度撑出父容器 */
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .chart-card:hover {
@@ -963,7 +1002,10 @@ select.form-input {
 }
 
 .chart-container canvas {
+  width: 100%;
+  height: 100%;
   max-height: 100%;
+  display: block;
 }
 
 .chart-container-dual {
@@ -971,6 +1013,8 @@ select.form-input {
   grid-template-columns: 1fr 1fr;
   gap: 24px;
   padding: 16px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .chart-item {
@@ -1071,7 +1115,8 @@ select.form-input {
   min-height: calc(100vh - var(--header-height) - 32px);
   height: auto;
   width: 100%;
-  max-width: min(1120px, 100vw);
+  /* 在桌面端占满内容区宽度，由内部元素控制最大内容宽度 */
+  max-width: 100%;
   box-sizing: border-box;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
@@ -1312,26 +1357,43 @@ select.form-input {
 }
 
 @media (max-width: 768px) {
-  /* 移动端：统一为整卡布局，宽度自适应屏幕 */
+  /* 移动端：整体间距适配 */
   .chat-messages {
     padding: 16px 12px;
+    gap: 14px;
   }
 
   .chat-message,
   .voice-message {
-    width: 100%;
-    max-width: 100%;
-    padding: 12px 14px;
-    align-self: stretch;
+    width: auto;
+    /* 统一控制气泡最大宽度，避免占满整行 */
+    max-width: 88%;
+    padding: 10px 12px;
+    font-size: 13px;
     margin: 8px 0;
+  }
+
+  .chat-message-actions {
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .chat-action-btn {
+    padding: 5px 10px;
+  }
+
+  .chat-action-btn span {
+    font-size: 12px;
   }
 
   .chat-message.user,
   .chat-message.assistant,
   .voice-message.user,
   .voice-message.assistant {
-    margin-left: 0;
-    margin-right: 0;
+    /* 使用左右呼吸感更小的间距，适合手机 */
+    margin-left: 16px;
+    margin-right: 16px;
   }
 
   .chat-input-area {
@@ -1349,6 +1411,24 @@ select.form-input {
   .chat-send-btn {
     width: 40px;
     height: 40px;
+  }
+
+  .chat-message .chat-image-container,
+  .chat-message .chat-video-container,
+  .chat-message .chat-audio-container,
+  .chat-message .chat-media-placeholder,
+  .chat-message .chat-file,
+  .chat-message .chat-markdown,
+  .chat-message .chat-tool-block,
+  .chat-message .chat-reply {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* 移动端：音频条不再强制 300px 起步，避免在小屏溢出 */
+  .chat-audio-container {
+    min-width: 0;
+    width: 100%;
   }
 }
 
@@ -2163,7 +2243,7 @@ select.form-input {
 }
 
 .chat-record {
-  /* 独立聊天记录卡片：拉满一行，避免被左右压缩 */
+  /* 默认：桌面端拉满一行，避免被左右压缩 */
   width: 100%;
   max-width: 100% !important; /* 覆盖 chat-message 的 max-width: 80% */
   margin: 8px 0; /* 与上下普通对话气泡拉开一点距离 */
@@ -2180,7 +2260,7 @@ select.form-input {
   flex-direction: column;
 }
 
-/* 聊天记录卡片需要打破 .chat-message.assistant / .user 的 align-self 设置 */
+/* 聊天记录卡片需要打破 .chat-message.assistant / .user 的 align-self 设置（桌面端） */
 .chat-message.chat-record {
   align-self: stretch !important;
   max-width: 100% !important;
@@ -2219,6 +2299,13 @@ select.form-input {
 @media (max-width: 768px) {
   .chat-record-content {
     max-height: 300px;
+  }
+
+  /* 移动端：聊天记录卡片也使用“收缩气泡”风格，而不是铺满整行 */
+  .chat-message.chat-record {
+    align-self: flex-start !important;
+    width: auto;
+    max-width: 88% !important;
   }
 }
 
@@ -2328,6 +2415,7 @@ select.form-input {
   align-items: flex-end;
   gap: 12px;
   background: var(--bg-card);
+  min-width: 0;
 }
 
 .chat-input {
@@ -2341,6 +2429,7 @@ select.form-input {
   outline: none;
   transition: all var(--transition);
   resize: none;
+  min-width: 0; /* 避免输入框把按钮挤出可视区域 */
 }
 
 .chat-input:focus {
@@ -2565,6 +2654,8 @@ select.form-input {
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 24px;
+  /* 与首页/聊天等保持一致：默认填满内容区宽度 */
+  width: 100%;
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -2591,7 +2682,7 @@ select.form-input {
   gap: 20px;
   height: fit-content;
   max-height: calc(100vh - 80px);
-  min-width: 0; /* 避免侧栏在极端内容下撑破 grid，导致整体横移 */
+  min-width: 0;
   contain: layout paint;
 }
 
@@ -2703,6 +2794,10 @@ select.form-input {
   padding: 28px;
   min-height: 480px;
   contain: layout paint;
+  /* 避免右侧编辑区在长内容时撑破 grid 导致整体横向溢出 */
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 @media (max-width: 720px) {
@@ -3200,9 +3295,11 @@ select.form-input {
 
 .config-switch {
   position: relative;
-  width: 46px;
-  height: 24px;
+  width: 48px;
+  height: 26px;
   display: inline-flex;
+  align-items: center;
+  cursor: pointer;
 }
 
 .config-switch input {
@@ -3214,7 +3311,7 @@ select.form-input {
 .config-switch-slider {
   position: absolute;
   inset: 0;
-  background: var(--bg-card);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 24px;
   transition: all var(--transition);
@@ -3223,13 +3320,14 @@ select.form-input {
 .config-switch-slider::before {
   content: '';
   position: absolute;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   left: 2px;
-  bottom: 2px;
-  background: white;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-card);
   border-radius: 50%;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-sm);
   transition: all var(--transition);
 }
 
@@ -3239,13 +3337,31 @@ select.form-input {
 }
 
 .config-switch input:checked + .config-switch-slider::before {
-  transform: translateX(20px);
+  transform: translate(20px, -50%);
+  background: white;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 70%, transparent), var(--shadow-sm);
+}
+
+.config-switch input:focus-visible + .config-switch-slider {
+  box-shadow: 0 0 0 2px var(--primary-100);
+}
+
+.config-switch input:disabled + .config-switch-slider {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* API 调试页面 */
 .api-container {
-  display: grid;
+  /* 使用 flex 列布局，避免 grid 隐式轨道的 max-content 参与宽度计算导致页面被撑宽 */
+  display: flex;
+  flex-direction: column;
   gap: 24px;
+  /* 在桌面和移动端都占满内容区宽度，避免卡片被压得过窄 */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .api-header-section {
@@ -3302,6 +3418,15 @@ select.form-input {
   border-bottom: 1px solid var(--border);
 }
 
+/* API 调试 - 响应区域整体容器 */
+.api-response-wrapper {
+  margin-top: 24px;
+  max-width: 100%;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 /* JSON 编辑器 */
 .json-editor-container {
   background: var(--bg-card);
@@ -3353,7 +3478,6 @@ select.form-input {
   font-size: 13px;
 }
 
-/* 响应结果 */
 /* 请求信息区域 */
 .request-info-section {
   background: var(--bg-card);
@@ -3361,7 +3485,9 @@ select.form-input {
   border-radius: var(--radius-md);
   margin-bottom: 24px;
   overflow: hidden;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   contain: layout paint;
 }
@@ -3479,9 +3605,9 @@ select.form-input {
   gap: 8px;
   padding: 6px 0;
   font-family: 'Monaco', 'Consolas', monospace;
-  font-size: 13px;
   line-height: 1.6;
   word-break: break-all;
+  font-size: 0;
 }
 
 .request-header-key {
@@ -3489,11 +3615,18 @@ select.form-input {
   font-weight: 600;
   min-width: 120px;
   flex-shrink: 0;
+  font-size: 13px;
+}
+
+.request-header-key::after {
+  content: ':';
+  margin: 0 4px 0 0;
 }
 
 .request-header-value {
   color: var(--text-secondary);
   flex: 1;
+  font-size: 13px;
 }
 
 .request-body {
@@ -3502,7 +3635,12 @@ select.form-input {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   max-width: 100%;
-  overflow-x: auto;
+  overflow: hidden;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  max-height: min(40vh, 360px);
+  touch-action: pan-x pan-y;
 }
 
 .request-body pre {
@@ -3510,9 +3648,17 @@ select.form-input {
   font-family: 'Monaco', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.6;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  max-width: 100%;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  box-sizing: border-box;
+  /* 由 pre 自己产生横向滚动，避免撑大外层布局 */
+  display: block;
+  width: 100%;
+  max-height: min(40vh, 360px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* 响应式设计 */
@@ -3542,7 +3688,10 @@ select.form-input {
 
 .response-section {
   margin-top: 24px;
+  width: 100%;
   max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .response-header {
@@ -3550,6 +3699,9 @@ select.form-input {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
 }
 
 .response-title {
@@ -3562,16 +3714,25 @@ select.form-input {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .response-content {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  /* 页面不横向溢出；内容在卡片内可上下/左右滚动查看 */
   overflow: hidden;
   max-width: 100%;
+  width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   contain: layout paint;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  max-height: min(60vh, 520px);
+  touch-action: pan-x pan-y;
 }
 
 .response-content pre {
@@ -3580,12 +3741,18 @@ select.form-input {
   font-family: 'Monaco', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.6;
-  /* 避免超长单行把卡片和页面一起撑飞，同时保证可读性 */
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  max-width: 100%;
-  max-height: 60vh;
+  /* 保留原始格式：允许在卡片内横向滚动查看，不把页面撑破 */
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  box-sizing: border-box;
+  /* 在 pre 内部上下/左右滚动查看，不影响外层布局宽度 */
+  display: block;
+  width: 100%;
+  max-height: min(60vh, 520px);
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   color: var(--text-primary);
 }
 
@@ -3631,6 +3798,7 @@ body.dark .json-boolean { color: #f87171; }
 .data-table tr:hover td {
   background: var(--bg-hover);
 }
+
 
 /* 文件上传 */
 .file-upload {
@@ -3824,22 +3992,27 @@ body.dark .json-boolean { color: #f87171; }
     align-items: center;
     justify-content: center;
   }
-  
+
   .content {
+    /* 顶部/底部留 16px，左右安全边距由各页面主容器控制 */
     padding: 16px 0;
     align-items: stretch; /* 移动端占满整行，而不是在中间留白 */
+    width: 100%;
+    max-width: 100vw; /* 关键：避免内部内容把布局宽度撑大 */
+    overflow-x: hidden;
   }
   
   .stats-grid {
     grid-template-columns: 1fr 1fr;
   }
-  
-  .chart-grid {
-    grid-template-columns: 1fr;
+
+  /* 图表卡片在手机端略微缩小，避免子图占满视野 */
+  .chart-card {
+    padding: 16px;
   }
-  
-  .api-form-grid {
-    grid-template-columns: 1fr;
+
+  .chart-container {
+    height: 160px;
   }
   
   .chat-container {
@@ -3862,6 +4035,15 @@ body.dark .json-boolean { color: #f87171; }
   .chat-main {
     flex: 1;
     min-height: 0;
+  }
+
+  /* 手机小屏：各主页面容器左右留出安全边距，避免内容贴边 */
+  .dashboard,
+  .config-page,
+  .api-container {
+    padding-left: 12px;
+    padding-right: 12px;
+    box-sizing: border-box;
   }
 
   /* Voice 模式移动端适配：内容整体缩放 */
@@ -3942,6 +4124,54 @@ body.dark .json-boolean { color: #f87171; }
   transition: all var(--transition);
   font-size: 14px;
   font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  /* 手机端：允许页面轻微滚动，让浏览器地址栏可以隐藏 */
+  body[data-page="chat"] {
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* 手机端：聊天布局改为上下结构，避免横向被侧栏压缩。
+     不再修改高度，由全局的 100vh + 内部滚动逻辑控制，保留“聊天记录不无限延伸”特性。 */
+  .chat-container {
+    flex-direction: column;
+  }
+
+  .chat-sidebar {
+    width: 100%;
+    max-width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .chat-main {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* 手机端：Event / Voice / AI 三个按钮一行平分 */
+  .chat-mode-selector {
+    flex-direction: row;
+    align-items: stretch;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .chat-mode-btn {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  /* 手机端：隐藏 AI 详细设置面板，为聊天区腾出空间（桌面端保留） */
+  .ai-settings-panel {
+    display: none;
+  }
 }
 
 .chat-mode-btn:hover {
@@ -4097,16 +4327,27 @@ body.dark .json-boolean { color: #f87171; }
 }
 
 @media (max-width: 480px) {
+  /* 首页系统概览：手机小屏左右留出安全边距，且不超过视口宽度 */
+  .dashboard {
+    padding: 0 16px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+  
+  /* 手机小屏：统计卡片一行展示两个，稍微缩小间距和内边距 */
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
   }
   
   .stat-card {
-    padding: 16px;
+    padding: 14px;
   }
   
   .stat-value {
-    font-size: 24px;
+    font-size: 18px;
   }
   
   .dashboard-title {
@@ -4120,6 +4361,14 @@ body.dark .json-boolean { color: #f87171; }
   
   .config-name {
     font-size: 14px;
+  }
+
+  .chart-card,
+  .chart-container,
+  .chart-container-dual {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 }
 
