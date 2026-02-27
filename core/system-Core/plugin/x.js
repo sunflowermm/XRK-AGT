@@ -11,7 +11,8 @@ export class XWorkflow extends plugin {
       dsc: '以 x 开头的消息触发工作流',
       event: 'message',
       priority: 1000,
-      rule: [{ reg: /^x\s*/i, fnc: 'triggerWorkflow', permission: 'master' }]
+      // 注意：区分大小写，只有小写 "x" 才触发
+      rule: [{ reg: /^x\s*/, fnc: 'triggerWorkflow', permission: 'master' }]
     });
   }
 
