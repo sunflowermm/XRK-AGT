@@ -42,4 +42,4 @@ emotion: "happy"
 # 分片大小（毫秒）
 chunkMs: 128
 # 分片延迟（毫秒）
-chunkDelayMs: 5
+chunkDelayMs: 0

@@ -33,8 +33,22 @@ export default class GeminiCompatibleLLMConfig extends ConfigBase {
               topK: { type: 'number', label: 'Top K', min: 1, default: 40, component: 'InputNumber' },
               timeout: { type: 'number', label: '超时(ms)', min: 1000, default: 360000, component: 'InputNumber' },
               enableStream: { type: 'boolean', label: '启用流式', default: true, component: 'Switch' },
-              headers: { type: 'object', label: '额外请求头', component: 'SubForm', fields: {} },
-              extraBody: { type: 'object', label: '额外请求体字段', component: 'SubForm', fields: {} },
+              headers: { 
+                type: 'object', 
+                label: '额外请求头',
+                description: '可选：为 Gemini 接口追加 HTTP 头',
+                example: { 'X-Referer': 'xrk-agt-console' },
+                component: 'SubForm', 
+                fields: {} 
+              },
+              extraBody: { 
+                type: 'object', 
+                label: '额外请求体字段',
+                description: '可选：原样合并到 generateContent 请求体顶层',
+                example: { systemInstruction: { parts: [{ text: '你是一个严谨的助手。' }], role: 'user' } },
+                component: 'SubForm', 
+                fields: {} 
+              },
               proxy: {
                 type: 'object',
                 label: '代理配置',

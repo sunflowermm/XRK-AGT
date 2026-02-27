@@ -36,8 +36,22 @@ export default class AzureOpenAICompatibleLLMConfig extends ConfigBase {
               enableTools: { type: 'boolean', label: '启用工具调用', default: true, component: 'Switch' },
               maxToolRounds: { type: 'number', label: '最大工具轮次', min: 1, max: 20, default: 7, component: 'InputNumber' },
               enableStream: { type: 'boolean', label: '启用流式', default: true, component: 'Switch' },
-              headers: { type: 'object', label: '额外请求头', component: 'SubForm', fields: {} },
-              extraBody: { type: 'object', label: '额外请求体字段', component: 'SubForm', fields: {} },
+              headers: { 
+                type: 'object', 
+                label: '额外请求头',
+                description: '可选：为 Azure OpenAI 接口追加 HTTP 头',
+                example: { 'X-Client-Request-Id': 'xrk-azure-compat' },
+                component: 'SubForm', 
+                fields: {} 
+              },
+              extraBody: { 
+                type: 'object', 
+                label: '额外请求体字段',
+                description: '可选：原样合并到请求体顶层',
+                example: { user: 'demo-user' },
+                component: 'SubForm', 
+                fields: {} 
+              },
               proxy: {
                 type: 'object',
                 label: '代理配置',

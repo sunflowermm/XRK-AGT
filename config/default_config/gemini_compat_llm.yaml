@@ -21,6 +21,11 @@ providers: []
 #    topK: 40
 #    timeout: 360000
 #    enableStream: true
+#    # 额外请求头/请求体字段（可选）
+#    # headers: { "X-Referer": "xrk-agt-console" }
 #    headers: {}
+#    # extraBody: { "systemInstruction": { "parts": [ { "text": "你是一个严谨的助手。" } ], "role": "user" } }
 #    extraBody: {}
-#    proxy: {}
+#    proxy:
+#      enabled: false
+#      url: ""

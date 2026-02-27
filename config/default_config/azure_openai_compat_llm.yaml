@@ -22,6 +22,11 @@ providers: []
 #    enableTools: true
 #    maxToolRounds: 7
 #    enableStream: true
+#    # 额外请求头/请求体字段（可选）
+#    # headers: { "X-Client-Request-Id": "xrk-azure-compat" }
 #    headers: {}
+#    # extraBody: { "user": "demo-user" }
 #    extraBody: {}
-#    proxy: {}
+#    proxy:
+#      enabled: false
+#      url: ""

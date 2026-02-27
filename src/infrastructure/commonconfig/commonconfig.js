@@ -224,15 +224,24 @@ export default class ConfigBase {
       return await this._readMultiFile();
     }
 
-    // 检查文件是否存在
-    if (!await this.exists()) {
-      throw new Error(`配置文件不存在: ${this.filePath || this._resolveFilePath()}`);
-    }
-    
     try {
-      // 读取文件内容
+      // 解析目标文件路径（可能为动态路径）
       const filePath = this._resolveFilePath();
-      const content = await fs.readFile(filePath, 'utf8');
+
+      // 检查文件是否存在；若不存在，尝试使用默认模板（config/default_config/<name>.yaml）
+      let content;
+      if (!await this.exists()) {
+        const defaultTemplatePath = path.join(paths.root, 'config', 'default_config', `${this.name}.yaml`);
+        if (this.fileType === 'yaml' && fsSync.existsSync(defaultTemplatePath)) {
+          content = await fs.readFile(defaultTemplatePath, 'utf8');
+          BotUtil.makeLog('info', `使用默认配置模板 [${this.name}]`, 'ConfigBase');
+        } else {
+          throw new Error(`配置文件不存在: ${this.filePath || filePath}`);
+        }
+      } else {
+        // 读取实际文件内容
+        content = await fs.readFile(filePath, 'utf8');
+      }
 
       // 解析内容
       let data;
@@ -784,8 +793,20 @@ export default class ConfigBase {
     if (!schema?.fields) return list;
     for (const [key, fs] of Object.entries(schema.fields)) {
       const path = prefix ? `${prefix}.${key}` : key;
-      if (fs.type === 'object') {
-        list.push(...this.getFlatSchema(path, { fields: fs.fields ?? {} }));
+      if (fs.type === 'object' || fs.type === 'map') {
+        // 先为对象 / Map 自身生成一条描述记录，保证：
+        // - component === 'SubForm' 时，即便没有子字段，前端也能渲染一个 JSON 编辑器
+        // - buildFieldTree 能够识别并分组 SubForm / 嵌套对象
+        list.push({
+          path,
+          type: fs.type,
+          component: fs.component,
+          meta: { ...fs }
+        });
+        // 若存在子字段，则继续递归展开
+        if (fs.fields && Object.keys(fs.fields).length > 0) {
+          list.push(...this.getFlatSchema(path, { fields: fs.fields }));
+        }
       } else if (fs.type === 'array' && fs.itemType === 'object') {
         // 数组<Object> 类型：始终为数组本身生成一条描述，
         // 同时递归展开元素结构（无论使用 itemSchema 还是直接使用 fields 定义）
@@ -818,7 +839,13 @@ export default class ConfigBase {
     for (const [k, v] of Object.entries(obj)) {
       const path = prefix ? `${prefix}.${k}` : k;
       if (v && typeof v === 'object' && !Array.isArray(v)) {
-        Object.assign(out, this.flattenData(v, path));
+        // 空对象需要保留自身路径，否则前端 flat 视图无法编辑（例如 headers: {}）
+        const keys = Object.keys(v);
+        if (keys.length === 0) {
+          out[path] = {};
+        } else {
+          Object.assign(out, this.flattenData(v, path));
+        }
       } else {
         out[path] = v;
       }

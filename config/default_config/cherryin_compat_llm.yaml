@@ -9,8 +9,9 @@ providers: []
 #  - key: "cherryin-default"
 #    label: "CherryIN 默认"
 #    protocol: "cherryin"
-#    baseUrl: "https://your-cherryin.example.com"
-#    path: "/v1/chat/completions"
+#    # 约定：baseUrl 建议包含版本前缀（如 /v1），path 只写资源路径（如 /chat/completions）
+#    baseUrl: "https://your-cherryin.example.com/v1"
+#    path: "/chat/completions"
 #    apiKey: ""
 #    authMode: "bearer"
 #    authHeaderName: ""
@@ -21,6 +22,11 @@ providers: []
 #    enableTools: true
 #    maxToolRounds: 7
 #    enableStream: true
+#    # 额外请求头/请求体字段（可选）
+#    # headers: { "X-Trace-Id": "req-001" }
 #    headers: {}
+#    # extraBody: { "user": "demo-user" }
 #    extraBody: {}
-#    proxy: {}
+#    proxy:
+#      enabled: false
+#      url: ""

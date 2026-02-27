@@ -3114,13 +3114,6 @@ class App {
     return div;
   }
 
-  escapeHtml(text) {
-    if (text == null) return '';
-    const div = document.createElement('div');
-    div.textContent = String(text);
-    return div.innerHTML;
-  }
-
   /**
    * 格式化字节数
    * @param {number} bytes - 字节数
@@ -4769,9 +4762,12 @@ class App {
       this._configState.flatSchema = schemaList;
 
       const normalizedValues = this.normalizeIncomingFlatValues(schemaList, values);
-      this._configState.values = normalizedValues;
-      this._configState.rawObject = this.unflattenObject(normalizedValues);
-      this._configState.original = this._cloneFlat(normalizedValues);
+      // flat 数据默认不包含“父对象字段本身”（例如 headers: {}），会导致 SubForm/JSON 控件初始为空。
+      // 这里基于 schema 的 default 为 object/map 字段补齐缺失项，保证前端有可编辑的初始值。
+      const filledValues = this.fillMissingObjectDefaults(schemaList, normalizedValues);
+      this._configState.values = filledValues;
+      this._configState.rawObject = this.unflattenObject(filledValues);
+      this._configState.original = this._cloneFlat(filledValues);
       this._configState.jsonText = JSON.stringify(this._configState.rawObject, null, 2);
       this._configState.dirty = {};
       this._configState.jsonDirty = false;
@@ -4851,6 +4847,31 @@ class App {
     return normalized;
   }
 
+  /**
+   * 补齐 flat values 中缺失的 object/map 字段（尤其是 SubForm 无子字段场景，如 headers/extraBody）。
+   * 说明：后端 flattenData 默认只展开子键，空对象会被“丢失”，导致前端渲染出空白编辑区。
+   */
+  fillMissingObjectDefaults(flatSchema, values) {
+    const filled = { ...(values ?? {}) };
+    if (!Array.isArray(flatSchema)) return filled;
+    flatSchema.forEach(field => {
+      const path = field?.path;
+      if (!path || Object.hasOwn(filled, path)) return;
+      const meta = field.meta ?? {};
+      const component = String(meta.component ?? field.component ?? '').toLowerCase();
+      const type = String(meta.type ?? field.type ?? '').toLowerCase();
+      const isObjectLike = type === 'object' || type === 'map';
+      const isSubForm = component === 'subform';
+      if (!isObjectLike && !isSubForm) return;
+      if (Object.hasOwn(meta, 'default')) {
+        filled[path] = this._cloneValue(meta.default);
+      } else if (isObjectLike) {
+        filled[path] = {};
+      }
+    });
+    return filled;
+  }
+
   getSchemaNodeByPath(path = '', schema = this._configState?.activeSchema) {
     if (!path) return schema;
     if (!schema?.fields) return null;
@@ -4908,6 +4929,11 @@ class App {
     if (configMain && !configMain.dataset._bound) {
       configMain.dataset._bound = '1';
       configMain.addEventListener('click', (e) => {
+        const subFormToggleBtn = e.target.closest('[data-action="subform-toggle"]');
+        if (subFormToggleBtn) {
+          this.toggleSubFormEditor(subFormToggleBtn.dataset.field, subFormToggleBtn.dataset.mode);
+          return;
+        }
         const reloadBtn = e.target.closest('#configReloadBtn');
         if (reloadBtn) {
           this.loadSelectedConfigDetail();
@@ -5220,6 +5246,11 @@ class App {
 
     const label = this.escapeHtml(meta.label || path);
     const description = meta.description ? `<p class="config-field-hint">${this.escapeHtml(meta.description)}</p>` : '';
+    const example = Object.hasOwn(meta, 'example') ? `
+      <div class="config-field-example"><strong>此为示例：</strong><pre>${this.escapeHtml(
+        typeof meta.example === 'string' ? meta.example : JSON.stringify(meta.example, null, 2)
+      )}</pre></div>
+    ` : '';
 
     return `
       <div class="config-field ${dirty ? 'config-field-dirty' : ''}">
@@ -5229,6 +5260,7 @@ class App {
         </label>
         ${description}
         ${this.renderConfigControl(field, value, inputId)}
+        ${example}
       </div>
     `;
   }
@@ -5295,11 +5327,30 @@ class App {
       case 'inputpassword':
         return `<input type="password" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
       case 'subform': {
-        // SubForm 类型：如果没有子字段，使用 JSON 编辑器
-        // 注意：有子字段的 SubForm 会在 renderFieldTree 中展开显示，不会调用此函数
+        // SubForm 类型：用于“自由对象/Map”场景（例如 headers/extraBody）。
+        // 注意：有子字段的 SubForm 会在 renderFieldTree 中展开显示，不会走到这里。
+        const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${field.path}`;
+        const mode = (localStorage.getItem(modeKey) || 'kv').toLowerCase(); // kv | json
+        const obj = value && typeof value === 'object' && !Array.isArray(value)
+          ? value
+          : (Object.hasOwn(meta, 'default') ? this._cloneValue(meta.default) : {});
+
+        const kvText = this.escapeHtml(this.formatKeyValueLines(obj));
+        const jsonText = obj ? this.escapeHtml(JSON.stringify(obj, null, 2)) : '';
+        const kvHidden = mode === 'json' ? 'hidden' : '';
+        const jsonHidden = mode === 'kv' ? 'hidden' : '';
+        const kvActive = mode === 'kv' ? 'active' : '';
+        const jsonActive = mode === 'json' ? 'active' : '';
         return `
-          <textarea class="form-input" rows="4" id="${inputId}" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled}>${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>
-          <p class="config-field-hint">以 JSON 形式编辑该字段</p>
+          <div class="subform-editor" data-subform-path="${this.escapeHtml(field.path)}" data-subform-mode-key="${this.escapeHtml(modeKey)}">
+            <div class="subform-editor-tabs">
+              <button type="button" class="subform-tab ${kvActive}" data-action="subform-toggle" data-field="${this.escapeHtml(field.path)}" data-mode="kv">键值</button>
+              <button type="button" class="subform-tab ${jsonActive}" data-action="subform-toggle" data-field="${this.escapeHtml(field.path)}" data-mode="json">JSON</button>
+            </div>
+            <textarea class="form-input subform-kv" rows="4" id="${inputId}-kv" ${dataset} data-control="kvlines" placeholder="每行一个：key=value（value 可写 JSON）" ${disabled} ${kvHidden}>${kvText}</textarea>
+            <textarea class="form-input subform-json" rows="4" id="${inputId}-json" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled} ${jsonHidden}>${jsonText}</textarea>
+            <p class="config-field-hint">键值模式更适合 Header/简单对象；复杂结构建议切换 JSON。</p>
+          </div>
         `;
       }
       case 'arrayform':
@@ -5875,6 +5926,8 @@ class App {
     let value;
     if (component === 'switch') {
       value = !!target.checked;
+    } else if (target.dataset.control === 'kvlines') {
+      value = this.parseKeyValueLines(target.value || '');
     } else if (target.dataset.control === 'tags') {
       value = target.value.split(/\n+/).map(v => v.trim()).filter(Boolean);
     } else if (target.dataset.control === 'multiselect') {
@@ -5895,6 +5948,85 @@ class App {
     value = this.normalizeFieldValue(value, meta, type);
     this.setConfigFieldValue(path, value);
     this.updateConfigSaveButton();
+  }
+
+  toggleSubFormEditor(path, mode) {
+    if (!path || !mode) return;
+    const editor = document.querySelector(`.subform-editor[data-subform-path="${this.escapeSelector(path)}"]`);
+    if (!editor) return;
+    const key = editor.dataset.subformModeKey;
+    const kv = editor.querySelector('.subform-kv');
+    const json = editor.querySelector('.subform-json');
+    const tabs = editor.querySelectorAll('.subform-tab');
+    const m = String(mode).toLowerCase();
+    if (kv) kv.hidden = m === 'json';
+    if (json) json.hidden = m === 'kv';
+    tabs.forEach(btn => btn.classList.toggle('active', (btn.dataset.mode || '').toLowerCase() === m));
+    // 切换时同步内容：避免两个视图显示不一致
+    if (this._configState?.values && Object.hasOwn(this._configState.values, path)) {
+      const current = this._configState.values[path];
+      const obj = current && typeof current === 'object' && !Array.isArray(current) ? current : {};
+      if (m === 'json' && json) {
+        json.value = JSON.stringify(obj, null, 2);
+      }
+      if (m === 'kv' && kv) {
+        kv.value = this.formatKeyValueLines(obj);
+      }
+    }
+    try {
+      if (key) localStorage.setItem(key, m);
+    } catch {}
+  }
+
+  formatKeyValueLines(obj = {}) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return '';
+    return Object.entries(obj)
+      .map(([k, v]) => {
+        if (v === undefined) return `${k}=`;
+        if (typeof v === 'string') return `${k}=${v}`;
+        try {
+          return `${k}=${JSON.stringify(v)}`;
+        } catch {
+          return `${k}=${String(v)}`;
+        }
+      })
+      .join('\n');
+  }
+
+  parseKeyValueLines(text = '') {
+    const out = {};
+    const lines = String(text).split(/\r?\n/);
+    for (const lineRaw of lines) {
+      const line = lineRaw.trim();
+      if (!line || line.startsWith('#') || line.startsWith('//')) continue;
+      const idx = line.indexOf('=');
+      if (idx <= 0) continue;
+      const key = line.slice(0, idx).trim();
+      const raw = line.slice(idx + 1).trim();
+      if (!key) continue;
+      if (!raw) {
+        out[key] = '';
+        continue;
+      }
+      const looksJson =
+        raw.startsWith('{') ||
+        raw.startsWith('[') ||
+        raw === 'null' ||
+        raw === 'true' ||
+        raw === 'false' ||
+        /^-?\d+(\.\d+)?$/.test(raw) ||
+        (raw.startsWith('"') && raw.endsWith('"'));
+      if (looksJson) {
+        try {
+          out[key] = JSON.parse(raw);
+          continue;
+        } catch {
+          // fallback to string
+        }
+      }
+      out[key] = raw;
+    }
+    return out;
   }
 
   setConfigFieldValue(path, value) {
@@ -6115,6 +6247,11 @@ class App {
 
   flattenObject(obj, prefix = '', out = {}) {
     if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      // 允许保存空对象：{} 也应当在 flat 中占位，才能覆盖/清空后端旧值
+      if (prefix && Object.keys(obj).length === 0) {
+        out[prefix] = {};
+        return out;
+      }
       Object.entries(obj).forEach(([key, val]) => {
         const path = prefix ? `${prefix}.${key}` : key;
         if (val && typeof val === 'object' && !Array.isArray(val)) {

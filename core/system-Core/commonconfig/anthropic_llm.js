@@ -60,7 +60,22 @@ export default class AnthropicLLMConfig extends ConfigBase {
             type: 'number',
             label: '最大 Tokens',
             min: 1,
-            default: 2048,
+            default: 4096,
+            component: 'InputNumber'
+          },
+          topP: {
+            type: 'number',
+            label: 'Top P（top_p）',
+            min: 0,
+            max: 1,
+            default: 1.0,
+            component: 'InputNumber'
+          },
+          timeout: {
+            type: 'number',
+            label: '超时时间 (ms)',
+            min: 1000,
+            default: 360000,
             component: 'InputNumber'
           },
           enableTools: {
@@ -79,12 +94,21 @@ export default class AnthropicLLMConfig extends ConfigBase {
           headers: {
             type: 'object',
             label: '额外请求头',
+            description: '可选：为每次请求追加 HTTP 头',
+            example: {
+              'X-Trace-Id': 'anth-req-001',
+              'X-Request-From': 'xrk-agt'
+            },
             component: 'SubForm',
             fields: {}
           },
           extraBody: {
             type: 'object',
             label: '额外请求体字段',
+            description: '可选：原样合并到请求体顶层，需符合 Anthropic Messages API 字段',
+            example: {
+              metadata: { project: 'demo', scene: 'dashboard' }
+            },
             component: 'SubForm',
             fields: {}
           },

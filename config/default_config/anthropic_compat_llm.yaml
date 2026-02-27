@@ -18,6 +18,11 @@ providers: []
 #    maxTokens: 2048
 #    timeout: 360000
 #    enableStream: true
+#    # 额外请求头/请求体字段（可选）
+#    # headers: { "X-Trace-Id": "anth-compat-001" }
 #    headers: {}
+#    # extraBody: { "metadata": { "scene": "dashboard" } }
 #    extraBody: {}
-#    proxy: {}
+#    proxy:
+#      enabled: false
+#      url: ""

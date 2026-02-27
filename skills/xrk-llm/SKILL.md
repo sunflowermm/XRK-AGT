@@ -47,7 +47,8 @@ description: 当你需要配置/新增/排查 LLM 提供商（OpenAI/Azure/Gemin
 
 1. **provider key 是否存在**：`LLMFactory.listProviders()` / `GET /api/v3/models`
 2. **v3 的 model 是否填对**：应该是 provider key，不是真实模型名
-3. **端点拼接是否正确**：`baseUrl + path`（或 Azure `deployment + api-version`、Ollama `/api/chat`、Gemini `:generateContent`）
+3. **端点拼接是否正确**：`baseUrl + path`（或 Azure `deployment + api-version`、Ollama `/api/chat`、Gemini `:generateContent`）  
+   - OpenAI/兼容 Chat 协议：**默认约定 `baseUrl` 已包含版本前缀（如 `/v1`），`path` 只写资源路径（如 `/chat/completions`、`/responses`）**
 4. **认证方式是否匹配**：
    - OpenAI 官方：`Authorization: Bearer`
    - Azure：`api-key`

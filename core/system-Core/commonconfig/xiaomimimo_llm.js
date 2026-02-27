@@ -56,7 +56,7 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             description: '生成文本的随机性，范围 0-2，建议 0.0~1.0',
             min: 0,
             max: 2,
-            default: 0.3,
+            default: 0.7,
             component: 'InputNumber'
           },
           maxTokens: {
@@ -64,7 +64,7 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             label: '最大 Tokens',
             description: '单次回复的最大 Token 数（最终会映射到 max_completion_tokens）',
             min: 1,
-            default: 1024,
+            default: 4096,
             component: 'InputNumber'
           },
           topP: {
@@ -152,7 +152,7 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             description: '多轮 tool calling 的最大轮次',
             min: 1,
             max: 20,
-            default: 5,
+            default: 7,
             component: 'InputNumber'
           },
           enableStream: {
@@ -161,6 +161,47 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             description: '是否启用流式输出（默认启用，所有运营商均支持）',
             default: true,
             component: 'Switch'
+          },
+          headers: {
+            type: 'object',
+            label: '额外请求头',
+            description: '可选：为每次请求追加 HTTP 头',
+            example: {
+              'X-Channel': 'xrk-agt'
+            },
+            component: 'SubForm',
+            fields: {}
+          },
+          extraBody: {
+            type: 'object',
+            label: '额外请求体字段',
+            description: '可选：原样合并到请求体顶层，需符合 MiMo OpenAI 兼容字段',
+            example: {
+              user: 'demo-user'
+            },
+            component: 'SubForm',
+            fields: {}
+          },
+          proxy: {
+            type: 'object',
+            label: '代理配置',
+            description: '仅影响本机到小米 MiMo 的 HTTP 请求，不修改系统全局代理；支持 http/https/socks5 标准代理地址',
+            component: 'SubForm',
+            fields: {
+              enabled: {
+                type: 'boolean',
+                label: '启用代理',
+                default: false,
+                component: 'Switch'
+              },
+              url: {
+                type: 'string',
+                label: '代理地址',
+                description: '例如：http://127.0.0.1:7890 或 http://user:pass@host:port',
+                default: '',
+                component: 'Input'
+              }
+            }
           }
         }
       }

@@ -2750,6 +2750,49 @@ select.form-input {
   transition: all var(--transition);
 }
 
+/* SubForm（自由对象/Map）编辑器：键值 / JSON 切换 */
+.subform-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.subform-editor-tabs {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.subform-tab {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all var(--transition);
+}
+
+.subform-tab:hover {
+  border-color: var(--primary-200);
+  color: var(--text-primary);
+}
+
+.subform-tab.active {
+  background: var(--primary-50);
+  border-color: var(--primary);
+  color: var(--primary-dark);
+  font-weight: 600;
+}
+
+.subform-kv,
+.subform-json {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .config-subgroup:hover {
   border-left-color: var(--primary-dark);
   box-shadow: var(--shadow);
@@ -2874,6 +2917,32 @@ select.form-input {
   font-size: 12px;
   color: var(--text-muted);
   margin-bottom: 8px;
+}
+
+.config-field-example {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-input) 70%, transparent);
+  border: 1px dashed var(--border-light);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.config-field-example strong {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.config-field-example pre {
+  margin: 6px 0 0;
+  padding: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .config-field-dirty {

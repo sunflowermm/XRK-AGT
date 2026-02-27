@@ -101,9 +101,12 @@ export default {
         }
 
         const current = await config.read(false);
-        const patchObj = config.expandFlatData(flat);
-        // 使用内部深合并，保持其余字段不动
-        const merged = config._deepMerge(current, patchObj);
+        // 注意：这里的 flat 是“精确路径集合”，语义应该是“只覆盖这些路径”，而不是深合并整个对象。
+        // 否则像 headers/extraBody 这类 object/map 字段无法被清空（{} 深合并会保留旧键）。
+        const merged = JSON.parse(JSON.stringify(current ?? {}));
+        for (const [p, v] of Object.entries(flat)) {
+          config._setValueByPath(merged, p, v);
+        }
 
         // 校验并写入
         const valid = await config.validate(merged);

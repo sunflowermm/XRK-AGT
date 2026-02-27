@@ -244,7 +244,7 @@ export default class VolcengineTTSClient {
         const chunkMs = Math.max(5, Math.min(512, this.config.chunkMs || 40));
         const bytesPerMs = (sr * 2) / 1000;
         const chunkBytes = Math.max(2, Math.floor((bytesPerMs * chunkMs) / 2) * 2);
-        const delayMs = 0; // 为了最低端到端延迟，禁用额外分片延迟
+        const delayMs = Math.max(0, Number(this.config.chunkDelayMs ?? 0)); // 0 表示不做额外延迟
         
         if (this.sessionStartTime === null) {
             this.sessionStartTime = Date.now();

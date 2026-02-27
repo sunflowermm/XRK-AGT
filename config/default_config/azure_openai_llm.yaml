@@ -49,4 +49,6 @@ extraBody: {}
 # proxy:
 #   enabled: true
 #   url: "http://127.0.0.1:7890"
-proxy: {}
+proxy:
+  enabled: false
+  url: ""

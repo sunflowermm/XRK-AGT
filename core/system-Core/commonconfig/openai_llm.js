@@ -34,7 +34,7 @@ export default class OpenAILLMConfig extends ConfigBase {
           path: {
             type: 'string',
             label: '接口路径',
-            description: 'Chat Completions 路径，官方默认 /v1/chat/completions',
+            description: 'Chat Completions 路径，官方默认 /chat/completions（基础地址已包含 /v1）',
             default: '/chat/completions',
             component: 'Input'
           },
@@ -52,11 +52,11 @@ export default class OpenAILLMConfig extends ConfigBase {
             default: 0.7,
             component: 'InputNumber'
           },
-          maxCompletionTokens: {
+          maxTokens: {
             type: 'number',
-            label: 'max_completion_tokens',
+            label: '最大 Tokens（max_tokens / max_completion_tokens）',
             min: 1,
-            default: 2048,
+            default: 4096,
             component: 'InputNumber'
           },
           topP: {
@@ -146,7 +146,7 @@ export default class OpenAILLMConfig extends ConfigBase {
             label: '最大工具轮次',
             min: 1,
             max: 20,
-            default: 5,
+            default: 7,
             component: 'InputNumber'
           },
           enableStream: {
@@ -158,12 +158,22 @@ export default class OpenAILLMConfig extends ConfigBase {
           headers: {
             type: 'object',
             label: '额外请求头',
+            description: '可选：为每次请求追加 HTTP 头',
+            example: {
+              'X-Trace-Id': 'req-123',
+              'X-Forwarded-For': '127.0.0.1'
+            },
             component: 'SubForm',
             fields: {}
           },
           extraBody: {
             type: 'object',
             label: '额外请求体字段',
+            description: '可选：原样合并到请求体顶层（与 OpenAI API 字段一致时才生效）',
+            example: {
+              user: 'demo-user',
+              metadata: { scene: 'dashboard' }
+            },
             component: 'SubForm',
             fields: {}
           },

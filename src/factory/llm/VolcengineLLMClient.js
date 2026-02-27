@@ -161,6 +161,7 @@ export default class VolcengineLLMClient {
    */
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
+    await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     
     const maxToolRounds = this.config.maxToolRounds || 7;
     let currentMessages = [...transformedMessages];

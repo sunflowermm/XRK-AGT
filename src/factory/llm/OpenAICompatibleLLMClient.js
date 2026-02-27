@@ -21,6 +21,7 @@ export default class OpenAICompatibleLLMClient {
 
   normalizeEndpoint(config) {
     const base = (config.baseUrl ?? '').replace(/\/+$/, '');
+    // 约定：baseUrl 默认已经带上版本前缀（如 /v1），path 只写资源路径（如 /chat/completions）
     const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
     if (!base) throw new Error('openai_compat: 未配置 baseUrl（第三方 OpenAI 兼容接口地址）');
     return `${base}${path}`;

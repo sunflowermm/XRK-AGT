@@ -10,8 +10,8 @@ providers: []
 #  - key: "openai-default"
 #    label: "OpenAI 官方"
 #    protocol: "openai"
-#    baseUrl: "https://api.openai.com"
-#    path: "/v1/chat/completions"
+#    baseUrl: "https://api.openai.com/v1"
+#    path: "/chat/completions"
 #    apiKey: ""
 #    authMode: "bearer"
 #    authHeaderName: ""
@@ -32,6 +32,11 @@ providers: []
 #    maxToolRounds: 7
 #    timeout: 360000
 #    enableStream: true
+#    # 额外请求头/请求体字段（可选）
+#    # headers: { "X-Trace-Id": "req-001" }
 #    headers: {}
+#    # extraBody: { "user": "demo-user" }
 #    extraBody: {}
-#    proxy: {}
+#    proxy:
+#      enabled: false
+#      url: ""

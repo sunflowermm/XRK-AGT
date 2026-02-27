@@ -118,7 +118,7 @@ export default class VolcengineTTSConfig extends ConfigBase {
             label: '分片延迟 (ms)',
             description: '分片之间的延迟时间（毫秒）',
             min: 0,
-            default: 5,
+            default: 0,
             component: 'InputNumber'
           }
         }

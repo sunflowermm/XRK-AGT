@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
+import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import BotUtil from '../../utils/botutil.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
@@ -172,33 +173,24 @@ export default class XiaomiMiMoLLMClient {
   buildBody(messages, overrides = {}) {
     // 规范化消息中的 tool_calls（多轮工具调用时需要）
     const normalizedMessages = this.normalizeMessages(messages);
-    
-    const body = {
-      model: this.config.chatModel || this.config.model || 'mimo-v2-flash',
-      messages: normalizedMessages,
-      temperature: this.config.temperature ?? 0.3,
-      max_completion_tokens: this.config.maxTokens ?? 1024,
-      top_p: this.config.topP ?? 0.95,
-      stream: overrides.stream ?? false,
-      frequency_penalty: this.config.frequencyPenalty ?? 0,
-      presence_penalty: this.config.presencePenalty ?? 0
-    };
 
-    if (this.config.stop !== undefined) body.stop = this.config.stop;
-    if (this.config.thinkingType !== undefined) body.thinking = { type: this.config.thinkingType };
-    if (this.config.response_format !== undefined) body.response_format = this.config.response_format;
+    // 复用 OpenAI-like 归一化逻辑，确保：
+    // - extraBody 生效
+    // - parallel_tool_calls / tool_choice 兼容
+    // - maxTokens 同时映射到 max_completion_tokens / max_tokens（MiMo 使用前者）
+    const defaultModel = this.config.model || this.config.chatModel || 'mimo-v2-flash';
+    const body = buildOpenAIChatCompletionsBody(normalizedMessages, this.config, overrides, defaultModel);
+    applyOpenAITools(body, this.config, overrides);
 
-    // 工具调用支持
-    const enableTools = this.config.enableTools !== false && MCPToolAdapter.hasTools();
-    let tools = overrides.tools ?? this.config.tools;
-    
-    if (!tools && enableTools) {
-      tools = MCPToolAdapter.convertMCPToolsToOpenAI();
+    // MiMo 扩展字段
+    const thinkingType = overrides.thinkingType ?? overrides.thinking_type ?? this.config.thinkingType ?? this.config.thinking_type;
+    if (thinkingType !== undefined && thinkingType !== '') {
+      body.thinking = { type: thinkingType };
     }
-    
-    if (tools?.length > 0) {
-      body.tools = this.normalizeTools(tools);
-      body.tool_choice = overrides.tool_choice ?? this.config.toolChoice ?? 'auto';
+
+    // MiMo 对 tool.name 有严格限制：出站 tools 需要规范化名称
+    if (Array.isArray(body.tools) && body.tools.length > 0) {
+      body.tools = this.normalizeTools(body.tools);
     }
 
     return body;

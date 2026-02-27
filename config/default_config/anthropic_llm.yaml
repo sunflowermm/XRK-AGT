@@ -29,7 +29,14 @@ timeout: 360000
 # 是否启用流式输出（默认启用）
 enableStream: true
 
+# ----------------------------------------
+# 高级：额外请求头 / 请求体字段
+# ----------------------------------------
+# 可选：为每次请求追加额外 Header（例如自定义追踪头）
+# headers: { "X-Trace-Id": "anth-req-001" }
 headers: {}
+# 可选：原样合并到请求体顶层（高级用法）
+# extraBody: { "metadata": { "scene": "dashboard" } }
 extraBody: {}
 
 # 代理配置（可选）
@@ -38,4 +45,6 @@ extraBody: {}
 # proxy:
 #   enabled: true
 #   url: "http://127.0.0.1:7890"
-proxy: {}
+proxy:
+  enabled: false
+  url: ""

@@ -35,8 +35,22 @@ export default class OllamaCompatibleLLMConfig extends ConfigBase {
               enableTools: { type: 'boolean', label: '启用工具调用（MCP）', default: true, component: 'Switch' },
               maxToolRounds: { type: 'number', label: '最大工具轮次', min: 1, max: 20, default: 7, component: 'InputNumber' },
               enableStream: { type: 'boolean', label: '启用流式输出', default: true, component: 'Switch' },
-              headers: { type: 'object', label: '额外请求头', component: 'SubForm', fields: {} },
-              extraBody: { type: 'object', label: '额外请求体字段', component: 'SubForm', fields: {} },
+              headers: { 
+                type: 'object', 
+                label: '额外请求头', 
+                description: '可选：为下游 Ollama 接口追加 HTTP 头',
+                example: { 'X-Client-Id': 'xrk-ollama' },
+                component: 'SubForm', 
+                fields: {} 
+              },
+              extraBody: { 
+                type: 'object', 
+                label: '额外请求体字段', 
+                description: '可选：原样合并到 Ollama /api/chat 请求体',
+                example: { options: { temperature: 0.3 } },
+                component: 'SubForm', 
+                fields: {} 
+              },
               proxy: {
                 type: 'object',
                 label: '代理配置',

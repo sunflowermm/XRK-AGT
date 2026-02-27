@@ -795,8 +795,17 @@ export default class AIStream {
       if (typeof onDelta === 'function') onDelta(delta);
     };
 
+    // 若该 provider 明确禁用流式，则退化为非流式调用，并一次性输出
+    // 这样可以保持上游“期望流式”的接口不报错，同时尊重配置 enableStream=false
+    if (config.enableStream === false) {
+      const { content } = await this.callAI(messages, apiConfig);
+      if (content) wrapDelta(content);
+      return content || '';
+    }
+
     // 优先使用 Python 子服务端流式（SSE透传），失败时回退到 NodeJS LLMFactory
     try {
+      const enableTools = config.enableTools !== false;
       const payload = {
         messages,
         model: config.chatModel || config.model || config.provider,
@@ -804,7 +813,15 @@ export default class AIStream {
         temperature: config.temperature,
         max_tokens: config.maxTokens,
         stream: true,
-        enableTools: config.enableTools !== false
+        // python 子服务端字段约定：use_tools
+        use_tools: enableTools,
+        enableTools, // 兼容旧字段（若子服务端未来支持/已支持）
+        // 透传 v3 兼容字段（是否生效取决于主服务 v3 & provider）
+        tool_choice: config.tool_choice ?? config.toolChoice,
+        parallel_tool_calls: config.parallel_tool_calls ?? config.parallelToolCalls,
+        extraBody: config.extraBody,
+        // 若禁用 tools，则显式传 tools=null，让主服务 v3 不注入 MCP tools
+        ...(enableTools ? {} : { tools: null })
       };
       if (config.streams?.length) {
         payload.workflow = { workflows: config.streams };

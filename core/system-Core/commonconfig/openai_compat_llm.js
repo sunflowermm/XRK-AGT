@@ -34,12 +34,12 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
                 default: 'openai',
                 component: 'Select'
               },
-              baseUrl: { type: 'string', label: 'API 基础地址', default: '', component: 'Input' },
+              baseUrl: { type: 'string', label: 'API 基础地址', description: '如 https://api.openai.com/v1 或任意兼容网关', default: '', component: 'Input' },
               path: {
                 type: 'string',
                 label: '接口路径',
-                description: '官方默认 /v1/chat/completions',
-                default: '/v1/chat/completions',
+                description: '官方默认 /chat/completions（基础地址已包含 /v1）',
+                default: '/chat/completions',
                 component: 'Input'
               },
               apiKey: { type: 'string', label: 'API Key', default: '', component: 'InputPassword' },
@@ -69,8 +69,22 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
               parallelToolCalls: { type: 'boolean', label: 'parallel_tool_calls', default: true, component: 'Switch' },
               maxToolRounds: { type: 'number', label: '最大工具轮次', min: 1, max: 20, default: 7, component: 'InputNumber' },
               enableStream: { type: 'boolean', label: '启用流式', default: true, component: 'Switch' },
-              headers: { type: 'object', label: '额外请求头', component: 'SubForm', fields: {} },
-              extraBody: { type: 'object', label: '额外请求体字段', component: 'SubForm', fields: {} },
+              headers: { 
+                type: 'object', 
+                label: '额外请求头',
+                description: '可选：为下游 Chat 接口追加 HTTP 头',
+                example: { 'X-Client-Id': 'xrk-openai-compat' },
+                component: 'SubForm', 
+                fields: {} 
+              },
+              extraBody: { 
+                type: 'object', 
+                label: '额外请求体字段',
+                description: '可选：原样合并到 Chat 请求体顶层，如 user/metadata 等',
+                example: { user: 'demo-user' },
+                component: 'SubForm', 
+                fields: {} 
+              },
               proxy: {
                 type: 'object',
                 label: '代理配置',

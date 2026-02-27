@@ -9,8 +9,8 @@ providers: []
 #  - key: "newapi-default"
 #    label: "New API 默认"
 #    protocol: "new-api"
-#    baseUrl: "https://your-newapi.example.com"
-#    path: "/v1/chat/completions"
+#    baseUrl: "https://your-newapi.example.com/v1"
+#    path: "/chat/completions"
 #    apiKey: ""
 #    authMode: "bearer"
 #    authHeaderName: ""
@@ -24,6 +24,11 @@ providers: []
 #    parallelToolCalls: true
 #    maxToolRounds: 7
 #    enableStream: true
+#    # 额外请求头/请求体字段（可选）
+#    # headers: { "X-Trace-Id": "req-001" }
 #    headers: {}
+#    # extraBody: { "user": "demo-user" }
 #    extraBody: {}
-#    proxy: {}
+#    proxy:
+#      enabled: false
+#      url: ""

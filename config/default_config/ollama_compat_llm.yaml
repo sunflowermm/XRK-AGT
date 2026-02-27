@@ -17,6 +17,11 @@ providers: []
 #    maxTokens: 4096
 #    timeout: 360000
 #    enableStream: true
+#    # 额外请求头/请求体字段（可选）
+#    # headers: { "X-Client-Id": "xrk-ollama" }
 #    headers: {}
+#    # extraBody: { "options": { "temperature": 0.3 } }
 #    extraBody: {}
-#    proxy: {}
+#    proxy:
+#      enabled: false
+#      url: ""

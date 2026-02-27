@@ -80,7 +80,7 @@ export default class GeminiLLMConfig extends ConfigBase {
             type: 'number',
             label: '最大输出（generationConfig.maxOutputTokens）',
             min: 1,
-            default: 2048,
+            default: 4096,
             component: 'InputNumber'
           },
           timeout: {
@@ -106,6 +106,10 @@ export default class GeminiLLMConfig extends ConfigBase {
           headers: {
             type: 'object',
             label: '额外请求头',
+            description: '可选：为每次请求追加 HTTP 头',
+            example: {
+              'X-Referer': 'xrk-agt-console'
+            },
             component: 'SubForm',
             fields: {}
           },
@@ -113,6 +117,12 @@ export default class GeminiLLMConfig extends ConfigBase {
             type: 'object',
             label: '额外请求体字段',
             description: '原样合并到 payload 顶层（高级用法）',
+            example: {
+              systemInstruction: {
+                parts: [{ text: '你是一个严谨的后端助手。' }],
+                role: 'user'
+              }
+            },
             component: 'SubForm',
             fields: {}
           },

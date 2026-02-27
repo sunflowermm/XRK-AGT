@@ -63,7 +63,7 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
             type: 'number',
             label: '最大 Tokens（max_tokens）',
             min: 1,
-            default: 2048,
+            default: 4096,
             component: 'InputNumber'
           },
           topP: {
@@ -102,12 +102,25 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
             default: 'auto',
             component: 'Input'
           },
+          parallelToolCalls: {
+            type: 'boolean',
+            label: '并行工具调用（parallel_tool_calls）',
+            default: true,
+            component: 'Switch'
+          },
           maxToolRounds: {
             type: 'number',
             label: '最大工具轮次',
             min: 1,
             max: 20,
-            default: 5,
+            default: 7,
+            component: 'InputNumber'
+          },
+          timeout: {
+            type: 'number',
+            label: '超时时间(ms)',
+            min: 1000,
+            default: 360000,
             component: 'InputNumber'
           },
           enableStream: {
@@ -119,12 +132,20 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
           headers: {
             type: 'object',
             label: '额外请求头',
+            description: '可选：为每次请求追加 HTTP 头（通常无需设置）',
+            example: {
+              'X-Client-Request-Id': 'azure-demo-001'
+            },
             component: 'SubForm',
             fields: {}
           },
           extraBody: {
             type: 'object',
             label: '额外请求体字段',
+            description: '可选：原样合并到请求体顶层，需符合 Azure OpenAI 官方字段',
+            example: {
+              user: 'demo-user'
+            },
             component: 'SubForm',
             fields: {}
           },

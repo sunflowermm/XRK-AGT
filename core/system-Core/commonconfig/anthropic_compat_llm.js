@@ -32,8 +32,22 @@ export default class AnthropicCompatibleLLMConfig extends ConfigBase {
               maxTokens: { type: 'number', label: '最大输出（max_tokens）', min: 1, default: 2048, component: 'InputNumber' },
               timeout: { type: 'number', label: '超时(ms)', min: 1000, default: 360000, component: 'InputNumber' },
               enableStream: { type: 'boolean', label: '启用流式', default: true, component: 'Switch' },
-              headers: { type: 'object', label: '额外请求头', component: 'SubForm', fields: {} },
-              extraBody: { type: 'object', label: '额外请求体字段', component: 'SubForm', fields: {} },
+              headers: { 
+                type: 'object', 
+                label: '额外请求头',
+                description: '可选：为 Anthropic Messages 接口追加 HTTP 头',
+                example: { 'X-Trace-Id': 'anth-compat-001' },
+                component: 'SubForm', 
+                fields: {} 
+              },
+              extraBody: { 
+                type: 'object', 
+                label: '额外请求体字段',
+                description: '可选：原样合并到 Messages 请求体顶层',
+                example: { metadata: { project: 'demo' } },
+                component: 'SubForm', 
+                fields: {} 
+              },
               proxy: {
                 type: 'object',
                 label: '代理配置',

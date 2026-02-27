@@ -17,6 +17,22 @@ accessKey: ""
 resourceId: "volc.bigasr.sauc.duration"
 
 # ----------------------------------------
+# 音频默认参数（可按会话覆盖）
+# ----------------------------------------
+# 默认音频格式（pcm 等）
+format: "pcm"
+# 默认音频编码（raw 等）
+codec: "raw"
+# 默认采样率（Hz）
+sampleRate: 16000
+# 默认采样位数
+bits: 16
+# 默认声道数
+channel: 1
+# 默认模型名称（对应 request.model_name）
+modelName: "bigmodel"
+
+# ----------------------------------------
 # 功能开关配置
 # ----------------------------------------
 # 是否启用逆文本标准化（ITN）
@@ -53,3 +69,15 @@ forceToSpeechTime: 500
 maxAudioBufferSize: 30
 # ASR最终文本等待时间（毫秒）
 asrFinalTextWaitMs: 1200
+
+# ----------------------------------------
+# WebSocket 连接保活 / 重连参数（高级）
+# ----------------------------------------
+# Ping 间隔（0 表示不启用）
+wsPingIntervalMs: 30000
+# Pong 超时
+wsPongTimeoutMs: 10000
+# 重连基础延迟（会按次数线性增加）
+wsReconnectDelayMs: 2000
+# 最大重连次数
+wsMaxReconnectAttempts: 5

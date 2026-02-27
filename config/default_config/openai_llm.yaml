@@ -23,6 +23,13 @@ topP: 1.0
 presencePenalty: 0
 frequencyPenalty: 0
 
+# OpenAI 官方可选参数（不需要可留默认）
+serviceTier: "auto"
+promptCacheKey: ""
+promptCacheRetention: "in-memory"
+safetyIdentifier: ""
+reasoningEffort: "medium"
+
 # 请求超时时间（毫秒）
 timeout: 360000
 
@@ -49,4 +56,6 @@ extraBody: {}
 # proxy:
 #   enabled: true
 #   url: "http://127.0.0.1:7890"
-proxy: {}
+proxy:
+  enabled: false
+  url: ""

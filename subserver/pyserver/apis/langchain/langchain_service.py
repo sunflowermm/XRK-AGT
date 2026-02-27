@@ -60,7 +60,7 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
         return {"success": False, "error": str(e)}
 
 
-def _v3_payload(messages, model: str, temperature: float, max_tokens: int, stream: bool, api_key: str):
+def _v3_payload(messages, model: str, temperature: float, max_tokens: int, stream: bool, api_key: str, extra: dict | None = None):
     """构建 v3 chat 请求体（与主服务端 /api/v3/chat/completions 约定一致）。"""
     p = {
         "messages": messages,
@@ -71,6 +71,9 @@ def _v3_payload(messages, model: str, temperature: float, max_tokens: int, strea
     }
     if api_key:
         p["apiKey"] = api_key
+    # 透传可选扩展字段（主服务 v3 将继续做字段归一化与白名单处理）
+    if isinstance(extra, dict) and extra:
+        p.update(extra)
     return p
 
 
@@ -100,7 +103,13 @@ async def chat_handler(request: Request):
     temperature = data.get("temperature", 0.8)
     max_tokens = data.get("max_tokens", 2000)
     stream = data.get("stream", False)
-    use_tools = data.get("use_tools", True)
+    # 兼容字段：use_tools / enableTools / enable_tools
+    use_tools = data.get("use_tools")
+    if use_tools is None:
+        use_tools = data.get("enableTools")
+    if use_tools is None:
+        use_tools = data.get("enable_tools")
+    use_tools = True if use_tools is None else bool(use_tools)
     
     if not messages or not isinstance(messages, list):
         raise HTTPException(status_code=400, detail="messages参数无效")
@@ -110,7 +119,22 @@ async def chat_handler(request: Request):
     main_api_key = (data.get("apiKey") or config.get("main_server.api_key", "")).strip()
 
     if stream:
-        payload = _v3_payload(messages, model, temperature, max_tokens, True, main_api_key)
+        # 透传可选字段（按 docs/subserver-api.md 支持的同义字段）
+        passthrough = {}
+        if data.get("tool_choice") is not None:
+            passthrough["tool_choice"] = data.get("tool_choice")
+        if data.get("toolChoice") is not None:
+            passthrough["toolChoice"] = data.get("toolChoice")
+        if data.get("parallel_tool_calls") is not None:
+            passthrough["parallel_tool_calls"] = data.get("parallel_tool_calls")
+        if data.get("parallelToolCalls") is not None:
+            passthrough["parallelToolCalls"] = data.get("parallelToolCalls")
+        if data.get("extraBody") is not None:
+            passthrough["extraBody"] = data.get("extraBody")
+        if data.get("tools") is not None:
+            passthrough["tools"] = data.get("tools")
+
+        payload = _v3_payload(messages, model, temperature, max_tokens, True, main_api_key, passthrough)
         client = await get_http_client()
         v3_url = f"{main_url}/api/v3/chat/completions"
         try:
@@ -154,7 +178,21 @@ async def chat_handler(request: Request):
         except Exception as e:
             logger.warning(f"[langchain] Agent失败，回退: {e}")
 
-    payload = _v3_payload(messages, model, temperature, max_tokens, False, main_api_key)
+    passthrough = {}
+    if data.get("tool_choice") is not None:
+        passthrough["tool_choice"] = data.get("tool_choice")
+    if data.get("toolChoice") is not None:
+        passthrough["toolChoice"] = data.get("toolChoice")
+    if data.get("parallel_tool_calls") is not None:
+        passthrough["parallel_tool_calls"] = data.get("parallel_tool_calls")
+    if data.get("parallelToolCalls") is not None:
+        passthrough["parallelToolCalls"] = data.get("parallelToolCalls")
+    if data.get("extraBody") is not None:
+        passthrough["extraBody"] = data.get("extraBody")
+    if data.get("tools") is not None:
+        passthrough["tools"] = data.get("tools")
+
+    payload = _v3_payload(messages, model, temperature, max_tokens, False, main_api_key, passthrough)
     try:
         return await call_main_server_json("POST", "/api/v3/chat/completions", json_data=payload, timeout=60)
     except httpx.TimeoutException:

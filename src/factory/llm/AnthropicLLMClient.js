@@ -130,6 +130,11 @@ export default class AnthropicLLMClient {
       messages: anthMessages
     };
 
+    const topP = (overrides.topP ?? overrides.top_p) ?? (this.config.topP ?? this.config.top_p);
+    if (topP !== undefined) {
+      body.top_p = topP;
+    }
+
     if (systemTexts.length > 0) {
       body.system = systemTexts.join('\n');
     }

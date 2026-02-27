@@ -64,7 +64,7 @@ export default class VolcengineLLMConfig extends ConfigBase {
             label: '最大 Tokens',
             description: '生成文本的最大长度',
             min: 1,
-            default: 4000,
+            default: 4096,
             component: 'InputNumber'
           },
           topP: {
@@ -136,7 +136,7 @@ export default class VolcengineLLMConfig extends ConfigBase {
             description: '多轮 tool calling 的最大轮次',
             min: 1,
             max: 20,
-            default: 5,
+            default: 7,
             component: 'InputNumber'
           },
           enableStream: {
@@ -145,6 +145,48 @@ export default class VolcengineLLMConfig extends ConfigBase {
             description: '是否启用流式输出（默认启用，所有运营商均支持）',
             default: true,
             component: 'Switch'
+          },
+          headers: {
+            type: 'object',
+            label: '额外请求头',
+            description: '可选：为每次请求追加 HTTP 头',
+            example: {
+              'X-Request-From': 'xrk-agt'
+            },
+            component: 'SubForm',
+            fields: {}
+          },
+          extraBody: {
+            type: 'object',
+            label: '额外请求体字段',
+            description: '可选：原样合并到请求体顶层，需符合豆包 API 字段',
+            example: {
+              user: 'demo-user',
+              metadata: { channel: 'xrk' }
+            },
+            component: 'SubForm',
+            fields: {}
+          },
+          proxy: {
+            type: 'object',
+            label: '代理配置',
+            description: '仅影响本机到火山引擎的 HTTP 请求，不修改系统全局代理；支持 http/https/socks5 标准代理地址',
+            component: 'SubForm',
+            fields: {
+              enabled: {
+                type: 'boolean',
+                label: '启用代理',
+                default: false,
+                component: 'Switch'
+              },
+              url: {
+                type: 'string',
+                label: '代理地址',
+                description: '例如：http://127.0.0.1:7890 或 http://user:pass@host:port',
+                default: '',
+                component: 'Input'
+              }
+            }
           }
         }
       }

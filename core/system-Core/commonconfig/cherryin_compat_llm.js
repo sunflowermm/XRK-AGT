@@ -23,8 +23,8 @@ export default class CherryINCompatibleLLMConfig extends ConfigBase {
               key: { type: 'string', label: '运营商标识（provider/model）', default: '', component: 'Input' },
               label: { type: 'string', label: '展示名称', default: '', component: 'Input' },
               protocol: { type: 'string', label: '协议类型', enum: ['cherryin'], default: 'cherryin', component: 'Select' },
-              baseUrl: { type: 'string', label: 'API 基础地址', default: '', component: 'Input' },
-              path: { type: 'string', label: '接口路径', default: '/v1/chat/completions', component: 'Input' },
+              baseUrl: { type: 'string', label: 'API 基础地址', description: 'CherryIN / 兼容网关基础地址', default: '', component: 'Input' },
+              path: { type: 'string', label: '接口路径', description: '默认 /chat/completions（基础地址建议包含 /v1）', default: '/chat/completions', component: 'Input' },
               apiKey: { type: 'string', label: 'API Key', default: '', component: 'InputPassword' },
               authMode: { type: 'string', label: '认证方式', enum: ['bearer', 'api-key', 'header'], default: 'bearer', component: 'Select' },
               authHeaderName: { type: 'string', label: '自定义认证头名', default: '', component: 'Input' },
@@ -35,8 +35,22 @@ export default class CherryINCompatibleLLMConfig extends ConfigBase {
               enableTools: { type: 'boolean', label: '启用工具调用（MCP）', default: true, component: 'Switch' },
               maxToolRounds: { type: 'number', label: '最大工具轮次', min: 1, max: 20, default: 7, component: 'InputNumber' },
               enableStream: { type: 'boolean', label: '启用流式输出', default: true, component: 'Switch' },
-              headers: { type: 'object', label: '额外请求头', component: 'SubForm', fields: {} },
-              extraBody: { type: 'object', label: '额外请求体字段', component: 'SubForm', fields: {} },
+              headers: { 
+                type: 'object', 
+                label: '额外请求头',
+                description: '可选：为 CherryIN 接口追加 HTTP 头',
+                example: { 'X-Channel': 'xrk-cherry' },
+                component: 'SubForm', 
+                fields: {} 
+              },
+              extraBody: { 
+                type: 'object', 
+                label: '额外请求体字段',
+                description: '可选：原样合并到请求体顶层',
+                example: { user: 'demo-user' },
+                component: 'SubForm', 
+                fields: {} 
+              },
               proxy: {
                 type: 'object',
                 label: '代理配置',

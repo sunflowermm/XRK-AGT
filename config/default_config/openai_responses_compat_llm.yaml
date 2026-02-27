@@ -16,8 +16,8 @@ providers: []
 #  - key: "openai-responses"        # 运营商 key，对外当成 provider/model 使用
 #    label: "OpenAI Responses 官方"
 #    protocol: "openai-response"    # 工厂内部协议类型：OpenAI Responses
-#    baseUrl: "https://api.openai.com"
-#    path: "/v1/responses"
+#    baseUrl: "https://api.openai.com/v1"
+#    path: "/responses"
 #    apiKey: ""
 #    authMode: "bearer"
 #    authHeaderName: ""
@@ -34,9 +34,14 @@ providers: []
 #    toolChoice: "auto"
 #    maxToolRounds: 7
 #    maxToolCalls: 20
+#    # 额外请求头/请求体字段（可选）
+#    # headers: { "X-Trace-Id": "resp-001" }
 #    headers: {}
+#    # extraBody: { "user": "demo-user" }
 #    extraBody: {}
-#    proxy: {}
+#    proxy:
+#      enabled: false
+#      url: ""
 #
 #  # 你可以继续在此处新增更多“Responses 运营商”：
 #  # - key: "xrk-resp"

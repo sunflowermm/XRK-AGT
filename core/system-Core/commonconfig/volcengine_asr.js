@@ -50,6 +50,53 @@ export default class VolcengineASRConfig extends ConfigBase {
             default: 'volc.bigasr.sauc.duration',
             component: 'Input'
           },
+
+          // 音频默认参数（可按会话覆盖）
+          format: {
+            type: 'string',
+            label: '音频格式（format）',
+            description: '默认音频格式（pcm 等），可按会话覆盖',
+            default: 'pcm',
+            component: 'Input'
+          },
+          codec: {
+            type: 'string',
+            label: '音频编码（codec）',
+            description: '默认音频编码（raw 等），可按会话覆盖',
+            default: 'raw',
+            component: 'Input'
+          },
+          sampleRate: {
+            type: 'number',
+            label: '采样率（Hz）',
+            description: '默认采样率（如 16000），可按会话覆盖',
+            enum: [8000, 16000, 24000],
+            default: 16000,
+            component: 'Select'
+          },
+          bits: {
+            type: 'number',
+            label: '采样位数（bits）',
+            description: '默认位深（一般 16）',
+            enum: [8, 16],
+            default: 16,
+            component: 'Select'
+          },
+          channel: {
+            type: 'number',
+            label: '声道数（channel）',
+            description: '默认声道数（一般 1）',
+            enum: [1, 2],
+            default: 1,
+            component: 'Select'
+          },
+          modelName: {
+            type: 'string',
+            label: '模型名称（model_name）',
+            description: '火山 ASR request.model_name 默认值，可按会话覆盖',
+            default: 'bigmodel',
+            component: 'Input'
+          },
           
           // 功能开关配置
           enableItn: {
@@ -153,6 +200,40 @@ export default class VolcengineASRConfig extends ConfigBase {
             description: '等待最终文本输出的时间',
             min: 0,
             default: 1200,
+            component: 'InputNumber'
+          },
+
+          // WebSocket 连接保活 / 重连参数（高级）
+          wsPingIntervalMs: {
+            type: 'number',
+            label: 'Ping 间隔 (ms)',
+            description: '定期发送 WS ping 的间隔；0 或空表示不启用',
+            min: 0,
+            default: 30000,
+            component: 'InputNumber'
+          },
+          wsPongTimeoutMs: {
+            type: 'number',
+            label: 'Pong 超时 (ms)',
+            description: '未收到 pong 时的超时断开时间',
+            min: 0,
+            default: 10000,
+            component: 'InputNumber'
+          },
+          wsReconnectDelayMs: {
+            type: 'number',
+            label: '重连基础延迟 (ms)',
+            description: '重连延迟基数（会按次数线性增加，并有上限）',
+            min: 0,
+            default: 2000,
+            component: 'InputNumber'
+          },
+          wsMaxReconnectAttempts: {
+            type: 'number',
+            label: '最大重连次数',
+            description: 'WS 非正常关闭时允许重连的最大次数',
+            min: 0,
+            default: 5,
             component: 'InputNumber'
           }
         }

@@ -22,6 +22,7 @@ model: "gemini-1.5-flash"
 temperature: 0.7
 maxTokens: 4096
 topP: 1.0
+topK: 0
 
 # Gemini function calling 与 OpenAI 协议不同，本实现默认不注入 MCP tools
 enableTools: false
@@ -34,9 +35,11 @@ timeout: 360000
 enableStream: true
 
 # 额外请求头（可选）
+# 示例：headers: { "X-Referer": "xrk-agt-console" }
 headers: {}
 
 # 额外请求体字段（原样合并到 payload 顶层；高级用法）
+# 示例：extraBody: { "systemInstruction": { "parts": [ { "text": "你是一个严谨的助手。" } ], "role": "user" } }
 extraBody: {}
 
 # 代理配置（可选）
@@ -45,4 +48,6 @@ extraBody: {}
 # proxy:
 #   enabled: true
 #   url: "http://127.0.0.1:7890"
-proxy: {}
+proxy:
+  enabled: false
+  url: ""
