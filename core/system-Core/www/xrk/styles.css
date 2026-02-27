@@ -1107,6 +1107,9 @@ select.form-input {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  /* 防止侧栏自身宽度把整体容器撑破 */
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .chat-main {
@@ -1118,6 +1121,7 @@ select.form-input {
   min-width: 0;
   width: 100%;
   max-width: 100%;
+  box-sizing: border-box;
 }
 
 .chat-header {
