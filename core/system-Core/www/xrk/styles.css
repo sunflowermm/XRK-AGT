@@ -1074,7 +1074,7 @@ select.form-input {
   height: auto;
   /* 始终限制在视口宽度内，防止内部卡片把整体容器横向撑大 */
   width: 100%;
-  max-width: 1120px; /* 桌面端的最大聊天宽度 */
+  max-width: min(1120px, 100vw); /* 桌面端统一宽度，同时不能超过视口 */
   box-sizing: border-box;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
@@ -2582,6 +2582,87 @@ select.form-input {
   transform: scale(1.1);
 }
 
+/* ======== 聊天调试面板（临时） ======== */
+.chat-debug-panel {
+  margin-top: 12px;
+  width: 100%;
+  max-width: 100%;
+  border-top: 1px dashed var(--border);
+  padding: 8px 10px 10px;
+  background: var(--bg-secondary);
+  box-sizing: border-box;
+}
+
+.chat-debug-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chat-debug-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-debug-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.chat-debug-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.chat-debug-btn.chat-debug-clear {
+  border-color: var(--danger-light);
+  color: var(--danger);
+}
+
+.chat-debug-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chat-debug-output {
+  width: 100%;
+  min-height: 80px;
+  max-height: 160px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  resize: vertical;
+  box-sizing: border-box;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  overflow: auto;
+}
+
+@media (max-width: 768px) {
+  .chat-debug-panel {
+    padding: 6px 6px 8px;
+  }
+
+  .chat-debug-output {
+    min-height: 100px;
+  }
+}
+
 /* 配置管理 */
 .config-page {
   /* 恢复为：左侧列表 + 右侧编辑区 的双栏布局 */
@@ -3868,7 +3949,7 @@ body.dark .json-boolean { color: #f87171; }
   .chat-container {
     flex-direction: column;
     width: 100%;
-    max-width: 100%;
+    max-width: 100vw;
     height: auto;
     min-height: calc(100dvh - var(--header-height) - 16px);
   }
@@ -4340,8 +4421,8 @@ body.dark .json-boolean { color: #f87171; }
 
 .voice-input {
   flex: 1;
-  min-width: 200px;
-  max-width: 400px;
+  min-width: 0;
+  max-width: 100%;
   padding: 10px 16px;
   background: var(--bg-input);
   border: 1px solid var(--border);
