@@ -416,6 +416,19 @@ body.dark .theme-btn .icon-moon { display: block; }
   margin: 0;
 }
 
+.api-key-a11y-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .api-key-box {
   display: flex;
   align-items: center;
@@ -2816,6 +2829,26 @@ select.form-input {
   text-align: center;
   color: var(--text-muted);
   gap: 12px;
+}
+
+.config-page-auth-required {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+}
+
+.config-auth-required-card {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.config-auth-required-card .config-empty {
+  padding: 32px 24px;
+}
+
+.config-auth-failed p {
+  margin: 0;
 }
 
 .config-main-header {

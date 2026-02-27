@@ -114,9 +114,10 @@
                 </button>
                 <div class="header-title" id="headerTitle">系统概览</div>
                 <div class="header-actions">
-                    <form id="apiKeyForm" class="api-key-form" autocomplete="off">
+                    <form id="apiKeyForm" class="api-key-form" autocomplete="off" role="form" aria-label="API 密钥设置">
                         <div class="api-key-box" id="apiKeyBox">
-                            <input type="password" id="apiKey" name="apiKey" placeholder="API Key" autocomplete="new-password">
+                            <input type="text" name="username" value="xrk" autocomplete="username" tabindex="-1" aria-hidden="true" class="api-key-a11y-hidden" aria-label="用户名（固定）">
+                            <input type="password" id="apiKey" name="apiKey" placeholder="API Key" autocomplete="new-password" aria-label="API 密钥（用于远程访问控制台，请填写后点击保存）">
                             <button class="btn btn-sm" id="saveApiKeyBtn" type="submit">保存</button>
                         </div>
                     </form>

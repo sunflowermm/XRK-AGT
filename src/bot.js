@@ -887,10 +887,12 @@ export default class Bot extends EventEmitter {
     
     // 3. 安全头部（在所有响应前设置）
     if (cfg.server.security.helmet.enabled !== false) {
+      const useHttps = cfg.server?.https?.enabled === true;
       this.express.use(helmet({
         contentSecurityPolicy: false,
         crossOriginEmbedderPolicy: false,
-        crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+        // COOP 仅在 HTTPS 时启用，否则非 localhost 会报 "untrustworthy origin" 并被忽略
+        crossOriginOpenerPolicy: useHttps ? { policy: 'same-origin-allow-popups' } : false,
         crossOriginResourcePolicy: { policy: 'cross-origin' },
         hsts: cfg.server.security.hsts.enabled === true ? {
           maxAge: cfg.server.security.hsts.maxAge || 31536000,

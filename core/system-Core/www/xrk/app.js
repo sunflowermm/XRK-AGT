@@ -553,9 +553,10 @@ class App {
       this.showToast('请输入 API Key', 'warning');
       return;
     }
-      localStorage.setItem('apiKey', key);
-      this.showToast('API Key 已保存', 'success');
-      this.checkConnection();
+    localStorage.setItem('apiKey', key);
+    this.showToast('API Key 已保存', 'success');
+    this.checkConnection();
+    if (window.location.hash === '#/config') this.renderConfig();
   }
 
   getHeaders() {
@@ -4517,6 +4518,34 @@ class App {
     const content = document.getElementById('content');
     if (!content) return;
 
+    const hasApiKey = !!localStorage.getItem('apiKey');
+    if (!hasApiKey) {
+      content.innerHTML = `
+        <div class="config-page config-page-auth-required">
+          <section class="config-main config-auth-required-card">
+            <div class="config-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 64px; height: 64px; margin: 0 auto 16px; opacity: 0.5;">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              <h2 style="margin-bottom: 8px;">需要 API 密钥</h2>
+              <p style="color: var(--text-muted); margin-bottom: 16px;">配置管理需要验证身份。请先在页面右上角填写并保存 API 密钥后再使用。</p>
+              <button type="button" class="btn btn-primary" id="configOpenApiKeyBtn">打开 API 密钥输入</button>
+            </div>
+          </section>
+        </div>
+      `;
+      const btn = document.getElementById('configOpenApiKeyBtn');
+      if (btn) btn.addEventListener('click', () => {
+        const box = document.getElementById('apiKeyBox');
+        if (box) {
+          box.classList.add('show');
+          const input = document.getElementById('apiKey');
+          if (input) input.focus();
+        }
+      });
+      return;
+    }
+
     // 如无现有状态则初始化，避免每次进入配置页都丢失已选项
     if (!this._configState) {
       this._configState = {
@@ -4618,8 +4647,31 @@ class App {
 
   async loadConfigList() {
     const list = document.getElementById('configList');
+    if (!list) return;
     try {
       const res = await fetch(`${this.serverUrl}/api/config/list`, { headers: this.getHeaders() });
+      if (res.status === 401) {
+        if (this._configState) this._configState.list = [];
+        list.innerHTML = `
+          <div class="empty-state config-auth-failed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.5;">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <p><strong>未授权</strong></p>
+            <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">API 密钥无效或已过期，请在上方重新填写并保存。</p>
+            <button type="button" class="btn btn-sm" id="configRetryApiKeyBtn" style="margin-top: 12px;">打开 API 密钥</button>
+          </div>
+        `;
+        const retryBtn = document.getElementById('configRetryApiKeyBtn');
+        if (retryBtn) retryBtn.addEventListener('click', () => {
+          const box = document.getElementById('apiKeyBox');
+          if (box) box.classList.add('show');
+          const input = document.getElementById('apiKey');
+          if (input) input.focus();
+        });
+        this.showToast('API 密钥无效或未填写，请重新填写后保存', 'warning');
+        return;
+      }
       if (!res.ok) throw new Error('获取配置列表失败');
       const data = await res.json();
       if (!data.success) throw new Error(data.message ?? '接口返回失败');
@@ -4637,7 +4689,9 @@ class App {
         this._configState.pendingSelect = null;
       }
     } catch (e) {
-      if (list) list.innerHTML = `<div class="empty-state"><p>加载失败: ${e.message}</p></div>`;
+      const msg = (e && e.message) ? String(e.message) : '未知错误';
+      if (list) list.innerHTML = `<div class="empty-state"><p>加载失败: ${this.escapeHtml(msg)}</p></div>`;
+      this.showToast('配置列表加载失败', 'error');
     }
   }
 
