@@ -1083,19 +1083,28 @@ class DeviceManager {
         ws.heartbeatTimer = setInterval(() => {
             const device = devices.get(deviceId);
             const now = Date.now();
+
             if (device && device.online) {
                 const timeSinceLastSeen = now - (device.last_seen || 0);
-                const timeout = (systemConfig.heartbeat?.timeout || 1800) * 1000;
-                
-                if (timeSinceLastSeen > timeout) {
+                const heartbeatTimeoutMs = (systemConfig.heartbeat?.timeout || 1800) * 1000;
+
+                // 主判断：基于心跳/last_seen 的超时控制（完全由配置 heartbeat.timeout 决定）
+                if (timeSinceLastSeen > heartbeatTimeoutMs) {
                     this.handleDeviceDisconnect(deviceId, ws);
                     return;
                 }
             }
-            
-            if (!ws.isAlive && ws.lastPong && (now - ws.lastPong) > 60000) {
-                this.handleDeviceDisconnect(deviceId, ws);
-                return;
+
+            // 对非 Web 设备，使用 websocket.pongTimeout 做底层连接健康检查；
+            // Web 客户端前端已有自动重连策略，这里不再基于 pong 额外判离线，避免与前端冲突。
+            if (device && device.device_type !== 'web' && !ws.isAlive && ws.lastPong) {
+                const basePongTimeoutMs = systemConfig.websocket?.pongTimeout || 10000;
+                const pongTimeoutMs = basePongTimeoutMs * 3;
+
+                if ((now - ws.lastPong) > pongTimeoutMs) {
+                    this.handleDeviceDisconnect(deviceId, ws);
+                    return;
+                }
             }
 
             ws.isAlive = false;
@@ -1140,8 +1149,9 @@ class DeviceManager {
         const runtimeBot = this.bot;
         if (device) {
             device.online = false;
-
-            BotUtil.makeLog('info',
+            const logLevel = device.device_type === 'web' ? 'debug' : 'info';
+            BotUtil.makeLog(
+                logLevel,
                 `🔴 [设备离线] ${device.device_name} (${deviceId})`,
                 device.device_name
             );
