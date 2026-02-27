@@ -2381,7 +2381,8 @@ export default class SystemConfig extends ConfigBase {
                         headers: { 
                           type: 'object', 
                           label: 'HTTP Headers', 
-                          description: 'HTTP请求头（仅HTTP格式需要，格式：{"Authorization":"Bearer token"}）',
+                          description: 'HTTP请求头（仅HTTP格式需要），建议用于标识客户端或附加追踪信息',
+                          example: { 'X-Client-Id': 'xrk-mcp-console', 'X-Trace-Id': 'mcp-req-001' },
                           component: 'Textarea'
                         },
                         // 原生JSON配置（直接存储JSON字符串，用于复杂配置，优先级最高）

@@ -4931,7 +4931,11 @@ class App {
       configMain.addEventListener('click', (e) => {
         const subFormToggleBtn = e.target.closest('[data-action="subform-toggle"]');
         if (subFormToggleBtn) {
-          this.toggleSubFormEditor(subFormToggleBtn.dataset.field, subFormToggleBtn.dataset.mode);
+          this.toggleSubFormEditor(
+            subFormToggleBtn.dataset.field,
+            subFormToggleBtn.dataset.mode,
+            subFormToggleBtn.dataset.subformId
+          );
           return;
         }
         const reloadBtn = e.target.closest('#configReloadBtn');
@@ -5001,8 +5005,12 @@ class App {
     // 第一遍：识别所有 SubForm 类型的字段
     flatSchema.forEach(field => {
       const meta = field.meta ?? {};
-      const component = (meta.component ?? '').toLowerCase();
-      if (component === 'subform' || (field.type === 'object' && meta.component !== 'json')) {
+      const component = String(meta.component ?? field.component ?? '').toLowerCase();
+      // 只把明确声明为 SubForm 的 object/map 当作“父级容器”；
+      // 避免把 Textarea 等普通 object 字段误判为 SubForm，导致字段被隐藏但又没有子分组渲染。
+      const isSubForm = component === 'subform';
+      const isObjectLike = field.type === 'object' || field.type === 'map';
+      if (isSubForm && isObjectLike) {
         subFormFields.set(field.path, {
           label: meta.label ?? field.path.split('.').pop() ?? field.path,
           description: meta.description ?? '',
@@ -5031,16 +5039,19 @@ class App {
       let groupKey = meta.group;
       let parentSubFormPath = null;
       
-      // 查找最近的父 SubForm
+      // 查找最近的父 SubForm（最长前缀匹配），避免把 proxy.healthCheck.* 错归到 proxy.*
+      let bestParent = null;
+      let bestInfo = null;
       for (const [subFormPath, subFormInfo] of subFormFields.entries()) {
-        if (path.startsWith(subFormPath + '.')) {
-          parentSubFormPath = subFormPath;
-          // 如果子字段没有 group，使用父 SubForm 的 group
-          if (!groupKey && subFormInfo.group) {
-            groupKey = subFormInfo.group;
-          }
-          break;
+        if (!path.startsWith(subFormPath + '.')) continue;
+        if (!bestParent || subFormPath.length > bestParent.length) {
+          bestParent = subFormPath;
+          bestInfo = subFormInfo;
         }
+      }
+      if (bestParent) {
+        parentSubFormPath = bestParent;
+        if (!groupKey && bestInfo?.group) groupKey = bestInfo.group;
       }
 
       // 如果是某个 SubForm 的子字段，但父级没有自定义 group，
@@ -5102,6 +5113,20 @@ class App {
               tree[groupKey] = { fields: [], subGroups: {} };
             }
             tree[groupKey].fields.push(field);
+          } else {
+            // 有子字段：提前创建 subGroup 容器，保证一定会渲染（避免“父被隐藏但子分组没建出来”）
+            if (!tree[groupKey]) {
+              tree[groupKey] = { fields: [], subGroups: {} };
+            }
+            const subFormInfo = subFormFields.get(path);
+            if (subFormInfo && !tree[groupKey].subGroups[path]) {
+              tree[groupKey].subGroups[path] = {
+                label: subFormInfo.label,
+                description: subFormInfo.description,
+                path,
+                fields: []
+              };
+            }
           }
           // 有子字段的 SubForm 在 subGroups 中显示，避免重复
         }
@@ -5246,11 +5271,7 @@ class App {
 
     const label = this.escapeHtml(meta.label || path);
     const description = meta.description ? `<p class="config-field-hint">${this.escapeHtml(meta.description)}</p>` : '';
-    const example = Object.hasOwn(meta, 'example') ? `
-      <div class="config-field-example"><strong>此为示例：</strong><pre>${this.escapeHtml(
-        typeof meta.example === 'string' ? meta.example : JSON.stringify(meta.example, null, 2)
-      )}</pre></div>
-    ` : '';
+    const example = Object.hasOwn(meta, 'example') ? this.renderExampleBlock(meta.example) : '';
 
     return `
       <div class="config-field ${dirty ? 'config-field-dirty' : ''}">
@@ -5261,6 +5282,47 @@ class App {
         ${description}
         ${this.renderConfigControl(field, value, inputId)}
         ${example}
+      </div>
+    `;
+  }
+
+  renderExampleBlock(example) {
+    try {
+      const text = typeof example === 'string' ? example : JSON.stringify(example, null, 2);
+      return `
+        <div class="config-field-example"><strong>此为示例：</strong><pre>${this.escapeHtml(text ?? '')}</pre></div>
+      `;
+    } catch {
+      return `
+        <div class="config-field-example"><strong>此为示例：</strong><pre>${this.escapeHtml(String(example ?? ''))}</pre></div>
+      `;
+    }
+  }
+
+  renderFreeObjectSubFormEditor({ dataset, value, defaultValue, modeKey, subformId, inputIdPrefix, disabled, fieldPath }) {
+    const mode = (localStorage.getItem(modeKey) || 'kv').toLowerCase(); // kv | json
+    const obj = value && typeof value === 'object' && !Array.isArray(value)
+      ? value
+      : this._cloneValue(defaultValue ?? {});
+
+    const kvText = this.escapeHtml(this.formatKeyValueLines(obj));
+    const jsonText = obj ? this.escapeHtml(JSON.stringify(obj, null, 2)) : '';
+    const kvHidden = mode === 'json' ? 'hidden' : '';
+    const jsonHidden = mode === 'kv' ? 'hidden' : '';
+    const kvActive = mode === 'kv' ? 'active' : '';
+    const jsonActive = mode === 'json' ? 'active' : '';
+    const kvId = inputIdPrefix ? `id="${inputIdPrefix}-kv"` : '';
+    const jsonId = inputIdPrefix ? `id="${inputIdPrefix}-json"` : '';
+    const fieldAttr = fieldPath ? `data-field="${this.escapeHtml(fieldPath)}"` : '';
+
+    return `
+      <div class="subform-editor" data-subform-id="${this.escapeHtml(subformId)}" data-subform-mode-key="${this.escapeHtml(modeKey)}">
+        <div class="subform-editor-tabs">
+          <button type="button" class="subform-tab ${kvActive}" data-action="subform-toggle" ${fieldAttr} data-subform-id="${this.escapeHtml(subformId)}" data-mode="kv">键值</button>
+          <button type="button" class="subform-tab ${jsonActive}" data-action="subform-toggle" ${fieldAttr} data-subform-id="${this.escapeHtml(subformId)}" data-mode="json">JSON</button>
+        </div>
+        <textarea class="form-input subform-kv" rows="4" ${kvId} ${dataset} data-control="kvlines" placeholder="每行一个：key=value（value 可写 JSON）" ${disabled ?? ''} ${kvHidden}>${kvText}</textarea>
+        <textarea class="form-input subform-json" rows="4" ${jsonId} ${dataset} data-control="json" placeholder="JSON 数据" ${disabled ?? ''} ${jsonHidden}>${jsonText}</textarea>
       </div>
     `;
   }
@@ -5330,27 +5392,19 @@ class App {
         // SubForm 类型：用于“自由对象/Map”场景（例如 headers/extraBody）。
         // 注意：有子字段的 SubForm 会在 renderFieldTree 中展开显示，不会走到这里。
         const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${field.path}`;
-        const mode = (localStorage.getItem(modeKey) || 'kv').toLowerCase(); // kv | json
-        const obj = value && typeof value === 'object' && !Array.isArray(value)
-          ? value
-          : (Object.hasOwn(meta, 'default') ? this._cloneValue(meta.default) : {});
-
-        const kvText = this.escapeHtml(this.formatKeyValueLines(obj));
-        const jsonText = obj ? this.escapeHtml(JSON.stringify(obj, null, 2)) : '';
-        const kvHidden = mode === 'json' ? 'hidden' : '';
-        const jsonHidden = mode === 'kv' ? 'hidden' : '';
-        const kvActive = mode === 'kv' ? 'active' : '';
-        const jsonActive = mode === 'json' ? 'active' : '';
+        const defaultValue = Object.hasOwn(meta, 'default') ? meta.default : {};
         return `
-          <div class="subform-editor" data-subform-path="${this.escapeHtml(field.path)}" data-subform-mode-key="${this.escapeHtml(modeKey)}">
-            <div class="subform-editor-tabs">
-              <button type="button" class="subform-tab ${kvActive}" data-action="subform-toggle" data-field="${this.escapeHtml(field.path)}" data-mode="kv">键值</button>
-              <button type="button" class="subform-tab ${jsonActive}" data-action="subform-toggle" data-field="${this.escapeHtml(field.path)}" data-mode="json">JSON</button>
-            </div>
-            <textarea class="form-input subform-kv" rows="4" id="${inputId}-kv" ${dataset} data-control="kvlines" placeholder="每行一个：key=value（value 可写 JSON）" ${disabled} ${kvHidden}>${kvText}</textarea>
-            <textarea class="form-input subform-json" rows="4" id="${inputId}-json" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled} ${jsonHidden}>${jsonText}</textarea>
-            <p class="config-field-hint">键值模式更适合 Header/简单对象；复杂结构建议切换 JSON。</p>
-          </div>
+          ${this.renderFreeObjectSubFormEditor({
+            dataset,
+            value,
+            defaultValue,
+            modeKey,
+            subformId: field.path,
+            inputIdPrefix: inputId,
+            disabled,
+            fieldPath: field.path
+          })}
+          <p class="config-field-hint">键值模式更适合 Header/简单对象；复杂结构建议切换 JSON。</p>
         `;
       }
       case 'arrayform':
@@ -5422,11 +5476,14 @@ class App {
       const value = rawValue !== undefined ? rawValue : this.getNestedValue(itemValue, relPath);
       
       const component = (schema.component ?? '').toLowerCase();
+      const example = Object.hasOwn(schema, 'example') ? this.renderExampleBlock(schema.example) : '';
       const isSubForm = component === 'subform';
-      const isNestedObject = (schema.type === 'object' || schema.type === 'map') && schema.fields;
+      const hasChildFields = schema.fields && Object.keys(schema.fields).length > 0;
+      const isNestedObject = (schema.type === 'object' || schema.type === 'map') && hasChildFields;
       
-      // SubForm 类型或嵌套对象类型：展开显示子字段
-      if ((isSubForm || isNestedObject) && schema.fields) {
+      // SubForm / 嵌套对象 且 定义了子字段：展开显示子字段
+      // 如果 SubForm 的 fields 为空（如 headers/extraBody 这种“自由对象”），不走这里，直接渲染为一个控件。
+      if ((isSubForm || isNestedObject) && hasChildFields) {
         // 对于嵌套对象，也需要从rawObject获取完整数据
         const nestedRawValue = this.getNestedValue(this._configState?.rawObject ?? {}, fullPath);
         const nestedValue = nestedRawValue !== undefined ? nestedRawValue : (value ?? {});
@@ -5444,6 +5501,7 @@ class App {
           <label>${this.escapeHtml(schema.label || key)}</label>
           ${schema.description ? `<p class="config-field-hint">${this.escapeHtml(schema.description)}</p>` : ''}
           ${this.renderArrayObjectFieldControl(parentPath, relPath, templatePath, schema, value, index)}
+          ${example}
         </div>
       `;
     }).join('');
@@ -5493,10 +5551,36 @@ class App {
         return `<input type="number" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${schema.min ?? ''}" max="${schema.max ?? ''}" step="${schema.step ?? 'any'}">`;
       case 'inputpassword':
         return `<input type="password" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'subform': {
+        const subformId = `${parentPath}.${index}.${relPath}`;
+        const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
+        return this.renderFreeObjectSubFormEditor({
+          dataset,
+          value,
+          defaultValue: {},
+          modeKey,
+          subformId,
+          disabled: '',
+          fieldPath: null
+        });
+      }
       case 'json':
         return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
       default:
-        if (schema.type === 'array' || schema.type === 'object') {
+        if (schema.type === 'object' || schema.type === 'map') {
+          const subformId = `${parentPath}.${index}.${relPath}`;
+          const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
+          return this.renderFreeObjectSubFormEditor({
+            dataset,
+            value,
+            defaultValue: {},
+            modeKey,
+            subformId,
+            disabled: '',
+            fieldPath: null
+          });
+        }
+        if (schema.type === 'array') {
           return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
         }
         return `<input type="text" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
@@ -5566,7 +5650,10 @@ class App {
       const templatePath = this.normalizeTemplatePath(templatePathBase ? `${templatePathBase}.${relPath}` : relPath);
       const fieldValue = this.getNestedValue(value, relPath);
 
-      if ((schema.type === 'object' || schema.type === 'map') && schema.fields) {
+      const component = (schema.component ?? '').toLowerCase();
+      const isSubForm = component === 'subform';
+      const hasChildFields = schema.fields && Object.keys(schema.fields).length > 0;
+      if ((isSubForm || schema.type === 'object' || schema.type === 'map') && hasChildFields) {
         return `
           <div class="array-object-subgroup">
             <div class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</div>
@@ -5576,17 +5663,20 @@ class App {
       }
 
       const dataset = `data-collection="${this.escapeHtml(collection.name)}" data-entry-key="${this.escapeHtml(entryKey)}" data-object-path="${this.escapeHtml(relPath)}" data-template-path="${this.escapeHtml(templatePath)}" data-component="${(schema.component ?? '').toLowerCase()}" data-type="${schema.type}"`;
+      const subformId = `${collection.name}.${entryKey}.${relPath}`;
+      const example = Object.hasOwn(schema, 'example') ? this.renderExampleBlock(schema.example) : '';
       return `
         <div class="array-object-field">
           <label>${this.escapeHtml(schema.label || key)}</label>
           ${schema.description ? `<p class="config-field-hint">${this.escapeHtml(schema.description)}</p>` : ''}
-          ${this.renderDynamicFieldControl(dataset, schema, fieldValue)}
+          ${this.renderDynamicFieldControl(dataset, schema, fieldValue, subformId)}
+          ${example}
         </div>
       `;
     }).join('');
   }
 
-  renderDynamicFieldControl(dataset, schema, value) {
+  renderDynamicFieldControl(dataset, schema, value, subformId) {
     const component = (schema.component ?? this.mapTypeToComponent(schema.type) ?? '').toLowerCase();
     const normalizeOptions = (options = []) => options.map(opt => (typeof opt === 'object' ? opt : { label: opt, value: opt }));
 
@@ -5628,10 +5718,34 @@ class App {
         return `<input type="number" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${schema.min ?? ''}" max="${schema.max ?? ''}" step="${schema.step ?? 'any'}">`;
       case 'inputpassword':
         return `<input type="password" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'subform': {
+        const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
+        return this.renderFreeObjectSubFormEditor({
+          dataset,
+          value,
+          defaultValue: {},
+          modeKey,
+          subformId,
+          disabled: '',
+          fieldPath: null
+        });
+      }
       case 'json':
         return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
       default:
-        if (schema.type === 'array' || schema.type === 'object') {
+        if (schema.type === 'object' || schema.type === 'map') {
+          const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
+          return this.renderFreeObjectSubFormEditor({
+            dataset,
+            value,
+            defaultValue: {},
+            modeKey,
+            subformId,
+            disabled: '',
+            fieldPath: null
+          });
+        }
+        if (schema.type === 'array') {
           return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
         }
         return `<input type="text" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
@@ -5686,7 +5800,8 @@ class App {
     const wrapper = document.getElementById('configFormWrapper');
     if (!wrapper) return;
 
-    wrapper.querySelectorAll('[data-array-parent]').forEach(el => {
+    const nodes = wrapper.querySelectorAll('[data-array-parent]');
+    nodes.forEach(el => {
       const evt = el.type === 'checkbox' ? 'change' : (el.tagName === 'SELECT' ? 'change' : 'input');
       el.addEventListener(evt, () => this.handleArrayObjectFieldChange(el));
     });
@@ -5714,6 +5829,8 @@ class App {
     let value;
     if (component === 'switch') {
       value = !!target.checked;
+    } else if (target.dataset.control === 'kvlines') {
+      value = this.parseKeyValueLines(target.value || '');
     } else if (target.dataset.control === 'tags') {
       value = target.value.split(/\n+/).map(v => v.trim()).filter(Boolean);
     } else if (target.dataset.control === 'multiselect') {
@@ -5787,7 +5904,8 @@ class App {
       btn.addEventListener('click', () => this.addDynamicCollectionEntry(btn.dataset.collection));
     });
 
-    wrapper.querySelectorAll('[data-collection]').forEach(el => {
+    const nodes = wrapper.querySelectorAll('[data-collection]');
+    nodes.forEach(el => {
       const evt = el.type === 'checkbox' ? 'change' : (el.tagName === 'SELECT' ? 'change' : 'input');
       el.addEventListener(evt, () => this.handleDynamicFieldChange(el));
     });
@@ -5892,6 +6010,8 @@ class App {
     let value;
     if (component === 'switch') {
       value = !!target.checked;
+    } else if (target.dataset.control === 'kvlines') {
+      value = this.parseKeyValueLines(target.value || '');
     } else if (target.dataset.control === 'tags') {
       value = target.value.split(/\n+/).map(v => v.trim()).filter(Boolean);
     } else if (target.dataset.control === 'multiselect') {
@@ -5950,29 +6070,44 @@ class App {
     this.updateConfigSaveButton();
   }
 
-  toggleSubFormEditor(path, mode) {
-    if (!path || !mode) return;
-    const editor = document.querySelector(`.subform-editor[data-subform-path="${this.escapeSelector(path)}"]`);
+  toggleSubFormEditor(path, mode, subformId) {
+    if (!mode) return;
+    const selector = subformId
+      ? `.subform-editor[data-subform-id="${this.escapeSelector(subformId)}"]`
+      : `.subform-editor[data-subform-path="${this.escapeSelector(path)}"]`;
+    const editor = document.querySelector(selector);
     if (!editor) return;
     const key = editor.dataset.subformModeKey;
     const kv = editor.querySelector('.subform-kv');
     const json = editor.querySelector('.subform-json');
     const tabs = editor.querySelectorAll('.subform-tab');
     const m = String(mode).toLowerCase();
+
+    // 切换时保持当前内容为“真相源”，并做基础校验提示
+    try {
+      if (m === 'json' && kv && !kv.hidden && json) {
+        const obj = this.parseKeyValueLines(kv.value || '');
+        json.value = JSON.stringify(obj ?? {}, null, 2);
+      }
+      if (m === 'kv' && json && !json.hidden && kv) {
+        let obj = {};
+        try {
+          obj = json.value ? JSON.parse(json.value) : {};
+        } catch (e) {
+          console.warn('[SubForm] JSON 解析失败，保持原文本:', e);
+          // 解析失败时给出用户提示，并阻止切换，避免误丢数据
+          this.showToast('JSON 格式有误，请先修正后再切换到键值模式', 'warning');
+          return;
+        }
+        kv.value = this.formatKeyValueLines(obj ?? {});
+      }
+    } catch (e) {
+      console.warn('[SubForm] 模式切换同步失败:', e);
+    }
+
     if (kv) kv.hidden = m === 'json';
     if (json) json.hidden = m === 'kv';
     tabs.forEach(btn => btn.classList.toggle('active', (btn.dataset.mode || '').toLowerCase() === m));
-    // 切换时同步内容：避免两个视图显示不一致
-    if (this._configState?.values && Object.hasOwn(this._configState.values, path)) {
-      const current = this._configState.values[path];
-      const obj = current && typeof current === 'object' && !Array.isArray(current) ? current : {};
-      if (m === 'json' && json) {
-        json.value = JSON.stringify(obj, null, 2);
-      }
-      if (m === 'kv' && kv) {
-        kv.value = this.formatKeyValueLines(obj);
-      }
-    }
     try {
       if (key) localStorage.setItem(key, m);
     } catch {}
