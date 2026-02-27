@@ -1298,6 +1298,47 @@ select.form-input {
   transition: all 0.2s ease;
 }
 
+@media (max-width: 768px) {
+  /* 移动端：统一为整卡布局，宽度自适应屏幕 */
+  .chat-messages {
+    padding: 16px 12px;
+  }
+
+  .chat-message,
+  .voice-message {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px 14px;
+    align-self: stretch;
+    margin: 8px 0;
+  }
+
+  .chat-message.user,
+  .chat-message.assistant,
+  .voice-message.user,
+  .voice-message.assistant {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .chat-input-area {
+    padding: 12px 12px;
+    gap: 8px;
+  }
+
+  .chat-input {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .mic-btn,
+  .image-upload-btn,
+  .chat-send-btn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
 /* 统一聊天气泡内部文字与边缘的视觉间距 */
 .chat-message .chat-content {
   margin: 2px 0;
@@ -3805,43 +3846,6 @@ body.dark .json-boolean { color: #f87171; }
   .chat-main {
     flex: 1;
     min-height: 0;
-  }
-
-  /* 移动端优化：聊天气泡与输入区域适配窄屏，避免横向溢出 */
-  .chat-messages {
-    padding: 16px 12px;
-  }
-
-  .chat-message {
-    max-width: 100%;
-    padding: 12px 14px;
-  }
-
-  .chat-message.user {
-    margin-left: 20px;
-    margin-right: 8px;
-  }
-
-  .chat-message.assistant {
-    margin-right: 20px;
-    margin-left: 8px;
-  }
-
-  .chat-input-area {
-    padding: 12px 12px;
-    gap: 8px;
-  }
-
-  .chat-input {
-    padding: 10px 12px;
-    font-size: 13px;
-  }
-
-  .mic-btn,
-  .image-upload-btn,
-  .chat-send-btn {
-    width: 40px;
-    height: 40px;
   }
 
   /* Voice 模式移动端适配：内容整体缩放并保持居中 */
