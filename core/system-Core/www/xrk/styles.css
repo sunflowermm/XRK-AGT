@@ -4178,8 +4178,9 @@ body.dark .json-boolean { color: #f87171; }
 .voice-message {
   padding: 12px 16px;
   border-radius: var(--radius-md);
-  max-width: 80%;
+  max-width: min(80%, 880px);
   word-wrap: break-word;
+  box-sizing: border-box;
 }
 
 .voice-message.user {
@@ -4193,6 +4194,47 @@ body.dark .json-boolean { color: #f87171; }
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text-primary);
+  margin-right: 40px;
+}
+
+@media (max-width: 768px) {
+  .voice-chat-center {
+    padding: 24px 16px 12px;
+  }
+
+  .voice-emotion-display {
+    font-size: 72px;
+    margin-bottom: 16px;
+  }
+
+  .voice-status {
+    font-size: 14px;
+    padding: 0 8px;
+  }
+
+  .voice-messages {
+    padding: 12px 12px;
+  }
+
+  .voice-message {
+    max-width: 100%;
+    padding: 10px 12px;
+  }
+
+  .voice-message.user {
+    margin-left: 20px;
+    margin-right: 8px;
+  }
+
+  .voice-message.assistant {
+    margin-right: 20px;
+    margin-left: 8px;
+  }
+
+  .voice-mic-btn {
+    width: 64px;
+    height: 64px;
+  }
 }
 
 .voice-mic-btn {
