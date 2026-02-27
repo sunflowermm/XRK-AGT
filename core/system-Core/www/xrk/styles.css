@@ -4073,10 +4073,6 @@ body.dark .json-boolean { color: #f87171; }
 }
 
 @media (max-width: 768px) {
-  .chat-message {
-    max-width: 90%;
-  }
-  
   .toast-container {
     left: 16px;
     right: 16px;
