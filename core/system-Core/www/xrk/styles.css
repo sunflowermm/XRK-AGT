@@ -446,6 +446,10 @@ body.dark .theme-btn .icon-moon { display: block; }
   padding: 24px;
   overflow-y: auto;
   overflow-x: hidden; /* 防止内部内容过长导致整体横向平移 */
+  /* 让页面内容在大屏上也以“卡片”形式居中显示 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 /* API 列表容器 (在侧边栏内) */
@@ -1067,10 +1071,10 @@ select.form-input {
   display: flex;
   /* 使用 min-height + dvh，避免在移动端浏览器地址栏变化时页面被“拉长” */
   min-height: calc(100vh - var(--header-height) - 32px);
-  height: calc(100dvh - var(--header-height) - 32px);
+  height: auto;
   /* 始终限制在视口宽度内，防止内部卡片把整体容器横向撑大 */
   width: 100%;
-  max-width: 100%;
+  max-width: 1120px; /* 桌面端的最大聊天宽度 */
   box-sizing: border-box;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
@@ -3830,6 +3834,7 @@ body.dark .json-boolean { color: #f87171; }
   
   .content {
     padding: 16px;
+    align-items: stretch; /* 移动端占满整行，而不是在中间留白 */
   }
   
   .stats-grid {
@@ -3846,8 +3851,10 @@ body.dark .json-boolean { color: #f87171; }
   
   .chat-container {
     flex-direction: column;
-    /* 在手机上用 dvh 确保刚好占满可视区域，不出现多余空白滚动 */
-    height: calc(100dvh - var(--header-height) - 16px);
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    min-height: calc(100dvh - var(--header-height) - 16px);
   }
   
   .chat-sidebar {
