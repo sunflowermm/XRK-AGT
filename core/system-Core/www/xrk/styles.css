@@ -1065,7 +1065,9 @@ select.form-input {
 /* 聊天页面 */
 .chat-container {
   display: flex;
-  height: calc(100vh - var(--header-height) - 32px);
+  /* 使用 min-height + dvh，避免在移动端浏览器地址栏变化时页面被“拉长” */
+  min-height: calc(100vh - var(--header-height) - 32px);
+  height: calc(100dvh - var(--header-height) - 32px);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--bg-card);
@@ -3833,7 +3835,8 @@ body.dark .json-boolean { color: #f87171; }
   
   .chat-container {
     flex-direction: column;
-    height: calc(100vh - var(--header-height) - 16px);
+    /* 在手机上用 dvh 确保刚好占满可视区域，不出现多余空白滚动 */
+    height: calc(100dvh - var(--header-height) - 16px);
   }
   
   .chat-sidebar {
@@ -3848,10 +3851,10 @@ body.dark .json-boolean { color: #f87171; }
     min-height: 0;
   }
 
-  /* Voice 模式移动端适配：内容整体缩放并保持居中 */
+  /* Voice 模式移动端适配：内容整体缩放并保持垂直居中 */
   .chat-container.voice-mode .chat-main {
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   .voice-chat-center {
