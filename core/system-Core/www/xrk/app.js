@@ -3555,11 +3555,21 @@ class App {
             return state;
           }
           if (json.mcp_tools && Array.isArray(json.mcp_tools) && json.mcp_tools.length > 0) {
-            state.segments.push({ type: 'text', text: state.currentText });
-            state.currentText = '';
-            state.segments.push({ type: 'tools', tools: json.mcp_tools });
-            state.mcpTools = state.mcpTools.concat(json.mcp_tools);
-            if (onDelta) onDelta('', state);
+            // 基本防御：忽略完全空对象的占位 mcp_tools
+            const tools = json.mcp_tools.filter((tool) => {
+              if (!tool) return false;
+              if (tool.name) return true;
+              if (tool.function?.name) return true;
+              if (tool.result || tool.content) return true;
+              return false;
+            });
+            if (tools.length > 0) {
+              state.segments.push({ type: 'text', text: state.currentText });
+              state.currentText = '';
+              state.segments.push({ type: 'tools', tools });
+              state.mcpTools = state.mcpTools.concat(tools);
+              if (onDelta) onDelta('', state);
+            }
           }
           const delta = json.choices?.[0]?.delta?.content || '';
           if (delta) {

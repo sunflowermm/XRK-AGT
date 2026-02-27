@@ -326,7 +326,6 @@ async function handleChatCompletionsV3(req, res) {
     let totalContent = '';
     let isFirstChunk = true;
     let chunkCount = 0;
-    let mcpTools = [];
 
     const streamCallback = (delta, metadata = {}) => {
       const hasTextDelta = typeof delta === 'string' && delta.length > 0;
@@ -354,16 +353,14 @@ async function handleChatCompletionsV3(req, res) {
         isFirstChunk = false;
       }
 
-      if (hasMcpTools) {
-        mcpTools = metadata.mcp_tools;
-        if (!hasTextDelta) {
-          writeSSEChunk(res, createOpenAIChunk({
-            id,
-            created: now,
-            model: modelName,
-            mcpTools
-          }));
-        }
+      if (hasMcpTools && !hasTextDelta) {
+        // 仅在真正有工具结果、且本次没有文本增量时，单独输出一条工具 chunk
+        writeSSEChunk(res, createOpenAIChunk({
+          id,
+          created: now,
+          model: modelName,
+          mcpTools: metadata.mcp_tools
+        }));
       }
     };
 
@@ -387,8 +384,8 @@ async function handleChatCompletionsV3(req, res) {
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
         total_tokens: promptTokens + completionTokens
-      },
-      mcpTools
+      }
+      // 不再在最终 usage chunk 中重复附带 mcp_tools，避免前端收到“重复/空工具卡片”事件
     }));
     res.write('data: [DONE]\n\n');
     BotUtil.makeLog('info', `[v3/chat/completions] 流式输出完成`, 'ai.v3.stream');
