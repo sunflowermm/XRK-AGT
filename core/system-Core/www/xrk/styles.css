@@ -3806,6 +3806,43 @@ body.dark .json-boolean { color: #f87171; }
     flex: 1;
     min-height: 0;
   }
+
+  /* 移动端优化：聊天气泡与输入区域适配窄屏，避免横向溢出 */
+  .chat-messages {
+    padding: 16px 12px;
+  }
+
+  .chat-message {
+    max-width: 100%;
+    padding: 12px 14px;
+  }
+
+  .chat-message.user {
+    margin-left: 20px;
+    margin-right: 8px;
+  }
+
+  .chat-message.assistant {
+    margin-right: 20px;
+    margin-left: 8px;
+  }
+
+  .chat-input-area {
+    padding: 12px 12px;
+    gap: 8px;
+  }
+
+  .chat-input {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .mic-btn,
+  .image-upload-btn,
+  .chat-send-btn {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 .chat-mode-selector {
