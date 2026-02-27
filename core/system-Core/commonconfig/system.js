@@ -2178,17 +2178,17 @@ export default class SystemConfig extends ConfigBase {
               }
             },
             llm: {
-              type: 'object',
-              label: 'LLM工厂运营商选择',
-              description: '详细配置位于 data/server_bots/{port}/*_llm.yaml（如 volcengine_llm / xiaomimimo_llm / openai_llm / openai_compat_llm / gemini_llm / anthropic_llm / azure_openai_llm）',
-              component: 'SubForm',
-              fields: {
-                Provider: {
-                  type: 'string',
-                  label: 'LLM运营商',
-                  enum: ['volcengine', 'xiaomimimo', 'openai', 'openai_compat', 'gemini', 'anthropic', 'azure_openai'],
-                  default: 'volcengine',
-                  component: 'Select'
+            type: 'object',
+            label: 'LLM工厂运营商选择',
+            description: '详细配置位于 data/server_bots/{port}/*_llm.yaml（如 volcengine_llm / xiaomimimo_llm / openai_llm / gemini_llm / anthropic_llm / azure_openai_llm）以及 openai_compat_llm.providers 中自定义的兼容运营商',
+            component: 'SubForm',
+            fields: {
+            Provider: {
+                type: 'string',
+                label: 'LLM运营商',
+                description: '可填写内置 provider（volcengine/openai/gemini/...）或在 openai_compat_llm.providers 中定义的自定义运营商 key',
+                default: 'volcengine',
+                component: 'Input'
                 },
                 timeout: {
                   type: 'number',

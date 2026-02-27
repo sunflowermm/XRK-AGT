@@ -4,13 +4,6 @@ import { MCPToolAdapter } from './mcp-tool-adapter.js';
  * OpenAI-like Chat Completions 参数归一化工具
  */
 
-/**
- * 从 overrides/config 中选择同义字段（优先 overrides）
- * @param {Object} overrides
- * @param {Object} config
- * @param {Array<string>} keys
- * @returns {*}
- */
 function pick(overrides, config, keys) {
   for (const k of keys) {
     if (overrides?.[k] !== undefined) return overrides[k];
@@ -19,13 +12,6 @@ function pick(overrides, config, keys) {
   return;
 }
 
-/**
- * 将“可选字段”按白名单透传到 body（若值为 undefined 则忽略）
- * @param {Object} body
- * @param {Object} overrides
- * @param {Object} config
- * @param {Array<{to:string, from:string[]}>} mapping
- */
 function applyOptionalFields(body, overrides, config, mapping) {
   for (const item of mapping) {
     const v = pick(overrides, config, item.from);
@@ -33,17 +19,9 @@ function applyOptionalFields(body, overrides, config, mapping) {
   }
 }
 
-/**
- * 构建 OpenAI-like Chat Completions 请求体（通用字段）
- * @param {Array} messages
- * @param {Object} config
- * @param {Object} overrides
- * @param {string|undefined} defaultModel
- * @returns {Object}
- */
-export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides = {}, defaultModel = 'gpt-4o-mini') {
+export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides = {}, defaultModel) {
   const temperature = pick(overrides, config, ['temperature']);
-  const maxTokens = pick(overrides, config, ['maxTokens', 'max_tokens', 'max_completion_tokens', 'maxCompletionTokens']);
+  const maxCompletionTokens = pick(overrides, config, ['maxCompletionTokens', 'max_completion_tokens', 'maxTokens', 'max_tokens']);
 
   const body = {
     model: pick(overrides, config, ['model', 'chatModel']) || defaultModel,
@@ -52,7 +30,10 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
     stream: pick(overrides, config, ['stream']) ?? false
   };
 
-  if (maxTokens !== undefined) body.max_tokens = maxTokens;
+  if (maxCompletionTokens !== undefined) {
+    body.max_completion_tokens = maxCompletionTokens;
+    body.max_tokens = maxCompletionTokens; // 兼容旧网关
+  }
 
   applyOptionalFields(body, overrides, config, [
     { to: 'top_p', from: ['topP', 'top_p'] },
@@ -62,12 +43,27 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
     { to: 'response_format', from: ['response_format', 'responseFormat'] },
     { to: 'stream_options', from: ['stream_options', 'streamOptions'] },
     { to: 'seed', from: ['seed'] },
-    { to: 'user', from: ['user'] },
     { to: 'n', from: ['n'] },
     { to: 'logit_bias', from: ['logit_bias', 'logitBias'] },
     { to: 'logprobs', from: ['logprobs'] },
-    { to: 'top_logprobs', from: ['top_logprobs', 'topLogprobs'] }
+    { to: 'top_logprobs', from: ['top_logprobs', 'topLogprobs'] },
+    { to: 'service_tier', from: ['service_tier', 'serviceTier'] },
+    { to: 'prompt_cache_key', from: ['prompt_cache_key', 'promptCacheKey'] },
+    { to: 'prompt_cache_retention', from: ['prompt_cache_retention', 'promptCacheRetention'] },
+    { to: 'safety_identifier', from: ['safety_identifier', 'safetyIdentifier'] },
+    { to: 'reasoning_effort', from: ['reasoning_effort', 'reasoningEffort'] },
+    { to: 'store', from: ['store'] },
+    { to: 'verbosity', from: ['verbosity'] },
+    { to: 'modalities', from: ['modalities'] },
+    { to: 'prediction', from: ['prediction'] },
+    { to: 'web_search_options', from: ['web_search_options', 'webSearchOptions'] },
+    { to: 'audio', from: ['audio'] }
   ]);
+
+  const userAlias = pick(overrides, config, ['prompt_cache_key', 'promptCacheKey', 'user']);
+  if (userAlias !== undefined && body.prompt_cache_key === undefined) {
+    body.prompt_cache_key = userAlias;
+  }
 
   const extraBody = pick(overrides, config, ['extraBody']);
   if (config.extraBody && typeof config.extraBody === 'object') Object.assign(body, config.extraBody);
@@ -76,13 +72,6 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
   return body;
 }
 
-/**
- * 在 OpenAI-like body 上注入 tools/tool_choice/parallel_tool_calls（支持 overrides 覆盖）
- * @param {Object} body
- * @param {Object} config
- * @param {Object} overrides
- * @returns {Object} 同一个 body 引用
- */
 export function applyOpenAITools(body, config = {}, overrides = {}) {
   const enableTools = config.enableTools !== false && MCPToolAdapter.hasTools();
 
@@ -95,22 +84,12 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
 
   if (!enableTools) return body;
 
-  // 工具作用域策略：
-  // - 若 overrides.streams 显式指定，优先使用（多工作流白名单）
-  // - 否则若有 workflow/config.workflow，则仅注入该工作流的工具
-  // - 若均未指定，则默认注入除 chat 之外的所有工作流工具
-  const workflow =
-    overrides.workflow ||
-    config.workflow ||
-    config.streamName || // 兼容可能存在的别名
-    null;
-
+  const workflow = overrides.workflow || config.workflow || config.streamName || null;
   const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
 
   const tools = MCPToolAdapter.convertMCPToolsToOpenAI({
     workflow,
     streams,
-    // 全局黑名单：不显式注入 chat 工作流工具（chat 只通过按 stream 过滤时使用）
     excludeStreams: ['chat']
   });
   if (!tools.length) return body;
@@ -122,4 +101,3 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
 
   return body;
 }
-

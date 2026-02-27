@@ -30,13 +30,15 @@ export default class AzureOpenAILLMClient {
     const base = (config.baseUrl ?? '').replace(/\/+$/, '');
     if (!base) throw new Error('azure_openai: 未配置 baseUrl（Azure endpoint）');
 
-    const deployment = encodeURIComponent(config.deployment ?? config.model ?? config.chatModel ?? '');
-    if (!deployment) throw new Error('azure_openai: 未配置 deployment（Azure 部署名）');
+    const deployment = encodeURIComponent(config.deployment ?? config.azureDeployment ?? config.model ?? config.chatModel ?? '');
+    if (!deployment && !config.path) throw new Error('azure_openai: 未配置 deployment（Azure 部署名）或 path');
 
     const path = (config.path || `/openai/deployments/${deployment}/chat/completions`).replace(/^\/?/, '/');
-    const apiVersion = (config.apiVersion || '2024-10-21').toString().trim();
+    const apiVersion = (config.apiVersion || '').toString().trim();
     const url = new URL(`${base}${path}`);
-    url.searchParams.set('api-version', apiVersion);
+    if (apiVersion) {
+      url.searchParams.set('api-version', apiVersion);
+    }
     return url.toString();
   }
 

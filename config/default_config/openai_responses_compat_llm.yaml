@@ -1,0 +1,45 @@
+############################################
+# OpenAI Responses 协议兼容 LLM 工厂（多运营商聚合）
+############################################
+# 位置：data/server_bots/{port}/openai_responses_compat_llm.yaml
+#
+# 设计说明：
+# - 工厂类型固定为 OpenAI Responses 协议（/responses 风格）
+# - 通过 providers 列表挂载多个“运营商/渠道商”，例如 XRK-Responses、gptgod-Responses 等
+# - 对外 HTTP 请求里仍然用 model = 运营商 key 来选择具体哪一家
+#
+
+providers: []
+
+#providers:
+#  # ===== 示例：直连 OpenAI 官方 Responses API =====
+#  - key: "openai-responses"        # 运营商 key，对外当成 provider/model 使用
+#    label: "OpenAI Responses 官方"
+#    protocol: "openai-response"    # 工厂内部协议类型：OpenAI Responses
+#    baseUrl: "https://api.openai.com"
+#    path: "/v1/responses"
+#    apiKey: ""
+#    authMode: "bearer"
+#    authHeaderName: ""
+#    model: "gpt-4.1-mini"          # 下游真实的模型名
+#    temperature: 0.7
+#    maxOutputTokens: 4096
+#    topP: 1.0
+#    serviceTier: "auto"
+#    promptCacheKey: ""
+#    promptCacheRetention: "in-memory"
+#    safetyIdentifier: ""
+#    timeout: 360000
+#    enableTools: true
+#    toolChoice: "auto"
+#    maxToolRounds: 7
+#    maxToolCalls: 20
+#    headers: {}
+#    extraBody: {}
+#    proxy: {}
+#
+#  # 你可以继续在此处新增更多“Responses 运营商”：
+#  # - key: "xrk-resp"
+#  # - key: "gptgod-resp"
+#  # - key: "iflow-resp"
+#

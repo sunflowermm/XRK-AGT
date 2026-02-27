@@ -40,16 +40,26 @@ function toBool(v) {
   return;
 }
 
-function getProviderConfig(provider) {
-  return provider ? (cfg[`${provider.toLowerCase()}_llm`] || {}) : {};
-}
-
 const getDefaultProvider = () => {
-  const llm = getAistreamConfigOptional().llm;
+  const llm = getAistreamConfigOptional().llm || cfg?.aistream?.llm || {};
   return (llm?.Provider || llm?.provider || '').toString().trim().toLowerCase();
 };
 
 const trimLower = (v) => (v || '').toString().trim().toLowerCase();
+
+function getProviderConfig(provider) {
+  return LLMFactory.getProviderConfig(provider) || {};
+}
+
+function resolveProviderFromRequest(body = {}) {
+  return LLMFactory.resolveProvider({
+    model: trimLower(pickFirst(body, ['model'])),
+    provider: trimLower(pickFirst(body, ['provider', 'llm', 'profile'])),
+    llm: trimLower(pickFirst(body, ['llm'])),
+    profile: trimLower(pickFirst(body, ['profile'])),
+    defaultProvider: getDefaultProvider()
+  });
+}
 
 /** 提取消息文本内容（支持字符串和对象格式） */
 function extractMessageText(messages) {
@@ -62,6 +72,33 @@ function extractMessageText(messages) {
 /** 计算 token 数量（粗略估算：1 token ≈ 4 字符） */
 function estimateTokens(text) {
   return Math.ceil((text || '').length / 4);
+}
+
+function writeSSEChunk(res, payload) {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  if (typeof res.flush === 'function') res.flush();
+}
+
+function createOpenAIChunk({ id, created, model, index = 0, delta = {}, finishReason = null, usage, mcpTools }) {
+  const chunk = {
+    id,
+    object: 'chat.completion.chunk',
+    created,
+    model
+  };
+
+  if (Object.keys(delta || {}).length > 0 || finishReason !== null || usage) {
+    chunk.choices = [{
+      index,
+      delta,
+      finish_reason: finishReason
+    }];
+  }
+
+  if (usage) chunk.usage = usage;
+  if (Array.isArray(mcpTools) && mcpTools.length > 0) chunk.mcp_tools = mcpTools;
+
+  return chunk;
 }
 
 /**
@@ -160,15 +197,15 @@ async function handleChatCompletionsV3(req, res) {
 
   // 鉴权由 src/bot.js _authMiddleware 统一处理，/api/* 到达此处已通过校验
   const streamFlag = Boolean(pickFirst(body, ['stream']));
-  const bodyModel = trimLower(pickFirst(body, ['model']));
-  const defaultProvider = getDefaultProvider();
-  
-  const provider = (bodyModel && LLMFactory.hasProvider(bodyModel)) 
-    ? bodyModel 
-    : (defaultProvider && LLMFactory.hasProvider(defaultProvider) ? defaultProvider : null);
-  
+  const provider = resolveProviderFromRequest(body);
+
   if (!provider) {
-    return HttpResponse.error(res, new Error(`未指定有效的LLM提供商，请在 aistream.yaml 中配置 llm.Provider`), 400, 'ai.v3.chat.completions');
+    return HttpResponse.error(
+      res,
+      new Error('未指定有效的LLM提供商：请检查 aistream.yaml 的 llm.Provider 是否已配置，或在请求中传入 model/provider。'),
+      400,
+      'ai.v3.chat.completions'
+    );
   }
 
   const base = getProviderConfig(provider);
@@ -243,11 +280,14 @@ async function handleChatCompletionsV3(req, res) {
   if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;
 
   if (!streamFlag) {
-    const text = await client.chat(messages, overrides);
+    const chatResult = await client.chat(messages, overrides);
+    const text = typeof chatResult === 'string' ? chatResult : (chatResult?.content || '');
+    const executedToolNames = Array.isArray(chatResult?.executedToolNames) ? chatResult.executedToolNames : [];
+
     const promptText = extractMessageText(messages);
     const promptTokens = estimateTokens(promptText);
     const completionTokens = estimateTokens(text);
-    
+
     // 对外返回 model=provider
     const responseModel = llmConfig.provider || 'unknown';
     return res.json({
@@ -260,6 +300,7 @@ async function handleChatCompletionsV3(req, res) {
         message: { role: 'assistant', content: text || '' },
         finish_reason: 'stop'
       }],
+      ...(executedToolNames.length > 0 ? { mcp_tools: executedToolNames.map((name) => ({ name })) }: {}),
       usage: {
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
@@ -286,95 +327,69 @@ async function handleChatCompletionsV3(req, res) {
     let isFirstChunk = true;
     let chunkCount = 0;
     let mcpTools = [];
-    
-    // 流式回调：所有工厂统一通过 onDelta 返回“纯文本增量”，这里封装成 OpenAI 风格 SSE 事件
+
     const streamCallback = (delta, metadata = {}) => {
-      if (delta && typeof delta === 'string') {
+      const hasTextDelta = typeof delta === 'string' && delta.length > 0;
+      const hasMcpTools = Array.isArray(metadata?.mcp_tools) && metadata.mcp_tools.length > 0;
+
+      if (!hasTextDelta && !hasMcpTools) return;
+
+      if (hasTextDelta) {
         totalContent += delta;
         chunkCount++;
-        const deltaObj = isFirstChunk ? { role: 'assistant', content: delta } : { content: delta };
-        
-        const chunkData = {
-          id,
-          object: 'chat.completion.chunk',
-          created: now,
-          model: modelName,
-          choices: [{
-            index: 0,
-            delta: deltaObj,
-            finish_reason: null
-          }]
-        };
-        
-        if (metadata && metadata.mcp_tools && Array.isArray(metadata.mcp_tools) && metadata.mcp_tools.length > 0) {
-          mcpTools = metadata.mcp_tools;
-          chunkData.mcp_tools = mcpTools;
-        }
-        
-        const chunkStr = `data: ${JSON.stringify(chunkData)}\n\n`;
-        
+
         if (chunkCount % 10 === 1 || chunkCount <= 3) {
           BotUtil.makeLog('debug', `[v3/chat/completions] 发送chunk #${chunkCount}: delta长度=${delta.length}, 总长度=${totalContent.length}`, 'ai.v3.stream');
         }
-        
-        try {
-          res.write(chunkStr);
-          if (typeof res.flush === 'function') {
-            res.flush();
-          }
-        } catch (writeError) {
-          BotUtil.makeLog('error', `[v3/chat/completions] 写入chunk失败: ${writeError.message}`, 'ai.v3.stream');
-          throw writeError;
-        }
-        
-        isFirstChunk = false;
-      } else if (delta === '' && metadata && metadata.mcp_tools && Array.isArray(metadata.mcp_tools) && metadata.mcp_tools.length > 0) {
-        mcpTools = metadata.mcp_tools;
-        const mcpData = {
+
+        writeSSEChunk(res, createOpenAIChunk({
           id,
-          object: 'chat.completion.chunk',
           created: now,
           model: modelName,
-          mcp_tools: mcpTools
-        };
-        res.write(`data: ${JSON.stringify(mcpData)}\n\n`);
-        if (typeof res.flush === 'function') {
-          res.flush();
+          delta: isFirstChunk ? { role: 'assistant', content: delta } : { content: delta },
+          finishReason: null,
+          mcpTools: hasMcpTools ? metadata.mcp_tools : undefined
+        }));
+
+        isFirstChunk = false;
+      }
+
+      if (hasMcpTools) {
+        mcpTools = metadata.mcp_tools;
+        if (!hasTextDelta) {
+          writeSSEChunk(res, createOpenAIChunk({
+            id,
+            created: now,
+            model: modelName,
+            mcpTools
+          }));
         }
-      } else {
-        BotUtil.makeLog('warn', `[v3/chat/completions] 收到无效delta: type=${typeof delta}, value=${String(delta).substring(0, 50)}`, 'ai.v3.stream');
       }
     };
-    
+
     BotUtil.makeLog('info', `[v3/chat/completions] 调用client.chatStream开始`, 'ai.v3.stream');
-    
+
     await client.chatStream(messages, streamCallback, overrides);
     BotUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总chunks=${chunkCount}, 总长度=${totalContent.length}`, 'ai.v3.stream');
-    
-    // 发送完成标记和统计信息
+
     const promptText = extractMessageText(messages);
     const promptTokens = estimateTokens(promptText);
     const completionTokens = estimateTokens(totalContent);
-    
-    const finishData = {
+
+    BotUtil.makeLog('debug', `[v3/chat/completions] 发送完成标记`, 'ai.v3.stream');
+    writeSSEChunk(res, createOpenAIChunk({
       id,
-      object: 'chat.completion.chunk',
       created: now,
       model: modelName,
-      choices: [{
-        index: 0,
-        delta: {},
-        finish_reason: 'stop'
-      }],
+      delta: {},
+      finishReason: 'stop',
       usage: {
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
         total_tokens: promptTokens + completionTokens
-      }
-    };
-    
-    BotUtil.makeLog('debug', `[v3/chat/completions] 发送完成标记`, 'ai.v3.stream');
-    res.write(`data: ${JSON.stringify(finishData)}\n\n`);
+      },
+      mcpTools
+    }));
     res.write('data: [DONE]\n\n');
     BotUtil.makeLog('info', `[v3/chat/completions] 流式输出完成`, 'ai.v3.stream');
   } catch (error) {

@@ -1,0 +1,26 @@
+############################################
+# Gemini 协议兼容 LLM 工厂（多运营商聚合）
+############################################
+# 协议：Google Generative Language API
+# - 非流式：:generateContent
+# - 流式：:streamGenerateContent?alt=sse
+
+providers: []
+
+#providers:
+#  - key: "gemini-default"
+#    label: "Gemini 默认"
+#    protocol: "gemini"
+#    baseUrl: "https://generativelanguage.googleapis.com"
+#    path: "/v1beta/models/gemini-1.5-flash:generateContent"
+#    apiKey: ""
+#    model: "gemini-1.5-flash"
+#    temperature: 0.7
+#    maxTokens: 2048
+#    topP: 1
+#    topK: 40
+#    timeout: 360000
+#    enableStream: true
+#    headers: {}
+#    extraBody: {}
+#    proxy: {}

@@ -1,62 +1,37 @@
-# ============================================
-# OpenAI 兼容 LLM 配置（随端口变化）
-# ============================================
-# Provider: openai_compat。兼容 OpenAI 格式的第三方 API。
+############################################
+# OpenAI Chat Completions 协议兼容 LLM 工厂（多运营商）
+############################################
 # 位置：data/server_bots/{port}/openai_compat_llm.yaml
+# 说明：该工厂仅用于 Chat Completions（不混入 Responses）
 
-# 第三方 API Key
-apiKey: ""
+providers: []
 
-# 第三方 API 基础地址（必须配置）
-# 例：https://api.example.com/v1
-baseUrl: ""
-
-# Chat Completions 路径（多数为 /chat/completions）
-path: "/chat/completions"
-
-# 模型名称（OpenAI-like: model；第三方自定义）
-model: ""
-
-# 认证模式：
-# - bearer: Authorization: Bearer ${apiKey}
-# - api-key: api-key: ${apiKey}
-# - header: 使用 authHeaderName 作为头名
-authMode: "bearer"
-authHeaderName: ""
-
-# 生成参数
-temperature: 0.7
-maxTokens: 4096
-topP: 1.0
-presencePenalty: 0
-frequencyPenalty: 0
-
-# 工具调用（MCP）
-enableTools: true
-toolChoice: "auto"
-# 最大工具调用轮次（默认 7，给模型一定的纠错空间，仍有限制防止死循环）
-maxToolRounds: 7
-
-# 并行工具调用（若服务端不支持会忽略）
-parallelToolCalls: true
-
-# 请求超时时间（毫秒）
-timeout: 360000
-
-# Stream 流式输出配置
-# 是否启用流式输出（默认启用）
-enableStream: true
-
-# 额外请求头（可选）
-headers: {}
-
-# 额外请求体字段（原样透传到下游；可用于第三方的扩展参数）
-extraBody: {}
-
-# 代理配置（可选）
-# 用于为第三方 OpenAI 兼容接口配置 HTTP(S) 代理
-# 示例：
-# proxy:
-#   enabled: true
-#   url: "http://127.0.0.1:7890"
-proxy: {}
+#providers:
+#  - key: "openai-default"
+#    label: "OpenAI 官方"
+#    protocol: "openai"
+#    baseUrl: "https://api.openai.com"
+#    path: "/v1/chat/completions"
+#    apiKey: ""
+#    authMode: "bearer"
+#    authHeaderName: ""
+#    model: "gpt-4o-mini"
+#    temperature: 0.7
+#    maxCompletionTokens: 4096
+#    topP: 1.0
+#    presencePenalty: 0
+#    frequencyPenalty: 0
+#    serviceTier: "auto"
+#    promptCacheKey: ""
+#    promptCacheRetention: "in-memory"
+#    safetyIdentifier: ""
+#    reasoningEffort: "medium"
+#    enableTools: true
+#    toolChoice: "auto"
+#    parallelToolCalls: true
+#    maxToolRounds: 7
+#    timeout: 360000
+#    enableStream: true
+#    headers: {}
+#    extraBody: {}
+#    proxy: {}

@@ -67,9 +67,16 @@ commonconfig/**
 !commonconfig/xiaomimimo_llm.js
 !commonconfig/openai_llm.js
 !commonconfig/openai_compat_llm.js
+!commonconfig/openai_responses_compat_llm.js
 !commonconfig/gemini_llm.js
+!commonconfig/gemini_compat_llm.js
 !commonconfig/anthropic_llm.js
+!commonconfig/anthropic_compat_llm.js
 !commonconfig/azure_openai_llm.js
+!commonconfig/azure_openai_compat_llm.js
+!commonconfig/newapi_compat_llm.js
+!commonconfig/cherryin_compat_llm.js
+!commonconfig/ollama_compat_llm.js
 !commonconfig/tools.js
 *.psd
 *.map

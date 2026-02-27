@@ -1,0 +1,29 @@
+############################################
+# New API 协议兼容 LLM 工厂（多运营商聚合）
+############################################
+# 位置：data/server_bots/{port}/newapi_compat_llm.yaml
+
+providers: []
+
+#providers:
+#  - key: "newapi-default"
+#    label: "New API 默认"
+#    protocol: "new-api"
+#    baseUrl: "https://your-newapi.example.com"
+#    path: "/v1/chat/completions"
+#    apiKey: ""
+#    authMode: "bearer"
+#    authHeaderName: ""
+#    model: "gpt-4o-mini"
+#    temperature: 0.7
+#    maxTokens: 4096
+#    topP: 1.0
+#    timeout: 360000
+#    enableTools: true
+#    toolChoice: "auto"
+#    parallelToolCalls: true
+#    maxToolRounds: 7
+#    enableStream: true
+#    headers: {}
+#    extraBody: {}
+#    proxy: {}

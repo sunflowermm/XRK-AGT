@@ -104,22 +104,28 @@ sequenceDiagram
 
 LLMFactory 负责管理所有大语言模型服务提供商，支持多种 LLM API 协议。
 
-#### 支持的提供商
+#### 支持的提供商（官方 + 兼容）
 
-| 提供商 | 标识符 | 说明 | 接口地址 | 多模态支持 |
-|--------|--------|------|----------|-----------|
-| 火山引擎 | `volcengine` | 火山引擎豆包大模型 | `https://ark.cn-beijing.volces.com/api/v3` | ✅ 支持 |
-| 小米 MiMo | `xiaomimimo` | 兼容 OpenAI API 的 MiMo 大语言模型（仅文本） | `https://api.xiaomimimo.com/v1` | ❌ 不支持 |
-| OpenAI | `openai` | OpenAI Chat Completions | `https://api.openai.com/v1` | ✅ 支持 |
-| Gemini | `gemini` | Google Generative Language API | `https://generativelanguage.googleapis.com/v1beta` | ✅ 支持 |
-| OpenAI 兼容 | `openai_compat` | 任意 OpenAI-like Chat Completions（可自定义 baseUrl） | 可配置 | 取决于后端 |
-| Anthropic | `anthropic` | Claude Messages API | `https://api.anthropic.com/v1` | ✅ 支持 |
-| Azure OpenAI | `azure_openai` | Azure OpenAI（deployment + api-version 体系） | 可配置 | ✅ 支持 |
+> 下表只列出「**工厂级别**」的官方 provider；所有兼容厂商（第三方代理 / New API / CherryIN / Ollama / 自建网关等）均通过 `*_compat_llm.yaml` 里的 `providers[].key` 动态扩展，这些 key 本身也会出现在 `LLMFactory.listProviders()` 与 `/api/v3/models` 中，可直接作为 v3 接口里的 `model` 使用。
+
+| 类型 | 提供商 | v3 中 `model` 示例 | 说明 | 官方文档 / 协议 | 多模态 |
+|------|--------|--------------------|------|------------------|--------|
+| 官方 | 火山引擎 | `volcengine` | 火山引擎豆包大模型工厂 | /api/v3（Ark Chat Completions 风格） | ✅ |
+| 官方 | 小米 MiMo | `xiaomimimo` | 兼容 OpenAI API 的 MiMo 大语言模型（仅文本） | OpenAI Chat Completions | ❌ |
+| 官方 | OpenAI | `openai` | OpenAI 官方 Chat Completions 工厂，配置文件 `openai_llm.yaml` | `POST https://api.openai.com/v1/chat/completions` | ✅ |
+| 官方 | Gemini | `gemini` | Google Generative Language API 工厂，配置文件 `gemini_llm.yaml` | `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` | ✅ |
+| 官方 | Anthropic | `anthropic` | Claude Messages API 工厂，配置文件 `anthropic_llm.yaml` | `POST https://api.anthropic.com/v1/messages` | ✅ |
+| 官方 | Azure OpenAI | `azure_openai` | Azure OpenAI Chat Completions 工厂，配置文件 `azure_openai_llm.yaml` | `POST https://{resource}.openai.azure.com/openai/deployments/{deployment}/chat/completions?api-version=...` | ✅ |
+| 兼容 | OpenAI Chat 协议 | 例如：`my-openai-proxy` | 通过 `openai_compat_llm.yaml.providers[].key` 定义的任意 OpenAI-like Chat Completions（自定义 `baseUrl/path/apiKey`） | 完全兼容 `POST /v1/chat/completions` | 由网关决定 |
+| 兼容 | OpenAI Responses 协议 | 例如：`my-responses-gateway` | 通过 `openai_responses_compat_llm.yaml.providers[].key` 定义的 Responses 兼容网关 | `POST /v1/responses` | 由网关决定 |
+| 兼容 | New API / CherryIN | 例如：`newapi-main` / `cherry-cn` | 通过 `newapi_compat_llm.yaml` / `cherryin_compat_llm.yaml` 的 `providers[].key` 扩展 | OpenAI Chat Completions 风格 | 由网关决定 |
+| 兼容 | Ollama | 例如：`ollama-local` | 通过 `ollama_compat_llm.yaml.providers[].key` 映射到本机 `http://127.0.0.1:11434/api/chat` | Ollama Chat API (`/api/chat`) | ✅（视模型而定） |
+| 兼容 | Gemini / Anthropic / Azure 兼容工厂 | 例如：`gemini-alt` / `claude-alt` | `gemini_compat_llm.yaml` / `anthropic_compat_llm.yaml` / `azure_openai_compat_llm.yaml` 中的 `providers[].key` | 与各家官方协议完全一致 | ✅ |
 
 **多模态说明**：
-- 多模态能力由各家 LLM 自身的多模态接口提供
-- 支持图片识别、图片理解等功能
-- 通过 `messages` 数组中的 `image_url` 字段传递图片
+- 多模态能力由各家 LLM 自身的多模态接口提供（OpenAI / Gemini / Anthropic / Azure / 部分第三方网关 / Ollama 模型等）
+- 主服务统一使用 OpenAI 风格的 `messages[].content = [{type:'text'},{type:'image_url', image_url:{url}}]` 结构；  
+  每个工厂内部再通过 `transformMessagesWithVision` 转换为各家协议要求的格式（如 Gemini `parts.inlineData`、Anthropic `image` blocks、Ollama `images[]` base64 等）。
 
 #### 基本用法
 

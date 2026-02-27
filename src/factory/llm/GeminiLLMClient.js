@@ -26,10 +26,13 @@ export default class GeminiLLMClient {
 
   normalizeEndpoint(config) {
     const base = (config.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
-    const model = encodeURIComponent(config.model || config.chatModel || 'gemini-1.5-flash');
-    const path = (config.path || `/v1beta/models/${model}:generateContent`).replace(/^\/?/, '/');
+    const model = encodeURIComponent(config.model || config.chatModel || '');
+    const path = (config.path || (model ? `/v1beta/models/${model}:generateContent` : '')).replace(/^\/?/, '/');
     if (!config.apiKey) {
       throw new Error('gemini: 未配置 apiKey');
+    }
+    if (!path) {
+      throw new Error('gemini: 未配置 model/chatModel 或 path');
     }
     return `${base}${path}`;
   }
@@ -116,9 +119,16 @@ export default class GeminiLLMClient {
       contents,
       generationConfig: {
         temperature: overrides.temperature ?? this.config.temperature ?? 0.7,
-        maxOutputTokens: (overrides.maxTokens ?? overrides.max_tokens) ?? (this.config.maxTokens ?? this.config.max_tokens) ?? 2048,
-        ...(((overrides.topP ?? this.config.topP) !== undefined) ? { topP: (overrides.topP ?? this.config.topP) } : {}),
-        ...(((overrides.topK ?? this.config.topK) !== undefined && (overrides.topK ?? this.config.topK)) ? { topK: (overrides.topK ?? this.config.topK) } : {})
+        maxOutputTokens:
+          (overrides.maxOutputTokens ?? overrides.max_output_tokens ?? overrides.maxTokens ?? overrides.max_tokens) ??
+          (this.config.maxOutputTokens ?? this.config.max_output_tokens ?? this.config.maxTokens ?? this.config.max_tokens) ??
+          2048,
+        ...(((overrides.topP ?? overrides.top_p ?? this.config.topP ?? this.config.top_p) !== undefined)
+          ? { topP: (overrides.topP ?? overrides.top_p ?? this.config.topP ?? this.config.top_p) }
+          : {}),
+        ...(((overrides.topK ?? overrides.top_k ?? this.config.topK ?? this.config.top_k) !== undefined)
+          ? { topK: (overrides.topK ?? overrides.top_k ?? this.config.topK ?? this.config.top_k) }
+          : {})
       }
     };
 

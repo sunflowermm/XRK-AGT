@@ -1,0 +1,23 @@
+############################################
+# Anthropic 协议兼容 LLM 工厂（多运营商聚合）
+############################################
+# 协议：Anthropic Messages API (/v1/messages)
+
+providers: []
+
+#providers:
+#  - key: "anthropic-default"
+#    label: "Anthropic 默认"
+#    protocol: "anthropic"
+#    baseUrl: "https://api.anthropic.com/v1"
+#    path: "/messages"
+#    apiKey: ""
+#    anthropicVersion: "2023-06-01"
+#    model: "claude-3-5-sonnet-latest"
+#    temperature: 0.7
+#    maxTokens: 2048
+#    timeout: 360000
+#    enableStream: true
+#    headers: {}
+#    extraBody: {}
+#    proxy: {}
