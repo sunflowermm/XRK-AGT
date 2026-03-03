@@ -736,7 +736,8 @@ export default class VolcengineASRClient {
             const sessionId = this.currentUtterance.sessionId;
             BotUtil.makeLog('info', `✓ [ASR会话] 结束: ${sessionId}`, this.deviceId);
 
-            // endUtterance 发送 end 后，服务端应回一条 isLast=true；若 3 秒内未收到则强制清理并通知设备同步状态
+            // endUtterance 发送 end 后，服务端应回一条 isLast=true；
+            // 若超时未收到则强制清理并通知上层（默认 8 秒，避免长句/网络抖动导致误判）
             const cleanupTimer = setTimeout(() => {
                 if (this.currentUtterance && this.currentUtterance.sessionId === sessionId) {
                     BotUtil.makeLog('warn', `[ASR] 会话 ${sessionId} 超时未收到最终结果，强制清理`, this.deviceId);
@@ -747,7 +748,7 @@ export default class VolcengineASRClient {
                     this.currentUtterance = null;
                     this._emitAsrTimeoutOnce(sessionId, 'no_final_result');
                 }
-            }, 3000);
+            }, this.config.finalResultTimeoutMs || 8000);
             
             // 保存清理定时器，在收到最终结果时清除
             if (this.currentUtterance) {

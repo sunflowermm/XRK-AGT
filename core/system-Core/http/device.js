@@ -746,14 +746,60 @@ class DeviceManager {
                 return;
             }
 
+            // 若工具调用/慢响应导致长时间无声：延迟播一句提示音（可配置化前先给默认行为）
+            const ttsConfig = getTtsConfig();
+            const aistreamTtsConfig = getAistreamConfig().tts || {};
+            const ttsOnlyForASR = aistreamTtsConfig.onlyForASR !== false; // 默认只有ASR触发才有TTS
+            const shouldPlayTTS = Boolean(ttsConfig.enabled && (fromASR || !ttsOnlyForASR));
+
+            // 默认：1.2s 后仍未出结果则先播一句，避免用户误以为卡住
+            const progressText = String(aistreamTtsConfig.progressSpeechText || '我查一下，请稍等。');
+            const progressDelayMs = Number.isFinite(Number(aistreamTtsConfig.progressSpeechDelayMs))
+                ? Math.max(0, Number(aistreamTtsConfig.progressSpeechDelayMs))
+                : 1200;
+            const progressEnabled = aistreamTtsConfig.progressSpeechEnabled !== false;
+
             // 调用工作流（工作流内部会自动选择LLM工厂）
-            const aiResult = await deviceStream.execute(
-                deviceId,
-                question,
-                streamConfig,
-                deviceInfo || {},
-                streamConfig.persona
-            );
+            let aiResult;
+            let waiting = true;
+            let progressTimer = null;
+            let progressPromise = null;
+
+            if (progressEnabled && shouldPlayTTS && progressText.trim()) {
+                progressTimer = setTimeout(() => {
+                    if (!waiting) return;
+                    try {
+                        const ttsClient = this._getTTSClient(deviceId, ttsConfig);
+                        BotUtil.makeLog('info', `🔊 [TTS] AI较慢/工具调用中，先播提示语音`, deviceId);
+                        progressPromise = Promise.resolve()
+                            .then(() => ttsClient.synthesize(progressText))
+                            .then(() => (typeof ttsClient.waitAudioSent === 'function' ? ttsClient.waitAudioSent() : null))
+                            .catch(() => null);
+                    } catch {
+                        // ignore
+                    }
+                }, progressDelayMs);
+            }
+
+            try {
+                aiResult = await deviceStream.execute(
+                    deviceId,
+                    question,
+                    streamConfig,
+                    deviceInfo || {},
+                    streamConfig.persona
+                );
+            } finally {
+                waiting = false;
+                if (progressTimer) {
+                    try { clearTimeout(progressTimer); } catch { }
+                    progressTimer = null;
+                }
+                // 若已触发提示 TTS，等待它结束，避免与正式回复 TTS 并发导致截断/抢占
+                if (progressPromise) {
+                    try { await progressPromise; } catch { }
+                }
+            }
 
             if (!aiResult) {
                 // warn: 未返回结果需要关注
@@ -779,12 +825,7 @@ class DeviceManager {
             }
 
             // 播放TTS（只有ASR触发或配置允许时才播放）
-            const ttsConfig = getTtsConfig();
-            const aistreamTtsConfig = getAistreamConfig().tts || {};
-            const ttsOnlyForASR = aistreamTtsConfig.onlyForASR !== false; // 默认只有ASR触发才有TTS
-
             if (aiResult.text && ttsConfig.enabled) {
-                const shouldPlayTTS = fromASR || !ttsOnlyForASR;
                 if (shouldPlayTTS) {
                     try {
                         const ttsClient = this._getTTSClient(deviceId, ttsConfig);

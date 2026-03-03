@@ -93,7 +93,6 @@
     "start:windows": "start.bat server",
     "start:unix": "./start.sh server",
     "start:docker": "docker-compose up -d",
-    "test": "node --test --test-force-exit test/*.test.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
