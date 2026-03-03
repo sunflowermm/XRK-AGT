@@ -2717,7 +2717,11 @@ class App {
       this.appendChatRecord(m.messages ?? [], m.title ?? '', m.description ?? '', false);
     } else if (m.segments && Array.isArray(m.segments)) {
       const hasToolsInSegments = m.segments.some(s => s && s.type === 'tools');
-      this.appendSegments(m.segments, false, m.role || 'assistant', hasToolsInSegments ? {} : (m.mcpTools?.length ? { mcpTools: m.mcpTools } : {}));
+      const options = { messageId: m.id };
+      if (!hasToolsInSegments && m.mcpTools?.length) {
+        options.mcpTools = m.mcpTools;
+      }
+      this.appendSegments(m.segments, false, m.role || 'assistant', options);
     } else if (m.type === 'image' && m.url) {
       this.appendSegments([{ type: 'image', url: m.url }], false, m.role || 'assistant');
     } else if (m.role && m.text) {
@@ -2740,7 +2744,9 @@ class App {
    * @param {Array} segments - 消息段数组
    * @param {boolean} persist - 是否持久化到历史记录
    * @param {string} role - 'user' | 'assistant'
-   * @param {{ mcpTools?: Array }} options - 可选，mcpTools 时展示工具调用方块
+   * @param {{ mcpTools?: Array, messageId?: string }} options - 可选配置：
+   *   - mcpTools：展示工具调用方块
+   *   - messageId：显式指定消息 ID，便于与历史记录对齐（用于恢复历史、撤回/重新生成等场景）
    * @returns {HTMLElement|null} 创建的消息容器
    */
   appendSegments(segments, persist = true, role = 'assistant', options = {}) {
@@ -2749,8 +2755,10 @@ class App {
     const box = document.getElementById('chatMessages');
     if (!box) return;
 
+    const { mcpTools = null, messageId: providedMessageId = null } = options;
+
     const div = document.createElement('div');
-    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const messageId = providedMessageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     div.id = messageId;
     const roleKey = role === 'user' ? 'user' : 'assistant';
     div.className = `chat-message ${roleKey}${this._isRestoringHistory ? '' : ' message-enter'}`;
@@ -2946,10 +2954,10 @@ class App {
     });
 
     this._flushTextParts(div, textParts);
-    if (div.children.length === 0 && !(options.mcpTools && options.mcpTools.length > 0)) return;
+    if (div.children.length === 0 && !(mcpTools && mcpTools.length > 0)) return;
 
-    if (options.mcpTools && Array.isArray(options.mcpTools) && options.mcpTools.length > 0) {
-      this._addToolBlock(div, options.mcpTools);
+    if (mcpTools && Array.isArray(mcpTools) && mcpTools.length > 0) {
+      this._addToolBlock(div, mcpTools);
     }
     const fullText = allText.join('').trim();
     this._addMessageActions(div, role, fullText, messageId);
@@ -2971,7 +2979,7 @@ class App {
         ts: Date.now(),
         id: messageId
       };
-      if (options.mcpTools?.length) historyItem.mcpTools = options.mcpTools;
+      if (mcpTools?.length) historyItem.mcpTools = mcpTools;
       this._getCurrentChatHistory().push(historyItem);
       this._saveChatHistory();
     }
