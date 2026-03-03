@@ -45,6 +45,14 @@ export default class VolcengineASRClient {
         
         // 重连相关
         this.reconnectAttempts = 0;
+
+        // timeout 去重（utteranceId 唯一，最多保留最近若干条）
+        this._timeoutEmittedQueue = [];
+        this._timeoutEmittedSet = new Set();
+        this._timeoutEmittedMax = 64;
+
+        // 连接轮转（每个 utterance 使用独立 WS）
+        this._closingForRotate = false;
         
         // 性能指标
         this.performanceMetrics = {
@@ -65,6 +73,26 @@ export default class VolcengineASRClient {
             'X-Api-Resource-Id': this.config.resourceId,
             'X-Api-Connect-Id': this.connectId,
         };
+    }
+
+    _emitAsrTimeoutOnce(sessionId, reason = '') {
+        if (!sessionId) return;
+        if (this._timeoutEmittedSet.has(sessionId)) return;
+        this._timeoutEmittedSet.add(sessionId);
+        this._timeoutEmittedQueue.push(sessionId);
+        if (this._timeoutEmittedQueue.length > this._timeoutEmittedMax) {
+            const old = this._timeoutEmittedQueue.shift();
+            if (old) this._timeoutEmittedSet.delete(old);
+        }
+        this.Bot.em('device.asr_timeout', {
+            post_type: 'device',
+            event_type: 'asr_timeout',
+            device_id: this.deviceId,
+            session_id: sessionId,
+            self_id: this.deviceId,
+            time: Math.floor(Date.now() / 1000),
+            reason
+        });
     }
 
     /**
@@ -305,6 +333,8 @@ export default class VolcengineASRClient {
                 }, 8000);
 
                 try {
+                    // 每次新连接都刷新 connectId（对齐火山建议：用于链路追踪）
+                    this.connectId = uuidv4();
                     const ws = new WebSocket(this.config.wsUrl, {
                         headers: this._headers(),
                         handshakeTimeout: 8000
@@ -406,21 +436,21 @@ export default class VolcengineASRClient {
                         this.connected = false;
                         this.connecting = false;
 
-                        if (this.currentUtterance) {
-                            const sid = this.currentUtterance.sessionId;
-                            if (this.currentUtterance._cleanupTimer) {
-                                clearTimeout(this.currentUtterance._cleanupTimer);
-                                this.currentUtterance._cleanupTimer = null;
+                        // 关闭时不再无条件触发 timeout：
+                        // - ending=true：由 endUtterance 的 cleanupTimer 决定是否超时
+                        // - 轮转关闭：不触发 timeout（新 utterance 会用新 WS）
+                        // - 非 ending 且非轮转：认为是异常中断，触发 timeout
+                        if (this.currentUtterance && !this._closingForRotate) {
+                            const u = this.currentUtterance;
+                            if (!u.ending) {
+                                const sid = u.sessionId;
+                                if (u._cleanupTimer) {
+                                    clearTimeout(u._cleanupTimer);
+                                    u._cleanupTimer = null;
+                                }
+                                this.currentUtterance = null;
+                                this._emitAsrTimeoutOnce(sid, `ws_close:${code}`);
                             }
-                            this.currentUtterance = null;
-                            this.Bot.em('device.asr_timeout', {
-                                post_type: 'device',
-                                event_type: 'asr_timeout',
-                                device_id: this.deviceId,
-                                session_id: sid,
-                                self_id: this.deviceId,
-                                time: Math.floor(Date.now() / 1000)
-                            });
                         }
 
                         this._clearIdleTimer();
@@ -498,14 +528,7 @@ export default class VolcengineASRClient {
                 });
             }
             this._lastIntermediateText = '';
-            this.Bot.em('device.asr_timeout', {
-                post_type: 'device',
-                event_type: 'asr_timeout',
-                device_id: this.deviceId,
-                session_id: sessionId,
-                self_id: this.deviceId,
-                time: Math.floor(Date.now() / 1000)
-            });
+            this._emitAsrTimeoutOnce(sessionId, `server_error:${errorCode}`);
         } else if (errorCode === 45000000) {
             this.sequence = 1;
         } else {
@@ -601,18 +624,43 @@ export default class VolcengineASRClient {
      * @returns {Promise<void>}
      */
     async beginUtterance(sessionId, audioInfo) {
-        if (this.currentUtterance) {
-            BotUtil.makeLog('info',
-                `🔄 [ASR] 切换会话：${this.currentUtterance.sessionId} → ${sessionId}`,
-                this.deviceId
-            );
+        // 对齐稳定策略：每个 utterance 使用独立 WebSocket，避免 end/close/timeout 串台
+        // 先尽力结束上一轮（如果有）
+        if (this.currentUtterance && !this.currentUtterance.ending) {
+            try { await this.endUtterance(); } catch { /* ignore */ }
+        }
+        // 轮转关闭旧连接（无论是否 connected），确保新 utterance 干净开始
+        if (this.ws) {
+            this._closingForRotate = true;
             try {
-                await this.endUtterance();
-                // 服务端会在 end 后关闭连接(1006)，避免在即将关闭的连接上发 start，主动标记未连接并等待关闭
-                this.connected = false;
-                await new Promise(r => setTimeout(r, 150));
+                await new Promise((resolve) => {
+                    const w = this.ws;
+                    let done = false;
+                    const finish = () => {
+                        if (done) return;
+                        done = true;
+                        resolve();
+                    };
+                    const t = setTimeout(finish, 1000);
+                    try {
+                        w.once('close', () => {
+                            clearTimeout(t);
+                            finish();
+                        });
+                        if (w.readyState === 1) w.close(1000, 'rotate utterance');
+                        else w.terminate();
+                    } catch {
+                        clearTimeout(t);
+                        finish();
+                    }
+                });
             } catch {
-                // 忽略错误
+                // ignore
+            } finally {
+                this._closingForRotate = false;
+                this.ws = null;
+                this.connected = false;
+                this.connecting = false;
             }
         }
 
@@ -697,14 +745,7 @@ export default class VolcengineASRClient {
                         this.currentUtterance._cleanupTimer = null;
                     }
                     this.currentUtterance = null;
-                    this.Bot.em('device.asr_timeout', {
-                        post_type: 'device',
-                        event_type: 'asr_timeout',
-                        device_id: this.deviceId,
-                        session_id: sessionId,
-                        self_id: this.deviceId,
-                        time: Math.floor(Date.now() / 1000)
-                    });
+                    this._emitAsrTimeoutOnce(sessionId, 'no_final_result');
                 }
             }, 3000);
             
