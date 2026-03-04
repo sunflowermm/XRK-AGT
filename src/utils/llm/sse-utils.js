@@ -1,3 +1,5 @@
+import BotUtil from '../botutil.js';
+
 /**
  * 通用 SSE 解析器（适用于各类 LLM / 子进程流式接口）
  *
@@ -20,15 +22,53 @@
  */
 export async function* iterateSSE(resp, options = {}) {
   const { stopOnDone = true } = options || {};
-  if (!resp?.body?.getReader) throw new Error('SSE响应无效：resp.body 不可读');
+  if (!resp?.body?.getReader) {
+    BotUtil.makeLog('warn', '[SSE] 无效响应：resp.body 不可读', 'LLMStream');
+    throw new Error('SSE响应无效：resp.body 不可读');
+  }
 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
+  let chunkCount = 0;
+  let totalBytes = 0;
+  let eventCount = 0;
+
+  BotUtil.makeLog(
+    'info',
+    `[SSE] 开始读取流式响应，stopOnDone=${stopOnDone}, url=${resp.url || 'unknown'}`,
+    'LLMStream'
+  );
 
   while (true) {
     const { value, done } = await reader.read();
-    if (done) break;
+    if (done) {
+      BotUtil.makeLog(
+        'info',
+        `[SSE] 读取结束：chunks=${chunkCount}, totalBytes=${totalBytes}, remainingBufferLength=${buffer.length}`,
+        'LLMStream'
+      );
+      break;
+    }
+
+    chunkCount += 1;
+    const byteLength = value?.byteLength ?? 0;
+    totalBytes += byteLength;
+
+    if (chunkCount <= 5) {
+      const preview = (() => {
+        try {
+          return decoder.decode(value, { stream: true }).slice(0, 200).replace(/\s+/g, ' ');
+        } catch {
+          return '<decode_failed>';
+        }
+      })();
+      BotUtil.makeLog(
+        'debug',
+        `[SSE] 收到 chunk#${chunkCount} bytes=${byteLength}, preview="${preview}"`,
+        'LLMStream'
+      );
+    }
 
     // 统一 CRLF -> LF，避免分隔符匹配失败
     buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
@@ -62,8 +102,24 @@ export async function* iterateSSE(resp, options = {}) {
       const data = dataParts.join('\n');
 
       if (stopOnDone && data === '[DONE]') return;
+      eventCount += 1;
+
+      if (eventCount <= 10) {
+        BotUtil.makeLog(
+          'debug',
+          `[SSE] 解析到 event#${eventCount}, event="${event || ''}", dataLen=${data.length}, preview="${data.slice(0, 200).replace(/\s+/g, ' ')}"`,
+          'LLMStream'
+        );
+      }
+
       yield { event, data, rawEvent };
     }
   }
+
+  BotUtil.makeLog(
+    'info',
+    `[SSE] 迭代结束，总事件数=${eventCount}, 最终缓冲区长度=${buffer.length}`,
+    'LLMStream'
+  );
 }
 

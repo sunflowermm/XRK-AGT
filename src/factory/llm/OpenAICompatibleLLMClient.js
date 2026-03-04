@@ -93,10 +93,24 @@ export default class OpenAICompatibleLLMClient {
   }
 
   _buildRequestOptions(messages, overrides = {}, stream = false) {
+    const body = this.buildBody(messages, { ...overrides, stream });
+    const bodyStr = JSON.stringify(body);
+
+    const model = body?.model ?? '';
+    const toolsCount = Array.isArray(body?.tools) ? body.tools.length : 0;
+    const hasTools = toolsCount > 0;
+    const maxTokens = body?.max_completion_tokens ?? body?.max_tokens;
+
+    BotUtil.makeLog(
+      'debug',
+      `[OpenAICompatibleLLMClient] 构建请求: stream=${stream}, endpoint=${this.endpoint}, model=${model || '<empty>'}, tools=${hasTools ? toolsCount : 0}, temperature=${body?.temperature}, top_p=${body?.top_p}, max_tokens=${maxTokens ?? ''}, bodyLength=${bodyStr.length}`,
+      'LLMFactory'
+    );
+
     return buildFetchOptionsWithProxy(this.config, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
-      body: JSON.stringify(this.buildBody(messages, { ...overrides, stream })),
+      body: bodyStr,
       signal: AbortSignal.timeout(this.timeout)
     });
   }
@@ -109,8 +123,38 @@ export default class OpenAICompatibleLLMClient {
       throw new Error(`openai_compat ${tag}: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
     if (stream && !resp.body) {
+      BotUtil.makeLog(
+        'warn',
+        '[OpenAICompatibleLLMClient] 流式请求失败：resp.ok 但 body 为空',
+        'LLMFactory'
+      );
       throw new Error('openai_compat 流式请求失败: 响应 body 为空');
     }
+
+    if (stream) {
+      const contentType = (resp.headers?.get?.('content-type') || '').toLowerCase();
+      // 某些上游在 HTTP 200 时仍返回 JSON 错误体（如 {"status":"435","msg":"Model not support"}），
+      // 这会导致 SSE 解析拿不到任何 data 事件，表现为“空流”。这里显式检测并抛出可读错误。
+      if (contentType && !contentType.includes('text/event-stream')) {
+        const text = await resp.text().catch(() => '');
+        BotUtil.makeLog(
+          'warn',
+          `[OpenAICompatibleLLMClient] 期望SSE但收到非SSE响应: content-type=${contentType}, bodyPreview="${String(text)
+            .slice(0, 300)
+            .replace(/\s+/g, ' ')}"`,
+          'LLMFactory'
+        );
+        throw new Error(
+          `openai_compat 流式响应不是SSE: content-type=${contentType}${text ? ` | body=${text}` : ''}`
+        );
+      }
+    }
+
+    BotUtil.makeLog(
+      'info',
+      `[OpenAICompatibleLLMClient] _fetchRound 成功: stream=${stream}, status=${resp.status}, url=${resp.url || this.endpoint}`,
+      'LLMFactory'
+    );
     return resp;
   }
 
@@ -131,14 +175,21 @@ export default class OpenAICompatibleLLMClient {
   async _consumeSSEWithToolCalls(resp, onDelta) {
     const toolCallsMap = new Map();
     const result = { content: '', toolCalls: [] };
+    let sseEventCount = 0;
+    let sseDataChars = 0;
+    let deltaContentChars = 0;
 
     for await (const { data } of iterateSSE(resp)) {
+      sseEventCount += 1;
+      sseDataChars += data?.length || 0;
+
       try {
         const json = JSON.parse(data);
         const delta = json?.choices?.[0]?.delta;
 
         if (typeof delta?.content === 'string' && delta.content.length > 0) {
           result.content += delta.content;
+          deltaContentChars += delta.content.length;
           if (typeof onDelta === 'function') onDelta(delta.content);
         }
 
@@ -171,6 +222,12 @@ export default class OpenAICompatibleLLMClient {
       result.toolCalls = sortedIndices.map((idx, i) => this._normalizeToolCall(toolCallsMap.get(idx), i));
       BotUtil.makeLog('info', `[OpenAICompatibleLLMClient] 收集到${result.toolCalls.length}个工具调用`, 'LLMFactory');
     }
+
+    BotUtil.makeLog(
+      'info',
+      `[OpenAICompatibleLLMClient] SSE 消费完成: events=${sseEventCount}, sseDataChars=${sseDataChars}, deltaContentChars=${deltaContentChars}`,
+      'LLMFactory'
+    );
 
     return result;
   }
@@ -235,12 +292,26 @@ export default class OpenAICompatibleLLMClient {
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this._prepareMessages(messages);
 
-    await this._runWithToolRounds(transformedMessages, overrides, {
+    BotUtil.makeLog(
+      'info',
+      `[OpenAICompatibleLLMClient] chatStream 开始: messages=${transformedMessages.length}`,
+      'LLMFactory'
+    );
+
+    const result = await this._runWithToolRounds(transformedMessages, overrides, {
       onDelta,
       requestRound: async (currentMessages, ov) => {
         const resp = await this._fetchRound(currentMessages, ov, true);
         return await this._consumeSSEWithToolCalls(resp, onDelta);
       }
     });
+
+    BotUtil.makeLog(
+      'info',
+      `[OpenAICompatibleLLMClient] chatStream 结束`,
+      'LLMFactory'
+    );
+
+    return result;
   }
 }
