@@ -22,17 +22,15 @@
 
 <br>
 
-<!-- 第二排：其他五所大学 -->
+<!-- 第二排：其他五所大学（自适应布局，手机不挤压） -->
 <div align="center">
-<table>
-<tr>
-<td align="center" width="20%"><img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="130" height="130"></td>
-<td align="center" width="20%"><img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" width="130" height="130"></td>
-<td align="center" width="20%"><img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="130" height="130"></td>
-<td align="center" width="20%"><img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="130" height="130"></td>
-<td align="center" width="20%"><img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="130" height="130"></td>
-</tr>
-</table>
+  <p>
+    <img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" style="max-width:120px;width:22%;min-width:70px;height:auto;margin:8px;">
+    <img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" style="max-width:120px;width:22%;min-width:70px;height:auto;margin:8px;">
+    <img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" style="max-width:120px;width:22%;min-width:70px;height:auto;margin:8px;">
+    <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" style="max-width:120px;width:22%;min-width:70px;height:auto;margin:8px;">
+    <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" style="max-width:120px;width:22%;min-width:70px;height:auto;margin:8px;">
+  </p>
 </div>
 
 </div>
