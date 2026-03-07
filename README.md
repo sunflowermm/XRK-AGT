@@ -25,11 +25,11 @@
 <!-- 第二排：其他五所大学（使用 width/height 保证 Gitee/GitHub 等平台显示一致，避免原图过大） -->
 <div align="center">
   <p>
-    <img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="64" height="64" style="margin:4px;">
-    <img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" width="64" height="64" style="margin:4px;">
-    <img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="64" height="64" style="margin:4px;">
-    <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="64" height="64" style="margin:4px;">
-    <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="64" height="64" style="margin:4px;">
+    <img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="96" height="96" style="margin:4px;">
+    <img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" width="96" height="96" style="margin:4px;">
+    <img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="96" height="96" style="margin:4px;">
+    <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="96" height="96" style="margin:4px;">
+    <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="96" height="96" style="margin:4px;">
   </p>
 </div>
 
