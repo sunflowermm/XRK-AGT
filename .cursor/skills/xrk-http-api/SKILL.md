@@ -11,7 +11,7 @@ description: 当你需要开发或排查 HTTP API（core/*/http/*.js）、理解
 
 - 文档：`docs/http-api.md`、`docs/api-loader.md`、`docs/http-business-layer.md`
 - 基类：`src/infrastructure/http/http.js`
-- 加载器：`src/infrastructure/http/api-loader.js`
+- 加载器：`src/infrastructure/http/loader.js`
 
 ## 核心约定
 

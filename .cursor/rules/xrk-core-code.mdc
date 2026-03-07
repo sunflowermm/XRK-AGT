@@ -6,6 +6,17 @@ alwaysApply: false
 
 # Core 业务代码约定
 
-- **放码**：插件 `core/*/plugin/*.js`，HTTP API `core/*/http/*.js`，工作流 `core/*/stream/*.js`；各自继承对应基类，符合 `docs/` 对应文档。
-- **导入**：不自带 package.json 的 core 用根包 `#` 别名（`#infrastructure/*`、`#utils/*`）；自带 package.json 的 core 用相对路径引用 `src/*`。
-- **编码**：constructor 不定义缓存/状态容器，用类字段或 `init()`；插件/事件/Tasker 用全局 `Bot`、`segment`；HTTP 用 `HttpResponse` 与 `req.bot`。详见 `xrk-dev-requirements.mdc`。
+## 放码位置
+
+- 插件：`core/*/plugin/*.js`；HTTP API：`core/*/http/*.js`；工作流：`core/*/stream/*.js`。各自继承对应基类，行为符合 `docs/` 中对应文档。
+- 基类路径：插件 `#infrastructure/plugins/plugin.js`，HTTP `#infrastructure/http/http.js`，工作流 `#infrastructure/aistream/aistream.js`。
+
+## 导入约定
+
+- 不自带 package.json 的 core：使用根包 `#` 别名（`#infrastructure/*`、`#utils/*`）；自带 package.json 的 core 用相对路径引用 `src/*`。
+
+## 编码约定
+
+- constructor 内不定义缓存/状态容器，用类字段或 `init()` 初始化。
+- 插件/事件/Tasker：使用全局 `Bot`、`segment`（不要 import Bot 或 segment）。
+- HTTP handler：使用 `HttpResponse`（`#utils/http-utils.js`）与注入的 `req.bot`。详见 `xrk-dev-requirements.mdc`。
