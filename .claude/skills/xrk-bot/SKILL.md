@@ -16,10 +16,14 @@ description: 当你需要理解 XRK-AGT 的运行时核心（Bot 主类）、事
 
 - 启动 HTTP/HTTPS/WebSocket 服务器和 `_authMiddleware` 鉴权中间件。
 - 初始化加载器：TaskerLoader / ApiLoader / StreamLoader / PluginsLoader。
-- 维护全局 `Bot` 对象：\n
-  - `Bot`（EventEmitter 实例）\n
-  - `Bot[self_id]`：具体 Bot 会话实例\n
-  - `Bot.tasker` / `Bot.wsf` / `Bot.uin` / `Bot.em()` / `Bot.makeLog()`。
+- 维护全局 `Bot` 对象：`Bot`（EventEmitter 实例）、`Bot[self_id]`（具体 Bot 会话）、`Bot.tasker` / `Bot.wsf` / `Bot.uin` / `Bot.em()` / `Bot.makeLog()`。
+
+## 充分利用 Bot 对象
+
+- 业务代码**不要** `import Bot` 或 `new Bot()`；由 `node app` / `start.js` 创建并挂载全局 `Bot`。
+- **插件 / Tasker / 事件监听器**：直接使用全局 `Bot`、`Bot[self_id]`、`Bot.em()`、`Bot.tasker`、`Bot.makeLog()` 等。
+- **HTTP API**：使用注入的 `req.bot` 或路由 handler 的第三参 `Bot`，获取 `getServerUrl()`、`callRoute()`、多 Bot 列表等。
+- 详见 `docs/bot.md` 的“快速开始”“核心 API”“多 Bot 管理”。
 
 ## 常见问题你要怎么回答
 

@@ -17,6 +17,19 @@ description: 当你需要开发或排查 HTTP API（core/*/http/*.js）、理解
 
 - API 模块放在 `core/*/http/*.js`，导出对象或继承 HttpApi。
 - 路由数组 `routes` 中声明 method/path/handler/middleware。
-- 建议使用 `HttpResponse.asyncHandler` 包裹 handler，实现统一成功/错误返回格式。
 - 鉴权由 Server 层 `_authMiddleware` 完成，业务 handler 不重复校验（详见 `xrk-auth` skill）。
+
+## HttpResponse（src/utils/http-utils.js）
+
+- **导入**：`import { HttpResponse } from '#utils/http-utils.js'`（文件名是 http-utils，不是 http-response）。
+- **用途**：统一成功/错误响应格式与错误处理；handler 应优先用 HttpResponse，避免手写 `res.json()` 导致格式不一致。
+- **常用方法**：
+  - `HttpResponse.success(res, data, message)`：成功；
+  - `HttpResponse.error(res, error, statusCode, context)`：统一错误与日志；
+  - `HttpResponse.validationError(res, message, code)`：400；
+  - `HttpResponse.notFound(res, message)`、`HttpResponse.unauthorized(res, message)`、`HttpResponse.forbidden(res, message)`；
+  - `HttpResponse.asyncHandler(handler, context)`：包装异步 handler，自动 try/catch 并调 `HttpResponse.error`；
+  - `HttpResponse.streamResponse(res, streamHandler, context)`：SSE 流式；
+  - MCP：`jsonRpcError` / `jsonRpcSuccess` / `validateJsonRpcRequest`。
+- **约定**：handler 内用 `return HttpResponse.xxx(...)` 提前返回，不要与 `res.json()` 混用。
 

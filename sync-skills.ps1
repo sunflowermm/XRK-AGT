@@ -1,28 +1,35 @@
-Param(
-    [string]$SourceDir = "skills"
-)
-
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sourcePath = Join-Path $root $SourceDir
+$cursorDir = Join-Path $root ".cursor"
 
-if (-not (Test-Path $sourcePath)) {
-    Write-Error "Source directory not found: $sourcePath"
+if (-not (Test-Path $cursorDir)) {
+    Write-Error "Source not found: $cursorDir"
     exit 1
 }
 
-$targets = @(
-    (Join-Path $root ".claude\skills"),
-    (Join-Path $root ".trae\skills"),
-    (Join-Path $root ".cursor\skills")
+$pairs = @(
+    @{ From = "skills"; ToClaude = ".claude\skills"; ToTrae = ".trae\skills" },
+    @{ From = "rules";  ToClaude = ".claude\rules"; ToTrae = ".trae\rules" }
 )
 
-foreach ($target in $targets) {
-    if (-not (Test-Path $target)) {
-        New-Item -ItemType Directory -Path $target -Force | Out-Null
+foreach ($pair in $pairs) {
+    $src = Join-Path $cursorDir $pair.From
+    if (-not (Test-Path $src)) {
+        Write-Host "Skip (missing): $src"
+        continue
     }
 
-    Write-Host "Copy $sourcePath -> $target"
-    Copy-Item -Path (Join-Path $sourcePath "*") -Destination $target -Recurse -Force
+    foreach ($targetRel in $pair.ToClaude, $pair.ToTrae) {
+        $target = Join-Path $root $targetRel
+        $parent = Split-Path -Parent $target
+        if (-not (Test-Path $parent)) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        }
+        if (-not (Test-Path $target)) {
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+        }
+        Write-Host "Copy .cursor\$($pair.From) -> $targetRel"
+        Copy-Item -Path (Join-Path $src "*") -Destination $target -Recurse -Force
+    }
 }
 
-Write-Host "skills synced to .claude and .trae and .cursor."
+Write-Host "Done. .cursor/skills and .cursor/rules synced to .claude and .trae."

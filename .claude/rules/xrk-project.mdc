@@ -1,0 +1,34 @@
+---
+description: XRK-AGT 项目架构与开发约定（全局生效）
+alwaysApply: true
+---
+
+# XRK-AGT 项目规则
+
+## 架构与放码位置
+
+- **业务逻辑**一律放在 `core/<core名>/(plugin|http|stream|events|tasker|commonconfig|www)`，不要写在 `src/`。
+- **基础设施**：基类、加载器、工具在 `src/infrastructure/`、`src/utils/`、`src/factory/`。
+- **入口**：Bot 主类 `src/bot.js`；应用启动 `app.js` / `start.js`。
+
+## 技术栈与版本
+
+- Node.js ≥ 24.13（LTS）；包管理仅支持 **pnpm**。
+- 使用 Node 24 特性：全局 `URLPattern`、`Error.isError()`、原生 `fetch`、`AbortController` 超时。
+
+## 文档与回答规范
+
+- 涉及「在哪改/在哪配」必须给出**具体路径**（文件 + 函数/字段），不以「应该在某个地方」含糊带过。
+- 文档与代码冲突时以**代码为准**，并标注需修订的文档。
+- 新增配置时需同时考虑：`config/default_config/` 默认模板、`core/system-Core/commonconfig/*.js` 的 schema、以及实际消费该配置的代码。
+
+## 开发与底层
+
+- **编码与全局对象**：见 `xrk-dev-requirements.mdc`。**扩展点与基类**：见 `docs/框架可扩展性指南.md`、skill `xrk-infrastructure`。
+- **Core**：`core/<core名>/` 下按需建 `plugin/`、`http/`、`stream/`、`tasker/`、`events/`、`commonconfig/`、`www/<应用名>/`；`www/` 须建子目录；无 package.json 的 core 用 `#` 别名。
+- **加载**：`node app` → `start.js` → `src/bot.js`；各 Loader 扫描 `core/*/` 对应子目录自动加载。
+
+## 语言与风格
+
+- 项目内规则、Skills、开发说明统一使用**简体中文**。
+- 回复简洁、结论先行，少用空洞形容词；贴代码时只给最小可运行片段。

@@ -25,7 +25,7 @@ description: 当你需要配置/新增/排查 LLM 提供商（OpenAI/Azure/Gemin
 - OpenAI：`data/server_bots/{port}/openai_llm.yaml`
 - Azure OpenAI：`data/server_bots/{port}/azure_openai_llm.yaml`
 - Gemini：`data/server_bots/{port}/gemini_llm.yaml`
--（若启用）Anthropic：`data/server_bots/{port}/anthropic_llm.yaml`
+- （若启用）Anthropic：`data/server_bots/{port}/anthropic_llm.yaml`
 
 ### 兼容 provider（providers[] 多运营商聚合）
 

@@ -12,7 +12,7 @@
 - `skills/`：人类可读、仓库内可检索的 Skills 源文件（你要求的根目录技能库）。
 - `.trae/skills/`：给 Trae 使用的内部镜像目录。
 - `.claude/skills/`：给 Trae/Claude 直接加载的镜像目录（内容与 `skills/` 同步）。
-- `.cursor/skills/`：给 Cursor 直接加载的镜像目录（内容与 `skills` 同步）。
+- `.cursor/skills/`：给 Cursor 直接加载的镜像目录（内容与 `skills/` 同步；若项目仅用 Cursor，可只维护本目录）。
 
 ## 目录结构
 
@@ -55,7 +55,7 @@ description: 一句话说明何时使用
 
 ## 使用建议
 
-- **遇到复杂问题时优先检索 Skill 名**（例如 `xrk-llm`、`xrk-aistream`），而不是全局搜索关键词，可以更快定位“权威入口”。
+- **遇到复杂问题时优先检索 Skill 名**（如 `xrk-llm`、`xrk-aistream`、`xrk-infrastructure` 等），而不是全局搜索关键词，可更快定位权威入口。
 - **更新功能时优先更新对应 Skill**：当某个子系统发生重要改动（配置字段、目录结构、路由路径等），请同步更新相关 Skill，保证 AI 回答不会“过期”。
 - **避免在 Skill 里写实现细节代码段的长篇大论**：Skill 更偏向“导航 + 关键决策点”，具体实现细节应指向 `docs/*` 与源码文件。
 

@@ -1,6 +1,6 @@
 ---
 name: xrk-mcp
-description: 当你需要理解或扩展 MCP 工具（Model Context Protocol）、工具注册/分组/远程 MCP 连接与与 LLM tool calling 的关系时使用。
+description: 当你需要理解或扩展 MCP 工具（Model Context Protocol）、工具注册/分组/远程 MCP 连接与 LLM tool calling 的关系时使用。
 ---
 
 ## 你是什么

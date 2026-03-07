@@ -1,0 +1,11 @@
+---
+description: core 目录下业务代码（插件/HTTP/工作流）的编写约定
+globs: core/**/*.js
+alwaysApply: false
+---
+
+# Core 业务代码约定
+
+- **放码**：插件 `core/*/plugin/*.js`，HTTP API `core/*/http/*.js`，工作流 `core/*/stream/*.js`；各自继承对应基类，符合 `docs/` 对应文档。
+- **导入**：不自带 package.json 的 core 用根包 `#` 别名（`#infrastructure/*`、`#utils/*`）；自带 package.json 的 core 用相对路径引用 `src/*`。
+- **编码**：constructor 不定义缓存/状态容器，用类字段或 `init()`；插件/事件/Tasker 用全局 `Bot`、`segment`；HTTP 用 `HttpResponse` 与 `req.bot`。详见 `xrk-dev-requirements.mdc`。

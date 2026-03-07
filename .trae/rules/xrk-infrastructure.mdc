@@ -1,0 +1,12 @@
+---
+description: 基础设施层（src/）代码约定，仅修改底层时遵守
+globs: src/**/*.js
+alwaysApply: false
+---
+
+# 基础设施层约定
+
+- **职责**：只提供基类、加载器、工具、工厂；不包含业务逻辑（业务在 `core/*`）。
+- **错误**：使用 `#utils/error-handler.js` 的 `errorHandler.handle()` 与 `ErrorCodes`；HTTP 响应用 `HttpResponse.error()`。
+- **日志**：使用 `BotUtil.makeLog`（或注入的 logger），不随意 `console.log` 业务信息。
+- **接口稳定**：修改基类或加载器对外 API 时，需兼容现有 core 与 `docs/` 文档；新增可选参数优于破坏性变更。
