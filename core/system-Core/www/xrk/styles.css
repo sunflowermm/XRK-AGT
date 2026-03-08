@@ -3979,6 +3979,15 @@ body.dark .json-boolean { color: #f87171; }
     display: flex;
   }
   
+  .sidebar-brand {
+    padding: 16px 12px;
+  }
+  
+  .brand-name {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  
   .main {
     margin-left: 0;
   }
