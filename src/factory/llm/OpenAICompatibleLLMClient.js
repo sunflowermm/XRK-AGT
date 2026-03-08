@@ -172,7 +172,8 @@ export default class OpenAICompatibleLLMClient {
     return toolResults;
   }
 
-  async _consumeSSEWithToolCalls(resp, onDelta) {
+  async _consumeSSEWithToolCalls(resp, onDelta, options = {}) {
+    const mcpToolMode = options?.mcpToolMode || 'execute';
     const toolCallsMap = new Map();
     const result = { content: '', toolCalls: [] };
     let sseEventCount = 0;
@@ -211,6 +212,11 @@ export default class OpenAICompatibleLLMClient {
             if (tc.function?.name) item.function.name = tc.function.name;
             if (tc.function?.arguments) item.function.arguments += tc.function.arguments;
           }
+
+          // 在“透传模式”下，将上游的 tool_calls 直接通过 metadata 传给上层（例如 v3 handler），由上游客户端自行处理
+          if (mcpToolMode === 'passthrough' && typeof onDelta === 'function' && delta.tool_calls.length > 0) {
+            onDelta('', { tool_calls: delta.tool_calls });
+          }
         }
       } catch (e) {
         BotUtil.makeLog('warn', `[OpenAICompatibleLLMClient] SSE JSON解析失败: ${e.message}`, 'LLMFactory');
@@ -241,6 +247,7 @@ export default class OpenAICompatibleLLMClient {
 
   async _runWithToolRounds(initialMessages, overrides = {}, handlers = {}) {
     const maxToolRounds = this.config.maxToolRounds || 7;
+    const enableMcpTools = overrides?.mcpToolMode === 'passthrough' ? false : true;
     const state = {
       messages: [...initialMessages],
       toolNameSet: new Set()
@@ -251,7 +258,8 @@ export default class OpenAICompatibleLLMClient {
       const content = roundResult?.content || '';
       const toolCalls = Array.isArray(roundResult?.toolCalls) ? roundResult.toolCalls : [];
 
-      if (!toolCalls.length) {
+      // 无工具调用，或调用方显式要求仅“透传 tools 给模型、不在 XRK 执行 MCP 工具”时，直接返回本轮结果
+      if (!toolCalls.length || !enableMcpTools) {
         return { content, executedToolNames: Array.from(state.toolNameSet) };
       }
 
@@ -302,7 +310,7 @@ export default class OpenAICompatibleLLMClient {
       onDelta,
       requestRound: async (currentMessages, ov) => {
         const resp = await this._fetchRound(currentMessages, ov, true);
-        return await this._consumeSSEWithToolCalls(resp, onDelta);
+        return await this._consumeSSEWithToolCalls(resp, onDelta, ov);
       }
     });
 

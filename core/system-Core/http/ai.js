@@ -79,6 +79,93 @@ function writeSSEChunk(res, payload) {
   if (typeof res.flush === 'function') res.flush();
 }
 
+function safePreview(value, { maxLen = 500 } = {}) {
+  if (value == null) return value;
+  if (typeof value === 'string') {
+    const s = value.replace(/\s+/g, ' ').trim();
+    return s.length > maxLen ? `${s.slice(0, maxLen)}…(len=${s.length})` : s;
+  }
+  try {
+    const s = JSON.stringify(value);
+    return s.length > maxLen ? `${s.slice(0, maxLen)}…(len=${s.length})` : s;
+  } catch {
+    return String(value);
+  }
+}
+
+function redactSecrets(headers = {}) {
+  const out = {};
+  for (const [k, v] of Object.entries(headers || {})) {
+    const key = String(k).toLowerCase();
+    if (key === 'authorization' || key === 'api-key' || key === 'x-api-key') {
+      out[k] = '<redacted>';
+    } else {
+      out[k] = safePreview(v, { maxLen: 200 });
+    }
+  }
+  return out;
+}
+
+function summarizeTools(tools) {
+  if (!Array.isArray(tools)) return { type: typeof tools, count: 0, names: [] };
+  const names = [];
+  for (const t of tools) {
+    const name = t?.function?.name || t?.name || t?.id;
+    if (name) names.push(String(name));
+  }
+  return {
+    type: 'array',
+    count: tools.length,
+    names: names.slice(0, 12),
+    namesTruncated: names.length > 12
+  };
+}
+
+function summarizeV3Request(req, body, { contentType, messages, uploadedImagesCount = 0 } = {}) {
+  const rawWorkflow = pickFirst(body, ['workflow']);
+  const workflowType = rawWorkflow == null ? null : (Array.isArray(rawWorkflow) ? 'array' : typeof rawWorkflow);
+  const workflowPreview = rawWorkflow && typeof rawWorkflow === 'object'
+    ? {
+        workflow: safePreview(rawWorkflow.workflow, { maxLen: 120 }),
+        workflowsCount: Array.isArray(rawWorkflow.workflows) ? rawWorkflow.workflows.length : 0,
+        streamsCount: Array.isArray(rawWorkflow.streams) ? rawWorkflow.streams.length : 0
+      }
+    : safePreview(rawWorkflow, { maxLen: 200 });
+
+  const toolChoice = pickFirst(body, ['tool_choice', 'toolChoice']);
+  const parallelToolCalls = pickFirst(body, ['parallel_tool_calls', 'parallelToolCalls']);
+  const tools = pickFirst(body, ['tools']);
+
+  return {
+    method: req?.method,
+    path: req?.path,
+    ip: req?.ip,
+    contentType: safePreview(contentType, { maxLen: 200 }),
+    stream: Boolean(pickFirst(body, ['stream'])),
+    model: safePreview(pickFirst(body, ['model']), { maxLen: 120 }),
+    provider: safePreview(pickFirst(body, ['provider']), { maxLen: 120 }),
+    llm: safePreview(pickFirst(body, ['llm']), { maxLen: 120 }),
+    profile: safePreview(pickFirst(body, ['profile']), { maxLen: 120 }),
+    temperature: toNum(pickFirst(body, ['temperature'])),
+    max_tokens: toNum(pickFirst(body, ['max_tokens', 'maxTokens', 'max_completion_tokens', 'maxCompletionTokens'])),
+    top_p: toNum(pickFirst(body, ['top_p', 'topP'])),
+    tool_choice: safePreview(toolChoice, { maxLen: 200 }),
+    parallel_tool_calls: toBool(parallelToolCalls),
+    toolsSummary: summarizeTools(tools),
+    workflow: { type: workflowType, preview: workflowPreview },
+    messagesCount: Array.isArray(messages) ? messages.length : 0,
+    uploadedImagesCount,
+    headers: redactSecrets({
+      'user-agent': req?.headers?.['user-agent'],
+      'x-request-id': req?.headers?.['x-request-id'],
+      'x-trace-id': req?.headers?.['x-trace-id'],
+      authorization: req?.headers?.authorization,
+      'api-key': req?.headers?.['api-key'],
+      'content-length': req?.headers?.['content-length']
+    })
+  };
+}
+
 function createOpenAIChunk({ id, created, model, index = 0, delta = {}, finishReason = null, usage, mcpTools }) {
   const chunk = {
     id,
@@ -157,6 +244,12 @@ async function handleChatCompletionsV3(req, res) {
   if (!messages || !Array.isArray(messages)) {
     return HttpResponse.validationError(res, 'messages 参数无效');
   }
+
+  BotUtil.makeLog(
+    'debug',
+    `[v3/chat/completions] 入参摘要: ${safePreview(summarizeV3Request(req, body, { contentType, messages, uploadedImagesCount: uploadedImages.length }), { maxLen: 2000 })}`,
+    'ai.v3.chat.completions'
+  );
   
   // 如果有上传的图片，将图片添加到最后一条用户消息中
   if (uploadedImages.length > 0) {
@@ -234,6 +327,9 @@ async function handleChatCompletionsV3(req, res) {
 
   const client = LLMFactory.createClient(llmConfig);
   const overrides = {};
+  // 默认视为“外部工具透传”模式：不在 XRK 侧执行 MCP 工具，只把 tools/参数传给上游模型
+  // 若显式通过 workflow 声明了 streams，则认为调用方希望使用 XRK 的 MCP 工具能力
+  overrides.mcpToolMode = workflowStreams && workflowStreams.length ? 'execute' : 'passthrough';
   const addNum = (key, ...aliases) => {
     const v = toNum(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
@@ -330,8 +426,9 @@ async function handleChatCompletionsV3(req, res) {
     const streamCallback = (delta, metadata = {}) => {
       const hasTextDelta = typeof delta === 'string' && delta.length > 0;
       const hasMcpTools = Array.isArray(metadata?.mcp_tools) && metadata.mcp_tools.length > 0;
+      const hasToolCalls = Array.isArray(metadata?.tool_calls) && metadata.tool_calls.length > 0;
 
-      if (!hasTextDelta && !hasMcpTools) return;
+      if (!hasTextDelta && !hasMcpTools && !hasToolCalls) return;
 
       if (hasTextDelta) {
         totalContent += delta;
@@ -360,6 +457,17 @@ async function handleChatCompletionsV3(req, res) {
           created: now,
           model: modelName,
           mcpTools: metadata.mcp_tools
+        }));
+      }
+
+      if (hasToolCalls) {
+        // 透传上游模型产生的 tool_calls（例如 OpenClaw 自带的工具），由上游客户端自行执行
+        writeSSEChunk(res, createOpenAIChunk({
+          id,
+          created: now,
+          model: modelName,
+          delta: { tool_calls: metadata.tool_calls },
+          finishReason: null
         }));
       }
     };
