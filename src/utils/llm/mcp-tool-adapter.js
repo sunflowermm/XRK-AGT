@@ -140,13 +140,13 @@ export class MCPToolAdapter {
    *
    * 权限控制策略：
    * - 若传入 options.allowedTools，则仅允许显式列出的工具被调用
-   * - 否则，若传入 options.streams，则会基于 streams 计算允许的工具白名单
-   * - 最终，任何不在白名单中的工具调用都会被拒绝，并返回一条失败的 tool 消息
+   * - 否则，若传入 options.streams，则基于 streams 计算允许的 MCP 工具白名单
+   * - 调用方传入 body.tools 时由 v3 设置为 mcpToolMode=passthrough，tool_calls 透传客户端执行，不进入本方法
    *
    * @param {Array} toolCalls - OpenAI tool_calls
    * @param {Object} options - 选项
-   * @param {Array<string>} options.allowedTools - 允许的工具名称列表（用于权限验证）
-   * @param {Array<string>} options.streams - 允许的工作流列表（用于权限验证）
+   * @param {Array<string>} options.allowedTools - 允许的工具名称列表
+   * @param {Array<string>} options.streams - 允许的工作流列表（用于计算 MCP 白名单）
    * @returns {Promise<Array>} tool role messages
    */
   static async handleToolCalls(toolCalls, options = {}) {
@@ -164,12 +164,10 @@ export class MCPToolAdapter {
       }));
     }
 
-    // 获取允许的工具列表（用于权限验证）
     let allowedToolNames = null;
     if (options.allowedTools && Array.isArray(options.allowedTools)) {
       allowedToolNames = new Set(options.allowedTools);
     } else if (options.streams && Array.isArray(options.streams)) {
-      // 根据streams获取允许的工具
       const allowedTools = this.convertMCPToolsToOpenAI({
         streams: options.streams,
         excludeStreams: []

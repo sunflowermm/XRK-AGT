@@ -1,4 +1,4 @@
-import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
+import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
@@ -97,18 +97,11 @@ export default class CherryINCompatibleLLMClient {
   }
 
   async _executeToolCalls(toolCalls, overrides = {}, onDelta) {
-    if (!Array.isArray(toolCalls) || !toolCalls.length) return [];
-
-    const normalizedToolCalls = toolCalls.map((tc, idx) => this._normalizeToolCall(tc, idx));
-    const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
-    const toolResults = await MCPToolAdapter.handleToolCalls(normalizedToolCalls, { streams });
-
-    if (typeof onDelta === 'function') {
-      const mcpTools = this._buildMcpToolsPayload(normalizedToolCalls, toolResults);
-      onDelta('', { mcp_tools: mcpTools });
-    }
-
-    return toolResults;
+    const normalized = toolCalls.map((tc, idx) => this._normalizeToolCall(tc, idx));
+    return partitionAndExecuteToolCalls(normalized, overrides, {
+      buildMcpPayload: (mid, res) => this._buildMcpToolsPayload(mid, res),
+      onDelta
+    });
   }
 
   async _fetchChatJson(messages, overrides = {}) {
@@ -129,7 +122,7 @@ export default class CherryINCompatibleLLMClient {
     return resp;
   }
 
-  async _consumeSSEWithToolCalls(resp, onDelta) {
+  async _consumeSSEWithToolCalls(resp, onDelta, options = {}) {
     const toolCallsMap = new Map();
     const result = { content: '', toolCalls: [], finishReason: null };
 
@@ -147,6 +140,10 @@ export default class CherryINCompatibleLLMClient {
         }
 
         if (Array.isArray(delta?.tool_calls)) {
+          const mode = options?.mcpToolMode || 'execute';
+          if ((mode === 'passthrough' || mode === 'hybrid') && typeof onDelta === 'function' && delta.tool_calls.length > 0) {
+            onDelta('', { tool_calls: delta.tool_calls });
+          }
           for (const tc of delta.tool_calls) {
             const index = tc.index;
             if (index === undefined || index === null) continue;
@@ -176,13 +173,14 @@ export default class CherryINCompatibleLLMClient {
 
   async _runWithToolRounds(initialMessages, overrides = {}, handlers = {}) {
     const maxToolRounds = this.config.maxToolRounds || 7;
+    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
     const state = { messages: [...initialMessages], executedToolNames: [] };
 
     for (let round = 0; round < maxToolRounds; round++) {
       const roundResult = await handlers.requestRound(state.messages, overrides, state);
       const toolCalls = Array.isArray(roundResult?.toolCalls) ? roundResult.toolCalls : [];
 
-      if (!toolCalls.length) {
+      if (!toolCalls.length || !enableMcpTools) {
         return { content: roundResult?.content || '', executedToolNames: state.executedToolNames };
       }
 
@@ -193,6 +191,7 @@ export default class CherryINCompatibleLLMClient {
 
       state.messages.push({ role: 'assistant', content: roundResult?.content || null, tool_calls: toolCalls });
       const toolResults = await this._executeToolCalls(toolCalls, overrides, handlers.onDelta);
+      if (toolResults === null) return { content: roundResult?.content || '', executedToolNames: state.executedToolNames };
       state.messages.push(...toolResults);
     }
 
@@ -228,7 +227,7 @@ export default class CherryINCompatibleLLMClient {
       onDelta,
       requestRound: async (currentMessages, ov) => {
         const resp = await this._fetchChatStream(currentMessages, ov);
-        return await this._consumeSSEWithToolCalls(resp, onDelta);
+        return await this._consumeSSEWithToolCalls(resp, onDelta, overrides);
       }
     });
   }

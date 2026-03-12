@@ -1,4 +1,4 @@
-import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
+import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
@@ -159,17 +159,11 @@ export default class OpenAICompatibleLLMClient {
   }
 
   async _executeToolCalls(toolCalls, overrides = {}, onDelta) {
-    if (!Array.isArray(toolCalls) || !toolCalls.length) return [];
-
-    const normalizedToolCalls = toolCalls.map((tc, idx) => this._normalizeToolCall(tc, idx));
-    const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
-    const toolResults = await MCPToolAdapter.handleToolCalls(normalizedToolCalls, { streams });
-
-    if (typeof onDelta === 'function') {
-      onDelta('', { mcp_tools: this._buildMcpToolsPayload(normalizedToolCalls, toolResults) });
-    }
-
-    return toolResults;
+    const normalized = toolCalls.map((tc, idx) => this._normalizeToolCall(tc, idx));
+    return partitionAndExecuteToolCalls(normalized, overrides, {
+      buildMcpPayload: (mid, res) => this._buildMcpToolsPayload(mid, res),
+      onDelta
+    });
   }
 
   async _consumeSSEWithToolCalls(resp, onDelta, options = {}) {
@@ -213,8 +207,8 @@ export default class OpenAICompatibleLLMClient {
             if (tc.function?.arguments) item.function.arguments += tc.function.arguments;
           }
 
-          // 在“透传模式”下，将上游的 tool_calls 直接通过 metadata 传给上层（例如 v3 handler），由上游客户端自行处理
-          if (mcpToolMode === 'passthrough' && typeof onDelta === 'function' && delta.tool_calls.length > 0) {
+          // passthrough/hybrid 时透传 tool_calls，由客户端处理下游工具
+          if ((mcpToolMode === 'passthrough' || mcpToolMode === 'hybrid') && typeof onDelta === 'function' && delta.tool_calls.length > 0) {
             onDelta('', { tool_calls: delta.tool_calls });
           }
         }
@@ -247,7 +241,7 @@ export default class OpenAICompatibleLLMClient {
 
   async _runWithToolRounds(initialMessages, overrides = {}, handlers = {}) {
     const maxToolRounds = this.config.maxToolRounds || 7;
-    const enableMcpTools = overrides?.mcpToolMode === 'passthrough' ? false : true;
+    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
     const state = {
       messages: [...initialMessages],
       toolNameSet: new Set()
@@ -258,7 +252,6 @@ export default class OpenAICompatibleLLMClient {
       const content = roundResult?.content || '';
       const toolCalls = Array.isArray(roundResult?.toolCalls) ? roundResult.toolCalls : [];
 
-      // 无工具调用，或调用方显式要求仅“透传 tools 给模型、不在 XRK 执行 MCP 工具”时，直接返回本轮结果
       if (!toolCalls.length || !enableMcpTools) {
         return { content, executedToolNames: Array.from(state.toolNameSet) };
       }
@@ -267,6 +260,7 @@ export default class OpenAICompatibleLLMClient {
       state.messages.push({ role: 'assistant', content: content || null, tool_calls: toolCalls });
 
       const toolResults = await this._executeToolCalls(toolCalls, overrides, handlers.onDelta);
+      if (toolResults === null) return { content, executedToolNames: Array.from(state.toolNameSet) };
       state.messages.push(...toolResults);
     }
 

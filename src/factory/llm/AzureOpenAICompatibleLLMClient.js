@@ -1,4 +1,4 @@
-import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
+import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
@@ -69,6 +69,7 @@ export default class AzureOpenAICompatibleLLMClient {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
 
+    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
     const maxToolRounds = this.config.maxToolRounds || 7;
     const currentMessages = [...transformedMessages];
     const executedToolNames = [];
@@ -93,16 +94,18 @@ export default class AzureOpenAICompatibleLLMClient {
       const message = result?.choices?.[0]?.message;
       if (!message) break;
 
-      if (message.tool_calls?.length > 0) {
+      if (message.tool_calls?.length > 0 && enableMcpTools) {
         for (const tc of message.tool_calls) {
           const name = tc.function?.name;
           if (name && !executedToolNames.includes(name)) executedToolNames.push(name);
         }
         currentMessages.push(message);
-        const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
-        currentMessages.push(...await MCPToolAdapter.handleToolCalls(message.tool_calls, { streams }));
+        const toolResults = await partitionAndExecuteToolCalls(message.tool_calls, overrides);
+        if (toolResults === null) return executedToolNames.length ? { content: '', executedToolNames } : '';
+        currentMessages.push(...toolResults);
         continue;
       }
+      if (message.tool_calls?.length > 0 && !enableMcpTools) break;
 
       const content = message.content || '';
       return executedToolNames.length > 0 ? { content, executedToolNames } : content;
@@ -120,6 +123,7 @@ export default class AzureOpenAICompatibleLLMClient {
     let currentMessages = [...transformedMessages];
     let round = 0;
 
+    const enableMcp = overrides?.mcpToolMode !== 'passthrough';
     while (round < maxToolRounds) {
       const resp = await fetch(
         this.endpoint,
@@ -137,25 +141,26 @@ export default class AzureOpenAICompatibleLLMClient {
       }
 
       const collector = { toolCalls: [], content: '', finishReason: null };
-      await this._consumeSSEWithToolCalls(resp, onDelta, collector);
+      await this._consumeSSEWithToolCalls(resp, onDelta, collector, overrides);
 
-      if (collector.toolCalls.length > 0 && collector.finishReason === 'tool_calls') {
+      if (collector.toolCalls.length > 0 && collector.finishReason === 'tool_calls' && enableMcp) {
         currentMessages.push({
           role: 'assistant',
           content: collector.content || null,
           tool_calls: collector.toolCalls
         });
 
-        const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
-        const toolResults = await MCPToolAdapter.handleToolCalls(collector.toolCalls, { streams });
-        currentMessages.push(...toolResults);
-
-        const mcpTools = collector.toolCalls.map((tc, idx) => ({
-          name: tc.function?.name || `工具${idx + 1}`,
+        const buildPayload = (mid, res) => mid.map((tc, i) => ({
+          name: tc.function?.name || `工具${i + 1}`,
           arguments: tc.function?.arguments || {},
-          result: toolResults[idx]?.content ?? ''
+          result: res[i]?.content ?? ''
         }));
-        if (typeof onDelta === 'function') onDelta('', { mcp_tools: mcpTools });
+        const toolResults = await partitionAndExecuteToolCalls(collector.toolCalls, overrides, {
+          buildMcpPayload: buildPayload,
+          onDelta
+        });
+        if (toolResults === null) break;
+        currentMessages.push(...toolResults);
 
         round++;
         if (round >= maxToolRounds) {
@@ -165,12 +170,12 @@ export default class AzureOpenAICompatibleLLMClient {
         continue;
       }
 
-      if (collector.content || !collector.toolCalls.length) break;
+      if (collector.content || !collector.toolCalls.length || !enableMcp) break;
       round++;
     }
   }
 
-  async _consumeSSEWithToolCalls(resp, onDelta, collector) {
+  async _consumeSSEWithToolCalls(resp, onDelta, collector, options = {}) {
     const toolCallsMap = new Map();
 
     for await (const { data } of iterateSSE(resp)) {
@@ -187,6 +192,10 @@ export default class AzureOpenAICompatibleLLMClient {
         }
 
         if (Array.isArray(delta?.tool_calls)) {
+          const mode = options?.mcpToolMode || 'execute';
+          if ((mode === 'passthrough' || mode === 'hybrid') && typeof onDelta === 'function' && delta.tool_calls.length > 0) {
+            onDelta('', { tool_calls: delta.tool_calls });
+          }
           for (const tc of delta.tool_calls) {
             const index = tc.index;
             if (index === undefined || index === null) continue;

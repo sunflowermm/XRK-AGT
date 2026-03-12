@@ -339,9 +339,11 @@ async function handleChatCompletionsV3(req, res) {
 
   const client = LLMFactory.createClient(llmConfig);
   const overrides = {};
-  // 默认视为“外部工具透传”模式：不在 XRK 侧执行 MCP 工具，只把 tools/参数传给上游模型
-  // 若通过 workflow 或 YAML 默认声明了 streams，则认为调用方希望使用 XRK 的 MCP 工具能力
-  overrides.mcpToolMode = effectiveStreams && effectiveStreams.length ? 'execute' : 'passthrough';
+  // hybrid：有 body.tools 时区分中游(MCP)/下游(请求)，中游 XRK 执行、下游透传客户端
+  // execute：无 body.tools 且有声明的 streams 时，仅中游由 XRK 执行
+  // passthrough：无 body.tools 且无 streams 时，tool_calls 透传
+  const hasRequestTools = Array.isArray(body.tools) && body.tools.length > 0;
+  overrides.mcpToolMode = hasRequestTools ? 'hybrid' : (effectiveStreams?.length ? 'execute' : 'passthrough');
   const addNum = (key, ...aliases) => {
     const v = toNum(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
@@ -383,12 +385,6 @@ async function handleChatCompletionsV3(req, res) {
   addNum('top_logprobs', 'topLogprobs');
   
   if (effectiveStreams?.length) overrides.streams = effectiveStreams;
-
-  // 工具合并策略：允许调用方通过请求体指定，未指定时可由 YAML 决定（当前仅透传给下游工具适配器）
-  const toolMergeStrategy = pickFirst(body, ['tool_merge_strategy', 'toolMergeStrategy']) || mcpCfg.toolMergeStrategy;
-  if (toolMergeStrategy) {
-    overrides.toolMergeStrategy = toolMergeStrategy;
-  }
 
   const extraBody = parseOptionalJson(pickFirst(body, ['extraBody']));
   if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;

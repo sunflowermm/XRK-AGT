@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
+import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
@@ -219,6 +219,7 @@ export default class XiaomiMiMoLLMClient {
    */
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
+    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
     const maxToolRounds = this.config.maxToolRounds || 7;
     const currentMessages = [...transformedMessages];
     const executedToolNames = [];
@@ -243,17 +244,19 @@ export default class XiaomiMiMoLLMClient {
       const message = data?.choices?.[0]?.message;
       if (!message) break;
 
-      if (message.tool_calls?.length > 0) {
-        for (const tc of message.tool_calls) {
+      if (message.tool_calls?.length > 0 && enableMcpTools) {
+        const denormalizedToolCalls = this.denormalizeToolCalls(message.tool_calls);
+        for (const tc of denormalizedToolCalls) {
           const name = tc.function?.name;
           if (name && !executedToolNames.includes(name)) executedToolNames.push(name);
         }
-        const denormalizedToolCalls = this.denormalizeToolCalls(message.tool_calls);
         currentMessages.push({ ...message, tool_calls: denormalizedToolCalls });
-        const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
-        currentMessages.push(...await MCPToolAdapter.handleToolCalls(denormalizedToolCalls, { streams }));
+        const toolResults = await partitionAndExecuteToolCalls(denormalizedToolCalls, overrides);
+        if (toolResults === null) return executedToolNames.length ? { content: '', executedToolNames } : '';
+        currentMessages.push(...toolResults);
         continue;
       }
+      if (message.tool_calls?.length > 0 && !enableMcpTools) break;
 
       const content = message.content || '';
       return executedToolNames.length > 0 ? { content, executedToolNames } : content;
@@ -301,27 +304,30 @@ export default class XiaomiMiMoLLMClient {
         finishReason: null
       };
       
-      await this._consumeSSEWithToolCalls(resp, onDelta, toolCallsCollector);
+      const enableMcp = overrides?.mcpToolMode !== 'passthrough';
+      await this._consumeSSEWithToolCalls(resp, onDelta, toolCallsCollector, overrides);
       
-      if (toolCallsCollector.toolCalls.length > 0 && toolCallsCollector.finishReason === 'tool_calls') {
+      if (toolCallsCollector.toolCalls.length > 0 && toolCallsCollector.finishReason === 'tool_calls' && enableMcp) {
         BotUtil.makeLog('info', `[XiaomiMiMoLLMClient] 检测到工具调用，执行工具: ${toolCallsCollector.toolCalls.length}个`, 'LLMFactory');
-        
+        const denormalized = this.denormalizeToolCalls(toolCallsCollector.toolCalls);
         currentMessages.push({
           role: 'assistant',
           content: toolCallsCollector.content || null,
           reasoning_content: toolCallsCollector.reasoningContent || null,
-          tool_calls: toolCallsCollector.toolCalls
+          tool_calls: denormalized
         });
         
-        const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
-        const toolResults = await MCPToolAdapter.handleToolCalls(toolCallsCollector.toolCalls, { streams });
-        currentMessages.push(...toolResults);
-        const mcpTools = toolCallsCollector.toolCalls.map((tc, idx) => ({
-          name: tc.function?.name || `工具${idx + 1}`,
+        const buildPayload = (mid, res) => mid.map((tc, i) => ({
+          name: tc.function?.name || `工具${i + 1}`,
           arguments: tc.function?.arguments || {},
-          result: toolResults[idx]?.content ?? ''
+          result: res[i]?.content ?? ''
         }));
-        if (typeof onDelta === 'function') onDelta('', { mcp_tools: mcpTools });
+        const toolResults = await partitionAndExecuteToolCalls(denormalized, overrides, {
+          buildMcpPayload: buildPayload,
+          onDelta
+        });
+        if (toolResults === null) break;
+        currentMessages.push(...toolResults);
         round++;
         if (round >= maxToolRounds) {
           BotUtil.makeLog('warn', `[XiaomiMiMoLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
@@ -329,15 +335,13 @@ export default class XiaomiMiMoLLMClient {
         }
         continue;
       }
-      if (toolCallsCollector.content || !toolCallsCollector.toolCalls.length) {
-        break;
-      }
+      if (toolCallsCollector.content || !toolCallsCollector.toolCalls.length || !enableMcp) break;
       
       round++;
     }
   }
   
-  async _consumeSSEWithToolCalls(resp, onDelta, collector) {
+  async _consumeSSEWithToolCalls(resp, onDelta, collector, options = {}) {
     const toolCallsMap = new Map();
     for await (const { data } of iterateSSE(resp)) {
       try {
@@ -360,6 +364,10 @@ export default class XiaomiMiMoLLMClient {
         }
 
         if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+          const mode = options?.mcpToolMode || 'execute';
+          if ((mode === 'passthrough' || mode === 'hybrid') && typeof onDelta === 'function' && delta.tool_calls.length > 0) {
+            onDelta('', { tool_calls: delta.tool_calls });
+          }
           for (const tc of delta.tool_calls) {
             const index = tc.index;
             if (index === undefined || index === null) continue;

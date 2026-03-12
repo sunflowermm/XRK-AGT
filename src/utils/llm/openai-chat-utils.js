@@ -116,64 +116,31 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
   const workflow = overrides.workflow || config.workflow || config.streamName || null;
   const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
 
-  // 从 MCP 获取基于 streams/workflow 白名单过滤后的工具列表
   const mcpTools = enableTools
-    ? MCPToolAdapter.convertMCPToolsToOpenAI({
-        workflow,
-        streams,
-        excludeStreams: ['chat']
-      })
+    ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, streams, excludeStreams: ['chat'] })
     : [];
 
-  const strategyRaw = (overrides.toolMergeStrategy || config.toolMergeStrategy || 'preferRequest').toString().trim().toLowerCase();
-  const strategy = ['preferrequest', 'preferstream', 'merge'].includes(strategyRaw)
-    ? strategyRaw
-    : 'preferrequest';
+  const getName = (t) => t?.function?.name || t?.name || t?.id;
+  let finalTools;
 
-  let finalTools = null;
-
-  // 有显式 tools 字段时：合并“请求 tools + MCP tools”，冲突时按 strategy 处理
   if (hasRequestToolsField) {
     const reqArr = Array.isArray(requestTools) ? requestTools : [];
-
-    // tools=null 或 [] 被视为“显式关闭工具”，此时不注入 MCP 工具
     if (!reqArr.length) {
       finalTools = [];
-    } else if (!mcpTools.length) {
-      finalTools = reqArr;
     } else {
-      const getName = (t) => t?.function?.name || t?.name || t?.id;
+      // 请求工具优先，MCP 填充不冲突项
       const map = new Map();
-
-      if (strategy === 'preferstream') {
-        for (const t of mcpTools) {
-          const name = getName(t);
-          if (!name) continue;
-          map.set(name, t);
-        }
-        for (const t of reqArr) {
-          const name = getName(t);
-          if (!name || map.has(name)) continue;
-          map.set(name, t);
-        }
-      } else {
-        // 默认：preferRequest / merge —— 请求中的 tools 优先生效
-        for (const t of mcpTools) {
-          const name = getName(t);
-          if (!name) continue;
-          map.set(name, t);
-        }
-        for (const t of reqArr) {
-          const name = getName(t);
-          if (!name) continue;
-          map.set(name, t);
-        }
+      for (const t of reqArr) {
+        const name = getName(t);
+        if (name) map.set(name, t);
       }
-
+      for (const t of mcpTools) {
+        const name = getName(t);
+        if (name && !map.has(name)) map.set(name, t);
+      }
       finalTools = Array.from(map.values());
     }
   } else {
-    // 未显式传入 tools：仅注入 MCP 工具
     finalTools = mcpTools;
   }
 

@@ -2,6 +2,7 @@ import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
+import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
 import BotUtil from '../../utils/botutil.js';
 
@@ -231,17 +232,17 @@ export default class OpenAIResponsesCompatibleLLMClient {
       }
     }));
 
-    const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
-    const toolResults = await MCPToolAdapter.handleToolCalls(openaiToolCalls, { streams });
+    const buildPayload = (mid, res) => mid.map((tc, i) => ({
+      name: tc.function?.name || `工具${i + 1}`,
+      arguments: tc.function?.arguments || '{}',
+      result: res[i]?.content ?? ''
+    }));
+    const toolResults = await partitionAndExecuteToolCalls(openaiToolCalls, overrides, {
+      buildMcpPayload: buildPayload,
+      onDelta
+    });
 
-    if (typeof onDelta === 'function') {
-      const mcpTools = openaiToolCalls.map((tc, idx) => ({
-        name: tc.function?.name || `工具${idx + 1}`,
-        arguments: tc.function?.arguments || '{}',
-        result: toolResults[idx]?.content ?? ''
-      }));
-      onDelta('', { mcp_tools: mcpTools });
-    }
+    if (toolResults === null) return null;
 
     return functionCalls.map((fc, idx) => ({
       type: 'function_call_output',
@@ -276,6 +277,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
 
     let input = toResponsesInput(transformed);
     let previousResponseId = undefined;
+    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
     const maxToolRounds = this.config.maxToolRounds || 7;
     const executedToolNames = [];
 
@@ -289,12 +291,15 @@ export default class OpenAIResponsesCompatibleLLMClient {
         const text = extractResponsesText(json);
         return executedToolNames.length ? { content: text, executedToolNames } : text;
       }
+      if (!enableMcpTools) return executedToolNames.length ? { content: '', executedToolNames } : '';
 
       for (const fc of functionCalls) {
         if (fc?.name && !executedToolNames.includes(fc.name)) executedToolNames.push(fc.name);
       }
 
-      input = await this.executeResponsesFunctionCalls(functionCalls, overrides);
+      const execResult = await this.executeResponsesFunctionCalls(functionCalls, overrides);
+      if (execResult === null) return executedToolNames.length ? { content: '', executedToolNames } : '';
+      input = execResult;
     }
 
     BotUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
