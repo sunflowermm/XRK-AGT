@@ -17,6 +17,22 @@ class FrontendLauncher {
   static #initialized = false;
   static #initializing = null;
 
+  static #getAppMode(json) {
+    const raw = json?.mode ? String(json.mode).toLowerCase() : 'auto';
+    if (raw === 'dev' || raw === 'prod' || raw === 'auto') return raw;
+    return 'auto';
+  }
+
+  static #normalizeCommandSpec(spec, fallbackCwd) {
+    if (!spec || typeof spec !== 'object') return null;
+    const command = spec.command && String(spec.command).trim();
+    if (!command) return null;
+    const args = Array.isArray(spec.args) ? spec.args.map(a => String(a)) : [];
+    const cwd = spec.cwd ? path.resolve(paths.root, String(spec.cwd)) : fallbackCwd;
+    const env = (spec.env && typeof spec.env === 'object') ? spec.env : {};
+    return { command, args, cwd, env };
+  }
+
   /**
    * 初始化并启动所有前端项目（幂等）
    */
@@ -64,8 +80,9 @@ class FrontendLauncher {
       'Frontend'
     );
 
-    for (const cfg of configs) {
-      this.#startApp(cfg);
+    for (const cfgApp of configs) {
+      this.#registerApp(cfgApp);
+      this.#startApp(cfgApp);
     }
 
     const used = BotUtil.getTimeDiff(startTime);
@@ -112,6 +129,21 @@ class FrontendLauncher {
           continue;
         }
 
+        const mode = this.#getAppMode(json);
+        const isProd = mode === 'prod' || (mode === 'auto' && json && (json.prod || json.build));
+        if (json && json.devOnly === true && isProd) {
+          BotUtil.makeLog('info', `跳过 devOnly 前端工程（生产模式不启动）: ${file}`, 'Frontend');
+          continue;
+        }
+        if (json && Array.isArray(json.modes) && json.modes.length > 0) {
+          const modes = json.modes.map(m => String(m).toLowerCase());
+          const required = isProd ? 'prod' : 'dev';
+          if (!modes.includes(required)) {
+            BotUtil.makeLog('info', `跳过 modes 不匹配的前端工程(${required}): ${file}`, 'Frontend');
+            continue;
+          }
+        }
+
         const dir = path.dirname(file);
         const relFromCore = path
           .relative(paths.core, dir)
@@ -121,20 +153,25 @@ class FrontendLauncher {
         const id = String(json.id || path.basename(dir));
 
         const port = Number(json.port);
-        const command = json.command && String(json.command).trim();
+        const defaultCommand = json.command && String(json.command).trim();
 
-        if (!command || !Number.isFinite(port) || port <= 0) {
+        // 生产环境可选：使用 prod 段覆盖 command/args/port（dev 仍用顶层）
+        const prodSpec = this.#normalizeCommandSpec(json.prod, dir);
+        const devSpec = this.#normalizeCommandSpec({ command: defaultCommand, args: json.args }, dir);
+        const runSpec = isProd && prodSpec ? prodSpec : devSpec;
+
+        // 可选：生产环境启动前 build
+        const buildSpec = this.#normalizeCommandSpec(json.build, dir);
+        const buildOnStart = json.buildOnStart !== false; // 默认 true（当提供 build 段时）
+
+        if (!runSpec || !Number.isFinite(port) || port <= 0) {
           BotUtil.makeLog(
             'warn',
-            `sign.json 缺少必要字段(command/port): ${file}`,
+            `sign.json 缺少必要字段(${isProd ? 'command/port 或 prod.command/port' : 'command/port'}): ${file}`,
             'Frontend'
           );
           continue;
         }
-
-        const args = Array.isArray(json.args)
-          ? json.args.map(a => String(a))
-          : [];
 
         const cwd = json.cwd
           ? path.resolve(paths.root, json.cwd)
@@ -162,15 +199,20 @@ class FrontendLauncher {
           description: json.description || '',
           coreName,
           signFile: file,
+          mode,
           cwd,
-          command,
-          args,
+          command: runSpec.command,
+          args: runSpec.args,
           port,
           publicPath,
           // 开发入口挂载路径（由 sign.json 决定）
           mountPath,
           env,
-          autoRestart
+          autoRestart,
+          // 生产环境可选：build + prod 启动声明（不影响开发态）
+          build: buildSpec ? { ...buildSpec, env: { ...env, ...buildSpec.env } } : null,
+          buildOnStart,
+          prod: prodSpec ? { ...prodSpec, env: { ...env, ...prodSpec.env } } : null
         };
 
         configs.push(config);
@@ -191,10 +233,20 @@ class FrontendLauncher {
    * @private
    * @param {object} config
    */
+  static #registerApp(config) {
+    if (this.#apps.has(config.id)) return;
+    this.#apps.set(config.id, {
+      config,
+      process: undefined,
+      status: 'queued',
+      restarts: 0,
+      startedAt: Date.now()
+    });
+  }
+
   static #startApp(config) {
-    if (this.#apps.has(config.id)) {
-      return;
-    }
+    const appInfo = this.#apps.get(config.id);
+    if (!appInfo) return;
 
     // 主服务信息，用于透传给前端（通过 Vite 的 import.meta.env 访问）
     const mainPort = cfg.port || 8086;
@@ -212,30 +264,19 @@ class FrontendLauncher {
       VITE_XRK_APP_ID: config.id
     };
 
-    const cmd = config.command;
-    const args = config.args || [];
+    const isProd = config.mode === 'prod' || (config.mode === 'auto' && (config.prod || config.build));
+    const runCmd = (isProd && config.prod?.command) ? config.prod.command : config.command;
+    const runArgs = (isProd && Array.isArray(config.prod?.args)) ? config.prod.args : (config.args || []);
+    const runCwd = (isProd && config.prod?.cwd) ? config.prod.cwd : config.cwd;
+    const runEnv = (isProd && config.prod?.env) ? { ...childEnv, ...config.prod.env } : childEnv;
 
-    const useShell = process.platform === 'win32' &&
-      !/[\\/]/.test(cmd); // 让 npm/pnpm/yarn 在 Windows 下通过 shell 解析
+    const buildCmd = isProd && config.build?.command ? config.build.command : null;
+    const buildArgs = isProd && Array.isArray(config.build?.args) ? config.build.args : [];
+    const buildCwd = isProd && config.build?.cwd ? config.build.cwd : config.cwd;
+    const buildEnv = isProd && config.build?.env ? { ...childEnv, ...config.build.env } : childEnv;
+    const shouldBuild = Boolean(buildCmd) && config.buildOnStart !== false;
 
-    const child = spawn(cmd, args, {
-      cwd: config.cwd,
-      env: childEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: useShell
-    });
-
-    const appInfo = {
-      config,
-      process: child,
-      status: 'starting',
-      restarts: 0,
-      startedAt: Date.now()
-    };
-
-    this.#apps.set(config.id, appInfo);
-
-    const baseInfo = `${config.id} (${cmd} ${args.join(' ')}) @ ${config.cwd}`;
+    const baseInfo = `${config.id} (${runCmd} ${runArgs.join(' ')}) @ ${runCwd}`;
     const targetUrl = `http://127.0.0.1:${config.port}`;
 
     BotUtil.makeLog(
@@ -243,6 +284,18 @@ class FrontendLauncher {
       `启动前端项目: ${baseInfo} -> ${targetUrl}${config.publicPath}`,
       'Frontend'
     );
+
+    const spawnChild = (cmd, args, cwd, env, label) => {
+      const shellFlag = process.platform === 'win32' && !/[\\/]/.test(cmd);
+      const child = spawn(cmd, args, {
+        cwd,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: shellFlag
+      });
+      child.__xrk_label = label;
+      return child;
+    };
 
     const handleOutput = (data, stream) => {
       const text = data?.toString?.() || '';
@@ -260,65 +313,59 @@ class FrontendLauncher {
       );
     };
 
-    if (child.stdout) {
-      child.stdout.on('data', (data) => handleOutput(data, 'stdout'));
+    const wireChild = (child, kind) => {
+      if (child.stdout) child.stdout.on('data', (data) => handleOutput(data, `${kind}:stdout`));
+      if (child.stderr) child.stderr.on('data', (data) => handleOutput(data, `${kind}:stderr`));
+      child.on('error', (err) => {
+        appInfo.status = 'error';
+        BotUtil.makeLog('error', `前端项目进程错误: ${config.id} - ${err.message}`, 'Frontend');
+      });
+    };
+
+    const startRuntime = () => {
+      appInfo.status = 'starting';
+      const child = spawnChild(runCmd, runArgs, runCwd, runEnv, 'runtime');
+      appInfo.process = child;
+      wireChild(child, 'runtime');
+
+      child.on('exit', (code, signal) => {
+        appInfo.status = 'stopped';
+        const reason = code !== null ? `退出码=${code}` : `信号=${signal || 'unknown'}`;
+        BotUtil.makeLog(code === 0 ? 'info' : 'warn', `前端项目已退出: ${config.id} (${reason})`, 'Frontend');
+
+        if (!config.autoRestart) return;
+        if (appInfo.restarts >= 3) {
+          BotUtil.makeLog('warn', `前端项目重启次数已达上限，停止重启: ${config.id}`, 'Frontend');
+          return;
+        }
+
+        appInfo.restarts += 1;
+        const delay = 1000 * appInfo.restarts;
+        BotUtil.makeLog('info', `准备重启前端项目(${appInfo.restarts}): ${config.id}, ${delay}ms 后`, 'Frontend');
+        setTimeout(() => startRuntime(), delay);
+      });
+    };
+
+    if (shouldBuild) {
+      appInfo.status = 'building';
+      BotUtil.makeLog('info', `生产环境后台构建前端: ${config.id} (${buildCmd} ${buildArgs.join(' ')})`, 'Frontend');
+      const buildChild = spawnChild(buildCmd, buildArgs, buildCwd, buildEnv, 'build');
+      appInfo.buildProcess = buildChild;
+      wireChild(buildChild, 'build');
+      buildChild.on('exit', (code) => {
+        appInfo.buildProcess = undefined;
+        if (code !== 0) {
+          appInfo.status = 'error';
+          BotUtil.makeLog('error', `前端构建失败，跳过启动: ${config.id} (退出码=${code})`, 'Frontend');
+          return;
+        }
+        BotUtil.makeLog('info', `前端构建完成，准备启动: ${config.id}`, 'Frontend');
+        startRuntime();
+      });
+      return;
     }
 
-    if (child.stderr) {
-      child.stderr.on('data', (data) => handleOutput(data, 'stderr'));
-    }
-
-    child.on('error', (err) => {
-      appInfo.status = 'error';
-      BotUtil.makeLog(
-        'error',
-        `前端项目进程错误: ${config.id} - ${err.message}`,
-        'Frontend'
-      );
-    });
-
-    child.on('exit', (code, signal) => {
-      appInfo.status = 'stopped';
-
-      const reason = code !== null
-        ? `退出码=${code}`
-        : `信号=${signal || 'unknown'}`;
-
-      BotUtil.makeLog(
-        code === 0 ? 'info' : 'warn',
-        `前端项目已退出: ${config.id} (${reason})`,
-        'Frontend'
-      );
-
-      // 根据配置决定是否自动重启
-      if (!config.autoRestart) {
-        return;
-      }
-
-      // 简单的重启保护，避免疯狂重启
-      if (appInfo.restarts >= 3) {
-        BotUtil.makeLog(
-          'warn',
-          `前端项目重启次数已达上限，停止重启: ${config.id}`,
-          'Frontend'
-        );
-        return;
-      }
-
-      appInfo.restarts += 1;
-      const delay = 1000 * appInfo.restarts;
-
-      BotUtil.makeLog(
-        'info',
-        `准备重启前端项目(${appInfo.restarts}): ${config.id}, ${delay}ms 后`,
-        'Frontend'
-      );
-
-      setTimeout(() => {
-        this.#apps.delete(config.id);
-        this.#startApp(config);
-      }, delay);
-    });
+    startRuntime();
   }
 }
 

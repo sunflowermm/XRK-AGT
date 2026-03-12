@@ -748,6 +748,15 @@ static:
 - **`env`**：注入给子进程的环境变量
 - **`autoRestart`**：异常退出时是否自动重启
 
+补充字段（推荐，用于区分开发/生产行为；所有行为以 `sign.json` 为准，不依赖额外全局配置）：
+
+- **`mode`**：启动模式：`auto` / `dev` / `prod`（默认 `auto`；`auto` 会在存在 `build/prod` 时优先走生产启动）
+- **`devOnly`**：仅在开发模式启动（当解析为 prod 时会自动跳过）
+- **`modes`**：声明允许启动的模式，例如 `["dev"]` / `["prod"]` / `["dev","prod"]`
+- **`build`**：生产环境启动前先执行构建命令（后台异步，不阻塞主服务启动）
+- **`prod`**：生产环境使用的启动命令（建议为 `start`/`serve`，不要用 `dev`）
+- **`buildOnStart`**：是否在启动时执行 `build`（默认 true；当未提供 `build` 时无效）
+
 示例：
 
 ```json
@@ -755,14 +764,34 @@ static:
   "id": "example",
   "name": "Example-Core 前端开发示例",
   "enabled": true,
+  "mode": "dev",
   "command": "pnpm",
   "args": ["dev"],
+  "devOnly": true,
+  "modes": ["dev"],
+  "build": { "command": "pnpm", "args": ["build"] },
+  "prod": { "command": "pnpm", "args": ["start"] },
   "port": 4173,
   "proxy": { "mount": "/example" },
   "env": { "BROWSER": "none" },
   "autoRestart": true
 }
 ```
+
+### Example-Core 的生产模式示例（Vite）
+
+示例目录：`core/Example-Core/www/frontend-example/`
+
+- 开发模式：`sign.json` 顶层 `command/args`（例如 `pnpm dev`）
+- 生产模式：在 `sign.json` 里声明 `build` + `prod`（Vite 推荐用 `preview` 作为生产演示），并确保服务端口与 `sign.json.port` 一致
+
+
+### 生产环境的推荐做法（重要）
+
+- **生产环境不要用 dev server 承接真实用户流量**（例如 `pnpm dev` / Vite HMR 等）。dev server 的目标是“开发体验”，并不保证生产稳定性、缓存策略与资源优化。
+- 推荐生产形态：
+  - **方式 A（最推荐）**：前端在 CI/CD 中 `build`，把产物放入 `core/*-Core/www/<你的目录>/`，由 AGT 静态服务托管（配合 `server.yaml` 的缓存/压缩/安全配置）。
+  - **方式 C（SSR）**：若确需 SSR，建议在生产环境用 `start`/`serve` 类命令启动服务，并通过反向代理接入（不要用 `dev`）。\n+\n+如果你希望 **AGT 在生产环境启动时自动后台 build 并启动服务**，可以在 `sign.json` 中声明 `build` 与 `prod`：\n+\n+```json\n+{\n+  \"id\": \"example\",\n+  \"enabled\": true,\n+  \"port\": 4173,\n+  \"proxy\": { \"mount\": \"/example\" },\n+  \"build\": { \"command\": \"pnpm\", \"args\": [\"build\"] },\n+  \"prod\": { \"command\": \"pnpm\", \"args\": [\"start\"] }\n+}\n+```\n+\n+注意：\n+\n+- build 在后台子进程执行，不会阻塞主服务启动；\n+- 反向代理会按 `port` 预先注册，前端服务启动完成后即可正常访问；\n+- 若 build 失败，将不会启动 `prod` 服务，日志会提示失败原因。
 
 ### 前端框架适配程度（推荐组合）
 
@@ -1271,8 +1300,8 @@ XRK-AGT方案：
 
 **基类挂载示例**：
 ```javascript
-// HTTP业务层方法已挂载到Bot实例
-const bot = new Bot();
+// HTTP业务层方法已挂载到运行时 Bot 实例（业务侧不要手动 new Bot）
+const bot = Bot; // 或在 HTTP handler 中使用注入的 req.bot
 
 // 直接调用挂载的方法
 const stats = bot.getProxyStats();
