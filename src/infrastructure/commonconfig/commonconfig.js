@@ -952,6 +952,11 @@ export default class ConfigBase {
 
       childValue = this._normalizeValueBySchema(childValue, childSchema);
       value[key] = childValue;
+      if (childValue === undefined) {
+        if (!isRequired || childSchema?.nullable === true) continue;
+        errors.push(`字段 ${childPath} 不允许为空`);
+        continue;
+      }
 
       if (childSchema.type && !this._checkType(childValue, childSchema.type)) {
         errors.push(`字段 ${childPath} 类型错误，期望 ${childSchema.type}`);
@@ -980,8 +985,9 @@ export default class ConfigBase {
     }
 
     if (expectedType === 'number') {
-      if (typeof value === 'number') return value;
-      if (typeof value === 'string' && value !== '') {
+      if (typeof value === 'number' && !isNaN(value)) return value;
+      if (value === null || value === '') return undefined; // 留空视为未设置，由下游默认
+      if (typeof value === 'string') {
         const num = Number(value);
         return isNaN(num) ? value : num;
       }
