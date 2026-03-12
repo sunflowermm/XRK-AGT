@@ -108,19 +108,24 @@ class Cfg {
     const defaultFile = path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`);
     let config = {};
 
+    // 服务器/工厂配置：缺失时自动从 default_config 复制一份到 server_bots/{port}/
+    // 这样用户后续可直接编辑落盘文件，避免“仅内存回退”导致配置分散与不可见。
+    if (!fs.existsSync(file) && fs.existsSync(defaultFile)) {
+      try {
+        fs.mkdirSync(configDir, { recursive: true });
+        fs.copyFileSync(defaultFile, file);
+        BotUtil.makeLog('mark', `[自动生成配置] ${name}.yaml -> ${file}`, LOG_TAG);
+      } catch (error) {
+        BotUtil.makeLog('error', `[自动生成配置失败][${name}] ${error?.message || error}`, LOG_TAG, true);
+      }
+    }
+
     if (fs.existsSync(file)) {
       try {
         config = YAML.parse(fs.readFileSync(file, 'utf8'));
         this.watch(file, name, key);
       } catch (error) {
         BotUtil.makeLog('error', `[服务器配置解析失败][${file}] ${error?.message || error}`, LOG_TAG, true);
-      }
-    } else if (fs.existsSync(defaultFile)) {
-      try {
-        config = YAML.parse(fs.readFileSync(defaultFile, 'utf8'));
-        BotUtil.makeLog('warn', `[配置提示] ${name}.yaml 不存在，使用默认配置`, LOG_TAG);
-      } catch (error) {
-        BotUtil.makeLog('error', `[默认配置读取失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       }
     }
     
@@ -139,7 +144,8 @@ class Cfg {
   get notice() { return this.getGlobalConfig('notice'); }
   get mongodb() { return this.getGlobalConfig('mongodb'); }
   get redis() { return this.getGlobalConfig('redis'); }
-  get aistream() { return this.getGlobalConfig('aistream'); }
+  // aistream 为随端口配置（server_bots/{port}/aistream.yaml）
+  get aistream() { return this.getServerConfig('aistream'); }
 
   get server() { return this.getServerConfig('server'); }
   get chatbot() { return this.getServerConfig('chatbot'); }

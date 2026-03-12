@@ -708,14 +708,37 @@ class StreamLoader {
    */
   _getRemoteMCPConfig() {
     const remoteConfig = getAistreamConfigOptional().mcp?.remote || {};
-    if (!remoteConfig.enabled || !Array.isArray(remoteConfig.servers)) return null;
-    
-    const { selected = [], servers = [] } = remoteConfig;
-    const selectedNames = Array.isArray(selected) && selected.length > 0 
-      ? new Set(selected.map(s => String(s).trim()).filter(Boolean))
-      : null;
-    
-    return { servers, selectedNames };
+    if (!remoteConfig.enabled) return null;
+    const blocks = Array.isArray(remoteConfig.mcpServers) ? remoteConfig.mcpServers : [];
+    if (!blocks.length) return null;
+
+    const merged = {};
+    const mergeServers = (obj) => {
+      if (!obj || typeof obj !== 'object') return;
+      const map = obj.mcpServers && typeof obj.mcpServers === 'object' && !Array.isArray(obj.mcpServers)
+        ? obj.mcpServers
+        : null;
+      if (!map) return;
+      for (const [name, cfg] of Object.entries(map)) {
+        const n = String(name || '').trim();
+        if (!n || !cfg || typeof cfg !== 'object') continue;
+        merged[n] = cfg;
+      }
+    };
+
+    for (const block of blocks) {
+      let obj = block?.config ?? block;
+      if (typeof obj === 'string') {
+        try { obj = JSON.parse(obj); } catch { obj = null; }
+      }
+      mergeServers(obj);
+    }
+
+    const servers = Object.entries(merged)
+      .map(([name, cfg]) => ({ name, cfg }))
+      .filter(item => item.name && item.cfg && typeof item.cfg === 'object');
+
+    return servers.length ? { servers } : null;
   }
 
   /**
@@ -743,33 +766,14 @@ class StreamLoader {
     const config = this._getRemoteMCPConfig();
     if (!config) return loadedServers;
 
-    const { servers, selectedNames } = config;
+    const { servers } = config;
     
     for (const serverConfig of servers) {
       const serverName = String(serverConfig.name || '').trim();
-      if (!serverName || (selectedNames && !selectedNames.has(serverName))) continue;
+      if (!serverName) continue;
 
       try {
-        let serverConfigObj = serverConfig.config;
-        if (typeof serverConfigObj === 'string') {
-          try {
-            serverConfigObj = JSON.parse(serverConfigObj);
-          } catch {
-            BotUtil.makeLog('warn', `远程MCP服务器 ${serverName} 的config字段JSON解析失败`, 'StreamLoader');
-            continue;
-          }
-        }
-
-        if (!serverConfigObj) {
-          serverConfigObj = serverConfig.command 
-            ? { command: serverConfig.command, args: Array.isArray(serverConfig.args) ? serverConfig.args : [] }
-            : serverConfig.url 
-              ? { url: serverConfig.url, transport: serverConfig.transport || 'http', headers: serverConfig.headers || {} }
-              : null;
-          if (!serverConfigObj) continue;
-        }
-
-        await this._createRemoteMCPClient(serverName, serverConfigObj);
+        await this._createRemoteMCPClient(serverName, serverConfig.cfg || {});
         loadedServers.push(serverName);
       } catch (error) {
         BotUtil.makeLog('error', `加载远程MCP服务器 ${serverName} 失败: ${error.message}`, 'StreamLoader');
@@ -780,13 +784,32 @@ class StreamLoader {
   }
 
   /**
+   * 获取已加载的远程 MCP 服务器名称列表
+   * 用于在 /api/ai/models 暴露为“可选工作流”，让前端显式勾选启用。
+   */
+  listRemoteMCPServers() {
+    return Array.from(this.remoteMCPServers?.keys?.() || []);
+  }
+
+  /**
    * 创建远程MCP客户端并注册工具
    */
   async _createRemoteMCPClient(serverName, config) {
-    if (config.command) {
-      // stdio协议：通过子进程启动MCP服务器
-      const child = spawn(config.command, config.args || [], { stdio: ['pipe', 'pipe', 'pipe'] });
-      this.remoteMCPServers.set(serverName, { type: 'stdio', process: child, config });
+    const cfg = config && typeof config === 'object' ? config : {};
+
+    if (cfg.command) {
+      // stdio 协议：通过子进程启动 MCP 服务器
+      const child = spawn(
+        String(cfg.command),
+        Array.isArray(cfg.args) ? cfg.args : [],
+        {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          shell: true,
+          env: { ...process.env, ...(cfg.env && typeof cfg.env === 'object' ? cfg.env : {}) },
+          cwd: typeof cfg.cwd === 'string' && cfg.cwd.trim() ? cfg.cwd.trim() : undefined
+        }
+      );
+      this.remoteMCPServers.set(serverName, { type: 'stdio', process: child, config: cfg });
       
       // 发送initialize请求
       const initRequest = {
@@ -829,10 +852,19 @@ class StreamLoader {
       child.on('error', (error) => {
         BotUtil.makeLog('error', `远程MCP服务器 ${serverName} 启动失败: ${error.message}`, 'StreamLoader');
       });
-    } else if (config.url) {
-      // HTTP协议：通过HTTP请求获取工具
-      this.remoteMCPServers.set(serverName, { type: 'http', url: config.url, transport: config.transport, headers: config.headers, config });
-      await this._fetchRemoteTools(serverName, config);
+    } else if (cfg.url) {
+      // URL 协议：支持 HTTP / WebSocket 等远程 MCP transport
+      const headers = cfg.headers && typeof cfg.headers === 'object' ? cfg.headers : {};
+      const transport = String(cfg.transport || 'http').toLowerCase();
+
+      if (transport === 'websocket' || transport === 'ws') {
+        this.remoteMCPServers.set(serverName, { type: 'ws', url: cfg.url, headers, config: cfg });
+        await this._fetchRemoteToolsViaWebSocket(serverName, { url: cfg.url, headers });
+      } else {
+        // 默认按 HTTP JSON-RPC 处理，包括 transport=http/sse/空
+        this.remoteMCPServers.set(serverName, { type: 'http', url: cfg.url, headers, config: cfg });
+        await this._fetchRemoteTools(serverName, { ...cfg, headers });
+      }
     }
   }
 
@@ -889,7 +921,7 @@ class StreamLoader {
   }
 
   /**
-   * 调用远程MCP工具（stdio / HTTP）
+   * 调用远程 MCP 工具（stdio / HTTP / WebSocket）
    */
   async _callRemoteTool(serverName, toolName, args) {
     const server = this.remoteMCPServers.get(serverName);
@@ -942,11 +974,52 @@ class StreamLoader {
       } catch (error) {
         return { success: false, error: error.message };
       }
+    } else if (server.type === 'ws') {
+      // 简单 WebSocket JSON-RPC 客户端：每次调用按需建立连接
+      try {
+        const { default: WebSocket } = await import('ws');
+        return await new Promise((resolve) => {
+          const ws = new WebSocket(server.url, { headers: server.headers || {} });
+          const timeout = setTimeout(() => {
+            try { ws.close(); } catch {}
+            resolve({ success: false, error: '调用超时' });
+          }, 30000);
+
+          ws.on('open', () => {
+            ws.send(JSON.stringify(request));
+          });
+
+          ws.on('message', (data) => {
+            try {
+              const msg = JSON.parse(data.toString());
+              if (msg.id !== requestId) return;
+              clearTimeout(timeout);
+              try { ws.close(); } catch {}
+              const finalResult = this._normalizeRemoteMCPResult(msg.result);
+              resolve(finalResult);
+            } catch {
+              // 忽略解析失败，继续等待下一条
+            }
+          });
+
+          ws.on('error', (err) => {
+            clearTimeout(timeout);
+            resolve({ success: false, error: err?.message || String(err) });
+          });
+
+          ws.on('close', () => {
+            // 如果在超时前关闭且尚未返回，则以通用错误结束
+            clearTimeout(timeout);
+          });
+        });
+      } catch (error) {
+        return { success: false, error: error.message || String(error) };
+      }
     }
   }
 
   /**
-   * 通过HTTP获取远程工具列表
+   * 通过 HTTP 获取远程工具列表
    */
   async _fetchRemoteTools(serverName, config) {
     try {
@@ -962,6 +1035,56 @@ class StreamLoader {
       }
     } catch (error) {
       BotUtil.makeLog('error', `获取远程MCP工具失败 ${serverName}: ${error.message}`, 'StreamLoader');
+    }
+  }
+
+  /**
+   * 通过 WebSocket 获取远程工具列表（MCP JSON-RPC over WS）
+   */
+  async _fetchRemoteToolsViaWebSocket(serverName, config) {
+    try {
+      const { default: WebSocket } = await import('ws');
+      const request = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
+
+      await new Promise((resolve) => {
+        const ws = new WebSocket(config.url, { headers: config.headers || {} });
+        const timeout = setTimeout(() => {
+          try { ws.close(); } catch {}
+          resolve();
+        }, 15000);
+
+        ws.on('open', () => {
+          ws.send(JSON.stringify(request));
+        });
+
+        ws.on('message', (data) => {
+          try {
+            const msg = JSON.parse(data.toString());
+            if (msg.id !== 1) return;
+            if (msg.result?.tools) {
+              this._registerRemoteTools(serverName, msg.result.tools);
+            }
+          } catch {
+            // 忽略解析失败
+          } finally {
+            clearTimeout(timeout);
+            try { ws.close(); } catch {}
+            resolve();
+          }
+        });
+
+        ws.on('error', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+
+        ws.on('close', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+    } catch (error) {
+      BotUtil.makeLog('error', `通过 WebSocket 获取远程MCP工具失败 ${serverName}: ${error.message}`, 'StreamLoader');
     }
   }
 }

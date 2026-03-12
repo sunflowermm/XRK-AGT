@@ -4,10 +4,10 @@
  */
 
 // 全局配置列表（不随端口变化，存储在server_bots/根目录）
-export const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'notice', 'mongodb', 'redis', 'aistream'];
+export const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'notice', 'mongodb', 'redis'];
 
 // 服务器配置列表（随端口变化，存储在server_bots/{port}/）
-export const SERVER_CONFIGS = ['server', 'chatbot', 'group'];
+export const SERVER_CONFIGS = ['server', 'chatbot', 'group', 'aistream'];
 
 // 工厂配置名称模式（随端口变化）
 export const FACTORY_CONFIG_PATTERNS = [

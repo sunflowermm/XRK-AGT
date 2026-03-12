@@ -65,15 +65,16 @@ mcp:
   autoRegister: true
   remote:
     enabled: false
-    selected: []
-    # 远程 MCP 服务器列表。stdio：command/args；HTTP：url + transport: http。示例：
-    # - name: bing-search
-    #   command: npx
-    #   args: ["-y", "bing-cn-mcp"]
-    # - name: custom-mcp
-    #   url: http://localhost:3000/mcp
-    #   transport: http
-    servers: []
+    # 远程 MCP 服务器配置（数组模式，推荐：每条粘贴一个 JSON 块）。
+    # 示例（直接把社区 JSON 粘贴到 config 里）：
+    #
+    # mcpServers:
+    #   - config:
+    #       mcpServers:
+    #         bing-search:
+    #           command: npx
+    #           args: ["-y", "bing-cn-mcp"]
+    mcpServers: []
 
 # ----------------------------------------
 # Python 子服务端

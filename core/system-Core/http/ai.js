@@ -576,13 +576,25 @@ async function handleModels(req, res) {
       uiHidden: false
     }));
 
+  // 远程 MCP 服务器也视为“工作流选项”，但默认不勾选，由用户显式选择。
+  const remoteServers = StreamLoader.listRemoteMCPServers?.() || [];
+  const remoteWorkflows = remoteServers.map((name) => ({
+    key: `remote-mcp.${name}`,
+    label: `远程 MCP：${name}`,
+    description: `远程 MCP 服务器 ${name}`,
+    profile: null,
+    persona: null,
+    uiHidden: false
+  }));
+
   return HttpResponse.success(res, {
     enabled: llm.enabled !== false,
     defaultProfile: defaultProvider,
-    defaultWorkflow: workflows[0]?.key || null,
+    // 不为 MCP 工具工作流设置默认值，避免“默认就勾选一堆工具工作流/远程 MCP”
+    defaultWorkflow: null,
     persona: llm.persona || '',
     profiles,
-    workflows
+    workflows: [...workflows, ...remoteWorkflows]
   });
 }
 

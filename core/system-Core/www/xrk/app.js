@@ -2201,10 +2201,10 @@ class App {
               if (systemConfig) {
                 // 选中system配置的aistream子配置
                 this.selectConfig('system', 'aistream');
-                // 等待配置加载后，尝试展开mcp.remote部分（如果支持）
+                  // 等待配置加载后，尝试展开 mcp.remote.mcpServers 部分（如果支持）
                 setTimeout(() => {
                   // 可以在这里添加逻辑来高亮或展开mcp.remote配置项
-                  const mcpRemoteField = document.querySelector('[data-path="mcp.remote"]');
+                  const mcpRemoteField = document.querySelector('[data-path="mcp.remote.mcpServers"]') || document.querySelector('[data-path="mcp.remote"]');
                   if (mcpRemoteField) {
                     mcpRemoteField.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     mcpRemoteField.style.background = 'var(--primary-50)';
@@ -4930,6 +4930,9 @@ class App {
   buildDynamicCollectionsMeta(schema) {
     const collections = schema?.meta?.collections ?? [];
     return collections.map(item => {
+      if (item.valueFields && typeof item.valueFields === 'object') {
+        return { ...item, valueFields: item.valueFields };
+      }
       const template = this.getSchemaNodeByPath(item.valueTemplatePath, schema);
       return {
         ...item,
@@ -5106,6 +5109,11 @@ class App {
   buildFieldTree(flatSchema) {
     const tree = {};
     const subFormFields = new Map(); // 记录所有 SubForm 类型的字段路径及其信息
+    const dynamicBasePaths = new Set(
+      (this._configState?.dynamicCollectionsMeta ?? [])
+        .map(c => String(c.basePath || '').trim())
+        .filter(Boolean)
+    );
     
     // 第一遍：识别所有 SubForm 类型的字段
     flatSchema.forEach(field => {
@@ -5128,11 +5136,32 @@ class App {
     flatSchema.forEach(field => {
       const meta = field.meta ?? {};
       const path = field.path;
+
+      // 动态集合的 basePath 由 dynamic collection 专门渲染，避免与普通字段区重复展示
+      if (dynamicBasePaths.has(path)) {
+        return;
+      }
       
       // 过滤掉数组模板路径字段（如 proxy.domains[].domain），这些字段只应该在数组项中显示
       // 模板路径包含 []，表示这是数组项的字段模板，不应该作为独立字段显示
       if (path.includes('[]')) {
         return; // 跳过数组模板字段，避免重复显示
+      }
+
+      // 防御性去重：如果某个 object/map 字段被声明为 SubForm 且确实存在子字段，
+      // 则它应该只作为“子分组容器”展示，而不应作为一个可编辑控件重复渲染。
+      //（否则会出现同名分组重复两次：一次为 SubForm 自由对象编辑器，一次为子字段表单）
+      const component = String(meta.component ?? field.component ?? '').toLowerCase();
+      const isObjectLike = field.type === 'object' || field.type === 'map';
+      if (component === 'subform' && isObjectLike) {
+        const hasChildren = flatSchema.some(f => {
+          const childPath = f.path;
+          return childPath.startsWith(path + '.') && !childPath.includes('[]');
+        });
+        if (hasChildren) {
+          // 交给 subGroups 渲染
+          return;
+        }
       }
       
       const parts = path.split('.');
@@ -5495,7 +5524,13 @@ class App {
       }
       case 'textarea':
       case 'text-area':
-        return `<textarea class="form-input" rows="3" id="${inputId}" ${dataset} placeholder="${placeholder}" ${disabled}>${this.escapeHtml(value ?? '')}</textarea>`;
+        return `<textarea class="form-input" rows="3" id="${inputId}" ${dataset} placeholder="${placeholder}" ${disabled}>${
+          this.escapeHtml(
+            value && typeof value === 'object'
+              ? JSON.stringify(value, null, 2)
+              : (value ?? '')
+          )
+        }</textarea>`;
       case 'inputnumber':
       case 'number':
         return `<input type="number" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${meta.min ?? ''}" max="${meta.max ?? ''}" step="${meta.step ?? 'any'}" placeholder="${placeholder}" ${disabled}>`;
