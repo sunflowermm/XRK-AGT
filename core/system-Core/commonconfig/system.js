@@ -2894,12 +2894,6 @@ export default class SystemConfig extends ConfigBase {
         if (mcpFields.defaultRemoteMcp) {
           mcpFields.defaultRemoteMcp.enum = remoteServers;
         }
-
-        BotUtil.makeLog(
-          'info',
-          `[SystemConfig] MCP 默认工作流枚举: [${workflowKeys.join(', ')}], 远程 MCP: [${remoteServers.join(', ')}]`,
-          'SystemConfig'
-        );
       }
 
       // 2) LLM Provider 动态单选：根据实际可用 provider 填充枚举
@@ -2926,12 +2920,6 @@ export default class SystemConfig extends ConfigBase {
           if (!llmFields.Provider.default || !providers.includes(llmFields.Provider.default)) {
             llmFields.Provider.default = providers[0];
           }
-
-          BotUtil.makeLog(
-            'info',
-            `[SystemConfig] LLM Provider 可选值: [${providers.join(', ')}], 默认: ${llmFields.Provider.default}`,
-            'SystemConfig'
-          );
         }
       }
     } catch (e) {
