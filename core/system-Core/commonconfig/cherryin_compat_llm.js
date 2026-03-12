@@ -88,18 +88,16 @@ export default class CherryINCompatibleLLMConfig extends ConfigBase {
               temperature: {
                 type: 'number',
                 label: '温度（temperature）',
-                description: '采样温度，0 越保守、2 越随机，推荐 0.5-1.0',
+                description: '采样温度，0 越保守、2 越随机；留空则不下发，由下游默认',
                 min: 0,
                 max: 2,
-                default: 0.7,
                 component: 'InputNumber'
               },
               maxTokens: {
                 type: 'number',
                 label: '最大输出（max_tokens）',
-                description: '单次回答允许使用的最大输出 tokens 数，过大可能被拒绝',
+                description: '单次回答允许使用的最大输出 tokens 数；留空则不下发，由下游根据模型上限处理',
                 min: 1,
-                default: 4096,
                 component: 'InputNumber'
               },
               timeout: {

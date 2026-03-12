@@ -18,11 +18,11 @@ path: ""
 # 模型名称（Gemini: model）
 model: "gemini-1.5-flash"
 
-# 生成参数
-temperature: 0.7
-maxTokens: 4096
-topP: 1.0
-topK: 0
+# 生成参数（全部为可选，默认不下发，使用 Gemini 自身默认）
+# temperature: 0.7
+# maxTokens: 4096
+# topP: 1.0
+# topK: 0
 
 # Gemini function calling 与 OpenAI 协议不同，本实现默认不注入 MCP tools
 enableTools: false

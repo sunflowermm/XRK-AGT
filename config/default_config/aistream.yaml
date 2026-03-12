@@ -75,6 +75,11 @@ mcp:
     #           command: npx
     #           args: ["-y", "bing-cn-mcp"]
     mcpServers: []
+  # 默认工作流 & 远程 MCP 选择（供 /api/v3/chat/completions 在未传 workflow 字段时使用）
+  # 默认留空：表示其它平台不显式选择时，仅按 provider 自身配置，不自动注入任何特定工作流/远程 MCP
+  defaultStreams: []       # 例如 ["chat", "memory", "database"]
+  defaultRemoteMcp: []     # 例如 ["github", "browser"]，对应 remote-mcp.github / remote-mcp.browser
+  toolMergeStrategy: preferRequest  # 工具合并策略：preferRequest | preferStream | merge
 
 # ----------------------------------------
 # Python 子服务端

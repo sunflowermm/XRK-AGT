@@ -54,14 +54,12 @@ export default class AnthropicLLMConfig extends ConfigBase {
             label: '温度',
             min: 0,
             max: 2,
-            default: 0.7,
             component: 'InputNumber'
           },
           maxTokens: {
             type: 'number',
             label: '最大 Tokens',
             min: 1,
-            default: 4096,
             component: 'InputNumber'
           },
           topP: {
@@ -69,7 +67,6 @@ export default class AnthropicLLMConfig extends ConfigBase {
             label: 'Top P（top_p）',
             min: 0,
             max: 1,
-            default: 1.0,
             component: 'InputNumber'
           },
           timeout: {

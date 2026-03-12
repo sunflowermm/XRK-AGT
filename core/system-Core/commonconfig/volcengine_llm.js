@@ -53,26 +53,23 @@ export default class VolcengineLLMConfig extends ConfigBase {
           temperature: {
             type: 'number',
             label: '温度',
-            description: '生成文本的随机性，范围 0-2',
+            description: '生成文本的随机性，范围 0-2；留空则不下发，由火山引擎使用模型默认值',
             min: 0,
             max: 2,
-            default: 0.8,
             component: 'InputNumber'
           },
           maxTokens: {
             type: 'number',
             label: '最大 Tokens',
-            description: '生成文本的最大长度',
+            description: '生成文本的最大长度；留空则不下发，由火山引擎根据模型上限裁剪',
             min: 1,
-            default: 4096,
             component: 'InputNumber'
           },
           tokenField: {
             type: 'string',
             label: 'Token 字段名',
-            description: '上游接口对 token 参数字段的要求；火山引擎不允许同时设置 max_tokens 与 max_completion_tokens',
+            description: '上游接口对 token 参数字段的要求；留空则仅在显式传入 max_completion_tokens 时使用该字段',
             enum: ['max_tokens', 'max_completion_tokens', 'both'],
-            default: 'max_tokens',
             component: 'Select'
           },
           thinkingType: {
@@ -80,34 +77,30 @@ export default class VolcengineLLMConfig extends ConfigBase {
             label: '深度思考',
             description: '火山方舟 thinking.type（如 disabled/enabled）；留空则不传 thinking 字段',
             enum: ['disabled', 'enabled', ''],
-            default: 'disabled',
             component: 'Select'
           },
           topP: {
             type: 'number',
             label: 'Top P',
-            description: '核采样参数，范围 0-1',
+            description: '核采样参数，范围 0-1；留空则不下发，由火山引擎使用模型默认值',
             min: 0,
             max: 1,
-            default: 0.9,
             component: 'InputNumber'
           },
           presencePenalty: {
             type: 'number',
             label: 'Presence Penalty',
-            description: '存在惩罚（-2 到 2），控制模型重复已出现的内容',
+            description: '存在惩罚（-2 到 2），控制模型重复已出现的内容；留空则不下发',
             min: -2,
             max: 2,
-            default: 0,
             component: 'InputNumber'
           },
           frequencyPenalty: {
             type: 'number',
             label: 'Frequency Penalty',
-            description: '频率惩罚（-2 到 2），控制模型重复高频词汇',
+            description: '频率惩罚（-2 到 2），控制模型重复高频词汇；留空则不下发',
             min: -2,
             max: 2,
-            default: 0,
             component: 'InputNumber'
           },
           timeout: {

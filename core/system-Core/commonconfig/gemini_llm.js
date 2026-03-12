@@ -57,7 +57,6 @@ export default class GeminiLLMConfig extends ConfigBase {
             label: '温度（generationConfig.temperature）',
             min: 0,
             max: 2,
-            default: 0.7,
             component: 'InputNumber'
           },
           topP: {
@@ -65,7 +64,6 @@ export default class GeminiLLMConfig extends ConfigBase {
             label: 'Top P（generationConfig.topP）',
             min: 0,
             max: 1,
-            default: 1.0,
             component: 'InputNumber'
           },
           topK: {
@@ -73,14 +71,12 @@ export default class GeminiLLMConfig extends ConfigBase {
             label: 'Top K（generationConfig.topK）',
             description: '可选，高级采样参数',
             min: 0,
-            default: 0,
             component: 'InputNumber'
           },
           maxTokens: {
             type: 'number',
             label: '最大输出（generationConfig.maxOutputTokens）',
             min: 1,
-            default: 4096,
             component: 'InputNumber'
           },
           timeout: {

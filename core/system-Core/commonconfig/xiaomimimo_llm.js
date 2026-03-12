@@ -56,7 +56,6 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             description: '生成文本的随机性，范围 0-2，建议 0.0~1.0',
             min: 0,
             max: 2,
-            default: 0.7,
             component: 'InputNumber'
           },
           maxTokens: {
@@ -64,7 +63,6 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             label: '最大 Tokens',
             description: '单次回复的最大 Token 数（最终会映射到 max_completion_tokens）',
             min: 1,
-            default: 4096,
             component: 'InputNumber'
           },
           tokenField: {
@@ -72,7 +70,6 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             label: 'Token 字段名',
             description: 'MiMo 使用 max_completion_tokens；建议保持默认值',
             enum: ['max_tokens', 'max_completion_tokens', 'both'],
-            default: 'max_completion_tokens',
             component: 'Select'
           },
           topP: {
@@ -81,7 +78,6 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             description: '核采样参数，范围 0-1',
             min: 0,
             max: 1,
-            default: 0.95,
             component: 'InputNumber'
           },
           frequencyPenalty: {
@@ -90,7 +86,6 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             description: '频率惩罚（-2 到 2），用于减少重复内容',
             min: -2,
             max: 2,
-            default: 0,
             component: 'InputNumber'
           },
           presencePenalty: {
@@ -99,7 +94,6 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             description: '存在惩罚（-2 到 2），用于鼓励引入新话题',
             min: -2,
             max: 2,
-            default: 0,
             component: 'InputNumber'
           },
           stop: {
@@ -107,7 +101,6 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             label: '停止词',
             description: '停止词列表，当生成包含这些词时停止',
             itemType: 'string',
-            default: [],
             component: 'Tags'
           },
           thinkingType: {
@@ -115,7 +108,6 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             label: '思维链模式',
             description: '控制是否启用思维链（thinking.type），默认 disabled',
             enum: ['enabled', 'disabled'],
-            default: 'disabled',
             component: 'Select'
           },
           responseFormat: {

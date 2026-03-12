@@ -59,7 +59,6 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
             description: '采样温度，0 越保守、2 越随机，推荐 0.5-1.0',
             min: 0,
             max: 2,
-            default: 0.7,
             component: 'InputNumber'
           },
           maxTokens: {
@@ -67,7 +66,6 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
             label: '最大 Tokens（max_tokens）',
             description: '单次回答允许使用的最大输出 tokens 数，过大可能被 Azure 拒绝',
             min: 1,
-            default: 4096,
             component: 'InputNumber'
           },
           topP: {
@@ -76,7 +74,6 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
             description: '核采样参数，越接近 1 结果越多样，一般与 temperature 二选一调整',
             min: 0,
             max: 1,
-            default: 1,
             component: 'InputNumber'
           },
           presencePenalty: {
@@ -85,7 +82,6 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
             description: '存在惩罚（-2~2），>0 时鼓励模型少重复说过的内容',
             min: -2,
             max: 2,
-            default: 0,
             component: 'InputNumber'
           },
           frequencyPenalty: {
@@ -94,7 +90,6 @@ export default class AzureOpenAILLMConfig extends ConfigBase {
             description: '频率惩罚（-2~2），>0 时减少口头禅和高频词复读',
             min: -2,
             max: 2,
-            default: 0,
             component: 'InputNumber'
           },
           enableTools: {

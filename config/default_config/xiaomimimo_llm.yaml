@@ -23,28 +23,30 @@ path: "/chat/completions"
 chatModel: "mimo-v2-flash"
 
 # ----------------------------------------
-# API 参数配置
+# API 参数配置（全部为可选）
 # ----------------------------------------
-# 温度参数（0-2），值越高越随机
-temperature: 0.7
-# 最大输出token数（注意：MiMo 使用 max_completion_tokens）
-maxTokens: 4096
-# Token 字段名（MiMo 需要 max_completion_tokens）
-tokenField: "max_completion_tokens"
-# Top-p采样（0-1）
-topP: 0.95
-# 存在惩罚（-2.0到2.0）
-presencePenalty: 0
-# 频率惩罚（-2.0到2.0）
-frequencyPenalty: 0
-# 停止词（最多 4 个序列；为空表示不传 stop）
-stop: []
-# 思维链模式（thinking.type）
-thinkingType: "disabled"
+# 说明：以下参数默认不填写，表示完全使用 MiMo 上游默认。
+# 仅当你在 YAML 或控制台中显式填写时，XRK-AGT 才会下发对应字段。
+# 温度参数（0-2），值越高越随机，例如：
+# temperature: 0.7
+# 最大输出 token 数（注意：MiMo 使用 max_completion_tokens），例如：
+# maxTokens: 4096
+# Token 字段名（MiMo 需要 max_completion_tokens），例如：
+# tokenField: "max_completion_tokens"
+# Top-p 采样（0-1），例如：
+# topP: 0.95
+# 存在惩罚（-2.0到2.0），例如：
+# presencePenalty: 0
+# 频率惩罚（-2.0到2.0），例如：
+# frequencyPenalty: 0
+# 停止词（最多 4 个序列；为空表示不传 stop），例如：
+# stop: []
+# 思维链模式（thinking.type），例如：
+# thinkingType: "disabled"
 # 响应格式（MiMo 官方为 response_format 对象；此处只配置 type）
 # - text: 文本（通常不需要显式设置）
 # - json_object: 结构化 JSON（beta，按需）
-responseFormat: ""
+# responseFormat: ""
 # 请求超时时间（毫秒）
 timeout: 360000
 

@@ -58,7 +58,8 @@ export default class NewAPICompatibleLLMClient {
   }
 
   buildBody(messages, overrides = {}) {
-    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, 'gpt-4o-mini');
+    const defaultModel = this.config.model || this.config.chatModel || 'gpt-4o-mini';
+    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, defaultModel);
     applyOpenAITools(body, this.config, overrides);
     return body;
   }

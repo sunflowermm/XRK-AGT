@@ -50,14 +50,12 @@ export default class OpenAILLMConfig extends ConfigBase {
             label: 'temperature',
             min: 0,
             max: 2,
-            default: 0.7,
             component: 'InputNumber'
           },
           maxTokens: {
             type: 'number',
             label: '最大 Tokens（max_tokens / max_completion_tokens）',
             min: 1,
-            default: 4096,
             component: 'InputNumber'
           },
           topP: {
@@ -65,7 +63,6 @@ export default class OpenAILLMConfig extends ConfigBase {
             label: 'top_p',
             min: 0,
             max: 1,
-            default: 1.0,
             component: 'InputNumber'
           },
           presencePenalty: {
@@ -73,7 +70,6 @@ export default class OpenAILLMConfig extends ConfigBase {
             label: 'presence_penalty',
             min: -2,
             max: 2,
-            default: 0,
             component: 'InputNumber'
           },
           frequencyPenalty: {
@@ -81,40 +77,34 @@ export default class OpenAILLMConfig extends ConfigBase {
             label: 'frequency_penalty',
             min: -2,
             max: 2,
-            default: 0,
             component: 'InputNumber'
           },
           serviceTier: {
             type: 'string',
             label: 'service_tier',
             enum: ['auto', 'default', 'flex', 'scale', 'priority'],
-            default: 'auto',
             component: 'Select'
           },
           promptCacheKey: {
             type: 'string',
             label: 'prompt_cache_key',
-            default: '',
             component: 'Input'
           },
           promptCacheRetention: {
             type: 'string',
             label: 'prompt_cache_retention',
             enum: ['in-memory', '24h'],
-            default: 'in-memory',
             component: 'Select'
           },
           safetyIdentifier: {
             type: 'string',
             label: 'safety_identifier',
-            default: '',
             component: 'Input'
           },
           reasoningEffort: {
             type: 'string',
             label: 'reasoning_effort',
             enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
-            default: 'medium',
             component: 'Select'
           },
           timeout: {

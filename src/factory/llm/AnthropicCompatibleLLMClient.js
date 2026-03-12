@@ -91,10 +91,14 @@ export default class AnthropicCompatibleLLMClient {
 
     const body = {
       model: overrides.model || overrides.chatModel || this.config.model || this.config.chatModel,
-      max_tokens: (overrides.maxTokens ?? overrides.max_tokens) ?? (this.config.maxTokens ?? this.config.max_tokens) ?? 2048,
-      temperature: overrides.temperature ?? this.config.temperature ?? 0.7,
       messages: anthMessages
     };
+
+    const maxTokens = (overrides.maxTokens ?? overrides.max_tokens) ?? (this.config.maxTokens ?? this.config.max_tokens);
+    if (maxTokens !== undefined) body.max_tokens = maxTokens;
+
+    const temperature = overrides.temperature ?? this.config.temperature;
+    if (temperature !== undefined) body.temperature = temperature;
 
     if (systemTexts.length > 0) body.system = systemTexts.join('\n');
     if (this.config.extraBody && typeof this.config.extraBody === 'object') Object.assign(body, this.config.extraBody);

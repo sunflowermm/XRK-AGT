@@ -325,11 +325,23 @@ async function handleChatCompletionsV3(req, res) {
     return streams.length ? [...new Set(streams)] : null;
   })() : null;
 
+  // YAML 默认工作流 & 远程 MCP：在调用方未显式传入 workflow 时生效
+  const aistreamCfg = getAistreamConfigOptional();
+  const mcpCfg = aistreamCfg.mcp || {};
+  const defaultStreamsCfg = Array.isArray(mcpCfg.defaultStreams) ? mcpCfg.defaultStreams.filter(Boolean) : [];
+  const defaultRemoteMcpCfg = Array.isArray(mcpCfg.defaultRemoteMcp)
+    ? mcpCfg.defaultRemoteMcp.filter(Boolean).map((name) => `remote-mcp.${String(name).trim()}`).filter(Boolean)
+    : [];
+  const mergedDefaultStreams = [...new Set([...defaultStreamsCfg, ...defaultRemoteMcpCfg])];
+  const effectiveStreams = (workflowStreams && workflowStreams.length)
+    ? workflowStreams
+    : (mergedDefaultStreams.length ? mergedDefaultStreams : null);
+
   const client = LLMFactory.createClient(llmConfig);
   const overrides = {};
   // 默认视为“外部工具透传”模式：不在 XRK 侧执行 MCP 工具，只把 tools/参数传给上游模型
-  // 若显式通过 workflow 声明了 streams，则认为调用方希望使用 XRK 的 MCP 工具能力
-  overrides.mcpToolMode = workflowStreams && workflowStreams.length ? 'execute' : 'passthrough';
+  // 若通过 workflow 或 YAML 默认声明了 streams，则认为调用方希望使用 XRK 的 MCP 工具能力
+  overrides.mcpToolMode = effectiveStreams && effectiveStreams.length ? 'execute' : 'passthrough';
   const addNum = (key, ...aliases) => {
     const v = toNum(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
@@ -370,7 +382,13 @@ async function handleChatCompletionsV3(req, res) {
   addBool('logprobs');
   addNum('top_logprobs', 'topLogprobs');
   
-  if (workflowStreams?.length) overrides.streams = workflowStreams;
+  if (effectiveStreams?.length) overrides.streams = effectiveStreams;
+
+  // 工具合并策略：允许调用方通过请求体指定，未指定时可由 YAML 决定（当前仅透传给下游工具适配器）
+  const toolMergeStrategy = pickFirst(body, ['tool_merge_strategy', 'toolMergeStrategy']) || mcpCfg.toolMergeStrategy;
+  if (toolMergeStrategy) {
+    overrides.toolMergeStrategy = toolMergeStrategy;
+  }
 
   const extraBody = parseOptionalJson(pickFirst(body, ['extraBody']));
   if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;

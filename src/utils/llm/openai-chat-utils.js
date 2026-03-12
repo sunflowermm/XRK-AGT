@@ -29,9 +29,13 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
   const body = {
     model: pick(overrides, config, ['model', 'chatModel']) || defaultModel,
     messages,
-    temperature: temperature ?? 0.7,
     stream: pick(overrides, config, ['stream']) ?? false
   };
+
+  // 仅在调用方或配置显式设置时才下发 temperature，未配置时完全交由上游默认
+  if (temperature !== undefined) {
+    body.temperature = temperature;
+  }
 
   if (maxCompletionTokens !== undefined) {
     const want = (tokenField || '').toString().trim().toLowerCase();
@@ -90,28 +94,92 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
 }
 
 export function applyOpenAITools(body, config = {}, overrides = {}) {
-  const enableTools = config.enableTools !== false && MCPToolAdapter.hasTools();
+  const hasMcpTools = MCPToolAdapter.hasTools();
+  const enableTools = config.enableTools !== false && hasMcpTools;
 
-  if (Object.hasOwn(overrides, 'tools')) {
-    if (overrides.tools) body.tools = overrides.tools;
-    if (overrides.tool_choice !== undefined) body.tool_choice = overrides.tool_choice;
-    if (overrides.parallel_tool_calls !== undefined) body.parallel_tool_calls = overrides.parallel_tool_calls;
+  // 调用方是否显式传入了 tools 字段（包括 null/[]）
+  const hasRequestToolsField = Object.prototype.hasOwnProperty.call(overrides, 'tools');
+  const requestTools = hasRequestToolsField ? overrides.tools : undefined;
+
+  // 如果系统完全没有 MCP 工具，则只透传调用方的 tools
+  if (!hasMcpTools) {
+    if (hasRequestToolsField && requestTools) {
+      body.tools = requestTools;
+      if (overrides.tool_choice !== undefined) body.tool_choice = overrides.tool_choice;
+      if (overrides.parallel_tool_calls !== undefined) body.parallel_tool_calls = overrides.parallel_tool_calls;
+    }
     return body;
   }
 
-  if (!enableTools) return body;
+  if (!enableTools && !hasRequestToolsField) return body;
 
   const workflow = overrides.workflow || config.workflow || config.streamName || null;
   const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
 
-  const tools = MCPToolAdapter.convertMCPToolsToOpenAI({
-    workflow,
-    streams,
-    excludeStreams: ['chat']
-  });
-  if (!tools.length) return body;
+  // 从 MCP 获取基于 streams/workflow 白名单过滤后的工具列表
+  const mcpTools = enableTools
+    ? MCPToolAdapter.convertMCPToolsToOpenAI({
+        workflow,
+        streams,
+        excludeStreams: ['chat']
+      })
+    : [];
 
-  body.tools = tools;
+  const strategyRaw = (overrides.toolMergeStrategy || config.toolMergeStrategy || 'preferRequest').toString().trim().toLowerCase();
+  const strategy = ['preferrequest', 'preferstream', 'merge'].includes(strategyRaw)
+    ? strategyRaw
+    : 'preferrequest';
+
+  let finalTools = null;
+
+  // 有显式 tools 字段时：合并“请求 tools + MCP tools”，冲突时按 strategy 处理
+  if (hasRequestToolsField) {
+    const reqArr = Array.isArray(requestTools) ? requestTools : [];
+
+    // tools=null 或 [] 被视为“显式关闭工具”，此时不注入 MCP 工具
+    if (!reqArr.length) {
+      finalTools = [];
+    } else if (!mcpTools.length) {
+      finalTools = reqArr;
+    } else {
+      const getName = (t) => t?.function?.name || t?.name || t?.id;
+      const map = new Map();
+
+      if (strategy === 'preferstream') {
+        for (const t of mcpTools) {
+          const name = getName(t);
+          if (!name) continue;
+          map.set(name, t);
+        }
+        for (const t of reqArr) {
+          const name = getName(t);
+          if (!name || map.has(name)) continue;
+          map.set(name, t);
+        }
+      } else {
+        // 默认：preferRequest / merge —— 请求中的 tools 优先生效
+        for (const t of mcpTools) {
+          const name = getName(t);
+          if (!name) continue;
+          map.set(name, t);
+        }
+        for (const t of reqArr) {
+          const name = getName(t);
+          if (!name) continue;
+          map.set(name, t);
+        }
+      }
+
+      finalTools = Array.from(map.values());
+    }
+  } else {
+    // 未显式传入 tools：仅注入 MCP 工具
+    finalTools = mcpTools;
+  }
+
+  if (!finalTools || !finalTools.length) return body;
+
+  body.tools = finalTools;
   body.tool_choice = overrides.tool_choice ?? config.toolChoice ?? 'auto';
   const parallel = pick(overrides, config, ['parallelToolCalls', 'parallel_tool_calls']);
   if (parallel !== undefined) body.parallel_tool_calls = parallel;

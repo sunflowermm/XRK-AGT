@@ -73,27 +73,24 @@ export default class GeminiCompatibleLLMConfig extends ConfigBase {
               temperature: {
                 type: 'number',
                 label: '温度',
-                description: 'generationConfig.temperature：0 越保守、2 越随机，推荐 0.5-1.0',
+                description: 'generationConfig.temperature：0 越保守、2 越随机；留空则不下发，由下游默认',
                 min: 0,
                 max: 2,
-                default: 0.7,
                 component: 'InputNumber'
               },
               maxTokens: {
                 type: 'number',
                 label: '最大输出（maxOutputTokens）',
-                description: 'generationConfig.maxOutputTokens，单次回答的最大 token 数',
+                description: 'generationConfig.maxOutputTokens，单次回答的最大 token 数；留空则不下发，由下游根据模型上限处理',
                 min: 1,
-                default: 2048,
                 component: 'InputNumber'
               },
               topP: {
                 type: 'number',
                 label: 'Top P',
-                description: 'generationConfig.topP，核采样参数',
+                description: 'generationConfig.topP，核采样参数；留空则不下发',
                 min: 0,
                 max: 1,
-                default: 1,
                 component: 'InputNumber'
               },
               topK: {
@@ -101,7 +98,6 @@ export default class GeminiCompatibleLLMConfig extends ConfigBase {
                 label: 'Top K',
                 description: 'generationConfig.topK，高级采样参数；0 为使用默认',
                 min: 1,
-                default: 40,
                 component: 'InputNumber'
               },
               timeout: {

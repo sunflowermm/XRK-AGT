@@ -74,9 +74,9 @@ export class MCPToolAdapter {
     }
 
     // 自动合并远程 MCP 工具（包括通过 aistream.yaml 或插件注册的服务器）
-    // 当前已加载的远程 MCP 服务器（包括插件式）
+    // 仅在“未显式指定 streams/workflow”时启用，避免覆盖调用方的精细选择
     const remoteServers = StreamLoader.remoteMCPServers || new Map();
-    if (remoteServers.size > 0) {
+    if (!workflow && !streams && remoteServers.size > 0) {
       const toolMap = new Map(mcpTools.map(t => [t.name, t]));
 
       for (const serverName of remoteServers.keys()) {

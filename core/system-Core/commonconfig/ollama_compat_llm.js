@@ -91,7 +91,6 @@ export default class OllamaCompatibleLLMConfig extends ConfigBase {
                 description: '采样温度，0 越保守、2 越随机，推荐 0.5-1.0',
                 min: 0,
                 max: 2,
-                default: 0.7,
                 component: 'InputNumber'
               },
               maxTokens: {
@@ -99,7 +98,6 @@ export default class OllamaCompatibleLLMConfig extends ConfigBase {
                 label: '最大输出（max_tokens）',
                 description: '单次回答允许使用的最大输出 tokens 数，过大可能影响性能',
                 min: 1,
-                default: 4096,
                 component: 'InputNumber'
               },
               timeout: {

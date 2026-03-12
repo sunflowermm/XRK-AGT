@@ -89,22 +89,25 @@ export default class GeminiCompatibleLLMClient {
       contents.push({ role: role === 'assistant' ? 'model' : 'user', parts });
     }
 
+    const generationConfig = {};
+
+    const temperature = overrides.temperature ?? this.config.temperature;
+    if (temperature !== undefined) generationConfig.temperature = temperature;
+
     const maxOutputTokens =
       overrides.maxOutputTokens ?? overrides.max_output_tokens ?? overrides.maxTokens ?? overrides.max_tokens ??
-      this.config.maxOutputTokens ?? this.config.max_output_tokens ?? this.config.maxTokens ?? this.config.max_tokens ?? 2048;
+      this.config.maxOutputTokens ?? this.config.max_output_tokens ?? this.config.maxTokens ?? this.config.max_tokens;
+    if (maxOutputTokens !== undefined) generationConfig.maxOutputTokens = maxOutputTokens;
+
+    const topP = overrides.topP ?? overrides.top_p ?? this.config.topP ?? this.config.top_p;
+    if (topP !== undefined) generationConfig.topP = topP;
+
+    const topK = overrides.topK ?? overrides.top_k ?? this.config.topK ?? this.config.top_k;
+    if (topK !== undefined) generationConfig.topK = topK;
 
     const payload = {
       contents,
-      generationConfig: {
-        temperature: overrides.temperature ?? this.config.temperature ?? 0.7,
-        maxOutputTokens,
-        ...(((overrides.topP ?? overrides.top_p ?? this.config.topP ?? this.config.top_p) !== undefined)
-          ? { topP: (overrides.topP ?? overrides.top_p ?? this.config.topP ?? this.config.top_p) }
-          : {}),
-        ...(((overrides.topK ?? overrides.top_k ?? this.config.topK ?? this.config.top_k) !== undefined)
-          ? { topK: (overrides.topK ?? overrides.top_k ?? this.config.topK ?? this.config.top_k) }
-          : {})
-      }
+      ...(Object.keys(generationConfig).length ? { generationConfig } : {})
     };
 
     if (systemTexts.length > 0) payload.systemInstruction = { parts: [{ text: systemTexts.join('\n') }] };

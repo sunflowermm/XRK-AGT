@@ -111,9 +111,11 @@ export default class OpenAIResponsesCompatibleLLMClient {
     const body = {
       model: pick(overrides, this.config, ['model', 'chatModel']),
       input,
-      stream,
-      temperature: pick(overrides, this.config, ['temperature']) ?? 0.7
+      stream
     };
+
+    const temperature = pick(overrides, this.config, ['temperature']);
+    if (temperature !== undefined) body.temperature = temperature;
 
     const maxTokens = pick(overrides, this.config, ['maxOutputTokens', 'max_output_tokens', 'maxTokens', 'max_tokens', 'maxCompletionTokens']);
     if (maxTokens !== undefined) body.max_output_tokens = maxTokens;

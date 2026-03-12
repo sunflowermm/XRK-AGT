@@ -99,57 +99,50 @@ export default class OpenAIResponsesCompatibleLLMConfig extends ConfigBase {
               temperature: {
                 type: 'number',
                 label: 'temperature',
-                description: '采样温度，0 越保守、2 越随机，推荐 0.5-1.0',
+                description: '采样温度，0 越保守、2 越随机；留空则不下发，由上游默认',
                 min: 0,
                 max: 2,
-                default: 0.7,
                 component: 'InputNumber'
               },
               maxOutputTokens: {
                 type: 'number',
                 label: 'max_output_tokens',
-                description: '单次回答允许使用的最大输出 tokens 数，过大可能被运营商拒绝',
+                description: '单次回答允许使用的最大输出 tokens 数；留空则不下发，由上游根据模型上限处理',
                 min: 1,
-                default: 4096,
                 component: 'InputNumber'
               },
               topP: {
                 type: 'number',
                 label: 'top_p',
-                description: '核采样参数，越接近 1 结果越多样，一般与 temperature 二选一调整',
+                description: '核采样参数，越接近 1 结果越多样，一般与 temperature 二选一调整；留空则不下发',
                 min: 0,
                 max: 1,
-                default: 1.0,
                 component: 'InputNumber'
               },
               serviceTier: {
                 type: 'string',
                 label: 'service_tier',
-                description: '部分官方模型支持的服务等级，auto 通常即可，详见各家文档',
+                description: '部分官方模型支持的服务等级；留空则不下发，由上游默认',
                 enum: ['auto', 'default', 'flex', 'scale', 'priority'],
-                default: 'auto',
                 component: 'Select'
               },
               promptCacheKey: {
                 type: 'string',
                 label: 'prompt_cache_key',
-                description: '用于复用厂商侧 Prompt 缓存的 key，相同 key 的调用可能命中缓存',
-                default: '',
+                description: '用于复用厂商侧 Prompt 缓存的 key，相同 key 的调用可能命中缓存；留空则不下发',
                 component: 'Input'
               },
               promptCacheRetention: {
                 type: 'string',
                 label: 'prompt_cache_retention',
-                description: 'Prompt 缓存保存策略，in-memory 为进程内缓存，24h 为厂商侧 24 小时缓存',
+                description: 'Prompt 缓存保存策略，in-memory 为进程内缓存，24h 为厂商侧 24 小时缓存；留空则不下发',
                 enum: ['in-memory', '24h'],
-                default: 'in-memory',
                 component: 'Select'
               },
               safetyIdentifier: {
                 type: 'string',
                 label: 'safety_identifier',
-                description: '安全策略标识（如厂商预配置的安全档位 ID），留空则使用默认策略',
-                default: '',
+                description: '安全策略标识（如厂商预配置的安全档位 ID）；留空则使用默认策略',
                 component: 'Input'
               },
               maxToolCalls: {

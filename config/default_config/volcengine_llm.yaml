@@ -27,25 +27,27 @@ path: "/chat/completions"
 chatModel: "doubao-pro-4k"
 
 # ----------------------------------------
-# API 参数配置
+# API 参数配置（可选）
 # ----------------------------------------
-# 温度参数（0-2），值越高越随机
-temperature: 0.8
-# 最大输出token数
-maxTokens: 4096
+# 说明：以下高级参数默认不填写，表示完全使用火山引擎的模型默认值；
+# 仅当你在 YAML 或控制台中显式填写时，XRK-AGT 才会下发对应字段。
+# 温度参数（0-2），值越高越随机，例如：
+# temperature: 0.8
+# 最大输出 token 数，例如：
+# maxTokens: 4096
 # Token 字段名（火山引擎 max_tokens 与 max_completion_tokens 互斥）
 # - max_tokens: 仅发送 max_tokens（推荐）
 # - max_completion_tokens: 仅发送 max_completion_tokens
 # - both: 同时发送两者（仅用于少数旧网关/自建兼容层，不推荐）
-tokenField: "max_tokens"
-# 深度思考（thinking.type），按官方文档可设置 disabled/enabled
-thinkingType: "disabled"
-# Top-p采样（0-1）
-topP: 0.9
-# 存在惩罚（-2.0到2.0），控制模型重复已出现的内容
-presencePenalty: 0
-# 频率惩罚（-2.0到2.0），控制模型重复高频词汇
-frequencyPenalty: 0
+# tokenField: "max_tokens"
+# 深度思考（thinking.type），按官方文档可设置 disabled/enabled，例如：
+# thinkingType: "disabled"
+# Top-p 采样（0-1），例如：
+# topP: 0.9
+# 存在惩罚（-2.0到2.0），控制模型重复已出现的内容，例如：
+# presencePenalty: 0
+# 频率惩罚（-2.0到2.0），控制模型重复高频词汇，例如：
+# frequencyPenalty: 0
 # 请求超时时间（毫秒）
 timeout: 360000
 

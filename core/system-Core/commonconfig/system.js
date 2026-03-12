@@ -1,6 +1,9 @@
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 import path from 'path';
 import paths from '#utils/paths.js';
+import StreamLoader from '#infrastructure/aistream/loader.js';
+import LLMFactory from '#factory/llm/LLMFactory.js';
+import BotUtil from '#utils/botutil.js';
 
 /**
  * 系统配置管理
@@ -2332,6 +2335,30 @@ export default class SystemConfig extends ConfigBase {
                   default: true,
                   component: 'Switch'
                 },
+                defaultStreams: {
+                  type: 'array',
+                  label: '默认启用的工作流',
+                  description: '当 /api/v3/chat/completions 未显式传入 workflow 时，默认启用这些工作流下的 MCP 工具（如 chat/memory/database）',
+                  itemType: 'string',
+                  default: [],
+                  component: 'MultiSelect'
+                },
+                defaultRemoteMcp: {
+                  type: 'array',
+                  label: '默认启用的远程 MCP',
+                  description: '当未显式传入 workflow 时，默认启用的远程 MCP 服务器名称列表（对应 remote-mcp.xxx 前缀，仅填 name 部分，如 github、browser）',
+                  itemType: 'string',
+                  default: [],
+                  component: 'MultiSelect'
+                },
+                toolMergeStrategy: {
+                  type: 'string',
+                  label: '工具合并策略',
+                  description: '当接口请求体同时传入 tools 且启用了工作流/MCP 工具时的合并策略：preferRequest=以接口 tools 为准，preferStream=以工作流/MCP 工具为准，merge=尽量合并（同名以接口为准）',
+                  enum: ['preferRequest', 'preferStream', 'merge'],
+                  default: 'preferRequest',
+                  component: 'Select'
+                },
                 remote: {
                   type: 'object',
                   label: '远程MCP连接',
@@ -2816,6 +2843,105 @@ export default class SystemConfig extends ConfigBase {
         }
       }
     };
+
+    // 动态为 aistream.mcp.defaultStreams / defaultRemoteMcp / llm.Provider 填充可选项
+    // 日志前缀：SystemConfig（方便在控制台与日志文件中 grep）
+    try {
+      const aistreamSchema = this.configFiles?.aistream?.schema?.fields || {};
+
+      // 1) 工作流 & 远程 MCP 多选枚举
+      const mcpFields = aistreamSchema.mcp?.fields;
+      if (mcpFields) {
+        let workflowKeys = [];
+        try {
+          const streams = typeof StreamLoader.getStreamsByPriority === 'function'
+            ? StreamLoader.getStreamsByPriority()
+            : [];
+          workflowKeys = streams
+            .filter(s => !s.primaryStream && !s.secondaryStreams)
+            .map(s => s.name)
+            .filter(Boolean);
+        } catch (e) {
+          BotUtil.makeLog(
+            'warn',
+            `[SystemConfig] 获取工作流列表失败, 使用静态候选值: ${e.message}`,
+            'SystemConfig'
+          );
+        }
+
+        // 若运行时还未加载工作流，提供一组静态候选，避免前端下拉为空白
+        if (!workflowKeys.length) {
+          workflowKeys = ['chat', 'memory', 'database', 'tools', 'device', 'desktop'];
+        }
+
+        let remoteServers = [];
+        try {
+          remoteServers = typeof StreamLoader.listRemoteMCPServers === 'function'
+            ? (StreamLoader.listRemoteMCPServers() || [])
+            : [];
+        } catch (e) {
+          BotUtil.makeLog(
+            'warn',
+            `[SystemConfig] 获取远程 MCP 列表失败, 使用空列表: ${e.message}`,
+            'SystemConfig'
+          );
+          remoteServers = [];
+        }
+
+        if (mcpFields.defaultStreams) {
+          mcpFields.defaultStreams.enum = workflowKeys;
+        }
+        if (mcpFields.defaultRemoteMcp) {
+          mcpFields.defaultRemoteMcp.enum = remoteServers;
+        }
+
+        BotUtil.makeLog(
+          'info',
+          `[SystemConfig] MCP 默认工作流枚举: [${workflowKeys.join(', ')}], 远程 MCP: [${remoteServers.join(', ')}]`,
+          'SystemConfig'
+        );
+      }
+
+      // 2) LLM Provider 动态单选：根据实际可用 provider 填充枚举
+      const llmFields = aistreamSchema.llm?.fields;
+      if (llmFields?.Provider) {
+        let providers = [];
+        try {
+          providers = typeof LLMFactory.listProviders === 'function'
+            ? (LLMFactory.listProviders() || [])
+            : [];
+        } catch (e) {
+          BotUtil.makeLog(
+            'warn',
+            `[SystemConfig] 获取 LLM Provider 列表失败, 保持手动输入模式: ${e.message}`,
+            'SystemConfig'
+          );
+          providers = [];
+        }
+
+        // 只有在检测到至少一个可用 Provider 时，才切换为下拉单选；否则保留原来的自由输入，避免渲染空下拉
+        if (providers.length) {
+          llmFields.Provider.enum = providers;
+          llmFields.Provider.component = 'Select';
+          if (!llmFields.Provider.default || !providers.includes(llmFields.Provider.default)) {
+            llmFields.Provider.default = providers[0];
+          }
+
+          BotUtil.makeLog(
+            'info',
+            `[SystemConfig] LLM Provider 可选值: [${providers.join(', ')}], 默认: ${llmFields.Provider.default}`,
+            'SystemConfig'
+          );
+        }
+      }
+    } catch (e) {
+      // 动态枚举失败时保持回退，不影响配置读写和基础表单渲染
+      BotUtil.makeLog(
+        'error',
+        `[SystemConfig] 初始化动态枚举失败: ${e.message}`,
+        'SystemConfig'
+      );
+    }
   }
 
   /**
@@ -2895,6 +3021,9 @@ export default class SystemConfig extends ConfigBase {
    * @returns {Object}
    */
   getStructure() {
+    // 每次获取结构前动态刷新 schema，确保工作流/远程 MCP/Provider 列表是最新的
+    this._refreshDynamicSchema();
+
     const structure = {
       name: this.name,
       displayName: this.displayName,
@@ -2924,5 +3053,101 @@ export default class SystemConfig extends ConfigBase {
       filePath: meta.filePath,
       fileType: meta.fileType
     }));
+  }
+
+  /**
+   * 动态刷新 aistream 相关 schema（工作流、远程 MCP、LLM Provider）
+   */
+  _refreshDynamicSchema() {
+    try {
+      const aistreamSchema = this.configFiles?.aistream?.schema?.fields || {};
+
+      // 1) 工作流 & 远程 MCP 多选枚举（真正动态：不再使用静态兜底）
+      const mcpFields = aistreamSchema.mcp?.fields;
+      if (mcpFields) {
+        let workflowKeys = [];
+        try {
+          const streams = typeof StreamLoader.getStreamsByPriority === 'function'
+            ? StreamLoader.getStreamsByPriority()
+            : [];
+          workflowKeys = streams
+            .filter(s => !s.primaryStream && !s.secondaryStreams)
+            .map(s => s.name)
+            .filter(Boolean);
+        } catch (e) {
+          BotUtil.makeLog(
+            'warn',
+            `[SystemConfig] 获取工作流列表失败: ${e.message}`,
+            'SystemConfig'
+          );
+        }
+
+        let remoteServers = [];
+        try {
+          remoteServers = typeof StreamLoader.listRemoteMCPServers === 'function'
+            ? (StreamLoader.listRemoteMCPServers() || [])
+            : [];
+        } catch (e) {
+          BotUtil.makeLog(
+            'warn',
+            `[SystemConfig] 获取远程 MCP 列表失败: ${e.message}`,
+            'SystemConfig'
+          );
+          remoteServers = [];
+        }
+
+        if (mcpFields.defaultStreams) {
+          mcpFields.defaultStreams.enum = workflowKeys;
+        }
+        if (mcpFields.defaultRemoteMcp) {
+          mcpFields.defaultRemoteMcp.enum = remoteServers;
+        }
+
+        BotUtil.makeLog(
+          'info',
+          `[SystemConfig] MCP 默认工作流枚举: [${workflowKeys.join(', ')}], 远程 MCP: [${remoteServers.join(', ')}]`,
+          'SystemConfig'
+        );
+      }
+
+      // 2) LLM Provider 动态单选：根据实际可用 provider 填充枚举
+      const llmFields = aistreamSchema.llm?.fields;
+      if (llmFields?.Provider) {
+        let providers = [];
+        try {
+          providers = typeof LLMFactory.listProviders === 'function'
+            ? (LLMFactory.listProviders() || [])
+            : [];
+        } catch (e) {
+          BotUtil.makeLog(
+            'warn',
+            `[SystemConfig] 获取 LLM Provider 列表失败, 保持手动输入模式: ${e.message}`,
+            'SystemConfig'
+          );
+          providers = [];
+        }
+
+        // 只有在检测到至少一个可用 Provider 时，才切换为下拉单选；否则保留原来的自由输入，避免渲染空下拉
+        if (providers.length) {
+          llmFields.Provider.enum = providers;
+          llmFields.Provider.component = 'Select';
+          if (!llmFields.Provider.default || !providers.includes(llmFields.Provider.default)) {
+            llmFields.Provider.default = providers[0];
+          }
+
+          BotUtil.makeLog(
+            'info',
+            `[SystemConfig] LLM Provider 可选值: [${providers.join(', ')}], 默认: ${llmFields.Provider.default}`,
+            'SystemConfig'
+          );
+        }
+      }
+    } catch (e) {
+      BotUtil.makeLog(
+        'error',
+        `[SystemConfig] 刷新动态 schema 失败: ${e.message}`,
+        'SystemConfig'
+      );
+    }
   }
 }

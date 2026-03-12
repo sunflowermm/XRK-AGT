@@ -120,20 +120,19 @@ export default class AnthropicLLMClient {
       });
     }
 
-    const temperature = overrides.temperature ?? this.config.temperature ?? 0.7;
-    const maxTokens = (overrides.maxTokens ?? overrides.max_tokens) ?? (this.config.maxTokens ?? this.config.max_tokens) ?? 2048;
-
     const body = {
       model: overrides.model || overrides.chatModel || this.config.model || this.config.chatModel || 'claude-3-5-sonnet-latest',
-      max_tokens: maxTokens,
-      temperature,
       messages: anthMessages
     };
 
+    const maxTokens = (overrides.maxTokens ?? overrides.max_tokens) ?? (this.config.maxTokens ?? this.config.max_tokens);
+    if (maxTokens !== undefined) body.max_tokens = maxTokens;
+
+    const temperature = overrides.temperature ?? this.config.temperature;
+    if (temperature !== undefined) body.temperature = temperature;
+
     const topP = (overrides.topP ?? overrides.top_p) ?? (this.config.topP ?? this.config.top_p);
-    if (topP !== undefined) {
-      body.top_p = topP;
-    }
+    if (topP !== undefined) body.top_p = topP;
 
     if (systemTexts.length > 0) {
       body.system = systemTexts.join('\n');

@@ -86,19 +86,20 @@ export default class OllamaCompatibleLLMClient {
 
   buildBody(messages, overrides = {}, stream = false) {
     const model = overrides.model || overrides.chatModel || this.config.model || this.config.chatModel;
+    const options = {
+      temperature: overrides.temperature ?? this.config.temperature,
+      top_p: overrides.topP ?? overrides.top_p ?? this.config.topP ?? this.config.top_p,
+      num_predict: overrides.maxTokens ?? overrides.max_tokens ?? this.config.maxTokens ?? this.config.max_tokens
+    };
+
+    Object.keys(options).forEach((k) => options[k] === undefined && delete options[k]);
+
     const body = {
       model,
       messages,
       stream,
-      options: {
-        temperature: overrides.temperature ?? this.config.temperature ?? 0.7,
-        top_p: overrides.topP ?? overrides.top_p ?? this.config.topP ?? this.config.top_p,
-        num_predict: overrides.maxTokens ?? overrides.max_tokens ?? this.config.maxTokens ?? this.config.max_tokens
-      }
+      ...(Object.keys(options).length ? { options } : {})
     };
-
-    Object.keys(body.options).forEach((k) => body.options[k] === undefined && delete body.options[k]);
-    if (Object.keys(body.options).length === 0) delete body.options;
 
     if (this.config.extraBody && typeof this.config.extraBody === 'object') Object.assign(body, this.config.extraBody);
     if (overrides.extraBody && typeof overrides.extraBody === 'object') Object.assign(body, overrides.extraBody);
