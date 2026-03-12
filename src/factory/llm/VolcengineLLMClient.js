@@ -86,6 +86,10 @@ export default class VolcengineLLMClient {
   buildBody(messages, overrides = {}) {
     const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, (this.config.chatModel || this.config.model || 'doubao-pro-4k'));
     applyOpenAITools(body, this.config, overrides);
+    const thinkingType = overrides.thinkingType ?? overrides.thinking_type ?? this.config.thinkingType ?? this.config.thinking_type;
+    if (thinkingType !== undefined && thinkingType !== '') {
+      body.thinking = { type: thinkingType };
+    }
     return body;
   }
 

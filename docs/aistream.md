@@ -228,7 +228,7 @@ constructor(options = {})
 |------|------|------|--------|
 | `name` | `string` | 工作流名称 | `'base-stream'` |
 | `description` | `string` | 描述 | `'基础工作流'` |
-| `version` | `string` | 版本号 | `'1.0.5'` |
+| `version` | `string` | 版本号 | `'2.0.0'` |
 | `author` | `string` | 作者标识 | `'unknown'` |
 | `priority` | `number` | 工作流优先级 | `100` |
 | `config` | `Object` | AI调用配置 | `{ enabled: true, temperature: 0.8, ... }` |
@@ -242,7 +242,7 @@ constructor(options = {})
 
 ### 全局配置
 
-工作流系统全局配置位于 `data/server_bots/aistream.yaml`：
+工作流系统配置位于 `data/server_bots/{port}/aistream.yaml`（**随端口变化**）：
 
 **关键配置项**：
 - `llm.Provider` - LLM提供商（`volcengine`/`xiaomimimo`/`openai`/`openai_compat`/`gemini`/`anthropic`/`azure_openai`）

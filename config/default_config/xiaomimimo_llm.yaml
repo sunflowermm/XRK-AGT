@@ -29,12 +29,22 @@ chatModel: "mimo-v2-flash"
 temperature: 0.7
 # 最大输出token数（注意：MiMo 使用 max_completion_tokens）
 maxTokens: 4096
+# Token 字段名（MiMo 需要 max_completion_tokens）
+tokenField: "max_completion_tokens"
 # Top-p采样（0-1）
 topP: 0.95
 # 存在惩罚（-2.0到2.0）
 presencePenalty: 0
 # 频率惩罚（-2.0到2.0）
 frequencyPenalty: 0
+# 停止词（最多 4 个序列；为空表示不传 stop）
+stop: []
+# 思维链模式（thinking.type）
+thinkingType: "disabled"
+# 响应格式（MiMo 官方为 response_format 对象；此处只配置 type）
+# - text: 文本（通常不需要显式设置）
+# - json_object: 结构化 JSON（beta，按需）
+responseFormat: ""
 # 请求超时时间（毫秒）
 timeout: 360000
 

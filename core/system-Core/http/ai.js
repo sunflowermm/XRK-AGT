@@ -420,6 +420,7 @@ async function handleChatCompletionsV3(req, res) {
   
   try {
     let totalContent = '';
+    let totalReasoningContent = '';
     let isFirstChunk = true;
     let chunkCount = 0;
 
@@ -427,8 +428,9 @@ async function handleChatCompletionsV3(req, res) {
       const hasTextDelta = typeof delta === 'string' && delta.length > 0;
       const hasMcpTools = Array.isArray(metadata?.mcp_tools) && metadata.mcp_tools.length > 0;
       const hasToolCalls = Array.isArray(metadata?.tool_calls) && metadata.tool_calls.length > 0;
+      const hasReasoningDelta = typeof metadata?.reasoning_content === 'string' && metadata.reasoning_content.length > 0;
 
-      if (!hasTextDelta && !hasMcpTools && !hasToolCalls) return;
+      if (!hasTextDelta && !hasMcpTools && !hasToolCalls && !hasReasoningDelta) return;
 
       if (hasTextDelta) {
         totalContent += delta;
@@ -447,6 +449,18 @@ async function handleChatCompletionsV3(req, res) {
           // 工具结果统一通过“纯 mcp_tools chunk”下发，避免同一批工具在文本chunk和独立chunk中各出现一次
         }));
 
+        isFirstChunk = false;
+      }
+
+      if (hasReasoningDelta) {
+        totalReasoningContent += metadata.reasoning_content;
+        writeSSEChunk(res, createOpenAIChunk({
+          id,
+          created: now,
+          model: modelName,
+          delta: isFirstChunk ? { role: 'assistant', reasoning_content: metadata.reasoning_content } : { reasoning_content: metadata.reasoning_content },
+          finishReason: null
+        }));
         isFirstChunk = false;
       }
 

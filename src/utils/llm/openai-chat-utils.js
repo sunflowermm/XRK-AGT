@@ -21,7 +21,10 @@ function applyOptionalFields(body, overrides, config, mapping) {
 
 export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides = {}, defaultModel) {
   const temperature = pick(overrides, config, ['temperature']);
-  const maxCompletionTokens = pick(overrides, config, ['maxCompletionTokens', 'max_completion_tokens', 'maxTokens', 'max_tokens']);
+  const maxCompletionTokensExplicit = pick(overrides, config, ['maxCompletionTokens', 'max_completion_tokens']);
+  const maxTokensCompat = pick(overrides, config, ['maxTokens', 'max_tokens']);
+  const maxCompletionTokens = maxCompletionTokensExplicit ?? maxTokensCompat;
+  const tokenField = pick(overrides, config, ['tokenField', 'token_field']);
 
   const body = {
     model: pick(overrides, config, ['model', 'chatModel']) || defaultModel,
@@ -31,8 +34,22 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
   };
 
   if (maxCompletionTokens !== undefined) {
-    body.max_completion_tokens = maxCompletionTokens;
-    body.max_tokens = maxCompletionTokens; // 兼容旧网关
+    const want = (tokenField || '').toString().trim().toLowerCase();
+    const useBoth = want === 'both';
+    const useMaxCompletionTokens =
+      want === 'max_completion_tokens'
+      // 未显式指定 tokenField 时：若调用方显式传了 max_completion_tokens，则优先走该字段
+      || (!want && maxCompletionTokensExplicit !== undefined);
+
+    if (useBoth) {
+      body.max_completion_tokens = maxCompletionTokens;
+      body.max_tokens = maxCompletionTokens;
+    } else if (useMaxCompletionTokens) {
+      body.max_completion_tokens = maxCompletionTokens;
+    } else {
+      // 默认仅发送 max_tokens，避免部分上游（如火山引擎）对两个字段互斥报错
+      body.max_tokens = maxCompletionTokens;
+    }
   }
 
   applyOptionalFields(body, overrides, config, [

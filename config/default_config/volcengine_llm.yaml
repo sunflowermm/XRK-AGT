@@ -33,6 +33,13 @@ chatModel: "doubao-pro-4k"
 temperature: 0.8
 # 最大输出token数
 maxTokens: 4096
+# Token 字段名（火山引擎 max_tokens 与 max_completion_tokens 互斥）
+# - max_tokens: 仅发送 max_tokens（推荐）
+# - max_completion_tokens: 仅发送 max_completion_tokens
+# - both: 同时发送两者（仅用于少数旧网关/自建兼容层，不推荐）
+tokenField: "max_tokens"
+# 深度思考（thinking.type），按官方文档可设置 disabled/enabled
+thinkingType: "disabled"
 # Top-p采样（0-1）
 topP: 0.9
 # 存在惩罚（-2.0到2.0），控制模型重复已出现的内容

@@ -188,6 +188,21 @@ export default class XiaomiMiMoLLMClient {
       body.thinking = { type: thinkingType };
     }
 
+    // MiMo: response_format 官方为对象，这里兼容 string/对象两种写法
+    const rf = overrides.response_format ?? overrides.responseFormat ?? this.config.response_format ?? this.config.responseFormat;
+    if (rf !== undefined) {
+      const type = typeof rf === 'string' ? rf.trim() : rf?.type;
+      if (type) {
+        body.response_format = { type };
+      } else {
+        delete body.response_format;
+      }
+    } else if (typeof body.response_format === 'string') {
+      const type = body.response_format.trim();
+      if (type) body.response_format = { type };
+      else delete body.response_format;
+    }
+
     // MiMo 对 tool.name 有严格限制：出站 tools 需要规范化名称
     if (Array.isArray(body.tools) && body.tools.length > 0) {
       body.tools = this.normalizeTools(body.tools);
@@ -282,6 +297,7 @@ export default class XiaomiMiMoLLMClient {
       const toolCallsCollector = {
         toolCalls: [],
         content: '',
+        reasoningContent: '',
         finishReason: null
       };
       
@@ -293,6 +309,7 @@ export default class XiaomiMiMoLLMClient {
         currentMessages.push({
           role: 'assistant',
           content: toolCallsCollector.content || null,
+          reasoning_content: toolCallsCollector.reasoningContent || null,
           tool_calls: toolCallsCollector.toolCalls
         });
         
@@ -330,6 +347,11 @@ export default class XiaomiMiMoLLMClient {
 
         if (finishReason) {
           collector.finishReason = finishReason;
+        }
+
+        if (delta?.reasoning_content && typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0) {
+          collector.reasoningContent += delta.reasoning_content;
+          if (typeof onDelta === 'function') onDelta('', { reasoning_content: delta.reasoning_content });
         }
 
         if (delta?.content && typeof delta.content === 'string' && delta.content.length > 0) {

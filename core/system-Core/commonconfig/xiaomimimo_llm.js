@@ -67,6 +67,14 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             default: 4096,
             component: 'InputNumber'
           },
+          tokenField: {
+            type: 'string',
+            label: 'Token 字段名',
+            description: 'MiMo 使用 max_completion_tokens；建议保持默认值',
+            enum: ['max_tokens', 'max_completion_tokens', 'both'],
+            default: 'max_completion_tokens',
+            component: 'Select'
+          },
           topP: {
             type: 'number',
             label: 'Top P',
@@ -110,12 +118,13 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             default: 'disabled',
             component: 'Select'
           },
-          response_format: {
+          responseFormat: {
             type: 'string',
-            label: '响应格式',
-            description: '响应格式，如 json_object；留空按默认文本模式返回',
+            label: '响应格式（response_format.type）',
+            description: 'MiMo 官方字段为 response_format 对象；这里简化为选择 type（text/json_object）。留空则不传 response_format。',
+            enum: ['text', 'json_object', ''],
             default: '',
-            component: 'Input'
+            component: 'Select'
           },
           toolChoice: {
             type: 'string',

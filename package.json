@@ -1,6 +1,6 @@
 {
   "name": "xrk-agt",
-  "version": "1.0.5",
+  "version": "2.0.0",
   "author": "Xrkseek",
   "description": "多平台、多Tasker、工作流驱动型智能体平台 - Multi-platform, multi-Tasker, workflow-driven intelligent agent platform",
   "main": "app.js",
@@ -9,7 +9,7 @@
     "node": ">=24.13.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@10.32.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/sunflowermm/XRK-AGT.git"
