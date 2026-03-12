@@ -8,6 +8,7 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D24.13.0-brightgreen.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Docker-blue.svg)](https://github.com/sunflowermm/XRK-AGT)
 [![Version](https://img.shields.io/badge/version-1.0.5-orange.svg)](https://github.com/sunflowermm/XRK-AGT)
+[![GitHub Repo stars](https://img.shields.io/github/stars/sunflowermm/XRK-AGT?style=social)](https://github.com/sunflowermm/XRK-AGT/stargazers)
 
 </div>
 
@@ -129,6 +130,14 @@ flowchart LR
 **详细架构说明**：请参见 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)
 
 ---
+
+## ⭐ Star 趋势
+
+<div align="center">
+
+[![Star History Chart](https://api.star-history.com/svg?repos=sunflowermm/XRK-AGT&type=Date)](https://star-history.com/#sunflowermm/XRK-AGT&Date)
+
+</div>
 
 ## 🚀 快速开始
 
