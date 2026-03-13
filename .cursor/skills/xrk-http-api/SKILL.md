@@ -17,7 +17,7 @@ description: 当你需要开发或排查 HTTP API（core/*/http/*.js）、理解
 
 - API 模块放在 `core/*/http/*.js`，导出对象或继承 HttpApi。
 - 路由数组 `routes` 中声明 method/path/handler/middleware。
-- 鉴权由 Server 层 `_authMiddleware` 完成，业务 handler 不重复校验（详见 `xrk-auth` skill）。
+- 鉴权策略由各模块自行决定：system-Core HTTP 推荐在模块内通过 `Bot.checkApiAuthorization(req)` 统一使用系统级 API Key，其他 Core 可自定义或选择接入该能力（详见 `xrk-auth` skill）。
 
 ## HttpResponse（src/utils/http-utils.js）
 

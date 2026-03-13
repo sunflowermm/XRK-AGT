@@ -408,11 +408,10 @@ handler: async (req, res, bot) => {
 
 以下建议适用于在 `core/*/http/` 下新增或维护 API 模块，与 system-Core 现有实现保持一致，便于维护和排查。
 
-### 1. 鉴权：不做重复校验
+### 1. 鉴权：位置清晰、不做重复校验
 
-- **所有以 `/api/` 开头的请求**在进入业务 handler 前，已由 Server 层（`src/bot.js` 的 `_authMiddleware`）完成鉴权（白名单 / 本地 / 同源 Cookie / API Key）。
-- **业务层只需做参数与业务逻辑**，不要在 handler 内再写 `checkApiAuthorization`、`ensureAuth` 或自行校验 API Key，否则属于冗余且易与全局逻辑不一致。
-- 详见 **[AUTH.md](AUTH.md)**。
+- system-Core 下的 HTTP API 在各自模块内通过 `Bot.checkApiAuthorization(req)` 统一使用系统级 API Key（详见 **[AUTH.md](AUTH.md)**）。
+- 其他 Core 的 HTTP 模块可以选择接入系统级 API Key，或实现自有鉴权方案，但应保持“**一处判断、避免重复**”的原则：不要既在 Server 层又在业务 handler 内多次判断同一层级的 Key。
 
 ### 2. 响应格式：统一用 HttpResponse
 

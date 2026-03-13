@@ -6,7 +6,15 @@ alwaysApply: false
 
 # 基础设施层约定
 
-- **职责**：只提供基类、加载器、工具、工厂；不包含业务逻辑（业务在 `core/*`）。
-- **错误**：使用 `#utils/error-handler.js` 的 `errorHandler.handle()` 与 `ErrorCodes`；HTTP 响应用 `HttpResponse.error()`。
-- **日志**：使用 `BotUtil.makeLog`（或注入的 logger），不随意 `console.log` 业务信息。
-- **接口稳定**：修改基类或加载器对外 API 时，需兼容现有 core 与 `docs/` 文档；新增可选参数优于破坏性变更。
+## 职责边界
+
+- 本层只提供基类、加载器、工具、工厂；不包含业务逻辑（业务在 `core/*`）。
+
+## 错误与日志
+
+- 错误处理：使用 `#utils/error-handler.js` 的 `errorHandler.handle()` 与 `ErrorCodes`；HTTP 响应用 `HttpResponse.error()`。
+- 日志：使用 `BotUtil.makeLog`（或注入的 logger），不在业务逻辑处随意 `console.log`。
+
+## 接口稳定
+
+- 修改基类或加载器对外 API 时，需兼容现有 core 与 `docs/` 文档；优先新增可选参数，避免破坏性变更。

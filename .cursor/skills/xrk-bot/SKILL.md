@@ -14,7 +14,7 @@ description: 当你需要理解 XRK-AGT 的运行时核心（Bot 主类）、事
 
 ## 关键职责
 
-- 启动 HTTP/HTTPS/WebSocket 服务器和 `_authMiddleware` 鉴权中间件。
+- 启动 HTTP/HTTPS/WebSocket 服务器，以及基础中间件（压缩、安全头、CORS、日志、基础认证等）。
 - 初始化加载器：TaskerLoader / ApiLoader / StreamLoader / PluginsLoader。
 - 维护全局 `Bot` 对象：`Bot`（EventEmitter 实例）、`Bot[self_id]`（具体 Bot 会话）、`Bot.tasker` / `Bot.wsf` / `Bot.uin` / `Bot.em()` / `Bot.makeLog()`。
 

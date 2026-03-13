@@ -8,35 +8,29 @@ alwaysApply: true
 ## Constructor 内不要定义易变状态
 
 - **禁止**在 `constructor` 里定义会被反复创建、或作为“缓存/状态容器”的变量（如 `this.cache = new Map()`、`this.xxx = {}`）。
-- **原因**：热加载或多次实例化时，constructor 会重复执行，导致 Map/对象被重新创建、引用错乱或“无限刷新”感，且不利于内存与行为稳定。
-- **正确做法**：
-  - 需要实例级缓存/状态时，用**类字段**在声明处初始化（如 `cache = new Map()`），或放在只调用一次的 `init()` 里；
-  - constructor 内只做必要的 `super()` 调用和固定配置（如 `name`、`event`），不创建 Map/Set/大对象。
+- **原因**：热加载或多次实例化时 constructor 会重复执行，导致引用错乱或“无限刷新”感。
+- **正确做法**：需要实例级缓存/状态时，用**类字段**在声明处初始化（如 `cache = new Map()`），或放在只调用一次的 `init()` 里；constructor 内只做 `super()` 与固定配置（如 `name`、`event`）。
 
 ## segment 已挂全局，无需 import
 
-- **`segment`** 在插件加载时已挂到 `global.segment`（见 `src/infrastructure/plugins/loader.js`）。
-- 在**插件、事件、Tasker**等业务代码中**不要**写 `import { segment } from '#oicq'`，直接使用全局 `segment` 即可（如 `segment.image(url)`）。
-- 避免在业务层重复导入，保证与框架一致、减少多份引用。
+- `segment` 在插件加载时已挂到 `global.segment`（见 `src/infrastructure/plugins/loader.js`）。
+- 在插件、事件、Tasker 中**不要**写 `import { segment } from '#oicq'`，直接使用全局 `segment`（如 `segment.image(url)`）。
 
 ## 充分利用 Bot 对象
 
-- **不要**在业务里手动 `import Bot` 或 `new Bot()`；由启动脚本（`node app` / `start.js`）创建并挂载全局 `Bot`。
-- 在**插件 / Tasker / 事件监听器**中：直接用全局 `Bot`、`Bot[self_id]`、`Bot.em()`、`Bot.tasker`、`Bot.makeLog()` 等（详见 `docs/bot.md`）。
-- 在 **HTTP API handler** 中：使用注入的 `req.bot` 或 `Bot` 参数（由 ApiLoader 传入），拿服务 URL、多 Bot、调用内部路由等。
-- 常用：`Bot[self_id]` 取子 Bot、`Bot.em()` 发事件、`bot.getServerUrl()`、`bot.callRoute()`，避免自己维护重复的“全局实例”。
+- **不要**在业务里手动 `import Bot` 或 `new Bot()`；由 `node app` / `start.js` 创建并挂载全局 `Bot`。
+- **插件 / Tasker / 事件监听器**：直接用全局 `Bot`、`Bot[self_id]`、`Bot.em()`、`Bot.tasker`、`Bot.makeLog()` 等（详见 `docs/bot.md`）。
+- **HTTP API handler**：使用注入的 `req.bot` 或路由第三参 `Bot`，用于 `getServerUrl()`、`callRoute()`、多 Bot 等。
 
 ## HttpResponse（src/utils/http-utils.js）
 
-- **用途**：统一 HTTP 响应格式与错误处理，所有 `core/*/http/*.js` 的 handler 应优先使用。
-- **入口**：`import { HttpResponse } from '#utils/http-utils.js'`（注意是 `http-utils.js`，不是 http-response）。
+- **导入**：`import { HttpResponse } from '#utils/http-utils.js'`（文件名是 http-utils，不是 http-response）。
+- **用途**：统一 HTTP 响应格式与错误处理；`core/*/http/*.js` 的 handler 应优先使用。
 - **常用静态方法**：
-  - `HttpResponse.success(res, data, message)`：成功，返回 `{ success: true, message, ...data }`；
-  - `HttpResponse.error(res, error, statusCode, context)`：统一错误格式与日志；
-  - `HttpResponse.validationError(res, message, code)`：400 参数校验错误；
-  - `HttpResponse.notFound(res, message)`：404；
-  - `HttpResponse.unauthorized(res, message)`：401；
-  - `HttpResponse.forbidden(res, message)`：403；
-  - `HttpResponse.asyncHandler(handler, context)`：包装异步 handler，自动 try/catch 并调 `HttpResponse.error`。
-- **流式/SSE**：`HttpResponse.streamResponse(res, streamHandler, context)`；**MCP**：`HttpResponse.jsonRpcError` / `jsonRpcSuccess` / `validateJsonRpcRequest`。
-- **约定**：handler 内用 `return HttpResponse.xxx(...)` 提前返回，不要混用 `res.json()` 与 `HttpResponse`，保证响应格式一致。
+  - `HttpResponse.success(res, data, message)`：成功；
+  - `HttpResponse.error(res, error, statusCode, context)`：统一错误与日志；
+  - `HttpResponse.validationError(res, message, code)`：400；
+  - `HttpResponse.notFound(res, message)`、`HttpResponse.unauthorized(res, message)`、`HttpResponse.forbidden(res, message)`；
+  - `HttpResponse.asyncHandler(handler, context)`：包装异步 handler，自动 try/catch 并调 `HttpResponse.error`；
+  - 流式/SSE：`HttpResponse.streamResponse(res, streamHandler, context)`；MCP：`jsonRpcError` / `jsonRpcSuccess` / `validateJsonRpcRequest`。
+- **约定**：handler 内用 `return HttpResponse.xxx(...)` 提前返回，不要与 `res.json()` 混用。

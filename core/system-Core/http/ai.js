@@ -294,7 +294,6 @@ async function handleChatCompletionsV3(req, res) {
     }
   }
 
-  // 鉴权由 src/bot.js _authMiddleware 统一处理，/api/* 到达此处已通过校验
   const streamFlag = Boolean(pickFirst(body, ['stream']));
   const provider = resolveProviderFromRequest(body);
 
