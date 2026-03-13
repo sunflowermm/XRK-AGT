@@ -870,14 +870,16 @@ export default class Bot extends EventEmitter {
         filter: (req, res) => {
           // 跳过压缩的情况
           if (req.headers['x-no-compression']) return false;
-          
-          if (this._isApiPath(req.path)) {
-            const contentType = res.getHeader('content-type') || '';
-            return compression.filter(req, res) && 
+
+          const isApiRequest = typeof req.path === 'string' && req.path.startsWith('/api/');
+
+          if (isApiRequest) {
+            const contentType = String(res.getHeader('content-type') || '');
+            return compression.filter(req, res) &&
                    (contentType.includes('json') || contentType.includes('text'));
           }
-          
-          // 静态文件：使用标准过滤
+
+          // 其他响应：使用标准过滤
           return compression.filter(req, res);
         },
         level: cfg.server.compression.level || 6,
@@ -1193,7 +1195,7 @@ export default class Bot extends EventEmitter {
 
     // ========== 目录索引与静态文件服务 ==========
     this.express.use((req, res, next) => {
-      if (this._isApiPath(req.path)) return next();
+      if (typeof req.path === 'string' && req.path.startsWith('/api/')) return next();
       if (this._checkHeadersSent(res, next)) return;
       this._directoryIndexMiddleware(req, res, next);
     });
@@ -1268,7 +1270,7 @@ export default class Bot extends EventEmitter {
     }
     
     this.express.use((req, res, next) => {
-      if (this._isApiPath(req.path)) return next();
+      if (typeof req.path === 'string' && req.path.startsWith('/api/')) return next();
       if (this._checkHeadersSent(res, next)) return;
       
       const staticRoot = req.staticRoot || paths.www;
@@ -1285,7 +1287,7 @@ export default class Bot extends EventEmitter {
    * 跳过API路由，只处理静态文件请求
    */
   _directoryIndexMiddleware(req, res, next) {
-    if (this._isApiPath(req.path)) return next();
+    if (typeof req.path === 'string' && req.path.startsWith('/api/')) return next();
     if (res.headersSent) return next();
     if (res.headersSent) {
       return next();
@@ -1390,7 +1392,7 @@ export default class Bot extends EventEmitter {
 
   /** 静态文件安全中间件：跳过 API 路径，仅对静态路径做规范化与隐藏规则校验 */
   _staticSecurityMiddleware(req, res, next) {
-    if (this._isApiPath(req.path)) {
+    if (typeof req.path === 'string' && req.path.startsWith('/api/')) {
       return next();
     }
     
@@ -2529,7 +2531,7 @@ export default class Bot extends EventEmitter {
       if (this._checkHeadersSent(res)) return;
       
       // API请求返回JSON格式404
-      if (this._isApiPath(req.path)) {
+      if (typeof req.path === 'string' && req.path.startsWith('/api/')) {
         return res.status(404).json({
           success: false,
           error: '未找到',
@@ -2568,25 +2570,25 @@ export default class Bot extends EventEmitter {
     // 全局错误处理（捕获所有未处理的错误）
     this.express.use((err, req, res, next) => {
       if (this._checkHeadersSent(res, next, err)) return;
-      
-      const isApiRequest = this._isApiPath(req.path);
-      
+
+      const isApiRequest = typeof req.path === 'string' && req.path.startsWith('/api/');
+
       BotUtil.makeLog('error', `请求错误 [${req.requestId || 'unknown'}]: ${err.message}`, '服务器', err);
-      
+
       if (isApiRequest) {
         res.status(err.status || 500).json({
           success: false,
           error: '内部服务器错误',
-          message: process.env.NODE_ENV === 'production' ?
-            '发生了一个错误' : err.message,
+          message: process.env.NODE_ENV === 'production'
+            ? '发生了一个错误' : err.message,
           requestId: req.requestId,
           timestamp: Date.now()
         });
       } else {
         res.status(err.status || 500).json({
           error: '内部服务器错误',
-          message: process.env.NODE_ENV === 'production' ?
-            '发生了一个错误' : err.message,
+          message: process.env.NODE_ENV === 'production'
+            ? '发生了一个错误' : err.message,
           timestamp: Date.now()
         });
       }
