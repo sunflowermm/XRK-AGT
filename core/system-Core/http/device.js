@@ -48,6 +48,12 @@ import {
     getAudioFileList
 } from '#utils/deviceutil.js';
 
+function ensureSystemCoreAuth(req, res, Bot, context) {
+    if (!Bot?.checkApiAuthorization?.(req)) {
+        return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.device');
+    }
+}
+
 // ==================== 全局存储 ====================
 const devices = new Map();
 const deviceWebSockets = new Map();
@@ -2155,6 +2161,8 @@ export default {
             method: 'POST',
             path: '/api/device/register',
             handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+                    const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.register');
+                    if (authResp) return authResp;
                     const device = await deviceManager.registerDevice(
                         {
                             ...req.body,
@@ -2169,7 +2177,9 @@ export default {
         {
             method: 'POST',
             path: '/api/device/:deviceId/ai',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+                    const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.ai');
+                    if (authResp) return authResp;
                     const deviceId = req.params.deviceId;
                     const { text, workflow, persona, profile, llm, model, llmProfile } = req.body || {};
                     if (!text || !String(text).trim()) {
@@ -2193,7 +2203,9 @@ export default {
         {
             method: 'GET',
             path: '/api/devices',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+                const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.list');
+                if (authResp) return authResp;
                 const list = deviceManager.getDeviceList();
                 HttpResponse.success(res, { devices: list, count: list.length });
             }, 'device.list')
@@ -2202,7 +2214,9 @@ export default {
         {
             method: 'GET',
             path: '/api/device/:deviceId',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+                const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.get');
+                if (authResp) return authResp;
                 const device = deviceManager.getDevice(req.params.deviceId);
                 if (device) {
                     HttpResponse.success(res, { device });
@@ -2215,7 +2229,9 @@ export default {
         {
             method: 'GET',
             path: '/api/device/:deviceId/asr/sessions',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+                const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.asr.sessions');
+                if (authResp) return authResp;
                 const sessions = Array.from(asrSessions.entries())
                     .filter(([, s]) => s.deviceId === req.params.deviceId)
                     .map(([sid, s]) => ({
@@ -2235,7 +2251,9 @@ export default {
         {
             method: 'GET',
             path: '/api/device/:deviceId/asr/recordings',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+                    const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.asr.recordings');
+                    if (authResp) return authResp;
                     const recordings = await getAudioFileList(
                         deviceManager.AUDIO_SAVE_DIR,
                         req.params.deviceId
@@ -2253,6 +2271,8 @@ export default {
             method: 'POST',
             path: '/api/device/tts',
             handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+                const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.tts');
+                if (authResp) return authResp;
                 const { device_id, text } = req.body || {};
                 if (!text || !String(text).trim()) {
                     return HttpResponse.validationError(res, '缺少文本内容');

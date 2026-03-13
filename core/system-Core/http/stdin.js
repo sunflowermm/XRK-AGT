@@ -3,6 +3,12 @@ import path from "path";
 import paths from '#utils/paths.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
+function ensureSystemCoreAuth(req, res, Bot, context) {
+  if (!Bot?.checkApiAuthorization?.(req)) {
+    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.stdin');
+  }
+}
+
 /**
  * 标准输入API
  * 提供命令执行和事件触发功能
@@ -17,6 +23,8 @@ export default {
       method: 'GET',
       path: '/api/stdin/status',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'stdin.status');
+        if (authResp) return authResp;
         const stdinHandler = global.stdinHandler;
         
         if (!stdinHandler) {
@@ -42,6 +50,8 @@ export default {
       method: 'POST',
       path: '/api/stdin/command',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'stdin.command');
+        if (authResp) return authResp;
         const stdinHandler = global.stdinHandler;
         if (!stdinHandler) return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.command');
 
@@ -70,6 +80,8 @@ export default {
       method: 'POST',
       path: '/api/stdin/event',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'stdin.event');
+        if (authResp) return authResp;
         const stdinHandler = global.stdinHandler;
         if (!stdinHandler) return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.event');
 

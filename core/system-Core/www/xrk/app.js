@@ -4526,34 +4526,6 @@ class App {
     const content = document.getElementById('content');
     if (!content) return;
 
-    const hasApiKey = !!localStorage.getItem('apiKey');
-    if (!hasApiKey) {
-      content.innerHTML = `
-        <div class="config-page config-page-auth-required">
-          <section class="config-main config-auth-required-card">
-            <div class="config-empty">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 64px; height: 64px; margin: 0 auto 16px; opacity: 0.5;">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
-              <h2 style="margin-bottom: 8px;">需要 API 密钥</h2>
-              <p style="color: var(--text-muted); margin-bottom: 16px;">配置管理需要验证身份。请先在页面右上角填写并保存 API 密钥后再使用。</p>
-              <button type="button" class="btn btn-primary" id="configOpenApiKeyBtn">打开 API 密钥输入</button>
-            </div>
-          </section>
-        </div>
-      `;
-      const btn = document.getElementById('configOpenApiKeyBtn');
-      if (btn) btn.addEventListener('click', () => {
-        const box = document.getElementById('apiKeyBox');
-        if (box) {
-          box.classList.add('show');
-          const input = document.getElementById('apiKey');
-          if (input) input.focus();
-        }
-      });
-      return;
-    }
-
     // 如无现有状态则初始化，避免每次进入配置页都丢失已选项
     if (!this._configState) {
       this._configState = {

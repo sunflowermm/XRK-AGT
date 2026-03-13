@@ -336,7 +336,7 @@ XRK-AGT/
 
 ### 1. 全局 URLPattern API
 
-**应用场景**：HTTP重定向规则匹配、白名单路径匹配
+**应用场景**：HTTP 重定向规则匹配、路径模式匹配（如按前缀区分 API/静态资源）
 
 ```javascript
 // 无需导入，直接使用
@@ -346,7 +346,6 @@ const match = pattern.test({ pathname: '/api/users' });
 
 **使用位置**：
 - `src/utils/http-business.js` - 重定向管理器
-- `src/bot.js` - 认证中间件白名单匹配
 
 ### 2. Error.isError()
 

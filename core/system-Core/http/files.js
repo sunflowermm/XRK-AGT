@@ -9,6 +9,12 @@ import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import { parseMultipartData } from '#utils/multipart-parser.js';
 
+function ensureSystemCoreAuth(req, res, Bot, context) {
+  if (!Bot?.checkApiAuthorization?.(req)) {
+    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.files');
+  }
+}
+
 const uploadDir = path.join(paths.data, 'uploads');
 const mediaDir = path.join(paths.data, 'media');
 const fileMap = new Map();
@@ -29,6 +35,8 @@ export default {
       method: 'POST',
       path: '/api/file/upload',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'file.upload');
+        if (authResp) return authResp;
         const contentType = req.headers['content-type'] || '';
         if (!contentType.includes('multipart/form-data')) return HttpResponse.validationError(res, '请使用 multipart/form-data 格式上传文件');
         const { files } = await parseMultipartData(req);
@@ -80,6 +88,8 @@ export default {
       method: 'GET',
       path: '/api/file/:id',
       handler: HttpResponse.asyncHandler(async (req, res) => {
+        const authResp = ensureSystemCoreAuth(req, res, req.bot || global.Bot, 'file.get');
+        if (authResp) return authResp;
         // 输入验证
         const { id } = req.params;
         if (!id || typeof id !== 'string' || id.length > 50) {

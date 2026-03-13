@@ -11,17 +11,11 @@ description: 当你需要解释/排查 HTTP 或 WebSocket 的 401、白名单、
   - `_checkApiAuthorization`
   - `wsConnect`
 
-## 核心原则
+## 核心原则（v2）
 
-- **鉴权只在 Server 层做一次**；`core/*/http/*.js` 业务 handler 不做重复校验。
-
-## HTTP 鉴权判定顺序（概念）
-
-1. 白名单路径（`server.auth.whitelist`）
-2. 静态资源（非 `/api/`）
-3. 本地连接
-4. 同源 Cookie（UI 免 Key）
-5. `/api/*` 必须通过 API Key（除非 `server.auth.apiKey.enabled=false`）
+- Server 层只做静态资源、本地连接等基础放行，不再对 `/api/*` 做统一鉴权。
+- **system-Core HTTP**（`core/system-Core/http/*.js`）在模块内使用 `Bot.checkApiAuthorization(req)` 做系统级 API Key 校验。
+- 其他 Core 的 HTTP / Tasker 可以自由选择鉴权方式；如需复用系统 API Key，同样调用 `Bot.checkApiAuthorization(req)`。
 
 ## API Key 携带方式（任意一种）
 

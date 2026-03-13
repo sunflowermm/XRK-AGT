@@ -556,7 +556,7 @@ export default class ConfigBase {
    * @returns {Promise<boolean>} 是否成功
    * @throws {Error} 如果路径不是数组类型
    * @example
-   * await config.append('server.auth.whitelist', '/new-path');
+   * await config.append('server.auth.allowPaths', '/new-path');
    */
   async append(keyPath, value, options = {}) {
     const data = await this.read();
@@ -584,7 +584,7 @@ export default class ConfigBase {
    * @throws {Error} 如果路径不是数组类型
    * @example
    * // 按索引移除
-   * await config.remove('server.auth.whitelist', 0);
+   * await config.remove('server.auth.allowPaths', 0);
    * 
    * // 按条件移除
    * await config.remove('domains', (item) => item.domain === 'old.com');

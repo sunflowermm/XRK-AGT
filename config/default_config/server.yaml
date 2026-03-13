@@ -228,23 +228,6 @@ cors:
   exposeHeaders: ["X-Request-Id", "X-Response-Time"]
 
 # ----------------------------------------
-# UI 同源 Cookie 认证（Web 控制台）
-# ----------------------------------------
-uiCookie:
-  # 是否启用同源 Cookie 认证（用于 Web 控制台/同源前端免 API Key）
-  enabled: true
-  # 命中的路径前缀（默认 /xrk）
-  pathPrefix: "/xrk"
-  # Cookie 名称与值
-  name: "xrk_ui"
-  value: "1"
-  # Cookie 属性（默认 httpOnly + SameSite=Lax）
-  httpOnly: true
-  sameSite: "lax"
-  # 有效期（毫秒）
-  maxAgeMs: 86400000
-
-# ----------------------------------------
 # 认证配置
 # ----------------------------------------
 auth:
@@ -256,18 +239,6 @@ auth:
     file: "config/server_config/api_key.json"
     # 密钥长度（字符数）
     length: 64
-  # 无需认证的路径（白名单）
-  # 这些路径可以直接访问
-  whitelist:
-    - "/"              # 根目录
-    - "/favicon.ico"   # 网站图标
-    - "/health"        # 健康检查
-    - "/status"        # 状态接口
-    - "/robots.txt"    # 爬虫规则
-    - "/xrk"           # 葵子的API接口测试页面
-    - "/media/*"       # 媒体文件目录
-    - "/uploads/*"     # 上传文件目录
-    # 注意：静态文件默认允许访问
 
 # ----------------------------------------
 # 速率限制

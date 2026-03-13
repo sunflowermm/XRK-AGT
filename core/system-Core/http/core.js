@@ -7,6 +7,12 @@ import StreamLoader from '#infrastructure/aistream/loader.js';
 import { collectBotInventory, summarizeBots } from '#infrastructure/http/utils/botInventory.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
+function ensureSystemCoreAuth(req, res, Bot, context) {
+  if (!Bot?.checkApiAuthorization?.(req)) {
+    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.core');
+  }
+}
+
 const execAsync = promisify(exec);
 
 let __lastNetSample = null;
@@ -676,6 +682,8 @@ export default {
       method: 'GET',
       path: '/api/system/status',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'system.status');
+        if (authResp) return authResp;
         const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
         const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
         res.json(snapshot);
@@ -686,6 +694,8 @@ export default {
       method: 'GET',
       path: '/api/system/overview',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'system.overview');
+        if (authResp) return authResp;
         const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
         const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
         HttpResponse.success(res, {
@@ -709,6 +719,8 @@ export default {
       method: 'GET',
       path: '/api/status',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'system.api.status');
+        if (authResp) return authResp;
         const snapshot = await buildSystemSnapshot(Bot, { includeHistory: false });
         HttpResponse.success(res, {
           system: snapshot.system,
@@ -723,6 +735,8 @@ export default {
       method: 'GET',
       path: '/api/config',
       handler: async (req, res) => {
+        const authResp = ensureSystemCoreAuth(req, res, req.bot || global.Bot, 'system.api.config');
+        if (authResp) return authResp;
         function serialize(obj, seen = new WeakSet()) {
           if (typeof obj === 'function') {
             return obj.toString();
@@ -754,6 +768,8 @@ export default {
       method: 'GET',
       path: '/api/health',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'system.health');
+        if (authResp) return authResp;
         // 尝试获取 redis 实例（如果存在）
         let redisOk = false;
         try {

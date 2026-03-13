@@ -5,7 +5,11 @@
 import BotUtil from '#utils/botutil.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
-// 鉴权由 src/bot.js 的 _authMiddleware 统一处理，/api/* 请求到达前已校验
+function ensureSystemCoreAuth(req, res, Bot, context) {
+  if (!Bot?.checkApiAuthorization?.(req)) {
+    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-core.config');
+  }
+}
 const getConfig = (name) => global.ConfigManager?.get(name);
 const resolveConfigInstance = (name, keyPath) => {
   const config = getConfig(name);
@@ -28,6 +32,8 @@ export default {
       method: 'GET',
       path: '/api/config/list',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.list');
+        if (authResp) return authResp;
         let configList = (global.ConfigManager?.getList?.() || []);
         // 确保 system 配置排在第一位，其余按名称排序，提升前端展示的一致性
         configList = configList.slice().sort((a, b) => {
@@ -48,6 +54,8 @@ export default {
       method: 'GET',
       path: '/api/config/:name/structure',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.structure');
+        if (authResp) return authResp;
         const { name } = req.params;
         const config = getConfig(name);
         if (!config) return HttpResponse.notFound(res, `配置 ${name} 不存在`);
@@ -61,6 +69,8 @@ export default {
       method: 'GET',
       path: '/api/config/:name/flat-structure',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.flat-structure');
+        if (authResp) return authResp;
         const { name } = req.params;
         const { path: keyPath } = req.query || {};
         const { config, error } = resolveConfigInstance(name, keyPath);
@@ -75,6 +85,8 @@ export default {
       method: 'GET',
       path: '/api/config/:name/flat',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.flat');
+        if (authResp) return authResp;
         const { name } = req.params;
         const { path: keyPath } = req.query || {};
         const { config, error } = resolveConfigInstance(name, keyPath);
@@ -90,6 +102,8 @@ export default {
       method: 'POST',
       path: '/api/config/:name/batch-set',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.batch-set');
+        if (authResp) return authResp;
         const { name } = req.params;
         const { flat, path: keyPath, backup = true, validate = true } = req.body || {};
         if (!flat || typeof flat !== 'object') {
@@ -123,6 +137,8 @@ export default {
       method: 'GET',
       path: '/api/config/:name/read',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.read');
+        if (authResp) return authResp;
         const configName = req.params?.name;
         const { path: keyPath } = req.query || {};
         if (!configName) return HttpResponse.validationError(res, '配置名称不能为空');
@@ -142,6 +158,8 @@ export default {
       method: 'POST',
       path: '/api/config/:name/write',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.write');
+        if (authResp) return authResp;
         const configName = req.params?.name;
         const { data, path: keyPath, backup = true, validate = true } = req.body || {};
 
@@ -181,6 +199,8 @@ export default {
       method: 'POST',
       path: '/api/config/:name/validate',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.validate');
+        if (authResp) return authResp;
         const { name } = req.params;
         const { data } = req.body;
         const config = getConfig(name);
@@ -194,6 +214,8 @@ export default {
       method: 'POST',
       path: '/api/config/:name/backup',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.backup');
+        if (authResp) return authResp;
         const { name } = req.params;
         const config = getConfig(name);
         if (!config) return HttpResponse.notFound(res, `配置 ${name} 不存在`);
@@ -206,6 +228,8 @@ export default {
       method: 'POST',
       path: '/api/config/:name/reset',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.reset');
+        if (authResp) return authResp;
         const { name } = req.params;
         const { backup = true } = req.body;
         const config = getConfig(name);
@@ -219,6 +243,8 @@ export default {
       method: 'POST',
       path: '/api/config/clear-cache',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'config.clear-cache');
+        if (authResp) return authResp;
         global.ConfigManager.clearAllCache();
         HttpResponse.success(res, null, '已清除所有配置缓存');
       }, 'config.clear-cache')

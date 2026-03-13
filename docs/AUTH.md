@@ -1,49 +1,38 @@
-# 鉴权与认证
+# 鉴权与认证（v2 设计）
 
-> 项目内所有 HTTP/WebSocket 鉴权由 **Server 层（`src/bot.js`）统一负责**，业务路由不再做重复校验。详见 [Server 文档](server.md)。
+> 当前版本中，Server 层 **不再内置通用的 HTTP 白名单 / `/api/*` 统一鉴权逻辑**，仅负责静态资源与本地连接的“基础放行”。真正的鉴权由各 Core 自行负责，其中：
+> - **system-Core 下的所有 HTTP API 默认使用系统级 API Key**；
+> - 其他 Core（插件 HTTP / 业务 HTTP / 自定义 Tasker 等）由开发者自行实现鉴权，需要时可以复用 `Bot.apiKey`。
 
 ## 职责划分
 
 | 层级 | 职责 |
 |------|------|
-| **Server 层**（`src/bot.js`） | 统一鉴权：白名单、本地连接、同源 Cookie、API Key。未通过则 401/拒绝连接，请求不会进入业务路由。 |
-| **业务层**（`core/*/http/*.js`） | 仅做参数校验与业务逻辑，**不进行鉴权**。 |
-
-**「业务层不鉴权」的含义**：鉴权只在 Server 的中间件里做**一次**，每个接口的 handler 里不再重复写「检查 API Key」的代码；请求是否带 Key 仍由中间件判断，带错了或没带照样 401。
-
-**控制台（www/xrk）里填写的 API Key 有没有必要？**  
-**有必要**。控制台前端请求的都是 `/api/*`（如配置列表、机器人状态、插件列表等），这些请求在到达业务代码前会先经过中间件：要么通过「同源 Cookie」放行（同一浏览器同源访问且带 `xrk_ui=1` 的 Cookie），要么必须带上正确的 API Key（请求头 `X-API-Key` 或 `Authorization: Bearer <key>`）。控制台里填写的 Key 会被保存到 localStorage，并在每次请求时自动带上。若你关闭了同源 Cookie 或从别的域名/客户端访问，就必须填 Key，否则接口会返回 401。
+| **Server 层**（`src/bot.js`） | 仅做基础网络层处理：速率限制、Body 解析、静态资源映射、本地连接放行等；不再对 `/api/*` 做统一鉴权。 |
+| **system-Core HTTP**（`core/system-Core/http/*.js`） | 内置使用 `Bot.checkApiAuthorization(req)` 检查系统级 API Key，例如配置管理、AI 接口、设备管理、插件管理等。 |
+| **其他 Core HTTP / Tasker** | 自行决定是否以及如何鉴权；需要接入系统 API Key 时，可在模块内调用 `Bot.checkApiAuthorization(req)`。 |
 
 ---
 
-## HTTP 鉴权流程
+## Server 层基础处理流程（HTTP）
 
-请求经过认证中间件 `_authMiddleware` 时，按下列顺序判断，任一通过即放行：
+请求经过 `src/bot.js` 中的中间件时，认证相关只做两类“放行”判断：
 
-1. **白名单路径**  
-   路径与配置的 `server.auth.whitelist` 匹配则放行。支持：
-   - 精确：`/health`、`/status`
-   - 前缀：`/xrk/*`、`/media/*`
-   - 目录：`/uploads/`（等价于该目录下所有路径）
+1. **静态资源**  
+   路径为常见静态扩展名（如 `.html`、`.js`、`.ico`、图片、字体等）时直接放行。
 
-2. **静态资源**  
-   请求路径为常见静态扩展名（如 `.html`、`.js`、`.ico` 等）且**不以** `/api/` 开头时，直接放行。
+2. **本地连接**  
+   `req.ip` 为 localhost、127.0.0.1、::1 或私网 IP 时直接放行，便于本机调试。
 
-3. **本地连接**  
-   `req.ip` 为 localhost、127.0.0.1、::1 或内网 IP 时放行。
-
-4. **同源 Cookie（前端 UI）**  
-   请求带 Cookie `xrk_ui=1` 且 Origin/Referer 与当前服务同源时放行，便于控制台免 Key 访问。
-
-5. **API Key（仅对 `/api/*`）**  
-   路径以 `/api/` 开头时**必须**通过 API Key 校验，否则返回 401，且**不会进入任何业务 handler**。  
-   若配置中 `server.auth.apiKey.enabled === false`，则跳过本步。
+除此之外，Server 不再基于 URL 前缀、白名单配置或 Cookie 自动放行/拒绝；是否需要 Key、如何校验，完全交给上层模块处理。
 
 ---
 
 ## API Key 校验
 
-- **实现位置**：`src/bot.js` 的 `_checkApiAuthorization(req)`。
+- **实现位置**：
+  - 底层比对逻辑：`src/bot.js` 的 `_checkApiAuthorization(req)`；
+  - system-Core HTTP 统一入口：各 `core/system-Core/http/*.js` 文件顶部的 `ensureSystemCoreAuth`。
 - **密钥来源**：`server.auth.apiKey.file`（如 `config/server_config/api_key.json`）中的 `key`；未配置则启动时自动生成并写入该文件。
 - **请求中如何携带**（任选其一即可）：
   - 请求头：`X-API-Key: <key>`
@@ -56,60 +45,39 @@
 
 ## WebSocket 鉴权
 
-WebSocket 升级请求使用与 HTTP **相同的鉴权逻辑**（`src/bot.js` 的 `wsConnect`）：
+所有通过 Tasker 暴露的 WebSocket 路径（`Bot.wsf`）都会先经过 `src/bot.js` 的 `wsConnect` 统一鉴权：
 
-- 使用同一套 **白名单**（`_isPathWhitelisted`，与 HTTP 共用）。
-- 白名单或**本地连接**则放行。
-- 否则若 `server.auth.apiKey.enabled !== false`，则要求通过 `_checkApiAuthorization(req)`，失败则返回 `401 Unauthorized` 并关闭连接。
+- **本地/内网连接**：直接放行，便于开发调试；
+- **远程连接**：若 `server.auth.apiKey.enabled !== false`，则必须通过 `Bot.apiKey` 校验，否则返回 `401 Unauthorized` 并拒绝升级。
 
-客户端可在连接 URL 中带参：`wss://host/device?api_key=<key>`。
+客户端可以通过以下任一方式携带系统 API Key（与 HTTP 一致）：
 
----
+- 头部：`X-API-Key: <key>`
+- 头部：`Authorization: Bearer <key>`
+- 查询：`?api_key=<key>`（如 `wss://host/device?api_key=<key>`）
 
-## 配置示例
-
-```yaml
-# config/system.yaml 或通过控制台「认证配置」修改
-server:
-  auth:
-    apiKey:
-      enabled: true
-      file: "config/server_config/api_key.json"
-      length: 64
-    whitelist:
-      - "/"
-      - "/favicon.ico"
-      - "/health"
-      - "/status"
-      - "/robots.txt"
-      - "/media/*"
-      - "/uploads/*"
-```
-
-- **关闭 API Key**：将 `apiKey.enabled` 设为 `false`，则所有请求仅按白名单/本地/同源放行，不再校验 Key。
-- **白名单**：列表中的路径（及前缀/目录规则）无需 API Key 即可访问。
+各 Tasker 若还需要额外的业务级鉴权（例如设备 ID 白名单），可以在各自的 WS handler 内再做一层校验。
 
 ---
 
 ## 相关文件
 
-- **鉴权实现**：`src/bot.js`  
-  - `_isPathWhitelisted(pathName, whitelist)`：白名单匹配（HTTP/WS 共用）  
-  - `_authMiddleware(req, res, next)`：HTTP 认证中间件  
-  - `_checkApiAuthorization(req)`：API Key 校验  
-  - `wsConnect`：WebSocket 升级时的鉴权
-- **业务层说明**：`core/system-Core/http/config.js` 顶部注释（鉴权由 Server 统一处理，业务层不校验）。
-- **配置结构**：`core/system-Core/commonconfig/system.js` 中 `server.auth` 的 schema。
+- HTTP 基础与 API Key 校验：`src/bot.js`  
+  - `_authMiddleware(req, res, next)`：HTTP 基础放行（静态 / 本地）  
+  - `_checkApiAuthorization(req)` / `checkApiAuthorization(req)`：API Key 校验  
+  - `wsConnect`：WebSocket 升级与连接管理（不做统一鉴权）
+- system-Core HTTP 模块：`core/system-Core/http/*.js`  
+  - 在各自文件顶部定义 `ensureSystemCoreAuth`，内部调用 `Bot.checkApiAuthorization(req)` 做系统级鉴权。
 
 ---
 
 ## 常见问题
 
-**Q：为什么业务接口里看不到鉴权代码？**  
-A：有意为之。所有以 `/api/` 开头的请求在到达 `core/*/http/*` 前已由 `_authMiddleware` 校验，未通过会直接 401，业务层只需关心参数与逻辑。
+**Q：现在鉴权到底写在哪一层？**  
+A：Server 层只做“静态 + 本地”放行，不再判断是否需要 Key；系统级接口（system-Core HTTP）在各自模块里显式调用 `Bot.checkApiAuthorization(req)`，其他 Core 可自由选择是否接入系统 API Key 或自定义鉴权。
 
-**Q：如何允许某路径免 Key 访问？**  
-A：将该路径加入 `server.auth.whitelist`（支持精确、前缀 `*`、目录 `/` 匹配）。
+**Q：如何使用系统 API Key 保护自定义 HTTP 接口？**  
+A：在自定义 `core/<your-core>/http/*.js` 里，按 system-Core 的写法增加一个 `ensureAuth` 函数，在 handler 开头调用 `Bot.checkApiAuthorization(req)`，失败时返回 401 即可。
 
-**Q：本地调试不想带 Key？**  
-A：用 `localhost` / 127.0.0.1 访问会走「本地连接」分支自动放行；或临时将 `apiKey.enabled` 设为 `false`（仅建议在受控环境使用）。
+**Q：本地调试可以不带 Key 吗？**  
+A：可以。Server 会对本地/内网 IP 做基础放行，你也可以在开发环境里临时将 `server.auth.apiKey.enabled` 设为 `false`，关闭系统级 API Key 校验。

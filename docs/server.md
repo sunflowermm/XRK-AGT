@@ -918,7 +918,7 @@ rateLimit:
 
 ### 4. API 认证
 
-鉴权流程、API Key 携带方式、白名单与 WebSocket 说明见 **[AUTH.md](AUTH.md)**。
+系统级 API Key 的生成与校验见 **[AUTH.md](AUTH.md)**。
 
 ```yaml
 auth:
@@ -926,11 +926,6 @@ auth:
     enabled: true
     file: "config/server_config/api_key.json"
     length: 64
-  whitelist:
-    - "/"
-    - "/health"
-    - "/status"
-    - "/xrk"
 ```
 
 ---
@@ -1204,10 +1199,6 @@ auth:
   apiKey:
     enabled: true
     file: "config/server_config/api_key.json"
-  whitelist:
-    - "/"
-    - "/health"
-    - "/xrk"
 
 # 速率限制
 rateLimit:

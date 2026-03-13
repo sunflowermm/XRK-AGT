@@ -4,6 +4,12 @@ import { HttpResponse } from '#utils/http-utils.js';
 
 const getMCPServer = () => StreamLoader.mcpServer;
 
+function ensureSystemCoreAuth(req, res, Bot, context) {
+  if (!Bot?.checkApiAuthorization?.(req)) {
+    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.mcp');
+  }
+}
+
 const requireMCP = (res) => {
   const mcpServer = getMCPServer();
   if (!mcpServer) {
@@ -21,7 +27,9 @@ const setupSSEHeaders = (res) => {
   res.setHeader('X-Accel-Buffering', 'no');
 };
 
-const jsonrpcHandler = HttpResponse.asyncHandler(async (req, res) => {
+const jsonrpcHandler = HttpResponse.asyncHandler(async (req, res, Bot) => {
+  const authResp = ensureSystemCoreAuth(req, res, Bot, 'mcp.jsonrpc');
+  if (authResp) return authResp;
   const mcpServer = requireMCP(res);
   if (!mcpServer) return;
   try {
@@ -81,6 +89,8 @@ export default {
       method: 'GET',
       path: '/api/mcp/tools',
       handler: HttpResponse.asyncHandler(async (req, res) => {
+        const authResp = ensureSystemCoreAuth(req, res, req.bot || global.Bot, 'mcp.tools');
+        if (authResp) return authResp;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -93,6 +103,8 @@ export default {
       method: 'GET',
       path: '/api/mcp/tools/streams',
       handler: HttpResponse.asyncHandler(async (req, res) => {
+        const authResp = ensureSystemCoreAuth(req, res, req.bot || global.Bot, 'mcp.tools.streams');
+        if (authResp) return authResp;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -110,6 +122,8 @@ export default {
       method: 'GET',
       path: '/api/mcp/tools/stream/:streamName',
       handler: HttpResponse.asyncHandler(async (req, res) => {
+        const authResp = ensureSystemCoreAuth(req, res, req.bot || global.Bot, 'mcp.tools.stream');
+        if (authResp) return authResp;
         const { streamName } = req.params;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;

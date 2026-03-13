@@ -438,7 +438,7 @@ export default class SystemConfig extends ConfigBase {
             },
             whitelist: {
               type: 'object',
-              label: '白名单配置',
+              label: '白名单配置（保留给上层模块使用，Server 不再内置 HTTP 鉴权白名单）',
               component: 'SubForm',
               fields: {
                 groups: {
@@ -1149,16 +1149,16 @@ export default class SystemConfig extends ConfigBase {
                 },
                 whitelist: {
                   type: 'array',
-                  label: '白名单路径',
+                  label: '白名单路径（供业务模块按需使用）',
                   itemType: 'string',
-                  default: ['/', '/favicon.ico', '/health', '/status', '/robots.txt', '/media/*', '/uploads/*'],
+                  default: [],
                   component: 'Tags'
                 }
               }
             },
             uiCookie: {
               type: 'object',
-              label: 'UI 同源 Cookie 认证',
+              label: 'UI 同源 Cookie（已废弃，保留字段以兼容旧配置，不再在 Server 内置逻辑中使用）',
               component: 'SubForm',
               fields: {
                 enabled: {

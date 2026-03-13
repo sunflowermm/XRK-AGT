@@ -47,6 +47,12 @@ const getDefaultProvider = () => {
 
 const trimLower = (v) => (v || '').toString().trim().toLowerCase();
 
+function ensureSystemCoreAuth(req, res, Bot, context) {
+  if (!Bot?.checkApiAuthorization?.(req)) {
+    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.ai');
+  }
+}
+
 function getProviderConfig(provider) {
   return LLMFactory.getProviderConfig(provider) || {};
 }
@@ -634,17 +640,29 @@ export default {
     {
       method: 'POST',
       path: '/api/v3/chat/completions',
-      handler: HttpResponse.asyncHandler(handleChatCompletionsV3, 'ai.v3.chat.completions')
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'ai.v3.chat.completions');
+        if (authResp) return authResp;
+        return handleChatCompletionsV3(req, res);
+      }, 'ai.v3.chat.completions')
     },
     {
       method: 'GET',
       path: '/api/v3/models',
-      handler: HttpResponse.asyncHandler(handleModels, 'ai.v3.models')
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'ai.v3.models');
+        if (authResp) return authResp;
+        return handleModels(req, res);
+      }, 'ai.v3.models')
     },
     {
       method: 'GET',
       path: '/api/ai/models',
-      handler: HttpResponse.asyncHandler(handleModels, 'ai.models')
+      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'ai.models');
+        if (authResp) return authResp;
+        return handleModels(req, res);
+      }, 'ai.models')
     },
     {
       method: 'GET',

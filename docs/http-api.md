@@ -16,7 +16,7 @@
 - ✅ **灵活路由**：支持REST API和WebSocket
 - ✅ **中间件支持**：支持全局和路由级中间件
 - ✅ **热重载支持**：修改代码后自动重载
-- ✅ **统一鉴权**：`/api/*` 在进入业务路由前由 Server 层完成鉴权，业务 handler 无需再校验（详见 [AUTH.md](AUTH.md)）
+- ✅ **System-Core 默认鉴权**：system-Core 下的 HTTP API 在各自模块内通过 `Bot.checkApiAuthorization(req)` 统一使用系统级 API Key，其他 Core 可按需自定义（详见 [AUTH.md](AUTH.md)）
 
 ---
 
@@ -480,7 +480,7 @@ routes: [
 
 1. **业务逻辑分层**：业务逻辑沉淀在插件与工作流中，HTTP 层提供入口和管理界面。
 2. **统一响应与错误**：使用 `HttpResponse` 与 `asyncHandler`，保持 `{ success, message, code }` 等格式一致。
-3. **鉴权不重复**：依赖 Server 层统一鉴权，业务 handler 不校验 API Key。
+3. **鉴权位置清晰**：system-Core HTTP 在模块内统一使用系统级 API Key（`Bot.checkApiAuthorization(req)`），其他 Core 可按需接入或自定义鉴权。
 4. **与前端协作**：统一 JSON、必填/可选参数清晰，关键接口可在文档或 system-Core 说明中列出。
 
 ---
@@ -489,7 +489,7 @@ routes: [
 
 - **[API加载器](api-loader.md)** - API 自动加载和热重载机制
 - **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 10 个 HTTP API 模块的实际示例 ⭐
-- **[鉴权与认证（AUTH）](AUTH.md)** - 统一鉴权流程与业务层不鉴权约定
+- **[鉴权与认证（AUTH）](AUTH.md)** - 系统级 API Key 与各层职责划分
 - **[HTTP业务层](http-business-layer.md)** - 重定向、CDN、反向代理增强功能
 - **[Server服务器架构](server.md)** - 完整的服务器架构说明
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南

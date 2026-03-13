@@ -2,6 +2,12 @@ import { collectBotInventory } from '#infrastructure/http/utils/botInventory.js'
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
+function ensureSystemCoreAuth(req, res, Bot, context) {
+  if (!Bot?.checkApiAuthorization?.(req)) {
+    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.bot');
+  }
+}
+
 /**
  * 机器人管理API
  * 提供机器人状态查询、消息发送、好友群组列表等功能
@@ -16,6 +22,8 @@ export default {
       method: 'GET',
       path: '/api/bots',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'bot.list');
+        if (authResp) return authResp;
         const includeDevices = /^(1|true|yes)$/i.test(String(req.query?.includeDevices ?? ''));
         const bots = await collectBotInventory(Bot);
         HttpResponse.success(res, { bots: includeDevices ? bots : bots.filter(b => !b.device) });
@@ -26,6 +34,8 @@ export default {
       method: 'GET',
       path: '/api/bot/:uin/friends',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'bot.friends');
+        if (authResp) return authResp;
         const uin = InputValidator.validateUserId(req.params.uin);
         const bot = Bot.bots[uin];
         
@@ -42,6 +52,8 @@ export default {
       method: 'GET', 
       path: '/api/bot/:uin/groups',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'bot.groups');
+        if (authResp) return authResp;
         const uin = InputValidator.validateUserId(req.params.uin);
         const bot = Bot.bots[uin];
         
@@ -58,6 +70,8 @@ export default {
       method: 'POST',
       path: '/api/message/send',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+        const authResp = ensureSystemCoreAuth(req, res, Bot, 'bot.message.send');
+        if (authResp) return authResp;
         // 输入验证
         const { bot_id, type, target_id, message } = req.body;
 

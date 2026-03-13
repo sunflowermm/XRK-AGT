@@ -504,32 +504,16 @@ flowchart TB
 
 ### 认证机制
 
-Bot 支持多级认证，按优先级依次检查：
+当前版本中，Bot 的认证职责划分如下（详见 `docs/AUTH.md`）：
 
-```mermaid
-flowchart LR
-    Request(["🌐 HTTP请求"]) --> Check1["1️⃣ 白名单路径<br/>✅ 完全免认证<br/>/ /health /status"]
-    
-    Check1 -->|"✅ 通过"| Allow(["✅ 允许访问<br/>继续处理"])
-    Check1 -->|"❌ 未通过"| Check2["2️⃣ 本地连接<br/>🏠 127.0.0.1<br/>localhost<br/>私有IP"]
-    
-    Check2 -->|"✅ 通过"| Allow
-    Check2 -->|"❌ 未通过"| Check3["3️⃣ 同源Cookie<br/>🍪 xrk_ui Cookie<br/>前端认证"]
-    
-    Check3 -->|"✅ 通过"| Allow
-    Check3 -->|"❌ 未通过"| Check4["4️⃣ API Key<br/>🔑 X-API-Key请求头<br/>API认证"]
-    
-    Check4 -->|"✅ 通过"| Allow
-    Check4 -->|"❌ 未通过"| Deny(["❌ 拒绝访问<br/>401 Unauthorized<br/>403 Forbidden"])
-    
-    style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
-    style Check1 fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
-    style Check2 fill:#3498DB,stroke:#2980B9,stroke-width:2px,color:#fff
-    style Check3 fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
-    style Check4 fill:#E74C3C,stroke:#C0392B,stroke-width:2px,color:#fff
-    style Allow fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
-    style Deny fill:#E74C3C,stroke:#C0392B,stroke-width:3px,color:#fff
-```
+- **Server 层 (`src/bot.js`)**  
+  - 只做静态资源放行（根据扩展名）和本地/内网 IP 放行；  
+  - 不再根据 URL 白名单或 Cookie 做统一鉴权。
+- **system-Core HTTP (`core/system-Core/http/*.js`)**  
+  - 在各自模块顶部通过 `ensureSystemCoreAuth` 调用 `Bot.checkApiAuthorization(req)`，统一使用系统级 API Key。  
+- **其他 Core HTTP / Tasker**  
+  - 可选择接入系统 API Key，或定义自己的鉴权方案（如自有 token / 签名）；  
+  - Tasker 暴露的 WebSocket 路径统一经过 `wsConnect` 做系统级 API Key 校验（本地/内网除外）。
 
 **配置示例**：
 
