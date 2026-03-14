@@ -9,7 +9,6 @@ import BotUtil from '#utils/botutil.js';
  * - 将 StreamLoader 暴露的 MCP 工具转换为 OpenAI tools 数组格式，供各 LLM 工厂在构造请求体时注入
  * - 在收到 OpenAI style tool_calls 时，实际调用 MCP 工具，并返回 role=tool 的消息列表
  * - 基于 streams/allowedTools 做工具白名单过滤：保证"未通过接口声明的工具"不会被调用
- * - 自动合并远程 MCP 工具：无论指定什么工作流，都会自动添加已启用的远程 MCP 工具
  */
 export class MCPToolAdapter {
   /**
@@ -26,8 +25,7 @@ export class MCPToolAdapter {
    * 说明：
    * - streams 白名单优先：只有在 streams 中声明的工作流，其下工具才会被注入
    * - workflow 为单工作流名，仅在未显式提供 streams 时使用
-   * - 默认分支会排除 excludeStreams（如 chat），防止基础通用工作流的工具"泄漏"到所有会话
-   * - 自动合并远程 MCP：无论指定什么工作流，都会自动添加已启用的远程 MCP 工具
+   * - 未指定 workflow 且未指定 streams 时不注入任何 MCP 工具（不选则不传）
    *
    * @param {Object} options
    * @param {string|null} options.workflow - 单个工作流名称；若提供则仅注入该工作流下的工具
@@ -64,34 +62,8 @@ export class MCPToolAdapter {
       // 2. 若指定单一 workflow，则直接用 listTools(workflow)
       mcpTools = mcpServer.listTools(workflow);
     } else {
-      // 3. 默认：所有工具，但排除黑名单工作流（如 chat）
-      const all = mcpServer.listTools();
-      const excludes = new Set((excludeStreams || []).filter(Boolean));
-      mcpTools = all.filter(tool => {
-        const prefix = String(tool.name).split('.')[0];
-        return !excludes.has(prefix);
-      });
-    }
-
-    // 自动合并远程 MCP 工具（包括通过 aistream.yaml 或插件注册的服务器）
-    // 仅在“未显式指定 streams/workflow”时启用，避免覆盖调用方的精细选择
-    const remoteServers = StreamLoader.remoteMCPServers || new Map();
-    if (!workflow && !streams && remoteServers.size > 0) {
-      const toolMap = new Map(mcpTools.map(t => [t.name, t]));
-
-      for (const serverName of remoteServers.keys()) {
-        const name = String(serverName || '').trim();
-        if (!name) continue;
-
-        const remoteTools = mcpServer.listTools(`remote-mcp.${name}`);
-        for (const tool of remoteTools) {
-          if (!toolMap.has(tool.name)) {
-            toolMap.set(tool.name, tool);
-          }
-        }
-      }
-
-      mcpTools = Array.from(toolMap.values());
+      // 3. 未选工作流且未选 streams：不注入任何 MCP 工具
+      mcpTools = [];
     }
 
     return mcpTools.map(tool => ({
