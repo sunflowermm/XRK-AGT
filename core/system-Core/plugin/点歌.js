@@ -35,7 +35,7 @@ export class MusicPlugin extends plugin {
 
       const lines = songs.map((s, i) => `${i + 1}. ${s.name} - ${s.artists.map(a => a.name).join('、')}`)
       e._musicSearchResults = songs
-      this.setContext('musicChooseContext', e.isGroup, 60, '选择超时已取消')
+      this.setContext('musicChooseContext', false, 60, '选择超时已取消')
       await this.reply(['搜索结果：', ...lines, '回复数字选择'].join('\n'))
       return true
     } catch (err) {
