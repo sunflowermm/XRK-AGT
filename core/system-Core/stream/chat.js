@@ -1171,31 +1171,21 @@ export default class ChatStream extends AIStream {
   }
 
   /**
-   * 记录消息到历史（多平台兼容）
-   * 历史记录包含：用户信息、消息内容、消息ID、时间戳
-   * 支持onebot、其他平台的事件对象
+   * 记录消息到历史，统一使用 getEventHistoryKey 作为 key，群聊/私聊/设备互不冲突；最多保留 50 条。
    */
   recordMessage(e) {
     if (!e) return;
-    
+    const historyKey = ChatStream.getEventHistoryKey(e);
+    if (!historyKey) return;
     try {
-      // 多平台兼容：获取群组ID或用户ID
-      const groupId = e.group_id || e.groupId || null;
-      const userId = e.user_id || e.userId || e.user?.id || null;
-      const historyKey = groupId || `private_${userId}`;
-
-      // 多平台兼容：提取消息内容
       let message = '';
-      if (e.raw_message) {
-        message = e.raw_message;
-      } else if (e.msg) {
-        message = e.msg;
-      } else if (e.message) {
-        if (typeof e.message === 'string') {
-          message = e.message;
-        } else if (Array.isArray(e.message)) {
-          // onebot格式：消息段数组
+      if (e.raw_message) message = e.raw_message;
+      else if (e.msg) message = e.msg;
+      else if (e.message) {
+        if (typeof e.message === 'string') message = e.message;
+        else if (Array.isArray(e.message)) {
           message = e.message.map(seg => {
+            if (!seg || typeof seg !== 'object') return '';
             switch (seg.type) {
               case 'text': return seg.text || '';
               case 'image': return '[图片]';
@@ -1205,20 +1195,13 @@ export default class ChatStream extends AIStream {
             }
           }).join('');
         }
-      } else if (e.content) {
-        message = typeof e.content === 'string' ? e.content : e.content.text || '';
-      }
+      } else if (e.content) message = typeof e.content === 'string' ? e.content : (e.content?.text ?? '');
 
-      // 多平台兼容：获取用户信息
-      const nickname = e.sender?.card || e.sender?.nickname || 
-                      e.user?.name || e.user?.nickname || 
-                      e.from?.name || '未知';
-      
-      // 优先使用真实的消息ID；若无则从回复段取被回复消息 ID 作兜底（与 e.getReply() 同源）
-      let messageId = e.message_id || e.real_id || e.messageId || e.id || e.source?.id;
-      if (!messageId) messageId = ChatStream.getReplySegmentId(e);
+      const userId = e.user_id ?? e.userId ?? e.user?.id ?? e.sender?.user_id ?? null;
+      const nickname = e.sender?.card || e.sender?.nickname || e.user?.name || e.user?.nickname || e.from?.name || '未知';
+      let messageId = e.message_id ?? e.real_id ?? e.messageId ?? e.id ?? e.source?.id ?? ChatStream.getReplySegmentId(e);
       if (!messageId) {
-        messageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        messageId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
         BotUtil.makeLog('debug', `消息ID缺失，使用临时ID: ${messageId}`, 'ChatStream');
       } else {
         messageId = String(messageId);
@@ -1230,22 +1213,14 @@ export default class ChatStream extends AIStream {
         message,
         message_id: messageId,
         time: e.time || Date.now(),
-        platform: e.platform || 'onebot' // 标识平台类型
+        platform: e.isDevice ? 'device' : 'onebot'
       };
 
-      // 群聊内存历史（仅群聊，最多保留50条）
-      if (groupId && e.isGroup !== false) {
-        if (!ChatStream.messageHistory.has(groupId)) {
-          ChatStream.messageHistory.set(groupId, []);
-        }
-        const history = ChatStream.messageHistory.get(groupId);
-        history.push(msgData);
-        if (history.length > 50) {
-          ChatStream.messageHistory.set(groupId, history.slice(-50));
-        }
-      }
+      if (!ChatStream.messageHistory.has(historyKey)) ChatStream.messageHistory.set(historyKey, []);
+      const history = ChatStream.messageHistory.get(historyKey);
+      history.push(msgData);
+      if (history.length > 50) ChatStream.messageHistory.set(historyKey, history.slice(-50));
 
-      // 语义检索存储（启用embedding时）
       if (this.embeddingConfig?.enabled && message && message.length > 5) {
         this.storeMessageWithEmbedding(historyKey, msgData).catch(() => {});
       }
@@ -1408,9 +1383,9 @@ ${embeddingHint}
    */
   static getEventHistoryKey(e) {
     if (!e) return null;
-    if (e.isGroup === true && e.group_id) return e.group_id;
+    if (e.isGroup === true && e.group_id != null) return String(e.group_id);
     if (e.isDevice === true && e.device_id) return `device_${e.device_id}`;
-    if (e.user_id) return `private_${e.user_id}`;
+    if (e.user_id != null) return `private_${e.user_id}`;
     return null;
   }
 
@@ -1561,7 +1536,7 @@ ${embeddingHint}
       }
     }
 
-    const sectionLabel = historyKey.startsWith('device_') ? '[近期对话]' : '[群聊记录]';
+    const sectionLabel = String(historyKey).startsWith('device_') ? '[近期对话]' : '[群聊记录]';
     if (isGlobalTrigger) {
       const recentMessages = uniqueHistory.slice(-15);
       if (recentMessages.length > 0) {
@@ -1849,17 +1824,13 @@ ${embeddingHint}
   }
 
   cleanupCache() {
-    for (const [groupId, messages] of ChatStream.messageHistory.entries()) {
+    for (const [historyKey, messages] of ChatStream.messageHistory.entries()) {
       if (!messages || messages.length === 0) {
-        ChatStream.messageHistory.delete(groupId);
+        ChatStream.messageHistory.delete(historyKey);
         continue;
       }
-      // 始终只保留最近50条消息
-      if (messages.length > 50) {
-        ChatStream.messageHistory.set(groupId, messages.slice(-50));
-      }
+      if (messages.length > 50) ChatStream.messageHistory.set(historyKey, messages.slice(-50));
     }
-    
   }
 
   async cleanup() {

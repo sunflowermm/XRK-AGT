@@ -28,6 +28,7 @@ export class XWorkflow extends plugin {
     const stream = this.getStream('chat');
     if (!stream) return this.reply('工作流未加载');
 
+    // 仅挂载 chat + desktop 工作流工具，不选远程 MCP（与接口一致：仅传声明的 streams）
     await stream.process(this.e, { content: questionText, persona }, {
       mergeStreams: ['desktop'],
       enableMemory: true,

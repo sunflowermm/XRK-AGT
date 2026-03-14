@@ -2,7 +2,9 @@ import { EventNormalizer } from '#utils/event-normalizer.js'
 
 /**
  * Tasker 基类
- * 提供标准化的 Bot 实例创建和事件处理
+ * 提供标准化的 Bot 实例创建和事件处理。
+ * 约定：各 Tasker 派发事件前应通过 createEvent 或 EventNormalizer.normalize 统一事件形态，
+ * 保证 group_id / user_id / message_type / isGroup / isPrivate / isDevice 等字段一致，便于插件与工作流按 key 区分群聊/私聊/设备。
  */
 export class TaskerBase {
   /**

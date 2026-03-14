@@ -121,13 +121,12 @@ export class EventNormalizer {
   }
 
   /**
-   * 标准化Device事件特有字段
-   * @param {Object} e - 事件对象
-   * @returns {Object} 标准化后的事件对象
+   * 标准化 Device 事件特有字段（与 getEventHistoryKey 一致：群/私聊/设备互不冲突）
    */
   static normalizeDevice(e) {
     if (!e) return e
     if (e.post_type === 'device' && e.event_type === 'message') e.post_type = 'message'
+    e.isDevice = true
     e.isGroup = false
     e.isPrivate = true
     if (!e.sender) e.sender = {}

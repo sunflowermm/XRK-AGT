@@ -119,7 +119,7 @@ async def chat_handler(request: Request):
     main_api_key = (data.get("apiKey") or config.get("main_server.api_key", "")).strip()
 
     if stream:
-        # 透传可选字段（按 docs/subserver-api.md 支持的同义字段）
+        # 透传可选字段（按 docs/subserver-api.md 支持的同义字段），含 workflow 以与接口一致（不选则不传/仅传声明的 streams）
         passthrough = {}
         if data.get("tool_choice") is not None:
             passthrough["tool_choice"] = data.get("tool_choice")
@@ -133,6 +133,8 @@ async def chat_handler(request: Request):
             passthrough["extraBody"] = data.get("extraBody")
         if data.get("tools") is not None:
             passthrough["tools"] = data.get("tools")
+        if data.get("workflow") is not None:
+            passthrough["workflow"] = data.get("workflow")
 
         payload = _v3_payload(messages, model, temperature, max_tokens, True, main_api_key, passthrough)
         client = await get_http_client()
@@ -191,6 +193,8 @@ async def chat_handler(request: Request):
         passthrough["extraBody"] = data.get("extraBody")
     if data.get("tools") is not None:
         passthrough["tools"] = data.get("tools")
+    if data.get("workflow") is not None:
+        passthrough["workflow"] = data.get("workflow")
 
     payload = _v3_payload(messages, model, temperature, max_tokens, False, main_api_key, passthrough)
     try:
