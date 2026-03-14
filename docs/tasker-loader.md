@@ -124,6 +124,12 @@ flowchart TB
   - `message(wsMessage, ws)` - 解析上报并调用 `Bot.em` 触发事件
   - 各种 send/get 接口封装（发送消息、获取列表等）
 
+`Bot.wsf[path]` 的元素可以是：
+
+- 直接的函数：`(ws, req, ...args) => { ... }`（兼容旧版本，默认需要系统级 API Key）；
+- 或对象：`{ handler: (ws, req, ...args) => { ... }, skipAuth: true }`  
+  当任意条目声明 `skipAuth: true` 时，该路径在 `wsConnect` 中会跳过系统级 API Key 鉴权（但仍按 IP 判断是否本地/内网），适合像 `xiaozhi-Core` 这类需要自定义鉴权的 Tasker。
+
 **事件流向**：
 
 1. 外部平台通过 WebSocket 与 XRK-AGT 建立连接

@@ -2083,8 +2083,16 @@ export default class Bot extends EventEmitter {
     const authConfig = cfg.server.auth || {};
     const isLocal = this._isLocalConnection(req.socket.remoteAddress);
     const apiKeyEnabled = authConfig.apiKey?.enabled !== false;
+    
+    // 判断当前 WS 路径是否声明“跳过系统级鉴权”
+    // 约定：Bot.wsf[wsPath] 的元素既可以是函数（兼容旧版本），
+    // 也可以是形如 { handler: Function, skipAuth?: boolean } 的对象；
+    // 只要其中任意一个元素的 skipAuth === true，则该路径整体跳过 API Key 鉴权。
+    const handlersForPath = this.wsf[wsPath];
+    const skipAuthForPath = Array.isArray(handlersForPath)
+      && handlersForPath.some((h) => h && typeof h === 'object' && h.skipAuth === true);
 
-    if (!isLocal && apiKeyEnabled && !this._checkApiAuthorization(req)) {
+    if (!isLocal && apiKeyEnabled && !skipAuthForPath && !this._checkApiAuthorization(req)) {
       BotUtil.makeLog('warn', `WebSocket 鉴权失败：${req.url} ip=${req.socket.remoteAddress}`, '服务器');
       try {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -2170,10 +2178,15 @@ export default class Bot extends EventEmitter {
       // 启动心跳检测
       this._startWebSocketHeartbeat();
       
-      // 调用注册的处理器
+      // 调用注册的处理器（兼容函数与 { handler, skipAuth } 结构）
       try {
-        for (const handler of this.wsf[wsPath]) {
-          handler(conn, req, socket, head);
+        const handlers = this.wsf[wsPath] || [];
+        for (const entry of handlers) {
+          if (!entry) continue;
+          const fn = typeof entry === 'function' ? entry : entry.handler;
+          if (typeof fn === 'function') {
+            fn(conn, req, socket, head);
+          }
         }
       } catch (err) {
         // 使用 Error.isError() 进行可靠的错误类型判断（Node.js 24+）

@@ -46,9 +46,10 @@
 ## WebSocket 鉴权
 
 所有通过 Tasker 暴露的 WebSocket 路径（`Bot.wsf`）都会先经过 `src/bot.js` 的 `wsConnect` 统一鉴权：
-
+ 
 - **本地/内网连接**：直接放行，便于开发调试；
-- **远程连接**：若 `server.auth.apiKey.enabled !== false`，则必须通过 `Bot.apiKey` 校验，否则返回 `401 Unauthorized` 并拒绝升级。
+- **远程连接**：若 `server.auth.apiKey.enabled !== false`，则默认必须通过 `Bot.apiKey` 校验，否则返回 `401 Unauthorized` 并拒绝升级；
+- **Tasker 级免鉴权**：若某个 WS 路径在 `Bot.wsf[path]` 中包含形如 `{ handler, skipAuth: true }` 的条目，则视为该路径整体“跳过系统级 API Key 鉴权”，仅保留本地/内网判定。
 
 客户端可以通过以下任一方式携带系统 API Key（与 HTTP 一致）：
 
@@ -56,7 +57,7 @@
 - 头部：`Authorization: Bearer <key>`
 - 查询：`?api_key=<key>`（如 `wss://host/device?api_key=<key>`）
 
-各 Tasker 若还需要额外的业务级鉴权（例如设备 ID 白名单），可以在各自的 WS handler 内再做一层校验。
+各 Tasker 若还需要额外的业务级鉴权（例如设备 ID 白名单），可以在各自的 WS handler 内再做一层校验；对于显式声明 `skipAuth: true` 的路径，推荐在 Tasker 内自行实现细粒度的业务鉴权逻辑。
 
 ---
 
