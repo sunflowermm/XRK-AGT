@@ -85,6 +85,7 @@ export default class OpenAILLMConfig extends ConfigBase {
             label: 'service_tier',
             description: 'OpenAI 服务档位（仅部分端点支持）',
             enum: ['auto', 'default', 'flex', 'scale', 'priority'],
+            default: 'auto',
             component: 'Select'
           },
           promptCacheKey: {
@@ -98,6 +99,7 @@ export default class OpenAILLMConfig extends ConfigBase {
             label: 'prompt_cache_retention',
             description: '提示缓存保留策略',
             enum: ['in-memory', '24h'],
+            default: 'in-memory',
             component: 'Select'
           },
           safetyIdentifier: {
@@ -111,6 +113,7 @@ export default class OpenAILLMConfig extends ConfigBase {
             label: 'reasoning_effort',
             description: '推理强度（o1 等推理模型可用）',
             enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+            default: 'medium',
             component: 'Select'
           },
           timeout: {

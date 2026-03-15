@@ -70,6 +70,7 @@ export default class VolcengineLLMConfig extends ConfigBase {
             label: 'Token 字段名',
             description: '上游接口对 token 参数字段的要求；留空则仅在显式传入 max_completion_tokens 时使用该字段',
             enum: ['max_tokens', 'max_completion_tokens', 'both'],
+            default: 'max_tokens',
             component: 'Select'
           },
           thinkingType: {
@@ -77,6 +78,7 @@ export default class VolcengineLLMConfig extends ConfigBase {
             label: '深度思考',
             description: '火山方舟 thinking.type（如 disabled/enabled）；留空则不传 thinking 字段',
             enum: ['disabled', 'enabled', ''],
+            default: 'disabled',
             component: 'Select'
           },
           topP: {

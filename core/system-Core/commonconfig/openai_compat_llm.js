@@ -133,6 +133,7 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
                 label: 'service_tier',
                 description: '部分官方模型支持的服务等级；留空则不下发，由下游默认',
                 enum: ['auto', 'default', 'flex', 'scale', 'priority'],
+                default: 'auto',
                 component: 'Select'
               },
               promptCacheKey: {
@@ -146,6 +147,7 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
                 label: 'prompt_cache_retention',
                 description: 'Prompt 缓存保存策略，in-memory 为进程内缓存，24h 为厂商侧 24 小时缓存；留空则不下发',
                 enum: ['in-memory', '24h'],
+                default: 'in-memory',
                 component: 'Select'
               },
               safetyIdentifier: {
@@ -159,6 +161,7 @@ export default class OpenAICompatibleLLMConfig extends ConfigBase {
                 label: 'reasoning_effort',
                 description: '推理强度，仅支持推理型模型；越高越慢但思考更充分；留空则不下发',
                 enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+                default: 'medium',
                 component: 'Select'
               },
               timeout: {

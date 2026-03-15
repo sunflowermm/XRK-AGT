@@ -5486,7 +5486,9 @@ class App {
         `;
       case 'select': {
         const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
-        const current = value ?? '';
+        const current = (value !== undefined && value !== null && value !== '')
+          ? value
+          : (meta.default ?? (opts.length ? opts[0].value : ''));
         return `
           <select class="form-input" id="${inputId}" ${dataset} ${disabled}>
             ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
@@ -6629,18 +6631,27 @@ class App {
   buildDefaultsFromFields(fields = {}) {
     const result = {};
     Object.entries(fields).forEach(([key, schema]) => {
+      // 嵌套对象：始终生成子对象结构
       if (schema.type === 'object' && schema.fields) {
         result[key] = this.buildDefaultsFromFields(schema.fields);
-      } else if (schema.type === 'array') {
+        return;
+      }
+
+      // 数组字段：仅在 schema 提供默认值时生成；否则用空数组
+      if (schema.type === 'array') {
         if (schema.itemType === 'object') {
           result[key] = [];
         } else {
           result[key] = Array.isArray(schema.default) ? [...schema.default] : [];
         }
-      } else if (Object.hasOwn(schema, 'default')) {
+        return;
+      }
+
+      // 其余标量类型：只有在 schema 显式提供 default 时才生成字段；
+      // 没有 default 的 number/string/boolean 视为“真正可选”，不创建 key，
+      // 这样后端校验时不会因为空字符串或 0 误判为非法值。
+      if (Object.hasOwn(schema, 'default')) {
         result[key] = this._cloneValue(schema.default);
-      } else {
-        result[key] = schema.type === 'number' ? 0 : schema.type === 'boolean' ? false : '';
       }
     });
     return result;
