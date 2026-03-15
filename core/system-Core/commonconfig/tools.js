@@ -106,6 +106,22 @@ export default class ToolsConfig extends ConfigBase {
             enum: ['full', 'simple'],
             default: 'full',
             component: 'Select'
+          },
+          jsExecutionMode: {
+            type: 'string',
+            label: 'JS 执行模式',
+            description: 'JavaScript 代码执行的安全模式：safe=安全模式（沙箱）；unsafe=非安全模式（完整权限）',
+            enum: ['safe', 'unsafe'],
+            default: 'safe',
+            component: 'Select'
+          },
+          jsTimeout: {
+            type: 'number',
+            label: 'JS 执行超时',
+            description: 'JavaScript 代码执行超时时间（毫秒）',
+            min: 1000,
+            default: 10000,
+            component: 'InputNumber'
           }
         }
       }

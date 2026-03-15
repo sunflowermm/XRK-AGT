@@ -76,8 +76,8 @@ export default class VolcengineLLMConfig extends ConfigBase {
           thinkingType: {
             type: 'string',
             label: '深度思考',
-            description: '火山方舟 thinking.type（如 disabled/enabled）；留空则不传 thinking 字段',
-            enum: ['disabled', 'enabled', ''],
+            description: '火山方舟 thinking.type（如 disabled/enabled）',
+            enum: ['disabled', 'enabled'],
             default: 'disabled',
             component: 'Select'
           },

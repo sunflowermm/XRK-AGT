@@ -1,31 +1,49 @@
-function $(selector, context = document) {
-  return context.querySelector(selector);
-}
+// 导入模块化工具函数
+import {
+  formatBytes,
+  formatTime,
+  formatNumber,
+  formatPercent,
+  escapeHtml,
+  escapeSelector,
+  copyToClipboard,
+  cloneValue,
+  isSameValue,
+  formatKeyValueLines,
+  parseKeyValueLines
+} from './modules/utils.js';
 
-function $$(selector, context = document) {
-  return context.querySelectorAll(selector);
-}
+import {
+  $,
+  $$,
+  scrollToBottom as domScrollToBottom,
+  initLazyLoad
+} from './modules/dom.js';
 
-function initLazyLoad(selector = 'img[data-src]') {
-  const imageObserver = new IntersectionObserver((entries, observer) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const img = entry.target;
-        if (img.dataset.src) {
-          img.src = img.dataset.src;
-          img.removeAttribute('data-src');
-          img.classList.add('loaded');
-          observer.unobserve(img);
-        }
-      }
-    });
-  }, {
-    rootMargin: '50px'
-  });
+import {
+  fileManager,
+  compressImage
+} from './modules/file-manager.js';
 
-  const images = $$(selector);
-  images.forEach(img => imageObserver.observe(img));
-}
+import {
+  markdownRenderer,
+  stripMarkdownForTTS
+} from './modules/markdown.js';
+
+import {
+  flattenObject,
+  unflattenObject,
+  getNestedValue,
+  setNestedValue,
+  combineConfigPath,
+  normalizeFieldValue,
+  castValue,
+  normalizeTemplatePath,
+  buildDefaultsFromFields,
+  formatGroupLabel
+} from './modules/config-manager.js';
+
+import * as apiDebug from './modules/api-debug.js';
 
 class App {
   constructor() {
@@ -34,7 +52,7 @@ class App {
     this.currentAPI = null;
     this.apiConfig = null;
     this.selectedFiles = [];
-    this._objectUrls = new Set();
+    // this._objectUrls 已迁移到 fileManager 模块
     this.jsonEditor = null;
     this._charts = {};
     this._metricsHistory = { 
@@ -135,6 +153,7 @@ class App {
     await this.loadLlmOptions();
     this._initMermaid();
     this.checkConnection();
+    // 根据当前 hash 或本地缓存决定首页，统一通过路由逻辑导航，内部会负责滚动等处理
     this.handleRoute();
     this.ensureDeviceWs();
     
@@ -161,32 +180,13 @@ class App {
     });
   }
 
+  // Mermaid 相关方法 - 包装器（调用模块函数）
   _initMermaid() {
-    try {
-      if (!window.mermaid) return;
-      window.mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: 'loose',
-        theme: 'neutral'
-      });
-    } catch (e) {
-      console.warn('[Mermaid] 初始化失败:', e);
-    }
+    markdownRenderer.initMermaid();
   }
 
   _renderMermaidIn(container) {
-    try {
-      if (!container || !window.mermaid) return;
-      const nodes = container.querySelectorAll('.mermaid');
-      if (!nodes.length) return;
-      const targets = Array.from(nodes).filter((n) => !n.dataset.mermaidRendered);
-      if (!targets.length) return;
-      targets.forEach((n) => { n.dataset.mermaidRendered = '1'; });
-      window.mermaid.init(undefined, targets);
-      this._bindMermaidToolbar(container);
-    } catch (e) {
-      console.warn('[Mermaid] 渲染失败:', e);
-    }
+    markdownRenderer.renderMermaidIn(container);
   }
 
   _bindMermaidToolbar(root) {
@@ -357,34 +357,17 @@ class App {
     }
   }
 
+  // 文件管理方法 - 包装器（调用模块函数）
   _safeRevokeObjectURL(url) {
-    if (!url) return;
-    try {
-      URL.revokeObjectURL(url);
-      this._objectUrls?.delete(url);
-    } catch {}
+    fileManager.safeRevokeObjectURL(url);
   }
 
   _createTrackedObjectURL(file) {
-    try {
-      const url = URL.createObjectURL(file);
-      this._objectUrls?.add(url);
-      return url;
-    } catch {
-      return '';
-    }
+    return fileManager.createTrackedObjectURL(file);
   }
 
   _revokeAllObjectUrls() {
-    if (!this._objectUrls) return;
-    try {
-      for (const url of this._objectUrls) {
-        try {
-          URL.revokeObjectURL(url);
-        } catch {}
-      }
-      this._objectUrls.clear();
-    } catch {}
+    fileManager.revokeAllObjectUrls();
   }
 
   async loadAPIConfig() {
@@ -1094,219 +1077,7 @@ class App {
   }
 
   renderMarkdown(text) {
-    if (!text) return '';
-    const esc = (s) => String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    // GitHub 风格子集：先提取 fenced code blocks（支持 ```lang），避免被其它规则干扰
-    const blocks = [];
-    const withPlaceholders = String(text).replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) => {
-      const i = blocks.length;
-      blocks.push({ lang: (lang || '').toLowerCase(), code: String(code || '') });
-      return `@@MD_BLOCK_${i}@@`;
-    });
-
-    // 行级解析：支持列表分组/引用/分隔线/标题/段落/表格
-    const lines = withPlaceholders.split(/\r?\n/);
-    let out = '';
-    let inUl = false;
-    let inOl = false;
-    let inQuote = false;
-    let quoteBuf = [];
-    // 表格状态：inTable 表示当前是否在表格块内，tableRows 收集表头和行
-    let inTable = false;
-    let tableRows = [];
-
-    const flushLists = () => {
-      if (inUl) { out += '</ul>'; inUl = false; }
-      if (inOl) { out += '</ol>'; inOl = false; }
-    };
-    const flushQuote = () => {
-      if (!inQuote) return;
-      const inner = quoteBuf.join('\n');
-      out += `<blockquote class="md-quote">${inner}</blockquote>`;
-      inQuote = false;
-      quoteBuf = [];
-    };
-
-    const inline = (s) => {
-      let html = esc(s);
-      // 图片 ![alt](url)（先于链接）
-      html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '<img class="md-img" alt="$1" src="$2" loading="lazy">');
-      // 链接 [text](url)
-      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-      // 删除线 ~~text~~
-      html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
-      // 粗体 **text**
-      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      // 行内代码 `code`
-      html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="md-inline">${esc(code)}</code>`);
-      // 斜体 *text*（放在粗体后）
-      html = html.replace(/(^|[^\*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
-      // 任务列表 [ ] / [x]
-      html = html.replace(/^\s*\[( |x|X)\]\s+/g, (_, c) => {
-        const checked = String(c).toLowerCase() === 'x';
-        return `<input type="checkbox" class="md-task" ${checked ? 'checked' : ''} disabled> `;
-      });
-      return html;
-    };
-
-    const flushTable = () => {
-      if (!inTable || tableRows.length === 0) return;
-      const header = tableRows[0];
-      const bodyRows = tableRows.slice(1);
-      out += '<table class="md-table">';
-      if (header) {
-        out += '<thead><tr>';
-        header.cells.forEach((c) => {
-          out += `<th>${inline(c)}</th>`;
-        });
-        out += '</tr></thead>';
-      }
-      if (bodyRows.length) {
-        out += '<tbody>';
-        bodyRows.forEach((row) => {
-          out += '<tr>';
-          row.cells.forEach((c) => {
-            out += `<td>${inline(c)}</td>`;
-          });
-          out += '</tr>';
-        });
-        out += '</tbody>';
-      }
-      out += '</table>';
-      inTable = false;
-      tableRows = [];
-    };
-
-    for (let i = 0; i < lines.length; i++) {
-      const rawLine = lines[i];
-      const line = String(rawLine ?? '');
-
-      // 空行：结束块
-      if (!line.trim()) {
-        flushQuote();
-        flushLists();
-        flushTable();
-        continue;
-      }
-
-      // 表格处理：匹配形如 | a | b | 的行，并检查下一行是否为 --- 分隔线
-      const tableRowMatch = line.match(/^\s*\|(.+)\|\s*$/);
-      if (tableRowMatch) {
-        const next = lines[i + 1] ?? '';
-        const dividerMatch = /^\s*\|?\s*:?-{2,}.*\|\s*$/.test(String(next));
-        // 表头 + 分隔线：开始一个表格
-        if (!inTable && dividerMatch) {
-          flushQuote();
-          flushLists();
-          flushTable();
-          const headerCells = tableRowMatch[1].split('|').map(c => c.trim());
-          tableRows.push({ header: true, cells: headerCells });
-          inTable = true;
-          i += 1; // 跳过分隔线行
-          continue;
-        }
-        // 已在表格中：追加数据行
-        if (inTable) {
-          const cells = tableRowMatch[1].split('|').map(c => c.trim());
-          tableRows.push({ header: false, cells });
-          continue;
-        }
-      } else if (inTable) {
-        // 表格结束，刷新为 HTML，再继续按照普通行处理当前行
-        flushTable();
-      }
-
-      // Mermaid / Code placeholders
-      const ph = line.trim().match(/^@@MD_BLOCK_(\d+)@@$/);
-      if (ph) {
-        flushQuote();
-        flushLists();
-        out += `@@MD_BLOCK_${ph[1]}@@`;
-        continue;
-      }
-
-      // 分隔线
-      if (/^\s*(---|___|\*\*\*)\s*$/.test(line)) {
-        flushQuote();
-        flushLists();
-        flushTable();
-        out += '<hr class="md-hr">';
-        continue;
-      }
-
-      // 引用 >
-      const quoteMatch = line.match(/^\s*>\s?(.*)$/);
-      if (quoteMatch) {
-        flushLists();
-        flushTable();
-        inQuote = true;
-        quoteBuf.push(`<div class="md-quote-line">${inline(quoteMatch[1])}</div>`);
-        continue;
-      }
-      flushQuote();
-
-      // 标题
-      const h3 = line.match(/^\s*###\s+(.*)$/);
-      if (h3) { flushLists(); out += `<h3>${inline(h3[1])}</h3>`; continue; }
-      const h2 = line.match(/^\s*##\s+(.*)$/);
-      if (h2) { flushLists(); out += `<h2>${inline(h2[1])}</h2>`; continue; }
-
-      // 无序列表
-      const ul = line.match(/^\s*[-*]\s+(.+)$/);
-      if (ul) {
-        if (inOl) { out += '</ol>'; inOl = false; }
-        flushTable();
-        if (!inUl) { out += '<ul class="md-list">'; inUl = true; }
-        out += `<li>${inline(ul[1])}</li>`;
-        continue;
-      }
-
-      // 有序列表
-      const ol = line.match(/^\s*\d+\.\s+(.+)$/);
-      if (ol) {
-        if (inUl) { out += '</ul>'; inUl = false; }
-        flushTable();
-        if (!inOl) { out += '<ol class="md-list">'; inOl = true; }
-        out += `<li>${inline(ol[1])}</li>`;
-        continue;
-      }
-
-      // 普通段落
-      flushLists();
-      flushTable();
-      out += `<p>${inline(line)}</p>`;
-    }
-
-    flushQuote();
-    flushLists();
-    flushTable();
-
-    // 回填 fenced blocks
-    out = out.replace(/@@MD_BLOCK_(\d+)@@/g, (_, idx) => {
-      const b = blocks[Number(idx)];
-      if (!b) return '';
-      const rawCode = b.code.replace(/\s+$/g, '');
-      const safeCode = esc(rawCode);
-      if (b.lang === 'mermaid') {
-        // 为每个 Mermaid 区块生成统一容器，样式由 .md-mermaid 控制
-        return `
-<div class="md-mermaid" data-mermaid-raw="${safeCode}">
-  <div class="md-mermaid-toolbar">
-    <button type="button" class="md-mermaid-copy">复制 Mermaid</button>
-    <button type="button" class="md-mermaid-download">下载 PNG</button>
-  </div>
-  <pre class="mermaid">${safeCode}</pre>
-</div>`.trim();
-      }
-      const langAttr = b.lang ? ` data-lang="${esc(b.lang)}"` : '';
-      return `<pre class="md-code"${langAttr}><code>${safeCode}</code></pre>`;
-    });
-
-    return out;
+    return markdownRenderer.render(text);
   }
 
   /**
@@ -1315,66 +1086,7 @@ class App {
    * @returns {string} 纯文本
    */
   _stripMarkdownForTTS(text = '') {
-    if (!text) return '';
-    let s = String(text);
-    
-    // 1. 代码块 ```code``` 或 ```lang code``` - 完全移除
-    s = s.replace(/```[\w]*\n?[\s\S]*?```/g, '');
-    
-    // 2. 行内代码 `code` - 保留内容，去掉反引号
-    s = s.replace(/`([^`\n]+)`/g, '$1');
-    
-    // 3. 链接 [text](url) -> text
-    s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-    
-    // 4. 图片 ![alt](url) -> alt（如果有alt文本）
-    s = s.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1');
-    
-    // 5. 标题 # ## ### 等 - 移除标记，保留文本
-    s = s.replace(/^\s{0,3}#{1,6}\s+(.+)$/gm, '$1');
-    
-    // 6. 粗体 **text** 或 __text__ - 保留内容
-    s = s.replace(/\*\*([^*]+)\*\*/g, '$1');
-    s = s.replace(/__([^_]+)__/g, '$1');
-    
-    // 7. 斜体 *text* 或 _text_ - 保留内容（需在粗体之后处理）
-    s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '$1');
-    s = s.replace(/(?<!_)_([^_]+)_(?!_)/g, '$1');
-    
-    // 8. 删除线 ~~text~~ - 保留内容
-    s = s.replace(/~~([^~]+)~~/g, '$1');
-    
-    // 9. 任务列表 - [ ] 或 [x] - 移除标记
-    s = s.replace(/^\s*[-*+]\s+\[[ xX]\]\s+/gm, '');
-    s = s.replace(/^\s*\d+\.\s+\[[ xX]\]\s+/gm, '');
-    
-    // 10. 无序列表 - * - + - 移除标记
-    s = s.replace(/^\s*[-*+]\s+/gm, '');
-    
-    // 11. 有序列表 1. 2. 等 - 移除标记
-    s = s.replace(/^\s*\d+\.\s+/gm, '');
-    
-    // 12. 引用 > - 移除标记
-    s = s.replace(/^\s*>+\s?/gm, '');
-    
-    // 13. 分隔线 --- 或 *** - 完全移除
-    s = s.replace(/^\s*[-*_]{3,}\s*$/gm, '');
-    
-    // 14. 表格标记 | - 移除表格结构，保留内容
-    s = s.replace(/\|/g, ' ');
-    s = s.replace(/^\s*:?-+:?\s*$/gm, ''); // 表格分隔行
-    
-    // 15. HTML标签（如果有） - 移除
-    s = s.replace(/<[^>]+>/g, '');
-    
-    // 16. 多余空白压缩：多个空格/制表符 -> 单个空格
-    s = s.replace(/[ \t]+/g, ' ');
-    
-    // 17. 多个换行 -> 单个空格
-    s = s.replace(/\s*\n+\s*/g, ' ');
-    
-    // 18. 移除行首行尾空白
-    return s.trim();
+    return stripMarkdownForTTS(text);
   }
   
   /**
@@ -2206,7 +1918,6 @@ class App {
                   // 可以在这里添加逻辑来高亮或展开mcp.remote配置项
                   const mcpRemoteField = document.querySelector('[data-path="mcp.remote.mcpServers"]') || document.querySelector('[data-path="mcp.remote"]');
                   if (mcpRemoteField) {
-                    mcpRemoteField.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     mcpRemoteField.style.background = 'var(--primary-50)';
                     setTimeout(() => {
                       if (mcpRemoteField) mcpRemoteField.style.background = '';
@@ -3134,55 +2845,21 @@ class App {
    * @param {number} bytes - 字节数
    * @returns {string} 格式化后的字符串
    */
+  // 格式化方法 - 包装器（调用模块函数）
   formatBytes(bytes) {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    return formatBytes(bytes);
   }
 
-  /**
-   * 格式化时间
-   * @param {number} seconds - 秒数
-   * @returns {string} 格式化后的时间字符串
-   */
   formatTime(seconds) {
-    if (!seconds || seconds === 0) return '0秒';
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Number((seconds % 60).toFixed(2));
-    
-    const parts = [];
-    if (days > 0) parts.push(`${days}天`);
-    if (hours > 0) parts.push(`${hours}时`);
-    if (minutes > 0) parts.push(`${minutes}分`);
-    if (secs > 0 || parts.length === 0) parts.push(`${secs}秒`);
-    
-    return parts.join('');
+    return formatTime(seconds);
   }
 
-  /**
-   * 格式化数字（添加千分位）
-   * @param {number} num - 数字
-   * @returns {string} 格式化后的字符串
-   */
   formatNumber(num) {
-    if (num == null || isNaN(num)) return '--';
-    return Number(num).toLocaleString('zh-CN');
+    return formatNumber(num);
   }
 
-  /**
-   * 格式化百分比
-   * @param {number} value - 数值
-   * @param {number} total - 总数
-   * @returns {string} 格式化后的百分比字符串
-   */
   formatPercent(value, total) {
-    if (!total || total === 0) return '0%';
-    const percent = (value / total) * 100;
-    return percent.toFixed(1) + '%';
+    return formatPercent(value, total);
   }
 
   clearChat() {
@@ -3249,62 +2926,14 @@ class App {
    * 压缩/缩放图片（减少上传体积与多模态 token 消耗，提高响应速度）
    * @returns {Promise<File>}
    */
+  // 图片压缩 - 包装器（调用模块函数）
   async compressImageFile(file) {
-    try {
-      if (!file || !file.type?.startsWith('image/')) return file;
-
-      // 小图直接走原图（避免无谓的重新编码）
-      const SOFT_LIMIT = 900 * 1024; // ~900KB
-      if (file.size <= SOFT_LIMIT) return file;
-
-      const maxDim = 1280;
-      const quality = 0.82;
-      const url = URL.createObjectURL(file);
-
-      const img = await new Promise((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = reject;
-        el.src = url;
-      });
-
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
-      if (!w || !h) {
-        URL.revokeObjectURL(url);
-        return file;
-      }
-
-      const scale = Math.min(1, maxDim / Math.max(w, h));
-      const targetW = Math.max(1, Math.round(w * scale));
-      const targetH = Math.max(1, Math.round(h * scale));
-
-      const canvas = document.createElement('canvas');
-      canvas.width = targetW;
-      canvas.height = targetH;
-      const ctx = canvas.getContext('2d', { alpha: false });
-      if (!ctx) {
-        URL.revokeObjectURL(url);
-        return file;
-      }
-      ctx.drawImage(img, 0, 0, targetW, targetH);
-
-      const blob = await new Promise((resolve) => {
-        // 统一转 jpeg（更小）；如果你更喜欢 webp，可改成 image/webp
-        canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
-      });
-
-      URL.revokeObjectURL(url);
-      if (!blob) return file;
-
-      // 如果压缩后反而更大，就用原图
-      if (blob.size >= file.size) return file;
-
-      const name = (file.name || 'image').replace(/\.(png|jpg|jpeg|webp|bmp)$/i, '');
-      return new File([blob], `${name}.jpg`, { type: 'image/jpeg' });
-    } catch {
-      return file;
-    }
+    return await compressImage(file, {
+      maxDimension: 1280,
+      quality: 0.82,
+      softLimit: 900 * 1024,
+      outputType: 'image/jpeg'
+    });
   }
   
   /**
@@ -4389,16 +4018,10 @@ class App {
     return urls;
   }
   
-  /** 滚动到底部：最大滚动位置为 scrollHeight - clientHeight，否则会差一截 */
   scrollToBottom(smooth = false) {
     const box = document.getElementById('chatMessages');
     if (!box) return;
-    const top = Math.max(0, box.scrollHeight - box.clientHeight);
-    if (smooth && typeof box.scrollTo === 'function') {
-      box.scrollTo({ top, behavior: 'smooth' });
-    } else {
-      box.scrollTop = top;
-    }
+    domScrollToBottom(box, smooth);
   }
 
   /**
@@ -4859,7 +4482,6 @@ class App {
       this._configState.jsonDirty = false;
 
       this.renderConfigFormPanel();
-      if (main) main.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       const mainEl = document.getElementById('configMain');
       if (mainEl) mainEl.innerHTML = `<div class="empty-state"><p>加载失败：${this.escapeHtml(e.message)}</p></div>`;
@@ -5415,6 +5037,164 @@ class App {
     }
   }
 
+  /**
+   * 统一的组件渲染方法（消除重复代码）
+   * @private
+   */
+  _renderComponentByType(config) {
+    const {
+      component,
+      inputId,
+      dataset,
+      value,
+      meta,
+      field,
+      disabled,
+      placeholder
+    } = config;
+
+    const normalizeOptions = (options = []) => options.map(opt => {
+      if (typeof opt === 'object') return opt;
+      return { label: opt, value: opt };
+    });
+
+    const lowerComponent = (component ?? '').toLowerCase();
+
+    switch (lowerComponent) {
+      case 'switch':
+        return `
+          <label class="config-switch">
+            <input type="checkbox" id="${inputId}" ${dataset} ${value ? 'checked' : ''} ${disabled}>
+            <span class="config-switch-slider"></span>
+          </label>
+        `;
+      case 'select': {
+        const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
+        const current = (value !== undefined && value !== null && value !== '')
+          ? value
+          : (meta.default ?? (opts.length ? opts[0].value : ''));
+        return `
+          <select class="form-input" id="${inputId}" ${dataset} ${disabled}>
+            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
+          </select>
+        `;
+      }
+      case 'multiselect': {
+        const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
+        const current = Array.isArray(value) ? value.map(v => String(v)) : [];
+        return `
+          <select class="form-input" id="${inputId}" multiple ${dataset} data-control="multiselect" ${disabled}>
+            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${current.includes(String(opt.value)) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
+          </select>
+          <p class="config-field-hint">按住 Ctrl/Command 多选</p>
+        `;
+      }
+      case 'tags': {
+        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value ?? ''));
+        const tagsPlaceholder = placeholder || '每行一个值';
+        return `
+          <textarea class="form-input" rows="3" id="${inputId}" ${dataset} data-control="tags" placeholder="${tagsPlaceholder}" ${disabled}>${text}</textarea>
+          <p class="config-field-hint">将文本拆分为数组</p>
+        `;
+      }
+      case 'textarea':
+      case 'text-area':
+        return `<textarea class="form-input" rows="3" id="${inputId}" ${dataset} placeholder="${placeholder}" ${disabled}>${
+          this.escapeHtml(
+            value && typeof value === 'object'
+              ? JSON.stringify(value, null, 2)
+              : (value ?? '')
+          )
+        }</textarea>`;
+      case 'inputnumber':
+      case 'number':
+        return `<input type="number" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${meta.min ?? ''}" max="${meta.max ?? ''}" step="${meta.step ?? 'any'}" placeholder="${placeholder}" ${disabled}>`;
+      case 'inputpassword': {
+        const nofillName = `${inputId}-nofill`;
+        return `<input type="password" class="form-input" id="${inputId}" name="${this.escapeHtml(nofillName)}" autocomplete="new-password" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      }
+      case 'url':
+        return `<input type="url" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      case 'email':
+        return `<input type="email" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      case 'slider':
+      case 'range': {
+        const min = meta.min ?? 0;
+        const max = meta.max ?? 100;
+        const step = meta.step ?? 1;
+        const numVal = value !== undefined && value !== null && value !== '' ? Number(value) : (meta.default ?? min);
+        const displayVal = numVal;
+        return `
+          <div class="config-slider-wrap">
+            <input type="range" class="config-slider" id="${inputId}" ${dataset} min="${min}" max="${max}" step="${step}" value="${this.escapeHtml(String(displayVal))}" ${disabled}>
+            <span class="config-slider-value" data-slider-value-for="${inputId}">${this.escapeHtml(String(displayVal))}</span>
+          </div>
+        `;
+      }
+      case 'radio': {
+        const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
+        const current = value ?? meta.default ?? '';
+        return `
+          <div class="config-radio-group" role="radiogroup" aria-label="${this.escapeHtml(meta.label || field.path)}" id="${inputId}-group">
+            ${opts.map((opt, i) => `
+              <label class="config-radio-option">
+                <input type="radio" name="${inputId}" ${dataset} value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'checked' : ''} ${i === 0 ? `id="${inputId}"` : ''} ${disabled}>
+                <span class="config-radio-label">${this.escapeHtml(opt.label)}</span>
+              </label>
+            `).join('')}
+          </div>
+        `;
+      }
+      case 'input':
+        return `<input type="text" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      case 'subform': {
+        const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${field.path}`;
+        const defaultValue = Object.hasOwn(meta, 'default') ? meta.default : {};
+        return `
+          ${this.renderFreeObjectSubFormEditor({
+            dataset,
+            value,
+            defaultValue,
+            modeKey,
+            subformId: field.path,
+            inputIdPrefix: inputId,
+            disabled,
+            fieldPath: field.path
+          })}
+          <p class="config-field-hint">键值模式更适合 Header/简单对象；复杂结构建议切换 JSON。</p>
+        `;
+      }
+      case 'arrayform':
+      case 'json':
+        return `
+          <textarea class="form-input" rows="4" id="${inputId}" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled}>${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>
+          <p class="config-field-hint">以 JSON 形式编辑该字段</p>
+        `;
+      default:
+        if (field.type === 'object' || field.type === 'map') {
+          const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${field.path}`;
+          const defaultValue = Object.hasOwn(meta, 'default') ? meta.default : {};
+          return `
+          ${this.renderFreeObjectSubFormEditor({
+            dataset,
+            value,
+            defaultValue,
+            modeKey,
+            subformId: field.path,
+            inputIdPrefix: inputId,
+            disabled,
+            fieldPath: field.path
+          })}
+          <p class="config-field-hint">键值模式更适合简单键值对；复杂结构建议切换 JSON。</p>
+        `;
+        }
+        const displayValue = (value != null && typeof value === 'object')
+          ? ''
+          : (value ?? '');
+        return `<input type="text" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(displayValue)}" placeholder="${placeholder}" ${disabled}>`;
+    }
+  }
+
   renderFreeObjectSubFormEditor({ dataset, value, defaultValue, modeKey, subformId, inputIdPrefix, disabled, fieldPath }) {
     const mode = (localStorage.getItem(modeKey) || 'kv').toLowerCase(); // kv | json
     const obj = value && typeof value === 'object' && !Array.isArray(value)
@@ -5476,143 +5256,17 @@ class App {
       return this.renderArrayObjectControl(field, arrayValue, meta);
     }
 
-    switch (lowerComponent) {
-      case 'switch':
-        return `
-          <label class="config-switch">
-            <input type="checkbox" id="${inputId}" ${dataset} ${value ? 'checked' : ''} ${disabled}>
-            <span class="config-switch-slider"></span>
-          </label>
-        `;
-      case 'select': {
-        const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
-        const current = (value !== undefined && value !== null && value !== '')
-          ? value
-          : (meta.default ?? (opts.length ? opts[0].value : ''));
-        return `
-          <select class="form-input" id="${inputId}" ${dataset} ${disabled}>
-            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
-          </select>
-        `;
-      }
-      case 'multiselect': {
-        const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
-        const current = Array.isArray(value) ? value.map(v => String(v)) : [];
-        return `
-          <select class="form-input" id="${inputId}" multiple ${dataset} data-control="multiselect" ${disabled}>
-            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${current.includes(String(opt.value)) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
-          </select>
-          <p class="config-field-hint">按住 Ctrl/Command 多选</p>
-        `;
-      }
-      case 'tags': {
-        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value ?? ''));
-        const tagsPlaceholder = placeholder || '每行一个值';
-        return `
-          <textarea class="form-input" rows="3" id="${inputId}" ${dataset} data-control="tags" placeholder="${tagsPlaceholder}" ${disabled}>${text}</textarea>
-          <p class="config-field-hint">将文本拆分为数组</p>
-        `;
-      }
-      case 'textarea':
-      case 'text-area':
-        return `<textarea class="form-input" rows="3" id="${inputId}" ${dataset} placeholder="${placeholder}" ${disabled}>${
-          this.escapeHtml(
-            value && typeof value === 'object'
-              ? JSON.stringify(value, null, 2)
-              : (value ?? '')
-          )
-        }</textarea>`;
-      case 'inputnumber':
-      case 'number':
-        return `<input type="number" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${meta.min ?? ''}" max="${meta.max ?? ''}" step="${meta.step ?? 'any'}" placeholder="${placeholder}" ${disabled}>`;
-      case 'inputpassword': {
-        // 为避免浏览器错误自动填充，将密码类配置字段显式关闭自动完成，并使用无意义的 name
-        const nofillName = `${inputId}-nofill`;
-        return `<input type="password" class="form-input" id="${inputId}" name="${this.escapeHtml(nofillName)}" autocomplete="new-password" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
-      }
-      case 'url':
-        return `<input type="url" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
-      case 'email':
-        return `<input type="email" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
-      case 'slider':
-      case 'range': {
-        const min = meta.min ?? 0;
-        const max = meta.max ?? 100;
-        const step = meta.step ?? 1;
-        const numVal = value !== undefined && value !== null && value !== '' ? Number(value) : (meta.default ?? min);
-        const displayVal = numVal;
-        return `
-          <div class="config-slider-wrap">
-            <input type="range" class="config-slider" id="${inputId}" ${dataset} min="${min}" max="${max}" step="${step}" value="${this.escapeHtml(String(displayVal))}" ${disabled}>
-            <span class="config-slider-value" data-slider-value-for="${inputId}">${this.escapeHtml(String(displayVal))}</span>
-          </div>
-        `;
-      }
-      case 'radio': {
-        const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
-        const current = value ?? meta.default ?? '';
-        return `
-          <div class="config-radio-group" role="radiogroup" aria-label="${this.escapeHtml(meta.label || field.path)}" id="${inputId}-group">
-            ${opts.map((opt, i) => `
-              <label class="config-radio-option">
-                <input type="radio" name="${inputId}" ${dataset} value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'checked' : ''} ${i === 0 ? `id="${inputId}"` : ''} ${disabled}>
-                <span class="config-radio-label">${this.escapeHtml(opt.label)}</span>
-              </label>
-            `).join('')}
-          </div>
-        `;
-      }
-      case 'input':
-        return `<input type="text" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
-      case 'subform': {
-        // SubForm 类型：用于“自由对象/Map”场景（例如 headers/extraBody）。
-        // 注意：有子字段的 SubForm 会在 renderFieldTree 中展开显示，不会走到这里。
-        const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${field.path}`;
-        const defaultValue = Object.hasOwn(meta, 'default') ? meta.default : {};
-        return `
-          ${this.renderFreeObjectSubFormEditor({
-            dataset,
-            value,
-            defaultValue,
-            modeKey,
-            subformId: field.path,
-            inputIdPrefix: inputId,
-            disabled,
-            fieldPath: field.path
-          })}
-          <p class="config-field-hint">键值模式更适合 Header/简单对象；复杂结构建议切换 JSON。</p>
-        `;
-      }
-      case 'arrayform':
-      case 'json':
-        return `
-          <textarea class="form-input" rows="4" id="${inputId}" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled}>${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>
-          <p class="config-field-hint">以 JSON 形式编辑该字段</p>
-        `;
-      default:
-        // object/map 即使 component 被误配为 Input 也统一用键值+JSON 编辑器，避免显示 [object Object]
-        if (field.type === 'object' || field.type === 'map') {
-          const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${field.path}`;
-          const defaultValue = Object.hasOwn(meta, 'default') ? meta.default : {};
-          return `
-          ${this.renderFreeObjectSubFormEditor({
-            dataset,
-            value,
-            defaultValue,
-            modeKey,
-            subformId: field.path,
-            inputIdPrefix: inputId,
-            disabled,
-            fieldPath: field.path
-          })}
-          <p class="config-field-hint">键值模式更适合简单键值对；复杂结构建议切换 JSON。</p>
-        `;
-        }
-        const displayValue = (value != null && typeof value === 'object')
-          ? ''
-          : (value ?? '');
-        return `<input type="text" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(displayValue)}" placeholder="${placeholder}" ${disabled}>`;
-    }
+    // 使用统一的组件渲染方法
+    return this._renderComponentByType({
+      component: lowerComponent,
+      inputId,
+      dataset,
+      value,
+      meta,
+      field,
+      disabled,
+      placeholder
+    });
   }
 
   renderConfigJsonPanel() {
@@ -5708,112 +5362,33 @@ class App {
     const component = (schema.component ?? this.mapTypeToComponent(schema.type) ?? '').toLowerCase();
     const dataset = `data-array-parent="${this.escapeHtml(parentPath)}" data-array-index="${index}" data-object-path="${this.escapeHtml(relPath)}" data-template-path="${this.escapeHtml(templatePath)}" data-component="${component}" data-type="${schema.type}"`;
 
-    const normalizeOptions = (options = []) => options.map(opt => (typeof opt === 'object' ? opt : { label: opt, value: opt }));
-
-    switch (component) {
-      case 'switch':
-        return `
-          <label class="config-switch">
-            <input type="checkbox" ${dataset} ${value ? 'checked' : ''}>
-            <span class="config-switch-slider"></span>
-          </label>
-        `;
-      case 'select': {
-        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
-        const current = value ?? '';
-        return `
-          <select class="form-input" ${dataset}>
-            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
-          </select>
-        `;
-      }
-      case 'multiselect': {
-        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
-        const current = Array.isArray(value) ? value.map(v => String(v)) : [];
-        return `
-          <select class="form-input" multiple ${dataset} data-control="multiselect">
-            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${current.includes(String(opt.value)) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
-          </select>
-        `;
-      }
-      case 'tags': {
-        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value ?? ''));
-        return `<textarea class="form-input" rows="3" ${dataset} data-control="tags" placeholder="每行一个值">${text}</textarea>`;
-      }
-      case 'textarea':
-      case 'text-area':
-        return `<textarea class="form-input" rows="3" ${dataset}>${this.escapeHtml(value ?? '')}</textarea>`;
-      case 'inputnumber':
-      case 'number':
-        return `<input type="number" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${schema.min ?? ''}" max="${schema.max ?? ''}" step="${schema.step ?? 'any'}">`;
-      case 'inputpassword':
-        return `<input type="password" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
-      case 'url':
-        return `<input type="url" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
-      case 'email':
-        return `<input type="email" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
-      case 'slider':
-      case 'range': {
-        const min = schema.min ?? 0;
-        const max = schema.max ?? 100;
-        const step = schema.step ?? 1;
-        const numVal = value !== undefined && value !== null && value !== '' ? Number(value) : (schema.default ?? min);
-        return `
-          <div class="config-slider-wrap">
-            <input type="range" class="config-slider" ${dataset} min="${min}" max="${max}" step="${step}" value="${this.escapeHtml(String(numVal))}">
-            <span class="config-slider-value">${this.escapeHtml(String(numVal))}</span>
-          </div>
-        `;
-      }
-      case 'radio': {
-        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
-        const current = value ?? schema.default ?? '';
-        const name = `arr-${parentPath}-${index}-${relPath}`.replace(/[^a-zA-Z0-9-_]/g, '_');
-        return `
-          <div class="config-radio-group" role="radiogroup">
-            ${opts.map((opt, i) => `
-              <label class="config-radio-option">
-                <input type="radio" name="${name}" ${dataset} value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'checked' : ''}>
-                <span class="config-radio-label">${this.escapeHtml(opt.label)}</span>
-              </label>
-            `).join('')}
-          </div>
-        `;
-      }
-      case 'subform': {
-        const subformId = `${parentPath}.${index}.${relPath}`;
-        const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
-        return this.renderFreeObjectSubFormEditor({
-          dataset,
-          value,
-          defaultValue: {},
-          modeKey,
-          subformId,
-          disabled: '',
-          fieldPath: null
-        });
-      }
-      case 'json':
-        return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
-      default:
-        if (schema.type === 'object' || schema.type === 'map') {
-          const subformId = `${parentPath}.${index}.${relPath}`;
-          const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
-          return this.renderFreeObjectSubFormEditor({
-            dataset,
-            value,
-            defaultValue: {},
-            modeKey,
-            subformId,
-            disabled: '',
-            fieldPath: null
-          });
-        }
-        if (schema.type === 'array') {
-          return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
-        }
-        return `<input type="text" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+    // 特殊处理：SubForm 需要特定的 subformId
+    if (component === 'subform' || ((schema.type === 'object' || schema.type === 'map') && !schema.fields)) {
+      const subformId = `${parentPath}.${index}.${relPath}`;
+      const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
+      return this.renderFreeObjectSubFormEditor({
+        dataset,
+        value,
+        defaultValue: {},
+        modeKey,
+        subformId,
+        disabled: '',
+        fieldPath: null
+      });
     }
+
+    // 使用统一的组件渲染方法
+    const inputId = `arr-${parentPath}-${index}-${relPath}`.replace(/[^a-zA-Z0-9-_]/g, '_');
+    return this._renderComponentByType({
+      component,
+      inputId,
+      dataset,
+      value,
+      meta: schema,
+      field: { path: relPath, type: schema.type },
+      disabled: '',
+      placeholder: ''
+    });
   }
 
   renderDynamicCollections() {
@@ -5907,110 +5482,33 @@ class App {
 
   renderDynamicFieldControl(dataset, schema, value, subformId) {
     const component = (schema.component ?? this.mapTypeToComponent(schema.type) ?? '').toLowerCase();
-    const normalizeOptions = (options = []) => options.map(opt => (typeof opt === 'object' ? opt : { label: opt, value: opt }));
 
-    switch (component) {
-      case 'switch':
-        return `
-          <label class="config-switch">
-            <input type="checkbox" ${dataset} ${value ? 'checked' : ''}>
-            <span class="config-switch-slider"></span>
-          </label>
-        `;
-      case 'select': {
-        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
-        const current = value ?? '';
-        return `
-          <select class="form-input" ${dataset}>
-            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
-          </select>
-        `;
-      }
-      case 'multiselect': {
-        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
-        const current = Array.isArray(value) ? value.map(v => String(v)) : [];
-        return `
-          <select class="form-input" multiple ${dataset} data-control="multiselect">
-            ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${current.includes(String(opt.value)) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
-          </select>
-        `;
-      }
-      case 'tags': {
-        const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value ?? ''));
-        return `<textarea class="form-input" rows="3" ${dataset} data-control="tags">${text}</textarea>`;
-      }
-      case 'textarea':
-      case 'text-area':
-        return `<textarea class="form-input" rows="3" ${dataset}>${this.escapeHtml(value ?? '')}</textarea>`;
-      case 'inputnumber':
-      case 'number':
-        return `<input type="number" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${schema.min ?? ''}" max="${schema.max ?? ''}" step="${schema.step ?? 'any'}">`;
-      case 'inputpassword':
-        return `<input type="password" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
-      case 'url':
-        return `<input type="url" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
-      case 'email':
-        return `<input type="email" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
-      case 'slider':
-      case 'range': {
-        const min = schema.min ?? 0;
-        const max = schema.max ?? 100;
-        const step = schema.step ?? 1;
-        const numVal = value !== undefined && value !== null && value !== '' ? Number(value) : (schema.default ?? min);
-        return `
-          <div class="config-slider-wrap">
-            <input type="range" class="config-slider" ${dataset} min="${min}" max="${max}" step="${step}" value="${this.escapeHtml(String(numVal))}">
-            <span class="config-slider-value">${this.escapeHtml(String(numVal))}</span>
-          </div>
-        `;
-      }
-      case 'radio': {
-        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
-        const current = value ?? schema.default ?? '';
-        const name = `dyn-${subformId}`.replace(/[^a-zA-Z0-9-_]/g, '_');
-        return `
-          <div class="config-radio-group" role="radiogroup">
-            ${opts.map(opt => `
-              <label class="config-radio-option">
-                <input type="radio" name="${name}" ${dataset} value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'checked' : ''}>
-                <span class="config-radio-label">${this.escapeHtml(opt.label)}</span>
-              </label>
-            `).join('')}
-          </div>
-        `;
-      }
-      case 'subform': {
-        const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
-        return this.renderFreeObjectSubFormEditor({
-          dataset,
-          value,
-          defaultValue: {},
-          modeKey,
-          subformId,
-          disabled: '',
-          fieldPath: null
-        });
-      }
-      case 'json':
-        return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
-      default:
-        if (schema.type === 'object' || schema.type === 'map') {
-          const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
-          return this.renderFreeObjectSubFormEditor({
-            dataset,
-            value,
-            defaultValue: {},
-            modeKey,
-            subformId,
-            disabled: '',
-            fieldPath: null
-          });
-        }
-        if (schema.type === 'array') {
-          return `<textarea class="form-input" rows="4" ${dataset} data-control="json">${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>`;
-        }
-        return `<input type="text" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+    // 特殊处理：SubForm 需要特定的 modeKey
+    if (component === 'subform' || ((schema.type === 'object' || schema.type === 'map') && !schema.fields)) {
+      const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
+      return this.renderFreeObjectSubFormEditor({
+        dataset,
+        value,
+        defaultValue: {},
+        modeKey,
+        subformId,
+        disabled: '',
+        fieldPath: null
+      });
     }
+
+    // 使用统一的组件渲染方法
+    const inputId = `dyn-${subformId}`.replace(/[^a-zA-Z0-9-_]/g, '_');
+    return this._renderComponentByType({
+      component,
+      inputId,
+      dataset,
+      value,
+      meta: schema,
+      field: { path: subformId, type: schema.type },
+      disabled: '',
+      placeholder: ''
+    });
   }
 
   bindConfigFieldEvents() {
@@ -6404,55 +5902,13 @@ class App {
     } catch {}
   }
 
+  // 键值对处理 - 包装器（调用模块函数）
   formatKeyValueLines(obj = {}) {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return '';
-    return Object.entries(obj)
-      .map(([k, v]) => {
-        if (v === undefined) return `${k}=`;
-        if (typeof v === 'string') return `${k}=${v}`;
-        try {
-          return `${k}=${JSON.stringify(v)}`;
-        } catch {
-          return `${k}=${String(v)}`;
-        }
-      })
-      .join('\n');
+    return formatKeyValueLines(obj);
   }
 
   parseKeyValueLines(text = '') {
-    const out = {};
-    const lines = String(text).split(/\r?\n/);
-    for (const lineRaw of lines) {
-      const line = lineRaw.trim();
-      if (!line || line.startsWith('#') || line.startsWith('//')) continue;
-      const idx = line.indexOf('=');
-      if (idx <= 0) continue;
-      const key = line.slice(0, idx).trim();
-      const raw = line.slice(idx + 1).trim();
-      if (!key) continue;
-      if (!raw) {
-        out[key] = '';
-        continue;
-      }
-      const looksJson =
-        raw.startsWith('{') ||
-        raw.startsWith('[') ||
-        raw === 'null' ||
-        raw === 'true' ||
-        raw === 'false' ||
-        /^-?\d+(\.\d+)?$/.test(raw) ||
-        (raw.startsWith('"') && raw.endsWith('"'));
-      if (looksJson) {
-        try {
-          out[key] = JSON.parse(raw);
-          continue;
-        } catch {
-          // fallback to string
-        }
-      }
-      out[key] = raw;
-    }
-    return out;
+    return parseKeyValueLines(text);
   }
 
   setConfigFieldValue(path, value) {
@@ -6533,8 +5989,6 @@ class App {
       this._configState.dirty = {};
       this.showToast('配置已保存', 'success');
       await this.loadSelectedConfigDetail();
-      const wrapper = document.getElementById('configFormWrapper');
-      if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       this.showToast('保存失败: ' + e.message, 'error');
     }
@@ -6551,8 +6005,6 @@ class App {
       this.showToast('配置已保存', 'success');
       this._configState.mode = 'form';
       await this.loadSelectedConfigDetail();
-      const wrapper = document.getElementById('configFormWrapper');
-      if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       this.showToast('保存失败: ' + e.message, 'error');
     }
@@ -6586,33 +6038,15 @@ class App {
   }
 
   formatGroupLabel(label) {
-    if (!label || label === '基础') return '基础设置';
-    return label.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+    return formatGroupLabel(label);
   }
 
   normalizeFieldValue(value, meta, typeHint) {
-    const type = (meta.type ?? typeHint ?? '').toLowerCase();
-    if (type === 'number') return value === null || value === '' ? null : Number(value);
-    if (type === 'boolean') {
-      if (typeof value === 'string') {
-        const normalized = value.toLowerCase();
-        if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
-        if (['false', '0', 'no', 'off'].includes(normalized)) return false;
-      }
-      return !!value;
-    }
-    if (type === 'array<object>' || (type === 'array' && meta.itemType === 'object')) return Array.isArray(value) ? value : [];
-    if (type === 'array' && Array.isArray(value)) return value;
-    if (type === 'array' && typeof value === 'string') return value ? value.split(',').map(v => v.trim()).filter(Boolean) : [];
-    return value;
+    return normalizeFieldValue(value, meta, typeHint);
   }
 
   castValue(value, type) {
-    switch ((type ?? '').toLowerCase()) {
-      case 'number': return Number(value);
-      case 'boolean': return value === 'true' || value === true;
-      default: return value;
-    }
+    return castValue(value, type);
   }
 
   getFlatFieldDefinition(path) {
@@ -6625,873 +6059,142 @@ class App {
 
 
   normalizeTemplatePath(path = '') {
-    return path.replace(/\[\d+\]/g, '[]');
+    return normalizeTemplatePath(path);
   }
 
   buildDefaultsFromFields(fields = {}) {
-    const result = {};
-    Object.entries(fields).forEach(([key, schema]) => {
-      // 嵌套对象：始终生成子对象结构
-      if (schema.type === 'object' && schema.fields) {
-        result[key] = this.buildDefaultsFromFields(schema.fields);
-        return;
-      }
-
-      // 数组字段：仅在 schema 提供默认值时生成；否则用空数组
-      if (schema.type === 'array') {
-        if (schema.itemType === 'object') {
-          result[key] = [];
-        } else {
-          result[key] = Array.isArray(schema.default) ? [...schema.default] : [];
-        }
-        return;
-      }
-
-      // 其余标量类型：只有在 schema 显式提供 default 时才生成字段；
-      // 没有 default 的 number/string/boolean 视为“真正可选”，不创建 key，
-      // 这样后端校验时不会因为空字符串或 0 误判为非法值。
-      if (Object.hasOwn(schema, 'default')) {
-        result[key] = this._cloneValue(schema.default);
-      }
-    });
-    return result;
+    return buildDefaultsFromFields(fields, this._cloneValue.bind(this));
   }
 
+  // 配置管理方法 - 包装器（调用模块函数）
   getNestedValue(obj = {}, path = '') {
-    if (!path) return obj;
-    return path.split('.').reduce((current, key) => (current ? current[key] : undefined), obj);
+    return getNestedValue(obj, path);
   }
 
   setNestedValue(source = {}, path = '', value) {
-    if (!path) return this._cloneValue(value);
-    const clone = Array.isArray(source) ? [...source] : { ...source };
-    const keys = path.split('.');
-    let cursor = clone;
-    keys.forEach((key, idx) => {
-      if (idx === keys.length - 1) {
-        cursor[key] = this._cloneValue(value);
-      } else {
-        if (!cursor[key] || typeof cursor[key] !== 'object') {
-          cursor[key] = {};
-        }
-        cursor = cursor[key];
-      }
-    });
-    return clone;
+    return setNestedValue(source, path, value);
   }
 
   combinePath(base, tail) {
-    if (!base) return tail;
-    if (!tail) return base;
-    return `${base}.${tail}`;
+    return combineConfigPath(base, tail);
   }
 
   flattenObject(obj, prefix = '', out = {}) {
-    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-      // 允许保存空对象：{} 也应当在 flat 中占位，才能覆盖/清空后端旧值
-      if (prefix && Object.keys(obj).length === 0) {
-        out[prefix] = {};
-        return out;
-      }
-      Object.entries(obj).forEach(([key, val]) => {
-        const path = prefix ? `${prefix}.${key}` : key;
-        if (val && typeof val === 'object' && !Array.isArray(val)) {
-          this.flattenObject(val, path, out);
-        } else {
-          out[path] = val;
-        }
-      });
-      return out;
-    }
-    if (prefix) out[prefix] = obj;
-    return out;
+    return flattenObject(obj, prefix, out);
   }
 
   unflattenObject(flat = {}) {
-    const result = {};
-    Object.entries(flat).forEach(([path, value]) => {
-      const keys = path.split('.');
-      let cursor = result;
-      keys.forEach((key, idx) => {
-        if (idx === keys.length - 1) {
-          cursor[key] = this._cloneValue(value);
-        } else {
-          if (!cursor[key] || typeof cursor[key] !== 'object') cursor[key] = {};
-          cursor = cursor[key];
-        }
-      });
-    });
-    return result;
+    return unflattenObject(flat);
   }
 
+  // 值比较 - 包装器（调用模块函数）
   isSameValue(a, b) {
-    // 处理 null 和 undefined
-    if (a === null || a === undefined || b === null || b === undefined) {
-      return a === b;
-    }
-    // 处理对象和数组
-    if (typeof a === 'object' || typeof b === 'object') {
-      // 如果一个是数组另一个不是，直接返回 false
-      if (Array.isArray(a) !== Array.isArray(b)) {
-        return false;
-      }
-      try {
-      return JSON.stringify(a) === JSON.stringify(b);
-      } catch (e) {
-        // JSON.stringify 失败时（如循环引用），使用严格相等
-        console.warn('isSameValue JSON.stringify 失败:', e);
-        return a === b;
-      }
-    }
-    return a === b;
+    return isSameValue(a, b);
   }
 
   _cloneFlat(data) {
     const clone = {};
     Object.entries(data ?? {}).forEach(([k, v]) => {
-      clone[k] = this._cloneValue(v);
+      clone[k] = cloneValue(v);
     });
     return clone;
   }
 
   _cloneValue(value) {
-    if (Array.isArray(value) || (value && typeof value === 'object')) {
-      return JSON.parse(JSON.stringify(value));
-    }
-    return value;
+    return cloneValue(value);
   }
 
+  // 选择器转义 - 包装器（调用模块函数）
   escapeSelector(value = '') {
-    if (window.CSS && typeof window.CSS.escape === 'function') {
-      return window.CSS.escape(value);
-    }
-    return value.replace(/"/g, '\\"');
+    return escapeSelector(value);
   }
 
+  // 转义 HTML - 包装器（调用模块函数）
   escapeHtml(value = '') {
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return escapeHtml(value);
   }
 
   // ========== API 调试 ==========
   renderAPI() {
-    const content = document.getElementById('content');
-    if (!content) return;
-    
-    content.innerHTML = `
-      <div class="api-container">
-        <div class="api-header-section" id="apiWelcome">
-          <h1 class="api-header-title">API 调试中心</h1>
-          <p class="api-header-subtitle">在左侧侧边栏选择 API 开始测试</p>
-        </div>
-        <div id="apiTestSection" style="display:none"></div>
-      </div>
-    `;
-
-    // 如果之前已选择过某个 API，刷新后自动恢复
-    try {
-      const lastApiId = localStorage.getItem('lastApiId');
-      if (lastApiId) {
-        this.selectAPI(lastApiId);
-      }
-    } catch {}
+    return apiDebug.renderAPI(this);
   }
 
   renderAPIGroups() {
-    const container = document.getElementById('apiGroups');
-    if (!container || !this.apiConfig) return;
-    
-    container.innerHTML = this.apiConfig.apiGroups.map(group => `
-      <div class="api-group">
-        <div class="api-group-title">${group.title}</div>
-        ${group.apis.map(api => `
-          <div class="api-item" data-id="${api.id}">
-            <span class="method-tag method-${api.method.toLowerCase()}">${api.method}</span>
-            <span>${api.title}</span>
-          </div>
-        `).join('')}
-      </div>
-    `).join('');
-    
-    // 事件委托：避免为每个 API 条目重复绑定监听器
-    container.onclick = (e) => {
-      const item = e.target?.closest?.('.api-item');
-      if (!item || !container.contains(item)) return;
-        container.querySelectorAll('.api-item').forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
-        this.selectAPI(item.dataset.id);
-    };
+    return apiDebug.renderAPIGroups(this);
   }
 
   selectAPI(apiId) {
-    const api = this.findAPIById(apiId);
-    if (!api) {
-      this.showToast('API 不存在', 'error');
-      return;
-    }
-    
-    this.currentAPI = { method: api.method, path: api.path, apiId };
-    // 记住最近选中的 API，刷新后恢复
-    try {
-      localStorage.setItem('lastApiId', apiId);
-    } catch {}
-    this._lastJsonPreview = null;
-    
-    // 在移动端，选择API后关闭侧边栏
-    if (window.innerWidth <= 768) {
-      this.closeSidebar();
-    }
-    
-    const welcome = document.getElementById('apiWelcome');
-    const section = document.getElementById('apiTestSection');
-    
-    if (!welcome || !section) {
-      console.error('API页面元素不存在');
-      return;
-    }
-    
-    welcome.style.display = 'none';
-    section.style.display = 'block';
-    
-    const pathParams = (api.path.match(/:(\w+)/g) ?? []).map(p => p.slice(1));
-    
-    let paramsHTML = '';
-    
-    // 路径参数
-    if (pathParams.length && api.pathParams) {
-      paramsHTML += `<div class="api-form-section">
-        <h3 class="api-form-section-title">路径参数</h3>
-        ${pathParams.map(p => {
-          const cfg = api.pathParams[p] ?? {};
-          return `<div class="form-group">
-            <label class="form-label">${this.escapeHtml(cfg.label || p)} <span style="color:var(--danger)">*</span></label>
-            <input type="text" class="form-input" id="path_${this.escapeHtml(p)}" placeholder="${this.escapeHtml(cfg.placeholder ?? '')}" data-request-field="1">
-          </div>`;
-        }).join('')}
-      </div>`;
-    }
-    
-    // 查询参数
-    if (api.queryParams?.length) {
-      paramsHTML += `<div class="api-form-section">
-        <h3 class="api-form-section-title">查询参数</h3>
-        ${api.queryParams.map(p => this.renderParamInput(p)).join('')}
-      </div>`;
-    }
-    
-    // 请求体参数
-    if (api.method !== 'GET' && api.bodyParams?.length) {
-      paramsHTML += `<div class="api-form-section">
-        <h3 class="api-form-section-title">请求体</h3>
-        ${api.bodyParams.map(p => this.renderParamInput(p)).join('')}
-      </div>`;
-    }
-    
-    section.innerHTML = `
-      <div class="card" style="margin-bottom:24px">
-        <div class="card-header">
-          <span class="card-title">${api.title}</span>
-          <span class="method-tag method-${api.method.toLowerCase()}">${api.method}</span>
-        </div>
-        <div class="api-endpoint-box">
-          <span>${api.path}</span>
-        </div>
-        <p style="margin-top:12px;color:var(--text-secondary)">${api.description || ''}</p>
-      </div>
-      
-      <div class="api-form-grid">
-        <div>
-          ${paramsHTML}
-          ${apiId === 'file-upload' ? this.renderFileUpload() : ''}
-          <div style="display:flex;gap:12px;margin-top:20px">
-            <button class="btn btn-primary" id="executeBtn" type="button">执行请求</button>
-            <button class="btn btn-secondary" id="fillExampleBtn" type="button">填充示例</button>
-          </div>
-        </div>
-        <div>
-          <div class="json-editor-container">
-            <div class="json-editor-header">
-              <span class="json-editor-title">请求预览</span>
-              <div class="json-editor-actions">
-                <button class="btn btn-sm btn-secondary" id="formatJsonBtn" type="button">格式化</button>
-                <button class="btn btn-sm btn-secondary" id="copyJsonBtn" type="button">复制</button>
-              </div>
-            </div>
-            <div class="json-editor-wrapper">
-              <textarea id="jsonEditor">{}</textarea>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div id="responseSection"></div>
-    `;
-    
-    // 事件链收敛：一个 click 入口 + 输入事件委托，避免重复绑定和 setTimeout
-    section.onclick = (e) => {
-      const t = e.target;
-      if (!t) return;
-      if (t.id === 'executeBtn') return this.executeRequest();
-      if (t.id === 'fillExampleBtn') return this.fillExample();
-      if (t.id === 'formatJsonBtn') return this.formatJSON();
-      if (t.id === 'copyJsonBtn') return this.copyJSON();
-    };
-
-    section.oninput = (e) => {
-      const t = e.target;
-      if (t?.matches?.('[data-request-field="1"]')) this.updateJSONPreview();
-    };
-    section.onchange = (e) => {
-      const t = e.target;
-      if (t?.matches?.('[data-request-field="1"]')) this.updateJSONPreview();
-    };
-      
-      // 文件上传设置
-      if (apiId === 'file-upload') {
-        this.setupFileUpload();
-      }
-    
-    // 初始化JSON编辑器（只做“请求预览”，只读，避免误操作）
-    this.initJSONEditor().then(() => this.updateJSONPreview());
+    return apiDebug.selectAPI(this, apiId);
   }
 
   renderParamInput(param) {
-    const required = param.required ? '<span style="color:var(--danger)">*</span>' : '';
-    let input = '';
-    const placeholder = this.escapeHtml(param.placeholder || '');
-    
-    switch (param.type) {
-      case 'select':
-        input = `<select class="form-input" id="${param.name}" data-request-field="1">
-          <option value="">请选择</option>
-          ${param.options.map(o => {
-            const selected = (param.defaultValue !== undefined && String(o.value) === String(param.defaultValue)) ? ' selected' : '';
-            return `<option value="${this.escapeHtml(o.value)}"${selected}>${this.escapeHtml(o.label)}</option>`;
-          }).join('')}
-        </select>`;
-        break;
-      case 'textarea':
-      case 'json':
-        input = `<textarea class="form-input" id="${this.escapeHtml(param.name)}" placeholder="${placeholder}" data-request-field="1">${this.escapeHtml(param.defaultValue || '')}</textarea>`;
-        break;
-      default:
-        input = `<input type="${this.escapeHtml(param.type || 'text')}" class="form-input" id="${this.escapeHtml(param.name)}" placeholder="${placeholder}" value="${this.escapeHtml(param.defaultValue || '')}" data-request-field="1">`;
-    }
-    
-    return `<div class="form-group">
-      <label class="form-label">${this.escapeHtml(param.label)} ${required}</label>
-      ${param.hint ? `<p class="config-field-hint">${this.escapeHtml(param.hint)}</p>` : ''}
-      ${input}
-    </div>`;
+    return apiDebug.renderParamInput(this, param);
   }
 
   renderFileUpload() {
-    return `<div class="api-form-section">
-      <h3 class="api-form-section-title">文件上传</h3>
-      <div class="file-upload" id="fileUploadArea">
-        <input type="file" id="fileInput" style="display:none" multiple>
-        <svg class="file-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-          <polyline points="17,8 12,3 7,8"/>
-          <line x1="12" y1="3" x2="12" y2="15"/>
-        </svg>
-        <p class="file-upload-text">点击或拖放文件到此处</p>
-      </div>
-      <div class="file-list" id="fileList"></div>
-    </div>`;
+    return apiDebug.renderFileUpload();
   }
 
   setupFileUpload() {
-    const area = document.getElementById('fileUploadArea');
-    const input = document.getElementById('fileInput');
-    
-    if (!area || !input) return;
-    
-    area.addEventListener('click', () => input.click());
-    input.addEventListener('change', (e) => this.handleFiles(e.target.files));
-    
-    this._bindDropArea(area, {
-      onDragStateChange: (active) => {
-        area.classList.toggle('is-dragover', Boolean(active));
-      },
-      onFiles: (files) => this.handleFiles(files)
-    });
+    return apiDebug.setupFileUpload(this);
   }
 
   handleFiles(files) {
-    this.selectedFiles = Array.from(files);
-    const list = document.getElementById('fileList');
-    if (!list) return;
-    
-    list.innerHTML = this.selectedFiles.map((f, i) => `
-      <div class="file-item">
-        <div class="file-item-info">
-          <div class="file-item-name">${f.name}</div>
-          <div class="file-item-size">${(f.size / 1024).toFixed(1)} KB</div>
-        </div>
-        <button class="file-item-remove" data-index="${i}">×</button>
-      </div>
-    `).join('');
-    
-    list.querySelectorAll('.file-item-remove').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.selectedFiles.splice(parseInt(btn.dataset.index), 1);
-        this.handleFiles(this.selectedFiles);
-      });
-    });
+    return apiDebug.handleFiles(this, files);
   }
 
   findAPIById(id) {
-    for (const group of this.apiConfig?.apiGroups || []) {
-      const api = group.apis.find(a => a.id === id);
-      if (api) return api;
-    }
-    return null;
+    return apiDebug.findAPIById(this, id);
   }
 
   updateJSONPreview() {
-    if (!this.currentAPI) return;
-    const data = this.buildRequestData();
-    const next = JSON.stringify(data, null, 2);
-    if (this._lastJsonPreview === next) return;
-    this._lastJsonPreview = next;
-    const textarea = document.getElementById('jsonEditor');
-    if (textarea && !this.jsonEditor) {
-      const top = textarea.scrollTop;
-      textarea.value = next;
-      textarea.scrollTop = top;
-    } else if (this.jsonEditor) {
-      const scroll = this.jsonEditor.getScrollInfo();
-      this.jsonEditor.setValue(next);
-      this.jsonEditor.scrollTo(null, scroll.top);
-    }
+    return apiDebug.updateJSONPreview(this);
   }
 
   buildRequestData() {
-    const { method, path } = this.currentAPI;
-    const api = this.findAPIById(this.currentAPI.apiId);
-    const data = { method, url: path };
-    
-    // 路径参数
-    (path.match(/:(\w+)/g) || []).forEach(p => {
-      const name = p.slice(1);
-      const val = document.getElementById(`path_${name}`)?.value;
-      if (val) data.url = data.url.replace(p, val);
-    });
-    
-    // 查询参数
-    const query = {};
-    api?.queryParams?.forEach(p => {
-      const val = document.getElementById(p.name)?.value;
-      if (!val) return;
-      if (p.defaultValue !== undefined && String(val) === String(p.defaultValue)) return;
-      query[p.name] = val;
-    });
-    if (Object.keys(query).length) data.query = query;
-    
-    // 请求体
-    const body = {};
-    api?.bodyParams?.forEach(p => {
-      const el = document.getElementById(p.name);
-      const rawVal = el?.value;
-      if (!rawVal) return;
-      if (p.defaultValue !== undefined && String(rawVal) === String(p.defaultValue)) return;
-      let val = rawVal;
-        if (p.type === 'json') {
-          try {
-            val = JSON.parse(val);
-          } catch {
-            // 解析失败时保持原值
-          }
-        }
-        body[p.name] = val;
-    });
-    if (Object.keys(body).length) data.body = body;
-    
-    if (this.selectedFiles.length) {
-      data.files = this.selectedFiles.map(f => ({ name: f.name, size: f.size }));
-    }
-    
-    return data;
+    return apiDebug.buildRequestData(this);
   }
 
   async initJSONEditor() {
-    await this.loadCodeMirror();
-    const textarea = document.getElementById('jsonEditor');
-    if (!textarea || !window.CodeMirror) return;
-    
-    const theme = this.theme === 'dark' ? 'monokai' : 'default';
-    this.jsonEditor = CodeMirror.fromTextArea(textarea, {
-      mode: 'application/json',
-      theme,
-      lineNumbers: true,
-      lineWrapping: true,
-      matchBrackets: true,
-      readOnly: true
-    });
+    return apiDebug.initJSONEditor(this);
   }
 
   async loadCodeMirror() {
-    if (window.CodeMirror) return;
-    
-    const loadCSS = (href) => new Promise((resolve, reject) => {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = href;
-      link.onload = resolve;
-      link.onerror = reject;
-      document.head.appendChild(link);
-    });
-    
-    const loadJS = (src) => new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = src;
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-    
-    const base = 'lib/codemirror';
-    try {
-      await loadCSS(`${base}/lib/codemirror.min.css`);
-      await loadCSS(`${base}/theme/monokai.min.css`);
-      await loadJS(`${base}/lib/codemirror.min.js`);
-      await loadJS(`${base}/mode/javascript/javascript.min.js`);
-    } catch (e) {
-      console.warn('Failed to load CodeMirror:', e);
-    }
+    return apiDebug.loadCodeMirror();
   }
 
   formatJSON() {
-    try {
-      const jsonEditor = document.getElementById('jsonEditor');
-      const val = this.jsonEditor?.getValue() || jsonEditor?.value || '{}';
-      const formatted = JSON.stringify(JSON.parse(val), null, 2);
-      if (this.jsonEditor) {
-        this.jsonEditor.setValue(formatted);
-      } else if (jsonEditor) {
-        jsonEditor.value = formatted;
-      }
-      this.showToast('已格式化', 'success');
-    } catch (e) {
-      this.showToast('JSON 格式错误: ' + e.message, 'error');
-    }
+    return apiDebug.formatJSONPreview(this);
   }
 
   copyJSON() {
-    const jsonEditor = document.getElementById('jsonEditor');
-    const val = this.jsonEditor?.getValue() || jsonEditor?.value || '';
-    if (!val) {
-      this.showToast('没有可复制的内容', 'warning');
-      return;
-    }
-    
-    this.copyToClipboard(val, '已复制', '复制失败');
+    return apiDebug.copyJSON(this);
   }
 
   fillExample() {
-    if (!this.currentAPI || !this.apiConfig?.examples) return;
-    const example = this.apiConfig.examples[this.currentAPI.apiId];
-    if (!example) {
-      this.showToast('暂无示例数据', 'info');
-      return;
-    }
-    
-    Object.entries(example).forEach(([key, val]) => {
-      const el = document.getElementById(key);
-      if (el) el.value = typeof val === 'object' ? JSON.stringify(val, null, 2) : val;
-    });
-    
-    this.updateJSONPreview();
-    this.showToast('已填充示例', 'success');
+    return apiDebug.fillExample(this);
   }
 
   async executeRequest() {
-    if (!this.currentAPI) {
-      this.showToast('请先选择 API', 'warning');
-      return;
-    }
-    
-    const btn = document.getElementById('executeBtn');
-    if (!btn) {
-      this.showToast('执行按钮不存在', 'error');
-      return;
-    }
-    
-    const requestData = this.buildRequestData();
-    
-    // 文件上传
-    if (this.currentAPI.apiId === 'file-upload' && this.selectedFiles.length) {
-      return this.executeFileUpload();
-    }
-    
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<span class="loading-spinner"></span> 执行中...';
-    btn.disabled = true;
-    
-    const startTime = Date.now();
-    let url = this.serverUrl + (requestData.url || this.currentAPI.path);
-    
-    // 处理路径参数
-    if (requestData.url) {
-      url = this.serverUrl + requestData.url;
-    }
-    
-    if (requestData.query && Object.keys(requestData.query).length > 0) {
-      url += '?' + new URLSearchParams(requestData.query).toString();
-    }
-    
-    try {
-      const options = {
-        method: requestData.method || this.currentAPI.method || 'GET',
-        headers: this.getHeaders()
-      };
-      
-      if (requestData.body && Object.keys(requestData.body).length > 0) {
-        options.body = JSON.stringify(requestData.body);
-      }
-      
-      const res = await fetch(url, options);
-      const time = Date.now() - startTime;
-      const text = await res.text();
-      let data;
-      try { 
-        data = JSON.parse(text); 
-      } catch { 
-        data = text; 
-      }
-      
-      // 保存请求信息用于显示
-      const requestInfo = {
-        method: options.method || 'GET',
-        url: url,
-        headers: options.headers || {},
-        body: requestData.body || null
-      };
-      
-      this.renderResponse(res.status, data, time, requestInfo);
-      this.showToast(res.ok ? '请求成功' : `请求失败: ${res.status}`, res.ok ? 'success' : 'error');
-    } catch (e) {
-      const requestInfo = {
-        method: requestData.method || this.currentAPI.method || 'GET',
-        url: url,
-        headers: this.getHeaders(),
-        body: requestData.body || null
-      };
-      this.renderResponse(0, { error: e.message }, Date.now() - startTime, requestInfo);
-      this.showToast('请求失败: ' + e.message, 'error');
-    } finally {
-      if (btn) {
-      btn.innerHTML = originalText;
-      btn.disabled = false;
-      }
-    }
+    return apiDebug.executeRequest(this);
   }
 
   async executeFileUpload() {
-    if (!this.selectedFiles || this.selectedFiles.length === 0) {
-      this.showToast('请先选择文件', 'warning');
-      return;
-    }
-    
-    const formData = new FormData();
-    this.selectedFiles.forEach(f => formData.append('file', f));
-    
-    const btn = document.getElementById('executeBtn');
-    if (!btn) {
-      this.showToast('执行按钮不存在', 'error');
-      return;
-    }
-    
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<span class="loading-spinner"></span> 上传中...';
-    btn.disabled = true;
-    
-    const startTime = Date.now();
-    
-    try {
-      const res = await fetch(`${this.serverUrl}/api/file/upload`, {
-        method: 'POST',
-        headers: { 'X-API-Key': localStorage.getItem('apiKey') || '' },
-        body: formData
-      });
-      
-      const time = Date.now() - startTime;
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        data = { error: '响应解析失败' };
-      }
-      
-      const requestInfo = {
-        method: 'POST',
-        url: `${this.serverUrl}/api/file/upload`,
-        headers: { 'X-API-Key': localStorage.getItem('apiKey') || '' },
-        body: null // FormData 不显示
-      };
-      
-      this.renderResponse(res.status, data, time, requestInfo);
-      
-      if (res.ok) {
-        this.showToast('上传成功', 'success');
-        this.selectedFiles = [];
-        const fileList = document.getElementById('fileList');
-        if (fileList) fileList.innerHTML = '';
-      } else {
-        this.showToast('上传失败: ' + (data.message || res.statusText), 'error');
-      }
-    } catch (e) {
-      const requestInfo = {
-        method: 'POST',
-        url: `${this.serverUrl}/api/file/upload`,
-        headers: { 'X-API-Key': localStorage.getItem('apiKey') || '' },
-        body: null
-      };
-      this.renderResponse(0, { error: e.message }, Date.now() - startTime, requestInfo);
-      this.showToast('上传失败: ' + e.message, 'error');
-    } finally {
-      if (btn) {
-        btn.innerHTML = originalText;
-      btn.disabled = false;
-      }
-    }
+    return apiDebug.executeFileUpload(this);
   }
 
   renderResponse(status, data, time, requestInfo = {}) {
-    const section = document.getElementById('responseSection');
-    const isSuccess = status >= 200 && status < 300;
-    const prettyJson = JSON.stringify(data, null, 2);
-    
-    // 格式化请求头显示
-    const headers = requestInfo.headers || {};
-    const headersHtml = Object.entries(headers).map(([key, value]) => 
-      `<div class="request-header-item"><span class="request-header-key">${this.escapeHtml(key)}</span>: <span class="request-header-value">${this.escapeHtml(String(value))}</span></div>`
-    ).join('');
-    
-    section.innerHTML = `
-      <div class="api-response-wrapper">
-        <!-- 请求头一览 -->
-        <div class="request-info-section" id="requestInfoSection">
-          <div class="request-info-header" id="requestInfoToggle">
-            <h3 class="request-info-title">
-              <span class="request-info-icon">▼</span>
-              请求信息
-            </h3>
-            <div class="request-info-meta">
-              <span class="request-method-badge">${requestInfo.method || 'GET'}</span>
-              <span class="request-url-text" title="${this.escapeHtml(requestInfo.url || '')}">${this.escapeHtml((requestInfo.url || '').substring(0, 60))}${(requestInfo.url || '').length > 60 ? '...' : ''}</span>
-            </div>
-          </div>
-          <div class="request-info-content" id="requestInfoContent" style="display:none">
-            <div class="request-info-item">
-              <div class="request-info-label">请求方法</div>
-              <div class="request-info-value">${requestInfo.method || 'GET'}</div>
-            </div>
-            <div class="request-info-item">
-              <div class="request-info-label">请求URL</div>
-              <div class="request-info-value request-url-full">${this.escapeHtml(requestInfo.url || '')}</div>
-            </div>
-            ${headersHtml ? `
-            <div class="request-info-item">
-              <div class="request-info-label">请求头</div>
-              <div class="request-info-value request-headers">${headersHtml}</div>
-            </div>
-            ` : ''}
-            ${requestInfo.body ? `
-            <div class="request-info-item">
-              <div class="request-info-label">请求体</div>
-              <div class="request-info-value request-body"><pre>${this.syntaxHighlight(JSON.stringify(requestInfo.body, null, 2))}</pre></div>
-            </div>
-            ` : ''}
-          </div>
-        </div>
-        
-        <!-- 响应结果 -->
-        <div class="response-section">
-          <div class="response-header">
-            <h3 class="response-title">响应结果</h3>
-            <div class="response-meta">
-              <span class="badge ${isSuccess ? 'badge-success' : 'badge-danger'}">${status || 'Error'}</span>
-              <span style="color:var(--text-muted)">${time}ms</span>
-              <button id="responseCopyBtn" class="btn btn-secondary btn-sm" type="button">复制结果</button>
-            </div>
-          </div>
-          <div class="response-content">
-            <pre>${this.syntaxHighlight(prettyJson)}</pre>
-          </div>
-        </div>
-      </div>
-    `;
-    
-    // 请求信息折叠/展开 & 复制响应结果 - 使用事件委托避免重复绑定
-    if (section && !section.dataset._bound) {
-      section.dataset._bound = '1';
-      section.addEventListener('click', (e) => {
-        const toggleBtn = e.target.closest('#requestInfoToggle');
-        if (toggleBtn) {
-          const content = document.getElementById('requestInfoContent');
-          if (content) {
-            const isHidden = content.style.display === 'none';
-            content.style.display = isHidden ? 'block' : 'none';
-            const icon = toggleBtn.querySelector('.request-info-icon');
-            if (icon) icon.textContent = isHidden ? '▲' : '▼';
-          }
-        }
-        
-        const copyBtn = e.target.closest('#responseCopyBtn');
-        if (copyBtn) {
-          this.copyToClipboard(prettyJson, '响应结果已复制到剪贴板', '复制失败，请检查浏览器权限');
-        }
-      });
-    }
-    
-    try {
-      if (window.innerWidth > 768) {
-        section.scrollIntoView({ behavior: 'smooth' });
-      }
-    } catch {}
+    return apiDebug.renderResponse(this, status, data, time, requestInfo);
   }
   
-  copyToClipboard(text, successMsg = '已复制到剪贴板', errorMsg = '复制失败') {
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = String(text ?? '');
-      ta.setAttribute('readonly', '');
-      ta.style.position = 'fixed';
-      ta.style.top = '-9999px';
-      ta.style.left = '-9999px';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      ta.setSelectionRange(0, ta.value.length);
-      const ok = document.execCommand && document.execCommand('copy');
-      document.body.removeChild(ta);
-      if (ok) {
-        this.showToast(successMsg, 'success');
-        return;
-      }
-    } catch {}
-    this.showToast(errorMsg, 'error');
-  }
-
-  syntaxHighlight(json) {
-    return json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
-        let cls = 'json-number';
-        if (/^"/.test(match)) {
-          cls = /:$/.test(match) ? 'json-key' : 'json-string';
-        } else if (/true|false/.test(match)) {
-          cls = 'json-boolean';
-        } else if (/null/.test(match)) {
-          cls = 'json-null';
-        }
-        return `<span class="${cls}">${match}</span>`;
-      });
+  // 复制到剪贴板 - 包装器（调用模块函数）
+  async copyToClipboard(text, successMsg = '已复制到剪贴板', errorMsg = '复制失败') {
+    const success = await copyToClipboard(text);
+    if (success) {
+      this.showToast(successMsg, 'success');
+    } else {
+      this.showToast(errorMsg, 'error');
+    }
   }
 
   // ========== WebSocket & 语音 ==========

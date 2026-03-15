@@ -70,6 +70,7 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             label: 'Token 字段名',
             description: 'MiMo 使用 max_completion_tokens；建议保持默认值',
             enum: ['max_tokens', 'max_completion_tokens', 'both'],
+            default: 'max_completion_tokens',
             component: 'Select'
           },
           topP: {
@@ -108,14 +109,15 @@ export default class XiaomiMiMoLLMConfig extends ConfigBase {
             label: '思维链模式',
             description: '控制是否启用思维链（thinking.type），默认 disabled',
             enum: ['enabled', 'disabled'],
+            default: 'disabled',
             component: 'Select'
           },
           responseFormat: {
             type: 'string',
             label: '响应格式（response_format.type）',
-            description: 'MiMo 官方字段为 response_format 对象；这里简化为选择 type（text/json_object）。留空则不传 response_format。',
-            enum: ['text', 'json_object', ''],
-            default: '',
+            description: 'MiMo 官方字段为 response_format 对象；这里简化为选择 type（text/json_object）',
+            enum: ['text', 'json_object'],
+            default: 'text',
             component: 'Select'
           },
           toolChoice: {

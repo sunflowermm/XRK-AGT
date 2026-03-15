@@ -322,6 +322,7 @@ export default class ConfigBase {
    * @param {Object} options - 写入选项
    * @param {boolean} options.backup - 是否备份原文件
    * @param {boolean} options.validate - 是否验证数据
+   * @param {boolean} options.cleanEmpty - 是否清理空值（默认 false，子类可覆盖）
    * @returns {Promise<boolean>}
    */
   async write(data, options = {}) {
@@ -330,12 +331,18 @@ export default class ConfigBase {
       return await this._writeMultiFile(data, options);
     }
 
-    const { backup = true, validate = true } = options;
+    const { backup = true, validate = true, cleanEmpty = false } = options;
 
     try {
+      // 清理空值（如果启用）
+      let processedData = data;
+      if (cleanEmpty) {
+        processedData = this._cleanEmptyValues(data);
+      }
+
       // 验证数据
       if (validate) {
-        const validation = await this.validate(data);
+        const validation = await this.validate(processedData);
         if (!validation.valid) {
           throw new Error(`配置验证失败: ${validation.errors.join(', ')}`);
         }
@@ -354,13 +361,13 @@ export default class ConfigBase {
       // 序列化数据
       let content;
       if (this.fileType === 'yaml') {
-        content = yaml.stringify(data, {
+        content = yaml.stringify(processedData, {
           indent: 2,
           lineWidth: 0,
           minContentWidth: 0
         });
       } else if (this.fileType === 'json') {
-        content = JSON.stringify(data, null, 2);
+        content = JSON.stringify(processedData, null, 2);
       } else {
         throw new Error(`不支持的文件类型: ${this.fileType}`);
       }
@@ -369,7 +376,7 @@ export default class ConfigBase {
       await fs.writeFile(filePath, content, 'utf8');
 
       // 清除缓存
-      this._cache = data;
+      this._cache = processedData;
       this._cacheTime = Date.now();
 
       BotUtil.makeLog('info', `配置已保存 [${this.name}]`, 'ConfigBase');
@@ -1153,6 +1160,88 @@ export default class ConfigBase {
     }
 
     return output;
+  }
+
+  /**
+   * 清理空值（用于写入前过滤）
+   * 子类可以覆盖此方法以自定义清理逻辑
+   * @private
+   * @param {Object} obj - 要清理的对象
+   * @returns {Object} 清理后的对象
+   */
+  _cleanEmptyValues(obj) {
+    if (typeof obj !== 'object' || obj === null) {
+      return obj;
+    }
+
+    if (Array.isArray(obj)) {
+      // 过滤数组中的空值
+      return obj.filter(item => {
+        if (item === undefined || item === null) return false;
+        if (typeof item === 'string' && item.trim() === '') return false;
+        return true;
+      }).map(item => this._cleanEmptyValues(item));
+    }
+
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+      // 跳过 undefined
+      if (value === undefined) continue;
+
+      // 跳过空字符串（根据 schema 判断是否可选）
+      if (typeof value === 'string' && value.trim() === '') {
+        const fieldSchema = this.schema?.fields?.[key];
+        if (!fieldSchema?.required && !this._isRequiredField(key)) {
+          continue;
+        }
+      }
+
+      // 跳过空数组（根据 schema 判断是否可选）
+      if (Array.isArray(value) && value.length === 0) {
+        const fieldSchema = this.schema?.fields?.[key];
+        if (!fieldSchema?.required && !this._isRequiredField(key)) {
+          continue;
+        }
+      }
+
+      // 跳过空对象（根据 schema 判断是否可选）
+      if (this._isObject(value) && Object.keys(value).length === 0) {
+        const fieldSchema = this.schema?.fields?.[key];
+        if (!fieldSchema?.required && !this._isRequiredField(key)) {
+          continue;
+        }
+      }
+
+      // 递归清理对象和数组
+      if (typeof value === 'object' && value !== null) {
+        const cleaned = this._cleanEmptyValues(value);
+        // 清理后如果变成空对象/数组且是可选字段，则跳过
+        const fieldSchema = this.schema?.fields?.[key];
+        if (!fieldSchema?.required && !this._isRequiredField(key)) {
+          if (Array.isArray(cleaned) && cleaned.length === 0) continue;
+          if (this._isObject(cleaned) && Object.keys(cleaned).length === 0) continue;
+        }
+        result[key] = cleaned;
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 判断字段是否为必填字段
+   * @private
+   * @param {string} key - 字段名
+   * @returns {boolean}
+   */
+  _isRequiredField(key) {
+    // 检查 schema.required 数组
+    if (this.schema?.required && Array.isArray(this.schema.required)) {
+      return this.schema.required.includes(key);
+    }
+    return false;
   }
 
   /**
