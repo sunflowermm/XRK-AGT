@@ -16,3 +16,5 @@ xrk/**
 !xrk/lib/codemirror/mode
 !xrk/lib/codemirror/mode/javascript
 !xrk/lib/codemirror/mode/javascript/javascript.min.js
+!xrk/modules
+!xrk/modules/*
