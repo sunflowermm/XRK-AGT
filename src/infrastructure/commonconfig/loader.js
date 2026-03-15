@@ -5,7 +5,8 @@ import paths from '#utils/paths.js';
 
 /**
  * 配置加载器
- * 负责加载和管理所有配置类
+ * 负责加载和管理所有配置类（从 core/<core名>/commonconfig/*.js 加载）。
+ * 通道配置（如 feishu）由此加载，通过 ConfigManager.get('feishu') 访问，路径约定与 config-constants 注释一致。
  */
 class ConfigLoader {
   constructor() {

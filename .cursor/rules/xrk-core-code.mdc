@@ -6,14 +6,20 @@ alwaysApply: false
 
 # Core 业务代码约定
 
+## 底层与基类
+
+- **不改底层**：不得修改 `src/infrastructure/`、`src/utils/` 等底层代码。
+- **充分利用底层**：继承基类并按文档实现接口即可；commonconfig 用足 ConfigBase 的 schema、getStructure、read、write、validate，插件/HTTP/工作流用足各自基类能力，不重复实现、不伸手改 src/。
+
 ## 放码位置
 
 - 插件：`core/*/plugin/*.js`；HTTP API：`core/*/http/*.js`；工作流：`core/*/stream/*.js`。各自继承对应基类，行为符合 `docs/` 中对应文档。
-- 基类路径：插件 `#infrastructure/plugins/plugin.js`，HTTP `#infrastructure/http/http.js`，工作流 `#infrastructure/aistream/aistream.js`。
+- 基类路径（无 package.json 时用 `#`）：插件 `#infrastructure/plugins/plugin.js`，HTTP `#infrastructure/http/http.js`，工作流 `#infrastructure/aistream/aistream.js`。有 package.json 时改为相对路径至 `src/`（如 `../../../src/infrastructure/...`）。
 
 ## 导入约定
 
-- 不自带 package.json 的 core：使用根包 `#` 别名（`#infrastructure/*`、`#utils/*`）；自带 package.json 的 core 用相对路径引用 `src/*`。
+- **无** package.json 的 core：使用根包 `#` 别名（`#infrastructure/*`、`#utils/*`）。
+- **有** package.json 的 core：**禁止使用 `#`**（子包无法解析根包别名），须用**相对路径**引用项目根下 `src/`（如从 `core/X/commonconfig/` 用 `../../../src/infrastructure/...`）。写业务 core 时若该 core 目录下存在 package.json，一律不得使用 `#` 路径。
 
 ## 编码约定
 

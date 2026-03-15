@@ -1,6 +1,10 @@
 /**
  * 配置常量定义
  * 统一管理全局配置、服务器配置和工厂配置的分类
+ *
+ * 通道配置（如 feishu）：由各 Core 的 commonconfig 提供，通过 ConfigManager.get('feishu') 等访问；
+ * 文件路径约定为 data/server_bots/{port}/<name>.yaml，与底层 config.getConfigDir() 一致。
+ * 不列入 GLOBAL_CONFIGS/SERVER_CONFIGS，避免与 config/default_config 冲突。
  */
 
 // 全局配置列表（不随端口变化，存储在server_bots/根目录）

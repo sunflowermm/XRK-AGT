@@ -207,10 +207,11 @@ class PluginsLoader {
           if (val.url || val.file) e.video.push(val.url || val.file)
           break
         case 'audio':
+        case 'record':
           if (val.url || val.file) e.audio.push(val.url || val.file)
           break
         case 'file':
-          e.file = { name: val.name, fid: val.fid, size: val.size, url: val.url }
+          e.file = { name: val.name || val.file_name, fid: val.fid, size: val.size, url: val.url || val.file }
           if (!e.fileList) e.fileList = []
           e.fileList.push(e.file)
           break

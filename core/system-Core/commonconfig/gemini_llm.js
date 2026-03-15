@@ -76,12 +76,14 @@ export default class GeminiLLMConfig extends ConfigBase {
           maxTokens: {
             type: 'number',
             label: '最大输出（generationConfig.maxOutputTokens）',
+            description: '单次回答允许的最大输出 token 数',
             min: 1,
             component: 'InputNumber'
           },
           timeout: {
             type: 'number',
             label: '超时时间 (ms)',
+            description: 'API 请求超时时间（毫秒）',
             min: 1000,
             default: 360000,
             component: 'InputNumber'

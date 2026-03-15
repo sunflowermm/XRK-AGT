@@ -28,6 +28,7 @@ export default class AnthropicLLMConfig extends ConfigBase {
           apiKey: {
             type: 'string',
             label: 'API Key',
+            description: 'Anthropic 颁发的 API 密钥，必填',
             default: '',
             component: 'InputPassword'
           },
@@ -72,6 +73,7 @@ export default class AnthropicLLMConfig extends ConfigBase {
           timeout: {
             type: 'number',
             label: '超时时间 (ms)',
+            description: 'API 请求超时时间（毫秒）',
             min: 1000,
             default: 360000,
             component: 'InputNumber'
@@ -86,6 +88,7 @@ export default class AnthropicLLMConfig extends ConfigBase {
           enableStream: {
             type: 'boolean',
             label: '启用流式输出',
+            description: '开启后使用流式 Messages API 返回内容',
             default: true,
             component: 'Switch'
           },

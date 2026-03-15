@@ -42,6 +42,7 @@ export default class OpenAILLMConfig extends ConfigBase {
           model: {
             type: 'string',
             label: '模型（model）',
+            description: '模型标识，如 gpt-4o-mini、gpt-4o 等',
             default: 'gpt-4o-mini',
             component: 'Input'
           },
@@ -82,34 +83,40 @@ export default class OpenAILLMConfig extends ConfigBase {
           serviceTier: {
             type: 'string',
             label: 'service_tier',
+            description: 'OpenAI 服务档位（仅部分端点支持）',
             enum: ['auto', 'default', 'flex', 'scale', 'priority'],
             component: 'Select'
           },
           promptCacheKey: {
             type: 'string',
             label: 'prompt_cache_key',
+            description: '提示缓存键，用于复用缓存（仅部分模型支持）',
             component: 'Input'
           },
           promptCacheRetention: {
             type: 'string',
             label: 'prompt_cache_retention',
+            description: '提示缓存保留策略',
             enum: ['in-memory', '24h'],
             component: 'Select'
           },
           safetyIdentifier: {
             type: 'string',
             label: 'safety_identifier',
+            description: '安全/审核标识（仅部分端点支持）',
             component: 'Input'
           },
           reasoningEffort: {
             type: 'string',
             label: 'reasoning_effort',
+            description: '推理强度（o1 等推理模型可用）',
             enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
             component: 'Select'
           },
           timeout: {
             type: 'number',
             label: '超时时间(ms)',
+            description: 'API 请求超时时间（毫秒）',
             min: 1000,
             default: 360000,
             component: 'InputNumber'
@@ -117,24 +124,28 @@ export default class OpenAILLMConfig extends ConfigBase {
           enableTools: {
             type: 'boolean',
             label: '启用工具调用（MCP）',
+            description: '开启后自动将 MCP 工具映射为 OpenAI tools 字段',
             default: true,
             component: 'Switch'
           },
           toolChoice: {
             type: 'string',
             label: 'tool_choice',
+            description: '工具调用策略：auto / none / 或指定 tool 名',
             default: 'auto',
             component: 'Input'
           },
           parallelToolCalls: {
             type: 'boolean',
             label: 'parallel_tool_calls',
+            description: '是否允许模型并行发起多次 tool call',
             default: true,
             component: 'Switch'
           },
           maxToolRounds: {
             type: 'number',
             label: '最大工具轮次',
+            description: '多轮 tool calling 的最大轮次',
             min: 1,
             max: 20,
             default: 7,
@@ -143,6 +154,7 @@ export default class OpenAILLMConfig extends ConfigBase {
           enableStream: {
             type: 'boolean',
             label: '启用流式输出',
+            description: '开启后使用 SSE 流式返回内容',
             default: true,
             component: 'Switch'
           },
@@ -171,6 +183,7 @@ export default class OpenAILLMConfig extends ConfigBase {
           proxy: {
             type: 'object',
             label: '代理配置',
+            description: '仅影响本机到 OpenAI 的 HTTP 请求；支持 http/https/socks5',
             component: 'SubForm',
             fields: {
               enabled: {
@@ -182,6 +195,7 @@ export default class OpenAILLMConfig extends ConfigBase {
               url: {
                 type: 'string',
                 label: '代理地址',
+                description: '例如 http://127.0.0.1:7890 或 http://user:pass@host:port',
                 default: '',
                 component: 'Input'
               }

@@ -1,5 +1,9 @@
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 
+/**
+ * Cherryin 协议兼容 LLM 工厂配置（多运营商）
+ * 配置文件：data/server_bots/{port}/cherryin_compat_llm.yaml
+ */
 export default class CherryINCompatibleLLMConfig extends ConfigBase {
   constructor() {
     super({

@@ -4808,12 +4808,21 @@ class App {
 
   async loadSelectedConfigDetail() {
     if (!this._configState?.selected) return;
+    const main = document.getElementById('configMain');
     const { name } = this._configState.selected;
     const child = this._configState.selectedChild;
     const query = child ? `?path=${encodeURIComponent(child)}` : '';
 
     try {
       this._configState.loading = true;
+      if (main) {
+        main.innerHTML = `
+          <div class="config-loading">
+            <div class="loading-spinner" style="margin:0 auto"></div>
+            <p style="margin-top:12px; color: var(--text-muted);">加载配置中...</p>
+          </div>
+        `;
+      }
       const [flatStructRes, flatDataRes, structure] = await Promise.all([
         fetch(`${this.serverUrl}/api/config/${name}/flat-structure${query}`, { headers: this.getHeaders() }),
         fetch(`${this.serverUrl}/api/config/${name}/flat${query}`, { headers: this.getHeaders() }),
@@ -4850,9 +4859,10 @@ class App {
       this._configState.jsonDirty = false;
 
       this.renderConfigFormPanel();
+      if (main) main.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
-      const main = document.getElementById('configMain');
-      if (main) main.innerHTML = `<div class="empty-state"><p>加载失败：${e.message}</p></div>`;
+      const mainEl = document.getElementById('configMain');
+      if (mainEl) mainEl.innerHTML = `<div class="empty-state"><p>加载失败：${this.escapeHtml(e.message)}</p></div>`;
     } finally {
       if (this._configState) this._configState.loading = false;
     }
@@ -5441,7 +5451,13 @@ class App {
     const basePlaceholder = meta.placeholder ?? '';
     const hasSchemaDefault = Object.hasOwn(field, 'default') || Object.hasOwn(meta, 'default');
     const rawDefault = Object.hasOwn(meta, 'default') ? meta.default : field.default;
-    const defaultText = rawDefault === undefined || rawDefault === null ? '' : String(rawDefault);
+    // 对象/数组不做 String()，避免 placeholder 显示 [object Object]
+    let defaultText = '';
+    if (rawDefault !== undefined && rawDefault !== null) {
+      if (typeof rawDefault === 'object' && !Array.isArray(rawDefault)) defaultText = '(对象)';
+      else if (Array.isArray(rawDefault)) defaultText = '(数组)';
+      else defaultText = String(rawDefault);
+    }
     const isEmptyValue = value === undefined || value === null || value === '';
     // 当字段没有显式 placeholder 且当前值为空时，用 commonconfig 的 default 作为灰字提示
     const effectivePlaceholder = basePlaceholder
@@ -5489,8 +5505,9 @@ class App {
       }
       case 'tags': {
         const text = this.escapeHtml(Array.isArray(value) ? value.join('\n') : (value ?? ''));
+        const tagsPlaceholder = placeholder || '每行一个值';
         return `
-          <textarea class="form-input" rows="3" id="${inputId}" ${dataset} data-control="tags" placeholder="每行一个值" ${disabled}>${text}</textarea>
+          <textarea class="form-input" rows="3" id="${inputId}" ${dataset} data-control="tags" placeholder="${tagsPlaceholder}" ${disabled}>${text}</textarea>
           <p class="config-field-hint">将文本拆分为数组</p>
         `;
       }
@@ -5511,6 +5528,40 @@ class App {
         const nofillName = `${inputId}-nofill`;
         return `<input type="password" class="form-input" id="${inputId}" name="${this.escapeHtml(nofillName)}" autocomplete="new-password" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
       }
+      case 'url':
+        return `<input type="url" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      case 'email':
+        return `<input type="email" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+      case 'slider':
+      case 'range': {
+        const min = meta.min ?? 0;
+        const max = meta.max ?? 100;
+        const step = meta.step ?? 1;
+        const numVal = value !== undefined && value !== null && value !== '' ? Number(value) : (meta.default ?? min);
+        const displayVal = numVal;
+        return `
+          <div class="config-slider-wrap">
+            <input type="range" class="config-slider" id="${inputId}" ${dataset} min="${min}" max="${max}" step="${step}" value="${this.escapeHtml(String(displayVal))}" ${disabled}>
+            <span class="config-slider-value" data-slider-value-for="${inputId}">${this.escapeHtml(String(displayVal))}</span>
+          </div>
+        `;
+      }
+      case 'radio': {
+        const opts = normalizeOptions(meta.enum ?? meta.options ?? []);
+        const current = value ?? meta.default ?? '';
+        return `
+          <div class="config-radio-group" role="radiogroup" aria-label="${this.escapeHtml(meta.label || field.path)}" id="${inputId}-group">
+            ${opts.map((opt, i) => `
+              <label class="config-radio-option">
+                <input type="radio" name="${inputId}" ${dataset} value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'checked' : ''} ${i === 0 ? `id="${inputId}"` : ''} ${disabled}>
+                <span class="config-radio-label">${this.escapeHtml(opt.label)}</span>
+              </label>
+            `).join('')}
+          </div>
+        `;
+      }
+      case 'input':
+        return `<input type="text" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
       case 'subform': {
         // SubForm 类型：用于“自由对象/Map”场景（例如 headers/extraBody）。
         // 注意：有子字段的 SubForm 会在 renderFieldTree 中展开显示，不会走到这里。
@@ -5537,7 +5588,28 @@ class App {
           <p class="config-field-hint">以 JSON 形式编辑该字段</p>
         `;
       default:
-        return `<input type="text" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(value ?? '')}" placeholder="${placeholder}" ${disabled}>`;
+        // object/map 即使 component 被误配为 Input 也统一用键值+JSON 编辑器，避免显示 [object Object]
+        if (field.type === 'object' || field.type === 'map') {
+          const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${field.path}`;
+          const defaultValue = Object.hasOwn(meta, 'default') ? meta.default : {};
+          return `
+          ${this.renderFreeObjectSubFormEditor({
+            dataset,
+            value,
+            defaultValue,
+            modeKey,
+            subformId: field.path,
+            inputIdPrefix: inputId,
+            disabled,
+            fieldPath: field.path
+          })}
+          <p class="config-field-hint">键值模式更适合简单键值对；复杂结构建议切换 JSON。</p>
+        `;
+        }
+        const displayValue = (value != null && typeof value === 'object')
+          ? ''
+          : (value ?? '');
+        return `<input type="text" class="form-input" id="${inputId}" ${dataset} value="${this.escapeHtml(displayValue)}" placeholder="${placeholder}" ${disabled}>`;
     }
   }
 
@@ -5674,6 +5746,38 @@ class App {
         return `<input type="number" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${schema.min ?? ''}" max="${schema.max ?? ''}" step="${schema.step ?? 'any'}">`;
       case 'inputpassword':
         return `<input type="password" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'url':
+        return `<input type="url" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'email':
+        return `<input type="email" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'slider':
+      case 'range': {
+        const min = schema.min ?? 0;
+        const max = schema.max ?? 100;
+        const step = schema.step ?? 1;
+        const numVal = value !== undefined && value !== null && value !== '' ? Number(value) : (schema.default ?? min);
+        return `
+          <div class="config-slider-wrap">
+            <input type="range" class="config-slider" ${dataset} min="${min}" max="${max}" step="${step}" value="${this.escapeHtml(String(numVal))}">
+            <span class="config-slider-value">${this.escapeHtml(String(numVal))}</span>
+          </div>
+        `;
+      }
+      case 'radio': {
+        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
+        const current = value ?? schema.default ?? '';
+        const name = `arr-${parentPath}-${index}-${relPath}`.replace(/[^a-zA-Z0-9-_]/g, '_');
+        return `
+          <div class="config-radio-group" role="radiogroup">
+            ${opts.map((opt, i) => `
+              <label class="config-radio-option">
+                <input type="radio" name="${name}" ${dataset} value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'checked' : ''}>
+                <span class="config-radio-label">${this.escapeHtml(opt.label)}</span>
+              </label>
+            `).join('')}
+          </div>
+        `;
+      }
       case 'subform': {
         const subformId = `${parentPath}.${index}.${relPath}`;
         const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
@@ -5841,6 +5945,38 @@ class App {
         return `<input type="number" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}" min="${schema.min ?? ''}" max="${schema.max ?? ''}" step="${schema.step ?? 'any'}">`;
       case 'inputpassword':
         return `<input type="password" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'url':
+        return `<input type="url" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'email':
+        return `<input type="email" class="form-input" ${dataset} value="${this.escapeHtml(value ?? '')}">`;
+      case 'slider':
+      case 'range': {
+        const min = schema.min ?? 0;
+        const max = schema.max ?? 100;
+        const step = schema.step ?? 1;
+        const numVal = value !== undefined && value !== null && value !== '' ? Number(value) : (schema.default ?? min);
+        return `
+          <div class="config-slider-wrap">
+            <input type="range" class="config-slider" ${dataset} min="${min}" max="${max}" step="${step}" value="${this.escapeHtml(String(numVal))}">
+            <span class="config-slider-value">${this.escapeHtml(String(numVal))}</span>
+          </div>
+        `;
+      }
+      case 'radio': {
+        const opts = normalizeOptions(schema.enum ?? schema.options ?? []);
+        const current = value ?? schema.default ?? '';
+        const name = `dyn-${subformId}`.replace(/[^a-zA-Z0-9-_]/g, '_');
+        return `
+          <div class="config-radio-group" role="radiogroup">
+            ${opts.map(opt => `
+              <label class="config-radio-option">
+                <input type="radio" name="${name}" ${dataset} value="${this.escapeHtml(opt.value)}" ${String(opt.value) === String(current) ? 'checked' : ''}>
+                <span class="config-radio-label">${this.escapeHtml(opt.label)}</span>
+              </label>
+            `).join('')}
+          </div>
+        `;
+      }
       case 'subform': {
         const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${subformId}`;
         return this.renderFreeObjectSubFormEditor({
@@ -5880,9 +6016,16 @@ class App {
     const wrapper = document.getElementById('configFormWrapper');
     if (!wrapper) return;
     wrapper.querySelectorAll('[data-field]').forEach(el => {
-      // 对于checkbox使用change事件，其他使用input事件（input事件会在每次输入时触发，change只在失去焦点时触发）
-      const evt = el.type === 'checkbox' ? 'change' : 'input';
+      // checkbox/radio 用 change，range 用 input（实时更新滑块数值），其余用 input
+      const evt = (el.type === 'checkbox' || el.type === 'radio') ? 'change' : 'input';
       el.addEventListener(evt, () => this.handleConfigFieldChange(el));
+    });
+    // 滑块数值显示实时同步
+    wrapper.querySelectorAll('.config-slider').forEach(slider => {
+      const span = slider.id ? wrapper.querySelector(`[data-slider-value-for="${slider.id}"]`) : null;
+      const sync = () => { if (span) span.textContent = slider.value; };
+      slider.addEventListener('input', sync);
+      sync();
     });
   }
 
@@ -5925,8 +6068,15 @@ class App {
 
     const nodes = wrapper.querySelectorAll('[data-array-parent]');
     nodes.forEach(el => {
-      const evt = el.type === 'checkbox' ? 'change' : (el.tagName === 'SELECT' ? 'change' : 'input');
+      const evt = (el.type === 'checkbox' || el.type === 'radio') ? 'change' : (el.tagName === 'SELECT' ? 'change' : 'input');
       el.addEventListener(evt, () => this.handleArrayObjectFieldChange(el));
+    });
+    wrapper.querySelectorAll('.config-slider[data-array-parent]').forEach(slider => {
+      const wrap = slider.closest('.array-object-card, .dynamic-entry-card');
+      const span = wrap?.querySelector('.config-slider-value');
+      const sync = () => { if (span) span.textContent = slider.value; };
+      slider.addEventListener('input', sync);
+      sync();
     });
 
     wrapper.querySelectorAll('[data-action="array-add"]').forEach(btn => {
@@ -5952,6 +6102,14 @@ class App {
     let value;
     if (component === 'switch') {
       value = !!target.checked;
+    } else if (target.type === 'radio') {
+      const checked = target.closest('#configFormWrapper')?.querySelector(`input[name="${target.name}"]:checked`);
+      value = checked ? checked.value : target.value;
+    } else if (target.type === 'range' || component === 'slider' || component === 'range') {
+      const card = target.closest('.array-object-card, .dynamic-entry-card');
+      const span = card?.querySelector('.config-slider-value');
+      if (span) span.textContent = target.value;
+      value = target.value === '' ? null : Number(target.value);
     } else if (target.dataset.control === 'kvlines') {
       value = this.parseKeyValueLines(target.value || '');
     } else if (target.dataset.control === 'tags') {
@@ -6169,6 +6327,14 @@ class App {
     let value;
     if (component === 'switch') {
       value = !!target.checked;
+    } else if (target.type === 'radio') {
+      const checked = document.querySelector(`input[name="${target.name}"]:checked`);
+      value = checked ? checked.value : target.value;
+    } else if (target.type === 'range' || component === 'slider' || component === 'range') {
+      const wrap = target.closest('#configFormWrapper');
+      const span = wrap && target.id ? wrap.querySelector(`[data-slider-value-for="${target.id}"]`) : null;
+      if (span) span.textContent = target.value;
+      value = target.value === '' ? null : Number(target.value);
     } else if (target.dataset.control === 'kvlines') {
       value = this.parseKeyValueLines(target.value || '');
     } else if (target.dataset.control === 'tags') {
@@ -6364,7 +6530,9 @@ class App {
       });
       this._configState.dirty = {};
       this.showToast('配置已保存', 'success');
-      this.loadSelectedConfigDetail();
+      await this.loadSelectedConfigDetail();
+      const wrapper = document.getElementById('configFormWrapper');
+      if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       this.showToast('保存失败: ' + e.message, 'error');
     }
@@ -6380,7 +6548,9 @@ class App {
       await this.postBatchSet(flat);
       this.showToast('配置已保存', 'success');
       this._configState.mode = 'form';
-      this.loadSelectedConfigDetail();
+      await this.loadSelectedConfigDetail();
+      const wrapper = document.getElementById('configFormWrapper');
+      if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       this.showToast('保存失败: ' + e.message, 'error');
     }
@@ -6407,6 +6577,8 @@ class App {
     switch ((type ?? '').toLowerCase()) {
       case 'boolean': return 'Switch';
       case 'number': return 'InputNumber';
+      case 'object':
+      case 'map': return 'SubForm';
       default: return 'Input';
     }
   }

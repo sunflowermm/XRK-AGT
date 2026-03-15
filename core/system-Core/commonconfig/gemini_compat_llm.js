@@ -1,5 +1,9 @@
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 
+/**
+ * Gemini 协议兼容 LLM 工厂配置（多运营商）
+ * 配置文件：data/server_bots/{port}/gemini_compat_llm.yaml
+ */
 export default class GeminiCompatibleLLMConfig extends ConfigBase {
   constructor() {
     super({
