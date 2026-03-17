@@ -1730,7 +1730,8 @@ Bot.tasker.push(
       // 时间戳和事件ID
       data.time = data.time || Math.floor(Date.now() / 1000)
       if (!data.event_id) {
-        const idPart = data.message_id ? `${data.message_id}_${data.time}` : `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        // message_id 本身就是同一条消息的稳定标识；拼接 time 会导致重复上报时产生不同 event_id，去重失效
+        const idPart = data.message_id ? String(data.message_id) : `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
         data.event_id = `onebot_${data.self_id}_${idPart}`
       }
       
