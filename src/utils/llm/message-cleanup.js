@@ -27,6 +27,13 @@ export function cleanupMessages(messages, options = {}) {
 
   BotUtil.makeLog('debug', `[message-cleanup] ${messages.length} -> ${cleaned.length} 条消息`, 'MessageCleanup');
 
+  // 输出最后几条消息的序列，用于调试
+  const lastMessages = cleaned.slice(-10).map((m, i) => {
+    const idx = cleaned.length - 10 + i;
+    return `${idx}:${m.role}${m.tool_calls ? `(${m.tool_calls.length}tc)` : ''}`;
+  }).join(' ');
+  BotUtil.makeLog('debug', `[message-cleanup] 最后10条: ${lastMessages}`, 'MessageCleanup');
+
   return cleaned;
 }
 
