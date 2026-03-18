@@ -18,10 +18,16 @@ export function cleanupMessages(messages, options = {}) {
     return [];
   }
 
+  console.log('[message-cleanup] 输入消息数量:', messages.length);
+  console.log('[message-cleanup] 输入消息序列:', messages.map((m, i) =>
+    `${i}: ${m.role}${m.tool_calls ? `(${m.tool_calls.length} calls)` : ''}${m.tool_call_id ? `(id:${m.tool_call_id})` : ''}`
+  ).join(' -> '));
+
   let cleaned = [...messages];
 
   // 1. 移除无效消息
   cleaned = removeInvalidMessages(cleaned);
+  console.log('[message-cleanup] 移除无效后:', cleaned.length);
 
   // 2. 标准化消息内容
   cleaned = normalizeMessageContent(cleaned);
@@ -29,6 +35,7 @@ export function cleanupMessages(messages, options = {}) {
   // 3. 合并连续的相同角色消息（可选）
   if (options.mergeConsecutive !== false) {
     cleaned = mergeConsecutiveMessages(cleaned);
+    console.log('[message-cleanup] 合并后:', cleaned.length);
   }
 
   // 4. 确保第一条非 system 消息是 user（可选）
@@ -38,6 +45,10 @@ export function cleanupMessages(messages, options = {}) {
 
   // 5. 验证并修复工具调用序列
   cleaned = fixToolCallSequence(cleaned);
+  console.log('[message-cleanup] 修复序列后:', cleaned.length);
+  console.log('[message-cleanup] 输出消息序列:', cleaned.map((m, i) =>
+    `${i}: ${m.role}${m.tool_calls ? `(${m.tool_calls.length} calls)` : ''}${m.tool_call_id ? `(id:${m.tool_call_id})` : ''}`
+  ).join(' -> '));
 
   return cleaned;
 }
@@ -207,15 +218,19 @@ function ensureFirstUserMessage(messages) {
  * 移除任何破坏序列的消息
  */
 function fixToolCallSequence(messages) {
+  console.log('[fixToolCallSequence] 开始修复，消息数:', messages.length);
+
   const fixed = [];
   let expectingToolResponse = false;
   let toolCallsCount = 0;
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
+    console.log(`[fixToolCallSequence] 处理 ${i}: role=${msg.role}, expectingTool=${expectingToolResponse}, toolCallsCount=${toolCallsCount}`);
 
     // 如果当前是 assistant with tool_calls
     if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+      console.log(`[fixToolCallSequence] ${i}: assistant with ${msg.tool_calls.length} tool_calls`);
       fixed.push(msg);
       expectingToolResponse = true;
       toolCallsCount = msg.tool_calls.length;
@@ -226,15 +241,17 @@ function fixToolCallSequence(messages) {
     if (msg.role === 'tool') {
       // 必须在期待 tool 响应的状态
       if (!expectingToolResponse) {
-        console.warn(`[message-cleanup] Skipping orphan tool message at index ${i}`);
+        console.warn(`[fixToolCallSequence] ${i}: 跳过孤立的 tool 消息`);
         continue;
       }
 
+      console.log(`[fixToolCallSequence] ${i}: tool 消息，剩余 ${toolCallsCount - 1}`);
       fixed.push(msg);
       toolCallsCount--;
 
       // 如果所有 tool 响应都收到了，重置状态
       if (toolCallsCount <= 0) {
+        console.log(`[fixToolCallSequence] ${i}: 所有 tool 响应已收到，重置状态`);
         expectingToolResponse = false;
       }
       continue;
@@ -243,15 +260,15 @@ function fixToolCallSequence(messages) {
     // 其他消息
     // 如果正在期待 tool 响应，跳过这条消息（破坏序列）
     if (expectingToolResponse) {
-      console.warn(
-        `[message-cleanup] Skipping ${msg.role} message at index ${i} (expecting tool response)`
-      );
+      console.warn(`[fixToolCallSequence] ${i}: 跳过 ${msg.role} 消息（正在等待 tool 响应）`);
       continue;
     }
 
+    console.log(`[fixToolCallSequence] ${i}: 保留 ${msg.role} 消息`);
     fixed.push(msg);
   }
 
+  console.log(`[fixToolCallSequence] 修复完成: ${messages.length} -> ${fixed.length}`);
   return fixed;
 }
 

@@ -65,11 +65,18 @@ export default class OpenAICompatibleLLMClient {
   }
 
   async _prepareMessages(messages) {
+    console.log('[OpenAICompatibleLLMClient] _prepareMessages 输入:', messages.length, '条消息');
+
     const transformed = await this.transformMessages(messages);
+    console.log('[OpenAICompatibleLLMClient] transformMessages 后:', transformed.length, '条消息');
+
     await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
 
     // 标准化消息序列（统一处理所有规范）
-    return cleanupMessages(transformed);
+    const cleaned = cleanupMessages(transformed);
+    console.log('[OpenAICompatibleLLMClient] cleanupMessages 后:', cleaned.length, '条消息');
+
+    return cleaned;
   }
 
   _normalizeToolCall(toolCall, index) {
@@ -254,12 +261,19 @@ export default class OpenAICompatibleLLMClient {
       toolNameSet: new Set()
     };
 
+    console.log('[_runWithToolRounds] 开始工具调用循环, 初始消息数:', state.messages.length);
+
     for (let round = 0; round < maxToolRounds; round++) {
+      console.log(`[_runWithToolRounds] 第 ${round + 1} 轮, 当前消息数:`, state.messages.length);
+
       const roundResult = await handlers.requestRound(state.messages, overrides, state);
       const content = roundResult?.content || '';
       const toolCalls = Array.isArray(roundResult?.toolCalls) ? roundResult.toolCalls : [];
 
+      console.log(`[_runWithToolRounds] 第 ${round + 1} 轮结果: content=${content.length}字符, toolCalls=${toolCalls.length}个`);
+
       if (!toolCalls.length || !enableMcpTools) {
+        console.log('[_runWithToolRounds] 无工具调用或已禁用，结束循环');
         return { content, executedToolNames: Array.from(state.toolNameSet) };
       }
 
@@ -271,11 +285,17 @@ export default class OpenAICompatibleLLMClient {
         assistantMsg.content = content;
       }
       state.messages.push(assistantMsg);
+      console.log(`[_runWithToolRounds] 添加 assistant 消息, 当前消息数:`, state.messages.length);
 
       // 执行工具调用并添加 tool 消息
       const toolResults = await this._executeToolCalls(toolCalls, overrides, handlers.onDelta);
-      if (toolResults === null) return { content, executedToolNames: Array.from(state.toolNameSet) };
+      if (toolResults === null) {
+        console.log('[_runWithToolRounds] 工具执行返回 null，结束循环');
+        return { content, executedToolNames: Array.from(state.toolNameSet) };
+      }
+
       state.messages.push(...toolResults);
+      console.log(`[_runWithToolRounds] 添加 ${toolResults.length} 个 tool 消息, 当前消息数:`, state.messages.length);
     }
 
     BotUtil.makeLog('warn', `[OpenAICompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
