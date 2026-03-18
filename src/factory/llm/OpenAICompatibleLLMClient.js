@@ -3,6 +3,7 @@ import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/ll
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
+import { cleanupMessages } from '../../utils/llm/message-cleanup.js';
 import BotUtil from '../../utils/botutil.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 
@@ -66,7 +67,9 @@ export default class OpenAICompatibleLLMClient {
   async _prepareMessages(messages) {
     const transformed = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
-    return transformed;
+
+    // 标准化消息序列（统一处理所有规范）
+    return cleanupMessages(transformed);
   }
 
   _normalizeToolCall(toolCall, index) {
@@ -257,8 +260,15 @@ export default class OpenAICompatibleLLMClient {
       }
 
       this._collectToolNames(toolCalls, state.toolNameSet);
-      state.messages.push({ role: 'assistant', content: content || null, tool_calls: toolCalls });
 
+      // 添加 assistant 消息（带 tool_calls）
+      const assistantMsg = { role: 'assistant', tool_calls: toolCalls };
+      if (content && content.trim()) {
+        assistantMsg.content = content;
+      }
+      state.messages.push(assistantMsg);
+
+      // 执行工具调用并添加 tool 消息
       const toolResults = await this._executeToolCalls(toolCalls, overrides, handlers.onDelta);
       if (toolResults === null) return { content, executedToolNames: Array.from(state.toolNameSet) };
       state.messages.push(...toolResults);
