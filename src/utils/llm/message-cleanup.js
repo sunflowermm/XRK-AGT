@@ -161,6 +161,10 @@ function fixToolCallSequence(messages) {
   let pendingToolCallsStartIndex = -1;
   /** @type {Set<string>} */
   let pendingToolCallIds = new Set();
+  /** @type {Map<string, string>} */
+  let pendingToolCallNameById = new Map();
+  /** @type {string|null} */
+  let singlePendingId = null;
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
@@ -176,11 +180,16 @@ function fixToolCallSequence(messages) {
       expectingToolResponse = true;
       toolCallsCount = msg.tool_calls.length;
       pendingToolCallsStartIndex = fixed.length - 1;
-      pendingToolCallIds = new Set(
-        msg.tool_calls
-          .map(tc => tc?.id)
-          .filter(id => typeof id === 'string' && id.trim().length > 0)
-      );
+      pendingToolCallIds = new Set();
+      pendingToolCallNameById = new Map();
+      for (const tc of msg.tool_calls) {
+        const id = typeof tc?.id === 'string' ? tc.id.trim() : '';
+        if (!id) continue;
+        pendingToolCallIds.add(id);
+        const n = typeof tc?.function?.name === 'string' ? tc.function.name.trim() : '';
+        if (n) pendingToolCallNameById.set(id, n);
+      }
+      singlePendingId = pendingToolCallIds.size === 1 ? Array.from(pendingToolCallIds)[0] : null;
       continue;
     }
 
@@ -190,24 +199,41 @@ function fixToolCallSequence(messages) {
         continue;
       }
 
-      // 仅接受能与上一条 assistant.tool_calls 配对的 tool 响应
-      // 部分上游会严格校验 tool_call_id，否则会把后续 function call 视为“未紧跟 user/函数响应”并 400。
+      // 尝试补齐/纠正 tool_call_id / name，使其能被上游识别为 function response turn
+      const normalizedTool = { ...msg };
+      if ((!normalizedTool.tool_call_id || typeof normalizedTool.tool_call_id !== 'string') && singlePendingId) {
+        normalizedTool.tool_call_id = singlePendingId;
+      }
+      const toolId = typeof normalizedTool.tool_call_id === 'string' ? normalizedTool.tool_call_id.trim() : '';
+
       if (pendingToolCallIds.size > 0) {
-        const id = typeof msg.tool_call_id === 'string' ? msg.tool_call_id : '';
-        if (!pendingToolCallIds.has(id)) {
-          BotUtil.makeLog('debug', `[message-cleanup] 跳过不匹配的 tool 消息（tool_call_id=${id || '<empty>'}）`, 'MessageCleanup');
+        if (!toolId || !pendingToolCallIds.has(toolId)) {
+          BotUtil.makeLog('debug', `[message-cleanup] 跳过不匹配的 tool 消息（tool_call_id=${toolId || '<empty>'}）`, 'MessageCleanup');
           continue;
         }
-        pendingToolCallIds.delete(id);
       }
 
-      fixed.push(msg);
+      if (!normalizedTool.name || normalizedTool.name === 'unknown') {
+        const mapped = pendingToolCallNameById.get(toolId);
+        if (mapped) normalizedTool.name = mapped;
+      }
+
+      // tool 回合仍然缺关键字段时，宁可丢弃，避免污染序列导致上游 400
+      if (!toolId || !normalizedTool.name) {
+        BotUtil.makeLog('debug', `[message-cleanup] 跳过不完整的 tool 消息（tool_call_id/name 缺失）`, 'MessageCleanup');
+        continue;
+      }
+
+      pendingToolCallIds.delete(toolId);
+      fixed.push(normalizedTool);
       toolCallsCount--;
 
       if (toolCallsCount <= 0) {
         expectingToolResponse = false;
         pendingToolCallsStartIndex = -1;
         pendingToolCallIds = new Set();
+        pendingToolCallNameById = new Map();
+        singlePendingId = null;
       }
       continue;
     }
