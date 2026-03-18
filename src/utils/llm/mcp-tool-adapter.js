@@ -101,6 +101,16 @@ export class MCPToolAdapter {
 
         if (prop.enum) result.properties[key].enum = prop.enum;
         if (prop.default !== undefined) result.properties[key].default = prop.default;
+
+        // 处理 array 类型：必须包含 items 字段
+        if (prop.type === 'array') {
+          result.properties[key].items = prop.items || { type: 'string' };
+        }
+
+        // 处理 object 类型：可能包含 properties
+        if (prop.type === 'object' && prop.properties) {
+          result.properties[key].properties = prop.properties;
+        }
       }
     }
 

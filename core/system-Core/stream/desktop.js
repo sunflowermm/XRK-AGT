@@ -777,7 +777,10 @@ export default class DesktopStream extends AIStream {
           },
           data: {
             type: 'array',
-            description: '数据数组，支持多种格式：1) 二维数组 [[header1, header2], [value1, value2]] 2) 对象数组 [{header1: value1, header2: value2}] 3) sheets格式 {sheets: [{name: "Sheet1", data: [[...]]}]}'
+            description: '数据数组，支持多种格式：1) 二维数组 [[header1, header2], [value1, value2]] 2) 对象数组 [{header1: value1, header2: value2}] 3) sheets格式 {sheets: [{name: "Sheet1", data: [[...]]}]}',
+            items: {
+              type: 'object'
+            }
           }
         },
         required: ['fileName', 'data']
