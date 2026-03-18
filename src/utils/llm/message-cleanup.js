@@ -29,7 +29,8 @@ export function cleanupMessages(messages, options = {}) {
 
   // 输出完整消息序列，用于调试
   const fullSequence = cleaned.map((m, i) => {
-    return `${i}:${m.role}${m.tool_calls ? `(${m.tool_calls.length}tc)` : ''}`;
+    const hasContent = m.content && (typeof m.content === 'string' ? m.content.trim().length > 0 : true);
+    return `${i}:${m.role}${m.tool_calls ? `(${m.tool_calls.length}tc)` : ''}${hasContent && m.tool_calls ? '+content' : ''}`;
   }).join(' ');
   BotUtil.makeLog('debug', `[message-cleanup] 完整序列: ${fullSequence}`, 'MessageCleanup');
 
