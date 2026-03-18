@@ -32,6 +32,7 @@
     <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="130" height="130" style="margin:8px;">
     <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin:8px;">
     <img src="resources/mdimg/河北工程大学-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin:8px;">
+    <img src="resources/mdimg/河北经贸大学-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin:8px;">
   </p>
 </div>
 
