@@ -15,6 +15,12 @@ export function cleanupMessages(messages, options = {}) {
   cleaned = removeInvalidMessages(cleaned);
   cleaned = normalizeMessageContent(cleaned);
 
+  // 某些上游（尤其是 Gemini 的部分 OpenAI 兼容网关）对“历史里携带 tool_calls/tool 回合”非常敏感，
+  // 即使顺序看似合法也会直接 400。这里提供可选开关：剥离历史工具痕迹，仅保留可读文本上下文。
+  if (options.stripToolTraces) {
+    cleaned = stripToolTraces(cleaned);
+  }
+
   if (options.mergeConsecutive !== false) {
     cleaned = mergeConsecutiveMessages(cleaned);
   }
@@ -23,7 +29,9 @@ export function cleanupMessages(messages, options = {}) {
     cleaned = ensureFirstUserMessage(cleaned);
   }
 
-  cleaned = fixToolCallSequence(cleaned);
+  if (!options.stripToolTraces) {
+    cleaned = fixToolCallSequence(cleaned);
+  }
 
   BotUtil.makeLog('debug', `[message-cleanup] ${messages.length} -> ${cleaned.length} 条消息`, 'MessageCleanup');
 
@@ -62,6 +70,26 @@ function hasValidContent(content) {
   if (typeof content === 'string') return content.trim().length > 0;
   if (Array.isArray(content)) return content.length > 0;
   return true;
+}
+
+function stripToolTraces(messages) {
+  const out = [];
+  for (const msg of messages) {
+    if (!msg?.role) continue;
+    if (msg.role === 'tool') continue;
+
+    if (msg.role === 'assistant' && msg.tool_calls?.length > 0) {
+      if (hasValidContent(msg.content)) {
+        const kept = { ...msg };
+        delete kept.tool_calls;
+        out.push(kept);
+      }
+      continue;
+    }
+
+    out.push(msg);
+  }
+  return out;
 }
 
 /**
