@@ -164,8 +164,8 @@ function fixToolCallSequence(messages) {
     const prev = fixed[fixed.length - 1];
 
     if (msg.role === 'assistant' && msg.tool_calls?.length > 0) {
-      if (prev?.role === 'assistant' && !prev.tool_calls) {
-        BotUtil.makeLog('debug', `[message-cleanup] 跳过 assistant with tool_calls（前面是普通 assistant）`, 'MessageCleanup');
+      if (prev && prev.role !== 'user' && prev.role !== 'tool') {
+        BotUtil.makeLog('debug', `[message-cleanup] 跳过 assistant with tool_calls（前面是 ${prev.role}，需要 user 或 tool）`, 'MessageCleanup');
         continue;
       }
 
