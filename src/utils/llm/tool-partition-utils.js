@@ -23,7 +23,9 @@ export function getRequestToolNames(overrides) {
 export async function partitionAndExecuteToolCalls(toolCalls, overrides, { buildMcpPayload, onDelta } = {}) {
   if (!Array.isArray(toolCalls) || !toolCalls.length) return [];
 
-  const requestNames = getRequestToolNames(overrides);
+  const mode = (overrides?.mcpToolMode || '').toString().toLowerCase();
+  // execute 模式：即使请求体带了 tools，也由中游执行（tools 仅作为“允许工具白名单/向上游声明”）
+  const requestNames = mode === 'execute' ? new Set() : getRequestToolNames(overrides);
   const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
   const getName = (tc) => tc.function?.name || '';
 
@@ -31,7 +33,10 @@ export async function partitionAndExecuteToolCalls(toolCalls, overrides, { build
   const downstream = toolCalls.filter((tc) => requestNames.has(getName(tc)));
 
   if (downstream.length > 0 && midstream.length === 0) return null;
-  const midstreamResults = midstream.length > 0 ? await MCPToolAdapter.handleToolCalls(midstream, { streams }) : [];
+  const allowedTools = Array.isArray(overrides?.allowedTools) ? overrides.allowedTools : null;
+  const midstreamResults = midstream.length > 0
+    ? await MCPToolAdapter.handleToolCalls(midstream, { streams, allowedTools })
+    : [];
 
   if (typeof onDelta === 'function' && midstream.length > 0 && typeof buildMcpPayload === 'function') {
     onDelta('', { mcp_tools: buildMcpPayload(midstream, midstreamResults) });
