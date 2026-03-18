@@ -1,5 +1,6 @@
 import { MCPToolAdapter } from './mcp-tool-adapter.js';
 import { getAistreamConfigOptional } from '../aistream-config.js';
+import BotUtil from '../botutil.js';
 
 /**
  * OpenAI-like Chat Completions 参数归一化工具
@@ -200,6 +201,11 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
   // 这样在工具执行时可以正确识别哪些工具应该透传给下游
   if (downstreamToolNames.length > 0) {
     overrides.downstreamToolNames = downstreamToolNames;
+    BotUtil.makeLog(
+      'debug',
+      `[工具合并] 保存下游工具名称: ${downstreamToolNames.slice(0, 10).join(', ')}${downstreamToolNames.length > 10 ? ` ...共${downstreamToolNames.length}个` : ''}`,
+      'openai-chat-utils'
+    );
   }
 
   body.tools = finalTools;

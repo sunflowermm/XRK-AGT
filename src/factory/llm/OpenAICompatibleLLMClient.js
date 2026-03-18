@@ -109,7 +109,10 @@ export default class OpenAICompatibleLLMClient {
   }
 
   _buildRequestOptions(messages, overrides = {}, stream = false) {
-    const body = this.buildBody(messages, { ...overrides, stream });
+    // 重要：直接修改 overrides 对象，不要创建新对象
+    // 这样 applyOpenAITools 对 overrides 的修改（如添加 downstreamToolNames）才能生效
+    overrides.stream = stream;
+    const body = this.buildBody(messages, overrides);
     const bodyStr = JSON.stringify(body);
 
     // 构建日志信息（只显示有值的字段）
