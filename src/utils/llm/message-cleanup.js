@@ -203,35 +203,53 @@ function ensureFirstUserMessage(messages) {
 
 /**
  * 修复工具调用序列
- * 确保符合规范：assistant with tool_calls -> tool -> (继续循环)
+ * 确保严格符合规范：assistant with tool_calls -> tool(s) -> (继续循环)
+ * 移除任何破坏序列的消息
  */
 function fixToolCallSequence(messages) {
   const fixed = [];
+  let expectingToolResponse = false;
+  let toolCallsCount = 0;
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    const next = messages[i + 1];
+
+    // 如果当前是 assistant with tool_calls
+    if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+      fixed.push(msg);
+      expectingToolResponse = true;
+      toolCallsCount = msg.tool_calls.length;
+      continue;
+    }
+
+    // 如果当前是 tool 消息
+    if (msg.role === 'tool') {
+      // 必须在期待 tool 响应的状态
+      if (!expectingToolResponse) {
+        console.warn(`[message-cleanup] Skipping orphan tool message at index ${i}`);
+        continue;
+      }
+
+      fixed.push(msg);
+      toolCallsCount--;
+
+      // 如果所有 tool 响应都收到了，重置状态
+      if (toolCallsCount <= 0) {
+        expectingToolResponse = false;
+      }
+      continue;
+    }
+
+    // 其他消息
+    // 如果正在期待 tool 响应，跳过这条消息（破坏序列）
+    if (expectingToolResponse) {
+      console.warn(
+        `[message-cleanup] Skipping ${msg.role} message at index ${i} (expecting tool response)`
+      );
+      continue;
+    }
 
     fixed.push(msg);
-
-    // 验证 assistant with tool_calls 后面必须跟 tool
-    if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-      if (!next || next.role !== 'tool') {
-        console.warn(
-          `[message-cleanup] Invalid sequence: assistant with tool_calls at index ${i} not followed by tool message`
-        );
-      }
-    }
-
-    // 验证 tool 消息前面必须是 assistant with tool_calls
-    if (msg.role === 'tool') {
-      const prev = fixed[fixed.length - 2]; // 前一条（不是刚 push 的当前消息）
-      if (!prev || prev.role !== 'assistant' || !prev.tool_calls) {
-        console.warn(
-          `[message-cleanup] Invalid sequence: tool message at index ${i} not preceded by assistant with tool_calls`
-        );
-      }
-    }
   }
 
   return fixed;

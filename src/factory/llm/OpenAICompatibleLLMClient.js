@@ -99,16 +99,20 @@ export default class OpenAICompatibleLLMClient {
     const body = this.buildBody(messages, { ...overrides, stream });
     const bodyStr = JSON.stringify(body);
 
-    const model = body?.model ?? '';
-    const toolsCount = Array.isArray(body?.tools) ? body.tools.length : 0;
-    const hasTools = toolsCount > 0;
-    const maxTokens = body?.max_completion_tokens ?? body?.max_tokens;
+    // 构建日志信息（只显示有值的字段）
+    const logParts = [
+      `stream=${stream}`,
+      `endpoint=${this.endpoint}`,
+      `model=${body?.model || '<empty>'}`,
+      body?.tools?.length > 0 ? `tools=${body.tools.length}` : null,
+      body?.temperature !== undefined ? `temperature=${body.temperature}` : null,
+      body?.top_p !== undefined ? `top_p=${body.top_p}` : null,
+      body?.max_completion_tokens !== undefined ? `max_completion_tokens=${body.max_completion_tokens}` : null,
+      body?.max_tokens !== undefined ? `max_tokens=${body.max_tokens}` : null,
+      `bodyLength=${bodyStr.length}`
+    ].filter(Boolean).join(', ');
 
-    BotUtil.makeLog(
-      'debug',
-      `[OpenAICompatibleLLMClient] 构建请求: stream=${stream}, endpoint=${this.endpoint}, model=${model || '<empty>'}, tools=${hasTools ? toolsCount : 0}, temperature=${body?.temperature}, top_p=${body?.top_p}, max_tokens=${maxTokens ?? ''}, bodyLength=${bodyStr.length}`,
-      'LLMFactory'
-    );
+    BotUtil.makeLog('debug', `[OpenAICompatibleLLMClient] 构建请求: ${logParts}`, 'LLMFactory');
 
     return buildFetchOptionsWithProxy(this.config, {
       method: 'POST',
