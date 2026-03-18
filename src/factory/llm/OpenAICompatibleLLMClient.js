@@ -253,6 +253,8 @@ export default class OpenAICompatibleLLMClient {
     };
 
     for (let round = 0; round < maxToolRounds; round++) {
+      state.messages = cleanupMessages(state.messages, { ensureUserFirst: false });
+
       const roundResult = await handlers.requestRound(state.messages, overrides, state);
       const content = roundResult?.content || '';
       const toolCalls = Array.isArray(roundResult?.toolCalls) ? roundResult.toolCalls : [];
