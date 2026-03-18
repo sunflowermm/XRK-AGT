@@ -159,6 +159,8 @@ function fixToolCallSequence(messages) {
   let expectingToolResponse = false;
   let toolCallsCount = 0;
   let pendingToolCallsStartIndex = -1;
+  /** @type {Set<string>} */
+  let pendingToolCallIds = new Set();
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
@@ -174,6 +176,11 @@ function fixToolCallSequence(messages) {
       expectingToolResponse = true;
       toolCallsCount = msg.tool_calls.length;
       pendingToolCallsStartIndex = fixed.length - 1;
+      pendingToolCallIds = new Set(
+        msg.tool_calls
+          .map(tc => tc?.id)
+          .filter(id => typeof id === 'string' && id.trim().length > 0)
+      );
       continue;
     }
 
@@ -183,12 +190,24 @@ function fixToolCallSequence(messages) {
         continue;
       }
 
+      // 仅接受能与上一条 assistant.tool_calls 配对的 tool 响应
+      // 部分上游会严格校验 tool_call_id，否则会把后续 function call 视为“未紧跟 user/函数响应”并 400。
+      if (pendingToolCallIds.size > 0) {
+        const id = typeof msg.tool_call_id === 'string' ? msg.tool_call_id : '';
+        if (!pendingToolCallIds.has(id)) {
+          BotUtil.makeLog('debug', `[message-cleanup] 跳过不匹配的 tool 消息（tool_call_id=${id || '<empty>'}）`, 'MessageCleanup');
+          continue;
+        }
+        pendingToolCallIds.delete(id);
+      }
+
       fixed.push(msg);
       toolCallsCount--;
 
       if (toolCallsCount <= 0) {
         expectingToolResponse = false;
         pendingToolCallsStartIndex = -1;
+        pendingToolCallIds = new Set();
       }
       continue;
     }
