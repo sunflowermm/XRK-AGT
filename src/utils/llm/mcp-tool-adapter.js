@@ -139,6 +139,7 @@ export class MCPToolAdapter {
       return toolCalls.map(tc => ({
         role: 'tool',
         tool_call_id: tc.id,
+        name: tc.function?.name || 'unknown',
         content: JSON.stringify({
           success: false,
           error: 'MCP服务未启用'
@@ -171,6 +172,7 @@ export class MCPToolAdapter {
           return {
             role: 'tool',
             tool_call_id: toolCall.id,
+            name: functionName || 'unknown',
             content: JSON.stringify({
               success: false,
               error: `工具 "${functionName}" 不在允许的工具列表中`
@@ -230,12 +232,15 @@ export class MCPToolAdapter {
         return {
           role: 'tool',
           tool_call_id: toolCall.id,
+          name: functionName || 'unknown',
           content
         };
       } catch (error) {
+        const functionName = toolCall.function?.name || 'unknown';
         return {
           role: 'tool',
           tool_call_id: toolCall.id,
+          name: functionName,
           content: JSON.stringify({
             success: false,
             error: error.message || String(error)
