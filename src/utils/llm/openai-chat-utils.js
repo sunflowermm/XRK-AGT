@@ -165,6 +165,12 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
   if (hasRequestToolsField) {
     const requestToolsArray = Array.isArray(requestTools) ? requestTools : [];
 
+    BotUtil.makeLog(
+      'debug',
+      `[工具合并] hasRequestToolsField=true, requestToolsArray.length=${requestToolsArray.length}, mcpTools.length=${mcpTools.length}`,
+      'openai-chat-utils'
+    );
+
     if (!requestToolsArray.length) {
       // 下游没有传递工具，只使用 MCP 工具
       finalTools = mcpTools;
