@@ -67,11 +67,22 @@ export default class OpenAICompatibleLLMClient {
   async _prepareMessages(messages) {
     const transformed = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
-    const model = (this.config.model || this.config.chatModel || '').toString().toLowerCase();
-    // Gemini 的部分 OpenAI 兼容网关会拒绝“历史包含 tool_calls/tool 回合”的 messages
-    // 这里仅在准备发往上游的 messages 时剥离历史工具痕迹；工具主循环内部不要开启该选项。
-    const stripToolTraces = model.includes('gemini');
-    return cleanupMessages(transformed, { stripToolTraces });
+    const cleaned = cleanupMessages(transformed);
+    // 可选：部分上游兼容网关不接受历史 tool/tool_calls 回合。
+    // 这里用“配置开关”而非写死某个模型，保证行为可控且不影响其他平台的标准调用。
+    if (this.config.stripToolTraces !== true) return cleaned;
+    return cleaned
+      .filter(m => m?.role && m.role !== 'tool')
+      .map(m => {
+        if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+          const hasText = typeof m.content === 'string' ? m.content.trim().length > 0 : Boolean(m.content);
+          return hasText ? { role: 'assistant', content: m.content } : null;
+        }
+        const out = { ...m };
+        if (out.role === 'assistant') delete out.tool_calls;
+        return out;
+      })
+      .filter(Boolean);
   }
 
   _normalizeToolCall(toolCall, index) {

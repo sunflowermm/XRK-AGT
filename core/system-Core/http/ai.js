@@ -344,14 +344,11 @@ async function handleChatCompletionsV3(req, res) {
 
   const client = LLMFactory.createClient(llmConfig);
   const overrides = {};
-  // execute：中游由 XRK 执行（tools 仅作为“允许工具白名单/向上游声明”）
+  // hybrid：有 body.tools 时区分中游(MCP)/下游(请求)，中游 XRK 执行、下游透传客户端执行
+  // execute：无 body.tools 且有声明的 streams 时，仅中游由 XRK 执行
   // passthrough：无 body.tools 且无 streams 时，tool_calls 透传
   const hasRequestTools = Array.isArray(body.tools) && body.tools.length > 0;
-  overrides.mcpToolMode = hasRequestTools ? 'execute' : (effectiveStreams?.length ? 'execute' : 'passthrough');
-  if (hasRequestTools) {
-    const getName = (t) => t?.function?.name || t?.name || t?.id;
-    overrides.allowedTools = body.tools.map(getName).filter(Boolean);
-  }
+  overrides.mcpToolMode = hasRequestTools ? 'hybrid' : (effectiveStreams?.length ? 'execute' : 'passthrough');
   const addNum = (key, ...aliases) => {
     const v = toNum(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
