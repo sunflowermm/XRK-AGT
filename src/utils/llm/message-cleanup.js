@@ -158,6 +158,7 @@ function fixToolCallSequence(messages) {
   const fixed = [];
   let expectingToolResponse = false;
   let toolCallsCount = 0;
+  let pendingToolCallsStartIndex = -1;
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
@@ -172,6 +173,7 @@ function fixToolCallSequence(messages) {
       fixed.push(msg);
       expectingToolResponse = true;
       toolCallsCount = msg.tool_calls.length;
+      pendingToolCallsStartIndex = fixed.length - 1;
       continue;
     }
 
@@ -186,6 +188,7 @@ function fixToolCallSequence(messages) {
 
       if (toolCallsCount <= 0) {
         expectingToolResponse = false;
+        pendingToolCallsStartIndex = -1;
       }
       continue;
     }
@@ -196,6 +199,17 @@ function fixToolCallSequence(messages) {
     }
 
     fixed.push(msg);
+  }
+
+  // 如果消息在裁剪后以不完整的 tool_calls 结尾（assistant 有 tool_calls 但 tool 响应不足），
+  // Gemini/部分上游会直接 400。这里丢弃这段不完整片段，保证请求永远合法。
+  if (expectingToolResponse && pendingToolCallsStartIndex >= 0) {
+    BotUtil.makeLog(
+      'debug',
+      `[message-cleanup] 丢弃不完整的 tool_calls 片段（从 index=${pendingToolCallsStartIndex} 起）`,
+      'MessageCleanup'
+    );
+    fixed.splice(pendingToolCallsStartIndex);
   }
 
   return fixed;
