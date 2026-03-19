@@ -28,6 +28,103 @@ class StreamLoader {
     };
   }
 
+  _nextRemoteRequestId = 1;
+
+  _makeRemoteRequestId() {
+    // 保持为安全整数，避免长时间运行溢出
+    const id = this._nextRemoteRequestId++;
+    if (this._nextRemoteRequestId > 1_000_000_000) this._nextRemoteRequestId = 1;
+    return id;
+  }
+
+  _createDeferred() {
+    /** @type {(value:any)=>void} */
+    let resolve;
+    /** @type {(reason:any)=>void} */
+    let reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  }
+
+  _ensureStdioClient(serverName, entry) {
+    if (!entry || entry.type !== 'stdio' || !entry.process) return null;
+    if (entry._stdioClient) return entry._stdioClient;
+
+    const child = entry.process;
+    const client = {
+      buffer: '',
+      pending: new Map(),
+      onData: null,
+      closed: false
+    };
+
+    const flushPending = (errMsg) => {
+      for (const [id, p] of client.pending.entries()) {
+        try { p.reject(new Error(errMsg)); } catch {}
+      }
+      client.pending.clear();
+    };
+
+    client.onData = (data) => {
+      if (client.closed) return;
+      client.buffer += data?.toString?.() || '';
+      const lines = client.buffer.split('\n');
+      client.buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const s = String(line || '').trim();
+        if (!s) continue;
+        let msg;
+        try { msg = JSON.parse(s); } catch { continue; }
+        const id = msg?.id;
+        if (!id) continue;
+        const pending = client.pending.get(id);
+        if (!pending) continue;
+        client.pending.delete(id);
+        if (pending.timeout) clearTimeout(pending.timeout);
+        if (msg.error) {
+          pending.reject(new Error(msg.error?.message || '远程MCP返回错误'));
+        } else {
+          pending.resolve(msg.result);
+        }
+      }
+    };
+
+    child.stdout?.on('data', client.onData);
+    child.on('exit', () => {
+      client.closed = true;
+      try { child.stdout?.removeListener('data', client.onData); } catch {}
+      flushPending('远程MCP进程已退出');
+    });
+    child.on('error', (err) => {
+      client.closed = true;
+      try { child.stdout?.removeListener('data', client.onData); } catch {}
+      flushPending(err?.message || '远程MCP进程错误');
+    });
+
+    entry._stdioClient = client;
+    return client;
+  }
+
+  async _stdioRequest(serverName, entry, method, params, { timeoutMs = 15000 } = {}) {
+    const client = this._ensureStdioClient(serverName, entry);
+    if (!client || client.closed) {
+      throw new Error(`远程MCP服务器 ${serverName} 不可用`);
+    }
+    const id = this._makeRemoteRequestId();
+    const deferred = this._createDeferred();
+    const timeout = setTimeout(() => {
+      client.pending.delete(id);
+      deferred.reject(new Error('调用超时'));
+    }, Math.max(1000, Number(timeoutMs) || 15000));
+
+    client.pending.set(id, { ...deferred, timeout });
+
+    const request = { jsonrpc: '2.0', id, method, params: params || {} };
+    entry.process.stdin.write(JSON.stringify(request) + '\n');
+    return deferred.promise;
+  }
+
 
   /**
    * 加载所有工作流（标准化流程）
@@ -773,6 +870,7 @@ class StreamLoader {
       if (!serverName) continue;
 
       try {
+        // 串行逐个加载，避免同时启动大量 stdio 子进程导致 CPU 峰值
         await this._createRemoteMCPClient(serverName, serverConfig.cfg || {});
         loadedServers.push(serverName);
       } catch (error) {
@@ -809,49 +907,27 @@ class StreamLoader {
           cwd: typeof cfg.cwd === 'string' && cfg.cwd.trim() ? cfg.cwd.trim() : undefined
         }
       );
-      this.remoteMCPServers.set(serverName, { type: 'stdio', process: child, config: cfg });
-      
-      // 发送initialize请求
-      const initRequest = {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
+      const entry = { type: 'stdio', process: child, config: cfg };
+      this.remoteMCPServers.set(serverName, entry);
+
+      // 使用单一 stdout listener + pending map，避免超时/并发造成 listener 泄漏
+      this._ensureStdioClient(serverName, entry);
+
+      try {
+        const initParams = {
           protocolVersion: '2025-11-25',
           capabilities: {},
           clientInfo: { name: 'xrk-agt', version: '1.0.0' }
+        };
+        await this._stdioRequest(serverName, entry, 'initialize', initParams, { timeoutMs: 15000 });
+        const listResult = await this._stdioRequest(serverName, entry, 'tools/list', {}, { timeoutMs: 15000 });
+        if (listResult?.tools) {
+          this._registerRemoteTools(serverName, listResult.tools);
         }
-      };
-      
-      child.stdin.write(JSON.stringify(initRequest) + '\n');
-      
-      // 监听响应并注册工具
-      let buffer = '';
-      const responseHandler = (data) => {
-        buffer += data.toString();
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const response = JSON.parse(line);
-            
-            if (response.id === 1 && response.result) {
-              // 初始化成功后请求工具列表
-              child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }) + '\n');
-            } else if (response.id === 2 && response.result?.tools) {
-              this._registerRemoteTools(serverName, response.result.tools);
-              child.stdout.removeListener('data', responseHandler);
-            }
-          } catch {}
-        }
-      };
-      
-      child.stdout.on('data', responseHandler);
-      child.on('error', (error) => {
-        BotUtil.makeLog('error', `远程MCP服务器 ${serverName} 启动失败: ${error.message}`, 'StreamLoader');
-      });
+      } catch (error) {
+        BotUtil.makeLog('error', `远程MCP服务器 ${serverName} 初始化失败: ${error.message}`, 'StreamLoader');
+        throw error;
+      }
     } else if (cfg.url) {
       // URL 协议：支持 HTTP / WebSocket 等远程 MCP transport
       const headers = cfg.headers && typeof cfg.headers === 'object' ? cfg.headers : {};
@@ -929,41 +1005,23 @@ class StreamLoader {
       return { success: false, error: `远程MCP服务器 ${serverName} 未找到` };
     }
 
-    const requestId = Date.now();
-    const request = { jsonrpc: '2.0', id: requestId, method: 'tools/call', params: { name: toolName, arguments: args } };
-
     if (server.type === 'stdio') {
-      return new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve({ success: false, error: '调用超时' }), 30000);
-        
-        let responseBuffer = '';
-        const handler = (data) => {
-          responseBuffer += data.toString();
-          const lines = responseBuffer.split('\n');
-          responseBuffer = lines.pop() || '';
-          
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const response = JSON.parse(line);
-              if (response.id !== requestId) continue;
-
-                clearTimeout(timeout);
-                server.process.stdout.removeListener('data', handler);
-
-              const finalResult = this._normalizeRemoteMCPResult(response.result);
-              resolve(finalResult);
-            } catch {
-              // 单行解析失败直接忽略，继续等待下一行
-            }
-          }
-        };
-        
-        server.process.stdout.on('data', handler);
-        server.process.stdin.write(JSON.stringify(request) + '\n');
-      });
+      try {
+        const result = await this._stdioRequest(
+          serverName,
+          server,
+          'tools/call',
+          { name: toolName, arguments: args },
+          { timeoutMs: 30000 }
+        );
+        return this._normalizeRemoteMCPResult(result);
+      } catch (error) {
+        return { success: false, error: error.message || String(error) };
+      }
     } else if (server.type === 'http') {
       try {
+        const requestId = this._makeRemoteRequestId();
+        const request = { jsonrpc: '2.0', id: requestId, method: 'tools/call', params: { name: toolName, arguments: args } };
         const response = await BotUtil.fetch(server.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...server.headers },
@@ -978,6 +1036,8 @@ class StreamLoader {
       // 简单 WebSocket JSON-RPC 客户端：每次调用按需建立连接
       try {
         const { default: WebSocket } = await import('ws');
+        const requestId = this._makeRemoteRequestId();
+        const request = { jsonrpc: '2.0', id: requestId, method: 'tools/call', params: { name: toolName, arguments: args } };
         return await new Promise((resolve) => {
           const ws = new WebSocket(server.url, { headers: server.headers || {} });
           const timeout = setTimeout(() => {
