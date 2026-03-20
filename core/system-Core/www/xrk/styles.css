@@ -903,6 +903,20 @@ body.dark select.form-input {
 }
 
 @media (max-width: 768px) {
+  .chat-container {
+    min-height: 0;
+    height: calc(var(--vh, 100vh) - var(--header-height) - 32px);
+    max-height: calc(var(--vh, 100vh) - var(--header-height) - 32px);
+  }
+
+  .chat-sidebar {
+    min-height: 0;
+  }
+
+  .chat-main {
+    min-height: 0;
+  }
+
   .chat-settings {
     flex-direction: column;
     align-items: stretch;
@@ -3353,7 +3367,8 @@ body.dark select.form-input {
 .chat-container.voice-mode .chat-main {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* 不再硬写 height:100%：交由 .chat-container 在移动端限制高度并由 flex 来自然对齐 */
+  min-height: 0;
 }
 
 .chat-container.voice-mode .chat-input-area {
@@ -3470,7 +3485,7 @@ body.dark select.form-input {
   cursor: pointer;
   transition: all var(--transition);
   box-shadow: var(--shadow-lg);
-  margin: 0 auto;
+  margin: 0; /* 避免在 flex 行内产生“自动边距”导致对齐偏移 */
 }
 
 .voice-mic-btn:hover {
@@ -3581,7 +3596,20 @@ body.dark select.form-input {
   cursor: pointer;
   transition: all var(--transition);
   box-shadow: var(--shadow-sm);
-  margin-right: 8px;
+  margin-right: 0; /* 与 Event 输入区对齐，避免额外挤压发送按钮 */
+}
+
+@media (max-width: 768px) {
+  /* 键盘弹出时，让 Voice 的居中大屏“引导区”让位，保证输入框紧贴软键盘 */
+  .chat-container.voice-mode.keyboard-open .voice-chat-center {
+    display: none;
+  }
+
+  /* Voice：按钮离边框更远一点，并让发送/语音按钮位置更像 Event */
+  .chat-container.voice-mode .chat-input-area {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
 }
 
 .voice-tts-stop-btn:hover {

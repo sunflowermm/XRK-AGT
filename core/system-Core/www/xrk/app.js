@@ -1455,6 +1455,7 @@ class App {
     
     const sendBtn = document.getElementById('chatSendBtn');
     const input = document.getElementById('chatInput');
+    const voiceInput = document.getElementById('voiceInput');
     const micBtn = document.getElementById('micBtn');
     const clearBtn = document.getElementById('clearChatBtn');
     const imageUploadBtn = document.getElementById('imageUploadBtn');
@@ -1471,6 +1472,22 @@ class App {
         this._chatEventHandlers.set(element, []);
       }
       this._chatEventHandlers.get(element).push({ event, handler });
+    };
+
+    // 移动端软键盘对齐：只要聊天输入获得焦点就标记，交给 CSS 处理布局
+    const chatRootContainer = document.querySelector('.chat-container');
+    const setKeyboardOpen = (open) => {
+      chatRootContainer?.classList.toggle('keyboard-open', open);
+    };
+    const isAnyChatInputFocused = () => {
+      const active = document.activeElement;
+      return active === input || active === voiceInput;
+    };
+    const onChatInputFocusIn = () => setKeyboardOpen(true);
+    const onChatInputFocusOut = () => {
+      setTimeout(() => {
+        if (!isAnyChatInputFocused()) setKeyboardOpen(false);
+      }, 0);
     };
     
     // 聊天模式切换按钮 - 使用事件委托（统一交给 _unbindChatEvents 管理，避免 dataset 标记导致失效）
@@ -1563,6 +1580,13 @@ class App {
         }
       };
       safeBind(input, 'keydown', inputHandler);
+      safeBind(input, 'focusin', onChatInputFocusIn);
+      safeBind(input, 'focusout', onChatInputFocusOut);
+    }
+
+    if (voiceInput) {
+      safeBind(voiceInput, 'focusin', onChatInputFocusIn);
+      safeBind(voiceInput, 'focusout', onChatInputFocusOut);
     }
     
     // 麦克风按钮
@@ -1581,8 +1605,7 @@ class App {
       if (voiceClearBtn) {
         safeBind(voiceClearBtn, 'click', () => this.clearChat());
       }
-      
-      const voiceInput = document.getElementById('voiceInput');
+
       const voiceSendBtn = document.getElementById('voiceSendBtn');
       const voiceTtsStopBtn = document.getElementById('voiceTtsStopBtn');
       
