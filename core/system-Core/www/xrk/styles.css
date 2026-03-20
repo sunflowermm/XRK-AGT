@@ -2179,7 +2179,7 @@ body.dark select.form-input {
   padding: 6px 12px;
   border-radius: 999px;
   background: var(--bg-hover);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: 13px;
 }
 .chat-poke-icon {
@@ -2194,8 +2194,9 @@ body.dark select.form-input {
   height: 1em;
 }
 .chat-message.user .chat-poke {
-  background: var(--primary-100);
-  color: var(--primary);
+  /* 戳一戳在“用户气泡”态下避免蓝字叠浅蓝底导致不可读 */
+  background: var(--primary-200);
+  color: var(--text-inverse);
 }
 
 .mic-btn svg,

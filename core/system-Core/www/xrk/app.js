@@ -2242,8 +2242,9 @@ class App {
         allText.push('[戳一戳]');
       } else if (seg.type === 'markdown' || seg.type === 'raw') {
         this._flushTextParts(div, textParts);
-        const content = seg.data ?? seg.markdown ?? seg.raw ?? '';
-        if (content) {
+        const contentRaw = seg.data ?? seg.markdown ?? seg.raw ?? '';
+        const content = String(contentRaw);
+        if (content.trim()) {
           const contentDiv = document.createElement('div');
           contentDiv.className = seg.type === 'markdown' ? 'chat-markdown' : 'chat-raw';
           contentDiv.innerHTML = seg.type === 'markdown' ? this.renderMarkdown(content) : this.escapeHtml(content);
@@ -6169,12 +6170,15 @@ class App {
         break;
       case 'llm':
         // xiaozhi 协议：LLM 回复 { text, emotion }
-        if (data.text) {
+        {
+          const llmText = String(data.text ?? '').trim();
+          if (llmText) {
           this.clearChatStreamState();
-          this.appendSegments([{ type: 'text', text: data.text }], true, 'assistant');
+            this.appendSegments([{ type: 'text', text: llmText }], true, 'assistant');
           if (data.emotion && typeof this.updateEmotionDisplay === 'function') {
             this.updateEmotionDisplay(data.emotion);
           }
+        }
         }
         break;
       case 'tts':
@@ -6279,16 +6283,22 @@ class App {
         break;
       }
       case 'status':
-        if (data.text) {
-          this.appendChat('system', data.text, { persist: true, withCopyBtn: false });
+        {
+          const statusText = String(data.text ?? '').trim();
+          if (statusText) {
+            this.appendChat('system', statusText, { persist: true, withCopyBtn: false });
+          }
         }
         // 状态消息不中断聊天流程
         break;
       case 'error':
-        if (data.message) {
-          this.showToast(data.message, 'error');
+        {
+          const errorMsg = String(data.message ?? '').trim();
+          if (errorMsg) {
+            this.showToast(errorMsg, 'error');
           // 错误时也显示在聊天中
-          this.appendChat('system', `错误: ${data.message}`, { persist: true, withCopyBtn: false });
+            this.appendChat('system', `错误: ${errorMsg}`, { persist: true, withCopyBtn: false });
+          }
         }
         this.clearChatStreamState();
         break;
@@ -6313,9 +6323,11 @@ class App {
       case 'command': {
         const cmd = data.command;
         if (cmd?.command === 'display' && cmd?.parameters?.text) {
+          const displayText = String(cmd.parameters.text ?? '').trim();
+          if (!displayText) break;
           const opts = { persist: true, withCopyBtn: true };
           if (cmd.parameters.mcp_tools?.length) opts.mcpTools = cmd.parameters.mcp_tools;
-          this.appendChat('assistant', cmd.parameters.text, opts);
+          this.appendChat('assistant', displayText, opts);
         } else if (cmd?.command === 'display_emotion' && cmd?.parameters?.emotion) {
           this.updateEmotionDisplay(cmd.parameters.emotion);
         }
