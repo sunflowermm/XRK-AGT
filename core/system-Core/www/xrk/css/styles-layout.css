@@ -5,7 +5,6 @@
   display: flex;
   min-height: var(--vh, 100vh);
   position: relative;
-  z-index: 1;
 }
 
 /* 侧边栏 */
@@ -368,6 +367,11 @@ body[data-page="chat"] .content {
 
   .sidebar.open {
     transform: translateX(0);
+  }
+
+  body.sidebar-open {
+    overflow: hidden;
+    overscroll-behavior: contain;
   }
 
   .sidebar-close {
