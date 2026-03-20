@@ -2194,7 +2194,6 @@ body.dark select.form-input {
   height: 1em;
 }
 .chat-message.user .chat-poke {
-  /* 戳一戳在“用户气泡”态下避免蓝字叠浅蓝底导致不可读 */
   background: var(--primary-200);
   color: var(--text-inverse);
 }
