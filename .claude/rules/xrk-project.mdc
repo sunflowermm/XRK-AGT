@@ -14,7 +14,9 @@ alwaysApply: true
 - **业务逻辑**：一律放在 `core/<core名>/` 下，按类型分目录：
   - `plugin/` 插件；`http/` HTTP API；`stream/` AI 工作流；`tasker/` 协议适配；`events/` 事件监听；`commonconfig/` 配置 Schema；`www/<应用名>/` 静态前端（必须建子目录）。
 - **基础设施**：基类、加载器、工具在 `src/infrastructure/`、`src/utils/`、`src/factory/`；入口为 `src/bot.js`，应用启动为 `app.js` / `start.js`。
-- **禁止**：业务代码不得写在 `src/`；无 package.json 的 core 使用根包 `#` 别名引用 `#infrastructure/*`、`#utils/*` 等。
+- **禁止**：业务代码不得写在 `src/`；**不得修改** `src/infrastructure/` 等底层代码。
+- **充分利用底层**：业务（含 commonconfig）应只继承基类、填 schema/实现接口，用足 ConfigBase（schema、getStructure、read、write、validate）、插件/HTTP/工作流基类等已有能力，不重复造轮、不伸手改底层。
+- **导入路径**：**无** package.json 的 core 使用根包 `#` 别名（`#infrastructure/*`、`#utils/*`）；**有** package.json 的 core **不得**使用 `#`（子包无该别名），须用相对路径引用根目录下 `src/`（如 `../../../src/infrastructure/...`）。
 
 ## 技术栈与版本
 

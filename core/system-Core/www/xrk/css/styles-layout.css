@@ -1,0 +1,544 @@
+/* Layout: 主框架（侧边栏/内容区/顶部栏等） */
+
+/* ======== 布局 ======== */
+.app {
+  display: flex;
+  min-height: var(--vh, 100vh);
+  position: relative;
+  z-index: 1;
+}
+
+/* 侧边栏 */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: var(--vh, 100vh);
+  z-index: var(--z-sidebar);
+  transition: transform var(--transition-slow);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.sidebar-brand {
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand-logo {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.brand-logo svg {
+  width: 22px;
+  height: 22px;
+}
+
+.brand-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sidebar-close {
+  display: none;
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+/* 导航 */
+.nav {
+  flex: 1;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  transition: all var(--transition);
+}
+
+.nav-item svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background: var(--primary-100);
+  color: var(--primary);
+}
+
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.connection-status.online .status-dot {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-light);
+}
+
+.theme-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.theme-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.theme-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.theme-btn .icon-moon { display: none; }
+body.dark .theme-btn .icon-sun { display: none; }
+body.dark .theme-btn .icon-moon { display: block; }
+
+/* 主内容区 */
+.main {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  min-height: var(--vh, 100vh);
+  transition: margin-left var(--transition-slow);
+}
+
+/* 头部 */
+.header {
+  height: var(--header-height);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+  /* 性能优化：启用GPU加速 */
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.menu-btn {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: var(--radius);
+}
+
+.menu-btn:hover {
+  background: var(--bg-hover);
+}
+
+.menu-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.api-key-form {
+  margin: 0;
+}
+
+.api-key-a11y-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.api-key-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-input);
+  padding: 6px 8px 6px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  transition: all var(--transition);
+}
+
+.api-key-box input {
+  width: 180px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.api-key-box input::placeholder {
+  color: var(--text-muted);
+}
+
+/* 内容区 */
+.content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  overflow-x: hidden; /* 防止内部内容过长导致整体横向平移 */
+  display: flex;
+  flex-direction: column;
+  /* 让各业务页面容器自行控制最大宽度，这里默认拉伸占满可用宽度 */
+  align-items: stretch;
+}
+
+/* 聊天页：消息区内部滚动，输入框始终在视口底部上方 */
+body[data-page="chat"] .content {
+  padding: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+/* 聊天页整体高度锁定为一屏（仅桌面端）；移动端保持原先可滚动行为 */
+@media (min-width: 769px) {
+  body[data-page="chat"] {
+    height: var(--vh, 100vh);
+    overflow: hidden;
+  }
+
+  body[data-page="chat"] .main {
+    height: var(--vh, 100vh);
+    min-height: var(--vh, 100vh);
+    display: flex;
+    flex-direction: column;
+  }
+
+  body[data-page="chat"] .chat-container {
+    /* 在聊天页中，聊天容器固定填满内容区，高度不随消息数量增长 */
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}
+
+/* API 列表容器 (侧边栏内) */
+.api-list-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.api-list-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.api-list-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.api-list-back-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--primary);
+}
+
+.api-list-back-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.api-list-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* ======== 响应式（移动端布局）======== */
+@media (max-width: 768px) {
+  :root {
+    --header-height: 56px;
+  }
+
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-close {
+    display: flex;
+  }
+
+  .sidebar-brand {
+    padding: 16px 12px;
+  }
+
+  .brand-name {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .main {
+    margin-left: 0;
+  }
+
+  .menu-btn {
+    display: flex;
+  }
+
+  .header {
+    padding: 0 16px;
+  }
+
+  .header-title {
+    font-size: 16px;
+  }
+
+  .api-key-box {
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    right: 0;
+    padding: 12px 16px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-md);
+    z-index: 60;
+    transform: translateY(-100%);
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition-slow);
+  }
+
+  .api-key-box.show {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .api-key-box input {
+    width: 100%;
+    flex: 1;
+  }
+
+  .api-key-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .content {
+    /* 顶部/底部留 16px，左右安全边距由各页面主容器控制 */
+    padding: 16px 0;
+    align-items: stretch; /* 移动端占满整行，而不是在中间留白 */
+    width: 100%;
+    max-width: 100vw; /* 关键：避免内部内容把布局宽度撑大 */
+    overflow-x: hidden;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* 图表卡片在手机端略微缩小，避免子图占满视野 */
+  .chart-card {
+    padding: 16px;
+  }
+
+  .chart-container {
+    height: 160px;
+  }
+
+  .chat-container {
+    flex-direction: column;
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    margin: 0 12px;
+    height: auto;
+    /* 使用布局视口高度，避免随可视视口(键盘/地址栏)剧烈抖动 */
+    min-height: calc(var(--vh, 100vh) - var(--header-height) - 16px);
+  }
+
+  .chat-sidebar {
+    width: 100%;
+    max-height: 32vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chat-main {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* 手机小屏：各主页面容器左右留出安全边距，避免内容贴边 */
+  .dashboard,
+  .config-page,
+  .api-container {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* Voice 模式移动端适配：内容整体缩放 */
+  .chat-container.voice-mode .chat-main {
+    align-items: center;
+    justify-content: center;
+  }
+
+  .voice-chat-center {
+    max-width: 360px;
+    padding: 24px 16px 16px;
+    margin: 0 auto;
+  }
+
+  .voice-emotion-display {
+    font-size: 80px;
+  }
+
+  .voice-status {
+    font-size: 14px;
+  }
+
+  .voice-mic-btn {
+    width: 64px;
+    height: 64px;
+  }
+
+  .voice-mic-btn svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  .voice-clear-btn {
+    margin-top: 16px;
+    font-size: 13px;
+    padding: 6px 14px;
+  }
+
+  /* Event / AI 对话卡片在手机上全宽且居中视觉 */
+  .chat-message,
+  .voice-message {
+    max-width: 100%;
+  }
+
+  .chat-message.assistant,
+  .voice-message.assistant {
+    margin-left: 8px;
+    margin-right: 8px;
+  }
+
+  .chat-message.user,
+  .voice-message.user {
+    margin-left: 40px;
+    margin-right: 8px;
+  }
+}
+

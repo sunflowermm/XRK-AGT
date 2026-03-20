@@ -17,7 +17,10 @@ import {
   $,
   $$,
   scrollToBottom as domScrollToBottom,
-  initLazyLoad
+  initLazyLoad,
+  setUpdating,
+  clearUpdating,
+  bindViewportHeightVar
 } from './modules/dom.js';
 
 import {
@@ -29,6 +32,22 @@ import {
   markdownRenderer,
   stripMarkdownForTTS
 } from './modules/markdown.js';
+
+import {
+  pokeHandIconSVG,
+  paperclipIconSVG,
+  wrenchIconSVG,
+  filePreviewIconSVG,
+  toastIconSVG,
+  normalizeEmotionKey,
+  emotionIconSVG
+} from './modules/ui-kit.js';
+
+import {
+  renderNetworkInfo as renderNetworkInfoPanel,
+  updateSystemStatus as updateSystemStatusPanel,
+  updateCharts as updateChartsPanel
+} from './modules/system-overview.js';
 
 import {
   flattenObject,
@@ -138,8 +157,6 @@ class App {
     this._latestSystem = null;
     this._homeDataCache = this._loadHomeDataCache();
     this._chartPluginsRegistered = false;
-    // 事件绑定状态跟踪，避免重复绑定
-    this._chatEventsBound = false;
     this._chatEventHandlers = new Map();
     
     this.init();
@@ -149,6 +166,8 @@ class App {
     initLazyLoad();
     await this.loadAPIConfig();
     this.bindEvents();
+    // 让移动端键盘/地址栏变化不再引起 100vh 跳动
+    bindViewportHeightVar();
     this.loadSettings();
     await this.loadLlmOptions();
     this._initMermaid();
@@ -620,7 +639,7 @@ class App {
     
     const navMenu = $('#navMenu');
     const apiListContainer = $('#apiListContainer');
-    const isMobile = window.innerWidth <= 768;
+    const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
     
     if (page === 'api') {
       if (navMenu) navMenu.style.display = 'none';
@@ -937,11 +956,11 @@ class App {
     if (!botsInfo) return;
     
     // 添加更新标记，用于CSS过渡
-    botsInfo.setAttribute('data-updating', 'true');
+    setUpdating(botsInfo);
     
     if (!Array.isArray(bots) || !bots.length) {
       botsInfo.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无机器人</div>';
-      setTimeout(() => botsInfo.removeAttribute('data-updating'), 300);
+      setTimeout(() => clearUpdating(botsInfo), 300);
       return;
     }
       
@@ -972,16 +991,14 @@ class App {
           </div>
         `;
     
-    requestAnimationFrame(() => {
-      botsInfo.removeAttribute('data-updating');
-    });
+    clearUpdating(botsInfo);
   }
   
   renderWorkflowInfo(workflows = {}, panels = {}) {
     const box = document.getElementById('workflowInfo');
     if (!box) return;
     
-    box.setAttribute('data-updating', 'true');
+    setUpdating(box);
     const workflowData = panels.workflows ?? workflows;
     const stats = workflowData.stats ?? {};
     const items = workflowData.items ?? [];
@@ -989,7 +1006,7 @@ class App {
     
     if (!total && !items.length) {
       box.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无工作流数据</div>';
-      requestAnimationFrame(() => box.removeAttribute('data-updating'));
+      clearUpdating(box);
       return;
     }
     
@@ -1025,55 +1042,12 @@ class App {
         </ul>
       ` : ''}
     `;
+
+    clearUpdating(box);
   }
   
   renderNetworkInfo(network = {}, rates = {}) {
-    const box = document.getElementById('networkInfo');
-    if (!box) return;
-    
-    // 添加更新标记，用于CSS过渡
-    box.setAttribute('data-updating', 'true');
-    const entries = Object.entries(network ?? {});
-    if (!entries.length) {
-      box.innerHTML = `
-        <div class="empty-state">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.3;">
-            <path d="M21 16V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h14a2 2 0 002-2z"/>
-            <polyline points="23,6 13.5,15.5 8.5,10.5 1,18"/>
-            <polyline points="17,6 23,6 23,12"/>
-          </svg>
-          <p>暂无网络信息</p>
-        </div>
-      `;
-      requestAnimationFrame(() => box.removeAttribute('data-updating'));
-      return;
-    }
-    
-    const rxSec = rates.rxSec ?? rates.rx ?? 0;
-    const txSec = rates.txSec ?? rates.tx ?? 0;
-    const rxFormatted = this.formatBytes(rxSec);
-    const txFormatted = this.formatBytes(txSec);
-    const rateText = `${rxFormatted}/s ↓ · ${txFormatted}/s ↑`;
-    
-    box.innerHTML = `
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-align:center;line-height:1.4;padding:8px;background:var(--bg-input);border-radius:var(--radius);border:1px solid var(--border)">
-        <span style="color:var(--primary);font-weight:600">${rateText}</span>
-      </div>
-      ${entries.map(([name, info]) => {
-        const address = info.address ?? '';
-        const mac = info.mac ?? '';
-        return `
-        <div style="padding:12px;border-bottom:1px solid var(--border);transition:background var(--transition)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
-          <div style="font-weight:600;color:var(--text-primary);text-align:center;margin-bottom:4px">${this.escapeHtml(name)}</div>
-          <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">
-            <span style="font-family:monospace">IP: ${this.escapeHtml(address)}</span>${mac ? ` <span style="font-family:monospace">· MAC: ${this.escapeHtml(mac)}</span>` : ''}
-          </div>
-        </div>
-      `;
-      }).join('')}
-    `;
-    
-    requestAnimationFrame(() => box.removeAttribute('data-updating'));
+    return renderNetworkInfoPanel(this, network, rates);
   }
 
   renderMarkdown(text) {
@@ -1097,7 +1071,7 @@ class App {
     if (!pluginsInfo) return;
     
     // 添加更新标记，用于CSS过渡
-    pluginsInfo.setAttribute('data-updating', 'true');
+    setUpdating(pluginsInfo);
     
     try {
       const res = await fetch(`${this.serverUrl}/api/plugins/summary`, { 
@@ -1149,373 +1123,17 @@ class App {
       }
     } finally {
       setTimeout(() => {
-        pluginsInfo.removeAttribute('data-updating');
+        clearUpdating(pluginsInfo);
       }, 50);
     }
   }
 
   updateSystemStatus(data) {
-    const { system } = data;
-    const panels = data.panels ?? {};
-    const metrics = panels.metrics ?? {};
-    
-    // 更新统计卡片
-    const cpuPercent = metrics.cpu ?? system?.cpu?.percent ?? 0;
-    const cpuEl = document.getElementById('cpuValue');
-    if (cpuEl) cpuEl.textContent = `${cpuPercent.toFixed(1)}%`;
-    
-    const memUsed = system?.memory?.used ?? 0;
-    const memTotal = system?.memory?.total ?? 1;
-    const memPercent = metrics.memory ?? (memTotal > 0 ? ((memUsed / memTotal) * 100).toFixed(1) : 0);
-    const memEl = document.getElementById('memValue');
-    if (memEl) memEl.textContent = `${memPercent}%`;
-    
-    const disks = system?.disks ?? [];
-    const diskEl = document.getElementById('diskValue');
-    if (diskEl) {
-      if (typeof metrics.disk === 'number') {
-        diskEl.textContent = `${metrics.disk.toFixed(1)}%`;
-      } else if (disks.length > 0) {
-      const disk = disks[0];
-        const diskPercent = disk.size > 0 ? ((disk.used / disk.size) * 100).toFixed(1) : 0;
-        diskEl.textContent = `${diskPercent}%`;
-      } else {
-        diskEl.textContent = '--';
-      }
-    }
-    
-    const uptimeEl = document.getElementById('uptimeValue');
-    if (uptimeEl) {
-      uptimeEl.textContent = this.formatTime((system && system.uptime) || (data.bot && data.bot.uptime) || 0);
-    }
-    
-    // 更新网络历史：优先使用后端返回的实时数据
-    const netRecent = system?.netRecent ?? [];
-    const currentRxSec = Math.max(0, Number(metrics.net?.rxSec ?? system?.netRates?.rxSec ?? 0)) / 1024;
-    const currentTxSec = Math.max(0, Number(metrics.net?.txSec ?? system?.netRates?.txSec ?? 0)) / 1024;
-    
-    // 如果后端返回了实时数据，直接使用
-    if (netRecent.length > 0) {
-      // 使用后端返回的实时数据点（每3-5秒一个点）
-      this._metricsHistory.netRx = netRecent.map(h => Math.max(0, (h.rxSec || 0) / 1024));
-      this._metricsHistory.netTx = netRecent.map(h => Math.max(0, (h.txSec || 0) / 1024));
-      this._metricsHistory._initialized = true;
-      this._metricsHistory._lastTimestamp = data.timestamp;
-    } else {
-      // 如果没有实时数据，使用当前速率累积
-      const now = Date.now();
-      if (!this._metricsHistory._lastUpdate || (now - this._metricsHistory._lastUpdate) >= 3000) {
-        // 每3秒添加一个新数据点
-        this._metricsHistory.netRx.push(currentRxSec);
-        this._metricsHistory.netTx.push(currentTxSec);
-        this._metricsHistory._lastUpdate = now;
-        // 保留最近60个点
-        if (this._metricsHistory.netRx.length > 60) this._metricsHistory.netRx.shift();
-        if (this._metricsHistory.netTx.length > 60) this._metricsHistory.netTx.shift();
-      } else {
-        // 更新最后一个数据点（实时更新当前值）
-        if (this._metricsHistory.netRx.length > 0) {
-          this._metricsHistory.netRx[this._metricsHistory.netRx.length - 1] = currentRxSec;
-          this._metricsHistory.netTx[this._metricsHistory.netTx.length - 1] = currentTxSec;
-        } else {
-          // 如果数组为空，初始化
-          this._metricsHistory.netRx = [currentRxSec];
-          this._metricsHistory.netTx = [currentTxSec];
-        }
-      }
-    }
-    
-    const procTable = document.getElementById('processTable');
-    if (procTable) {
-      if (Array.isArray(data.processesTop5) && data.processesTop5.length > 0) {
-      procTable.innerHTML = data.processesTop5.map(p => `
-        <tr>
-            <td style="font-weight:500">${p.name || '未知进程'}</td>
-            <td style="color:var(--text-muted);font-family:monospace;font-size:12px">${p.pid || '--'}</td>
-            <td style="color:${(p.cpu || 0) > 50 ? 'var(--warning)' : 'var(--text-primary)'};font-weight:500">${(p.cpu || 0).toFixed(1)}%</td>
-            <td style="color:${(p.mem || 0) > 50 ? 'var(--warning)' : 'var(--text-primary)'};font-weight:500">${(p.mem || 0).toFixed(1)}%</td>
-        </tr>
-        `).join('');
-      } else {
-        procTable.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px">暂无进程数据</td></tr>';
-      }
-    }
-    
-    // 更新图表
-    this.updateCharts(cpuPercent, (memUsed / memTotal) * 100);
-  }
-
-  /**
-   * 注册 Chart 插件（避免重复注册）
-   */
-  _registerChartPlugins() {
-    if (this._chartPluginsRegistered || !window.Chart) return;
-    
-    // CPU 图表中心标签插件
-    const cpuLabelPlugin = {
-      id: 'cpuLabel',
-      afterDraw: (chart) => {
-        if (chart.config.type !== 'doughnut' || chart.canvas.id !== 'cpuChart') return;
-        const ctx = chart.ctx;
-        const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
-        const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
-        const value = chart.data.datasets[0].data[0];
-        ctx.save();
-        ctx.font = 'bold 16px Inter';
-        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
-        ctx.restore();
-      }
-    };
-    
-    // 内存图表中心标签插件
-    const memLabelPlugin = {
-      id: 'memLabel',
-      afterDraw: (chart) => {
-        if (chart.config.type !== 'doughnut' || chart.canvas.id !== 'memChart') return;
-        const ctx = chart.ctx;
-        const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
-        const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
-        const value = chart.data.datasets[0].data[0];
-        ctx.save();
-        ctx.font = 'bold 16px Inter';
-        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`${value.toFixed(1)}%`, centerX, centerY);
-        ctx.restore();
-      }
-    };
-    
-    Chart.register(cpuLabelPlugin, memLabelPlugin);
-    this._chartPluginsRegistered = true;
+    return updateSystemStatusPanel(this, data);
   }
 
   updateCharts(cpu, mem) {
-    if (!window.Chart) return;
-    
-    // 注册插件（仅一次）
-    this._registerChartPlugins();
-    
-    const primary = getComputedStyle(document.body).getPropertyValue('--primary').trim() || '#0ea5e9';
-    const success = getComputedStyle(document.body).getPropertyValue('--success').trim() || '#22c55e';
-    const warning = getComputedStyle(document.body).getPropertyValue('--warning').trim() || '#f59e0b';
-    const danger = getComputedStyle(document.body).getPropertyValue('--danger').trim() || '#ef4444';
-    const border = getComputedStyle(document.body).getPropertyValue('--border').trim() || '#e2e8f0';
-    
-    // CPU 图表
-    const cpuCtx = document.getElementById('cpuChart');
-    if (cpuCtx) {
-      if (this._charts.cpu && this._charts.cpu.canvas !== cpuCtx) {
-        this._charts.cpu.destroy();
-        this._charts.cpu = null;
-      }
-      
-      const cpuColor = cpu > 80 ? danger : cpu > 50 ? warning : primary;
-      const cpuFree = 100 - cpu;
-      
-      if (!this._charts.cpu) {
-        this._charts.cpu = new Chart(cpuCtx.getContext('2d'), {
-          type: 'doughnut',
-          data: {
-            labels: ['使用', '空闲'],
-            datasets: [{
-              data: [cpu, cpuFree],
-              backgroundColor: [cpuColor, border],
-              borderWidth: 0
-            }]
-          },
-          options: {
-            cutout: '75%',
-            plugins: {
-              legend: { display: false },
-              tooltip: { enabled: true }
-            }
-          }
-        });
-      } else {
-        const cpuColor = cpu > 80 ? danger : cpu > 50 ? warning : primary;
-        this._charts.cpu.data.datasets[0].data = [cpu, 100 - cpu];
-        this._charts.cpu.data.datasets[0].backgroundColor = [cpuColor, border];
-        this._charts.cpu.update('none');
-      }
-    }
-    
-    // 内存图表
-    const memCtx = document.getElementById('memChart');
-    if (memCtx) {
-      if (this._charts.mem && this._charts.mem.canvas !== memCtx) {
-        this._charts.mem.destroy();
-        this._charts.mem = null;
-      }
-      
-      const memColor = mem > 80 ? danger : mem > 50 ? warning : success;
-      const memFree = 100 - mem;
-      
-      if (!this._charts.mem) {
-        this._charts.mem = new Chart(memCtx.getContext('2d'), {
-          type: 'doughnut',
-          data: {
-            labels: ['使用', '空闲'],
-            datasets: [{
-              data: [mem, memFree],
-              backgroundColor: [memColor, border],
-              borderWidth: 0
-            }]
-          },
-          options: {
-            cutout: '75%',
-            plugins: {
-              legend: { display: false },
-              tooltip: { enabled: true }
-            }
-          }
-        });
-      } else {
-        const memColor = mem > 80 ? danger : mem > 50 ? warning : success;
-        this._charts.mem.data.datasets[0].data = [mem, 100 - mem];
-        this._charts.mem.data.datasets[0].backgroundColor = [memColor, border];
-        this._charts.mem.update('none');
-      }
-    }
-    
-    // 网络图表
-    const netCtx = document.getElementById('netChart');
-    if (netCtx) {
-      if (this._charts.net && this._charts.net.canvas !== netCtx) {
-        this._charts.net.destroy();
-        this._charts.net = null;
-      }
-      
-      const textMuted = getComputedStyle(document.body).getPropertyValue('--text-muted').trim() || '#94a3b8';
-      const labels = this._metricsHistory.netRx.map(() => '');
-      if (!this._charts.net) {
-        this._charts.net = new Chart(netCtx.getContext('2d'), {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [
-              { 
-                label: '下行', 
-                data: this._metricsHistory.netRx, 
-                borderColor: primary, 
-                backgroundColor: `${primary}15`, 
-                fill: true, 
-                tension: 0.3, 
-                pointRadius: 0,
-                pointHoverRadius: 4,
-                borderWidth: 2,
-                spanGaps: true
-              },
-              { 
-                label: '上行', 
-                data: this._metricsHistory.netTx, 
-                borderColor: warning, 
-                backgroundColor: `${warning}15`, 
-                fill: true, 
-                tension: 0.3, 
-                pointRadius: 0,
-                pointHoverRadius: 4,
-                borderWidth: 2,
-                spanGaps: true
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { intersect: false, mode: 'index' },
-            plugins: { 
-              legend: { 
-                position: 'bottom', 
-                display: true,
-                labels: { 
-                  color: textMuted, 
-                  padding: 12,
-                  font: { size: 12 },
-                  usePointStyle: true,
-                  pointStyle: 'line'
-                } 
-              },
-              tooltip: {
-                enabled: true,
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                padding: 10,
-                titleFont: { size: 12 },
-                bodyFont: { size: 11 },
-                cornerRadius: 6,
-                displayColors: true,
-                callbacks: {
-                  label: function(context) {
-                    const value = context.parsed.y;
-                    if (value === 0 || value < 0.01) return '';
-                    return `${context.dataset.label}: ${value.toFixed(2)} KB/s`;
-                  },
-                  filter: function(tooltipItem) {
-                    return tooltipItem.parsed.y > 0.01;
-                  }
-                }
-              }
-            },
-            scales: {
-              x: { 
-                display: false,
-                grid: { display: false }
-              },
-              y: { 
-                beginAtZero: true,
-                suggestedMax: 10, // 默认最大10 KB/s，会根据实际数据动态调整
-                grid: { 
-                  color: border,
-                  drawBorder: false,
-                  lineWidth: 1
-                }, 
-                ticks: { 
-                  display: false,
-                  maxTicksLimit: 5
-                }
-              }
-            }
-          }
-        });
-      } else {
-        // 更新图表数据
-        this._charts.net.data.labels = labels;
-        this._charts.net.data.datasets[0].data = this._metricsHistory.netRx;
-        this._charts.net.data.datasets[1].data = this._metricsHistory.netTx;
-        
-        // 动态调整Y轴范围，确保数据可见
-        const allValues = [...this._metricsHistory.netRx, ...this._metricsHistory.netTx];
-        const maxValue = Math.max(...allValues.filter(v => isFinite(v) && v > 0), 1);
-        const yMax = Math.ceil(maxValue * 1.2); // 留20%的顶部空间
-        
-        if (this._charts.net.options.scales?.y) {
-          this._charts.net.options.scales.y.max = yMax;
-          if (this._charts.net.options.scales.y.ticks) {
-            this._charts.net.options.scales.y.ticks.display = false;
-          }
-        }
-        
-        // 更新tooltip配置，过滤0.0值
-        if (this._charts.net.options.plugins?.tooltip) {
-          this._charts.net.options.plugins.tooltip.callbacks = {
-            label: function(context) {
-              const value = context.parsed.y;
-              if (value === 0 || value < 0.01) return '';
-              return `${context.dataset.label}: ${value.toFixed(2)} KB/s`;
-            },
-            filter: function(tooltipItem) {
-              return tooltipItem.parsed.y > 0.01;
-            }
-          };
-        }
-        
-        // 使用 'default' 动画模式，让图表平滑更新
-        this._charts.net.update('default');
-      }
-    }
+    return updateChartsPanel(this, cpu, mem);
   }
 
   // ========== 聊天 ==========
@@ -1523,7 +1141,12 @@ class App {
     const content = document.getElementById('content');
     const isAIMode = this._isAIMode();
     const isVoiceMode = this._isVoiceMode();
-    const aiSettings = isAIMode ? await this._renderAISettings() : '';
+    // 先渲染骨架：避免等待 AI 设置时整页突然“硬切”。
+    const aiSettingsPlaceholder = isAIMode
+      ? `<div class="ai-settings-panel" id="aiSettingsPlaceholder">
+          <div style="padding:16px;color:var(--text-muted);font-size:13px;">AI 设置加载中...</div>
+        </div>`
+      : '';
     content.innerHTML = `
       <div class="chat-container ${isVoiceMode ? 'voice-mode' : ''}">
         <div class="chat-sidebar">
@@ -1551,12 +1174,12 @@ class App {
               <span>AI</span>
             </button>
           </div>
-          ${aiSettings}
+          ${aiSettingsPlaceholder}
         </div>
         <div class="chat-main">
         ${isVoiceMode ? `
-          <div class="voice-chat-center">
-            <div class="voice-emotion-display" id="voiceEmotionIcon">😊</div>
+            <div class="voice-chat-center">
+            <div class="voice-emotion-display" id="voiceEmotionIcon">${this._emotionIconSVG('happy')}</div>
             <div class="voice-wave" id="voiceWave">
               ${Array(6).fill('<div class="voice-wave-bar"></div>').join('')}
             </div>
@@ -1572,7 +1195,7 @@ class App {
         ` : `
         <div class="chat-header">
           <div class="chat-header-title">
-            <span class="emotion-display" id="emotionIcon">😊</span>
+            <span class="emotion-display" id="emotionIcon">${this._emotionIconSVG('happy')}</span>
               <span>${isAIMode ? 'AI 对话' : 'Event 对话'}</span>
           </div>
           <div class="chat-header-actions">
@@ -1630,7 +1253,7 @@ class App {
             </svg>
             `}
           </button>
-          ${!isAIMode ? `<button class="poke-btn" id="pokeBtn" type="button" title="戳一戳">👆</button>` : ''}
+          ${!isAIMode ? `<button class="poke-btn" id="pokeBtn" type="button" title="戳一戳">${this._pokeHandIconSVG()}</button>` : ''}
             <input type="file" class="chat-image-input" id="chatImageInput" accept="${isAIMode ? 'image/*' : '*'}" multiple style="display: none;">
           <input type="text" class="chat-input" id="chatInput" placeholder="输入消息...">
           <button class="chat-send-btn" id="chatSendBtn">
@@ -1645,6 +1268,17 @@ class App {
         </div> <!-- .chat-main -->
       </div>
     `;
+
+    // 确保 ai 设置在 _bindChatEvents 之前已落 DOM，避免事件绑定缺失。
+    if (isAIMode) {
+      try {
+        const aiSettings = await this._renderAISettings();
+        const placeholder = document.getElementById('aiSettingsPlaceholder');
+        placeholder.outerHTML = aiSettings;
+      } catch {
+        // 保留占位态，避免影响聊天主流程。
+      }
+    }
     
     if (isVoiceMode) {
       await this.loadLlmOptions();
@@ -1810,7 +1444,6 @@ class App {
       }
     }
     this._chatEventHandlers.clear();
-    this._chatEventsBound = false;
   }
 
   /**
@@ -1903,30 +1536,14 @@ class App {
       const remoteMCPBtn = document.getElementById('remoteMCPConfigBtn');
       if (remoteMCPBtn) {
         const remoteMCPHandler = () => {
-          // 跳转到配置管理页面
+          // 直接通过“配置恢复渲染”机制选中 system/aistream，避免脆弱的多段 setTimeout
+          const pendingSelect = { name: 'system', child: 'aistream' };
+          if (this._configState) this._configState.pendingSelect = pendingSelect;
+          try {
+            localStorage.setItem('lastConfigName', pendingSelect.name);
+            localStorage.setItem('lastConfigChild', pendingSelect.child);
+          } catch {}
           this.navigateTo('config');
-          // 等待配置列表加载完成后选中aistream配置
-          setTimeout(() => {
-            if (this._configState) {
-              // 查找system配置
-              const systemConfig = this._configState.list.find(cfg => cfg.name === 'system');
-              if (systemConfig) {
-                // 选中system配置的aistream子配置
-                this.selectConfig('system', 'aistream');
-                  // 等待配置加载后，尝试展开 mcp.remote.mcpServers 部分（如果支持）
-                setTimeout(() => {
-                  // 可以在这里添加逻辑来高亮或展开mcp.remote配置项
-                  const mcpRemoteField = document.querySelector('[data-path="mcp.remote.mcpServers"]') || document.querySelector('[data-path="mcp.remote"]');
-                  if (mcpRemoteField) {
-                    mcpRemoteField.style.background = 'var(--primary-50)';
-                    setTimeout(() => {
-                      if (mcpRemoteField) mcpRemoteField.style.background = '';
-                    }, 2000);
-                  }
-                }, 500);
-              }
-            }
-          }, 300);
         };
         safeBind(remoteMCPBtn, 'click', remoteMCPHandler);
       }
@@ -1940,12 +1557,12 @@ class App {
     // 输入框
     if (input) {
       const inputHandler = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter') {
           e.preventDefault();
           this.sendChatMessage();
         }
       };
-      safeBind(input, 'keypress', inputHandler);
+      safeBind(input, 'keydown', inputHandler);
     }
     
     // 麦克风按钮
@@ -1982,12 +1599,12 @@ class App {
         safeBind(voiceSendBtn, 'click', voiceSendHandler);
         
         const voiceInputHandler = (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+          if (e.key === 'Enter') {
             e.preventDefault();
             voiceSendBtn.click();
           }
         };
-        safeBind(voiceInput, 'keypress', voiceInputHandler);
+        safeBind(voiceInput, 'keydown', voiceInputHandler);
       }
 
       // 语音对话模式下的"停止TTS"按钮
@@ -2047,7 +1664,6 @@ class App {
       });
     }
     
-    this._chatEventsBound = true;
   }
 
   /**
@@ -2336,7 +1952,7 @@ class App {
       block.className = 'chat-tool-block';
       const header = document.createElement('div');
       header.className = 'chat-tool-block-header';
-      header.innerHTML = `<span class="chat-tool-block-icon">🔧</span><span class="chat-tool-block-title">${this.escapeHtml(name)}</span><span class="chat-tool-block-toggle">展开</span>`;
+      header.innerHTML = `<span class="chat-tool-block-icon">${this._wrenchIconSVG()}</span><span class="chat-tool-block-title">${this.escapeHtml(name)}</span><span class="chat-tool-block-toggle">展开</span>`;
       const content = document.createElement('div');
       content.className = 'chat-tool-block-content';
       content.hidden = true;
@@ -2346,10 +1962,25 @@ class App {
           <div class="chat-tool-block-item-section"><span class="chat-tool-block-label">结果</span><pre class="chat-tool-block-code">${this.escapeHtml(resultText)}</pre></div>
         </div>
       `;
-      header.addEventListener('click', () => {
+      // 可键盘访问：让“展开/收起”对屏幕阅读器与键盘用户可用
+      header.setAttribute('role', 'button');
+      header.tabIndex = 0;
+      header.setAttribute('aria-expanded', 'false');
+      const toggle = () => {
         const open = content.hidden;
         content.hidden = !open;
         header.querySelector('.chat-tool-block-toggle').textContent = open ? '收起' : '展开';
+        header.setAttribute('aria-expanded', String(!content.hidden));
+      };
+      header.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggle();
+      });
+      header.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle();
+        }
       });
       block.appendChild(header);
       block.appendChild(content);
@@ -2596,7 +2227,7 @@ class App {
           const fileName = seg.name || '文件';
           fileDiv.innerHTML = `
             <a href="${url}" download="${fileName}" class="chat-file-link">
-              <span class="chat-file-icon">📎</span>
+              <span class="chat-file-icon" aria-hidden="true">${this._paperclipIconSVG()}</span>
               <span class="chat-file-name">${this.escapeHtml(fileName)}</span>
             </a>
           `;
@@ -2606,7 +2237,7 @@ class App {
         this._flushTextParts(div, textParts);
         const pokeWrap = document.createElement('div');
         pokeWrap.className = 'chat-poke';
-        pokeWrap.innerHTML = `<span class="chat-poke-icon">👆</span><span class="chat-poke-text">戳了戳${seg.name ? ` ${this.escapeHtml(seg.name)}` : '你'}</span>`;
+        pokeWrap.innerHTML = `<span class="chat-poke-icon" aria-hidden="true">${this._pokeHandIconSVG()}</span><span class="chat-poke-text">戳了戳${seg.name ? ` ${this.escapeHtml(seg.name)}` : '你'}</span>`;
         div.appendChild(pokeWrap);
         allText.push('[戳一戳]');
       } else if (seg.type === 'markdown' || seg.type === 'raw') {
@@ -2873,7 +2504,7 @@ class App {
     if (box) box.innerHTML = '';
     this._chatMessagesCache[this._chatMode] = null;
     if (this._isVoiceMode()) {
-      this.updateVoiceEmotion('😊');
+      this.updateVoiceEmotion('happy');
       this.updateVoiceStatus('点击麦克风开始对话');
     }
   }
@@ -2961,8 +2592,7 @@ class App {
         </div>
         `;
       } else {
-        const fileIcon = item.file.type.startsWith('video/') ? '🎥' : 
-                        item.file.type.startsWith('audio/') ? '🎵' : '📄';
+        const fileIcon = this._filePreviewIconSVG(item.file.type);
         const fileSize = (item.file.size / 1024 / 1024).toFixed(2);
         return `
         <div class="chat-image-preview-item" data-file-id="${item.id}">
@@ -3444,7 +3074,7 @@ class App {
 
       this._chatStreamState = { running: true, source: 'voice' };
       this.updateVoiceStatus('AI 思考中...');
-      this.updateVoiceEmotion('🤔');
+      this.updateVoiceEmotion('think');
 
       const response = await fetch(`${this.serverUrl}/api/v3/chat/completions`, {
         method: 'POST',
@@ -3461,7 +3091,7 @@ class App {
         onDelta: (_d, s) => {
           if (!assistantMsg) assistantMsg = this._createStreamingMessage('voice-message');
           this._updateStreamingMarkdown(assistantMsg, [...(s.segments || []), { type: 'text', text: s.currentText ?? s.fullText ?? '' }]);
-          this.updateVoiceEmotion('💬');
+          this.updateVoiceEmotion('message');
         },
         onError: (err) => this.showToast(`AI 请求失败: ${err.message}`, 'error')
       });
@@ -3477,7 +3107,7 @@ class App {
           this._sendTTSChunk(ttsText).catch(() => {});
         }
         this._renderMermaidIn(assistantMsg);
-        this.updateVoiceEmotion('😊');
+        this.updateVoiceEmotion('happy');
         this.updateVoiceStatus('对话完成');
         const historyItem = { role: 'assistant', text: fullText, ts: Date.now(), id: assistantMsg.dataset.messageId };
         if (segments && segments.length > 0) historyItem.segments = segments;
@@ -3489,12 +3119,12 @@ class App {
       setTimeout(() => { this.updateVoiceStatus('点击麦克风开始对话'); }, 2000);
     } catch (error) {
       this.showToast(`AI 请求失败: ${error.message}`, 'error');
-      this.updateVoiceEmotion('😢');
+      this.updateVoiceEmotion('sad');
       this.updateVoiceStatus('出错了，请重试');
       this.clearChatStreamState();
       setTimeout(() => {
         this.updateVoiceStatus('点击麦克风开始对话');
-        this.updateVoiceEmotion('😊');
+        this.updateVoiceEmotion('happy');
       }, 3000);
     }
   }
@@ -3910,7 +3540,7 @@ class App {
   updateVoiceEmotion(emotion) {
     const emotionEl = document.getElementById('voiceEmotionIcon');
     if (emotionEl) {
-      emotionEl.textContent = emotion;
+      emotionEl.innerHTML = this._emotionIconSVG(emotion);
       emotionEl.style.animation = 'none';
       setTimeout(() => {
         emotionEl.style.animation = 'pulse 0.5s ease';
@@ -4137,11 +3767,33 @@ class App {
     this.showToast('已中断 AI 输出', 'info');
   }
 
+  _normalizeEmotionKey(emotion) {
+    return normalizeEmotionKey(emotion);
+  }
+
+  _emotionIconSVG(emotion) {
+    return emotionIconSVG(emotion);
+  }
+
+  _pokeHandIconSVG() {
+    return pokeHandIconSVG();
+  }
+
+  _paperclipIconSVG() {
+    return paperclipIconSVG();
+  }
+
+  _wrenchIconSVG() {
+    return wrenchIconSVG();
+  }
+
+  _filePreviewIconSVG(mimeType = '') {
+    return filePreviewIconSVG(mimeType);
+  }
+
   updateEmotionDisplay(emotion) {
-    const map = { happy: '😊', sad: '😢', angry: '😠', surprise: '😮', love: '❤️', cool: '😎', sleep: '😴', think: '🤔' };
-    const icon = map[emotion?.toLowerCase()] || map.happy;
     const el = document.getElementById('emotionIcon');
-    if (el) el.textContent = icon;
+    if (el) el.innerHTML = this._emotionIconSVG(emotion);
   }
 
   // ========== 配置管理 ==========
@@ -4219,12 +3871,26 @@ class App {
     // 配置列表事件委托：只绑定一次，避免每次重绘重复绑定
     const listContainer = document.getElementById('configList');
     if (listContainer) {
-      listContainer.addEventListener('click', (e) => {
-        const item = e.target.closest('.config-item');
-        if (!item || !this._configState) return;
-        const name = item.dataset.name;
-        if (name) this.selectConfig(name);
-      });
+      if (!listContainer.dataset._bound) {
+        listContainer.dataset._bound = '1';
+        listContainer.addEventListener('click', (e) => {
+          const item = e.target.closest('.config-item');
+          if (!item || !this._configState) return;
+          const name = item.dataset.name;
+          if (name) this.selectConfig(name);
+        });
+
+        // 键盘可达：Enter/Space 触发同样的选择行为
+        listContainer.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          const item = e.target.closest('.config-item');
+          if (!item || !this._configState) return;
+          const name = item.dataset.name;
+          if (!name) return;
+          e.preventDefault();
+          this.selectConfig(name);
+        });
+      }
     }
 
     this.loadConfigList();
@@ -4290,6 +3956,20 @@ class App {
           this.selectConfig(name, child || null);
         }
         this._configState.pendingSelect = null;
+      } else if (this.currentPage === 'config' && this._configState.selected) {
+        // 从其它页面返回 config：pendingSelect 已清空，但 selected/selectedChild 仍保留，
+        // 需要恢复渲染，否则 configMain 会停留在占位态/旧态，导致系统配置气泡不可交互。
+        const selectedName = this._configState.selected.name;
+        const selectedChild = this._configState.selectedChild;
+        const latestSelected = this._configState.list.find(cfg => cfg.name === selectedName);
+        if (latestSelected) {
+          this._configState.selected = latestSelected;
+          if (latestSelected.name === 'system' && !selectedChild) {
+            this.renderSystemConfigChooser(latestSelected);
+          } else {
+            this.loadSelectedConfigDetail();
+          }
+        }
       }
     } catch (e) {
       const msg = (e && e.message) ? String(e.message) : '未知错误';
@@ -4340,7 +4020,13 @@ class App {
       const title = this.escapeHtml(cfg.displayName || cfg.name);
       const desc = this.escapeHtml(cfg.description ?? cfg.filePath ?? '');
       return `
-      <div class="config-item ${this._configState.selected?.name === cfg.name ? 'active' : ''}" data-name="${this.escapeHtml(cfg.name)}">
+      <div
+        class="config-item ${this._configState.selected?.name === cfg.name ? 'active' : ''}"
+        data-name="${this.escapeHtml(cfg.name)}"
+        role="button"
+        tabindex="0"
+        aria-pressed="${this._configState.selected?.name === cfg.name ? 'true' : 'false'}"
+      >
         <div class="config-item-meta">
           <div class="config-name">${title}</div>
           <p class="config-desc">${desc}</p>
@@ -4413,7 +4099,13 @@ class App {
         </div>
       <div class="config-grid">
         ${entries.map(([key, meta]) => `
-          <div class="config-subcard" data-child="${this.escapeHtml(key)}">
+          <div
+            class="config-subcard"
+            data-child="${this.escapeHtml(key)}"
+            role="button"
+            tabindex="0"
+            aria-label="选择系统子配置 system/${this.escapeHtml(key)}"
+          >
             <div>
               <div class="config-subcard-title">${this.escapeHtml(meta.displayName || key)}</div>
               <p class="config-subcard-desc">${this.escapeHtml(meta.description ?? '')}</p>
@@ -4424,9 +4116,26 @@ class App {
       </div>
     `;
     
-    main.querySelectorAll('.config-subcard').forEach(card => {
-      card.addEventListener('click', () => this.selectConfig('system', card.dataset.child));
-    });
+    if (!main.dataset._systemChooserBound) {
+      main.dataset._systemChooserBound = '1';
+
+      main.addEventListener('click', (e) => {
+        const card = e.target.closest('.config-subcard');
+        if (!card || !this._configState) return;
+        const child = card.dataset.child;
+        if (child) this.selectConfig('system', child);
+      });
+
+      main.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const card = e.target.closest('.config-subcard');
+        if (!card || !this._configState) return;
+        const child = card.dataset.child;
+        if (!child) return;
+        e.preventDefault();
+        this.selectConfig('system', child);
+      });
+    }
   }
 
   async loadSelectedConfigDetail() {
@@ -5520,13 +5229,6 @@ class App {
       const evt = (el.type === 'checkbox' || el.type === 'radio') ? 'change' : 'input';
       el.addEventListener(evt, () => this.handleConfigFieldChange(el));
     });
-    // 滑块数值显示实时同步
-    wrapper.querySelectorAll('.config-slider').forEach(slider => {
-      const span = slider.id ? wrapper.querySelector(`[data-slider-value-for="${slider.id}"]`) : null;
-      const sync = () => { if (span) span.textContent = slider.value; };
-      slider.addEventListener('input', sync);
-      sync();
-    });
   }
 
   bindConfigJsonEvents() {
@@ -5571,13 +5273,6 @@ class App {
       const evt = (el.type === 'checkbox' || el.type === 'radio') ? 'change' : (el.tagName === 'SELECT' ? 'change' : 'input');
       el.addEventListener(evt, () => this.handleArrayObjectFieldChange(el));
     });
-    wrapper.querySelectorAll('.config-slider[data-array-parent]').forEach(slider => {
-      const wrap = slider.closest('.array-object-card, .dynamic-entry-card');
-      const span = wrap?.querySelector('.config-slider-value');
-      const sync = () => { if (span) span.textContent = slider.value; };
-      slider.addEventListener('input', sync);
-      sync();
-    });
 
     wrapper.querySelectorAll('[data-action="array-add"]').forEach(btn => {
       btn.addEventListener('click', () => this.addArrayObjectItem(btn.dataset.field));
@@ -5599,35 +5294,21 @@ class App {
     const type = fieldDef.type ?? target.dataset.type ?? '';
     const component = (target.dataset.component ?? '').toLowerCase();
 
-    let value;
-    if (component === 'switch') {
-      value = !!target.checked;
-    } else if (target.type === 'radio') {
-      const checked = target.closest('#configFormWrapper')?.querySelector(`input[name="${target.name}"]:checked`);
-      value = checked ? checked.value : target.value;
-    } else if (target.type === 'range' || component === 'slider' || component === 'range') {
+    const isRange = target.type === 'range' || component === 'slider' || component === 'range';
+    if (isRange) {
       const card = target.closest('.array-object-card, .dynamic-entry-card');
       const span = card?.querySelector('.config-slider-value');
       if (span) span.textContent = target.value;
-      value = target.value === '' ? null : Number(target.value);
-    } else if (target.dataset.control === 'kvlines') {
-      value = this.parseKeyValueLines(target.value || '');
-    } else if (target.dataset.control === 'tags') {
-      value = target.value.split(/\n+/).map(v => v.trim()).filter(Boolean);
-    } else if (target.dataset.control === 'multiselect') {
-      value = Array.from(target.selectedOptions).map(opt => this.castValue(opt.value, meta.itemType || 'string'));
-    } else if (target.dataset.control === 'json') {
-      try {
-        value = target.value ? JSON.parse(target.value) : null;
-      } catch (e) {
-        this.showToast('JSON 解析失败: ' + e.message, 'error');
-        return;
-      }
-    } else if (component === 'inputnumber' || type === 'number') {
-      value = target.value === '' ? null : Number(target.value);
-    } else {
-      value = target.value;
     }
+
+    const parsed = this._parseConfigFieldValueFromTarget(target, {
+      component,
+      meta,
+      type,
+      radioRoot: target.closest('#configFormWrapper')
+    });
+    if (!parsed.ok) return;
+    let value = parsed.value;
 
     value = this.normalizeFieldValue(value, meta, type);
     this.updateArrayObjectValue(parentPath, index, objectPath, value);
@@ -5787,10 +5468,33 @@ class App {
     const meta = fieldDef.meta || {};
     const type = fieldDef.type || target.dataset.type || '';
     const component = (target.dataset.component || '').toLowerCase();
+    const parsed = this._parseConfigFieldValueFromTarget(target, {
+      component,
+      meta,
+      type,
+      radioRoot: target.closest('#configFormWrapper')
+    });
+    if (!parsed.ok) return;
+    let value = parsed.value;
 
+    value = this.normalizeFieldValue(value, meta, type);
+    const prefix = this.combinePath(collection.basePath ?? '', key);
+    const fullPath = this.combinePath(prefix, objectPath);
+    this.setConfigFieldValue(fullPath, value);
+  }
+
+  _parseConfigFieldValueFromTarget(target, { component, meta, type, radioRoot } = {}) {
+    // 只做“值解析/转换”，不处理 dirty/保存逻辑；需要时由调用方更新 UI 文本与 span
     let value;
+
     if (component === 'switch') {
       value = !!target.checked;
+    } else if (target.type === 'radio') {
+      const root = radioRoot ?? document;
+      const checked = root?.querySelector ? root.querySelector(`input[name="${target.name}"]:checked`) : null;
+      value = checked ? checked.value : target.value;
+    } else if (target.type === 'range' || component === 'slider' || component === 'range') {
+      value = target.value === '' ? null : Number(target.value);
     } else if (target.dataset.control === 'kvlines') {
       value = this.parseKeyValueLines(target.value || '');
     } else if (target.dataset.control === 'tags') {
@@ -5802,18 +5506,15 @@ class App {
         value = target.value ? JSON.parse(target.value) : null;
       } catch (e) {
         this.showToast('JSON 解析失败: ' + e.message, 'error');
-        return;
+        return { ok: false, value: undefined };
       }
     } else if (component === 'inputnumber' || type === 'number') {
       value = target.value === '' ? null : Number(target.value);
-      } else {
+    } else {
       value = target.value;
     }
 
-    value = this.normalizeFieldValue(value, meta, type);
-    const prefix = this.combinePath(collection.basePath ?? '', key);
-    const fullPath = this.combinePath(prefix, objectPath);
-    this.setConfigFieldValue(fullPath, value);
+    return { ok: true, value };
   }
 
   handleConfigFieldChange(target) {
@@ -5824,35 +5525,21 @@ class App {
     const meta = fieldDef?.meta ?? {};
     const type = fieldDef?.type ?? target.dataset.type ?? '';
 
-    let value;
-    if (component === 'switch') {
-      value = !!target.checked;
-    } else if (target.type === 'radio') {
-      const checked = document.querySelector(`input[name="${target.name}"]:checked`);
-      value = checked ? checked.value : target.value;
-    } else if (target.type === 'range' || component === 'slider' || component === 'range') {
+    const isRange = target.type === 'range' || component === 'slider' || component === 'range';
+    if (isRange) {
       const wrap = target.closest('#configFormWrapper');
       const span = wrap && target.id ? wrap.querySelector(`[data-slider-value-for="${target.id}"]`) : null;
       if (span) span.textContent = target.value;
-      value = target.value === '' ? null : Number(target.value);
-    } else if (target.dataset.control === 'kvlines') {
-      value = this.parseKeyValueLines(target.value || '');
-    } else if (target.dataset.control === 'tags') {
-      value = target.value.split(/\n+/).map(v => v.trim()).filter(Boolean);
-    } else if (target.dataset.control === 'multiselect') {
-      value = Array.from(target.selectedOptions).map(opt => this.castValue(opt.value, meta.itemType || 'string'));
-    } else if (target.dataset.control === 'json') {
-      try {
-        value = target.value ? JSON.parse(target.value) : null;
-      } catch (e) {
-        this.showToast('JSON 解析失败: ' + e.message, 'error');
-        return;
-      }
-    } else if (component === 'inputnumber' || type === 'number') {
-      value = target.value === '' ? null : Number(target.value);
-    } else {
-      value = target.value;
     }
+
+    const parsed = this._parseConfigFieldValueFromTarget(target, {
+      component,
+      meta,
+      type,
+      radioRoot: document
+    });
+    if (!parsed.ok) return;
+    let value = parsed.value;
 
     value = this.normalizeFieldValue(value, meta, type);
     this.setConfigFieldValue(path, value);
@@ -6948,11 +6635,9 @@ class App {
   showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
-    
-    const icons = { success: '✓', error: '✗', warning: '⚠', info: 'ℹ' };
-    
+
     toast.className = `toast ${type}`;
-    toast.innerHTML = `<span class="toast-icon">${icons[type]}</span><span>${message}</span>`;
+    toast.innerHTML = `<span class="toast-icon" aria-hidden="true">${toastIconSVG(type)}</span><span>${message}</span>`;
     
     container.appendChild(toast);
     

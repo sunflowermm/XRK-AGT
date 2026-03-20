@@ -3,6 +3,8 @@ xrk/**
 !xrk/index.html
 !xrk/api-config.json
 !xrk/styles.css
+!xrk/css/
+!xrk/css/*
 !xrk/app.js
 !xrk/lib
 !xrk/lib/chart.umd.min.js

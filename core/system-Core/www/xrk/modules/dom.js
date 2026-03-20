@@ -213,3 +213,48 @@ export function initLazyLoad(selector = 'img[data-src]', options = { rootMargin:
 
   return imageObserver;
 }
+
+/**
+ * 统一 UI 加载态（data-updating）切换
+ * @param {Element|null|undefined} el
+ */
+export function setUpdating(el) {
+  if (!el) return;
+  el.setAttribute('data-updating', 'true');
+}
+
+export function clearUpdating(el) {
+  if (!el) return;
+  requestAnimationFrame(() => el.removeAttribute('data-updating'));
+}
+
+/**
+ * 绑定移动端“真实可视高度”到 CSS 变量 `--vh`。
+ * - 解决移动端软键盘/地址栏变化导致的 `100vh` 跳动问题
+ * - 使用 visualViewport（支持的浏览器更准确），否则回退到 innerHeight
+ */
+let _viewportHeightBound = false;
+export function bindViewportHeightVar(varName = '--vh') {
+  if (_viewportHeightBound) return;
+  _viewportHeightBound = true;
+
+  const apply = () => {
+    const height =
+      window.visualViewport?.height ??
+      window.innerHeight ??
+      document.documentElement.clientHeight;
+    document.documentElement.style.setProperty(varName, `${height}px`);
+  };
+
+  // 先立即设置一次，减少首屏跳动
+  try {
+    apply();
+  } catch {}
+
+  // visualViewport resize 在软键盘弹出时更敏感
+  try {
+    window.visualViewport?.addEventListener?.('resize', apply);
+  } catch {}
+
+  window.addEventListener('resize', apply, { passive: true });
+}

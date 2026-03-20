@@ -1,0 +1,671 @@
+/* API 调试 - 工具/响应结果超长文本：限制在卡片内自动换行，不撑宽整页 */
+
+.request-body {
+  background: var(--bg-card);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  max-width: 100%;
+  /* 响应体内部预格式可能出现超长无空格内容：避免撑宽整页 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  max-height: min(40vh, 360px);
+  /* 动态视口高度：软键盘展开时更稳定（若浏览器支持 dvh） */
+  max-height: min(40dvh, 360px);
+  touch-action: pan-x pan-y;
+}
+
+.request-body pre {
+  margin: 0;
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-sizing: border-box;
+  /* 由 pre 自己产生横向滚动，避免撑大外层布局 */
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-height: min(40vh, 360px);
+  max-height: min(40dvh, 360px);
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.response-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  /* 响应结果内部预格式可能出现超长无空格内容：避免撑宽整页 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  contain: layout paint;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  max-height: min(60vh, 520px);
+  max-height: min(60dvh, 520px);
+  touch-action: pan-x pan-y;
+}
+
+.response-content pre {
+  padding: 16px;
+  margin: 0;
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  /* 自动换行 + 断词：避免超长行撑宽导致整体右移 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-sizing: border-box;
+  /* 在 pre 内部上下/左右滚动查看，不影响外层布局宽度 */
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-height: min(60vh, 520px);
+  max-height: min(60dvh, 520px);
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  color: var(--text-primary);
+}
+
+/* API 调试页面（从 styles.css 迁移，保证移动端/桌面端一致的基座样式） */
+/* API 调试页面 */
+.api-container {
+  /* 使用 flex 列布局，避免 grid 隐式轨道的 max-content 参与宽度计算导致页面被撑宽 */
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  /* 在桌面和移动端都占满内容区宽度，避免卡片被压得过窄 */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.api-header-section {
+  text-align: center;
+  padding: 40px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.api-header-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.api-header-subtitle {
+  color: var(--text-muted);
+}
+
+.api-endpoint-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--bg-input);
+  border-radius: var(--radius);
+  margin-top: 16px;
+  font-family: var(--font-family-mono);
+  font-size: 14px;
+}
+
+.api-form-grid {
+  /* API 编辑也统一为单列布局，避免左右分栏 */
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.api-form-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+}
+
+.api-form-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* API 调试 - 响应区域整体容器 */
+.api-response-wrapper {
+  margin-top: 24px;
+  max-width: 100%;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* JSON 编辑器 */
+.json-editor-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.json-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-input);
+  border-bottom: 1px solid var(--border);
+}
+
+.json-editor-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.json-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.json-editor-wrapper {
+  position: relative;
+}
+
+.json-editor-wrapper textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: 16px;
+  border: none;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+}
+
+.CodeMirror {
+  height: 300px;
+  font-size: 13px;
+}
+
+/* 请求信息区域 */
+.request-info-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 24px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  contain: layout paint;
+}
+
+.request-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.request-info-header:hover {
+  background: var(--bg-hover);
+}
+
+.request-info-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.request-info-icon {
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+
+.request-info-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.request-method-badge {
+  padding: 4px 8px;
+  background: var(--primary);
+  color: var(--text-inverse);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.request-url-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-info-content {
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-input);
+}
+
+.request-info-item {
+  margin-bottom: 16px;
+}
+
+.request-info-item:last-child {
+  margin-bottom: 0;
+}
+
+.request-info-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.request-info-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.request-url-full {
+  font-family: var(--font-family-mono);
+  background: var(--bg-card);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+.request-headers {
+  background: var(--bg-card);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.request-header-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  font-family: var(--font-family-mono);
+  line-height: 1.6;
+  word-break: break-all;
+  font-size: 0;
+}
+
+.request-header-key {
+  color: var(--primary);
+  font-weight: 600;
+  min-width: 120px;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.request-header-key::after {
+  content: ':';
+  margin: 0 4px 0 0;
+}
+
+.request-header-value {
+  color: var(--text-secondary);
+  flex: 1;
+  font-size: 13px;
+}
+
+.response-section {
+  margin-top: 24px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.response-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.response-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.response-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* JSON 语法高亮 */
+.json-key { color: #0284c7; }
+.json-string { color: #059669; }
+.json-number { color: #7c3aed; }
+.json-boolean { color: #dc2626; }
+.json-null { color: var(--text-muted); }
+
+body.dark .json-key { color: #38bdf8; }
+body.dark .json-string { color: #34d399; }
+body.dark .json-number { color: #a78bfa; }
+body.dark .json-boolean { color: #f87171; }
+
+/* 数据表格 */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  /* 固定列宽，配合单元格内换行，避免在窄屏下把父级卡片撑宽 */
+  table-layout: fixed;
+}
+
+.data-table th,
+.data-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  /* 进程名 / 请求路径 等长字符串在移动端会自动换行，不再溢出卡片 */
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.data-table th {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+}
+
+.data-table td {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.data-table tr:hover td {
+  background: var(--bg-hover);
+}
+
+/* 文件上传 */
+.file-upload {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.file-upload:hover {
+  border-color: var(--primary);
+  background: var(--primary-50);
+}
+
+.file-upload.is-dragover {
+  border-color: var(--primary);
+  background: var(--primary-50);
+  box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+.file-upload-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  color: var(--text-muted);
+}
+
+.file-upload-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.file-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius);
+}
+
+.file-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-item-size {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.file-item-remove {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--danger-light);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 加载动画 */
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+}
+
+.empty-state-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.empty-state-text {
+  font-size: 14px;
+}
+
+/* ======== API 调试中心：移动端信息密度优化 ======== */
+@media (max-width: 768px) {
+  .api-container {
+    gap: 16px;
+  }
+
+  .api-header-section {
+    padding: 24px 12px;
+  }
+
+  .api-header-title {
+    font-size: 20px;
+  }
+
+  .api-endpoint-box {
+    margin-top: 12px;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .api-form-grid {
+    gap: 16px;
+  }
+
+  .api-form-section {
+    padding: 14px;
+  }
+
+  .api-form-section-title {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+  }
+
+  /* JSON 编辑器缩短高度，避免单块占满可视屏幕 */
+  .json-editor-header {
+    padding: 10px 12px;
+  }
+
+  .json-editor-actions {
+    gap: 6px;
+  }
+
+  .json-editor-wrapper textarea {
+    padding: 12px;
+    min-height: 220px;
+    max-height: min(42vh, 320px);
+    max-height: min(42dvh, 320px);
+    resize: none;
+  }
+
+  .CodeMirror {
+    height: min(42vh, 320px);
+    height: min(42dvh, 320px);
+  }
+
+  /* 请求信息默认展开后，减少内部 padding/margin，保证信息量仍然密集但不过度堆叠 */
+  .request-info-section {
+    margin-bottom: 16px;
+  }
+
+  .request-info-header {
+    padding: 10px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .request-info-meta {
+    width: 100%;
+  }
+
+  .request-info-title {
+    font-size: 14px;
+  }
+
+  .request-info-content {
+    padding: 12px;
+  }
+
+  .request-info-item {
+    margin-bottom: 12px;
+  }
+
+  .request-header-item {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .request-header-key {
+    min-width: auto;
+  }
+
+  /* URL 文本允许换行，避免只显示省略号导致信息损失 */
+  .request-url-text {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: initial;
+    max-width: 100%;
+  }
+
+  .response-section {
+    margin-top: 16px;
+  }
+
+  .response-header {
+    margin-bottom: 12px;
+  }
+}
+

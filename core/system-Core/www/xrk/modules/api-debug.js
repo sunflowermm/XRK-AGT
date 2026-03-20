@@ -68,9 +68,12 @@ export function selectAPI(app, apiId) {
     localStorage.setItem('lastApiId', apiId);
   } catch {}
   app._lastJsonPreview = null;
+  // 切换 API 时强制清空旧 CodeMirror 引用，避免 setValue 写入已被 innerHTML 替换的旧 textarea
+  app.jsonEditor = null;
 
   // 在移动端，选择API后关闭侧边栏
-  if (window.innerWidth <= 768) {
+  const mql = window.matchMedia?.('(max-width: 768px)');
+  if ((mql ? mql.matches : window.innerWidth <= 768) && typeof app.closeSidebar === 'function') {
     app.closeSidebar();
   }
 
@@ -173,14 +176,12 @@ export function selectAPI(app, apiId) {
     if (t.id === 'copyJsonBtn') return copyJSON(app);
   };
 
-  section.oninput = (e) => {
+  const onRequestFieldChanged = (e) => {
     const t = e.target;
     if (t?.matches?.('[data-request-field="1"]')) updateJSONPreview(app);
   };
-  section.onchange = (e) => {
-    const t = e.target;
-    if (t?.matches?.('[data-request-field="1"]')) updateJSONPreview(app);
-  };
+  section.oninput = onRequestFieldChanged;
+  section.onchange = onRequestFieldChanged;
 
   // 文件上传设置
   if (apiId === 'file-upload') {
@@ -188,6 +189,8 @@ export function selectAPI(app, apiId) {
   }
 
   // 初始化JSON编辑器（只做“请求预览”，只读，避免误操作）
+  // 先立即渲染一次 preview，CodeMirror 初始化期间也能看到请求内容
+  updateJSONPreview(app);
   initJSONEditor(app).then(() => updateJSONPreview(app));
 }
 
@@ -308,11 +311,13 @@ export function updateJSONPreview(app) {
   if (app._lastJsonPreview === next) return;
   app._lastJsonPreview = next;
   const textarea = document.getElementById('jsonEditor');
-  if (textarea && !app.jsonEditor) {
+  // 同步 textarea 与 CodeMirror，避免初始化/切换期间出现“显示/复制源不一致”
+  if (textarea) {
     const top = textarea.scrollTop;
     textarea.value = next;
     textarea.scrollTop = top;
-  } else if (app.jsonEditor) {
+  }
+  if (app.jsonEditor) {
     const scroll = app.jsonEditor.getScrollInfo();
     app.jsonEditor.setValue(next);
     app.jsonEditor.scrollTo(null, scroll.top);
@@ -320,8 +325,10 @@ export function updateJSONPreview(app) {
 }
 
 export function buildRequestData(app) {
-  const { method, path } = app.currentAPI;
-  const api = findAPIById(app, app.currentAPI.apiId);
+  const api = findAPIById(app, app.currentAPI.apiId) || {};
+  // 避免 method/path 为 undefined 时 JSON.stringify 得到空对象 {}
+  const method = app.currentAPI.method ?? api.method ?? 'GET';
+  const path = app.currentAPI.path ?? api.path ?? '';
   const data = { method, url: path };
 
   // 路径参数
@@ -371,6 +378,13 @@ export async function initJSONEditor(app) {
   await loadCodeMirror();
   const textarea = document.getElementById('jsonEditor');
   if (!textarea || !window.CodeMirror) return;
+
+  // 旧实例安全销毁（DOM 可能已被 innerHTML 替换）
+  if (app.jsonEditor && typeof app.jsonEditor.toTextArea === 'function') {
+    try {
+      app.jsonEditor.toTextArea();
+    } catch {}
+  }
 
   const theme = app.theme === 'dark' ? 'monokai' : 'default';
   app.jsonEditor = window.CodeMirror.fromTextArea(textarea, {
@@ -620,6 +634,10 @@ export function renderResponse(app, status, data, time, requestInfo = {}) {
   const section = document.getElementById('responseSection');
   const isSuccess = status >= 200 && status < 300;
   const prettyJson = JSON.stringify(data, null, 2);
+  // 复制按钮只绑定一次，但回调需要复制“最新响应结果”，避免闭包引用陈旧数据
+  if (section) section.dataset.latestPrettyJson = prettyJson;
+  const mql = window.matchMedia?.('(max-width: 768px)');
+  const isMobile = mql ? mql.matches : window.innerWidth <= 768;
 
   // 格式化请求头显示
   const headers = requestInfo.headers || {};
@@ -638,7 +656,7 @@ export function renderResponse(app, status, data, time, requestInfo = {}) {
         <div class="request-info-section" id="requestInfoSection">
           <div class="request-info-header" id="requestInfoToggle">
             <h3 class="request-info-title">
-              <span class="request-info-icon">▼</span>
+              <span class="request-info-icon">${isMobile ? '▲' : '▼'}</span>
               请求信息
             </h3>
             <div class="request-info-meta">
@@ -648,7 +666,7 @@ export function renderResponse(app, status, data, time, requestInfo = {}) {
               )}${(requestInfo.url || '').length > 60 ? '...' : ''}</span>
             </div>
           </div>
-          <div class="request-info-content" id="requestInfoContent" style="display:none">
+          <div class="request-info-content" id="requestInfoContent" style="display:${isMobile ? 'block' : 'none'}">
             <div class="request-info-item">
               <div class="request-info-label">请求方法</div>
               <div class="request-info-value">${requestInfo.method || 'GET'}</div>
@@ -708,13 +726,14 @@ export function renderResponse(app, status, data, time, requestInfo = {}) {
 
       const copyBtn = e.target.closest('#responseCopyBtn');
       if (copyBtn) {
-        app.copyToClipboard(prettyJson, '响应结果已复制到剪贴板', '复制失败，请检查浏览器权限');
+        const latest = section.dataset.latestPrettyJson || '';
+        app.copyToClipboard(latest, '响应结果已复制到剪贴板', '复制失败，请检查浏览器权限');
       }
     });
   }
 
   try {
-    if (window.innerWidth > 768) {
+    if (!isMobile) {
       section.scrollIntoView({ behavior: 'smooth' });
     }
   } catch {}

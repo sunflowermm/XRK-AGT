@@ -18,6 +18,9 @@ export * from './markdown.js';
 // 配置管理模块
 export { default as ConfigManager } from './config-manager.js';
 
+// UI 工具模块
+export * from './ui-kit.js';
+
 /**
  * 使用示例：
  *

@@ -1,0 +1,21 @@
+/* Chat：工具块结果超长文本的卡片内自适应（避免撑宽整页） */
+
+.chat-tool-block-code {
+  font-size: 12px;
+  font-family: var(--font-family-mono);
+  background: var(--bg-body);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  color: var(--text-primary);
+  line-height: 1.45;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* flex 容器下防止子元素撑宽导致整体右移 */
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+

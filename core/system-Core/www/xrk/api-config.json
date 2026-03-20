@@ -1288,22 +1288,22 @@
   },
   "quickActions": [
     {
-      "icon": "💬",
+      "icon": "AI",
       "text": "AI 聊天",
       "action": "ai-chat"
     },
     {
-      "icon": "⚙️",
+      "icon": "CFG",
       "text": "配置管理",
       "apiId": "config-list"
     },
     {
-      "icon": "📡",
+      "icon": "DEV",
       "text": "设备管理",
       "apiId": "device-list"
     },
     {
-      "icon": "🧩",
+      "icon": "PLG",
       "text": "插件管理",
       "apiId": "plugin-list"
     }

@@ -76,9 +76,31 @@ export class MarkdownRenderer {
 
       const toolbar = document.createElement('div');
       toolbar.className = 'mermaid-toolbar';
+      const copyIcon = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      `;
+      const checkIcon = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 6L9 17l-5-5"></path>
+        </svg>
+      `;
+      const downloadIcon = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      `;
       toolbar.innerHTML = `
-        <button class="mermaid-copy" title="复制">📋</button>
-        <button class="mermaid-download" title="下载">💾</button>
+        <button class="mermaid-copy" type="button" title="复制" aria-label="复制 SVG">
+          ${copyIcon}
+        </button>
+        <button class="mermaid-download" type="button" title="下载" aria-label="下载 SVG">
+          ${downloadIcon}
+        </button>
       `;
       wrap.appendChild(toolbar);
 
@@ -90,9 +112,12 @@ export class MarkdownRenderer {
           const svg = wrap.querySelector('svg');
           if (svg) {
             try {
+              const original = copyBtn.innerHTML;
               await navigator.clipboard.writeText(svg.outerHTML);
-              copyBtn.textContent = '✅';
-              setTimeout(() => copyBtn.textContent = '📋', 2000);
+              copyBtn.innerHTML = checkIcon;
+              setTimeout(() => {
+                copyBtn.innerHTML = original;
+              }, 2000);
             } catch (e) {
               console.error('复制失败:', e);
             }

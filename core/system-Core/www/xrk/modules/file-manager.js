@@ -254,22 +254,22 @@ export class FileManager {
   /**
    * 获取文件图标
    * @param {File|string} fileOrType - 文件对象或 MIME 类型
-   * @returns {string} 图标 emoji
+   * @returns {string} 图标标识（不使用 emoji）
    */
   getFileIcon(fileOrType) {
     const type = typeof fileOrType === 'string' ? fileOrType : fileOrType?.type || '';
 
-    if (type.startsWith('image/')) return '🖼️';
-    if (type.startsWith('video/')) return '🎥';
-    if (type.startsWith('audio/')) return '🎵';
-    if (type.startsWith('text/')) return '📄';
-    if (type.includes('pdf')) return '📕';
-    if (type.includes('zip') || type.includes('rar') || type.includes('7z')) return '📦';
-    if (type.includes('word') || type.includes('document')) return '📘';
-    if (type.includes('excel') || type.includes('spreadsheet')) return '📗';
-    if (type.includes('powerpoint') || type.includes('presentation')) return '📙';
+    if (type.startsWith('image/')) return 'IMG';
+    if (type.startsWith('video/')) return 'VID';
+    if (type.startsWith('audio/')) return 'AUD';
+    if (type.startsWith('text/')) return 'TXT';
+    if (type.includes('pdf')) return 'PDF';
+    if (type.includes('zip') || type.includes('rar') || type.includes('7z')) return 'ZIP';
+    if (type.includes('word') || type.includes('document')) return 'DOC';
+    if (type.includes('excel') || type.includes('spreadsheet')) return 'XLS';
+    if (type.includes('powerpoint') || type.includes('presentation')) return 'PPT';
 
-    return '📄';
+    return 'FILE';
   }
 }
 
