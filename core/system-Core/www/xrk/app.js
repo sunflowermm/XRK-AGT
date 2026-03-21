@@ -697,8 +697,8 @@ class App {
     
     // 更新各个面板（平滑过渡）
     this.renderBotsPanel(data.bots ?? []);
-    this.renderWorkflowInfo(data.workflows ?? {}, data.panels ?? {});
-    this.renderNetworkInfo(data.system?.network ?? {}, data.system?.netRates ?? {});
+    renderWorkflowInfoPanel(this, data.workflows ?? {}, data.panels ?? {});
+    renderNetworkInfoPanel(this, data.system?.network ?? {}, data.system?.netRates ?? {});
   }
   
   /**
@@ -709,7 +709,7 @@ class App {
       // 并行加载系统状态和插件信息
       await Promise.all([
         this.loadSystemStatus(),
-        this.loadPluginsInfo()
+        loadPluginsInfoPanel(this)
       ]);
     } catch (error) {
       console.warn('首页数据加载失败:', error);
@@ -847,14 +847,6 @@ class App {
     
     clearUpdating(botsInfo);
   }
-  
-  renderWorkflowInfo(workflows = {}, panels = {}) {
-    return renderWorkflowInfoPanel(this, workflows, panels);
-  }
-  
-  renderNetworkInfo(network = {}, rates = {}) {
-    return renderNetworkInfoPanel(this, network, rates);
-  }
 
   renderMarkdown(text) {
     return markdownRenderer.render(text);
@@ -867,13 +859,6 @@ class App {
    */
   _stripMarkdownForTTS(text = '') {
     return stripMarkdownForTTS(text);
-  }
-  
-  /**
-   * 加载插件信息（词云块展示，详情见 modules/pages/home-plugins-workflow.js）
-   */
-  async loadPluginsInfo() {
-    return loadPluginsInfoPanel(this);
   }
 
   updateSystemStatus(data) {
