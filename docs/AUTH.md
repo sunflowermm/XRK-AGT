@@ -21,8 +21,8 @@
 1. **静态资源**  
    路径为常见静态扩展名（如 `.html`、`.js`、`.ico`、图片、字体等）时直接放行。
 
-2. **本地连接**  
-   `req.ip` 为 localhost、127.0.0.1、::1 或私网 IP 时直接放行，便于本机调试。
+2. **127 回环连接**  
+   来源 IP 为 `127.*`（包含 `::ffff:127.*`）时直接放行，便于本机调试。
 
 除此之外，Server 不再基于 URL 前缀、白名单配置或 Cookie 自动放行/拒绝；是否需要 Key、如何校验，完全交给上层模块处理。
 
@@ -47,9 +47,9 @@
 
 所有通过 Tasker 暴露的 WebSocket 路径（`Bot.wsf`）都会先经过 `src/bot.js` 的 `wsConnect` 统一鉴权：
  
-- **本地/内网连接**：直接放行，便于开发调试；
+- **127 回环连接**：直接放行（仅 `127.*` / `::ffff:127.*`）；
 - **远程连接**：若 `server.auth.apiKey.enabled !== false`，则默认必须通过 `Bot.apiKey` 校验，否则返回 `401 Unauthorized` 并拒绝升级；
-- **Tasker 级免鉴权**：若某个 WS 路径在 `Bot.wsf[path]` 中包含形如 `{ handler, skipAuth: true }` 的条目，则视为该路径整体“跳过系统级 API Key 鉴权”，仅保留本地/内网判定。
+- **Tasker 级免鉴权**：若某个 WS 路径在 `Bot.wsf[path]` 中包含形如 `{ handler, skipAuth: true }` 的条目，则视为该路径整体“跳过系统级 API Key 鉴权”。
 
 客户端可以通过以下任一方式携带系统 API Key（与 HTTP 一致）：
 
@@ -64,7 +64,7 @@
 ## 相关文件
 
 - HTTP 基础与 API Key 校验：`src/bot.js`  
-  - `_authMiddleware(req, res, next)`：HTTP 基础放行（静态 / 本地）  
+  - `_authMiddleware(req, res, next)`：HTTP 基础放行（静态资源）  
   - `_checkApiAuthorization(req)` / `checkApiAuthorization(req)`：API Key 校验  
   - `wsConnect`：WebSocket 升级与连接管理（不做统一鉴权）
 - system-Core HTTP 模块：`core/system-Core/http/*.js`  
@@ -75,10 +75,10 @@
 ## 常见问题
 
 **Q：现在鉴权到底写在哪一层？**  
-A：Server 层只做“静态 + 本地”放行，不再判断是否需要 Key；系统级接口（system-Core HTTP）在各自模块里显式调用 `Bot.checkApiAuthorization(req)`，其他 Core 可自由选择是否接入系统 API Key 或自定义鉴权。
+A：Server 层只做“静态资源”放行；系统级接口（system-Core HTTP）在各自模块里显式调用 `Bot.checkApiAuthorization(req)`，其他 Core 可自由选择是否接入系统 API Key 或自定义鉴权。
 
 **Q：如何使用系统 API Key 保护自定义 HTTP 接口？**  
 A：在自定义 `core/<your-core>/http/*.js` 里，按 system-Core 的写法增加一个 `ensureAuth` 函数，在 handler 开头调用 `Bot.checkApiAuthorization(req)`，失败时返回 401 即可。
 
 **Q：本地调试可以不带 Key 吗？**  
-A：可以。Server 会对本地/内网 IP 做基础放行，你也可以在开发环境里临时将 `server.auth.apiKey.enabled` 设为 `false`，关闭系统级 API Key 校验。
+A：可以，但仅当来源是 `127.*`（或 `::ffff:127.*`）时自动放行；内网地址（如 `192.168.*`、`10.*`、`172.16-31.*`）不会自动放行。

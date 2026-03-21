@@ -1725,6 +1725,12 @@ export default class Bot extends EventEmitter {
       return false;
     }
 
+    // 仅 127 回环地址免鉴权（内网网段不放行）
+    const remoteAddress = req.socket?.remoteAddress || req.ip || '';
+    if (this._isLoopback127Connection(remoteAddress)) {
+      return true;
+    }
+
     // 认证已启用但服务端尚未加载/生成密钥 → 拒绝，避免未鉴权放行
     if (!this.apiKey) {
       BotUtil.makeLog('warn', '[Auth] API 认证已启用但服务端密钥未加载，拒绝请求', '认证');
@@ -1736,8 +1742,10 @@ export default class Bot extends EventEmitter {
       req.query?.api_key ??
       req.body?.api_key;
 
+    const requestPath = req.path || req.url || req.originalUrl || 'unknown';
+
     if (!authKey) {
-      BotUtil.makeLog('debug', `[Auth] API 认证失败：缺少密钥 path=${req.path} ip=${req.ip}`, '认证');
+      BotUtil.makeLog('debug', `[Auth] API 认证失败：缺少密钥 path=${requestPath} ip=${req.ip}`, '认证');
       return false;
     }
 
@@ -1746,15 +1754,15 @@ export default class Bot extends EventEmitter {
       const apiKeyBuffer = Buffer.from(String(this.apiKey));
 
       if (authKeyBuffer.length !== apiKeyBuffer.length) {
-        BotUtil.makeLog('warn', `[Auth] 未授权：密钥长度不一致 path=${req.path} 来自 ${req.socket?.remoteAddress || req.ip}`, '认证');
+        BotUtil.makeLog('warn', `[Auth] 未授权：密钥长度不一致 path=${requestPath} 来自 ${req.socket?.remoteAddress || req.ip}`, '认证');
         return false;
       }
 
       const ok = crypto.timingSafeEqual(authKeyBuffer, apiKeyBuffer);
-      if (!ok) BotUtil.makeLog('debug', `[Auth] 未授权：密钥不匹配 path=${req.path} ip=${req.ip}`, '认证');
+      if (!ok) BotUtil.makeLog('debug', `[Auth] 未授权：密钥不匹配 path=${requestPath} ip=${req.ip}`, '认证');
       return ok;
     } catch (error) {
-      BotUtil.makeLog('error', `[Auth] API 认证异常：${error.message} path=${req.path}`, '认证');
+      BotUtil.makeLog('error', `[Auth] API 认证异常：${error.message} path=${requestPath}`, '认证');
       return false;
     }
   }
@@ -1823,6 +1831,44 @@ export default class Bot extends EventEmitter {
     const testPatterns = isIPv4 ? patterns.ipv4 : patterns.ipv6;
     
     return testPatterns.some(pattern => pattern.test(ip));
+  }
+
+  /**
+   * 仅识别 127 回环地址（含 IPv4-mapped IPv6）
+   */
+  _isLoopback127Connection(address) {
+    if (!address || typeof address !== 'string') return false;
+    const ip = address.toLowerCase().trim()
+      .replace(/^::ffff:/, '')
+      .replace(/%.+$/, '');
+    return /^127\./.test(ip);
+  }
+
+  /**
+   * 获取路径的 WebSocket 处理器（兼容函数与对象结构）
+   */
+  _getWsHandlersForPath(wsPath) {
+    const rawHandlers = this.wsf?.[wsPath];
+    if (!Array.isArray(rawHandlers)) return [];
+    return rawHandlers.filter(Boolean);
+  }
+
+  /**
+   * 检查 WS 路径是否声明跳过系统级 API Key 鉴权
+   */
+  _isWsPathSkipAuth(wsPath) {
+    const handlers = this._getWsHandlersForPath(wsPath);
+    return handlers.some((entry) => entry && typeof entry === 'object' && entry.skipAuth === true);
+  }
+
+  /**
+   * 是否要求当前 WS 连接进行系统级 API Key 鉴权
+   */
+  _shouldRequireWsApiAuth(req, wsPath) {
+    const apiKeyEnabled = cfg.server?.auth?.apiKey?.enabled !== false;
+    if (!apiKeyEnabled) return false;
+    if (this._isWsPathSkipAuth(wsPath)) return false;
+    return true;
   }
 
   /**
@@ -2074,18 +2120,7 @@ export default class Bot extends EventEmitter {
       return socket.destroy();
     }
 
-    const authConfig = cfg.server.auth || {};
-    const apiKeyEnabled = authConfig.apiKey?.enabled !== false;
-    
-    // 判断当前 WS 路径是否声明“跳过系统级鉴权”
-    // 约定：Bot.wsf[wsPath] 的元素既可以是函数（兼容旧版本），
-    // 也可以是形如 { handler: Function, skipAuth?: boolean } 的对象；
-    // 只要其中任意一个元素的 skipAuth === true，则该路径整体跳过 API Key 鉴权。
-    const handlersForPath = this.wsf[wsPath];
-    const skipAuthForPath = Array.isArray(handlersForPath)
-      && handlersForPath.some((h) => h && typeof h === 'object' && h.skipAuth === true);
-
-    if (apiKeyEnabled && !skipAuthForPath && !this._checkApiAuthorization(req)) {
+    if (this._shouldRequireWsApiAuth(req, wsPath) && !this._checkApiAuthorization(req)) {
       BotUtil.makeLog('warn', `WebSocket 鉴权失败：${req.url} ip=${req.socket.remoteAddress}`, '服务器');
       try {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -2173,9 +2208,8 @@ export default class Bot extends EventEmitter {
       
       // 调用注册的处理器（兼容函数与 { handler, skipAuth } 结构）
       try {
-        const handlers = this.wsf[wsPath] || [];
+        const handlers = this._getWsHandlersForPath(wsPath);
         for (const entry of handlers) {
-          if (!entry) continue;
           const fn = typeof entry === 'function' ? entry : entry.handler;
           if (typeof fn === 'function') {
             fn(conn, req, socket, head);

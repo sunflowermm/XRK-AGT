@@ -128,7 +128,7 @@ flowchart TB
 
 - 直接的函数：`(ws, req, ...args) => { ... }`（兼容旧版本，默认需要系统级 API Key）；
 - 或对象：`{ handler: (ws, req, ...args) => { ... }, skipAuth: true }`  
-  当任意条目声明 `skipAuth: true` 时，该路径在 `wsConnect` 中会跳过系统级 API Key 鉴权（但仍按 IP 判断是否本地/内网），适合像 `xiaozhi-Core` 这类需要自定义鉴权的 Tasker。
+  当任意条目声明 `skipAuth: true` 时，该路径在 `wsConnect` 中会跳过系统级 API Key 鉴权，适合像 `xiaozhi-Core` 这类需要自定义鉴权的 Tasker。
 
 **事件流向**：
 
