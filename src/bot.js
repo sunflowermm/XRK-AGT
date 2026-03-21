@@ -1737,10 +1737,7 @@ export default class Bot extends EventEmitter {
       return false;
     }
 
-    const authKey = req.headers?.["x-api-key"] ??
-      req.headers?.["authorization"]?.replace('Bearer ', '') ??
-      req.query?.api_key ??
-      req.body?.api_key;
+    const authKey = this._extractApiKeyFromRequest(req);
 
     const requestPath = req.path || req.url || req.originalUrl || 'unknown';
 
@@ -1769,6 +1766,94 @@ export default class Bot extends EventEmitter {
 
   checkApiAuthorization(req) {
     return this._checkApiAuthorization(req);
+  }
+
+  /**
+   * 归一化密钥候选值：转字符串、去空白、过滤空值
+   */
+  _normalizeApiKeyCandidate(value) {
+    if (value == null) return null;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const normalized = this._normalizeApiKeyCandidate(item);
+        if (normalized) return normalized;
+      }
+      return null;
+    }
+
+    const normalized = String(value).trim();
+    if (!normalized) return null;
+    // 防御性过滤：拒绝带换行的输入，避免头部注入类脏值参与比对
+    if (/[\r\n]/.test(normalized)) return null;
+    return normalized;
+  }
+
+  /**
+   * 从 Authorization / Proxy-Authorization 提取密钥
+   * 支持 Bearer/Token/ApiKey 三种常见方案；无方案时按裸 token 处理
+   */
+  _extractApiKeyFromAuthHeader(headerValue) {
+    const header = this._normalizeApiKeyCandidate(headerValue);
+    if (!header) return null;
+
+    const match = header.match(/^(Bearer|Token|ApiKey)\s+(.+)$/i);
+    if (match) {
+      return this._normalizeApiKeyCandidate(match[2]);
+    }
+
+    // 兼容直接把 key 放在 Authorization 里的老客户端
+    if (!header.includes(' ')) return header;
+    return null;
+  }
+
+  /**
+   * 从请求中提取 API Key（HTTP/WS 共用）
+   */
+  _extractApiKeyFromRequest(req) {
+    const headers = req?.headers || {};
+    const query = req?.query || {};
+    const body = req?.body || {};
+
+    const headerCandidates = [
+      headers['x-api-key'],
+      headers['api-key'],
+      headers['x-auth-token'],
+      headers['x-access-token'],
+      this._extractApiKeyFromAuthHeader(headers.authorization),
+      this._extractApiKeyFromAuthHeader(headers['proxy-authorization']),
+    ];
+    for (const candidate of headerCandidates) {
+      const key = this._normalizeApiKeyCandidate(candidate);
+      if (key) return key;
+    }
+
+    const queryCandidates = [
+      query.api_key,
+      query.apiKey,
+      query.apikey,
+      query.access_token,
+      query.token,
+      query.key,
+    ];
+    for (const candidate of queryCandidates) {
+      const key = this._normalizeApiKeyCandidate(candidate);
+      if (key) return key;
+    }
+
+    const bodyCandidates = [
+      body.api_key,
+      body.apiKey,
+      body.apikey,
+      body.access_token,
+      body.token,
+      body.key,
+    ];
+    for (const candidate of bodyCandidates) {
+      const key = this._normalizeApiKeyCandidate(candidate);
+      if (key) return key;
+    }
+
+    return null;
   }
 
   /**

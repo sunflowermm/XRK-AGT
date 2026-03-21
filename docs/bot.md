@@ -102,7 +102,7 @@ flowchart TB
 | **服务入口** | Express 应用、HTTP/HTTPS 服务器、静态文件服务、基础中间件 |
 | **API 与 WebSocket** | 动态加载所有 `core/*/http` 目录下的 API 模块，管理 WebSocket 连接与路径路由 |
 | **Tasker 与多 Bot** | 管理 Tasker 实例，按账号/设备 ID 管理子 Bot |
-| **认证与安全** | API Key 生成/验证、白名单、本地连接、同源 Cookie 认证 |
+| **认证与安全** | API Key 生成/验证、127 回环免鉴权、WebSocket 统一鉴权 |
 | **事件系统** | 统一事件入口 `Bot.em()`，事件准备与增强，逐级事件派发 |
 | **HTTP业务层** | 重定向管理、CDN 支持、反向代理增强（负载均衡、健康检查） |
 | **资源管理** | 临时文件清理、优雅关闭、Redis 持久化 |
@@ -436,7 +436,7 @@ flowchart LR
     RateLimit --> BodyParser["7️⃣ 请求体解析<br/>📦 JSON<br/>📋 URL-Encoded"]
     BodyParser --> Redirect["8️⃣ 重定向检查<br/>🔄 HTTP业务层<br/>📍 路径匹配"]
     Redirect --> Route["9️⃣ 路由匹配<br/>🔍 系统路由<br/>📡 API路由"]
-    Route --> Auth["🔟 认证中间件<br/>✅ 白名单<br/>🔑 API Key"]
+    Route --> Auth["🔟 认证中间件<br/>🔁 静态资源放行<br/>🔑 API Key"]
     Auth --> Handler["⚙️ 业务处理<br/>处理请求逻辑"]
     Handler --> Response["✅ 返回响应<br/>HTTP状态码<br/>响应数据"]
     
@@ -507,13 +507,13 @@ flowchart TB
 当前版本中，Bot 的认证职责划分如下（详见 `docs/AUTH.md`）：
 
 - **Server 层 (`src/bot.js`)**  
-  - 只做静态资源放行（根据扩展名）和本地/内网 IP 放行；  
+  - 只做静态资源放行（根据扩展名）；`127.*`（含 `::ffff:127.*`）来源请求由底层统一免鉴权；  
   - 不再根据 URL 白名单或 Cookie 做统一鉴权。
 - **system-Core HTTP (`core/system-Core/http/*.js`)**  
   - 在各自模块顶部通过 `ensureSystemCoreAuth` 调用 `Bot.checkApiAuthorization(req)`，统一使用系统级 API Key。  
 - **其他 Core HTTP / Tasker**  
   - 可选择接入系统 API Key，或定义自己的鉴权方案（如自有 token / 签名）；  
-  - Tasker 暴露的 WebSocket 路径统一经过 `wsConnect` 做系统级 API Key 校验（本地/内网除外）。
+  - Tasker 暴露的 WebSocket 路径统一经过 `wsConnect` 做系统级 API Key 校验（`127.*` 来源除外）。
 
 **配置示例**：
 
@@ -523,24 +523,6 @@ auth:
   apiKey:
     enabled: true
     file: "config/server_config/api_key.json"
-  whitelist:
-    - "/"
-    - "/health"
-    - "/status"
-    - "/xrk"
-```
-
-同源 Cookie 认证（用于 Web 控制台免 API Key）可通过 `uiCookie` 配置：
-
-```yaml
-uiCookie:
-  enabled: true
-  pathPrefix: "/xrk"
-  name: "xrk_ui"
-  value: "1"
-  sameSite: "lax"
-  httpOnly: true
-  maxAgeMs: 86400000
 ```
 
 ---

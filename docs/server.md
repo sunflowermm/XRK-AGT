@@ -386,7 +386,7 @@ flowchart LR
     RateLimit --> BodyParser["7️⃣ 请求体解析<br/>📦 JSON<br/>📋 URL-Encoded"]
     BodyParser --> Redirect["8️⃣ 重定向检查<br/>🔄 HTTP业务层<br/>📍 路径匹配"]
     Redirect --> Routes["9️⃣ 路由匹配<br/>🔍 系统路由<br/>📡 API路由"]
-    Routes --> Auth["🔟 认证中间件<br/>✅ 白名单<br/>🔑 API Key"]
+    Routes --> Auth["🔟 认证中间件<br/>📄 静态资源放行<br/>🔑 API Key 校验链路"]
     Auth --> Handler["⚙️ 业务处理<br/>处理请求逻辑"]
     Handler --> Response["✅ 返回响应<br/>HTTP状态码<br/>响应数据"]
     
@@ -588,9 +588,9 @@ Bot.wsf['OneBotv11'].push((ws, ...args) => {
 
 ### WebSocket 认证
 
-- **统一认证**：使用与HTTP相同的认证机制
-- **白名单支持**：某些路径可以免认证
-- **API Key支持**：支持通过API Key认证
+- **统一认证链路**：WebSocket 升级阶段复用 `Bot.checkApiAuthorization(req)` 逻辑
+- **127 回环免鉴权**：仅 `127.*` / `::ffff:127.*` 自动放行
+- **路径级例外**：`Bot.wsf[path]` 中声明 `skipAuth: true` 时可跳过系统级 API Key
 
 ---
 
@@ -608,7 +608,7 @@ flowchart LR
     
     SystemRoute --> FileRoute["📁 文件服务路由<br/>/File/*<br/>文件下载/上传"]
     
-    FileRoute --> Auth["🔐 认证中间件<br/>白名单检查<br/>API Key验证"]
+    FileRoute --> Auth["🔐 认证中间件<br/>静态资源规则<br/>API Key 校验链路"]
     
     Auth -->|"认证通过"| DataStatic["💾 数据静态服务<br/>/media → data/media<br/>/uploads → data/uploads<br/>用户上传文件"]
     
@@ -638,7 +638,7 @@ flowchart TB
     Request["🌐 HTTP请求"] --> Priority1["1️⃣ 系统路由<br/>🔧 精确匹配<br/>/status /health /metrics"]
     Request --> Priority2["2️⃣ 文件服务<br/>📁 /File/*"]
     Request --> Priority3["3️⃣ API路由<br/>📡 /api/*<br/>⭐ 最高优先级"]
-    Request --> Priority4["4️⃣ 认证中间件<br/>🔐 白名单/本地/API Key"]
+    Request --> Priority4["4️⃣ 认证中间件<br/>🔐 静态资源/127回环/API Key"]
     Request --> Priority5["5️⃣ 数据静态服务<br/>💾 /media /uploads<br/>映射到data目录"]
     Request --> Priority6["6️⃣ 静态文件服务<br/>📄 /www/* /<br/>映射到www目录"]
     Request --> Priority7["7️⃣ 404处理<br/>❌ 未找到资源"]
@@ -849,7 +849,7 @@ export default {
 
 ## 安全与中间件
 
-**鉴权总览**：HTTP/WebSocket 鉴权由 Server 层统一处理（白名单、本地、同源 Cookie、API Key），业务路由不做重复校验。详见 **[鉴权与认证（AUTH）](AUTH.md)**。
+**鉴权总览**：Server 层不再做 HTTP 业务统一鉴权；system-Core HTTP 在模块内调用 `Bot.checkApiAuthorization(req)`，WebSocket 升级阶段走统一 API Key 校验链路。详见 **[鉴权与认证（AUTH）](AUTH.md)**。
 
 ### 安全中间件栈
 
@@ -864,7 +864,7 @@ flowchart LR
     RateLimit --> BodyParser["📦 请求体解析<br/>JSON/URL-encoded/Raw<br/>大小限制保护"]
     BodyParser --> Redirect["🔄 重定向检查<br/>HTTP业务层<br/>301/302/307/308"]
     Redirect --> Routes["🔍 路由匹配<br/>系统/API/静态文件<br/>优先级排序"]
-    Routes --> Auth["🔐 API认证<br/>白名单检查<br/>本地IP验证<br/>API Key验证"]
+    Routes --> Auth["🔐 API认证<br/>静态资源规则<br/>127回环例外<br/>API Key验证"]
     Auth --> Handler["⚙️ 业务处理<br/>执行具体逻辑<br/>返回业务数据"]
     
     style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff

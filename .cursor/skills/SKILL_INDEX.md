@@ -18,7 +18,7 @@
 
 - `xrk-aistream`：AIStream、RAG、子服务回退相关能力。
 - `xrk-app-dev`：从应用视角理解启动与前后端协作。
-- `xrk-auth`：401、白名单、Cookie、API Key 鉴权问题。
+- `xrk-auth`：401、127 回环例外、API Key 鉴权问题。
 - `xrk-bot`：Bot 运行时、事件总线、HTTP/WS 启动流程。
 - `xrk-botutil`：日志、缓存、文件、网络等工具复用。
 - `xrk-config`：配置字段、schema 与消费代码一致性。

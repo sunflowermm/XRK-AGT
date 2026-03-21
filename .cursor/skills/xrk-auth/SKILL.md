@@ -1,6 +1,6 @@
 ---
 name: xrk-auth
-description: 当你需要解释/排查 HTTP 或 WebSocket 的 401、白名单、同源 Cookie、API Key 机制时使用；确保业务层不重复鉴权。
+description: 当你需要解释/排查 HTTP 或 WebSocket 的 401、127 回环例外、API Key 机制时使用；确保业务层不重复鉴权。
 ---
 
 ## 权威文档与实现
@@ -34,9 +34,10 @@ description: 当你需要解释/排查 HTTP 或 WebSocket 的 401、白名单、
 ## API Key 携带方式（任意一种）
 
 - `X-API-Key: <key>`
-- `Authorization: Bearer <key>`
-- `?api_key=<key>`
-- JSON body：`{ "api_key": "<key>" }`
+- `Authorization: Bearer <key>` / `Authorization: Token <key>` / `Authorization: ApiKey <key>`
+- `X-Auth-Token: <key>` / `X-Access-Token: <key>` / `Api-Key: <key>`
+- `?api_key=<key>`（兼容 `apiKey/apikey/access_token/token/key`）
+- JSON body：`{ "api_key": "<key>" }`（兼容 `apiKey/apikey/access_token/token/key`）
 
 ## 权威入口
 
