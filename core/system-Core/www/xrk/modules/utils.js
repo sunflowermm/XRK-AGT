@@ -60,20 +60,6 @@ export function formatPercent(value, total) {
 }
 
 /**
- * 格式化 JSON
- * @param {any} obj - 要格式化的对象
- * @param {number} indent - 缩进空格数
- * @returns {string} 格式化后的 JSON 字符串
- */
-export function formatJSON(obj, indent = 2) {
-  try {
-    return JSON.stringify(obj, null, indent);
-  } catch (e) {
-    return String(obj);
-  }
-}
-
-/**
  * 转义 HTML 特殊字符
  * @param {string} text - 要转义的文本
  * @returns {string} 转义后的文本
@@ -175,22 +161,6 @@ export function isSameValue(a, b) {
 }
 
 /**
- * 组合路径
- * @param {...string} parts - 路径部分
- * @returns {string} 组合后的路径
- */
-export function combinePath(...parts) {
-  return parts
-    .filter(Boolean)
-    .map((part, i) => {
-      if (i === 0) return part.replace(/\/+$/, '');
-      if (i === parts.length - 1) return part.replace(/^\/+/, '');
-      return part.replace(/^\/+|\/+$/g, '');
-    })
-    .join('/');
-}
-
-/**
  * 格式化键值对行（用于 Tags 组件）
  * @param {Object} obj - 对象
  * @returns {string} 格式化后的字符串
@@ -245,39 +215,4 @@ export function parseKeyValueLines(text = '') {
     out[key] = raw;
   }
   return out;
-}
-
-/**
- * 防抖函数
- * @param {Function} func - 要防抖的函数
- * @param {number} wait - 等待时间（毫秒）
- * @returns {Function} 防抖后的函数
- */
-export function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
-
-/**
- * 节流函数
- * @param {Function} func - 要节流的函数
- * @param {number} limit - 时间限制（毫秒）
- * @returns {Function} 节流后的函数
- */
-export function throttle(func, limit) {
-  let inThrottle;
-  return function executedFunction(...args) {
-    if (!inThrottle) {
-      func(...args);
-      inThrottle = true;
-      setTimeout(() => inThrottle = false, limit);
-    }
-  };
 }
