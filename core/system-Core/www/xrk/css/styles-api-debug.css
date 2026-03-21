@@ -605,20 +605,17 @@ body.dark .json-boolean { color: #f87171; }
 
   .json-editor-wrapper textarea {
     padding: 12px;
-    min-height: 220px;
-    max-height: min(42vh, 320px);
-    max-height: min(42dvh, 320px);
+    height: 200px !important;
     resize: none;
   }
 
   .CodeMirror {
-    height: min(42vh, 320px);
-    height: min(42dvh, 320px);
+    height: 200px !important;
   }
 
   /* 请求信息默认展开后，减少内部 padding/margin，保证信息量仍然密集但不过度堆叠 */
   .request-info-section {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
   }
 
   .request-info-header {
@@ -636,11 +633,11 @@ body.dark .json-boolean { color: #f87171; }
   }
 
   .request-info-content {
-    padding: 12px;
+    padding: 10px;
   }
 
   .request-info-item {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
 
   .request-header-item {

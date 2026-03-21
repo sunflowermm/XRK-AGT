@@ -1527,18 +1527,8 @@
   }
   
   /* 手机小屏：统计卡片一行展示两个，稍微缩小间距和内边距 */
-  .stats-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-  
   .stat-card {
     padding: 14px;
-  }
-  
-  .stat-value {
-    font-size: 16px;
-    font-weight: 500;
   }
   
   .dashboard-title {

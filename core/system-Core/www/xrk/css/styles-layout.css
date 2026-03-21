@@ -448,10 +448,6 @@ body[data-page="chat"] .content {
     overflow-x: hidden;
   }
 
-  .stats-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
   /* 图表卡片在手机端略微缩小，避免子图占满视野 */
   .chart-card {
     padding: 16px;

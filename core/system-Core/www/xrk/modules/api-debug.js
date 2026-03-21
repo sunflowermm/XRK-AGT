@@ -18,7 +18,8 @@ export function renderAPI(app) {
   try {
     const lastApiId = localStorage.getItem('lastApiId');
     if (lastApiId) {
-      selectAPI(app, lastApiId);
+      // 进入 API 页：恢复上次选择不强制关闭侧边栏
+      selectAPI(app, lastApiId, { closeSidebar: false });
     }
   } catch {}
 }
@@ -27,23 +28,35 @@ export function renderAPIGroups(app) {
   const container = document.getElementById('apiGroups');
   if (!container || !app.apiConfig) return;
 
-  container.innerHTML = app.apiConfig.apiGroups
-    .map(
-      (group) => `
-      <div class="api-group">
-        <div class="api-group-title">${group.title}</div>
-        ${group.apis
-          .map(
-            (api) => `
-          <div class="api-item" data-id="${api.id}">
-            <span class="method-tag method-${api.method.toLowerCase()}">${api.method}</span>
-            <span>${api.title}</span>
-          </div>`
-          )
-          .join('')}
-      </div>`
-    )
-    .join('');
+  const customGroupHtml = `
+    <div class="api-group">
+      <div class="api-group-title">自定义</div>
+      <div class="api-item" data-id="custom">
+        <span class="method-tag method-post">CUSTOM</span>
+        <span>自定义请求</span>
+      </div>
+    </div>
+  `;
+
+  container.innerHTML =
+    customGroupHtml +
+    app.apiConfig.apiGroups
+      .map(
+        (group) => `
+        <div class="api-group">
+          <div class="api-group-title">${group.title}</div>
+          ${group.apis
+            .map(
+              (api) => `
+            <div class="api-item" data-id="${api.id}">
+              <span class="method-tag method-${api.method.toLowerCase()}">${api.method}</span>
+              <span>${api.title}</span>
+            </div>`
+            )
+            .join('')}
+        </div>`
+      )
+      .join('');
 
   // 事件委托：避免为每个 API 条目重复绑定监听器
   container.onclick = (e) => {
@@ -51,11 +64,19 @@ export function renderAPIGroups(app) {
     if (!item || !container.contains(item)) return;
     container.querySelectorAll('.api-item').forEach((i) => i.classList.remove('active'));
     item.classList.add('active');
-    selectAPI(app, item.dataset.id);
+    // 移动端：用户点了具体 API 条目后关闭侧边栏
+    selectAPI(app, item.dataset.id, { closeSidebar: true });
   };
 }
 
-export function selectAPI(app, apiId) {
+export function selectAPI(app, apiId, options = {}) {
+  const closeSidebar = Boolean(options?.closeSidebar);
+
+  // 自定义 API：不依赖 api-config.json
+  if (apiId === 'custom') {
+    return selectCustomAPI(app, { closeSidebar });
+  }
+
   const api = findAPIById(app, apiId);
   if (!api) {
     app.showToast('API 不存在', 'error');
@@ -71,12 +92,6 @@ export function selectAPI(app, apiId) {
   // 切换 API 时强制清空旧 CodeMirror 引用，避免 setValue 写入已被 innerHTML 替换的旧 textarea
   app.jsonEditor = null;
 
-  // 在移动端，选择API后关闭侧边栏
-  const mql = window.matchMedia?.('(max-width: 768px)');
-  if ((mql ? mql.matches : window.innerWidth <= 768) && typeof app.closeSidebar === 'function') {
-    app.closeSidebar();
-  }
-
   const welcome = document.getElementById('apiWelcome');
   const section = document.getElementById('apiTestSection');
 
@@ -87,6 +102,15 @@ export function selectAPI(app, apiId) {
 
   welcome.style.display = 'none';
   section.style.display = 'block';
+
+  // 侧边栏关闭（移动端 + 用户点击具体 API）
+  if (closeSidebar) {
+    const mql = window.matchMedia?.('(max-width: 768px)');
+    const isMobile = mql ? mql.matches : window.innerWidth <= 768;
+    if (isMobile && typeof app.closeSidebar === 'function') {
+      app.closeSidebar();
+    }
+  }
 
   const pathParams = (api.path.match(/:(\w+)/g) ?? []).map((p) => p.slice(1));
 
@@ -190,6 +214,153 @@ export function selectAPI(app, apiId) {
 
   // 初始化JSON编辑器（只做“请求预览”，只读，避免误操作）
   // 先立即渲染一次 preview，CodeMirror 初始化期间也能看到请求内容
+  updateJSONPreview(app);
+  initJSONEditor(app).then(() => updateJSONPreview(app));
+}
+
+function selectCustomAPI(app, { closeSidebar }) {
+  const welcome = document.getElementById('apiWelcome');
+  const section = document.getElementById('apiTestSection');
+
+  if (!welcome || !section) {
+    console.error('API页面元素不存在');
+    return;
+  }
+
+  // 默认值（保存由页面交互触发）
+  const method = String(localStorage.getItem('customApiMethod') || 'GET').toUpperCase();
+  const customUrl = localStorage.getItem('customApiUrl') || '/api/system/status';
+  const customBody = localStorage.getItem('customApiBody') || '{}';
+
+  app.currentAPI = { method, path: customUrl, apiId: 'custom' };
+  app._lastJsonPreview = null;
+  app.jsonEditor = null;
+  try {
+    localStorage.setItem('lastApiId', 'custom');
+  } catch {}
+
+  welcome.style.display = 'none';
+  section.style.display = 'block';
+
+  if (closeSidebar) {
+    const mql = window.matchMedia?.('(max-width: 768px)');
+    const isMobile = mql ? mql.matches : window.innerWidth <= 768;
+    if (isMobile && typeof app.closeSidebar === 'function') {
+      app.closeSidebar();
+    }
+  }
+
+  const methodOptions = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
+  const methodOptionsHtml = methodOptions
+    .map((m) => `<option value="${m}"${m === method ? ' selected' : ''}>${m}</option>`)
+    .join('');
+
+  section.innerHTML = `
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header">
+        <span class="card-title">自定义请求</span>
+        <span class="method-tag method-post">${method}</span>
+      </div>
+      <div class="api-endpoint-box">
+        <span>${app.escapeHtml(customUrl || '')}</span>
+      </div>
+      <p style="margin-top:12px;color:var(--text-secondary)">
+        URL 支持相对路径（如 <span class="mono">/api/system/status</span>）或以 http(s) 开头的绝对地址
+      </p>
+    </div>
+
+    <div class="api-form-grid">
+      <div>
+        <div class="api-form-section">
+          <h3 class="api-form-section-title">请求</h3>
+
+          <div class="form-group">
+            <label class="form-label">方法</label>
+            <select class="form-input" id="customMethod" data-request-field="1">
+              ${methodOptionsHtml}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">URL</label>
+            <input type="text" class="form-input" id="customUrl" data-request-field="1" value="${app.escapeHtml(customUrl)}" placeholder="/api/system/status">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Body (JSON)</label>
+            <textarea class="form-input" id="customBody" data-request-field="1" placeholder="{}">${app.escapeHtml(customBody)}</textarea>
+            <p class="config-field-hint">仅当方法非 GET 时会加入请求体；JSON 格式错误将导致请求失败</p>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:20px">
+          <button class="btn btn-primary" id="executeBtn" type="button">执行请求</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="json-editor-container">
+          <div class="json-editor-header">
+            <span class="json-editor-title">请求预览</span>
+            <div class="json-editor-actions">
+              <button class="btn btn-sm btn-secondary" id="formatJsonBtn" type="button">格式化</button>
+              <button class="btn btn-sm btn-secondary" id="copyJsonBtn" type="button">复制</button>
+            </div>
+          </div>
+          <div class="json-editor-wrapper">
+            <textarea id="jsonEditor">{}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="responseSection"></div>
+  `;
+
+  // 事件链收敛：一个 click 入口 + 输入事件委托
+  section.onclick = (e) => {
+    const t = e.target;
+    if (!t) return;
+    if (t.id === 'executeBtn') return executeRequest(app);
+    if (t.id === 'formatJsonBtn') return formatJSONPreview(app);
+    if (t.id === 'copyJsonBtn') return copyJSON(app);
+  };
+
+  const onRequestFieldChanged = (e) => {
+    const t = e.target;
+    if (t?.matches?.('[data-request-field="1"]')) updateJSONPreview(app);
+  };
+  section.oninput = onRequestFieldChanged;
+  section.onchange = onRequestFieldChanged;
+
+  const customMethodEl = document.getElementById('customMethod');
+  const customUrlEl = document.getElementById('customUrl');
+  const customBodyEl = document.getElementById('customBody');
+
+  // 保存自定义输入，提升开发者体验（防止刷新丢失）
+  if (customMethodEl) {
+    customMethodEl.addEventListener('change', () => {
+      try {
+        localStorage.setItem('customApiMethod', customMethodEl.value);
+      } catch {}
+    });
+  }
+  let customSaveTimer = null;
+  const persistWithDebounce = (key, el, delay = 400) => {
+    if (!el) return;
+    el.addEventListener('input', () => {
+      clearTimeout(customSaveTimer);
+      customSaveTimer = setTimeout(() => {
+        try {
+          localStorage.setItem(key, el.value);
+        } catch {}
+      }, delay);
+    });
+  };
+  persistWithDebounce('customApiUrl', customUrlEl);
+  persistWithDebounce('customApiBody', customBodyEl);
+
+  // 初始化 JSON 预览
   updateJSONPreview(app);
   initJSONEditor(app).then(() => updateJSONPreview(app));
 }
@@ -325,6 +496,29 @@ export function updateJSONPreview(app) {
 }
 
 export function buildRequestData(app) {
+  // 自定义 API：从输入框读取请求信息
+  if (app.currentAPI?.apiId === 'custom') {
+    const methodEl = document.getElementById('customMethod');
+    const urlEl = document.getElementById('customUrl');
+    const bodyEl = document.getElementById('customBody');
+
+    const method = String(methodEl?.value || app.currentAPI.method || 'GET').toUpperCase();
+    const url = String(urlEl?.value || app.currentAPI.path || '');
+    const rawBody = String(bodyEl?.value || '');
+
+    const data = { method, url };
+
+    if (method !== 'GET' && rawBody.trim()) {
+      try {
+        data.body = JSON.parse(rawBody);
+      } catch {
+        // Body JSON 非法时不加入 body，避免把字符串当作 JSON 发送
+      }
+    }
+
+    return data;
+  }
+
   const api = findAPIById(app, app.currentAPI.apiId) || {};
   // 避免 method/path 为 undefined 时 JSON.stringify 得到空对象 {}
   const method = app.currentAPI.method ?? api.method ?? 'GET';
@@ -502,15 +696,23 @@ export async function executeRequest(app) {
   btn.disabled = true;
 
   const startTime = Date.now();
-  let url = app.serverUrl + (requestData.url || app.currentAPI.path);
+  const rawUrl = String(requestData.url ?? app.currentAPI.path ?? '');
+  let url = '';
 
-  // 处理路径参数
-  if (requestData.url) {
-    url = app.serverUrl + requestData.url;
+  // 支持：相对路径 / 绝对 http(s) URL
+  if (!rawUrl) {
+    url = app.serverUrl;
+  } else if (/^https?:\/\//i.test(rawUrl) || rawUrl.startsWith('//')) {
+    url = rawUrl;
+  } else if (rawUrl.startsWith('/')) {
+    url = app.serverUrl + rawUrl;
+  } else {
+    url = app.serverUrl + '/' + rawUrl;
   }
 
   if (requestData.query && Object.keys(requestData.query).length > 0) {
-    url += '?' + new URLSearchParams(requestData.query).toString();
+    const qs = new URLSearchParams(requestData.query).toString();
+    if (qs) url += url.includes('?') ? '&' + qs : '?' + qs;
   }
 
   try {
