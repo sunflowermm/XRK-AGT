@@ -1806,12 +1806,6 @@
   .chat-container.voice-mode.keyboard-open .voice-chat-center {
     display: none;
   }
-
-  /* Voice：按钮离边框更远一点，并让发送/语音按钮位置更像 Event */
-  .chat-container.voice-mode .chat-input-area {
-    padding-left: 20px;
-    padding-right: 20px;
-  }
 }
 
 .voice-tts-stop-btn:hover {

@@ -500,16 +500,12 @@ body[data-page="chat"] .content {
     box-sizing: border-box;
   }
 
-  /* Voice 模式移动端适配：内容整体缩放 */
-  .chat-container.voice-mode .chat-main {
-    align-items: center;
-    justify-content: center;
-  }
-
   .voice-chat-center {
     max-width: 360px;
     padding: 24px 16px 16px;
     margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .voice-emotion-display {
@@ -536,22 +532,5 @@ body[data-page="chat"] .content {
     padding: 6px 14px;
   }
 
-  /* Event / AI 对话卡片在手机上全宽且居中视觉 */
-  .chat-message,
-  .voice-message {
-    max-width: 100%;
-  }
-
-  .chat-message.assistant,
-  .voice-message.assistant {
-    margin-left: 8px;
-    margin-right: 8px;
-  }
-
-  .chat-message.user,
-  .voice-message.user {
-    margin-left: 40px;
-    margin-right: 8px;
-  }
 }
 
