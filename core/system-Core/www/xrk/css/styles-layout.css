@@ -443,7 +443,7 @@ body[data-page="chat"] .content {
     transform: translateY(-100%);
     opacity: 0;
     visibility: hidden;
-    transition: all var(--transition-slow);
+    transition: transform var(--transition-slow), opacity var(--transition-slow), visibility var(--transition-slow);
   }
 
   .api-key-box.show {

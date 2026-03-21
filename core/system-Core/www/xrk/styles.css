@@ -1062,7 +1062,7 @@
   color: var(--text-primary);
   font-size: 14px;
   outline: none;
-  transition: all var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
   resize: none;
   min-width: 0; /* 避免输入框把按钮挤出可视区域 */
 }
@@ -1088,7 +1088,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition);
+  transition: background-color var(--transition), transform var(--transition), opacity var(--transition);
   flex-shrink: 0;
 }
 
@@ -1125,7 +1125,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition);
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition), transform var(--transition);
 }
 
 .mic-btn:hover,
@@ -1152,7 +1152,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition);
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition), transform var(--transition);
 }
 .poke-btn:hover {
   background: var(--bg-hover);
@@ -1320,7 +1320,7 @@
   background: var(--bg-card);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition);
   font-size: 14px;
   font-weight: 500;
 }
@@ -1404,7 +1404,7 @@
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
   width: 100%;
 }
 
@@ -1425,7 +1425,7 @@
   min-height: 80px;
   max-height: 200px;
   font-family: inherit;
-  transition: all var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
   width: 100%;
   line-height: 1.5;
 }
@@ -1449,7 +1449,7 @@
   padding: 8px;
   border-radius: var(--radius);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color var(--transition), color var(--transition);
 }
 
 .ai-settings-checkbox:hover {
@@ -1685,7 +1685,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color var(--transition), transform var(--transition), box-shadow var(--transition);
   box-shadow: var(--shadow-lg);
   margin: 0; /* 避免在 flex 行内产生“自动边距”导致对齐偏移 */
 }
@@ -1717,7 +1717,7 @@
   color: var(--text-secondary);
   font-size: 14px;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color var(--transition), color var(--transition), border-color var(--transition), transform var(--transition);
 }
 
 .voice-clear-btn:hover {
@@ -1742,7 +1742,7 @@
   color: var(--text-primary);
   font-size: 14px;
   outline: none;
-  transition: all var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
 }
 
 .voice-input:focus {
@@ -1767,7 +1767,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color var(--transition), transform var(--transition), box-shadow var(--transition);
   box-shadow: var(--shadow-md);
 }
 
@@ -1796,7 +1796,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color var(--transition), color var(--transition), transform var(--transition), box-shadow var(--transition);
   box-shadow: var(--shadow-sm);
   margin-right: 0; /* 与 Event 输入区对齐，避免额外挤压发送按钮 */
 }
