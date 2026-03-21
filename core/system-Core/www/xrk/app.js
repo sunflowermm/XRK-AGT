@@ -917,7 +917,14 @@ class App {
       : (this._chatSettings.workflow ? [this._chatSettings.workflow] : []);
     
     return `
-      <div class="ai-settings-panel">
+      <div class="ai-settings-panel" id="aiSettingsPanel">
+        <button type="button" class="ai-settings-mobile-toggle" id="aiSettingsMobileToggle" aria-expanded="false" aria-controls="aiSettingsContent">
+          <span>AI 设置</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <div class="ai-settings-content" id="aiSettingsContent">
         <div class="ai-settings-section">
           <label class="ai-settings-label">运营商</label>
           <select id="aiProviderSelect" class="ai-settings-select">
@@ -941,19 +948,20 @@ class App {
           </div>
         </div>
         <div class="ai-settings-section">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-            <label class="ai-settings-label" style="margin: 0;">远程 MCP 配置</label>
+          <div class="ai-settings-row">
+            <label class="ai-settings-label ai-settings-label-inline">远程 MCP 配置</label>
             <button id="remoteMCPConfigBtn" class="ai-settings-btn" title="管理远程MCP服务器配置（如必应搜索等）">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 20h9"/>
                 <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
               </svg>
               <span>配置</span>
             </button>
           </div>
-          <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-muted);">
+          <p class="ai-settings-desc">
             配置外部MCP服务器（如必应中文搜索），支持原生JSON格式
           </p>
+        </div>
         </div>
       </div>
     `;

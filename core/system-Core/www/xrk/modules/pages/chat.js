@@ -134,6 +134,7 @@ export async function renderChatPage(app) {
       const aiSettings = await app._renderAISettings();
       const placeholder = document.getElementById('aiSettingsPlaceholder');
       placeholder.outerHTML = aiSettings;
+      applyAIMobileSettingsState(true);
     } catch {}
   }
 
@@ -195,6 +196,7 @@ export function switchChatMode(app, mode, oldMode = null) {
         settingsDiv.innerHTML = aiSettings;
         sidebar.appendChild(settingsDiv.firstElementChild);
       }
+      applyAIMobileSettingsState(true);
       app.initChatControls();
       finish();
     });
@@ -260,6 +262,13 @@ export function bindChatEvents(app) {
     });
   }
   if (app._isAIMode()) {
+    const aiSettingsToggle = document.getElementById('aiSettingsMobileToggle');
+    if (aiSettingsToggle) safeBind(aiSettingsToggle, 'click', () => {
+      const panel = document.getElementById('aiSettingsPanel');
+      if (!panel) return;
+      panel.classList.toggle('mobile-collapsed');
+      applyAIMobileSettingsState(false);
+    });
     const providerSelect = document.getElementById('aiProviderSelect');
     const personaInput = document.getElementById('aiPersonaInput');
     if (providerSelect) safeBind(providerSelect, 'change', () => {
@@ -365,6 +374,23 @@ export function bindChatEvents(app) {
       }
     });
   }
+}
+
+function applyAIMobileSettingsState(forceCollapseOnMobile = true) {
+  const panel = document.getElementById('aiSettingsPanel');
+  const toggle = document.getElementById('aiSettingsMobileToggle');
+  if (!panel || !toggle) return;
+  const isMobile = window.matchMedia?.('(max-width: 768px)')?.matches ?? window.innerWidth <= 768;
+  if (!isMobile) {
+    panel.classList.remove('mobile-collapsed');
+    toggle.setAttribute('aria-expanded', 'true');
+    return;
+  }
+  if (forceCollapseOnMobile) {
+    panel.classList.add('mobile-collapsed');
+  }
+  const expanded = !panel.classList.contains('mobile-collapsed');
+  toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
 }
 
 export function applyMessageEnter(app, div, animate = true) {
