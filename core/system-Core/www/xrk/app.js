@@ -1,4 +1,3 @@
-// 导入模块化工具函数
 import {
   formatBytes,
   formatTime,
@@ -38,10 +37,26 @@ import {
   paperclipIconSVG,
   wrenchIconSVG,
   filePreviewIconSVG,
-  toastIconSVG,
   normalizeEmotionKey,
   emotionIconSVG
 } from './modules/ui-kit.js';
+
+import { showToast as showToastUI } from './modules/ui/toast.js';
+import { showPromptDialog as showPromptDialogUI } from './modules/ui/prompt-dialog.js';
+import { renderHomePage } from './modules/pages/home.js';
+import {
+  renderWorkflowInfoPanel,
+  loadPluginsInfoPanel
+} from './modules/pages/home-plugins-workflow.js';
+import {
+  renderChatPage,
+  switchChatMode,
+  bindChatEvents,
+  unbindChatEvents,
+  applyMessageEnter,
+  appendChatMessage
+} from './modules/pages/chat.js';
+import { renderConfigPage } from './modules/pages/config.js';
 
 import {
   renderNetworkInfo as renderNetworkInfoPanel,
@@ -77,8 +92,6 @@ class App {
     this._metricsHistory = { 
       netRx: Array(30).fill(0), 
       netTx: Array(30).fill(0),
-      _initialized: false,
-      _lastTimestamp: null,
       _lastUpdate: null
     };
     this._eventChatHistory = this._loadChatHistory('event');
@@ -670,166 +683,7 @@ class App {
   }
 
   async renderHome() {
-    ['cpu', 'mem', 'net'].forEach(key => {
-      if (this._charts[key]) {
-        try {
-          this._charts[key].destroy();
-        } catch (e) {
-          console.warn(`Failed to destroy chart ${key}:`, e);
-        }
-        this._charts[key] = null;
-      }
-    });
-    
-    const content = $('#content');
-    
-    content.innerHTML = `
-      <div class="dashboard">
-        <div class="dashboard-header">
-          <div>
-            <h1 class="dashboard-title">系统概览</h1>
-            <p class="dashboard-subtitle">实时监控系统运行状态</p>
-          </div>
-        </div>
-        
-        <div class="stats-grid" id="statsGrid">
-          <div class="stat-card">
-            <div class="stat-header">
-              <div class="stat-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                  <line x1="8" y1="21" x2="16" y2="21"/>
-                  <line x1="12" y1="17" x2="12" y2="21"/>
-                </svg>
-              </div>
-            </div>
-            <div class="stat-value" id="cpuValue">--%</div>
-            <div class="stat-label">CPU 使用率</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-header">
-              <div class="stat-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 12H18L15 21L9 3L6 12H2"/>
-                </svg>
-              </div>
-            </div>
-            <div class="stat-value" id="memValue">--</div>
-            <div class="stat-label">内存使用</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-header">
-              <div class="stat-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                </svg>
-              </div>
-            </div>
-            <div class="stat-value" id="diskValue">--</div>
-            <div class="stat-label">磁盘使用</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-header">
-              <div class="stat-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12,6 12,12 16,14"/>
-                </svg>
-              </div>
-            </div>
-            <div class="stat-value" id="uptimeValue">--</div>
-            <div class="stat-label">运行时间</div>
-          </div>
-        </div>
-        
-        <div class="chart-grid">
-          <div class="chart-card">
-            <div class="chart-card-header">
-              <span class="chart-card-title">系统资源</span>
-            </div>
-            <div class="chart-container-dual">
-              <div class="chart-item">
-                <div class="chart-item-label">CPU</div>
-                <div class="chart-item-canvas"><canvas id="cpuChart"></canvas></div>
-              </div>
-              <div class="chart-item">
-                <div class="chart-item-label">内存</div>
-                <div class="chart-item-canvas"><canvas id="memChart"></canvas></div>
-              </div>
-            </div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-card-header">
-              <span class="chart-card-title">网络流量 (KB/s)</span>
-            </div>
-            <div class="chart-container"><canvas id="netChart"></canvas></div>
-          </div>
-        </div>
-        
-        <div class="info-grid">
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">机器人状态</span>
-            </div>
-            <div id="botsInfo" style="padding:0;color:var(--text-muted);text-align:center">加载中...</div>
-          </div>
-          
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">插件信息</span>
-            </div>
-            <div id="pluginsInfo" style="padding:20px;color:var(--text-muted);text-align:center">加载中...</div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">工作流状态</span>
-            </div>
-            <div id="workflowInfo" style="padding:20px;color:var(--text-muted);text-align:center">加载中...</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">网络接口</span>
-          </div>
-          <div id="networkInfo" style="padding:20px;color:var(--text-muted);text-align:center">加载中...</div>
-        </div>
-        
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">进程 Top 5</span>
-          </div>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>进程名</th>
-                <th>PID</th>
-                <th>CPU</th>
-                <th>内存</th>
-              </tr>
-            </thead>
-            <tbody id="processTable">
-              <tr><td colspan="4" style="text-align:center;color:var(--text-muted)">加载中...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-    
-    // 立即应用缓存数据（使用微任务确保 DOM 已渲染）
-    const cachedData = this._homeDataCache || this._latestSystem;
-    if (cachedData) {
-      // 使用微任务确保 DOM 已渲染后再应用数据
-      Promise.resolve().then(() => {
-        this._applyHomeData(cachedData, true);
-      });
-    }
-    
-    // 后台加载最新数据，平滑更新
-    this._loadHomeDataAndUpdate();
+    return renderHomePage(this);
   }
   
   /**
@@ -995,55 +849,7 @@ class App {
   }
   
   renderWorkflowInfo(workflows = {}, panels = {}) {
-    const box = document.getElementById('workflowInfo');
-    if (!box) return;
-    
-    setUpdating(box);
-    const workflowData = panels.workflows ?? workflows;
-    const stats = workflowData.stats ?? {};
-    const items = workflowData.items ?? [];
-    const total = stats.total ?? workflowData.total ?? 0;
-    
-    if (!total && !items.length) {
-      box.innerHTML = '<div style="color:var(--text-muted);padding:16px">暂无工作流数据</div>';
-      clearUpdating(box);
-      return;
-    }
-    
-    const enabled = stats.enabled ?? workflowData.enabled ?? 0;
-    const totalCount = total;
-    const embeddingReady = stats.embeddingReady ?? workflowData.embeddingReady ?? 0;
-    const provider = stats.provider ?? workflowData.provider ?? '默认';
-    
-    box.innerHTML = `
-      <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center">
-        <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px">${enabled}/${totalCount}</div>
-          <div style="font-size:12px;color:var(--text-muted);line-height:1.4">启用 / 总数</div>
-        </div>
-        <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px">${embeddingReady}</div>
-          <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding 就绪</div>
-        </div>
-        <div style="text-align:center;min-width:0;flex:1 1 auto">
-          <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px">${this.escapeHtml(provider)}</div>
-          <div style="font-size:12px;color:var(--text-muted);line-height:1.4">Embedding Provider</div>
-        </div>
-      </div>
-      ${items.length ? `
-        <div style="margin-top:16px;font-size:12px;color:var(--text-muted);text-align:center">工作流列表</div>
-        <ul style="margin:8px 0 0;padding:0;list-style:none">
-          ${items.map(item => `
-            <li style="padding:8px 0;border-bottom:1px solid var(--border)">
-              <div style="font-weight:600;color:var(--text-primary)">${this.escapeHtml(item.name ?? 'workflow')}</div>
-              <div style="font-size:12px;color:var(--text-muted)">${this.escapeHtml(item.description ?? '')}</div>
-            </li>
-          `).join('')}
-        </ul>
-      ` : ''}
-    `;
-
-    clearUpdating(box);
+    return renderWorkflowInfoPanel(this, workflows, panels);
   }
   
   renderNetworkInfo(network = {}, rates = {}) {
@@ -1064,68 +870,10 @@ class App {
   }
   
   /**
-   * 加载插件信息
+   * 加载插件信息（词云块展示，详情见 modules/pages/home-plugins-workflow.js）
    */
   async loadPluginsInfo() {
-    const pluginsInfo = document.getElementById('pluginsInfo');
-    if (!pluginsInfo) return;
-    
-    // 添加更新标记，用于CSS过渡
-    setUpdating(pluginsInfo);
-    
-    try {
-      const res = await fetch(`${this.serverUrl}/api/plugins/summary`, { 
-        headers: this.getHeaders(),
-        signal: AbortSignal.timeout(5000) // 5秒超时
-      });
-      
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-      
-      const data = await res.json();
-      
-      if (!data.success) {
-        throw new Error(data.message ?? data.error ?? '获取插件信息失败');
-      }
-      const summary = data.summary ?? {};
-      const totalPlugins = summary.totalPlugins || (data.plugins?.length || 0);
-      const pluginsWithRules = summary.withRules || 0;
-      const pluginsWithTasks = summary.withTasks || summary.taskCount || 0;
-      const loadTime = summary.totalLoadTime || 0;
-      const formatLoadTime = (ms) => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`;
-        pluginsInfo.innerHTML = `
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center">
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:6px;line-height:1.2">${totalPlugins}</div>
-              <div style="font-size:12px;color:var(--text-muted);font-weight:500">总插件数</div>
-            </div>
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:6px;line-height:1.2">${pluginsWithRules}</div>
-              <div style="font-size:12px;color:var(--text-muted);font-weight:500">有规则</div>
-            </div>
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--warning);margin-bottom:6px;line-height:1.2">${pluginsWithTasks}</div>
-              <div style="font-size:12px;color:var(--text-muted);font-weight:500">定时任务</div>
-            </div>
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--info);margin-bottom:6px;line-height:1.2">${formatLoadTime(loadTime)}</div>
-              <div style="font-size:12px;color:var(--text-muted);font-weight:500">加载时间</div>
-            </div>
-          </div>
-        `;
-    } catch (e) {
-      if (e.name === 'AbortError' || e.name === 'TimeoutError') {
-        pluginsInfo.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center">加载超时</div>';
-      } else {
-        console.warn('[插件信息] 加载失败:', e);
-        pluginsInfo.innerHTML = `<div style="color:var(--text-muted);padding:16px;text-align:center">加载失败：${this.escapeHtml(e.message || '未知错误')}</div>`;
-      }
-    } finally {
-      setTimeout(() => {
-        clearUpdating(pluginsInfo);
-      }, 50);
-    }
+    return loadPluginsInfoPanel(this);
   }
 
   updateSystemStatus(data) {
@@ -1136,214 +884,12 @@ class App {
     return updateChartsPanel(this, cpu, mem);
   }
 
-  // ========== 聊天 ==========
   async renderChat() {
-    const content = document.getElementById('content');
-    const isAIMode = this._isAIMode();
-    const isVoiceMode = this._isVoiceMode();
-    // 先渲染骨架：避免等待 AI 设置时整页突然“硬切”。
-    const aiSettingsPlaceholder = isAIMode
-      ? `<div class="ai-settings-panel" id="aiSettingsPlaceholder">
-          <div style="padding:16px;color:var(--text-muted);font-size:13px;">AI 设置加载中...</div>
-        </div>`
-      : '';
-    content.innerHTML = `
-      <div class="chat-container ${isVoiceMode ? 'voice-mode' : ''}">
-        <div class="chat-sidebar">
-          <div class="chat-mode-selector">
-            <button class="chat-mode-btn ${this._isEventMode() ? 'active' : ''}" data-mode="event">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-              </svg>
-              <span>Event</span>
-            </button>
-            <button class="chat-mode-btn ${this._isVoiceMode() ? 'active' : ''}" data-mode="voice">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-                <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-              <span>Voice</span>
-            </button>
-            <button class="chat-mode-btn ${this._isAIMode() ? 'active' : ''}" data-mode="ai">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 6v6l4 2"/>
-              </svg>
-              <span>AI</span>
-            </button>
-          </div>
-          ${aiSettingsPlaceholder}
-        </div>
-        <div class="chat-main">
-        ${isVoiceMode ? `
-            <div class="voice-chat-center">
-            <div class="voice-emotion-display" id="voiceEmotionIcon">${this._emotionIconSVG('happy')}</div>
-            <div class="voice-wave" id="voiceWave">
-              ${Array(6).fill('<div class="voice-wave-bar"></div>').join('')}
-            </div>
-            <div class="voice-status" id="voiceStatus">点击麦克风开始对话</div>
-            <button class="voice-clear-btn" id="voiceClearBtn" title="清空聊天记录">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-              </svg>
-              <span>清空</span>
-            </button>
-          </div>
-        ` : `
-        <div class="chat-header">
-          <div class="chat-header-title">
-            <span class="emotion-display" id="emotionIcon">${this._emotionIconSVG('happy')}</span>
-              <span>${isAIMode ? 'AI 对话' : 'Event 对话'}</span>
-          </div>
-          <div class="chat-header-actions">
-            <button class="btn btn-sm btn-secondary" id="clearChatBtn">清空</button>
-          </div>
-        </div>
-        <div class="chat-settings">
-          <span class="chat-stream-status" id="chatStreamStatus">空闲</span>
-        </div>
-        `}
-        <div class="chat-messages ${isVoiceMode ? 'voice-messages' : ''}" id="chatMessages"></div>
-        <div class="chat-input-area">
-          ${!isAIMode && !isVoiceMode ? `<div class="event-quote-strip" id="eventQuoteStrip" style="display:none;"><span class="event-quote-label">引用：</span><span class="event-quote-text"></span><button type="button" class="event-quote-cancel" aria-label="取消引用">×</button></div>` : ''}
-          ${isVoiceMode ? `
-          <button class="voice-mic-btn" id="micBtn" title="按住或点击说话">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-              <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-          </button>
-          <input type="text" class="voice-input" id="voiceInput" placeholder="或直接输入文字...">
-          <button class="voice-tts-stop-btn" id="voiceTtsStopBtn" title="停止当前播报">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="6" y="6" width="12" height="12" rx="2" ry="2"/>
-            </svg>
-          </button>
-          <button class="voice-send-btn" id="voiceSendBtn" title="发送并触发TTS">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22,2 15,22 11,13 2,9"/>
-            </svg>
-          </button>
-          ` : `
-          <button class="mic-btn" id="micBtn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-              <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-          </button>
-          <button class="image-upload-btn" id="imageUploadBtn" title="${isAIMode ? '上传图片' : '上传文件'}">
-            ${isAIMode ? `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-            ` : `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
-              <polyline points="13 2 13 9 20 9"/>
-            </svg>
-            `}
-          </button>
-          ${!isAIMode ? `<button class="poke-btn" id="pokeBtn" type="button" title="戳一戳">${this._pokeHandIconSVG()}</button>` : ''}
-            <input type="file" class="chat-image-input" id="chatImageInput" accept="${isAIMode ? 'image/*' : '*'}" multiple style="display: none;">
-          <input type="text" class="chat-input" id="chatInput" placeholder="输入消息...">
-          <button class="chat-send-btn" id="chatSendBtn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22,2 15,22 11,13 2,9"/>
-            </svg>
-          </button>
-          `}
-        </div>
-        ${!isVoiceMode ? `<div class="chat-image-preview" id="chatImagePreview" style="display: none;"></div>` : ''}
-        </div> <!-- .chat-main -->
-      </div>
-    `;
-
-    // 确保 ai 设置在 _bindChatEvents 之前已落 DOM，避免事件绑定缺失。
-    if (isAIMode) {
-      try {
-        const aiSettings = await this._renderAISettings();
-        const placeholder = document.getElementById('aiSettingsPlaceholder');
-        placeholder.outerHTML = aiSettings;
-      } catch {
-        // 保留占位态，避免影响聊天主流程。
-      }
-    }
-    
-    if (isVoiceMode) {
-      await this.loadLlmOptions();
-    }
-    if (!isVoiceMode) {
-      this.initChatControls();
-    }
-    this.restoreChatHistory();
-    if (isVoiceMode || !isAIMode) {
-      this.ensureDeviceWs();
-    }
-    this._bindChatEvents();
+    return renderChatPage(this);
   }
 
   async _switchChatMode(mode, oldMode = null) {
-    this.clearChatStreamState();
-    const needFullRender = mode === 'voice' || oldMode === 'voice' || mode === 'event' || oldMode === 'event';
-    if (needFullRender) {
-      if (mode !== 'event') this._clearEventReplyState();
-      await this.renderChat();
-      return;
-    }
-
-    const box = document.getElementById('chatMessages');
-    if (!box) {
-      await this.renderChat();
-      return;
-    }
-
-    const isAIMode = mode === 'ai';
-    const sidebar = document.querySelector('.chat-sidebar');
-    const headerTitle = document.querySelector('.chat-header-title span:last-child');
-    const imageInput = document.getElementById('chatImageInput');
-    document.querySelectorAll('.chat-mode-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.mode === mode);
-    });
-    if (headerTitle) headerTitle.textContent = isAIMode ? 'AI 对话' : 'Event 对话';
-    if (imageInput) imageInput.setAttribute('accept', isAIMode ? 'image/*' : 'image/*,video/*,audio/*');
-
-    if (isAIMode) {
-      const aiSettings = await this._renderAISettings();
-      if (sidebar && !sidebar.querySelector('.ai-settings-panel')) {
-        const settingsDiv = document.createElement('div');
-        settingsDiv.innerHTML = aiSettings;
-        sidebar.appendChild(settingsDiv.firstElementChild);
-      }
-      this.initChatControls();
-    } else {
-      sidebar?.querySelector('.ai-settings-panel')?.remove();
-    }
-    this.ensureDeviceWs();
-    this._bindChatEvents();
-
-    const cached = this._chatMessagesCache[mode];
-    if (cached?.html) {
-      box.style.overflow = 'hidden';
-      box.innerHTML = cached.html;
-      box.style.overflow = '';
-      box.scrollTop = cached.scrollTop ?? box.scrollHeight;
-      this._chatMessagesCache[mode] = { scrollTop: box.scrollTop, scrollHeight: box.scrollHeight, html: box.innerHTML };
-      return;
-    }
-    this._renderHistoryIntoBox(box, this._getChatHistoryByMode(mode));
-    box.scrollTop = box.scrollHeight;
-    this._chatMessagesCache[mode] = { scrollTop: box.scrollTop, scrollHeight: box.scrollHeight, html: box.innerHTML };
+    return switchChatMode(this, mode, oldMode);
   }
 
 
@@ -1428,274 +974,14 @@ class App {
     `;
   }
   
-  /**
-   * 解绑聊天相关事件
-   */
   _unbindChatEvents() {
-    for (const [element, handlers] of this._chatEventHandlers.entries()) {
-      if (element && handlers) {
-        handlers.forEach(({ event, handler }) => {
-          try {
-            element.removeEventListener(event, handler);
-          } catch (e) {
-            // 忽略解绑错误
-          }
-        });
-      }
-    }
-    this._chatEventHandlers.clear();
+    return unbindChatEvents(this);
   }
 
-  /**
-   * 绑定聊天相关事件（企业级事件管理，支持解绑）
-   */
   _bindChatEvents() {
-    // 先解绑旧的事件，避免重复绑定
-    this._unbindChatEvents();
-    
-    const sendBtn = document.getElementById('chatSendBtn');
-    const input = document.getElementById('chatInput');
-    const voiceInput = document.getElementById('voiceInput');
-    const micBtn = document.getElementById('micBtn');
-    const clearBtn = document.getElementById('clearChatBtn');
-    const imageUploadBtn = document.getElementById('imageUploadBtn');
-    const imageInput = document.getElementById('chatImageInput');
-    if (imageInput) {
-      imageInput.setAttribute('accept', this._isAIMode() ? 'image/*' : 'image/*,video/*,audio/*');
-    }
-    
-    // 辅助函数：安全地绑定事件并记录
-    const safeBind = (element, event, handler) => {
-      if (!element) return;
-      element.addEventListener(event, handler);
-      if (!this._chatEventHandlers.has(element)) {
-        this._chatEventHandlers.set(element, []);
-      }
-      this._chatEventHandlers.get(element).push({ event, handler });
-    };
-
-    // 移动端软键盘对齐：只要聊天输入获得焦点就标记，交给 CSS 处理布局
-    const chatRootContainer = document.querySelector('.chat-container');
-    const setKeyboardOpen = (open) => {
-      chatRootContainer?.classList.toggle('keyboard-open', open);
-    };
-    const isAnyChatInputFocused = () => {
-      const active = document.activeElement;
-      return active === input || active === voiceInput;
-    };
-    const onChatInputFocusIn = () => setKeyboardOpen(true);
-    const onChatInputFocusOut = () => {
-      setTimeout(() => {
-        if (!isAnyChatInputFocused()) setKeyboardOpen(false);
-      }, 0);
-    };
-    
-    // 聊天模式切换按钮 - 使用事件委托（统一交给 _unbindChatEvents 管理，避免 dataset 标记导致失效）
-    const modeSelector = document.querySelector('.chat-mode-selector');
-    if (modeSelector) {
-      const modeHandler = async (e) => {
-        const btn = e.target.closest('.chat-mode-btn');
-        if (!btn) return;
-        const mode = btn.dataset.mode;
-        if (this._chatMode === mode) return;
-        
-        const oldMode = this._chatMode;
-        const box = document.getElementById('chatMessages');
-        if (box) {
-          this._chatMessagesCache[oldMode] = {
-            scrollTop: box.scrollTop,
-            scrollHeight: box.scrollHeight,
-            html: box.innerHTML
-          };
-        }
-        
-        this._chatMode = mode;
-        localStorage.setItem('chatMode', mode);
-        await this._switchChatMode(mode, oldMode);
-      };
-      safeBind(modeSelector, 'click', modeHandler);
-    }
-
-    // AI 模式特定设置
-    if (this._isAIMode()) {
-      const providerSelect = document.getElementById('aiProviderSelect');
-      const personaInput = document.getElementById('aiPersonaInput');
-
-      if (providerSelect) {
-        const providerHandler = () => {
-          this._chatSettings.provider = providerSelect.value;
-          localStorage.setItem('chatProvider', providerSelect.value);
-        };
-        safeBind(providerSelect, 'change', providerHandler);
-      }
-
-      if (personaInput) {
-        const personaHandler = () => {
-          this._chatSettings.persona = personaInput.value;
-          localStorage.setItem('chatPersona', personaInput.value);
-        };
-        safeBind(personaInput, 'input', personaHandler);
-      }
-
-      // MCP 工具工作流多选：使用事件委托（交给 safeBind/_unbindChatEvents 管理，无需 dataset 标记）
-      const workflowContainer = document.querySelector('.ai-settings-checkboxes');
-      if (workflowContainer) {
-        const workflowHandler = () => {
-          const workflows = Array.from(document.querySelectorAll('input[id^="workflow_"]:checked'))
-            .map(c => c.value);
-          this._chatSettings.workflows = workflows;
-          localStorage.setItem('chatWorkflows', JSON.stringify(workflows));
-        };
-        safeBind(workflowContainer, 'change', workflowHandler);
-      }
-
-      // 远程MCP配置按钮
-      const remoteMCPBtn = document.getElementById('remoteMCPConfigBtn');
-      if (remoteMCPBtn) {
-        const remoteMCPHandler = () => {
-          // 直接通过“配置恢复渲染”机制选中 system/aistream，避免脆弱的多段 setTimeout
-          const pendingSelect = { name: 'system', child: 'aistream' };
-          if (this._configState) this._configState.pendingSelect = pendingSelect;
-          try {
-            localStorage.setItem('lastConfigName', pendingSelect.name);
-            localStorage.setItem('lastConfigChild', pendingSelect.child);
-          } catch {}
-          this.navigateTo('config');
-        };
-        safeBind(remoteMCPBtn, 'click', remoteMCPHandler);
-      }
-    }
-    
-    // 发送按钮
-    if (sendBtn) {
-      safeBind(sendBtn, 'click', () => this.sendChatMessage());
-    }
-    
-    // 输入框
-    if (input) {
-      const inputHandler = (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          this.sendChatMessage();
-        }
-      };
-      safeBind(input, 'keydown', inputHandler);
-      safeBind(input, 'focusin', onChatInputFocusIn);
-      safeBind(input, 'focusout', onChatInputFocusOut);
-    }
-
-    if (voiceInput) {
-      safeBind(voiceInput, 'focusin', onChatInputFocusIn);
-      safeBind(voiceInput, 'focusout', onChatInputFocusOut);
-    }
-    
-    // 麦克风按钮
-    if (micBtn) {
-      safeBind(micBtn, 'click', () => this.toggleMic());
-    }
-    
-    // 清空按钮
-    if (clearBtn) {
-      safeBind(clearBtn, 'click', () => this.clearChat());
-    }
-    
-    // 语音模式特定事件
-    if (this._isVoiceMode()) {
-      const voiceClearBtn = document.getElementById('voiceClearBtn');
-      if (voiceClearBtn) {
-        safeBind(voiceClearBtn, 'click', () => this.clearChat());
-      }
-
-      const voiceSendBtn = document.getElementById('voiceSendBtn');
-      const voiceTtsStopBtn = document.getElementById('voiceTtsStopBtn');
-      
-      if (voiceInput && voiceSendBtn) {
-        const voiceSendHandler = () => {
-          const text = voiceInput.value.trim();
-          if (text) {
-            this.sendVoiceMessage(text).catch(e => {
-              this.showToast(`发送失败: ${e.message}`, 'error');
-            });
-            voiceInput.value = '';
-          }
-        };
-        safeBind(voiceSendBtn, 'click', voiceSendHandler);
-        
-        const voiceInputHandler = (e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            voiceSendBtn.click();
-          }
-        };
-        safeBind(voiceInput, 'keydown', voiceInputHandler);
-      }
-
-      // 语音对话模式下的"停止TTS"按钮
-      if (voiceTtsStopBtn) {
-        const ttsStopHandler = () => {
-          this.stopTTS();
-          this.clearChatStreamState();
-          this.updateVoiceStatus('播报已停止');
-        };
-        safeBind(voiceTtsStopBtn, 'click', ttsStopHandler);
-      }
-    }
-    
-    // 图片上传
-    if (imageUploadBtn && imageInput) {
-      safeBind(imageUploadBtn, 'click', () => imageInput.click());
-      safeBind(imageInput, 'change', (e) => {
-        this.handleImageSelect(e.target.files);
-      });
-    }
-    const pokeBtn = document.getElementById('pokeBtn');
-    if (pokeBtn) {
-      safeBind(pokeBtn, 'click', () => {
-        const qq = this.getWebUserId();
-        this.appendSegments([{ type: 'poke', qq }], true, 'user');
-        this.sendDeviceNotice('notify', 'poke', { user_id: qq });
-        this.scrollToBottom();
-      });
-    }
-    const quoteStrip = document.getElementById('eventQuoteStrip');
-    const quoteCancel = quoteStrip?.querySelector('.event-quote-cancel');
-    if (quoteCancel) {
-      safeBind(quoteCancel, 'click', () => this._clearEventReplyState());
-    }
-
-    // 拖拽区域绑定（只在首次绑定时执行）
-    const chatContainer = document.querySelector('.chat-container');
-    if (chatContainer && !chatContainer.dataset._dropBound) {
-      chatContainer.dataset._dropBound = '1';
-      this._bindDropArea(chatContainer, {
-        onDragStateChange: (active) => {
-          chatContainer?.classList.toggle('is-dragover', Boolean(active));
-        },
-        onFiles: (files) => {
-          if (!files || files.length === 0) return;
-          const isAIMode = this._isAIMode();
-          const filteredFiles = isAIMode 
-            ? files.filter(f => f?.type?.startsWith('image/'))
-            : files;
-          if (!filteredFiles.length) {
-            this.showToast(isAIMode ? '只能上传图片文件' : '文件格式不支持', 'warning');
-            return;
-          }
-          this.handleImageSelect(filteredFiles);
-          this.showToast(`已添加 ${filteredFiles.length} ${isAIMode ? '张图片' : '个文件'}，点击发送即可上传`, 'success');
-        }
-      });
-    }
-    
+    return bindChatEvents(this);
   }
 
-  /**
-   * 统一绑定拖拽投放区域（减少冗余事件绑定）
-   * @param {HTMLElement} el
-   * @param {Object} options
-   * @param {(active:boolean)=>void} [options.onDragStateChange]
-   * @param {(files:File[])=>void} options.onFiles
-   */
   _bindDropArea(el, options = {}) {
     if (!el || typeof options.onFiles !== 'function') return;
 
@@ -1787,63 +1073,11 @@ class App {
   }
 
   _applyMessageEnter(div, animate = true) {
-    if (!div || this._isRestoringHistory) return;
-    if (!animate) {
-        div.classList.add('message-enter-active');
-    } else {
-      requestAnimationFrame(() => {
-      div.classList.add('message-enter-active');
-      });
-    }
+    return applyMessageEnter(this, div, animate);
   }
 
   appendChat(role, text, options = {}) {
-    const isVoiceMode = this._isVoiceMode();
-    const { persist = true, mcpTools = null, messageId = null, source = null } = options;
-    
-    const msgId = messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    if (persist) {
-      const history = this._getCurrentChatHistory();
-      const historyItem = { role, text, ts: Date.now(), id: msgId };
-      if (mcpTools) historyItem.mcpTools = mcpTools;
-      if (source) historyItem.source = source;
-      history.push(historyItem);
-      this._saveChatHistory();
-    }
-    
-    const box = document.getElementById('chatMessages');
-    if (!box) return null;
-    
-    const div = document.createElement('div');
-    div.className = `chat-message ${role}${isVoiceMode ? ' voice-message' : ''}${this._isRestoringHistory ? '' : ' message-enter'}`;
-    div.dataset.messageId = msgId;
-    div.dataset.role = role;
-    const contentDiv = document.createElement('div');
-    // 统一“MD 显示协议”：所有使用 renderMarkdown 的容器都带上 chat-markdown 样式域
-    contentDiv.className = 'chat-content chat-markdown';
-    // Voice / AI / Event 使用同一套 Markdown 渲染，保持显示一致
-    contentDiv.innerHTML = this.renderMarkdown(text);
-    div.appendChild(contentDiv);
-    
-    if (mcpTools && Array.isArray(mcpTools) && mcpTools.length > 0) {
-      this._addToolBlock(div, mcpTools);
-    }
-    
-    // Voice 模式也需要基础操作（复制/撤回），体验保持一致
-    this._addMessageActions(div, role, text, msgId);
-    
-    box.appendChild(div);
-    // Mermaid：只对新增消息做局部渲染
-    this._renderMermaidIn(div);
-    
-    if (!this._isRestoringHistory) {
-    this.scrollToBottom();
-    }
-    
-    this._applyMessageEnter(div, persist);
-    
-    return div;
+    return appendChatMessage(this, role, text, options);
   }
   
   _addMessageActions(msgElement, role, text, messageId) {
@@ -3822,102 +3056,7 @@ class App {
 
   // ========== 配置管理 ==========
   renderConfig() {
-    const content = document.getElementById('content');
-    if (!content) return;
-
-    // 如无现有状态则初始化，避免每次进入配置页都丢失已选项
-    if (!this._configState) {
-      this._configState = {
-        list: [],
-        filter: '',
-        selected: null,
-        selectedChild: null,
-        flatSchema: [],
-        activeSchema: null,
-        structureMeta: {},
-        arraySchemaMap: {},
-        dynamicCollectionsMeta: [],
-        values: {},
-        original: {},
-        rawObject: {},
-        dirty: {},
-        mode: 'form',
-        jsonText: '',
-        jsonDirty: false,
-        loading: false
-      };
-      // 从本地缓存恢复上次选中的配置
-      try {
-        const lastName = localStorage.getItem('lastConfigName') || '';
-        const lastChild = localStorage.getItem('lastConfigChild') || '';
-        if (lastName) {
-          this._configState.pendingSelect = { name: lastName, child: lastChild || null };
-        }
-      } catch {}
-    }
-
-    content.innerHTML = `
-      <div class="config-page">
-        <aside class="config-sidebar">
-          <div class="config-sidebar-header">
-            <h1 class="dashboard-title">配置管理</h1>
-            <p class="dashboard-subtitle">扁平 schema · 严格写入</p>
-          </div>
-          <div class="config-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input type="search" id="configSearchInput" placeholder="搜索配置 / 描述">
-        </div>
-        <div class="config-list" id="configList">
-          <div class="empty-state">
-            <div class="loading-spinner" style="margin:0 auto"></div>
-              <p style="margin-top:12px">加载配置中...</p>
-          </div>
-        </div>
-        </aside>
-        <section class="config-main" id="configMain">
-          ${this.renderConfigPlaceholder()}
-        </section>
-      </div>
-    `;
-    
-    const searchInput = document.getElementById('configSearchInput');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-      if (!this._configState) return;
-      this._configState.filter = e.target.value.trim().toLowerCase();
-      this.renderConfigList();
-    });
-    }
-
-    // 配置列表事件委托：只绑定一次，避免每次重绘重复绑定
-    const listContainer = document.getElementById('configList');
-    if (listContainer) {
-      if (!listContainer.dataset._bound) {
-        listContainer.dataset._bound = '1';
-        listContainer.addEventListener('click', (e) => {
-          const item = e.target.closest('.config-item');
-          if (!item || !this._configState) return;
-          const name = item.dataset.name;
-          if (name) this.selectConfig(name);
-        });
-
-        // 键盘可达：Enter/Space 触发同样的选择行为
-        listContainer.addEventListener('keydown', (e) => {
-          if (e.key !== 'Enter' && e.key !== ' ') return;
-          const item = e.target.closest('.config-item');
-          if (!item || !this._configState) return;
-          const name = item.dataset.name;
-          if (!name) return;
-          e.preventDefault();
-          this.selectConfig(name);
-        });
-      }
-    }
-
-    this.loadConfigList();
+    return renderConfigPage(this);
   }
 
   renderConfigPlaceholder() {
@@ -5397,73 +4536,12 @@ class App {
     });
   }
 
-  async showPromptDialog(message) {
-    return new Promise(resolve => {
-      const id = 'xrkPromptDialog';
-      let modal = document.getElementById(id);
-      if (!modal) {
-        modal = document.createElement('div');
-        modal.id = id;
-        modal.className = 'xrk-prompt-modal';
-        modal.innerHTML = `
-          <div class="xrk-prompt-backdrop"></div>
-          <div class="xrk-prompt-dialog">
-            <div class="xrk-prompt-message"></div>
-            <input class="xrk-prompt-input" type="text" />
-            <div class="xrk-prompt-actions">
-              <button type="button" class="xrk-prompt-cancel">取消</button>
-              <button type="button" class="xrk-prompt-ok">确定</button>
-            </div>
-          </div>
-        `;
-        document.body.appendChild(modal);
-      }
-
-      const backdrop = modal.querySelector('.xrk-prompt-backdrop');
-      const msgEl = modal.querySelector('.xrk-prompt-message');
-      const input = modal.querySelector('.xrk-prompt-input');
-      const okBtn = modal.querySelector('.xrk-prompt-ok');
-      const cancelBtn = modal.querySelector('.xrk-prompt-cancel');
-
-      const cleanup = (value) => {
-        modal.style.display = 'none';
-        okBtn.removeEventListener('click', onOk);
-        cancelBtn.removeEventListener('click', onCancel);
-        backdrop.removeEventListener('click', onCancel);
-        input.removeEventListener('keydown', onKeydown);
-        resolve(value);
-      };
-
-      const onOk = () => cleanup(input.value);
-      const onCancel = () => cleanup(null);
-      const onKeydown = (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          onOk();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          onCancel();
-        }
-      };
-
-      msgEl.textContent = message ?? '';
-      input.value = '';
-      modal.style.display = 'flex';
-      input.focus();
-
-      okBtn.addEventListener('click', onOk);
-      cancelBtn.addEventListener('click', onCancel);
-      backdrop.addEventListener('click', onCancel);
-      input.addEventListener('keydown', onKeydown);
-    });
-  }
-
   async addDynamicCollectionEntry(collectionName) {
     if (!this._configState) return;
     const collection = this._configState.dynamicCollectionsMeta.find(col => col.name === collectionName);
     if (!collection) return;
 
-    const key = (await this.showPromptDialog(collection.keyPlaceholder || '请输入键'))?.trim();
+    const key = (await showPromptDialogUI(collection.keyPlaceholder || '请输入键'))?.trim();
     if (!key) return;
     const existing = this.getNestedValue(this._configState.rawObject ?? {}, collection.basePath ?? '');
     if (existing && Object.hasOwn(existing, key)) {
@@ -6668,18 +5746,7 @@ class App {
 
   // ========== Toast ==========
   showToast(message, type = 'info') {
-    const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-
-    toast.className = `toast ${type}`;
-    toast.innerHTML = `<span class="toast-icon" aria-hidden="true">${toastIconSVG(type)}</span><span>${message}</span>`;
-    
-    container.appendChild(toast);
-    
-    setTimeout(() => {
-      toast.classList.add('hide');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    showToastUI(message, type);
   }
 }
 

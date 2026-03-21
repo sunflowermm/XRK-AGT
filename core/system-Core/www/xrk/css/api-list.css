@@ -1,0 +1,94 @@
+/* API 调试：列表/方法标签/切换按钮（与主样式文件解耦） */
+
+.api-panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+}
+
+.api-panel-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.api-groups {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.api-group {
+  margin-bottom: 20px;
+}
+
+.api-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding: 8px 12px;
+}
+
+.api-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+
+.api-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.api-item.active {
+  background: var(--primary-100);
+  color: var(--primary);
+}
+
+.method-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.method-get { background: var(--success-light); color: var(--success); }
+.method-post { background: var(--primary-100); color: var(--primary); }
+.method-put { background: var(--warning-light); color: var(--warning); }
+.method-delete { background: var(--danger-light); color: var(--danger); }
+
+/* API Key 切换按钮 */
+.api-key-toggle-btn {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+
+.api-key-toggle-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.api-key-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+}
+

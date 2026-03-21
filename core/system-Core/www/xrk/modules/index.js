@@ -20,6 +20,15 @@ export { default as ConfigManager } from './config-manager.js';
 
 // UI 工具模块
 export * from './ui-kit.js';
+export * from './ui/toast.js';
+export * from './ui/prompt-dialog.js';
+export * from './pages/home.js';
+export {
+  loadPluginsInfoPanel,
+  renderWorkflowInfoPanel
+} from './pages/home-plugins-workflow.js';
+export * from './pages/chat.js';
+export * from './pages/config.js';
 
 /**
  * 使用示例：

@@ -1,0 +1,13 @@
+{
+  "plugins": {
+    "figma": {
+      "enabled": true
+    },
+    "linear": {
+      "enabled": true
+    },
+    "datadog": {
+      "enabled": true
+    }
+  }
+}

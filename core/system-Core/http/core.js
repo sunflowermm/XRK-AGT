@@ -568,8 +568,7 @@ async function buildSystemSnapshot(Bot, { includeHistory = false } = {}) {
     name: stream.name,
     description: stream.description,
     priority: stream.priority,
-    enabled: stream.config?.enabled !== false,
-    embeddingReady: !!stream.embeddingReady
+    enabled: stream.config?.enabled !== false
   }));
 
   const system = {
@@ -655,8 +654,6 @@ function buildPanelPayload(snapshot) {
     workflows: {
       total: workflows.stats.total,
       enabled: workflows.stats.enabled,
-      embeddingReady: workflows.stats.embedding?.ready || 0,
-      mode: workflows.stats.embedding?.mode || 'local',
       items: workflows.items.slice(0, 5)
     },
     processes: snapshot.processesTop5 || [],

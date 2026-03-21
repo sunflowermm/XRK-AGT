@@ -6,6 +6,10 @@ xrk/**
 !xrk/css/
 !xrk/css/*
 !xrk/app.js
+!xrk/modules/pages/
+!xrk/modules/pages/*
+!xrk/modules/ui/
+!xrk/modules/ui/*
 !xrk/lib
 !xrk/lib/chart.umd.min.js
 !xrk/lib/mermaid.min.js

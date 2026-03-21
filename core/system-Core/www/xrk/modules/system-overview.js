@@ -5,6 +5,22 @@
 
 import { setUpdating, clearUpdating } from './dom.js';
 
+function toFiniteNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function clampNumber(n, min, max) {
+  return Math.min(max, Math.max(min, n));
+}
+
+function calcUsagePercent(used, total) {
+  const t = toFiniteNumber(total, 0);
+  if (t <= 0) return 0;
+  const u = toFiniteNumber(used, 0);
+  return clampNumber((u / t) * 100, 0, 100);
+}
+
 export function renderNetworkInfo(app, network = {}, rates = {}) {
   const box = document.getElementById('networkInfo');
   if (!box) return;
@@ -60,13 +76,13 @@ export function updateSystemStatus(app, data) {
   const metrics = panels.metrics ?? {};
 
   // 更新统计卡片
-  const cpuPercent = metrics.cpu ?? system?.cpu?.percent ?? 0;
+  const cpuPercent = clampNumber(toFiniteNumber(metrics.cpu ?? system?.cpu?.percent ?? 0, 0), 0, 100);
   const cpuEl = document.getElementById('cpuValue');
   if (cpuEl) cpuEl.textContent = `${cpuPercent.toFixed(1)}%`;
 
   const memUsed = system?.memory?.used ?? 0;
   const memTotal = system?.memory?.total ?? 1;
-  const memPercent = metrics.memory ?? (memTotal > 0 ? ((memUsed / memTotal) * 100).toFixed(1) : 0);
+  const memPercent = toFiniteNumber(metrics.memory ?? calcUsagePercent(memUsed, memTotal), 0);
   const memEl = document.getElementById('memValue');
   if (memEl) memEl.textContent = `${memPercent}%`;
 
@@ -74,11 +90,11 @@ export function updateSystemStatus(app, data) {
   const diskEl = document.getElementById('diskValue');
   if (diskEl) {
     if (typeof metrics.disk === 'number') {
-      diskEl.textContent = `${metrics.disk.toFixed(1)}%`;
+      diskEl.textContent = `${clampNumber(toFiniteNumber(metrics.disk, 0), 0, 100).toFixed(1)}%`;
     } else if (disks.length > 0) {
       const disk = disks[0];
-      const diskPercent = disk.size > 0 ? ((disk.used / disk.size) * 100).toFixed(1) : 0;
-      diskEl.textContent = `${diskPercent}%`;
+      const diskPercent = calcUsagePercent(disk.used, disk.size);
+      diskEl.textContent = `${diskPercent.toFixed(1)}%`;
     } else {
       diskEl.textContent = '--';
     }
@@ -96,10 +112,9 @@ export function updateSystemStatus(app, data) {
 
   // 如果后端返回了实时数据，直接使用
   if (netRecent.length > 0) {
-    app._metricsHistory.netRx = netRecent.map(h => Math.max(0, (h.rxSec || 0) / 1024));
-    app._metricsHistory.netTx = netRecent.map(h => Math.max(0, (h.txSec || 0) / 1024));
-    app._metricsHistory._initialized = true;
-    app._metricsHistory._lastTimestamp = data.timestamp;
+    const recent = netRecent.slice(-60);
+    app._metricsHistory.netRx = recent.map(h => Math.max(0, (h.rxSec || 0) / 1024));
+    app._metricsHistory.netTx = recent.map(h => Math.max(0, (h.txSec || 0) / 1024));
   } else {
     // 如果没有实时数据，使用当前速率累积
     const now = Date.now();
@@ -140,8 +155,8 @@ export function updateSystemStatus(app, data) {
     }
   }
 
-  // 更新图表
-  updateCharts(app, cpuPercent, (memUsed / memTotal) * 100);
+  // 更新图表（与上面文本口径一致：使用同一份数值）
+  updateCharts(app, cpuPercent, memPercent);
 }
 
 /**
@@ -161,7 +176,7 @@ export function registerChartPlugins(app) {
       const value = chart.data.datasets[0].data[0];
       ctx.save();
       const fontFamily = (getComputedStyle(document.body).fontFamily || '').split(',')[0].trim() || 'sans-serif';
-      ctx.font = `700 16px ${fontFamily}`;
+      ctx.font = `500 14px ${fontFamily}`;
       ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -181,7 +196,7 @@ export function registerChartPlugins(app) {
       const value = chart.data.datasets[0].data[0];
       ctx.save();
       const fontFamily = (getComputedStyle(document.body).fontFamily || '').split(',')[0].trim() || 'sans-serif';
-      ctx.font = `700 16px ${fontFamily}`;
+      ctx.font = `500 14px ${fontFamily}`;
       ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
