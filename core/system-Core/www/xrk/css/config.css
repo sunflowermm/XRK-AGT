@@ -151,9 +151,149 @@
   box-sizing: border-box;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
+  .config-page {
+    gap: 12px;
+  }
+
+  .config-sidebar {
+    padding: 14px;
+    gap: 12px;
+    border-radius: var(--radius-md);
+  }
+
+  .config-list {
+    gap: 8px;
+  }
+
+  .config-item {
+    padding: 12px;
+  }
+
   .config-main {
-    padding: 20px;
+    padding: 14px;
+    min-height: 0;
+    border-radius: var(--radius-md);
+  }
+
+  .config-main-header {
+    margin-bottom: 14px;
+    gap: 10px;
+  }
+
+  .config-main-header h2 {
+    font-size: 18px;
+  }
+
+  .config-main-header p {
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .config-main-actions {
+    gap: 8px;
+  }
+
+  .config-mode-toggle button {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .config-group {
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+
+  .config-group-header {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    gap: 10px;
+  }
+
+  .config-group-header h3 {
+    font-size: 16px;
+    margin-bottom: 2px;
+  }
+
+  .config-group-header p {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .config-group-count {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  .config-field {
+    padding: 12px;
+  }
+
+  .config-field label {
+    margin-bottom: 6px;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .config-field-hint {
+    margin-bottom: 6px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .config-field-example {
+    margin-top: 3px;
+    padding: 6px 8px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .config-field-example pre {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .config-field-grid {
+    gap: 12px;
+  }
+
+  .config-subgroup {
+    padding: 12px;
+    margin-top: 12px;
+    margin-bottom: 8px;
+  }
+
+  .config-subgroup-header {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+  }
+
+  .config-subgroup-desc {
+    margin-top: 6px;
+    line-height: 1.35;
+  }
+
+  .config-subgroup-section {
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+
+  .config-subgroup-section-header {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+  }
+
+  .config-subgroup-section .config-field-grid {
+    gap: 10px;
+    padding-left: 0;
+  }
+
+  .config-json-panel textarea {
+    min-height: 260px;
+    padding: 10px;
+    font-size: 12px;
   }
 }
 

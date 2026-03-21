@@ -564,11 +564,11 @@ body.dark .json-boolean { color: #f87171; }
 /* ======== API 调试中心：移动端信息密度优化 ======== */
 @media (max-width: 768px) {
   .api-container {
-    gap: 16px;
+    gap: 12px;
   }
 
   .api-header-section {
-    padding: 24px 12px;
+    padding: 16px 8px;
   }
 
   .api-header-title {
@@ -582,11 +582,11 @@ body.dark .json-boolean { color: #f87171; }
   }
 
   .api-form-grid {
-    gap: 16px;
+    gap: 12px;
   }
 
   .api-form-section {
-    padding: 14px;
+    padding: 12px;
   }
 
   .api-form-section-title {

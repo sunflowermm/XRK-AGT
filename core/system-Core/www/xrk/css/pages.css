@@ -101,6 +101,10 @@
 
 /* 手机端：统计卡片维持两列，提升信息密度 */
 @media (max-width: 768px) {
+  .dashboard {
+    gap: 16px;
+  }
+
   .stats-grid {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
@@ -142,6 +146,10 @@
   .chart-grid {
     display: flex;
     flex-direction: column;
+  }
+
+  .chart-card {
+    padding: 16px;
   }
 }
 
@@ -225,6 +233,13 @@
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .info-grid {
+    gap: 12px;
+    margin-bottom: 16px;
+  }
 }
 
 /* 聊天页布局（chat-container 到 chat-messages 之前） */
@@ -406,17 +421,36 @@
 
 @media (max-width: 768px) {
   .chat-container {
+    flex-direction: column;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
     min-height: 0;
+    min-width: 0;
+    max-width: 100%;
     height: calc(var(--vh, 100vh) - var(--header-height) - 32px);
     max-height: calc(var(--vh, 100vh) - var(--header-height) - 32px);
   }
 
   .chat-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
     min-height: 0;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
 
   .chat-main {
+    width: 100%;
     min-height: 0;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
 
   .chat-settings {
@@ -426,6 +460,8 @@
   
   .chat-setting {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
   
   .chat-setting label {

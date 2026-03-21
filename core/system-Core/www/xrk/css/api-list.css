@@ -68,27 +68,3 @@
 .method-put { background: var(--warning-light); color: var(--warning); }
 .method-delete { background: var(--danger-light); color: var(--danger); }
 
-/* API Key 切换按钮 */
-.api-key-toggle-btn {
-  display: none;
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--border);
-  background: var(--bg-input);
-  border-radius: var(--radius);
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all var(--transition);
-}
-
-.api-key-toggle-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.api-key-toggle-btn svg {
-  width: 20px;
-  height: 20px;
-}
-

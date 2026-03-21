@@ -263,6 +263,30 @@ body.dark .theme-btn .icon-moon { display: block; }
   color: var(--text-muted);
 }
 
+/* API Key 抽屉切换按钮（统一在 layout 管理） */
+.api-key-toggle-btn {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+
+.api-key-toggle-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.api-key-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
 /* 内容区 */
 .content {
   flex: 1;
@@ -440,51 +464,40 @@ body[data-page="chat"] .content {
   }
 
   .content {
-    /* 顶部/底部留 16px，左右安全边距由各页面主容器控制 */
-    padding: 16px 0;
+    /* 顶部/底部适度收紧，提升移动端信息密度 */
+    padding: 12px 0;
     align-items: stretch; /* 移动端占满整行，而不是在中间留白 */
     width: 100%;
-    max-width: 100vw; /* 关键：避免内部内容把布局宽度撑大 */
+    max-width: 100%;
     overflow-x: hidden;
+    box-sizing: border-box;
   }
 
-  /* 图表卡片在手机端略微缩小，避免子图占满视野 */
-  .chart-card {
-    padding: 16px;
+  /*
+   * 聊天页：左右内边距放在 .content 上，避免「子项 width:100% + 自身 margin」撑破父级
+   * （pages.css 中 .chat-container 为 width:100% 时，若再 margin 0 12px 会整体偏右/横向溢出）
+   */
+  body[data-page="chat"] .content {
+    padding-left: 12px;
+    padding-right: 12px;
+    box-sizing: border-box;
   }
 
   .chart-container {
     height: 160px;
   }
 
-  .chat-container {
-    flex-direction: column;
-    width: calc(100vw - 24px);
-    max-width: calc(100vw - 24px);
-    margin: 0 12px;
-    height: auto;
-    /* 使用布局视口高度，避免随可视视口(键盘/地址栏)剧烈抖动 */
-    min-height: calc(var(--vh, 100vh) - var(--header-height) - 16px);
-  }
-
-  .chat-sidebar {
-    width: 100%;
-    max-height: 32vh;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .chat-main {
-    flex: 1;
-    min-height: 0;
-  }
-
   /* 手机小屏：各主页面容器左右留出安全边距，避免内容贴边 */
   .dashboard,
   .config-page,
   .api-container {
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-left: 8px;
+    padding-right: 8px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   /* Voice 模式移动端适配：内容整体缩放 */

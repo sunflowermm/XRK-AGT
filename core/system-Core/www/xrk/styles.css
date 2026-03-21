@@ -1334,42 +1334,24 @@
     overflow-x: hidden;
   }
 
-  /* 手机端：聊天布局改为上下结构，避免横向被侧栏压缩。
-     不再修改高度，由全局的 100vh + 内部滚动逻辑控制，保留“聊天记录不无限延伸”特性。 */
-  .chat-container {
-    flex-direction: column;
-  }
-
-  .chat-sidebar {
-    width: 100%;
-    max-width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .chat-main {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  /* 手机端：Event / Voice / AI 三个按钮一行平分 */
+  /* 手机端：Event / Voice / AI 三键一行三等分 */
   .chat-mode-selector {
-    flex-direction: row;
-    align-items: stretch;
-    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+    padding: 8px 12px;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .chat-mode-btn {
-    flex: 1 1 0;
+    width: 100%;
+    min-width: 0;
     justify-content: center;
-    padding: 10px 0;
+    padding: 10px 8px;
   }
 
   .ai-settings-panel {
-    /* 手机端：不要整块隐藏，改为高度受限可滚动，确保信息量不低 */
-    display: flex;
     max-height: 28vh;
     padding: 12px;
     gap: 16px;

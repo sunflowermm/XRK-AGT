@@ -1698,7 +1698,7 @@ export default class Bot extends EventEmitter {
 
   /**
    * 认证中间件（HTTP）
-   * 仅负责基础放行规则：静态资源 / 本地连接
+   * 仅负责基础放行规则：静态资源
    * 具体业务鉴权（如 system-Core HTTP / 各 Core 自定义）由各自模块自行处理
    */
   _authMiddleware(req, res, next) {
@@ -1709,11 +1709,6 @@ export default class Bot extends EventEmitter {
 
     if (AUTH_STATIC_EXT_REGEX.test(req.path)) {
       BotUtil.makeLog('debug', `[Auth] 放行：静态资源 path=${req.path}`, '认证');
-      return next();
-    }
-
-    if (this._isLocalConnection(req.ip)) {
-      BotUtil.makeLog('debug', `[Auth] 放行：本地/内网 ip=${req.ip} path=${req.path}`, '认证');
       return next();
     }
 
@@ -2063,7 +2058,6 @@ export default class Bot extends EventEmitter {
   /**
    * WebSocket连接处理
    * 所有 Tasker 暴露的 WS 路径（Bot.wsf）在此统一进行系统级鉴权：
-   * - 本地/内网连接直接放行
    * - 其余连接若 server.auth.apiKey.enabled !== false，则必须通过 API Key 校验
    */
   wsConnect(req, socket, head) {
@@ -2081,7 +2075,6 @@ export default class Bot extends EventEmitter {
     }
 
     const authConfig = cfg.server.auth || {};
-    const isLocal = this._isLocalConnection(req.socket.remoteAddress);
     const apiKeyEnabled = authConfig.apiKey?.enabled !== false;
     
     // 判断当前 WS 路径是否声明“跳过系统级鉴权”
@@ -2092,7 +2085,7 @@ export default class Bot extends EventEmitter {
     const skipAuthForPath = Array.isArray(handlersForPath)
       && handlersForPath.some((h) => h && typeof h === 'object' && h.skipAuth === true);
 
-    if (!isLocal && apiKeyEnabled && !skipAuthForPath && !this._checkApiAuthorization(req)) {
+    if (apiKeyEnabled && !skipAuthForPath && !this._checkApiAuthorization(req)) {
       BotUtil.makeLog('warn', `WebSocket 鉴权失败：${req.url} ip=${req.socket.remoteAddress}`, '服务器');
       try {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

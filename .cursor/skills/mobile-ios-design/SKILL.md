@@ -1,259 +1,35 @@
 ---
 name: mobile-ios-design
-description: Master iOS Human Interface Guidelines and SwiftUI patterns for building native iOS apps. Use when designing iOS interfaces, implementing SwiftUI views, or ensuring apps follow Apple's design principles.
+description: 当需要按 iOS HIG 与 SwiftUI 规范设计 iOS 界面时使用。
 ---
 
-# iOS Mobile Design
+## 权威入口
 
-Master iOS Human Interface Guidelines (HIG) and SwiftUI patterns to build polished, native iOS applications that feel at home on Apple platforms.
+- ` .cursor/skills/mobile-ios-design/references/hig-patterns.md `
+- ` .cursor/skills/mobile-ios-design/references/swiftui-components.md `
+- ` .cursor/skills/mobile-ios-design/references/ios-navigation.md `
 
-## When to Use This Skill
+## 适用场景
 
-- Designing iOS app interfaces following Apple HIG
-- Building SwiftUI views and layouts
-- Implementing iOS navigation patterns (NavigationStack, TabView, sheets)
-- Creating adaptive layouts for iPhone and iPad
-- Using SF Symbols and system typography
-- Building accessible iOS interfaces
-- Implementing iOS-specific gestures and interactions
-- Designing for Dynamic Type and Dark Mode
+- iOS 原生界面布局与组件设计。
+- SwiftUI 页面结构、状态与导航策略。
+- 对齐 iOS 交互预期（手势、转场、信息层级）。
 
-## Core Concepts
+## 非适用场景
 
-### 1. Human Interface Guidelines Principles
+- 不用于 Android 或 Web 端设计规范。
+- 不替代业务域规则与后端错误处理定义。
 
-**Clarity**: Content is legible, icons are precise, adornments are subtle
-**Deference**: UI helps users understand content without competing with it
-**Depth**: Visual layers and motion convey hierarchy and enable navigation
+## 执行步骤
 
-**Platform Considerations:**
+1. 依据 HIG 确定页面信息层级与交互优先级。
+2. 设计 SwiftUI 组件状态与可访问性标签。
+3. 统一导航结构（层级、模态、返回）。
+4. 校验动态字体、暗黑模式与触控可达性。
+5. 复核平台一致性，避免“跨平台生搬硬套”。
 
-- **iOS**: Touch-first, compact displays, portrait orientation
-- **iPadOS**: Larger canvas, multitasking, pointer support
-- **visionOS**: Spatial computing, eye/hand input
+## 常见陷阱
 
-### 2. SwiftUI Layout System
-
-**Stack-Based Layouts:**
-
-```swift
-// Vertical stack with alignment
-VStack(alignment: .leading, spacing: 12) {
-    Text("Title")
-        .font(.headline)
-    Text("Subtitle")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-}
-
-// Horizontal stack with flexible spacing
-HStack {
-    Image(systemName: "star.fill")
-    Text("Featured")
-    Spacer()
-    Text("View All")
-        .foregroundStyle(.blue)
-}
-```
-
-**Grid Layouts:**
-
-```swift
-// Adaptive grid that fills available width
-LazyVGrid(columns: [
-    GridItem(.adaptive(minimum: 150, maximum: 200))
-], spacing: 16) {
-    ForEach(items) { item in
-        ItemCard(item: item)
-    }
-}
-
-// Fixed column grid
-LazyVGrid(columns: [
-    GridItem(.flexible()),
-    GridItem(.flexible()),
-    GridItem(.flexible())
-], spacing: 12) {
-    ForEach(items) { item in
-        ItemThumbnail(item: item)
-    }
-}
-```
-
-### 3. Navigation Patterns
-
-**NavigationStack (iOS 16+):**
-
-```swift
-struct ContentView: View {
-    @State private var path = NavigationPath()
-
-    var body: some View {
-        NavigationStack(path: $path) {
-            List(items) { item in
-                NavigationLink(value: item) {
-                    ItemRow(item: item)
-                }
-            }
-            .navigationTitle("Items")
-            .navigationDestination(for: Item.self) { item in
-                ItemDetailView(item: item)
-            }
-        }
-    }
-}
-```
-
-**TabView (iOS 18+):**
-
-```swift
-struct MainTabView: View {
-    @State private var selectedTab = 0
-
-    var body: some View {
-        TabView(selection: $selectedTab) {
-            Tab("Home", systemImage: "house", value: 0) {
-                HomeView()
-            }
-
-            Tab("Search", systemImage: "magnifyingglass", value: 1) {
-                SearchView()
-            }
-
-            Tab("Profile", systemImage: "person", value: 2) {
-                ProfileView()
-            }
-        }
-    }
-}
-```
-
-### 4. System Integration
-
-**SF Symbols:**
-
-```swift
-// Basic symbol
-Image(systemName: "heart.fill")
-    .foregroundStyle(.red)
-
-// Symbol with rendering mode
-Image(systemName: "cloud.sun.fill")
-    .symbolRenderingMode(.multicolor)
-
-// Variable symbol (iOS 16+)
-Image(systemName: "speaker.wave.3.fill", variableValue: volume)
-
-// Symbol effect (iOS 17+)
-Image(systemName: "bell.fill")
-    .symbolEffect(.bounce, value: notificationCount)
-```
-
-**Dynamic Type:**
-
-```swift
-// Use semantic fonts
-Text("Headline")
-    .font(.headline)
-
-Text("Body text that scales with user preferences")
-    .font(.body)
-
-// Custom font that respects Dynamic Type
-Text("Custom")
-    .font(.custom("Avenir", size: 17, relativeTo: .body))
-```
-
-### 5. Visual Design
-
-**Colors and Materials:**
-
-```swift
-// Semantic colors that adapt to light/dark mode
-Text("Primary")
-    .foregroundStyle(.primary)
-Text("Secondary")
-    .foregroundStyle(.secondary)
-
-// System materials for blur effects
-Rectangle()
-    .fill(.ultraThinMaterial)
-    .frame(height: 100)
-
-// Vibrant materials for overlays
-Text("Overlay")
-    .padding()
-    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-```
-
-**Shadows and Depth:**
-
-```swift
-// Standard card shadow
-RoundedRectangle(cornerRadius: 16)
-    .fill(.background)
-    .shadow(color: .black.opacity(0.1), radius: 8, y: 4)
-
-// Elevated appearance
-.shadow(radius: 2, y: 1)
-.shadow(radius: 8, y: 4)
-```
-
-## Quick Start Component
-
-```swift
-import SwiftUI
-
-struct FeatureCard: View {
-    let title: String
-    let description: String
-    let systemImage: String
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: systemImage)
-                .font(.title)
-                .foregroundStyle(.blue)
-                .frame(width: 44, height: 44)
-                .background(.blue.opacity(0.1), in: Circle())
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
-                Text(description)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .foregroundStyle(.tertiary)
-        }
-        .padding()
-        .background(.background, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
-    }
-}
-```
-
-## Best Practices
-
-1. **Use Semantic Colors**: Always use `.primary`, `.secondary`, `.background` for automatic light/dark mode support
-2. **Embrace SF Symbols**: Use system symbols for consistency and automatic accessibility
-3. **Support Dynamic Type**: Use semantic fonts (`.body`, `.headline`) instead of fixed sizes
-4. **Add Accessibility**: Include `.accessibilityLabel()` and `.accessibilityHint()` modifiers
-5. **Use Safe Areas**: Respect `safeAreaInset` and avoid hardcoded padding at screen edges
-6. **Implement State Restoration**: Use `@SceneStorage` for preserving user state
-7. **Support iPad Multitasking**: Design for split view and slide over
-8. **Test on Device**: Simulator doesn't capture full haptic and performance experience
-
-## Common Issues
-
-- **Layout Breaking**: Use `.fixedSize()` sparingly; prefer flexible layouts
-- **Performance Issues**: Use `LazyVStack`/`LazyHStack` for long scrolling lists
-- **Navigation Bugs**: Ensure `NavigationLink` values are `Hashable`
-- **Dark Mode Problems**: Avoid hardcoded colors; use semantic or asset catalog colors
-- **Accessibility Failures**: Test with VoiceOver enabled
-- **Memory Leaks**: Watch for strong reference cycles in closures
+- 用 Android 交互习惯直接套到 iOS。
+- 模态与导航层级混乱，用户难以返回。
+- 忽略系统字体缩放导致可读性问题。
