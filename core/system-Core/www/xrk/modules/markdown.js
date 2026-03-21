@@ -153,13 +153,22 @@ export class MarkdownRenderer {
               img.onerror = reject;
               img.src = svgUrl;
             });
+            const naturalWidth = img.naturalWidth || width;
+            const naturalHeight = img.naturalHeight || height;
+            if (!naturalWidth || !naturalHeight) {
+              downloadSvg();
+              return;
+            }
             const canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, Math.round(width * scale));
-            canvas.height = Math.max(1, Math.round(height * scale));
+            canvas.width = Math.max(1, Math.round(naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(naturalHeight * scale));
             const ctx = canvas.getContext('2d');
-            ctx.setTransform(scale, 0, 0, scale, 0, 0);
-            ctx.clearRect(0, 0, width, height);
-            ctx.drawImage(img, 0, 0, width, height);
+            if (!ctx) {
+              downloadSvg();
+              return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
             if (!blob) {
               downloadSvg();
