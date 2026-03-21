@@ -15,10 +15,12 @@ export class Help extends plugin {
       imgType: 'png',
       quality: 100,
       title: 'XRK-AGT 帮助',
-      subtitle: '多端统一事件链 · QQ / 设备 / Web / 终端',
+      subtitle: '常用指令速查 · 按任务分组',
+      highlight: '提示：先看「常用」与「设备 / Web」，再按需使用高级命令。',
       sections: [
         {
           name: '常用',
+          desc: '高频操作，建议优先记住',
           items: [
             { cmd: '#帮助', desc: '本帮助页' },
             { cmd: '#状态', desc: '系统状态' },
@@ -29,6 +31,7 @@ export class Help extends plugin {
         },
         {
           name: '更新与日志',
+          desc: '版本维护与问题排查',
           items: [
             { cmd: '#强制更新', desc: '强制更新' },
             { cmd: '#全部更新', desc: '静默全部更新' },
@@ -38,6 +41,7 @@ export class Help extends plugin {
         },
         {
           name: '消息与违禁词',
+          desc: '词条维护与风控管理',
           items: [
             { cmd: '#添加/#删除', desc: '消息词条' },
             { cmd: '#消息/#词条', desc: '列表' },
@@ -47,6 +51,7 @@ export class Help extends plugin {
         },
         {
           name: '终端与脚本',
+          desc: '高权限命令，建议仅管理员使用',
           items: [
             { cmd: 'rx <cmd>', desc: '项目目录执行' },
             { cmd: 'rh <cmd>', desc: '用户主目录执行' },
@@ -59,6 +64,7 @@ export class Help extends plugin {
         },
         {
           name: '其他',
+          desc: '辅助能力',
           items: [
             { cmd: '#点歌 歌名', desc: '搜索分享歌曲' },
             { cmd: '#复读', desc: '主动复读' }
@@ -67,13 +73,14 @@ export class Help extends plugin {
         {
           name: '设备 / Web',
           full: true,
+          desc: '控制台模式说明',
           items: [
             { cmd: 'Event 对话', desc: '戳一戳、发消息走事件链(OneBot v11 notice/message)' },
             { cmd: 'AI 对话', desc: '与工作流对话' }
           ]
         }
       ],
-      footer: 'XRK-AGT · 使用项目渲染器生成'
+      footer: 'XRK-AGT · 帮助页由渲染器生成'
     }
     try {
       const result = await this.e.runtime.render('帮助', 'help', data, { retType: 'base64' })

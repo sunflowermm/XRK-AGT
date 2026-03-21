@@ -88,7 +88,7 @@ export function clearUpdating(el) {
 /**
  * 绑定移动端“真实可视高度”到 CSS 变量 `--vh`。
  * - 解决移动端软键盘/地址栏变化导致的 `100vh` 跳动问题
- * - 使用 visualViewport（支持的浏览器更准确），否则回退到 innerHeight
+ * - 使用 visualViewport.height + offsetTop 计算实际可见高度；否则回退到 innerHeight
  */
 let _viewportHeightBound = false;
 export function bindViewportHeightVar(varName = '--vh') {
@@ -96,10 +96,10 @@ export function bindViewportHeightVar(varName = '--vh') {
   _viewportHeightBound = true;
 
   const apply = () => {
-    const height =
-      window.visualViewport?.height ??
-      window.innerHeight ??
-      document.documentElement.clientHeight;
+    const viewport = window.visualViewport;
+    const height = viewport
+      ? Math.max(0, (viewport.height ?? 0) + (viewport.offsetTop ?? 0))
+      : (window.innerHeight ?? document.documentElement.clientHeight);
     document.documentElement.style.setProperty(varName, `${height}px`);
   };
 

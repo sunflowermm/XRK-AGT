@@ -478,6 +478,8 @@ body[data-page="chat"] .content {
    * （pages.css 中 .chat-container 为 width:100% 时，若再 margin 0 12px 会整体偏右/横向溢出）
    */
   body[data-page="chat"] .content {
+    padding-top: 0;
+    padding-bottom: 0;
     padding-left: 12px;
     padding-right: 12px;
     box-sizing: border-box;

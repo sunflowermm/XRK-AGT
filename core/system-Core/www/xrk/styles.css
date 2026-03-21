@@ -1326,14 +1326,6 @@
 }
 
 @media (max-width: 768px) {
-  /* 手机端：允许页面轻微滚动，让浏览器地址栏可以隐藏 */
-  body[data-page="chat"] {
-    height: auto;
-    min-height: var(--vh, 100vh);
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-
   /* 手机端：Event / Voice / AI 三键一行三等分 */
   .chat-mode-selector {
     display: grid;

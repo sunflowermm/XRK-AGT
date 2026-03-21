@@ -428,8 +428,8 @@
     min-height: 0;
     min-width: 0;
     max-width: 100%;
-    height: calc(var(--vh, 100vh) - var(--header-height) - 32px);
-    max-height: calc(var(--vh, 100vh) - var(--header-height) - 32px);
+    height: calc(var(--vh, 100vh) - var(--header-height));
+    max-height: calc(var(--vh, 100vh) - var(--header-height));
   }
 
   .chat-sidebar {
