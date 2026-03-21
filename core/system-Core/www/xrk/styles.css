@@ -67,8 +67,7 @@
 
 .chat-message.user {
   align-self: flex-end;
-  margin-left: auto;
-  margin-right: 0;
+  margin-left: 40px;
   background: var(--primary);
   color: white;
   border-bottom-right-radius: 4px;
@@ -76,8 +75,7 @@
 
 .chat-message.assistant {
   align-self: flex-start;
-  margin-left: 0;
-  margin-right: auto;
+  margin-right: 40px;
   background: var(--bg-input);
   color: var(--text-primary);
   border-bottom-left-radius: 4px;
@@ -259,7 +257,7 @@
   margin-top: 8px;
   transition: transform 0.2s, opacity 0.3s ease;
   object-fit: contain;
-  aspect-ratio: auto;
+  /* 初始状态：显示占位，加载完成后显示 */
   opacity: 0;
   display: block;
   width: auto;
@@ -275,15 +273,32 @@
   opacity: 0.95;
 }
 
+/* 图片加载占位符 */
+.chat-image:not(.loaded) {
+  background: var(--bg-input);
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-image:not(.loaded)::before {
+  content: '';
+  width: 48px;
+  height: 48px;
+  display: block;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2394a3b8%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%223%22%20y%3D%225%22%20width%3D%2218%22%20height%3D%2214%22%20rx%3D%222%22/%3E%3Ccircle%20cx%3D%228.5%22%20cy%3D%229%22%20r%3D%221.5%22/%3E%3Cpath%20d%3D%22M21%2015l-5-5-4%204-2-2-7%207%22/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
 /* 图片容器 */
 .chat-image-container {
   margin-top: 8px;
   display: inline-block;
   max-width: 100%;
-  min-width: 0;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--bg-input);
 }
 
 /* 用户侧图片：容器靠右对齐，视觉更符合“我发的在右侧” */
@@ -566,10 +581,9 @@
   padding: 0;
   background: transparent;
   border-radius: 0;
-  /* 外层区域：只负责约束，不承担宽内容滚动 */
+  /* 超长内容允许左右滑动，但不影响纵向布局 */
   max-width: 100%;
-  min-width: 0;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: visible;
 }
 
@@ -694,51 +708,27 @@
 
 .md-mermaid {
   margin: 8px auto;
-  padding: clamp(8px, 1.8vw, 14px);
+  padding: 12px 14px;
   border-radius: var(--radius-md);
   background: var(--bg-input);
   border: 1px solid var(--border);
-  min-width: 0;
+  /* 在气泡内部自己带横向滚动条，允许内部图表宽度 > 气泡宽度 */
   overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
+  /* 自身宽度跟随气泡/容器，真正“超宽”交给内部 SVG 实现 */
   width: 100%;
   max-width: 100%;
   display: block;
-  box-sizing: border-box;
 }
 
-.md-mermaid-canvas {
-  width: max-content;
-  min-width: 100%;
-}
-
-.md-mermaid::-webkit-scrollbar {
-  height: 8px;
-}
-
-.md-mermaid::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.md-mermaid::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--border) 88%, transparent);
-  border-radius: 999px;
-}
-
-.md-mermaid::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+.md-mermaid .mermaid {
+  margin: 4px auto 0;
+  display: block;
 }
 
 .md-mermaid svg {
   display: block;
-  width: auto !important;
-  min-width: 0 !important;
   max-width: none !important;
-  height: auto !important;
+  width: auto !important;
 }
 
 .md-mermaid-toolbar {
@@ -1061,7 +1051,6 @@
   gap: 12px;
   background: var(--bg-card);
   min-width: 0;
-  margin-top: auto;
 }
 
 .chat-input {
@@ -1874,13 +1863,6 @@
 }
 
 @media (max-width: 768px) {
-  .chat-input-area {
-    position: sticky;
-    bottom: 0;
-    z-index: 4;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-
   /* 键盘弹出时，让 Voice 的居中大屏“引导区”让位，保证输入框紧贴软键盘 */
   .chat-container.voice-mode.keyboard-open .voice-chat-center {
     display: none;

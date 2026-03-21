@@ -55,7 +55,6 @@ export class MarkdownRenderer {
           wrapper.setAttribute('data-mermaid-raw', escapeHtml(code));
           wrapper.innerHTML = svg;
           node.parentElement.replaceWith(wrapper);
-          this.normalizeMermaidSvg(wrapper);
           node.dataset.processed = 'true';
         } catch (err) {
           // Mermaid 语法异常时保留原始代码块，避免出现空白或占位符残留
@@ -67,58 +66,6 @@ export class MarkdownRenderer {
     } catch (e) {
       console.warn('Mermaid 渲染失败:', e);
     }
-  }
-
-  /**
-   * 统一 Mermaid SVG 显示规则：保证 viewBox 存在并保持等比缩放
-   * @param {Element} wrapper
-   */
-  normalizeMermaidSvg(wrapper) {
-    if (!wrapper) return;
-    const svg = wrapper.querySelector('svg');
-    if (!svg) return;
-    const { width, height } = this.getMermaidSvgSize(svg);
-    if (!width || !height) return;
-    if (!svg.getAttribute('viewBox')) {
-      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    }
-    svg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
-    svg.style.width = 'auto';
-    svg.style.maxWidth = 'none';
-    svg.style.height = 'auto';
-
-    // 外层: 气泡约束宽度；内层: 内容原宽滚动（避免被其它消息挤压）
-    let canvas = wrapper.querySelector('.md-mermaid-canvas');
-    if (!canvas) {
-      canvas = document.createElement('div');
-      canvas.className = 'md-mermaid-canvas';
-      wrapper.appendChild(canvas);
-    }
-    if (svg.parentElement !== canvas) {
-      canvas.appendChild(svg);
-    }
-  }
-
-  /**
-   * 统一 Mermaid SVG 尺寸来源：viewBox > width/height > DOMRect
-   * @param {SVGElement} svg
-   * @returns {{ width: number, height: number }}
-   */
-  getMermaidSvgSize(svg) {
-    const vb = svg?.viewBox?.baseVal;
-    if (vb?.width && vb?.height) {
-      return { width: vb.width, height: vb.height };
-    }
-    const widthAttr = Number(svg?.getAttribute?.('width')) || 0;
-    const heightAttr = Number(svg?.getAttribute?.('height')) || 0;
-    if (widthAttr && heightAttr) {
-      return { width: widthAttr, height: heightAttr };
-    }
-    const rect = svg?.getBoundingClientRect?.();
-    return {
-      width: rect?.width || 0,
-      height: rect?.height || 0
-    };
   }
 
   /**
@@ -171,10 +118,19 @@ export class MarkdownRenderer {
           const svg = wrap.querySelector('svg');
           if (!svg) return;
           const cloned = svg.cloneNode(true);
-          const { width, height } = this.getMermaidSvgSize(cloned);
+          let width = Number(cloned.getAttribute('width')) || 0;
+          let height = Number(cloned.getAttribute('height')) || 0;
+          const vb = cloned.viewBox && cloned.viewBox.baseVal;
+          if (vb && vb.width && vb.height) {
+            width = vb.width;
+            height = vb.height;
+            cloned.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.width} ${vb.height}`);
+          } else {
+            const rect = svg.getBoundingClientRect();
+            width = rect.width;
+            height = rect.height;
+          }
           if (!width || !height) return;
-          cloned.setAttribute('viewBox', `0 0 ${width} ${height}`);
-          cloned.setAttribute('preserveAspectRatio', 'xMinYMin meet');
           cloned.setAttribute('width', String(width));
           cloned.setAttribute('height', String(height));
           const xml = new XMLSerializer().serializeToString(cloned);
@@ -197,22 +153,13 @@ export class MarkdownRenderer {
               img.onerror = reject;
               img.src = svgUrl;
             });
-            const naturalWidth = img.naturalWidth || width;
-            const naturalHeight = img.naturalHeight || height;
-            if (!naturalWidth || !naturalHeight) {
-              downloadSvg();
-              return;
-            }
             const canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, Math.round(naturalWidth * scale));
-            canvas.height = Math.max(1, Math.round(naturalHeight * scale));
+            canvas.width = Math.max(1, Math.round(width * scale));
+            canvas.height = Math.max(1, Math.round(height * scale));
             const ctx = canvas.getContext('2d');
-            if (!ctx) {
-              downloadSvg();
-              return;
-            }
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            ctx.setTransform(scale, 0, 0, scale, 0, 0);
+            ctx.clearRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
             const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
             if (!blob) {
               downloadSvg();
