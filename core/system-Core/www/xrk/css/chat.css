@@ -14,6 +14,7 @@
   scrollbar-color: var(--border) transparent;
   background: var(--bg-card);
   scroll-behavior: smooth;
+  --chat-bubble-max-inline: min(78%, 72ch);
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -34,8 +35,9 @@
 }
 
 .chat-message {
-  flex: 0 0 auto;
-  max-width: min(80%, 880px);
+  flex: 0 1 auto;
+  width: auto;
+  max-width: var(--chat-bubble-max-inline);
   padding: 14px 20px;
   border-radius: var(--radius-md);
   font-size: 14px;
@@ -53,12 +55,13 @@
   .chat-messages {
     padding: 16px 12px;
     gap: 14px;
+    --chat-bubble-max-inline: min(84%, 64ch);
   }
 
   .chat-message,
   .voice-message {
     width: auto;
-    max-width: 88%;
+    max-width: var(--chat-bubble-max-inline);
     padding: 10px 12px;
     font-size: 13px;
     margin: 8px 0;
@@ -76,14 +79,6 @@
 
   .chat-action-btn span {
     font-size: 12px;
-  }
-
-  .chat-message.user,
-  .chat-message.assistant,
-  .voice-message.user,
-  .voice-message.assistant {
-    margin-left: 16px;
-    margin-right: 16px;
   }
 
   .chat-input-area {

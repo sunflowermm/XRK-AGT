@@ -67,7 +67,8 @@
 
 .chat-message.user {
   align-self: flex-end;
-  margin-left: 40px;
+  margin-left: auto;
+  margin-right: 0;
   background: var(--primary);
   color: white;
   border-bottom-right-radius: 4px;
@@ -75,7 +76,8 @@
 
 .chat-message.assistant {
   align-self: flex-start;
-  margin-right: 40px;
+  margin-left: 0;
+  margin-right: auto;
   background: var(--bg-input);
   color: var(--text-primary);
   border-bottom-left-radius: 4px;
@@ -564,9 +566,10 @@
   padding: 0;
   background: transparent;
   border-radius: 0;
-  /* 超长内容允许左右滑动，但不影响纵向布局 */
+  /* 外层区域：只负责约束，不承担宽内容滚动 */
   max-width: 100%;
-  overflow-x: auto;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: visible;
 }
 
@@ -691,27 +694,51 @@
 
 .md-mermaid {
   margin: 8px auto;
-  padding: 12px 14px;
+  padding: clamp(8px, 1.8vw, 14px);
   border-radius: var(--radius-md);
   background: var(--bg-input);
   border: 1px solid var(--border);
-  /* 在气泡内部自己带横向滚动条，允许内部图表宽度 > 气泡宽度 */
+  min-width: 0;
   overflow-x: auto;
-  /* 自身宽度跟随气泡/容器，真正“超宽”交给内部 SVG 实现 */
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   width: 100%;
   max-width: 100%;
   display: block;
+  box-sizing: border-box;
 }
 
-.md-mermaid .mermaid {
-  margin: 4px auto 0;
-  display: block;
+.md-mermaid-canvas {
+  width: max-content;
+  min-width: 100%;
+}
+
+.md-mermaid::-webkit-scrollbar {
+  height: 8px;
+}
+
+.md-mermaid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.md-mermaid::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 999px;
+}
+
+.md-mermaid::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .md-mermaid svg {
   display: block;
-  max-width: none !important;
   width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
 }
 
 .md-mermaid-toolbar {
