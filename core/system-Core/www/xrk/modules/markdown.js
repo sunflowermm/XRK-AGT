@@ -45,14 +45,21 @@ export class MarkdownRenderer {
       if (!targets.length) return;
 
       for (const node of targets) {
-        const code = node.textContent;
+        const code = String(node.textContent || '').trim();
+        if (!code) continue;
         const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const { svg } = await window.mermaid.render(id, code);
-        const wrapper = document.createElement('div');
-        wrapper.className = 'mermaid-wrapper';
-        wrapper.innerHTML = svg;
-        node.parentElement.replaceWith(wrapper);
-        node.dataset.processed = 'true';
+        try {
+          const { svg } = await window.mermaid.render(id, code);
+          const wrapper = document.createElement('div');
+          wrapper.className = 'md-mermaid';
+          wrapper.setAttribute('data-mermaid-raw', escapeHtml(code));
+          wrapper.innerHTML = svg;
+          node.parentElement.replaceWith(wrapper);
+          node.dataset.processed = 'true';
+        } catch (err) {
+          // Mermaid 语法异常时保留原始代码块，避免出现空白或占位符残留
+          console.warn('Mermaid 节点渲染失败:', err);
+        }
       }
 
       this.bindMermaidToolbar(container);
@@ -67,7 +74,7 @@ export class MarkdownRenderer {
    */
   bindMermaidToolbar(root) {
     if (!root) return;
-    const wrappers = root.querySelectorAll('.mermaid-wrapper');
+    const wrappers = root.querySelectorAll('.md-mermaid');
     if (!wrappers.length) return;
 
     wrappers.forEach(wrap => {
@@ -75,68 +82,98 @@ export class MarkdownRenderer {
       wrap.dataset._toolbarBound = 'true';
 
       const toolbar = document.createElement('div');
-      toolbar.className = 'mermaid-toolbar';
-      const copyIcon = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="9" y="9" width="13" height="13" rx="2"></rect>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>
-      `;
-      const checkIcon = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20 6L9 17l-5-5"></path>
-        </svg>
-      `;
-      const downloadIcon = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
-      `;
+      toolbar.className = 'md-mermaid-toolbar';
       toolbar.innerHTML = `
-        <button class="mermaid-copy" type="button" title="复制" aria-label="复制 SVG">
-          ${copyIcon}
+        <button class="md-mermaid-copy" type="button" title="复制 Mermaid 源码" aria-label="复制 Mermaid 源码">
+          复制
         </button>
-        <button class="mermaid-download" type="button" title="下载" aria-label="下载 SVG">
-          ${downloadIcon}
+        <button class="md-mermaid-download" type="button" title="下载高清 PNG（失败时回退 SVG）" aria-label="下载高清 PNG">
+          下载高清
         </button>
       `;
-      wrap.appendChild(toolbar);
+      wrap.prepend(toolbar);
 
-      const copyBtn = toolbar.querySelector('.mermaid-copy');
-      const downloadBtn = toolbar.querySelector('.mermaid-download');
+      const copyBtn = toolbar.querySelector('.md-mermaid-copy');
+      const downloadBtn = toolbar.querySelector('.md-mermaid-download');
 
       if (copyBtn && navigator.clipboard) {
         copyBtn.addEventListener('click', async () => {
-          const svg = wrap.querySelector('svg');
-          if (svg) {
-            try {
-              const original = copyBtn.innerHTML;
-              await navigator.clipboard.writeText(svg.outerHTML);
-              copyBtn.innerHTML = checkIcon;
-              setTimeout(() => {
-                copyBtn.innerHTML = original;
-              }, 2000);
-            } catch (e) {
-              console.error('复制失败:', e);
-            }
+          const raw = (wrap.getAttribute('data-mermaid-raw') || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+          if (!raw) return;
+          try {
+            const original = copyBtn.textContent;
+            await navigator.clipboard.writeText(raw);
+            copyBtn.textContent = '已复制';
+            setTimeout(() => {
+              copyBtn.textContent = original;
+            }, 1400);
+          } catch (e) {
+            console.error('复制失败:', e);
           }
         });
       }
 
       if (downloadBtn) {
-        downloadBtn.addEventListener('click', () => {
+        downloadBtn.addEventListener('click', async () => {
           const svg = wrap.querySelector('svg');
-          if (svg) {
-            const xml = new XMLSerializer().serializeToString(svg);
-            const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
-            const url = URL.createObjectURL(svgBlob);
+          if (!svg) return;
+          const cloned = svg.cloneNode(true);
+          let width = Number(cloned.getAttribute('width')) || 0;
+          let height = Number(cloned.getAttribute('height')) || 0;
+          const vb = cloned.viewBox && cloned.viewBox.baseVal;
+          if (vb && vb.width && vb.height) {
+            width = vb.width;
+            height = vb.height;
+            cloned.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.width} ${vb.height}`);
+          } else {
+            const rect = svg.getBoundingClientRect();
+            width = rect.width;
+            height = rect.height;
+          }
+          if (!width || !height) return;
+          cloned.setAttribute('width', String(width));
+          cloned.setAttribute('height', String(height));
+          const xml = new XMLSerializer().serializeToString(cloned);
+          const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+          const svgUrl = URL.createObjectURL(svgBlob);
+
+          const downloadSvg = () => {
             const a = document.createElement('a');
-            a.href = url;
+            a.href = svgUrl;
             a.download = `mermaid-${Date.now()}.svg`;
             a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            setTimeout(() => URL.revokeObjectURL(svgUrl), 2000);
+          };
+
+          try {
+            const scale = 3;
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              img.src = svgUrl;
+            });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(width * scale));
+            canvas.height = Math.max(1, Math.round(height * scale));
+            const ctx = canvas.getContext('2d');
+            ctx.setTransform(scale, 0, 0, scale, 0, 0);
+            ctx.clearRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            if (!blob) {
+              downloadSvg();
+              return;
+            }
+            const a = document.createElement('a');
+            const pngUrl = URL.createObjectURL(blob);
+            a.href = pngUrl;
+            a.download = `mermaid-${Date.now()}.png`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(pngUrl), 2000);
+            URL.revokeObjectURL(svgUrl);
+          } catch {
+            downloadSvg();
           }
         });
       }
@@ -153,8 +190,8 @@ export class MarkdownRenderer {
 
     // 保护代码块
     const codeBlocks = [];
-    const withPlaceholders = String(text).replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) => {
-      const id = `__CODE_BLOCK_${codeBlocks.length}__`;
+    const withPlaceholders = String(text).replace(/```([^\n\r`]*)\r?\n([\s\S]*?)```/g, (_, lang, code) => {
+      const id = `@@CODEBLOCK${codeBlocks.length}@@`;
       codeBlocks.push({ lang: lang || '', code });
       return id;
     });
@@ -162,7 +199,8 @@ export class MarkdownRenderer {
     // 保护行内代码
     const inlineCodes = [];
     const withInlineProtected = withPlaceholders.replace(/`([^`]+)`/g, (_, code) => {
-      const id = `__INLINE_CODE_${inlineCodes.length}__`;
+      // 同上：避免占位符被 markdown 强调语法误处理
+      const id = `@@INLINECODE${inlineCodes.length}@@`;
       inlineCodes.push(code);
       return id;
     });
@@ -206,7 +244,7 @@ export class MarkdownRenderer {
 
     // 恢复行内代码
     inlineCodes.forEach((code, i) => {
-      html = html.replace(`__INLINE_CODE_${i}__`, `<code>${escapeHtml(code)}</code>`);
+      html = html.replace(`@@INLINECODE${i}@@`, `<code>${escapeHtml(code)}</code>`);
     });
 
     // 恢复代码块
@@ -214,7 +252,7 @@ export class MarkdownRenderer {
       const langAttr = block.lang ? ` data-lang="${escapeHtml(block.lang)}"` : '';
       const highlighted = this.syntaxHighlight(block.code, block.lang);
       html = html.replace(
-        `__CODE_BLOCK_${i}__`,
+        `@@CODEBLOCK${i}@@`,
         `<pre><code class="language-${escapeHtml(block.lang)}"${langAttr}>${highlighted}</code></pre>`
       );
     });
@@ -223,10 +261,10 @@ export class MarkdownRenderer {
     html = html.replace(/\n\n/g, '</p><p>');
     html = `<p>${html}</p>`;
 
-    // 清理空段落
-    html = html.replace(/<p><\/p>/g, '');
-    html = html.replace(/<p>(<[huo])/g, '$1');
-    html = html.replace(/(<\/[huo][^>]*>)<\/p>/g, '$1');
+    // 清理空段落与块级标签外层多余 <p>
+    html = html.replace(/<p>\s*<\/p>/g, '');
+    html = html.replace(/<p>\s*(<(?:h[1-6]|ul|ol|blockquote|pre|hr)\b[^>]*>)/g, '$1');
+    html = html.replace(/(<\/(?:h[1-6]|ul|ol|blockquote|pre)>|<hr[^>]*>)\s*<\/p>/g, '$1');
 
     return html;
   }

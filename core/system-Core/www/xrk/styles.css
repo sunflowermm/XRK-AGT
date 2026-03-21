@@ -1351,11 +1351,6 @@
     padding: 10px 8px;
   }
 
-  .ai-settings-panel {
-    max-height: 28vh;
-    padding: 12px;
-    gap: 10px;
-  }
 }
 
 .chat-mode-btn:hover {
@@ -1528,9 +1523,15 @@
 }
 
 @media (max-width: 768px) {
+  .ai-settings-panel {
+    max-height: 28vh;
+    padding: 12px;
+    gap: 10px;
+  }
+
   .ai-settings-mobile-toggle {
     width: 100%;
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: space-between;
     padding: 8px 10px;
