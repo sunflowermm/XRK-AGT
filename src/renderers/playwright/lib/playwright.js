@@ -254,7 +254,13 @@ export default class PlaywrightRenderer extends Renderer {
     const start = Date.now();
 
     try {
-      context = await this.browser.newContext(this.contextOptions);
+      // 单次渲染可覆盖设备像素比（如帮助页高清截图），sys.scale 建议 1–4
+      const sysScale = Number(data.sys?.scale);
+      const contextOptions = { ...this.contextOptions };
+      if (Number.isFinite(sysScale) && sysScale > 0) {
+        contextOptions.deviceScaleFactor = Math.min(Math.max(sysScale, 1), 4);
+      }
+      context = await this.browser.newContext(contextOptions);
       page = await context.newPage();
       if (!page) throw new Error("Failed to create page");
 

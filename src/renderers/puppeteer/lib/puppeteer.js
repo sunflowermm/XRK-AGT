@@ -208,7 +208,13 @@ export default class PuppeteerRenderer extends Renderer {
       page = await this.browser.newPage();
       if (!page) throw new Error("Failed to create page");
 
-      await page.setViewport(this.viewport);
+      // 单次渲染可覆盖设备像素比（如帮助页高清截图），sys.scale 建议 1–4
+      const sysScale = Number(data.sys?.scale);
+      const viewport = { ...this.viewport };
+      if (Number.isFinite(sysScale) && sysScale > 0) {
+        viewport.deviceScaleFactor = Math.min(Math.max(sysScale, 1), 4);
+      }
+      await page.setViewport(viewport);
 
       const gotoOpts = { timeout: this.puppeteerTimeout, waitUntil: "load", ...data.pageGotoParams };
       await page.goto(Renderer.toFileUrl(filePath), gotoOpts);

@@ -14,6 +14,8 @@ export class Help extends plugin {
       saveId: `help_${Date.now()}`,
       imgType: 'png',
       quality: 100,
+      /** 渲染器按设备像素比截图，提高文字/边框清晰度（1–4，过大易占内存） */
+      sys: { scale: 3 },
       title: 'XRK-AGT 帮助',
       subtitle: '常用指令速查 · 按任务分组',
       highlight: '提示：先看「常用」与「设备 / Web」，再按需使用高级命令。',
