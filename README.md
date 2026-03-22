@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D24.13.0-brightgreen.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Docker-blue.svg)](https://github.com/sunflowermm/XRK-AGT)
-[![Version](https://img.shields.io/badge/version-1.0.5-orange.svg)](https://github.com/sunflowermm/XRK-AGT)
+[![Version](https://img.shields.io/badge/version-2.0.0-orange.svg)](https://github.com/sunflowermm/XRK-AGT)
 [![GitHub Repo stars](https://img.shields.io/github/stars/sunflowermm/XRK-AGT?style=social)](https://github.com/sunflowermm/XRK-AGT/stargazers)
 
 </div>
