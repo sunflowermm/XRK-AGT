@@ -70,9 +70,7 @@ export class update extends plugin {
         }
       }
 
-      if (isUp) {
-        setTimeout(() => this.restart(), 2000)
-      }
+      this._scheduleRestartIfUpdated(isUp)
     } catch (error) {
       logger.error(`更新失败: ${error.message}`, error)
       await this.reply(`更新失败: ${error.message}`)
@@ -239,15 +237,13 @@ export class update extends plugin {
       }
     }
 
-    if (isUp) {
-      setTimeout(() => this.restart(), 2000)
-    }
-    
+    this._scheduleRestartIfUpdated(isUp)
     return true
   }
 
-  restart() {
-    new Restart(this.e).restart()
+  /** 有拉取到新代码时延迟重启，逻辑只保留一处 */
+  _scheduleRestartIfUpdated(didUpdate) {
+    if (didUpdate) setTimeout(() => new Restart(this.e).restart(), 2000)
   }
 
   async getLog(cwd = '.', displayName = '', oldCommitId = null) {

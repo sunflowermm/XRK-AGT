@@ -2,6 +2,7 @@ import os from 'os'
 import moment from 'moment'
 import * as si from 'systeminformation'
 import cfg from '#infrastructure/config/config.js'
+import PluginsLoader from '#infrastructure/plugins/loader.js'
 
 // 模块级配置
 let showNetworkInfo = true
@@ -85,9 +86,8 @@ export class stattools extends plugin {
         : (time.uptime || os.uptime())
       const botRuntime = this.formatTime(runtimeSeconds)
       
-      const loader = (await import('#infrastructure/plugins/loader.js')).default
-      const pluginCount = loader.priority.length + loader.extended.length
-      const taskCount = loader.task.length
+      const pluginCount = PluginsLoader.priority.length + PluginsLoader.extended.length
+      const taskCount = PluginsLoader.task.length
 
       // Node进程信息
       const nodeUsage = process.memoryUsage()

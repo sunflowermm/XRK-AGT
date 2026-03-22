@@ -8,9 +8,9 @@ export default class OneBotEvent extends EventListenerBase {
 
   async init() {
     const bot = this.bot || Bot
-    bot.on('onebot.message', (e) => this.handleEvent(e))
-    bot.on('onebot.notice', (e) => this.handleEvent(e))
-    bot.on('onebot.request', (e) => this.handleEvent(e))
+    for (const t of ['message', 'notice', 'request']) {
+      bot.on(`onebot.${t}`, (e) => this.handleEvent(e))
+    }
   }
 
   /** 前置校验与标记，标准化由 loader 统一执行 */

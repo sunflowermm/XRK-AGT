@@ -16,10 +16,10 @@ export class MusicPlugin extends plugin {
     })
   }
 
-  async searchMusic(e) {
-    const keyword = (e.msg || '').replace(/^#点歌\s*/, '').trim()
+  async searchMusic() {
+    const keyword = (this.e.msg || '').replace(/^#点歌\s*/, '').trim()
     if (!keyword) {
-      await e.reply('请输入歌曲名，例：#点歌青花瓷')
+      await this.reply('请输入歌曲名，例：#点歌青花瓷')
       return false
     }
 
@@ -29,18 +29,18 @@ export class MusicPlugin extends plugin {
       const data = await res.json()
       const songs = data.result?.songs
       if (!songs?.length) {
-        await e.reply('未找到相关歌曲，换关键词试试')
+        await this.reply('未找到相关歌曲，换关键词试试')
         return false
       }
 
       const lines = songs.map((s, i) => `${i + 1}. ${s.name} - ${s.artists.map(a => a.name).join('、')}`)
-      e._musicSearchResults = songs
+      this.e._musicSearchResults = songs
       this.setContext('musicChooseContext', false, 60, '选择超时已取消')
       await this.reply(['搜索结果：', ...lines, '回复数字选择'].join('\n'))
       return true
     } catch (err) {
       logger.error(`点歌搜索失败: ${err.message}`)
-      await e.reply('点歌失败，请稍后再试')
+      await this.reply('点歌失败，请稍后再试')
       return false
     }
   }

@@ -20,20 +20,26 @@ export class Restart extends plugin {
   async init() {
     if (Restart._ackDone) return
     Restart._ackDone = true
-    Bot.on('device.online', (d) => d?.device_id && Restart._sendRestartAck(d.device_id))
-    Bot.on('ready', (d) => (d?.self_id ?? d?.uin) && Restart._sendRestartAck(d.self_id ?? d.uin))
-    setTimeout(() => (Bot.uin || []).forEach((uin) => Restart._sendRestartAck(uin)), 5000)
+    const ack = (uid) => uid && Restart._sendRestartAck(uid)
+    Bot.on('device.online', (d) => ack(d?.device_id))
+    Bot.on('ready', (d) => ack(d?.self_id ?? d?.uin))
+    setTimeout(() => (Bot.uin || []).forEach(ack), 5000)
     logger.mark('[重启] 已注册重连/就绪回复耗时')
   }
 
-  static async _sendRestartAck(uid) {
-    if (!uid || !redis?.get) return
+  /** 单次 MULTI：GET+DEL 原子，避免 ready / device.online 并发双读 */
+  static async _popRestartPayload(uid) {
     const key = `${RESTART_KEY}:${uid}`
+    const replies = await redis.multi().get(key).del(key).exec().catch(() => null)
+    return replies?.[0] ?? null
+  }
+
+  static async _sendRestartAck(uid) {
+    if (!uid || !redis) return
     try {
-      const raw = await redis.get(key)
+      const raw = await Restart._popRestartPayload(uid)
       if (!raw) return
       const d = JSON.parse(raw)
-      await redis.del(key)
       const msg = `重启完成，耗时 ${((Date.now() - (d.time || 0)) / 1000).toFixed(1)} 秒`
       const bot = Bot[uid]
       let sent = false
