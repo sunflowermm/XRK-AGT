@@ -21,7 +21,7 @@
 
 XRK-AGT 是向日葵工作室基于 **Node.js 24.13** 打造的多平台、多Tasker、工作流驱动型智能体平台，采用清晰的分层架构设计，支持：
 
-- **多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
+- **多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker；更多生态项目见 [AGT-Cores-Tools-Index](https://github.com/sunflowermm/AGT-Cores-Tools-Index)（含 [核心工具索引](https://github.com/sunflowermm/AGT-Cores-Tools-Index/blob/main/Core-Tools.md)）
 - **插件工作流**：指令插件 + AI 工作流 (`AIStream`)
 - **Web 与 HTTP/API 服务**：内置 Web 控制台 + REST API + WebSocket
 - **HTTP业务层**：重定向、CDN支持、反向代理增强（负载均衡、健康检查）
@@ -589,4 +589,4 @@ flowchart TB
 
 ---
 
-*最后更新：2026-02-06*
+*最后更新：2026-03-22*

@@ -265,11 +265,12 @@ flowchart TB
 ## 相关资源
 
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 项目整体架构说明
+- **[XRK-AGT 生态索引（AGT-Cores-Tools-Index）](https://github.com/sunflowermm/AGT-Cores-Tools-Index)** - 官方导航仓库（含 [核心工具与通用组件索引](https://github.com/sunflowermm/AGT-Cores-Tools-Index/blob/main/Core-Tools.md) 等，以该仓库为准）
 - **[GitHub 仓库](https://github.com/sunflowermm/XRK-AGT)** - 源代码仓库
 - **[Gitee 仓库](https://gitee.com/xrkseek/XRK-AGT)** - 国内镜像仓库
 - **[GitCode 仓库](https://gitcode.com/Xrkseek/XRK-AGT)** - 国内镜像仓库
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-03-22*
 

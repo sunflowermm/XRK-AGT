@@ -31,8 +31,8 @@
     <img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="130" height="130" style="margin:8px;">
     <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="130" height="130" style="margin:8px;">
     <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin:8px;">
-    <img src="resources/mdimg/河北工程大学-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin:8px;">
-    <img src="resources/mdimg/河北经贸大学-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin:8px;">
+    <img src="resources/mdimg/河北工程大学-logo-2048px.png" alt="河北工程大学" width="130" height="130" style="margin:8px;">
+    <img src="resources/mdimg/河北经贸大学-logo-2048px.png" alt="河北经贸大学" width="130" height="130" style="margin:8px;">
   </p>
 </div>
 
@@ -312,6 +312,7 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可在 Cursor 等 AI 编�
 
 | 模块 | 文档 |
 |------|------|
+| 生态索引 | [AGT-Cores-Tools-Index](https://github.com/sunflowermm/AGT-Cores-Tools-Index)（[核心工具索引](https://github.com/sunflowermm/AGT-Cores-Tools-Index/blob/main/Core-Tools.md) 等，以该仓库为准） |
 | 概览与运行 | [项目概览](PROJECT_OVERVIEW.md)、[Bot 主类文档](docs/bot.md)、[Server 服务器架构文档](docs/server.md)、[Docker 部署指南](docs/docker.md) |
 | system-Core | [system-Core 特性文档](docs/system-core.md) ⭐ - 内置模块完整说明（10个HTTP API、6个工作流、4个Tasker、Web控制台） |
 | 任务与事件 | [Tasker 底层规范](docs/tasker-base-spec.md)、[OneBotv11 Tasker 文档](docs/tasker-onebotv11.md)、[Tasker 加载器文档](docs/tasker-loader.md)、[事件系统标准化文档](docs/事件系统标准化文档.md)（包含事件监听器开发指南） |
@@ -377,4 +378,4 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-03-22*
