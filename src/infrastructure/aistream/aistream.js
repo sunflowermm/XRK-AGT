@@ -6,6 +6,7 @@ import MemoryManager from '#infrastructure/aistream/memory-manager.js';
 import PromptEngine from '#infrastructure/aistream/prompt-engine.js';
 import MonitorService from '#infrastructure/aistream/monitor-service.js';
 import { iterateSSE } from '#utils/llm/sse-utils.js';
+import { appendAgentWorkspaceToPrompt } from '#utils/agent-workspace.js';
 
 export default class AIStream {
   /**
@@ -505,6 +506,16 @@ export default class AIStream {
     return '';
   }
 
+  /**
+   * 在 system 文案末尾注入工作区上下文（AGENT(S).md、.cursor/rules、SKILL.md、subagents），受 aistream.agentWorkspace 控制。
+   * 覆盖 buildChatContext 的子类若自行组装 system，应调用本方法以保持一致行为。
+   * @param {string} text
+   * @returns {Promise<string>}
+   */
+  async finalizeSystemPromptContent(text) {
+    if (text == null || text === '') return text;
+    return appendAgentWorkspaceToPrompt(text, getAistreamConfigOptional(), this.name);
+  }
 
   /**
    * 构建聊天上下文
@@ -521,11 +532,13 @@ export default class AIStream {
         systemPrompt,
         userQuestion: typeof question === 'string' ? question : question?.text || question?.content || ''
       });
-      return [{ role: 'system', content: rendered }];
+      const content = await this.finalizeSystemPromptContent(rendered);
+      return [{ role: 'system', content }];
     }
 
     if (systemPrompt) {
-      return [{ role: 'system', content: systemPrompt }];
+      const content = await this.finalizeSystemPromptContent(systemPrompt);
+      return [{ role: 'system', content: content }];
     }
 
     return [];

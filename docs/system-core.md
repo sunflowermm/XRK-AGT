@@ -8,7 +8,7 @@
 system-Core 是 XRK-AGT 的内置核心模块，提供了开箱即用的完整功能集，包括：
 
 - ✅ **10个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、标准输入、数据编辑
-- ✅ **6个工作流**：聊天、桌面、工具、记忆、知识库、设备（共53个MCP工具）
+- ✅ **工作流**：以 `core/system-Core/stream/*.js` 为准（当前含 chat、desktop、tools、memory、database、web 等；MCP 工具数以代码注册为准）
 - ✅ **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
 - ✅ **Web控制台**：企业级管理界面，支持系统监控、API调试、配置管理
 
@@ -256,167 +256,102 @@ stdin 体系由 **Tasker + HTTP API + 增强插件** 共同组成：
 
 ## 工作流（Stream）
 
-system-Core 提供了6个工作流，共53个MCP工具：
+system-Core 工作流位于 **`core/system-Core/stream/*.js`**，由 **`StreamLoader`**（`src/infrastructure/aistream/loader.js`）扫描 **`core/*/stream`** 自动加载。  
+**工具数量以代码中 `registerMCPTool` 为准**；下列为当前仓库模块概览（不含其它 Core 包内工作流）。
 
 ```mermaid
 flowchart TB
-    subgraph Streams["🌊 工作流系统"]
-        Chat["💬 chat工作流<br/>24个MCP工具"]
-        Desktop["🖥️ desktop工作流<br/>17个MCP工具"]
-        Tools["🔧 tools工作流<br/>4个MCP工具"]
-        Memory["🧠 memory工作流<br/>4个MCP工具"]
-        Database["📚 database工作流<br/>4个MCP工具"]
-        Device["📱 device工作流<br/>设备AI交互"]
+    subgraph Streams["🌊 system-Core 工作流"]
+        Chat["💬 chat"]
+        Desktop["🖥️ desktop"]
+        Tools["🔧 tools"]
+        Memory["🧠 memory"]
+        Database["📚 database"]
+        Web["🌐 web"]
+        Browser["🧭 browser"]
     end
     
     style Streams fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
-    style Chat fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
-    style Desktop fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
-    style Tools fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
-    style Memory fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
-    style Database fill:#E0F2F1,stroke:#00695C,stroke-width:2px
-    style Device fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
 ```
+
+> **说明**：若仓库中不存在 `stream/device.js`，则不会加载 `device` 工作流；自定义部署可自行添加该文件（`.gitignore` 中已预留白名单条目）。
 
 ### 1. chat 工作流
 
 **文件**: `core/system-Core/stream/chat.js`  
 **优先级**: 10  
-**MCP工具数**: 24个
 
 **功能分类**：
-- **互动功能**：`at`、`poke`、`reply`、`emojiReaction`、`thumbUp`、`sign`
+- **互动**：`at`、`poke`、`reply`、`emojiReaction`、`thumbUp`、`sign`
 - **群管理**：`mute`/`unmute`、`muteAll`/`unmuteAll`、`setCard`、`setGroupName`
-- **权限管理**：`setAdmin`/`unsetAdmin`、`setTitle`、`kick`
-- **消息管理**：`setEssence`/`removeEssence`、`announce`、`recall`、`setGroupTodo`
-- **信息查询**：`getGroupInfoEx`、`getAtAllRemain`、`getBanList`
-
-**特性**：
-- ✅ 支持表情包和表情回应
-- ✅ 完整的群管理功能
-- ✅ 消息历史缓存（5分钟自动清理）
+- **权限**：`setAdmin`/`unsetAdmin`、`setTitle`、`kick`
+- **消息**：`setEssence`/`removeEssence`、`announce`、`recall`、`setGroupTodo`
+- **查询**：`getGroupInfoEx`、`getAtAllRemain`、`getBanList`、`getFriendList`、`getGroupMembers` 等
 
 **使用示例**：
 ```javascript
-// 在插件中调用 chat 工作流的 MCP 工具
 const stream = await this.getStream('chat');
-// 通过 MCP 工具调用群管理功能
-// 例如：at、mute、setAdmin 等
 ```
 
 ### 2. desktop 工作流
 
 **文件**: `core/system-Core/stream/desktop.js`  
 **优先级**: 100  
-**MCP工具数**: 17个
 
 **功能分类**：
-- **系统操作**：`show_desktop`、`open_system_tool`、`lock_screen`、`power_control`
-- **文件操作**：`create_folder`、`open_explorer`、`open_application`
-- **网络操作**：`open_browser`
-- **命令执行**：`execute_powershell`、`cleanup_processes`
-- **信息读取**：`screenshot`、`system_info`、`disk_space`、`list_desktop_files`
-- **文档生成**：`create_word_document`、`create_excel_document`
-- **数据查询**：`stock_quote`
+- **系统**：`show_desktop`、`open_system_tool`、`lock_screen`、`power_control`（实现随平台选用 Shell/AppleScript/systemd 等，详见工具描述）
+- **文件/资源管理器**：`create_folder`、`open_explorer`、`open_application`、`open_path`
+- **网络**：`open_browser`
+- **其它**：`cleanup_processes`（清理 `BaseTools` 登记的 PID：Windows `taskkill`，Unix `SIGTERM`）、`screenshot`、`system_info`、`disk_space`、`get_time`
+- **Office**：`create_word_document`、`create_excel_document`
+- **数据**：`stock_quote`（新浪沪深行情源，6 位代码）
+- **剪贴板**：`read_clipboard`、`write_clipboard`
 
-**特性**：
-- Windows系统优化
-- 自动进程清理（每30秒）
-- 工作区：桌面目录
+长时间命令执行请优先使用 **`tools.run`**，而非杜撰的 `execute_powershell` 工具名。
 
 **使用示例**：
 ```javascript
-// 在插件中调用 desktop 工作流
 const stream = await this.getStream('desktop');
-// 通过 MCP 工具调用桌面操作
-// 例如：screenshot、open_browser、execute_powershell 等
 ```
 
 ### 3. tools 工作流
 
 **文件**: `core/system-Core/stream/tools.js`  
 **优先级**: 200  
-**MCP工具数**: 4个
 
-**工具**：
-- `read` - 读取文件
-- `grep` - 搜索文本
-- `write` - 写入文件
-- `run` - 执行命令
+**工具**：`read`、`grep`、`write`、`create_file`、`delete_file`、`modify_file`、`list_files`、`run`  
 
-**特性**：
-- 基础工具集
-- 工作区：桌面目录
-- 文件搜索和自动匹配
+**配置**：`aistream.tools.file`（`workspace`、`maxReadChars`、`grepMaxResults`、`runEnabled`、`runTimeoutMs`、`maxCommandOutputChars`）。`run` 在 Windows 与 Unix 下均可使用（Unix 为 `/bin/sh -lc`）。
 
 ### 4. memory 工作流
 
 **文件**: `core/system-Core/stream/memory.js`  
-**优先级**: 1  
-**MCP工具数**: 4个
-
-**工具**：
-- `query_memory` - 查询记忆
-- `save_memory` - 保存记忆
-- `list_memories` - 列出记忆
-- `delete_memory` - 删除记忆
-
-**特性**：
-- 长期记忆存储
-- 向量检索支持
-- 记忆目录：`~/.xrk/memory`
-
-**使用场景**：
-- 保存用户偏好和习惯
-- 记录重要对话内容
-- 跨会话信息持久化
-
-**使用示例**：
-```javascript
-// 在插件中调用 memory 工作流
-const stream = await this.getStream('memory');
-// 通过 MCP 工具管理长期记忆
-// query_memory、save_memory、list_memories、delete_memory
-```
+**工具**：`query_memory`、`save_memory`、`list_memories`、`delete_memory`  
+**目录**：`~/.xrk/memory`
 
 ### 5. database 工作流
 
 **文件**: `core/system-Core/stream/database.js`  
-**MCP工具数**: 4个
+**工具**：`query_knowledge`、`save_knowledge`、`list_knowledge`、`delete_knowledge`
 
-**工具**：
-- `query_knowledge` - 查询知识
-- `save_knowledge` - 保存知识
-- `list_knowledge` - 列出知识库
-- `delete_knowledge` - 删除知识
+### 6. web 工作流
 
-**特性**：
-- 知识库管理
-- 关键词搜索
-- 向量检索支持
+**文件**: `core/system-Core/stream/web.js`  
+**实现库**：`core/system-Core/lib/openclaw-web/`（OpenClaw 同源 `web_fetch` 行为）  
+**工具**：`web_fetch`（配置：`aistream.tools.web.fetch`，含可选 Firecrawl）
 
-**使用场景**：
-- 企业知识库管理
-- 文档检索和问答
-- 专业知识存储
+### 7. browser 工作流（受控浏览器）
 
-**使用示例**：
-```javascript
-// 在插件中调用 database 工作流
-const stream = await this.getStream('database');
-// 通过 MCP 工具管理知识库
-// query_knowledge、save_knowledge、list_knowledge、delete_knowledge
-```
+**文件**: `core/system-Core/stream/browser.js`  
+**实现库**：`core/system-Core/lib/agent-browser/`（`PlaywrightAgentSession` + `nav-ssrf`）  
+**配置**：`aistream.tools.agentBrowser`（`enabled`、`headless`、`browserType`、`executablePath`、超时、`maxTextChars`、`screenshotMaxBytes`、SSRF：`allowPrivateNetwork` / `dangerouslyAllowPrivateNetwork`）  
+**MCP 工具**：`browser_status`、`browser_start`、`browser_goto`、`browser_page_text`、`browser_screenshot`、`browser_close`  
 
-### 6. device 工作流
+与 **`web_fetch`** 分工：需要 **执行页面 JS、渲染后 DOM** → 用本工作流；仅需 **HTTP 拉取与 Readability** → 用 `web` 工作流。
 
-**文件**: `core/system-Core/stream/device.js`  
-**优先级**: 50
+### 8. device 工作流（可选）
 
-**特性**：
-- 设备AI交互
-- ASR/TTS集成
-- 连续对话支持
+若存在 **`core/system-Core/stream/device.js`**，则由同一加载器注册；默认克隆可能不含此文件。设备 HTTP 入口仍为 `core/system-Core/http/device.js`，与工作流是否分离需以仓库为准。
 
 ---
 
@@ -496,7 +431,7 @@ flowchart LR
   - 使用 `accept(e)` 做前置过滤（如别名、权限、来源筛选）
   - 支持按优先级分组执行、默认处理器与上下文回调
 - **跨模块协作**：
-  - 插件通过 `getStream()` 调用 AI 工作流（chat/desktop/tools/memory/database/device）
+  - 插件通过 `getStream()` 调用 AI 工作流（如 chat/desktop/tools/memory/database/web，以已加载的 `stream` 为准）
   - 通过事件订阅机制与其他插件/Tasker 协同（详见 `plugins-loader.md` 与 `事件系统标准化文档`）
 - **运行时能力**：
   - 冷却 / 节流（按用户、群、设备维度）
@@ -747,7 +682,7 @@ system-Core 提供了完整的配置管理功能：
 system-Core 是 XRK-AGT 的核心模块，提供了：
 
 - ✅ **10个HTTP API模块**：覆盖系统管理、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、标准输入、数据编辑
-- ✅ **6个工作流**：53个MCP工具，覆盖聊天、桌面、工具、记忆、知识库、设备
+- ✅ **工作流**：`core/system-Core/stream` 下脚本自动加载，MCP 工具以注册为准（含 `web` 等）
 - ✅ **4个Tasker**：支持OneBotv11、GSUIDCORE、QBQBot、stdin
 - ✅ **Web控制台**：企业级管理界面，支持系统监控、API调试、配置管理
 - ✅ **完整配置系统**：支持多种配置类型，Schema验证，可视化编辑

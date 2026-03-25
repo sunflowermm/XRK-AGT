@@ -57,6 +57,8 @@ stream/**
 !stream/memory.js
 !stream/tools.js
 !stream/database.js
+!stream/web.js
+!stream/browser.js
 
 !commonconfig
 commonconfig/**
@@ -82,3 +84,8 @@ commonconfig/**
 *.map
 
 !www/
+!lib/
+!lib/agent-browser/
+!lib/agent-browser/*
+!lib/openclaw-web/
+!lib/openclaw-web/*

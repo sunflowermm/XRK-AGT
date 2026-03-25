@@ -22,6 +22,11 @@ description: 当你需要新增/调整配置字段、确保 YAML 与 commonconfi
 3. 客户端/工厂代码是否真正消费这些字段（避免“写了 schema 但没用”）
 4. 若 system-Core 的 `.gitignore` 做了白名单：新增 commonconfig 文件要加入白名单
 
+### aistream 专项
+
+- 运行时：`data/server_bots/{port}/aistream.yaml`（`cfg.aistream`）；模板：`config/default_config/aistream.yaml`。
+- 常见段落：`embedding`、`mcp`、`agentWorkspace`、`tools`（`file`→ToolsStream、`web.fetch`→WebStream、`agentBrowser`→BrowserStream）；desktop 工作流工具在 `desktop.js` 内实现，无 `tools.desktop` YAML。
+
 ## 权威入口
 
 - 项目概览：`PROJECT_OVERVIEW.md`

@@ -1,32 +1,39 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import path from 'path';
 import os from 'os';
 import { BaseTools } from '#utils/base-tools.js';
+import { getDefaultDesktopDirSync } from '#utils/user-dirs.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 const IS_WINDOWS = process.platform === 'win32';
 
+function resolveToolsWorkspace(raw) {
+  if (raw == null || String(raw).trim() === '') {
+    return getDefaultDesktopDirSync();
+  }
+  let w = String(raw).trim();
+  if (w.startsWith('~')) {
+    w = path.join(os.homedir(), w.slice(1).replace(/^[\\/]/, '') || '');
+    return path.normalize(w);
+  }
+  if (path.isAbsolute(w)) return path.normalize(w);
+  return path.resolve(process.cwd(), w);
+}
+
 /**
- * 基础工具工作流
- * 
- * 所有功能都通过 MCP 工具提供：
- * - read（读取文件）
- * - grep（搜索文本）
- * - write（写入文件，覆盖）
- * - create_file（创建新文件）
- * - delete_file（删除文件）
- * - modify_file（修改文件，支持替换/追加/插入）
- * - list_files（列出目录文件）
- * - run（执行命令）
+ * 基础工具工作流（配置：aistream.tools.file）
+ *
+ * MCP：read / grep / write / create_file / delete_file / modify_file / list_files / run
  */
 export default class ToolsStream extends AIStream {
   constructor() {
     super({
       name: 'tools',
       description: '基础工具工作流（read/grep/write/run）',
-      version: '1.0.5',
+      version: '1.0.6',
       author: 'XRK',
       priority: 200, // 高优先级，基础工具
       config: {
@@ -37,12 +44,39 @@ export default class ToolsStream extends AIStream {
       }
     });
 
-    this.workspace = path.join(os.homedir(), 'Desktop');
-    
+    this.workspace = getDefaultDesktopDirSync();
+    this.tools = new BaseTools(this.workspace);
+    this.fileToolsCfg = {};
+  }
+
+  applyFileToolsConfig() {
+    const fileCfg = getAistreamConfigOptional().tools?.file ?? {};
+    this.fileToolsCfg = {
+      maxReadChars:
+        typeof fileCfg.maxReadChars === 'number' && Number.isFinite(fileCfg.maxReadChars)
+          ? Math.max(1000, Math.floor(fileCfg.maxReadChars))
+          : 500_000,
+      grepMaxResults:
+        typeof fileCfg.grepMaxResults === 'number' && Number.isFinite(fileCfg.grepMaxResults)
+          ? Math.min(500, Math.max(1, Math.floor(fileCfg.grepMaxResults)))
+          : 100,
+      runEnabled: fileCfg.runEnabled !== false,
+      runTimeoutMs:
+        typeof fileCfg.runTimeoutMs === 'number' && Number.isFinite(fileCfg.runTimeoutMs)
+          ? Math.max(1000, Math.floor(fileCfg.runTimeoutMs))
+          : 120_000,
+      maxCommandOutputChars:
+        typeof fileCfg.maxCommandOutputChars === 'number' &&
+        Number.isFinite(fileCfg.maxCommandOutputChars)
+          ? Math.max(1000, Math.floor(fileCfg.maxCommandOutputChars))
+          : 200_000
+    };
+    this.workspace = resolveToolsWorkspace(fileCfg.workspace);
     this.tools = new BaseTools(this.workspace);
   }
 
   async init() {
+    this.applyFileToolsConfig();
     await super.init();
     this.registerAllFunctions();
   }
@@ -71,13 +105,23 @@ export default class ToolsStream extends AIStream {
         }
 
         if (result.success) {
+          const maxChars = this.fileToolsCfg.maxReadChars ?? 500_000;
+          let content = result.content;
+          let truncated = false;
+          if (typeof content === 'string' && content.length > maxChars) {
+            content = content.slice(0, maxChars);
+            truncated = true;
+          }
           return {
             success: true,
             data: {
               filePath: result.path,
               fileName: path.basename(result.path),
-              content: result.content,
-              size: result.content.length
+              content,
+              size: result.content.length,
+              returnedChars: typeof content === 'string' ? content.length : 0,
+              truncated,
+              maxReadChars: maxChars
             }
           };
         }
@@ -110,7 +154,7 @@ export default class ToolsStream extends AIStream {
         const result = await this.tools.grep(pattern, filePath, {
           caseSensitive: false,
           lineNumbers: true,
-          maxResults: 50
+          maxResults: this.fileToolsCfg.grepMaxResults ?? 100
         });
 
         if (result.success) {
@@ -367,20 +411,21 @@ export default class ToolsStream extends AIStream {
     });
 
     this.registerMCPTool('run', {
-      description: '执行系统命令。在工作区目录下执行，支持 Windows CMD 和 PowerShell 命令，仅 Windows 系统支持。',
+      description:
+        '在工作区目录下执行 shell 命令。Windows：CMD 或 PowerShell（Get-/Set- 等前缀走 PowerShell）；Linux/macOS：/bin/sh -lc。受 aistream.tools.file.runEnabled / runTimeoutMs 约束。',
       inputSchema: {
         type: 'object',
         properties: {
           command: {
             type: 'string',
-            description: '要执行的命令（CMD 或 PowerShell）'
+            description: '要执行的命令'
           }
         },
         required: ['command']
       },
       handler: async (args = {}, context = {}) => {
-        if (!IS_WINDOWS) {
-          return { success: false, error: 'run命令仅在Windows上支持' };
+        if (!this.fileToolsCfg.runEnabled) {
+          return { success: false, error: 'run 已在 aistream.tools.file.runEnabled 中关闭' };
         }
 
         const { command } = args;
@@ -389,13 +434,24 @@ export default class ToolsStream extends AIStream {
         }
 
         try {
-          const output = await this.executeCommand(command);
+          const { output, stderr } = await this.executeCommand(command);
+          const maxOut = this.fileToolsCfg.maxCommandOutputChars ?? 200_000;
+          let out = output;
+          let truncated = false;
+          if (out.length > maxOut) {
+            out = out.slice(0, maxOut);
+            truncated = true;
+          }
           return {
             success: true,
             data: {
               command,
-              output,
-              message: '命令执行成功'
+              output: out,
+              stderr: stderr ? String(stderr).slice(0, maxOut) : '',
+              message: '命令执行完成',
+              truncated,
+              maxCommandOutputChars: maxOut,
+              platform: process.platform
             }
           };
         } catch (err) {
@@ -421,37 +477,38 @@ export default class ToolsStream extends AIStream {
   }
 
   async executeCommand(command) {
+    const timeout = this.fileToolsCfg.runTimeoutMs ?? 120_000;
     const fullCommand = this.buildFullCommand(command, this.workspace);
-    const { stdout } = await execAsync(fullCommand, {
+    const opts = {
       maxBuffer: 10 * 1024 * 1024,
       cwd: this.workspace,
-      shell: IS_WINDOWS ? 'cmd.exe' : undefined
-    });
-    return (stdout ?? '').trim();
+      timeout,
+      env: { ...process.env }
+    };
+    if (IS_WINDOWS) {
+      opts.shell = 'cmd.exe';
+    } else {
+      opts.shell = '/bin/sh';
+    }
+    const { stdout, stderr } = await execAsync(fullCommand, opts);
+    return { output: (stdout ?? '').trim(), stderr: (stderr ?? '').trim() };
   }
 
   buildFullCommand(command, workspace) {
     const isPowerShellCmd = /^(Get-|Set-|New-|Remove-|Test-|Invoke-|Start-|Stop-)/i.test(command);
     if (IS_WINDOWS) {
+      const ws = workspace.replace(/'/g, "''");
       return isPowerShellCmd
-        ? `powershell -NoProfile -Command "Set-Location '${workspace}'; ${command.replace(/"/g, '`"')}"`
+        ? `powershell -NoProfile -Command "Set-Location '${ws}'; ${command.replace(/"/g, '`"')}"`
         : `cd /d "${workspace}" && ${command}`;
     }
-    return `cd "${workspace}" && ${command}`;
+    const ws = workspace.replace(/'/g, `'\\''`);
+    return `cd '${ws}' && ${command}`;
   }
 
-
   buildSystemPrompt() {
-    return `【基础工具说明】
-所有功能都通过MCP工具调用协议提供，包括：
-- read：读取文件内容
-- grep：在文件中搜索文本
-- write：写入文件内容（覆盖）
-- create_file：创建新文件
-- delete_file：删除文件
-- modify_file：修改文件内容（支持替换、追加、插入）
-- list_files：列出目录中的文件
-- run：执行命令（工作区：桌面）`;
+    const ws = this.workspace;
+    return `本工作流通过 MCP 提供文件与命令类工具（read/grep/write/create_file/delete_file/modify_file/list_files/run）。当前工作区：${ws}。read 受 maxReadChars 截断；run 受 aistream.tools.file 开关与超时约束。勿伪造命令输出。`;
   }
 }
 

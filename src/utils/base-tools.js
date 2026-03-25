@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import os from 'os';
+import { getDefaultDesktopDirSync } from '#utils/user-dirs.js';
 
 const execAsync = promisify(exec);
 const IS_WINDOWS = process.platform === 'win32';
@@ -13,9 +13,7 @@ const IS_WINDOWS = process.platform === 'win32';
  */
 export class BaseTools {
   constructor(workspace = null) {
-    this.workspace = workspace || (IS_WINDOWS 
-      ? path.join(os.homedir(), 'Desktop')
-      : path.join(os.homedir(), 'Desktop'));
+    this.workspace = workspace || getDefaultDesktopDirSync();
     this.processRegistry = new Set(); // 进程注册表
   }
 
@@ -231,16 +229,21 @@ export class BaseTools {
    * 清理已注册的进程
    */
   async cleanupProcesses() {
-    if (!IS_WINDOWS) return { success: true, killed: [] };
-
     const killed = [];
     for (const pid of this.processRegistry) {
       try {
-        await execAsync(`taskkill /F /PID ${pid}`, { timeout: 5000 });
+        if (IS_WINDOWS) {
+          await execAsync(`taskkill /F /PID ${pid}`, { timeout: 5000 });
+        } else {
+          try {
+            process.kill(pid, 'SIGTERM');
+          } catch {
+            /* ESRCH 等 */
+          }
+        }
         killed.push(pid);
         this.processRegistry.delete(pid);
       } catch {
-        // 进程可能已结束
         this.processRegistry.delete(pid);
       }
     }
@@ -252,7 +255,9 @@ export class BaseTools {
    * 监控并清理无用进程（自动检测）
    */
   async autoCleanupProcesses(excludePatterns = []) {
-    if (!IS_WINDOWS) return { success: true, killed: [] };
+    if (!IS_WINDOWS) {
+      return { success: true, killed: [], note: '非 Windows：不扫描系统进程列表；请用 cleanupProcesses 清理已登记 PID' };
+    }
 
     try {
       const { stdout } = await execAsync('tasklist /FO CSV /NH', { encoding: 'utf8' });

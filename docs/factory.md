@@ -328,14 +328,14 @@ class TTSClient {
 
 ### 工厂配置位置
 
-工厂配置分为两个层级：
+与工厂相关的 YAML 均在**当前 Bot 端口目录** `data/server_bots/{port}/` 下（端口由运行时 `cfg` 绑定，见 `src/infrastructure/config/config.js` 中 `getServerConfig` 与 `cfg.aistream`）：
 
-1. **全局配置**（`data/server_bots/aistream.yaml`）：选择使用的工厂提供商
-2. **提供商配置**（`data/server_bots/{port}/*.yaml`）：各提供商的具体配置
+1. **`aistream.yaml`**：`llm.Provider` / `asr.Provider` / `tts.Provider` 等选择默认工厂提供商；另含工作流、MCP、子服务端等段（详见 `docs/aistream.md`）。
+2. **各提供商配置文件**（如 `volcengine_llm.yaml`）：API Key、模型名等具体参数。
 
 ### 配置示例
 
-#### aistream.yaml（全局配置）
+#### aistream.yaml（端口目录内，非 `server_bots` 根目录）
 
 ```yaml
 # LLM 工厂运营商选择
@@ -452,8 +452,8 @@ export default class MyCustomLLMClient {
 
 ### 在配置中启用新提供商
 
-1. 在 `aistream.yaml` 中设置新提供商为默认值
-2. 创建对应的配置文件（如 `myprovider_llm.yaml`）
+1. 在对应端口目录的 `data/server_bots/{port}/aistream.yaml` 中将 `llm.Provider`（或 asr/tts）设为新提供商 key
+2. 在同一端口目录创建提供商配置文件（如 `myprovider_llm.yaml`）
 3. 在配置管理界面中配置 API Key 等参数
 
 ---
@@ -725,7 +725,7 @@ try {
 
 ### Q: 如何切换 LLM 提供商？
 
-A: 修改 `data/server_bots/aistream.yaml` 中的 `llm.Provider` 字段，然后重启服务或重新加载配置。
+A: 修改**当前端口**下 `data/server_bots/{port}/aistream.yaml` 中的 `llm.Provider` 字段，然后重启服务或重新加载配置。
 
 ### Q: 如何添加新的 LLM 提供商？
 
@@ -733,7 +733,7 @@ A:
 1. 实现新的 LLM 客户端类（继承接口规范）
 2. 使用 `LLMFactory.registerProvider()` 注册提供商
 3. 创建对应的配置文件（如 `myprovider_llm.yaml`）
-4. 在 `aistream.yaml` 中设置新提供商
+4. 在该端口目录的 `aistream.yaml` 中将对应 `*.Provider` 设为新提供商
 
 ### Q: 如何查看当前支持的所有提供商？
 

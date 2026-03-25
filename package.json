@@ -33,6 +33,8 @@
     "#oicq": "./src/modules/oicq/index.js"
   },
   "dependencies": {
+    "@mariozechner/pi-coding-agent": "0.61.1",
+    "@mozilla/readability": "^0.6.0",
     "@nut-tree/nut-js": "^4.2.0",
     "art-template": "^4.13.2",
     "axios": "^1.13.4",
@@ -54,6 +56,7 @@
     "icqq": "^0.6.10",
     "image-size": "^2.0.2",
     "inquirer": "^8.2.5",
+    "linkedom": "^0.18.12",
     "lodash": "^4.17.21",
     "md5": "^2.3.0",
     "mime": "^4.0.7",

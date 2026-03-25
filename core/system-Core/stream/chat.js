@@ -4,7 +4,6 @@ import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { PARSEABLE_EMOTIONS } from '#utils/emotion-utils.js';
-
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 
 // 表情回应映射
@@ -23,20 +22,7 @@ function randomRange(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-/**
- * 聊天工作流
- * 
- * 功能分类：
- * - MCP工具（返回JSON）：getGroupInfoEx（获取群信息ex）、getAtAllRemain（获取@全体剩余）、getBanList（获取禁言列表）
- * 
- *   - 互动功能：poke（戳一戳）、emojiReaction（表情回应）、thumbUp（点赞）、sign（签到）
- *   - 群管理：mute/unmute（禁言/解禁）、muteAll/unmuteAll（全员禁言）、setCard（改名片）、setGroupName（改群名）
- *   - 权限管理：setAdmin/unsetAdmin（设置/取消管理员）、setTitle（设置头衔）、kick（踢人）
- *   - 消息管理：setEssence/removeEssence（设置/取消精华）、announce（群公告）、recall（撤回）、setGroupTodo（群代办）
- *   - 消息格式：at（@某人）、reply（回复消息）
- * 
- * 支持表情包、群管理、表情回应等功能
- */
+/** 聊天工作流：群聊/互动/群管 MCP 工具 */
 export default class ChatStream extends AIStream {
   static emotionImages = {};
   static messageHistory = new Map();
@@ -147,27 +133,9 @@ export default class ChatStream extends AIStream {
     // 表情包（作为消息段的一部分，不在工具调用/函数解析中处理）
     // 表情包标记会在parseCQToSegments中解析，保持顺序
 
-    /**
-     * @某人
-     * 
-     * @description 在群聊中@指定用户。此工具仅执行@操作，不附带文本内容，文本内容由LLM正常回复。
-     * 
-     * @param {string} qq - 要@的用户QQ号（必填）
-     * 
-     * @returns {Object} 返回结果对象
-     * @returns {boolean} returns.success - 是否成功
-     * @returns {string} returns.message - 操作结果消息
-     * @returns {Object} returns.data - 数据对象
-     * @returns {string} returns.data.qq - 被@的用户QQ号
-     * @returns {string} returns.error - 失败时的错误信息
-     * 
-     * @example
-     * { qq: "123456789" }
-     * 
-     * @note 此功能仅在群聊环境中可用。如无特殊需要，不要对同一用户重复调用。
-     */
     this.registerMCPTool('at', {
-      description: '@群成员。在群聊中@指定用户，仅执行@操作，不附带文本内容。仅群聊环境可用。',
+      description:
+        '群聊中 @ 指定成员（仅发送 @ 段，正文仍由你生成）。参数 qq 为对方账号。非群聊不可用。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -192,7 +160,7 @@ export default class ChatStream extends AIStream {
           await context.e.reply([seg.at(qq)]);
           return {
             success: true,
-            message: `已在当前群聊中成功 @ 了 QQ=${qq} 的用户，如无特殊需要请不要再次对同一用户调用此工具。`,
+            message: `已 @ ${qq}`,
             data: { qq }
           };
         }, 200);
@@ -862,26 +830,8 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    /**
-     * 获取群的扩展详细信息
-     * 
-     * @description 获取当前群的扩展详细信息，包括更多群信息（如群等级、成员数上限等）。
-     * 
-     * @param {} 无需参数
-     * 
-     * @returns {Object} 返回结果对象
-     * @returns {boolean} returns.success - 是否成功
-     * @returns {Object} returns.data - 群的扩展信息对象
-     * @returns {string} returns.error - 失败时的错误信息
-     * 
-     * @example
-     * // 调用示例
-     * {}
-     * 
-     * @note 此功能仅在群聊环境中可用
-     */
     this.registerMCPTool('getGroupInfoEx', {
-      description: '获取群的扩展详细信息（包括更多群信息）。此功能仅在群聊中可用。',
+      description: '获取当前群扩展信息（如 getInfoEx）。仅群聊。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -1050,38 +1000,8 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // 获取当前群成员列表（包含QQ号、昵称、名片、角色、是否管理员/群主）
-    /**
-     * 获取群成员列表
-     * 
-     * @description 获取当前群的所有成员列表，包含QQ号、昵称、名片、角色、是否管理员/群主等信息。
-     * 
-     * @param {} 无需参数
-     * 
-     * @returns {Object} 返回结果对象
-     * @returns {boolean} returns.success - 是否成功
-     * @returns {Object} returns.data - 数据对象
-     * @returns {Array} returns.data.members - 成员列表，每个元素包含 { qq, nickname, card, role, is_owner, is_admin }
-     * @returns {string} returns.error - 失败时的错误信息
-     * 
-     * @example
-     * // 调用示例
-     * {}
-     * 
-     * // 返回示例
-     * {
-     *   success: true,
-     *   data: {
-     *     members: [
-     *       { qq: "123456789", nickname: "用户A", card: "名片", role: "owner", is_owner: true, is_admin: true }
-     *     ]
-     *   }
-     * }
-     * 
-     * @note 此功能仅在群聊环境中可用
-     */
     this.registerMCPTool('getGroupMembers', {
-      description: '获取群成员列表。返回当前群的所有成员列表，包含QQ号、昵称、名片、角色等信息。仅群聊环境可用。',
+      description: '列出当前群成员（qq、昵称、名片、角色等）。仅群聊。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -1269,40 +1189,38 @@ export default class ChatStream extends AIStream {
     const { e, question } = context;
     const persona =
       question?.persona ||
-      '你是在这个QQ群里的普通聊天助手，正常聊天、帮忙解决问题即可，不要刻意卖萌或重复固定话术。';
-    const botRole = question?.botRole || await this.getBotRole(e);
+      '你是一个对话助手：正常回答问题，语气自然简洁，不堆砌套话。';
     const dateStr = question?.dateStr || new Date().toLocaleString('zh-CN');
-    
     let embeddingHint = '';
     if (this.embeddingConfig?.enabled) {
-      embeddingHint = '\n💡 系统会自动检索相关历史对话（通过子服务端向量服务）\n';
+      embeddingHint = '\n（系统可能按历史/向量检索补充上下文）\n';
+    }
+    const toolHint =
+      '工具：以本请求下发的 MCP/Function 定义为准，按名称与参数调用；勿在正文中伪造协议或未执行的操作。';
+
+    if (!e) {
+      return this.finalizeSystemPromptContent(
+        `人设：${persona}\n时间：${dateStr}\n${embeddingHint}\n${toolHint}`
+      );
     }
 
+    const botRole = question?.botRole || (await this.getBotRole(e));
     const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot';
     const isMaster = e.isMaster === true;
-    
-    return `人设（最高优先级，请始终遵守）：${persona}
-身份：昵称=${botName}，QQ=${e.self_id}，群=${e.group_id}，角色=${botRole}${isMaster ? '（当前说话的是主人，可以稍微亲近一点，但不要过头）' : ''}
+    const selfId = e.self_id ?? '';
+    const userId = e.user_id ?? '';
+    const groupId = e.group_id ?? e.group?.group_id ?? '';
+
+    const core = `人设：${persona}
+身份：昵称=${botName}，机器人账号=${selfId}${groupId ? `，当前群=${groupId}` : ''}，群内角色=${botRole}${isMaster ? '（当前用户为配置中的主权限用户）' : ''}
 时间：${dateStr}
 ${embeddingHint}
-说话风格：
-- 正常聊天或解决问题即可，回答紧贴用户内容。
-- 语言口语化、简洁，不要堆太多表情或套话。
-- 听不懂用户想干嘛时，用一句话简单确认，不要连续追问很多句。
-工具使用（必须遵守权限和安全）：
-- 需要群管/互动（@、戳一戳、改名片、禁言、踢人、设管理员、群代办等）时，直接调用对应工具完成，不要在回复里写指令或协议。
-- 修改群名片（setCard）时：
-  · “把你自己改成 X”→ 修改机器人自己的名片（QQ=${e.self_id}）。
-  · 明确 @ 某人或给出 QQ 时→ 修改那个人的名片。
-  · “把我改成 X”→ 修改当前说话人的名片（QQ=${e.user_id}）。
-- 禁言/解禁/踢人/设管理员等操作：
-  · 只有在用户明确提出、且理由合理（如刷屏、骂人）时才考虑执行。
-  · 如果当前机器人不是管理员或群主，只能礼貌说明权限不足，不要假装执行成功。
-- 设置群代办（setGroupTodo）等对全群有影响的操作，只在用户明确要求且语义清晰时执行，避免频繁创建无意义代办。
-回复要求：
-- 一次回复只做当前这一轮能完成的事。
-- 如果通过工具完成了操作，用很简短的话说明结果即可。
-- 在任何情况下，都不要违背上面的人设和权限约束。`;
+风格：简洁、贴题；不确定时用一句话确认。
+${toolHint}
+群管/互动类：仅在用户明确要求时调用对应工具；无权限则说明原因，勿假装成功。
+setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=${userId}；他人→按其账号。`;
+
+    return this.finalizeSystemPromptContent(core);
   }
 
   async buildChatContext(e, question) {

@@ -2147,9 +2147,10 @@ export default class SystemConfig extends ConfigBase {
             },
             streamDir: {
               type: 'string',
-              label: '工作流目录',
-              description: '工作流定义所在目录，相对项目根目录的路径',
-              default: 'core/stream',
+              label: '工作流目录（备注）',
+              description:
+                '实际由框架扫描 core/*/stream/*.js 加载；本字段仅作文档/展示，不参与解析。留空即可。',
+              default: '',
               component: 'Input'
             },
             global: {
@@ -2388,6 +2389,457 @@ export default class SystemConfig extends ConfigBase {
                           default: {}
                         }
                       }
+                    }
+                  }
+                }
+              }
+            },
+            agentWorkspace: {
+              type: 'object',
+              label: 'Agent 工作区上下文',
+              description:
+                '将 AGENT.md / AGENTS.md、.cursor/rules、SKILL.md、subagents 清单注入到 system prompt（惯例对齐 Cursor / OpenClaw 工作区）',
+              component: 'SubForm',
+              fields: {
+                enabled: {
+                  type: 'boolean',
+                  label: '启用注入',
+                  description: '关闭后不再附加工作区 Markdown 上下文',
+                  default: true,
+                  component: 'Switch'
+                },
+                root: {
+                  type: 'string',
+                  label: '工作区根目录',
+                  description: '留空=项目根目录；可填相对项目根的路径',
+                  default: '',
+                  component: 'Input'
+                },
+                streams: {
+                  type: 'array',
+                  label: '仅对这些工作流/入口注入',
+                  description:
+                    '留空=全部生效。填工作流 name（chat、web、desktop、tools…）；填 v3 表示仅对 POST /api/v3/chat/completions 合并 system',
+                  itemType: 'string',
+                  default: [],
+                  component: 'MultiSelect'
+                },
+                includeSkills: {
+                  type: 'boolean',
+                  label: '包含 SKILL.md',
+                  default: true,
+                  component: 'Switch'
+                },
+                includeRules: {
+                  type: 'boolean',
+                  label: '包含 .cursor/rules',
+                  default: true,
+                  component: 'Switch'
+                },
+                includeAgentMd: {
+                  type: 'boolean',
+                  label: '包含 AGENT.md / AGENTS.md',
+                  default: true,
+                  component: 'Switch'
+                },
+                includeSubagents: {
+                  type: 'boolean',
+                  label: '包含 subagents 清单',
+                  description: '.cursor/subagents.yaml|json 或项目根 subagents.yaml|json',
+                  default: true,
+                  component: 'Switch'
+                },
+                includeBootstrapFiles: {
+                  type: 'boolean',
+                  label: '包含 OpenClaw 风格 bootstrap 文件',
+                  description:
+                    '读取 SOUL/TOOLS/IDENTITY/USER/HEARTBEAT/BOOTSTRAP/MEMORY.md 等（存在则注入，与 OpenClaw 工作区命名对齐）',
+                  default: false,
+                  component: 'Switch'
+                },
+                maxBootstrapFileChars: {
+                  type: 'number',
+                  label: '单个 bootstrap 文件最大字符',
+                  min: 100,
+                  default: 6000,
+                  component: 'InputNumber'
+                },
+                maxTotalChars: {
+                  type: 'number',
+                  label: 'Prose 段总字符上限',
+                  description:
+                    '0 表示不限制（推荐）；仅约束 AGENT/bootstrap/rules/扩展文件等 prose，Skills XML 由 maxSkillsPromptChars 单独限制',
+                  min: 0,
+                  default: 0,
+                  component: 'InputNumber'
+                },
+                extraMarkdownFiles: {
+                  type: 'array',
+                  label: '额外 Markdown 文件',
+                  description: '相对工作区根的路径列表（如 docs/NOTE.md），安全读入后追加到 prose',
+                  itemType: 'string',
+                  default: [],
+                  component: 'ArrayForm'
+                },
+                maxCandidatesPerRoot: {
+                  type: 'number',
+                  label: '技能根目录扫描上限（嵌套 skills 探测条目数）',
+                  description: '对齐 OpenClaw skills.limits.maxCandidatesPerRoot',
+                  min: 1,
+                  default: 300,
+                  component: 'InputNumber'
+                },
+                maxSkillsLoadedPerSource: {
+                  type: 'number',
+                  label: '每目录最多加载技能数',
+                  description: '对齐 OpenClaw skills.limits.maxSkillsLoadedPerSource；旧配置 maxSkillFiles 仍可读',
+                  min: 1,
+                  default: 200,
+                  component: 'InputNumber'
+                },
+                maxSkillsInPrompt: {
+                  type: 'number',
+                  label: '写入 prompt 的技能条数上限',
+                  description: '对齐 OpenClaw skills.limits.maxSkillsInPrompt',
+                  min: 1,
+                  default: 150,
+                  component: 'InputNumber'
+                },
+                maxSkillsPromptChars: {
+                  type: 'number',
+                  label: '技能 XML  catalog 最大字符',
+                  description: '对齐 OpenClaw skills.limits.maxSkillsPromptChars；超出则 compact 或截断',
+                  min: 500,
+                  default: 30000,
+                  component: 'InputNumber'
+                },
+                maxSkillFileBytes: {
+                  type: 'number',
+                  label: '单个 SKILL.md 最大字节',
+                  description: '对齐 OpenClaw skills.limits.maxSkillFileBytes',
+                  min: 1024,
+                  default: 256000,
+                  component: 'InputNumber'
+                },
+                skillRoots: {
+                  type: 'array',
+                  label: '技能根目录（相对工作区）',
+                  description:
+                    'OpenClaw 式目录发现（非 glob）：子目录含 SKILL.md 即为一项技能；后者覆盖同名；默认含 .cursor/skills、.agents/skills、skills',
+                  itemType: 'string',
+                  default: ['.cursor/skills', '.agents/skills', 'skills'],
+                  component: 'ArrayForm'
+                },
+                maxRulesChars: {
+                  type: 'number',
+                  label: '规则块最大字符',
+                  min: 100,
+                  default: 12000,
+                  component: 'InputNumber'
+                },
+                maxAgentMdChars: {
+                  type: 'number',
+                  label: 'AGENT 文件最大字符',
+                  min: 100,
+                  default: 12000,
+                  component: 'InputNumber'
+                }
+              }
+            },
+            embedding: {
+              type: 'object',
+              label: 'Embedding（向量/RAG）',
+              description:
+                '全局合并到各 AIStream.embeddingConfig；子服务端向量化、跨工作流 RAG 条数与知识库向量相似度阈值',
+              component: 'SubForm',
+              fields: {
+                enabled: {
+                  type: 'boolean',
+                  label: '启用全局 Embedding',
+                  description: '关闭则跳过 applyEmbeddingConfig 中的向量初始化（各工作流仍可单独 enabled: false）',
+                  default: true,
+                  component: 'Switch'
+                },
+                maxContexts: {
+                  type: 'number',
+                  label: '单次检索最大上下文条数',
+                  description: 'AIStream 合并多工作流 retrieveKnowledgeContexts 时的上限',
+                  min: 1,
+                  max: 50,
+                  default: 5,
+                  component: 'InputNumber'
+                },
+                similarityThreshold: {
+                  type: 'number',
+                  label: '向量相似度阈值',
+                  description: 'database 等工作流 queryKnowledgeWithEmbedding 过滤用（0~1）',
+                  min: 0,
+                  max: 1,
+                  default: 0.3,
+                  component: 'InputNumber'
+                }
+              }
+            },
+            tools: {
+              type: 'object',
+              label: '工具子系统（工作流 tools / web / agentBrowser）',
+              description:
+                '与 config/default_config/aistream.yaml 中 tools 段一致：file→ToolsStream；web→web_fetch；agentBrowser→Playwright 受控浏览器（stream/browser.js）',
+              component: 'SubForm',
+              fields: {
+                file: {
+                  type: 'object',
+                  label: '文件工具（tools 工作流）',
+                  description: '工作区路径、read 截断、run 开关与超时',
+                  component: 'SubForm',
+                  fields: {
+                    workspace: {
+                      type: 'string',
+                      label: '工作区根目录',
+                      description: '留空=用户桌面；~/ 表示家目录；绝对路径；否则相对项目根',
+                      default: '',
+                      component: 'Input'
+                    },
+                    maxReadChars: {
+                      type: 'number',
+                      label: 'read 最大返回字符',
+                      min: 1000,
+                      default: 500000,
+                      component: 'InputNumber'
+                    },
+                    grepMaxResults: {
+                      type: 'number',
+                      label: 'grep 最大匹配条数',
+                      min: 1,
+                      max: 500,
+                      default: 100,
+                      component: 'InputNumber'
+                    },
+                    runEnabled: {
+                      type: 'boolean',
+                      label: '允许 run 执行命令',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    runTimeoutMs: {
+                      type: 'number',
+                      label: 'run 超时（毫秒）',
+                      min: 1000,
+                      default: 120000,
+                      component: 'InputNumber'
+                    },
+                    maxCommandOutputChars: {
+                      type: 'number',
+                      label: 'run 标准输出最大字符',
+                      min: 1000,
+                      default: 200000,
+                      component: 'InputNumber'
+                    }
+                  }
+                },
+                web: {
+                  type: 'object',
+                  label: 'Web',
+                  component: 'SubForm',
+                  fields: {
+                    fetch: {
+                      type: 'object',
+                      label: 'web_fetch',
+                      component: 'SubForm',
+                      fields: {
+                        enabled: {
+                          type: 'boolean',
+                          label: '启用 web_fetch',
+                          default: true,
+                          component: 'Switch'
+                        },
+                        readability: {
+                          type: 'boolean',
+                          label: '启用 Readability',
+                          description: 'HTML 正文提取（@mozilla/readability + linkedom）',
+                          default: true,
+                          component: 'Switch'
+                        },
+                        timeoutSeconds: {
+                          type: 'number',
+                          label: '请求超时（秒）',
+                          min: 1,
+                          default: 30,
+                          component: 'InputNumber'
+                        },
+                        maxCharsCap: {
+                          type: 'number',
+                          label: '返回正文最大字符上限',
+                          min: 100,
+                          default: 50000,
+                          component: 'InputNumber'
+                        },
+                        maxResponseBytes: {
+                          type: 'number',
+                          label: '响应体最大字节',
+                          min: 32000,
+                          default: 2000000,
+                          component: 'InputNumber'
+                        },
+                        maxRedirects: {
+                          type: 'number',
+                          label: '最大重定向次数',
+                          min: 0,
+                          default: 3,
+                          component: 'InputNumber'
+                        },
+                        cacheTtlMinutes: {
+                          type: 'number',
+                          label: '内存缓存 TTL（分钟）',
+                          min: 0,
+                          default: 15,
+                          component: 'InputNumber'
+                        },
+                        userAgent: {
+                          type: 'string',
+                          label: 'User-Agent',
+                          description: '留空使用 OpenClaw 默认 UA',
+                          default: '',
+                          component: 'Input'
+                        },
+                        firecrawl: {
+                          type: 'object',
+                          label: 'Firecrawl 回退',
+                          description: '可与环境变量 FIRECRAWL_API_KEY / FIRECRAWL_BASE_URL 叠加',
+                          component: 'SubForm',
+                          fields: {
+                            enabled: {
+                              type: 'boolean',
+                              label: '启用',
+                              default: false,
+                              component: 'Switch'
+                            },
+                            apiKey: {
+                              type: 'string',
+                              label: 'API Key',
+                              default: '',
+                              component: 'Input',
+                              inputType: 'password'
+                            },
+                            baseUrl: {
+                              type: 'string',
+                              label: 'API Base URL',
+                              default: '',
+                              component: 'Input',
+                              placeholder: 'https://api.firecrawl.dev'
+                            },
+                            onlyMainContent: {
+                              type: 'boolean',
+                              label: '仅主内容',
+                              default: true,
+                              component: 'Switch'
+                            },
+                            maxAgeMs: {
+                              type: 'number',
+                              label: 'maxAge（毫秒）',
+                              min: 0,
+                              default: 172800000,
+                              component: 'InputNumber'
+                            },
+                            timeoutSeconds: {
+                              type: 'number',
+                              label: 'Firecrawl 超时（秒）',
+                              min: 1,
+                              default: 30,
+                              component: 'InputNumber'
+                            },
+                            proxy: {
+                              type: 'string',
+                              label: '代理模式',
+                              enum: ['auto', 'basic', 'stealth'],
+                              default: 'auto',
+                              component: 'Select'
+                            },
+                            storeInCache: {
+                              type: 'boolean',
+                              label: 'storeInCache',
+                              default: true,
+                              component: 'Switch'
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                agentBrowser: {
+                  type: 'object',
+                  label: '受控浏览器（browser 工作流）',
+                  description: 'Playwright 受控浏览器：stream/browser.js；导航 URL 校验同 web_fetch（ssrf-guard）',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用 browser 工作流 MCP',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    headless: {
+                      type: 'boolean',
+                      label: '无头模式',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    browserType: {
+                      type: 'string',
+                      label: '浏览器引擎',
+                      enum: ['chromium', 'firefox', 'webkit'],
+                      default: 'chromium',
+                      component: 'Select'
+                    },
+                    executablePath: {
+                      type: 'string',
+                      label: '浏览器可执行路径',
+                      description: '留空使用 Playwright 自带浏览器',
+                      default: '',
+                      component: 'Input'
+                    },
+                    launchTimeoutMs: {
+                      type: 'number',
+                      label: '启动超时（毫秒）',
+                      min: 5000,
+                      default: 120000,
+                      component: 'InputNumber'
+                    },
+                    navigationTimeoutMs: {
+                      type: 'number',
+                      label: '导航超时（毫秒）',
+                      min: 5000,
+                      default: 60000,
+                      component: 'InputNumber'
+                    },
+                    maxTextChars: {
+                      type: 'number',
+                      label: 'browser_page_text 最大字符',
+                      min: 500,
+                      default: 50000,
+                      component: 'InputNumber'
+                    },
+                    screenshotMaxBytes: {
+                      type: 'number',
+                      label: '截图 PNG 最大字节',
+                      min: 32000,
+                      default: 4194304,
+                      component: 'InputNumber'
+                    },
+                    allowPrivateNetwork: {
+                      type: 'boolean',
+                      label: 'SSRF：允许私网',
+                      description: '与 web_fetch 策略一致；默认禁止访问内网地址',
+                      default: false,
+                      component: 'Switch'
+                    },
+                    dangerouslyAllowPrivateNetwork: {
+                      type: 'boolean',
+                      label: 'SSRF：危险允许私网',
+                      description: '仅可信内网环境',
+                      default: false,
+                      component: 'Switch'
                     }
                   }
                 }

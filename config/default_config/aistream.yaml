@@ -9,8 +9,9 @@
 # 工作流系统
 # ----------------------------------------
 enabled: true
-# 工作流脚本目录（相对于项目根）
-streamDir: "core/stream"
+# 工作流发现：框架自动扫描所有 core/*/stream/*.js（见 StreamLoader），非单一目录。
+# 本字段仅作文档/控制台备注，不参与加载路径解析；留空即可。
+streamDir: ""
 
 # ----------------------------------------
 # 工作流全局
@@ -77,9 +78,86 @@ mcp:
     mcpServers: []
   # 默认工作流 & 远程 MCP 选择（供 /api/v3/chat/completions 在未传 workflow 字段时使用）
   # 默认留空：表示其它平台不显式选择时，仅按 provider 自身配置，不自动注入任何特定工作流/远程 MCP
-  defaultStreams: []       # 例如 ["chat", "memory", "database"]
+  defaultStreams: []       # 例如 ["chat", "web", "browser", "tools", "desktop", "memory", "database"]
   defaultRemoteMcp: []     # 例如 ["github", "browser"]，对应 remote-mcp.github / remote-mcp.browser
   toolMergeStrategy: preferRequest  # 工具合并策略：preferRequest | preferStream | merge
+
+# Agent 工作区上下文（Skills / Rules / AGENT.md / Subagents，注入到工作流 system prompt）
+agentWorkspace:
+  enabled: true
+  root: ""                 # 留空=项目根；可填相对项目根的路径
+  # 留空=全部；否则仅注入列出的入口：工作流 name（chat/web/desktop/tools…）+ v3（POST /api/v3/chat/completions）
+  streams: []
+  includeSkills: true
+  includeRules: true
+  includeAgentMd: true
+  includeSubagents: true
+  # 与 OpenClaw workspace  bootstrap 文件名对齐；默认关闭以免上下文膨胀
+  includeBootstrapFiles: false
+  maxBootstrapFileChars: 6000
+  # 0 = 不限制 prose 总长；Skills 仍受 maxSkillsPromptChars 约束
+  maxTotalChars: 0
+  extraMarkdownFiles: []
+  # 以下与 OpenClaw config skills.limits / 目录结构对齐（pi-coding-agent formatSkillsForPrompt）
+  maxCandidatesPerRoot: 300
+  maxSkillsLoadedPerSource: 200
+  maxSkillsInPrompt: 150
+  maxSkillsPromptChars: 30000
+  maxSkillFileBytes: 256000
+  skillRoots:
+    - ".cursor/skills"
+    - ".agents/skills"
+    - "skills"
+  maxRulesChars: 12000
+  maxAgentMdChars: 12000
+
+# Embedding 全局配置（StreamLoader.applyEmbeddingConfig 合并到各工作流 embeddingConfig；RAG/知识库检索使用 similarityThreshold）
+embedding:
+  enabled: true
+  maxContexts: 5
+  similarityThreshold: 0.3
+
+# 工具子系统（与 system.js aistream.schema.fields.tools 一一对应）
+tools:
+  # tools 工作流：文件/命令工作区（core/system-Core/stream/tools.js）
+  file:
+    workspace: ""              # 空=用户桌面；~/ 开头；绝对路径；或相对项目根
+    maxReadChars: 500000       # read 返回正文最大字符，超出截断并标注
+    grepMaxResults: 100
+    runEnabled: true
+    runTimeoutMs: 120000
+    maxCommandOutputChars: 200000
+  web:
+    fetch:
+      enabled: true
+      readability: true
+      timeoutSeconds: 30
+      maxCharsCap: 50000
+      maxResponseBytes: 2000000
+      maxRedirects: 3
+      cacheTtlMinutes: 15
+      userAgent: ""
+      firecrawl:
+        enabled: false
+        apiKey: ""
+        baseUrl: ""
+        onlyMainContent: true
+        maxAgeMs: 172800000
+        timeoutSeconds: 30
+        proxy: "auto"
+        storeInCache: true
+  # browser 工作流（stream/browser.js + lib/agent-browser）
+  agentBrowser:
+    enabled: true
+    headless: true
+    browserType: chromium      # chromium | firefox | webkit
+    executablePath: ""         # 留空使用 Playwright 自带
+    launchTimeoutMs: 120000
+    navigationTimeoutMs: 60000
+    maxTextChars: 50000          # browser_page_text 截断
+    screenshotMaxBytes: 4194304
+    allowPrivateNetwork: false
+    dangerouslyAllowPrivateNetwork: false
 
 # ----------------------------------------
 # Python 子服务端

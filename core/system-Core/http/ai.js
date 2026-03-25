@@ -7,6 +7,7 @@ import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import { parseMultipartData } from '#utils/multipart-parser.js';
+import { mergeAgentWorkspaceIntoMessages } from '#utils/agent-workspace.js';
 
 function pickFirst(obj, keys) {
   for (const k of keys) {
@@ -294,6 +295,8 @@ async function handleChatCompletionsV3(req, res) {
     }
   }
 
+  await mergeAgentWorkspaceIntoMessages(messages, getAistreamConfigOptional(), 'v3');
+  
   const streamFlag = Boolean(pickFirst(body, ['stream']));
   const provider = resolveProviderFromRequest(body);
 

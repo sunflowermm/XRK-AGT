@@ -18,8 +18,9 @@
 
 ### 工作流分类
 
-- **主工作流**：`device`、`chat`、`desktop`（完整功能工作流，通过 `mergeStreams` 合并）
-- **工具工作流**：`memory`、`database`、`tools`（提供MCP工具的工作流，通过标志启用）
+- **主/合并向**：`chat`、`desktop` 等（可经 `mergeStreams` 与上下文合并）
+- **工具向 MCP**：`tools`、`memory`、`database`、`web`（`web_fetch` 等）
+- **其它 Core**：任意 `core/<包名>/stream/*.js` 均由同一 `StreamLoader` 扫描加载
 
 所有自定义 AI 工作流都应继承此类，可选择实现 `buildSystemPrompt` 与 `buildChatContext`。
 
@@ -242,13 +243,20 @@ constructor(options = {})
 
 ### 全局配置
 
-工作流系统配置位于 `data/server_bots/{port}/aistream.yaml`（**随端口变化**）：
+工作流系统配置由 **`cfg.aistream`** 提供（`src/infrastructure/config/config.js`：`getServerConfig('aistream')`），运行时文件为 **`data/server_bots/{port}/aistream.yaml`**（随 Bot/端口变化）。仓库模板见 **`config/default_config/aistream.yaml`**，部署时应对齐该模板与 **`core/system-Core/commonconfig/system.js`** 中 `aistream.schema.fields`。
 
-**关键配置项**：
+**关键配置项（节选）**：
 - `llm.Provider` - LLM提供商（`volcengine`/`xiaomimimo`/`openai`/`openai_compat`/`gemini`/`anthropic`/`azure_openai`）
-- `subserver.host` - 子服务端地址（默认 `127.0.0.1`）
-- `subserver.port` - 子服务端端口（默认 `8000`）
-- `subserver.timeout` - 请求超时时间（毫秒，默认 `30000`）
+- `subserver.host` / `subserver.port` / `subserver.timeout` - Python 子服务端连接
+- `embedding.enabled` / `maxContexts` / `similarityThreshold` - 由 `StreamLoader.applyEmbeddingConfig` 合并到各工作流 `embeddingConfig`（`loader.js`）
+- `mcp.*` - 默认注入工作流、远程 MCP、工具合并策略等
+- `agentWorkspace.*` - Skills/Rules/AGENT.md 等工作区上下文注入（见 `src/utils/agent-workspace.js`）
+- `tools.file` - `ToolsStream`：工作区路径、`read` 截断、`run` 开关与超时（`core/system-Core/stream/tools.js`）
+- `tools.web.fetch` - `WebStream` / `web_fetch`：OpenClaw 同源抓取逻辑（`core/system-Core/stream/web.js` + `core/system-Core/lib/openclaw-web/`）
+- `tools.agentBrowser` - `BrowserStream`：Playwright 受控浏览器（`core/system-Core/stream/browser.js` + `lib/agent-browser/`），导航 SSRF 与 `ssrf-guard.js` 对齐
+- **desktop 工作流**（`core/system-Core/stream/desktop.js`）的 MCP 工具（含剪贴板、`open_path` 等）无单独 `aistream.tools.*` 开关，与工作区解析内置在流内
+
+**`streamDir` 说明（易误解）**：`StreamLoader` **不使用** `aistream.streamDir` 解析路径。工作流发现固定为 **`paths.getCoreSubDirs('stream')`**，即扫描所有 **`core/*/stream/*.js`**。YAML 中的 `streamDir` 仅为 Schema/控制台占位与文档备注，留空即可。
 
 **LLM提供商配置**：
 - 配置文件：`data/server_bots/{port}/{providerName}_llm.yaml`
@@ -266,11 +274,11 @@ constructor(options = {})
 - 对外 v3 入口 `POST /api/v3/chat/completions`：外部调用只需要把 `model` 填成 **provider（运营商）**（如 `openai` / `openai_compat` / `gemini` 等），**不需要**再填写真实模型名。
 - 真实模型名由 `{provider}_llm.yaml` 中的默认 `model`/`chatModel` 决定；你也可以通过工作流/内部配置覆盖，但外部调用不强制要求。
 
-**Embedding配置**：
-- 统一使用子服务端向量服务（`/api/vector/*`）
-- 工作流构造函数只需设置 `embedding: { enabled: true, maxContexts: 5 }`
-- 向量服务配置位于子服务端配置文件（`data/subserver/config.yaml`）
-- `maxContexts` 为工作流级别配置，控制检索上下文条数
+**Embedding 配置**：
+- 向量计算统一走子服务端（`/api/vector/embed` 等，`AIStream.generateEmbedding`）
+- **全局**：`aistream.embedding` 在加载阶段被合并进各流 `embeddingConfig`（含 `similarityThreshold`，供 `database` 等检索阈值使用）
+- **工作流级**：构造函数仍可传 `embedding: { enabled, maxContexts }`；与全局合并后生效
+- 子服务端模型/维度等见 `data/subserver/config.yaml`
 
 ---
 
@@ -836,7 +844,7 @@ AIStream通过子服务端提供向量化服务（统一通过 `Bot.callSubserve
 
 ### 重试配置
 
-在 `aistream.yaml` 中配置：
+与 **`core/system-Core/commonconfig/system.js`** 中 `aistream.schema.fields.llm.retry` 一致，仅下列字段有效：
 
 ```yaml
 llm:
@@ -844,19 +852,14 @@ llm:
     enabled: true
     maxAttempts: 3
     delay: 2000
-    maxDelay: 10000
-    backoffMultiplier: 2
-    retryOn: ["timeout", "network", "5xx", "rate_limit"]
+    retryOn: ["timeout", "network", "5xx"]   # 可选含 all，见 schema enum
 ```
 
-### 错误分类
+> 若文档其它处出现 `maxDelay`、`backoffMultiplier`、`rate_limit` 等而未写入 schema，以 **schema + 实际 LLM 工厂实现** 为准。
 
-系统自动分类错误类型：
-- `timeout` - 超时错误
-- `network` - 网络错误
-- `5xx` - 服务器错误
-- `rate_limit` - 限流错误
-- `auth` - 认证错误（不重试）
+### 错误分类（概念）
+
+工厂侧可能对错误做分类与重试策略；具体以 **`LLMFactory`** 及各 provider 客户端为准。
 
 ---
 
@@ -902,7 +905,7 @@ MonitorService.endTrace(traceId, { success: true });
 
 ## 相关文档
 
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含6个工作流的实际实现（chat、desktop、tools、memory、database、device） ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块与工作流清单（以 `core/system-Core/stream/*.js` 为准，含 `web` 等） ⭐
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 - **[工厂系统](factory.md)** - LLM/Vision/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 - **[子服务端 API](subserver-api.md)** - LangChain + 向量服务 + 与主服务 v3 的衔接
@@ -910,4 +913,4 @@ MonitorService.endTrace(traceId, { success: true });
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-03-25（对齐 aistream 配置、加载路径与 tools/embedding 文档）*

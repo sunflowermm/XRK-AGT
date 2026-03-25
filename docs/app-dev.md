@@ -104,7 +104,6 @@ flowchart TB
         G4["notice.yaml"]
         G5["mongodb.yaml"]
         G6["redis.yaml"]
-        G7["aistream.yaml"]
     end
 
     subgraph Server["端口配置"]
@@ -112,8 +111,9 @@ flowchart TB
         S1["server.yaml"]
         S2["chatbot.yaml"]
         S3["group.yaml"]
-        S4["volcengine_llm.yaml"]
-        S5["其他工厂配置..."]
+        S4["aistream.yaml"]
+        S5["volcengine_llm.yaml"]
+        S6["其他工厂配置..."]
     end
 
     subgraph Cfg["cfg 对象 · global.cfg"]
@@ -153,7 +153,6 @@ flowchart TB
 | `notice` | `data/server_bots/notice.yaml` | 通知配置 |
 | `mongodb` | `data/server_bots/mongodb.yaml` | MongoDB 连接配置 |
 | `redis` | `data/server_bots/redis.yaml` | Redis 连接配置 |
-| `aistream` | `data/server_bots/aistream.yaml` | AI 工作流全局配置 |
 
 **使用方式**：
 ```javascript
@@ -174,6 +173,7 @@ const deviceConfig = cfg.getGlobalConfig('device');
 | `server` | `data/server_bots/{port}/server.yaml` | 服务器配置（端口、代理等） |
 | `chatbot` | `data/server_bots/{port}/chatbot.yaml` | 聊天机器人配置 |
 | `group` | `data/server_bots/{port}/group.yaml` | 群组配置 |
+| `aistream` | `data/server_bots/{port}/aistream.yaml` | AI 工作流、工厂默认提供商（`llm`/`asr`/`tts`）等，见 `docs/aistream.md` |
 | `volcengine_llm` | `data/server_bots/{port}/volcengine_llm.yaml` | 火山引擎 LLM 配置 |
 | `其他工厂配置` | `data/server_bots/{port}/*.yaml` | 其他 LLM/ASR/TTS 提供商配置 |
 
@@ -211,9 +211,9 @@ const groupConfig = cfg.getServerConfig('group');
 - `cfg.notice` - 通知配置
 - `cfg.mongodb` - MongoDB 配置
 - `cfg.redis` - Redis 配置
-- `cfg.aistream` - AI 工作流配置
 
 **端口配置访问器**：
+- `cfg.aistream` - AI 工作流与工厂默认提供商等（`getServerConfig('aistream')`，文件在端口目录）
 - `cfg.server` - 服务器配置
 - `cfg.chatbot` - 聊天机器人配置
 - `cfg.group` - 群组配置

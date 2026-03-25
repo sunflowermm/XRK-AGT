@@ -47,7 +47,7 @@ v3 支持 `multipart/form-data`：
 ## 常见错误定位
 
 - 401：先看 `docs/AUTH.md`（system-Core HTTP 在模块内调用 `Bot.checkApiAuthorization(req)` 做系统级鉴权）
-- provider 不存在：检查 `aistream.yaml.llm.Provider` 或 compat providers[].key
+- provider 不存在：检查当前端口 `data/server_bots/{port}/aistream.yaml` 中 `llm.Provider` 或 compat `providers[].key`
 - stream 被禁用：provider 配置 `enableStream: false`
 - 工具不生效：检查 `enableTools`、`workflow->streams`、是否存在 MCP 工具
 
