@@ -107,6 +107,10 @@ classDiagram
 | `makeLog(level, msg, id?, trace?)` | 按配置的日志级别过滤后，格式化输出日志，并可附带调用堆栈 |
 | `getCircularReplacer()` | 返回一个可在 `JSON.stringify` 中使用的 replacer，安全处理循环引用、Map/Set/Error/Buffer 等 |
 
+> 说明：
+> - `level` 支持 `trace/debug/info/warn/error/fatal/mark/success/tip`（不在列表会回退到 `info`）。
+> - `trace=true` 会额外输出堆栈；`id=false` 会禁用 `[ID]` 前缀。
+
 ### 字符串与数据格式化
 
 | 方法 | 说明 |
@@ -132,7 +136,7 @@ classDiagram
 | `glob(pattern, opts?)` | 使用 fast-glob / glob 查找匹配模式的文件；若非模式则回退为普通路径检测 |
 | `Buffer(data, opts?)` | 将 base64/URL/文件路径/字符串转换为 Buffer 或临时文件 URL，支持大小阈值与 HTTP 超时 |
 | `fileType({ name, file }, opts?)` | 检测文件类型（扩展名/MIME/MD5），并规范化文件名 |
-| `fileToUrl(file, opts?)` | 将 Buffer/本地文件/网络 URL 转为 `http(s)://.../media/...`，并安排定时清理临时文件 |
+| `fileToUrl(file, opts?)` | 将 Buffer/本地文件/网络 URL 转为 `http(s)://.../media/...`（并按配置安排定时清理）。可选 `opts`: `name` / `returnPath` / `baseUrl` / `fetchOptions` |
 
 这些方法是截图、文件转发、日志附件、媒体缓存等功能的基础。
 
@@ -154,7 +158,6 @@ classDiagram
 |------|------|
 | `getTimeDiff(t1?, t2?)` | 将两个时间点的差值格式化为「X天 X小时 X分钟 X秒」或毫秒 |
 | `formatFileSize(bytes, decimals?)` | 将字节数转换为「KB/MB/GB/TB」格式 |
-| `formatDate(date?, format?)` | 将日期格式化为字符串（支持 `YYYY-MM-DD HH:mm:ss` 等模式） |
 
 ---
 
@@ -165,8 +168,6 @@ classDiagram
 | `deepClone(obj)` | 深度克隆各种结构（Date/Array/Map/Set 等） |
 | `deepMerge(target, ...sources)` | 深度合并普通对象 |
 | `isObject(item)` | 判断是否为普通对象 |
-| `throttle(func, limit?)` | 为函数增加节流控制（在 limit 内最多执行一次） |
-| `debounce(func, delay?)` | 为函数增加防抖控制（支持 `debounced.cancel()`） |
 
 ---
 
@@ -177,7 +178,6 @@ classDiagram
 | `extractTextContent(message)` | 从字符串/消息数组/事件对象中提取纯文本内容，适合日志与检索 |
 | `makeChatRecord(e, messages, title, description?)` | 根据事件 `e` 创建聊天记录：在 ICQQ 情况下生成合并转发消息，否则退化为普通消息 |
 | `makeMsg(e, messages, title, description)` | 制作合并转发消息，尽量调用Tasker的 `makeForwardMsg` 能力，并附带摘要与标题 |
-| `parseJSON(str, defaultValue?)` | 安全解析 JSON 字符串，异常时返回默认值 |
 
 同时还导出了两个兼容函数：
 
@@ -230,47 +230,28 @@ if (await BotUtil.fileExists('data/file.txt')) {
 // 文件转URL（用于发送图片等）
 const url = await BotUtil.fileToUrl(buffer, {
   name: 'image.png',
-  ttl: 3600000
 });
 ```
 
-### 网络请求
+### 命令执行
 
 ```javascript
-// 带重试的HTTP请求
-const response = await BotUtil.retry(
-  async () => {
-    const res = await fetch('https://api.example.com/data');
-    if (!res.ok) throw new Error('Request failed');
-    return res.json();
-  },
-  {
-    maxRetries: 3,
-    delay: 1000,
-    exponential: true
-  }
-);
+const ret = await BotUtil.exec('node -v', { quiet: true });
+if (ret.error) throw ret.error;
+console.log(ret.stdout);
 ```
 
-### 批处理
+### 等待事件
 
 ```javascript
-// 批量处理任务
-const items = [1, 2, 3, 4, 5];
-const results = await BotUtil.batch(
-  items,
-  async (item) => {
-    // 处理单个item
-    return await processItem(item);
-  },
-  {
-    batchSize: 2,      // 每批2个
-    concurrency: 3,    // 并发3个
-    onProgress: (current, total) => {
-      console.log(`进度: ${current}/${total}`);
-    }
-  }
-);
+// emitter 需要是 EventEmitter 实例
+await BotUtil.promiseEvent(emitter, 'ready', 'error', 5000);
+```
+
+### 延迟
+
+```javascript
+await BotUtil.sleep(500);
 ```
 
 ### 日志输出
@@ -295,10 +276,6 @@ const diff = BotUtil.getTimeDiff(startTime, endTime);
 // 文件大小格式化
 const size = BotUtil.formatFileSize(1024 * 1024 * 5);
 // 输出: "5.00 MB"
-
-// 日期格式化
-const date = BotUtil.formatDate(new Date(), 'YYYY-MM-DD HH:mm:ss');
-// 输出: "2026-02-06 12:30:45"
 ```
 
 ---
@@ -311,7 +288,7 @@ const date = BotUtil.formatDate(new Date(), 'YYYY-MM-DD HH:mm:ss');
   - 借助 `BotUtil.fileToUrl/formatFileSize` 处理文件服务与统计输出。
 
 - **插件系统**
-  - 插件中常用 `BotUtil.sleep/retry/batch` 实现复杂的异步流程。
+  - 插件中常用 `BotUtil.sleep`、`BotUtil.exec`、`BotUtil.promiseEvent` 实现异步流程控制。
   - 使用 `BotUtil.extractTextContent` 或 `String` 做调试输出与上下文处理。
 
 - **Tasker与 API**

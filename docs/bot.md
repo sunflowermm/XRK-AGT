@@ -378,9 +378,9 @@ await subBot.pickFriend('789012').sendMsg('Hello');
 const deviceBot = Bot['device_001'];
 await deviceBot.sendCommand('reboot');
 
-// 访问BotUtil静态方法
-const friend = Bot.pickFriend('123456', '789012');
-await friend.sendMsg('Hello');
+// 访问 BotUtil 静态方法（通过 Bot 代理透传）
+const url = await Bot.fileToUrl('/path/to/file.jpg');
+Bot.makeLog('info', '文件 URL 已生成', false);
 
 // 访问Bot自身
 Bot.express.get('/custom', (req, res) => {

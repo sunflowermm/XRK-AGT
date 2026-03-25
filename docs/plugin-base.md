@@ -135,6 +135,8 @@ classDiagram
 - `log` - 是否记录日志（默认 `true`）
 - `permission` - 权限要求（如 `master/owner/admin`）
 
+**注意**：执行 `rule[].fnc` 时，框架会把**事件对象 `e`** 作为参数传入（处理函数签名为 `async xxx(e)`）。`context` 不是函数参数，而是你用 `this.getContext(...)` 拿到的上下文返回值。
+
 **规则格式支持**：
 - 字符串：`'^#测试$'` → `{ reg: '^#测试$' }`
 - RegExp：`/^#测试$/` → `{ reg: /^#测试$/ }`
@@ -202,6 +204,7 @@ async secondCommand(e) {
   // 获取上下文，继续处理
   const context = this.getContext('waitingInput');
   if (context) {
+    // context 只是 getContext 返回值；消息仍从 e 读取
     // 使用上下文处理
     await this.reply(`收到：${e.msg}`);
     this.finish('waitingInput'); // 清理上下文
