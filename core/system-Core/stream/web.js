@@ -1,5 +1,4 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import {
   buildWebFetchRuntime,
   runWebFetch,
@@ -8,7 +7,7 @@ import {
 
 /**
  * OpenClaw web_fetch 能力（实现自 MIT openclaw 移植，挂载为 MCP）
- * 配置：aistream.tools.web.fetch（与 OpenClaw tools.web.fetch 键对齐）
+ * 当前实现使用内置默认参数 + 环境变量（Firecrawl 相关）。
  */
 export default class WebStream extends AIStream {
   constructor() {
@@ -34,7 +33,7 @@ export default class WebStream extends AIStream {
   }
 
   registerWebTools() {
-    const runtimeBase = () => buildWebFetchRuntime(getAistreamConfigOptional());
+    const runtimeBase = () => buildWebFetchRuntime();
 
     this.registerMCPTool('web_fetch', {
       description:
@@ -59,10 +58,6 @@ export default class WebStream extends AIStream {
       },
       handler: async (args = {}) => {
         const rt = runtimeBase();
-        if (!rt.enabled) {
-          return { success: false, error: 'web_fetch 已在 aistream.tools.web.fetch 中禁用 (enabled: false)' };
-        }
-
         const url = typeof args.url === 'string' ? args.url.trim() : '';
         if (!url) return { success: false, error: 'url required' };
 

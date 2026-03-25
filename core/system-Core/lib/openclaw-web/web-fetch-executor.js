@@ -246,66 +246,40 @@ async function fetchWithManualRedirects(url, init, maxRedirects, timeoutMs) {
   throw new Error('Too many redirects');
 }
 
-/**
- * 从 aistream.tools.web.fetch 与环境变量合并运行时参数（对齐 OpenClaw 配置键）
- */
-export function buildWebFetchRuntime(aistreamCfg = {}) {
-  const fetchCfg = aistreamCfg?.tools?.web?.fetch ?? {};
-  const enabled = fetchCfg.enabled !== false;
+/** 构建 web_fetch 运行时参数（默认值 + 环境变量）。 */
+export function buildWebFetchRuntime() {
+  const maxCharsCap = DEFAULT_FETCH_MAX_CHARS;
 
-  const maxCharsCap =
-    typeof fetchCfg.maxCharsCap === 'number' && Number.isFinite(fetchCfg.maxCharsCap)
-      ? Math.max(100, Math.floor(fetchCfg.maxCharsCap))
-      : DEFAULT_FETCH_MAX_CHARS;
-
-  let maxResponseBytes =
-    typeof fetchCfg.maxResponseBytes === 'number' && Number.isFinite(fetchCfg.maxResponseBytes)
-      ? Math.floor(fetchCfg.maxResponseBytes)
-      : DEFAULT_FETCH_MAX_RESPONSE_BYTES;
+  let maxResponseBytes = DEFAULT_FETCH_MAX_RESPONSE_BYTES;
   maxResponseBytes = Math.min(
     FETCH_MAX_RESPONSE_BYTES_MAX,
     Math.max(FETCH_MAX_RESPONSE_BYTES_MIN, maxResponseBytes)
   );
 
-  const firecrawl = fetchCfg.firecrawl && typeof fetchCfg.firecrawl === 'object' ? fetchCfg.firecrawl : {};
   const apiKey =
-    (typeof firecrawl.apiKey === 'string' && firecrawl.apiKey.trim()) ||
     (typeof process.env.FIRECRAWL_API_KEY === 'string' && process.env.FIRECRAWL_API_KEY.trim()) ||
     undefined;
-  const firecrawlEnabled =
-    typeof firecrawl.enabled === 'boolean' ? firecrawl.enabled : Boolean(apiKey);
+  const firecrawlEnabled = Boolean(apiKey);
 
   return {
-    enabled,
-    readabilityEnabled: fetchCfg.readability !== false,
+    readabilityEnabled: true,
     maxCharsCap,
     maxResponseBytes,
-    maxRedirects: resolveMaxRedirects(fetchCfg.maxRedirects, DEFAULT_FETCH_MAX_REDIRECTS),
-    timeoutSeconds: resolveTimeoutSeconds(fetchCfg.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS),
-    cacheTtlMs: resolveCacheTtlMs(fetchCfg.cacheTtlMinutes, DEFAULT_CACHE_TTL_MINUTES),
-    userAgent:
-      typeof fetchCfg.userAgent === 'string' && fetchCfg.userAgent.trim()
-        ? fetchCfg.userAgent.trim()
-        : DEFAULT_FETCH_USER_AGENT,
+    maxRedirects: resolveMaxRedirects(undefined, DEFAULT_FETCH_MAX_REDIRECTS),
+    timeoutSeconds: resolveTimeoutSeconds(undefined, DEFAULT_TIMEOUT_SECONDS),
+    cacheTtlMs: resolveCacheTtlMs(undefined, DEFAULT_CACHE_TTL_MINUTES),
+    userAgent: DEFAULT_FETCH_USER_AGENT,
     firecrawlEnabled,
     firecrawlApiKey: apiKey,
     firecrawlBaseUrl:
-      typeof firecrawl.baseUrl === 'string' && firecrawl.baseUrl.trim()
-        ? firecrawl.baseUrl.trim()
-        : typeof process.env.FIRECRAWL_BASE_URL === 'string' && process.env.FIRECRAWL_BASE_URL.trim()
-          ? process.env.FIRECRAWL_BASE_URL.trim()
-          : DEFAULT_FIRECRAWL_BASE_URL,
-    firecrawlOnlyMainContent: firecrawl.onlyMainContent !== false,
-    firecrawlMaxAgeMs:
-      typeof firecrawl.maxAgeMs === 'number' && Number.isFinite(firecrawl.maxAgeMs)
-        ? Math.max(0, Math.floor(firecrawl.maxAgeMs))
-        : DEFAULT_FIRECRAWL_MAX_AGE_MS,
-    firecrawlProxy: firecrawl.proxy === 'basic' || firecrawl.proxy === 'stealth' ? firecrawl.proxy : 'auto',
-    firecrawlStoreInCache: firecrawl.storeInCache !== false,
-    firecrawlTimeoutSeconds: resolveTimeoutSeconds(
-      firecrawl.timeoutSeconds ?? fetchCfg.timeoutSeconds,
-      DEFAULT_TIMEOUT_SECONDS
-    )
+      typeof process.env.FIRECRAWL_BASE_URL === 'string' && process.env.FIRECRAWL_BASE_URL.trim()
+        ? process.env.FIRECRAWL_BASE_URL.trim()
+        : DEFAULT_FIRECRAWL_BASE_URL,
+    firecrawlOnlyMainContent: true,
+    firecrawlMaxAgeMs: DEFAULT_FIRECRAWL_MAX_AGE_MS,
+    firecrawlProxy: 'auto',
+    firecrawlStoreInCache: true,
+    firecrawlTimeoutSeconds: resolveTimeoutSeconds(undefined, DEFAULT_TIMEOUT_SECONDS)
   };
 }
 

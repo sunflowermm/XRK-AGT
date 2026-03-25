@@ -127,37 +127,6 @@ tools:
     runEnabled: true
     runTimeoutMs: 120000
     maxCommandOutputChars: 200000
-  web:
-    fetch:
-      enabled: true
-      readability: true
-      timeoutSeconds: 30
-      maxCharsCap: 50000
-      maxResponseBytes: 2000000
-      maxRedirects: 3
-      cacheTtlMinutes: 15
-      userAgent: ""
-      firecrawl:
-        enabled: false
-        apiKey: ""
-        baseUrl: ""
-        onlyMainContent: true
-        maxAgeMs: 172800000
-        timeoutSeconds: 30
-        proxy: "auto"
-        storeInCache: true
-  # browser 工作流（stream/browser.js + lib/agent-browser）
-  agentBrowser:
-    enabled: true
-    headless: true
-    browserType: chromium      # chromium | firefox | webkit
-    executablePath: ""         # 留空使用 Playwright 自带
-    launchTimeoutMs: 120000
-    navigationTimeoutMs: 60000
-    maxTextChars: 50000          # browser_page_text 截断
-    screenshotMaxBytes: 4194304
-    allowPrivateNetwork: false
-    dangerouslyAllowPrivateNetwork: false
 
 # ----------------------------------------
 # Python 子服务端
