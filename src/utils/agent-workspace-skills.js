@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { formatSkillsForPrompt, loadSkillsFromDir } from '@mariozechner/pi-coding-agent';
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
+import { resolveSkillLimits, resolveSkillRoots } from '#utils/skills/config.js';
 
 function resolveContainedSkillPath({ rootRealPath, candidatePath }) {
   const candidateRealPath = realpathSyncOrResolve(candidatePath);
@@ -57,7 +58,7 @@ function resolveNestedSkillsRoot(dir, opts = {}) {
   for (const name of toScan) {
     const skillMd = path.join(nested, name, 'SKILL.md');
     if (fs.existsSync(skillMd)) {
-      return { baseDir: nested, note: `Detected nested skills root at ${nested}` };
+      return { baseDir: nested };
     }
   }
   return { baseDir: dir };
@@ -127,7 +128,9 @@ function loadSkillsForOneRoot(params, limits) {
   }
 
   const childDirs = listChildDirectories(baseDir);
-  const maxCandidates = Math.max(0, limits.maxSkillsLoadedPerSource);
+  // baseDir 没有 SKILL.md 时：maxCandidatesPerRoot 限制候选子目录数
+  // maxSkillsLoadedPerSource 则由后续 break/load 数量共同约束最终加载数量
+  const maxCandidates = Math.max(0, limits.maxCandidatesPerRoot);
   const limitedChildren = childDirs.slice().sort().slice(0, maxCandidates);
 
   const loadedSkills = [];
@@ -213,18 +216,14 @@ function formatSkillsCompact(skills) {
   return lines.join('\n');
 }
 
-const COMPACT_WARNING_OVERHEAD = 150;
-
 /** OpenClaw applySkillsPromptLimits */
 function applySkillsPromptLimits(skills, limits) {
-  const total = skills.length;
   const byCount = skills.slice(0, Math.max(0, limits.maxSkillsInPrompt));
   let skillsForPrompt = byCount;
-  let truncated = total > byCount.length;
   let compact = false;
 
   const fitsFull = (s) => formatSkillsForPrompt(s).length <= limits.maxSkillsPromptChars;
-  const compactBudget = limits.maxSkillsPromptChars - COMPACT_WARNING_OVERHEAD;
+  const compactBudget = limits.maxSkillsPromptChars;
   const fitsCompact = (s) => formatSkillsCompact(s).length <= compactBudget;
 
   if (!fitsFull(skillsForPrompt)) {
@@ -240,14 +239,11 @@ function applySkillsPromptLimits(skills, limits) {
         else hi = mid - 1;
       }
       skillsForPrompt = skillsForPrompt.slice(0, lo);
-      truncated = true;
     }
   }
 
-  return { skillsForPrompt, truncated, compact };
+  return { skillsForPrompt, compact };
 }
-
-const DEFAULT_SKILL_ROOTS = ['.cursor/skills', '.agents/skills', 'skills'];
 
 /**
  * @param {string} workspaceRootResolved 已 realpath 的工作区根
@@ -255,16 +251,8 @@ const DEFAULT_SKILL_ROOTS = ['.cursor/skills', '.agents/skills', 'skills'];
  * @returns {string} XML 技能目录或空串
  */
 export function buildSkillsPromptFromWorkspace(workspaceRootResolved, cfg = {}) {
-  const limits = {
-    maxCandidatesPerRoot: cfg.maxCandidatesPerRoot ?? 300,
-    maxSkillsLoadedPerSource: cfg.maxSkillsLoadedPerSource ?? cfg.maxSkillFiles ?? 200,
-    maxSkillsInPrompt: cfg.maxSkillsInPrompt ?? 150,
-    maxSkillsPromptChars: cfg.maxSkillsPromptChars ?? 30_000,
-    maxSkillFileBytes: cfg.maxSkillFileBytes ?? 256_000,
-  };
-
-  const skillRoots =
-    Array.isArray(cfg.skillRoots) && cfg.skillRoots.length > 0 ? cfg.skillRoots : DEFAULT_SKILL_ROOTS;
+  const limits = resolveSkillLimits(cfg);
+  const skillRoots = resolveSkillRoots(cfg);
 
   const merged = new Map();
   for (const rel of skillRoots) {
@@ -281,13 +269,48 @@ export function buildSkillsPromptFromWorkspace(workspaceRootResolved, cfg = {}) 
   if (resolvedSkills.length === 0) return '';
 
   const promptSkills = compactSkillPaths(resolvedSkills);
-  const { skillsForPrompt, truncated, compact } = applySkillsPromptLimits(promptSkills, limits);
-  const truncationNote = truncated
-    ? `⚠️ Skills truncated: included ${skillsForPrompt.length} of ${resolvedSkills.length}${compact ? ' (compact format, descriptions omitted)' : ''}.`
-    : compact
-      ? '⚠️ Skills catalog using compact format (descriptions omitted).'
-      : '';
-  return [truncationNote, compact ? formatSkillsCompact(skillsForPrompt) : formatSkillsForPrompt(skillsForPrompt)]
-    .filter(Boolean)
-    .join('\n');
+  const { skillsForPrompt, compact } = applySkillsPromptLimits(promptSkills, limits);
+  const totalSkills = resolvedSkills.length;
+  const maxChars = limits.maxSkillsPromptChars;
+
+  const buildCombined = (subsetSkills, useCompact) => {
+    if (!Array.isArray(subsetSkills) || subsetSkills.length === 0) return '';
+    const included = subsetSkills.length;
+    const isTruncated = included < totalSkills;
+
+    const note = isTruncated
+      ? `⚠️ Skills truncated: included ${included} of ${totalSkills}${useCompact ? ' (compact format, descriptions omitted)' : ''}.`
+      : useCompact
+        ? '⚠️ Skills catalog using compact format (descriptions omitted).'
+        : '';
+
+    const xml = useCompact ? formatSkillsCompact(subsetSkills) : formatSkillsForPrompt(subsetSkills);
+    return [note, xml].filter(Boolean).join('\n');
+  };
+
+  // applySkillsPromptLimits 已保证 skills XML 自身预算大概率满足；
+  // 这里再把 truncationNote 与最终拼接结果纳入精确预算，避免最终超限。
+  const initial = buildCombined(skillsForPrompt, compact);
+  if (initial.length <= maxChars) return initial;
+
+  const modes = compact ? [true] : [false, true];
+  for (const useCompact of modes) {
+    const direct = buildCombined(skillsForPrompt, useCompact);
+    if (direct.length <= maxChars) return direct;
+
+    let lo = 0;
+    let hi = skillsForPrompt.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      const subset = skillsForPrompt.slice(0, mid);
+      const combined = buildCombined(subset, useCompact);
+      if (combined.length <= maxChars) lo = mid;
+      else hi = mid - 1;
+    }
+
+    const best = buildCombined(skillsForPrompt.slice(0, lo), useCompact);
+    if (best.length > 0) return best;
+  }
+
+  return '';
 }

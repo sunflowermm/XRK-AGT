@@ -41,3 +41,4 @@ Write-Host "Synced groups: $totalSyncedGroups / $($pairs.Count)"
 Write-Host "Total copied files (including both targets): $totalCopiedFiles"
 Write-Host ("Elapsed: {0:n2}s" -f $elapsed.TotalSeconds)
 Write-Host "Covered paths: .cursor/skills, .cursor/rules, .cursor/agents, .cursor/commands -> .claude + .trae"
+Write-Host "Note: runtime 注入 sources 以 workspace 根目录的 `rules/` 与 `agents/subagents.*` 为准。"

@@ -82,32 +82,28 @@ mcp:
   defaultRemoteMcp: []     # 例如 ["github", "browser"]，对应 remote-mcp.github / remote-mcp.browser
   toolMergeStrategy: preferRequest  # 工具合并策略：preferRequest | preferStream | merge
 
-# Agent 工作区上下文（Skills / Rules / AGENT.md / Subagents，注入到工作流 system prompt）
+# Agent 工作区上下文（Skills / Rules / OpenClaw 模板文件 / Memory / Subagents，注入到工作流 system prompt）
 agentWorkspace:
   enabled: true
   root: ""                 # 留空=项目根；可填相对项目根的路径
   # 留空=全部；否则仅注入列出的入口：工作流 name（chat/web/desktop/tools…）+ v3（POST /api/v3/chat/completions）
   streams: []
-  includeSkills: true
   includeRules: true
   includeAgentMd: true
   includeSubagents: true
-  # 与 OpenClaw workspace  bootstrap 文件名对齐；默认关闭以免上下文膨胀
-  includeBootstrapFiles: false
-  maxBootstrapFileChars: 6000
   # 0 = 不限制 prose 总长；Skills 仍受 maxSkillsPromptChars 约束
   maxTotalChars: 0
-  extraMarkdownFiles: []
+  contextFiles: []         # 额外注入的 Markdown 路径（相对工作区根）
   # 以下与 OpenClaw config skills.limits / 目录结构对齐（pi-coding-agent formatSkillsForPrompt）
   maxCandidatesPerRoot: 300
   maxSkillsLoadedPerSource: 200
   maxSkillsInPrompt: 150
   maxSkillsPromptChars: 30000
   maxSkillFileBytes: 256000
-  skillRoots:
-    - ".cursor/skills"
-    - ".agents/skills"
-    - "skills"
+  customSkillRoots:
+    - "standard-skills"
+  # 自定义技能目录（可多个；相对工作区路径或绝对路径均可）。
+  # 为空不注入 skills。示例：`.cursor/skills` 或 `C:/.../standard-skills`
   maxRulesChars: 12000
   maxAgentMdChars: 12000
 

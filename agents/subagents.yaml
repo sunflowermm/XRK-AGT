@@ -1,0 +1,10 @@
+subagents:
+  - name: xrk-config-sync
+    description: 当用户要改配置/Schema/默认模板但不确定是否生效时使用
+    model: null
+  - name: xrk-http-api-impl
+    description: 当用户要实现/排错 HTTP API handler、路由与参数校验时使用
+    model: null
+  - name: xrk-plugin-tasker
+    description: 当用户要做插件/Tasker 协议适配、输入输出映射与运行时校验时使用
+    model: null

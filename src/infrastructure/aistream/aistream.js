@@ -507,7 +507,8 @@ export default class AIStream {
   }
 
   /**
-   * 在 system 文案末尾注入工作区上下文（AGENT(S).md、.cursor/rules、SKILL.md、subagents），受 aistream.agentWorkspace 控制。
+   * 在 system 文案末尾注入工作区上下文（AGENT(S).md、rules、skills catalog、MEMORY/模板、subagents），
+   * 受 `aistream.agentWorkspace` 控制。
    * 覆盖 buildChatContext 的子类若自行组装 system，应调用本方法以保持一致行为。
    * @param {string} text
    * @returns {Promise<string>}

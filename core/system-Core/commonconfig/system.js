@@ -2398,7 +2398,7 @@ export default class SystemConfig extends ConfigBase {
               type: 'object',
               label: 'Agent 工作区上下文',
               description:
-                '将 AGENT.md / AGENTS.md、.cursor/rules、SKILL.md、subagents 清单注入到 system prompt（惯例对齐 Cursor / OpenClaw 工作区）',
+                '将 AGENT.md / AGENTS.md、rules、OpenClaw 模板与 skills catalog、MEMORY（主会话）、subagents 清单注入到 system prompt（对齐 OpenClaw 工作区习惯）',
               component: 'SubForm',
               fields: {
                 enabled: {
@@ -2424,45 +2424,25 @@ export default class SystemConfig extends ConfigBase {
                   default: [],
                   component: 'MultiSelect'
                 },
-                includeSkills: {
-                  type: 'boolean',
-                  label: '包含 SKILL.md',
-                  default: true,
-                  component: 'Switch'
-                },
                 includeRules: {
                   type: 'boolean',
-                  label: '包含 .cursor/rules',
+                  label: '包含 rules',
                   default: true,
                   component: 'Switch'
                 },
                 includeAgentMd: {
                   type: 'boolean',
-                  label: '包含 AGENT.md / AGENTS.md',
+                  label: '注入工作区上下文（OpenClaw 模板等）',
+                  description: '注入 AGENT/AGENTS，以及 SOUL/USER/IDENTITY/TOOLS/HEARTBEAT/BOOTSTRAP/MEMORY 等助手向模板（存在则读取）',
                   default: true,
                   component: 'Switch'
                 },
                 includeSubagents: {
                   type: 'boolean',
                   label: '包含 subagents 清单',
-                  description: '.cursor/subagents.yaml|json 或项目根 subagents.yaml|json',
+                  description: '项目根 agents/subagents.yaml|json',
                   default: true,
                   component: 'Switch'
-                },
-                includeBootstrapFiles: {
-                  type: 'boolean',
-                  label: '包含 OpenClaw 风格 bootstrap 文件',
-                  description:
-                    '读取 SOUL/TOOLS/IDENTITY/USER/HEARTBEAT/BOOTSTRAP/MEMORY.md 等（存在则注入，与 OpenClaw 工作区命名对齐）',
-                  default: false,
-                  component: 'Switch'
-                },
-                maxBootstrapFileChars: {
-                  type: 'number',
-                  label: '单个 bootstrap 文件最大字符',
-                  min: 100,
-                  default: 6000,
-                  component: 'InputNumber'
                 },
                 maxTotalChars: {
                   type: 'number',
@@ -2473,9 +2453,9 @@ export default class SystemConfig extends ConfigBase {
                   default: 0,
                   component: 'InputNumber'
                 },
-                extraMarkdownFiles: {
+                contextFiles: {
                   type: 'array',
-                  label: '额外 Markdown 文件',
+                  label: '额外上下文文件',
                   description: '相对工作区根的路径列表（如 docs/NOTE.md），安全读入后追加到 prose',
                   itemType: 'string',
                   default: [],
@@ -2492,7 +2472,7 @@ export default class SystemConfig extends ConfigBase {
                 maxSkillsLoadedPerSource: {
                   type: 'number',
                   label: '每目录最多加载技能数',
-                  description: '对齐 OpenClaw skills.limits.maxSkillsLoadedPerSource；旧配置 maxSkillFiles 仍可读',
+                  description: '对齐 OpenClaw skills.limits.maxSkillsLoadedPerSource',
                   min: 1,
                   default: 200,
                   component: 'InputNumber'
@@ -2521,13 +2501,13 @@ export default class SystemConfig extends ConfigBase {
                   default: 256000,
                   component: 'InputNumber'
                 },
-                skillRoots: {
+                customSkillRoots: {
                   type: 'array',
-                  label: '技能根目录（相对工作区）',
+                  label: '自定义技能目录',
                   description:
-                    'OpenClaw 式目录发现（非 glob）：子目录含 SKILL.md 即为一项技能；后者覆盖同名；默认含 .cursor/skills、.agents/skills、skills',
+                    '可填相对工作区路径或绝对路径；为空不注入 skills（示例：`.cursor/skills` 或 `C:/.../standard-skills`）',
                   itemType: 'string',
-                  default: ['.cursor/skills', '.agents/skills', 'skills'],
+                  default: [],
                   component: 'ArrayForm'
                 },
                 maxRulesChars: {
