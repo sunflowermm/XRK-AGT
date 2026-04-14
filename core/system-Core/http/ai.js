@@ -41,6 +41,11 @@ function toBool(v) {
   return;
 }
 
+function normalizeStringArray(values = []) {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map((item) => String(item || '').trim()).filter(Boolean))];
+}
+
 const getDefaultProvider = () => {
   const llm = getAistreamConfigOptional().llm || cfg?.aistream?.llm || {};
   return (llm?.Provider || llm?.provider || '').toString().trim().toLowerCase();
@@ -171,6 +176,73 @@ function summarizeV3Request(req, body, { contentType, messages, uploadedImagesCo
       'content-length': req?.headers?.['content-length']
     })
   };
+}
+
+function resolveWorkflowStreams(body = {}) {
+  const workflowConfig = pickFirst(body, ['workflow']);
+  if (!workflowConfig || typeof workflowConfig !== 'object') return null;
+  const streams = [];
+  if (Array.isArray(workflowConfig.workflows)) streams.push(...workflowConfig.workflows);
+  if (Array.isArray(workflowConfig.streams)) streams.push(...workflowConfig.streams);
+  if (typeof workflowConfig.workflow === 'string') streams.push(workflowConfig.workflow);
+  const normalized = normalizeStringArray(streams);
+  return normalized.length > 0 ? normalized : null;
+}
+
+function resolveDefaultStreams() {
+  const aistreamCfg = getAistreamConfigOptional();
+  const mcpCfg = aistreamCfg.mcp || {};
+  const defaultStreamsCfg = normalizeStringArray(mcpCfg.defaultStreams);
+  const defaultRemoteMcpCfg = normalizeStringArray(mcpCfg.defaultRemoteMcp).map((name) => `remote-mcp.${name}`);
+  const merged = normalizeStringArray([...defaultStreamsCfg, ...defaultRemoteMcpCfg]);
+  return merged.length > 0 ? merged : null;
+}
+
+function buildOverridesFromBody(body = {}) {
+  const overrides = {};
+  const addNum = (key, ...aliases) => {
+    const v = toNum(pickFirst(body, [key, ...aliases]));
+    if (v !== undefined) {
+      overrides[key] = v;
+      if (aliases.length) overrides[aliases[0]] = v;
+    }
+  };
+  const addVal = (key, ...aliases) => {
+    const v = pickFirst(body, [key, ...aliases]);
+    if (v !== undefined) {
+      overrides[key] = v;
+      if (aliases.length) overrides[aliases[0]] = v;
+    }
+  };
+  const addBool = (key, ...aliases) => {
+    const v = toBool(pickFirst(body, [key, ...aliases]));
+    if (v !== undefined) {
+      overrides[key] = v;
+      if (aliases.length) overrides[aliases[0]] = v;
+    }
+  };
+
+  addNum('temperature');
+  addNum('max_tokens', 'maxTokens', 'max_completion_tokens', 'maxCompletionTokens');
+  addNum('top_p', 'topP');
+  addNum('presence_penalty', 'presencePenalty');
+  addNum('frequency_penalty', 'frequencyPenalty');
+  addVal('tool_choice', 'toolChoice');
+  addBool('parallel_tool_calls', 'parallelToolCalls');
+  addVal('tools');
+  addVal('stop');
+  addVal('response_format', 'responseFormat');
+  addVal('stream_options', 'streamOptions');
+  addNum('seed');
+  addVal('user');
+  addNum('n');
+  addVal('logit_bias', 'logitBias');
+  addBool('logprobs');
+  addNum('top_logprobs', 'topLogprobs');
+
+  const extraBody = parseOptionalJson(pickFirst(body, ['extraBody']));
+  if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;
+  return overrides;
 }
 
 function createOpenAIChunk({ id, created, model, index = 0, delta = {}, finishReason = null, usage, mcpTools }) {
@@ -324,78 +396,19 @@ async function handleChatCompletionsV3(req, res) {
     );
   }
 
-  const workflowConfig = pickFirst(body, ['workflow']);
-  const workflowStreams = workflowConfig && typeof workflowConfig === 'object' ? (() => {
-    const streams = [];
-    if (Array.isArray(workflowConfig.workflows)) streams.push(...workflowConfig.workflows.filter(Boolean));
-    if (Array.isArray(workflowConfig.streams)) streams.push(...workflowConfig.streams.filter(Boolean));
-    if (typeof workflowConfig.workflow === 'string' && workflowConfig.workflow.trim()) streams.push(workflowConfig.workflow.trim());
-    return streams.length ? [...new Set(streams)] : null;
-  })() : null;
-
-  // YAML 默认工作流 & 远程 MCP：在调用方未显式传入 workflow 时生效
-  const aistreamCfg = getAistreamConfigOptional();
-  const mcpCfg = aistreamCfg.mcp || {};
-  const defaultStreamsCfg = Array.isArray(mcpCfg.defaultStreams) ? mcpCfg.defaultStreams.filter(Boolean) : [];
-  const defaultRemoteMcpCfg = Array.isArray(mcpCfg.defaultRemoteMcp)
-    ? mcpCfg.defaultRemoteMcp.filter(Boolean).map((name) => `remote-mcp.${String(name).trim()}`).filter(Boolean)
-    : [];
-  const mergedDefaultStreams = [...new Set([...defaultStreamsCfg, ...defaultRemoteMcpCfg])];
-  const effectiveStreams = (workflowStreams && workflowStreams.length)
-    ? workflowStreams
-    : (mergedDefaultStreams.length ? mergedDefaultStreams : null);
+  const workflowStreams = resolveWorkflowStreams(body);
+  const defaultStreams = resolveDefaultStreams();
+  const effectiveStreams = workflowStreams?.length ? workflowStreams : defaultStreams;
 
   const client = LLMFactory.createClient(llmConfig);
-  const overrides = {};
+  const overrides = buildOverridesFromBody(body);
   // hybrid：有 body.tools 时区分中游(MCP)/下游(请求)，中游 XRK 执行、下游透传客户端执行
   // execute：无 body.tools 且有声明的 streams 时，仅中游由 XRK 执行
   // passthrough：无 body.tools 且无 streams 时，tool_calls 透传
   const hasRequestTools = Array.isArray(body.tools) && body.tools.length > 0;
   overrides.mcpToolMode = hasRequestTools ? 'hybrid' : (effectiveStreams?.length ? 'execute' : 'passthrough');
-  const addNum = (key, ...aliases) => {
-    const v = toNum(pickFirst(body, [key, ...aliases]));
-    if (v !== undefined) {
-      overrides[key] = v;
-      if (aliases.length) overrides[aliases[0]] = v;
-    }
-  };
-  const addVal = (key, ...aliases) => {
-    const v = pickFirst(body, [key, ...aliases]);
-    if (v !== undefined) {
-      overrides[key] = v;
-      if (aliases.length) overrides[aliases[0]] = v;
-    }
-  };
-  const addBool = (key, ...aliases) => {
-    const v = toBool(pickFirst(body, [key, ...aliases]));
-    if (v !== undefined) {
-      overrides[key] = v;
-      if (aliases.length) overrides[aliases[0]] = v;
-    }
-  };
-
-  addNum('temperature');
-  addNum('max_tokens', 'maxTokens', 'max_completion_tokens', 'maxCompletionTokens');
-  addNum('top_p', 'topP');
-  addNum('presence_penalty', 'presencePenalty');
-  addNum('frequency_penalty', 'frequencyPenalty');
-  addVal('tool_choice', 'toolChoice');
-  addBool('parallel_tool_calls', 'parallelToolCalls');
-  addVal('tools');
-  addVal('stop');
-  addVal('response_format', 'responseFormat');
-  addVal('stream_options', 'streamOptions');
-  addNum('seed');
-  addVal('user');
-  addNum('n');
-  addVal('logit_bias', 'logitBias');
-  addBool('logprobs');
-  addNum('top_logprobs', 'topLogprobs');
   
   if (effectiveStreams?.length) overrides.streams = effectiveStreams;
-
-  const extraBody = parseOptionalJson(pickFirst(body, ['extraBody']));
-  if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;
 
   if (!streamFlag) {
     const chatResult = await client.chat(messages, overrides);

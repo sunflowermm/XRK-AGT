@@ -4,6 +4,7 @@
 > **说明**：Node 侧"多步工作流/WorkflowManager/TODO"已移除；复杂多步编排请使用 Python 子服务端（LangChain/LangGraph）。本文档描述的是 Node 侧 `AIStream` 基类与 LLM/MCP 集成方式。  
 > **可扩展性**：AIStream是工作流系统的核心扩展点。通过继承AIStream，开发者可以快速创建自定义工作流。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
 > **相关文档**：关于 LLM/Vision/ASR/TTS 工厂系统的详细说明，请参考 **[工厂系统文档](factory.md)** 📖
+> **底层基线**：架构边界与调用链路以 **[底层架构设计](底层架构设计.md)** 为准。
 
 `AIStream` 是 XRK-AGT 中的 **AI 工作流基类**，用于封装 LLM 调用、向量服务、上下文增强等能力（工具调用由 LLM 工厂的 tool calling + MCP 统一处理，AIStream 本身**不再解析函数调用文本**）。
 
@@ -246,7 +247,7 @@ constructor(options = {})
 工作流系统配置由 **`cfg.aistream`** 提供（`src/infrastructure/config/config.js`：`getServerConfig('aistream')`），运行时文件为 **`data/server_bots/{port}/aistream.yaml`**（随 Bot/端口变化）。仓库模板见 **`config/default_config/aistream.yaml`**，部署时应对齐该模板与 **`core/system-Core/commonconfig/system.js`** 中 `aistream.schema.fields`。
 
 **关键配置项（节选）**：
-- `llm.Provider` - LLM提供商（`volcengine`/`xiaomimimo`/`openai`/`openai_compat`/`gemini`/`anthropic`/`azure_openai`）
+- `llm.Provider` - 默认 LLM 提供商（示例：`volcengine`/`xiaomimimo`/`openai`/`gemini`/`anthropic`/`azure_openai`；兼容厂商由 `*_compat_llm.yaml` 的 `providers[].key` 动态扩展）
 - `subserver.host` / `subserver.port` / `subserver.timeout` - Python 子服务端连接
 - `embedding.enabled` / `maxContexts` / `similarityThreshold` - 由 `StreamLoader.applyEmbeddingConfig` 合并到各工作流 `embeddingConfig`（`loader.js`）
 - `mcp.*` - 默认注入工作流、远程 MCP、工具合并策略等
@@ -271,7 +272,7 @@ constructor(options = {})
   - 仅支持标准代理协议；**vmess/vless 等订阅需由 Clash / sing-box 等独立客户端转换为 HTTP 代理后再由 `proxy.url` 指向**
 
 **关于 model（外部调用约定）**：
-- 对外 v3 入口 `POST /api/v3/chat/completions`：外部调用只需要把 `model` 填成 **provider（运营商）**（如 `openai` / `openai_compat` / `gemini` 等），**不需要**再填写真实模型名。
+- 对外 v3 入口 `POST /api/v3/chat/completions`：外部调用只需要把 `model` 填成 **provider（运营商）**（如 `openai` / `gemini` / `ollama-local` 等），**不需要**再填写真实模型名。
 - 真实模型名由 `{provider}_llm.yaml` 中的默认 `model`/`chatModel` 决定；你也可以通过工作流/内部配置覆盖，但外部调用不强制要求。
 
 **Embedding 配置**：
@@ -913,4 +914,4 @@ MonitorService.endTrace(traceId, { success: true });
 
 ---
 
-*最后更新：2026-03-25（对齐 aistream 配置、加载路径与 tools/embedding 文档）*
+*最后更新：2026-04-14（对齐底层架构基线与 provider 动态扩展口径）*

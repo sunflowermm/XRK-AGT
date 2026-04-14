@@ -2,6 +2,7 @@
 
 > **文件位置**：`src/factory/`  
 > **可扩展性**：工厂系统是 XRK-AGT 的核心扩展点之一。通过工厂模式，开发者可以轻松接入新的 AI 服务提供商，实现统一的多厂商支持。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+> **底层基线**：工厂层职责、调用链路与配置优先级以 **[底层架构设计](底层架构设计.md)** 为准。
 
 XRK-AGT 采用**工厂模式**统一管理多种 AI 服务提供商，包括大语言模型（LLM）、语音识别（ASR）和语音合成（TTS）。工厂系统提供了统一的接口，屏蔽了不同厂商的 API 差异，让开发者可以轻松切换和扩展服务提供商。多模态识图能力由各家 LLM 自身的多模态接口提供，不再通过单独的「识图工厂」转发。
 
@@ -895,7 +896,7 @@ Host: localhost:8080
   "data": {
     "enabled": true,
     "defaultProfile": "volcengine",
-    "defaultWorkflow": "chat",
+    "defaultWorkflow": null,
     "persona": "",
     "profiles": [
       {
@@ -948,7 +949,7 @@ Host: localhost:8080
   "object": "list",
   "data": [
     {
-      "id": "volcengine",
+      "id": "openai",
       "object": "model",
       "created": 1703123456,
       "owned_by": "xrk-agt"
@@ -976,4 +977,4 @@ Host: localhost:8080
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-04-14（对齐底层架构基线与 v3 接口实际返回口径）*

@@ -31,6 +31,8 @@ yarn-error.log*
 # IDE
 .vscode/
 .idea/
+.claude/
+.trae/
 *.swp
 *.swo
 *~
@@ -63,6 +65,8 @@ data/stdin/
 .parcel-cache/
 .eslintcache
 .stylelintcache
+__pycache__/
+*.pyc
 
 # TypeScript
 *.tsbuildinfo

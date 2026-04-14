@@ -58,6 +58,7 @@ XRK-AGT 是由向日葵开发，各个大学志同道合的学生联合研制，
 
 - 仅想**先跑起来**：直接看下面的「快速开始」
 - 想**了解整体架构**：先看「架构层次说明」和 [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)
+- 想**看底层设计边界（推荐）**：阅读 [`docs/底层架构设计.md`](docs/底层架构设计.md)
 - 想**做二次开发/写插件**：阅读 [`docs/README.md`](docs/README.md) 与各子文档
 
 ---

@@ -2,6 +2,8 @@
 
 欢迎来到 XRK-AGT 框架文档中心。
 
+> **底层设计基线**：请优先阅读 **[底层架构设计](底层架构设计.md)**，该文档作为架构边界、AI 调用链路、配置优先级的统一事实源。
+
 > **主入口文档**：建议从 [PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md) 与本页开始阅读。
 
 ---
@@ -11,6 +13,7 @@
 ### 🚀 快速开始
 
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
+- **[底层架构设计](底层架构设计.md)** - 统一 Runtime / Infrastructure / Core 与 AI 底层设计（建议先读）
 - **[Bot 主类文档](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范 ⭐
 
@@ -103,6 +106,7 @@ flowchart TB
 ### 🤖 AI 工作流
 
 - **说明**：Node 侧"多步工作流/WorkflowManager/TODO"已移除；复杂 Agent 编排请使用 **Python 子服务端（LangChain/LangGraph）**，主服务端提供统一的 **v3 LLM Provider** 与 **MCP 工具注入/执行**。
+- **[底层架构设计](底层架构设计.md)** - AI 主链路、AIStream 链路、子服务端职责边界（权威）
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
 - **[AIStream 工作流基类文档](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
@@ -272,5 +276,5 @@ flowchart TB
 
 ---
 
-*最后更新：2026-03-22*
+*最后更新：2026-04-14*
 

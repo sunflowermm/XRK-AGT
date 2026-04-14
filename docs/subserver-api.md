@@ -2,6 +2,7 @@
 
 > **文件位置**：`subserver/pyserver/`  
 > **说明**：XRK-AGT Python 子服务端提供 AI 生态相关的服务，包括 LangChain 集成和向量服务
+> **底层基线**：主/子服务端职责边界以 **[底层架构设计](底层架构设计.md)** 为准。
 
 XRK-AGT Python 子服务端提供 AI 生态相关的服务，包括：
 - **LangChain集成**：通过主服务v3接口实现，支持MCP工具调用
@@ -68,7 +69,7 @@ LangChain聊天接口，使用主服务v3接口作为LLM provider，支持MCP工
 - 子服务端调用主服务端：`POST /api/v3/chat/completions`
 - **必填字段**：
   - `messages`: OpenAI messages
-  - `model`: 运营商/provider（`volcengine` / `xiaomimimo` / `openai` / `openai_compat` / `gemini` / `anthropic` / `azure_openai`）
+  - `model`: 运营商/provider（如 `volcengine` / `xiaomimimo` / `openai` / `gemini` / `anthropic` / `azure_openai`，以及兼容配置中定义的 provider key）
   - `apiKey`（或 `api_key`）: 访问主服务端 v3 的鉴权 key（Bot 启动生成），**不是厂商 key**
 
 - **说明**：
@@ -464,4 +465,4 @@ HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-04-14（对齐底层架构基线与 provider 动态扩展口径）*
