@@ -130,7 +130,7 @@ export default class BotUtil {
 
   // 初始化定期缓存清理
   static {
-    setInterval(() => {
+    const timer = setInterval(() => {
       const now = Date.now();
       for (const [key, cached] of BotUtil.#memoryCache) {
         if (cached.ttl > 0 && now > cached.expireAt) {
@@ -138,6 +138,8 @@ export default class BotUtil {
         }
       }
     }, 60000);
+    // 不阻塞进程退出（避免热重启/停止卡住）
+    timer.unref?.();
   }
 
   // ========== Map 管理 ==========
@@ -257,6 +259,7 @@ export default class BotUtil {
       map._cleanInterval = setInterval(() => {
         map.cleanExpired();
       }, cleanInterval);
+      map._cleanInterval.unref?.();
     }
 
     return map;

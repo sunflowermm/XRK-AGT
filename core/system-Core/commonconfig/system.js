@@ -1149,7 +1149,8 @@ export default class SystemConfig extends ConfigBase {
                 },
                 whitelist: {
                   type: 'array',
-                  label: '白名单路径（供业务模块按需使用）',
+                  label: '白名单路径（免 API Key）',
+                  description: '支持前缀或 regex: 正则字面量字符串；命中后跳过 API Key 鉴权',
                   itemType: 'string',
                   default: [],
                   component: 'Tags'
@@ -1316,6 +1317,67 @@ export default class SystemConfig extends ConfigBase {
                   type: 'string',
                   label: '文件上传',
                   default: '100mb',
+                  component: 'Input'
+                },
+                files: {
+                  type: 'number',
+                  label: '上传文件数限制',
+                  description: 'multipart 单次请求最大文件数量',
+                  min: 1,
+                  default: 8,
+                  component: 'InputNumber'
+                }
+              }
+            },
+            contentSafety: {
+              type: 'object',
+              label: '内容安全（HTTP侧）',
+              component: 'SubForm',
+              fields: {
+                http: {
+                  type: 'object',
+                  label: 'HTTP入口检测',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用内容安全',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    action: {
+                      type: 'string',
+                      label: '命中后的处理方式',
+                      enum: ['reject', 'warn'],
+                      default: 'reject',
+                      component: 'Select'
+                    },
+                    checkAiInput: {
+                      type: 'boolean',
+                      label: '检测 AI 输入文本',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    checkUploadMd5: {
+                      type: 'boolean',
+                      label: '检测上传文件哈希',
+                      default: true,
+                      component: 'Switch'
+                    }
+                  }
+                }
+              }
+            },
+            outbound: {
+              type: 'object',
+              label: '外联请求',
+              component: 'SubForm',
+              fields: {
+                proxy: {
+                  type: 'string',
+                  label: '统一代理',
+                  description: '如：http://127.0.0.1:7890，留空表示不走代理',
+                  default: '',
                   component: 'Input'
                 }
               }

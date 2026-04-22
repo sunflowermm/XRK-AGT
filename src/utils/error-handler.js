@@ -56,10 +56,19 @@ export class BotError extends Error {
       return error;
     }
     
+    const safeOriginal = error && typeof error === 'object'
+      ? {
+          name: error.name,
+          message: error.message,
+          // 只保留字符串 stack，避免挂载复杂对象导致常驻引用
+          stack: typeof error.stack === 'string' ? error.stack : undefined
+        }
+      : { message: String(error) };
+
     const botError = new BotError(
       error.message || '未知错误',
       code,
-      { ...context, original: error }
+      { ...context, original: safeOriginal }
     );
     
     if (error.stack) botError.stack = error.stack;

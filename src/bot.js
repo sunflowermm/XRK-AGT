@@ -11,6 +11,7 @@ import { WebSocketServer } from "ws";
 import compression from 'compression';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import multer from 'multer';
 import crypto from 'crypto';
 import os from 'node:os';
 import chalk from 'chalk';
@@ -74,6 +75,7 @@ export default class Bot extends EventEmitter {
     this.express = Object.assign(express(), { skip_auth: [], quiet: [] });
     this.server = null;
     this.httpsServer = null;
+    this.multipartUpload = null;
     
     // WebSocket 服务器配置：尽量全部由 server.yaml 驱动（保留默认值）
     const wsConfig = cfg.server?.websocket || {};
@@ -118,11 +120,12 @@ export default class Bot extends EventEmitter {
     const cacheTtl = Number(cfg.server?.misc?.cache?.ttlMs);
     this._cache = BotUtil.getMap('core_cache', { ttl: (Number.isFinite(cacheTtl) && cacheTtl > 0) ? cacheTtl : 60000, autoClean: true });
     this._rateLimiters = new Map();
+    this._authWhitelistCache = { ref: null, rules: [] };
     this.httpPort = null;
     this.httpsPort = null;
     this.actualPort = null;
     this.actualHttpsPort = null;
-    const configuredUrl = typeof cfg.server?.server?.url === 'string' ? cfg.server.server.url.trim() : '';
+    const configuredUrl = this._getConfiguredServerUrl();
     this.url = configuredUrl;
     
     // 反向代理相关
@@ -144,7 +147,6 @@ export default class Bot extends EventEmitter {
     this.ApiLoader = ApiLoader;
     this._initHttpServer();
     this._setupSignalHandlers();
-    this.generateApiKey();
     this._initSubServer();
     
     // 安全规则的编译缓存（避免每个请求重复解析）
@@ -305,7 +307,7 @@ export default class Bot extends EventEmitter {
    * 初始化代理应用和服务器
    */
   async _initProxyApp() {
-    const proxyConfig = cfg.server.proxy;
+    const proxyConfig = this._getProxyConfig();
     if (!proxyConfig?.enabled) return;
     
     // 创建独立的Express应用用于代理
@@ -410,7 +412,7 @@ export default class Bot extends EventEmitter {
    * 加载域名SSL证书
    */
   async _loadDomainCertificates() {
-    const proxyConfig = cfg.server.proxy;
+    const proxyConfig = this._getProxyConfig();
     if (!proxyConfig?.domains) return;
     
     for (const domainConfig of proxyConfig.domains) {
@@ -905,6 +907,14 @@ export default class Bot extends EventEmitter {
     
     // 7. 请求体解析（POST/PUT等需要）
     this._setupBodyParsers();
+
+    // 为业务层注入统一 multipart 上传器与限额配置
+    this.express.use((req, res, next) => {
+      req.multipartUpload = this.multipartUpload;
+      req.createMultipartUploader = (options = {}) => this._createMultipartUploader(options);
+      req.serverLimits = cfg.server?.limits || {};
+      next();
+    });
     
     this.express.use((req, res, next) => {
       const baseSkipPrefixes = ['/api/', '/media/', '/uploads/', '/File', '/core/'];
@@ -1576,6 +1586,70 @@ export default class Bot extends EventEmitter {
     this.express.use(express.raw({
       limit: limits.raw || '10mb'
     }));
+
+    this.express.use(express.text({
+      type: ['text/*', 'application/xml'],
+      limit: limits.text || '10mb'
+    }));
+
+    // multipart 统一上传器（供业务 API 复用，统一限额）
+    this._setupMultipartUploader();
+  }
+
+  _parseByteSize(value, fallback = 10 * 1024 * 1024) {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.floor(value);
+    if (typeof value !== 'string') return fallback;
+    const s = value.trim().toLowerCase();
+    const m = s.match(/^(\d+(?:\.\d+)?)\s*(b|kb|k|mb|m|gb|g|tb|t)?$/i);
+    if (!m) return fallback;
+    const n = Number(m[1]);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    const unit = (m[2] || 'b').toLowerCase();
+    const mul =
+      unit === 'b' ? 1 :
+      (unit === 'kb' || unit === 'k') ? 1024 :
+      (unit === 'mb' || unit === 'm') ? 1024 ** 2 :
+      (unit === 'gb' || unit === 'g') ? 1024 ** 3 :
+      (unit === 'tb' || unit === 't') ? 1024 ** 4 :
+      1;
+    return Math.floor(n * mul);
+  }
+
+  _setupMultipartUploader() {
+    this.multipartUpload = this._createMultipartUploader();
+  }
+
+  _getServerHost() {
+    const host = cfg?.server?.server?.host;
+    return (typeof host === 'string' && host.trim()) ? host.trim() : '0.0.0.0';
+  }
+
+  _getConfiguredServerUrl() {
+    const configuredUrl = cfg?.server?.server?.url;
+    return (typeof configuredUrl === 'string') ? configuredUrl.trim() : '';
+  }
+
+  _getProxyConfig() {
+    return cfg?.server?.proxy || {};
+  }
+
+  _isHttpsEnabled() {
+    return cfg?.server?.https?.enabled === true;
+  }
+
+  _createMultipartUploader(options = {}) {
+    const limitsCfg = cfg.server.limits || {};
+    const fileSize = this._parseByteSize(options.fileSize || limitsCfg.fileSize || '100mb', 100 * 1024 * 1024);
+    const files = Number.isFinite(Number(options.files))
+      ? Number(options.files)
+      : (Number.isFinite(Number(limitsCfg.files)) ? Number(limitsCfg.files) : 8);
+
+    const multerOptions = {
+      limits: { fileSize, files }
+    };
+    if (options.storage) multerOptions.storage = options.storage;
+    if (options.fileFilter) multerOptions.fileFilter = options.fileFilter;
+    return multer(multerOptions);
   }
 
   /**
@@ -1692,8 +1766,15 @@ export default class Bot extends EventEmitter {
     }
     
     BotUtil.apiKey = this.apiKey;
-    BotUtil.makeLog('success', `⚡ 生成新API密钥：${this.apiKey}`, '服务器');
+    const maskedKey = this._maskSensitive(this.apiKey);
+    BotUtil.makeLog('success', `⚡ 生成新API密钥：${maskedKey}`, '服务器');
     return this.apiKey;
+  }
+
+  _maskSensitive(value, keepStart = 6, keepEnd = 4) {
+    if (typeof value !== 'string' || value.length === 0) return '';
+    if (value.length <= keepStart + keepEnd) return '*'.repeat(value.length);
+    return `${value.slice(0, keepStart)}${'*'.repeat(value.length - keepStart - keepEnd)}${value.slice(-keepEnd)}`;
   }
 
   /**
@@ -1728,6 +1809,11 @@ export default class Bot extends EventEmitter {
     // 仅 127 回环地址免鉴权（内网网段不放行）
     const remoteAddress = req.socket?.remoteAddress || req.ip || '';
     if (this._isLoopback127Connection(remoteAddress)) {
+      return true;
+    }
+
+    // 白名单路径免鉴权（来自 server.auth.whitelist）
+    if (this._isApiWhitelistPath(req.path || req.url || req.originalUrl || '')) {
       return true;
     }
 
@@ -1766,6 +1852,40 @@ export default class Bot extends EventEmitter {
 
   checkApiAuthorization(req) {
     return this._checkApiAuthorization(req);
+  }
+
+  _isApiWhitelistPath(requestPath) {
+    const rules = this._getAuthWhitelistRules();
+    if (rules.length === 0) return false;
+    const p = String(requestPath || '').split('?')[0].split('#')[0];
+    return rules.some((rule) => rule.type === 'regex' ? rule.value.test(p) : p.startsWith(rule.value));
+  }
+
+  _getAuthWhitelistRules() {
+    const list = cfg?.server?.auth?.whitelist;
+    if (this._authWhitelistCache.ref === list) {
+      return this._authWhitelistCache.rules;
+    }
+
+    const rules = [];
+    if (Array.isArray(list)) {
+      for (const item of list) {
+        const pattern = String(item || '').trim();
+        if (!pattern) continue;
+        if (pattern.startsWith('^')) {
+          try {
+            rules.push({ type: 'regex', value: new RegExp(pattern) });
+          } catch {
+            // ignore invalid regex
+          }
+        } else {
+          rules.push({ type: 'prefix', value: pattern });
+        }
+      }
+    }
+
+    this._authWhitelistCache = { ref: list, rules };
+    return rules;
   }
 
   /**
@@ -1943,13 +2063,13 @@ export default class Bot extends EventEmitter {
    */
   _isWsPathSkipAuth(wsPath) {
     const handlers = this._getWsHandlersForPath(wsPath);
-    return handlers.some((entry) => entry && typeof entry === 'object' && entry.skipAuth === true);
+    return handlers.some((entry) => Boolean(entry && entry.skipAuth === true));
   }
 
   /**
    * 是否要求当前 WS 连接进行系统级 API Key 鉴权
    */
-  _shouldRequireWsApiAuth(req, wsPath) {
+  _shouldRequireWsApiAuth(wsPath) {
     const apiKeyEnabled = cfg.server?.auth?.apiKey?.enabled !== false;
     if (!apiKeyEnabled) return false;
     if (this._isWsPathSkipAuth(wsPath)) return false;
@@ -2205,7 +2325,7 @@ export default class Bot extends EventEmitter {
       return socket.destroy();
     }
 
-    if (this._shouldRequireWsApiAuth(req, wsPath) && !this._checkApiAuthorization(req)) {
+    if (this._shouldRequireWsApiAuth(wsPath) && !this._checkApiAuthorization(req)) {
       BotUtil.makeLog('warn', `WebSocket 鉴权失败：${req.url} ip=${req.socket.remoteAddress}`, '服务器');
       try {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -2323,7 +2443,7 @@ export default class Bot extends EventEmitter {
     await BotUtil.sleep(this[retryKey] * 1000);
     
     const server = isHttps ? this.httpsServer : this.server;
-    const host = cfg.server.server.host || '0.0.0.0';
+    const host = this._getServerHost();
     
     if (server) {
       server.listen(port, host);
@@ -2336,7 +2456,7 @@ export default class Bot extends EventEmitter {
   async serverLoad(isHttps) {
     const server = isHttps ? this.httpsServer : this.server;
     const port = isHttps ? this.httpsPort : this.httpPort;
-    const host = cfg.server.server.host || '0.0.0.0';
+    const host = this._getServerHost();
     
     if (!server) return;
     
@@ -2368,11 +2488,11 @@ export default class Bot extends EventEmitter {
    * 启动代理服务器
    */
   async startProxyServers() {
-    const proxyConfig = cfg.server.proxy;
+    const proxyConfig = this._getProxyConfig();
     if (!proxyConfig?.enabled) return;
     
     const httpPort = proxyConfig.httpPort || 80;
-    const host = cfg.server.server.host || '0.0.0.0';
+    const host = this._getServerHost();
     
     // 启动HTTP代理服务器
     this.proxyServer.listen(httpPort, host);
@@ -2402,7 +2522,7 @@ export default class Bot extends EventEmitter {
     
     console.log(chalk.cyan('▶ 代理域名：'));
     
-    const proxyConfig = cfg.server.proxy;
+    const proxyConfig = this._getProxyConfig();
     const domains = proxyConfig?.domains || [];
     
     for (const domainConfig of domains) {
@@ -2463,7 +2583,7 @@ export default class Bot extends EventEmitter {
       console.log(`    ${chalk.cyan('•')} ${chalk.white(publicUrl)}`);
     }
     
-    const configuredUrl = typeof cfg.server?.server?.url === 'string' ? cfg.server.server.url.trim() : '';
+    const configuredUrl = this._getConfiguredServerUrl();
     if (configuredUrl) {
       console.log(chalk.yellow('\n  配置域名：'));
       
@@ -2663,7 +2783,31 @@ export default class Bot extends EventEmitter {
     this.express.use((err, req, res, next) => {
       if (this._checkHeadersSent(res, next, err)) return;
 
-      BotUtil.makeLog('error', `请求错误 [${req.requestId || 'unknown'}]: ${err.message}`, '服务器', err);
+      if (cfg.server?.logging?.errors !== false) {
+        BotUtil.makeLog('error', `请求错误 [${req.requestId || 'unknown'}]: ${err.message}`, '服务器', err);
+      }
+
+      if (err?.name === 'MulterError') {
+        const code = err.code || 'MULTER_ERROR';
+        if (code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({
+            success: false,
+            error: '上传文件过大',
+            message: '文件大小超过限制',
+            requestId: req.requestId,
+            timestamp: Date.now()
+          });
+        }
+        if (code === 'LIMIT_FILE_COUNT') {
+          return res.status(413).json({
+            success: false,
+            error: '上传文件数量过多',
+            message: '文件数量超过限制',
+            requestId: req.requestId,
+            timestamp: Date.now()
+          });
+        }
+      }
 
       // 统一使用 JSON 结构返回错误，避免基于路径做特殊分支
       res.status(err.status || 500).json({
@@ -2682,6 +2826,11 @@ export default class Bot extends EventEmitter {
    */
   async closeServer() {
     BotUtil.makeLog('info', '⏳ 正在关闭服务器...', '服务器');
+
+    // 停止前端子进程（如果有），避免重启/停机后资源常驻
+    try {
+      await FrontendLauncher.stopAll();
+    } catch {}
     
     // 停止WebSocket心跳检测
     this._stopWebSocketHeartbeat();
@@ -2723,15 +2872,16 @@ export default class Bot extends EventEmitter {
    * 获取服务器URL
    */
   getServerUrl() {
-    if (this.proxyEnabled && cfg.server.proxy.domains[0]) {
-      const domain = cfg.server.proxy.domains[0];
+    const proxyConfig = this._getProxyConfig();
+    if (this.proxyEnabled && Array.isArray(proxyConfig.domains) && proxyConfig.domains[0]) {
+      const domain = proxyConfig.domains[0];
       const protocol = domain.ssl?.enabled ? 'https' : 'http';
       return `${protocol}://${domain.domain}`;
     }
     
-    const protocol = cfg.server.https.enabled ? 'https' : 'http';
+    const protocol = this._isHttpsEnabled() ? 'https' : 'http';
     const port = protocol === 'https' ? this.actualHttpsPort : this.actualPort;
-    const configuredUrl = typeof cfg.server?.server?.url === 'string' ? cfg.server.server.url.trim() : '';
+    const configuredUrl = this._getConfiguredServerUrl();
     let host = configuredUrl || '127.0.0.1';
     
     // 移除host中可能包含的协议前缀
@@ -2783,7 +2933,7 @@ export default class Bot extends EventEmitter {
         }
       } catch { }
       
-      if (cfg.server.misc.detectPublicIP !== false) {
+      if (cfg.server?.misc?.detectPublicIP !== false) {
         result.public = await this._getPublicIP();
       }
       
@@ -2909,7 +3059,7 @@ export default class Bot extends EventEmitter {
     this._reinitHttpBusiness();
     
     // 初始化配置
-    const proxyConfig = cfg.server.proxy;
+    const proxyConfig = this._getProxyConfig();
     this.proxyEnabled = proxyConfig?.enabled === true;
     
     // 设置端口（优先级：参数 > 环境变量 > 默认值8080）
@@ -3010,7 +3160,7 @@ export default class Bot extends EventEmitter {
     
     await this.serverLoad(false);
     
-    if (cfg.server.https.enabled) {
+    if (this._isHttpsEnabled()) {
       await this.httpsLoad();
     }
     
@@ -3126,7 +3276,7 @@ export default class Bot extends EventEmitter {
     const authConfig = cfg.server.auth || {};
     if (authConfig.apiKey?.enabled !== false) {
       console.log(chalk.yellow('\n▶ 认证配置：'));
-      console.log(`    ${chalk.cyan('•')} API密钥：${chalk.white(this.apiKey)}`);
+      console.log(`    ${chalk.cyan('•')} API密钥：${chalk.white(this._maskSensitive(this.apiKey))}`);
       console.log(chalk.gray(`    使用 X-API-Key 请求头进行认证`));
     }
     

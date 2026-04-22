@@ -4,9 +4,14 @@ import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
+import path from 'path';
+import crypto from 'crypto';
+import multer from 'multer';
+import fs from 'fs/promises';
+import paths from '#utils/paths.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
-import { parseMultipartData } from '#utils/multipart-parser.js';
+import { bannedWordsService } from '../lib/content-safety/banned-words-service.js';
 import { mergeAgentWorkspaceIntoMessages } from '#utils/agent-workspace.js';
 
 function pickFirst(obj, keys) {
@@ -286,7 +291,40 @@ async function handleChatCompletionsV3(req, res) {
   // 支持 multipart/form-data 格式（图片上传）
   if (contentType.includes('multipart/form-data')) {
     try {
-      const { files, fields } = await parseMultipartData(req);
+      const Bot = req.bot || global.Bot;
+      const maxFileSize = cfg?.server?.limits?.fileSize || '100mb';
+      const mediaDir = path.join(paths.data, 'media');
+      await fs.mkdir(mediaDir, { recursive: true });
+      const createUploader = req.createMultipartUploader || (() => req.multipartUpload);
+      const upload = createUploader({
+        fileSize: maxFileSize,
+        files: 8,
+        storage: multer.diskStorage({
+          destination: (_req, _file, cb) => cb(null, mediaDir),
+          filename: (_req, file, cb) => {
+            const ext = path.extname(file.originalname || '').slice(0, 20) || '.img';
+            cb(null, `${crypto.randomUUID()}${ext}`);
+          }
+        }),
+        fileFilter: (_req, file, cb) => {
+          cb(null, String(file?.mimetype || '').startsWith('image/'));
+        }
+      }).any();
+
+      try {
+        await new Promise((resolve, reject) => upload(req, res, (err) => (err ? reject(err) : resolve())));
+      } catch (e) {
+        const code = e?.code || e?.name || 'UPLOAD_ERROR';
+        if (code === 'LIMIT_FILE_SIZE') {
+          return HttpResponse.error(res, new Error(`图片超过大小限制（${maxFileSize}）`), 413, 'ai.v3.chat.completions');
+        }
+        if (code === 'LIMIT_FILE_COUNT') {
+          return HttpResponse.error(res, new Error('上传图片数量超过限制'), 413, 'ai.v3.chat.completions');
+        }
+        return HttpResponse.error(res, new Error(`解析 multipart/form-data 失败: ${e?.message || e}`), 400, 'ai.v3.chat.completions');
+      }
+      const files = Array.isArray(req.files) ? req.files : [];
+      const fields = req.body || {};
       
       // 解析 JSON 字段
       if (fields.messages) {
@@ -306,13 +344,12 @@ async function handleChatCompletionsV3(req, res) {
       if (fields.max_tokens) body.max_tokens = fields.max_tokens;
       if (fields.maxTokens) body.maxTokens = fields.maxTokens;
       
-      // 处理上传的图片（字段名可以是 'images' 或 'file'）
+      // 处理上传的图片：改为落盘文件 URL，避免 base64 膨胀与内存峰值
       if (files && files.length > 0) {
+        const baseUrl = String(Bot?.url || Bot?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
         for (const file of files) {
-          if (file.mimetype?.startsWith('image/')) {
-            const base64 = file.buffer.toString('base64');
-            uploadedImages.push(`data:${file.mimetype};base64,${base64}`);
-          }
+          const filename = file.filename || path.basename(file.path);
+          uploadedImages.push(`${baseUrl}/media/${filename}`);
         }
       }
     } catch (e) {
@@ -322,6 +359,40 @@ async function handleChatCompletionsV3(req, res) {
   
   if (!messages || !Array.isArray(messages)) {
     return HttpResponse.validationError(res, 'messages 参数无效');
+  }
+
+  // HTTP 侧内容安全：对输入文本做违禁词检测（复用 data/bannedWords/global.json）
+  const safetyCfg = cfg?.server?.contentSafety?.http || {};
+  if (safetyCfg.enabled !== false && safetyCfg.checkAiInput !== false) {
+    const extractTexts = (msg) => {
+      const out = [];
+      const c = msg?.content;
+      if (typeof c === 'string') out.push(c);
+      else if (Array.isArray(c)) {
+        for (const p of c) {
+          if (p?.type === 'text' && typeof p.text === 'string') out.push(p.text);
+        }
+      } else if (c && typeof c === 'object') {
+        if (typeof c.text === 'string') out.push(c.text);
+        if (typeof c.content === 'string') out.push(c.content);
+      }
+      return out;
+    };
+
+    for (const m of messages) {
+      if (m?.role !== 'user') continue;
+      for (const t of extractTexts(m)) {
+        const hit = await bannedWordsService.checkText(t);
+        if (hit) {
+          const msg = `内容触发违禁词(${hit.type})：${hit.word}`;
+          if (String(safetyCfg.action || 'reject').toLowerCase() === 'warn') {
+            BotUtil.makeLog('warn', msg, 'ai.v3.chat.completions');
+            break;
+          }
+          return HttpResponse.error(res, new Error(msg), 400, 'ai.v3.chat.completions');
+        }
+      }
+    }
   }
 
   BotUtil.makeLog(
@@ -352,7 +423,7 @@ async function handleChatCompletionsV3(req, res) {
         const c = lastMessage.content;
         const text = (c.text || c.content || '').toString().trim();
         const images = Array.isArray(c.images) ? c.images : [];
-        // 这里把上传后的 dataURL 直接追加到 images，后续由各 provider 的 transformMessagesWithVision 统一转协议
+        // 这里把上传后的图片 URL 追加到 images，后续由各 provider 的 transformMessagesWithVision 统一转协议
         c.text = text;
         c.images = [...images, ...uploadedImages];
         lastMessage.content = c;
@@ -455,7 +526,6 @@ async function handleChatCompletionsV3(req, res) {
   
   try {
     let totalContent = '';
-    let totalReasoningContent = '';
     let isFirstChunk = true;
     let chunkCount = 0;
 

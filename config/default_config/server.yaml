@@ -239,6 +239,13 @@ auth:
     file: "config/server_config/api_key.json"
     # 密钥长度（字符数）
     length: 64
+  # API 鉴权白名单路径（支持前缀、正则字面量字符串）
+  # 示例：
+  # - "/health"
+  # - "/robots.txt"
+  # - "regex:^/api/public/.*$"
+  # 留空表示不放行任何额外路径（更安全）
+  whitelist: []
 
 # ----------------------------------------
 # 速率限制
@@ -273,6 +280,28 @@ limits:
   raw: "50mb"         # 原始数据
   text: "10mb"        # 文本数据
   fileSize: "100mb"   # 文件上传
+  files: 8            # 单次 multipart 最大文件数
+
+# ----------------------------------------
+# 内容安全（HTTP侧）
+# ----------------------------------------
+contentSafety:
+  http:
+    # 是否启用 HTTP 入口的违禁词/图片 hash 检测（使用 data/bannedWords/global.json）
+    enabled: true
+    # action: reject | warn
+    action: "reject"
+    # 是否检测 AI 输入文本
+    checkAiInput: true
+    # 是否检测上传文件的 md5（图片/媒体）
+    checkUploadMd5: true
+
+# ----------------------------------------
+# 外联请求（HTTP client）
+# ----------------------------------------
+outbound:
+  # 可选：统一外联代理（undici ProxyAgent）。示例: "http://127.0.0.1:7890"
+  proxy: ""
 
 # ----------------------------------------
 # 压缩配置

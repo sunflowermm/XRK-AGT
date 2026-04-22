@@ -1,4 +1,4 @@
-import fetch from 'node-fetch'
+import { fetchWithPolicy } from '../lib/net/fetcher.js'
 
 const SEARCH_API = 'https://music.163.com/api/search/get'
 const SONG_URL_API = 'https://music.163.com/song/media/outer/url'
@@ -25,7 +25,7 @@ export class MusicPlugin extends plugin {
 
     try {
       const url = `${SEARCH_API}?s=${encodeURIComponent(keyword)}&type=1&limit=${LIMIT}`
-      const res = await fetch(url, { headers: HEADERS })
+      const res = await fetchWithPolicy(url, { headers: HEADERS, timeoutMs: 8000, retries: 1 })
       const data = await res.json()
       const songs = data.result?.songs
       if (!songs?.length) {

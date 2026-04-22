@@ -62,6 +62,60 @@ class FrontendLauncher {
   }
 
   /**
+   * 停止所有已启动的前端子进程（用于主服务关闭/重启释放资源）
+   */
+  static async stopAll() {
+    const apps = Array.from(this.#apps.values());
+    for (const app of apps) {
+      if (app) {
+        app.stopping = true;
+        if (app.restartTimer) {
+          clearTimeout(app.restartTimer);
+          app.restartTimer = undefined;
+        }
+      }
+      const child = app?.process;
+      if (!child || child.killed) continue;
+      try {
+        // Windows 用 SIGTERM 无效时会 fallback；其它平台正常 SIGTERM
+        child.kill('SIGTERM');
+      } catch {}
+    }
+
+    // 给一点缓冲，再强杀
+    await BotUtil.sleep(800).catch(() => {});
+    for (const app of apps) {
+      const child = app?.process;
+      if (!child || child.killed) continue;
+      try {
+        child.kill('SIGKILL');
+      } catch {}
+    }
+
+    // 生产构建进程也一并处理
+    for (const app of apps) {
+      const buildChild = app?.buildProcess;
+      if (!buildChild || buildChild.killed) continue;
+      try { buildChild.kill('SIGTERM'); } catch {}
+    }
+    await BotUtil.sleep(400).catch(() => {});
+    for (const app of apps) {
+      const buildChild = app?.buildProcess;
+      if (!buildChild || buildChild.killed) continue;
+      try { buildChild.kill('SIGKILL'); } catch {}
+    }
+
+    // 清理强引用，避免关闭后对象常驻
+    for (const app of apps) {
+      if (!app) continue;
+      app.process = undefined;
+      app.buildProcess = undefined;
+      app.status = 'stopped';
+      app.startedAt = undefined;
+    }
+  }
+
+  /**
    * 内部真正初始化逻辑
    * @private
    */
@@ -330,9 +384,11 @@ class FrontendLauncher {
 
       child.on('exit', (code, signal) => {
         appInfo.status = 'stopped';
+        appInfo.process = undefined;
         const reason = code !== null ? `退出码=${code}` : `信号=${signal || 'unknown'}`;
         BotUtil.makeLog(code === 0 ? 'info' : 'warn', `前端项目已退出: ${config.id} (${reason})`, 'Frontend');
 
+        if (appInfo.stopping) return;
         if (!config.autoRestart) return;
         if (appInfo.restarts >= 3) {
           BotUtil.makeLog('warn', `前端项目重启次数已达上限，停止重启: ${config.id}`, 'Frontend');
@@ -342,7 +398,9 @@ class FrontendLauncher {
         appInfo.restarts += 1;
         const delay = 1000 * appInfo.restarts;
         BotUtil.makeLog('info', `准备重启前端项目(${appInfo.restarts}): ${config.id}, ${delay}ms 后`, 'Frontend');
-        setTimeout(() => startRuntime(), delay);
+        if (appInfo.restartTimer) clearTimeout(appInfo.restartTimer);
+        appInfo.restartTimer = setTimeout(() => startRuntime(), delay);
+        appInfo.restartTimer.unref?.();
       });
     };
 

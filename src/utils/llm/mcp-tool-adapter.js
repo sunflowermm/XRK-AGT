@@ -1,5 +1,4 @@
 import StreamLoader from '#infrastructure/aistream/loader.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import BotUtil from '#utils/botutil.js';
 
 /**
@@ -66,7 +65,15 @@ export class MCPToolAdapter {
       mcpTools = [];
     }
 
-    return mcpTools.map(tool => ({
+    const excluded = new Set((Array.isArray(excludeStreams) ? excludeStreams : []).filter(Boolean));
+    const filteredTools = excluded.size > 0
+      ? mcpTools.filter((tool) => {
+        const streamName = String(tool?.name || '').split('.')[0];
+        return !excluded.has(streamName);
+      })
+      : mcpTools;
+
+    return filteredTools.map(tool => ({
       type: 'function',
       function: {
         name: tool.name,

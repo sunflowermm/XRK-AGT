@@ -1,6 +1,6 @@
 const EXCLUDE_KEYS = new Set(['port', 'apiKey', 'stdin', 'logger', '_eventsCount', 'url']);
 
-async function ensureBotFlGl(bot, uin) {
+async function ensureBotFlGl(bot) {
   if (bot.device_type || typeof bot.getFriendMap !== 'function') return;
   const needFl = !bot.fl || bot.fl.size === 0;
   const needGl = !bot.gl || bot.gl.size === 0;
@@ -13,7 +13,7 @@ async function ensureBotFlGl(bot, uin) {
   } catch {}
 }
 
-export async function collectBotInventory(Bot, { includeDevices = true } = {}) {
+export async function collectBotInventory(Bot, { includeDevices: _includeDevices = true } = {}) {
   if (!Bot?.bots) return [];
   const list = [];
   const entries = Object.entries(Bot.bots);
@@ -34,7 +34,7 @@ export async function collectBotInventory(Bot, { includeDevices = true } = {}) {
 
     if (!bot.tasker && !bot.nickname && !bot.fl && !bot.gl) continue;
 
-    await ensureBotFlGl(bot, uin);
+    await ensureBotFlGl(bot);
 
     const online = Boolean(bot.stat?.online ?? bot._ready);
     list.push({

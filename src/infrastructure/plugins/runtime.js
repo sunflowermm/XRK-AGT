@@ -23,10 +23,36 @@ class RuntimeExtensionRegistry {
    * 注册运行时扩展
    * @param {string} name 扩展名称
    * @param {Function} extension 扩展类或函数
+   * @param {Object} [options]
+   * @param {boolean} [options.replace=false] 是否允许覆盖同名扩展（用于热重载）
    */
-  register(name, extension) {
-    this.extensions.set(name, extension)
-    logger.info(`[Runtime] 注册扩展: ${name}`)
+  register(name, extension, options = {}) {
+    const key = String(name || '').trim()
+    if (!key) return false
+    const replace = options?.replace === true
+    if (this.extensions.has(key) && !replace) {
+      logger.warn(`[Runtime] 扩展已存在，跳过注册: ${key}`)
+      return false
+    }
+    this.extensions.set(key, extension)
+    logger.info(`[Runtime] 注册扩展: ${key}${replace ? ' (replace)' : ''}`)
+    return true
+  }
+
+  /**
+   * 卸载运行时扩展（用于热重载释放引用）
+   */
+  unregister(name) {
+    const key = String(name || '').trim()
+    if (!key) return false
+    return this.extensions.delete(key)
+  }
+
+  /**
+   * 清空所有扩展（谨慎使用）
+   */
+  clear() {
+    this.extensions.clear()
   }
 
   /**

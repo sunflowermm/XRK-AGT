@@ -82,7 +82,7 @@ export async function* iterateSSE(resp, options = {}) {
       let event = null;
       const dataParts = [];
 
-      for (let line of lines) {
+      for (const line of lines) {
         if (!line) continue;
         // 允许前导空格，但不强求 trim 以避免破坏 data 内容
         const trimmed = line.trim();

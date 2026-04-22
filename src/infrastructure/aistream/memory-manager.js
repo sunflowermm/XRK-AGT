@@ -13,6 +13,7 @@ export class MemoryManager extends EventEmitter {
     this.memoryIndex = new Map(); // 记忆索引（用于快速检索）
     this.maxShortTermSize = 50; // 短期记忆最大条数
     this.maxLongTermSize = 1000; // 长期记忆最大条数
+    this.maxIndexKeywords = 5000; // 单用户索引最大关键词数（防止无限增长）
   }
 
   /**
@@ -151,8 +152,15 @@ export class MemoryManager extends EventEmitter {
     if (index === -1) return false;
 
     memories.splice(index, 1);
+    this._removeFromIndex(userId, memoryId);
     this.emit('memory:long_term:deleted', { userId, memoryId });
     return true;
+  }
+
+  clearLongTermMemories(userId) {
+    this.longTermMemories.delete(userId);
+    this.memoryIndex.delete(`${userId}_index`);
+    this.emit('memory:long_term:cleared', { userId });
   }
 
   /**
@@ -200,6 +208,25 @@ export class MemoryManager extends EventEmitter {
         index.set(keyword, []);
       }
       index.get(keyword).push(memory.id);
+    }
+
+    // 索引上限：超过后按插入顺序淘汰（Map 保持插入序）
+    while (index.size > this.maxIndexKeywords) {
+      const firstKey = index.keys().next().value;
+      if (firstKey === undefined) break;
+      index.delete(firstKey);
+    }
+  }
+
+  _removeFromIndex(userId, memoryId) {
+    const key = `${userId}_index`;
+    const index = this.memoryIndex.get(key);
+    if (!index) return;
+    for (const [kw, ids] of index.entries()) {
+      if (!Array.isArray(ids) || ids.length === 0) continue;
+      const next = ids.filter((id) => id !== memoryId);
+      if (next.length === 0) index.delete(kw);
+      else if (next.length !== ids.length) index.set(kw, next);
     }
   }
 

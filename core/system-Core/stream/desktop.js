@@ -8,7 +8,7 @@ import fs from 'fs/promises';
 import { BaseTools } from '#utils/base-tools.js';
 import { getDefaultDesktopDirSync, resolveUserDesktopDirAsync } from '#utils/user-dirs.js';
 import si from 'systeminformation';
-import fetch from 'node-fetch';
+import { fetchWithPolicy } from '../lib/net/fetcher.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 const IS_DARWIN = process.platform === 'darwin';
@@ -1389,7 +1389,7 @@ export default class DesktopStream extends AIStream {
     // 适当延时，避免频率过高
     await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY));
 
-    const response = await fetch(url, {
+    const response = await fetchWithPolicy(url, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (compatible; XRK-AGT/2.0; +https://github.com/sunflowermm/XRK-AGT) AppleWebKit/537.36',
@@ -1398,7 +1398,8 @@ export default class DesktopStream extends AIStream {
         'Accept-Language': 'zh-CN,zh;q=0.9',
         Connection: 'keep-alive'
       },
-      timeout: REQUEST_TIMEOUT
+      timeoutMs: REQUEST_TIMEOUT,
+      retries: 1
     });
 
     if (!response.ok) {

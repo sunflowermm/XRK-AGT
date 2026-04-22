@@ -1,13 +1,16 @@
 import path from 'path';
 import fs from 'fs/promises';
-import { ulid } from 'ulid';
+import { createReadStream } from 'fs';
 import crypto from 'crypto';
+import multer from 'multer';
 import paths from '#utils/paths.js';
 import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
-import { parseMultipartData } from '#utils/multipart-parser.js';
+import cfg from '#infrastructure/config/config.js';
+import { bannedWordsService } from '../lib/content-safety/banned-words-service.js';
+import { Disposables } from '../lib/runtime/disposables.js';
 
 function ensureSystemCoreAuth(req, res, Bot, context) {
   if (!Bot?.checkApiAuthorization?.(req)) {
@@ -18,6 +21,50 @@ function ensureSystemCoreAuth(req, res, Bot, context) {
 const uploadDir = path.join(paths.data, 'uploads');
 const mediaDir = path.join(paths.data, 'media');
 const fileMap = new Map();
+let __runtime = null;
+
+function resolveBaseUrl(Bot, req) {
+  const raw = Bot?.url || Bot?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`;
+  return String(raw).replace(/\/+$/, '');
+}
+
+async function hashFileMd5(filePath) {
+  const hash = crypto.createHash('md5');
+  await new Promise((resolve, reject) => {
+    const stream = createReadStream(filePath);
+    stream.on('data', (d) => hash.update(d));
+    stream.on('end', resolve);
+    stream.on('error', reject);
+  });
+  return hash.digest('hex');
+}
+
+function createDiskUploader(req, maxFileSize) {
+  const createUploader = req.createMultipartUploader || (() => req.multipartUpload);
+  const storage = multer.diskStorage({
+    destination: async (_req, file, cb) => {
+      try {
+        const ext = path.extname(file.originalname || '');
+        const isMedia = /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|mp3|wav|ogg)$/i.test(ext);
+        const targetDir = isMedia ? mediaDir : uploadDir;
+        await fs.mkdir(targetDir, { recursive: true });
+        cb(null, targetDir);
+      } catch (e) {
+        cb(e);
+      }
+    },
+    filename: (_req, file, cb) => {
+      const id = crypto.randomUUID();
+      const ext = path.extname(file.originalname || '').slice(0, 20) || '.file';
+      cb(null, `${id}${ext}`);
+    }
+  });
+  return createUploader({
+    storage,
+    fileSize: maxFileSize,
+    files: 8
+  }).any();
+}
 
 // 目录已在 paths.ensureBaseDirs() 中创建，无需重复创建
 
@@ -34,39 +81,85 @@ export default {
     {
       method: 'POST',
       path: '/api/file/upload',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const authResp = ensureSystemCoreAuth(req, res, Bot, 'file.upload');
         if (authResp) return authResp;
         const contentType = req.headers['content-type'] || '';
         if (!contentType.includes('multipart/form-data')) return HttpResponse.validationError(res, '请使用 multipart/form-data 格式上传文件');
-        const { files } = await parseMultipartData(req);
-        if (!files?.length) return HttpResponse.validationError(res, '没有文件');
+        const maxFileSize = cfg?.server?.limits?.fileSize || '100mb';
+        let files = [];
+        try {
+          const upload = createDiskUploader(req, maxFileSize);
+          await new Promise((resolve, reject) => upload(req, res, (err) => (err ? reject(err) : resolve())));
+          files = Array.isArray(req.files) ? req.files : [];
+        } catch (e) {
+          const code = e?.code || e?.name || 'UPLOAD_ERROR';
+          if (code === 'LIMIT_FILE_SIZE') {
+            return HttpResponse.error(res, new Error(`文件超过大小限制（${maxFileSize}）`), 413, 'file.upload');
+          }
+          if (code === 'LIMIT_FILE_COUNT') {
+            return HttpResponse.error(res, new Error('上传文件数量超过限制'), 413, 'file.upload');
+          }
+          return HttpResponse.error(res, new Error(`解析 multipart/form-data 失败: ${e?.message || e}`), 400, 'file.upload');
+        }
+        if (!files?.length) return HttpResponse.validationError(res, '没有文件或文件被过滤');
+        const filesWithMd5 = [];
+        for (const f of files) {
+          if (!f?.path) continue;
+          let md5 = null;
+          try {
+            md5 = await hashFileMd5(f.path);
+          } catch {}
+          filesWithMd5.push({
+            id: path.basename(f.filename || '').split('.')[0],
+            originalname: f.originalname,
+            mimetype: f.mimetype,
+            size: f.size,
+            filename: f.filename,
+            path: f.path,
+            md5
+          });
+        }
+        const safetyCfg = cfg?.server?.contentSafety?.http || {};
+        if (safetyCfg.enabled !== false && safetyCfg.checkUploadMd5 !== false) {
+          for (const f of filesWithMd5) {
+            const hit = f.md5 ? await bannedWordsService.checkImageMd5(f.md5) : null;
+            if (!hit) continue;
+            const msg = `上传内容命中违禁图片(hash)：${hit.md5}`;
+            if (String(safetyCfg.action || 'reject').toLowerCase() === 'warn') {
+              BotUtil.makeLog('warn', msg, 'file.upload');
+              break;
+            }
+            // 拒绝：删除本次上传的文件（避免落盘残留）
+            for (const g of filesWithMd5) {
+              try { await fs.unlink(g.path); } catch {}
+            }
+            return HttpResponse.error(res, new Error(msg), 400, 'file.upload');
+          }
+        }
 
         const uploadedFiles = [];
-        for (const file of files) {
-          const fileId = ulid();
+        const baseUrl = resolveBaseUrl(Bot, req);
+        for (const file of filesWithMd5) {
           const ext = path.extname(file.originalname) || '.file';
-          const filename = `${fileId}${ext}`;
-          const isMedia = /\.(jpg|jpeg|png|gif|webp|mp4|webm|mp3|wav|ogg)$/i.test(ext);
+          const isMedia = /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|mp3|wav|ogg)$/i.test(ext);
+          const filename = file.filename || `${file.id}${ext}`;
           const targetDir = isMedia ? mediaDir : uploadDir;
-          const safeFilename = InputValidator.validatePath(filename, targetDir);
-          const targetPath = path.join(targetDir, safeFilename);
-          await fs.writeFile(targetPath, file.buffer);
-          const hash = crypto.createHash('md5').update(file.buffer).digest('hex');
+          InputValidator.validatePath(file.path, targetDir);
           const fileInfo = {
-            id: fileId,
+            id: file.id,
             name: file.originalname,
-            path: targetPath,
-            url: `${Bot.url}/${isMedia ? 'media' : 'uploads'}/${filename}`,
-            download_url: `${Bot.url}/api/file/${fileId}?download=true`,
-            preview_url: isMedia ? `${Bot.url}/api/file/${fileId}` : null,
+            path: file.path,
+            url: `${baseUrl}/${isMedia ? 'media' : 'uploads'}/${filename}`,
+            download_url: `${baseUrl}/api/file/${file.id}?download=true`,
+            preview_url: isMedia ? `${baseUrl}/api/file/${file.id}` : null,
             size: file.size,
             mime: file.mimetype,
-            hash,
+            hash: file.md5 || null,
             is_media: isMedia,
             upload_time: Date.now()
           };
-          fileMap.set(fileId, fileInfo);
+          fileMap.set(file.id, fileInfo);
           uploadedFiles.push(fileInfo);
         }
 
@@ -112,7 +205,15 @@ export default {
                 if (download === 'true') {
                   return res.download(filePath, file);
                 }
-                res.setHeader('Content-Type', 'application/octet-stream');
+                const ext = path.extname(filePath).toLowerCase();
+                const mime = ext === '.png' ? 'image/png'
+                  : (ext === '.jpg' || ext === '.jpeg') ? 'image/jpeg'
+                  : ext === '.gif' ? 'image/gif'
+                  : ext === '.webp' ? 'image/webp'
+                  : ext === '.svg' ? 'image/svg+xml'
+                  : ext === '.bmp' ? 'image/bmp'
+                  : 'application/octet-stream';
+                res.setHeader('Content-Type', mime);
                 res.setHeader('Cache-Control', 'public, max-age=3600');
                 return res.sendFile(filePath);
               }
@@ -139,7 +240,7 @@ export default {
     {
       method: 'DELETE',
       path: '/api/file/:id',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const { id } = req.params;
         if (!id || typeof id !== 'string' || id.length > 50) {
           return HttpResponse.validationError(res, '无效的文件ID');
@@ -169,7 +270,7 @@ export default {
     {
       method: 'GET',
       path: '/api/files',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const files = Array.from(fileMap.values()).map(f => ({
           id: f.id,
           name: f.name,
@@ -190,8 +291,10 @@ export default {
   ],
 
   init() {
+    if (__runtime) __runtime.dispose();
+    __runtime = new Disposables();
     // 定期清理过期文件
-    setInterval(async () => {
+    __runtime.interval(async () => {
       const now = Date.now();
       const maxAge = 24 * 60 * 60 * 1000; // 24小时
       
@@ -205,5 +308,10 @@ export default {
         }
       }
     }, 60 * 60 * 1000);
+  },
+
+  stop() {
+    if (__runtime) __runtime.dispose();
+    __runtime = null;
   }
 };

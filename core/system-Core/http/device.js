@@ -47,6 +47,7 @@ import {
     hasCapability,
     getAudioFileList
 } from '#utils/deviceutil.js';
+import { Disposables } from '../lib/runtime/disposables.js';
 
 function ensureSystemCoreAuth(req, res, Bot, context) {
     if (!Bot?.checkApiAuthorization?.(req)) {
@@ -219,6 +220,7 @@ const asrSessions = new Map();
 
 const LOG_THROTTLE_CACHE = new Map();
 const DEFAULT_LOG_THROTTLE = 1200;
+let __runtime = null;
 
 function shouldEmitThrottledLog(key, windowMs = DEFAULT_LOG_THROTTLE) {
     const now = Date.now();
@@ -1765,7 +1767,7 @@ class DeviceManager {
                         channel: messagePayload.channel,
                         meta: messagePayload.meta,
                         /** 与 QQ 一致：供 ChatStream.syncHistoryFromAdapter 拉取近期对话并参与 LLM 上下文。签名 (message_seq, count, reverseOrder) */
-                        getChatHistory: (message_seq, count = 20, reverseOrder) =>
+                        getChatHistory: (_message_seq, count = 20, _reverseOrder) =>
                             getDeviceChatHistory(deviceId, count),
                         /** 获取当前消息所回复的那条（从 message 中第一个 reply 段解析），便于插件处理媒体等 */
                         getReply: async () => {
@@ -1901,7 +1903,7 @@ class DeviceManager {
                                         }
                                         const normalizedPath = path.normalize(filePath);
                                         const trashPath = path.normalize(paths.trash);
-                                        let url = normalizedPath.startsWith(trashPath)
+                                        const url = normalizedPath.startsWith(trashPath)
                                             ? `/api/trash/${path.relative(trashPath, normalizedPath).replace(/\\/g, '/')}`
                                             : path.isAbsolute(filePath)
                                                 ? `/api/device/file/${Buffer.from(filePath, 'utf8').toString('base64url')}`
@@ -2448,12 +2450,14 @@ export default {
     },
 
     init(app, Bot) {
+        if (__runtime) __runtime.dispose();
+        __runtime = new Disposables();
         deviceManager.setBot(Bot);
-        deviceManager.cleanupInterval = setInterval(() => {
+        deviceManager.cleanupInterval = __runtime.interval(() => {
             deviceManager.checkOfflineDevices();
         }, 30000);
 
-        setInterval(() => {
+        __runtime.interval(() => {
             const now = Date.now();
             for (const [id, _] of commandCallbacks) {
                 const timestamp = parseInt(id.split('_')[0]);
@@ -2463,7 +2467,7 @@ export default {
             }
         }, 60000);
 
-        setInterval(() => {
+        __runtime.interval(() => {
             const now = Date.now();
             for (const [sessionId, session] of asrSessions) {
                 if (now - session.lastChunkTime > 5 * 60 * 1000) {
@@ -2490,9 +2494,8 @@ export default {
 
     destroy() {
         deviceManager.detachDeviceEventBridge();
-        if (deviceManager.cleanupInterval) {
-            clearInterval(deviceManager.cleanupInterval);
-        }
+        if (__runtime) __runtime.dispose();
+        __runtime = null;
 
         for (const [, ws] of deviceWebSockets) {
             try {
@@ -2524,5 +2527,9 @@ export default {
         }
 
         asrSessions.clear();
+    },
+
+    stop() {
+        return this.destroy();
     }
 };

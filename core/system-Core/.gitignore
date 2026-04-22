@@ -42,6 +42,18 @@ http/**
 !http/ai.js
 !http/mcp.js
 !http/mcp-server.js
+!http/notice.js
+
+!lib
+lib/**
+!lib/runtime/
+!lib/runtime/disposables.js
+!lib/content-safety/
+!lib/content-safety/banned-words-service.js
+!lib/net/
+!lib/net/fetcher.js
+!lib/notice/
+!lib/notice/notice-service.js
 
 !events
 events/**

@@ -93,3 +93,4 @@ trash/
 # Core modules (exclude system-Core)
 core/*
 !core/system-Core/
+!core/system-Core/**

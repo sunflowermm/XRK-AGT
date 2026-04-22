@@ -46,7 +46,7 @@ class StreamLoader {
     return { promise, resolve, reject };
   }
 
-  _ensureStdioClient(serverName, entry) {
+  _ensureStdioClient(_serverName, entry) {
     if (!entry || entry.type !== 'stdio' || !entry.process) return null;
     if (entry._stdioClient) return entry._stdioClient;
 
@@ -59,7 +59,7 @@ class StreamLoader {
     };
 
     const flushPending = (errMsg) => {
-      for (const [id, p] of client.pending.entries()) {
+      for (const [_id, p] of client.pending.entries()) {
         try { p.reject(new Error(errMsg)); } catch {}
       }
       client.pending.clear();
@@ -549,11 +549,11 @@ class StreamLoader {
     // 合并流执行时把 deviceId 同步到主/副流，避免 MCP 按名称调用 xiaozhi.xxx 时主工作流 _currentDeviceId 未设置导致 DEVICE_NOT_FOUND
     const origExecute = merged.execute;
     if (typeof origExecute === 'function') {
-      merged.execute = async function (deviceId, question, apiConfig, persona) {
+      merged.execute = async function (deviceId, ...restArgs) {
         for (const s of merged._mergedStreams || []) {
           if (s) s._currentDeviceId = deviceId;
         }
-        return origExecute.apply(this, arguments);
+        return origExecute.call(this, deviceId, ...restArgs);
       };
     }
 
@@ -784,7 +784,7 @@ class StreamLoader {
     const localCount = this.mcpServer.tools.size;
     
     // 加载远程MCP服务器（如果启用）
-    const loadedServers = await this.loadRemoteMCPServers();
+    await this.loadRemoteMCPServers();
     
     // 标记MCP服务已初始化
     this.mcpServer.initialized = true;

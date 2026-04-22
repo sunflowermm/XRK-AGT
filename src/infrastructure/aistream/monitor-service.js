@@ -8,11 +8,14 @@ export class MonitorService extends EventEmitter {
   constructor() {
     super();
     this.executionTraces = new Map(); // traceId -> 执行追踪
+    this._traceOrder = []; // FIFO 队列：按 startTrace 插入顺序淘汰（用 head 指针避免 shift O(n)）
+    this._traceHead = 0;
     this.performanceMetrics = new Map(); // metricName -> 指标数据
     this.errorLogs = []; // 错误日志
     this.costStats = new Map(); // 成本统计
     this.maxTraces = 10000; // 最大追踪数
     this.maxErrors = 1000; // 最大错误数
+    this.maxCostStats = 2000; // 成本统计最大条目数（避免长期运行无限增长）
   }
 
   /**
@@ -42,12 +45,19 @@ export class MonitorService extends EventEmitter {
     };
 
     this.executionTraces.set(traceId, trace);
+    this._traceOrder.push(traceId);
 
     // 限制大小
-    if (this.executionTraces.size > this.maxTraces) {
-      const oldestTrace = Array.from(this.executionTraces.values())
-        .sort((a, b) => a.startTime - b.startTime)[0];
-      this.executionTraces.delete(oldestTrace.id);
+    while (this.executionTraces.size > this.maxTraces) {
+      const oldestId = this._traceOrder[this._traceHead++];
+      if (!oldestId) break;
+      this.executionTraces.delete(oldestId);
+    }
+
+    // 队列压缩：避免数组无限增长
+    if (this._traceHead > 1000 && this._traceHead * 2 > this._traceOrder.length) {
+      this._traceOrder = this._traceOrder.slice(this._traceHead);
+      this._traceHead = 0;
     }
 
     this.emit('trace:started', { traceId, trace });
@@ -116,6 +126,13 @@ export class MonitorService extends EventEmitter {
       this.costStats.set(key, { agentId: trace.agentId, date, total: 0 });
     }
     this.costStats.get(key).total += cost;
+
+    // 限制 costStats 大小（按插入顺序淘汰最旧条目）
+    while (this.costStats.size > this.maxCostStats) {
+      const firstKey = this.costStats.keys().next().value;
+      if (firstKey === undefined) break;
+      this.costStats.delete(firstKey);
+    }
   }
 
   /**

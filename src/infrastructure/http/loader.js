@@ -1,12 +1,9 @@
 import path from 'path';
-import { fileURLToPath } from 'url';
 import HttpApi from './http.js';
 import BotUtil from '#utils/botutil.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import paths from '#utils/paths.js';
 import { validateApiInstance, getApiPriority } from './utils/helpers.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * API加载器类
@@ -31,6 +28,7 @@ class ApiLoader {
     
     /** Bot实例 */
     this.bot = null;
+
   }
   
   /**
@@ -164,7 +162,6 @@ class ApiLoader {
       // 设置API的key和文件路径
       apiInstance.key = key;
       apiInstance.filePath = filePath;
-      
       // 存储API实例
       this.apis.set(key, apiInstance);
       
@@ -182,16 +179,34 @@ class ApiLoader {
   async unloadApi(key) {
     const api = this.apis.get(key);
     if (!api) return;
-    
-    // 调用停止方法
-    if (typeof api.stop === 'function') {
-      api.stop();
+
+    // 优先调用 stop，其次兼容 destroy；统一支持 async
+    try {
+      if (typeof api.stop === 'function') {
+        await api.stop();
+      } else if (typeof api.destroy === 'function') {
+        await api.destroy();
+      }
+    } catch (error) {
+      BotUtil.makeLog('warn', `卸载API生命周期调用失败: ${api.name || key} - ${error.message}`, 'ApiLoader');
     }
+
+    // 兜底清理：移除该 API 注册的 WS handlers（防止热重载叠加）
+    this._removeWsHandlersByOwner(key);
     
     // 从集合中删除
     this.apis.delete(key);
-    
     BotUtil.makeLog('debug', `卸载API: ${api.name || key}`, 'ApiLoader');
+  }
+
+  _removeWsHandlersByOwner(ownerKey) {
+    if (!this.bot?.wsf || typeof this.bot.wsf !== 'object') return;
+    for (const [wsPath, handlers] of Object.entries(this.bot.wsf)) {
+      if (!Array.isArray(handlers)) continue;
+      const filtered = handlers.filter(fn => fn?.__ownerKey !== ownerKey);
+      if (filtered.length > 0) this.bot.wsf[wsPath] = filtered;
+      else delete this.bot.wsf[wsPath];
+    }
   }
   
   /**
@@ -451,7 +466,6 @@ class ApiLoader {
       })
 
       this.watcher.api = hotReload.watcher
-      BotUtil.makeLog('debug', '文件监视已启动', 'ApiLoader')
     } catch (error) {
       BotUtil.makeLog('error', '启动文件监视失败', 'ApiLoader', error)
     }
