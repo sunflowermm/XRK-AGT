@@ -849,7 +849,7 @@ export default {
 
 ## 安全与中间件
 
-**鉴权总览**：Server 层不再做 HTTP 业务统一鉴权；system-Core HTTP 在模块内调用 `Bot.checkApiAuthorization(req)`，WebSocket 升级阶段走统一 API Key 校验链路。详见 **[鉴权与认证（AUTH）](AUTH.md)**。
+**鉴权总览**：Server 层不做 HTTP 路由的统一鉴权拦截；system-Core HTTP 在模块内调用 `Bot.checkApiAuthorization(req)`，其他 Core 按需自行实现；WebSocket 升级阶段默认走统一 API Key 校验链路。详见 **[鉴权与认证（AUTH）](AUTH.md)**。
 
 ### 安全中间件栈
 
@@ -864,7 +864,7 @@ flowchart LR
     RateLimit --> BodyParser["📦 请求体解析<br/>JSON/URL-encoded/Raw<br/>大小限制保护"]
     BodyParser --> Redirect["🔄 重定向检查<br/>HTTP业务层<br/>301/302/307/308"]
     Redirect --> Routes["🔍 路由匹配<br/>系统/API/静态文件<br/>优先级排序"]
-    Routes --> Auth["🔐 API认证<br/>静态资源规则<br/>127回环例外<br/>API Key验证"]
+    Routes --> Auth["🔐 认证说明<br/>静态资源规则<br/>HTTP：不做统一鉴权拦截（由业务模块决定是否调用 API Key 校验）<br/>WS：升级阶段默认校验 API Key（127 回环例外）"]
     Auth --> Handler["⚙️ 业务处理<br/>执行具体逻辑<br/>返回业务数据"]
     
     style Request fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff

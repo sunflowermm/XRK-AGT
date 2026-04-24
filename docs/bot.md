@@ -507,8 +507,9 @@ flowchart TB
 当前版本中，Bot 的认证职责划分如下（详见 `docs/AUTH.md`）：
 
 - **Server 层 (`src/bot.js`)**  
-  - 只做静态资源放行（根据扩展名）；`127.*`（含 `::ffff:127.*`）来源请求由底层统一免鉴权；  
-  - 不再根据 URL 白名单或 Cookie 做统一鉴权。
+  - 只做静态资源放行（根据扩展名）；  
+  - **不会对 HTTP 路由做统一鉴权拦截**；是否校验系统 API Key 由上层模块决定；  
+  - 当上层模块调用 `Bot.checkApiAuthorization(req)` 时：`127.*`（含 `::ffff:127.*`）来源免鉴权；可选支持 `server.auth.whitelist` 命中免鉴权。
 - **system-Core HTTP (`core/system-Core/http/*.js`)**  
   - 在各自模块顶部通过 `ensureSystemCoreAuth` 调用 `Bot.checkApiAuthorization(req)`，统一使用系统级 API Key。  
 - **其他 Core HTTP / Tasker**  

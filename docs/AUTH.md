@@ -1,6 +1,6 @@
-# 鉴权与认证（v2 设计）
+# 鉴权与认证（以代码为准）
 
-> 当前版本中，Server 层 **不再内置通用的 HTTP 白名单 / `/api/*` 统一鉴权逻辑**。HTTP 业务鉴权由各 Core 自行负责；系统级 API Key 校验统一复用 `Bot.checkApiAuthorization(req)`。
+> 当前版本中，Server 层 **不会对 HTTP 路由做“统一鉴权拦截”**（不会自动对 `/api/*` 强制校验）。HTTP 业务鉴权由各 Core 自行负责；系统级 API Key 校验统一复用 `Bot.checkApiAuthorization(req)`。
 > - **system-Core 下的所有 HTTP API 默认使用系统级 API Key**；
 > - 其他 Core（插件 HTTP / 业务 HTTP / 自定义 Tasker 等）由开发者自行实现鉴权，需要时可以复用 `Bot.apiKey`。
 
@@ -21,9 +21,10 @@
 1. **静态资源**  
    路径为常见静态扩展名（如 `.html`、`.js`、`.ico`、图片、字体等）时直接放行。
 
-除此之外，Server 不再基于 URL 前缀、白名单配置或 Cookie 自动放行/拒绝；是否需要 Key、如何校验，完全交给上层模块处理。  
+除此之外，Server 不会基于 URL 前缀自动放行/拒绝；是否需要 Key、如何校验，完全交给上层模块处理。  
 当上层调用 `Bot.checkApiAuthorization(req)` 时，底层会统一执行：
 - `127.*`（含 `::ffff:127.*`）来源免鉴权；
+- **可选白名单**：若 `server.auth.whitelist` 配置了前缀/正则规则，命中时免鉴权；
 - 非 `127.*` 来源按 API Key 规则严格校验。
 
 ---
