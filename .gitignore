@@ -90,6 +90,11 @@ config/server_config/
 # Temporary files
 trash/
 
+# Agent workspace local memories
+memory/*.md
+!memory/MEMORY.md
+!memory/.gitkeep
+
 # Core modules (exclude system-Core)
 core/*
 !core/system-Core/

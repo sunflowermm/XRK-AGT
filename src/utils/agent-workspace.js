@@ -9,14 +9,14 @@ import { realpathSyncOrResolve } from '#utils/path-guards.js';
 import { readTextFileUnderWorkspaceRoot } from '#utils/safe-workspace-read.js';
 import { buildSkillsPromptFromWorkspace } from '#utils/agent-workspace-skills.js';
 import { DEFAULT_SKILL_LIMITS } from '#utils/skills/defaults.js';
+import { buildWorkspacePromptSections } from '#utils/agent-workspace-sections.js';
 
-const OPENCLAW_WORKSPACE_FILES = [
-  'SOUL.md',
-  'IDENTITY.md',
-  'USER.md',
-  'TOOLS.md',
-  'HEARTBEAT.md',
-  'BOOTSTRAP.md',
+const OPENCLAW_WORKSPACE_FILE_CANDIDATES = [
+  ['agents/workspace/SOUL.md', 'SOUL.md'],
+  ['agents/workspace/IDENTITY.md', 'IDENTITY.md'],
+  ['agents/workspace/USER.md', 'USER.md'],
+  ['agents/workspace/TOOLS.md', 'TOOLS.md'],
+  ['agents/workspace/HEARTBEAT.md', 'HEARTBEAT.md'],
 ];
 
 const SUBAGENT_MANIFEST_CANDIDATES = [
@@ -24,6 +24,10 @@ const SUBAGENT_MANIFEST_CANDIDATES = [
   'agents/subagents.yml',
   'agents/subagents.json',
 ];
+
+// Cache workspace file content by stable identity (size+mtimeMs) to keep output stable
+// across repeated calls and reduce IO. Keyed by canonical path to avoid duplicate reads.
+const workspaceFileCache = new Map();
 
 function listFilesRecursive(dir, predicate) {
   const out = [];
@@ -70,6 +74,41 @@ function truncate(text, max, label) {
   return `${text.slice(0, max)}\n\n… (truncated ${label}, len=${text.length})`;
 }
 
+function readTextFileUnderWorkspaceRootCached(rootResolved, absolutePath, maxBytes) {
+  let canonical;
+  let st;
+  try {
+    canonical = realpathSyncOrResolve(absolutePath);
+    st = fs.statSync(canonical);
+  } catch {
+    return { ok: false, reason: 'io' };
+  }
+
+  const identity = `${st.size}:${st.mtimeMs}`;
+  const cached = workspaceFileCache.get(canonical);
+  if (cached && cached.identity === identity) {
+    return { ok: true, content: cached.content };
+  }
+
+  const got = readTextFileUnderWorkspaceRoot(rootResolved, absolutePath, maxBytes);
+  if (got.ok) {
+    workspaceFileCache.set(canonical, { identity, content: got.content });
+  } else {
+    workspaceFileCache.delete(canonical);
+  }
+  return got;
+}
+
+function readFirstWorkspaceFile(rootResolved, candidates, maxBytes) {
+  for (const rel of candidates) {
+    const fp = path.join(rootResolved, rel);
+    const got = readTextFileUnderWorkspaceRootCached(rootResolved, fp, maxBytes);
+    if (!got.ok) continue;
+    return { rel, content: got.content };
+  }
+  return null;
+}
+
 export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamName = '') {
   const cfg = {
     enabled: true,
@@ -78,9 +117,11 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     includeRules: true,
     includeAgentMd: true,
     includeSubagents: true,
+    includeDiagnostics: false,
     maxTotalChars: 0,
     maxRulesChars: 12_000,
     maxAgentMdChars: 12_000,
+    maxDiagnosticsChars: 2_000,
     maxCandidatesPerRoot: DEFAULT_SKILL_LIMITS.maxCandidatesPerRoot,
     maxSkillsLoadedPerSource: DEFAULT_SKILL_LIMITS.maxSkillsLoadedPerSource,
     maxSkillsInPrompt: DEFAULT_SKILL_LIMITS.maxSkillsInPrompt,
@@ -125,10 +166,12 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
 
   if (cfg.includeAgentMd) {
     const openclawTemplateMaxChars = cfg.maxAgentMdChars;
+    let agentsMdContent = '';
     for (const name of ['AGENT.md', 'AGENTS.md']) {
       const fp = path.join(rootResolved, name);
-      const got = readTextFileUnderWorkspaceRoot(rootResolved, fp, cfg.maxAgentMdChars * 4);
+      const got = readTextFileUnderWorkspaceRootCached(rootResolved, fp, cfg.maxAgentMdChars * 4);
       if (!got.ok) continue;
+      if (!agentsMdContent && name === 'AGENTS.md') agentsMdContent = got.content;
       pushProse(name, truncate(got.content, cfg.maxAgentMdChars, name));
       break;
     }
@@ -137,11 +180,10 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     // MEMORY.md 会在“主会话”里加载（这里用 v3 作为主会话信号）。
     const isMainSession = streamName === 'v3' || !streamName;
 
-    for (const name of OPENCLAW_WORKSPACE_FILES) {
-      const fp = path.join(rootResolved, name);
-      const got = readTextFileUnderWorkspaceRoot(rootResolved, fp, MAX_OPENCLAW_FILE_CHARS * 4);
-      if (!got.ok) continue;
-      pushProse(name, truncate(got.content, MAX_OPENCLAW_FILE_CHARS, name));
+    for (const candidates of OPENCLAW_WORKSPACE_FILE_CANDIDATES) {
+      const got = readFirstWorkspaceFile(rootResolved, candidates, openclawTemplateMaxChars * 4);
+      if (!got) continue;
+      pushProse(got.rel, truncate(got.content, openclawTemplateMaxChars, got.rel));
     }
 
     // 每日记忆：memory/YYYY-MM-DD.md（今日 + 昨日）
@@ -156,19 +198,29 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     for (const ymd of [todayYmd, yesterdayYmd]) {
       const rel = path.join('memory', `${ymd}.md`).replace(/\\/g, '/');
       const fp = path.join(rootResolved, 'memory', `${ymd}.md`);
-      const got = readTextFileUnderWorkspaceRoot(rootResolved, fp, openclawTemplateMaxChars * 4);
+      const got = readTextFileUnderWorkspaceRootCached(rootResolved, fp, openclawTemplateMaxChars * 4);
       if (!got.ok) continue;
       pushProse(rel, truncate(got.content, openclawTemplateMaxChars, rel));
     }
 
     if (isMainSession) {
-      // 支持 MEMORY.md 与 memory.md 两种命名（历史兼容 + Windows 大小写敏感性）
-      for (const name of ['MEMORY.md', 'memory.md']) {
-        const fp = path.join(rootResolved, name);
-        const got = readTextFileUnderWorkspaceRoot(rootResolved, fp, openclawTemplateMaxChars * 4);
-        if (!got.ok) continue;
-        pushProse(name, truncate(got.content, openclawTemplateMaxChars, name));
-        break;
+      // 支持新路径与历史路径（含大小写兼容）
+      const memoryGot = readFirstWorkspaceFile(
+        rootResolved,
+        ['memory/MEMORY.md', 'agents/workspace/MEMORY.md', 'MEMORY.md', 'memory.md'],
+        openclawTemplateMaxChars * 4
+      );
+      if (memoryGot) {
+        pushProse(memoryGot.rel, truncate(memoryGot.content, openclawTemplateMaxChars, memoryGot.rel));
+      } else if (cfg.includeDiagnostics) {
+        const mentionsMemory = /memory\/memory\.md|memory\.md|memory\/\d{4}-\d{2}-\d{2}\.md/i.test(agentsMdContent || '');
+        if (!mentionsMemory) {
+          const diag = [
+            '未发现长期记忆文件（`memory/MEMORY.md`）。',
+            '建议：在 `memory/MEMORY.md` 写入你希望长期保留的偏好/约束/决策；并在 `AGENTS.md` 里保持引用一致。',
+          ].join('\n');
+          pushProse('Workspace diagnostics', truncate(diag, cfg.maxDiagnosticsChars, 'diagnostics'));
+        }
       }
     }
   }
@@ -180,10 +232,23 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
       const safeRel = rel.replace(/\\/g, '/').replace(/^\/+/, '');
       if (safeRel.includes('..')) continue;
       const fp = path.join(rootResolved, safeRel);
-      const got = readTextFileUnderWorkspaceRoot(rootResolved, fp, 2 * 1024 * 1024);
+      const got = readTextFileUnderWorkspaceRootCached(rootResolved, fp, 2 * 1024 * 1024);
       if (!got.ok) continue;
       pushProse(safeRel, got.content);
     }
+  }
+
+  // Pluggable prompt sections (stable ordering by title)
+  try {
+    const sections = await buildWorkspacePromptSections(ctx);
+    if (Array.isArray(sections) && sections.length > 0) {
+      sections
+        .filter((s) => s?.title && s?.body)
+        .sort((a, b) => String(a.title).localeCompare(String(b.title)))
+        .forEach((s) => pushProse(String(s.title), String(s.body)));
+    }
+  } catch {
+    /* ignore */
   }
 
   if (cfg.includeRules) {
@@ -197,7 +262,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
       let acc = '';
       for (const rel of relFiles) {
         const fp = path.join(rulesDir, ...rel.split('/'));
-        const got = readTextFileUnderWorkspaceRoot(rootResolved, fp, cfg.maxRulesChars * 4);
+        const got = readTextFileUnderWorkspaceRootCached(rootResolved, fp, cfg.maxRulesChars * 4);
         if (!got.ok) continue;
         acc += `\n### ${rel}\n\n${got.content}\n`;
         if (acc.length >= cfg.maxRulesChars) break;
@@ -220,14 +285,15 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
   const parts = [...proseSections];
 
   if (Array.isArray(cfg.customSkillRoots) && cfg.customSkillRoots.length > 0) {
-    const skillsPrompt = buildSkillsPromptFromWorkspace(rootResolved, cfg);
+    const customSkillRoots = [...cfg.customSkillRoots].filter(Boolean).map(String).sort((a, b) => a.localeCompare(b));
+    const skillsPrompt = buildSkillsPromptFromWorkspace(rootResolved, { ...cfg, customSkillRoots });
     if (skillsPrompt) parts.push(`## Skills\n\n${skillsPrompt}`);
   }
 
   if (cfg.includeSubagents) {
     for (const rel of SUBAGENT_MANIFEST_CANDIDATES) {
       const fp = path.join(rootResolved, rel);
-      const got = readTextFileUnderWorkspaceRoot(rootResolved, fp, 512 * 1024);
+      const got = readTextFileUnderWorkspaceRootCached(rootResolved, fp, 512 * 1024);
       if (!got.ok) continue;
       try {
         const data = fp.endsWith('.json') ? JSON.parse(got.content) : YAML.parse(got.content);
