@@ -564,20 +564,20 @@ export default class AssistantPlugin extends plugin {
       enableTools: true            // 整合文件操作工具工作流
     });
     
-    // 复杂任务：调用 Python 子服务端（LangChain/LangGraph）
-    // 通过 Bot.callSubserver('/api/langchain/chat') 调用
+    // 复杂任务：优先拆分为多个工作流 + MCP 工具协作
+    // 如需 Python 能力：调用你自定义的子服务端扩展 API
   }
 }
 
 // 2. 工作流自动处理：
 //    - 简单任务：直接执行
-//    - 复杂任务：调用 Python 子服务端进行多步编排
+//    - 复杂任务：通过工作流 + MCP 工具编排，必要时调用自定义子服务端扩展 API
 //    - 自动记录笔记，传递上下文
 ```
 
 **应用场景**：智能办公助手、自动化脚本、复杂任务编排
 
-> **注意**：Node 侧多步工作流（TODO系统）已移除，复杂多步编排请使用 Python 子服务端（LangChain/LangGraph）
+> **注意**：Node 侧多步能力通过工作流 + MCP 工具协作实现；Python 子服务端用于承载可选扩展 API，而非固定 AI 编排入口。
 
 #### 方案3：Web控制台应用
 
@@ -757,7 +757,7 @@ export default class UnifiedPlugin extends plugin {
 | 应用类型 | 推荐技术栈 | 核心组件 |
 |---------|-----------|---------|
 | **简单对话** | 插件 + 工作流 | `chat` stream + `enableMemory` |
-| **复杂任务** | 插件 + 子服务端 Agent | Python 子服务端（LangChain/LangGraph）进行多步编排 |
+| **复杂任务** | 插件 + 工作流 + MCP 工具 | 通过主服务工作流组合与工具调用实现，必要时接入自定义子服务 API |
 | **Web应用** | 前端 + HTTP API + 工作流 | REST API + `process()` |
 | **数据可视化** | 插件 + 工作流 + 渲染器 | `Renderer` + 模板系统 |
 | **多平台** | Tasker + 插件 + 事件系统 | 通用事件监听 |
@@ -791,7 +791,7 @@ flowchart TB
 
 2. **技术栈组合原则**：
    - 简单功能：直接使用插件 + 工作流
-   - 复杂功能：插件 + 工作流 + Python 子服务端（LangChain/LangGraph）
+   - 复杂功能：插件 + 工作流 + MCP 工具（可选扩展子服务 API）
    - Web应用：前端 + HTTP API + 工作流
    - 数据展示：工作流 + 渲染器
 

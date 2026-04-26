@@ -254,7 +254,7 @@ async complexTask(e) {
     enableTools: true           // 整合文件操作工具工作流
   });
   
-  // 复杂多步任务请使用 Python 子服务端（LangChain/LangGraph）
+  // 复杂任务建议使用工作流 + MCP 工具协作；必要时调用自定义子服务端扩展 API
 }
 ```
 

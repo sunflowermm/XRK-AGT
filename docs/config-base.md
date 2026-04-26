@@ -244,8 +244,9 @@ export default class ServerConfig extends ConfigBase {
       schema: {
         required: ['server'],
         fields: {
-          'server.server.port': { type: 'number', min: 1, max: 65535 },
-          'server.host': { type: 'string' }
+          'server.host': { type: 'string' },
+          'server.url': { type: 'string' },
+          'server.name': { type: 'string' }
         }
       }
     });
@@ -313,7 +314,7 @@ await fetch('/api/config/server/batch-set', {
   body: JSON.stringify({
     flat: {
       'server.host': '0.0.0.0',
-      'server.port': 8080
+      'server.url': 'http://127.0.0.1:8080'
     }
   })
 });

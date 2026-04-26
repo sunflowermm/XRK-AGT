@@ -105,13 +105,13 @@ flowchart TB
 
 ### 🤖 AI 工作流
 
-- **说明**：Node 侧"多步工作流/WorkflowManager/TODO"已移除；复杂 Agent 编排请使用 **Python 子服务端（LangChain/LangGraph）**，主服务端提供统一的 **v3 LLM Provider** 与 **MCP 工具注入/执行**。
+- **说明**：Node 侧统一通过工作流 + MCP 工具完成能力编排；如需 Python 侧能力，请在子服务端按 `apis/<group>/*.py` 扩展自定义接口。
 - **[底层架构设计](底层架构设计.md)** - AI 主链路、AIStream 链路、子服务端职责边界（权威）
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接
 - **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
 - **[AIStream 工作流基类文档](aistream.md)** - `AIStream` 基类技术文档，涵盖 Embedding、多提供商支持、Function Calling 与上下文增强（MCP 工具 vs Call Function 见该文档）
-- **[工厂系统文档](factory.md)** - LLM/Vision/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
-- **[子服务端 API 文档](subserver-api.md)** - Python 子服务端 API 文档，LangChain + 向量服务 + 与主服务 v3 的衔接
+- **[工厂系统文档](factory.md)** - LLM（含多模态）/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
+- **[子服务端 API 文档](subserver-api.md)** - Python 子服务端底层系统接口与扩展装载说明
 
 ### ⚙️ 配置与工具
 

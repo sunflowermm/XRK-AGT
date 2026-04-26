@@ -52,10 +52,10 @@ COPY . .
 WORKDIR /app/subserver/pyserver
 RUN if command -v /usr/local/bin/uv >/dev/null 2>&1; then \
         /usr/local/bin/uv venv .venv && \
-        /usr/local/bin/uv pip install --no-cache fastapi "uvicorn[standard]" httpx pyyaml sentence-transformers chromadb langchain langchain-openai langgraph; \
+        /usr/local/bin/uv pip install --no-cache fastapi "uvicorn[standard]" pyyaml; \
     else \
         python3 -m venv .venv && \
-        .venv/bin/pip install --no-cache-dir fastapi "uvicorn[standard]" httpx pyyaml sentence-transformers chromadb langchain langchain-openai langgraph && \
+        .venv/bin/pip install --no-cache-dir fastapi "uvicorn[standard]" pyyaml && \
         .venv/bin/pip cache purge; \
     fi && \
     find .venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
@@ -136,9 +136,7 @@ RUN mkdir -p \
     \) -delete 2>/dev/null || true
 
 ENV NODE_ENV=production \
-    NODE_OPTIONS="--no-warnings --no-deprecation" \
-    HF_HOME=/app/data/subserver/model_cache \
-    HF_HUB_CACHE=/app/data/subserver/model_cache
+    NODE_OPTIONS="--no-warnings --no-deprecation"
 
 # 创建非 root 用户并设置权限
 RUN groupadd -g 10000 xrk && \

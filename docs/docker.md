@@ -8,7 +8,7 @@
 - ✅ **一键部署**：Docker Compose 一键启动所有服务
 - ✅ **自动构建**：自动构建 Python 子服务端，无需手动配置
 - ✅ **数据持久化**：支持数据、日志、配置的持久化存储
-- ✅ **代理支持**：支持配置代理加速模型下载
+- ✅ **代理支持**：支持按需为容器网络请求配置代理
 - ✅ **健康检查**：内置健康检查机制，确保服务正常运行
 
 ---
@@ -32,11 +32,11 @@
 
 Docker 部署会自动构建和启动以下服务：
 - **xrk-agt**：主服务端（Node.js），提供 HTTP/HTTPS/WebSocket、AI 工作流、MCP 工具
-- **xrk-subserver**：Python 子服务端（FastAPI），提供 LangChain、向量服务、RAG（**自动构建，无需手动配置**）
+- **xrk-subserver**：Python 子服务端（FastAPI），提供底层子服务能力（健康检查、系统接口与扩展 API 装载）
 - **redis**：Redis 缓存服务
 - **mongodb**：MongoDB 数据库服务
 
-> **重要提示**：Docker 构建时会自动构建子服务端（Python FastAPI），包括安装所有 Python 依赖和模型缓存配置，无需手动操作。
+> **重要提示**：Docker 构建时会自动构建子服务端（Python FastAPI）并安装基础运行依赖，无需手动操作。
 
 ## 快速开始
 
@@ -55,7 +55,7 @@ cd XRK-AGT
 # 主服务端口（默认 8080）
 XRK_SERVER_PORT=8080
 
-# 代理配置（用于模型下载，可选）
+# 代理配置（可选）
 HTTP_PROXY=http://host.docker.internal:7890
 HTTPS_PROXY=https://host.docker.internal:7890
 NO_PROXY=127.0.0.1,localhost,xrk-agt,redis,mongodb
@@ -84,9 +84,8 @@ docker-compose down
   - 提供AI工作流和MCP工具
   - 提供Web控制台（`/xrk/`）
 - `xrk-subserver`: Python 子服务端（端口：8000，**自动构建**）
-  - 提供LangChain服务（`/api/langchain/chat`）
-  - 提供向量服务（`/api/vector/*`）
-  - 自动安装Python依赖和模型
+  - 提供底层系统接口（`/api/system/*`）
+  - 可按 `subserver/pyserver/apis/` 结构挂载自定义 API
 - `redis`: Redis 缓存服务（端口：6379，内部）
   - 用于缓存和会话管理
   - 数据持久化到 `data/redis/`
@@ -113,16 +112,14 @@ curl http://localhost:8000/health
 
 ### 自动构建子服务端
 
-Docker 构建时会自动安装 Python 依赖（FastAPI、uvicorn、sentence-transformers、chromadb 等）、配置虚拟环境与 HuggingFace 模型缓存，并支持代理环境变量用于模型下载。
+Docker 构建时会自动安装 Python 运行依赖（FastAPI、uvicorn、pyyaml）并配置虚拟环境。
 
 **构建阶段**（`Dockerfile`）：
 - 安装 Python 3 和构建工具、`uv` 包管理器
-- 创建 Python 虚拟环境并安装依赖，清理构建缓存
+- 创建 Python 虚拟环境并安装底层依赖，清理构建缓存
 
 **运行阶段**：
-- 复制构建好的虚拟环境，配置环境变量和代理，启动子服务端服务
-
-> **注意**：首次启动时，子服务端会自动下载向量化模型（若未缓存），可能需要较长时间，建议配置代理加速。
+- 复制构建好的虚拟环境并启动子服务端服务
 
 ### Redis
 
@@ -142,7 +139,7 @@ Docker 构建时会自动安装 Python 依赖（FastAPI、uvicorn、sentence-tra
 
 Docker 容器内的应用无法直接使用宿主机的系统代理设置，需要手动传递代理环境变量。
 
-### 配置代理（用于模型下载）
+### 配置代理（按需）
 
 #### 方式 1：使用 .env 文件（推荐）
 
@@ -177,7 +174,7 @@ HTTPS_PROXY=http://host.docker.internal:7890
 
 ### 代理说明
 
-- **模型下载**：子服务端使用代理下载 HuggingFace 模型
+- **容器出网请求**：可按需通过代理访问外网
 - **主服务端连接**：不走代理（已自动排除）
 - **本地服务**：Redis、MongoDB 不走代理（已自动排除）
 
@@ -196,17 +193,14 @@ Docker 环境自动配置：
 
 - **Redis/MongoDB**：自动将配置中的 `127.0.0.1` 替换为 Docker 服务名
 - **主服务端连接**：子服务端通过环境变量自动连接主服务端
-- **代理隔离**：主服务端连接不走代理，仅模型下载使用代理
+- **代理隔离**：可用 `NO_PROXY` 排除内部服务地址
 
 ## 环境变量
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
 | `XRK_SERVER_PORT` | 主服务端口 | `8080` |
-| `HTTP_PROXY` | HTTP 代理地址 | 空 |
-| `HTTPS_PROXY` | HTTPS 代理地址 | 空 |
-| `NO_PROXY` | 不走代理的地址 | `127.0.0.1,localhost,xrk-agt,redis,mongodb` |
-| `HF_ENDPOINT` | HuggingFace 镜像地址 | 空 |
+| `NO_PROXY` | 不走代理的地址 | `127.0.0.1,localhost,redis,mongodb` |
 | `MONGO_ROOT_USERNAME` | MongoDB 用户名 | 空 |
 | `MONGO_ROOT_PASSWORD` | MongoDB 密码 | 空 |
 
@@ -285,9 +279,9 @@ curl http://xrk-agt:8080/health
 - 配置文件错误导致服务启动失败
 - 依赖服务（Redis/MongoDB）未就绪
 
-#### 模型下载失败
+#### 容器网络访问失败
 
-**问题**：子服务端首次启动时模型下载失败
+**问题**：子服务端无法访问外部网络资源
 
 **解决方案**：
 ```bash
@@ -297,15 +291,8 @@ docker exec xrk-subserver env | grep -i proxy
 # 2. 验证代理连接
 docker exec xrk-subserver curl -I https://www.google.com
 
-# 3. 查看模型下载日志
-docker-compose logs xrk-subserver | grep -i model
-
-# 4. 手动配置 HuggingFace 镜像（国内加速）
-# 在 .env 中添加
-HF_ENDPOINT=https://hf-mirror.com
-
-# 5. 重新启动服务
-docker-compose restart xrk-subserver
+# 3. 查看子服务端日志
+docker-compose logs xrk-subserver
 ```
 
 **手动下载模型**：
@@ -313,10 +300,10 @@ docker-compose restart xrk-subserver
 # 进入容器
 docker exec -it xrk-subserver sh
 
-# 手动下载模型（使用代理）
+# 手动验证代理连通性
 export HTTP_PROXY=http://host.docker.internal:7890
 export HTTPS_PROXY=http://host.docker.internal:7890
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+curl -I https://example.com
 ```
 
 #### 主服务端连接失败
@@ -409,7 +396,7 @@ server {
 
 **推荐配置**：
 - 主服务端：至少 512MB 内存
-- 子服务端：至少 1GB 内存（模型加载需要）
+- 子服务端：按扩展 API 复杂度评估内存（基础系统接口场景通常低于 AI 模型场景）
 - Redis：至少 256MB 内存
 - MongoDB：至少 512MB 内存
 
@@ -460,7 +447,7 @@ curl -f http://localhost:8080/health || exit 1
 
 - 使用 SSD 存储（提升数据库性能）
 - 配置 Redis 持久化策略
-- 优化模型缓存（子服务端）
+- 优化子服务端扩展 API 的资源使用
 - 使用 CDN 加速静态资源
 
 ---

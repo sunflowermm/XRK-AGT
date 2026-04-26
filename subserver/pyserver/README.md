@@ -1,13 +1,12 @@
-# XRK-AGT Python 子服务端
+# XRK-AGT Python 子服务端（底层版）
 
-基于 FastAPI 的高性能独立服务，提供 AI 生态相关能力。
+基于 FastAPI 的独立子服务，仅保留底层框架能力（健康检查、系统 API、可扩展装载）。
 
 ## 功能特性
 
-- **LangChain 集成**：支持 Agent 编排和 MCP 工具调用
-- **向量服务**：文本向量化、向量检索和向量数据库管理
-- **高性能**：异步模型加载、结果缓存、连接池优化
-- **易于扩展**：模块化 API 设计，支持多组结构
+- **底层可用性**：`/health`、`/api/list`、`/api/system/*`
+- **模块化扩展**：自动扫描 `apis/` 目录并装载 API 组
+- **轻量依赖**：仅保留 FastAPI/uvicorn/pyyaml
 
 ## 🚀 快速开始
 
@@ -27,19 +26,7 @@ uv run xrk
 
 ## 🔌 主要 API
 
-- **LangChain 服务**: `/api/langchain/chat` - LangChain聊天接口，支持MCP工具调用
-- **向量服务**: `/api/vector/embed`, `/api/vector/search`, `/api/vector/upsert` - 向量化、检索、入库
-- **向量健康检查**: `/api/vector/health` - 向量模型/向量库状态
-
-## 🔗 主服务端 v3（给 LangChain 的“类 ChatGPT 协议”入口）
-
-Python 子服务端内部会调用主服务端的 `POST /api/v3/chat/completions`（OpenAI Chat Completions 兼容）。
-
-- **base_url**：指向主服务端 `/api/v3`
-- **apiKey（访问鉴权）**：需要携带主服务端 `Bot.apiKey`（等价于 Node 侧 `BotUtil.apiKey`），用于访问 `/api/v3/chat/completions`。在子服务端配置 `main_server.api_key` 后会自动带上。
-- **model 字段约定**：这里填"运营商/provider"（例如 `volcengine` / `xiaomimimo` / `openai`）
-- **真实模型ID**：由主服务端 `cfg.aistream.llm.defaults/profiles` 决定（也可在请求体内用自定义字段覆写，如 `chatModel`/`model` 等，以实际工厂实现为准）
-- **tool calling + MCP**：由主服务端 NodeJS LLMFactory 自动处理（会把 MCP tools 注入到厂商工具协议，并执行多轮工具调用），返回最终 `assistant.content`
+- **系统接口**：`/api/system/ping`、`/api/system/config`
 
 ## 🔧 配置
 
@@ -59,10 +46,7 @@ HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 ### 主要配置项
 
 - `server.host` / `server.port`：服务监听地址和端口
-- `main_server.host` / `main_server.port`：主服务端连接地址
-- `vector.model`：向量化模型名称
-- `vector.cache_enabled`：是否启用嵌入结果缓存
-- `langchain.enabled`：是否启用 LangChain Agent
+- `api.auto_load` / `api.api_dir`：自动加载 API 目录设置
 
 ## 📝 开发 API
 
@@ -72,11 +56,8 @@ HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 
 ```
 apis/
-  langchain/       # LangChain服务
-    langchain_service.py
-    agent.py
-  vector/          # 向量服务
-    vector_service.py
+  system/          # 系统底层接口
+    basic_service.py
 ```
 
 ### 创建 API
