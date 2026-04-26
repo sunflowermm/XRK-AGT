@@ -18,6 +18,4 @@ password: ""
 # 连接选项
 # ----------------------------------------
 options:
-  connectionPoolSize: "auto"   # auto 或 3-50
-  commandsQueueMaxLength: 5000
   connectTimeout: 10000       # 毫秒

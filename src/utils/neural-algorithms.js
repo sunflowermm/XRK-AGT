@@ -4,7 +4,7 @@ import crypto from 'crypto';
  * 文本相似度计算（基于Jaccard相似度和编辑距离）
  * 使用轻量级算法，适合实时场景
  */
-export class TextSimilarity {
+class TextSimilarity {
   /**
    * 计算Jaccard相似度（基于字符n-gram）
    * @param {string} text1 - 文本1
@@ -516,87 +516,6 @@ export class PluginMatcher {
   clear() {
     this.ruleCache.clear();
     this.matchStats.clear();
-  }
-}
-
-/**
- * 工作流决策器（使用简单的决策树思想）
- * 基于历史数据智能决策是否需要工作流
- */
-export class WorkflowDecisionTree {
-  constructor() {
-    this.decisionHistory = []; // 历史决策记录
-    this.patterns = new Map(); // 模式 -> 决策结果
-  }
-
-  /**
-   * 记录决策历史
-   */
-  recordDecision(goal, todos, shouldUseTodo) {
-    this.decisionHistory.push({
-      goal,
-      todosCount: todos.length,
-      shouldUseTodo,
-      timestamp: Date.now()
-    });
-
-    // 提取模式
-    const pattern = this.extractPattern(goal, todos);
-    if (pattern) {
-      this.patterns.set(pattern, {
-        shouldUseTodo,
-        count: (this.patterns.get(pattern)?.count || 0) + 1
-      });
-    }
-
-    // 限制历史记录大小
-    if (this.decisionHistory.length > 1000) {
-      this.decisionHistory = this.decisionHistory.slice(-500);
-    }
-  }
-
-  /**
-   * 提取决策模式
-   */
-  extractPattern(goal, todos) {
-    // 基于目标关键词和TODO数量提取模式
-    const keywords = goal.toLowerCase().match(/\b\w{3,}\b/g) || [];
-    const keyPattern = keywords.slice(0, 3).join('_');
-    return `${keyPattern}_${todos.length}`;
-  }
-
-  /**
-   * 基于历史决策预测
-   */
-  predict(goal, todos) {
-    const pattern = this.extractPattern(goal, todos);
-    const history = this.patterns.get(pattern);
-
-    if (history && history.count >= 3) {
-      // 如果相同模式有足够的历史记录，使用历史决策
-      return {
-        shouldUseTodo: history.shouldUseTodo,
-        confidence: Math.min(0.9, 0.5 + history.count * 0.1)
-      };
-    }
-
-    // 否则返回null，让AI决策
-    return null;
-  }
-
-  /**
-   * 获取决策统计
-   */
-  getStats() {
-    const total = this.decisionHistory.length;
-    const useWorkflow = this.decisionHistory.filter(d => d.shouldUseTodo).length;
-    
-    return {
-      total,
-      useWorkflow,
-      useWorkflowRate: total > 0 ? (useWorkflow / total).toFixed(2) : 0,
-      patterns: this.patterns.size
-    };
   }
 }
 

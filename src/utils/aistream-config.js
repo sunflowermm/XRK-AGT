@@ -80,10 +80,6 @@ export const getLLMSettings = ({ workflow, persona, profile } = {}) => {
     };
 };
 
-/** volcengine 基础配置，供 xiaozhi 等模块复用 */
-export const getVolcengineAsrConfig = () => cfg.volcengine_asr || {};
-export const getVolcengineTtsConfig = () => cfg.volcengine_tts || {};
-
 export const getTtsConfig = () => {
     const aistream = getAistreamConfig();
     const section = aistream.tts || {};

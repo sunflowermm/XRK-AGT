@@ -9,7 +9,7 @@ import fetch from 'node-fetch';
 
 const DATA_URL_CACHE = new Map();
 
-export function getServerPublicUrl() {
+function getServerPublicUrl() {
   try {
     const base = globalThis.Bot?.url;
     return base ? String(base).replace(/\/+$/, '') : '';
@@ -18,7 +18,7 @@ export function getServerPublicUrl() {
   }
 }
 
-export function normalizeToAbsoluteUrl(url) {
+function normalizeToAbsoluteUrl(url) {
   const u = String(url ?? '').trim();
   if (!u) return '';
   if (u.startsWith('data:')) return u;
@@ -29,7 +29,7 @@ export function normalizeToAbsoluteUrl(url) {
   return u;
 }
 
-export function parseDataUrl(dataUrl) {
+function parseDataUrl(dataUrl) {
   const raw = String(dataUrl ?? '').trim();
   const m = raw.match(/^data:([^;]+);base64,(.*)$/i);
   if (!m) return null;

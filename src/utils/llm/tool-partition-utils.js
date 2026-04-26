@@ -6,7 +6,7 @@ import BotUtil from '../botutil.js';
  * @param {Object} overrides - 包含 downstreamToolNames 的配置对象
  * @returns {Set<string>} 下游工具名称集合
  */
-export function getDownstreamToolNames(overrides) {
+function getDownstreamToolNames(overrides) {
   if (Array.isArray(overrides?.downstreamToolNames) && overrides.downstreamToolNames.length > 0) {
     return new Set(overrides.downstreamToolNames.map(s => String(s).trim()).filter(Boolean));
   }

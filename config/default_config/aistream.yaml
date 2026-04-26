@@ -9,25 +9,12 @@
 # 工作流系统
 # ----------------------------------------
 enabled: true
-# 工作流发现：框架自动扫描所有 core/*/stream/*.js（见 StreamLoader），非单一目录。
-# 本字段仅作文档/控制台备注，不参与加载路径解析；留空即可。
-streamDir: ""
 
 # ----------------------------------------
 # 工作流全局
 # ----------------------------------------
 global:
-  maxTimeout: 360000   # 单次执行最大超时（毫秒）
   debug: false
-  maxConcurrent: 5     # 最大并发执行数
-
-# ----------------------------------------
-# 工作流缓存
-# ----------------------------------------
-cache:
-  enabled: true
-  ttl: 300             # 缓存过期时间（秒）
-  maxSize: 100
 
 # ----------------------------------------
 # LLM 厂商
@@ -63,7 +50,6 @@ tts:
 # Model Context Protocol：工具调用与跨平台集成。remote 可桥接外部 MCP（stdio/HTTP/SSE/WebSocket）。
 mcp:
   enabled: true
-  autoRegister: true
   remote:
     enabled: false
     # 远程 MCP 服务器配置（数组模式，推荐：每条粘贴一个 JSON 块）。
@@ -91,8 +77,10 @@ agentWorkspace:
   includeRules: true
   includeAgentMd: true
   includeSubagents: true
+  includeDiagnostics: false   # true 时在缺失关键工作区文件时追加简短诊断提示
   # 0 = 不限制 prose 总长；Skills 仍受 maxSkillsPromptChars 约束
   maxTotalChars: 0
+  maxDiagnosticsChars: 2000   # 诊断提示最大字符
   contextFiles: []         # 额外注入的 Markdown 路径（相对工作区根）
   # 以下与 OpenClaw config skills.limits / 目录结构对齐（pi-coding-agent formatSkillsForPrompt）
   maxCandidatesPerRoot: 300
@@ -101,9 +89,9 @@ agentWorkspace:
   maxSkillsPromptChars: 30000
   maxSkillFileBytes: 256000
   customSkillRoots:
-    - "standard-skills"
+    - "skills/standard"
   # 自定义技能目录（可多个；相对工作区路径或绝对路径均可）。
-  # 为空不注入 skills。示例：`.cursor/skills` 或 `C:/.../standard-skills`
+  # 为空不注入 skills。示例：`.cursor/skills` 或 `C:/.../skills/standard`
   maxRulesChars: 12000
   maxAgentMdChars: 12000
 

@@ -37,7 +37,7 @@ export const SUPPORTED_EMOTIONS = [
 export const PARSEABLE_EMOTIONS = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
 
 /** 中文关键词 -> 表情代码 */
-export const EMOTION_KEYWORDS = {
+const EMOTION_KEYWORDS = {
     '开心': 'happy',
     '高兴': 'happy',
     '伤心': 'sad',

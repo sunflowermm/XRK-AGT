@@ -459,5 +459,3 @@ misc:
   cache:
     ttlMs: 60000
 
-  # 404时的默认重定向路径
-  defaultRoute: "/"

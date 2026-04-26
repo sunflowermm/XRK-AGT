@@ -70,10 +70,6 @@ system:
   '/→#': true
   # 群聊/频道中是否过滤自己发出的消息
   ignoreSelf: true
-  # 上线推送通知冷却时间（秒）
-  onlineMsgExp: 86400
-  # 是否缓存群成员列表
-  cacheGroupMember: true
 
 # ----------------------------------------
 # 状态插件

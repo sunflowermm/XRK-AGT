@@ -16,25 +16,19 @@ heartbeat:
 # 容量限制
 # ----------------------------------------
 limits:
-  maxDevices: 100
   maxLogsPerDevice: 100   # 单设备日志条数上限，超出截断
-  maxDataPerDevice: 50    # 单设备数据条数上限，超出移除最早
 
 # ----------------------------------------
 # 命令
 # ----------------------------------------
 command:
   timeout: 5000   # 执行超时（毫秒）
-  batchSize: 100  # 批量发送上限
 
 # ----------------------------------------
 # WebSocket
 # ----------------------------------------
 websocket:
-  pingInterval: 30000        # Ping 间隔（毫秒）
   pongTimeout: 10000         # Pong 超时（毫秒）
-  reconnectDelay: 2000      # 重连延迟（毫秒）
-  maxReconnectAttempts: 5
 
 # ----------------------------------------
 # 消息队列
@@ -47,7 +41,6 @@ messageQueue:
 # ----------------------------------------
 logging:
   enableDetailedLogs: true
-  enablePerformanceLogs: true
 
 # ----------------------------------------
 # 音频

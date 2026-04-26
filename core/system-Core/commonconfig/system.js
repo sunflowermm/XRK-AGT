@@ -312,21 +312,6 @@ export default class SystemConfig extends ConfigBase {
                   description: '群聊和频道中过滤自己的消息',
                   default: true,
                   component: 'Switch'
-                },
-                onlineMsgExp: {
-                  type: 'number',
-                  label: '上线推送冷却',
-                  description: '上线推送通知的冷却时间（秒）',
-                  min: 0,
-                  default: 86400,
-                  component: 'InputNumber'
-                },
-                cacheGroupMember: {
-              type: 'boolean',
-              label: '缓存群成员列表',
-              description: '是否缓存群成员列表',
-              default: true,
-              component: 'Switch'
                 }
               }
             },
@@ -1590,12 +1575,6 @@ export default class SystemConfig extends ConfigBase {
                   default: true,
                   component: 'Switch'
                 },
-                defaultRoute: {
-                  type: 'string',
-                  label: '404重定向',
-                  default: '/',
-                  component: 'Input'
-                },
                 publicIpApis: {
                   type: 'array',
                   label: '公网 IP API 列表',
@@ -1721,25 +1700,11 @@ export default class SystemConfig extends ConfigBase {
               label: '容量限制配置',
               component: 'SubForm',
               fields: {
-                maxDevices: {
-              type: 'number',
-              label: '最大设备数量',
-              min: 1,
-              default: 100,
-              component: 'InputNumber'
-            },
                 maxLogsPerDevice: {
               type: 'number',
               label: '设备最大日志条数',
               min: 1,
               default: 100,
-              component: 'InputNumber'
-            },
-                maxDataPerDevice: {
-              type: 'number',
-              label: '设备最大数据条数',
-              min: 1,
-              default: 50,
               component: 'InputNumber'
                 }
               }
@@ -1756,13 +1721,6 @@ export default class SystemConfig extends ConfigBase {
               min: 100,
               default: 5000,
               component: 'InputNumber'
-            },
-                batchSize: {
-              type: 'number',
-              label: '批量发送数量',
-              min: 1,
-              default: 100,
-              component: 'InputNumber'
                 }
               }
             },
@@ -1771,28 +1729,10 @@ export default class SystemConfig extends ConfigBase {
               label: 'WebSocket配置',
               component: 'SubForm',
               fields: {
-                pingInterval: {
-                  type: 'number',
-                  label: 'Ping间隔（毫秒）',
-                  default: 30000,
-                  component: 'InputNumber'
-                },
                 pongTimeout: {
                   type: 'number',
                   label: 'Pong超时（毫秒）',
                   default: 10000,
-                  component: 'InputNumber'
-                },
-                reconnectDelay: {
-                  type: 'number',
-                  label: '重连延迟（毫秒）',
-                  default: 2000,
-                  component: 'InputNumber'
-                },
-                maxReconnectAttempts: {
-                  type: 'number',
-                  label: '最大重连尝试次数',
-                  default: 5,
                   component: 'InputNumber'
                 }
               }
@@ -1818,12 +1758,6 @@ export default class SystemConfig extends ConfigBase {
                 enableDetailedLogs: {
                   type: 'boolean',
                   label: '启用详细日志',
-                  default: true,
-                  component: 'Switch'
-                },
-                enablePerformanceLogs: {
-                  type: 'boolean',
-                  label: '启用性能日志',
                   default: true,
                   component: 'Switch'
                 }
@@ -2074,21 +2008,6 @@ export default class SystemConfig extends ConfigBase {
               label: 'Redis连接选项',
               component: 'SubForm',
               fields: {
-                connectionPoolSize: {
-                  type: 'string',
-                  label: '连接池大小',
-                  description: '连接池大小。auto 表示自动计算，也可填写具体数字（3-50）以限制并发连接数',
-                  default: 'auto',
-                  component: 'Input'
-                },
-                commandsQueueMaxLength: {
-                  type: 'number',
-                  label: '命令队列最大长度',
-                  description: '当 Redis 短暂不可用时最多排队多少条命令，超出将直接报错',
-                  min: 1,
-                  default: 5000,
-                  component: 'InputNumber'
-                },
                 connectTimeout: {
                   type: 'number',
                   label: '连接超时时间（毫秒）',
@@ -2207,68 +2126,17 @@ export default class SystemConfig extends ConfigBase {
               default: true,
               component: 'Switch'
             },
-            streamDir: {
-              type: 'string',
-              label: '工作流目录（备注）',
-              description:
-                '实际由框架扫描 core/*/stream/*.js 加载；本字段仅作文档/展示，不参与解析。留空即可。',
-              default: '',
-              component: 'Input'
-            },
             global: {
               type: 'object',
               label: '全局设置',
               component: 'SubForm',
               fields: {
-                maxTimeout: {
-                  type: 'number',
-                  label: '最大执行超时（毫秒）',
-                  min: 1000,
-                  default: 360000,
-                  component: 'InputNumber'
-                },
                 debug: {
                   type: 'boolean',
                   label: '调试日志',
                   description: '启用后会输出更详细的工作流调试日志，仅建议在开发/排错时打开',
                   default: false,
                   component: 'Switch'
-                },
-                maxConcurrent: {
-                  type: 'number',
-                  label: '并发执行限制',
-                  description: '同一时刻允许同时运行的工作流实例数量上限',
-                  min: 1,
-                  default: 5,
-                  component: 'InputNumber'
-                }
-              }
-            },
-            cache: {
-              type: 'object',
-              label: '缓存设置',
-              component: 'SubForm',
-              fields: {
-                enabled: {
-                  type: 'boolean',
-                  label: '启用缓存',
-                  default: true,
-                  component: 'Switch'
-                },
-                ttl: {
-                  type: 'number',
-                  label: '缓存过期时间',
-                  description: '缓存过期时间（秒）',
-                  min: 1,
-                  default: 300,
-                  component: 'InputNumber'
-                },
-                maxSize: {
-                  type: 'number',
-                  label: '最大缓存条数',
-                  min: 1,
-                  default: 100,
-                  component: 'InputNumber'
                 }
               }
             },
@@ -2391,13 +2259,6 @@ export default class SystemConfig extends ConfigBase {
                   max: 65535,
                   component: 'InputNumber'
                 },
-                autoRegister: {
-                  type: 'boolean',
-                  label: '自动注册工具',
-                  description: '自动从工作流中收集并注册MCP工具',
-                  default: true,
-                  component: 'Switch'
-                },
                 defaultStreams: {
                   type: 'array',
                   label: '默认启用的工作流',
@@ -2506,6 +2367,13 @@ export default class SystemConfig extends ConfigBase {
                   default: true,
                   component: 'Switch'
                 },
+                includeDiagnostics: {
+                  type: 'boolean',
+                  label: '包含诊断提示',
+                  description: '启用后在缺失 MEMORY 等关键文件时追加简短诊断段（默认关闭）',
+                  default: false,
+                  component: 'Switch'
+                },
                 maxTotalChars: {
                   type: 'number',
                   label: 'Prose 段总字符上限',
@@ -2513,6 +2381,14 @@ export default class SystemConfig extends ConfigBase {
                     '0 表示不限制（推荐）；仅约束 AGENT/bootstrap/rules/扩展文件等 prose，Skills XML 由 maxSkillsPromptChars 单独限制',
                   min: 0,
                   default: 0,
+                  component: 'InputNumber'
+                },
+                maxDiagnosticsChars: {
+                  type: 'number',
+                  label: '诊断提示最大字符',
+                  description: 'Workspace diagnostics 段的字符预算上限',
+                  min: 100,
+                  default: 2000,
                   component: 'InputNumber'
                 },
                 contextFiles: {
@@ -2567,7 +2443,7 @@ export default class SystemConfig extends ConfigBase {
                   type: 'array',
                   label: '自定义技能目录',
                   description:
-                    '可填相对工作区路径或绝对路径；为空不注入 skills（示例：`.cursor/skills` 或 `C:/.../standard-skills`）',
+                    '可填相对工作区路径或绝对路径；为空不注入 skills（示例：`.cursor/skills` 或 `C:/.../skills/standard`）',
                   itemType: 'string',
                   default: [],
                   component: 'ArrayForm'
