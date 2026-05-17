@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D24.13.0-brightgreen.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Docker-blue.svg)](https://github.com/sunflowermm/XRK-AGT)
-[![Version](https://img.shields.io/badge/version-2.0.0-orange.svg)](https://github.com/sunflowermm/XRK-AGT)
+[![Version](https://img.shields.io/badge/version-2.0.8-orange.svg)](https://github.com/sunflowermm/XRK-AGT)
 [![GitHub Repo stars](https://img.shields.io/github/stars/sunflowermm/XRK-AGT?style=social)](https://github.com/sunflowermm/XRK-AGT/stargazers)
 
 </div>
@@ -32,14 +32,14 @@
 
 ### 联合研制单位
 
-<!-- 第一排：沈阳农业大学 -->
+<!-- 第一排：沈阳农业大学 问就是乐 -->
 <div align="center">
   <img src="resources/mdimg/沈阳农业大学-logo-2048px.png" alt="沈阳农业大学" width="160" height="160">
 </div>
 
 <br>
 
-<!-- 第二排：其他五所大学（使用 width/height 保证 Gitee/GitHub 等平台显示一致，避免原图过大） -->
+<!-- 第二排：其他五所大学（使用 width/height 保证 Gitee/GitHub 等平台显示一致 -->
 <div align="center">
   <p>
     <img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="130" height="130" style="margin:4px;">
