@@ -1,10 +1,25 @@
 # XRK-AGT 文档中心
 
-欢迎来到 XRK-AGT 框架文档中心。
+欢迎来到 XRK-AGT 框架文档中心。仓库根目录 [README.md](../README.md) 负责安装与启动；**本页**负责开发文档索引与阅读路径。
 
-> **底层设计基线**：请优先阅读 **[底层架构设计](底层架构设计.md)**，该文档作为架构边界、AI 调用链路、配置优先级的统一事实源。
+| 我想… | 从这里开始 |
+|--------|------------|
+| 跑起来 | [README.md §快速开始](../README.md#-快速开始) |
+| 懂架构 | [底层架构设计](底层架构设计.md) → [PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md) |
+| 用内置能力 | [system-core.md](system-core.md) |
+| 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
+| 发布前检查 | [框架测试指南](框架测试指南.md) → [代码审查清单](代码审查清单.md) → [文档审查清单](文档审查清单.md) |
 
-> **主入口文档**：建议从 [PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md) 与本页开始阅读。
+> **底层设计基线**：[底层架构设计](底层架构设计.md)（架构边界、AI 链路、配置优先级）。  
+> **数字与 CI**：以 `tests/helpers/system-core.mjs` 与 [框架测试指南](框架测试指南.md) 为准；文档冲突时见 [文档审查清单](文档审查清单.md#权威事实源冲突时优先级)。
+
+## 目录
+
+- [仓库目录速查](#仓库目录速查避免误放重复)
+- [文档导航](#-文档导航)
+- [按角色推荐阅读](#-按角色推荐阅读)
+- [典型开发路径](#典型开发路径)
+- [相关资源](#相关资源)
 
 ---
 
@@ -32,7 +47,8 @@
 ### 🚀 快速开始
 
 - **[框架测试指南](框架测试指南.md)** - 标准值、实测数据、CI 命令（仅 system-Core）
-- **[代码审查清单](代码审查清单.md)** - 发布前审查（含启动冒烟）
+- **[代码审查清单](代码审查清单.md)** - 发布前代码与架构检查
+- **[文档审查清单](文档审查清单.md)** - 发布前文档准确性、互链与数字一致性 ⭐
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
 - **[底层架构设计](底层架构设计.md)** - 统一 Runtime / Infrastructure / Core 与 AI 底层设计（建议先读）
 - **[Bot 主类文档](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
@@ -99,7 +115,7 @@ flowchart TB
 
 > **重要说明**：本项目的"业务实现"都应该放在 `core/*/(plugin|http|stream)` 下；`src/*` 主要是基础设施/工厂/通用能力，**不要把业务 API/工作流写进 `src`**（否则会破坏多 core 扩展机制）。
 
-**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供 11 个 HTTP API 模块、7 个工作流（MCP 工具以 `registerMCPTool` 为准）、4 个 Tasker 和 Web 控制台。详见 **[system-Core 特性文档](system-core.md)** ⭐。
+**system-Core 内置模块**：11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 3 events；MCP 工具在七个自带工作流内合计 **68** 个。详见 **[system-Core 特性文档](system-core.md)**；CI 标准值与实测见 **[框架测试指南](框架测试指南.md)**。
 
 详细说明请参考 [项目概览](../PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
 
@@ -289,7 +305,9 @@ flowchart TB
 
 ## 相关资源
 
+- **[README.md](../README.md)** - 仓库入口、目录导航、测试与质量摘要
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 项目整体架构说明
+- **[文档审查清单](文档审查清单.md)** - 文档层级图与发布前自检
 - **[XRK-AGT 生态索引（AGT-Cores-Tools-Index）](https://github.com/sunflowermm/AGT-Cores-Tools-Index)** - 官方导航仓库（含 [核心工具与通用组件索引](https://github.com/sunflowermm/AGT-Cores-Tools-Index/blob/main/Core-Tools.md) 等，以该仓库为准）
 - **[GitHub 仓库](https://github.com/sunflowermm/XRK-AGT)** - 源代码仓库
 - **[Gitee 仓库](https://gitee.com/xrkseek/XRK-AGT)** - 国内镜像仓库
@@ -297,5 +315,5 @@ flowchart TB
 
 ---
 
-*最后更新：2026-04-14*
+*最后更新：2026-05-17*
 

@@ -2,8 +2,7 @@
 
 > **Node.js 版本要求**: ≥ 24.13.0 (LTS)  
 > 本文档提供 XRK-AGT 项目的完整架构概览、目录结构说明和核心特性介绍。  
-> 如需快速开始，请查看 [README.md](README.md)；详细开发与扩展指南请结合 [docs/README.md](docs/README.md) 与各模块文档阅读。
-> 底层边界与 AI 调用链路权威说明见 [docs/底层架构设计.md](docs/底层架构设计.md)。
+> 快速开始：[README.md](README.md) · 文档中心：[docs/README.md](docs/README.md) · 底层设计：[docs/底层架构设计.md](docs/底层架构设计.md) · 测试/审查：[docs/框架测试指南.md](docs/框架测试指南.md)、[docs/代码审查清单.md](docs/代码审查清单.md)、[docs/文档审查清单.md](docs/文档审查清单.md)
 
 ## 📋 目录
 
@@ -118,8 +117,10 @@ flowchart TB
 XRK-AGT 内置了完整的 system-Core 模块，提供开箱即用的功能：
 
 - **11个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、通知服务、标准输入、数据编辑
-- **7个工作流**：chat、desktop、tools、memory、database、web、browser（MCP 工具约 68 个，以代码注册为准）
+- **7个工作流**：chat、desktop、tools、memory、database、web、browser（system-Core 内 MCP 工具 **68** 个，以 `registerMCPTool` 为准）
+- **15个内置插件**：增强器 + 运维与示例业务
 - **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
+- **3个事件监听器**：onebot、stdin、device
 - **Web控制台**：企业级管理界面（`/xrk/`），支持系统监控、API调试、配置管理
 
 详细说明请参考 [system-Core 特性文档](docs/system-core.md)。
