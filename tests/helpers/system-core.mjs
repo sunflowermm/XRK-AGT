@@ -4,17 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** 框架基准仅统计内置 core/system-Core（扩展 core 不计入） */
 export const SYSTEM_CORE_DIR = path.join(root, 'core', 'system-Core');
 
-/**
- * 不计入框架基准的 system-Core 文件（个人/后期扩展，勿与官方自带模块混淆）
- */
-export const SYSTEM_CORE_NON_BASELINE = Object.freeze({
-  stream: ['screen.js', 'react-bits-mcp.js'],
-  plugin: ['远行商人.js'],
-});
-
+/** 框架基准：仅 system-Core 官方自带（见 tests/helpers/system-core.mjs） */
 export const SYSTEM_CORE_BASELINE = Object.freeze({
   http: 11,
   stream: 7,
@@ -26,11 +18,9 @@ export const SYSTEM_CORE_BASELINE = Object.freeze({
 export function listSystemCoreJs(subdir) {
   const dir = path.join(SYSTEM_CORE_DIR, subdir);
   if (!fs.existsSync(dir)) return [];
-  const skip = new Set(SYSTEM_CORE_NON_BASELINE[subdir] || []);
-  return fs.readdirSync(dir).filter((f) => f.endsWith('.js') && !skip.has(f));
+  return fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
 }
 
-/** ApiLoader key：http/<basename> */
 export function systemCoreHttpApiKeys() {
   return listSystemCoreJs('http').map((f) => `http/${f.replace(/\.js$/, '')}`);
 }

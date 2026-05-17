@@ -161,26 +161,6 @@ export default class Runtime {
     return common
   }
 
-  get puppeteer() {
-    // 直接使用 Renderer，提供兼容接口
-    const renderer = RendererLoader.getRenderer()
-    return {
-      screenshot: async (name, data) => {
-        const img = await renderer.render(name, data)
-        return img ? segment.image(img) : img
-      },
-      screenshots: async (name, data) => {
-        data.multiPage = true
-        const imgs = await renderer.render(name, data) || []
-        const ret = []
-        for (const img of imgs) {
-          ret.push(img ? segment.image(img) : img)
-        }
-        return ret.length > 0 ? ret : false
-      }
-    }
-  }
-
   /**
    * 代理访问扩展的属性
    */
@@ -202,8 +182,7 @@ export default class Runtime {
    * @returns {Promise<boolean>}
    */
   async render(plugin, tplPath, data = {}, cfg = {}) {
-    // 处理传入的路径，兼容传入 .html 结尾的写法
-    const cleanPath = String(tplPath || "").replace(/\.html$/, "")
+    const cleanPath = String(tplPath || '').replace(/\.html$/, '')
     const parts = lodash.filter(cleanPath.split("/"), Boolean)
     const normalizedPath = parts.join("/") || "index"
     

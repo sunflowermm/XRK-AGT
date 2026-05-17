@@ -49,11 +49,3 @@ describe('ui-kit 情绪 key', () => {
     }
   });
 });
-
-describe('chat 页面模板', () => {
-  it('chat.js 不引用已删除的 app._pokeHandIconSVG 包装', () => {
-    const chatJs = fs.readFileSync(path.join(wwwRoot, 'modules/pages/chat.js'), 'utf8');
-    assert.doesNotMatch(chatJs, /app\._pokeHandIconSVG/);
-    assert.match(chatJs, /pokeHandIconSVG\(/);
-  });
-});

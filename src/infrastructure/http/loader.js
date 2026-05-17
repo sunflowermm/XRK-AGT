@@ -180,13 +180,8 @@ class ApiLoader {
     const api = this.apis.get(key);
     if (!api) return;
 
-    // 优先调用 stop，其次兼容 destroy；统一支持 async
     try {
-      if (typeof api.stop === 'function') {
-        await api.stop();
-      } else if (typeof api.destroy === 'function') {
-        await api.destroy();
-      }
+      if (typeof api.stop === 'function') await api.stop();
     } catch (error) {
       BotUtil.makeLog('warn', `卸载API生命周期调用失败: ${api.name || key} - ${error.message}`, 'ApiLoader');
     }
