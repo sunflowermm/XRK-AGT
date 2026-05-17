@@ -7,6 +7,7 @@ import PluginsLoader from '#infrastructure/plugins/loader.js'
 // 模块级配置
 let showNetworkInfo = true
 let showProcessInfo = true
+let showDiskInfo = true
 
 export class stattools extends plugin {
   constructor() {
@@ -28,6 +29,7 @@ export class stattools extends plugin {
     const statusCfg = agtCfg.status || {}
     showNetworkInfo = statusCfg.showNetwork !== false
     showProcessInfo = statusCfg.showProcess !== false
+    showDiskInfo = statusCfg.showDisk !== false
   }
 
   formatFileSize(bytes) {
@@ -132,15 +134,17 @@ export class stattools extends plugin {
         `  缓存：${this.formatFileSize(mem.cached || 0)}`,
         `  Node占用：${this.formatFileSize(nodeUsage.rss)} (堆${this.formatFileSize(nodeUsage.heapUsed)})`,
         '',
-        `● 磁盘信息`,
-        mainDisk ? [
-          `  挂载点：${mainDisk.mount}`,
-          `  文件系统：${mainDisk.fs}`,
-          `  总容量：${this.formatFileSize(mainDisk.size)}`,
-          `  已使用：${this.formatFileSize(mainDisk.used)} (${mainDisk.use?.toFixed(1) || '0'}%)`,
-          `  可用：${this.formatFileSize(mainDisk.available)}`
-        ].join('\n') : '  无磁盘信息',
-        '',
+        ...(showDiskInfo ? [
+          `● 磁盘信息`,
+          mainDisk ? [
+            `  挂载点：${mainDisk.mount}`,
+            `  文件系统：${mainDisk.fs}`,
+            `  总容量：${this.formatFileSize(mainDisk.size)}`,
+            `  已使用：${this.formatFileSize(mainDisk.used)} (${mainDisk.use?.toFixed(1) || '0'}%)`,
+            `  可用：${this.formatFileSize(mainDisk.available)}`
+          ].join('\n') : '  无磁盘信息',
+          ''
+        ] : []),
         showProcessInfo ? [
           `● 进程信息`,
           `  总进程数：${processes.all}个`,

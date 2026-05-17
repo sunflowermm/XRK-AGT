@@ -11,9 +11,19 @@ description: 当你需要新增/调整配置字段、确保 YAML 与 commonconfi
 
 ## 配置路径规则（核心）
 
-- 全局配置：`data/server_bots/<name>.yaml`
-- 随端口配置：`data/server_bots/{port}/<name>.yaml`
-- 工厂/LLM 配置也属于随端口配置（例如 `openai_llm.yaml`、`openai_compat_llm.yaml` 等）
+权威常量：`src/infrastructure/config/config-constants.js`
+
+| 分类 | 存储路径 | 配置名（示例） |
+|------|----------|----------------|
+| 全局 | `data/server_bots/<name>.yaml` | `agt`、`device`、`monitor`、`notice`、`mongodb`、`redis` |
+| 随端口 | `data/server_bots/{port}/<name>.yaml` | `server`、`chatbot`、`group`、`aistream` |
+| 工厂 LLM | `data/server_bots/{port}/<name>.yaml` | `openai_llm`、`volcengine_llm`、`gemini_compat_llm` 等（见 `FACTORY_CONFIG_PATTERNS`） |
+
+- 默认模板：`config/default_config/<name>.yaml`（`Cfg` 在缺失时自动复制到目标路径）
+- **Schema 来源**：
+  - 独立文件：`core/system-Core/commonconfig/<name>.js`（与 YAML 同名，如 `openai_llm.js`）
+  - 聚合在 `system.js`：`agt`、`server`、`chatbot`、`device`、`group`、`notice`、`redis`、`mongodb`、`monitor`、`aistream` 等（无单独 commonconfig 文件）
+  - 仅代码侧：`tools.js`（无对应 default YAML）
 
 ## 变更清单（做配置相关改动必须检查）
 

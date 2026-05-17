@@ -49,11 +49,7 @@ import {
 } from '#utils/deviceutil.js';
 import { Disposables } from '../lib/runtime/disposables.js';
 
-function ensureSystemCoreAuth(req, res, Bot, context) {
-    if (!Bot?.checkApiAuthorization?.(req)) {
-        return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.device');
-    }
-}
+const DEVICE_FILE_ROOTS = [paths.data, paths.trash, paths.resources];
 
 // ==================== 全局存储 ====================
 const devices = new Map();
@@ -283,7 +279,7 @@ class DeviceManager {
         if (!this.bot?.on) return;
         this.detachDeviceEventBridge();
         this._deviceEventListener = (e) => {
-            try {
+        try {
                 if (!e || e.event_type !== 'asr_result') return;
                 const deviceId = e.device_id;
                 const sessionId = e.session_id;
@@ -540,7 +536,7 @@ class DeviceManager {
                             );
 
                             client.endUtterance().catch((e) => {
-                                BotUtil.makeLog('error',
+        BotUtil.makeLog('error',
                                     `❌ [ASR] 提前结束失败: ${e.message}`,
                                     deviceId
                                 );
@@ -775,7 +771,7 @@ class DeviceManager {
 
             if (progressEnabled && shouldPlayTTS && progressText.trim()) {
                 progressTimer = setTimeout(() => {
-                    if (!waiting) return;
+        if (!waiting) return;
                     try {
                         const ttsClient = this._getTTSClient(deviceId, ttsConfig);
                         BotUtil.makeLog('info', `🔊 [TTS] AI较慢/工具调用中，先播提示语音`, deviceId);
@@ -1141,7 +1137,7 @@ class DeviceManager {
 
         const systemConfig = getSystemConfig();
         ws.heartbeatTimer = setInterval(() => {
-            const device = devices.get(deviceId);
+        const device = devices.get(deviceId);
             const now = Date.now();
 
             if (device && device.online) {
@@ -1182,13 +1178,13 @@ class DeviceManager {
         }, (systemConfig.heartbeat?.interval || 30) * 1000);
 
         ws.on('pong', () => {
-            ws.isAlive = true;
+        ws.isAlive = true;
             ws.lastPong = Date.now();
             this.updateDeviceStats(deviceId, 'heartbeat');
         });
 
         ws.on('error', (error) => {
-            BotUtil.makeLog('error',
+        BotUtil.makeLog('error',
                 `❌ [WebSocket错误] ${error.message}`,
                 deviceId
             );
@@ -1279,7 +1275,7 @@ class DeviceManager {
             clearLogs: () => deviceLogs.set(deviceId, []),
 
             sendMsg: async (msg) => {
-                const emotion = findEmotionFromKeywords(msg);
+        const emotion = findEmotionFromKeywords(msg);
                 if (emotion) {
                     return await this.sendCommand(deviceId, 'display_emotion', { emotion }, 1);
                 }
@@ -1300,7 +1296,7 @@ class DeviceManager {
 
             /** 以聊天回复形式发到 Web 客户端（Event/聊天窗口展示），与事件里的 reply 同格式 */
             reply: async (segmentsOrText) => {
-                const ws = deviceWebSockets.get(deviceId);
+        const ws = deviceWebSockets.get(deviceId);
                 if (!ws || ws.readyState !== WebSocket.OPEN) return false;
                 try {
                     const text = typeof segmentsOrText === 'string' ? segmentsOrText : (segmentsOrText?.segments?.[0]?.text ?? String(segmentsOrText ?? ''));
@@ -1327,7 +1323,7 @@ class DeviceManager {
             // 同一设备维度串行发送，不阻塞上游
             // 优先使用二进制传输（借鉴 xiaozhi）：hex 转 ArrayBuffer 直接发送，带宽约减半、解析更快
             sendAudioChunk: (hex) => {
-                const ws = deviceWebSockets.get(deviceId);
+        const ws = deviceWebSockets.get(deviceId);
                 if (ws && ws.readyState === WebSocket.OPEN && typeof hex === 'string' && hex.length > 0) {
                     const bytes = hex.length / 2;
 
@@ -1347,7 +1343,7 @@ class DeviceManager {
                         const STATUS_STALE_MS = 800;      // 状态超过 800ms 视为过期，避免旧水位误判
 
                         ws.__ttsSendChain = ws.__ttsSendChain.then(async () => {
-                            if (ws.readyState !== WebSocket.OPEN) return;
+        if (ws.readyState !== WebSocket.OPEN) return;
 
                             const startWait = Date.now();
                             while (ws.readyState === WebSocket.OPEN) {
@@ -1375,14 +1371,14 @@ class DeviceManager {
                             BotUtil.makeLog(
                                 'debug',
                                 (() => {
-                                    const status = ttsQueueStatus.get(deviceId);
+        const status = ttsQueueStatus.get(deviceId);
                                     const q = status ? status.queueLen : 'N/A';
                                     return `[TTS传输] 二进制发送: 字节=${bytes}, buffered=${ws.bufferedAmount}, 前端队列=${q}`;
                                 })(),
                                 deviceId
                             );
                         }).catch((e) => {
-                            BotUtil.makeLog('error', `[TTS传输] WebSocket发送队列异常: ${e.message}`, deviceId);
+        BotUtil.makeLog('error', `[TTS传输] WebSocket发送队列异常: ${e.message}`, deviceId);
                         });
                     } catch (e) {
                         BotUtil.makeLog('error', `[TTS传输] WebSocket发送失败: ${e.message}`, deviceId);
@@ -1412,7 +1408,7 @@ class DeviceManager {
                 ),
 
             emotion: async (emotionName) => {
-                if (!SUPPORTED_EMOTIONS.includes(emotionName)) {
+        if (!SUPPORTED_EMOTIONS.includes(emotionName)) {
                     throw new Error(`未知表情: ${emotionName}`);
                 }
                 return await this.sendCommand(
@@ -1454,7 +1450,7 @@ class DeviceManager {
             hasCapability: (cap) => hasCapability(deviceInfo, cap),
 
             getStatus: () => {
-                const device = devices.get(deviceId);
+        const device = devices.get(deviceId);
                 return {
                     device_id: deviceId,
                     device_name: deviceInfo.device_name,
@@ -1507,13 +1503,13 @@ class DeviceManager {
 
         if (ws && ws.readyState === WebSocket.OPEN) {
             return new Promise((resolve) => {
-                const timeout = setTimeout(() => {
-                    commandCallbacks.delete(cmd.id);
+        const timeout = setTimeout(() => {
+        commandCallbacks.delete(cmd.id);
                     resolve({ success: true, command_id: cmd.id, timeout: true });
                 }, systemConfig.command?.timeout || 5000);
 
                 commandCallbacks.set(cmd.id, (result) => {
-                    clearTimeout(timeout);
+        clearTimeout(timeout);
                     resolve({ success: true, command_id: cmd.id, result });
                 });
 
@@ -1771,7 +1767,7 @@ class DeviceManager {
                             getDeviceChatHistory(deviceId, count),
                         /** 获取当前消息所回复的那条（从 message 中第一个 reply 段解析），便于插件处理媒体等 */
                         getReply: async () => {
-                            const msg = messagePayload.message;
+        const msg = messagePayload.message;
                             const seg = Array.isArray(msg) ? msg.find(s => s && s.type === 'reply') : null;
                             if (!seg) return null;
                             return {
@@ -1801,7 +1797,7 @@ class DeviceManager {
                          * @returns {Promise<boolean>} 是否发送成功
                          */
                         reply: async (segmentsOrText) => {
-                            try {
+        try {
                                 const ws = deviceWebSockets.get(deviceId);
                                 if (!ws || ws.readyState !== WebSocket.OPEN) {
                                     BotUtil.makeLog('warn', `[WebSocket] 连接未打开，无法发送消息`, deviceId);
@@ -1844,7 +1840,7 @@ class DeviceManager {
 
                                 // 处理 segments：路径/Buffer 转 web URL
                                 segments = segments.map((seg) => {
-                                    // 字符串类型：转换为 text segment（防御性处理）
+        // 字符串类型：转换为 text segment（防御性处理）
                                     if (typeof seg === 'string') {
                                         return { type: 'text', text: seg };
                                     }
@@ -2163,8 +2159,6 @@ export default {
             method: 'POST',
             path: '/api/device/register',
             handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-                    const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.register');
-                    if (authResp) return authResp;
                     const device = await deviceManager.registerDevice(
                         {
                             ...req.body,
@@ -2179,10 +2173,8 @@ export default {
         {
             method: 'POST',
             path: '/api/device/:deviceId/ai',
-            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-                    const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.ai');
-                    if (authResp) return authResp;
-                    const deviceId = req.params.deviceId;
+            handler: HttpResponse.asyncHandler(async (req, res) => {
+        const deviceId = req.params.deviceId;
                     const { text, workflow, persona, profile, llm, model, llmProfile } = req.body || {};
                     if (!text || !String(text).trim()) {
                     return HttpResponse.validationError(res, '缺少文本内容');
@@ -2205,10 +2197,8 @@ export default {
         {
             method: 'GET',
             path: '/api/devices',
-            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-                const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.list');
-                if (authResp) return authResp;
-                const list = deviceManager.getDeviceList();
+            handler: HttpResponse.asyncHandler(async (req, res) => {
+        const list = deviceManager.getDeviceList();
                 HttpResponse.success(res, { devices: list, count: list.length });
             }, 'device.list')
         },
@@ -2216,10 +2206,8 @@ export default {
         {
             method: 'GET',
             path: '/api/device/:deviceId',
-            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-                const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.get');
-                if (authResp) return authResp;
-                const device = deviceManager.getDevice(req.params.deviceId);
+            handler: HttpResponse.asyncHandler(async (req, res) => {
+        const device = deviceManager.getDevice(req.params.deviceId);
                 if (device) {
                     HttpResponse.success(res, { device });
                 } else {
@@ -2231,10 +2219,8 @@ export default {
         {
             method: 'GET',
             path: '/api/device/:deviceId/asr/sessions',
-            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-                const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.asr.sessions');
-                if (authResp) return authResp;
-                const sessions = Array.from(asrSessions.entries())
+            handler: HttpResponse.asyncHandler(async (req, res) => {
+        const sessions = Array.from(asrSessions.entries())
                     .filter(([, s]) => s.deviceId === req.params.deviceId)
                     .map(([sid, s]) => ({
                         session_id: sid,
@@ -2253,10 +2239,8 @@ export default {
         {
             method: 'GET',
             path: '/api/device/:deviceId/asr/recordings',
-            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-                    const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.asr.recordings');
-                    if (authResp) return authResp;
-                    const recordings = await getAudioFileList(
+            handler: HttpResponse.asyncHandler(async (req, res) => {
+        const recordings = await getAudioFileList(
                         deviceManager.AUDIO_SAVE_DIR,
                         req.params.deviceId
                     );
@@ -2272,10 +2256,8 @@ export default {
         {
             method: 'POST',
             path: '/api/device/tts',
-            handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-                const authResp = ensureSystemCoreAuth(req, res, Bot, 'device.tts');
-                if (authResp) return authResp;
-                const { device_id, text } = req.body || {};
+            handler: HttpResponse.asyncHandler(async (req, res) => {
+        const { device_id, text } = req.body || {};
                 if (!text || !String(text).trim()) {
                     return HttpResponse.validationError(res, '缺少文本内容');
                 }
@@ -2305,110 +2287,102 @@ export default {
         {
             method: 'GET',
             path: '/api/trash/*',
-                handler: HttpResponse.asyncHandler(async (req, res) => {
-                        const filePath = req.params[0];
-                        if (!filePath || filePath.includes('..')) {
-                        return HttpResponse.validationError(res, '无效的文件路径');
-                        }
+            handler: HttpResponse.asyncHandler(async (req, res) => {
+                const filePath = req.params[0];
+                if (!filePath || filePath.includes('..')) {
+                    return HttpResponse.validationError(res, '无效的文件路径');
+                }
 
-                        const normalizedPath = InputValidator.validatePath(filePath, paths.trash);
-                        const resolvedPath = path.resolve(paths.trash, normalizedPath);
+                let resolvedPath;
+                try {
+                    resolvedPath = InputValidator.validatePath(filePath, paths.trash);
+                } catch (e) {
+                    return HttpResponse.validationError(res, e.message || '无效的文件路径');
+                }
 
-                        if (!fs.existsSync(resolvedPath)) {
-                        return HttpResponse.notFound(res, '文件不存在');
-                        }
+                if (!fs.existsSync(resolvedPath)) {
+                    return HttpResponse.notFound(res, '文件不存在');
+                }
 
-                        const ext = path.extname(resolvedPath).toLowerCase();
-                        const contentTypeMap = {
-                            '.png': 'image/png',
-                            '.jpg': 'image/jpeg',
-                            '.jpeg': 'image/jpeg',
-                            '.gif': 'image/gif',
-                            '.webp': 'image/webp',
-                            '.svg': 'image/svg+xml'
-                        };
+                const ext = path.extname(resolvedPath).toLowerCase();
+                const contentTypeMap = {
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.gif': 'image/gif',
+                    '.webp': 'image/webp',
+                    '.svg': 'image/svg+xml'
+                };
 
-                        const contentType = contentTypeMap[ext] || 'application/octet-stream';
-                        res.setHeader('Content-Type', contentType);
-                        res.setHeader('Cache-Control', 'public, max-age=3600');
+                const contentType = contentTypeMap[ext] || 'application/octet-stream';
+                res.setHeader('Content-Type', contentType);
+                res.setHeader('Cache-Control', 'public, max-age=3600');
 
-                        fs.createReadStream(resolvedPath).pipe(res);
-                }, 'trash.file')
-            },
-            {
-                method: 'GET',
-                path: '/api/device/file/:fileId',
-                handler: HttpResponse.asyncHandler(async (req, res) => {
-                        const fileId = req.params.fileId;
-                        if (!fileId) {
-                        return HttpResponse.validationError(res, '文件ID不能为空');
-                        }
+                fs.createReadStream(resolvedPath).pipe(res);
+            }, 'trash.file')
+        },
+        {
+            method: 'GET',
+            path: '/api/device/file/:fileId',
+            handler: HttpResponse.asyncHandler(async (req, res) => {
+                const fileId = req.params.fileId;
+                if (!fileId) {
+                    return HttpResponse.validationError(res, '文件ID不能为空');
+                }
 
-                        // 解码文件路径
-                        let filePath;
-                        try {
-                            filePath = Buffer.from(fileId, 'base64url').toString('utf8');
-                        } catch {
-                        return HttpResponse.validationError(res, '无效的文件ID');
-                        }
+                let filePath;
+                try {
+                    filePath = Buffer.from(fileId, 'base64url').toString('utf8');
+                } catch {
+                    return HttpResponse.validationError(res, '无效的文件ID');
+                }
 
-                        // 安全检查：确保是绝对路径且文件存在
-                        if (!path.isAbsolute(filePath)) {
-                        return HttpResponse.validationError(res, '只支持绝对路径');
-                        }
+                let normalizedPath;
+                try {
+                    normalizedPath = InputValidator.assertPathUnderRoots(filePath, DEVICE_FILE_ROOTS);
+                } catch (e) {
+                    const msg = e.message || '无效的文件路径';
+                    if (msg.includes('拒绝')) {
+                        return HttpResponse.forbidden(res, msg);
+                    }
+                    return HttpResponse.validationError(res, msg);
+                }
 
-                        const normalizedPath = path.normalize(filePath);
-                        
-                        // 安全检查：禁止访问系统关键目录
-                        const forbiddenPaths = [
-                            path.join(paths.root, 'node_modules'),
-                            path.join(paths.root, '.git'),
-                            process.cwd() !== paths.root ? process.cwd() : null
-                        ].filter(Boolean);
-                        
-                        for (const forbidden of forbiddenPaths) {
-                            if (normalizedPath.startsWith(path.normalize(forbidden))) {
-                            return HttpResponse.forbidden(res, '访问被拒绝');
-                            }
-                        }
+                if (!fs.existsSync(normalizedPath)) {
+                    return HttpResponse.notFound(res, '文件不存在');
+                }
 
-                        if (!fs.existsSync(normalizedPath)) {
-                        return HttpResponse.notFound(res, '文件不存在');
-                        }
+                const stats = fs.statSync(normalizedPath);
+                if (!stats.isFile()) {
+                    return HttpResponse.validationError(res, '路径不是文件');
+                }
 
-                        // 检查是否为文件（不是目录）
-                        const stats = fs.statSync(normalizedPath);
-                        if (!stats.isFile()) {
-                        return HttpResponse.validationError(res, '路径不是文件');
-                        }
+                const ext = path.extname(normalizedPath).toLowerCase();
+                const contentTypeMap = {
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.gif': 'image/gif',
+                    '.webp': 'image/webp',
+                    '.svg': 'image/svg+xml',
+                    '.bmp': 'image/bmp',
+                    '.ico': 'image/x-icon'
+                };
 
-                        // 设置Content-Type
-                        const ext = path.extname(normalizedPath).toLowerCase();
-                        const contentTypeMap = {
-                            '.png': 'image/png',
-                            '.jpg': 'image/jpeg',
-                            '.jpeg': 'image/jpeg',
-                            '.gif': 'image/gif',
-                            '.webp': 'image/webp',
-                            '.svg': 'image/svg+xml',
-                            '.bmp': 'image/bmp',
-                            '.ico': 'image/x-icon'
-                        };
+                const contentType = contentTypeMap[ext] || 'application/octet-stream';
+                res.setHeader('Content-Type', contentType);
+                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('Content-Disposition', `inline; filename="${path.basename(normalizedPath)}"`);
 
-                        const contentType = contentTypeMap[ext] || 'application/octet-stream';
-                        res.setHeader('Content-Type', contentType);
-                        res.setHeader('Cache-Control', 'public, max-age=3600');
-                        res.setHeader('Content-Disposition', `inline; filename="${path.basename(normalizedPath)}"`);
-
-                        fs.createReadStream(normalizedPath).pipe(res);
-                }, 'device.file')
-            }
-        ],
+                fs.createReadStream(normalizedPath).pipe(res);
+            }, 'device.file')
+        }
+    ],
 
     ws: {
         device: [
             (ws, req, Bot) => {
-                const remote = req.socket?.remoteAddress || req.headers['x-real-ip'] || 'unknown';
+        const remote = req.socket?.remoteAddress || req.headers['x-real-ip'] || 'unknown';
                 if (shouldLogConnection(remote)) {
                     BotUtil.makeLog('info',
                         `🔌 [WebSocket] 新连接: ${remote}`,
@@ -2429,7 +2403,7 @@ export default {
                 });
 
                 ws.on('close', () => {
-                    if (ws.device_id) {
+        if (ws.device_id) {
                         deviceManager.handleDeviceDisconnect(ws.device_id, ws);
                     } else {
                         BotUtil.makeLog('info',
@@ -2440,7 +2414,7 @@ export default {
                 });
 
                 ws.on('error', (e) => {
-                    BotUtil.makeLog('error',
+        BotUtil.makeLog('error',
                         `❌ [WebSocket] 错误: ${e.message}`,
                         ws.device_id || 'unknown'
                     );
@@ -2454,11 +2428,11 @@ export default {
         __runtime = new Disposables();
         deviceManager.setBot(Bot);
         deviceManager.cleanupInterval = __runtime.interval(() => {
-            deviceManager.checkOfflineDevices();
+        deviceManager.checkOfflineDevices();
         }, 30000);
 
         __runtime.interval(() => {
-            const now = Date.now();
+        const now = Date.now();
             for (const [id, _] of commandCallbacks) {
                 const timestamp = parseInt(id.split('_')[0]);
                 if (now - timestamp > 60000) {
@@ -2468,7 +2442,7 @@ export default {
         }, 60000);
 
         __runtime.interval(() => {
-            const now = Date.now();
+        const now = Date.now();
             for (const [sessionId, session] of asrSessions) {
                 if (now - session.lastChunkTime > 5 * 60 * 1000) {
                     try {

@@ -258,18 +258,7 @@ export class sendLog extends plugin {
         if (logFiles.length > 0) {
           return path.join(logDir, logFiles[0])
         }
-        
-        // 兼容旧格式（仅对app日志）
-        if (prefix === 'app') {
-          const oldFiles = files
-            .filter(file => file.match(/^\d{4}-\d{2}-\d{2}\.log$/))
-            .sort((a, b) => b.localeCompare(a))
-          
-          if (oldFiles.length > 0) {
-            return path.join(logDir, oldFiles[0])
-          }
-        }
-        
+
         return null
       }
     } catch (error) {

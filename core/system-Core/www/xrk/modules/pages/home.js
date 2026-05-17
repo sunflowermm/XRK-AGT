@@ -108,24 +108,19 @@ export function renderHomePage(app) {
           
           <div class="card">
             <div class="card-header">
-              <span class="card-title">插件信息</span>
+              <span class="card-title">插件与工作流</span>
             </div>
-            <div id="pluginsInfo" class="home-cloud-panel" role="region" aria-label="插件信息">加载中...</div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">工作流状态</span>
+            <div class="home-runtime-sections">
+              <section class="home-runtime-section" aria-label="插件">
+                <div class="home-runtime-section__label">插件</div>
+                <div id="pluginsInfo" class="home-cloud-panel">加载中...</div>
+              </section>
+              <section class="home-runtime-section" aria-label="工作流">
+                <div class="home-runtime-section__label">工作流</div>
+                <div id="workflowInfo" class="home-cloud-panel">加载中...</div>
+              </section>
             </div>
-            <div id="workflowInfo" class="home-cloud-panel" role="region" aria-label="工作流状态">加载中...</div>
           </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">网络接口</span>
-          </div>
-          <div id="networkInfo" style="padding:20px;color:var(--text-muted);text-align:center">加载中...</div>
         </div>
         
         <div class="card">
@@ -158,4 +153,3 @@ export function renderHomePage(app) {
 
   app._loadHomeDataAndUpdate();
 }
-

@@ -497,6 +497,20 @@
 /* 首页：插件 / 工作流 词云（home-cloud-panel + tag-cloud）                      */
 /* -------------------------------------------------------------------------- */
 
+.home-runtime-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.home-runtime-section__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
 .home-cloud-panel {
   padding: 12px 4px 16px;
   color: var(--text-muted);

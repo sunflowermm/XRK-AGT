@@ -1,6 +1,6 @@
 /**
- * 首页「插件信息」「工作流状态」词云式展示（悬停/聚焦显示详情）
- * 由系统概览路由 renderHome → _applyHomeData / _loadHomeDataAndUpdate 驱动
+ * 首页「插件与工作流」词云展示（悬停/聚焦显示详情）
+ * 由 renderHome → _applyHomeData / _loadHomeDataAndUpdate 驱动
  */
 
 import { escapeHtml } from '../utils.js';
@@ -66,6 +66,51 @@ function bindTagCloudPopoverFlip(root) {
   }
 }
 
+function mountTagCloud(box, metaHtml, chipsHtml) {
+  box.innerHTML = chipsHtml
+    ? `${metaHtml}<div class="tag-cloud" role="list">${chipsHtml}</div>`
+    : metaHtml;
+  if (chipsHtml) {
+    applyTagCloudPopoverFlip(box);
+    bindTagCloudPopoverFlip(box);
+  }
+}
+
+function buildTagCloudChip({
+  seed,
+  tipPrefix,
+  index,
+  label,
+  badge = '',
+  extraClass = '',
+  popoverTitle,
+  popoverKey = '',
+  desc,
+  facts
+}) {
+  const tipId = safeDomId(tipPrefix, seed, index);
+  const keyLine = popoverKey
+    ? `<div class="tag-cloud-chip__popover-key mono">${escapeHtml(popoverKey)}</div>`
+    : '';
+  const factRows = facts
+    .map(({ label: k, value }) => `<li><span>${escapeHtml(k)}</span><em>${escapeHtml(String(value))}</em></li>`)
+    .join('');
+  return `
+    <div class="tag-cloud-chip ${sizeClass(seed)} ${toneClass(seed)}${extraClass}" style="--stagger:${index}">
+      <button type="button" class="tag-cloud-chip__btn" aria-describedby="${tipId}">
+        <span class="tag-cloud-chip__label">${escapeHtml(label)}</span>
+        ${badge}
+      </button>
+      <div class="tag-cloud-chip__popover" id="${tipId}" role="tooltip">
+        <div class="tag-cloud-chip__popover-title">${escapeHtml(popoverTitle)}</div>
+        ${keyLine}
+        <p class="tag-cloud-chip__popover-desc">${escapeHtml(desc)}</p>
+        <ul class="tag-cloud-chip__popover-facts">${factRows}</ul>
+      </div>
+    </div>
+  `;
+}
+
 /**
  * 渲染插件摘要词云（依赖 /api/plugins/summary）
  */
@@ -118,34 +163,24 @@ export async function loadPluginsInfoPanel(app) {
       .map((p, i) => {
         const key = p.key ?? p.name ?? `p${i}`;
         const label = p.name ?? p.key ?? 'plugin';
-        const tipId = safeDomId('plg-tip', key, i);
-        const dsc = (p.dsc ?? '暂无描述').trim();
-        const rules = Number(p.rule) || 0;
-        const hasTask = p.task > 0;
-        const pri = p.priority ?? '—';
-        return `
-          <div class="tag-cloud-chip ${sizeClass(key)} ${toneClass(key)}" style="--stagger:${i}">
-            <button type="button" class="tag-cloud-chip__btn" aria-describedby="${tipId}">
-              <span class="tag-cloud-chip__label">${escapeHtml(label)}</span>
-            </button>
-            <div class="tag-cloud-chip__popover" id="${tipId}" role="tooltip">
-              <div class="tag-cloud-chip__popover-title">${escapeHtml(label)}</div>
-              <div class="tag-cloud-chip__popover-key mono">${escapeHtml(String(key))}</div>
-              <p class="tag-cloud-chip__popover-desc">${escapeHtml(dsc)}</p>
-              <ul class="tag-cloud-chip__popover-facts">
-                <li><span>优先级</span><em>${escapeHtml(String(pri))}</em></li>
-                <li><span>规则条数</span><em>${rules}</em></li>
-                <li><span>定时任务</span><em>${hasTask ? '是' : '否'}</em></li>
-              </ul>
-            </div>
-          </div>
-        `;
+        return buildTagCloudChip({
+          seed: key,
+          tipPrefix: 'plg-tip',
+          index: i,
+          label,
+          popoverTitle: label,
+          popoverKey: String(key),
+          desc: (p.dsc ?? '暂无描述').trim() || '暂无描述',
+          facts: [
+            { label: '优先级', value: p.priority ?? '—' },
+            { label: '规则条数', value: Number(p.rule) || 0 },
+            { label: '定时任务', value: p.task > 0 ? '是' : '否' }
+          ]
+        });
       })
       .join('');
 
-    box.innerHTML = `${metaHtml}<div class="tag-cloud" role="list">${chips}</div>`;
-    applyTagCloudPopoverFlip(box);
-    bindTagCloudPopoverFlip(box);
+    mountTagCloud(box, metaHtml, chips);
   } catch (e) {
     if (e.name === 'AbortError' || e.name === 'TimeoutError') {
       box.innerHTML = '<div class="home-cloud-empty">加载超时</div>';
@@ -170,7 +205,6 @@ export function renderWorkflowInfoPanel(app, workflows = {}, panels = {}) {
   const panelWf = panels.workflows ?? {};
   const stats = panelWf.stats ?? workflows.stats ?? {};
   const total = stats.total ?? panelWf.total ?? workflows.total ?? 0;
-  /** 完整列表在 snapshot.workflows.items；panels 内为截断列表，优先用前者 */
   const items = Array.isArray(workflows.items) && workflows.items.length
     ? workflows.items
     : (panelWf.items ?? []);
@@ -182,11 +216,9 @@ export function renderWorkflowInfoPanel(app, workflows = {}, panels = {}) {
   }
 
   const enabled = stats.enabled ?? panelWf.enabled ?? workflows.enabled ?? 0;
-  const totalCount = total;
-
   const metaHtml = `
     <div class="home-cloud-meta" aria-label="工作流汇总">
-      <span class="home-cloud-meta__item"><strong class="home-cloud-meta__num home-cloud-meta__num--primary">${enabled}/${totalCount}</strong><span class="home-cloud-meta__lbl">启用 / 总数</span></span>
+      <span class="home-cloud-meta__item"><strong class="home-cloud-meta__num home-cloud-meta__num--primary">${enabled}/${total}</strong><span class="home-cloud-meta__lbl">启用 / 总数</span></span>
     </div>
   `;
 
@@ -199,33 +231,24 @@ export function renderWorkflowInfoPanel(app, workflows = {}, panels = {}) {
   const chips = items
     .map((item, i) => {
       const name = item.name ?? 'workflow';
-      const desc = (item.description ?? '').trim() || '暂无描述';
-      const priority = item.priority ?? '—';
       const on = item.enabled !== false;
-      const tipId = safeDomId('wf-tip', name, i);
-      const seed = `${name}-${i}`;
-      const offCls = on ? '' : ' tag-cloud-chip--disabled';
-      return `
-        <div class="tag-cloud-chip ${sizeClass(seed)} ${toneClass(seed)}${offCls}" style="--stagger:${i}">
-          <button type="button" class="tag-cloud-chip__btn" aria-describedby="${tipId}">
-            <span class="tag-cloud-chip__label">${escapeHtml(name)}</span>
-            ${on ? '' : '<span class="tag-cloud-chip__badge" aria-hidden="true">停</span>'}
-          </button>
-          <div class="tag-cloud-chip__popover" id="${tipId}" role="tooltip">
-            <div class="tag-cloud-chip__popover-title">${escapeHtml(name)}</div>
-            <p class="tag-cloud-chip__popover-desc">${escapeHtml(desc)}</p>
-            <ul class="tag-cloud-chip__popover-facts">
-              <li><span>优先级</span><em>${escapeHtml(String(priority))}</em></li>
-              <li><span>状态</span><em>${on ? '已启用' : '未启用'}</em></li>
-            </ul>
-          </div>
-        </div>
-      `;
+      return buildTagCloudChip({
+        seed: `${name}-${i}`,
+        tipPrefix: 'wf-tip',
+        index: i,
+        label: name,
+        badge: on ? '' : '<span class="tag-cloud-chip__badge" aria-hidden="true">停</span>',
+        extraClass: on ? '' : ' tag-cloud-chip--disabled',
+        popoverTitle: name,
+        desc: (item.description ?? '').trim() || '暂无描述',
+        facts: [
+          { label: '优先级', value: item.priority ?? '—' },
+          { label: '状态', value: on ? '已启用' : '未启用' }
+        ]
+      });
     })
     .join('');
 
-  box.innerHTML = `${metaHtml}<div class="tag-cloud" role="list">${chips}</div>`;
-  applyTagCloudPopoverFlip(box);
-  bindTagCloudPopoverFlip(box);
+  mountTagCloud(box, metaHtml, chips);
   clearUpdating(box);
 }

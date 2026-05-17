@@ -1142,65 +1142,6 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
-            uiCookie: {
-              type: 'object',
-              label: 'UI 同源 Cookie（已废弃，保留字段以兼容旧配置，不再在 Server 内置逻辑中使用）',
-              component: 'SubForm',
-              fields: {
-                enabled: {
-                  type: 'boolean',
-                  label: '启用 UI Cookie 认证',
-                  description: '用于 Web 控制台 / 同源前端免 API Key 访问；不配置或关闭时不会设置 Cookie，公网必须使用 API Key',
-                  default: false,
-                  component: 'Switch'
-                },
-                allowPublicSameOrigin: {
-                  type: 'boolean',
-                  label: '公网同源免 Key',
-                  description: '仅在启用 UI Cookie 时生效：允许公网访问时凭同源 + Cookie 放行（不填 API Key）',
-                  default: false,
-                  component: 'Switch'
-                },
-                pathPrefix: {
-                  type: 'string',
-                  label: '命中路径前缀',
-                  description: '仅当请求路径以此前缀开头时才设置/校验 UI Cookie',
-                  default: '/xrk',
-                  component: 'Input'
-                },
-                name: {
-                  type: 'string',
-                  label: 'Cookie 名称',
-                  default: 'xrk_ui',
-                  component: 'Input'
-                },
-                value: {
-                  type: 'string',
-                  label: 'Cookie 值',
-                  default: '1',
-                  component: 'Input'
-                },
-                httpOnly: {
-                  type: 'boolean',
-                  label: 'HttpOnly',
-                  default: true,
-                  component: 'Switch'
-                },
-                sameSite: {
-                  type: 'string',
-                  label: 'SameSite',
-                  enum: ['lax', 'strict', 'none'],
-                  default: 'lax',
-                  component: 'Select'
-                },
-                maxAgeMs: {
-                  type: 'number',
-                  label: '有效期（毫秒）',
-                  default: 86400000,
-                  component: 'InputNumber'
-                }
-              }
-            },
             rateLimit: {
               type: 'object',
               label: '速率限制',

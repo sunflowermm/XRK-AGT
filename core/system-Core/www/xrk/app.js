@@ -37,7 +37,6 @@ import {
   paperclipIconSVG,
   wrenchIconSVG,
   filePreviewIconSVG,
-  normalizeEmotionKey,
   emotionIconSVG
 } from './modules/ui-kit.js';
 
@@ -59,7 +58,6 @@ import {
 import { renderConfigPage } from './modules/pages/config.js';
 
 import {
-  renderNetworkInfo as renderNetworkInfoPanel,
   updateSystemStatus as updateSystemStatusPanel,
   updateCharts as updateChartsPanel
 } from './modules/system-overview.js';
@@ -504,7 +502,13 @@ class App {
     
     const navItems = $$('.nav-item');
     navItems.forEach(item => {
-      item.classList.toggle('active', item.dataset.page === page);
+      const active = item.dataset.page === page;
+      item.classList.toggle('active', active);
+      if (active) {
+        item.setAttribute('aria-current', 'page');
+      } else {
+        item.removeAttribute('aria-current');
+      }
     });
     
     const titles = { home: '系统概览', chat: 'AI 对话', config: '配置管理', api: 'API 调试' };
@@ -561,7 +565,6 @@ class App {
     // 更新各个面板（平滑过渡）
     this.renderBotsPanel(data.bots ?? []);
     renderWorkflowInfoPanel(this, data.workflows ?? {}, data.panels ?? {});
-    renderNetworkInfoPanel(this, data.system?.network ?? {}, data.system?.netRates ?? {});
   }
   
   /**
@@ -1065,7 +1068,7 @@ class App {
       block.className = 'chat-tool-block';
       const header = document.createElement('div');
       header.className = 'chat-tool-block-header';
-      header.innerHTML = `<span class="chat-tool-block-icon">${this._wrenchIconSVG()}</span><span class="chat-tool-block-title">${this.escapeHtml(name)}</span><span class="chat-tool-block-toggle">展开</span>`;
+      header.innerHTML = `<span class="chat-tool-block-icon">${wrenchIconSVG()}</span><span class="chat-tool-block-title">${this.escapeHtml(name)}</span><span class="chat-tool-block-toggle">展开</span>`;
       const content = document.createElement('div');
       content.className = 'chat-tool-block-content';
       content.hidden = true;
@@ -1340,7 +1343,7 @@ class App {
           const fileName = seg.name || '文件';
           fileDiv.innerHTML = `
             <a href="${url}" download="${fileName}" class="chat-file-link">
-              <span class="chat-file-icon" aria-hidden="true">${this._paperclipIconSVG()}</span>
+              <span class="chat-file-icon" aria-hidden="true">${paperclipIconSVG()}</span>
               <span class="chat-file-name">${this.escapeHtml(fileName)}</span>
             </a>
           `;
@@ -1350,7 +1353,7 @@ class App {
         this._flushTextParts(div, textParts);
         const pokeWrap = document.createElement('div');
         pokeWrap.className = 'chat-poke';
-        pokeWrap.innerHTML = `<span class="chat-poke-icon" aria-hidden="true">${this._pokeHandIconSVG()}</span><span class="chat-poke-text">戳了戳${seg.name ? ` ${this.escapeHtml(seg.name)}` : '你'}</span>`;
+        pokeWrap.innerHTML = `<span class="chat-poke-icon" aria-hidden="true">${pokeHandIconSVG()}</span><span class="chat-poke-text">戳了戳${seg.name ? ` ${this.escapeHtml(seg.name)}` : '你'}</span>`;
         div.appendChild(pokeWrap);
         allText.push('[戳一戳]');
       } else if (seg.type === 'markdown' || seg.type === 'raw') {
@@ -1706,7 +1709,7 @@ class App {
         </div>
         `;
       } else {
-        const fileIcon = this._filePreviewIconSVG(item.file.type);
+        const fileIcon = filePreviewIconSVG(item.file.type);
         const fileSize = (item.file.size / 1024 / 1024).toFixed(2);
         return `
         <div class="chat-image-preview-item" data-file-id="${item.id}">
@@ -2654,7 +2657,7 @@ class App {
   updateVoiceEmotion(emotion) {
     const emotionEl = document.getElementById('voiceEmotionIcon');
     if (emotionEl) {
-      emotionEl.innerHTML = this._emotionIconSVG(emotion);
+      emotionEl.innerHTML = emotionIconSVG(emotion);
       emotionEl.style.animation = 'none';
       setTimeout(() => {
         emotionEl.style.animation = 'pulse 0.5s ease';
@@ -2881,33 +2884,9 @@ class App {
     this.showToast('已中断 AI 输出', 'info');
   }
 
-  _normalizeEmotionKey(emotion) {
-    return normalizeEmotionKey(emotion);
-  }
-
-  _emotionIconSVG(emotion) {
-    return emotionIconSVG(emotion);
-  }
-
-  _pokeHandIconSVG() {
-    return pokeHandIconSVG();
-  }
-
-  _paperclipIconSVG() {
-    return paperclipIconSVG();
-  }
-
-  _wrenchIconSVG() {
-    return wrenchIconSVG();
-  }
-
-  _filePreviewIconSVG(mimeType = '') {
-    return filePreviewIconSVG(mimeType);
-  }
-
   updateEmotionDisplay(emotion) {
     const el = document.getElementById('emotionIcon');
-    if (el) el.innerHTML = this._emotionIconSVG(emotion);
+    if (el) el.innerHTML = emotionIconSVG(emotion);
   }
 
   // ========== 配置管理 ==========

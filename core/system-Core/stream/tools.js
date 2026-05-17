@@ -3,6 +3,7 @@ import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import path from 'path';
 import os from 'os';
 import { BaseTools } from '#utils/base-tools.js';
+import { InputValidator } from '#utils/input-validator.js';
 import { getDefaultDesktopDirSync } from '#utils/user-dirs.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -477,8 +478,9 @@ export default class ToolsStream extends AIStream {
   }
 
   async executeCommand(command) {
+    const safeCommand = InputValidator.validateCommand(command);
     const timeout = this.fileToolsCfg.runTimeoutMs ?? 120_000;
-    const fullCommand = this.buildFullCommand(command, this.workspace);
+    const fullCommand = this.buildFullCommand(safeCommand, this.workspace);
     const opts = {
       maxBuffer: 10 * 1024 * 1024,
       cwd: this.workspace,

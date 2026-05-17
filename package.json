@@ -97,7 +97,9 @@
     "start:unix": "./start.sh server",
     "start:docker": "docker-compose up -d",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test": "node --test tests/framework/auth-loopback.test.mjs tests/framework/config-alignment.test.mjs tests/framework/module-inventory.test.mjs tests/framework/www-xrk.test.mjs",
+    "test:framework": "node --test tests/framework/auth-loopback.test.mjs tests/framework/config-alignment.test.mjs tests/framework/module-inventory.test.mjs tests/framework/www-xrk.test.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -16,7 +16,7 @@
 - ✅ **灵活路由**：支持REST API和WebSocket
 - ✅ **中间件支持**：支持全局和路由级中间件
 - ✅ **热重载支持**：修改代码后自动重载
-- ✅ **System-Core 默认鉴权**：system-Core 下的 HTTP API 在各自模块内通过 `Bot.checkApiAuthorization(req)` 统一使用系统级 API Key，其他 Core 可按需自定义（详见 [AUTH.md](AUTH.md)）
+- ✅ **System-Core 默认鉴权**：`HttpApi` 对路径以 `/api/` 开头的路由自动调用 `Bot.checkApiAuthorization(req)`（见 `route.systemAuth` / `src/infrastructure/http/http.js`）；显式设置 `systemAuth: false` 可关闭。其他 Core 可按需自定义（详见 [AUTH.md](AUTH.md)）
 
 ---
 
@@ -84,6 +84,7 @@ constructor(data = {})
 | `method` | `string` | HTTP方法（GET/POST/PUT/DELETE等，不区分大小写） |
 | `path` | `string` | 路由路径（如 `/api/example/ping`） |
 | `handler` | `Function` | 处理函数 `(req, res, bot, next) => {}` |
+| `systemAuth` | `string \| false` | 可选。字符串为鉴权日志上下文；`false` 关闭鉴权；省略且 `path` 以 `/api/` 开头时由基类自动启用系统 API Key |
 | `middleware` | `Array` | 可选的路由级中间件数组 |
 
 **内部属性**（由框架自动设置）：
@@ -487,7 +488,7 @@ routes: [
 ## 相关文档
 
 - **[API加载器](api-loader.md)** - API 自动加载和热重载机制
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 10 个 HTTP API 模块的实际示例 ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 11 个 HTTP API 模块的实际示例 ⭐
 - **[鉴权与认证（AUTH）](AUTH.md)** - 系统级 API Key 与各层职责划分
 - **[HTTP业务层](http-business-layer.md)** - 重定向、CDN、反向代理增强功能
 - **[Server服务器架构](server.md)** - 完整的服务器架构说明

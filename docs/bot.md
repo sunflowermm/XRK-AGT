@@ -508,10 +508,10 @@ flowchart TB
 
 - **Server 层 (`src/bot.js`)**  
   - 只做静态资源放行（根据扩展名）；  
-  - **不会对 HTTP 路由做统一鉴权拦截**；是否校验系统 API Key 由上层模块决定；  
-  - 当上层模块调用 `Bot.checkApiAuthorization(req)` 时：`127.*`（含 `::ffff:127.*`）来源免鉴权；可选支持 `server.auth.whitelist` 命中免鉴权。
-- **system-Core HTTP (`core/system-Core/http/*.js`)**  
-  - 在各自模块顶部通过 `ensureSystemCoreAuth` 调用 `Bot.checkApiAuthorization(req)`，统一使用系统级 API Key。  
+  - 不在此层对全部 `/api/*` 统一拦截；密钥比对逻辑见 `checkApiAuthorization`；  
+  - `127.*`（含 `::ffff:127.*`）来源免鉴权；可选 `server.auth.whitelist`。
+- **HttpApi 路由 (`src/infrastructure/http/http.js`)**  
+  - 路径以 `/api/` 开头时，由 `wrapHandler` 自动调用 `ensureSystemCoreAuth`（`src/infrastructure/http/auth.js`）；业务 handler 无需重复鉴权。  
 - **其他 Core HTTP / Tasker**  
   - 可选择接入系统 API Key，或定义自己的鉴权方案（如自有 token / 签名）；  
   - Tasker 暴露的 WebSocket 路径统一经过 `wsConnect` 做系统级 API Key 校验（`127.*` 来源除外）。

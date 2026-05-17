@@ -25,7 +25,7 @@ default:
     muteTime: 720     # 触发禁言时长（分钟）
     warnOnly: false
     exemptRoles: []   # 免检角色，如 owner、admin
-  addLimit: 0         # 添加权限：0-无限制 1-仅主人 2-管理员及以上
+  addLimit: 0         # 添加权限：0-无限制 1-需管理员 2-仅主人（见 add.js）
   addReply: true
   addAt: false
 

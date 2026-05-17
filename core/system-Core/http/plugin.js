@@ -2,11 +2,6 @@ import PluginsLoader from '#infrastructure/plugins/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import BotUtil from '#utils/botutil.js';
 
-function ensureSystemCoreAuth(req, res, Bot, context) {
-  if (!Bot?.checkApiAuthorization?.(req)) {
-    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.plugin');
-  }
-}
 
 function collectPluginEntries() {
   const priorityPlugins = PluginsLoader.priority || [];
@@ -67,9 +62,7 @@ export default {
     {
       method: 'GET',
       path: '/api/plugins',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'plugin.list');
-        if (authResp) return authResp;
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const plugins = collectPluginEntries();
         HttpResponse.success(res, { plugins });
       }, 'plugin.list')
@@ -78,9 +71,7 @@ export default {
     {
       method: 'GET',
       path: '/api/plugins/summary',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'plugin.summary');
-        if (authResp) return authResp;
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const { plugins, summary } = getPluginsWithSummary();
         HttpResponse.success(res, { summary, plugins });
       }, 'plugin.summary')
@@ -89,9 +80,7 @@ export default {
     {
       method: 'POST',
       path: '/api/plugin/:key/reload',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'plugin.reload');
-        if (authResp) return authResp;
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const { key } = req.params;
         if (!key) {
           return HttpResponse.validationError(res, '缺少插件key参数');

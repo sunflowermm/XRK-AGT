@@ -90,8 +90,13 @@ constructor(metadata = {})
 | `multiFile` | `Object` | 多文件配置定义（可选） | `null` |
 
 **filePath 格式**：
-- 字符串：相对于项目根目录的路径，如 `'config/server.yaml'`
-- 函数：动态路径函数 `(cfg) => 'data/server_bots/' + cfg.port + '/server.yaml'`
+- 字符串：相对于项目根目录的路径，如 `'data/server_bots/2533/server.yaml'`（随端口配置）
+- 函数：动态路径函数 `(cfg) => path.join('data/server_bots', String(cfg.port), 'server.yaml')`
+
+**与运行时 `Cfg` 的关系**（`src/infrastructure/config/config.js`）：
+- **全局配置**（`GLOBAL_CONFIGS`）：`data/server_bots/<name>.yaml`（如 `agt`、`device`、`notice`、`redis`）
+- **随端口配置**（`SERVER_CONFIGS` + 工厂 LLM）：`data/server_bots/{port}/<name>.yaml`（如 `server`、`chatbot`、`aistream`）
+- 默认模板来源：`config/default_config/<name>.yaml`；首次缺失时自动复制到上述路径
 
 ---
 

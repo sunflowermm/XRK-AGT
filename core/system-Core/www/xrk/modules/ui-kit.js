@@ -115,26 +115,12 @@ export function toastIconSVG(type = 'info') {
   `;
 }
 
-/**
- * 统一将“情绪 key”映射到 SVG 图标。
- * 说明：兼容旧版传入 emoji 字符串（如 '😊'、'🤔'）。
- */
+export const EMOTION_KEYS = new Set(['happy', 'sad', 'angry', 'surprise', 'love', 'cool', 'sleep', 'think', 'message']);
+
+/** 情绪 key → SVG 图标（仅接受标准 key） */
 export function normalizeEmotionKey(emotion) {
   const k = String(emotion ?? '').trim().toLowerCase();
-
-  const emojiMap = {
-    '😊': 'happy',
-    '😢': 'sad',
-    '😠': 'angry',
-    '😮': 'surprise',
-    '❤️': 'love',
-    '😎': 'cool',
-    '😴': 'sleep',
-    '🤔': 'think',
-    '💬': 'message',
-  };
-
-  return emojiMap[k] || (k || 'happy');
+  return EMOTION_KEYS.has(k) ? k : 'happy';
 }
 
 export function emotionIconSVG(emotion) {

@@ -2,12 +2,6 @@ import { HttpResponse } from '#utils/http-utils.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { noticeService } from '../lib/notice/notice-service.js';
 
-function ensureSystemCoreAuth(req, res, Bot, context) {
-  if (!Bot?.checkApiAuthorization?.(req)) {
-    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.notice');
-  }
-}
-
 export default {
   name: 'notice',
   dsc: '通知服务 API（IYUU/Server酱/飞书）',
@@ -17,10 +11,7 @@ export default {
     {
       method: 'POST',
       path: '/api/notice/send',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'notice.send');
-        if (authResp) return authResp;
-
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const title = InputValidator.sanitizeText(req.body?.title, 200) || 'XRK-AGT 通知';
         const content = InputValidator.sanitizeText(req.body?.content, 10_000) || '';
         const channels = Array.isArray(req.body?.channels) ? req.body.channels : undefined;
@@ -32,9 +23,7 @@ export default {
     {
       method: 'POST',
       path: '/api/notice/test',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'notice.test');
-        if (authResp) return authResp;
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const results = await noticeService.send({
           title: 'XRK-AGT 测试通知',
           content: `time=${new Date().toISOString()}`

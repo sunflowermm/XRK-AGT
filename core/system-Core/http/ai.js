@@ -52,17 +52,11 @@ function normalizeStringArray(values = []) {
 }
 
 const getDefaultProvider = () => {
-  const llm = getAistreamConfigOptional().llm || cfg?.aistream?.llm || {};
+        const llm = getAistreamConfigOptional().llm || cfg?.aistream?.llm || {};
   return (llm?.Provider || llm?.provider || '').toString().trim().toLowerCase();
 };
 
 const trimLower = (v) => (v || '').toString().trim().toLowerCase();
-
-function ensureSystemCoreAuth(req, res, Bot, context) {
-  if (!Bot?.checkApiAuthorization?.(req)) {
-    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.ai');
-  }
-}
 
 function getProviderConfig(provider) {
   return LLMFactory.getProviderConfig(provider) || {};
@@ -206,21 +200,21 @@ function resolveDefaultStreams() {
 function buildOverridesFromBody(body = {}) {
   const overrides = {};
   const addNum = (key, ...aliases) => {
-    const v = toNum(pickFirst(body, [key, ...aliases]));
+        const v = toNum(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
       overrides[key] = v;
       if (aliases.length) overrides[aliases[0]] = v;
     }
   };
   const addVal = (key, ...aliases) => {
-    const v = pickFirst(body, [key, ...aliases]);
+        const v = pickFirst(body, [key, ...aliases]);
     if (v !== undefined) {
       overrides[key] = v;
       if (aliases.length) overrides[aliases[0]] = v;
     }
   };
   const addBool = (key, ...aliases) => {
-    const v = toBool(pickFirst(body, [key, ...aliases]));
+        const v = toBool(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
       overrides[key] = v;
       if (aliases.length) overrides[aliases[0]] = v;
@@ -302,12 +296,12 @@ async function handleChatCompletionsV3(req, res) {
         storage: multer.diskStorage({
           destination: (_req, _file, cb) => cb(null, mediaDir),
           filename: (_req, file, cb) => {
-            const ext = path.extname(file.originalname || '').slice(0, 20) || '.img';
+        const ext = path.extname(file.originalname || '').slice(0, 20) || '.img';
             cb(null, `${crypto.randomUUID()}${ext}`);
           }
         }),
         fileFilter: (_req, file, cb) => {
-          cb(null, String(file?.mimetype || '').startsWith('image/'));
+        cb(null, String(file?.mimetype || '').startsWith('image/'));
         }
       }).any();
 
@@ -365,7 +359,7 @@ async function handleChatCompletionsV3(req, res) {
   const safetyCfg = cfg?.server?.contentSafety?.http || {};
   if (safetyCfg.enabled !== false && safetyCfg.checkAiInput !== false) {
     const extractTexts = (msg) => {
-      const out = [];
+        const out = [];
       const c = msg?.content;
       if (typeof c === 'string') out.push(c);
       else if (Array.isArray(c)) {
@@ -530,7 +524,7 @@ async function handleChatCompletionsV3(req, res) {
     let chunkCount = 0;
 
     const streamCallback = (delta, metadata = {}) => {
-      const hasTextDelta = typeof delta === 'string' && delta.length > 0;
+        const hasTextDelta = typeof delta === 'string' && delta.length > 0;
       const hasMcpTools = Array.isArray(metadata?.mcp_tools) && metadata.mcp_tools.length > 0;
       const hasToolCalls = Array.isArray(metadata?.tool_calls) && metadata.tool_calls.length > 0;
       const hasReasoningDelta = typeof metadata?.reasoning_content === 'string' && metadata.reasoning_content.length > 0;
@@ -725,27 +719,21 @@ export default {
     {
       method: 'POST',
       path: '/api/v3/chat/completions',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'ai.v3.chat.completions');
-        if (authResp) return authResp;
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         return handleChatCompletionsV3(req, res);
       }, 'ai.v3.chat.completions')
     },
     {
       method: 'GET',
       path: '/api/v3/models',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'ai.v3.models');
-        if (authResp) return authResp;
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         return handleModels(req, res);
       }, 'ai.v3.models')
     },
     {
       method: 'GET',
       path: '/api/ai/models',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'ai.models');
-        if (authResp) return authResp;
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         return handleModels(req, res);
       }, 'ai.models')
     },
@@ -816,7 +804,7 @@ export default {
             messages,
             llmOverrides,
             (delta) => {
-              acc += delta;
+        acc += delta;
               res.write(`data: ${JSON.stringify({ delta, workflow: stream.name })}\n\n`);
             },
             {

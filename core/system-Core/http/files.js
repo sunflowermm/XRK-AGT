@@ -12,11 +12,6 @@ import cfg from '#infrastructure/config/config.js';
 import { bannedWordsService } from '../lib/content-safety/banned-words-service.js';
 import { Disposables } from '../lib/runtime/disposables.js';
 
-function ensureSystemCoreAuth(req, res, Bot, context) {
-  if (!Bot?.checkApiAuthorization?.(req)) {
-    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.files');
-  }
-}
 
 const uploadDir = path.join(paths.data, 'uploads');
 const mediaDir = path.join(paths.data, 'media');
@@ -31,7 +26,7 @@ function resolveBaseUrl(Bot, req) {
 async function hashFileMd5(filePath) {
   const hash = crypto.createHash('md5');
   await new Promise((resolve, reject) => {
-    const stream = createReadStream(filePath);
+        const stream = createReadStream(filePath);
     stream.on('data', (d) => hash.update(d));
     stream.on('end', resolve);
     stream.on('error', reject);
@@ -43,7 +38,7 @@ function createDiskUploader(req, maxFileSize) {
   const createUploader = req.createMultipartUploader || (() => req.multipartUpload);
   const storage = multer.diskStorage({
     destination: async (_req, file, cb) => {
-      try {
+        try {
         const ext = path.extname(file.originalname || '');
         const isMedia = /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|webm|mp3|wav|ogg)$/i.test(ext);
         const targetDir = isMedia ? mediaDir : uploadDir;
@@ -54,7 +49,7 @@ function createDiskUploader(req, maxFileSize) {
       }
     },
     filename: (_req, file, cb) => {
-      const id = crypto.randomUUID();
+        const id = crypto.randomUUID();
       const ext = path.extname(file.originalname || '').slice(0, 20) || '.file';
       cb(null, `${id}${ext}`);
     }
@@ -82,8 +77,6 @@ export default {
       method: 'POST',
       path: '/api/file/upload',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'file.upload');
-        if (authResp) return authResp;
         const contentType = req.headers['content-type'] || '';
         if (!contentType.includes('multipart/form-data')) return HttpResponse.validationError(res, '请使用 multipart/form-data 格式上传文件');
         const maxFileSize = cfg?.server?.limits?.fileSize || '100mb';
@@ -181,8 +174,6 @@ export default {
       method: 'GET',
       path: '/api/file/:id',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        const authResp = ensureSystemCoreAuth(req, res, req.bot || global.Bot, 'file.get');
-        if (authResp) return authResp;
         // 输入验证
         const { id } = req.params;
         if (!id || typeof id !== 'string' || id.length > 50) {
@@ -295,7 +286,7 @@ export default {
     __runtime = new Disposables();
     // 定期清理过期文件
     __runtime.interval(async () => {
-      const now = Date.now();
+        const now = Date.now();
       const maxAge = 24 * 60 * 60 * 1000; // 24小时
       
       for (const [id, info] of fileMap) {

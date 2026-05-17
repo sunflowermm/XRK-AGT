@@ -1,4 +1,6 @@
 import BotUtil from "#utils/botutil.js";
+import { HttpResponse } from '#utils/http-utils.js';
+import { ensureSystemCoreAuth } from './auth.js';
 
 /**
  * HTTP API基础类
@@ -56,7 +58,7 @@ export default class HttpApi {
         continue;
       }
       
-      const wrappedHandler = this.wrapHandler(handler, bot);
+      const wrappedHandler = this.wrapHandler(handler, bot, this._withDefaultSystemAuth(route));
       
       if (middleware.length > 0) {
         app[lowerMethod](path, ...middleware, wrappedHandler);
@@ -68,23 +70,37 @@ export default class HttpApi {
     
   }
   
-  wrapHandler(handler, bot) {
+  _withDefaultSystemAuth(route) {
+    if (route.systemAuth === false) return route;
+    if (route.systemAuth != null && route.systemAuth !== '') return route;
+    const p = route.path;
+    if (typeof p !== 'string' || !p.startsWith('/api/')) return route;
+    const ctx = p
+      .replace(/^\/api\//, '')
+      .replace(/[/:*?]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '') || 'api';
+    return { ...route, systemAuth: ctx };
+  }
+
+  wrapHandler(handler, bot, route = {}) {
     return async (req, res, next) => {
       if (res.headersSent) return;
       
       try {
         req.bot = bot;
         req.api = this;
+        if (route.systemAuth) {
+          const ctx = typeof route.systemAuth === 'string' ? route.systemAuth : this.name;
+          const authResp = ensureSystemCoreAuth(req, res, bot, ctx);
+          if (authResp) return authResp;
+        }
         await handler(req, res, bot, next);
       } catch (error) {
-        BotUtil.makeLog('error', `[HttpApi] ${this.name} 处理请求失败: ${error.message}`, 'HttpApi', error);
-        
         if (!res.headersSent) {
-          res.status(500).json({
-            success: false,
-            message: '服务器内部错误',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-          });
+          HttpResponse.error(res, error, 500, `${this.name}.route`);
+        } else {
+          BotUtil.makeLog('error', `[HttpApi] ${this.name} 处理请求失败: ${error.message}`, 'HttpApi', error);
         }
       }
     };

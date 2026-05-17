@@ -105,7 +105,7 @@ export default class EnhancerBase extends plugin {
 
     this.enhanceEvent(e)
     
-    const cfgResult = this.applyConfigPolicies(e)
+    const cfgResult = await this.applyConfigPolicies(e)
     if (cfgResult === 'return' || cfgResult === false) return cfgResult
 
     this.setupReply(e)

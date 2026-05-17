@@ -182,6 +182,33 @@ body.dark::before {
   opacity: 0.95;
 }
 
+/* 跳过导航：键盘用户直达主内容 */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: var(--space-2);
+  z-index: 10000;
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  left: var(--space-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-updating] {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* 键盘可访问性：统一可见的 focus 样式 */
 button:focus-visible,
 a:focus-visible,

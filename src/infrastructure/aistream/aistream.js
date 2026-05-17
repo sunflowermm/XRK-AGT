@@ -727,7 +727,7 @@ export default class AIStream {
         temperature: config.temperature,
         max_tokens: config.maxTokens,
         stream: false,
-        enableTools: config.enableTools !== false
+        enableTools: config.enableTools
       };
       if (config.streams?.length) payload.workflow = { workflows: config.streams };
       const response = await Bot.callSubserver('/api/langchain/chat', { body: payload });
@@ -819,7 +819,6 @@ export default class AIStream {
 
     // 优先使用 Python 子服务端流式（SSE透传），失败时回退到 NodeJS LLMFactory
     try {
-      const enableTools = config.enableTools !== false;
       const payload = {
         messages,
         model: config.chatModel || config.model || config.provider,
@@ -827,15 +826,11 @@ export default class AIStream {
         temperature: config.temperature,
         max_tokens: config.maxTokens,
         stream: true,
-        // python 子服务端字段约定：use_tools
-        use_tools: enableTools,
-        enableTools, // 兼容旧字段（若子服务端未来支持/已支持）
-        // 透传 v3 兼容字段（是否生效取决于主服务 v3 & provider）
-        tool_choice: config.tool_choice ?? config.toolChoice,
-        parallel_tool_calls: config.parallel_tool_calls ?? config.parallelToolCalls,
+        use_tools: config.enableTools,
+        tool_choice: config.toolChoice,
+        parallel_tool_calls: config.parallelToolCalls,
         extraBody: config.extraBody,
-        // 若禁用 tools，则显式传 tools=null，让主服务 v3 不注入 MCP tools
-        ...(enableTools ? {} : { tools: null })
+        ...(config.enableTools ? {} : { tools: null })
       };
       if (config.streams?.length) {
         payload.workflow = { workflows: config.streams };
@@ -915,44 +910,26 @@ export default class AIStream {
    */
   resolveLLMConfig(apiConfig = {}) {
     const llm = getAistreamConfigOptional().llm || {};
-    const pick = (...vals) => vals.find(v => v !== undefined);
-    const pickTrim = (...vals) => {
-      const v = vals.find(v => v !== undefined);
-      return v ? String(v).trim() : undefined;
-    };
+    const trim = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : undefined);
 
-    const provider = (apiConfig.provider || this.config.provider || llm.Provider || llm.provider || '').toLowerCase();
+    const provider = (apiConfig.provider ?? this.config.provider ?? llm.provider ?? llm.Provider ?? '').toLowerCase();
     if (provider && !LLMFactory.hasProvider(provider)) {
       throw new Error(`不支持的LLM提供商: ${provider}`);
     }
 
     const providerConfig = this.getProviderConfig(provider);
-    const timeout = pick(apiConfig.timeout, apiConfig.timeoutMs, this.config.timeout, llm.timeout, 360000);
-    const apiKey = pickTrim(apiConfig.apiKey, apiConfig.api_key, providerConfig.apiKey, providerConfig.api_key, this.config.apiKey, this.config.api_key);
-    const baseUrl = pick(apiConfig.baseUrl, apiConfig.base_url, this.config.baseUrl, this.config.base_url, providerConfig.baseUrl, providerConfig.base_url);
-    const model = pick(apiConfig.model, apiConfig.chatModel, this.config.model, this.config.chatModel, providerConfig.model, providerConfig.chatModel);
-    const chatModel = pick(apiConfig.chatModel, this.config.chatModel, providerConfig.chatModel, apiConfig.model, this.config.model, providerConfig.model);
-    const maxTokens = pick(apiConfig.maxTokens, apiConfig.max_tokens, apiConfig.max_completion_tokens, apiConfig.maxCompletionTokens, this.config.maxTokens, this.config.max_tokens, providerConfig.maxTokens, providerConfig.max_tokens);
-    const topP = pick(apiConfig.topP, apiConfig.top_p, this.config.topP, this.config.top_p, providerConfig.topP, providerConfig.top_p);
-    const presencePenalty = pick(apiConfig.presencePenalty, apiConfig.presence_penalty, this.config.presencePenalty, this.config.presence_penalty, providerConfig.presencePenalty, providerConfig.presence_penalty);
-    const frequencyPenalty = pick(apiConfig.frequencyPenalty, apiConfig.frequency_penalty, this.config.frequencyPenalty, this.config.frequency_penalty, providerConfig.frequencyPenalty, providerConfig.frequency_penalty);
-    const enableTools = pick(apiConfig.enableTools, apiConfig.enable_tools, providerConfig.enableTools, providerConfig.enable_tools, this.config.enableTools, this.config.enable_tools, true);
+    const merged = { ...providerConfig, ...this.config, ...apiConfig, provider };
+    const chatModel = merged.chatModel ?? merged.model;
 
     return {
-      ...providerConfig,
-      ...this.config,
-      ...apiConfig,
-      apiKey,
-      baseUrl,
-      model,
-      chatModel,
-      maxTokens,
-      topP,
-      presencePenalty,
-      frequencyPenalty,
-      provider,
-      timeout,
-      enableTools
+      ...merged,
+      timeout: merged.timeout ?? merged.timeoutMs ?? llm.timeout ?? 360000,
+      apiKey: trim(merged.apiKey),
+      baseUrl: trim(merged.baseUrl),
+      model: merged.model ?? chatModel,
+      chatModel: chatModel ?? merged.model,
+      maxTokens: merged.maxTokens ?? merged.maxCompletionTokens,
+      enableTools: merged.enableTools !== false
     };
   }
 

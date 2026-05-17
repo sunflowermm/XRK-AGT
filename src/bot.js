@@ -29,6 +29,7 @@ import paths from '#utils/paths.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import HTTPBusinessLayer from '#utils/http-business.js';
 import FrontendLauncher from '#infrastructure/frontend/launcher.js';
+import { isLoopback127Connection } from '#infrastructure/http/auth.js';
 
 // 静态资源扩展名，用于基础放行（非鉴权）
 const AUTH_STATIC_EXT_REGEX = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i;
@@ -1800,15 +1801,15 @@ export default class Bot extends EventEmitter {
    * 检查API授权
    * 当 server.auth.apiKey.enabled 为 true 时，必须提供有效密钥；密钥未加载或缺失时一律拒绝
    */
-  _checkApiAuthorization(req) {
+  checkApiAuthorization(req) {
     if (!req) {
-      BotUtil.makeLog('debug', '[Auth] _checkApiAuthorization: req 为空', '认证');
+      BotUtil.makeLog('debug', '[Auth] checkApiAuthorization: req 为空', '认证');
       return false;
     }
 
     // 仅 127 回环地址免鉴权（内网网段不放行）
     const remoteAddress = req.socket?.remoteAddress || req.ip || '';
-    if (this._isLoopback127Connection(remoteAddress)) {
+    if (isLoopback127Connection(remoteAddress)) {
       return true;
     }
 
@@ -1848,10 +1849,6 @@ export default class Bot extends EventEmitter {
       BotUtil.makeLog('error', `[Auth] API 认证异常：${error.message} path=${requestPath}`, '认证');
       return false;
     }
-  }
-
-  checkApiAuthorization(req) {
-    return this._checkApiAuthorization(req);
   }
 
   _isApiWhitelistPath(requestPath) {
@@ -2036,17 +2033,6 @@ export default class Bot extends EventEmitter {
     const testPatterns = isIPv4 ? patterns.ipv4 : patterns.ipv6;
     
     return testPatterns.some(pattern => pattern.test(ip));
-  }
-
-  /**
-   * 仅识别 127 回环地址（含 IPv4-mapped IPv6）
-   */
-  _isLoopback127Connection(address) {
-    if (!address || typeof address !== 'string') return false;
-    const ip = address.toLowerCase().trim()
-      .replace(/^::ffff:/, '')
-      .replace(/%.+$/, '');
-    return /^127\./.test(ip);
   }
 
   /**
@@ -2325,7 +2311,7 @@ export default class Bot extends EventEmitter {
       return socket.destroy();
     }
 
-    if (this._shouldRequireWsApiAuth(wsPath) && !this._checkApiAuthorization(req)) {
+    if (this._shouldRequireWsApiAuth(wsPath) && !this.checkApiAuthorization(req)) {
       BotUtil.makeLog('warn', `WebSocket 鉴权失败：${req.url} ip=${req.socket.remoteAddress}`, '服务器');
       try {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

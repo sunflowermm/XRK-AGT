@@ -144,13 +144,52 @@ export default class OneBotEnhancer extends EnhancerBase {
     }
   }
 
+  async applyAutoRequest(e) {
+    if (e.post_type !== 'request' || typeof e.approve !== 'function') return
+    const auto = cfg.chatbot?.auto || {}
+    try {
+      if (e.request_type === 'friend' && auto.friend === 1) {
+        await e.approve(true)
+        BotUtil.makeLog('info', `已自动同意加好友：${e.user_id}`, e.self_id)
+      }
+    } catch (err) {
+      BotUtil.makeLog('warn', `自动同意加好友失败: ${err?.message || err}`, e.self_id)
+    }
+  }
+
+  async applyAutoQuitOnInvite(e) {
+    if (e.post_type !== 'notice' || e.notice_type !== 'group' || e.sub_type !== 'invite') return
+    const quitThreshold = Number(cfg.chatbot?.auto?.quit) || 0
+    if (quitThreshold <= 0 || !e.group_id) return
+    try {
+      const group = e.group || e.bot?.pickGroup?.(e.group_id)
+      const info = group?.getInfo ? await group.getInfo() : null
+      const count = info?.member_count ?? info?.memberCount
+      if (typeof count === 'number' && count < quitThreshold && group?.quit) {
+        await group.quit()
+        BotUtil.makeLog('info', `群人数 ${count} < ${quitThreshold}，已自动退群 ${e.group_id}`, e.self_id)
+      }
+    } catch (err) {
+      BotUtil.makeLog('warn', `自动退群失败: ${err?.message || err}`, e.self_id)
+    }
+  }
+
   async applyConfigPolicies(e) {
     try {
+      if (e.post_type === 'request') {
+        await this.applyAutoRequest(e)
+        return true
+      }
+      if (e.post_type === 'notice') {
+        await this.applyAutoQuitOnInvite(e)
+        return true
+      }
+
       const chatbotCfg = cfg.chatbot || {}
       const {
         blacklist = {},
         whitelist = {},
-        privateChat = {},
+        private: privateCfg = {},
         guild = {}
       } = chatbotCfg
       
@@ -158,9 +197,9 @@ export default class OneBotEnhancer extends EnhancerBase {
       const whiteQQ = whitelist?.qq || []
       const blackGroup = blacklist?.groups || []
       const whiteGroup = whitelist?.groups || []
-      const disablePrivate = privateChat?.enabled === false
-      const disableMsg = privateChat?.disableMsg || '私聊功能已禁用'
-      const disableAdopt = privateChat?.disableAdopt || []
+      const disablePrivate = privateCfg?.disabled === true
+      const disableMsg = privateCfg?.disabledMsg || '私聊功能已禁用'
+      const passKeywords = privateCfg?.passKeywords || []
       const disableGuildMsg = guild?.disableMsg === true
 
       // 统一字符串转换和比较
@@ -199,8 +238,8 @@ export default class OneBotEnhancer extends EnhancerBase {
       // 检查私聊功能
       if (disablePrivate && e.isPrivate && !e.isMaster) {
         const text = String(e.msg || e.plainText || e.raw_message || '')
-        const adopted = Array.isArray(disableAdopt) &&
-          disableAdopt.filter(Boolean).some((key) => text.includes(String(key)))
+        const adopted = Array.isArray(passKeywords) &&
+          passKeywords.filter(Boolean).some((key) => text.includes(String(key)))
 
         if (!adopted) {
           try {

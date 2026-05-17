@@ -117,8 +117,8 @@ flowchart TB
 
 XRK-AGT 内置了完整的 system-Core 模块，提供开箱即用的功能：
 
-- **10个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、标准输入、数据编辑
-- **6个工作流**：50+个MCP工具，覆盖聊天、桌面、工具、记忆、知识库、设备
+- **11个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、通知服务、标准输入、数据编辑
+- **7个工作流**：chat、desktop、tools、memory、database、web、browser（MCP 工具约 68 个，以代码注册为准）
 - **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
 - **Web控制台**：企业级管理界面（`/xrk/`），支持系统监控、API调试、配置管理
 
@@ -277,7 +277,7 @@ XRK-AGT/
 │   │   ├── tasker/          # Tasker加载器
 │   │   ├── plugins/         # 插件系统基础设施
 │   │   ├── listener/        # 事件监听器基础设施
-│   │   ├── http/            # HTTP API基础设施
+│   │   ├── http/            # HTTP API基础设施（含 auth.js 统一鉴权）
 │   │   ├── aistream/        # AI工作流基础设施
 │   │   ├── renderer/        # 渲染器基础设施
 │   │   ├── commonconfig/    # 配置系统基础设施（ConfigBase基类）
@@ -295,12 +295,12 @@ XRK-AGT/
 │   │   ├── plugin/          # 业务插件目录（增强器、功能插件）
 │   │   ├── tasker/          # 任务层目录（OneBotv11、GSUIDCORE、QBQBot、stdin）
 │   │   ├── events/          # 事件系统目录（onebot、device、stdin）
-│   │   ├── http/            # HTTP API目录（10个API模块）
-│   │   ├── stream/          # 工作流目录（6个工作流，50+个MCP工具）
+│   │   ├── http/            # HTTP API目录（11个API模块）
+│   │   ├── stream/          # 工作流目录（7个工作流，MCP 工具以 registerMCPTool 为准）
 │   │   ├── commonconfig/    # 配置管理（system.js、LLM配置、工具配置）
 │   │   └── www/             # 静态资源（Web控制台 /xrk/）
 │   │       └── xrk/         # Web控制台前端（系统监控、API调试、配置管理）
-│   └── my-core/             # 自定义core模块
+│   └── <your-core>/         # 自定义 Core（示例名，需自行创建）
 │
 ├── config/                   # 配置文件
 │   ├── default_config/      # 默认配置
@@ -312,11 +312,18 @@ XRK-AGT/
 │   ├── media/                # 媒体文件
 │   └── uploads/              # 上传文件
 │
-├── www/                       # 前端静态资源
-├── docs/                     # 文档
-├── resources/                 # 渲染模板和资源
-├── logs/                      # 日志文件
-└── trash/                     # 回收站（自动清理）
+├── www/                       # 可选：根级静态资源（默认路由，见 www/ 内说明）
+├── docs/                      # 项目文档
+├── resources/                 # 渲染模板与静态资源
+├── .cursor/                   # Cursor 技能/规则/命令（仓库内权威副本）
+├── rules/                     # 助手 system prompt 注入规则（与 .cursor/rules 分工不同）
+├── skills/                    # 工作流可加载技能（如 skills/standard，见 aistream.yaml）
+├── agents/                    # 助手工作区（SOUL.md、USER.md 等，见 AGENTS.md）
+├── logs/                      # 日志（gitignore）
+└── trash/                     # 回收站（gitignore，自动清理）
+
+# 以下目录不入库，本地可选生成：
+# .claude/、.trae/  — 由 sync-skills.ps1 从 .cursor/ 同步，供其他 IDE 使用
 ```
 
 ### 关键目录说明
@@ -463,7 +470,7 @@ proxy:
 
 **7 大核心扩展点**（插件、工作流、Tasker、事件监听器、HTTP API、渲染器、配置）及扩展流程、目录与基类说明，详见 **[`docs/框架可扩展性指南.md`](docs/框架可扩展性指南.md)**。
 
-**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供10个HTTP API模块、6个工作流（50+个MCP工具）、4个Tasker和Web控制台。详见 **[`docs/system-core.md`](docs/system-core.md)**。
+**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供 11 个 HTTP API 模块、7 个工作流、4 个 Tasker 和 Web 控制台。详见 **[`docs/system-core.md`](docs/system-core.md)**。
 
 ---
 

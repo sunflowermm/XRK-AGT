@@ -37,7 +37,29 @@ export class InputValidator {
       );
     }
 
-    return normalized;
+    return resolved;
+  }
+
+  /**
+   * 校验绝对路径是否位于允许的根目录之一
+   */
+  static assertPathUnderRoots(filePath, allowedRoots) {
+    if (!filePath || typeof filePath !== 'string') {
+      throw new BotError('路径必须是字符串', ErrorCodes.INVALID_INPUT);
+    }
+    const normalized = path.normalize(filePath);
+    if (!path.isAbsolute(normalized)) {
+      throw new BotError('只支持绝对路径', ErrorCodes.INVALID_PATH);
+    }
+    const resolved = path.resolve(normalized);
+    const roots = (allowedRoots || []).map((r) => path.resolve(r));
+    const allowed = roots.some(
+      (base) => resolved === base || resolved.startsWith(base + path.sep)
+    );
+    if (!allowed) {
+      throw new BotError('访问被拒绝：路径不在允许的数据目录内', ErrorCodes.INVALID_PATH);
+    }
+    return resolved;
   }
 
   /**

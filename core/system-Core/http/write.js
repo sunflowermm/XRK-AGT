@@ -4,11 +4,6 @@ import yaml from 'yaml';
 import { HttpResponse } from '#utils/http-utils.js';
 import { InputValidator } from '#utils/input-validator.js';
 
-function ensureSystemCoreAuth(req, res, Bot, context) {
-  if (!Bot?.checkApiAuthorization?.(req)) {
-    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.write');
-  }
-}
 
 /**
  * 判断是否为对象
@@ -73,9 +68,7 @@ export default {
     {
       method: 'GET',
       path: '/api/data/read',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'data.read');
-        if (authResp) return authResp;
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const { filePath, encoding = 'utf8' } = req.query;
         
         if (!filePath) {
@@ -130,9 +123,7 @@ export default {
     {
       method: 'POST',
       path: '/api/data/write',
-      handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
-        const authResp = ensureSystemCoreAuth(req, res, Bot, 'data.write');
-        if (authResp) return authResp;
+      handler: HttpResponse.asyncHandler(async (req, res) => {
         const {
           filePath, 
           data, 

@@ -1,3 +1,5 @@
+import { emotionIconSVG, pokeHandIconSVG } from '../ui-kit.js';
+
 export async function renderChatPage(app) {
   const content = document.getElementById('content');
   const isAIMode = app._isAIMode();
@@ -39,7 +41,7 @@ export async function renderChatPage(app) {
         <div class="chat-main">
         ${isVoiceMode ? `
             <div class="voice-chat-center">
-            <div class="voice-emotion-display" id="voiceEmotionIcon">${app._emotionIconSVG('happy')}</div>
+            <div class="voice-emotion-display" id="voiceEmotionIcon">${emotionIconSVG('happy')}</div>
             <div class="voice-wave" id="voiceWave">
               ${Array(6).fill('<div class="voice-wave-bar"></div>').join('')}
             </div>
@@ -55,7 +57,7 @@ export async function renderChatPage(app) {
         ` : `
         <div class="chat-header">
           <div class="chat-header-title">
-            <span class="emotion-display" id="emotionIcon">${app._emotionIconSVG('happy')}</span>
+            <span class="emotion-display" id="emotionIcon">${emotionIconSVG('happy')}</span>
               <span>${isAIMode ? 'AI 对话' : 'Event 对话'}</span>
           </div>
           <div class="chat-header-actions">
@@ -113,7 +115,7 @@ export async function renderChatPage(app) {
             </svg>
             `}
           </button>
-          ${!isAIMode ? `<button class="poke-btn" id="pokeBtn" type="button" title="戳一戳">${app._pokeHandIconSVG()}</button>` : ''}
+          ${!isAIMode ? `<button class="poke-btn" id="pokeBtn" type="button" title="戳一戳">${pokeHandIconSVG()}</button>` : ''}
             <input type="file" class="chat-image-input" id="chatImageInput" accept="${isAIMode ? 'image/*' : '*'}" multiple style="display: none;">
           <input type="text" class="chat-input" id="chatInput" placeholder="输入消息...">
           <button class="chat-send-btn" id="chatSendBtn">

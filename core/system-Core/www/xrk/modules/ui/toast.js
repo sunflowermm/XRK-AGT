@@ -10,6 +10,8 @@ export function showToast(message, type = 'info', options = {}) {
 
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
+  toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  toast.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
   toast.innerHTML = `<span class="toast-icon" aria-hidden="true">${toastIconSVG(type)}</span><span>${message}</span>`;
   container.appendChild(toast);
 

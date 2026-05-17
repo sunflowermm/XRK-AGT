@@ -8,10 +8,31 @@
 
 ---
 
+## 仓库目录速查（避免误放/重复）
+
+| 路径 | 用途 | 是否入库 |
+|------|------|----------|
+| `src/` | 运行时与基础设施（**勿写业务**） | 是 |
+| `core/<name>/` | 业务：plugin / http / stream / tasker / events / commonconfig / www | system-Core 是 |
+| `config/default_config/` | 配置模板 | 是 |
+| `data/` | 运行期数据（按端口分目录） | 否（gitignore） |
+| `core/system-Core/www/xrk/` | 内置 Web 控制台 | 是 |
+| `www/` | 可选根级静态站 | 是 |
+| `.cursor/` | Cursor 技能、规则、命令（**权威副本**） | 是 |
+| `rules/`、`skills/`、`agents/` | 助手注入规则 / 工作流技能 / 工作区记忆 | 是 |
+| `.claude/`、`.trae/` | 由 `sync-skills.ps1` 生成的 IDE 副本 | 否（gitignore，可删后重建） |
+| `logs/`、`trash/`、`node_modules/` | 日志、回收站、依赖 | 否 |
+
+**HTTP 鉴权**：经 `HttpApi` 注册且路径以 `/api/` 开头时，默认要求系统 API Key（见 [AUTH.md](AUTH.md)、[http-api.md](http-api.md)）。公开接口在路由上设置 `systemAuth: false`。
+
+---
+
 ## 📚 文档导航
 
 ### 🚀 快速开始
 
+- **[代码审查清单](代码审查清单.md)** - 发布前安全/架构/文档自检
+- **[框架测试指南](框架测试指南.md)** - 配置消费对照、`pnpm test` 冒烟、控制台人工清单
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
 - **[底层架构设计](底层架构设计.md)** - 统一 Runtime / Infrastructure / Core 与 AI 底层设计（建议先读）
 - **[Bot 主类文档](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
@@ -78,7 +99,7 @@ flowchart TB
 
 > **重要说明**：本项目的"业务实现"都应该放在 `core/*/(plugin|http|stream)` 下；`src/*` 主要是基础设施/工厂/通用能力，**不要把业务 API/工作流写进 `src`**（否则会破坏多 core 扩展机制）。
 
-**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供 10 个 HTTP API 模块、`core/system-Core/stream` 下多工作流（MCP 工具以加载结果为准）、4 个 Tasker 和 Web 控制台。详见 **[system-Core 特性文档](system-core.md)** ⭐。
+**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供 11 个 HTTP API 模块、7 个工作流（MCP 工具以 `registerMCPTool` 为准）、4 个 Tasker 和 Web 控制台。详见 **[system-Core 特性文档](system-core.md)** ⭐。
 
 详细说明请参考 [项目概览](../PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
 

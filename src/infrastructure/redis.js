@@ -85,11 +85,12 @@ function buildRedisUrl(redisConfig) {
  * @returns {Object} 客户端配置对象
  */
 function buildClientConfig(redisUrl) {
+  const options = cfg.redis?.options || {}
   return {
     url: redisUrl,
     socket: {
       reconnectStrategy: createReconnectStrategy(),
-      connectTimeout: REDIS_CONFIG.CONNECT_TIMEOUT
+      connectTimeout: options.connectTimeout ?? REDIS_CONFIG.CONNECT_TIMEOUT
     },
     connectionPoolSize: getOptimalPoolSize(),
     commandsQueueMaxLength: REDIS_CONFIG.MAX_COMMAND_QUEUE

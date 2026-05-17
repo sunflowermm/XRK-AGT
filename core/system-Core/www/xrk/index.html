@@ -27,6 +27,7 @@
     <link rel="stylesheet" href="css/config.css">
 </head>
 <body>
+    <a href="#content" class="skip-link">跳到主内容</a>
     <div class="app">
         <!-- 侧边栏 -->
         <aside class="sidebar" id="sidebar">
@@ -46,7 +47,7 @@
             </div>
 
             <!-- 导航菜单 -->
-            <nav class="nav" id="navMenu">
+            <nav class="nav" id="navMenu" aria-label="主菜单">
                 <a href="#/home" class="nav-item active" data-page="home">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
@@ -154,7 +155,7 @@
 
 
     <!-- Toast 容器 -->
-    <div class="toast-container" id="toastContainer"></div>
+    <div class="toast-container" id="toastContainer" aria-live="polite" aria-relevant="additions"></div>
 
     <!-- Chart.js / Mermaid：同目录下 lib，与 xrk 同源避免 MIME 错误 -->
     <script src="lib/chart.umd.min.js" defer></script>

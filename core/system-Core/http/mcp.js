@@ -4,14 +4,8 @@ import { HttpResponse } from '#utils/http-utils.js';
 
 const getMCPServer = () => StreamLoader.mcpServer;
 
-function ensureSystemCoreAuth(req, res, Bot, context) {
-  if (!Bot?.checkApiAuthorization?.(req)) {
-    return HttpResponse.error(res, new Error('未授权'), 401, context || 'system-Core.mcp');
-  }
-}
-
 const requireMCP = (res) => {
-  const mcpServer = getMCPServer();
+        const mcpServer = getMCPServer();
   if (!mcpServer) {
     HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp');
     return null;
@@ -20,17 +14,15 @@ const requireMCP = (res) => {
 };
 
 const setupSSEHeaders = (res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('X-Accel-Buffering', 'no');
 };
 
-const jsonrpcHandler = HttpResponse.asyncHandler(async (req, res, Bot) => {
-  const authResp = ensureSystemCoreAuth(req, res, Bot, 'mcp.jsonrpc');
-  if (authResp) return authResp;
-  const mcpServer = requireMCP(res);
+const jsonrpcHandler = HttpResponse.asyncHandler(async (req, res) => {
+        const mcpServer = requireMCP(res);
   if (!mcpServer) return;
   try {
     const stream = req.params?.stream ?? req.query?.stream;
@@ -63,20 +55,20 @@ export default {
         res.write(': connected\n\n');
 
         const heartbeat = setInterval(() => {
-          if (!res.writableEnded) {
+        if (!res.writableEnded) {
             res.write(`: heartbeat ${Date.now()}\n\n`);
           }
         }, 30000);
 
         req.on('close', () => {
-          clearInterval(heartbeat);
+        clearInterval(heartbeat);
           if (!res.writableEnded) {
             res.end();
           }
         });
 
         req.on('error', () => {
-          clearInterval(heartbeat);
+        clearInterval(heartbeat);
         });
       }
     },
@@ -89,8 +81,6 @@ export default {
       method: 'GET',
       path: '/api/mcp/tools',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        const authResp = ensureSystemCoreAuth(req, res, req.bot || global.Bot, 'mcp.tools');
-        if (authResp) return authResp;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -103,8 +93,6 @@ export default {
       method: 'GET',
       path: '/api/mcp/tools/streams',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        const authResp = ensureSystemCoreAuth(req, res, req.bot || global.Bot, 'mcp.tools.streams');
-        if (authResp) return authResp;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -122,8 +110,6 @@ export default {
       method: 'GET',
       path: '/api/mcp/tools/stream/:streamName',
       handler: HttpResponse.asyncHandler(async (req, res) => {
-        const authResp = ensureSystemCoreAuth(req, res, req.bot || global.Bot, 'mcp.tools.stream');
-        if (authResp) return authResp;
         const { streamName } = req.params;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
@@ -185,7 +171,7 @@ export default {
         })}\n\n`);
 
         const heartbeat = setInterval(() => {
-          if (!res.writableEnded) {
+        if (!res.writableEnded) {
             res.write(`data: ${JSON.stringify({ 
               type: 'ping', 
               timestamp: Date.now(),
@@ -195,14 +181,14 @@ export default {
         }, 30000);
 
         req.on('close', () => {
-          clearInterval(heartbeat);
+        clearInterval(heartbeat);
           if (!res.writableEnded) {
             res.end();
           }
         });
 
         req.on('error', () => {
-          clearInterval(heartbeat);
+        clearInterval(heartbeat);
         });
       }
     },
@@ -306,7 +292,7 @@ export default {
 
   ws: {
     '/mcp/ws': (ws) => {
-      BotUtil.makeLog('info', 'MCP WebSocket连接已建立', 'MCPApi');
+        BotUtil.makeLog('info', 'MCP WebSocket连接已建立', 'MCPApi');
 
       const mcpServer = getMCPServer();
       if (!mcpServer) {

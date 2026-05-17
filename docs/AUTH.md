@@ -1,15 +1,16 @@
 # 鉴权与认证（以代码为准）
 
-> 当前版本中，Server 层 **不会对 HTTP 路由做“统一鉴权拦截”**（不会自动对 `/api/*` 强制校验）。HTTP 业务鉴权由各 Core 自行负责；系统级 API Key 校验统一复用 `Bot.checkApiAuthorization(req)`。
-> - **system-Core 下的所有 HTTP API 默认使用系统级 API Key**；
-> - 其他 Core（插件 HTTP / 业务 HTTP / 自定义 Tasker 等）由开发者自行实现鉴权，需要时可以复用 `Bot.apiKey`。
+> Server 层 **不会**在 `src/bot.js` 对全部 `/api/*` 做统一拦截；经 **`HttpApi` 注册**且路径以 `/api/` 开头时，由基础设施层**默认**校验系统 API Key（见 `src/infrastructure/http/http.js`）。
+> - **system-Core 的 HTTP 路由**：默认需 API Key（可用 `systemAuth: false` 关闭）；
+> - **其他 Core**：同样走 `HttpApi` 时规则一致；未使用 `HttpApi` 时需自行调用 `Bot.checkApiAuthorization(req)` 或 `ensureSystemCoreAuth`。
 
 ## 职责划分
 
 | 层级 | 职责 |
 |------|------|
 | **Server 层**（`src/bot.js`） | 仅做基础网络层处理：速率限制、Body 解析、静态资源映射等；不再对 `/api/*` 做统一鉴权。 |
-| **system-Core HTTP**（`core/system-Core/http/*.js`） | 内置使用 `Bot.checkApiAuthorization(req)` 检查系统级 API Key，例如配置管理、AI 接口、设备管理、插件管理等。 |
+| **HttpApi 路由**（`src/infrastructure/http/http.js`） | 路径以 `/api/` 开头时默认调用 `ensureSystemCoreAuth` → `Bot.checkApiAuthorization(req)`。 |
+| **system-Core HTTP**（`core/system-Core/http/*.js`） | 仅定义路由与 handler，**无需**在每个 handler 内重复写鉴权代码。 |
 | **其他 Core HTTP / Tasker** | 自行决定是否以及如何鉴权；需要接入系统 API Key 时，可在模块内调用 `Bot.checkApiAuthorization(req)`。 |
 
 ---
@@ -32,8 +33,8 @@
 ## API Key 校验
 
 - **实现位置**：
-  - 底层比对逻辑：`src/bot.js` 的 `_checkApiAuthorization(req)`；
-  - system-Core HTTP 统一入口：各 `core/system-Core/http/*.js` 文件顶部的 `ensureSystemCoreAuth`。
+  - 底层比对逻辑：`src/bot.js` 的 `_checkApiAuthorization(req)` / `checkApiAuthorization(req)`；
+  - HTTP 路由包装：`src/infrastructure/http/auth.js` 的 `ensureSystemCoreAuth`（由 `HttpApi.wrapHandler` 自动调用）。
 - **密钥来源**：`server.auth.apiKey.file`（如 `config/server_config/api_key.json`）中的 `key`；未配置则启动时自动生成并写入该文件。
 - **请求中如何携带**（任选其一即可）：
   - 请求头：`X-API-Key: <key>`
@@ -69,18 +70,21 @@
   - `_authMiddleware(req, res, next)`：HTTP 基础放行（静态资源）  
   - `_checkApiAuthorization(req)` / `checkApiAuthorization(req)`：API Key 校验  
   - `wsConnect`：WebSocket 升级与连接管理（统一调用 API Key 校验链路）
-- system-Core HTTP 模块：`core/system-Core/http/*.js`  
-  - 在各自文件顶部定义 `ensureSystemCoreAuth`，内部调用 `Bot.checkApiAuthorization(req)` 做系统级鉴权。
+- HTTP 鉴权：`src/infrastructure/http/auth.js`、`src/infrastructure/http/http.js`（`route.systemAuth` / `_withDefaultSystemAuth`）
+- system-Core 路由定义：`core/system-Core/http/*.js`
 
 ---
 
 ## 常见问题
 
 **Q：现在鉴权到底写在哪一层？**  
-A：Server 层只做“静态资源”放行；系统级接口（system-Core HTTP）在各自模块里显式调用 `Bot.checkApiAuthorization(req)`，其他 Core 可自由选择是否接入系统 API Key 或自定义鉴权。
+A：`src/bot.js` 只做静态资源放行；`/api/*` 由 `HttpApi` 在 `wrapHandler` 中默认鉴权。业务 handler 内一般不必再写鉴权。
 
 **Q：如何使用系统 API Key 保护自定义 HTTP 接口？**  
-A：在自定义 `core/<your-core>/http/*.js` 里，按 system-Core 的写法增加一个 `ensureAuth` 函数，在 handler 开头调用 `Bot.checkApiAuthorization(req)`，失败时返回 401 即可。
+A：在 `core/<your-core>/http/*.js` 导出 `HttpApi` 路由对象即可；路径以 `/api/` 开头会自动鉴权。非 `/api/` 路径或不用 `HttpApi` 时，在 handler 内调用 `ensureSystemCoreAuth(req, res, bot, 'context')`（`src/infrastructure/http/auth.js`）。
 
 **Q：本地调试可以不带 Key 吗？**  
 A：可以，但仅当来源是 `127.*`（或 `::ffff:127.*`）时自动放行；内网地址（如 `192.168.*`、`10.*`、`172.16-31.*`）不会自动放行。
+
+**Q：新增 HTTP 路由时鉴权要注意什么？**  
+A：经 `HttpApi` 注册且路径以 `/api/` 开头时**默认**鉴权；公开接口写 `systemAuth: false`。实现见 `src/infrastructure/http/http.js` 与 `src/infrastructure/http/auth.js`。

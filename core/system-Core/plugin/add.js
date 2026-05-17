@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import lodash from "lodash"
 import crypto from "crypto"
+import chokidar from "chokidar"
 
 export const messageMap = {}
 export const bannedWordsMap = {}
@@ -14,6 +15,7 @@ let bannedImagesPath = "data/bannedWords/images/"
 let configPath = "data/bannedWords/config/"
 
 export class add extends plugin {
+  _bannedWordsWatcher = null
   constructor() {
     super({
       name: "添加消息",
@@ -73,6 +75,24 @@ export class add extends plugin {
       Bot.mkdir(configPath)
     ])
     await this.initAllBannedWords()
+
+    if (filesCfg.watch) {
+      try {
+        this._bannedWordsWatcher?.close()
+        const watchDir = path.resolve(bannedWordsPath)
+        this._bannedWordsWatcher = chokidar.watch(path.join(watchDir, '*.json'), { ignoreInitial: true })
+        this._bannedWordsWatcher.on('change', (filePath) => {
+          const groupId = path.basename(filePath, '.json')
+          delete bannedWordsMap[groupId]
+          this.initBannedWords(groupId).catch((err) => {
+            logger.warn(`热重载违禁词失败 [${groupId}]: ${err.message}`)
+          })
+        })
+        logger.info(`已监听违禁词目录变更: ${watchDir}`)
+      } catch (err) {
+        logger.warn(`启用 files.watch 失败: ${err.message}`)
+      }
+    }
   }
 
   /** 处理添加删除 */
@@ -110,10 +130,10 @@ export class add extends plugin {
       fuzzy: new Set(),
       images: new Map(),
       config: {
-        enabled: groupCfg.banned_words_enabled !== false,
-        muteTime: groupCfg.banned_words_mute_time || 720,
-        warnOnly: groupCfg.banned_words_warn_only || false,
-        exemptRoles: groupCfg.banned_words_exempt_roles || []
+        enabled: groupCfg.bannedWords?.enabled !== false,
+        muteTime: Number(groupCfg.bannedWords?.muteTime) || 720,
+        warnOnly: groupCfg.bannedWords?.warnOnly === true,
+        exemptRoles: Array.isArray(groupCfg.bannedWords?.exemptRoles) ? groupCfg.bannedWords.exemptRoles : []
       }
     }
 
@@ -627,6 +647,13 @@ export class add extends plugin {
     await Promise.all([this.initBannedWords(groupId), this.initBannedWords('global')])
     
     if (!bannedWordsMap[groupId]?.config?.enabled) return false
+
+    const bwConfig = bannedWordsMap[groupId].config
+    if (bwConfig.exemptRoles?.length) {
+      if (this.e.isMaster) return false
+      const { role } = this.getRoleInfo(this.e.user_id)
+      if (bwConfig.exemptRoles.includes(role)) return false
+    }
     
     let violated = false
     let violationType = ""

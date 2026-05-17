@@ -21,55 +21,6 @@ function calcUsagePercent(used, total) {
   return clampNumber((u / t) * 100, 0, 100);
 }
 
-export function renderNetworkInfo(app, network = {}, rates = {}) {
-  const box = document.getElementById('networkInfo');
-  if (!box) return;
-
-  // 添加更新标记，用于CSS过渡
-  setUpdating(box);
-  const entries = Object.entries(network ?? {});
-  if (!entries.length) {
-    box.innerHTML = `
-      <div class="empty-state">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.3;">
-          <path d="M21 16V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h14a2 2 0 002-2z"/>
-          <polyline points="23,6 13.5,15.5 8.5,10.5 1,18"/>
-          <polyline points="17,6 23,6 23,12"/>
-        </svg>
-        <p>暂无网络信息</p>
-      </div>
-    `;
-    clearUpdating(box);
-    return;
-  }
-
-  const rxSec = rates.rxSec ?? rates.rx ?? 0;
-  const txSec = rates.txSec ?? rates.tx ?? 0;
-  const rxFormatted = app.formatBytes(rxSec);
-  const txFormatted = app.formatBytes(txSec);
-  const rateText = `${rxFormatted}/s ↓ · ${txFormatted}/s ↑`;
-
-  box.innerHTML = `
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-align:center;line-height:1.4;padding:8px;background:var(--bg-input);border-radius:var(--radius);border:1px solid var(--border)">
-      <span style="color:var(--primary);font-weight:600">${rateText}</span>
-    </div>
-    ${entries.map(([name, info]) => {
-      const address = info.address ?? '';
-      const mac = info.mac ?? '';
-      return `
-      <div style="padding:12px;border-bottom:1px solid var(--border);transition:background var(--transition)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
-        <div style="font-weight:600;color:var(--text-primary);text-align:center;margin-bottom:4px">${app.escapeHtml(name)}</div>
-        <div style="font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4">
-          <span class="mono">IP: ${app.escapeHtml(address)}</span>${mac ? ` <span class="mono">· MAC: ${app.escapeHtml(mac)}</span>` : ''}
-        </div>
-      </div>
-    `;
-    }).join('')}
-  `;
-
-  clearUpdating(box);
-}
-
 export function updateSystemStatus(app, data) {
   const { system } = data;
   const panels = data.panels ?? {};

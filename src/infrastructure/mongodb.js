@@ -91,11 +91,12 @@ function buildMongoUrl(mongoConfig) {
 }
 
 function buildClientOptions() {
+  const options = cfg.mongodb?.options || {}
   return {
-    maxPoolSize: MONGODB_CONFIG.MAX_POOL_SIZE,
-    minPoolSize: MONGODB_CONFIG.MIN_POOL_SIZE,
-    connectTimeoutMS: MONGODB_CONFIG.CONNECT_TIMEOUT,
-    serverSelectionTimeoutMS: MONGODB_CONFIG.CONNECT_TIMEOUT,
+    maxPoolSize: options.maxPoolSize ?? MONGODB_CONFIG.MAX_POOL_SIZE,
+    minPoolSize: options.minPoolSize ?? MONGODB_CONFIG.MIN_POOL_SIZE,
+    connectTimeoutMS: options.connectTimeoutMS ?? MONGODB_CONFIG.CONNECT_TIMEOUT,
+    serverSelectionTimeoutMS: options.serverSelectionTimeoutMS ?? MONGODB_CONFIG.CONNECT_TIMEOUT,
     socketTimeoutMS: 45000,
     heartbeatFrequencyMS: 10000,
     retryWrites: true,
