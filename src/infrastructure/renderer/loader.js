@@ -9,10 +9,6 @@ import Renderer from "./Renderer.js"
 import paths from "#utils/paths.js"
 import BotUtil from "#utils/botutil.js"
 
-// 注意：渲染器需要监视目录变化（addDir/unlinkDir），HotReloadBase只支持文件监视
-// 因此保留直接使用chokidar的方式
-
-// 暴露 Renderer 构造，仅一次
 global.Renderer = Renderer
 
 class RendererLoader {
@@ -20,12 +16,6 @@ class RendererLoader {
     this.renderers = new Map()
     this.watcher = null
     this._loadPromise = null
-  }
-
-  static async init() {
-    const loader = new RendererLoader()
-    await loader.load()
-    return loader
   }
 
   async load() {
@@ -68,23 +58,21 @@ class RendererLoader {
   }
 
   getRenderer(name = cfg.agt?.browser?.renderer || 'puppeteer') {
+    if (this.renderers.size === 0 && !this._loadPromise) {
+      void this.load()
+    }
     let r = this.renderers.get(name)
     if (r && typeof r.render === 'function') return r
     r = this.renderers.get('puppeteer') || this.renderers.get('playwright')
     return r || {}
   }
 
-  /** 若当前无可用渲染器则重新加载一次（解决初始化顺序导致未加载的问题） */
   async ensureLoaded() {
     if (this.renderers.size > 0) return
     this._loadPromise = null
     await this.load()
   }
 
-  /**
-   * 启用文件监视（热加载）
-   * @param {boolean} enable - 是否启用
-   */
   async watch(enable = true) {
     if (!enable) {
       if (this.watcher) {
@@ -100,7 +88,6 @@ class RendererLoader {
     if (!fsSync.existsSync(baseDir)) return
 
     try {
-      // 渲染器需要监视目录变化，使用chokidar直接监视目录
       const watcher = chokidar.watch(baseDir, {
         ignored: /(^|[\/\\])\../,
         persistent: true,
@@ -143,4 +130,5 @@ class RendererLoader {
   }
 }
 
-export default await RendererLoader.init()
+const loader = new RendererLoader()
+export default loader

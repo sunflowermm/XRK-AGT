@@ -98,8 +98,11 @@
     "start:docker": "docker-compose up -d",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test tests/framework/auth-loopback.test.mjs tests/framework/config-alignment.test.mjs tests/framework/module-inventory.test.mjs tests/framework/www-xrk.test.mjs",
-    "test:framework": "node --test tests/framework/auth-loopback.test.mjs tests/framework/config-alignment.test.mjs tests/framework/module-inventory.test.mjs tests/framework/www-xrk.test.mjs"
+    "test": "node --test --test-force-exit tests/framework/auth-loopback.test.mjs tests/framework/config-alignment.test.mjs tests/framework/module-inventory.test.mjs tests/framework/input-validator.test.mjs tests/framework/renderer-lazy.test.mjs tests/framework/http-init-hook.test.mjs tests/framework/www-xrk.test.mjs tests/framework/http-api-structure.test.mjs tests/framework/loaders-integration.test.mjs",
+    "test:all": "node --test --test-force-exit tests/framework/*.test.mjs",
+    "test:fast": "node --test --test-force-exit tests/framework/auth-loopback.test.mjs tests/framework/config-alignment.test.mjs tests/framework/module-inventory.test.mjs tests/framework/input-validator.test.mjs tests/framework/www-xrk.test.mjs tests/framework/http-api-structure.test.mjs",
+    "test:integration": "node --test --test-force-exit tests/framework/loaders-integration.test.mjs",
+    "test:e2e": "node --test --test-force-exit tests/framework/server-e2e.test.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

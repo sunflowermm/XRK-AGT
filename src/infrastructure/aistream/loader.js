@@ -842,7 +842,8 @@ class StreamLoader {
    * 加载远程MCP服务器并注册工具
    */
   async loadRemoteMCPServers() {
-    if (!this.mcpServer) return;
+    if (!this.mcpServer) return [];
+    if (process.env.XRK_TEST === '1') return [];
 
     const loadedServers = [];
 

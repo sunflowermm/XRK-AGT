@@ -8,9 +8,13 @@
 system-Core 是 XRK-AGT 的内置核心模块，提供了开箱即用的完整功能集，包括：
 
 - ✅ **11个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、通知服务、标准输入、数据编辑
-- ✅ **9个工作流**：chat、desktop、tools、memory、database、web、browser、screen、react-bits-mcp（MCP 工具数以 `registerMCPTool` 为准，当前仓库约 68+ 个）
+- ✅ **7个工作流**：chat、desktop、tools、memory、database、web、browser（MCP 工具数以 `registerMCPTool` 为准，当前仓库约 68 个）
+- ✅ **15个内置插件**：增强器（OneBot/OPQ/Device/Stdin）+ 运维与示例业务
 - ✅ **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
+- ✅ **3个事件监听器**：onebot、stdin、device
 - ✅ **Web控制台**：企业级管理界面，支持系统监控、API调试、配置管理
+
+> **非自带扩展（勿计入框架基准）**：`stream/screen.js`、`stream/react-bits-mcp.js`、`plugin/远行商人.js` 等为后期个人扩展，已从官方自带清单移除；可放在独立 `core/<你的包名>/` 中维护。
 
 ### 核心特性
 
@@ -699,6 +703,7 @@ system-Core 是 XRK-AGT 的核心模块，提供了：
 
 - ✅ **11个HTTP API模块**：覆盖系统管理、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、通知服务、标准输入、数据编辑
 - ✅ **7个工作流**：chat、desktop、tools、memory、database、web、browser；MCP 工具以 `registerMCPTool` 注册为准（当前约 68 个）
+- ✅ **15个内置插件**：增强器 + 运维与示例业务
 - ✅ **4个Tasker**：支持OneBotv11、GSUIDCORE、QBQBot、stdin
 - ✅ **Web控制台**：企业级管理界面，支持系统监控、API调试、配置管理
 - ✅ **完整配置系统**：支持多种配置类型，Schema验证，可视化编辑

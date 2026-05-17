@@ -30,12 +30,11 @@ export default class HttpApi {
     }
     
     this.registerRoutes(app, bot);
-    // 清理旧的 WS 注册，避免热重载叠加
     this._disposeWebSocketHandlers();
     this._wsDisposers = this.registerWebSocketHandlers(bot, this.key || this.name || 'unknown');
     
     if (typeof this.initHook === 'function') {
-      await this.initHook(app, bot);
+      await this.initHook.call(this, app, bot);
     }
     
     return true;

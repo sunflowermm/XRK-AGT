@@ -1,26 +1,33 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import {
+  SYSTEM_CORE_BASELINE,
+  listSystemCoreJs,
+} from '../helpers/system-core.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-
-function listJsFiles(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
-}
-
-describe('system-Core 模块数量（与文档一致）', () => {
+describe('system-Core 模块数量（框架基准）', () => {
   it('HTTP API 为 11 个', () => {
-    const httpDir = path.join(root, 'core/system-Core/http');
-    const files = listJsFiles(httpDir);
-    assert.equal(files.length, 11, `http 目录文件: ${files.join(', ')}`);
+    const files = listSystemCoreJs('http');
+    assert.equal(files.length, SYSTEM_CORE_BASELINE.http, files.join(', '));
   });
 
-  it('AI 工作流为 9 个（含 screen、react-bits-mcp）', () => {
-    const streamDir = path.join(root, 'core/system-Core/stream');
-    const files = listJsFiles(streamDir);
-    assert.equal(files.length, 9, `stream 目录文件: ${files.join(', ')}`);
+  it('AI 工作流为 7 个（不含 screen / react-bits-mcp）', () => {
+    const files = listSystemCoreJs('stream');
+    assert.equal(files.length, SYSTEM_CORE_BASELINE.stream, files.join(', '));
+  });
+
+  it('内置插件为 15 个（不含远行商人）', () => {
+    const files = listSystemCoreJs('plugin');
+    assert.equal(files.length, SYSTEM_CORE_BASELINE.plugin, files.join(', '));
+  });
+
+  it('Tasker 为 4 个', () => {
+    const files = listSystemCoreJs('tasker');
+    assert.equal(files.length, SYSTEM_CORE_BASELINE.tasker, files.join(', '));
+  });
+
+  it('events 监听器为 3 个', () => {
+    const files = listSystemCoreJs('events');
+    assert.equal(files.length, SYSTEM_CORE_BASELINE.events, files.join(', '));
   });
 });
