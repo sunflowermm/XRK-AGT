@@ -357,13 +357,13 @@ const stream = await this.getStream('desktop');
 ### 6. web 工作流
 
 **文件**: `core/system-Core/stream/web.js`  
-**实现库**：`core/system-Core/lib/openclaw-web/`（OpenClaw 同源 `web_fetch` 行为）  
+**实现库**：`core/system-Core/lib/crawl/`（`web_fetch`、SSRF、Readability/Firecrawl）  
 **工具**：`web_fetch`（由工作流实现提供，配置请以 `core/system-Core/stream/web.js` 与对应实现为准）
 
 ### 7. browser 工作流（受控浏览器）
 
 **文件**: `core/system-Core/stream/browser.js`  
-**实现库**：`core/system-Core/lib/agent-browser/`（`PlaywrightAgentSession` + `nav-ssrf`）  
+**实现库**：`core/system-Core/lib/crawl/`（`PlaywrightAgentSession`、`createLocalFontScreenshotHelper`；SSRF 与 `web_fetch` 同源）  
 **配置**：浏览器工作流参数以 `core/system-Core/stream/browser.js` 及其实现代码为准。  
 **MCP 工具**：`browser_status`、`browser_start`、`browser_goto`、`browser_page_text`、`browser_screenshot`、`browser_close`  
 

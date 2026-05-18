@@ -283,11 +283,11 @@ export function buildWebFetchRuntime() {
   };
 }
 
-async function tryFirecrawlFallback(params) {
+async function tryFirecrawlFallback(params, url) {
   if (!params.firecrawlEnabled || !params.firecrawlApiKey) return null;
   try {
     return await fetchFirecrawlContent({
-      url: params.url,
+      url,
       extractMode: params.extractMode,
       apiKey: params.firecrawlApiKey,
       baseUrl: params.firecrawlBaseUrl,
@@ -302,38 +302,72 @@ async function tryFirecrawlFallback(params) {
   }
 }
 
-async function maybeFetchFirecrawlWebFetchPayload(params) {
-  const firecrawl = await tryFirecrawlFallback({
-    url: params.urlToFetch,
-    extractMode: params.extractMode,
-    firecrawlEnabled: params.firecrawlEnabled,
-    firecrawlApiKey: params.firecrawlApiKey,
-    firecrawlBaseUrl: params.firecrawlBaseUrl,
-    firecrawlOnlyMainContent: params.firecrawlOnlyMainContent,
-    firecrawlMaxAgeMs: params.firecrawlMaxAgeMs,
-    firecrawlProxy: params.firecrawlProxy,
-    firecrawlStoreInCache: params.firecrawlStoreInCache,
-    firecrawlTimeoutSeconds: params.firecrawlTimeoutSeconds
-  });
-  if (!firecrawl?.text) return null;
-
+function cacheFirecrawlPayload(ctx, firecrawl) {
   const payload = buildFirecrawlWebFetchPayload({
-    firecrawl: {
-      text: firecrawl.text,
-      title: firecrawl.title,
-      finalUrl: firecrawl.finalUrl,
-      status: firecrawl.status,
-      warning: firecrawl.warning
-    },
-    rawUrl: params.url,
-    finalUrlFallback: params.finalUrlFallback,
-    statusFallback: params.statusFallback,
-    extractMode: params.extractMode,
-    maxChars: params.maxChars,
-    tookMs: params.tookMs
+    firecrawl,
+    rawUrl: ctx.url,
+    finalUrlFallback: ctx.finalUrlFallback,
+    statusFallback: ctx.statusFallback,
+    extractMode: ctx.extractMode,
+    maxChars: ctx.maxChars,
+    tookMs: ctx.tookMs
   });
-  writeCache(FETCH_CACHE, params.cacheKey, payload, params.cacheTtlMs);
+  writeCache(FETCH_CACHE, ctx.cacheKey, payload, ctx.cacheTtlMs);
   return payload;
+}
+
+async function firecrawlPayloadOrNull(ctx, urlToFetch) {
+  const fc = await tryFirecrawlFallback(ctx, urlToFetch);
+  if (!fc?.text) return null;
+  return cacheFirecrawlPayload(ctx, fc);
+}
+
+async function extractHtmlToText(params, html, finalUrl) {
+  if (params.readabilityEnabled) {
+    const readable = await extractReadableContent({ html, url: finalUrl, extractMode: params.extractMode });
+    if (readable?.text) {
+      return { text: readable.text, title: readable.title, extractor: 'readability' };
+    }
+    const fc = await tryFirecrawlFallback(params, finalUrl);
+    if (fc?.text) {
+      return { text: fc.text, title: fc.title, extractor: 'firecrawl' };
+    }
+    const basic = await extractBasicHtmlContent({ html, extractMode: params.extractMode });
+    if (basic?.text) {
+      return { text: basic.text, title: basic.title, extractor: 'raw-html' };
+    }
+    throw new Error(
+      'Web fetch extraction failed: Readability, Firecrawl, and basic HTML cleanup returned no content.'
+    );
+  }
+
+  const fc = await tryFirecrawlFallback(params, finalUrl);
+  if (fc?.text) {
+    return { text: fc.text, title: fc.title, extractor: 'firecrawl' };
+  }
+  throw new Error('Web fetch extraction failed: Readability disabled and Firecrawl unavailable.');
+}
+
+function buildFetchSuccessPayload(params, fields) {
+  const wrapped = wrapWebFetchContent(fields.text, params.maxChars);
+  return {
+    url: params.url,
+    finalUrl: fields.finalUrl,
+    status: fields.status,
+    contentType: fields.contentType,
+    title: fields.title ? wrapWebFetchField(fields.title) : undefined,
+    extractMode: params.extractMode,
+    extractor: fields.extractor,
+    externalContent: { untrusted: true, source: 'web_fetch', wrapped: true },
+    truncated: wrapped.truncated,
+    length: wrapped.wrappedLength,
+    rawLength: wrapped.rawLength,
+    wrappedLength: wrapped.wrappedLength,
+    fetchedAt: new Date().toISOString(),
+    tookMs: fields.tookMs,
+    text: wrapped.text,
+    warning: wrapWebFetchField(fields.warning)
+  };
 }
 
 export async function runWebFetch(params) {
@@ -377,141 +411,66 @@ export async function runWebFetch(params) {
     finalUrl = out.finalUrl;
   } catch (error) {
     if (error instanceof SsrFBlockedError) throw error;
-    const payload = await maybeFetchFirecrawlWebFetchPayload({
-      ...params,
-      urlToFetch: finalUrl,
-      finalUrlFallback: finalUrl,
-      statusFallback: 200,
-      cacheKey,
-      tookMs: Date.now() - start
-    });
+    const ctx = { ...params, cacheKey, tookMs: Date.now() - start, finalUrlFallback: finalUrl, statusFallback: 200 };
+    const payload = await firecrawlPayloadOrNull(ctx, finalUrl);
     if (payload) return payload;
     throw error;
   }
 
-  try {
-    if (!res.ok) {
-      const payload = await maybeFetchFirecrawlWebFetchPayload({
-        ...params,
-        urlToFetch: params.url,
-        finalUrlFallback: finalUrl,
-        statusFallback: res.status,
-        cacheKey,
-        tookMs: Date.now() - start
-      });
-      if (payload) return payload;
+  const tookMs = () => Date.now() - start;
 
-      const rawDetailResult = await readResponseText(res, { maxBytes: DEFAULT_ERROR_MAX_BYTES });
-      const rawDetail = rawDetailResult.text;
-      const detail = formatWebFetchErrorDetail({
-        detail: rawDetail,
-        contentType: res.headers.get('content-type'),
-        maxChars: DEFAULT_ERROR_MAX_CHARS
-      });
-      const wrappedDetail = wrapWebFetchContent(detail || res.statusText, DEFAULT_ERROR_MAX_CHARS);
-      throw new Error(`Web fetch failed (${res.status}): ${wrappedDetail.text}`);
-    }
+  if (!res.ok) {
+    const ctx = { ...params, cacheKey, tookMs: tookMs(), finalUrlFallback: finalUrl, statusFallback: res.status };
+    const payload = await firecrawlPayloadOrNull(ctx, params.url);
+    if (payload) return payload;
 
-    const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
-    const normalizedContentType = normalizeContentType(contentType) ?? 'application/octet-stream';
-    const bodyResult = await readResponseText(res, { maxBytes: params.maxResponseBytes });
-    const body = bodyResult.text;
-    const responseTruncatedWarning = bodyResult.truncated
-      ? `Response body truncated after ${params.maxResponseBytes} bytes.`
-      : undefined;
-
-    let title;
-    let extractor = 'raw';
-    let text = body;
-
-    if (contentType.includes('text/markdown')) {
-      extractor = 'cf-markdown';
-      if (params.extractMode === 'text') {
-        text = markdownToText(body);
-      }
-    } else if (contentType.includes('text/html')) {
-      if (params.readabilityEnabled) {
-        const readable = await extractReadableContent({
-          html: body,
-          url: finalUrl,
-          extractMode: params.extractMode
-        });
-        if (readable?.text) {
-          text = readable.text;
-          title = readable.title;
-          extractor = 'readability';
-        } else {
-          const fc = await tryFirecrawlFallback({ ...params, url: finalUrl });
-          if (fc?.text) {
-            text = fc.text;
-            title = fc.title;
-            extractor = 'firecrawl';
-          } else {
-            const basic = await extractBasicHtmlContent({
-              html: body,
-              extractMode: params.extractMode
-            });
-            if (basic?.text) {
-              text = basic.text;
-              title = basic.title;
-              extractor = 'raw-html';
-            } else {
-              throw new Error(
-                'Web fetch extraction failed: Readability, Firecrawl, and basic HTML cleanup returned no content.'
-              );
-            }
-          }
-        }
-      } else {
-        const fc = await tryFirecrawlFallback({ ...params, url: finalUrl });
-        if (fc?.text) {
-          text = fc.text;
-          title = fc.title;
-          extractor = 'firecrawl';
-        } else {
-          throw new Error('Web fetch extraction failed: Readability disabled and Firecrawl unavailable.');
-        }
-      }
-    } else if (contentType.includes('application/json')) {
-      try {
-        text = JSON.stringify(JSON.parse(body), null, 2);
-        extractor = 'json';
-      } catch {
-        text = body;
-        extractor = 'raw';
-      }
-    }
-
-    const wrapped = wrapWebFetchContent(text, params.maxChars);
-    const wrappedTitle = title ? wrapWebFetchField(title) : undefined;
-    const wrappedWarning = wrapWebFetchField(responseTruncatedWarning);
-    const payload = {
-      url: params.url,
-      finalUrl,
-      status: res.status,
-      contentType: normalizedContentType,
-      title: wrappedTitle,
-      extractMode: params.extractMode,
-      extractor,
-      externalContent: {
-        untrusted: true,
-        source: 'web_fetch',
-        wrapped: true
-      },
-      truncated: wrapped.truncated,
-      length: wrapped.wrappedLength,
-      rawLength: wrapped.rawLength,
-      wrappedLength: wrapped.wrappedLength,
-      fetchedAt: new Date().toISOString(),
-      tookMs: Date.now() - start,
-      text: wrapped.text,
-      warning: wrappedWarning
-    };
-    writeCache(FETCH_CACHE, cacheKey, payload, params.cacheTtlMs);
-    return payload;
-  } finally {
-    // native fetch: drain if needed
+    const rawDetailResult = await readResponseText(res, { maxBytes: DEFAULT_ERROR_MAX_BYTES });
+    const rawDetail = rawDetailResult.text;
+    const detail = formatWebFetchErrorDetail({
+      detail: rawDetail,
+      contentType: res.headers.get('content-type'),
+      maxChars: DEFAULT_ERROR_MAX_CHARS
+    });
+    const wrappedDetail = wrapWebFetchContent(detail || res.statusText, DEFAULT_ERROR_MAX_CHARS);
+    throw new Error(`Web fetch failed (${res.status}): ${wrappedDetail.text}`);
   }
+
+  const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+  const normalizedContentType = normalizeContentType(contentType) ?? 'application/octet-stream';
+  const bodyResult = await readResponseText(res, { maxBytes: params.maxResponseBytes });
+  const body = bodyResult.text;
+  const responseTruncatedWarning = bodyResult.truncated
+    ? `Response body truncated after ${params.maxResponseBytes} bytes.`
+    : undefined;
+
+  let extracted = { text: body, title: undefined, extractor: 'raw' };
+
+  if (contentType.includes('text/markdown')) {
+    extracted = {
+      text: params.extractMode === 'text' ? markdownToText(body) : body,
+      title: undefined,
+      extractor: 'cf-markdown'
+    };
+  } else if (contentType.includes('text/html')) {
+    extracted = await extractHtmlToText(params, body, finalUrl);
+  } else if (contentType.includes('application/json')) {
+    try {
+      extracted = { text: JSON.stringify(JSON.parse(body), null, 2), title: undefined, extractor: 'json' };
+    } catch {
+      extracted = { text: body, title: undefined, extractor: 'raw' };
+    }
+  }
+
+  const payload = buildFetchSuccessPayload(params, {
+    ...extracted,
+    finalUrl,
+    status: res.status,
+    contentType: normalizedContentType,
+    warning: responseTruncatedWarning,
+    tookMs: tookMs()
+  });
+  writeCache(FETCH_CACHE, cacheKey, payload, params.cacheTtlMs);
+  return payload;
 }
 
 export { DEFAULT_FETCH_MAX_CHARS, FETCH_CACHE };

@@ -48,6 +48,18 @@ const LABEL_COLON_NUM_CLASS = 'pss-label-num'
  * @property {string} [colonMarginRight='-0.14em'] 半角冒号与数字之间的负间距
  */
 
+function resolveDir(dir) {
+  return path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir)
+}
+
+function fontFormat(fileName) {
+  return fileName.endsWith('.woff2') ? 'woff2' : 'truetype'
+}
+
+function fontContentType(fileName) {
+  return fileName.endsWith('.woff2') ? 'font/woff2' : 'font/ttf'
+}
+
 /**
  * 创建「本地字体 + 页面样式 + 区域截图」助手（HTTPS 页通过 page.route 同源回源 fontDir）
  * @param {LocalFontScreenshotHelperOptions} options
@@ -70,12 +82,11 @@ export function createLocalFontScreenshotHelper(options) {
     throw new Error('createLocalFontScreenshotHelper: fontUrlBase、fontDir、fonts 为必填')
   }
 
-  const fontDirAbs = path.isAbsolute(fontDir) ? fontDir : path.join(process.cwd(), fontDir)
-  const assetDirAbs = assetDir
-    ? (path.isAbsolute(assetDir) ? assetDir : path.join(process.cwd(), assetDir))
-    : null
+  const fontDirAbs = resolveDir(fontDir)
+  const assetDirAbs = assetDir ? resolveDir(assetDir) : null
   const baseUrl = fontUrlBase.endsWith('/') ? fontUrlBase : `${fontUrlBase}/`
   const routedPages = new WeakSet()
+  const colonTweaks = domTweaks.filter((t) => t.kind === DOM_TWEAK_LABEL_COLON_HALF)
 
   const log = (level, msg) => BotUtil.makeLog(level, msg, logContext)
 
@@ -84,11 +95,9 @@ export function createLocalFontScreenshotHelper(options) {
     loadWeight: f.loadWeight || String(f.weight || '400').split(/\s+/)[0] || '400',
   }))
 
-  function fontPublicUrl(fileName) {
-    return `${baseUrl}${encodeURIComponent(fileName)}`
-  }
+  const fontPublicUrl = (fileName) => `${baseUrl}${encodeURIComponent(fileName)}`
 
-  function buildCss() {
+  const css = (() => {
     const faces = []
     const stackParts = []
     for (const f of fonts) {
@@ -97,7 +106,7 @@ export function createLocalFontScreenshotHelper(options) {
         log('warn', `跳过缺失字体: ${filePath}`)
         continue
       }
-      const fmt = f.file.endsWith('.woff2') ? 'woff2' : 'truetype'
+      const fmt = fontFormat(f.file)
       const weight = f.weight || '400'
       faces.push(
         `@font-face{font-family:'${f.family}';src:url('${fontPublicUrl(f.file)}') format('${fmt}');font-weight:${weight};font-style:normal;font-display:block;}`
@@ -114,47 +123,32 @@ export function createLocalFontScreenshotHelper(options) {
       ? `.content,.content *{font-family:${stack}!important;-webkit-font-smoothing:antialiased!important;-moz-osx-font-smoothing:grayscale!important;text-rendering:geometricPrecision!important;font-synthesis:none!important;}`
       : ''
 
-    const colonHalfRules = domTweaks
-      .filter((t) => t.kind === DOM_TWEAK_LABEL_COLON_HALF)
-      .map((t) => {
-        const gap = t.colonMarginRight ?? '-0.14em'
-        return (
-          `.${LABEL_COLON_HALF_CLASS}{display:inline!important;margin:0 ${gap} 0 0!important;` +
-          `letter-spacing:0!important;font-variant-east-asian:normal!important;}` +
-          `.${LABEL_COLON_NUM_CLASS}{margin-left:0!important;letter-spacing:0!important;}`
-        )
-      })
+    const colonHalfRules = colonTweaks.map((t) => {
+      const gap = t.colonMarginRight ?? '-0.14em'
+      return (
+        `.${LABEL_COLON_HALF_CLASS}{display:inline!important;margin:0 ${gap} 0 0!important;` +
+        `letter-spacing:0!important;font-variant-east-asian:normal!important;}` +
+        `.${LABEL_COLON_NUM_CLASS}{margin-left:0!important;letter-spacing:0!important;}`
+      )
+    })
 
     return [hideRule, ...faces, baseRule, ...colonHalfRules, extraCss].filter(Boolean).join('')
+  })()
+
+  async function fulfillLocalFile(route, filePath, contentType) {
+    if (!fs.existsSync(filePath)) {
+      await route.abort()
+      return false
+    }
+    await route.fulfill({
+      status: 200,
+      headers: { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=86400' },
+      body: fs.readFileSync(filePath),
+    })
+    return true
   }
 
-  async function applyDomTweaks(page) {
-    const colonTweaks = domTweaks.filter((t) => t.kind === DOM_TWEAK_LABEL_COLON_HALF)
-    if (!colonTweaks.length) return
-
-    await page.evaluate(
-      ({ tweaks, colonClass, numClass }) => {
-        for (const { selector, label = '价格' } of tweaks) {
-          const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          const re = new RegExp(`^\\s*${escaped}\\s*([：:])\\s*(\\d+)\\s*$`)
-          document.querySelectorAll(selector).forEach((el) => {
-            const text = (el.textContent || '').replace(/\s+/g, ' ')
-            const m = text.match(re)
-            if (!m) return
-            el.innerHTML =
-              `${label}<span class="${colonClass}">:</span> <span class="${numClass}">${m[2]}</span>`
-          })
-        }
-      },
-      {
-        tweaks: colonTweaks.map((t) => ({ selector: t.selector, label: t.label })),
-        colonClass: LABEL_COLON_HALF_CLASS,
-        numClass: LABEL_COLON_NUM_CLASS,
-      }
-    )
-  }
-
-  async function prepare(page) {
+  async function ensureRoutes(page) {
     if (routedPages.has(page)) return
     routedPages.add(page)
 
@@ -162,45 +156,24 @@ export function createLocalFontScreenshotHelper(options) {
       const url = fontPublicUrl(f.file)
       await page.route(url, async (route) => {
         const filePath = path.join(fontDirAbs, f.file)
-        if (!fs.existsSync(filePath)) {
+        if (!(await fulfillLocalFile(route, filePath, fontContentType(f.file)))) {
           log('warn', `字体文件不存在: ${filePath}`)
-          await route.abort()
-          return
         }
-        const ct = f.file.endsWith('.woff2') ? 'font/woff2' : 'font/ttf'
-        await route.fulfill({
-          status: 200,
-          headers: { 'Content-Type': ct, 'Cache-Control': 'public, max-age=86400' },
-          body: fs.readFileSync(filePath),
-        })
       })
     }
 
-    if (assetDirAbs && assetRoutes.length) {
-      for (const routeSpec of assetRoutes) {
-        await page.route(routeSpec.match, async (route) => {
-          const filePath = path.join(assetDirAbs, routeSpec.file)
-          if (!fs.existsSync(filePath)) {
-            log('warn', `资源文件不存在: ${filePath}`)
-            await route.abort()
-            return
-          }
-          await route.fulfill({
-            status: 200,
-            headers: { 'Content-Type': routeSpec.contentType || 'application/octet-stream' },
-            body: fs.readFileSync(filePath),
-          })
-        })
-      }
+    if (!assetDirAbs) return
+    for (const spec of assetRoutes) {
+      await page.route(spec.match, async (route) => {
+        const filePath = path.join(assetDirAbs, spec.file)
+        if (!(await fulfillLocalFile(route, filePath, spec.contentType || 'application/octet-stream'))) {
+          log('warn', `资源文件不存在: ${filePath}`)
+        }
+      })
     }
   }
 
-  /** @param {import('playwright').Page} page */
-  async function apply(page) {
-    await prepare(page)
-    const css = buildCss()
-    if (css) await page.addStyleTag({ content: css }).catch(() => {})
-
+  async function waitFonts(page) {
     await Promise.race([
       page.evaluate(async (specs) => {
         await Promise.all(
@@ -224,32 +197,61 @@ export function createLocalFontScreenshotHelper(options) {
     }, loadSpecs)
 
     const missing = loadSpecs.filter((s) => !families[s.family]).map((s) => s.family)
-    if (missing.length) {
-      log('warn', `字体未完全加载: ${missing.join(', ')}`)
-    }
+    if (missing.length) log('warn', `字体未完全加载: ${missing.join(', ')}`)
+  }
 
-    await page.evaluate(() => {
-      document.getAnimations?.().forEach((a) => {
-        try {
-          a.cancel()
-        } catch {
-          /* ignore */
+  async function applyColonTweaks(page) {
+    if (!colonTweaks.length) return
+    await page.evaluate(
+      ({ tweaks, colonClass, numClass }) => {
+        for (const { selector, label = '价格' } of tweaks) {
+          const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const re = new RegExp(`^\\s*${escaped}\\s*([：:])\\s*(\\d+)\\s*$`)
+          document.querySelectorAll(selector).forEach((el) => {
+            const text = (el.textContent || '').replace(/\s+/g, ' ')
+            const m = text.match(re)
+            if (!m) return
+            el.innerHTML =
+              `${label}<span class="${colonClass}">:</span> <span class="${numClass}">${m[2]}</span>`
+          })
         }
-      })
-    }).catch(() => {})
+      },
+      {
+        tweaks: colonTweaks.map((t) => ({ selector: t.selector, label: t.label })),
+        colonClass: LABEL_COLON_HALF_CLASS,
+        numClass: LABEL_COLON_NUM_CLASS,
+      }
+    )
+  }
 
-    await applyDomTweaks(page)
+  /** 在 goto 前注册 route（与 apply 内 ensureRoutes 幂等） */
+  async function prepare(page) {
+    await ensureRoutes(page)
+  }
+
+  /** @param {import('playwright').Page} page */
+  async function apply(page) {
+    await ensureRoutes(page)
+    if (css) await page.addStyleTag({ content: css }).catch(() => {})
+    await waitFonts(page)
+    await page
+      .evaluate(() => {
+        document.getAnimations?.().forEach((a) => {
+          try {
+            a.cancel()
+          } catch {
+            /* ignore */
+          }
+        })
+      })
+      .catch(() => {})
+    await applyColonTweaks(page)
   }
 
   /** @param {import('playwright').Page} page @param {string} [selector='.content'] */
   async function capture(page, selector = '.content') {
+    const shotOpts = { type: 'png', animations: 'disabled', caret: 'hide', scale: 'device' }
     const locator = page.locator(selector).first()
-    const shotOpts = {
-      type: 'png',
-      animations: 'disabled',
-      caret: 'hide',
-      scale: 'device',
-    }
     return locator.screenshot(shotOpts).catch(() => page.screenshot({ ...shotOpts, fullPage: false }))
   }
 

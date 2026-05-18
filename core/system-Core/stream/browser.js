@@ -1,6 +1,10 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
-import { PlaywrightAgentSession, SsrFBlockedError } from '../lib/agent-browser/index.js';
+import {
+  PlaywrightAgentSession,
+  SsrFBlockedError,
+  DEFAULT_DEVICE_SCALE_FACTOR
+} from '../lib/crawl/index.js';
 
 const BROWSER_DEFAULTS = Object.freeze({
   headless: true,
@@ -47,7 +51,8 @@ export default class BrowserStream extends AIStream {
     const launchOpts = {
       browserType: BROWSER_DEFAULTS.browserType,
       headless: BROWSER_DEFAULTS.headless,
-      launchTimeoutMs: BROWSER_DEFAULTS.launchTimeoutMs
+      launchTimeoutMs: BROWSER_DEFAULTS.launchTimeoutMs,
+      deviceScaleFactor: DEFAULT_DEVICE_SCALE_FACTOR
     };
     this.session = await PlaywrightAgentSession.launch(launchOpts);
     BotUtil.makeLog(
@@ -168,7 +173,11 @@ export default class BrowserStream extends AIStream {
       inputSchema: {
         type: 'object',
         properties: {
-          fullPage: { type: 'boolean', description: '是否整页截图', default: false }
+          fullPage: { type: 'boolean', description: '是否整页截图', default: false },
+          selector: {
+            type: 'string',
+            description: '区域选择器（非空时优先区域截图；已 attach 截图助手时先应用字体/样式）'
+          }
         },
         required: []
       },
@@ -178,7 +187,10 @@ export default class BrowserStream extends AIStream {
             return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
           }
           const fullPage = args.fullPage === true;
-          const buf = await this.session.screenshot({ fullPage, type: 'png' });
+          const selector = typeof args.selector === 'string' ? args.selector.trim() : '';
+          const buf = selector
+            ? await this.session.captureRegion(selector)
+            : await this.session.screenshot({ fullPage, type: 'png' });
           if (buf.length > BROWSER_DEFAULTS.screenshotMaxBytes) {
             return this.errorResponse(
               'SCREENSHOT_TOO_LARGE',
@@ -189,7 +201,8 @@ export default class BrowserStream extends AIStream {
             mimeType: 'image/png',
             base64: buf.toString('base64'),
             bytes: buf.length,
-            fullPage
+            fullPage,
+            selector: selector || undefined
           });
         } catch (e) {
           return this.errorResponse('BROWSER_SCREENSHOT_FAILED', e?.message || String(e));
@@ -211,7 +224,7 @@ export default class BrowserStream extends AIStream {
 
   buildSystemPrompt() {
     return [
-      '本工作流提供受控浏览器（Playwright）MCP 工具：browser_status、browser_start、browser_goto、browser_page_text、browser_screenshot、browser_close。',
+      '本工作流提供受控浏览器（Playwright）MCP 工具：browser_status、browser_start、browser_goto、browser_page_text、browser_screenshot（支持 selector 区域截图）、browser_close。',
       '导航 URL 与 web_fetch 共用 SSRF 策略（默认禁止私网）。',
       '需要渲染完整页面后再抓正文时请用 browser_goto + browser_page_text；仅需无 JS 的 HTTP 正文请优先 web 工作流 web_fetch。'
     ].join('\n');

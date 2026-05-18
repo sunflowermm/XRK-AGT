@@ -97,7 +97,5 @@ commonconfig/**
 
 !www/
 !lib/
-!lib/agent-browser/
-!lib/agent-browser/*
-!lib/openclaw-web/
-!lib/openclaw-web/*
+!lib/crawl/
+!lib/crawl/*

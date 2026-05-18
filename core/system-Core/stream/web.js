@@ -1,9 +1,5 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
-import {
-  buildWebFetchRuntime,
-  runWebFetch,
-  DEFAULT_FETCH_MAX_CHARS
-} from '../lib/openclaw-web/web-fetch-executor.js';
+import { buildWebFetchRuntime, runWebFetch, DEFAULT_FETCH_MAX_CHARS } from '../lib/crawl/index.js';
 
 /**
  * OpenClaw web_fetch 能力（实现自 MIT openclaw 移植，挂载为 MCP）
