@@ -5,6 +5,12 @@ import BotUtil from '#utils/botutil.js'
 /** 推荐的高 DPI 截图设备像素比 */
 export const DEFAULT_DEVICE_SCALE_FACTOR = 2
 
+/** DOM 微调：将「标签+全角/半角冒号+数字」拆为半角冒号并收紧与数字间距 */
+export const DOM_TWEAK_LABEL_COLON_HALF = 'labelColonHalf'
+
+const LABEL_COLON_HALF_CLASS = 'pss-label-colon'
+const LABEL_COLON_NUM_CLASS = 'pss-label-num'
+
 /**
  * @typedef {Object} LocalFontSpec
  * @property {string} family CSS font-family 名称
@@ -29,8 +35,17 @@ export const DEFAULT_DEVICE_SCALE_FACTOR = 2
  * @property {LocalAssetRouteSpec[]} [assetRoutes] 拦截远程 URL 并回源本地文件（如图标贴图）
  * @property {string[]} [hideSelectors] 截图前 display:none 的选择器
  * @property {string} [extraCss] 追加样式（业务排版放调用方）
+ * @property {LabelColonHalfTweak[]} [domTweaks] 截图前 DOM 微调（如全角冒号改半角）
  * @property {string} [logContext] BotUtil.makeLog 上下文
  * @property {number} [fontWaitMs=8000] 等待字体加载超时
+ */
+
+/**
+ * @typedef {Object} LabelColonHalfTweak
+ * @property {typeof DOM_TWEAK_LABEL_COLON_HALF} kind
+ * @property {string} selector 匹配含「标签：数字」的节点（常见为 em）
+ * @property {string} [label='价格'] 冒号前标签文案
+ * @property {string} [colonMarginRight='-0.14em'] 半角冒号与数字之间的负间距
  */
 
 /**
@@ -46,6 +61,7 @@ export function createLocalFontScreenshotHelper(options) {
     assetRoutes = [],
     hideSelectors = [],
     extraCss = '',
+    domTweaks = [],
     logContext = 'PageScreenshot',
     fontWaitMs = 8000,
   } = options
@@ -60,9 +76,6 @@ export function createLocalFontScreenshotHelper(options) {
     : null
   const baseUrl = fontUrlBase.endsWith('/') ? fontUrlBase : `${fontUrlBase}/`
   const routedPages = new WeakSet()
-  /** @type {Map<string, Buffer>} */
-  const binaryCache = new Map()
-  let cachedCss = null
 
   const log = (level, msg) => BotUtil.makeLog(level, msg, logContext)
 
@@ -75,16 +88,7 @@ export function createLocalFontScreenshotHelper(options) {
     return `${baseUrl}${encodeURIComponent(fileName)}`
   }
 
-  function readBinary(filePath) {
-    if (binaryCache.has(filePath)) return binaryCache.get(filePath)
-    const body = fs.readFileSync(filePath)
-    binaryCache.set(filePath, body)
-    return body
-  }
-
   function buildCss() {
-    if (cachedCss) return cachedCss
-
     const faces = []
     const stackParts = []
     for (const f of fonts) {
@@ -110,8 +114,44 @@ export function createLocalFontScreenshotHelper(options) {
       ? `.content,.content *{font-family:${stack}!important;-webkit-font-smoothing:antialiased!important;-moz-osx-font-smoothing:grayscale!important;text-rendering:geometricPrecision!important;font-synthesis:none!important;}`
       : ''
 
-    cachedCss = [hideRule, ...faces, baseRule, extraCss].filter(Boolean).join('')
-    return cachedCss
+    const colonHalfRules = domTweaks
+      .filter((t) => t.kind === DOM_TWEAK_LABEL_COLON_HALF)
+      .map((t) => {
+        const gap = t.colonMarginRight ?? '-0.14em'
+        return (
+          `.${LABEL_COLON_HALF_CLASS}{display:inline!important;margin:0 ${gap} 0 0!important;` +
+          `letter-spacing:0!important;font-variant-east-asian:normal!important;}` +
+          `.${LABEL_COLON_NUM_CLASS}{margin-left:0!important;letter-spacing:0!important;}`
+        )
+      })
+
+    return [hideRule, ...faces, baseRule, ...colonHalfRules, extraCss].filter(Boolean).join('')
+  }
+
+  async function applyDomTweaks(page) {
+    const colonTweaks = domTweaks.filter((t) => t.kind === DOM_TWEAK_LABEL_COLON_HALF)
+    if (!colonTweaks.length) return
+
+    await page.evaluate(
+      ({ tweaks, colonClass, numClass }) => {
+        for (const { selector, label = '价格' } of tweaks) {
+          const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const re = new RegExp(`^\\s*${escaped}\\s*([：:])\\s*(\\d+)\\s*$`)
+          document.querySelectorAll(selector).forEach((el) => {
+            const text = (el.textContent || '').replace(/\s+/g, ' ')
+            const m = text.match(re)
+            if (!m) return
+            el.innerHTML =
+              `${label}<span class="${colonClass}">:</span> <span class="${numClass}">${m[2]}</span>`
+          })
+        }
+      },
+      {
+        tweaks: colonTweaks.map((t) => ({ selector: t.selector, label: t.label })),
+        colonClass: LABEL_COLON_HALF_CLASS,
+        numClass: LABEL_COLON_NUM_CLASS,
+      }
+    )
   }
 
   async function prepare(page) {
@@ -131,7 +171,7 @@ export function createLocalFontScreenshotHelper(options) {
         await route.fulfill({
           status: 200,
           headers: { 'Content-Type': ct, 'Cache-Control': 'public, max-age=86400' },
-          body: readBinary(filePath),
+          body: fs.readFileSync(filePath),
         })
       })
     }
@@ -147,21 +187,15 @@ export function createLocalFontScreenshotHelper(options) {
           }
           await route.fulfill({
             status: 200,
-            headers: {
-              'Content-Type': routeSpec.contentType || 'application/octet-stream',
-              'Cache-Control': 'public, max-age=86400',
-            },
-            body: readBinary(filePath),
+            headers: { 'Content-Type': routeSpec.contentType || 'application/octet-stream' },
+            body: fs.readFileSync(filePath),
           })
         })
       }
     }
   }
 
-  /**
-   * @param {import('playwright').Page} page
-   * @returns {Promise<{ families: Record<string, boolean>, allOk: boolean }>}
-   */
+  /** @param {import('playwright').Page} page */
   async function apply(page) {
     await prepare(page)
     const css = buildCss()
@@ -189,12 +223,9 @@ export function createLocalFontScreenshotHelper(options) {
       return out
     }, loadSpecs)
 
-    const allOk = loadSpecs.every((s) => families[s.family])
-    if (allOk) {
-      log('info', `字体已加载: ${loadSpecs.map((s) => s.family).join(', ')}`)
-    } else {
-      const missing = loadSpecs.filter((s) => !families[s.family]).map((s) => s.family)
-      log('warn', `字体未完全加载，缺失: ${missing.join(', ')} | ${JSON.stringify(families)}`)
+    const missing = loadSpecs.filter((s) => !families[s.family]).map((s) => s.family)
+    if (missing.length) {
+      log('warn', `字体未完全加载: ${missing.join(', ')}`)
     }
 
     await page.evaluate(() => {
@@ -207,14 +238,10 @@ export function createLocalFontScreenshotHelper(options) {
       })
     }).catch(() => {})
 
-    return { families, allOk }
+    await applyDomTweaks(page)
   }
 
-  /**
-   * @param {import('playwright').Page} page
-   * @param {string} [selector='.content']
-   * @returns {Promise<Buffer>}
-   */
+  /** @param {import('playwright').Page} page @param {string} [selector='.content'] */
   async function capture(page, selector = '.content') {
     const locator = page.locator(selector).first()
     const shotOpts = {
@@ -226,10 +253,5 @@ export function createLocalFontScreenshotHelper(options) {
     return locator.screenshot(shotOpts).catch(() => page.screenshot({ ...shotOpts, fullPage: false }))
   }
 
-  function clearCache() {
-    cachedCss = null
-    binaryCache.clear()
-  }
-
-  return { prepare, apply, capture, clearCache }
+  return { prepare, apply, capture }
 }
