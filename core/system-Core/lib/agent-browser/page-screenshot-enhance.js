@@ -14,10 +14,19 @@ export const DEFAULT_DEVICE_SCALE_FACTOR = 2
  */
 
 /**
+ * @typedef {Object} LocalAssetRouteSpec
+ * @property {string|RegExp} match Playwright page.route 的 URL 模式（支持 ** 通配）
+ * @property {string} file 本地文件名（位于 assetDir）
+ * @property {string} [contentType='application/octet-stream']
+ */
+
+/**
  * @typedef {Object} LocalFontScreenshotHelperOptions
  * @property {string} fontUrlBase 与目标页同域的虚拟 URL 前缀（须以 / 结尾）
  * @property {string} fontDir 字体目录（相对 cwd 或绝对路径）
  * @property {LocalFontSpec[]} fonts
+ * @property {string} [assetDir] 静态资源目录（相对 cwd 或绝对路径）
+ * @property {LocalAssetRouteSpec[]} [assetRoutes] 拦截远程 URL 并回源本地文件（如图标贴图）
  * @property {string[]} [hideSelectors] 截图前 display:none 的选择器
  * @property {string} [extraCss] 追加样式（业务排版放调用方）
  * @property {string} [logContext] BotUtil.makeLog 上下文
@@ -33,6 +42,8 @@ export function createLocalFontScreenshotHelper(options) {
     fontUrlBase,
     fontDir,
     fonts,
+    assetDir,
+    assetRoutes = [],
     hideSelectors = [],
     extraCss = '',
     logContext = 'PageScreenshot',
@@ -44,10 +55,13 @@ export function createLocalFontScreenshotHelper(options) {
   }
 
   const fontDirAbs = path.isAbsolute(fontDir) ? fontDir : path.join(process.cwd(), fontDir)
+  const assetDirAbs = assetDir
+    ? (path.isAbsolute(assetDir) ? assetDir : path.join(process.cwd(), assetDir))
+    : null
   const baseUrl = fontUrlBase.endsWith('/') ? fontUrlBase : `${fontUrlBase}/`
   const routedPages = new WeakSet()
   /** @type {Map<string, Buffer>} */
-  const fontBodyCache = new Map()
+  const binaryCache = new Map()
   let cachedCss = null
 
   const log = (level, msg) => BotUtil.makeLog(level, msg, logContext)
@@ -61,10 +75,10 @@ export function createLocalFontScreenshotHelper(options) {
     return `${baseUrl}${encodeURIComponent(fileName)}`
   }
 
-  function readFontBody(filePath) {
-    if (fontBodyCache.has(filePath)) return fontBodyCache.get(filePath)
+  function readBinary(filePath) {
+    if (binaryCache.has(filePath)) return binaryCache.get(filePath)
     const body = fs.readFileSync(filePath)
-    fontBodyCache.set(filePath, body)
+    binaryCache.set(filePath, body)
     return body
   }
 
@@ -117,9 +131,30 @@ export function createLocalFontScreenshotHelper(options) {
         await route.fulfill({
           status: 200,
           headers: { 'Content-Type': ct, 'Cache-Control': 'public, max-age=86400' },
-          body: readFontBody(filePath),
+          body: readBinary(filePath),
         })
       })
+    }
+
+    if (assetDirAbs && assetRoutes.length) {
+      for (const routeSpec of assetRoutes) {
+        await page.route(routeSpec.match, async (route) => {
+          const filePath = path.join(assetDirAbs, routeSpec.file)
+          if (!fs.existsSync(filePath)) {
+            log('warn', `资源文件不存在: ${filePath}`)
+            await route.abort()
+            return
+          }
+          await route.fulfill({
+            status: 200,
+            headers: {
+              'Content-Type': routeSpec.contentType || 'application/octet-stream',
+              'Cache-Control': 'public, max-age=86400',
+            },
+            body: readBinary(filePath),
+          })
+        })
+      }
     }
   }
 
@@ -193,7 +228,7 @@ export function createLocalFontScreenshotHelper(options) {
 
   function clearCache() {
     cachedCss = null
-    fontBodyCache.clear()
+    binaryCache.clear()
   }
 
   return { prepare, apply, capture, clearCache }
