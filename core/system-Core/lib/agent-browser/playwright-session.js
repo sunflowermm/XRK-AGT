@@ -12,6 +12,8 @@ const BROWSER_TYPES = /** @type {const} */ (['chromium', 'firefox', 'webkit']);
  * @property {number} [launchTimeoutMs]
  * @property {string[]} [launchArgs]
  * @property {Record<string, string>} [extraHTTPHeaders]
+ * @property {number} [deviceScaleFactor] 设备像素比（截图清晰度，如 2）
+ * @property {{ width: number, height: number }} [viewport]
  */
 
 export class PlaywrightAgentSession {
@@ -38,7 +40,9 @@ export class PlaywrightAgentSession {
       executablePath,
       launchTimeoutMs = 120_000,
       launchArgs = [],
-      extraHTTPHeaders
+      extraHTTPHeaders,
+      deviceScaleFactor,
+      viewport
     } = options;
 
     if (!BROWSER_TYPES.includes(browserType)) {
@@ -53,9 +57,18 @@ export class PlaywrightAgentSession {
       timeout: Math.min(Math.max(launchTimeoutMs, 5_000), 180_000)
     });
 
-    const context = await browser.newContext(
-      extraHTTPHeaders && Object.keys(extraHTTPHeaders).length > 0 ? { extraHTTPHeaders } : {}
-    );
+    /** @type {import('playwright').BrowserContextOptions} */
+    const contextOptions = {};
+    if (extraHTTPHeaders && Object.keys(extraHTTPHeaders).length > 0) {
+      contextOptions.extraHTTPHeaders = extraHTTPHeaders;
+    }
+    if (viewport?.width && viewport?.height) {
+      contextOptions.viewport = viewport;
+    }
+    if (Number.isFinite(deviceScaleFactor) && deviceScaleFactor > 0) {
+      contextOptions.deviceScaleFactor = deviceScaleFactor;
+    }
+    const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
 
     return new PlaywrightAgentSession(browser, context, page);
