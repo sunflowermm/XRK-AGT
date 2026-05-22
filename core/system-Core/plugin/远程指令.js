@@ -1225,6 +1225,41 @@ const inspector = new ObjectInspector({
 });
 const jsExecutor = new JavaScriptExecutor();
 
+/** rj / roj / roi 共享的 JS 沙箱静态绑定（不含 e、plugin、运行时全局） */
+const JS_SANDBOX_STATIC = {
+  Bot,
+  common,
+  cfg,
+  process,
+  os,
+  fs,
+  path,
+  moment,
+  util,
+  terminal,
+  config,
+  history,
+  inspector,
+  jsExecutor,
+  YAML,
+  fetch: globalThis.fetch,
+  crypto,
+  zlib,
+  querystring,
+  url,
+  stream,
+  vm,
+  Buffer,
+  EventEmitter,
+  console,
+  setTimeout,
+  setInterval,
+  clearTimeout,
+  clearInterval,
+  Promise,
+  ROOT_PATH,
+}
+
 /**
  * 增强型终端工具插件
  */
@@ -1379,8 +1414,7 @@ roj const arr = [1,2,3];
       return true;
     }
 
-    const globalContext = this.getGlobalContext();
-    globalContext.e = e;
+    const globalContext = this.getGlobalContext(e);
 
     try {
       const result = await jsExecutor.execute(code, globalContext);
@@ -1447,8 +1481,7 @@ roi new Date()          // 检查日期对象`, true);
       return true;
     }
 
-    const globalContext = this.getGlobalContext();
-    globalContext.e = e;
+    const globalContext = this.getGlobalContext(e);
 
     try {
       const execResult = await jsExecutor.execute(code, globalContext);
@@ -1506,8 +1539,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
       return true;
     }
 
-    const globalContext = this.getGlobalContext();
-    globalContext.e = e;
+    const globalContext = this.getGlobalContext(e);
 
     try {
       // 对于简单表达式，使用快速计算模式
@@ -1765,45 +1797,14 @@ rc help - 显示详细帮助`, true);
     return '未知';
   }
 
-  /** 获取全局上下文对象 */
-  getGlobalContext() {
+  /** 获取 rj/roj/roi 的全局上下文（每次浅拷贝，避免调用方污染静态绑定） */
+  getGlobalContext(e = null) {
     return {
-      Bot: Bot,
+      ...JS_SANDBOX_STATIC,
       segment: global.segment,
-      e: null,
-      plugin: this,
       logger: global.logger,
-      common: common,
-      cfg: cfg,
-      process: process,
-      os: os,
-      fs: fs,
-      path: path,
-      moment: moment,
-      util: util,
-      terminal: terminal,
-      config: config,
-      history: history,
-      inspector: inspector,
-      jsExecutor: jsExecutor,
-      YAML: YAML,
-      fetch: fetch,
-      axios: axios,
-      crypto: crypto,
-      zlib: zlib,
-      querystring: querystring,
-      url: url,
-      stream: stream,
-      vm: vm,
-      Buffer: Buffer,
-      EventEmitter: EventEmitter,
-      console: console,
-      setTimeout: setTimeout,
-      setInterval: setInterval,
-      clearTimeout: clearTimeout,
-      clearInterval: clearInterval,
-      Promise: Promise,
-      ROOT_PATH: ROOT_PATH
-    };
+      e,
+      plugin: this,
+    }
   }
 }

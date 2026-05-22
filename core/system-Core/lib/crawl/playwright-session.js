@@ -1,4 +1,4 @@
-/** Playwright 受控会话；`goto` 默认走 SSRF 校验（与 web_fetch 一致）。 */
+/** Playwright 受控会话；goto 默认 SSRF 校验（与 web_fetch 一致） */
 import playwright from 'playwright';
 import { assertUrlSafeForFetch } from './ssrf-guard.js';
 import { DEFAULT_DEVICE_SCALE_FACTOR } from './page-screenshot-enhance.js';
@@ -13,7 +13,7 @@ const BROWSER_TYPES = /** @type {const} */ (['chromium', 'firefox', 'webkit']);
  * @property {number} [launchTimeoutMs]
  * @property {string[]} [launchArgs]
  * @property {Record<string, string>} [extraHTTPHeaders]
- * @property {number} [deviceScaleFactor] 设备像素比（截图清晰度，默认 {@link DEFAULT_DEVICE_SCALE_FACTOR}）
+ * @property {number} [deviceScaleFactor]
  * @property {{ width: number, height: number }} [viewport]
  */
 
@@ -26,24 +26,18 @@ export class PlaywrightAgentSession {
   constructor(browser, context, page) {
     this.browser = browser;
     this.context = context;
-    /** @type {import('playwright').Page} */
     this.page = page;
-    /** @type {{ apply: (page: import('playwright').Page) => Promise<void>, capture: (page: import('playwright').Page, selector?: string) => Promise<Buffer> } | null} */
+    /** @type {{ prepare?: (page: import('playwright').Page) => Promise<void>, apply: (page: import('playwright').Page) => Promise<void>, capture: (page: import('playwright').Page, selector?: string) => Promise<Buffer> } | null} */
     this.screenshotHelper = null;
   }
 
-  /**
-   * @param {ReturnType<import('./page-screenshot-enhance.js').createLocalFontScreenshotHelper>} helper
-   */
+  /** @param {ReturnType<import('./page-screenshot-enhance.js').createLocalFontScreenshotHelper>} helper */
   attachScreenshotHelper(helper) {
     this.screenshotHelper = helper;
     return this;
   }
 
-  /**
-   * @param {PlaywrightAgentLaunchOptions} [options]
-   * @returns {Promise<PlaywrightAgentSession>}
-   */
+  /** @param {PlaywrightAgentLaunchOptions} [options] */
   static async launch(options = {}) {
     const {
       browserType = 'chromium',
@@ -60,8 +54,7 @@ export class PlaywrightAgentSession {
       throw new Error(`browserType must be one of: ${BROWSER_TYPES.join(', ')}`);
     }
 
-    const launcher = playwright[browserType];
-    const browser = await launcher.launch({
+    const browser = await playwright[browserType].launch({
       headless,
       executablePath: executablePath || undefined,
       args: launchArgs,
@@ -81,73 +74,36 @@ export class PlaywrightAgentSession {
     }
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
-
     return new PlaywrightAgentSession(browser, context, page);
   }
 
-  /**
-   * @param {string} url
-   * @param {{
-   *   waitUntil?: 'load'|'domcontentloaded'|'networkidle'|'commit',
-   *   timeoutMs?: number,
-   *   skipSsrfCheck?: boolean,
-   *   ssrfPolicy?: { allowPrivateNetwork?: boolean, dangerouslyAllowPrivateNetwork?: boolean }
-   * }} [navOptions]
-   */
   async goto(url, navOptions = {}) {
     const { waitUntil = 'load', timeoutMs = 60_000, skipSsrfCheck = false, ssrfPolicy } = navOptions;
-    if (!skipSsrfCheck) {
-      await assertUrlSafeForFetch(url, ssrfPolicy ?? {});
-    }
+    if (!skipSsrfCheck) await assertUrlSafeForFetch(url, ssrfPolicy ?? {});
     await this.page.goto(url, { waitUntil, timeout: timeoutMs });
   }
 
-  /** @returns {Promise<string>} */
   async title() {
     return this.page.title();
   }
 
-  /** @returns {Promise<string>} */
   async textContent() {
-    const h = await this.page.locator('body').innerText().catch(() => '');
-    return h ?? '';
+    return this.page.locator('body').innerText();
   }
 
-  /**
-   * @param {import('playwright').PageScreenshotOptions} [opts]
-   * @returns {Promise<Buffer>}
-   */
   async screenshot(opts) {
     return this.page.screenshot({ fullPage: false, type: 'png', ...opts });
   }
 
-  /**
-   * 区域截图；若已 attachScreenshotHelper 则先应用字体/样式增强
-   * @param {string} [selector='.content']
-   * @param {import('playwright').PageScreenshotOptions} [opts] 无 helper 时传给 page.screenshot
-   */
   async captureRegion(selector = '.content', opts) {
     if (this.screenshotHelper) {
       await this.screenshotHelper.apply(this.page);
       return this.screenshotHelper.capture(this.page, selector);
     }
-    const locator = this.page.locator(selector).first();
     const shotOpts = { type: 'png', animations: 'disabled', caret: 'hide', scale: 'device', ...opts };
-    return locator.screenshot(shotOpts).catch(() => this.screenshot(shotOpts));
+    return this.page.locator(selector).first().screenshot(shotOpts);
   }
 
-  /**
-   * 导航后区域截图；已 attach screenshotHelper 时在 goto 前注册 route
-   * @param {string} url
-   * @param {{
-   *   selector?: string,
-   *   waitUntil?: 'load'|'domcontentloaded'|'networkidle'|'commit',
-   *   timeoutMs?: number,
-   *   settleMs?: number,
-   *   skipSsrfCheck?: boolean,
-   *   ssrfPolicy?: { allowPrivateNetwork?: boolean, dangerouslyAllowPrivateNetwork?: boolean }
-   * }} [options]
-   */
   async gotoAndCapture(url, options = {}) {
     const {
       selector = '.content',
@@ -157,47 +113,34 @@ export class PlaywrightAgentSession {
       skipSsrfCheck = false,
       ssrfPolicy
     } = options;
-    if (this.screenshotHelper?.prepare) {
-      await this.screenshotHelper.prepare(this.page);
-    }
+    if (this.screenshotHelper?.prepare) await this.screenshotHelper.prepare(this.page);
     await this.goto(url, { waitUntil, timeoutMs, skipSsrfCheck, ssrfPolicy });
-    if (settleMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, settleMs));
-    }
+    if (settleMs > 0) await new Promise((r) => setTimeout(r, settleMs));
     return this.captureRegion(selector);
   }
 
-  /** @param {string} [selector='.content'] */
   async regionText(selector = '.content') {
-    return this.page.locator(selector).first().innerText().catch(() => this.textContent());
+    const loc = this.page.locator(selector).first();
+    if (await loc.count()) return loc.innerText();
+    return this.textContent();
   }
 
-  /**
-   * 启动会话、执行回调、关闭（避免业务层重复 try/finally）
-   * @param {PlaywrightAgentLaunchOptions} options
-   * @param {(session: PlaywrightAgentSession) => Promise<T>} fn
-   * @template T
-   */
+  /** @template T */
   static async using(options, fn) {
     const session = await PlaywrightAgentSession.launch(options);
     try {
       return await fn(session);
     } finally {
-      await session.close().catch(() => {});
+      await session.close();
     }
   }
 
-  /** @returns {string} */
   url() {
-    try {
-      return this.page?.url() ?? '';
-    } catch {
-      return '';
-    }
+    return this.page?.url() ?? '';
   }
 
   async close() {
-    await this.context?.close().catch(() => {});
-    await this.browser?.close().catch(() => {});
+    if (this.context) await this.context.close();
+    if (this.browser) await this.browser.close();
   }
 }

@@ -175,15 +175,14 @@ export function createLocalFontScreenshotHelper(options) {
 
   async function waitFonts(page) {
     await Promise.race([
-      page.evaluate(async (specs) => {
-        await Promise.all(
-          specs.map(({ family, loadWeight }) => {
-            const spec = `${loadWeight} 16px "${family}"`
-            return document.fonts.load(spec).catch(() => {})
-          })
-        )
-        await document.fonts.ready
-      }, loadSpecs).catch(() => {}),
+      page
+        .evaluate(async (specs) => {
+          await Promise.all(
+            specs.map(({ family, loadWeight }) => document.fonts.load(`${loadWeight} 16px "${family}"`))
+          )
+          await document.fonts.ready
+        }, loadSpecs)
+        .catch(() => {}),
       new Promise((resolve) => setTimeout(resolve, fontWaitMs)),
     ])
 
@@ -232,19 +231,11 @@ export function createLocalFontScreenshotHelper(options) {
   /** @param {import('playwright').Page} page */
   async function apply(page) {
     await ensureRoutes(page)
-    if (css) await page.addStyleTag({ content: css }).catch(() => {})
+    if (css) await page.addStyleTag({ content: css })
     await waitFonts(page)
-    await page
-      .evaluate(() => {
-        document.getAnimations?.().forEach((a) => {
-          try {
-            a.cancel()
-          } catch {
-            /* ignore */
-          }
-        })
-      })
-      .catch(() => {})
+    await page.evaluate(() => {
+      document.getAnimations?.().forEach((a) => a.cancel?.())
+    })
     await applyColonTweaks(page)
   }
 
@@ -252,7 +243,7 @@ export function createLocalFontScreenshotHelper(options) {
   async function capture(page, selector = '.content') {
     const shotOpts = { type: 'png', animations: 'disabled', caret: 'hide', scale: 'device' }
     const locator = page.locator(selector).first()
-    return locator.screenshot(shotOpts).catch(() => page.screenshot({ ...shotOpts, fullPage: false }))
+    return locator.screenshot(shotOpts)
   }
 
   return { prepare, apply, capture }

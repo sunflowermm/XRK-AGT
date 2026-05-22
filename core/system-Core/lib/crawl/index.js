@@ -1,5 +1,6 @@
 /**
  * 爬虫 / 外联抓取统一入口（HTTP、SSRF、web_fetch、Playwright、增强截图）
+ * 模块：ssrf-guard | web-fetch-executor | web-fetch-utils | playwright-session | page-screenshot-enhance
  */
 export { fetchWithPolicy } from '../net/fetcher.js';
 export { SsrFBlockedError, assertUrlSafeForFetch, isPrivateOrReservedIpv4, isBlockedIpv6 } from './ssrf-guard.js';
