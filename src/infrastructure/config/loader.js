@@ -12,6 +12,9 @@ const CONFIG = {
 
 const NETWORK_ERROR_CODES = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST'];
 
+/** @type {Promise<{success: boolean, mode: string}> | null} */
+let packageloaderPromise = null;
+
 class ProcessManager {
   constructor() {
     this.lastSignal = null;
@@ -37,28 +40,58 @@ class ProcessManager {
   }
 
   setupSignalHandlers() {
+    if (global.__xrkSignalHandlersReady) return;
+    global.__xrkSignalHandlersReady = true;
+
     const handleSignal = async (signal) => {
       const currentTime = Date.now();
-      
-      if (signal === this.lastSignal && currentTime - this.lastSignalTime < CONFIG.SIGNAL_TIME_THRESHOLD) {
-        logger.mark(chalk.yellow(`检测到连续两次${signal}信号，程序退出`));
-        await this.cleanup();
+      const isDoubleTap = signal === this.lastSignal &&
+        currentTime - this.lastSignalTime < CONFIG.SIGNAL_TIME_THRESHOLD;
+
+      if (isDoubleTap) {
+        logger.mark(chalk.yellow(`检测到连续两次${signal}信号，强制退出`));
         process.exit(0);
-      } else {
-        this.lastSignal = signal;
-        this.lastSignalTime = currentTime;
-        logger.mark(chalk.yellow(`接收到${signal}信号，程序重启`));
-        await this.restart();
+        return;
       }
+
+      this.lastSignal = signal;
+      this.lastSignalTime = currentTime;
+      logger.mark(chalk.yellow(`接收到${signal}信号，正在优雅关闭（再次发送将强制退出）...`));
+
+      try {
+        if (global.Bot?.closeServer) {
+          await global.Bot.closeServer();
+        } else if (global.Bot?.exit) {
+          await global.Bot.exit().catch(() => {});
+        }
+      } catch (err) {
+        logger.error(`优雅关闭失败: ${err.message}`);
+      }
+
+      try {
+        if (global.logger?.shutdown) {
+          await global.logger.shutdown();
+        }
+      } catch {}
+
+      await this.cleanup();
+      process.exit(0);
     };
 
     ['SIGINT', 'SIGTERM', 'SIGHUP'].forEach(signal => {
-      process.removeAllListeners(signal);
-      process.on(signal, () => handleSignal(signal));
+      process.on(signal, () => {
+        handleSignal(signal).catch((err) => {
+          logger.error(`信号处理失败: ${err.message}`);
+          process.exit(1);
+        });
+      });
     });
   }
 
   setupErrorHandlers() {
+    if (global.__xrkErrorHandlersReady) return;
+    global.__xrkErrorHandlersReady = true;
+
     process.on("uncaughtException", async (error) => {
       logger.error(`未捕获异常: ${error.message}`);
       if (this.isNetworkError(error)) {
@@ -75,13 +108,15 @@ class ProcessManager {
       }
     });
 
-    process.on("exit", async (code) => {
-      await this.cleanup();
+    process.on("exit", (code) => {
       logger.mark(chalk.magenta(`XRK-AGT 已停止，退出码: ${code}`));
     });
   }
 
   async cleanup() {
+    try {
+      SystemMonitor.getInstance()?.stop?.();
+    } catch {}
     try {
       await closeDatabases();
     } catch {
@@ -137,6 +172,7 @@ class InitManager {
     this.setupEnvironment();
     // 初始化数据库（MongoDB和Redis）
     await initDatabases();
+    cfg.enableWatching?.();
     await this.processManager.updateTitle();
     await this.startMonitoring();
     
@@ -147,6 +183,17 @@ class InitManager {
 }
 
 export default async function Packageloader() {
-  const initManager = new InitManager();
-  return await initManager.init();
+  if (packageloaderPromise) return packageloaderPromise;
+
+  packageloaderPromise = (async () => {
+    const initManager = new InitManager();
+    return await initManager.init();
+  })();
+
+  try {
+    return await packageloaderPromise;
+  } catch (error) {
+    packageloaderPromise = null;
+    throw error;
+  }
 }

@@ -21,6 +21,7 @@ import PluginsLoader from "#infrastructure/plugins/loader.js";
 import ListenerLoader from "#infrastructure/listener/loader.js";
 import ApiLoader from "#infrastructure/http/loader.js";
 import Packageloader from "#infrastructure/config/loader.js";
+import ConfigLoader from "#infrastructure/commonconfig/loader.js";
 import StreamLoader from "#infrastructure/aistream/loader.js";
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
@@ -802,9 +803,11 @@ export default class Bot extends EventEmitter {
    * 重新初始化HTTP业务层（配置加载后调用）
    */
   _reinitHttpBusiness() {
-    // 重新创建HTTP业务层实例（使用最新配置）
-    this.httpBusiness = new HTTPBusinessLayer(cfg.server || {});
-    // 重新挂载方法
+    const serverCfg = cfg.server || {};
+    const sig = JSON.stringify(serverCfg);
+    if (this._httpBusinessCfgSig === sig && this.httpBusiness) return;
+    this._httpBusinessCfgSig = sig;
+    this.httpBusiness = new HTTPBusinessLayer(serverCfg);
     this._mountHttpBusinessMethods();
   }
 
@@ -844,7 +847,7 @@ export default class Bot extends EventEmitter {
     // 预先获取前端挂载前缀，用于后续跳过业务重定向（sign.json + FrontendLauncher）
     let frontendMountPrefixes = [];
     try {
-      const apps = await FrontendLauncher.getApps();
+      const apps = await FrontendLauncher.discover();
       if (apps && apps.size > 0) {
         frontendMountPrefixes = Array.from(apps.values())
           .map(app => app && app.config)
@@ -1146,7 +1149,7 @@ export default class Bot extends EventEmitter {
   async _setupStaticServing() {
     // ========== 动态前端开发代理（sign.json 声明的 dev server） ==========
     try {
-      const apps = await FrontendLauncher.getApps();
+      const apps = await FrontendLauncher.start();
       if (apps && apps.size > 0) {
         const devApps = Array.from(apps.values()).filter(app => app && app.config);
 
@@ -1654,13 +1657,9 @@ export default class Bot extends EventEmitter {
   }
 
   /**
-   * 信号处理器设置
+   * 信号由 Packageloader/ProcessManager 统一处理（含 closeServer），此处不再重复注册
    */
-  _setupSignalHandlers() {
-    const closeHandler = async () => await this.closeServer();
-    process.on('SIGINT', closeHandler);
-    process.on('SIGTERM', closeHandler);
-  }
+  _setupSignalHandlers() {}
 
   /**
    * 创建Bot代理对象
@@ -2844,12 +2843,22 @@ export default class Bot extends EventEmitter {
       this._trashTimer = null;
     }
 
+    try {
+      cfg.destroy?.();
+    } catch {}
+
     await Promise.all(servers.map(server =>
       new Promise(resolve => server.close(resolve))
     ));
     
     await BotUtil.sleep(2000);
     await this.redisExit();
+
+    try {
+      if (global.logger?.shutdown) {
+        await global.logger.shutdown();
+      }
+    } catch {}
     
     BotUtil.makeLog('info', '✓ 服务器已关闭', '服务器');
   }
@@ -3040,6 +3049,13 @@ export default class Bot extends EventEmitter {
   async run(options = {}) {
     const { port } = options;
     const startTime = Date.now();
+    const timings = {};
+    const phase = async (name, fn) => {
+      const t0 = Date.now();
+      const result = await fn();
+      timings[name] = Date.now() - t0;
+      return result;
+    };
     
     // 重新初始化HTTP业务层（确保使用最新配置）
     this._reinitHttpBusiness();
@@ -3067,21 +3083,19 @@ export default class Bot extends EventEmitter {
     }
     
     if (this.proxyEnabled) {
-      await this._initProxyApp();
+      await phase('proxyInit', () => this._initProxyApp());
     }
     
-    // 初始化基础服务（顺序执行）
-    await Packageloader();
+    await phase('packageloader', () => Packageloader());
     
-    // 并行加载配置和模块（异步，避免日志交叉）
-    const ConfigLoader = (await import('./infrastructure/commonconfig/loader.js')).default;
-    
-    const [configResult, streamResult, pluginsResult, apiResult] = await Promise.allSettled([
-      ConfigLoader.load(),
-      StreamLoader.load(),
-      PluginsLoader.load(),
-      ApiLoader.load()
-    ]);
+    const [configResult, streamResult, pluginsResult, apiResult] = await phase('loaders', () =>
+      Promise.allSettled([
+        ConfigLoader.load(),
+        StreamLoader.load(),
+        PluginsLoader.load(),
+        ApiLoader.load()
+      ])
+    );
     
     // 处理加载结果（统一处理，避免重复日志）
     if (configResult.status === 'fulfilled') {
@@ -3103,37 +3117,26 @@ export default class Bot extends EventEmitter {
       BotUtil.makeLog('error', `API加载失败: ${apiResult.reason?.message}`, '服务器');
     }
 
-    // 启用各 Loader 的目录热加载：新增 / 修改 / 删除文件时自动生效
-    try {
-      // 配置热加载（core/*/commonconfig）
-      await ConfigLoader.watch(true);
-    } catch (err) {
-      BotUtil.makeLog('error', `配置热加载启动失败: ${err?.message}`, '服务器');
-    }
-
-    try {
-      // 工作流热加载（core/*/stream）
-      await StreamLoader.watch(true);
-    } catch (err) {
-      BotUtil.makeLog('error', `工作流热加载启动失败: ${err?.message}`, '服务器');
-    }
-
-    try {
-      // 插件热加载（core/*/plugin）
-      await PluginsLoader.watch(true);
-    } catch (err) {
-      BotUtil.makeLog('error', `插件热加载启动失败: ${err?.message}`, '服务器');
-    }
+    const watchResults = await phase('watchSetup', () =>
+      Promise.allSettled([
+        ConfigLoader.watch(true),
+        StreamLoader.watch(true),
+        PluginsLoader.watch(true)
+      ])
+    );
+    const watchLabels = ['配置', '工作流', '插件'];
+    watchResults.forEach((result, i) => {
+      if (result.status === 'rejected') {
+        BotUtil.makeLog('error', `${watchLabels[i]}热加载启动失败: ${result.reason?.message}`, '服务器');
+      }
+    });
     
-    // 初始化中间件和路由
-    await this._initializeMiddlewareAndRoutes();
+    await phase('middleware', () => this._initializeMiddlewareAndRoutes());
 
-    // 注册API
-    await ApiLoader.register(this.express, this);
+    await phase('apiRegister', () => ApiLoader.register(this.express, this));
     this._setupFinalHandlers();
 
-    // 在监听前确保 API 密钥已加载/生成（鉴权启用时必须有 this.apiKey，否则 /api/* 一律拒绝）
-    await this.generateApiKey();
+    await phase('apiKey', () => this.generateApiKey());
 
     // 启动HTTP/HTTPS服务器
     const originalHttpPort = this.httpPort;
@@ -3144,28 +3147,29 @@ export default class Bot extends EventEmitter {
       this.httpsPort = this.actualHttpsPort;
     }
     
-    await this.serverLoad(false);
+    await phase('httpListen', async () => {
+      await this.serverLoad(false);
+      if (this._isHttpsEnabled()) {
+        await this.httpsLoad();
+      }
+    });
     
-    if (this._isHttpsEnabled()) {
-      await this.httpsLoad();
-    }
-    
-    // 启动代理服务器
     if (this.proxyEnabled) {
       this.httpPort = originalHttpPort;
       this.httpsPort = originalHttpsPort;
-      await this.startProxyServers();
+      await phase('proxyListen', () => this.startProxyServers());
     }
     
-    // 加载监听事件和Tasker
-    await ListenerLoader.load(this);
+    await phase('listener', () =>
+      Promise.all([
+        ListenerLoader.load(this),
+        ApiLoader.watch(true)
+      ])
+    );
     
-    // 启动文件监视
-    await ApiLoader.watch(true);
-    
-    // 启动完成 - 显示完整启动信息
     const loadTime = Date.now() - startTime;
-    await this._displayStartupSummary(loadTime, startTime);
+    cfg.enableWatching?.();
+    await this._displayStartupSummary(loadTime, startTime, timings);
     
     this.emit("online", {
       bot: this,
@@ -3184,7 +3188,7 @@ export default class Bot extends EventEmitter {
    * 显示启动汇总信息
    * 包含服务器配置、性能指标、服务状态等
    */
-  async _displayStartupSummary(loadTime, startTime) {
+  async _displayStartupSummary(loadTime, startTime, timings = {}) {
     const memUsage = process.memoryUsage();
     const memMB = (size) => `${(size / 1024 / 1024).toFixed(2)}MB`;
     
@@ -3197,6 +3201,29 @@ export default class Bot extends EventEmitter {
     console.log(`    ${chalk.cyan('•')} 总耗时：${chalk.white(`${loadTime}ms`)}`);
     console.log(`    ${chalk.cyan('•')} 启动时间：${chalk.white(new Date(startTime).toLocaleString('zh-CN'))}`);
     console.log(`    ${chalk.cyan('•')} 运行时长：${chalk.white(`${process.uptime().toFixed(2)}s`)}`);
+
+    const phaseLabels = {
+      proxyInit: '反向代理初始化',
+      packageloader: 'Packageloader',
+      loaders: 'Loader 并行加载',
+      watchSetup: '热加载监视',
+      middleware: '中间件与路由',
+      apiRegister: 'API 注册',
+      apiKey: 'API 密钥',
+      httpListen: 'HTTP/HTTPS 监听',
+      proxyListen: '代理监听',
+      listener: '事件/Tasker'
+    };
+    const phaseEntries = Object.entries(timings)
+      .filter(([, ms]) => Number.isFinite(ms))
+      .sort((a, b) => b[1] - a[1]);
+    if (phaseEntries.length > 0) {
+      console.log(chalk.yellow('\n▶ 分阶段耗时：'));
+      for (const [key, ms] of phaseEntries) {
+        const label = phaseLabels[key] || key;
+        console.log(`    ${chalk.cyan('•')} ${label}：${chalk.white(`${ms}ms`)}`);
+      }
+    }
     
     // 服务器信息
     console.log(chalk.yellow('\n▶ 服务器信息：'));

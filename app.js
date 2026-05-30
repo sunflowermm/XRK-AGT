@@ -81,17 +81,19 @@ class DependencyManager {
     const baseDir = path.join(rootDir, 'core');
     let entries;
     try { entries = await fs.readdir(baseDir, { withFileTypes: true }); } catch { return; }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const dir = path.join(baseDir, entry.name);
-      const pkgPath = path.join(dir, 'package.json');
-      try { await fs.access(pkgPath); } catch { continue; }
-      try {
-        await this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'));
-      } catch (e) {
-        await this.logger.warning(`${path.relative(rootDir, dir)}: ${e.message}`);
-      }
-    }
+    const tasks = entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const dir = path.join(baseDir, entry.name);
+        const pkgPath = path.join(dir, 'package.json');
+        try { await fs.access(pkgPath); } catch { return; }
+        try {
+          await this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'));
+        } catch (e) {
+          await this.logger.warning(`${path.relative(rootDir, dir)}: ${e.message}`);
+        }
+      });
+    await Promise.all(tasks);
   }
 
   /**
@@ -109,6 +111,8 @@ class DependencyManager {
       return;
     }
 
+    const installTasks = [];
+
     for (const coreEntry of coreEntries) {
       if (!coreEntry.isDirectory()) continue;
       const coreDir = path.join(coreBase, coreEntry.name);
@@ -122,7 +126,6 @@ class DependencyManager {
       }
       if (!wwwStat.isDirectory()) continue;
 
-      // 仅检查 www 根和一层子目录
       const candidateDirs = [wwwDir];
       try {
         const subEntries = await fs.readdir(wwwDir, { withFileTypes: true });
@@ -131,42 +134,46 @@ class DependencyManager {
             candidateDirs.push(path.join(wwwDir, sub.name));
           }
         }
-      } catch {
-        // 目录读取失败不影响整体流程
-      }
+      } catch {}
 
       for (const dir of candidateDirs) {
         const pkgPath = path.join(dir, 'package.json');
         const signPath = path.join(dir, 'sign.json');
 
-        let hasPkg = false;
-        let hasSign = false;
-        try {
-          await fs.access(pkgPath);
-          hasPkg = true;
-        } catch {}
-        try {
-          await fs.access(signPath);
-          hasSign = true;
-        } catch {}
+        installTasks.push((async () => {
+          let hasPkg = false;
+          let hasSign = false;
+          try {
+            await fs.access(pkgPath);
+            hasPkg = true;
+          } catch {}
+          try {
+            await fs.access(signPath);
+            hasSign = true;
+          } catch {}
+          if (!hasPkg || !hasSign) return;
 
-        if (!hasPkg || !hasSign) continue;
-
-        try {
-          await this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'));
-        } catch (e) {
-          const rel = path.relative(rootDir, dir) || dir;
-          await this.logger.warning(`${rel}: ${e.message}`);
-        }
+          try {
+            await this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'));
+          } catch (e) {
+            const rel = path.relative(rootDir, dir) || dir;
+            await this.logger.warning(`${rel}: ${e.message}`);
+          }
+        })());
       }
     }
+
+    await Promise.all(installTasks);
   }
 }
 
 async function validateEnvironment() {
-  const [major, minor] = process.version.slice(1).split('.').map(Number);
-  if (major < 18 || (major === 18 && minor < 14)) {
-    throw new Error(`Node.js 需 v18.14.0+，当前: ${process.version}`);
+  const [major, minor = 0, patch = 0] = process.version.slice(1).split('.').map(Number);
+  const meetsRecommended =
+    major > 24 || (major === 24 && (minor > 13 || (minor === 13 && patch >= 0)));
+  const meetsMinimum = major > 18 || (major === 18 && minor >= 14);
+  if (!meetsRecommended && !meetsMinimum) {
+    throw new Error(`Node.js 需 v24.13+（推荐）或 v18.14+，当前: ${process.version}`);
   }
   await paths.ensureBaseDirs(fs);
 }
@@ -192,22 +199,33 @@ class Bootstrap {
     ));
     if (!Object.keys(merged).length) return;
     const pkg = await this.dependencyManager.parsePackageJson(packageJsonPath);
-    pkg.imports = { ...(pkg.imports || {}), ...merged };
+    const nextImports = { ...(pkg.imports || {}), ...merged };
+    if (JSON.stringify(pkg.imports || {}) === JSON.stringify(nextImports)) return;
+    pkg.imports = nextImports;
     await fs.writeFile(packageJsonPath, JSON.stringify(pkg, null, 2));
   }
 
   async initialize() {
     await validateEnvironment();
     const root = process.cwd();
-    await this.dependencyManager.checkAndInstall(path.join(root, 'package.json'), path.join(root, 'node_modules'));
-    await this.dependencyManager.ensurePluginDependencies(root);
-    await this.dependencyManager.ensureFrontendDependencies(root);
+    await Promise.all([
+      this.dependencyManager.checkAndInstall(path.join(root, 'package.json'), path.join(root, 'node_modules')),
+      this.dependencyManager.ensurePluginDependencies(root)
+    ]);
+    if (process.env.XRK_SKIP_FRONTEND_BOOTSTRAP !== '1') {
+      await this.dependencyManager.ensureFrontendDependencies(root);
+    }
     await this.loadDynamicImports(path.join(root, 'package.json'));
   }
 
   async run() {
     try {
-      await this.initialize();
+      const skipBootstrap =
+        process.argv[2] === 'server' && process.env.XRK_SKIP_BOOTSTRAP === '1';
+      if (!skipBootstrap) {
+        await this.initialize();
+      }
+      process.env.XRK_FROM_APP = '1';
       await new Promise(r => setImmediate(r));
       await import('./start.js');
     } catch (e) {
@@ -219,14 +237,6 @@ class Bootstrap {
 }
 
 const bootstrap = new Bootstrap();
-
-process.on('uncaughtException', (err) => {
-  bootstrap.logger.error(`未捕获的异常: ${err?.stack || err?.message || err}`).then(() => process.exit(1));
-});
-
-process.on('unhandledRejection', (reason) => {
-  bootstrap.logger.error(`未处理的 Promise 拒绝: ${reason?.stack || reason?.message || reason}`);
-});
 
 bootstrap.run();
 

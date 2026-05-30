@@ -5,8 +5,6 @@ import os from 'os';
 import { spawnSync } from 'child_process';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import paths from './src/utils/paths.js';
-
 // 修复 Windows UTF-8 编码问题
 if (process.platform === 'win32') {
   try {
@@ -83,10 +81,14 @@ async function copyFileIfMissing(source, target) {
 // 使用统一的简单日志工具
 import { createSimpleLogger } from './src/infrastructure/log.js';
 
-// 创建统一的日志实例
+let _restartLogger = null;
+
+/** 复用同一日志实例，避免重复创建 */
 function getLogger() {
-  const logFile = path.join(PATHS.LOGS, 'restart.log');
-  return createSimpleLogger(logFile, false);
+  if (!_restartLogger) {
+    _restartLogger = createSimpleLogger(path.join(PATHS.LOGS, 'restart.log'), false);
+  }
+  return _restartLogger;
 }
 
 class BaseManager {
@@ -280,21 +282,25 @@ class ServerManager extends BaseManager {
       const { GLOBAL_CONFIGS, isServerOrFactoryConfig } = await import('./src/infrastructure/config/config-constants.js');
       
       const defaultConfigFiles = await fs.readdir(PATHS.DEFAULT_CONFIG);
-      const created = [];
-      
+      const copyTasks = [];
+
       for (const file of defaultConfigFiles) {
         if (!file.endsWith('.yaml') || file === 'qq.yaml') continue;
-        
+
         const configName = path.basename(file, '.yaml');
         if (GLOBAL_CONFIGS.includes(configName)) continue;
-        
+
         if (isServerOrFactoryConfig(configName)) {
           const sourcePath = path.join(PATHS.DEFAULT_CONFIG, file);
           const targetPath = path.join(targetDir, file);
-          const copied = await copyFileIfMissing(sourcePath, targetPath);
-          if (copied) created.push(file);
+          copyTasks.push(
+            copyFileIfMissing(sourcePath, targetPath).then(copied => (copied ? file : null))
+          );
         }
       }
+
+      const copyResults = await Promise.all(copyTasks);
+      const created = copyResults.filter(Boolean);
       
       if (!silent && created.length > 0) {
         await this.logger.success(`配置文件已就绪: ${targetDir} (新建: ${created.join(', ')})`);
@@ -344,7 +350,8 @@ class ServerManager extends BaseManager {
         await this.logger.log(`重启进程 (尝试 ${restartCount + 1}/${CONFIG.MAX_RESTARTS})`);
       }
       
-      const exitCode = await this.runServerProcess(port, restartCount > 0);
+      // 父进程已 ensurePortConfig；子进程跳过重复引导与配置拷贝
+      const exitCode = await this.runServerProcess(port, true);
       
       if (exitCode === 0 || exitCode === 255) {
         await this.logger.log('正常退出');
@@ -371,7 +378,12 @@ class ServerManager extends BaseManager {
     const cleanEnv = {
       ...process.env,
       XRK_SERVER_PORT: port.toString(),
-      XRK_SKIP_CONFIG_CHECK: skipConfigCheck ? '1' : '0'
+      XRK_SKIP_CONFIG_CHECK: skipConfigCheck ? '1' : '0',
+      XRK_SKIP_BOOTSTRAP: skipConfigCheck ? '1' : '0',
+      XRK_SKIP_FRONTEND_BOOTSTRAP: skipConfigCheck ? '1' : '0',
+      XRK_SKIP_FRONTEND_START: process.env.XRK_SKIP_FRONTEND_START || '0',
+      XRK_FAST_START: process.env.XRK_FAST_START || '0',
+      XRK_OPTIONAL_DB: process.env.XRK_OPTIONAL_DB || '0'
     };
     
     const result = spawnSync(process.argv[0], startArgs, {
@@ -395,11 +407,13 @@ class ServerManager extends BaseManager {
     await this.logger.log(`尝试停止端口 ${port} 的服务器`);
     
     try {
-      const { default: fetch } = await import('node-fetch');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(`http://localhost:${port}/shutdown`, {
         method: 'POST',
-        timeout: 5000
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         await this.logger.success('服务器停止请求已发送');
@@ -526,14 +540,6 @@ class MenuManager {
         short: '退出'
       }
     ];
-    
-    if (choices.length === 0) {
-      choices.unshift({ 
-        name: chalk.blue('+ 添加新端口'), 
-        value: { action: 'add_port' },
-        short: '添加新端口'
-      });
-    }
     
     const { selected } = await inquirer.prompt([{
       type: 'list',
@@ -700,35 +706,26 @@ function getNodeArgs() {
   return nodeArgs;
 }
 
-process.on('uncaughtException', async (error) => {
-  const logger = getLogger();
-  const errorMsg = error.stack || `${error.message}\n${error.stack || ''}`;
-  console.error('\n未捕获的异常:');
-  console.error(errorMsg);
-  await logger.error(`未捕获的异常: ${errorMsg}`);
-  await cleanup();
-  process.exit(1);
-});
+if (process.env.XRK_FROM_APP !== '1') {
+  process.on('uncaughtException', async (error) => {
+    const logger = getLogger();
+    const errorMsg = error.stack || `${error.message}\n${error.stack || ''}`;
+    console.error('\n未捕获的异常:');
+    console.error(errorMsg);
+    await logger.error(`未捕获的异常: ${errorMsg}`);
+    await cleanup();
+    process.exit(1);
+  });
 
-process.on('unhandledRejection', async (reason) => {
-  const logger = getLogger();
-  const errorMessage = reason instanceof Error 
-    ? (reason.stack || `${reason.message}\n${reason.stack || ''}`)
-    : String(reason);
-  
-  console.error('\n未处理的Promise拒绝:');
-  console.error(errorMessage);
-  await logger.error(`未处理的Promise拒绝: ${errorMessage}`);
-});
-
-process.on('exit', async () => {
-  await cleanup();
-});
+  process.on('exit', () => {
+    void cleanup();
+  });
+}
 
 async function main() {
   const logger = getLogger();
-  await paths.ensureBaseDirs(fs);
-  
+  // 目录结构由 app.js Bootstrap.validateEnvironment → paths.ensureBaseDirs 已创建
+
   const commandArg = process.argv[2];
   const portArg = process.argv[3] || process.env.XRK_SERVER_PORT;
   const port = portArg && !isNaN(parseInt(portArg)) ? parseInt(portArg) : null;

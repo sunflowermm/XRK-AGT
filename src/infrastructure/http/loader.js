@@ -39,18 +39,21 @@ class ApiLoader {
     const startTime = Date.now();
     BotUtil.makeLog('info', '开始加载API模块...', 'ApiLoader');
     
-    // 获取所有 core 目录下的 http 目录
     const apiDirs = await paths.getCoreSubDirs('http');
-    
-    // 加载每个API目录
+    const allFiles = [];
     for (const apiDir of apiDirs) {
       const files = await this.getApiFiles(apiDir);
-      for (const file of files) {
-        await this.loadApi(file);
-      }
+      allFiles.push(...files);
     }
+
+    this._coreDirsCache = await paths.getCoreDirs();
+    const batchSize = 10;
+    for (let i = 0; i < allFiles.length; i += batchSize) {
+      const batch = allFiles.slice(i, i + batchSize);
+      await Promise.allSettled(batch.map(file => this.loadApi(file)));
+    }
+    this._coreDirsCache = null;
     
-    // 按优先级排序
     this.sortByPriority();
     
     this.loaded = true;
@@ -80,7 +83,7 @@ class ApiLoader {
    * @returns {Promise<string>} API key
    */
   async getApiKey(filePath) {
-    const coreDirs = await paths.getCoreDirs();
+    const coreDirs = this._coreDirsCache || await paths.getCoreDirs();
     const normalizedPath = path.normalize(filePath);
     
     for (const coreDir of coreDirs) {
@@ -251,37 +254,49 @@ class ApiLoader {
     let totalRoutes = 0;
     let totalWS = 0;
     let enabledCount = 0;
-    
-    // 按优先级顺序初始化API
-    for (const api of this.priority) {
+
+    const enabledApis = this.priority.filter(api => {
       if (!api || typeof api !== 'object') {
-        BotUtil.makeLog('warn', `发现无效的API实例，已跳过`, 'ApiLoader');
-        continue;
+        BotUtil.makeLog('warn', '发现无效的API实例，已跳过', 'ApiLoader');
+        return false;
       }
-      
-      if (api.enable === false) continue;
-      
+      return api.enable !== false;
+    });
+
+    const registerOne = async (api) => {
       const apiName = api.name || api.key || 'unknown';
-      
       try {
         const routeCount = api.routes ? api.routes.length : 0;
         const wsCount = api.wsHandlers ? Object.keys(api.wsHandlers).length : 0;
-        
+
         if (typeof api.init === 'function') {
           await api.init(app, bot);
         }
-        
+
         if (routeCount > 0 || wsCount > 0) {
-          totalRoutes += routeCount;
-          totalWS += wsCount;
-          enabledCount++;
-          
           if (getAistreamConfigOptional().global?.debug) {
             BotUtil.makeLog('debug', `注册API: ${apiName} (路由: ${routeCount}, WS: ${wsCount})`, 'ApiLoader');
           }
+          return { routeCount, wsCount, enabled: true };
         }
+        return { routeCount: 0, wsCount: 0, enabled: false };
       } catch (error) {
         BotUtil.makeLog('error', `注册API失败: ${apiName} - ${error.message}`, 'ApiLoader', error);
+        return { routeCount: 0, wsCount: 0, enabled: false };
+      }
+    };
+
+    const batchSize = 8;
+    for (let i = 0; i < enabledApis.length; i += batchSize) {
+      const batch = enabledApis.slice(i, i + batchSize);
+      const results = await Promise.allSettled(batch.map(api => registerOne(api)));
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue;
+        const stats = result.value;
+        if (!stats?.enabled) continue;
+        totalRoutes += stats.routeCount;
+        totalWS += stats.wsCount;
+        enabledCount++;
       }
     }
     

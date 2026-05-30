@@ -16,35 +16,66 @@ class FrontendLauncher {
 
   static #initialized = false;
   static #initializing = null;
+  static #discovered = false;
+  static #discovering = null;
+  static #started = false;
+  static #starting = null;
 
-  static #getAppMode(json) {
-    const raw = json?.mode ? String(json.mode).toLowerCase() : 'auto';
-    if (raw === 'dev' || raw === 'prod' || raw === 'auto') return raw;
-    return 'auto';
-  }
+  /**
+   * 仅扫描 sign.json 并注册元数据，不启动 dev server
+   */
+  static async discover() {
+    if (this.#discovered) return this.#apps;
+    if (this.#discovering) return this.#discovering;
 
-  static #normalizeCommandSpec(spec, fallbackCwd) {
-    if (!spec || typeof spec !== 'object') return null;
-    const command = spec.command && String(spec.command).trim();
-    if (!command) return null;
-    const args = Array.isArray(spec.args) ? spec.args.map(a => String(a)) : [];
-    const cwd = spec.cwd ? path.resolve(paths.root, String(spec.cwd)) : fallbackCwd;
-    const env = (spec.env && typeof spec.env === 'object') ? spec.env : {};
-    return { command, args, cwd, env };
+    this.#discovering = this.#doDiscover()
+      .catch(err => {
+        BotUtil.makeLog('error', `前端项目扫描失败: ${err.message}`, 'Frontend');
+        return this.#apps;
+      })
+      .finally(() => {
+        this.#discovered = true;
+        this.#discovering = null;
+      });
+
+    return this.#discovering;
   }
 
   /**
-   * 初始化并启动所有前端项目（幂等）
+   * 启动已发现的前端 dev server（需先 discover）
+   */
+  static async start() {
+    if (process.env.XRK_SKIP_FRONTEND_START === '1') {
+      await this.discover();
+      BotUtil.makeLog('info', 'XRK_SKIP_FRONTEND_START=1，跳过前端 dev server 启动', 'Frontend');
+      return this.#apps;
+    }
+
+    await this.discover();
+    if (this.#started) return this.#apps;
+    if (this.#starting) return this.#starting;
+
+    this.#starting = this.#doStart()
+      .catch(err => {
+        BotUtil.makeLog('error', `前端项目启动失败: ${err.message}`, 'Frontend');
+        return this.#apps;
+      })
+      .finally(() => {
+        this.#started = true;
+        this.#starting = null;
+      });
+
+    return this.#starting;
+  }
+
+  /**
+   * 初始化并启动所有前端项目（discover + start，向后兼容）
    */
   static async init() {
     if (this.#initialized) return this.#apps;
     if (this.#initializing) return this.#initializing;
 
-    this.#initializing = this.#doInit()
-      .catch(err => {
-        BotUtil.makeLog('error', `前端项目初始化失败: ${err.message}`, 'Frontend');
-        return this.#apps;
-      })
+    this.#initializing = this.start()
       .finally(() => {
         this.#initialized = true;
         this.#initializing = null;
@@ -54,11 +85,10 @@ class FrontendLauncher {
   }
 
   /**
-   * 获取已发现的前端项目（不会重复扫描）
+   * 获取已发现的前端项目（仅扫描，不 spawn）
    */
   static async getApps() {
-    await this.init();
-    return this.#apps;
+    return this.discover();
   }
 
   /**
@@ -77,12 +107,10 @@ class FrontendLauncher {
       const child = app?.process;
       if (!child || child.killed) continue;
       try {
-        // Windows 用 SIGTERM 无效时会 fallback；其它平台正常 SIGTERM
         child.kill('SIGTERM');
       } catch {}
     }
 
-    // 给一点缓冲，再强杀
     await BotUtil.sleep(800).catch(() => {});
     for (const app of apps) {
       const child = app?.process;
@@ -92,7 +120,6 @@ class FrontendLauncher {
       } catch {}
     }
 
-    // 生产构建进程也一并处理
     for (const app of apps) {
       const buildChild = app?.buildProcess;
       if (!buildChild || buildChild.killed) continue;
@@ -105,7 +132,6 @@ class FrontendLauncher {
       try { buildChild.kill('SIGKILL'); } catch {}
     }
 
-    // 清理强引用，避免关闭后对象常驻
     for (const app of apps) {
       if (!app) continue;
       app.process = undefined;
@@ -115,28 +141,67 @@ class FrontendLauncher {
     }
   }
 
+  static #getAppMode(json) {
+    const raw = json?.mode ? String(json.mode).toLowerCase() : 'auto';
+    if (raw === 'dev' || raw === 'prod' || raw === 'auto') return raw;
+    return 'auto';
+  }
+
+  static #normalizeCommandSpec(spec, fallbackCwd) {
+    if (!spec || typeof spec !== 'object') return null;
+    const command = spec.command && String(spec.command).trim();
+    if (!command) return null;
+    const args = Array.isArray(spec.args) ? spec.args.map(a => String(a)) : [];
+    const cwd = spec.cwd ? path.resolve(paths.root, String(spec.cwd)) : fallbackCwd;
+    const env = (spec.env && typeof spec.env === 'object') ? spec.env : {};
+    return { command, args, cwd, env };
+  }
+
   /**
-   * 内部真正初始化逻辑
+   * 扫描 sign.json 并注册元数据
    * @private
    */
-  static async #doInit() {
+  static async #doDiscover() {
     const startTime = Date.now();
-
     const configs = await this.#discoverConfigs();
+
     if (configs.length === 0) {
-      BotUtil.makeLog('info', '未发现启用的 sign.json 前端项目，跳过启动', 'Frontend');
+      BotUtil.makeLog('info', '未发现启用的 sign.json 前端项目', 'Frontend');
       return this.#apps;
     }
 
+    for (const cfgApp of configs) {
+      this.#registerApp(cfgApp);
+    }
+
+    const used = BotUtil.getTimeDiff(startTime);
     BotUtil.makeLog(
       'info',
-      `发现前端项目 ${configs.length} 个，开始启动...`,
+      `前端项目扫描完成: ${this.#apps.size} 个, 耗时 ${used}`,
       'Frontend'
     );
 
-    for (const cfgApp of configs) {
-      this.#registerApp(cfgApp);
-      this.#startApp(cfgApp);
+    return this.#apps;
+  }
+
+  /**
+   * 启动已注册的前端 dev server
+   * @private
+   */
+  static async #doStart() {
+    const startTime = Date.now();
+    const pending = Array.from(this.#apps.values()).filter(
+      app => app && (app.status === 'queued' || app.status === 'stopped')
+    );
+
+    if (pending.length === 0) {
+      return this.#apps;
+    }
+
+    BotUtil.makeLog('info', `开始启动前端项目 ${pending.length} 个...`, 'Frontend');
+
+    for (const appInfo of pending) {
+      this.#startApp(appInfo.config);
     }
 
     const used = BotUtil.getTimeDiff(startTime);

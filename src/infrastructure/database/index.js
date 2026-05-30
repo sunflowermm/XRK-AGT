@@ -42,27 +42,37 @@ class DatabaseManager {
       // 处理MongoDB初始化结果
       if (mongodbResult.status === 'fulfilled') {
         this.mongodbDb = mongodbResult.value
-        // 从全局变量获取客户端（保持兼容性）
         this.mongodb = global.mongodb
         BotUtil.makeLog('success', 'MongoDB 初始化成功', 'DatabaseManager')
       } else {
-        BotUtil.makeLog('error', `MongoDB 初始化失败: ${mongodbResult.reason?.message}`, 'DatabaseManager')
+        const level = process.env.XRK_OPTIONAL_DB === '1' ? 'warn' : 'error'
+        BotUtil.makeLog(level, `MongoDB 初始化失败: ${mongodbResult.reason?.message}`, 'DatabaseManager')
       }
 
-      // 处理Redis初始化结果
       if (redisResult.status === 'fulfilled') {
         this.redis = redisResult.value || getRedisClient()
         BotUtil.makeLog('success', 'Redis 初始化成功', 'DatabaseManager')
       } else {
-        BotUtil.makeLog('error', `Redis 初始化失败: ${redisResult.reason?.message}`, 'DatabaseManager')
+        const level = process.env.XRK_OPTIONAL_DB === '1' ? 'warn' : 'error'
+        BotUtil.makeLog(level, `Redis 初始化失败: ${redisResult.reason?.message}`, 'DatabaseManager')
       }
 
       this.initialized = true
 
-      return {
+      const status = {
         mongodb: !!this.mongodb,
         redis: !!this.redis
       }
+
+      if (!status.mongodb && !status.redis && process.env.XRK_OPTIONAL_DB !== '1') {
+        throw new Error('MongoDB 与 Redis 均不可用')
+      }
+
+      if (!status.mongodb && !status.redis && process.env.XRK_OPTIONAL_DB === '1') {
+        BotUtil.makeLog('warn', 'XRK_OPTIONAL_DB=1：在无数据库连接下继续启动', 'DatabaseManager')
+      }
+
+      return status
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error))
       BotUtil.makeLog('error', `数据库初始化异常: ${err.message}`, 'DatabaseManager')

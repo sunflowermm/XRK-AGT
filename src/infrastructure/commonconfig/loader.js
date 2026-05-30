@@ -32,15 +32,17 @@ class ConfigLoader {
       const startTime = Date.now();
       BotUtil.makeLog('info', '开始加载配置管理器...', 'ConfigLoader');
 
-      // 获取所有 core 目录下的 commonconfig 目录
       const configDirs = await paths.getCoreSubDirs('commonconfig');
-
-      // 加载每个配置目录
+      const allFiles = [];
       for (const configDir of configDirs) {
         const files = await this._getConfigFiles(configDir);
-        for (const file of files) {
-          await this._loadConfig(file);
-        }
+        allFiles.push(...files);
+      }
+
+      const batchSize = 10;
+      for (let i = 0; i < allFiles.length; i += batchSize) {
+        const batch = allFiles.slice(i, i + batchSize);
+        await Promise.allSettled(batch.map(file => this._loadConfig(file)));
       }
 
       this.loaded = true;

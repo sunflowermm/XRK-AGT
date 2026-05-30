@@ -31,20 +31,35 @@ const _baseDirs = [
   path.join(_trash, 'html')
 ];
 
+/** @type {string[] | null} */
+let _coreDirsCache = null;
+/** @type {Map<string, string[]>} */
+const _coreSubDirsCache = new Map();
+
+/**
+ * 清除 core 目录缓存（热加载新增 core 时可调用）
+ */
+function invalidateCoreCache() {
+  _coreDirsCache = null;
+  _coreSubDirsCache.clear();
+}
+
 /**
  * 获取所有 core 目录
  * @returns {Promise<Array<string>>} core 目录路径数组
  */
 async function getCoreDirs() {
+  if (_coreDirsCache) return _coreDirsCache;
+
   try {
-    // core 目录应该始终存在，但如果没有创建，返回空数组
     const entries = await fs.readdir(_core, { withFileTypes: true });
-    return entries
+    _coreDirsCache = entries
       .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
       .map(entry => path.join(_core, entry.name));
+    return _coreDirsCache;
   } catch {
-    // 目录不存在时返回空数组（开发者可能还没创建 core 目录）
-    return [];
+    _coreDirsCache = [];
+    return _coreDirsCache;
   }
 }
 
@@ -54,16 +69,21 @@ async function getCoreDirs() {
  * @returns {Promise<Array<string>>} 子目录路径数组
  */
 async function getCoreSubDirs(subDir) {
+  if (_coreSubDirsCache.has(subDir)) {
+    return _coreSubDirsCache.get(subDir);
+  }
+
   const coreDirs = await getCoreDirs();
   const subDirs = [];
-  
+
   for (const coreDir of coreDirs) {
     const subDirPath = path.join(coreDir, subDir);
     if (existsSync(subDirPath)) {
       subDirs.push(subDirPath);
     }
   }
-  
+
+  _coreSubDirsCache.set(subDir, subDirs);
   return subDirs;
 }
 
@@ -93,6 +113,11 @@ export default {
    * 获取所有 core 中指定子目录的路径
    */
   getCoreSubDirs,
+
+  /**
+   * 清除 core 目录扫描缓存
+   */
+  invalidateCoreCache,
 
   /**
    * 确保核心目录结构存在

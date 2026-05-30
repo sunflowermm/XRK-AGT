@@ -51,6 +51,9 @@ export function scrollToBottom(element, smooth = true) {
  * @param {Object} options - IntersectionObserver 选项
  */
 export function initLazyLoad(selector = 'img[data-src]', options = { rootMargin: '50px' }) {
+  const images = $$(selector);
+  if (!images.length) return null;
+
   const imageObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
@@ -65,7 +68,6 @@ export function initLazyLoad(selector = 'img[data-src]', options = { rootMargin:
     });
   }, options);
 
-  const images = $$(selector);
   images.forEach(img => imageObserver.observe(img));
 
   return imageObserver;

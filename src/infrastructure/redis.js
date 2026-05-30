@@ -29,24 +29,26 @@ const REDIS_CONFIG = {
 export default async function redisInit() {
   if (globalClient?.isOpen) return globalClient
 
+  const fastStart = process.env.XRK_FAST_START === '1'
+  const maxRetries = fastStart ? 1 : REDIS_CONFIG.MAX_RETRIES
   const redisUrl = buildRedisUrl(cfg.redis)
-  const clientConfig = buildClientConfig(redisUrl)
+  const clientConfig = buildClientConfig(redisUrl, fastStart)
   let client = createClient(clientConfig)
   let retryCount = 0
   
-  while (retryCount < REDIS_CONFIG.MAX_RETRIES) {
+  while (retryCount < maxRetries) {
     try {
-      BotUtil.makeLog('info', `连接中 [${retryCount + 1}/${REDIS_CONFIG.MAX_RETRIES}]: ${maskRedisUrl(redisUrl)}`, 'Redis')
+      BotUtil.makeLog('info', `连接中 [${retryCount + 1}/${maxRetries}]: ${maskRedisUrl(redisUrl)}`, 'Redis')
       await client.connect()
       BotUtil.makeLog('success', '连接成功', 'Redis')
       break
     } catch (err) {
       retryCount++
       const error = err instanceof Error ? err : new Error(String(err))
-      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${REDIS_CONFIG.MAX_RETRIES}]: ${error.message}`, 'Redis')
+      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${maxRetries}]: ${error.message}`, 'Redis')
 
-      if (retryCount < REDIS_CONFIG.MAX_RETRIES) {
-        await attemptRedisStart(retryCount)
+      if (retryCount < maxRetries) {
+        if (!fastStart) await attemptRedisStart(retryCount)
         client = createClient(clientConfig)
       } else {
         handleFinalConnectionFailure(error)
@@ -84,13 +86,16 @@ function buildRedisUrl(redisConfig) {
  * @param {string} redisUrl - Redis连接URL
  * @returns {Object} 客户端配置对象
  */
-function buildClientConfig(redisUrl) {
+function buildClientConfig(redisUrl, fastStart = false) {
   const options = cfg.redis?.options || {}
+  const connectTimeout = fastStart
+    ? 2000
+    : (options.connectTimeout ?? REDIS_CONFIG.CONNECT_TIMEOUT)
   return {
     url: redisUrl,
     socket: {
       reconnectStrategy: createReconnectStrategy(),
-      connectTimeout: options.connectTimeout ?? REDIS_CONFIG.CONNECT_TIMEOUT
+      connectTimeout
     },
     connectionPoolSize: getOptimalPoolSize(),
     commandsQueueMaxLength: REDIS_CONFIG.MAX_COMMAND_QUEUE
@@ -163,6 +168,11 @@ function handleFinalConnectionFailure(error) {
   if (process.env.NODE_ENV !== 'production') {
     BotUtil.makeLog('error', '手动启动: redis-server --daemonize yes', 'Redis')
   }
+
+  if (process.env.XRK_OPTIONAL_DB === '1') {
+    throw error instanceof Error ? error : new Error(String(error))
+  }
+
   process.exit(1)
 }
 

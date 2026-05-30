@@ -181,25 +181,26 @@ class App {
 
   async init() {
     initLazyLoad();
-    await this.loadAPIConfig();
     this.bindEvents();
-    // 让移动端键盘/地址栏变化不再引起 100vh 跳动
     bindViewportHeightVar();
     this.loadSettings();
-    await this.loadLlmOptions();
-    this._initMermaid();
+    markdownRenderer.initMermaid();
     motion.initMotion();
-    this.checkConnection();
-    // 根据当前 hash 或本地缓存决定首页，统一通过路由逻辑导航，内部会负责滚动等处理
+
+    // API 配置需在路由到 api 页面前就绪；LLM/WS 仅在 chat 页按需加载
+    await this.loadAPIConfig();
+
+    const connectionPromise = this.checkConnection();
     this.handleRoute();
-    this.ensureDeviceWs();
-    
+    await connectionPromise;
+
     window.addEventListener('hashchange', () => this.handleRoute());
-    // 切回浏览器标签页时只做连接检查，不再强制刷新历史/回到底部，避免打断用户阅读
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
         this.checkConnection();
-        this.ensureDeviceWs();
+        if (this._needsDeviceWs()) {
+          this.ensureDeviceWs();
+        }
       }
     });
     this._statusUpdateTimer = setInterval(() => {
@@ -207,20 +208,16 @@ class App {
         this.loadSystemStatus().catch(() => {});
       }
     }, 60000);
-    
+
     window.addEventListener('beforeunload', () => {
       if (this._statusUpdateTimer) {
         clearInterval(this._statusUpdateTimer);
       }
       this._unbindChatEvents();
+      this._releaseDeviceWs();
       this._revokeAllObjectUrls();
       motion.disposeMotion();
     });
-  }
-
-  // Mermaid 相关方法 - 包装器（调用模块函数）
-  _initMermaid() {
-    markdownRenderer.initMermaid();
   }
 
   _renderMermaidIn(container) {
@@ -280,26 +277,40 @@ class App {
     }
   }
 
-  async loadLlmOptions() {
-    try {
-      const res = await fetch(`${this.serverUrl}/api/ai/models`, { headers: this.getHeaders() });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      if (!data?.success) {
-        throw new Error(data?.message || 'LLM 接口返回异常');
-      }
-      this._llmOptions = {
-        enabled: data.enabled !== false,
-        defaultProfile: data.defaultProfile ?? '',
-        profiles: data.profiles ?? [],
-        workflows: data.workflows ?? []
-      };
-
-    } catch (e) {
-      console.warn('未能加载 LLM 档位信息:', e.message || e);
+  async loadLlmOptions(force = false) {
+    if (!force && this._llmOptionsLoading) {
+      return this._llmOptionsLoadingPromise ?? Promise.resolve();
     }
+    if (!force && (this._llmOptions?.profiles?.length || this._llmOptions?.workflows?.length)) {
+      return Promise.resolve();
+    }
+
+    this._llmOptionsLoading = true;
+    this._llmOptionsLoadingPromise = (async () => {
+      try {
+        const res = await fetch(`${this.serverUrl}/api/ai/models`, { headers: this.getHeaders() });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        if (!data?.success) {
+          throw new Error(data?.message || 'LLM 接口返回异常');
+        }
+        this._llmOptions = {
+          enabled: data.enabled !== false,
+          defaultProfile: data.defaultProfile ?? '',
+          profiles: data.profiles ?? [],
+          workflows: data.workflows ?? []
+        };
+      } catch (e) {
+        console.warn('未能加载 LLM 档位信息:', e.message || e);
+      } finally {
+        this._llmOptionsLoading = false;
+        this._llmOptionsLoadingPromise = null;
+      }
+    })();
+
+    return this._llmOptionsLoadingPromise;
   }
 
   /** 同步侧边栏主菜单 / API 列表显隐（API 页内「返回」与路由共用） */
@@ -470,6 +481,13 @@ class App {
     localStorage.setItem('apiKey', key);
     this.showToast('API Key 已保存', 'success');
     this.checkConnection();
+    if (this.currentPage === 'chat') {
+      this.loadLlmOptions(true).catch(() => {});
+      if (this._needsDeviceWs()) {
+        this._releaseDeviceWs();
+        this.ensureDeviceWs();
+      }
+    }
     if (window.location.hash === '#/config') this.renderConfig();
   }
 
@@ -549,6 +567,8 @@ class App {
 
     if (prevPage === 'chat' && normalizedPage !== 'chat') {
       this._unbindChatEvents();
+      this.stopActiveStream();
+      this._releaseDeviceWs();
     }
 
     if (shouldAnimate) {
@@ -720,7 +740,7 @@ class App {
       
       this._latestSystem = data;
       this._saveHomeDataCache(data);
-      this._applyHomeData(data, false);
+      this._applyHomeData(data);
       
     } catch (e) {
         if (e.name !== 'AbortError' && e.name !== 'TimeoutError') {
@@ -729,8 +749,8 @@ class App {
         
         const cachedData = this._latestSystem || this._homeDataCache;
         if (cachedData) {
-        this._applyHomeData(cachedData, true);
-      }
+          this._applyHomeData(cachedData);
+        }
       } finally {
         this._statusLoading = false;
         this._statusLoadingPromise = null;
@@ -3066,6 +3086,10 @@ class App {
     return this._webUserId;
   }
 
+  _needsDeviceWs(page = this.currentPage) {
+    return page === 'chat' && (this._isVoiceMode() || !this._isAIMode());
+  }
+
   // 清理 WebSocket 相关定时器
   _clearWsTimers() {
     if (this._heartbeatTimer) {
@@ -3076,6 +3100,23 @@ class App {
       clearInterval(this._offlineCheckTimer);
       this._offlineCheckTimer = null;
     }
+  }
+
+  _releaseDeviceWs() {
+    this._clearWsTimers();
+    const ws = this._deviceWs;
+    if (!ws) {
+      this._wsConnecting = false;
+      return;
+    }
+    this._deviceWs = null;
+    this._wsConnecting = false;
+    try {
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      ws.close(1000, 'released');
+    } catch {}
   }
 
   async ensureDeviceWs() {
@@ -3175,12 +3216,12 @@ class App {
         this._wsConnecting = false;
         this._clearWsTimers();
         this._deviceWs = null;
-        
-        // 非正常关闭时，延迟重连
-        if (event.code !== 1000) {
-          const delay = event.code === 1006 ? 3000 : 5000; // 异常关闭时3秒重连，正常关闭时5秒
+
+        // 非正常关闭且仍在需要 WS 的 chat 模式时才重连
+        if (event.code !== 1000 && this._needsDeviceWs()) {
+          const delay = event.code === 1006 ? 3000 : 5000;
           setTimeout(() => {
-            if (!this._deviceWs) {
+            if (!this._deviceWs && this._needsDeviceWs()) {
               this.ensureDeviceWs();
             }
           }, delay);

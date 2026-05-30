@@ -177,8 +177,10 @@ class StreamLoader {
 
 
       // 阶段1: 加载工作流类（不初始化Embedding）
-      for (const file of files) {
-        await this.loadStreamClass(file);
+      const batchSize = 10;
+      for (let i = 0; i < files.length; i += batchSize) {
+        const batch = files.slice(i, i + batchSize);
+        await Promise.allSettled(batch.map(file => this.loadStreamClass(file)));
       }
 
       // 阶段2: 应用 Embedding 配置

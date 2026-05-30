@@ -6,6 +6,7 @@ import chokidar from 'chokidar'
 import lodash from 'lodash'
 import path from 'path'
 import BotUtil from '#utils/botutil.js'
+import paths from '#utils/paths.js'
 
 export class HotReloadBase {
   constructor(options = {}) {
@@ -70,6 +71,7 @@ export class HotReloadBase {
         this.watcher.on('add', lodash.debounce(async (filePath) => {
           if (!this.isValidFile(filePath)) return
           try {
+            paths.invalidateCoreCache?.()
             await onAdd(filePath)
           } catch (error) {
             BotUtil.makeLog('error', `处理文件新增失败: ${filePath}`, this.loggerName, error)

@@ -68,6 +68,10 @@ const LOG_STYLES = {
  * @returns {Object} 全局 logger 对象
  */
 export default function setLog() {
+  if (global.logger?.__xrkSetLogDone) {
+    return global.logger;
+  }
+
   fixWindowsUTF8()
 
   const logDir = paths.logs || path.join(process.cwd(), 'logs')
@@ -757,15 +761,8 @@ export default function setLog() {
     } catch {}
   })
 
-  const handleShutdown = async () => {
-    await logger.shutdown()
-    process.exit(0)
-  }
-
-  process.on('SIGINT', handleShutdown)
-  process.on('SIGTERM', handleShutdown)
-
   global.logger = logger
+  logger.__xrkSetLogDone = true
 
   return logger
 }

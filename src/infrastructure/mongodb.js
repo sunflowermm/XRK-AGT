@@ -24,24 +24,26 @@ export default async function mongodbInit() {
     return globalDb
   }
 
+  const fastStart = process.env.XRK_FAST_START === '1'
+  const maxRetries = fastStart ? 1 : MONGODB_CONFIG.MAX_RETRIES
   const mongoUrl = buildMongoUrl(cfg.mongodb)
-  const clientOptions = buildClientOptions()
+  const clientOptions = buildClientOptions(fastStart)
   let client = new MongoClient(mongoUrl, clientOptions)
   let retryCount = 0
 
-  while (retryCount < MONGODB_CONFIG.MAX_RETRIES) {
+  while (retryCount < maxRetries) {
     try {
-      BotUtil.makeLog('info', `连接中 [${retryCount + 1}/${MONGODB_CONFIG.MAX_RETRIES}]: ${maskMongoUrl(mongoUrl)}`, 'MongoDB')
+      BotUtil.makeLog('info', `连接中 [${retryCount + 1}/${maxRetries}]: ${maskMongoUrl(mongoUrl)}`, 'MongoDB')
       await client.connect()
       BotUtil.makeLog('success', '连接成功', 'MongoDB')
       break
     } catch (err) {
       retryCount++
       const error = err instanceof Error ? err : new Error(String(err))
-      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${MONGODB_CONFIG.MAX_RETRIES}]: ${error.message}`, 'MongoDB')
+      BotUtil.makeLog('warn', `连接失败 [${retryCount}/${maxRetries}]: ${error.message}`, 'MongoDB')
 
-      if (retryCount < MONGODB_CONFIG.MAX_RETRIES) {
-        await attemptMongoStart(retryCount)
+      if (retryCount < maxRetries) {
+        if (!fastStart) await attemptMongoStart(retryCount)
         client = new MongoClient(mongoUrl, clientOptions)
       } else {
         handleFinalConnectionFailure(error)
@@ -90,13 +92,14 @@ function buildMongoUrl(mongoConfig) {
   return `mongodb://${auth}${host}:${port}/${database || 'xrk_agt'}${query}`
 }
 
-function buildClientOptions() {
+function buildClientOptions(fastStart = false) {
   const options = cfg.mongodb?.options || {}
+  const connectTimeout = fastStart ? 2000 : MONGODB_CONFIG.CONNECT_TIMEOUT
   return {
     maxPoolSize: options.maxPoolSize ?? MONGODB_CONFIG.MAX_POOL_SIZE,
     minPoolSize: options.minPoolSize ?? MONGODB_CONFIG.MIN_POOL_SIZE,
-    connectTimeoutMS: options.connectTimeoutMS ?? MONGODB_CONFIG.CONNECT_TIMEOUT,
-    serverSelectionTimeoutMS: options.serverSelectionTimeoutMS ?? MONGODB_CONFIG.CONNECT_TIMEOUT,
+    connectTimeoutMS: options.connectTimeoutMS ?? connectTimeout,
+    serverSelectionTimeoutMS: options.serverSelectionTimeoutMS ?? connectTimeout,
     socketTimeoutMS: 45000,
     heartbeatFrequencyMS: 10000,
     retryWrites: true,
@@ -138,7 +141,11 @@ function handleFinalConnectionFailure(error) {
     const forkFlag = process.platform === 'win32' ? '' : '--fork'
     BotUtil.makeLog('error', `手动启动: mongod --dbpath "${dbPath}" ${forkFlag}`.trim(), 'MongoDB')
   }
-  
+
+  if (process.env.XRK_OPTIONAL_DB === '1') {
+    throw error instanceof Error ? error : new Error(String(error))
+  }
+
   process.exit(1)
 }
 

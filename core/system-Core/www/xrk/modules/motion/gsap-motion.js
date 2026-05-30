@@ -213,11 +213,6 @@ export function animatePageExit(contentEl) {
   });
 }
 
-/** @deprecated 页面切换仅保留块级 stagger，避免整页 + 块级双重动画 */
-export function animatePageEnter(contentEl, page) {
-  animatePageBlocks(contentEl, page);
-}
-
 export function animatePageBlocks(container, page) {
   if (!container) return;
 

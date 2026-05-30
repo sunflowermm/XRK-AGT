@@ -20,6 +20,8 @@ class Cfg {
     this._port = null;
     this.watcher = {};
     this._renderer = null;
+    this._watchEnabled = false;
+    this._deferredWatches = [];
 
     this.PATHS = {
       DEFAULT_CONFIG: paths.configDefault,
@@ -270,6 +272,11 @@ class Cfg {
   watch(file, name, key) {
     if (this.watcher[key]) return;
 
+    if (!this._watchEnabled) {
+      this._deferredWatches.push({ file, name, key });
+      return;
+    }
+
     const watcher = chokidar.watch(file, {
       persistent: true,
       ignoreInitial: true
@@ -282,6 +289,15 @@ class Cfg {
     });
 
     this.watcher[key] = watcher;
+  }
+
+  enableWatching() {
+    if (this._watchEnabled) return;
+    this._watchEnabled = true;
+    const pending = this._deferredWatches.splice(0);
+    for (const { file, name, key } of pending) {
+      this.watch(file, name, key);
+    }
   }
 
   async change_agt() {

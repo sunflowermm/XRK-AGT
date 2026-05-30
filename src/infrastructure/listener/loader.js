@@ -33,6 +33,7 @@ class ListenerLoader {
       
       // 加载所有 events 目录中的文件
       const { FileLoader } = await import('#utils/file-loader.js');
+      const eventFiles = [];
       for (const eventsDir of eventsDirs) {
         try {
           const files = await FileLoader.readFiles(eventsDir, {
@@ -40,40 +41,50 @@ class ListenerLoader {
             recursive: false,
             ignore: ['.', '_']
           });
-          
-          for (const filePath of files) {
-            const file = path.basename(filePath);
-            BotUtil.makeLog('debug', `加载监听事件: ${file}`, 'ListenerLoader');
-            try {
-              const relativePath = path.relative(paths.root, filePath);
-              const listener = await import(`../../../${relativePath.replace(/\\/g, '/')}`);
-              if (!listener.default) continue;
-              
-              const instance = new listener.default();
-              instance.bot = this.bot;
-              
-              if (typeof instance.init === 'function') {
-                await instance.init();
-                eventCount++;
-              } else {
-                const on = instance.once ? "once" : "on";
-                if (lodash.isArray(instance.event)) {
-                  instance.event.forEach((type) => {
-                    const handler = instance[type] ? type : "execute";
-                    this.bot[on](instance.prefix + type, instance[handler].bind(instance));
-                  });
-                } else {
-                  const handler = instance[instance.event] ? instance.event : "execute";
-                  this.bot[on](instance.prefix + instance.event, instance[handler].bind(instance));
-                }
-                eventCount++;
-              }
-            } catch (err) {
-              BotUtil.makeLog('error', `监听事件加载错误: ${file}`, 'ListenerLoader', err);
-            }
-          }
+          eventFiles.push(...files);
         } catch {
           BotUtil.makeLog('warn', `读取事件目录失败: ${eventsDir}`, 'ListenerLoader');
+        }
+      }
+
+      const loadEventFile = async (filePath) => {
+        const file = path.basename(filePath);
+        BotUtil.makeLog('debug', `加载监听事件: ${file}`, 'ListenerLoader');
+        const relativePath = path.relative(paths.root, filePath);
+        const listener = await import(`../../../${relativePath.replace(/\\/g, '/')}`);
+        if (!listener.default) return 0;
+
+        const instance = new listener.default();
+        instance.bot = this.bot;
+
+        if (typeof instance.init === 'function') {
+          await instance.init();
+          return 1;
+        }
+
+        const on = instance.once ? "once" : "on";
+        if (lodash.isArray(instance.event)) {
+          instance.event.forEach((type) => {
+            const handler = instance[type] ? type : "execute";
+            this.bot[on](instance.prefix + type, instance[handler].bind(instance));
+          });
+        } else {
+          const handler = instance[instance.event] ? instance.event : "execute";
+          this.bot[on](instance.prefix + instance.event, instance[handler].bind(instance));
+        }
+        return 1;
+      };
+
+      const batchSize = 10;
+      for (let i = 0; i < eventFiles.length; i += batchSize) {
+        const batch = eventFiles.slice(i, i + batchSize);
+        const results = await Promise.allSettled(batch.map(filePath => loadEventFile(filePath)));
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            eventCount += result.value || 0;
+          } else {
+            BotUtil.makeLog('error', `监听事件加载错误: ${result.reason?.message || result.reason}`, 'ListenerLoader', result.reason);
+          }
         }
       }
     } catch (error) {
@@ -107,19 +118,25 @@ class ListenerLoader {
       return;
     }
 
-    for (const tasker of this.bot.tasker) {
-      try {
+    const initResults = await Promise.allSettled(
+      this.bot.tasker.map(async (tasker) => {
         if (!tasker || typeof tasker.load !== 'function') {
           BotUtil.makeLog('warn', `tasker 无效: ${tasker?.name || 'unknown'}(${tasker?.id || 'unknown'})`, 'ListenerLoader');
-          continue
+          return { ok: false };
         }
 
         BotUtil.makeLog('debug', `初始化 tasker: ${tasker.name}(${tasker.id})`, 'ListenerLoader');
-        await tasker.load()
-        taskerCount++
-      } catch (err) {
-        BotUtil.makeLog('error', `tasker 初始化错误: ${tasker?.name || 'unknown'}(${tasker?.id || 'unknown'})`, 'ListenerLoader', err)
-        taskerErrorCount++
+        await tasker.load();
+        return { ok: true };
+      })
+    );
+
+    for (const result of initResults) {
+      if (result.status === 'fulfilled' && result.value?.ok) {
+        taskerCount++;
+      } else if (result.status === 'rejected') {
+        taskerErrorCount++;
+        BotUtil.makeLog('error', `tasker 初始化错误: ${result.reason?.message || result.reason}`, 'ListenerLoader', result.reason);
       }
     }
 
