@@ -1,10 +1,9 @@
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs/promises';
 import { discoverCoreSubDirs } from './core-fs.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const _root = path.resolve(__dirname, '../../');
 const _src = path.join(_root, 'src');
@@ -31,11 +30,8 @@ const _baseDirs = [
   path.join(_trash, 'html')
 ];
 
-/** @type {string[] | null} */
 let _coreDirsCache = null;
-/** @type {Map<string, string[]>} */
 const _coreSubDirsCache = new Map();
-/** @type {Promise<void> | null} */
 let _warmupPromise = null;
 
 const DEFAULT_LOADER_SUBDIRS = [
@@ -47,53 +43,29 @@ const DEFAULT_LOADER_SUBDIRS = [
   'events'
 ];
 
-/**
- * 清除 core 目录缓存（热加载新增 core 时可调用）
- */
 function invalidateCoreCache() {
   _coreDirsCache = null;
   _coreSubDirsCache.clear();
   _warmupPromise = null;
 }
 
-/**
- * 获取所有 core 目录
- * @returns {Promise<Array<string>>} core 目录路径数组
- */
 async function getCoreDirs() {
   if (_coreDirsCache) return _coreDirsCache;
 
-  try {
-    const entries = await fs.readdir(_core, { withFileTypes: true });
-    _coreDirsCache = entries
-      .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
-      .map(entry => path.join(_core, entry.name));
-    return _coreDirsCache;
-  } catch {
-    _coreDirsCache = [];
-    return _coreDirsCache;
-  }
+  const entries = await fs.readdir(_core, { withFileTypes: true });
+  _coreDirsCache = entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => path.join(_core, entry.name));
+  return _coreDirsCache;
 }
 
-/**
- * 获取所有 core 中指定子目录的路径
- * @param {string} subDir - 子目录名（如 'plugin', 'tasker'）
- * @returns {Promise<Array<string>>} 子目录路径数组
- */
 async function getCoreSubDirs(subDir) {
-  if (_coreSubDirsCache.has(subDir)) {
-    return _coreSubDirsCache.get(subDir);
+  if (!_coreSubDirsCache.has(subDir)) {
+    await warmupCoreLayout([subDir]);
   }
-
-  await warmupCoreLayout([subDir]);
-  return _coreSubDirsCache.get(subDir) || [];
+  return _coreSubDirsCache.get(subDir);
 }
 
-/**
- * 启动前一次性预热 core 子目录索引（减少并行 Loader 重复 stat）
- * @param {string[]} [subDirNames]
- * @returns {Promise<void>}
- */
 async function warmupCoreLayout(subDirNames = DEFAULT_LOADER_SUBDIRS) {
   const pending = subDirNames.filter((name) => !_coreSubDirsCache.has(name));
   if (pending.length === 0) return;
@@ -103,21 +75,17 @@ async function warmupCoreLayout(subDirNames = DEFAULT_LOADER_SUBDIRS) {
       const discovered = await discoverCoreSubDirs(_core, DEFAULT_LOADER_SUBDIRS);
 
       if (!_coreDirsCache) {
-        const allCoreDirs = new Set();
+        const coreDirs = new Set();
         for (const dirs of Object.values(discovered)) {
           for (const subPath of dirs) {
-            allCoreDirs.add(path.dirname(subPath));
+            coreDirs.add(path.dirname(subPath));
           }
         }
-        if (allCoreDirs.size > 0) {
-          _coreDirsCache = [...allCoreDirs].sort();
-        } else {
-          await getCoreDirs();
-        }
+        _coreDirsCache = coreDirs.size > 0 ? [...coreDirs].sort() : await getCoreDirs();
       }
 
       for (const name of DEFAULT_LOADER_SUBDIRS) {
-        _coreSubDirsCache.set(name, discovered[name] || []);
+        _coreSubDirsCache.set(name, discovered[name]);
       }
     })();
   }
@@ -142,47 +110,17 @@ export default {
   logs: _logs,
   renderers: _renderers,
   resources: _resources,
-  
+
   configDefault: path.join(_config, 'default_config'),
-  
   dataServerBots: path.join(_data, 'server_bots'),
   dataModels: path.join(_data, 'models'),
 
-  /**
-   * 获取所有 core 目录
-   */
   getCoreDirs,
-
-  /**
-   * 获取所有 core 中指定子目录的路径
-   */
   getCoreSubDirs,
-
-  /**
-   * 启动前预热 core 子目录布局
-   */
   warmupCoreLayout,
-
-  /**
-   * 清除 core 目录扫描缓存
-   */
   invalidateCoreCache,
 
-  /**
-   * 确保核心目录结构存在
-   * - logs: 日志
-   * - data: 插件与系统配置/数据
-   * - resources: 插件与渲染静态资源
-   * - trash: 临时文件（截图、缓存等）
-   */
-  async ensureBaseDirs(fsPromises) {
-    const fsMod = fsPromises || await import('fs/promises').then(m => m.default || m);
-    await Promise.all(_baseDirs.map(async dir => {
-      try {
-        await fsMod.mkdir(dir, { recursive: true });
-      } catch {
-        // 目录创建失败不应中断主流程，交由上层日志处理
-      }
-    }));
+  async ensureBaseDirs() {
+    await Promise.all(_baseDirs.map((dir) => fs.mkdir(dir, { recursive: true })));
   }
 };

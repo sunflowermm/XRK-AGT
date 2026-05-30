@@ -1,222 +1,135 @@
-/**
- * 统一数据库管理器
- * 
- * 提供统一的数据库访问接口，管理MongoDB和Redis连接
- * 替代直接使用全局变量的方式
- */
+import mongodbInit, { closeMongodb } from '../mongodb.js';
+import redisInit, { closeRedis, getRedisClient } from '../redis.js';
+import BotUtil from '#utils/botutil.js';
 
-import mongodbInit, { closeMongodb } from '../mongodb.js'
-import redisInit, { closeRedis, getRedisClient } from '../redis.js'
-import BotUtil from '#utils/botutil.js'
-
-/**
- * 数据库管理器类
- */
 class DatabaseManager {
-  constructor() {
-    this.mongodb = null
-    this.mongodbDb = null
-    this.redis = null
-    this.initialized = false
-  }
+  mongodb = null;
+  mongodbDb = null;
+  redis = null;
+  initialized = false;
 
-  /**
-   * 初始化所有数据库连接
-   * @returns {Promise<{mongodb: boolean, redis: boolean}>}
-   */
   async init() {
     if (this.initialized) {
-      return {
-        mongodb: !!this.mongodb,
-        redis: !!this.redis
-      }
+      return { mongodb: !!this.mongodb, redis: !!this.redis };
     }
 
-    try {
-      // 并行初始化MongoDB和Redis
-      const [mongodbResult, redisResult] = await Promise.allSettled([
-        mongodbInit(),
-        redisInit()
-      ])
+    const [mongodbResult, redisResult] = await Promise.allSettled([
+      mongodbInit(),
+      redisInit()
+    ]);
 
-      // 处理MongoDB初始化结果
-      if (mongodbResult.status === 'fulfilled') {
-        this.mongodbDb = mongodbResult.value
-        this.mongodb = global.mongodb
-        BotUtil.makeLog('success', 'MongoDB 初始化成功', 'DatabaseManager')
-      } else {
-        const level = process.env.XRK_OPTIONAL_DB === '1' ? 'warn' : 'error'
-        BotUtil.makeLog(level, `MongoDB 初始化失败: ${mongodbResult.reason?.message}`, 'DatabaseManager')
-      }
-
-      if (redisResult.status === 'fulfilled') {
-        this.redis = redisResult.value || getRedisClient()
-        BotUtil.makeLog('success', 'Redis 初始化成功', 'DatabaseManager')
-      } else {
-        const level = process.env.XRK_OPTIONAL_DB === '1' ? 'warn' : 'error'
-        BotUtil.makeLog(level, `Redis 初始化失败: ${redisResult.reason?.message}`, 'DatabaseManager')
-      }
-
-      this.initialized = true
-
-      const status = {
-        mongodb: !!this.mongodb,
-        redis: !!this.redis
-      }
-
-      if (!status.mongodb && !status.redis && process.env.XRK_OPTIONAL_DB !== '1') {
-        throw new Error('MongoDB 与 Redis 均不可用')
-      }
-
-      if (!status.mongodb && !status.redis && process.env.XRK_OPTIONAL_DB === '1') {
-        BotUtil.makeLog('warn', 'XRK_OPTIONAL_DB=1：在无数据库连接下继续启动', 'DatabaseManager')
-      }
-
-      return status
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error))
-      BotUtil.makeLog('error', `数据库初始化异常: ${err.message}`, 'DatabaseManager')
-      throw err
+    if (mongodbResult.status === 'fulfilled') {
+      this.mongodbDb = mongodbResult.value;
+      this.mongodb = global.mongodb;
+      BotUtil.makeLog('success', 'MongoDB 初始化成功', 'DatabaseManager');
+    } else {
+      const level = process.env.XRK_OPTIONAL_DB === '1' ? 'warn' : 'error';
+      BotUtil.makeLog(level, `MongoDB 初始化失败: ${mongodbResult.reason.message}`, 'DatabaseManager');
     }
+
+    if (redisResult.status === 'fulfilled') {
+      this.redis = redisResult.value ?? getRedisClient();
+      BotUtil.makeLog('success', 'Redis 初始化成功', 'DatabaseManager');
+    } else {
+      const level = process.env.XRK_OPTIONAL_DB === '1' ? 'warn' : 'error';
+      BotUtil.makeLog(level, `Redis 初始化失败: ${redisResult.reason.message}`, 'DatabaseManager');
+    }
+
+    this.initialized = true;
+    const status = { mongodb: !!this.mongodb, redis: !!this.redis };
+
+    if (!status.mongodb && !status.redis && process.env.XRK_OPTIONAL_DB !== '1') {
+      throw new Error('MongoDB 与 Redis 均不可用');
+    }
+    if (!status.mongodb && !status.redis) {
+      BotUtil.makeLog('warn', 'XRK_OPTIONAL_DB=1：在无数据库连接下继续启动', 'DatabaseManager');
+    }
+
+    return status;
   }
 
-  /**
-   * 获取MongoDB客户端
-   * @returns {import('mongodb').MongoClient | null}
-   */
   getMongoClient() {
-    return this.mongodb || global.mongodb || null
+    return this.mongodb;
   }
 
-  /**
-   * 获取MongoDB数据库实例
-   * @returns {import('mongodb').Db | null}
-   */
   getMongoDb() {
-    return this.mongodbDb || global.mongodbDb || null
+    return this.mongodbDb;
   }
 
-  /**
-   * 获取Redis客户端
-   * @returns {import('redis').RedisClientType | null}
-   */
   getRedis() {
-    return this.redis || global.redis || null
+    return this.redis;
   }
 
-  /**
-   * 检查MongoDB连接状态
-   * @returns {Promise<boolean>}
-   */
   async checkMongoDB() {
+    const db = this.mongodbDb;
+    if (!db) return false;
     try {
-      const db = this.getMongoDb()
-      if (!db) return false
-      await db.admin().ping()
-      return true
+      await db.admin().ping();
+      return true;
     } catch {
-      return false
+      return false;
     }
   }
 
-  /**
-   * 检查Redis连接状态
-   * @returns {Promise<boolean>}
-   */
   async checkRedis() {
+    const redis = this.redis;
+    if (!redis?.isOpen) return false;
     try {
-      const redis = this.getRedis()
-      if (!redis || !redis.isOpen) return false
-      await redis.ping()
-      return true
+      await redis.ping();
+      return true;
     } catch {
-      return false
+      return false;
     }
   }
 
-  /**
-   * 关闭所有数据库连接
-   * @returns {Promise<void>}
-   */
   async close() {
-    const promises = []
-    
-    if (this.mongodb || global.mongodb) {
-      promises.push(closeMongodb().catch(() => {}))
-    }
-    
-    if (this.redis || global.redis) {
-      promises.push(closeRedis().catch(() => {}))
-    }
-
-    await Promise.allSettled(promises)
-    
-    this.mongodb = null
-    this.mongodbDb = null
-    this.redis = null
-    this.initialized = false
-
-    BotUtil.makeLog('info', '所有数据库连接已关闭', 'DatabaseManager')
+    await Promise.allSettled([
+      closeMongodb().catch(() => {}),
+      closeRedis().catch(() => {})
+    ]);
+    this.mongodb = null;
+    this.mongodbDb = null;
+    this.redis = null;
+    this.initialized = false;
+    BotUtil.makeLog('info', '数据库连接已关闭', 'DatabaseManager');
   }
 
-  /**
-   * 获取数据库健康状态
-   * @returns {Promise<{mongodb: boolean, redis: boolean}>}
-   */
   async getHealthStatus() {
     const [mongodb, redis] = await Promise.all([
       this.checkMongoDB(),
       this.checkRedis()
-    ])
-
-    return { mongodb, redis }
+    ]);
+    return { mongodb, redis };
   }
 }
 
-// 单例实例
-let instance = null
+let instance = null;
 
-/**
- * 获取数据库管理器实例
- * @returns {DatabaseManager}
- */
 export function getDatabaseManager() {
-  if (!instance) {
-    instance = new DatabaseManager()
-  }
-  return instance
+  if (!instance) instance = new DatabaseManager();
+  return instance;
 }
 
-/**
- * 初始化数据库（便捷函数）
- * @returns {Promise<DatabaseManager>}
- */
 export async function initDatabases() {
-  const manager = getDatabaseManager()
-  await manager.init()
-  return manager
+  const manager = getDatabaseManager();
+  await manager.init();
+  return manager;
 }
 
-/**
- * 关闭所有数据库连接（便捷函数）
- * @returns {Promise<void>}
- */
 export async function closeDatabases() {
-  const manager = getDatabaseManager()
-  await manager.close()
+  await getDatabaseManager().close();
 }
 
-// 导出便捷访问函数
 export function getMongoClient() {
-  return getDatabaseManager().getMongoClient()
+  return getDatabaseManager().getMongoClient();
 }
 
 export function getMongoDb() {
-  return getDatabaseManager().getMongoDb()
+  return getDatabaseManager().getMongoDb();
 }
 
 export function getRedis() {
-  return getDatabaseManager().getRedis()
+  return getDatabaseManager().getRedis();
 }
 
-export default getDatabaseManager
+export default getDatabaseManager;

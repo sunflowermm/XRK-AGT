@@ -4,13 +4,13 @@ import path from 'node:path';
 
 import { SCAN_IGNORE_PREFIXES } from './loader-constants.js';
 
-function scanOpts(options = {}) {
-  return {
-    ext: options.ext || '',
-    recursive: options.recursive !== false,
-    ignore: options.ignore || SCAN_IGNORE_PREFIXES,
-    exclude: options.exclude || []
-  };
+export function normalizeScanOptions({
+  ext = '',
+  recursive = true,
+  ignore = SCAN_IGNORE_PREFIXES,
+  exclude = []
+} = {}) {
+  return { ext, recursive, ignore, exclude };
 }
 
 async function walkDir(dir, opts, out) {
@@ -36,79 +36,33 @@ async function walkDir(dir, opts, out) {
   }
 }
 
-/**
- * @param {string} dir
- * @param {object} [options]
- * @returns {Promise<string[]>}
- */
-export async function scanFiles(dir, options = {}) {
-  const opts = scanOpts(options);
-  try {
-    await fsPromises.access(dir);
-  } catch {
-    return [];
-  }
+/** @param {string} dir @param {object} [options] @returns {Promise<string[]>} */
+export async function scanFiles(dir, options) {
   const files = [];
-  await walkDir(dir, opts, files);
+  await walkDir(dir, normalizeScanOptions(options), files);
   return files;
 }
 
-/**
- * @param {string[]} pathsList
- * @returns {Promise<boolean[]>}
- */
-/** 与 statDirsSync 相同，供 await 调用方使用 */
-export const statDirs = statDirsSync;
-
-/** 与 statFilesSync 相同，供 await 调用方使用 */
-export const statFiles = statFilesSync;
-
-/**
- * @param {string[]} pathsList
- * @returns {boolean[]}
- */
-export function statDirsSync(pathsList) {
+function statKindSync(pathsList, kind) {
   return pathsList.map((p) => {
     try {
-      return fs.existsSync(p) && fs.statSync(p).isDirectory();
+      return fs.statSync(p)[kind]();
     } catch {
       return false;
     }
   });
 }
 
-/**
- * @param {string[]} pathsList
- * @returns {boolean[]}
- */
-export function statFilesSync(pathsList) {
-  return pathsList.map((p) => {
-    try {
-      return fs.existsSync(p) && fs.statSync(p).isFile();
-    } catch {
-      return false;
-    }
-  });
-}
+export const statDirs = (pathsList) => statKindSync(pathsList, 'isDirectory');
+export const statFiles = (pathsList) => statKindSync(pathsList, 'isFile');
 
-/**
- * @param {string} coreRoot
- * @param {string[]} subDirNames
- * @returns {Promise<Record<string, string[]>>}
- */
+/** @param {string} coreRoot @param {string[]} subDirNames */
 export async function discoverCoreSubDirs(coreRoot, subDirNames) {
-  /** @type {Record<string, string[]>} */
   const result = Object.fromEntries(subDirNames.map((name) => [name, []]));
-
-  let coreDirs = [];
-  try {
-    const entries = await fsPromises.readdir(coreRoot, { withFileTypes: true });
-    coreDirs = entries
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-      .map((entry) => path.join(coreRoot, entry.name));
-  } catch {
-    return result;
-  }
+  const entries = await fsPromises.readdir(coreRoot, { withFileTypes: true });
+  const coreDirs = entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+    .map((e) => path.join(coreRoot, e.name));
 
   const candidates = [];
   for (const coreDir of coreDirs) {
@@ -118,21 +72,18 @@ export async function discoverCoreSubDirs(coreRoot, subDirNames) {
   }
   if (candidates.length === 0) return result;
 
-  const exists = statDirsSync(candidates.map((item) => item.fullPath));
-  candidates.forEach((item, index) => {
-    if (exists[index]) result[item.subName].push(item.fullPath);
+  const exists = statDirs(candidates.map((c) => c.fullPath));
+  candidates.forEach((c, i) => {
+    if (exists[i]) result[c.subName].push(c.fullPath);
   });
   return result;
 }
 
-/**
- * @param {string[]} pathsList
- * @returns {(string | null)[]}
- */
+/** @param {string[]} pathsList @returns {(string | null)[]} */
 export function readTextFilesSync(pathsList) {
   return pathsList.map((p) => {
     try {
-      if (!fs.existsSync(p) || !fs.statSync(p).isFile()) return null;
+      if (!fs.statSync(p).isFile()) return null;
       return fs.readFileSync(p, 'utf8');
     } catch {
       return null;
@@ -140,47 +91,18 @@ export function readTextFilesSync(pathsList) {
   });
 }
 
-/**
- * @param {string[]} pathsList
- * @returns {number}
- */
+/** @param {string[]} pathsList @returns {number} */
 export function pickFirstExistingSync(pathsList) {
-  for (let i = 0; i < pathsList.length; i++) {
-    try {
-      if (fs.existsSync(pathsList[i])) return i;
-    } catch {
-      // continue
-    }
-  }
-  return -1;
+  return pathsList.findIndex((p) => fs.existsSync(p));
 }
 
-/**
- * @param {string[]} candidates
- * @returns {string | null}
- */
-export function findFirstExistingFile(candidates) {
-  const list = candidates?.filter(Boolean) ?? [];
-  if (list.length === 0) return null;
-  const idx = pickFirstExistingSync(list);
-  return idx >= 0 ? list[idx] : null;
-}
-
-/**
- * @param {string[]} subDirs
- * @param {string} fileBaseName
- * @returns {string | null}
- */
+/** @param {string[]} subDirs @param {string} fileBaseName */
 export function findInCoreSubDirs(subDirs, fileBaseName) {
-  const candidates = subDirs.map((dir) => path.join(dir, `${fileBaseName}.js`));
-  return findFirstExistingFile(candidates);
+  const idx = pickFirstExistingSync(subDirs.map((dir) => path.join(dir, `${fileBaseName}.js`)));
+  return idx >= 0 ? path.join(subDirs[idx], `${fileBaseName}.js`) : null;
 }
 
-/**
- * @param {string} pattern
- * @param {string} event
- * @returns {boolean}
- */
+/** @param {string} pattern @param {string} event */
 export function matchEventPattern(pattern, event) {
   if (pattern === event) return true;
   if (!pattern.includes('*')) return false;

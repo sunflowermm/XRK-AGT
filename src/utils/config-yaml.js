@@ -3,7 +3,7 @@ import YAML from 'yaml';
 import {
   pickFirstExistingSync,
   readTextFilesSync,
-  statFilesSync
+  statFiles
 } from './core-fs.js';
 
 /**
@@ -17,12 +17,11 @@ export function loadYamlFromCandidates(candidates, logLabel = 'config') {
   if (idx < 0) return { config: {}, watchFile: null };
 
   const watchFile = paths[idx];
-  const texts = readTextFilesSync([watchFile]);
-  const raw = texts[0];
-  if (raw == null || raw === '') return { config: {}, watchFile };
+  const raw = readTextFilesSync([watchFile])[0];
+  if (!raw) return { config: {}, watchFile };
 
   try {
-    return { config: YAML.parse(raw) ?? {}, watchFile };
+    return { config: YAML.parse(raw) || {}, watchFile };
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     err.configLabel = logLabel;
@@ -51,25 +50,12 @@ export function readYamlTextsBatch(paths) {
  * @returns {object}
  */
 export function mergeYamlTexts(defaultText, serverText) {
-  let config = {};
-  if (defaultText) {
-    try {
-      config = YAML.parse(defaultText) ?? {};
-    } catch {
-      config = {};
-    }
-  }
-  if (serverText) {
-    try {
-      config = { ...config, ...(YAML.parse(serverText) ?? {}) };
-    } catch {
-      // 保留 default
-    }
-  }
-  return config;
+  const defaultConfig = defaultText ? YAML.parse(defaultText) : {};
+  const serverConfig = serverText ? YAML.parse(serverText) : {};
+  return { ...defaultConfig, ...serverConfig };
 }
 
 /** @param {string} filePath */
 export function fileExistsSync(filePath) {
-  return statFilesSync([filePath])[0] === true;
+  return statFiles([filePath])[0];
 }

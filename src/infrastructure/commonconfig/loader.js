@@ -1,109 +1,51 @@
-import fsSync from 'fs';
-import path from 'path';
+import path from 'node:path';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 import { findInCoreSubDirs } from '#utils/core-fs.js';
+import { FileLoader } from '#utils/file-loader.js';
+import { HotReloadBase } from '#utils/hot-reload-base.js';
+import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 
-/**
- * 配置加载器
- * 负责加载和管理所有配置类（从 core/<core名>/commonconfig/*.js 加载）。
- * 通道配置（如 feishu）由此加载，通过 ConfigManager.get('feishu') 访问，路径约定与 config-constants 注释一致。
- */
 class ConfigLoader {
-  constructor() {
-    /** 所有配置实例 */
-    this.configs = new Map();
-    
-    /** 加载状态 */
-    this.loaded = false;
-    
-    /** 配置目录路径（不再使用固定路径） */
-    this.configDir = null;
-    
-    /** 文件监视器 */
-    this.watcher = null;
-  }
+  configs = new Map();
+  loaded = false;
+  watcher = null;
 
-  /**
-   * 加载所有配置
-   * @returns {Promise<Map>}
-   */
   async load() {
-    try {
-      const startTime = Date.now();
-      BotUtil.makeLog('info', '开始加载配置管理器...', 'ConfigLoader');
+    const startTime = Date.now();
+    BotUtil.makeLog('info', '开始加载配置管理器...', 'ConfigLoader');
 
-      const { FileLoader } = await import('#utils/file-loader.js');
-      const allFiles = await FileLoader.getCoreSubDirFiles('commonconfig', {
-        ext: '.js',
-        recursive: false
-      });
+    const allFiles = await FileLoader.getCoreSubDirFiles('commonconfig', {
+      ext: '.js',
+      recursive: false
+    });
 
-      const batchSize = 10;
-      for (let i = 0; i < allFiles.length; i += batchSize) {
-        const batch = allFiles.slice(i, i + batchSize);
-        await Promise.allSettled(batch.map(file => this._loadConfig(file)));
-      }
+    await FileLoader.forEachBatch(allFiles, LOADER_BATCH_SIZE, (file) => this._loadConfig(file));
 
-      this.loaded = true;
-      const loadTime = Date.now() - startTime;
-      
-      BotUtil.makeLog('info', 
-        `配置管理器加载完成: ${this.configs.size}个配置, 耗时${loadTime}ms`, 
-        'ConfigLoader'
-      );
-
-      return this.configs;
-    } catch (error) {
-      BotUtil.makeLog('error', '配置管理器加载失败', 'ConfigLoader', error);
-      throw error;
-    }
+    this.loaded = true;
+    BotUtil.makeLog(
+      'info',
+      `配置管理器加载完成: ${this.configs.size}个, 耗时${Date.now() - startTime}ms`,
+      'ConfigLoader'
+    );
+    return this.configs;
   }
 
-  /**
-   * 加载单个配置文件
-   * @private
-   */
   async _loadConfig(filePath) {
     try {
       const key = path.basename(filePath, '.js');
-      
-      // 动态导入
-      const fileUrl = `file://${filePath}?t=${Date.now()}`;
-      const module = await import(fileUrl);
-      
+      const module = await import(`file://${filePath}?t=${Date.now()}`);
       if (!module.default) {
-        BotUtil.makeLog('warn', `无效的配置模块: ${key} (缺少default导出)`, 'ConfigLoader');
+        BotUtil.makeLog('warn', `无效的配置模块: ${key}`, 'ConfigLoader');
         return false;
       }
 
-      let configInstance;
-      
-      // 支持类和对象两种导出方式
-      if (typeof module.default === 'function') {
-        try {
-          configInstance = new module.default();
-        } catch {
-          BotUtil.makeLog('warn', `无法实例化配置模块: ${key}`, 'ConfigLoader');
-          return false;
-        }
-      } else if (typeof module.default === 'object' && module.default !== null) {
-        configInstance = module.default;
-      } else {
-        BotUtil.makeLog('warn', `无效的配置模块: ${key} (导出类型错误)`, 'ConfigLoader');
-        return false;
-      }
+      const configInstance = typeof module.default === 'function'
+        ? new module.default()
+        : module.default;
 
-      // 验证配置实例
-      if (!configInstance || typeof configInstance !== 'object') {
-        BotUtil.makeLog('warn', `配置实例创建失败: ${key}`, 'ConfigLoader');
-        return false;
-      }
-
-      // 存储配置实例
       this.configs.set(key, configInstance);
-      
-      BotUtil.makeLog('debug', `加载配置: ${configInstance.displayName || key}`, 'ConfigLoader');
+      BotUtil.makeLog('debug', `加载配置: ${configInstance.displayName ?? key}`, 'ConfigLoader');
       return true;
     } catch (error) {
       BotUtil.makeLog('error', `加载配置失败: ${filePath} - ${error.message}`, 'ConfigLoader', error);
@@ -111,123 +53,59 @@ class ConfigLoader {
     }
   }
 
-  /**
-   * 获取配置实例
-   * @param {string} name - 配置名称
-   * @returns {Object|null}
-   */
   get(name) {
-    return this.configs.get(name) || null;
+    return this.configs.get(name) ?? null;
   }
 
-  /**
-   * 获取所有配置
-   * @returns {Map}
-   */
   getAll() {
     return this.configs;
   }
 
-  /**
-   * 获取配置列表（用于API）
-   * @returns {Array}
-   */
   getList() {
-    const list = [];
-    
-    for (const config of this.configs.values()) {
-      if (config && typeof config.getStructure === 'function') {
-        list.push(config.getStructure());
-      }
-    }
-    
-    return list;
+    return [...this.configs.values()]
+      .filter((config) => typeof config.getStructure === 'function')
+      .map((config) => config.getStructure());
   }
 
-  /**
-   * 重新加载指定配置
-   * @param {string} name - 配置名称
-   * @returns {Promise<boolean>}
-   */
   async reload(name) {
-    try {
-      // 查找配置文件
-      const configDirs = await paths.getCoreSubDirs('commonconfig');
-      const configPath = await findInCoreSubDirs(configDirs, name);
-      
-      if (!configPath) {
-        throw new Error(`配置文件不存在: ${name}`);
-      }
-
-      await this._loadConfig(configPath);
-      
-      BotUtil.makeLog('info', `配置已重载: ${name}`, 'ConfigLoader');
-      return true;
-    } catch (error) {
-      BotUtil.makeLog('error', `配置重载失败: ${name}`, 'ConfigLoader', error);
+    const configPath = findInCoreSubDirs(await paths.getCoreSubDirs('commonconfig'), name);
+    if (!configPath) {
+      BotUtil.makeLog('error', `配置重载失败: ${name} 文件不存在`, 'ConfigLoader');
       return false;
     }
+    await this._loadConfig(configPath);
+    BotUtil.makeLog('info', `配置已重载: ${name}`, 'ConfigLoader');
+    return true;
   }
 
-  /**
-   * 清除所有缓存
-   */
   clearAllCache() {
     for (const config of this.configs.values()) {
-      if (typeof config.clearCache === 'function') {
-        config.clearCache();
-      }
+      config.clearCache?.();
     }
-    BotUtil.makeLog('debug', '已清除所有配置缓存', 'ConfigLoader');
   }
 
-  /**
-   * 启用文件监视（热加载）
-   * @param {boolean} enable - 是否启用
-   */
   async watch(enable = true) {
     if (!enable) {
       if (this.watcher) {
-        await this.watcher.close()
-        this.watcher = null
+        await this.watcher.close();
+        this.watcher = null;
       }
-      return
+      return;
     }
+    if (this.watcher) return;
 
-    if (this.watcher) return
+    const hotReload = new HotReloadBase({ loggerName: 'ConfigLoader' });
+    const configDirs = await paths.getCoreSubDirs('commonconfig');
+    if (configDirs.length === 0) return;
 
-    try {
-      const { HotReloadBase } = await import('#utils/hot-reload-base.js')
-      const hotReload = new HotReloadBase({ loggerName: 'ConfigLoader' })
-      
-      const configDirs = await paths.getCoreSubDirs('commonconfig')
-      if (configDirs.length === 0) return
-
-      await hotReload.watch(true, {
-        dirs: configDirs,
-        onAdd: async (filePath) => {
-          const key = hotReload.getFileKey(filePath)
-          BotUtil.makeLog('info', `检测到新配置文件: ${key}`, 'ConfigLoader')
-          await this._loadConfig(filePath)
-        },
-        onChange: async (filePath) => {
-          const key = hotReload.getFileKey(filePath)
-          BotUtil.makeLog('info', `检测到配置文件变更: ${key}`, 'ConfigLoader')
-          await this.reload(key)
-        },
-        onUnlink: async (filePath) => {
-          const key = hotReload.getFileKey(filePath)
-          BotUtil.makeLog('info', `检测到配置文件删除: ${key}`, 'ConfigLoader')
-          this.configs.delete(key)
-        }
-      })
-
-      this.watcher = hotReload.watcher
-    } catch (error) {
-      BotUtil.makeLog('error', '启动配置文件监视失败', 'ConfigLoader', error)
-    }
+    await hotReload.watch(true, {
+      dirs: configDirs,
+      onAdd: (filePath) => this._loadConfig(filePath),
+      onChange: (filePath) => this.reload(hotReload.getFileKey(filePath)),
+      onUnlink: (filePath) => this.configs.delete(hotReload.getFileKey(filePath))
+    });
+    this.watcher = hotReload.watcher;
   }
 }
 
-// 导出单例
 export default new ConfigLoader();
