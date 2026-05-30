@@ -1,7 +1,15 @@
 import { emotionIconSVG, pokeHandIconSVG } from '../ui-kit.js';
+import {
+  animateChatMessage,
+  animateChatModeSwitch,
+  animateAISettingsPanel,
+  animateChatSendPulse,
+  cancelPageMotion
+} from '../motion/gsap-motion.js';
 
 export async function renderChatPage(app) {
   const content = document.getElementById('content');
+  cancelPageMotion(content);
   const isAIMode = app._isAIMode();
   const isVoiceMode = app._isVoiceMode();
   const aiSettingsPlaceholder = isAIMode
@@ -153,59 +161,10 @@ export async function renderChatPage(app) {
   app._bindChatEvents();
 }
 
-export function switchChatMode(app, mode, oldMode = null) {
+export function switchChatMode(app, mode) {
   app.clearChatStreamState();
-  const needFullRender = mode === 'voice' || oldMode === 'voice' || mode === 'event' || oldMode === 'event';
-  if (needFullRender) {
-    if (mode !== 'event') app._clearEventReplyState();
-    return app.renderChat();
-  }
-
-  const box = document.getElementById('chatMessages');
-  if (!box) return app.renderChat();
-
-  const isAIMode = mode === 'ai';
-  const sidebar = document.querySelector('.chat-sidebar');
-  const headerTitle = document.querySelector('.chat-header-title span:last-child');
-  const imageInput = document.getElementById('chatImageInput');
-  document.querySelectorAll('.chat-mode-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.mode === mode);
-  });
-  if (headerTitle) headerTitle.textContent = isAIMode ? 'AI 对话' : 'Event 对话';
-  if (imageInput) imageInput.setAttribute('accept', isAIMode ? 'image/*' : 'image/*,video/*,audio/*');
-
-  const finish = () => {
-    app.ensureDeviceWs();
-    app._bindChatEvents();
-    const cached = app._chatMessagesCache[mode];
-    if (cached?.html) {
-      box.style.overflow = 'hidden';
-      box.innerHTML = cached.html;
-      box.style.overflow = '';
-      box.scrollTop = cached.scrollTop ?? box.scrollHeight;
-      app._chatMessagesCache[mode] = { scrollTop: box.scrollTop, scrollHeight: box.scrollHeight, html: box.innerHTML };
-      return;
-    }
-    app._renderHistoryIntoBox(box, app._getChatHistoryByMode(mode));
-    box.scrollTop = box.scrollHeight;
-    app._chatMessagesCache[mode] = { scrollTop: box.scrollTop, scrollHeight: box.scrollHeight, html: box.innerHTML };
-  };
-
-  if (isAIMode) {
-    return app._renderAISettings().then(aiSettings => {
-      if (sidebar && !sidebar.querySelector('.ai-settings-panel')) {
-        const settingsDiv = document.createElement('div');
-        settingsDiv.innerHTML = aiSettings;
-        sidebar.appendChild(settingsDiv.firstElementChild);
-      }
-      applyAIMobileSettingsState(true);
-      app.initChatControls();
-      finish();
-    });
-  }
-
-  sidebar?.querySelector('.ai-settings-panel')?.remove();
-  finish();
+  if (mode !== 'event') app._clearEventReplyState();
+  return app.renderChat();
 }
 
 export function unbindChatEvents(app) {
@@ -246,7 +205,11 @@ export function bindChatEvents(app) {
     return active === input || active === voiceInput;
   };
   const onChatInputFocusIn = () => setKeyboardOpen(true);
-  const onChatInputFocusOut = () => setTimeout(() => { if (!isAnyChatInputFocused()) setKeyboardOpen(false); }, 0);
+  const onChatInputFocusOut = () => {
+    setTimeout(() => {
+      if (!isAnyChatInputFocused()) setKeyboardOpen(false);
+    }, 0);
+  };
 
   const modeSelector = document.querySelector('.chat-mode-selector');
   if (modeSelector) {
@@ -260,7 +223,9 @@ export function bindChatEvents(app) {
       if (box) app._chatMessagesCache[oldMode] = { scrollTop: box.scrollTop, scrollHeight: box.scrollHeight, html: box.innerHTML };
       app._chatMode = mode;
       localStorage.setItem('chatMode', mode);
-      await app._switchChatMode(mode, oldMode);
+      await app._switchChatMode(mode);
+      const activeBtn = document.querySelector(`.chat-mode-btn[data-mode="${mode}"]`);
+      animateChatModeSwitch(activeBtn);
     });
   }
   if (app._isAIMode()) {
@@ -270,6 +235,7 @@ export function bindChatEvents(app) {
       if (!panel) return;
       panel.classList.toggle('mobile-collapsed');
       applyAIMobileSettingsState(false);
+      animateAISettingsPanel(panel, !panel.classList.contains('mobile-collapsed'));
     });
     const providerSelect = document.getElementById('aiProviderSelect');
     const personaInput = document.getElementById('aiPersonaInput');
@@ -298,7 +264,10 @@ export function bindChatEvents(app) {
       app.navigateTo('config');
     });
   }
-  if (sendBtn) safeBind(sendBtn, 'click', () => app.sendChatMessage());
+  if (sendBtn) safeBind(sendBtn, 'click', () => {
+    animateChatSendPulse(sendBtn);
+    app.sendChatMessage();
+  });
   if (input) {
     safeBind(input, 'keydown', (e) => {
       if (e.key === 'Enter') {
@@ -381,13 +350,14 @@ export function bindChatEvents(app) {
 function applyAIMobileSettingsState(forceCollapseOnMobile = true) {
   const panel = document.getElementById('aiSettingsPanel');
   const toggle = document.getElementById('aiSettingsMobileToggle');
-  if (!panel || !toggle) return;
+  if (!panel) return;
   const isMobile = window.matchMedia?.('(max-width: 768px)')?.matches ?? window.innerWidth <= 768;
   if (!isMobile) {
     panel.classList.remove('mobile-collapsed');
-    toggle.setAttribute('aria-expanded', 'true');
+    toggle?.setAttribute('aria-expanded', 'true');
     return;
   }
+  if (!toggle) return;
   if (forceCollapseOnMobile) {
     panel.classList.add('mobile-collapsed');
   }
@@ -399,6 +369,10 @@ export function applyMessageEnter(app, div, animate = true) {
   if (!div || app._isRestoringHistory) return;
   if (!animate) {
     div.classList.remove('message-enter');
+    return;
+  }
+  if (isMotionReady() && !isReducedMotion()) {
+    animateChatMessage(div);
     return;
   }
   div.addEventListener('animationend', () => {

@@ -1,3 +1,5 @@
+import { cancelPageMotion } from '../motion/gsap-motion.js';
+
 export function renderHomePage(app) {
   ['cpu', 'mem', 'net'].forEach(key => {
     if (app._charts[key]) {
@@ -12,6 +14,8 @@ export function renderHomePage(app) {
 
   const content = document.getElementById('content');
   if (!content) return;
+
+  cancelPageMotion(content);
 
   content.innerHTML = `
       <div class="dashboard">
@@ -146,8 +150,8 @@ export function renderHomePage(app) {
 
   const cachedData = app._homeDataCache || app._latestSystem;
   if (cachedData) {
-    Promise.resolve().then(() => {
-      app._applyHomeData(cachedData, true);
+    requestAnimationFrame(() => {
+      app._applyHomeData(cachedData);
     });
   }
 

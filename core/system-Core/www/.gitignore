@@ -2,7 +2,6 @@
 xrk/**
 !xrk/index.html
 !xrk/api-config.json
-!xrk/styles.css
 !xrk/css/
 !xrk/css/*
 !xrk/app.js
@@ -10,6 +9,9 @@ xrk/**
 !xrk/modules/pages/*
 !xrk/modules/ui/
 !xrk/modules/ui/*
+!xrk/modules/motion/
+!xrk/modules/motion/*
+!xrk/modules/config-page.js
 !xrk/lib
 !xrk/lib/chart.umd.min.js
 !xrk/lib/mermaid.min.js

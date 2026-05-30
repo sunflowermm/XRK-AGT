@@ -24,6 +24,13 @@
   backface-visibility: hidden;
 }
 
+/* 桌面端侧栏始终可见（防止 GSAP 移动端遗留 inline transform） */
+@media (min-width: 769px) {
+  .sidebar {
+    transform: translateX(0) !important;
+  }
+}
+
 .sidebar-brand {
   padding: 20px;
   display: flex;
@@ -359,6 +366,8 @@ body[data-page="chat"] .content {
   font-size: 13px;
   cursor: pointer;
   transition: all var(--transition);
+  flex-shrink: 0;
+  pointer-events: auto;
 }
 
 .api-list-back-btn:hover {

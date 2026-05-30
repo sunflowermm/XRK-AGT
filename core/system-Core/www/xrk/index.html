@@ -14,7 +14,6 @@
     <noscript><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-    <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="css/styles-base.css">
     <link rel="stylesheet" href="css/styles-layout.css">
     <link rel="stylesheet" href="css/styles-api-debug.css">
@@ -22,9 +21,9 @@
     <!-- Phase B: UI 组件/页面 CSS 模块化骨架 -->
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/pages.css">
-    <link rel="stylesheet" href="css/chat.css">
     <link rel="stylesheet" href="css/api-list.css">
     <link rel="stylesheet" href="css/config.css">
+    <link rel="stylesheet" href="css/motion.css">
 </head>
 <body>
     <a href="#content" class="skip-link">跳到主内容</a>
@@ -80,7 +79,7 @@
             <!-- API 列表 (仅在API调试页面显示) -->
             <div class="api-list-container" id="apiListContainer" style="display:none">
                 <div class="api-list-header">
-                    <button class="api-list-back-btn" id="apiListBackBtn">
+                    <button type="button" class="api-list-back-btn" id="apiListBackBtn" aria-label="返回主菜单">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="15,18 9,12 15,6"/>
                         </svg>
@@ -157,6 +156,8 @@
     <!-- Toast 容器 -->
     <div class="toast-container" id="toastContainer" aria-live="polite" aria-relevant="additions"></div>
 
+    <!-- GSAP：页面动效（本地 lib，与 chart/mermaid 同源） -->
+    <script src="lib/gsap.min.js"></script>
     <!-- Chart.js / Mermaid：同目录下 lib，与 xrk 同源避免 MIME 错误 -->
     <script src="lib/chart.umd.min.js" defer></script>
     <script src="lib/mermaid.min.js" defer></script>

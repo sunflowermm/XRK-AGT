@@ -1,37 +1,87 @@
 // API 调试模块：从 app.js 中提取的逻辑，统一通过 app 实例传入
 
+import { cancelPageMotion } from './motion/gsap-motion.js';
+
+/** 当前应高亮的 API id：内存态优先，其次 localStorage */
+function getResolvedActiveApiId(app) {
+  if (app.currentAPI?.apiId) return app.currentAPI.apiId;
+  try {
+    return localStorage.getItem('lastApiId') || null;
+  } catch {
+    return null;
+  }
+}
+
+function escapeApiItemSelector(apiId) {
+  const id = String(apiId ?? '');
+  return typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(id) : id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+/** 同步侧边栏 API 条目的选中态（点击与路由恢复共用） */
+export function setActiveApiSidebarItem(apiId) {
+  const container = document.getElementById('apiGroups');
+  if (!container || !apiId) return false;
+
+  const item = container.querySelector(`.api-item[data-id="${escapeApiItemSelector(apiId)}"]`);
+  if (!item) return false;
+
+  container.querySelectorAll('.api-item').forEach((el) => {
+    el.classList.remove('active');
+    el.removeAttribute('aria-current');
+  });
+  item.classList.add('active');
+  item.setAttribute('aria-current', 'true');
+  try {
+    item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } catch {}
+  return true;
+}
+
+function restoreApiSidebarSelection(app) {
+  const apiId = getResolvedActiveApiId(app);
+  if (apiId) setActiveApiSidebarItem(apiId);
+}
+
 export function renderAPI(app) {
   const content = document.getElementById('content');
   if (!content) return;
+  cancelPageMotion(content);
+
+  const activeApiId = getResolvedActiveApiId(app);
+  const restoring = Boolean(activeApiId);
 
   content.innerHTML = `
       <div class="api-container">
-        <div class="api-header-section" id="apiWelcome">
+        <div class="api-header-section" id="apiWelcome"${restoring ? ' style="display:none"' : ''}>
           <h1 class="api-header-title">API 调试中心</h1>
           <p class="api-header-subtitle">在左侧侧边栏选择 API 开始测试</p>
         </div>
-        <div id="apiTestSection" style="display:none"></div>
+        <div id="apiTestSection"${restoring ? '' : ' style="display:none"'}></div>
       </div>
     `;
 
-  // 如果之前已选择过某个 API，刷新后自动恢复
-  try {
-    const lastApiId = localStorage.getItem('lastApiId');
-    if (lastApiId) {
-      // 进入 API 页：恢复上次选择不强制关闭侧边栏
-      selectAPI(app, lastApiId, { closeSidebar: false });
-    }
-  } catch {}
+  if (activeApiId) {
+    selectAPI(app, activeApiId, { closeSidebar: false });
+  }
 }
 
 export function renderAPIGroups(app) {
   const container = document.getElementById('apiGroups');
   if (!container || !app.apiConfig) return;
 
+  const configSig = (app.apiConfig.apiGroups ?? [])
+    .flatMap((g) => (g.apis ?? []).map((a) => a.id))
+    .join('|');
+  if (container.dataset._apiConfigSig === configSig && container.querySelector('.api-item')) {
+    restoreApiSidebarSelection(app);
+    return;
+  }
+  container.dataset._apiConfigSig = configSig;
+
   const customGroupHtml = `
     <div class="api-group">
       <div class="api-group-title">自定义</div>
-      <div class="api-item" data-id="custom">
+      <div class="api-item" data-id="custom" role="button" tabindex="0">
         <span class="method-tag method-post">CUSTOM</span>
         <span>自定义请求</span>
       </div>
@@ -48,7 +98,7 @@ export function renderAPIGroups(app) {
           ${group.apis
             .map(
               (api) => `
-            <div class="api-item" data-id="${api.id}">
+            <div class="api-item" data-id="${api.id}" role="button" tabindex="0">
               <span class="method-tag method-${api.method.toLowerCase()}">${api.method}</span>
               <span>${api.title}</span>
             </div>`
@@ -58,15 +108,26 @@ export function renderAPIGroups(app) {
       )
       .join('');
 
-  // 事件委托：避免为每个 API 条目重复绑定监听器
-  container.onclick = (e) => {
+  restoreApiSidebarSelection(app);
+
+  if (container.dataset._apiListBound === '1') return;
+  container.dataset._apiListBound = '1';
+
+  container.addEventListener('click', (e) => {
     const item = e.target?.closest?.('.api-item');
     if (!item || !container.contains(item)) return;
-    container.querySelectorAll('.api-item').forEach((i) => i.classList.remove('active'));
-    item.classList.add('active');
-    // 移动端：用户点了具体 API 条目后关闭侧边栏
+    setActiveApiSidebarItem(item.dataset.id);
     selectAPI(app, item.dataset.id, { closeSidebar: true });
-  };
+  });
+
+  container.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const item = e.target?.closest?.('.api-item');
+    if (!item || !container.contains(item)) return;
+    e.preventDefault();
+    setActiveApiSidebarItem(item.dataset.id);
+    selectAPI(app, item.dataset.id, { closeSidebar: true });
+  });
 }
 
 export function selectAPI(app, apiId, options = {}) {
@@ -88,6 +149,7 @@ export function selectAPI(app, apiId, options = {}) {
   try {
     localStorage.setItem('lastApiId', apiId);
   } catch {}
+  setActiveApiSidebarItem(apiId);
   app._lastJsonPreview = null;
   // 切换 API 时强制清空旧 CodeMirror 引用，避免 setValue 写入已被 innerHTML 替换的旧 textarea
   app.jsonEditor = null;
@@ -238,6 +300,7 @@ function selectCustomAPI(app, { closeSidebar }) {
   try {
     localStorage.setItem('lastApiId', 'custom');
   } catch {}
+  setActiveApiSidebarItem('custom');
 
   welcome.style.display = 'none';
   section.style.display = 'block';

@@ -1,6 +1,9 @@
+import { cancelPageMotion } from '../motion/gsap-motion.js';
+
 export function renderConfigPage(app) {
   const content = document.getElementById('content');
   if (!content) return;
+  cancelPageMotion(content);
 
   if (!app._configState) {
     app._configState = {
@@ -31,6 +34,11 @@ export function renderConfigPage(app) {
     } catch {}
   }
 
+  const hasSelection = Boolean(app._configState?.selected);
+  const mainInitial = hasSelection
+    ? `<div class="empty-state"><div class="loading-spinner" style="margin:0 auto"></div><p style="margin-top:12px">加载配置中...</p></div>`
+    : app.renderConfigPlaceholder();
+
   content.innerHTML = `
       <div class="config-page">
         <aside class="config-sidebar">
@@ -43,7 +51,7 @@ export function renderConfigPage(app) {
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="search" id="configSearchInput" placeholder="搜索配置 / 描述">
+            <input type="search" id="configSearchInput" placeholder="搜索配置 / 描述" autocomplete="off">
         </div>
         <div class="config-list" id="configList">
           <div class="empty-state">
@@ -53,18 +61,24 @@ export function renderConfigPage(app) {
         </div>
         </aside>
         <section class="config-main" id="configMain">
-          ${app.renderConfigPlaceholder()}
+          ${mainInitial}
         </section>
       </div>
     `;
 
   const searchInput = document.getElementById('configSearchInput');
   if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      if (!app._configState) return;
-      app._configState.filter = e.target.value.trim().toLowerCase();
-      app.renderConfigList();
-    });
+    if (app._configState?.filter) {
+      searchInput.value = app._configState.filter;
+    }
+    if (searchInput.dataset._bound !== '1') {
+      searchInput.dataset._bound = '1';
+      searchInput.addEventListener('input', (e) => {
+        if (!app._configState) return;
+        app._configState.filter = e.target.value.trim().toLowerCase();
+        app.renderConfigList();
+      });
+    }
   }
 
   const listContainer = document.getElementById('configList');
@@ -74,7 +88,10 @@ export function renderConfigPage(app) {
       const item = e.target.closest('.config-item');
       if (!item || !app._configState) return;
       const name = item.dataset.name;
-      if (name) app.selectConfig(name);
+      if (name) {
+        app.setActiveConfigSidebarItem(name);
+        app.selectConfig(name);
+      }
     });
 
     listContainer.addEventListener('keydown', (e) => {
@@ -84,6 +101,7 @@ export function renderConfigPage(app) {
       const name = item.dataset.name;
       if (!name) return;
       e.preventDefault();
+      app.setActiveConfigSidebarItem(name);
       app.selectConfig(name);
     });
   }
