@@ -49,7 +49,9 @@ const CONFIG = {
     SHORT: 1000,
     MEDIUM: 5000,
     LONG: 15000
-  }
+  },
+  /** 子进程 exit(0) 表示停止自动重启并返回菜单（如连续 Ctrl+C） */
+  EXIT_STOP: 0,
 };
 
 const JSON_SPACE = 2;
@@ -305,8 +307,8 @@ class ServerManager extends BaseManager {
       // 父进程已 ensurePortConfig；子进程跳过重复引导与配置拷贝
       const exitCode = await this.runServerProcess(port, true);
       
-      if (exitCode === 0 || exitCode === 255) {
-        await this.logger.log('正常退出');
+      if (exitCode === CONFIG.EXIT_STOP) {
+        await this.logger.log('已停止自动重启，返回菜单');
         return;
       }
       

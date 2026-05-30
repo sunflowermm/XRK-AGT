@@ -57,17 +57,11 @@ export async function scanFiles(dir, options = {}) {
  * @param {string[]} pathsList
  * @returns {Promise<boolean[]>}
  */
-export async function statDirs(pathsList) {
-  return statDirsSync(pathsList);
-}
+/** 与 statDirsSync 相同，供 await 调用方使用 */
+export const statDirs = statDirsSync;
 
-/**
- * @param {string[]} pathsList
- * @returns {Promise<boolean[]>}
- */
-export async function statFiles(pathsList) {
-  return statFilesSync(pathsList);
-}
+/** 与 statFilesSync 相同，供 await 调用方使用 */
+export const statFiles = statFilesSync;
 
 /**
  * @param {string[]} pathsList

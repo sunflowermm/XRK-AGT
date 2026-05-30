@@ -1,6 +1,7 @@
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { bootstrapTestEnv } from '../helpers/bootstrap.mjs';
+import { SYSTEM_CORE_VENDOR_PLUGINS } from '../../src/utils/loader-constants.js';
 import {
   SYSTEM_CORE_BASELINE,
   systemCoreHttpApiKeys,
@@ -22,7 +23,9 @@ describe('加载器集成（system-Core 基准）', () => {
 
   it('PluginsLoader 至少加载 system-Core 的 15 个插件', async () => {
     const { default: PluginsLoader } = await import('../../src/infrastructure/plugins/loader.js');
-    const listed = (await PluginsLoader.getPlugins()).filter((p) => p.core === 'system-Core');
+    const listed = (await PluginsLoader.getPlugins())
+      .filter((p) => p.core === 'system-Core')
+      .filter((p) => !SYSTEM_CORE_VENDOR_PLUGINS.includes(p.name));
     assert.equal(listed.length, SYSTEM_CORE_BASELINE.plugin);
     await PluginsLoader.load(true);
     assert.ok(PluginsLoader.pluginCount >= SYSTEM_CORE_BASELINE.plugin);

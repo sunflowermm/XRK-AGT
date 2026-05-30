@@ -67,8 +67,6 @@ lib/crawl/
 lib/net/fetcher.js          # 通用 HTTP（超时/重试/代理），由 crawl 再导出
 ```
 
-已移除的冗余目录：`lib/openclaw-web/`、`lib/agent-browser/`、`nav-ssrf.js`。
-
 ## 与工作流
 
 - `stream/web.js` → `web_fetch`
@@ -76,8 +74,7 @@ lib/net/fetcher.js          # 通用 HTTP（超时/重试/代理），由 crawl 
 
 ## 常见陷阱
 
-- 不要 `import` 已删除的 `openclaw-web/`、`agent-browser/` 路径。
-- 不要新建仅 re-export 的包装文件；扩展写在 `lib/crawl/` 内并在 `index.js` 导出。
+- 扩展写在 `lib/crawl/` 内并在 `index.js` 导出，不要新建仅 re-export 的包装文件。
 - 优先 `using` + `gotoAndCapture`，勿手写四段截图流程。
 
 ## 参考

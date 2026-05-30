@@ -1285,9 +1285,6 @@ export default class Bot extends EventEmitter {
    */
   _directoryIndexMiddleware(req, res, next) {
     if (res.headersSent) return next();
-    if (res.headersSent) {
-      return next();
-    }
     
     const hasExtension = path.extname(req.path);
     if (hasExtension || req.path.endsWith('/')) {

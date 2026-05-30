@@ -67,8 +67,8 @@ flowchart TD
 `app.js` 主要做三件事：
 
 1. **环境验证（EnvironmentValidator）**
-   - 检查 Node.js 版本（当前要求 \(\geq 14\)，实际项目中推荐 \(\geq 18\)）。
-   - 通过 `paths.ensureBaseDirs` 确保 `logs/`、`data/`、`config/` 等基础目录存在。
+   - 检查 Node.js 版本（`package.json` engines：**≥ 24.12**）。
+   - 通过 `paths.ensureBaseDirs` 确保 `logs/`、`data/`、`config/` 等基础目录存在；`paths.warmupCoreLayout()` 预热 core 子目录索引。
 
 2. **依赖管理（DependencyManager）**
    - 解析根目录 `package.json`。
@@ -81,6 +81,15 @@ flowchart TD
    - 合并到根目录 `package.json.imports` 中，方便在运行时新增别名映射（例如第三方插件）。
 
 完成上述步骤后，`app.js` 动态 `import('./start.js')`，交给主程序继续。
+
+### 可选环境变量（多端口 / 调试）
+
+| 变量 | 作用 |
+|------|------|
+| `XRK_SKIP_CONFIG_CHECK=1` | 跳过配置检查（`start.js` 可连带跳过引导） |
+| `XRK_SKIP_BOOTSTRAP=1` | 跳过插件/前端依赖安装 |
+| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 仅跳过前端依赖检查 |
+| `XRK_SKIP_FRONTEND_START=1` | 跳过前端 dev server |
 
 ---
 

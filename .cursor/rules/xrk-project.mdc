@@ -20,7 +20,7 @@ alwaysApply: true
 
 ## 技术栈与版本
 
-- Node.js ≥ 24.13（LTS）；包管理仅支持 **pnpm**。
+- Node.js ≥ 24.12（LTS）；包管理仅支持 **pnpm**。
 - 可使用 Node 24 特性：全局 `URLPattern`、`Error.isError()`、原生 `fetch`、`AbortController` 超时等。
 
 ## 文档与回答规范

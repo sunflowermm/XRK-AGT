@@ -7,7 +7,11 @@ import SystemMonitor from "#modules/systemmonitor.js";
 const CONFIG = {
   PROCESS_TITLE: "XRK-AGT",
   SIGNAL_TIME_THRESHOLD: 3000,
-  TIMEZONE: "Asia/Shanghai"
+  TIMEZONE: "Asia/Shanghai",
+  /** 单次 SIGINT 优雅关闭后退出码，供 start.js 自动重启 */
+  EXIT_RESTART: 1,
+  /** 连续 SIGINT 退出码，供 start.js 停止重启并返回菜单 */
+  EXIT_STOP: 0,
 };
 
 const NETWORK_ERROR_CODES = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST'];
@@ -49,14 +53,14 @@ class ProcessManager {
         currentTime - this.lastSignalTime < CONFIG.SIGNAL_TIME_THRESHOLD;
 
       if (isDoubleTap) {
-        logger.mark(chalk.yellow(`检测到连续两次${signal}信号，强制退出`));
-        process.exit(0);
+        logger.mark(chalk.yellow(`检测到连续两次${signal}信号，返回菜单`));
+        process.exit(CONFIG.EXIT_STOP);
         return;
       }
 
       this.lastSignal = signal;
       this.lastSignalTime = currentTime;
-      logger.mark(chalk.yellow(`接收到${signal}信号，正在优雅关闭（再次发送将强制退出）...`));
+      logger.mark(chalk.yellow(`接收到${signal}信号，正在优雅关闭（再次发送将返回菜单）...`));
 
       try {
         if (global.Bot?.closeServer) {
@@ -75,7 +79,7 @@ class ProcessManager {
       } catch {}
 
       await this.cleanup();
-      process.exit(0);
+      process.exit(CONFIG.EXIT_RESTART);
     };
 
     ['SIGINT', 'SIGTERM', 'SIGHUP'].forEach(signal => {
