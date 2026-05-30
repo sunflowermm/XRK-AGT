@@ -4,7 +4,10 @@ import chokidar from 'chokidar';
 import path from 'path';
 import paths from '#utils/paths.js';
 import BotUtil from '#utils/botutil.js';
+import { fileExistsSync, loadYamlFromCandidates, mergeYamlTexts, readYamlTextsBatch } from '#utils/config-yaml.js';
+import { copyFileIfMissingSync } from './config-seed.js';
 import { GLOBAL_CONFIGS, SERVER_CONFIGS } from './config-constants.js';
+import { seedGlobalConfigsSync } from './config-seed.js';
 
 const LOG_TAG = 'Config';
 
@@ -37,7 +40,7 @@ class Cfg {
       this._port = parseInt(process.argv[portIndex + 1]);
     }
 
-    this.ensureGlobalConfigDir();
+    seedGlobalConfigsSync();
   }
 
   getGlobalConfigDir() {
@@ -49,42 +52,21 @@ class Cfg {
     return path.join(this.PATHS.SERVER_BOTS, String(this._port));
   }
 
-  ensureGlobalConfigDir() {
-    fs.mkdirSync(this.getGlobalConfigDir(), { recursive: true });
-    try {
-      const defaultFiles = fs.readdirSync(this.PATHS.DEFAULT_CONFIG);
-      for (const file of defaultFiles) {
-        const configName = path.basename(file, '.yaml');
-        if (this.GLOBAL_CONFIGS.includes(configName)) {
-          const targetPath = path.join(this.getGlobalConfigDir(), file);
-          if (!fs.existsSync(targetPath)) {
-            fs.copyFileSync(path.join(this.PATHS.DEFAULT_CONFIG, file), targetPath);
-          }
-        }
-      }
-    } catch {}
-  }
-
   getGlobalConfig(name) {
     const key = `global.${name}`;
     if (this.config[key]) return this.config[key];
-    
+
     const file = path.join(this.getGlobalConfigDir(), `${name}.yaml`);
     const defaultFile = path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`);
-    
-    const watchFile = fs.existsSync(file) ? file : (fs.existsSync(defaultFile) ? defaultFile : null);
-    let config = {};
-    
-    if (watchFile) {
-      try {
-        config = YAML.parse(fs.readFileSync(watchFile, 'utf8'));
-        this.watch(watchFile, name, key);
-      } catch (error) {
-        BotUtil.makeLog('error', `[配置解析失败][${watchFile}] ${error?.message || error}`, LOG_TAG, true);
-      }
+
+    try {
+      const { config, watchFile } = loadYamlFromCandidates([file, defaultFile], name);
+      if (watchFile) this.watch(watchFile, name, key);
+      return this.config[key] = config;
+    } catch (error) {
+      BotUtil.makeLog('error', `[配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
+      return this.config[key] = {};
     }
-    
-    return this.config[key] = config;
   }
 
   getServerConfig(name) {
@@ -100,38 +82,28 @@ class Cfg {
     if (!configDir) {
       const defaultFile = path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`);
       try {
-        return fs.existsSync(defaultFile) ? YAML.parse(fs.readFileSync(defaultFile, 'utf8')) : {};
+        const { config } = loadYamlFromCandidates([defaultFile], name);
+        return config;
       } catch {
         return {};
       }
     }
-    
+
     const file = path.join(configDir, `${name}.yaml`);
     const defaultFile = path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`);
-    let config = {};
 
-    // 服务器/工厂配置：缺失时自动从 default_config 复制一份到 server_bots/{port}/
-    // 这样用户后续可直接编辑落盘文件，避免“仅内存回退”导致配置分散与不可见。
-    if (!fs.existsSync(file) && fs.existsSync(defaultFile)) {
-      try {
-        fs.mkdirSync(configDir, { recursive: true });
-        fs.copyFileSync(defaultFile, file);
-        BotUtil.makeLog('mark', `[自动生成配置] ${name}.yaml -> ${file}`, LOG_TAG);
-      } catch (error) {
-        BotUtil.makeLog('error', `[自动生成配置失败][${name}] ${error?.message || error}`, LOG_TAG, true);
-      }
+    if (fileExistsSync(defaultFile) && copyFileIfMissingSync(defaultFile, file)) {
+      BotUtil.makeLog('mark', `[自动生成配置] ${name}.yaml -> ${file}`, LOG_TAG);
     }
 
-    if (fs.existsSync(file)) {
-      try {
-        config = YAML.parse(fs.readFileSync(file, 'utf8'));
-        this.watch(file, name, key);
-      } catch (error) {
-        BotUtil.makeLog('error', `[服务器配置解析失败][${file}] ${error?.message || error}`, LOG_TAG, true);
-      }
+    try {
+      const { config, watchFile } = loadYamlFromCandidates([file], name);
+      if (watchFile) this.watch(watchFile, name, key);
+      return this.config[key] = config;
+    } catch (error) {
+      BotUtil.makeLog('error', `[服务器配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
+      return this.config[key] = {};
     }
-    
-    return this.config[key] = config;
   }
 
   getConfig(name) {
@@ -195,9 +167,9 @@ class Cfg {
     const defaultFile = path.join(this.PATHS.RENDERERS, type, 'config_default.yaml');
     if (!this._port) {
       try {
-        const out = fs.existsSync(defaultFile) ? YAML.parse(fs.readFileSync(defaultFile, 'utf8')) : {};
+        const { config } = loadYamlFromCandidates([defaultFile], `renderer.${type}`);
         BotUtil.makeLog('debug', `[渲染器] port 未设置，仅用默认配置: ${type}`, LOG_TAG);
-        return out;
+        return config;
       } catch {
         return {};
       }
@@ -206,26 +178,40 @@ class Cfg {
     if (this.config[key]) return this.config[key];
     const serverDir = path.join(this.getConfigDir(), 'renderers', type);
     const serverFile = path.join(serverDir, 'config.yaml');
-    let config = {};
-    if (fs.existsSync(defaultFile)) {
-      try {
-        config = YAML.parse(fs.readFileSync(defaultFile, 'utf8'));
-      } catch (e) {
-        BotUtil.makeLog('error', `[渲染器] 默认配置解析失败 [${type}] ${e?.message || e}`, LOG_TAG, true);
-      }
-    }
-    if (fs.existsSync(serverFile)) {
-      try {
-        config = { ...config, ...YAML.parse(fs.readFileSync(serverFile, 'utf8')) };
-        this.watch(serverFile, `renderer.${type}`, key);
-        BotUtil.makeLog('debug', `[渲染器] 已合并 ${type} 服务器配置: ${serverFile}`, LOG_TAG);
-      } catch (e) {
-        BotUtil.makeLog('error', `[渲染器] 服务器配置解析失败 [${type}] ${serverFile} ${e?.message || e}`, LOG_TAG, true);
-      }
+
+    const texts = readYamlTextsBatch([defaultFile, serverFile]);
+    const config = mergeYamlTexts(texts.get(defaultFile), texts.get(serverFile));
+
+    if (fileExistsSync(serverFile)) {
+      this.watch(serverFile, `renderer.${type}`, key);
+      BotUtil.makeLog('debug', `[渲染器] 已合并 ${type} 服务器配置: ${serverFile}`, LOG_TAG);
     } else {
       BotUtil.makeLog('debug', `[渲染器] 无服务器覆盖: ${serverFile}`, LOG_TAG);
     }
     return this.config[key] = config;
+  }
+
+  /**
+   * 启动期批量预热配置（减少首次 getter 的分散 I/O）
+   */
+  warmupConfigs() {
+    const pathsToRead = [];
+    for (const name of this.GLOBAL_CONFIGS) {
+      pathsToRead.push(
+        path.join(this.getGlobalConfigDir(), `${name}.yaml`),
+        path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`)
+      );
+    }
+    if (this._port && this.getConfigDir()) {
+      const configDir = this.getConfigDir();
+      for (const name of this.SERVER_CONFIGS) {
+        pathsToRead.push(
+          path.join(configDir, `${name}.yaml`),
+          path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`)
+        );
+      }
+    }
+    readYamlTextsBatch(pathsToRead);
   }
 
   get renderer() {

@@ -33,19 +33,10 @@ class ListenerLoader {
       
       // 加载所有 events 目录中的文件
       const { FileLoader } = await import('#utils/file-loader.js');
-      const eventFiles = [];
-      for (const eventsDir of eventsDirs) {
-        try {
-          const files = await FileLoader.readFiles(eventsDir, {
-            ext: '.js',
-            recursive: false,
-            ignore: ['.', '_']
-          });
-          eventFiles.push(...files);
-        } catch {
-          BotUtil.makeLog('warn', `读取事件目录失败: ${eventsDir}`, 'ListenerLoader');
-        }
-      }
+      const eventFiles = await FileLoader.getCoreSubDirFiles('events', {
+        ext: '.js',
+        recursive: false
+      });
 
       const loadEventFile = async (filePath) => {
         const file = path.basename(filePath);

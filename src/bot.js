@@ -148,7 +148,6 @@ export default class Bot extends EventEmitter {
     
     this.ApiLoader = ApiLoader;
     this._initHttpServer();
-    this._setupSignalHandlers();
     this._initSubServer();
     
     // 安全规则的编译缓存（避免每个请求重复解析）
@@ -1209,18 +1208,17 @@ export default class Bot extends EventEmitter {
     const staticOptions = this._createStaticOptions();
     const mountedPaths = new Set(); // 用于检测路径冲突
     
-    for (const coreDir of coreDirs) {
-      const wwwDir = path.join(coreDir, 'www');
+    const { statDirs, statFiles } = await import('#utils/core-fs.js');
+    const wwwDirPaths = coreDirs.map((coreDir) => path.join(coreDir, 'www'));
+    const wwwIsDir = await statDirs(wwwDirPaths);
+
+    for (let ci = 0; ci < coreDirs.length; ci++) {
+      const coreDir = coreDirs[ci];
+      const wwwDir = wwwDirPaths[ci];
       const coreName = path.basename(coreDir);
-      
-      // 检查 www 目录是否存在
-      try {
-        const stat = fsSync.statSync(wwwDir);
-        if (!stat.isDirectory()) continue;
-      } catch {
-        continue;
-      }
-      
+
+      if (!wwwIsDir[ci]) continue;
+
       // 挂载 core/*/www 到 /core/{coreName}/*
       const coreMountPath = `/core/${coreName}`;
       if (!mountedPaths.has(coreMountPath)) {
@@ -1228,42 +1226,41 @@ export default class Bot extends EventEmitter {
         mountedPaths.add(coreMountPath);
         BotUtil.makeLog('info', `挂载静态资源: ${coreMountPath} -> ${wwwDir}`, 'Bot');
       }
-      
+
       // 扫描 www 下的子目录，挂载到根路径（避免冲突）
       try {
         const entries = fsSync.readdirSync(wwwDir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            const subDirName = entry.name;
-            const subDirPath = path.join(wwwDir, subDirName);
-            const mountPath = `/${subDirName}`;
-            
-            // 如果子目录中存在 sign.json，视为动态前端工程目录，由 FrontendLauncher + HTTP 模块接管
-            // 此处不再挂静态子目录，避免暴露未构建的前端源码结构
-            try {
-              const signStat = fsSync.statSync(path.join(subDirPath, 'sign.json'));
-              if (signStat.isFile()) {
-                BotUtil.makeLog('info', `检测到前端 sign.json，跳过子目录静态挂载: ${mountPath} (core: ${coreName})`, 'Bot');
-                continue;
-              }
-            } catch {}
-            
-            // 检查路径冲突（排除已保留的路径）
-            const reservedPaths = ['api', 'core', 'media', 'uploads', 'File'];
-            if (reservedPaths.includes(subDirName)) {
-              BotUtil.makeLog('warn', `跳过保留路径: ${mountPath} (core: ${coreName})`, 'Bot');
-              continue;
-            }
-            
-            if (mountedPaths.has(mountPath)) {
-              BotUtil.makeLog('warn', `路径冲突，跳过: ${mountPath} (core: ${coreName})，已被其他core占用`, 'Bot');
-              continue;
-            }
-            
-            this.express.use(mountPath, express.static(subDirPath, staticOptions));
-            mountedPaths.add(mountPath);
-            BotUtil.makeLog('info', `挂载子目录: ${mountPath} -> ${subDirPath} (core: ${coreName})`, 'Bot');
+        const dirEntries = entries.filter((entry) => entry.isDirectory());
+        const signPaths = dirEntries.map((entry) =>
+          path.join(wwwDir, entry.name, 'sign.json')
+        );
+        const signExists = signPaths.length > 0 ? await statFiles(signPaths) : [];
+
+        for (let di = 0; di < dirEntries.length; di++) {
+          const entry = dirEntries[di];
+          const subDirName = entry.name;
+          const subDirPath = path.join(wwwDir, subDirName);
+          const mountPath = `/${subDirName}`;
+
+          if (signExists[di]) {
+            BotUtil.makeLog('info', `检测到前端 sign.json，跳过子目录静态挂载: ${mountPath} (core: ${coreName})`, 'Bot');
+            continue;
           }
+
+          const reservedPaths = ['api', 'core', 'media', 'uploads', 'File'];
+          if (reservedPaths.includes(subDirName)) {
+            BotUtil.makeLog('warn', `跳过保留路径: ${mountPath} (core: ${coreName})`, 'Bot');
+            continue;
+          }
+
+          if (mountedPaths.has(mountPath)) {
+            BotUtil.makeLog('warn', `路径冲突，跳过: ${mountPath} (core: ${coreName})，已被其他core占用`, 'Bot');
+            continue;
+          }
+
+          this.express.use(mountPath, express.static(subDirPath, staticOptions));
+          mountedPaths.add(mountPath);
+          BotUtil.makeLog('info', `挂载子目录: ${mountPath} -> ${subDirPath} (core: ${coreName})`, 'Bot');
         }
       } catch (error) {
         BotUtil.makeLog('debug', `扫描 www 子目录失败: ${wwwDir} - ${error.message}`, 'Bot');
@@ -1656,10 +1653,6 @@ export default class Bot extends EventEmitter {
     return multer(multerOptions);
   }
 
-  /**
-   * 信号由 Packageloader/ProcessManager 统一处理（含 closeServer），此处不再重复注册
-   */
-  _setupSignalHandlers() {}
 
   /**
    * 创建Bot代理对象

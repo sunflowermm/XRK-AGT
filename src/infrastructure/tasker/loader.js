@@ -1,13 +1,12 @@
-import path from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { existsSync } from 'node:fs'
-import paths from '#utils/paths.js'
-import BotUtil from '#utils/botutil.js'
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import BotUtil from '#utils/botutil.js';
+import { FileLoader } from '#utils/file-loader.js';
 
 // Tasker 加载器
 class TaskerLoader {
   constructor() {
-    this.loggerNs = 'TaskerLoader'
+    this.loggerNs = 'TaskerLoader';
   }
 
   async load(bot = Bot) {
@@ -20,91 +19,73 @@ class TaskerLoader {
       failed: 0,
       registered: 0,
       errors: []
-    }
+    };
 
     try {
-      const files = await this.getAdapterFiles()
-      summary.scanned = files.length
+      const files = await this.getAdapterFiles();
+      summary.scanned = files.length;
 
       if (!files.length) {
-        BotUtil.makeLog('info', '未找到 tasker 文件', this.loggerNs)
-        return summary
+        BotUtil.makeLog('info', '未找到 tasker 文件', this.loggerNs);
+        return summary;
       }
 
-      const adapterCountBefore = bot?.tasker?.length ?? 0
+      const adapterCountBefore = bot?.tasker?.length ?? 0;
 
       await Promise.allSettled(
         files.map(async ({ name, href }) => {
           try {
-            BotUtil.makeLog('debug', `导入 tasker 文件: ${name}`, this.loggerNs)
-            const mod = await import(href)
+            BotUtil.makeLog('debug', `导入 tasker 文件: ${name}`, this.loggerNs);
+            const mod = await import(href);
             if (typeof mod.register === 'function') {
-              await mod.register(bot)
+              await mod.register(bot);
             }
-            summary.loaded += 1
+            summary.loaded += 1;
           } catch (err) {
-            summary.failed += 1
-            summary.errors.push({ name, message: err.message })
-            BotUtil.makeLog('error', `导入 tasker 失败: ${name}`, this.loggerNs, err)
-            BotUtil.makeLog('warn', `[TaskerLoader] ${name} 错误: ${err.message}`, this.loggerNs)
-            if (err.stack) BotUtil.makeLog('warn', `[TaskerLoader] ${name} 堆栈:\n${err.stack}`, this.loggerNs)
-            if (err.cause) BotUtil.makeLog('warn', `[TaskerLoader] ${name} cause: ${err.cause?.message ?? String(err.cause)}`, this.loggerNs)
+            summary.failed += 1;
+            summary.errors.push({ name, message: err.message });
+            BotUtil.makeLog('error', `导入 tasker 失败: ${name}`, this.loggerNs, err);
+            BotUtil.makeLog('warn', `[TaskerLoader] ${name} 错误: ${err.message}`, this.loggerNs);
+            if (err.stack) BotUtil.makeLog('warn', `[TaskerLoader] ${name} 堆栈:\n${err.stack}`, this.loggerNs);
+            if (err.cause) BotUtil.makeLog('warn', `[TaskerLoader] ${name} cause: ${err.cause?.message ?? String(err.cause)}`, this.loggerNs);
           }
         })
-      )
+      );
 
-      summary.registered = (bot?.tasker?.length ?? 0) - adapterCountBefore
+      summary.registered = (bot?.tasker?.length ?? 0) - adapterCountBefore;
 
       BotUtil.makeLog(
         summary.failed ? 'warn' : 'info',
         `Tasker 加载完成: 成功${summary.loaded}个, 注册${summary.registered}个${summary.failed ? `, 失败${summary.failed}个` : ''}`,
         this.loggerNs
-      )
+      );
 
-      return summary
+      return summary;
     } catch (error) {
-      BotUtil.makeLog('error', 'Tasker 加载失败', this.loggerNs, error)
-      summary.failed += 1
-      summary.errors.push({ name: 'internal', message: error.message })
-      return summary
+      BotUtil.makeLog('error', 'Tasker 加载失败', this.loggerNs, error);
+      summary.failed += 1;
+      summary.errors.push({ name: 'internal', message: error.message });
+      return summary;
     }
   }
 
   async getAdapterFiles() {
     try {
-      const files = []
-      const coreDirs = await paths.getCoreDirs()
-      
-      for (const coreDir of coreDirs) {
-        const taskerDir = path.join(coreDir, 'tasker')
-        if (!existsSync(taskerDir)) continue
-        
-        try {
-          const { FileLoader } = await import('#utils/file-loader.js');
-          const taskerFiles = await FileLoader.readFiles(taskerDir, {
-            ext: '.js',
-            recursive: false,
-            ignore: ['.', '_']
-          });
-      for (const filePath of taskerFiles) {
-            files.push({
-              name: path.basename(filePath),
-              href: pathToFileURL(filePath).href,
-              core: path.basename(coreDir)
-            });
-          }
-        } catch {
-          BotUtil.makeLog('warn', `读取 tasker 目录失败: ${taskerDir}`, this.loggerNs);
-        }
-      }
-      
-      return files
+      const filePaths = await FileLoader.getCoreSubDirFiles('tasker', {
+        ext: '.js',
+        recursive: false
+      });
+
+      return filePaths.map((filePath) => ({
+        name: path.basename(filePath),
+        href: pathToFileURL(filePath).href,
+        core: path.basename(path.dirname(path.dirname(filePath)))
+      }));
     } catch (error) {
-      BotUtil.makeLog('error', `获取 tasker 文件列表失败`, this.loggerNs, error)
-      return []
+      BotUtil.makeLog('error', `获取 tasker 文件列表失败`, this.loggerNs, error);
+      return [];
     }
   }
 }
 
-export default new TaskerLoader()
-
+export default new TaskerLoader();

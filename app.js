@@ -2,6 +2,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
 import paths from '#utils/paths.js';
+import { statDirs } from '#utils/core-fs.js';
+import { createSimpleLogger } from '#infrastructure/log.js';
 
 function spawnSync(cmd, args, opts) {
   return new Promise((resolve, reject) => {
@@ -9,24 +11,6 @@ function spawnSync(cmd, args, opts) {
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`exit ${code}`))));
   });
-}
-
-function createBootstrapLogger(logFile) {
-  const colors = { INFO: '\x1b[36m', SUCCESS: '\x1b[32m', WARNING: '\x1b[33m', ERROR: '\x1b[31m', RESET: '\x1b[0m' };
-  async function write(message, level = 'INFO') {
-    const line = `[${new Date().toISOString()}] [${level}] ${message}\n`;
-    try {
-      await fs.mkdir(path.dirname(logFile), { recursive: true });
-      await fs.appendFile(logFile, line, 'utf8');
-    } catch {}
-    console.log(`${colors[level] || ''}${message}${colors.RESET}`);
-  }
-  return {
-    log: (msg) => write(msg, 'INFO'),
-    success: (msg) => write(msg, 'SUCCESS'),
-    warning: (msg) => write(msg, 'WARNING'),
-    error: (msg) => write(msg, 'ERROR')
-  };
 }
 
 
@@ -41,15 +25,9 @@ class DependencyManager {
   }
 
   async getMissingDependencies(depNames, nodeModulesPath) {
-    const results = await Promise.all(
-      depNames.map(async dep => {
-        try {
-          const st = await fs.stat(path.join(nodeModulesPath, dep));
-          return st.isDirectory();
-        } catch { return false; }
-      })
-    );
-    return depNames.filter((_, i) => !results[i]);
+    const targets = depNames.map((dep) => path.join(nodeModulesPath, dep));
+    const exists = await statDirs(targets);
+    return depNames.filter((_, i) => !exists[i]);
   }
 
   async installDependencies(missingDeps, cwd = process.cwd()) {
@@ -78,21 +56,16 @@ class DependencyManager {
   }
 
   async ensurePluginDependencies(rootDir = process.cwd()) {
-    const baseDir = path.join(rootDir, 'core');
-    let entries;
-    try { entries = await fs.readdir(baseDir, { withFileTypes: true }); } catch { return; }
-    const tasks = entries
-      .filter((entry) => entry.isDirectory())
-      .map(async (entry) => {
-        const dir = path.join(baseDir, entry.name);
-        const pkgPath = path.join(dir, 'package.json');
-        try { await fs.access(pkgPath); } catch { return; }
-        try {
-          await this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'));
-        } catch (e) {
-          await this.logger.warning(`${path.relative(rootDir, dir)}: ${e.message}`);
-        }
-      });
+    const coreDirs = await paths.getCoreDirs();
+    const tasks = coreDirs.map(async (dir) => {
+      const pkgPath = path.join(dir, 'package.json');
+      try { await fs.access(pkgPath); } catch { return; }
+      try {
+        await this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'));
+      } catch (e) {
+        await this.logger.warning(`${path.relative(rootDir, dir)}: ${e.message}`);
+      }
+    });
     await Promise.all(tasks);
   }
 
@@ -103,19 +76,10 @@ class DependencyManager {
    * - 自动执行依赖检查与按需安装（与主工程、插件保持一致流程）
    */
   async ensureFrontendDependencies(rootDir = process.cwd()) {
-    const coreBase = path.join(rootDir, 'core');
-    let coreEntries;
-    try {
-      coreEntries = await fs.readdir(coreBase, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
+    const coreDirs = await paths.getCoreDirs();
     const installTasks = [];
 
-    for (const coreEntry of coreEntries) {
-      if (!coreEntry.isDirectory()) continue;
-      const coreDir = path.join(coreBase, coreEntry.name);
+    for (const coreDir of coreDirs) {
       const wwwDir = path.join(coreDir, 'www');
 
       let wwwStat;
@@ -170,17 +134,18 @@ class DependencyManager {
 async function validateEnvironment() {
   const [major, minor = 0, patch = 0] = process.version.slice(1).split('.').map(Number);
   const meetsRecommended =
-    major > 24 || (major === 24 && (minor > 13 || (minor === 13 && patch >= 0)));
+    major > 24 || (major === 24 && minor >= 12);
   const meetsMinimum = major > 18 || (major === 18 && minor >= 14);
   if (!meetsRecommended && !meetsMinimum) {
     throw new Error(`Node.js 需 v24.13+（推荐）或 v18.14+，当前: ${process.version}`);
   }
   await paths.ensureBaseDirs(fs);
+  await paths.warmupCoreLayout();
 }
 
 class Bootstrap {
   constructor() {
-    this.logger = createBootstrapLogger(path.join('./logs', 'bootstrap.log'));
+    this.logger = createSimpleLogger(path.join('./logs', 'bootstrap.log'));
     this.dependencyManager = new DependencyManager(this.logger);
   }
 

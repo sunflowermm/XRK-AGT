@@ -1,12 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SYSTEM_CORE_VENDOR_PLUGINS } from '../../src/utils/loader-constants.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 export const SYSTEM_CORE_DIR = path.join(root, 'core', 'system-Core');
 
-/** 框架基准：仅 system-Core 官方自带（见 tests/helpers/system-core.mjs） */
+/** 框架基准：仅 system-Core 官方自带（第三方 vendor 插件不计入） */
 export const SYSTEM_CORE_BASELINE = Object.freeze({
   http: 11,
   stream: 7,
@@ -18,7 +19,9 @@ export const SYSTEM_CORE_BASELINE = Object.freeze({
 export function listSystemCoreJs(subdir) {
   const dir = path.join(SYSTEM_CORE_DIR, subdir);
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
+  if (subdir !== 'plugin') return files;
+  return files.filter((f) => !SYSTEM_CORE_VENDOR_PLUGINS.includes(f));
 }
 
 export function systemCoreHttpApiKeys() {

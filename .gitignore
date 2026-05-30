@@ -79,7 +79,6 @@ coverage/
 
 # Build outputs
 dist/
-build/
 out/
 .next/
 .nuxt/

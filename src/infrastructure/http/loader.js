@@ -39,12 +39,11 @@ class ApiLoader {
     const startTime = Date.now();
     BotUtil.makeLog('info', '开始加载API模块...', 'ApiLoader');
     
-    const apiDirs = await paths.getCoreSubDirs('http');
-    const allFiles = [];
-    for (const apiDir of apiDirs) {
-      const files = await this.getApiFiles(apiDir);
-      allFiles.push(...files);
-    }
+    const { FileLoader } = await import('#utils/file-loader.js');
+    const allFiles = await FileLoader.getCoreSubDirFiles('http', {
+      ext: '.js',
+      recursive: true
+    });
 
     this._coreDirsCache = await paths.getCoreDirs();
     const batchSize = 10;
@@ -61,20 +60,6 @@ class ApiLoader {
     BotUtil.makeLog('info', `API模块加载完成: ${this.apis.size}个, 耗时${loadTime}ms`, 'ApiLoader');
     
     return this.apis;
-  }
-  
-  /**
-   * 获取API文件列表
-   * @param {string} dir - 目录路径
-   * @returns {Promise<Array>} 文件路径数组
-   */
-  async getApiFiles(dir) {
-    const { FileLoader } = await import('#utils/file-loader.js');
-    return FileLoader.readFiles(dir, {
-      ext: '.js',
-      recursive: true,
-      ignore: ['.', '_']
-    });
   }
   
   /**
@@ -327,8 +312,9 @@ class ApiLoader {
       BotUtil.makeLog('warn', `API不存在: ${key}`, 'ApiLoader');
       // 如果API不存在但文件存在，尝试直接加载
       const apiDirs = await paths.getCoreSubDirs('http');
+      const { FileLoader } = await import('#utils/file-loader.js');
       for (const apiDir of apiDirs) {
-        const files = await this.getApiFiles(apiDir);
+        const files = await FileLoader.readFiles(apiDir, { ext: '.js', recursive: true });
         const file = files.find(f => {
           const fileKey = path.relative(apiDir, f).replace(/\\/g, '/').replace(/\.js$/, '');
           return fileKey === key || path.basename(f, '.js') === key;

@@ -148,33 +148,17 @@ class StreamLoader {
       BotUtil.makeLog('info', '开始加载工作流...', 'StreamLoader');
 
       // 获取所有 core 目录下的 stream 目录
-      const streamDirs = await paths.getCoreSubDirs('stream');
-      
-      // 如果没有 stream 目录，说明开发者可能不开发工作流，这是正常的
-      if (streamDirs.length === 0) {
-        BotUtil.makeLog('info', '未找到工作流目录，跳过加载', 'StreamLoader');
-        this.loaded = true;
-        return;
-      }
-
-      // 获取所有工作流文件
-      const files = [];
-      for (const streamDir of streamDirs) {
-        try {
-          const pattern = path.posix.join(streamDir.replace(/\\/g, '/'), '*.js');
-          const dirFiles = await BotUtil.glob(pattern);
-          files.push(...dirFiles);
-        } catch {
-          BotUtil.makeLog('warn', `读取工作流目录失败: ${streamDir}`, 'StreamLoader');
-        }
-      }
+      const { FileLoader } = await import('#utils/file-loader.js');
+      const files = await FileLoader.getCoreSubDirFiles('stream', {
+        ext: '.js',
+        recursive: false
+      });
       
       if (files.length === 0) {
-        BotUtil.makeLog('warn', '未找到工作流文件', 'StreamLoader');
+        BotUtil.makeLog('info', '未找到工作流，跳过加载', 'StreamLoader');
         this.loaded = true;
         return;
       }
-
 
       // 阶段1: 加载工作流类（不初始化Embedding）
       const batchSize = 10;

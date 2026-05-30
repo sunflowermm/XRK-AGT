@@ -12,6 +12,7 @@ import Runtime from './runtime.js'
 import { segment } from '#oicq'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { EventDeduplicator, IntelligentCache, PluginMatcher } from '#utils/neural-algorithms.js'
+import { matchEventPattern as matchEventPatternFn } from '#utils/core-fs.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
 
 global.plugin = plugin
@@ -682,40 +683,37 @@ class PluginsLoader {
   async getPlugins() {
     const ret = []
     const { FileLoader } = await import('#utils/file-loader.js')
-    const pluginDirs = await FileLoader.getCoreSubDirs('plugin')
 
-    // 1. 加载各 core 下的插件文件
-    const coreDirs = new Set()
-    for (const pluginDir of pluginDirs) {
-      try {
-        const files = await FileLoader.readFiles(pluginDir, {
-          ext: '.js',
-          recursive: false,
-          ignore: ['.', '_']
+    try {
+      const files = await FileLoader.getCoreSubDirFiles('plugin', {
+        ext: '.js',
+        recursive: false
+      })
+
+      for (const filePath of files) {
+        const coreDir = path.dirname(path.dirname(filePath))
+        const relativePath = path.relative(paths.root, filePath)
+        ret.push({
+          name: path.basename(filePath),
+          path: `../../../${relativePath.replace(/\\/g, '/')}`,
+          core: path.basename(coreDir)
         })
-        const coreDir = path.dirname(pluginDir)
-        coreDirs.add(coreDir)
-
-        for (const filePath of files) {
-          const relativePath = path.relative(paths.root, filePath)
-          ret.push({
-            name: path.basename(filePath),
-            path: `../../../${relativePath.replace(/\\/g, '/')}`,
-            core: path.basename(coreDir)
-          })
-        }
-      } catch (error) {
-        logger.error(`获取插件文件列表失败: ${pluginDir}`, error)
       }
+    } catch (error) {
+      logger.error('获取插件文件列表失败', error)
     }
 
     // 2. 加载每个 core 根目录下的 index.js（含无 plugin/ 的 core，保证如 xiaozhi-Core 的 index 会被执行）
     const allCoreDirs = await paths.getCoreDirs()
-    for (const coreDir of allCoreDirs) {
-      try {
-        const indexPath = path.join(coreDir, 'index.js')
-        if (!existsSync(indexPath)) continue
+    const indexPaths = allCoreDirs.map((coreDir) => path.join(coreDir, 'index.js'))
+    const { statFiles } = await import('#utils/core-fs.js')
+    const indexExists = await statFiles(indexPaths)
 
+    for (let i = 0; i < allCoreDirs.length; i++) {
+      if (!indexExists[i]) continue
+      const coreDir = allCoreDirs[i]
+      try {
+        const indexPath = indexPaths[i]
         const relativePath = path.relative(paths.root, indexPath)
         const name = `${path.basename(coreDir)}-index.js`
         if (ret.some((p) => p.name === name)) continue
@@ -1048,18 +1046,7 @@ class PluginsLoader {
   }
 
   matchEventPattern(pattern, event) {
-    if (pattern === event) return true
-    if (!pattern.includes('*')) return false
-    
-    const patternParts = pattern.split('.')
-    const eventParts = event.split('.')
-    
-    if (patternParts.length !== eventParts.length) return false
-    
-    return patternParts.every((part, i) => {
-      if (part === '*') return true
-      return part === eventParts[i]
-    })
+    return matchEventPatternFn(pattern, event)
   }
 
   filtPermission(e, v) {
@@ -1456,16 +1443,9 @@ class PluginsLoader {
    */
   async findPluginFilePath(key) {
     try {
-      const { FileLoader } = await import('#utils/file-loader.js')
-      const pluginDirs = await FileLoader.getCoreSubDirs('plugin')
-      
-      for (const pluginDir of pluginDirs) {
-        const filePath = path.join(pluginDir, `${key}.js`)
-        if (existsSync(filePath)) {
-          return filePath
-        }
-      }
-      return null
+      const pluginDirs = await paths.getCoreSubDirs('plugin')
+      const { findInCoreSubDirs } = await import('#utils/core-fs.js')
+      return findInCoreSubDirs(pluginDirs, key)
     } catch (error) {
       logger.error(`查找插件文件失败: ${key}`, error)
       return null

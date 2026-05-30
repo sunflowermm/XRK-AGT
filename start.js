@@ -67,17 +67,6 @@ async function writeFileIfChanged(filePath, content) {
   return true;
 }
 
-async function copyFileIfMissing(source, target) {
-  try {
-    await fs.access(target);
-    return false;
-  } catch {
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.copyFile(source, target);
-    return true;
-  }
-}
-
 // 使用统一的简单日志工具
 import { createSimpleLogger } from './src/infrastructure/log.js';
 
@@ -223,10 +212,8 @@ class ServerManager extends BaseManager {
   }
 
   async ensurePortConfig(port, silent = false) {
-    const portDir = this.getPortDir(port);
-    await fs.mkdir(portDir, { recursive: true });
-    await this.copyDefaultConfigs(portDir, silent);
-    return portDir;
+    const { seedPortConfigs } = await import('./src/infrastructure/config/config-seed.js');
+    return seedPortConfigs(port, { silent, logger: this.logger });
   }
 
   async removePortConfig(port) {
@@ -275,41 +262,6 @@ class ServerManager extends BaseManager {
     await this.ensurePortConfig(portNum);
     
     return portNum;
-  }
-
-  async copyDefaultConfigs(targetDir, silent = false) {
-    try {
-      const { GLOBAL_CONFIGS, isServerOrFactoryConfig } = await import('./src/infrastructure/config/config-constants.js');
-      
-      const defaultConfigFiles = await fs.readdir(PATHS.DEFAULT_CONFIG);
-      const copyTasks = [];
-
-      for (const file of defaultConfigFiles) {
-        if (!file.endsWith('.yaml') || file === 'qq.yaml') continue;
-
-        const configName = path.basename(file, '.yaml');
-        if (GLOBAL_CONFIGS.includes(configName)) continue;
-
-        if (isServerOrFactoryConfig(configName)) {
-          const sourcePath = path.join(PATHS.DEFAULT_CONFIG, file);
-          const targetPath = path.join(targetDir, file);
-          copyTasks.push(
-            copyFileIfMissing(sourcePath, targetPath).then(copied => (copied ? file : null))
-          );
-        }
-      }
-
-      const copyResults = await Promise.all(copyTasks);
-      const created = copyResults.filter(Boolean);
-      
-      if (!silent && created.length > 0) {
-        await this.logger.success(`配置文件已就绪: ${targetDir} (新建: ${created.join(', ')})`);
-      } else if (!silent && !fsSync.existsSync(path.join(targetDir, 'server.yaml'))) {
-        await this.logger.success(`配置文件已就绪: ${targetDir}`);
-      }
-    } catch (error) {
-      await this.logger.error(`创建配置文件失败: ${error.message}\n${error.stack}`);
-    }
   }
 
   async startServerMode(port) {

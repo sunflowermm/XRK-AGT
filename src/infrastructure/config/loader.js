@@ -167,6 +167,7 @@ class InitManager {
 
   async init() {
     await setLog();
+    cfg.warmupConfigs?.();
     logger.mark(chalk.cyan("XRK-AGT 初始化中..."));
 
     this.setupEnvironment();

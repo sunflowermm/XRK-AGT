@@ -2,6 +2,7 @@ import fsSync from 'fs';
 import path from 'path';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
+import { findInCoreSubDirs } from '#utils/core-fs.js';
 
 /**
  * 配置加载器
@@ -32,12 +33,11 @@ class ConfigLoader {
       const startTime = Date.now();
       BotUtil.makeLog('info', '开始加载配置管理器...', 'ConfigLoader');
 
-      const configDirs = await paths.getCoreSubDirs('commonconfig');
-      const allFiles = [];
-      for (const configDir of configDirs) {
-        const files = await this._getConfigFiles(configDir);
-        allFiles.push(...files);
-      }
+      const { FileLoader } = await import('#utils/file-loader.js');
+      const allFiles = await FileLoader.getCoreSubDirFiles('commonconfig', {
+        ext: '.js',
+        recursive: false
+      });
 
       const batchSize = 10;
       for (let i = 0; i < allFiles.length; i += batchSize) {
@@ -57,24 +57,6 @@ class ConfigLoader {
     } catch (error) {
       BotUtil.makeLog('error', '配置管理器加载失败', 'ConfigLoader', error);
       throw error;
-    }
-  }
-
-  /**
-   * 获取配置文件列表
-   * @private
-   */
-  async _getConfigFiles(dir) {
-    try {
-      const { FileLoader } = await import('#utils/file-loader.js');
-      return FileLoader.readFiles(dir, {
-        ext: '.js',
-        recursive: false,
-        ignore: ['.', '_']
-      });
-    } catch (error) {
-      BotUtil.makeLog('error', `读取配置目录失败: ${dir}`, 'ConfigLoader', error);
-      return [];
     }
   }
 
@@ -171,15 +153,7 @@ class ConfigLoader {
     try {
       // 查找配置文件
       const configDirs = await paths.getCoreSubDirs('commonconfig');
-      let configPath = null;
-      
-      for (const configDir of configDirs) {
-        const filePath = path.join(configDir, `${name}.js`);
-        if (fsSync.existsSync(filePath)) {
-          configPath = filePath;
-          break;
-        }
-      }
+      const configPath = await findInCoreSubDirs(configDirs, name);
       
       if (!configPath) {
         throw new Error(`配置文件不存在: ${name}`);

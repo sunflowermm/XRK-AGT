@@ -10,17 +10,20 @@ const wwwRoot = path.resolve(
   '../../core/system-Core/www/xrk'
 );
 
+/** 与 index.html 引用的模块化 CSS 结构对齐（styles.css 已拆分） */
 const requiredFiles = [
   'index.html',
   'app.js',
-  'styles.css',
+  'css/styles-base.css',
+  'css/styles-layout.css',
+  'css/styles-chat-tools.css',
+  'css/pages.css',
+  'css/motion.css',
   'modules/ui-kit.js',
   'modules/dom.js',
   'modules/system-overview.js',
   'modules/pages/home.js',
-  'modules/pages/home-plugins-workflow.js',
-  'css/styles-base.css',
-  'css/pages.css'
+  'modules/pages/home-plugins-workflow.js'
 ];
 
 describe('www/xrk 静态资源', () => {
@@ -34,6 +37,13 @@ describe('www/xrk 静态资源', () => {
     const html = fs.readFileSync(path.join(wwwRoot, 'index.html'), 'utf8');
     assert.match(html, /id="content"/);
     assert.match(html, /id="toastContainer"/);
+  });
+
+  it('index.html 引用模块化 CSS 而非旧 styles.css', () => {
+    const html = fs.readFileSync(path.join(wwwRoot, 'index.html'), 'utf8');
+    assert.doesNotMatch(html, /href="styles\.css"/);
+    assert.match(html, /css\/styles-base\.css/);
+    assert.match(html, /css\/styles-layout\.css/);
   });
 });
 
