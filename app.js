@@ -92,6 +92,7 @@ async function validateEnvironment() {
   await paths.warmupCoreLayout();
 }
 
+
 class Bootstrap {
   constructor() {
     this.logger = createSimpleLogger(path.join('./logs', 'bootstrap.log'));
