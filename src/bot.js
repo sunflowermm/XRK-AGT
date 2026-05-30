@@ -204,8 +204,7 @@ export default class Bot extends EventEmitter {
   makeError(message, type = 'Error', details = {}) {
     let error;
 
-    // 使用Node.js 24.13 Error.isError()进行可靠的错误类型判断
-    if (Error.isError ? Error.isError(message) : message instanceof Error) {
+    if (Error.isError(message)) {
       error = message;
       if (type === 'Error' && error.type) {
         type = error.type;
@@ -2330,9 +2329,7 @@ export default class Bot extends EventEmitter {
         conn.lastPing = Date.now();
       });
       
-      // 错误处理（使用 Node.js 24 Error.isError() 优化）
       conn.on("error", err => {
-        // 使用 Error.isError() 进行可靠的错误类型判断（Node.js 24+）
         const errorMsg = Error.isError(err) ? err.message : String(err);
         BotUtil.makeLog("error", `WebSocket错误 [${connectionId}]: ${errorMsg}`, '服务器');
         this._wsConnections.delete(connectionId);
@@ -2344,7 +2341,6 @@ export default class Bot extends EventEmitter {
         this._wsConnections.delete(connectionId);
       });
       
-      // 消息处理（增强，使用 Node.js 24 Error.isError()）
       conn.on("message", (msg) => {
         try {
           conn.lastPing = Date.now(); // 更新活跃时间
@@ -2352,7 +2348,6 @@ export default class Bot extends EventEmitter {
             `[二进制消息，长度：${msg.length}]` : BotUtil.String(msg);
           BotUtil.makeLog("trace", `WS消息 [${connectionId}]: ${logMsg}`, '服务器');
         } catch (err) {
-          // 使用 Error.isError() 进行可靠的错误类型判断（Node.js 24+）
           const errorMsg = Error.isError(err) ? err.message : String(err);
           BotUtil.makeLog("error", `WebSocket消息处理错误 [${connectionId}]: ${errorMsg}`, '服务器');
         }
@@ -2375,7 +2370,6 @@ export default class Bot extends EventEmitter {
           
           return conn.send(msg, options);
         } catch (err) {
-          // 使用 Error.isError() 进行可靠的错误类型判断（Node.js 24+）
           const errorMsg = Error.isError(err) ? err.message : String(err);
           BotUtil.makeLog("error", `WebSocket发送错误 [${connectionId}]: ${errorMsg}`, '服务器');
           this._wsConnections.delete(connectionId);
@@ -2396,7 +2390,6 @@ export default class Bot extends EventEmitter {
           }
         }
       } catch (err) {
-        // 使用 Error.isError() 进行可靠的错误类型判断（Node.js 24+）
         const errorMsg = Error.isError(err) ? err.message : String(err);
         BotUtil.makeLog("error", `WebSocket处理器错误 [${connectionId}]: ${errorMsg}`, '服务器');
       }
@@ -2992,18 +2985,13 @@ export default class Bot extends EventEmitter {
     // 尝试每个API，直到成功
     for (const apiUrl of apis) {
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), timeoutMs);
-        
         const response = await fetch(apiUrl, {
-          signal: controller.signal,
-          headers: { 
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: {
             'User-Agent': 'Mozilla/5.0',
             'Accept': 'text/plain, */*'
           }
         });
-        
-        clearTimeout(timeout);
         
         if (response.ok) {
           const text = await response.text();
@@ -3609,18 +3597,11 @@ export default class Bot extends EventEmitter {
       }
     }
     
-    const controller = typeof AbortController === 'function'
-      ? new AbortController()
-      : null;
-    const timer = controller
-      ? setTimeout(() => controller.abort(), timeout)
-      : null;
-    
     const options = {
       method: String(method || 'GET').toUpperCase(),
-      headers: { ...headers }
+      headers: { ...headers },
+      signal: AbortSignal.timeout(timeout)
     };
-    if (controller) options.signal = controller.signal;
     
     const needBody = !['GET', 'HEAD'].includes(options.method);
     if (needBody && body !== undefined) {
@@ -3636,22 +3617,18 @@ export default class Bot extends EventEmitter {
       }
     }
     
-    try {
-      const response = await fetchFn(url, options);
-      const text = await response.text();
-      let data;
-      try { data = JSON.parse(text); } catch { data = text; }
-      
-      return {
-        ok: response.ok,
-        status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
-        data,
-        raw: text
-      };
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
+    const response = await fetchFn(url, options);
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = text; }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+      data,
+      raw: text
+    };
   }
   
   _cascadeEmit(name, data) {

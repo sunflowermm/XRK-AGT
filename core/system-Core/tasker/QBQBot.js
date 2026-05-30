@@ -47,7 +47,7 @@ Bot.tasker.push(
         http: true,
         size: 10485760,
       })
-      if (Buffer.isBuffer(file)) opts.Base64Buf = file.toString("base64")
+      if (Buffer.isBuffer(file)) opts.Base64Buf = file.toBase64()
       else if (file.match(/^https?:\/\//)) opts.FileUrl = file
       else opts.FilePath = file
 

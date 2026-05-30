@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';

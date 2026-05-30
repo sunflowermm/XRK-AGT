@@ -5,10 +5,7 @@ import os from 'os';
 import { BaseTools } from '#utils/base-tools.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { getDefaultDesktopDirSync } from '#utils/user-dirs.js';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { exec } from '#utils/exec-async.js';
 const IS_WINDOWS = process.platform === 'win32';
 
 function resolveToolsWorkspace(raw) {
@@ -492,7 +489,7 @@ export default class ToolsStream extends AIStream {
     } else {
       opts.shell = '/bin/sh';
     }
-    const { stdout, stderr } = await execAsync(fullCommand, opts);
+    const { stdout, stderr } = await exec(fullCommand, opts);
     return { output: (stdout ?? '').trim(), stderr: (stderr ?? '').trim() };
   }
 

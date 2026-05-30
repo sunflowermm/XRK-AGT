@@ -60,7 +60,7 @@ Bot.tasker.push(
         size: 10485760,
         ...opts,
       })
-      if (Buffer.isBuffer(file)) return `base64://${file.toString("base64")}`
+      if (Buffer.isBuffer(file)) return `base64://${file.toBase64()}`
       return file
     }
 

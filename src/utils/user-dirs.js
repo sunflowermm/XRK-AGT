@@ -4,10 +4,7 @@
 import fs from 'node:fs';
 import path from 'path';
 import os from 'os';
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { exec } from './exec-async.js';
 
 /**
  * 同步解析默认桌面目录（构造期/无 await 场景）。
@@ -43,7 +40,7 @@ export function getDefaultDesktopDirSync() {
 export async function resolveUserDesktopDirAsync() {
   if (process.platform === 'win32') {
     try {
-      const { stdout } = await execAsync(
+      const { stdout } = await exec(
         'powershell -NoProfile -Command "[Environment]::GetFolderPath([Environment+SpecialFolder]::Desktop)"',
         { encoding: 'utf8', timeout: 8000 }
       );

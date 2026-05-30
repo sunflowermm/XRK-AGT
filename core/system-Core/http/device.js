@@ -183,7 +183,7 @@ function decodeAsrAudioPayload(payload, deviceId) {
             // 其他情况按 base64 处理（支持前缀 base64:）
             const b64 = s.startsWith('base64:') ? s.slice(7) : s;
             try {
-                return Buffer.from(b64, 'base64');
+                return Buffer.from(Uint8Array.fromBase64(b64));
             } catch (e) {
                 BotUtil.makeLog(
                     'error',
@@ -1888,7 +1888,7 @@ class DeviceManager {
                                         const filePath = seg.file || seg.data?.file;
                                         if (Buffer.isBuffer(filePath)) {
                                             const mime = seg.type === 'image' ? (filePath[0] === 0x89 && filePath[1] === 0x50 ? 'image/png' : 'image/jpeg') : seg.type === 'video' ? 'video/mp4' : 'application/octet-stream';
-                                            return { type: seg.type, url: `data:${mime};base64,${filePath.toString('base64')}`, data: {}, name: seg.name };
+                                            return { type: seg.type, url: `data:${mime};base64,${filePath.toBase64()}`, data: {}, name: seg.name };
                                         }
                                         if (!filePath || typeof filePath !== 'string') {
                                             BotUtil.makeLog('warn', `[reply] ${seg.type} segment 缺少 file 或 url`, deviceId);
@@ -1902,7 +1902,7 @@ class DeviceManager {
                                         const url = normalizedPath.startsWith(trashPath)
                                             ? `/api/trash/${path.relative(trashPath, normalizedPath).replace(/\\/g, '/')}`
                                             : path.isAbsolute(filePath)
-                                                ? `/api/device/file/${Buffer.from(filePath, 'utf8').toString('base64url')}`
+                                                ? `/api/device/file/${Buffer.from(filePath, 'utf8').toBase64({ alphabet: 'base64url' })}`
                                                 : `/api/trash/${filePath.replace(/\\/g, '/')}`;
                                         return { type: seg.type, url, data: { file: filePath }, name: seg.name };
                                     }
@@ -2332,7 +2332,7 @@ export default {
 
                 let filePath;
                 try {
-                    filePath = Buffer.from(fileId, 'base64url').toString('utf8');
+                    filePath = Buffer.from(Uint8Array.fromBase64(fileId, { alphabet: 'base64url' })).toString('utf8');
                 } catch {
                     return HttpResponse.validationError(res, '无效的文件ID');
                 }

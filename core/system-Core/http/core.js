@@ -1,14 +1,10 @@
 import os from 'os';
 import si from 'systeminformation';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from '#utils/exec-async.js';
 import cfg from '#infrastructure/config/config.js';
 import StreamLoader from '#infrastructure/aistream/loader.js';
 import { collectBotInventory, summarizeBots } from '#infrastructure/http/utils/botInventory.js';
 import { HttpResponse } from '#utils/http-utils.js';
-
-
-const execAsync = promisify(exec);
 
 let __lastNetSample = null;
 let __netSampler = null;
@@ -57,7 +53,7 @@ let __procTimer = null;
 async function __sampleNetWindows() {
   // 方法1: 使用Get-NetAdapterStatistics（PowerShell，累计值，Windows Server最准确）
   try {
-    const { stdout } = await execAsync(
+    const { stdout } = await exec(
       'powershell -NoProfile -Command "$adapters = Get-NetAdapterStatistics | Where-Object { $_.InterfaceDescription -notlike \"*Loopback*\" -and $_.InterfaceDescription -notlike \"*Teredo*\" -and $_.InterfaceDescription -notlike \"*isatap*\" -and $_.InterfaceDescription -notlike \"*Virtual*\" }; if ($adapters) { $rx = ($adapters | Measure-Object -Property ReceivedBytes -Sum).Sum; $tx = ($adapters | Measure-Object -Property SentBytes -Sum).Sum; \"$rx|$tx\" } else { \"0|0\" }"',
       { timeout: 5000, maxBuffer: 1024 * 1024 }
     );
@@ -74,7 +70,7 @@ async function __sampleNetWindows() {
 
   // 方法2: 使用Get-Counter（PowerShell，速率值，需要转换为累计值）
   try {
-    const { stdout } = await execAsync(
+    const { stdout } = await exec(
       'powershell -NoProfile -Command "$r = Get-Counter \"\\Network Interface(*)\\Bytes Received/sec\", \"\\Network Interface(*)\\Bytes Sent/sec\" -ErrorAction SilentlyContinue; if ($r) { $rx = 0; $tx = 0; $r.CounterSamples | ForEach-Object { if ($_.Path -match \"Bytes Received\" -and $_.Path -notmatch \"Loopback|Teredo|isatap\") { $rx += $_.CookedValue } elseif ($_.Path -match \"Bytes Sent\" -and $_.Path -notmatch \"Loopback|Teredo|isatap\") { $tx += $_.CookedValue } }; \"$rx|$tx\" } else { \"0|0\" }"',
       { timeout: 5000, maxBuffer: 1024 * 1024 }
     );
@@ -91,7 +87,7 @@ async function __sampleNetWindows() {
 
   // 方法3: 使用wmic（Windows Management Instrumentation，兼容性最好）
   try {
-    const { stdout } = await execAsync(
+    const { stdout } = await exec(
       'wmic path Win32_PerfRawData_Tcpip_NetworkInterface get BytesReceivedPersec,BytesSentPersec /format:list 2>nul',
       { timeout: 5000, maxBuffer: 1024 * 1024 }
     );
@@ -127,7 +123,7 @@ async function __sampleNetUnix() {
     if (platform === 'linux') {
       // Linux: 读取/proc/net/dev（最快最准确）
       try {
-        const { stdout } = await execAsync(
+        const { stdout } = await exec(
           'cat /proc/net/dev | grep -v "lo:" | awk \'BEGIN {rx=0; tx=0} {if(NR>2 && $1!="") {rx+=$2; tx+=$10}}\' END \'{print rx"|"tx}\'',
           { timeout: 1000 }
         );
@@ -145,7 +141,7 @@ async function __sampleNetUnix() {
     } else if (platform === 'darwin') {
       // macOS: 使用netstat -ib
       try {
-        const { stdout } = await execAsync(
+        const { stdout } = await exec(
           'netstat -ib | awk \'BEGIN {rx=0; tx=0} /^[^I]/ {if($1!="Name" && $1!="") {rx+=$7; tx+=$10}}\' END \'{print rx"|"tx}\'',
           { timeout: 2000 }
         );

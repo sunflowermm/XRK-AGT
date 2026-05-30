@@ -1,7 +1,7 @@
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import { ProxyAgent } from 'undici';
 
 /**
- * 为 node-fetch 请求构建带代理能力的配置
+ * 为全局 fetch 请求构建带代理能力的配置（Undici dispatcher）
  * @param {Object} config - LLM 配置对象，支持：
  *   - proxy: {
  *       enabled: boolean,
@@ -19,7 +19,6 @@ export function buildFetchOptionsWithProxy(config = {}, baseOptions = {}) {
     return options;
   }
 
-  // 开关控制：对象形式时必须显式 enabled 为 true；字符串简写则默认开启
   const isObjectConfig = typeof proxyConfig === 'object' && proxyConfig !== null;
   const enabled = isObjectConfig ? proxyConfig.enabled === true : true;
   if (!enabled) {
@@ -32,9 +31,8 @@ export function buildFetchOptionsWithProxy(config = {}, baseOptions = {}) {
   }
 
   try {
-    options.agent = new HttpsProxyAgent(url);
+    options.dispatcher = new ProxyAgent(url);
   } catch (err) {
-    // 代理配置异常时不中断业务，只做日志提示
     globalThis.Bot?.makeLog?.(
       'warn',
       `[LLM Proxy] 创建代理失败: ${String(err?.message || err)}`
@@ -43,4 +41,3 @@ export function buildFetchOptionsWithProxy(config = {}, baseOptions = {}) {
 
   return options;
 }
-

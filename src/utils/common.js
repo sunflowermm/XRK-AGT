@@ -1,5 +1,5 @@
 import { pipeline } from 'node:stream/promises'
-import fetch from 'node-fetch'
+import { Readable } from 'node:stream'
 import path from 'node:path'
 import { existsSync, createWriteStream } from 'node:fs'
 import BotUtil from './botutil.js'
@@ -45,8 +45,13 @@ export const downFile = async (fileUrl, savePath, param = {}) => {
   try {
     await BotUtil.mkdir(path.dirname(savePath))
     logger?.debug?.(`[下载文件] ${fileUrl}`)
-    const response = await fetch(fileUrl, param)
-    await pipeline(response.body, createWriteStream(savePath))
+    const { timeout = 30000, signal, ...fetchOpts } = param
+    const response = await fetch(fileUrl, {
+      ...fetchOpts,
+      signal: signal ?? AbortSignal.timeout(timeout)
+    })
+    if (!response.ok || !response.body) return false
+    await pipeline(Readable.fromWeb(response.body), createWriteStream(savePath))
     return true
   } catch (err) {
     logger?.error?.(`下载文件错误：${err}`)

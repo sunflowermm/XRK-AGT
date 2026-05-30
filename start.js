@@ -361,13 +361,10 @@ class ServerManager extends BaseManager {
     await this.logger.log(`尝试停止端口 ${port} 的服务器`);
     
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(`http://localhost:${port}/shutdown`, {
         method: 'POST',
-        signal: controller.signal
+        signal: AbortSignal.timeout(5000)
       });
-      clearTimeout(timeoutId);
       
       if (response.ok) {
         await this.logger.success('服务器停止请求已发送');

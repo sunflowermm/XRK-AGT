@@ -1,8 +1,8 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
-import { exec, spawn } from 'child_process';
-import { promisify } from 'util';
+import { exec as execCb, spawn } from 'child_process';
+import { exec } from '#utils/exec-async.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { BaseTools } from '#utils/base-tools.js';
@@ -12,11 +12,9 @@ import { fetchWithPolicy } from '../lib/net/fetcher.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 const IS_DARWIN = process.platform === 'darwin';
-const execAsync = promisify(exec);
-
 const execCommand = (command, options = {}) => {
   return new Promise((resolve, reject) => {
-    exec(command, { ...options, encoding: 'utf8' }, (error, stdout, stderr) => {
+    execCb(command, { ...options, encoding: 'utf8' }, (error, stdout, stderr) => {
       if (error) {
         error.stderr = stderr;
         return reject(error);
@@ -83,7 +81,7 @@ export default class DesktopStream extends AIStream {
     const resolved = path.resolve(fullPath);
     if (IS_WINDOWS) {
       const escaped = resolved.replace(/"/g, '""');
-      await execAsync(`start "" "${escaped}"`, { shell: 'cmd.exe', timeout: 20000 });
+      await exec(`start "" "${escaped}"`, { shell: 'cmd.exe', timeout: 20000 });
       return;
     }
     const bin = IS_DARWIN ? 'open' : 'xdg-open';
@@ -172,19 +170,19 @@ export default class DesktopStream extends AIStream {
       handler: async (_args = {}, _context = {}) => {
         try {
           if (IS_WINDOWS) {
-            await execAsync('powershell -NoProfile -Command "(New-Object -ComObject shell.application).MinimizeAll()"', {
+            await exec('powershell -NoProfile -Command "(New-Object -ComObject shell.application).MinimizeAll()"', {
               timeout: 8000
             });
             return this.successResponse({ message: '已回到桌面', platform: 'win32' });
           }
           if (IS_DARWIN) {
             try {
-              await execAsync(
+              await exec(
                 `osascript -e 'tell application "System Events" to keystroke "d" using {command down, fn down}'`,
                 { timeout: 5000 }
               );
             } catch {
-              await execAsync(`osascript -e 'tell application "System Events" to key code 103'`, { timeout: 5000 });
+              await exec(`osascript -e 'tell application "System Events" to key code 103'`, { timeout: 5000 });
             }
             return this.successResponse({
               message: '已尝试显示桌面（若无效请在「系统设置 → 键盘」中确认 Mission Control/显示桌面快捷键）',
@@ -192,10 +190,10 @@ export default class DesktopStream extends AIStream {
             });
           }
           try {
-            await execAsync('wmctrl -k on', { timeout: 5000 });
+            await exec('wmctrl -k on', { timeout: 5000 });
             return this.successResponse({ message: '已切换展示桌面（wmctrl）', platform: 'linux' });
           } catch {
-            await execAsync('xdotool key Super_L+d', { timeout: 5000 });
+            await exec('xdotool key Super_L+d', { timeout: 5000 });
             return this.successResponse({ message: '已发送显示桌面快捷键（xdotool）', platform: 'linux' });
           }
         } catch (err) {
@@ -243,7 +241,7 @@ export default class DesktopStream extends AIStream {
           if (IS_DARWIN) {
             const appMap = { notepad: 'TextEdit', calc: 'Calculator', taskmgr: 'Activity Monitor' };
             const app = appMap[tool];
-            await execAsync(`open -a "${app.replace(/"/g, '\\"')}"`, { timeout: 15000 });
+            await exec(`open -a "${app.replace(/"/g, '\\"')}"`, { timeout: 15000 });
             return this.successResponse({
               message: `已打开 ${app}`,
               tool: app,
@@ -257,7 +255,7 @@ export default class DesktopStream extends AIStream {
           }[tool];
           for (const bin of candidates) {
             try {
-              await execAsync(`command -v ${bin}`, { shell: true, timeout: 4000 });
+              await exec(`command -v ${bin}`, { shell: true, timeout: 4000 });
             } catch {
               continue;
             }
@@ -366,7 +364,7 @@ export default class DesktopStream extends AIStream {
             return this.successResponse({ message: '屏幕已锁定', platform: 'win32' });
           }
           if (IS_DARWIN) {
-            await execAsync(
+            await exec(
               `osascript -e 'tell application "System Events" to keystroke "q" using {control down, command down}'`,
               { timeout: 8000 }
             );
@@ -381,7 +379,7 @@ export default class DesktopStream extends AIStream {
           let last = '';
           for (const cmd of attempts) {
             try {
-              await execAsync(cmd, { shell: true, timeout: 8000 });
+              await exec(cmd, { shell: true, timeout: 8000 });
               return this.successResponse({ message: '已请求锁屏', command: cmd, platform: 'linux' });
             } catch (e) {
               last = e.message;
@@ -599,9 +597,9 @@ export default class DesktopStream extends AIStream {
               );
             }
             if (action === 'shutdown_now' || action === 'shutdown') {
-              await execAsync(`osascript -e 'tell application "System Events" to shut down'`, { timeout: 15000 });
+              await exec(`osascript -e 'tell application "System Events" to shut down'`, { timeout: 15000 });
             } else if (action === 'restart') {
-              await execAsync(`osascript -e 'tell application "System Events" to restart'`, { timeout: 15000 });
+              await exec(`osascript -e 'tell application "System Events" to restart'`, { timeout: 15000 });
             }
             return this.successResponse({
               message: '已向系统发送电源请求（可能出现确认对话框）',
@@ -611,7 +609,7 @@ export default class DesktopStream extends AIStream {
           }
 
           if (action === 'cancel') {
-            await execAsync('shutdown -c', { shell: true, timeout: 8000 });
+            await exec('shutdown -c', { shell: true, timeout: 8000 });
             return this.successResponse({ message: '已取消关机/重启', action, platform: process.platform });
           }
           const linuxCmd =
@@ -620,7 +618,7 @@ export default class DesktopStream extends AIStream {
               : action === 'shutdown'
                 ? 'shutdown -h +1'
                 : 'shutdown -r +1';
-          await execAsync(linuxCmd, { shell: true, timeout: 8000 });
+          await exec(linuxCmd, { shell: true, timeout: 8000 });
           return this.successResponse({
             message: `已执行 ${linuxCmd}（部分发行版需 root 或 polkit 授权）`,
             action,
@@ -771,7 +769,7 @@ export default class DesktopStream extends AIStream {
             }
             if (shortcutPath) {
               const escaped = shortcutPath.replace(/"/g, '""');
-              await execAsync(`start "" "${escaped}"`, { shell: 'cmd.exe' });
+              await exec(`start "" "${escaped}"`, { shell: 'cmd.exe' });
               return this.successResponse({
                 message: `已打开快捷方式: ${appName}`,
                 appName,
@@ -782,14 +780,14 @@ export default class DesktopStream extends AIStream {
               const child = spawn(appName, [], { detached: true, stdio: 'ignore', shell: true });
               child.unref();
             } catch {
-              await execAsync(`start "" "${String(appName).replace(/"/g, '""')}"`, { shell: 'cmd.exe' });
+              await exec(`start "" "${String(appName).replace(/"/g, '""')}"`, { shell: 'cmd.exe' });
             }
             return this.successResponse({ message: `已尝试打开: ${appName}`, appName });
           }
 
           if (IS_DARWIN) {
             try {
-              await execAsync(`open -a "${String(appName).replace(/"/g, '\\"')}"`, { timeout: 20000 });
+              await exec(`open -a "${String(appName).replace(/"/g, '\\"')}"`, { timeout: 20000 });
               return this.successResponse({ message: `已打开应用: ${appName}`, appName, platform: 'darwin' });
             } catch {
               try {
@@ -1256,7 +1254,7 @@ export default class DesktopStream extends AIStream {
 
   async _writeClipboardText(text) {
     if (process.platform === 'win32') {
-      const b64 = Buffer.from(text, 'utf8').toString('base64');
+      const b64 = Buffer.from(text, 'utf8').toBase64();
       await execCommand(
         `powershell -NoProfile -Command "$b='${b64}'; $t=[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b)); Set-Clipboard -Value $t"`,
         { shell: 'cmd.exe', timeout: 15000, maxBuffer: 20 * 1024 * 1024 }

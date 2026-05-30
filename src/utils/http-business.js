@@ -3,12 +3,10 @@
  * 提供重定向、CDN、反向代理增强等功能的统一实现
  * 
  * @module http-business
- * @description 使用Node.js 24.13新特性优化，提供完整的HTTP业务层能力
+ * @description 使用 Node.js 全局 URLPattern API，提供完整的 HTTP 业务层能力
  */
 
 import crypto from 'node:crypto';
-
-const URLPatternClass = globalThis.URLPattern || null;
 
 /**
  * 重定向管理器
@@ -22,33 +20,17 @@ export class RedirectManager {
   }
 
   /**
-   * 编译重定向规则（使用Node.js 24.13 URLPattern API）
+   * 编译重定向规则（URLPattern API）
    */
   _compileRules() {
     const redirectConfig = this.config.redirects || [];
     
     for (const rule of redirectConfig) {
       try {
-        let pattern;
-        if (URLPatternClass) {
-          pattern = new URLPatternClass({ 
-            pathname: rule.from,
-            ...(rule.hostname && { hostname: rule.hostname })
-          });
-        } else {
-          pattern = {
-            pathname: rule.from,
-            test: (url) => {
-              const pathname = url.pathname || '';
-              if (rule.from.endsWith('*')) {
-                const prefix = rule.from.slice(0, -1);
-                return pathname.startsWith(prefix);
-              }
-              const regex = new RegExp('^' + rule.from.replace(/\*/g, '.*') + '$');
-              return pathname === rule.from || regex.test(pathname);
-            }
-          };
-        }
+        const pattern = new URLPattern({
+          pathname: rule.from,
+          ...(rule.hostname && { hostname: rule.hostname })
+        });
         
         this.rules.push({
           pattern,
@@ -97,17 +79,10 @@ export class RedirectManager {
           continue;
         }
 
-        let match;
-        if (typeof rule.pattern.test === 'function') {
-          match = rule.pattern.test({
-            pathname: url.pathname,
-            hostname: url.hostname
-          });
-        } else {
-          match = url.pathname === rule.pattern.pathname || 
-                  (rule.pattern.pathname.endsWith('*') && 
-                   url.pathname.startsWith(rule.pattern.pathname.slice(0, -1)));
-        }
+        const match = rule.pattern.test({
+          pathname: url.pathname,
+          hostname: url.hostname
+        });
 
         if (!match) continue;
 
@@ -327,7 +302,7 @@ export class CDNManager {
   _generateETag(filePath) {
     // 简单实现：基于文件路径和修改时间
     // 实际应用中可以使用文件hash
-    return `"${Buffer.from(filePath).toString('base64').slice(0, 16)}"`;
+    return `"${Buffer.from(filePath).toBase64().slice(0, 16)}"`;
   }
 
   /**
@@ -484,12 +459,12 @@ export class ProxyManager {
     }
 
     const key = `${domain}-${upstreamUrl}`;
-    const stat = this._stats.upstreamStats.get(key) || {
+    const stat = this._stats.upstreamStats.getOrInsert(key, () => ({
       requests: 0,
       failures: 0,
       totalResponseTime: 0,
       avgResponseTime: 0
-    };
+    }));
 
     stat.requests++;
     if (!success) {
@@ -499,8 +474,6 @@ export class ProxyManager {
       stat.totalResponseTime += responseTime;
       stat.avgResponseTime = stat.totalResponseTime / stat.requests;
     }
-
-    this._stats.upstreamStats.set(key, stat);
   }
 
   /**
@@ -589,18 +562,14 @@ export class ProxyManager {
     try {
       const healthUrl = upstream.healthUrl || `${upstream.url}/health`;
       const timeout = this.config.healthCheck?.timeout || 5000;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
+
       const response = await fetch(healthUrl, {
-        signal: controller.signal,
+        signal: AbortSignal.timeout(timeout),
         method: 'GET',
         headers: {
           'User-Agent': 'XRK-AGT-HealthCheck/1.0'
         }
       });
-      
-      clearTimeout(timeoutId);
       
       const responseTime = Date.now() - startTime;
       upstream.responseTime = responseTime;
@@ -729,7 +698,7 @@ export class ProxyManager {
    */
   _selectRoundRobin(upstreams, domain) {
     const key = `round-robin-${domain}`;
-    const currentIndex = this._roundRobinIndex.get(key) || 0;
+    const currentIndex = this._roundRobinIndex.getOrInsert(key, () => 0);
     const selected = upstreams[currentIndex % upstreams.length];
     this._roundRobinIndex.set(key, currentIndex + 1);
     

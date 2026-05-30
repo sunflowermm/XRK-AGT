@@ -2,11 +2,8 @@ import os from 'os';
 import v8 from 'v8';
 import fs from 'fs/promises';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from '#utils/exec-async.js';
 import EventEmitter from 'events';
-
-const execAsync = promisify(exec);
 
 /**
  * 系统监控器 - 统一管理浏览器、内存、CPU等资源
@@ -384,7 +381,7 @@ class SystemMonitor extends EventEmitter {
         }
 
         try {
-            const { stdout } = await execAsync(command);
+            const { stdout } = await exec(command);
             return this.parseBrowserProcesses(stdout, platform);
         } catch {
             return [];
@@ -474,7 +471,7 @@ class SystemMonitor extends EventEmitter {
                 const cmd = process.platform === 'win32' 
                     ? `taskkill /F /PID ${proc.pid}`
                     : `kill -15 ${proc.pid}`;
-                await execAsync(cmd, { timeout: 3000 });
+                await exec(cmd, { timeout: 3000 });
                 cleaned++;
                 return true;
             } catch (e) {
@@ -609,7 +606,7 @@ class SystemMonitor extends EventEmitter {
             let diskUsage = null;
 
             if (platform === 'win32') {
-                const { stdout } = await execAsync('wmic logicaldisk get size,freespace,caption');
+                const { stdout } = await exec('wmic logicaldisk get size,freespace,caption');
                 const lines = stdout.split('\n').filter(l => l.trim() && !l.includes('Caption'));
                 if (lines.length > 0) {
                     const parts = lines[0].trim().split(/\s+/);
@@ -618,7 +615,7 @@ class SystemMonitor extends EventEmitter {
                     diskUsage = this._calculateDiskUsage(total, free);
                 }
             } else {
-                const { stdout } = await execAsync('df -k /');
+                const { stdout } = await exec('df -k /');
                 const lines = stdout.split('\n');
                 if (lines.length > 1) {
                     const parts = lines[1].trim().split(/\s+/);
@@ -663,14 +660,14 @@ class SystemMonitor extends EventEmitter {
 
             if (platform === 'win32') {
                 try {
-                    const { stdout } = await execAsync('netstat -an | find /c "ESTABLISHED"');
+                    const { stdout } = await exec('netstat -an | find /c "ESTABLISHED"');
                     connections = parseInt(stdout.trim()) || 0;
                 } catch {
                     connections = this._estimateNetworkConnections();
                 }
             } else if (platform === 'linux' || platform === 'darwin') {
                 try {
-                    const { stdout } = await execAsync('netstat -an 2>/dev/null | grep ESTABLISHED | wc -l || ss -an 2>/dev/null | grep ESTAB | wc -l || echo 0');
+                    const { stdout } = await exec('netstat -an 2>/dev/null | grep ESTABLISHED | wc -l || ss -an 2>/dev/null | grep ESTAB | wc -l || echo 0');
                     connections = parseInt(stdout.trim()) || 0;
                 } catch {
                     connections = this._estimateNetworkConnections();
@@ -746,7 +743,7 @@ class SystemMonitor extends EventEmitter {
      */
     async _getFileHandleLimit() {
         try {
-            const { stdout } = await execAsync(`ulimit -n 2>/dev/null || echo 1024`);
+            const { stdout } = await exec(`ulimit -n 2>/dev/null || echo 1024`);
             return parseInt(stdout.trim()) || 1024;
         } catch {
             return 1024;
@@ -759,11 +756,11 @@ class SystemMonitor extends EventEmitter {
      */
     async _getLinuxFileHandles(pid) {
         try {
-            const { stdout } = await execAsync(`lsof -p ${pid} 2>/dev/null | wc -l`);
+            const { stdout } = await exec(`lsof -p ${pid} 2>/dev/null | wc -l`);
             return parseInt(stdout.trim()) || 0;
         } catch {
             try {
-                const { stdout } = await execAsync(`ls /proc/${pid}/fd 2>/dev/null | wc -l`);
+                const { stdout } = await exec(`ls /proc/${pid}/fd 2>/dev/null | wc -l`);
                 return parseInt(stdout.trim()) || 0;
             } catch {
                 return 0;
@@ -777,7 +774,7 @@ class SystemMonitor extends EventEmitter {
      */
     async _getWindowsFileHandles(pid) {
         try {
-            const { stdout } = await execAsync(`handle.exe -p ${pid} 2>nul | find /c "File"`);
+            const { stdout } = await exec(`handle.exe -p ${pid} 2>nul | find /c "File"`);
             return parseInt(stdout.trim()) || 0;
         } catch {
             return 0;
@@ -790,7 +787,7 @@ class SystemMonitor extends EventEmitter {
      */
     async _getDarwinFileHandles(pid) {
         try {
-            const { stdout } = await execAsync(`lsof -p ${pid} 2>/dev/null | wc -l`);
+            const { stdout } = await exec(`lsof -p ${pid} 2>/dev/null | wc -l`);
             return parseInt(stdout.trim()) || 0;
         } catch {
             return 0;
@@ -1011,7 +1008,7 @@ class SystemMonitor extends EventEmitter {
             if (commands) {
                 for (const cmd of commands) {
                     try {
-                        await execAsync(cmd);
+                        await exec(cmd);
                     } catch {
                         // 权限不足或命令失败，忽略
                     }
@@ -1036,7 +1033,7 @@ class SystemMonitor extends EventEmitter {
             // CPU优化（仅 Linux）
             if (this.config.system?.optimizeCPU && process.platform === 'linux') {
                 try {
-                    await execAsync(`chrt -r -p 0 ${process.pid} 2>/dev/null || true`);
+                    await exec(`chrt -r -p 0 ${process.pid} 2>/dev/null || true`);
                     logger.info('  ✓ 已优化CPU调度策略');
                 } catch {
                     // 权限不足，忽略
@@ -1075,7 +1072,7 @@ class SystemMonitor extends EventEmitter {
                 };
                 const winPriority = priorityMap[priority] || 'normal';
                 try {
-                    await execAsync(`wmic process where processid=${process.pid} set priority="${winPriority}"`);
+                    await exec(`wmic process where processid=${process.pid} set priority="${winPriority}"`);
                     logger.info(`  ✓ 已设置进程优先级 (${priority})`);
                 } catch {
                     // 忽略错误

@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import crypto from 'node:crypto';
+import { glob as globLib } from 'glob';
 import { ulid } from "ulid";
 import { fileTypeFromBuffer } from "file-type";
 import md5 from "md5";
@@ -10,6 +12,8 @@ import chalk from "chalk";
 import cfg from "#infrastructure/config/config.js";
 import common from './common.js';
 import paths from '#utils/paths.js';
+import { exec, execFile } from './exec-async.js';
+import { normalizeError } from './normalize-error.js';
 
 /**
  * Bot 实用工具类
@@ -104,13 +108,6 @@ export default class BotUtil {
    */
   static #memoryCache = new Map();
 
-  /**
-   * Glob 库实例
-   * @static
-   * @private
-   * @type {Function|null}
-   */
-  static #globLib = null;
 
   /**
    * 日志 ID 颜色方案
@@ -156,10 +153,7 @@ export default class BotUtil {
    * @returns {Map} 具有额外方法的扩展 Map 对象
    */
   static getMap(name = 'default', options = {}) {
-    if (!BotUtil.#globalMaps.has(name)) {
-      BotUtil.#globalMaps.set(name, BotUtil.#createExtendedMap(options));
-    }
-    return BotUtil.#globalMaps.get(name);
+    return BotUtil.#globalMaps.getOrInsertComputed(name, () => BotUtil.#createExtendedMap(options));
   }
 
   /**
@@ -392,14 +386,14 @@ export default class BotUtil {
       case "function":
         return `[Function: ${data.name || "anonymous"}]`;
       case "object":
-        if (data instanceof Error) {
+        if (Error.isError(data)) {
           return data.stack || data.message || String(data);
         }
         if (Buffer.isBuffer(data)) {
           if (data.length > 1024) {
             return `[Binary data, length: ${data.length}]`;
           }
-          return `base64://${data.toString("base64")}`;
+          return `base64://${data.toBase64()}`;
         }
         try {
           return JSON.stringify(data);
@@ -422,7 +416,7 @@ export default class BotUtil {
 
     const string = data.toString();
     if (string.includes("\ufffd") || /[\uD800-\uDFFF]/.test(string)) {
-      return base64 ? `base64://${data.toString("base64")}` : data;
+      return base64 ? `base64://${data.toBase64()}` : data;
     }
     return string;
   }
@@ -741,7 +735,7 @@ export default class BotUtil {
           if (seen.has(value)) return "[循环引用]";
           seen.add(value);
 
-          if (value instanceof Error) {
+          if (Error.isError(value)) {
             return {
               name: value.name,
               message: value.message,
@@ -868,35 +862,13 @@ export default class BotUtil {
     if (!filePath) return false;
 
     try {
-      await fs.access(filePath, fsSync.constants.FOK);
+      await fs.access(filePath, fsSync.constants.F_OK);
       return true;
     } catch {
       return false;
     }
   }
 
-  /**
-   * 延迟加载 glob 库
-   * @private
-   * @returns {Promise<Function>} Glob 函数
-   * @throws {Error} 如果没有可用的 glob 库
-   */
-  static async #getGlobLib() {
-    if (!BotUtil.#globLib) {
-      try {
-        const { default: fastGlob } = await import('fast-glob');
-        BotUtil.#globLib = fastGlob;
-      } catch {
-        try {
-          const { glob } = await import('glob');
-          BotUtil.#globLib = glob;
-        } catch {
-          throw new Error("无法加载 glob 库");
-        }
-      }
-    }
-    return BotUtil.#globLib;
-  }
 
   /**
    * 查找匹配模式的文件
@@ -919,8 +891,6 @@ export default class BotUtil {
     }
 
     try {
-      const globFunc = await BotUtil.#getGlobLib();
-
       const globOptions = {
         dot: opts.dot !== false,
         absolute: opts.absolute === true,
@@ -930,7 +900,7 @@ export default class BotUtil {
         ...opts
       };
 
-      const files = await globFunc(pattern, globOptions);
+      const files = await globLib(pattern, globOptions);
       return Array.isArray(files) ? files : Array.from(files);
     } catch (err) {
       if (globalThis.logger?.error) {
@@ -964,7 +934,7 @@ export default class BotUtil {
     // 处理 base64
     if (dataStr.startsWith("base64://")) {
       try {
-        const buffer = Buffer.from(dataStr.slice(9), "base64");
+        const buffer = Buffer.from(Uint8Array.fromBase64(dataStr.slice(9)));
         return opts.size && buffer.length > opts.size ?
           await BotUtil.#saveBufferToTempFile(buffer) : buffer;
       } catch {
@@ -1034,7 +1004,7 @@ export default class BotUtil {
 
       return `file://${path.resolve(filePath)}`;
     } catch {
-      return `data:application/octet-stream;base64,${buffer.toString('base64')}`;
+      return `data:application/octet-stream;base64,${buffer.toBase64()}`;
     }
   }
 
@@ -1131,7 +1101,7 @@ export default class BotUtil {
         fileBuffer = file;
       } else if (typeof file === "string") {
         if (file.startsWith("base64://")) {
-          fileBuffer = Buffer.from(file.slice(9), "base64");
+          fileBuffer = Buffer.from(Uint8Array.fromBase64(file.slice(9)));
         } else if (BotUtil.regexCache.url.test(file)) {
           const response = await fetch(file, {
             signal: AbortSignal.timeout(30000),
@@ -1214,49 +1184,54 @@ export default class BotUtil {
       globalThis.logger.mark(cmdStr, "命令");
     }
 
-    return new Promise((resolve) => {
-      const execOpts = {
-        encoding: "buffer",
-        maxBuffer: 10 * 1024 * 1024,
-        timeout: opts.timeout || 60000,
-        windowsHide: true,
-        ...opts
-      };
+    const execOpts = {
+      encoding: "buffer",
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: opts.timeout || 60000,
+      windowsHide: true,
+      ...opts
+    };
 
-      const callback = (error, stdout, stderr) => {
-        const raw = { stdout, stderr };
-        const stdoutStr = stdout?.toString() || "";
-        const stderrStr = stderr?.toString() || "";
-        const duration = BotUtil.getTimeDiff(startTime);
+    let error = null;
+    let stdout = "";
+    let stderr = "";
+    let raw = { stdout: null, stderr: null };
 
-        const result = {
-          error,
-          stdout: stdoutStr.trim(),
-          stderr: stderrStr.trim(),
-          raw,
-          duration
-        };
+    try {
+      const out = Array.isArray(cmd)
+        ? await execFile(cmd[0], cmd.slice(1), execOpts)
+        : await exec(cmdStr, execOpts);
+      raw = { stdout: out.stdout, stderr: out.stderr };
+      stdout = out.stdout?.toString() || "";
+      stderr = out.stderr?.toString() || "";
+    } catch (err) {
+      error = normalizeError(err);
+      raw = { stdout: err.stdout, stderr: err.stderr };
+      stdout = err.stdout?.toString?.() || "";
+      stderr = err.stderr?.toString?.() || "";
+    }
 
-        if (!opts.quiet && globalThis.logger?.mark) {
-          let logMessage = `${cmdStr} [完成 ${duration}]`;
-          if (result.stdout) logMessage += `\n${result.stdout}`;
-          if (result.stderr) logMessage += `\n${result.stderr}`;
-          globalThis.logger.mark(logMessage, "命令");
-        }
+    const duration = BotUtil.getTimeDiff(startTime);
+    const result = {
+      error,
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+      raw,
+      duration
+    };
 
-        if (error && !opts.quiet && globalThis.logger?.error) {
-          globalThis.logger.error(error, "命令");
-        }
+    if (!opts.quiet && globalThis.logger?.mark) {
+      let logMessage = `${cmdStr} [完成 ${duration}]`;
+      if (result.stdout) logMessage += `\n${result.stdout}`;
+      if (result.stderr) logMessage += `\n${result.stderr}`;
+      globalThis.logger.mark(logMessage, "命令");
+    }
 
-        resolve(result);
-      };
+    if (error && !opts.quiet && globalThis.logger?.error) {
+      globalThis.logger.error(error, "命令");
+    }
 
-      if (Array.isArray(cmd)) {
-        execFile(cmd[0], cmd.slice(1), execOpts, callback);
-      } else {
-        execCallback(cmd, execOpts, callback);
-      }
-    });
+    return result;
   }
 
   /**

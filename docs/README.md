@@ -5,7 +5,7 @@
 | 我想… | 从这里开始 |
 |--------|------------|
 | 跑起来 | [README.md §快速开始](../README.md#-快速开始) |
-| 懂架构 | [底层架构设计](底层架构设计.md) → [PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md) |
+| 懂架构 | [底层架构设计](底层架构设计.md) → [PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md) → [Node 26 运行时](node-26-runtime.md) |
 | 用内置能力 | [system-core.md](system-core.md) |
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
 | 发布前检查 | [框架测试指南](框架测试指南.md) → [代码审查清单](代码审查清单.md) → [文档审查清单](文档审查清单.md) |
@@ -50,6 +50,7 @@
 - **[文档审查清单](文档审查清单.md)** - 发布前文档准确性、互链与数字一致性 ⭐
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
 - **[底层架构设计](底层架构设计.md)** - 统一 Runtime / Infrastructure / Core 与 AI 底层设计（建议先读）
+- **[Node 26 运行时约定](node-26-runtime.md)** - 版本要求、已用 API、编译缓存与迁移禁止项 ⭐
 - **[Bot 主类文档](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范 ⭐
 

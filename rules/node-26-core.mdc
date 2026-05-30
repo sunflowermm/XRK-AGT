@@ -1,0 +1,28 @@
+---
+title: Node 26 Core 运行时（禁止旧写法）
+---
+
+## 适用范围
+
+编写或审查 **`core/**/*.js`**、**`src/**/*.js`** 业务与基础设施代码时必守。完整清单：`.cursor/skills/xrk-node-runtime/SKILL.md`、`docs/node-26-runtime.md`。
+
+## 版本
+
+- **Node ≥ 26.0**（`package.json` engines、`app.js` 启动校验、`Dockerfile` node:26）
+- **勿引导** Node 24、polyfill、特性检测回退
+
+## 必用 / 禁止对照
+
+| 场景 | 必用 | 禁止 |
+|------|------|------|
+| HTTP | 全局 `fetch` + `AbortSignal.timeout(ms)` | `node-fetch`、`AbortController`+`setTimeout` |
+| LLM 代理 | `buildFetchOptionsWithProxy`（`proxy-utils.js`） | `https-proxy-agent` |
+| Shell | `#utils/exec-async.js` | 分散 `promisify(exec)`、`child_process/promises`（26.2 无此模块） |
+| 判错 | `Error.isError`、`normalizeError` | 基础设施层 `instanceof Error` |
+| 二进制 | `toBase64()` / `fromBase64()` / `toHex()` | `toString('base64'|'hex')`、`Buffer.from(s,'base64')` |
+| 路径 | `URLPattern` | `globalThis.URLPattern ? ... : fallback` |
+
+## Core 边界
+
+- **不改** `src/infrastructure/`、`src/utils/`；复用已有工具模块。
+- 有 `package.json` 的子 core：**禁止 `#` 别名**，用相对路径至 `src/`。

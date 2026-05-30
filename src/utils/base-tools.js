@@ -1,10 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from './exec-async.js';
 import { getDefaultDesktopDirSync } from '#utils/user-dirs.js';
-
-const execAsync = promisify(exec);
 const IS_WINDOWS = process.platform === 'win32';
 
 /**
@@ -197,7 +194,7 @@ export class BaseTools {
     } = options;
 
     try {
-      const result = await execAsync(command, {
+      const result = await exec(command, {
         cwd,
         timeout,
         maxBuffer: 10 * 1024 * 1024
@@ -233,7 +230,7 @@ export class BaseTools {
     for (const pid of this.processRegistry) {
       try {
         if (IS_WINDOWS) {
-          await execAsync(`taskkill /F /PID ${pid}`, { timeout: 5000 });
+          await exec(`taskkill /F /PID ${pid}`, { timeout: 5000 });
         } else {
           try {
             process.kill(pid, 'SIGTERM');
@@ -260,7 +257,7 @@ export class BaseTools {
     }
 
     try {
-      const { stdout } = await execAsync('tasklist /FO CSV /NH', { encoding: 'utf8' });
+      const { stdout } = await exec('tasklist /FO CSV /NH', { encoding: 'utf8' });
       const lines = stdout.split('\n').filter(line => line.trim());
       
       const processes = lines.map(line => {

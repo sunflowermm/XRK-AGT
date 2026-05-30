@@ -9,6 +9,7 @@ import schedule from 'node-schedule'
 import { createStream } from 'rotating-file-stream'
 import { execSync } from 'node:child_process'
 import paths from '#utils/paths.js'
+import { normalizeError } from '#utils/normalize-error.js'
 
 /**
  * Logger 配置常量
@@ -214,7 +215,7 @@ export default function setLog() {
       const prefix = createLogPrefix(level)
       const message = args
         .map((arg) => {
-          if (typeof arg === 'object' && !(arg instanceof Error)) {
+          if (typeof arg === 'object' && !Error.isError(arg)) {
             return util.inspect(arg, { colors: false, depth: null, maxArrayLength: null })
           }
           return ensureUTF8(String(arg))
@@ -229,7 +230,7 @@ export default function setLog() {
       const fileMessage = stripColors(message)
       const pinoLevel = level === 'mark' || level === 'success' || level === 'tip' || level === 'done' ? 'info' : level
 
-      if (args[0] instanceof Error) {
+      if (Error.isError(args[0])) {
         const error = args[0]
         pinoLogger[pinoLevel]({ err: error }, fileMessage)
       } else {
@@ -890,7 +891,7 @@ async function cleanExpiredLogs(logger, customDays, includeTrace = true) {
           }
           continue
         } catch (err) {
-          const error = err instanceof Error ? err : new Error(String(err))
+          const error = normalizeError(err)
           if (logger) {
             logger.error(`Failed to delete redundant log file: ${file}`, error.message)
           }
@@ -915,7 +916,7 @@ async function cleanExpiredLogs(logger, customDays, includeTrace = true) {
           await fsPromises.unlink(filePath)
           deletedCount++
         } catch (err) {
-          const error = err instanceof Error ? err : new Error(String(err))
+          const error = normalizeError(err)
           if (logger) {
             logger.error(`Failed to delete log file: ${file}`, error.message)
           }
@@ -928,7 +929,7 @@ async function cleanExpiredLogs(logger, customDays, includeTrace = true) {
     }
     return deletedCount
   } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err))
+    const error = normalizeError(err)
     if (logger) {
       logger.error('Error cleaning expired logs:', error.message)
     }

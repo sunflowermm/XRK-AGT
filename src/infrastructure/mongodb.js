@@ -1,9 +1,10 @@
 import cfg from './config/config.js'
 import common, { normalizeHost } from '#utils/common.js'
+import { normalizeError } from '#utils/normalize-error.js'
 import BotUtil from '#utils/botutil.js'
 import fs from 'node:fs'
 import path from 'node:path'
-import { exec } from 'node:child_process'
+import { exec } from '#utils/exec-async.js'
 import { MongoClient } from 'mongodb'
 
 /** @type {import('mongodb').MongoClient | null} */
@@ -39,7 +40,7 @@ export default async function mongodbInit() {
       break
     } catch (err) {
       retryCount++
-      const error = err instanceof Error ? err : new Error(String(err))
+      const error = normalizeError(err)
       BotUtil.makeLog('warn', `连接失败 [${retryCount}/${maxRetries}]: ${error.message}`, 'MongoDB')
 
       if (retryCount < maxRetries) {
@@ -127,7 +128,7 @@ async function attemptMongoStart(retryCount) {
     const waitTime = 3000 + retryCount * 1000
     await common.sleep(waitTime)
   } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err))
+    const error = normalizeError(err)
     BotUtil.makeLog('debug', `启动失败: ${error.message}`, 'MongoDB')
   }
 }
@@ -143,7 +144,7 @@ function handleFinalConnectionFailure(error) {
   }
 
   if (process.env.XRK_OPTIONAL_DB === '1') {
-    throw error instanceof Error ? error : new Error(String(error))
+    throw normalizeError(error)
   }
 
   process.exit(1)
@@ -161,7 +162,7 @@ function startHealthCheck(client, db) {
     try {
       await db.admin().ping()
     } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err))
+      const error = normalizeError(err)
       BotUtil.makeLog('warn', `健康检查失败: ${error.message}`, 'MongoDB')
     }
   }, MONGODB_CONFIG.HEALTH_CHECK_INTERVAL)
@@ -181,16 +182,22 @@ async function getArchitectureOptions() {
   return ''
 }
 
-function execCommand(cmd) {
-  return new Promise((resolve) => {
-    exec(cmd, (error, stdout, stderr) => {
-      resolve({
-        error,
-        stdout: (stdout || '').toString(),
-        stderr: (stderr || '').toString()
-      })
-    })
-  })
+async function execCommand(cmd) {
+  try {
+    const { stdout, stderr } = await exec(cmd)
+    return {
+      error: null,
+      stdout: (stdout || '').toString(),
+      stderr: (stderr || '').toString()
+    }
+  } catch (err) {
+    const error = normalizeError(err)
+    return {
+      error,
+      stdout: (err.stdout || '').toString?.() ?? String(err.stdout || ''),
+      stderr: (err.stderr || '').toString?.() ?? String(err.stderr || '')
+    }
+  }
 }
 
 function maskMongoUrl(url) {
@@ -209,7 +216,7 @@ export async function closeMongodb() {
     globalClient = null
     globalDb = null
   } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err))
+    const error = normalizeError(err)
     BotUtil.makeLog('error', `关闭失败: ${error.message}`, 'MongoDB')
   }
 }

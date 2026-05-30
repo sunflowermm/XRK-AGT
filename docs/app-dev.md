@@ -51,14 +51,18 @@ flowchart TD
   Bot --> Online["触发 online / ready 事件"]
 ```
 
+
+
 **关键文件：**
 
-| 角色 | 文件 | 说明 |
-|------|------|------|
-| 引导器 | `app.js` | 检查依赖与环境、安装缺失依赖、加载动态 `imports`，最后启动 `start.js` |
-| 主程序入口 | `start.js` | 实际创建 `Bot` 实例、加载配置、监听事件、启动 HTTP/WS 服务 |
-| 运行核心 | `src/bot.js` | 封装 HTTP/HTTPS/WebSocket、中间件、认证、Tasker/插件/API 装载 |
-| Web 前端 | `core/system-Core/www/xrk/index.html` / `core/system-Core/www/xrk/app.js` | XRK Web 控制台，包含系统状态、API 调试、配置管理前端<br/>访问路径：`/<目录名>/*`（如 `/xrk/*`）<br/>**说明**：`www/` 下可以创建子目录，子目录自动挂载到 `/<目录名>/*` |
+
+| 角色     | 文件                                                                        | 说明                                                                                                      |
+| ------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 引导器    | `app.js`                                                                  | 检查依赖与环境、安装缺失依赖、加载动态 `imports`，最后启动 `start.js`                                                           |
+| 主程序入口  | `start.js`                                                                | 实际创建 `Bot` 实例、加载配置、监听事件、启动 HTTP/WS 服务                                                                   |
+| 运行核心   | `src/bot.js`                                                              | 封装 HTTP/HTTPS/WebSocket、中间件、认证、Tasker/插件/API 装载                                                         |
+| Web 前端 | `core/system-Core/www/xrk/index.html` / `core/system-Core/www/xrk/app.js` | XRK Web 控制台，包含系统状态、API 调试、配置管理前端 访问路径：`/<目录名>/`*（如 `/xrk/*`） **说明**：`www/` 下可以创建子目录，子目录自动挂载到 `/<目录名>/`* |
+
 
 ---
 
@@ -67,29 +71,29 @@ flowchart TD
 `app.js` 主要做三件事：
 
 1. **环境验证（EnvironmentValidator）**
-   - 检查 Node.js 版本（`package.json` engines：**≥ 24.12**）。
-   - 通过 `paths.ensureBaseDirs` 确保 `logs/`、`data/`、`config/` 等基础目录存在；`paths.warmupCoreLayout()` 预热 core 子目录索引。
-
+  - 检查 Node.js 版本（`package.json` engines：**≥ 26.0**）。
+  - 通过 `paths.ensureBaseDirs` 确保 `logs/`、`data/`、`config/` 等基础目录存在；`paths.warmupCoreLayout()` 预热 core 子目录索引。
 2. **依赖管理（DependencyManager）**
-   - 解析根目录 `package.json`。
-   - 检查 `dependencies + devDependencies` 对应的模块是否存在于 `node_modules`。
-   - 若有缺失，自动选择可用的包管理器（`pnpm` → `npm` → `yarn`）执行 `install`。
-   - 扫描 `core/*` 下含 `package.json` 的子核心目录，缺依赖则在该目录执行 `pnpm install`（渲染器在 `src/renderers/`，使用根依赖，不单独安装）。
-
+  - 解析根目录 `package.json`。
+  - 检查 `dependencies + devDependencies` 对应的模块是否存在于 `node_modules`。
+  - 若有缺失，自动选择可用的包管理器（`pnpm` → `npm` → `yarn`）执行 `install`。
+  - 扫描 `core/`* 下含 `package.json` 的子核心目录，缺依赖则在该目录执行 `pnpm install`（渲染器在 `src/renderers/`，使用根依赖，不单独安装）。
 3. **动态 imports 合并**
-   - 扫描 `data/importsJson/*.json`，收集所有 `imports` 字段。
-   - 合并到根目录 `package.json.imports` 中，方便在运行时新增别名映射（例如第三方插件）。
+  - 扫描 `data/importsJson/*.json`，收集所有 `imports` 字段。
+  - 合并到根目录 `package.json.imports` 中，方便在运行时新增别名映射（例如第三方插件）。
 
 完成上述步骤后，`app.js` 动态 `import('./start.js')`，交给主程序继续。
 
 ### 可选环境变量（多端口 / 调试）
 
-| 变量 | 作用 |
-|------|------|
-| `XRK_SKIP_CONFIG_CHECK=1` | 跳过配置检查（`start.js` 可连带跳过引导） |
-| `XRK_SKIP_BOOTSTRAP=1` | 跳过插件/前端依赖安装 |
-| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 仅跳过前端依赖检查 |
-| `XRK_SKIP_FRONTEND_START=1` | 跳过前端 dev server |
+
+| 变量                              | 作用                         |
+| ------------------------------- | -------------------------- |
+| `XRK_SKIP_CONFIG_CHECK=1`       | 跳过配置检查（`start.js` 可连带跳过引导） |
+| `XRK_SKIP_BOOTSTRAP=1`          | 跳过插件/前端依赖安装                |
+| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 仅跳过前端依赖检查                  |
+| `XRK_SKIP_FRONTEND_START=1`     | 跳过前端 dev server            |
+
 
 ---
 
@@ -148,22 +152,27 @@ flowchart TB
     style pathS fill:#FFE0B2
 ```
 
+
+
 ### 配置分类
 
 #### 1. 全局配置（不随端口变化）
 
 全局配置存储在 `data/server_bots/` 根目录，所有端口实例共享：
 
-| 配置名称 | 文件路径 | 说明 |
-|---------|---------|------|
-| `agt` | `data/server_bots/agt.yaml` | AGT 主配置 |
-| `device` | `data/server_bots/device.yaml` | 设备配置 |
-| `monitor` | `data/server_bots/monitor.yaml` | 监控配置 |
-| `notice` | `data/server_bots/notice.yaml` | 通知配置 |
+
+| 配置名称      | 文件路径                            | 说明           |
+| --------- | ------------------------------- | ------------ |
+| `agt`     | `data/server_bots/agt.yaml`     | AGT 主配置      |
+| `device`  | `data/server_bots/device.yaml`  | 设备配置         |
+| `monitor` | `data/server_bots/monitor.yaml` | 监控配置         |
+| `notice`  | `data/server_bots/notice.yaml`  | 通知配置         |
 | `mongodb` | `data/server_bots/mongodb.yaml` | MongoDB 连接配置 |
-| `redis` | `data/server_bots/redis.yaml` | Redis 连接配置 |
+| `redis`   | `data/server_bots/redis.yaml`   | Redis 连接配置   |
+
 
 **使用方式**：
+
 ```javascript
 // 通过快捷访问器
 const agtConfig = cfg.agt;
@@ -177,16 +186,19 @@ const deviceConfig = cfg.getGlobalConfig('device');
 
 端口配置存储在 `data/server_bots/{port}/` 目录，每个端口实例独立：
 
-| 配置名称 | 文件路径 | 说明 |
-|---------|---------|------|
-| `server` | `data/server_bots/{port}/server.yaml` | 服务器配置（端口、代理等） |
-| `chatbot` | `data/server_bots/{port}/chatbot.yaml` | 聊天机器人配置 |
-| `group` | `data/server_bots/{port}/group.yaml` | 群组配置 |
-| `aistream` | `data/server_bots/{port}/aistream.yaml` | AI 工作流、工厂默认提供商（`llm`/`asr`/`tts`）等，见 `docs/aistream.md` |
-| `volcengine_llm` | `data/server_bots/{port}/volcengine_llm.yaml` | 火山引擎 LLM 配置 |
-| `其他工厂配置` | `data/server_bots/{port}/*.yaml` | 其他 LLM/ASR/TTS 提供商配置 |
+
+| 配置名称             | 文件路径                                          | 说明                                                      |
+| ---------------- | --------------------------------------------- | ------------------------------------------------------- |
+| `server`         | `data/server_bots/{port}/server.yaml`         | 服务器配置（端口、代理等）                                           |
+| `chatbot`        | `data/server_bots/{port}/chatbot.yaml`        | 聊天机器人配置                                                 |
+| `group`          | `data/server_bots/{port}/group.yaml`          | 群组配置                                                    |
+| `aistream`       | `data/server_bots/{port}/aistream.yaml`       | AI 工作流、工厂默认提供商（`llm`/`asr`/`tts`）等，见 `docs/aistream.md` |
+| `volcengine_llm` | `data/server_bots/{port}/volcengine_llm.yaml` | 火山引擎 LLM 配置                                             |
+| `其他工厂配置`         | `data/server_bots/{port}/*.yaml`              | 其他 LLM/ASR/TTS 提供商配置                                    |
+
 
 **使用方式**：
+
 ```javascript
 // 通过快捷访问器
 const serverConfig = cfg.server;
@@ -200,20 +212,23 @@ const groupConfig = cfg.getServerConfig('group');
 
 #### 核心方法
 
-| 方法 | 说明 | 示例 |
-|------|------|------|
-| `getGlobalConfig(name)` | 获取全局配置 | `cfg.getGlobalConfig('agt')` |
-| `getServerConfig(name)` | 获取端口配置 | `cfg.getServerConfig('server')` |
-| `getConfig(name)` | 自动判断全局/端口配置 | `cfg.getConfig('agt')` → 全局<br/>`cfg.getConfig('server')` → 端口 |
-| `setConfig(name, data)` | 保存配置（自动判断类型） | `cfg.setConfig('server', {...})` |
-| `getConfigDir()` | 获取当前端口配置目录 | `data/server_bots/8080` |
-| `getGlobalConfigDir()` | 获取全局配置目录 | `data/server_bots` |
-| `getRendererConfig(type)` | 获取渲染器配置 | `cfg.getRendererConfig('puppeteer')` |
-| `watch(file, name, key)` | 监听配置变更 | 自动调用，无需手动使用 |
+
+| 方法                        | 说明           | 示例                                                         |
+| ------------------------- | ------------ | ---------------------------------------------------------- |
+| `getGlobalConfig(name)`   | 获取全局配置       | `cfg.getGlobalConfig('agt')`                               |
+| `getServerConfig(name)`   | 获取端口配置       | `cfg.getServerConfig('server')`                            |
+| `getConfig(name)`         | 自动判断全局/端口配置  | `cfg.getConfig('agt')` → 全局 `cfg.getConfig('server')` → 端口 |
+| `setConfig(name, data)`   | 保存配置（自动判断类型） | `cfg.setConfig('server', {...})`                           |
+| `getConfigDir()`          | 获取当前端口配置目录   | `data/server_bots/8080`                                    |
+| `getGlobalConfigDir()`    | 获取全局配置目录     | `data/server_bots`                                         |
+| `getRendererConfig(type)` | 获取渲染器配置      | `cfg.getRendererConfig('puppeteer')`                       |
+| `watch(file, name, key)`  | 监听配置变更       | 自动调用，无需手动使用                                                |
+
 
 #### 快捷访问器
 
 **全局配置访问器**：
+
 - `cfg.agt` - AGT 配置
 - `cfg.device` - 设备配置
 - `cfg.monitor` - 监控配置
@@ -222,6 +237,7 @@ const groupConfig = cfg.getServerConfig('group');
 - `cfg.redis` - Redis 配置
 
 **端口配置访问器**：
+
 - `cfg.aistream` - AI 工作流与工厂默认提供商等（`getServerConfig('aistream')`，文件在端口目录）
 - `cfg.server` - 服务器配置
 - `cfg.chatbot` - 聊天机器人配置
@@ -230,6 +246,7 @@ const groupConfig = cfg.getServerConfig('group');
 - `cfg.renderer` - 渲染器配置（合并 puppeteer + playwright）
 
 **便捷方法**：
+
 - `cfg.masterQQ` - 获取主人 QQ 号列表
 - `cfg.master` - 获取主人映射对象
 - `cfg.getGroup(groupId)` - 获取群组配置
@@ -254,6 +271,8 @@ sequenceDiagram
     Cfg-->>Bot: 返回配置对象
     Bot->>Bot: 使用配置启动服务
 ```
+
+
 
 ### 配置使用示例
 
@@ -310,13 +329,15 @@ export default {
 
 `ConfigBase` 提供面向对象、可校验的配置操作 API，适用于需要 Schema 验证、自动备份等高级特性的场景：
 
-| 能力 | 方法 | 说明 |
-|------|------|------|
-| 文件访问 | `read()/write()/exists()/backup()` | 带缓存的 YAML/JSON 读写与自动备份 |
-| 路径操作 | `get/set/delete/append/remove` | 基于「点号 + 数组下标」的读写 API |
-| 合并与重置 | `merge()/reset()` | 深度合并、恢复默认配置 |
-| 校验 | `validate(data)` | 按 `schema` 验证字段类型、范围、枚举 |
-| 结构导出 | `getStructure()` | 供前端生成「动态表单」所需的字段元数据 |
+
+| 能力    | 方法                                 | 说明                      |
+| ----- | ---------------------------------- | ----------------------- |
+| 文件访问  | `read()/write()/exists()/backup()` | 带缓存的 YAML/JSON 读写与自动备份  |
+| 路径操作  | `get/set/delete/append/remove`     | 基于「点号 + 数组下标」的读写 API    |
+| 合并与重置 | `merge()/reset()`                  | 深度合并、恢复默认配置             |
+| 校验    | `validate(data)`                   | 按 `schema` 验证字段类型、范围、枚举 |
+| 结构导出  | `getStructure()`                   | 供前端生成「动态表单」所需的字段元数据     |
+
 
 **详细文档**：参见 [ConfigBase 文档](config-base.md)
 
@@ -358,6 +379,8 @@ sequenceDiagram
     API-->>FE: 返回结果，前端提示用户
 ```
 
+
+
 前端开发者需要关注：
 
 - 所有可调用的 API 列表，可以通过 `/api/...` 中某个「API 列表接口」获取（例如 `ApiLoader.getApiList()` 暴露的接口）。
@@ -383,7 +406,10 @@ flowchart TB
     style F fill:#87CEEB
 ```
 
+
+
 **步骤**:
+
 1. **后台 API**: 在任意 `core/*/http` 目录创建 API，使用 `ConfigBase` 子类读写配置
 2. **前端页面**: 在 `core/system-Core/www/xrk/app.js` 注册路由，使用 `fetch` 调用 API
 
@@ -406,7 +432,10 @@ sequenceDiagram
     API-->>FE: 返回 JSON 响应
 ```
 
+
+
 **步骤**:
+
 1. 创建 HTTP API，构造事件对象并调用插件
 2. 前端提供按钮，点击后调用 API
 
@@ -427,7 +456,10 @@ flowchart TB
     style G fill:#90EE90
 ```
 
+
+
 **步骤**:
+
 1. 创建渲染API，使用 `RendererLoader.getRenderer()` 生成图片
 2. 前端调用API并展示返回的图片
 
@@ -514,6 +546,8 @@ flowchart TB
     style Backend fill:#FFE6CC
     style External fill:#90EE90
 ```
+
+
 
 ### 技术栈组合方案
 
@@ -763,15 +797,17 @@ export default class UnifiedPlugin extends plugin {
 
 ### 技术栈选择指南
 
-| 应用类型 | 推荐技术栈 | 核心组件 |
-|---------|-----------|---------|
-| **简单对话** | 插件 + 工作流 | `chat` stream + `enableMemory` |
-| **复杂任务** | 插件 + 工作流 + MCP 工具 | 通过主服务工作流组合与工具调用实现，必要时接入自定义子服务 API |
-| **Web应用** | 前端 + HTTP API + 工作流 | REST API + `process()` |
-| **数据可视化** | 插件 + 工作流 + 渲染器 | `Renderer` + 模板系统 |
-| **多平台** | Tasker + 插件 + 事件系统 | 通用事件监听 |
-| **配置管理** | HTTP API + ConfigBase | 动态表单生成 |
-| **实时通信** | WebSocket + 事件系统 | `Bot.em` + 事件订阅 |
+
+| 应用类型      | 推荐技术栈                 | 核心组件                              |
+| --------- | --------------------- | --------------------------------- |
+| **简单对话**  | 插件 + 工作流              | `chat` stream + `enableMemory`    |
+| **复杂任务**  | 插件 + 工作流 + MCP 工具     | 通过主服务工作流组合与工具调用实现，必要时接入自定义子服务 API |
+| **Web应用** | 前端 + HTTP API + 工作流   | REST API + `process()`            |
+| **数据可视化** | 插件 + 工作流 + 渲染器        | `Renderer` + 模板系统                 |
+| **多平台**   | Tasker + 插件 + 事件系统    | 通用事件监听                            |
+| **配置管理**  | HTTP API + ConfigBase | 动态表单生成                            |
+| **实时通信**  | WebSocket + 事件系统      | `Bot.em` + 事件订阅                   |
+
 
 ### 开发流程建议
 
@@ -789,32 +825,31 @@ flowchart TB
     style G fill:#90EE90
 ```
 
+
+
 ### 最佳实践
 
 1. **分层设计**：
-   - 前端：专注于UI和交互
-   - HTTP API：提供标准化接口
-   - 插件：处理业务逻辑
-   - 工作流：AI能力和复杂任务
-   - 基础设施：配置、渲染、存储
-
+  - 前端：专注于UI和交互
+  - HTTP API：提供标准化接口
+  - 插件：处理业务逻辑
+  - 工作流：AI能力和复杂任务
+  - 基础设施：配置、渲染、存储
 2. **技术栈组合原则**：
-   - 简单功能：直接使用插件 + 工作流
-   - 复杂功能：插件 + 工作流 + MCP 工具（可选扩展子服务 API）
-   - Web应用：前端 + HTTP API + 工作流
-   - 数据展示：工作流 + 渲染器
-
+  - 简单功能：直接使用插件 + 工作流
+  - 复杂功能：插件 + 工作流 + MCP 工具（可选扩展子服务 API）
+  - Web应用：前端 + HTTP API + 工作流
+  - 数据展示：工作流 + 渲染器
 3. **性能优化**：
-   - 合理使用记忆系统（避免过度检索）
-   - 工作流合并（减少重复加载）
-   - 渲染器缓存（避免重复渲染）
-   - 配置缓存（减少文件读取）
-
+  - 合理使用记忆系统（避免过度检索）
+  - 工作流合并（减少重复加载）
+  - 渲染器缓存（避免重复渲染）
+  - 配置缓存（减少文件读取）
 4. **可维护性**：
-   - 使用ConfigBase管理配置
-   - 统一错误处理
-   - 日志记录规范
-   - 代码模块化
+  - 使用ConfigBase管理配置
+  - 统一错误处理
+  - 日志记录规范
+  - 代码模块化
 
 ---
 

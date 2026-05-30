@@ -85,8 +85,8 @@ class DependencyManager {
 
 async function validateEnvironment() {
   const [major, minor = 0] = process.version.slice(1).split('.').map(Number);
-  if (major < 24 || (major === 24 && minor < 12)) {
-    throw new Error(`Node.js 需 >= v24.12.0，当前: ${process.version}`);
+  if (major < 26) {
+    throw new Error(`Node.js 需 >= v26.0.0，当前: ${process.version}`);
   }
   await paths.ensureBaseDirs();
   await paths.warmupCoreLayout();

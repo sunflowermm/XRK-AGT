@@ -1,4 +1,5 @@
 import YAML from 'yaml';
+import { normalizeError } from '#utils/normalize-error.js';
 
 import {
   pickFirstExistingSync,
@@ -23,7 +24,7 @@ export function loadYamlFromCandidates(candidates, logLabel = 'config') {
   try {
     return { config: YAML.parse(raw) || {}, watchFile };
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
+    const err = normalizeError(error);
     err.configLabel = logLabel;
     err.configPath = watchFile;
     throw err;

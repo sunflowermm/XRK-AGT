@@ -504,15 +504,10 @@ class App {
     this._connectionChecking = true;
     
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const res = await fetch(`${this.serverUrl}/api/status`, { 
+      const res = await fetch(`${this.serverUrl}/api/status`, {
         headers: this.getHeaders(),
-        signal: controller.signal
+        signal: AbortSignal.timeout(5000)
       });
-      
-      clearTimeout(timeoutId);
       
       const status = $('#connectionStatus');
       if (!status) return;
@@ -718,15 +713,10 @@ class App {
     this._statusLoading = true;
     this._statusLoadingPromise = (async () => {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
-      const res = await fetch(`${this.serverUrl}/api/system/overview?withHistory=1`, { 
+      const res = await fetch(`${this.serverUrl}/api/system/overview?withHistory=1`, {
         headers: this.getHeaders(),
-          signal: controller.signal
+        signal: AbortSignal.timeout(10000)
       });
-        
-        clearTimeout(timeoutId);
       
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);

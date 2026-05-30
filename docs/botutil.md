@@ -26,6 +26,14 @@
 | 典型使用方式 | `import BotUtil from '#utils/botutil.js'` |
 | 主要服务对象 | `Bot`、插件（`plugin`）、Tasker、`ApiLoader` 等 |
 
+### 相关底层模块（Node 26）
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| `exec-async` | `src/utils/exec-async.js` | Promise 版 `exec`；Core 通过 `BotUtil.exec` 或 `#utils/exec-async.js` 使用 |
+| `normalize-error` | `src/utils/normalize-error.js` | `normalizeError()`，配合 `Error.isError()` |
+| 运行时约定 | `docs/node-26-runtime.md` | API 清单与禁止旧写法 |
+
 ---
 
 ## 静态属性概览
@@ -133,7 +141,7 @@ classDiagram
 | `readFile(filePath, encoding?)` | 读取文件内容（自动校验路径为空） |
 | `writeFile(filePath, data, opts?)` | 写入文件，自动创建目录 |
 | `fileExists(filePath)` | 判断文件是否存在 |
-| `glob(pattern, opts?)` | 使用 fast-glob / glob 查找匹配模式的文件；若非模式则回退为普通路径检测 |
+| `glob(pattern, opts?)` | 使用 `glob` 包查找匹配模式的文件；若非模式则回退为普通路径检测 |
 | `Buffer(data, opts?)` | 将 base64/URL/文件路径/字符串转换为 Buffer 或临时文件 URL，支持大小阈值与 HTTP 超时 |
 | `fileType({ name, file }, opts?)` | 检测文件类型（扩展名/MIME/MD5），并规范化文件名 |
 | `fileToUrl(file, opts?)` | 将 Buffer/本地文件/网络 URL 转为 `http(s)://.../media/...`（并按配置安排定时清理）。可选 `opts`: `name` / `returnPath` / `baseUrl` / `fetchOptions` |
@@ -146,7 +154,7 @@ classDiagram
 
 | 方法 | 说明 |
 |------|------|
-| `exec(cmd, opts?)` | 执行系统命令（字符串或 `[cmd, ...args]`），捕获 stdout/stderr，并输出日志 |
+| `exec(cmd, opts?)` | 执行系统命令（内部走 `#utils/exec-async.js`）；Core 内勿自写 `promisify(exec)` |
 | `sleep(time, promise?)` | 延迟一段时间，或与另一个 Promise 竞争超时 |
 | `promiseEvent(emitter, event, errorEvent?, timeout?)` | 等待 EventEmitter 上的事件，支持错误事件和超时 |
 

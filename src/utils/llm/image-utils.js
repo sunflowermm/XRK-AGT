@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 /**
  * 图片 / 多模态辅助工具：
  * - 统一将相对路径 / 内部 URL 转成可 fetch 的绝对 URL
@@ -66,8 +64,7 @@ export async function fetchAsBase64(url, { timeoutMs = 30000 } = {}) {
   if (!resp.ok) return null;
 
   const mimeType = resp.headers.get('content-type') || 'image/png';
-  const buf = Buffer.from(await resp.arrayBuffer());
-  const base64 = buf.toString('base64');
+  const base64 = new Uint8Array(await resp.arrayBuffer()).toBase64();
 
   DATA_URL_CACHE.set(abs, { ts: now, mimeType, base64 });
   return { mimeType, base64 };

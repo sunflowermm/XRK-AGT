@@ -88,7 +88,7 @@ class TerminalHandler {
         `powershell -EncodedCommand ${Buffer.from(
           `$ProgressPreference="SilentlyContinue";[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;${cmd}`,
           'utf-16le'
-        ).toString('base64')}`;
+        ).toBase64()}`;
       this.formatOutput = (cmd, data) => data.replace(/\r\n/g, '\n').trim();
     } else {
       this.formatPrompt = (cmd) => cmd;
@@ -476,7 +476,7 @@ class ObjectInspector {
     if (Array.isArray(obj)) return 'Array';
     if (obj instanceof Date) return 'Date';
     if (obj instanceof RegExp) return 'RegExp';
-    if (obj instanceof Error) return obj.constructor.name;
+    if (Error.isError(obj)) return obj.constructor.name;
     if (obj instanceof Map) return 'Map';
     if (obj instanceof Set) return 'Set';
     if (obj instanceof WeakMap) return 'WeakMap';
@@ -536,7 +536,7 @@ class ObjectInspector {
 
       if (value instanceof Date) return value.toISOString();
       if (value instanceof RegExp) return value.toString();
-      if (value instanceof Error) return `${value.name}: ${value.message}`;
+      if (Error.isError(value)) return `${value.name}: ${value.message}`;
       
       if (value instanceof Map) {
         return `Map(${value.size})`;
@@ -883,7 +883,7 @@ class JavaScriptExecutor {
       if (result instanceof Promise) {
         return '[Promise]';
       }
-      if (result instanceof Error) {
+      if (Error.isError(result)) {
         return `${result.name}: ${result.message}\n${result.stack}`;
       }
       if (result instanceof Date) {
@@ -893,7 +893,7 @@ class JavaScriptExecutor {
         return result.toString();
       }
       if (Buffer.isBuffer(result)) {
-        return `Buffer(${result.length}): ${result.toString('hex').substring(0, 100)}...`;
+        return `Buffer(${result.length}): ${result.toHex().substring(0, 100)}...`;
       }
       if (result instanceof Map) {
         const entries = Array.from(result.entries()).slice(0, 10);

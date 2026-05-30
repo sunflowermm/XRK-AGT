@@ -11,6 +11,7 @@ import Handler from './handler.js'
 import Runtime from './runtime.js'
 import { segment } from '#oicq'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
+import { normalizeError } from '#utils/normalize-error.js'
 import { EventDeduplicator, IntelligentCache, PluginMatcher } from '#utils/neural-algorithms.js'
 import { matchEventPattern as matchEventPatternFn } from '#utils/core-fs.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
@@ -259,7 +260,7 @@ class PluginsLoader {
         try {
           msgRes = await e.replyNew(msgArray, false)
         } catch (err) {
-          const error = err instanceof Error ? err : new Error(String(err))
+          const error = normalizeError(err)
           logger.debug(`发送消息错误: ${error.message}`)
           const textMsg = msgArray.map(m => typeof m === 'string' ? m : m?.text || '').join('')
           if (textMsg) {
@@ -650,7 +651,7 @@ class PluginsLoader {
           } else if (existsSync(media)) {
             return await fs.readFile(media)
           } else if (media.startsWith('base64://')) {
-            return Buffer.from(media.replace(/^base64:\/\//, ''), 'base64')
+            return Buffer.from(Uint8Array.fromBase64(media.replace(/^base64:\/\//, '')))
           }
         } else if (Buffer.isBuffer(media)) {
           return media

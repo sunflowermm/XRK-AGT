@@ -5,7 +5,7 @@
 **多平台、多Tasker、工作流驱动型智能体平台**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D24.12.0-brightgreen.svg)](https://nodejs.org/)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D26.0.0-brightgreen.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Docker-blue.svg)](https://github.com/sunflowermm/XRK-AGT)
 [![Version](https://img.shields.io/badge/version-2.0.8-orange.svg)](https://github.com/sunflowermm/XRK-AGT)
 [![GitHub Repo stars](https://img.shields.io/github/stars/sunflowermm/XRK-AGT?style=social)](https://github.com/sunflowermm/XRK-AGT/stargazers)
@@ -286,7 +286,7 @@ node start.js server 3000
 
 ### 💡 现代技术栈
 
-基于 Node.js 24.12 LTS，充分利用现代 JavaScript 特性：全局 URLPattern API、原生 fetch API、AsyncLocalStorage 优化等。
+基于 Node.js 26 Current，使用 `Error.isError`、`Map.getOrInsert*`、`Uint8Array` 内置 base64/hex、全局 `URLPattern`、原生 `fetch`（Undici 8）与 `AbortSignal.timeout` 等。详见 [docs/node-26-runtime.md](docs/node-26-runtime.md)。
 
 ### 🔧 7 大扩展点
 
@@ -417,4 +417,4 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 
 ---
 
-*最后更新：2026-05-17*
+*最后更新：2026-05-30*

@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import setLog from '#infrastructure/log.js';
 import { initDatabases, closeDatabases } from '#infrastructure/database/index.js';
 import SystemMonitor from '#modules/systemmonitor.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 const CONFIG = {
   PROCESS_TITLE: 'XRK-AGT',
@@ -13,6 +14,8 @@ const CONFIG = {
 };
 
 const NETWORK_ERROR_CODES = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST'];
+/** DNS/解析类失败：记录为 warn，不触发重启 */
+const EXPECTED_REJECTION_CODES = ['ENOTFOUND', 'EAI_AGAIN', 'EAI_NONAME'];
 
 let packageloaderPromise = null;
 
@@ -81,7 +84,13 @@ class ProcessManager {
     if (global.__xrkErrorHandlersReady) return;
     global.__xrkErrorHandlersReady = true;
 
-    const onNetworkFatal = async (error, label) => {
+    const onNetworkFatal = async (reason, label) => {
+      const error = normalizeError(reason);
+      const isExpected = EXPECTED_REJECTION_CODES.includes(error.code);
+      if (isExpected) {
+        logger.warn(`${label}: ${error.message} (${error.code})`);
+        return;
+      }
       logger.error(`${label}: ${error.message}`);
       if (!this.isNetworkError(error)) return;
       logger.error(chalk.red(`网络错误(${error.code})，准备重启`));
@@ -89,7 +98,7 @@ class ProcessManager {
     };
 
     process.on('uncaughtException', (error) => onNetworkFatal(error, '未捕获异常'));
-    process.on('unhandledRejection', (error) => onNetworkFatal(error, '未处理Promise'));
+    process.on('unhandledRejection', (reason) => onNetworkFatal(reason, '未处理Promise'));
     process.on('exit', (code) => {
       logger.mark(chalk.magenta(`XRK-AGT 已停止，退出码: ${code}`));
     });

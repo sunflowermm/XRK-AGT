@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { fetchAsBase64 } from '../../utils/llm/image-utils.js';

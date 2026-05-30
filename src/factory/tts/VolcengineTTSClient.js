@@ -252,7 +252,7 @@ export default class VolcengineTTSClient {
         }
         for (let offset = 0; offset < audioData.length; offset += chunkBytes) {
             const slice = audioData.slice(offset, Math.min(offset + chunkBytes, audioData.length));
-            const hex = slice.toString('hex');
+            const hex = slice.toHex();
             this.audioChunkCount++;
             try {
                 if (deviceBot.sendAudioChunk && typeof deviceBot.sendAudioChunk === 'function') {

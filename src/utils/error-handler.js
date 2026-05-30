@@ -1,5 +1,6 @@
 import BotUtil from './botutil.js';
 import chalk from 'chalk';
+import { normalizeError } from './normalize-error.js';
 
 /**
  * 错误类型枚举
@@ -45,7 +46,7 @@ export class BotError extends Error {
     this.code = code;
     this.context = context;
     this.timestamp = Date.now();
-    Error.captureStackTrace?.(this, BotError);
+    Error.captureStackTrace(this, BotError);
   }
 
   /**
@@ -55,24 +56,18 @@ export class BotError extends Error {
     if (error instanceof BotError) {
       return error;
     }
-    
-    const safeOriginal = error && typeof error === 'object'
-      ? {
-          name: error.name,
-          message: error.message,
-          // 只保留字符串 stack，避免挂载复杂对象导致常驻引用
-          stack: typeof error.stack === 'string' ? error.stack : undefined
-        }
-      : { message: String(error) };
 
-    const botError = new BotError(
-      error.message || '未知错误',
-      code,
-      { ...context, original: safeOriginal }
-    );
-    
-    if (error.stack) botError.stack = error.stack;
-    
+    const normalized = normalizeError(error);
+    const safeOriginal = {
+      name: normalized.name,
+      message: normalized.message,
+      stack: typeof normalized.stack === 'string' ? normalized.stack : undefined
+    };
+
+    const botError = new BotError(normalized.message || '未知错误', code, { ...context, original: safeOriginal });
+
+    if (normalized.stack) botError.stack = normalized.stack;
+
     return botError;
   }
 
@@ -157,12 +152,12 @@ export class ErrorHandler {
    */
   recordError(error) {
     const key = `${error.code}`;
-    const stats = this.errorStats.get(key) || {
+    const stats = this.errorStats.getOrInsert(key, () => ({
       count: 0,
       firstOccurrence: Date.now(),
       lastOccurrence: Date.now(),
       contexts: []
-    };
+    }));
     
     stats.count++;
     stats.lastOccurrence = Date.now();
@@ -173,8 +168,6 @@ export class ErrorHandler {
         context: error.context
       });
     }
-    
-    this.errorStats.set(key, stats);
   }
 
   /**

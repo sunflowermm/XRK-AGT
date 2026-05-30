@@ -199,7 +199,7 @@ export default class BrowserStream extends AIStream {
           }
           return this.successResponse({
             mimeType: 'image/png',
-            base64: buf.toString('base64'),
+            base64: buf.toBase64(),
             bytes: buf.length,
             fullPage,
             selector: selector || undefined

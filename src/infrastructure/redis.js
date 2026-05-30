@@ -1,7 +1,8 @@
 import cfg from './config/config.js'
 import common, { normalizeHost } from '#utils/common.js'
+import { normalizeError } from '#utils/normalize-error.js'
 import BotUtil from '#utils/botutil.js'
-import { exec } from 'node:child_process'
+import { exec } from '#utils/exec-async.js'
 import os from 'node:os'
 import { createClient } from 'redis'
 
@@ -44,7 +45,7 @@ export default async function redisInit() {
       break
     } catch (err) {
       retryCount++
-      const error = err instanceof Error ? err : new Error(String(err))
+      const error = normalizeError(err)
       BotUtil.makeLog('warn', `连接失败 [${retryCount}/${maxRetries}]: ${error.message}`, 'Redis')
 
       if (retryCount < maxRetries) {
@@ -152,7 +153,7 @@ async function attemptRedisStart(retryCount) {
     await execCommand(cmd)
     await common.sleep(2000 + retryCount * 1000)
   } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err))
+    const error = normalizeError(err)
     BotUtil.makeLog('debug', `启动失败: ${error.message}`, 'Redis')
   }
 }
@@ -170,7 +171,7 @@ function handleFinalConnectionFailure(error) {
   }
 
   if (process.env.XRK_OPTIONAL_DB === '1') {
-    throw error instanceof Error ? error : new Error(String(error))
+    throw normalizeError(error)
   }
 
   process.exit(1)
@@ -182,7 +183,7 @@ function handleFinalConnectionFailure(error) {
  */
 function registerEventHandlers(client) {
   client.on('error', async (/** @type {any} */ err) => {
-    const error = err instanceof Error ? err : new Error(String(err))
+    const error = normalizeError(err)
     BotUtil.makeLog('error', error.message, 'Redis')
     
     // 使用 WeakMap 存储重连状态，避免修改客户端对象
@@ -198,7 +199,7 @@ function registerEventHandlers(client) {
       await client.connect()
       BotUtil.makeLog('success', '重新连接成功', 'Redis')
     } catch (reconnectErr) {
-      const reconnectError = reconnectErr instanceof Error ? reconnectErr : new Error(String(reconnectErr))
+      const reconnectError = normalizeError(reconnectErr)
       BotUtil.makeLog('error', `重连失败: ${reconnectError.message}`, 'Redis')
     } finally {
       client._reconnectState.isReconnecting = false
@@ -220,7 +221,7 @@ function startHealthCheck(client) {
     try {
       await client.ping()
     } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err))
+      const error = normalizeError(err)
       BotUtil.makeLog('warn', `健康检查失败: ${error.message}`, 'Redis')
     }
   }, REDIS_CONFIG.HEALTH_CHECK_INTERVAL)
@@ -249,7 +250,7 @@ async function getArchitectureOptions() {
       return ' --ignore-warnings ARM64-COW-BUG'
     }
   } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err))
+    const error = normalizeError(err)
     BotUtil.makeLog('debug', `检查系统架构失败: ${error.message}`, 'Redis')
   }
   return ''
@@ -260,16 +261,22 @@ async function getArchitectureOptions() {
  * @param {string} cmd - 要执行的命令
  * @returns {Promise<{error: Error|null, stdout: string, stderr: string}>} 命令执行结果
  */
-function execCommand(cmd) {
-  return new Promise((resolve) => {
-    exec(cmd, (error, stdout, stderr) => {
-      resolve({
-        error,
-        stdout: (stdout || '').toString(),
-        stderr: (stderr || '').toString()
-      })
-    })
-  })
+async function execCommand(cmd) {
+  try {
+    const { stdout, stderr } = await exec(cmd)
+    return {
+      error: null,
+      stdout: (stdout || '').toString(),
+      stderr: (stderr || '').toString()
+    }
+  } catch (err) {
+    const error = normalizeError(err)
+    return {
+      error,
+      stdout: (err.stdout || '').toString?.() ?? String(err.stdout || ''),
+      stderr: (err.stderr || '').toString?.() ?? String(err.stderr || '')
+    }
+  }
 }
 
 /**

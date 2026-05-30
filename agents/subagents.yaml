@@ -1,10 +1,10 @@
 subagents:
   - name: xrk-config-sync
-    description: 当用户要改配置/Schema/默认模板但不确定是否生效时使用
+    description: 当用户要改配置/Schema/默认模板但不确定是否生效时使用；Core 示例须遵守 Node 26（skill xrk-node-runtime）
     model: null
   - name: xrk-http-api-impl
-    description: 当用户要实现/排错 HTTP API handler、路由与参数校验时使用
+    description: 当用户要实现/排错 HTTP API handler、路由与参数校验时使用；必用 fetch+AbortSignal.timeout、normalizeError（skill xrk-node-runtime）
     model: null
   - name: xrk-plugin-tasker
-    description: 当用户要做插件/Tasker 协议适配、输入输出映射与运行时校验时使用
+    description: 当用户要做插件/Tasker 协议适配、输入输出映射与运行时校验时使用；二进制用 toBase64/fromBase64（skill xrk-node-runtime）
     model: null

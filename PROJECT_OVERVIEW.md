@@ -1,6 +1,6 @@
 # XRK-AGT 项目概览
 
-> **Node.js 版本要求**: ≥ 24.12.0 (LTS)  
+> **Node.js 版本要求**: ≥ 26.0.0 (Current，2026-10 转 LTS)  
 > 本文档提供 XRK-AGT 项目的完整架构概览、目录结构说明和核心特性介绍。  
 > 快速开始：[README.md](README.md) · 文档中心：[docs/README.md](docs/README.md) · 底层设计：[docs/底层架构设计.md](docs/底层架构设计.md) · 测试/审查：[docs/框架测试指南.md](docs/框架测试指南.md)、[docs/代码审查清单.md](docs/代码审查清单.md)、[docs/文档审查清单.md](docs/文档审查清单.md)
 
@@ -10,7 +10,7 @@
 - [核心特性](#核心特性)
 - [架构层次总览](#架构层次总览)
 - [目录结构详解](#目录结构详解)
-- [Node.js 24.12 新特性应用](#nodejs-2413-新特性应用)
+- [Node.js 26 新特性应用](#nodejs-26-新特性应用)
 - [HTTP业务层功能](#http业务层功能)
 - [快速开始](#快速开始)
 - [开发指南](#开发指南)
@@ -19,7 +19,7 @@
 
 ## 项目简介
 
-XRK-AGT 是向日葵工作室基于 **Node.js 24.12** 打造的多平台、多Tasker、工作流驱动型智能体平台，采用清晰的分层架构设计，支持：
+XRK-AGT 是向日葵工作室基于 **Node.js 26** 打造的多平台、多Tasker、工作流驱动型智能体平台，采用清晰的分层架构设计，支持：
 
 - **多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker；更多生态项目见 [AGT-Cores-Tools-Index](https://github.com/sunflowermm/AGT-Cores-Tools-Index)（含 [核心工具索引](https://github.com/sunflowermm/AGT-Cores-Tools-Index/blob/main/Core-Tools.md)）
 - **插件工作流**：指令插件 + AI 工作流 (`AIStream`)
@@ -29,7 +29,7 @@ XRK-AGT 是向日葵工作室基于 **Node.js 24.12** 打造的多平台、多Ta
 
 ### 技术栈
 
-- **运行时**: Node.js 24.12.0+ (LTS)
+- **运行时**: Node.js 26.0+（Current，2026-10 转 LTS）
 - **Web框架**: Express 4.x
 - **数据库**: Redis 5.0+, MongoDB 4.0+ (可选)
 - **渲染引擎**: Puppeteer / Playwright
@@ -85,13 +85,17 @@ flowchart TB
 
 **架构优势**：清晰的层次划分、基础设施与业务分离、基于基类设计便于扩展
 
-### 2. Node.js 24.12 新特性应用
+### 2. Node.js 26（含 25 过渡特性）应用
 
-- **全局 URLPattern API**：无需导入，直接使用路径匹配
-- **Error.isError()**：可靠的错误类型判断
-- **原生 fetch API**：使用 AbortController 控制超时
-- **AsyncLocalStorage 优化**：提升异步上下文追踪性能
-- **V8 13.6 引擎**：支持 Float16Array、RegExp.escape 等新特性
+- **全局 URLPattern API**：重定向规则路径匹配
+- **Error.isError()** + **normalizeError**：统一错误归一化
+- **Map.getOrInsert***：统计与缓存初始化
+- **Uint8Array.fromBase64 / toBase64 / toHex**（Node 25+ V8）：二进制编解码
+- **#utils/exec-async.js**：Promise 版 `exec` 单点导出（26.2 尚无 `child_process/promises` 子模块）
+- **原生 fetch**（Undici 8 + `ProxyAgent`）+ **AbortSignal.timeout**
+- **Temporal**、Web Storage 等 Web 标准 API 默认启用（Node 26）
+
+详见 [docs/node-26-runtime.md](docs/node-26-runtime.md)（含 V8 编译缓存、Undici 8 与迁移清单）。
 
 ### 3. HTTP业务层功能
 
@@ -341,63 +345,56 @@ XRK-AGT/
 
 ---
 
-## Node.js 24.12 新特性应用
+## Node.js 26 新特性应用
+
+> 完整说明（编译缓存、Undici 8、禁止旧写法）：[docs/node-26-runtime.md](docs/node-26-runtime.md)
 
 ### 1. 全局 URLPattern API
 
-**应用场景**：HTTP 重定向规则匹配、路径模式匹配（如按前缀区分 API/静态资源）
+**应用场景**：HTTP 重定向规则匹配
 
 ```javascript
-// 无需导入，直接使用
 const pattern = new URLPattern({ pathname: '/api/*' });
 const match = pattern.test({ pathname: '/api/users' });
 ```
 
-**使用位置**：
-- `src/utils/http-business.js` - 重定向管理器
+**使用位置**：`src/utils/http-business.js` — `RedirectManager._compileRules()`
 
-### 2. Error.isError()
-
-**应用场景**：可靠的错误类型判断
+### 2. Error.isError() 与 normalizeError
 
 ```javascript
-// 替代 instanceof Error，更可靠
-if (Error.isError(err)) {
-  console.error(err.message);
-}
+import { normalizeError } from '#utils/normalize-error.js';
+
+if (Error.isError(err)) { /* ... */ }
+const error = normalizeError(unknown);
 ```
 
-**使用位置**：
-- `src/bot.js` - WebSocket错误处理
-- `src/utils/http-business.js` - 错误处理
+**使用位置**：`src/infrastructure/*`、`src/bot.js`、日志与数据库连接层
 
-### 3. 原生 fetch API
+### 3. Map.getOrInsert*
 
-**应用场景**：健康检查、公网IP获取
+**使用位置**：`error-handler.js` 错误统计、`botutil.getMap()` 全局 Map
+
+### 4. Uint8Array 内置 base64/hex（Node 25+ V8）
+
+**使用位置**：`botutil.js`、`image-utils.js`、Tasker 消息编码、设备 HTTP
+
+### 5. 原生 fetch + AbortSignal.timeout
 
 ```javascript
-// 使用AbortController控制超时
-const controller = new AbortController();
-const timeout = setTimeout(() => controller.abort(), 5000);
-const response = await fetch(url, { signal: controller.signal });
-clearTimeout(timeout);
+const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
 ```
 
-**使用位置**：
-- `src/utils/http-business.js` - 反向代理健康检查
-- `src/bot.js` - 公网IP获取
+**使用位置**：`http-business.js` 健康检查、`bot.js` 公网 IP、`start.js` 停机探测、全部 LLM 客户端
 
-### 4. AsyncLocalStorage 优化
+### 6. #utils/exec-async.js
 
-**应用场景**：请求追踪、上下文传递
+Promise 版 `exec` 单点导出（26.2 尚无 `node:child_process/promises` 子模块）。
 
-Node.js 24.12 对 AsyncLocalStorage 进行了性能优化，提升异步上下文追踪性能。
+### 7. 编译与引擎层（无需改业务代码）
 
-### 5. V8 13.6 引擎特性
-
-- **Float16Array**：高性能数值计算
-- **RegExp.escape**：正则表达式转义
-- **WebAssembly Memory64**：大内存支持
+- **V8 14.6**：大 JSON 序列化、Map 新 API 性能更好
+- **可移植编译缓存**（`NODE_COMPILE_CACHE`）：可选，用于生产/Docker 缩短冷启动；见 [node-26-runtime.md](docs/node-26-runtime.md)
 
 ---
 
@@ -548,12 +545,12 @@ flowchart TB
 
 ## 性能优化
 
-### Node.js 24.12 优化
+### Node.js 26 优化
 
-1. **V8 13.6 引擎**：提升JavaScript执行性能
-2. **AsyncLocalStorage优化**：提升异步上下文追踪性能
-3. **HTTP客户端升级**：Undici 7提升网络请求性能
-4. **全局URLPattern**：简化路由匹配，无需导入
+1. **V8 14.6**：JSON 与大对象序列化更快；`Map.getOrInsert`、二进制 base64/hex 内置
+2. **Undici 8**：原生 `fetch`、LLM 流式与代理（`ProxyAgent`）
+3. **可选编译缓存**：`NODE_COMPILE_CACHE` 缩短生产环境冷启动（见 [node-26-runtime.md](docs/node-26-runtime.md)）
+4. **全局 URLPattern**：重定向与路径匹配无 polyfill
 
 ### 框架优化
 

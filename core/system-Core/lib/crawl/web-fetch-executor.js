@@ -160,7 +160,7 @@ function replaceMarkers(content) {
 function wrapExternalContent(content, { source, includeWarning = true }) {
   const sanitized = replaceMarkers(content);
   const sourceLabel = EXTERNAL_SOURCE_LABELS[source] ?? EXTERNAL_SOURCE_LABELS.unknown;
-  const markerId = randomBytes(8).toString('hex');
+  const markerId = randomBytes(8).toHex();
   const warningBlock = includeWarning ? `${EXTERNAL_CONTENT_WARNING}\n\n` : '';
   return [
     warningBlock,
