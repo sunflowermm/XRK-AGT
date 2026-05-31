@@ -23,6 +23,7 @@ alwaysApply: false
 | `normalize-error.js` | 非 Error → Error |
 | `exec-async.js` | 唯一 Promise 版 `exec`/`execFile` |
 | `db-connect-utils.js` | DB 连接辅助：`execCommandResult`、`maskConnectionUrl`、`detectArm64`、`connectWithRetry` |
+| `browser-renderer-base.js` | Puppeteer/Playwright 共用浏览器截图基类 |
 | `llm/proxy-utils.js` | `fetch` + Undici `ProxyAgent` |
 | `common.js` | `downFile`：`fetch` + `Readable.fromWeb` |
 
