@@ -1,38 +1,22 @@
-import Renderer from "#infrastructure/renderer/Renderer.js";
-import lodash from "lodash";
+import BrowserRendererBase from "#infrastructure/renderer/browser-renderer-base.js";
 import playwright from "playwright";
-import fs from "node:fs";
-import path from "node:path";
 import BotUtil from '#utils/botutil.js';
-import paths from '#utils/paths.js';
+import Renderer from "#infrastructure/renderer/Renderer.js";
 
 /**
  * Playwright-based browser renderer for screenshot generation.
- * 配置由 RendererLoader 通过 getRendererConfig('playwright') 注入（默认 + data/server_bots/{port}/renderers/playwright/config.yaml）。
+ * 配置由 RendererLoader 通过 getRendererConfig('playwright') 注入。
  */
-export default class PlaywrightRenderer extends Renderer {
+export default class PlaywrightRenderer extends BrowserRendererBase {
   constructor(config = {}) {
-    super({
-      id: "playwright",
-      type: "image",
-      render: "screenshot",
-    });
+    super({ id: "playwright", type: "image", render: "screenshot" }, config, "PlaywrightRenderer");
 
-    this.browser = null;
-    this.lock = false;
-    this.shoting = [];
     this.isClosing = false;
-    this.mac = "";
-    this.browserMacKey = null;
-
-    this.restartNum = config.restartNum ?? 100;
-    this.renderNum = 0;
     this.browserType = config.browser ?? "chromium";
     this.playwrightTimeout = config.playwrightTimeout ?? 120000;
     this.healthCheckInterval = config.healthCheckInterval ?? 120000;
     this.maxRetries = config.maxRetries ?? 3;
     this.retryDelay = config.retryDelay ?? 2000;
-    this.maxConcurrent = config.maxConcurrent ?? 3;
 
     const defaultArgs = [
       "--disable-gpu", "--disable-software-rasterizer", "--disable-dev-shm-usage",
@@ -64,23 +48,13 @@ export default class PlaywrightRenderer extends Renderer {
       bypassCSP: true,
       reducedMotion: "reduce",
     };
-
-    this.healthCheckTimer = null;
-
-    process.on("exit", () => this.cleanup());
-    process.on("SIGINT", () => this.cleanup());
-    process.on("SIGTERM", () => this.cleanup());
   }
 
-
-  /**
-   * Attempt to connect to existing browser instance with retry logic
-   */
   async connectToExisting(wsEndpoint, retries = 0) {
     const delay = this.retryDelay * Math.pow(2, retries);
     try {
-      BotUtil.makeLog("info", `Connecting to existing ${this.browserType} instance (attempt ${retries + 1}/${this.maxRetries})`, "PlaywrightRenderer");
-      
+      BotUtil.makeLog("info", `Connecting to existing ${this.browserType} instance (attempt ${retries + 1}/${this.maxRetries})`, this.logTag);
+
       const browser = await playwright[this.browserType].connect(wsEndpoint, { timeout: 10000 });
       const context = await browser.newContext();
       const page = await context.newPage();
@@ -88,110 +62,67 @@ export default class PlaywrightRenderer extends Renderer {
       await page.close();
       await context.close();
 
-      BotUtil.makeLog("info", `Successfully connected to existing ${this.browserType} instance`, "PlaywrightRenderer");
+      BotUtil.makeLog("info", `Successfully connected to existing ${this.browserType} instance`, this.logTag);
       return browser;
     } catch (e) {
-      BotUtil.makeLog("warn", `Connection failed: ${e.message}`, "PlaywrightRenderer");
-      
+      BotUtil.makeLog("warn", `Connection failed: ${e.message}`, this.logTag);
+
       if (retries < this.maxRetries - 1) {
         await new Promise(r => setTimeout(r, delay));
         return this.connectToExisting(wsEndpoint, retries + 1);
       }
-      
-      if (this.browserMacKey) {
-        try {
-          await redis.del(this.browserMacKey);
-          BotUtil.makeLog("info", "Cleaned up invalid browser instance record", "PlaywrightRenderer");
-        } catch {
-        }
-      }
+
+      await this.removeStoredEndpoint();
       return null;
     }
   }
 
-  /**
-   * Initialize browser instance with connection reuse and health monitoring
-   */
   async browserInit() {
-      if (this.browser) {
-        try {
-          this.browser.contexts();
-          return this.browser;
-        } catch (e) {
-          BotUtil.makeLog("warn", `Existing browser instance invalid: ${e.message}`, "PlaywrightRenderer");
-          this.browser = null;
-        }
+    if (this.browser) {
+      try {
+        this.browser.contexts();
+        return this.browser;
+      } catch (e) {
+        BotUtil.makeLog("warn", `Existing browser instance invalid: ${e.message}`, this.logTag);
+        this.browser = null;
       }
-
-    if (this.lock) {
-      let waitTime = 0;
-      while (this.lock && waitTime < 30000) {
-        await new Promise(r => setTimeout(r, 100));
-        waitTime += 100;
-      }
-      if (this.browser) return this.browser;
-      if (this.lock) return false;
     }
+
+    const lockResult = await this.waitForInitLock();
+    if (lockResult !== true && lockResult !== false) return lockResult;
+    if (lockResult === false) return false;
 
     this.lock = true;
     try {
-      BotUtil.makeLog("info", `Starting playwright ${this.browserType}...`, "PlaywrightRenderer");
+      BotUtil.makeLog("info", `Starting playwright ${this.browserType}...`, this.logTag);
 
-      if (!this.mac) {
-        this.mac = await this.getMac();
-        this.browserMacKey = `AGT:${this.browserType}:browserURL:${this.mac}`;
-      }
-
-      let wsEndpoint = null;
-      if (this.browserMacKey) {
-        try {
-          wsEndpoint = await redis.get(this.browserMacKey);
-        } catch {
-        }
-      }
-      if (!wsEndpoint && this.config.wsEndpoint) {
-        wsEndpoint = this.config.wsEndpoint;
-      }
+      await this.ensureMac(`AGT:${this.browserType}:browserURL`);
+      const wsEndpoint = await this.resolveWsEndpoint();
 
       if (wsEndpoint) {
         this.browser = await this.connectToExisting(wsEndpoint);
       }
 
       if (!this.browser) {
-        BotUtil.makeLog("info", `Launching new ${this.browserType} instance...`, "PlaywrightRenderer");
+        BotUtil.makeLog("info", `Launching new ${this.browserType} instance...`, this.logTag);
         this.browser = await playwright[this.browserType].launch(this.config);
-        
+
         if (this.browser) {
-          BotUtil.makeLog("info", `Playwright ${this.browserType} started successfully`, "PlaywrightRenderer");
-          const endpoint = this.browser.wsEndpoint();
-          
-          if (endpoint && this.browserMacKey) {
-            try {
-              await redis.set(this.browserMacKey, endpoint, { EX: 60 * 60 * 24 * 30 });
-              BotUtil.makeLog("debug", "Browser instance saved to Redis", "PlaywrightRenderer");
-            } catch (e) {
-              BotUtil.makeLog("warn", `Failed to save browser instance: ${e.message}`, "PlaywrightRenderer");
-            }
-          }
+          BotUtil.makeLog("info", `Playwright ${this.browserType} started successfully`, this.logTag);
+          await this.persistWsEndpoint(this.browser.wsEndpoint());
         }
       }
 
       if (!this.browser) {
-        BotUtil.makeLog("error", `Playwright ${this.browserType} failed to start`, "PlaywrightRenderer");
+        BotUtil.makeLog("error", `Playwright ${this.browserType} failed to start`, this.logTag);
         return false;
       }
 
       this.browser.on("disconnected", async () => {
-        BotUtil.makeLog("warn", `${this.browserType} instance disconnected`, "PlaywrightRenderer");
+        BotUtil.makeLog("warn", `${this.browserType} instance disconnected`, this.logTag);
         this.browser = null;
-        
-      if (this.browserMacKey) {
-        try {
-          await redis.del(this.browserMacKey);
-        } catch {
-        }
-      }
-        
+        await this.removeStoredEndpoint();
+
         if (!this.isClosing) {
           await this.restart(true);
         }
@@ -199,7 +130,7 @@ export default class PlaywrightRenderer extends Renderer {
 
       this.startHealthCheck();
     } catch (e) {
-      BotUtil.makeLog("error", `Browser initialization failed: ${e.message}`, "PlaywrightRenderer");
+      BotUtil.makeLog("error", `Browser initialization failed: ${e.message}`, this.logTag);
       this.browser = null;
     } finally {
       this.lock = false;
@@ -208,45 +139,29 @@ export default class PlaywrightRenderer extends Renderer {
     return this.browser;
   }
 
-  /**
-   * Start periodic health check for browser instance
-   */
   startHealthCheck() {
     if (this.healthCheckTimer) return;
-    
+
     this.healthCheckTimer = setInterval(async () => {
       if (!this.browser || this.shoting.length > 0 || this.isClosing) return;
-      
+
       try {
         this.browser.contexts();
       } catch (e) {
-        BotUtil.makeLog("warn", `Health check failed: ${e.message}, restarting...`, "PlaywrightRenderer");
+        BotUtil.makeLog("warn", `Health check failed: ${e.message}, restarting...`, this.logTag);
         await this.restart(true);
       }
     }, this.healthCheckInterval);
   }
 
-  /**
-   * Generate screenshot with optimized resource management
-   */
   async screenshot(name, data = {}) {
-    while (this.shoting.length >= this.maxConcurrent) {
-      await new Promise(r => setTimeout(r, 100));
-    }
-
+    await this.waitForScreenshotSlot();
     if (!await this.browserInit()) return false;
 
-    data._baseUrl = Renderer.toFileUrl(paths.root);
-    const pageHeight = data.multiPageHeight ?? 4000;
-    const savePath = this.dealTpl(name, data);
-    if (!savePath) return false;
+    const prepared = this.prepareScreenshotFile(name, data);
+    if (!prepared) return false;
 
-    const filePath = path.join(paths.root, lodash.trimStart(savePath, "."));
-    if (!fs.existsSync(filePath)) {
-      BotUtil.makeLog("error", `HTML file does not exist: ${filePath}`, "PlaywrightRenderer");
-      return false;
-    }
-
+    const { filePath, pageHeight } = prepared;
     let ret = [];
     let context = null;
     let page = null;
@@ -254,7 +169,6 @@ export default class PlaywrightRenderer extends Renderer {
     const start = Date.now();
 
     try {
-      // 单次渲染可覆盖设备像素比（如帮助页高清截图），sys.scale 建议 1–4
       const sysScale = Number(data.sys?.scale);
       const contextOptions = { ...this.contextOptions };
       if (Number.isFinite(sysScale) && sysScale > 0) {
@@ -272,16 +186,10 @@ export default class PlaywrightRenderer extends Renderer {
       if (!body) throw new Error("Content element not found");
 
       const boundingBox = await body.boundingBox();
-
       const screenshotOptions = {
-        type: data.imgType ?? "jpeg",
+        ...this.buildScreenshotOptions(data),
         fullPage: !data.multiPage,
-        omitBackground: data.omitBackground ?? false,
-        quality: data.quality ?? 85,
-        path: data.path ?? "",
       };
-
-      if (data.imgType === "png") delete screenshotOptions.quality;
 
       let num = 1;
       if (data.multiPage) {
@@ -294,7 +202,7 @@ export default class PlaywrightRenderer extends Renderer {
         const buff = await body.screenshot(screenshotOptions);
         this.renderNum++;
         const kb = (buff.length / 1024).toFixed(2) + "KB";
-        BotUtil.makeLog("info", `[${name}][${this.renderNum}] ${kb} ${Date.now() - start}ms`, "PlaywrightRenderer");
+        BotUtil.makeLog("info", `[${name}][${this.renderNum}] ${kb} ${Date.now() - start}ms`, this.logTag);
         ret.push(buff);
       } else {
         if (num > 1) {
@@ -325,13 +233,13 @@ export default class PlaywrightRenderer extends Renderer {
             height: Math.min(boundingBox.height - pageHeight * (i - 1), pageHeight),
           } : null;
 
-          const buff = clip 
-            ? await page.screenshot({ ...screenshotOptions, clip }) 
+          const buff = clip
+            ? await page.screenshot({ ...screenshotOptions, clip })
             : await body.screenshot(screenshotOptions);
-            
+
           this.renderNum++;
           const kb = (buff.length / 1024).toFixed(2) + "KB";
-          BotUtil.makeLog("debug", `[${name}][${i}/${num}] ${kb}`, "PlaywrightRenderer");
+          BotUtil.makeLog("debug", `[${name}][${i}/${num}] ${kb}`, this.logTag);
           ret.push(buff);
 
           if (i < num && num > 2) {
@@ -340,49 +248,34 @@ export default class PlaywrightRenderer extends Renderer {
         }
 
         if (num > 1) {
-          BotUtil.makeLog("info", `[${name}] Completed in ${Date.now() - start}ms`, "PlaywrightRenderer");
+          BotUtil.makeLog("info", `[${name}] Completed in ${Date.now() - start}ms`, this.logTag);
         }
       }
     } catch (error) {
-      BotUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, "PlaywrightRenderer");
+      BotUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
       ret = [];
     } finally {
       if (page) {
         try {
           await page.close({ runBeforeUnload: false });
-        } catch {
-        }
+        } catch {}
       }
       if (context) {
         try {
           await context.close();
-        } catch {
-        }
+        } catch {}
       }
       this.shoting = this.shoting.filter(item => item !== name);
     }
 
-    if (this.renderNum % this.restartNum === 0 && this.renderNum > 0 && this.shoting.length === 0) {
-      BotUtil.makeLog("info", `Completed ${this.renderNum} screenshots, restarting browser...`, "PlaywrightRenderer");
-      setTimeout(() => this.restart(), 2000);
-    }
-
-    if (ret.length === 0 || !ret[0]) {
-      BotUtil.makeLog("error", `[${name}] Screenshot result is empty`, "PlaywrightRenderer");
-      return false;
-    }
-
-    return data.multiPage ? ret : ret[0];
+    return this.finishScreenshotRun(name, ret, data);
   }
 
-  /**
-   * Restart browser instance with cleanup
-   */
   async restart(force = false) {
     if (!this.browser || this.lock || this.isClosing) return;
     if (!force && (this.renderNum % this.restartNum !== 0 || this.shoting.length > 0)) return;
 
-    BotUtil.makeLog("warn", `${this.browserType} ${force ? "forced" : "scheduled"} restart...`, "PlaywrightRenderer");
+    BotUtil.makeLog("warn", `${this.browserType} ${force ? "forced" : "scheduled"} restart...`, this.logTag);
     this.isClosing = true;
 
     try {
@@ -393,24 +286,15 @@ export default class PlaywrightRenderer extends Renderer {
       await this.browser.close();
       this.browser = null;
 
-      if (this.browserMacKey) {
-        await redis.del(this.browserMacKey).catch(() => {});
-      }
-
+      await this.removeStoredEndpoint();
       this.renderNum = 0;
+      this.clearHealthCheckTimer();
 
-      if (this.healthCheckTimer) {
-        clearInterval(this.healthCheckTimer);
-        this.healthCheckTimer = null;
-      }
+      if (global.gc) global.gc();
 
-      if (global.gc) {
-        global.gc();
-      }
-
-      BotUtil.makeLog("info", `${this.browserType} restart completed`, "PlaywrightRenderer");
+      BotUtil.makeLog("info", `${this.browserType} restart completed`, this.logTag);
     } catch (err) {
-      BotUtil.makeLog("error", `Restart failed: ${err.message}`, "PlaywrightRenderer");
+      BotUtil.makeLog("error", `Restart failed: ${err.message}`, this.logTag);
     } finally {
       this.isClosing = false;
     }
@@ -418,16 +302,9 @@ export default class PlaywrightRenderer extends Renderer {
     return true;
   }
 
-  /**
-   * Clean up all resources on process exit
-   */
   async cleanup() {
     this.isClosing = true;
-
-    if (this.healthCheckTimer) {
-      clearInterval(this.healthCheckTimer);
-      this.healthCheckTimer = null;
-    }
+    this.clearHealthCheckTimer();
 
     if (this.browser) {
       const contexts = this.browser.contexts();
@@ -438,10 +315,7 @@ export default class PlaywrightRenderer extends Renderer {
       this.browser = null;
     }
 
-    if (this.browserMacKey) {
-      await redis.del(this.browserMacKey).catch(() => {});
-    }
-
-    BotUtil.makeLog("info", "Playwright resources cleaned up", "PlaywrightRenderer");
+    await this.removeStoredEndpoint();
+    BotUtil.makeLog("info", "Playwright resources cleaned up", this.logTag);
   }
 }

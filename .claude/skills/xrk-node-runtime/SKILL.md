@@ -22,6 +22,7 @@ description: 编写或审查 core/src 代码时，确保使用 Node 26 稳定 AP
 | HTTP 出站 | 全局 `fetch(url, { signal: AbortSignal.timeout(ms), ...opts })` | `node-fetch`、`import fetch from ...` |
 | LLM 代理 | `buildFetchOptionsWithProxy(config, opts)`（`#utils/llm/proxy-utils.js`） | `https-proxy-agent`、`options.agent` |
 | Shell 命令 | `import { exec } from '#utils/exec-async.js'`（有 `#` 的 core）或相对路径到 `src/utils/exec-async.js` | `util.promisify(exec)`、`child_process/promises` |
+| 流式 Shell | 需 `stdout`/`stderr` 实时流时可用 `child_process.exec` 回调 API（如 `远程指令.js`） | 在普通 await 场景自写 promisify |
 | 判错 | `Error.isError(err)`；需包装时用 `normalizeError(err)`（`#utils/normalize-error.js`） | `err instanceof Error` |
 | Buffer 编码 | `buf.toBase64()`、`buf.toHex()`、`Uint8Array.fromBase64(s)` | `buf.toString('base64'|'hex')`、`Buffer.from(s,'base64')` |
 | Map 初始化 | `map.getOrInsert(k, () => ({ ... }))` / `getOrInsertComputed` | `map.get(k) \|\| (map.set(k,v), v)` 样板（可写时） |

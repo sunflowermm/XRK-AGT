@@ -393,6 +393,8 @@ const client = LLMFactory.createClient({
 
 所有工厂都支持通过 `registerProvider` 方法注册新的提供商。
 
+ASR/TTS 工厂由 `BaseFactory.createMediaFactoryClass()` 生成（`src/factory/BaseFactory.js`），对外 API 与下文一致；新增 ASR/TTS 厂商时实现客户端类并在对应 `*Factory.js` 的 `providers` Map 中注册，或运行时 `registerProvider`。
+
 #### 示例：注册新的 LLM 提供商
 
 ```javascript

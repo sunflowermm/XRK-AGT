@@ -229,7 +229,7 @@ flowchart TB
 
 **包含**：
 - **加载器**：TaskerLoader、PluginsLoader、ApiLoader、StreamLoader、ListenerLoader
-- **基类库**：plugin、HttpApi、AIStream、Renderer、ConfigBase、EventListener
+- **基类库**：plugin、HttpApi、AIStream、Renderer、ConfigBase、EventListenerBase（`listener/base.js`）
 - **HTTP业务层**：`http-business.js` - 重定向、CDN、反向代理增强
 - **数据库客户端**：`redis.js`、`mongodb.js`
 - **配置管理**：`config/`、`commonconfig/`
@@ -284,12 +284,13 @@ XRK-AGT/
 │   │   ├── listener/        # 事件监听器基础设施
 │   │   ├── http/            # HTTP API基础设施（含 auth.js 统一鉴权）
 │   │   ├── aistream/        # AI工作流基础设施
-│   │   ├── renderer/        # 渲染器基础设施
+│   │   ├── renderer/        # 渲染器基础设施（含 browser-renderer-base.js）
 │   │   ├── commonconfig/    # 配置系统基础设施（ConfigBase基类）
 │   │   └── config/          # 配置加载器
 │   ├── utils/               # 工具函数
 │   │   ├── botutil.js       # 核心工具类
 │   │   ├── http-business.js # HTTP业务层
+│   │   ├── db-connect-utils.js # Redis/Mongo 连接重试与脱敏
 │   │   └── paths.js         # 路径管理
 │   ├── factory/             # 工厂类（ASR/TTS/LLM/Vision）
 │   ├── modules/             # 业务模块

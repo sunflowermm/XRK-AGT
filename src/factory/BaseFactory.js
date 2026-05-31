@@ -39,12 +39,59 @@ export default class BaseFactory {
   }
 
   /**
-   * 创建客户端（子类需要实现）
-   * @param {...any} args - 参数
-   * @returns {*} 客户端实例
-   * @throws {Error} 如果提供商不存在
+   * 获取提供商工厂函数
+   * @param {string} provider - 提供商名称
+   * @returns {Function|undefined}
    */
-  createClient(..._args) {
-    throw new Error('子类必须实现 createClient 方法');
+  getProviderFactory(provider) {
+    return this.providers.get((provider || '').toLowerCase());
+  }
+
+  /**
+   * 创建设备媒体工厂类（ASR/TTS 等同构工厂）
+   * @param {Object} options
+   * @param {Map<string, Function>} options.providers - 提供商映射
+   * @param {string} options.factoryName - 工厂名称（用于错误提示）
+   * @param {string} options.defaultProvider - 默认提供商
+   * @param {string} options.disabledMessage - 未启用时的错误信息
+   * @param {(provider: string) => string} options.unsupportedMessage - 不支持提供商时的错误信息
+   * @returns {typeof MediaFactory} 静态媒体工厂类
+   */
+  static createMediaFactoryClass({
+    providers,
+    factoryName,
+    defaultProvider,
+    disabledMessage,
+    unsupportedMessage
+  }) {
+    const baseFactory = new BaseFactory(providers, factoryName);
+
+    return class MediaFactory {
+      static registerProvider(name, factoryFn) {
+        baseFactory.registerProvider(name, factoryFn);
+      }
+
+      static listProviders() {
+        return baseFactory.listProviders();
+      }
+
+      static isProviderSupported(provider) {
+        return baseFactory.isProviderSupported(provider);
+      }
+
+      static createClient(deviceId, config = {}, Bot) {
+        if (!config.enabled) {
+          throw new Error(disabledMessage);
+        }
+
+        const provider = (config.provider || defaultProvider).toLowerCase();
+        const factory = baseFactory.getProviderFactory(provider);
+        if (!factory) {
+          throw new Error(unsupportedMessage(provider));
+        }
+
+        return factory(deviceId, config, Bot);
+      }
+    };
   }
 }

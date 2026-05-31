@@ -316,10 +316,6 @@ export default class plugin {
       eventSubscribe: normalizeEventSubscribe(this.eventSubscribe)
     };
   }
-
-  getInfo() {
-    return this.getDescriptor();
-  }
 }
 
 export const PluginSchema = {

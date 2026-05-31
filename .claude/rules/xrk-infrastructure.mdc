@@ -22,6 +22,7 @@ alwaysApply: false
 |------|------|
 | `normalize-error.js` | 非 Error → Error |
 | `exec-async.js` | 唯一 Promise 版 `exec`/`execFile` |
+| `db-connect-utils.js` | DB 连接辅助：`execCommandResult`、`maskConnectionUrl`、`detectArm64`、`connectWithRetry` |
 | `llm/proxy-utils.js` | `fetch` + Undici `ProxyAgent` |
 | `common.js` | `downFile`：`fetch` + `Readable.fromWeb` |
 

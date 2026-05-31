@@ -100,8 +100,4 @@ export default class Renderer {
       type: this.type
     };
   }
-
-  getDescriptor() {
-    return this.getInfo();
-  }
 }

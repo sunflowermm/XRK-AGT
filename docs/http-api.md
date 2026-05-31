@@ -145,8 +145,9 @@ async (req, res, bot, next) => {
   // bot - Bot实例（参数传递）
   // next - Express next函数（可选）
   
-  // 推荐：直接发送响应
-  res.json({ success: true, data: result });
+  // 推荐：统一 HttpResponse
+  import { HttpResponse } from '#utils/http-utils.js';
+  return HttpResponse.success(res, result);
 }
 ```
 
@@ -496,4 +497,4 @@ routes: [
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-05-31*

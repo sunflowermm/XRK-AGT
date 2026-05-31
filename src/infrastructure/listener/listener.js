@@ -32,12 +32,4 @@ export default class EventListener {
       once: this.once
     }
   }
-
-  /**
-   * 获取描述符（别名方法）
-   * @returns {Object} 监听器描述信息
-   */
-  getDescriptor() {
-    return this.getInfo()
-  }
 }

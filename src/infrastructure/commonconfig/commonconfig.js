@@ -749,14 +749,6 @@ export default class ConfigBase {
   }
 
   /**
-   * 获取配置描述信息（别名，兼容性）
-   * @returns {Object} 配置描述信息
-   */
-  getDescriptor() {
-    return this.getInfo();
-  }
-
-  /**
    * 重置为默认配置
    * @param {Object} options - 写入选项
    * @returns {Promise<boolean>}

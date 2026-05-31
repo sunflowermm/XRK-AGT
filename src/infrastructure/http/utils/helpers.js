@@ -1,5 +1,3 @@
-import BotUtil from '#utils/botutil.js';
-
 export function getApiPriority(api) {
   const priority = Number(api.priority);
   return Number.isFinite(priority) ? priority : 100;
