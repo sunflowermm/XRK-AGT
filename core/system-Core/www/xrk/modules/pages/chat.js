@@ -4,7 +4,9 @@ import {
   animateChatModeSwitch,
   animateAISettingsPanel,
   animateChatSendPulse,
-  cancelPageMotion
+  cancelPageMotion,
+  isMotionReady,
+  isReducedMotion
 } from '../motion/gsap-motion.js';
 
 export async function renderChatPage(app) {

@@ -5,7 +5,7 @@ import {
   formatPercent,
   escapeHtml,
   escapeSelector,
-  copyToClipboard,
+  copyToClipboard as copyTextToClipboard,
   cloneValue,
   isSameValue,
   formatKeyValueLines,
@@ -3849,6 +3849,12 @@ class App {
   }
 
   // ========== Toast ==========
+  async copyToClipboard(text, successMessage = '已复制到剪贴板', failMessage = '复制失败，请检查浏览器权限') {
+    const ok = await copyTextToClipboard(text);
+    this.showToast(ok ? successMessage : failMessage, ok ? 'success' : 'error');
+    return ok;
+  }
+
   showToast(message, type = 'info') {
     showToastUI(message, type);
   }
