@@ -78,6 +78,7 @@ import {
 import * as apiDebug from './modules/api-debug.js';
 import { configPageMethods } from './modules/config-page.js';
 import * as motion from './modules/motion/gsap-motion.js';
+import { ensurePageLibs } from './modules/runtime-libs.js';
 
 class App {
   constructor() {
@@ -184,7 +185,6 @@ class App {
     this.bindEvents();
     bindViewportHeightVar();
     this.loadSettings();
-    markdownRenderer.initMermaid();
     motion.initMotion();
 
     // API 配置需在路由到 api 页面前就绪；LLM/WS 仅在 chat 页按需加载
@@ -612,11 +612,20 @@ class App {
     }
 
     switch (normalizedPage) {
-      case 'home': this.renderHome(); break;
-      case 'chat': this.renderChat(); break;
+      case 'home':
+        await ensurePageLibs('home');
+        this.renderHome();
+        break;
+      case 'chat':
+        await ensurePageLibs('chat');
+        markdownRenderer.initMermaid();
+        this.renderChat();
+        break;
       case 'config': this.renderConfig(); break;
       case 'api': this.renderAPI(); break;
-      default: this.renderHome();
+      default:
+        await ensurePageLibs('home');
+        this.renderHome();
     }
 
     if (location.hash !== `#/${normalizedPage}`) {
@@ -3867,7 +3876,7 @@ Object.assign(App.prototype, configPageMethods);
 const API_PROTOTYPE_METHODS = [
   'renderAPI', 'renderAPIGroups', 'selectAPI', 'renderParamInput', 'renderFileUpload',
   'setupFileUpload', 'handleFiles', 'findAPIById', 'updateJSONPreview', 'buildRequestData',
-  'initJSONEditor', 'loadCodeMirror', 'formatJSON', 'copyJSON', 'fillExample',
+  'initJSONEditor', 'loadCodeMirror', 'formatJSONPreview', 'copyJSON', 'fillExample',
   'executeRequest', 'executeFileUpload', 'renderResponse'
 ];
 for (const method of API_PROTOTYPE_METHODS) {

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="XRK-AGT控制台 - 多语言、多适配器、工作流驱动型智能体平台">
     <meta name="theme-color" content="#0ea5e9">
     <title>XRK-AGT控制台</title>
@@ -156,11 +156,9 @@
     <!-- Toast 容器 -->
     <div class="toast-container" id="toastContainer" aria-live="polite" aria-relevant="additions"></div>
 
-    <!-- GSAP：页面动效（本地 lib，与 chart/mermaid 同源） -->
+    <!-- GSAP：全站动效 -->
     <script src="lib/gsap.min.js"></script>
-    <!-- Chart.js / Mermaid：同目录下 lib，与 xrk 同源避免 MIME 错误 -->
-    <script src="lib/chart.umd.min.js" defer></script>
-    <script src="lib/mermaid.min.js" defer></script>
+    <!-- Chart.js / Mermaid 由 app 按路由懒加载（modules/runtime-libs.js） -->
     <!-- 主应用脚本（使用 ES Module） -->
     <script type="module" src="app.js"></script>
 </body>
