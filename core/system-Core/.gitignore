@@ -92,10 +92,21 @@ commonconfig/**
 !commonconfig/cherryin_compat_llm.js
 !commonconfig/ollama_compat_llm.js
 !commonconfig/tools.js
+!commonconfig/shared/
+!commonconfig/shared/**
+
+!http/ai-workspace.js
+
+!lib/ai-workspace-runtime.js
+!lib/ai-workspace-context.js
+!lib/ai-workspace-audit.js
+!lib/ai-workspace-policy.js
+
+!events/ai-workspace.js
+
 *.psd
 *.map
 
 !www/
-!lib/
 !lib/crawl/
 !lib/crawl/*
