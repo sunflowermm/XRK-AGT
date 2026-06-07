@@ -13,6 +13,12 @@ import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import { bannedWordsService } from '../lib/content-safety/banned-words-service.js';
 import { mergeAgentWorkspaceIntoMessages } from '#utils/agent-workspace.js';
+import {
+  parseRequestWorkspace,
+  buildAistreamCfgForAgentRoot,
+  applyRequestWorkspaceToStreams
+} from '../lib/ai-workspace-runtime.js';
+import { runWithAiConsoleContext, installMcpAuditHook } from '../lib/ai-workspace-context.js';
 
 function pickFirst(obj, keys) {
   for (const k of keys) {
@@ -277,6 +283,7 @@ function createOpenAIChunk({ id, created, model, index = 0, delta = {}, finishRe
  * - 工作流/工具：仅负责把前端选择的“带 MCP 工具的工作流”转换为 streams 透传给 LLM 工厂，用于工具白名单控制
  */
 async function handleChatCompletionsV3(req, res) {
+  installMcpAuditHook();
   const contentType = req.headers['content-type'] || '';
   const body = req.body || {};
   let messages = Array.isArray(body.messages) ? body.messages : null;
@@ -337,6 +344,13 @@ async function handleChatCompletionsV3(req, res) {
       if (fields.temperature) body.temperature = fields.temperature;
       if (fields.max_tokens) body.max_tokens = fields.max_tokens;
       if (fields.maxTokens) body.maxTokens = fields.maxTokens;
+      if (fields.workspace) {
+        try {
+          body.workspace = JSON.parse(fields.workspace);
+        } catch {
+          body.workspace = fields.workspace;
+        }
+      }
       
       // 处理上传的图片：改为落盘文件 URL，避免 base64 膨胀与内存峰值
       if (files && files.length > 0) {
@@ -432,8 +446,13 @@ async function handleChatCompletionsV3(req, res) {
     }
   }
 
-  await mergeAgentWorkspaceIntoMessages(messages, getAistreamConfigOptional(), 'v3');
-  
+  const workspaceCtx = parseRequestWorkspace(body);
+  const aistreamCfgForRequest = buildAistreamCfgForAgentRoot(
+    getAistreamConfigOptional(),
+    workspaceCtx.agentRootAbs
+  );
+  await mergeAgentWorkspaceIntoMessages(messages, aistreamCfgForRequest, 'v3');
+
   const streamFlag = Boolean(pickFirst(body, ['stream']));
   const provider = resolveProviderFromRequest(body);
 
@@ -475,34 +494,45 @@ async function handleChatCompletionsV3(req, res) {
   
   if (effectiveStreams?.length) overrides.streams = effectiveStreams;
 
+  const fileWorkspaceAbs = workspaceCtx.fileRootAbs || workspaceCtx.agentRootAbs;
+  const restoreStreamWorkspace = applyRequestWorkspaceToStreams(StreamLoader, fileWorkspaceAbs);
+  const auditWorkspaceId = workspaceCtx.presetId || null;
+
   if (!streamFlag) {
-    const chatResult = await client.chat(messages, overrides);
-    const text = typeof chatResult === 'string' ? chatResult : (chatResult?.content || '');
-    const executedToolNames = Array.isArray(chatResult?.executedToolNames) ? chatResult.executedToolNames : [];
+    try {
+      const chatResult = await runWithAiConsoleContext(
+        { workspaceId: auditWorkspaceId },
+        () => client.chat(messages, overrides)
+      );
+      const text = typeof chatResult === 'string' ? chatResult : (chatResult?.content || '');
+      const executedToolNames = Array.isArray(chatResult?.executedToolNames) ? chatResult.executedToolNames : [];
 
-    const promptText = extractMessageText(messages);
-    const promptTokens = estimateTokens(promptText);
-    const completionTokens = estimateTokens(text);
+      const promptText = extractMessageText(messages);
+      const promptTokens = estimateTokens(promptText);
+      const completionTokens = estimateTokens(text);
 
-    // 对外返回 model=provider
-    const responseModel = llmConfig.provider || 'unknown';
-    return res.json({
-      id: `chatcmpl_${Date.now()}`,
-      object: 'chat.completion',
-      created: Math.floor(Date.now() / 1000),
-      model: responseModel,
-      choices: [{
-        index: 0,
-        message: { role: 'assistant', content: text || '' },
-        finish_reason: 'stop'
-      }],
-      ...(executedToolNames.length > 0 ? { mcp_tools: executedToolNames.map((name) => ({ name })) }: {}),
-      usage: {
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        total_tokens: promptTokens + completionTokens
-      }
-    });
+      // 对外返回 model=provider
+      const responseModel = llmConfig.provider || 'unknown';
+      return res.json({
+        id: `chatcmpl_${Date.now()}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: responseModel,
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: text || '' },
+          finish_reason: 'stop'
+        }],
+        ...(executedToolNames.length > 0 ? { mcp_tools: executedToolNames.map((name) => ({ name })) }: {}),
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens
+        }
+      });
+    } finally {
+      restoreStreamWorkspace();
+    }
   }
 
   // SSE 响应头：标准 Server-Sent Events 配置 + 关闭 Nginx 缓冲，确保实时流式输出
@@ -587,7 +617,10 @@ async function handleChatCompletionsV3(req, res) {
 
     BotUtil.makeLog('info', `[v3/chat/completions] 调用client.chatStream开始`, 'ai.v3.stream');
 
-    await client.chatStream(messages, streamCallback, overrides);
+    await runWithAiConsoleContext(
+      { workspaceId: auditWorkspaceId },
+      () => client.chatStream(messages, streamCallback, overrides)
+    );
     BotUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总chunks=${chunkCount}, 总长度=${totalContent.length}`, 'ai.v3.stream');
 
     const promptText = extractMessageText(messages);
@@ -634,6 +667,7 @@ async function handleChatCompletionsV3(req, res) {
     res.write(`data: ${JSON.stringify(errorData)}\n\n`);
     res.write('data: [DONE]\n\n');
   } finally {
+    restoreStreamWorkspace();
     BotUtil.makeLog('debug', `[v3/chat/completions] 关闭响应流`, 'ai.v3.stream');
     res.end();
   }
@@ -641,16 +675,24 @@ async function handleChatCompletionsV3(req, res) {
 
 async function handleModels(req, res) {
   const llm = getAistreamConfigOptional().llm || {};
-  const providers = LLMFactory.listProviders();
   const defaultProvider = getDefaultProvider();
   const format = (req.query.format || '').toLowerCase();
+  const profileRows = LLMFactory.listProviderProfiles?.() || LLMFactory.listProviders().map((key) => ({
+    key,
+    factory: key,
+    factoryType: 'builtin',
+    label: key,
+    model: getProviderConfig(key)?.model || getProviderConfig(key)?.chatModel || null,
+    baseUrl: getProviderConfig(key)?.baseUrl || null,
+    source: `${key}_llm`
+  }));
 
   if (format === 'openai' || req.path === '/api/v3/models') {
-    const list = providers.length ? providers : (defaultProvider ? [defaultProvider] : []);
+    const list = profileRows.map((p) => p.key);
     const now = Math.floor(Date.now() / 1000);
     return res.json({
       object: 'list',
-      data: list.map((p) => ({
+      data: (list.length ? list : (defaultProvider ? [defaultProvider] : [])).map((p) => ({
         id: p,
         object: 'model',
         created: now,
@@ -659,15 +701,18 @@ async function handleModels(req, res) {
     });
   }
 
-  const profiles = providers.map(provider => {
-    const c = getProviderConfig(provider);
+  const profiles = profileRows.map((row) => {
+    const c = getProviderConfig(row.key) || {};
     return {
-      key: provider,
-      label: provider,
-      description: `LLM提供商: ${provider}`,
+      key: row.key,
+      factory: row.factory || row.key,
+      factoryType: row.factoryType || 'builtin',
+      protocol: row.protocol || null,
+      label: row.label || row.key,
+      description: row.source ? `配置来源: ${row.source}` : `LLM 提供商: ${row.key}`,
       tags: [],
-      model: c.model || c.chatModel || null,
-      baseUrl: c.baseUrl || null,
+      model: row.model || c.model || c.chatModel || null,
+      baseUrl: row.baseUrl || c.baseUrl || null,
       maxTokens: c.maxTokens ?? c.max_tokens ?? null,
       temperature: c.temperature ?? null,
       hasApiKey: Boolean((c.apiKey || '').toString().trim()),
@@ -677,6 +722,28 @@ async function handleModels(req, res) {
       ]
     };
   });
+
+  const vendorMap = new Map();
+  for (const profile of profiles) {
+    const vendorKey = profile.factory || profile.key;
+    if (!vendorMap.has(vendorKey)) {
+      vendorMap.set(vendorKey, {
+        id: vendorKey,
+        label: vendorKey,
+        factoryType: profile.factoryType,
+        endpoints: []
+      });
+    }
+    vendorMap.get(vendorKey).endpoints.push({
+      key: profile.key,
+      label: profile.label,
+      model: profile.model,
+      baseUrl: profile.baseUrl,
+      hasApiKey: profile.hasApiKey,
+      capabilities: profile.capabilities
+    });
+  }
+  const vendors = [...vendorMap.values()];
 
   const workflows = StreamLoader.getStreamsByPriority()
     .filter(s => !s.primaryStream && !s.secondaryStreams && (s.mcpTools?.size || 0) > 0)
@@ -703,10 +770,10 @@ async function handleModels(req, res) {
   return HttpResponse.success(res, {
     enabled: llm.enabled !== false,
     defaultProfile: defaultProvider,
-    // 不为 MCP 工具工作流设置默认值，避免“默认就勾选一堆工具工作流/远程 MCP”
     defaultWorkflow: null,
     persona: llm.persona || '',
     profiles,
+    vendors,
     workflows: [...workflows, ...remoteWorkflows]
   });
 }

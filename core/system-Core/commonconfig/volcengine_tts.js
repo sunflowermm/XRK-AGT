@@ -27,28 +27,32 @@ export default class VolcengineTTSConfig extends ConfigBase {
             label: 'WebSocket 地址',
             description: '火山引擎 TTS WebSocket 服务地址（V3双向流式接口：wss://openspeech.bytedance.com/api/v3/tts/bidirection）',
             default: 'wss://openspeech.bytedance.com/api/v3/tts/bidirection',
-            component: 'Input'
+            component: 'Input',
+            layout: 'full'
           },
           appKey: {
             type: 'string',
             label: 'App ID',
             description: '火山引擎应用 ID (对应控制台的 APP ID)',
             default: '',
-            component: 'Input'
+            component: 'Input',
+            layout: 'half'
           },
           accessKey: {
             type: 'string',
             label: 'Access Token',
             description: '火山引擎访问令牌 (对应控制台的 Access Token)',
             default: '',
-            component: 'InputPassword'
+            component: 'InputPassword',
+            layout: 'half'
           },
           resourceId: {
             type: 'string',
             label: '资源 ID',
             description: '火山引擎 TTS 资源 ID（用于V3双向流式接口，必须与音色类型匹配，否则会报错"resource ID is mismatched with speaker related resource"。常见值：seed-tts-2.0 或其他，请根据音色在控制台查看对应的resourceId）',
             default: 'seed-tts-2.0',
-            component: 'Input'
+            component: 'Input',
+            layout: 'half'
           },
           
           // 语音参数配置
@@ -57,7 +61,8 @@ export default class VolcengineTTSConfig extends ConfigBase {
             label: '音色类型',
             description: 'TTS 音色类型（对应文档的voice_type字段，如 zh_female_vv_uranus_bigtts），参考大模型音色列表。注意：必须与resourceId匹配，否则会报错"resource ID is mismatched with speaker related resource"',
             default: 'zh_female_vv_uranus_bigtts',
-            component: 'Input'
+            component: 'Input',
+            layout: 'half'
           },
           encoding: {
             type: 'string',
@@ -65,7 +70,8 @@ export default class VolcengineTTSConfig extends ConfigBase {
             description: '音频编码格式（对应文档的encoding字段：pcm、mp3、wav、ogg_opus），注意：wav不支持流式',
             enum: ['pcm', 'mp3', 'wav', 'ogg_opus'],
             default: 'pcm',
-            component: 'Select'
+            component: 'Select',
+            layout: 'half'
           },
           sampleRate: {
             type: 'number',
@@ -73,7 +79,8 @@ export default class VolcengineTTSConfig extends ConfigBase {
             description: '音频采样率（对应文档的rate字段，单位Hz，默认24000，可选8000、16000）',
             enum: [8000, 16000, 24000],
             default: 16000,
-            component: 'Select'
+            component: 'Select',
+            layout: 'half'
           },
           
           // 语音效果配置
@@ -84,7 +91,8 @@ export default class VolcengineTTSConfig extends ConfigBase {
             min: -500,
             max: 500,
             default: 5,
-            component: 'InputNumber'
+            component: 'InputNumber',
+            layout: 'half'
           },
           loudnessRate: {
             type: 'number',
@@ -93,7 +101,8 @@ export default class VolcengineTTSConfig extends ConfigBase {
             min: -500,
             max: 500,
             default: 0,
-            component: 'InputNumber'
+            component: 'InputNumber',
+            layout: 'half'
           },
           emotion: {
             type: 'string',
@@ -101,7 +110,8 @@ export default class VolcengineTTSConfig extends ConfigBase {
             description: '音色情感（对应文档的 emotion 字段，如 happy、sad、angry 等），仅部分音色支持设置情感，详见大模型音色列表-多情感音色；不确定时可先用 happy/neutral 测试',
             enum: ['happy', 'sad', 'neutral', 'angry', 'surprise'],
             default: 'happy',
-            component: 'Select'
+            component: 'Select',
+            layout: 'half'
           },
           
           // 分片配置
@@ -111,7 +121,8 @@ export default class VolcengineTTSConfig extends ConfigBase {
             description: '音频分片时长（毫秒）',
             min: 1,
             default: 128,
-            component: 'InputNumber'
+            component: 'InputNumber',
+            layout: 'half'
           },
           chunkDelayMs: {
             type: 'number',
@@ -119,7 +130,8 @@ export default class VolcengineTTSConfig extends ConfigBase {
             description: '分片之间的延迟时间（毫秒）',
             min: 0,
             default: 0,
-            component: 'InputNumber'
+            component: 'InputNumber',
+            layout: 'half'
           }
         }
       }

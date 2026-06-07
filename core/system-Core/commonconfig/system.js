@@ -2084,14 +2084,14 @@ export default class SystemConfig extends ConfigBase {
             llm: {
             type: 'object',
             label: 'LLM工厂运营商选择',
-            description: '详细配置位于 data/server_bots/{port}/*_llm.yaml（如 volcengine_llm / xiaomimimo_llm / openai_llm / gemini_llm / anthropic_llm / azure_openai_llm）以及 openai_compat_llm.providers 中自定义的兼容运营商',
+            description: '在各工厂 YAML（data/server_bots/{port}/*_llm.yaml）的 providers[] 中配置端点 key，此处 Provider 填写其中任一 key',
             component: 'SubForm',
             fields: {
             Provider: {
                 type: 'string',
                 label: 'LLM运营商',
-                description: '可填写内置 provider（volcengine/openai/gemini/...）或在 openai_compat_llm.providers 中定义的自定义运营商 key',
-                default: 'volcengine',
+                description: '填写任一工厂 providers[] 条目的 key（同一 baseUrl 可配置多个不同 model 的条目）',
+                default: '',
                 component: 'Input'
                 },
                 timeout: {
@@ -2258,11 +2258,49 @@ export default class SystemConfig extends ConfigBase {
                 }
               }
             },
+            workspace: {
+              type: 'object',
+              label: 'Agent 文件工作区',
+              description:
+                'tools / desktop 工作流的文件操作根目录预设；控制台工作区列表来自 data/ai-workspace/*',
+              component: 'SubForm',
+              fields: {
+                defaultId: {
+                  type: 'string',
+                  label: '默认工作区 ID',
+                  description: '留空或 default → data/ai-workspace/default；也可填已存在的子目录名',
+                  default: 'default',
+                  component: 'Input',
+                  layout: 'half'
+                },
+                audit: {
+                  type: 'object',
+                  label: '工具审计',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用 MCP 工具审计',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    maxEntries: {
+                      type: 'number',
+                      label: '每工作区最大审计条数',
+                      min: 10,
+                      max: 500,
+                      default: 200,
+                      component: 'InputNumber'
+                    }
+                  }
+                }
+              }
+            },
             agentWorkspace: {
               type: 'object',
-              label: 'Agent 工作区上下文',
+              label: 'Agent 工作区上下文（Prompt 注入）',
               description:
-                '将 AGENT.md / AGENTS.md、rules、OpenClaw 模板与 skills catalog、MEMORY（主会话）、subagents 清单注入到 system prompt（对齐 OpenClaw 工作区习惯）',
+                '将 AGENT.md / AGENTS.md、rules、OpenClaw 模板与 skills catalog、MEMORY（主会话）、subagents 清单注入到 system prompt。与 tools.file.workspace（文件 cwd）分离',
               component: 'SubForm',
               fields: {
                 enabled: {
@@ -2274,10 +2312,11 @@ export default class SystemConfig extends ConfigBase {
                 },
                 root: {
                   type: 'string',
-                  label: '工作区根目录',
-                  description: '留空=项目根目录；可填相对项目根的路径',
+                  label: 'Prompt 注入根目录',
+                  description: '留空=项目根；相对项目根路径。控制台请求 workspace 会覆盖此根用于 AGENTS/rules 注入',
                   default: '',
-                  component: 'Input'
+                  component: 'Input',
+                  layout: 'full'
                 },
                 streams: {
                   type: 'array',
@@ -2441,8 +2480,8 @@ export default class SystemConfig extends ConfigBase {
             },
             tools: {
               type: 'object',
-              label: '工具子系统（tools 工作流）',
-              description: '与 config/default_config/aistream.yaml 中 tools 段一致：file→ToolsStream',
+              label: '工具子系统（tools + desktop 文件 cwd）',
+              description: 'tools.file 同时驱动 ToolsStream 与 DesktopStream 的文件类 MCP 工作区',
               component: 'SubForm',
               fields: {
                 file: {
@@ -2453,10 +2492,11 @@ export default class SystemConfig extends ConfigBase {
                   fields: {
                     workspace: {
                       type: 'string',
-                      label: '工作区根目录',
-                      description: '留空=用户桌面；~/ 表示家目录；绝对路径；否则相对项目根',
+                      label: '文件工具工作区',
+                      description: '留空=data/ai-workspace/{workspace.defaultId}；agent:xxx 指定 preset；project=项目根；~/ 家目录；绝对/相对路径',
                       default: '',
-                      component: 'Input'
+                      component: 'Input',
+                      layout: 'full'
                     },
                     maxReadChars: {
                       type: 'number',

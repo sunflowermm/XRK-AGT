@@ -1,6 +1,12 @@
-/** 配置页方法，挂载到 App.prototype（依赖 app.js 中的 config-manager 包装方法） */
+/**
+ * 配置页方法，挂载到 App.prototype（依赖 app.js 中的 config-manager 包装方法）
+ *
+ * 渲染管线：flatSchema → buildFieldTree → renderFieldTree → renderConfigField
+ * 数组项（providers 等）：renderArrayObjectControl → renderProviderEntryFields（分组）→ renderArrayObjectFieldMarkup
+ */
 import { formatKeyValueLines, parseKeyValueLines } from './utils.js';
 import { showPromptDialog as showPromptDialogUI } from './ui/prompt-dialog.js';
+import { groupProviderSchemaFields } from './llm-provider-ui.js';
 
 function escapeConfigItemSelector(name) {
   const id = String(name ?? '');
@@ -8,6 +14,115 @@ function escapeConfigItemSelector(name) {
 }
 
 export const configPageMethods = {
+  isConfigDense() {
+    try {
+      return localStorage.getItem('configEditorDense') === '1';
+    } catch {
+      return false;
+    }
+  },
+
+  toggleConfigDense() {
+    const next = !this.isConfigDense();
+    try {
+      localStorage.setItem('configEditorDense', next ? '1' : '0');
+    } catch {}
+    document.querySelector('.config-page')?.classList.toggle('config-page-dense', next);
+    const btn = document.getElementById('configDensityToggle');
+    if (btn) btn.textContent = next ? '舒适布局' : '紧凑布局';
+    return next;
+  },
+
+  isLlmProvidersArray(path = '') {
+    return /(?:^|\.)providers$/.test(String(path || ''));
+  },
+
+  /** 短字段半宽（一行两个）；长字段/复杂控件占满行 */
+  resolveConfigFieldSpan(meta = {}, field = {}) {
+    if (meta.layout === 'full' || meta.span === 'full') return 'config-field-span-full';
+    if (meta.layout === 'half' || meta.span === 'half') return '';
+
+    const component = String(meta.component ?? field.component ?? '').toLowerCase();
+    const type = String(meta.type ?? field.type ?? '').toLowerCase();
+    const path = String(field.path ?? '');
+    const key = path.split('.').pop() || path;
+
+    const fullComponents = new Set(['textarea', 'tags', 'arrayform', 'subform', 'inputpassword']);
+    if (fullComponents.has(component)) return 'config-field-span-full';
+
+    if (type.startsWith('array') || type === 'object' || type === 'map') {
+      return 'config-field-span-full';
+    }
+
+    const fullKeyPattern = /^(wsUrl|baseUrl|path|instructions|promptCacheKey|safetyIdentifier|anthropicVersion|apiVersion|deployment|headers|extraBody|proxy|description|content|.*[Uu]rl)$/;
+    if (fullKeyPattern.test(key)) return 'config-field-span-full';
+
+    return '';
+  },
+
+  /**
+   * 扁平行字段统一外壳（顶层 schema 与 array 子项共用）。
+   * 结构：meta（标签 + 说明） + control + 可选 example
+   */
+  renderConfigFieldShell({
+    classNames = 'config-field config-field-row',
+    label,
+    description = '',
+    inputId = '',
+    required = false,
+    isFullSpan = false,
+    controlClass = '',
+    controlHtml = '',
+    exampleHtml = '',
+    dirty = false
+  }) {
+    const dirtyCls = dirty ? ' config-field-dirty' : '';
+    return `
+      <div class="${classNames}${dirtyCls}">
+        <div class="config-field-body">
+          ${this.renderFieldMetaBlock({ label, description, inputId, required, isFullSpan })}
+          <div class="config-field-control${controlClass}">${controlHtml}</div>
+          ${exampleHtml}
+        </div>
+      </div>
+    `;
+  },
+
+  /** 控件下方辅助说明（tags / JSON 等），与 meta 区 schema description 区分 */
+  renderControlFootnote(text) {
+    if (!text) return '';
+    return `<p class="config-field-hint config-control-footnote">${this.escapeHtml(text)}</p>`;
+  },
+
+  /** 标签 + 说明；半宽字段无说明时用等高占位，保证两列控件底对齐 */
+  renderFieldMetaBlock({ label, description = '', inputId = '', required = false, isFullSpan = false }) {
+    const hintClass = !isFullSpan ? ' config-field-hint-compact' : '';
+    const hintHtml = description
+      ? `<p class="config-field-hint${hintClass}">${this.escapeHtml(description)}</p>`
+      : (!isFullSpan
+        ? '<p class="config-field-hint config-field-hint-compact config-field-hint-empty" aria-hidden="true"></p>'
+        : '');
+    const forAttr = inputId ? ` for="${this.escapeHtml(inputId)}"` : '';
+    const titleAttr = description ? ` title="${this.escapeHtml(description)}"` : '';
+    const req = required ? '<span class="required">*</span>' : '';
+    return `
+      <div class="config-field-meta${isFullSpan ? ' config-field-meta-full' : ''}">
+        <label${forAttr}${titleAttr}>${label}${req}</label>
+        ${hintHtml}
+      </div>
+    `;
+  },
+
+  getProviderEntrySummary(item = {}) {
+    const key = item.key || item.provider || '—';
+    const label = item.label ? ` · ${item.label}` : '';
+    const model = item.model || item.chatModel || '';
+    const base = item.baseUrl || '';
+    const modelPart = model ? ` · ${model}` : '';
+    const basePart = base ? ` · ${base}` : '';
+    return `${key}${label}${modelPart}${basePart}`;
+  },
+
   setActiveConfigSidebarItem(name) {
     const list = document.getElementById('configList');
     if (!list || !name) return false;
@@ -457,6 +572,7 @@ export const configPageMethods = {
         </div>
         <div class="config-main-actions">
           <button class="btn btn-secondary" id="configReloadBtn">重载</button>
+          <button class="btn btn-secondary" id="configDensityToggle" type="button">${this.isConfigDense() ? '舒适布局' : '紧凑布局'}</button>
           <div class="config-mode-toggle">
             <button class="${mode === 'form' ? 'active' : ''}" data-mode="form">表单</button>
             <button class="${mode === 'json' ? 'active' : ''}" data-mode="json">JSON</button>
@@ -493,6 +609,12 @@ export const configPageMethods = {
         const reloadBtn = e.target.closest('#configReloadBtn');
         if (reloadBtn) {
           this.loadSelectedConfigDetail();
+          return;
+        }
+        const densityBtn = e.target.closest('#configDensityToggle');
+        if (densityBtn) {
+          this.toggleConfigDense();
+          this.renderConfigFormPanel();
           return;
         }
         const saveBtn = e.target.closest('#configSaveBtn');
@@ -546,6 +668,12 @@ export const configPageMethods = {
     return this.renderFieldTree(fieldTree);
   },
 
+  /**
+   * 将扁平 schema 整理为分组树：{ [groupKey]: { fields, subGroups } }
+   * - 顶层无 meta.group → __default__，避免工厂配置每字段单独成组
+   * - SubForm 子字段归入 subGroups，不重复渲染父级自由对象编辑器
+   * - 含 [] 的模板路径、dynamicCollections basePath 跳过
+   */
   buildFieldTree(flatSchema) {
     const tree = {};
     const subFormFields = new Map(); // 记录所有 SubForm 类型的字段路径及其信息
@@ -636,10 +764,9 @@ export const configPageMethods = {
         groupKey = top || parentSubFormPath;
       }
       
-      // 如果还是没有 group，根据路径确定
-      // 统一使用路径的第一部分作为分组，避免重复分组
+      // 顶层无 meta.group 的字段归入同一组，避免每个字段单独成组（工厂配置常见）
       if (!groupKey) {
-        groupKey = parts[0];
+        groupKey = parts.length === 1 ? '__default__' : parts[0];
       }
       
       // 格式化分组键
@@ -717,7 +844,7 @@ export const configPageMethods = {
   },
 
   formatGroupKey(key) {
-    if (!key) return '其他';
+    if (!key || key === '__default__') return '__default__';
     
     // 如果包含点，说明是嵌套路径，只取第一部分作为分组
     // 避免生成 "Proxy - Domains" 这样的重复标题
@@ -748,8 +875,12 @@ export const configPageMethods = {
   },
 
   renderFieldTree(tree) {
-    return Object.entries(tree).map(([groupKey, group]) => {
-      const groupLabel = this.formatGroupLabel(groupKey);
+    const entries = Object.entries(tree);
+    const singleDefaultGroup = entries.length === 1 && entries[0][0] === '__default__';
+
+    return entries.map(([groupKey, group]) => {
+      const hideGroupHeader = singleDefaultGroup || groupKey === '__default__';
+      const groupLabel = hideGroupHeader ? '' : this.formatGroupLabel(groupKey);
       const groupDesc = group.fields[0]?.meta?.groupDesc ?? '';
       const totalFields = group.fields.length + Object.values(group.subGroups).reduce((sum, sg) => sum + sg.fields.length, 0);
       
@@ -767,7 +898,7 @@ export const configPageMethods = {
                   <h5>${this.escapeHtml(this.formatGroupLabel(subGroupKey))}</h5>
                 </div>
               ` : ''}
-              <div class="config-field-grid">
+              <div class="config-field-grid config-field-grid--flat">
                 ${subFields.map(field => this.renderConfigField(field)).join('')}
               </div>
             </div>
@@ -787,13 +918,14 @@ export const configPageMethods = {
       
       // 渲染普通字段
       const fieldsHtml = group.fields.length > 0 ? `
-        <div class="config-field-grid">
+        <div class="config-field-grid config-field-grid--flat">
           ${group.fields.map(field => this.renderConfigField(field)).join('')}
         </div>
       ` : '';
       
       return `
       <div class="config-group">
+        ${hideGroupHeader ? '' : `
         <div class="config-group-header">
           <div>
               <h3>${this.escapeHtml(groupLabel)}</h3>
@@ -801,6 +933,7 @@ export const configPageMethods = {
           </div>
             <span class="config-group-count">${totalFields} 项</span>
         </div>
+        `}
           ${fieldsHtml}
           ${subGroupsHtml}
         </div>
@@ -832,20 +965,28 @@ export const configPageMethods = {
     const inputId = `cfg-${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
   
     const label = this.escapeHtml(meta.label || path);
-    const description = meta.description ? `<p class="config-field-hint">${this.escapeHtml(meta.description)}</p>` : '';
-    const example = Object.hasOwn(meta, 'example') ? this.renderExampleBlock(meta.example) : '';
-  
-    return `
-      <div class="config-field ${dirty ? 'config-field-dirty' : ''}">
-        <label for="${inputId}">
-          ${label}
-          ${meta.required ? '<span class="required">*</span>' : ''}
-        </label>
-        ${description}
-        ${this.renderConfigControl(field, value, inputId)}
-        ${example}
-      </div>
-    `;
+    const dense = this.isConfigDense();
+    const spanClass = this.resolveConfigFieldSpan(meta, field);
+    const isFullSpan = spanClass.includes('config-field-span-full');
+    const component = String(meta.component ?? field.component ?? '').toLowerCase();
+    const example = dense && !isFullSpan && Object.hasOwn(meta, 'example')
+      ? ''
+      : (Object.hasOwn(meta, 'example') ? this.renderExampleBlock(meta.example) : '');
+    const controlClass = component === 'switch' ? ' config-field-control-switch' : '';
+    const subformClass = component === 'subform' ? ' config-field-subform' : '';
+
+    return this.renderConfigFieldShell({
+      classNames: `config-field config-field-row ${spanClass}${subformClass}`,
+      label,
+      description: meta.description ?? '',
+      inputId,
+      required: !!meta.required,
+      isFullSpan,
+      controlClass,
+      controlHtml: this.renderConfigControl(field, value, inputId),
+      exampleHtml: example,
+      dirty: !!dirty
+    });
   },
 
   renderExampleBlock(example) {
@@ -906,7 +1047,7 @@ export const configPageMethods = {
           <select class="form-input" id="${inputId}" multiple ${dataset} data-control="multiselect" ${disabled}>
             ${opts.map(opt => `<option value="${this.escapeHtml(opt.value)}" ${current.includes(String(opt.value)) ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
           </select>
-          <p class="config-field-hint">按住 Ctrl/Command 多选</p>
+          ${this.renderControlFootnote('按住 Ctrl/Command 多选')}
         `;
       }
       case 'tags': {
@@ -914,7 +1055,7 @@ export const configPageMethods = {
         const tagsPlaceholder = placeholder || '每行一个值';
         return `
           <textarea class="form-input" rows="3" id="${inputId}" ${dataset} data-control="tags" placeholder="${tagsPlaceholder}" ${disabled}>${text}</textarea>
-          <p class="config-field-hint">将文本拆分为数组</p>
+          ${this.renderControlFootnote('将文本拆分为数组')}
         `;
       }
       case 'textarea':
@@ -970,25 +1111,22 @@ export const configPageMethods = {
       case 'subform': {
         const modeKey = `subform_mode:${this._configState?.selected?.name ?? 'config'}:${this._configState?.selectedChild ?? ''}:${field.path}`;
         const defaultValue = Object.hasOwn(meta, 'default') ? meta.default : {};
-        return `
-          ${this.renderFreeObjectSubFormEditor({
-            dataset,
-            value,
-            defaultValue,
-            modeKey,
-            subformId: field.path,
-            inputIdPrefix: inputId,
-            disabled,
-            fieldPath: field.path
-          })}
-          <p class="config-field-hint">键值模式更适合 Header/简单对象；复杂结构建议切换 JSON。</p>
-        `;
+        return this.renderFreeObjectSubFormEditor({
+          dataset,
+          value,
+          defaultValue,
+          modeKey,
+          subformId: field.path,
+          inputIdPrefix: inputId,
+          disabled,
+          fieldPath: field.path
+        });
       }
       case 'arrayform':
       case 'json':
         return `
           <textarea class="form-input" rows="4" id="${inputId}" ${dataset} data-control="json" placeholder="JSON 数据" ${disabled}>${value ? this.escapeHtml(JSON.stringify(value, null, 2)) : ''}</textarea>
-          <p class="config-field-hint">以 JSON 形式编辑该字段</p>
+          ${this.renderControlFootnote('以 JSON 形式编辑该字段')}
         `;
       default:
         if (field.type === 'object' || field.type === 'map') {
@@ -1005,7 +1143,7 @@ export const configPageMethods = {
             disabled,
             fieldPath: field.path
           })}
-          <p class="config-field-hint">键值模式更适合简单键值对；复杂结构建议切换 JSON。</p>
+          ${this.renderControlFootnote('键值模式更适合简单键值对；复杂结构建议切换 JSON。')}
         `;
         }
         const displayValue = (value != null && typeof value === 'object')
@@ -1016,11 +1154,11 @@ export const configPageMethods = {
   },
 
   renderFreeObjectSubFormEditor({ dataset, value, defaultValue, modeKey, subformId, inputIdPrefix, disabled, fieldPath }) {
-    const mode = (localStorage.getItem(modeKey) || 'kv').toLowerCase(); // kv | json
+    const mode = (localStorage.getItem(modeKey) || 'kv').toLowerCase();
     const obj = value && typeof value === 'object' && !Array.isArray(value)
       ? value
       : this._cloneValue(defaultValue ?? {});
-  
+
     const kvText = this.escapeHtml(this.formatKeyValueLines(obj));
     const jsonText = obj ? this.escapeHtml(JSON.stringify(obj, null, 2)) : '';
     const kvHidden = mode === 'json' ? 'hidden' : '';
@@ -1030,15 +1168,23 @@ export const configPageMethods = {
     const kvId = inputIdPrefix ? `id="${inputIdPrefix}-kv"` : '';
     const jsonId = inputIdPrefix ? `id="${inputIdPrefix}-json"` : '';
     const fieldAttr = fieldPath ? `data-field="${this.escapeHtml(fieldPath)}"` : '';
-  
+    const tip = mode === 'json'
+      ? '标准 JSON 对象；保存前会自动校验格式'
+      : '每行一项 key=value，值可写 JSON 字面量';
+
     return `
       <div class="subform-editor" data-subform-id="${this.escapeHtml(subformId)}" data-subform-mode-key="${this.escapeHtml(modeKey)}">
-        <div class="subform-editor-tabs">
-          <button type="button" class="subform-tab ${kvActive}" data-action="subform-toggle" ${fieldAttr} data-subform-id="${this.escapeHtml(subformId)}" data-mode="kv">键值</button>
-          <button type="button" class="subform-tab ${jsonActive}" data-action="subform-toggle" ${fieldAttr} data-subform-id="${this.escapeHtml(subformId)}" data-mode="json">JSON</button>
+        <div class="subform-editor-toolbar">
+          <div class="subform-editor-tabs config-mode-toggle" role="tablist" aria-label="编辑模式">
+            <button type="button" role="tab" aria-selected="${mode === 'kv' ? 'true' : 'false'}" class="subform-tab ${kvActive}" data-action="subform-toggle" ${fieldAttr} data-subform-id="${this.escapeHtml(subformId)}" data-mode="kv">键值</button>
+            <button type="button" role="tab" aria-selected="${mode === 'json' ? 'true' : 'false'}" class="subform-tab ${jsonActive}" data-action="subform-toggle" ${fieldAttr} data-subform-id="${this.escapeHtml(subformId)}" data-mode="json">JSON</button>
+          </div>
+          <span class="subform-editor-tip">${this.escapeHtml(tip)}</span>
         </div>
-        <textarea class="form-input subform-kv" rows="4" ${kvId} ${dataset} data-control="kvlines" placeholder="每行一个：key=value（value 可写 JSON）" ${disabled ?? ''} ${kvHidden}>${kvText}</textarea>
-        <textarea class="form-input subform-json" rows="4" ${jsonId} ${dataset} data-control="json" placeholder="JSON 数据" ${disabled ?? ''} ${jsonHidden}>${jsonText}</textarea>
+        <div class="subform-editor-panel">
+          <textarea class="form-input subform-kv" rows="5" ${kvId} ${dataset} data-control="kvlines" placeholder="Authorization=Bearer xxx&#10;X-Custom=value" ${disabled ?? ''} ${kvHidden}>${kvText}</textarea>
+          <textarea class="form-input subform-json" rows="8" ${jsonId} ${dataset} data-control="json" placeholder="{&#10;  &quot;key&quot;: &quot;value&quot;&#10;}" ${disabled ?? ''} ${jsonHidden}>${jsonText}</textarea>
+        </div>
       </div>
     `;
   },
@@ -1101,12 +1247,13 @@ export const configPageMethods = {
     const itemLabel = meta.itemLabel ?? '条目';
     const fullItems = Array.isArray(items) && items.length > 0 ? items : 
       (this.getNestedValue(this._configState?.rawObject ?? {}, field.path) ?? []);
+    const isProviders = this.isLlmProvidersArray(field.path);
     const body = fullItems.length
-      ? fullItems.map((item, idx) => this.renderArrayObjectItem(field.path, subFields, item ?? {}, idx, itemLabel)).join('')
+      ? fullItems.map((item, idx) => this.renderArrayObjectItem(field.path, subFields, item ?? {}, idx, itemLabel, { isProviders })).join('')
       : `<div class="config-field-hint">暂无${this.escapeHtml(itemLabel)}，点击下方按钮新增。</div>`;
   
     return `
-      <div class="array-object" data-array-wrapper="${this.escapeHtml(field.path)}">
+      <div class="array-object ${isProviders ? 'array-object-providers' : ''}" data-array-wrapper="${this.escapeHtml(field.path)}">
         ${body}
         <button type="button" class="btn btn-secondary array-object-add" data-action="array-add" data-field="${this.escapeHtml(field.path)}">
           新增${this.escapeHtml(itemLabel)}
@@ -1115,8 +1262,11 @@ export const configPageMethods = {
     `;
   },
 
-  renderArrayObjectItem(parentPath, subFields, item, index, itemLabel) {
-    return `
+  renderArrayObjectItem(parentPath, subFields, item, index, itemLabel, options = {}) {
+    const { isProviders = this.isLlmProvidersArray(parentPath) } = options;
+    const summary = isProviders ? this.getProviderEntrySummary(item) : '';
+    if (!isProviders) {
+      return `
       <div class="array-object-card" data-array-card="${this.escapeHtml(parentPath)}" data-index="${index}">
         <div class="array-object-card-header">
           <span>${this.escapeHtml(itemLabel)} #${index + 1}</span>
@@ -1125,52 +1275,123 @@ export const configPageMethods = {
           </div>
         </div>
         <div class="array-object-card-body">
-          ${this.renderArrayObjectFields(parentPath, subFields, item, index)}
+          ${this.renderArrayObjectFields(parentPath, subFields, item, index, '', { isProviders })}
         </div>
       </div>
     `;
+    }
+    return `
+      <details class="array-object-card array-object-card-compact" data-array-card="${this.escapeHtml(parentPath)}" data-index="${index}" open>
+        <summary class="array-object-card-header">
+          <span class="array-object-card-title">${this.escapeHtml(summary || `${itemLabel} #${index + 1}`)}</span>
+          <div class="array-object-actions">
+            <button type="button" class="btn btn-sm btn-secondary array-object-remove" data-action="array-remove" data-field="${this.escapeHtml(parentPath)}" data-index="${index}">删除</button>
+          </div>
+        </summary>
+        <div class="array-object-card-body array-object-card-body-collapsible">
+          ${this.renderArrayObjectFields(parentPath, subFields, item, index, '', { isProviders: true })}
+        </div>
+      </details>
+    `;
   },
 
-  renderArrayObjectFields(parentPath, fields, itemValue, index, basePath = '') {
-    return Object.entries(fields ?? {}).map(([key, schema]) => {
-      const relPath = basePath ? `${basePath}.${key}` : key;
-      const templatePath = `${parentPath}[].${relPath}`;
-      
-      // 优先从rawObject获取完整数据，确保嵌套对象（如SSL证书）正确显示
-      const fullPath = `${parentPath}.${index}.${relPath}`;
-      const rawValue = this.getNestedValue(this._configState?.rawObject ?? {}, fullPath);
-      const value = rawValue !== undefined ? rawValue : this.getNestedValue(itemValue, relPath);
-      
-      const component = (schema.component ?? '').toLowerCase();
-      const example = Object.hasOwn(schema, 'example') ? this.renderExampleBlock(schema.example) : '';
-      const isSubForm = component === 'subform';
-      const hasChildFields = schema.fields && Object.keys(schema.fields).length > 0;
-      const isNestedObject = (schema.type === 'object' || schema.type === 'map') && hasChildFields;
-      
-      // SubForm / 嵌套对象 且 定义了子字段：展开显示子字段
-      // 如果 SubForm 的 fields 为空（如 headers/extraBody 这种“自由对象”），不走这里，直接渲染为一个控件。
-      if ((isSubForm || isNestedObject) && hasChildFields) {
-        // 对于嵌套对象，也需要从rawObject获取完整数据
-        const nestedRawValue = this.getNestedValue(this._configState?.rawObject ?? {}, fullPath);
-        const nestedValue = nestedRawValue !== undefined ? nestedRawValue : (value ?? {});
-        return `
-          <div class="array-object-subgroup">
-            <div class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</div>
-            ${schema.description ? `<p class="config-field-hint">${this.escapeHtml(schema.description)}</p>` : ''}
-            ${this.renderArrayObjectFields(parentPath, schema.fields, nestedValue, index, relPath)}
-          </div>
-        `;
-      }
-  
+  renderArrayObjectFieldMarkup(parentPath, key, schema, itemValue, index, basePath = '', options = {}) {
+    const relPath = basePath ? `${basePath}.${key}` : key;
+    const templatePath = `${parentPath}[].${relPath}`;
+    const fullPath = `${parentPath}.${index}.${relPath}`;
+    const rawValue = this.getNestedValue(this._configState?.rawObject ?? {}, fullPath);
+    const value = rawValue !== undefined ? rawValue : this.getNestedValue(itemValue, relPath);
+
+    const component = String(schema.component ?? '').toLowerCase();
+    const example = Object.hasOwn(schema, 'example') ? this.renderExampleBlock(schema.example) : '';
+    const isSubForm = component === 'subform';
+    const hasChildFields = schema.fields && Object.keys(schema.fields).length > 0;
+    const isNestedObject = (schema.type === 'object' || schema.type === 'map') && hasChildFields;
+
+    if ((isSubForm || isNestedObject) && hasChildFields) {
+      const nestedRawValue = this.getNestedValue(this._configState?.rawObject ?? {}, fullPath);
+      const nestedValue = nestedRawValue !== undefined ? nestedRawValue : (value ?? {});
       return `
-        <div class="array-object-field">
-          <label>${this.escapeHtml(schema.label || key)}</label>
-          ${schema.description ? `<p class="config-field-hint">${this.escapeHtml(schema.description)}</p>` : ''}
-          ${this.renderArrayObjectFieldControl(parentPath, relPath, templatePath, schema, value, index)}
-          ${example}
+        <div class="array-object-subgroup config-field-span-full">
+          <div class="array-object-subgroup-header">
+            <span class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</span>
+            ${schema.description ? `<p class="config-field-hint config-field-hint-compact">${this.escapeHtml(schema.description)}</p>` : ''}
+          </div>
+          ${this.renderArrayObjectFields(parentPath, schema.fields, nestedValue, index, relPath, options)}
         </div>
       `;
+    }
+
+    const spanClass = this.resolveConfigFieldSpan(schema, { path: relPath });
+    const isFullSpan = spanClass.includes('config-field-span-full');
+    const isFreeSubForm = isSubForm && !hasChildFields;
+    const controlClass = component === 'switch' ? ' config-field-control-switch' : '';
+    const fieldClass = [
+      'config-field',
+      'config-field-row',
+      spanClass,
+      isFreeSubForm ? 'config-field-subform' : ''
+    ].filter(Boolean).join(' ');
+
+    return this.renderConfigFieldShell({
+      classNames: fieldClass,
+      label: this.escapeHtml(schema.label || key),
+      description: schema.description ?? '',
+      isFullSpan,
+      controlClass,
+      controlHtml: this.renderArrayObjectFieldControl(parentPath, relPath, templatePath, schema, value, index),
+      exampleHtml: example || ''
+    });
+  },
+
+  renderArrayObjectFieldGrid(entries, parentPath, itemValue, index, basePath, options) {
+    const html = entries.map(([key, schema]) =>
+      this.renderArrayObjectFieldMarkup(parentPath, key, schema, itemValue, index, basePath, options)
+    ).join('');
+    return html ? `<div class="config-field-grid config-field-grid--flat array-object-field-grid">${html}</div>` : '';
+  },
+
+  /** LLM providers[] 单条：按 llm-provider-ui 分组顺序渲染，collapsible 组用 details */
+  renderProviderEntryFields(parentPath, fields, itemValue, index, options = {}) {
+    const sections = groupProviderSchemaFields(fields);
+    return sections.map((section) => {
+      const grid = this.renderArrayObjectFieldGrid(
+        section.entries,
+        parentPath,
+        itemValue,
+        index,
+        '',
+        options
+      );
+      if (!grid) return '';
+
+      if (section.collapsible) {
+        return `
+          <details class="config-form-section config-form-section-collapsible" open>
+            <summary class="config-form-section-head">${this.escapeHtml(section.label)}</summary>
+            <div class="config-form-section-body">${grid}</div>
+          </details>
+        `;
+      }
+
+      return `
+        <section class="config-form-section">
+          <header class="config-form-section-head">${this.escapeHtml(section.label)}</header>
+          <div class="config-form-section-body">${grid}</div>
+        </section>
+      `;
     }).join('');
+  },
+
+  renderArrayObjectFields(parentPath, fields, itemValue, index, basePath = '', options = {}) {
+    const { isProviders = false } = options;
+
+    if (isProviders && !basePath) {
+      return this.renderProviderEntryFields(parentPath, fields, itemValue, index, options);
+    }
+
+    const entries = Object.entries(fields ?? {});
+    return this.renderArrayObjectFieldGrid(entries, parentPath, itemValue, index, basePath, options);
   },
 
   renderArrayObjectFieldControl(parentPath, relPath, templatePath, schema, value, index) {
@@ -1263,36 +1484,51 @@ export const configPageMethods = {
   },
 
   renderDynamicFields(collection, fields, value, entryKey, basePath = '') {
-    return Object.entries(fields ?? {}).map(([key, schema]) => {
+    const html = Object.entries(fields ?? {}).map(([key, schema]) => {
       const relPath = basePath ? `${basePath}.${key}` : key;
       const templatePathBase = collection.valueTemplatePath ?? '';
       const templatePath = this.normalizeTemplatePath(templatePathBase ? `${templatePathBase}.${relPath}` : relPath);
       const fieldValue = this.getNestedValue(value, relPath);
-  
-      const component = (schema.component ?? '').toLowerCase();
+
+      const component = String(schema.component ?? '').toLowerCase();
       const isSubForm = component === 'subform';
       const hasChildFields = schema.fields && Object.keys(schema.fields).length > 0;
       if ((isSubForm || schema.type === 'object' || schema.type === 'map') && hasChildFields) {
         return `
-          <div class="array-object-subgroup">
-            <div class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</div>
+          <div class="array-object-subgroup config-field-span-full">
+            <div class="array-object-subgroup-header">
+              <span class="array-object-subgroup-title">${this.escapeHtml(schema.label || key)}</span>
+              ${schema.description ? `<p class="config-field-hint config-field-hint-compact">${this.escapeHtml(schema.description)}</p>` : ''}
+            </div>
             ${this.renderDynamicFields(collection, schema.fields, fieldValue ?? {}, entryKey, relPath)}
           </div>
         `;
       }
-  
-      const dataset = `data-collection="${this.escapeHtml(collection.name)}" data-entry-key="${this.escapeHtml(entryKey)}" data-object-path="${this.escapeHtml(relPath)}" data-template-path="${this.escapeHtml(templatePath)}" data-component="${(schema.component ?? '').toLowerCase()}" data-type="${schema.type}"`;
+
+      const spanClass = this.resolveConfigFieldSpan(schema, { path: relPath });
+      const isFullSpan = spanClass.includes('config-field-span-full');
+      const dataset = `data-collection="${this.escapeHtml(collection.name)}" data-entry-key="${this.escapeHtml(entryKey)}" data-object-path="${this.escapeHtml(relPath)}" data-template-path="${this.escapeHtml(templatePath)}" data-component="${component}" data-type="${schema.type}"`;
       const subformId = `${collection.name}.${entryKey}.${relPath}`;
       const example = Object.hasOwn(schema, 'example') ? this.renderExampleBlock(schema.example) : '';
+      const controlClass = component === 'switch' ? ' config-field-control-switch' : '';
       return `
-        <div class="array-object-field">
-          <label>${this.escapeHtml(schema.label || key)}</label>
-          ${schema.description ? `<p class="config-field-hint">${this.escapeHtml(schema.description)}</p>` : ''}
-          ${this.renderDynamicFieldControl(dataset, schema, fieldValue, subformId)}
-          ${example}
+        <div class="config-field config-field-row ${spanClass}">
+          <div class="config-field-body">
+            ${this.renderFieldMetaBlock({
+              label: this.escapeHtml(schema.label || key),
+              description: schema.description ?? '',
+              isFullSpan
+            })}
+            <div class="config-field-control${controlClass}">
+              ${this.renderDynamicFieldControl(dataset, schema, fieldValue, subformId)}
+            </div>
+            ${example || ''}
+          </div>
         </div>
       `;
     }).join('');
+
+    return `<div class="config-field-grid config-field-grid--flat array-object-field-grid">${html}</div>`;
   },
 
   renderDynamicFieldControl(dataset, schema, value, subformId) {
@@ -1627,7 +1863,17 @@ export const configPageMethods = {
   
     if (kv) kv.hidden = m === 'json';
     if (json) json.hidden = m === 'kv';
-    tabs.forEach(btn => btn.classList.toggle('active', (btn.dataset.mode || '').toLowerCase() === m));
+    tabs.forEach(btn => {
+      const active = (btn.dataset.mode || '').toLowerCase() === m;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    const tip = editor.querySelector('.subform-editor-tip');
+    if (tip) {
+      tip.textContent = m === 'json'
+        ? '标准 JSON 对象；保存前会自动校验格式'
+        : '每行一项 key=value，值可写 JSON 字面量';
+    }
     try {
       if (key) localStorage.setItem(key, m);
     } catch {}

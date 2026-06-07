@@ -13,7 +13,7 @@ import GeminiCompatibleLLMClient from './GeminiCompatibleLLMClient.js';
 import AnthropicCompatibleLLMClient from './AnthropicCompatibleLLMClient.js';
 import AzureOpenAICompatibleLLMClient from './AzureOpenAICompatibleLLMClient.js';
 
-const builtinProviders = new Map([
+const builtinClientFactories = new Map([
   ['volcengine', (config) => new VolcengineLLMClient(config)],
   ['xiaomimimo', (config) => new XiaomiMiMoLLMClient(config)],
   ['openai', (config) => new OpenAILLMClient(config)],
@@ -22,15 +22,22 @@ const builtinProviders = new Map([
   ['azure_openai', (config) => new AzureOpenAILLMClient(config)]
 ]);
 
-const compatFactories = [
-  { configKey: 'openai_compat_llm', factoryType: 'openai_compat_llm', defaultProtocol: 'openai', clientClass: OpenAICompatibleLLMClient },
-  { configKey: 'openai_responses_compat_llm', factoryType: 'openai_responses_compat_llm', defaultProtocol: 'openai-response', clientClass: OpenAIResponsesCompatibleLLMClient },
-  { configKey: 'newapi_compat_llm', factoryType: 'newapi_compat_llm', defaultProtocol: 'new-api', clientClass: NewAPICompatibleLLMClient },
-  { configKey: 'cherryin_compat_llm', factoryType: 'cherryin_compat_llm', defaultProtocol: 'cherryin', clientClass: CherryINCompatibleLLMClient },
-  { configKey: 'ollama_compat_llm', factoryType: 'ollama_compat_llm', defaultProtocol: 'ollama', clientClass: OllamaCompatibleLLMClient },
-  { configKey: 'gemini_compat_llm', factoryType: 'gemini_compat_llm', defaultProtocol: 'gemini', clientClass: GeminiCompatibleLLMClient },
-  { configKey: 'anthropic_compat_llm', factoryType: 'anthropic_compat_llm', defaultProtocol: 'anthropic', clientClass: AnthropicCompatibleLLMClient },
-  { configKey: 'azure_openai_compat_llm', factoryType: 'azure_openai_compat_llm', defaultProtocol: 'azure-openai', clientClass: AzureOpenAICompatibleLLMClient }
+/** 所有 LLM 工厂统一从 providers[] 解析；YAML 默认仅 providers: [] */
+const factoryRegistry = [
+  { configKey: 'volcengine_llm', factoryType: 'builtin', protocol: 'volcengine' },
+  { configKey: 'xiaomimimo_llm', factoryType: 'builtin', protocol: 'xiaomimimo' },
+  { configKey: 'openai_llm', factoryType: 'builtin', protocol: 'openai' },
+  { configKey: 'gemini_llm', factoryType: 'builtin', protocol: 'gemini' },
+  { configKey: 'anthropic_llm', factoryType: 'builtin', protocol: 'anthropic' },
+  { configKey: 'azure_openai_llm', factoryType: 'builtin', protocol: 'azure_openai' },
+  { configKey: 'openai_compat_llm', factoryType: 'compat', defaultProtocol: 'openai', clientClass: OpenAICompatibleLLMClient },
+  { configKey: 'openai_responses_compat_llm', factoryType: 'compat', defaultProtocol: 'openai-response', clientClass: OpenAIResponsesCompatibleLLMClient },
+  { configKey: 'newapi_compat_llm', factoryType: 'compat', defaultProtocol: 'new-api', clientClass: NewAPICompatibleLLMClient },
+  { configKey: 'cherryin_compat_llm', factoryType: 'compat', defaultProtocol: 'cherryin', clientClass: CherryINCompatibleLLMClient },
+  { configKey: 'ollama_compat_llm', factoryType: 'compat', defaultProtocol: 'ollama', clientClass: OllamaCompatibleLLMClient },
+  { configKey: 'gemini_compat_llm', factoryType: 'compat', defaultProtocol: 'gemini', clientClass: GeminiCompatibleLLMClient },
+  { configKey: 'anthropic_compat_llm', factoryType: 'compat', defaultProtocol: 'anthropic', clientClass: AnthropicCompatibleLLMClient },
+  { configKey: 'azure_openai_compat_llm', factoryType: 'compat', defaultProtocol: 'azure-openai', clientClass: AzureOpenAICompatibleLLMClient }
 ];
 
 function normalizeProviderKey(name) {
@@ -47,28 +54,25 @@ function normalizeProtocol(value) {
   return protocol;
 }
 
-function getBuiltinProviderConfig(key) {
-  return key ? (global.cfg?.[`${key}_llm`] || null) : null;
-}
-
-function getCompatProviderEntries() {
+function getProviderEntries() {
   const entries = [];
 
-  for (const factory of compatFactories) {
+  for (const factory of factoryRegistry) {
     const factoryCfg = global.cfg?.[factory.configKey] || {};
     const providerList = Array.isArray(factoryCfg.providers) ? factoryCfg.providers : [];
-    const defaults = { ...factoryCfg };
-    delete defaults.providers;
 
     for (const providerEntry of providerList) {
       const key = normalizeProviderKey(providerEntry.key || providerEntry.provider);
       if (!key) continue;
-      const protocol = normalizeProtocol(providerEntry.protocol || defaults.protocol) || factory.defaultProtocol;
+
+      const protocol = normalizeProtocol(
+        providerEntry.protocol || factory.protocol || factory.defaultProtocol
+      );
+
       entries.push({
         key,
         protocol,
         factory,
-        defaults,
         entry: providerEntry
       });
     }
@@ -79,13 +83,24 @@ function getCompatProviderEntries() {
 
 export default class LLMFactory {
   static registerProvider(name, factoryFn) {
-    builtinProviders.set(String(name).toLowerCase(), factoryFn);
+    builtinClientFactories.set(String(name).toLowerCase(), factoryFn);
   }
 
   static listProviders() {
-    const builtin = Array.from(builtinProviders.keys());
-    const compat = getCompatProviderEntries().map((x) => x.key);
-    return Array.from(new Set([...builtin, ...compat]));
+    return getProviderEntries().map((x) => x.key);
+  }
+
+  static listProviderProfiles() {
+    return getProviderEntries().map(({ key, protocol, factory, entry }) => ({
+      key,
+      factory: factory.configKey.replace(/_llm$/, '').replace(/_compat_llm$/, ''),
+      factoryType: factory.factoryType,
+      protocol,
+      label: entry.label || key,
+      model: entry.model || entry.chatModel || entry.deployment || null,
+      baseUrl: entry.baseUrl || null,
+      source: `${factory.configKey}.providers[]`
+    }));
   }
 
   static hasProvider(name) {
@@ -122,53 +137,32 @@ export default class LLMFactory {
     const key = normalizeProviderKey(providerName);
     if (!key) return null;
 
-    const builtinDefaults = getBuiltinProviderConfig(key);
-    if (builtinDefaults || builtinProviders.has(key)) {
-      return {
-        provider: key,
-        factoryType: 'builtin',
-        protocol: key,
-        ...(builtinDefaults || {})
-      };
-    }
+    const matched = getProviderEntries().find((x) => x.key === key);
+    if (!matched) return null;
 
-    const compat = getCompatProviderEntries().find((x) => x.key === key);
-    if (!compat) return null;
+    const { factory, entry, protocol } = matched;
 
     return {
-      ...compat.defaults,
-      ...compat.entry,
+      ...entry,
       provider: key,
-      protocol: compat.protocol,
-      factoryType: compat.factory.factoryType,
-      _clientClass: compat.factory.clientClass
+      protocol,
+      factoryType: factory.factoryType,
+      factory: factory.configKey.replace(/_llm$/, '').replace(/_compat_llm$/, ''),
+      _clientClass: factory.clientClass || null
     };
   }
 
   static createClient(config = {}) {
     const provider = this.resolveProvider(config, { allowDefaultAliases: true });
     if (!provider) {
-      throw new Error('未指定LLM提供商，请在 aistream.yaml 中配置 llm.Provider');
-    }
-
-    const builtinFactory = builtinProviders.get(provider);
-    if (builtinFactory) {
-      const merged = {
-        ...(getBuiltinProviderConfig(provider) || {}),
-        ...config,
-        provider
-      };
-      return builtinFactory(merged);
+      throw new Error('未指定 LLM 提供商：请在各工厂 providers[] 中添加端点，并在 aistream.yaml 配置 llm.Provider');
     }
 
     const resolved = this.getProviderConfig(provider);
     if (!resolved) {
-      throw new Error(`不支持的LLM提供商: ${provider}`);
+      throw new Error(`不支持的 LLM 提供商: ${provider}`);
     }
 
-    const ClientClass = resolved._clientClass || OpenAICompatibleLLMClient;
-
-    // 避免上游传入的 undefined 字段（尤其是 baseUrl/apiKey）覆盖 provider 默认配置
     const sanitizedConfig = {};
     for (const [key, value] of Object.entries(config || {})) {
       if (value !== undefined) {
@@ -176,13 +170,21 @@ export default class LLMFactory {
       }
     }
 
-    const { _clientClass, ...clientConfig } = {
+    const clientConfig = {
       ...resolved,
       ...sanitizedConfig,
       provider,
       protocol: normalizeProtocol(sanitizedConfig.protocol || resolved.protocol) || resolved.protocol
     };
 
-    return new ClientClass(clientConfig);
+    const { _clientClass, factory, factoryType, ...rest } = clientConfig;
+
+    const builtinFactory = builtinClientFactories.get(rest.protocol);
+    if (builtinFactory) {
+      return builtinFactory(rest);
+    }
+
+    const ClientClass = _clientClass || OpenAICompatibleLLMClient;
+    return new ClientClass(rest);
   }
 }

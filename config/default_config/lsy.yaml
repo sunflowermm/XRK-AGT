@@ -1,0 +1,19 @@
+# 李诗雅 Agent 默认配置模板（运行时写入 data/lsy/lsy.yaml）
+enabled: true
+defaultQuota: 100
+defaultUsername: "demo"
+defaultPassword: "demo1234"
+tools:
+  allowGhClone: false
+admin:
+  allowLoopbackBypass: false
+llm:
+  baseUrl: "https://api.gptgod.online/v1"
+  path: "/messages"
+  apiKey: ""
+  model: "claude-opus-4-5-20251101"
+  anthropicVersion: "2023-06-01"
+  maxTokens: 8192
+  temperature: 0.7
+  timeout: 360000
+  maxToolRounds: 16

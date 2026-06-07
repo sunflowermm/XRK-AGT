@@ -89,8 +89,14 @@ export default class OllamaCompatibleLLMClient {
     const options = {
       temperature: overrides.temperature ?? this.config.temperature,
       top_p: overrides.topP ?? overrides.top_p ?? this.config.topP ?? this.config.top_p,
-      num_predict: overrides.maxTokens ?? overrides.max_tokens ?? this.config.maxTokens ?? this.config.max_tokens
+      num_predict: overrides.maxTokens ?? overrides.max_tokens ?? this.config.maxTokens ?? this.config.max_tokens,
+      repeat_penalty: overrides.frequencyPenalty ?? overrides.frequency_penalty ?? this.config.frequencyPenalty ?? this.config.frequency_penalty
     };
+
+    const stop = overrides.stop ?? this.config.stop;
+    if (stop !== undefined) {
+      options.stop = Array.isArray(stop) ? stop : [String(stop)];
+    }
 
     Object.keys(options).forEach((k) => options[k] === undefined && delete options[k]);
 

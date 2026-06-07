@@ -14,6 +14,8 @@ function pick(overrides, config, keys) {
   return;
 }
 
+export { pick };
+
 /**
  * 提取工具名称
  */
@@ -127,6 +129,10 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
   if (config.extraBody && typeof config.extraBody === 'object') Object.assign(body, config.extraBody);
   if (extraBody && typeof extraBody === 'object') Object.assign(body, extraBody);
 
+  if (typeof body.response_format === 'string' && body.response_format.trim()) {
+    body.response_format = { type: body.response_format.trim() };
+  }
+
   return body;
 }
 
@@ -215,7 +221,7 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
   }
 
   body.tools = finalTools;
-  body.tool_choice = overrides.tool_choice ?? config.toolChoice ?? 'auto';
+  body.tool_choice = overrides.tool_choice ?? config.toolChoice ?? config.tool_choice ?? 'auto';
   const parallel = pick(overrides, config, ['parallelToolCalls', 'parallel_tool_calls']);
   if (parallel !== undefined) body.parallel_tool_calls = parallel;
 

@@ -8,6 +8,7 @@ import {
   isMotionReady,
   isReducedMotion
 } from '../motion/gsap-motion.js';
+import { bindWorkspacePanel } from '../ai-workspace-ui.js';
 
 export async function renderChatPage(app) {
   const content = document.getElementById('content');
@@ -147,6 +148,8 @@ export async function renderChatPage(app) {
       const placeholder = document.getElementById('aiSettingsPlaceholder');
       placeholder.outerHTML = aiSettings;
       applyAIMobileSettingsState(true);
+      bindWorkspacePanel(app)?.();
+      app._syncAiEndpointMeta?.();
     } catch {}
   }
 
@@ -239,11 +242,20 @@ export function bindChatEvents(app) {
       applyAIMobileSettingsState(false);
       animateAISettingsPanel(panel, !panel.classList.contains('mobile-collapsed'));
     });
+    const factorySelect = document.getElementById('aiFactorySelect');
     const providerSelect = document.getElementById('aiProviderSelect');
     const personaInput = document.getElementById('aiPersonaInput');
+    if (factorySelect) safeBind(factorySelect, 'change', () => {
+      app._chatSettings.llmFactory = factorySelect.value;
+      localStorage.setItem('chatLlmFactory', factorySelect.value);
+      app._refreshAiEndpointSelect?.(factorySelect.value, '');
+      app._chatSettings.provider = '';
+      localStorage.setItem('chatProvider', '');
+    });
     if (providerSelect) safeBind(providerSelect, 'change', () => {
       app._chatSettings.provider = providerSelect.value;
       localStorage.setItem('chatProvider', providerSelect.value);
+      app._syncAiEndpointMeta?.();
     });
     if (personaInput) safeBind(personaInput, 'input', () => {
       app._chatSettings.persona = personaInput.value;

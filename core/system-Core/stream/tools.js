@@ -1,25 +1,11 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import path from 'path';
-import os from 'os';
 import { BaseTools } from '#utils/base-tools.js';
 import { InputValidator } from '#utils/input-validator.js';
-import { getDefaultDesktopDirSync } from '#utils/user-dirs.js';
+import { resolveConfiguredWorkspace, ensureAgentWorkspaceSync, getConfiguredDefaultWorkspaceId } from '../lib/ai-workspace-runtime.js';
 import { exec } from '#utils/exec-async.js';
 const IS_WINDOWS = process.platform === 'win32';
-
-function resolveToolsWorkspace(raw) {
-  if (raw == null || String(raw).trim() === '') {
-    return getDefaultDesktopDirSync();
-  }
-  let w = String(raw).trim();
-  if (w.startsWith('~')) {
-    w = path.join(os.homedir(), w.slice(1).replace(/^[\\/]/, '') || '');
-    return path.normalize(w);
-  }
-  if (path.isAbsolute(w)) return path.normalize(w);
-  return path.resolve(process.cwd(), w);
-}
 
 /**
  * 基础工具工作流（配置：aistream.tools.file）
@@ -42,7 +28,7 @@ export default class ToolsStream extends AIStream {
       }
     });
 
-    this.workspace = getDefaultDesktopDirSync();
+    this.workspace = ensureAgentWorkspaceSync(getConfiguredDefaultWorkspaceId());
     this.tools = new BaseTools(this.workspace);
     this.fileToolsCfg = {};
   }
@@ -69,7 +55,7 @@ export default class ToolsStream extends AIStream {
           ? Math.max(1000, Math.floor(fileCfg.maxCommandOutputChars))
           : 200_000
     };
-    this.workspace = resolveToolsWorkspace(fileCfg.workspace);
+    this.workspace = resolveConfiguredWorkspace(fileCfg.workspace);
     this.tools = new BaseTools(this.workspace);
   }
 

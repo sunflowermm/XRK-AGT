@@ -1,154 +1,27 @@
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
+import { buildLlmProvidersFromPreset } from './shared/llm-provider-fields.js';
 
 /**
- * Gemini 官方 LLM 工厂配置管理（文本）
+ * Gemini 官方 LLM 工厂配置
  * 配置文件：data/server_bots/{port}/gemini_llm.yaml
- *
- * 注意：
- * - Gemini 的 function calling 协议与 OpenAI 不同；
- * - 本项目当前 Gemini LLMClient 默认不注入 MCP tools（建议 enableTools=false）。
  */
 export default class GeminiLLMConfig extends ConfigBase {
   constructor() {
     super({
       name: 'gemini_llm',
       displayName: 'Gemini LLM 工厂配置（官方）',
-      description: 'Google Generative Language API 配置（文本）',
+      description: 'Google Generative Language API 配置，通过 providers[] 管理多 API / 多模型端点',
       filePath: (cfg) => {
         const port = cfg?.port ?? cfg?._port;
-        if (!port) {
-          throw new Error('GeminiLLMConfig: 未提供端口，无法解析路径');
-        }
+        if (!port) throw new Error('GeminiLLMConfig: 未提供端口，无法解析路径');
         return `data/server_bots/${port}/gemini_llm.yaml`;
       },
       fileType: 'yaml',
       schema: {
         fields: {
-          baseUrl: {
-            type: 'string',
-            label: 'API 基础地址',
-            description: 'Generative Language API 基础地址',
-            default: 'https://generativelanguage.googleapis.com',
-            component: 'Input'
-          },
-          apiKey: {
-            type: 'string',
-            label: 'API Key',
-            description: 'Google API Key（Generative Language）',
-            default: '',
-            component: 'InputPassword'
-          },
-          path: {
-            type: 'string',
-            label: '接口路径（可选）',
-            description: '留空则使用 /v1beta/models/{model}:generateContent',
-            default: '',
-            component: 'Input'
-          },
-          model: {
-            type: 'string',
-            label: '模型（model）',
-            description: 'Gemini 模型名称，例如 gemini-1.5-flash',
-            default: 'gemini-1.5-flash',
-            component: 'Input'
-          },
-          temperature: {
-            type: 'number',
-            label: '温度（generationConfig.temperature）',
-            min: 0,
-            max: 2,
-            component: 'InputNumber'
-          },
-          topP: {
-            type: 'number',
-            label: 'Top P（generationConfig.topP）',
-            min: 0,
-            max: 1,
-            component: 'InputNumber'
-          },
-          topK: {
-            type: 'number',
-            label: 'Top K（generationConfig.topK）',
-            description: '可选，高级采样参数',
-            min: 0,
-            component: 'InputNumber'
-          },
-          maxTokens: {
-            type: 'number',
-            label: '最大输出（generationConfig.maxOutputTokens）',
-            description: '单次回答允许的最大输出 token 数',
-            min: 1,
-            component: 'InputNumber'
-          },
-          timeout: {
-            type: 'number',
-            label: '超时时间 (ms)',
-            description: 'API 请求超时时间（毫秒）',
-            min: 1000,
-            default: 360000,
-            component: 'InputNumber'
-          },
-          enableTools: {
-            type: 'boolean',
-            label: '启用工具调用（MCP）',
-            description: 'Gemini 协议不同，默认关闭；如需启用需实现 Gemini function calling 适配',
-            default: false,
-            component: 'Switch'
-          },
-          enableStream: {
-            type: 'boolean',
-            label: '启用流式输出',
-            description: '开启后优先使用 streamGenerateContent 流式接口，将增量内容推送到前端',
-            default: true,
-            component: 'Switch'
-          },
-          headers: {
-            type: 'object',
-            label: '额外请求头',
-            description: '可选：为每次请求追加 HTTP 头',
-            example: {
-              'X-Referer': 'xrk-agt-console'
-            },
-            component: 'SubForm',
-            fields: {}
-          },
-          extraBody: {
-            type: 'object',
-            label: '额外请求体字段',
-            description: '原样合并到 payload 顶层（高级用法）',
-            example: {
-              systemInstruction: {
-                parts: [{ text: '你是一个严谨的后端助手。' }],
-                role: 'user'
-              }
-            },
-            component: 'SubForm',
-            fields: {}
-          },
-          proxy: {
-            type: 'object',
-            label: '代理配置',
-            description: '仅影响本机到 Gemini 的 HTTP 请求，不修改系统全局代理；支持 http/https/socks5 标准代理地址',
-            component: 'SubForm',
-            fields: {
-              enabled: {
-                type: 'boolean',
-                label: '启用代理',
-                default: false,
-                component: 'Switch'
-              },
-              url: {
-                type: 'string',
-                label: '代理地址',
-                description: '例如：http://127.0.0.1:7890 或 http://user:pass@host:port',
-                default: '',
-                component: 'Input'
-              }
-            }
-          }
+          providers: buildLlmProvidersFromPreset('gemini')
         }
       }
     });
   }
 }
-

@@ -40,7 +40,17 @@ export default class AnthropicLLMClient {
     };
 
     if (this.config.apiKey) {
-      headers['x-api-key'] = String(this.config.apiKey).trim();
+      const apiKey = String(this.config.apiKey).trim();
+      const mode = String(this.config.authMode || 'x-api-key').toLowerCase();
+      if (mode === 'bearer') {
+        headers.Authorization = `Bearer ${apiKey}`;
+      } else if (mode === 'header') {
+        const name = String(this.config.authHeaderName ?? '').trim();
+        if (!name) throw new Error('Anthropic: authMode=header 时必须提供 authHeaderName');
+        headers[name] = apiKey;
+      } else {
+        headers['x-api-key'] = apiKey;
+      }
     }
 
     // Anthropic 要求提供版本头
@@ -132,6 +142,16 @@ export default class AnthropicLLMClient {
 
     const topP = (overrides.topP ?? overrides.top_p) ?? (this.config.topP ?? this.config.top_p);
     if (topP !== undefined) body.top_p = topP;
+
+    const topK = (overrides.topK ?? overrides.top_k) ?? (this.config.topK ?? this.config.top_k);
+    if (topK !== undefined) body.top_k = topK;
+
+    const stop = overrides.stop ?? this.config.stop;
+    if (Array.isArray(stop) && stop.length > 0) body.stop_sequences = stop;
+
+    const serviceTier = (overrides.anthropicServiceTier ?? overrides.serviceTier ?? overrides.service_tier)
+      ?? (this.config.anthropicServiceTier ?? this.config.serviceTier ?? this.config.service_tier);
+    if (serviceTier !== undefined && serviceTier !== '') body.service_tier = serviceTier;
 
     if (systemTexts.length > 0) {
       body.system = systemTexts.join('\n');

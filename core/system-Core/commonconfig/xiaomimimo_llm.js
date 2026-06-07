@@ -1,215 +1,27 @@
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
+import { buildLlmProvidersFromPreset } from './shared/llm-provider-fields.js';
 
 /**
- * 小米 MiMo LLM 工厂配置管理
- * 管理小米 MiMo 大语言模型（仅文本）相关配置
- * 支持前端编辑，配置文件位于 data/server_bots/{port}/xiaomimimo_llm.yaml
+ * 小米 MiMo LLM 工厂配置
+ * 配置文件：data/server_bots/{port}/xiaomimimo_llm.yaml
  */
 export default class XiaomiMiMoLLMConfig extends ConfigBase {
   constructor() {
     super({
       name: 'xiaomimimo_llm',
       displayName: '小米 MiMo LLM 工厂配置',
-      description: '小米 MiMo 大语言模型配置（仅文本，无识图逻辑）',
+      description: '小米 MiMo 大语言模型配置，通过 providers[] 管理多 API / 多模型端点',
       filePath: (cfg) => {
         const port = cfg?.port ?? cfg?._port;
-        if (!port) {
-          throw new Error('XiaomiMiMoLLMConfig: 未提供端口，无法解析路径');
-        }
+        if (!port) throw new Error('XiaomiMiMoLLMConfig: 未提供端口，无法解析路径');
         return `data/server_bots/${port}/xiaomimimo_llm.yaml`;
       },
       fileType: 'yaml',
       schema: {
         fields: {
-          baseUrl: {
-            type: 'string',
-            label: 'API 基础地址',
-            description: '小米 MiMo OpenAI 兼容 API 基础地址',
-            default: 'https://api.xiaomimimo.com/v1',
-            component: 'Input'
-          },
-          authMode: {
-            type: 'string',
-            label: '认证方式',
-            description: '选择使用 api-key 头或 Authorization: Bearer 头进行认证',
-            enum: ['api-key', 'bearer'],
-            default: 'api-key',
-            component: 'Select'
-          },
-          apiKey: {
-            type: 'string',
-            label: 'API Key',
-            description: '小米 MiMo API Key（通过控制台创建）',
-            default: '',
-            component: 'InputPassword'
-          },
-          chatModel: {
-            type: 'string',
-            label: '聊天模型',
-            description: '用于文本对话的模型名称，例如 mimo-v2-flash',
-            default: 'mimo-v2-flash',
-            component: 'Input'
-          },
-          temperature: {
-            type: 'number',
-            label: '温度',
-            description: '生成文本的随机性，范围 0-2，建议 0.0~1.0',
-            min: 0,
-            max: 2,
-            component: 'InputNumber'
-          },
-          maxTokens: {
-            type: 'number',
-            label: '最大 Tokens',
-            description: '单次回复的最大 Token 数（最终会映射到 max_completion_tokens）',
-            min: 1,
-            component: 'InputNumber'
-          },
-          tokenField: {
-            type: 'string',
-            label: 'Token 字段名',
-            description: 'MiMo 使用 max_completion_tokens；建议保持默认值',
-            enum: ['max_tokens', 'max_completion_tokens', 'both'],
-            default: 'max_completion_tokens',
-            component: 'Select'
-          },
-          topP: {
-            type: 'number',
-            label: 'Top P',
-            description: '核采样参数，范围 0-1',
-            min: 0,
-            max: 1,
-            component: 'InputNumber'
-          },
-          frequencyPenalty: {
-            type: 'number',
-            label: 'Frequency Penalty',
-            description: '频率惩罚（-2 到 2），用于减少重复内容',
-            min: -2,
-            max: 2,
-            component: 'InputNumber'
-          },
-          presencePenalty: {
-            type: 'number',
-            label: 'Presence Penalty',
-            description: '存在惩罚（-2 到 2），用于鼓励引入新话题',
-            min: -2,
-            max: 2,
-            component: 'InputNumber'
-          },
-          stop: {
-            type: 'array',
-            label: '停止词',
-            description: '停止词列表，当生成包含这些词时停止',
-            itemType: 'string',
-            component: 'Tags'
-          },
-          thinkingType: {
-            type: 'string',
-            label: '思维链模式',
-            description: '控制是否启用思维链（thinking.type），默认 disabled',
-            enum: ['enabled', 'disabled'],
-            default: 'disabled',
-            component: 'Select'
-          },
-          responseFormat: {
-            type: 'string',
-            label: '响应格式（response_format.type）',
-            description: 'MiMo 官方字段为 response_format 对象；这里简化为选择 type（text/json_object）',
-            enum: ['text', 'json_object'],
-            default: 'text',
-            component: 'Select'
-          },
-          toolChoice: {
-            type: 'string',
-            label: '工具选择模式',
-            description: 'tool_choice 字段，目前官方仅支持 auto',
-            default: 'auto',
-            component: 'Input'
-          },
-          timeout: {
-            type: 'number',
-            label: '超时时间 (ms)',
-            description: 'API 请求超时时间',
-            min: 1000,
-            default: 360000,
-            component: 'InputNumber'
-          },
-          path: {
-            type: 'string',
-            label: '接口路径',
-            description: 'OpenAI 兼容聊天接口路径，默认为 /chat/completions',
-            default: '/chat/completions',
-            component: 'Input'
-          },
-          enableTools: {
-            type: 'boolean',
-            label: '启用工具调用',
-            description: '开启后会自动注入 MCP 工具列表（无需手写 tools）',
-            default: true,
-            component: 'Switch'
-          },
-          maxToolRounds: {
-            type: 'number',
-            label: '最大工具轮次',
-            description: '多轮 tool calling 的最大轮次',
-            min: 1,
-            max: 20,
-            default: 7,
-            component: 'InputNumber'
-          },
-          enableStream: {
-            type: 'boolean',
-            label: '启用流式输出',
-            description: '是否启用流式输出（默认启用，所有运营商均支持）',
-            default: true,
-            component: 'Switch'
-          },
-          headers: {
-            type: 'object',
-            label: '额外请求头',
-            description: '可选：为每次请求追加 HTTP 头',
-            example: {
-              'X-Channel': 'xrk-agt'
-            },
-            component: 'SubForm',
-            fields: {}
-          },
-          extraBody: {
-            type: 'object',
-            label: '额外请求体字段',
-            description: '可选：原样合并到请求体顶层，需符合 MiMo OpenAI 兼容字段',
-            example: {
-              user: 'demo-user'
-            },
-            component: 'SubForm',
-            fields: {}
-          },
-          proxy: {
-            type: 'object',
-            label: '代理配置',
-            description: '仅影响本机到小米 MiMo 的 HTTP 请求，不修改系统全局代理；支持 http/https/socks5 标准代理地址',
-            component: 'SubForm',
-            fields: {
-              enabled: {
-                type: 'boolean',
-                label: '启用代理',
-                default: false,
-                component: 'Switch'
-              },
-              url: {
-                type: 'string',
-                label: '代理地址',
-                description: '例如：http://127.0.0.1:7890 或 http://user:pass@host:port',
-                default: '',
-                component: 'Input'
-              }
-            }
-          }
+          providers: buildLlmProvidersFromPreset('xiaomimimo')
         }
       }
     });
   }
 }
-
-

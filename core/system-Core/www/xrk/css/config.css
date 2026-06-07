@@ -1,11 +1,20 @@
-/* 配置管理：侧栏 + 右侧编辑区容器样式 */
-
+/**
+ * 配置管理页样式
+ *
+ * 布局约定：
+ * - 字段区统一使用 `.config-field-grid.config-field-grid--flat`（扁平行，非卡片）
+ * - 单行字段结构：`.config-field-row` > `.config-field-body` > meta + control
+ * - 边框 token 定义在 `.config-page`，比全局 `--border` 略深，提升灰线辨识度
+ */
 .config-page {
-  /* 恢复为：左侧列表 + 右侧编辑区 的双栏布局 */
+  --config-border: color-mix(in srgb, var(--text-muted) 30%, var(--border));
+  --config-border-strong: color-mix(in srgb, var(--text-muted) 44%, var(--border));
+  --config-divider: color-mix(in srgb, var(--text-muted) 26%, var(--border-light));
+  --config-control-height: 36px;
+
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 24px;
-  /* 与首页/聊天等保持一致：默认填满内容区宽度 */
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -25,7 +34,7 @@
 
 .config-sidebar {
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--config-border-strong);
   border-radius: var(--radius-lg);
   padding: 24px;
   display: flex;
@@ -145,7 +154,7 @@
 
 .config-main {
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--config-border-strong);
   border-radius: var(--radius-lg);
   padding: 28px;
   min-height: 480px;
@@ -390,7 +399,7 @@
 }
 
 .config-group {
-  border: 1px solid var(--border);
+  border: 1px solid var(--config-border-strong);
   border-radius: var(--radius-lg);
   padding: 24px;
   background: var(--bg-card);
@@ -421,7 +430,7 @@
   gap: 16px;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 2px solid var(--border-light);
+  border-bottom: 1px solid var(--config-divider);
 }
 
 .config-group-header > div {
@@ -455,16 +464,262 @@
   border: 1px solid var(--primary-100);
 }
 
+/* 两列字段网格；配合 --flat 为扁平行表单 */
 .config-field-grid {
-  /* 配置项编辑区域强制单列布局，避免出现两三列卡片 */
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+  align-items: stretch;
 }
 
-/* SubForm 嵌套分组样式 */
+/* 扁平行：无卡片边框，行间用分隔线区分 */
+.config-field-grid--flat > .config-field.config-field-row {
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--config-divider);
+  padding: 12px 4px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.config-field-grid--flat {
+  row-gap: 0;
+}
+
+.config-field-grid--flat > .config-field.config-field-row:hover,
+.config-field-grid--flat > .config-field.config-field-row:focus-within {
+  box-shadow: none;
+}
+
+.config-field-grid--flat > .config-field.config-field-row:not(.config-field-span-full) .config-field-body {
+  min-height: 0;
+}
+
+.config-field-grid--flat > .config-field.config-field-dirty {
+  background: color-mix(in srgb, var(--primary-50) 35%, transparent);
+  border-radius: var(--radius-sm);
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.config-form-section {
+  margin-top: 4px;
+}
+
+.config-form-section + .config-form-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--config-divider);
+}
+
+.config-form-section-head {
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary-dark);
+  background: linear-gradient(90deg, var(--primary-50) 0%, transparent 100%);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--primary);
+}
+
+.config-form-section-collapsible {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.config-form-section-collapsible > summary.config-form-section-head {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  border-left: 3px solid var(--primary);
+}
+
+.config-form-section-collapsible > summary.config-form-section-head::-webkit-details-marker {
+  display: none;
+}
+
+.config-form-section-collapsible > summary.config-form-section-head::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--text-muted);
+  transition: transform var(--transition);
+}
+
+.config-form-section-collapsible[open] > summary.config-form-section-head::before {
+  transform: rotate(90deg);
+}
+
+.config-form-section-body {
+  padding-top: 2px;
+}
+
+.config-field-span-full {
+  grid-column: 1 / -1;
+}
+
+.config-field-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.config-field-grid--flat .config-field-body {
+  height: 100%;
+}
+
+.config-field-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+}
+
+.config-field-grid--flat .config-field:not(.config-field-span-full) .config-field-meta {
+  min-height: 4.5rem;
+}
+
+.config-field-meta-full {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.config-field-meta label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+  margin: 0;
+}
+
+/* 控件区纵向堆叠，避免 textarea + 脚注被 flex 横排导致 focus 环压住右侧文字 */
+.config-field-control {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-top: 8px;
+  min-height: var(--config-control-height, 36px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.config-field-control-switch {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: var(--config-control-height, 36px);
+}
+
+.config-field-control > .form-input,
+.config-field-control > textarea.form-input,
+.config-field-control > select.form-input,
+.config-field-control > input.form-input,
+.config-field-control > .subform-editor,
+.config-field-control > .config-radio-group,
+.config-field-control > .config-slider-wrap,
+.config-field-control > .array-object {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.config-control-footnote {
+  margin: 0;
+  padding: 6px 0 0;
+  border-top: 1px dashed var(--config-divider);
+  line-height: 1.45;
+}
+
+.config-field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.config-field-hint-compact {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.9em;
+  max-height: 2.9em;
+}
+
+.config-field-hint-empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 配置页控件：仅用 background-color，勿用 background 简写（会冲掉 select 箭头 repeat/position） */
+.config-field-control > input.form-input,
+.config-field-control > select.form-input,
+.config-field-control > .form-input:not(textarea) {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  line-height: 1.25;
+  border: 1px solid var(--config-border-strong);
+  border-radius: 6px;
+  background-color: var(--bg-card);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--config-border) 50%, transparent);
+  box-sizing: border-box;
+}
+
+.config-field-control > select.form-input {
+  padding-right: 34px;
+}
+
+.config-field-control > input.form-input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.config-field-control > input.form-input:focus,
+.config-field-control > select.form-input:focus,
+.config-field-control > textarea.form-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-100);
+  outline: none;
+}
+
+.config-field-control > textarea.form-input {
+  min-height: 88px;
+  height: auto;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid var(--config-border-strong);
+  border-radius: 6px;
+  background-color: var(--bg-card);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--config-border) 50%, transparent);
+  resize: vertical;
+}
+
+.config-field-control .config-slider-wrap {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+/* SubForm 嵌套分组 */
 .config-subgroup {
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--config-border-strong);
   border-radius: var(--radius);
   padding: 20px;
   background: var(--bg-input);
@@ -479,47 +734,101 @@
 .subform-editor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--bg-input);
-}
-
-.subform-editor-tabs {
-  display: inline-flex;
   gap: 8px;
-  align-items: center;
+  width: 100%;
 }
 
-.subform-tab {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-input);
-  color: var(--text-secondary);
-  border-radius: 999px;
+.config-field-subform .config-field-control {
+  margin-top: 0;
+}
+
+.config-field-subform .subform-editor {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.subform-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.subform-editor-tabs.config-mode-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  border: 1px solid var(--config-border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.subform-editor-tabs.config-mode-toggle .subform-tab {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
   cursor: pointer;
-  font-size: var(--font-size-xs);
+  white-space: nowrap;
   transition: all var(--transition);
 }
 
-.subform-tab:hover {
-  border-color: var(--primary-200);
+.subform-editor-tabs.config-mode-toggle .subform-tab:hover {
   color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
-.subform-tab.active {
+.subform-editor-tabs.config-mode-toggle .subform-tab.active {
   background: var(--primary-50);
-  border-color: var(--primary);
-  color: var(--primary-dark);
+  color: var(--primary);
   font-weight: 600;
 }
 
-.subform-kv,
-.subform-json {
+.subform-editor-tip {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subform-editor-panel {
+  display: block;
+  width: 100%;
+}
+
+.subform-editor-panel .subform-kv,
+.subform-editor-panel .subform-json {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 120px;
   font-family: var(--font-family-mono);
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-tight);
+  line-height: 1.5;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  resize: vertical;
+}
+
+.subform-editor-panel .subform-kv:focus,
+.subform-editor-panel .subform-json:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-100);
+}
+
+.subform-editor-panel .subform-json {
+  min-height: 160px;
 }
 
 .config-subgroup:hover {
@@ -570,42 +879,8 @@
   border: 1px solid var(--primary-100);
 }
 
-.config-field {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  background: var(--bg-card);
-  transition: all var(--transition);
-}
-
-.config-field:hover {
-  border-color: var(--primary-200);
-  box-shadow: var(--shadow-sm);
-}
-
-.config-field:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-100);
-}
-
-.config-field label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
 .config-field .required {
   color: var(--danger);
-}
-
-.config-field-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 8px;
 }
 
 .config-field-example {
@@ -615,7 +890,7 @@
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--bg-input) 70%, transparent);
-  border: 1px dashed var(--border-light);
+  border: 1px dashed var(--config-border);
   line-height: 1.5;
   word-break: break-word;
 }
@@ -634,79 +909,96 @@
   word-break: break-word;
 }
 
-.config-field-dirty {
-  border-color: var(--primary-200);
-  box-shadow: 0 0 0 1px var(--primary-50);
-}
-
-/* 数组对象编辑器（array / list / entry） */
+/* 数组对象编辑器（providers 等 list<entry>） */
 .array-object {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 .array-object-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  background: var(--bg-input);
+  border: 1px solid var(--config-border-strong);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--bg-card);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
 }
 
 .array-object-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   font-weight: 600;
+  font-size: 13px;
   color: var(--text-primary);
 }
 
 .array-object-card-body {
-  display: grid;
-  gap: 12px;
+  display: block;
 }
 
-.array-object-field label {
+.array-object-field-grid {
+  gap: 0 20px;
+}
+
+.array-object-subgroup {
+  grid-column: 1 / -1;
+  border: 1px solid var(--config-border-strong);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border-left: 3px solid var(--primary-light);
+}
+
+.array-object-subgroup-header {
+  margin-bottom: 8px;
+}
+
+.array-object-subgroup-title {
+  display: block;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 4px;
-  display: block;
 }
 
-.array-object-subgroup {
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  background: var(--bg-card);
+.array-object-subgroup .config-field-grid {
+  margin-top: 4px;
 }
 
-.array-object-subgroup-title {
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: var(--text-secondary);
+.array-object-subgroup .array-object-subgroup {
+  margin-top: 8px;
+  border-left-color: var(--primary);
 }
 
 .dynamic-collections {
   display: grid;
-  gap: 20px;
-  margin-top: 24px;
+  gap: 16px;
+  margin-top: 20px;
 }
 
 .dynamic-entry-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  background: var(--bg-input);
+  border: 1px solid var(--config-border-strong);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.dynamic-collection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .config-subgroup-section {
   margin-top: 20px;
   padding-top: 18px;
-  border-top: 1px dashed var(--border-light);
+  border-top: 1px dashed var(--config-divider);
   position: relative;
 }
 
@@ -845,7 +1137,7 @@
   position: absolute;
   inset: 0;
   background: var(--bg-input);
-  border: 1px solid var(--border);
+  border: 1px solid var(--config-border-strong);
   border-radius: 24px;
   transition: all var(--transition);
 }
@@ -860,7 +1152,7 @@
   transform: translateY(-50%);
   background: var(--bg-card);
   border-radius: 50%;
-  box-shadow: 0 0 0 1px var(--border), var(--shadow-sm);
+  box-shadow: 0 0 0 1px var(--config-border), var(--shadow-sm);
   transition: all var(--transition);
 }
 
@@ -884,3 +1176,106 @@
   cursor: not-allowed;
 }
 
+.config-page-dense .config-main {
+  padding: 18px;
+}
+
+.config-page-dense .config-group {
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.config-page-dense .config-group-header {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+}
+
+.config-page-dense .config-field-grid {
+  gap: 8px;
+}
+
+.config-page-dense .config-field-grid--flat > .config-field.config-field-row {
+  padding: 8px 4px;
+}
+
+.config-page-dense .config-subgroup {
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.array-object-providers {
+  gap: 8px;
+}
+
+.array-object-card-compact {
+  border: 1px solid var(--config-border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.array-object-card-compact > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.array-object-card-compact > summary::-webkit-details-marker {
+  display: none;
+}
+
+.array-object-card-compact .array-object-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: color-mix(in srgb, var(--bg-input) 55%, var(--bg-card));
+  border-bottom: 1px solid var(--config-divider);
+}
+
+.array-object-card-compact .array-object-card-title {
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.array-object-card-compact .array-object-card-body-collapsible {
+  padding: 4px 14px 14px;
+}
+
+.array-object-providers .config-form-section:first-child {
+  margin-top: 0;
+}
+
+.array-object-providers .config-form-section-collapsible + .config-form-section-collapsible {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--config-divider);
+}
+
+.array-object-field-grid .subform-editor {
+  background: transparent;
+  border: none;
+}
+
+@media (max-width: 900px) {
+  .subform-editor-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .subform-editor-tip {
+    flex: 1 0 100%;
+    text-align: left;
+  }
+
+  .config-field-grid,
+  .array-object-field-grid,
+  .config-subgroup-section .config-field-grid {
+    grid-template-columns: 1fr;
+  }
+}

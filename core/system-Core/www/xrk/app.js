@@ -79,6 +79,11 @@ import * as apiDebug from './modules/api-debug.js';
 import { configPageMethods } from './modules/config-page.js';
 import * as motion from './modules/motion/gsap-motion.js';
 import { ensurePageLibs } from './modules/runtime-libs.js';
+import {
+  fetchWorkspacePresets,
+  bindWorkspacePanel,
+  normalizeWorkspaceId
+} from './modules/ai-workspace-ui.js';
 
 class App {
   constructor() {
@@ -139,8 +144,11 @@ class App {
     this._chatSettings = {
       workflows: savedWorkflows ? JSON.parse(savedWorkflows) : [],
       persona: localStorage.getItem('chatPersona') || '',
-      provider: localStorage.getItem('chatProvider') || ''
+      provider: localStorage.getItem('chatProvider') || '',
+      llmFactory: localStorage.getItem('chatLlmFactory') || '',
+      workspace: normalizeWorkspaceId(localStorage.getItem('chatWorkspace'))
     };
+    this._aiWorkspacePresets = [];
     this._webUserId = localStorage.getItem('webUserId') ?? 'webclient';
     this._activeEventSource = null;
     // ASR相关状态
@@ -300,6 +308,7 @@ class App {
           enabled: data.enabled !== false,
           defaultProfile: data.defaultProfile ?? '',
           profiles: data.profiles ?? [],
+          vendors: data.vendors ?? [],
           workflows: data.workflows ?? []
         };
       } catch (e) {
@@ -493,6 +502,13 @@ class App {
 
   getHeaders() {
     const headers = { 'Content-Type': 'application/json' };
+    const key = localStorage.getItem('apiKey');
+    if (key) headers['X-API-Key'] = key;
+    return headers;
+  }
+
+  getAuthHeaders() {
+    const headers = {};
     const key = localStorage.getItem('apiKey');
     if (key) headers['X-API-Key'] = key;
     return headers;
@@ -858,10 +874,44 @@ class App {
 
   async _renderAISettings() {
     await this.loadLlmOptions();
-    const providers = (this._llmOptions?.profiles || []).map(p => ({
-      value: p.key || p.provider || p.label || '',
-      label: p.label || p.key || p.provider || ''
-    })).filter(p => p.value);
+    let workspacePresets = this._aiWorkspacePresets || [];
+    try {
+      const wsData = await fetchWorkspacePresets(this);
+      workspacePresets = wsData.workspaces;
+      this._aiWorkspacePresets = workspacePresets;
+      if (!this._chatSettings.workspace) {
+        this._chatSettings.workspace = wsData.defaultId || 'default';
+      }
+    } catch {
+      workspacePresets = [
+        { id: 'default', label: '默认工作区' },
+        { id: 'project', label: '项目根目录' }
+      ];
+    }
+    const selectedWorkspace = normalizeWorkspaceId(this._chatSettings.workspace);
+    const vendors = this._llmOptions?.vendors?.length
+      ? this._llmOptions.vendors
+      : [{
+          id: 'default',
+          label: '全部端点',
+          endpoints: (this._llmOptions?.profiles || []).map((p) => ({
+            key: p.key,
+            label: p.label || p.key,
+            model: p.model
+          }))
+        }];
+    const selectedProvider = this._chatSettings.provider || '';
+    let selectedFactory = this._chatSettings.llmFactory || '';
+    let selectedEndpoint = selectedProvider;
+    if (selectedProvider) {
+      const hit = vendors.find((v) => v.endpoints?.some((e) => e.key === selectedProvider));
+      if (hit) {
+        selectedFactory = hit.id;
+        selectedEndpoint = selectedProvider;
+      }
+    } else if (!selectedFactory && vendors.length === 1) {
+      selectedFactory = vendors[0].id;
+    }
     
     // 后端已仅返回“带 MCP 工具”的工作流，这里直接作为 MCP 工具工作流多选
     const allWorkflows = (this._llmOptions?.workflows || []).map(w => ({
@@ -882,12 +932,46 @@ class App {
           </svg>
         </button>
         <div class="ai-settings-content" id="aiSettingsContent">
-        <div class="ai-settings-section">
-          <label class="ai-settings-label">运营商</label>
-          <select id="aiProviderSelect" class="ai-settings-select">
-            <option value="">默认</option>
-            ${providers.map(p => `<option value="${p.value}" ${this._chatSettings.provider === p.value ? 'selected' : ''}>${p.label}</option>`).join('')}
+        <div class="ai-settings-section ai-workspace-section">
+          <div class="ai-settings-row">
+            <label class="ai-settings-label ai-settings-label-inline" for="aiWorkspaceSelect">工作区</label>
+            <span class="ai-ws-actions">
+              <button type="button" id="aiWorkspaceCreateBtn" class="link-btn" title="新建工作区">新建</button>
+              <button type="button" id="aiWorkspaceUploadBtn" class="link-btn" title="上传到当前目录">上传</button>
+              <button type="button" id="aiWorkspaceRulesBtn" class="link-btn" title="编辑 AGENTS.md">规则</button>
+              <button type="button" id="aiWorkspaceAuditBtn" class="link-btn" title="工具审计">审计</button>
+              <button type="button" id="aiWorkspaceRefreshBtn" class="ai-settings-btn ai-settings-btn-icon" title="刷新文件列表">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                </svg>
+              </button>
+            </span>
+          </div>
+          <select id="aiWorkspaceSelect" class="ai-settings-select">
+            ${workspacePresets.map((w) => `<option value="${w.id}" ${selectedWorkspace === w.id ? 'selected' : ''}>${this.escapeHtml(w.label || w.id)}</option>`).join('')}
           </select>
+          <p class="ai-settings-desc" id="aiWorkspacePathHint">data/ai-workspace · Agent / tools 文件根目录</p>
+          <input type="file" id="aiWorkspaceUploadInput" multiple hidden>
+          <nav id="aiWorkspaceBreadcrumb" class="ai-workspace-breadcrumb" aria-label="工作区路径"></nav>
+          <div class="ai-workspace-files-list ink-scroll" id="aiWorkspaceFilesList">
+            <div class="ai-workspace-files-loading">加载中…</div>
+          </div>
+        </div>
+        <div class="ai-settings-section">
+          <label class="ai-settings-label">LLM 工厂</label>
+          <select id="aiFactorySelect" class="ai-settings-select">
+            <option value="">默认（aistream.yaml）</option>
+            ${vendors.map((v) => `<option value="${this.escapeHtml(v.id)}" ${selectedFactory === v.id ? 'selected' : ''}>${this.escapeHtml(v.label || v.id)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="ai-settings-section">
+          <label class="ai-settings-label">API 端点 / 模型</label>
+          <select id="aiProviderSelect" class="ai-settings-select">
+            <option value="">继承工厂默认</option>
+            ${this._renderAiEndpointOptions(vendors, selectedFactory, selectedEndpoint)}
+          </select>
+          <p class="ai-settings-desc" id="aiEndpointMeta"></p>
         </div>
         <div class="ai-settings-section">
           <label class="ai-settings-label">人设</label>
@@ -922,6 +1006,42 @@ class App {
         </div>
       </div>
     `;
+  }
+
+  _renderAiEndpointOptions(vendors = [], factoryId = '', selectedKey = '') {
+    const vendor = vendors.find((v) => v.id === factoryId) || null;
+    const endpoints = vendor?.endpoints || (factoryId ? [] : vendors.flatMap((v) => v.endpoints || []));
+    return endpoints.map((ep) => {
+      const label = ep.label || ep.key;
+      const modelHint = ep.model ? ` · ${ep.model}` : '';
+      return `<option value="${this.escapeHtml(ep.key)}" ${selectedKey === ep.key ? 'selected' : ''}>${this.escapeHtml(label)}${this.escapeHtml(modelHint)}</option>`;
+    }).join('');
+  }
+
+  _syncAiEndpointMeta() {
+    const meta = document.getElementById('aiEndpointMeta');
+    const select = document.getElementById('aiProviderSelect');
+    if (!meta || !select) return;
+    const key = select.value;
+    if (!key) {
+      meta.textContent = '未指定端点时将使用 aistream.llm.Provider 或工厂默认配置';
+      return;
+    }
+    const profile = (this._llmOptions?.profiles || []).find((p) => p.key === key);
+    if (!profile) {
+      meta.textContent = `端点：${key}`;
+      return;
+    }
+    const parts = [profile.model ? `模型 ${profile.model}` : null, profile.baseUrl ? profile.baseUrl : null].filter(Boolean);
+    meta.textContent = parts.join(' · ') || `端点：${key}`;
+  }
+
+  _refreshAiEndpointSelect(factoryId, selectedKey = '') {
+    const select = document.getElementById('aiProviderSelect');
+    if (!select) return;
+    const vendors = this._llmOptions?.vendors || [];
+    select.innerHTML = `<option value="">继承工厂默认</option>${this._renderAiEndpointOptions(vendors, factoryId, selectedKey)}`;
+    this._syncAiEndpointMeta();
   }
   
   _unbindChatEvents() {
@@ -2209,6 +2329,8 @@ class App {
         };
       }
 
+      requestBody.workspace = { id: normalizeWorkspaceId(this._chatSettings.workspace) };
+
       this._chatStreamState = { running: true, source: 'ai' };
       this.updateChatStatus('AI 生成中...');
       this.setChatInteractionState(true);
@@ -2281,6 +2403,14 @@ class App {
       if (provider) {
         requestBody.model = provider;
       }
+
+      const workflows = Array.isArray(this._chatSettings.workflows)
+        ? this._chatSettings.workflows.filter(Boolean)
+        : [];
+      if (workflows.length > 0) {
+        requestBody.workflow = { workflows };
+      }
+      requestBody.workspace = { id: normalizeWorkspaceId(this._chatSettings.workspace) };
 
       this._chatStreamState = { running: true, source: 'voice' };
       this.updateVoiceStatus('AI 思考中...');
@@ -2781,6 +2911,31 @@ class App {
       uploadFd.append('file', fileToUpload);
     }
 
+    if (isAIMode) {
+      const ws = normalizeWorkspaceId(this._chatSettings.workspace);
+      const dir = this._aiWorkspaceDir || '';
+      const q = new URLSearchParams({ workspace: ws, dir });
+      const uploadResp = await fetch(`${this.serverUrl}/api/ai/workspace/files/upload?${q}`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: uploadFd
+      });
+      if (!uploadResp.ok) {
+        const raw = await uploadResp.text().catch(() => '');
+        let msg = uploadResp.statusText || '图片上传失败';
+        try {
+          const j = raw ? JSON.parse(raw) : null;
+          msg = j?.message || j?.error || msg;
+        } catch {}
+        throw new Error(msg);
+      }
+      const uploadData = await uploadResp.json().catch(() => null);
+      const urls = (uploadData?.files || uploadData?.data?.files || []).map((f) => f.url).filter(Boolean);
+      if (urls.length === 0) throw new Error('图片上传成功但未返回可用的 url');
+      this._refreshAIWorkspaceFiles?.();
+      return urls;
+    }
+
     const uploadResp = await fetch(`${this.serverUrl}/api/file/upload`, {
       method: 'POST',
       headers: apiKey ? { 'X-API-Key': apiKey } : undefined,
@@ -2789,7 +2944,7 @@ class App {
 
     if (!uploadResp.ok) {
       const raw = await uploadResp.text().catch(() => '');
-      let msg = uploadResp.statusText || (isAIMode ? '图片上传失败' : '文件上传失败');
+      let msg = uploadResp.statusText || '文件上传失败';
       try {
         const j = raw ? JSON.parse(raw) : null;
         msg = j?.message || j?.error || msg;
@@ -2809,7 +2964,7 @@ class App {
     }
 
     if (urls.length === 0) {
-      throw new Error(isAIMode ? '图片上传成功但未返回可用的 file_url' : '文件上传成功但未返回可用的 file_url');
+      throw new Error('文件上传成功但未返回可用的 file_url');
     }
 
     return urls;

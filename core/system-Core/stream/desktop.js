@@ -6,7 +6,8 @@ import { exec } from '#utils/exec-async.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { BaseTools } from '#utils/base-tools.js';
-import { getDefaultDesktopDirSync, resolveUserDesktopDirAsync } from '#utils/user-dirs.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { resolveConfiguredWorkspace, ensureAgentWorkspaceSync, getConfiguredDefaultWorkspaceId } from '../lib/ai-workspace-runtime.js';
 import si from 'systeminformation';
 import { fetchWithPolicy } from '../lib/net/fetcher.js';
 
@@ -57,9 +58,14 @@ export default class DesktopStream extends AIStream {
       embedding: { enabled: true }
     });
 
-    // 工作区在 init() 中异步精解析；构造期先用同步默认桌面
-    this.workspace = getDefaultDesktopDirSync();
+    this.workspace = ensureAgentWorkspaceSync(getConfiguredDefaultWorkspaceId());
     this.tools = null;
+  }
+
+  applyWorkspaceConfig() {
+    const fileCfg = getAistreamConfigOptional().tools?.file ?? {};
+    this.workspace = resolveConfiguredWorkspace(fileCfg.workspace);
+    this.tools = new BaseTools(this.workspace);
   }
 
   /**
@@ -70,8 +76,7 @@ export default class DesktopStream extends AIStream {
   }
 
   async init() {
-    this.workspace = await resolveUserDesktopDirAsync();
-    this.tools = new BaseTools(this.workspace);
+    this.applyWorkspaceConfig();
     await super.init();
     this.registerAllFunctions();
   }
@@ -633,7 +638,7 @@ export default class DesktopStream extends AIStream {
     });
 
     this.registerMCPTool('create_folder', {
-      description: '在当前工作区（默认用户桌面）下创建文件夹，跨平台。',
+      description: '在当前 Agent 工作区（data/ai-workspace）下创建文件夹，跨平台。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -671,7 +676,7 @@ export default class DesktopStream extends AIStream {
     });
 
     this.registerMCPTool('open_explorer', {
-      description: '在文件管理器中打开当前工作区（桌面）目录，跨平台。',
+      description: '在文件管理器中打开当前 Agent 工作区目录，跨平台。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -830,7 +835,7 @@ export default class DesktopStream extends AIStream {
     });
 
     this.registerMCPTool('create_word_document', {
-      description: '生成并保存Word文档文件（.docx格式）。根据提供的文件名和内容创建新的Word文档文件并保存到桌面。注意：这是创建文档文件，不是打开记事本应用程序。如果用户要求"打开记事本"，应使用open_system_tool工具，而不是此工具。',
+      description: '生成并保存 Word 文档（.docx）。文件保存到当前 Agent 工作区。注意：这是创建文档，不是打开记事本；打开记事本请用 open_system_tool。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1196,7 +1201,7 @@ export default class DesktopStream extends AIStream {
 
     this.registerMCPTool('open_path', {
       description:
-        '用系统默认应用打开文件或目录。相对路径相对于当前工作区（默认用户桌面）；支持绝对路径。',
+        '用系统默认应用打开文件或目录。相对路径相对于当前 Agent 工作区（data/ai-workspace）；支持绝对路径。',
       inputSchema: {
         type: 'object',
         properties: {

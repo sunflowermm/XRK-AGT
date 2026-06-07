@@ -40,7 +40,7 @@ export function renderConfigPage(app) {
     : app.renderConfigPlaceholder();
 
   content.innerHTML = `
-      <div class="config-page">
+      <div class="config-page${app.isConfigDense?.() ? ' config-page-dense' : ''}">
         <aside class="config-sidebar">
           <div class="config-sidebar-header">
             <h1 class="dashboard-title">配置管理</h1>

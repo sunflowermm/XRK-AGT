@@ -19,9 +19,9 @@ global:
 # ----------------------------------------
 # LLM 厂商
 # ----------------------------------------
-# 可选：volcengine、xiaomimimo、openai、openai_compat、gemini、anthropic、azure_openai。详细配置见 data/server_bots/{port}/*_llm.yaml
+# 填写各工厂 providers[] 条目的 key（先在 data/server_bots/{port}/*_llm.yaml 配置端点）
 llm:
-  Provider: volcengine
+  Provider: ""
   timeout: 360000      # 请求超时（毫秒）
   retry:
     enabled: true
@@ -68,10 +68,18 @@ mcp:
   defaultRemoteMcp: []     # 例如 ["github", "browser"]，对应 remote-mcp.github / remote-mcp.browser
   toolMergeStrategy: preferRequest  # 工具合并策略：preferRequest | preferStream | merge
 
+# Agent 文件工作区（tools / desktop MCP 的 cwd，以及控制台工作区预设）
+workspace:
+  defaultId: default       # data/ai-workspace/{id}；控制台默认选中
+  audit:
+    enabled: true
+    maxEntries: 200
+
 # Agent 工作区上下文（Skills / Rules / OpenClaw 模板文件 / Memory / Subagents，注入到工作流 system prompt）
+# 注意：agentWorkspace.root 控制「注入到 system prompt 的 Markdown 根」，与 tools.file.workspace（文件工具 cwd）可不同
 agentWorkspace:
   enabled: true
-  root: ""                 # 留空=项目根；可填相对项目根的路径
+  root: ""                 # 留空=项目根；可填相对项目根的路径；请求级 workspace 会覆盖
   # 留空=全部；否则仅注入列出的入口：工作流 name（chat/web/desktop/tools…）+ v3（POST /api/v3/chat/completions）
   streams: []
   includeRules: true
@@ -105,7 +113,7 @@ embedding:
 tools:
   # tools 工作流：文件/命令工作区（core/system-Core/stream/tools.js）
   file:
-    workspace: ""              # 空=用户桌面；~/ 开头；绝对路径；或相对项目根
+    workspace: ""              # 空=data/ai-workspace/{workspace.defaultId}；agent:xxx；project；~/；绝对/相对路径
     maxReadChars: 500000       # read 返回正文最大字符，超出截断并标注
     grepMaxResults: 100
     runEnabled: true

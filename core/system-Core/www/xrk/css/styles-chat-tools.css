@@ -140,7 +140,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   cursor: pointer;
   user-select: none;
   transition: background 0.2s ease;
@@ -163,10 +163,11 @@
 
 .chat-tool-block-title {
   flex: 1;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--primary-dark);
   word-break: break-all;
+  letter-spacing: 0.01em;
 }
 
 .chat-tool-block-toggle {

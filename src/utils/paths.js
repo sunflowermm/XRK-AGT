@@ -23,6 +23,8 @@ const _baseDirs = [
   path.join(_data, 'server_bots'),
   path.join(_data, 'uploads'),
   path.join(_data, 'media'),
+  path.join(_data, 'ai-workspace'),
+  path.join(_data, 'ai-workspace', 'default'),
   path.join(_data, 'stdin'),
   _resources,
   _trash,
@@ -114,6 +116,7 @@ export default {
   configDefault: path.join(_config, 'default_config'),
   dataServerBots: path.join(_data, 'server_bots'),
   dataModels: path.join(_data, 'models'),
+  dataAiWorkspace: path.join(_data, 'ai-workspace'),
 
   getCoreDirs,
   getCoreSubDirs,

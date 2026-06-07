@@ -1,3 +1,4 @@
+import { pick } from '../../utils/llm/openai-chat-utils.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
@@ -5,14 +6,6 @@ import { iterateSSE } from '../../utils/llm/sse-utils.js';
 import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
 import { MCPToolAdapter } from '../../utils/llm/mcp-tool-adapter.js';
 import BotUtil from '../../utils/botutil.js';
-
-function pick(overrides, config, keys) {
-  for (const k of keys) {
-    if (overrides?.[k] !== undefined) return overrides[k];
-    if (config?.[k] !== undefined) return config[k];
-  }
-  return undefined;
-}
 
 function isOpenAIResponsesBuiltInTool(tool) {
   const type = String(tool?.type || '').trim();
