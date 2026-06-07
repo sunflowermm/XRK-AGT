@@ -28,6 +28,18 @@ function isConfigListItemVisible(list, item) {
   return itemTop >= visibleTop && itemBottom <= visibleBottom;
 }
 
+/** 选中项是否与列表可视区有交集（比 fully visible 宽松，避免 restore 时侧栏跳动） */
+function isConfigListItemInViewport(list, item) {
+  if (!list || !item) return true;
+  const listHeight = list.clientHeight;
+  if (listHeight <= 0) return true;
+  const visibleTop = list.scrollTop;
+  const visibleBottom = visibleTop + listHeight;
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+  return itemBottom > visibleTop && itemTop < visibleBottom;
+}
+
 /** 在 .config-list 容器内滚动，避免 scrollIntoView 误滚整页 */
 function scrollConfigListItem(list, item, { align = 'nearest', behavior = 'auto' } = {}) {
   if (!list || !item) return;
@@ -213,6 +225,35 @@ export const configPageMethods = {
     }, 320);
   },
 
+  _captureConfigEditorScroll() {
+    const list = document.getElementById('configList');
+    const content = document.querySelector('.content');
+    const listTop = list?.scrollTop ?? 0;
+    const contentTop = content?.scrollTop ?? 0;
+    if (list) this.persistConfigListScroll(listTop, { flush: true });
+    if (this._configState) this._configState.mainScrollTop = contentTop;
+    return { listTop, contentTop };
+  },
+
+  _restoreConfigEditorScroll(snapshot = null) {
+    const list = document.getElementById('configList');
+    const content = document.querySelector('.content');
+    const listTop = snapshot?.listTop ?? this._configState?.listScrollTop;
+    const contentTop = snapshot?.contentTop ?? this._configState?.mainScrollTop;
+    const apply = () => {
+      if (list && typeof listTop === 'number' && Number.isFinite(listTop)) {
+        list.scrollTop = listTop;
+      }
+      if (content && typeof contentTop === 'number' && Number.isFinite(contentTop)) {
+        content.scrollTop = contentTop;
+      }
+    };
+    requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(apply);
+    });
+  },
+
   _applyConfigListView(mode = 'restore') {
     if (!this._configState) return;
     const name = this._configState.selected?.name;
@@ -232,7 +273,7 @@ export const configPageMethods = {
 
     if (restoreScroll) {
       list.scrollTop = savedScroll;
-      if (!isConfigListItemVisible(list, item)) {
+      if (!isConfigListItemInViewport(list, item)) {
         scrollConfigListItem(list, item, { align: 'nearest', behavior: 'auto' });
       }
     } else if (mode === 'select') {
@@ -535,6 +576,7 @@ export const configPageMethods = {
 
   async loadSelectedConfigDetail() {
     if (!this._configState?.selected) return;
+    const scrollSnapshot = this._captureConfigEditorScroll();
     const main = document.getElementById('configMain');
     const { name } = this._configState.selected;
     const child = this._configState.selectedChild;
@@ -591,6 +633,7 @@ export const configPageMethods = {
       if (mainEl) mainEl.innerHTML = `<div class="empty-state"><p>加载失败：${this.escapeHtml(e.message)}</p></div>`;
     } finally {
       if (this._configState) this._configState.loading = false;
+      this._restoreConfigEditorScroll(scrollSnapshot);
     }
   },
 
@@ -758,8 +801,10 @@ export const configPageMethods = {
         }
         const densityBtn = e.target.closest('#configDensityToggle');
         if (densityBtn) {
+          const snap = this._captureConfigEditorScroll();
           this.toggleConfigDense();
           this.renderConfigFormPanel();
+          this._restoreConfigEditorScroll(snap);
           return;
         }
         const saveBtn = e.target.closest('#configSaveBtn');

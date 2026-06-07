@@ -57,6 +57,12 @@ import {
 } from './modules/pages/chat.js';
 import { renderConfigPage } from './modules/pages/config.js';
 import { createPageCache } from './modules/page-cache.js';
+import {
+  readStoredChatScroll,
+  persistChatScroll,
+  clearStoredChatScroll,
+  applyChatScroll
+} from './modules/chat-scroll.js';
 
 import {
   updateSystemStatus as updateSystemStatusPanel,
@@ -231,6 +237,10 @@ class App {
     window.addEventListener('beforeunload', () => {
       if (this._statusUpdateTimer) {
         clearInterval(this._statusUpdateTimer);
+      }
+      if (this.currentPage === 'chat') {
+        const box = document.getElementById('chatMessages');
+        if (box) persistChatScroll(this._chatMode, box.scrollTop, { flush: true });
       }
       this._unbindChatEvents();
       this._releaseDeviceWs();
@@ -578,6 +588,8 @@ class App {
 
   _onPageHide(page) {
     if (page === 'chat') {
+      const box = document.getElementById('chatMessages');
+      if (box) persistChatScroll(this._chatMode, box.scrollTop, { flush: true });
       this._unbindChatEvents();
       this.stopActiveStream();
       this._releaseDeviceWs();
@@ -585,6 +597,10 @@ class App {
     if (page === 'config') {
       const list = document.getElementById('configList');
       if (list) this.persistConfigListScroll(list.scrollTop, { flush: true });
+      const content = document.querySelector('.content');
+      if (content && this._configState) {
+        this._configState.mainScrollTop = content.scrollTop;
+      }
     }
   }
 
@@ -1164,19 +1180,20 @@ class App {
     const box = document.getElementById('chatMessages');
     if (!box || this._isRestoringHistory) return;
 
-    const cached = this._chatMessagesCache[this._chatMode];
+    const mode = this._chatMode;
+    const cached = this._chatMessagesCache[mode];
     if (cached?.html) {
-      box.style.scrollBehavior = 'auto';
       box.innerHTML = cached.html;
-      box.scrollTop = cached.scrollTop ?? 0;
-      box.style.removeProperty('scroll-behavior');
+      applyChatScroll(box, cached.scrollTop ?? readStoredChatScroll(mode));
       return;
     }
 
     if (box.querySelector('.chat-message, .voice-message')) return;
 
-    this._renderHistoryIntoBox(box, this._getCurrentChatHistory());
-    requestAnimationFrame(() => this.scrollToBottom(false));
+    const history = this._getCurrentChatHistory();
+    this._renderHistoryIntoBox(box, history);
+    const savedTop = readStoredChatScroll(mode);
+    applyChatScroll(box, history.length > 0 ? savedTop : null);
   }
 
   appendChat(role, text, options = {}) {
@@ -1864,6 +1881,7 @@ class App {
     const box = document.getElementById('chatMessages');
     if (box) box.innerHTML = '';
     this._chatMessagesCache[this._chatMode] = null;
+    clearStoredChatScroll(this._chatMode);
     if (this._isVoiceMode()) {
       this.updateVoiceEmotion('happy');
       this.updateVoiceStatus('点击麦克风开始对话');

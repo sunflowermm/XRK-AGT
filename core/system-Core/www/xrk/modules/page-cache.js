@@ -2,7 +2,7 @@
 const PAGE_SCROLL_TARGETS = {
   home: ['.dashboard'],
   chat: ['#chatMessages', '.ai-settings-content'],
-  config: ['#configList', '#configMain'],
+  config: ['#configList'],
   api: ['.api-container']
 };
 

@@ -1,4 +1,5 @@
 import VolcengineLLMClient from './VolcengineLLMClient.js';
+import DeepSeekLLMClient from './DeepSeekLLMClient.js';
 import XiaomiMiMoLLMClient from './XiaomiMiMoLLMClient.js';
 import OpenAILLMClient from './OpenAILLMClient.js';
 import GeminiLLMClient from './GeminiLLMClient.js';
@@ -15,6 +16,7 @@ import AzureOpenAICompatibleLLMClient from './AzureOpenAICompatibleLLMClient.js'
 
 const builtinClientFactories = new Map([
   ['volcengine', (config) => new VolcengineLLMClient(config)],
+  ['deepseek', (config) => new DeepSeekLLMClient(config)],
   ['xiaomimimo', (config) => new XiaomiMiMoLLMClient(config)],
   ['openai', (config) => new OpenAILLMClient(config)],
   ['gemini', (config) => new GeminiLLMClient(config)],
@@ -39,6 +41,7 @@ function readFactoryCfg(configKey) {
 /** 所有 LLM 工厂统一从 providers[] 解析；YAML 默认仅 providers: [] */
 const factoryRegistry = [
   { configKey: 'volcengine_llm', factoryType: 'builtin', protocol: 'volcengine', displayName: '火山引擎（官方）' },
+  { configKey: 'deepseek_llm', factoryType: 'builtin', protocol: 'deepseek', displayName: 'DeepSeek（官方）' },
   { configKey: 'xiaomimimo_llm', factoryType: 'builtin', protocol: 'xiaomimimo', displayName: '小米 MiMo（官方）' },
   { configKey: 'openai_llm', factoryType: 'builtin', protocol: 'openai', displayName: 'OpenAI（官方）' },
   { configKey: 'gemini_llm', factoryType: 'builtin', protocol: 'gemini', displayName: 'Gemini（官方）' },

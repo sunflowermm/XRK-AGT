@@ -29,6 +29,7 @@ description: 当你需要配置/新增/排查 LLM 提供商（OpenAI/Azure/Gemin
 | **gemini** / **gemini_compat** | Gemini 3 建议默认 temperature；thinking 用 `thinkingLevel`（`extraBody`） | 采样字段保留；无 MCP 工具字段 |
 | **azure_openai** / **azure_openai_compat** | `deployment` + `api-version`；Chat 字段同 OpenAI | compat 对齐 builtin + `AUTH_FIELDS` + penalties + `stripToolTraces` |
 | **volcengine** | OpenAI-like + `thinking.type`: enabled/disabled/**auto**；另有 `reasoning_effort` | preset 含 `reasoningEffort`；thinking enum 含 `auto` |
+| **deepseek** | OpenAI-like + `thinking.type` enabled/disabled；`reasoning_effort` 仅 high/max；`user_id`；思考模式下采样参数无效；工具轮次需 `reasoning_content` | preset 固定 `tokenField=max_tokens`；Client 剥离思考模式无效采样字段 |
 | **xiaomimimo** | `max_completion_tokens`；`thinking.type` 仅 enabled/disabled | preset 固定 `tokenField`；thinking 无 `auto` |
 | **ollama_compat** | 参数在 `options`：`num_predict`、`top_p`、`stop`、`repeat_penalty` | Client 映射 stop / frequencyPenalty→repeat_penalty |
 | **newapi_compat** / **cherryin_compat** | OpenAI-like 聚合网关 | 与 `openai_compat` 同字段集 `OPENAI_CHAT_COMPAT` |

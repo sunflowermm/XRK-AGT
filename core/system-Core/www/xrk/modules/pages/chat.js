@@ -7,6 +7,7 @@ import {
   syncAiEndpointMeta,
   refreshAiEndpointSelect
 } from '../ai-llm-settings.js';
+import { persistChatScroll } from '../chat-scroll.js';
 
 export async function renderChatPage(app) {
   const content = document.getElementById('content');
@@ -227,7 +228,10 @@ export function bindChatEvents(app) {
       if (app._chatMode === mode) return;
       const oldMode = app._chatMode;
       const box = document.getElementById('chatMessages');
-      if (box) app._chatMessagesCache[oldMode] = { scrollTop: box.scrollTop, scrollHeight: box.scrollHeight, html: box.innerHTML };
+      if (box) {
+        persistChatScroll(oldMode, box.scrollTop, { flush: true });
+        app._chatMessagesCache[oldMode] = { scrollTop: box.scrollTop, html: box.innerHTML };
+      }
       app._chatMode = mode;
       localStorage.setItem('chatMode', mode);
       await app._switchChatMode(mode);
@@ -337,6 +341,18 @@ export function bindChatEvents(app) {
   const quoteStrip = document.getElementById('eventQuoteStrip');
   const quoteCancel = quoteStrip?.querySelector('.event-quote-cancel');
   if (quoteCancel) safeBind(quoteCancel, 'click', () => app._clearEventReplyState());
+
+  const chatMessages = document.getElementById('chatMessages');
+  if (chatMessages) {
+    let scrollPersistRaf = 0;
+    safeBind(chatMessages, 'scroll', () => {
+      if (scrollPersistRaf) return;
+      scrollPersistRaf = requestAnimationFrame(() => {
+        scrollPersistRaf = 0;
+        persistChatScroll(app._chatMode, chatMessages.scrollTop);
+      });
+    });
+  }
 
   const chatContainer = document.querySelector('.chat-container');
   if (chatContainer && !chatContainer.dataset._dropBound) {

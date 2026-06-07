@@ -526,6 +526,84 @@ export const LLM_PROVIDER_PRESETS = {
       ...RUNTIME_FIELDS
     ]
   },
+  deepseek: {
+    itemLabel: 'DeepSeek 端点',
+    fixedProtocol: 'deepseek',
+    extraFields: {
+      baseUrl: {
+        type: 'string',
+        label: 'API 基础地址',
+        description: '不含 path，官方默认 https://api.deepseek.com',
+        default: 'https://api.deepseek.com',
+        component: 'Input',
+        layout: 'full'
+      },
+      path: {
+        type: 'string',
+        label: '接口路径',
+        default: '/chat/completions',
+        component: 'Input',
+        layout: 'half'
+      },
+      model: {
+        type: 'string',
+        label: '模型名（model）',
+        description: 'deepseek-v4-flash（快）/ deepseek-v4-pro；旧版 deepseek-chat、deepseek-reasoner 已弃用',
+        enum: ['deepseek-v4-flash', 'deepseek-v4-pro'],
+        default: 'deepseek-v4-flash',
+        component: 'Select'
+      },
+      thinkingType: {
+        type: 'string',
+        label: 'thinking.type',
+        description: '思考模式：enabled（默认）/ disabled；enabled 时 temperature 等采样参数不生效',
+        enum: ['enabled', 'disabled'],
+        default: 'enabled',
+        component: 'Select'
+      },
+      reasoningEffort: {
+        type: 'string',
+        label: 'reasoning_effort',
+        description: '思考强度：high（默认）/ max；low、medium 在 API 侧映射为 high',
+        enum: ['high', 'max'],
+        default: 'high',
+        component: 'Select'
+      },
+      userId: {
+        type: 'string',
+        label: 'user_id',
+        description: '可选；用于缓存命中与请求调度优化',
+        default: '',
+        component: 'Input'
+      },
+      tokenField: {
+        type: 'string',
+        label: 'Token 字段名',
+        description: 'DeepSeek 官方使用 max_tokens',
+        enum: ['max_tokens'],
+        default: 'max_tokens',
+        component: 'Select'
+      }
+    },
+    include: [
+      ...IDENTITY_FIELDS,
+      ...ENDPOINT_FIELDS,
+      'model',
+      'thinkingType',
+      'reasoningEffort',
+      'maxTokens',
+      'tokenField',
+      'temperature',
+      'topP',
+      'presencePenalty',
+      'frequencyPenalty',
+      'stop',
+      'responseFormat',
+      'userId',
+      ...TOOL_FIELDS,
+      ...RUNTIME_FIELDS
+    ]
+  },
   xiaomimimo: {
     itemLabel: 'MiMo 端点',
     fixedProtocol: 'xiaomimimo',

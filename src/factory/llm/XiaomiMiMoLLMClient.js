@@ -2,6 +2,7 @@ import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-uti
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
+import { createToolNameMapper } from '../../utils/llm/tool-name-utils.js';
 import BotUtil from '../../utils/botutil.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 
@@ -16,12 +17,12 @@ import { iterateSSE } from '../../utils/llm/sse-utils.js';
  * 模型本身是纯文本的，图片由上游转为简单的占位文本后再交给 MiMo 处理（不再依赖独立的识图工厂）。
  */
 export default class XiaomiMiMoLLMClient {
+  _toolNames = createToolNameMapper();
+
   constructor(config = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
-    // 工具名称映射：规范化名称 -> 原始名称
-    this._toolNameMap = new Map();
   }
 
   /**
@@ -72,106 +73,13 @@ export default class XiaomiMiMoLLMClient {
   }
 
   /**
-   * 规范化工具名称以符合小米 MiMo API 要求
-   * 要求：只能包含 a-z、A-Z、0-9、下划线(_)和连字符(-)，最大长度64
-   * @param {string} originalName - 原始工具名称（可能包含点号等）
-   * @returns {string} 规范化后的名称
-   */
-  normalizeToolName(originalName) {
-    if (!originalName || typeof originalName !== 'string') return originalName;
-    
-    // 将点号替换为下划线，移除其他不符合要求的字符
-    let normalized = originalName
-      .replace(/\./g, '_')
-      .replace(/[^a-zA-Z0-9_-]/g, '_')
-      .substring(0, 64);
-    
-    // 确保不以数字开头
-    if (/^\d/.test(normalized)) {
-      normalized = 'tool_' + normalized;
-    }
-    
-    // 存储映射关系
-    this._toolNameMap.set(normalized, originalName);
-    return normalized;
-  }
-
-  /**
-   * 将规范化的工具名称还原为原始名称
-   * @param {string} normalizedName - 规范化后的名称
-   * @returns {string} 原始工具名称
-   */
-  denormalizeToolName(normalizedName) {
-    return this._toolNameMap.get(normalizedName) || normalizedName;
-  }
-
-  /**
-   * 规范化工具列表中的名称
-   * @param {Array} tools - 工具列表
-   * @returns {Array} 规范化后的工具列表
-   */
-  normalizeTools(tools) {
-    if (!Array.isArray(tools)) return tools;
-    return tools.map(tool => {
-      if (tool?.type === 'function' && tool.function?.name) {
-        return {
-          ...tool,
-          function: { ...tool.function, name: this.normalizeToolName(tool.function.name) }
-        };
-      }
-      return tool;
-    });
-  }
-
-  /**
-   * 规范化消息数组中的 tool_calls
-   * @param {Array} messages - 消息数组
-   * @returns {Array} 规范化后的消息数组
-   */
-  normalizeMessages(messages) {
-    if (!Array.isArray(messages)) return messages;
-    return messages.map(msg => {
-      if (msg.tool_calls?.length > 0) {
-        return {
-          ...msg,
-          tool_calls: msg.tool_calls.map(tc => ({
-            ...tc,
-            function: tc.function?.name
-              ? { ...tc.function, name: this.normalizeToolName(tc.function.name) }
-              : tc.function
-          }))
-        };
-      }
-      return msg;
-    });
-  }
-
-  /**
-   * 还原工具调用中的名称
-   * @param {Array} toolCalls - 工具调用列表
-   * @returns {Array} 还原后的工具调用列表
-   */
-  denormalizeToolCalls(toolCalls) {
-    if (!Array.isArray(toolCalls)) return toolCalls;
-    return toolCalls.map(tc => {
-      if (tc.function?.name) {
-        return {
-          ...tc,
-          function: { ...tc.function, name: this.denormalizeToolName(tc.function.name) }
-        };
-      }
-      return tc;
-    });
-  }
-
-  /**
    * 构建请求体（OpenAI 兼容格式）
    * 小米 MiMo API 使用 max_completion_tokens 而非 max_tokens
    * 支持高级参数：stop、thinking、tool_choice、tools、response_format
    */
   buildBody(messages, overrides = {}) {
     // 规范化消息中的 tool_calls（多轮工具调用时需要）
-    const normalizedMessages = this.normalizeMessages(messages);
+    const normalizedMessages = this._toolNames.normalizeMessages(messages);
 
     // 复用 OpenAI-like 归一化逻辑，确保：
     // - extraBody 生效
@@ -204,7 +112,7 @@ export default class XiaomiMiMoLLMClient {
 
     // MiMo 对 tool.name 有严格限制：出站 tools 需要规范化名称
     if (Array.isArray(body.tools) && body.tools.length > 0) {
-      body.tools = this.normalizeTools(body.tools);
+      body.tools = this._toolNames.normalizeTools(body.tools);
     }
 
     return body;
@@ -244,12 +152,12 @@ export default class XiaomiMiMoLLMClient {
       if (!message) break;
 
       if (message.tool_calls?.length > 0 && enableMcpTools) {
-        const denormalizedToolCalls = this.denormalizeToolCalls(message.tool_calls);
+        const denormalizedToolCalls = this._toolNames.denormalizeToolCalls(message.tool_calls);
         for (const tc of denormalizedToolCalls) {
           const name = tc.function?.name;
           if (name && !executedToolNames.includes(name)) executedToolNames.push(name);
         }
-        currentMessages.push({ ...message, tool_calls: denormalizedToolCalls });
+        currentMessages.push({ ...message, tool_calls: message.tool_calls });
         const toolResults = await partitionAndExecuteToolCalls(denormalizedToolCalls, overrides);
         if (toolResults === null) return executedToolNames.length ? { content: '', executedToolNames } : '';
         currentMessages.push(...toolResults);
@@ -308,12 +216,12 @@ export default class XiaomiMiMoLLMClient {
       
       if (toolCallsCollector.toolCalls.length > 0 && toolCallsCollector.finishReason === 'tool_calls' && enableMcp) {
         BotUtil.makeLog('info', `[XiaomiMiMoLLMClient] 检测到工具调用，执行工具: ${toolCallsCollector.toolCalls.length}个`, 'LLMFactory');
-        const denormalized = this.denormalizeToolCalls(toolCallsCollector.toolCalls);
+        const denormalized = this._toolNames.denormalizeToolCalls(toolCallsCollector.toolCalls);
         currentMessages.push({
           role: 'assistant',
           content: toolCallsCollector.content || null,
           reasoning_content: toolCallsCollector.reasoningContent || null,
-          tool_calls: denormalized
+          tool_calls: toolCallsCollector.toolCalls
         });
         
         const buildPayload = (mid, res) => mid.map((tc, i) => ({

@@ -48,7 +48,8 @@ export function renderConfigPage(app) {
       jsonText: '',
       jsonDirty: false,
       loading: false,
-      listScrollTop: app.readStoredConfigListScroll?.() ?? null
+      listScrollTop: app.readStoredConfigListScroll?.() ?? null,
+      mainScrollTop: null
     };
     try {
       const lastName = localStorage.getItem('lastConfigName') || '';
@@ -108,6 +109,18 @@ export function renderConfigPage(app) {
   const listContainer = document.getElementById('configList');
   if (listContainer) {
     bindConfigListEvents(app, listContainer);
+  }
+
+  const contentScroller = document.querySelector('.content');
+  if (contentScroller) {
+    let mainScrollRaf = 0;
+    contentScroller.addEventListener('scroll', () => {
+      if (mainScrollRaf) return;
+      mainScrollRaf = requestAnimationFrame(() => {
+        mainScrollRaf = 0;
+        if (app._configState) app._configState.mainScrollTop = contentScroller.scrollTop;
+      });
+    }, { passive: true });
   }
 
   app.loadConfigList();
