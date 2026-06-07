@@ -8,9 +8,62 @@ import { formatKeyValueLines, parseKeyValueLines } from './utils.js';
 import { showPromptDialog as showPromptDialogUI } from './ui/prompt-dialog.js';
 import { groupProviderSchemaFields } from './llm-provider-ui.js';
 
+let _configScrollPersistTimer = null;
+let _configListSyncRaf = 0;
+let _configListSyncMode = 'restore';
+
 function escapeConfigItemSelector(name) {
   const id = String(name ?? '');
   return typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(id) : id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function isConfigListItemVisible(list, item) {
+  if (!list || !item) return true;
+  const listHeight = list.clientHeight;
+  if (listHeight <= 0) return true;
+  const visibleTop = list.scrollTop;
+  const visibleBottom = visibleTop + listHeight;
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+  return itemTop >= visibleTop && itemBottom <= visibleBottom;
+}
+
+/** 在 .config-list 容器内滚动，避免 scrollIntoView 误滚整页 */
+function scrollConfigListItem(list, item, { align = 'nearest', behavior = 'auto' } = {}) {
+  if (!list || !item) return;
+  const listHeight = list.clientHeight;
+  const itemHeight = item.offsetHeight;
+  if (listHeight <= 0) return;
+
+  const itemTop = item.offsetTop;
+  let targetTop;
+
+  if (align === 'center') {
+    targetTop = itemTop - (listHeight - itemHeight) / 2;
+  } else {
+    if (isConfigListItemVisible(list, item)) return;
+    const visibleTop = list.scrollTop;
+    targetTop = itemTop < visibleTop
+      ? itemTop - 8
+      : itemTop - listHeight + itemHeight + 8;
+  }
+
+  const maxScroll = Math.max(0, list.scrollHeight - listHeight);
+  targetTop = Math.max(0, Math.min(targetTop, maxScroll));
+  list.scrollTo({ top: targetTop, behavior });
+}
+
+function markConfigListActive(list, name) {
+  if (!list || !name) return null;
+  const item = list.querySelector(`.config-item[data-name="${escapeConfigItemSelector(name)}"]`);
+  if (!item) return null;
+  list.querySelectorAll('.config-item').forEach((el) => {
+    el.classList.remove('active');
+    el.setAttribute('aria-pressed', 'false');
+  });
+  item.classList.add('active');
+  item.setAttribute('aria-pressed', 'true');
+  return item;
 }
 
 export const configPageMethods = {
@@ -121,21 +174,139 @@ export const configPageMethods = {
     return `${key}${label}${modelPart}${basePart}`;
   },
 
-  setActiveConfigSidebarItem(name) {
-    const list = document.getElementById('configList');
-    if (!list || !name) return false;
-    const item = list.querySelector(`.config-item[data-name="${escapeConfigItemSelector(name)}"]`);
-    if (!item) return false;
-    list.querySelectorAll('.config-item').forEach((el) => {
-      el.classList.remove('active');
-      el.setAttribute('aria-pressed', 'false');
-    });
-    item.classList.add('active');
-    item.setAttribute('aria-pressed', 'true');
+  readStoredConfigListScroll() {
     try {
-      item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const raw = localStorage.getItem('lastConfigListScrollTop');
+      if (raw == null || raw === '') return null;
+      const top = Number(raw);
+      return Number.isFinite(top) && top >= 0 ? top : null;
+    } catch {
+      return null;
+    }
+  },
+
+  persistConfigListScroll(top, { flush = false } = {}) {
+    if (!this._configState) return;
+    const n = Number(top);
+    if (!Number.isFinite(n) || n < 0) return;
+    this._configState.listScrollTop = n;
+
+    const write = () => {
+      try {
+        localStorage.setItem('lastConfigListScrollTop', String(Math.round(n)));
+      } catch {}
+    };
+
+    if (flush) {
+      if (_configScrollPersistTimer) {
+        clearTimeout(_configScrollPersistTimer);
+        _configScrollPersistTimer = null;
+      }
+      write();
+      return;
+    }
+
+    if (_configScrollPersistTimer) return;
+    _configScrollPersistTimer = setTimeout(() => {
+      _configScrollPersistTimer = null;
+      write();
+    }, 320);
+  },
+
+  _applyConfigListView(mode = 'restore') {
+    if (!this._configState) return;
+    const name = this._configState.selected?.name;
+    if (!name) return;
+
+    const list = document.getElementById('configList');
+    if (!list) return;
+    const item = markConfigListActive(list, name);
+    if (!item) return;
+
+    const hasFilter = Boolean(this._configState.filter);
+    const savedScroll = this._configState.listScrollTop;
+    const restoreScroll = mode === 'restore'
+      && !hasFilter
+      && typeof savedScroll === 'number'
+      && Number.isFinite(savedScroll);
+
+    if (restoreScroll) {
+      list.scrollTop = savedScroll;
+      if (!isConfigListItemVisible(list, item)) {
+        scrollConfigListItem(list, item, { align: 'nearest', behavior: 'auto' });
+      }
+    } else if (mode === 'select') {
+      scrollConfigListItem(list, item, {
+        align: 'nearest',
+        behavior: hasFilter ? 'auto' : 'smooth'
+      });
+    } else if (!isConfigListItemVisible(list, item)) {
+      scrollConfigListItem(list, item, { align: 'nearest', behavior: 'auto' });
+    }
+
+    this.persistConfigListScroll(list.scrollTop, { flush: mode === 'restore' });
+  },
+
+  /** 同步列表选中态与滚动：restore=回页/刷新恢复；select=用户点选 */
+  syncConfigListView(mode = 'restore') {
+    if (!this._configState?.selected?.name) return;
+    _configListSyncMode = mode;
+    if (_configListSyncRaf) return;
+    _configListSyncRaf = requestAnimationFrame(() => {
+      _configListSyncRaf = 0;
+      this._applyConfigListView(_configListSyncMode);
+    });
+  },
+
+  /** 跳转到配置页并选中指定项（侧边栏 / 对话页入口共用） */
+  openConfigSelection(name, child = null) {
+    const target = { name, child: child || null };
+    try {
+      localStorage.setItem('lastConfigName', name);
+      localStorage.setItem('lastConfigChild', child || '');
     } catch {}
-    return true;
+    if (!this._configState) {
+      void this.navigateTo('config');
+      return;
+    }
+    this._configState.pendingSelect = target;
+    if (this.currentPage !== 'config') {
+      void this.navigateTo('config');
+      return;
+    }
+    this._configState.pendingSelect = null;
+    this.selectConfig(name, child);
+  },
+
+  restoreConfigSelectionAfterListLoad() {
+    if (!this._configState) return;
+    const pending = this._configState.pendingSelect;
+    if (pending) this._configState.pendingSelect = null;
+
+    const name = pending?.name ?? this._configState.selected?.name;
+    const child = pending
+      ? (pending.child ?? null)
+      : (this._configState.selectedChild ?? null);
+    if (!name) return;
+
+    const target = this._configState.list.find(cfg => cfg.name === name);
+    if (!target) return;
+
+    const sameSelection = this._configState.selected?.name === name
+      && (this._configState.selectedChild ?? null) === (child ?? null);
+
+    if (!sameSelection) {
+      this.selectConfig(name, child, { listScroll: 'restore' });
+      return;
+    }
+
+    this._configState.selected = target;
+    if (target.name === 'system' && !child) {
+      this.renderSystemConfigChooser(target);
+    } else {
+      this.loadSelectedConfigDetail();
+    }
+    this.syncConfigListView('restore');
   },
   renderConfigPlaceholder() {
     return `
@@ -188,30 +359,7 @@ export const configPageMethods = {
       if (!this._configState) return;
       this._configState.list = data.configs ?? [];
       this.renderConfigList();
-  
-      // 若存在待选中的配置（刷新后恢复）
-      if (this._configState.pendingSelect) {
-        const { name, child } = this._configState.pendingSelect;
-        const target = this._configState.list.find(cfg => cfg.name === name);
-        if (target) {
-          this.selectConfig(name, child || null);
-        }
-        this._configState.pendingSelect = null;
-      } else if (this.currentPage === 'config' && this._configState.selected) {
-        // 从其它页面返回 config：pendingSelect 已清空，但 selected/selectedChild 仍保留，
-        // 需要恢复渲染，否则 configMain 会停留在占位态/旧态，导致系统配置气泡不可交互。
-        const selectedName = this._configState.selected.name;
-        const selectedChild = this._configState.selectedChild;
-        const latestSelected = this._configState.list.find(cfg => cfg.name === selectedName);
-        if (latestSelected) {
-          this._configState.selected = latestSelected;
-          if (latestSelected.name === 'system' && !selectedChild) {
-            this.renderSystemConfigChooser(latestSelected);
-          } else {
-            this.loadSelectedConfigDetail();
-          }
-        }
-      }
+      this.restoreConfigSelectionAfterListLoad();
     } catch (e) {
       const msg = (e && e.message) ? String(e.message) : '未知错误';
       if (list) list.innerHTML = `<div class="empty-state"><p>加载失败: ${this.escapeHtml(msg)}</p></div>`;
@@ -278,16 +426,15 @@ export const configPageMethods = {
     }).join('');
 
     if (this._configState.selected?.name) {
-      this.setActiveConfigSidebarItem(this._configState.selected.name);
+      this.syncConfigListView('restore');
     }
   },
 
-  selectConfig(name, child = null) {
+  selectConfig(name, child = null, { listScroll = 'select' } = {}) {
     if (!this._configState) return;
-    
-    // 若选择与当前相同的配置和子项，避免重复渲染导致的抖动
+
     if (this._configState.selected?.name === name && (child || null) === this._configState.selectedChild) {
-      this.setActiveConfigSidebarItem(name);
+      this.syncConfigListView(listScroll === 'restore' ? 'restore' : 'select');
       return;
     }
   
@@ -311,7 +458,7 @@ export const configPageMethods = {
     this._configState.jsonText = '';
     this._configState.jsonDirty = false;
 
-    this.setActiveConfigSidebarItem(name);
+    this.syncConfigListView(listScroll === 'restore' ? 'restore' : 'select');
 
     if (config.name === 'system' && !child) {
       this.renderSystemConfigChooser(config);

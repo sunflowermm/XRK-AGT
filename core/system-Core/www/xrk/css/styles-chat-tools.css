@@ -13,7 +13,8 @@
   word-wrap: break-word;
   word-break: break-word;
   box-sizing: border-box;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
 }
 
 .chat-message .chat-content {
@@ -216,13 +217,11 @@ html.motion-enabled .chat-message.message-enter {
 @keyframes messageSlideIn {
   from {
     opacity: 0;
-    transform: translateY(14px) scale(0.985);
-    filter: blur(2px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
+    transform: translateY(0);
   }
 }
 
@@ -636,10 +635,16 @@ html.motion-enabled .chat-message.message-enter {
 }
 
 /* Markdown 表格（GitHub 风格简化版） */
+.chat-markdown .md-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0;
+  max-width: 100%;
+}
+
 .chat-markdown .md-table {
   width: 100%;
   border-collapse: collapse;
-  margin: 8px 0;
+  margin: 0;
   font-size: 13px;
 }
 

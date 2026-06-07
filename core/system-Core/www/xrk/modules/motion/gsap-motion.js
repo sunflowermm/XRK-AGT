@@ -1,6 +1,6 @@
 /**
  * GSAP 动效层：页面切换、壳层入场、Dashboard/聊天/Toast。
- * 原则：单一 reveal 入口、结束时 clearProps、尊重 prefers-reduced-motion。
+ * 原则：短时长、power 缓动、无 back 弹跳；缓存页零动效；尊重 prefers-reduced-motion。
  */
 
 let gsap = null;
@@ -11,8 +11,10 @@ let reducedMotion = false;
 let onResizeSync = null;
 
 const MOBILE_MQ = '(max-width: 768px)';
-const EASE_OUT = 'power3.out';
-const EASE_IN = 'power2.in';
+/** 控制台：短、稳、少位移；避免 back/elastic 弹跳 */
+const EASE_OUT = 'power2.out';
+const EASE_IN = 'power1.in';
+const DUR = { fast: 0.14, normal: 0.2, slow: 0.26 };
 const PAGE_BLOCK_SEL =
   '.dashboard-header, .stat-card, .chart-card, .info-grid .card, .dashboard > .card, ' +
   '.card, .config-page, .api-container, ' +
@@ -26,7 +28,7 @@ function getGsap() {
   return typeof window !== 'undefined' ? window.gsap : null;
 }
 
-function dur(fallback = 0.32) {
+function dur(fallback = DUR.normal) {
   return reducedMotion ? 0 : fallback;
 }
 
@@ -38,7 +40,7 @@ export function isReducedMotion() {
   return reducedMotion;
 }
 
-/** 统一入场：淡入 + 轻微上移，结束清内联样式 */
+/** 统一入场：淡入 + 极轻微位移 */
 function reveal(targets, options = {}) {
   if (!gsap || reducedMotion) return;
   const list = gsap.utils.toArray(targets);
@@ -46,12 +48,12 @@ function reveal(targets, options = {}) {
   gsap.killTweensOf(list);
   gsap.fromTo(
     list,
-    { y: options.y ?? 12, autoAlpha: 0 },
+    { y: options.y ?? 6, autoAlpha: 0 },
     {
       y: 0,
       autoAlpha: 1,
-      duration: dur(options.duration ?? 0.32),
-      stagger: options.stagger ?? 0.045,
+      duration: dur(options.duration ?? DUR.normal),
+      stagger: options.stagger ?? 0.024,
       ease: options.ease ?? EASE_OUT,
       overwrite: 'auto',
       clearProps: 'transform,opacity,visibility'
@@ -118,7 +120,7 @@ export function initMotion() {
     return false;
   }
 
-  gsap.defaults({ duration: 0.32, ease: EASE_OUT });
+  gsap.defaults({ duration: DUR.normal, ease: EASE_OUT });
 
   mm = gsap.matchMedia();
   mm.add('(prefers-reduced-motion: reduce)', () => {
@@ -172,25 +174,24 @@ export function animateAppShell() {
     defaults: { ease: EASE_OUT },
     onComplete: () => gsap.set(shellTargets, { clearProps: 'transform,opacity,visibility' })
   });
-  tl.fromTo('.brand-logo', { scale: 0.88, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.42, ease: 'back.out(1.4)' })
-    .fromTo('.brand-name', { x: -10, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.28 }, '-=0.28')
-    .fromTo('.nav-item', { x: -12, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.28, stagger: 0.05 }, '-=0.18')
-    .fromTo('.sidebar-footer', { y: 8, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.26 }, '-=0.1')
-    .fromTo('.header', { y: -8, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.28 }, '-=0.24');
+  tl.fromTo('.brand-logo', { scale: 0.96, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: dur(DUR.slow) })
+    .fromTo('.brand-name', { autoAlpha: 0 }, { autoAlpha: 1, duration: dur(DUR.normal) }, '-=0.16')
+    .fromTo('.nav-item', { autoAlpha: 0 }, { autoAlpha: 1, duration: dur(DUR.normal), stagger: 0.03 }, '-=0.12')
+    .fromTo('.sidebar-footer', { autoAlpha: 0 }, { autoAlpha: 1, duration: dur(DUR.normal) }, '-=0.08')
+    .fromTo('.header', { autoAlpha: 0 }, { autoAlpha: 1, duration: dur(DUR.normal) }, '-=0.12');
 }
 
 export function animateHeaderTitle(el) {
   if (!gsap || !el || reducedMotion) return;
   gsap.fromTo(
     el,
-    { y: -6, autoAlpha: 0 },
+    { autoAlpha: 0 },
     {
-      y: 0,
       autoAlpha: 1,
-      duration: dur(0.24),
+      duration: dur(DUR.fast),
       ease: EASE_OUT,
       overwrite: 'auto',
-      clearProps: 'transform,opacity,visibility'
+      clearProps: 'opacity,visibility'
     }
   );
 }
@@ -201,25 +202,26 @@ export function animatePageExit(contentEl) {
   return new Promise((resolve) => {
     gsap.to(contentEl, {
       autoAlpha: 0,
-      y: 6,
-      duration: dur(0.18),
+      duration: dur(DUR.fast),
       ease: EASE_IN,
       overwrite: 'auto',
       onComplete: () => {
-        gsap.set(contentEl, { clearProps: 'transform,opacity,visibility' });
+        gsap.set(contentEl, { clearProps: 'opacity,visibility' });
         resolve();
       }
     });
   });
 }
 
-export function animatePageBlocks(container, page) {
+export function animatePageBlocks(container, page, { intro = true, cached = false } = {}) {
   if (!container) return;
 
   pageBlockContext?.revert();
   pageBlockContext = null;
 
-  if (!gsap || reducedMotion) {
+  if (cached) return;
+
+  if (!intro || !gsap || reducedMotion) {
     releaseMotionStyles(container);
     return;
   }
@@ -243,23 +245,25 @@ export function animatePageBlocks(container, page) {
 
 export function animateDashboard(root) {
   const scope = root.querySelector('.dashboard') || root;
-  const targets = scope.querySelectorAll(
-    '.dashboard-header, .stat-card, .chart-card, .info-grid .card, .dashboard > .card'
-  );
-  reveal(targets, { y: 14, duration: 0.34, stagger: 0.04 });
+  const header = scope.querySelector('.dashboard-header');
+  const blocks = scope.querySelectorAll('.stat-card, .chart-card, .info-grid .card, .dashboard > .card');
+  if (header) reveal(header, { y: 4, duration: DUR.normal, stagger: 0 });
+  if (blocks.length) reveal(blocks, { y: 6, duration: DUR.normal, stagger: 0.02 });
 }
 
 export function animateChatLayout(root) {
   const container = root.querySelector('.chat-container') || root;
   if (!container) return;
-  const targets = container.querySelectorAll('.chat-sidebar, .chat-main, .chat-mode-btn');
-  reveal(targets, { y: 10, duration: 0.3, stagger: 0.05 });
-  const aiSections = container.querySelectorAll('.ai-settings-section');
-  if (aiSections.length) reveal(aiSections, { y: 8, duration: 0.26, stagger: 0.04 });
+  reveal(container.querySelectorAll('.chat-sidebar, .chat-main'), { y: 5, duration: DUR.normal, stagger: 0.03 });
 }
 
 export function animateGenericBlocks(root) {
-  reveal(root.querySelectorAll('.card, .config-page, .api-container, .dashboard-header'));
+  const page = root.querySelector('.config-page, .api-container, .dashboard');
+  if (page) {
+    reveal(page, { y: 4, duration: DUR.normal, stagger: 0 });
+    return;
+  }
+  reveal(root.querySelectorAll('.card, .dashboard-header'), { y: 5, duration: DUR.normal, stagger: 0.02 });
 }
 
 export function animateOverlay(show) {
@@ -275,11 +279,11 @@ export function animateOverlay(show) {
   gsap.killTweensOf(overlay);
   if (show) {
     overlay.classList.add('show');
-    gsap.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, duration: dur(0.22), ease: EASE_OUT, overwrite: 'auto' });
+    gsap.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, duration: dur(DUR.normal), ease: EASE_OUT, overwrite: 'auto' });
   } else {
     gsap.to(overlay, {
       autoAlpha: 0,
-      duration: dur(0.18),
+      duration: dur(DUR.fast),
       ease: EASE_IN,
       overwrite: 'auto',
       onComplete: () => overlay.classList.remove('show')
@@ -308,9 +312,9 @@ export function setSidebarOpen(open) {
 
   gsap.killTweensOf(sidebar);
   if (open) {
-    gsap.fromTo(sidebar, { x: '-100%' }, { x: '0%', duration: dur(0.32), ease: EASE_OUT, overwrite: 'auto' });
+    gsap.fromTo(sidebar, { x: '-100%' }, { x: '0%', duration: dur(DUR.slow), ease: EASE_OUT, overwrite: 'auto' });
   } else {
-    gsap.to(sidebar, { x: '-100%', duration: dur(0.26), ease: EASE_IN, overwrite: 'auto' });
+    gsap.to(sidebar, { x: '-100%', duration: dur(DUR.normal), ease: EASE_IN, overwrite: 'auto' });
   }
   animateOverlay(open);
 }
@@ -319,13 +323,12 @@ export function animateToastIn(toast) {
   if (!gsap || !toast || reducedMotion) return null;
   gsap.fromTo(
     toast,
-    { x: 20, autoAlpha: 0, scale: 0.97 },
+    { x: 12, autoAlpha: 0 },
     {
       x: 0,
       autoAlpha: 1,
-      scale: 1,
-      duration: dur(0.3),
-      ease: 'back.out(1.4)',
+      duration: dur(DUR.normal),
+      ease: EASE_OUT,
       overwrite: 'auto',
       clearProps: 'transform,opacity,visibility'
     }
@@ -333,10 +336,9 @@ export function animateToastIn(toast) {
   return () =>
     new Promise((resolve) => {
       gsap.to(toast, {
-        x: 16,
+        x: 8,
         autoAlpha: 0,
-        scale: 0.97,
-        duration: dur(0.18),
+        duration: dur(DUR.fast),
         ease: EASE_IN,
         overwrite: 'auto',
         onComplete: resolve
@@ -347,29 +349,18 @@ export function animateToastIn(toast) {
 export function animateChatMessage(el) {
   if (!gsap || !el || reducedMotion) return;
   el.classList.remove('message-enter');
-  const isUser = el.classList.contains('user');
   gsap.fromTo(
     el,
-    { x: isUser ? 8 : -8, y: 8, autoAlpha: 0, scale: 0.98 },
+    { y: 4, autoAlpha: 0 },
     {
-      x: 0,
       y: 0,
       autoAlpha: 1,
-      scale: 1,
-      duration: dur(isUser ? 0.24 : 0.28),
+      duration: dur(DUR.fast),
       ease: EASE_OUT,
       clearProps: 'transform,opacity,visibility',
       overwrite: 'auto'
     }
   );
-}
-
-export function animateChatHistoryRestore(box) {
-  if (!gsap || !box || reducedMotion) return;
-  const items = box.querySelectorAll('.chat-message, .voice-message');
-  if (!items.length) return;
-  items.forEach((el) => el.classList.remove('message-enter'));
-  reveal(items, { y: 6, duration: 0.26, stagger: 0.035 });
 }
 
 export function animateChatMainCrossfade(el, onSwap) {
@@ -380,21 +371,19 @@ export function animateChatMainCrossfade(el, onSwap) {
   return new Promise((resolve) => {
     gsap.to(el, {
       autoAlpha: 0,
-      y: 6,
-      duration: dur(0.14),
+      duration: dur(DUR.fast),
       ease: EASE_IN,
       overwrite: 'auto',
       onComplete: () => {
         onSwap?.();
         gsap.fromTo(
           el,
-          { autoAlpha: 0, y: -4 },
+          { autoAlpha: 0 },
           {
             autoAlpha: 1,
-            y: 0,
-            duration: dur(0.22),
+            duration: dur(DUR.normal),
             ease: EASE_OUT,
-            clearProps: 'transform,opacity,visibility',
+            clearProps: 'opacity,visibility',
             onComplete: resolve
           }
         );
@@ -407,7 +396,7 @@ export function animateImagePreviewItems(container) {
   if (!gsap || !container || reducedMotion) return;
   const items = container.querySelectorAll('.chat-image-preview-item');
   if (!items.length) return;
-  reveal(items, { y: 0, duration: 0.24, stagger: 0.04 });
+  reveal(items, { y: 0, duration: DUR.fast, stagger: 0.02 });
 }
 
 export function animateToolBlockToggle(content, expanded) {
@@ -421,7 +410,7 @@ export function animateToolBlockToggle(content, expanded) {
       {
         height: 'auto',
         autoAlpha: 1,
-        duration: dur(0.24),
+        duration: dur(DUR.normal),
         ease: EASE_OUT,
         clearProps: 'height,opacity,visibility',
         overwrite: 'auto'
@@ -431,7 +420,7 @@ export function animateToolBlockToggle(content, expanded) {
     gsap.to(content, {
       height: 0,
       autoAlpha: 0,
-      duration: dur(0.18),
+      duration: dur(DUR.fast),
       ease: EASE_IN,
       overwrite: 'auto',
       onComplete: () => {
@@ -446,8 +435,8 @@ export function animateChatModeSwitch(activeBtn) {
   if (!gsap || reducedMotion || !activeBtn) return;
   gsap.fromTo(
     activeBtn,
-    { scale: 0.96 },
-    { scale: 1, duration: dur(0.22), ease: 'back.out(1.6)', overwrite: 'auto', clearProps: 'transform' }
+    { autoAlpha: 0.72 },
+    { autoAlpha: 1, duration: dur(DUR.fast), ease: EASE_OUT, overwrite: 'auto', clearProps: 'opacity' }
   );
 }
 
@@ -455,17 +444,15 @@ export function animateStreamStatus(el, active) {
   if (!gsap || !el || reducedMotion || !active) return;
   gsap.fromTo(
     el,
-    { scale: 0.92, autoAlpha: 0.7 },
-    { scale: 1, autoAlpha: 1, duration: dur(0.22), ease: EASE_OUT, overwrite: 'auto' }
+    { autoAlpha: 0.75 },
+    { autoAlpha: 1, duration: dur(DUR.fast), ease: EASE_OUT, overwrite: 'auto' }
   );
 }
 
 export function animateAISettingsPanel(panel, expanded) {
-  if (!gsap || !panel || reducedMotion || !isMobileViewport()) return;
+  if (!gsap || !panel || reducedMotion || !isMobileViewport() || !expanded) return;
   const content = panel.querySelector('.ai-settings-content');
-  if (content && expanded) {
-    reveal([content], { y: -4, duration: 0.22, stagger: 0 });
-  }
+  if (content) reveal([content], { y: 0, duration: DUR.fast, stagger: 0 });
 }
 
 export function animateChatSendPulse(btn) {
@@ -473,7 +460,7 @@ export function animateChatSendPulse(btn) {
   gsap.fromTo(
     btn,
     { scale: 1 },
-    { scale: 0.9, duration: dur(0.07), yoyo: true, repeat: 1, ease: 'power2.inOut', overwrite: 'auto' }
+    { scale: 0.94, duration: dur(0.06), yoyo: true, repeat: 1, ease: 'power1.inOut', overwrite: 'auto' }
   );
 }
 
@@ -491,7 +478,7 @@ export function pulseOnlineStatus(dotEl) {
   if (!gsap || !dotEl || reducedMotion) return;
   gsap.fromTo(
     dotEl,
-    { scale: 0.75 },
-    { scale: 1, duration: dur(0.4), ease: 'back.out(2)', overwrite: 'auto', clearProps: 'transform' }
+    { autoAlpha: 0.5 },
+    { autoAlpha: 1, duration: dur(DUR.normal), ease: EASE_OUT, overwrite: 'auto', clearProps: 'opacity' }
   );
 }

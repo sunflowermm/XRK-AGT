@@ -56,6 +56,7 @@ import {
   appendChatMessage
 } from './modules/pages/chat.js';
 import { renderConfigPage } from './modules/pages/config.js';
+import { createPageCache } from './modules/page-cache.js';
 
 import {
   updateSystemStatus as updateSystemStatusPanel,
@@ -193,7 +194,8 @@ class App {
     this._suppressHashChange = false;
     /** API 页侧边栏：'api-list' | 'nav'（返回主菜单） */
     this._apiSidebarView = 'api-list';
-    
+    this._pageCache = createPageCache(this);
+
     this.init();
   }
 
@@ -506,7 +508,10 @@ class App {
         this.ensureDeviceWs();
       }
     }
-    if (window.location.hash === '#/config') this.renderConfig();
+    if (window.location.hash === '#/config') {
+      this._pageCache.invalidate('config');
+      this.renderConfig();
+    }
   }
 
   getHeaders() {
@@ -572,6 +577,59 @@ class App {
     void this.navigateTo(page);
   }
 
+  _onPageHide(page) {
+    if (page === 'chat') {
+      this._unbindChatEvents();
+      this.stopActiveStream();
+      this._releaseDeviceWs();
+    }
+    if (page === 'config') {
+      const list = document.getElementById('configList');
+      if (list) this.persistConfigListScroll(list.scrollTop, { flush: true });
+    }
+  }
+
+  _onPageShow(page) {
+    switch (page) {
+      case 'home': {
+        const refresh = () => void this._loadHomeDataAndUpdate();
+        if (typeof requestIdleCallback === 'function') {
+          requestIdleCallback(refresh, { timeout: 2500 });
+        } else {
+          setTimeout(refresh, 200);
+        }
+        break;
+      }
+      case 'chat':
+        markdownRenderer.initMermaid();
+        this._bindChatEvents();
+        if (this._isVoiceMode() || !this._isAIMode()) {
+          this.ensureDeviceWs();
+        }
+        {
+          const box = document.getElementById('chatMessages');
+          if (box?.querySelector('pre code.language-mermaid:not([data-processed])')) {
+            void this._renderMermaidIn(box);
+          }
+        }
+        break;
+      case 'config':
+        if (this._configState?.pendingSelect) {
+          this.restoreConfigSelectionAfterListLoad();
+        }
+        break;
+      case 'api':
+        if (this.jsonEditor?.refresh) {
+          requestAnimationFrame(() => {
+            try { this.jsonEditor.refresh(); } catch {}
+          });
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
   async navigateTo(page) {
     const normalizedPage = page || 'home';
     if (this._routeInitialized && this.currentPage === normalizedPage) {
@@ -584,15 +642,15 @@ class App {
     const content = $('#content');
     const prevPage = this.currentPage;
     const shouldAnimate = this._routeInitialized && content && prevPage !== normalizedPage;
+    const restoringTarget = this._pageCache.has(normalizedPage);
 
-    if (prevPage === 'chat' && normalizedPage !== 'chat') {
-      this._unbindChatEvents();
-      this.stopActiveStream();
-      this._releaseDeviceWs();
+    const willCachePrev = Boolean(prevPage && prevPage !== normalizedPage);
+    if (shouldAnimate && content?.firstElementChild && !restoringTarget && !willCachePrev) {
+      await motion.animatePageExit(content);
     }
 
-    if (shouldAnimate) {
-      await motion.animatePageExit(content);
+    if (willCachePrev) {
+      this._pageCache.save(prevPage);
     }
 
     this.currentPage = normalizedPage;
@@ -638,20 +696,36 @@ class App {
 
     switch (normalizedPage) {
       case 'home':
-        await ensurePageLibs('home');
-        this.renderHome();
+        if (!this._pageCache.restore('home')) {
+          await ensurePageLibs('home');
+          this.renderHome();
+        }
         break;
       case 'chat':
-        await ensurePageLibs('chat');
-        markdownRenderer.initMermaid();
-        this.renderChat();
+        if (!this._pageCache.restore('chat')) {
+          await ensurePageLibs('chat');
+          markdownRenderer.initMermaid();
+          await this.renderChat();
+        }
         break;
-      case 'config': this.renderConfig(); break;
-      case 'api': this.renderAPI(); break;
+      case 'config':
+        if (!this._pageCache.restore('config')) {
+          this.renderConfig();
+        }
+        break;
+      case 'api':
+        if (!this._pageCache.restore('api')) {
+          this.renderAPI();
+        }
+        break;
       default:
-        await ensurePageLibs('home');
-        this.renderHome();
+        if (!this._pageCache.restore('home')) {
+          await ensurePageLibs('home');
+          this.renderHome();
+        }
     }
+
+    const mountedFromCache = restoringTarget;
 
     if (location.hash !== `#/${normalizedPage}`) {
       this._suppressHashChange = true;
@@ -659,9 +733,12 @@ class App {
     }
 
     if (content) {
-      motion.animatePageBlocks(content, normalizedPage);
+      motion.animatePageBlocks(content, normalizedPage, {
+        intro: !mountedFromCache,
+        cached: mountedFromCache
+      });
     }
-    if (headerTitle) {
+    if (headerTitle && !mountedFromCache) {
       motion.animateHeaderTitle(headerTitle);
     }
     this._routeInitialized = true;
@@ -688,9 +765,11 @@ class App {
   /**
    * 加载首页数据并更新（后台更新，平滑过渡）
    */
-  async _loadHomeDataAndUpdate() {
+  async _loadHomeDataAndUpdate({ force = false, minInterval = 12000 } = {}) {
+    const now = Date.now();
+    if (!force && now - (this._homeDataLastFetch || 0) < minInterval) return;
+    this._homeDataLastFetch = now;
     try {
-      // 并行加载系统状态和插件信息
       await Promise.all([
         this.loadSystemStatus(),
         loadPluginsInfoPanel(this)
@@ -875,9 +954,6 @@ class App {
     } finally {
       this._isRestoringHistory = false;
       box.style.overflow = '';
-      if (history.length > 0) {
-        requestAnimationFrame(() => motion.animateChatHistoryRestore(box));
-      }
     }
   }
 
@@ -1097,15 +1173,6 @@ class App {
       const history = this._getCurrentChatHistory();
       const historyToSave = Array.isArray(history) ? history.slice(-MAX_HISTORY) : [];
       localStorage.setItem(this._getHistoryStorageKey(), JSON.stringify(historyToSave));
-      
-      const box = document.getElementById('chatMessages');
-      if (box) {
-        this._chatMessagesCache[this._chatMode] = {
-          scrollTop: box.scrollTop,
-          scrollHeight: box.scrollHeight,
-          html: box.innerHTML
-        };
-      }
     } catch (e) {
       console.warn('[聊天历史] 保存失败:', e);
     }
@@ -1114,6 +1181,18 @@ class App {
   restoreChatHistory() {
     const box = document.getElementById('chatMessages');
     if (!box || this._isRestoringHistory) return;
+
+    const cached = this._chatMessagesCache[this._chatMode];
+    if (cached?.html) {
+      box.style.scrollBehavior = 'auto';
+      box.innerHTML = cached.html;
+      box.scrollTop = cached.scrollTop ?? 0;
+      box.style.removeProperty('scroll-behavior');
+      return;
+    }
+
+    if (box.querySelector('.chat-message, .voice-message')) return;
+
     this._renderHistoryIntoBox(box, this._getCurrentChatHistory());
     requestAnimationFrame(() => this.scrollToBottom(false));
   }

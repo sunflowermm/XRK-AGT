@@ -5,6 +5,88 @@
 
 import { escapeHtml } from './utils.js';
 
+/** LLM 常把多行表格压成 `||` 分隔的单行 */
+function normalizeCompactTableLines(text) {
+  return String(text).replace(/^([^\n]*\|[^\n]*\|\|[^\n]+)$/gm, (line) =>
+    line.split(/\s*\|\|\s*/).map((part) => part.trim()).filter(Boolean).join('\n')
+  );
+}
+
+function splitTableCells(line) {
+  const trimmed = String(line ?? '').trim();
+  if (!trimmed.includes('|')) return [];
+  const inner = trimmed.replace(/^\|/, '').replace(/\|$/, '');
+  return inner.split('|').map((c) => c.trim());
+}
+
+function isTableSeparatorRow(cells) {
+  return cells.length > 0 && cells.every((c) => /^:?-{3,}:?$/.test(c));
+}
+
+function isTableLine(line) {
+  const t = String(line ?? '').trim();
+  if (!t.includes('|')) return false;
+  return t.startsWith('|') || (t.match(/\|/g) || []).length >= 2;
+}
+
+function formatInlineMarkdown(text) {
+  let s = escapeHtml(String(text ?? ''));
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  return s;
+}
+
+function renderTableBlock(lines) {
+  const rows = lines.map(splitTableCells).filter((r) => r.some((c) => c !== ''));
+  if (rows.length < 2) return null;
+
+  let headHtml = '';
+  let bodyStart = 0;
+  if (isTableSeparatorRow(rows[1])) {
+    headHtml = `<thead><tr>${rows[0].map((c) => `<th>${formatInlineMarkdown(c)}</th>`).join('')}</tr></thead>`;
+    bodyStart = 2;
+  }
+
+  const bodyRows = rows.slice(bodyStart);
+  if (!bodyRows.length) return null;
+
+  const bodyHtml = bodyRows.map((r) =>
+    `<tr>${r.map((c) => `<td>${formatInlineMarkdown(c)}</td>`).join('')}</tr>`
+  ).join('');
+
+  return `<div class="md-table-wrap"><table class="md-table">${headHtml}<tbody>${bodyHtml}</tbody></table></div>`;
+}
+
+function extractTables(text) {
+  const tables = [];
+  const lines = text.split('\n');
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    if (isTableLine(lines[i])) {
+      const block = [];
+      while (i < lines.length && isTableLine(lines[i])) {
+        block.push(lines[i]);
+        i += 1;
+      }
+      const html = renderTableBlock(block);
+      if (html) {
+        const id = `@@TABLE${tables.length}@@`;
+        tables.push(html);
+        out.push(id);
+      } else {
+        out.push(...block);
+      }
+    } else {
+      out.push(lines[i]);
+      i += 1;
+    }
+  }
+
+  return { text: out.join('\n'), tables };
+}
+
 /**
  * Markdown 渲染器类
  */
@@ -188,83 +270,70 @@ export class MarkdownRenderer {
   render(text) {
     if (!text) return '';
 
-    // 保护代码块
+    let working = normalizeCompactTableLines(text);
+
     const codeBlocks = [];
-    const withPlaceholders = String(text).replace(/```([^\n\r`]*)\r?\n([\s\S]*?)```/g, (_, lang, code) => {
+    working = working.replace(/```([^\n\r`]*)\r?\n([\s\S]*?)```/g, (_, lang, code) => {
       const id = `@@CODEBLOCK${codeBlocks.length}@@`;
       codeBlocks.push({ lang: lang || '', code });
       return id;
     });
 
-    // 保护行内代码
     const inlineCodes = [];
-    const withInlineProtected = withPlaceholders.replace(/`([^`]+)`/g, (_, code) => {
-      // 同上：避免占位符被 markdown 强调语法误处理
+    working = working.replace(/`([^`]+)`/g, (_, code) => {
       const id = `@@INLINECODE${inlineCodes.length}@@`;
       inlineCodes.push(code);
       return id;
     });
 
-    // 处理块级元素
-    let html = withInlineProtected;
+    const { text: withoutTables, tables } = extractTables(working);
+    let html = withoutTables;
 
-    // 标题
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
 
-    // 列表
     html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
     html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
     html = html.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
+    html = html.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
 
-    // 包装列表
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, match => {
-      return `<ul>${match}</ul>`;
-    });
+    html = html.replace(/^> (.+)$/gm, '<blockquote class="md-quote"><p class="md-quote-line">$1</p></blockquote>');
 
-    // 引用
-    html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+    html = html.replace(/^---$/gm, '<hr class="md-hr">');
+    html = html.replace(/^\*\*\*$/gm, '<hr class="md-hr">');
 
-    // 水平线
-    html = html.replace(/^---$/gm, '<hr>');
-    html = html.replace(/^\*\*\*$/gm, '<hr>');
-
-    // 行内样式
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
     html = html.replace(/_(.+?)_/g, '<em>$1</em>');
 
-    // 链接
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img class="md-img" src="$2" alt="$1">');
 
-    // 图片
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
-
-    // 恢复行内代码
     inlineCodes.forEach((code, i) => {
-      html = html.replace(`@@INLINECODE${i}@@`, `<code>${escapeHtml(code)}</code>`);
+      html = html.replace(`@@INLINECODE${i}@@`, `<code class="md-inline">${escapeHtml(code)}</code>`);
     });
 
-    // 恢复代码块
     codeBlocks.forEach((block, i) => {
       const langAttr = block.lang ? ` data-lang="${escapeHtml(block.lang)}"` : '';
       const highlighted = this.syntaxHighlight(block.code, block.lang);
       html = html.replace(
         `@@CODEBLOCK${i}@@`,
-        `<pre><code class="language-${escapeHtml(block.lang)}"${langAttr}>${highlighted}</code></pre>`
+        `<pre class="md-code"><code class="language-${escapeHtml(block.lang)}"${langAttr}>${highlighted}</code></pre>`
       );
     });
 
-    // 段落
+    tables.forEach((tableHtml, i) => {
+      html = html.replace(`@@TABLE${i}@@`, tableHtml);
+    });
+
     html = html.replace(/\n\n/g, '</p><p>');
     html = `<p>${html}</p>`;
 
-    // 清理空段落与块级标签外层多余 <p>
     html = html.replace(/<p>\s*<\/p>/g, '');
-    html = html.replace(/<p>\s*(<(?:h[1-6]|ul|ol|blockquote|pre|hr)\b[^>]*>)/g, '$1');
-    html = html.replace(/(<\/(?:h[1-6]|ul|ol|blockquote|pre)>|<hr[^>]*>)\s*<\/p>/g, '$1');
+    html = html.replace(/<p>\s*(<(?:h[1-6]|ul|ol|blockquote|pre|hr|div)\b[^>]*>)/g, '$1');
+    html = html.replace(/(<\/(?:h[1-6]|ul|ol|blockquote|pre|div)>|<hr[^>]*>)\s*<\/p>/g, '$1');
 
     return html;
   }

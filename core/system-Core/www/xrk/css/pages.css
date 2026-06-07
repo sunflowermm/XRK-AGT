@@ -423,6 +423,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  scroll-behavior: auto;
   padding: 24px 20px;
   display: flex;
   flex-direction: column;
@@ -432,7 +433,6 @@
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
   background: var(--bg-card);
-  scroll-behavior: smooth;
 }
 
 .chat-messages::-webkit-scrollbar {

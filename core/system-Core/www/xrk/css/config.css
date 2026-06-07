@@ -94,6 +94,8 @@
   padding-right: 4px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scroll-behavior: auto;
+  scroll-padding: 8px 0;
 }
 
 .config-item {

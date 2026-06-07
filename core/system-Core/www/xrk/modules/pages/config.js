@@ -1,5 +1,32 @@
 import { cancelPageMotion } from '../motion/gsap-motion.js';
 
+function bindConfigListEvents(app, listContainer) {
+  const selectFromEvent = (e) => {
+    const item = e.target.closest('.config-item');
+    if (!item || !app._configState) return;
+    const name = item.dataset.name;
+    if (name) app.selectConfig(name);
+  };
+
+  listContainer.addEventListener('click', selectFromEvent);
+  listContainer.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const item = e.target.closest('.config-item');
+    if (!item || !app._configState) return;
+    if (!item.dataset.name) return;
+    e.preventDefault();
+    selectFromEvent(e);
+  });
+  let scrollPersistRaf = 0;
+  listContainer.addEventListener('scroll', () => {
+    if (scrollPersistRaf) return;
+    scrollPersistRaf = requestAnimationFrame(() => {
+      scrollPersistRaf = 0;
+      app.persistConfigListScroll?.(listContainer.scrollTop);
+    });
+  }, { passive: true });
+}
+
 export function renderConfigPage(app) {
   const content = document.getElementById('content');
   if (!content) return;
@@ -23,7 +50,8 @@ export function renderConfigPage(app) {
       mode: 'form',
       jsonText: '',
       jsonDirty: false,
-      loading: false
+      loading: false,
+      listScrollTop: app.readStoredConfigListScroll?.() ?? null
     };
     try {
       const lastName = localStorage.getItem('lastConfigName') || '';
@@ -32,6 +60,8 @@ export function renderConfigPage(app) {
         app._configState.pendingSelect = { name: lastName, child: lastChild || null };
       }
     } catch {}
+  } else if (app._configState.listScrollTop == null) {
+    app._configState.listScrollTop = app.readStoredConfigListScroll?.() ?? null;
   }
 
   const hasSelection = Boolean(app._configState?.selected);
@@ -71,41 +101,17 @@ export function renderConfigPage(app) {
     if (app._configState?.filter) {
       searchInput.value = app._configState.filter;
     }
-    if (searchInput.dataset._bound !== '1') {
-      searchInput.dataset._bound = '1';
-      searchInput.addEventListener('input', (e) => {
-        if (!app._configState) return;
-        app._configState.filter = e.target.value.trim().toLowerCase();
-        app.renderConfigList();
-      });
-    }
+    searchInput.addEventListener('input', (e) => {
+      if (!app._configState) return;
+      app._configState.filter = e.target.value.trim().toLowerCase();
+      app.renderConfigList();
+    });
   }
 
   const listContainer = document.getElementById('configList');
-  if (listContainer && !listContainer.dataset._bound) {
-    listContainer.dataset._bound = '1';
-    listContainer.addEventListener('click', (e) => {
-      const item = e.target.closest('.config-item');
-      if (!item || !app._configState) return;
-      const name = item.dataset.name;
-      if (name) {
-        app.setActiveConfigSidebarItem(name);
-        app.selectConfig(name);
-      }
-    });
-
-    listContainer.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      const item = e.target.closest('.config-item');
-      if (!item || !app._configState) return;
-      const name = item.dataset.name;
-      if (!name) return;
-      e.preventDefault();
-      app.setActiveConfigSidebarItem(name);
-      app.selectConfig(name);
-    });
+  if (listContainer) {
+    bindConfigListEvents(app, listContainer);
   }
 
   app.loadConfigList();
 }
-

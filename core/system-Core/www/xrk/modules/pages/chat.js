@@ -180,6 +180,7 @@ export async function renderChatPage(app) {
 export function switchChatMode(app, mode) {
   app.clearChatStreamState();
   if (mode !== 'event') app._clearEventReplyState();
+  app._pageCache?.invalidate('chat');
   return app.renderChat();
 }
 
@@ -287,13 +288,7 @@ export function bindChatEvents(app) {
     });
     const remoteMCPBtn = document.getElementById('remoteMCPConfigBtn');
     if (remoteMCPBtn) safeBind(remoteMCPBtn, 'click', () => {
-      const pendingSelect = { name: 'system', child: 'aistream' };
-      if (app._configState) app._configState.pendingSelect = pendingSelect;
-      try {
-        localStorage.setItem('lastConfigName', pendingSelect.name);
-        localStorage.setItem('lastConfigChild', pendingSelect.child);
-      } catch {}
-      app.navigateTo('config');
+      app.openConfigSelection('system', 'aistream');
     });
   }
   if (sendBtn) safeBind(sendBtn, 'click', () => {
