@@ -96,7 +96,6 @@ commonconfig/**
 !commonconfig/shared/**
 
 !http/ai-workspace.js
-
 !lib/ai-workspace-runtime.js
 !lib/ai-workspace-context.js
 !lib/ai-workspace-audit.js
