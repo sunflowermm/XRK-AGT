@@ -84,6 +84,15 @@ import {
   bindWorkspacePanel,
   normalizeWorkspaceId
 } from './modules/ai-workspace-ui.js';
+import {
+  getLlmVendors,
+  resolveAiLlmSelection,
+  persistAiLlmSelection,
+  renderAiEndpointOptions,
+  syncAiEndpointMeta,
+  validateChatProviderForFactory,
+  getVendorEndpoints
+} from './modules/ai-llm-settings.js';
 
 class App {
   constructor() {
@@ -889,29 +898,14 @@ class App {
       ];
     }
     const selectedWorkspace = normalizeWorkspaceId(this._chatSettings.workspace);
-    const vendors = this._llmOptions?.vendors?.length
-      ? this._llmOptions.vendors
-      : [{
-          id: 'default',
-          label: '全部端点',
-          endpoints: (this._llmOptions?.profiles || []).map((p) => ({
-            key: p.key,
-            label: p.label || p.key,
-            model: p.model
-          }))
-        }];
-    const selectedProvider = this._chatSettings.provider || '';
-    let selectedFactory = this._chatSettings.llmFactory || '';
-    let selectedEndpoint = selectedProvider;
-    if (selectedProvider) {
-      const hit = vendors.find((v) => v.endpoints?.some((e) => e.key === selectedProvider));
-      if (hit) {
-        selectedFactory = hit.id;
-        selectedEndpoint = selectedProvider;
-      }
-    } else if (!selectedFactory && vendors.length === 1) {
-      selectedFactory = vendors[0].id;
+    const vendors = getLlmVendors(this._llmOptions);
+    const selection = resolveAiLlmSelection(vendors, this._chatSettings);
+    if (selection.changed) {
+      persistAiLlmSelection(this._chatSettings, selection);
     }
+    const selectedFactory = selection.factoryId;
+    const selectedEndpoint = selection.endpointKey;
+    const providerSelectDisabled = !selectedFactory || !getVendorEndpoints(vendors, selectedFactory).length;
     
     // 后端已仅返回“带 MCP 工具”的工作流，这里直接作为 MCP 工具工作流多选
     const allWorkflows = (this._llmOptions?.workflows || []).map(w => ({
@@ -919,9 +913,9 @@ class App {
       label: w.label || w.description || w.key || w.name || ''
     })).filter(w => w.value);
     
-    const selectedWorkflows = Array.isArray(this._chatSettings.workflows) 
-      ? this._chatSettings.workflows 
-      : (this._chatSettings.workflow ? [this._chatSettings.workflow] : []);
+    const selectedWorkflows = Array.isArray(this._chatSettings.workflows)
+      ? this._chatSettings.workflows
+      : [];
     
     return `
       <div class="ai-settings-panel" id="aiSettingsPanel">
@@ -961,15 +955,14 @@ class App {
         <div class="ai-settings-section">
           <label class="ai-settings-label">LLM 工厂</label>
           <select id="aiFactorySelect" class="ai-settings-select">
-            <option value="">默认（aistream.yaml）</option>
-            ${vendors.map((v) => `<option value="${this.escapeHtml(v.id)}" ${selectedFactory === v.id ? 'selected' : ''}>${this.escapeHtml(v.label || v.id)}</option>`).join('')}
+            <option value="">请选择 LLM 工厂</option>
+            ${vendors.map((v) => `<option value="${this.escapeHtml(v.id)}" ${selectedFactory === v.id ? 'selected' : ''}>${this.escapeHtml(v.label || v.id)}${v.endpoints?.length ? '' : '（未配置端点）'}</option>`).join('')}
           </select>
         </div>
         <div class="ai-settings-section">
           <label class="ai-settings-label">API 端点 / 模型</label>
-          <select id="aiProviderSelect" class="ai-settings-select">
-            <option value="">继承工厂默认</option>
-            ${this._renderAiEndpointOptions(vendors, selectedFactory, selectedEndpoint)}
+          <select id="aiProviderSelect" class="ai-settings-select"${providerSelectDisabled ? ' disabled' : ''}>
+            ${renderAiEndpointOptions((v) => this.escapeHtml(v), vendors, selectedFactory, selectedEndpoint)}
           </select>
           <p class="ai-settings-desc" id="aiEndpointMeta"></p>
         </div>
@@ -1008,40 +1001,26 @@ class App {
     `;
   }
 
-  _renderAiEndpointOptions(vendors = [], factoryId = '', selectedKey = '') {
-    const vendor = vendors.find((v) => v.id === factoryId) || null;
-    const endpoints = vendor?.endpoints || (factoryId ? [] : vendors.flatMap((v) => v.endpoints || []));
-    return endpoints.map((ep) => {
-      const label = ep.label || ep.key;
-      const modelHint = ep.model ? ` · ${ep.model}` : '';
-      return `<option value="${this.escapeHtml(ep.key)}" ${selectedKey === ep.key ? 'selected' : ''}>${this.escapeHtml(label)}${this.escapeHtml(modelHint)}</option>`;
-    }).join('');
+  /** 配置页保存 LLM 工厂 YAML 后，刷新侧栏工厂/端点列表 */
+  async _notifyLlmConfigChanged() {
+    await this.loadLlmOptions(true);
+    const panel = document.getElementById('aiSettingsPanel');
+    if (!panel || !this._isAIMode?.()) return;
+    const html = await this._renderAISettings();
+    panel.outerHTML = html;
+    bindWorkspacePanel(this)?.();
+    syncAiEndpointMeta(
+      this._llmOptions || {},
+      this._chatSettings.llmFactory || '',
+      this._chatSettings.provider || ''
+    );
+    this._bindChatEvents();
   }
 
-  _syncAiEndpointMeta() {
-    const meta = document.getElementById('aiEndpointMeta');
-    const select = document.getElementById('aiProviderSelect');
-    if (!meta || !select) return;
-    const key = select.value;
-    if (!key) {
-      meta.textContent = '未指定端点时将使用 aistream.llm.Provider 或工厂默认配置';
-      return;
-    }
-    const profile = (this._llmOptions?.profiles || []).find((p) => p.key === key);
-    if (!profile) {
-      meta.textContent = `端点：${key}`;
-      return;
-    }
-    const parts = [profile.model ? `模型 ${profile.model}` : null, profile.baseUrl ? profile.baseUrl : null].filter(Boolean);
-    meta.textContent = parts.join(' · ') || `端点：${key}`;
-  }
-
-  _refreshAiEndpointSelect(factoryId, selectedKey = '') {
-    const select = document.getElementById('aiProviderSelect');
-    if (!select) return;
-    const vendors = this._llmOptions?.vendors || [];
-    select.innerHTML = `<option value="">继承工厂默认</option>${this._renderAiEndpointOptions(vendors, factoryId, selectedKey)}`;
-    this._syncAiEndpointMeta();
+  _isLlmRelatedConfigName(name = '', child = '') {
+    const n = String(name || '');
+    const c = String(child || '');
+    return n.endsWith('_llm') || c.endsWith('_llm') || n === 'aistream' || c === 'aistream';
   }
   
   _unbindChatEvents() {
@@ -2281,7 +2260,11 @@ class App {
       }
 
       const apiKey = localStorage.getItem('apiKey') || '';
-      const provider = this._chatSettings.provider || '';
+      const provider = validateChatProviderForFactory(this._llmOptions, this._chatSettings);
+      if (provider !== (this._chatSettings.provider || '')) {
+        this._chatSettings.provider = provider;
+        try { localStorage.setItem('chatProvider', provider); } catch {}
+      }
       const persona = this._chatSettings.persona || '';
 
       // 构造消息列表：历史 + 本次用户输入（可选人设）

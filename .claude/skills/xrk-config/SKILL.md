@@ -14,14 +14,27 @@ description: 当你需要新增/调整配置字段、确保 YAML 与 commonconfi
 | 全局 | `data/server_bots/<name>.yaml` | `agt`、`redis`、`mongodb` |
 | 随端口 | `data/server_bots/{port}/<name>.yaml` | `server`、`aistream`、`chatbot` |
 | 工厂 LLM | `data/server_bots/{port}/<name>.yaml` | `openai_llm`、`*_compat_llm` |
-| 模板 | `config/default_config/<name>.yaml` | 缺失时自动复制 |
+| **底层模板** | `config/default_config/<name>.yaml` | 仅 AGT/工厂/system-Core；**禁止**产品 Core |
+| **产品 Core 模板** | `core/<core名>/default/<name>.yaml` | `core/lsy-Core/default/lsy.yaml` |
+| **产品运行时** | `data/<产品>/` | `data/lsy/lsy.yaml` |
 
 ## 改动须同步
 
+**system-Core / 工厂 / 全局服务**
+
 1. `config/default_config/<name>.yaml`
-2. `commonconfig/<name>.js` 或 `system.js` 内 schema
+2. `core/system-Core/commonconfig/<name>.js` 或 `system.js` 内 schema
 3. 消费该字段的代码
-4. system-Core `.gitignore` 白名单（若新增 commonconfig 文件）
+
+**独立产品 Core**（如 `lsy-Core`）
+
+1. `core/<core名>/default/<name>.yaml`
+2. `core/<core名>/commonconfig/<name>.js` schema；`read()` 从 Core 内 `default/` 复制，**不要**在 `config/default_config/` 加同名文件
+3. 消费该字段的代码（均在 `core/<core名>/` 内）
+
+4. system-Core `.gitignore` 白名单（若新增 **system-Core** commonconfig 文件）
+
+**勿混淆**：`core/<core>/AGENTS.md` 给**产品 Agent**（工作区/工具），不含 LLM 工厂与 `default_config` 约定；上述路径与模板规则仅写在 **本 skill / `xrk-project` / `core/<core>/README.md`**。
 
 `aistream.yaml`：`embedding`、`mcp`、`agentWorkspace`、`tools` 等见 `docs/aistream.md`。
 

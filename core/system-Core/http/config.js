@@ -6,6 +6,16 @@ import BotUtil from '#utils/botutil.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
 const getConfig = (name) => global.ConfigManager?.get(name);
+
+/** CommonConfig 写入后清 global.cfg 内存缓存，使 LLMFactory 等立即读到新 providers[] */
+function invalidateRuntimeCfgCache(configName) {
+  const cfg = global.cfg;
+  if (!cfg?.config || !configName) return;
+  delete cfg.config[`global.${configName}`];
+  const port = cfg.port;
+  if (port) delete cfg.config[`server.${port}.${configName}`];
+}
+
 const resolveConfigInstance = (name, keyPath) => {
         const config = getConfig(name);
   if (!config) return { error: `配置 ${name} 不存在` };
@@ -114,6 +124,8 @@ export default {
           return HttpResponse.validationError(res, `校验失败: ${valid.errors.join('; ')}`);
         }
         await config.write(merged, { backup, validate });
+        const cacheKey = name === 'system' ? keyPath : name;
+        if (cacheKey) invalidateRuntimeCfgCache(cacheKey);
         HttpResponse.success(res, null, '批量写入成功');
       }, 'config.batch-set')
     },
@@ -171,6 +183,8 @@ export default {
           }
         }
 
+        const cacheKey = configName === 'system' ? keyPath : configName;
+        if (cacheKey) invalidateRuntimeCfgCache(cacheKey);
         HttpResponse.success(res, { result }, '配置已保存');
       }, 'config.write')
     },

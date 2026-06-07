@@ -677,18 +677,10 @@ async function handleModels(req, res) {
   const llm = getAistreamConfigOptional().llm || {};
   const defaultProvider = getDefaultProvider();
   const format = (req.query.format || '').toLowerCase();
-  const profileRows = LLMFactory.listProviderProfiles?.() || LLMFactory.listProviders().map((key) => ({
-    key,
-    factory: key,
-    factoryType: 'builtin',
-    label: key,
-    model: getProviderConfig(key)?.model || getProviderConfig(key)?.chatModel || null,
-    baseUrl: getProviderConfig(key)?.baseUrl || null,
-    source: `${key}_llm`
-  }));
+  const profiles = LLMFactory.listModelProfiles();
 
   if (format === 'openai' || req.path === '/api/v3/models') {
-    const list = profileRows.map((p) => p.key);
+    const list = profiles.map((p) => p.key);
     const now = Math.floor(Date.now() / 1000);
     return res.json({
       object: 'list',
@@ -701,49 +693,7 @@ async function handleModels(req, res) {
     });
   }
 
-  const profiles = profileRows.map((row) => {
-    const c = getProviderConfig(row.key) || {};
-    return {
-      key: row.key,
-      factory: row.factory || row.key,
-      factoryType: row.factoryType || 'builtin',
-      protocol: row.protocol || null,
-      label: row.label || row.key,
-      description: row.source ? `配置来源: ${row.source}` : `LLM 提供商: ${row.key}`,
-      tags: [],
-      model: row.model || c.model || c.chatModel || null,
-      baseUrl: row.baseUrl || c.baseUrl || null,
-      maxTokens: c.maxTokens ?? c.max_tokens ?? null,
-      temperature: c.temperature ?? null,
-      hasApiKey: Boolean((c.apiKey || '').toString().trim()),
-      capabilities: [
-        ...(c.enableStream !== false ? ['stream'] : []),
-        ...(c.enableTools === true ? ['tools'] : [])
-      ]
-    };
-  });
-
-  const vendorMap = new Map();
-  for (const profile of profiles) {
-    const vendorKey = profile.factory || profile.key;
-    if (!vendorMap.has(vendorKey)) {
-      vendorMap.set(vendorKey, {
-        id: vendorKey,
-        label: vendorKey,
-        factoryType: profile.factoryType,
-        endpoints: []
-      });
-    }
-    vendorMap.get(vendorKey).endpoints.push({
-      key: profile.key,
-      label: profile.label,
-      model: profile.model,
-      baseUrl: profile.baseUrl,
-      hasApiKey: profile.hasApiKey,
-      capabilities: profile.capabilities
-    });
-  }
-  const vendors = [...vendorMap.values()];
+  const vendors = LLMFactory.listVendors(profiles);
 
   const workflows = StreamLoader.getStreamsByPriority()
     .filter(s => !s.primaryStream && !s.secondaryStreams && (s.mcpTools?.size || 0) > 0)

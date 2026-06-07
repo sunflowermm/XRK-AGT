@@ -29,7 +29,25 @@ alwaysApply: true
 
 - 涉及「在哪改/在哪配」必须给出**具体路径**（文件 + 函数/字段），不以「应该在某个地方」含糊带过。
 - 文档与代码冲突时以**代码为准**，并标注需修订的文档。
-- 新增配置需同时维护：`config/default_config/` 默认模板、`core/system-Core/commonconfig/*.js` 的 schema、以及实际消费该配置的代码。
+- 新增配置需同时维护默认模板、commonconfig schema、以及实际消费该配置的代码（见下节「配置模板归属」）。
+
+## 配置模板归属
+
+- **`config/default_config/`**：仅 **AGT 运行时 / LLM·ASR·TTS 工厂 / system-Core 体系** 的配置模板（如 `agt`、`server`、`aistream`、`*_llm`）。**禁止**放入独立产品 Core 的业务配置。
+- **独立产品 Core**（如 `lsy-Core`）：模板在 **`core/<core名>/default/<name>.yaml`**，运行时数据在 **`data/<产品>/`**，schema 在 **`core/<core名>/commonconfig/`**；`read()` 须从 Core 内 `default/` 引导复制，**不得**在 `config/default_config/` 添加同名 yaml。
+- **system-Core** 改配置：`config/default_config/` + `core/system-Core/commonconfig/` + 消费代码。
+- **独立 Core** 改配置：`core/<core名>/default/` + `core/<core名>/commonconfig/` + 消费代码；**不**改 `config/default_config/`、`src/infrastructure/`。
+
+## Core 内文档分工（产品 vs 开发）
+
+| 文档 | 读者 | 写什么 |
+|------|------|--------|
+| `core/<core>/AGENTS.md` | **产品 Agent** | 工作区、工具边界、用户规则说明；**不写** LLM 工厂、commonconfig、底层路径 |
+| `core/<core>/README.md` | **开发者** | 部署、API、架构、与 AGT 本体的集成方式 |
+| `core/<core>/skills/` | **产品 Agent**（注入 prompt） | 能力细则与操作规范 |
+| `.cursor/rules`、`skills/xrk-*` | **Cursor / 维护者** | 全局底层约定（配置归属、LLM 工厂、Node 26 等） |
+
+改 lsy-Core 底层接线看 **README + `xrk-config`**；改李诗雅「怎么干活」看 **AGENTS.md + skills/**。
 
 ## 开发与扩展
 

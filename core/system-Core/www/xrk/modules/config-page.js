@@ -94,19 +94,17 @@ export const configPageMethods = {
     return `<p class="config-field-hint config-control-footnote">${this.escapeHtml(text)}</p>`;
   },
 
-  /** 标签 + 说明；半宽字段无说明时用等高占位，保证两列控件底对齐 */
+  /** 标签 + 说明；无说明时不占位，避免半宽字段出现大块空行 */
   renderFieldMetaBlock({ label, description = '', inputId = '', required = false, isFullSpan = false }) {
     const hintClass = !isFullSpan ? ' config-field-hint-compact' : '';
     const hintHtml = description
       ? `<p class="config-field-hint${hintClass}">${this.escapeHtml(description)}</p>`
-      : (!isFullSpan
-        ? '<p class="config-field-hint config-field-hint-compact config-field-hint-empty" aria-hidden="true"></p>'
-        : '');
+      : '';
     const forAttr = inputId ? ` for="${this.escapeHtml(inputId)}"` : '';
     const titleAttr = description ? ` title="${this.escapeHtml(description)}"` : '';
     const req = required ? '<span class="required">*</span>' : '';
     return `
-      <div class="config-field-meta${isFullSpan ? ' config-field-meta-full' : ''}">
+      <div class="config-field-meta${isFullSpan ? ' config-field-meta-full' : ''}${description ? ' config-field-meta-has-hint' : ''}">
         <label${forAttr}${titleAttr}>${label}${req}</label>
         ${hintHtml}
       </div>
@@ -1965,6 +1963,11 @@ export const configPageMethods = {
       this._configState.dirty = {};
       this.showToast('配置已保存', 'success');
       await this.loadSelectedConfigDetail();
+      const { name } = this._configState.selected || {};
+      const child = this._configState.selectedChild || '';
+      if (this._isLlmRelatedConfigName?.(name, child)) {
+        await this._notifyLlmConfigChanged?.();
+      }
     } catch (e) {
       this.showToast('保存失败: ' + e.message, 'error');
     }
@@ -1981,6 +1984,11 @@ export const configPageMethods = {
       this.showToast('配置已保存', 'success');
       this._configState.mode = 'form';
       await this.loadSelectedConfigDetail();
+      const { name } = this._configState.selected || {};
+      const child = this._configState.selectedChild || '';
+      if (this._isLlmRelatedConfigName?.(name, child)) {
+        await this._notifyLlmConfigChanged?.();
+      }
     } catch (e) {
       this.showToast('保存失败: ' + e.message, 'error');
     }

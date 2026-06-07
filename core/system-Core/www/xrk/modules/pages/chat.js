@@ -9,6 +9,13 @@ import {
   isReducedMotion
 } from '../motion/gsap-motion.js';
 import { bindWorkspacePanel } from '../ai-workspace-ui.js';
+import {
+  getLlmVendors,
+  getVendorEndpoints,
+  persistAiLlmSelection,
+  syncAiEndpointMeta,
+  refreshAiEndpointSelect
+} from '../ai-llm-settings.js';
 
 export async function renderChatPage(app) {
   const content = document.getElementById('content');
@@ -149,7 +156,11 @@ export async function renderChatPage(app) {
       placeholder.outerHTML = aiSettings;
       applyAIMobileSettingsState(true);
       bindWorkspacePanel(app)?.();
-      app._syncAiEndpointMeta?.();
+      syncAiEndpointMeta(
+        app._llmOptions || {},
+        app._chatSettings.llmFactory || '',
+        app._chatSettings.provider || ''
+      );
     } catch {}
   }
 
@@ -246,16 +257,23 @@ export function bindChatEvents(app) {
     const providerSelect = document.getElementById('aiProviderSelect');
     const personaInput = document.getElementById('aiPersonaInput');
     if (factorySelect) safeBind(factorySelect, 'change', () => {
-      app._chatSettings.llmFactory = factorySelect.value;
-      localStorage.setItem('chatLlmFactory', factorySelect.value);
-      app._refreshAiEndpointSelect?.(factorySelect.value, '');
-      app._chatSettings.provider = '';
-      localStorage.setItem('chatProvider', '');
+      const factoryId = factorySelect.value;
+      const vendors = getLlmVendors(app._llmOptions || {});
+      const endpoints = getVendorEndpoints(vendors, factoryId);
+      const nextProvider = endpoints.length === 1 ? endpoints[0].key : '';
+      persistAiLlmSelection(app._chatSettings, { factoryId, endpointKey: nextProvider });
+      refreshAiEndpointSelect(app, factoryId, nextProvider);
     });
     if (providerSelect) safeBind(providerSelect, 'change', () => {
-      app._chatSettings.provider = providerSelect.value;
-      localStorage.setItem('chatProvider', providerSelect.value);
-      app._syncAiEndpointMeta?.();
+      persistAiLlmSelection(app._chatSettings, {
+        factoryId: app._chatSettings.llmFactory || factorySelect?.value || '',
+        endpointKey: providerSelect.value
+      });
+      syncAiEndpointMeta(
+        app._llmOptions || {},
+        app._chatSettings.llmFactory || '',
+        providerSelect.value
+      );
     });
     if (personaInput) safeBind(personaInput, 'input', () => {
       app._chatSettings.persona = personaInput.value;

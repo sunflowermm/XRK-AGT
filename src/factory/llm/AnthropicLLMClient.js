@@ -2,6 +2,7 @@ import { transformMessagesWithVision } from '../../utils/llm/message-transform.j
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
+import { ensureAnthropicMaxTokens, normalizeAnthropicMessages } from '../../utils/llm/anthropic-chat-utils.js';
 
 /**
  * Anthropic 官方 LLM 客户端（Messages API）
@@ -111,6 +112,16 @@ export default class AnthropicLLMClient {
         for (const p of m.content) {
           if (p?.type === 'text' && p.text) {
             blocks.push({ type: 'text', text: String(p.text) });
+          } else if (p?.type === 'tool_use' && p.id && p.name) {
+            blocks.push({ type: 'tool_use', id: p.id, name: p.name, input: p.input ?? {} });
+          } else if (p?.type === 'tool_result' && p.tool_use_id) {
+            blocks.push({
+              type: 'tool_result',
+              tool_use_id: p.tool_use_id,
+              content: String(p.content ?? '')
+            });
+          } else if (p?.type === 'image' && p.source) {
+            blocks.push(p);
           } else if (p?.type === 'image_url' && p.image_url?.url) {
             // 这里保持同步结构，实际转换在 chat/chatStream 前进行（buildBody 是纯构建函数）
             blocks.push({ type: '__image_url__', url: String(p.image_url.url) });
@@ -174,11 +185,7 @@ export default class AnthropicLLMClient {
     return parts.map(p => (p?.type === 'text' ? (p.text ?? '') : '')).join('');
   }
 
-  async chat(messages, overrides = {}) {
-    const transformedMessages = await this.transformMessages(messages);
-
-    // 把占位的 image_url block 转成 Anthropic image block（需要 async fetch/base64）
-    const body = this.buildBody(transformedMessages, overrides);
+  async _finalizeBodyImageBlocks(body) {
     for (const msg of body.messages ?? []) {
       if (!Array.isArray(msg.content)) continue;
       const newBlocks = [];
@@ -189,11 +196,18 @@ export default class AnthropicLLMClient {
           else newBlocks.push({ type: 'text', text: `[图片:${String(b.url)}]` });
         } else if (b?.type === 'text') {
           newBlocks.push({ type: 'text', text: String(b.text ?? '') });
+        } else if (b?.type === 'image' && b.source) {
+          newBlocks.push(b);
+        } else if (b?.type === 'tool_use' || b?.type === 'tool_result') {
+          newBlocks.push(b);
         }
       }
-      msg.content = newBlocks.filter(x => x && (x.type === 'text' ? (x.text ?? '').toString().trim() : true));
+      msg.content = newBlocks.filter((x) => x && (x.type === 'text' ? (x.text ?? '').toString().trim() : true));
     }
+  }
 
+  async _postNativeBody(body, overrides = {}) {
+    await this._finalizeBodyImageBlocks(body);
     const resp = await fetch(
       this.endpoint,
       buildFetchOptionsWithProxy(this.config, {
@@ -203,52 +217,40 @@ export default class AnthropicLLMClient {
         signal: AbortSignal.timeout(this.timeout)
       })
     );
-
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw new Error(`Anthropic 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
+    return resp;
+  }
 
+  /** 原生 Anthropic content blocks（含 image / tool_use），不经 OpenAI 多模态转换 */
+  async chatNative(messages, overrides = {}) {
+    const body = this.buildBody(normalizeAnthropicMessages(messages), overrides);
+    ensureAnthropicMaxTokens(body, this.config, overrides);
+    const resp = await this._postNativeBody(body, overrides);
+    const data = await resp.json();
+    return this.extractText(data);
+  }
+
+  async chat(messages, overrides = {}) {
+    const transformedMessages = await this.transformMessages(messages);
+    const body = this.buildBody(transformedMessages, overrides);
+    const resp = await this._postNativeBody(body, overrides);
     const data = await resp.json();
     return this.extractText(data);
   }
 
   async chatStream(messages, onDelta, overrides = {}) {
-    // Anthropic 支持 SSE：stream=true
     const transformedMessages = await this.transformMessages(messages);
     const body = this.buildBody(transformedMessages, overrides);
-
-    // 把占位的 image_url block 转成 Anthropic image block（需要 async fetch/base64）
-    for (const msg of body.messages ?? []) {
-      if (!Array.isArray(msg.content)) continue;
-      const newBlocks = [];
-      for (const b of msg.content) {
-        if (b?.type === '__image_url__' && b.url) {
-          const imgBlock = await this._toAnthropicImageBlock(b.url);
-          if (imgBlock) newBlocks.push(imgBlock);
-          else newBlocks.push({ type: 'text', text: `[图片:${String(b.url)}]` });
-        } else if (b?.type === 'text') {
-          newBlocks.push({ type: 'text', text: String(b.text ?? '') });
-        }
-      }
-      msg.content = newBlocks.filter(x => x && (x.type === 'text' ? (x.text ?? '').toString().trim() : true));
-    }
     body.stream = true;
 
-    const resp = await fetch(
-      this.endpoint,
-      buildFetchOptionsWithProxy(this.config, {
-        method: 'POST',
-        headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.timeout)
-      })
-    );
-
-    if (!resp.ok || !resp.body) {
-      const text = await resp.text().catch(() => '');
-      throw new Error(`Anthropic 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+    const resp = await this._postNativeBody(body, overrides);
+    if (!resp.body) {
+      throw new Error('Anthropic 流式响应无 body');
     }
+
     for await (const { data } of iterateSSE(resp, { stopOnDone: false })) {
       if (!data) continue;
       try {

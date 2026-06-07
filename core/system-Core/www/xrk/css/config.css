@@ -477,7 +477,7 @@
   border: none;
   border-radius: 0;
   border-bottom: 1px solid var(--config-divider);
-  padding: 12px 4px;
+  padding: 8px 4px;
   background: transparent;
   box-shadow: none;
 }
@@ -491,8 +491,27 @@
   box-shadow: none;
 }
 
+.config-field-grid--flat > .config-field.config-field-row:not(.config-field-span-full) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 .config-field-grid--flat > .config-field.config-field-row:not(.config-field-span-full) .config-field-body {
-  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  gap: 0;
+}
+
+.config-field-grid--flat > .config-field.config-field-row:not(.config-field-span-full) .config-field-meta {
+  flex: 0 0 auto;
+}
+
+.config-field-grid--flat > .config-field.config-field-row:not(.config-field-span-full) .config-field-control {
+  margin-top: auto;
+  padding-top: 6px;
 }
 
 .config-field-grid--flat > .config-field.config-field-dirty {
@@ -570,29 +589,27 @@
 .config-field-body {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  height: 100%;
+  gap: 6px;
   min-height: 0;
 }
 
 .config-field-grid--flat .config-field-body {
-  height: 100%;
+  height: auto;
+}
+
+.config-field-grid--flat > .config-field.config-field-span-full .config-field-body {
+  gap: 6px;
 }
 
 .config-field-meta {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1 1 auto;
-}
-
-.config-field-grid--flat .config-field:not(.config-field-span-full) .config-field-meta {
-  min-height: 4.5rem;
+  flex: 0 0 auto;
 }
 
 .config-field-meta-full {
   flex: 0 0 auto;
-  min-height: 0;
 }
 
 .config-field-meta label {
@@ -607,14 +624,19 @@
 /* 控件区纵向堆叠，避免 textarea + 脚注被 flex 横排导致 focus 环压住右侧文字 */
 .config-field-control {
   flex: 0 0 auto;
-  margin-top: auto;
-  padding-top: 8px;
+  margin-top: 0;
+  padding-top: 0;
   min-height: var(--config-control-height, 36px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
   width: 100%;
+}
+
+/* 满宽字段：说明与控件固定间距 */
+.config-field-span-full .config-field-meta-has-hint + .config-field-control {
+  margin-top: 0.65rem;
 }
 
 .config-field-control-switch {
@@ -656,13 +678,7 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 2.9em;
   max-height: 2.9em;
-}
-
-.config-field-hint-empty {
-  visibility: hidden;
-  pointer-events: none;
 }
 
 /* 配置页控件：仅用 background-color，勿用 background 简写（会冲掉 select 箭头 repeat/position） */
@@ -1178,29 +1194,6 @@
 
 .config-page-dense .config-main {
   padding: 18px;
-}
-
-.config-page-dense .config-group {
-  padding: 14px 16px;
-  margin-bottom: 14px;
-}
-
-.config-page-dense .config-group-header {
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-}
-
-.config-page-dense .config-field-grid {
-  gap: 8px;
-}
-
-.config-page-dense .config-field-grid--flat > .config-field.config-field-row {
-  padding: 8px 4px;
-}
-
-.config-page-dense .config-subgroup {
-  padding: 12px;
-  margin-top: 10px;
 }
 
 .array-object-providers {

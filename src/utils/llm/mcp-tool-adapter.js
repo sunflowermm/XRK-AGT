@@ -32,7 +32,7 @@ export class MCPToolAdapter {
    * @param {Array<string>} [options.excludeStreams] - 黑名单工作流列表（如 ['chat']）
    * @returns {Array} OpenAI tools
    */
-  static convertMCPToolsToOpenAI(options = {}) {
+  static listMcpTools(options = {}) {
     const {
       workflow = null,
       streams = null,
@@ -43,43 +43,44 @@ export class MCPToolAdapter {
     if (!mcpServer) return [];
 
     let mcpTools;
-
-    // 1. 若显式传入 streams 白名单，则只保留这些前缀的工具
     if (Array.isArray(streams) && streams.length > 0) {
-      // 明确指定多个工作流时：分别调用 listTools(stream) 再合并，避免受全局过滤影响
       const uniq = new Map();
       for (const s of streams.filter(Boolean)) {
-        const toolsOfStream = mcpServer.listTools(s);
-        for (const tool of toolsOfStream) {
-          if (!uniq.has(tool.name)) {
-            uniq.set(tool.name, tool);
-          }
+        for (const tool of mcpServer.listTools(s)) {
+          if (!uniq.has(tool.name)) uniq.set(tool.name, tool);
         }
       }
       mcpTools = Array.from(uniq.values());
     } else if (workflow) {
-      // 2. 若指定单一 workflow，则直接用 listTools(workflow)
       mcpTools = mcpServer.listTools(workflow);
     } else {
-      // 3. 未选工作流且未选 streams：不注入任何 MCP 工具
       mcpTools = [];
     }
 
     const excluded = new Set((Array.isArray(excludeStreams) ? excludeStreams : []).filter(Boolean));
-    const filteredTools = excluded.size > 0
-      ? mcpTools.filter((tool) => {
-        const streamName = String(tool?.name || '').split('.')[0];
-        return !excluded.has(streamName);
-      })
-      : mcpTools;
+    if (!excluded.size) return mcpTools;
+    return mcpTools.filter((tool) => {
+      const streamName = String(tool?.name || '').split('.')[0];
+      return !excluded.has(streamName);
+    });
+  }
 
-    return filteredTools.map(tool => ({
+  static convertMCPToolsToOpenAI(options = {}) {
+    return this.listMcpTools(options).map((tool) => ({
       type: 'function',
       function: {
         name: tool.name,
         description: tool.description || '',
         parameters: this.convertSchemaToOpenAI(tool.inputSchema || {})
       }
+    }));
+  }
+
+  static convertMCPToolsToAnthropic(options = {}) {
+    return this.listMcpTools(options).map((tool) => ({
+      name: tool.name,
+      description: tool.description || '',
+      input_schema: this.convertSchemaToOpenAI(tool.inputSchema || {})
     }));
   }
 
