@@ -207,11 +207,7 @@
 }
 
 .chat-message.message-enter {
-  animation: messageSlideIn 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-html.motion-enabled .chat-message.message-enter {
-  animation: none;
+  animation: messageSlideIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes messageSlideIn {

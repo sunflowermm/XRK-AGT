@@ -78,7 +78,7 @@ import {
 
 import * as apiDebug from './modules/api-debug.js';
 import { configPageMethods } from './modules/config-page.js';
-import * as motion from './modules/motion/gsap-motion.js';
+import * as motion from './modules/motion/motion.js';
 import { ensurePageLibs } from './modules/runtime-libs.js';
 import {
   fetchWorkspacePresets,
@@ -546,7 +546,6 @@ class App {
         status.classList.add('online');
         const statusText = status.querySelector('.status-text');
         if (statusText) statusText.textContent = '已连接';
-        motion.pulseOnlineStatus(status.querySelector('.status-dot'));
       } else {
         status.classList.remove('online');
         const statusText = status.querySelector('.status-text');
@@ -641,13 +640,7 @@ class App {
 
     const content = $('#content');
     const prevPage = this.currentPage;
-    const shouldAnimate = this._routeInitialized && content && prevPage !== normalizedPage;
-    const restoringTarget = this._pageCache.has(normalizedPage);
-
     const willCachePrev = Boolean(prevPage && prevPage !== normalizedPage);
-    if (shouldAnimate && content?.firstElementChild && !restoringTarget && !willCachePrev) {
-      await motion.animatePageExit(content);
-    }
 
     if (willCachePrev) {
       this._pageCache.save(prevPage);
@@ -725,22 +718,11 @@ class App {
         }
     }
 
-    const mountedFromCache = restoringTarget;
-
     if (location.hash !== `#/${normalizedPage}`) {
       this._suppressHashChange = true;
       location.hash = `#/${normalizedPage}`;
     }
 
-    if (content) {
-      motion.animatePageBlocks(content, normalizedPage, {
-        intro: !mountedFromCache,
-        cached: mountedFromCache
-      });
-    }
-    if (headerTitle && !mountedFromCache) {
-      motion.animateHeaderTitle(headerTitle);
-    }
     this._routeInitialized = true;
   }
 
@@ -1197,10 +1179,6 @@ class App {
     requestAnimationFrame(() => this.scrollToBottom(false));
   }
 
-  _applyMessageEnter(div, animate = true) {
-    return applyMessageEnter(this, div, animate);
-  }
-
   appendChat(role, text, options = {}) {
     return appendChatMessage(this, role, text, options);
   }
@@ -1350,11 +1328,7 @@ class App {
       header.setAttribute('aria-expanded', 'false');
       const toggle = () => {
         const open = content.hidden;
-        if (motion.isMotionReady() && !motion.isReducedMotion()) {
-          motion.animateToolBlockToggle(content, open);
-        } else {
-          content.hidden = !open;
-        }
+        content.hidden = !open;
         header.querySelector('.chat-tool-block-toggle').textContent = open ? '收起' : '展开';
         header.setAttribute('aria-expanded', String(open));
       };
@@ -1695,7 +1669,7 @@ class App {
     this._renderMermaidIn(div);
 
     if (!this._isRestoringHistory) this.scrollToBottom();
-    this._applyMessageEnter(div, persist);
+    applyMessageEnter(this, div, persist);
 
     if (persist) {
       const normalizedSegments = segments.map(s => {
@@ -1838,7 +1812,7 @@ class App {
     this.scrollToBottom();
     }
 
-    this._applyMessageEnter(div, persist);
+    applyMessageEnter(this, div, persist);
 
     // 保存到聊天历史（仅在需要持久化时）
     if (persist) {
@@ -2002,7 +1976,6 @@ class App {
         this.removeImagePreview(fileId);
       });
     });
-    requestAnimationFrame(() => motion.animateImagePreviewItems(previewContainer));
   }
   
   /**
@@ -2260,7 +2233,7 @@ class App {
     assistantMsg.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     assistantMsg.dataset.role = 'assistant';
     box.appendChild(assistantMsg);
-    this._applyMessageEnter(assistantMsg, false);
+    applyMessageEnter(this, assistantMsg, false);
     return assistantMsg;
   }
 
@@ -3110,7 +3083,6 @@ class App {
       ? (message || `${this._chatStreamState.source === 'voice' ? '语音' : '文本'}生成中...`)
       : '空闲';
     statusEl.classList.toggle('active', isRunning);
-    motion.animateStreamStatus(statusEl, isRunning);
   }
   
   _updateEventQuoteStrip() {
@@ -3909,7 +3881,6 @@ class App {
       this.updateVoiceStatus('正在聆听...');
       document.getElementById('micBtn')?.classList.add('recording');
       document.getElementById('voiceWave')?.classList.add('active');
-      motion.animateVoiceWave(document.getElementById('voiceWave'), true);
       
       // 发送会话启动请求
       this._deviceWs?.send(JSON.stringify({
@@ -4063,7 +4034,6 @@ class App {
       this._micActive = false;
       document.getElementById('micBtn')?.classList.remove('recording');
       document.getElementById('voiceWave')?.classList.remove('active');
-      motion.animateVoiceWave(document.getElementById('voiceWave'), false);
       this._audioCtx = null;
       this._micStream = null;
       this._audioProcessor = null;

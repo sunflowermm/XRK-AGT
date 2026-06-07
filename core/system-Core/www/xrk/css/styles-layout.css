@@ -24,7 +24,7 @@
   backface-visibility: hidden;
 }
 
-/* 桌面端侧栏始终可见（防止 GSAP 移动端遗留 inline transform） */
+  /* 桌面端侧栏始终可见 */
 @media (min-width: 769px) {
   .sidebar {
     transform: translateX(0) !important;
@@ -56,9 +56,10 @@
 }
 
 .brand-name {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
+  letter-spacing: var(--letter-spacing-tight);
 }
 
 .sidebar-close {
@@ -92,9 +93,10 @@
   border-radius: var(--radius);
   color: var(--text-secondary);
   text-decoration: none;
+  font-family: var(--font-family-sans);
   font-size: var(--font-size-md);
-  font-weight: 500;
-  transition: all var(--transition);
+  font-weight: var(--font-weight-medium);
+  transition: background-color var(--transition), color var(--transition);
 }
 
 .nav-item svg {

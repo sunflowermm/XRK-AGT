@@ -18,13 +18,11 @@
 }
 
 .dashboard-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: var(--font-size-2xl);
 }
 
 .dashboard-subtitle {
-  font-size: 14px;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
   margin-top: 4px;
 }
@@ -709,7 +707,7 @@
   width: 100%;
   min-height: 280px;
   box-sizing: border-box;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-family-mono);
   font-size: 13px;
   line-height: 1.5;
   padding: 12px;

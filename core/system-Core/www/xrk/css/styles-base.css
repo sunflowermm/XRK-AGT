@@ -77,20 +77,32 @@
   --header-height: 64px;
   --api-panel-width: 280px;
 
-  /* 字体与排版（统一比例体系） */
-  --font-family-sans: 'Noto Sans SC', sans-serif;
-  --font-family-mono: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  --font-size-xs: 0.75rem;     /* 12px - 标签/辅助文字 */
+  /* 字体分级：display 标题 / sans 界面 / mono 代码 */
+  --font-family-display: 'Noto Serif SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-family-sans: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --font-size-xs: 0.75rem;     /* 12px - 标签/辅助 */
   --font-size-sm: 0.8125rem;   /* 13px - 次要说明 */
-  --font-size-md: 0.875rem;    /* 14px - 表单/按钮文字 */
-  --font-size-base: 0.9375rem; /* 15px - 常规正文（可按需替换 body） */
-  --font-size-lg: 1rem;        /* 16px - 主体正文 */
+  --font-size-md: 0.875rem;    /* 14px - 表单/按钮 */
+  --font-size-base: 0.9375rem; /* 15px - 正文 */
+  --font-size-lg: 1rem;        /* 16px - 强调正文 */
   --font-size-xl: 1.25rem;     /* 20px - 区块标题 */
   --font-size-2xl: 1.5rem;     /* 24px - 页面主标题 */
+  --font-size-3xl: 1.75rem;    /* 28px - 品牌/大标题 */
 
-  --line-height-tight: 1.3;
-  --line-height-normal: 1.5;
-  --line-height-relaxed: 1.7;
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.02em;
+
+  --line-height-tight: 1.35;
+  --line-height-normal: 1.55;
+  --line-height-relaxed: 1.72;
 
   /* 动画 */
   --transition: 0.2s ease;
@@ -143,11 +155,29 @@ html {
 
 body {
   font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-regular);
   background: var(--bg-body);
   color: var(--text-primary);
   line-height: var(--line-height-normal);
   min-height: var(--vh, 100vh);
   overflow-x: hidden;
+  font-feature-settings: 'kern' 1, 'liga' 1;
+  text-rendering: optimizeLegibility;
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+}
+
+label,
+.form-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-wide);
 }
 
 /* 统一等宽字体：避免不同模块出现 Monaco/Consolas/Courier New 等差异 */
@@ -221,18 +251,31 @@ select:focus-visible,
 }
 
 /* 全局标题与文字层级 */
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 600;
+h1, h2,
+.dashboard-title,
+.brand-name,
+.config-sidebar-header h1 {
+  font-family: var(--font-family-display);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
   color: var(--text-primary);
   line-height: var(--line-height-tight);
 }
 
-h1 {
+h1, .dashboard-title {
   font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
 }
 
 h2 {
   font-size: var(--font-size-xl);
+}
+
+h3, h4, h5, h6 {
+  font-family: var(--font-family-sans);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  line-height: var(--line-height-tight);
 }
 
 h3 {
@@ -242,6 +285,10 @@ h3 {
 h4, h5, h6 {
   font-size: var(--font-size-base);
 }
+
+.font-display { font-family: var(--font-family-display); }
+.font-ui { font-family: var(--font-family-sans); }
+.font-mono { font-family: var(--font-family-mono); }
 
 small,
 .text-xs {
@@ -275,5 +322,16 @@ small,
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 

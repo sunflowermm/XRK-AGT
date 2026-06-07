@@ -666,3 +666,10 @@ body.dark .json-boolean { color: #f87171; }
   }
 }
 
+/* CodeMirror 与项目等宽字体对齐 */
+.CodeMirror,
+.CodeMirror pre {
+  font-family: var(--font-family-mono) !important;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}

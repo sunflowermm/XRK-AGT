@@ -6,14 +6,8 @@
     <meta name="description" content="XRK-AGT控制台 - 多语言、多适配器、工作流驱动型智能体平台">
     <meta name="theme-color" content="#0ea5e9">
     <title>XRK-AGT控制台</title>
-    <!-- DNS预解析和预连接优化 -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- 字体加载优化（避免通用 Inter：使用更适配中文的 Noto 字体） -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+    <link rel="preload" href="fonts/noto-sans-sc/noto-sans-sc-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="css/fonts.css">
     <link rel="stylesheet" href="css/styles-base.css">
     <link rel="stylesheet" href="css/styles-layout.css">
     <link rel="stylesheet" href="css/styles-api-debug.css">
@@ -23,7 +17,6 @@
     <link rel="stylesheet" href="css/pages.css">
     <link rel="stylesheet" href="css/api-list.css">
     <link rel="stylesheet" href="css/config.css">
-    <link rel="stylesheet" href="css/motion.css">
 </head>
 <body>
     <a href="#content" class="skip-link">跳到主内容</a>
@@ -156,8 +149,6 @@
     <!-- Toast 容器 -->
     <div class="toast-container" id="toastContainer" aria-live="polite" aria-relevant="additions"></div>
 
-    <!-- GSAP：全站动效 -->
-    <script src="lib/gsap.min.js"></script>
     <!-- Chart.js / Mermaid 由 app 按路由懒加载（modules/runtime-libs.js） -->
     <!-- 主应用脚本（使用 ES Module） -->
     <script type="module" src="app.js"></script>

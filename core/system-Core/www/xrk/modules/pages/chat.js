@@ -1,13 +1,5 @@
 import { emotionIconSVG, pokeHandIconSVG } from '../ui-kit.js';
-import {
-  animateChatMessage,
-  animateChatModeSwitch,
-  animateAISettingsPanel,
-  animateChatSendPulse,
-  cancelPageMotion,
-  isMotionReady,
-  isReducedMotion
-} from '../motion/gsap-motion.js';
+import { cancelPageMotion } from '../motion/motion.js';
 import { bindWorkspacePanel } from '../ai-workspace-ui.js';
 import {
   getLlmVendors,
@@ -241,8 +233,6 @@ export function bindChatEvents(app) {
       app._chatMode = mode;
       localStorage.setItem('chatMode', mode);
       await app._switchChatMode(mode);
-      const activeBtn = document.querySelector(`.chat-mode-btn[data-mode="${mode}"]`);
-      animateChatModeSwitch(activeBtn);
     });
   }
   if (app._isAIMode()) {
@@ -252,7 +242,6 @@ export function bindChatEvents(app) {
       if (!panel) return;
       panel.classList.toggle('mobile-collapsed');
       applyAIMobileSettingsState(false);
-      animateAISettingsPanel(panel, !panel.classList.contains('mobile-collapsed'));
     });
     const factorySelect = document.getElementById('aiFactorySelect');
     const providerSelect = document.getElementById('aiProviderSelect');
@@ -291,10 +280,7 @@ export function bindChatEvents(app) {
       app.openConfigSelection('system', 'aistream');
     });
   }
-  if (sendBtn) safeBind(sendBtn, 'click', () => {
-    animateChatSendPulse(sendBtn);
-    app.sendChatMessage();
-  });
+  if (sendBtn) safeBind(sendBtn, 'click', () => app.sendChatMessage());
   if (input) {
     safeBind(input, 'keydown', (e) => {
       if (e.key === 'Enter') {
@@ -398,10 +384,6 @@ export function applyMessageEnter(app, div, animate = true) {
     div.classList.remove('message-enter');
     return;
   }
-  if (isMotionReady() && !isReducedMotion()) {
-    animateChatMessage(div);
-    return;
-  }
   div.addEventListener('animationend', () => {
     div.classList.remove('message-enter');
   }, { once: true });
@@ -434,7 +416,7 @@ export function appendChatMessage(app, role, text, options = {}) {
   box.appendChild(div);
   app._renderMermaidIn(div);
   if (!app._isRestoringHistory) app.scrollToBottom();
-  app._applyMessageEnter(div, persist);
+  applyMessageEnter(app, div, persist);
   return div;
 }
 

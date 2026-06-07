@@ -26,8 +26,9 @@
   justify-content: center;
   gap: 8px;
   padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
   border-radius: var(--radius);
   border: none;
   cursor: pointer;

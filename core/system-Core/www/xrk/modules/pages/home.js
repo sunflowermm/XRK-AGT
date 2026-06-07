@@ -1,4 +1,4 @@
-import { cancelPageMotion } from '../motion/gsap-motion.js';
+import { cancelPageMotion } from '../motion/motion.js';
 
 export function renderHomePage(app) {
   ['cpu', 'mem', 'net'].forEach(key => {

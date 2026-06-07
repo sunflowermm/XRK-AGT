@@ -1,0 +1,78 @@
+/**
+ * 本地字体（SIL Open Font License）
+ * - Noto Sans SC：界面正文 / 控件
+ * - Noto Serif SC：标题 / 品牌层级
+ * - JetBrains Mono：代码 / 等宽
+ */
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/noto-sans-sc/noto-sans-sc-400.woff2') format('woff2');
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF, U+0020-007F;
+}
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/noto-sans-sc/noto-sans-sc-500.woff2') format('woff2');
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF, U+0020-007F;
+}
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/noto-sans-sc/noto-sans-sc-600.woff2') format('woff2');
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF, U+0020-007F;
+}
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/noto-sans-sc/noto-sans-sc-700.woff2') format('woff2');
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF, U+0020-007F;
+}
+
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/noto-serif-sc/noto-serif-sc-600.woff2') format('woff2');
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF, U+0020-007F;
+}
+
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/noto-serif-sc/noto-serif-sc-700.woff2') format('woff2');
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF, U+0020-007F;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono/jetbrains-mono-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono/jetbrains-mono-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}

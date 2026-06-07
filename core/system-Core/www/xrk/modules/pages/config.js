@@ -1,4 +1,4 @@
-import { cancelPageMotion } from '../motion/gsap-motion.js';
+import { cancelPageMotion } from '../motion/motion.js';
 
 function bindConfigListEvents(app, listContainer) {
   const selectFromEvent = (e) => {
