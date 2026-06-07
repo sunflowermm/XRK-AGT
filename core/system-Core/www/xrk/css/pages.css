@@ -1127,12 +1127,92 @@
     min-width: 0;
     width: 100%;
   }
+
+  /* Voice 模式：居中内容区 + 底部输入栏不溢出（Event/AI 不受影响） */
+  .chat-container.voice-mode {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    overflow-x: clip;
+  }
+
+  .chat-container.voice-mode .chat-main {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    align-items: stretch;
+  }
+
+  .chat-container.voice-mode .voice-chat-center {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 20px 12px 12px;
+    box-sizing: border-box;
+  }
+
+  .chat-container.voice-mode .voice-emotion-display {
+    font-size: 72px;
+    margin-bottom: 12px;
+  }
+
+  .chat-container.voice-mode .voice-status {
+    font-size: 14px;
+    margin-top: 10px;
+  }
+
+  .chat-container.voice-mode .voice-clear-btn {
+    margin-top: 12px;
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .chat-container.voice-mode .voice-messages {
+    width: 100%;
+    padding-left: 12px;
+    padding-right: 12px;
+    box-sizing: border-box;
+  }
+
+  .chat-container.voice-mode .chat-input-area {
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 10px 12px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .chat-container.voice-mode .voice-mic-btn {
+    width: 52px;
+    height: 52px;
+    flex: 0 0 52px;
+  }
+
+  .chat-container.voice-mode .voice-mic-btn svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .chat-container.voice-mode .voice-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+  }
+
+  .chat-container.voice-mode .voice-send-btn,
+  .chat-container.voice-mode .voice-tts-stop-btn {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+  }
 }
 
-/* Voice 模式布局与控件 */
+/* Voice 模式：主栏纵向 flex（与 .chat-main 一致，仅补充 min-height） */
 .chat-container.voice-mode .chat-main {
-  display: flex;
-  flex-direction: column;
   min-height: 0;
 }
 
@@ -1147,6 +1227,9 @@
   justify-content: center;
   padding: 40px 20px 20px;
   flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .voice-emotion-display {

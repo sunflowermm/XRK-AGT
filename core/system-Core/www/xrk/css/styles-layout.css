@@ -512,38 +512,5 @@ body[data-page="chat"] .content {
     max-width: 100%;
     box-sizing: border-box;
   }
-
-  .voice-chat-center {
-    max-width: 360px;
-    padding: 24px 16px 16px;
-    margin: 0 auto;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .voice-emotion-display {
-    font-size: 80px;
-  }
-
-  .voice-status {
-    font-size: 14px;
-  }
-
-  .voice-mic-btn {
-    width: 64px;
-    height: 64px;
-  }
-
-  .voice-mic-btn svg {
-    width: 30px;
-    height: 30px;
-  }
-
-  .voice-clear-btn {
-    margin-top: 16px;
-    font-size: 13px;
-    padding: 6px 14px;
-  }
-
 }
 
