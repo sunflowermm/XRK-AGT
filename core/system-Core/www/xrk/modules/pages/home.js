@@ -1,5 +1,3 @@
-import { cancelPageMotion } from '../motion/motion.js';
-
 export function renderHomePage(app) {
   ['cpu', 'mem', 'net'].forEach(key => {
     if (app._charts[key]) {
@@ -14,8 +12,6 @@ export function renderHomePage(app) {
 
   const content = document.getElementById('content');
   if (!content) return;
-
-  cancelPageMotion(content);
 
   content.innerHTML = `
       <div class="dashboard">

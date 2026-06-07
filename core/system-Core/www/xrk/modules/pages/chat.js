@@ -1,5 +1,4 @@
 import { emotionIconSVG, pokeHandIconSVG } from '../ui-kit.js';
-import { cancelPageMotion } from '../motion/motion.js';
 import { bindWorkspacePanel } from '../ai-workspace-ui.js';
 import {
   getLlmVendors,
@@ -11,7 +10,6 @@ import {
 
 export async function renderChatPage(app) {
   const content = document.getElementById('content');
-  cancelPageMotion(content);
   const isAIMode = app._isAIMode();
   const isVoiceMode = app._isVoiceMode();
   const aiSettingsPlaceholder = isAIMode

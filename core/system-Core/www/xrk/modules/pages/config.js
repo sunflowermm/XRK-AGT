@@ -1,5 +1,3 @@
-import { cancelPageMotion } from '../motion/motion.js';
-
 function bindConfigListEvents(app, listContainer) {
   const selectFromEvent = (e) => {
     const item = e.target.closest('.config-item');
@@ -30,7 +28,6 @@ function bindConfigListEvents(app, listContainer) {
 export function renderConfigPage(app) {
   const content = document.getElementById('content');
   if (!content) return;
-  cancelPageMotion(content);
 
   if (!app._configState) {
     app._configState = {
