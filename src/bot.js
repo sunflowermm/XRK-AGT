@@ -204,6 +204,33 @@ export default class Bot extends EventEmitter {
         throw error;
       }
     };
+
+    /** 子服务端根 URL（与 aistream.yaml subserver.host/port 一致） */
+    this.getSubserverBaseUrl = () => this._subserverBaseUrl;
+
+    /**
+     * 从子服务端下载二进制文件到本地路径（远程子服务 / 多 AGT 共用场景）
+     * @param {string} requestPath - 如 /api/jmcomic/file
+     * @param {{ query?: object, dest: string, timeout?: number }} options
+     */
+    this.fetchSubserverToPath = async (requestPath, options = {}) => {
+      const { query, dest, timeout } = options;
+      if (!dest) throw new Error('fetchSubserverToPath 需要 dest');
+
+      const response = await this.callSubserver(requestPath, {
+        method: 'GET',
+        query,
+        rawResponse: true,
+        timeout: timeout ?? this._subserverTimeout
+      });
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (!buffer.length) throw new Error('子服务端返回空文件');
+
+      await fs.mkdir(path.dirname(dest), { recursive: true });
+      await fs.writeFile(dest, buffer);
+      return dest;
+    };
   }
   /**
    * 静态方法版本的makeError
