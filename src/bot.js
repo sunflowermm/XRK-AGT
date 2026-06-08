@@ -958,7 +958,7 @@ export default class Bot extends EventEmitter {
     });
     
     this.express.use((req, res, next) => {
-      const baseSkipPrefixes = ['/api/', '/media/', '/uploads/', '/File', '/core/'];
+      const baseSkipPrefixes = ['/api/', '/media/', '/uploads/', '/File', '/core/', '/subserver-file'];
       if (!req.path || req.path === '/') return next();
       const redirectSkipPrefixes = baseSkipPrefixes.concat(frontendMountPrefixes || []);
       if (redirectSkipPrefixes.some(p => req.path.startsWith(p))) {
@@ -978,6 +978,8 @@ export default class Bot extends EventEmitter {
     this.express.get('/metrics', this._metricsHandler.bind(this)); // 性能指标
     this.express.get('/robots.txt', this._handleRobotsTxt.bind(this));
     this.express.get('/favicon.ico', this._handleFavicon.bind(this));
+    // 子服务端文件公网代理（免 API Key；本地有文件则直出，否则向子服务拉取）
+    this.express.get('/subserver-file', (req, res) => this._handleSubserverFileProxy(req, res));
     
     // ========== 第四阶段：前缀路由匹配 ==========
     // 文件服务路由（/File前缀）
@@ -2895,19 +2897,105 @@ export default class Bot extends EventEmitter {
       const protocol = domain.ssl?.enabled ? 'https' : 'http';
       return `${protocol}://${domain.domain}`;
     }
-    
+
+    const configuredUrl = this._getConfiguredServerUrl();
+    if (configuredUrl) {
+      const withScheme = /^https?:\/\//i.test(configuredUrl)
+        ? configuredUrl
+        : `${this._isHttpsEnabled() ? 'https' : 'http'}://${configuredUrl.replace(/^\/+/, '')}`;
+      return new URL(withScheme).toString().replace(/\/+$/, '');
+    }
+
     const protocol = this._isHttpsEnabled() ? 'https' : 'http';
     const port = protocol === 'https' ? this.actualHttpsPort : this.actualPort;
-    const configuredUrl = this._getConfiguredServerUrl();
-    let host = configuredUrl || '127.0.0.1';
-    
-    // 移除host中可能包含的协议前缀
-    host = host.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    
-    const needPort = (protocol === 'http' && port !== 80) ||
-                     (protocol === 'https' && port !== 443);
-    
-    return `${protocol}://${host}${needPort ? ':' + port : ''}`;
+    const needPort = (protocol === 'http' && port !== 80)
+      || (protocol === 'https' && port !== 443);
+
+    return `${protocol}://127.0.0.1${needPort ? ':' + port : ''}`;
+  }
+
+  /**
+   * 对外可访问的服务根 URL（优先 server.url / override，否则将 127 替换为公网或局域网 IP）
+   */
+  async getPublicServerUrl(override = '') {
+    const raw = String(override || this._getConfiguredServerUrl() || '').trim();
+    if (raw) {
+      const withScheme = /^https?:\/\//i.test(raw)
+        ? raw
+        : `${this._isHttpsEnabled() ? 'https' : 'http'}://${raw.replace(/^\/+/, '')}`;
+      return new URL(withScheme).toString().replace(/\/+$/, '');
+    }
+
+    const loopbackRe = /:\/\/(127(?:\.\d+){3}|localhost)(?:[:/]|$)/i;
+    const base = this.getServerUrl();
+    if (!loopbackRe.test(base)) return base.replace(/\/+$/, '');
+
+    const ipInfo = await this.getLocalIpAddress();
+    const parsed = new URL(base);
+    const host = ipInfo?.public
+      || ipInfo?.local?.find(item => item.primary)?.ip
+      || ipInfo?.local?.[0]?.ip;
+    if (host) parsed.hostname = host;
+    return parsed.toString().replace(/\/+$/, '');
+  }
+
+  /**
+   * 公网直链：优先读本机 data 相对路径，缺失则代理子服务端文件 API
+   */
+  async _handleSubserverFileProxy(req, res) {
+    if (this._checkHeadersSent(res)) return;
+
+    const rel = String(req.query.path || '').trim();
+    if (!rel || rel.includes('..') || path.isAbsolute(rel)) {
+      return res.status(400).json({ error: 'invalid path' });
+    }
+
+    const fileName = path.basename(rel);
+    const localPath = path.join(process.cwd(), rel);
+
+    try {
+      const stat = await fs.stat(localPath);
+      if (stat.isFile()) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+        res.setHeader('Cache-Control', 'private, max-age=300');
+        return res.sendFile(path.resolve(localPath));
+      }
+    } catch { /* 本地无文件，走子服务代理 */ }
+
+    const apiPath = String(req.query.api || '/api/jmcomic/file').trim();
+    if (!apiPath.startsWith('/api/')) {
+      return res.status(400).json({ error: 'invalid api' });
+    }
+
+    try {
+      const response = await this.callSubserver(apiPath, {
+        method: 'GET',
+        query: { path: rel },
+        rawResponse: true,
+        timeout: this._subserverTimeout
+      });
+
+      res.setHeader('Content-Type', response.headers.get('content-type') || 'application/pdf');
+      const cd = response.headers.get('content-disposition');
+      if (cd) res.setHeader('Content-Disposition', cd);
+      else res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+      res.setHeader('Cache-Control', 'private, max-age=300');
+
+      if (response.body) {
+        const { Readable } = await import('node:stream');
+        const { pipeline } = await import('node:stream/promises');
+        await pipeline(Readable.fromWeb(response.body), res);
+        return;
+      }
+
+      res.send(Buffer.from(await response.arrayBuffer()));
+    } catch (error) {
+      BotUtil.makeLog('warn', `[subserver-file] 拉取失败 path=${rel}: ${error.message}`, 'Bot');
+      if (!res.headersSent) {
+        res.status(502).json({ error: '子服务端文件拉取失败', path: rel });
+      }
+    }
   }
 
   /**
