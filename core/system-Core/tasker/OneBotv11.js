@@ -87,6 +87,13 @@ Bot.tasker.push(
           case "node":
             forward.push(...i.data)
             continue
+          case "forward":
+            Bot.makeLog(
+              "warn",
+              `忽略无法直接发送的 forward 段 id=${i.data?.id ?? i.data?.message_id ?? "?"}`,
+              "OneBotv11",
+            )
+            continue
           case "raw":
             i = i.data
             break
@@ -255,16 +262,119 @@ Bot.tasker.push(
       return msgs
     }
 
-    async getForwardMsg(data, message_id) {
-      const msgs = (
-        await data.bot.sendApi("get_forward_msg", {
-          message_id,
-        })
-      ).data?.messages
+    /** 收集 forward 段所有可用的 message_id */
+    collectForwardIds(seg, contextMessageId) {
+      const ids = []
+      if (contextMessageId != null && contextMessageId !== "") ids.push(String(contextMessageId))
+      if (seg == null) return [...new Set(ids)]
+      if (typeof seg !== "object") {
+        ids.push(String(seg))
+        return [...new Set(ids)]
+      }
+      for (const k of ["message_id", "id"]) {
+        if (seg[k] != null && seg[k] !== "") ids.push(String(seg[k]))
+      }
+      if (seg.data && typeof seg.data === "object") {
+        for (const k of ["message_id", "id"]) {
+          if (seg.data[k] != null && seg.data[k] !== "") ids.push(String(seg.data[k]))
+        }
+      }
+      return [...new Set(ids)]
+    }
 
-      for (const i of Array.isArray(msgs) ? msgs : [msgs])
-        if (i?.message) i.message = this.parseMsg(i.message || i.content)
+    /** 拉取聊天记录，支持多 ID 回退与嵌套展开 */
+    async getForwardMsg(data, message_id, depth = 0, altIds = []) {
+      if (depth > 8) {
+        Bot.makeLog("warn", "getForwardMsg 嵌套层级过深，已停止展开", data.self_id)
+        return []
+      }
+
+      const ids = this.collectForwardIds(
+        typeof message_id === "object" ? message_id : { id: message_id },
+        null,
+      )
+      for (const alt of Array.isArray(altIds) ? altIds : []) {
+        if (alt != null && alt !== "") ids.push(String(alt))
+      }
+      const uniqueIds = [...new Set(ids)]
+
+      let msgs
+      let lastErr
+      for (const id of uniqueIds) {
+        try {
+          const res = await data.bot.sendApi("get_forward_msg", { message_id: id })
+          if (Array.isArray(res?.data?.messages) && res.data.messages.length) {
+            msgs = res.data.messages
+            break
+          }
+        } catch (err) {
+          lastErr = err
+        }
+      }
+      if (!msgs) {
+        if (lastErr) throw lastErr
+        return []
+      }
+
+      for (const i of msgs) {
+        if (i.message) i.message = this.parseMsg(i.message || i.content)
+        i.message = await this.expandForwardSegments(data, i.message, depth)
+      }
       return msgs
+    }
+
+    /** 展开消息段中的嵌套聊天记录（forward / node） */
+    async expandForwardSegments(data, segments, depth) {
+      if (!Array.isArray(segments) || !segments.length) return segments
+      const result = []
+      for (const seg of segments) {
+        if (!seg || typeof seg !== "object") {
+          result.push(seg)
+          continue
+        }
+
+        if (seg.type === "forward") {
+          const ids = this.collectForwardIds(seg, null)
+          let expanded = false
+          for (const id of ids) {
+            try {
+              const nested = await this.getForwardMsg(data, id, depth + 1)
+              if (nested.length) {
+                result.push({ type: "node", data: nested })
+                expanded = true
+                break
+              }
+            } catch (err) {
+              Bot.makeLog(
+                "warn",
+                `展开嵌套聊天记录失败 id=${id}: ${err.message}`,
+                data.self_id,
+              )
+            }
+          }
+          if (expanded) continue
+        }
+
+        if (seg.type === "node" && Array.isArray(seg.data)) {
+          const nodes = []
+          for (const node of seg.data) {
+            const inner = Array.isArray(node.message)
+              ? node.message
+              : Array.isArray(node.content)
+                ? node.content
+                : []
+            nodes.push({
+              ...node,
+              message: await this.expandForwardSegments(data, inner, depth),
+            })
+          }
+          result.push({ type: "node", data: nodes })
+          continue
+        }
+
+        result.push(seg)
+      }
+      return result
     }
 
     /**
