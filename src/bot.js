@@ -2915,6 +2915,18 @@ export default class Bot extends EventEmitter {
   }
 
   /**
+   * 直链等对外 URL：端口与 HTTP 监听口一致时改用 http（避免 https.enabled 误生成不可用的 https 直链）
+   */
+  _normalizePublicServerUrl(url) {
+    const parsed = url instanceof URL ? url : new URL(url);
+    const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+    if (parsed.protocol === 'https:' && this.actualPort && String(port) === String(this.actualPort)) {
+      parsed.protocol = 'http:';
+    }
+    return parsed.toString().replace(/\/+$/, '');
+  }
+
+  /**
    * 对外可访问的服务根 URL（优先 server.url / override，否则将 127 替换为公网或局域网 IP）
    */
   async getPublicServerUrl(override = '') {
@@ -2923,12 +2935,12 @@ export default class Bot extends EventEmitter {
       const withScheme = /^https?:\/\//i.test(raw)
         ? raw
         : `${this._isHttpsEnabled() ? 'https' : 'http'}://${raw.replace(/^\/+/, '')}`;
-      return new URL(withScheme).toString().replace(/\/+$/, '');
+      return this._normalizePublicServerUrl(new URL(withScheme));
     }
 
     const loopbackRe = /:\/\/(127(?:\.\d+){3}|localhost)(?:[:/]|$)/i;
     const base = this.getServerUrl();
-    if (!loopbackRe.test(base)) return base.replace(/\/+$/, '');
+    if (!loopbackRe.test(base)) return this._normalizePublicServerUrl(new URL(base));
 
     const ipInfo = await this.getLocalIpAddress();
     const parsed = new URL(base);
@@ -2936,7 +2948,7 @@ export default class Bot extends EventEmitter {
       || ipInfo?.local?.find(item => item.primary)?.ip
       || ipInfo?.local?.[0]?.ip;
     if (host) parsed.hostname = host;
-    return parsed.toString().replace(/\/+$/, '');
+    return this._normalizePublicServerUrl(parsed);
   }
 
   /**
