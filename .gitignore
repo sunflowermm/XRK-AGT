@@ -58,6 +58,10 @@ data/uploads/
 data/media/
 data/stdin/
 
+# 独立子服务 / Core 插件（单独仓库，deploy 脚本复制安装，勿进主仓）
+subserver/pyserver/apis/jmcomic/
+data/jmcomic/
+
 # Cache directories
 .cache/
 .parcel-cache/

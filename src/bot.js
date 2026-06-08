@@ -166,15 +166,27 @@ export default class Bot extends EventEmitter {
     this._subserverTimeout = timeout;
 
     this.callSubserver = async (path, options = {}) => {
-      const { method = 'POST', body, signal, rawResponse } = options;
-      const url = `${this._subserverBaseUrl}${path}`;
-      
+      const { method = 'POST', body, signal, rawResponse, timeout, query } = options;
+      const url = new URL(`${this._subserverBaseUrl}${path}`);
+      if (query && typeof query === 'object') {
+        for (const [key, value] of Object.entries(query)) {
+          if (value != null && value !== '') url.searchParams.set(key, String(value));
+        }
+      }
+
+      const headers = {};
+      const payload = body == null ? undefined : JSON.stringify(body);
+      if (payload != null) headers['Content-Type'] = 'application/json';
+      const requestTimeout = Number.isFinite(timeout) && timeout > 0
+        ? timeout
+        : this._subserverTimeout;
+
       try {
         const response = await fetch(url, {
           method,
-          headers: { 'Content-Type': 'application/json' },
-          body: body ? JSON.stringify(body) : undefined,
-          signal: signal || AbortSignal.timeout(this._subserverTimeout)
+          headers,
+          body: payload,
+          signal: signal || AbortSignal.timeout(requestTimeout)
         });
         
         if (!response.ok) {

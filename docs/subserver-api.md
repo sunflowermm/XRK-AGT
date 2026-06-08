@@ -99,6 +99,7 @@ default = {
 - 按业务分组目录：`apis/<group>/xxx.py`
 - 在扩展层实现业务逻辑，不改动 `core/` 与加载器底层
 - 接口前缀统一走 `/api/*`
+- **业务扩展自带 README、默认配置与依赖清单**；不写入 AGT 本体 `config/default_config/` 或 `docs/subserver-api.md`
 
 ## 配置
 
