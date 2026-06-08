@@ -585,7 +585,7 @@ export default class ChatPlugin extends plugin {
 
 #### 方案2：复杂任务自动化应用
 
-**技术栈**：插件 + 工作流 + 子服务端 Agent + 记忆系统
+**技术栈**：插件 + 工作流 + MCP + MemoryManager
 
 ```javascript
 // 1. 创建插件（core/my-core/plugin/assistant.js）
@@ -858,7 +858,7 @@ flowchart TB
 - **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：整体架构与运行逻辑
 - **[system-Core 特性](system-core.md)**：system-Core 内置模块完整说明，包含Web控制台、所有HTTP API、工作流、插件和Tasker ⭐
 - **[框架可扩展性指南](框架可扩展性指南.md)**：完整的扩展能力说明
-- **[AIStream 文档](aistream.md)**：AIStream基类完整API（Node 侧单次对话 + MCP 工具调用，复杂多步在 Python 子服务端）
+- **[AIStream 文档](aistream.md)**：AIStream 基类 API（Node 侧 LLM + MCP + RAG；子服务为可选扩展）
 - **[插件基类文档](plugin-base.md)**：插件基类完整API
 - **[Bot文档](bot.md)**：Bot生命周期、中间件与认证
 - **[HTTP API文档](http-api.md)**：API定义与装载

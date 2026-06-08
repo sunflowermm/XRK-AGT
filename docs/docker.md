@@ -182,7 +182,7 @@ HTTPS_PROXY=http://host.docker.internal:7890
 
 以下目录通过 volume 挂载：
 
-- `./data` - 运行时数据（包括模型缓存）
+- `./data` - 运行时数据（配置、业务数据、子服务配置等）
 - `./logs` - 日志文件
 - `./config` - 配置文件
 - `./resources` - 资源文件
@@ -295,17 +295,6 @@ docker exec xrk-subserver curl -I https://www.google.com
 docker-compose logs xrk-subserver
 ```
 
-**手动下载模型**：
-```bash
-# 进入容器
-docker exec -it xrk-subserver sh
-
-# 手动验证代理连通性
-export HTTP_PROXY=http://host.docker.internal:7890
-export HTTPS_PROXY=http://host.docker.internal:7890
-curl -I https://example.com
-```
-
 #### 主服务端连接失败
 
 **问题**：子服务端无法连接到主服务端
@@ -359,8 +348,7 @@ docker stats
 # 2. 调整 docker-compose.yml 中的资源限制
 # 增加 memory 限制或移除限制
 
-# 3. 优化模型加载（子服务端）
-# 使用更小的模型或延迟加载
+# 3. 子服务端仅承载扩展 API 时，通常内存占用低于重型 AI 推理场景
 ```
 
 ## 生产环境建议
@@ -396,7 +384,7 @@ server {
 
 **推荐配置**：
 - 主服务端：至少 512MB 内存
-- 子服务端：按扩展 API 复杂度评估内存（基础系统接口场景通常低于 AI 模型场景）
+- 子服务端：按扩展 API 复杂度评估内存（基础系统接口场景占用较低）
 - Redis：至少 256MB 内存
 - MongoDB：至少 512MB 内存
 

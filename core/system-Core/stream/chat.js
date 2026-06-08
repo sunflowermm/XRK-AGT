@@ -1142,7 +1142,7 @@ export default class ChatStream extends AIStream {
       if (history.length > 50) ChatStream.messageHistory.set(historyKey, history.slice(-50));
 
       if (this.embeddingConfig?.enabled && message && message.length > 5) {
-        this.storeMessageWithEmbedding(historyKey, msgData).catch(() => {});
+        this.storeMessageMemory(historyKey, msgData).catch(() => {});
       }
     } catch (error) {
       BotUtil.makeLog('debug', `记录消息失败: ${error.message}`, 'ChatStream');
@@ -1182,7 +1182,7 @@ export default class ChatStream extends AIStream {
       ChatStream.messageHistory.set(historyKey, history);
     }
     if (this.embeddingConfig?.enabled && historyKey)
-      this.storeMessageWithEmbedding(historyKey, msgData).catch(() => {});
+      this.storeMessageMemory(historyKey, msgData).catch(() => {});
   }
 
   async buildSystemPrompt(context) {
@@ -1193,7 +1193,7 @@ export default class ChatStream extends AIStream {
     const dateStr = question?.dateStr || new Date().toLocaleString('zh-CN');
     let embeddingHint = '';
     if (this.embeddingConfig?.enabled) {
-      embeddingHint = '\n（系统可能按历史/向量检索补充上下文）\n';
+      embeddingHint = '\n（系统可能按历史记忆与知识库补充上下文）\n';
     }
     const toolHint =
       '工具：以本请求下发的 MCP/Function 定义为准，按名称与参数调用；勿在正文中伪造协议或未执行的操作。';

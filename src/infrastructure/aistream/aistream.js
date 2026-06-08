@@ -5,7 +5,6 @@ import LLMFactory from '#factory/llm/LLMFactory.js';
 import MemoryManager from '#infrastructure/aistream/memory-manager.js';
 import PromptEngine from '#infrastructure/aistream/prompt-engine.js';
 import MonitorService from '#infrastructure/aistream/monitor-service.js';
-import { iterateSSE } from '#utils/llm/sse-utils.js';
 import { appendAgentWorkspaceToPrompt } from '#utils/agent-workspace.js';
 
 export default class AIStream {
@@ -64,30 +63,6 @@ export default class AIStream {
   }
 
   /**
-   * 初始化Embedding（子类可重写）
-   * @returns {Promise<void>}
-   */
-  async initEmbedding() {
-    return;
-  }
-
-  /**
-   * 生成文本向量嵌入
-   * @param {string} text - 待向量化的文本
-   * @returns {Promise<Array<number>|null>} 向量数组或null
-   */
-  async generateEmbedding(text) {
-    if (!text) return null;
-    try {
-      const result = await Bot.callSubserver('/api/vector/embed', { body: { texts: [text] } });
-      return result.embeddings?.[0]?.embedding || null;
-    } catch (error) {
-      BotUtil.makeLog('debug', `[${this.name}] 生成Embedding失败: ${error.message}`, 'AIStream');
-      return null;
-    }
-  }
-
-  /**
    * 估算文本token数量
    * @param {string} text - 待估算的文本
    * @returns {number} token数量
@@ -123,98 +98,12 @@ export default class AIStream {
   }
 
   /**
-   * 计算两个向量的余弦相似度
-   * @param {Array<number>} vecA - 向量A
-   * @param {Array<number>} vecB - 向量B
-   * @returns {number} 相似度值 (0-1)
-   */
-  cosineSimilarity(vecA, vecB) {
-    if (!Array.isArray(vecA) || !Array.isArray(vecB) || vecA.length !== vecB.length) {
-      return 0;
-    }
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-    for (let i = 0; i < vecA.length; i++) {
-      dotProduct += vecA[i] * vecB[i];
-      normA += vecA[i] * vecA[i];
-      normB += vecB[i] * vecB[i];
-    }
-    const denominator = Math.sqrt(normA) * Math.sqrt(normB);
-    return denominator === 0 ? 0 : dotProduct / denominator;
-  }
-
-  /**
-   * 去重上下文列表
-   * @param {Array<Object>} contexts - 上下文列表
-   * @returns {Array<Object>} 去重后的上下文列表
-   */
-  deduplicateContexts(contexts) {
-    if (!contexts || contexts.length <= 1) return contexts;
-    const seen = new Set();
-    return contexts.filter(ctx => {
-      const text = (ctx.message || ctx.content || '').toLowerCase();
-      if (seen.has(text)) return false;
-      seen.add(text);
-      return true;
-    });
-  }
-
-  /**
-   * 优化上下文列表（去重、压缩、按相似度排序）
-   * @param {Array<Object>} contexts - 上下文列表
-   * @param {number} maxTokens - 最大token数
-   * @returns {Promise<Array<Object>>} 优化后的上下文列表
-   */
-  async optimizeContexts(contexts, maxTokens = 1500) {
-    if (!contexts || contexts.length === 0) return contexts;
-    
-    let optimized = this.deduplicateContexts(contexts);
-    const totalTokens = optimized.reduce((sum, ctx) => {
-      const text = ctx.message || ctx.content || '';
-      return sum + this.estimateTokens(text);
-    }, 0);
-    
-    if (totalTokens > maxTokens) {
-      optimized.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
-      
-      const compressed = [];
-      let currentTokens = 0;
-      
-      for (const ctx of optimized) {
-        const text = ctx.message || ctx.content || '';
-        const tokens = this.estimateTokens(text);
-        
-        if (currentTokens + tokens <= maxTokens) {
-          compressed.push(ctx);
-          currentTokens += tokens;
-        } else {
-          const compressedText = this.compressText(text, Math.floor((maxTokens - currentTokens) / 1.5));
-          if (compressedText.length > 0) {
-            compressed.push({
-              ...ctx,
-              message: compressedText,
-              content: compressedText,
-              compressed: true
-            });
-            break;
-          }
-        }
-      }
-      
-      optimized = compressed;
-    }
-    
-    return optimized;
-  }
-
-  /**
-   * 存储消息并生成向量嵌入
+   * 存储消息到 MemoryManager（短期记忆）
    * @param {string} groupId - 群组ID
    * @param {Object} message - 消息对象
    * @returns {Promise<void>}
    */
-  async storeMessageWithEmbedding(groupId, message) {
+  async storeMessageMemory(groupId, message) {
     if (!this.embeddingConfig?.enabled) return;
 
     const messageText = `${message.nickname}: ${message.message}`;
@@ -231,21 +120,6 @@ export default class AIStream {
           messageId: message.message_id
     }
       });
-
-      await Bot.callSubserver('/api/vector/upsert', {
-        body: {
-          collection: `memory_${groupId}`,
-          documents: [{
-            text: messageText,
-            metadata: {
-              userId,
-              nickname: message.nickname,
-              time: message.time || Date.now(),
-              messageId: message.message_id
-            }
-          }]
-        }
-      }).catch(() => {});
     } catch (e) {
       BotUtil.makeLog('debug', `[${this.name}] 存储消息失败: ${e.message}`, 'AIStream');
     }
@@ -275,17 +149,7 @@ export default class AIStream {
         }));
       }
 
-      const result = await Bot.callSubserver('/api/vector/search', {
-        body: { query, collection: `memory_${groupIdStr}`, top_k: 5 }
-      }).catch(() => ({ results: [] }));
-      
-      return result.results?.map(r => ({
-        message: r.text,
-        similarity: r.score || 0,
-        time: r.metadata?.time || Date.now(),
-        userId: r.metadata?.userId,
-        nickname: r.metadata?.nickname
-      })) || [];
+      return [];
     } catch (error) {
       BotUtil.makeLog('debug', `[${this.name}] 检索上下文失败: ${error.message}`, 'AIStream');
       return [];
@@ -703,11 +567,6 @@ export default class AIStream {
     );
   }
 
-  getTimeoutSeconds(config) {
-    const timeout = config.timeout || this.config?.timeout || 360000;
-    return Math.round(timeout / 1000);
-  }
-
   /**
    * 调用AI（非流式，支持tool calling）
    * @param {Array<Object>} messages - 消息列表
@@ -717,30 +576,6 @@ export default class AIStream {
   async callAI(messages, apiConfig = {}) {
     const config = this.resolveLLMConfig(apiConfig);
     const retryConfig = this.getRetryConfig();
-
-    try {
-      BotUtil.makeLog('debug', `[${this.name}] 尝试子服务端 /api/langchain/chat (stream=false)`, 'AIStream');
-      const payload = {
-        messages,
-        model: config.chatModel || config.model || config.provider,
-        provider: config.provider,
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        stream: false,
-        enableTools: config.enableTools
-      };
-      if (config.streams?.length) payload.workflow = { workflows: config.streams };
-      const response = await Bot.callSubserver('/api/langchain/chat', { body: payload });
-      const content = response?.choices?.[0]?.message?.content || response?.content || '';
-      if (content) {
-        BotUtil.makeLog('debug', `[${this.name}] 子服务端 callAI 成功`, 'AIStream');
-        return { content, executedToolNames: [] };
-      }
-    } catch (error) {
-      const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
-      BotUtil.makeLog('warn', `[${this.name}] 子服务端调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
-      BotUtil.makeLog('debug', `[${this.name}] 子服务端失败详情: ${error.message}${cause}`, 'AIStream');
-    }
 
     const inputTokens = messages.reduce((sum, m) => {
       const content = typeof m.content === 'string' ? m.content : (m.content?.text || '');
@@ -815,52 +650,6 @@ export default class AIStream {
       const { content } = await this.callAI(messages, apiConfig);
       if (content) wrapDelta(content);
       return content || '';
-    }
-
-    // 优先使用 Python 子服务端流式（SSE透传），失败时回退到 NodeJS LLMFactory
-    try {
-      const payload = {
-        messages,
-        model: config.chatModel || config.model || config.provider,
-        provider: config.provider,
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        stream: true,
-        use_tools: config.enableTools,
-        tool_choice: config.toolChoice,
-        parallel_tool_calls: config.parallelToolCalls,
-        extraBody: config.extraBody,
-        ...(config.enableTools ? {} : { tools: null })
-      };
-      if (config.streams?.length) {
-        payload.workflow = { workflows: config.streams };
-      }
-      const response = await Bot.callSubserver('/api/langchain/chat', {
-        body: payload,
-        rawResponse: true
-      });
-
-      if (!response || !response.body) {
-        throw new Error('子服务端响应无效');
-      }
-
-      for await (const { data } of iterateSSE(response)) {
-        try {
-          const json = JSON.parse(data);
-          const delta = json?.choices?.[0]?.delta?.content || '';
-          if (delta) wrapDelta(delta);
-        } catch {
-          // ignore
-        }
-      }
-
-      BotUtil.makeLog('debug', `[${this.name}] 子服务端 callAIStream 成功`, 'AIStream');
-      return fullText;
-    } catch (error) {
-      const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
-      BotUtil.makeLog('warn', `[${this.name}] 子服务端流式调用失败，回退到LLM工厂: ${error.message}`, 'AIStream');
-      BotUtil.makeLog('debug', `[${this.name}] 子服务端流式失败详情: ${error.message}${cause}`, 'AIStream');
-      fullText = '';
     }
 
     let lastError = null;
@@ -1002,7 +791,7 @@ export default class AIStream {
 
       if (this.embeddingConfig.enabled && e) {
         const groupId = e.group_id || `private_${e.user_id}`;
-        this.storeMessageWithEmbedding(groupId, {
+        this.storeMessageMemory(groupId, {
           user_id: e.self_id,
           nickname: e.bot?.nickname || e.bot?.info?.nickname || 'Bot',
           message: responseText,

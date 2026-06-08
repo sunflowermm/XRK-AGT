@@ -2446,15 +2446,14 @@ export default class SystemConfig extends ConfigBase {
             },
             embedding: {
               type: 'object',
-              label: 'Embedding（向量/RAG）',
-              description:
-                '全局合并到各 AIStream.embeddingConfig；子服务端向量化、跨工作流 RAG 条数与知识库向量相似度阈值',
+              label: 'RAG / 记忆增强',
+              description: '全局合并到各 AIStream.embeddingConfig；MemoryManager 历史检索与知识库关键词 RAG',
               component: 'SubForm',
               fields: {
                 enabled: {
                   type: 'boolean',
-                  label: '启用全局 Embedding',
-                  description: '关闭则跳过 applyEmbeddingConfig 中的向量初始化（各工作流仍可单独 enabled: false）',
+                  label: '启用上下文增强',
+                  description: '关闭则跳过 storeMessageMemory 与 retrieveKnowledgeContexts（各工作流仍可单独 enabled: false）',
                   default: true,
                   component: 'Switch'
                 },
@@ -2465,15 +2464,6 @@ export default class SystemConfig extends ConfigBase {
                   min: 1,
                   max: 50,
                   default: 5,
-                  component: 'InputNumber'
-                },
-                similarityThreshold: {
-                  type: 'number',
-                  label: '向量相似度阈值',
-                  description: 'database 等工作流 queryKnowledgeWithEmbedding 过滤用（0~1）',
-                  min: 0,
-                  max: 1,
-                  default: 0.3,
                   component: 'InputNumber'
                 }
               }
@@ -2540,7 +2530,7 @@ export default class SystemConfig extends ConfigBase {
             subserver: {
               type: 'object',
               label: 'Python子服务端配置',
-              description: 'Python子服务端地址配置，提供向量化、数据处理等服务',
+              description: '可选 Python 子服务地址（FastAPI 扩展）；LLM/工作流由主服务端负责，此处仅用于 callSubserver 调用 apis/ 扩展',
               component: 'SubForm',
               fields: {
                 host: {

@@ -210,7 +210,7 @@ XRK-AGT 支持多种启动方式，包括本地运行和 Docker 部署。
 
 #### 🐳 Docker 启动（推荐）
 
-> **提示**：Docker 构建会自动构建子服务端（Python FastAPI），提供 LangChain 和向量服务，无需手动配置。
+> **提示**：Docker Compose 会一并构建可选的 Python 子服务端（FastAPI 扩展框架），主服务 LLM/工作流无需依赖子服务即可运行。
 
 ```bash
 # 启动所有服务（包括主服务端和子服务端）

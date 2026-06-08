@@ -30,7 +30,7 @@
 - `llm.Provider`
 - `llm.timeout`
 - `llm.retry.*`
-- `embedding.enabled` / `embedding.maxContexts` / `embedding.similarityThreshold`
+- `embedding.enabled` / `embedding.maxContexts`
 - `mcp.*`
 - `agentWorkspace.*`
 - `tools.file.*`
@@ -70,10 +70,9 @@
 
 | 方法 | 说明 |
 |------|------|
-| `generateEmbedding(text)` | 生成向量（具体实现以当前代码为准） |
-| `storeMessageWithEmbedding(groupId, message)` | 存储消息到向量数据库和Redis（key: `ai:memory:${name}:${groupId}`） |
-| `retrieveRelevantContexts(groupId, query)` | 检索相关上下文 |
-| `buildEnhancedContext(e, question, baseMessages)` | 构建增强上下文（完整RAG流程：历史对话 + 知识库） |
+| `storeMessageMemory(groupId, message)` | 写入 MemoryManager 短期记忆 |
+| `retrieveRelevantContexts(groupId, query)` | 经 MemoryManager 检索相关历史 |
+| `buildEnhancedContext(e, question, baseMessages)` | RAG：历史对话 + 知识库（如 database 工作流） |
 
 ## 函数调用与 MCP 工具
 
@@ -148,7 +147,7 @@ sequenceDiagram
 1. `buildChatContext` - 构建基础消息数组
 2. `buildEnhancedContext` - RAG流程：检索历史对话和知识库
 3. `callAI` - 调用 LLM
-4. `storeMessageWithEmbedding` - 存储到记忆系统（按当前工作流实现）
+4. `storeMessageMemory` - 存储到 MemoryManager 短期记忆
 5. 自动发送回复（插件不需要再次调用 `reply()`）
 
 ## 完整API参考
@@ -459,15 +458,13 @@ llm:
 
 ### 上下文优化
 
-- **自动去重**：`deduplicateContexts()` 去除重复上下文
-- **智能压缩**：`optimizeContexts()` 按相似度排序并压缩
-- **Token估算**：`estimateTokens()` 估算文本token数量
+- **文本压缩**：`compressText()` 截断注入 prompt 的历史/知识片段
+- **Token 估算**：`estimateTokens()` 估算文本 token 数量
 
 ### 缓存机制
 
-- Embedding结果缓存
-- 上下文检索结果缓存
-- 工作流实例缓存（StreamLoader）
+- 工作流实例缓存（`StreamLoader`）
+- 知识库 JSON 内存缓存（`database` 工作流）
 
 ---
 

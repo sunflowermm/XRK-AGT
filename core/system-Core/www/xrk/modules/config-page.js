@@ -1051,7 +1051,7 @@ export const configPageMethods = {
       'llm': 'LLM 大语言模型',
       'defaults': '默认参数',
       'profiles': '模型档位',
-      'embedding': 'Embedding 向量检索',
+      'embedding': 'RAG / 记忆增强',
       'drawing': '绘图模型',
       'tts': 'TTS 语音合成',
       'asr': 'ASR 语音识别',

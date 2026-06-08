@@ -53,7 +53,7 @@ export default class DatabaseStream extends AIStream {
     /**
      * 保存知识到知识库
      * 
-     * @description 将知识保存到指定的知识库中。支持文本或JSON格式的内容，会自动生成embedding用于后续向量检索。
+     * @description 将知识保存到指定的知识库中。支持文本或JSON格式的内容。
      * 
      * @param {string} db - 知识库名称（必填）
      * @param {string} content - 知识内容，支持文本或JSON格式（必填）
@@ -73,7 +73,7 @@ export default class DatabaseStream extends AIStream {
      * { db: "products", content: '{"name": "产品A", "price": 100}' }
      */
     this.registerMCPTool('save_knowledge', {
-      description: '保存知识到知识库。支持文本或JSON格式，会自动生成embedding用于向量检索，可用于RAG。',
+      description: '保存知识到知识库。支持文本或 JSON 格式，可用于 RAG 关键词检索。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -107,7 +107,7 @@ export default class DatabaseStream extends AIStream {
     /**
      * 查询知识库
      * 
-     * @description 从指定知识库中查询知识，支持关键词搜索和向量检索（如果启用了embedding）。如果未指定关键词，返回所有知识。
+     * @description 从指定知识库中查询知识（关键词匹配）。未指定关键词时返回全部。
      * 
      * @param {string} db - 知识库名称（必填）
      * @param {string} [keyword] - 搜索关键词（可选，不指定则返回所有知识）
@@ -129,7 +129,7 @@ export default class DatabaseStream extends AIStream {
      * { db: "faq" }
      */
     this.registerMCPTool('query_knowledge', {
-      description: '从知识库查询知识。当需要从知识库中查找信息、检索FAQ、查找产品信息、搜索文档内容时使用此工具。支持关键词搜索和向量检索（如果启用了embedding），可以找到语义相关的内容。如果未指定关键词，返回知识库中的所有知识。',
+      description: '从知识库查询知识。用于检索 FAQ、产品信息、文档等；支持关键词匹配。未指定关键词时返回该库全部条目。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -274,7 +274,7 @@ export default class DatabaseStream extends AIStream {
   }
 
   /**
-   * 保存知识（自动处理文本或JSON，并生成 embedding）
+   * 保存知识（自动处理文本或 JSON）
    */
   async saveKnowledge(db, content) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
@@ -302,23 +302,6 @@ export default class DatabaseStream extends AIStream {
       createdAt: new Date().toISOString()
     };
 
-    // 如果启用 embedding，生成并缓存向量
-    if (this.embeddingConfig.enabled) {
-      const textContent = typeof record.content === 'string' 
-        ? record.content 
-        : JSON.stringify(record);
-      try {
-        const embedding = await this.generateEmbedding(textContent);
-        if (embedding && Array.isArray(embedding)) {
-          record.embedding = embedding;
-        }
-      } catch (error) {
-        BotUtil.makeLog('debug', `[${this.name}] 生成embedding失败，将异步生成: ${error.message}`, 'DatabaseStream');
-        // 异步生成 embedding（不阻塞主流程）
-        this.generateEmbeddingAsync(record, db, textContent).catch(() => {});
-      }
-    }
-    
     records.push(record);
     await fs.writeFile(dbFile, JSON.stringify(records, null, 2), 'utf8');
     this.databases.set(db, records);
@@ -327,11 +310,11 @@ export default class DatabaseStream extends AIStream {
   }
 
   /**
-   * 查询知识（支持向量检索和关键词搜索）
+   * 查询知识（关键词匹配）
    */
   async queryKnowledge(db, keyword) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
-    
+
     let records = [];
     try {
       const data = await fs.readFile(dbFile, 'utf8');
@@ -339,104 +322,13 @@ export default class DatabaseStream extends AIStream {
     } catch {
       return [];
     }
-    
+
     if (!keyword || keyword === '*') {
       return records;
     }
-    
-    // 如果启用 embedding，使用向量检索
-    if (this.embeddingConfig.enabled) {
-      return await this.queryKnowledgeWithEmbedding(records, keyword, db);
-    }
-    
-    // 否则使用关键词搜索
-    return records.filter(record => {
-      const content = JSON.stringify(record).toLowerCase();
-      return content.includes(keyword.toLowerCase());
-    });
-  }
 
-  /**
-   * 使用向量检索知识库
-   */
-  async queryKnowledgeWithEmbedding(records, query, dbName = null) {
-    if (!records || records.length === 0) return [];
-    
-    const queryEmbedding = await this.generateEmbedding(query);
-    if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
-      // 回退到关键词搜索
-      return records.filter(record => {
-        const content = JSON.stringify(record).toLowerCase();
-        return content.includes(query.toLowerCase());
-      });
-    }
-
-    // 为每条记录计算相似度
-    const scored = [];
-    for (const record of records) {
-      const content = typeof record.content === 'string' 
-        ? record.content 
-        : JSON.stringify(record);
-      
-      // 如果记录已有 embedding，直接使用
-      let recordEmbedding = record.embedding;
-      if (!recordEmbedding || !Array.isArray(recordEmbedding)) {
-        // 生成 embedding（不立即保存，避免频繁IO）
-        recordEmbedding = await this.generateEmbedding(content);
-        if (!recordEmbedding || !Array.isArray(recordEmbedding)) {
-          continue; // 跳过无法生成 embedding 的记录
-        }
-        // 异步保存 embedding（不阻塞检索）
-        record.embedding = recordEmbedding;
-        if (dbName) {
-          this.saveEmbeddingAsync(record, dbName).catch(() => {}); // 静默失败
-        }
-      }
-
-      const similarity = this.cosineSimilarity(queryEmbedding, recordEmbedding);
-      scored.push({ record, similarity });
-    }
-
-    // 按相似度排序并过滤
-    const threshold = this.embeddingConfig.similarityThreshold ?? 0.3;
-    return scored
-      .filter(item => item.similarity >= threshold)
-      .sort((a, b) => b.similarity - a.similarity)
-      .map(item => item.record);
-  }
-
-  /**
-   * 异步生成并保存 embedding（不阻塞主流程）
-   */
-  async generateEmbeddingAsync(record, db, textContent) {
-    try {
-      const embedding = await this.generateEmbedding(textContent);
-      if (embedding && Array.isArray(embedding)) {
-        record.embedding = embedding;
-        await this.saveEmbeddingAsync(record, db);
-      }
-    } catch (error) {
-      BotUtil.makeLog('debug', `[${this.name}] 异步生成embedding失败: ${error.message}`, 'DatabaseStream');
-    }
-  }
-
-  /**
-   * 异步保存 embedding（不阻塞主流程）
-   */
-  async saveEmbeddingAsync(record, db) {
-    const dbFile = path.join(this.dbDir, `${db}.json`);
-    try {
-      const data = await fs.readFile(dbFile, 'utf8');
-      const records = JSON.parse(data);
-      const index = records.findIndex(r => r.id === record.id);
-      if (index >= 0 && record.embedding) {
-        records[index].embedding = record.embedding;
-        await fs.writeFile(dbFile, JSON.stringify(records, null, 2), 'utf8');
-        this.databases.set(db, records);
-      }
-    } catch (error) {
-      BotUtil.makeLog('debug', `[${this.name}] 保存embedding失败: ${error.message}`, 'DatabaseStream');
-    }
+    const q = keyword.toLowerCase();
+    return records.filter(record => JSON.stringify(record).toLowerCase().includes(q));
   }
 
   /**
@@ -467,8 +359,6 @@ export default class DatabaseStream extends AIStream {
           });
         });
       }
-
-      // 向量检索结果已按相似度排序（由子服务端处理）
 
       return allResults.slice(0, maxResults);
     } catch (error) {

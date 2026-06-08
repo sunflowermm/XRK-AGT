@@ -25,7 +25,7 @@ import ConfigLoader from "#infrastructure/commonconfig/loader.js";
 import StreamLoader from "#infrastructure/aistream/loader.js";
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { callSubserver as callSubserverApi } from '#utils/subserver-client.js';
 import paths from '#utils/paths.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import HTTPBusinessLayer from '#utils/http-business.js';
@@ -157,79 +157,15 @@ export default class Bot extends EventEmitter {
   }
 
   _initSubServer() {
-    // 仅使用 aistream.yaml 中的 subserver 配置，避免重复配置源
-    const config = getAistreamConfigOptional().subserver || {};
-    const host = config.host || '127.0.0.1';
-    const port = config.port || 8000;
-    const timeout = config.timeout || 30000;
-    this._subserverBaseUrl = `http://${host}:${port}`;
-    this._subserverTimeout = timeout;
-
-    this.callSubserver = async (path, options = {}) => {
-      const { method = 'POST', body, signal, rawResponse, timeout, query } = options;
-      const url = new URL(`${this._subserverBaseUrl}${path}`);
-      if (query && typeof query === 'object') {
-        for (const [key, value] of Object.entries(query)) {
-          if (value != null && value !== '') url.searchParams.set(key, String(value));
-        }
-      }
-
-      const headers = {};
-      const payload = body == null ? undefined : JSON.stringify(body);
-      if (payload != null) headers['Content-Type'] = 'application/json';
-      const requestTimeout = Number.isFinite(timeout) && timeout > 0
-        ? timeout
-        : this._subserverTimeout;
-
+    /** 可选扩展：业务 Core 调用子服务 apis/ 时使用，见 #utils/subserver-client.js */
+    this.callSubserver = async (requestPath, options = {}) => {
       try {
-        const response = await fetch(url, {
-          method,
-          headers,
-          body: payload,
-          signal: signal || AbortSignal.timeout(requestTimeout)
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        if (rawResponse) {
-          return response;
-        }
-        
-        return await response.json();
+        return await callSubserverApi(requestPath, options);
       } catch (error) {
         const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
-        BotUtil.makeLog('debug', `子服务端调用失败 [${path}]: ${error.message} url=${url}${cause}`, 'Bot');
+        BotUtil.makeLog('debug', `子服务端调用失败 [${requestPath}]: ${error.message}${cause}`, 'Bot');
         throw error;
       }
-    };
-
-    /** 子服务端根 URL（与 aistream.yaml subserver.host/port 一致） */
-    this.getSubserverBaseUrl = () => this._subserverBaseUrl;
-
-    /**
-     * 从子服务端下载二进制文件到本地路径（远程子服务 / 多 AGT 共用场景）
-     * @param {string} requestPath - 如 /api/jmcomic/file
-     * @param {{ query?: object, dest: string, timeout?: number }} options
-     */
-    this.fetchSubserverToPath = async (requestPath, options = {}) => {
-      const { query, dest, timeout } = options;
-      if (!dest) throw new Error('fetchSubserverToPath 需要 dest');
-
-      const response = await this.callSubserver(requestPath, {
-        method: 'GET',
-        query,
-        rawResponse: true,
-        timeout: timeout ?? this._subserverTimeout
-      });
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-      if (!buffer.length) throw new Error('子服务端返回空文件');
-
-      await fs.mkdir(path.dirname(dest), { recursive: true });
-      await fs.writeFile(dest, buffer);
-      return dest;
     };
   }
   /**
@@ -958,7 +894,7 @@ export default class Bot extends EventEmitter {
     });
     
     this.express.use((req, res, next) => {
-      const baseSkipPrefixes = ['/api/', '/media/', '/uploads/', '/File', '/core/', '/subserver-file'];
+      const baseSkipPrefixes = ['/api/', '/media/', '/uploads/', '/File', '/core/'];
       if (!req.path || req.path === '/') return next();
       const redirectSkipPrefixes = baseSkipPrefixes.concat(frontendMountPrefixes || []);
       if (redirectSkipPrefixes.some(p => req.path.startsWith(p))) {
@@ -978,9 +914,7 @@ export default class Bot extends EventEmitter {
     this.express.get('/metrics', this._metricsHandler.bind(this)); // 性能指标
     this.express.get('/robots.txt', this._handleRobotsTxt.bind(this));
     this.express.get('/favicon.ico', this._handleFavicon.bind(this));
-    // 子服务端文件公网代理（免 API Key；本地有文件则直出，否则向子服务拉取）
-    this.express.get('/subserver-file', (req, res) => this._handleSubserverFileProxy(req, res));
-    
+
     // ========== 第四阶段：前缀路由匹配 ==========
     // 文件服务路由（/File前缀）
     this.express.use('/File', this._fileHandler.bind(this));
@@ -2912,90 +2846,6 @@ export default class Bot extends EventEmitter {
       || (protocol === 'https' && port !== 443);
 
     return `${protocol}://127.0.0.1${needPort ? ':' + port : ''}`;
-  }
-
-  /**
-   * 对外可访问的服务根 URL（优先 server.url / override，否则将 127 替换为公网或局域网 IP）
-   */
-  async getPublicServerUrl(override = '') {
-    const raw = String(override || this._getConfiguredServerUrl() || '').trim();
-    if (raw) {
-      const withScheme = /^https?:\/\//i.test(raw)
-        ? raw
-        : `${this._isHttpsEnabled() ? 'https' : 'http'}://${raw.replace(/^\/+/, '')}`;
-      return new URL(withScheme).toString().replace(/\/+$/, '');
-    }
-
-    const loopbackRe = /:\/\/(127(?:\.\d+){3}|localhost)(?:[:/]|$)/i;
-    const base = this.getServerUrl();
-    if (!loopbackRe.test(base)) return base.replace(/\/+$/, '');
-
-    const ipInfo = await this.getLocalIpAddress();
-    const parsed = new URL(base);
-    const host = ipInfo?.public
-      || ipInfo?.local?.find(item => item.primary)?.ip
-      || ipInfo?.local?.[0]?.ip;
-    if (host) parsed.hostname = host;
-    return parsed.toString().replace(/\/+$/, '');
-  }
-
-  /**
-   * 公网直链：优先读本机 data 相对路径，缺失则代理子服务端文件 API
-   */
-  async _handleSubserverFileProxy(req, res) {
-    if (this._checkHeadersSent(res)) return;
-
-    const rel = String(req.query.path || '').trim();
-    if (!rel || rel.includes('..') || path.isAbsolute(rel)) {
-      return res.status(400).json({ error: 'invalid path' });
-    }
-
-    const fileName = path.basename(rel);
-    const localPath = path.join(process.cwd(), rel);
-
-    try {
-      const stat = await fs.stat(localPath);
-      if (stat.isFile()) {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
-        res.setHeader('Cache-Control', 'private, max-age=300');
-        return res.sendFile(path.resolve(localPath));
-      }
-    } catch { /* 本地无文件，走子服务代理 */ }
-
-    const apiPath = String(req.query.api || '/api/jmcomic/file').trim();
-    if (!apiPath.startsWith('/api/')) {
-      return res.status(400).json({ error: 'invalid api' });
-    }
-
-    try {
-      const response = await this.callSubserver(apiPath, {
-        method: 'GET',
-        query: { path: rel },
-        rawResponse: true,
-        timeout: this._subserverTimeout
-      });
-
-      res.setHeader('Content-Type', response.headers.get('content-type') || 'application/pdf');
-      const cd = response.headers.get('content-disposition');
-      if (cd) res.setHeader('Content-Disposition', cd);
-      else res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
-      res.setHeader('Cache-Control', 'private, max-age=300');
-
-      if (response.body) {
-        const { Readable } = await import('node:stream');
-        const { pipeline } = await import('node:stream/promises');
-        await pipeline(Readable.fromWeb(response.body), res);
-        return;
-      }
-
-      res.send(Buffer.from(await response.arrayBuffer()));
-    } catch (error) {
-      BotUtil.makeLog('warn', `[subserver-file] 拉取失败 path=${rel}: ${error.message}`, 'Bot');
-      if (!res.headersSent) {
-        res.status(502).json({ error: '子服务端文件拉取失败', path: rel });
-      }
-    }
   }
 
   /**

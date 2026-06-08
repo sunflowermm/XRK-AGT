@@ -103,11 +103,10 @@ agentWorkspace:
   maxRulesChars: 12000
   maxAgentMdChars: 12000
 
-# Embedding 全局配置（StreamLoader.applyEmbeddingConfig 合并到各工作流 embeddingConfig；RAG/知识库检索使用 similarityThreshold）
+# RAG / 记忆增强（StreamLoader.applyEmbeddingConfig 合并到各工作流 embeddingConfig）
 embedding:
   enabled: true
   maxContexts: 5
-  similarityThreshold: 0.3
 
 # 工具子系统（与 system.js aistream.schema.fields.tools 一一对应）
 tools:
@@ -121,9 +120,10 @@ tools:
     maxCommandOutputChars: 200000
 
 # ----------------------------------------
-# Python 子服务端
+# Python 子服务端（可选）
 # ----------------------------------------
-# 提供向量化、数据处理等，与主服务端分离部署。
+# 独立 FastAPI 扩展服务；主服务通过 Bot.callSubserver / subserver-client 调用 apis/ 下接口。
+# LLM、工作流、RAG 均在主服务端 Node 侧完成，不依赖子服务内置 AI 能力。
 subserver:
   host: "127.0.0.1"
   port: 8000

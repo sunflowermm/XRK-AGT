@@ -118,7 +118,7 @@ export class MemoryManager extends EventEmitter {
   async searchLongTermMemories(userId, query, limit = 5) {
     const memories = this.longTermMemories.get(userId) || [];
     
-    // 简单的关键词匹配（实际应该使用向量检索）
+    // 关键词匹配 + 重要性/访问频次排序
     const results = memories
       .filter(m => m.content.includes(query))
       .sort((a, b) => {
