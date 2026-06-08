@@ -7,7 +7,7 @@ Bot.tasker.push(
     name = "OneBotv11"
     path = this.name
     echo = new Map()
-    timeout = 60000
+    timeout = 360000
 
     /**
      * 生成日志消息（隐藏base64内容）
