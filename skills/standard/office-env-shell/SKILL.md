@@ -50,7 +50,7 @@ Windows 注意路径引号；优先相对工作区路径。
 | 命令不存在 | pandoc/soffice/qpdf → 换 Python 或 desktop 路径 |
 | 超时 | 拆小脚本或增大 runTimeoutMs（需用户改配置） |
 
-依赖对照：`skills/standard/_references/deps-matrix.md`（逻辑同 office-env-setup 表）
+依赖对照：见 **office-env-setup** 任务降级表。
 
 ## 禁止
 
