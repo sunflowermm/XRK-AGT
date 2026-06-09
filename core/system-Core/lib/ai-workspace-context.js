@@ -5,8 +5,6 @@ import { auditToolUse, formatAuditDetail } from './ai-workspace-audit.js';
 import { normalizePresetId } from './ai-workspace-runtime.js';
 
 const consoleContext = new AsyncLocalStorage();
-const auditByWorkspace = new Map();
-const MAX_AUDIT_ENTRIES = 200;
 let mcpAuditHookInstalled = false;
 
 function normalizeWorkspaceId(id) {
@@ -25,7 +23,6 @@ async function recordToolAudit(toolName, { ok = true, detail = '' } = {}) {
   if (!workspaceId || !toolName) return;
 
   const formatted = formatAuditDetail(detail);
-  appendAiWorkspaceAudit({ workspaceId, tool: toolName, ok, detail: formatted });
   try {
     await auditToolUse(workspaceId, toolName, { ok, detail: formatted });
   } catch { /* 审计失败不阻断 */ }
@@ -74,24 +71,3 @@ export function getAiConsoleContext() {
   return consoleContext.getStore() || {};
 }
 
-export function appendAiWorkspaceAudit(entry = {}) {
-  const ctx = getAiConsoleContext();
-  const workspaceId = normalizeWorkspaceId(entry.workspaceId ?? ctx.workspaceId);
-  const list = auditByWorkspace.get(workspaceId) || [];
-  list.unshift({
-    ts: Date.now(),
-    tool: entry.tool || entry.name || 'unknown',
-    ok: entry.ok !== false,
-    detail: entry.detail || entry.error || ''
-  });
-  if (list.length > MAX_AUDIT_ENTRIES) list.length = MAX_AUDIT_ENTRIES;
-  auditByWorkspace.set(workspaceId, list);
-}
-
-/** @deprecated 审计以 jsonl 为准；保留供调试 */
-export function listAiWorkspaceAudit(workspaceId, { limit = 50 } = {}) {
-  const id = normalizeWorkspaceId(workspaceId);
-  const list = auditByWorkspace.get(id) || [];
-  const n = Math.max(1, Math.min(Number(limit) || 50, MAX_AUDIT_ENTRIES));
-  return list.slice(0, n);
-}

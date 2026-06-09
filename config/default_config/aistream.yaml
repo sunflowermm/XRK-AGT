@@ -75,17 +75,17 @@ workspace:
     enabled: true
     maxEntries: 200
 
-# Agent 工作区上下文（Skills / Rules / OpenClaw 模板文件 / Memory / Subagents，注入到工作流 system prompt）
-# 注意：agentWorkspace.root 控制「注入到 system prompt 的 Markdown 根」，与 tools.file.workspace（文件工具 cwd）可不同
+# Agent 工作区上下文（data/ai-workspace/{id} 内 AGENTS/SOUL/USER/memory + 项目 rules/skills → system prompt）
+# 根目录 AGENTS.md 仅 IDE；agents/workspace/ 仅为首次引导模板，运行时不从项目根注入
 agentWorkspace:
   enabled: true
-  root: ""                 # 留空=项目根；可填相对项目根的路径；请求级 workspace 会覆盖
+  root: ""                 # 留空=data/ai-workspace/{workspace.defaultId}；请求 workspace 会覆盖
   # 留空=全部；否则仅注入列出的入口：工作流 name（chat/web/desktop/tools…）+ v3（POST /api/v3/chat/completions）
   streams: []
   includeRules: true
   includeAgentMd: true
   includeSubagents: true
-  includeDiagnostics: false   # true 时在缺失关键工作区文件时追加简短诊断提示
+  includeDiagnostics: false   # true 时提示缺失 MEMORY.md / ENV.md / 未同步的 skills
   # 0 = 不限制 prose 总长；Skills 仍受 maxSkillsPromptChars 约束
   maxTotalChars: 0
   maxDiagnosticsChars: 2000   # 诊断提示最大字符
@@ -97,9 +97,8 @@ agentWorkspace:
   maxSkillsPromptChars: 30000
   maxSkillFileBytes: 256000
   customSkillRoots:
-    - "skills/standard"
-  # 自定义技能目录（可多个；相对工作区路径或绝对路径均可）。
-  # 为空不注入 skills。示例：`.cursor/skills` 或 `C:/.../skills/standard`
+    - "skills/standard"       # 办公技能：office-* 格式 + office-env-* 环境 + assistant-core
+  # 另自动合并 data/ai-workspace/{id}/skills（种子自 standard，缺啥补啥不覆盖）
   maxRulesChars: 12000
   maxAgentMdChars: 12000
 

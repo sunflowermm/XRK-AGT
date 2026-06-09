@@ -100,7 +100,6 @@ commonconfig/**
 !lib/ai-workspace-runtime.js
 !lib/ai-workspace-context.js
 !lib/ai-workspace-audit.js
-!lib/ai-workspace-policy.js
 !events/ai-workspace.js
 
 *.psd

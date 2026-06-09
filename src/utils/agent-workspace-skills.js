@@ -256,7 +256,7 @@ export function buildSkillsPromptFromWorkspace(workspaceRootResolved, cfg = {}) 
 
   const merged = new Map();
   for (const rel of skillRoots) {
-    const abs = path.join(workspaceRootResolved, rel);
+    const abs = path.isAbsolute(rel) ? path.normalize(rel) : path.join(workspaceRootResolved, rel);
     if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) continue;
     const slug = String(rel).replace(/[^\w.-]+/g, '_');
     const loaded = loadSkillsForOneRoot({ dir: abs, source: `xrk-${slug}` }, limits);

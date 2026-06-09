@@ -324,7 +324,7 @@ XRK-AGT/
 ├── .cursor/                   # Cursor 技能/规则/命令（仓库内权威副本）
 ├── rules/                     # 助手 system prompt 注入规则（与 .cursor/rules 分工不同）
 ├── skills/                    # 工作流可加载技能（如 skills/standard，见 aistream.yaml）
-├── agents/                    # 助手工作区（SOUL.md、USER.md 等，见 AGENTS.md）
+├── agents/workspace/          # 助手模板（首次引导复制到 data/ai-workspace/{id}/）
 ├── logs/                      # 日志（gitignore）
 └── trash/                     # 回收站（gitignore，自动清理）
 

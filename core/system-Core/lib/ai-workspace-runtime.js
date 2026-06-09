@@ -6,10 +6,27 @@ import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 import { readTextFileUnderWorkspaceRoot } from '#utils/safe-workspace-read.js';
 import { BaseTools } from '#utils/base-tools.js';
+import {
+  AGENTS_MD,
+  DEFAULT_WORKSPACE_ID,
+  getAgentWorkspaceAbs,
+  getAgentWorkspacesRoot,
+  getAgentsReadCandidates,
+  getAgentsWriteRel,
+  getConfiguredDefaultWorkspaceId,
+  getProjectRoot,
+  normalizeWorkspaceId,
+  seedWorkspaceFromBundle
+} from '#utils/agent-workspace-paths.js';
 
-const AGENTS_CANDIDATES = ['AGENTS.md', 'agents/AGENTS.md', 'agents/workspace/AGENTS.md'];
-
-export const DEFAULT_WORKSPACE_ID = 'default';
+export {
+  AGENTS_MD,
+  DEFAULT_WORKSPACE_ID,
+  getAgentsReadCandidates,
+  getAgentsWriteRel,
+  getConfiguredDefaultWorkspaceId,
+  getProjectRoot
+} from '#utils/agent-workspace-paths.js';
 
 const BUILTIN_PROJECT = {
   id: 'project',
@@ -29,38 +46,16 @@ function resolvePathInput(raw, projectRoot) {
   return path.resolve(projectRoot, w);
 }
 
-function getProjectRoot() {
-  return paths.root || process.cwd();
-}
-
-export function getAgentWorkspacesRoot() {
-  return paths.dataAiWorkspace || path.join(paths.data, 'ai-workspace');
-}
-
 export function sanitizeWorkspaceId(raw) {
   const id = String(raw || DEFAULT_WORKSPACE_ID).trim() || DEFAULT_WORKSPACE_ID;
   if (id === 'project') return 'project';
-  const safe = id.replace(/[^\w.\u4e00-\u9fa5-]/g, '_').slice(0, 64);
-  return safe || DEFAULT_WORKSPACE_ID;
-}
-
-export function getAgentWorkspaceAbs(id = DEFAULT_WORKSPACE_ID) {
-  return path.join(getAgentWorkspacesRoot(), sanitizeWorkspaceId(id));
+  return normalizeWorkspaceId(id);
 }
 
 export function ensureAgentWorkspaceSync(id = DEFAULT_WORKSPACE_ID) {
   const safeId = sanitizeWorkspaceId(id);
-  const abs = path.join(getAgentWorkspacesRoot(), safeId);
-  fs.mkdirSync(abs, { recursive: true });
-  const agentsPath = path.join(abs, AGENTS_CANDIDATES[0]);
-  if (!fs.existsSync(agentsPath)) {
-    const label = safeId === DEFAULT_WORKSPACE_ID ? '默认工作区' : safeId;
-    fs.writeFileSync(
-      agentsPath,
-      `# ${label}\n\n在此编写 Agent 规则（AGENTS.md）。\n`,
-      'utf8'
-    );
-  }
+  const abs = getAgentWorkspaceAbs(safeId);
+  seedWorkspaceFromBundle(abs);
   return abs;
 }
 
@@ -101,20 +96,11 @@ export function resolveWorkspacePreset(presetId = DEFAULT_WORKSPACE_ID) {
   };
 }
 
-/** 统一 preset id（兼容旧 desktop → default） */
+/** 统一 preset id（兼容旧 desktop → default；保留 project） */
 export function normalizePresetId(presetId) {
-  let id = String(presetId || DEFAULT_WORKSPACE_ID).trim() || DEFAULT_WORKSPACE_ID;
-  if (id === 'desktop') id = DEFAULT_WORKSPACE_ID;
-  return id;
-}
-
-export function getConfiguredDefaultWorkspaceId() {
-  const cfg = getAistreamConfigOptional();
-  const raw = cfg?.workspace?.defaultId;
-  if (raw != null && String(raw).trim() !== '') {
-    return normalizePresetId(raw);
-  }
-  return DEFAULT_WORKSPACE_ID;
+  const id = String(presetId || DEFAULT_WORKSPACE_ID).trim() || DEFAULT_WORKSPACE_ID;
+  if (id === 'project') return 'project';
+  return normalizeWorkspaceId(id);
 }
 
 /**
@@ -200,9 +186,13 @@ export function parseRequestWorkspace(body = {}) {
   const projectRoot = getProjectRoot();
 
   if (presetId === 'project') {
-    const agentRootAbs = resolvePathInput(ws.agentRoot || ws.root || '', projectRoot);
-    let fileRootAbs = agentRootAbs;
-    if (ws.fileRoot) fileRootAbs = resolvePathInput(ws.fileRoot, projectRoot);
+    const fileRootAbs = ws.fileRoot
+      ? resolvePathInput(ws.fileRoot, projectRoot)
+      : projectRoot;
+    // project 仅作代码文件 cwd；助手规则仍在 data/ai-workspace，避免读写根目录 IDE AGENTS.md
+    const agentRootAbs = ws.agentRoot
+      ? resolvePathInput(ws.agentRoot, projectRoot)
+      : ensureAgentWorkspaceSync(getConfiguredDefaultWorkspaceId());
     return {
       presetId,
       preset: BUILTIN_PROJECT,
@@ -222,6 +212,7 @@ export function parseRequestWorkspace(body = {}) {
   };
 }
 
+/** 请求级工作区：prompt 注入与文件 cwd 使用同一 data/ai-workspace 目录 */
 export function buildAistreamCfgForAgentRoot(aistreamCfg = {}, agentRootAbs) {
   if (!agentRootAbs) return aistreamCfg || {};
   const projectRoot = getProjectRoot();
@@ -236,7 +227,7 @@ export function buildAistreamCfgForAgentRoot(aistreamCfg = {}, agentRootAbs) {
     ...aistreamCfg,
     agentWorkspace: {
       ...(aistreamCfg?.agentWorkspace || {}),
-      root: rel === '' ? '' : rel
+      root: rel
     }
   };
 }
@@ -323,18 +314,19 @@ function resolveFileUnderRoot(fileRootAbs, relPath = '') {
 }
 
 export function readWorkspaceAgents(agentRootAbs) {
-  for (const rel of AGENTS_CANDIDATES) {
+  seedWorkspaceFromBundle(agentRootAbs);
+  for (const rel of getAgentsReadCandidates()) {
     const abs = path.join(agentRootAbs, rel);
     const result = readTextFileUnderWorkspaceRoot(agentRootAbs, abs);
     if (result.ok) {
       return { path: rel, content: result.content };
     }
   }
-  return { path: AGENTS_CANDIDATES[0], content: '' };
+  return { path: getAgentsWriteRel(), content: '' };
 }
 
 export function writeWorkspaceAgents(agentRootAbs, content = '') {
-  const rel = AGENTS_CANDIDATES[0];
+  const rel = getAgentsWriteRel();
   const abs = path.join(agentRootAbs, rel);
   const rootReal = realpathSyncOrResolve(agentRootAbs);
   const dir = path.dirname(abs);

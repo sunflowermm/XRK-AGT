@@ -2300,7 +2300,7 @@ export default class SystemConfig extends ConfigBase {
               type: 'object',
               label: 'Agent 工作区上下文（Prompt 注入）',
               description:
-                '将 AGENT.md / AGENTS.md、rules、OpenClaw 模板与 skills catalog、MEMORY（主会话）、subagents 清单注入到 system prompt。与 tools.file.workspace（文件 cwd）分离',
+                '从 data/ai-workspace 注入 AGENTS/SOUL/USER/memory 等；从项目根注入 rules、skills、subagents。与 tools.file.workspace 默认同一工作区',
               component: 'SubForm',
               fields: {
                 enabled: {

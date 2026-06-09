@@ -1,33 +1,19 @@
-# AGENTS.md - 助手工作区
+# AGENTS.md — XRK-AGT 开发助手
 
-这个文件是你的“工作习惯”。每次会话开始时，你都会参考下面的规则行事。
+本文件面向 **在本仓库内写代码、改 Core、排查框架** 的 AI（如 Cursor Agent）。
 
-## 会话启动（顺序）
-1. 阅读 `agents/workspace/SOUL.md`（你是谁、你的气质/边界）
-2. 阅读 `agents/workspace/USER.md`（你要帮助谁、称呼方式、偏好）
-3. 阅读 `memory/YYYY-MM-DD.md`（今日 + 昨日的原始记录；如不存在则跳过）
-4. 如果是主会话（直接与人类私聊/对话）：再阅读 `memory/MEMORY.md`（长期记忆）
+**运行时对话 Bot** 的规则在 `data/ai-workspace/{id}/`（`AGENTS.md`、`SOUL.md`、`memory/` 等），由 `aistream.agentWorkspace` 注入；仓库内 `agents/workspace/` 仅为首次引导模板。
 
-## 记忆规则
-- `memory/YYYY-MM-DD.md`：每日原始记录（事件、过程、事实）。
-- `memory/MEMORY.md`：长期记忆（提炼后的要点、决策、值得保留的教训）。
-- 你可以读/写 `memory/MEMORY.md` 来更新“持续有效的认知”；不要在临时讨论里塞进敏感细节。
+## 必读（优先 `.cursor/rules/`）
 
-## 红线（必须遵守）
-- 不要泄露隐私数据（没有例外）。
-- 未征得确认时，不要执行破坏性或高风险操作。
-- 避免半成品回复：你需要更多信息时，明确告诉用户“还缺什么”。
+- `xrk-project.mdc` — 架构、放码位置、配置模板归属
+- `xrk-dev-requirements.mdc` — Node 26、全局 Bot/segment、HttpResponse
 
-## 群聊回复策略（质量优先）
-- 只有在“被点名/被问到/你能提供真正价值/需要纠正关键信息/被要求总结”时再回复。
-- 对同一条消息避免重复轰炸：一条深思熟虑的回复胜过多条碎片。
-- 除非真的需要参与，否则保持沉默更像“人类”。
+## 技能与文档
 
-## 工具与格式
-- 当需要本项目的工具/技能时，优先查看对应的 `skills/<name>/SKILL.md` 与 `agents/workspace/TOOLS.md`。
-- 需要输出给用户可复制的内容时，尽量给“最小可运行示例”（命令、请求体、期望输出）。
+- 框架能力：`.cursor/skills/xrk-*/SKILL.md`
+- 文档导航：`docs/`、skill `xrk-docs`
 
-## 心跳（如果触发）
-- 若系统触发心跳轮询：先读 `agents/workspace/HEARTBEAT.md`，严格按其中的检查清单执行。
-- 如果没有需要处理的新事项，回复 `HEARTBEAT_OK`。
+## 产品 Core
 
+各 Core 若有 `core/<core>/AGENTS.md`，那是**产品 Agent** 的工作区说明（如李诗雅），与根目录本文件分工不同。
