@@ -36,32 +36,6 @@ export const WORKSPACE_SKILLS_DIR = 'skills';
 
 export const DEFAULT_WORKSPACE_ID = 'default';
 
-function listSkillIdsInDir(dir) {
-  if (!fs.existsSync(dir)) return [];
-  const ids = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
-    if (fs.existsSync(path.join(dir, entry.name, 'SKILL.md'))) ids.push(entry.name);
-  }
-  return ids.sort();
-}
-
-/** 对比仓库 standard 与工作区 skills/，供诊断与文档说明 */
-export function getWorkspaceSkillsSyncReport(workspaceAbs) {
-  const standardDir = path.join(getProjectRoot(), PROJECT_SKILLS_STANDARD_REL);
-  const wsSkillsDir = path.join(workspaceAbs, WORKSPACE_SKILLS_DIR);
-  const standard = listSkillIdsInDir(standardDir);
-  const workspace = listSkillIdsInDir(wsSkillsDir);
-  const standardSet = new Set(standard);
-  const workspaceSet = new Set(workspace);
-  return {
-    standardCount: standard.length,
-    workspaceCount: workspace.length,
-    missingInWorkspace: standard.filter((id) => !workspaceSet.has(id)),
-    extraInWorkspace: workspace.filter((id) => !standardSet.has(id)),
-  };
-}
-
 function copyTreeMissingOnly(srcDir, destDir) {
   if (!fs.existsSync(srcDir)) return;
   fs.mkdirSync(destDir, { recursive: true });

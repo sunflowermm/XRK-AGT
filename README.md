@@ -14,53 +14,18 @@
 
 ## 目录
 
-- [联合研制单位](#联合研制单位)
-- [联合研制工作室](#联合研制工作室)
 - [架构层次说明](#-架构层次说明)
 - [Star 趋势](#-star-趋势)
 - [快速开始](#-快速开始)
 - [核心特性](#-核心特性)
 - [文档与开发指南](#-文档与开发指南)
 - [测试与质量](#测试与质量)
-- [文档与开发指南](#-文档与开发指南)
 - [常见问题](#-常见问题)
 - [贡献指南](#-贡献指南)
 - [致谢](#-致谢)
 - [许可证](#-许可证)
-
-<div align="center">
-
-### 联合研制单位
-
-<!-- 第一排：沈阳农业大学 问就是乐 -->
-<div align="center">
-  <img src="resources/mdimg/沈阳农业大学-logo-2048px.png" alt="沈阳农业大学" width="160" height="160">
-</div>
-
-<br>
-
-<!-- 第二排：其他五所大学（使用 width/height 保证 Gitee/GitHub 等平台显示一致 -->
-<div align="center">
-  <p>
-    <img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="130" height="130" style="margin:4px;">
-    <img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" width="130" height="130" style="margin:8px;">
-    <img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="130" height="130" style="margin:8px;">
-    <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="130" height="130" style="margin:8px;">
-    <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin:8px;">
-    <img src="resources/mdimg/河北工程大学-logo-2048px.png" alt="河北工程大学" width="130" height="130" style="margin:8px;">
-    <img src="resources/mdimg/河北经贸大学-logo-2048px.png" alt="河北经贸大学" width="130" height="130" style="margin:8px;">
-  </p>
-</div>
-
-</div>
-<div align="center">
-
-### 联合研制工作室
-
-  <img src="resources/mdimg/fengyun.png" alt="风云工作室" width="280" height="160">
-</div>
-
-<br>
+- [联合研制单位](#联合研制单位)
+- [联合研制工作室](#联合研制工作室)
 
 XRK-AGT 是由向日葵开发，各个大学志同道合的学生联合研制，基于 Node.js 打造的 **多平台、多Tasker、工作流驱动型智能体平台**，采用分层架构设计，支持：
 
@@ -405,7 +370,6 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 
 ## 🙏 致谢
 
-- **大学联合研制团队**：持续打磨架构与运行稳定性
 - **所有提交 Issue / PR 的社区成员**：为 XRK-AGT 带来了真实场景的需求和改进建议
 - **开源生态中的优秀组件作者**：包括 Node.js、Redis、MongoDB、Puppeteer/Playwright 等，为本项目提供了坚实基础
 
@@ -413,7 +377,39 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 
 ## 📄 许可证
 
-本项目由大学联合研制。详见 [LICENSE](LICENSE) 文件。
+详见 [LICENSE](LICENSE) 文件。
+
+---
+
+<div align="center">
+
+## 联合研制单位
+
+<!-- 第一排：沈阳农业大学 -->
+<div align="center">
+  <img src="resources/mdimg/沈阳农业大学-logo-2048px.png" alt="沈阳农业大学" width="160" height="160">
+</div>
+
+<br>
+
+<!-- 第二排：其他大学 -->
+<div align="center">
+  <p>
+    <img src="resources/mdimg/浙江大学-logo-2048px.png" alt="浙江大学" width="130" height="130" style="margin:4px;">
+    <img src="resources/mdimg/西安工程大学-logo-2048px.png" alt="西安工程大学" width="130" height="130" style="margin:8px;">
+    <img src="resources/mdimg/中国矿业大学-logo-2048px.png" alt="中国矿业大学" width="130" height="130" style="margin:8px;">
+    <img src="resources/mdimg/湖南工业大学-logo-2048px.png" alt="湖南工业大学" width="130" height="130" style="margin:8px;">
+    <img src="resources/mdimg/山东交通学院-logo-2048px.png" alt="山东交通学院" width="130" height="130" style="margin:8px;">
+    <img src="resources/mdimg/河北工程大学-logo-2048px.png" alt="河北工程大学" width="130" height="130" style="margin:8px;">
+    <img src="resources/mdimg/河北经贸大学-logo-2048px.png" alt="河北经贸大学" width="130" height="130" style="margin:8px;">
+  </p>
+</div>
+
+### 联合研制工作室
+
+<img src="resources/mdimg/fengyun.png" alt="风云工作室" width="280" height="160">
+
+</div>
 
 ---
 

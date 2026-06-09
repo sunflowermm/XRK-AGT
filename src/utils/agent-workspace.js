@@ -9,7 +9,6 @@ import { realpathSyncOrResolve } from '#utils/path-guards.js';
 import { readTextFileUnderWorkspaceRoot } from '#utils/safe-workspace-read.js';
 import { buildSkillsPromptFromWorkspace } from '#utils/agent-workspace-skills.js';
 import { DEFAULT_SKILL_LIMITS } from '#utils/skills/defaults.js';
-import { buildWorkspacePromptSections } from '#utils/agent-workspace-sections.js';
 import {
   AGENTS_MD,
   WORKSPACE_TEMPLATE_RELS,
@@ -18,7 +17,6 @@ import {
   WORKSPACE_SKILLS_DIR,
   getProjectRoot,
   resolveAgentWorkspaceAbs,
-  getWorkspaceSkillsSyncReport,
 } from '#utils/agent-workspace-paths.js';
 
 const SUBAGENT_MANIFEST_RELS = ['agents/subagents.yaml', 'agents/subagents.yml', 'agents/subagents.json'];
@@ -47,18 +45,6 @@ function listFilesRecursive(dir, predicate) {
   };
   walk(dir);
   return out;
-}
-
-/** @type {Array<(ctx: object) => Promise<{ title?: string, body?: string } | null | void>>} */
-const workspaceProviders = [];
-
-export function registerAgentWorkspaceProvider(fn) {
-  if (typeof fn !== 'function') return () => {};
-  workspaceProviders.push(fn);
-  return () => {
-    const i = workspaceProviders.indexOf(fn);
-    if (i >= 0) workspaceProviders.splice(i, 1);
-  };
 }
 
 function sliceWorkspaceCfg(aistreamCfg) {
@@ -146,24 +132,6 @@ function injectWorkspaceAssistant(workspaceRoot, maxChars, pushProse, { isMainSe
         pushProse('Workspace diagnostics', truncate(diag, maxDiagnosticsChars, 'diagnostics'));
       }
     }
-
-    if (includeDiagnostics) {
-      const skillReport = getWorkspaceSkillsSyncReport(workspaceRoot);
-      const lines = [];
-      if (!readFirstWorkspaceFile(workspaceRoot, ['ENV.md'], 512)) {
-        lines.push('缺少 `ENV.md`（本机能力与依赖清单）。模板在 `agents/workspace/ENV.md`，重启或触发工作区 seed 可补全。');
-      }
-      if (skillReport.missingInWorkspace.length > 0) {
-        lines.push(
-          `工作区 skills/ 缺 ${skillReport.missingInWorkspace.length} 个标准技能（standard ${skillReport.standardCount} / workspace ${skillReport.workspaceCount}）。`,
-          `缺失示例：${skillReport.missingInWorkspace.slice(0, 8).join(', ')}${skillReport.missingInWorkspace.length > 8 ? '…' : ''}`,
-          '补全：重启 Bot 触发 seed（只复制缺失目录，不覆盖已改副本）；或从 `skills/standard/` 手动拷贝。'
-        );
-      }
-      if (lines.length > 0) {
-        pushProse('Workspace diagnostics', truncate(lines.join('\n'), maxDiagnosticsChars, 'diagnostics'));
-      }
-    }
   }
 }
 
@@ -221,8 +189,6 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     proseSections.push(block);
   };
 
-  const ctx = { workspaceRoot, projectRoot, cfg, streamName, paths };
-
   if (cfg.includeAgentMd) {
     injectWorkspaceAssistant(workspaceRoot, cfg.maxAgentMdChars, pushProse, {
       isMainSession: streamName === 'v3' || !streamName,
@@ -240,18 +206,6 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     const got = readTextFileUnderWorkspaceRootCached(workspaceRoot, fp, 2 * 1024 * 1024);
     if (!got.ok) continue;
     pushProse(safeRel, got.content);
-  }
-
-  try {
-    const sections = await buildWorkspacePromptSections(ctx);
-    if (Array.isArray(sections) && sections.length > 0) {
-      sections
-        .filter((s) => s?.title && s?.body)
-        .sort((a, b) => String(a.title).localeCompare(String(b.title)))
-        .forEach((s) => pushProse(String(s.title), String(s.body)));
-    }
-  } catch {
-    /* ignore */
   }
 
   if (cfg.includeRules) {
@@ -273,15 +227,6 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
       pushProse('rules', truncate(acc.trim(), cfg.maxRulesChars, 'rules'));
     } catch {
       /* no rules dir */
-    }
-  }
-
-  for (const provider of workspaceProviders) {
-    try {
-      const out = await provider(ctx);
-      if (out?.title && out?.body) pushProse(out.title, out.body);
-    } catch {
-      /* ignore */
     }
   }
 

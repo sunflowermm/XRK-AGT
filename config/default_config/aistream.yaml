@@ -85,7 +85,7 @@ agentWorkspace:
   includeRules: true
   includeAgentMd: true
   includeSubagents: true
-  includeDiagnostics: false   # true 时提示缺失 MEMORY.md / ENV.md / 未同步的 skills
+  includeDiagnostics: false   # true 时在缺失 MEMORY.md 时追加简短诊断提示
   # 0 = 不限制 prose 总长；Skills 仍受 maxSkillsPromptChars 约束
   maxTotalChars: 0
   maxDiagnosticsChars: 2000   # 诊断提示最大字符
