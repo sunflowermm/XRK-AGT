@@ -32,6 +32,10 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("🛑 关闭服务...")
+    try:
+        await ApiLoader.shutdown_all(app)
+    except Exception as e:
+        logger.warning("API 资源释放异常: %s", e, exc_info=True)
 
 
 app = FastAPI(

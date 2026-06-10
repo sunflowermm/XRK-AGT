@@ -25,7 +25,10 @@ import ConfigLoader from "#infrastructure/commonconfig/loader.js";
 import StreamLoader from "#infrastructure/aistream/loader.js";
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
-import { callSubserver as callSubserverApi } from '#utils/subserver-client.js';
+import {
+  callSubserver as callSubserverApi,
+  fetchSubserverToPath as fetchSubserverToPathApi
+} from '#utils/subserver-client.js';
 import paths from '#utils/paths.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import HTTPBusinessLayer from '#utils/http-business.js';
@@ -164,6 +167,15 @@ export default class Bot extends EventEmitter {
       } catch (error) {
         const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
         BotUtil.makeLog('debug', `子服务端调用失败 [${requestPath}]: ${error.message}${cause}`, 'Bot');
+        throw error;
+      }
+    };
+    this.fetchSubserverToPath = async (requestPath, options = {}) => {
+      try {
+        return await fetchSubserverToPathApi(requestPath, options);
+      } catch (error) {
+        const cause = error.cause ? ` cause=${error.cause?.message ?? error.cause}` : '';
+        BotUtil.makeLog('debug', `子服务端文件拉取失败 [${requestPath}]: ${error.message}${cause}`, 'Bot');
         throw error;
       }
     };

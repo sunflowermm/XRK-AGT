@@ -18,7 +18,7 @@ description: Agent 工作区文件操作：read/write/list_files/grep/create/del
 |------|------|
 | `list_files` | 列目录（可递归） |
 | `read` | 读文本/代码（有大小上限） |
-| `write` / `create_file` | 新建或覆盖 |
+| `write` | 新建或覆盖（自动建目录） |
 | `modify_file` | 局部替换 |
 | `delete_file` | 删除（需确认） |
 | `grep` | 按正则搜文件内容 |

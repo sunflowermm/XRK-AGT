@@ -127,3 +127,13 @@ class ApiLoader:
             if api.name == name:
                 return api
         return None
+
+    @classmethod
+    async def shutdown_all(cls, app: FastAPI):
+        """关闭所有 API，释放线程池/连接等资源"""
+        instance = cls()
+        for api in reversed(instance._apis):
+            try:
+                await api.shutdown(app)
+            except Exception as e:
+                logger.warning("API 关闭失败 %s: %s", api.name, e, exc_info=True)

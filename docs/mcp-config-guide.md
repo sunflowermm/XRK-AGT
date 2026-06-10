@@ -135,7 +135,7 @@ XRK-AGT 提供以下工作流，每个工作流包含一组相关工具：
 
 | 工作流 | 说明 | 主要工具 |
 |--------|------|----------|
-| `tools` | 文件操作工具 | `read`, `grep`, `write`, `create_file`, `delete_file`, `modify_file`, `list_files`, `run` |
+| `tools` | 文件操作工具 | `read`, `grep`, `write`, `delete_file`, `modify_file`, `list_files`, `run` |
 | `memory` | 记忆系统 | `query_memory`, `save_memory`, `list_memories`, `delete_memory` |
 | `database` | 知识库 | `query_knowledge`, `save_knowledge`, `list_knowledge`, `delete_knowledge` |
 

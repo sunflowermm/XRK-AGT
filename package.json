@@ -37,6 +37,7 @@
     "@mozilla/readability": "^0.6.0",
     "@nut-tree/nut-js": "^4.2.0",
     "art-template": "^4.13.2",
+    "baidu-search-mcp": "^1.0.1",
     "chalk": "^5.4.1",
     "cheerio": "^1.2.0",
     "chokidar": "^5.0.0",

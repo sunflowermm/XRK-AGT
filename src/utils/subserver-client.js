@@ -4,8 +4,11 @@
  * 配置单一来源：aistream.yaml 的 subserver 段（host/port/timeout）。
  * 子服务端仅提供底层框架与 apis/ 扩展；LLM/RAG 由主服务端 Node 侧负责。
  */
+import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 
 const DEFAULT_HOST = '127.0.0.1';
@@ -84,10 +87,17 @@ export async function fetchSubserverToPath(requestPath, options = {}) {
     timeout
   });
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (!buffer.length) throw new Error('子服务端返回空文件');
-
   await fs.mkdir(path.dirname(dest), { recursive: true });
-  await fs.writeFile(dest, buffer);
+
+  if (response.body) {
+    await pipeline(Readable.fromWeb(response.body), createWriteStream(dest));
+  } else {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (!buffer.length) throw new Error('子服务端返回空文件');
+    await fs.writeFile(dest, buffer);
+  }
+
+  const stat = await fs.stat(dest);
+  if (!stat.size) throw new Error('子服务端返回空文件');
   return dest;
 }

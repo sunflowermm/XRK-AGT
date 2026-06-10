@@ -14,7 +14,6 @@ const TOOL_LABELS = {
   run: '命令',
   web_fetch: '抓取',
   web_search: '搜索',
-  create_file: '创建',
   delete_file: '删除',
   modify_file: '修改'
 };

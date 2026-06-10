@@ -10,7 +10,7 @@ const IS_WINDOWS = process.platform === 'win32';
 /**
  * 基础工具工作流（配置：aistream.tools.file）
  *
- * MCP：read / grep / write / create_file / delete_file / modify_file / list_files / run
+ * MCP：read / grep / write / delete_file / modify_file / list_files / run
  */
 export default class ToolsStream extends AIStream {
   constructor() {
@@ -192,45 +192,6 @@ export default class ToolsStream extends AIStream {
         }
         
         return { success: false, error: result.error };
-      },
-      enabled: true
-    });
-
-    this.registerMCPTool('create_file', {
-      description: '创建新文件。自动创建不存在的目录，文件已存在时覆盖。',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          filePath: {
-            type: 'string',
-            description: '文件路径'
-          },
-          content: {
-            type: 'string',
-            description: '初始内容（可选）'
-          }
-        },
-        required: ['filePath']
-      },
-      handler: async (args = {}, context = {}) => {
-        const { filePath, content = '' } = args;
-        if (!filePath) return { success: false, error: '文件路径不能为空' };
-
-        const fullPath = this.tools.resolvePath(filePath);
-        try {
-          const fs = await import('fs/promises');
-          await fs.mkdir(path.dirname(fullPath), { recursive: true });
-          await fs.writeFile(fullPath, content, 'utf8');
-          return {
-            success: true,
-            data: {
-              filePath: fullPath,
-              message: '文件创建成功'
-            }
-          };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
       },
       enabled: true
     });
@@ -493,7 +454,7 @@ export default class ToolsStream extends AIStream {
 
   buildSystemPrompt() {
     const ws = this.workspace;
-    return `本工作流通过 MCP 提供文件与命令类工具（read/grep/write/create_file/delete_file/modify_file/list_files/run）。当前工作区：${ws}。read 受 maxReadChars 截断；run 受 aistream.tools.file 开关与超时约束。勿伪造命令输出。`;
+    return `本工作流通过 MCP 提供文件与命令类工具（read/grep/write/delete_file/modify_file/list_files/run）。新建文件用 write（自动建目录）。当前工作区：${ws}。read 受 maxReadChars 截断；run 受 aistream.tools.file 开关与超时约束。勿伪造命令输出。`;
   }
 }
 

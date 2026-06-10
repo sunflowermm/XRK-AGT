@@ -2203,7 +2203,7 @@ export default class SystemConfig extends ConfigBase {
                 defaultStreams: {
                   type: 'array',
                   label: '默认启用的工作流',
-                  description: '当 /api/v3/chat/completions 未显式传入 workflow 时，默认启用这些工作流下的 MCP 工具（如 chat/memory/database）',
+                  description: '留空=代码内置默认（tools、web）；填写则覆盖 builtin-mcp.js',
                   itemType: 'string',
                   default: [],
                   component: 'MultiSelect'
@@ -2211,7 +2211,7 @@ export default class SystemConfig extends ConfigBase {
                 defaultRemoteMcp: {
                   type: 'array',
                   label: '默认启用的远程 MCP',
-                  description: '当未显式传入 workflow 时，默认启用的远程 MCP 服务器名称列表（对应 remote-mcp.xxx 前缀，仅填 name 部分，如 github、browser）',
+                  description: '留空=代码内置默认（baidu-search）；填写则覆盖。用户自增 MCP 在 remote.mcpServers',
                   itemType: 'string',
                   default: [],
                   component: 'MultiSelect'
@@ -2233,6 +2233,7 @@ export default class SystemConfig extends ConfigBase {
                     enabled: {
                       type: 'boolean',
                       label: '启用远程MCP',
+                      description: '仅控制 aistream.yaml 中用户自增的 mcpServers；内置 baidu-search 始终由代码加载',
                       default: false,
                       component: 'Switch'
                     },
@@ -2248,7 +2249,7 @@ export default class SystemConfig extends ConfigBase {
                         config: {
                           type: 'object',
                           label: 'JSON',
-                          description: '示例：{ "mcpServers": { "bing-search": { "command": "npx", "args": ["-y","bing-cn-mcp"] } } }',
+                          description: '示例：{ "mcpServers": { "baidu-search": { "command": "npx", "args": ["-y","baidu-search-mcp"] } } }',
                           component: 'json',
                           default: {}
                         }

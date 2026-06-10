@@ -1,6 +1,6 @@
 ---
 name: office-xlsx
-description: 真实 .xlsx/.csv 读写；desktop create_excel_document 或 pandas/openpyxl
+description: 真实 .xlsx/.csv 读写；tools.run + pandas/openpyxl，无专用 doc MCP
 ---
 
 ## 何时使用
@@ -9,13 +9,15 @@ description: 真实 .xlsx/.csv 读写；desktop create_excel_document 或 pandas
 
 ## 快速创建（优先）
 
-**desktop** 工作流 `create_excel_document`：
+**tools** 工作流 `run` + pandas/openpyxl：
 
-- `fileName`：`台账.xlsx`
-- `data` 支持：
-  - 二维数组：`[["姓名","部门"],["张三","研发"]]`
-  - 对象数组：`[{"姓名":"张三","部门":"研发"}]`
-  - 多 sheet：`{ sheets: [{ name: "Sheet1", data: [[...]] }] }`
+```python
+import pandas as pd
+df = pd.DataFrame([{"姓名": "张三", "部门": "研发"}])
+df.to_excel("台账.xlsx", index=False)
+```
+
+多 sheet 用 `pd.ExcelWriter`。
 
 ## 读取与分析
 
@@ -45,8 +47,7 @@ CSV 用 `utf-8-sig` 便于 Excel 打开中文。
 
 ## 工具
 
-- `create_excel_document`（desktop）
-- `read` / `write` / `run`（tools）
+- `read` / `write` / `run`（tools 工作流）
 - 依赖：`pandas openpyxl`（`run` + pip 按需安装）
 
 ## 禁止
@@ -56,4 +57,4 @@ CSV 用 `utf-8-sig` 便于 Excel 打开中文。
 
 ## 缺环境
 
-无 pandas → **`create_excel_document`** 或 **office-sheet** / **office-csv** 文本表；见 **office-env-setup**
+无 pandas → **office-sheet** / **office-csv** 文本表或 CSV；见 **office-env-setup**

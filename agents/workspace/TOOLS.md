@@ -22,7 +22,7 @@
 
 | 类别 | 技能名 |
 |------|--------|
-| 通用 | assistant-core, answer-format |
+| Agent 基础 | agent-core, agent-tools, agent-search, agent-memory, answer-format |
 | 沟通 | office-email, office-outreach, office-internal, office-meeting, office-meeting-prep, office-transcribe |
 | 文稿 | office-doc, office-docx, office-copy, office-proofread, office-research, office-plan, office-briefing |
 | 对外 | office-press, office-changelog, office-repurpose, office-faq |

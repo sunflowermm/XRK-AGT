@@ -46,6 +46,39 @@ class StreamLoader {
     return { promise, resolve, reject };
   }
 
+  _disposeRemoteMCPServer(serverName) {
+    const server = this.remoteMCPServers.get(serverName);
+    if (!server) return;
+
+    if (server.type === 'stdio' && server.process) {
+      const client = server._stdioClient;
+      if (client?.pending) {
+        for (const [, pending] of client.pending.entries()) {
+          if (pending.timeout) clearTimeout(pending.timeout);
+          try { pending.reject(new Error('远程MCP已卸载')); } catch {}
+        }
+        client.pending.clear();
+      }
+      if (client?.onData) {
+        try { server.process.stdout?.removeListener('data', client.onData); } catch {}
+      }
+      try {
+        server.process.stdin?.end?.();
+        server.process.kill('SIGTERM');
+      } catch {}
+    }
+
+    this.remoteMCPServers.delete(serverName);
+    this._loadedPluginServers.delete(serverName);
+  }
+
+  async _disposeAllRemoteMCPServers() {
+    for (const name of [...this.remoteMCPServers.keys()]) {
+      this._disposeRemoteMCPServer(name);
+    }
+    this._loadedPluginServers.clear();
+  }
+
   _ensureStdioClient(_serverName, entry) {
     if (!entry || entry.type !== 'stdio' || !entry.process) return null;
     if (entry._stdioClient) return entry._stdioClient;
@@ -492,6 +525,8 @@ class StreamLoader {
       }
     }
 
+    await this._disposeAllRemoteMCPServers();
+
     this.streams.clear();
     this.streamClasses.clear();
     this.loaded = false;
@@ -711,6 +746,16 @@ class StreamLoader {
 
     // 2) 再加载 aistream.yaml 中配置的远程 MCP 服务器
     const config = this._getRemoteMCPConfig();
+    const yamlNames = new Set(
+      (config?.servers || []).map((item) => String(item?.name || '').trim()).filter(Boolean)
+    );
+
+    for (const name of [...this.remoteMCPServers.keys()]) {
+      if (!this._loadedPluginServers.has(name) && !yamlNames.has(name)) {
+        this._disposeRemoteMCPServer(name);
+      }
+    }
+
     if (!config) return loadedServers;
 
     const { servers } = config;
@@ -736,7 +781,8 @@ class StreamLoader {
    * 用于在 /api/ai/models 暴露为“可选工作流”，让前端显式勾选启用。
    */
   listRemoteMCPServers() {
-    return Array.from(this.remoteMCPServers?.keys?.() || []);
+    const names = new Set([...this.mcpPluginServers.keys(), ...this.remoteMCPServers.keys()]);
+    return [...names].sort((a, b) => a.localeCompare(b));
   }
 
   /**
@@ -744,15 +790,17 @@ class StreamLoader {
    */
   async _createRemoteMCPClient(serverName, config) {
     const cfg = config && typeof config === 'object' ? config : {};
+    this._disposeRemoteMCPServer(serverName);
 
     if (cfg.command) {
       // stdio 协议：通过子进程启动 MCP 服务器
+      const spawnShell = typeof cfg.shell === 'boolean' ? cfg.shell : true;
       const child = spawn(
         String(cfg.command),
         Array.isArray(cfg.args) ? cfg.args : [],
         {
           stdio: ['pipe', 'pipe', 'pipe'],
-          shell: true,
+          shell: spawnShell,
           env: { ...process.env, ...(cfg.env && typeof cfg.env === 'object' ? cfg.env : {}) },
           cwd: typeof cfg.cwd === 'string' && cfg.cwd.trim() ? cfg.cwd.trim() : undefined
         }

@@ -52,20 +52,11 @@ mcp:
   enabled: true
   remote:
     enabled: false
-    # 远程 MCP 服务器配置（数组模式，推荐：每条粘贴一个 JSON 块）。
-    # 示例（直接把社区 JSON 粘贴到 config 里）：
-    #
-    # mcpServers:
-    #   - config:
-    #       mcpServers:
-    #         bing-search:
-    #           command: npx
-    #           args: ["-y", "bing-cn-mcp"]
+    # 用户自增远程 MCP（数组模式）。内置 baidu-search 见 core/system-Core/stream/baidu-search.js（getMcpServers）
     mcpServers: []
-  # 默认工作流 & 远程 MCP 选择（供 /api/v3/chat/completions 在未传 workflow 字段时使用）
-  # 默认留空：表示其它平台不显式选择时，仅按 provider 自身配置，不自动注入任何特定工作流/远程 MCP
-  defaultStreams: []       # 例如 ["chat", "web", "browser", "tools", "desktop", "memory", "database"]
-  defaultRemoteMcp: []     # 例如 ["github", "browser"]，对应 remote-mcp.github / remote-mcp.browser
+  # 留空=使用代码内置默认（tools + web + baidu-search）；显式填写则覆盖内置
+  defaultStreams: []
+  defaultRemoteMcp: []
   toolMergeStrategy: preferRequest  # 工具合并策略：preferRequest | preferStream | merge
 
 # Agent 文件工作区（tools / desktop MCP 的 cwd，以及控制台工作区预设）
@@ -97,7 +88,8 @@ agentWorkspace:
   maxSkillsPromptChars: 30000
   maxSkillFileBytes: 256000
   customSkillRoots:
-    - "skills/standard"       # 办公技能：office-* 格式 + office-env-* 环境 + assistant-core
+    - "skills/standard/core"  # Agent 基础：agent-core / agent-tools / agent-search / agent-memory / answer-format
+    - "skills/standard"       # 办公扩展：office-*（docx/xlsx/pdf 等走 skills+tools.run，不依赖 desktop doc MCP）
   # 另自动合并 data/ai-workspace/{id}/skills（种子自 standard，缺啥补啥不覆盖）
   maxRulesChars: 12000
   maxAgentMdChars: 12000

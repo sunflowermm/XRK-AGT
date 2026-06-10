@@ -19,8 +19,8 @@ description: 环境探测、缺依赖降级、能力档位 A–E；run/pip/deskt
 | 档 | 条件 | 能做什么 |
 |----|------|----------|
 | A | 文件工具 | Markdown 文稿、聊天表格、工作区存草稿 |
-| B | + desktop | 生成 docx/xlsx、打开文件夹/浏览器 |
-| C | + run 开启 | Python 脚本、pip、命令行转换 |
+| B | + desktop | 打开文件夹/浏览器/剪贴板（文档生成用 C 档 run） |
+| C | + run 开启 | Python 脚本、pandoc、docx/xlsx 转换 |
 | D | + Python 可用 | pandas/pypdf/pptx 等 |
 | E | + web/browser | 调研、抓公开网页 |
 
@@ -40,8 +40,8 @@ pdftotext -v
 
 | 任务 | 首选 | 缺环境时 |
 |------|------|----------|
-| Word 交付 | `create_word_document` | Markdown + 说明「请 Word 粘贴」 |
-| Excel 交付 | `create_excel_document` | `office-sheet` 聊天表 + CSV 文本 |
+| Word 交付 | run + pandoc / python-docx | Markdown + 说明「请 Word 粘贴」 |
+| Excel 交付 | run + pandas/openpyxl | `office-sheet` 聊天表 + CSV 文本 |
 | PDF 读 | run + pypdf/pdfplumber | 用户粘贴；或 `pdftotext` |
 | PDF 合并 | run + qpdf/pypdf | 请用户本地合并 |
 | PPT | run + python-pptx | Markdown 大纲（office-pptx） |

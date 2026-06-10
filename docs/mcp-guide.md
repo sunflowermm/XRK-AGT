@@ -99,13 +99,6 @@ flowchart TB
 - `filePath` (string, 必需): 文件路径
 - `content` (string, 必需): 文件内容
 
-#### `tools.create_file`
-创建新文件
-
-**参数**：
-- `filePath` (string, 必需): 文件路径
-- `content` (string, 可选): 文件内容，默认为空
-
 #### `tools.delete_file`
 删除文件
 

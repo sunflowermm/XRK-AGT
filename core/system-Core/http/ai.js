@@ -19,6 +19,7 @@ import {
   applyRequestWorkspaceToStreams
 } from '../lib/ai-workspace-runtime.js';
 import { runWithAiConsoleContext, installMcpAuditHook } from '../lib/ai-workspace-context.js';
+import { resolveDefaultMcpWorkflow } from '../lib/builtin-mcp.js';
 
 function pickFirst(obj, keys) {
   for (const k of keys) {
@@ -195,12 +196,8 @@ function resolveWorkflowStreams(body = {}) {
 }
 
 function resolveDefaultStreams() {
-  const aistreamCfg = getAistreamConfigOptional();
-  const mcpCfg = aistreamCfg.mcp || {};
-  const defaultStreamsCfg = normalizeStringArray(mcpCfg.defaultStreams);
-  const defaultRemoteMcpCfg = normalizeStringArray(mcpCfg.defaultRemoteMcp).map((name) => `remote-mcp.${name}`);
-  const merged = normalizeStringArray([...defaultStreamsCfg, ...defaultRemoteMcpCfg]);
-  return merged.length > 0 ? merged : null;
+  const mcpCfg = getAistreamConfigOptional().mcp || {};
+  return resolveDefaultMcpWorkflow(mcpCfg);
 }
 
 function buildOverridesFromBody(body = {}) {

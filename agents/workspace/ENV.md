@@ -5,7 +5,7 @@
 ## 能力档位（探测后勾选）
 
 - [ ] **A 基础**：工作区 `read/write/list_files/grep` 可用
-- [ ] **B 桌面**：`create_word_document` / `create_excel_document` / `open_path` 可用
+- [ ] **B 桌面**：`open_path` / `open_browser` / `open_explorer` 可用
 - [ ] **C 命令**：`run` 已开启（`config/.../aistream.yaml` → `tools.file.runEnabled: true`）
 - [ ] **D Python**：`python` / `python3` 可执行
 - [ ] **E 网页**：`web_fetch` 可用；需 JS 渲染时用 `browser_*`
@@ -28,8 +28,8 @@
 
 ## 已知限制
 
-- `run` 关闭时：只能用 Markdown 交付 + desktop 生成 docx/xlsx，不能跑脚本
-- 无 pandoc：Word 用 `create_word_document` 或纯 Markdown
+- `run` 关闭时：只能用 Markdown 交付，不能跑脚本生成 docx/xlsx
+- 无 pandoc：Word 用纯 Markdown 或请用户本地转换
 - 无 LibreOffice：不承诺 .doc 老格式转换
 - 无 OCR：扫描 PDF 请用户提供可复制文本或手动录入
 
@@ -42,6 +42,7 @@
 ## 相关配置路径（XRK）
 
 - 工作区：`data/ai-workspace/{id}/`
-- 技能种子：`skills/standard/` → 同步到工作区 `skills/`（缺啥补啥）
+- 技能种子：`skills/standard/`（含 `core/` 基础 + `office-*` 扩展）→ 同步到工作区 `skills/`
 - run 开关：`config/default_config/aistream.yaml` → `tools.file.runEnabled`
-- 技能注入：`agentWorkspace.customSkillRoots`（默认含 `skills/standard`）
+- 技能注入：`agentWorkspace.customSkillRoots`（默认 `skills/standard/core` + `skills/standard`）
+- 内置远程 MCP：`core/system-Core/stream/baidu-search.js`（`getMcpServers()` 插件式注册，不进 yaml）

@@ -1,20 +1,13 @@
 ---
 name: office-env-desktop
-description: 本机 desktop 工作流；无 run 时生成 docx/xlsx 的首选路径
+description: 本机 desktop 工作流；打开路径/浏览器/系统信息，文档走 tools+skills
 ---
 
 ## 何时使用
 
-用户要「打开网页/文件夹」「生成 Word/Excel」「看磁盘/剪贴板」。**B 档能力，不依赖 run。**
+用户要「打开网页/文件夹」「看磁盘/剪贴板」「截图」。**B 档能力，不依赖 run。**
 
-## 文档（工作区落盘）
-
-| 工具 | 说明 |
-|------|------|
-| `create_word_document` | 多行文本 → `.docx` |
-| `create_excel_document` | JSON/二维数组 → `.xlsx` |
-
-复杂版式、合并单元格公式 → 仍需 run + python-docx/pandas；见 **office-env-setup** 降级表。
+办公 **docx/xlsx/pdf** 不在 desktop 提供 MCP，统一走 **tools.run** + **office-*** skills。
 
 ## 文件与系统
 
@@ -33,7 +26,7 @@ description: 本机 desktop 工作流；无 run 时生成 docx/xlsx 的首选路
 |------|------|
 | 工具未注册/报错 | Markdown 交付 + 路径说明 |
 | 仅要内容不要文件 | 聊天正文 + office-sheet |
-| 要 pptx/pdf | 需 C 档 run；否则 MD 大纲 |
+| 要 docx/xlsx/pptx/pdf | 需 C 档 **tools.run**；否则 MD 大纲 |
 
 ## 注意
 

@@ -1,6 +1,6 @@
 ---
 name: office-docx
-description: Word .docx 生成与读取；desktop create_word_document 或 pandoc/run
+description: Word .docx 生成与读取；tools.run + pandoc/python-docx，无专用 doc MCP
 ---
 
 ## 何时使用
@@ -9,13 +9,15 @@ description: Word .docx 生成与读取；desktop create_word_document 或 pando
 
 ## 快速生成（优先）
 
-使用 **desktop** 工作流 `create_word_document`：
+使用 **tools** 工作流 `run`：
 
-- `fileName`：如 `报告.docx`
-- `content`：多行纯文本（`\n` 分段）
-- 文件落在当前 Agent 工作区
+```bash
+pandoc draft.md -o 报告.docx
+```
 
-适合：通知、说明、无复杂样式的文稿。
+或 Python `python-docx` 脚本写入工作区（见 **office-env-shell**）。
+
+简单文稿也可先交付 Markdown，由用户粘贴到 Word。
 
 ## 读取 / 转换已有 docx
 
@@ -51,4 +53,4 @@ soffice --headless --convert-to docx legacy.doc
 
 ## 缺环境
 
-无 pandoc / python-docx → **`create_word_document`** 或 Markdown；见 **office-env-setup**
+无 pandoc / python-docx → Markdown 交付 + 说明；见 **office-env-setup**

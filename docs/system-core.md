@@ -322,9 +322,8 @@ const stream = await this.getStream('chat');
 - **系统**：`show_desktop`、`open_system_tool`、`lock_screen`、`power_control`（实现随平台选用 Shell/AppleScript/systemd 等，详见工具描述）
 - **文件/资源管理器**：`create_folder`、`open_explorer`、`open_application`、`open_path`
 - **网络**：`open_browser`
-- **其它**：`cleanup_processes`（清理 `BaseTools` 登记的 PID：Windows `taskkill`，Unix `SIGTERM`）、`screenshot`、`system_info`、`disk_space`、`get_time`
-- **Office**：`create_word_document`、`create_excel_document`
-- **数据**：`stock_quote`（新浪沪深行情源，6 位代码）
+- **其它**：`cleanup_processes`（清理 `BaseTools` 登记的 PID：Windows `taskkill`，Unix `SIGTERM`）、`screenshot`、`system_info`、`disk_space`
+- **办公文档**：不在 desktop 注册 MCP；由 `tools` 工作流 + `office-*` skills（`run`/pandoc/pandas）处理
 - **剪贴板**：`read_clipboard`、`write_clipboard`
 
 长时间命令执行请优先使用 **`tools.run`**，而非杜撰的 `execute_powershell` 工具名。
@@ -339,7 +338,7 @@ const stream = await this.getStream('desktop');
 **文件**: `core/system-Core/stream/tools.js`  
 **优先级**: 200  
 
-**工具**：`read`、`grep`、`write`、`create_file`、`delete_file`、`modify_file`、`list_files`、`run`  
+**工具**：`read`、`grep`、`write`、`delete_file`、`modify_file`、`list_files`、`run`（新建文件用 `write`，自动建目录）  
 
 **配置**：`aistream.tools.file`（`workspace`、`maxReadChars`、`grepMaxResults`、`runEnabled`、`runTimeoutMs`、`maxCommandOutputChars`）。`run` 在 Windows 与 Unix 下均可使用（Unix 为 `/bin/sh -lc`）。
 
@@ -359,6 +358,12 @@ const stream = await this.getStream('desktop');
 **文件**: `core/system-Core/stream/web.js`  
 **实现库**：`core/system-Core/lib/crawl/`（`web_fetch`、SSRF、Readability/Firecrawl）  
 **工具**：`web_fetch`（由工作流实现提供，配置请以 `core/system-Core/stream/web.js` 与对应实现为准）
+
+### 6b. baidu-search 工作流（内置远程 MCP 插件）
+
+**文件**: `core/system-Core/stream/baidu-search.js`  
+**注册方式**：模块导出 `getMcpServers()` → `StreamLoader` 在加载 stream 时自动拉起 stdio 子进程并注册 `remote-mcp.baidu-search.*` 工具（**不进** `aistream.yaml`）。  
+**默认启用**：`core/system-Core/lib/builtin-mcp.js` 在 `defaultStreams` / `defaultRemoteMcp` 留空时注入 `tools`、`web`、`remote-mcp.baidu-search`。
 
 ### 7. browser 工作流（受控浏览器）
 

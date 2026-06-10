@@ -65,6 +65,10 @@ class BaseAPI:
         except Exception as e:
             logger.error(f"[BaseAPI] {self.name} 注册失败: {e}", exc_info=True)
             raise
+
+    async def shutdown(self, app: FastAPI):
+        """关闭时调用，子类可重写以释放资源"""
+        pass
     
     def get_info(self) -> Dict[str, Any]:
         """获取 API 信息"""
@@ -123,6 +127,19 @@ def create_api_from_dict(data: Dict[str, Any]) -> BaseAPI:
                 await init_hook(app)
             else:
                 result = init_hook(app)
+                if inspect.isawaitable(result):
+                    await result
+
+        async def shutdown(self, app: FastAPI):
+            """执行自定义关闭钩子"""
+            shutdown_hook = self._data.get("shutdown")
+            if not (shutdown_hook and callable(shutdown_hook)):
+                return
+
+            if inspect.iscoroutinefunction(shutdown_hook):
+                await shutdown_hook(app)
+            else:
+                result = shutdown_hook(app)
                 if inspect.isawaitable(result):
                     await result
         

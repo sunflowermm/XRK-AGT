@@ -28,7 +28,7 @@ description: 表格整理、台账、对比表、CSV/Markdown 表；数据统计
 
 ## 与 office-xlsx
 
-用户要 **.xlsx 文件** 或编辑已有 Excel → 改用 `office-xlsx`（`create_excel_document` / pandas）。
+用户要 **.xlsx 文件** 或编辑已有 Excel → 改用 `office-xlsx`（run + pandas/openpyxl）。
 
 ## 禁止
 
