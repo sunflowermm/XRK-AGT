@@ -29,7 +29,8 @@ import {
 
 import {
   markdownRenderer,
-  stripMarkdownForTTS
+  stripMarkdownForTTS,
+  extractCopyableText
 } from './modules/markdown.js';
 
 import {
@@ -250,7 +251,7 @@ class App {
   }
 
   _renderMermaidIn(container) {
-    markdownRenderer.renderMermaidIn(container);
+    return markdownRenderer.renderMermaidIn(container);
   }
 
   /**
@@ -1209,23 +1210,7 @@ class App {
     const actionsContainer = document.createElement('div');
     actionsContainer.className = 'chat-message-actions';
     
-    // 提取消息中的所有文本内容（包括markdown渲染后的文本）
-    const extractText = (element) => {
-      let text = '';
-      const walker = document.createTreeWalker(
-        element,
-        NodeFilter.SHOW_TEXT,
-        null,
-        false
-      );
-      let node;
-      while (node = walker.nextNode()) {
-        text += node.textContent + ' ';
-      }
-      return text.trim();
-    };
-    
-    const messageText = text || extractText(msgElement);
+    const messageText = (text && String(text).trim()) || extractCopyableText(msgElement);
     
     // 所有消息都有复制按钮
     if (messageText) {

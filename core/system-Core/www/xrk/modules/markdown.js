@@ -3,7 +3,61 @@
  * 提供 Markdown 到 HTML 的转换和语法高亮功能
  */
 
-import { escapeHtml } from './utils.js';
+import { escapeHtml, copyToClipboard } from './utils.js';
+
+const COPY_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+
+function encodeRawCode(code) {
+  try {
+    return btoa(unescape(encodeURIComponent(String(code ?? ''))));
+  } catch {
+    return '';
+  }
+}
+
+function decodeRawCode(b64) {
+  if (!b64) return '';
+  try {
+    return decodeURIComponent(escape(atob(b64)));
+  } catch {
+    return '';
+  }
+}
+
+function getCodeText(codeEl) {
+  if (!codeEl) return '';
+  const b64 = codeEl.dataset.rawB64;
+  if (b64) return decodeRawCode(b64);
+  return String(codeEl.textContent || '').replace(/\n$/, '');
+}
+
+async function runCopyAction(button, labelSpan, text, { ok = '已复制', fail = '复制失败', restoreMs = 1400 } = {}) {
+  const original = labelSpan?.textContent || button.textContent || '复制';
+  const okResult = await copyToClipboard(text);
+  const next = okResult ? ok : fail;
+  if (labelSpan) labelSpan.textContent = next;
+  else button.textContent = next;
+  setTimeout(() => {
+    if (labelSpan) labelSpan.textContent = original;
+    else button.textContent = original;
+  }, restoreMs);
+  return okResult;
+}
+
+function wrapParagraphs(html) {
+  let out = html.replace(/\n\n/g, '</p><p>');
+  out = `<p>${out}</p>`;
+  out = out.replace(/<p>\s*<\/p>/g, '');
+  out = out.replace(/<p>\s*(<(?:h[1-6]|ul|ol|blockquote|hr)\b[^>]*>)/g, '$1');
+  out = out.replace(/(<\/(?:h[1-6]|ul|ol|blockquote)>|<hr[^>]*>)\s*<\/p>/g, '$1');
+  return out;
+}
+
+function unwrapBlockElements(html) {
+  return html
+    .replace(/<p>\s*(<(?:pre|div)\b[^>]*>)/g, '$1')
+    .replace(/(<\/(?:pre|div)>)\s*<\/p>/g, '$1');
+}
 
 /** LLM 常把多行表格压成 `||` 分隔的单行 */
 function normalizeCompactTableLines(text) {
@@ -118,36 +172,104 @@ export class MarkdownRenderer {
    * @param {Element} container - 容器元素
    */
   async renderMermaidIn(container) {
+    if (!container) return;
     try {
-      if (!container || !window.mermaid) return;
-      const nodes = container.querySelectorAll('pre code.language-mermaid');
-      if (!nodes.length) return;
+      if (window.mermaid) {
+        const nodes = container.querySelectorAll('pre code.language-mermaid');
+        const targets = Array.from(nodes).filter(node => !node.dataset.processed);
 
-      const targets = Array.from(nodes).filter(node => !node.dataset.processed);
-      if (!targets.length) return;
-
-      for (const node of targets) {
-        const code = String(node.textContent || '').trim();
-        if (!code) continue;
-        const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        try {
-          const { svg } = await window.mermaid.render(id, code);
-          const wrapper = document.createElement('div');
-          wrapper.className = 'md-mermaid';
-          wrapper.setAttribute('data-mermaid-raw', escapeHtml(code));
-          wrapper.innerHTML = svg;
-          node.parentElement.replaceWith(wrapper);
-          node.dataset.processed = 'true';
-        } catch (err) {
-          // Mermaid 语法异常时保留原始代码块，避免出现空白或占位符残留
-          console.warn('Mermaid 节点渲染失败:', err);
+        for (const node of targets) {
+          const code = String(node.textContent || '').trim();
+          if (!code) continue;
+          const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          try {
+            const { svg } = await window.mermaid.render(id, code);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'md-mermaid';
+            wrapper.setAttribute('data-mermaid-raw-b64', encodeRawCode(code));
+            wrapper.innerHTML = svg;
+            node.parentElement.replaceWith(wrapper);
+            node.dataset.processed = 'true';
+          } catch (err) {
+            // Mermaid 语法异常时保留原始代码块，避免出现空白或占位符残留
+            console.warn('Mermaid 节点渲染失败:', err);
+          }
         }
-      }
 
-      this.bindMermaidToolbar(container);
+        this.bindMermaidToolbar(container);
+      }
     } catch (e) {
       console.warn('Mermaid 渲染失败:', e);
+    } finally {
+      this.bindCodeBlockToolbar(container);
     }
+  }
+
+  /**
+   * 为 Markdown 代码块绑定复制工具栏
+   * @param {Element} root - 根元素
+   */
+  bindCodeBlockToolbar(root) {
+    if (!root) return;
+    const pres = root.querySelectorAll('pre.md-code:not([data-code-toolbar-bound])');
+    if (!pres.length) return;
+
+    pres.forEach((pre) => {
+      const codeEl = pre.querySelector('code');
+      if (!codeEl) return;
+
+      const lang = (codeEl.dataset.lang || codeEl.className.match(/language-(\S+)/)?.[1] || '').trim();
+      if (lang === 'mermaid') return;
+
+      pre.dataset.codeToolbarBound = 'true';
+
+      const wrap = document.createElement('div');
+      wrap.className = 'md-code-wrap';
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+
+      const toolbar = document.createElement('div');
+      toolbar.className = 'md-code-toolbar';
+      toolbar.innerHTML = `
+        <span class="md-code-lang">${lang ? escapeHtml(lang) : 'code'}</span>
+        <button class="md-code-copy" type="button" title="复制代码" aria-label="复制代码">
+          ${COPY_ICON_SVG}<span>复制</span>
+        </button>
+      `;
+      wrap.insertBefore(toolbar, pre);
+
+      const copyBtn = toolbar.querySelector('.md-code-copy');
+      if (!copyBtn) return;
+
+      copyBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const raw = getCodeText(codeEl);
+        if (!raw) return;
+        await runCopyAction(copyBtn, copyBtn.querySelector('span'), raw);
+      });
+
+      pre.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        const range = document.createRange();
+        range.selectNodeContents(codeEl);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      });
+    });
+
+    root.querySelectorAll('code.md-inline:not([data-inline-copy-bound])').forEach((inline) => {
+      inline.dataset.inlineCopyBound = 'true';
+      inline.title = '点击复制';
+      inline.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const raw = String(inline.textContent || '').trim();
+        if (!raw) return;
+        inline.classList.add('md-inline-copied');
+        await runCopyAction(inline, null, raw, { ok: '✓', fail: '×', restoreMs: 900 });
+        setTimeout(() => inline.classList.remove('md-inline-copied'), 900);
+      });
+    });
   }
 
   /**
@@ -178,20 +300,14 @@ export class MarkdownRenderer {
       const copyBtn = toolbar.querySelector('.md-mermaid-copy');
       const downloadBtn = toolbar.querySelector('.md-mermaid-download');
 
-      if (copyBtn && navigator.clipboard) {
-        copyBtn.addEventListener('click', async () => {
-          const raw = (wrap.getAttribute('data-mermaid-raw') || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+      if (copyBtn) {
+        copyBtn.innerHTML = `${COPY_ICON_SVG}<span>复制</span>`;
+        copyBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const raw = decodeRawCode(wrap.getAttribute('data-mermaid-raw-b64'))
+            || (wrap.getAttribute('data-mermaid-raw') || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
           if (!raw) return;
-          try {
-            const original = copyBtn.textContent;
-            await navigator.clipboard.writeText(raw);
-            copyBtn.textContent = '已复制';
-            setTimeout(() => {
-              copyBtn.textContent = original;
-            }, 1400);
-          } catch (e) {
-            console.error('复制失败:', e);
-          }
+          await runCopyAction(copyBtn, copyBtn.querySelector('span'), raw);
         });
       }
 
@@ -315,12 +431,18 @@ export class MarkdownRenderer {
       html = html.replace(`@@INLINECODE${i}@@`, `<code class="md-inline">${escapeHtml(code)}</code>`);
     });
 
+    // 段落换行须在代码块/表格还原前处理，避免破坏 <pre> 内换行
+    html = wrapParagraphs(html);
+
     codeBlocks.forEach((block, i) => {
-      const langAttr = block.lang ? ` data-lang="${escapeHtml(block.lang)}"` : '';
-      const highlighted = this.syntaxHighlight(block.code, block.lang);
+      const lang = block.lang || '';
+      const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : '';
+      const langClass = lang ? `language-${escapeHtml(lang)}` : 'language-plaintext';
+      const rawB64 = encodeRawCode(block.code);
+      const highlighted = this.syntaxHighlight(block.code, lang);
       html = html.replace(
         `@@CODEBLOCK${i}@@`,
-        `<pre class="md-code"><code class="language-${escapeHtml(block.lang)}"${langAttr}>${highlighted}</code></pre>`
+        `<pre class="md-code"><code class="${langClass}"${langAttr} data-raw-b64="${rawB64}">${highlighted}</code></pre>`
       );
     });
 
@@ -328,12 +450,7 @@ export class MarkdownRenderer {
       html = html.replace(`@@TABLE${i}@@`, tableHtml);
     });
 
-    html = html.replace(/\n\n/g, '</p><p>');
-    html = `<p>${html}</p>`;
-
-    html = html.replace(/<p>\s*<\/p>/g, '');
-    html = html.replace(/<p>\s*(<(?:h[1-6]|ul|ol|blockquote|pre|hr|div)\b[^>]*>)/g, '$1');
-    html = html.replace(/(<\/(?:h[1-6]|ul|ol|blockquote|pre|div)>|<hr[^>]*>)\s*<\/p>/g, '$1');
+    html = unwrapBlockElements(html);
 
     return html;
   }
@@ -364,6 +481,20 @@ export class MarkdownRenderer {
         .replace(/:\s*(".*?")/g, ': <span class="string">$1</span>')
         .replace(/:\s*(\d+)/g, ': <span class="number">$1</span>')
         .replace(/:\s*(true|false|null)/g, ': <span class="literal">$1</span>');
+    }
+
+    if (lang === 'python' || lang === 'py') {
+      return escaped
+        .replace(/\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|pass|break|continue|raise|yield|lambda|global|nonlocal|assert|del|in|is|not|and|or)\b/g, '<span class="keyword">$1</span>')
+        .replace(/\b(True|False|None)\b/g, '<span class="literal">$1</span>')
+        .replace(/(#.*$)/gm, '<span class="comment">$1</span>')
+        .replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|f?r?['"][^'"]*['"])/g, '<span class="string">$1</span>');
+    }
+
+    if (lang === 'bash' || lang === 'sh' || lang === 'shell') {
+      return escaped
+        .replace(/(#.*$)/gm, '<span class="comment">$1</span>')
+        .replace(/\b(if|then|else|fi|for|do|done|echo|export|cd|python|npm|git)\b/g, '<span class="keyword">$1</span>');
     }
 
     return escaped;
@@ -453,6 +584,44 @@ export function stripMarkdownForTTS(text = '') {
   return s.trim();
 }
 
+/**
+ * 从已渲染的聊天气泡中提取可复制的纯文本（保留代码块换行）
+ * @param {Element} root - 消息根元素
+ * @returns {string}
+ */
+export function extractCopyableText(root) {
+  if (!root) return '';
+  const parts = [];
+  const content = root.querySelector('.chat-content, .chat-markdown, .chat-text') || root;
+
+  const walk = (node) => {
+    if (!node) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push(node.textContent);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node;
+    if (el.matches('pre.md-code')) {
+      const code = el.querySelector('code');
+      parts.push('\n', getCodeText(code), '\n');
+      return;
+    }
+    if (el.matches('pre.example-block, .chat-tool-block-code')) {
+      parts.push('\n', el.textContent, '\n');
+      return;
+    }
+    if (el.tagName === 'BR') {
+      parts.push('\n');
+      return;
+    }
+    Array.from(el.childNodes).forEach(walk);
+  };
+
+  walk(content);
+  return parts.join('').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // 导出单例
 export const markdownRenderer = new MarkdownRenderer();
 
@@ -461,6 +630,7 @@ export const {
   initMermaid,
   renderMermaidIn,
   bindMermaidToolbar,
+  bindCodeBlockToolbar,
   render: renderMarkdown,
   syntaxHighlight,
   renderExampleBlock

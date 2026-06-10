@@ -662,16 +662,123 @@
   word-break: break-word;
 }
 
-.chat-markdown .md-code {
+.md-code-wrap {
   margin: 6px 0;
-  padding: 8px 10px;
-  background: var(--bg-input);
   border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.md-code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-input) 72%, var(--border));
+}
+
+.md-code-lang {
+  font-size: 11px;
+  font-family: var(--font-family-mono);
+  color: var(--text-muted);
+  text-transform: lowercase;
+  min-height: 1em;
+}
+
+.md-code-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.md-code-copy svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.md-code-copy:hover {
+  background: var(--primary-100);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.chat-message.user .md-code-toolbar {
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.12) 80%, transparent);
+  border-bottom-color: rgba(255, 255, 255, 0.2);
+}
+
+.chat-message.user .md-code-lang {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.chat-message.user .md-code-copy {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.chat-message.user .md-code-copy:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
+
+.chat-markdown .md-code-wrap .md-code,
+.chat-markdown .md-code {
+  margin: 0;
+  padding: 8px 10px;
+  background: transparent;
+  border-radius: 0;
   font-family: var(--font-family-mono);
   font-size: 12px;
   overflow-x: auto;
-  border: 1px solid var(--border);
+  border: none;
   max-width: 100%;
+  white-space: pre;
+  tab-size: 4;
+  cursor: text;
+}
+
+.chat-markdown .md-code code {
+  display: block;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.chat-markdown .md-code .keyword {
+  color: #8250df;
+  font-weight: 600;
+}
+
+.chat-markdown .md-code .string {
+  color: #0a7c42;
+}
+
+.chat-markdown .md-code .comment {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.chat-markdown .md-code .literal,
+.chat-markdown .md-code .number {
+  color: #0550ae;
+}
+
+.chat-markdown .md-code .property {
+  color: #953800;
 }
 
 .chat-markdown .md-inline {
@@ -681,6 +788,18 @@
   font-family: var(--font-family-mono);
   font-size: 12px;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.chat-markdown .md-inline:hover {
+  border-color: var(--primary);
+  background: var(--primary-50);
+}
+
+.chat-markdown .md-inline.md-inline-copied {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, var(--bg-input));
 }
 
 .md-mermaid {
@@ -716,6 +835,9 @@
 }
 
 .md-mermaid-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 6px;
@@ -724,6 +846,12 @@
   color: var(--text-secondary);
   cursor: pointer;
   transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.md-mermaid-copy svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .md-mermaid-copy:hover {
