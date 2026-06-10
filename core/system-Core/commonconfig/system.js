@@ -3433,11 +3433,7 @@ export default class SystemConfig extends ConfigBase {
 
     const instance = new ConfigBase(configMeta);
     if (name === 'aistream') {
-      const baseValidate = instance.validate.bind(instance);
-      instance.validate = async (data) => {
-        this._refreshDynamicSchema(data);
-        return baseValidate(data);
-      };
+      instance.prepareValidate = (data) => this._refreshDynamicSchema(data);
     }
     return instance;
   }

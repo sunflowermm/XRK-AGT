@@ -253,6 +253,8 @@ export default class ConfigBase {
         throw new Error(`不支持的文件类型: ${this.fileType}`);
       }
 
+      this._fillDefaultsInPlace(data, this.buildDefaultFromSchema());
+
       // 更新缓存
       this._cache = data;
       this._cacheTime = Date.now();
@@ -665,6 +667,13 @@ export default class ConfigBase {
     const errors = [];
 
     try {
+      if (typeof this.prepareValidate === 'function') {
+        this.prepareValidate(data);
+      }
+      if (data && typeof data === 'object') {
+        this._fillDefaultsInPlace(data, this.buildDefaultFromSchema());
+      }
+
       // 基础验证：检查必需字段
       if (this.schema.required) {
         for (const field of this.schema.required) {
@@ -774,18 +783,51 @@ export default class ConfigBase {
     const result = {};
     if (!schema?.fields) return result;
     for (const [key, fs] of Object.entries(schema.fields)) {
-      if (fs.type === 'object') {
+      if (fs.type === 'object' || fs.type === 'map') {
         result[key] = this.buildDefaultFromSchema({ fields: fs.fields ?? {} });
       } else if (fs.type === 'array') {
         result[key] = Array.isArray(fs.default) ? [...fs.default] : [];
-      } else {
+      } else if (Object.hasOwn(fs, 'default')) {
         result[key] = fs.default;
       }
     }
     return result;
   }
 
-  getDefaultFromSchema() { return this.buildDefaultFromSchema(this.schema); }
+  /**
+   * 将 schema 默认值填入 data 中缺失的字段（不覆盖用户已配置的值）
+   * @param {object} target
+   * @param {object} defaults
+   */
+  _fillDefaultsInPlace(target, defaults) {
+    if (!target || typeof target !== 'object' || !defaults || typeof defaults !== 'object') return;
+
+    for (const [key, defVal] of Object.entries(defaults)) {
+      const cur = target[key];
+      const missing = !Object.hasOwn(target, key) || cur === null || cur === undefined;
+
+      if (missing) {
+        if (defVal === undefined) continue;
+        target[key] = this._cloneDefaultValue(defVal);
+        continue;
+      }
+
+      if (
+        this._isObject(defVal) && !Array.isArray(defVal) &&
+        this._isObject(cur) && !Array.isArray(cur)
+      ) {
+        this._fillDefaultsInPlace(cur, defVal);
+      }
+    }
+  }
+
+  _cloneDefaultValue(value) {
+    if (Array.isArray(value)) return [...value];
+    if (this._isObject(value)) {
+      return structuredClone(value);
+    }
+    return value;
+  }
 
   getFlatSchema(prefix = '', schema = this.schema) {
     const list = [];
