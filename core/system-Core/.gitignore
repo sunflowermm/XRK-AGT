@@ -108,3 +108,4 @@ commonconfig/**
 !www/
 !lib/crawl/
 !lib/crawl/*
+!lib/builtin-mcp.js
