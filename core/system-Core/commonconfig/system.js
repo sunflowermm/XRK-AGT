@@ -3431,7 +3431,15 @@ export default class SystemConfig extends ConfigBase {
       throw new Error(`未知的配置: ${name}`);
     }
 
-    return new ConfigBase(configMeta);
+    const instance = new ConfigBase(configMeta);
+    if (name === 'aistream') {
+      const baseValidate = instance.validate.bind(instance);
+      instance.validate = async (data) => {
+        this._refreshDynamicSchema(data);
+        return baseValidate(data);
+      };
+    }
+    return instance;
   }
 
   /**
@@ -3533,10 +3541,25 @@ export default class SystemConfig extends ConfigBase {
 
   /**
    * 动态刷新 aistream 相关 schema（工作流、远程 MCP、LLM Provider）
+   * @param {object} [validateSnapshot] - 待校验/写入的配置快照；用于把已持久化的值并入 enum，避免改 MCP 等无关字段时误伤校验
    */
-  _refreshDynamicSchema() {
+  _refreshDynamicSchema(validateSnapshot = null) {
     try {
       const aistreamSchema = this.configFiles?.aistream?.schema?.fields || {};
+      const snap = validateSnapshot || global.cfg?.aistream || {};
+
+      const mergeEnum = (dynamicList, persisted) => {
+        const merged = [...(Array.isArray(dynamicList) ? dynamicList : [])];
+        const seen = new Set(merged);
+        const items = Array.isArray(persisted) ? persisted : (persisted != null && persisted !== '' ? [persisted] : []);
+        for (const raw of items) {
+          const s = String(raw ?? '').trim();
+          if (!s || seen.has(s)) continue;
+          seen.add(s);
+          merged.push(s);
+        }
+        return merged;
+      };
 
       // 1) 工作流 & 远程 MCP 多选枚举（真正动态：不再使用静态兜底）
       const mcpFields = aistreamSchema.mcp?.fields;
@@ -3572,6 +3595,11 @@ export default class SystemConfig extends ConfigBase {
           remoteServers = [];
         }
 
+        const persistedStreams = snap?.mcp?.defaultStreams;
+        const persistedRemote = snap?.mcp?.defaultRemoteMcp;
+        workflowKeys = mergeEnum(workflowKeys, persistedStreams);
+        remoteServers = mergeEnum(remoteServers, persistedRemote);
+
         if (mcpFields.defaultStreams) {
           mcpFields.defaultStreams.enum = workflowKeys;
         }
@@ -3603,6 +3631,9 @@ export default class SystemConfig extends ConfigBase {
           providers = [];
         }
 
+        const currentProvider = String(snap?.llm?.Provider ?? snap?.llm?.provider ?? '').trim().toLowerCase();
+        providers = mergeEnum(providers, currentProvider);
+
         // 只有在检测到至少一个可用 Provider 时，才切换为下拉单选；否则保留原来的自由输入，避免渲染空下拉
         if (providers.length) {
           llmFields.Provider.enum = providers;
@@ -3616,6 +3647,9 @@ export default class SystemConfig extends ConfigBase {
             `[SystemConfig] LLM Provider 可选值: [${providers.join(', ')}], 默认: ${llmFields.Provider.default}`,
             'SystemConfig'
           );
+        } else {
+          delete llmFields.Provider.enum;
+          llmFields.Provider.component = 'Input';
         }
       }
     } catch (e) {

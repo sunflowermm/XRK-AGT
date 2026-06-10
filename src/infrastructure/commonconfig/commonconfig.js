@@ -889,10 +889,13 @@ export default class ConfigBase {
     if (schema.enum) {
       if (Array.isArray(value)) {
         for (const item of value) {
+          if (item === '' && schema.required !== true) continue;
           if (!schema.enum.includes(item)) {
             errors.push(`字段 ${path} 中的值 "${item}" 必须是: ${schema.enum.join(', ')}`);
           }
         }
+      } else if (value === '' && schema.required !== true) {
+        // 动态 enum 字段留空表示“未指定”，由运行时解析默认值
       } else if (!schema.enum.includes(value)) {
         errors.push(`字段 ${path} 值必须是: ${schema.enum.join(', ')}`);
       }
