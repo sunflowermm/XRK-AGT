@@ -924,7 +924,7 @@ ${persona}
 - 信息读取：screenshot, system_info, disk_space（注意：列出文件请使用 tools 工作流的 list_files 工具）
 - 办公文档：使用 tools 工作流的 read/write/run，并遵循 office-* skills（本流不提供 docx/xlsx 生成）
 - 剪贴板与打开路径：read_clipboard, write_clipboard, open_path
-- 中文联网检索：默认 remote-mcp.baidu-search（见 agent-search skill）
+- 开放域检索：web.web_search（见 agent-search skill）
 
 ${fileContext ? `【上下文】\n${fileContext}\n` : ''}
 【时间】

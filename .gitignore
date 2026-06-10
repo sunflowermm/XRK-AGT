@@ -1,3 +1,6 @@
+# Vendor clones (OpenClaw 等参考源码，本地学习用)
+.vendor/
+
 # Dependencies
 node_modules/
 .pnpm-store/

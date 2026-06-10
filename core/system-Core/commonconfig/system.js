@@ -5,6 +5,27 @@ import StreamLoader from '#infrastructure/aistream/loader.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import BotUtil from '#utils/botutil.js';
 
+/** crawl.webSearch 提供商凭据 SubForm 字段（commonconfig 与 aistream.yaml 对齐） */
+function crawlProviderApiFields(extraFields = {}) {
+  return {
+    apiKey: {
+      type: 'string',
+      label: 'API Key',
+      default: '',
+      component: 'Input',
+      layout: 'full'
+    },
+    baseUrl: {
+      type: 'string',
+      label: 'Base URL（可选）',
+      default: '',
+      component: 'Input',
+      layout: 'full'
+    },
+    ...extraFields
+  };
+}
+
 /**
  * 系统配置管理
  * 管理所有系统级配置文件
@@ -2211,7 +2232,7 @@ export default class SystemConfig extends ConfigBase {
                 defaultRemoteMcp: {
                   type: 'array',
                   label: '默认启用的远程 MCP',
-                  description: '留空=代码内置默认（baidu-search）；填写则覆盖。用户自增 MCP 在 remote.mcpServers',
+                  description: '留空=代码内置默认（tools + web）；填写则覆盖。用户自增 MCP 在 remote.mcpServers',
                   itemType: 'string',
                   default: [],
                   component: 'MultiSelect'
@@ -2233,7 +2254,7 @@ export default class SystemConfig extends ConfigBase {
                     enabled: {
                       type: 'boolean',
                       label: '启用远程MCP',
-                      description: '仅控制 aistream.yaml 中用户自增的 mcpServers；内置 baidu-search 始终由代码加载',
+                      description: '用户自增远程 MCP；开放域检索内置 web.web_search（parallel-free 零配置）',
                       default: false,
                       component: 'Switch'
                     },
@@ -2249,7 +2270,7 @@ export default class SystemConfig extends ConfigBase {
                         config: {
                           type: 'object',
                           label: 'JSON',
-                          description: '示例：{ "mcpServers": { "baidu-search": { "command": "npx", "args": ["-y","baidu-search-mcp"] } } }',
+                          description: '示例：{ "mcpServers": { "my-mcp": { "command": "npx", "args": ["-y","some-mcp-package"] } } }',
                           component: 'json',
                           default: {}
                         }
@@ -2466,6 +2487,422 @@ export default class SystemConfig extends ConfigBase {
                   max: 50,
                   default: 5,
                   component: 'InputNumber'
+                }
+              }
+            },
+            crawl: {
+              type: 'object',
+              label: 'Web 抓取 / 检索 / 浏览器（OpenClaw crawl）',
+              description:
+                '驱动 web.web_fetch、web.web_search、browser 工作流。浏览器启动参数优先合并 renderer.playwright（data/server_bots/{port}/renderers/playwright/config.yaml）',
+              component: 'SubForm',
+              fields: {
+                webFetch: {
+                  type: 'object',
+                  label: 'web_fetch',
+                  component: 'SubForm',
+                  fields: {
+                    timeoutSeconds: {
+                      type: 'number',
+                      label: '超时（秒）',
+                      min: 1,
+                      default: 30,
+                      component: 'InputNumber'
+                    },
+                    cacheTtlMinutes: {
+                      type: 'number',
+                      label: '缓存 TTL（分钟）',
+                      min: 0,
+                      default: 15,
+                      component: 'InputNumber'
+                    },
+                    maxChars: {
+                      type: 'number',
+                      label: '正文最大字符',
+                      min: 100,
+                      default: 50000,
+                      component: 'InputNumber'
+                    },
+                    maxResponseBytes: {
+                      type: 'number',
+                      label: '响应体最大字节',
+                      min: 32000,
+                      default: 2000000,
+                      component: 'InputNumber'
+                    },
+                    maxRedirects: {
+                      type: 'number',
+                      label: '最大重定向次数',
+                      min: 0,
+                      default: 3,
+                      component: 'InputNumber'
+                    },
+                    pinDns: {
+                      type: 'boolean',
+                      label: 'DNS pinning（SSRF 加固）',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    readabilityEnabled: {
+                      type: 'boolean',
+                      label: 'Readability 提取',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    userAgent: {
+                      type: 'string',
+                      label: 'User-Agent',
+                      default: '',
+                      component: 'Input',
+                      layout: 'full'
+                    },
+                    firecrawlApiKey: {
+                      type: 'string',
+                      label: 'Firecrawl API Key（回退抓取）',
+                      default: '',
+                      component: 'Input',
+                      layout: 'full'
+                    },
+                    firecrawlBaseUrl: {
+                      type: 'string',
+                      label: 'Firecrawl Base URL',
+                      default: 'https://api.firecrawl.dev',
+                      component: 'Input',
+                      layout: 'full'
+                    },
+                    firecrawlEnabled: {
+                      type: 'boolean',
+                      label: '启用 Firecrawl 回退',
+                      description: '留空则按是否配置 firecrawlApiKey 自动判断',
+                      default: false,
+                      component: 'Switch'
+                    }
+                  }
+                },
+                webSearch: {
+                  type: 'object',
+                  label: 'web_search',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用 web_search',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    provider: {
+                      type: 'string',
+                      label: '默认提供商',
+                      description: '留空=auto-detect（无 Key 时 parallel-free）',
+                      default: '',
+                      component: 'Input'
+                    },
+                    timeoutSeconds: {
+                      type: 'number',
+                      label: '超时（秒）',
+                      min: 1,
+                      default: 20,
+                      component: 'InputNumber'
+                    },
+                    cacheTtlMinutes: {
+                      type: 'number',
+                      label: '缓存 TTL（分钟）',
+                      min: 0,
+                      default: 15,
+                      component: 'InputNumber'
+                    },
+                    region: {
+                      type: 'string',
+                      label: 'DuckDuckGo region',
+                      default: '',
+                      component: 'Input'
+                    },
+                    safeSearch: {
+                      type: 'string',
+                      label: 'DuckDuckGo SafeSearch',
+                      enum: ['strict', 'moderate', 'off'],
+                      default: 'moderate',
+                      component: 'Select'
+                    },
+                    country: {
+                      type: 'string',
+                      label: '国家/地区（2 字母）',
+                      default: '',
+                      component: 'Input'
+                    },
+                    parallelFree: {
+                      type: 'object',
+                      label: 'parallel-free',
+                      component: 'SubForm',
+                      fields: {
+                        url: {
+                          type: 'string',
+                          label: 'MCP URL',
+                          default: 'https://search.parallel.ai/mcp',
+                          component: 'Input',
+                          layout: 'full'
+                        }
+                      }
+                    },
+                    brave: {
+                      type: 'object',
+                      label: 'Brave',
+                      component: 'SubForm',
+                      fields: crawlProviderApiFields()
+                    },
+                    perplexity: {
+                      type: 'object',
+                      label: 'Perplexity',
+                      component: 'SubForm',
+                      fields: {
+                        ...crawlProviderApiFields(),
+                        openRouterApiKey: {
+                          type: 'string',
+                          label: 'OpenRouter API Key（可选）',
+                          default: '',
+                          component: 'Input',
+                          layout: 'full'
+                        },
+                        model: {
+                          type: 'string',
+                          label: 'Model（可选）',
+                          default: '',
+                          component: 'Input'
+                        }
+                      }
+                    },
+                    exa: {
+                      type: 'object',
+                      label: 'Exa',
+                      component: 'SubForm',
+                      fields: crawlProviderApiFields()
+                    },
+                    tavily: {
+                      type: 'object',
+                      label: 'Tavily',
+                      component: 'SubForm',
+                      fields: crawlProviderApiFields()
+                    },
+                    parallel: {
+                      type: 'object',
+                      label: 'Parallel（付费）',
+                      component: 'SubForm',
+                      fields: crawlProviderApiFields()
+                    },
+                    gemini: {
+                      type: 'object',
+                      label: 'Gemini',
+                      component: 'SubForm',
+                      fields: {
+                        ...crawlProviderApiFields(),
+                        model: {
+                          type: 'string',
+                          label: 'Model（可选）',
+                          default: '',
+                          component: 'Input'
+                        }
+                      }
+                    },
+                    kimi: {
+                      type: 'object',
+                      label: 'Kimi / Moonshot',
+                      component: 'SubForm',
+                      fields: {
+                        ...crawlProviderApiFields(),
+                        model: {
+                          type: 'string',
+                          label: 'Model（可选）',
+                          default: '',
+                          component: 'Input'
+                        }
+                      }
+                    },
+                    minimax: {
+                      type: 'object',
+                      label: 'MiniMax',
+                      component: 'SubForm',
+                      fields: {
+                        ...crawlProviderApiFields(),
+                        region: {
+                          type: 'string',
+                          label: 'Region',
+                          enum: ['', 'global', 'cn'],
+                          default: '',
+                          component: 'Select'
+                        },
+                        apiHost: {
+                          type: 'string',
+                          label: 'API Host（可选，用于推断 cn）',
+                          default: '',
+                          component: 'Input',
+                          layout: 'full'
+                        }
+                      }
+                    },
+                    firecrawl: {
+                      type: 'object',
+                      label: 'Firecrawl Search',
+                      component: 'SubForm',
+                      fields: crawlProviderApiFields()
+                    },
+                    searxng: {
+                      type: 'object',
+                      label: 'SearXNG',
+                      component: 'SubForm',
+                      fields: {
+                        baseUrl: {
+                          type: 'string',
+                          label: '实例 Base URL',
+                          default: '',
+                          component: 'Input',
+                          layout: 'full'
+                        },
+                        categories: {
+                          type: 'string',
+                          label: '默认 categories',
+                          default: '',
+                          component: 'Input'
+                        },
+                        language: {
+                          type: 'string',
+                          label: '默认 language',
+                          default: '',
+                          component: 'Input'
+                        }
+                      }
+                    },
+                    ollama: {
+                      type: 'object',
+                      label: 'Ollama',
+                      component: 'SubForm',
+                      fields: {
+                        baseUrl: {
+                          type: 'string',
+                          label: 'Base URL',
+                          default: 'http://127.0.0.1:11434',
+                          component: 'Input',
+                          layout: 'full'
+                        },
+                        apiKey: {
+                          type: 'string',
+                          label: '本地 API Key（可选）',
+                          default: '',
+                          component: 'Input',
+                          layout: 'full'
+                        },
+                        cloudApiKey: {
+                          type: 'string',
+                          label: 'Ollama Cloud API Key（可选）',
+                          default: '',
+                          component: 'Input',
+                          layout: 'full'
+                        }
+                      }
+                    }
+                  }
+                },
+                browser: {
+                  type: 'object',
+                  label: 'browser MCP',
+                  description: '与 renderer.playwright 合并；此处可覆盖 MCP 专用限制',
+                  component: 'SubForm',
+                  fields: {
+                    browserType: {
+                      type: 'string',
+                      label: '浏览器类型',
+                      enum: ['chromium', 'firefox', 'webkit'],
+                      default: 'chromium',
+                      component: 'Select'
+                    },
+                    headless: {
+                      type: 'boolean',
+                      label: 'Headless',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    wsEndpoint: {
+                      type: 'string',
+                      label: 'WebSocket 端点（远程连接）',
+                      default: '',
+                      component: 'Input',
+                      layout: 'full'
+                    },
+                    executablePath: {
+                      type: 'string',
+                      label: '可执行文件路径',
+                      default: '',
+                      component: 'Input',
+                      layout: 'full'
+                    },
+                    launchTimeoutMs: {
+                      type: 'number',
+                      label: '启动超时（毫秒）',
+                      min: 5000,
+                      default: 120000,
+                      component: 'InputNumber'
+                    },
+                    navigationTimeoutMs: {
+                      type: 'number',
+                      label: '导航超时（毫秒）',
+                      min: 1000,
+                      default: 60000,
+                      component: 'InputNumber'
+                    },
+                    maxTextChars: {
+                      type: 'number',
+                      label: 'page_text 最大字符',
+                      min: 1000,
+                      default: 50000,
+                      component: 'InputNumber'
+                    },
+                    screenshotMaxBytes: {
+                      type: 'number',
+                      label: '截图最大字节',
+                      min: 64000,
+                      default: 4194304,
+                      component: 'InputNumber'
+                    },
+                    screenshotFontDir: {
+                      type: 'string',
+                      label: '截图字体目录',
+                      default: '',
+                      component: 'Input',
+                      layout: 'full'
+                    },
+                    screenshotFontUrlBase: {
+                      type: 'string',
+                      label: '截图字体虚拟 URL 前缀',
+                      default: '',
+                      component: 'Input',
+                      layout: 'full'
+                    },
+                    screenshotFontFiles: {
+                      type: 'array',
+                      label: '截图字体文件',
+                      itemType: 'string',
+                      default: [],
+                      component: 'Tags'
+                    },
+                    ssrfPolicy: {
+                      type: 'object',
+                      label: 'SSRF 策略',
+                      component: 'SubForm',
+                      fields: {
+                        allowPrivateNetwork: {
+                          type: 'boolean',
+                          label: '允许私网',
+                          default: false,
+                          component: 'Switch'
+                        },
+                        dangerouslyAllowPrivateNetwork: {
+                          type: 'boolean',
+                          label: '危险：允许私网（内网）',
+                          default: false,
+                          component: 'Switch'
+                        }
+                      }
+                    }
+                  }
                 }
               }
             },

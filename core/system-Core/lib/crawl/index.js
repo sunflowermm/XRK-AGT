@@ -24,4 +24,74 @@ export {
   DOM_TWEAK_LABEL_COLON_HALF
 } from './page-screenshot-enhance.js';
 
-export { assertUrlSafeForFetch as assertUrlSafeForBrowserNavigation } from './ssrf-guard.js';
+export { fetchWithSsrFGuard } from './fetch-guard.js';
+export {
+  assertBrowserNavigationResultAllowed,
+  assertBrowserNavigationAllowed,
+  didCrossDocumentUrlChange,
+  SsrFBlockedError as BrowserNavigationBlockedError
+} from './browser-navigation-guard.js';
+export {
+  buildRoleSnapshotFromAriaSnapshot,
+  buildRoleSnapshotFromAiSnapshot,
+  parseRoleRef,
+  getRoleSnapshotStats
+} from './pw-role-snapshot.js';
+export { refLocator, resolveInteractionTarget } from './pw-ref-locator.js';
+export {
+  ACT_MAX_BATCH_ACTIONS,
+  clampInteractionTimeoutMs,
+  clampWaitTimeoutMs
+} from './act-policy.js';
+export {
+  ensurePageState,
+  getObservedBrowserStateForPage,
+  BrowserObservedDialogBlockedError,
+  isBrowserObservedDialogBlockedError
+} from './pw-page-state.js';
+export {
+  resolvePinnedHostnameWithPolicy,
+  createPinnedDispatcher,
+  closeDispatcher,
+  mergeSsrFPolicies
+} from './ssrf-policy.js';
+export { gotoWithNavigationGuard, InvalidBrowserNavigationUrlError } from './browser-navigation-guard.js';
+export {
+  buildBrowserRuntime,
+  resolveWebFetchRuntime,
+  resolveWebSearchConfig,
+  getCrawlConfigSection,
+  getPlaywrightRendererConfig
+} from './crawl-config.js';
+export {
+  buildWebSearchRuntime,
+  runWebSearch,
+  listWebSearchProviders,
+  resolveWebSearchProviderId,
+  WEB_SEARCH_PROVIDERS,
+  getWebSearchProvider
+} from './web-search-executor.js';
+export { listWebSearchProviderMeta, isWebSearchProviderConfigured } from './web-search-registry.js';
+export { runDuckDuckGoSearch, parseDuckDuckGoHtml } from './web-search-duckduckgo.js';
+export { runBraveSearch } from './web-search-brave.js';
+export { runPerplexitySearch } from './web-search-perplexity.js';
+export { runExaSearch } from './web-search-exa.js';
+export { runTavilySearch } from './web-search-tavily.js';
+export { runFirecrawlSearch } from './web-search-firecrawl.js';
+export { runSearxngSearch } from './web-search-searxng.js';
+export { runGeminiSearch } from './web-search-gemini.js';
+export { runMiniMaxSearch } from './web-search-minimax.js';
+export { runParallelSearch } from './web-search-parallel.js';
+export { runParallelFreeSearch, PARALLEL_MCP_SEARCH_URL } from './web-search-parallel-free.js';
+export { callMcpTool } from './web-search-mcp-client.js';
+export { runKimiSearch } from './web-search-kimi.js';
+export { runOllamaSearch } from './web-search-ollama.js';
+export { withTrustedWebSearchEndpoint, withSelfHostedWebSearchEndpoint } from './web-search-endpoint.js';
+export {
+  SEARCH_CACHE,
+  MAX_SEARCH_COUNT,
+  DEFAULT_SEARCH_COUNT,
+  buildSearchCacheKey,
+  readCachedSearchPayload,
+  writeCachedSearchPayload
+} from './web-search-shared.js';

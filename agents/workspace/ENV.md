@@ -8,7 +8,7 @@
 - [ ] **B 桌面**：`open_path` / `open_browser` / `open_explorer` 可用
 - [ ] **C 命令**：`run` 已开启（`config/.../aistream.yaml` → `tools.file.runEnabled: true`）
 - [ ] **D Python**：`python` / `python3` 可执行
-- [ ] **E 网页**：`web_fetch` 可用；需 JS 渲染时用 `browser_*`
+- [ ] **E 网页**：`web_search` / `web_fetch` 可用；需 JS 渲染时用 `browser_*`
 
 ## 已安装 CLI / 工具（有则填路径或版本）
 
@@ -45,4 +45,5 @@
 - 技能种子：`skills/standard/`（含 `core/` 基础 + `office-*` 扩展）→ 同步到工作区 `skills/`
 - run 开关：`config/default_config/aistream.yaml` → `tools.file.runEnabled`
 - 技能注入：`agentWorkspace.customSkillRoots`（默认 `skills/standard/core` + `skills/standard`）
-- 内置远程 MCP：`core/system-Core/stream/baidu-search.js`（`getMcpServers()` 插件式注册，不进 yaml）
+- 开放域检索：`web.web_search`（`aistream.crawl.webSearch` + 13 提供商；无 Key 默认 parallel-free）。查状态：`web.web_search_providers`
+- Web 抓取 / 浏览器：`aistream.crawl.webFetch` / `aistream.crawl.browser`；Playwright 启动参数另见 `renderer.playwright`（控制台 renderer 配置）

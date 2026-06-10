@@ -52,9 +52,9 @@ mcp:
   enabled: true
   remote:
     enabled: false
-    # 用户自增远程 MCP（数组模式）。内置 baidu-search 见 core/system-Core/stream/baidu-search.js（getMcpServers）
+    # 用户自增远程 MCP（数组模式）。开放域检索内置 web.web_search（parallel-free 零配置）
     mcpServers: []
-  # 留空=使用代码内置默认（tools + web + baidu-search）；显式填写则覆盖内置
+  # 留空=内置默认（tools + web）；显式填写则覆盖内置
   defaultStreams: []
   defaultRemoteMcp: []
   toolMergeStrategy: preferRequest  # 工具合并策略：preferRequest | preferStream | merge
@@ -98,6 +98,87 @@ agentWorkspace:
 embedding:
   enabled: true
   maxContexts: 5
+
+# OpenClaw crawl：web_fetch / web_search / browser（browser 启动参数另合并 renderer/playwright）
+crawl:
+  webFetch:
+    timeoutSeconds: 30
+    cacheTtlMinutes: 15
+    maxChars: 50000
+    maxResponseBytes: 2000000
+    maxRedirects: 3
+    pinDns: true
+    readabilityEnabled: true
+    userAgent: ""
+    firecrawlApiKey: ""
+    firecrawlBaseUrl: "https://api.firecrawl.dev"
+    firecrawlEnabled: false
+  webSearch:
+    enabled: true
+    provider: ""
+    timeoutSeconds: 20
+    cacheTtlMinutes: 15
+    region: ""
+    safeSearch: moderate
+    country: ""
+    parallelFree:
+      url: "https://search.parallel.ai/mcp"
+    brave:
+      apiKey: ""
+      baseUrl: ""
+    perplexity:
+      apiKey: ""
+      openRouterApiKey: ""
+      baseUrl: ""
+      model: ""
+    exa:
+      apiKey: ""
+      baseUrl: ""
+    tavily:
+      apiKey: ""
+      baseUrl: ""
+    parallel:
+      apiKey: ""
+      baseUrl: ""
+    gemini:
+      apiKey: ""
+      baseUrl: ""
+      model: ""
+    kimi:
+      apiKey: ""
+      baseUrl: ""
+      model: ""
+    minimax:
+      apiKey: ""
+      baseUrl: ""
+      region: ""
+      apiHost: ""
+    firecrawl:
+      apiKey: ""
+      baseUrl: ""
+    searxng:
+      baseUrl: ""
+      categories: ""
+      language: ""
+    ollama:
+      baseUrl: "http://127.0.0.1:11434"
+      apiKey: ""
+      cloudApiKey: ""
+  browser:
+    browserType: chromium
+    headless: true
+    wsEndpoint: ""
+    executablePath: ""
+    launchTimeoutMs: 120000
+    navigationTimeoutMs: 60000
+    maxTextChars: 50000
+    screenshotMaxBytes: 4194304
+    screenshotFontDir: ""
+    screenshotFontUrlBase: ""
+    screenshotFontFiles: []
+    ssrfPolicy:
+      allowPrivateNetwork: false
+      dangerouslyAllowPrivateNetwork: false
 
 # 工具子系统（与 system.js aistream.schema.fields.tools 一一对应）
 tools:

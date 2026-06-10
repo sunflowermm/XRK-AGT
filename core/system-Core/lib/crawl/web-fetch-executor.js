@@ -1,6 +1,7 @@
 /** web_fetch：SSRF、重定向、正文提取、不可信内容包裹、缓存、Firecrawl 回退 */
 import { randomBytes } from 'node:crypto';
 import { SsrFBlockedError, assertUrlSafeForFetch } from './ssrf-guard.js';
+import { fetchWithSsrFGuard } from './fetch-guard.js';
 import {
   extractBasicHtmlContent,
   extractReadableContent,
@@ -8,21 +9,9 @@ import {
   markdownToText,
   truncateText
 } from './web-fetch-utils.js';
+import { resolveWebFetchRuntime } from './crawl-config.js';
 
-const DEFAULT_TIMEOUT_SECONDS = 30;
-const DEFAULT_CACHE_TTL_MINUTES = 15;
 const DEFAULT_CACHE_MAX_ENTRIES = 100;
-
-function resolveTimeoutSeconds(value, fallback) {
-  const parsed = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-  return Math.max(1, Math.floor(parsed));
-}
-
-function resolveCacheTtlMs(value, fallbackMinutes) {
-  const minutes =
-    typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : fallbackMinutes;
-  return Math.round(minutes * 60_000);
-}
 
 function normalizeCacheKey(value) {
   return value.trim().toLowerCase();
@@ -177,16 +166,14 @@ function wrapWebContent(content, source = 'web_search') {
 }
 
 const DEFAULT_FETCH_MAX_CHARS = 50_000;
-const DEFAULT_FETCH_MAX_RESPONSE_BYTES = 2_000_000;
-const FETCH_MAX_RESPONSE_BYTES_MIN = 32_000;
-const FETCH_MAX_RESPONSE_BYTES_MAX = 10_000_000;
-const DEFAULT_FETCH_MAX_REDIRECTS = 3;
 const DEFAULT_ERROR_MAX_CHARS = 4_000;
 const DEFAULT_ERROR_MAX_BYTES = 64_000;
 const DEFAULT_FIRECRAWL_BASE_URL = 'https://api.firecrawl.dev';
-const DEFAULT_FIRECRAWL_MAX_AGE_MS = 172_800_000;
-const DEFAULT_FETCH_USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+/** 构建 web_fetch 运行时参数（aistream.crawl.webFetch + 环境变量 + overrides）。 */
+export function buildWebFetchRuntime(overrides = {}) {
+  return resolveWebFetchRuntime(overrides);
+}
 
 const FETCH_CACHE = new Map();
 
@@ -195,17 +182,6 @@ const WEB_FETCH_WRAPPER_NO_WARNING_OVERHEAD = wrapExternalContent('', {
   source: 'web_fetch',
   includeWarning: false
 }).length;
-
-function resolveMaxChars(value, fallback, cap) {
-  const parsed = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-  const clamped = Math.max(100, Math.floor(parsed));
-  return Math.min(clamped, cap);
-}
-
-function resolveMaxRedirects(value, fallback) {
-  const parsed = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-  return Math.max(0, Math.floor(parsed));
-}
 
 function looksLikeHtml(value) {
   const trimmed = value.trimStart();
@@ -369,73 +345,14 @@ function buildFirecrawlWebFetchPayload(params) {
   };
 }
 
-async function fetchWithManualRedirects(url, init, maxRedirects, timeoutMs) {
-  let current = url;
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-
-  for (let i = 0; i <= maxRedirects; i++) {
-    await assertUrlSafeForFetch(current);
-
-    const res = await fetch(current, {
-      ...init,
-      redirect: 'manual',
-      signal: timeoutSignal
-    });
-
-    if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get('location');
-      if (!loc) {
-        return { response: res, finalUrl: current };
-      }
-      try {
-        current = new URL(loc, current).href;
-      } catch {
-        return { response: res, finalUrl: current };
-      }
-      continue;
-    }
-
-    return { response: res, finalUrl: current };
-  }
-
-  throw new Error('Too many redirects');
-}
-
-/** 构建 web_fetch 运行时参数（默认值 + 环境变量）。 */
-export function buildWebFetchRuntime() {
-  const maxCharsCap = DEFAULT_FETCH_MAX_CHARS;
-
-  let maxResponseBytes = DEFAULT_FETCH_MAX_RESPONSE_BYTES;
-  maxResponseBytes = Math.min(
-    FETCH_MAX_RESPONSE_BYTES_MAX,
-    Math.max(FETCH_MAX_RESPONSE_BYTES_MIN, maxResponseBytes)
-  );
-
-  const apiKey =
-    (typeof process.env.FIRECRAWL_API_KEY === 'string' && process.env.FIRECRAWL_API_KEY.trim()) ||
-    undefined;
-  const firecrawlEnabled = Boolean(apiKey);
-
-  return {
-    readabilityEnabled: true,
-    maxCharsCap,
-    maxResponseBytes,
-    maxRedirects: resolveMaxRedirects(undefined, DEFAULT_FETCH_MAX_REDIRECTS),
-    timeoutSeconds: resolveTimeoutSeconds(undefined, DEFAULT_TIMEOUT_SECONDS),
-    cacheTtlMs: resolveCacheTtlMs(undefined, DEFAULT_CACHE_TTL_MINUTES),
-    userAgent: DEFAULT_FETCH_USER_AGENT,
-    firecrawlEnabled,
-    firecrawlApiKey: apiKey,
-    firecrawlBaseUrl:
-      typeof process.env.FIRECRAWL_BASE_URL === 'string' && process.env.FIRECRAWL_BASE_URL.trim()
-        ? process.env.FIRECRAWL_BASE_URL.trim()
-        : DEFAULT_FIRECRAWL_BASE_URL,
-    firecrawlOnlyMainContent: true,
-    firecrawlMaxAgeMs: DEFAULT_FIRECRAWL_MAX_AGE_MS,
-    firecrawlProxy: 'auto',
-    firecrawlStoreInCache: true,
-    firecrawlTimeoutSeconds: resolveTimeoutSeconds(undefined, DEFAULT_TIMEOUT_SECONDS)
-  };
+async function fetchWithManualRedirects(url, init, maxRedirects, timeoutMs, ssrfPolicy = {}, pinDns = true) {
+  const { response, finalUrl } = await fetchWithSsrFGuard(url, init, {
+    maxRedirects,
+    timeoutMs,
+    ssrfPolicy,
+    pinDns
+  });
+  return { response, finalUrl };
 }
 
 async function tryFirecrawlFallback(params, url) {
@@ -560,7 +477,9 @@ export async function runWebFetch(params) {
         }
       },
       params.maxRedirects,
-      timeoutMs
+      timeoutMs,
+      params.ssrfPolicy ?? {},
+      params.pinDns !== false
     );
     res = out.response;
     finalUrl = out.finalUrl;
@@ -628,4 +547,4 @@ export async function runWebFetch(params) {
   return payload;
 }
 
-export { DEFAULT_FETCH_MAX_CHARS, FETCH_CACHE };
+export { DEFAULT_FETCH_MAX_CHARS, FETCH_CACHE, wrapWebContent };

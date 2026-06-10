@@ -1,28 +1,20 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
+import path from 'node:path';
 import {
   PlaywrightAgentSession,
   SsrFBlockedError,
-  DEFAULT_DEVICE_SCALE_FACTOR
+  buildBrowserRuntime,
+  createLocalFontScreenshotHelper
 } from '../lib/crawl/index.js';
-
-const BROWSER_DEFAULTS = Object.freeze({
-  headless: true,
-  browserType: 'chromium',
-  launchTimeoutMs: 120_000,
-  navigationTimeoutMs: 60_000,
-  maxTextChars: 50_000,
-  screenshotMaxBytes: 4 * 1024 * 1024,
-  ssrfPolicy: {
-    allowPrivateNetwork: false,
-    dangerouslyAllowPrivateNetwork: false
-  }
-});
 
 /** Playwright 受控浏览器 MCP。 */
 export default class BrowserStream extends AIStream {
   /** @type {PlaywrightAgentSession | null} */
   session = null;
+
+  /** @type {ReturnType<typeof buildBrowserRuntime>} */
+  browserRuntime;
 
   constructor() {
     super({
@@ -42,25 +34,53 @@ export default class BrowserStream extends AIStream {
   }
 
   async init() {
+    this.browserRuntime = buildBrowserRuntime();
     await super.init();
     this.registerBrowserTools();
   }
 
   async ensureSession() {
     if (this.session) return this.session;
+    const rt = this.browserRuntime;
     const launchOpts = {
-      browserType: BROWSER_DEFAULTS.browserType,
-      headless: BROWSER_DEFAULTS.headless,
-      launchTimeoutMs: BROWSER_DEFAULTS.launchTimeoutMs,
-      deviceScaleFactor: DEFAULT_DEVICE_SCALE_FACTOR
+      browserType: rt.browserType,
+      headless: rt.headless,
+      wsEndpoint: rt.wsEndpoint,
+      executablePath: rt.executablePath,
+      launchTimeoutMs: rt.launchTimeoutMs,
+      launchArgs: rt.launchArgs,
+      deviceScaleFactor: rt.deviceScaleFactor,
+      viewport: rt.viewport
     };
     this.session = await PlaywrightAgentSession.launch(launchOpts);
+    this.attachScreenshotHelperIfConfigured();
     BotUtil.makeLog(
       'info',
-      `[${this.name}] Playwright 已启动 (${BROWSER_DEFAULTS.browserType}, headless=${BROWSER_DEFAULTS.headless})`,
+      `[${this.name}] Playwright 已启动 (${rt.browserType}, headless=${rt.headless}${rt.wsEndpoint ? ', remote' : ''})`,
       'BrowserStream'
     );
     return this.session;
+  }
+
+  attachScreenshotHelperIfConfigured() {
+    const rt = this.browserRuntime;
+    if (!rt.screenshotFontDir || !rt.screenshotFontUrlBase || !this.session) return;
+    const fontFiles = rt.screenshotFontFiles ?? [];
+    if (!fontFiles.length) return;
+    try {
+      const helper = createLocalFontScreenshotHelper({
+        fontUrlBase: rt.screenshotFontUrlBase,
+        fontDir: rt.screenshotFontDir,
+        fonts: fontFiles.map((file) => ({ family: path.basename(file, path.extname(file)), file }))
+      });
+      this.session.attachScreenshotHelper(helper);
+    } catch (e) {
+      BotUtil.makeLog(
+        'warn',
+        `[${this.name}] 截图字体助手未启用: ${e?.message || e}`,
+        'BrowserStream'
+      );
+    }
   }
 
   async closeSessionInternal() {
@@ -80,8 +100,8 @@ export default class BrowserStream extends AIStream {
         return this.successResponse({
           running: Boolean(this.session),
           currentUrl: u || undefined,
-          browserType: BROWSER_DEFAULTS.browserType,
-          headless: BROWSER_DEFAULTS.headless
+          browserType: this.browserRuntime.browserType,
+          headless: this.browserRuntime.headless
         });
       },
       enabled: true
@@ -128,8 +148,8 @@ export default class BrowserStream extends AIStream {
           const s = await this.ensureSession();
           await s.goto(url, {
             waitUntil,
-            timeoutMs: BROWSER_DEFAULTS.navigationTimeoutMs,
-            ssrfPolicy: BROWSER_DEFAULTS.ssrfPolicy
+            timeoutMs: this.browserRuntime.navigationTimeoutMs,
+            ssrfPolicy: this.browserRuntime.ssrfPolicy
           });
           const title = await s.title();
           return this.successResponse({ url, title });
@@ -156,11 +176,11 @@ export default class BrowserStream extends AIStream {
           const title = await this.session.title();
           let text = await this.session.textContent();
           let truncated = false;
-          if (text.length > BROWSER_DEFAULTS.maxTextChars) {
-            text = text.slice(0, BROWSER_DEFAULTS.maxTextChars);
+          if (text.length > this.browserRuntime.maxTextChars) {
+            text = text.slice(0, this.browserRuntime.maxTextChars);
             truncated = true;
           }
-          return this.successResponse({ title, text, truncated, maxChars: BROWSER_DEFAULTS.maxTextChars });
+          return this.successResponse({ title, text, truncated, maxChars: this.browserRuntime.maxTextChars });
         } catch (e) {
           return this.errorResponse('BROWSER_PAGE_TEXT_FAILED', e?.message || String(e));
         }
@@ -191,10 +211,10 @@ export default class BrowserStream extends AIStream {
           const buf = selector
             ? await this.session.captureRegion(selector)
             : await this.session.screenshot({ fullPage, type: 'png' });
-          if (buf.length > BROWSER_DEFAULTS.screenshotMaxBytes) {
+          if (buf.length > this.browserRuntime.screenshotMaxBytes) {
             return this.errorResponse(
               'SCREENSHOT_TOO_LARGE',
-              `PNG ${buf.length} 字节超过 screenshotMaxBytes=${BROWSER_DEFAULTS.screenshotMaxBytes}`
+              `PNG ${buf.length} 字节超过 screenshotMaxBytes=${this.browserRuntime.screenshotMaxBytes}`
             );
           }
           return this.successResponse({
@@ -206,6 +226,453 @@ export default class BrowserStream extends AIStream {
           });
         } catch (e) {
           return this.errorResponse('BROWSER_SCREENSHOT_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_snapshot', {
+      description:
+        'OpenClaw 风格 ARIA role 快照：返回 snapshot 文本与 refs（e1/e2…），供 browser_click/browser_type/browser_act 使用 ref 定位。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          interactive: {
+            type: 'boolean',
+            description: '仅返回可交互元素（button/link/textbox 等）',
+            default: false
+          },
+          compact: { type: 'boolean', description: '压缩无 ref 的结构节点', default: true },
+          maxDepth: { type: 'number', description: '最大缩进深度' },
+          selector: { type: 'string', description: '根选择器，默认整页 :root' },
+          timeoutMs: { type: 'number', description: 'ariaSnapshot 超时毫秒', default: 5000 }
+        },
+        required: []
+      },
+      handler: async (args = {}) => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
+          const out = await this.session.roleSnapshot({
+            interactive: args.interactive === true,
+            compact: args.compact !== false,
+            maxDepth: args.maxDepth,
+            selector: args.selector,
+            timeoutMs: args.timeoutMs
+          });
+          return this.successResponse({
+            url: this.session.url(),
+            snapshot: out.snapshot,
+            refs: out.refs,
+            stats: out.stats
+          });
+        } catch (e) {
+          return this.errorResponse('BROWSER_SNAPSHOT_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_act', {
+      description:
+        'OpenClaw 统一交互：kind=click|type|press|hover|select|wait|evaluate。目标用 ref（snapshot 的 eN）或 selector。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          kind: {
+            type: 'string',
+            enum: [
+              'click',
+              'type',
+              'fill',
+              'press',
+              'hover',
+              'select',
+              'wait',
+              'evaluate',
+              'batch',
+              'scrollIntoView'
+            ],
+            description: '动作类型'
+          },
+          ref: { type: 'string', description: 'browser_snapshot 返回的 ref，如 e3' },
+          selector: { type: 'string', description: 'CSS 选择器（与 ref 二选一）' },
+          text: { type: 'string', description: 'type/fill 文本' },
+          key: { type: 'string', description: 'press 按键，默认 Enter' },
+          values: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'select 选项值'
+          },
+          force: { type: 'boolean', description: 'click 强制点击', default: false },
+          clear: { type: 'boolean', description: 'type 前清空', default: true },
+          pressEnter: { type: 'boolean', description: 'type 后按 Enter', default: false },
+          timeMs: { type: 'number', description: 'wait 固定延时' },
+          loadState: {
+            type: 'string',
+            enum: ['load', 'domcontentloaded', 'networkidle'],
+            description: 'wait 页面状态'
+          },
+          expression: { type: 'string', description: 'evaluate JS 函数体' },
+          actions: {
+            type: 'array',
+            description: 'batch：子动作数组',
+            items: { type: 'object' }
+          },
+          stopOnError: { type: 'boolean', description: 'batch 遇错是否停止', default: true },
+          timeoutMs: { type: 'number', default: 8000 }
+        },
+        required: ['kind']
+      },
+      handler: async (args = {}) => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
+          const result = await this.session.runAct({
+            ...args,
+            ssrfPolicy: this.browserRuntime.ssrfPolicy
+          });
+          return this.successResponse(result);
+        } catch (e) {
+          if (e instanceof SsrFBlockedError || e?.name === 'SsrFBlockedError') {
+            return this.errorResponse('SSRF_BLOCKED', e.message);
+          }
+          return this.errorResponse('BROWSER_ACT_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_click', {
+      description: '点击元素。优先 ref（browser_snapshot 的 eN），否则 CSS selector。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ref: { type: 'string', description: 'ARIA ref，如 e2' },
+          selector: { type: 'string', description: 'CSS 选择器' },
+          timeoutMs: { type: 'number', description: '超时毫秒', default: 8000 },
+          force: { type: 'boolean', description: '强制点击（绕过可操作性检查）', default: false }
+        },
+        required: []
+      },
+      handler: async (args = {}) => {
+        const ref = typeof args.ref === 'string' ? args.ref.trim() : '';
+        const selector = typeof args.selector === 'string' ? args.selector.trim() : '';
+        if (!ref && !selector) return this.errorResponse('INVALID_PARAM', 'ref 或 selector 必填其一');
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
+          await this.session.clickTarget(
+            { ref, selector },
+            {
+              timeoutMs: args.timeoutMs,
+              force: args.force === true,
+              ssrfPolicy: this.browserRuntime.ssrfPolicy
+            }
+          );
+          return this.successResponse({ ref: ref || undefined, selector: selector || undefined, url: this.session.url() });
+        } catch (e) {
+          if (e instanceof SsrFBlockedError || e?.name === 'SsrFBlockedError') {
+            return this.errorResponse('SSRF_BLOCKED', e.message);
+          }
+          return this.errorResponse('BROWSER_CLICK_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_type', {
+      description: '向输入框填入文本（fill）。支持 ref 或 selector。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ref: { type: 'string', description: 'ARIA ref' },
+          selector: { type: 'string', description: 'CSS 选择器' },
+          text: { type: 'string', description: '填入文本' },
+          clear: { type: 'boolean', description: '写入前清空', default: true },
+          pressEnter: { type: 'boolean', description: '填入后按 Enter', default: false },
+          timeoutMs: { type: 'number', default: 8000 }
+        },
+        required: ['text']
+      },
+      handler: async (args = {}) => {
+        const ref = typeof args.ref === 'string' ? args.ref.trim() : '';
+        const selector = typeof args.selector === 'string' ? args.selector.trim() : '';
+        if (!ref && !selector) return this.errorResponse('INVALID_PARAM', 'ref 或 selector 必填其一');
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
+          await this.session.typeTarget(
+            { ref, selector },
+            args.text ?? '',
+            {
+              clear: args.clear !== false,
+              pressEnter: args.pressEnter === true,
+              timeoutMs: args.timeoutMs,
+              ssrfPolicy: this.browserRuntime.ssrfPolicy
+            }
+          );
+          return this.successResponse({ ref: ref || undefined, selector: selector || undefined, url: this.session.url() });
+        } catch (e) {
+          if (e instanceof SsrFBlockedError || e?.name === 'SsrFBlockedError') {
+            return this.errorResponse('SSRF_BLOCKED', e.message);
+          }
+          return this.errorResponse('BROWSER_TYPE_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_wait', {
+      description:
+        '等待：固定延时、ref/selector、可见文本、文本消失、URL、或 loadState（load/domcontentloaded/networkidle）。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          timeMs: { type: 'number', description: '固定等待毫秒（与 selector/loadState 互斥优先 timeMs）' },
+          ref: { type: 'string', description: 'browser_snapshot 的 ref（eN）' },
+          selector: { type: 'string', description: '等待的选择器' },
+          text: { type: 'string', description: '等待可见文本出现' },
+          textGone: { type: 'string', description: '等待文本消失' },
+          url: { type: 'string', description: '等待 URL 匹配（Playwright waitForURL 模式）' },
+          state: {
+            type: 'string',
+            enum: ['attached', 'detached', 'visible', 'hidden'],
+            description: '配合 selector/ref，默认 visible'
+          },
+          loadState: {
+            type: 'string',
+            enum: ['load', 'domcontentloaded', 'networkidle'],
+            description: '页面加载状态'
+          },
+          timeoutMs: { type: 'number', default: 30000 }
+        },
+        required: []
+      },
+      handler: async (args = {}) => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
+          await this.session.waitFor({
+            timeMs: args.timeMs,
+            ref: args.ref,
+            selector: args.selector,
+            text: args.text,
+            textGone: args.textGone,
+            url: args.url,
+            state: args.state,
+            loadState: args.loadState,
+            timeoutMs: args.timeoutMs
+          });
+          return this.successResponse({ url: this.session.url() });
+        } catch (e) {
+          return this.errorResponse('BROWSER_WAIT_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_evaluate', {
+      description:
+        '在页面上下文执行 JS 函数并返回 JSON 可序列化结果。示例：() => document.title 或 () => Array.from(document.querySelectorAll("a")).map(a => a.href)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          expression: { type: 'string', description: '函数表达式或箭头函数体' }
+        },
+        required: ['expression']
+      },
+      handler: async (args = {}) => {
+        const expression = typeof args.expression === 'string' ? args.expression.trim() : '';
+        if (!expression) return this.errorResponse('INVALID_PARAM', 'expression 必填');
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
+          const result = await this.session.evaluateExpression(expression);
+          return this.successResponse({ result, url: this.session.url() });
+        } catch (e) {
+          return this.errorResponse('BROWSER_EVALUATE_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_tabs', {
+      description: '列出所有标签页（index、url、title、active）。',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
+          const tabs = await this.session.listTabs();
+          return this.successResponse({ tabs });
+        } catch (e) {
+          return this.errorResponse('BROWSER_TABS_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_tab_new', {
+      description: '新建标签页并可选用 browser_goto 同款 SSRF 策略导航。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '可选 URL，默认 about:blank' }
+        },
+        required: []
+      },
+      handler: async (args = {}) => {
+        try {
+          await this.ensureSession();
+          const url = typeof args.url === 'string' ? args.url.trim() : '';
+          const out = await this.session.newTab(url || 'about:blank', {
+            ssrfPolicy: this.browserRuntime.ssrfPolicy
+          });
+          return this.successResponse(out);
+        } catch (e) {
+          if (e instanceof SsrFBlockedError || e?.name === 'SsrFBlockedError') {
+            return this.errorResponse('SSRF_BLOCKED', e.message);
+          }
+          return this.errorResponse('BROWSER_TAB_NEW_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_tab_close', {
+      description: '关闭指定 index 标签页（不可关闭最后一个）。',
+      inputSchema: {
+        type: 'object',
+        properties: { index: { type: 'number', description: '标签 index，默认当前页' } },
+        required: []
+      },
+      handler: async (args = {}) => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
+          const out = await this.session.closeTab(args.index);
+          return this.successResponse(out);
+        } catch (e) {
+          return this.errorResponse('BROWSER_TAB_CLOSE_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_tab_focus', {
+      description: '切换活动标签页。',
+      inputSchema: {
+        type: 'object',
+        properties: { index: { type: 'number' } },
+        required: ['index']
+      },
+      handler: async (args = {}) => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
+          if (typeof args.index !== 'number') return this.errorResponse('INVALID_PARAM', 'index 必填');
+          const out = await this.session.focusTab(Math.floor(args.index));
+          return this.successResponse(out);
+        } catch (e) {
+          return this.errorResponse('BROWSER_TAB_FOCUS_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_console', {
+      description: '读取当前页捕获的 console 消息（OpenClaw observe）。',
+      inputSchema: {
+        type: 'object',
+        properties: { limit: { type: 'number', default: 50 } },
+        required: []
+      },
+      handler: async (args = {}) => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
+          const limit = typeof args.limit === 'number' ? Math.floor(args.limit) : 50;
+          return this.successResponse({ messages: this.session.getConsoleMessages(limit) });
+        } catch (e) {
+          return this.errorResponse('BROWSER_CONSOLE_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_network', {
+      description: '读取当前页捕获的网络请求摘要。',
+      inputSchema: {
+        type: 'object',
+        properties: { limit: { type: 'number', default: 100 } },
+        required: []
+      },
+      handler: async (args = {}) => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
+          const limit = typeof args.limit === 'number' ? Math.floor(args.limit) : 100;
+          return this.successResponse({ requests: this.session.getNetworkRequests(limit) });
+        } catch (e) {
+          return this.errorResponse('BROWSER_NETWORK_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_dialog_arm', {
+      description: '预设下一次弹窗自动 accept/dismiss（OpenClaw arm dialog）。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          accept: { type: 'boolean' },
+          promptText: { type: 'string' },
+          timeoutMs: { type: 'number' }
+        },
+        required: ['accept']
+      },
+      handler: async (args = {}) => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
+          this.session.armDialog({
+            accept: args.accept === true,
+            promptText: args.promptText,
+            timeoutMs: args.timeoutMs
+          });
+          return this.successResponse({ armed: true });
+        } catch (e) {
+          return this.errorResponse('BROWSER_DIALOG_ARM_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_dialog_respond', {
+      description: '响应当前 pending 弹窗（alert/confirm/prompt）。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          accept: { type: 'boolean' },
+          promptText: { type: 'string' },
+          dialogId: { type: 'string' }
+        },
+        required: ['accept']
+      },
+      handler: async (args = {}) => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
+          const record = await this.session.respondDialog({
+            accept: args.accept === true,
+            promptText: args.promptText,
+            dialogId: args.dialogId
+          });
+          return this.successResponse({ dialog: record });
+        } catch (e) {
+          return this.errorResponse('BROWSER_DIALOG_RESPOND_FAILED', e?.message || String(e));
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('browser_observed_state', {
+      description: '查询弹窗等可观测浏览器状态（pending/recent dialogs）。',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => {
+        try {
+          if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
+          return this.successResponse(this.session.getObservedBrowserState());
+        } catch (e) {
+          return this.errorResponse('BROWSER_OBSERVED_STATE_FAILED', e?.message || String(e));
         }
       },
       enabled: true
@@ -224,9 +691,10 @@ export default class BrowserStream extends AIStream {
 
   buildSystemPrompt() {
     return [
-      '本工作流提供受控浏览器（Playwright）MCP 工具：browser_status、browser_start、browser_goto、browser_page_text、browser_screenshot（支持 selector 区域截图）、browser_close。',
-      '导航 URL 与 web_fetch 共用 SSRF 策略（默认禁止私网）。',
-      '需要渲染完整页面后再抓正文时请用 browser_goto + browser_page_text；仅需无 JS 的 HTTP 正文请优先 web 工作流 web_fetch。'
+      '本工作流提供 OpenClaw 风格受控浏览器（Playwright）MCP：',
+      'browser_status / browser_start / browser_goto / browser_tabs / browser_tab_* / browser_snapshot / browser_act（含 batch）/ browser_click / browser_type / browser_wait / browser_console / browser_network / browser_dialog_* / browser_evaluate / browser_page_text / browser_screenshot / browser_close。',
+      '流程建议：goto → snapshot（读 snapshot 文本与 ref=eN）→ browser_act 或 click/type（ref 优先）→ wait → page_text 或 screenshot。',
+      '导航与交互后跨文档跳转均做 SSRF 复检（默认禁私网）。无 JS 静态页优先 web.web_fetch。'
     ].join('\n');
   }
 

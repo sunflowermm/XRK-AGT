@@ -68,7 +68,12 @@ export async function partitionAndExecuteToolCalls(toolCalls, overrides, { build
     return null;
   }
 
-  // 情况4：仅有中游工具，返回执行结果
-  const resultMap = new Map(midstreamCalls.map((tc, i) => [getToolName(tc), midstreamResults[i]]));
-  return toolCalls.map((tc) => resultMap.get(getToolName(tc))).filter(Boolean);
+  // 情况4：仅有中游工具，按 toolCalls 顺序回填（同名并行调用不能用函数名做 key）
+  let midstreamResultIndex = 0;
+  return toolCalls
+    .map((tc) => {
+      if (downstreamNames.has(getToolName(tc))) return null;
+      return midstreamResults[midstreamResultIndex++];
+    })
+    .filter((m) => m != null);
 }
