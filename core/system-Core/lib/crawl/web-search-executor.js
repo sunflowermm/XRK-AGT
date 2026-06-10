@@ -1,5 +1,5 @@
 /**
- * OpenClaw web-search runtime — 提供商解析 + runWebSearch + keyless 回退链
+ * web-search runtime — 提供商解析 + runWebSearch + keyless 回退链
  */
 import { resolveWebSearchConfig } from './crawl-config.js';
 import { PARALLEL_MAX_SEARCH_COUNT } from './web-search-parallel-shared.js';
@@ -11,7 +11,7 @@ import {
   WEB_SEARCH_PROVIDERS
 } from './web-search-registry.js';
 
-/** aistream.crawl.webSearch + 环境变量 + overrides，并完成 provider auto-detect */
+/** aistream.crawl.webSearch + overrides，并完成 provider auto-detect */
 export function buildWebSearchRuntime(overrides = {}) {
   const base = resolveWebSearchConfig(overrides);
   const runtime = { ...base, ...overrides };

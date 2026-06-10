@@ -1,7 +1,7 @@
 /**
- * OpenClaw pw-session PageState 精简移植 — role refs、console、network、dialog
+ * Playwright PageState — role refs、console、network、dialog
  */
-export const BROWSER_REF_MARKER_ATTRIBUTE = 'data-openclaw-ref';
+export const BROWSER_REF_MARKER_ATTRIBUTE = 'data-xrk-browser-ref';
 export const AX_REF_PATTERN = /^ax\d+$/i;
 
 const MAX_CONSOLE = 500;

@@ -61,7 +61,8 @@ export {
   resolveWebFetchRuntime,
   resolveWebSearchConfig,
   getCrawlConfigSection,
-  getPlaywrightRendererConfig
+  getPlaywrightRendererConfig,
+  getWebSearchProviderScope
 } from './crawl-config.js';
 export {
   buildWebSearchRuntime,

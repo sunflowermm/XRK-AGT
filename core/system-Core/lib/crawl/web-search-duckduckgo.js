@@ -1,5 +1,4 @@
 /**
- * OpenClaw duckduckgo/ddg-client.ts 移植 — 无 API Key HTML 搜索
  */
 import { fetchWithSsrFGuard } from './fetch-guard.js';
 import {

@@ -12,7 +12,7 @@ import {
 const PROVIDER_IDS = WEB_SEARCH_PROVIDERS.map((p) => p.id);
 
 /**
- * OpenClaw web 能力（web_fetch + web_search）挂载为 MCP
+ * Web 能力（web_fetch + web_search）挂载为 MCP
  */
 export default class WebStream extends AIStream {
   /** @type {ReturnType<typeof buildWebFetchRuntime>} */
@@ -25,7 +25,7 @@ export default class WebStream extends AIStream {
     super({
       name: 'web',
       description:
-        'OpenClaw 风格 Web：web_fetch（SSRF+Readability）与 web_search（13 提供商，零配置 parallel-free + 凭据 auto-detect）',
+        'Web：web_fetch（SSRF+Readability）与 web_search（13 提供商，零配置 parallel-free + 凭据 auto-detect）',
       version: '1.2.0',
       author: 'XRK',
       priority: 95,
@@ -52,7 +52,7 @@ export default class WebStream extends AIStream {
 
     this.registerMCPTool('web_search', {
       description:
-        'Search the web (OpenClaw web_search). Providers: perplexity, brave, exa, tavily, parallel, parallel-free, gemini, kimi, minimax, firecrawl, ollama, searxng, duckduckgo. Zero-config default parallel-free (no API key); auto-detects paid keys from env; fallback chain parallel-free → duckduckgo. Returns untrusted-content wrapping.',
+        'Search the web. Providers: perplexity, brave, exa, tavily, parallel, parallel-free, gemini, kimi, minimax, firecrawl, ollama, searxng, duckduckgo. Zero-config default parallel-free (no API key); auto-detect from aistream.crawl.webSearch; fallback chain parallel-free → duckduckgo. Returns untrusted-content wrapping.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -220,7 +220,7 @@ export default class WebStream extends AIStream {
 
   buildSystemPrompt() {
     return [
-      '本工作流提供 OpenClaw 同源 web 工具：',
+      '本工作流提供 web 工具：',
       'web_search — 开放域检索（perplexity/brave/exa/tavily/parallel/parallel-free/gemini/kimi/minimax/firecrawl/ollama/searxng/duckduckgo；无 Key 默认 parallel-free，回退 duckduckgo）；',
       'web_search_providers — 列出提供商与凭据状态；',
       'web_fetch — 已知 URL 抓取、SSRF、正文提取。',

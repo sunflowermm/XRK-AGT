@@ -1,5 +1,4 @@
 /**
- * OpenClaw firecrawl-client.ts runFirecrawlSearch 移植
  */
 import {
   DEFAULT_SEARCH_COUNT,
@@ -91,7 +90,7 @@ export function missingFirecrawlApiKeyPayload() {
   return {
     error: 'missing_firecrawl_api_key',
     message: 'web_search (firecrawl) needs aistream.crawl.webSearch.firecrawl.apiKey.',
-    docs: 'https://docs.openclaw.ai/tools/web'
+    docs: 'docs/system-core.md'
   };
 }
 

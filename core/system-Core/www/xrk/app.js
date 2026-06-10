@@ -1297,6 +1297,48 @@ class App {
   }
   
   /** 每调用一次生成一张工具卡片，卡片外显工具名；多个工具则生成多张卡 */
+  _parseToolResultPayload(result) {
+    if (result == null || result === '') return null;
+    if (typeof result === 'object') return result;
+    if (typeof result !== 'string') return null;
+    try {
+      return JSON.parse(result);
+    } catch {
+      return null;
+    }
+  }
+
+  _buildToolResultPreview(name, payload) {
+    const data = payload?.data ?? payload;
+    const mime = data?.mimeType || data?.mime;
+    const b64 = data?.base64;
+    if (typeof b64 === 'string' && b64.length > 40 && String(mime || '').startsWith('image/')) {
+      return `<img class="chat-tool-screenshot" src="data:${mime || 'image/png'};base64,${b64}" alt="${this.escapeHtml(name)} 截图" loading="lazy" />`;
+    }
+    return '';
+  }
+
+  _summarizeToolResultText(payload) {
+    if (payload == null || payload === '') return '';
+    const clone = typeof payload === 'object' ? structuredClone(payload) : this._parseToolResultPayload(payload);
+    if (!clone || typeof clone !== 'object') {
+      return typeof payload === 'string' ? payload : String(payload);
+    }
+    const stripBase64 = (obj) => {
+      if (!obj || typeof obj !== 'object') return;
+      if (typeof obj.base64 === 'string' && obj.base64.length > 80) {
+        obj.base64 = `[base64 ${obj.base64.length} chars — 见上方预览]`;
+      }
+      if (obj.data && typeof obj.data === 'object') stripBase64(obj.data);
+    };
+    stripBase64(clone);
+    try {
+      return JSON.stringify(clone, null, 2);
+    } catch {
+      return String(payload);
+    }
+  }
+
   _addToolBlocks(msgElement, tools) {
     if (!msgElement || !Array.isArray(tools) || tools.length === 0) return;
     tools.forEach((tool) => {
@@ -1304,12 +1346,9 @@ class App {
       const args = tool.arguments ?? tool.function?.arguments ?? {};
       const result = tool.result ?? tool.content ?? '';
       const argsText = typeof args === 'string' ? args : (() => { try { return JSON.stringify(args, null, 2); } catch { return String(args); } })();
-      let resultText = '';
-      try {
-        resultText = typeof result === 'string' ? (() => { try { return JSON.stringify(JSON.parse(result), null, 2); } catch { return result; } })() : JSON.stringify(result, null, 2);
-      } catch {
-        resultText = String(result);
-      }
+      const payload = this._parseToolResultPayload(result);
+      const previewHtml = this._buildToolResultPreview(name, payload ?? result);
+      const resultText = this._summarizeToolResultText(payload ?? result);
       const block = document.createElement('div');
       block.className = 'chat-tool-block';
       const header = document.createElement('div');
@@ -1321,6 +1360,7 @@ class App {
       content.innerHTML = `
         <div class="chat-tool-block-item-body">
           <div class="chat-tool-block-item-section"><span class="chat-tool-block-label">参数</span><pre class="chat-tool-block-code">${this.escapeHtml(argsText)}</pre></div>
+          ${previewHtml ? `<div class="chat-tool-block-item-section chat-tool-block-preview">${previewHtml}</div>` : ''}
           <div class="chat-tool-block-item-section"><span class="chat-tool-block-label">结果</span><pre class="chat-tool-block-code">${this.escapeHtml(resultText)}</pre></div>
         </div>
       `;
@@ -2206,6 +2246,7 @@ class App {
               state.currentText = '';
               state.segments.push({ type: 'tools', tools });
               state.mcpTools = state.mcpTools.concat(tools);
+              this.syncWorkspaceFilesFromTools?.(tools);
               if (onDelta) onDelta('', state);
             }
           }
@@ -2970,7 +3011,7 @@ class App {
       const uploadData = await uploadResp.json().catch(() => null);
       const urls = (uploadData?.files || uploadData?.data?.files || []).map((f) => f.url).filter(Boolean);
       if (urls.length === 0) throw new Error('图片上传成功但未返回可用的 url');
-      this._refreshAIWorkspaceFiles?.();
+      this.refreshWorkspaceFiles?.({ silent: true });
       return urls;
     }
 

@@ -1,5 +1,4 @@
 /**
- * OpenClaw ollama web-search-provider.ts 移植
  */
 import { fetchWithSsrFGuard } from './fetch-guard.js';
 import {

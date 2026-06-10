@@ -1,5 +1,4 @@
 /**
- * OpenClaw navigation-guard 移植 — 浏览器导航 SSRF、重定向链、hash-only 检测
  */
 import { isIP } from 'node:net';
 import {
@@ -132,7 +131,7 @@ export async function assertBrowserNavigationResultAllowedForPage(page, ssrfPoli
 }
 
 /**
- * Playwright route 拦截导航请求（OpenClaw gotoPageWithNavigationGuard 精简）
+ * Playwright route 拦截导航请求（gotoPageWithNavigationGuard 精简）
  * @param {import('playwright').Page} page
  */
 export async function gotoWithNavigationGuard(page, url, opts = {}) {

@@ -1,5 +1,5 @@
 /**
- * SSRF 防护入口 — 委托 OpenClaw 完整策略（ssrf-policy.js）
+ * SSRF 防护入口 — 委托 完整策略（ssrf-policy.js）
  */
 export {
   SsrFBlockedError,

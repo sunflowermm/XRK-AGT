@@ -1,5 +1,4 @@
 /**
- * OpenClaw fetch-guard 移植 — SSRF、DNS pinning、重定向环、方法改写、跨域头剥离
  */
 import {
   SsrFBlockedError,

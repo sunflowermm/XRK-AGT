@@ -2492,7 +2492,7 @@ export default class SystemConfig extends ConfigBase {
             },
             crawl: {
               type: 'object',
-              label: 'Web 抓取 / 检索 / 浏览器（OpenClaw crawl）',
+              label: 'Web 抓取 / 检索 / 浏览器（crawl）',
               description:
                 '驱动 web.web_fetch、web.web_search、browser 工作流。浏览器启动参数优先合并 renderer.playwright（data/server_bots/{port}/renderers/playwright/config.yaml）',
               component: 'SubForm',

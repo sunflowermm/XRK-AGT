@@ -1,7 +1,8 @@
 /**
- * OpenClaw parallel-free — 免费 Search MCP（无需 API Key）
+ * parallel-free — 免费 Search MCP（无需 API Key）
  * https://search.parallel.ai/mcp
  */
+import { getWebSearchProviderScope } from './crawl-config.js';
 import { randomUUID } from 'node:crypto';
 import {
   buildExternalSearchMeta,
@@ -37,7 +38,8 @@ export async function runParallelFreeSearch(params, runtime = {}) {
   const count = resolveParallelSearchCount(params.count ?? runtime.maxResults);
   const timeoutSeconds = resolveSearchTimeoutSeconds(runtime.timeoutSeconds);
   const cacheTtlMs = resolveSearchCacheTtlMs(runtime.cacheTtlMinutes);
-  const mcpUrl = runtime?.parallelFree?.url?.trim?.() || PARALLEL_MCP_SEARCH_URL;
+  const mcpUrl =
+    getWebSearchProviderScope(runtime, 'parallel-free')?.url?.trim?.() || PARALLEL_MCP_SEARCH_URL;
 
   const sessionId = normalizeMcpSessionId(
     normalizeParallelSessionId(params.session_id, PARALLEL_FREE_SESSION_ID_MAX_LENGTH)

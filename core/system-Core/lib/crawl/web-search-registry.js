@@ -1,6 +1,7 @@
 /**
- * OpenClaw web_search 提供商注册表 — 元数据、凭据检测、auto-detect 顺序
+ * web_search 提供商注册表 — 元数据、凭据检测、auto-detect 顺序
  */
+import { getWebSearchProviderScope } from './crawl-config.js';
 import { runBraveSearch } from './web-search-brave.js';
 import { runDuckDuckGoSearch } from './web-search-duckduckgo.js';
 import { runPerplexitySearch } from './web-search-perplexity.js';
@@ -135,14 +136,14 @@ export function getWebSearchProvider(id) {
 /** @param {WebSearchProviderEntry} provider @param {object} [runtime] */
 export function isWebSearchProviderConfigured(provider, runtime = {}) {
   if (!provider.requiresCredential) return true;
-  const scoped = runtime?.[provider.id];
+  const scoped = getWebSearchProviderScope(runtime, provider.id);
   if (provider.credentialField === 'baseUrl') {
     return Boolean(scoped?.baseUrl?.trim?.());
   }
   return Boolean(scoped?.apiKey?.trim?.());
 }
 
-/** OpenClaw 风格：有凭据的提供商优先，keyless 最后 */
+/** 有凭据的提供商优先，keyless 最后 */
 export function resolveAutoDetectProviderId(runtime = {}) {
   const explicit = runtime.provider?.trim?.() || '';
   if (explicit && getWebSearchProvider(explicit)) return explicit;

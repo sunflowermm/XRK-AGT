@@ -1,5 +1,4 @@
 /**
- * OpenClaw pw-role-snapshot.ts 移植 — ARIA 快照 + 稳定 ref（e1/e2…）
  */
 import { CONTENT_ROLES, INTERACTIVE_ROLES, STRUCTURAL_ROLES } from './snapshot-roles.js';
 

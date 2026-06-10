@@ -1,5 +1,5 @@
 /**
- * OpenClaw crawl 运行时配置 — 单一来源：aistream.crawl + renderer.playwright + overrides
+ * crawl 运行时配置 — 单一来源：aistream.crawl + renderer.playwright + overrides
  * 优先级：调用方 overrides > aistream.yaml > renderer.playwright > 默认值
  */
 import cfg from '#infrastructure/config/config.js';
@@ -98,6 +98,23 @@ function mergeAllProviderSections(section, overrides) {
     out[id] = mergeSection(section?.[id], overrides?.[id]);
   }
   return out;
+}
+
+/** YAML 段名（camelCase）与 provider id（可含连字符）对齐 */
+export function getWebSearchProviderScope(runtime, providerId) {
+  const id = String(providerId || '').toLowerCase();
+  if (!runtime || typeof runtime !== 'object') return undefined;
+  if (id === 'parallel-free') {
+    return runtime.parallelFree ?? runtime['parallel-free'];
+  }
+  return runtime[id];
+}
+
+function attachProviderScopeAliases(config) {
+  if (config.parallelFree && !config['parallel-free']) {
+    config['parallel-free'] = config.parallelFree;
+  }
+  return config;
 }
 
 export function getCrawlConfigSection() {
@@ -200,7 +217,7 @@ export function resolveWebSearchConfig(overrides = {}) {
   const section = getCrawlConfigSection().webSearch ?? {};
   const providers = mergeAllProviderSections(section, overrides);
 
-  return {
+  return attachProviderScopeAliases({
     enabled: pickBool(true, overrides.enabled, section.enabled),
     provider: pickString(overrides.provider, section.provider).toLowerCase(),
     region: pickString(overrides.region, section.region),
@@ -220,7 +237,7 @@ export function resolveWebSearchConfig(overrides = {}) {
     ),
     maxResults: overrides.maxResults ?? section.maxResults,
     ...providers
-  };
+  });
 }
 
 /** @param {object} [overrides] */

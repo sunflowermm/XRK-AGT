@@ -358,7 +358,7 @@ const stream = await this.getStream('desktop');
 **文件**: `core/system-Core/stream/web.js`  
 **实现库**：`core/system-Core/lib/crawl/`（`web_fetch`、SSRF、Readability/Firecrawl）  
 **工具**：
-- `web_search` — OpenClaw 全量移植；**13 提供商**（perplexity、brave、exa、tavily、parallel、**parallel-free**、gemini、kimi、minimax、firecrawl、ollama、searxng、duckduckgo）；凭据 **auto-detect**，无 Key 时默认 **parallel-free**（MCP `https://search.parallel.ai/mcp`），失败回退 **duckduckgo**
+- `web_search` — **13 提供商**（perplexity、brave、exa、tavily、parallel、**parallel-free**、gemini、kimi、minimax、firecrawl、ollama、searxng、duckduckgo）；凭据 **auto-detect**，无 Key 时默认 **parallel-free**（MCP `https://search.parallel.ai/mcp`），失败回退 **duckduckgo**
 - `web_search_providers` — 列出提供商、auto-detect 顺序与凭据状态
 - `web_fetch` — `fetch-guard`（DNS pinning、重定向环、SSRF；Readability / Firecrawl）
 
@@ -376,13 +376,11 @@ const stream = await this.getStream('desktop');
 **实现库**：`core/system-Core/lib/crawl/`（`PlaywrightAgentSession`、`crawl-config.buildBrowserRuntime`、`createLocalFontScreenshotHelper`；SSRF 与 `web_fetch` 同源）  
 **配置**：`aistream.crawl.browser` + **`renderer.playwright`**（`data/server_bots/{port}/renderers/playwright/config.yaml`，见 commonconfig `renderer` 段）
 **配置**：浏览器工作流参数以 `core/system-Core/stream/browser.js` 及其实现代码为准。  
-**MCP 工具**（OpenClaw `browser` 插件全量移植）：`browser_status`、`browser_start`、`browser_goto`、`browser_tabs`、`browser_tab_new`、`browser_tab_close`、`browser_tab_focus`、`browser_snapshot`、`browser_act`（含 `batch`）、`browser_click`、`browser_type`、`browser_wait`、`browser_console`、`browser_network`、`browser_dialog_arm`、`browser_dialog_respond`、`browser_observed_state`、`browser_evaluate`、`browser_page_text`、`browser_screenshot`、`browser_close`  
+**MCP 工具**（受控浏览器）：`browser_status`、`browser_start`、`browser_goto`、`browser_tabs`、`browser_tab_new`、`browser_tab_close`、`browser_tab_focus`、`browser_snapshot`、`browser_act`（含 `batch`）、`browser_click`、`browser_type`、`browser_wait`、`browser_console`、`browser_network`、`browser_dialog_arm`、`browser_dialog_respond`、`browser_observed_state`、`browser_evaluate`、`browser_page_text`、`browser_screenshot`、`browser_close`  
 
 实现库：`core/system-Core/lib/crawl/` — `ssrf-policy.js`（DNS pinning）、`fetch-guard.js`、`ssrf-ip-policy.js`、`playwright-session.js`、`pw-page-state.js`、`pw-role-snapshot.js`、`pw-ref-locator.js`、`browser-navigation-guard.js`（`page.route` 导航拦截）、`act-policy.js`。  
 
 与 **`web_fetch`** 分工：需要 **执行页面 JS、渲染后 DOM、表单交互** → 用本工作流；仅需 **HTTP 拉取与 Readability** → 用 `web` 工作流。
-
-**参考上游**：`.vendor/openclaw`（本地克隆，不入库）— `extensions/browser`、`src/agents/tools/web-fetch*.ts`、`src/infra/net/ssrf.ts`。
 
 ### 8. device 工作流（可选）
 

@@ -1,6 +1,6 @@
 /**
  * Streamable HTTP MCP 客户端 — Parallel Search MCP 等免费通道
- * 移植自 OpenClaw parallel-mcp-search.runtime.ts
+ * 移植自 parallel-mcp-search.runtime.ts
  */
 import { randomUUID } from 'node:crypto';
 import { withTrustedWebSearchEndpoint } from './web-search-endpoint.js';

@@ -18,6 +18,66 @@ const TOOL_LABELS = {
   modify_file: '修改'
 };
 
+/** 可能改动工作区文件的工具名（短名或 workflow.tool） */
+const WORKSPACE_MUTATING = new Set([
+  'write',
+  'modify_file',
+  'delete_file',
+  'browser_screenshot',
+  'create_folder',
+  'upload'
+]);
+
+function toolFullName(tool) {
+  return String(tool?.name || tool?.function?.name || '').trim();
+}
+
+function toolShortName(full) {
+  const n = String(full || '');
+  const i = n.lastIndexOf('.');
+  return i >= 0 ? n.slice(i + 1) : n;
+}
+
+function toolResultHintsWorkspace(tool) {
+  const raw = tool?.result ?? tool?.content;
+  if (raw == null) return false;
+  let text;
+  if (typeof raw === 'string') {
+    text = raw;
+    try {
+      const j = JSON.parse(raw);
+      if (j && typeof j === 'object') {
+        if (j.savedPath || j.path || j.written || j.deleted) return true;
+      }
+    } catch {
+      /* 非 JSON 字符串 */
+    }
+  } else if (typeof raw === 'object') {
+    if (raw.savedPath || raw.path || raw.written || raw.deleted) return true;
+    try {
+      text = JSON.stringify(raw);
+    } catch {
+      return false;
+    }
+  } else {
+    text = String(raw);
+  }
+  return /\b(savedPath|output\/|written|wrote|created|deleted)\b/i.test(text);
+}
+
+export function toolsMayTouchWorkspace(tools) {
+  if (!Array.isArray(tools) || tools.length === 0) return false;
+  return tools.some((tool) => {
+    const full = toolFullName(tool);
+    if (!full) return false;
+    if (WORKSPACE_MUTATING.has(toolShortName(full))) return true;
+    if (full.startsWith('tools.') && ['write', 'modify_file', 'delete_file', 'run'].includes(toolShortName(full))) {
+      return true;
+    }
+    return toolResultHintsWorkspace(tool);
+  });
+}
+
 function toolLabel(name) {
   const short = String(name || '').split('.').pop();
   return TOOL_LABELS[short] || short || '?';
@@ -154,20 +214,35 @@ export function bindWorkspacePanel(app) {
     localStorage.setItem('chatWorkspace', next);
   };
 
-  const refreshFiles = async () => {
+  const refreshFiles = async ({ silent = false } = {}) => {
     if (!listEl) return;
     const ws = currentWorkspace();
     const dir = app._aiWorkspaceDir || '';
-    listEl.innerHTML = '<div class="ai-workspace-files-loading">加载中…</div>';
-    if (crumbEl) crumbEl.innerHTML = renderBreadcrumb(dir);
+    if (!silent) {
+      listEl.innerHTML = '<div class="ai-workspace-files-loading">加载中…</div>';
+      if (crumbEl) crumbEl.innerHTML = renderBreadcrumb(dir);
+    }
     try {
       const q = new URLSearchParams({ workspace: ws, dir });
       const json = await apiGet(app, `/api/ai/workspace/files?${q}`);
       if (pathEl) pathEl.textContent = json.root || '';
+      if (crumbEl) crumbEl.innerHTML = renderBreadcrumb(dir);
       listEl.innerHTML = renderWorkspaceFilesHtml(json.files || []);
     } catch (err) {
-      listEl.innerHTML = `<div class="ai-workspace-files-empty">${escapeHtml(err.message)}</div>`;
+      if (!silent) {
+        listEl.innerHTML = `<div class="ai-workspace-files-empty">${escapeHtml(err.message)}</div>`;
+      }
     }
+  };
+
+  let workspaceSyncTimer = null;
+  const syncWorkspaceFilesFromTools = (tools) => {
+    if (!listEl) return;
+    if (Array.isArray(tools) && tools.length > 0 && !toolsMayTouchWorkspace(tools)) return;
+    clearTimeout(workspaceSyncTimer);
+    workspaceSyncTimer = setTimeout(() => {
+      refreshFiles({ silent: true }).catch(() => {});
+    }, 400);
   };
 
   listEl?.addEventListener('click', (e) => {
@@ -233,7 +308,7 @@ export function bindWorkspacePanel(app) {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.message || '上传失败');
       app.showToast(`已上传 ${json.files?.length || files.length} 个文件`, 'success');
-      await refreshFiles();
+      await refreshFiles({ silent: true });
     } catch (err) {
       app.showToast(err.message, 'error');
     } finally {
@@ -314,6 +389,7 @@ export function bindWorkspacePanel(app) {
     }
   });
 
-  app._refreshAIWorkspaceFiles = refreshFiles;
-  return refreshFiles;
+  app.refreshWorkspaceFiles = refreshFiles;
+  app.syncWorkspaceFilesFromTools = syncWorkspaceFilesFromTools;
+  return () => refreshFiles({ silent: false });
 }

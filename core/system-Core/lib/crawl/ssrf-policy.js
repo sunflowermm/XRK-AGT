@@ -1,5 +1,4 @@
 /**
- * OpenClaw src/infra/net/ssrf.ts 移植 — 策略、allowlist、DNS pinning、undici dispatcher
  */
 import dns from 'node:dns';
 import { lookup as dnsLookup } from 'node:dns/promises';

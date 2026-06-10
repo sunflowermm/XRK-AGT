@@ -1,5 +1,4 @@
 /**
- * OpenClaw gemini-web-search-provider.runtime.ts 移植
  */
 import {
   DEFAULT_SEARCH_COUNT,
@@ -76,7 +75,7 @@ export function missingGeminiApiKeyPayload() {
   return {
     error: 'missing_gemini_api_key',
     message: 'web_search (gemini) needs GEMINI_API_KEY.',
-    docs: 'https://docs.openclaw.ai/tools/web'
+    docs: 'docs/system-core.md'
   };
 }
 

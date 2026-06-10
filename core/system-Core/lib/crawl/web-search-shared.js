@@ -1,5 +1,4 @@
 /**
- * OpenClaw web-search-provider-common 移植 — 缓存、计数、站点名、时间过滤
  */
 import { wrapWebContent } from './web-fetch-executor.js';
 

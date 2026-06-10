@@ -252,7 +252,8 @@ export default class DesktopStream extends AIStream {
       enabled: true
     });
     this.registerMCPTool('screenshot', {
-      description: '截取屏幕截图。保存为PNG文件，QQ群聊中会自动发送。',
+      description:
+        '截取宿主 OS 全屏桌面 PNG（保存到 data/trash/screenshot/）。Playwright 浏览器页面截图必须用 browser.browser_screenshot，勿用本工具。',
       inputSchema: {
         type: 'object',
         properties: {},

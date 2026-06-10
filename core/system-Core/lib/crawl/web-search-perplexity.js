@@ -1,5 +1,4 @@
 /**
- * OpenClaw perplexity-web-search-provider.runtime.ts 移植
  */
 import {
   DEFAULT_SEARCH_COUNT,
@@ -79,8 +78,8 @@ function buildPerplexityHeaders(apiKey, acceptJson = false) {
     'Content-Type': 'application/json',
     ...(acceptJson ? { Accept: 'application/json' } : {}),
     Authorization: `Bearer ${apiKey}`,
-    'HTTP-Referer': 'https://openclaw.ai',
-    'X-Title': 'OpenClaw Web Search'
+    'HTTP-Referer': 'https://github.com/sunflowermm/XRK-AGT',
+    'X-Title': 'XRK-AGT Web Search'
   };
 }
 
@@ -167,7 +166,7 @@ export function missingPerplexityApiKeyPayload() {
     error: 'missing_perplexity_api_key',
     message:
       'web_search (perplexity) needs PERPLEXITY_API_KEY or OPENROUTER_API_KEY. Or use provider=duckduckgo (no key).',
-    docs: 'https://docs.openclaw.ai/tools/web'
+    docs: 'docs/system-core.md'
   };
 }
 

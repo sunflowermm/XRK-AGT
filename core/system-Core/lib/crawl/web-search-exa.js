@@ -1,5 +1,4 @@
 /**
- * OpenClaw exa-web-search-provider.runtime.ts 移植
  */
 import {
   DEFAULT_SEARCH_COUNT,
@@ -70,7 +69,7 @@ export function missingExaApiKeyPayload() {
   return {
     error: 'missing_exa_api_key',
     message: 'web_search (exa) needs EXA_API_KEY.',
-    docs: 'https://docs.openclaw.ai/tools/web'
+    docs: 'docs/system-core.md'
   };
 }
 
@@ -133,7 +132,7 @@ export async function runExaSearch(params, runtime = {}) {
           Accept: 'application/json',
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'x-exa-integration': 'openclaw'
+          'x-exa-integration': 'xrk-agt'
         },
         body: JSON.stringify(body)
       }

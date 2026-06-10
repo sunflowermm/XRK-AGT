@@ -1,4 +1,4 @@
-/** OpenClaw snapshot-roles.ts 移植 — Playwright / Chrome 快照共用角色分类 */
+/** snapshot-roles.ts 移植 — Playwright / Chrome 快照共用角色分类 */
 
 export const INTERACTIVE_ROLES = new Set([
   'button', 'checkbox', 'combobox', 'link', 'listbox', 'menuitem', 'menuitemcheckbox',

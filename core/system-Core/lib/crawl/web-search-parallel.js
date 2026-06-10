@@ -1,5 +1,4 @@
 /**
- * OpenClaw parallel-web-search-provider.runtime.ts — 付费 REST API
  */
 import {
   buildExternalSearchMeta,
@@ -41,7 +40,7 @@ export function missingParallelApiKeyPayload() {
   return {
     error: 'missing_parallel_api_key',
     message: 'web_search (parallel) needs PARALLEL_API_KEY.',
-    docs: 'https://docs.openclaw.ai/tools/parallel-search'
+    docs: 'docs/system-core.md'
   };
 }
 
@@ -90,7 +89,7 @@ export async function runParallelSearch(params, runtime = {}) {
           Accept: 'application/json',
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'User-Agent': 'openclaw-parallel/xrk-agt'
+          'User-Agent': 'xrk-agt-parallel/1.0'
         },
         body: JSON.stringify(body)
       }

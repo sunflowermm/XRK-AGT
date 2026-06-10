@@ -1,4 +1,4 @@
-# Vendor clones (OpenClaw 等参考源码，本地学习用)
+# 本地参考源码克隆（不入库）
 .vendor/
 
 # Dependencies

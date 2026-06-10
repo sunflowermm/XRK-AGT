@@ -1,5 +1,4 @@
 /**
- * OpenClaw minimax-web-search-provider.runtime.ts 移植
  */
 import {
   DEFAULT_SEARCH_COUNT,
@@ -50,7 +49,7 @@ export function missingMiniMaxApiKeyPayload() {
   return {
     error: 'missing_minimax_api_key',
     message: `web_search (minimax) needs MINIMAX_CODE_PLAN_KEY / MINIMAX_CODING_API_KEY / MINIMAX_OAUTH_TOKEN / MINIMAX_API_KEY.`,
-    docs: 'https://docs.openclaw.ai/tools/web'
+    docs: 'docs/system-core.md'
   };
 }
 

@@ -1,4 +1,4 @@
-/** OpenClaw act-policy.ts 移植 — 浏览器交互上限 */
+/** act-policy.ts 移植 — 浏览器交互上限 */
 
 export const ACT_MAX_BATCH_ACTIONS = 100;
 export const ACT_MAX_BATCH_DEPTH = 5;

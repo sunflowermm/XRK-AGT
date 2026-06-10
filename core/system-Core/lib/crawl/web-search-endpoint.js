@@ -1,5 +1,4 @@
 /**
- * OpenClaw provider-web-search 端点封装 — 受信 / 自托管 SSRF 策略
  */
 import { assertUrlSafeForFetch } from './ssrf-policy.js';
 import { isPrivateIpAddress } from './ssrf-ip-policy.js';

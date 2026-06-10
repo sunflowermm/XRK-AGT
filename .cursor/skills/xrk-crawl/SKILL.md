@@ -36,7 +36,7 @@ import {
 
 **选型**：HTTP 能拿正文 → `runWebFetch`；要渲染或 PNG → Playwright。
 
-## SSRF（OpenClaw 全量）
+## SSRF
 
 - `ssrf-policy.js`：allowlist、legacy IP、DNS pinning、`createPinnedDispatcher`
 - `ssrf-guard.js`：对外 re-export `assertUrlSafeForFetch`
@@ -94,10 +94,10 @@ lib/crawl/
 **单一实现**：`crawl-config.js` — `resolveWebFetchRuntime` / `resolveWebSearchConfig` / `buildBrowserRuntime`  
 **禁止**在 crawl 模块内读取 `process.env` 做业务配置；凭据与参数一律写 `data/server_bots/{port}/aistream.yaml` → `crawl.*`（控制台 commonconfig 编辑）。
 
-## web_search 提供商（OpenClaw 全量）
+## web_search 提供商
 
 - 注册表：`web-search-registry.js`（`WEB_SEARCH_PROVIDERS`、`resolveAutoDetectProviderId`）
-- 配置：`crawl-config.js` → `aistream.crawl` + 环境变量；browser 另合并 `renderer.playwright`
+- 配置：`crawl-config.js` → `aistream.crawl`；`getWebSearchProviderScope` 对齐 `parallelFree` ↔ `parallel-free`；browser 另合并 `renderer.playwright`
 - 执行器：`web-search-executor.js` → `buildWebSearchRuntime` / `runWebSearch`
 - 端点封装：`web-search-endpoint.js`（`withTrustedWebSearchEndpoint` / 自托管 SearXNG·Firecrawl）
 - 缺凭据时：`runWebSearch` 默认 `parallel-free`，回退链 **parallel-free → duckduckgo**

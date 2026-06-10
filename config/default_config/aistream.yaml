@@ -81,7 +81,7 @@ agentWorkspace:
   maxTotalChars: 0
   maxDiagnosticsChars: 2000   # 诊断提示最大字符
   contextFiles: []         # 额外注入的 Markdown 路径（相对工作区根）
-  # 以下与 OpenClaw config skills.limits / 目录结构对齐（pi-coding-agent formatSkillsForPrompt）
+  # Skills 预算与目录结构（formatSkillsForPrompt）
   maxCandidatesPerRoot: 300
   maxSkillsLoadedPerSource: 200
   maxSkillsInPrompt: 150
@@ -99,7 +99,7 @@ embedding:
   enabled: true
   maxContexts: 5
 
-# OpenClaw crawl：web_fetch / web_search / browser（browser 启动参数另合并 renderer/playwright）
+# crawl：web_fetch / web_search / browser（browser 启动参数另合并 renderer/playwright）
 crawl:
   webFetch:
     timeoutSeconds: 30

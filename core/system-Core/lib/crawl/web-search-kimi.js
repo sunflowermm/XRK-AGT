@@ -1,5 +1,4 @@
 /**
- * OpenClaw kimi-web-search-provider.runtime.ts 移植（Moonshot $web_search 工具）
  */
 import {
   DEFAULT_SEARCH_COUNT,
@@ -56,7 +55,7 @@ export function missingKimiApiKeyPayload() {
   return {
     error: 'missing_kimi_api_key',
     message: 'web_search (kimi) needs KIMI_API_KEY or MOONSHOT_API_KEY.',
-    docs: 'https://docs.openclaw.ai/tools/web'
+    docs: 'docs/system-core.md'
   };
 }
 

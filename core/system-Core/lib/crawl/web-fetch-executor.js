@@ -170,7 +170,7 @@ const DEFAULT_ERROR_MAX_CHARS = 4_000;
 const DEFAULT_ERROR_MAX_BYTES = 64_000;
 const DEFAULT_FIRECRAWL_BASE_URL = 'https://api.firecrawl.dev';
 
-/** 构建 web_fetch 运行时参数（aistream.crawl.webFetch + 环境变量 + overrides）。 */
+/** 构建 web_fetch 运行时参数（aistream.crawl.webFetch + overrides）。 */
 export function buildWebFetchRuntime(overrides = {}) {
   return resolveWebFetchRuntime(overrides);
 }

@@ -59,7 +59,7 @@ export function invalidSearchQueriesPayload() {
     error: 'invalid_search_queries',
     message:
       'search_queries must be a non-empty array of keyword strings (max 5, max 200 chars each).',
-    docs: 'https://docs.openclaw.ai/tools/parallel-search'
+    docs: 'docs/system-core.md'
   };
 }
 

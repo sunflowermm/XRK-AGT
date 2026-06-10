@@ -1,4 +1,4 @@
-/** Playwright 受控会话；OpenClaw 风格 role ref 快照 + 导航 SSRF 复检 */
+/** Playwright 受控会话； role ref 快照 + 导航 SSRF 复检 */
 import playwright from 'playwright';
 import {
   assertBrowserNavigationResultAllowedForPage,
@@ -269,7 +269,6 @@ export class PlaywrightAgentSession {
   }
 
   /**
-   * OpenClaw 风格 ARIA role 快照（e1/e2 ref + 可选仅交互元素）。
    * @param {{ interactive?: boolean, compact?: boolean, maxDepth?: number, selector?: string, timeoutMs?: number }} [opts]
    */
   async roleSnapshot(opts = {}) {
@@ -468,7 +467,6 @@ export class PlaywrightAgentSession {
   }
 
   /**
-   * OpenClaw browser_act：click | type | press | hover | select | wait | evaluate | batch | scrollIntoView | fill
    * @param {object} act
    */
   async runAct(act = {}, depth = 0) {

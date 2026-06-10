@@ -1,5 +1,8 @@
 import AIStream from '#infrastructure/aistream/aistream.js';
+import StreamLoader from '#infrastructure/aistream/loader.js';
 import BotUtil from '#utils/botutil.js';
+import { isPathInside } from '#utils/path-guards.js';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
   PlaywrightAgentSession,
@@ -7,6 +10,15 @@ import {
   buildBrowserRuntime,
   createLocalFontScreenshotHelper
 } from '../lib/crawl/index.js';
+
+function resolveBrowserScreenshotSavePath(relPath) {
+  const ws = StreamLoader.getStream('tools')?.workspace;
+  if (!ws || typeof relPath !== 'string' || !relPath.trim()) return null;
+  const root = path.resolve(ws);
+  const target = path.resolve(root, relPath.trim().replace(/^\/+/, ''));
+  if (!isPathInside(root, target)) return null;
+  return target;
+}
 
 /** Playwright 受控浏览器 MCP。 */
 export default class BrowserStream extends AIStream {
@@ -189,7 +201,8 @@ export default class BrowserStream extends AIStream {
     });
 
     this.registerMCPTool('browser_screenshot', {
-      description: '截取当前页 PNG（Base64）。',
+      description:
+        '截取 Playwright 当前页 PNG（非 OS 桌面屏）。浏览器默认 headless 在服务端运行，用户界面不可见；交付截图请用本工具，勿用 desktop.screenshot。默认写入工作区 output/ 并返回 base64 预览。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -197,6 +210,10 @@ export default class BrowserStream extends AIStream {
           selector: {
             type: 'string',
             description: '区域选择器（非空时优先区域截图；已 attach 截图助手时先应用字体/样式）'
+          },
+          savePath: {
+            type: 'string',
+            description: '相对工作区路径保存 PNG（默认 output/browser-screenshot-<ts>.png；传空字符串则仅返回 base64）'
           }
         },
         required: []
@@ -217,12 +234,29 @@ export default class BrowserStream extends AIStream {
               `PNG ${buf.length} 字节超过 screenshotMaxBytes=${this.browserRuntime.screenshotMaxBytes}`
             );
           }
+          let savePathRel =
+            args.savePath === ''
+              ? null
+              : (typeof args.savePath === 'string' && args.savePath.trim()
+                  ? args.savePath.trim()
+                  : `output/browser-screenshot-${Date.now()}.png`);
+          let savedPath;
+          if (savePathRel) {
+            const abs = resolveBrowserScreenshotSavePath(savePathRel);
+            if (abs) {
+              await fs.mkdir(path.dirname(abs), { recursive: true });
+              await fs.writeFile(abs, buf);
+              savedPath = savePathRel.replace(/\\/g, '/');
+            }
+          }
           return this.successResponse({
             mimeType: 'image/png',
             base64: buf.toBase64(),
             bytes: buf.length,
             fullPage,
-            selector: selector || undefined
+            selector: selector || undefined,
+            headless: this.browserRuntime.headless,
+            savedPath
           });
         } catch (e) {
           return this.errorResponse('BROWSER_SCREENSHOT_FAILED', e?.message || String(e));
@@ -233,7 +267,7 @@ export default class BrowserStream extends AIStream {
 
     this.registerMCPTool('browser_snapshot', {
       description:
-        'OpenClaw 风格 ARIA role 快照：返回 snapshot 文本与 refs（e1/e2…），供 browser_click/browser_type/browser_act 使用 ref 定位。',
+        'ARIA 文本快照（非 PNG 截图）：返回 snapshot 与 refs（e1/e2…）供 browser_act/click/type 定位。要看页面图像请用 browser_screenshot。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -274,7 +308,7 @@ export default class BrowserStream extends AIStream {
 
     this.registerMCPTool('browser_act', {
       description:
-        'OpenClaw 统一交互：kind=click|type|press|hover|select|wait|evaluate。目标用 ref（snapshot 的 eN）或 selector。',
+        '统一浏览器交互：kind=click|type|press|hover|select|wait|evaluate。目标用 ref（snapshot 的 eN）或 selector。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -573,7 +607,7 @@ export default class BrowserStream extends AIStream {
     });
 
     this.registerMCPTool('browser_console', {
-      description: '读取当前页捕获的 console 消息（OpenClaw observe）。',
+      description: '读取当前页捕获的 console 消息（页面观测）。',
       inputSchema: {
         type: 'object',
         properties: { limit: { type: 'number', default: 50 } },
@@ -611,7 +645,7 @@ export default class BrowserStream extends AIStream {
     });
 
     this.registerMCPTool('browser_dialog_arm', {
-      description: '预设下一次弹窗自动 accept/dismiss（OpenClaw arm dialog）。',
+      description: '预设下一次弹窗自动 accept/dismiss（预设弹窗响应）。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -691,9 +725,10 @@ export default class BrowserStream extends AIStream {
 
   buildSystemPrompt() {
     return [
-      '本工作流提供 OpenClaw 风格受控浏览器（Playwright）MCP：',
+      '本工作流提供受控浏览器（Playwright）MCP：',
       'browser_status / browser_start / browser_goto / browser_tabs / browser_tab_* / browser_snapshot / browser_act（含 batch）/ browser_click / browser_type / browser_wait / browser_console / browser_network / browser_dialog_* / browser_evaluate / browser_page_text / browser_screenshot / browser_close。',
-      '流程建议：goto → snapshot（读 snapshot 文本与 ref=eN）→ browser_act 或 click/type（ref 优先）→ wait → page_text 或 screenshot。',
+      '流程建议：goto → snapshot（读 ref=eN）→ browser_act 或 click/type → wait → browser_screenshot（页面 PNG）或 page_text。',
+      '浏览器默认 headless 在服务端运行，界面上不可见；截图必须用 browser_screenshot（会写入工作区 output/），禁止用 desktop.screenshot（那是 OS 全屏）。',
       '导航与交互后跨文档跳转均做 SSRF 复检（默认禁私网）。无 JS 静态页优先 web.web_fetch。'
     ].join('\n');
   }

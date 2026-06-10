@@ -1,4 +1,4 @@
-/** OpenClaw refLocator 移植 — role / aria / ax ref + frame scope */
+/** refLocator 移植 — role / aria / ax ref + frame scope */
 import { parseRoleRef } from './pw-role-snapshot.js';
 import {
   AX_REF_PATTERN,

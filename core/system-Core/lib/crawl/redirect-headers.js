@@ -1,4 +1,4 @@
-/** OpenClaw redirect-headers.ts 移植 */
+/** redirect-headers.ts 移植 */
 
 const CROSS_ORIGIN_REDIRECT_SAFE_HEADERS = new Set([
   'accept', 'accept-encoding', 'accept-language', 'cache-control', 'content-language',

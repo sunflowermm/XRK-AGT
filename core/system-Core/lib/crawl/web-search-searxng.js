@@ -1,5 +1,4 @@
 /**
- * OpenClaw searxng-client.ts 移植
  */
 import {
   DEFAULT_SEARCH_COUNT,

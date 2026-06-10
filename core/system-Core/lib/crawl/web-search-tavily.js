@@ -1,5 +1,4 @@
 /**
- * OpenClaw tavily-client.ts 移植（web_search 路径）
  */
 import {
   DEFAULT_SEARCH_COUNT,
@@ -38,7 +37,7 @@ export function missingTavilyApiKeyPayload() {
   return {
     error: 'missing_tavily_api_key',
     message: 'web_search (tavily) needs aistream.crawl.webSearch.tavily.apiKey.',
-    docs: 'https://docs.openclaw.ai/tools/web'
+    docs: 'docs/system-core.md'
   };
 }
 
@@ -93,7 +92,7 @@ export async function runTavilySearch(params, runtime = {}) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Client-Source': 'openclaw'
+          'X-Client-Source': 'xrk-agt'
         },
         body: JSON.stringify(body)
       }

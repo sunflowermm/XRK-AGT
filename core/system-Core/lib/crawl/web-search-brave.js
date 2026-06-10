@@ -1,5 +1,4 @@
 /**
- * OpenClaw brave-web-search-provider.runtime.ts 移植 — Brave Web Search API
  */
 import {
   DEFAULT_SEARCH_COUNT,
