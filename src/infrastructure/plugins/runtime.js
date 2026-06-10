@@ -8,7 +8,6 @@ import path from "node:path"
 import common from "#utils/common.js"
 import cfg from "#infrastructure/config/config.js"
 import RendererLoader from "#infrastructure/renderer/loader.js"
-import { segment } from "#oicq"
 import Handler from "./handler.js";
 
 /**
@@ -231,7 +230,7 @@ export default class Runtime {
       throw new Error('未加载到可用渲染器(puppeteer/playwright)，请检查 src/renderers 与 agt.browser.renderer')
     }
     const img = await renderer.render(`${plugin}/${normalizedPath}`, data)
-    const base64 = img ? segment.image(img) : null
+    const base64 = img ? globalThis.segment.image(img) : null
     if (cfg.retType === "base64") {
       return base64
     }

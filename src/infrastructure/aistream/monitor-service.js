@@ -5,17 +5,18 @@
 import EventEmitter from 'events';
 
 export class MonitorService extends EventEmitter {
+  executionTraces = new Map();
+  _traceOrder = [];
+  _traceHead = 0;
+  performanceMetrics = new Map();
+  errorLogs = [];
+  costStats = new Map();
+  maxTraces = 10000;
+  maxErrors = 1000;
+  maxCostStats = 2000;
+
   constructor() {
     super();
-    this.executionTraces = new Map(); // traceId -> 执行追踪
-    this._traceOrder = []; // FIFO 队列：按 startTrace 插入顺序淘汰（用 head 指针避免 shift O(n)）
-    this._traceHead = 0;
-    this.performanceMetrics = new Map(); // metricName -> 指标数据
-    this.errorLogs = []; // 错误日志
-    this.costStats = new Map(); // 成本统计
-    this.maxTraces = 10000; // 最大追踪数
-    this.maxErrors = 1000; // 最大错误数
-    this.maxCostStats = 2000; // 成本统计最大条目数（避免长期运行无限增长）
   }
 
   /**
@@ -348,6 +349,17 @@ export class MonitorService extends EventEmitter {
       costs: this.getCostStats(),
       errors: this.getErrorStats()
     };
+  }
+
+  /** 停机或工作流全量清理时重置监控状态 */
+  reset() {
+    this.executionTraces.clear();
+    this._traceOrder = [];
+    this._traceHead = 0;
+    this.performanceMetrics.clear();
+    this.errorLogs = [];
+    this.costStats.clear();
+    this.removeAllListeners();
   }
 }
 

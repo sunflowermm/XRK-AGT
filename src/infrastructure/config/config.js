@@ -32,6 +32,7 @@ class Cfg {
   _package = null;
   _watchEnabled = false;
   _deferredWatches = [];
+  _destroying = false;
 
   PATHS = {
     DEFAULT_CONFIG: paths.configDefault,
@@ -69,8 +70,10 @@ class Cfg {
 
     try {
       const { config, watchFile } = loadYamlFromCandidates([file, defaultFile], name);
+      // 必须先写入缓存再 watch：watch 内 makeLog 会读 cfg.agt，否则会递归 getGlobalConfig
+      this.config[key] = config;
       if (watchFile) this.watch(watchFile, name, key);
-      return this.config[key] = config;
+      return this.config[key];
     } catch (error) {
       BotUtil.makeLog('error', `[配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return this.config[key] = {};
@@ -106,8 +109,9 @@ class Cfg {
 
     try {
       const { config, watchFile } = loadYamlFromCandidates([file], name);
+      this.config[key] = config;
       if (watchFile) this.watch(watchFile, name, key);
-      return this.config[key] = config;
+      return this.config[key];
     } catch (error) {
       BotUtil.makeLog('error', `[服务器配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return this.config[key] = {};
@@ -190,13 +194,14 @@ class Cfg {
     const texts = readYamlTextsBatch([defaultFile, serverFile]);
     const config = mergeYamlTexts(texts.get(defaultFile), texts.get(serverFile));
 
+    this.config[key] = config;
     if (fileExistsSync(serverFile)) {
       this.watch(serverFile, `renderer.${type}`, key);
       BotUtil.makeLog('debug', `[渲染器] 已合并 ${type} 服务器配置: ${serverFile}`, LOG_TAG);
     } else {
       BotUtil.makeLog('debug', `[渲染器] 无服务器覆盖: ${serverFile}`, LOG_TAG);
     }
-    return this.config[key] = config;
+    return this.config[key];
   }
 
   /**
@@ -264,7 +269,7 @@ class Cfg {
   }
 
   watch(file, name, key) {
-    if (this._hotReloads.has(key)) return;
+    if (this._destroying || global.__xrkShuttingDown || this._hotReloads.has(key)) return;
 
     if (!this._watchEnabled) {
       this._deferredWatches.push({ file, name, key });
@@ -272,11 +277,13 @@ class Cfg {
     }
 
     const hotReload = new HotReloadBase({ loggerName: LOG_TAG });
+    this._hotReloads.set(key, hotReload);
     void hotReload.watch(true, {
       files: [file],
       shouldHandle: () => true,
       invalidateCoreCacheOnAdd: false,
       onChange: () => {
+        if (this._destroying) return;
         delete this.config[key];
         if (key.startsWith('renderer.')) {
           this._renderer = null;
@@ -287,11 +294,10 @@ class Cfg {
         this[`change_${name}`]?.();
       }
     });
-    this._hotReloads.set(key, hotReload);
   }
 
   enableWatching() {
-    if (this._watchEnabled) return;
+    if (this._watchEnabled || this._destroying || global.__xrkShuttingDown) return;
     this._watchEnabled = true;
     const pending = this._deferredWatches.splice(0);
     for (const { file, name, key } of pending) {
@@ -308,9 +314,14 @@ class Cfg {
     }
   }
 
-  destroy() {
-    void Promise.all([...this._hotReloads.values()].map((hr) => hr.stop()));
+  async destroy() {
+    if (this._destroying) return;
+    this._destroying = true;
+    const reloads = [...this._hotReloads.values()];
     this._hotReloads.clear();
+    for (const hr of reloads) {
+      await hr.stop().catch(() => {});
+    }
     this.config = {};
     this._renderer = null;
   }

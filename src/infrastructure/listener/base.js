@@ -1,4 +1,5 @@
 import PluginsLoader from '#infrastructure/plugins/loader.js'
+import BotUtil from '#utils/botutil.js'
 
 /**
  * 事件监听基类
@@ -13,12 +14,13 @@ import PluginsLoader from '#infrastructure/plugins/loader.js'
  * - e.isGroup / e.isPrivate : 由 EventNormalizer 或适配器设置，设备会话为 isGroup=false, isPrivate=true
  */
 export default class EventListenerBase {
+  plugins = PluginsLoader
+  processedEvents = new Set()
+  MAX_PROCESSED_EVENTS = 1000
+  bot = null
+
   constructor(adapterName = '') {
-    this.plugins = PluginsLoader
-    this.processedEvents = new Set()
     this.adapterName = adapterName
-    this.MAX_PROCESSED_EVENTS = 1000
-    this.bot = null
   }
 
   /**
@@ -29,7 +31,7 @@ export default class EventListenerBase {
   ensureEventId(e) {
     if (e.event_id) return e.event_id
     const postType = e.post_type || 'event'
-    const randomId = Math.random().toString(36).substr(2, 9)
+    const randomId = BotUtil.shortId()
     e.event_id = `${this.adapterName || 'event'}_${postType}_${Date.now()}_${randomId}`
     return e.event_id
   }

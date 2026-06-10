@@ -7,6 +7,8 @@ import { ensureSystemCoreAuth } from './auth.js';
  * 提供统一的HTTP API接口结构，支持路由注册、WebSocket处理、中间件等。
  */
 export default class HttpApi {
+  _wsDisposers = [];
+
   constructor(data = {}) {
     this.name = data.name || 'unnamed-api';
     this.dsc = data.dsc || '暂无描述';
@@ -17,7 +19,6 @@ export default class HttpApi {
     this.wsHandlers = data.ws || {};
     this.middleware = data.middleware || [];
     this.createTime = Date.now();
-    this._wsDisposers = [];
   }
   
   async init(app, bot) {

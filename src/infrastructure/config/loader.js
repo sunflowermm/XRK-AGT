@@ -29,6 +29,7 @@ class ProcessManager {
   }
 
   async restart() {
+    if (global.__xrkShuttingDown) return;
     logger.mark(chalk.yellow('重启中...'));
     await this.cleanup();
     if (global.Bot) await global.Bot.closeServer().catch(() => {});
@@ -40,6 +41,7 @@ class ProcessManager {
   }
 
   async gracefulShutdown(exitCode) {
+    global.__xrkShuttingDown = true;
     if (global.Bot) {
       await global.Bot.closeServer().catch((err) => logger.error(`关闭失败: ${err.message}`));
     } else {
@@ -85,6 +87,7 @@ class ProcessManager {
     global.__xrkErrorHandlersReady = true;
 
     const onNetworkFatal = async (reason, label) => {
+      if (global.__xrkShuttingDown) return;
       const error = normalizeError(reason);
       const isExpected = EXPECTED_REJECTION_CODES.includes(error.code);
       if (isExpected) {

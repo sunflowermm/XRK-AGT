@@ -1,3 +1,4 @@
+import './bootstrap-globals.js';
 import path from 'path';
 import fs from 'node:fs/promises';
 import * as fsSync from 'fs';
@@ -60,6 +61,12 @@ const AUTH_STATIC_EXT_REGEX = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico
  * });
  */
 export default class Bot extends EventEmitter {
+  _wsConnections = new Map();
+  _rateLimiters = new Map();
+  proxyMiddlewares = new Map();
+  domainConfigs = new Map();
+  sslContexts = new Map();
+
   /**
    * Bot构造函数
    * 
@@ -118,14 +125,12 @@ export default class Bot extends EventEmitter {
     this.fs = Object.create(null);
     
     // WebSocket连接管理
-    this._wsConnections = new Map(); // 连接池
     this._wsHeartbeatInterval = null;
     
     // 配置属性
     this.apiKey = '';
     const cacheTtl = Number(cfg.server?.misc?.cache?.ttlMs);
     this._cache = BotUtil.getMap('core_cache', { ttl: (Number.isFinite(cacheTtl) && cacheTtl > 0) ? cacheTtl : 60000, autoClean: true });
-    this._rateLimiters = new Map();
     this._authWhitelistCache = { ref: null, rules: [] };
     this.httpPort = null;
     this.httpsPort = null;
@@ -139,9 +144,6 @@ export default class Bot extends EventEmitter {
     this.proxyApp = null;
     this.proxyServer = null;
     this.proxyHttpsServer = null;
-    this.proxyMiddlewares = new Map();
-    this.domainConfigs = new Map();
-    this.sslContexts = new Map();
     
     // HTTP业务层初始化（企业级网络服务核心）
     // 注意：此时cfg.server可能还未加载，会在run()方法中重新初始化
@@ -851,7 +853,7 @@ export default class Bot extends EventEmitter {
     // 1. 请求追踪和基础信息
     this.express.use((req, res, next) => {
       req.startTime = Date.now();
-      req.requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      req.requestId = `${Date.now()}-${BotUtil.shortId()}`;
       next();
     });
     
@@ -1017,7 +1019,7 @@ export default class Bot extends EventEmitter {
       
       // 设置请求ID（用于追踪）
       if (!req.requestId) {
-        req.requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        req.requestId = `${Date.now()}-${BotUtil.shortId()}`;
       }
       
       // 在响应发送前设置头部
@@ -1142,17 +1144,20 @@ export default class Bot extends EventEmitter {
         // 为每个前端项目注册入口代理：由 sign.json 的 proxy.mount 或 id 决定
         for (const appInfo of devApps) {
           const cfgApp = appInfo.config;
-          const mountPath = (cfgApp.mountPath && String(cfgApp.mountPath).trim()) || `/${cfgApp.id}`;
-          const target = `http://127.0.0.1:${cfgApp.port}`;
+          const appId = cfgApp.id;
+          const mountPath = (cfgApp.mountPath && String(cfgApp.mountPath).trim()) || `/${appId}`;
+          const defaultPort = cfgApp.port;
 
-          // 注意：由于 middleware 挂载在 mountPath 上，Express 会剥离前缀导致转发时变成 /
-          // 因此在代理层把 mountPath 前缀加回去，确保上游 dev server 实际收到的是 /example/*
           const mountPrefix = mountPath.endsWith('/')
             ? mountPath.slice(0, -1)
             : mountPath;
 
           const devProxy = createProxyMiddleware({
-            target,
+            target: `http://127.0.0.1:${defaultPort}`,
+            router: () => {
+              const port = FrontendLauncher.getRuntimePort(appId) ?? defaultPort;
+              return `http://127.0.0.1:${port}`;
+            },
             changeOrigin: true,
             ws: true,
             logLevel: 'warn',
@@ -1164,17 +1169,20 @@ export default class Bot extends EventEmitter {
             }
           });
 
-          // 包一层日志，便于观察入口是否命中 dev 代理
           this.express.use(mountPath, (req, res, next) => {
             BotUtil.makeLog(
               'debug',
-              `[前端入口] id=${cfgApp.id} mount=${mountPath} ${req.method} ${req.originalUrl}`,
+              `[前端入口] id=${appId} mount=${mountPath} ${req.method} ${req.originalUrl}`,
               'Frontend'
             );
             return devProxy(req, res, next);
           });
 
-          BotUtil.makeLog('info', `注册前端开发入口: ${mountPath} -> ${target}`, 'Frontend');
+          BotUtil.makeLog(
+            'info',
+            `注册前端开发入口: ${mountPath} -> http://127.0.0.1:${defaultPort}`,
+            'Frontend'
+          );
         }
       }
     } catch (e) {
@@ -2298,7 +2306,7 @@ export default class Bot extends EventEmitter {
     BotUtil.makeLog("debug", `WebSocket路径匹配: ${req.url} -> ${wsPath}`, '服务器');
     
     this.wss.handleUpgrade(req, socket, head, conn => {
-      const connectionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const connectionId = `${Date.now()}-${BotUtil.shortId()}`;
       conn.id = connectionId;
       conn.path = wsPath;
       conn.remoteAddress = req.socket.remoteAddress;
@@ -2816,10 +2824,6 @@ export default class Bot extends EventEmitter {
 
     try {
       await stopAllLoaderWatchers();
-    } catch {}
-
-    try {
-      cfg.destroy?.();
     } catch {}
 
     await Promise.all(servers.map(server =>

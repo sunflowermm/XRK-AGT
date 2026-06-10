@@ -104,12 +104,13 @@ class TextSimilarity {
  * 基于文本相似度和时间窗口的智能去重
  */
 export class EventDeduplicator {
+  recentEvents = new Map();
+  cleanupInterval = null;
+
   constructor(options = {}) {
     this.similarityThreshold = options.similarityThreshold || 0.85;
     this.timeWindow = options.timeWindow || 60000; // 1分钟
     this.maxHistory = options.maxHistory || 1000;
-    this.recentEvents = new Map(); // eventId -> { event, timestamp, fingerprint }
-    this.cleanupInterval = null;
     this.startCleanup();
   }
 
@@ -215,6 +216,7 @@ export class EventDeduplicator {
    * 清空所有记录
    */
   clear() {
+    this.stopCleanup();
     this.recentEvents.clear();
   }
 }
@@ -224,12 +226,13 @@ export class EventDeduplicator {
  * 使用简单的神经网络思想：根据访问模式调整缓存策略
  */
 export class IntelligentCache {
+  cache = new Map();
+  accessPatterns = new Map();
+  cleanupInterval = null;
+
   constructor(options = {}) {
     this.maxSize = options.maxSize || 1000;
     this.ttl = options.ttl || 3600000; // 1小时
-    this.cache = new Map(); // key -> { value, timestamp, accessCount, lastAccess }
-    this.accessPatterns = new Map(); // key -> accessHistory
-    this.cleanupInterval = null;
     this.startCleanup();
   }
 
@@ -384,6 +387,7 @@ export class IntelligentCache {
    * 清空缓存
    */
   clear() {
+    this.stopCleanup();
     this.cache.clear();
     this.accessPatterns.clear();
   }
@@ -422,10 +426,8 @@ export class IntelligentCache {
  * 智能匹配插件规则，提高匹配效率
  */
 export class PluginMatcher {
-  constructor() {
-    this.ruleCache = new Map(); // 规则 -> 编译后的匹配器
-    this.matchStats = new Map(); // 规则 -> 匹配统计
-  }
+  ruleCache = new Map();
+  matchStats = new Map();
 
   /**
    * 编译规则为高效匹配器

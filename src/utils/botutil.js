@@ -346,6 +346,11 @@ export default class BotUtil {
     });
   }
 
+  /** 短随机 id（事件去重、requestId 等） */
+  static shortId() {
+    return crypto.randomBytes(6).toHex();
+  }
+
   /**
    * 生成随机字符串
    * @param {number} [length=10] - 字符串长度

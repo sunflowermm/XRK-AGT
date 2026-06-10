@@ -17,19 +17,18 @@ import os from 'os';
  * 参考：https://modelcontextprotocol.io/specification/2025-11-25
  */
 export class MCPServer {
+  tools = new Map();
+  resources = new Map();
+  prompts = new Map();
+  initialized = false;
+  serverInfo = {
+    name: 'xrk-agt-mcp-server',
+    version: '1.0.5',
+    protocolVersion: '2025-11-25'
+  };
+
   constructor(streamInstance = null) {
     this.stream = streamInstance;
-    this.tools = new Map(); // 注册的工具
-    this.resources = new Map(); // 注册的资源
-    this.prompts = new Map(); // 注册的提示词
-    this.initialized = false; // 初始化状态
-    this.serverInfo = {
-      name: 'xrk-agt-mcp-server',
-      version: '1.0.5',
-      protocolVersion: '2025-11-25' // MCP协议版本（最新规范）
-    };
-    
-    // 注册跨平台通用工具
     this.registerCoreTools();
   }
 
@@ -659,30 +658,12 @@ export class MCPServer {
       },
       handler: async (args) => {
         const { version = 'v4', count = 1 } = args;
-        const crypto = await import('crypto');
-        
-        const generateUUID = () => {
-          // 使用crypto.randomUUID() (Node.js 14.17.0+)
-          if (crypto.randomUUID) {
-            return crypto.randomUUID();
-          }
-          // 降级方案：手动生成v4 UUID
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-        };
-        
-        const uuids = [];
-        for (let i = 0; i < Math.min(count, 100); i++) {
-          uuids.push(generateUUID());
-        }
-        
+        const n = Math.min(Math.max(Number(count) || 1, 1), 100);
+        const uuids = Array.from({ length: n }, () => BotUtil.uuid());
         return {
           version,
           count: uuids.length,
-          uuids: count === 1 ? uuids[0] : uuids
+          uuids: n === 1 ? uuids[0] : uuids
         };
       }
     });

@@ -9,6 +9,12 @@ import { appendAgentWorkspaceToPrompt } from '#utils/agent-workspace.js';
 import { estimateTokensMixed } from '#utils/token-estimate.js';
 
 export default class AIStream {
+  /** @type {Map<string, object>} MCP 工具注册表 */
+  mcpTools = new Map();
+  /** @type {AIStream[]} 已 merge 的子工作流 */
+  _mergedStreams = [];
+  _initialized = false;
+
   /**
    * 构造函数
    * @param {Object} options - 选项
@@ -43,8 +49,6 @@ export default class AIStream {
       enabled: options.embedding?.enabled ?? true,
       maxContexts: options.embedding?.maxContexts || 5
     };
-
-    this._initialized = false;
   }
 
   /**
@@ -54,10 +58,6 @@ export default class AIStream {
   async init() {
     if (this._initialized) {
       return;
-    }
-
-    if (!this.mcpTools) {
-      this.mcpTools = new Map();
     }
 
     this._initialized = true;
@@ -325,9 +325,6 @@ export default class AIStream {
       throw new Error('无效的 Stream 实例');
     }
 
-    if (!this._mergedStreams) {
-      this._mergedStreams = [];
-    }
     if (!this._mergedStreams.includes(stream)) {
       this._mergedStreams.push(stream);
     }
@@ -337,10 +334,6 @@ export default class AIStream {
 
     // 合并MCP工具
     if (stream.mcpTools) {
-      if (!this.mcpTools) {
-        this.mcpTools = new Map();
-      }
-
       for (const [name, tool] of stream.mcpTools.entries()) {
         const newName = prefix ? `${prefix}${name}` : name;
 

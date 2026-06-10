@@ -79,6 +79,12 @@ class RendererLoader {
     this._loadPromise = null
     await this.load()
   }
+
+  async stopAllWatchers() {
+    await Promise.allSettled(
+      [...this.renderers.values()].map((r) => r.stopAllWatchers?.())
+    );
+  }
 }
 
 const loader = new RendererLoader()

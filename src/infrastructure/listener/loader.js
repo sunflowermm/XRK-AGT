@@ -1,5 +1,4 @@
 import path from 'node:path';
-import lodash from 'lodash';
 import TaskerLoader from '#infrastructure/tasker/loader.js';
 import BotUtil from '#utils/botutil.js';
 import { FileLoader } from '#utils/file-loader.js';
@@ -29,21 +28,11 @@ class ListenerLoader {
         const instance = new listener.default();
         instance.bot = this.bot;
 
-        if (typeof instance.init === 'function') {
-          await instance.init();
-          return 1;
+        if (typeof instance.init !== 'function') {
+          BotUtil.makeLog('warn', `监听事件 ${file} 缺少 init()，已跳过`, 'ListenerLoader');
+          return 0;
         }
-
-        const on = instance.once ? 'once' : 'on';
-        if (lodash.isArray(instance.event)) {
-          for (const type of instance.event) {
-            const handler = instance[type] ? type : 'execute';
-            this.bot[on](instance.prefix + type, instance[handler].bind(instance));
-          }
-        } else {
-          const handler = instance[instance.event] ? instance.event : 'execute';
-          this.bot[on](instance.prefix + instance.event, instance[handler].bind(instance));
-        }
+        await instance.init();
         return 1;
       };
 

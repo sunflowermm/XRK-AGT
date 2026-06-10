@@ -6,14 +6,15 @@ import BotUtil from '#utils/botutil.js';
 import EventEmitter from 'events';
 
 export class MemoryManager extends EventEmitter {
+  shortTermMemories = new Map();
+  longTermMemories = new Map();
+  memoryIndex = new Map();
+  maxShortTermSize = 50;
+  maxLongTermSize = 1000;
+  maxIndexKeywords = 5000;
+
   constructor() {
     super();
-    this.shortTermMemories = new Map(); // userId -> 对话上下文
-    this.longTermMemories = new Map(); // userId -> 长期记忆列表
-    this.memoryIndex = new Map(); // 记忆索引（用于快速检索）
-    this.maxShortTermSize = 50; // 短期记忆最大条数
-    this.maxLongTermSize = 1000; // 长期记忆最大条数
-    this.maxIndexKeywords = 5000; // 单用户索引最大关键词数（防止无限增长）
   }
 
   /**

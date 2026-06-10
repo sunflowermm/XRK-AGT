@@ -8,18 +8,15 @@ import schedule from 'node-schedule'
 import moment from 'moment'
 import Handler from './handler.js'
 import Runtime from './runtime.js'
-import { segment } from '#oicq'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { normalizeError } from '#utils/normalize-error.js'
 import { EventDeduplicator, IntelligentCache, PluginMatcher } from '#utils/neural-algorithms.js'
 import { matchEventPattern as matchEventPatternFn, findInCoreSubDirs, statFiles } from '#utils/core-fs.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
 import { FileLoader } from '#utils/file-loader.js'
+import BotUtil from '#utils/botutil.js'
 import { HotReloadBase } from '#utils/hot-reload-base.js'
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
-
-global.plugin = plugin
-global.segment = segment
 
 class PluginsLoader {
   priority = []
@@ -528,7 +525,7 @@ class PluginsLoader {
     // 确保 event_id 存在（如果 EventNormalizer 未设置）
     if (!e.event_id) {
       const postType = e.post_type || 'unknown'
-      const randomId = Math.random().toString(36).substr(2, 9)
+      const randomId = BotUtil.shortId()
       e.event_id = `${e.tasker || 'event'}_${postType}_${Date.now()}_${randomId}`
     }
 
@@ -1393,6 +1390,16 @@ class PluginsLoader {
       return true
     })
 
+    // 释放插件实例资源（如 add 插件的 HotReloadBase 监视）
+    for (const pluginData of removedPlugins) {
+      const inst = pluginData.plugin
+      if (typeof inst?.destroy === 'function') {
+        Promise.resolve(inst.destroy()).catch((err) => {
+          logger.warn(`插件 ${normalizedKey} destroy 失败: ${err.message}`)
+        })
+      }
+    }
+
     // 清理 Handler（使用插件的命名空间）
     for (const pluginData of removedPlugins) {
       const namespace = pluginData.plugin?.namespace || normalizedKey
@@ -1530,7 +1537,7 @@ class PluginsLoader {
   async emit(eventType, eventData) {
     try {
       const postType = eventType.split('.')[0] || 'custom'
-      const randomId = Math.random().toString(36).substr(2, 9)
+      const randomId = BotUtil.shortId()
       const event = {
         ...eventData,
         post_type: postType,

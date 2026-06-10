@@ -114,10 +114,8 @@ export class BotError extends Error {
  * 统一处理、记录和恢复错误
  */
 export class ErrorHandler {
-  constructor() {
-    this.errorStats = new Map();
-    this.recoveryStrategies = new Map();
-  }
+  errorStats = new Map();
+  recoveryStrategies = new Map();
 
   /**
    * 处理错误

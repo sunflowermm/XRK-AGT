@@ -16,6 +16,8 @@ function normalizeWatchTargets(value) {
 
 export class HotReloadBase {
   watcher = null;
+  _debouncers = [];
+  _stopping = false;
 
   constructor(options = {}) {
     this.loggerName = options.loggerName ?? 'HotReload';
@@ -46,7 +48,7 @@ export class HotReloadBase {
       await this.stop();
       return;
     }
-    if (this.watcher) return;
+    if (global.__xrkShuttingDown || this.watcher || this._stopping) return;
 
     const {
       dirs,
@@ -77,7 +79,8 @@ export class HotReloadBase {
 
     const bind = (event, handler, { skipCheck = false } = {}) => {
       if (!handler) return;
-      this.watcher.on(event, lodash.debounce(async (filePath) => {
+      const debounced = lodash.debounce(async (filePath) => {
+        if (this._stopping || !this.watcher) return;
         if (!skipCheck && !handleCheck(filePath, event)) return;
         try {
           if (event === 'add' && invalidateCoreCacheOnAdd) {
@@ -87,7 +90,9 @@ export class HotReloadBase {
         } catch (error) {
           BotUtil.makeLog('error', `热更新 ${event} 失败: ${filePath}`, this.loggerName, error);
         }
-      }, this.debounceDelay));
+      }, this.debounceDelay);
+      this._debouncers.push(debounced);
+      this.watcher.on(event, debounced);
     };
 
     bind('add', onAdd);
@@ -97,15 +102,36 @@ export class HotReloadBase {
     bind('unlinkDir', onUnlinkDir, { skipCheck: true });
 
     this.watcher.on('error', (error) => {
+      if (this._stopping) return;
       BotUtil.makeLog('error', '文件监视错误', this.loggerName, error);
     });
     BotUtil.makeLog('info', '文件监视已启动', this.loggerName);
   }
 
   async stop() {
-    if (!this.watcher) return;
-    await this.watcher.close();
+    if (this._stopping && !this.watcher) return;
+    this._stopping = true;
+
+    for (const debounced of this._debouncers) {
+      debounced.cancel?.();
+    }
+    this._debouncers.length = 0;
+
+    const watcher = this.watcher;
     this.watcher = null;
+    if (!watcher) {
+      this._stopping = false;
+      return;
+    }
+
+    watcher.removeAllListeners();
+    try {
+      await watcher.close();
+    } catch (error) {
+      BotUtil.makeLog('debug', `关闭文件监视: ${error?.message || error}`, this.loggerName);
+    } finally {
+      this._stopping = false;
+    }
   }
 
   getFileKey(filePath) {

@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 import cfg from '#infrastructure/config/config.js';
+import { execFile } from '#utils/exec-async.js';
 
 /**
  * FrontendLauncher
@@ -14,12 +15,24 @@ class FrontendLauncher {
   /** @type {Map<string, { config: any, process?: import('child_process').ChildProcess, status: string, restarts: number, startedAt?: number }>} */
   static #apps = new Map();
 
-  static #initialized = false;
-  static #initializing = null;
   static #discovered = false;
   static #discovering = null;
   static #started = false;
   static #starting = null;
+
+  /** 子进程 stdout/stderr 中可忽略的进度行 */
+  static #OUTPUT_NOISE = /^(?:>|$|vite v[\d.]+\s+building|transforming\.{3}|rendering chunks\.{3}|computing gzip size\.{3}|dist\/|✓ \d+ modules transformed|\(\!\)\s+Some chunks|- Using dynamic import|- Use build\.rollupOptions|- Adjust chunk size limit)/i;
+
+  /** 值得打到主日志的关键行 */
+  static #OUTPUT_KEY = /(?:Local:|Network:|ready in|built in|✓ built|error|Error|failed|EADDRINUSE|Port \d+ is in use|trying another one|➜)/i;
+
+  static #LOCAL_URL = /(?:Local:|Network:)\s*(https?:\/\/\S+)/i;
+
+  /** Bot 代理读取实际监听端口（Vite 端口漂移时） */
+  static getRuntimePort(id) {
+    const app = this.#apps.get(id);
+    return app?.runtimePort ?? app?.config?.port;
+  }
 
   /**
    * 仅扫描 sign.json 并注册元数据，不启动 dev server
@@ -69,68 +82,136 @@ class FrontendLauncher {
   }
 
   /**
-   * 初始化并启动所有前端项目（discover + start，向后兼容）
-   */
-  static async init() {
-    if (this.#initialized) return this.#apps;
-    if (this.#initializing) return this.#initializing;
-
-    this.#initializing = this.start()
-      .finally(() => {
-        this.#initialized = true;
-        this.#initializing = null;
-      });
-
-    return this.#initializing;
-  }
-
-  /**
-   * 获取已发现的前端项目（仅扫描，不 spawn）
-   */
-  static async getApps() {
-    return this.discover();
-  }
-
-  /**
    * 停止所有已启动的前端子进程（用于主服务关闭/重启释放资源）
    */
+  static #spawnChildProcess(cmd, args, { cwd, env }) {
+    const shell = process.platform === 'win32' && !/[\\/]/.test(cmd);
+    return spawn(cmd, args, {
+      cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell,
+      windowsHide: true,
+    });
+  }
+
+  static #attachProcessOutput(child, appInfo) {
+    const appId = appInfo.config.id;
+    let pending = '';
+    const flushLine = (raw) => {
+      const line = raw.replace(/\r$/, '').trim();
+      if (!line || this.#OUTPUT_NOISE.test(line)) return;
+
+      const localMatch = line.match(this.#LOCAL_URL);
+      if (localMatch) {
+        try {
+          const u = new URL(localMatch[1]);
+          const p = Number(u.port) || (u.protocol === 'https:' ? 443 : 80);
+          appInfo.runtimePort = p;
+          appInfo.status = 'running';
+          BotUtil.makeLog('info', `[${appId}] 监听 ${u.href}`, 'Frontend');
+          return;
+        } catch {}
+      }
+
+      const verbose = process.env.XRK_FRONTEND_VERBOSE === '1';
+      if (!verbose && !this.#OUTPUT_KEY.test(line)) return;
+
+      const level = /error|failed|EADDRINUSE/i.test(line) ? 'warn' : 'info';
+      BotUtil.makeLog(verbose ? 'debug' : level, `[${appId}] ${line}`, 'Frontend');
+    };
+
+    const onChunk = (chunk) => {
+      pending += chunk?.toString?.() ?? '';
+      const lines = pending.split(/\r?\n/);
+      pending = lines.pop() ?? '';
+      for (const line of lines) flushLine(line);
+    };
+
+    child.stdout?.on('data', onChunk);
+    child.stderr?.on('data', onChunk);
+  }
+
+  static #wireChild(child, appInfo, config) {
+    this.#attachProcessOutput(child, appInfo);
+    child.on('error', (err) => {
+      appInfo.status = 'error';
+      BotUtil.makeLog('error', `前端项目进程错误: ${config.id} - ${err.message}`, 'Frontend');
+    });
+  }
+
+  static async #killChildTree(child) {
+    if (!child?.pid || child.killed) return;
+    try {
+      if (process.platform === 'win32') {
+        await execFile('taskkill', ['/PID', String(child.pid), '/T', '/F']).catch(() => {});
+        return;
+      }
+      child.kill('SIGTERM');
+    } catch {}
+  }
+
+  /** Vite dev/preview 追加 strictPort，避免端口漂移导致代理失效 */
+  static #viteRuntimeArgs(args, port) {
+    const list = [...(args || [])];
+    if (!list.some((a) => /^(dev|preview|serve)$/i.test(String(a)))) return list;
+    if (list.some((a) => String(a).includes('strictPort'))) return list;
+    return [...list, '--', '--strictPort', '--host', '127.0.0.1', '--port', String(port)];
+  }
+
+  static async #ensurePortFree(port) {
+    if (!Number.isFinite(port) || port <= 0) return;
+    const killPids = new Set();
+    try {
+      if (process.platform === 'win32') {
+        const { stdout } = await execFile('netstat', ['-ano'], { encoding: 'utf8' });
+        const suffix = `:${port}`;
+        for (const line of stdout.split(/\r?\n/)) {
+          if (!/LISTENING/i.test(line)) continue;
+          const parts = line.trim().split(/\s+/);
+          const local = parts[1] || '';
+          if (!local.endsWith(suffix)) continue;
+          const pid = parts[parts.length - 1];
+          if (pid && /^\d+$/.test(pid) && pid !== '0') killPids.add(pid);
+        }
+      } else {
+        const { stdout } = await execFile('lsof', ['-ti', `:${port}`], { encoding: 'utf8' }).catch(() => ({ stdout: '' }));
+        for (const pid of stdout.trim().split(/\s+/)) {
+          if (pid) killPids.add(pid);
+        }
+      }
+    } catch {}
+
+    const self = String(process.pid);
+    for (const pid of killPids) {
+      if (pid === self) continue;
+      if (process.platform === 'win32') {
+        await execFile('taskkill', ['/PID', pid, '/T', '/F']).catch(() => {});
+      } else {
+        await execFile('kill', ['-9', pid]).catch(() => {});
+      }
+    }
+    if (killPids.size) {
+      await BotUtil.sleep(400).catch(() => {});
+      BotUtil.makeLog('debug', `已释放端口 ${port} (PID: ${[...killPids].join(', ')})`, 'Frontend');
+    }
+  }
+
   static async stopAll() {
     const apps = Array.from(this.#apps.values());
     for (const app of apps) {
-      if (app) {
-        app.stopping = true;
-        if (app.restartTimer) {
-          clearTimeout(app.restartTimer);
-          app.restartTimer = undefined;
-        }
+      if (!app) continue;
+      app.stopping = true;
+      if (app.restartTimer) {
+        clearTimeout(app.restartTimer);
+        app.restartTimer = undefined;
       }
-      const child = app?.process;
-      if (!child || child.killed) continue;
-      try {
-        child.kill('SIGTERM');
-      } catch {}
+      for (const child of [app.process, app.buildProcess]) {
+        if (child && !child.killed) await this.#killChildTree(child);
+      }
     }
 
     await BotUtil.sleep(800).catch(() => {});
-    for (const app of apps) {
-      const child = app?.process;
-      if (!child || child.killed) continue;
-      try {
-        child.kill('SIGKILL');
-      } catch {}
-    }
-
-    for (const app of apps) {
-      const buildChild = app?.buildProcess;
-      if (!buildChild || buildChild.killed) continue;
-      try { buildChild.kill('SIGTERM'); } catch {}
-    }
-    await BotUtil.sleep(400).catch(() => {});
-    for (const app of apps) {
-      const buildChild = app?.buildProcess;
-      if (!buildChild || buildChild.killed) continue;
-      try { buildChild.kill('SIGKILL'); } catch {}
-    }
 
     for (const app of apps) {
       if (!app) continue;
@@ -138,7 +219,10 @@ class FrontendLauncher {
       app.buildProcess = undefined;
       app.status = 'stopped';
       app.startedAt = undefined;
+      if (app.config?.port) await this.#ensurePortFree(app.config.port).catch(() => {});
     }
+
+    this.#started = false;
   }
 
   static #getAppMode(json) {
@@ -359,6 +443,7 @@ class FrontendLauncher {
       process: undefined,
       status: 'queued',
       restarts: 0,
+      runtimePort: config.port,
       startedAt: Date.now()
     });
   }
@@ -404,56 +489,28 @@ class FrontendLauncher {
       'Frontend'
     );
 
-    const spawnChild = (cmd, args, cwd, env, label) => {
-      const shellFlag = process.platform === 'win32' && !/[\\/]/.test(cmd);
-      const child = spawn(cmd, args, {
-        cwd,
-        env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: shellFlag
-      });
-      child.__xrk_label = label;
-      return child;
-    };
+    const spawnChild = (cmd, args, cwd, env) =>
+      this.#spawnChildProcess(cmd, args, { cwd, env });
 
-    const handleOutput = (data, stream) => {
-      const text = data?.toString?.() || '';
-      if (!text) return;
-
-      // 避免刷屏，只取前 400 字符
-      const trimmed = text.length > 400
-        ? `${text.slice(0, 400)}...`
-        : text;
-
-      BotUtil.makeLog(
-        'debug',
-        `[${config.id}] ${stream}: ${trimmed}`,
-        'Frontend'
-      );
-    };
-
-    const wireChild = (child, kind) => {
-      if (child.stdout) child.stdout.on('data', (data) => handleOutput(data, `${kind}:stdout`));
-      if (child.stderr) child.stderr.on('data', (data) => handleOutput(data, `${kind}:stderr`));
-      child.on('error', (err) => {
-        appInfo.status = 'error';
-        BotUtil.makeLog('error', `前端项目进程错误: ${config.id} - ${err.message}`, 'Frontend');
-      });
-    };
-
-    const startRuntime = () => {
+    const startRuntime = async () => {
+      await this.#ensurePortFree(config.port).catch(() => {});
+      appInfo.runtimePort = config.port;
       appInfo.status = 'starting';
-      const child = spawnChild(runCmd, runArgs, runCwd, runEnv, 'runtime');
+      const runtimeArgs = this.#viteRuntimeArgs(runArgs, config.port);
+      const child = spawnChild(runCmd, runtimeArgs, runCwd, runEnv);
       appInfo.process = child;
-      wireChild(child, 'runtime');
+      this.#wireChild(child, appInfo, config);
 
       child.on('exit', (code, signal) => {
         appInfo.status = 'stopped';
         appInfo.process = undefined;
         const reason = code !== null ? `退出码=${code}` : `信号=${signal || 'unknown'}`;
+        if (appInfo.stopping) {
+          BotUtil.makeLog('debug', `前端项目已停止: ${config.id} (${reason})`, 'Frontend');
+          return;
+        }
         BotUtil.makeLog(code === 0 ? 'info' : 'warn', `前端项目已退出: ${config.id} (${reason})`, 'Frontend');
 
-        if (appInfo.stopping) return;
         if (!config.autoRestart) return;
         if (appInfo.restarts >= 3) {
           BotUtil.makeLog('warn', `前端项目重启次数已达上限，停止重启: ${config.id}`, 'Frontend');
@@ -464,7 +521,7 @@ class FrontendLauncher {
         const delay = 1000 * appInfo.restarts;
         BotUtil.makeLog('info', `准备重启前端项目(${appInfo.restarts}): ${config.id}, ${delay}ms 后`, 'Frontend');
         if (appInfo.restartTimer) clearTimeout(appInfo.restartTimer);
-        appInfo.restartTimer = setTimeout(() => startRuntime(), delay);
+        appInfo.restartTimer = setTimeout(() => { void startRuntime(); }, delay);
         appInfo.restartTimer.unref?.();
       });
     };
@@ -472,9 +529,9 @@ class FrontendLauncher {
     if (shouldBuild) {
       appInfo.status = 'building';
       BotUtil.makeLog('info', `生产环境后台构建前端: ${config.id} (${buildCmd} ${buildArgs.join(' ')})`, 'Frontend');
-      const buildChild = spawnChild(buildCmd, buildArgs, buildCwd, buildEnv, 'build');
+      const buildChild = spawnChild(buildCmd, buildArgs, buildCwd, buildEnv);
       appInfo.buildProcess = buildChild;
-      wireChild(buildChild, 'build');
+      this.#wireChild(buildChild, appInfo, config);
       buildChild.on('exit', (code) => {
         appInfo.buildProcess = undefined;
         if (code !== 0) {
@@ -483,12 +540,12 @@ class FrontendLauncher {
           return;
         }
         BotUtil.makeLog('info', `前端构建完成，准备启动: ${config.id}`, 'Frontend');
-        startRuntime();
+        void startRuntime();
       });
       return;
     }
 
-    startRuntime();
+    void startRuntime();
   }
 }
 

@@ -8,12 +8,16 @@
 |------|------|
 | `file-loader.js` | `importFresh`（热重载 cache-bust）、`forEachBatch` / `mapInBatches` |
 | `loader-constants.js` | `LOADER_BATCH_SIZE`、`API_REGISTER_BATCH_SIZE` |
-| `loader-shutdown.js` | 停机时 `stopAllLoaderWatchers()`（Plugins/Stream/Api/Config） |
+| `loader-shutdown.js` | 停机时 `stopAllLoaderWatchers()`（Plugins/Stream/Api/Config/cfg/Renderer） |
 | `token-estimate.js` | `estimateTokensRough` / `estimateTokensMixed` |
 | `sse-openai.js` | `writeSSEChunk`、`createOpenAIChunk` |
 | `hot-reload-base.js` | chokidar 热重载唯一入口（`src/` 内除本文件外禁止直接 chokidar） |
 | `core-fs.js` | `resolveCoreModuleKey`、`scanFiles` |
 | `string-array-utils.js` | 配置层字符串数组归一化 |
+
+## 全局引导
+
+- `src/bootstrap-globals.js`：在 `bot.js` 首行 import，挂载 `global.plugin` / `global.segment`；业务与 runtime 勿再 `import #oicq`。
 
 ## Loader 标准模式
 
@@ -25,4 +29,5 @@
 ## 文档入口
 
 - HTTP API：`docs/http-api.md`
+- 基类契约：`docs/base-classes.md`
 - 插件 / Tasker / 工作流：`.cursor/skills/xrk-*` 与 `docs/框架可扩展性指南.md`

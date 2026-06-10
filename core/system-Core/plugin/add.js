@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import lodash from "lodash"
 import crypto from "crypto"
-import chokidar from "chokidar"
+import { HotReloadBase } from '#utils/hot-reload-base.js'
 
 export const messageMap = {}
 export const bannedWordsMap = {}
@@ -65,7 +65,7 @@ let bannedImagesPath = "data/bannedWords/images/"
 let configPath = "data/bannedWords/config/"
 
 export class add extends plugin {
-  _bannedWordsWatcher = null
+  _bannedWordsHotReload = null
   constructor() {
     super({
       name: "添加消息",
@@ -128,21 +128,31 @@ export class add extends plugin {
 
     if (filesCfg.watch) {
       try {
-        this._bannedWordsWatcher?.close()
+        await this._bannedWordsHotReload?.stop()
+        this._bannedWordsHotReload = new HotReloadBase({ loggerName: 'add-plugin' })
         const watchDir = path.resolve(bannedWordsPath)
-        this._bannedWordsWatcher = chokidar.watch(path.join(watchDir, '*.json'), { ignoreInitial: true })
-        this._bannedWordsWatcher.on('change', (filePath) => {
-          const groupId = path.basename(filePath, '.json')
-          delete bannedWordsMap[groupId]
-          this.initBannedWords(groupId).catch((err) => {
-            logger.warn(`热重载违禁词失败 [${groupId}]: ${err.message}`)
-          })
+        await this._bannedWordsHotReload.watch(true, {
+          files: path.join(watchDir, '*.json'),
+          invalidateCoreCacheOnAdd: false,
+          shouldHandle: (filePath) => filePath.endsWith('.json'),
+          onChange: async (filePath) => {
+            const groupId = path.basename(filePath, '.json')
+            delete bannedWordsMap[groupId]
+            await this.initBannedWords(groupId).catch((err) => {
+              logger.warn(`热重载违禁词失败 [${groupId}]: ${err.message}`)
+            })
+          },
         })
         logger.info(`已监听违禁词目录变更: ${watchDir}`)
       } catch (err) {
         logger.warn(`启用 files.watch 失败: ${err.message}`)
       }
     }
+  }
+
+  async destroy() {
+    await this._bannedWordsHotReload?.stop()
+    this._bannedWordsHotReload = null
   }
 
   /** 处理添加删除 */

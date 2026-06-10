@@ -386,19 +386,21 @@ export class CDNManager {
  * 支持多种负载均衡算法：轮询、加权轮询、最少连接、IP Hash、一致性哈希
  */
 export class ProxyManager {
+  config = {};
+  upstreams = new Map();
+  healthChecks = new Map();
+  _roundRobinIndex = new Map();
+  _connectionCounts = new Map();
+  _responseTimes = new Map();
+  _healthCheckCache = new Map();
+  _stats = {
+    totalRequests: 0,
+    totalFailures: 0,
+    upstreamStats: new Map(),
+  };
+
   constructor(config = {}) {
     this.config = config.proxy || {};
-    this.upstreams = new Map();
-    this.healthChecks = new Map();
-    this._roundRobinIndex = new Map();
-    this._connectionCounts = new Map(); // 连接数统计
-    this._responseTimes = new Map(); // 响应时间统计
-    this._healthCheckCache = new Map(); // 健康检查结果缓存
-    this._stats = {
-      totalRequests: 0,
-      totalFailures: 0,
-      upstreamStats: new Map() // 每个上游服务器的统计
-    };
     this._initUpstreams();
   }
 

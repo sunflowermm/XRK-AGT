@@ -7,6 +7,7 @@ import { MCPServer } from '#utils/mcp-server.js';
 import { FileLoader } from '#utils/file-loader.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
+import MonitorService from '#infrastructure/aistream/monitor-service.js';
 
 /**
  * AI工作流加载器
@@ -518,6 +519,8 @@ class StreamLoader {
     }
 
     await this._disposeAllRemoteMCPServers();
+
+    MonitorService.reset();
 
     this.streams.clear();
     this.streamClasses.clear();

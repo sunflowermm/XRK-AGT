@@ -1,5 +1,5 @@
 import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-utils.js';
-import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '../../utils/llm/openai-chat-utils.js';
+import { buildOpenAIChatCompletionsBody, applyOpenAITools, buildOpenAICompatEndpoint } from '../../utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '../../utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
@@ -21,11 +21,10 @@ export default class OpenAICompatibleLLMClient {
   }
 
   normalizeEndpoint(config) {
-    const base = (config.baseUrl ?? '').replace(/\/+$/, '');
-    // 约定：baseUrl 默认已经带上版本前缀（如 /v1），path 只写资源路径（如 /chat/completions）
-    const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
-    if (!base) throw new Error('openai_compat: 未配置 baseUrl（第三方 OpenAI 兼容接口地址）');
-    return `${base}${path}`;
+    return buildOpenAICompatEndpoint(config, {
+      defaultPath: '/chat/completions',
+      label: 'openai_compat',
+    });
   }
 
   get timeout() {

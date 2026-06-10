@@ -16,6 +16,14 @@ function pick(overrides, config, keys) {
 
 export { pick };
 
+/** OpenAI Chat Completions 兼容端点拼接（openai_compat / newapi / cherryin 等共用） */
+export function buildOpenAICompatEndpoint(config, { defaultPath = '/chat/completions', label = 'openai_compat' } = {}) {
+  const base = (config.baseUrl ?? '').replace(/\/+$/, '');
+  const pathPart = (config.path || defaultPath).replace(/^\/?/, '/');
+  if (!base) throw new Error(`${label}: 未配置 baseUrl`);
+  return `${base}${pathPart}`;
+}
+
 /**
  * 提取工具名称
  */

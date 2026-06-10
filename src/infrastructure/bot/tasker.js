@@ -1,4 +1,5 @@
 import { EventNormalizer } from '#utils/event-normalizer.js'
+import BotUtil from '#utils/botutil.js'
 
 /**
  * Tasker 基类
@@ -141,7 +142,7 @@ export class TaskerBase {
     
     // 确保 event_id 存在
     if (!event.event_id) {
-      const randomId = Math.random().toString(36).substr(2, 9)
+      const randomId = BotUtil.shortId()
       event.event_id = `${tasker_type || 'event'}_${event.post_type}_${Date.now()}_${randomId}`
     }
     

@@ -9,9 +9,10 @@ const IS_WINDOWS = process.platform === 'win32';
  * 提供文件操作、文本处理等核心功能，类似Cursor的工具集
  */
 export class BaseTools {
+  processRegistry = new Set();
+
   constructor(workspace = null) {
     this.workspace = workspace || getDefaultDesktopDirSync();
-    this.processRegistry = new Set(); // 进程注册表
   }
 
   /**

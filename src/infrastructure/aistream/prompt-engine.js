@@ -8,12 +8,13 @@ import fs from 'fs/promises';
 import path from 'path';
 
 export class PromptEngine extends EventEmitter {
+  templates = new Map();
+  fewShotExamples = new Map();
+  promptVersions = new Map();
+  activeVersions = new Map();
+
   constructor() {
     super();
-    this.templates = new Map(); // templateName -> Template定义
-    this.fewShotExamples = new Map(); // category -> Example列表
-    this.promptVersions = new Map(); // templateName -> Version列表
-    this.activeVersions = new Map(); // templateName -> 当前版本
   }
 
   /**

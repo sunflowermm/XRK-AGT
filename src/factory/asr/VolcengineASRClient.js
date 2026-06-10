@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import BotUtil from '#utils/botutil.js';
 
 export default class VolcengineASRClient {
+    _timeoutEmittedSet = new Set();
+
     /**
      * 构造函数
      * @param {string} deviceId - 设备ID
@@ -48,7 +50,6 @@ export default class VolcengineASRClient {
 
         // timeout 去重（utteranceId 唯一，最多保留最近若干条）
         this._timeoutEmittedQueue = [];
-        this._timeoutEmittedSet = new Set();
         this._timeoutEmittedMax = 64;
 
         // 连接轮转（每个 utterance 使用独立 WS）

@@ -84,6 +84,11 @@ export default class Renderer {
     this._tplHotReloads.set(tplFile, hotReload)
   }
 
+  async stopAllWatchers() {
+    await Promise.all([...this._tplHotReloads.values()].map((hr) => hr.stop()));
+    this._tplHotReloads.clear();
+  }
+
   async getMac() {
     const macAddr = "000000000000";
     try {
