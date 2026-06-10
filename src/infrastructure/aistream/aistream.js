@@ -6,6 +6,7 @@ import MemoryManager from '#infrastructure/aistream/memory-manager.js';
 import PromptEngine from '#infrastructure/aistream/prompt-engine.js';
 import MonitorService from '#infrastructure/aistream/monitor-service.js';
 import { appendAgentWorkspaceToPrompt } from '#utils/agent-workspace.js';
+import { estimateTokensMixed } from '#utils/token-estimate.js';
 
 export default class AIStream {
   /**
@@ -68,10 +69,7 @@ export default class AIStream {
    * @returns {number} token数量
    */
   estimateTokens(text) {
-    if (!text || typeof text !== 'string') return 0;
-    const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-    const englishWords = (text.match(/[a-zA-Z]+/g) || []).length;
-    return Math.ceil(chineseChars * 1.5 + englishWords * 1.3 + text.length * 0.3);
+    return estimateTokensMixed(text);
   }
 
   /**

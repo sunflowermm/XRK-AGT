@@ -2,7 +2,6 @@ import fs from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
 import paths from '#utils/paths.js'
-import os from 'os'
 import cfg from '../config/config.js'
 import plugin from './plugin.js'
 import schedule from 'node-schedule'
@@ -13,47 +12,45 @@ import { segment } from '#oicq'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { normalizeError } from '#utils/normalize-error.js'
 import { EventDeduplicator, IntelligentCache, PluginMatcher } from '#utils/neural-algorithms.js'
-import { matchEventPattern as matchEventPatternFn } from '#utils/core-fs.js'
+import { matchEventPattern as matchEventPatternFn, findInCoreSubDirs, statFiles } from '#utils/core-fs.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
+import { FileLoader } from '#utils/file-loader.js'
+import { HotReloadBase } from '#utils/hot-reload-base.js'
+import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
 
 global.plugin = plugin
 global.segment = segment
 
 class PluginsLoader {
-  constructor() {
-    this.priority = []
-    this.extended = []
-    this.task = []
-    this.watcher = {}
-    this.cooldowns = {
-      group: new Map(),
-      single: new Map()
-    }
-    this.msgThrottle = new Map()
-    this.eventThrottle = new Map()
-    this.defaultMsgHandlers = []
-    this.eventSubscribers = new Map()
-    this.pluginCount = 0
-    // 使用智能缓存替换简单数组
-    this.eventHistoryCache = new IntelligentCache({ maxSize: 1000, ttl: 3600000 })
-    // 使用神经网络算法进行事件去重
-    this.eventDeduplicator = new EventDeduplicator({ 
-      similarityThreshold: 0.85, 
-      timeWindow: 60000,
-      maxHistory: 1000
-    })
-    // 使用智能插件匹配器
-    this.pluginMatcher = new PluginMatcher()
-    this.cleanupTimer = null
-    this.pluginLoadStats = {
-      plugins: [],
-      totalLoadTime: 0,
-      startTime: 0,
-      totalPlugins: 0,
-      taskCount: 0,
-      extendedCount: 0
-    }
+  priority = []
+  extended = []
+  task = []
+  cooldowns = {
+    group: new Map(),
+    single: new Map()
   }
+  msgThrottle = new Map()
+  eventThrottle = new Map()
+  defaultMsgHandlers = []
+  eventSubscribers = new Map()
+  pluginCount = 0
+  eventHistoryCache = new IntelligentCache({ maxSize: 1000, ttl: 3600000 })
+  eventDeduplicator = new EventDeduplicator({
+    similarityThreshold: 0.85,
+    timeWindow: 60000,
+    maxHistory: 1000
+  })
+  pluginMatcher = new PluginMatcher()
+  cleanupTimer = null
+  pluginLoadStats = {
+    plugins: [],
+    totalLoadTime: 0,
+    startTime: 0,
+    totalPlugins: 0,
+    taskCount: 0,
+    extendedCount: 0
+  }
+  _hotReload = null
 
   async load(isRefresh = false) {
     try {
@@ -72,31 +69,24 @@ class PluginsLoader {
       this.pluginCount = 0
       const packageErr = []
 
-      const batchSize = 10
-      for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize)
-        await Promise.allSettled(
-          batch.map(async (file) => {
-            const pluginStartTime = Date.now()
-            try {
-              await this.importPlugin(file, packageErr, false)
-              const loadTime = Date.now() - pluginStartTime
-              this.pluginLoadStats.plugins.push({ name: file.name, loadTime, success: true })
-            } catch (err) {
-              const loadTime = Date.now() - pluginStartTime
-              this.pluginLoadStats.plugins.push({
-                name: file.name,
-                loadTime,
-                success: false,
-                error: err.message
-              })
-              errorHandler.handle(err, { context: 'loadPlugin', pluginName: file.name }, true)
-              logger.error(`插件加载失败: ${file.name}`, err)
-              return null
-            }
+      await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, async (file) => {
+        const pluginStartTime = Date.now()
+        try {
+          await this.importPlugin(file, packageErr, false)
+          const loadTime = Date.now() - pluginStartTime
+          this.pluginLoadStats.plugins.push({ name: file.name, loadTime, success: true })
+        } catch (err) {
+          const loadTime = Date.now() - pluginStartTime
+          this.pluginLoadStats.plugins.push({
+            name: file.name,
+            loadTime,
+            success: false,
+            error: err.message
           })
-        )
-      }
+          errorHandler.handle(err, { context: 'loadPlugin', pluginName: file.name }, true)
+          logger.error(`插件加载失败: ${file.name}`, err)
+        }
+      })
 
       this.pluginLoadStats.totalLoadTime = Date.now() - this.pluginLoadStats.startTime
       this.pluginLoadStats.totalPlugins = this.pluginCount
@@ -104,10 +94,8 @@ class PluginsLoader {
       this.pluginLoadStats.extendedCount = this.extended.length
 
       this.packageTips(packageErr)
-      this.createTask()
+      this._rebuildPluginGraph()
       this.initEventSystem()
-      this.sortPlugins()
-      this.identifyDefaultMsgHandlers()
 
       logger.info(`加载定时任务[${this.task.length}个]`)
       logger.info(`加载插件[${this.pluginCount}个]`)
@@ -681,9 +669,19 @@ class PluginsLoader {
     }
   }
 
+  _rebuildPluginGraph() {
+    this.createTask()
+    this.sortPlugins()
+    this.identifyDefaultMsgHandlers()
+  }
+
+  /** 插件文件键名（不含 .js，与热重载/unload 一致） */
+  _pluginFileKey(nameOrPath) {
+    return HotReloadBase.moduleFileKey(nameOrPath);
+  }
+
   async getPlugins() {
     const ret = []
-    const { FileLoader } = await import('#utils/file-loader.js')
 
     try {
       const files = await FileLoader.getCoreSubDirFiles('plugin', {
@@ -693,10 +691,9 @@ class PluginsLoader {
 
       for (const filePath of files) {
         const coreDir = path.dirname(path.dirname(filePath))
-        const relativePath = path.relative(paths.root, filePath)
         ret.push({
-          name: path.basename(filePath),
-          path: `../../../${relativePath.replace(/\\/g, '/')}`,
+          name: this._pluginFileKey(filePath),
+          path: filePath,
           core: path.basename(coreDir)
         })
       }
@@ -704,23 +701,20 @@ class PluginsLoader {
       logger.error('获取插件文件列表失败', error)
     }
 
-    // 2. 加载每个 core 根目录下的 index.js（含无 plugin/ 的 core，保证如 xiaozhi-Core 的 index 会被执行）
     const allCoreDirs = await paths.getCoreDirs()
     const indexPaths = allCoreDirs.map((coreDir) => path.join(coreDir, 'index.js'))
-    const { statFiles } = await import('#utils/core-fs.js')
-    const indexExists = await statFiles(indexPaths)
+    const indexExists = statFiles(indexPaths)
 
     for (let i = 0; i < allCoreDirs.length; i++) {
       if (!indexExists[i]) continue
       const coreDir = allCoreDirs[i]
       try {
         const indexPath = indexPaths[i]
-        const relativePath = path.relative(paths.root, indexPath)
-        const name = `${path.basename(coreDir)}-index.js`
+        const name = `${path.basename(coreDir)}-index`
         if (ret.some((p) => p.name === name)) continue
         ret.push({
           name,
-          path: `../../../${relativePath.replace(/\\/g, '/')}`,
+          path: indexPath,
           core: path.basename(coreDir)
         })
       } catch (error) {
@@ -730,18 +724,6 @@ class PluginsLoader {
 
     return ret
   }
-  /**
-   * 获取插件加载统计信息
-   */
-  getPluginStats() {
-    return {
-      ...this.pluginLoadStats,
-      priority: this.priority.length,
-      extended: this.extended.length,
-      task: this.task.length
-    };
-  }
-
   prepareRuleTemplates(ruleList = []) {
     if (!Array.isArray(ruleList) || !ruleList.length) return []
     return ruleList.map(rule => rule?.reg ? { ...rule, reg: this.createRegExp(rule.reg) } : rule)
@@ -763,8 +745,7 @@ class PluginsLoader {
    */
   async importPluginModule(file, packageErr) {
     try {
-      // 优化：使用动态import，支持缓存
-      const app = await import(file.path)
+      const app = await FileLoader.importFresh(file.path)
       // 优化：简化返回逻辑
       return app.apps || app
     } catch (error) {
@@ -1182,20 +1163,12 @@ class PluginsLoader {
 
     this.cleanupTimer = setInterval(() => {
       try {
-        this.cleanupEventHistory()
         this.cleanupThrottles()
         this.cleanupCooldowns()
       } catch (error) {
         errorHandler.handle(error, { context: 'cleanupTimer' })
       }
     }, 60000)
-  }
-
-  /**
-   * 统一的事件历史清理（使用智能缓存）
-   */
-  cleanupEventHistory() {
-    // 智能缓存会自动清理过期项，无需手动清理
   }
 
   /**
@@ -1391,9 +1364,12 @@ class PluginsLoader {
    * @param {string} key - 插件文件名（不含扩展名）
    */
   unloadPlugin(key) {
+    const normalizedKey = this._pluginFileKey(key)
+    const matchesKey = (pluginKey) => this._pluginFileKey(pluginKey) === normalizedKey
+
     // 清理定时任务（精确匹配插件键名）
     this.task = this.task.filter(task => {
-      if (task.name === key) {
+      if (matchesKey(task.name)) {
         task.job?.cancel()
         return false
       }
@@ -1403,14 +1379,14 @@ class PluginsLoader {
     // 清理插件数组
     const removedPlugins = []
     this.priority = this.priority.filter(p => {
-      if (p.key === key) {
+      if (matchesKey(p.key)) {
         removedPlugins.push(p)
         return false
       }
       return true
     })
     this.extended = this.extended.filter(p => {
-      if (p.key === key) {
+      if (matchesKey(p.key)) {
         removedPlugins.push(p)
         return false
       }
@@ -1419,14 +1395,14 @@ class PluginsLoader {
 
     // 清理 Handler（使用插件的命名空间）
     for (const pluginData of removedPlugins) {
-      const namespace = pluginData.plugin?.namespace || key
+      const namespace = pluginData.plugin?.namespace || normalizedKey
       Handler.del(namespace)
     }
 
     // 清理事件订阅（需要遍历所有订阅者找到对应的插件）
     for (const [eventType, subscribers] of this.eventSubscribers) {
       const filtered = subscribers.filter(sub => {
-        return !sub._pluginKey || sub._pluginKey !== key
+        return !sub._pluginKey || !matchesKey(sub._pluginKey)
       })
       if (filtered.length !== subscribers.length) {
         this.eventSubscribers.set(eventType, filtered)
@@ -1445,7 +1421,6 @@ class PluginsLoader {
   async findPluginFilePath(key) {
     try {
       const pluginDirs = await paths.getCoreSubDirs('plugin')
-      const { findInCoreSubDirs } = await import('#utils/core-fs.js')
       return findInCoreSubDirs(pluginDirs, key)
     } catch (error) {
       logger.error(`查找插件文件失败: ${key}`, error)
@@ -1460,10 +1435,9 @@ class PluginsLoader {
    * @returns {Object} 文件对象
    */
   buildPluginFileObject(filePath, key) {
-    const relativePath = path.relative(paths.root, filePath)
     return {
       name: key,
-      path: `../../../${relativePath.replace(/\\/g, '/')}?${Date.now()}`
+      path: filePath
     }
   }
 
@@ -1490,9 +1464,7 @@ class PluginsLoader {
       const loadedPlugins = await this.importPlugin(file, [], false)
       
       if (loadedPlugins.length > 0) {
-        this.createTask()
-        this.sortPlugins()
-        this.identifyDefaultMsgHandlers()
+        this._rebuildPluginGraph()
         logger.mark(`[热更新插件][${key}] 更新了 ${loadedPlugins.length} 个插件实例`)
       }
     } catch (error) {
@@ -1507,17 +1479,14 @@ class PluginsLoader {
    */
   async watch(enable = true) {
     if (!enable) {
-      if (this.watcher.dir) {
-        await this.watcher.dir.close()
-        delete this.watcher.dir
-      }
+      await this._hotReload?.stop()
+      this._hotReload = null
       return
     }
 
-    if (this.watcher.dir) return
+    if (this._hotReload?.watcher) return
 
     try {
-      const { HotReloadBase } = await import('#utils/hot-reload-base.js')
       const hotReload = new HotReloadBase({ loggerName: 'PluginsLoader' })
       
       const pluginDirs = await paths.getCoreSubDirs('plugin')
@@ -1532,9 +1501,7 @@ class PluginsLoader {
             const file = this.buildPluginFileObject(filePath, key)
             const loadedPlugins = await this.importPlugin(file, [], false)
             if (loadedPlugins.length > 0) {
-              this.createTask()
-              this.sortPlugins()
-              this.identifyDefaultMsgHandlers()
+              this._rebuildPluginGraph()
               logger.mark(`[新增插件][${key}] 成功加载 ${loadedPlugins.length} 个插件实例`)
             }
           } catch (error) {
@@ -1553,7 +1520,7 @@ class PluginsLoader {
         }
       })
 
-      this.watcher.dir = hotReload.watcher
+      this._hotReload = hotReload
     } catch (error) {
       logger.error('启动插件文件监视失败', error)
     }
@@ -1584,24 +1551,6 @@ class PluginsLoader {
   }
 
   /**
-   * 获取动态批次大小（优化：提升默认批次大小）
-   */
-  getDynamicBatchSize() {
-    try {
-      const totalMemory = os.totalmem()
-      const freeMemory = os.freemem()
-      const memoryUsage = (totalMemory - freeMemory) / totalMemory
-      // 优化：提升批次大小，充分利用并发能力
-      if (memoryUsage > 0.8) return 10
-      if (memoryUsage > 0.6) return 15
-      return 20
-    } catch (error) {
-      logger.debug(`获取内存信息失败，使用默认批次大小: ${error.message}`)
-      return 20
-    }
-  }
-
-  /**
    * 分析插件加载性能（优化：简化逻辑）
    */
   analyzePluginPerformance() {
@@ -1625,7 +1574,8 @@ class PluginsLoader {
   async destroy() {
     try {
       this.task.forEach(task => task.job?.cancel())
-      await Promise.allSettled(Object.values(this.watcher).map(watcher => watcher?.close?.()))
+      await this._hotReload?.stop()
+      this._hotReload = null
       if (this.cleanupTimer) {
         clearInterval(this.cleanupTimer)
         this.cleanupTimer = null
@@ -1634,12 +1584,12 @@ class PluginsLoader {
       this.priority = []
       this.extended = []
       this.task = []
-      this.watcher = {}
       this.cooldowns.group.clear()
       this.cooldowns.single.clear()
       this.msgThrottle.clear()
       this.eventThrottle.clear()
       this.eventSubscribers.clear()
+      this.eventHistoryCache.stopCleanup()
       this.eventHistoryCache.clear()
 
       logger.info('插件加载器已销毁')

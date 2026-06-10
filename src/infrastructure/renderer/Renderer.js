@@ -1,8 +1,8 @@
 import template from 'art-template'
-import chokidar from 'chokidar'
 import fs from 'node:fs'
 import os from 'node:os'
 import BotUtil from '#utils/botutil.js'
+import { HotReloadBase } from '#utils/hot-reload-base.js'
 
 /**
  * 将绝对路径转为 file:// URL（Windows 下用正斜杠，避免浏览器无法加载）
@@ -19,13 +19,16 @@ function toFileUrl(absPath) {
 export default class Renderer {
   static toFileUrl = toFileUrl;
 
+  id = 'renderer'
+  type = 'image'
+  dir = './trash/html'
+  html = {}
+  _tplHotReloads = new Map()
+
   constructor(data) {
-    this.id = data.id || 'renderer'
-    this.type = data.type || 'image'
+    this.id = data.id || this.id
+    this.type = data.type || this.type
     this.render = this[data.render || 'render']
-    this.dir = './trash/html'
-    this.html = {}
-    this.watcher = {}
     this.createDir(this.dir)
   }
 
@@ -66,15 +69,19 @@ export default class Renderer {
   }
 
   watch(tplFile) {
-    if (this.watcher[tplFile]) return
+    if (this._tplHotReloads.has(tplFile)) return
 
-    const watcher = chokidar.watch(tplFile)
-    watcher.on('change', () => {
-      delete this.html[tplFile]
-      BotUtil.makeLog('info', `[修改html模板] ${tplFile}`, 'Renderer')
+    const hotReload = new HotReloadBase({ loggerName: 'Renderer' })
+    void hotReload.watch(true, {
+      files: [tplFile],
+      shouldHandle: () => true,
+      invalidateCoreCacheOnAdd: false,
+      onChange: () => {
+        delete this.html[tplFile]
+        BotUtil.makeLog('info', `[修改html模板] ${tplFile}`, 'Renderer')
+      }
     })
-
-    this.watcher[tplFile] = watcher
+    this._tplHotReloads.set(tplFile, hotReload)
   }
 
   async getMac() {

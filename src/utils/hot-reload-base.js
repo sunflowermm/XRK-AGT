@@ -9,6 +9,11 @@ const DEFAULT_AWAIT_WRITE_FINISH = {
   pollInterval: 100
 };
 
+function normalizeWatchTargets(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
 export class HotReloadBase {
   watcher = null;
 
@@ -23,6 +28,19 @@ export class HotReloadBase {
     return fileName.endsWith('.js') && !fileName.startsWith('.') && !fileName.startsWith('_');
   }
 
+  /**
+   * @param {boolean} enable
+   * @param {object} options
+   * @param {string|string[]} [options.dirs]
+   * @param {string|string[]} [options.files] 单文件监视（YAML/HTML 等）
+   * @param {(filePath: string) => void|Promise<void>} [options.onAdd]
+   * @param {(filePath: string) => void|Promise<void>} [options.onChange]
+   * @param {(filePath: string) => void|Promise<void>} [options.onUnlink]
+   * @param {(dirPath: string) => void|Promise<void>} [options.onAddDir]
+   * @param {(dirPath: string) => void|Promise<void>} [options.onUnlinkDir]
+   * @param {(filePath: string, event: string) => boolean} [options.shouldHandle]
+   * @param {boolean} [options.invalidateCoreCacheOnAdd]
+   */
   async watch(enable = true, options = {}) {
     if (!enable) {
       await this.stop();
@@ -30,23 +48,41 @@ export class HotReloadBase {
     }
     if (this.watcher) return;
 
-    const { dirs, onAdd, onChange, onUnlink } = options;
-    const dirList = Array.isArray(dirs) ? dirs : dirs ? [dirs] : [];
-    if (dirList.length === 0) return;
+    const {
+      dirs,
+      files,
+      onAdd,
+      onChange,
+      onUnlink,
+      onAddDir,
+      onUnlinkDir,
+      shouldHandle,
+      invalidateCoreCacheOnAdd = normalizeWatchTargets(files).length === 0
+    } = options;
 
-    this.watcher = chokidar.watch(dirList, {
+    const targets = [
+      ...normalizeWatchTargets(dirs),
+      ...normalizeWatchTargets(files)
+    ];
+    if (targets.length === 0) return;
+
+    const handleCheck = shouldHandle ?? ((filePath) => this.isValidFile(filePath));
+
+    this.watcher = chokidar.watch(targets, {
       ignored: /(^|[/\\])\../,
       persistent: true,
       ignoreInitial: true,
       awaitWriteFinish: this.awaitWriteFinish
     });
 
-    const bind = (event, handler) => {
+    const bind = (event, handler, { skipCheck = false } = {}) => {
       if (!handler) return;
       this.watcher.on(event, lodash.debounce(async (filePath) => {
-        if (!this.isValidFile(filePath)) return;
+        if (!skipCheck && !handleCheck(filePath, event)) return;
         try {
-          if (event === 'add') paths.invalidateCoreCache();
+          if (event === 'add' && invalidateCoreCacheOnAdd) {
+            paths.invalidateCoreCache();
+          }
           await handler(filePath);
         } catch (error) {
           BotUtil.makeLog('error', `热更新 ${event} 失败: ${filePath}`, this.loggerName, error);
@@ -57,6 +93,9 @@ export class HotReloadBase {
     bind('add', onAdd);
     bind('change', onChange);
     bind('unlink', onUnlink);
+    bind('addDir', onAddDir, { skipCheck: true });
+    bind('unlinkDir', onUnlinkDir, { skipCheck: true });
+
     this.watcher.on('error', (error) => {
       BotUtil.makeLog('error', '文件监视错误', this.loggerName, error);
     });
@@ -71,5 +110,11 @@ export class HotReloadBase {
 
   getFileKey(filePath) {
     return path.basename(filePath, '.js');
+  }
+
+  /** 模块文件键（路径或文件名 → 不含 .js 的 basename） */
+  static moduleFileKey(nameOrPath) {
+    const base = path.basename(String(nameOrPath ?? ''));
+    return base.endsWith('.js') ? base.slice(0, -3) : base;
   }
 }

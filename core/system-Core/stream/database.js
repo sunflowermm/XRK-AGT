@@ -15,6 +15,9 @@ import os from 'os';
  * - delete_knowledge（删除知识）
  */
 export default class DatabaseStream extends AIStream {
+  dbDir = path.join(os.homedir(), '.xrk', 'knowledge');
+  databases = new Map();
+
   constructor() {
     super({
       name: 'database',
@@ -29,10 +32,6 @@ export default class DatabaseStream extends AIStream {
       },
       embedding: { enabled: true }
     });
-    
-    // 知识库存储目录
-    this.dbDir = path.join(os.homedir(), '.xrk', 'knowledge');
-    this.databases = new Map(); // 内存中的数据库缓存
   }
 
   async init() {

@@ -1,32 +1,34 @@
 import path from 'path';
-import { pathToFileURL } from 'url';
 import { spawn } from 'child_process';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import { MCPServer } from '#utils/mcp-server.js';
+import { FileLoader } from '#utils/file-loader.js';
+import { HotReloadBase } from '#utils/hot-reload-base.js';
+import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 
 /**
  * AI工作流加载器
  * 标准化初始化流程，避免重复加载
  */
 class StreamLoader {
-  constructor() {
-    this.streams = new Map();
-    this.streamClasses = new Map();
-    this.remoteMCPServers = new Map();
-    this.mcpPluginServers = new Map();   // 由 stream 插件导出的 getMcpServers() 提供
-    this._loadedPluginServers = new Set();
-    this.loaded = false;
-    this.watcher = null;
-    this.loadStats = {
-      streams: [],
-      totalLoadTime: 0,
-      startTime: 0,
-      totalStreams: 0,
-      failedStreams: 0
-    };
-  }
+  streams = new Map();
+  streamClasses = new Map();
+  remoteMCPServers = new Map();
+  mcpPluginServers = new Map();
+  _loadedPluginServers = new Set();
+  loaded = false;
+  _hotReload = null;
+  loadStats = {
+    streams: [],
+    totalLoadTime: 0,
+    startTime: 0,
+    totalStreams: 0,
+    failedStreams: 0
+  };
+  /** 文件 basename（无 .js）→ stream.name，热重载清理用 */
+  fileKeyToStreamName = new Map();
 
   _nextRemoteRequestId = 1;
 
@@ -181,7 +183,6 @@ class StreamLoader {
       BotUtil.makeLog('info', '开始加载工作流...', 'StreamLoader');
 
       // 获取所有 core 目录下的 stream 目录
-      const { FileLoader } = await import('#utils/file-loader.js');
       const files = await FileLoader.getCoreSubDirFiles('stream', {
         ext: '.js',
         recursive: false
@@ -194,11 +195,7 @@ class StreamLoader {
       }
 
       // 阶段1: 加载工作流类
-      const batchSize = 10;
-      for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize);
-        await Promise.allSettled(batch.map(file => this.loadStreamClass(file)));
-      }
+      await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, (file) => this.loadStreamClass(file));
 
       // 阶段2: 合并 Embedding/RAG 配置到各工作流
       this.applyEmbeddingConfig(getAistreamConfigOptional().embedding || {});
@@ -226,11 +223,7 @@ class StreamLoader {
     const startTime = Date.now();
 
     try {
-      const normalizedPath = path.resolve(file);
-      const fileUrlObj = pathToFileURL(normalizedPath);
-      // 添加时间戳避免缓存，使用 .href 获取字符串格式
-      const fileUrl = `${fileUrlObj.href}?t=${Date.now()}`;
-      const module = await import(fileUrl);
+      const module = await FileLoader.importFresh(file);
       const StreamClass = module.default;
 
       if (!StreamClass || typeof StreamClass !== 'function') {
@@ -250,6 +243,7 @@ class StreamLoader {
       }
 
       // 保存
+      this.fileKeyToStreamName.set(streamName, stream.name);
       this.streams.set(stream.name, stream);
       this.streamClasses.set(stream.name, StreamClass);
 
@@ -514,10 +508,8 @@ class StreamLoader {
   async cleanupAll() {
     BotUtil.makeLog('info', '🧹 清理资源...', 'StreamLoader');
     
-    if (this.watcher) {
-      await this.watcher.close();
-      this.watcher = null;
-    }
+    await this._hotReload?.stop();
+    this._hotReload = null;
     
     for (const stream of this.streams.values()) {
       if (typeof stream.cleanup === 'function') {
@@ -529,6 +521,7 @@ class StreamLoader {
 
     this.streams.clear();
     this.streamClasses.clear();
+    this.fileKeyToStreamName.clear();
     this.loaded = false;
 
     BotUtil.makeLog('success', '✅ 清理完成', 'StreamLoader');
@@ -545,6 +538,14 @@ class StreamLoader {
     }
     this.streams.delete(streamName)
     this.streamClasses.delete(streamName)
+    for (const [fileKey, name] of this.fileKeyToStreamName) {
+      if (name === streamName) this.fileKeyToStreamName.delete(fileKey)
+    }
+  }
+
+  _streamNameForFile(filePath) {
+    const fileKey = path.basename(filePath, '.js')
+    return this.fileKeyToStreamName.get(fileKey) ?? fileKey
   }
 
   /**
@@ -563,46 +564,43 @@ class StreamLoader {
    */
   async watch(enable = true) {
     if (!enable) {
-      if (this.watcher) {
-        await this.watcher.close()
-        this.watcher = null
-      }
-      return
+      await this._hotReload?.stop();
+      this._hotReload = null;
+      return;
     }
 
-    if (this.watcher) return
+    if (this._hotReload?.watcher) return;
 
     try {
-      const { HotReloadBase } = await import('#utils/hot-reload-base.js')
-      const hotReload = new HotReloadBase({ loggerName: 'StreamLoader' })
+      const hotReload = new HotReloadBase({ loggerName: 'StreamLoader' });
       
-      const streamDirs = await paths.getCoreSubDirs('stream')
-      if (streamDirs.length === 0) return
+      const streamDirs = await paths.getCoreSubDirs('stream');
+      if (streamDirs.length === 0) return;
 
       await hotReload.watch(true, {
         dirs: streamDirs,
         onAdd: async (filePath) => {
-          const streamName = hotReload.getFileKey(filePath)
-          BotUtil.makeLog('debug', `检测到新工作流: ${streamName}`, 'StreamLoader')
-          await this._reloadStream(filePath)
+          const streamName = hotReload.getFileKey(filePath);
+          BotUtil.makeLog('debug', `检测到新工作流: ${streamName}`, 'StreamLoader');
+          await this._reloadStream(filePath);
         },
         onChange: async (filePath) => {
-          const streamName = hotReload.getFileKey(filePath)
-          BotUtil.makeLog('debug', `检测到工作流变更: ${streamName}`, 'StreamLoader')
-          await this._cleanupStream(streamName)
-          await this._reloadStream(filePath)
+          const streamName = this._streamNameForFile(filePath);
+          BotUtil.makeLog('debug', `检测到工作流变更: ${streamName}`, 'StreamLoader');
+          await this._cleanupStream(streamName);
+          await this._reloadStream(filePath);
         },
         onUnlink: async (filePath) => {
-          const streamName = hotReload.getFileKey(filePath)
-          BotUtil.makeLog('debug', `检测到工作流删除: ${streamName}`, 'StreamLoader')
-          await this._cleanupStream(streamName)
-          await this.initMCP()
+          const streamName = this._streamNameForFile(filePath);
+          BotUtil.makeLog('debug', `检测到工作流删除: ${streamName}`, 'StreamLoader');
+          await this._cleanupStream(streamName);
+          await this.initMCP();
         }
-      })
+      });
 
-      this.watcher = hotReload.watcher
+      this._hotReload = hotReload;
     } catch (error) {
-      BotUtil.makeLog('error', '启动工作流文件监视失败', 'StreamLoader', error)
+      BotUtil.makeLog('error', '启动工作流文件监视失败', 'StreamLoader', error);
     }
   }
 

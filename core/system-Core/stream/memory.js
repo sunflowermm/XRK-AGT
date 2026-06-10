@@ -15,6 +15,9 @@ import os from 'os';
  * - delete_memory（删除记忆）
  */
 export default class MemoryStream extends AIStream {
+  memoryDir = path.join(os.homedir(), '.xrk', 'memory');
+  memories = new Map();
+
   constructor() {
     super({
       name: 'memory',
@@ -29,10 +32,6 @@ export default class MemoryStream extends AIStream {
       },
       embedding: { enabled: true }
     });
-    
-    // 记忆存储目录
-    this.memoryDir = path.join(os.homedir(), '.xrk', 'memory');
-    this.memories = new Map(); // 内存中的记忆缓存
   }
 
   async init() {

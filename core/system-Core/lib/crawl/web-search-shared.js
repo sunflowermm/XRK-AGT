@@ -1,17 +1,25 @@
 /**
  */
 import { wrapWebContent } from './web-fetch-executor.js';
+import {
+  DEFAULT_CACHE_MAX_ENTRIES,
+  normalizeCacheKey,
+  readTTLCache,
+  writeTTLCache
+} from './cache-utils.js';
 
 export { wrapWebContent };
+
+export { DEFAULT_CACHE_MAX_ENTRIES, normalizeCacheKey };
+export const readSearchCache = readTTLCache;
+export const writeSearchCache = writeTTLCache;
+
+export const SEARCH_CACHE = new Map();
 
 export const DEFAULT_SEARCH_COUNT = 5;
 export const MAX_SEARCH_COUNT = 10;
 export const DEFAULT_SEARCH_TIMEOUT_SECONDS = 20;
 export const DEFAULT_SEARCH_CACHE_TTL_MINUTES = 15;
-export const DEFAULT_CACHE_MAX_ENTRIES = 100;
-
-/** @type {Map<string, { value: object, insertedAt: number, expiresAt: number }>} */
-export const SEARCH_CACHE = new Map();
 
 export function buildSearchCacheKey(parts) {
   return normalizeCacheKey(
@@ -101,28 +109,6 @@ export function resolveSearchCacheTtlMs(value, fallbackMinutes = DEFAULT_SEARCH_
 export function resolveSearchCount(value, fallback = DEFAULT_SEARCH_COUNT) {
   const parsed = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
   return Math.max(1, Math.min(MAX_SEARCH_COUNT, Math.floor(parsed)));
-}
-
-export function normalizeCacheKey(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-export function readSearchCache(cache, key) {
-  const entry = cache.get(key);
-  if (!entry || Date.now() > entry.expiresAt) {
-    if (entry) cache.delete(key);
-    return null;
-  }
-  return { value: entry.value, cached: true };
-}
-
-export function writeSearchCache(cache, key, value, ttlMs) {
-  if (ttlMs <= 0) return;
-  if (cache.size >= DEFAULT_CACHE_MAX_ENTRIES) {
-    const oldest = cache.keys().next();
-    if (!oldest.done) cache.delete(oldest.value);
-  }
-  cache.set(key, { value, expiresAt: Date.now() + ttlMs, insertedAt: Date.now() });
 }
 
 export function resolveSiteName(url) {

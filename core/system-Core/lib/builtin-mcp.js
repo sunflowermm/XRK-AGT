@@ -3,21 +3,10 @@
  * 开放域：web.web_search（parallel-free 零配置 + 凭据 auto-detect）。
  */
 
+import { normalizeStringArray } from '#utils/string-array-utils.js';
+
 export const BUILTIN_DEFAULT_STREAMS = Object.freeze(['tools', 'web']);
 export const BUILTIN_DEFAULT_REMOTE_MCP = Object.freeze([]);
-
-function normalizeStringArray(values = []) {
-  const src = Array.isArray(values) ? values : [values];
-  const out = [];
-  const seen = new Set();
-  for (const raw of src) {
-    const s = String(raw ?? '').trim();
-    if (!s || seen.has(s)) continue;
-    seen.add(s);
-    out.push(s);
-  }
-  return out;
-}
 
 /**
  * 解析 v3 默认 workflow：配置优先，留空则用内置默认。

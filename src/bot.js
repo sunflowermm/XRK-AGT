@@ -23,6 +23,7 @@ import ApiLoader from "#infrastructure/http/loader.js";
 import Packageloader from "#infrastructure/config/loader.js";
 import ConfigLoader from "#infrastructure/commonconfig/loader.js";
 import StreamLoader from "#infrastructure/aistream/loader.js";
+import { stopAllLoaderWatchers } from "#utils/loader-shutdown.js";
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import {
@@ -2812,6 +2813,10 @@ export default class Bot extends EventEmitter {
       clearInterval(this._trashTimer);
       this._trashTimer = null;
     }
+
+    try {
+      await stopAllLoaderWatchers();
+    } catch {}
 
     try {
       cfg.destroy?.();

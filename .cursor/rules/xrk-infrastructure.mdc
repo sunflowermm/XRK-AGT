@@ -25,7 +25,7 @@ alwaysApply: false
 | `db-connect-utils.js` | DB 连接辅助：`execCommandResult`、`maskConnectionUrl`、`detectArm64`、`connectWithRetry` |
 | `browser-renderer-base.js` | Puppeteer/Playwright 共用浏览器截图基类 |
 | `llm/proxy-utils.js` | `fetch` + Undici `ProxyAgent` |
-| `common.js` | `downFile`：`fetch` + `Readable.fromWeb` |
+| `subserver-client.js` | `fetchSubserverToPath`：`fetch` + `Readable.fromWeb` |
 
 禁止在本层以外重复实现上述能力；详见 skill `xrk-node-runtime`。
 

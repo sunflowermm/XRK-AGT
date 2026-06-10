@@ -15,9 +15,7 @@ import Handler from "./handler.js";
  * 运行时扩展注册器
  */
 class RuntimeExtensionRegistry {
-  constructor() {
-    this.extensions = new Map()
-  }
+  extensions = new Map()
 
   /**
    * 注册运行时扩展
@@ -278,23 +276,4 @@ export default class Runtime {
     
     return e.runtime
   }
-
-  /**
-   * 注册扩展（静态方法）
-   */
-  static registerExtension(name, extension) {
-    extensionRegistry.register(name, extension)
-  }
-
-  /**
-   * 检查扩展是否已注册（静态方法）
-   */
-  static hasExtension(name) {
-    return extensionRegistry.has(name)
-  }
 }
-
-/**
- * 导出注册器供外部使用
- */
-export { extensionRegistry }

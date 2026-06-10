@@ -187,9 +187,8 @@ classDiagram
 | `makeChatRecord(e, messages, title, description?)` | 根据事件 `e` 创建聊天记录：在 ICQQ 情况下生成合并转发消息，否则退化为普通消息 |
 | `makeMsg(e, messages, title, description)` | 制作合并转发消息，尽量调用Tasker的 `makeForwardMsg` 能力，并附带摘要与标题 |
 
-同时还导出了两个兼容函数：
+同时还导出了兼容函数：
 
-- `makemsg(e, messages, title, description)`：代理到 `BotUtil.makeMsg`。  
 - `制作聊天记录(e, messages, title, description)`：代理到 `BotUtil.makeChatRecord`。
 
 ---

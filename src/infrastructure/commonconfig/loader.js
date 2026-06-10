@@ -9,7 +9,7 @@ import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 class ConfigLoader {
   configs = new Map();
   loaded = false;
-  watcher = null;
+  _hotReload = null;
 
   async load() {
     const startTime = Date.now();
@@ -34,7 +34,7 @@ class ConfigLoader {
   async _loadConfig(filePath) {
     try {
       const key = path.basename(filePath, '.js');
-      const module = await import(`file://${filePath}?t=${Date.now()}`);
+      const module = await FileLoader.importFresh(filePath);
       if (!module.default) {
         BotUtil.makeLog('warn', `无效的配置模块: ${key}`, 'ConfigLoader');
         return false;
@@ -86,13 +86,11 @@ class ConfigLoader {
 
   async watch(enable = true) {
     if (!enable) {
-      if (this.watcher) {
-        await this.watcher.close();
-        this.watcher = null;
-      }
+      await this._hotReload?.stop();
+      this._hotReload = null;
       return;
     }
-    if (this.watcher) return;
+    if (this._hotReload?.watcher) return;
 
     const hotReload = new HotReloadBase({ loggerName: 'ConfigLoader' });
     const configDirs = await paths.getCoreSubDirs('commonconfig');
@@ -104,7 +102,7 @@ class ConfigLoader {
       onChange: (filePath) => this.reload(hotReload.getFileKey(filePath)),
       onUnlink: (filePath) => this.configs.delete(hotReload.getFileKey(filePath))
     });
-    this.watcher = hotReload.watcher;
+    this._hotReload = hotReload;
   }
 }
 

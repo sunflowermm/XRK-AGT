@@ -2,7 +2,6 @@ import path from 'node:path';
 import lodash from 'lodash';
 import TaskerLoader from '#infrastructure/tasker/loader.js';
 import BotUtil from '#utils/botutil.js';
-import paths from '#utils/paths.js';
 import { FileLoader } from '#utils/file-loader.js';
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 
@@ -24,8 +23,7 @@ class ListenerLoader {
       const loadEventFile = async (filePath) => {
         const file = path.basename(filePath);
         BotUtil.makeLog('debug', `加载监听事件: ${file}`, 'ListenerLoader');
-        const relativePath = path.relative(paths.root, filePath);
-        const listener = await import(`../../../${relativePath.replace(/\\/g, '/')}`);
+        const listener = await FileLoader.importFresh(filePath);
         if (!listener.default) return 0;
 
         const instance = new listener.default();

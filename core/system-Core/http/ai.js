@@ -20,6 +20,9 @@ import {
 } from '../lib/ai-workspace-runtime.js';
 import { runWithAiConsoleContext, installMcpAuditHook } from '../lib/ai-workspace-context.js';
 import { resolveDefaultMcpWorkflow } from '../lib/builtin-mcp.js';
+import { normalizeStringArray } from '#utils/string-array-utils.js';
+import { estimateTokensRough } from '#utils/token-estimate.js';
+import { writeSSEChunk, createOpenAIChunk } from '#utils/sse-openai.js';
 
 function pickFirst(obj, keys) {
   for (const k of keys) {
@@ -53,11 +56,6 @@ function toBool(v) {
   return;
 }
 
-function normalizeStringArray(values = []) {
-  if (!Array.isArray(values)) return [];
-  return [...new Set(values.map((item) => String(item || '').trim()).filter(Boolean))];
-}
-
 const getDefaultProvider = () => {
         const llm = getAistreamConfigOptional().llm || cfg?.aistream?.llm || {};
   return (llm?.Provider || llm?.provider || '').toString().trim().toLowerCase();
@@ -87,15 +85,8 @@ function extractMessageText(messages) {
   }).join('');
 }
 
-/** 计算 token 数量（粗略估算：1 token ≈ 4 字符） */
-function estimateTokens(text) {
-  return Math.ceil((text || '').length / 4);
-}
-
-function writeSSEChunk(res, payload) {
-  res.write(`data: ${JSON.stringify(payload)}\n\n`);
-  if (typeof res.flush === 'function') res.flush();
-}
+/** 计算 token 数量（OpenAI 兼容粗略估算） */
+const estimateTokens = estimateTokensRough;
 
 function safePreview(value, { maxLen = 500 } = {}) {
   if (value == null) return value;
@@ -245,28 +236,6 @@ function buildOverridesFromBody(body = {}) {
   const extraBody = parseOptionalJson(pickFirst(body, ['extraBody']));
   if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;
   return overrides;
-}
-
-function createOpenAIChunk({ id, created, model, index = 0, delta = {}, finishReason = null, usage, mcpTools }) {
-  const chunk = {
-    id,
-    object: 'chat.completion.chunk',
-    created,
-    model
-  };
-
-  if (Object.keys(delta || {}).length > 0 || finishReason !== null || usage) {
-    chunk.choices = [{
-      index,
-      delta,
-      finish_reason: finishReason
-    }];
-  }
-
-  if (usage) chunk.usage = usage;
-  if (Array.isArray(mcpTools) && mcpTools.length > 0) chunk.mcp_tools = mcpTools;
-
-  return chunk;
 }
 
 /**

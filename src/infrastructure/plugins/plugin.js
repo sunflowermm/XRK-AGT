@@ -317,10 +317,3 @@ export default class plugin {
     };
   }
 }
-
-export const PluginSchema = {
-  normalizeRules,
-  normalizeTasks,
-  normalizeHandlers,
-  normalizeEventSubscribe
-}

@@ -110,15 +110,8 @@ export function seedWorkspaceFromBundle(workspaceAbs) {
 
   const bundleMemory = path.join(bundleDir, LONG_TERM_MEMORY_REL);
   const wsMemory = path.join(workspaceAbs, LONG_TERM_MEMORY_REL);
-  if (!fs.existsSync(wsMemory)) {
-    if (fs.existsSync(bundleMemory)) {
-      fs.copyFileSync(bundleMemory, wsMemory);
-    } else {
-      const projMemory = path.join(getProjectRoot(), LONG_TERM_MEMORY_REL);
-      if (fs.existsSync(projMemory)) {
-        fs.copyFileSync(projMemory, wsMemory);
-      }
-    }
+  if (!fs.existsSync(wsMemory) && fs.existsSync(bundleMemory)) {
+    fs.copyFileSync(bundleMemory, wsMemory);
   }
 
   const standardSkills = path.join(getProjectRoot(), PROJECT_SKILLS_STANDARD_REL);

@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import BotUtil from '#utils/botutil.js';
 import { FileLoader } from '#utils/file-loader.js';
 
@@ -22,9 +21,9 @@ class TaskerLoader {
     const adapterCountBefore = bot.tasker.length;
 
     await Promise.allSettled(
-      files.map(async ({ name, href }) => {
+      files.map(async ({ name, filePath }) => {
         try {
-          const mod = await import(href);
+          const mod = await FileLoader.importFresh(filePath);
           if (typeof mod.register === 'function') await mod.register(bot);
           summary.loaded += 1;
         } catch (err) {
@@ -51,7 +50,7 @@ class TaskerLoader {
     });
     return filePaths.map((filePath) => ({
       name: path.basename(filePath),
-      href: pathToFileURL(filePath).href,
+      filePath,
       core: path.basename(path.dirname(path.dirname(filePath)))
     }));
   }

@@ -6,7 +6,7 @@ description: 当你需要理解或修改 Python 子服务端（FastAPI 扩展框
 ## 文档与代码
 
 - `docs/subserver-api.md`、`subserver/pyserver/`
-- 主→子调用：`#utils/subserver-client.js`（`callSubserver`、`getSubserverBaseUrl`、`fetchSubserverToPath`）
+- 主→子调用：`#utils/subserver-client.js`（`callSubserver`、`getSubserverConfig`、`fetchSubserverToPath`）
 - Bot 挂载：`Bot.callSubserver`（日志包装）
 
 ## 职责边界

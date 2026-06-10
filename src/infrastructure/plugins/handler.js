@@ -3,12 +3,10 @@
  * 用于管理和调度各种事件的处理函数
  */
 class HandlerManager {
-  constructor() {
-    /** @type {Map<string, Array>} 事件处理器映射 */
-    this.events = new Map()
-    /** @type {Map<string, boolean>} 排序状态缓存 */
-    this.sortedCache = new Map()
-  }
+  /** @type {Map<string, Array>} 事件处理器映射 */
+  events = new Map()
+  /** @type {Map<string, boolean>} 排序状态缓存 */
+  sortedCache = new Map()
 
   /**
    * 添加事件处理器
@@ -140,31 +138,6 @@ class HandlerManager {
     this.events.clear()
     this.sortedCache.clear()
     logger.mark('[Handler][Clear]: 已清空所有处理器')
-  }
-
-  /**
-   * 获取统计信息
-   * @returns {Object}
-   */
-  getStats() {
-    const stats = {
-      totalEvents: this.events.size,
-      totalHandlers: 0,
-      eventDetails: {}
-    }
-
-    for (const [key, handlers] of this.events) {
-      stats.totalHandlers += handlers.length
-      stats.eventDetails[key] = {
-        count: handlers.length,
-        handlers: handlers.map(h => ({
-          ns: h.ns,
-          priority: h.priority
-        }))
-      }
-    }
-
-    return stats
   }
 
   // ========== 私有方法 ==========
@@ -308,8 +281,7 @@ const Handler = {
   has: handlerInstance.has.bind(handlerInstance),
   count: handlerInstance.count.bind(handlerInstance),
   getKeys: handlerInstance.getKeys.bind(handlerInstance),
-  clear: handlerInstance.clear.bind(handlerInstance),
-  getStats: handlerInstance.getStats.bind(handlerInstance)
+  clear: handlerInstance.clear.bind(handlerInstance)
 }
 
 export default Handler

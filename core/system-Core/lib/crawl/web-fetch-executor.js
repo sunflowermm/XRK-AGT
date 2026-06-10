@@ -10,30 +10,11 @@ import {
   truncateText
 } from './web-fetch-utils.js';
 import { resolveWebFetchRuntime } from './crawl-config.js';
-
-const DEFAULT_CACHE_MAX_ENTRIES = 100;
-
-function normalizeCacheKey(value) {
-  return value.trim().toLowerCase();
-}
-
-function readCache(cache, key) {
-  const entry = cache.get(key);
-  if (!entry || Date.now() > entry.expiresAt) {
-    if (entry) cache.delete(key);
-    return null;
-  }
-  return { value: entry.value, cached: true };
-}
-
-function writeCache(cache, key, value, ttlMs) {
-  if (ttlMs <= 0) return;
-  if (cache.size >= DEFAULT_CACHE_MAX_ENTRIES) {
-    const oldest = cache.keys().next();
-    if (!oldest.done) cache.delete(oldest.value);
-  }
-  cache.set(key, { value, expiresAt: Date.now() + ttlMs, insertedAt: Date.now() });
-}
+import {
+  normalizeCacheKey,
+  readTTLCache,
+  writeTTLCache
+} from './cache-utils.js';
 
 async function readResponseText(res, options) {
   const maxBytesRaw = options?.maxBytes;
@@ -384,7 +365,7 @@ function cacheFirecrawlPayload(ctx, firecrawl) {
     maxChars: ctx.maxChars,
     tookMs: ctx.tookMs
   });
-  writeCache(FETCH_CACHE, ctx.cacheKey, payload, ctx.cacheTtlMs);
+  writeTTLCache(FETCH_CACHE, ctx.cacheKey, payload, ctx.cacheTtlMs);
   return payload;
 }
 
@@ -446,7 +427,7 @@ export async function runWebFetch(params) {
   const cacheKey = normalizeCacheKey(
     `fetch:${params.url}:${params.extractMode}:${params.maxChars}`
   );
-  const cached = readCache(FETCH_CACHE, cacheKey);
+  const cached = readTTLCache(FETCH_CACHE, cacheKey);
   if (cached) {
     return { ...cached.value, cached: true };
   }
@@ -543,7 +524,7 @@ export async function runWebFetch(params) {
     warning: responseTruncatedWarning,
     tookMs: tookMs()
   });
-  writeCache(FETCH_CACHE, cacheKey, payload, params.cacheTtlMs);
+  writeTTLCache(FETCH_CACHE, cacheKey, payload, params.cacheTtlMs);
   return payload;
 }
 

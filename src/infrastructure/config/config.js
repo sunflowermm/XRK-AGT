@@ -1,15 +1,22 @@
 import YAML from 'yaml';
 import fs from 'fs';
-import chokidar from 'chokidar';
 import path from 'path';
 import paths from '#utils/paths.js';
 import BotUtil from '#utils/botutil.js';
+import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { fileExistsSync, loadYamlFromCandidates, mergeYamlTexts, readYamlTextsBatch } from '#utils/config-yaml.js';
 import { copyFileIfMissingSync } from './config-seed.js';
 import { GLOBAL_CONFIGS, SERVER_CONFIGS } from './config-constants.js';
 import { seedGlobalConfigsSync } from './config-seed.js';
 
 const LOG_TAG = 'Config';
+/** @type {Promise<typeof import('#infrastructure/renderer/loader.js')['default']>|null} */
+let rendererLoaderPromise = null;
+
+function getRendererLoader() {
+  rendererLoaderPromise ??= import('#infrastructure/renderer/loader.js').then((m) => m.default);
+  return rendererLoaderPromise;
+}
 
 /**
  * 配置管理类
@@ -18,23 +25,24 @@ const LOG_TAG = 'Config';
  * - 服务器配置：存储在 server_bots/{port}/
  */
 class Cfg {
-  constructor() {
-    this.config = {};
-    this._port = null;
-    this.watcher = {};
-    this._renderer = null;
-    this._watchEnabled = false;
-    this._deferredWatches = [];
+  config = {};
+  _port = null;
+  _hotReloads = new Map();
+  _renderer = null;
+  _package = null;
+  _watchEnabled = false;
+  _deferredWatches = [];
 
-    this.PATHS = {
-      DEFAULT_CONFIG: paths.configDefault,
-      SERVER_BOTS: paths.dataServerBots,
-      RENDERERS: paths.renderers
-    };
-    
-    this.GLOBAL_CONFIGS = GLOBAL_CONFIGS;
-    this.SERVER_CONFIGS = SERVER_CONFIGS;
-    
+  PATHS = {
+    DEFAULT_CONFIG: paths.configDefault,
+    SERVER_BOTS: paths.dataServerBots,
+    RENDERERS: paths.renderers
+  };
+
+  GLOBAL_CONFIGS = GLOBAL_CONFIGS;
+  SERVER_CONFIGS = SERVER_CONFIGS;
+
+  constructor() {
     const portIndex = process.argv.indexOf('server');
     if (portIndex !== -1 && process.argv[portIndex + 1]) {
       this._port = parseInt(process.argv[portIndex + 1]);
@@ -256,25 +264,30 @@ class Cfg {
   }
 
   watch(file, name, key) {
-    if (this.watcher[key]) return;
+    if (this._hotReloads.has(key)) return;
 
     if (!this._watchEnabled) {
       this._deferredWatches.push({ file, name, key });
       return;
     }
 
-    const watcher = chokidar.watch(file, {
-      persistent: true,
-      ignoreInitial: true
+    const hotReload = new HotReloadBase({ loggerName: LOG_TAG });
+    void hotReload.watch(true, {
+      files: [file],
+      shouldHandle: () => true,
+      invalidateCoreCacheOnAdd: false,
+      onChange: () => {
+        delete this.config[key];
+        if (key.startsWith('renderer.')) {
+          this._renderer = null;
+          const type = key.split('.').pop();
+          void getRendererLoader().then((loader) => loader.reloadRenderer(type));
+        }
+        BotUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
+        this[`change_${name}`]?.();
+      }
     });
-
-    watcher.on('change', () => {
-      delete this.config[key];
-      BotUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
-      this[`change_${name}`]?.();
-    });
-
-    this.watcher[key] = watcher;
+    this._hotReloads.set(key, hotReload);
   }
 
   enableWatching() {
@@ -296,9 +309,10 @@ class Cfg {
   }
 
   destroy() {
-    Object.values(this.watcher).forEach(watcher => watcher?.close());
-    this.watcher = {};
+    void Promise.all([...this._hotReloads.values()].map((hr) => hr.stop()));
+    this._hotReloads.clear();
     this.config = {};
+    this._renderer = null;
   }
 }
 

@@ -1,5 +1,6 @@
 import path from 'path';
 import { BotError, ErrorCodes } from './error-handler.js';
+import { isPathInside, realpathSyncOrResolve } from './path-guards.js';
 
 /**
  * 输入验证器
@@ -51,11 +52,9 @@ export class InputValidator {
     if (!path.isAbsolute(normalized)) {
       throw new BotError('只支持绝对路径', ErrorCodes.INVALID_PATH);
     }
-    const resolved = path.resolve(normalized);
-    const roots = (allowedRoots || []).map((r) => path.resolve(r));
-    const allowed = roots.some(
-      (base) => resolved === base || resolved.startsWith(base + path.sep)
-    );
+    const resolved = realpathSyncOrResolve(normalized);
+    const roots = (allowedRoots || []).map((r) => realpathSyncOrResolve(r));
+    const allowed = roots.some((base) => isPathInside(base, resolved));
     if (!allowed) {
       throw new BotError('访问被拒绝：路径不在允许的数据目录内', ErrorCodes.INVALID_PATH);
     }

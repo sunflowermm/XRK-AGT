@@ -1,8 +1,13 @@
+import { pathToFileURL } from 'node:url';
 import paths from './paths.js';
 import { scanFiles } from './core-fs.js';
 import { LOADER_BATCH_SIZE } from './loader-constants.js';
 
 export class FileLoader {
+  /** @param {string} absPath @returns {Promise<Record<string, unknown>>} */
+  static importFresh(absPath) {
+    return import(`${pathToFileURL(absPath).href}?t=${Date.now()}`);
+  }
   static readFiles(dir, options) {
     return scanFiles(dir, options);
   }
@@ -26,5 +31,3 @@ export class FileLoader {
     await FileLoader.mapInBatches(items, size ?? LOADER_BATCH_SIZE, fn);
   }
 }
-
-export { LOADER_BATCH_SIZE };

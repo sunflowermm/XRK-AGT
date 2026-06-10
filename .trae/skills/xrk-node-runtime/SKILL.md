@@ -26,7 +26,7 @@ description: 编写或审查 core/src 代码时，确保使用 Node 26 稳定 AP
 | 判错 | `Error.isError(err)`；需包装时用 `normalizeError(err)`（`#utils/normalize-error.js`） | `err instanceof Error` |
 | Buffer 编码 | `buf.toBase64()`、`buf.toHex()`、`Uint8Array.fromBase64(s)` | `buf.toString('base64'|'hex')`、`Buffer.from(s,'base64')` |
 | Map 初始化 | `map.getOrInsert(k, () => ({ ... }))` / `getOrInsertComputed` | `map.get(k) \|\| (map.set(k,v), v)` 样板（可写时） |
-| 下载文件 | `BotUtil` / `common.downFile`（内部已用 `Readable.fromWeb`） | 自写 `node-fetch` pipeline |
+| 下载文件 | `fetch` + `Readable.fromWeb` + `pipeline`（见 `subserver-client.fetchSubserverToPath`） | 自写 `node-fetch` pipeline |
 | 路径匹配 | `new URLPattern({ pathname })` | 手写 regex fallback、`globalThis.URLPattern ?` |
 | URL-safe Base64 | `buf.toBase64({ alphabet: 'base64url' })`、`Uint8Array.fromBase64(s, { alphabet: 'base64url' })` | 手写 base64url 替换 |
 | 文件 glob | `import { glob } from 'glob'`（`botutil.glob` 已封装） | 动态加载 fast-glob、自写 `#getGlobLib` |

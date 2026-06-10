@@ -33,9 +33,6 @@ export const SUPPORTED_EMOTIONS = [
     'download'
 ];
 
-/** parseEmotion 与系统提示支持的中文表情标记（子集） */
-export const PARSEABLE_EMOTIONS = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
-
 /** 中文关键词 -> 表情代码 */
 const EMOTION_KEYWORDS = {
     '开心': 'happy',
@@ -50,6 +47,9 @@ const EMOTION_KEYWORDS = {
     '哈哈': 'laugh',
     '害怕': 'sad'
 };
+
+/** 系统提示与 stream 解析支持的中文表情标记（子集） */
+export const PARSEABLE_EMOTIONS = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
 
 /**
  * 从文本中解析 [开心]、[惊讶] 等情绪标记

@@ -4,7 +4,6 @@
 import fs from 'node:fs';
 import path from 'path';
 import os from 'os';
-import { exec } from './exec-async.js';
 
 /**
  * 同步解析默认桌面目录（构造期/无 await 场景）。
@@ -32,26 +31,4 @@ export function getDefaultDesktopDirSync() {
   }
 
   return path.normalize(path.join(home, 'Desktop'));
-}
-
-/**
- * 异步解析用户桌面（Windows 优先 Shell API，与本地化文件夹名一致）。
- */
-export async function resolveUserDesktopDirAsync() {
-  if (process.platform === 'win32') {
-    try {
-      const { stdout } = await exec(
-        'powershell -NoProfile -Command "[Environment]::GetFolderPath([Environment+SpecialFolder]::Desktop)"',
-        { encoding: 'utf8', timeout: 8000 }
-      );
-      const p = String(stdout || '')
-        .trim()
-        .replace(/\r?\n/g, '');
-      if (p) return path.normalize(p);
-    } catch {
-      /* fall through */
-    }
-  }
-
-  return getDefaultDesktopDirSync();
 }

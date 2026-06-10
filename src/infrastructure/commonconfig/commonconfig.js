@@ -34,6 +34,10 @@ import paths from '#utils/paths.js';
  * await config.write({ key: 'value' });
  */
 export default class ConfigBase {
+  _cache = null;
+  _cacheTime = 0;
+  _cacheTTL = 5000;
+
   /**
    * 构造函数
    * 
@@ -69,13 +73,8 @@ export default class ConfigBase {
     } else {
       this.fullPath = undefined;
     }
-    
-    // 缓存配置内容
-    this._cache = null;
-    this._cacheTime = 0;
-    this._cacheTTL = 5000; // 5秒缓存
   }
-  
+
   /**
    * 严格校验 schema：
    * - 确保每个字段的 default 类型与 type 一致（若提供）
@@ -253,7 +252,7 @@ export default class ConfigBase {
         throw new Error(`不支持的文件类型: ${this.fileType}`);
       }
 
-      this._fillDefaultsInPlace(data, this.buildDefaultFromSchema());
+      this._applySchemaDefaults(data);
 
       // 更新缓存
       this._cache = data;
@@ -309,7 +308,14 @@ export default class ConfigBase {
       }
       
       result[key] = config;
+      const fieldSchema = this.schema?.fields?.[key];
+      if (fieldSchema?.fields) {
+        this._fillDefaultsInPlace(config, this.buildDefaultFromSchema({ fields: fieldSchema.fields }));
+      }
     }
+
+    // 顶层 multiFile 容器字段补全（如 renderer.puppeteer / playwright）
+    this._applySchemaDefaults(result);
 
     // 更新缓存
     this._cache = result;
@@ -670,9 +676,7 @@ export default class ConfigBase {
       if (typeof this.prepareValidate === 'function') {
         this.prepareValidate(data);
       }
-      if (data && typeof data === 'object') {
-        this._fillDefaultsInPlace(data, this.buildDefaultFromSchema());
-      }
+      this._applySchemaDefaults(data);
 
       // 基础验证：检查必需字段
       if (this.schema.required) {
@@ -778,6 +782,15 @@ export default class ConfigBase {
   }
 
   // ========== 生成默认对象与扁平化工具 ==========
+
+  /**
+   * 将 schema 默认值填入 data（仅补缺失字段，不覆盖已有值）
+   * @param {object} data
+   */
+  _applySchemaDefaults(data) {
+    if (!data || typeof data !== 'object') return;
+    this._fillDefaultsInPlace(data, this.buildDefaultFromSchema());
+  }
 
   buildDefaultFromSchema(schema = this.schema) {
     const result = {};
@@ -927,21 +940,24 @@ export default class ConfigBase {
       }
     }
 
-    // 对于数组类型，检查每个元素是否在 enum 中
-    if (schema.enum) {
+    // enum：非必填字段允许留空；动态 enum 会把已持久化值并入可选列表（见 SystemConfig）
+    if (schema.enum && !this._enumValueAllowed(value, schema)) {
       if (Array.isArray(value)) {
         for (const item of value) {
-          if (item === '' && schema.required !== true) continue;
-          if (!schema.enum.includes(item)) {
-            errors.push(`字段 ${path} 中的值 "${item}" 必须是: ${schema.enum.join(', ')}`);
-          }
+          if (this._enumValueAllowed(item, schema)) continue;
+          errors.push(`字段 ${path} 中的值 "${item}" 必须是: ${schema.enum.join(', ')}`);
         }
-      } else if (value === '' && schema.required !== true) {
-        // 动态 enum 字段留空表示“未指定”，由运行时解析默认值
-      } else if (!schema.enum.includes(value)) {
+      } else {
         errors.push(`字段 ${path} 值必须是: ${schema.enum.join(', ')}`);
       }
     }
+  }
+
+  /** @returns {boolean} */
+  _enumValueAllowed(value, schema) {
+    if (!schema?.enum) return true;
+    if (value === '' && schema.required !== true) return true;
+    return schema.enum.includes(value);
   }
 
   _validateArrayField(value, schema, path, errors) {

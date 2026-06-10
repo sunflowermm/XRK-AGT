@@ -102,6 +102,23 @@ export function findInCoreSubDirs(subDirs, fileBaseName) {
   return idx >= 0 ? path.join(subDirs[idx], `${fileBaseName}.js`) : null;
 }
 
+/**
+ * 从 core 子目录内绝对路径解析模块 key（相对 core 子目录，不含 .js）
+ * @param {string} filePath
+ * @param {string[]} [coreDirs] 如 paths.getCoreSubDirs('http') 的返回值
+ */
+export function resolveCoreModuleKey(filePath, coreDirs = []) {
+  const normalizedPath = path.resolve(filePath);
+  for (const coreDir of coreDirs) {
+    const normalizedCoreDir = path.resolve(coreDir);
+    const rel = path.relative(normalizedCoreDir, normalizedPath);
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+      return rel.replace(/\\/g, '/').replace(/\.js$/, '');
+    }
+  }
+  return path.basename(filePath, '.js');
+}
+
 /** @param {string} pattern @param {string} event */
 export function matchEventPattern(pattern, event) {
   if (pattern === event) return true;

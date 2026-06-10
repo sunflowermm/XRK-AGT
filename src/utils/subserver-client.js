@@ -66,11 +66,6 @@ export async function callSubserver(requestPath, options = {}) {
   return response.json();
 }
 
-/** 子服务端根 URL */
-export function getSubserverBaseUrl() {
-  return getSubserverConfig().baseUrl;
-}
-
 /**
  * 从子服务端下载二进制到本地
  * @param {string} requestPath - 子服务 GET 路径（如 /api/xxx/file）

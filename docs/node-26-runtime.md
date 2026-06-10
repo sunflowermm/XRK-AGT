@@ -17,7 +17,7 @@
 | 原生 `fetch` + `ProxyAgent` | LLM/下载/健康检查 | 全局 fetch；代理 `#utils/llm/proxy-utils.js` |
 | `AbortSignal.timeout` | HTTP 超时 | `bot.js`、`http-business.js`、`start.js` |
 | `Uint8Array.fromBase64/toBase64/toHex` | 二进制编解码（Node 25+ V8） | `botutil.js`、`image-utils.js`、Tasker 等 |
-| `Readable.fromWeb` | fetch body 写盘 | `common.js` → `downFile` |
+| `Readable.fromWeb` | fetch body 写盘 | `subserver-client.js` → `fetchSubserverToPath` |
 | `#utils/exec-async.js` | Promise 版 `exec` | 全项目唯一 `promisify(exec)` 封装点 |
 
 ### 已删除的旧写法（勿再引入）

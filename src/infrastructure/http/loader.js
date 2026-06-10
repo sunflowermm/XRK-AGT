@@ -5,17 +5,18 @@ import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import paths from '#utils/paths.js';
 import { validateApiInstance, getApiPriority } from './utils/helpers.js';
 import { FileLoader } from '#utils/file-loader.js';
+import { resolveCoreModuleKey } from '#utils/core-fs.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { API_REGISTER_BATCH_SIZE, LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 
 class ApiLoader {
   apis = new Map();
   priority = [];
-  watcher = {};
   loaded = false;
   app = null;
   bot = null;
-  _coreDirsCache = null;
+  _httpDirsCache = null;
+  _hotReload = null;
 
   async load() {
     const startTime = Date.now();
@@ -26,9 +27,9 @@ class ApiLoader {
       recursive: true
     });
 
-    this._coreDirsCache = await paths.getCoreDirs();
+    this._httpDirsCache = await paths.getCoreSubDirs('http');
     await FileLoader.forEachBatch(allFiles, LOADER_BATCH_SIZE, (file) => this.loadApi(file));
-    this._coreDirsCache = null;
+    this._httpDirsCache = null;
 
     this.sortByPriority();
     this.loaded = true;
@@ -37,16 +38,8 @@ class ApiLoader {
   }
 
   async getApiKey(filePath) {
-    const coreDirs = this._coreDirsCache ?? await paths.getCoreDirs();
-    const normalizedPath = path.normalize(filePath);
-
-    for (const coreDir of coreDirs) {
-      const normalizedCoreDir = path.normalize(coreDir);
-      if (normalizedPath.startsWith(normalizedCoreDir)) {
-        return path.relative(normalizedCoreDir, normalizedPath).replace(/\\/g, '/').replace(/\.js$/, '');
-      }
-    }
-    return path.basename(filePath, '.js');
+    const httpDirs = this._httpDirsCache ?? await paths.getCoreSubDirs('http');
+    return resolveCoreModuleKey(filePath, httpDirs);
   }
 
   async loadApi(filePath) {
@@ -54,7 +47,7 @@ class ApiLoader {
       const key = await this.getApiKey(filePath);
       if (this.apis.has(key)) await this.unloadApi(key);
 
-      const module = await import(`file://${filePath}?t=${Date.now()}`);
+      const module = await FileLoader.importFresh(filePath);
       if (!module.default) {
         const namedExports = Object.keys(module).filter((k) => k !== 'default');
         if (namedExports.length > 0) {
@@ -208,10 +201,7 @@ class ApiLoader {
       const apiDirs = await paths.getCoreSubDirs('http');
       for (const apiDir of apiDirs) {
         const files = await FileLoader.readFiles(apiDir, { ext: '.js', recursive: true });
-        const file = files.find((f) => {
-          const fileKey = path.relative(apiDir, f).replace(/\\/g, '/').replace(/\.js$/, '');
-          return fileKey === key || path.basename(f, '.js') === key;
-        });
+        const file = files.find((f) => resolveCoreModuleKey(f, [apiDir]) === key);
         if (file) {
           await this._reloadFromFile(key, file);
           return true;
@@ -241,12 +231,12 @@ class ApiLoader {
 
   async watch(enable = true) {
     if (!enable) {
-      for (const watcher of Object.values(this.watcher)) {
-        watcher?.close();
-      }
-      this.watcher = {};
+      await this._hotReload?.stop();
+      this._hotReload = null;
       return;
     }
+
+    if (this._hotReload?.watcher) return;
 
     const hotReload = new HotReloadBase({ loggerName: 'ApiLoader' });
     const apiDirs = await paths.getCoreSubDirs('http');
@@ -269,7 +259,7 @@ class ApiLoader {
       }
     });
 
-    this.watcher.api = hotReload.watcher;
+    this._hotReload = hotReload;
   }
 }
 

@@ -1,31 +1,4 @@
-import { pipeline } from 'node:stream/promises'
-import { Readable } from 'node:stream'
-import path from 'node:path'
-import { existsSync, createWriteStream } from 'node:fs'
-import BotUtil from './botutil.js'
-
-/**
- * 发送私聊消息，仅给好友发送
- * @param {string|number} userId - QQ号
- * @param {string} msg - 消息内容
- * @param {string} [uin=Bot.uin] - 指定bot发送
- * @returns {Promise<undefined|*>} 发送结果
- */
-export const replyPrivate = async (userId, msg, uin = Bot.uin) => {
-  const targetId = Number(userId)
-  if (!targetId || !Bot?.fl?.get) return
-
-  const friend = Bot.fl.get(targetId)
-  if (!friend) return
-
-  logger?.mark?.(`发送好友消息[${friend.nickname}](${targetId})`)
-  try {
-    return await Bot[uin].pickUser(targetId).sendMsg(msg)
-  } catch (err) {
-    logger?.mark?.(err)
-    return
-  }
-}
+import { existsSync } from 'node:fs'
 
 /**
  * 休眠函数
@@ -33,31 +6,6 @@ export const replyPrivate = async (userId, msg, uin = Bot.uin) => {
  * @returns {Promise<void>}
  */
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
-/**
- * 下载保存文件
- * @param {string} fileUrl - 下载地址
- * @param {string} savePath - 保存路径
- * @param {Object} [param={}] - 请求参数
- * @returns {Promise<boolean>} 是否成功
- */
-export const downFile = async (fileUrl, savePath, param = {}) => {
-  try {
-    await BotUtil.mkdir(path.dirname(savePath))
-    logger?.debug?.(`[下载文件] ${fileUrl}`)
-    const { timeout = 30000, signal, ...fetchOpts } = param
-    const response = await fetch(fileUrl, {
-      ...fetchOpts,
-      signal: signal ?? AbortSignal.timeout(timeout)
-    })
-    if (!response.ok || !response.body) return false
-    await pipeline(Readable.fromWeb(response.body), createWriteStream(savePath))
-    return true
-  } catch (err) {
-    logger?.error?.(`下载文件错误：${err}`)
-    return false
-  }
-}
 
 /**
  * 制作转发消息
@@ -99,10 +47,8 @@ export const normalizeHost = (host, serviceName) => {
   return hostStr
 }
 
-export default { 
-  sleep, 
-  replyPrivate, 
-  downFile, 
+export default {
+  sleep,
   makeForwardMsg,
   isDockerEnvironment,
   normalizeHost
