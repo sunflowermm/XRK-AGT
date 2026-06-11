@@ -4,6 +4,7 @@ import path from 'path';
 import paths from '#utils/paths.js';
 import BotUtil from '#utils/botutil.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
+import { normalizeError } from '#utils/normalize-error.js';
 import { fileExistsSync, loadYamlFromCandidates, mergeYamlTexts, readYamlTextsBatch } from '#utils/config-yaml.js';
 import { copyFileIfMissingSync } from './config-seed.js';
 import { GLOBAL_CONFIGS, SERVER_CONFIGS } from './config-constants.js';
@@ -284,36 +285,59 @@ class Cfg {
   }
 
   _attachWatch(file, name, key) {
-    this._hotReloads.set(key, file);
-    this._watchHandlers.set(file, { name, key });
+    const resolved = HotReloadBase.resolveWatchPath(file);
+    this._hotReloads.set(key, resolved);
+    this._watchHandlers.set(resolved, { name, key });
 
     if (!this._configHotReload) {
-      this._configHotReload = new HotReloadBase({ loggerName: LOG_TAG });
-      void this._configHotReload.watch(true, {
-        files: [file],
+      const hotReload = new HotReloadBase({ loggerName: LOG_TAG });
+      this._configHotReload = hotReload;
+      void hotReload.watch(true, {
+        files: [resolved],
         shouldHandle: () => true,
         invalidateCoreCacheOnAdd: false,
         onChange: (changedFile) => this._handleConfigChange(changedFile)
+      }).then((ok) => {
+        if (ok) return;
+        if (this._configHotReload === hotReload) {
+          this._configHotReload = null;
+        }
+        this._rollbackWatch(key, resolved);
+        BotUtil.makeLog('warn', `[配置文件监视启动失败][${name}] ${resolved}`, LOG_TAG);
       });
       return;
     }
 
-    this._configHotReload.addTargets(file);
+    if (!this._configHotReload.addTargets(resolved)) {
+      this._rollbackWatch(key, resolved);
+      BotUtil.makeLog('warn', `[配置文件监视追加失败][${name}] ${resolved}`, LOG_TAG);
+    }
   }
 
-  _handleConfigChange(changedFile) {
-    const meta = this._watchHandlers.get(changedFile);
+  _rollbackWatch(key, resolved) {
+    this._hotReloads.delete(key);
+    this._watchHandlers.delete(resolved);
+  }
+
+  async _handleConfigChange(changedFile) {
+    const meta = this._watchHandlers.get(HotReloadBase.resolveWatchPath(changedFile));
     if (!meta || this._destroying) return;
 
     const { name, key } = meta;
-    delete this.config[key];
-    if (key.startsWith('renderer.')) {
-      this._renderer = null;
-      const type = key.split('.').pop();
-      void getRendererLoader().then((loader) => loader.reloadRenderer(type));
+    try {
+      delete this.config[key];
+      if (key.startsWith('renderer.')) {
+        this._renderer = null;
+        const type = key.split('.').pop();
+        await getRendererLoader().then((loader) => loader.reloadRenderer(type));
+      }
+      BotUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
+      const handler = this[`change_${name}`];
+      if (handler) await handler();
+    } catch (err) {
+      const error = normalizeError(err);
+      BotUtil.makeLog('error', `[配置热更新失败][${name}] ${error.message}`, LOG_TAG, error);
     }
-    BotUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
-    this[`change_${name}`]?.();
   }
 
   enableWatching() {
@@ -337,6 +361,7 @@ class Cfg {
   async destroy() {
     if (this._destroying) return;
     this._destroying = true;
+    this._deferredWatches.length = 0;
     await this._configHotReload?.stop().catch(() => {});
     this._configHotReload = null;
     this._hotReloads.clear();

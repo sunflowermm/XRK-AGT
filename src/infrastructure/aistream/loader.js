@@ -580,7 +580,7 @@ class StreamLoader {
       const streamDirs = await paths.getCoreSubDirs('stream');
       if (streamDirs.length === 0) return;
 
-      await hotReload.watch(true, {
+      const started = await hotReload.watch(true, {
         dirs: streamDirs,
         onAdd: async (filePath) => {
           const streamName = hotReload.getFileKey(filePath);
@@ -601,7 +601,7 @@ class StreamLoader {
         }
       });
 
-      this._hotReload = hotReload;
+      if (started) this._hotReload = hotReload;
     } catch (error) {
       BotUtil.makeLog('error', '启动工作流文件监视失败', 'StreamLoader', error);
     }

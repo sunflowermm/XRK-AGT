@@ -92,17 +92,21 @@ class ConfigLoader {
     }
     if (this._hotReload?.watcher) return;
 
-    const hotReload = new HotReloadBase({ loggerName: 'ConfigLoader' });
-    const configDirs = await paths.getCoreSubDirs('commonconfig');
-    if (configDirs.length === 0) return;
+    try {
+      const hotReload = new HotReloadBase({ loggerName: 'ConfigLoader' });
+      const configDirs = await paths.getCoreSubDirs('commonconfig');
+      if (configDirs.length === 0) return;
 
-    await hotReload.watch(true, {
-      dirs: configDirs,
-      onAdd: (filePath) => this._loadConfig(filePath),
-      onChange: (filePath) => this.reload(hotReload.getFileKey(filePath)),
-      onUnlink: (filePath) => this.configs.delete(hotReload.getFileKey(filePath))
-    });
-    this._hotReload = hotReload;
+      const started = await hotReload.watch(true, {
+        dirs: configDirs,
+        onAdd: (filePath) => this._loadConfig(filePath),
+        onChange: (filePath) => this.reload(hotReload.getFileKey(filePath)),
+        onUnlink: (filePath) => this.configs.delete(hotReload.getFileKey(filePath))
+      });
+      if (started) this._hotReload = hotReload;
+    } catch (error) {
+      BotUtil.makeLog('error', '启动 CommonConfig 文件监视失败', 'ConfigLoader', error);
+    }
   }
 }
 

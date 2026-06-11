@@ -72,16 +72,18 @@ export default class Renderer {
     if (this._tplHotReloads.has(tplFile)) return
 
     const hotReload = new HotReloadBase({ loggerName: 'Renderer' })
+    const resolved = HotReloadBase.resolveWatchPath(tplFile)
     void hotReload.watch(true, {
-      files: [tplFile],
+      files: [resolved],
       shouldHandle: () => true,
       invalidateCoreCacheOnAdd: false,
       onChange: () => {
         delete this.html[tplFile]
         BotUtil.makeLog('info', `[修改html模板] ${tplFile}`, 'Renderer')
       }
+    }).then((ok) => {
+      if (ok) this._tplHotReloads.set(tplFile, hotReload)
     })
-    this._tplHotReloads.set(tplFile, hotReload)
   }
 
   async stopAllWatchers() {

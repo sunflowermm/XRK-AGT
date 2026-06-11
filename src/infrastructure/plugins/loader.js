@@ -1499,7 +1499,7 @@ class PluginsLoader {
       const pluginDirs = await paths.getCoreSubDirs('plugin')
       if (pluginDirs.length === 0) return
 
-      await hotReload.watch(true, {
+      const started = await hotReload.watch(true, {
         dirs: pluginDirs,
         onAdd: async (filePath) => {
           const key = hotReload.getFileKey(filePath)
@@ -1527,7 +1527,7 @@ class PluginsLoader {
         }
       })
 
-      this._hotReload = hotReload
+      if (started) this._hotReload = hotReload
     } catch (error) {
       logger.error('启动插件文件监视失败', error)
     }

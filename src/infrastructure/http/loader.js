@@ -238,28 +238,32 @@ class ApiLoader {
 
     if (this._hotReload?.watcher) return;
 
-    const hotReload = new HotReloadBase({ loggerName: 'ApiLoader' });
-    const apiDirs = await paths.getCoreSubDirs('http');
-    if (apiDirs.length === 0) return;
+    try {
+      const hotReload = new HotReloadBase({ loggerName: 'ApiLoader' });
+      const apiDirs = await paths.getCoreSubDirs('http');
+      if (apiDirs.length === 0) return;
 
-    await hotReload.watch(true, {
-      dirs: apiDirs,
-      onAdd: async (filePath) => {
-        const key = await this.getApiKey(filePath);
-        await this.loadApi(filePath);
-        this.sortByPriority();
-        await this._initApi(this.apis.get(key));
-      },
-      onChange: async (filePath) => {
-        await this.changeApi(await this.getApiKey(filePath));
-      },
-      onUnlink: async (filePath) => {
-        await this.unloadApi(await this.getApiKey(filePath));
-        this.sortByPriority();
-      }
-    });
+      const started = await hotReload.watch(true, {
+        dirs: apiDirs,
+        onAdd: async (filePath) => {
+          const key = await this.getApiKey(filePath);
+          await this.loadApi(filePath);
+          this.sortByPriority();
+          await this._initApi(this.apis.get(key));
+        },
+        onChange: async (filePath) => {
+          await this.changeApi(await this.getApiKey(filePath));
+        },
+        onUnlink: async (filePath) => {
+          await this.unloadApi(await this.getApiKey(filePath));
+          this.sortByPriority();
+        }
+      });
 
-    this._hotReload = hotReload;
+      if (started) this._hotReload = hotReload;
+    } catch (error) {
+      BotUtil.makeLog('error', '启动 API 文件监视失败', 'ApiLoader', error);
+    }
   }
 }
 
