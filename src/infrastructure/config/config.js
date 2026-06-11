@@ -27,7 +27,11 @@ function getRendererLoader() {
 class Cfg {
   config = {};
   _port = null;
+  _configHotReload = null;
+  /** @type {Map<string, string>} key -> 文件路径 */
   _hotReloads = new Map();
+  /** @type {Map<string, { name: string, key: string }>} 文件路径 -> 变更元数据 */
+  _watchHandlers = new Map();
   _renderer = null;
   _package = null;
   _watchEnabled = false;
@@ -276,24 +280,40 @@ class Cfg {
       return;
     }
 
-    const hotReload = new HotReloadBase({ loggerName: LOG_TAG });
-    this._hotReloads.set(key, hotReload);
-    void hotReload.watch(true, {
-      files: [file],
-      shouldHandle: () => true,
-      invalidateCoreCacheOnAdd: false,
-      onChange: () => {
-        if (this._destroying) return;
-        delete this.config[key];
-        if (key.startsWith('renderer.')) {
-          this._renderer = null;
-          const type = key.split('.').pop();
-          void getRendererLoader().then((loader) => loader.reloadRenderer(type));
-        }
-        BotUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
-        this[`change_${name}`]?.();
-      }
-    });
+    this._attachWatch(file, name, key);
+  }
+
+  _attachWatch(file, name, key) {
+    this._hotReloads.set(key, file);
+    this._watchHandlers.set(file, { name, key });
+
+    if (!this._configHotReload) {
+      this._configHotReload = new HotReloadBase({ loggerName: LOG_TAG });
+      void this._configHotReload.watch(true, {
+        files: [file],
+        shouldHandle: () => true,
+        invalidateCoreCacheOnAdd: false,
+        onChange: (changedFile) => this._handleConfigChange(changedFile)
+      });
+      return;
+    }
+
+    this._configHotReload.addTargets(file);
+  }
+
+  _handleConfigChange(changedFile) {
+    const meta = this._watchHandlers.get(changedFile);
+    if (!meta || this._destroying) return;
+
+    const { name, key } = meta;
+    delete this.config[key];
+    if (key.startsWith('renderer.')) {
+      this._renderer = null;
+      const type = key.split('.').pop();
+      void getRendererLoader().then((loader) => loader.reloadRenderer(type));
+    }
+    BotUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
+    this[`change_${name}`]?.();
   }
 
   enableWatching() {
@@ -317,11 +337,10 @@ class Cfg {
   async destroy() {
     if (this._destroying) return;
     this._destroying = true;
-    const reloads = [...this._hotReloads.values()];
+    await this._configHotReload?.stop().catch(() => {});
+    this._configHotReload = null;
     this._hotReloads.clear();
-    for (const hr of reloads) {
-      await hr.stop().catch(() => {});
-    }
+    this._watchHandlers.clear();
     this.config = {};
     this._renderer = null;
   }

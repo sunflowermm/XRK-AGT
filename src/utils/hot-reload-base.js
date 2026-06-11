@@ -108,6 +108,15 @@ export class HotReloadBase {
     BotUtil.makeLog('info', '文件监视已启动', this.loggerName);
   }
 
+  /** 向已运行的监视器追加路径（用于配置等多文件场景） */
+  addTargets(targets) {
+    if (!this.watcher || this._stopping) return false;
+    for (const target of normalizeWatchTargets(targets)) {
+      this.watcher.add(target);
+    }
+    return true;
+  }
+
   async stop() {
     if (this._stopping && !this.watcher) return;
     this._stopping = true;
