@@ -11,11 +11,9 @@
 ## 🚀 快速开始
 
 ```bash
-# 安装依赖
+cd subserver/pyserver
 uv sync
-
-# 启动服务
-uv run xrk
+uv run xrk              # 或 uv run python main.py
 ```
 
 ## 📋 API 地址

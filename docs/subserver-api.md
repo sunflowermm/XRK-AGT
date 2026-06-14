@@ -140,11 +140,16 @@ uv sync
 uv run xrk
 ```
 
-按需覆盖启动参数：
-```bash
-HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
-```
+等价启动（Docker 子服务同款）：`uv run python main.py`
 
+环境变量示例：`HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk`
+
+### 常见问题
+
+| 现象 | 处理 |
+|------|------|
+| `Failed to spawn: xrk` | 在 `pyserver/` 下执行 `uv sync`，确认 `.venv/bin/xrk` 存在；否则用 `uv run python main.py` |
+| 端口被占用 | `PORT=8001 uv run xrk` 或改 `data/subserver/config.yaml` |
 ## 相关文档
 
 - **[AIStream 文档](aistream.md)** - Node 侧工作流与 LLM/MCP 调用说明
@@ -153,4 +158,4 @@ HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 
 ---
 
-*最后更新：2026-04-26*
+*最后更新：2026-06-14*
