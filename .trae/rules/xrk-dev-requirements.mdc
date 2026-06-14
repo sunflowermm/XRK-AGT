@@ -5,22 +5,28 @@ alwaysApply: true
 
 # 开发需求与约定
 
+> 完整写法与性能规范：**`docs/coding-style.md`** · skill **`xrk-coding-style`**
+
 ## Constructor 内不要定义易变状态
 
 - **禁止**在 `constructor` 里定义会被反复创建、或作为“缓存/状态容器”的变量（如 `this.cache = new Map()`、`this.xxx = {}`）。
 - **原因**：热加载或多次实例化时 constructor 会重复执行，导致引用错乱或“无限刷新”感。
 - **正确做法**：需要实例级缓存/状态时，用**类字段**在声明处初始化（如 `cache = new Map()`），或放在只调用一次的 `init()` 里；constructor 内只做 `super()` 与固定配置（如 `name`、`event`）。
 
-## segment 已挂全局，无需 import
+## 全局标识符：裸名，勿写 `global.`
 
-- `segment` 在插件加载时已挂到 `global.segment`（见 `src/infrastructure/plugins/loader.js`）。
-- 在插件、事件、Tasker 中**不要**写 `import { segment } from '#oicq'`，直接使用全局 `segment`（如 `segment.image(url)`）。
+运行时挂在 **`globalThis`**；Node ESM 下业务模块可直接写裸名（详见 `docs/runtime-surface.md`）。
 
-## 充分利用 Bot 对象
+| 对象 | 业务写法（`core/`） |
+|------|---------------------|
+| Bot | 裸名 `Bot`、`Bot.em()`、`Bot[self_id]`；**勿** `import Bot`、`new Bot()`、`global.Bot` |
+| segment | 裸名 `segment.image(url)`；**勿** `import #oicq`、`global.segment` |
+| plugin 基类 | `import plugin from '#infrastructure/plugins/plugin.js'` |
+| cfg | `import cfg from '#infrastructure/config/config.js'`（与全局同一单例） |
+| HTTP | `req.bot` 或 handler 第三参 `Bot` |
 
-- **不要**在业务里手动 `import Bot` 或 `new Bot()`；由 `node app` / `start.js` 创建并挂载全局 `Bot`。
-- **插件 / Tasker / 事件监听器**：直接用全局 `Bot`、`Bot[self_id]`、`Bot.em()`、`Bot.tasker`、`Bot.makeLog()` 等（详见 `docs/bot.md`）。
-- **HTTP API handler**：使用注入的 `req.bot` 或路由第三参 `Bot`，用于 `getServerUrl()`、`callRoute()`、多 Bot 等。
+- **`src/` 挂载**统一用 `setRuntimeGlobal(name, value)`（`#utils/runtime-globals.js`），勿手写 `global.x` 与 `globalThis.x` 双份。
+- 配置在 `Bot.run` 完成 `ConfigLoader.load()` 之前不可用。
 
 ## HttpResponse（src/utils/http-utils.js）
 
@@ -33,7 +39,7 @@ alwaysApply: true
   - `HttpResponse.notFound(res, message)`、`HttpResponse.unauthorized(res, message)`、`HttpResponse.forbidden(res, message)`；
   - `HttpResponse.asyncHandler(handler, context)`：包装异步 handler，自动 try/catch 并调 `HttpResponse.error`；
   - 流式/SSE：`HttpResponse.streamResponse(res, streamHandler, context)`；MCP：`jsonRpcError` / `jsonRpcSuccess` / `validateJsonRpcRequest`。
-- **约定**：handler 内用 `return HttpResponse.xxx(...)` 提前返回，不要与 `res.json()` 混用。
+- **约定**：handler 内用 `return HttpResponse.xxx(...)` 提前返回，不要与裸 `res.json()` 混用；兼容端点用 `HttpResponse.json(res, body)`。
 
 ## Node 26 运行时（全局）
 

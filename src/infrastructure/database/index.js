@@ -1,6 +1,7 @@
 import mongodbInit, { closeMongodb } from '../mongodb.js';
 import redisInit, { closeRedis, getRedisClient } from '../redis.js';
 import BotUtil from '#utils/botutil.js';
+import { getRuntimeGlobal } from '#utils/runtime-globals.js';
 
 class DatabaseManager {
   mongodb = null;
@@ -20,7 +21,7 @@ class DatabaseManager {
 
     if (mongodbResult.status === 'fulfilled') {
       this.mongodbDb = mongodbResult.value;
-      this.mongodb = global.mongodb;
+      this.mongodb = getRuntimeGlobal('mongodb');
       BotUtil.makeLog('success', 'MongoDB 初始化成功', 'DatabaseManager');
     } else {
       const level = process.env.XRK_OPTIONAL_DB === '1' ? 'warn' : 'error';

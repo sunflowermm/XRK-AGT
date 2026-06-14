@@ -5,7 +5,9 @@
 | 我想… | 从这里开始 |
 |--------|------------|
 | 跑起来 | [README.md §快速开始](../README.md#-快速开始) |
-| 懂架构 | [底层架构设计](底层架构设计.md) → [PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md) → [Node 26 运行时](node-26-runtime.md) |
+| **写业务（先看挂载）** | **[runtime-surface.md](runtime-surface.md)** → [base-classes.md](base-classes.md) |
+| **写法与性能** | **[coding-style.md](coding-style.md)** → [node-26-runtime.md](node-26-runtime.md) |
+| 懂架构 | [底层架构设计](底层架构设计.md) → [startup.md](startup.md) → [database.md](database.md) |
 | 用内置能力 | [system-core.md](system-core.md) |
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
 | 发布前检查 | [框架测试指南](框架测试指南.md) → [代码审查清单](代码审查清单.md) → [文档审查清单](文档审查清单.md) |
@@ -48,76 +50,22 @@
 - **[框架测试指南](框架测试指南.md)** - 标准值、实测数据、CI 命令（仅 system-Core）
 - **[代码审查清单](代码审查清单.md)** - 发布前代码与架构检查
 - **[文档审查清单](文档审查清单.md)** - 发布前文档准确性、互链与数字一致性 ⭐
-- **[项目概览](../PROJECT_OVERVIEW.md)** - 了解项目整体架构和目录结构
-- **[底层架构设计](底层架构设计.md)** - 统一 Runtime / Infrastructure / Core 与 AI 底层设计（建议先读）
-- **[Node 26 运行时约定](node-26-runtime.md)** - 版本要求、已用 API、编译缓存与迁移禁止项 ⭐
-- **[Bot 主类文档](bot.md)** - 核心运行时对象，负责服务生命周期、HTTP/WebSocket、事件派发等
+- **[项目概览](../PROJECT_OVERVIEW.md)** - 目录树与文档入口（架构图见底层架构设计）
+- **[底层架构设计](底层架构设计.md)** - Runtime / Infrastructure / Core 分层与 AI 链路（**架构单一事实源**） ⭐
+- **[启动与引导](startup.md)** - `app.js` → bootstrap → `start.js` → Bot，环境变量与 Playwright ⭐
+- **[运行时挂载面](runtime-surface.md)** - 全局对象、Bot Proxy、Loader 单例、按场景写法 ⭐ **开发首读**
+- **[底层写法规范](coding-style.md)** - 全局裸名、状态/I/O/异步/HTTP、性能速查 ⭐
+- **[业务基类契约](base-classes.md)** - plugin / HttpApi / AIStream 最小 export
+- **[文档编写规范](DOCSTYLE.md)** - 维护者标注化模板
+- **[Node 26 运行时约定](node-26-runtime.md)** - 版本要求、已用 API（禁止项见 skill `xrk-node-runtime`）
+- **[Bot 主类文档](bot.md)** - Bot 生命周期、HTTP/WebSocket（挂载面见 runtime-surface）
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范 ⭐
 
-### 🏗️ 架构层次
+### 🏗️ 架构
 
-XRK-AGT 采用清晰的分层架构，各层职责如下：
-
-```mermaid
-flowchart TB
-    subgraph Clients["👥 外部客户端"]
-        QQ["📱 QQ/OneBotv11"]
-        Chatbot["💬 Chatbot客户端"]
-        WebUI["🌐 Web控制台"]
-        API["🔌 HTTP客户端"]
-    end
-
-    subgraph Runtime["⚙️ 运行核心层"]
-        Bot["🤖 Bot主类<br/>HTTP/WS/事件总线"]
-    end
-
-    subgraph Infrastructure["🏗️ 基础设施层"]
-        Loaders["📚 加载器"]
-        BaseClasses["📦 基类库"]
-    end
-
-    subgraph Tasker["📡 任务层"]
-        Taskers["各平台Tasker<br/>协议转换"]
-    end
-
-    subgraph Events["📢 事件系统"]
-        Listeners["事件监听器<br/>去重/标准化/分发"]
-    end
-
-    subgraph Business["💼 业务层"]
-        Plugins["🔌 业务插件"]
-        APIs["📡 HTTP API"]
-        Streams["🌊 工作流"]
-    end
-
-    Clients --> Bot
-    Bot --> Infrastructure
-    Infrastructure --> Tasker
-    Infrastructure --> Events
-    Infrastructure --> Business
-    Tasker --> Events
-    Events --> Business
-
-    style Clients fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
-    style Runtime fill:#FFF3E0,stroke:#F57C00,stroke-width:3px
-    style Infrastructure fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
-    style Tasker fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
-    style Events fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
-    style Business fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
-    style Bot fill:#FFF9C4,stroke:#F9A825,stroke-width:3px
-```
-
-**层次说明**：
-
-- **运行核心层**（`src/bot.js`）：系统入口，统一管理 HTTP/HTTPS/WebSocket、反向代理和事件总线 `Bot.em`
-- **基础设施层（辅助层）**（`src/infrastructure/`）：提供基类、加载器、HTTP 业务层、数据库客户端等通用能力，不包含业务逻辑
-- **核心模块层（Core）**（`core/*/`）：按业务拆分的模块集合，内部再分为 `tasker/`、`events/`、`plugin/`、`http/`、`stream/`、`commonconfig/`、`www/` 等子目录
-
-> **重要说明**：本项目的"业务实现"都应该放在 `core/*/(plugin|http|stream)` 下；`src/*` 主要是基础设施/工厂/通用能力，**不要把业务 API/工作流写进 `src`**（否则会破坏多 core 扩展机制）。
+分层与职责见 **[底层架构设计](底层架构设计.md)**（本页不重复架构图）。业务实现放在 `core/*/`；`src/` 为基础设施，**勿写业务 API/工作流**。
 
 **system-Core 内置模块**：11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 3 events；MCP 工具在七个自带工作流内合计 **68** 个。详见 **[system-Core 特性文档](system-core.md)**；CI 标准值与实测见 **[框架测试指南](框架测试指南.md)**。
-
-详细说明请参考 [项目概览](../PROJECT_OVERVIEW.md) 的「架构层次总览」章节。
 
 ### 🔌 插件与事件系统
 
@@ -153,62 +101,36 @@ flowchart TB
 ### ⚙️ 配置与工具
 
 - **[配置基类文档](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写、多文件配置等
+- **[Redis 与 MongoDB](database.md)** - 连接配置、启动流程、全局客户端、环境变量与 Docker ⭐
 - **[渲染器基类文档](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
 - **[BotUtil 工具类文档](botutil.md)** - 工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
 
+### 🧱 基础设施约定
+
+- **[运行时挂载面](runtime-surface.md)** - Bot / global / req 注入透明清单 ⭐
+- **[业务扩展基类契约](base-classes.md)** - 各基类最小 export
+- **[基础设施共享约定](infrastructure-shared.md)** - Loader 标准模式、热重载、`bootstrap-globals`
+- **[文档编写规范](DOCSTYLE.md)** - 文档分层与单篇模板
+
 ### 📱 应用开发
 
-- **[应用开发指南](app-dev.md)** - 应用 & 前后端开发总览（`app.js` 引导、Web 控制台、配置体系等）
+- **[应用开发指南](app-dev.md)** - Web 控制台、前后端协作、cfg 体系
+- **[启动与引导](startup.md)** - 引导链、环境变量、Playwright 浏览器 ⭐
 - **[Docker 部署指南](docker.md)** - Docker 容器化部署说明，包含 docker-compose 配置和使用指南
 
 ---
 
 ## 🎯 按角色推荐阅读
 
-### 插件开发者
+| 角色 | 首读 | 扩展 |
+|------|------|------|
+| 插件开发者 | **[runtime-surface.md](runtime-surface.md)** · [base-classes.md](base-classes.md) · [框架可扩展性指南](框架可扩展性指南.md) · [plugin-base.md](plugin-base.md) | [plugins-loader.md](plugins-loader.md) · [aistream.md](aistream.md) |
+| Tasker 开发者 | [tasker-loader.md](tasker-loader.md) · [tasker-base-spec.md](tasker-base-spec.md) | [tasker-onebotv11.md](tasker-onebotv11.md) · [bot.md](bot.md) |
+| 后端 / API | [http-api.md](http-api.md) · [base-classes.md](base-classes.md) · [bot.md](bot.md) · [AUTH.md](AUTH.md) | [api-loader.md](api-loader.md) · [infrastructure-shared.md](infrastructure-shared.md) |
+| 运维 / 配置 | [config-base.md](config-base.md) · [database.md](database.md) · [docker.md](docker.md) | [factory.md](factory.md) · [server.md](server.md) |
+| 前端 / 渲染 | [app-dev.md](app-dev.md) · [renderer.md](renderer.md) | [system-core.md](system-core.md) · [http-api.md](http-api.md) |
 
-1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解整体架构和分层设计
-2. **[Bot 主类文档](bot.md)** - 了解整体运行环境与事件来源
-3. **[框架可扩展性指南](框架可扩展性指南.md)** - 学习扩展开发的最佳实践和代码质量规范 ⭐
-4. **[插件基类文档](plugin-base.md)** - 学习插件基类与规则/上下文用法
-5. **[插件加载器文档](plugins-loader.md)** - 了解事件如何流转到插件
-6. **[事件系统标准化文档](事件系统标准化文档.md)** - 了解事件命名规范、监听器开发和监听方式
-7. **[AIStream 工作流基类文档](aistream.md)** - 了解 AI 调用、MCP 与上下文增强（主服务 Node 侧）
-
-### Tasker 开发者（任务层/事件生成器开发者）
-
-1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次和 Tasker 定位
-2. **[Tasker 加载器文档](tasker-loader.md)** - 了解 Tasker 是如何被框架加载的
-3. **[Tasker 底层规范](tasker-base-spec.md)** - 了解 Tasker 基础接口规范
-4. **[OneBotv11 Tasker 文档](tasker-onebotv11.md)** - 参考成熟实现，学习事件转译与对象封装方式
-5. **[事件系统标准化文档](事件系统标准化文档.md)** - 学习如何创建新的事件监听器（包含开发指南）
-6. **[Bot 主类文档](bot.md)** - 理解 Tasker 与 `Bot` 的交互点（`Bot.tasker` / `Bot.wsf` / `Bot.em`）
-
-### 后端/API 开发者
-
-1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次和 API 定位
-2. **[Bot 主类文档](bot.md)** - 了解 HTTP 服务器、认证、中间件栈
-3. **[HTTP API 基类文档](http-api.md)** - 学习如何定义一个新的 API 模块
-4. **[API 加载器文档](api-loader.md)** - 理解 API 模块如何被自动加载与热重载
-5. **[Server 服务器架构文档](server.md)** - 了解 HTTP/HTTPS/WebSocket 服务、反向代理等
-6. **[HTTP 业务层文档](http-business-layer.md)** - 了解重定向、CDN、负载均衡等企业级功能
-
-### 运维 / 配置管理者
-
-1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解整体架构和目录结构
-2. **[配置基类文档](config-base.md)** - 理解配置读写与校验机制
-3. **[工厂系统文档](factory.md)** - 了解 AI 服务提供商的配置与管理
-4. **[Bot 主类文档](bot.md)** - 了解服务端口、反向代理、CORS 与安全策略
-5. **[Docker 部署指南](docker.md)** - Docker 容器化部署说明
-6. **[Server 服务器架构文档](server.md)** - 了解服务器配置和部署
-
-### 前端 / 渲染相关开发者
-
-1. **[项目概览](../PROJECT_OVERVIEW.md)** - 了解架构层次
-2. **[渲染器基类文档](renderer.md)** - 了解 HTML 模板渲染与文件生成
-3. **[应用开发指南](app-dev.md)** - 了解 Web 控制台开发
-4. **[HTTP API 基类文档](http-api.md)** - 了解后端 API 接口设计
-5. **[system-Core 特性文档](system-core.md)** - 了解内置 Web 控制台和 API
+架构与目录：**[底层架构设计](底层架构设计.md)** · **[PROJECT_OVERVIEW](../PROJECT_OVERVIEW.md)**（目录树）· **[startup.md](startup.md)**（启动链）。
 
 ---
 
@@ -222,9 +144,8 @@ flowchart TB
 
 ### 编写一个简单指令插件
 
-1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 中的架构层次说明
-2. 阅读 **[Bot 主类文档](bot.md)** 与 **[插件基类文档](plugin-base.md)**
-3. 在任意 core 目录的 `plugin/` 子目录下新建插件 JS 文件（如 `core/my-core/plugin/my-plugin.js`）
+1. [plugin-base.md](plugin-base.md) · [plugins-loader.md](plugins-loader.md)
+2. 在 `core/<name>/plugin/` 下新建插件文件
 
 ### 新增一个 API 接口
 
@@ -234,11 +155,8 @@ flowchart TB
 
 ### 接入新的 IM 平台（创建新 Tasker）
 
-1. 阅读 **[项目概览](../PROJECT_OVERVIEW.md)** 了解架构层次
-2. 阅读 **[Tasker 加载器文档](tasker-loader.md)** 与 **[Tasker 底层规范](tasker-base-spec.md)**
-3. 参考 **[OneBotv11 Tasker 文档](tasker-onebotv11.md)**，在任意 core 目录的 `tasker/` 子目录中编写新 Tasker 文件
-4. 阅读 **[事件系统标准化文档](事件系统标准化文档.md)** 中的"事件监听器开发指南"章节，在对应 core 的 `events/` 子目录中创建事件监听器
-5. 确保对外暴露统一的事件结构（`post_type/message_type/notice_type` 等），这样可以复用现有插件
+1. [tasker-loader.md](tasker-loader.md) · [tasker-base-spec.md](tasker-base-spec.md) · 参考 [tasker-onebotv11.md](tasker-onebotv11.md)
+2. 在 `core/<name>/tasker/` 编写 Tasker，在 `events/` 编写监听器（见 [事件系统标准化文档](事件系统标准化文档.md)）
 
 ### 创建新的 AI 工作流
 
@@ -270,26 +188,11 @@ flowchart TB
 
 ---
 
-## 🔍 全局对象说明
+## 🔍 全局对象与 Bot
 
-### Bot 主对象
+**完整挂载表**（含 Proxy 透传 `BotUtil`、HTTP 业务层方法、`req.bot`）：**[runtime-surface.md](runtime-surface.md)**。
 
-`Bot` 是系统的核心全局对象，继承自 `EventEmitter`。详细说明请参考：
-
-- **[Bot 主类文档](bot.md)** - 完整的 Bot 类说明
-- **[OneBotv11 Tasker 文档](tasker-onebotv11.md)** - Bot 对象结构和使用示例
-
-### 常用全局对象
-
-- `Bot` - Bot 主实例（EventEmitter）
-- `Bot[self_id]` - 特定 Bot 实例
-- `Bot.tasker` - Tasker 列表（事件生成器列表）
-- `Bot.uin` - Bot QQ 号列表
-- `Bot.wsf` - WebSocket 工厂函数映射
-- `Bot.em()` - 事件触发方法
-- `Bot.makeLog()` - 日志方法
-
-详细说明请参考各 Tasker 文档。
+Bot 生命周期、HTTP/WS、关闭流程：**[bot.md](bot.md)**。OneBot 子 Bot 结构：**[tasker-onebotv11.md](tasker-onebotv11.md)**。
 
 ---
 
@@ -298,8 +201,10 @@ flowchart TB
 1. **架构层次**：理解基础设施层（辅助层）和业务层的区别，基础设施层提供通用能力，业务层实现具体功能
 2. **全局对象访问**：始终通过 `Bot[self_id]` 访问 Bot 实例，不要直接使用 `e.bot`（除非确保已初始化）
 3. **事件命名**：遵循 `tasker.类型.子类型` 格式，如 `onebot.message.group.normal`
-4. **错误处理**：所有异步操作都应使用 try-catch，API 调用失败会抛出错误
-5. **Bot 实例创建**：不要手动 `import Bot` 或 `new Bot()`，通过 `node app` / `node start.js` 启动，框架会自动创建并挂载全局 `Bot` 实例
+4. **错误处理**：异步操作用 try/catch；基础设施层用 `Error.isError` / `normalizeError`
+5. **Bot 实例**：通过 `node app` 启动，勿手动 `new Bot()`
+6. **Ctrl+C**：服务端 1 次重启 / 3 次回菜单（见 [bot.md](bot.md)）；勿在业务代码自行 `process.on('SIGINT')`
+7. **Node.js ≥ 26**、**pnpm** 为硬性要求（见 [node-26-runtime.md](node-26-runtime.md)）
 
 ---
 
@@ -315,5 +220,5 @@ flowchart TB
 
 ---
 
-*最后更新：2026-05-17*
+*最后更新：2026-06-14*
 

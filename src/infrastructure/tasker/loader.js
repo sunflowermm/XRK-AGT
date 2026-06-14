@@ -1,13 +1,13 @@
 import path from 'node:path';
 import BotUtil from '#utils/botutil.js';
 import { FileLoader } from '#utils/file-loader.js';
+import { setRuntimeGlobal } from '#utils/runtime-globals.js';
 
 class TaskerLoader {
   loggerNs = 'TaskerLoader';
 
   async load(bot = Bot) {
-    global.Bot = bot;
-    globalThis.Bot = bot;
+    setRuntimeGlobal('Bot', bot);
 
     const summary = { scanned: 0, loaded: 0, failed: 0, registered: 0, errors: [] };
     const files = await this.getAdapterFiles();

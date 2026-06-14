@@ -4,6 +4,7 @@
 process.env.XRK_TEST = '1';
 
 import Bot from '../../src/bot.js';
+import { setRuntimeGlobal } from '../../src/utils/runtime-globals.js';
 
 const port = Number(process.env.XRK_TEST_PORT);
 if (!Number.isFinite(port) || port <= 0) {
@@ -12,7 +13,7 @@ if (!Number.isFinite(port) || port <= 0) {
 }
 
 const bot = new Bot();
-global.Bot = bot;
+setRuntimeGlobal('Bot', bot);
 
 async function shutdown() {
   try {

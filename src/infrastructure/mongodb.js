@@ -15,12 +15,10 @@ import {
 } from '#utils/db-connect-utils.js'
 
 import BotUtil from '#utils/botutil.js'
-
 import fs from 'node:fs'
-
 import path from 'node:path'
-
 import { MongoClient } from 'mongodb'
+import { setRuntimeGlobal } from '#utils/runtime-globals.js'
 
 
 
@@ -106,15 +104,8 @@ export default async function mongodbInit() {
 
   globalDb = db
 
-  // @ts-ignore - 全局变量赋值
-
-  global.mongodb = client
-
-  // @ts-ignore - 全局变量赋值
-
-  global.mongodbDb = db
-
-
+  setRuntimeGlobal('mongodb', client)
+  setRuntimeGlobal('mongodbDb', db)
 
   return db
 

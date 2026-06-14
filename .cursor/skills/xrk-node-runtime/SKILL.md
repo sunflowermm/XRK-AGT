@@ -6,6 +6,7 @@ description: 编写或审查 core/src 代码时，确保使用 Node 26 稳定 AP
 ## 文档
 
 - 权威清单：`docs/node-26-runtime.md`
+- 写法与性能（非 Node 专项）：`docs/coding-style.md` · skill **`xrk-coding-style`**
 - 工具模块：`docs/底层架构设计.md` §1 工具表
 
 ## 版本

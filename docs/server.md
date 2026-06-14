@@ -18,7 +18,7 @@
 - [平台 SDK 适配度](#平台-sdk-适配度)
 - [快速搭建指南](#快速搭建指南)
 - [配置参考](#配置参考)
-- [架构优越性](#架构优越性)
+- [架构说明](#架构说明)
 - [最佳实践](#最佳实践)
 - [常见问题](#常见问题)
 
@@ -26,97 +26,11 @@
 
 ## 架构总览
 
-### 系统架构层次
+`Bot`（`src/bot.js`）统一承载 HTTP/HTTPS/WebSocket、中间件、路由与可选反向代理。Runtime 与 Core 分层见 **[底层架构设计](底层架构设计.md)**；启动见 **[startup.md](startup.md)**。本文只讲 **Server 层**。
 
-```mermaid
-flowchart TB
-    subgraph Clients["👥 客户端层"]
-        Browser["🌐 浏览器/Web前端"]
-        Mobile["📱 移动端应用"]
-        ThirdAPI["🔌 第三方API"]
-        WSClient["💻 WebSocket客户端"]
-    end
-    
-    subgraph Proxy["🔄 反向代理层（可选）"]
-        HTTPProxy["HTTP代理 :80"]
-        HTTPSProxy["HTTPS代理 :443"]
-        DomainRoute["域名路由"]
-    end
-    
-    subgraph Core["⚙️ 核心服务层"]
-        Express["Express应用"]
-        HTTPServer["HTTP服务器"]
-        HTTPSServer["HTTPS服务器"]
-        WSServer["WebSocket服务器"]
-    end
-    
-    subgraph Middleware["🛠️ 中间件层"]
-        Track["请求追踪"]
-        Compression["响应压缩"]
-        Helmet["安全头"]
-        CORS["CORS处理"]
-        Logging["请求日志"]
-        RateLimit["速率限制"]
-    end
-    
-    subgraph Routes["🔍 路由层"]
-        SystemRoute["系统路由"]
-        APIRoute["API路由"]
-        StaticRoute["静态文件"]
-    end
-    
-    subgraph Business["💼 业务层"]
-        Plugins["🔌 插件系统"]
-        Streams["🌊 工作流系统"]
-        Taskers["📡 Tasker层"]
-    end
-    
-    Clients --> Proxy
-    Proxy --> Core
-    Core --> Middleware
-    Middleware --> Routes
-    Routes --> Business
-    
-    style Clients fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
-    style Proxy fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
-    style Core fill:#E8F5E9,stroke:#388E3C,stroke-width:3px
-    style Middleware fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
-    style Routes fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
-    style Business fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
-```
+**请求路径**：客户端 →（可选反向代理）→ Express → 中间件 → 路由（系统 / API / 静态）→ `core/*/` 业务。
 
-### 数据流向
-
-```mermaid
-sequenceDiagram
-    participant Client as 👤 客户端
-    participant Proxy as 🔄 反向代理（可选）
-    participant Server as ⚙️ 核心服务
-    participant Middleware as 🛠️ 中间件层
-    participant Route as 🔍 路由层
-    participant Business as 💼 业务层
-    
-    Note over Client,Business: 🌐 HTTP请求流程
-    
-    Client->>Proxy: 📨 HTTP/HTTPS请求<br/>GET /api/users
-    Proxy->>Server: ➡️ 转发请求<br/>域名路由/路径重写
-    Server->>Middleware: 🛠️ 中间件处理<br/>压缩/安全头/CORS/日志/限流
-    Middleware->>Route: 🔍 路由匹配<br/>系统/API/静态文件
-    Route->>Business: 💼 业务处理<br/>执行具体逻辑
-    Business-->>Route: ✅ 返回响应<br/>JSON数据
-    Route-->>Middleware: 📤 响应数据
-    Middleware-->>Server: 📤 响应数据
-    Server-->>Proxy: 📤 响应数据
-    Proxy-->>Client: 📥 返回响应<br/>HTTP 200 OK
-    
-    Note over Client,Business: 🔌 WebSocket流程
-    
-    Client->>Server: 📨 HTTP升级请求<br/>Upgrade: websocket
-    Server->>Server: 🔄 WebSocket协议升级<br/>101 Switching Protocols
-    Server->>Route: 📍 路径路由<br/>查找Bot.wsf[path]
-    Route->>Business: ⚙️ Tasker处理<br/>WebSocket处理器
-    Business<->Business: 💬 双向通信（持续）<br/>实时消息交换
-```
+**WebSocket**：`Upgrade` 后由 `Bot.wsf[path]` 路由到 Tasker 处理器。
 
 ---
 
@@ -1241,104 +1155,9 @@ performance:
 
 ---
 
-## 架构优越性
+## 架构说明
 
-### 1. 统一的服务入口
-
-**优势**：
-- 所有HTTP/HTTPS/WebSocket请求统一管理
-- 统一的认证、日志、监控
-- 便于扩展和维护
-
-**对比传统方案**：
-```
-传统方案：
-- Nginx（反向代理）
-- Node.js应用（业务逻辑）
-- 需要配置多个服务
-
-XRK-AGT方案：
-- 一个Bot实例
-- 内置反向代理
-- 统一配置管理
-```
-
-### 2. 灵活的端口管理
-
-**优势**：
-- 自动端口检测和冲突处理
-- 支持多端口同时运行
-- 智能端口分配
-
-### 3. 强大的反向代理
-
-**优势**：
-- 多域名支持（SNI）
-- 路径重写
-- WebSocket代理
-- 6种负载均衡算法
-- 智能健康检查与故障转移
-- 企业级监控与统计
-
-### 4. 企业级代码架构
-
-**代码优化**：
-- **统一代理处理**：所有代理请求通过统一入口处理，减少代码重复
-- **基类挂载**：HTTP业务层方法挂载到Bot实例，方便直接调用
-- **连接管理**：统一的连接数管理方法，自动追踪和清理
-- **错误处理**：统一的错误处理回调，提供详细的错误信息
-- **请求追踪**：完整的请求生命周期追踪，支持性能分析
-
-**基类挂载示例**：
-```javascript
-// HTTP业务层方法已挂载到运行时 Bot 实例（业务侧不要手动 new Bot）
-const bot = Bot; // 或在 HTTP handler 中使用注入的 req.bot
-
-// 直接调用挂载的方法
-const stats = bot.getProxyStats();
-const isCDN = bot.isCDNRequest(req);
-bot.setCDNHeaders(res, filePath, req);
-bot.handleRedirect(req, res);
-```
-
-**代理处理流程**：
-```
-请求 → _handleProxyRequest (统一入口)
-  → _getOrCreateProxyMiddleware (获取/创建中间件)
-  → _createProxyMiddleware (创建中间件)
-  → _createProxyOptions (统一选项创建)
-  → onProxyReq: _handleProxyRequestStart (统一请求处理)
-  → onProxyRes: _handleProxyResponse (统一响应处理)
-  → onError: _handleProxyError (统一错误处理)
-```
-- 负载均衡（轮询/加权/最少连接）
-- 健康检查和故障转移
-- 无需额外Nginx配置
-
-**详细文档**：参见 [HTTP业务层文档](http-business-layer.md)
-
-### 4. 开箱即用的Web控制台
-
-**优势**：
-- 零配置启动
-- 完整的API测试界面
-- 实时监控和日志
-
-### 5. 完善的中间件系统
-
-**优势**：
-- 安全头自动添加
-- CORS跨域支持
-- 速率限制
-- API认证
-
-### 6. 快速搭建能力
-
-**优势**：
-- 5分钟搭建HTTP服务
-- 10分钟启用HTTPS
-- 15分钟配置反向代理
-- 支持多种协议（HTTP/WebSocket/TCP/UDP）
+Bot 作为单一 HTTP/WS 入口，可选内置反向代理与 [HTTP 业务层](http-business-layer.md)（重定向、CDN、负载均衡）。HTTP 业务层方法已挂载到运行时 `Bot` 实例，例如 `bot.handleRedirect(req, res)`、`bot.getProxyStats()`。
 
 ---
 
@@ -1459,4 +1278,4 @@ XRK-AGT 的 Server 层提供了：
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-06-14*

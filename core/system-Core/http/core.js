@@ -672,7 +672,7 @@ export default {
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         const includeHist = ['24h', '1', 'true'].includes(req.query?.hist) || ['1', 'true'].includes(req.query?.withHistory);
         const snapshot = await buildSystemSnapshot(Bot, { includeHistory: includeHist });
-        res.json(snapshot);
+        return HttpResponse.json(res, snapshot);
       }, 'system.status')
     },
 

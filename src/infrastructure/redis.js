@@ -9,6 +9,7 @@ import {
 import BotUtil from '#utils/botutil.js'
 import os from 'node:os'
 import { createClient } from 'redis'
+import { setRuntimeGlobal } from '#utils/runtime-globals.js'
 
 /** @type {import('redis').RedisClientType | null} */
 let globalClient = null
@@ -47,8 +48,7 @@ export default async function redisInit() {
 
   // @ts-ignore - Redis 客户端类型兼容性问题
   globalClient = client
-  // @ts-ignore - 全局变量赋值
-  global.redis = client
+  setRuntimeGlobal('redis', client)
   return client
 }
 

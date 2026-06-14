@@ -5,6 +5,7 @@ import { initDatabases, closeDatabases } from '#infrastructure/database/index.js
 import SystemMonitor from '#modules/systemmonitor.js';
 import { normalizeError } from '#utils/normalize-error.js';
 import { installProcessSignals, runShutdownHooks } from '#utils/process-signals.js';
+import { getRuntimeGlobal, isShuttingDown, setShuttingDown, isProcessFlagSet, setProcessFlag } from '#utils/runtime-globals.js';
 
 const CONFIG = {
   PROCESS_TITLE: 'XRK-AGT',
@@ -29,12 +30,12 @@ class ProcessManager {
   }
 
   async restart() {
-    if (global.__xrkShuttingDown) return;
+    if (isShuttingDown()) return;
     const epoch = ++this._signalEpoch;
     logger.mark(chalk.yellow('重启中...'));
     await this.cleanup();
     if (epoch !== this._signalEpoch) return;
-    if (global.Bot) await global.Bot.closeServer({ fast: true }).catch(() => {});
+    if (getRuntimeGlobal('Bot')) await getRuntimeGlobal('Bot').closeServer({ fast: true }).catch(() => {});
     if (epoch !== this._signalEpoch) return;
     process.exit(CONFIG.EXIT_RESTART);
   }
@@ -45,21 +46,22 @@ class ProcessManager {
 
   async gracefulShutdown(exitCode) {
     this._signalEpoch += 1;
-    if (global.__xrkShuttingDown) return;
-    global.__xrkShuttingDown = true;
+    if (isShuttingDown()) return;
+    setShuttingDown(true);
     logger.mark(chalk.yellow('正在关闭...'));
-    if (global.Bot) {
-      await global.Bot.closeServer().catch((err) => logger.error(`关闭失败: ${err.message}`));
+    const bot = getRuntimeGlobal('Bot');
+    if (bot) {
+      await bot.closeServer().catch((err) => logger.error(`关闭失败: ${err.message}`));
     } else {
-      await global.logger.shutdown().catch(() => {});
+      await getRuntimeGlobal('logger')?.shutdown?.().catch(() => {});
     }
     await this.cleanup();
     process.exit(exitCode);
   }
 
   setupSignalHandlers() {
-    if (global.__xrkSignalHandlersReady) return;
-    global.__xrkSignalHandlersReady = true;
+    if (isProcessFlagSet('__xrkSignalHandlersReady')) return;
+    setProcessFlag('__xrkSignalHandlersReady', true);
 
     this._signalController = installProcessSignals({
       mode: 'server',
@@ -73,11 +75,11 @@ class ProcessManager {
   }
 
   setupErrorHandlers() {
-    if (global.__xrkErrorHandlersReady) return;
-    global.__xrkErrorHandlersReady = true;
+    if (isProcessFlagSet('__xrkErrorHandlersReady')) return;
+    setProcessFlag('__xrkErrorHandlersReady', true);
 
     const onNetworkFatal = async (reason, label) => {
-      if (global.__xrkShuttingDown) return;
+      if (isShuttingDown()) return;
       const error = normalizeError(reason);
       if (EXPECTED_REJECTION_CODES.includes(error.code)) {
         logger.warn(`${label}: ${error.message} (${error.code})`);

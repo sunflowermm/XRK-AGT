@@ -1,599 +1,91 @@
 # XRK-AGT 项目概览
 
-> **Node.js 版本要求**: ≥ 26.0.0 (Current，2026-10 转 LTS)  
-> 本文档提供 XRK-AGT 项目的完整架构概览、目录结构说明和核心特性介绍。  
-> 快速开始：[README.md](README.md) · 文档中心：[docs/README.md](docs/README.md) · 底层设计：[docs/底层架构设计.md](docs/底层架构设计.md) · 测试/审查：[docs/框架测试指南.md](docs/框架测试指南.md)、[docs/代码审查清单.md](docs/代码审查清单.md)、[docs/文档审查清单.md](docs/文档审查清单.md)
+> **Node.js ≥ 26.0** · **包管理仅 pnpm**  
+> XRK-AGT 是**融合智能体业务逻辑的通用后端**：`src/` 提供 Runtime 与基础设施，`core/*/` 承载插件、HTTP API、AI 工作流、Tasker 与智能体业务。
 
-## 📋 目录
+**入口导航**
 
-- [项目简介](#项目简介)
-- [核心特性](#核心特性)
-- [架构层次总览](#架构层次总览)
-- [目录结构详解](#目录结构详解)
-- [Node.js 26 新特性应用](#nodejs-26-新特性应用)
-- [HTTP业务层功能](#http业务层功能)
-- [快速开始](#快速开始)
-- [开发指南](#开发指南)
-
----
-
-## 项目简介
-
-XRK-AGT 是向日葵工作室基于 **Node.js 26** 打造的多平台、多Tasker、工作流驱动型智能体平台，采用清晰的分层架构设计，支持：
-
-- **多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker；更多生态项目见 [AGT-Cores-Tools-Index](https://github.com/sunflowermm/AGT-Cores-Tools-Index)（含 [核心工具索引](https://github.com/sunflowermm/AGT-Cores-Tools-Index/blob/main/Core-Tools.md)）
-- **插件工作流**：指令插件 + AI 工作流 (`AIStream`)
-- **Web 与 HTTP/API 服务**：内置 Web 控制台 + REST API + WebSocket
-- **HTTP业务层**：重定向、CDN支持、反向代理增强（负载均衡、健康检查）
-- **渲染与截图**：基于 Puppeteer / Playwright 的页面渲染与图片输出
-
-### 技术栈
-
-- **运行时**: Node.js 26.0+（Current，2026-10 转 LTS）
-- **Web框架**: Express 4.x
-- **数据库**: Redis 5.0+, MongoDB 4.0+ (可选)
-- **渲染引擎**: Puppeteer / Playwright
-- **包管理**: pnpm (仅支持)
-- **跨平台支持**: Windows 10+ / Linux / macOS / Docker
+| 目的 | 文档 |
+|------|------|
+| 安装与运行 | [README.md](README.md) |
+| 文档索引 | [docs/README.md](docs/README.md) |
+| 架构边界（先读） | [docs/底层架构设计.md](docs/底层架构设计.md) |
+| 启动链 | [docs/startup.md](docs/startup.md) |
+| 数据库 | [docs/database.md](docs/database.md) |
+| 扩展开发 | [docs/框架可扩展性指南.md](docs/框架可扩展性指南.md) |
+| 内置能力 | [docs/system-core.md](docs/system-core.md) |
+| 测试 / 审查 | [docs/框架测试指南.md](docs/框架测试指南.md) · [docs/代码审查清单.md](docs/代码审查清单.md) |
 
 ---
 
-## 核心特性
+## 技术栈摘要
 
-### 1. 分层架构设计
+- **运行时**：Node.js 26+，Express，全局 `Bot`（`src/bot.js`）
+- **数据**：Redis + MongoDB（默认必需；无库调试 `XRK_OPTIONAL_DB=1`）
+- **AI**：`AIStream` 工作流 + LLM/ASR/TTS 工厂 + MCP
+- **接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
+- **渲染**：Playwright（默认）/ Puppeteer；Chromium 可选安装
 
-```mermaid
-flowchart TB
-    subgraph Runtime["⚙️ 运行核心层"]
-        Bot["🤖 Bot主类<br/>统一管理所有组件"]
-    end
-    
-    subgraph Infrastructure["🏗️ 基础设施层"]
-        Loaders["📚 加载器"]
-        BaseClasses["📦 基类库"]
-        HTTPBusiness["💼 HTTP业务层"]
-    end
-    
-    subgraph Tasker["📡 任务层"]
-        Taskers["各平台Tasker<br/>协议转换"]
-    end
-    
-    subgraph Events["📢 事件系统"]
-        Listeners["事件监听器<br/>去重/标准化"]
-    end
-    
-    subgraph Business["💼 业务层"]
-        Plugins["🔌 业务插件"]
-        APIs["📡 HTTP API"]
-        Streams["🌊 工作流"]
-    end
-    
-    Bot --> Infrastructure
-    Infrastructure --> Tasker
-    Infrastructure --> Events
-    Infrastructure --> Business
-    Tasker --> Events
-    Events --> Business
-    
-    style Runtime fill:#FFF3E0,stroke:#F57C00,stroke-width:3px
-    style Infrastructure fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
-    style Tasker fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
-    style Events fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
-    style Business fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
-    style Bot fill:#FFF9C4,stroke:#F9A825,stroke-width:3px
-```
-
-**架构优势**：清晰的层次划分、基础设施与业务分离、基于基类设计便于扩展
-
-### 2. Node.js 26（含 25 过渡特性）应用
-
-- **全局 URLPattern API**：重定向规则路径匹配
-- **Error.isError()** + **normalizeError**：统一错误归一化
-- **Map.getOrInsert***：统计与缓存初始化
-- **Uint8Array.fromBase64 / toBase64 / toHex**（Node 25+ V8）：二进制编解码
-- **#utils/exec-async.js**：Promise 版 `exec` 单点导出（26.2 尚无 `child_process/promises` 子模块）
-- **原生 fetch**（Undici 8 + `ProxyAgent`）+ **AbortSignal.timeout**
-- **Temporal**、Web Storage 等 Web 标准 API 默认启用（Node 26）
-
-详见 [docs/node-26-runtime.md](docs/node-26-runtime.md)（含 V8 编译缓存、Undici 8 与迁移清单）。
-
-### 3. HTTP业务层功能
-
-- **重定向管理**：支持301/302/307/308重定向，通配符匹配，条件重定向
-- **CDN支持**：静态资源CDN回源、缓存控制、CDN头部处理
-- **反向代理增强**：负载均衡（轮询/加权/最少连接）、健康检查、故障转移
-
-### 4. 插件与工作流系统
-
-- 兼容 Yunzai 风格插件开发体验
-- 通用工作流系统，基于 `AIStream` 基类
-- 支持增强插件（Enhancer），为特定 Tasker 提供功能增强
-- 内建多种 Embedding 与函数调用（Function Calling）
-
-### 5. 生产级能力
-
-- **反向代理**：多域名 + SNI + HTTP/2 + 负载均衡
-- **安全与观测**：CORS / Helmet / 速率限制 / 请求日志
-- **资源管理**：自动清理临时文件，适合长期稳定运行
-
-### 6. system-Core 内置模块
-
-XRK-AGT 内置了完整的 system-Core 模块，提供开箱即用的功能：
-
-- **11个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、MCP服务、设备管理、通知服务、标准输入、数据编辑
-- **7个工作流**：chat、desktop、tools、memory、database、web、browser（system-Core 内 MCP 工具 **68** 个，以 `registerMCPTool` 为准）
-- **15个内置插件**：增强器 + 运维与示例业务
-- **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
-- **3个事件监听器**：onebot、stdin、device
-- **Web控制台**：企业级管理界面（`/xrk/`），支持系统监控、API调试、配置管理
-
-详细说明请参考 [system-Core 特性文档](docs/system-core.md)。
+架构图、分层职责、消息与 AI 链路：**仅维护于 [docs/底层架构设计.md](docs/底层架构设计.md)**，本页不重复 mermaid。
 
 ---
 
-## 架构层次总览
-
-### 层次关系图
-
-```mermaid
-flowchart TB
-    subgraph Clients["外部客户端"]
-        QQ["QQ / OneBotv11"]
-        IM["IM / Bot 平台"]
-        WebUI["XRK Web 控制台"]
-        ThirdAPI["第三方 API"]
-    end
-    
-    subgraph Runtime["运行核心层"]
-        Bot["Bot主类<br/>src/bot.js"]
-    end
-    
-    subgraph Infrastructure["基础设施层（辅助层）"]
-        TaskerLoader["TaskerLoader"]
-        PluginsLoader["PluginsLoader"]
-        ApiLoader["ApiLoader"]
-        StreamLoader["StreamLoader"]
-        ListenerLoader["ListenerLoader"]
-        BaseClasses["基类库"]
-        HTTPBusiness["HTTP业务层"]
-    end
-    
-    subgraph Tasker["任务层"]
-        OneBot["OneBotv11"]
-        QBQ["QBQBot / GSUIDCORE"]
-        Stdin["stdin"]
-    end
-    
-    subgraph Events["事件系统"]
-        OneBotEvent["OneBot事件监听器"]
-        DeviceEvent["Device事件监听器"]
-        StdinEvent["Stdin事件监听器"]
-    end
-    
-    subgraph Business["业务层"]
-        Plugins["业务插件"]
-        HttpApis["HTTP API"]
-        Streams["工作流"]
-    end
-    
-    QQ --> OneBot
-    IM --> QBQ
-    WebUI --> Bot
-    ThirdAPI --> Bot
-    
-    Bot --> TaskerLoader
-    Bot --> PluginsLoader
-    Bot --> ApiLoader
-    Bot --> StreamLoader
-    Bot --> ListenerLoader
-    Bot --> HTTPBusiness
-    
-    TaskerLoader --> OneBot
-    TaskerLoader --> QBQ
-    TaskerLoader --> Stdin
-    
-    OneBot --> OneBotEvent
-    QBQ --> OneBotEvent
-    Stdin --> StdinEvent
-    
-    OneBotEvent --> PluginsLoader
-    DeviceEvent --> PluginsLoader
-    StdinEvent --> PluginsLoader
-    
-    PluginsLoader --> Plugins
-    ApiLoader --> HttpApis
-    StreamLoader --> Streams
-    
-    Plugins --> BaseClasses
-    HttpApis --> BaseClasses
-    Streams --> BaseClasses
-```
-
-### 各层职责说明
-
-#### 1. 运行核心层 (`src/bot.js`)
-
-**职责**：
-- 统一管理 HTTP/HTTPS/WebSocket 服务
-- 中间件配置（CORS、认证、限流、压缩等）
-- 反向代理支持（多域名、SNI、负载均衡）
-- HTTP业务层集成（重定向、CDN、反向代理增强）
-- 事件总线 (`Bot.em`)
-- 资源清理和生命周期管理
-
-**特点**：系统入口，协调所有组件
-
-#### 2. 基础设施层（辅助层）(`src/infrastructure/`)
-
-**职责**：提供所有基础设施和基类，为业务层提供通用能力
-
-**包含**：
-- **加载器**：TaskerLoader、PluginsLoader、ApiLoader、StreamLoader、ListenerLoader
-- **基类库**：plugin、HttpApi、AIStream、Renderer、ConfigBase、EventListenerBase（`listener/base.js`）
-- **HTTP业务层**：`http-business.js` - 重定向、CDN、反向代理增强
-- **数据库客户端**：`redis.js`、`mongodb.js`
-- **配置管理**：`config/`、`commonconfig/`
-
-**特点**：不包含具体业务逻辑，只提供抽象和工具
-
-#### 3. 任务层（Tasker）(`core/*/tasker/`)
-
-**职责**：对接各平台协议（QQ/IM/自定义），将平台消息转换为统一事件模型，通过 `Bot.em` 触发事件
-
-**包含**：`OneBotv11.js`、`QBQBot.js`、`GSUIDCORE.js`、`stdin.js`、自定义 Tasker
-
-**特点**：事件生成器，负责协议转换
-
-#### 4. 事件系统 (`core/*/events/`)
-
-**职责**：监听 `Bot.em` 事件，进行去重、标记、预处理，然后调用 `PluginsLoader.deal(e)` 分发到插件
-
-**包含**：`onebot.js`、`device.js`、`stdin.js`
-
-**特点**：事件标准化和预处理层
-
-#### 5. 业务层 (`core/*/`)
-
-**职责**：实现具体业务逻辑
-
-**包含**：
-- **业务插件** (`core/*/plugin/`)：指令插件、增强插件（Enhancer）等
-- **HTTP API** (`core/*/http/`)：REST/WebSocket API 实现
-- **工作流** (`core/*/stream/`)：基于 `AIStream` 的业务工作流实现
-
-**特点**：基于基础设施层的基类实现具体功能
-
----
-
-## 目录结构详解
-
-### 项目根目录结构
+## 目录结构
 
 ```
 XRK-AGT/
-├── app.js                    # 应用启动入口
-├── start.js                  # 主启动脚本
-├── package.json              # 项目配置和依赖
-├── PROJECT_OVERVIEW.md        # 项目概览文档（本文档）
+├── app.js                    # → src/utils/bootstrap.js
+├── start.js                  # 菜单 / PM2 / server
+├── package.json
 │
-├── src/                      # 运行核心与基础设施
-│   ├── bot.js                # Bot主类（核心运行时）
-│   ├── infrastructure/       # 基础设施层
-│   │   ├── tasker/          # Tasker加载器
-│   │   ├── plugins/         # 插件系统基础设施
-│   │   ├── listener/        # 事件监听器基础设施
-│   │   ├── http/            # HTTP API基础设施（含 auth.js 统一鉴权）
-│   │   ├── aistream/        # AI工作流基础设施
-│   │   ├── renderer/        # 渲染器基础设施（含 browser-renderer-base.js）
-│   │   ├── commonconfig/    # 配置系统基础设施（ConfigBase基类）
-│   │   └── config/          # 配置加载器
-│   ├── utils/               # 工具函数
-│   │   ├── botutil.js       # 核心工具类
-│   │   ├── http-business.js # HTTP业务层
-│   │   ├── db-connect-utils.js # Redis/Mongo 连接重试与脱敏
-│   │   └── paths.js         # 路径管理
-│   ├── factory/             # 工厂类（ASR/TTS/LLM/Vision）
-│   ├── modules/             # 业务模块
-│   └── renderers/           # 渲染实现（Puppeteer/Playwright）
+├── src/                      # Runtime + 基础设施（勿写业务）
+│   ├── bot.js
+│   ├── infrastructure/       # 加载器、基类、database、config…
+│   ├── utils/                # bootstrap、process-signals、http-business…
+│   ├── factory/              # LLM / ASR / TTS
+│   └── renderers/
 │
-├── core/                     # 业务层与任务层
-│   ├── system-Core/         # 系统核心模块（内置，开箱即用）
-│   │   ├── plugin/          # 业务插件目录（增强器、功能插件）
-│   │   ├── tasker/          # 任务层目录（OneBotv11、GSUIDCORE、QBQBot、stdin）
-│   │   ├── events/          # 事件系统目录（onebot、device、stdin）
-│   │   ├── http/            # HTTP API目录（11个API模块）
-│   │   ├── stream/          # 工作流目录（7个工作流，MCP 工具以 registerMCPTool 为准）
-│   │   ├── commonconfig/    # 配置管理（system.js、LLM配置、工具配置）
-│   │   └── www/             # 静态资源（Web控制台 /xrk/）
-│   │       └── xrk/         # Web控制台前端（系统监控、API调试、配置管理）
-│   └── <your-core>/         # 自定义 Core（示例名，需自行创建）
+├── core/                     # 业务与智能体逻辑
+│   ├── system-Core/          # 内置：http / stream / plugin / tasker / www/xrk
+│   └── <your-core>/          # 自定义 Core
 │
-├── config/                   # 配置文件
-│   ├── default_config/      # 默认配置
-│   └── server_config/       # API 密钥等（如 api_key.json）
-│
-├── data/                     # 运行期数据
-│   ├── server_bots/          # 服务器Bot配置（按端口分目录）
-│   ├── configs/              # 运行时配置
-│   ├── media/                # 媒体文件
-│   └── uploads/              # 上传文件
-│
-├── www/                       # 可选：根级静态资源（默认路由，见 www/ 内说明）
-├── docs/                      # 项目文档
-├── resources/                 # 渲染模板与静态资源
-├── .cursor/                   # Cursor 技能/规则/命令（仓库内权威副本）
-├── rules/                     # 助手 system prompt 注入规则（与 .cursor/rules 分工不同）
-├── skills/                    # 工作流可加载技能（如 skills/standard，见 aistream.yaml）
-├── agents/workspace/          # 助手模板（首次引导复制到 data/ai-workspace/{id}/）
-├── logs/                      # 日志（gitignore）
-└── trash/                     # 回收站（gitignore，自动清理）
-
-# 以下目录不入库，本地可选生成：
-# .claude/、.trae/  — 由 sync-skills.ps1 从 .cursor/ 同步，供其他 IDE 使用
+├── config/default_config/    # AGT 运行时配置模板（非独立产品业务 yaml）
+├── data/server_bots/         # 运行时配置（gitignore）
+├── docs/                     # 开发文档
+├── www/                      # 可选根级静态站
+└── resources/                # 渲染模板
 ```
 
-### 关键目录说明
+### 关键路径
 
-- **`src/bot.js`**：Bot主类，系统核心运行时
-- **`src/infrastructure/`**：基础设施层，提供基类和加载器
-- **`src/utils/http-business.js`**：HTTP业务层，提供重定向、CDN、反向代理增强功能
-- **`core/*/tasker/`**：任务层，协议转换
-- **`core/*/events/`**：事件系统，事件标准化和预处理
-- **`core/*/plugin/`**：业务插件实现
-- **`core/*/http/`**：HTTP API实现
-- **`core/*/stream/`**：AI工作流实现
-- **`core/*/www/`**：静态资源（⚠️ 必须创建子目录，避免与根目录www冲突）
+| 路径 | 说明 |
+|------|------|
+| `app.js` → `bootstrap.js` → `start.js` → `bot.js` | 启动链，见 [docs/startup.md](docs/startup.md) |
+| `core/*/plugin/` | 指令与增强插件 |
+| `core/*/http/` | HTTP API（`/api/` 默认鉴权） |
+| `core/*/stream/` | AI 工作流（`AIStream`） |
+| `core/*/tasker/` | 平台协议 → 统一事件 |
+| `core/*/events/` | 去重、标准化 → `PluginsLoader.deal` |
+| `core/*/www/<app>/` | 静态前端（如 `/xrk/`） |
+| `core/*/commonconfig/` | 配置 Schema（独立 Core 模板在 `core/<名>/default/`） |
 
----
-
-## Node.js 26 新特性应用
-
-> 完整说明（编译缓存、Undici 8、禁止旧写法）：[docs/node-26-runtime.md](docs/node-26-runtime.md)
-
-### 1. 全局 URLPattern API
-
-**应用场景**：HTTP 重定向规则匹配
-
-```javascript
-const pattern = new URLPattern({ pathname: '/api/*' });
-const match = pattern.test({ pathname: '/api/users' });
-```
-
-**使用位置**：`src/utils/http-business.js` — `RedirectManager._compileRules()`
-
-### 2. Error.isError() 与 normalizeError
-
-```javascript
-import { normalizeError } from '#utils/normalize-error.js';
-
-if (Error.isError(err)) { /* ... */ }
-const error = normalizeError(unknown);
-```
-
-**使用位置**：`src/infrastructure/*`、`src/bot.js`、日志与数据库连接层
-
-### 3. Map.getOrInsert*
-
-**使用位置**：`error-handler.js` 错误统计、`botutil.getMap()` 全局 Map
-
-### 4. Uint8Array 内置 base64/hex（Node 25+ V8）
-
-**使用位置**：`botutil.js`、`image-utils.js`、Tasker 消息编码、设备 HTTP
-
-### 5. 原生 fetch + AbortSignal.timeout
-
-```javascript
-const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-```
-
-**使用位置**：`http-business.js` 健康检查、`bot.js` 公网 IP、`start.js` 停机探测、全部 LLM 客户端
-
-### 6. #utils/exec-async.js
-
-Promise 版 `exec` 单点导出（26.2 尚无 `node:child_process/promises` 子模块）。
-
-### 7. 编译与引擎层（无需改业务代码）
-
-- **V8 14.6**：大 JSON 序列化、Map 新 API 性能更好
-- **可移植编译缓存**（`NODE_COMPILE_CACHE`）：可选，用于生产/Docker 缩短冷启动；见 [node-26-runtime.md](docs/node-26-runtime.md)
+**规则**：业务只在 `core/`；`config/default_config/` 仅 AGT 运行时模板；独立产品配置见各 Core 的 `default/` + `data/<产品>/`。
 
 ---
 
-## HTTP业务层功能
+## system-Core 规模（索引）
 
-### 功能概览
-
-HTTP业务层（`src/utils/http-business.js`）提供：
-
-1. **重定向管理**（`RedirectManager`）
-   - 支持301/302/307/308重定向
-   - 通配符匹配（使用URLPattern API）
-   - 条件重定向（基于请求头）
-   - 查询参数保留
-
-2. **CDN支持**（`CDNManager`）
-   - CDN回源识别
-   - 静态资源CDN URL生成
-   - 缓存控制（按文件类型）
-   - CDN头部设置
-
-3. **反向代理增强**（`ProxyManager`）
-   - 负载均衡（轮询/加权/最少连接）
-   - 健康检查（自动故障检测）
-   - 故障转移（自动切换）
-
-### 配置示例
-
-```yaml
-# 重定向配置
-redirects:
-  - from: "/old-page"
-    to: "/new-page"
-    status: 301
-
-# CDN配置
-cdn:
-  enabled: true
-  domain: "cdn.example.com"
-  cacheControl:
-    static: 31536000
-    images: 604800
-
-# 反向代理配置（负载均衡）
-proxy:
-  enabled: true
-  healthCheck:
-    enabled: true
-    interval: 30000
-  domains:
-    - domain: "api.example.com"
-      target:
-        - url: "http://backend1:3000"
-          weight: 3
-        - url: "http://backend2:3000"
-          weight: 1
-      loadBalancingAlgorithm: "weighted"
-```
-
-**详细文档**：参见 [`docs/http-business-layer.md`](docs/http-business-layer.md)
+开箱即用模块数量以代码与 [docs/system-core.md](docs/system-core.md) 为准（约 11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / Web 控制台 `/xrk/`）。MCP 工具数以 `registerMCPTool` 为准。
 
 ---
 
-## 快速开始
+## 专题文档（不重复于此）
 
-参见 [README.md](README.md) 的「快速开始」章节。
-
----
-
-## 开发指南
-
-**7 大核心扩展点**（插件、工作流、Tasker、事件监听器、HTTP API、渲染器、配置）及扩展流程、目录与基类说明，详见 **[`docs/框架可扩展性指南.md`](docs/框架可扩展性指南.md)**。
-
-**system-Core 内置模块**：XRK-AGT 内置了完整的 system-Core 模块，提供 11 个 HTTP API 模块、7 个工作流、4 个 Tasker 和 Web 控制台。详见 **[`docs/system-core.md`](docs/system-core.md)**。
+- **Node 26 API**：[docs/node-26-runtime.md](docs/node-26-runtime.md)
+- **HTTP 业务层**：[docs/http-business-layer.md](docs/http-business-layer.md)
+- **安全与鉴权**：[docs/server.md](docs/server.md) · [docs/AUTH.md](docs/AUTH.md)
+- **应用 / Web 控制台**：[docs/app-dev.md](docs/app-dev.md)
 
 ---
 
-## 数据流向
-
-### 消息处理流程
-
-```mermaid
-sequenceDiagram
-    participant Platform as 平台
-    participant Tasker as Tasker层
-    participant Event as 事件系统
-    participant Plugin as 插件系统
-    participant Stream as 工作流
-    
-    Platform->>Tasker: 接收消息
-    Tasker->>Tasker: 协议转换
-    Tasker->>Event: Bot.em触发事件
-    Event->>Event: 去重/标准化
-    Event->>Plugin: PluginsLoader.deal
-    Plugin->>Plugin: 规则匹配
-    opt 需要AI处理
-        Plugin->>Stream: 调用工作流
-        Stream-->>Plugin: 返回结果
-    end
-    Plugin-->>Platform: 回复消息
-```
-
-### HTTP请求流程
-
-```mermaid
-sequenceDiagram
-    participant Client as 客户端
-    participant Bot as Bot主类
-    participant Redirect as 重定向管理器
-    participant CDN as CDN管理器
-    participant Proxy as 反向代理
-    participant API as API路由
-    
-    Client->>Bot: HTTP请求
-    Bot->>Redirect: 检查重定向
-    alt 需要重定向
-        Redirect-->>Client: 重定向响应
-    else 继续处理
-        Bot->>CDN: CDN处理
-        alt 启用反向代理
-            Bot->>Proxy: 负载均衡选择
-            Proxy->>Proxy: 健康检查
-            Proxy-->>Client: 转发响应
-        else 本地处理
-            Bot->>API: API路由匹配
-            API-->>Client: 返回响应
-        end
-    end
-```
-
-### 配置加载流程
-
-```mermaid
-flowchart TB
-    A["启动应用"] --> B["读取default_config"]
-    B --> C["读取server_bots配置"]
-    C --> D["合并配置"]
-    D --> E["验证配置"]
-    E --> F["应用配置"]
-    F --> G["启动服务"]
-    
-    style A fill:#E6F3FF
-    style B fill:#FFE6CC
-    style G fill:#90EE90
-```
-
----
-
-## 性能优化
-
-### Node.js 26 优化
-
-1. **V8 14.6**：JSON 与大对象序列化更快；`Map.getOrInsert`、二进制 base64/hex 内置
-2. **Undici 8**：原生 `fetch`、LLM 流式与代理（`ProxyAgent`）
-3. **可选编译缓存**：`NODE_COMPILE_CACHE` 缩短生产环境冷启动（见 [node-26-runtime.md](docs/node-26-runtime.md)）
-4. **全局 URLPattern**：重定向与路径匹配无 polyfill
-
-### 框架优化
-
-1. **并行加载**：使用`Promise.allSettled`批量加载插件、API、工作流
-2. **动态批次**：根据内存使用情况动态调整插件加载批次大小
-3. **热加载优化**：支持插件、API、配置的完整热加载，资源清理完善
-4. **缓存机制**：配置缓存、事件历史缓存，减少重复计算
-
----
-
-## 安全特性
-
-### HTTP安全
-
-- **Helmet安全头**：自动添加安全相关的HTTP头部
-- **CORS跨域**：灵活的跨域配置
-- **速率限制**：防止恶意请求
-- **API认证**：API密钥认证机制
-
-### 反向代理安全
-
-- **SNI支持**：多域名SSL证书
-- **健康检查**：自动故障检测和转移
-- **负载均衡**：分散请求压力
-
----
-
-## 文档导航
-
-参见 [docs/README.md](docs/README.md)。
-
-**重要文档**：
-- **[system-Core 特性文档](docs/system-core.md)** ⭐ - system-Core 内置模块完整说明
-- **[框架可扩展性指南](docs/框架可扩展性指南.md)** ⭐ - 7大扩展点、Core模块开发指南
-
----
-
-## 相关资源
-
-- **GitHub仓库**: https://github.com/sunflowermm/XRK-AGT
-- **GitCode仓库**: https://gitcode.com/Xrkseek/XRK-AGT
-
----
-
-*最后更新：2026-04-14*
+*最后更新：2026-06-14*

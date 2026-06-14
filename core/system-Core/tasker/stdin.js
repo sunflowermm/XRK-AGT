@@ -11,6 +11,7 @@ import { ulid } from 'ulid';
 import crypto from 'crypto';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
+import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js';
 
 const LOG_TAG = 'StdinTasker';
 const tempDir = path.join(paths.data, 'stdin');
@@ -57,7 +58,7 @@ export default class StdinTasker {
   }
 
   load() {
-    if (global.stdinHandler) return;
+    if (getRuntimeGlobal('stdinHandler')) return;
     this.rl = createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -65,7 +66,7 @@ export default class StdinTasker {
     });
     this.initStdinBot();
     this.setupListeners();
-    global.stdinHandler = this;
+    setRuntimeGlobal('stdinHandler', this);
     this.rl.prompt();
   }
 

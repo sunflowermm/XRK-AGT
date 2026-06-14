@@ -7,9 +7,10 @@ import ConfigLoader from '#infrastructure/commonconfig/loader.js';
 import StreamLoader from '#infrastructure/aistream/loader.js';
 import cfg from '#infrastructure/config/config.js';
 import RendererLoader from '#infrastructure/renderer/loader.js';
+import { setShuttingDown } from '#utils/runtime-globals.js';
 
 export async function stopAllLoaderWatchers() {
-  global.__xrkShuttingDown = true;
+  setShuttingDown(true);
   // 先停业务 Loader，再停 YAML/模板 watcher，避免 close 事件回调重入
   await PluginsLoader.destroy().catch(() => {});
   await StreamLoader.cleanupAll().catch(() => {});

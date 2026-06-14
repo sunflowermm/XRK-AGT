@@ -1,7 +1,8 @@
 # Bot 主类文档
 
-> **文件位置**：`src/bot.js`  
-> **说明**：Bot 是 XRK-AGT 的核心运行时对象，负责 HTTP/HTTPS/WebSocket 服务、反向代理、HTTP业务层、API 装载、插件与工作流集成、事件派发与资源清理
+> **源码**：`src/bot.js`（类 `Bot`，构造后 `_createProxy()` 返回 Proxy）  
+> **读者**：需理解 HTTP/WS、生命周期、关闭流程的开发者  
+> **挂载面速查**：[runtime-surface.md](runtime-surface.md)（全局、`Bot.em`、`req.bot`、HTTP 业务层挂载）
 
 ---
 
@@ -26,9 +27,9 @@
 
 ### 推荐用法：通过启动脚本与全局 `Bot`
 
-在实际项目中，一般**不需要手动 `import Bot` 或 `new Bot()`**，而是通过 `node app` / `node start.js` 启动，框架会自动创建并挂载全局 `Bot` 实例：
+启动链见 **[startup.md](startup.md)**。一般**不需要**手动 `import Bot` 或 `new Bot()`：
 
-- 启动：`node app`（推荐）或 `node app server {端口}` / `node start.js server {端口}`
+- 启动：`node app`（推荐）或 `node app server {端口}`
 - 运行时：
   - 在插件 / Tasker / 事件监听器等代码中，直接使用全局 `Bot`（由启动脚本挂载）
   - 在 HTTP API 中使用 `req.bot`（由 `HttpApi` 基类自动注入）
@@ -142,25 +143,39 @@ flowchart LR
     style Online fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
-### 关闭流程
+### 关闭流程与 Ctrl+C
+
+信号由 `src/utils/process-signals.js` 的 `ProcessSignalController` 统一处理（`src/infrastructure/config/loader.js` → `ProcessManager.setupSignalHandlers()`）。**业务代码不要自行 `process.on('SIGINT')`**，否则会与三击语义冲突。
+
+**服务端进程（`mode: 'server'`）**：
+
+| 连按次数（3s 窗口内） | 行为 |
+|---------------------|------|
+| 第 1 次 | 重启（`closeServer({ fast: true })` → `exit(1)`，由菜单/PM2 拉起） |
+| 第 2 次 | 提示再按 N 次将返回菜单 |
+| 第 3 次 | 优雅关闭并 `exit(0)` 返回启动菜单 |
+| 关闭进行中再按 | 强制 `exit(130)` |
+
+**启动菜单（`mode: 'menu'`，`start.js`）**：连按 3 次退出程序；`spawnSync` 跑子进程期间 `pause()`，结束后 `resetStrikes()`。
+
+自定义资源清理请用 `registerShutdownHook()`（渲染器浏览器实例已注册）。
 
 ```mermaid
 sequenceDiagram
-    participant Signal as 🛑 信号处理器
-    participant Bot as 🤖 Bot实例
-    participant Server as 🌐 HTTP/HTTPS服务器
-    participant Redis as 💾 Redis客户端
-    
-    Note over Signal,Redis: 🔄 优雅关闭流程
-    
-    Signal->>Bot: 📨 SIGINT/SIGTERM<br/>Ctrl+C 或 kill命令
-    Bot->>Bot: ⏹️ 停止WebSocket心跳<br/>clearInterval()
-    Bot->>Server: 🔒 关闭所有服务器<br/>server.close()
-    Bot->>Bot: 🧹 停止定时清理任务<br/>clearInterval()
-    Bot->>Redis: 💾 保存并关闭Redis<br/>redisExit()
-    Bot->>Signal: ✅ 优雅关闭完成<br/>process.exit(0)
-    
-    Note over Signal: ✨ 服务器已安全关闭
+    participant User as 用户 Ctrl+C
+    participant PSC as ProcessSignalController
+    participant PM as ProcessManager
+    participant Bot as Bot 实例
+
+    User->>PSC: SIGINT 第 1 次
+    PSC->>PM: onRestart
+    PM->>Bot: closeServer(fast)
+    PM->>PM: exit(1) 重启
+
+    User->>PSC: SIGINT 第 3 次
+    PSC->>PM: onStop
+    PM->>Bot: closeServer()
+    PM->>PM: runShutdownHooks + exit(0)
 ```
 
 ---
@@ -802,14 +817,18 @@ throw new Error('操作失败');  // 不会记录日志
 ### 5. 资源清理
 
 ```javascript
-// ✅ 推荐：使用 closeServer
+// ✅ 推荐：注册 shutdown hook（与框架三击关闭协同）
+import { registerShutdownHook } from '#utils/process-signals.js';
+
+registerShutdownHook(async () => {
+  await myResource.close();
+});
+
+// ❌ 不推荐：自行监听 SIGINT（与 ProcessSignalController 冲突）
 process.on('SIGINT', async () => {
   await bot.closeServer();
   process.exit(0);
 });
-
-// ❌ 不推荐：直接退出
-process.exit(0);  // 不会清理资源
 ```
 
 ---
@@ -874,4 +893,4 @@ server:
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-06-14*

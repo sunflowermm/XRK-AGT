@@ -5,6 +5,7 @@ import paths from '#utils/paths.js';
 import BotUtil from '#utils/botutil.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { normalizeError } from '#utils/normalize-error.js';
+import { isShuttingDown } from '#utils/runtime-globals.js';
 import { fileExistsSync, loadYamlFromCandidates, mergeYamlTexts, readYamlTextsBatch } from '#utils/config-yaml.js';
 import { copyFileIfMissingSync } from './config-seed.js';
 import { GLOBAL_CONFIGS, SERVER_CONFIGS } from './config-constants.js';
@@ -274,7 +275,7 @@ class Cfg {
   }
 
   watch(file, name, key) {
-    if (this._destroying || global.__xrkShuttingDown || this._hotReloads.has(key)) return;
+    if (this._destroying || isShuttingDown() || this._hotReloads.has(key)) return;
 
     if (!this._watchEnabled) {
       this._deferredWatches.push({ file, name, key });
@@ -341,7 +342,7 @@ class Cfg {
   }
 
   enableWatching() {
-    if (this._watchEnabled || this._destroying || global.__xrkShuttingDown) return;
+    if (this._watchEnabled || this._destroying || isShuttingDown()) return;
     this._watchEnabled = true;
     const pending = this._deferredWatches.splice(0);
     for (const { file, name, key } of pending) {

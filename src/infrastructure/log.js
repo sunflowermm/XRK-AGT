@@ -7,9 +7,10 @@ import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import schedule from 'node-schedule'
 import { createStream } from 'rotating-file-stream'
-import { execSync } from 'node:child_process'
 import paths from '#utils/paths.js'
 import { normalizeError } from '#utils/normalize-error.js'
+import { fixWindowsUTF8 } from '#utils/win-utf8.js'
+import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js'
 
 /**
  * Logger 配置常量
@@ -69,8 +70,8 @@ const LOG_STYLES = {
  * @returns {Object} 全局 logger 对象
  */
 export default function setLog() {
-  if (global.logger?.__xrkSetLogDone) {
-    return global.logger;
+  if (getRuntimeGlobal('logger')?.__xrkSetLogDone) {
+    return getRuntimeGlobal('logger');
   }
 
   fixWindowsUTF8()
@@ -762,27 +763,12 @@ export default function setLog() {
     } catch {}
   })
 
-  global.logger = logger
+  setRuntimeGlobal('logger', logger);
   logger.__xrkSetLogDone = true
 
   return logger
 }
 
-
-/**
- * 修复 Windows UTF-8 编码问题
- */
-function fixWindowsUTF8() {
-  if (process.platform === 'win32') {
-    try {
-      process.stdout.setEncoding('utf8')
-      process.stderr.setEncoding('utf8')
-      try {
-        execSync('chcp 65001', { stdio: 'ignore' })
-      } catch {}
-    } catch {}
-  }
-}
 
 /**
  * 创建日志轮转流

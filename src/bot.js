@@ -26,6 +26,7 @@ import ConfigLoader from "#infrastructure/commonconfig/loader.js";
 import StreamLoader from "#infrastructure/aistream/loader.js";
 import { stopAllLoaderWatchers } from "#utils/loader-shutdown.js";
 import BotUtil from '#utils/botutil.js';
+import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js';
 import cfg from '#infrastructure/config/config.js';
 import {
   callSubserver as callSubserverApi,
@@ -36,6 +37,7 @@ import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import HTTPBusinessLayer from '#utils/http-business.js';
 import FrontendLauncher from '#infrastructure/frontend/launcher.js';
 import { isLoopback127Connection } from '#infrastructure/http/auth.js';
+import { HttpResponse } from '#utils/http-utils.js';
 
 // 静态资源扩展名，用于基础放行（非鉴权）
 const AUTH_STATIC_EXT_REGEX = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i;
@@ -66,6 +68,8 @@ export default class Bot extends EventEmitter {
   proxyMiddlewares = new Map();
   domainConfigs = new Map();
   sslContexts = new Map();
+  bots = {};
+  tasker = [];
 
   /**
    * Bot构造函数
@@ -79,9 +83,6 @@ export default class Bot extends EventEmitter {
     // 核心属性初始化
     this.stat = { start_time: Date.now() / 1000 };
     this.bot = this;
-    this.bots = {};
-    // Tasker 列表（原 adapter 列表）
-    this.tasker = [];
     this.uin = this._createUinManager();
     
     // Express应用和服务器
@@ -753,8 +754,7 @@ export default class Bot extends EventEmitter {
   }
 
   /**
-   * 挂载HTTP业务层方法到Bot实例（基类挂载）
-   * 使HTTP业务层的方法可以直接通过bot实例调用
+   * 挂载 HTTP 业务层方法到 Bot 实例（文档：docs/runtime-surface.md）
    */
   _mountHttpBusinessMethods() {
     // 挂载代理管理器方法
@@ -1647,7 +1647,7 @@ export default class Bot extends EventEmitter {
 
 
   /**
-   * 创建Bot代理对象
+   * 创建 Bot 代理：Bot[self_id] → bots 映射；未命中时透传 BotUtil 静态成员（文档：docs/runtime-surface.md）
    */
   _createProxy() {
     const botMap = this.bots;
@@ -2074,7 +2074,7 @@ export default class Bot extends EventEmitter {
       }
     };
     
-    res.type('json').send(JSON.stringify(status, null, 2));
+    return HttpResponse.json(res, status);
   }
 
   /**
@@ -2082,8 +2082,8 @@ export default class Bot extends EventEmitter {
    */
   _healthHandler(req, res) {
     if (this._checkHeadersSent(res)) return;
-    
-    res.json({
+
+    return HttpResponse.json(res, {
       status: '健康',
       uptime: process.uptime(),
       timestamp: Date.now()
@@ -2096,11 +2096,11 @@ export default class Bot extends EventEmitter {
    */
   _metricsHandler(req, res) {
     if (this._checkHeadersSent(res)) return;
-    
+
     const memUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage();
     const wsStats = this.getWebSocketStats();
-    
+
     const metrics = {
       timestamp: Date.now(),
       uptime: process.uptime(),
@@ -2129,8 +2129,8 @@ export default class Bot extends EventEmitter {
         arch: process.arch
       }
     };
-    
-    res.type('json').send(JSON.stringify(metrics, null, 2));
+
+    return HttpResponse.json(res, metrics);
   }
 
   /**
@@ -2837,8 +2837,9 @@ export default class Bot extends EventEmitter {
     await this.redisExit();
 
     try {
-      if (global.logger?.shutdown) {
-        await global.logger.shutdown();
+      const logger = globalThis.logger;
+      if (logger?.shutdown) {
+        await logger.shutdown();
       }
     } catch {}
     
@@ -3078,8 +3079,8 @@ export default class Bot extends EventEmitter {
     
     // 处理加载结果（统一处理，避免重复日志）
     if (configResult.status === 'fulfilled') {
-      global.ConfigManager = ConfigLoader;
-      global.cfg = cfg;
+      setRuntimeGlobal('ConfigManager', ConfigLoader);
+      setRuntimeGlobal('cfg', cfg);
     } else {
       BotUtil.makeLog('error', `配置加载失败: ${configResult.reason?.message}`, '服务器');
     }
@@ -3487,7 +3488,7 @@ export default class Bot extends EventEmitter {
    * @returns {Promise<Object>} 命令结果或stdin输出
    */
   async callStdin(command, { user_info = {}, timeout = 5000 } = {}) {
-    const stdinHandler = global.stdinHandler;
+    const stdinHandler = getRuntimeGlobal('stdinHandler');
     
     if (!stdinHandler?.processCommand) {
       throw this.makeError('stdin handler not initialized', 'StdinUnavailable');

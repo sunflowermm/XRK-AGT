@@ -5,16 +5,9 @@ import os from 'os';
 import { spawnSync } from 'child_process';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-// 修复 Windows UTF-8 编码问题
-if (process.platform === 'win32') {
-  try {
-    process.stdout.setEncoding('utf8');
-    process.stderr.setEncoding('utf8');
-    spawnSync('chcp', ['65001'], { stdio: 'ignore', shell: false });
-  } catch {
-    // 忽略错误
-  }
-}
+import { fixWindowsUTF8 } from './src/utils/win-utf8.js';
+
+fixWindowsUTF8();
 
 process.setMaxListeners(30);
 
@@ -218,7 +211,7 @@ class ServerManager extends BaseManager {
         onForceExit: async () => cleanup()
       });
     }
-    this.signalHandler = globalMenuSignalController;
+    this.signalController = globalMenuSignalController;
   }
 
   getPortDir(port) {
@@ -289,10 +282,9 @@ class ServerManager extends BaseManager {
     
     try {
       const { default: BotClass } = await import('./src/bot.js');
+      const { setRuntimeGlobal } = await import('./src/utils/runtime-globals.js');
       const bot = new BotClass();
-      // 设置全局 Bot 实例，供插件、API 等使用
-      global.Bot = bot;
-      globalThis.Bot = bot;
+      setRuntimeGlobal('Bot', bot);
       await bot.run({ port });
     } catch (error) {
       await this.logger.error(`服务器模式启动失败: ${error.message}\n${error.stack}`);
@@ -304,8 +296,8 @@ class ServerManager extends BaseManager {
     // 确保配置就绪（只输出一次日志）
     await this.ensurePortConfig(port);
     
-    if (!this.signalHandler.installed) {
-      this.signalHandler.install();
+    if (!this.signalController.installed) {
+      this.signalController.install();
     }
     
     let restartCount = 0;
@@ -337,7 +329,7 @@ class ServerManager extends BaseManager {
   }
 
   async runServerProcess(port, skipConfigCheck = false) {
-    this.signalHandler.pause();
+    this.signalController.pause();
     try {
       const nodeArgs = getNodeArgs();
       const entryScript = path.join(process.cwd(), 'app.js');
@@ -363,8 +355,8 @@ class ServerManager extends BaseManager {
 
       return normalizeChildExitCode(result.status, CONFIG.EXIT_STOP);
     } finally {
-      this.signalHandler.resetStrikes();
-      this.signalHandler.resume();
+      this.signalController.resetStrikes();
+      this.signalController.resume();
     }
   }
 

@@ -9,6 +9,7 @@
  */
 
 import Bot from './src/bot.js';
+import { setRuntimeGlobal } from './src/utils/runtime-globals.js';
 
 const DEBUG_PORT = 11451;
 
@@ -20,14 +21,11 @@ async function start() {
   console.log('[+] 正在初始化 Bot 核心...');
 
   try {
-    // 模拟服务器启动参数
     process.argv.push('server', DEBUG_PORT.toString());
 
-    // 创建 Bot 实例
     const bot = new Bot();
-    global.Bot = bot;
+    setRuntimeGlobal('Bot', bot);
 
-    // 运行 Bot
     await bot.run({ port: DEBUG_PORT });
 
     console.log('[+] Bot 核心已成功启动');
@@ -38,7 +36,6 @@ async function start() {
   }
 }
 
-// 全局异常捕获
 process.on('uncaughtException', (error) => {
   console.error('[-] 发生未捕获的异常:', error);
   process.exit(1);

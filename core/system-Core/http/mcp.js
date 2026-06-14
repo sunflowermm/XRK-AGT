@@ -27,7 +27,7 @@ const jsonrpcHandler = HttpResponse.asyncHandler(async (req, res) => {
   try {
     const stream = req.params?.stream ?? req.query?.stream;
     const response = await mcpServer.handleJSONRPC(req.body, { stream });
-    res.json(response);
+    return HttpResponse.json(res, response);
   } catch (error) {
     HttpResponse.error(res, error, 500, 'mcp.jsonrpc');
   }
@@ -143,7 +143,7 @@ export default {
         const result = await mcpServer.handleToolCall({ name, arguments: args || {} });
         const duration = Date.now() - startTime;
         
-        res.json({
+        return HttpResponse.json(res, {
           success: !result.isError,
           ...result,
           metadata: {

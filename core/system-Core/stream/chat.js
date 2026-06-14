@@ -156,7 +156,7 @@ export default class ChatStream extends AIStream {
         }
 
         return this._wrapHandler(async () => {
-          const seg = global.segment || segment;
+          const seg = segment;
           await context.e.reply([seg.at(qq)]);
           return {
             success: true,
@@ -1621,7 +1621,7 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
         // 表情包标记
         const image = this.getRandomEmotionImage(marker.emotion);
         if (image) {
-          const seg = global.segment || segment;
+          const seg = segment;
           segments.push(seg.image(image));
         }
       } else if (marker.content.startsWith('[CQ:')) {
@@ -1630,7 +1630,7 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
         if (cqMatch) {
           const [, type, params] = cqMatch;
           const paramObj = {};
-          const seg = global.segment || segment;
+          const seg = segment;
           
           if (params) {
             params.split(',').forEach(p => {
@@ -1720,7 +1720,7 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
         if (replyId) {
           // 有回复ID：回复段必须在最前面（OneBot协议要求）
           // segment.reply返回 { type: "reply", id, ... }，makeMsg会转换为 { type: "reply", data: { id } }
-          const seg = global.segment || segment;
+          const seg = segment;
           const replySegment = seg.reply(replyId);
           const replySegments = segments.length > 0 
             ? [replySegment, ...segments] 

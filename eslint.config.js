@@ -68,7 +68,8 @@ export default [
         logger: 'readonly',
         plugin: 'readonly',
         Renderer: 'readonly',
-        segment: 'readonly'
+        redis: 'readonly',
+        mongodbDb: 'readonly'
       }
     },
     rules: {

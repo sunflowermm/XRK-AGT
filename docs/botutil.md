@@ -32,7 +32,7 @@
 |------|------|------|
 | `exec-async` | `src/utils/exec-async.js` | Promise 版 `exec`；Core 通过 `BotUtil.exec` 或 `#utils/exec-async.js` 使用 |
 | `normalize-error` | `src/utils/normalize-error.js` | `normalizeError()`，配合 `Error.isError()` |
-| 运行时约定 | `docs/node-26-runtime.md` | API 清单与禁止旧写法 |
+| 运行时约定 | `docs/node-26-runtime.md` | Node 26 API 清单 |
 
 ---
 
@@ -187,9 +187,9 @@ classDiagram
 | `makeChatRecord(e, messages, title, description?)` | 根据事件 `e` 创建聊天记录：在 ICQQ 情况下生成合并转发消息，否则退化为普通消息 |
 | `makeMsg(e, messages, title, description)` | 制作合并转发消息，尽量调用Tasker的 `makeForwardMsg` 能力，并附带摘要与标题 |
 
-同时还导出了兼容函数：
+同时还导出了中文别名：
 
-- `制作聊天记录(e, messages, title, description)`：代理到 `BotUtil.makeChatRecord`。
+- `制作聊天记录(...)` → `BotUtil.makeChatRecord`
 
 ---
 

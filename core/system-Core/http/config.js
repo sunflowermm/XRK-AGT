@@ -3,13 +3,14 @@
  * 提供统一的配置文件读写接口
  */
 import BotUtil from '#utils/botutil.js';
+import cfg from '#infrastructure/config/config.js';
+import ConfigLoader from '#infrastructure/commonconfig/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
-const getConfig = (name) => global.ConfigManager?.get(name);
+const getConfig = (name) => ConfigLoader?.get(name);
 
-/** CommonConfig 写入后清 global.cfg 内存缓存，使 LLMFactory 等立即读到新 providers[] */
+/** CommonConfig 写入后清 cfg 内存缓存，使 LLMFactory 等立即读到新 providers[] */
 function invalidateRuntimeCfgCache(configName) {
-  const cfg = global.cfg;
   if (!cfg?.config || !configName) return;
   delete cfg.config[`global.${configName}`];
   const port = cfg.port;

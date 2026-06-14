@@ -258,7 +258,7 @@ async function handleChatCompletionsV3(req, res) {
   // 支持 multipart/form-data 格式（图片上传）
   if (contentType.includes('multipart/form-data')) {
     try {
-      const Bot = req.bot || global.Bot;
+      const bot = req.bot ?? Bot;
       const maxFileSize = cfg?.server?.limits?.fileSize || '100mb';
       const mediaDir = path.join(paths.data, 'media');
       await fs.mkdir(mediaDir, { recursive: true });
@@ -320,7 +320,7 @@ async function handleChatCompletionsV3(req, res) {
       
       // 处理上传的图片：改为落盘文件 URL，避免 base64 膨胀与内存峰值
       if (files && files.length > 0) {
-        const baseUrl = String(Bot?.url || Bot?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+        const baseUrl = String(bot?.url || bot?.getServerUrl?.() || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
         for (const file of files) {
           const filename = file.filename || path.basename(file.path);
           uploadedImages.push(`${baseUrl}/media/${filename}`);
@@ -479,7 +479,7 @@ async function handleChatCompletionsV3(req, res) {
 
       // 对外返回 model=provider
       const responseModel = llmConfig.provider || 'unknown';
-      return res.json({
+      return HttpResponse.json(res, {
         id: `chatcmpl_${Date.now()}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
@@ -648,7 +648,7 @@ async function handleModels(req, res) {
   if (format === 'openai' || req.path === '/api/v3/models') {
     const list = profiles.map((p) => p.key);
     const now = Math.floor(Date.now() / 1000);
-    return res.json({
+    return HttpResponse.json(res, {
       object: 'list',
       data: (list.length ? list : (defaultProvider ? [defaultProvider] : [])).map((p) => ({
         id: p,

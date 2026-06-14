@@ -68,7 +68,8 @@ flowchart TB
 
 ## 配置与加载
 
-- **渲染后端选择**：全局配置 `agt.browser.renderer`（`puppeteer` | `playwright`），决定 `getRenderer()` 使用的实现。
+- **渲染后端选择**：全局配置 `agt.browser.renderer`（`playwright` | `puppeteer`），**默认 `playwright`**；`RendererLoader.getRenderer()` 无参时使用该值。
+- **Playwright Chromium**：npm 包随 `pnpm install` 安装；浏览器二进制需启动菜单「Playwright 浏览器」或 `pnpm run setup:browsers` 单独安装。
 - **按端口配置**：`data/server_bots/{port}/renderers/{type}/config.yaml`，缺省从 `src/renderers/{type}/config_default.yaml` 合并。
 - **加载方式**：`RendererLoader` 扫描 `src/renderers/` 下每个子目录，加载 `index.js` 并调用 `default(config)` 得到实例；配置来自 `cfg.getRendererConfig(type)`。
 
@@ -154,8 +155,8 @@ flowchart TB
 ```javascript
 import RendererLoader from '#infrastructure/renderer/loader.js';
 
-// 获取渲染器实例
-const renderer = RendererLoader.getRenderer('puppeteer');
+// 获取渲染器实例（默认 playwright，见 agt.browser.renderer）
+const renderer = RendererLoader.getRenderer();
 if (!renderer) {
   await this.reply('渲染器未启用');
   return;

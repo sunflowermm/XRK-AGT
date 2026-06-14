@@ -1,9 +1,11 @@
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
+import { GLOBAL_CONFIGS } from '#infrastructure/config/config-constants.js';
 import path from 'path';
 import paths from '#utils/paths.js';
 import StreamLoader from '#infrastructure/aistream/loader.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import BotUtil from '#utils/botutil.js';
+import cfg from '#infrastructure/config/config.js';
 import { mergeUniqueStrings } from '#utils/string-array-utils.js';
 
 /** crawl.webSearch 提供商凭据 SubForm 字段（commonconfig 与 aistream.yaml 对齐） */
@@ -31,7 +33,7 @@ function crawlProviderApiFields(extraFields = {}) {
  * 系统配置管理
  * 管理所有系统级配置文件
  * 新配置结构：
- * - 全局配置（不随端口变化）：agt, device, monitor, notice, mongodb, redis, db, aistream
+ * - 全局配置（不随端口变化）：agt, device, monitor, notice, mongodb, redis（与 config-constants.js 一致）
  *   存储位置：server_bots/ 根目录
  * - 服务器配置（随端口变化）：server, chatbot, group
  *   存储位置：server_bots/{port}/
@@ -46,8 +48,7 @@ export default class SystemConfig extends ConfigBase {
       fileType: 'yaml'
     });
 
-    // 全局配置列表（不随端口变化，存储在server_bots/根目录）
-    const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'notice', 'mongodb', 'redis', 'db'];
+    // 全局配置列表（与 config-constants.js 一致）
 
     // 辅助函数：获取端口号
     const getPort = (cfg) => cfg?.port ?? cfg?._port;
@@ -3345,7 +3346,7 @@ export default class SystemConfig extends ConfigBase {
         multiFile: {
           keys: ['puppeteer', 'playwright'],
           getFilePath: (key) => {
-            const port = getPort(global.cfg);
+            const port = getPort(cfg);
             if (!port) throw new Error('SystemConfig: 渲染器配置需要端口号');
             return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
           },
@@ -3545,7 +3546,7 @@ export default class SystemConfig extends ConfigBase {
       const aistreamSchema = this.configFiles?.aistream?.schema?.fields;
       if (!aistreamSchema) return;
 
-      const snap = validateSnapshot || global.cfg?.aistream || {};
+      const snap = validateSnapshot || cfg?.aistream || {};
       this._refreshAistreamMcpEnums(aistreamSchema.mcp?.fields, snap);
       this._refreshAistreamLlmProviderEnum(aistreamSchema.llm?.fields, snap);
     } catch (e) {

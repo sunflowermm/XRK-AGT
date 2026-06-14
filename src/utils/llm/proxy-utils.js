@@ -33,7 +33,7 @@ export function buildFetchOptionsWithProxy(config = {}, baseOptions = {}) {
   try {
     options.dispatcher = new ProxyAgent(url);
   } catch (err) {
-    globalThis.Bot?.makeLog?.(
+    Bot?.makeLog?.(
       'warn',
       `[LLM Proxy] 创建代理失败: ${String(err?.message || err)}`
     );

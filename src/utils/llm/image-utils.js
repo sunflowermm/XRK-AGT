@@ -9,7 +9,7 @@ const DATA_URL_CACHE = new Map();
 
 function getServerPublicUrl() {
   try {
-    const base = globalThis.Bot?.url;
+    const base = Bot?.url;
     return base ? String(base).replace(/\/+$/, '') : '';
   } catch {
     return '';

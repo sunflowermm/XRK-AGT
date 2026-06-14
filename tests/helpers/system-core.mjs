@@ -9,11 +9,11 @@ export const SYSTEM_CORE_DIR = path.join(root, 'core', 'system-Core');
 
 /** 框架基准：仅 system-Core 官方自带（第三方 vendor 插件不计入） */
 export const SYSTEM_CORE_BASELINE = Object.freeze({
-  http: 11,
+  http: 12,
   stream: 7,
-  plugin: 15,
+  plugin: 16,
   tasker: 4,
-  events: 3,
+  events: 4,
 });
 
 export function listSystemCoreJs(subdir) {

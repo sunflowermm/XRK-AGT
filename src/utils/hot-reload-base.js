@@ -4,6 +4,7 @@ import path from 'path';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 import { normalizeError } from '#utils/normalize-error.js';
+import { isShuttingDown } from '#utils/runtime-globals.js';
 
 const DEFAULT_AWAIT_WRITE_FINISH = {
   stabilityThreshold: 300,
@@ -61,7 +62,7 @@ export class HotReloadBase {
       await this.stop();
       return false;
     }
-    if (global.__xrkShuttingDown || this._stopping) return false;
+    if (isShuttingDown() || this._stopping) return false;
     if (this.watcher) return true;
 
     const {
@@ -83,7 +84,7 @@ export class HotReloadBase {
     ];
     if (targets.length === 0) return false;
 
-    if (this._stopping || global.__xrkShuttingDown) return false;
+    if (this._stopping || isShuttingDown()) return false;
 
     const handleCheck = shouldHandle ?? ((filePath) => this.isValidFile(filePath));
 
@@ -140,7 +141,7 @@ export class HotReloadBase {
    * @returns {boolean} 是否已接受（入队或已 add）
    */
   addTargets(targets) {
-    if (this._stopping || global.__xrkShuttingDown) return false;
+    if (this._stopping || isShuttingDown()) return false;
 
     const list = normalizeWatchTargets(targets);
     if (list.length === 0) return true;

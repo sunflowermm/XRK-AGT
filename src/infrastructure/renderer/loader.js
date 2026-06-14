@@ -7,8 +7,9 @@ import Renderer from "./Renderer.js"
 import paths from "#utils/paths.js"
 import BotUtil from "#utils/botutil.js"
 import { FileLoader } from "#utils/file-loader.js"
+import { setRuntimeGlobal } from "#utils/runtime-globals.js"
 
-global.Renderer = Renderer
+setRuntimeGlobal("Renderer", Renderer)
 
 class RendererLoader {
   renderers = new Map()

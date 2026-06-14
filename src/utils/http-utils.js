@@ -25,6 +25,16 @@ export class HttpResponse {
   }
 
   /**
+   * 原样 JSON 响应（兼容端点如 stdin，不包 success 外壳）
+   * @param {Object} res
+   * @param {*} body
+   * @param {number} [statusCode=200]
+   */
+  static json(res, body, statusCode = 200) {
+    return res.status(statusCode).json(body)
+  }
+
+  /**
    * 错误响应
    * @param {Object} res - Express响应对象
    * @param {Error} error - 错误对象

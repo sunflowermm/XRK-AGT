@@ -1,7 +1,8 @@
 # Tasker 加载器文档
 
 > **文件位置**：`src/infrastructure/tasker/loader.js`  
-> **可扩展性**：TaskerLoader是Tasker系统的核心加载器，自动发现和加载所有Tasker。Tasker开发者只需将Tasker放置到对应目录，无需任何配置。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+> **Loader 模式**：[infrastructure-shared.md](infrastructure-shared.md) · **规范**：[tasker-base-spec.md](tasker-base-spec.md)  
+> **可扩展性**：[框架可扩展性指南](框架可扩展性指南.md)
 
 `TaskerLoader` 负责从所有 `core/*/tasker` 目录动态加载各类 Tasker（事件生成器，如 QQ OneBotv11 等），并与 `Bot` 主类配合，为整个系统提供统一的事件入口。
 
@@ -126,7 +127,7 @@ flowchart TB
 
 `Bot.wsf[path]` 的元素可以是：
 
-- 直接的函数：`(ws, req, ...args) => { ... }`（兼容旧版本，默认需要系统级 API Key）；
+- 直接的函数：`(ws, req, ...args) => { ... }`（简写形式，默认需要系统级 API Key）；
 - 或对象：`{ handler: (ws, req, ...args) => { ... }, skipAuth: true }`  
   当任意条目声明 `skipAuth: true` 时，该路径在 `wsConnect` 中会跳过系统级 API Key 鉴权，适合像 `xiaozhi-Core` 这类需要自定义鉴权的 Tasker。
 
@@ -205,4 +206,4 @@ Bot.tasker.push(new MyTasker());
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-06-14*

@@ -1,3 +1,5 @@
+import { isShuttingDown } from '#utils/runtime-globals.js';
+
 /** 连续按键判定窗口（毫秒） */
 export const SIGNAL_STRIKE_WINDOW_MS = 3000;
 
@@ -150,7 +152,7 @@ export class ProcessSignalController {
   async _handle(signal) {
     if (this.paused) return;
 
-    if (global.__xrkShuttingDown) {
+    if (isShuttingDown()) {
       await this._forceExit(signal);
       return;
     }

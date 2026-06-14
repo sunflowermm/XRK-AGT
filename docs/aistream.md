@@ -2,7 +2,7 @@
 
 > **文件位置**：`src/infrastructure/aistream/aistream.js`  
 > **说明**：本文档描述 Node 侧 `AIStream` 基类与 LLM/MCP 集成方式。  
-> **底层基线**：架构边界与调用链路以 **[底层架构设计](底层架构设计.md)** 为准。
+> **底层基线**：[底层架构设计](底层架构设计.md) · **基类契约**：[base-classes.md](base-classes.md) · **Loader 模式**：[infrastructure-shared.md](infrastructure-shared.md)
 
 `AIStream` 是 XRK-AGT 的工作流基类，用于统一处理：
 - 消息上下文构建

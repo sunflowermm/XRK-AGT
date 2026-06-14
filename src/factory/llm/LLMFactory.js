@@ -13,6 +13,7 @@ import OllamaCompatibleLLMClient from './OllamaCompatibleLLMClient.js';
 import GeminiCompatibleLLMClient from './GeminiCompatibleLLMClient.js';
 import AnthropicCompatibleLLMClient from './AnthropicCompatibleLLMClient.js';
 import AzureOpenAICompatibleLLMClient from './AzureOpenAICompatibleLLMClient.js';
+import cfg from '#infrastructure/config/config.js';
 
 const builtinClientFactories = new Map([
   ['volcengine', (config) => new VolcengineLLMClient(config)],
@@ -34,8 +35,8 @@ export function resolveFactoryId(configKey = '') {
 
 /** 读取工厂 YAML（须走 cfg.getConfig； bracket 访问对多数 *_compat_llm 无效） */
 function readFactoryCfg(configKey) {
-  if (!configKey || typeof global.cfg?.getConfig !== 'function') return {};
-  return global.cfg.getConfig(configKey) || {};
+  if (!configKey || typeof cfg?.getConfig !== 'function') return {};
+  return cfg.getConfig(configKey) || {};
 }
 
 /** 所有 LLM 工厂统一从 providers[] 解析；YAML 默认仅 providers: [] */
@@ -62,7 +63,7 @@ function normalizeProviderKey(name) {
 }
 
 function resolveDefaultProvider() {
-  return normalizeProviderKey(global.cfg?.aistream?.llm?.Provider || global.cfg?.aistream?.llm?.provider);
+  return normalizeProviderKey(cfg?.aistream?.llm?.Provider || cfg?.aistream?.llm?.provider);
 }
 
 function normalizeProtocol(value) {

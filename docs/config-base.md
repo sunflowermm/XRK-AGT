@@ -275,8 +275,8 @@ export default class RendererConfig extends ConfigBase {
       filePath: (cfg) => `data/server_bots/${cfg.port}/renderers/{type}/config.yaml`,
       multiFile: {
         keys: ['puppeteer', 'playwright'],
-        getFilePath: (key) => {
-          const port = global.cfg?.port ?? global.cfg?._port;
+        getFilePath: (key, cfg) => {
+          const port = cfg?.port ?? cfg?._port;
           return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
         }
       }

@@ -1,99 +1,26 @@
 # 应用 & 前后端开发总览
 
-> **文件位置**：`app.js`、`start.js`、`core/system-Core/www/xrk/`  
-> **说明**：本文档面向应用开发者、前后端开发者、运维人员，提供完整的应用开发思路和技术栈整合方案
+> **文件位置**：`core/system-Core/www/xrk/`、`start.js` 菜单后的 Bot 运行时  
+> **启动链**（bootstrap、环境变量、Playwright）：见 **[startup.md](startup.md)** — 本文不重复引导细节。
 
-本篇文档说明：
-
-- 整体启动流程（`app.js` → `start.js` → `src/bot.js`）
-- 如何扩展 Web 前端（`core/system-Core/www/xrk` 控制台，访问路径：`/xrk`）
-- 如何让前端与后端 API、插件、渲染器、工作流协同工作
-- **完整的技术栈整合方案**：插件系统 + 工作流系统 + HTTP API + 渲染器 + 配置系统 + 事件系统
+本篇说明 Web 控制台、前后端协作、`cfg` 配置体系，以及插件 / 工作流 / HTTP API 的整合方式。
 
 ### 核心特性
 
-- ✅ **引导流程**：自动环境检查、依赖安装、配置加载
-- ✅ **Web控制台**：内置Web管理界面，支持系统状态、API调试、配置管理
-- ✅ **技术栈整合**：插件系统 + 工作流系统 + HTTP API + 渲染器 + 配置系统 + 事件系统
-- ✅ **前后端分离**：前端通过HTTP API与后端交互
-- ✅ **热重载支持**：开发时自动重载，提升开发效率
+- ✅ **Web 控制台**：系统状态、API 调试、配置管理（`/xrk/`）
+- ✅ **技术栈整合**：插件 + 工作流 + HTTP API + 渲染器 + 配置 + 事件
+- ✅ **前后端分离**：前端经 HTTP API 与 `Bot` 交互
 
 ---
 
 ## 📚 目录
 
-- [启动流程总览](#启动流程总览)
-- [app.js：引导流程详解](#appjs引导流程详解)
 - [配置系统（cfg 对象）](#配置系统cfg-对象)
-- [Web 控制台（core/system-Core/www/xrk）与 API 交互](#web-控制台coresystem-corewwwxrk-与-api-交互)
+- [Web 控制台与 API 交互](#web-控制台coresystem-corewwwxrk-与-api-交互)
 - [典型开发场景](#典型开发场景)
 - [建议的前后端协作模式](#建议的前后端协作模式)
 - [完整技术栈整合方案](#完整技术栈整合方案)
 - [进一步阅读](#进一步阅读)
-
----
-
-## 启动流程总览
-
-```mermaid
-flowchart TD
-  Entry["命令行: node app"] --> Bootstrap["app.js<br/>Bootstrap"]
-  Bootstrap --> EnvCheck["环境检查<br/>Node 版本 + 目录结构"]
-  Bootstrap --> Deps["依赖检测与安装<br/>DependencyManager"]
-  Bootstrap --> Imports["动态 imports 合并<br/>data/importsJson/*.json"]
-  Bootstrap --> Start["import ./start.js"]
-  Start --> Bot["创建 Bot 实例<br/>src/bot.js"]
-  Bot --> Http["初始化 HTTP/HTTPS/WS 服务"]
-  Bot --> Taskers["加载 Tasker<br/>core/*/tasker"]
-  Bot --> Plugins["加载插件<br/>core/*/plugin"]
-  Bot --> ApiLoader["加载 HTTP API<br/>core/*/http"]
-  Bot --> Renderers["初始化渲染器<br/>src/renderers"]
-  Bot --> Online["触发 online / ready 事件"]
-```
-
-
-
-**关键文件：**
-
-
-| 角色     | 文件                                                                        | 说明                                                                                                      |
-| ------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| 引导器    | `app.js`                                                                  | 检查依赖与环境、安装缺失依赖、加载动态 `imports`，最后启动 `start.js`                                                           |
-| 主程序入口  | `start.js`                                                                | 实际创建 `Bot` 实例、加载配置、监听事件、启动 HTTP/WS 服务                                                                   |
-| 运行核心   | `src/bot.js`                                                              | 封装 HTTP/HTTPS/WebSocket、中间件、认证、Tasker/插件/API 装载                                                         |
-| Web 前端 | `core/system-Core/www/xrk/index.html` / `core/system-Core/www/xrk/app.js` | XRK Web 控制台，包含系统状态、API 调试、配置管理前端 访问路径：`/<目录名>/`*（如 `/xrk/*`） **说明**：`www/` 下可以创建子目录，子目录自动挂载到 `/<目录名>/`* |
-
-
----
-
-## app.js：引导流程详解
-
-`app.js` 主要做三件事：
-
-1. **环境验证（EnvironmentValidator）**
-  - 检查 Node.js 版本（`package.json` engines：**≥ 26.0**）。
-  - 通过 `paths.ensureBaseDirs` 确保 `logs/`、`data/`、`config/` 等基础目录存在；`paths.warmupCoreLayout()` 预热 core 子目录索引。
-2. **依赖管理（DependencyManager）**
-  - 解析根目录 `package.json`。
-  - 检查 `dependencies + devDependencies` 对应的模块是否存在于 `node_modules`。
-  - 若有缺失，自动选择可用的包管理器（`pnpm` → `npm` → `yarn`）执行 `install`。
-  - 扫描 `core/`* 下含 `package.json` 的子核心目录，缺依赖则在该目录执行 `pnpm install`（渲染器在 `src/renderers/`，使用根依赖，不单独安装）。
-3. **动态 imports 合并**
-  - 扫描 `data/importsJson/*.json`，收集所有 `imports` 字段。
-  - 合并到根目录 `package.json.imports` 中，方便在运行时新增别名映射（例如第三方插件）。
-
-完成上述步骤后，`app.js` 动态 `import('./start.js')`，交给主程序继续。
-
-### 可选环境变量（多端口 / 调试）
-
-
-| 变量                              | 作用                         |
-| ------------------------------- | -------------------------- |
-| `XRK_SKIP_CONFIG_CHECK=1`       | 跳过配置检查（`start.js` 可连带跳过引导） |
-| `XRK_SKIP_BOOTSTRAP=1`          | 跳过插件/前端依赖安装                |
-| `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 仅跳过前端依赖检查                  |
-| `XRK_SKIP_FRONTEND_START=1`     | 跳过前端 dev server            |
-
 
 ---
 
@@ -129,7 +56,7 @@ flowchart TB
         S6["其他工厂配置..."]
     end
 
-    subgraph Cfg["cfg 对象 · global.cfg"]
+    subgraph Cfg["cfg 对象 · import cfg"]
         C1["getGlobalConfig"]
         C2["getServerConfig"]
         C3["快捷访问器"]
@@ -141,7 +68,7 @@ flowchart TB
     Server --> C2
     C1 --> C3
     C2 --> C3
-    C3 --> Bot["Bot.run · global.cfg"]
+    C3 --> Bot["Bot.run · cfg 就绪"]
 
     style Default fill:#E6F3FF
     style Global fill:#E8F5E9
@@ -167,8 +94,8 @@ flowchart TB
 | `device`  | `data/server_bots/device.yaml`  | 设备配置         |
 | `monitor` | `data/server_bots/monitor.yaml` | 监控配置         |
 | `notice`  | `data/server_bots/notice.yaml`  | 通知配置         |
-| `mongodb` | `data/server_bots/mongodb.yaml` | MongoDB 连接配置 |
-| `redis`   | `data/server_bots/redis.yaml`   | Redis 连接配置   |
+| `mongodb` | `data/server_bots/mongodb.yaml` | MongoDB 连接配置（详见 [database.md](database.md)） |
+| `redis`   | `data/server_bots/redis.yaml`   | Redis 连接配置（详见 [database.md](database.md)）   |
 
 
 **使用方式**：
@@ -711,7 +638,7 @@ export default class ReportPlugin extends plugin {
     
     // 使用渲染器生成图片
     import RendererLoader from '#infrastructure/renderer/loader.js';
-    const renderer = RendererLoader.getRenderer('puppeteer');
+    const renderer = RendererLoader.getRenderer(); // 默认 agt.browser.renderer（playwright）
     if (renderer) {
       const imagePath = await renderer.renderImage({
         template: 'report-template',
@@ -731,7 +658,8 @@ export default {
       method: 'GET',
       path: '/api/report/generate',
       handler: async (req, res, bot) => {
-        const renderer = bot.renderer?.puppeteer;
+        const type = bot.cfg?.agt?.browser?.renderer || 'playwright';
+        const renderer = bot.renderer?.[type];
         if (!renderer) {
           return res.status(503).json({
             success: false,
@@ -855,16 +783,13 @@ flowchart TB
 
 ## 进一步阅读
 
-- **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：整体架构与运行逻辑
-- **[system-Core 特性](system-core.md)**：system-Core 内置模块完整说明，包含Web控制台、所有HTTP API、工作流、插件和Tasker ⭐
-- **[框架可扩展性指南](框架可扩展性指南.md)**：完整的扩展能力说明
-- **[AIStream 文档](aistream.md)**：AIStream 基类 API（Node 侧 LLM + MCP + RAG；子服务为可选扩展）
-- **[插件基类文档](plugin-base.md)**：插件基类完整API
-- **[Bot文档](bot.md)**：Bot生命周期、中间件与认证
-- **[HTTP API文档](http-api.md)**：API定义与装载
-- **[配置系统文档](config-base.md)**：配置基类细节
-- **[渲染器文档](renderer.md)**：模板与截图渲染能力
+- **[startup.md](startup.md)**：引导链与环境变量
+- **[底层架构设计](底层架构设计.md)**：分层边界
+- **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：目录树
+- **[system-Core 特性](system-core.md)**：Web 控制台与内置 API/工作流 ⭐
+- **[框架可扩展性指南](框架可扩展性指南.md)**：扩展点与 Core 开发
+- **[aistream.md](aistream.md)** · **[plugin-base.md](plugin-base.md)** · **[bot.md](bot.md)** · **[http-api.md](http-api.md)** · **[config-base.md](config-base.md)** · **[renderer.md](renderer.md)**
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-06-14*

@@ -18,7 +18,7 @@ const requiredFiles = [
   'css/styles-layout.css',
   'css/styles-chat-tools.css',
   'css/pages.css',
-  'css/motion.css',
+  'css/components.css',
   'modules/ui-kit.js',
   'modules/dom.js',
   'modules/system-overview.js',

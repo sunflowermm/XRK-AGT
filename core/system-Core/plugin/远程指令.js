@@ -1801,8 +1801,8 @@ rc help - 显示详细帮助`, true);
   getGlobalContext(e = null) {
     return {
       ...JS_SANDBOX_STATIC,
-      segment: global.segment,
-      logger: global.logger,
+      segment,
+      logger,
       e,
       plugin: this,
     }

@@ -6,6 +6,8 @@
 | **加载器** | `src/infrastructure/plugins/loader.js` → [plugins-loader.md](plugins-loader.md) |
 | **放置位置** | `core/<core名>/plugin/*.js`（自动扫描，零配置） |
 | **扩展总览** | [框架可扩展性指南](框架可扩展性指南.md) |
+| **基类契约** | [base-classes.md](base-classes.md)（最小导出；本篇为插件专题） |
+| **Loader 模式** | [infrastructure-shared.md](infrastructure-shared.md) |
 
 `plugin` 是 XRK-AGT 插件系统的统一基类：规则匹配、定时任务、事件订阅、多轮上下文、工作流调用与统一回复。业务逻辑只写在继承类中，**不要改** `src/infrastructure/plugins/` 底层。
 
@@ -364,7 +366,8 @@ export default class MyPlugin extends plugin {
 |------|----------|
 | 子 Bot | `e.bot`、`Bot[self_id]` |
 | 全局 Bot | 全局 `Bot` |
-| Redis | 全局 `redis` |
+| Redis | 全局 `redis`（启动后由 [database.md](database.md) 初始化） |
+| MongoDB | 全局 `mongodb` / `mongodbDb`，或 `getMongoDb()` |
 | 配置 | 经 HTTP / `ConfigBase`，勿在插件内直接写 YAML 路径 |
 
 ---
@@ -375,8 +378,8 @@ export default class MyPlugin extends plugin {
 - [事件系统标准化文档](事件系统标准化文档.md) — 事件命名与字段
 - [aistream.md](aistream.md) — 工作流与 MCP
 - [框架可扩展性指南](框架可扩展性指南.md) — 七大扩展点
-- [底层架构设计.md](底层架构设计.md) — 分层与工具模块
+- [database.md](database.md) — Redis / MongoDB 配置与访问
 
 ---
 
-*最后更新：2026-05-31*
+*最后更新：2026-06-14*

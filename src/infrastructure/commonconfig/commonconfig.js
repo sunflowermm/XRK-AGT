@@ -3,6 +3,7 @@ import fsSync from 'fs';
 import path from 'path';
 import yaml from 'yaml';
 import BotUtil from '#utils/botutil.js';
+import cfg from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
 
 /**
@@ -148,7 +149,7 @@ export default class ConfigBase {
    */
   _resolveFilePath() {
     if (this._getFilePath) {
-      const dynamicPath = this._getFilePath(global.cfg);
+      const dynamicPath = this._getFilePath(cfg);
       if (!dynamicPath) {
         throw new Error('动态路径函数未返回有效路径');
       }

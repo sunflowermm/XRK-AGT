@@ -288,7 +288,7 @@ export default class DesktopStream extends AIStream {
           const e = context.e;
           if (e && typeof e.reply === 'function') {
             try {
-              const seg = global.segment || segment;
+              const seg = segment;
               await e.reply([seg.image(screenshotPath)]);
             } catch (err) {
               BotUtil.makeLog(

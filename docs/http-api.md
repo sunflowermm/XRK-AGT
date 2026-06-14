@@ -1,7 +1,8 @@
 # HTTP API 基类文档
 
 > **文件位置**：`src/infrastructure/http/http.js`  
-> **可扩展性**：HttpApi是HTTP/API系统的核心扩展点。通过继承HttpApi或导出对象，开发者可以快速创建自定义API，无需修改底层代码。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+> **基类契约**：[base-classes.md](base-classes.md) · **加载器**：[api-loader.md](api-loader.md) · [infrastructure-shared.md](infrastructure-shared.md)  
+> **可扩展性**：[框架可扩展性指南](框架可扩展性指南.md)
 
 `HttpApi` 是 XRK-AGT 中的 **HTTP API 基类**，用于统一定义 REST 路由、WebSocket 处理器、中间件等。
 
@@ -418,6 +419,7 @@ handler: async (req, res, bot) => {
 ### 2. 响应格式：统一用 HttpResponse
 
 - **成功**：`HttpResponse.success(res, data, message)`，会输出 `{ success: true, message, ...data }`。
+- **原样 JSON**（兼容端点）：`HttpResponse.json(res, body)`，不包 `success` 外壳（如 `/api/stdin/command`）。
 - **错误**：`HttpResponse.error(res, error, statusCode, context)`、`HttpResponse.validationError(res, message)`、`HttpResponse.notFound(res, message)`、`HttpResponse.forbidden(res, message)` 等，格式统一为 `{ success: false, message, code }`。
 - **避免**在 handler 里直接 `res.status(200).json({ ... })` 或手写错误 JSON，以便日志与前端解析一致。
 
@@ -497,4 +499,4 @@ routes: [
 
 ---
 
-*最后更新：2026-05-31*
+*最后更新：2026-06-14*

@@ -6,6 +6,7 @@
 | **配对基类** | [plugin-base.md](plugin-base.md)（规则、上下文、工作流） |
 | **事件链路图** | 见 [plugin-base.md § 事件链路](plugin-base.md#事件链路) |
 | **扩展总览** | [框架可扩展性指南](框架可扩展性指南.md) |
+| **Loader 模式** | [infrastructure-shared.md](infrastructure-shared.md) |
 
 `PluginsLoader` 是 XRK-AGT 的 **插件调度核心**，负责：
 
@@ -410,4 +411,4 @@ await PluginsLoader.watch(true);
 
 ---
 
-*最后更新：2026-05-31*
+*最后更新：2026-06-14*
