@@ -75,7 +75,7 @@ XRK-AGT/
 
 ## system-Core 规模（索引）
 
-开箱即用模块数量以代码与 [docs/system-core.md](docs/system-core.md) 为准（约 11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / Web 控制台 `/xrk/`）。MCP 工具数以 `registerMCPTool` 为准。
+开箱即用模块数量以代码与 [docs/system-core.md](docs/system-core.md) 为准（约 **12 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 4 events**；Web 控制台 `/xrk/`）。MCP 工具数以 `registerMCPTool` 为准（当前 **80**）。
 
 ---
 

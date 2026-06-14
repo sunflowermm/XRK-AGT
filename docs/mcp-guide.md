@@ -41,7 +41,7 @@ flowchart TB
 
     subgraph Streams["🌊 工作流层"]
         direction TB
-        MainStreams["主工作流<br/>chat / device / desktop"]
+        MainStreams["主工作流<br/>chat / desktop / web / browser"]
         ToolStreams["工具工作流<br/>tools / memory / database"]
     end
 
@@ -354,11 +354,12 @@ GET /api/mcp/tools/streams
 ```json
 {
   "success": true,
-  "streams": ["chat", "device", "desktop", "tools", "memory", "database"],
+  "streams": ["chat", "desktop", "web", "browser", "tools", "memory", "database"],
   "groups": {
     "chat": [...],
-    "device": [...],
     "desktop": [...],
+    "web": [...],
+    "browser": [...],
     "tools": [
       {
         "name": "tools.read",
@@ -374,7 +375,7 @@ GET /api/mcp/tools/streams
 ```
 
 **工作流分类**：
-- **主工作流**：`chat`、`device`、`desktop`（完整功能工作流）
+- **主工作流**：`chat`、`desktop`、`web`、`browser`（system-Core 七个自带工作流中的完整功能流；**无**默认 `device` 工作流文件）
 - **工具工作流**：`tools`、`memory`、`database`（提供MCP工具的工作流）
 
 #### 5. 健康检查

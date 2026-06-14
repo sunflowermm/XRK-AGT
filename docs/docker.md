@@ -7,8 +7,9 @@
 
 - ✅ **一键部署**：Docker Compose 一键启动所有服务
 - ✅ **自动构建**：自动构建 Python 子服务端，无需手动配置
+- ✅ **无内置模型**：LLM/ASR/TTS 均走外部 API 或本机 Ollama 等；**容器内不下载、不打包** Whisper/ONNX 等权重
 - ✅ **数据持久化**：支持数据、日志、配置的持久化存储
-- ✅ **代理支持**：支持按需为容器网络请求配置代理
+- ✅ **代理支持**：按需为容器出网（调用 LLM API 等）配置 `HTTP_PROXY`
 - ✅ **健康检查**：内置健康检查机制，确保服务正常运行
 
 ---
@@ -55,9 +56,9 @@ cd XRK-AGT
 # 主服务端口（默认 8080）
 XRK_SERVER_PORT=8080
 
-# 代理配置（可选）
+# 代理配置（可选：容器访问外网 LLM / Git 等，非模型下载）
 HTTP_PROXY=http://host.docker.internal:7890
-HTTPS_PROXY=https://host.docker.internal:7890
+HTTPS_PROXY=http://host.docker.internal:7890
 NO_PROXY=127.0.0.1,localhost,xrk-agt,redis,mongodb
 
 # MongoDB 认证（可选）
@@ -137,7 +138,7 @@ Docker 构建时会自动安装 Python 运行依赖（FastAPI、uvicorn、pyyaml
 
 ### 为什么需要代理？
 
-Docker 容器内的应用无法直接使用宿主机的系统代理设置，需要手动传递代理环境变量。
+Docker 容器内的应用无法直接使用宿主机的系统代理设置。当主服务需要访问**外网 LLM API**、Git、或子服务端扩展 API 拉取外部资源时，需通过环境变量传入代理（**与「模型下载」无关**——当前版本不在镜像或启动流程中预拉 AI 权重）。
 
 ### 配置代理（按需）
 
@@ -178,6 +179,24 @@ HTTPS_PROXY=http://host.docker.internal:7890
 - **主服务端连接**：不走代理（已自动排除）
 - **本地服务**：Redis、MongoDB 不走代理（已自动排除）
 
+## 轻量性与适用场景
+
+| 维度 | 现状 | 说明 |
+|------|------|------|
+| **子服务端** | 轻 | FastAPI + uvicorn + pyyaml；无 PyTorch/Whisper；历史 AI 推理接口已下线（见 [subserver-api.md](subserver-api.md)） |
+| **主镜像** | 偏重 | `node:26-slim` + 完整 `node_modules` + **Chromium**（截图/Playwright 渲染）；构建后常见 **1GB+** |
+| **Compose 默认** | 四服务 | `xrk-agt` + `xrk-subserver`（同镜像不同 command）+ `redis:7-alpine` + `mongo:8.0`；内存上限合计约 **4.5GB**（见 `docker-compose.yml` `deploy.resources`） |
+| **LLM 推理** | 不在容器内 | 配置各 `*_llm.yaml` 指向云端或宿主机 Ollama；镜像不含模型文件 |
+
+**算轻量吗？** 相对「带 GPU + 本地大模型」的 AI 栈，**是的**（无模型权重、子服务极简）。相对「纯 Node API + SQLite」，**不算**（Chromium + Mongo + 双应用容器）。
+
+**好用吗？** 开箱 `docker-compose up -d` 即可跑通控制台与 Redis/Mongo；注意：
+
+1. 首次构建需拉 Node/Python 依赖，耗时取决于网络（可配代理）。
+2. 不需要 Python 扩展 API 时，可只起 `xrk-agt` + `redis`（自行改 compose 或 `docker-compose up xrk-agt redis`）。
+3. MongoDB 在 compose 中为默认依赖；本机调试可用 `XRK_OPTIONAL_DB=1`（见 [database.md](database.md)），生产仍建议至少 Redis 或 Mongo 其一。
+4. `.env` 中的 `HTTP_PROXY` 需写入 compose 才会进容器（见下节环境变量表）。
+
 ## 数据持久化
 
 以下目录通过 volume 挂载：
@@ -200,7 +219,8 @@ Docker 环境自动配置：
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
 | `XRK_SERVER_PORT` | 主服务端口 | `8080` |
-| `NO_PROXY` | 不走代理的地址 | `127.0.0.1,localhost,redis,mongodb` |
+| `HTTP_PROXY` / `HTTPS_PROXY` | 容器出网代理（LLM API 等） | 空（不启用） |
+| `NO_PROXY` | 不走代理的地址 | `127.0.0.1,localhost,redis,mongodb,xrk-agt` |
 | `MONGO_ROOT_USERNAME` | MongoDB 用户名 | 空 |
 | `MONGO_ROOT_PASSWORD` | MongoDB 密码 | 空 |
 
@@ -449,4 +469,4 @@ curl -f http://localhost:8080/health || exit 1
 
 ---
 
-*最后更新：2026-02-12*
+*最后更新：2026-06-14*

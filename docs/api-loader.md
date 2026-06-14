@@ -32,7 +32,7 @@
 - ✅ **错误隔离**：单个API加载失败不影响其他API
 - ✅ **优先级排序**：支持按优先级排序
 
-> 💡 **实际示例**：system-Core 提供了 11 个 HTTP API 模块的实际实现，展示了如何使用 ApiLoader 自动加载和管理 API。详见 [system-Core 特性文档](system-core.md#http-api-模块)。
+> 💡 **实际示例**：system-Core 提供了 **12 个** HTTP API 模块的实际实现，展示了如何使用 ApiLoader 自动加载和管理 API。详见 [system-Core 特性文档](system-core.md#http-api-模块)。
 
 ---
 
@@ -335,7 +335,7 @@ export default {
   routes: [
     {
       method: 'POST',
-      path: '/api/ai/chat',
+      path: '/api/ai/chat', // 自定义 Core 示例路径；内置 AI 见 ai.js（/api/v3/chat/completions 等）
       handler: async (req, res, bot) => {
         const stream = StreamLoader.getStream('chat');
         if (!stream) {
@@ -364,7 +364,7 @@ export default {
 ## 相关文档
 
 - **[HTTP API 基类](http-api.md)** - HttpApi 基类完整说明
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 11 个 HTTP API 模块的实际示例 ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 **12 个** HTTP API 模块的实际示例 ⭐
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 
 ---

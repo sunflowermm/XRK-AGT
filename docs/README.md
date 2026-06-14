@@ -65,7 +65,7 @@
 
 分层与职责见 **[底层架构设计](底层架构设计.md)**（本页不重复架构图）。业务实现放在 `core/*/`；`src/` 为基础设施，**勿写业务 API/工作流**。
 
-**system-Core 内置模块**：11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 3 events；MCP 工具在七个自带工作流内合计 **68** 个。详见 **[system-Core 特性文档](system-core.md)**；CI 标准值与实测见 **[框架测试指南](框架测试指南.md)**。
+**system-Core 内置模块**：12 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 4 events；MCP 工具在七个自带工作流内合计 **80** 个（`registerMCPTool` 计数）。详见 **[system-Core 特性文档](system-core.md)**；CI 标准值见 **`tests/helpers/system-core.mjs`** 与 **[框架测试指南](框架测试指南.md)**。
 
 ### 🔌 插件与事件系统
 

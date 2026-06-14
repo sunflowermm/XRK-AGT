@@ -547,7 +547,8 @@ export default class AssistantPlugin extends plugin {
 
 **应用场景**：智能办公助手、自动化脚本、复杂任务编排
 
-> **注意**：Node 侧多步能力通过工作流 + MCP 工具协作实现；Python 子服务端用于承载可选扩展 API，而非固定 AI 编排入口。
+> **注意**：Node 侧多步能力通过工作流 + MCP 工具协作实现；Python 子服务端用于承载可选扩展 API，而非固定 AI 编排入口。  
+> **内置 AI 端点**（system-Core `ai.js`）：`/api/v3/chat/completions`、`/api/ai/stream`、`/api/ai/models` 等；**无** `/api/ai/chat`。下列为**自定义 Core** 示例路径。
 
 #### 方案3：Web控制台应用
 

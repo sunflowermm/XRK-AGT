@@ -11,7 +11,7 @@ export const SYSTEM_CORE_DIR = path.join(root, 'core', 'system-Core');
 export const SYSTEM_CORE_BASELINE = Object.freeze({
   http: 12,
   stream: 7,
-  plugin: 16,
+  plugin: 15,
   tasker: 4,
   events: 4,
 });

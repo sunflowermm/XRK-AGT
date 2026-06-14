@@ -128,8 +128,9 @@ XRK-AGT 提供以下工作流，每个工作流包含一组相关工具：
 | 工作流 | 说明 | 主要工具 |
 |--------|------|----------|
 | `chat` | 聊天工作流 | 群聊功能、消息处理等 |
-| `device` | 设备工作流 | 设备控制、语音识别等 |
 | `desktop` | 桌面工作流 | `show_desktop`, `open_system_tool`, `open_browser`, `screenshot` 等 |
+| `web` | 网页抓取工作流 | `web_fetch`、搜索等 |
+| `browser` | 受控浏览器工作流 | Playwright 截图、页面交互等 |
 
 ### 工具工作流（提供MCP工具）
 

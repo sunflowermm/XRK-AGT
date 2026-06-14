@@ -11,7 +11,7 @@ import {
 describe('加载器集成（system-Core 基准）', () => {
   before(bootstrapTestEnv);
 
-  it('ApiLoader 注册全部 11 个 system-Core HTTP 模块', async () => {
+  it(`ApiLoader 注册全部 ${SYSTEM_CORE_BASELINE.http} 个 system-Core HTTP 模块`, async () => {
     const { default: ApiLoader } = await import('../../src/infrastructure/http/loader.js');
     const apis = await ApiLoader.load();
     const keys = systemCoreHttpApiKeys();
@@ -21,7 +21,7 @@ describe('加载器集成（system-Core 基准）', () => {
     }
   });
 
-  it('PluginsLoader 至少加载 system-Core 的 15 个插件', async () => {
+  it(`PluginsLoader 至少加载 system-Core 的 ${SYSTEM_CORE_BASELINE.plugin} 个插件`, async () => {
     const { default: PluginsLoader } = await import('../../src/infrastructure/plugins/loader.js');
     const listed = (await PluginsLoader.getPlugins())
       .filter((p) => p.core === 'system-Core')
