@@ -16,7 +16,7 @@
 | `token-estimate.js` | `estimateTokensRough` / `estimateTokensMixed` |
 | `sse-openai.js` | `writeSSEChunk`、`createOpenAIChunk` |
 | `hot-reload-base.js` | chokidar 热重载唯一入口（`src/` 内除本文件外禁止直接 chokidar） |
-| `core-fs.js` | `resolveCoreModuleKey`、`scanFiles` |
+| `core-fs.js` | `resolveCoreModuleKey`（ApiLoader / 热重载 key：相对 `core/*/http/` 等子目录、无 `.js`）、`scanFiles` |
 | `string-array-utils.js` | 配置层字符串数组归一化 |
 
 引导、信号、路径等其余 `src/utils/` 模块见 [底层架构设计.md](底层架构设计.md#工具模块src-utils-等)。
@@ -24,6 +24,7 @@
 ## 全局引导
 
 - `src/bootstrap-globals.js`：在 `bot.js` 首行 import，`setRuntimeGlobal('plugin'|'segment', …)`  
+- 集成测试：`tests/helpers/bootstrap.mjs` 同样 import 一次，供 PluginsLoader / ApiLoader 加载 `extends plugin` 模块  
 - 业务：裸名 `segment` / import 基类；勿 `import #oicq`（见 [runtime-surface.md](runtime-surface.md)）
 
 ## Loader 标准模式

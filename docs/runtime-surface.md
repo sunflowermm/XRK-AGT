@@ -25,6 +25,16 @@
 
 配置在 `Bot.run` 完成 `ConfigLoader.load()` **之前**不可用；此前请用 ConfigBase / 默认模板，勿假设 `cfg` 已就绪。
 
+### 框架单测 / 集成测
+
+`tests/helpers/bootstrap.mjs` 在 `describe(..., { before: bootstrapTestEnv })` 中：
+
+1. 设置 `process.env.XRK_TEST = '1'`
+2. **import `src/bootstrap-globals.js`**（与生产 `bot.js` 一致，挂载 `plugin` / `segment`）
+3. stub 最小 `Bot`（EventEmitter + `makeLog` / `tasker` / `em`）
+
+未执行 bootstrap-globals 时，system-Core 插件（`extends plugin` 裸名）会在 PluginsLoader 导入阶段报 `plugin is not defined`。ApiLoader 集成断言的 key 见 [api-loader.md](api-loader.md)（`resolveCoreModuleKey`，如 `ai-workspace`）。
+
 ---
 
 ## 挂载时间线
@@ -137,7 +147,7 @@ sequenceDiagram
 |------|-------------|----------|
 | StreamLoader | `#infrastructure/aistream/loader.js` | `getStream(name)`、`getStreamClass(name)` |
 | PluginsLoader | `#infrastructure/plugins/loader.js` | `deal(e)`（框架内）；插件通过基类间接使用 |
-| ApiLoader | `#infrastructure/http/loader.js` | `getApiList()`、`apis` Map |
+| ApiLoader | `#infrastructure/http/loader.js` | `getApiList()`、`apis` Map（key = `resolveCoreModuleKey`，如 `ai-workspace`） |
 | ConfigLoader | `#infrastructure/commonconfig/loader.js` | `get(name)`、`getList()` |
 | RendererLoader | `#infrastructure/renderer/loader.js` | `getRenderer(name?)`、`ensureLoaded()` |
 | TaskerLoader | `#infrastructure/tasker/loader.js` | `load(bot)`（框架内） |

@@ -121,4 +121,4 @@ lib/crawl/
 ## 参考
 
 - `docs/system-core.md`（web / browser 章节）
-- `core/system-Core/plugin/lkwg.js`
+- 本地 vendor 插件：`core/system-Core/plugin/` 下未写入 `.gitignore` 白名单的 `.js` 仍会加载，但不计入框架 baseline

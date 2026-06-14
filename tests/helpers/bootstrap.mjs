@@ -3,6 +3,7 @@ import { setRuntimeGlobal, getRuntimeGlobal } from '../../src/utils/runtime-glob
 
 export async function bootstrapTestEnv() {
   process.env.XRK_TEST = '1';
+  await import('../../src/bootstrap-globals.js');
   if (!getRuntimeGlobal('logger')) {
     const setLog = (await import('../../src/infrastructure/log.js')).default;
     setLog();

@@ -38,7 +38,7 @@
 
 ## 核心属性
 
-- `apis: Map<string, apiInstance>`：以相对路径 key 存储所有 API 实例。
+- `apis: Map<string, apiInstance>`：以 **`resolveCoreModuleKey`** 生成的 key 存储实例——相对 **`core/<coreName>/http/`** 的路径、不含 `.js`（如 `ai-workspace`、`my-api`；子目录则为 `sub/foo`）。**不含** `http/` 前缀。
 - `priority: apiInstance[]`：按优先级排序后的 API 列表。
 - `watcher: { [name: string]: FSWatcher }`：文件监视器。
 - `loaded: boolean`：是否已经完成初次加载。
@@ -76,7 +76,7 @@ flowchart TB
 1. 调用 `paths.getCoreSubDirs('http')` 获取所有 `core/*/http` 目录
 2. 调用 `getApiFiles` 递归扫描每个目录，收集 `.js` 文件
 3. 对每个文件调用 `loadApi`：
-   - 生成相对路径 key
+   - 生成 key（`resolveCoreModuleKey`，相对 `core/*/http/`，无 `.js`）
    - 动态导入模块并实例化
    - 校验并存入 `apis` Map
 4. 调用 `sortByPriority` 排序
@@ -257,7 +257,7 @@ flowchart TB
 按 key 返回对应API实例，不存在则返回 `null`。
 
 **参数**：
-- `key`: API键名（相对路径，如 `example/ping`）
+- `key`: API 键名（`resolveCoreModuleKey` 结果，如 `ai-workspace` 或嵌套 `example/ping`；勿加 `http/` 前缀）
 
 **返回值**：`HttpApi` 实例或 `null`
 
