@@ -44,9 +44,9 @@ logging:
 # ----------------------------------------
 # 渲染器
 # ----------------------------------------
-# 渲染后端：puppeteer、playwright。详细配置见 data/server_bots/{port}/renderers/{type}/config.yaml
+# 渲染后端：playwright（默认）、puppeteer。详细配置见 data/server_bots/{port}/renderers/{type}/config.yaml
 browser:
-  renderer: puppeteer
+  renderer: playwright
 
 # ----------------------------------------
 # 文件系统

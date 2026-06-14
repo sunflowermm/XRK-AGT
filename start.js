@@ -71,6 +71,10 @@ async function writeFileIfChanged(filePath, content) {
 
 // 使用统一的简单日志工具
 import { createSimpleLogger } from './src/infrastructure/log.js';
+import {
+  getPlaywrightChromiumStatus,
+  installPlaywrightChromium
+} from './src/utils/bootstrap-deps.js';
 
 let _restartLogger = null;
 
@@ -462,27 +466,38 @@ class MenuManager {
 
   async showMainMenu() {
     const availablePorts = await this.serverManager.getAvailablePorts();
-    
+    const pwStatus = await getPlaywrightChromiumStatus();
+    const pwLabel = !pwStatus.playwrightInstalled
+      ? chalk.gray('Playwright 未安装')
+      : pwStatus.browserInstalled
+        ? chalk.green('Playwright Chromium 已安装')
+        : chalk.yellow('Playwright Chromium 未安装');
+
     const choices = [
       ...availablePorts.map(port => ({
         name: chalk.green(`> 启动服务器 (端口: ${port})`),
         value: { action: 'start_server', port },
         short: `启动端口 ${port}`
       })),
-      { 
-        name: chalk.blue('+ 添加新端口'), 
+      {
+        name: chalk.blue('+ 添加新端口'),
         value: { action: 'add_port' },
         short: '添加新端口'
       },
-      { 
-        name: chalk.yellow('- 删除端口配置'), 
+      {
+        name: chalk.yellow('- 删除端口配置'),
         value: { action: 'delete_port_config' },
         short: '删除端口配置'
       },
-      { 
-        name: chalk.cyan('* PM2管理'), 
+      {
+        name: chalk.cyan('* PM2管理'),
         value: { action: 'pm2_menu' },
         short: 'PM2管理'
+      },
+      {
+        name: `${chalk.magenta('◎ Playwright 浏览器')} ${chalk.gray('[')}${pwLabel}${chalk.gray(']')}`,
+        value: { action: 'playwright_browser' },
+        short: 'Playwright 浏览器'
       },
       new inquirer.Separator(chalk.gray('─────────────────────────────')),
       { 
@@ -519,6 +534,10 @@ class MenuManager {
         
       case 'pm2_menu':
         await this.showPM2Menu();
+        break;
+
+      case 'playwright_browser':
+        await this.showPlaywrightBrowserMenu();
         break;
         
       case 'exit':
@@ -570,6 +589,80 @@ class MenuManager {
 
     if (confirm) {
       await this.serverManager.removePortConfig(port);
+    }
+  }
+
+  async showPlaywrightBrowserMenu() {
+    const status = await getPlaywrightChromiumStatus();
+
+    console.log(chalk.cyan.bold('\n── Playwright 浏览器 ──'));
+    if (!status.playwrightInstalled) {
+      console.log(chalk.yellow('  npm 包 playwright 未安装，请先完成 pnpm install'));
+    } else if (status.browserInstalled) {
+      console.log(chalk.green('  Chromium: 已安装'));
+      if (status.executablePath) {
+        console.log(chalk.gray(`  路径: ${status.executablePath}`));
+      }
+    } else {
+      console.log(chalk.yellow('  Chromium: 未安装（帮助页截图等功能需要）'));
+    }
+    console.log('');
+
+    if (!status.playwrightInstalled) {
+      await inquirer.prompt([{
+        type: 'input',
+        name: 'back',
+        message: chalk.gray('按 Enter 返回主菜单')
+      }]);
+      return;
+    }
+
+    const choices = [];
+    if (!status.browserInstalled) {
+      choices.push({
+        name: chalk.green('> 安装 Chromium'),
+        value: 'install',
+        short: '安装 Chromium'
+      });
+    } else {
+      choices.push({
+        name: chalk.cyan('* 重新安装 Chromium'),
+        value: 'reinstall',
+        short: '重新安装'
+      });
+    }
+    choices.push(
+      new inquirer.Separator(chalk.gray('─────────────────────────────')),
+      { name: chalk.gray('< 返回主菜单'), value: 'back', short: '返回' }
+    );
+
+    const { action } = await inquirer.prompt([{
+      type: 'list',
+      name: 'action',
+      message: chalk.bold('请选择:'),
+      choices,
+      pageSize: 10
+    }]);
+
+    if (action === 'back') return;
+
+    if (action === 'reinstall') {
+      const { confirm } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'confirm',
+        message: chalk.bold.yellow('确定重新下载 Chromium？'),
+        default: false
+      }]);
+      if (!confirm) return;
+    }
+
+    console.log(chalk.cyan('\n正在安装 Playwright Chromium（首次可能较慢）...\n'));
+    try {
+      await installPlaywrightChromium();
+      console.log(chalk.green('\n✓ Playwright Chromium 安装完成\n'));
+    } catch (err) {
+      console.error(chalk.red(`\n✗ 安装失败: ${err.message}\n`));
+      await this.serverManager.logger.error(`Playwright 浏览器安装失败: ${err.message}`);
     }
   }
 

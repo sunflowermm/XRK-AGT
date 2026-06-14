@@ -65,12 +65,12 @@ class RendererLoader {
     }
   }
 
-  getRenderer(name = cfg.agt?.browser?.renderer || 'puppeteer') {
+  getRenderer(name = cfg.agt?.browser?.renderer || 'playwright') {
     if (this.renderers.size === 0 && !this._loadPromise) void this.load()
     return (
       this.renderers.get(name) ||
-      this.renderers.get('puppeteer') ||
-      this.renderers.get('playwright')
+      this.renderers.get('playwright') ||
+      this.renderers.get('puppeteer')
     )
   }
 

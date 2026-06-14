@@ -253,7 +253,7 @@ export default class SystemConfig extends ConfigBase {
                   label: '渲染后端',
                   description: '详细配置: data/server_bots/{port}/renderers/{type}/config.yaml',
                   enum: ['puppeteer', 'playwright'],
-                  default: 'puppeteer',
+                  default: 'playwright',
                   component: 'Select'
                 }
               }

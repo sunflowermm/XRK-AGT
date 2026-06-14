@@ -130,6 +130,9 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
       this.startHealthCheck();
     } catch (e) {
+      if (/Executable doesn't exist|browserType\.launch/i.test(e.message)) {
+        BotUtil.makeLog("error", "Playwright 浏览器未安装，请在启动菜单选择「Playwright 浏览器」安装，或执行: pnpm run setup:browsers", this.logTag);
+      }
       BotUtil.makeLog("error", `Browser initialization failed: ${e.message}`, this.logTag);
       this.browser = null;
     } finally {

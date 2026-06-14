@@ -89,6 +89,7 @@
     "start": "node app.js",
     "dev": "node app.js",
     "debug": "node debug.js",
+    "setup:browsers": "playwright install chromium",
     "start:windows": "start.bat server",
     "start:unix": "./start.sh server",
     "start:docker": "docker-compose up -d",
@@ -103,7 +104,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "classic-level",
-      "puppeteer",
       "sqlite3",
       "log4js"
     ]
