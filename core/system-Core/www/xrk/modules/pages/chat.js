@@ -324,6 +324,7 @@ export function bindChatEvents(app) {
       app.clearChatStreamState();
       app.updateVoiceStatus('播报已停止');
     });
+    app.syncMicAvailabilityHint?.();
   }
   if (imageUploadBtn && imageInput) {
     safeBind(imageUploadBtn, 'click', () => imageInput.click());

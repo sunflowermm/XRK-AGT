@@ -216,3 +216,35 @@ export function parseKeyValueLines(text = '') {
   }
   return out;
 }
+
+/**
+ * 麦克风不可用时的原因（null 表示可以尝试 getUserMedia）
+ * @returns {string|null}
+ */
+export function getMicAccessError() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return '当前环境不支持麦克风';
+  }
+  if (!window.isSecureContext) {
+    return '麦克风需 HTTPS 或 localhost/127.0.0.1 访问（勿用局域网 IP 的 HTTP）';
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return '当前浏览器不支持麦克风，请使用 Chrome/Edge/Firefox 最新版';
+  }
+  return null;
+}
+
+/**
+ * 请求麦克风音频流（含安全上下文与 API 可用性检查）
+ * @param {MediaStreamConstraints} [constraints]
+ * @returns {Promise<MediaStream>}
+ */
+export async function requestMicStream(constraints) {
+  const preflight = getMicAccessError();
+  if (preflight) {
+    const err = new Error(preflight);
+    err.name = 'MicNotSupportedError';
+    throw err;
+  }
+  return navigator.mediaDevices.getUserMedia(constraints);
+}

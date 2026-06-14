@@ -9,7 +9,9 @@ import {
   cloneValue,
   isSameValue,
   formatKeyValueLines,
-  parseKeyValueLines
+  parseKeyValueLines,
+  getMicAccessError,
+  requestMicStream
 } from './modules/utils.js';
 
 import {
@@ -2956,6 +2958,30 @@ class App {
     }
   }
 
+  /** Voice 模式：根据安全上下文更新麦克风按钮与提示 */
+  syncMicAvailabilityHint() {
+    if (!this._isVoiceMode()) return;
+    const err = getMicAccessError();
+    const micBtn = document.getElementById('micBtn');
+    if (err) {
+      if (!this._micActive) this.updateVoiceStatus(err);
+      micBtn?.classList.add('disabled');
+      micBtn?.setAttribute('aria-disabled', 'true');
+      micBtn?.setAttribute('title', err);
+      return;
+    }
+    micBtn?.classList.remove('disabled');
+    micBtn?.removeAttribute('aria-disabled');
+    micBtn?.setAttribute('title', this._isVoiceMode() ? '按住或点击说话' : '麦克风');
+    if (!this._micActive) {
+      const statusEl = document.getElementById('voiceStatus');
+      const current = statusEl?.textContent?.trim() || '';
+      if (!current || current.includes('HTTPS') || current.includes('localhost') || current.includes('浏览器不支持')) {
+        this.updateVoiceStatus('点击麦克风开始对话');
+      }
+    }
+  }
+
   updateVoiceEmotion(emotion) {
     const emotionEl = document.getElementById('voiceEmotionIcon');
     if (emotionEl) {
@@ -3803,6 +3829,15 @@ class App {
 
   async toggleMic() {
     if (this._micStarting || this._micStopping) return;
+
+    if (!this._micActive) {
+      const preflight = getMicAccessError();
+      if (preflight) {
+        this.showToast(preflight, 'error');
+        this.syncMicAvailabilityHint();
+        return;
+      }
+    }
     
     if (this._micActive) {
       await this.stopMic();
@@ -3828,7 +3863,7 @@ class App {
       
       await this.ensureDeviceWs();
       
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await requestMicStream({
         audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000, channelCount: 1 }
       });
       
@@ -3995,7 +4030,10 @@ class App {
       // 立即开始发送（不等待），确保不丢失最开始的话
       startSending();
     } catch (e) {
-      if (e.name === 'NotAllowedError') {
+      if (e.name === 'MicNotSupportedError') {
+        this.showToast(e.message, 'error');
+        this.syncMicAvailabilityHint();
+      } else if (e.name === 'NotAllowedError') {
         this.showToast('请允许访问麦克风', 'error');
       } else if (e.name === 'NotFoundError') {
         this.showToast('未找到麦克风设备', 'error');
