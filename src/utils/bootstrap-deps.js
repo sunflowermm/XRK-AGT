@@ -103,13 +103,18 @@ export class DependencyManager {
     if (missing.length > 0) await this.installDependencies(missing, packageRoot);
   }
 
+  _checkInstallSafe(packageJsonPath, nodeModulesPath, rootDir) {
+    const label = path.relative(rootDir, path.dirname(packageJsonPath)) || packageJsonPath;
+    return this.checkAndInstall(packageJsonPath, nodeModulesPath)
+      .catch((e) => this.logger.warning(`${label}: ${e.message}`));
+  }
+
   async ensurePluginDependencies(rootDir = process.cwd()) {
     const coreDirs = await paths.getCoreDirs();
     await Promise.all(coreDirs.map(async (dir) => {
       const pkgPath = path.join(dir, 'package.json');
       if (!statFiles([pkgPath])[0]) return;
-      await this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'))
-        .catch((e) => this.logger.warning(`${path.relative(rootDir, dir)}: ${e.message}`));
+      await this._checkInstallSafe(pkgPath, path.join(dir, 'node_modules'), rootDir);
     }));
   }
 
@@ -126,11 +131,7 @@ export class DependencyManager {
         const pkgPath = path.join(dir, 'package.json');
         const signPath = path.join(dir, 'sign.json');
         if (!statFiles([pkgPath, signPath]).every(Boolean)) continue;
-
-        tasks.push(
-          this.checkAndInstall(pkgPath, path.join(dir, 'node_modules'))
-            .catch((e) => this.logger.warning(`${path.relative(rootDir, dir) || dir}: ${e.message}`))
-        );
+        tasks.push(this._checkInstallSafe(pkgPath, path.join(dir, 'node_modules'), rootDir));
       }
     }
     await Promise.all(tasks);

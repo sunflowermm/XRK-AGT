@@ -2,11 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 /**
- * 引导阶段日志（零第三方依赖，供 app.js 在 pnpm install 之前使用）
+ * 轻量文件日志（零第三方依赖；引导阶段与 restart 日志共用）
  * @param {string} logFile
  * @param {boolean} [silent]
  */
-export function createBootstrapLogger(logFile, silent = false) {
+export function createSimpleLogger(logFile, silent = false) {
   const colors = {
     INFO: '\x1b[36m',
     SUCCESS: '\x1b[32m',
@@ -22,13 +22,13 @@ export function createBootstrapLogger(logFile, silent = false) {
     try {
       await fs.mkdir(path.dirname(logFile), { recursive: true });
       await fs.appendFile(logFile, logMessage, 'utf8');
-    } catch {
-      /* 文件不可写时仍输出控制台 */
-    }
-
-    if (!silent || level === 'ERROR' || level === 'SUCCESS') {
-      const color = colors[level] || '';
-      console.log(`${color}${message}${colors.RESET}`);
+      if (!silent || level === 'ERROR' || level === 'SUCCESS') {
+        const color = colors[level] || '';
+        console.log(`${color}${message}${colors.RESET}`);
+      }
+    } catch (error) {
+      console.error(`日志写入失败 [${level}]: ${error.message}`);
+      if (!silent) console.log(message);
     }
   }
 

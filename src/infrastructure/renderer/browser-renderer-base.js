@@ -3,6 +3,7 @@ import path from 'node:path';
 import lodash from 'lodash';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
+import { registerShutdownHook } from '#utils/process-signals.js';
 import Renderer from './Renderer.js';
 
 /**
@@ -21,10 +22,7 @@ export default class BrowserRendererBase extends Renderer {
     this.renderNum = 0;
     this.maxConcurrent = config.maxConcurrent ?? 3;
     this.healthCheckTimer = null;
-
-    for (const signal of ['exit', 'SIGINT', 'SIGTERM']) {
-      process.on(signal, () => this.cleanup());
-    }
+    this._unregisterShutdownHook = registerShutdownHook(() => this.cleanup());
   }
 
   async waitForInitLock() {

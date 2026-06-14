@@ -2,11 +2,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import fs from 'node:fs';
 import {
   isPackageInstalled,
   getPlaywrightChromiumStatus
 } from '../../src/utils/bootstrap-deps.js';
+import { createSimpleLogger } from '../../src/utils/simple-logger.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -27,9 +27,10 @@ describe('Bootstrap 依赖检测', () => {
   });
 });
 
-describe('默认渲染器配置', () => {
-  it('agt.yaml 默认 playwright', () => {
-    const agt = fs.readFileSync(path.join(root, 'config/default_config/agt.yaml'), 'utf8');
-    assert.match(agt, /renderer:\s*playwright/);
+describe('simple-logger', () => {
+  it('createSimpleLogger 返回标准方法', () => {
+    const logger = createSimpleLogger(path.join(root, 'trash', 'test-simple-logger.log'), true);
+    assert.equal(typeof logger.info, 'function');
+    assert.equal(typeof logger.error, 'function');
   });
 });

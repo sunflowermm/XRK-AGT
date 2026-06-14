@@ -25,11 +25,12 @@ if (entry && path.basename(entry) === 'start.js') {
   process.exit(result.status !== null ? result.status : 1);
 }
 
-let globalSignalHandler = null;
+let globalMenuSignalController = null;
 
 async function cleanup() {
-  if (globalSignalHandler) {
-    await globalSignalHandler.cleanup();
+  if (globalMenuSignalController) {
+    await globalMenuSignalController.uninstall();
+    globalMenuSignalController = null;
   }
 }
 
@@ -42,7 +43,6 @@ const PM2_TMP_PREFIX = path.join(os.tmpdir(), 'xrk-agt-pm2-');
 
 const CONFIG = {
   MAX_RESTARTS: 1000,
-  SIGNAL_TIME_THRESHOLD: 3000,
   PM2_LINES: 100,
   MEMORY_LIMIT: '512M',
   RESTART_DELAYS: {
@@ -50,7 +50,7 @@ const CONFIG = {
     MEDIUM: 5000,
     LONG: 15000
   },
-  /** 子进程 exit(0) 表示停止自动重启并返回菜单（如连续 Ctrl+C） */
+  /** 子进程 exit(0) 表示停止自动重启并返回菜单 */
   EXIT_STOP: 0,
 };
 
@@ -70,11 +70,12 @@ async function writeFileIfChanged(filePath, content) {
 }
 
 // 使用统一的简单日志工具
-import { createSimpleLogger } from './src/infrastructure/log.js';
+import { createSimpleLogger } from './src/utils/simple-logger.js';
 import {
   getPlaywrightChromiumStatus,
   installPlaywrightChromium
 } from './src/utils/bootstrap-deps.js';
+import { ProcessSignalController, normalizeChildExitCode } from './src/utils/process-signals.js';
 
 let _restartLogger = null;
 
@@ -207,10 +208,17 @@ class ServerManager extends BaseManager {
     super(logger);
     this.pm2Manager = pm2Manager;
     
-    if (!globalSignalHandler) {
-      globalSignalHandler = new SignalHandler(logger);
+    if (!globalMenuSignalController) {
+      globalMenuSignalController = new ProcessSignalController({
+        mode: 'menu',
+        logger: {
+          warning: (msg) => this.logger.warning(msg),
+          mark: (msg) => this.logger.log(msg, 'INFO')
+        },
+        onForceExit: async () => cleanup()
+      });
     }
-    this.signalHandler = globalSignalHandler;
+    this.signalHandler = globalMenuSignalController;
   }
 
   getPortDir(port) {
@@ -296,8 +304,8 @@ class ServerManager extends BaseManager {
     // 确保配置就绪（只输出一次日志）
     await this.ensurePortConfig(port);
     
-    if (!this.signalHandler.isSetup) {
-      this.signalHandler.setup();
+    if (!this.signalHandler.installed) {
+      this.signalHandler.install();
     }
     
     let restartCount = 0;
@@ -329,29 +337,35 @@ class ServerManager extends BaseManager {
   }
 
   async runServerProcess(port, skipConfigCheck = false) {
-    const nodeArgs = getNodeArgs();
-    const entryScript = path.join(process.cwd(), 'app.js');
-    const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
-    
-    const cleanEnv = {
-      ...process.env,
-      XRK_SERVER_PORT: port.toString(),
-      XRK_SKIP_CONFIG_CHECK: skipConfigCheck ? '1' : '0',
-      XRK_SKIP_BOOTSTRAP: skipConfigCheck ? '1' : '0',
-      XRK_SKIP_FRONTEND_BOOTSTRAP: skipConfigCheck ? '1' : '0',
-      XRK_SKIP_FRONTEND_START: process.env.XRK_SKIP_FRONTEND_START || '0',
-      XRK_FAST_START: process.env.XRK_FAST_START || '0',
-      XRK_OPTIONAL_DB: process.env.XRK_OPTIONAL_DB || '0'
-    };
-    
-    const result = spawnSync(process.argv[0], startArgs, {
-      stdio: 'inherit',
-      windowsHide: true,
-      env: cleanEnv,
-      detached: false
-    });
-    
-    return result.status || 0;
+    this.signalHandler.pause();
+    try {
+      const nodeArgs = getNodeArgs();
+      const entryScript = path.join(process.cwd(), 'app.js');
+      const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
+
+      const cleanEnv = {
+        ...process.env,
+        XRK_SERVER_PORT: port.toString(),
+        XRK_SKIP_CONFIG_CHECK: skipConfigCheck ? '1' : '0',
+        XRK_SKIP_BOOTSTRAP: skipConfigCheck ? '1' : '0',
+        XRK_SKIP_FRONTEND_BOOTSTRAP: skipConfigCheck ? '1' : '0',
+        XRK_SKIP_FRONTEND_START: process.env.XRK_SKIP_FRONTEND_START || '0',
+        XRK_FAST_START: process.env.XRK_FAST_START || '0',
+        XRK_OPTIONAL_DB: process.env.XRK_OPTIONAL_DB || '0'
+      };
+
+      const result = spawnSync(process.argv[0], startArgs, {
+        stdio: 'inherit',
+        windowsHide: true,
+        env: cleanEnv,
+        detached: false
+      });
+
+      return normalizeChildExitCode(result.status, CONFIG.EXIT_STOP);
+    } finally {
+      this.signalHandler.resetStrikes();
+      this.signalHandler.resume();
+    }
   }
 
   calculateRestartDelay(runTime, restartCount) {
@@ -378,59 +392,6 @@ class ServerManager extends BaseManager {
     } catch (error) {
       await this.logger.error(`停止请求失败: ${error.message}`);
     }
-  }
-}
-
-class SignalHandler {
-  constructor(logger) {
-    this.logger = logger;
-    this.lastSignal = null;
-    this.lastSignalTime = 0;
-    this.isSetup = false;
-    this.handlers = {};
-  }
-
-  setup() {
-    if (this.isSetup) return;
-    
-    const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'];
-    const createHandler = (signal) => async () => {
-      const currentTime = Date.now();
-      
-      if (this.shouldExit(signal, currentTime)) {
-        await this.logger.log(`检测到双击 ${signal} 信号，准备退出`);
-        await this.cleanup();
-        process.exit(0);
-      }
-      
-      this.lastSignal = signal;
-      this.lastSignalTime = currentTime;
-      await this.logger.warning(`收到 ${signal} 信号，再次发送将退出程序`);
-    };
-    
-    signals.forEach(signal => {
-      this.handlers[signal] = createHandler(signal);
-      process.on(signal, this.handlers[signal]);
-    });
-    
-    this.isSetup = true;
-  }
-
-  async cleanup() {
-    if (!this.isSetup) return;
-    
-    Object.keys(this.handlers).forEach(signal => {
-      process.removeListener(signal, this.handlers[signal]);
-      delete this.handlers[signal];
-    });
-    
-    this.isSetup = false;
-    await this.logger.log('信号处理器已清理');
-  }
-
-  shouldExit(signal, currentTime) {
-    return signal === this.lastSignal && 
-           currentTime - this.lastSignalTime < CONFIG.SIGNAL_TIME_THRESHOLD;
   }
 }
 

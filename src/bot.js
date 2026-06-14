@@ -2787,8 +2787,9 @@ export default class Bot extends EventEmitter {
 
   /**
    * 关闭服务器
+   * @param {{ fast?: boolean }} [options] fast 为 true 时跳过固定等待（用于 Ctrl+C 重启）
    */
-  async closeServer() {
+  async closeServer(options = {}) {
     BotUtil.makeLog('info', '⏳ 正在关闭服务器...', '服务器');
 
     // 停止前端子进程（如果有），避免重启/停机后资源常驻
@@ -2829,8 +2830,10 @@ export default class Bot extends EventEmitter {
     await Promise.all(servers.map(server =>
       new Promise(resolve => server.close(resolve))
     ));
-    
-    await BotUtil.sleep(2000);
+
+    if (!options.fast) {
+      await BotUtil.sleep(2000);
+    }
     await this.redisExit();
 
     try {
