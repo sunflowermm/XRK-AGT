@@ -99,6 +99,7 @@ default = {
 - 按业务分组目录：`apis/<group>/xxx.py`
 - 在扩展层实现业务逻辑，不改动 `core/` 与加载器底层
 - 接口前缀统一走 `/api/*`
+- 扩展可自带 `requirements.txt`；**不会**随 `uv sync` 安装，需单独 `uv pip install -r apis/<group>/requirements.txt`
 - **业务扩展自带 README、默认配置与依赖清单**；不写入 AGT 本体 `config/default_config/` 或 `docs/subserver-api.md`
 
 ## 配置
@@ -138,6 +139,12 @@ logging:
 cd subserver/pyserver
 uv sync
 uv run xrk
+```
+
+扩展插件（`apis/<组名>/requirements.txt`）：
+
+```bash
+uv pip install -r apis/jmcomic/requirements.txt   # 示例，组名按实际目录
 ```
 
 等价启动（Docker 子服务同款）：`uv run python main.py`

@@ -110,7 +110,8 @@ sequenceDiagram
 | `Bot.em(name, data, asJson?, options?)` | 触发事件总线；Tasker / 监听器 / 插件链路入口 |
 | `Bot.e(...)` | `em` 别名 |
 | `Bot.callStdin(command, options?)` | 经 stdin Tasker 执行命令 |
-| `Bot.getServerUrl()` | 当前 HTTP 基址 |
+| `Bot.getServerUrl()` | 当前 HTTP 基址（含 127.0.0.1 回落） |
+| `Bot.getPublicServerUrl(override?)` | 对外直链基址（代理/`server.url`/override；无公网配置时返回 `''`） |
 | `Bot.callRoute(path, options?)` | 内部调用已注册 API 路由 |
 | `Bot.checkApiAuthorization(req)` | `/api/*` 鉴权（HttpApi 自动调用） |
 | `Bot.makeError(msg, type?, details?)` | 标准化错误对象 |

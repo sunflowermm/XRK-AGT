@@ -38,6 +38,9 @@ import HTTPBusinessLayer from '#utils/http-business.js';
 import FrontendLauncher from '#infrastructure/frontend/launcher.js';
 import { isLoopback127Connection } from '#infrastructure/http/auth.js';
 import { HttpResponse } from '#utils/http-utils.js';
+import { InputValidator } from '#utils/input-validator.js';
+import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
 
 // 静态资源扩展名，用于基础放行（非鉴权）
 const AUTH_STATIC_EXT_REGEX = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i;
@@ -909,7 +912,7 @@ export default class Bot extends EventEmitter {
     });
     
     this.express.use((req, res, next) => {
-      const baseSkipPrefixes = ['/api/', '/media/', '/uploads/', '/File', '/core/'];
+      const baseSkipPrefixes = ['/api/', '/media/', '/uploads/', '/File', '/core/', '/subserver-file'];
       if (!req.path || req.path === '/') return next();
       const redirectSkipPrefixes = baseSkipPrefixes.concat(frontendMountPrefixes || []);
       if (redirectSkipPrefixes.some(p => req.path.startsWith(p))) {
@@ -926,6 +929,7 @@ export default class Bot extends EventEmitter {
     // 系统路由（精确匹配，无需认证）
     this.express.get('/status', this._statusHandler.bind(this));
     this.express.get('/health', this._healthHandler.bind(this));
+    this.express.get('/subserver-file', this._subserverFileHandler.bind(this));
     this.express.get('/metrics', this._metricsHandler.bind(this)); // 性能指标
     this.express.get('/robots.txt', this._handleRobotsTxt.bind(this));
     this.express.get('/favicon.ico', this._handleFavicon.bind(this));
@@ -2134,6 +2138,65 @@ export default class Bot extends EventEmitter {
   }
 
   /**
+   * 子服务/数据目录文件直链（如 jmcomic PDF），无需 API Key
+   */
+  async _subserverFileHandler(req, res) {
+    if (this._checkHeadersSent(res)) return;
+
+    const rel = String(req.query.path || '').trim();
+    if (!rel) {
+      return HttpResponse.validationError(res, '缺少 path 参数');
+    }
+
+    let localPath;
+    try {
+      localPath = InputValidator.validatePath(rel, paths.root);
+      InputValidator.assertPathUnderRoots(localPath, [paths.data]);
+    } catch {
+      return HttpResponse.validationError(res, '非法路径');
+    }
+
+    try {
+      await fs.access(localPath);
+      const stat = await fs.stat(localPath);
+      if (!stat.isFile()) {
+        return HttpResponse.notFound(res, '文件不存在');
+      }
+
+      const ext = path.extname(localPath).toLowerCase();
+      const mime = ext === '.pdf' ? 'application/pdf' : 'application/octet-stream';
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(path.basename(localPath))}"`);
+      return res.sendFile(localPath);
+    } catch {
+      /* 本地无文件时尝试从子服务流式代理 */
+    }
+
+    try {
+      const response = await callSubserverApi('/api/jmcomic/file', {
+        method: 'GET',
+        query: { path: rel },
+        rawResponse: true,
+        timeout: 600_000
+      });
+
+      const contentType = response.headers.get('content-type');
+      if (contentType) res.setHeader('Content-Type', contentType);
+      const contentDisposition = response.headers.get('content-disposition');
+      if (contentDisposition) res.setHeader('Content-Disposition', contentDisposition);
+
+      if (!response.body) {
+        return HttpResponse.error(res, new Error('子服务端返回空响应'), 502, 'subserver-file');
+      }
+
+      res.status(response.status);
+      await pipeline(Readable.fromWeb(response.body), res);
+    } catch (error) {
+      return HttpResponse.notFound(res, '文件不存在');
+    }
+  }
+
+  /**
    * 文件处理器
    */
   _fileHandler(req, res) {
@@ -2871,6 +2934,46 @@ export default class Bot extends EventEmitter {
       || (protocol === 'https' && port !== 443);
 
     return `${protocol}://127.0.0.1${needPort ? ':' + port : ''}`;
+  }
+
+  /**
+   * 获取对外可访问的服务器 URL（用于 QQ 直链等）
+   * 不回落到 127.0.0.1；无公网/代理配置时返回空字符串
+   * @param {string} [override=''] - 业务覆盖（如 jmcomic public_base_url）
+   */
+  getPublicServerUrl(override = '') {
+    const trimmed = typeof override === 'string' ? override.trim() : '';
+    if (trimmed) {
+      const withScheme = /^https?:\/\//i.test(trimmed)
+        ? trimmed
+        : `${this._isHttpsEnabled() ? 'https' : 'http'}://${trimmed.replace(/^\/+/, '')}`;
+      try {
+        return new URL(withScheme).toString().replace(/\/+$/, '');
+      } catch {
+        return '';
+      }
+    }
+
+    const proxyConfig = this._getProxyConfig();
+    if (this.proxyEnabled && Array.isArray(proxyConfig.domains) && proxyConfig.domains[0]) {
+      const domain = proxyConfig.domains[0];
+      const protocol = domain.ssl?.enabled ? 'https' : 'http';
+      return `${protocol}://${domain.domain}`.replace(/\/+$/, '');
+    }
+
+    const configuredUrl = this._getConfiguredServerUrl();
+    if (configuredUrl) {
+      const withScheme = /^https?:\/\//i.test(configuredUrl)
+        ? configuredUrl
+        : `${this._isHttpsEnabled() ? 'https' : 'http'}://${configuredUrl.replace(/^\/+/, '')}`;
+      try {
+        return new URL(withScheme).toString().replace(/\/+$/, '');
+      } catch {
+        return '';
+      }
+    }
+
+    return '';
   }
 
   /**
