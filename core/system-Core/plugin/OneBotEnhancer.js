@@ -49,57 +49,6 @@ export default class OneBotEnhancer extends EnhancerBase {
     }
   }
 
-  setupReply(e) {
-    if (e.reply) return // 如果已经设置过reply，则跳过
-
-    let sendMethod = null
-    
-    // 优先使用群组发送方法
-    if (e.isGroup && e.group_id) {
-      if (e.group?.sendMsg) {
-        sendMethod = e.group.sendMsg.bind(e.group)
-      } else if (e.bot?.tasker?.sendGroupMsg) {
-        sendMethod = (msg) => e.bot.tasker.sendGroupMsg({ ...e, group_id: e.group_id }, msg)
-      }
-    }
-    
-    // 私聊发送方法
-    if (!sendMethod && e.isPrivate && e.user_id) {
-      if (e.friend?.sendMsg) {
-        sendMethod = e.friend.sendMsg.bind(e.friend)
-      } else if (e.bot?.tasker?.sendFriendMsg) {
-        sendMethod = (msg) => e.bot.tasker.sendFriendMsg({ ...e, user_id: e.user_id }, msg)
-      }
-    }
-
-    if (!sendMethod) return
-
-    e.reply = async (msg = '', quote = false, data = {}) => {
-      if (!msg) return false
-
-      try {
-        let message = msg
-
-        // 处理引用回复
-        if (quote && e.message_id) {
-          const replySegment = { type: 'reply', data: { id: String(e.message_id) } }
-          message = Array.isArray(message) ? [replySegment, ...message] : [replySegment, message]
-        }
-
-        // 处理@消息
-        if (data?.at && e.isGroup && e.user_id) {
-          const atSegment = { type: 'at', data: { qq: String(e.user_id) } }
-          message = Array.isArray(message) ? [atSegment, ...message] : [atSegment, message]
-        }
-
-        return await sendMethod(message)
-      } catch (error) {
-        BotUtil.makeLog('error', `回复消息失败: ${error.message}`, e.self_id)
-        return false
-      }
-    }
-  }
-
   processAtProperties(e) {
     if (!e.message || !Array.isArray(e.message)) return
 

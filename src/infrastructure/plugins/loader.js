@@ -17,6 +17,7 @@ import { FileLoader } from '#utils/file-loader.js'
 import BotUtil from '#utils/botutil.js'
 import { HotReloadBase } from '#utils/hot-reload-base.js'
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
+import { segment } from '#oicq'
 
 class PluginsLoader {
   priority = []
@@ -226,28 +227,47 @@ class PluginsLoader {
 
   setupReply(e) {
     if (e._replySetup) return
+    if (!e.reply || e.isDevice) return
     e._replySetup = true
 
-    // 保存原始的reply方法
     e.replyNew = e.reply
-    
-    // 设置通用reply方法，特定适配器的增强功能由适配器增强插件处理
-    e.reply = async (msg = '') => {
+    e.reply = async (msg = '', quote = false, data = {}) => {
       if (!msg) return false
-      
+
       try {
-        const msgArray = Array.isArray(msg) ? msg : [msg]
-        // 记录本次回复内容（用于按事件聚合返回），不影响实际发送
+        if (e.isStdin) return await e.replyNew(msg, quote, data)
+
+        if (e.isGroup && e.group) {
+          if (e.group.mute_left > 0
+            || (e.group.all_muted && !e.group.is_admin && !e.group.is_owner)) {
+            return false
+          }
+        }
+
+        let { recallMsg = 0, at = '' } = data
+        if (!Array.isArray(msg)) msg = [msg]
+
+        if (at && e.isGroup) {
+          const atId = at === true ? e.user_id : at
+          const rawName = at === true ? (e.sender?.card || e.sender?.nickname || '') : ''
+          const atName = rawName.length > 10 ? rawName.slice(0, 10) : rawName
+          msg.unshift(segment.at(String(atId), atName), '\n')
+        }
+
+        if (quote && e.message_id) {
+          msg.unshift(segment.reply(e.message_id))
+        }
+
         if (!Array.isArray(e._replyOutputs)) e._replyOutputs = []
-        e._replyOutputs.push(msgArray)
+        e._replyOutputs.push(msg)
 
         let msgRes
         try {
-          msgRes = await e.replyNew(msgArray, false)
+          msgRes = await e.replyNew(msg, false)
         } catch (err) {
           const error = normalizeError(err)
           logger.debug(`发送消息错误: ${error.message}`)
-          const textMsg = msgArray.map(m => typeof m === 'string' ? m : m?.text || '').join('')
+          const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
           if (textMsg) {
             try {
               msgRes = await e.replyNew(textMsg)
@@ -255,6 +275,19 @@ class PluginsLoader {
               logger.debug(`纯文本发送也失败: ${innerErr.message}`)
               return { error: err }
             }
+          }
+        }
+
+        const recallSeconds = Number(recallMsg)
+        if (recallSeconds > 0 && msgRes?.message_id) {
+          const target = e.isGroup ? e.group : e.friend
+          if (target?.recallMsg) {
+            setTimeout(() => {
+              Promise.resolve(target.recallMsg(msgRes.message_id)).catch(() => {})
+              if (e.message_id) {
+                Promise.resolve(target.recallMsg(e.message_id)).catch(() => {})
+              }
+            }, recallSeconds * 1000)
           }
         }
 
