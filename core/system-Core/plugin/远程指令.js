@@ -976,13 +976,19 @@ class JavaScriptExecutor {
     features.hasFunction = /\b(function|async\s+function|const\s+\w+\s*=\s*async|\w+\s*:\s*async)/.test(code);
     features.isAsync = features.hasAwait || /\basync\s+/.test(code);
 
-    // 判断是否为表达式
+    // 判断是否为表达式（含 await 的异步表达式须用 AsyncFunction 检测）
+    const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
     try {
       new Function(`return (${code})`);
       features.isExpression = true;
     } catch {
-      features.isExpression = false;
-      features.isStatement = true;
+      try {
+        new AsyncFunction(`return (${code});`);
+        features.isExpression = true;
+      } catch {
+        features.isExpression = false;
+        features.isStatement = true;
+      }
     }
 
     return features;
@@ -1023,9 +1029,11 @@ class JavaScriptExecutor {
     try {
       let wrappedCode = code;
       
-      // 处理顶层await
+      // 顶层 await：必须 return，否则单行表达式会得到 undefined
       if (features.hasAwait && !features.hasFunction) {
-        wrappedCode = `(async () => { ${code} })()`;
+        wrappedCode = features.hasReturn || features.isMultiline
+          ? `return (async () => { ${code} })();`
+          : `return (${code});`;
       }
       
       const stmtFunction = new AsyncFunction(...contextKeys, wrappedCode);
@@ -1184,19 +1192,24 @@ class JavaScriptExecutor {
    * 评估表达式（快速计算）
    */
   async evaluate(expression, globalContext = {}) {
+    const keys = Object.keys(globalContext);
+    const values = keys.map((key) => globalContext[key]);
+    const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
     try {
-      // 简单表达式直接计算
-      const func = new Function(...Object.keys(globalContext), `return ${expression}`);
-      const result = func(...Object.values(globalContext));
+      const useAsync = /\bawait\s+/.test(expression);
+      const func = useAsync
+        ? new AsyncFunction(...keys, `return (${expression});`)
+        : new Function(...keys, `return (${expression});`);
+      const result = useAsync ? await func(...values) : func(...values);
       return {
         success: true,
-        result: result,
-        type: typeof result
+        result,
+        type: typeof result,
       };
     } catch (error) {
       return {
         success: false,
-        error: error.message
+        error: error.message,
       };
     }
   }

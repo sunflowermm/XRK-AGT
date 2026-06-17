@@ -4,9 +4,12 @@ import path from "node:path"
 import lodash from "lodash"
 import crypto from "crypto"
 import { HotReloadBase } from '#utils/hot-reload-base.js'
+import { isHttpRef, readImageBuffer } from '#utils/outbound-media.js'
 
 export const messageMap = {}
 export const bannedWordsMap = {}
+
+const ENTRY_MEDIA_TYPES = new Set(['image', 'video', 'record'])
 
 /** 添加词条上下文超时（秒），展开嵌套聊天记录可能较慢 */
 const ADD_CONTEXT_TIMEOUT = 300
@@ -1102,23 +1105,61 @@ export class add extends plugin {
     }
   }
 
-  /** 保存文件 */
+  _bindSendApi() {
+    if (!this.e?.bot?.sendApi) return undefined
+    return (action, params) => this.e.bot.sendApi(action, params)
+  }
+
+  /** 词条媒体是否仍需本地化（HTTP 直链或本地文件缺失） */
+  async needsMediaLocalization(item) {
+    if (!ENTRY_MEDIA_TYPES.has(item.type)) return false
+    const ref = String(item.file || item.url || '').trim()
+    if (!ref || ref.startsWith('base64://')) return false
+    if (isHttpRef(ref)) return true
+    const localPath = `${messageDataPath}${ref}`
+    if (await Bot.fsStat(localPath)) return false
+    if (item.file && await Bot.fsStat(item.file)) return false
+    return true
+  }
+
+  /** 保存文件到 messageDataPath，返回相对路径；失败返回 null（不再存 URL） */
   async saveFile(data) {
-    if (!data || !data.url) return data.url
-    
     try {
-      const file = await Bot.fileType({ ...data, file: data.url })
-      if (Buffer.isBuffer(file.buffer)) {
-        file.name = `${this.group_id}/${data.type}/${file.name}`
-        file.path = `${messageDataPath}${file.name}`
-        await Bot.mkdir(path.dirname(file.path))
-        await fs.writeFile(file.path, file.buffer)
-        return file.name
+      const ref = data.file || data.url
+      if (!ref) return null
+
+      if (typeof ref === 'string' && !isHttpRef(ref) && !ref.startsWith('base64://')) {
+        const local = `${messageDataPath}${ref}`
+        if (await Bot.fsStat(local)) return ref
+        if (await Bot.fsStat(ref)) {
+          const rel = `${this.group_id}/${data.type}/${path.basename(ref)}`
+          const dest = `${messageDataPath}${rel}`
+          await Bot.mkdir(path.dirname(dest))
+          await fs.copyFile(ref, dest)
+          return rel
+        }
       }
+
+      const buffer = Buffer.isBuffer(ref)
+        ? ref
+        : await readImageBuffer({ file: data.file, url: data.url }, this._bindSendApi())
+      if (!buffer?.length) {
+        logger.error(`保存文件失败: 无法下载媒体 ${String(ref).slice(0, 80)}`)
+        return null
+      }
+
+      const file = await Bot.fileType({ ...data, file: buffer })
+      if (!Buffer.isBuffer(file.buffer)) return null
+
+      file.name = `${this.group_id}/${data.type}/${file.name}`
+      file.path = `${messageDataPath}${file.name}`
+      await Bot.mkdir(path.dirname(file.path))
+      await fs.writeFile(file.path, file.buffer)
+      return file.name
     } catch (err) {
       logger.error(`保存文件失败: ${err.message}`, err)
+      return null
     }
-    return data.url
   }
 
   /** 获取 getForwardMsg（兼容群/私聊/事件直挂） */
@@ -1198,26 +1239,32 @@ export class add extends plugin {
       }
 
       const item = { ...seg }
-      if (mode === 'store' && item.url && !item.file) {
-        item.file = await this.saveFile(item)
+      if (mode === 'store' && await this.needsMediaLocalization(item)) {
+        const saved = await this.saveFile(item)
+        if (!saved) throw new Error(`${item.type} 本地化失败，请重新发送`)
+        item.file = saved
         delete item.url
         delete item.fid
-      } else if (mode === 'send' && item.file) {
+      } else if (mode === 'send' && ENTRY_MEDIA_TYPES.has(item.type)) {
         const localPath = await this.resolveEntryMediaPath(item)
-        if (localPath) item.file = localPath
+        if (!localPath) continue
+        item.file = localPath
+        delete item.url
+        delete item.fid
       }
       out.push(item)
     }
     return out
   }
 
-  /** 解析词条存储的媒体本地路径 */
+  /** 解析词条存储的媒体本地路径（仅相对/绝对本地路径，不含 HTTP） */
   async resolveEntryMediaPath(item) {
-    if (!item?.file) return item?.url || null
-    const localPath = `${messageDataPath}${item.file}`
+    const ref = String(item?.file ?? '').trim()
+    if (!ref || isHttpRef(ref)) return null
+    const localPath = `${messageDataPath}${ref}`
     if (await Bot.fsStat(localPath)) return localPath
-    if (await Bot.fsStat(item.file)) return item.file
-    return item?.url || null
+    if (await Bot.fsStat(ref)) return ref
+    return null
   }
 
   /** 获取关键词消息 */

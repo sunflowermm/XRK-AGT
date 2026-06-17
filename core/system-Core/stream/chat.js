@@ -1223,6 +1223,48 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
     return this.finalizeSystemPromptContent(core);
   }
 
+  async _extractImagesFromEvent(e) {
+    const images = [];
+    const replyImages = [];
+
+    if (e && Array.isArray(e.message)) {
+      let inReplyRegion = false;
+      for (const seg of e.message) {
+        if (seg.type === 'reply') {
+          inReplyRegion = true;
+          continue;
+        }
+        if (seg.type === 'image') {
+          const ref = seg.file || seg.url || seg.data?.file || seg.data?.url;
+          if (!ref) continue;
+          if (inReplyRegion) {
+            replyImages.push(ref);
+          } else {
+            images.push(ref);
+          }
+        }
+      }
+    }
+
+    if (typeof e?.getReply === 'function') {
+      try {
+        const reply = await e.getReply();
+        if (reply && Array.isArray(reply.message)) {
+          for (const seg of reply.message) {
+            if (seg.type === 'image') {
+              const ref = seg.file || seg.url || seg.data?.file || seg.data?.url;
+              if (ref) replyImages.push(ref);
+            }
+          }
+        }
+      } catch (err) {
+        Bot.makeLog('debug', `[ChatStream] _extractImagesFromEvent 获取被回复图片失败: ${err?.message}`, 'ChatStream');
+      }
+    }
+
+    return { images, replyImages };
+  }
+
   async buildChatContext(e, question) {
     if (Array.isArray(question)) {
       return question;
@@ -1240,27 +1282,7 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
       : (question?.content ?? question?.text ?? '');
 
     // 从事件中提取图片（OneBot 消息段）
-    const images = [];
-    const replyImages = [];
-
-    if (e && Array.isArray(e.message)) {
-      let inReplyRegion = false;
-      for (const seg of e.message) {
-        if (seg.type === 'reply') {
-          inReplyRegion = true;
-          continue;
-        }
-        if (seg.type === 'image') {
-          const url = seg.url || seg.data?.url || seg.data?.file;
-          if (!url) continue;
-          if (inReplyRegion) {
-            replyImages.push(url);
-          } else {
-            images.push(url);
-          }
-        }
-      }
-    }
+    const { images, replyImages } = await this._extractImagesFromEvent(e);
 
     // 若无图片，则仍然用纯文本，兼容旧逻辑
     if (images.length === 0 && replyImages.length === 0) {
