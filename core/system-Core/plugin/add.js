@@ -4,7 +4,7 @@ import path from "node:path"
 import lodash from "lodash"
 import crypto from "crypto"
 import { HotReloadBase } from '#utils/hot-reload-base.js'
-import { isHttpRef, readImageBuffer } from '#utils/outbound-media.js'
+import { isHttpRef, isEntryMediaRelPath, readImageBuffer, persistEntryMedia } from '#utils/outbound-media.js'
 
 export const messageMap = {}
 export const bannedWordsMap = {}
@@ -403,7 +403,7 @@ export class add extends plugin {
   async addImageBannedWord(imgUrl, groupId) {
     try {
       const refs = typeof imgUrl === 'object' && imgUrl !== null ? imgUrl : { url: imgUrl }
-      const buffer = await readImageBuffer(refs, this._bindSendApi())
+      const buffer = await readImageBuffer(refs, this._bindSendApi(), { persist: true })
       if (!buffer?.length) return { success: false, error: '下载图片失败' }
 
       const hash = crypto.createHash('md5').update(buffer).digest('hex')
@@ -898,7 +898,7 @@ export class add extends plugin {
   async getImageHash(imgUrl) {
     try {
       const refs = typeof imgUrl === 'object' && imgUrl !== null ? imgUrl : { url: imgUrl }
-      const buffer = await readImageBuffer(refs, this._bindSendApi())
+      const buffer = await readImageBuffer(refs, this._bindSendApi(), { persist: true })
       if (!buffer?.length) return null
       return crypto.createHash('md5').update(buffer).digest('hex')
     } catch (err) {
@@ -1039,17 +1039,6 @@ export class add extends plugin {
       
       if (!contextData.messages?.length) return this.reply("添加错误：没有添加内容")
 
-      try {
-        const finalized = []
-        for (const msg of contextData.messages) {
-          finalized.push(await this.transformSegments(msg, 'store', { root: false }))
-        }
-        contextData.messages = finalized
-      } catch (err) {
-        logger.error(`添加词条内容失败: ${err.message}`, err)
-        return this.reply(`添加失败：${err.message || '媒体本地化失败，请重新发送图片'}`)
-      }
-
       messageMap[this.group_id] || (messageMap[this.group_id] = new Map())
       
       const storageKey = this.isFuzzy ? `[模糊]${this.keyWord}` : this.keyWord
@@ -1121,8 +1110,7 @@ export class add extends plugin {
   /** 词条媒体是否已落盘到 messageDataPath（相对路径 group/type/file） */
   async isEntryMediaPersisted(item) {
     const fileRef = String(item?.file ?? '').trim()
-    if (!fileRef || isHttpRef(fileRef) || fileRef.startsWith('base64://')) return false
-    if (!fileRef.includes('/')) return false
+    if (!isEntryMediaRelPath(fileRef)) return false
     return Bot.fsStat(`${messageDataPath}${fileRef}`)
   }
 
@@ -1137,41 +1125,19 @@ export class add extends plugin {
     return true
   }
 
-  /** 保存文件到 messageDataPath，返回相对路径；失败返回 null（不再存 URL） */
+  /** 保存文件到 messageDataPath，返回相对路径；失败返回 null（不存 URL） */
   async saveFile(data) {
     try {
-      const fileRef = String(data.file ?? '').trim()
-      const urlRef = String(data.url ?? '').trim()
-
-      for (const ref of [fileRef, urlRef]) {
-        if (!ref || isHttpRef(ref) || ref.startsWith('base64://')) continue
-        if (ref.includes('/')) {
-          const inJson = `${messageDataPath}${ref}`
-          if (await Bot.fsStat(inJson)) return ref
-        }
-        if (await Bot.fsStat(ref)) {
-          const rel = `${this.group_id}/${data.type}/${path.basename(ref)}`
-          const dest = `${messageDataPath}${rel}`
-          await Bot.mkdir(path.dirname(dest))
-          await fs.copyFile(ref, dest)
-          return rel
-        }
+      const rel = await persistEntryMedia(data, {
+        baseDir: messageDataPath,
+        groupId: this.group_id,
+        sendApi: this._bindSendApi(),
+      })
+      if (!rel) {
+        const hint = String(data.file ?? data.url ?? '').slice(0, 80)
+        logger.error(`保存文件失败: 无法下载媒体 ${hint}`)
       }
-
-      const buffer = await readImageBuffer({ file: data.file, url: data.url }, this._bindSendApi())
-      if (!buffer?.length) {
-        logger.error(`保存文件失败: 无法下载媒体 ${String(fileRef || urlRef).slice(0, 80)}`)
-        return null
-      }
-
-      const file = await Bot.fileType({ ...data, file: buffer })
-      if (!Buffer.isBuffer(file.buffer)) return null
-
-      file.name = `${this.group_id}/${data.type}/${file.name}`
-      file.path = `${messageDataPath}${file.name}`
-      await Bot.mkdir(path.dirname(file.path))
-      await fs.writeFile(file.path, file.buffer)
-      return file.name
+      return rel
     } catch (err) {
       logger.error(`保存文件失败: ${err.message}`, err)
       return null

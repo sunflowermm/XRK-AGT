@@ -9,12 +9,23 @@ export function isHttpRef(ref) {
   return HTTP_RE.test(String(ref ?? '').trim());
 }
 
+/** 词条 JSON 合法媒体路径：group/type/file（不含 HTTP / base64） */
+export function isEntryMediaRelPath(ref) {
+  const s = String(ref ?? '').trim();
+  return Boolean(s && !isHttpRef(s) && !s.startsWith('base64://') && s.includes('/'));
+}
+
 function isQqCdn(ref) {
   return isHttpRef(ref) && QQ_CDN_RE.test(String(ref));
 }
 
 function toRefs(ref) {
   return typeof ref === 'object' && ref !== null ? ref : { file: ref };
+}
+
+function refStrings(refs) {
+  const { file: f = '', url: u = '' } = toRefs(refs);
+  return { file: String(f).trim(), url: String(u).trim() };
 }
 
 async function readLocalBuffer(ref) {
@@ -29,10 +40,24 @@ async function readLocalBuffer(ref) {
   }
 }
 
-async function getImageViaApi(sendApi, fileRef) {
+async function fetchHttpBuffer(ref, timeoutMs) {
+  if (!isHttpRef(ref)) return null;
+  const fetched = await BotUtil.Buffer(ref, { http: false, timeout: timeoutMs });
+  return Buffer.isBuffer(fetched) && fetched.length ? fetched : null;
+}
+
+async function getImageViaApi(sendApi, fileRef, timeoutMs) {
   if (!sendApi || !fileRef) return null;
   try {
-    const d = (await sendApi('get_image', { file: fileRef }))?.data ?? {};
+    const api = sendApi('get_image', { file: fileRef }).then((r) => r?.data ?? {});
+    const d = timeoutMs > 0
+      ? await Promise.race([
+        api,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('请求超时')), timeoutMs);
+        }),
+      ])
+      : await api;
     if (d.file && await BotUtil.fileExists(d.file)) {
       return readLocalBuffer(`file://${path.resolve(d.file)}`);
     }
@@ -47,12 +72,15 @@ async function getImageViaApi(sendApi, fileRef) {
 }
 
 /**
- * 读图片 Buffer：本地 → get_image(file) → get_image(url) → 非 QQ 外链 fetch
+ * 读图片 Buffer
+ * - persist：添加词条落盘；QQ 直链可即时 fetch（会过期，仅用于下载落盘）
+ * - 默认：出站发送；QQ CDN 不裸发，走 get_image
  */
-export async function readImageBuffer(refs, sendApi) {
-  const { file: f = '', url: u = '' } = toRefs(refs);
-  const file = String(f).trim();
-  const url = String(u).trim();
+export async function readImageBuffer(refs, sendApi, opts = {}) {
+  const { file, url } = refStrings(refs);
+  const persist = opts.persist === true;
+  const getImageTimeout = opts.getImageTimeout ?? (persist ? 8000 : 60000);
+  const fetchTimeout = opts.fetchTimeout ?? 12000;
 
   if (file.startsWith('base64://')) {
     return Buffer.from(file.slice(9), 'base64');
@@ -61,18 +89,66 @@ export async function readImageBuffer(refs, sendApi) {
   const local = (await readLocalBuffer(file)) || (await readLocalBuffer(url));
   if (local) return local;
 
-  if (!sendApi) return null;
-
-  for (const ref of [file, url]) {
-    const buf = await getImageViaApi(sendApi, ref);
-    if (buf?.length) return buf;
+  if (persist) {
+    for (const ref of [url, file]) {
+      const buf = await fetchHttpBuffer(ref, fetchTimeout);
+      if (buf?.length) return buf;
+    }
   }
 
-  const external = [file, url].find((r) => isHttpRef(r) && !isQqCdn(r));
-  if (!external) return null;
+  if (sendApi) {
+    for (const ref of [file, url]) {
+      if (!ref) continue;
+      const buf = await getImageViaApi(sendApi, ref, getImageTimeout);
+      if (buf?.length) return buf;
+    }
+  }
 
-  const fetched = await BotUtil.Buffer(external, { http: false });
-  return Buffer.isBuffer(fetched) && fetched.length ? fetched : null;
+  if (!persist) {
+    const external = [file, url].find((r) => isHttpRef(r) && !isQqCdn(r));
+    if (external) {
+      return fetchHttpBuffer(external, fetchTimeout);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 词条媒体落盘 → 相对路径 group/type/file（JSON 仅存本地，不存 URL）
+ * QQ 直链仅在添加时通过 readImageBuffer(persist) 即时下载
+ */
+export async function persistEntryMedia(segment, { baseDir, groupId, sendApi }) {
+  const data = typeof segment === 'object' && segment !== null ? segment : { file: segment };
+  const mediaType = data.type || 'image';
+  const { file: fileRef, url: urlRef } = refStrings(data);
+
+  for (const ref of [fileRef, urlRef]) {
+    if (!ref || isHttpRef(ref) || ref.startsWith('base64://')) continue;
+    if (isEntryMediaRelPath(ref)) {
+      const existing = path.join(baseDir, ref);
+      if (await BotUtil.fileExists(existing)) return ref;
+    }
+    if (await BotUtil.fileExists(ref)) {
+      const rel = `${groupId}/${mediaType}/${path.basename(ref)}`;
+      const dest = path.join(baseDir, rel);
+      await BotUtil.mkdir(path.dirname(dest));
+      await fs.copyFile(ref, dest);
+      return rel;
+    }
+  }
+
+  const buffer = await readImageBuffer(data, sendApi, { persist: true });
+  if (!buffer?.length) return null;
+
+  const file = await Bot.fileType({ ...data, file: buffer });
+  if (!Buffer.isBuffer(file.buffer)) return null;
+
+  file.name = `${groupId}/${mediaType}/${file.name}`;
+  file.path = path.join(baseDir, file.name);
+  await BotUtil.mkdir(path.dirname(file.path));
+  await BotUtil.writeFile(file.path, file.buffer);
+  return file.name;
 }
 
 /** 出站 segment.file */
@@ -105,7 +181,7 @@ export async function resolveOutboundFile(file, opts = {}) {
 
 /** 落盘到绝对路径 */
 export async function materializeMediaRefToPath(refs, absPath, sendApi) {
-  const buf = await readImageBuffer(refs, sendApi);
+  const buf = await readImageBuffer(refs, sendApi, { persist: true });
   if (!buf?.length) return false;
   await BotUtil.writeFile(absPath, buf);
   return true;
