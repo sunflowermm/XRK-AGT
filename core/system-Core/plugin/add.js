@@ -402,20 +402,18 @@ export class add extends plugin {
   /** 添加图片违禁词 */
   async addImageBannedWord(imgUrl, groupId) {
     try {
-      const hash = await this.getImageHash(imgUrl)
-      if (!hash) return { success: false, error: '获取图片hash失败' }
-      
+      const refs = typeof imgUrl === 'object' && imgUrl !== null ? imgUrl : { url: imgUrl }
+      const buffer = await readImageBuffer(refs, this._bindSendApi())
+      if (!buffer?.length) return { success: false, error: '下载图片失败' }
+
+      const hash = crypto.createHash('md5').update(buffer).digest('hex')
       const groupImgPath = `${bannedImagesPath}${groupId}/`
       await Bot.mkdir(groupImgPath)
-      
-      const response = await fetch(imgUrl)
-      if (!response.ok) return { success: false, error: '下载图片失败' }
-      
-      const buffer = await response.arrayBuffer()
-      const ext = imgUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] || 'jpg'
+
+      const ext = String(refs.url || refs.file || '').match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] || 'jpg'
       const filePath = `${groupImgPath}${hash}.${ext}`
-      
-      await fs.writeFile(filePath, Buffer.from(buffer))
+
+      await fs.writeFile(filePath, buffer)
       
       bannedWordsMap[groupId].images.set(hash, {
         path: filePath,
@@ -899,11 +897,10 @@ export class add extends plugin {
   /** 获取图片hash */
   async getImageHash(imgUrl) {
     try {
-      const response = await fetch(imgUrl)
-      if (!response.ok) return null
-      
-      const buffer = await response.arrayBuffer()
-      return crypto.createHash('md5').update(Buffer.from(buffer)).digest('hex')
+      const refs = typeof imgUrl === 'object' && imgUrl !== null ? imgUrl : { url: imgUrl }
+      const buffer = await readImageBuffer(refs, this._bindSendApi())
+      if (!buffer?.length) return null
+      return crypto.createHash('md5').update(buffer).digest('hex')
     } catch (err) {
       logger.error(`获取图片hash失败: ${err}`)
       return null
@@ -1042,6 +1039,17 @@ export class add extends plugin {
       
       if (!contextData.messages?.length) return this.reply("添加错误：没有添加内容")
 
+      try {
+        const finalized = []
+        for (const msg of contextData.messages) {
+          finalized.push(await this.transformSegments(msg, 'store', { root: false }))
+        }
+        contextData.messages = finalized
+      } catch (err) {
+        logger.error(`添加词条内容失败: ${err.message}`, err)
+        return this.reply(`添加失败：${err.message || '媒体本地化失败，请重新发送图片'}`)
+      }
+
       messageMap[this.group_id] || (messageMap[this.group_id] = new Map())
       
       const storageKey = this.isFuzzy ? `[模糊]${this.keyWord}` : this.keyWord
@@ -1110,27 +1118,37 @@ export class add extends plugin {
     return (action, params) => this.e.bot.sendApi(action, params)
   }
 
-  /** 词条媒体是否仍需本地化（HTTP 直链或本地文件缺失） */
+  /** 词条媒体是否已落盘到 messageDataPath（相对路径 group/type/file） */
+  async isEntryMediaPersisted(item) {
+    const fileRef = String(item?.file ?? '').trim()
+    if (!fileRef || isHttpRef(fileRef) || fileRef.startsWith('base64://')) return false
+    if (!fileRef.includes('/')) return false
+    return Bot.fsStat(`${messageDataPath}${fileRef}`)
+  }
+
+  /** 词条媒体是否仍需本地化（未写入 messageDataPath 的 HTTP / NapCat 临时引用） */
   async needsMediaLocalization(item) {
     if (!ENTRY_MEDIA_TYPES.has(item.type)) return false
-    const ref = String(item.file || item.url || '').trim()
-    if (!ref || ref.startsWith('base64://')) return false
-    if (isHttpRef(ref)) return true
-    const localPath = `${messageDataPath}${ref}`
-    if (await Bot.fsStat(localPath)) return false
-    if (item.file && await Bot.fsStat(item.file)) return false
+    const fileRef = String(item.file ?? '').trim()
+    const urlRef = String(item.url ?? '').trim()
+    if (!fileRef && !urlRef) return false
+    if (fileRef.startsWith('base64://')) return false
+    if (await this.isEntryMediaPersisted(item)) return false
     return true
   }
 
   /** 保存文件到 messageDataPath，返回相对路径；失败返回 null（不再存 URL） */
   async saveFile(data) {
     try {
-      const ref = data.file || data.url
-      if (!ref) return null
+      const fileRef = String(data.file ?? '').trim()
+      const urlRef = String(data.url ?? '').trim()
 
-      if (typeof ref === 'string' && !isHttpRef(ref) && !ref.startsWith('base64://')) {
-        const local = `${messageDataPath}${ref}`
-        if (await Bot.fsStat(local)) return ref
+      for (const ref of [fileRef, urlRef]) {
+        if (!ref || isHttpRef(ref) || ref.startsWith('base64://')) continue
+        if (ref.includes('/')) {
+          const inJson = `${messageDataPath}${ref}`
+          if (await Bot.fsStat(inJson)) return ref
+        }
         if (await Bot.fsStat(ref)) {
           const rel = `${this.group_id}/${data.type}/${path.basename(ref)}`
           const dest = `${messageDataPath}${rel}`
@@ -1140,11 +1158,9 @@ export class add extends plugin {
         }
       }
 
-      const buffer = Buffer.isBuffer(ref)
-        ? ref
-        : await readImageBuffer({ file: data.file, url: data.url }, this._bindSendApi())
+      const buffer = await readImageBuffer({ file: data.file, url: data.url }, this._bindSendApi())
       if (!buffer?.length) {
-        logger.error(`保存文件失败: 无法下载媒体 ${String(ref).slice(0, 80)}`)
+        logger.error(`保存文件失败: 无法下载媒体 ${String(fileRef || urlRef).slice(0, 80)}`)
         return null
       }
 
@@ -1263,7 +1279,7 @@ export class add extends plugin {
     if (!ref || isHttpRef(ref)) return null
     const localPath = `${messageDataPath}${ref}`
     if (await Bot.fsStat(localPath)) return localPath
-    if (await Bot.fsStat(ref)) return ref
+    if (!ref.includes('/')) return ref
     return null
   }
 
