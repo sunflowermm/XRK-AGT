@@ -166,11 +166,13 @@ export class MCPToolAdapter {
       allowedToolNames = new Set(allowedTools.map(t => t.function.name));
     }
 
-    const promises = toolCalls.map(async (toolCall, index) => {
+    const parallel = options.parallel_tool_calls ?? options.parallelToolCalls;
+    const sequential = parallel === false || options.sequentialToolCalls === true;
+
+    const runOne = async (toolCall, index) => {
       try {
         const functionName = toolCall.function?.name;
-        
-        // 权限验证：如果指定了允许的工具列表，检查工具是否在允许列表中
+
         if (allowedToolNames && !allowedToolNames.has(functionName)) {
           BotUtil.makeLog(
             'warn',
@@ -187,7 +189,7 @@ export class MCPToolAdapter {
             })
           };
         }
-        
+
         let argumentsObj = {};
 
         if (toolCall.function?.arguments) {
@@ -220,7 +222,6 @@ export class MCPToolAdapter {
           arguments: argumentsObj
         });
 
-        // 确保 content 始终是字符串，避免出现 undefined 传给 LLM
         let content = result?.content?.[0]?.text;
         if (typeof content !== 'string' || !content.length) {
           try {
@@ -255,9 +256,17 @@ export class MCPToolAdapter {
           })
         };
       }
-    });
+    };
 
-    return await Promise.all(promises);
+    if (sequential) {
+      const results = [];
+      for (let i = 0; i < toolCalls.length; i++) {
+        results.push(await runOne(toolCalls[i], i));
+      }
+      return results;
+    }
+
+    return Promise.all(toolCalls.map((tc, i) => runOne(tc, i)));
   }
 
   /**

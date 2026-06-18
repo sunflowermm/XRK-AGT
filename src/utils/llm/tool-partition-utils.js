@@ -54,7 +54,12 @@ export async function partitionAndExecuteToolCalls(toolCalls, overrides, { build
 
   // 情况2：有中游工具，执行中游工具
   const midstreamResults = midstreamCalls.length > 0
-    ? await MCPToolAdapter.handleToolCalls(midstreamCalls, { streams })
+    ? await MCPToolAdapter.handleToolCalls(midstreamCalls, {
+      streams,
+      parallel_tool_calls: overrides?.parallel_tool_calls ?? overrides?.parallelToolCalls,
+      sequentialToolCalls: overrides?.sequentialToolCalls,
+      allowedTools: overrides?.allowedTools
+    })
     : [];
 
   // 发送中游工具执行结果（用于流式输出）

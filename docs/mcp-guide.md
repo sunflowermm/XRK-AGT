@@ -391,7 +391,9 @@ GET /api/mcp/health
 
 - `/api/v3/chat/completions` 会将前端选择的「带 MCP 工具的工作流」打包进请求体的 `workflow` 字段；
 - 后端将其解析为 `streams` 白名单，传给 LLM 工厂和 `MCPToolAdapter`；
-- LLM 客户端在收到 `tool_calls` 时，会通过 `MCPToolAdapter.handleToolCalls(tool_calls, { streams })` 执行工具；
+- LLM 客户端在收到 `tool_calls` 时，会通过 `MCPToolAdapter.handleToolCalls(tool_calls, options)` 执行工具；
+- `options` 可含 `streams`（白名单）、`parallel_tool_calls`（为 `false` 时**顺序**执行同轮 tool_calls，避免 reply 与其它 MCP 抢状态）；
+- MCP handler 的 `context.e` / `context.turnState` 优先从 `runWithStreamRequestContext`（AsyncLocalStorage）读取，并发消息互不串线；无 ALS 时回退 `StreamLoader.currentEvent`；
 - `MCPToolAdapter` 会基于 `streams` 计算出**允许的工具集合**，只有这些工具可以被真正调用，其它工具调用会被拒绝并返回错误结果。
 
 > 换句话说：**前端/调用方在 v3 接口里没有显式允许的工作流，其下所有 MCP 工具都不会被 AI 使用**，确保工具权限和作用域可控。

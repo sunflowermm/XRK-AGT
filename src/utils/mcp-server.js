@@ -1,4 +1,5 @@
 import BotUtil from '#utils/botutil.js';
+import { summarizeToolResultText } from '#utils/mcp-tool-result-text.js';
 import os from 'os';
 
 /**
@@ -164,14 +165,9 @@ export class MCPServer {
         'MCPServer'
       );
       
-      // 直接返回结果，不做增强（AI无法使用MCP，增强逻辑无用）
+      const text = summarizeToolResultText(result);
       return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(result !== undefined && result !== null ? result : { success: true }, null, 2)
-          }
-        ],
+        content: [{ type: 'text', text }],
         isError
       };
     } catch (error) {

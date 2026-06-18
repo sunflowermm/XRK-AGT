@@ -4,6 +4,19 @@ import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import { PARSEABLE_EMOTIONS } from '#utils/emotion-utils.js';
+import {
+  actionAck,
+  createUserVisibleTurnState,
+  formatReplyQueuedAck,
+  formatSessionWhere,
+  formatUserVisibleDuplicateAck,
+  formatUserVisibleSentAck,
+  isOverlappingUserVisible
+} from '#utils/chat-user-visible-ack.js';
+import {
+  getStreamRequestContext,
+  runWithStreamRequestContext
+} from '#infrastructure/aistream/stream-request-context.js';
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 
 // 表情回应映射
@@ -41,7 +54,9 @@ export default class ChatStream extends AIStream {
         maxTokens: 6000,
         topP: 0.9,
         presencePenalty: 0.6,
-        frequencyPenalty: 0.6
+        frequencyPenalty: 0.6,
+        /** 多工具同轮时顺序执行，避免 reply 与其它 MCP 抢跑 */
+        parallel_tool_calls: false
       },
       embedding: { enabled: true }
     });
@@ -108,6 +123,13 @@ export default class ChatStream extends AIStream {
     return null;
   }
 
+  _getTurnState(context) {
+    const turn = context?.turnState ?? getStreamRequestContext()?.turnState;
+    if (turn) return turn;
+    BotUtil.makeLog('warn', '[ChatStream] 无请求级 turnState，reply 队列可能串线', 'ChatStream');
+    return createUserVisibleTurnState();
+  }
+
   /**
    * 统一错误处理包装器
    * @param {Function} fn - 要执行的异步函数
@@ -158,10 +180,10 @@ export default class ChatStream extends AIStream {
         return this._wrapHandler(async () => {
           const seg = segment;
           await context.e.reply([seg.at(qq)]);
+          const where = formatSessionWhere(context.e);
           return {
             success: true,
-            message: `已 @ ${qq}`,
-            data: { qq }
+            raw: formatUserVisibleSentAck(where, `@${qq}`)
           };
         }, 200);
       },
@@ -188,13 +210,14 @@ export default class ChatStream extends AIStream {
         if (!targetQq) return { success: false, error: '无法确定要戳的对象' };
 
         return this._wrapHandler(async () => {
+          const where = formatSessionWhere(e);
           if (e.isGroup === true && e.group?.pokeMember) {
             await e.group.pokeMember(targetQq);
-            return { success: true, message: '戳一戳成功', data: { qq: targetQq } };
+            return { success: true, raw: actionAck(`你已在${where}戳了 ${targetQq}`) };
           }
           if (typeof e.reply === 'function') {
             await e.reply({ type: 'poke', qq: targetQq });
-            return { success: true, message: '戳一戳成功', data: { qq: targetQq } };
+            return { success: true, raw: actionAck(`你已在${where}戳了 ${targetQq}`) };
           }
           return { success: false, error: '当前环境不支持戳一戳' };
         });
@@ -203,7 +226,7 @@ export default class ChatStream extends AIStream {
     });
 
     this.registerMCPTool('reply', {
-      description: '回复消息',
+      description: '拟定回复正文（本轮 tool 轮结束后由框架统一发到 QQ）。content 支持 | 分句、[CQ:reply,id=]、[开心] 等表情标记。回执会说明是否已拟定。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -218,8 +241,24 @@ export default class ChatStream extends AIStream {
         },
         required: ['content']
       },
-      handler: async (args = {}, _context = {}) => {
-        return { success: true, message: '消息已回复', data: { content: args.content } };
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        const turn = this._getTurnState(context);
+        const content = String(args.content ?? '').trim();
+        if (!content) return { success: false, error: 'content 不能为空' };
+        const where = formatSessionWhere(e);
+        if (turn.queuedReplyContent && isOverlappingUserVisible(content, turn.queuedReplyContent)) {
+          return {
+            success: true,
+            raw: formatUserVisibleDuplicateAck(where, `回复「${turn.queuedReplyContent}」`, 'reply')
+          };
+        }
+        turn.queuedReplyContent = content;
+        turn.queuedReplyMessageId = args.messageId != null ? String(args.messageId).trim() : null;
+        return {
+          success: true,
+          raw: formatReplyQueuedAck(where, content, turn.queuedReplyMessageId)
+        };
       },
       enabled: true
     });
@@ -1196,7 +1235,7 @@ export default class ChatStream extends AIStream {
       embeddingHint = '\n（系统可能按历史记忆与知识库补充上下文）\n';
     }
     const toolHint =
-      '工具：以本请求下发的 MCP/Function 定义为准，按名称与参数调用；勿在正文中伪造协议或未执行的操作。';
+      '工具：以本请求下发的 MCP/Function 定义为准，按名称与参数调用；勿在正文中伪造协议或未执行的操作。工具回执会说明「你已发出/拟定什么」；用户已能看到或已拟定后，不要重复 reply。';
 
     if (!e) {
       return this.finalizeSystemPromptContent(
@@ -1523,76 +1562,95 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
     return mergedMessages;
   }
 
+  _formatQueuedReplyForSend(content, messageId) {
+    const body = String(content ?? '').trim();
+    if (!body) return '';
+    const mid = messageId != null && String(messageId).trim() ? String(messageId).trim() : '';
+    return mid ? `[CQ:reply,id=${mid}]${body}` : body;
+  }
+
   async execute(e, messages, config) {
-    let StreamLoader = null;
-    
-    try {
-      // 构建消息上下文
-      if (!Array.isArray(messages)) {
-        messages = await this.buildChatContext(e, messages);
-      }
-      messages = await this.mergeMessageHistory(messages, e);
-      const query = Array.isArray(messages) ? this.extractQueryFromMessages(messages) : messages;
-      messages = await this.buildEnhancedContext(e, query, messages);
-      
-      // 在调用 AI 之前，挂载当前事件，供 MCP 工具在本轮对话中获取上下文（群/私聊信息）
+    return runWithStreamRequestContext({ e, turnState: createUserVisibleTurnState() }, async () => {
+      let StreamLoader = null;
+
       try {
-        StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
-        if (StreamLoader) {
-          StreamLoader.currentEvent = e || null;
+        if (!Array.isArray(messages)) {
+          messages = await this.buildChatContext(e, messages);
+        }
+        messages = await this.mergeMessageHistory(messages, e);
+        const query = Array.isArray(messages) ? this.extractQueryFromMessages(messages) : messages;
+        messages = await this.buildEnhancedContext(e, query, messages);
+
+        try {
+          StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
+          if (StreamLoader) {
+            StreamLoader.currentEvent = e || null;
+            BotUtil.makeLog(
+              'debug',
+              `[ChatStream.execute] 设置当前事件: isGroup=${e?.isGroup}, message_type=${e?.message_type}, group_id=${e?.group_id}, user_id=${e?.user_id}`,
+              'ChatStream'
+            );
+          }
+        } catch {
+          StreamLoader = null;
+        }
+
+        if (Bot.StreamLoader) Bot.StreamLoader.currentEvent = e || null;
+
+        try {
+          const preview = (messages || []).map((m, idx) => {
+            const role = m.role || `msg${idx}`;
+            let content = m.content;
+            if (typeof content === 'object') {
+              const text = content.text || content.content || '';
+              content = text;
+            }
+            return {
+              idx,
+              role,
+              text: String(content ?? '')
+            };
+          });
           BotUtil.makeLog(
             'debug',
-            `[ChatStream.execute] 设置当前事件: isGroup=${e?.isGroup}, message_type=${e?.message_type}, group_id=${e?.group_id}, user_id=${e?.user_id}`,
+            `[ChatStream.execute] LLM消息预览: ${JSON.stringify(preview, null, 2)}`,
             'ChatStream'
           );
+        } catch {
+          // 调试日志失败直接忽略
         }
-      } catch {
-        StreamLoader = null;
-      }
-      
-      // 打印给 LLM 的消息概要，便于调试 Prompt 结构（只截取前几百字符，避免刷屏）
-      try {
-        const preview = (messages || []).map((m, idx) => {
-          const role = m.role || `msg${idx}`;
-          let content = m.content;
-          if (typeof content === 'object') {
-            const text = content.text || content.content || '';
-            content = text;
-          }
-          return {
-            idx,
-            role,
-            text: String(content ?? '')
-          };
-        });
-        BotUtil.makeLog(
-          'debug',
-          `[ChatStream.execute] LLM消息预览: ${JSON.stringify(preview, null, 2)}`,
+
+        const turn = getStreamRequestContext()?.turnState;
+        const { content: text, executedToolNames } = await this.callAI(messages, config);
+        let trimmed = (text ?? '').toString().trim();
+        if (!trimmed && turn?.queuedReplyContent) {
+          trimmed = this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
+        }
+        if (
+          trimmed &&
+          turn?.queuedReplyContent &&
+          isOverlappingUserVisible(trimmed, turn.queuedReplyContent)
+        ) {
+          trimmed = this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
+        }
+        if (trimmed) {
+          await this.sendMessages(e, trimmed, executedToolNames);
+          this.recordAIResponse(e, trimmed, executedToolNames);
+          if (turn) turn.lastOutboundSummary = trimmed;
+        }
+        return trimmed || '';
+      } catch (error) {
+        BotUtil.makeLog('error',
+          `工作流执行失败[${this.name}]: ${error.message}`,
           'ChatStream'
         );
-      } catch {
-        // 调试日志失败直接忽略
+        return null;
+      } finally {
+        if (StreamLoader && StreamLoader.currentEvent === e) {
+          StreamLoader.currentEvent = null;
+        }
       }
-      
-      const { content: text, executedToolNames } = await this.callAI(messages, config);
-      const trimmed = (text ?? '').toString().trim();
-      if (trimmed) {
-        await this.sendMessages(e, trimmed, executedToolNames);
-        this.recordAIResponse(e, trimmed, executedToolNames);
-      }
-      return trimmed || '';
-    } catch (error) {
-      BotUtil.makeLog('error', 
-        `工作流执行失败[${this.name}]: ${error.message}`, 
-        'ChatStream'
-      );
-      return null;
-    } finally {
-      // 清理当前事件，避免影响其他工作流/请求
-      if (StreamLoader && StreamLoader.currentEvent === e) {
-        StreamLoader.currentEvent = null;
-      }
-    }
+    });
   }
 
   /**

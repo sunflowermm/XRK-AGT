@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { getStreamRequestContext } from './stream-request-context.js';
 import { MCPServer } from '#utils/mcp-server.js';
 import { FileLoader } from '#utils/file-loader.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
@@ -615,7 +616,16 @@ class StreamLoader {
       description: tool.description || `执行${toolName}操作`,
       inputSchema: tool.inputSchema || {},
       handler: async (args) => {
-        const context = { e: args.e || loader.currentEvent || null, question: null };
+        const context = {
+          get e() {
+            return getStreamRequestContext()?.e ?? args.e ?? loader.currentEvent ?? null;
+          },
+          get turnState() {
+            return getStreamRequestContext()?.turnState ?? null;
+          },
+          question: null,
+          stream
+        };
         try {
           if (tool.handler) {
             const result = await tool.handler(args, { ...context, stream });
