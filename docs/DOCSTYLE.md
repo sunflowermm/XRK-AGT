@@ -66,9 +66,37 @@
 
 ### 图表
 
-- 架构分层：仅 `底层架构设计.md`  
-- 挂载/全局：仅 `runtime-surface.md`  
+- 架构分层：仅 `底层架构设计.md`（Mermaid 为权威；可配 `resources/mdimg/docs/` 示意图作导读）
+- 挂载/全局：仅 `runtime-surface.md`
 - 专题内流程（如插件事件链）：保留 1 张即可，勿与上层重复
+
+### 配图与媒体（`resources/mdimg/`）
+
+| 目录 | 用途 | 引用路径（从 `docs/*.md`） |
+|------|------|---------------------------|
+| `showcase/` | **真实**录屏、控制台截图 | `../resources/mdimg/showcase/...` |
+| `docs/` | AI 概念图、架构导读图 | `../resources/mdimg/docs/...` |
+| `mdimg/*.png` | README 联合研制校徽等 | `../resources/mdimg/...` |
+
+**约定**：
+
+1. **实拍优先**：能截屏/录屏的用 `showcase/`（见根 [README.md](../README.md#-项目展示)）
+2. **概念补充**：架构、扩展点、MCP、工厂等可用 `docs/` 下 AI 生图作导读（不替代 Mermaid 权威图）
+3. **单篇最多 1～2 张**导读图 + 必要时 1 组实拍表；避免与上层文档重复贴同一张图
+4. 图片 `alt` 写清场景；大图用 `<details>` 折叠
+
+**已有导读图索引**（维护者增删时同步本表）：
+
+| 文件 | 建议挂载文档 |
+|------|----------------|
+| `docs-hub-banner.png` | `docs/README.md` |
+| `architecture-layers.png` | `底层架构设计.md` |
+| `seven-extensions.png` | `框架可扩展性指南.md` |
+| `mcp-ecosystem.png` | `mcp-guide.md` |
+| `docker-compose-stack.png` | `docker.md` |
+| `llm-factory.png` | `factory.md` |
+| `plugin-event-pipeline.png` | `plugin-base.md` |
+| `aistream-mcp-flow.png` | `aistream.md` |
 
 ---
 
@@ -84,4 +112,4 @@
 
 ---
 
-*最后更新：2026-06-14*
+*最后更新：2026-06-19*

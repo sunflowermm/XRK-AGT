@@ -19,6 +19,8 @@
 
 ## MCP概述
 
+![MCP 生态导读](../resources/mdimg/docs/mcp-ecosystem.png)
+
 ### 核心特性
 
 - ✅ **统一工具管理**：所有工作流的函数自动注册为MCP工具

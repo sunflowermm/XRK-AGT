@@ -274,6 +274,12 @@ export default {
 
 **访问路径**：`/<目录名>`（如 `/xrk`，具体端口由启动配置决定）
 
+| 页面 | 实拍 |
+|------|------|
+| 系统概览 | ![概览](../resources/mdimg/showcase/console-home-11451.png) |
+| AI 对话 | ![对话](../resources/mdimg/showcase/console-chat-ai-mcp-11451.png) |
+| API 调试 | ![API](../resources/mdimg/showcase/console-api-health-11451.png) |
+
 `core/system-Core/www/xrk/index.html` + `core/system-Core/www/xrk/app.js` 实现了一个单页控制台，核心功能包括：
 
 - 系统状态监控（通过 HTTP API 拉取指标）。

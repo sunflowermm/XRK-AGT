@@ -29,6 +29,8 @@
 
 ## 事件链路
 
+![插件事件链路导读](../resources/mdimg/docs/plugin-event-pipeline.png)
+
 插件处于「事件中心」：Tasker 产出事件 → 监听器去重 → `PluginsLoader.deal(e)` → 各插件 `accept` / `rule` / 工作流。
 
 ```mermaid

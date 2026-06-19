@@ -7,6 +7,8 @@
 
 XRK-AGT 提供标准化的 **Model Context Protocol (MCP)** 服务，允许外部 AI 平台（如 Cursor、Claude Desktop、小智 AI）通过 HTTP 连接并调用系统工具。
 
+![MCP 连接架构](../resources/mdimg/docs/mcp-ecosystem.png)
+
 ### 核心特性
 
 - ✅ **按工作流分组**：支持按工作流分组使用工具，灵活选择所需功能

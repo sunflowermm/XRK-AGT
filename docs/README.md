@@ -2,9 +2,12 @@
 
 欢迎来到 XRK-AGT 框架文档中心。仓库根目录 [README.md](../README.md) 负责安装与启动；**本页**负责开发文档索引与阅读路径。
 
+![XRK-AGT 文档中心](../resources/mdimg/docs/docs-hub-banner.png)
+
 | 我想… | 从这里开始 |
 |--------|------------|
-| 跑起来 | [README.md §快速开始](../README.md#-快速开始) |
+| 跑起来 | [README.md §快速开始](../README.md#-快速开始) · [startup.md](startup.md) |
+| **看实拍** | [README §项目展示](../README.md#-项目展示) |
 | **写业务（先看挂载）** | **[runtime-surface.md](runtime-surface.md)** → [base-classes.md](base-classes.md) |
 | **写法与性能** | **[coding-style.md](coding-style.md)** → [node-26-runtime.md](node-26-runtime.md) |
 | 懂架构 | [底层架构设计](底层架构设计.md) → [startup.md](startup.md) → [database.md](database.md) |
@@ -12,7 +15,20 @@
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
 | 发布前检查 | [框架测试指南](框架测试指南.md) → [代码审查清单](代码审查清单.md) → [文档审查清单](文档审查清单.md) |
 
-> **架构边界**：[底层架构设计](底层架构设计.md)。**测试数字**：[框架测试指南](框架测试指南.md)。冲突时以代码为准，见 [文档审查清单](文档审查清单.md)。
+> **架构边界**：[底层架构设计](底层架构设计.md)。**测试**：`tests/` 仅本地/CI 使用（**不入库**），标准值见本地 `tests/helpers/system-core.mjs` 与 [框架测试指南](框架测试指南.md)。冲突时以代码为准，见 [文档审查清单](文档审查清单.md)。  
+> 文档配图规范：[DOCSTYLE.md §配图与媒体](DOCSTYLE.md#配图与媒体resourcesmdimg) · 实拍见 [README §项目展示](../README.md#-项目展示)
+
+### 配图导读（概念图）
+
+| 主题 | 导读图 | 文档 |
+|------|--------|------|
+| 三层架构 | ![架构](../resources/mdimg/docs/architecture-layers.png) | [底层架构设计](底层架构设计.md) |
+| 七大扩展点 | ![扩展点](../resources/mdimg/docs/seven-extensions.png) | [框架可扩展性指南](框架可扩展性指南.md) |
+| MCP 生态 | ![MCP](../resources/mdimg/docs/mcp-ecosystem.png) | [mcp-guide.md](mcp-guide.md) |
+| LLM 工厂 | ![工厂](../resources/mdimg/docs/llm-factory.png) | [factory.md](factory.md) |
+| Docker 部署 | ![Docker](../resources/mdimg/docs/docker-compose-stack.png) | [docker.md](docker.md) |
+
+配图规范见 [DOCSTYLE.md §配图与媒体](DOCSTYLE.md#配图与媒体resourcesmdimg)。
 
 ## 目录
 
@@ -65,7 +81,7 @@
 
 分层与职责见 **[底层架构设计](底层架构设计.md)**（本页不重复架构图）。业务实现放在 `core/*/`；`src/` 为基础设施，**勿写业务 API/工作流**。
 
-**system-Core 内置模块**：12 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 4 events；MCP 工具在七个自带工作流内合计 **80** 个（`registerMCPTool` 计数）。详见 **[system-Core 特性文档](system-core.md)**；CI 标准值见 **`tests/helpers/system-core.mjs`** 与 **[框架测试指南](框架测试指南.md)**。
+**system-Core 内置模块**：12 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 4 events；MCP 工具在七个自带工作流内合计 **80** 个（`registerMCPTool` 计数）。详见 **[system-Core 特性文档](system-core.md)**；标准值见本地 **`tests/helpers/system-core.mjs`**（`tests/` 不入库）与 **[框架测试指南](框架测试指南.md)**。
 
 ### 🔌 插件与事件系统
 
@@ -220,5 +236,5 @@ Bot 生命周期、HTTP/WS、关闭流程：**[bot.md](bot.md)**。OneBot 子 Bo
 
 ---
 
-*最后更新：2026-06-14*
+*最后更新：2026-06-19*
 

@@ -1,4 +1,4 @@
- # AIStream 工作流基类文档
+# AIStream 工作流基类文档
 
 > **文件位置**：`src/infrastructure/aistream/aistream.js`  
 > **说明**：本文档描述 Node 侧 `AIStream` 基类与 LLM/MCP 集成方式。  
@@ -13,6 +13,8 @@
 ---
 
 ## 核心结论
+
+![AIStream 与 MCP 工具链导读](../resources/mdimg/docs/aistream-mcp-flow.png)
 
 - 工作流发现路径固定为 `core/*/stream/*.js`
 - 工具调用统一走 **LLM tool calling + MCP**，不走文本函数解析

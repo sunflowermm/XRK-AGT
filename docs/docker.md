@@ -31,6 +31,8 @@
 
 ## 概述
 
+![Docker Compose 服务栈](../resources/mdimg/docs/docker-compose-stack.png)
+
 Docker 部署会自动构建和启动以下服务：
 - **xrk-agt**：主服务端（Node.js），提供 HTTP/HTTPS/WebSocket、AI 工作流、MCP 工具
 - **xrk-subserver**：Python 子服务端（FastAPI），提供底层子服务能力（健康检查、系统接口与扩展 API 装载）

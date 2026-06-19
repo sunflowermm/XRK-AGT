@@ -7,6 +7,8 @@
 
 system-Core 是 XRK-AGT 的内置核心模块，提供了开箱即用的完整功能集，包括：
 
+![系统概览实拍](../resources/mdimg/showcase/console-home-11451.png)
+
 - ✅ **12个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、**AI 工作区**、MCP服务、设备管理、通知服务、标准输入、数据编辑
 - ✅ **7个工作流**：chat、desktop、tools、memory、database、web、browser（MCP 工具数以 `registerMCPTool` 为准，当前 **80** 个）
 - ✅ **15个内置插件**：增强器（OneBot/OPQ/Device/Stdin）+ 运维与示例业务
@@ -632,7 +634,17 @@ flowchart LR
 
 **核心功能模块与后端能力映射**：
 
-1. **系统概览**  
+| 模块 | 实拍 | 说明 |
+|------|------|------|
+| 系统概览 | ![概览](../resources/mdimg/showcase/console-home-11451.png) | CPU/内存/网络、Bot 状态、插件与工作流统计 |
+| AI 对话 | ![对话](../resources/mdimg/showcase/console-chat-ai-mcp-11451.png) | 工作区、LLM 工厂、MCP 工作流勾选、多模态输入 |
+| 配置管理 | ![配置](../resources/mdimg/showcase/console-config-11451.png) | 表单/JSON 双模式、ConfigBase schema 校验 |
+| API 调试 | ![API](../resources/mdimg/showcase/console-api-health-11451.png) | 内置 API Client，`/api/health` 等一键调试 |
+
+<details>
+<summary><strong>模块说明（展开）</strong></summary>
+
+1. **系统概览**
    - 实时监控系统资源（CPU、内存、网络流量）、Bot 在线状态和运行时长。  
    - 展示工作流加载情况、插件数量与定时任务统计（对应 `core.js` 和 `plugin.js` 的统计接口）。  
    - 支持查看最近 24 小时的系统指标曲线（通过 `/api/system/status` 与 `/api/system/overview`）。
@@ -651,6 +663,8 @@ flowchart LR
    - 内置简易 API Client，可以直接选择 system-Core 暴露的所有 HTTP 路由进行调用（包括插件管理、设备管理、stdin 接口等）。  
    - 支持填写请求体、Header、鉴权参数，查看响应 JSON / 原始文本，以及 WebSocket 调试（如 `/stdin` 频道）。  
    - 适合调试自定义 Core 的 HTTP 接口、验证配置与工作流集成是否正确。
+
+</details>
 
 **前端特性**：
 - 响应式布局：适配桌面与移动端浏览器，侧边导航 + 顶部状态栏结构。  
