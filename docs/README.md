@@ -15,20 +15,7 @@
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
 | 发布前检查 | [框架测试指南](框架测试指南.md) → [代码审查清单](代码审查清单.md) → [文档审查清单](文档审查清单.md) |
 
-> **架构边界**：[底层架构设计](底层架构设计.md)。**测试**：`tests/` 仅本地/CI 使用（**不入库**），标准值见本地 `tests/helpers/system-core.mjs` 与 [框架测试指南](框架测试指南.md)。冲突时以代码为准，见 [文档审查清单](文档审查清单.md)。  
-> 文档配图规范：[DOCSTYLE.md §配图与媒体](DOCSTYLE.md#配图与媒体resourcesmdimg) · 实拍见 [README §项目展示](../README.md#-项目展示)
-
-### 配图导读（概念图）
-
-| 主题 | 导读图 | 文档 |
-|------|--------|------|
-| 三层架构 | ![架构](../resources/mdimg/docs/architecture-layers.png) | [底层架构设计](底层架构设计.md) |
-| 七大扩展点 | ![扩展点](../resources/mdimg/docs/seven-extensions.png) | [框架可扩展性指南](框架可扩展性指南.md) |
-| MCP 生态 | ![MCP](../resources/mdimg/docs/mcp-ecosystem.png) | [mcp-guide.md](mcp-guide.md) |
-| LLM 工厂 | ![工厂](../resources/mdimg/docs/llm-factory.png) | [factory.md](factory.md) |
-| Docker 部署 | ![Docker](../resources/mdimg/docs/docker-compose-stack.png) | [docker.md](docker.md) |
-
-配图规范见 [DOCSTYLE.md §配图与媒体](DOCSTYLE.md#配图与媒体resourcesmdimg)。
+> 配图约定：[DOCSTYLE.md](DOCSTYLE.md) · 仓库 [github.com/sunflowermm/XRK-AGT](https://github.com/sunflowermm/XRK-AGT)
 
 ## 目录
 

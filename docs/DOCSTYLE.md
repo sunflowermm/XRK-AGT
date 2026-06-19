@@ -64,39 +64,16 @@
 - 示例代码可运行、与 Node 26 规范一致  
 - 同一事实只维护一处；他处用「见 [xxx.md](xxx.md)」
 
-### 图表
+### 配图
 
-- 架构分层：仅 `底层架构设计.md`（Mermaid 为权威；可配 `resources/mdimg/docs/` 示意图作导读）
-- 挂载/全局：仅 `runtime-surface.md`
-- 专题内流程（如插件事件链）：保留 1 张即可，勿与上层重复
+| 目录 | 用途 |
+|------|------|
+| `showcase/` | 实拍（录屏、控制台截图） |
+| `docs/` | 概念导读图（**不替代** Mermaid；文内注明以代码/Mermaid 为准） |
 
-### 配图与媒体（`resources/mdimg/`）
-
-| 目录 | 用途 | 引用路径（从 `docs/*.md`） |
-|------|------|---------------------------|
-| `showcase/` | **真实**录屏、控制台截图 | `../resources/mdimg/showcase/...` |
-| `docs/` | AI 概念图、架构导读图 | `../resources/mdimg/docs/...` |
-| `mdimg/*.png` | README 联合研制校徽等 | `../resources/mdimg/...` |
-
-**约定**：
-
-1. **实拍优先**：能截屏/录屏的用 `showcase/`（见根 [README.md](../README.md#-项目展示)）
-2. **概念补充**：架构、扩展点、MCP、工厂等可用 `docs/` 下 AI 生图作导读（不替代 Mermaid 权威图）
-3. **单篇最多 1～2 张**导读图 + 必要时 1 组实拍表；避免与上层文档重复贴同一张图
-4. 图片 `alt` 写清场景；大图用 `<details>` 折叠
-
-**已有导读图索引**（维护者增删时同步本表）：
-
-| 文件 | 建议挂载文档 |
-|------|----------------|
-| `docs-hub-banner.png` | `docs/README.md` |
-| `architecture-layers.png` | `底层架构设计.md` |
-| `seven-extensions.png` | `框架可扩展性指南.md` |
-| `mcp-ecosystem.png` | `mcp-guide.md` |
-| `docker-compose-stack.png` | `docker.md` |
-| `llm-factory.png` | `factory.md` |
-| `plugin-event-pipeline.png` | `plugin-base.md` |
-| `aistream-mcp-flow.png` | `aistream.md` |
+- 单篇：导读图 ≤1 张 + 实拍表按需；与上层文档勿重复贴同图
+- 生图提示词须符合项目事实：Node ≥26、pnpm、`node app.js`、仓库 `github.com/sunflowermm/XRK-AGT`；**禁止** pip/Python/错误仓库名
+- 少用大段假代码/假 URL，优先图标 + 准确标签
 
 ---
 

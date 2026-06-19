@@ -6,8 +6,6 @@
 
 ## 启动链
 
-终端实录（剪掉片头 4s）：`node app.js` 引导 → 选端口 → Loader 加载 → online。
-
 ![终端启动](../resources/mdimg/showcase/terminal-startup.gif)
 
 ```mermaid
