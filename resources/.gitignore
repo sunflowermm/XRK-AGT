@@ -5,6 +5,6 @@ fonts/
 !fonts/Genshin.ttf
 !instruct.txt
 !mdimg
-!mdimg/*
+!mdimg/**
 !帮助
 !帮助/help.html

@@ -15,6 +15,7 @@
 ## 目录
 
 - [架构](#-架构)
+- [项目展示](#-项目展示)
 - [Star 趋势](#-star-趋势)
 - [快速开始](#-快速开始)
 - [核心特性](#-核心特性)
@@ -34,6 +35,41 @@ XRK-AGT 是由向日葵开发、各大学志同道合的学生联合研制的 **
 - **🌐 Web 与 HTTP/API**：内置 Web 控制台 + REST API + WebSocket
 - **⭐ system-Core**：12 HTTP API、7 工作流（80 MCP 工具）、15 插件、4 Tasker、4 events、Web 控制台（`/xrk/`）
 - **🎨 渲染**：默认 Playwright；Chromium 经启动菜单或 `pnpm run setup:browsers` 安装
+
+---
+
+## 📸 项目展示
+
+> 以下均为 **本机真实运行** 录屏/截图（端口 `11451`，控制台 `http://127.0.0.1:11451/xrk/`）。
+
+### 终端启动
+
+`node app.js` 引导菜单 → 选择端口 → 加载插件 / 工作流 / Tasker → 服务 online。
+
+![终端启动录屏](resources/mdimg/showcase/terminal-startup.gif)
+
+### Web 控制台
+
+| 系统概览 | AI 对话 · MCP 工作流 |
+|:---:|:---:|
+| ![系统概览](resources/mdimg/showcase/console-home-11451.png) | ![AI 对话 MCP](resources/mdimg/showcase/console-chat-ai-mcp-11451.png) |
+
+| 配置管理 | API 调试 · `/api/health` |
+|:---:|:---:|
+| ![配置管理](resources/mdimg/showcase/console-config-11451.png) | ![API 健康检查](resources/mdimg/showcase/console-api-health-11451.png) |
+
+<details>
+<summary><strong>更多截图</strong></summary>
+
+**AI 对话（Event 模式）**
+
+![AI 对话 Event](resources/mdimg/showcase/console-chat-11451.png)
+
+**API 调试中心（端点列表）**
+
+![API 调试](resources/mdimg/showcase/console-api-11451.png)
+
+</details>
 
 **如果你是第一次接触本项目：**
 
@@ -354,4 +390,4 @@ A: Docker 构建会自动包含子服务端，无需手动配置。详见 [Docke
 
 ---
 
-*最后更新：2026-06-14*
+*最后更新：2026-06-19*
