@@ -33,44 +33,7 @@
 
 ## MCP架构
 
-```mermaid
-flowchart TB
-    subgraph External["👥 外部AI平台"]
-        Cursor["Cursor IDE"]
-        Claude["Claude Desktop"]
-        XiaoZhi["小智AI"]
-    end
-
-    subgraph Streams["🌊 工作流层"]
-        direction TB
-        MainStreams["主工作流<br/>chat / desktop / web / browser"]
-        ToolStreams["工具工作流<br/>tools / memory / database"]
-    end
-
-    subgraph MCPServer["🔧 MCP服务器"]
-        direction TB
-        ToolRegistry["工具注册表<br/>自动注册MCP工具"]
-        CoreTools["核心工具<br/>system / time / util"]
-    end
-
-    subgraph HTTPAPI["🌐 HTTP API层"]
-        direction TB
-        REST["REST API<br/>/api/mcp/tools"]
-        WS["WebSocket<br/>/mcp/ws"]
-        SSE["SSE<br/>/api/mcp/connect"]
-    end
-
-    External -->|HTTP/WS连接| HTTPAPI
-    Streams -->|注册工具| MCPServer
-    MCPServer -->|提供工具| HTTPAPI
-    HTTPAPI -->|调用工具| MCPServer
-    MCPServer -->|执行工具| Streams
-    
-    style External fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
-    style Streams fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
-    style MCPServer fill:#FFF3E0,stroke:#F57C00,stroke-width:3px
-    style HTTPAPI fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
-```
+端点与工作流分组见下文 [HTTP API](#http-api)；外部平台连接配置见 [MCP配置指南](mcp-config-guide.md)。
 
 ---
 

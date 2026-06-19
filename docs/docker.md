@@ -33,13 +33,7 @@
 
 ![Docker Compose 服务栈](../resources/mdimg/docs/docker-compose-stack.png)
 
-Docker 部署会自动构建和启动以下服务：
-- **xrk-agt**：主服务端（Node.js），提供 HTTP/HTTPS/WebSocket、AI 工作流、MCP 工具
-- **xrk-subserver**：Python 子服务端（FastAPI），提供底层子服务能力（健康检查、系统接口与扩展 API 装载）
-- **redis**：Redis 缓存服务
-- **mongodb**：MongoDB 数据库服务
-
-> **重要提示**：Docker 构建时会自动构建子服务端（Python FastAPI）并安装基础运行依赖，无需手动操作。
+服务定义见根目录 `docker-compose.yml`（`xrk-agt`、`xrk-subserver`、`redis`、`mongodb`）。
 
 ## 快速开始
 

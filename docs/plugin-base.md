@@ -31,37 +31,7 @@
 
 ![插件事件链路导读](../resources/mdimg/docs/plugin-event-pipeline.png)
 
-插件处于「事件中心」：Tasker 产出事件 → 监听器去重 → `PluginsLoader.deal(e)` → 各插件 `accept` / `rule` / 工作流。
-
-```mermaid
-flowchart TB
-    subgraph Sources["📡 事件来源"]
-        T1["OneBot / Device / stdin<br/>Tasker"]
-        T2["core/*/events/*.js<br/>监听器"]
-    end
-
-    subgraph Loader["⚙️ PluginsLoader"]
-        N["EventNormalizer<br/>标准化 e"]
-        D["deal(e)<br/>分发"]
-        A["accept → rule → handler"]
-    end
-
-    subgraph Plugin["🔌 业务插件"]
-        P["继承 plugin<br/>core/*/plugin/"]
-        S["getStream() → AIStream"]
-    end
-
-    T1 --> T2
-    T2 --> N
-    N --> D
-    D --> A
-    A --> P
-    P --> S
-
-    style Sources fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
-    style Loader fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
-    style Plugin fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
-```
+插件处于事件中心：Tasker → 监听器 → `PluginsLoader.deal(e)` → `accept` / `rule` / 工作流。Loader 细节见 [plugins-loader.md](plugins-loader.md)。
 
 **职责边界**
 
