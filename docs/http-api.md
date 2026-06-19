@@ -23,39 +23,9 @@
 
 ## 架构概览
 
-```mermaid
-flowchart TB
-    subgraph Core["Core模块"]
-        API["core/*/http/*.js<br/>API模块"]
-    end
-    
-    subgraph Loader["ApiLoader"]
-        Scan["扫描API模块"]
-        Wrap["包装为HttpApi实例"]
-        Init["调用init()"]
-    end
-    
-    subgraph HttpApi["HttpApi基类"]
-        Routes["注册HTTP路由"]
-        WS["注册WebSocket"]
-        Middleware["挂载中间件"]
-    end
-    
-    subgraph Express["Express应用"]
-        REST["REST API路由"]
-        WSHandler["WebSocket处理器"]
-    end
-    
-    Core -->|自动加载| Loader
-    Loader -->|创建实例| HttpApi
-    HttpApi -->|注册路由| Express
-    HttpApi -->|注册处理器| Express
-    
-    style Core fill:#E6F3FF
-    style Loader fill:#FFE6CC
-    style HttpApi fill:#90EE90
-    style Express fill:#FFD700
-```
+![HttpApi 与 ApiLoader 导读](../resources/mdimg/docs/http-api-pipeline.png)
+
+路由注册、`systemAuth` 与 `HttpResponse` 细节见下文各节；加载流程见 [api-loader.md](api-loader.md)。
 
 ---
 

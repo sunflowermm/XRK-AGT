@@ -62,6 +62,7 @@
 - **[文档编写规范](DOCSTYLE.md)** - 维护者标注化模板
 - **[Node 26 运行时约定](node-26-runtime.md)** - 版本要求、已用 API（禁止项见 skill `xrk-node-runtime`）
 - **[Bot 主类文档](bot.md)** - Bot 生命周期、HTTP/WebSocket（挂载面见 runtime-surface）
+- **[基础设施共享约定](infrastructure-shared.md)** - Loader 标准模式、热重载、`bootstrap-globals`
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范 ⭐
 
 ### 🏗️ 架构
@@ -72,7 +73,7 @@
 
 ### 🔌 插件与事件系统
 
-- **[插件基类文档](plugin-base.md)** - `plugin` 基类：事件链路、规则/上下文、工作流集成（含 Mermaid 图） ⭐
+- **[插件基类文档](plugin-base.md)** - `plugin` 基类：事件链路、规则/上下文、工作流集成 ⭐
 - **[插件加载器文档](plugins-loader.md)** - `PluginsLoader` 的插件加载、事件调度、冷却与节流机制
 - **[事件系统标准化文档](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程、事件监听器开发指南
 

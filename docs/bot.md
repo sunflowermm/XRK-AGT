@@ -69,35 +69,6 @@ export default {
 
 `Bot` 类是 XRK-AGT 的核心运行时对象，统一管理以下功能：
 
-```mermaid
-flowchart TB
-    subgraph Bot["🤖 Bot 核心类"]
-        Service["🌐 服务入口"]
-        API["📡 API与WebSocket"]
-        Tasker["⚙️ Tasker与多Bot"]
-        Auth["🔐 认证与安全"]
-        Event["📢 事件系统"]
-        Business["💼 HTTP业务层"]
-        Resource["📦 资源管理"]
-    end
-    
-    Service --> API
-    API --> Tasker
-    Tasker --> Event
-    Auth --> Service
-    Business --> Service
-    Resource --> Service
-    
-    style Bot fill:#E3F2FD,stroke:#1976D2,stroke-width:3px
-    style Service fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
-    style API fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
-    style Tasker fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
-    style Auth fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
-    style Event fill:#E1F5FE,stroke:#0277BD,stroke-width:2px
-    style Business fill:#E0F2F1,stroke:#00695C,stroke-width:2px
-    style Resource fill:#F1F8E9,stroke:#558B2F,stroke-width:2px
-```
-
 | 职责模块 | 说明 |
 |---------|------|
 | **服务入口** | Express 应用、HTTP/HTTPS 服务器、静态文件服务、基础中间件 |
@@ -112,36 +83,9 @@ flowchart TB
 
 ## 生命周期
 
-### 启动流程
+![Bot 生命周期导读](../resources/mdimg/docs/bot-lifecycle.png)
 
-```mermaid
-flowchart LR
-    Start([🚀 node app / start.js<br/>启动脚本]) --> Create["📦 创建Bot实例<br/>（由启动脚本自动完成）<br/>new Bot()"]
-    Create --> Init["⚙️ 初始化HTTP/WS/代理<br/>_initHttpServer()<br/>_initProxyApp()"]
-    Init --> Run["▶️ bot.run(options)<br/>传入端口配置"]
-    
-    Run --> Load["📚 并行加载模块<br/>Config/Stream/Plugin/API<br/>Promise.allSettled()"]
-    Load --> Middleware["🛠️ 初始化中间件与路由<br/>压缩/安全头/CORS<br/>日志/限流/解析"]
-    Middleware --> Register["📝 注册API路由<br/>ApiLoader.register()"]
-    Register --> Server["🌐 启动HTTP/HTTPS服务器<br/>server.listen()"]
-    Server --> Proxy["🔄 启动反向代理（可选）<br/>startProxyServers()"]
-    Proxy --> Listener["👂 加载事件监听器<br/>ListenerLoader.load()"]
-    Listener --> Watch["🔄 启动API热重载<br/>ApiLoader.watch()"]
-    Watch --> Online([✅ 触发online事件<br/>服务器就绪])
-    
-    style Start fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
-    style Create fill:#E6F3FF,stroke:#2E5C8A,stroke-width:2px
-    style Init fill:#FFE6CC,stroke:#CC8400,stroke-width:2px
-    style Run fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
-    style Load fill:#87CEEB,stroke:#5F9EA0,stroke-width:2px
-    style Middleware fill:#DDA0DD,stroke:#9370DB,stroke-width:2px
-    style Register fill:#98FB98,stroke:#3CB371,stroke-width:2px
-    style Server fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
-    style Proxy fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
-    style Listener fill:#9B59B6,stroke:#7D3C98,stroke-width:2px,color:#fff
-    style Watch fill:#F39C12,stroke:#D68910,stroke-width:2px,color:#fff
-    style Online fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
-```
+启动链分步说明见 [startup.md](startup.md)；挂载时间表见 [runtime-surface.md](runtime-surface.md)。
 
 ### 关闭流程与 Ctrl+C
 

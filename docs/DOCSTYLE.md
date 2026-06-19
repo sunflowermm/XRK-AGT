@@ -71,6 +71,25 @@
 | `showcase/` | 实拍（录屏、控制台截图） |
 | `docs/` | 概念导读图（**不替代** Mermaid；文内注明以代码/Mermaid 为准） |
 
+**`docs/` 导读图**（按主题，单篇最多引用 1 张）：
+
+| 文件 | 用于 |
+|------|------|
+| `docs-hub-banner.png` | 文档枢纽 |
+| `architecture-layers.png` | 三层架构 |
+| `runtime-surface.png` | 运行时挂载 |
+| `bot-lifecycle.png` | Bot 生命周期 |
+| `loader-hot-reload.png` | Loader 扫描/热重载 |
+| `database-dual-store.png` | Redis + MongoDB |
+| `config-base-flow.png` | ConfigBase |
+| `http-api-pipeline.png` | HttpApi / ApiLoader |
+| `seven-extensions.png` | 七大扩展点 |
+| `plugin-event-pipeline.png` | 插件事件链 |
+| `aistream-mcp-flow.png` | AIStream + MCP |
+| `mcp-ecosystem.png` | MCP 生态 |
+| `llm-factory.png` | LLM/ASR/TTS 工厂 |
+| `docker-compose-stack.png` | Docker 编排 |
+
 - 单篇：导读图 ≤1 张 + 实拍表按需；与上层文档勿重复贴同图
 - 生图提示词须符合项目事实：Node ≥26、pnpm、`node app.js`、仓库 `github.com/sunflowermm/XRK-AGT`；**禁止** pip/Python/错误仓库名
 - 少用大段假代码/假 URL，优先图标 + 准确标签

@@ -6,6 +6,8 @@
 
 `TaskerLoader` 负责从所有 `core/*/tasker` 目录动态加载各类 Tasker（事件生成器，如 QQ OneBotv11 等），并与 `Bot` 主类配合，为整个系统提供统一的事件入口。
 
+Loader 扫描与热重载模式见 [infrastructure-shared.md](infrastructure-shared.md) · 事件命名见 [事件系统标准化文档.md](事件系统标准化文档.md)。
+
 ## 📚 目录
 
 - [职责与定位](#职责与定位)

@@ -8,6 +8,8 @@
 
 ## 在文档体系中的位置
 
+![数据库层导读](../resources/mdimg/docs/database-dual-store.png)
+
 | 主题 | 文档 |
 |------|------|
 | 配置字段与路径 | 本文 + [config-base.md](config-base.md) · [app-dev.md §配置分类](app-dev.md#配置分类) |

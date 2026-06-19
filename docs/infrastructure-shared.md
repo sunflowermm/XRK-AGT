@@ -1,9 +1,11 @@
 # 基础设施共享约定
 
 > Loader / 热重载 / 全局引导的**单一说明**；**写法与性能**见 [coding-style.md](coding-style.md)。  
-> 工具表见 [底层架构设计.md](底层架构设计.md#工具模块src-utils-等)；基类见 [base-classes.md](base-classes.md)。
+> 工具索引见 [runtime-surface.md](runtime-surface.md)；基类见 [base-classes.md](base-classes.md)。
 
 各 Loader / 配置模块复用的工具与模式，**业务 Core 勿在此目录放码**。
+
+![Loader 标准模式导读](../resources/mdimg/docs/loader-hot-reload.png)
 
 ## 工具模块（`src/utils/`）
 
@@ -19,7 +21,7 @@
 | `core-fs.js` | `resolveCoreModuleKey`（ApiLoader / 热重载 key：相对 `core/*/http/` 等子目录、无 `.js`）、`scanFiles` |
 | `string-array-utils.js` | 配置层字符串数组归一化 |
 
-引导、信号、路径等其余 `src/utils/` 模块见 [底层架构设计.md](底层架构设计.md#工具模块src-utils-等)。
+引导、信号、路径等其余 `src/utils/` 模块见 [runtime-surface.md](runtime-surface.md)、[coding-style.md](coding-style.md)。
 
 ## 全局引导
 
@@ -44,4 +46,4 @@
 
 ---
 
-*最后更新：2026-06-14*
+*最后更新：2026-06-19*

@@ -10,6 +10,8 @@
 - 将路由与 WebSocket 处理器注册到 Express 与 Bot
 - 监控 API 文件变更，实现热加载
 
+![Loader 标准模式导读](../resources/mdimg/docs/loader-hot-reload.png)
+
 ## 📚 目录
 
 - [扩展特性](#扩展特性)

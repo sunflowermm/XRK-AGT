@@ -35,39 +35,7 @@
 
 ## 架构概览
 
-```mermaid
-flowchart TB
-    subgraph App["应用层"]
-        API["HTTP API"]
-        Plugin["插件"]
-        Web["Web管理界面"]
-    end
-    
-    subgraph ConfigBase["ConfigBase基类"]
-        Read["读取配置"]
-        Write["写入配置"]
-        Get["路径读取"]
-        Set["路径写入"]
-        Validate["Schema验证"]
-        Cache["配置缓存"]
-    end
-    
-    subgraph File["文件系统"]
-        YAML["YAML文件"]
-        JSON["JSON文件"]
-        Backup["备份文件"]
-    end
-    
-    App --> ConfigBase
-    ConfigBase --> File
-    ConfigBase --> Backup
-    ConfigBase --> Cache
-    
-    style App fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
-    style ConfigBase fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
-    style File fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
-    style Cache fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
-```
+![ConfigBase 导读](../resources/mdimg/docs/config-base-flow.png)
 
 ---
 

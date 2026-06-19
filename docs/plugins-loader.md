@@ -17,6 +17,8 @@
 
 > **注意**：框架支持多 core 模块架构。`PluginsLoader` 会自动扫描所有 `core/*/plugin` 目录，加载其中的所有插件。
 
+事件链路导读见 [plugin-base.md § 事件链路](plugin-base.md#事件链路)；Loader 扫描与热重载见 [infrastructure-shared.md](infrastructure-shared.md)。
+
 ## 📚 目录
 
 - [扩展特性](#扩展特性)
