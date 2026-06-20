@@ -65,9 +65,11 @@ Bot.tasker.push(
 
     /** 转换文件为 base64、本地路径或 HTTP（与 TRSS OneBotv11 一致，交给协议端处理） */
     async makeFile(file, opts = {}) {
+      // NapCat/QQ NT 对 base64 图片 rich media 易失败；出站 image/video/record 优先落盘走 file://
+      const spillThreshold = opts.preferPath ? 1 : 10485760
       file = await Bot.Buffer(file, {
         http: true,
-        size: 10485760,
+        size: spillThreshold,
         ...opts,
       })
       if (Buffer.isBuffer(file)) return `base64://${file.toBase64()}`
@@ -110,7 +112,10 @@ Bot.tasker.push(
         }
 
         const fileRef = pickOutboundFileRef(i.data)
-        if (fileRef) i.data.file = await this.makeFile(fileRef)
+        if (fileRef) {
+          const preferPath = i.type === "image" || i.type === "video" || i.type === "record"
+          i.data.file = await this.makeFile(fileRef, preferPath ? { preferPath: true } : {})
+        }
         msgs.push(i)
       }
       return [msgs, forward]
