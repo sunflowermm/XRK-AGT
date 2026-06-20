@@ -4,7 +4,7 @@ import path from "node:path"
 import lodash from "lodash"
 import crypto from "crypto"
 import { HotReloadBase } from '#utils/hot-reload-base.js'
-import { isHttpRef, isEntryMediaRelPath, readImageBuffer, persistEntryMedia } from '#utils/outbound-media.js'
+import { isHttpRef, isEntryMediaRelPath, readImageBuffer, persistEntryMedia } from '#utils/entry-media.js'
 
 export const messageMap = {}
 export const bannedWordsMap = {}

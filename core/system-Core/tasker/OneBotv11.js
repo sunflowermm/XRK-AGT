@@ -1,6 +1,17 @@
 import path from "node:path"
 import { ulid } from "ulid"
-import { resolveOutboundFile } from "#utils/outbound-media.js"
+
+/** 出站 file：优先 HTTP url / 本地 path，避免 NapCat 仅给文件名时读不到 */
+function pickOutboundFileRef(data) {
+  if (!data || typeof data !== "object") return data
+  const file = String(data.file ?? "").trim()
+  const url = String(data.url ?? "").trim()
+  const p = String(data.path ?? "").trim()
+  if (/^https?:\/\//i.test(file)) return file
+  if (/^https?:\/\//i.test(url)) return url
+  if (p) return p
+  return file || url || p
+}
 
 Bot.tasker.push(
   new (class OneBotv11Tasker {
@@ -52,29 +63,21 @@ Bot.tasker.push(
         })
     }
 
-    _makeSendApi(data) {
-      if (!data?.bot?.sendApi) return undefined
-      return (action, params) => data.bot.sendApi(action, params)
-    }
-
-    /**
-     * 转换文件为 base64、本地路径或稳定 HTTP；QQ 临时图链经 get_image 解析
-     */
+    /** 转换文件为 base64、本地路径或 HTTP（与 TRSS OneBotv11 一致，交给协议端处理） */
     async makeFile(file, opts = {}) {
-      const { sendApi, ...rest } = opts
-      const resolved = await resolveOutboundFile(file, {
-        sendApi,
+      file = await Bot.Buffer(file, {
+        http: true,
         size: 10485760,
-        ...rest,
+        ...opts,
       })
-      if (Buffer.isBuffer(resolved)) return `base64://${resolved.toBase64()}`
-      return resolved
+      if (Buffer.isBuffer(file)) return `base64://${file.toBase64()}`
+      return file
     }
 
     /**
      * 处理消息格式
      */
-    async makeMsg(msg, sendApi) {
+    async makeMsg(msg) {
       if (!Array.isArray(msg)) msg = [msg]
       const msgs = []
       const forward = []
@@ -106,7 +109,8 @@ Bot.tasker.push(
             break
         }
 
-        if (i.data.file) i.data.file = await this.makeFile(i.data.file, { sendApi })
+        const fileRef = pickOutboundFileRef(i.data)
+        if (fileRef) i.data.file = await this.makeFile(fileRef)
         msgs.push(i)
       }
       return [msgs, forward]
@@ -115,8 +119,8 @@ Bot.tasker.push(
     /**
      * 发送消息（支持普通和转发）
      */
-    async sendMsg(msg, send, sendForwardMsg, sendApi) {
-      const [message, forward] = await this.makeMsg(msg, sendApi)
+    async sendMsg(msg, send, sendForwardMsg) {
+      const [message, forward] = await this.makeMsg(msg)
       const ret = []
 
       if (forward.length) {
@@ -137,7 +141,6 @@ Bot.tasker.push(
       if (msg && typeof msg === 'object' && msg.type === "poke" && (msg.qq || msg.user_id)) {
         return this.sendPoke(data, msg.qq || msg.user_id)
       }
-      const sendApi = this._makeSendApi(data)
       return this.sendMsg(
         msg,
         message => {
@@ -153,7 +156,6 @@ Bot.tasker.push(
           })
         },
         msg => this.sendFriendForwardMsg(data, msg),
-        sendApi,
       )
     }
 
@@ -161,7 +163,6 @@ Bot.tasker.push(
       if (msg && typeof msg === 'object' && msg.type === "poke" && msg.qq) {
         return this.sendPoke(data, msg.qq)
       }
-      const sendApi = this._makeSendApi(data)
       return this.sendMsg(
         msg,
         message => {
@@ -177,7 +178,6 @@ Bot.tasker.push(
           })
         },
         msg => this.sendGroupForwardMsg(data, msg),
-        sendApi,
       )
     }
 
@@ -191,7 +191,6 @@ Bot.tasker.push(
     }
 
     sendGuildMsg(data, msg) {
-      const sendApi = this._makeSendApi(data)
       return this.sendMsg(
         msg,
         message => {
@@ -208,7 +207,6 @@ Bot.tasker.push(
           })
         },
         msg => Bot.sendForwardMsg(msg => this.sendGuildMsg(data, msg), msg),
-        sendApi,
       )
     }
 
@@ -467,11 +465,11 @@ Bot.tasker.push(
     /**
      * 构建转发消息
      */
-    async makeForwardMsg(msg, sendApi) {
+    async makeForwardMsg(msg) {
       const msgs = []
       for (const i of msg) {
-        const [content, forward] = await this.makeMsg(i.message, sendApi)
-        if (forward.length) msgs.push(...(await this.makeForwardMsg(forward, sendApi)))
+        const [content, forward] = await this.makeMsg(i.message)
+        if (forward.length) msgs.push(...(await this.makeForwardMsg(forward)))
         if (content.length)
           msgs.push({
             type: "node",
@@ -493,10 +491,9 @@ Bot.tasker.push(
         `${data.self_id} => ${data.user_id}`,
         true,
       )
-      const sendApi = this._makeSendApi(data)
       return data.bot.sendApi("send_private_forward_msg", {
         user_id: data.user_id,
-        messages: await this.makeForwardMsg(msg, sendApi),
+        messages: await this.makeForwardMsg(msg),
       })
     }
 
@@ -507,10 +504,9 @@ Bot.tasker.push(
         `${data.self_id} => ${data.group_id}`,
         true,
       )
-      const sendApi = this._makeSendApi(data)
       return data.bot.sendApi("send_group_forward_msg", {
         group_id: data.group_id,
-        messages: await this.makeForwardMsg(msg, sendApi),
+        messages: await this.makeForwardMsg(msg),
       })
     }
 
@@ -877,9 +873,8 @@ Bot.tasker.push(
 
     async setAvatar(data, file) {
       Bot.makeLog("info", `设置头像：${file}`, data.self_id)
-      const sendApi = this._makeSendApi(data)
       return data.bot.sendApi("set_qq_avatar", {
-        file: await this.makeFile(file, { sendApi }),
+        file: await this.makeFile(file),
       })
     }
 
@@ -901,10 +896,9 @@ Bot.tasker.push(
 
     async setGroupAvatar(data, file) {
       Bot.makeLog("info", `设置群头像：${file}`, `${data.self_id} => ${data.group_id}`, true)
-      const sendApi = this._makeSendApi(data)
       return data.bot.sendApi("set_group_portrait", {
         group_id: data.group_id,
-        file: await this.makeFile(file, { sendApi }),
+        file: await this.makeFile(file),
       })
     }
 
@@ -1022,10 +1016,9 @@ Bot.tasker.push(
         `${data.self_id} => ${data.user_id}`,
         true,
       )
-      const sendApi = this._makeSendApi(data)
       return data.bot.sendApi("upload_private_file", {
         user_id: data.user_id,
-        file: (await this.makeFile(file, { file: true, sendApi })).replace("file://", ""),
+        file: (await this.makeFile(file, { file: true })).replace("file://", ""),
         name,
       })
     }
@@ -1037,11 +1030,10 @@ Bot.tasker.push(
         `${data.self_id} => ${data.group_id}`,
         true,
       )
-      const sendApi = this._makeSendApi(data)
       return data.bot.sendApi("upload_group_file", {
         group_id: data.group_id,
         folder,
-        file: (await this.makeFile(file, { file: true, sendApi })).replace("file://", ""),
+        file: (await this.makeFile(file, { file: true })).replace("file://", ""),
         name,
       })
     }
@@ -1420,9 +1412,8 @@ Bot.tasker.push(
 
 
     async ocrImage(data, image) {
-      const sendApi = this._makeSendApi(data)
       return data.bot.sendApi("ocr_image", {
-        image: await this.makeFile(image, { sendApi }),
+        image: await this.makeFile(image),
       })
     }
 

@@ -19,13 +19,12 @@ function isQqCdn(ref) {
   return isHttpRef(ref) && QQ_CDN_RE.test(String(ref));
 }
 
-function toRefs(ref) {
-  return typeof ref === 'object' && ref !== null ? ref : { file: ref };
-}
-
 function refStrings(refs) {
-  const { file: f = '', url: u = '' } = toRefs(refs);
-  return { file: String(f).trim(), url: String(u).trim() };
+  const data = typeof refs === 'object' && refs !== null ? refs : { file: refs };
+  return {
+    file: String(data.file ?? '').trim(),
+    url: String(data.url ?? '').trim(),
+  };
 }
 
 async function readLocalBuffer(ref) {
@@ -40,8 +39,8 @@ async function readLocalBuffer(ref) {
   }
 }
 
-async function fetchHttpBuffer(ref, timeoutMs) {
-  if (!isHttpRef(ref)) return null;
+async function fetchRefBuffer(ref, timeoutMs) {
+  if (!ref || !isHttpRef(ref)) return null;
   const fetched = await BotUtil.Buffer(ref, { http: false, timeout: timeoutMs });
   return Buffer.isBuffer(fetched) && fetched.length ? fetched : null;
 }
@@ -66,33 +65,31 @@ async function getImageViaApi(sendApi, fileRef, timeoutMs) {
       return raw ? Buffer.from(raw, 'base64') : null;
     }
   } catch (err) {
-    globalThis.Bot?.makeLog?.('debug', `[get_image] ${fileRef} → ${err.message}`, 'OutboundMedia');
+    globalThis.Bot?.makeLog?.('debug', `[get_image] ${fileRef} → ${err.message}`, 'EntryMedia');
   }
   return null;
 }
 
-/**
- * 读图片 Buffer
- * - persist：添加词条落盘；QQ 直链可即时 fetch（会过期，仅用于下载落盘）
- * - 默认：出站发送；QQ CDN 不裸发，走 get_image
- */
+/** QQ 图链 / 本地路径 → Buffer（词条落盘、LLM 视觉）；出站发送走 OneBotv11.makeFile */
 export async function readImageBuffer(refs, sendApi, opts = {}) {
   const { file, url } = refStrings(refs);
   const persist = opts.persist === true;
-  const getImageTimeout = opts.getImageTimeout ?? (persist ? 8000 : 60000);
   const fetchTimeout = opts.fetchTimeout ?? 12000;
+  const getImageTimeout = opts.getImageTimeout ?? (persist ? 8000 : 60000);
 
   if (file.startsWith('base64://')) {
     return Buffer.from(file.slice(9), 'base64');
   }
 
-  const local = (await readLocalBuffer(file)) || (await readLocalBuffer(url));
-  if (local) return local;
+  for (const ref of [file, url]) {
+    const local = await readLocalBuffer(ref);
+    if (local) return local;
+  }
 
   if (persist) {
     for (const ref of [url, file]) {
-      const buf = await fetchHttpBuffer(ref, fetchTimeout);
-      if (buf?.length) return buf;
+      const buf = await fetchRefBuffer(ref, fetchTimeout);
+      if (buf) return buf;
     }
   }
 
@@ -105,19 +102,18 @@ export async function readImageBuffer(refs, sendApi, opts = {}) {
   }
 
   if (!persist) {
-    const external = [file, url].find((r) => isHttpRef(r) && !isQqCdn(r));
-    if (external) {
-      return fetchHttpBuffer(external, fetchTimeout);
+    for (const ref of [file, url]) {
+      if (isHttpRef(ref) && !isQqCdn(ref)) {
+        const buf = await fetchRefBuffer(ref, fetchTimeout);
+        if (buf) return buf;
+      }
     }
   }
 
   return null;
 }
 
-/**
- * 词条媒体落盘 → 相对路径 group/type/file（JSON 仅存本地，不存 URL）
- * QQ 直链仅在添加时通过 readImageBuffer(persist) 即时下载
- */
+/** 词条媒体落盘 → 相对路径 group/type/file（JSON 仅存本地，不存 URL） */
 export async function persistEntryMedia(segment, { baseDir, groupId, sendApi }) {
   const data = typeof segment === 'object' && segment !== null ? segment : { file: segment };
   const mediaType = data.type || 'image';
@@ -149,40 +145,4 @@ export async function persistEntryMedia(segment, { baseDir, groupId, sendApi }) 
   await BotUtil.mkdir(path.dirname(file.path));
   await BotUtil.writeFile(file.path, file.buffer);
   return file.name;
-}
-
-/** 出站 segment.file */
-export async function resolveOutboundFile(file, opts = {}) {
-  const size = opts.size ?? 10485760;
-  const { sendApi } = opts;
-
-  if (Buffer.isBuffer(file)) {
-    return BotUtil.Buffer(file, { size, file: opts.file });
-  }
-
-  const str = String(file ?? '').trim();
-  if (!str) throw new Error('空文件引用');
-  if (str.startsWith('base64://')) return str;
-
-  const buf = await readImageBuffer(isHttpRef(str) ? { url: str } : { file: str }, sendApi);
-  if (buf?.length) {
-    return BotUtil.Buffer(buf, { size, file: opts.file });
-  }
-
-  if (isHttpRef(str)) {
-    if (isQqCdn(str)) {
-      throw new Error('QQ 临时图链无法解析，请用 get_image 或本地文件');
-    }
-    return str;
-  }
-
-  throw new Error(`无法解析文件: ${str.slice(0, 120)}`);
-}
-
-/** 落盘到绝对路径 */
-export async function materializeMediaRefToPath(refs, absPath, sendApi) {
-  const buf = await readImageBuffer(refs, sendApi, { persist: true });
-  if (!buf?.length) return false;
-  await BotUtil.writeFile(absPath, buf);
-  return true;
 }
