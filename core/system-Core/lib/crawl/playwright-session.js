@@ -32,6 +32,7 @@ import {
   INTERACTION_NAVIGATION_GRACE_MS
 } from './act-policy.js';
 import { DEFAULT_DEVICE_SCALE_FACTOR } from './page-screenshot-enhance.js';
+import { patchBrowserCompat } from '#utils/playwright-puppeteer-compat.js';
 
 const BROWSER_TYPES = /** @type {const} */ (['chromium', 'firefox', 'webkit']);
 
@@ -105,6 +106,8 @@ export class PlaywrightAgentSession {
         timeout: Math.min(Math.max(launchTimeoutMs, 5_000), 180_000)
       });
     }
+
+    patchBrowserCompat(browser);
 
     /** @type {import('playwright').BrowserContextOptions} */
     const contextOptions = {};

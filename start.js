@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { fixWindowsUTF8 } from './src/utils/win-utf8.js';
@@ -18,12 +18,12 @@ if (entry && path.basename(entry) === 'start.js') {
   process.exit(result.status !== null ? result.status : 1);
 }
 
-let globalMenuSignalController = null;
+let globalMenuSignalHandler = null;
 
 async function cleanup() {
-  if (globalMenuSignalController) {
-    await globalMenuSignalController.uninstall();
-    globalMenuSignalController = null;
+  if (globalMenuSignalHandler) {
+    await globalMenuSignalHandler.cleanup();
+    globalMenuSignalHandler = null;
   }
 }
 
@@ -68,7 +68,7 @@ import {
   getBrowserStatus,
   installPlaywrightChromium
 } from './src/utils/bootstrap-deps.js';
-import { ProcessSignalController, normalizeChildExitCode } from './src/utils/process-signals.js';
+import { MenuSignalHandler } from './src/utils/process-signals.js';
 
 let _restartLogger = null;
 
@@ -201,17 +201,13 @@ class ServerManager extends BaseManager {
     super(logger);
     this.pm2Manager = pm2Manager;
     
-    if (!globalMenuSignalController) {
-      globalMenuSignalController = new ProcessSignalController({
-        mode: 'menu',
-        logger: {
-          warning: (msg) => this.logger.warning(msg),
-          mark: (msg) => this.logger.log(msg, 'INFO')
-        },
-        onForceExit: async () => cleanup()
+    if (!globalMenuSignalHandler) {
+      globalMenuSignalHandler = new MenuSignalHandler({
+        log: (msg, level) => this.logger.log(msg, level),
+        warning: (msg) => this.logger.warning(msg)
       });
     }
-    this.signalController = globalMenuSignalController;
+    this.signalHandler = globalMenuSignalHandler;
   }
 
   getPortDir(port) {
@@ -293,71 +289,84 @@ class ServerManager extends BaseManager {
   }
 
   async startWithAutoRestart(port) {
-    // 确保配置就绪（只输出一次日志）
     await this.ensurePortConfig(port);
-    
-    if (!this.signalController.installed) {
-      this.signalController.install();
-    }
-    
+
+    if (!this.signalHandler.isSetup) this.signalHandler.setup();
+    this.signalHandler.inRestartLoop = true;
     let restartCount = 0;
     const startTime = Date.now();
-    
-    while (restartCount < CONFIG.MAX_RESTARTS) {
-      if (restartCount > 0) {
-        await this.logger.log(`重启进程 (尝试 ${restartCount + 1}/${CONFIG.MAX_RESTARTS})`);
+
+    try {
+      while (restartCount < CONFIG.MAX_RESTARTS) {
+        if (restartCount > 0) {
+          await this.logger.log(`重启进程 (尝试 ${restartCount + 1}/${CONFIG.MAX_RESTARTS})`);
+        }
+
+        const exitCode = await this.runServerProcess(port, restartCount > 0);
+
+        if (exitCode === CONFIG.EXIT_STOP || exitCode === 255) {
+          await this.logger.log('正常退出，返回菜单');
+          return;
+        }
+
+        await this.logger.log(`进程退出，状态码: ${exitCode}`);
+        const waitTime = this.calculateRestartDelay(Date.now() - startTime, restartCount);
+        if (waitTime > 0) {
+          await this.logger.warning(`将在 ${waitTime / 1000} 秒后重启`);
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
+        }
+        restartCount++;
       }
-      
-      // 父进程已 ensurePortConfig；子进程跳过重复引导与配置拷贝
-      const exitCode = await this.runServerProcess(port, true);
-      
-      if (exitCode === CONFIG.EXIT_STOP) {
-        await this.logger.log('已停止自动重启，返回菜单');
-        return;
-      }
-      
-      await this.logger.log(`进程退出，状态码: ${exitCode}`);
-      const waitTime = this.calculateRestartDelay(Date.now() - startTime, restartCount);
-      if (waitTime > 0) {
-        await this.logger.warning(`将在 ${waitTime / 1000} 秒后重启`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
-      restartCount++;
+
+      await this.logger.error(`达到最大重启次数 (${CONFIG.MAX_RESTARTS})，停止重启`);
+    } finally {
+      this.signalHandler.inRestartLoop = false;
     }
-    
-    await this.logger.error(`达到最大重启次数 (${CONFIG.MAX_RESTARTS})，停止重启`);
   }
 
   async runServerProcess(port, skipConfigCheck = false) {
-    this.signalController.pause();
-    try {
-      const nodeArgs = getNodeArgs();
-      const entryScript = path.join(process.cwd(), 'app.js');
-      const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
+    const nodeArgs = getNodeArgs();
+    const entryScript = path.join(process.cwd(), 'app.js');
+    const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
+    const cleanEnv = {
+      ...process.env,
+      XRK_SERVER_PORT: port.toString(),
+      XRK_SKIP_CONFIG_CHECK: skipConfigCheck ? '1' : '0',
+      XRK_SKIP_BOOTSTRAP: skipConfigCheck ? '1' : '0',
+      XRK_SKIP_FRONTEND_BOOTSTRAP: skipConfigCheck ? '1' : '0',
+      XRK_SKIP_FRONTEND_START: process.env.XRK_SKIP_FRONTEND_START || '0',
+      XRK_FAST_START: process.env.XRK_FAST_START || '0',
+      XRK_OPTIONAL_DB: process.env.XRK_OPTIONAL_DB || '0'
+    };
 
-      const cleanEnv = {
-        ...process.env,
-        XRK_SERVER_PORT: port.toString(),
-        XRK_SKIP_CONFIG_CHECK: skipConfigCheck ? '1' : '0',
-        XRK_SKIP_BOOTSTRAP: skipConfigCheck ? '1' : '0',
-        XRK_SKIP_FRONTEND_BOOTSTRAP: skipConfigCheck ? '1' : '0',
-        XRK_SKIP_FRONTEND_START: process.env.XRK_SKIP_FRONTEND_START || '0',
-        XRK_FAST_START: process.env.XRK_FAST_START || '0',
-        XRK_OPTIONAL_DB: process.env.XRK_OPTIONAL_DB || '0'
-      };
-
-      const result = spawnSync(process.argv[0], startArgs, {
+    return new Promise((resolve) => {
+      this.signalHandler._closeReadline();
+      const child = spawn(process.argv[0], startArgs, {
         stdio: 'inherit',
         windowsHide: true,
         env: cleanEnv,
         detached: false
       });
 
-      return normalizeChildExitCode(result.status, CONFIG.EXIT_STOP);
-    } finally {
-      this.signalController.resetStrikes();
-      this.signalController.resume();
-    }
+      this.signalHandler.currentChild = child;
+
+      child.on('exit', (code, signal) => {
+        this.signalHandler.currentChild = null;
+        this.signalHandler._ensureReadline();
+        const ret = signal ? CONFIG.EXIT_RESTART : (code ?? CONFIG.EXIT_STOP);
+        if (signal) {
+          void this.logger.warning(`子进程被信号 ${signal} 终止，将自动重启`);
+        }
+        resolve(ret);
+      });
+
+      child.on('error', (err) => {
+        this.signalHandler.currentChild = null;
+        this.signalHandler._ensureReadline();
+        void this.logger.error(`子进程启动失败: ${err.message}`);
+        resolve(CONFIG.EXIT_RESTART);
+      });
+    });
   }
 
   calculateRestartDelay(runTime, restartCount) {

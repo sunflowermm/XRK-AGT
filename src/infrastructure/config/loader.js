@@ -4,7 +4,7 @@ import setLog from '#infrastructure/log.js';
 import { initDatabases, closeDatabases } from '#infrastructure/database/index.js';
 import SystemMonitor from '#modules/systemmonitor.js';
 import { normalizeError } from '#utils/normalize-error.js';
-import { installProcessSignals, runShutdownHooks } from '#utils/process-signals.js';
+import { runShutdownHooks, SIGNAL_TIME_THRESHOLD_MS } from '#utils/process-signals.js';
 import { getRuntimeGlobal, isShuttingDown, setShuttingDown, isProcessFlagSet, setProcessFlag } from '#utils/runtime-globals.js';
 
 const CONFIG = {
@@ -16,13 +16,13 @@ const CONFIG = {
 
 const NETWORK_ERROR_CODES = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST'];
 const EXPECTED_REJECTION_CODES = ['ENOTFOUND', 'EAI_AGAIN', 'EAI_NONAME'];
+const SERVER_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
 let packageloaderPromise = null;
 
 class ProcessManager {
-  /** @type {import('#utils/process-signals.js').ProcessSignalController | null} */
-  _signalController = null;
-  _signalEpoch = 0;
+  lastSignal = null;
+  lastSignalTime = 0;
 
   async updateTitle() {
     const currentQQ = global.selectedQQ ?? process.argv.find((arg) => /^\d+$/.test(arg));
@@ -31,12 +31,11 @@ class ProcessManager {
 
   async restart() {
     if (isShuttingDown()) return;
-    const epoch = ++this._signalEpoch;
     logger.mark(chalk.yellow('重启中...'));
     await this.cleanup();
-    if (epoch !== this._signalEpoch) return;
-    if (getRuntimeGlobal('Bot')) await getRuntimeGlobal('Bot').closeServer({ fast: true }).catch(() => {});
-    if (epoch !== this._signalEpoch) return;
+    if (getRuntimeGlobal('Bot')) {
+      await getRuntimeGlobal('Bot').closeServer({ fast: true }).catch(() => {});
+    }
     process.exit(CONFIG.EXIT_RESTART);
   }
 
@@ -45,7 +44,6 @@ class ProcessManager {
   }
 
   async gracefulShutdown(exitCode) {
-    this._signalEpoch += 1;
     if (isShuttingDown()) return;
     setShuttingDown(true);
     logger.mark(chalk.yellow('正在关闭...'));
@@ -63,15 +61,39 @@ class ProcessManager {
     if (isProcessFlagSet('__xrkSignalHandlersReady')) return;
     setProcessFlag('__xrkSignalHandlersReady', true);
 
-    this._signalController = installProcessSignals({
-      mode: 'server',
-      logger: {
-        mark: (msg) => logger.mark(chalk.yellow(msg)),
-        warning: (msg) => logger.mark(chalk.yellow(msg))
-      },
-      onRestart: () => this.restart(),
-      onStop: () => this.gracefulShutdown(CONFIG.EXIT_STOP)
-    });
+    const handleSignal = async (signal) => {
+      if (isShuttingDown()) {
+        process.exit(130);
+        return;
+      }
+
+      const now = Date.now();
+      if (
+        signal === this.lastSignal &&
+        now - this.lastSignalTime < SIGNAL_TIME_THRESHOLD_MS
+      ) {
+        logger.mark(chalk.yellow(`检测到连续两次 ${signal}，返回菜单`));
+        await this.gracefulShutdown(CONFIG.EXIT_STOP);
+        return;
+      }
+
+      this.lastSignal = signal;
+      this.lastSignalTime = now;
+      logger.mark(chalk.yellow(`接收到 ${signal}，正在重启`));
+      try {
+        await this.restart();
+      } catch (err) {
+        logger.error(`restart 异常: ${err?.message || err}`);
+        process.exit(CONFIG.EXIT_RESTART);
+      }
+    };
+
+    for (const signal of SERVER_SIGNALS) {
+      process.removeAllListeners(signal);
+      process.on(signal, () => {
+        void handleSignal(signal);
+      });
+    }
   }
 
   setupErrorHandlers() {

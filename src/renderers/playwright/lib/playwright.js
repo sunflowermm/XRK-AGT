@@ -3,7 +3,7 @@ import playwright from "playwright";
 import { createRequire } from "node:module";
 import BotUtil from '#utils/botutil.js';
 import Renderer from "#infrastructure/renderer/Renderer.js";
-
+import { patchBrowserCompat } from "#utils/playwright-puppeteer-compat.js";
 const { buildPlaywrightLaunchOptions, pickBrowserPath } = createRequire(import.meta.url)('#utils/system-browser.cjs');
 
 /**
@@ -66,7 +66,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       await context.close();
 
       BotUtil.makeLog("info", `Successfully connected to existing ${this.browserType} instance`, this.logTag);
-      return browser;
+      return patchBrowserCompat(browser);
     } catch (e) {
       BotUtil.makeLog("warn", `Connection failed: ${e.message}`, this.logTag);
 
@@ -123,6 +123,8 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         BotUtil.makeLog("error", `Playwright ${this.browserType} failed to start`, this.logTag);
         return false;
       }
+
+      patchBrowserCompat(this.browser);
 
       this.browser.on("disconnected", async () => {
         BotUtil.makeLog("warn", `${this.browserType} instance disconnected`, this.logTag);
