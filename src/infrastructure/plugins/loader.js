@@ -246,6 +246,10 @@ class PluginsLoader {
 
         let { recallMsg = 0, at = '' } = data
         if (!Array.isArray(msg)) msg = [msg]
+        msg = msg.map(m => {
+          if (Buffer.isBuffer(m) || m instanceof Uint8Array) return segment.image(m)
+          return m
+        })
 
         if (at && e.isGroup) {
           const atId = at === true ? e.user_id : at

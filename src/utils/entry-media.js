@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import BotUtil from '#utils/botutil.js';
+import { inlineBinaryFromRef, isPathLike } from '#utils/media-ref.js';
 
 const HTTP_RE = /^https?:\/\//i;
 const QQ_CDN_RE = /multimedia\.nt\.qq\.com/i;
@@ -28,8 +29,10 @@ function refStrings(refs) {
 }
 
 async function readLocalBuffer(ref) {
+  const inline = inlineBinaryFromRef(ref);
+  if (inline) return inline;
   const p = String(ref ?? '').replace(/^file:\/\//, '').trim();
-  if (!p || isHttpRef(p)) return null;
+  if (!p || isHttpRef(p) || !isPathLike(p)) return null;
   if (!(await BotUtil.fileExists(p))) return null;
   try {
     const buf = await fs.readFile(p);
@@ -57,7 +60,7 @@ async function getImageViaApi(sendApi, fileRef, timeoutMs) {
         }),
       ])
       : await api;
-    if (d.file && await BotUtil.fileExists(d.file)) {
+    if (d.file && isPathLike(d.file) && await BotUtil.fileExists(d.file)) {
       return readLocalBuffer(`file://${path.resolve(d.file)}`);
     }
     if (d.base64) {
@@ -125,7 +128,7 @@ export async function persistEntryMedia(segment, { baseDir, groupId, sendApi }) 
       const existing = path.join(baseDir, ref);
       if (await BotUtil.fileExists(existing)) return ref;
     }
-    if (await BotUtil.fileExists(ref)) {
+    if (isPathLike(ref) && await BotUtil.fileExists(ref)) {
       const rel = `${groupId}/${mediaType}/${path.basename(ref)}`;
       const dest = path.join(baseDir, rel);
       await BotUtil.mkdir(path.dirname(dest));

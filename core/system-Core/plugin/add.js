@@ -5,6 +5,7 @@ import lodash from "lodash"
 import crypto from "crypto"
 import { HotReloadBase } from '#utils/hot-reload-base.js'
 import { isHttpRef, isEntryMediaRelPath, readImageBuffer, persistEntryMedia } from '#utils/entry-media.js'
+import { inlineBinaryFromRef, isPathLike } from '#utils/media-ref.js'
 
 export const messageMap = {}
 export const bannedWordsMap = {}
@@ -1228,23 +1229,37 @@ export class add extends plugin {
         delete item.url
         delete item.fid
       } else if (mode === 'send' && ENTRY_MEDIA_TYPES.has(item.type)) {
-        const localPath = await this.resolveEntryMediaPath(item)
-        if (!localPath) continue
-        item.file = localPath
-        delete item.url
-        delete item.fid
+        const inline = inlineBinaryFromRef(item.file)
+        if (inline) {
+          item.file = `base64://${inline.toString('base64')}`
+          delete item.url
+          delete item.fid
+        } else {
+          const localPath = await this.resolveEntryMediaPath(item)
+          if (!localPath) continue
+          item.file = localPath
+          delete item.url
+          delete item.fid
+        }
       }
       out.push(item)
     }
     return out
   }
 
-  /** 解析词条存储的媒体本地路径（仅相对/绝对本地路径，不含 HTTP） */
+  /** 解析词条存储的媒体本地路径（仅相对/绝对本地路径，不含 HTTP / 内联二进制） */
   async resolveEntryMediaPath(item) {
     const ref = String(item?.file ?? '').trim()
-    if (!ref || isHttpRef(ref)) return null
-    const localPath = `${messageDataPath}${ref}`
-    if (await Bot.fsStat(localPath)) return localPath
+    if (!ref || isHttpRef(ref) || ref.startsWith('base64://') || inlineBinaryFromRef(ref)) return null
+    if (isEntryMediaRelPath(ref)) {
+      const localPath = `${messageDataPath}${ref}`
+      if (await Bot.fsStat(localPath)) return localPath
+    }
+    if (isPathLike(ref)) {
+      if (await Bot.fsStat(ref)) return ref
+      const nested = `${messageDataPath}${ref}`
+      if (await Bot.fsStat(nested)) return nested
+    }
     if (!ref.includes('/')) return ref
     return null
   }

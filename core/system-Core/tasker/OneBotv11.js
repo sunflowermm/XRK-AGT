@@ -1,17 +1,22 @@
 import path from "node:path"
 import { ulid } from "ulid"
 
-/** 出站 file：优先 HTTP url / 本地 path，避免 NapCat 仅给文件名时读不到 */
+/** NapCat 出站：url/path 优先；Buffer 勿 String()（TRSS 直传 makeFile） */
 function pickOutboundFileRef(data) {
-  if (!data || typeof data !== "object") return data
-  const file = String(data.file ?? "").trim()
+  if (!data || typeof data !== "object") return data?.file
+  const raw = data.file
+  if (Buffer.isBuffer(raw) || raw instanceof Uint8Array) return raw
+  const file = typeof raw === "string" ? raw.trim() : ""
+  if (file.startsWith("base64://")) return file
   const url = String(data.url ?? "").trim()
   const p = String(data.path ?? "").trim()
   if (/^https?:\/\//i.test(file)) return file
   if (/^https?:\/\//i.test(url)) return url
   if (p) return p
-  return file || url || p
+  return file || url || p || undefined
 }
+
+const RICH_MEDIA = new Set(["image", "video", "record"])
 
 Bot.tasker.push(
   new (class OneBotv11Tasker {
@@ -63,29 +68,29 @@ Bot.tasker.push(
         })
     }
 
-    /** 转换文件为 base64、本地路径或 HTTP（与 TRSS OneBotv11 一致，交给协议端处理） */
     async makeFile(file, opts = {}) {
-      // NapCat/QQ NT 对 base64 图片 rich media 易失败；出站 image/video/record 优先落盘走 file://
-      const spillThreshold = opts.preferPath ? 1 : 10485760
       file = await Bot.Buffer(file, {
         http: true,
-        size: spillThreshold,
+        size: opts.preferPath ? 1 : 1048576,
         ...opts,
       })
       if (Buffer.isBuffer(file)) return `base64://${file.toBase64()}`
+      if (typeof file === "string" && file.startsWith("file://")) return file.slice(7)
       return file
     }
 
-    /**
-     * 处理消息格式
-     */
     async makeMsg(msg) {
       if (!Array.isArray(msg)) msg = [msg]
       const msgs = []
       const forward = []
       for (let i of msg) {
-        if (typeof i !== "object") i = { type: "text", data: { text: i } }
-        else if (!i.data) i = { type: i.type, data: { ...i, type: undefined } }
+        if (Buffer.isBuffer(i) || i instanceof Uint8Array) {
+          i = { type: "image", data: { file: i } }
+        } else if (typeof i !== "object") {
+          i = { type: "text", data: { text: i } }
+        } else if (!i.data) {
+          i = { type: i.type, data: { ...i, type: undefined } }
+        }
 
         switch (i.type) {
           case "at":
@@ -112,9 +117,8 @@ Bot.tasker.push(
         }
 
         const fileRef = pickOutboundFileRef(i.data)
-        if (fileRef) {
-          const preferPath = i.type === "image" || i.type === "video" || i.type === "record"
-          i.data.file = await this.makeFile(fileRef, preferPath ? { preferPath: true } : {})
+        if (fileRef != null && fileRef !== "") {
+          i.data.file = await this.makeFile(fileRef, RICH_MEDIA.has(i.type) ? { preferPath: true } : {})
         }
         msgs.push(i)
       }

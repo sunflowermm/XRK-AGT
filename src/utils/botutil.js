@@ -14,6 +14,7 @@ import common from './common.js';
 import paths from '#utils/paths.js';
 import { exec, execFile } from './exec-async.js';
 import { normalizeError } from './normalize-error.js';
+import { inlineBinaryFromRef, isPathLike } from './media-ref.js';
 
 /**
  * Bot 实用工具类
@@ -777,15 +778,15 @@ export default class BotUtil {
    * @returns {Promise<fs.Stats|false>} 文件统计信息或 false（如果不存在）
    */
   static async fsStat(filePath) {
-    if (!filePath) return false;
+    if (!filePath || !isPathLike(filePath)) return false;
 
     try {
       return await fs.stat(filePath);
     } catch (err) {
-      if (err.code !== 'ENOENT') {
-        if (globalThis.logger?.trace) {
-          globalThis.logger.trace(["获取", filePath, "统计信息错误", err.code || err.message]);
-        }
+      if (err.code !== 'ENOENT' && globalThis.logger?.trace) {
+        const s = String(filePath);
+        const hint = s.length <= 120 ? s : `${s.slice(0, 48)}…[+${s.length - 48} chars]`;
+        globalThis.logger.trace(["获取", hint, "统计信息错误", err.code || err.message]);
       }
       return false;
     }
@@ -864,7 +865,7 @@ export default class BotUtil {
    * @returns {Promise<boolean>} 存在状态
    */
   static async fileExists(filePath) {
-    if (!filePath) return false;
+    if (!filePath || !isPathLike(filePath)) return false;
 
     try {
       await fs.access(filePath, fsSync.constants.F_OK);
@@ -972,18 +973,26 @@ export default class BotUtil {
       }
     }
 
+    const inlineBinary = inlineBinaryFromRef(dataStr);
+    if (inlineBinary) {
+      return opts.size && inlineBinary.length > opts.size
+        ? await BotUtil.#saveBufferToTempFile(inlineBinary) : inlineBinary;
+    }
+
     // 处理文件路径
     const filePath = dataStr.replace(/^file:\/\//, "");
-    const stat = await BotUtil.fsStat(filePath);
-    if (stat) {
-      if (opts.file) return `file://${path.resolve(filePath)}`;
+    if (isPathLike(filePath)) {
+      const stat = await BotUtil.fsStat(filePath);
+      if (stat) {
+        if (opts.file) return `file://${path.resolve(filePath)}`;
 
-      try {
-        const buffer = await fs.readFile(filePath);
-        return opts.size && buffer.length > opts.size ?
-          `file://${path.resolve(filePath)}` : buffer;
-      } catch {
-        return Buffer.alloc(0);
+        try {
+          const buffer = await fs.readFile(filePath);
+          return opts.size && buffer.length > opts.size ?
+            `file://${path.resolve(filePath)}` : buffer;
+        } catch {
+          return Buffer.alloc(0);
+        }
       }
     }
 
