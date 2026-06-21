@@ -1,8 +1,7 @@
 import readline from 'node:readline';
 
-/** 连续按键判定窗口（毫秒） */
-export const SIGNAL_STRIKE_WINDOW_MS = 3000;
-export const SIGNAL_TIME_THRESHOLD_MS = SIGNAL_STRIKE_WINDOW_MS;
+/** 连按两次退出的判定窗口（毫秒） */
+export const SIGNAL_TIME_THRESHOLD_MS = 3000;
 
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
@@ -21,17 +20,6 @@ export async function runShutdownHooks() {
   await Promise.allSettled([...shutdownHooks].map((fn) => fn()));
 }
 
-/** 无 logger 时的兜底输出（不额外空行） */
-export function syncSignalNotice(message) {
-  try {
-    process.stderr.write(`${message}\n`);
-  } catch {
-    try {
-      console.warn(message);
-    } catch {}
-  }
-}
-
 /**
  * 启动菜单信号：服务器运行中忽略 Ctrl+C（由子进程 loader 处理）；菜单界面连按两次退出。
  */
@@ -43,8 +31,6 @@ export class MenuSignalHandler {
     this.lastSignalTime = 0;
     this.isSetup = false;
     this.inRestartLoop = false;
-    /** @type {import('node:child_process').ChildProcess | null} */
-    this.currentChild = null;
     /** @type {Record<string, () => void>} */
     this.handlers = {};
     /** @type {readline.Interface | null} */
@@ -86,20 +72,14 @@ export class MenuSignalHandler {
     this.handlers = {};
     this.isSetup = false;
     this.inRestartLoop = false;
-    this.currentChild = null;
     this.lastSignal = null;
     this.lastSignalTime = 0;
   }
 
-  _shouldExit(signal, now) {
-    return signal === this.lastSignal && now - this.lastSignalTime < SIGNAL_STRIKE_WINDOW_MS;
-  }
-
   async _handle(signal) {
     const now = Date.now();
-    // 子进程与父进程同组，终端 SIGINT 会直达子进程；勿再 kill 避免双重 SIGINT
     if (this.inRestartLoop) return;
-    if (this._shouldExit(signal, now)) {
+    if (signal === this.lastSignal && now - this.lastSignalTime < SIGNAL_TIME_THRESHOLD_MS) {
       await this.logger.log?.(`检测到双击 ${signal} 信号，准备退出`, 'INFO');
       await this.cleanup();
       process.exit(0);

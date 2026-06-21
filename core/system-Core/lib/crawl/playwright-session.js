@@ -32,7 +32,7 @@ import {
   INTERACTION_NAVIGATION_GRACE_MS
 } from './act-policy.js';
 import { DEFAULT_DEVICE_SCALE_FACTOR } from './page-screenshot-enhance.js';
-import { patchBrowserCompat } from '#utils/playwright-puppeteer-compat.js';
+import { connectPlaywrightBrowser, launchPlaywrightBrowser } from '#utils/playwright-puppeteer-compat.js';
 
 const BROWSER_TYPES = /** @type {const} */ (['chromium', 'firefox', 'webkit']);
 
@@ -93,21 +93,15 @@ export class PlaywrightAgentSession {
       throw new Error(`browserType must be one of: ${BROWSER_TYPES.join(', ')}`);
     }
 
-    let browser;
-    if (typeof wsEndpoint === 'string' && wsEndpoint.trim()) {
-      browser = await playwright[browserType].connect(wsEndpoint.trim(), {
-        timeout: Math.min(Math.max(launchTimeoutMs, 5_000), 180_000)
-      });
-    } else {
-      browser = await playwright[browserType].launch({
-        headless,
-        executablePath: executablePath || undefined,
-        args: launchArgs,
-        timeout: Math.min(Math.max(launchTimeoutMs, 5_000), 180_000)
-      });
-    }
-
-    patchBrowserCompat(browser);
+    const timeout = Math.min(Math.max(launchTimeoutMs, 5_000), 180_000);
+    const browser = typeof wsEndpoint === 'string' && wsEndpoint.trim()
+      ? await connectPlaywrightBrowser(playwright, browserType, wsEndpoint.trim(), { timeout })
+      : await launchPlaywrightBrowser(playwright, browserType, {
+          headless,
+          executablePath: executablePath || undefined,
+          args: launchArgs,
+          timeout
+        });
 
     /** @type {import('playwright').BrowserContextOptions} */
     const contextOptions = {};

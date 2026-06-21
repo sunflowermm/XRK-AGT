@@ -43,8 +43,9 @@ const CONFIG = {
     MEDIUM: 5000,
     LONG: 15000
   },
-  /** 子进程 exit(0) 表示停止自动重启并返回菜单 */
+  /** 子进程 exit(0) 停止自动重启；exit(1) 表示重启 */
   EXIT_STOP: 0,
+  EXIT_RESTART: 1,
 };
 
 const JSON_SPACE = 2;
@@ -348,10 +349,7 @@ class ServerManager extends BaseManager {
         detached: false
       });
 
-      this.signalHandler.currentChild = child;
-
       child.on('exit', (code, signal) => {
-        this.signalHandler.currentChild = null;
         this.signalHandler._ensureReadline();
         const ret = signal ? CONFIG.EXIT_RESTART : (code ?? CONFIG.EXIT_STOP);
         if (signal) {
@@ -361,7 +359,6 @@ class ServerManager extends BaseManager {
       });
 
       child.on('error', (err) => {
-        this.signalHandler.currentChild = null;
         this.signalHandler._ensureReadline();
         void this.logger.error(`子进程启动失败: ${err.message}`);
         resolve(CONFIG.EXIT_RESTART);
