@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import BotUtil from '#utils/botutil.js';
 import Renderer from "#infrastructure/renderer/Renderer.js";
 
-const { buildPlaywrightLaunchOptions, pickBrowserPath } = createRequire(import.meta.url)('./system-browser.cjs');
+const { buildPlaywrightLaunchOptions, pickBrowserPath } = createRequire(import.meta.url)('#utils/system-browser.cjs');
 
 /**
  * Playwright-based browser renderer for screenshot generation.

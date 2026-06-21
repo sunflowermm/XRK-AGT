@@ -6,7 +6,7 @@ import cfg from '#infrastructure/config/config.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import { createRequire } from 'node:module';
 
-const { findSystemBrowser } = createRequire(import.meta.url)('../../../../src/utils/system-browser.cjs');
+const { findSystemBrowser } = createRequire(import.meta.url)('#utils/system-browser.cjs');
 
 const BROWSER_TYPES = new Set(['chromium', 'firefox', 'webkit']);
 const DEFAULT_FETCH_MAX_CHARS = 50_000;

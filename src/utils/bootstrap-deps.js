@@ -7,7 +7,7 @@ import paths from '#utils/paths.js';
 import { statDirs, statFiles } from '#utils/core-fs.js';
 
 const require = createRequire(import.meta.url);
-const { findSystemBrowser } = require('./system-browser.cjs');
+const { findSystemBrowser } = require('#utils/system-browser.cjs');
 
 const DEFAULT_PLAYWRIGHT_DOWNLOAD_HOST = 'https://npmmirror.com/mirrors/playwright';
 const DEPS_READY_MARKER = '.xrk-deps-ready';
