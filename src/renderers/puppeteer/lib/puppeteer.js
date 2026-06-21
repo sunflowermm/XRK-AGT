@@ -1,7 +1,10 @@
 import BrowserRendererBase from "#infrastructure/renderer/browser-renderer-base.js";
 import puppeteer from "puppeteer";
+import { createRequire } from "node:module";
 import BotUtil from "#utils/botutil.js";
 import Renderer from "#infrastructure/renderer/Renderer.js";
+
+const { resolvePlaywrightExecutable, pickBrowserPath } = createRequire(import.meta.url)('../../../utils/system-browser.cjs');
 
 /**
  * Puppeteer-based browser renderer for screenshot generation.
@@ -22,9 +25,10 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
     this.config = {
       headless: config.headless ?? "new",
       args: config.args ?? ['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'],
-      executablePath: config.chromiumPath,
-      wsEndpoint: config.wsEndpoint ?? config.puppeteerWS,
+      wsEndpoint: pickBrowserPath(config.wsEndpoint ?? config.puppeteerWS),
     };
+    const executablePath = resolvePlaywrightExecutable(config.chromiumPath);
+    if (executablePath) this.config.executablePath = executablePath;
   }
 
   async browserInit() {

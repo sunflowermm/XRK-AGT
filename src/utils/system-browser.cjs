@@ -81,8 +81,31 @@ function findSystemBrowser() {
   return null;
 }
 
+/** @returns {string | null} */
+function pickBrowserPath(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/** 配置路径优先，否则回退系统 Chrome/Chromium/Edge */
+function resolvePlaywrightExecutable(configuredPath) {
+  return pickBrowserPath(configuredPath) || findSystemBrowser();
+}
+
+/** 仅包含 Playwright launch 有效字段（避免 null/空值触发 type 校验失败） */
+function buildPlaywrightLaunchOptions({ headless, args, channel, configuredPath } = {}) {
+  const opts = { headless: headless ?? true, args: args ?? [] };
+  const ch = pickBrowserPath(channel);
+  if (ch) opts.channel = ch;
+  const executablePath = resolvePlaywrightExecutable(configuredPath);
+  if (executablePath) opts.executablePath = executablePath;
+  return opts;
+}
+
 module.exports = {
   findSystemBrowser,
+  pickBrowserPath,
+  resolvePlaywrightExecutable,
+  buildPlaywrightLaunchOptions,
   currentPlatform,
   currentArch
 };

@@ -114,12 +114,13 @@ export async function getBrowserStatus(rootDir = process.cwd()) {
     const { chromium } = await import('playwright');
     const executablePath = chromium.executablePath();
     const browserInstalled = fsSync.existsSync(executablePath);
+    const canLaunch = !!(systemBrowserPath || browserInstalled);
     return {
       playwrightInstalled: true,
       browserInstalled,
       executablePath,
       systemBrowserPath,
-      needsBrowserReminder: !systemBrowserPath && !browserInstalled
+      needsBrowserReminder: !canLaunch
     };
   } catch {
     return {

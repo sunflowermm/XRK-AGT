@@ -1,7 +1,10 @@
 import BrowserRendererBase from "#infrastructure/renderer/browser-renderer-base.js";
 import playwright from "playwright";
+import { createRequire } from "node:module";
 import BotUtil from '#utils/botutil.js';
 import Renderer from "#infrastructure/renderer/Renderer.js";
+
+const { buildPlaywrightLaunchOptions, pickBrowserPath } = createRequire(import.meta.url)('./system-browser.cjs');
 
 /**
  * Playwright-based browser renderer for screenshot generation.
@@ -12,7 +15,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
     super({ id: "playwright", type: "image", render: "screenshot" }, config, "PlaywrightRenderer");
 
     this.isClosing = false;
-    this.browserType = config.browser ?? "chromium";
+    this.browserType = config.browserType ?? config.browser ?? "chromium";
     this.playwrightTimeout = config.playwrightTimeout ?? 120000;
     this.healthCheckInterval = config.healthCheckInterval ?? 120000;
     this.maxRetries = config.maxRetries ?? 3;
@@ -33,13 +36,13 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       "--disable-accelerated-jpeg-decoding", "--disable-accelerated-mjpeg-decode",
       "--disable-accelerated-video-decode",
     ];
-    this.config = {
+    this.launchOptions = buildPlaywrightLaunchOptions({
       headless: config.headless ?? true,
       args: config.args ?? defaultArgs,
       channel: config.channel,
-      executablePath: config.chromiumPath,
-      wsEndpoint: config.wsEndpoint ?? config.playwrightWS,
-    };
+      configuredPath: config.chromiumPath
+    });
+    this.wsEndpoint = pickBrowserPath(config.wsEndpoint ?? config.playwrightWS);
 
     const vp = config.viewport ?? config.contextOptions?.viewport ?? {};
     this.contextOptions = config.contextOptions ?? {
@@ -97,7 +100,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       BotUtil.makeLog("info", `Starting playwright ${this.browserType}...`, this.logTag);
 
       await this.ensureMac(`AGT:${this.browserType}:browserURL`);
-      const wsEndpoint = await this.resolveWsEndpoint();
+      const wsEndpoint = this.wsEndpoint || await this.resolveWsEndpoint();
 
       if (wsEndpoint) {
         this.browser = await this.connectToExisting(wsEndpoint);
@@ -105,7 +108,10 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
       if (!this.browser) {
         BotUtil.makeLog("info", `Launching new ${this.browserType} instance...`, this.logTag);
-        this.browser = await playwright[this.browserType].launch(this.config);
+        if (this.launchOptions.executablePath) {
+          BotUtil.makeLog("info", `Using browser: ${this.launchOptions.executablePath}`, this.logTag);
+        }
+        this.browser = await playwright[this.browserType].launch(this.launchOptions);
 
         if (this.browser) {
           BotUtil.makeLog("info", `Playwright ${this.browserType} started successfully`, this.logTag);
@@ -130,8 +136,10 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
       this.startHealthCheck();
     } catch (e) {
-      if (/Executable doesn't exist|browserType\.launch/i.test(e.message)) {
+      if (/Executable doesn't exist/i.test(e.message)) {
         BotUtil.makeLog("error", "Playwright 浏览器未安装，请在启动菜单选择「Playwright 浏览器」安装，或执行: pnpm run setup:browsers", this.logTag);
+      } else if (!this.launchOptions.executablePath) {
+        BotUtil.makeLog("error", "未找到可用浏览器：请安装系统 Chrome/Chromium，或在启动菜单安装 Playwright Chromium", this.logTag);
       }
       BotUtil.makeLog("error", `Browser initialization failed: ${e.message}`, this.logTag);
       this.browser = null;
