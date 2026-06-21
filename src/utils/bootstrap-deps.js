@@ -9,16 +9,41 @@ import { statDirs, statFiles } from '#utils/core-fs.js';
 const require = createRequire(import.meta.url);
 const { findSystemBrowser } = require('#utils/system-browser.cjs');
 
-const DEFAULT_PLAYWRIGHT_DOWNLOAD_HOST = 'https://npmmirror.com/mirrors/playwright';
+/** Playwright 1.58+ CfT 路径为 builds/cft/…，需同时配置两个 HOST（见 npmmirror / Playwright #39430） */
+const NPMMIRROR_PLAYWRIGHT = 'https://cdn.npmmirror.com/binaries/playwright';
+const NPMMIRROR_CFT = 'https://cdn.npmmirror.com/binaries/chrome-for-testing';
+const OFFICIAL_PLAYWRIGHT_CDN = 'https://cdn.playwright.dev';
 const DEPS_READY_MARKER = '.xrk-deps-ready';
 
+const PLAYWRIGHT_INSTALL_SOURCES = [
+  {
+    label: 'npmmirror',
+    env: {
+      PLAYWRIGHT_DOWNLOAD_HOST: NPMMIRROR_PLAYWRIGHT,
+      PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST: NPMMIRROR_CFT
+    }
+  },
+  {
+    label: '官方 CDN',
+    env: {
+      PLAYWRIGHT_DOWNLOAD_HOST: OFFICIAL_PLAYWRIGHT_CDN,
+      PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST: OFFICIAL_PLAYWRIGHT_CDN
+    }
+  }
+];
+
 /** @returns {Record<string, string>} */
-export function getBrowserDownloadEnv() {
+export function getBrowserDownloadEnv(overrides = {}) {
   const env = {
-    PUPPETEER_SKIP_DOWNLOAD: process.env.PUPPETEER_SKIP_DOWNLOAD ?? 'true'
+    PUPPETEER_SKIP_DOWNLOAD: process.env.PUPPETEER_SKIP_DOWNLOAD ?? 'true',
+    ...overrides
   };
-  if (process.env.PLAYWRIGHT_DOWNLOAD_HOST === undefined) {
-    env.PLAYWRIGHT_DOWNLOAD_HOST = DEFAULT_PLAYWRIGHT_DOWNLOAD_HOST;
+  const primary = PLAYWRIGHT_INSTALL_SOURCES[0].env;
+  if (process.env.PLAYWRIGHT_DOWNLOAD_HOST === undefined && env.PLAYWRIGHT_DOWNLOAD_HOST === undefined) {
+    env.PLAYWRIGHT_DOWNLOAD_HOST = primary.PLAYWRIGHT_DOWNLOAD_HOST;
+  }
+  if (process.env.PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST === undefined && env.PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST === undefined) {
+    env.PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST = primary.PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST;
   }
   return env;
 }
@@ -42,7 +67,7 @@ export function spawnCommand(command, args, cwd, extraEnv = {}) {
       cwd,
       shell: false,
       stdio: 'inherit',
-      env: { ...process.env, ...getBrowserDownloadEnv(), ...extraEnv }
+      env: { ...process.env, ...getBrowserDownloadEnv(extraEnv), ...extraEnv }
     });
     child.on('error', (err) => reject(err.code === 'ENOENT'
       ? new Error(`${command} 未安装或不在 PATH 中${command === 'pnpm' ? '，请执行: npm install -g pnpm' : ''}`)
@@ -133,8 +158,26 @@ export async function getBrowserStatus(rootDir = process.cwd()) {
   }
 }
 
-export function installPlaywrightChromium(rootDir = process.cwd()) {
-  return spawnCommand('pnpm', ['exec', 'playwright', 'install', 'chromium'], rootDir);
+export async function installPlaywrightChromium(rootDir = process.cwd()) {
+  if (process.env.PLAYWRIGHT_DOWNLOAD_HOST !== undefined) {
+    await spawnCommand('pnpm', ['exec', 'playwright', 'install', 'chromium'], rootDir);
+    return;
+  }
+
+  let lastError;
+  for (let i = 0; i < PLAYWRIGHT_INSTALL_SOURCES.length; i++) {
+    const source = PLAYWRIGHT_INSTALL_SOURCES[i];
+    if (i > 0) {
+      process.stderr.write(`\n${PLAYWRIGHT_INSTALL_SOURCES[i - 1].label} 不可用，改试 ${source.label}...\n\n`);
+    }
+    try {
+      await spawnCommand('pnpm', ['exec', 'playwright', 'install', 'chromium'], rootDir, source.env);
+      return;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError ?? new Error('Playwright Chromium 安装失败');
 }
 
 export class DependencyManager {
