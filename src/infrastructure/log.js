@@ -762,6 +762,7 @@ export default function setLog() {
       }
     } catch {}
   })
+  // SIGINT/SIGTERM 由 loader.js ProcessManager 统一处理；此处勿注册，避免与 readline 争抢导致 Ctrl+C 需按两次
 
   setRuntimeGlobal('logger', logger);
   logger.__xrkSetLogDone = true

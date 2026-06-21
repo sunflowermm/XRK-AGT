@@ -33,8 +33,7 @@ export function syncSignalNotice(message) {
 }
 
 /**
- * 启动菜单信号：重启循环内 Ctrl+C 转发给子进程；菜单界面连按两次退出。
- * 对齐 XRK-Yunzai SignalHandler。
+ * 启动菜单信号：服务器运行中忽略 Ctrl+C（由子进程 loader 处理）；菜单界面连按两次退出。
  */
 export class MenuSignalHandler {
   /** @param {{ log?: (msg: string, level?: string) => void | Promise<void>, warning?: (msg: string) => void | Promise<void> }} logger */
@@ -98,11 +97,8 @@ export class MenuSignalHandler {
 
   async _handle(signal) {
     const now = Date.now();
-    if (this.inRestartLoop) {
-      if (this.currentChild) this.currentChild.kill('SIGINT');
-      else process.exit(0);
-      return;
-    }
+    // 子进程与父进程同组，终端 SIGINT 会直达子进程；勿再 kill 避免双重 SIGINT
+    if (this.inRestartLoop) return;
     if (this._shouldExit(signal, now)) {
       await this.logger.log?.(`检测到双击 ${signal} 信号，准备退出`, 'INFO');
       await this.cleanup();

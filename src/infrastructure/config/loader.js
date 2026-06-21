@@ -23,6 +23,7 @@ let packageloaderPromise = null;
 class ProcessManager {
   lastSignal = null;
   lastSignalTime = 0;
+  _restarting = false;
 
   async updateTitle() {
     const currentQQ = global.selectedQQ ?? process.argv.find((arg) => /^\d+$/.test(arg));
@@ -30,7 +31,8 @@ class ProcessManager {
   }
 
   async restart() {
-    if (isShuttingDown()) return;
+    if (isShuttingDown() || this._restarting) return;
+    this._restarting = true;
     logger.mark(chalk.yellow('重启中...'));
     await this.cleanup();
     if (getRuntimeGlobal('Bot')) {
@@ -62,10 +64,7 @@ class ProcessManager {
     setProcessFlag('__xrkSignalHandlersReady', true);
 
     const handleSignal = async (signal) => {
-      if (isShuttingDown()) {
-        process.exit(130);
-        return;
-      }
+      if (this._restarting || isShuttingDown()) return;
 
       const now = Date.now();
       if (

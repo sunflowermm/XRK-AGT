@@ -286,6 +286,8 @@ export default class StdinTasker {
       await this.processCommand(input, { tasker: 'stdin' });
       this.rl.prompt();
     });
+    // readline 会拦截 Ctrl+C；须转发给 loader.js 统一处理（对齐 Yunzai stdin adapter）
+    this.rl.on('SIGINT', () => process.emit('SIGINT'));
   }
 
   createEvent(input, userInfo = {}) {
