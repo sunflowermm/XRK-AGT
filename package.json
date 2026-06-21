@@ -89,7 +89,7 @@
     "start": "node app.js",
     "dev": "node app.js",
     "debug": "node debug.js",
-    "setup:browsers": "playwright install chromium",
+    "setup:browsers": "node -e \"import { installPlaywrightChromium } from './src/utils/bootstrap-deps.js'; await installPlaywrightChromium();\"",
     "start:windows": "start.bat server",
     "start:unix": "./start.sh server",
     "start:docker": "docker-compose up -d",

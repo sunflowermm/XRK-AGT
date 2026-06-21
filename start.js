@@ -559,7 +559,7 @@ class MenuManager {
       console.log(chalk.gray('  （Puppeteer 等可选用；Playwright 默认仍使用下方自带 Chromium）'));
     } else {
       console.log(chalk.yellow('  系统浏览器: 未检测到'));
-      console.log(chalk.gray('  可安装系统 Chrome/Chromium，或在本菜单安装 Playwright 自带 Chromium'));
+      console.log(chalk.gray('  可安装系统 Chrome/Chromium（推荐，已自动使用），或在本菜单从 cdn.playwright.dev 下载自带包'));
     }
     if (!status.playwrightInstalled) {
       console.log(chalk.yellow('\n  npm 包 playwright 未安装，请先完成 pnpm install'));
@@ -621,7 +621,7 @@ class MenuManager {
       if (!confirm) return;
     }
 
-    console.log(chalk.cyan('\n正在安装 Playwright Chromium（首次可能较慢）...\n'));
+    console.log(chalk.cyan('\n正在从 cdn.playwright.dev 下载 Playwright Chromium...\n'));
     try {
       await installPlaywrightChromium();
       console.log(chalk.green('\n✓ Playwright Chromium 安装完成\n'));
