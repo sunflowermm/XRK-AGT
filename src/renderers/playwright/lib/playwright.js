@@ -115,7 +115,10 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
         if (this.browser) {
           BotUtil.makeLog("info", `Playwright ${this.browserType} started successfully`, this.logTag);
-          await this.persistWsEndpoint(this.browser.wsEndpoint());
+          if (typeof this.browser.wsEndpoint === 'function') {
+            const endpoint = this.browser.wsEndpoint();
+            if (endpoint) await this.persistWsEndpoint(endpoint);
+          }
         }
       }
 
