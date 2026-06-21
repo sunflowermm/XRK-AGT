@@ -7,12 +7,6 @@ const skipDownload = !!(
   || (currentPlatform === 'linux' && ['armv7l', 'armv6l'].includes(currentArch))
 );
 
-if (executablePath) {
-  console.info(`[Browser] Found: ${executablePath}`);
-} else if (skipDownload) {
-  console.info(`[Browser] Skipping download for architecture: ${currentArch}`);
-}
-
 module.exports = {
   skipDownload,
   executablePath,

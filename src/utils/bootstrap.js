@@ -3,7 +3,7 @@ import path from 'node:path';
 import paths from '#utils/paths.js';
 import { statDirs, statFiles } from '#utils/core-fs.js';
 import { createSimpleLogger } from '#utils/simple-logger.js';
-import { DependencyManager } from '#utils/bootstrap-deps.js';
+import { DependencyManager, logBrowserEnvironment } from '#utils/bootstrap-deps.js';
 
 async function validateEnvironment() {
   const [major] = process.version.slice(1).split('.').map(Number);
@@ -54,6 +54,7 @@ export class Bootstrap {
       await this.dependencyManager.ensureFrontendDependencies(root);
     }
     await loadDynamicImports(this.dependencyManager, rootPkg);
+    await logBrowserEnvironment(this.logger, root);
   }
 
   async run() {

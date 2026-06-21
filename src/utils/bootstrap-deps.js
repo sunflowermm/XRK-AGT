@@ -135,6 +135,22 @@ export async function getBrowserStatus(rootDir = process.cwd()) {
   }
 }
 
+/** 引导阶段记录可用浏览器（系统路径同步检测，避免首次截图时才打 Found） */
+export async function logBrowserEnvironment(logger, rootDir = process.cwd()) {
+  const systemBrowserPath = findSystemBrowser();
+  if (systemBrowserPath) {
+    await logger.success(`渲染浏览器: 系统 ${systemBrowserPath}`);
+    return;
+  }
+
+  const status = await getBrowserStatus(rootDir);
+  if (status.browserInstalled && status.executablePath) {
+    await logger.success(`渲染浏览器: Playwright ${status.executablePath}`);
+  } else if (status.needsBrowserReminder) {
+    await logger.warning('渲染浏览器: 未检测到系统浏览器或 Playwright Chromium（启动菜单可安装）');
+  }
+}
+
 export async function installPlaywrightChromium(rootDir = process.cwd()) {
   const extraEnv = process.env.PLAYWRIGHT_DOWNLOAD_HOST === undefined
     ? PLAYWRIGHT_DOWNLOAD_ENV

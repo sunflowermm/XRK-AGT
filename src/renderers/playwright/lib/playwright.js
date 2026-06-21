@@ -108,9 +108,6 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
       if (!this.browser) {
         BotUtil.makeLog("info", `Launching new ${this.browserType} instance...`, this.logTag);
-        if (this.launchOptions.executablePath) {
-          BotUtil.makeLog("info", `Using browser: ${this.launchOptions.executablePath}`, this.logTag);
-        }
         this.browser = await playwright[this.browserType].launch(this.launchOptions);
 
         if (this.browser) {
