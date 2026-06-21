@@ -65,7 +65,7 @@ async function writeFileIfChanged(filePath, content) {
 // 使用统一的简单日志工具
 import { createSimpleLogger } from './src/utils/simple-logger.js';
 import {
-  getPlaywrightChromiumStatus,
+  getBrowserStatus,
   installPlaywrightChromium
 } from './src/utils/bootstrap-deps.js';
 import { ProcessSignalController, normalizeChildExitCode } from './src/utils/process-signals.js';
@@ -419,12 +419,17 @@ class MenuManager {
 
   async showMainMenu() {
     const availablePorts = await this.serverManager.getAvailablePorts();
-    const pwStatus = await getPlaywrightChromiumStatus();
-    const pwLabel = !pwStatus.playwrightInstalled
+    const browser = await getBrowserStatus();
+    const pwLabel = !browser.playwrightInstalled
       ? chalk.gray('Playwright 未安装')
-      : pwStatus.browserInstalled
+      : browser.browserInstalled
         ? chalk.green('Playwright Chromium 已安装')
         : chalk.yellow('Playwright Chromium 未安装');
+
+    if (browser.needsBrowserReminder) {
+      console.log(chalk.yellow.bold('\n! 未检测到系统浏览器（Chrome / Chromium / Edge）'));
+      console.log(chalk.yellow('  默认渲染器 Playwright 需要浏览器：请在下方菜单选择「Playwright 浏览器」安装 Chromium\n'));
+    }
 
     const choices = [
       ...availablePorts.map(port => ({
@@ -546,18 +551,25 @@ class MenuManager {
   }
 
   async showPlaywrightBrowserMenu() {
-    const status = await getPlaywrightChromiumStatus();
+    const status = await getBrowserStatus();
 
     console.log(chalk.cyan.bold('\n── Playwright 浏览器 ──'));
+    if (status.systemBrowserPath) {
+      console.log(chalk.green(`  系统浏览器: ${status.systemBrowserPath}`));
+      console.log(chalk.gray('  （Puppeteer 等可选用；Playwright 默认仍使用下方自带 Chromium）'));
+    } else {
+      console.log(chalk.yellow('  系统浏览器: 未检测到'));
+      console.log(chalk.gray('  可安装系统 Chrome/Chromium，或在本菜单安装 Playwright 自带 Chromium'));
+    }
     if (!status.playwrightInstalled) {
-      console.log(chalk.yellow('  npm 包 playwright 未安装，请先完成 pnpm install'));
+      console.log(chalk.yellow('\n  npm 包 playwright 未安装，请先完成 pnpm install'));
     } else if (status.browserInstalled) {
-      console.log(chalk.green('  Chromium: 已安装'));
+      console.log(chalk.green('\n  Playwright Chromium: 已安装'));
       if (status.executablePath) {
         console.log(chalk.gray(`  路径: ${status.executablePath}`));
       }
     } else {
-      console.log(chalk.yellow('  Chromium: 未安装（帮助页截图等功能需要）'));
+      console.log(chalk.yellow('\n  Playwright Chromium: 未安装（截图 / browser 工作流需要）'));
     }
     console.log('');
 
