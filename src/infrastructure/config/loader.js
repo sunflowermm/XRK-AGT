@@ -4,25 +4,28 @@ import setLog from '#infrastructure/log.js';
 import { initDatabases, closeDatabases } from '#infrastructure/database/index.js';
 import SystemMonitor from '#modules/systemmonitor.js';
 import { normalizeError } from '#utils/normalize-error.js';
-import { runShutdownHooks, SIGNAL_TIME_THRESHOLD_MS } from '#utils/process-signals.js';
+import {
+  runShutdownHooks,
+  handleDoubleTapSignal,
+  SignalTapState,
+  SERVER_SIGNALS,
+  EXIT_RESTART,
+  EXIT_STOP
+} from '#utils/process-signals.js';
 import { getRuntimeGlobal, isShuttingDown, setShuttingDown, isProcessFlagSet, setProcessFlag } from '#utils/runtime-globals.js';
 
 const CONFIG = {
   PROCESS_TITLE: 'XRK-AGT',
-  TIMEZONE: 'Asia/Shanghai',
-  EXIT_RESTART: 1,
-  EXIT_STOP: 0
+  TIMEZONE: 'Asia/Shanghai'
 };
 
 const NETWORK_ERROR_CODES = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST'];
 const EXPECTED_REJECTION_CODES = ['ENOTFOUND', 'EAI_AGAIN', 'EAI_NONAME'];
-const SERVER_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
 let packageloaderPromise = null;
 
 class ProcessManager {
-  lastSignal = null;
-  lastSignalTime = 0;
+  tap = new SignalTapState();
   _restarting = false;
 
   async updateTitle() {
@@ -38,7 +41,7 @@ class ProcessManager {
     if (getRuntimeGlobal('Bot')) {
       await getRuntimeGlobal('Bot').closeServer({ fast: true }).catch(() => {});
     }
-    process.exit(CONFIG.EXIT_RESTART);
+    process.exit(EXIT_RESTART);
   }
 
   isNetworkError(error) {
@@ -66,25 +69,25 @@ class ProcessManager {
     const handleSignal = async (signal) => {
       if (this._restarting || isShuttingDown()) return;
 
-      const now = Date.now();
-      if (
-        signal === this.lastSignal &&
-        now - this.lastSignalTime < SIGNAL_TIME_THRESHOLD_MS
-      ) {
-        logger.mark(chalk.yellow(`检测到连续两次 ${signal}，返回菜单`));
-        await this.gracefulShutdown(CONFIG.EXIT_STOP);
-        return;
-      }
-
-      this.lastSignal = signal;
-      this.lastSignalTime = now;
-      logger.mark(chalk.yellow(`接收到 ${signal}，正在重启`));
-      try {
-        await this.restart();
-      } catch (err) {
-        logger.error(`restart 异常: ${err?.message || err}`);
-        process.exit(CONFIG.EXIT_RESTART);
-      }
+      await handleDoubleTapSignal(signal, this.tap, {
+        onHangup: async () => {
+          logger.mark(chalk.yellow('终端断开，正在关闭…'));
+          await this.gracefulShutdown(EXIT_STOP);
+        },
+        onTwice: async (sig) => {
+          logger.mark(chalk.yellow(`检测到连续两次 ${sig}，返回菜单`));
+          await this.gracefulShutdown(EXIT_STOP);
+        },
+        onOnce: async (sig) => {
+          logger.mark(chalk.yellow(`接收到 ${sig}，正在重启`));
+          try {
+            await this.restart();
+          } catch (err) {
+            logger.error(`restart 异常: ${err?.message || err}`);
+            process.exit(EXIT_RESTART);
+          }
+        }
+      });
     };
 
     for (const signal of SERVER_SIGNALS) {

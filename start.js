@@ -44,8 +44,8 @@ const CONFIG = {
     LONG: 15000
   },
   /** 子进程 exit(0) 停止自动重启；exit(1) 表示重启 */
-  EXIT_STOP: 0,
-  EXIT_RESTART: 1,
+  EXIT_STOP,
+  EXIT_RESTART,
 };
 
 const JSON_SPACE = 2;
@@ -69,7 +69,7 @@ import {
   getBrowserStatus,
   installPlaywrightChromium
 } from './src/utils/bootstrap-deps.js';
-import { MenuSignalHandler } from './src/utils/process-signals.js';
+import { MenuSignalHandler, resolveChildExit, killProcessTree, registerShutdownHook, EXIT_STOP, EXIT_RESTART } from './src/utils/process-signals.js';
 
 let _restartLogger = null;
 
@@ -201,7 +201,8 @@ class ServerManager extends BaseManager {
   constructor(logger, pm2Manager) {
     super(logger);
     this.pm2Manager = pm2Manager;
-    
+    this._activeChild = null;
+
     if (!globalMenuSignalHandler) {
       globalMenuSignalHandler = new MenuSignalHandler({
         log: (msg, level) => this.logger.log(msg, level),
@@ -209,6 +210,13 @@ class ServerManager extends BaseManager {
       });
     }
     this.signalHandler = globalMenuSignalHandler;
+    this.signalHandler.onStopRestartLoop = () => this.stopActiveChild();
+  }
+
+  async stopActiveChild() {
+    if (this._activeChild) {
+      await killProcessTree(this._activeChild);
+    }
   }
 
   getPortDir(port) {
@@ -296,6 +304,7 @@ class ServerManager extends BaseManager {
     this.signalHandler.inRestartLoop = true;
     let restartCount = 0;
     const startTime = Date.now();
+    const unhookShutdown = registerShutdownHook(() => this.stopActiveChild());
 
     try {
       while (restartCount < CONFIG.MAX_RESTARTS) {
@@ -305,12 +314,12 @@ class ServerManager extends BaseManager {
 
         const exitCode = await this.runServerProcess(port, restartCount > 0);
 
-        if (exitCode === CONFIG.EXIT_STOP || exitCode === 255) {
+        if (exitCode === CONFIG.EXIT_STOP) {
           await this.logger.log('正常退出，返回菜单');
           return;
         }
 
-        await this.logger.log(`进程退出，状态码: ${exitCode}`);
+        await this.logger.log(`进程异常退出，状态码: ${exitCode}`);
         const waitTime = this.calculateRestartDelay(Date.now() - startTime, restartCount);
         if (waitTime > 0) {
           await this.logger.warning(`将在 ${waitTime / 1000} 秒后重启`);
@@ -321,7 +330,10 @@ class ServerManager extends BaseManager {
 
       await this.logger.error(`达到最大重启次数 (${CONFIG.MAX_RESTARTS})，停止重启`);
     } finally {
+      unhookShutdown();
+      await this.stopActiveChild();
       this.signalHandler.inRestartLoop = false;
+      this._activeChild = null;
     }
   }
 
@@ -348,19 +360,20 @@ class ServerManager extends BaseManager {
         env: cleanEnv,
         detached: false
       });
+      this._activeChild = child;
 
-      child.on('exit', (code, signal) => {
+      const finish = (code, signal) => {
+        if (this._activeChild === child) this._activeChild = null;
         this.signalHandler._ensureReadline();
-        const ret = signal ? CONFIG.EXIT_RESTART : (code ?? CONFIG.EXIT_STOP);
-        if (signal) {
-          void this.logger.warning(`子进程被信号 ${signal} 终止，将自动重启`);
-        }
-        resolve(ret);
-      });
+        resolve(resolveChildExit(code, signal));
+      };
+
+      child.on('exit', (code, signal) => finish(code, signal));
 
       child.on('error', (err) => {
         this.signalHandler._ensureReadline();
         void this.logger.error(`子进程启动失败: ${err.message}`);
+        if (this._activeChild === child) this._activeChild = null;
         resolve(CONFIG.EXIT_RESTART);
       });
     });

@@ -2466,7 +2466,17 @@ export default class Bot extends EventEmitter {
     
     const retryKey = isHttps ? 'https_retry_count' : 'http_retry_count';
     this[retryKey] = (this[retryKey] || 0) + 1;
-    
+
+    if (this[retryKey] >= 10) {
+      BotUtil.makeLog(
+        'error',
+        `${serverType}端口 ${port} 持续被占用，请检查是否有残留进程后重试`,
+        '服务器'
+      );
+      process.exit(0);
+      return;
+    }
+
     await BotUtil.sleep(this[retryKey] * 1000);
     
     const server = isHttps ? this.httpsServer : this.server;
