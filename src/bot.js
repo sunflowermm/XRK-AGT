@@ -1789,15 +1789,15 @@ export default class Bot extends EventEmitter {
    * 检查API授权
    * 当 server.auth.apiKey.enabled 为 true 时，必须提供有效密钥；密钥未加载或缺失时一律拒绝
    */
-  checkApiAuthorization(req) {
+  checkApiAuthorization(req, options = {}) {
     if (!req) {
       BotUtil.makeLog('debug', '[Auth] checkApiAuthorization: req 为空', '认证');
       return false;
     }
 
-    // 仅 127 回环地址免鉴权（内网网段不放行）
+    const forceAuth = options.forceAuth === true;
     const remoteAddress = req.socket?.remoteAddress || req.ip || '';
-    if (isLoopback127Connection(remoteAddress)) {
+    if (!forceAuth && isLoopback127Connection(remoteAddress)) {
       return true;
     }
 
@@ -2358,7 +2358,9 @@ export default class Bot extends EventEmitter {
       return socket.destroy();
     }
 
-    if (this._shouldRequireWsApiAuth(wsPath) && !this.checkApiAuthorization(req)) {
+    if (this._shouldRequireWsApiAuth(wsPath) && !this.checkApiAuthorization(req, {
+      forceAuth: wsPath === 'OneBotv11' && cfg.server?.auth?.onebot?.requireLoopbackAuth === true,
+    })) {
       BotUtil.makeLog('warn', `WebSocket 鉴权失败：${req.url} ip=${req.socket.remoteAddress}`, '服务器');
       try {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

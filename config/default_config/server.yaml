@@ -239,6 +239,9 @@ auth:
     file: "config/server_config/api_key.json"
     # 密钥长度（字符数）
     length: 64
+  # NapCat 反向 WS（/OneBotv11）：true 时 127.* 也须 Bearer/access_token
+  onebot:
+    requireLoopbackAuth: true
   # API 鉴权白名单路径（支持前缀、正则字面量字符串）
   # 示例：
   # - "/health"
