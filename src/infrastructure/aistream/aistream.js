@@ -10,7 +10,7 @@ import { applyPromptCachePolicy } from '#utils/llm/prompt-cache-policy.js';
 import { getStreamRequestContext } from '#infrastructure/aistream/stream-request-context.js';
 import { collectAuxiliaryStreamPrompts, resolveToolStreamNames } from '#infrastructure/aistream/chat-tool-streams.js';
 import { unpackFactoryChatRaw } from '#utils/llm/llm-nonstream-reply.js';
-import { previewLlmMessages } from '#infrastructure/aistream/chat-pipeline.js';
+import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/aistream/chat-pipeline.js';
 
 function shallowMergePlain(...sources) {
   const out = {};
@@ -931,10 +931,6 @@ export default class AIStream {
     return out;
   }
 
-  getProviderConfig(provider) {
-    return LLMFactory.getProviderConfig(provider) || {};
-  }
-
   /**
    * 执行工作流
    * @param {Object} e - 事件对象
@@ -950,21 +946,9 @@ export default class AIStream {
     });
 
     try {
-      const baseMessages = await this.buildChatContext(e, question);
-      const messages = await this.buildEnhancedContext(e, question, baseMessages);
-      
+      const messages = await assembleChatLlmMessages(this, e, question);
       MonitorService.addStep(traceId, { step: 'build_context', messages: messages.length });
-
-      // 调试：打印给 LLM 的消息概要（所有工作流通用），方便查看最终 prompt 结构
-      try {
-        BotUtil.makeLog(
-          'debug',
-          `[AIStream.execute] LLM消息预览[${this.name}]: ${JSON.stringify(previewLlmMessages(messages), null, 2)}`,
-          'AIStream'
-        );
-      } catch {
-        // 调试日志失败直接忽略
-      }
+      logLlmMessagePreview(this, messages, 'AIStream');
 
       const result = await this.callAI(messages, config);
       const responseText = result?.content ?? '';

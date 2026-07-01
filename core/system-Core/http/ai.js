@@ -20,7 +20,7 @@ import {
 } from '../lib/ai-workspace-runtime.js';
 import { runWithAiConsoleContext, installMcpAuditHook } from '../lib/ai-workspace-context.js';
 import { resolveDefaultMcpWorkflow } from '../lib/builtin-mcp.js';
-import { writeSSEChunk, createOpenAIChunk } from '#utils/sse-openai.js';
+import { initOpenAIChatSSE, pipeOpenAIChatCompletionsStream, writeOpenAIStreamError } from '#utils/sse-openai.js';
 import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
 import { expandChatToolStreamWhitelist } from '#infrastructure/aistream/chat-tool-streams.js';
 import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
@@ -38,10 +38,6 @@ import {
   resolveWorkflowStreams,
   buildOverridesFromBody
 } from '#utils/http/ai-v3-utils.js';
-
-function getProviderConfig(provider) {
-  return LLMFactory.getProviderConfig(provider) || {};
-}
 
 function safePreview(value, { maxLen = 500 } = {}) {
   if (value == null) return value;
@@ -328,7 +324,7 @@ async function handleChatCompletionsV3(req, res) {
     );
   }
 
-  const base = getProviderConfig(provider);
+  const base = LLMFactory.getProviderConfig(provider) || {};
   const llmConfig = {
     provider,
     ...base,
@@ -408,138 +404,35 @@ async function handleChatCompletionsV3(req, res) {
     }
   }
 
-  // SSE 响应头：标准 Server-Sent Events 配置 + 关闭 Nginx 缓冲，确保实时流式输出
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // 禁用Nginx缓冲
-  res.flushHeaders?.();
+  initOpenAIChatSSE(res);
 
   const now = Math.floor(Date.now() / 1000);
   const id = `chatcmpl_${Date.now()}`;
   const modelName = llmConfig.provider || 'unknown';
-  
+
   BotUtil.makeLog('info', `[v3/chat/completions] 开始流式输出: provider=${modelName}, id=${id}`, 'ai.v3.stream');
-  
+
   try {
-    let totalContent = '';
-    let totalReasoningContent = '';
-    let isFirstChunk = true;
-    let chunkCount = 0;
-
-    const streamCallback = (delta, metadata = {}) => {
-        const hasTextDelta = typeof delta === 'string' && delta.length > 0;
-      const hasMcpTools = Array.isArray(metadata?.mcp_tools) && metadata.mcp_tools.length > 0;
-      const hasToolCalls = Array.isArray(metadata?.tool_calls) && metadata.tool_calls.length > 0;
-      const hasReasoningDelta = typeof metadata?.reasoning_content === 'string' && metadata.reasoning_content.length > 0;
-
-      if (!hasTextDelta && !hasMcpTools && !hasToolCalls && !hasReasoningDelta) return;
-
-      if (hasTextDelta) {
-        totalContent += delta;
-        chunkCount++;
-
-        if (chunkCount % 10 === 1 || chunkCount <= 3) {
-          BotUtil.makeLog('debug', `[v3/chat/completions] 发送chunk #${chunkCount}: delta长度=${delta.length}, 总长度=${totalContent.length}`, 'ai.v3.stream');
-        }
-
-        writeSSEChunk(res, createOpenAIChunk({
-          id,
-          created: now,
-          model: modelName,
-          delta: isFirstChunk ? { role: 'assistant', content: delta } : { content: delta },
-          finishReason: null
-          // 工具结果统一通过“纯 mcp_tools chunk”下发，避免同一批工具在文本chunk和独立chunk中各出现一次
-        }));
-
-        isFirstChunk = false;
-      }
-
-      if (hasReasoningDelta) {
-        totalReasoningContent += metadata.reasoning_content;
-        writeSSEChunk(res, createOpenAIChunk({
-          id,
-          created: now,
-          model: modelName,
-          delta: isFirstChunk ? { role: 'assistant', reasoning_content: metadata.reasoning_content } : { reasoning_content: metadata.reasoning_content },
-          finishReason: null
-        }));
-        isFirstChunk = false;
-      }
-
-      if (hasMcpTools && !hasTextDelta) {
-        // 仅在真正有工具结果、且本次没有文本增量时，单独输出一条工具 chunk
-        writeSSEChunk(res, createOpenAIChunk({
-          id,
-          created: now,
-          model: modelName,
-          mcpTools: metadata.mcp_tools
-        }));
-      }
-
-      if (hasToolCalls) {
-        // 透传上游模型产生的 tool_calls（例如 OpenClaw 自带的工具），由上游客户端自行执行
-        writeSSEChunk(res, createOpenAIChunk({
-          id,
-          created: now,
-          model: modelName,
-          delta: { tool_calls: metadata.tool_calls },
-          finishReason: null
-        }));
-      }
-    };
-
     BotUtil.makeLog('info', `[v3/chat/completions] 调用client.chatStream开始`, 'ai.v3.stream');
 
-    await runWithAiConsoleContext(
-      { workspaceId: auditWorkspaceId },
-      () => client.chatStream(llmMessages, streamCallback, overrides)
-    );
-    BotUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总chunks=${chunkCount}, 总长度=${totalContent.length}`, 'ai.v3.stream');
-
-    const promptText = extractMessageText(messages);
-    const promptTokens = estimateTokens(promptText);
-    const completionTokens = estimateTokens(totalContent);
-
-    BotUtil.makeLog('debug', `[v3/chat/completions] 发送完成标记`, 'ai.v3.stream');
-    writeSSEChunk(res, createOpenAIChunk({
+    const totalContent = await pipeOpenAIChatCompletionsStream(res, {
+      client,
+      messages: llmMessages,
+      overrides,
       id,
       created: now,
       model: modelName,
-      delta: {},
-      finishReason: 'stop',
-      usage: {
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        total_tokens: promptTokens + completionTokens
-      }
-      // 不再在最终 usage chunk 中重复附带 mcp_tools，避免前端收到“重复/空工具卡片”事件
-    }));
-    res.write('data: [DONE]\n\n');
+      usageMessages: messages,
+      extractMessageText,
+      estimateTokens,
+      runWrapped: (run) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)
+    });
+
+    BotUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总长度=${totalContent.length}`, 'ai.v3.stream');
     BotUtil.makeLog('info', `[v3/chat/completions] 流式输出完成`, 'ai.v3.stream');
   } catch (error) {
     BotUtil.makeLog('error', `[v3/chat/completions] 流式输出错误: ${error.message}, stack=${error.stack?.substring(0, 200)}`, 'ai.v3.stream');
-    
-    // 错误处理：发送错误信息并结束流
-    const errorData = {
-      id,
-      object: 'chat.completion.chunk',
-      created: now,
-      model: modelName,
-      choices: [{
-        index: 0,
-        delta: {},
-        finish_reason: null
-      }],
-      error: {
-        message: error.message || 'Internal server error',
-        type: 'server_error',
-        code: 'internal_error'
-      }
-    };
-    
-    res.write(`data: ${JSON.stringify(errorData)}\n\n`);
-    res.write('data: [DONE]\n\n');
+    writeOpenAIStreamError(res, { id, created: now, model: modelName, error });
   } finally {
     restoreStreamWorkspace();
     BotUtil.makeLog('debug', `[v3/chat/completions] 关闭响应流`, 'ai.v3.stream');

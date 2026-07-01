@@ -13,11 +13,12 @@ import {
   formatUserVisibleSentAck,
   isOverlappingUserVisible
 } from '#utils/chat-user-visible-ack.js';
+import { withStreamLoaderEvent } from '#infrastructure/aistream/stream-loader-context.js';
 import {
   getStreamRequestContext,
   runWithStreamRequestContext
 } from '#infrastructure/aistream/stream-request-context.js';
-import { assembleChatLlmMessages, previewLlmMessages } from '#infrastructure/aistream/chat-pipeline.js';
+import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/aistream/chat-pipeline.js';
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 
 // 表情回应映射
@@ -1571,73 +1572,44 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
   }
 
   async execute(e, messages, config) {
-    return runWithStreamRequestContext({ e, turnState: createUserVisibleTurnState() }, async () => {
-      let StreamLoader = null;
-
-      try {
-        messages = await assembleChatLlmMessages(this, e, messages);
-
+    return runWithStreamRequestContext({ e, turnState: createUserVisibleTurnState() }, () =>
+      withStreamLoaderEvent(e, async () => {
         try {
-          StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
-          if (StreamLoader) {
-            StreamLoader.currentEvent = e || null;
-            BotUtil.makeLog(
-              'debug',
-              `[ChatStream.execute] 设置当前事件: isGroup=${e?.isGroup}, message_type=${e?.message_type}, group_id=${e?.group_id}, user_id=${e?.user_id}`,
-              'ChatStream'
-            );
+          messages = await assembleChatLlmMessages(this, e, messages);
+          logLlmMessagePreview(this, messages, 'ChatStream');
+
+          const turn = getStreamRequestContext()?.turnState;
+          const aiResult = await this.callAI(messages, config);
+          if (!aiResult) {
+            return null;
           }
-        } catch {
-          StreamLoader = null;
-        }
-
-        if (Bot.StreamLoader) Bot.StreamLoader.currentEvent = e || null;
-
-        try {
-          BotUtil.makeLog(
-            'debug',
-            `[ChatStream.execute] LLM消息预览: ${JSON.stringify(previewLlmMessages(messages), null, 2)}`,
+          const { content: text, executedToolNames } = aiResult;
+          let trimmed = (text ?? '').toString().trim();
+          if (!trimmed && turn?.queuedReplyContent) {
+            trimmed = this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
+          }
+          if (
+            trimmed &&
+            turn?.queuedReplyContent &&
+            isOverlappingUserVisible(trimmed, turn.queuedReplyContent)
+          ) {
+            trimmed = this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
+          }
+          if (trimmed) {
+            await this.sendMessages(e, trimmed, executedToolNames);
+            this.recordAIResponse(e, trimmed, executedToolNames);
+            if (turn) turn.lastOutboundSummary = trimmed;
+          }
+          return trimmed || '';
+        } catch (error) {
+          BotUtil.makeLog('error',
+            `工作流执行失败[${this.name}]: ${error.message}`,
             'ChatStream'
           );
-        } catch {
-          // 调试日志失败直接忽略
-        }
-
-        const turn = getStreamRequestContext()?.turnState;
-        const aiResult = await this.callAI(messages, config);
-        if (!aiResult) {
           return null;
         }
-        const { content: text, executedToolNames, toolRoundsExhausted } = aiResult;
-        let trimmed = (text ?? '').toString().trim();
-        if (!trimmed && turn?.queuedReplyContent) {
-          trimmed = this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
-        }
-        if (
-          trimmed &&
-          turn?.queuedReplyContent &&
-          isOverlappingUserVisible(trimmed, turn.queuedReplyContent)
-        ) {
-          trimmed = this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
-        }
-        if (trimmed) {
-          await this.sendMessages(e, trimmed, executedToolNames);
-          this.recordAIResponse(e, trimmed, executedToolNames);
-          if (turn) turn.lastOutboundSummary = trimmed;
-        }
-        return trimmed || '';
-      } catch (error) {
-        BotUtil.makeLog('error',
-          `工作流执行失败[${this.name}]: ${error.message}`,
-          'ChatStream'
-        );
-        return null;
-      } finally {
-        if (StreamLoader && StreamLoader.currentEvent === e) {
-          StreamLoader.currentEvent = null;
-        }
-      }
-    });
+      })
+    );
   }
 
   /**
