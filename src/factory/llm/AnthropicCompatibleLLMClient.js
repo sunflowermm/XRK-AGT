@@ -8,6 +8,7 @@ import {
   normalizeAnthropicMessages
 } from '../../utils/llm/anthropic-chat-utils.js';
 import BotUtil from '../../utils/botutil.js';
+import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
 
 /**
  * Anthropic Messages 兼容工厂（anthropic_compat_llm.providers）
@@ -163,6 +164,7 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
         toolUses = streamed.toolUses;
       } else {
         const json = await resp.json();
+        logPromptCacheUsage(json?.usage, 'AnthropicCompatible');
         const parsed = this._parseMessageToolUses(json);
         roundText = parsed.text;
         toolUses = parsed.toolUses;

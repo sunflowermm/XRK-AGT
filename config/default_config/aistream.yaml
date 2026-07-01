@@ -28,6 +28,13 @@ llm:
     maxAttempts: 3
     delay: 2000        # 重试间隔（毫秒）
     retryOn: ["timeout", "network", "5xx"]
+  # Provider 提示缓存：提高前缀命中率、降低 input token 费用（OpenAI / Anthropic / DeepSeek 等）
+  promptCache:
+    enabled: true
+    keyPrefix: xrk
+    retention: in-memory
+    anthropicCache: true
+    scopeInKey: true
 
 # ----------------------------------------
 # ASR 厂商

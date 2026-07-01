@@ -109,3 +109,7 @@ export async function transformMessagesWithVision(messages, config = {}, options
   return transformed;
 }
 
+/** OpenAI Chat Completions 多模态别名（HTTP v3 / 兼容工厂共用） */
+export function transformOpenAIStyleVisionMessages(messages, config = {}, options = {}) {
+  return transformMessagesWithVision(messages, config, { mode: 'openai', ...options });
+}

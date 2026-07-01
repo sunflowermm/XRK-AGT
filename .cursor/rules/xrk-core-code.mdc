@@ -6,10 +6,11 @@ alwaysApply: false
 
 # Core 业务代码约定
 
-## 底层与基类
+## 底层与基类（Core 开发者边界）
 
-- **不改底层**：不得修改 `src/infrastructure/`、`src/utils/` 等底层代码。
-- **充分利用底层**：继承基类并按文档实现接口即可；commonconfig 用足 ConfigBase 的 schema、getStructure、read、write、validate，插件/HTTP/工作流用足各自基类能力，不重复实现、不伸手改 src/。
+- **Core 不改 Runtime**：在 `core/` 写业务时，**不得**修改 `src/infrastructure/`、`src/utils/`、`src/factory/` 等 Runtime 代码；缺能力应提 issue 或请框架开发者扩展基类/工具。
+- **框架开发者**：维护 `src/` 与 Loader/工厂/基类时**可以且应当**改 `src/`，并通过 `docs/` 与 commonconfig 暴露给 Core。
+- **充分利用底层**：继承基类并按文档实现接口；commonconfig 用足 ConfigBase；插件/HTTP/工作流用足各自基类能力，不重复造轮、不在 Core 内复制 `src/` 逻辑。
 
 ## 放码位置
 

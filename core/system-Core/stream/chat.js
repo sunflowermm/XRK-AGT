@@ -17,6 +17,7 @@ import {
   getStreamRequestContext,
   runWithStreamRequestContext
 } from '#infrastructure/aistream/stream-request-context.js';
+import { assembleChatLlmMessages, previewLlmMessages } from '#infrastructure/aistream/chat-pipeline.js';
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 
 // 表情回应映射
@@ -1574,12 +1575,7 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
       let StreamLoader = null;
 
       try {
-        if (!Array.isArray(messages)) {
-          messages = await this.buildChatContext(e, messages);
-        }
-        messages = await this.mergeMessageHistory(messages, e);
-        const query = Array.isArray(messages) ? this.extractQueryFromMessages(messages) : messages;
-        messages = await this.buildEnhancedContext(e, query, messages);
+        messages = await assembleChatLlmMessages(this, e, messages);
 
         try {
           StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
@@ -1598,22 +1594,9 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
         if (Bot.StreamLoader) Bot.StreamLoader.currentEvent = e || null;
 
         try {
-          const preview = (messages || []).map((m, idx) => {
-            const role = m.role || `msg${idx}`;
-            let content = m.content;
-            if (typeof content === 'object') {
-              const text = content.text || content.content || '';
-              content = text;
-            }
-            return {
-              idx,
-              role,
-              text: String(content ?? '')
-            };
-          });
           BotUtil.makeLog(
             'debug',
-            `[ChatStream.execute] LLM消息预览: ${JSON.stringify(preview, null, 2)}`,
+            `[ChatStream.execute] LLM消息预览: ${JSON.stringify(previewLlmMessages(messages), null, 2)}`,
             'ChatStream'
           );
         } catch {
@@ -1621,7 +1604,11 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
         }
 
         const turn = getStreamRequestContext()?.turnState;
-        const { content: text, executedToolNames } = await this.callAI(messages, config);
+        const aiResult = await this.callAI(messages, config);
+        if (!aiResult) {
+          return null;
+        }
+        const { content: text, executedToolNames, toolRoundsExhausted } = aiResult;
         let trimmed = (text ?? '').toString().trim();
         if (!trimmed && turn?.queuedReplyContent) {
           trimmed = this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);

@@ -20,73 +20,28 @@ import {
 } from '../lib/ai-workspace-runtime.js';
 import { runWithAiConsoleContext, installMcpAuditHook } from '../lib/ai-workspace-context.js';
 import { resolveDefaultMcpWorkflow } from '../lib/builtin-mcp.js';
-import { normalizeStringArray } from '#utils/string-array-utils.js';
-import { estimateTokensRough } from '#utils/token-estimate.js';
 import { writeSSEChunk, createOpenAIChunk } from '#utils/sse-openai.js';
-
-function pickFirst(obj, keys) {
-  for (const k of keys) {
-    if (Object.hasOwn(obj, k) && obj[k] !== undefined) return obj[k];
-  }
-  return;
-}
-
-function parseOptionalJson(raw) {
-  if (raw == null) return null;
-  if (typeof raw === 'object') return raw;
-  try {
-    return JSON.parse(String(raw));
-  } catch {
-    return null;
-  }
-}
-
-function toNum(v) {
-  if (v == null || v === '') return;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function toBool(v) {
-  if (v == null || v === '') return;
-  if (typeof v === 'boolean') return v;
-  const s = String(v).trim().toLowerCase();
-  if (s === 'true' || s === '1') return true;
-  if (s === 'false' || s === '0') return false;
-  return;
-}
-
-const getDefaultProvider = () => {
-        const llm = getAistreamConfigOptional().llm || cfg?.aistream?.llm || {};
-  return (llm?.Provider || llm?.provider || '').toString().trim().toLowerCase();
-};
-
-const trimLower = (v) => (v || '').toString().trim().toLowerCase();
+import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
+import { expandChatToolStreamWhitelist } from '#infrastructure/aistream/chat-tool-streams.js';
+import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
+import { assembleChatLlmMessages } from '#infrastructure/aistream/chat-pipeline.js';
+import {
+  pickFirst,
+  parseOptionalJson,
+  toNum,
+  toBool,
+  trimLower,
+  getDefaultProvider,
+  resolveProviderFromRequest,
+  extractMessageText,
+  estimateTokens,
+  resolveWorkflowStreams,
+  buildOverridesFromBody
+} from '#utils/http/ai-v3-utils.js';
 
 function getProviderConfig(provider) {
   return LLMFactory.getProviderConfig(provider) || {};
 }
-
-function resolveProviderFromRequest(body = {}) {
-  return LLMFactory.resolveProvider({
-    model: trimLower(pickFirst(body, ['model'])),
-    provider: trimLower(pickFirst(body, ['provider', 'llm', 'profile'])),
-    llm: trimLower(pickFirst(body, ['llm'])),
-    profile: trimLower(pickFirst(body, ['profile'])),
-    defaultProvider: getDefaultProvider()
-  });
-}
-
-/** 提取消息文本内容（支持字符串和对象格式） */
-function extractMessageText(messages) {
-  return messages.map(m => {
-    const content = m.content;
-    return typeof content === 'string' ? content : (content?.text || '');
-  }).join('');
-}
-
-/** 计算 token 数量（OpenAI 兼容粗略估算） */
-const estimateTokens = estimateTokensRough;
 
 function safePreview(value, { maxLen = 500 } = {}) {
   if (value == null) return value;
@@ -175,67 +130,9 @@ function summarizeV3Request(req, body, { contentType, messages, uploadedImagesCo
   };
 }
 
-function resolveWorkflowStreams(body = {}) {
-  const workflowConfig = pickFirst(body, ['workflow']);
-  if (!workflowConfig || typeof workflowConfig !== 'object') return null;
-  const streams = [];
-  if (Array.isArray(workflowConfig.workflows)) streams.push(...workflowConfig.workflows);
-  if (Array.isArray(workflowConfig.streams)) streams.push(...workflowConfig.streams);
-  if (typeof workflowConfig.workflow === 'string') streams.push(workflowConfig.workflow);
-  const normalized = normalizeStringArray(streams);
-  return normalized.length > 0 ? normalized : null;
-}
-
 function resolveDefaultStreams() {
   const mcpCfg = getAistreamConfigOptional().mcp || {};
   return resolveDefaultMcpWorkflow(mcpCfg);
-}
-
-function buildOverridesFromBody(body = {}) {
-  const overrides = {};
-  const addNum = (key, ...aliases) => {
-        const v = toNum(pickFirst(body, [key, ...aliases]));
-    if (v !== undefined) {
-      overrides[key] = v;
-      if (aliases.length) overrides[aliases[0]] = v;
-    }
-  };
-  const addVal = (key, ...aliases) => {
-        const v = pickFirst(body, [key, ...aliases]);
-    if (v !== undefined) {
-      overrides[key] = v;
-      if (aliases.length) overrides[aliases[0]] = v;
-    }
-  };
-  const addBool = (key, ...aliases) => {
-        const v = toBool(pickFirst(body, [key, ...aliases]));
-    if (v !== undefined) {
-      overrides[key] = v;
-      if (aliases.length) overrides[aliases[0]] = v;
-    }
-  };
-
-  addNum('temperature');
-  addNum('max_tokens', 'maxTokens', 'max_completion_tokens', 'maxCompletionTokens');
-  addNum('top_p', 'topP');
-  addNum('presence_penalty', 'presencePenalty');
-  addNum('frequency_penalty', 'frequencyPenalty');
-  addVal('tool_choice', 'toolChoice');
-  addBool('parallel_tool_calls', 'parallelToolCalls');
-  addVal('tools');
-  addVal('stop');
-  addVal('response_format', 'responseFormat');
-  addVal('stream_options', 'streamOptions');
-  addNum('seed');
-  addVal('user');
-  addNum('n');
-  addVal('logit_bias', 'logitBias');
-  addBool('logprobs');
-  addNum('top_logprobs', 'topLogprobs');
-
-  const extraBody = parseOptionalJson(pickFirst(body, ['extraBody']));
-  if (extraBody && typeof extraBody === 'object') overrides.extraBody = extraBody;
-  return overrides;
 }
 
 /**
@@ -434,7 +331,8 @@ async function handleChatCompletionsV3(req, res) {
   const base = getProviderConfig(provider);
   const llmConfig = {
     provider,
-    ...base
+    ...base,
+    promptCache: aistreamCfgForRequest.llm?.promptCache
   };
 
   if (streamFlag && base.enableStream === false) {
@@ -458,7 +356,16 @@ async function handleChatCompletionsV3(req, res) {
   const hasRequestTools = Array.isArray(body.tools) && body.tools.length > 0;
   overrides.mcpToolMode = hasRequestTools ? 'hybrid' : (effectiveStreams?.length ? 'execute' : 'passthrough');
   
-  if (effectiveStreams?.length) overrides.streams = effectiveStreams;
+  if (effectiveStreams?.length) {
+    overrides.streams = expandChatToolStreamWhitelist(effectiveStreams);
+  }
+
+  Object.assign(
+    overrides,
+    pickPromptCacheOverrides(llmConfig, { stream: { name: effectiveStreams?.[0] || 'http-v3' } })
+  );
+
+  const llmMessages = await transformOpenAIStyleVisionMessages(messages, llmConfig);
 
   const fileWorkspaceAbs = workspaceCtx.fileRootAbs || workspaceCtx.agentRootAbs;
   const restoreStreamWorkspace = applyRequestWorkspaceToStreams(StreamLoader, fileWorkspaceAbs);
@@ -468,7 +375,7 @@ async function handleChatCompletionsV3(req, res) {
     try {
       const chatResult = await runWithAiConsoleContext(
         { workspaceId: auditWorkspaceId },
-        () => client.chat(messages, overrides)
+        () => client.chat(llmMessages, overrides)
       );
       const text = typeof chatResult === 'string' ? chatResult : (chatResult?.content || '');
       const executedToolNames = Array.isArray(chatResult?.executedToolNames) ? chatResult.executedToolNames : [];
@@ -516,6 +423,7 @@ async function handleChatCompletionsV3(req, res) {
   
   try {
     let totalContent = '';
+    let totalReasoningContent = '';
     let isFirstChunk = true;
     let chunkCount = 0;
 
@@ -585,7 +493,7 @@ async function handleChatCompletionsV3(req, res) {
 
     await runWithAiConsoleContext(
       { workspaceId: auditWorkspaceId },
-      () => client.chatStream(messages, streamCallback, overrides)
+      () => client.chatStream(llmMessages, streamCallback, overrides)
     );
     BotUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总chunks=${chunkCount}, 总长度=${totalContent.length}`, 'ai.v3.stream');
 
@@ -748,7 +656,7 @@ export default {
           res.setHeader('Connection', 'keep-alive');
           res.flushHeaders?.();
 
-          const messages = await stream.buildChatContext(null, {
+          const messages = await assembleChatLlmMessages(stream, null, {
             text: prompt,
             persona,
             context: contextObj,

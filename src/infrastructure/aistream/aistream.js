@@ -1,5 +1,4 @@
 import BotUtil from '#utils/botutil.js';
-import cfg from '#infrastructure/config/config.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import MemoryManager from '#infrastructure/aistream/memory-manager.js';
@@ -7,6 +6,26 @@ import PromptEngine from '#infrastructure/aistream/prompt-engine.js';
 import MonitorService from '#infrastructure/aistream/monitor-service.js';
 import { appendAgentWorkspaceToPrompt } from '#utils/agent-workspace.js';
 import { estimateTokensMixed } from '#utils/token-estimate.js';
+import { applyPromptCachePolicy } from '#utils/llm/prompt-cache-policy.js';
+import { getStreamRequestContext } from '#infrastructure/aistream/stream-request-context.js';
+import { collectAuxiliaryStreamPrompts, resolveToolStreamNames } from '#infrastructure/aistream/chat-tool-streams.js';
+import { unpackFactoryChatRaw } from '#utils/llm/llm-nonstream-reply.js';
+import { previewLlmMessages } from '#infrastructure/aistream/chat-pipeline.js';
+
+function shallowMergePlain(...sources) {
+  const out = {};
+  for (const src of sources) {
+    if (!src || typeof src !== 'object') continue;
+    for (const [k, v] of Object.entries(src)) {
+      if (v != null && typeof v === 'object' && !Array.isArray(v)) {
+        out[k] = { ...(out[k] || {}), ...v };
+      } else if (v !== undefined) {
+        out[k] = v;
+      }
+    }
+  }
+  return out;
+}
 
 export default class AIStream {
   /** @type {Map<string, object>} MCP 工具注册表 */
@@ -369,8 +388,11 @@ export default class AIStream {
    * @returns {Promise<string>}
    */
   async finalizeSystemPromptContent(text) {
-    if (text == null || text === '') return text;
-    return appendAgentWorkspaceToPrompt(text, getAistreamConfigOptional(), this.name);
+    if (text == null || text === '') text = '';
+    const streamKey = String(this.name || '').replace(/-merged$/, '') || this.name;
+    const aux = collectAuxiliaryStreamPrompts(this);
+    const merged = aux ? `${text}${aux}` : text;
+    return appendAgentWorkspaceToPrompt(merged, getAistreamConfigOptional(), streamKey);
   }
 
   /**
@@ -558,14 +580,34 @@ export default class AIStream {
     );
   }
 
+  _getDefaultProvider() {
+    return LLMFactory.resolveProvider({}) ?? LLMFactory.listProviders()[0] ?? null;
+  }
+
+  /** chat 白名单：合并副流 + web/browser 等框架自研 + remote-mcp.* */
+  _getToolStreamNames() {
+    if (this._cachedToolStreamNames) {
+      return this._cachedToolStreamNames;
+    }
+    this._cachedToolStreamNames = resolveToolStreamNames(this);
+    BotUtil.makeLog('debug', `[AIStream] 工具白名单 ${this.name}: [${this._cachedToolStreamNames.join(', ')}]`, 'AIStream');
+    return this._cachedToolStreamNames;
+  }
+
   /**
    * 调用AI（非流式，支持tool calling）
-   * @param {Array<Object>} messages - 消息列表
-   * @param {Object} apiConfig - API配置
-   * @returns {Promise<{ content: string, executedToolNames: string[] }>}
+   * @returns {Promise<{ content: string, executedToolNames: string[], usedReplyTool?: boolean, toolRoundsExhausted?: boolean }|null>}
    */
   async callAI(messages, apiConfig = {}) {
-    const config = this.resolveLLMConfig(apiConfig);
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      BotUtil.makeLog('warn', '[AIStream] callAI 消息数组为空', 'AIStream');
+      return null;
+    }
+
+    const config = applyPromptCachePolicy(this.resolveLLMConfig(apiConfig), {
+      stream: this,
+      e: getStreamRequestContext()?.e ?? null,
+    });
     const retryConfig = this.getRetryConfig();
 
     const inputTokens = messages.reduce((sum, m) => {
@@ -578,38 +620,43 @@ export default class AIStream {
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
         const client = LLMFactory.createClient(config);
-        const overrides = { ...config };
+        const overrides = { ...config, stream: false, streams: this._getToolStreamNames() };
         const raw = await client.chat(messages, overrides);
-        const content = typeof raw === 'object' && raw?.content !== undefined ? raw.content : String(raw ?? '');
-        const executedToolNames = Array.isArray(raw?.executedToolNames) ? raw.executedToolNames : [];
+        const { text, usedReplyTool, toolRoundsExhausted, executedToolNames } = unpackFactoryChatRaw(raw);
+        const content = text != null ? String(text) : '';
         MonitorService.recordTokens(`${this.name}.callAI`, { output: this.estimateTokens(content) });
-        return { content, executedToolNames };
+
+        if (toolRoundsExhausted) {
+          return { content, executedToolNames, usedReplyTool, toolRoundsExhausted: true };
+        }
+        if (content.trim()) {
+          return { content, executedToolNames, usedReplyTool };
+        }
+        if (usedReplyTool || executedToolNames.length > 0) {
+          return { content: '', executedToolNames, usedReplyTool };
+        }
+        return null;
       } catch (error) {
         lastError = error;
         const errorInfo = this.classifyError(error);
         const shouldRetry = this.shouldRetry(errorInfo, retryConfig, attempt);
-        
+
         if (shouldRetry) {
           const delay = this.calculateRetryDelay(attempt, retryConfig);
-          BotUtil.makeLog('warn', 
+          BotUtil.makeLog('warn',
             `[${this.name}] AI调用失败，${attempt}/${retryConfig.maxAttempts}次重试中: ${error.message}`,
             'AIStream'
           );
           await BotUtil.sleep(delay);
           continue;
         }
-        
-        // 不再重试，抛出错误
-        BotUtil.makeLog('error', 
-          `[${this.name}] AI调用失败: ${error.message}`,
-          'AIStream'
-        );
+
+        BotUtil.makeLog('error', `[${this.name}] AI调用失败: ${error.message}`, 'AIStream');
         throw error;
       }
     }
-    
-    // 所有重试都失败
-    BotUtil.makeLog('error', 
+
+    BotUtil.makeLog('error',
       `[${this.name}] AI调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`,
       'AIStream'
     );
@@ -625,7 +672,10 @@ export default class AIStream {
    * @returns {Promise<string>}
    */
   async callAIStream(messages, apiConfig = {}, onDelta, _options = {}) {
-    const config = this.resolveLLMConfig(apiConfig);
+    const config = applyPromptCachePolicy(this.resolveLLMConfig(apiConfig), {
+      stream: this,
+      e: getStreamRequestContext()?.e ?? null,
+    });
     const retryConfig = this.getRetryConfig();
 
     let fullText = '';
@@ -638,18 +688,18 @@ export default class AIStream {
     // 若该 provider 明确禁用流式，则退化为非流式调用，并一次性输出
     // 这样可以保持上游“期望流式”的接口不报错，同时尊重配置 enableStream=false
     if (config.enableStream === false) {
-      const { content } = await this.callAI(messages, apiConfig);
-      if (content) wrapDelta(content);
-      return content || '';
+      const result = await this.callAI(messages, apiConfig);
+      if (result?.content) wrapDelta(result.content);
+      return result?.content || '';
     }
 
     let lastError = null;
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
         const client = LLMFactory.createClient(config);
-        const overrides = { ...config };
+        const overrides = { ...config, stream: true, streams: this._getToolStreamNames() };
         await client.chatStream(messages, wrapDelta, overrides);
-        return fullText; // 成功，返回结果
+        return fullText;
       } catch (error) {
         lastError = error;
         const errorInfo = this.classifyError(error);
@@ -689,37 +739,200 @@ export default class AIStream {
    * @returns {Object}
    */
   resolveLLMConfig(apiConfig = {}) {
-    const llm = getAistreamConfigOptional().llm || {};
-    const trim = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : undefined);
+    const ai = getAistreamConfigOptional();
+    const llm = ai.llm || {};
+    const pick = (...vals) => vals.find((v) => v !== undefined);
+    const pickTrim = (...vals) => {
+      const v = vals.find((x) => x !== undefined);
+      return v != null && v !== '' ? String(v).trim() : undefined;
+    };
+    const pickUrl = (...vals) => vals.find((v) => v != null && v !== '' && String(v).trim() !== '');
 
-    const provider = (apiConfig.provider ?? this.config.provider ?? llm.provider ?? llm.Provider ?? '').toLowerCase();
-    if (provider && !LLMFactory.hasProvider(provider)) {
-      throw new Error(`不支持的LLM提供商: ${provider}`);
+    const providerRaw = (apiConfig.provider || this.config?.provider || llm.Provider || llm.provider || '').toLowerCase();
+    const provider = providerRaw || this._getDefaultProvider();
+    if (providerRaw && !LLMFactory.hasProvider(providerRaw)) {
+      BotUtil.makeLog('warn', `[AIStream] 不支持的 LLM 提供商: ${providerRaw}`, 'AIStream');
     }
 
-    const providerConfig = this.getProviderConfig(provider);
-    const merged = { ...providerConfig, ...this.config, ...apiConfig, provider };
-    const chatModel = merged.chatModel ?? merged.model;
+    const providerConfig = LLMFactory.getProviderConfig(provider) || {};
 
-    return {
-      ...merged,
-      timeout: merged.timeout ?? merged.timeoutMs ?? llm.timeout ?? 360000,
-      apiKey: trim(merged.apiKey),
-      baseUrl: trim(merged.baseUrl),
-      model: merged.model ?? chatModel,
-      chatModel: chatModel ?? merged.model,
-      maxTokens: merged.maxTokens ?? merged.maxCompletionTokens,
-      enableTools: merged.enableTools !== false
+    const timeout = pick(
+      apiConfig.timeout,
+      apiConfig.timeoutMs,
+      this.config?.timeout,
+      providerConfig.timeout,
+      llm.timeout,
+      ai.global?.maxTimeout
+    );
+    const apiKey = pickTrim(
+      apiConfig.apiKey,
+      apiConfig.api_key,
+      this.config?.apiKey,
+      this.config?.api_key,
+      providerConfig.apiKey,
+      providerConfig.api_key
+    );
+    const baseUrl = pickUrl(
+      apiConfig.baseUrl,
+      apiConfig.base_url,
+      this.config?.baseUrl,
+      this.config?.base_url,
+      providerConfig.baseUrl,
+      providerConfig.base_url
+    );
+    const model = pick(
+      apiConfig.model,
+      apiConfig.chatModel,
+      this.config?.model,
+      this.config?.chatModel,
+      providerConfig.model,
+      providerConfig.chatModel
+    );
+    const maxTokens = pick(
+      apiConfig.maxTokens,
+      apiConfig.max_tokens,
+      apiConfig.max_completion_tokens,
+      apiConfig.maxCompletionTokens,
+      this.config?.maxTokens,
+      this.config?.max_tokens,
+      providerConfig.maxTokens,
+      providerConfig.max_tokens,
+      llm.maxTokens,
+      llm.max_tokens
+    );
+    const topP = pick(
+      apiConfig.topP,
+      apiConfig.top_p,
+      this.config?.topP,
+      this.config?.top_p,
+      providerConfig.topP,
+      providerConfig.top_p,
+      llm.topP,
+      llm.top_p
+    );
+    const presencePenalty = pick(
+      apiConfig.presencePenalty,
+      apiConfig.presence_penalty,
+      this.config?.presencePenalty,
+      this.config?.presence_penalty,
+      providerConfig.presencePenalty,
+      providerConfig.presence_penalty,
+      llm.presencePenalty,
+      llm.presence_penalty
+    );
+    const frequencyPenalty = pick(
+      apiConfig.frequencyPenalty,
+      apiConfig.frequency_penalty,
+      this.config?.frequencyPenalty,
+      this.config?.frequency_penalty,
+      providerConfig.frequencyPenalty,
+      providerConfig.frequency_penalty,
+      llm.frequencyPenalty,
+      llm.frequency_penalty
+    );
+    const temperature = pick(
+      apiConfig.temperature,
+      this.config?.temperature,
+      providerConfig.temperature,
+      llm.temperature
+    );
+    const enableTools = pick(
+      apiConfig.enableTools,
+      apiConfig.enable_tools,
+      this.config?.enableTools,
+      this.config?.enable_tools,
+      providerConfig.enableTools,
+      providerConfig.enable_tools,
+      llm.enableTools,
+      llm.enable_tools,
+      true
+    );
+    const enableStream = pick(
+      apiConfig.enableStream,
+      apiConfig.enable_stream,
+      this.config?.enableStream,
+      this.config?.enable_stream,
+      providerConfig.enableStream,
+      providerConfig.enable_stream,
+      llm.enableStream,
+      llm.enable_stream
+    );
+    const toolChoice = pick(
+      apiConfig.tool_choice,
+      apiConfig.toolChoice,
+      this.config?.tool_choice,
+      this.config?.toolChoice,
+      providerConfig.tool_choice,
+      providerConfig.toolChoice,
+      llm.tool_choice,
+      llm.toolChoice
+    );
+    const parallelToolCalls = pick(
+      apiConfig.parallel_tool_calls,
+      apiConfig.parallelToolCalls,
+      this.config?.parallel_tool_calls,
+      this.config?.parallelToolCalls,
+      providerConfig.parallel_tool_calls,
+      providerConfig.parallelToolCalls,
+      llm.parallel_tool_calls,
+      llm.parallelToolCalls
+    );
+    const maxToolRounds = pick(
+      apiConfig.maxToolRounds,
+      this.config?.maxToolRounds,
+      providerConfig.maxToolRounds,
+      llm.maxToolRounds
+    );
+    const mcpToolMode = pick(
+      apiConfig.mcpToolMode,
+      this.config?.mcpToolMode,
+      providerConfig.mcpToolMode,
+      llm.mcpToolMode
+    );
+    const promptCache = pick(
+      apiConfig.promptCache,
+      this.config?.promptCache,
+      llm.promptCache
+    );
+
+    const headers = shallowMergePlain(providerConfig.headers, this.config?.headers, apiConfig.headers);
+    const extraBody = shallowMergePlain(providerConfig.extraBody, this.config?.extraBody, apiConfig.extraBody);
+    const proxy = shallowMergePlain(providerConfig.proxy, this.config?.proxy, apiConfig.proxy);
+
+    const merged = {
+      ...providerConfig,
+      ...this.config,
+      ...apiConfig,
+      apiKey,
+      baseUrl,
+      model,
+      maxTokens,
+      topP,
+      presencePenalty,
+      frequencyPenalty,
+      provider,
+      timeout,
+      enableTools,
+      temperature,
+      enableStream,
+      tool_choice: toolChoice,
+      toolChoice,
+      parallel_tool_calls: parallelToolCalls,
+      parallelToolCalls,
+      maxToolRounds,
+      mcpToolMode
     };
+    if (promptCache) merged.promptCache = promptCache;
+    if (Object.keys(headers).length) merged.headers = headers;
+    if (Object.keys(extraBody).length) merged.extraBody = extraBody;
+    if (Object.keys(proxy).length) merged.proxy = proxy;
+
+    const { _clientClass, factoryType, ...out } = merged;
+    return out;
   }
 
-  /**
-   * 获取提供商配置
-   * @param {string} provider - 提供商名称（LLM 提供商）
-   * @returns {Object} 提供商配置
-   */
   getProviderConfig(provider) {
-    return provider ? (cfg[`${provider}_llm`] || {}) : {};
+    return LLMFactory.getProviderConfig(provider) || {};
   }
 
   /**
@@ -744,29 +957,17 @@ export default class AIStream {
 
       // 调试：打印给 LLM 的消息概要（所有工作流通用），方便查看最终 prompt 结构
       try {
-        const preview = (messages || []).map((m, idx) => {
-          const role = m.role || `msg${idx}`;
-          let content = m.content;
-          if (typeof content === 'object') {
-            const text = content.text || content.content || '';
-            content = text;
-          }
-          return {
-            idx,
-            role,
-            text: String(content ?? '')
-          };
-        });
         BotUtil.makeLog(
           'debug',
-          `[AIStream.execute] LLM消息预览[${this.name}]: ${JSON.stringify(preview, null, 2)}`,
+          `[AIStream.execute] LLM消息预览[${this.name}]: ${JSON.stringify(previewLlmMessages(messages), null, 2)}`,
           'AIStream'
         );
       } catch {
         // 调试日志失败直接忽略
       }
 
-      const { content: responseText } = await this.callAI(messages, config);
+      const result = await this.callAI(messages, config);
+      const responseText = result?.content ?? '';
       MonitorService.addStep(traceId, { step: 'ai_call', responseLength: responseText?.length || 0 });
 
       if (!responseText?.trim()) {
@@ -911,15 +1112,6 @@ export default class AIStream {
     if (options.enableDatabase) names.push('database');
     if (options.enableTools) names.push('tools');
     return [...new Set(names)];
-  }
-
-  handleError(error, operation) {
-    const errorMessage = error?.message || String(error);
-    BotUtil.makeLog('error', 
-      `[${this.name}] ${operation}失败: ${errorMessage}`, 
-      'AIStream'
-    );
-    return error;
   }
 
   /**

@@ -3,6 +3,7 @@ import { buildFetchOptionsWithProxy } from '../../utils/llm/proxy-utils.js';
 import { fetchAsBase64 } from '../../utils/llm/image-utils.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
 import { ensureAnthropicMaxTokens, normalizeAnthropicMessages } from '../../utils/llm/anthropic-chat-utils.js';
+import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
 
 /**
  * Anthropic 官方 LLM 客户端（Messages API）
@@ -165,7 +166,17 @@ export default class AnthropicLLMClient {
     if (serviceTier !== undefined && serviceTier !== '') body.service_tier = serviceTier;
 
     if (systemTexts.length > 0) {
-      body.system = systemTexts.join('\n');
+      const useCache = overrides.anthropic_prompt_cache === true
+        || this.config.anthropic_prompt_cache === true;
+      if (useCache) {
+        body.system = [{
+          type: 'text',
+          text: systemTexts.join('\n'),
+          cache_control: { type: 'ephemeral' },
+        }];
+      } else {
+        body.system = systemTexts.join('\n');
+      }
     }
 
     if (this.config.extraBody && typeof this.config.extraBody === 'object') {
@@ -230,6 +241,7 @@ export default class AnthropicLLMClient {
     ensureAnthropicMaxTokens(body, this.config, overrides);
     const resp = await this._postNativeBody(body, overrides);
     const data = await resp.json();
+    logPromptCacheUsage(data?.usage, 'Anthropic');
     return this.extractText(data);
   }
 
@@ -238,6 +250,7 @@ export default class AnthropicLLMClient {
     const body = this.buildBody(transformedMessages, overrides);
     const resp = await this._postNativeBody(body, overrides);
     const data = await resp.json();
+    logPromptCacheUsage(data?.usage, 'Anthropic');
     return this.extractText(data);
   }
 

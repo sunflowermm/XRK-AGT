@@ -2161,6 +2161,46 @@ export default class SystemConfig extends ConfigBase {
                       component: 'MultiSelect'
                     }
                   }
+                },
+                promptCache: {
+                  type: 'object',
+                  label: 'Provider 提示缓存',
+                  description: 'OpenAI prompt_cache_key / Anthropic cache_control；静态 system+tools 前缀命中率越高，input 费用越低',
+                  component: 'SubForm',
+                  fields: {
+                    enabled: {
+                      type: 'boolean',
+                      label: '启用自动提示缓存',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    keyPrefix: {
+                      type: 'string',
+                      label: 'cache key 前缀',
+                      default: 'xrk',
+                      component: 'Input'
+                    },
+                    retention: {
+                      type: 'string',
+                      label: 'OpenAI 保留策略',
+                      enum: ['in-memory', '24h'],
+                      default: 'in-memory',
+                      component: 'Select'
+                    },
+                    anthropicCache: {
+                      type: 'boolean',
+                      label: 'Anthropic system cache_control',
+                      default: true,
+                      component: 'Switch'
+                    },
+                    scopeInKey: {
+                      type: 'boolean',
+                      label: 'cache key 含会话 ID',
+                      description: 'true=按群/用户隔离；false=同 bot+模型共享前缀缓存（更省、隐私弱）',
+                      default: true,
+                      component: 'Switch'
+                    }
+                  }
                 }
               }
             },

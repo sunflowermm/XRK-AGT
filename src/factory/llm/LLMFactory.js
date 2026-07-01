@@ -7,8 +7,7 @@ import AnthropicLLMClient from './AnthropicLLMClient.js';
 import AzureOpenAILLMClient from './AzureOpenAILLMClient.js';
 import OpenAICompatibleLLMClient from './OpenAICompatibleLLMClient.js';
 import OpenAIResponsesCompatibleLLMClient from './OpenAIResponsesCompatibleLLMClient.js';
-import NewAPICompatibleLLMClient from './NewAPICompatibleLLMClient.js';
-import CherryINCompatibleLLMClient from './CherryINCompatibleLLMClient.js';
+import OpenAIPathCompatLLMClient from './OpenAIPathCompatLLMClient.js';
 import OllamaCompatibleLLMClient from './OllamaCompatibleLLMClient.js';
 import GeminiCompatibleLLMClient from './GeminiCompatibleLLMClient.js';
 import AnthropicCompatibleLLMClient from './AnthropicCompatibleLLMClient.js';
@@ -50,8 +49,8 @@ const factoryRegistry = [
   { configKey: 'azure_openai_llm', factoryType: 'builtin', protocol: 'azure_openai', displayName: 'Azure OpenAI（官方）' },
   { configKey: 'openai_compat_llm', factoryType: 'compat', defaultProtocol: 'openai', displayName: 'OpenAI Chat 兼容', clientClass: OpenAICompatibleLLMClient },
   { configKey: 'openai_responses_compat_llm', factoryType: 'compat', defaultProtocol: 'openai-response', displayName: 'OpenAI Responses 兼容', clientClass: OpenAIResponsesCompatibleLLMClient },
-  { configKey: 'newapi_compat_llm', factoryType: 'compat', defaultProtocol: 'new-api', displayName: 'New API 兼容', clientClass: NewAPICompatibleLLMClient },
-  { configKey: 'cherryin_compat_llm', factoryType: 'compat', defaultProtocol: 'cherryin', displayName: 'CherryIN 兼容', clientClass: CherryINCompatibleLLMClient },
+  { configKey: 'newapi_compat_llm', factoryType: 'compat', defaultProtocol: 'new-api', displayName: 'New API 兼容', clientClass: OpenAIPathCompatLLMClient },
+  { configKey: 'cherryin_compat_llm', factoryType: 'compat', defaultProtocol: 'cherryin', displayName: 'CherryIN 兼容', clientClass: OpenAIPathCompatLLMClient },
   { configKey: 'ollama_compat_llm', factoryType: 'compat', defaultProtocol: 'ollama', displayName: 'Ollama 兼容', clientClass: OllamaCompatibleLLMClient },
   { configKey: 'gemini_compat_llm', factoryType: 'compat', defaultProtocol: 'gemini', displayName: 'Gemini 兼容', clientClass: GeminiCompatibleLLMClient },
   { configKey: 'anthropic_compat_llm', factoryType: 'compat', defaultProtocol: 'anthropic', displayName: 'Anthropic 兼容', clientClass: AnthropicCompatibleLLMClient },

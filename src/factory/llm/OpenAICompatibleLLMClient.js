@@ -6,6 +6,7 @@ import { ensureMessagesImagesDataUrl } from '../../utils/llm/image-utils.js';
 import { cleanupMessages } from '../../utils/llm/message-cleanup.js';
 import BotUtil from '../../utils/botutil.js';
 import { iterateSSE } from '../../utils/llm/sse-utils.js';
+import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
 
 /**
  * OpenAI 兼容第三方 LLM 客户端（Chat Completions 协议）
@@ -305,6 +306,7 @@ export default class OpenAICompatibleLLMClient {
       requestRound: async (currentMessages, ov) => {
         const resp = await this._fetchRound(currentMessages, ov, false);
         const json = await resp.json();
+        logPromptCacheUsage(json?.usage, 'OpenAICompatible');
         const message = json?.choices?.[0]?.message;
         return {
           content: message?.content || '',
