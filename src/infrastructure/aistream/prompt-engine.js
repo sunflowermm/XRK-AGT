@@ -13,10 +13,6 @@ export class PromptEngine extends EventEmitter {
   promptVersions = new Map();
   activeVersions = new Map();
 
-  constructor() {
-    super();
-  }
-
   /**
    * 注册Prompt模板
    * @param {string} name - 模板名称

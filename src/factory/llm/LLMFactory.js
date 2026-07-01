@@ -15,6 +15,7 @@ import AzureOpenAICompatibleLLMClient from './AzureOpenAICompatibleLLMClient.js'
 import cfg from '#infrastructure/config/config.js';
 
 const builtinClientFactories = new Map([
+  // builtin：各厂商官方 SDK/文档路径，禁止与 openai_compat 混用
   ['volcengine', (config) => new VolcengineLLMClient(config)],
   ['deepseek', (config) => new DeepSeekLLMClient(config)],
   ['xiaomimimo', (config) => new XiaomiMiMoLLMClient(config)],

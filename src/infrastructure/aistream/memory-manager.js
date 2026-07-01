@@ -13,10 +13,6 @@ export class MemoryManager extends EventEmitter {
   maxLongTermSize = 1000;
   maxIndexKeywords = 5000;
 
-  constructor() {
-    super();
-  }
-
   /**
    * 添加短期记忆（对话上下文）
    * @param {string} userId - 用户ID

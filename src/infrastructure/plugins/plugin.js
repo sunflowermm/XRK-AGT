@@ -302,7 +302,7 @@ export default class plugin {
     return true
   }
 
-  getDescriptor() {
+  getInfo() {
     return {
       name: this.name,
       dsc: this.dsc,
@@ -315,5 +315,10 @@ export default class plugin {
       handlers: normalizeHandlers(this.handler),
       eventSubscribe: normalizeEventSubscribe(this.eventSubscribe)
     };
+  }
+
+  /** @deprecated 使用 getInfo() */
+  getDescriptor() {
+    return this.getInfo();
   }
 }

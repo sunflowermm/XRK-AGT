@@ -9,10 +9,12 @@ import { iterateSSE } from '../../utils/llm/sse-utils.js';
 import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
 
 /**
- * OpenAI 兼容第三方 LLM 客户端（Chat Completions 协议）
+ * OpenAI 兼容第三方网关客户端（NewAPI / CherryIN / 自建反代等）。
  *
- * - 专注 Chat Completions（与 OpenAI Responses 客户端分离）
- * - 统一非流式/流式工具调用主循环，减少事件链分叉
+ * 与官方客户端分工：
+ * - openai_llm → OpenAILLMClient（OpenAI 官方 Chat Completions）
+ * - openai_compat_llm → 本类（第三方 OpenAI 形态兼容）
+ * - 各厂商官方 builtin（deepseek / volcengine / anthropic …）独立 *LLMClient，按各自文档 buildBody
  */
 export default class OpenAICompatibleLLMClient {
   constructor(config = {}) {

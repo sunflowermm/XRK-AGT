@@ -1,17 +1,14 @@
 import { MCPToolAdapter } from './mcp-tool-adapter.js';
 import { getAistreamConfigOptional } from '../aistream-config.js';
 import BotUtil from '../botutil.js';
+import { pickFirstKey } from '#utils/coerce-pick.js';
 
 /**
  * OpenAI-like Chat Completions 参数归一化工具
  */
 
 function pick(overrides, config, keys) {
-  for (const k of keys) {
-    if (overrides?.[k] !== undefined) return overrides[k];
-    if (config?.[k] !== undefined) return config[k];
-  }
-  return;
+  return pickFirstKey(overrides, keys) ?? pickFirstKey(config, keys);
 }
 
 export { pick };

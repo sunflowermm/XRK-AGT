@@ -1,18 +1,12 @@
 import { DEFAULT_SKILL_LIMITS } from '#utils/skills/defaults.js';
-
-function normalizeStringList(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean);
-}
+import { normalizeStringArray } from '#utils/string-array-utils.js';
 
 function uniqueList(list) {
   return [...new Set(list)];
 }
 
 export function resolveSkillRoots(cfg = {}) {
-  const customSkillRoots = normalizeStringList(cfg.customSkillRoots);
+  const customSkillRoots = normalizeStringArray(cfg.customSkillRoots);
   // 助手 agent：默认不注入 skills；仅当用户在配置里显式提供 customSkillRoots 时才注入
   return uniqueList(customSkillRoots);
 }

@@ -15,10 +15,6 @@ export class MonitorService extends EventEmitter {
   maxErrors = 1000;
   maxCostStats = 2000;
 
-  constructor() {
-    super();
-  }
-
   /**
    * 开始执行追踪
    * @param {string} traceId - 追踪ID

@@ -1,26 +1,20 @@
-import BotUtil from '../botutil.js';
-import { getAistreamConfigOptional } from '../aistream-config.js';
+import BotUtil from '#utils/botutil.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { pickTrimmed } from '#utils/coerce-pick.js';
 
 /**
  * LLM Provider 提示缓存（OpenAI prompt_cache_key / Anthropic cache_control）。
  * 静态前缀在前、动态后缀在后；与 stream-cache（整轮结果 LRU）无关。
  */
 
-function pickTrim(...vals) {
-  for (const v of vals) {
-    if (v != null && String(v).trim() !== '') return String(v).trim();
-  }
-  return '';
-}
-
 /**
  * @param {{ keyPrefix?: string, streamName?: string, model?: string, selfId?: string|number, scopeId?: string|number, scopeInKey?: boolean }} parts
  */
 export function buildPromptCacheKey(parts = {}) {
   const segments = [
-    pickTrim(parts.keyPrefix, 'xrk'),
-    pickTrim(parts.streamName, 'stream'),
-    pickTrim(parts.model, 'default'),
+    pickTrimmed(parts.keyPrefix, 'xrk'),
+    pickTrimmed(parts.streamName, 'stream'),
+    pickTrimmed(parts.model, 'default'),
   ];
   if (parts.scopeInKey !== false && parts.selfId != null) {
     segments.push(String(parts.selfId));
@@ -52,7 +46,7 @@ export function applyPromptCachePolicy(resolvedConfig = {}, ctx = {}) {
   const e = ctx.e;
   const scopeInKey = pc.scopeInKey !== false;
 
-  if (!pickTrim(out.prompt_cache_key, out.promptCacheKey)) {
+  if (!pickTrimmed(out.prompt_cache_key, out.promptCacheKey)) {
     const key = buildPromptCacheKey({
       keyPrefix: pc.keyPrefix,
       streamName: ctx.stream?.name,
@@ -65,7 +59,7 @@ export function applyPromptCachePolicy(resolvedConfig = {}, ctx = {}) {
     out.promptCacheKey = key;
   }
 
-  const retention = pickTrim(out.prompt_cache_retention, out.promptCacheRetention, pc.retention);
+  const retention = pickTrimmed(out.prompt_cache_retention, out.promptCacheRetention, pc.retention);
   if (retention) {
     out.prompt_cache_retention = retention;
     out.promptCacheRetention = retention;

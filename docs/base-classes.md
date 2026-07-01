@@ -15,7 +15,7 @@
 |----|------|
 | 放置 | `core/<名>/plugin/*.js` |
 | 继承 | `import plugin from '#infrastructure/plugins/plugin.js'` |
-| 实例 API | `getStream`、`reply`、`setContext` / `getContext` / `finish`（见 [plugin-base.md](plugin-base.md)） |
+| 实例 API | `getStream`、`reply`、`setContext` / `getContext` / `finish`、`getInfo()`（见 [plugin-base.md](plugin-base.md)） |
 
 ```javascript
 export default class MyPlugin extends plugin {
@@ -68,6 +68,8 @@ export default {
 |----|------|
 | 放置 | `core/<名>/stream/*.js` |
 | 加载 | StreamLoader 单例 → `getStream(name)` |
+| 业务扩展 | 重写 `patchLLMConfig(merged, apiConfig)` 追加场景字段；request body 由各 `*LLMClient.buildBody` 按官方文档组装 |
+| 厂商协议 | `openai_llm` / `deepseek_llm` 等 **builtin** 独立客户端；`openai_compat_llm` 仅用于第三方 OpenAI 形态网关 |
 
 ```javascript
 import AIStream from '#infrastructure/aistream/aistream.js';

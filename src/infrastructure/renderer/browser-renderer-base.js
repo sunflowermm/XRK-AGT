@@ -10,18 +10,23 @@ import Renderer from './Renderer.js';
  * 浏览器截图渲染器基类（Puppeteer / Playwright 共用状态与工具方法）
  */
 export default class BrowserRendererBase extends Renderer {
+  logTag = '';
+  browser = null;
+  lock = false;
+  shoting = [];
+  mac = '';
+  browserMacKey = null;
+  restartNum = 100;
+  renderNum = 0;
+  maxConcurrent = 3;
+  healthCheckTimer = null;
+  _unregisterShutdownHook = null;
+
   constructor(meta, config = {}, logTag) {
     super(meta);
     this.logTag = logTag;
-    this.browser = null;
-    this.lock = false;
-    this.shoting = [];
-    this.mac = '';
-    this.browserMacKey = null;
-    this.restartNum = config.restartNum ?? 100;
-    this.renderNum = 0;
-    this.maxConcurrent = config.maxConcurrent ?? 3;
-    this.healthCheckTimer = null;
+    this.restartNum = config.restartNum ?? this.restartNum;
+    this.maxConcurrent = config.maxConcurrent ?? this.maxConcurrent;
     this._unregisterShutdownHook = registerShutdownHook(() => this.cleanup());
   }
 

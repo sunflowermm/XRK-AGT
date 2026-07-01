@@ -1,14 +1,10 @@
-import cfg from '#infrastructure/config/config.js';
-import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import { estimateTokensRough } from '#utils/token-estimate.js';
 import { normalizeStringArray } from '#utils/string-array-utils.js';
+import { pickFirstKey } from '#utils/coerce-pick.js';
 
 export function pickFirst(obj, keys) {
-  for (const k of keys) {
-    if (Object.hasOwn(obj, k) && obj[k] !== undefined) return obj[k];
-  }
-  return;
+  return pickFirstKey(obj, keys);
 }
 
 export function parseOptionalJson(raw) {
@@ -39,8 +35,7 @@ export function toBool(v) {
 export const trimLower = (v) => (v || '').toString().trim().toLowerCase();
 
 export function getDefaultProvider() {
-  const llm = getAistreamConfigOptional().llm || cfg?.aistream?.llm || {};
-  return (llm?.Provider || llm?.provider || '').toString().trim().toLowerCase();
+  return LLMFactory.resolveProvider({}) ?? '';
 }
 
 export function resolveProviderFromRequest(body = {}) {

@@ -4,28 +4,16 @@ import LLMFactory from '#factory/llm/LLMFactory.js';
 import MemoryManager from '#infrastructure/aistream/memory-manager.js';
 import PromptEngine from '#infrastructure/aistream/prompt-engine.js';
 import MonitorService from '#infrastructure/aistream/monitor-service.js';
+import StreamLoader from '#infrastructure/aistream/loader.js';
 import { appendAgentWorkspaceToPrompt } from '#utils/agent-workspace.js';
 import { estimateTokensMixed } from '#utils/token-estimate.js';
 import { applyPromptCachePolicy } from '#utils/llm/prompt-cache-policy.js';
+import { resolveStreamLLMConfig } from '#utils/llm/llm-config-resolve.js';
+import { runWithLlmRetry } from '#utils/llm/llm-retry.js';
 import { getStreamRequestContext } from '#infrastructure/aistream/stream-request-context.js';
 import { collectAuxiliaryStreamPrompts, resolveToolStreamNames } from '#infrastructure/aistream/chat-tool-streams.js';
 import { unpackFactoryChatRaw } from '#utils/llm/llm-nonstream-reply.js';
 import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/aistream/chat-pipeline.js';
-
-function shallowMergePlain(...sources) {
-  const out = {};
-  for (const src of sources) {
-    if (!src || typeof src !== 'object') continue;
-    for (const [k, v] of Object.entries(src)) {
-      if (v != null && typeof v === 'object' && !Array.isArray(v)) {
-        out[k] = { ...(out[k] || {}), ...v };
-      } else if (v !== undefined) {
-        out[k] = v;
-      }
-    }
-  }
-  return out;
-}
 
 export default class AIStream {
   /** @type {Map<string, object>} MCP 工具注册表 */
@@ -33,6 +21,7 @@ export default class AIStream {
   /** @type {AIStream[]} 已 merge 的子工作流 */
   _mergedStreams = [];
   _initialized = false;
+  _cachedToolStreamNames = null;
 
   /**
    * 构造函数
@@ -459,131 +448,6 @@ export default class AIStream {
     }
   }
 
-  /**
-   * 获取重试配置
-   * @returns {Object}
-   */
-  getRetryConfig() {
-    const runtime = getAistreamConfigOptional();
-    const llm = runtime.llm || {};
-    const retryConfig = llm.retry || {};
-    return {
-      enabled: retryConfig.enabled !== false, // 默认启用
-      maxAttempts: retryConfig.maxAttempts || 3,
-      delay: retryConfig.delay || 2000,
-      maxDelay: retryConfig.maxDelay || 10000, // 最大延迟
-      backoffMultiplier: retryConfig.backoffMultiplier || 2, // 指数退避倍数
-      retryOn: retryConfig.retryOn || ['timeout', 'network', '5xx', 'rate_limit']
-    };
-  }
-
-  /**
-   * 计算重试延迟（指数退避）
-   * @param {number} attempt - 重试次数
-   * @param {Object} retryConfig - 重试配置
-   * @returns {number}
-   */
-  calculateRetryDelay(attempt, retryConfig) {
-    const baseDelay = retryConfig.delay || 2000;
-    const multiplier = retryConfig.backoffMultiplier || 2;
-    const maxDelay = retryConfig.maxDelay || 10000;
-    
-    const delay = Math.min(baseDelay * Math.pow(multiplier, attempt - 1), maxDelay);
-    const jitter = delay * 0.1 * (Math.random() * 2 - 1);
-    
-    return Math.max(0, delay + jitter);
-  }
-
-  /**
-   * 分类错误类型
-   * @param {Error} error - 错误对象
-   * @returns {Object}
-   */
-  classifyError(error) {
-    if (!error) {
-      return {
-        isTimeout: false,
-        isNetwork: false,
-        is5xx: false,
-        is4xx: false,
-        isRateLimit: false,
-        isAuth: false,
-        originalError: error
-      };
-    }
-
-    const message = error?.message?.toLowerCase() || '';
-    const code = error?.code?.toLowerCase() || '';
-    const status = error?.status || error?.statusCode || 0;
-    const name = error?.name?.toLowerCase() || '';
-    
-    return {
-      isTimeout: name === 'aborterror' || 
-                 name === 'timeouterror' ||
-                 message.includes('timeout') || 
-                 message.includes('超时') || 
-                 message.includes('timed out') ||
-                 code === 'timeout' || 
-                 code === 'etimedout',
-      isNetwork: message.includes('network') || 
-                 message.includes('网络') || 
-                 message.includes('连接') || 
-                 message.includes('connection') ||
-                 code === 'econnrefused' ||
-                 code === 'enotfound' ||
-                 code === 'econnreset',
-      is5xx: /^5\d{2}$/.test(status) || 
-             code === '5xx' ||
-             (status >= 500 && status < 600),
-      is4xx: /^4\d{2}$/.test(status) || 
-             code === '4xx' ||
-             (status >= 400 && status < 500),
-      isRateLimit: status === 429 || 
-                   message.includes('rate limit') ||
-                   message.includes('限流') ||
-                   message.includes('too many requests'),
-      isAuth: status === 401 || 
-              status === 403 ||
-              message.includes('unauthorized') ||
-              message.includes('forbidden') ||
-              message.includes('认证') ||
-              message.includes('权限'),
-      originalError: error
-    };
-  }
-
-  /**
-   * 判断是否应该重试
-   * @param {Object} errorInfo - 错误信息
-   * @param {Object} retryConfig - 重试配置
-   * @param {number} attempt - 当前重试次数
-   * @returns {boolean}
-   */
-  shouldRetry(errorInfo, retryConfig, attempt) {
-    if (!retryConfig.enabled || attempt >= retryConfig.maxAttempts) {
-      return false;
-    }
-    
-    if (errorInfo.isAuth) {
-      return false;
-    }
-    
-    const { isTimeout, isNetwork, is5xx, isRateLimit } = errorInfo;
-    const { retryOn } = retryConfig;
-    
-    return (
-      (isTimeout && retryOn.includes('timeout')) ||
-      (isNetwork && retryOn.includes('network')) ||
-      (is5xx && retryOn.includes('5xx')) ||
-      (isRateLimit && retryOn.includes('rate_limit')) ||
-      (retryOn.includes('all'))
-    );
-  }
-
-  _getDefaultProvider() {
-    return LLMFactory.resolveProvider({}) ?? LLMFactory.listProviders()[0] ?? null;
-  }
-
   /** chat 白名单：合并副流 + web/browser 等框架自研 + remote-mcp.* */
   _getToolStreamNames() {
     if (this._cachedToolStreamNames) {
@@ -608,7 +472,6 @@ export default class AIStream {
       stream: this,
       e: getStreamRequestContext()?.e ?? null,
     });
-    const retryConfig = this.getRetryConfig();
 
     const inputTokens = messages.reduce((sum, m) => {
       const content = typeof m.content === 'string' ? m.content : (m.content?.text || '');
@@ -616,11 +479,12 @@ export default class AIStream {
     }, 0);
     MonitorService.recordTokens(`${this.name}.callAI`, { input: inputTokens });
 
-    let lastError = null;
-    for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
-      try {
+    return runWithLlmRetry({
+      label: this.name,
+      kind: 'AI调用',
+      run: async () => {
         const client = LLMFactory.createClient(config);
-        const overrides = { ...config, stream: false, streams: this._getToolStreamNames() };
+        const overrides = this.buildCallOverrides(config, apiConfig, { stream: false });
         const raw = await client.chat(messages, overrides);
         const { text, usedReplyTool, toolRoundsExhausted, executedToolNames } = unpackFactoryChatRaw(raw);
         const content = text != null ? String(text) : '';
@@ -636,31 +500,8 @@ export default class AIStream {
           return { content: '', executedToolNames, usedReplyTool };
         }
         return null;
-      } catch (error) {
-        lastError = error;
-        const errorInfo = this.classifyError(error);
-        const shouldRetry = this.shouldRetry(errorInfo, retryConfig, attempt);
-
-        if (shouldRetry) {
-          const delay = this.calculateRetryDelay(attempt, retryConfig);
-          BotUtil.makeLog('warn',
-            `[${this.name}] AI调用失败，${attempt}/${retryConfig.maxAttempts}次重试中: ${error.message}`,
-            'AIStream'
-          );
-          await BotUtil.sleep(delay);
-          continue;
-        }
-
-        BotUtil.makeLog('error', `[${this.name}] AI调用失败: ${error.message}`, 'AIStream');
-        throw error;
       }
-    }
-
-    BotUtil.makeLog('error',
-      `[${this.name}] AI调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`,
-      'AIStream'
-    );
-    throw new Error(`AI调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`);
+    });
   }
 
 
@@ -676,7 +517,6 @@ export default class AIStream {
       stream: this,
       e: getStreamRequestContext()?.e ?? null,
     });
-    const retryConfig = this.getRetryConfig();
 
     let fullText = '';
     const wrapDelta = (delta) => {
@@ -685,250 +525,54 @@ export default class AIStream {
       if (typeof onDelta === 'function') onDelta(delta);
     };
 
-    // 若该 provider 明确禁用流式，则退化为非流式调用，并一次性输出
-    // 这样可以保持上游“期望流式”的接口不报错，同时尊重配置 enableStream=false
     if (config.enableStream === false) {
       const result = await this.callAI(messages, apiConfig);
       if (result?.content) wrapDelta(result.content);
       return result?.content || '';
     }
 
-    let lastError = null;
-    for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
-      try {
+    return runWithLlmRetry({
+      label: this.name,
+      kind: 'AI流式调用',
+      run: async () => {
+        fullText = '';
         const client = LLMFactory.createClient(config);
-        const overrides = { ...config, stream: true, streams: this._getToolStreamNames() };
+        const overrides = this.buildCallOverrides(config, apiConfig, { stream: true });
         await client.chatStream(messages, wrapDelta, overrides);
         return fullText;
-      } catch (error) {
-        lastError = error;
-        const errorInfo = this.classifyError(error);
-        const shouldRetry = this.shouldRetry(errorInfo, retryConfig, attempt);
-        
-        if (shouldRetry) {
-          const delay = this.calculateRetryDelay(attempt, retryConfig);
-          BotUtil.makeLog('warn', 
-            `[${this.name}] AI流式调用失败，${attempt}/${retryConfig.maxAttempts}次重试中: ${error.message}`,
-            'AIStream'
-          );
-          fullText = '';
-          await BotUtil.sleep(delay);
-          continue;
-        }
-        
-        // 不再重试，抛出错误
-        BotUtil.makeLog('error', 
-          `[${this.name}] AI流式调用失败: ${error.message}`,
-          'AIStream'
-        );
-        throw error;
       }
-    }
-    
-    // 所有重试都失败
-    BotUtil.makeLog('error', 
-      `[${this.name}] AI流式调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`,
-      'AIStream'
-    );
-    throw new Error(`AI流式调用失败，已重试${retryConfig.maxAttempts}次: ${lastError?.message || '未知错误'}`);
+    });
+  }
+
+  resolveLLMConfig(apiConfig = {}) {
+    const merged = resolveStreamLLMConfig(this, apiConfig);
+    return this.patchLLMConfig(merged, apiConfig);
   }
 
   /**
-   * 解析LLM配置（标准化配置合并）
-   * @param {Object} apiConfig - API配置
-   * @returns {Object}
+   * 工作流级 LLM 配置补丁（业务场景扩展点）。
+   * 子类可追加场景字段；request body 仍由各 *LLMClient.buildBody 按官方文档组装。
+   * @param {object} merged - resolveStreamLLMConfig 产物
+   * @param {object} apiConfig - 本次调用覆盖
+   * @returns {object}
    */
-  resolveLLMConfig(apiConfig = {}) {
-    const ai = getAistreamConfigOptional();
-    const llm = ai.llm || {};
-    const pick = (...vals) => vals.find((v) => v !== undefined);
-    const pickTrim = (...vals) => {
-      const v = vals.find((x) => x !== undefined);
-      return v != null && v !== '' ? String(v).trim() : undefined;
-    };
-    const pickUrl = (...vals) => vals.find((v) => v != null && v !== '' && String(v).trim() !== '');
+  patchLLMConfig(merged, _apiConfig = {}) {
+    return merged;
+  }
 
-    const providerRaw = (apiConfig.provider || this.config?.provider || llm.Provider || llm.provider || '').toLowerCase();
-    const provider = providerRaw || this._getDefaultProvider();
-    if (providerRaw && !LLMFactory.hasProvider(providerRaw)) {
-      BotUtil.makeLog('warn', `[AIStream] 不支持的 LLM 提供商: ${providerRaw}`, 'AIStream');
-    }
-
-    const providerConfig = LLMFactory.getProviderConfig(provider) || {};
-
-    const timeout = pick(
-      apiConfig.timeout,
-      apiConfig.timeoutMs,
-      this.config?.timeout,
-      providerConfig.timeout,
-      llm.timeout,
-      ai.global?.maxTimeout
-    );
-    const apiKey = pickTrim(
-      apiConfig.apiKey,
-      apiConfig.api_key,
-      this.config?.apiKey,
-      this.config?.api_key,
-      providerConfig.apiKey,
-      providerConfig.api_key
-    );
-    const baseUrl = pickUrl(
-      apiConfig.baseUrl,
-      apiConfig.base_url,
-      this.config?.baseUrl,
-      this.config?.base_url,
-      providerConfig.baseUrl,
-      providerConfig.base_url
-    );
-    const model = pick(
-      apiConfig.model,
-      apiConfig.chatModel,
-      this.config?.model,
-      this.config?.chatModel,
-      providerConfig.model,
-      providerConfig.chatModel
-    );
-    const maxTokens = pick(
-      apiConfig.maxTokens,
-      apiConfig.max_tokens,
-      apiConfig.max_completion_tokens,
-      apiConfig.maxCompletionTokens,
-      this.config?.maxTokens,
-      this.config?.max_tokens,
-      providerConfig.maxTokens,
-      providerConfig.max_tokens,
-      llm.maxTokens,
-      llm.max_tokens
-    );
-    const topP = pick(
-      apiConfig.topP,
-      apiConfig.top_p,
-      this.config?.topP,
-      this.config?.top_p,
-      providerConfig.topP,
-      providerConfig.top_p,
-      llm.topP,
-      llm.top_p
-    );
-    const presencePenalty = pick(
-      apiConfig.presencePenalty,
-      apiConfig.presence_penalty,
-      this.config?.presencePenalty,
-      this.config?.presence_penalty,
-      providerConfig.presencePenalty,
-      providerConfig.presence_penalty,
-      llm.presencePenalty,
-      llm.presence_penalty
-    );
-    const frequencyPenalty = pick(
-      apiConfig.frequencyPenalty,
-      apiConfig.frequency_penalty,
-      this.config?.frequencyPenalty,
-      this.config?.frequency_penalty,
-      providerConfig.frequencyPenalty,
-      providerConfig.frequency_penalty,
-      llm.frequencyPenalty,
-      llm.frequency_penalty
-    );
-    const temperature = pick(
-      apiConfig.temperature,
-      this.config?.temperature,
-      providerConfig.temperature,
-      llm.temperature
-    );
-    const enableTools = pick(
-      apiConfig.enableTools,
-      apiConfig.enable_tools,
-      this.config?.enableTools,
-      this.config?.enable_tools,
-      providerConfig.enableTools,
-      providerConfig.enable_tools,
-      llm.enableTools,
-      llm.enable_tools,
-      true
-    );
-    const enableStream = pick(
-      apiConfig.enableStream,
-      apiConfig.enable_stream,
-      this.config?.enableStream,
-      this.config?.enable_stream,
-      providerConfig.enableStream,
-      providerConfig.enable_stream,
-      llm.enableStream,
-      llm.enable_stream
-    );
-    const toolChoice = pick(
-      apiConfig.tool_choice,
-      apiConfig.toolChoice,
-      this.config?.tool_choice,
-      this.config?.toolChoice,
-      providerConfig.tool_choice,
-      providerConfig.toolChoice,
-      llm.tool_choice,
-      llm.toolChoice
-    );
-    const parallelToolCalls = pick(
-      apiConfig.parallel_tool_calls,
-      apiConfig.parallelToolCalls,
-      this.config?.parallel_tool_calls,
-      this.config?.parallelToolCalls,
-      providerConfig.parallel_tool_calls,
-      providerConfig.parallelToolCalls,
-      llm.parallel_tool_calls,
-      llm.parallelToolCalls
-    );
-    const maxToolRounds = pick(
-      apiConfig.maxToolRounds,
-      this.config?.maxToolRounds,
-      providerConfig.maxToolRounds,
-      llm.maxToolRounds
-    );
-    const mcpToolMode = pick(
-      apiConfig.mcpToolMode,
-      this.config?.mcpToolMode,
-      providerConfig.mcpToolMode,
-      llm.mcpToolMode
-    );
-    const promptCache = pick(
-      apiConfig.promptCache,
-      this.config?.promptCache,
-      llm.promptCache
-    );
-
-    const headers = shallowMergePlain(providerConfig.headers, this.config?.headers, apiConfig.headers);
-    const extraBody = shallowMergePlain(providerConfig.extraBody, this.config?.extraBody, apiConfig.extraBody);
-    const proxy = shallowMergePlain(providerConfig.proxy, this.config?.proxy, apiConfig.proxy);
-
-    const merged = {
-      ...providerConfig,
-      ...this.config,
+  /**
+   * 组装传入 LLMFactory.createClient 的 overrides（工具白名单、流式开关等）。
+   * @param {object} resolvedConfig - resolveLLMConfig 结果
+   * @param {object} apiConfig - 原始调用参数
+   * @param {{ stream?: boolean }} options
+   */
+  buildCallOverrides(resolvedConfig, apiConfig = {}, { stream = false } = {}) {
+    return {
+      ...resolvedConfig,
       ...apiConfig,
-      apiKey,
-      baseUrl,
-      model,
-      maxTokens,
-      topP,
-      presencePenalty,
-      frequencyPenalty,
-      provider,
-      timeout,
-      enableTools,
-      temperature,
-      enableStream,
-      tool_choice: toolChoice,
-      toolChoice,
-      parallel_tool_calls: parallelToolCalls,
-      parallelToolCalls,
-      maxToolRounds,
-      mcpToolMode
+      stream,
+      streams: apiConfig.streams ?? this._getToolStreamNames()
     };
-    if (promptCache) merged.promptCache = promptCache;
-    if (Object.keys(headers).length) merged.headers = headers;
-    if (Object.keys(extraBody).length) merged.extraBody = extraBody;
-    if (Object.keys(proxy).length) merged.proxy = proxy;
-
-    const { _clientClass, factoryType, ...out } = merged;
-    return out;
   }
 
   /**
@@ -1007,21 +651,18 @@ export default class AIStream {
       } = options;
 
       let stream = this;
-      const StreamLoader = (mergeStreams.length > 0 || enableMemory || enableDatabase || enableTools)
-        ? (await import('#infrastructure/aistream/loader.js')).default
-        : null;
-      
+      const needLoader = mergeStreams.length > 0 || enableMemory || enableDatabase || enableTools;
+
       if (enableMemory || enableDatabase || enableTools) {
         await this.autoMergeAuxiliaryStreams(stream, { enableMemory, enableDatabase, enableTools });
       }
-      
-      // 构建streams列表：主工作流 + mergeStreams
+
       const streams = [this.name];
       if (mergeStreams.length > 0) {
         streams.push(...mergeStreams);
       }
-      
-      if (mergeStreams.length > 0 && StreamLoader) {
+
+      if (mergeStreams.length > 0 && needLoader) {
         const mergedName = `${this.name}-${mergeStreams.join('-')}`;
         stream = StreamLoader.getStream(mergedName) ||
           StreamLoader.mergeStreams({
@@ -1064,9 +705,8 @@ export default class AIStream {
   }
 
   async autoMergeAuxiliaryStreams(stream, options = {}) {
-    const StreamLoader = (await import('#infrastructure/aistream/loader.js')).default;
     const streamNames = this.extractStreamNames(options);
-    
+
     for (const streamName of streamNames) {
       try {
         let auxStream = StreamLoader.getStream(streamName);

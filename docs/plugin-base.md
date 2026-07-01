@@ -290,7 +290,7 @@ export default class OneBotEnhancer extends plugin {
 
 | 方法 | 说明 |
 |------|------|
-| `getDescriptor()` | 结构化描述（名称、规则、任务等），供加载器统计 |
+| `getInfo()` | 结构化描述（名称、规则、任务等），供加载器统计；`getDescriptor()` 为兼容别名 |
 | `markNeedReparse()` | 设置 `e._needReparse`，触发消息重解析 |
 
 ---
