@@ -15,8 +15,17 @@
 
 ## 技能与文档
 
-- 框架能力：`.cursor/skills/xrk-*/SKILL.md`
+- 全局工程师准则：`~/.cursor/rules/senior-engineer.mdc`
+- 工程师 skill 源码（已 clone）：`~/.agents/skills-sources/`（superpowers、planning-with-files、awesome-cursorrules 等）
+- 其它 skill：`~/.agents/skills/`（不含与 skills-sources 重复的 obra/planning 副本）
+- 框架能力：`.cursor/skills/xrk-*/SKILL.md` · 索引 `SKILL_INDEX.md`
 - 文档导航：`docs/`、skill `xrk-docs`
+- 外部调研：`xrk-github-research`
+- XRK 边界补充：`.cursor/rules/xrk-agent-behavior.mdc`
+
+## GitHub MCP（可选）
+
+在 `~/.cursor/mcp.json` 配置 GitHub MCP（模板见 `.cursor/mcp.json.example`，**勿把 PAT 提交进仓库**）。配置后重启 Cursor；验证：Settings → MCP Tools 出现 green dot。CLI 可 `gh auth login` 与 MCP 共用同一 PAT。
 
 ## 产品 Core
 

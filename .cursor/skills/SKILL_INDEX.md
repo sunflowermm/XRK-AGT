@@ -25,6 +25,7 @@
 - `xrk-config`：配置字段、schema 与消费代码一致性。
 - `xrk-docker`：Docker/Compose 部署与容器问题排查。
 - `xrk-docs`：文档导航与权威入口定位。
+- `xrk-github-research`：GitHub 搜成熟项目、读实现、论文/规范补课；架构选型与 unfamiliar 领域必用。
 - `xrk-http-api`：`core/*/http` 开发与排障。
 - `xrk-infrastructure`：加载器/基类/路径/错误处理等底层能力。
 - `xrk-llm`：LLM 提供商接入与配置一致性。
