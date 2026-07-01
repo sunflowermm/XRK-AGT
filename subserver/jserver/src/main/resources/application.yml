@@ -1,0 +1,6 @@
+server:
+  port: 8003
+
+xrk:
+  subserver:
+    runtime: jserver

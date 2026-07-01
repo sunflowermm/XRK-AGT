@@ -7,6 +7,9 @@ server:
   port: 8000           # 监听端口（默认 8000，避免与主服务端端口冲突）
   reload: false        # 开发模式自动重载（生产环境设为 false）
   log_level: "info"    # 日志级别: debug, info, warning, error
+  stdin:
+    enabled: true      # 交互终端下启用 sub> 命令行（help / <组名> update 等）
+    prompt: "sub> "
 
 # CORS 配置
 cors:

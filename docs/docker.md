@@ -80,9 +80,13 @@ docker-compose down
   - 提供HTTP/HTTPS/WebSocket服务
   - 提供AI工作流和MCP工具
   - 提供Web控制台（`/xrk/`）
-- `xrk-subserver`: Python 子服务端（端口：8000，**自动构建**）
-  - 提供底层系统接口（`/api/system/*`）
-  - 可按 `subserver/pyserver/apis/` 结构挂载自定义 API
+- `xrk-subserver`: Python 子服务端（端口 **8000**）
+- `xrk-subserver-go`: Go 子服务端（端口 **8001**）
+- `xrk-subserver-php`: PHP 子服务端（端口 **8002**）
+- `xrk-subserver-java`: Java/Spring 子服务端（端口 **8003**）
+- `xrk-subserver-net`: .NET 子服务端（端口 **8004**）
+
+  各 runtime 提供统一契约（`/health`、`/api/system/command`）与 `apis/<group>/` 插件；主服务 `xrk-agt` 通过 `SUBSERVER_*_HOST` 自动连接容器内地址。
 - `redis`: Redis 缓存服务（端口：6379，内部）
   - 用于缓存和会话管理
   - 数据持久化到 `data/redis/`
@@ -103,6 +107,8 @@ docker-compose logs -f xrk-subserver
 # 健康检查
 curl http://localhost:8080/health
 curl http://localhost:8000/health
+curl http://localhost:8001/health
+curl http://localhost:8004/health
 ```
 
 ## Docker 构建说明

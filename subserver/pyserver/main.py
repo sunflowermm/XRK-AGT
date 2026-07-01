@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from core.loader import ApiLoader
 from core.config import Config
 from core.logger import setup_logger
+from core.stdin_loop import start_stdin_loop
 
 config = Config()
 logger = setup_logger(__name__)
@@ -22,6 +23,9 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 启动 XRK-AGT Python 子服务端")
     try:
         await ApiLoader.load_all(app)
+        stdin_enabled = config.get("server.stdin.enabled", True)
+        stdin_prompt = config.get("server.stdin.prompt", "sub> ")
+        start_stdin_loop(enabled=stdin_enabled, prompt=stdin_prompt)
         logger.info("──────────────────────────────────────")
         logger.info("✅ 启动就绪 · 底层服务已加载")
         logger.info("──────────────────────────────────────")

@@ -65,6 +65,18 @@ export class Help extends plugin {
           ]
         },
         {
+          name: '子服务端',
+          desc: '多语言子服务 · Python/Go/PHP/Java/.NET',
+          items: [
+            { cmd: '#子服 help', desc: '列出已注册插件组' },
+            { cmd: '#子服 jmcomic update', desc: '默认 pyserver · 更新插件' },
+            { cmd: '#子服 @go hash-tools status', desc: 'Go 子服务' },
+            { cmd: '#子服 @java json-tools status', desc: 'Java 子服务' },
+            { cmd: '#子服 @net uuid-tools status', desc: '.NET 子服务' },
+            { cmd: 'Bot.callSubserver(...)', desc: '工作流/插件 HTTP 调用子服务' }
+          ]
+        },
+        {
           name: '其他',
           desc: '辅助能力',
           items: [

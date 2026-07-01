@@ -1,13 +1,25 @@
 # 子服务端 API 文档
 
-> **文件位置**：`subserver/pyserver/`  
-> **说明**：XRK-AGT Python 子服务端当前仅保留底层系统接口与扩展装载框架。  
-> **底层基线**：主/子服务端职责边界以 **[底层架构设计](底层架构设计.md)** 为准。
+> **目录**：`subserver/`（多语言）· 注册表 `subserver/registry.yaml`  
+> **Python 实现**：`subserver/pyserver/`  
+> **说明**：主服务通过 `Bot.callSubserver` 调用各 runtime 的 `apis/` 插件。
 
-子服务端当前提供：
-- **基础健康接口**：`GET /health`
-- **系统接口**：`GET /api/system/ping`、`GET /api/system/config`
-- **API 自动装载**：`apis/<group>/*.py`（通过 `default` 元数据注册路由）
+子服务端提供（各 runtime 统一契约）：
+- **健康检查**：`GET /health`
+- **系统接口**：`GET /api/system/ping`、`GET /api/system/groups`、`POST /api/system/command`
+- **插件装载**：各语言 `apis/<group>/`（见 `subserver/README.md`）
+
+| Runtime | 语言 | 默认端口 |
+|---------|------|----------|
+| `pyserver` | Python | 8000 |
+| `goserver` | Go | 8001 |
+| `phpserver` | PHP | 8002 |
+| `jserver` | Spring Boot | 8003 |
+| `netserver` | ASP.NET Core | 8004 |
+
+选型见 [`subserver/LANGUAGES.md`](../subserver/LANGUAGES.md)。主服务已是 Node.js，**不提供 Node 子服务端**。
+
+**Docker**：`docker compose up -d` 启动五 runtime；主服务容器通过 `SUBSERVER_*_HOST` 环境变量自动解析子服务地址。
 
 ---
 
@@ -26,12 +38,11 @@
 
 ```
 主服务端 (Node.js)
-    ↓ 可选 HTTP 调用
-子服务端 (Python FastAPI)
-    ├─ /health
-    ├─ /api/system/ping
-    ├─ /api/system/config
-    └─ apis/<group>/*.py 自动装载的扩展接口
+    ↓ Bot.callSubserver / #子服
+子服务端 (pyserver | goserver | phpserver | jserver | netserver)
+    ├─ GET /health
+    ├─ POST /api/system/command
+    └─ apis/<group>/ 业务插件
 ```
 
 > 历史上的 AI 业务接口已下线，不再属于当前子服务端官方能力。

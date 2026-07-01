@@ -61,9 +61,21 @@ data/uploads/
 data/media/
 data/stdin/
 
-# 独立子服务 / Core 插件（单独仓库，deploy 脚本复制安装，勿进主仓）
+# 独立子服务 / Core 插件（deploy 脚本复制安装，勿进主仓）
 subserver/pyserver/apis/jmcomic/
 data/jmcomic/
+
+# 子服务：构建产物与本地虚拟环境（源码 apis/* 示例保留入库）
+subserver/pyserver/.venv/
+subserver/goserver/goserver
+subserver/goserver/goserver.exe
+subserver/goserver/bin/
+subserver/jserver/target/
+subserver/netserver/bin/
+subserver/netserver/obj/
+subserver/**/.vs/
+
+# 子服务：运行时数据见 data/.gitignore（data/ 整目录不入库）
 
 # Cache directories
 .cache/

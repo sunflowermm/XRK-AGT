@@ -1,0 +1,9 @@
+max_upload_mb: 20
+jpeg_quality: 85
+thumbnail_size: 320
+allowed_formats:
+  - jpeg
+  - jpg
+  - png
+  - webp
+  - gif

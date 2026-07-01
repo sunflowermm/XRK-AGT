@@ -7,6 +7,49 @@ import LLMFactory from '#factory/llm/LLMFactory.js';
 import BotUtil from '#utils/botutil.js';
 import cfg from '#infrastructure/config/config.js';
 import { mergeUniqueStrings } from '#utils/string-array-utils.js';
+import { SUBSERVER_RUNTIME_CATALOG } from '#utils/subserver-runtimes.js';
+
+/** 子服务单个 runtime 端点（commonconfig ↔ aistream.yaml subserver.runtimes） */
+function subserverRuntimeEndpointFields(defaultPort) {
+  return {
+    enabled: {
+      type: 'boolean',
+      label: '启用',
+      default: true,
+      component: 'Switch'
+    },
+    host: {
+      type: 'string',
+      label: '地址',
+      default: '127.0.0.1',
+      component: 'Input',
+      placeholder: '127.0.0.1'
+    },
+    port: {
+      type: 'number',
+      label: '端口',
+      default: defaultPort,
+      min: 1024,
+      max: 65535,
+      component: 'InputNumber'
+    }
+  };
+}
+
+/** commonconfig 子服务 runtimes 字段（与 SUBSERVER_RUNTIME_CATALOG 同步） */
+function subserverRuntimeSubFormFields() {
+  return Object.fromEntries(
+    Object.entries(SUBSERVER_RUNTIME_CATALOG).map(([id, meta]) => [
+      id,
+      {
+        type: 'object',
+        label: `${meta.label} · ${id}`,
+        component: 'SubForm',
+        fields: subserverRuntimeEndpointFields(meta.port)
+      }
+    ])
+  );
+}
 
 /** crawl.webSearch 提供商凭据 SubForm 字段（commonconfig 与 aistream.yaml 对齐） */
 function crawlProviderApiFields(extraFields = {}) {
@@ -3009,24 +3052,17 @@ export default class SystemConfig extends ConfigBase {
             },
             subserver: {
               type: 'object',
-              label: 'Python子服务端配置',
-              description: '可选 Python 子服务地址（FastAPI 扩展）；LLM/工作流由主服务端负责，此处仅用于 callSubserver 调用 apis/ 扩展',
+              label: '多语言子服务端',
+              description: 'Python/Go/PHP/Java/.NET 子服务地址；Bot.callSubserver 与 #子服 命令均读取此处',
               component: 'SubForm',
               fields: {
-                host: {
+                default: {
                   type: 'string',
-                  label: '服务地址',
+                  label: '默认 runtime',
+                  description: '未指定 @runtime 时使用（如 #子服 jmcomic update）',
                   component: 'Input',
-                  default: '127.0.0.1',
-                  placeholder: '127.0.0.1'
-                },
-                port: {
-                  type: 'number',
-                  label: '服务端口',
-                  component: 'InputNumber',
-                  default: 8000,
-                  min: 1024,
-                  max: 65535
+                  default: 'pyserver',
+                  placeholder: 'pyserver'
                 },
                 timeout: {
                   type: 'number',
@@ -3034,6 +3070,12 @@ export default class SystemConfig extends ConfigBase {
                   component: 'InputNumber',
                   default: 30000,
                   min: 1000
+                },
+                runtimes: {
+                  type: 'object',
+                  label: '各 runtime 端点',
+                  component: 'SubForm',
+                  fields: subserverRuntimeSubFormFields()
                 }
               }
             },

@@ -24,7 +24,26 @@ uv run xrk              # 或 uv run python main.py
 
 ## 🔌 主要 API
 
-- **系统接口**：`/api/system/ping`、`/api/system/config`
+- **系统接口**：`/api/system/ping`、`/api/system/config`、`/api/system/groups`、`POST /api/system/command`
+- **业务插件**（按需安装依赖）：
+  - `jmcomic` — 本子下载 PDF
+  - `media-tools` — 图片缩放/转换
+  - `doc-pipeline` — HTML 提取 / Markdown
+  - `web-fetch` — 网页抓取缓存
+
+## ⌨️ 终端命令（标准输入）
+
+交互式启动且 `server.stdin.enabled: true` 时出现 `sub>` 提示符。
+
+另有两套**非 Node** 子服务：`goserver`（Go）、`phpserver`（PHP），契约相同，见 `subserver/README.md`。
+
+```text
+sub> help
+sub> jmcomic update
+sub> media-tools status
+```
+
+主服务端 QQ/stdin：`#子服 jmcomic update`、`#子服 @go hash-tools status`（见 `core/system-Core/plugin/子服务.js`）
 
 ## 🔧 配置
 

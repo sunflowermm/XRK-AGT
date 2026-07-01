@@ -1,0 +1,14 @@
+# 子服务 runtime 本地产物（路径相对 subserver/ 目录）
+
+pyserver/.venv/
+pyserver/__pycache__/
+
+goserver/goserver
+goserver/goserver.exe
+goserver/bin/
+
+jserver/target/
+
+netserver/bin/
+netserver/obj/
+netserver/.vs/

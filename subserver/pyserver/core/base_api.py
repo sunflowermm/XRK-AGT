@@ -11,10 +11,14 @@
 2. 使用字典配置（推荐）：在 API 文件中导出 default 字典
 """
 
-from typing import List, Dict, Callable, Any
+from pathlib import Path
+from typing import List, Dict, Callable, Any, Optional
 from fastapi import FastAPI, Request, HTTPException
 import logging
 import inspect
+
+from .command_registry import CommandRegistry, PluginCommandSet
+from .plugin_kit import dispatch_plugin_command
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +86,83 @@ class BaseAPI:
         }
 
 
+def _register_plugin_commands(
+    app: FastAPI,
+    api: BaseAPI,
+    data: Dict[str, Any],
+    routes: List[Dict[str, Any]],
+):
+    group = data.get("group")
+    if not group:
+        return
+
+    plugin_dir_raw = data.get("plugin_dir")
+    plugin_dir = Path(plugin_dir_raw) if plugin_dir_raw else None
+    commands = data.get("commands") or {}
+    on_update = data.get("on_update")
+
+    if not commands and not plugin_dir:
+        return
+
+    CommandRegistry.register(
+        PluginCommandSet(
+            group=group,
+            description=data.get("description", api.description),
+            plugin_dir=plugin_dir,
+            commands=commands,
+            on_update=on_update,
+        )
+    )
+
+    prefix = f"/api/{group}"
+
+    async def health_handler(_request: Request):
+        return {
+            "ok": True,
+            "group": group,
+            "name": api.name,
+            "commands": sorted(commands.keys()) + ["update", "help"],
+        }
+
+    async def command_handler(request: Request):
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"无效 JSON: {exc}") from exc
+
+        cmd = str(body.get("cmd") or body.get("command") or "").strip()
+        args = body.get("args") or []
+        if isinstance(args, str):
+            args = args.split()
+        if not isinstance(args, list):
+            args = []
+
+        line = body.get("line")
+        if line and not cmd:
+            parts = str(line).strip().split()
+            if parts and parts[0] == group:
+                parts = parts[1:]
+            if parts:
+                cmd = parts[0]
+                args = parts[1:]
+
+        if not cmd:
+            cmd = "help"
+
+        return await dispatch_plugin_command(
+            group,
+            commands,
+            request,
+            cmd=cmd,
+            args=args,
+            plugin_dir=plugin_dir,
+            on_update=on_update,
+        )
+
+    app.get(f"{prefix}/health")(health_handler)
+    app.post(f"{prefix}/command")(command_handler)
+
+
 def create_api_from_dict(data: Dict[str, Any]) -> BaseAPI:
     """从字典创建 API 实例"""
     class DictAPI(BaseAPI):
@@ -116,6 +197,8 @@ def create_api_from_dict(data: Dict[str, Any]) -> BaseAPI:
                 wrapped_handler = self._wrap_handler(handler)
                 route_methods[method](path)(wrapped_handler)
                 self.routes.append(route_config)
+
+            _register_plugin_commands(app, self, self._data, self.routes)
         
         async def init(self, app: FastAPI):
             """执行自定义初始化钩子"""

@@ -1,0 +1,9 @@
+{
+  "Server": {
+    "Port": 8004,
+    "Stdin": {
+      "Enabled": true,
+      "Prompt": "net> "
+    }
+  }
+}

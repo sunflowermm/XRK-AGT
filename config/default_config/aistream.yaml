@@ -198,13 +198,13 @@ tools:
     runTimeoutMs: 120000
     maxCommandOutputChars: 200000
 
-# ----------------------------------------
-# Python 子服务端（可选）
-# ----------------------------------------
-# 独立 FastAPI 扩展服务；主服务通过 Bot.callSubserver / subserver-client 调用 apis/ 下接口。
-# LLM、工作流、RAG 均在主服务端 Node 侧完成，不依赖子服务内置 AI 能力。
+# 多语言子服务端（CommonConfig → AIStream → 子服务端）
 subserver:
-  host: "127.0.0.1"
-  port: 8000
-  timeout: 30000        # 毫秒
-
+  default: pyserver
+  timeout: 30000
+  runtimes:
+    pyserver:  { enabled: true, host: "127.0.0.1", port: 8000 }
+    goserver:  { enabled: true, host: "127.0.0.1", port: 8001 }
+    phpserver: { enabled: true, host: "127.0.0.1", port: 8002 }
+    jserver:   { enabled: true, host: "127.0.0.1", port: 8003 }
+    netserver: { enabled: true, host: "127.0.0.1", port: 8004 }

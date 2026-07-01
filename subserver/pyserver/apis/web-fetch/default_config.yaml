@@ -1,0 +1,4 @@
+timeout_sec: 30
+cache_ttl_sec: 3600
+max_body_bytes: 2000000
+user_agent: "XRK-AGT-subserver/1.1"

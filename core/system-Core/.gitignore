@@ -19,6 +19,7 @@ plugin/**
 !plugin/x.js
 !plugin/点歌.js
 !plugin/帮助.js
+!plugin/子服务.js
 
 !tasker
 tasker/**
