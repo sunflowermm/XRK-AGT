@@ -8,7 +8,8 @@ export const SUBSERVER_RUNTIME_CATALOG = {
   goserver: { label: 'Go', port: 8001, language: 'go', aliases: ['go'] },
   phpserver: { label: 'PHP', port: 8002, language: 'php', aliases: ['php'] },
   jserver: { label: 'Java', port: 8003, language: 'java', aliases: ['java', 'j', 'spring'] },
-  netserver: { label: '.NET', port: 8004, language: 'csharp', aliases: ['net', 'dotnet', 'csharp', 'cs'] }
+  netserver: { label: '.NET', port: 8004, language: 'csharp', aliases: ['net', 'dotnet', 'csharp', 'cs'] },
+  rustserver: { label: 'Rust', port: 8005, language: 'rust', aliases: ['rust', 'rs'] }
 };
 
 const ALIAS_TO_RUNTIME = Object.fromEntries(
@@ -81,13 +82,14 @@ export function formatSubserverCommandResult(payload) {
 
 export function subserverRuntimeUsageHint() {
   const ids = listSubserverRuntimes().join(' | ');
-  const aliases = 'py / go / php / java / net';
+  const aliases = 'py / go / php / java / net / rust';
   return (
     '用法: #子服 [@runtime] <组名> <命令>\n' +
     '例: #子服 jmcomic update\n' +
     '#子服 @go hash-tools status\n' +
     '#子服 @java json-tools status\n' +
     '#子服 @net uuid-tools status\n' +
+    '#子服 @rust regex-tools status\n' +
     `runtime: ${ids}（别名 ${aliases}）`
   );
 }

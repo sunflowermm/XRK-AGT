@@ -44,23 +44,5 @@ public sealed class UuidToolsPlugin : ISubserverPlugin
                 ["normalized"] = valid ? guid.ToString() : null
             });
         });
-
-        group.MapGet("/health", () => Results.Json(new Dictionary<string, object?>
-        {
-            ["ok"] = true,
-            ["group"] = Group,
-            ["commands"] = new[] { "help", "update", "status" }
-        }));
-
-        group.MapPost("/command", async (HttpRequest request) =>
-        {
-            using var doc = await JsonDocument.ParseAsync(request.Body);
-            var parsed = PluginKit.ParseCommandBody(doc.RootElement, Group);
-            var cmd = parsed["cmd"]?.ToString() ?? "help";
-            var args = parsed["args"] as List<string> ?? [];
-            var result = registry.Dispatch(Group, cmd, args);
-            var ok = result.TryGetValue("ok", out var v) && v is not false;
-            return Results.Json(result, statusCode: ok ? 200 : 400);
-        });
     }
 }

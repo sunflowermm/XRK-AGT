@@ -87,7 +87,7 @@ public final class CommandRegistry {
         return res;
     }
 
-    public List<Map<String, Object>> apiList() {
+    public Map<String, Object> apiList() {
         List<Map<String, Object>> out = new ArrayList<>();
         for (String name : groups()) {
             PluginSet g = groups.get(name);
@@ -98,6 +98,19 @@ public final class CommandRegistry {
             ));
         }
         return out;
+    }
+
+    public Map<String, Object> groupHealth(String group) {
+        PluginSet g = groups.get(group);
+        if (g == null) {
+            return Map.of("ok", false, "error", "未知插件组: " + group);
+        }
+        return Map.of(
+                "ok", true,
+                "group", group,
+                "name", group,
+                "commands", commandNames(g)
+        );
     }
 
     private static List<String> commandNames(PluginSet g) {

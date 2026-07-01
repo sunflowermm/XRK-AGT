@@ -1,10 +1,10 @@
 {
   "server": {
     "host": "0.0.0.0",
-    "port": 8004,
+    "port": 8005,
     "stdin": {
       "enabled": true,
-      "prompt": "net> "
+      "prompt": "rs> "
     }
   }
 }

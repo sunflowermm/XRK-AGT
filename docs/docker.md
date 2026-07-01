@@ -85,6 +85,7 @@ docker-compose down
 - `xrk-subserver-php`: PHP 子服务端（端口 **8002**）
 - `xrk-subserver-java`: Java/Spring 子服务端（端口 **8003**）
 - `xrk-subserver-net`: .NET 子服务端（端口 **8004**）
+- `xrk-subserver-rust`: Rust 子服务端（端口 **8005**）
 
   各 runtime 提供统一契约（`/health`、`/api/system/command`）与 `apis/<group>/` 插件；主服务 `xrk-agt` 通过 `SUBSERVER_*_HOST` 自动连接容器内地址。
 - `redis`: Redis 缓存服务（端口：6379，内部）

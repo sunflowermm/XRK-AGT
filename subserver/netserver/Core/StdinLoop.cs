@@ -4,12 +4,11 @@ namespace Xrk.Subserver;
 
 public static class StdinLoop
 {
-    public static void Start(CommandRegistry registry, IConfiguration config)
+    public static void Start(CommandRegistry registry, RuntimeConfig config)
     {
-        var enabled = config.GetValue("Server:Stdin:Enabled", true);
-        if (!enabled || Console.IsInputRedirected) return;
+        if (!config.Server.Stdin.Enabled || Console.IsInputRedirected) return;
 
-        var prompt = config.GetValue<string>("Server:Stdin:Prompt") ?? "net> ";
+        var prompt = config.Server.Stdin.Prompt;
         _ = Task.Run(async () =>
         {
             Console.WriteLine("\n[.NET 子服务] 终端命令已就绪 · 输入 help 或 list");

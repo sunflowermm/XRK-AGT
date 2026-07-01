@@ -20,7 +20,7 @@ runtimes:
     language: php
     port: 8002
     path: subserver/phpserver
-    start: "cd subserver/phpserver && php -S 0.0.0.0:8002 server.php"
+    start: "cd subserver/phpserver && php run.php"
     data: data/phpserver
 
   jserver:
@@ -43,3 +43,13 @@ runtimes:
     data: data/netserver
     example_plugins:
       - uuid-tools
+
+  rustserver:
+    language: rust
+    framework: axum
+    port: 8005
+    path: subserver/rustserver
+    start: "cd subserver/rustserver && cargo run"
+    data: data/rustserver
+    example_plugins:
+      - regex-tools

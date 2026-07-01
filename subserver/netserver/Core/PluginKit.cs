@@ -8,13 +8,14 @@ public static class PluginKit
     public static Dictionary<string, object?> DefaultPluginUpdate(string pluginDir)
     {
         var steps = new List<Dictionary<string, object?>>();
-        var csproj = string.IsNullOrWhiteSpace(pluginDir)
-            ? Path.Combine(Directory.GetCurrentDirectory(), "netserver.csproj")
-            : Path.Combine(pluginDir, $"{Path.GetFileName(pluginDir)}.csproj");
+        var dir = string.IsNullOrWhiteSpace(pluginDir) ? Directory.GetCurrentDirectory() : pluginDir;
+        steps.Add(GitPull(dir));
+
+        var csproj = Path.Combine(dir, $"{Path.GetFileName(dir)}.csproj");
 
         if (File.Exists(csproj))
             steps.Add(RunProcess("dotnet", $"restore \"{csproj}\""));
-        else if (File.Exists("netserver.csproj"))
+        else if (File.Exists(Path.Combine(dir, "netserver.csproj")))
             steps.Add(RunProcess("dotnet", "restore netserver.csproj"));
         else
             steps.Add(new Dictionary<string, object?> { ["ok"] = true, ["skipped"] = "no csproj" });
@@ -81,6 +82,15 @@ public static class PluginKit
     {
         if (!body.TryGetProperty(name, out var value)) return "";
         return value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : value.ToString();
+    }
+
+    private static Dictionary<string, object?> GitPull(string dir)
+    {
+        if (!Directory.Exists(Path.Combine(dir, ".git")))
+            return new Dictionary<string, object?> { ["ok"] = true, ["skipped"] = "not a git repo" };
+        var step = RunProcess("git", "-C \"" + dir + "\" pull --ff-only");
+        step["action"] = "git_pull";
+        return step;
     }
 
     private static Dictionary<string, object?> RunProcess(string file, string args)

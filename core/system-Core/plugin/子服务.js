@@ -13,7 +13,7 @@ export class SubserverCliPlugin extends plugin {
   constructor() {
     super({
       name: '子服务命令',
-      dsc: '转发 #子服 到 Python/Go/PHP/Java/.NET 子服务',
+      dsc: '转发 #子服 到 Python/Go/PHP/Java/.NET/Rust 子服务',
       event: 'message',
       priority: 4500,
       rule: [{ reg: CMD_RE, fnc: 'runCommand' }]

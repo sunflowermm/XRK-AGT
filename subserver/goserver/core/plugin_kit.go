@@ -56,6 +56,7 @@ type TextBody struct {
 
 func DefaultPluginUpdate(pluginDir string) map[string]any {
 	steps := []map[string]any{}
+	steps = append(steps, gitPull(pluginDir))
 	goMod := filepath.Join(pluginDir, "go.mod")
 	if _, err := os.Stat(goMod); err == nil {
 		cmd := exec.Command("go", "mod", "download")
@@ -74,4 +75,17 @@ func DefaultPluginUpdate(pluginDir string) map[string]any {
 		}
 	}
 	return map[string]any{"ok": ok, "plugin": filepath.Base(pluginDir), "steps": steps}
+}
+
+func gitPull(pluginDir string) map[string]any {
+	gitDir := filepath.Join(pluginDir, ".git")
+	if _, err := os.Stat(gitDir); err != nil {
+		return map[string]any{"ok": true, "skipped": "not a git repo"}
+	}
+	cmd := exec.Command("git", "pull", "--ff-only")
+	cmd.Dir = pluginDir
+	out, err := cmd.CombinedOutput()
+	return map[string]any{
+		"ok": err == nil, "action": "git_pull", "output": string(out),
+	}
 }

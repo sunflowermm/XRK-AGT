@@ -11,13 +11,12 @@
 | `phpserver` | PHP | 8002 | 单文件拖拽、共享主机、字符串/Web 脚本 |
 | `jserver` | Java 21 + Spring Boot | 8003 | 企业库、JDBC、成熟中间件、Spring 生态 |
 | `netserver` | .NET 8 + ASP.NET Core | 8004 | Windows 企业、Office、GUID/系统 API |
+| `rustserver` | Rust + Axum | 8005 | 极致性能、正则/FFI、热点路径 |
 
 ## 可选扩展（未内置，按需自建）
 
 | 语言/框架 | 适合 | 说明 |
 |-----------|------|------|
-| **Rust (Axum/Actix)** | 极致性能、FFI | 编译成本高，适合单点热点 |
-| **Ruby (Sinatra)** | 快速脚本 | 与 Python 重叠大，**不推荐** |
 | **Kotlin + Ktor** | JVM 轻量替代 Spring | 已有 jserver 时优先级低 |
 
 ## 不建议

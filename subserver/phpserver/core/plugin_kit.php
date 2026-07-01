@@ -47,6 +47,14 @@ function load_plugin_config(string $pluginDir, string $dataName, array $defaults
 
 function default_plugin_update(string $pluginDir): array {
     $steps = [];
+    $git = $pluginDir . '/.git';
+    if (is_dir($git)) {
+        $cmd = 'git -C ' . escapeshellarg($pluginDir) . ' pull --ff-only';
+        exec($cmd, $out, $code);
+        $steps[] = ['ok' => $code === 0, 'action' => 'git_pull', 'output' => implode("\n", $out)];
+    } else {
+        $steps[] = ['ok' => true, 'skipped' => 'not a git repo'];
+    }
     if (file_exists($pluginDir . '/composer.json')) {
         $cmd = 'composer install --no-dev --working-dir=' . escapeshellarg($pluginDir);
         exec($cmd, $out, $code);

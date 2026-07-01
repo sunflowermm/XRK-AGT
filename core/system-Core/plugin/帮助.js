@@ -73,6 +73,7 @@ export class Help extends plugin {
             { cmd: '#子服 @go hash-tools status', desc: 'Go 子服务' },
             { cmd: '#子服 @java json-tools status', desc: 'Java 子服务' },
             { cmd: '#子服 @net uuid-tools status', desc: '.NET 子服务' },
+            { cmd: '#子服 @rust regex-tools status', desc: 'Rust 子服务' },
             { cmd: 'Bot.callSubserver(...)', desc: '工作流/插件 HTTP 调用子服务' }
           ]
         },

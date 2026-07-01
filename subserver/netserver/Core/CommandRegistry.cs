@@ -129,6 +129,20 @@ public sealed class CommandRegistry
         }).ToList();
     }
 
+    public Dictionary<string, object?> GroupHealth(string group)
+    {
+        if (!_groups.TryGetValue(group, out var g))
+            return new Dictionary<string, object?> { ["ok"] = false, ["error"] = $"未知插件组: {group}" };
+
+        return new Dictionary<string, object?>
+        {
+            ["ok"] = true,
+            ["group"] = g.Group,
+            ["name"] = g.Group,
+            ["commands"] = CommandNames(g)
+        };
+    }
+
     private static List<string> CommandNames(PluginSet g)
     {
         var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase) { "help", "update" };

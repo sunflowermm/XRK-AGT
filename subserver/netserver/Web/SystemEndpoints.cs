@@ -5,7 +5,7 @@ namespace Xrk.Subserver.Web;
 
 public static class SystemEndpoints
 {
-    public static void MapSubserverSystem(this WebApplication app, CommandRegistry registry)
+    public static void MapSubserverSystem(this WebApplication app, CommandRegistry registry, RuntimeConfig config)
     {
         app.MapGet("/", () => Results.Json(new Dictionary<string, object?>
         {
@@ -39,7 +39,16 @@ public static class SystemEndpoints
         app.MapGet("/api/system/config", () => Results.Json(new Dictionary<string, object?>
         {
             ["runtime"] = "netserver",
-            ["server"] = new Dictionary<string, object?> { ["port"] = 8004 }
+            ["server"] = new Dictionary<string, object?>
+            {
+                ["host"] = config.Server.Host,
+                ["port"] = config.Server.Port,
+                ["stdin"] = new Dictionary<string, object?>
+                {
+                    ["enabled"] = config.Server.Stdin.Enabled,
+                    ["prompt"] = config.Server.Stdin.Prompt
+                }
+            }
         }));
 
         app.MapGet("/api/system/groups", () =>
@@ -71,7 +80,18 @@ public static class SystemEndpoints
             return Results.Json(registry.RunLine(line));
         });
 
-        app.MapGet("/api/{group}/health", (string group, CommandRegistry reg) =>
-            Results.Json(reg.Dispatch(group, "help", Array.Empty<string>())));
+        app.MapGet("/api/{group}/health", (string group) =>
+            Results.Json(registry.GroupHealth(group)));
+
+        app.MapPost("/api/{group}/command", async (string group, HttpRequest request) =>
+        {
+            using var doc = await JsonDocument.ParseAsync(request.Body);
+            var parsed = PluginKit.ParseCommandBody(doc.RootElement, group);
+            var cmd = parsed["cmd"]?.ToString() ?? "help";
+            var args = parsed["args"] as List<string> ?? [];
+            var result = registry.Dispatch(group, cmd, args);
+            var ok = result.TryGetValue("ok", out var v) && v is not false;
+            return Results.Json(result, statusCode: ok ? 200 : 400);
+        });
     }
 }

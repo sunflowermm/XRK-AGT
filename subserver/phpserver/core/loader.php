@@ -19,6 +19,7 @@ final class ApiLoader {
 
         self::add('GET', "/api/{$group}/health", function () use ($entry, $group, $name) {
             $cmds = array_keys($entry['commands'] ?? []);
+            $cmds[] = 'help';
             $cmds[] = 'update';
             sort($cmds);
             json_response(200, ['ok' => true, 'group' => $group, 'name' => $name, 'commands' => $cmds]);

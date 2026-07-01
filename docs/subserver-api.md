@@ -16,6 +16,7 @@
 | `phpserver` | PHP | 8002 |
 | `jserver` | Spring Boot | 8003 |
 | `netserver` | ASP.NET Core | 8004 |
+| `rustserver` | Axum (Rust) | 8005 |
 
 选型见 [`subserver/LANGUAGES.md`](../subserver/LANGUAGES.md)。主服务已是 Node.js，**不提供 Node 子服务端**。
 

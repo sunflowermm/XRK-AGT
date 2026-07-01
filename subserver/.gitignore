@@ -9,6 +9,8 @@ goserver/bin/
 
 jserver/target/
 
+rustserver/target/
+
 netserver/bin/
 netserver/obj/
 netserver/.vs/

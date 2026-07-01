@@ -208,3 +208,4 @@ subserver:
     phpserver: { enabled: true, host: "127.0.0.1", port: 8002 }
     jserver:   { enabled: true, host: "127.0.0.1", port: 8003 }
     netserver: { enabled: true, host: "127.0.0.1", port: 8004 }
+    rustserver: { enabled: true, host: "127.0.0.1", port: 8005 }

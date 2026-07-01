@@ -9,6 +9,7 @@
 | `phpserver` | PHP | 8002 | string-tools |
 | `jserver` | Spring Boot | 8003 | datetime-tools, json-tools |
 | `netserver` | ASP.NET Core | 8004 | uuid-tools |
+| `rustserver` | Axum | 8005 | regex-tools |
 
 选型说明：[`LANGUAGES.md`](LANGUAGES.md) · 注册表：[`registry.yaml`](registry.yaml)
 
@@ -30,6 +31,7 @@ cd subserver/goserver && go run .
 cd subserver/phpserver && php -S 0.0.0.0:8002 server.php
 cd subserver/jserver && mvn -q spring-boot:run
 cd subserver/netserver && dotnet run
+cd subserver/rustserver && cargo run
 ```
 
 ## Docker Compose（五 runtime 一键）

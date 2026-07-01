@@ -48,7 +48,13 @@ public class SystemController {
 
     @GetMapping("/api/system/config")
     public Map<String, Object> config() {
-        return Map.of("runtime", "jserver", "server", Map.of("port", 8003));
+        return Map.of(
+                "runtime", "jserver",
+                "server", Map.of(
+                        "port", 8003,
+                        "stdin", Map.of("enabled", true, "prompt", "java> ")
+                )
+        );
     }
 
     @GetMapping("/api/system/groups")
@@ -73,7 +79,7 @@ public class SystemController {
 
     @GetMapping("/api/{group}/health")
     public Map<String, Object> groupHealth(@PathVariable String group) {
-        return registry.dispatch(group, "help", List.of());
+        return registry.groupHealth(group);
     }
 
     @PostMapping("/api/{group}/command")

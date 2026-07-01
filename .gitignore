@@ -71,6 +71,7 @@ subserver/goserver/goserver
 subserver/goserver/goserver.exe
 subserver/goserver/bin/
 subserver/jserver/target/
+subserver/rustserver/target/
 subserver/netserver/bin/
 subserver/netserver/obj/
 subserver/**/.vs/

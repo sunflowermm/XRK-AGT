@@ -14,6 +14,7 @@ public final class PluginKit {
     public static Map<String, Object> defaultPluginUpdate(String pluginDir) {
         List<Map<String, Object>> steps = new ArrayList<>();
         if (pluginDir != null && !pluginDir.isBlank()) {
+            steps.add(gitPull(Path.of(pluginDir)));
             Path pom = Path.of(pluginDir, "pom.xml");
             if (Files.isRegularFile(pom)) {
                 steps.add(run("mvn -f " + pom.toAbsolutePath() + " -q dependency:resolve"));
@@ -21,6 +22,7 @@ public final class PluginKit {
                 steps.add(Map.of("ok", true, "skipped", "no pom.xml in plugin dir"));
             }
         } else {
+            steps.add(gitPull(Path.of(".")));
             Path rootPom = Path.of("pom.xml");
             if (Files.isRegularFile(rootPom)) {
                 steps.add(run("mvn -q dependency:resolve"));
@@ -34,6 +36,16 @@ public final class PluginKit {
                 "plugin", pluginDir == null || pluginDir.isBlank() ? "jserver" : Path.of(pluginDir).getFileName().toString(),
                 "steps", steps
         );
+    }
+
+    private static Map<String, Object> gitPull(Path dir) {
+        Path git = dir.resolve(".git");
+        if (!Files.isDirectory(git)) {
+            return Map.of("ok", true, "skipped", "not a git repo");
+        }
+        Map<String, Object> step = run("git -C \"" + dir.toAbsolutePath() + "\" pull --ff-only");
+        step.put("action", "git_pull");
+        return step;
     }
 
     private static Map<String, Object> run(String cmd) {
