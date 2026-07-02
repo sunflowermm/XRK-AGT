@@ -9,6 +9,36 @@ import (
 	"strings"
 )
 
+var (
+	topCliAliases = map[string]string{"帮助": "help", "列表": "list", "组": "list"}
+	cmdCliAliases = map[string]string{"状态": "status", "更新": "update", "同步": "sync", "帮助": "help"}
+	exitCliWords  = map[string]struct{}{"exit": {}, "quit": {}, "q": {}, "退出": {}, "离开": {}}
+)
+
+func normalizeCliLine(line string) string {
+	parts := strings.Fields(strings.TrimSpace(line))
+	if len(parts) == 0 {
+		return strings.TrimSpace(line)
+	}
+	if v, ok := topCliAliases[parts[0]]; ok {
+		parts[0] = v
+	} else if len(parts) >= 2 {
+		if v, ok := cmdCliAliases[parts[1]]; ok {
+			parts[1] = v
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func isExitLine(line string) bool {
+	lower := strings.ToLower(strings.TrimSpace(line))
+	if _, ok := exitCliWords[lower]; ok {
+		return true
+	}
+	_, ok := exitCliWords[strings.TrimSpace(line)]
+	return ok
+}
+
 type App struct {
 	Config   Config
 	Commands *CommandRegistry
@@ -162,10 +192,10 @@ func (a *App) StartStdin() {
 	}
 	prompt := a.Config.Server.Stdin.Prompt
 	if prompt == "" {
-		prompt = "go> "
+		prompt = "子服> "
 	}
 	go func() {
-		fmt.Println("\n[Go 子服务] 终端命令已就绪 · 输入 help 或 list")
+		fmt.Println("\n[子服] 终端命令已就绪 · 输入 帮助 或 list")
 		sc := bufio.NewScanner(os.Stdin)
 		for {
 			fmt.Print(prompt)
@@ -176,8 +206,8 @@ func (a *App) StartStdin() {
 			if line == "" {
 				continue
 			}
-			if line == "exit" || line == "quit" {
-				fmt.Println("[Go 子服务] 终端命令已退出（HTTP 继续）")
+			if isExitLine(line) {
+				fmt.Println("[子服] 终端已关闭（HTTP 继续运行）")
 				break
 			}
 			out, _ := json.MarshalIndent(a.Commands.RunLine(line), "", "  ")

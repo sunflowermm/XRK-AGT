@@ -81,15 +81,9 @@ export function formatSubserverCommandResult(payload) {
 }
 
 export function subserverRuntimeUsageHint() {
-  const ids = listSubserverRuntimes().join(' | ');
-  const aliases = 'py / go / php / java / net / rust';
   return (
-    '用法: #子服 [@runtime] <组名> <命令>\n' +
-    '例: #子服 jmcomic update\n' +
-    '#子服 @go hash-tools status\n' +
-    '#子服 @java json-tools status\n' +
-    '#子服 @net uuid-tools status\n' +
-    '#子服 @rust regex-tools status\n' +
-    `runtime: ${ids}（别名 ${aliases}）`
+    '请在子服务终端操作（与主服 > 分离）:\n' +
+    '  帮助 · 列表\n' +
+    '  <组名> 状态 · <组名> 更新'
   );
 }

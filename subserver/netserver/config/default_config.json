@@ -4,7 +4,7 @@
     "port": 8004,
     "stdin": {
       "enabled": true,
-      "prompt": "net> "
+      "prompt": "子服> "
     }
   }
 }

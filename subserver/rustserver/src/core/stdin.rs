@@ -10,7 +10,7 @@ pub fn spawn_stdin(registry: Arc<CommandRegistry>, cfg: &RuntimeConfig) {
 
     let prompt = cfg.server.stdin.prompt.clone();
     tokio::task::spawn_blocking(move || {
-        println!("\n[Rust 子服务] 终端命令已就绪 · 输入 help 或 list");
+        println!("\n[子服] 终端命令已就绪 · 输入 帮助 或 list");
         loop {
             print!("{prompt}");
             let _ = io::stdout().flush();
@@ -22,8 +22,8 @@ pub fn spawn_stdin(registry: Arc<CommandRegistry>, cfg: &RuntimeConfig) {
             if line.is_empty() {
                 continue;
             }
-            if line == "exit" || line == "quit" {
-                println!("[Rust 子服务] 终端命令已退出（HTTP 继续）");
+            if is_exit_line(line) {
+                println!("[子服] 终端已关闭（HTTP 继续运行）");
                 break;
             }
             let out = registry.run_line(line);

@@ -14,7 +14,7 @@ public sealed class RuntimeConfig
     public sealed class StdinSection
     {
         public bool Enabled { get; set; } = true;
-        public string Prompt { get; set; } = "net> ";
+        public string Prompt { get; set; } = "子服> ";
     }
 
     public static RuntimeConfig Load()

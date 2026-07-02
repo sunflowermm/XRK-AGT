@@ -8,10 +8,12 @@ public static class StdinLoop
     {
         if (!config.Server.Stdin.Enabled || Console.IsInputRedirected) return;
 
-        var prompt = config.Server.Stdin.Prompt;
+        var prompt = string.IsNullOrWhiteSpace(config.Server.Stdin.Prompt)
+            ? "子服> "
+            : config.Server.Stdin.Prompt;
         _ = Task.Run(async () =>
         {
-            Console.WriteLine("\n[.NET 子服务] 终端命令已就绪 · 输入 help 或 list");
+            Console.WriteLine("\n[子服] 终端命令已就绪 · 输入 帮助 或 list");
             while (true)
             {
                 Console.Write(prompt);
@@ -19,9 +21,9 @@ public static class StdinLoop
                 if (line == null) break;
                 line = line.Trim();
                 if (line.Length == 0) continue;
-                if (line is "exit" or "quit")
+                if (CommandRegistry.IsExitLine(line))
                 {
-                    Console.WriteLine("[.NET 子服务] 终端命令已退出（HTTP 继续）");
+                    Console.WriteLine("[子服] 终端已关闭（HTTP 继续运行）");
                     break;
                 }
                 var result = registry.RunLine(line);

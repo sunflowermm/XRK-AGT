@@ -8,8 +8,8 @@ server:
   reload: false        # 开发模式自动重载（生产环境设为 false）
   log_level: "info"    # 日志级别: debug, info, warning, error
   stdin:
-    enabled: true      # 交互终端下启用 sub> 命令行（help / <组名> update 等）
-    prompt: "sub> "
+    enabled: true      # 交互终端下启用命令行（输入「帮助」）
+    prompt: "子服> "
 
 # CORS 配置
 cors:

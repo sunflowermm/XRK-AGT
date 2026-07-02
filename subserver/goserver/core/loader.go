@@ -8,6 +8,7 @@ func RegisterPlugin(exp PluginExport) {
 }
 
 // LoadPlugins 将 init 阶段登记的插件挂到 App（main 在 NewApp 后调用）
+// 插件包由 plugin_imports_gen.go 自动 import（go generate ./tools/gen_plugin_imports.go）
 func LoadPlugins(app *App) {
 	for _, exp := range pendingPlugins {
 		app.RegisterPlugin(exp)

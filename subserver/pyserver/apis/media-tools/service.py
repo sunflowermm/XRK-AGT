@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import logging
 from pathlib import Path
 from typing import Any, Dict, List
@@ -10,7 +9,7 @@ from typing import Any, Dict, List
 from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse
 
-from core.plugin_kit import PluginConfig, load_plugin_config
+from core.plugin_kit import load_plugin_config
 
 logger = logging.getLogger(__name__)
 

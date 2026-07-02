@@ -13,9 +13,11 @@ import java.util.Map;
 public class SystemController {
 
     private final CommandRegistry registry;
+    private final RuntimeConfig runtimeConfig;
 
-    public SystemController(CommandRegistry registry) {
+    public SystemController(CommandRegistry registry, RuntimeConfig runtimeConfig) {
         this.registry = registry;
+        this.runtimeConfig = runtimeConfig;
     }
 
     @GetMapping("/")
@@ -48,13 +50,7 @@ public class SystemController {
 
     @GetMapping("/api/system/config")
     public Map<String, Object> config() {
-        return Map.of(
-                "runtime", "jserver",
-                "server", Map.of(
-                        "port", 8003,
-                        "stdin", Map.of("enabled", true, "prompt", "java> ")
-                )
-        );
+        return runtimeConfig.serverView();
     }
 
     @GetMapping("/api/system/groups")

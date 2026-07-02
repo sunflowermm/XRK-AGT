@@ -13,6 +13,29 @@ from .plugin_kit import dispatch_plugin_command
 CommandHandler = Callable[..., Any]
 UpdateHandler = Callable[..., Awaitable[Any]]
 
+_TOP_ALIASES = {
+    "帮助": "help",
+    "列表": "list",
+    "组": "list",
+}
+_CMD_ALIASES = {
+    "状态": "status",
+    "更新": "update",
+    "同步": "sync",
+    "帮助": "help",
+}
+
+
+def _normalize_cli_line(text: str) -> str:
+    parts = text.strip().split()
+    if not parts:
+        return text.strip()
+    if parts[0] in _TOP_ALIASES:
+        parts[0] = _TOP_ALIASES[parts[0]]
+    elif len(parts) >= 2 and parts[1] in _CMD_ALIASES:
+        parts[1] = _CMD_ALIASES[parts[1]]
+    return " ".join(parts)
+
 
 @dataclass
 class PluginCommandSet:
@@ -67,13 +90,17 @@ class CommandRegistry:
 
     @classmethod
     async def run_line(cls, line: str) -> Dict[str, Any]:
-        text = (line or "").strip()
+        text = _normalize_cli_line(line or "")
         if not text:
             return {"ok": False, "error": "空命令"}
 
         lower = text.lower()
         if lower in ("help", "?", "h"):
-            return {"ok": True, **cls.list_help(), "hint": "用法: <组名> <命令> [参数...]"}
+            return {
+                "ok": True,
+                **cls.list_help(),
+                "hint": "例: media-tools 状态 · doc-pipeline 更新",
+            }
 
         if lower in ("list", "groups", "ls"):
             return {"ok": True, "groups": cls.groups()}
@@ -92,6 +119,3 @@ class CommandRegistry:
         args = parts[2:]
         return await entry.dispatch(cmd, args)
 
-    @classmethod
-    def clear(cls):
-        cls._groups.clear()

@@ -3,6 +3,25 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/plugin_kit.php';
 
+function normalize_cli_line(string $line): string {
+    $parts = preg_split('/\s+/', trim($line)) ?: [];
+    if ($parts === []) return trim($line);
+    $top = ['帮助' => 'help', '列表' => 'list', '组' => 'list'];
+    $cmd = ['状态' => 'status', '更新' => 'update', '同步' => 'sync', '帮助' => 'help'];
+    if (isset($top[$parts[0]])) {
+        $parts[0] = $top[$parts[0]];
+    } elseif (isset($parts[1], $cmd[$parts[1]])) {
+        $parts[1] = $cmd[$parts[1]];
+    }
+    return implode(' ', $parts);
+}
+
+function is_exit_line(string $line): bool {
+    $t = trim($line);
+    $lower = strtolower($t);
+    return in_array($lower, ['exit', 'quit', 'q'], true) || in_array($t, ['退出', '离开'], true);
+}
+
 final class CommandRegistry {
     /** @var array<string, array> */
     private static array $groups = [];
@@ -40,7 +59,7 @@ final class CommandRegistry {
     }
 
     public static function runLine(string $line): array {
-        $line = trim($line);
+        $line = normalize_cli_line($line);
         if ($line === '') return ['ok' => false, 'error' => '空命令'];
         $lower = strtolower($line);
         if ($lower === 'help' || $lower === '?') {

@@ -6,8 +6,4 @@
     <RootNamespace>Xrk.Subserver</RootNamespace>
     <AssemblyName>netserver</AssemblyName>
   </PropertyGroup>
-  <ItemGroup>
-    <Compile Remove="apis/_template/**" />
-    <Content Include="apis/_template/**" />
-  </ItemGroup>
 </Project>

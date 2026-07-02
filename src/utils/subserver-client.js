@@ -9,6 +9,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { normalizeError } from '#utils/normalize-error.js';
 import {
   SUBSERVER_RUNTIME_CATALOG,
   listSubserverRuntimes
@@ -89,6 +90,85 @@ export function getSubserverConfig(runtimeId) {
   };
 }
 
+/** @param {unknown} err */
+function errorCauseCode(err) {
+  const error = normalizeError(err);
+  const cause = error.cause;
+  if (cause && typeof cause === 'object' && 'code' in cause) {
+    return String(/** @type {{ code?: string }} */ (cause).code || '');
+  }
+  if ('code' in error && typeof error.code === 'string') return error.code;
+  return '';
+}
+
+/** @param {unknown} err */
+export function isSubserverConnectionError(err) {
+  const error = normalizeError(err);
+  const code = errorCauseCode(error);
+  if (code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'ENOTFOUND' || code === 'EHOSTUNREACH') {
+    return true;
+  }
+  if (error.name === 'TimeoutError') return true;
+  const msg = error.message.toLowerCase();
+  return msg.includes('timeout') || msg.includes('fetch failed');
+}
+
+/**
+ * 将子服务调用异常转为用户可读说明
+ * @param {unknown} err
+ * @param {{ id?: string, label?: string, baseUrl?: string, host?: string, port?: number }} [runtime]
+ */
+export function formatSubserverError(err, runtime) {
+  const error = normalizeError(err);
+  const endpoint = runtime?.baseUrl || (runtime?.host ? `http://${runtime.host}:${runtime.port}` : '');
+  const runtimeLabel = runtime?.label || runtime?.id || 'pyserver';
+  const suffix = endpoint ? `（${runtimeLabel} @ ${endpoint}）` : `（${runtimeLabel}）`;
+
+  const code = errorCauseCode(error);
+  if (code === 'ECONNREFUSED') {
+    return `子服务端可能未启动，连接被拒绝${suffix}\n请启动 pyserver 并在 CommonConfig → AIStream → 子服务端 核对地址端口`;
+  }
+  if (code === 'ECONNRESET') {
+    return `子服务端连接被重置，可能正在重启或处理超时${suffix}`;
+  }
+  if (code === 'ENOTFOUND' || code === 'EHOSTUNREACH') {
+    return `无法解析或到达子服务端${suffix}\n请检查 subserver 配置中的 host/port`;
+  }
+  if (error.name === 'TimeoutError' || error.message.toLowerCase().includes('timeout')) {
+    return `子服务端响应超时${suffix}\n任务可能仍在后台运行，请稍后查看子服务日志`;
+  }
+  if (error.message.startsWith('HTTP ')) {
+    const status = error.message.slice(5).split(':')[0].trim();
+    if (status === '502' || status === '503' || status === '504') {
+      return `子服务端不可用（HTTP ${status}）${suffix}\n请确认对应进程已启动`;
+    }
+    const detail = error.message.includes(':')
+      ? error.message.slice(error.message.indexOf(':') + 1).trim()
+      : '';
+    return detail ? `子服务 HTTP ${status}: ${detail}` : `子服务 HTTP ${status}${suffix}`;
+  }
+  if (error.message.toLowerCase().includes('fetch failed')) {
+    return `无法连接子服务端${suffix}\n请确认子服务进程已启动且网络可达`;
+  }
+  return error.message;
+}
+
+async function readHttpErrorDetail(response) {
+  try {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('json')) {
+      const body = await response.json();
+      if (body && typeof body === 'object') {
+        return body.detail || body.error || body.message || '';
+      }
+    }
+    const text = (await response.text()).trim();
+    return text.slice(0, 300);
+  } catch {
+    return '';
+  }
+}
+
 /**
  * @param {string} requestPath
  * @param {{ method?: string, body?: unknown, signal?: AbortSignal, rawResponse?: boolean, timeout?: number, query?: Record<string, unknown>, runtime?: string }} [options]
@@ -118,7 +198,8 @@ export async function callSubserver(requestPath, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    const detail = await readHttpErrorDetail(response);
+    throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
   }
 
   if (rawResponse) return response;

@@ -49,21 +49,7 @@ desktop.ini
 *.tmp
 *.temp
 
-# Runtime generated directories and files
-data/server_bots/
-data/models/
-data/importsJson/
-data/messageJson/
-data/bannedWords/
-data/terminal_output/
-data/tools_history.json
-data/uploads/
-data/media/
-data/stdin/
-
-# 独立子服务 / Core 插件（deploy 脚本复制安装，勿进主仓）
-subserver/pyserver/apis/jmcomic/
-data/jmcomic/
+# 运行期数据：见 data/.gitignore（整目录 *，仅 instruct.txt 例外）
 
 # 子服务：构建产物与本地虚拟环境（源码 apis/* 示例保留入库）
 subserver/pyserver/.venv/
@@ -76,7 +62,16 @@ subserver/netserver/bin/
 subserver/netserver/obj/
 subserver/**/.vs/
 
-# 子服务：运行时数据见 data/.gitignore（data/ 整目录不入库）
+# 子服 pyserver 插件：仅框架示例入库，其余为本地 clone
+subserver/pyserver/apis/*/
+!subserver/pyserver/apis/system/
+!subserver/pyserver/apis/system/**
+!subserver/pyserver/apis/media-tools/
+!subserver/pyserver/apis/media-tools/**
+!subserver/pyserver/apis/doc-pipeline/
+!subserver/pyserver/apis/doc-pipeline/**
+!subserver/pyserver/apis/web-fetch/
+!subserver/pyserver/apis/web-fetch/**
 
 # Cache directories
 .cache/
@@ -115,6 +110,7 @@ memory/*.md
 !memory/MEMORY.md
 !memory/.gitkeep
 
+# 业务 Core 本地部署，主仓仅 system-Core
 core/*
 !core/system-Core/
 !core/system-Core/**

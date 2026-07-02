@@ -9,6 +9,38 @@ import java.util.function.Function;
 
 public final class CommandRegistry {
 
+    private static final Map<String, String> TOP_ALIASES = Map.of(
+            "帮助", "help",
+            "列表", "list",
+            "组", "list"
+    );
+    private static final Map<String, String> CMD_ALIASES = Map.of(
+            "状态", "status",
+            "更新", "update",
+            "同步", "sync",
+            "帮助", "help"
+    );
+
+    public static boolean isExitLine(String line) {
+        if (line == null) return false;
+        String t = line.trim();
+        String lower = t.toLowerCase();
+        return lower.equals("exit") || lower.equals("quit") || lower.equals("q")
+                || t.equals("退出") || t.equals("离开");
+    }
+
+    private static String normalizeCliLine(String line) {
+        if (line == null) return "";
+        String[] parts = line.trim().split("\\s+");
+        if (parts.length == 0 || parts[0].isEmpty()) return line.trim();
+        if (TOP_ALIASES.containsKey(parts[0])) {
+            parts[0] = TOP_ALIASES.get(parts[0]);
+        } else if (parts.length >= 2 && CMD_ALIASES.containsKey(parts[1])) {
+            parts[1] = CMD_ALIASES.get(parts[1]);
+        }
+        return String.join(" ", parts);
+    }
+
     public record PluginSet(
             String group,
             String description,
@@ -42,7 +74,7 @@ public final class CommandRegistry {
     }
 
     public Map<String, Object> runLine(String line) {
-        line = line == null ? "" : line.trim();
+        line = normalizeCliLine(line);
         if (line.isEmpty()) return Map.of("ok", false, "error", "空命令");
         String lower = line.toLowerCase();
         if (lower.equals("help") || lower.equals("?")) {

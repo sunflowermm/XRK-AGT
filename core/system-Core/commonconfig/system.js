@@ -3053,13 +3053,13 @@ export default class SystemConfig extends ConfigBase {
             subserver: {
               type: 'object',
               label: '多语言子服务端',
-              description: 'Python/Go/PHP/Java/.NET 子服务地址；Bot.callSubserver 与 #子服 命令均读取此处',
+              description: 'Python/Go/PHP/Java/.NET 子服务地址；Bot.callSubserver 读取此处',
               component: 'SubForm',
               fields: {
                 default: {
                   type: 'string',
                   label: '默认 runtime',
-                  description: '未指定 @runtime 时使用（如 #子服 jmcomic update）',
+                  description: '默认 pyserver runtime',
                   component: 'Input',
                   default: 'pyserver',
                   placeholder: 'pyserver'

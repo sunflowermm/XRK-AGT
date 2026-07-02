@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 _stop_event = threading.Event()
 _thread: Optional[threading.Thread] = None
 
+_EXIT_WORDS = frozenset({"exit", "quit", "q", "退出", "离开"})
+
 
 def _format_result(payload: dict) -> str:
     if not isinstance(payload, dict):
@@ -41,22 +43,21 @@ def _format_result(payload: dict) -> str:
 
 
 def _stdin_reader_loop(prompt: str):
-    logger.info("终端命令已启用 · 输入 help 查看插件组")
-    print("\n[子服务] 终端命令已就绪 · 输入 help 或 list", flush=True)
+    logger.debug("子服务终端命令已启用")
     while not _stop_event.is_set():
         try:
             print(prompt, end="", flush=True)
             line = sys.stdin.readline()
         except (EOFError, KeyboardInterrupt):
-            print("\n[子服务] 终端命令已退出", flush=True)
+            print("\n终端已关闭（HTTP 继续运行）", flush=True)
             break
         if not line:
             break
         line = line.strip()
         if not line:
             continue
-        if line.lower() in ("exit", "quit", "q"):
-            print("[子服务] 终端命令已退出（HTTP 服务继续运行）", flush=True)
+        if line.lower() in _EXIT_WORDS or line in _EXIT_WORDS:
+            print("终端已关闭（HTTP 继续运行）", flush=True)
             break
 
         try:
@@ -67,7 +68,7 @@ def _stdin_reader_loop(prompt: str):
             print(f"✗ {exc}", flush=True)
 
 
-def start_stdin_loop(*, enabled: bool = True, prompt: str = "sub> "):
+def start_stdin_loop(*, enabled: bool = True, prompt: str = "子服> "):
     global _thread
     if not enabled:
         return

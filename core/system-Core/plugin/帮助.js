@@ -66,15 +66,12 @@ export class Help extends plugin {
         },
         {
           name: '子服务端',
-          desc: '多语言子服务 · Python/Go/PHP/Java/.NET',
+          desc: '在子服务进程终端操作（与主服 > 分离）',
           items: [
-            { cmd: '#子服 help', desc: '列出已注册插件组' },
-            { cmd: '#子服 jmcomic update', desc: '默认 pyserver · 更新插件' },
-            { cmd: '#子服 @go hash-tools status', desc: 'Go 子服务' },
-            { cmd: '#子服 @java json-tools status', desc: 'Java 子服务' },
-            { cmd: '#子服 @net uuid-tools status', desc: '.NET 子服务' },
-            { cmd: '#子服 @rust regex-tools status', desc: 'Rust 子服务' },
-            { cmd: 'Bot.callSubserver(...)', desc: '工作流/插件 HTTP 调用子服务' }
+            { cmd: '帮助', desc: '列出已装载插件组' },
+            { cmd: '<组名> 状态', desc: '例: media-tools 状态' },
+            { cmd: '<组名> 更新', desc: '例: web-fetch 更新' },
+            { cmd: '退出', desc: '关闭终端 REPL，HTTP 继续' }
           ]
         },
         {

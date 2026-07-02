@@ -157,7 +157,7 @@ class Config:
                 "port": 8000,
                 "reload": False,
                 "log_level": "info",
-                "stdin": {"enabled": True, "prompt": "sub> "},
+                "stdin": {"enabled": True, "prompt": "子服> "},
             },
             "cors": {"origins": ["*"]},
             "api": {"auto_load": True, "api_dir": "apis"},

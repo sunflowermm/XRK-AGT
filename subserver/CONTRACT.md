@@ -21,6 +21,16 @@
 | POST | `/api/{group}/command` | body: `{ "cmd": "update" }` 或 `{ "line": "..." }` |
 | * | `/api/{group}/...` | 业务路由 |
 
+## 目录分工
+
+| 路径 | 用途 |
+|------|------|
+| `core/`（或 `Core/`） | 加载器、配置、命令注册 — **底层** |
+| `apis/system/` 或 `Web/SystemEndpoints` | 框架系统路由 |
+| `apis/<group>/` | 示例或本地业务插件 |
+
+新建插件：复制同 runtime **已有示例**（如 pyserver `media-tools`），改 `group` 与路由；无 `_template` 目录。
+
 ## 插件元数据（对齐 pyserver `default` 字典）
 
 ```yaml

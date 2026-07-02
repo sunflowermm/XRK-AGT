@@ -29,7 +29,7 @@ func LoadConfig() Config {
 	cfg.Server.Host = "0.0.0.0"
 	cfg.Server.Port = 8001
 	cfg.Server.Stdin.Enabled = true
-	cfg.Server.Stdin.Prompt = "go> "
+	cfg.Server.Stdin.Prompt = "子服> "
 
 	if data, err := os.ReadFile(defaultFile); err == nil {
 		_ = json.Unmarshal(data, &cfg)

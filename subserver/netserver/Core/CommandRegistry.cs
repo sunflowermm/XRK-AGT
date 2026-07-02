@@ -2,6 +2,41 @@ namespace Xrk.Subserver.Core;
 
 public sealed class CommandRegistry
 {
+    private static readonly Dictionary<string, string> TopAliases = new(StringComparer.Ordinal)
+    {
+        ["帮助"] = "help",
+        ["列表"] = "list",
+        ["组"] = "list",
+    };
+
+    private static readonly Dictionary<string, string> CmdAliases = new(StringComparer.Ordinal)
+    {
+        ["状态"] = "status",
+        ["更新"] = "update",
+        ["同步"] = "sync",
+        ["帮助"] = "help",
+    };
+
+    private static readonly HashSet<string> ExitWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "exit", "quit", "q", "退出", "离开"
+    };
+
+    public static bool IsExitLine(string? line)
+    {
+        var t = (line ?? "").Trim();
+        return t.Length > 0 && ExitWords.Contains(t);
+    }
+
+    private static string NormalizeCliLine(string line)
+    {
+        var parts = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return line.Trim();
+        if (TopAliases.TryGetValue(parts[0], out var top)) parts[0] = top;
+        else if (parts.Length >= 2 && CmdAliases.TryGetValue(parts[1], out var cmd)) parts[1] = cmd;
+        return string.Join(' ', parts);
+    }
+
     public sealed record PluginSet(
         string Group,
         string Description,
@@ -41,7 +76,7 @@ public sealed class CommandRegistry
 
     public Dictionary<string, object?> RunLine(string line)
     {
-        line = (line ?? "").Trim();
+        line = NormalizeCliLine(line);
         if (line.Length == 0)
             return new Dictionary<string, object?> { ["ok"] = false, ["error"] = "空命令" };
 

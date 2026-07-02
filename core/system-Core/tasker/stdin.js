@@ -176,7 +176,12 @@ export default class StdinTasker {
           code: 200,
           message: '帮助信息',
           command: 'help',
-          commands: ['exit: 退出程序', 'help: 显示帮助', 'clear: 清屏', 'cleanup: 清理临时文件']
+          commands: [
+            'exit/退出: 退出程序',
+            'help/帮助: 显示帮助',
+            'clear/清屏: 清屏',
+            'cleanup/清理: 清理临时文件'
+          ]
         }),
         clear: () => ({ success: true, code: 200, message: '清屏命令已接收', command: 'clear' }),
         cleanup: () => {
@@ -189,6 +194,7 @@ export default class StdinTasker {
       if (builtinCommands[command]) {
         return { ...builtinCommands[command](), timestamp: Date.now() };
       }
+
       BotUtil.makeLog('info', `[命令] ${trimmedInput}`, LOG_TAG);
       const event = this.createEvent(trimmedInput, userInfo);
       await this.handleEvent(event);

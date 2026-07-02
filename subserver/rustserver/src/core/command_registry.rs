@@ -3,6 +3,37 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
+fn normalize_cli_line(line: &str) -> String {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.is_empty() {
+        return line.trim().to_string();
+    }
+    let top = [("帮助", "help"), ("列表", "list"), ("组", "list")];
+    let cmd = [("状态", "status"), ("更新", "update"), ("同步", "sync"), ("帮助", "help")];
+    let mut out: Vec<String> = parts.iter().map(|s| s.to_string()).collect();
+    for (from, to) in top {
+        if out[0] == from {
+            out[0] = to.into();
+            break;
+        }
+    }
+    if out.len() >= 2 {
+        for (from, to) in cmd {
+            if out[1] == from {
+                out[1] = to.into();
+                break;
+            }
+        }
+    }
+    out.join(" ")
+}
+
+fn is_exit_line(line: &str) -> bool {
+    let t = line.trim();
+    let lower = t.to_lowercase();
+    matches!(lower.as_str(), "exit" | "quit" | "q") || matches!(t, "退出" | "离开")
+}
+
 pub type CommandHandler = Arc<dyn Fn(&[String]) -> Value + Send + Sync>;
 
 pub struct PluginSet {
@@ -140,7 +171,7 @@ impl CommandRegistry {
     }
 
     pub fn run_line(&self, line: &str) -> Value {
-        let line = line.trim();
+        let line = normalize_cli_line(line);
         if line.is_empty() {
             return json!({ "ok": false, "error": "空命令" });
         }

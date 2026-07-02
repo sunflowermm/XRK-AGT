@@ -7,8 +7,6 @@ import (
 	"strconv"
 
 	"github.com/xrk-agt/goserver/core"
-
-	_ "github.com/xrk-agt/goserver/apis/hash-tools"
 )
 
 func main() {

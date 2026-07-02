@@ -101,7 +101,7 @@ func (cr *CommandRegistry) Dispatch(group, cmd string, args []string) map[string
 }
 
 func (cr *CommandRegistry) RunLine(line string) map[string]any {
-	line = strings.TrimSpace(line)
+	line = normalizeCliLine(line)
 	if line == "" {
 		return map[string]any{"ok": false, "error": "空命令"}
 	}

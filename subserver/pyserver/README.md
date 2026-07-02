@@ -25,25 +25,22 @@ uv run xrk              # 或 uv run python main.py
 ## 🔌 主要 API
 
 - **系统接口**：`/api/system/ping`、`/api/system/config`、`/api/system/groups`、`POST /api/system/command`
-- **业务插件**（按需安装依赖）：
-  - `jmcomic` — 本子下载 PDF
+- **业务插件**（按需安装，见各 `apis/<组名>/`）：
   - `media-tools` — 图片缩放/转换
   - `doc-pipeline` — HTML 提取 / Markdown
   - `web-fetch` — 网页抓取缓存
 
 ## ⌨️ 终端命令（标准输入）
 
-交互式启动且 `server.stdin.enabled: true` 时出现 `sub>` 提示符。
-
-另有两套**非 Node** 子服务：`goserver`（Go）、`phpserver`（PHP），契约相同，见 `subserver/README.md`。
+交互式启动且 `server.stdin.enabled: true` 时出现 `子服>` 提示符（与主服 `>` 分离，日志照常输出）。
 
 ```text
-sub> help
-sub> jmcomic update
-sub> media-tools status
+子服> 帮助
+子服> media-tools 状态
+子服> 退出
 ```
 
-主服务端 QQ/stdin：`#子服 jmcomic update`、`#子服 @go hash-tools status`（见 `core/system-Core/plugin/子服务.js`）
+第三方插件按各自 README 在子服终端操作。
 
 ## 🔧 配置
 
@@ -65,35 +62,54 @@ HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 - `server.host` / `server.port`：服务监听地址和端口
 - `api.auto_load` / `api.api_dir`：自动加载 API 目录设置
 
-## 📝 开发 API
+## 📝 开发插件
 
-### 多组结构
+### 目录分工（对齐主仓 system-Core）
 
-`apis/` 目录支持多组结构，每个子目录是一个独立的 API 组：
+| 路径 | 用途 |
+|------|------|
+| `core/` | 加载器、配置、`plugin_kit` 等**底层** |
+| `apis/system/` | 框架系统 API（`/api/system/*`） |
+| `apis/<组名>/` | **示例或业务插件**，每组一个目录 |
+
+勿在 `core/` 写业务；新建插件对照现有示例改组名与路由。
+
+### 参考示例
+
+完整写法见 **`apis/media-tools/service.py`**（`default` 字典、`commands`、`routes`、`load_plugin_config`）。
+
+最小结构：
 
 ```
-apis/
-  system/          # 系统底层接口
-    basic_service.py
+apis/my-tools/
+  service.py
+  default_config.yaml   # 可选
+  requirements.txt      # 可选，需单独 uv pip install
 ```
-
-### 创建 API
-
-在任意 API 组目录下创建 Python 文件：
 
 ```python
+from pathlib import Path
 from fastapi import Request
-from core.base_api import create_api_from_dict
 
-async def handler(request: Request):
-    return {"success": True}
+_PLUGIN_DIR = Path(__file__).resolve().parent
+
+async def cmd_status(_request, _args):
+    return {"service": "my-tools", "ready": True}
+
+async def hello_handler(_request: Request):
+    return {"ok": True}
 
 default = {
-    "name": "my-api",
-    "description": "我的 API",
+    "name": "my-tools",
+    "description": "我的插件",
+    "group": "my-tools",
+    "plugin_dir": str(_PLUGIN_DIR),
     "priority": 100,
+    "commands": {"status": cmd_status},
     "routes": [
-        {"method": "GET", "path": "/api/my", "handler": handler}
-    ]
+        {"method": "GET", "path": "/api/my-tools/hello", "handler": hello_handler},
+    ],
 }
 ```
+
+Loader 自动扫描 `apis/` 并装载；插件作者只需 export `default`，无需调用 `create_api_from_dict`。

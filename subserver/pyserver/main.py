@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     try:
         await ApiLoader.load_all(app)
         stdin_enabled = config.get("server.stdin.enabled", True)
-        stdin_prompt = config.get("server.stdin.prompt", "sub> ")
+        stdin_prompt = config.get("server.stdin.prompt", "子服> ")
         start_stdin_loop(enabled=stdin_enabled, prompt=stdin_prompt)
         logger.info("──────────────────────────────────────")
         logger.info("✅ 启动就绪 · 底层服务已加载")

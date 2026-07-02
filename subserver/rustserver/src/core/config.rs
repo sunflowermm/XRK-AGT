@@ -16,7 +16,7 @@ fn default_true() -> bool {
 }
 
 fn default_prompt() -> String {
-    "rs> ".into()
+    "子服> ".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

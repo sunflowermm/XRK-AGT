@@ -30,8 +30,12 @@ import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js';
 import cfg from '#infrastructure/config/config.js';
 import {
   callSubserver as callSubserverApi,
-  fetchSubserverToPath as fetchSubserverToPathApi
+  fetchSubserverToPath as fetchSubserverToPathApi,
+  formatSubserverError,
+  getSubserverConfig,
+  isSubserverConnectionError
 } from '#utils/subserver-client.js';
+import { resolveSubserverFileUpstream } from '#utils/subserver-file-proxy.js';
 import paths from '#utils/paths.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import HTTPBusinessLayer from '#utils/http-business.js';
@@ -2138,7 +2142,7 @@ export default class Bot extends EventEmitter {
   }
 
   /**
-   * 子服务/数据目录文件直链（如 jmcomic PDF），无需 API Key
+   * 子服务 data/ 文件直链：本地优先，缺失时按路径前缀代理到对应 pyserver /api/{group}/file
    */
   async _subserverFileHandler(req, res) {
     if (this._checkHeadersSent(res)) return;
@@ -2172,12 +2176,18 @@ export default class Bot extends EventEmitter {
       /* 本地无文件时尝试从子服务流式代理 */
     }
 
+    const upstream = resolveSubserverFileUpstream(rel);
+    if (!upstream) {
+      return HttpResponse.notFound(res, '文件不存在');
+    }
+
     try {
-      const response = await callSubserverApi('/api/jmcomic/file', {
+      const response = await callSubserverApi(upstream.upstream, {
         method: 'GET',
         query: { path: rel },
         rawResponse: true,
-        timeout: 600_000
+        timeout: 600_000,
+        runtime: upstream.runtime || 'pyserver'
       });
 
       const contentType = response.headers.get('content-type');
@@ -2192,6 +2202,10 @@ export default class Bot extends EventEmitter {
       res.status(response.status);
       await pipeline(Readable.fromWeb(response.body), res);
     } catch (error) {
+      if (isSubserverConnectionError(error)) {
+        const hint = formatSubserverError(error, getSubserverConfig());
+        return HttpResponse.error(res, new Error(hint), 503, 'subserver-file');
+      }
       return HttpResponse.notFound(res, '文件不存在');
     }
   }
@@ -2951,7 +2965,7 @@ export default class Bot extends EventEmitter {
   /**
    * 获取对外可访问的服务器 URL（用于 QQ 直链等）
    * 不回落到 127.0.0.1；无公网/代理配置时返回空字符串
-   * @param {string} [override=''] - 业务覆盖（如 jmcomic public_base_url）
+   * @param {string} [override=''] - 业务覆盖 public_base_url
    */
   getPublicServerUrl(override = '') {
     const trimmed = typeof override === 'string' ? override.trim() : '';

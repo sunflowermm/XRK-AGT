@@ -4,7 +4,7 @@
     "port": 8005,
     "stdin": {
       "enabled": true,
-      "prompt": "rs> "
+      "prompt": "子服> "
     }
   }
 }

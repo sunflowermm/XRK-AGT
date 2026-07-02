@@ -14,11 +14,11 @@ uv pip install -r apis/media-tools/requirements.txt
 子服务启动后（交互终端）：
 
 ```text
-sub> media-tools status
-sub> media-tools update
+子服> media-tools 状态
+子服> media-tools 更新
 ```
 
-主服务 stdin / QQ：`#子服 media-tools update`
+主服务代码调用：`Bot.callSubserver('/api/media-tools/...')`
 
 ## API
 

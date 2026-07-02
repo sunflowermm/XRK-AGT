@@ -16,6 +16,6 @@ cd subserver/jserver
 mvn -q spring-boot:run
 ```
 
-新插件：实现 `SubserverPlugin` + `@RestController`（Spring 自动注册）。
+新插件：复制 `apis/datetime/DatetimePlugin.java` 或 `apis/json/JsonToolsPlugin.java`，改 `group()` 与路由（Spring 自动注册）。
 
 主服务地址：**CommonConfig → AIStream → 子服务端 → jserver**
