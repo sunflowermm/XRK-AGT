@@ -36,11 +36,14 @@ uv run xrk              # 或 uv run python main.py
 
 ```text
 子服> 帮助
+子服> 列表
+子服> 更新              # 扫描 apis/*，逐个 git pull + pip
+子服> jmcomic 更新      # 仅更新某一插件
 子服> media-tools 状态
 子服> 退出
 ```
 
-第三方插件按各自 README 在子服终端操作。
+`apis/` 在**启动时**自动扫描装载；`更新` 对目录内所有插件（含未成功装载的 git clone）拉代码与依赖，完成后**重启子服**生效。
 
 ## 🔧 配置
 

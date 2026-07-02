@@ -16,6 +16,28 @@ logger = logging.getLogger(__name__)
 
 CommandHandler = Callable[..., Any]
 
+_SKIP_PLUGIN_DIRS = frozenset({"system"})
+
+
+def apis_dir() -> Path:
+    return Path(__file__).resolve().parent.parent / "apis"
+
+
+def iter_plugin_dirs() -> List[Path]:
+    root = apis_dir()
+    if not root.is_dir():
+        return []
+    return sorted(
+        d
+        for d in root.iterdir()
+        if d.is_dir() and not d.name.startswith("_") and d.name not in _SKIP_PLUGIN_DIRS
+    )
+
+
+def find_plugin_dir(name: str) -> Optional[Path]:
+    path = apis_dir() / name
+    return path if path.is_dir() else None
+
 
 def repo_root_from_plugin(plugin_dir: Path) -> Path:
     """apis/<group>/ -> 项目根目录。"""
@@ -182,6 +204,28 @@ async def default_plugin_update(
     return {"ok": ok, "plugin": plugin_dir.name, "steps": steps}
 
 
+async def update_all_plugin_dirs() -> Dict[str, Any]:
+    dirs = iter_plugin_dirs()
+    if not dirs:
+        return {"ok": False, "error": "apis/ 下无插件目录"}
+
+    results: Dict[str, Any] = {}
+    all_ok = True
+    for plugin_dir in dirs:
+        result = await default_plugin_update(plugin_dir)
+        results[plugin_dir.name] = result
+        if not result.get("ok"):
+            all_ok = False
+
+    return {
+        "ok": all_ok,
+        "action": "update-all",
+        "groups": [d.name for d in dirs],
+        "results": results,
+        "hint": "完成后重启子服以重新装载插件（含 git clone 的新目录）",
+    }
+
+
 async def run_command_handler(handler: CommandHandler, request, args: List[str]) -> Any:
     import inspect
 
@@ -220,14 +264,13 @@ async def dispatch_plugin_command(
         if on_update:
             result = await on_update(request, args)
         elif plugin_dir:
-            force_git = "force" in args or "--force" in args
             result = await default_plugin_update(
                 plugin_dir,
                 pip=True,
-                git=force_git or (plugin_dir / ".git").exists(),
+                git=True,
             )
         else:
-            return {"ok": False, "error": "未配置更新逻辑"}
+            return {"ok": False, "error": "未配置 plugin_dir"}
         return {"ok": bool(result.get("ok", True)), "group": group, "result": result}
 
     handler = commands.get(name)
@@ -245,14 +288,3 @@ async def dispatch_plugin_command(
         data.setdefault("group", group)
         return data
     return {"ok": True, "group": group, "data": data}
-
-
-def parse_command_line(line: str) -> tuple[str, str, List[str]]:
-    """解析 'group cmd arg1 arg2'。"""
-    parts = line.strip().split()
-    if not parts:
-        return "", "", []
-    group = parts[0]
-    if len(parts) == 1:
-        return group, "help", []
-    return group, parts[1], parts[2:]

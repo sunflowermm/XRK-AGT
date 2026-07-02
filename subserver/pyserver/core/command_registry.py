@@ -8,33 +8,29 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from fastapi import Request
 
-from .plugin_kit import dispatch_plugin_command
+from .plugin_kit import (
+    default_plugin_update,
+    dispatch_plugin_command,
+    find_plugin_dir,
+    update_all_plugin_dirs,
+)
 
 CommandHandler = Callable[..., Any]
 UpdateHandler = Callable[..., Awaitable[Any]]
 
-_TOP_ALIASES = {
-    "帮助": "help",
-    "列表": "list",
-    "组": "list",
-}
-_CMD_ALIASES = {
+_GROUP_CMD_CN = {
     "状态": "status",
     "更新": "update",
-    "同步": "sync",
+    "同步": "update",
     "帮助": "help",
 }
 
 
-def _normalize_cli_line(text: str) -> str:
-    parts = text.strip().split()
-    if not parts:
-        return text.strip()
-    if parts[0] in _TOP_ALIASES:
-        parts[0] = _TOP_ALIASES[parts[0]]
-    elif len(parts) >= 2 and parts[1] in _CMD_ALIASES:
-        parts[1] = _CMD_ALIASES[parts[1]]
-    return " ".join(parts)
+def _strip_line(line: str) -> str:
+    text = (line or "").strip()
+    if text.startswith("#"):
+        text = text[1:].strip()
+    return text
 
 
 @dataclass
@@ -89,33 +85,59 @@ class CommandRegistry:
         return {"groups": items, "count": len(items)}
 
     @classmethod
+    async def _update_group(cls, name: str) -> Dict[str, Any]:
+        entry = cls.get(name)
+        if entry:
+            return await entry.dispatch("update", [])
+        plugin_dir = find_plugin_dir(name)
+        if plugin_dir:
+            result = await default_plugin_update(plugin_dir)
+            return {"ok": bool(result.get("ok")), "group": name, "result": result}
+        return {
+            "ok": False,
+            "error": f"未知插件: {name}",
+            "available": cls.groups(),
+        }
+
+    @classmethod
     async def run_line(cls, line: str) -> Dict[str, Any]:
-        text = _normalize_cli_line(line or "")
-        if not text:
+        raw = _strip_line(line)
+        if not raw:
             return {"ok": False, "error": "空命令"}
 
-        lower = text.lower()
-        if lower in ("help", "?", "h"):
-            return {
-                "ok": True,
-                **cls.list_help(),
-                "hint": "例: media-tools 状态 · doc-pipeline 更新",
-            }
+        parts = raw.split()
+        head = parts[0]
+        head_lower = head.lower()
 
-        if lower in ("list", "groups", "ls"):
-            return {"ok": True, "groups": cls.groups()}
+        if len(parts) == 1:
+            if head_lower in ("help", "?", "h") or head == "帮助":
+                return {
+                    "ok": True,
+                    **cls.list_help(),
+                    "hint": "顶栏: 帮助 · 列表 · 更新 | 单插件: <组名> 更新",
+                }
+            if head_lower in ("list", "groups", "ls") or head in ("列表", "组"):
+                return {"ok": True, "groups": cls.groups()}
+            if head_lower == "update" or head in ("更新", "同步"):
+                return await update_all_plugin_dirs()
 
-        parts = text.split()
+        if head in ("更新", "同步") or head_lower == "update":
+            return await cls._update_group(parts[1]) if len(parts) >= 2 else await update_all_plugin_dirs()
+
         group = parts[0]
+        cmd = parts[1] if len(parts) > 1 else "help"
+        if cmd in _GROUP_CMD_CN:
+            cmd = _GROUP_CMD_CN[cmd]
+        args = parts[2:]
+
         entry = cls.get(group)
         if not entry:
+            if cmd == "update":
+                return await cls._update_group(group)
             return {
                 "ok": False,
                 "error": f"未知插件组: {group}",
                 "available": cls.groups(),
             }
 
-        cmd = parts[1] if len(parts) > 1 else "help"
-        args = parts[2:]
         return await entry.dispatch(cmd, args)
-

@@ -23,6 +23,7 @@ from fastapi import FastAPI
 import logging
 
 from .base_api import BaseAPI, create_api_from_dict
+from .command_registry import CommandRegistry, PluginCommandSet
 
 logger = logging.getLogger(__name__)
 
@@ -73,16 +74,39 @@ class ApiLoader:
         failed_count = 0
         for group_dir in api_groups:
             group_name = group_dir.name
+            if group_name == "system":
+                api_files = [f for f in group_dir.glob("*.py") if not f.name.startswith("_")]
+                for api_file in api_files:
+                    try:
+                        await self._load_api_file(api_file, group_name, app)
+                        loaded_count += 1
+                    except Exception as e:
+                        failed_count += 1
+                        logger.error("加载失败 %s/%s: %s", group_name, api_file.name, e, exc_info=True)
+                continue
+
             api_files = [f for f in group_dir.glob("*.py") if not f.name.startswith("_")]
             if not api_files:
+                logger.warning("跳过空插件目录: %s", group_name)
                 continue
+            group_loaded = False
             for api_file in api_files:
                 try:
                     await self._load_api_file(api_file, group_name, app)
                     loaded_count += 1
+                    group_loaded = True
                 except Exception as e:
                     failed_count += 1
                     logger.error("加载失败 %s/%s: %s", group_name, api_file.name, e, exc_info=True)
+            if not group_loaded:
+                CommandRegistry.register(
+                    PluginCommandSet(
+                        group=group_name,
+                        description="加载失败，可先 更新 再重启",
+                        plugin_dir=group_dir.resolve(),
+                        commands={},
+                    )
+                )
 
         self._apis.sort(key=lambda x: x.priority, reverse=True)
         logger.info("📂 API 已加载 · %d 个（失败 %d）", loaded_count, failed_count)
