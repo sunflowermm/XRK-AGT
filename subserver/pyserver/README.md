@@ -69,52 +69,25 @@ HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 
 > **完整指南**：[docs/subserver-plugin-development.md](../../docs/subserver-plugin-development.md)
 
-### 目录分工（对齐主仓 system-Core）
-
-| 路径 | 用途 |
-|------|------|
-| `core/` | 加载器、配置、`plugin_kit` 等**底层** |
-| `apis/system/` | 框架系统 API（`/api/system/*`） |
-| `apis/<组名>/` | **业务插件** |
-
-勿在 `core/` 写业务；**勿**在 `apis/<组名>/core/commonconfig/` 写 schema（用 `config_schema.yaml`）。
-
-### 参考示例
-
-| 目标 | 复制 |
-|------|------|
-| HTTP + 主服控制台可编辑 | `apis/media-tools/`（含 `config_schema.yaml` + `plugin_config`） |
-| 业务 + QQ 插件 + CommonConfig | `apis/jmcomic/`（本地 clone，gitignore） |
-
-### 标准结构
+### 标准结构（与主仓 Core 对齐）
 
 ```
 apis/my-tools/
   service.py
-  default_config.yaml      # → data/my-tools/config.yaml
-  config_schema.yaml       # 主服控制台面板
-  requirements.txt         # 可选
-  core/plugin/             # 可选：主服 QQ 插件
+  default_config.yaml
+  core/
+    commonconfig/my-tools.js   # 主服控制台 ConfigBase
+    plugin/                    # 可选 QQ 插件
 ```
 
 ```python
-from pathlib import Path
-from core.plugin_kit import load_plugin_config
-
-_PLUGIN_DIR = Path(__file__).resolve().parent
 config = load_plugin_config(_PLUGIN_DIR, "my-tools")
 
-async def cmd_status(_request, _args):
-    return {"service": "my-tools", "ready": True}
-
 default = {
-    "name": "my-tools",
     "group": "my-tools",
     "plugin_dir": str(_PLUGIN_DIR),
-    "plugin_config": config,
-    "commands": {"status": cmd_status},
     "routes": [...],
 }
 ```
 
-Loader 自动扫描 `apis/`；声明 `plugin_config` 后自动挂载 `/api/<group>/config/*`，主服 `ConfigLoader.registerFromSubserver()` 注入控制台。
+参考：`apis/media-tools/`、`apis/jmcomic/`（本地）。

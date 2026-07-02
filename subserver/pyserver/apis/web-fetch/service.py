@@ -149,7 +149,6 @@ default = {
     "description": "网页抓取与本地缓存",
     "group": "web-fetch",
     "plugin_dir": str(_PLUGIN_DIR),
-    "plugin_config": config,
     "priority": 130,
     "commands": {"status": cmd_status, "clear": cmd_clear},
     "routes": [

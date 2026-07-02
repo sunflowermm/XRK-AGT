@@ -116,7 +116,6 @@ default = {
     "description": "HTML/文本提取与 Markdown 转换",
     "group": "doc-pipeline",
     "plugin_dir": str(_PLUGIN_DIR),
-    "plugin_config": config,
     "priority": 140,
     "commands": {"status": cmd_status},
     "routes": [

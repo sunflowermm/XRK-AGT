@@ -169,7 +169,6 @@ default = {
     "description": "图片缩放、格式转换与缩略图",
     "group": "media-tools",
     "plugin_dir": str(_PLUGIN_DIR),
-    "plugin_config": config,
     "priority": 150,
     "commands": {"status": cmd_status},
     "routes": [

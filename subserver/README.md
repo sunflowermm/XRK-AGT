@@ -1,17 +1,19 @@
 # XRK-AGT 多语言子服务
 
-主服务 **Node.js** 负责 LLM / AIStream；子服务用**其它语言**做可插拔业务（契约见 [`CONTRACT.md`](CONTRACT.md)）。
+主服 **Node.js** 负责 LLM / AIStream / **全部配置管理（CommonConfig）**；子服务用其它语言做可插拔业务，**只读** `data/` 下运行时配置。
 
-| ID | 语言 | 端口 | 示例插件 | CommonConfig |
-|----|------|------|----------|:------------:|
-| `pyserver` | Python | 8000 | media-tools, doc-pipeline, web-fetch, jmcomic* | ✅ |
-| `goserver` | Go | 8001 | hash-tools | ❌ |
-| `phpserver` | PHP | 8002 | string-tools | ❌ |
-| `jserver` | Spring Boot | 8003 | datetime-tools, json-tools | ❌ |
-| `netserver` | ASP.NET Core | 8004 | uuid-tools | ❌ |
-| `rustserver` | Axum | 8005 | regex-tools | ❌ |
+> 配置分工：[docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md) · 插件开发：[docs/subserver-plugin-development.md](../docs/subserver-plugin-development.md)
 
-\* `jmcomic` 为本地 clone（gitignore），结构与框架示例相同。
+| ID | 语言 | 端口 | 示例插件 |
+|----|------|------|----------|
+| `pyserver` | Python | 8000 | media-tools, doc-pipeline, web-fetch, jmcomic* |
+| `goserver` | Go | 8001 | hash-tools |
+| `phpserver` | PHP | 8002 | string-tools |
+| `jserver` | Spring Boot | 8003 | datetime-tools, json-tools |
+| `netserver` | ASP.NET Core | 8004 | uuid-tools |
+| `rustserver` | Axum | 8005 | regex-tools |
+
+\* `jmcomic` 本地 clone（gitignore）。
 
 选型说明：[`LANGUAGES.md`](LANGUAGES.md) · 注册表：[`registry.yaml`](registry.yaml) · **开发指南**：[`docs/subserver-plugin-development.md`](../docs/subserver-plugin-development.md)
 
@@ -19,7 +21,7 @@
 
 与主仓 `core/system-Core` 同理：**子服底层在 runtime 的 `core/`，业务插件在 `apis/<组名>/`**。
 
-业务插件若需 QQ 指令等与主服融合，在 **`apis/<组名>/core/plugin/`**（等）下放置；业务 **配置** 用 `config_schema.yaml` + `plugin_config`，见 [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)。
+业务插件若需与主服融合，在 **`apis/<组名>/core/`** 放置与主仓 Core 相同结构：`commonconfig/`（控制台）、`plugin/`（QQ）等。见 [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)。
 
 ```
 <subserver>/<runtime>/
@@ -30,7 +32,8 @@
     <组名>/
       service.*               # 子服 HTTP/命令入口
       default_config.*        # 业务配置模板 → data/<组名>/
-      core/                   # 可选：主服扩展（plugin、http…）
+      core/                   # 主服 Core 扩展（与 core/system-Core 同结构）
+        commonconfig/
         plugin/
 ```
 
@@ -81,8 +84,7 @@ docker compose up -d
 | 能力 | pyserver | goserver | phpserver | jserver | netserver | rustserver |
 |------|:--------:|:--------:|:---------:|:-------:|:---------:|:----------:|
 | `/health` · `/api/system/*` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| CommonConfig HTTP → 主服控制台 | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| 主服扫描 `apis/*/core/plugin` | ✅ | ✅ | ✅ | ⚠️ | ✅ | ⚠️ |
+| 主服扫描 `core/commonconfig` | ✅ | ✅* | ✅* | ⚠️ | ✅* | ⚠️ |
 | `apis/<group>/` 自动扫描 | ✅ | 生成 import | ✅ | Spring 扫描 | 反射发现 | 手动注册 |
 | stdin `子服>` + 中文别名 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 

@@ -36,9 +36,8 @@ subserver/pyserver/apis/*/
 
 ## 子服插件 `apis/<group>/core/`
 
-- 主服可扫描 `plugin/`、`http/` 等（**不含 commonconfig**）。
-- 业务配置：子服 `config_schema.yaml` + `/api/{group}/config/*`；主服控制台经 `SubserverConfigProxy` 编辑。
-- 实现：`discoverAllCoreSubDirs` · [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)
+- 主服扫描 `commonconfig/`、`plugin/`、`http/` 等（与主仓 Core 同结构）。
+- **配置仅主服编辑**；子服 `load_plugin_config` 只读 yaml。见 [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)
 
 ## 子服运维
 

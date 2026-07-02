@@ -1,43 +1,30 @@
 ---
 name: xrk-subserver
-description: 当你需要理解或修改子服务端插件、与主服 HTTP/CommonConfig/QQ 插件融合时使用。
+description: 子服插件开发；配置全在主服 CommonConfig，子服只读 data/；Bot.callSubserver 用 cfg.subserver。
 ---
 
-## 文档（按场景）
+## 配置（必读）
 
-| 场景 | 文档 |
-|------|------|
-| **新建/改子服插件** | `docs/subserver-plugin-development.md` |
-| CommonConfig 代理 | `docs/subserver-commonconfig.md` |
-| HTTP 契约 | `subserver/CONTRACT.md` · `docs/subserver-api.md` |
-| Python 实现 | `subserver/pyserver/README.md` |
+**[docs/subserver-commonconfig.md](../../docs/subserver-commonconfig.md)**
 
-## 主服衔接
+| 类型 | 主服编辑 | 子服 |
+|------|----------|------|
+| 子服 host/port | AIStream → 子服务端（`cfg.subserver`） | 被连接 |
+| 业务插件 | `apis/<group>/core/commonconfig/*.js` | `load_plugin_config` 只读 yaml |
 
-| 能力 | 入口 |
-|------|------|
-| 调子服 API | `Bot.callSubserver` · `#utils/subserver-client.js` |
-| 子服地址 | `cfg.subserver`（`aistream.yaml`） |
-| 控制台业务配置 | `ConfigLoader.registerFromSubserver()` → **pyserver + `plugin_config`** |
-| QQ 插件 | `subserver/<runtime>/apis/<group>/core/plugin/*.js`（主服 Loader 扫描） |
+## 插件结构
 
-**不要**在 main `core/*/commonconfig/` 为子服业务写 schema；用子服 `config_schema.yaml`。
-
-## 参考示例
-
-- HTTP + CommonConfig：`subserver/pyserver/apis/media-tools/`
-- 完整（QQ + 业务）：`subserver/pyserver/apis/jmcomic/`
-
-## 调用示例
-
-```javascript
-await Bot.callSubserver('/api/media-tools/resize', {
-  method: 'POST',
-  body: { path: 'data/foo.png', width: 800 }
-});
-
-import ConfigLoader from '#infrastructure/commonconfig/loader.js';
-const cfg = await ConfigLoader.get('media-tools')?.read();
+```
+apis/<group>/
+  service.*
+  default_config.yaml
+  core/commonconfig/<group>.js
+  core/plugin/*.js
 ```
 
-Node 26：`fetch` + `AbortSignal.timeout`（skill **`xrk-node-runtime`**）。
+## 文档
+
+- [subserver-plugin-development.md](../../docs/subserver-plugin-development.md)
+- [subserver/CONTRACT.md](../../subserver/CONTRACT.md)
+
+参考：`subserver/pyserver/apis/jmcomic/`、`media-tools/`。

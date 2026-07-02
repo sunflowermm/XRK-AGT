@@ -90,21 +90,23 @@ export default class MyStream extends AIStream {
 
 ## ConfigBase（`commonconfig/commonconfig.js`）
 
+**配置管理全在主服**；子服业务插件通过 `core/commonconfig/*.js` 接入同一套控制台（见 [subserver-commonconfig.md](subserver-commonconfig.md)）。
+
 | 项 | 说明 |
 |----|------|
-| 放置 | `core/<名>/commonconfig/*.js`（主仓 Core） |
-| 子服业务插件 | **不在主服放 schema**；子服 `config_schema.yaml` + HTTP API，主服 `SubserverConfigProxy` 代理，见 [subserver-commonconfig.md](subserver-commonconfig.md) · [subserver-plugin-development.md](subserver-plugin-development.md) |
-| 模板 | 独立 Core：`core/<名>/default/<name>.yaml` |
-
-主服子服连接：`cfg.subserver`（`aistream.yaml`）→ `Bot.callSubserver`。
+| 主仓 Core | `core/<名>/commonconfig/*.js` |
+| 子服业务插件 | `subserver/*/apis/<group>/core/commonconfig/*.js` |
+| 运行时数据 | `data/<group>/config.yaml`（主服 write，子服只读） |
+| 子服连接 | `aistream.yaml` → `cfg.subserver`（非业务 yaml） |
 
 ```javascript
 export default class MyConfig extends ConfigBase {
   constructor() {
     super({
-      name: 'myconfig',
+      name: 'mygroup',
       displayName: '显示名',
       filePath: 'data/mygroup/config.yaml',
+      defaultTemplatePath: 'subserver/pyserver/apis/mygroup/default_config.yaml',
       schema: { fields: { /* ... */ } },
     });
   }

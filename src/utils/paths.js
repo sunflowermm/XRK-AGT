@@ -45,10 +45,11 @@ const DEFAULT_LOADER_SUBDIRS = [
   'events'
 ];
 
-/** 子服 apis/<group>/core/ 下仅扫描主服扩展点；业务 commonconfig 走子服 HTTP API */
+/** 子服 apis/<group>/core/ 与主仓 core 同结构，主服 Loader 一并扫描 */
 const SUBSERVER_PLUGIN_CORE_SUBDIRS = [
   'plugin',
   'http',
+  'commonconfig',
   'stream',
   'tasker',
   'events'

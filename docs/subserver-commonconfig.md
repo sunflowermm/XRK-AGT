@@ -1,69 +1,114 @@
-# 子服插件 CommonConfig（扩展性）
+# 子服与主服：配置分工
 
-业务子服插件的配置**由子服维护**，主服控制台通过 HTTP 代理读写，不在主服 `core/*/commonconfig/` 重复 schema。
+> **原则**：**配置管理全在主服**（控制台 CommonConfig）；**子服只读**运行时 yaml/json。  
+> **插件开发**：[subserver-plugin-development.md](subserver-plugin-development.md) · **HTTP**：[subserver-api.md](subserver-api.md)
 
-> **开发总览**：[subserver-plugin-development.md](subserver-plugin-development.md)
+---
 
-## 实现状态
+## 三类配置
 
-| Runtime | CommonConfig HTTP | 说明 |
-|---------|:-----------------:|------|
-| **pyserver** | ✅ | `plugin_kit.py` + `plugin_config_api.py` + `base_api.py` |
-| goserver / phpserver / jserver / netserver / rustserver | ❌ | 契约已定义，实现待对齐；主服 `SubserverConfigProxy` 已 runtime 无关 |
+| 类型 | 谁编辑 | 谁读取 | 文件 / 入口 |
+|------|--------|--------|-------------|
+| **子服连接** | 主服控制台 | 主服 `Bot.callSubserver` | `aistream.yaml` → **`cfg.subserver`**（系统配置 → AIStream → 子服务端） |
+| **业务插件** | 主服控制台 | 子服 `load_plugin_config` / 主服 QQ 插件 | `data/<group>/config.yaml` |
+| **子服进程**（可选） | 部署 / 子服本地 | pyserver 启动 | `data/subserver/config.yaml`（监听地址等，与主服「连哪个端口」无关） |
 
-## 子服插件约定（pyserver）
+主服编辑子服 **host/port** 时，改的是 **AIStream → 子服务端**（`subserver.runtimes.pyserver` 等），不是业务插件 yaml。
 
-**完整参考**：`subserver/pyserver/apis/jmcomic/`  
-**框架示例**：`media-tools`、`doc-pipeline`、`web-fetch`
+---
+
+## 业务插件 CommonConfig（与主仓 Core 同模式）
+
+schema 放在子服插件目录下的 **`core/commonconfig/`**，由主服 `ConfigLoader` 扫描——**不是**子服 HTTP API，**不是**主仓 `core/*/commonconfig/` 再写一份。
 
 ```
-apis/<group>/
-  service.py              # default 字典含 plugin_config: PluginConfig
-  default_config.yaml     # 默认值 → data/<group>/config.yaml
-  config_schema.yaml      # CommonConfig 面板 schema
-  core/plugin/            # 可选：主服 QQ 插件等
+subserver/pyserver/apis/<group>/
+  default_config.yaml              # 首次引导模板（仅复制用）
+  service.py                       # 子服业务，load_plugin_config 只读
+  core/
+    commonconfig/<group>.js        # ConfigBase → 控制台编辑
+    plugin/*.js                    # 可选：主服 QQ
 ```
 
-**不要**在 `apis/<group>/core/commonconfig/` 或主服 `core/*/commonconfig/` 为子服业务重复写 schema。
+### 数据流
 
-`default` 字典声明：
+```
+控制台保存
+    → ConfigBase.write()
+    → data/<group>/config.yaml
+    → 子服 PluginConfig.get() / reload()
+    → 主服 ConfigLoader.get('<group>').read()
+```
+
+子服**不提供**配置写入 API；改配置后子服需 **reload 配置或重启** 才能读到新值（各插件可在 `status` 命令里提示）。
+
+### 示例
+
+| 控制台名称 | commonconfig 文件 | 运行时数据 |
+|------------|-------------------|------------|
+| 禁漫本子 | `apis/jmcomic/core/commonconfig/jmcomic.js` | `data/jmcomic/config.yaml` |
+| 媒体工具 | `apis/media-tools/core/commonconfig/media-tools.js` | `data/media-tools/config.yaml` |
+
+`defaultTemplatePath` 指向 `subserver/pyserver/apis/<group>/default_config.yaml`。
+
+---
+
+## 主服扫描路径
+
+`src/utils/paths.js` 合并：
+
+| 来源 | 子目录 |
+|------|--------|
+| `core/<Core>/` | plugin, http, **commonconfig**, stream, tasker, events |
+| `subserver/*/apis/<group>/core/` | 同上 |
+
+实现：`src/infrastructure/commonconfig/loader.js`。
+
+---
+
+## 子服侧（只读）
 
 ```python
-default = {
-    "group": "mygroup",
-    "plugin_config": config,  # load_plugin_config(...) 实例
-    ...
-}
+from core.plugin_kit import load_plugin_config
+
+config = load_plugin_config(_PLUGIN_DIR, "<group>")
+value = config.get("limits.max_pages", 300)
+config.reload()  # 主服改 yaml 后可选刷新
 ```
 
-框架自动挂载：
+**禁止**在子服实现配置写入 HTTP、或在主仓 `core/*/commonconfig/` 重复业务 schema。
 
-| 方法 | 路径 |
-|------|------|
-| GET | `/api/system/commonconfig/list` |
-| GET | `/api/{group}/config/structure` |
-| GET | `/api/{group}/config/read` |
-| POST | `/api/{group}/config/write` |
+---
 
-实现：`subserver/pyserver/core/plugin_kit.py`、`plugin_config_api.py`、`base_api.py`。
-
-## 主服
-
-1. **连接**：`cfg.subserver`（来自 `aistream.yaml` → `subserver` 段）供 `Bot.callSubserver` / `getSubserverConfig()` 使用。
-2. **控制台**：`ConfigLoader.registerFromSubserver()` 启动时拉取子服 list + structure，注册 `SubserverConfigProxy`（`src/infrastructure/commonconfig/subserver-config-proxy.js`）。
-3. **扫描边界**：主服仅扫描子服 `apis/<group>/core/{plugin,http,stream,tasker,events}`，**不**扫描 `core/commonconfig`。
-
-子服端点编辑：**CommonConfig → 系统配置 → AIStream → 子服务端**（`system.js` / `aistream.yaml`）。
-
-## 插件内读配置（主服 JS）
+## 主服侧
 
 ```javascript
 import ConfigLoader from '#infrastructure/commonconfig/loader.js';
+import cfg from '#infrastructure/config/config.js';
+
+// 业务配置
 const data = await ConfigLoader.get('jmcomic')?.read();
+
+// 子服连接
+await Bot.callSubserver('/api/jmcomic/download', { body: { album_id: '123' } });
+// 端点来自 cfg.subserver
 ```
 
-与子服控制台、`data/<group>/config.yaml` 同源（经 HTTP 代理）。
+---
 
-## 其它 runtime
+## 新建业务插件检查清单
 
-对齐同一 HTTP 契约后，无需改主服代理逻辑。见 [subserver-plugin-development.md](subserver-plugin-development.md) 能力矩阵。
+- [ ] `default_config.yaml` + `data/<group>/config.yaml`
+- [ ] `core/commonconfig/<group>.js`（ConfigBase + `defaultTemplatePath`）
+- [ ] 子服 `service.*` 仅 `load_plugin_config` 读取
+- [ ] 需 QQ：`core/plugin/*.js`
+- [ ] 未在主仓 `core/*/commonconfig/` 重复 schema
+- [ ] 未在子服实现 config HTTP 写入
+
+---
+
+## 相关文档
+
+- [subserver-plugin-development.md](subserver-plugin-development.md) — 目录与 HTTP 契约
+- [subserver/CONTRACT.md](../subserver/CONTRACT.md) — 子服路由
+- [base-classes.md](base-classes.md) — ConfigBase 基类
