@@ -23,12 +23,12 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 启动 XRK-AGT Python 子服务端")
     try:
         await ApiLoader.load_all(app)
-        stdin_enabled = config.get("server.stdin.enabled", True)
-        stdin_prompt = config.get("server.stdin.prompt", "子服> ")
-        start_stdin_loop(enabled=stdin_enabled, prompt=stdin_prompt)
         logger.info("──────────────────────────────────────")
         logger.info("✅ 启动就绪 · 底层服务已加载")
         logger.info("──────────────────────────────────────")
+        stdin_enabled = config.get("server.stdin.enabled", True)
+        stdin_prompt = config.get("server.stdin.prompt", "子服> ")
+        start_stdin_loop(enabled=stdin_enabled, prompt=stdin_prompt)
     except Exception as e:
         logger.error("❌ 启动失败: %s", e, exc_info=True)
         raise

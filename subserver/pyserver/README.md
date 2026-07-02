@@ -35,15 +35,15 @@ uv run xrk              # 或 uv run python main.py
 交互式启动且 `server.stdin.enabled: true` 时出现 `子服>` 提示符（与主服 `>` 分离，日志照常输出）。
 
 ```text
-子服> 帮助
+子服> 帮助              # 插件与命令（Tab 补全 · ↑↓ 历史）
 子服> 列表
-子服> 更新              # 扫描 apis/*，逐个 git pull + pip
-子服> jmcomic 更新      # 仅更新某一插件
-子服> media-tools 状态
+子服> 更新              # 全部 apis/* git pull + pip
+子服> jmcomic 更新
+子服> 清屏
 子服> 退出
 ```
 
-`apis/` 在**启动时**自动扫描装载；`更新` 对目录内所有插件（含未成功装载的 git clone）拉代码与依赖，完成后**重启子服**生效。
+与主服 `>` 相同：readline 编辑、历史记录在 `data/subserver/stdin_history`。
 
 ## 🔧 配置
 

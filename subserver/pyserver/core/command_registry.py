@@ -15,6 +15,8 @@ from .plugin_kit import (
     update_all_plugin_dirs,
 )
 
+from .cli_ui import strip_line
+
 CommandHandler = Callable[..., Any]
 UpdateHandler = Callable[..., Awaitable[Any]]
 
@@ -24,13 +26,6 @@ _GROUP_CMD_CN = {
     "同步": "update",
     "帮助": "help",
 }
-
-
-def _strip_line(line: str) -> str:
-    text = (line or "").strip()
-    if text.startswith("#"):
-        text = text[1:].strip()
-    return text
 
 
 @dataclass
@@ -88,11 +83,18 @@ class CommandRegistry:
     async def _update_group(cls, name: str) -> Dict[str, Any]:
         entry = cls.get(name)
         if entry:
-            return await entry.dispatch("update", [])
+            res = await entry.dispatch("update", [])
+            res["action"] = "update-one"
+            return res
         plugin_dir = find_plugin_dir(name)
         if plugin_dir:
             result = await default_plugin_update(plugin_dir)
-            return {"ok": bool(result.get("ok")), "group": name, "result": result}
+            return {
+                "ok": bool(result.get("ok")),
+                "action": "update-one",
+                "group": name,
+                "result": result,
+            }
         return {
             "ok": False,
             "error": f"未知插件: {name}",
@@ -101,7 +103,7 @@ class CommandRegistry:
 
     @classmethod
     async def run_line(cls, line: str) -> Dict[str, Any]:
-        raw = _strip_line(line)
+        raw = strip_line(line)
         if not raw:
             return {"ok": False, "error": "空命令"}
 
@@ -114,7 +116,7 @@ class CommandRegistry:
                 return {
                     "ok": True,
                     **cls.list_help(),
-                    "hint": "顶栏: 帮助 · 列表 · 更新 | 单插件: <组名> 更新",
+                    "hint": "顶栏: 帮助 · 列表 · 更新 · 清屏 · 退出 | 单插件: <组名> 更新",
                 }
             if head_lower in ("list", "groups", "ls") or head in ("列表", "组"):
                 return {"ok": True, "groups": cls.groups()}
