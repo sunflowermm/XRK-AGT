@@ -14,16 +14,7 @@ from core.plugin_kit import load_plugin_config
 logger = logging.getLogger(__name__)
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
-config = load_plugin_config(
-    _PLUGIN_DIR,
-    "media-tools",
-    builtin={
-        "max_upload_mb": 20,
-        "jpeg_quality": 85,
-        "thumbnail_size": 320,
-        "allowed_formats": ["jpeg", "jpg", "png", "webp", "gif"],
-    },
-)
+config = load_plugin_config(_PLUGIN_DIR, "media-tools")
 
 
 def _output_dir() -> Path:
@@ -178,6 +169,7 @@ default = {
     "description": "图片缩放、格式转换与缩略图",
     "group": "media-tools",
     "plugin_dir": str(_PLUGIN_DIR),
+    "plugin_config": config,
     "priority": 150,
     "commands": {"status": cmd_status},
     "routes": [

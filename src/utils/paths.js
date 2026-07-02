@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
-import { discoverCoreSubDirs } from './core-fs.js';
+import { discoverAllCoreSubDirs } from './core-fs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -45,6 +45,15 @@ const DEFAULT_LOADER_SUBDIRS = [
   'events'
 ];
 
+/** 子服 apis/<group>/core/ 下仅扫描主服扩展点；业务 commonconfig 走子服 HTTP API */
+const SUBSERVER_PLUGIN_CORE_SUBDIRS = [
+  'plugin',
+  'http',
+  'stream',
+  'tasker',
+  'events'
+];
+
 function invalidateCoreCache() {
   _coreDirsCache = null;
   _coreSubDirsCache.clear();
@@ -74,7 +83,12 @@ async function warmupCoreLayout(subDirNames = DEFAULT_LOADER_SUBDIRS) {
 
   if (!_warmupPromise) {
     _warmupPromise = (async () => {
-      const discovered = await discoverCoreSubDirs(_core, DEFAULT_LOADER_SUBDIRS);
+      const discovered = await discoverAllCoreSubDirs(
+        _root,
+        _core,
+        DEFAULT_LOADER_SUBDIRS,
+        SUBSERVER_PLUGIN_CORE_SUBDIRS
+      );
 
       if (!_coreDirsCache) {
         const coreDirs = new Set();
@@ -87,7 +101,7 @@ async function warmupCoreLayout(subDirNames = DEFAULT_LOADER_SUBDIRS) {
       }
 
       for (const name of DEFAULT_LOADER_SUBDIRS) {
-        _coreSubDirsCache.set(name, discovered[name]);
+        _coreSubDirsCache.set(name, discovered[name] ?? []);
       }
     })();
   }

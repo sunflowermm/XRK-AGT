@@ -46,7 +46,9 @@
     └─ apis/<group>/      示例或业务插件
 ```
 
-与主仓 **`core/system-Core`** 分工相同：底层在 `core/`，可运行的示例在具名目录里（如 `media-tools`），**无** `_template` 脚手架目录。
+与主仓 **`core/system-Core`** 分工相同：子服底层在 runtime 的 `core/`，业务在 `apis/<group>/`。
+
+**主服融合**：见 [subserver-plugin-development.md](subserver-plugin-development.md)。`core/plugin/` 由主服 Loader 扫描；业务配置走子服 CommonConfig HTTP（[subserver-commonconfig.md](subserver-commonconfig.md)）；子服端点：`cfg.subserver`（`aistream.yaml`）。
 
 子服终端统一 **`子服>`** 提示符；顶栏支持 `帮助`/`列表`，组内支持 `状态`/`更新`。
 
@@ -90,13 +92,46 @@
 }
 ```
 
+### GET /api/system/commonconfig/list（pyserver）
+
+已声明 `plugin_config` 的插件列表，供主服 `ConfigLoader.registerFromSubserver()` 使用。
+
+**示例响应**：
+```json
+{
+  "ok": true,
+  "configs": [
+    {
+      "name": "media-tools",
+      "group": "media-tools",
+      "runtime": "pyserver",
+      "displayName": "媒体工具",
+      "source": "subserver"
+    }
+  ]
+}
+```
+
+### GET /api/{group}/config/structure · read · write（pyserver）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/{group}/config/structure` | schema + 元数据 |
+| GET | `/api/{group}/config/read` | 运行时配置 |
+| POST | `/api/{group}/config/write` | body: `{ "data": { ... } }` |
+
+其它 runtime 待对齐；主服 `SubserverConfigProxy` 已 runtime 无关。
+
 ## 扩展开发
 
 子服务端通过 Loader 自动扫描 `apis/` 并装载导出 `default` 的模块（契约见 [`subserver/CONTRACT.md`](../subserver/CONTRACT.md)）。
 
-**学习用完整示例**（推荐直接打开改组名）：
+**开发指南**：[subserver-plugin-development.md](subserver-plugin-development.md)
 
-- Python：`subserver/pyserver/apis/media-tools/service.py`
+**学习用示例**：
+
+- Python（HTTP + CommonConfig）：`subserver/pyserver/apis/media-tools/`
+- Python（完整融合 + QQ）：`subserver/pyserver/apis/jmcomic/`
 - Go：`subserver/goserver/apis/hash-tools/service.go`
 - PHP：`subserver/phpserver/apis/string-tools/service.php`
 

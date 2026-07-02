@@ -1,0 +1,30 @@
+name: media-tools
+displayName: 媒体工具
+description: 图片缩放、格式转换与缩略图（data/media-tools/config.yaml）
+
+schema:
+  fields:
+    max_upload_mb:
+      type: number
+      label: 最大上传 (MB)
+      min: 1
+      default: 20
+      component: InputNumber
+    jpeg_quality:
+      type: number
+      label: JPEG 质量
+      min: 1
+      max: 100
+      default: 85
+      component: InputNumber
+    thumbnail_size:
+      type: number
+      label: 缩略图边长 (px)
+      min: 32
+      default: 320
+      component: InputNumber
+    allowed_formats:
+      type: array
+      label: 允许格式
+      component: Input
+      default: ["jpeg", "jpg", "png", "webp", "gif"]

@@ -4,6 +4,7 @@ from fastapi import HTTPException, Request
 
 from core.command_registry import CommandRegistry
 from core.config import Config
+from core.plugin_config_api import commonconfig_list_handler
 
 config = Config()
 
@@ -56,6 +57,7 @@ default = {
     "routes": [
         {"method": "GET", "path": "/api/system/ping", "handler": ping_handler},
         {"method": "GET", "path": "/api/system/config", "handler": config_handler},
+        {"method": "GET", "path": "/api/system/commonconfig/list", "handler": commonconfig_list_handler},
         {"method": "GET", "path": "/api/system/groups", "handler": groups_handler},
         {"method": "POST", "path": "/api/system/command", "handler": command_handler},
     ],

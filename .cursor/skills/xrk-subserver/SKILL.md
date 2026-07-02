@@ -1,35 +1,43 @@
 ---
 name: xrk-subserver
-description: 当你需要理解或修改 Python 子服务端（FastAPI 扩展框架），以及它与主服务端的 HTTP 衔接时使用。
+description: 当你需要理解或修改子服务端插件、与主服 HTTP/CommonConfig/QQ 插件融合时使用。
 ---
 
-## 文档与代码
+## 文档（按场景）
 
-- `docs/subserver-api.md`、`subserver/pyserver/`
-- 主→子调用：`#utils/subserver-client.js`（`callSubserver`、`getSubserverConfig`、`fetchSubserverToPath`）
-- Bot 挂载：`Bot.callSubserver`（日志包装）
+| 场景 | 文档 |
+|------|------|
+| **新建/改子服插件** | `docs/subserver-plugin-development.md` |
+| CommonConfig 代理 | `docs/subserver-commonconfig.md` |
+| HTTP 契约 | `subserver/CONTRACT.md` · `docs/subserver-api.md` |
+| Python 实现 | `subserver/pyserver/README.md` |
 
-## 职责边界
+## 主服衔接
 
-| 侧 | 职责 |
-|----|------|
-| **主服务端 (Node)** | LLM（`LLMFactory`）、AIStream 工作流、MCP、MemoryManager/RAG、HTTP/WS |
-| **子服务端 (Python)** | 健康检查、系统 API、`apis/<group>/*.py` 业务扩展（按需装载） |
+| 能力 | 入口 |
+|------|------|
+| 调子服 API | `Bot.callSubserver` · `#utils/subserver-client.js` |
+| 子服地址 | `cfg.subserver`（`aistream.yaml`） |
+| 控制台业务配置 | `ConfigLoader.registerFromSubserver()` → **pyserver + `plugin_config`** |
+| QQ 插件 | `subserver/<runtime>/apis/<group>/core/plugin/*.js`（主服 Loader 扫描） |
 
-子服务端**不提供**内置 `/api/vector/*`、`/api/langchain/*`。
+**不要**在 main `core/*/commonconfig/` 为子服业务写 schema；用子服 `config_schema.yaml`。
+
+## 参考示例
+
+- HTTP + CommonConfig：`subserver/pyserver/apis/media-tools/`
+- 完整（QQ + 业务）：`subserver/pyserver/apis/jmcomic/`
 
 ## 调用示例
 
 ```javascript
-import { callSubserver, fetchSubserverToPath } from '#utils/subserver-client.js';
+await Bot.callSubserver('/api/media-tools/resize', {
+  method: 'POST',
+  body: { path: 'data/foo.png', width: 800 }
+});
 
-// 或运行时：Bot.callSubserver（配置来自 aistream.yaml → subserver）
-await Bot.callSubserver('/health', { method: 'GET' });
-await fetchSubserverToPath('/api/mygroup/file', { query: { id: '1' }, dest: '/path/local.bin' });
+import ConfigLoader from '#infrastructure/commonconfig/loader.js';
+const cfg = await ConfigLoader.get('media-tools')?.read();
 ```
 
-Node 26：`fetch` + `AbortSignal.timeout`（见 `subserver-client.js`、skill **`xrk-node-runtime`**）。
-
-## 扩展子服务 API
-
-在 `subserver/pyserver/apis/<group>/` 新增模块，导出 `default` 路由元数据（见 `docs/subserver-api.md`）。
+Node 26：`fetch` + `AbortSignal.timeout`（skill **`xrk-node-runtime`**）。

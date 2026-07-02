@@ -34,6 +34,12 @@ subserver/pyserver/apis/*/
 - 框架示例外均为本地 clone（含 jmcomic 等第三方），**勿**写 `apis/jmcomic/` 等按名排除。
 - 第三方插件不属于 XRK 底层：勿写进框架帮助、示例、注释、`PyserverApi` 封装。
 
+## 子服插件 `apis/<group>/core/`
+
+- 主服可扫描 `plugin/`、`http/` 等（**不含 commonconfig**）。
+- 业务配置：子服 `config_schema.yaml` + `/api/{group}/config/*`；主服控制台经 `SubserverConfigProxy` 编辑。
+- 实现：`discoverAllCoreSubDirs` · [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)
+
 ## 子服运维
 
 - 子服命令在 **子服终端 `子服>`** 输入，不经主服 stdin 转发。

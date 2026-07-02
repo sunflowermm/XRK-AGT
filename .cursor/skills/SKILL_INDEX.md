@@ -33,7 +33,7 @@
 - `xrk-plugins`：插件基类、加载与匹配机制。
 - `xrk-project-overview`：项目全局架构与目录速览。
 - `xrk-renderer`：渲染器、模板渲染、截图输出。
-- `xrk-subserver`：Python 子服务端与主服务衔接。
+- `xrk-subserver`：子服插件开发、主服 HTTP/CommonConfig/QQ 融合（见 `docs/subserver-plugin-development.md`）。
 - `xrk-system-core`：system-Core 模块能力与实现定位。
 - `xrk-tasker`：Tasker 协议适配层开发与理解。
 - `xrk-v3-api`：`/api/v3/chat/completions` 与流式能力。

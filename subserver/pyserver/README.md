@@ -67,52 +67,54 @@ HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk
 
 ## 📝 开发插件
 
+> **完整指南**：[docs/subserver-plugin-development.md](../../docs/subserver-plugin-development.md)
+
 ### 目录分工（对齐主仓 system-Core）
 
 | 路径 | 用途 |
 |------|------|
 | `core/` | 加载器、配置、`plugin_kit` 等**底层** |
 | `apis/system/` | 框架系统 API（`/api/system/*`） |
-| `apis/<组名>/` | **示例或业务插件**，每组一个目录 |
+| `apis/<组名>/` | **业务插件** |
 
-勿在 `core/` 写业务；新建插件对照现有示例改组名与路由。
+勿在 `core/` 写业务；**勿**在 `apis/<组名>/core/commonconfig/` 写 schema（用 `config_schema.yaml`）。
 
 ### 参考示例
 
-完整写法见 **`apis/media-tools/service.py`**（`default` 字典、`commands`、`routes`、`load_plugin_config`）。
+| 目标 | 复制 |
+|------|------|
+| HTTP + 主服控制台可编辑 | `apis/media-tools/`（含 `config_schema.yaml` + `plugin_config`） |
+| 业务 + QQ 插件 + CommonConfig | `apis/jmcomic/`（本地 clone，gitignore） |
 
-最小结构：
+### 标准结构
 
 ```
 apis/my-tools/
   service.py
-  default_config.yaml   # 可选
-  requirements.txt      # 可选，需单独 uv pip install
+  default_config.yaml      # → data/my-tools/config.yaml
+  config_schema.yaml       # 主服控制台面板
+  requirements.txt         # 可选
+  core/plugin/             # 可选：主服 QQ 插件
 ```
 
 ```python
 from pathlib import Path
-from fastapi import Request
+from core.plugin_kit import load_plugin_config
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
+config = load_plugin_config(_PLUGIN_DIR, "my-tools")
 
 async def cmd_status(_request, _args):
     return {"service": "my-tools", "ready": True}
 
-async def hello_handler(_request: Request):
-    return {"ok": True}
-
 default = {
     "name": "my-tools",
-    "description": "我的插件",
     "group": "my-tools",
     "plugin_dir": str(_PLUGIN_DIR),
-    "priority": 100,
+    "plugin_config": config,
     "commands": {"status": cmd_status},
-    "routes": [
-        {"method": "GET", "path": "/api/my-tools/hello", "handler": hello_handler},
-    ],
+    "routes": [...],
 }
 ```
 
-Loader 自动扫描 `apis/` 并装载；插件作者只需 export `default`，无需调用 `create_api_from_dict`。
+Loader 自动扫描 `apis/`；声明 `plugin_config` 后自动挂载 `/api/<group>/config/*`，主服 `ConfigLoader.registerFromSubserver()` 注入控制台。

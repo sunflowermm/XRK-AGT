@@ -5,6 +5,8 @@ import { findInCoreSubDirs } from '#utils/core-fs.js';
 import { FileLoader } from '#utils/file-loader.js';
 import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
+import { callSubserver } from '#utils/subserver-client.js';
+import SubserverConfigProxy from './subserver-config-proxy.js';
 
 class ConfigLoader {
   configs = new Map();
@@ -22,6 +24,8 @@ class ConfigLoader {
 
     await FileLoader.forEachBatch(allFiles, LOADER_BATCH_SIZE, (file) => this._loadConfig(file));
 
+    await this.registerFromSubserver();
+
     this.loaded = true;
     BotUtil.makeLog(
       'info',
@@ -29,6 +33,68 @@ class ConfigLoader {
       'ConfigLoader'
     );
     return this.configs;
+  }
+
+  /** 拉取子服已注册插件配置，注入控制台（业务 schema 仅在子服维护） */
+  async registerFromSubserver() {
+    let items = [];
+    try {
+      const res = await callSubserver('/api/system/commonconfig/list', {
+        method: 'GET',
+        timeout: 8000
+      });
+      items = Array.isArray(res?.configs) ? res.configs : [];
+    } catch (error) {
+      BotUtil.makeLog(
+        'debug',
+        `子服 CommonConfig 未接入（子服未启动或无可配置插件）: ${error.message}`,
+        'ConfigLoader'
+      );
+      return;
+    }
+
+    for (const item of items) {
+      const group = item.group;
+      if (!group) continue;
+      try {
+        const structureRes = await callSubserver(`/api/${group}/config/structure`, {
+          method: 'GET',
+          runtime: item.runtime,
+          timeout: 8000
+        });
+        const structure = structureRes?.structure;
+        if (!structure?.name) continue;
+
+        if (this.configs.has(structure.name)) {
+          BotUtil.makeLog(
+            'warn',
+            `子服配置 ${structure.name} 与本地 CommonConfig 重名，跳过代理`,
+            'ConfigLoader'
+          );
+          continue;
+        }
+
+        this.configs.set(
+          structure.name,
+          new SubserverConfigProxy({
+            ...structure,
+            runtime: item.runtime,
+            group
+          })
+        );
+        BotUtil.makeLog(
+          'debug',
+          `代理子服配置: ${structure.displayName ?? structure.name} (${item.runtime}/${group})`,
+          'ConfigLoader'
+        );
+      } catch (error) {
+        BotUtil.makeLog(
+          'warn',
+          `子服配置 ${group} 结构拉取失败: ${error.message}`,
+          'ConfigLoader'
+        );
+      }
+    }
   }
 
   async _loadConfig(filePath) {

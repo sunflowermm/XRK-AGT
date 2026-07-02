@@ -163,7 +163,9 @@ sequenceDiagram
 
 ## 按场景的写法
 
-### 插件（`core/*/plugin/`）
+### 插件（`core/*/plugin/` · `subserver/*/apis/*/core/plugin/`）
+
+主服 `PluginsLoader` 与 `ConfigLoader` 等会同时扫描仓库根 `core/<Core>/` 与子服业务插件下的 `apis/<group>/core/`（见 `subserver/CONTRACT.md`）。
 
 ```javascript
 import plugin from '#infrastructure/plugins/plugin.js';

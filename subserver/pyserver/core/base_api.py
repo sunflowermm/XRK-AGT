@@ -199,6 +199,15 @@ def create_api_from_dict(data: Dict[str, Any]) -> BaseAPI:
                 self.routes.append(route_config)
 
             _register_plugin_commands(app, self, self._data, self.routes)
+
+            plugin_config = self._data.get("plugin_config")
+            if plugin_config and self._data.get("group"):
+                from .plugin_config_api import attach_plugin_config_routes
+                from .plugin_kit import register_plugin_config
+
+                group = self._data["group"]
+                register_plugin_config(group, plugin_config)
+                attach_plugin_config_routes(app, group, plugin_config)
         
         async def init(self, app: FastAPI):
             """执行自定义初始化钩子"""

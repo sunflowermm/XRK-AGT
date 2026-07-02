@@ -19,16 +19,7 @@ from core.plugin_kit import load_plugin_config
 logger = logging.getLogger(__name__)
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
-config = load_plugin_config(
-    _PLUGIN_DIR,
-    "web-fetch",
-    builtin={
-        "timeout_sec": 30,
-        "cache_ttl_sec": 3600,
-        "max_body_bytes": 2_000_000,
-        "user_agent": "XRK-AGT-subserver/1.1",
-    },
-)
+config = load_plugin_config(_PLUGIN_DIR, "web-fetch")
 
 
 def _cache_dir() -> Path:
@@ -158,6 +149,7 @@ default = {
     "description": "网页抓取与本地缓存",
     "group": "web-fetch",
     "plugin_dir": str(_PLUGIN_DIR),
+    "plugin_config": config,
     "priority": 130,
     "commands": {"status": cmd_status, "clear": cmd_clear},
     "routes": [

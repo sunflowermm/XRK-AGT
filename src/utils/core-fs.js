@@ -79,6 +79,121 @@ export async function discoverCoreSubDirs(coreRoot, subDirNames) {
   return result;
 }
 
+function mergeCoreSubDirMaps(repoMap, extraMap, subDirNames) {
+  const merged = Object.fromEntries(subDirNames.map((name) => [name, []]));
+  for (const name of subDirNames) {
+    const seen = new Set();
+    for (const list of [repoMap[name], extraMap[name]]) {
+      for (const dirPath of list ?? []) {
+        const key = path.resolve(dirPath).toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged[name].push(path.resolve(dirPath));
+      }
+    }
+    merged[name].sort();
+  }
+  return merged;
+}
+
+/** 合并 repo core 与子服 apis 下 core 目录的 Loader 扫描结果 */
+export async function discoverAllCoreSubDirs(
+  repoRoot,
+  coreRoot,
+  subDirNames,
+  subserverSubDirNames = subDirNames,
+) {
+  const repo = await discoverCoreSubDirs(coreRoot, subDirNames);
+  const subserver = await discoverSubserverPluginCoreSubDirs(repoRoot, subserverSubDirNames);
+  return mergeCoreSubDirMaps(repo, subserver, subDirNames);
+}
+
+const SUBSERVER_PLUGIN_CORE_SKIP = new Set(['system']);
+
+/** @param {string} repoRoot @param {string[]} subDirNames */
+export async function discoverSubserverPluginCoreSubDirs(repoRoot, subDirNames) {
+  const result = Object.fromEntries(subDirNames.map((name) => [name, []]));
+  const subserverRoot = path.join(repoRoot, 'subserver');
+
+  let runtimeEntries;
+  try {
+    runtimeEntries = await fsPromises.readdir(subserverRoot, { withFileTypes: true });
+  } catch {
+    return result;
+  }
+
+  const candidates = [];
+  for (const runtimeEntry of runtimeEntries) {
+    if (!runtimeEntry.isDirectory() || runtimeEntry.name.startsWith('.')) continue;
+
+    const apisRoots = new Set();
+    for (const apisFolder of ['apis', 'Apis']) {
+      const apisRoot = path.join(subserverRoot, runtimeEntry.name, apisFolder);
+      try {
+        const stat = await fsPromises.stat(apisRoot);
+        if (stat.isDirectory()) apisRoots.add(path.resolve(apisRoot));
+      } catch {
+        /* runtime 无 apis 目录 */
+      }
+    }
+
+    for (const apisRoot of apisRoots) {
+      let groupEntries;
+      try {
+        groupEntries = await fsPromises.readdir(apisRoot, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      for (const groupEntry of groupEntries) {
+        if (!groupEntry.isDirectory()) continue;
+        if (groupEntry.name.startsWith('_') || SUBSERVER_PLUGIN_CORE_SKIP.has(groupEntry.name)) {
+          continue;
+        }
+
+        for (const subName of subDirNames) {
+          candidates.push({
+            subName,
+            fullPath: path.join(apisRoot, groupEntry.name, 'core', subName),
+          });
+        }
+      }
+    }
+  }
+
+  if (candidates.length === 0) return result;
+
+  const exists = statDirs(candidates.map((c) => c.fullPath));
+  candidates.forEach((c, i) => {
+    if (exists[i]) result[c.subName].push(path.resolve(c.fullPath));
+  });
+
+  for (const subName of subDirNames) {
+    result[subName].sort();
+  }
+  return result;
+}
+
+/** 从 core 扩展目录内绝对路径解析模块归属（repo Core 名或子服插件组名） */
+export function resolveCoreExtensionLabel(filePath, subDir = 'plugin') {
+  const normalized = path.resolve(filePath);
+  const parts = normalized.split(path.sep);
+  const apisIdx = parts.findIndex((part) => part.toLowerCase() === 'apis');
+  if (
+    apisIdx >= 0
+    && parts[apisIdx + 2]?.toLowerCase() === 'core'
+    && parts[apisIdx + 3] === subDir
+    && parts[apisIdx + 1]
+  ) {
+    return parts[apisIdx + 1];
+  }
+  return path.basename(path.dirname(path.dirname(normalized)));
+}
+
+export function resolvePluginCoreLabel(filePath) {
+  return resolveCoreExtensionLabel(filePath, 'plugin');
+}
+
 /** @param {string[]} pathsList @returns {(string | null)[]} */
 export function readTextFilesSync(pathsList) {
   return pathsList.map((p) => {

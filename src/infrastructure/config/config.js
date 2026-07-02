@@ -138,6 +138,8 @@ class Cfg {
   get redis() { return this.getGlobalConfig('redis'); }
   // aistream 为随端口配置（server_bots/{port}/aistream.yaml）
   get aistream() { return this.getServerConfig('aistream'); }
+  /** 子服务端连接（host/port/timeout/runtimes）；Bot.callSubserver 读取 */
+  get subserver() { return this.aistream?.subserver ?? {}; }
 
   get server() { return this.getServerConfig('server'); }
   get chatbot() { return this.getServerConfig('chatbot'); }

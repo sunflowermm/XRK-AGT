@@ -9,6 +9,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import cfg from '#infrastructure/config/config.js';
 import { normalizeError } from '#utils/normalize-error.js';
 import {
   SUBSERVER_RUNTIME_CATALOG,
@@ -48,8 +49,8 @@ function resolveRuntimeEntry(config, id) {
 
 /** @returns {string} */
 export function getSubserverDefaultRuntime() {
-  const config = getAistreamConfigOptional();
-  const id = config.subserver?.default;
+  const root = cfg.subserver ?? getAistreamConfigOptional().subserver ?? {};
+  const id = root.default;
   if (id && SUBSERVER_RUNTIME_CATALOG[id]) return id;
   return 'pyserver';
 }
@@ -58,8 +59,7 @@ export function getSubserverDefaultRuntime() {
  * @param {string} [runtimeId]
  */
 export function getSubserverConfig(runtimeId) {
-  const config = getAistreamConfigOptional();
-  const root = config.subserver || {};
+  const root = cfg.subserver ?? {};
   const id = runtimeId || getSubserverDefaultRuntime();
   const catalog = SUBSERVER_RUNTIME_CATALOG[id] || SUBSERVER_RUNTIME_CATALOG.pyserver;
 
@@ -67,7 +67,7 @@ export function getSubserverConfig(runtimeId) {
   let port = catalog.port;
   let timeout = Number(root.timeout) || DEFAULT_TIMEOUT;
 
-  const entry = resolveRuntimeEntry(config, id);
+  const entry = resolveRuntimeEntry({ subserver: root }, id);
   if (entry) {
     if (entry.enabled === false) {
       throw new Error(`子服务 runtime ${id} 已在配置中禁用`);

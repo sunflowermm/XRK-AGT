@@ -11,7 +11,7 @@ import Runtime from './runtime.js'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { normalizeError } from '#utils/normalize-error.js'
 import { EventDeduplicator, IntelligentCache, PluginMatcher } from '#utils/neural-algorithms.js'
-import { matchEventPattern as matchEventPatternFn, findInCoreSubDirs, statFiles } from '#utils/core-fs.js'
+import { matchEventPattern as matchEventPatternFn, findInCoreSubDirs, statFiles, resolvePluginCoreLabel } from '#utils/core-fs.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
 import { FileLoader } from '#utils/file-loader.js'
 import BotUtil from '#utils/botutil.js'
@@ -724,11 +724,10 @@ class PluginsLoader {
       })
 
       for (const filePath of files) {
-        const coreDir = path.dirname(path.dirname(filePath))
         ret.push({
           name: this._pluginFileKey(filePath),
           path: filePath,
-          core: path.basename(coreDir)
+          core: resolvePluginCoreLabel(filePath)
         })
       }
     } catch (error) {

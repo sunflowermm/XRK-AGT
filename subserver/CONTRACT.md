@@ -10,6 +10,7 @@
 | GET | `/api/list` | 已装载插件列表 |
 | GET | `/api/system/ping` | 存活 |
 | GET | `/api/system/config` | 只读配置 |
+| GET | `/api/system/commonconfig/list` | 已注册插件 CommonConfig 列表（供主服控制台） |
 | GET | `/api/system/groups` | 插件组与命令 |
 | POST | `/api/system/command` | body: `{ "line": "<组> <命令> [args...]" }` |
 
@@ -19,17 +20,25 @@
 |------|------|------|
 | GET | `/api/{group}/health` | 组健康 + 命令列表 |
 | POST | `/api/{group}/command` | body: `{ "cmd": "update" }` 或 `{ "line": "..." }` |
+| GET | `/api/{group}/config/structure` | CommonConfig schema（声明 `plugin_config` 时自动挂载） |
+| GET | `/api/{group}/config/read` | 读取运行时配置 |
+| POST | `/api/{group}/config/write` | 写入运行时配置 |
 | * | `/api/{group}/...` | 业务路由 |
 
 ## 目录分工
 
 | 路径 | 用途 |
 |------|------|
-| `core/`（或 `Core/`） | 加载器、配置、命令注册 — **底层** |
+| `core/`（runtime 根） | 加载器、配置、命令注册 — **子服底层** |
 | `apis/system/` 或 `Web/SystemEndpoints` | 框架系统路由 |
-| `apis/<group>/` | 示例或本地业务插件 |
+| `apis/<group>/` | 业务插件（Python/Go/… 的 `service` 入口） |
+| `apis/<group>/core/` | **主服扩展**（`plugin/`、`http/` 等；**不含**业务 commonconfig） |
 
-新建插件：复制同 runtime **已有示例**（如 pyserver `media-tools`），改 `group` 与路由；无 `_template` 目录。
+主服扫描 `subserver/<runtime>/apis/<group>/core/{plugin,http,stream,tasker,events}`。业务配置：`config_schema.yaml` + `plugin_config`，经 HTTP 供主服控制台代理（[docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)）。子服 host/port 在 `aistream.yaml` → `cfg.subserver`。
+
+新建插件：复制 pyserver 示例（**完整融合**见本地 `jmcomic`；**HTTP+控制台**见 `media-tools`）。开发指南：[docs/subserver-plugin-development.md](../docs/subserver-plugin-development.md)。
+
+> **CommonConfig 路由**：`/api/system/commonconfig/list` 与 `/api/{group}/config/*` 当前 **仅 pyserver 实现**；其它 runtime 须先对齐 [`CONTRACT.md`](CONTRACT.md) 后再被主服控制台代理。
 
 ## 插件元数据（对齐 pyserver `default` 字典）
 
@@ -47,6 +56,7 @@ routes:                # HTTP 业务
     path: /api/{group}/action
     handler: ...
 init: optional
+plugin_config: optional  # PluginConfig → 自动 /config/* 与 commonconfig/list
 on_update: optional
 ```
 

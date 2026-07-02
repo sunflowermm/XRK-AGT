@@ -2,28 +2,36 @@
 
 主服务 **Node.js** 负责 LLM / AIStream；子服务用**其它语言**做可插拔业务（契约见 [`CONTRACT.md`](CONTRACT.md)）。
 
-| ID | 语言 | 端口 | 示例插件 |
-|----|------|------|----------|
-| `pyserver` | Python | 8000 | media-tools, doc-pipeline, web-fetch |
-| `goserver` | Go | 8001 | hash-tools |
-| `phpserver` | PHP | 8002 | string-tools |
-| `jserver` | Spring Boot | 8003 | datetime-tools, json-tools |
-| `netserver` | ASP.NET Core | 8004 | uuid-tools |
-| `rustserver` | Axum | 8005 | regex-tools |
+| ID | 语言 | 端口 | 示例插件 | CommonConfig |
+|----|------|------|----------|:------------:|
+| `pyserver` | Python | 8000 | media-tools, doc-pipeline, web-fetch, jmcomic* | ✅ |
+| `goserver` | Go | 8001 | hash-tools | ❌ |
+| `phpserver` | PHP | 8002 | string-tools | ❌ |
+| `jserver` | Spring Boot | 8003 | datetime-tools, json-tools | ❌ |
+| `netserver` | ASP.NET Core | 8004 | uuid-tools | ❌ |
+| `rustserver` | Axum | 8005 | regex-tools | ❌ |
 
-选型说明：[`LANGUAGES.md`](LANGUAGES.md) · 注册表：[`registry.yaml`](registry.yaml)
+\* `jmcomic` 为本地 clone（gitignore），结构与框架示例相同。
+
+选型说明：[`LANGUAGES.md`](LANGUAGES.md) · 注册表：[`registry.yaml`](registry.yaml) · **开发指南**：[`docs/subserver-plugin-development.md`](../docs/subserver-plugin-development.md)
 
 ## 统一目录
 
-与主仓 `core/system-Core` 同理：**底层在 `core/`，示例插件在 `apis/<组名>/`**，无 `_template` 目录。
+与主仓 `core/system-Core` 同理：**子服底层在 runtime 的 `core/`，业务插件在 `apis/<组名>/`**。
+
+业务插件若需 QQ 指令等与主服融合，在 **`apis/<组名>/core/plugin/`**（等）下放置；业务 **配置** 用 `config_schema.yaml` + `plugin_config`，见 [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)。
 
 ```
-<subserver>/
-  config/default_config.*     # 配置模板
-  core/                       # 加载器、配置、命令注册（底层，勿放业务）
+<subserver>/<runtime>/
+  config/default_config.*     # 子服配置模板
+  core/                       # 子服加载器、命令注册（底层）
   apis/
-    system/ 或 Web/           # 框架系统 API（ping、config、command）
-    <组名>/                   # 示例或本地业务插件（见上表）
+    system/                   # 框架系统 API
+    <组名>/
+      service.*               # 子服 HTTP/命令入口
+      default_config.*        # 业务配置模板 → data/<组名>/
+      core/                   # 可选：主服扩展（plugin、http…）
+        plugin/
 ```
 
 新建插件：**复制同 runtime 已有示例**（如 pyserver 的 `media-tools`），改 `group` 与路由即可。
@@ -32,12 +40,12 @@
 
 | Runtime | 底层 | 学习用示例 |
 |---------|------|------------|
-| pyserver | `core/` · `apis/system/` | `apis/media-tools/service.py` |
+| pyserver | `core/` · `apis/system/` | `apis/media-tools/`（HTTP+CommonConfig）；完整融合见 `apis/jmcomic/` |
 | goserver | `core/` | `apis/hash-tools/service.go` |
 | phpserver | `core/` | `apis/string-tools/service.php` |
-| jserver | `core/` · `src/.../core/` | `apis/datetime/DatetimePlugin.java` |
+| jserver | `core/` · `src/.../apis/` | `DatetimePlugin.java`（主服 `core/plugin` 需自建 `apis/<group>/core/`） |
 | netserver | `Core/` · `Web/SystemEndpoints.cs` | `Apis/uuid-tools/UuidToolsPlugin.cs` |
-| rustserver | `src/core/` | `apis/regex-tools/` |
+| rustserver | `src/core/` · `src/plugins/` | `regex_tools.rs`（手动注册；主服扫描需 `apis/<group>/core/`） |
 
 ## 启动（本地）
 
@@ -73,6 +81,8 @@ docker compose up -d
 | 能力 | pyserver | goserver | phpserver | jserver | netserver | rustserver |
 |------|:--------:|:--------:|:---------:|:-------:|:---------:|:----------:|
 | `/health` · `/api/system/*` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| CommonConfig HTTP → 主服控制台 | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 主服扫描 `apis/*/core/plugin` | ✅ | ✅ | ✅ | ⚠️ | ✅ | ⚠️ |
 | `apis/<group>/` 自动扫描 | ✅ | 生成 import | ✅ | Spring 扫描 | 反射发现 | 手动注册 |
 | stdin `子服>` + 中文别名 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 

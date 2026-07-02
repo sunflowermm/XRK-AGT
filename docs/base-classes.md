@@ -13,7 +13,7 @@
 
 | 项 | 说明 |
 |----|------|
-| 放置 | `core/<名>/plugin/*.js` |
+| 放置 | `core/<名>/plugin/*.js` 或 `subserver/*/apis/<group>/core/plugin/*.js` |
 | 继承 | `import plugin from '#infrastructure/plugins/plugin.js'` |
 | 实例 API | `getStream`、`reply`、`setContext` / `getContext` / `finish`、`getInfo()`（见 [plugin-base.md](plugin-base.md)） |
 
@@ -92,8 +92,11 @@ export default class MyStream extends AIStream {
 
 | 项 | 说明 |
 |----|------|
-| 放置 | `core/<名>/commonconfig/*.js` |
+| 放置 | `core/<名>/commonconfig/*.js`（主仓 Core） |
+| 子服业务插件 | **不在主服放 schema**；子服 `config_schema.yaml` + HTTP API，主服 `SubserverConfigProxy` 代理，见 [subserver-commonconfig.md](subserver-commonconfig.md) · [subserver-plugin-development.md](subserver-plugin-development.md) |
 | 模板 | 独立 Core：`core/<名>/default/<name>.yaml` |
+
+主服子服连接：`cfg.subserver`（`aistream.yaml`）→ `Bot.callSubserver`。
 
 ```javascript
 export default class MyConfig extends ConfigBase {
@@ -101,8 +104,8 @@ export default class MyConfig extends ConfigBase {
     super({
       name: 'myconfig',
       displayName: '显示名',
-      filePath: (cfg) => `data/.../${cfg.port}/my.yaml`,
-      schema: { /* 字段 */ },
+      filePath: 'data/mygroup/config.yaml',
+      schema: { fields: { /* ... */ } },
     });
   }
 }
@@ -140,4 +143,4 @@ export default class MyEvent extends EventListenerBase {
 
 ---
 
-*最后更新：2026-06-14*
+*最后更新：2026-07-02*

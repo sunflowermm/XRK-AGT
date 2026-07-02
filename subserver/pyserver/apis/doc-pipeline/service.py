@@ -15,14 +15,7 @@ from core.plugin_kit import load_plugin_config
 logger = logging.getLogger(__name__)
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
-config = load_plugin_config(
-    _PLUGIN_DIR,
-    "doc-pipeline",
-    builtin={
-        "max_chars": 500_000,
-        "strip_scripts": True,
-    },
-)
+config = load_plugin_config(_PLUGIN_DIR, "doc-pipeline")
 
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -123,6 +116,7 @@ default = {
     "description": "HTML/文本提取与 Markdown 转换",
     "group": "doc-pipeline",
     "plugin_dir": str(_PLUGIN_DIR),
+    "plugin_config": config,
     "priority": 140,
     "commands": {"status": cmd_status},
     "routes": [

@@ -57,6 +57,7 @@ export default class ConfigBase {
     this.displayName = metadata.displayName ?? this.name;
     this.description = metadata.description ?? '';
     this.filePath = metadata.filePath ?? '';
+    this.defaultTemplatePath = metadata.defaultTemplatePath ?? '';
     this.fileType = metadata.fileType ?? 'yaml';
     this.schema = metadata.schema ?? {};
     // 多文件配置支持：用于处理一个配置包含多个文件的情况（如renderer包含puppeteer和playwright）
@@ -74,6 +75,22 @@ export default class ConfigBase {
     } else {
       this.fullPath = undefined;
     }
+
+    if (this.defaultTemplatePath) {
+      this._defaultTemplateFullPath = path.isAbsolute(this.defaultTemplatePath)
+        ? this.defaultTemplatePath
+        : path.join(paths.root, this.defaultTemplatePath);
+    } else {
+      this._defaultTemplateFullPath = undefined;
+    }
+  }
+
+  /** @returns {string[]} 读取缺省文件时的模板候选（按优先级） */
+  _defaultTemplateCandidates() {
+    const candidates = [];
+    if (this._defaultTemplateFullPath) candidates.push(this._defaultTemplateFullPath);
+    candidates.push(path.join(paths.root, 'config', 'default_config', `${this.name}.yaml`));
+    return candidates;
   }
 
   /**
@@ -231,10 +248,20 @@ export default class ConfigBase {
       // 检查文件是否存在；若不存在，尝试使用默认模板（config/default_config/<name>.yaml）
       let content;
       if (!await this.exists()) {
-        const defaultTemplatePath = path.join(paths.root, 'config', 'default_config', `${this.name}.yaml`);
-        if (this.fileType === 'yaml' && fsSync.existsSync(defaultTemplatePath)) {
-          content = await fs.readFile(defaultTemplatePath, 'utf8');
-          BotUtil.makeLog('info', `使用默认配置模板 [${this.name}]`, 'ConfigBase');
+        let templatePath = null;
+        for (const candidate of this._defaultTemplateCandidates()) {
+          if (candidate && fsSync.existsSync(candidate)) {
+            templatePath = candidate;
+            break;
+          }
+        }
+        if (templatePath) {
+          content = await fs.readFile(templatePath, 'utf8');
+          BotUtil.makeLog(
+            'info',
+            `使用默认配置模板 [${this.name}] ← ${path.relative(paths.root, templatePath)}`,
+            'ConfigBase'
+          );
         } else {
           throw new Error(`配置文件不存在: ${this.filePath || filePath}`);
         }
