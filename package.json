@@ -102,6 +102,7 @@
     "docker:build": "node src/utils/docker-stack.mjs build",
     "docker:up": "node src/utils/docker-stack.mjs up",
     "docker:down": "node src/utils/docker-stack.mjs down",
+    "docker:status": "node src/utils/docker-stack.mjs status",
     "docker:fresh": "node src/utils/docker-stack.mjs fresh",
     "test:fast": "node tests/run.mjs fast",
     "test:integration": "node tests/run.mjs integration",

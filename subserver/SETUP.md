@@ -16,7 +16,7 @@ pnpm test:subservers
 | 主 Bot | 8080 |
 | py / go / php / java / net / rust | 8000–8005 |
 
-停止 `pnpm docker:down` · 重建 `pnpm docker:build` · 启动 `pnpm docker:up`
+停止 `pnpm docker:down` · 状态 `pnpm docker:status` · 重建 `pnpm docker:build` · 启动 `pnpm docker:up`
 
 ## 本机单 runtime
 

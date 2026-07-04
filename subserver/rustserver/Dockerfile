@@ -4,6 +4,7 @@ ARG HTTPS_PROXY
 ARG NO_PROXY
 ENV HTTP_PROXY=$HTTP_PROXY HTTPS_PROXY=$HTTPS_PROXY NO_PROXY=$NO_PROXY
 WORKDIR /src
+RUN apk add --no-cache musl-dev build-base
 COPY Cargo.toml ./
 RUN mkdir src && echo 'fn main() {}' > src/main.rs && cargo build --release && rm -rf src
 COPY . .

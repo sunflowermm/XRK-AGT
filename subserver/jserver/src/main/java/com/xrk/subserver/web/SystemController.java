@@ -2,6 +2,7 @@ package com.xrk.subserver.web;
 
 import com.xrk.subserver.core.CommandRegistry;
 import com.xrk.subserver.core.PluginKit;
+import com.xrk.subserver.core.RuntimeConfig;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

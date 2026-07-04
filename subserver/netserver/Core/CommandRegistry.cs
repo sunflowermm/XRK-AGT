@@ -95,7 +95,7 @@ public sealed class CommandRegistry
         var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var group = parts[0];
         var cmd = parts.Length > 1 ? parts[1] : "help";
-        var args = parts.Length > 2 ? parts.Skip(2).ToList() : Array.Empty<string>();
+        var args = parts.Length > 2 ? parts.Skip(2).ToArray() : Array.Empty<string>();
         return Dispatch(group, cmd, args);
     }
 

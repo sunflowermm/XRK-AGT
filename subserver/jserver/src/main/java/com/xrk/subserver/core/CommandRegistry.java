@@ -119,7 +119,7 @@ public final class CommandRegistry {
         return res;
     }
 
-    public Map<String, Object> apiList() {
+    public List<Map<String, Object>> apiList() {
         List<Map<String, Object>> out = new ArrayList<>();
         for (String name : groups()) {
             PluginSet g = groups.get(name);

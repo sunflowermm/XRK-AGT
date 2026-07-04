@@ -12,7 +12,8 @@ description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Pytho
 ## 你要掌握的要点
 
 - Compose 全栈：`xrk-agt` + `xrk-subserver`（Python）+ 五语言子服 + `redis` + `mongodb`（见 `docker-compose.yml`）。
-- 命令：`pnpm docker:fresh` / `docker:build` / `docker:up` / `docker:down`（实现 `src/utils/docker-stack.mjs`）。
+- 命令：`pnpm docker:fresh` / `docker:build` / `docker:up` / `docker:down` / `docker:status`（`src/utils/docker-stack.mjs`）。
+- Python 子服：与主服**同镜像** `xrk-agt:latest`，`command: subserver`（无独立 pyserver Dockerfile）。
 - 代理：本机 `config/docker.env` 或根 `.env`；构建阶段用 `host.docker.internal`。
 - 挂载：`./data`、`./logs`、`./config`、`./resources`、`./core`。
 

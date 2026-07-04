@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Docker 全栈：clean · build · up · fresh */
+/** Docker 全栈：clean · build · up · fresh · status */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,13 +9,41 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const envFile = path.join(root, 'config', 'docker.env');
 const compose = path.join(root, 'docker-compose.yml');
 
-function ensureDocker() {
-  const r = spawnSync('docker', ['info'], {
+const BASE_IMAGES = [
+  'node:26-slim',
+  'redis:7-alpine',
+  'mongo:8.0',
+  'golang:1.23-alpine',
+  'alpine:3.20',
+  'php:8.3-cli-alpine',
+  'eclipse-temurin:21-jdk-alpine',
+  'eclipse-temurin:21-jre-alpine',
+  'rust:1.83-alpine',
+  'ghcr.io/astral-sh/uv:latest',
+  'mcr.microsoft.com/dotnet/sdk:8.0-alpine',
+  'mcr.microsoft.com/dotnet/aspnet:8.0-alpine'
+];
+
+const HEALTH_ENDPOINTS = [
+  ['主服', `http://127.0.0.1:${process.env.XRK_SERVER_PORT || '8080'}/health`],
+  ['py', 'http://127.0.0.1:8000/health'],
+  ['go', 'http://127.0.0.1:8001/health'],
+  ['php', 'http://127.0.0.1:8002/health'],
+  ['java', 'http://127.0.0.1:8003/health'],
+  ['net', 'http://127.0.0.1:8004/health'],
+  ['rust', 'http://127.0.0.1:8005/health']
+];
+
+function dockerSpawn(args, opts = {}) {
+  return spawnSync('docker', args, {
     cwd: root,
-    encoding: 'utf8',
     shell: process.platform === 'win32',
-    stdio: 'pipe'
+    ...opts
   });
+}
+
+function ensureDocker() {
+  const r = dockerSpawn(['info'], { encoding: 'utf8', stdio: 'pipe' });
   if (r.status === 0) return;
   console.error('>>> Docker 未运行：请先启动 Docker Desktop 并等待引擎就绪');
   process.exit(1);
@@ -28,11 +56,13 @@ function composeArgs() {
 }
 
 function run(cmd, args, opts = {}) {
+  const { env: extraEnv, ...rest } = opts;
   const r = spawnSync(cmd, args, {
     cwd: root,
     stdio: 'inherit',
     shell: process.platform === 'win32',
-    ...opts
+    env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
+    ...rest
   });
   if (r.error?.code === 'ETIMEDOUT') {
     console.error('>>> 超时');
@@ -46,11 +76,7 @@ function runSoft(cmd, args) {
 }
 
 function dockerLines(subcommand, extraArgs = []) {
-  const r = spawnSync('docker', [subcommand, ...extraArgs], {
-    cwd: root,
-    encoding: 'utf8',
-    shell: process.platform === 'win32'
-  });
+  const r = dockerSpawn([subcommand, ...extraArgs], { encoding: 'utf8', stdio: 'pipe' });
   return (r.stdout || '').trim().split(/\s+/).filter(Boolean);
 }
 
@@ -59,6 +85,36 @@ function removeAll(ids, removeCmd) {
   const batch = 50;
   for (let i = 0; i < ids.length; i += batch) {
     runSoft('docker', [removeCmd, '-f', ...ids.slice(i, i + batch)]);
+  }
+}
+
+function imageExistsLocally(image) {
+  return dockerSpawn(['image', 'inspect', image], { stdio: 'pipe' }).status === 0;
+}
+
+function pullImage(image, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    if (attempt > 0) console.log(`>>> 重试 pull ${image} (${attempt + 1}/${retries})`);
+    else console.log(`>>> pull ${image}`);
+    if (dockerSpawn(['pull', image], { stdio: 'inherit' }).status === 0) return true;
+  }
+  return false;
+}
+
+function prefetchBaseImages() {
+  console.log('>>> 预拉取 base 镜像（顺序执行，已存在则跳过）');
+  const failed = [];
+  for (const image of BASE_IMAGES) {
+    if (imageExistsLocally(image)) {
+      console.log(`>>> skip ${image}（本地已有）`);
+      continue;
+    }
+    if (!pullImage(image)) failed.push(image);
+  }
+  if (failed.length) {
+    console.error(`\n>>> 拉取失败: ${failed.join(', ')}`);
+    console.error('>>> 请检查: Docker Desktop 代理 · config/docker.env · %USERPROFILE%\\.docker\\daemon.json 镜像源');
+    process.exit(1);
   }
 }
 
@@ -94,8 +150,12 @@ function cleanAll() {
 
 function build() {
   ensureDocker();
+  prefetchBaseImages();
   console.log('>>> build 全栈（xrk-agt + 六语言子服 + redis + mongo）');
-  run('docker', [...composeArgs(), 'build', '--pull'], { timeout: 90 * 60 * 1000 });
+  run('docker', [...composeArgs(), 'build'], {
+    timeout: 90 * 60 * 1000,
+    env: { COMPOSE_PARALLEL_LIMIT: '2' }
+  });
 }
 
 function up() {
@@ -106,6 +166,20 @@ function up() {
 function down() {
   ensureDocker();
   run('docker', [...composeArgs(), 'down']);
+}
+
+async function status() {
+  ensureDocker();
+  runSoft('docker', [...composeArgs(), 'ps']);
+  console.log('\n>>> HTTP 健康探测');
+  for (const [name, url] of HEALTH_ENDPOINTS) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      console.log(`  ${name.padEnd(4)} ${res.ok ? 'OK' : `HTTP ${res.status}`}  ${url}`);
+    } catch (e) {
+      console.log(`  ${name.padEnd(4)} FAIL  ${url} (${e.message})`);
+    }
+  }
 }
 
 function fresh() {
@@ -129,6 +203,9 @@ switch (mode) {
   case 'down':
     down();
     break;
+  case 'status':
+    await status();
+    break;
   case 'fresh':
     fresh();
     break;
@@ -137,8 +214,9 @@ switch (mode) {
 
   clean   删除全部容器/镜像/build 缓存
   build   构建 docker-compose.yml 全栈
-  up      启动全栈
+  up      启动全栈（等待 healthcheck）
   down    停止全栈
+  status  查看 compose ps + HTTP 健康探测
   fresh   clean + build + up`);
     process.exit(mode === 'help' ? 0 : 1);
 }
