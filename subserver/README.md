@@ -52,7 +52,7 @@
 
 ## 启动
 
-详见 **[SETUP.md](SETUP.md)**。Docker 全栈：`pnpm docker:fresh`（见 [docs/docker.md](../docs/docker.md)）。
+详见 **[SETUP.md](SETUP.md)**。Docker：`pnpm docker:build` → `pnpm docker:up`（见 [docs/docker.md](../docs/docker.md)）。
 
 ```bash
 cd subserver/pyserver && uv run xrk          # 本机 Python 8000

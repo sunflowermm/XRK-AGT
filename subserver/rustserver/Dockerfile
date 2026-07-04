@@ -8,7 +8,7 @@ RUN apk add --no-cache musl-dev build-base
 COPY Cargo.toml ./
 RUN mkdir src && echo 'fn main() {}' > src/main.rs && cargo build --release && rm -rf src
 COPY . .
-RUN cargo build --release
+RUN touch src/main.rs && cargo build --release
 
 FROM alpine:3.20
 RUN apk add --no-cache wget libgcc

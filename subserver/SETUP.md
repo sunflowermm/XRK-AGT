@@ -7,16 +7,12 @@
 先启动 Docker Desktop，仓库根目录：
 
 ```powershell
-pnpm docker:fresh
-pnpm test:subservers
+pnpm docker:up         # 启动全栈（等待 healthcheck）
+pnpm docker:status     # 确认各端口 OK
+pnpm test:subservers   # 可选冒烟
 ```
 
-| 服务 | 端口 |
-|------|------|
-| 主 Bot | 8080 |
-| py / go / php / java / net / rust | 8000–8005 |
-
-停止 `pnpm docker:down` · 状态 `pnpm docker:status` · 重建 `pnpm docker:build` · 启动 `pnpm docker:up`
+从零重来：`pnpm docker:fresh` · 停止：`pnpm docker:down`
 
 ## 本机单 runtime
 

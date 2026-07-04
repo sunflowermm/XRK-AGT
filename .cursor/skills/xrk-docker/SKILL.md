@@ -12,14 +12,14 @@ description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Pytho
 ## 你要掌握的要点
 
 - Compose 全栈：`xrk-agt` + `xrk-subserver`（Python）+ 五语言子服 + `redis` + `mongodb`（见 `docker-compose.yml`）。
-- 命令：`pnpm docker:fresh` / `docker:build` / `docker:up` / `docker:down` / `docker:status`（`src/utils/docker-stack.mjs`）。
+- 命令：`pnpm docker:build` → `pnpm docker:up` → `pnpm docker:status`；从零重来 `pnpm docker:fresh`；停止 `pnpm docker:down`（`src/utils/docker-stack.mjs`）。
 - Python 子服：与主服**同镜像** `xrk-agt:latest`，`command: subserver`（无独立 pyserver Dockerfile）。
 - 代理：本机 `config/docker.env` 或根 `.env`；构建阶段用 `host.docker.internal`。
 - 挂载：`./data`、`./logs`、`./config`、`./resources`、`./core`。
 
 ## Node 26
 
-- 镜像基线：`Dockerfile` 使用 **`node:26`**；容器内 `node -v` 应 ≥ 26.0。
+- 镜像基线：`Dockerfile` 使用 **`node:26-slim`**；容器内 `node -v` 应 ≥ 26.0。
 - `package.json` engines 与 `app.js` 启动校验一致；**勿**在文档或示例中写 Node 24 / `node-fetch`。
 - 可选：`NODE_COMPILE_CACHE` 缩短冷启动（见 `docs/node-26-runtime.md` §2.2）。
 

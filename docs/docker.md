@@ -19,15 +19,24 @@
 ## 命令
 
 ```bash
-pnpm docker:fresh    # 清空 Docker + 构建全栈 + 启动
-pnpm docker:build    # 仅构建
-pnpm docker:up       # 仅启动
-pnpm docker:down     # 停止
+pnpm docker:build    # 构建（默认本地缓存）
+pnpm docker:up       # 启动全栈（构建完成后执行）
 pnpm docker:status   # 容器状态 + HTTP 健康探测
+pnpm docker:down     # 停止
 pnpm docker:clean    # 删除全部容器/镜像/缓存
+pnpm docker:fresh    # clean + --pull 构建 + 启动（从零重来）
+node src/utils/docker-stack.mjs build --pull   # 强制拉 base 镜像
 ```
 
-验证：`curl http://localhost:8080/health` · `docker compose ps` · `docker compose logs -f`
+### 构建成功后
+
+```bash
+pnpm docker:up
+pnpm docker:status
+pnpm test:subservers    # 可选：子服 8000–8005 冒烟
+```
+
+浏览器打开 `http://127.0.0.1:8080`（Web 控制台 `/xrk/`）。日志：`docker compose logs -f xrk-agt`。
 
 子服冒烟（本地 `tests/`，不入库）：`pnpm test:subservers`
 
@@ -52,7 +61,7 @@ Docker 内 Redis/Mongo 地址自动从 `127.0.0.1` 映射为服务名。
 
 - **Docker 未运行** — 先启动 Docker Desktop。
 - **端口占用** — 改 `XRK_SERVER_PORT` 或 compose 端口映射。
-- **构建慢 / auth.docker.io 超时** — `docker:build` 会**顺序预拉** base 镜像；检查代理、`config/docker.env`、`%USERPROFILE%\.docker\daemon.json` 镜像源；IPv6 连 Hub 失败时可配 `registry-mirrors` 或关闭 Docker IPv6。
+- **构建慢 / auth.docker.io 超时** — 检查代理、`config/docker.env`、镜像源；日常用 `docker:build`（本地缓存），仅 `docker:fresh` 或 `build --pull` 强制拉 base。
 - **健康检查失败** — `pnpm docker:status` 或 `docker compose logs <服务名>`。主服会等 redis/mongo/全部子服 healthy 后再启动。
 
 子服联调细节见 [subserver/SETUP.md](../subserver/SETUP.md)。
