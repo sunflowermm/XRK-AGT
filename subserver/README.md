@@ -50,22 +50,13 @@
 | netserver | `Core/` · `Web/SystemEndpoints.cs` | `Apis/uuid-tools/UuidToolsPlugin.cs` |
 | rustserver | `src/core/` · `src/plugins/` | `regex_tools.rs`（手动注册；主服扫描需 `apis/<group>/core/`） |
 
-## 启动（本地）
+## 启动
 
-详见 **[SETUP.md](SETUP.md)**（环境准备 + `pnpm test:subservers` 冒烟测试）。
-
-```bash
-cd subserver/pyserver && uv run xrk          # Python 8000
-docker compose -f docker-compose.subservers.yml up -d --build   # 其它 8001–8005
-```
-
-## Docker Compose（五 runtime 一键）
+详见 **[SETUP.md](SETUP.md)**。Docker 全栈：`pnpm docker:fresh`（见 [docs/docker.md](../docs/docker.md)）。
 
 ```bash
-docker compose up -d
+cd subserver/pyserver && uv run xrk          # 本机 Python 8000
 ```
-
-主容器 `xrk-agt` 通过环境变量 `SUBSERVER_*_HOST` 自动指向各子服务容器（见 `docker-compose.yml`）。
 
 ## 主服务衔接
 

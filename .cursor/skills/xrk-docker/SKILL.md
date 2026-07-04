@@ -11,10 +11,10 @@ description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Pytho
 
 ## 你要掌握的要点
 
-- Compose 启动的 4 个服务：`xrk-agt`（主服务）、`xrk-subserver`（Python 子服务）、`redis`、`mongodb`。
-- `.env` 可选环境变量：`XRK_SERVER_PORT`、`HTTP_PROXY/HTTPS_PROXY/NO_PROXY`、`MONGO_ROOT_USERNAME/MONGO_ROOT_PASSWORD` 等。
-- 子服务端为轻量 FastAPI 框架，无内置 AI 模型下载；外网访问扩展 API 时可配置 `HTTP_PROXY`（如 `host.docker.internal`）。
-- 挂载卷：`./data`、`./logs`、`./config`、`./resources` 等，避免数据丢失。
+- Compose 全栈：`xrk-agt` + `xrk-subserver`（Python）+ 五语言子服 + `redis` + `mongodb`（见 `docker-compose.yml`）。
+- 命令：`pnpm docker:fresh` / `docker:build` / `docker:up` / `docker:down`（实现 `src/utils/docker-stack.mjs`）。
+- 代理：本机 `config/docker.env` 或根 `.env`；构建阶段用 `host.docker.internal`。
+- 挂载：`./data`、`./logs`、`./config`、`./resources`、`./core`。
 
 ## Node 26
 

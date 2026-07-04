@@ -107,6 +107,9 @@ trash/
 # Framework tests（本地/CI 使用，不作为发行内容入库）
 tests/
 
+# 本地运维脚本（不入库；Docker 栈见 src/utils/docker-stack.mjs）
+scripts/
+
 # Agent workspace local memories
 memory/*.md
 !memory/MEMORY.md
