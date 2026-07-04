@@ -1,4 +1,8 @@
 FROM eclipse-temurin:21-jdk-alpine AS build
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV HTTP_PROXY=$HTTP_PROXY HTTPS_PROXY=$HTTPS_PROXY NO_PROXY=$NO_PROXY
 WORKDIR /src
 COPY pom.xml .
 COPY src ./src
@@ -10,6 +14,4 @@ WORKDIR /app
 COPY --from=build /src/target/*.jar app.jar
 ENV SERVER_PORT=8003
 EXPOSE 8003
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8003/health || exit 1
 CMD ["java", "-jar", "app.jar"]

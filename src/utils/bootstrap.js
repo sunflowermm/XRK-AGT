@@ -3,7 +3,7 @@ import path from 'node:path';
 import paths from '#utils/paths.js';
 import { statDirs, statFiles } from '#utils/core-fs.js';
 import { createSimpleLogger } from '#utils/simple-logger.js';
-import { DependencyManager, logBrowserEnvironment } from '#utils/bootstrap-deps.js';
+import { DependencyManager, getPnpmInstallHint, logBrowserEnvironment } from '#utils/bootstrap-deps.js';
 
 async function validateEnvironment() {
   const [major] = process.version.slice(1).split('.').map(Number);
@@ -66,7 +66,7 @@ export class Bootstrap {
       await import('../../start.js');
     } catch (e) {
       await this.logger.error(`引导失败: ${e.stack ?? e.message}`);
-      await this.logger.log('\n可尝试: pnpm install');
+      await this.logger.log(`\n可尝试: ${getPnpmInstallHint()}`);
       process.exit(1);
     }
   }

@@ -1,0 +1,141 @@
+# 六语言子服。代理：config/docker.env（勿提交）
+
+name: xrk-subservers
+
+x-build-proxy: &build-proxy
+  args:
+    HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+    HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+    NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,host.docker.internal}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+x-container-proxy: &container-proxy
+  HTTP_PROXY: ${CONTAINER_HTTP_PROXY:-}
+  HTTPS_PROXY: ${CONTAINER_HTTPS_PROXY:-}
+  NO_PROXY: ${CONTAINER_NO_PROXY:-localhost,127.0.0.1,host.docker.internal}
+
+services:
+  xrk-subserver-py:
+    build:
+      context: ./subserver/pyserver
+      dockerfile: Dockerfile
+    image: xrk-subserver-py:local
+    container_name: xrk-subserver-py
+    ports:
+      - "8000:8000"
+    working_dir: /workspace/subserver/pyserver
+    volumes:
+      - ./data:/workspace/data:rw
+      - ./config:/workspace/config:ro
+      - ./core:/workspace/core:ro
+    environment:
+      <<: *container-proxy
+      HOST: "0.0.0.0"
+      PORT: "8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  xrk-subserver-go:
+    build:
+      context: ./subserver/goserver
+      dockerfile: Dockerfile
+      <<: *build-proxy
+    image: xrk-subserver-go:local
+    container_name: xrk-subserver-go
+    ports:
+      - "8001:8001"
+    environment:
+      <<: *container-proxy
+      HOST: "0.0.0.0"
+      PORT: "8001"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  xrk-subserver-php:
+    build:
+      context: ./subserver/phpserver
+      dockerfile: Dockerfile
+      <<: *build-proxy
+    image: xrk-subserver-php:local
+    container_name: xrk-subserver-php
+    ports:
+      - "8002:8002"
+    environment:
+      <<: *container-proxy
+      HOST: "0.0.0.0"
+      PORT: "8002"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  xrk-subserver-java:
+    build:
+      context: ./subserver/jserver
+      dockerfile: Dockerfile
+      <<: *build-proxy
+    image: xrk-subserver-java:local
+    container_name: xrk-subserver-java
+    ports:
+      - "8003:8003"
+    environment:
+      <<: *container-proxy
+      SERVER_PORT: "8003"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8003/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  xrk-subserver-net:
+    build:
+      context: ./subserver/netserver
+      dockerfile: Dockerfile
+      <<: *build-proxy
+    image: xrk-subserver-net:local
+    container_name: xrk-subserver-net
+    ports:
+      - "8004:8004"
+    environment:
+      <<: *container-proxy
+      ASPNETCORE_URLS: "http://0.0.0.0:8004"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8004/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  xrk-subserver-rust:
+    build:
+      context: ./subserver/rustserver
+      dockerfile: Dockerfile
+      <<: *build-proxy
+    image: xrk-subserver-rust:local
+    container_name: xrk-subserver-rust
+    ports:
+      - "8005:8005"
+    environment:
+      <<: *container-proxy
+      HOST: "0.0.0.0"
+      PORT: "8005"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8005/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

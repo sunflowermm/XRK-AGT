@@ -158,6 +158,12 @@ AUTHORS*
 .circleci/
 .travis.yml
 .github/
+.cursor/
+.claude/
+.trae/
+.agents/
+.agent/
+.vendor/
 *.bak
 *.backup
 *.old

@@ -40,7 +40,7 @@ flowchart TD
 实现位于 `src/utils/bootstrap.js`（`app.js` 仅一行调用）。
 
 1. **环境验证** — Node **≥ 26**；`paths.ensureBaseDirs()`；`paths.warmupCoreLayout()` 预热 `core/*` 子目录索引。
-2. **依赖管理**（`src/utils/bootstrap-deps.js`）  
+2. **依赖管理**（`src/utils/bootstrap-deps.js`，跨平台命令解析见 `src/utils/command-spawn.js`）  
    - 根目录 `package.json` 缺失项 → **仅 pnpm install**（`PUPPETEER_SKIP_DOWNLOAD` 默认 `true`）。  
    - `core/*` 含 `package.json` 的子包各自 `pnpm install`。  
    - `www/` 前端依赖（可用 `XRK_SKIP_FRONTEND_BOOTSTRAP=1` 跳过）。  

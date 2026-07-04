@@ -52,13 +52,11 @@
 
 ## 启动（本地）
 
+详见 **[SETUP.md](SETUP.md)**（环境准备 + `pnpm test:subservers` 冒烟测试）。
+
 ```bash
-cd subserver/pyserver && uv run xrk
-cd subserver/goserver && go run .
-cd subserver/phpserver && php -S 0.0.0.0:8002 server.php
-cd subserver/jserver && mvn -q spring-boot:run
-cd subserver/netserver && dotnet run
-cd subserver/rustserver && cargo run
+cd subserver/pyserver && uv run xrk          # Python 8000
+docker compose -f docker-compose.subservers.yml up -d --build   # 其它 8001–8005
 ```
 
 ## Docker Compose（五 runtime 一键）

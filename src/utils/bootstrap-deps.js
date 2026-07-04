@@ -1,10 +1,10 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import paths from '#utils/paths.js';
 import { statDirs, statFiles } from '#utils/core-fs.js';
+import { getPnpmInstallHint, spawnCommand as spawnCommandBase } from '#utils/command-spawn.js';
 
 const require = createRequire(import.meta.url);
 const { findSystemBrowser } = require('#utils/system-browser.cjs');
@@ -39,29 +39,22 @@ async function markDepsInstallComplete(nodeModulesPath) {
 }
 
 export function spawnCommand(command, args, cwd, extraEnv = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      shell: false,
-      stdio: 'inherit',
-      env: { ...process.env, ...getBrowserDownloadEnv(extraEnv), ...extraEnv }
-    });
-    child.on('error', (err) => reject(err.code === 'ENOENT'
-      ? new Error(`${command} 未安装或不在 PATH 中${command === 'pnpm' ? '，请执行: npm install -g pnpm' : ''}`)
-      : err));
-    child.on('close', (code, signal) => {
-      if (signal === 'SIGINT' || code === 130) {
-        reject(new Error(`${command} 安装已中断（Ctrl+C），请重新运行 pnpm install`));
-        return;
-      }
-      if (code === 0) resolve();
-      else reject(new Error(`${command} ${args.join(' ')} 退出码 ${code ?? 'unknown'}`));
-    });
+  return spawnCommandBase(command, args, cwd, {
+    ...getBrowserDownloadEnv(extraEnv),
+    ...extraEnv
   });
 }
 
+export { getPnpmInstallHint };
+
+let pnpmInstallChain = Promise.resolve();
+
 export function spawnPnpmInstall(cwd) {
-  return spawnCommand('pnpm', ['install'], cwd, { CI: 'true' });
+  const install = pnpmInstallChain.then(() =>
+    spawnCommand('pnpm', ['install'], cwd, { CI: 'true' })
+  );
+  pnpmInstallChain = install.catch(() => {});
+  return install;
 }
 
 /** @param {string} depName @param {string} nodeModulesPath @param {string} packageRoot */

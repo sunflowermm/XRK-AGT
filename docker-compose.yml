@@ -1,8 +1,17 @@
+x-build-proxy: &build-proxy
+  args:
+    HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+    HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+    NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,host.docker.internal}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
 services:
   xrk-agt:
     build:
       context: .
       dockerfile: Dockerfile
+      <<: *build-proxy
     image: xrk-agt:latest
     container_name: xrk-agt
     restart: unless-stopped
@@ -94,6 +103,7 @@ services:
     build:
       context: ./subserver/goserver
       dockerfile: Dockerfile
+      <<: *build-proxy
     container_name: xrk-subserver-go
     restart: unless-stopped
     ports:
@@ -110,6 +120,7 @@ services:
     build:
       context: ./subserver/phpserver
       dockerfile: Dockerfile
+      <<: *build-proxy
     container_name: xrk-subserver-php
     restart: unless-stopped
     ports:
@@ -126,6 +137,7 @@ services:
     build:
       context: ./subserver/jserver
       dockerfile: Dockerfile
+      <<: *build-proxy
     container_name: xrk-subserver-java
     restart: unless-stopped
     ports:
@@ -142,6 +154,7 @@ services:
     build:
       context: ./subserver/netserver
       dockerfile: Dockerfile
+      <<: *build-proxy
     container_name: xrk-subserver-net
     restart: unless-stopped
     ports:
@@ -158,6 +171,7 @@ services:
     build:
       context: ./subserver/rustserver
       dockerfile: Dockerfile
+      <<: *build-proxy
     container_name: xrk-subserver-rust
     restart: unless-stopped
     ports:

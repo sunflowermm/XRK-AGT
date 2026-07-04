@@ -3,35 +3,25 @@
 # ============================================
 FROM node:26-slim AS builder
 
-# 安装构建依赖（仅在构建阶段需要，带重试机制和超时设置）
-RUN apt-get clean && \
-    for i in 1 2 3 4; do \
-        apt-get update -o Acquire::http::Timeout=30 -o Acquire::ftp::Timeout=30 && \
-        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            python3 \
-            python3-dev \
-            python3-venv \
-            python3-pip \
-            build-essential \
-            git \
-            wget \
-            curl \
-        && break || (echo "尝试 $i/4 失败，5秒后重试..." && sleep 5); \
-    done && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV HTTP_PROXY=$HTTP_PROXY HTTPS_PROXY=$HTTPS_PROXY NO_PROXY=$NO_PROXY
 
-# 安装 pnpm
-RUN npm install -g npm@latest pnpm
+# 构建阶段依赖（apt 不读 HTTP_PROXY，需 apt.conf + 超时）
+RUN set -eux; \
+    if [ -n "${HTTP_PROXY:-}" ]; then \
+      printf 'Acquire::http::Proxy "%s";\nAcquire::https::Proxy "%s";\n' \
+        "$HTTP_PROXY" "${HTTPS_PROXY:-$HTTP_PROXY}" > /etc/apt/apt.conf.d/01proxy; \
+    fi; \
+    apt-get update -o Acquire::http::Timeout=30 && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      python3 python3-dev python3-venv python3-pip build-essential git wget curl && \
+    rm -rf /var/lib/apt/lists/*
 
-# 安装 uv（带重试机制和超时设置）
-RUN for i in 1 2 3; do \
-        curl --connect-timeout 10 --max-time 60 -LsSf https://astral.sh/uv/install.sh | sh && break || sleep 3; \
-    done && \
-    (mv /root/.cargo/bin/uv /usr/local/bin/uv 2>/dev/null || \
-     mv /root/.local/bin/uv /usr/local/bin/uv 2>/dev/null || true) || \
-    pip3 install --no-cache-dir uv && \
-    rm -rf /root/.cargo /root/.local
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+RUN npm install -g pnpm
 
 WORKDIR /app
 
@@ -68,47 +58,25 @@ WORKDIR /app
 # ============================================
 FROM node:26-slim AS runtime
 
-# 安装运行时依赖（移除构建工具，带重试机制和超时设置）
-RUN apt-get clean && \
-    for i in 1 2 3 4; do \
-        apt-get update -o Acquire::http::Timeout=30 -o Acquire::ftp::Timeout=30 && \
-        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            python3 \
-            python3-venv \
-            wget \
-            curl \
-            chromium \
-            chromium-sandbox \
-            fonts-liberation \
-            libappindicator3-1 \
-            libasound2 \
-            libatk-bridge2.0-0 \
-            libatk1.0-0 \
-            libcups2 \
-            libdbus-1-3 \
-            libdrm2 \
-            libgbm1 \
-            libgtk-3-0 \
-            libnspr4 \
-            libnss3 \
-            libx11-xcb1 \
-            libxcomposite1 \
-            libxdamage1 \
-            libxfixes3 \
-            libxrandr2 \
-            xdg-utils \
-        && break || (echo "尝试 $i/4 失败，5秒后重试..." && sleep 5); \
-    done && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean && \
-    rm -rf /tmp/* /var/tmp/*
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV HTTP_PROXY=$HTTP_PROXY HTTPS_PROXY=$HTTPS_PROXY NO_PROXY=$NO_PROXY
 
-# 安装 uv（仅运行时需要，使用更轻量的方式）
-RUN curl --connect-timeout 10 --max-time 60 -LsSf https://astral.sh/uv/install.sh | sh && \
-    (mv /root/.cargo/bin/uv /usr/local/bin/uv 2>/dev/null || \
-     mv /root/.local/bin/uv /usr/local/bin/uv 2>/dev/null || true) || \
-    (pip3 install --no-cache-dir uv && pip3 cache purge) || true && \
-    rm -rf /root/.cargo /root/.local
+RUN set -eux; \
+    if [ -n "${HTTP_PROXY:-}" ]; then \
+      printf 'Acquire::http::Proxy "%s";\nAcquire::https::Proxy "%s";\n' \
+        "$HTTP_PROXY" "${HTTPS_PROXY:-$HTTP_PROXY}" > /etc/apt/apt.conf.d/01proxy; \
+    fi; \
+    apt-get update -o Acquire::http::Timeout=30 && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      python3 python3-venv wget curl chromium chromium-sandbox fonts-liberation \
+      libappindicator3-1 libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
+      libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libx11-xcb1 \
+      libxcomposite1 libxdamage1 libxfixes3 libxrandr2 xdg-utils && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 

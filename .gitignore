@@ -30,6 +30,8 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+# 本地 Docker 代理（可选，勿提交）
+config/docker.env
 .codegraph
 # IDE
 .vscode/

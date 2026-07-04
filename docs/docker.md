@@ -143,38 +143,28 @@ Docker 构建时会自动安装 Python 运行依赖（FastAPI、uvicorn、pyyaml
 
 Docker 容器内的应用无法直接使用宿主机的系统代理设置。当主服务需要访问**外网 LLM API**、Git、或子服务端扩展 API 拉取外部资源时，需通过环境变量传入代理（**与「模型下载」无关**——当前版本不在镜像或启动流程中预拉 AI 权重）。
 
-### 配置代理（按需）
+### 配置代理（按需，本机）
 
-#### 方式 1：使用 .env 文件（推荐）
+仓库不预设代理。需要时在**本机** `.env`（完整栈）或 `config/docker.env`（子服 compose）中设置，**勿提交 git**。
 
-```bash
-# .env
-HTTP_PROXY=http://127.0.0.1:7890
-HTTPS_PROXY=http://127.0.0.1:7890
-```
-
-#### 方式 2：环境变量
+| 使用场景 | 代理地址写法 |
+|----------|--------------|
+| 本机终端 / uv / pnpm | `http://127.0.0.1:<端口>` |
+| Docker 容器 / buildkit | `http://host.docker.internal:<端口>` |
 
 ```bash
-# Linux/macOS
-export HTTP_PROXY=http://127.0.0.1:7890
-export HTTPS_PROXY=http://127.0.0.1:7890
-docker-compose up -d
-
-# Windows PowerShell
-$env:HTTP_PROXY="http://127.0.0.1:7890"
-$env:HTTPS_PROXY="http://127.0.0.1:7890"
-docker-compose up -d
+# .env 示例（完整栈 docker compose）
+# HTTP_PROXY=http://host.docker.internal:<端口>
+# HTTPS_PROXY=http://host.docker.internal:<端口>
 ```
 
-#### 方式 3：Windows/Mac Docker Desktop
-
-如果 Clash 监听 `127.0.0.1:7890`，容器内需要使用：
-
-```bash
-HTTP_PROXY=http://host.docker.internal:7890
-HTTPS_PROXY=http://host.docker.internal:7890
+```powershell
+# 临时设置后启动（PowerShell）
+$env:HTTP_PROXY="http://127.0.0.1:<端口>"
+docker compose up -d
 ```
+
+Clash 等工具常见 HTTP 端口为 7890，**以你本机实际监听为准**。
 
 ### 代理说明
 
