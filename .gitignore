@@ -109,6 +109,10 @@ tests/
 
 # 本地运维脚本（不入库；Docker 栈见 src/utils/docker-stack.mjs）
 scripts/
+*.reg
+
+# 本地 Windows 注册表/卸载项清理备份（scripts/clean-empty-shell-uninstall.ps1）
+xrk-uninstall-backup-*.reg
 
 # Agent workspace local memories
 memory/*.md

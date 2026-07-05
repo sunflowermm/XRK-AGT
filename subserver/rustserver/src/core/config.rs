@@ -19,6 +19,15 @@ fn default_prompt() -> String {
     "子服> ".into()
 }
 
+impl Default for StdinConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            prompt: default_prompt(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     #[serde(default = "default_host")]
@@ -37,6 +46,16 @@ fn default_port() -> u16 {
     8005
 }
 
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            host: default_host(),
+            port: default_port(),
+            stdin: StdinConfig::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeConfig {
     #[serde(default)]
@@ -46,14 +65,7 @@ pub struct RuntimeConfig {
 impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
-            server: ServerConfig {
-                host: default_host(),
-                port: default_port(),
-                stdin: StdinConfig {
-                    enabled: true,
-                    prompt: default_prompt(),
-                },
-            },
+            server: ServerConfig::default(),
         }
     }
 }

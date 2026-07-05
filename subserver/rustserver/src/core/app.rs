@@ -29,18 +29,19 @@ impl AppState {
 
     pub fn routes(self) -> Router {
         let state = Arc::new(self);
-        Router::new()
-            .route("/", get(root))
-            .route("/health", get(health).head(health_head))
-            .route("/api/list", get(api_list))
-            .route("/api/system/ping", get(system_ping))
-            .route("/api/system/config", get(system_config))
-            .route("/api/system/groups", get(system_groups))
-            .route("/api/system/command", post(system_command))
-            .route("/api/:group/health", get(group_health))
-            .route("/api/:group/command", post(group_command))
-            .merge(plugins::routes(state.registry.clone()))
-            .with_state(state)
+        plugins::attach_routes(
+            Router::new()
+                .route("/", get(root))
+                .route("/health", get(health).head(health_head))
+                .route("/api/list", get(api_list))
+                .route("/api/system/ping", get(system_ping))
+                .route("/api/system/config", get(system_config))
+                .route("/api/system/groups", get(system_groups))
+                .route("/api/system/command", post(system_command))
+                .route("/api/:group/health", get(group_health))
+                .route("/api/:group/command", post(group_command)),
+        )
+        .with_state(state)
     }
 }
 

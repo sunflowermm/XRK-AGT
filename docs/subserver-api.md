@@ -1,6 +1,6 @@
 # 子服务端 API 文档
 
-> **目录**：`subserver/`（多语言）· 注册表 `subserver/registry.yaml`  
+> **目录**：`subserver/`（多语言）· 运行时目录 `src/utils/subserver-runtimes.js`  
 > **Python 实现**：`subserver/pyserver/`  
 > **说明**：主服务通过 `Bot.callSubserver` 调用各 runtime 的 `apis/` 插件。
 
@@ -17,6 +17,8 @@
 | `jserver` | Spring Boot | 8003 |
 | `netserver` | ASP.NET Core | 8004 |
 | `rustserver` | Axum (Rust) | 8005 |
+
+默认端口与路径/启动命令以 [`src/utils/subserver-runtimes.js`](../src/utils/subserver-runtimes.js) 为准。
 
 选型见 [`subserver/LANGUAGES.md`](../subserver/LANGUAGES.md)。主服务已是 Node.js，**不提供 Node 子服务端**。
 

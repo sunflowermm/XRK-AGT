@@ -2142,7 +2142,7 @@ export default class Bot extends EventEmitter {
   }
 
   /**
-   * 子服务 data/ 文件直链：本地优先，缺失时按路径前缀代理到对应 pyserver /api/{group}/file
+   * 子服务 data/ 文件直链：本地优先，缺失时按 data/<dir>/ 前缀代理到对应 runtime 的 /api/{group}/file
    */
   async _subserverFileHandler(req, res) {
     if (this._checkHeadersSent(res)) return;
@@ -2187,7 +2187,7 @@ export default class Bot extends EventEmitter {
         query: { path: rel },
         rawResponse: true,
         timeout: 600_000,
-        runtime: upstream.runtime || 'pyserver'
+        runtime: upstream.runtime
       });
 
       const contentType = response.headers.get('content-type');
@@ -2203,7 +2203,7 @@ export default class Bot extends EventEmitter {
       await pipeline(Readable.fromWeb(response.body), res);
     } catch (error) {
       if (isSubserverConnectionError(error)) {
-        const hint = formatSubserverError(error, getSubserverConfig());
+        const hint = formatSubserverError(error, getSubserverConfig(upstream.runtime));
         return HttpResponse.error(res, new Error(hint), 503, 'subserver-file');
       }
       return HttpResponse.notFound(res, '文件不存在');

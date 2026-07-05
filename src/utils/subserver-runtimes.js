@@ -1,15 +1,69 @@
 /**
- * 多语言子服务 runtime 目录（端口默认值；实际地址以 aistream.yaml → subserver.runtimes 为准）
+ * 多语言子服务 runtime 唯一目录（端口默认值；实际地址以 aistream.yaml → subserver.runtimes 为准）
  */
 
-/** @type {Record<string, { label: string, port: number, language: string, aliases?: string[] }>} */
+/** @type {Record<string, { label: string, port: number, language: string, path: string, start: string, data: string, aliases?: string[], framework?: string, examplePlugins?: string[] }>} */
 export const SUBSERVER_RUNTIME_CATALOG = {
-  pyserver: { label: 'Python', port: 8000, language: 'python', aliases: ['py', 'python'] },
-  goserver: { label: 'Go', port: 8001, language: 'go', aliases: ['go'] },
-  phpserver: { label: 'PHP', port: 8002, language: 'php', aliases: ['php'] },
-  jserver: { label: 'Java', port: 8003, language: 'java', aliases: ['java', 'j', 'spring'] },
-  netserver: { label: '.NET', port: 8004, language: 'csharp', aliases: ['net', 'dotnet', 'csharp', 'cs'] },
-  rustserver: { label: 'Rust', port: 8005, language: 'rust', aliases: ['rust', 'rs'] }
+  pyserver: {
+    label: 'Python',
+    port: 8000,
+    language: 'python',
+    path: 'subserver/pyserver',
+    start: 'cd subserver/pyserver && uv run xrk',
+    data: 'data/subserver',
+    aliases: ['py', 'python']
+  },
+  goserver: {
+    label: 'Go',
+    port: 8001,
+    language: 'go',
+    path: 'subserver/goserver',
+    start: 'cd subserver/goserver && go run .',
+    data: 'data/goserver',
+    aliases: ['go']
+  },
+  phpserver: {
+    label: 'PHP',
+    port: 8002,
+    language: 'php',
+    path: 'subserver/phpserver',
+    start: 'cd subserver/phpserver && php run.php',
+    data: 'data/phpserver',
+    aliases: ['php']
+  },
+  jserver: {
+    label: 'Java',
+    port: 8003,
+    language: 'java',
+    framework: 'spring-boot',
+    path: 'subserver/jserver',
+    start: 'cd subserver/jserver && mvn -q spring-boot:run',
+    data: 'data/jserver',
+    aliases: ['java', 'j', 'spring'],
+    examplePlugins: ['datetime-tools', 'json-tools']
+  },
+  netserver: {
+    label: '.NET',
+    port: 8004,
+    language: 'csharp',
+    framework: 'aspnet-core',
+    path: 'subserver/netserver',
+    start: 'cd subserver/netserver && dotnet run',
+    data: 'data/netserver',
+    aliases: ['net', 'dotnet', 'csharp', 'cs'],
+    examplePlugins: ['uuid-tools']
+  },
+  rustserver: {
+    label: 'Rust',
+    port: 8005,
+    language: 'rust',
+    framework: 'axum',
+    path: 'subserver/rustserver',
+    start: 'cd subserver/rustserver && cargo run',
+    data: 'data/rustserver',
+    aliases: ['rust', 'rs'],
+    examplePlugins: ['regex-tools']
+  }
 };
 
 const ALIAS_TO_RUNTIME = Object.fromEntries(
@@ -17,6 +71,29 @@ const ALIAS_TO_RUNTIME = Object.fromEntries(
     (meta.aliases || []).map((alias) => [alias.toLowerCase(), id])
   )
 );
+
+/** data/<dir>/ 首段目录 → runtime id（pyserver 配置目录 subserver 不参与代理） */
+const DATA_DIR_TO_RUNTIME = Object.fromEntries(
+  Object.entries(SUBSERVER_RUNTIME_CATALOG).map(([id, meta]) => [
+    meta.data.replace(/^data\//, ''),
+    id
+  ])
+);
+
+/**
+ * 解析 data/<dir>/… 路径（供文件代理与 runtime 路由共用）
+ * @param {string} relPath
+ * @returns {{ dir: string, runtime: string }|null}
+ */
+export function parseDataSubserverPath(relPath) {
+  const normalized = String(relPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized.startsWith('data/')) return null;
+  const match = /^data\/([^/]+)\//.exec(normalized);
+  if (!match) return null;
+  const dir = match[1];
+  if (dir === 'subserver') return null;
+  return { dir, runtime: DATA_DIR_TO_RUNTIME[dir] || 'pyserver' };
+}
 
 /** @returns {string[]} */
 export function listSubserverRuntimes() {
@@ -86,4 +163,15 @@ export function subserverRuntimeUsageHint() {
     '  帮助 · 列表\n' +
     '  <组名> 状态 · <组名> 更新'
   );
+}
+
+/** Docker status / 健康探测用端点列表 */
+export function subserverHealthEndpoints(serverPort = process.env.XRK_SERVER_PORT || '8080') {
+  return [
+    ['主服', `http://127.0.0.1:${serverPort}/health`],
+    ...Object.entries(SUBSERVER_RUNTIME_CATALOG).map(([id, meta]) => [
+      meta.aliases?.[0] || id,
+      `http://127.0.0.1:${meta.port}/health`
+    ])
+  ];
 }

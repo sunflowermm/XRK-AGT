@@ -2,7 +2,6 @@ use axum::{routing::post, Json, Router};
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::sync::Arc;
 
 use crate::core::command_registry::CommandRegistry;
 use crate::plugins::{cmd_handler, plugin_set};
@@ -20,8 +19,11 @@ pub fn register(registry: &CommandRegistry) {
     ));
 }
 
-pub fn routes() -> Router {
-    Router::new()
+pub fn attach_routes<S>(router: Router<S>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    router
         .route("/api/regex-tools/match", post(r#match))
         .route("/api/regex-tools/replace", post(replace))
 }

@@ -3,6 +3,7 @@ x-build-proxy: &build-proxy
     HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
     HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
     NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,host.docker.internal}
+    PLAYWRIGHT_VERSION: ${PLAYWRIGHT_VERSION:-1.58.1}
   extra_hosts:
     - "host.docker.internal:host-gateway"
 
@@ -54,8 +55,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: ${XRK_DOCKER_TARGET:-runtime}
       <<: *build-proxy
-    image: xrk-agt:latest
+    image: xrk-agt:${XRK_DOCKER_TAG:-latest}
     container_name: xrk-agt
     restart: unless-stopped
     environment:

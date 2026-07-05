@@ -9,8 +9,11 @@ pub fn register_all(registry: &CommandRegistry) {
     regex_tools::register(registry);
 }
 
-pub fn routes(_registry: Arc<CommandRegistry>) -> Router {
-    regex_tools::routes()
+pub fn attach_routes<S>(router: Router<S>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    regex_tools::attach_routes(router)
 }
 
 pub fn cmd_handler<F>(f: F) -> CommandHandler

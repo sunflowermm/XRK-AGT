@@ -26,6 +26,6 @@
 | Node 子服务 | 与主服务重复 |
 | 再叠一层 Python 微框架 | 已有 pyserver |
 
-新增 runtime：复制现有目录 → 实现 `CONTRACT.md` → 登记 `registry.yaml` → 在 `subserver-runtimes.js` 与 commonconfig `subserver.runtimes` 增加端点。
+新增 runtime：复制现有目录 → 实现 `CONTRACT.md` → 在 `src/utils/subserver-runtimes.js` 登记（commonconfig `subserver.runtimes` 自动同步）。
 
 契约详见 [`CONTRACT.md`](CONTRACT.md)。

@@ -1,6 +1,6 @@
 # 子服务端环境准备
 
-> 注册表 [`registry.yaml`](registry.yaml) · 契约 [`CONTRACT.md`](CONTRACT.md)
+> 运行时目录 [`src/utils/subserver-runtimes.js`](../src/utils/subserver-runtimes.js) · 契约 [`CONTRACT.md`](CONTRACT.md)
 
 ## Docker 全栈（推荐）
 
@@ -16,14 +16,16 @@ pnpm test:subservers   # 可选冒烟
 
 ## 本机单 runtime
 
-| Runtime | 端口 | 依赖 | 启动 |
-|---------|------|------|------|
-| pyserver | 8000 | Python 3.12+、[uv](https://docs.astral.sh/uv/) | `cd subserver/pyserver && uv run xrk` |
-| goserver | 8001 | Go 1.23+ | `cd subserver/goserver && go run .` |
-| phpserver | 8002 | PHP 8.2+ | `cd subserver/phpserver && php run.php` |
-| jserver | 8003 | JDK 21+、Maven | `cd subserver/jserver && mvn -q spring-boot:run` |
-| netserver | 8004 | .NET SDK 8+ | `cd subserver/netserver && dotnet run` |
-| rustserver | 8005 | Rust stable | `cd subserver/rustserver && cargo run` |
+端口与启动命令以 [`src/utils/subserver-runtimes.js`](../src/utils/subserver-runtimes.js) 中 `SUBSERVER_RUNTIME_CATALOG` 为准：
+
+| Runtime | 依赖 |
+|---------|------|
+| pyserver | Python 3.12+、[uv](https://docs.astral.sh/uv/) |
+| goserver | Go 1.23+ |
+| phpserver | PHP 8.2+ |
+| jserver | JDK 21+、Maven |
+| netserver | .NET SDK 8+ |
+| rustserver | Rust stable |
 
 自检：`pnpm subservers:check`（本地 `tests/`，不入库）
 

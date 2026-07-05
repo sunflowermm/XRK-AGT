@@ -11,12 +11,7 @@ import { Readable } from 'node:stream';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import cfg from '#infrastructure/config/config.js';
 import { normalizeError } from '#utils/normalize-error.js';
-import {
-  SUBSERVER_RUNTIME_CATALOG,
-  listSubserverRuntimes
-} from '#utils/subserver-runtimes.js';
-
-export { listSubserverRuntimes, SUBSERVER_RUNTIME_CATALOG };
+import { SUBSERVER_RUNTIME_CATALOG } from '#utils/subserver-runtimes.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_TIMEOUT = 30000;
@@ -34,17 +29,13 @@ function applyDockerHostOverride(id, host, port) {
 }
 
 /**
- * 读取 runtime 端点（aistream.yaml → subserver.runtimes）
- * @param {Record<string, unknown>} config
+ * @param {Record<string, unknown>} subserverRoot aistream.yaml → subserver
  * @param {string} id
  */
-function resolveRuntimeEntry(config, id) {
-  const root = /** @type {Record<string, unknown>} */ (config.subserver || {});
-  const runtimes = /** @type {Record<string, Record<string, unknown>>|undefined} */ (root.runtimes);
-  if (runtimes?.[id] && typeof runtimes[id] === 'object') {
-    return runtimes[id];
-  }
-  return null;
+function resolveRuntimeEntry(subserverRoot, id) {
+  const runtimes = /** @type {Record<string, Record<string, unknown>>|undefined} */ (subserverRoot?.runtimes);
+  const entry = runtimes?.[id];
+  return entry && typeof entry === 'object' ? entry : null;
 }
 
 /** @returns {string} */
@@ -67,7 +58,7 @@ export function getSubserverConfig(runtimeId) {
   let port = catalog.port;
   let timeout = Number(root.timeout) || DEFAULT_TIMEOUT;
 
-  const entry = resolveRuntimeEntry({ subserver: root }, id);
+  const entry = resolveRuntimeEntry(root, id);
   if (entry) {
     if (entry.enabled === false) {
       throw new Error(`子服务 runtime ${id} 已在配置中禁用`);
@@ -126,7 +117,7 @@ export function formatSubserverError(err, runtime) {
 
   const code = errorCauseCode(error);
   if (code === 'ECONNREFUSED') {
-    return `子服务端可能未启动，连接被拒绝${suffix}\n请启动 pyserver 并在 CommonConfig → AIStream → 子服务端 核对地址端口`;
+    return `子服务端可能未启动，连接被拒绝${suffix}\n请启动对应 runtime 并在 CommonConfig → AIStream → 子服务端 核对地址端口`;
   }
   if (code === 'ECONNRESET') {
     return `子服务端连接被重置，可能正在重启或处理超时${suffix}`;

@@ -1,4 +1,4 @@
-use crate::core::command_registry::CommandRegistry;
+use crate::core::command_registry::{is_exit_line, CommandRegistry};
 use crate::core::config::RuntimeConfig;
 use std::io::{self, IsTerminal, Write};
 use std::sync::Arc;

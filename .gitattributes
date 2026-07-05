@@ -1,0 +1,9 @@
+# Shell / 容器（强制 LF，避免 Windows CRLF 破坏 entrypoint）
+docker-entrypoint.sh text eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+
+# 源码
+*.mjs text eol=lf
+*.rs text eol=lf

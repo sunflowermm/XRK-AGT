@@ -28,7 +28,7 @@ fn normalize_cli_line(line: &str) -> String {
     out.join(" ")
 }
 
-fn is_exit_line(line: &str) -> bool {
+pub fn is_exit_line(line: &str) -> bool {
     let t = line.trim();
     let lower = t.to_lowercase();
     matches!(lower.as_str(), "exit" | "quit" | "q") || matches!(t, "退出" | "离开")
