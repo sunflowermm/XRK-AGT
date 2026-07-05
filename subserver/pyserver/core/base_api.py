@@ -1,18 +1,7 @@
-"""HTTP API 基类模块
-
-提供统一的 API 接口结构，支持字典配置和类继承两种方式。
-
-主要功能：
-- BaseAPI：API 基类，提供统一的注册和初始化接口
-- create_api_from_dict：从字典配置创建 API 实例
-
-使用方式：
-1. 继承 BaseAPI 类
-2. 使用字典配置（推荐）：在 API 文件中导出 default 字典
-"""
+"""API 基类与 dict 配置工厂。"""
 
 from pathlib import Path
-from typing import List, Dict, Callable, Any, Optional
+from typing import List, Dict, Callable, Any
 from fastapi import FastAPI, Request, HTTPException
 import logging
 import inspect
@@ -24,74 +13,65 @@ logger = logging.getLogger(__name__)
 
 
 class BaseAPI:
-    """HTTP API 基类，提供统一的 API 接口结构"""
-    
     def __init__(
         self,
         name: str,
         description: str = "",
         priority: int = 100,
-        enabled: bool = True
+        enabled: bool = True,
     ):
-        """
-        Args:
-            name: API 名称
-            description: API 描述
-            priority: 优先级（数字越大优先级越高）
-            enabled: 是否启用
-        """
         self.name = name
         self.description = description or "暂无描述"
         self.priority = priority
         self.enabled = enabled
         self.routes: List[Dict[str, Any]] = []
         self._registered = False
-    
+
     def register_routes(self, app: FastAPI):
-        """注册路由到 FastAPI 应用，子类应重写此方法"""
-        logger.warning(f"[BaseAPI] {self.name} 未实现 register_routes 方法")
-    
+        logger.warning("[BaseAPI] %s 未实现 register_routes", self.name)
+
     async def init(self, app: FastAPI):
-        """初始化钩子，子类可重写此方法实现自定义初始化逻辑"""
         pass
-    
+
     async def startup(self, app: FastAPI):
-        """启动时调用"""
         if not self.enabled:
-            logger.info(f"[BaseAPI] {self.name} 已禁用，跳过注册")
+            logger.info("[BaseAPI] %s 已禁用，跳过注册", self.name)
             return
-        
         try:
             self.register_routes(app)
             await self.init(app)
             self._registered = True
-            logger.info(f"[BaseAPI] {self.name} 注册成功 ({len(self.routes)} 个路由)")
+            logger.info("[BaseAPI] %s 注册成功 (%d 个路由)", self.name, len(self.routes))
         except Exception as e:
-            logger.error(f"[BaseAPI] {self.name} 注册失败: {e}", exc_info=True)
+            logger.error("[BaseAPI] %s 注册失败: %s", self.name, e, exc_info=True)
             raise
 
     async def shutdown(self, app: FastAPI):
-        """关闭时调用，子类可重写以释放资源"""
         pass
-    
+
     def get_info(self) -> Dict[str, Any]:
-        """获取 API 信息"""
         return {
             "name": self.name,
             "description": self.description,
             "priority": self.priority,
             "enabled": self.enabled,
             "routes_count": len(self.routes),
-            "registered": self._registered
+            "registered": self._registered,
         }
 
 
-def _register_plugin_commands(
-    app: FastAPI,
-    api: BaseAPI,
-    data: Dict[str, Any],
-    routes: List[Dict[str, Any]],
-):
+async def _run_hook(hook, app: FastAPI) -> None:
+    if not callable(hook):
+        return
+    if inspect.iscoroutinefunction(hook):
+        await hook(app)
+        return
+    result = hook(app)
+    if inspect.isawaitable(result):
+        await result
+
+
+def _register_plugin_commands(app: FastAPI, api: BaseAPI, data: Dict[str, Any]):
     group = data.get("group")
     if not group:
         return
@@ -100,7 +80,6 @@ def _register_plugin_commands(
     plugin_dir = Path(plugin_dir_raw) if plugin_dir_raw else None
     commands = data.get("commands") or {}
     on_update = data.get("on_update")
-
     if not commands and not plugin_dir:
         return
 
@@ -134,7 +113,7 @@ def _register_plugin_commands(
         args = body.get("args") or []
         if isinstance(args, str):
             args = args.split()
-        if not isinstance(args, list):
+        elif not isinstance(args, list):
             args = []
 
         line = body.get("line")
@@ -143,17 +122,13 @@ def _register_plugin_commands(
             if parts and parts[0] == group:
                 parts = parts[1:]
             if parts:
-                cmd = parts[0]
-                args = parts[1:]
-
-        if not cmd:
-            cmd = "help"
+                cmd, args = parts[0], parts[1:]
 
         return await dispatch_plugin_command(
             group,
             commands,
             request,
-            cmd=cmd,
+            cmd=cmd or "help",
             args=args,
             plugin_dir=plugin_dir,
             on_update=on_update,
@@ -164,20 +139,17 @@ def _register_plugin_commands(
 
 
 def create_api_from_dict(data: Dict[str, Any]) -> BaseAPI:
-    """从字典创建 API 实例"""
     class DictAPI(BaseAPI):
         def __init__(self, data: Dict[str, Any]):
             super().__init__(
                 name=data.get("name", "unnamed-api"),
                 description=data.get("description", ""),
                 priority=data.get("priority", 100),
-                enabled=data.get("enabled", True)
+                enabled=data.get("enabled", True),
             )
             self._data = data
-        
+
         def register_routes(self, app: FastAPI):
-            """从字典配置注册路由"""
-            routes = self._data.get("routes", [])
             route_methods = {
                 "GET": app.get,
                 "POST": app.post,
@@ -185,60 +157,37 @@ def create_api_from_dict(data: Dict[str, Any]) -> BaseAPI:
                 "DELETE": app.delete,
                 "PATCH": app.patch,
             }
-            
-            for route_config in routes:
+            for route_config in self._data.get("routes", []):
                 method = route_config.get("method", "GET").upper()
                 path = route_config.get("path")
                 handler = route_config.get("handler")
-                
-                if not path or not handler or method not in route_methods:
+                if not path or not handler:
                     continue
-                
-                wrapped_handler = self._wrap_handler(handler)
-                route_methods[method](path)(wrapped_handler)
+                register = route_methods.get(method)
+                if not register:
+                    continue
+                register(path)(self._wrap_handler(handler))
                 self.routes.append(route_config)
+            _register_plugin_commands(app, self, self._data)
 
-            _register_plugin_commands(app, self, self._data, self.routes)
-        
         async def init(self, app: FastAPI):
-            """执行自定义初始化钩子"""
-            init_hook = self._data.get("init")
-            if not (init_hook and callable(init_hook)):
-                return
-            
-            if inspect.iscoroutinefunction(init_hook):
-                await init_hook(app)
-            else:
-                result = init_hook(app)
-                if inspect.isawaitable(result):
-                    await result
+            await _run_hook(self._data.get("init"), app)
 
         async def shutdown(self, app: FastAPI):
-            """执行自定义关闭钩子"""
-            shutdown_hook = self._data.get("shutdown")
-            if not (shutdown_hook and callable(shutdown_hook)):
-                return
+            await _run_hook(self._data.get("shutdown"), app)
 
-            if inspect.iscoroutinefunction(shutdown_hook):
-                await shutdown_hook(app)
-            else:
-                result = shutdown_hook(app)
-                if inspect.isawaitable(result):
-                    await result
-        
         def _wrap_handler(self, handler: Callable) -> Callable:
-            """包装处理器以支持错误处理"""
             is_async = inspect.iscoroutinefunction(handler)
-            
+
             async def wrapped(request: Request):
                 try:
                     return await handler(request) if is_async else handler(request)
                 except HTTPException:
                     raise
                 except Exception as e:
-                    logger.error(f"[DictAPI] {self.name} 处理请求失败: {e}", exc_info=True)
-                    raise HTTPException(status_code=500, detail=str(e))
-            
+                    logger.error("[DictAPI] %s 处理失败: %s", self.name, e, exc_info=True)
+                    raise HTTPException(status_code=500, detail=str(e)) from e
+
             return wrapped
-    
+
     return DictAPI(data)

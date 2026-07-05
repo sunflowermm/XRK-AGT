@@ -196,29 +196,31 @@ class ApiLoader {
 
   async changeApi(key) {
     const api = this.apis.get(key);
-    if (!api?.filePath) {
+    const filePath = api?.filePath ?? await this._findApiFile(key);
+    if (!filePath) {
       BotUtil.makeLog('warn', `API不存在: ${key}`, 'ApiLoader');
-      const apiDirs = await paths.getCoreSubDirs('http');
-      for (const apiDir of apiDirs) {
-        const files = await FileLoader.readFiles(apiDir, { ext: '.js', recursive: true });
-        const file = files.find((f) => resolveCoreModuleKey(f, [apiDir]) === key);
-        if (file) {
-          await this._reloadFromFile(key, file);
-          return true;
-        }
-      }
       return false;
     }
 
     try {
-      BotUtil.makeLog('info', `重载API: ${api.name}`, 'ApiLoader');
-      await this._reloadFromFile(key, api.filePath);
-      BotUtil.makeLog('info', `API重载成功: ${api.name}`, 'ApiLoader');
+      BotUtil.makeLog('info', `重载API: ${api?.name ?? key}`, 'ApiLoader');
+      await this._reloadFromFile(key, filePath);
+      BotUtil.makeLog('info', `API重载成功: ${this.apis.get(key)?.name ?? key}`, 'ApiLoader');
       return true;
     } catch (error) {
-      BotUtil.makeLog('error', `API重载失败: ${api.name}`, 'ApiLoader', error);
+      BotUtil.makeLog('error', `API重载失败: ${key}`, 'ApiLoader', error);
       return false;
     }
+  }
+
+  async _findApiFile(key) {
+    const apiDirs = await paths.getCoreSubDirs('http');
+    for (const apiDir of apiDirs) {
+      const files = await FileLoader.readFiles(apiDir, { ext: '.js', recursive: true });
+      const file = files.find((f) => resolveCoreModuleKey(f, [apiDir]) === key);
+      if (file) return file;
+    }
+    return null;
   }
 
   getApiList() {

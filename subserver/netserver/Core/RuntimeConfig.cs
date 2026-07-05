@@ -44,7 +44,6 @@ public sealed class RuntimeConfig
         foreach (var candidate in new[]
         {
             Path.Combine("..", "..", "data", "netserver"),
-            Path.Combine("/app", "data", "netserver"),
             Path.Combine("data", "netserver")
         })
         {

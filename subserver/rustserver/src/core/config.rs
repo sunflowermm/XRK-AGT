@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StdinConfig {
@@ -22,7 +22,7 @@ fn default_prompt() -> String {
 impl Default for StdinConfig {
     fn default() -> Self {
         Self {
-            enabled: default_true(),
+            enabled: true,
             prompt: default_prompt(),
         }
     }
@@ -56,56 +56,38 @@ impl Default for ServerConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RuntimeConfig {
     #[serde(default)]
     pub server: ServerConfig,
 }
 
-impl Default for RuntimeConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-        }
-    }
+fn read_json(path: &Path) -> Option<RuntimeConfig> {
+    let text = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
 }
 
 impl RuntimeConfig {
     pub fn load() -> Self {
-        let mut cfg = Self::default();
         let default_path = PathBuf::from("config/default_config.json");
-        if default_path.is_file() {
-            if let Ok(text) = fs::read_to_string(&default_path) {
-                if let Ok(parsed) = serde_json::from_str::<RuntimeConfig>(&text) {
-                    cfg = parsed;
-                }
-            }
-        }
+        let mut cfg = read_json(&default_path).unwrap_or_default();
 
         let data_dir = Self::data_dir();
         let runtime_path = data_dir.join("config.json");
-        if runtime_path.is_file() {
-            if let Ok(text) = fs::read_to_string(&runtime_path) {
-                if let Ok(user) = serde_json::from_str::<RuntimeConfig>(&text) {
-                    cfg.server.host = user.server.host;
-                    cfg.server.port = user.server.port;
-                    cfg.server.stdin = user.server.stdin;
-                }
-            }
+        if let Some(user) = read_json(&runtime_path) {
+            cfg.server.host = user.server.host;
+            cfg.server.port = user.server.port;
+            cfg.server.stdin = user.server.stdin;
         } else if default_path.is_file() {
             let _ = fs::create_dir_all(&data_dir);
             let _ = fs::copy(&default_path, &runtime_path);
         }
 
-        if let Ok(host) = env::var("HOST") {
-            if !host.is_empty() {
-                cfg.server.host = host;
-            }
+        if let Some(host) = env::var("HOST").ok().filter(|v| !v.is_empty()) {
+            cfg.server.host = host;
         }
-        if let Ok(port) = env::var("PORT") {
-            if let Ok(p) = port.parse() {
-                cfg.server.port = p;
-            }
+        if let Some(port) = env::var("PORT").ok().and_then(|v| v.parse().ok()) {
+            cfg.server.port = port;
         }
 
         cfg
@@ -114,10 +96,9 @@ impl RuntimeConfig {
     fn data_dir() -> PathBuf {
         for candidate in [
             PathBuf::from("../../data/rustserver"),
-            PathBuf::from("/app/data/rustserver"),
             PathBuf::from("data/rustserver"),
         ] {
-            if candidate.parent().map(|p| p.exists()).unwrap_or(false) || candidate.exists() {
+            if candidate.parent().is_some_and(|p| p.exists()) || candidate.exists() {
                 return candidate;
             }
         }

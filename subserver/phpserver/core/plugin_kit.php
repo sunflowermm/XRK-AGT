@@ -7,16 +7,22 @@ function repo_root(): string {
 
 function load_runtime_config(): array {
     $dir = repo_root() . '/data/phpserver';
-    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
     $runtime = $dir . '/config.json';
     $default = __DIR__ . '/../config/default_config.json';
-    if (!file_exists($runtime) && file_exists($default)) copy($default, $runtime);
-    $cfg = file_exists($default) ? (json_decode(file_get_contents($default) ?: '{}', true) ?: []) : [];
-    if (file_exists($runtime)) {
-        $user = json_decode(file_get_contents($runtime) ?: '{}', true) ?: [];
-        $cfg = array_replace_recursive($cfg, $user);
+    if (!file_exists($runtime) && file_exists($default)) {
+        copy($default, $runtime);
     }
-    return $cfg;
+    $cfg = file_exists($default)
+        ? (json_decode(file_get_contents($default) ?: '{}', true) ?: [])
+        : [];
+    if (!file_exists($runtime)) {
+        return $cfg;
+    }
+    $user = json_decode(file_get_contents($runtime) ?: '{}', true) ?: [];
+    return array_replace_recursive($cfg, $user);
 }
 
 function json_response(int $status, array $body): void {

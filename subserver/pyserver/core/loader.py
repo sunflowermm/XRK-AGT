@@ -1,18 +1,4 @@
-"""API 加载器模块
-
-自动扫描并加载 apis 目录下的所有 API 组。
-
-功能：
-- 自动发现 apis 目录下的 API 组
-- 支持字典配置和类继承两种 API 定义方式
-- 按优先级排序注册 API
-- 单例模式，确保只加载一次
-
-API 组结构：
-apis/
-  group_name/
-    api_file.py  # 导出 default 字典或 BaseAPI 子类
-"""
+"""API 加载器：扫描 apis/ 并注册路由与命令。"""
 
 import importlib
 import importlib.util
@@ -61,44 +47,46 @@ class ApiLoader:
         cls._loaded = True
     
     async def _load_apis(self, app: FastAPI):
-        """加载所有 API 组"""
-        api_groups = [
+        api_groups = sorted(
             d for d in self.apis_dir.iterdir()
             if d.is_dir() and not d.name.startswith("_")
-        ]
+        )
         if not api_groups:
             logger.warning("未找到 API 组目录")
             return
 
         loaded_count = 0
+        skipped_count = 0
         failed_count = 0
         for group_dir in api_groups:
             group_name = group_dir.name
-            if group_name == "system":
-                api_files = [f for f in group_dir.glob("*.py") if not f.name.startswith("_")]
-                for api_file in api_files:
-                    try:
-                        await self._load_api_file(api_file, group_name, app)
-                        loaded_count += 1
-                    except Exception as e:
-                        failed_count += 1
-                        logger.error("加载失败 %s/%s: %s", group_name, api_file.name, e, exc_info=True)
+            api_files = sorted(
+                f for f in group_dir.glob("*.py") if not f.name.startswith("_")
+            )
+            if not api_files:
+                if group_name != "system":
+                    logger.warning("跳过空插件目录: %s", group_name)
                 continue
 
-            api_files = [f for f in group_dir.glob("*.py") if not f.name.startswith("_")]
-            if not api_files:
-                logger.warning("跳过空插件目录: %s", group_name)
-                continue
             group_loaded = False
+            group_hard_failed = False
             for api_file in api_files:
                 try:
                     await self._load_api_file(api_file, group_name, app)
                     loaded_count += 1
                     group_loaded = True
+                except ImportError as e:
+                    skipped_count += 1
+                    logger.warning(
+                        "跳过插件 %s/%s（依赖未安装）: %s",
+                        group_name, api_file.name, e,
+                    )
                 except Exception as e:
                     failed_count += 1
+                    group_hard_failed = True
                     logger.error("加载失败 %s/%s: %s", group_name, api_file.name, e, exc_info=True)
-            if not group_loaded:
+
+            if group_hard_failed and not group_loaded and group_name != "system":
                 CommandRegistry.register(
                     PluginCommandSet(
                         group=group_name,
@@ -109,7 +97,13 @@ class ApiLoader:
                 )
 
         self._apis.sort(key=lambda x: x.priority, reverse=True)
-        logger.info("📂 API 已加载 · %d 个（失败 %d）", loaded_count, failed_count)
+        if skipped_count:
+            logger.info(
+                "📂 API 已加载 · %d 个（跳过 %d · 失败 %d）",
+                loaded_count, skipped_count, failed_count,
+            )
+        else:
+            logger.info("📂 API 已加载 · %d 个（失败 %d）", loaded_count, failed_count)
     
     async def _load_api_file(self, api_file: Path, group_name: str, app: FastAPI):
         """加载单个 API 文件"""
@@ -139,18 +133,8 @@ class ApiLoader:
     
     @classmethod
     def get_api_list(cls) -> List[Dict[str, Any]]:
-        """获取所有 API 信息列表"""
         instance = cls()
         return [api.get_info() for api in instance._apis]
-    
-    @classmethod
-    def get_api(cls, name: str) -> Optional[BaseAPI]:
-        """根据名称获取 API"""
-        instance = cls()
-        for api in instance._apis:
-            if api.name == name:
-                return api
-        return None
 
     @classmethod
     async def shutdown_all(cls, app: FastAPI):

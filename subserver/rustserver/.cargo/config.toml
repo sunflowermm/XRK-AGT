@@ -1,0 +1,3 @@
+# 本机 Windows 无 Visual Studio Build Tools 时使用 MinGW（gcc 需在 PATH）
+[target.x86_64-pc-windows-gnu]
+linker = "gcc"

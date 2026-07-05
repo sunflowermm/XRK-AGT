@@ -15,8 +15,6 @@
 
 \* `jmcomic` 本地 clone（gitignore）。**权威目录**（含路径/启动命令）：[`src/utils/subserver-runtimes.js`](../src/utils/subserver-runtimes.js)
 
-\* `jmcomic` 本地 clone（gitignore）。
-
 选型说明：[`LANGUAGES.md`](LANGUAGES.md) · 运行时目录：[`src/utils/subserver-runtimes.js`](../src/utils/subserver-runtimes.js) · **开发指南**：[`docs/subserver-plugin-development.md`](../docs/subserver-plugin-development.md)
 
 ## 统一目录

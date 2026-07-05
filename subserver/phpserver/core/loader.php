@@ -98,7 +98,10 @@ function mount_system_routes(array $cfg): void {
     ]));
     ApiLoader::add('GET', '/health', fn () => json_response(200, ['status' => 'healthy', 'runtime' => 'phpserver']));
     ApiLoader::add('HEAD', '/health', function () { http_response_code(200); });
-    ApiLoader::add('GET', '/api/list', fn () => json_response(200, [
-        'apis' => CommandRegistry::apiList(), 'count' => count(CommandRegistry::apiList()), 'runtime' => 'phpserver',
-    ]));
+    ApiLoader::add('GET', '/api/list', function () {
+        $apis = CommandRegistry::apiList();
+        json_response(200, [
+            'apis' => $apis, 'count' => count($apis), 'runtime' => 'phpserver',
+        ]);
+    });
 }

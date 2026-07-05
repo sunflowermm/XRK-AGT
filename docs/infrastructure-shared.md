@@ -34,7 +34,34 @@
 1. 类字段存放 watcher / 缓存 Map（禁止在 constructor 里 new 可变容器）
 2. 扫描：`FileLoader.getCoreSubDirFiles(subDir)` 或 `paths.getCoreDirs()`
 3. 加载：`FileLoader.importFresh(absPath)` + `forEachBatch(..., LOADER_BATCH_SIZE, ...)`
-4. 热重载：`this._hotReload = new HotReloadBase({ files, onChange, ... })`，销毁时 `_hotReload?.stop()`
+4. 热重载：`this._hotReload = new HotReloadBase({ loggerName })`，`watch(true, { dirs|files, onAdd, onChange, onUnlink })`；销毁时 `_hotReload?.stop()`
+
+## HotReloadBase 语义（`src/utils/hot-reload-base.js`）
+
+各 Loader **禁止**直接使用 chokidar；统一经本类，避免重复实现与误触发。
+
+### 何时会触发 handler
+
+| 事件 | 行为 |
+|------|------|
+| `add` / `change` | 读文件 SHA256；与上次 hash **相同则跳过**（debug 日志「跳过热更新（内容未变）」） |
+| `unlink` | **延迟 600ms** 再执行；若期间同路径 `add`/`change` 到来则取消（原子保存/重命名） |
+| `ready` | 对当前已监视文件 **预填 hash**，避免启动后首次 phantom 事件误重载 |
+
+其余：`lodash.debounce`（默认 500ms）、`awaitWriteFinish`（stability 300ms）、同路径 `_inFlight` 去重、`isShuttingDown()` 时不启动。
+
+### Loader 侧约定
+
+- **ConfigLoader**：监视器回调用 **`reloadFile(绝对路径)`**，勿仅用 basename 调 `reload(name)`（多 Core 同名 schema 会歧义）。
+- **PluginsLoader**：`changePlugin(key, filePath)` 优先用监视器路径；`createTask()` 对 cron 指纹 `_taskScheduleKey` 去重，插件热更但 schedule 未变时不重建全部定时任务。
+- **ApiLoader / StreamLoader**：`onChange` 应基于监视器报告的 `filePath` 重载（Api 实例已缓存 `filePath` 时等价）。
+- **cfg（`config.js`）**：单文件 `files` 模式 + `shouldHandle: () => true`；YAML 原子写入同样受 hash / unlink 延迟保护。
+
+### 排查「未手改却热更」
+
+1. 看日志是否含 **跳过热更新** — 有则说明 chokidar 触了但内容 dedup 已拦住（可开 debug）。
+2. 若仍重载：查编辑器/同步盘/杀毒是否改写 mtime 或做 rename 保存；Windows 上偶发 `unlink`+`add` 已由延迟确认处理。
+3. 13:00 等整点 `[定时任务]` 日志是 **cron 正常执行**，不是热重载。
 
 ## 文档入口
 
@@ -46,4 +73,4 @@
 
 ---
 
-*最后更新：2026-06-19*
+*最后更新：2026-07-05*

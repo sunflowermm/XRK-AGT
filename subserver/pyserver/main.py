@@ -65,33 +65,6 @@ if cors_origins:
     )
 
 
-@app.get("/", tags=["系统"])
-async def root():
-    """根路径"""
-    return {
-        "name": "XRK-AGT Python 子服务端",
-        "version": "1.1.0",
-        "status": "running"
-    }
-
-
-@app.get("/health", tags=["系统"])
-@app.head("/health", tags=["系统"])
-async def health():
-    """健康检查"""
-    return {"status": "healthy"}
-
-
-@app.get("/api/list", tags=["系统"])
-async def api_list():
-    """获取 API 列表"""
-    apis = ApiLoader.get_api_list()
-    return {
-        "apis": apis,
-        "count": len(apis)
-    }
-
-
 def main():
     """主入口函数"""
     host = os.getenv("HOST") or config.get("server.host", "0.0.0.0")

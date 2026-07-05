@@ -59,7 +59,7 @@ export const SUBSERVER_RUNTIME_CATALOG = {
     language: 'rust',
     framework: 'axum',
     path: 'subserver/rustserver',
-    start: 'cd subserver/rustserver && cargo run',
+    start: 'node subserver/rustserver/run.mjs',
     data: 'data/rustserver',
     aliases: ['rust', 'rs'],
     examplePlugins: ['regex-tools']

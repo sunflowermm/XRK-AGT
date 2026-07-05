@@ -73,9 +73,16 @@ class ConfigLoader {
       BotUtil.makeLog('error', `配置重载失败: ${name} 文件不存在`, 'ConfigLoader');
       return false;
     }
-    await this._loadConfig(configPath);
-    BotUtil.makeLog('info', `配置已重载: ${name}`, 'ConfigLoader');
-    return true;
+    return this.reloadFile(configPath);
+  }
+
+  /** 按监视器报告的绝对路径重载（避免 basename 歧义） */
+  async reloadFile(configPath) {
+    const ok = await this._loadConfig(configPath);
+    if (ok) {
+      BotUtil.makeLog('info', `配置已重载: ${path.basename(configPath, '.js')}`, 'ConfigLoader');
+    }
+    return ok;
   }
 
   clearAllCache() {
@@ -100,7 +107,7 @@ class ConfigLoader {
       const started = await hotReload.watch(true, {
         dirs: configDirs,
         onAdd: (filePath) => this._loadConfig(filePath),
-        onChange: (filePath) => this.reload(hotReload.getFileKey(filePath)),
+        onChange: (filePath) => this.reloadFile(filePath),
         onUnlink: (filePath) => this.configs.delete(hotReload.getFileKey(filePath))
       });
       if (started) this._hotReload = hotReload;

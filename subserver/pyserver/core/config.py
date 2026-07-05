@@ -1,60 +1,21 @@
-"""配置管理模块
-
-支持 YAML 配置文件和环境变量，参考主服务端配置系统。
-
-功能：
-- 自动从默认配置复制到数据目录
-- 支持点号分隔的嵌套配置键
-- 配置缓存机制，提升读取性能
-- 统一的路径解析逻辑
-
-配置加载流程：
-1. 优先从 data/subserver/config.yaml 读取（用户配置）
-2. 如果不存在，从 config/default_config.yaml 复制并创建
-3. 如果默认配置也不存在，使用内置默认配置
-"""
+"""子服运行时配置：default_config.yaml → data/subserver/config.yaml。"""
 
 import yaml
 import shutil
 import os
-import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
-
 
 def get_project_root() -> Path:
-    """
-    获取项目根目录（subserver/pyserver）
-
-    Returns:
-        项目根目录Path对象
-    """
     return Path(__file__).parent.parent
 
 
 def get_data_root() -> Path:
-    """
-    获取数据目录（data/subserver，相对于项目根目录的父目录）
-
-    Returns:
-        数据目录Path对象
-    """
     return get_project_root().parent.parent / "data" / "subserver"
 
 
 def resolve_path(path_str: str, base: Optional[Path] = None) -> Path:
-    """
-    解析路径（相对路径转换为绝对路径）
-
-    Args:
-        path_str: 路径字符串（相对或绝对）
-        base: 基础路径（如果为None，使用项目根目录）
-
-    Returns:
-        解析后的绝对路径
-    """
     path = Path(path_str)
     if path.is_absolute():
         return path
@@ -63,20 +24,9 @@ def resolve_path(path_str: str, base: Optional[Path] = None) -> Path:
 
 
 class Config:
-    """配置管理器
-
-    配置加载流程：
-    1. 优先从 data/subserver/config.yaml 读取（用户配置）
-    2. 如果不存在，从 config/default_config.yaml 复制并创建
-    3. 如果默认配置也不存在，使用内置默认配置
-    """
-
     def __init__(self, config_file: str = "config.yaml"):
-        # 项目根目录（subserver/pyserver）
         self.project_root = get_project_root()
-        # 默认配置路径（config/default_config.yaml）
         self.default_config_file = self.project_root / "config" / "default_config.yaml"
-        # 数据目录配置路径（data/subserver/config.yaml，相对于项目根目录的父目录）
         self.data_root = get_data_root()
         self.config_file = self.data_root / config_file
 
@@ -170,17 +120,6 @@ class Config:
         }
 
     def get(self, key: str, default: Any = None) -> Any:
-        """
-        获取配置值，支持点号分隔的嵌套键
-        例如: config.get("server.port") -> 8000
-
-        Args:
-            key: 配置键，支持点号分隔的嵌套键
-            default: 默认值（如果键不存在）
-
-        Returns:
-            配置值或默认值
-        """
         if key in self._cache:
             return self._cache[key]
 
@@ -197,46 +136,5 @@ class Config:
         self._cache[key] = value
         return value
 
-    def set(self, key: str, value: Any, save: bool = False):
-        """
-        设置配置值
-
-        Args:
-            key: 配置键，支持点号分隔的嵌套键
-            value: 配置值
-            save: 是否立即保存到文件（默认False）
-        """
-        keys = key.split(".")
-        config = self._config
-
-        for k in keys[:-1]:
-            if k not in config:
-                config[k] = {}
-            config = config[k]
-
-        config[keys[-1]] = value
-        self._cache.clear()
-
-        if save:
-            self.save()
-
-    def to_dict(self) -> Dict[str, Any]:
-        """获取完整配置字典"""
-        return self._config.copy()
-
     def get_file_path(self) -> Path:
-        """获取配置文件路径"""
         return self.config_file
-
-    def exists(self) -> bool:
-        """检查配置文件是否存在"""
-        return self.config_file.exists()
-
-    def reset_to_default(self):
-        """重置为默认配置"""
-        if self.default_config_file.exists():
-            shutil.copy2(self.default_config_file, self.config_file)
-        else:
-            self._config = self._get_builtin_default_config()
-            self.save()
-        self.load()

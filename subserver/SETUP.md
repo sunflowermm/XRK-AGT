@@ -25,7 +25,7 @@ pnpm test:subservers   # 可选冒烟
 | phpserver | PHP 8.2+ |
 | jserver | JDK 21+、Maven |
 | netserver | .NET SDK 8+ |
-| rustserver | Rust stable |
+| rustserver | Rust stable（Windows 无 MSVC 时需 MinGW gcc，见 `rustserver/run.mjs`） |
 
 自检：`pnpm subservers:check`（本地 `tests/`，不入库）
 

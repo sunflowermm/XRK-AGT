@@ -95,7 +95,6 @@ public class RuntimeConfig {
     private static Path resolveDataDir() {
         for (String candidate : new String[]{
                 "../../data/jserver",
-                "/app/data/jserver",
                 "data/jserver"
         }) {
             Path p = Path.of(candidate).normalize();

@@ -151,12 +151,10 @@ impl CommandRegistry {
 
         if let Some(handler) = g.commands.get(&cmd) {
             let mut res = handler(args);
-            if res.get("ok").is_none() {
-                if let Some(obj) = res.as_object_mut() {
+            if let Some(obj) = res.as_object_mut() {
+                if obj.get("ok").is_none() {
                     obj.insert("ok".into(), json!(true));
                 }
-            }
-            if let Some(obj) = res.as_object_mut() {
                 obj.insert("group".into(), json!(g.group));
             }
             return res;
@@ -178,10 +176,10 @@ impl CommandRegistry {
         let lower = line.to_lowercase();
         if lower == "help" || lower == "?" {
             let mut out = self.list_help();
-            if let Some(obj) = out.as_object_mut() {
+            out.as_object_mut().map(|obj| {
                 obj.insert("ok".into(), json!(true));
                 obj.insert("hint".into(), json!("用法: <组名> <命令> [参数...]"));
-            }
+            });
             return out;
         }
         if lower == "list" || lower == "groups" {

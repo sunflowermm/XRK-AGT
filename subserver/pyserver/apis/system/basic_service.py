@@ -4,8 +4,26 @@ from fastapi import HTTPException, Request
 
 from core.command_registry import CommandRegistry
 from core.config import Config
+from core.loader import ApiLoader
 
 config = Config()
+
+
+async def root_handler(_request: Request):
+    return {
+        "name": "XRK-AGT Python 子服务端",
+        "version": "1.1.0",
+        "status": "running",
+    }
+
+
+async def health_handler(_request: Request):
+    return {"status": "healthy"}
+
+
+async def api_list_handler(_request: Request):
+    apis = ApiLoader.get_api_list()
+    return {"apis": apis, "count": len(apis)}
 
 
 async def ping_handler(_request: Request):
@@ -54,6 +72,10 @@ default = {
     "description": "子服务端底层系统接口",
     "priority": 100,
     "routes": [
+        {"method": "GET", "path": "/", "handler": root_handler},
+        {"method": "GET", "path": "/health", "handler": health_handler},
+        {"method": "HEAD", "path": "/health", "handler": health_handler},
+        {"method": "GET", "path": "/api/list", "handler": api_list_handler},
         {"method": "GET", "path": "/api/system/ping", "handler": ping_handler},
         {"method": "GET", "path": "/api/system/config", "handler": config_handler},
         {"method": "GET", "path": "/api/system/groups", "handler": groups_handler},

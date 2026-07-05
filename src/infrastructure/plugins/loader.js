@@ -49,6 +49,7 @@ class PluginsLoader {
     extendedCount: 0
   }
   _hotReload = null
+  _taskScheduleKey = ''
 
   async load(isRefresh = false) {
     try {
@@ -1310,6 +1311,13 @@ class PluginsLoader {
   }
 
   createTask() {
+    const scheduleKey = this.task
+      .map((t) => `${t.name}\0${t.cron}\0${t.taskName ?? ''}\0${t.log ? 1 : 0}`)
+      .sort()
+      .join('\n')
+    if (scheduleKey === this._taskScheduleKey) return
+    this._taskScheduleKey = scheduleKey
+
     const created = new Set()
 
     for (const task of this.task) {
@@ -1488,24 +1496,24 @@ class PluginsLoader {
    * 热更新插件（优化：简化逻辑）
    * @param {string} key - 插件文件名（不含扩展名）
    */
-  async changePlugin(key) {
+  async changePlugin(key, filePath = null) {
     if (!key) {
       logger.error('热更新插件: 缺少插件key')
       return
     }
-    
+
     try {
-      const pluginPath = await this.findPluginFilePath(key)
+      const pluginPath = filePath ?? await this.findPluginFilePath(key)
       if (!pluginPath) {
         logger.error(`插件文件未找到: ${key}`)
         return
       }
-      
+
       this.unloadPlugin(key)
-      
+
       const file = this.buildPluginFileObject(pluginPath, key)
       const loadedPlugins = await this.importPlugin(file, [], false)
-      
+
       if (loadedPlugins.length > 0) {
         this._rebuildPluginGraph()
         logger.mark(`[热更新插件][${key}] 更新了 ${loadedPlugins.length} 个插件实例`)
@@ -1554,7 +1562,7 @@ class PluginsLoader {
         onChange: async (filePath) => {
           const key = hotReload.getFileKey(filePath)
           logger.mark(`[修改插件][${key}]`)
-          await this.changePlugin(key)
+          await this.changePlugin(key, filePath)
         },
         onUnlink: async (filePath) => {
           const key = hotReload.getFileKey(filePath)

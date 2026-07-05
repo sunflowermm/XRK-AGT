@@ -1,6 +1,8 @@
 import chokidar from 'chokidar';
 import lodash from 'lodash';
-import path from 'path';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import fs from 'node:fs/promises';
 import BotUtil from '#utils/botutil.js';
 import paths from '#utils/paths.js';
 import { normalizeError } from '#utils/normalize-error.js';
@@ -10,6 +12,9 @@ const DEFAULT_AWAIT_WRITE_FINISH = {
   stabilityThreshold: 300,
   pollInterval: 100
 };
+
+/** unlink 后若同路径 add/change 到来，取消误删（原子保存/重命名） */
+const UNLINK_CONFIRM_MS = 600;
 
 function normalizeWatchPath(filePath) {
   return path.resolve(String(filePath ?? ''));
@@ -27,6 +32,12 @@ export class HotReloadBase {
   _stopping = false;
   _stopPromise = null;
   _pendingTargets = [];
+  /** @type {Map<string, string>} 路径 → 内容 SHA256 */
+  _fileHashes = new Map();
+  /** @type {Set<string>} */
+  _inFlight = new Set();
+  /** @type {Map<string, ReturnType<typeof setTimeout>>} */
+  _pendingUnlinks = new Map();
 
   constructor(options = {}) {
     this.loggerName = options.loggerName ?? 'HotReload';
@@ -43,11 +54,125 @@ export class HotReloadBase {
     return fileName.endsWith('.js') && !fileName.startsWith('.') && !fileName.startsWith('_');
   }
 
+  async _fileContentHash(filePath) {
+    try {
+      const content = await fs.readFile(filePath);
+      return createHash('sha256').update(content).digest('hex');
+    } catch {
+      return null;
+    }
+  }
+
+  _cancelPendingUnlink(filePath) {
+    const key = normalizeWatchPath(filePath);
+    const timer = this._pendingUnlinks.get(key);
+    if (!timer) return;
+    clearTimeout(timer);
+    this._pendingUnlinks.delete(key);
+  }
+
+  /**
+   * 内容未变则跳过重载（add/change 均适用）。
+   * unlink 不在此处理，由延迟确认避免原子保存误触发。
+   */
+  async _markContentChanged(filePath) {
+    const key = normalizeWatchPath(filePath);
+    const hash = await this._fileContentHash(filePath);
+    if (!hash) return false;
+
+    const prev = this._fileHashes.get(key);
+    if (prev === hash) {
+      BotUtil.makeLog(
+        'debug',
+        `跳过热更新（内容未变）: ${path.basename(filePath)}`,
+        this.loggerName
+      );
+      return false;
+    }
+
+    this._fileHashes.set(key, hash);
+    return true;
+  }
+
+  async _seedHashes(handleCheck) {
+    if (!this.watcher?.getWatched) return;
+    const watched = this.watcher.getWatched();
+    for (const [dir, files] of Object.entries(watched)) {
+      for (const file of files) {
+        const full = path.join(dir, file);
+        if (!handleCheck(full, 'seed')) continue;
+        const hash = await this._fileContentHash(full);
+        if (hash) this._fileHashes.set(normalizeWatchPath(full), hash);
+      }
+    }
+  }
+
+  async _runHandler(filePath, event, handler, { invalidateCoreCacheOnAdd = false } = {}) {
+    if (!handler) return;
+    const watchKey = normalizeWatchPath(filePath);
+    if (this._inFlight.has(watchKey)) return;
+
+    if (event === 'unlink' || event === 'unlinkDir') {
+      this._scheduleUnlink(filePath, handler);
+      return;
+    }
+
+    this._cancelPendingUnlink(filePath);
+    if (!(await this._markContentChanged(filePath))) return;
+
+    this._inFlight.add(watchKey);
+    try {
+      if (event === 'add' && invalidateCoreCacheOnAdd) {
+        paths.invalidateCoreCache();
+      }
+      await handler(filePath);
+    } catch (err) {
+      const error = normalizeError(err);
+      BotUtil.makeLog('error', `热更新 ${event} 失败: ${filePath}`, this.loggerName, error);
+    } finally {
+      this._inFlight.delete(watchKey);
+    }
+  }
+
+  _scheduleUnlink(filePath, handler) {
+    const key = normalizeWatchPath(filePath);
+    const existing = this._pendingUnlinks.get(key);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(async () => {
+      this._pendingUnlinks.delete(key);
+      if (this._stopping || !this.watcher) return;
+      try {
+        await fs.access(filePath);
+        BotUtil.makeLog(
+          'debug',
+          `跳过 unlink（文件已恢复，多为原子保存）: ${path.basename(filePath)}`,
+          this.loggerName
+        );
+        return;
+      } catch {
+        this._fileHashes.delete(key);
+      }
+      if (this._inFlight.has(key)) return;
+      this._inFlight.add(key);
+      try {
+        await handler(filePath);
+      } catch (err) {
+        const error = normalizeError(err);
+        BotUtil.makeLog('error', `热更新 unlink 失败: ${filePath}`, this.loggerName, error);
+      } finally {
+        this._inFlight.delete(key);
+      }
+    }, UNLINK_CONFIRM_MS);
+
+    this._pendingUnlinks.set(key, timer);
+  }
+
   /**
    * @param {boolean} enable
    * @param {object} options
    * @param {string|string[]} [options.dirs]
-   * @param {string|string[]} [options.files] 单文件监视（YAML/HTML 等）
+   * @param {string|string[]} [options.files]
    * @param {(filePath: string) => void|Promise<void>} [options.onAdd]
    * @param {(filePath: string) => void|Promise<void>} [options.onChange]
    * @param {(filePath: string) => void|Promise<void>} [options.onUnlink]
@@ -55,7 +180,6 @@ export class HotReloadBase {
    * @param {(dirPath: string) => void|Promise<void>} [options.onUnlinkDir]
    * @param {(filePath: string, event: string) => boolean} [options.shouldHandle]
    * @param {boolean} [options.invalidateCoreCacheOnAdd]
-   * @returns {Promise<boolean>} 是否已成功启动监视
    */
   async watch(enable = true, options = {}) {
     if (!enable) {
@@ -102,30 +226,28 @@ export class HotReloadBase {
       return false;
     }
 
-    const bind = (event, handler, { skipCheck = false } = {}) => {
+    const bind = (event, handler, { skipCheck = false, invalidateOnAdd = false } = {}) => {
       if (!handler) return;
-      const debounced = lodash.debounce(async (filePath) => {
+      const debounced = lodash.debounce((filePath) => {
         if (this._stopping || !this.watcher) return;
         if (!skipCheck && !handleCheck(filePath, event)) return;
-        try {
-          if (event === 'add' && invalidateCoreCacheOnAdd) {
-            paths.invalidateCoreCache();
-          }
-          await handler(filePath);
-        } catch (err) {
-          const error = normalizeError(err);
-          BotUtil.makeLog('error', `热更新 ${event} 失败: ${filePath}`, this.loggerName, error);
-        }
+        void this._runHandler(filePath, event, handler, {
+          invalidateCoreCacheOnAdd: invalidateOnAdd && event === 'add'
+        });
       }, this.debounceDelay);
       this._debouncers.push(debounced);
       this.watcher.on(event, debounced);
     };
 
-    bind('add', onAdd);
+    bind('add', onAdd, { invalidateOnAdd: invalidateCoreCacheOnAdd });
     bind('change', onChange);
     bind('unlink', onUnlink);
     bind('addDir', onAddDir, { skipCheck: true });
     bind('unlinkDir', onUnlinkDir, { skipCheck: true });
+
+    this.watcher.on('ready', () => {
+      void this._seedHashes(handleCheck);
+    });
 
     this.watcher.on('error', (err) => {
       if (this._stopping) return;
@@ -136,10 +258,6 @@ export class HotReloadBase {
     return true;
   }
 
-  /**
-   * 向已运行的监视器追加路径（watch 尚未完成时先入队，随 watch 一并注册）
-   * @returns {boolean} 是否已接受（入队或已 add）
-   */
   addTargets(targets) {
     if (this._stopping || isShuttingDown()) return false;
 
@@ -177,6 +295,13 @@ export class HotReloadBase {
     this._stopping = true;
     this._pendingTargets.length = 0;
 
+    for (const timer of this._pendingUnlinks.values()) {
+      clearTimeout(timer);
+    }
+    this._pendingUnlinks.clear();
+    this._fileHashes.clear();
+    this._inFlight.clear();
+
     for (const debounced of this._debouncers) {
       debounced.cancel?.();
     }
@@ -204,13 +329,11 @@ export class HotReloadBase {
     return path.basename(filePath, '.js');
   }
 
-  /** 模块文件键（路径或文件名 → 不含 .js 的 basename） */
   static moduleFileKey(nameOrPath) {
     const base = path.basename(String(nameOrPath ?? ''));
     return base.endsWith('.js') ? base.slice(0, -3) : base;
   }
 
-  /** 监视路径归一化（与 chokidar 事件路径对齐，避免 Windows 分隔符不一致） */
   static resolveWatchPath(filePath) {
     return normalizeWatchPath(filePath);
   }

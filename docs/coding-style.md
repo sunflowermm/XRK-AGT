@@ -26,7 +26,7 @@
 | 热路径 I/O | `fs/promises`；`try/catch` 代替反复 `existsSync` | 请求链路里 `readFileSync` / 循环 `existsSync` |
 | 批量加载 | `FileLoader.forEachBatch` + `LOADER_BATCH_SIZE` | 全量 `Promise.all(上千 import)` |
 | Map 默认 | `map.getOrInsert(k, () => v)` | `get \|\| set` 样板（可写时） |
-| 热重载 | `HotReloadBase`（`#utils/hot-reload-base.js`） | 业务/Loader 直接 `chokidar` |
+| 热重载 | `HotReloadBase`（`#utils/hot-reload-base.js`） | 业务/Loader 直接 `chokidar`；仅用 basename 重载多 Core 同名文件 |
 | 挂载 | `setRuntimeGlobal`（`#utils/runtime-globals.js`） | `global.x = globalThis.x =` 双写 |
 
 Node 26 API 明细与审查清单见 [node-26-runtime.md](node-26-runtime.md)、skill **`xrk-node-runtime`**。
@@ -189,7 +189,7 @@ export default {
 1. 类字段存 watcher / Map  
 2. `FileLoader.getCoreSubDirFiles(subDir)` 扫描  
 3. `importFresh` + `forEachBatch`  
-4. `HotReloadBase` 监听；`stop()` 随 shutdown  
+4. `HotReloadBase` 监听；`stop()` 随 shutdown。内容 hash 去重 + unlink 延迟确认见 [infrastructure-shared.md § HotReloadBase](infrastructure-shared.md#hotreloadbase-语义srutils/hot-reload-basejs)
 
 挂载面见 [runtime-surface.md](runtime-surface.md)。
 
