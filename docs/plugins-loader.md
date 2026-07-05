@@ -345,24 +345,23 @@ await PluginsLoader.watch(true);
 4. 输出加载日志
 
 **修改插件** (`onChange`)：
-1. 先卸载旧插件（清理定时任务、Handler、事件订阅等）
-2. 使用时间戳强制重新加载模块
-3. 重新初始化插件（确保状态正确）
-4. 重新创建定时任务
-5. 重新排序和识别
+1. `HotReloadBase` 校验内容 hash，未变则 **不进入** `changePlugin`
+2. `changePlugin(key, filePath)` 用监视器报告的绝对路径卸载并重载
+3. `_rebuildPluginGraph()` → `createTask()` 仅在 cron 指纹变化时重建定时任务
+4. 重新排序和识别默认消息处理器
 
 **删除插件** (`onUnlink`)：
-1. 清理定时任务（精确匹配插件键名）
-2. 清理插件数组（priority/extended）
-3. 清理 Handler（使用插件命名空间）
-4. 清理事件订阅（遍历所有订阅者）
-5. 重新识别默认消息处理器
+1. 经 600ms 延迟确认（避免原子保存误删）；期间文件恢复则跳过
+2. 清理定时任务、Handler、事件订阅等
+3. 重新识别默认消息处理器
 
 ### 热加载优化
 
+- **内容去重**：底层 `HotReloadBase` 对 add/change 做 SHA256 比对，编辑器 touch-only 或 chokidar 重复事件不会触发业务重载
+- **unlink 防抖**：rename 式保存不会误走卸载再加载
+- **Cron 指纹**：`_taskScheduleKey` 避免插件热更但 schedule 未变时刷屏「加载定时任务」
 - **资源清理**：卸载时完整清理所有相关资源，避免内存泄漏
-- **精确匹配**：使用插件键名（文件名）精确匹配，避免误删
-- **状态同步**：修改时重新初始化，确保插件状态正确
+- **精确路径**：`changePlugin` 优先 `filePath`，不单靠 basename 查找
 - **错误隔离**：单个插件热加载失败不影响其他插件
 
 ---

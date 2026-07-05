@@ -42,7 +42,7 @@
 
 - `apis: Map<string, apiInstance>`：以 **`resolveCoreModuleKey`** 生成的 key 存储实例——相对 **`core/<coreName>/http/`** 的路径、不含 `.js`（如 `ai-workspace`、`my-api`；子目录则为 `sub/foo`）。**不含** `http/` 前缀。
 - `priority: apiInstance[]`：按优先级排序后的 API 列表。
-- `watcher: { [name: string]: FSWatcher }`：文件监视器。
+- `_hotReload: HotReloadBase | null`：统一文件监视（见 [infrastructure-shared.md](infrastructure-shared.md)）。
 - `loaded: boolean`：是否已经完成初次加载。
 - `app`：当前 Express 实例。
 - `bot`：当前 Bot 实例。
@@ -213,14 +213,16 @@ flowchart TB
   - 若已初始化（有 `app` 和 `bot`），调用 `init` 即时挂载
   
 - **`change`** - 文件修改时：
-  - 调用 `changeApi` 热重载
-  - 自动重新注册路由和WebSocket
+  - `HotReloadBase` 内容 hash 未变则跳过
+  - 调用 `changeApi(key)`（实例内 `filePath` 或 `_findApiFile`）
+  - 自动重新注册路由和 WebSocket
   
 - **`unlink`** - 文件删除时：
-  - 调用 `unloadApi` 卸载API
+  - 延迟确认后调用 `unloadApi`
   - 调用 `sortByPriority` 重新排序
 
 **注意事项**：
+- 热重载语义（hash / unlink 延迟）见 [infrastructure-shared.md](infrastructure-shared.md)
 - 热重载时确保 `init` 方法是幂等的
 - 全局中间件需要确保不会重复挂载
 - 复杂API建议重启进程以获得更清晰的状态

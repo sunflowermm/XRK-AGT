@@ -189,7 +189,7 @@ export default {
 1. 类字段存 watcher / Map  
 2. `FileLoader.getCoreSubDirFiles(subDir)` 扫描  
 3. `importFresh` + `forEachBatch`  
-4. `HotReloadBase` 监听；`stop()` 随 shutdown。内容 hash 去重 + unlink 延迟确认见 [infrastructure-shared.md § HotReloadBase](infrastructure-shared.md#hotreloadbase-语义srutils/hot-reload-basejs)
+4. `HotReloadBase` 监听；`stop()` 随 shutdown。内容 hash 去重、unlink 延迟确认见 [infrastructure-shared.md](infrastructure-shared.md)
 
 挂载面见 [runtime-surface.md](runtime-surface.md)。
 

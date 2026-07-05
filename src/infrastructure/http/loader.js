@@ -194,17 +194,17 @@ class ApiLoader {
     BotUtil.makeLog('info', `API路由注册完成: ${enabledCount}个模块, ${totalRoutes}个路由, ${totalWS}个WebSocket`, 'ApiLoader');
   }
 
-  async changeApi(key) {
+  async changeApi(key, filePath = null) {
     const api = this.apis.get(key);
-    const filePath = api?.filePath ?? await this._findApiFile(key);
-    if (!filePath) {
+    const resolved = filePath ?? api?.filePath ?? await this._findApiFile(key);
+    if (!resolved) {
       BotUtil.makeLog('warn', `API不存在: ${key}`, 'ApiLoader');
       return false;
     }
 
     try {
       BotUtil.makeLog('info', `重载API: ${api?.name ?? key}`, 'ApiLoader');
-      await this._reloadFromFile(key, filePath);
+      await this._reloadFromFile(key, resolved);
       BotUtil.makeLog('info', `API重载成功: ${this.apis.get(key)?.name ?? key}`, 'ApiLoader');
       return true;
     } catch (error) {
@@ -254,7 +254,7 @@ class ApiLoader {
           await this._initApi(this.apis.get(key));
         },
         onChange: async (filePath) => {
-          await this.changeApi(await this.getApiKey(filePath));
+          await this.changeApi(await this.getApiKey(filePath), filePath);
         },
         onUnlink: async (filePath) => {
           await this.unloadApi(await this.getApiKey(filePath));
