@@ -38,10 +38,10 @@ class DatabaseManager {
   }
 
   async close() {
-    await Promise.allSettled([closeRedis().catch(() => {})]);
+    await closeRedis().catch(() => {});
     this.redis = null;
     this.initialized = false;
-    BotUtil.makeLog('info', '数据库连接已关闭', 'DatabaseManager');
+    BotUtil.makeLog('info', 'Redis 连接已关闭', 'DatabaseManager');
   }
 
   async getHealthStatus() {

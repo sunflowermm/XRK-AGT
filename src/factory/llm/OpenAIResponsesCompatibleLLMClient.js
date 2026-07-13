@@ -176,7 +176,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
     const streams = Array.isArray(overrides.streams) ? overrides.streams : null;
 
     const mcpTools = this.config.enableTools !== false && MCPToolAdapter.hasTools()
-      ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, streams, excludeStreams: ['chat'] })
+      ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, streams })
       : [];
 
     const customTools = Array.isArray(this.config.tools) ? this.config.tools : [];

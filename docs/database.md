@@ -2,7 +2,7 @@
 
 > **代码位置**：`src/infrastructure/database/index.js`、`src/infrastructure/redis.js`  
 > **连接工具**：`src/utils/db-connect-utils.js`  
-> **说明**：XRK-AGT 启动时初始化 **Redis** 作为框架内置数据库；MongoDB 等其它存储由**业务 Core** 自行引入，非 Runtime 依赖。
+> **说明**：XRK-AGT 启动时初始化 **Redis** 作为框架内置数据库；其它存储由业务 Core 自行引入。
 
 ---
 
@@ -22,7 +22,7 @@
 | 存储 | 归属 | 典型用途 |
 |------|------|----------|
 | **Redis** | **Runtime 内置** | 进程/机器人状态（`AGT:restart:`、`AGT:shutdown:`）、插件计数与会话键、HTTP 控制面、重启插件上下文 |
-| **MongoDB 等** | **业务 Core** | 企业/产品自行部署的持久化层（如本地 `core/mongodb-Core/`），主仓不初始化、不强制 |
+| **其它存储** | **业务 Core** | 企业自行部署（MongoDB 等），非 Runtime |
 
 插件与 HTTP 优先使用 **裸名 `redis`** 或 `getRedis()`。
 
@@ -137,14 +137,9 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 
 ---
 
-## MongoDB 与其它数据库
+## 其它数据库（业务 Core）
 
-主仓 **不** 提供 `mongodbDb` / `getMongoDb()`。需要 MongoDB 的企业或产品：
-
-1. 在 `core/` 下部署独立业务 Core（如 `mongodb-Core`），自行声明 `mongodb` 依赖与连接配置；
-2. 自行编排 Mongo 服务（**不在** AGT `docker-compose.yml` 默认栈内）。
-
-与框架 Redis **互不干扰**，Loader 不会自动初始化业务库。
+MongoDB / Postgres 等由 `core/<产品>/` 自行引入，不在 Runtime 初始化；亦不在 `docker-compose.yml` 默认栈内。
 
 ---
 

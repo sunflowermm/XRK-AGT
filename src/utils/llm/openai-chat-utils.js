@@ -167,7 +167,7 @@ export function applyOpenAITools(body, config = {}, overrides = {}) {
 
   // 获取 MCP 工具列表
   const mcpTools = enableTools
-    ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, streams, excludeStreams: ['chat'] })
+    ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, streams })
     : [];
 
   let finalTools;

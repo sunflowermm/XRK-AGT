@@ -77,9 +77,10 @@ export default class AIConfig extends ConfigBase {
         mergeStreams: {
           type: 'array',
           label: '合并工作流',
-          description: '合并到 chat 的副工作流；web/browser 由框架白名单自动包含',
+          description:
+            '合并到 chat 的副工作流。可选：memory（记忆）、database（知识库）、tools（工作区读写/run）。web、browser、remote-mcp.* 由框架自动并入；chat 自带 poke/reply/发文件等 QQ 工具。',
           itemType: 'string',
-          default: ['memory', 'tools'],
+          default: ['memory', 'database', 'tools'],
           component: 'Tags',
         },
       },

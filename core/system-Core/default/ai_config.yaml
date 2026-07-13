@@ -7,4 +7,5 @@ cooldown: 300
 chance: 0.1
 mergeStreams:
   - memory
+  - database
   - tools

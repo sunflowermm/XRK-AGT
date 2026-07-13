@@ -29,20 +29,14 @@ export class MCPToolAdapter {
    * @param {Object} options
    * @param {string|null} options.workflow - 单个工作流名称；若提供则仅注入该工作流下的工具
    * @param {Array<string>} [options.streams] - 白名单工作流列表；优先级高于 workflow
-   * @param {Array<string>} [options.excludeStreams] - 黑名单工作流列表（如 ['chat']）
    * @returns {Array} OpenAI tools
    */
   static listMcpTools(options = {}) {
-    const {
-      workflow = null,
-      streams = null,
-      excludeStreams = ['chat']
-    } = options || {};
+    const { workflow = null, streams = null } = options || {};
 
     const mcpServer = this.getMCPServer();
     if (!mcpServer) return [];
 
-    let mcpTools;
     if (Array.isArray(streams) && streams.length > 0) {
       const uniq = new Map();
       for (const s of streams.filter(Boolean)) {
@@ -50,19 +44,12 @@ export class MCPToolAdapter {
           if (!uniq.has(tool.name)) uniq.set(tool.name, tool);
         }
       }
-      mcpTools = Array.from(uniq.values());
-    } else if (workflow) {
-      mcpTools = mcpServer.listTools(workflow);
-    } else {
-      mcpTools = [];
+      return Array.from(uniq.values());
     }
-
-    const excluded = new Set((Array.isArray(excludeStreams) ? excludeStreams : []).filter(Boolean));
-    if (!excluded.size) return mcpTools;
-    return mcpTools.filter((tool) => {
-      const streamName = String(tool?.name || '').split('.')[0];
-      return !excluded.has(streamName);
-    });
+    if (workflow) {
+      return mcpServer.listTools(workflow);
+    }
+    return [];
   }
 
   static convertMCPToolsToOpenAI(options = {}) {
@@ -159,10 +146,7 @@ export class MCPToolAdapter {
     if (options.allowedTools && Array.isArray(options.allowedTools)) {
       allowedToolNames = new Set(options.allowedTools);
     } else if (options.streams && Array.isArray(options.streams)) {
-      const allowedTools = this.convertMCPToolsToOpenAI({
-        streams: options.streams,
-        excludeStreams: []
-      });
+      const allowedTools = this.convertMCPToolsToOpenAI({ streams: options.streams });
       allowedToolNames = new Set(allowedTools.map(t => t.function.name));
     }
 

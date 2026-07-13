@@ -78,7 +78,7 @@ export function applyAnthropicTools(body, config = {}, overrides = {}) {
   if (!enableMcp) return body;
 
   const workflow = overrides.workflow || config.workflow || config.streamName || null;
-  const mcpTools = MCPToolAdapter.convertMCPToolsToAnthropic({ workflow, streams, excludeStreams: ['chat'] });
+  const mcpTools = MCPToolAdapter.convertMCPToolsToAnthropic({ workflow, streams });
 
   if (mcpTools.length) {
     body.tools = mcpTools;

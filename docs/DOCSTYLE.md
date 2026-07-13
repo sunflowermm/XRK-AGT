@@ -80,7 +80,7 @@
 | `runtime-surface.png` | 运行时挂载 |
 | `bot-lifecycle.png` | Bot 生命周期 |
 | `loader-hot-reload.png` | Loader 扫描/热重载 |
-| `database-dual-store.png` | Redis + MongoDB |
+| `database-dual-store.png` | Redis（框架内置数据库） |
 | `config-base-flow.png` | ConfigBase |
 | `http-api-pipeline.png` | HttpApi / ApiLoader |
 | `seven-extensions.png` | 七大扩展点 |

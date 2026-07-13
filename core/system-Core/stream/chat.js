@@ -19,7 +19,12 @@ import {
   runWithStreamRequestContext
 } from '#infrastructure/aistream/stream-request-context.js';
 import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/aistream/chat-pipeline.js';
+import { BaseTools } from '#utils/base-tools.js';
+import { getAistreamConfigOptional } from '#utils/aistream-config.js';
+import { resolveConfiguredWorkspace } from '../lib/ai-workspace-runtime.js';
+
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
+const IMAGE_SEND_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
 
 function randomRange(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -136,6 +141,33 @@ export default class ChatStream extends AIStream {
     }
   }
 
+  _chatWorkspaceAbs() {
+    const fileCfg = getAistreamConfigOptional().tools?.file ?? {};
+    return resolveConfiguredWorkspace(fileCfg.workspace);
+  }
+
+  /** 解析工作区内文件路径（send_file / send_image） */
+  _resolveWorkspaceFile(_context, filePath, { requireImage = false, rejectImage = false } = {}) {
+    const rel = String(filePath ?? '').trim();
+    if (!rel) return { error: 'filePath 不能为空' };
+    const baseTools = new BaseTools(this._chatWorkspaceAbs());
+    let absPath;
+    try {
+      absPath = baseTools.resolvePath(rel);
+    } catch (err) {
+      return { error: err.message || '路径无效' };
+    }
+    if (!fs.existsSync(absPath)) return { error: `文件不存在: ${rel}` };
+    const ext = path.extname(absPath).toLowerCase();
+    if (requireImage && !IMAGE_SEND_EXTS.has(ext)) {
+      return { error: '非图片文件，请用 send_file' };
+    }
+    if (rejectImage && IMAGE_SEND_EXTS.has(ext)) {
+      return { error: '图片请用 send_image' };
+    }
+    return { absPath, displayName: path.basename(absPath) };
+  }
+
   /**
    * 注册所有功能
    * 
@@ -185,7 +217,7 @@ export default class ChatStream extends AIStream {
      * 群聊走 group.pokeMember；私聊走 reply({ type:'poke', qq }) 或好友 API；设备/Web 走 reply 下发给前端展示。
      */
     this.registerMCPTool('poke', {
-      description: '戳一戳对方。未指定qq时默认当前触发消息的用户。群聊、私聊、设备会话均可用。',
+      description: '戳一戳对方（QQ 系统戳一戳，用户可见）。群聊戳成员，私聊戳好友。qq 不填则当前说话人。禁止用文字 *戳戳* 代替本工具。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -203,16 +235,112 @@ export default class ChatStream extends AIStream {
           const where = formatSessionWhere(e);
           if (e.isGroup === true && e.group?.pokeMember) {
             await e.group.pokeMember(targetQq);
-            return { success: true, raw: actionAck(`你已在${where}戳了 ${targetQq}`) };
-          }
-          if (typeof e.reply === 'function') {
+          } else if (e.friend?.poke && String(e.user_id) === targetQq) {
+            await e.friend.poke();
+          } else if (e.bot?.sendApi) {
+            const qqNum = parseInt(targetQq, 10);
+            const params = e.group_id != null
+              ? { group_id: e.group_id, user_id: qqNum }
+              : { user_id: qqNum };
+            await e.bot.sendApi('send_poke', params);
+          } else if (typeof e.reply === 'function') {
             await e.reply({ type: 'poke', qq: targetQq });
-            return { success: true, raw: actionAck(`你已在${where}戳了 ${targetQq}`) };
+          } else {
+            return { success: false, error: '当前环境不支持戳一戳' };
           }
-          return { success: false, error: '当前环境不支持戳一戳' };
+          return { success: true, raw: actionAck(`你已对 ${targetQq} 戳一戳（${where}）`) };
         });
       },
       enabled: true
+    });
+
+    this.registerMCPTool('emotion', {
+      description: `发表情包图片（resources/aiimages 随机一张）。emotionType：${PARSEABLE_EMOTIONS.join('、')}。用户只要表情时不要再用 reply 附文字模拟。`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          emotionType: { type: 'string', enum: PARSEABLE_EMOTIONS },
+          text: { type: 'string', description: '可选附言' },
+        },
+        required: ['emotionType'],
+      },
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        if (!e?.reply) return { success: false, error: '当前环境无法发送' };
+        const t = String(args.emotionType ?? '').trim();
+        if (!PARSEABLE_EMOTIONS.includes(t)) return { success: false, error: '无效表情类型' };
+        const image = this.getRandomEmotionImage(t);
+        if (!image) return { success: false, error: `暂无「${t}」表情包资源` };
+        return this._wrapHandler(async () => {
+          const segments = [];
+          const text = String(args.text ?? '').trim();
+          if (text) segments.push(text);
+          segments.push(segment.image(image));
+          await e.reply(segments.length === 1 ? segments[0] : segments);
+          const where = formatSessionWhere(e);
+          this.recordAIResponse(e, `[表情:${t}]${text ? ` ${text}` : ''}`);
+          return { success: true, raw: actionAck(`你已在${where}发送「${t}」表情包`) };
+        });
+      },
+      enabled: true,
+    });
+
+    this.registerMCPTool('send_file', {
+      description: '向当前会话发送非图片类文件（文档、压缩包等）。filePath 为工作区内相对路径；图片请用 send_image。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: '工作区内文件路径' },
+          name: { type: 'string', description: '可选，客户端显示的文件名' },
+        },
+        required: ['filePath'],
+      },
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        const resolved = this._resolveWorkspaceFile(context, args.filePath, { rejectImage: true });
+        if (resolved.error) return { success: false, error: resolved.error };
+        return this._wrapHandler(async () => {
+          const displayName = String(args.name ?? resolved.displayName).trim() || resolved.displayName;
+          const sender = e?.group_id ? e.group : e?.friend;
+          if (!sender?.sendFile) {
+            return { success: false, error: '当前环境不支持发送文件' };
+          }
+          await sender.sendFile(resolved.absPath, displayName);
+          const where = formatSessionWhere(e);
+          this.recordAIResponse(e, `[文件:${displayName}]`);
+          return { success: true, raw: actionAck(`你已在${where}发送文件「${displayName}」`) };
+        });
+      },
+      enabled: true,
+    });
+
+    this.registerMCPTool('send_image', {
+      description: '向当前会话发送工作区内的图片（PNG/JPG/GIF 等）。filePath 为工作区相对路径；内置表情包用 emotion。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: '工作区内图片路径' },
+          messageId: { type: 'string', description: '可选，回复某条消息 ID' },
+        },
+        required: ['filePath'],
+      },
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        const resolved = this._resolveWorkspaceFile(context, args.filePath, { requireImage: true });
+        if (resolved.error) return { success: false, error: resolved.error };
+        if (!e?.reply) return { success: false, error: '当前环境无法发送消息' };
+        return this._wrapHandler(async () => {
+          const mid = args.messageId != null ? String(args.messageId).trim() : '';
+          const payload = [];
+          if (mid) payload.push({ type: 'reply', id: mid });
+          payload.push(segment.image(resolved.absPath));
+          await e.reply(payload);
+          const where = formatSessionWhere(e);
+          this.recordAIResponse(e, `[图片:${resolved.displayName}]`);
+          return { success: true, raw: actionAck(`你已在${where}发送图片「${resolved.displayName}」`) };
+        });
+      },
+      enabled: true,
     });
 
     this.registerMCPTool('reply', {
@@ -1190,19 +1318,23 @@ export default class ChatStream extends AIStream {
       `# ${botName}`,
       persona,
       '',
-      '## 对用户说话',
-      '- **reply**：拟定回复正文（框架在本轮 tool 结束后发到 QQ）。支持 `|` 分句、`[CQ:reply,id=消息ID]` 引用；表情包用 `[开心]` 等标记（见 emotion 工具说明）',
-      '- **emojiReaction**：对群消息做表情回应（开心/惊讶/伤心等）',
-      '- **poke / send_image / 群管工具**：按 MCP 定义调用；无权限则说明，勿假装成功',
+      '## 对用户说话（须调 MCP，勿用文字假装）',
+      '- **reply**：文字回复（`|` 分句、`[CQ:reply,id=]` 引用）；纯戳/纯表情/发文件勿用 reply 模拟',
+      '- **poke**：戳一戳（QQ 系统动作）；用户说「戳我/戳一下」必须调用',
+      '- **emotion** / **send_image**：表情包或工作区图片',
+      '- **send_file**：工作区内的非图片文件（doc/zip 等）',
+      '- **emojiReaction**：群消息表情回应',
+      '- **tools.***（已合并）：工作区 read/write/run 等；先 read 再发文件',
+      '- 无权限或失败时如实说明，勿假装成功',
       '- 工具回执会说明已拟定/已发出内容；用户已能看到后不要重复 reply',
       '- 只回答 `[当前消息]` 所指内容，勿复读整段群聊记录',
       '',
       '## 记录格式',
       '- 历史为 `昵称(QQ)[ID:xxx]: 内容`，ID 可用于 reply 引用',
       '',
-      '## 工作区',
-      '- 下文「Workspace context」含 AGENTS / rules / skills（由 aistream.agentWorkspace 注入）',
-      '- 文件与命令工具见 tools / desktop 等工作流 MCP',
+      '## 工作区与 skills',
+      '- 「Workspace context」含 AGENTS / rules / **skills**（按 `<location>` 用 tools.read 加载 SKILL.md）',
+      '- 工作区根目录与 tools 流一致；发文件前确认路径存在',
     ];
 
     return this.finalizeSystemPromptContent(lines.join('\n'));
