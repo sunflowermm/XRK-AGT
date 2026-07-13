@@ -11,8 +11,7 @@
 | `xrk-agt` | 8080 | 主 Bot（HTTP/WS/控制台） |
 | `xrk-subserver` | 8000 | Python 子服（同镜像，`command: subserver`） |
 | `xrk-subserver-go/php/java/net/rust` | 8001–8005 | 各语言子服 |
-| `redis` | 6379（内部） | 缓存 |
-| `mongodb` | 27017（内部） | 数据库（可选） |
+| `redis` | 6379（内部） | 框架内置数据库 |
 
 主服通过 `SUBSERVER_*_HOST` 连接子服。镜像**不含** LLM/Whisper 等模型权重。
 
@@ -49,23 +48,22 @@ pnpm test:subservers    # 可选：子服 8000–8005 冒烟
 | `XRK_SERVER_PORT` | 8080 | 主服端口 |
 | `HTTP_PROXY` / `HTTPS_PROXY` | 空 | 容器出网（LLM API 等） |
 | `BUILD_HTTP_PROXY` | 空 | 构建阶段代理（Docker VM 内用 `host.docker.internal`） |
-| `MONGO_ROOT_USERNAME/PASSWORD` | 空 | Mongo 认证 |
 
 ## 持久化卷
 
 `./data` · `./logs` · `./config` · `./resources` · `./core`
 
-Docker 内 Redis/Mongo 地址自动从 `127.0.0.1` 映射为服务名。
+Docker 内 Redis 地址自动从 `127.0.0.1` 映射为服务名 `redis`。
 
 ## 故障排查
 
 - **Docker 未运行** — 先启动 Docker Desktop。
 - **端口占用** — 改 `XRK_SERVER_PORT` 或 compose 端口映射。
 - **构建慢 / auth.docker.io 超时** — 检查代理、`config/docker.env`、镜像源；日常用 `docker:build`（本地缓存），仅 `docker:fresh` 或 `build --pull` 强制拉 base。
-- **健康检查失败** — `pnpm docker:status` 或 `docker compose logs <服务名>`。主服会等 redis/mongo/全部子服 healthy 后再启动。
+- **健康检查失败** — `pnpm docker:status` 或 `docker compose logs <服务名>`。主服会等 redis/全部子服 healthy 后再启动。
 
 子服联调细节见 [subserver/SETUP.md](../subserver/SETUP.md)。
 
 ---
 
-*最后更新：2026-07-04*
+*最后更新：2026-07-13*

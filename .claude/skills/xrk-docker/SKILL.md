@@ -1,6 +1,6 @@
 ---
 name: xrk-docker
-description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Python 子服务端、Redis、MongoDB），或排查容器化环境问题时使用。
+description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Python 子服务端、Redis），或排查容器化环境问题时使用。
 ---
 
 ## 权威文档与入口
@@ -11,8 +11,8 @@ description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Pytho
 
 ## 你要掌握的要点
 
-- Compose 启动的 4 个服务：`xrk-agt`（主服务）、`xrk-subserver`（Python 子服务）、`redis`、`mongodb`。
-- `.env` 可选环境变量：`XRK_SERVER_PORT`、`HTTP_PROXY/HTTPS_PROXY/NO_PROXY`、`MONGO_ROOT_USERNAME/MONGO_ROOT_PASSWORD` 等。
+- Compose 主栈：`xrk-agt`（主服务）、`xrk-subserver`（Python 子服务）、`redis`。
+- `.env` 可选环境变量：`XRK_SERVER_PORT`、`HTTP_PROXY/HTTPS_PROXY/NO_PROXY` 等。
 - 子服务端为轻量 FastAPI 框架，无内置 AI 模型下载；外网访问扩展 API 时可配置 `HTTP_PROXY`（如 `host.docker.internal`）。
 - 挂载卷：`./data`、`./logs`、`./config`、`./resources` 等，避免数据丢失。
 

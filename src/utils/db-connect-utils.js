@@ -3,7 +3,7 @@ import { exec } from './exec-async.js';
 import { normalizeError } from './normalize-error.js';
 
 /**
- * 执行 shell 命令并归一化 stdout/stderr（Redis/MongoDB 本地启动等场景共用）
+ * 执行 shell 命令并归一化 stdout/stderr（Redis 本地启动等场景共用）
  * @param {string} cmd
  * @returns {Promise<{ error: Error | null, stdout: string, stderr: string }>}
  */
@@ -51,7 +51,7 @@ export async function detectArm64() {
 }
 
 /**
- * 数据库连接最终失败：可选 devHint、XRK_OPTIONAL_DB 抛错，否则 exit(1)
+ * 数据库连接最终失败：记录 devHint 后 exit(1)
  * @param {string} label
  * @param {unknown} error
  * @param {{ devHint?: string }} [options]
@@ -65,15 +65,11 @@ export function finalizeDbConnectionFailure(label, error, options = {}) {
     BotUtil.makeLog('error', options.devHint, label);
   }
 
-  if (process.env.XRK_OPTIONAL_DB === '1') {
-    throw normalized;
-  }
-
   process.exit(1);
 }
 
 /**
- * 带重试的数据库 connect 循环（Redis / MongoDB 共用）
+ * 带重试的数据库 connect 循环（Redis）
  * @param {Object} options
  * @param {string} options.label
  * @param {number} options.maxRetries

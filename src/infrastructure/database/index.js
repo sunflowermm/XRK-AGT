@@ -10,27 +10,16 @@ class DatabaseManager {
       return { redis: !!this.redis };
     }
 
-    const redisResult = await Promise.allSettled([redisInit()]).then((r) => r[0]);
-
-    if (redisResult.status === 'fulfilled') {
-      this.redis = redisResult.value ?? getRedisClient();
+    try {
+      this.redis = (await redisInit()) ?? getRedisClient();
       BotUtil.makeLog('success', 'Redis 初始化成功', 'DatabaseManager');
-    } else {
-      const level = process.env.XRK_OPTIONAL_DB === '1' ? 'warn' : 'error';
-      BotUtil.makeLog(level, `Redis 初始化失败: ${redisResult.reason.message}`, 'DatabaseManager');
+    } catch (err) {
+      BotUtil.makeLog('error', `Redis 初始化失败: ${err.message}`, 'DatabaseManager');
+      throw err;
     }
 
     this.initialized = true;
-    const status = { redis: !!this.redis };
-
-    if (!status.redis && process.env.XRK_OPTIONAL_DB !== '1') {
-      throw new Error('Redis 不可用');
-    }
-    if (!status.redis) {
-      BotUtil.makeLog('warn', 'XRK_OPTIONAL_DB=1：在无 Redis 连接下继续启动', 'DatabaseManager');
-    }
-
-    return status;
+    return { redis: !!this.redis };
   }
 
   getRedis() {

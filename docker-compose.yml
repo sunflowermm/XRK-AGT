@@ -33,8 +33,6 @@ x-health-60s: &health-60s
 x-depends-datastores: &depends-datastores
   redis:
     condition: service_healthy
-  mongodb:
-    condition: service_healthy
 
 x-depends-subservers: &depends-subservers
   xrk-subserver:
@@ -67,7 +65,7 @@ services:
       DOCKER_CONTAINER: "1"
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
-      NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,redis,mongodb,xrk-agt,xrk-subserver,xrk-subserver-go,xrk-subserver-php,xrk-subserver-java,xrk-subserver-net,xrk-subserver-rust}
+      NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,redis,xrk-agt,xrk-subserver,xrk-subserver-go,xrk-subserver-php,xrk-subserver-java,xrk-subserver-net,xrk-subserver-rust}
       SUBSERVER_PYSERVER_HOST: xrk-subserver
       SUBSERVER_GOSERVER_HOST: xrk-subserver-go
       SUBSERVER_PHPSERVER_HOST: xrk-subserver-php
@@ -250,36 +248,9 @@ services:
           cpus: "0.1"
           memory: 64M
 
-  mongodb:
-    image: mongo:8.0
-    container_name: xrk-mongodb
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-}
-    volumes:
-      - mongodb-data:/data/db
-    networks:
-      - xrk-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512M
-        reservations:
-          cpus: "0.2"
-          memory: 128M
-
 networks:
   xrk-network:
     driver: bridge
 
 volumes:
   redis-data:
-  mongodb-data:

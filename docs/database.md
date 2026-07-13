@@ -2,7 +2,7 @@
 
 > **代码位置**：`src/infrastructure/database/index.js`、`src/infrastructure/redis.js`  
 > **连接工具**：`src/utils/db-connect-utils.js`  
-> **说明**：XRK-AGT 启动时初始化 **Redis** 作为框架内置数据库；MongoDB 等其它存储由**业务 Core** 自行引入（如本地 `mongodb-Core`），非 Runtime 依赖。
+> **说明**：XRK-AGT 启动时初始化 **Redis** 作为框架内置数据库；MongoDB 等其它存储由**业务 Core** 自行引入，非 Runtime 依赖。
 
 ---
 
@@ -41,7 +41,7 @@ sequenceDiagram
     IM->>DM: initDatabases()
     DM->>R: redisInit()
     R-->>DM: setRuntimeGlobal('redis')
-    Note over IM: 失败时见 XRK_OPTIONAL_DB
+    Note over IM: Redis 失败则阻断启动
     IM->>IM: cfg.enableWatching() …
     Note over PL: 关闭时 ProcessManager.cleanup
     PL->>DM: closeDatabases()
@@ -82,10 +82,9 @@ const { host, port } = cfg.redis;
 
 | 变量 | 作用 |
 |------|------|
-| `XRK_OPTIONAL_DB=1` | Redis 连接失败时**不**阻止启动（适合纯本地调试、无持久化需求） |
 | `XRK_FAST_START=1` | 减少连接重试次数、缩短超时（测试/快速冒烟） |
 
-默认（未设 `XRK_OPTIONAL_DB`）：Redis 在 `DatabaseManager.init()` 中连接失败会记 **error** 并抛出 `Redis 不可用`，阻止正常启动。
+Redis 在 `DatabaseManager.init()` 中连接失败会记 **error** 并阻断正常启动。
 
 ---
 
@@ -122,7 +121,7 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 | 场景 | Redis host | 数据目录 |
 |------|------------|----------|
 | 本机开发 | `127.0.0.1:6379` | 按本机 redis 安装 |
-| docker-compose | 服务名 `redis` | 卷映射 `data/redis/` |
+| docker-compose | 服务名 `redis` | 卷 `redis-data` |
 
 连接失败时，非生产环境日志会提示手动启动命令（如 `redis-server`）。完整编排见 [docker.md](docker.md)。
 
@@ -130,7 +129,7 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 
 ## 连接实现要点
 
-- **重试**：`connectWithRetry`（`db-connect-utils.js`），默认最多 3 次；失败走 `finalizeDbConnectionFailure`。
+- **重试**：`connectWithRetry`（`db-connect-utils.js`），默认最多 3 次；失败走 `finalizeDbConnectionFailure`（`process.exit(1)`）。
 - **日志脱敏**：`maskConnectionUrl` 隐藏 URL 中的密码。
 - **健康检查**：客户端就绪后定时 ping（间隔见 `redis.js` 内 `HEALTH_CHECK_INTERVAL`）。
 
@@ -143,7 +142,7 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 主仓 **不** 提供 `mongodbDb` / `getMongoDb()`。需要 MongoDB 的企业或产品：
 
 1. 在 `core/` 下部署独立业务 Core（如 `mongodb-Core`），自行声明 `mongodb` 依赖与连接配置；
-2. 或在 Docker 中额外编排 Mongo 服务，由该 Core 消费。
+2. 自行编排 Mongo 服务（**不在** AGT `docker-compose.yml` 默认栈内）。
 
 与框架 Redis **互不干扰**，Loader 不会自动初始化业务库。
 
@@ -153,7 +152,7 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 
 ### Q: 可以不装 Redis 吗？
 
-可以设 `XRK_OPTIONAL_DB=1` 启动，但依赖 Redis 的插件（重启/关机标记、部分计数）将不可用或报错，仅适合最小化调试。
+不可以。Redis 为框架必需依赖；请本机安装或通过 `docker-compose` 启动 `redis` 服务。
 
 ### Q: 配置改了要不要重启？
 

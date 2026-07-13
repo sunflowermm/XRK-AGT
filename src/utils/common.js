@@ -36,7 +36,7 @@ export const isDockerEnvironment = () => {
 /**
  * 规范化主机地址（移除引号，处理 Docker 服务名）
  * @param {string} host - 原始主机地址
- * @param {string} serviceName - Docker 服务名（如 'redis', 'mongodb'）
+ * @param {string} serviceName - Docker 服务名（如 'redis'）
  * @returns {string} 规范化后的主机地址
  */
 export const normalizeHost = (host, serviceName) => {

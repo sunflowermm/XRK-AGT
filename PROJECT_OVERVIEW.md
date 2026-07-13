@@ -21,7 +21,7 @@
 ## 技术栈摘要
 
 - **运行时**：Node.js 26+，Express，全局 `Bot`（`src/bot.js`）
-- **数据**：Redis（框架内置；无库调试 `XRK_OPTIONAL_DB=1`）；MongoDB 等由业务 Core 可选引入
+- **数据**：Redis（框架内置，启动必需）
 - **AI**：`AIStream` 工作流 + LLM/ASR/TTS 工厂 + MCP
 - **接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
 - **渲染**：Playwright（默认）/ Puppeteer；Chromium 可选安装

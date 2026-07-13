@@ -18,7 +18,7 @@ flowchart TD
   Boot --> Start["import start.js"]
   Start --> Menu["交互菜单 / PM2 / server 子进程"]
   Start --> Bot["src/bot.js · Bot.run"]
-  Bot --> DB["initDatabases · Redis + MongoDB"]
+  Bot --> DB["initDatabases · Redis"]
   Bot --> Load["并行加载 tasker / events / plugin / http / stream"]
   Bot --> Srv["HTTP · HTTPS · WebSocket · 静态 www"]
   Bot --> Online["online / ready"]
@@ -70,7 +70,6 @@ flowchart TD
 | `XRK_SKIP_CONFIG_CHECK=1` | 跳过配置检查 |
 | `XRK_SKIP_FRONTEND_BOOTSTRAP=1` | 跳过 `www/` 前端依赖检查 |
 | `XRK_SKIP_FRONTEND_START=1` | 跳过前端 dev server |
-| `XRK_OPTIONAL_DB=1` | Redis/Mongo 连接失败时不阻断启动（见 [database.md](database.md)） |
 | `PUPPETEER_SKIP_DOWNLOAD` | 覆盖 Puppeteer Chromium 下载（默认 `true`） |
 
 ---
@@ -90,7 +89,7 @@ Puppeteer 为可选渲染器；引导阶段不会自动下载浏览器。
 
 - [app-dev.md](app-dev.md) — Web 控制台、前后端协作、cfg 用法  
 - [bot.md](bot.md) — Bot 生命周期、中间件、关闭流程  
-- [database.md](database.md) — Redis / MongoDB  
+- [database.md](database.md) — Redis  
 - [底层架构设计](底层架构设计.md) — 分层与工具模块表  
 
 ---

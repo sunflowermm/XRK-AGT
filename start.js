@@ -348,8 +348,7 @@ class ServerManager extends BaseManager {
       XRK_SKIP_BOOTSTRAP: skipConfigCheck ? '1' : '0',
       XRK_SKIP_FRONTEND_BOOTSTRAP: skipConfigCheck ? '1' : '0',
       XRK_SKIP_FRONTEND_START: process.env.XRK_SKIP_FRONTEND_START || '0',
-      XRK_FAST_START: process.env.XRK_FAST_START || '0',
-      XRK_OPTIONAL_DB: process.env.XRK_OPTIONAL_DB || '0'
+      XRK_FAST_START: process.env.XRK_FAST_START || '0'
     };
 
     return new Promise((resolve) => {

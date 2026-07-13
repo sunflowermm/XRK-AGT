@@ -11,7 +11,7 @@ description: 当你需要新增/调整配置字段、确保 YAML 与 commonconfi
 
 | 类型 | 路径 | 示例 |
 |------|------|------|
-| 全局 | `data/server_bots/<name>.yaml` | `agt`、`redis`、`mongodb` |
+| 全局 | `data/server_bots/<name>.yaml` | `agt`、`redis` |
 | 随端口 | `data/server_bots/{port}/<name>.yaml` | `server`、`aistream`、`chatbot` |
 | 工厂 LLM | `data/server_bots/{port}/<name>.yaml` | `openai_llm`、`*_compat_llm` |
 | **底层模板** | `config/default_config/<name>.yaml` | 仅 AGT/工厂/system-Core；**禁止**产品 Core |

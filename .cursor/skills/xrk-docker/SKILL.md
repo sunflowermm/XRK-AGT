@@ -1,6 +1,6 @@
 ---
 name: xrk-docker
-description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Python 子服务端、Redis、MongoDB），或排查容器化环境问题时使用。
+description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Python 子服务端、Redis），或排查容器化环境问题时使用。
 ---
 
 ## 权威文档与入口
@@ -11,7 +11,7 @@ description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Pytho
 
 ## 你要掌握的要点
 
-- Compose 全栈：`xrk-agt` + `xrk-subserver`（Python）+ 五语言子服 + `redis` + `mongodb`（见 `docker-compose.yml`）。
+- Compose 全栈：`xrk-agt` + `xrk-subserver`（Python）+ 五语言子服 + `redis`（见 `docker-compose.yml`）。
 - 命令：`pnpm docker:build` → `pnpm docker:up` → `pnpm docker:status`；从零重来 `pnpm docker:fresh`；停止 `pnpm docker:down`（`src/utils/docker-stack.mjs`）。
 - Python 子服：与主服**同镜像** `xrk-agt:latest`，`command: subserver`（无独立 pyserver Dockerfile）。
 - 代理：本机 `config/docker.env` 或根 `.env`；构建阶段用 `host.docker.internal`。

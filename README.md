@@ -124,7 +124,7 @@ cd XRK-AGT
 pnpm install
 ```
 
-**Redis**：正常运行需要 Redis 可用（框架内置数据库）。Docker 见下文；本机需自行安装或设 `XRK_OPTIONAL_DB=1` 做无库调试。配置与生命周期见 **[docs/database.md](docs/database.md)**。MongoDB 等由业务 Core 自行部署，非框架必需。
+**Redis**：框架内置数据库，启动前须可用。Docker 见下文；本机需自行安装 Redis。配置与生命周期见 **[docs/database.md](docs/database.md)**。
 
 ### ⚙️ 3. 配置环境变量（可选）
 
@@ -138,10 +138,6 @@ XRK_SERVER_PORT=8080
 # HTTP_PROXY=http://host.docker.internal:<端口>
 # HTTPS_PROXY=http://host.docker.internal:<端口>
 # NO_PROXY=127.0.0.1,localhost
-
-# 业务 Core 可选：MongoDB 容器认证（docker-compose 中 mongodb 服务非 AGT 必需）
-# MONGO_ROOT_USERNAME=admin
-# MONGO_ROOT_PASSWORD=password
 ```
 
 ### 🚀 4. 启动服务
@@ -166,8 +162,7 @@ docker-compose down
 **服务说明**：
 - `xrk-agt`: 主服务端（端口：8080）
 - `xrk-subserver`: Python 子服务端（端口：8000，自动构建）
-- `redis`: Redis 缓存服务（端口：6379，**框架必需**）
-- `mongodb`: 可选，供业务 Core（如本地 `mongodb-Core`）使用，AGT 主服务不依赖
+- `redis`: Redis 缓存服务（端口：6379，框架必需）
 
 **详细 Docker 部署指南**：参见 [`docs/docker.md`](docs/docker.md)
 
