@@ -55,20 +55,44 @@ export function normalizeAnthropicMessages(messages = []) {
   return out;
 }
 
-function mapToolChoice(value) {
-  const v = (value ?? 'auto').toString().trim().toLowerCase();
+function mapToolChoice(value, toolNameMapper = null) {
+  const raw = (value ?? 'auto').toString().trim();
+  const v = raw.toLowerCase();
   if (v === 'none') return { type: 'none' };
   if (v === 'required' || v === 'any') return { type: 'any' };
   if (v === 'auto') return { type: 'auto' };
-  return { type: 'tool', name: v };
+  const name = toolNameMapper?.normalize(raw) ?? raw;
+  return { type: 'tool', name };
 }
 
-export function applyAnthropicTools(body, config = {}, overrides = {}) {
+/** 多轮 tool_use 历史：出站前将 MCP 名（如 chat.poke）规范为 API 合法名（chat_poke） */
+export function normalizeAnthropicToolHistory(messages = [], toolNameMapper = null) {
+  if (!toolNameMapper || !Array.isArray(messages)) return messages;
+  return messages.map((m) => {
+    if (m?.role !== 'assistant' || !Array.isArray(m.content)) return m;
+    let changed = false;
+    const content = m.content.map((block) => {
+      if (block?.type === 'tool_use' && block.name) {
+        const normalized = toolNameMapper.normalize(block.name);
+        if (normalized !== block.name) {
+          changed = true;
+          return { ...block, name: normalized };
+        }
+      }
+      return block;
+    });
+    return changed ? { ...m, content } : m;
+  });
+}
+
+export function applyAnthropicTools(body, config = {}, overrides = {}, toolNameMapper = null) {
   const customTools = Array.isArray(overrides.tools) ? overrides.tools.filter(Boolean) : [];
   if (customTools.length) {
-    body.tools = customTools;
+    body.tools = toolNameMapper
+      ? customTools.map((t) => ({ ...t, name: toolNameMapper.normalize(t.name) }))
+      : customTools;
     const choice = overrides.tool_choice ?? overrides.toolChoice ?? config.toolChoice;
-    if (choice != null) body.tool_choice = mapToolChoice(choice);
+    if (choice != null) body.tool_choice = mapToolChoice(choice, toolNameMapper);
     return body;
   }
 
@@ -81,9 +105,11 @@ export function applyAnthropicTools(body, config = {}, overrides = {}) {
   const mcpTools = MCPToolAdapter.convertMCPToolsToAnthropic({ workflow, streams });
 
   if (mcpTools.length) {
-    body.tools = mcpTools;
+    body.tools = toolNameMapper
+      ? mcpTools.map((t) => ({ ...t, name: toolNameMapper.normalize(t.name) }))
+      : mcpTools;
     const choice = overrides.tool_choice ?? overrides.toolChoice ?? config.toolChoice;
-    body.tool_choice = mapToolChoice(choice);
+    body.tool_choice = mapToolChoice(choice, toolNameMapper);
     BotUtil.makeLog(
       'debug',
       `[anthropic-chat-utils] 注入 MCP tools=${mcpTools.length}, streams=${JSON.stringify(streams)}`,

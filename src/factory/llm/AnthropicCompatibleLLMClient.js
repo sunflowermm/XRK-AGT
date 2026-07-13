@@ -5,8 +5,10 @@ import { partitionAndExecuteToolCalls } from '../../utils/llm/tool-partition-uti
 import {
   applyAnthropicTools,
   ensureAnthropicMaxTokens,
-  normalizeAnthropicMessages
+  normalizeAnthropicMessages,
+  normalizeAnthropicToolHistory
 } from '../../utils/llm/anthropic-chat-utils.js';
+import { createToolNameMapper } from '../../utils/llm/tool-name-utils.js';
 import BotUtil from '../../utils/botutil.js';
 import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
 
@@ -16,6 +18,8 @@ import { logPromptCacheUsage } from '../../utils/llm/prompt-cache-policy.js';
  * - MCP 工具：按 streams 白名单注入 tools[]，多轮 tool_use / tool_result
  */
 export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
+  _toolNames = createToolNameMapper();
+
   constructor(config = {}) {
     super({
       authMode: 'bearer',
@@ -38,9 +42,12 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
   }
 
   buildBody(messages, overrides = {}) {
-    const normalized = normalizeAnthropicMessages(messages);
+    const normalized = normalizeAnthropicToolHistory(
+      normalizeAnthropicMessages(messages),
+      this._toolNames
+    );
     const body = super.buildBody(normalized, overrides);
-    applyAnthropicTools(body, this.config, overrides);
+    applyAnthropicTools(body, this.config, overrides, this._toolNames);
     ensureAnthropicMaxTokens(body, this.config, overrides);
     return body;
   }
@@ -58,7 +65,7 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
       id: tu.id || `toolu_${i}`,
       type: 'function',
       function: {
-        name: tu.name || 'tool',
+        name: this._toolNames.denormalize(tu.name || 'tool'),
         arguments: JSON.stringify(tu.input ?? {})
       }
     }));
@@ -142,7 +149,10 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
       && overrides.mcpToolMode !== 'passthrough'
       && Array.isArray(overrides.streams)
       && overrides.streams.length > 0;
-    let currentMessages = normalizeAnthropicMessages(await this.transformMessages(initialMessages));
+    let currentMessages = normalizeAnthropicToolHistory(
+      normalizeAnthropicMessages(await this.transformMessages(initialMessages)),
+      this._toolNames
+    );
     let lastText = '';
 
     for (let round = 0; round < maxRounds; round++) {
