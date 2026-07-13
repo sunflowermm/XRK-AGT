@@ -1675,16 +1675,13 @@ export default class ChatStream extends AIStream {
     return mid ? `[CQ:reply,id=${mid}]${body}` : body;
   }
 
-  /** 合并 LLM 正文与 reply 工具拟定内容 */
+  /** 合并 LLM 正文与 reply 工具拟定内容（有拟定则始终以拟定为准，忽略 LLM 收尾摘要） */
   _resolveOutboundText(llmText, turn) {
-    let text = (llmText ?? '').toString().trim();
-    if (!text && turn?.queuedReplyContent) {
-      return this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
+    const queued = String(turn?.queuedReplyContent ?? '').trim();
+    if (queued) {
+      return this._formatQueuedReplyForSend(queued, turn.queuedReplyMessageId);
     }
-    if (text && turn?.queuedReplyContent && isOverlappingUserVisible(text, turn.queuedReplyContent)) {
-      return this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
-    }
-    return text;
+    return (llmText ?? '').toString().trim();
   }
 
   async execute(e, question, config) {
