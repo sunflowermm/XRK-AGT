@@ -22,6 +22,13 @@ import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/a
 import { BaseTools } from '#utils/base-tools.js';
 import { getAistreamConfigOptional } from '#utils/aistream-config.js';
 import { resolveConfiguredWorkspace } from '../lib/ai-workspace-runtime.js';
+import {
+  buildOutboundSegments,
+  contentHasGroupAt,
+  replyContentForbidden,
+  resolveOutgoingMessage,
+  splitProtocolParts,
+} from '#utils/chat-reply-protocol.js';
 
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 const IMAGE_SEND_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
@@ -272,11 +279,16 @@ export default class ChatStream extends AIStream {
         const image = this.getRandomEmotionImage(t);
         if (!image) return { success: false, error: `暂无「${t}」表情包资源` };
         return this._wrapHandler(async () => {
-          const segments = [];
           const text = String(args.text ?? '').trim();
-          if (text) segments.push(text);
-          segments.push(segment.image(image));
-          await e.reply(segments.length === 1 ? segments[0] : segments);
+          if (text) {
+            const forbidden = replyContentForbidden(text);
+            if (forbidden) return { success: false, error: forbidden };
+            const { replyId, segments } = resolveOutgoingMessage(text, { fallbackReplyId: null });
+            const payload = buildOutboundSegments({ replyId, imagePaths: [image], segments });
+            await e.reply(payload);
+          } else {
+            await e.reply(segment.image(image));
+          }
           const where = formatSessionWhere(e);
           this.recordAIResponse(e, `[表情:${t}]${text ? ` ${text}` : ''}`);
           return { success: true, raw: actionAck(`你已在${where}发送「${t}」表情包`) };
@@ -344,38 +356,49 @@ export default class ChatStream extends AIStream {
     });
 
     this.registerMCPTool('reply', {
-      description: '拟定回复正文（本轮 tool 轮结束后由框架统一发到 QQ）。content 支持 | 分句、[CQ:reply,id=]、[开心] 等表情标记。回执会说明是否已拟定。',
+      description: '拟定文字回复（本轮 tool 轮结束后由框架统一发到 QQ）。content：| 分句；[回复:消息ID] 引用（可省略，默认引用 [当前消息]）；群聊 [at:数字QQ]。禁止 @QQ/@昵称，发表情用 emotion。',
       inputSchema: {
         type: 'object',
         properties: {
-          messageId: {
-            type: 'string',
-            description: '要回复的消息ID'
-          },
-          content: {
-            type: 'string',
-            description: '回复内容'
-          }
+          content: { type: 'string', description: '正文（必填）' },
+          messageId: { type: 'string', description: '可选，显式引用消息 ID（一般不必填）' },
         },
         required: ['content']
       },
       handler: async (args = {}, context = {}) => {
         const e = context.e;
         const turn = this._getTurnState(context);
-        const content = String(args.content ?? '').trim();
-        if (!content) return { success: false, error: 'content 不能为空' };
-        const where = formatSessionWhere(e);
-        if (turn.queuedReplyContent && isOverlappingUserVisible(content, turn.queuedReplyContent)) {
-          return {
-            success: true,
-            raw: formatUserVisibleDuplicateAck(where, `回复「${turn.queuedReplyContent}」`, 'reply')
-          };
+        const rawContent = String(args.content ?? '').trim();
+        if (!rawContent) return { success: false, error: 'content 不能为空' };
+
+        const forbidden = replyContentForbidden(rawContent);
+        if (forbidden) return { success: false, error: forbidden };
+        if (contentHasGroupAt(rawContent) && !e?.isGroup) {
+          return { success: false, error: '[at:QQ] 仅群聊可用' };
         }
-        turn.queuedReplyContent = content;
-        turn.queuedReplyMessageId = args.messageId != null ? String(args.messageId).trim() : null;
+
+        const explicitMid = args.messageId != null ? String(args.messageId).trim() : '';
+        const fallbackId = explicitMid || ChatStream.resolveEventMessageId(e);
+        const { replyId, displayText } = resolveOutgoingMessage(rawContent, {
+          fallbackReplyId: fallbackId
+        });
+        const where = formatSessionWhere(e);
+        if (turn.queuedReplyContent) {
+          const prev = resolveOutgoingMessage(turn.queuedReplyContent, {
+            fallbackReplyId: turn.queuedReplyMessageId
+          }).displayText;
+          if (isOverlappingUserVisible(displayText, prev)) {
+            return {
+              success: true,
+              raw: formatUserVisibleDuplicateAck(where, `回复「${prev}」`, 'reply')
+            };
+          }
+        }
+        turn.queuedReplyContent = rawContent;
+        turn.queuedReplyMessageId = replyId;
         return {
           success: true,
-          raw: formatReplyQueuedAck(where, content, turn.queuedReplyMessageId)
+          raw: formatReplyQueuedAck(where, displayText, replyId)
         };
       },
       enabled: true
@@ -1319,18 +1342,18 @@ export default class ChatStream extends AIStream {
       persona,
       '',
       '## 对用户说话（须调 MCP，勿用文字假装）',
-      '- **reply**：文字回复（`|` 分句、`[CQ:reply,id=]` 引用）；纯戳/纯表情/发文件勿用 reply 模拟',
-      '- **poke**：戳一戳（QQ 系统动作）；用户说「戳我/戳一下」必须调用',
+      '- **reply**：当前会话文字。`|` 分句 · `[回复:消息ID]`（可省略，默认引用 [当前消息]）· 群聊 `[at:数字QQ]`',
+      '- **poke**：戳一戳；用户说「戳我/戳一下」必须调用',
       '- **emotion** / **send_image**：表情包或工作区图片',
-      '- **send_file**：工作区内的非图片文件（doc/zip 等）',
+      '- **send_file**：工作区非图片文件',
       '- **emojiReaction**：群消息表情回应',
-      '- **tools.***（已合并）：工作区 read/write/run 等；先 read 再发文件',
-      '- 无权限或失败时如实说明，勿假装成功',
-      '- 工具回执会说明已拟定/已发出内容；用户已能看到后不要重复 reply',
-      '- 只回答 `[当前消息]` 所指内容，勿复读整段群聊记录',
+      '- **tools.***（已合并）：工作区 read/write/run 等',
+      '- 禁止 `@QQ`/`@昵称`；无权限或失败时如实说明',
+      '- 工具回执说明已拟定/已发出；用户已能看到后不要重复 reply',
+      '- 只回答 `[当前消息]`，勿复读整段群聊记录',
       '',
-      '## 记录格式',
-      '- 历史为 `昵称(QQ)[ID:xxx]: 内容`，ID 可用于 reply 引用',
+      '## 记录',
+      '- `昵称(QQ)[ID:xxx]` 为消息 ID，引用他人发言写 `[回复:xxx]`',
       '',
       '## 工作区与 skills',
       '- 「Workspace context」含 AGENTS / rules / **skills**（按 `<location>` 用 tools.read 加载 SKILL.md）',
@@ -1481,6 +1504,14 @@ export default class ChatStream extends AIStream {
   static getReplySegmentId(e) {
     const seg = e?.message && Array.isArray(e.message) ? e.message.find(s => s && s.type === 'reply') : null;
     return seg?.id ?? seg?.data?.id ?? null;
+  }
+
+  /** 当前触发消息的消息 ID（[当前消息] 行里的 ID） */
+  static resolveEventMessageId(e) {
+    if (!e) return null;
+    const id = e.message_id ?? e.real_id ?? e.messageId ?? e.id ?? e.source?.id ?? ChatStream.getReplySegmentId(e);
+    const s = id != null ? String(id).trim() : '';
+    return s || null;
   }
 
   /**
@@ -1668,19 +1699,10 @@ export default class ChatStream extends AIStream {
     return mergedMessages;
   }
 
-  _formatQueuedReplyForSend(content, messageId) {
-    const body = String(content ?? '').trim();
-    if (!body) return '';
-    const mid = messageId != null && String(messageId).trim() ? String(messageId).trim() : '';
-    return mid ? `[CQ:reply,id=${mid}]${body}` : body;
-  }
-
   /** 合并 LLM 正文与 reply 工具拟定内容（有拟定则始终以拟定为准，忽略 LLM 收尾摘要） */
   _resolveOutboundText(llmText, turn) {
     const queued = String(turn?.queuedReplyContent ?? '').trim();
-    if (queued) {
-      return this._formatQueuedReplyForSend(queued, turn.queuedReplyMessageId);
-    }
+    if (queued) return queued;
     return (llmText ?? '').toString().trim();
   }
 
@@ -1699,9 +1721,12 @@ export default class ChatStream extends AIStream {
 
           const trimmed = this._resolveOutboundText(aiResult.content, turn);
           if (trimmed) {
-            await this.sendMessages(e, trimmed, aiResult.executedToolNames ?? []);
-            this.recordAIResponse(e, trimmed, aiResult.executedToolNames ?? []);
-            if (turn) turn.lastOutboundSummary = trimmed;
+            const fallbackReplyId = turn?.queuedReplyMessageId ?? ChatStream.resolveEventMessageId(e);
+            await this.sendMessages(e, trimmed, aiResult.executedToolNames ?? [], { fallbackReplyId });
+            const { displayText } = resolveOutgoingMessage(trimmed, { fallbackReplyId });
+            const historyText = displayText || trimmed;
+            this.recordAIResponse(e, historyText, aiResult.executedToolNames ?? []);
+            if (turn) turn.lastOutboundSummary = historyText;
           }
           return trimmed || '';
         } catch (error) {
@@ -1838,43 +1863,29 @@ export default class ChatStream extends AIStream {
     return { replyId, segments: mergedSegments };
   }
 
-  async sendMessages(e, cleanText, executedToolNames = []) {
-    if (!cleanText || !cleanText.trim()) return;
+  async sendMessages(e, cleanText, executedToolNames = [], { fallbackReplyId = null, replyFallbackOnAllParts = true } = {}) {
+    if (!cleanText?.trim() || !e?.reply) return;
 
     const toolPrefix = executedToolNames.length > 0
       ? `［使用了: ${executedToolNames.join('、')}］ `
       : '';
-    const messages = cleanText.split('|').map(m => m.trim()).filter(Boolean);
-    if (toolPrefix && messages.length > 0) messages[0] = toolPrefix + messages[0];
+    const parts = splitProtocolParts(cleanText);
+    if (!parts.length) return;
 
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-      if (!msg) continue;
-      
-      // 解析CQ码为segment数组
-      const { replyId, segments } = this.parseCQToSegments(msg, e);
-      
-      // 如果有回复ID或解析出了segment，使用segment方式发送
-      if (replyId || segments.length > 0) {
-        if (replyId) {
-          // 有回复ID：回复段必须在最前面（OneBot协议要求）
-          // segment.reply返回 { type: "reply", id, ... }，makeMsg会转换为 { type: "reply", data: { id } }
-          const seg = segment;
-          const replySegment = seg.reply(replyId);
-          const replySegments = segments.length > 0 
-            ? [replySegment, ...segments] 
-            : [replySegment, ' '];
-          await e.reply(replySegments);
-        } else {
-          // 没有回复ID：直接发送segments
-          await e.reply(segments);
-        }
-      } else {
-        // 如果没有解析出任何内容，直接发送原始文本
-        await e.reply(msg);
-      }
-      
-      if (i < messages.length - 1) {
+    for (let i = 0; i < parts.length; i++) {
+      let part = parts[i];
+      if (i === 0 && toolPrefix) part = toolPrefix + part;
+
+      const useFallback = replyFallbackOnAllParts || i === 0;
+      const { replyId, segments } = resolveOutgoingMessage(part, {
+        fallbackReplyId: useFallback ? fallbackReplyId : null
+      });
+      const payload = buildOutboundSegments({ replyId, segments });
+      if (!payload.length) continue;
+
+      await e.reply(payload);
+
+      if (i < parts.length - 1) {
         await BotUtil.sleep(randomRange(800, 1500));
       }
     }

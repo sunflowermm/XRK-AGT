@@ -56,7 +56,7 @@ export function actionAck(detail) {
 
 function normalizeVisibleCompare(text) {
   return String(text ?? '')
-    .replace(/\[回复:\d+\]/gi, '')
+    .replace(/\[回复:(?:ID:)?\d+\]/gi, '')
     .replace(/\[CQ:reply,id=\d+\]/gi, '')
     .replace(/\[at:\d{5,10}\]/gi, '')
     .replace(/\[(开心|惊讶|伤心|大笑|害怕|生气)\]/g, '')
