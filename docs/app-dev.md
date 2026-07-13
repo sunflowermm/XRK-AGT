@@ -42,8 +42,7 @@ flowchart TB
         G2["device.yaml"]
         G3["monitor.yaml"]
         G4["notice.yaml"]
-        G5["mongodb.yaml"]
-        G6["redis.yaml"]
+        G5["redis.yaml"]
     end
 
     subgraph Server["端口配置"]
@@ -94,7 +93,6 @@ flowchart TB
 | `device`  | `data/server_bots/device.yaml`  | 设备配置         |
 | `monitor` | `data/server_bots/monitor.yaml` | 监控配置         |
 | `notice`  | `data/server_bots/notice.yaml`  | 通知配置         |
-| `mongodb` | `data/server_bots/mongodb.yaml` | MongoDB 连接配置（详见 [database.md](database.md)） |
 | `redis`   | `data/server_bots/redis.yaml`   | Redis 连接配置（详见 [database.md](database.md)）   |
 
 
@@ -160,7 +158,6 @@ const groupConfig = cfg.getServerConfig('group');
 - `cfg.device` - 设备配置
 - `cfg.monitor` - 监控配置
 - `cfg.notice` - 通知配置
-- `cfg.mongodb` - MongoDB 配置
 - `cfg.redis` - Redis 配置
 
 **端口配置访问器**：

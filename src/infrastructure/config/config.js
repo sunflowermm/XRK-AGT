@@ -134,7 +134,6 @@ class Cfg {
   get device() { return this.getGlobalConfig('device'); }
   get monitor() { return this.getGlobalConfig('monitor'); }
   get notice() { return this.getGlobalConfig('notice'); }
-  get mongodb() { return this.getGlobalConfig('mongodb'); }
   get redis() { return this.getGlobalConfig('redis'); }
   // aistream 为随端口配置（server_bots/{port}/aistream.yaml）
   get aistream() { return this.getServerConfig('aistream'); }

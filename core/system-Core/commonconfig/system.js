@@ -76,7 +76,7 @@ function crawlProviderApiFields(extraFields = {}) {
  * 系统配置管理
  * 管理所有系统级配置文件
  * 新配置结构：
- * - 全局配置（不随端口变化）：agt, device, monitor, notice, mongodb, redis（与 config-constants.js 一致）
+ * - 全局配置（不随端口变化）：agt, device, monitor, notice, redis（与 config-constants.js 一致）
  *   存储位置：server_bots/ 根目录
  * - 服务器配置（随端口变化）：server, chatbot, group
  *   存储位置：server_bots/{port}/
@@ -2019,95 +2019,6 @@ export default class SystemConfig extends ConfigBase {
                   type: 'number',
                   label: '连接超时时间（毫秒）',
                   description: '与 Redis 建立 TCP 连接的超时时间，单位毫秒',
-                  min: 1000,
-                  default: 10000,
-                  component: 'InputNumber'
-                }
-              }
-            }
-          }
-        }
-      },
-
-      mongodb: {
-        name: 'mongodb',
-        displayName: 'MongoDB配置',
-        description: 'MongoDB服务器连接配置',
-        filePath: getConfigPath('mongodb'),
-        fileType: 'yaml',
-        schema: {
-          required: ['host', 'port', 'database'],
-          fields: {
-            host: {
-              type: 'string',
-              label: 'MongoDB地址',
-              description: 'MongoDB 主机名或 IP，一般为 127.0.0.1 或 docker 容器名',
-              default: '127.0.0.1',
-              component: 'Input'
-            },
-            port: {
-              type: 'number',
-              label: 'MongoDB端口',
-              description: 'MongoDB 监听端口，默认 27017',
-              min: 1,
-              max: 65535,
-              default: 27017,
-              component: 'InputNumber'
-            },
-            username: {
-              type: 'string',
-              label: 'MongoDB用户名',
-              description: 'MongoDB 认证用户名，使用「用户名+密码」认证时填写',
-              default: '',
-              component: 'Input'
-            },
-            password: {
-              type: 'string',
-              label: 'MongoDB密码',
-              description: 'MongoDB 认证密码，与上方用户名配套使用',
-              default: '',
-              component: 'InputPassword'
-            },
-            database: {
-              type: 'string',
-              label: 'MongoDB数据库名称',
-              description: '默认连接的数据库名称，例如 xrk 或 admin',
-              component: 'Input'
-            },
-            options: {
-              type: 'object',
-              label: 'MongoDB连接选项',
-              description: 'MongoDB 连接池与超时等高级选项（可选，一般保持默认即可）',
-              component: 'SubForm',
-              fields: {
-                maxPoolSize: {
-                  type: 'number',
-                  label: '最大连接池大小',
-                  description: '连接池内允许的最大连接数，数值越大并发承载越高，但占用资源也越多',
-                  min: 1,
-                  default: 50,
-                  component: 'InputNumber'
-                },
-                minPoolSize: {
-                  type: 'number',
-                  label: '最小连接池大小',
-                  description: '连接池内长期保留的最小连接数',
-                  min: 1,
-                  default: 3,
-                  component: 'InputNumber'
-                },
-                connectTimeoutMS: {
-                  type: 'number',
-                  label: '连接超时时间(ms)',
-                  description: '与 MongoDB 建立连接的超时时间，单位毫秒',
-                  min: 1000,
-                  default: 10000,
-                  component: 'InputNumber'
-                },
-                serverSelectionTimeoutMS: {
-                  type: 'number',
-                  label: '服务器选择超时时间(ms)',
-                  description: '驱动在集群中选择可用节点的超时时间，超时会报 “server selection timed out”',
                   min: 1000,
                   default: 10000,
                   component: 'InputNumber'

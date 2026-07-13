@@ -76,7 +76,7 @@ XRK-AGT 是由向日葵开发、各大学志同道合的学生联合研制的 **
 - 仅想**先跑起来**：「快速开始」
 - 想**懂架构**：[`docs/底层架构设计.md`](docs/底层架构设计.md)（单一架构图）
 - 想**看清启动链**：[`docs/startup.md`](docs/startup.md)
-- 想**配 Redis / MongoDB**：[`docs/database.md`](docs/database.md)
+- 想**配 Redis**：[`docs/database.md`](docs/database.md)
 - 想**看目录该放哪**：[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) · [`docs/README.md`](docs/README.md)
 - 想**写插件 / Core**：[`docs/runtime-surface.md`](docs/runtime-surface.md) → [`docs/coding-style.md`](docs/coding-style.md) → [`docs/base-classes.md`](docs/base-classes.md)
 - 想**跑测试 / 发布前审查**：[`docs/框架测试指南.md`](docs/框架测试指南.md) → [`docs/代码审查清单.md`](docs/代码审查清单.md)
@@ -124,7 +124,7 @@ cd XRK-AGT
 pnpm install
 ```
 
-**Redis / MongoDB**：正常运行需要两者至少其一可用（默认两者都连）。Docker 见下文；本机需自行安装或设 `XRK_OPTIONAL_DB=1` 做无库调试。配置与生命周期见 **[docs/database.md](docs/database.md)**。
+**Redis**：正常运行需要 Redis 可用（框架内置数据库）。Docker 见下文；本机需自行安装或设 `XRK_OPTIONAL_DB=1` 做无库调试。配置与生命周期见 **[docs/database.md](docs/database.md)**。MongoDB 等由业务 Core 自行部署，非框架必需。
 
 ### ⚙️ 3. 配置环境变量（可选）
 
@@ -139,9 +139,9 @@ XRK_SERVER_PORT=8080
 # HTTPS_PROXY=http://host.docker.internal:<端口>
 # NO_PROXY=127.0.0.1,localhost
 
-# MongoDB 认证（可选）
-MONGO_ROOT_USERNAME=admin
-MONGO_ROOT_PASSWORD=password
+# 业务 Core 可选：MongoDB 容器认证（docker-compose 中 mongodb 服务非 AGT 必需）
+# MONGO_ROOT_USERNAME=admin
+# MONGO_ROOT_PASSWORD=password
 ```
 
 ### 🚀 4. 启动服务
@@ -166,8 +166,8 @@ docker-compose down
 **服务说明**：
 - `xrk-agt`: 主服务端（端口：8080）
 - `xrk-subserver`: Python 子服务端（端口：8000，自动构建）
-- `redis`: Redis 缓存服务（端口：6379）
-- `mongodb`: MongoDB 数据库服务（端口：27017）
+- `redis`: Redis 缓存服务（端口：6379，**框架必需**）
+- `mongodb`: 可选，供业务 Core（如本地 `mongodb-Core`）使用，AGT 主服务不依赖
 
 **详细 Docker 部署指南**：参见 [`docs/docker.md`](docs/docker.md)
 

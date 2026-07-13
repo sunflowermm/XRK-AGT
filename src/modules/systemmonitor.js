@@ -46,8 +46,6 @@ class SystemMonitor extends EventEmitter {
             max: 0
         };
         // 数据库对象挂载（延迟初始化）
-        this.mongodb = null;
-        this.mongodbDb = null;
         this.redis = null;
     }
 
@@ -186,15 +184,7 @@ class SystemMonitor extends EventEmitter {
     async _initDatabase() {
         try {
             // 使用动态导入避免循环依赖
-            const { getMongoClient, getMongoDb, getRedis } = await import('#infrastructure/database/index.js');
-            // 挂载 MongoDB（如果已初始化）
-            const mongoClient = getMongoClient();
-            const mongoDb = getMongoDb();
-            if (mongoClient && mongoDb) {
-                this.mongodb = mongoClient;
-                this.mongodbDb = mongoDb;
-            }
-            // 挂载 Redis（如果已初始化）
+            const { getRedis } = await import('#infrastructure/database/index.js');
             const redis = getRedis();
             if (redis) {
                 this.redis = redis;

@@ -50,7 +50,6 @@ export default [
       // Core modules (exclude framework cores)
       'core/*',
       '!core/system-Core/',
-      '!core/mongodb-Core/',
 
       // Sub servers / third-party bundles
       'subserver/**',
@@ -69,9 +68,7 @@ export default [
         logger: 'readonly',
         plugin: 'readonly',
         Renderer: 'readonly',
-        redis: 'readonly',
-        mongodbDb: 'readonly',
-        MongoService: 'readonly'
+        redis: 'readonly'
       }
     },
     rules: {

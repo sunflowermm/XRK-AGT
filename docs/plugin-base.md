@@ -339,7 +339,7 @@ export default class MyPlugin extends plugin {
 | 子 Bot | `e.bot`、`Bot[self_id]` |
 | 全局 Bot | 全局 `Bot` |
 | Redis | 全局 `redis`（启动后由 [database.md](database.md) 初始化） |
-| MongoDB | 全局 `mongodb` / `mongodbDb`，或 `getMongoDb()` |
+| 其它数据库 | 由业务 Core 自行封装（如本地 `mongodb-Core`），非 Runtime 内置 |
 | 配置 | 经 HTTP / `ConfigBase`，勿在插件内直接写 YAML 路径 |
 
 ---
@@ -350,7 +350,7 @@ export default class MyPlugin extends plugin {
 - [事件系统标准化文档](事件系统标准化文档.md) — 事件命名与字段
 - [aistream.md](aistream.md) — 工作流与 MCP
 - [框架可扩展性指南](框架可扩展性指南.md) — 七大扩展点
-- [database.md](database.md) — Redis / MongoDB 配置与访问
+- [database.md](database.md) — Redis 配置与访问
 
 ---
 

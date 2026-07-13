@@ -105,7 +105,7 @@
 ### ⚙️ 配置与工具
 
 - **[配置基类文档](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写、多文件配置等
-- **[Redis 与 MongoDB](database.md)** - 连接配置、启动流程、全局客户端、环境变量与 Docker ⭐
+- **[Redis（框架内置数据库）](database.md)** - 连接配置、启动流程、全局客户端、环境变量与 Docker ⭐
 - **[渲染器基类文档](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
 - **[BotUtil 工具类文档](botutil.md)** - 工具类 `BotUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
 

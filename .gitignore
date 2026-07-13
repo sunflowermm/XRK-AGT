@@ -119,9 +119,7 @@ memory/*.md
 !memory/MEMORY.md
 !memory/.gitkeep
 
-# 业务 Core 本地部署，主仓 framework Core：system-Core、mongodb-Core
+# 业务 Core 本地部署，主仓 framework Core：system-Core
 core/*
 !core/system-Core/
 !core/system-Core/**
-!core/mongodb-Core/
-!core/mongodb-Core/**

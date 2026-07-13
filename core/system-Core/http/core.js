@@ -749,7 +749,6 @@ export default {
       path: '/api/health',
       handler: HttpResponse.asyncHandler(async (req, res, Bot) => {
         let redisOk = false;
-        let mongodbOk = false;
         try {
           const { getRedis } = await import('#infrastructure/database/index.js');
           const redis = getRedis();
@@ -759,16 +758,6 @@ export default {
         } catch {
           // redis 不可用，忽略
         }
-        try {
-          if (globalThis.MongoService?.ping) {
-            mongodbOk = await globalThis.MongoService.ping();
-          } else {
-            const { getDatabaseManager } = await import('#infrastructure/database/index.js');
-            mongodbOk = await getDatabaseManager().checkMongoDB();
-          }
-        } catch {
-          mongodbOk = false;
-        }
 
         HttpResponse.success(res, {
           status: 'healthy',
@@ -776,7 +765,6 @@ export default {
           services: {
             bot: Bot.uin && Bot.uin.length > 0 ? 'operational' : 'degraded',
             redis: redisOk ? 'operational' : 'down',
-            mongodb: mongodbOk ? 'operational' : 'down',
             api: 'operational'
           }
         });

@@ -1,14 +1,12 @@
-# Redis 与 MongoDB
+# Redis（框架内置数据库）
 
-> **代码位置**：`src/infrastructure/database/index.js`、`src/infrastructure/redis.js`、`src/infrastructure/mongodb.js`  
+> **代码位置**：`src/infrastructure/database/index.js`、`src/infrastructure/redis.js`  
 > **连接工具**：`src/utils/db-connect-utils.js`  
-> **说明**：XRK-AGT 启动时并行初始化 Redis 与 MongoDB；二者在多数部署中为**必需**，也可通过环境变量在无库模式下继续启动。
+> **说明**：XRK-AGT 启动时初始化 **Redis** 作为框架内置数据库；MongoDB 等其它存储由**业务 Core** 自行引入（如本地 `mongodb-Core`），非 Runtime 依赖。
 
 ---
 
 ## 在文档体系中的位置
-
-![数据库层导读](../resources/mdimg/docs/database-dual-store.png)
 
 | 主题 | 文档 |
 |------|------|
@@ -19,14 +17,14 @@
 
 ---
 
-## 各自用途（概览）
+## 用途（概览）
 
-| 存储 | 典型用途 |
-|------|----------|
-| **Redis** | 进程/机器人状态（`AGT:restart:`、`AGT:shutdown:`）、插件计数与会话键、HTTP 控制面、重启插件上下文 |
-| **MongoDB** | 业务持久化（**mongodb-Core** 统一管理集合/迁移/Repository）；连接在 Runtime，业务禁止裸用 `mongodbDb` |
+| 存储 | 归属 | 典型用途 |
+|------|------|----------|
+| **Redis** | **Runtime 内置** | 进程/机器人状态（`AGT:restart:`、`AGT:shutdown:`）、插件计数与会话键、HTTP 控制面、重启插件上下文 |
+| **MongoDB 等** | **业务 Core** | 企业/产品自行部署的持久化层（如本地 `core/mongodb-Core/`），主仓不初始化、不强制 |
 
-具体键名与集合以各 Core 消费代码为准；插件优先 **裸名 `redis`** 或 `getRedis()`。**MongoDB 业务层**见 [`core/mongodb-Core/README.md`](../core/mongodb-Core/README.md)：`MongoService` 全局或 `import ... from mongodb-Core/lib/index.js`。
+插件与 HTTP 优先使用 **裸名 `redis`** 或 `getRedis()`。
 
 ---
 
@@ -38,16 +36,11 @@ sequenceDiagram
     participant IM as InitManager
     participant DM as DatabaseManager
     participant R as redis.js
-    participant M as mongodb.js
 
     PL->>IM: init()
     IM->>DM: initDatabases()
-    par 并行
-        DM->>R: redisInit()
-        DM->>M: mongodbInit()
-    end
+    DM->>R: redisInit()
     R-->>DM: setRuntimeGlobal('redis')
-    M-->>DM: setRuntimeGlobal('mongodb' / 'mongodbDb')
     Note over IM: 失败时见 XRK_OPTIONAL_DB
     IM->>IM: cfg.enableWatching() …
     Note over PL: 关闭时 ProcessManager.cleanup
@@ -66,7 +59,6 @@ sequenceDiagram
 | 配置 | 默认模板 | 运行时（全局，不按端口） |
 |------|----------|--------------------------|
 | Redis | `config/default_config/redis.yaml` | `data/server_bots/redis.yaml` |
-| MongoDB | `config/default_config/mongodb.yaml` | `data/server_bots/mongodb.yaml` |
 
 首次运行由 ConfigBase 从 `default_config` 复制到 `data/server_bots/`。Web 控制台 / CommonConfig 亦可编辑（schema 在 `core/system-Core/commonconfig/system.js`）。
 
@@ -74,18 +66,15 @@ sequenceDiagram
 
 **Redis**（`redis.yaml`）：`host`、`port`、`db`（0–15）、`username`、`password`、`options.connectTimeout`。
 
-**MongoDB**（`mongodb.yaml`）：`host`、`port`、`database`（默认 `xrk_agt`）、`username`、`password`、`options.maxPoolSize` / `minPoolSize` / 超时。
-
 ### 读取方式
 
 ```javascript
 import cfg from '#infrastructure/config/config.js';
 
 const { host, port } = cfg.redis;
-const dbName = cfg.mongodb?.database;
 ```
 
-业务代码在连接建立后使用客户端，而非重复拼 URL（连接串由 `redis.js` / `mongodb.js` 内 `buildRedisUrl` / `buildMongoUrl` 生成；Docker 下 `normalizeHost` 会将 `127.0.0.1` 映射为服务名 `redis` / `mongodb`）。
+业务代码在连接建立后使用客户端，而非重复拼 URL（连接串由 `redis.js` 内 `buildRedisUrl` 生成；Docker 下 `normalizeHost` 会将 `127.0.0.1` 映射为服务名 `redis`）。
 
 ---
 
@@ -93,11 +82,10 @@ const dbName = cfg.mongodb?.database;
 
 | 变量 | 作用 |
 |------|------|
-| `XRK_OPTIONAL_DB=1` | Redis/Mongo 连接失败时**不** `process.exit(1)`；若两者均失败则 warn 后继续（适合纯本地调试、无持久化需求） |
+| `XRK_OPTIONAL_DB=1` | Redis 连接失败时**不**阻止启动（适合纯本地调试、无持久化需求） |
 | `XRK_FAST_START=1` | 减少连接重试次数、缩短超时（测试/快速冒烟） |
-| `MONGO_ROOT_USERNAME` / `MONGO_ROOT_PASSWORD` | Docker Compose 注入 Mongo 认证（见 [docker.md](docker.md)） |
 
-默认（未设 `XRK_OPTIONAL_DB`）：任一库在 `DatabaseManager.init()` 中连接失败会记 **error**；**两者均不可用**时抛出 `MongoDB 与 Redis 均不可用` 并阻止正常启动。
+默认（未设 `XRK_OPTIONAL_DB`）：Redis 在 `DatabaseManager.init()` 中连接失败会记 **error** 并抛出 `Redis 不可用`，阻止正常启动。
 
 ---
 
@@ -110,16 +98,11 @@ const dbName = cfg.mongodb?.database;
 if (redis?.isOpen) {
   await redis.set('my:key', 'value');
 }
-
-const db = mongodbDb;
-if (db) {
-  await db.collection('items').findOne({ id: 1 });
-}
 ```
 
 ```javascript
 // HTTP API（推荐 import，便于判空）
-import { getRedis, getMongoDb } from '#infrastructure/database/index.js';
+import { getRedis } from '#infrastructure/database/index.js';
 ```
 
 ### 健康检查
@@ -127,7 +110,7 @@ import { getRedis, getMongoDb } from '#infrastructure/database/index.js';
 ```javascript
 import getDatabaseManager from '#infrastructure/database/index.js';
 
-const { mongodb, redis } = await getDatabaseManager().getHealthStatus();
+const { redis } = await getDatabaseManager().getHealthStatus();
 ```
 
 system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/systemmonitor.js` 会引用上述能力做状态展示。
@@ -136,12 +119,12 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 
 ## 本地与 Docker
 
-| 场景 | Redis host | MongoDB host | 数据目录 |
-|------|------------|--------------|----------|
-| 本机开发 | `127.0.0.1:6379` | `127.0.0.1:27017` | Mongo 默认尝试 `data/mongodb/`（见 `mongodb.js` 启动提示） |
-| docker-compose | 服务名 `redis` | 服务名 `mongodb` | 卷映射 `data/redis/`、`data/mongodb/` |
+| 场景 | Redis host | 数据目录 |
+|------|------------|----------|
+| 本机开发 | `127.0.0.1:6379` | 按本机 redis 安装 |
+| docker-compose | 服务名 `redis` | 卷映射 `data/redis/` |
 
-连接失败时，非生产环境日志会提示手动启动命令（如 `redis-server`、`mongod --dbpath ...`）。完整编排见 [docker.md](docker.md)。
+连接失败时，非生产环境日志会提示手动启动命令（如 `redis-server`）。完整编排见 [docker.md](docker.md)。
 
 ---
 
@@ -149,37 +132,46 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 
 - **重试**：`connectWithRetry`（`db-connect-utils.js`），默认最多 3 次；失败走 `finalizeDbConnectionFailure`。
 - **日志脱敏**：`maskConnectionUrl` 隐藏 URL 中的密码。
-- **健康检查**：客户端就绪后定时 ping（间隔见各模块 `HEALTH_CHECK_INTERVAL`）。
-- **ARM64**：Mongo 本地自动启动路径会检测架构（非 Windows）。
+- **健康检查**：客户端就绪后定时 ping（间隔见 `redis.js` 内 `HEALTH_CHECK_INTERVAL`）。
 
-扩展连接行为应改 `redis.js` / `mongodb.js` 或 `db-connect-utils.js`（基础设施层），**不要在 Core 重复实现连接池**。
+扩展连接行为应改 `redis.js` 或 `db-connect-utils.js`（基础设施层），**不要在 Core 重复实现连接池**。
+
+---
+
+## MongoDB 与其它数据库
+
+主仓 **不** 提供 `mongodbDb` / `getMongoDb()`。需要 MongoDB 的企业或产品：
+
+1. 在 `core/` 下部署独立业务 Core（如 `mongodb-Core`），自行声明 `mongodb` 依赖与连接配置；
+2. 或在 Docker 中额外编排 Mongo 服务，由该 Core 消费。
+
+与框架 Redis **互不干扰**，Loader 不会自动初始化业务库。
 
 ---
 
 ## 常见问题
 
-### Q: 可以不装 Redis/Mongo 吗？
+### Q: 可以不装 Redis 吗？
 
-可以设 `XRK_OPTIONAL_DB=1` 启动，但依赖 Redis 的插件（重启/关机标记、部分计数）与 Mongo 持久化能力将不可用或报错，仅适合最小化调试。
+可以设 `XRK_OPTIONAL_DB=1` 启动，但依赖 Redis 的插件（重启/关机标记、部分计数）将不可用或报错，仅适合最小化调试。
 
 ### Q: 配置改了要不要重启？
 
-全局 `redis.yaml` / `mongodb.yaml` 变更后需**重启进程**（连接在启动期建立；热重载不负责重连数据库）。
+全局 `redis.yaml` 变更后需**重启进程**（连接在启动期建立；热重载不负责重连数据库）。
 
 ### Q: 和 `cfg.db` 的关系？
 
-CommonConfig 列表中含历史字段 `db`；当前连接以 **`redis` + `mongodb` 两份 YAML** 为准，无单独 `db.yaml` 模板。
+CommonConfig 列表中含历史字段 `db`；当前框架内置连接以 **`redis.yaml`** 为准，无单独 `db.yaml` 模板。
 
 ---
 
 ## 相关文档
 
-- [app-dev.md](app-dev.md) — `cfg.redis` / `cfg.mongodb` 与全局配置表
+- [app-dev.md](app-dev.md) — `cfg.redis` 与全局配置表
 - [docker.md](docker.md) — 容器、卷、环境变量
 - [config-base.md](config-base.md) — ConfigBase 读写与复制默认模板
-- [mongodb-core.md](mongodb-core.md) — MongoDB-Core 业务持久化层
 - [底层架构设计.md](底层架构设计.md) — 基础设施分层
 
 ---
 
-*最后更新：2026-06-14*
+*最后更新：2026-07-13*
