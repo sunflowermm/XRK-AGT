@@ -1,0 +1,4 @@
+runMigrationsOnBoot: true
+ensureIndexesOnBoot: true
+auditWrites: false
+collectionPrefix: ''

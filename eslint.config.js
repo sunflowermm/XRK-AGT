@@ -47,9 +47,10 @@ export default [
       '**/*.config.cjs',
       '**/*.config.mjs',
 
-      // Core modules (exclude system-Core)
+      // Core modules (exclude framework cores)
       'core/*',
       '!core/system-Core/',
+      '!core/mongodb-Core/',
 
       // Sub servers / third-party bundles
       'subserver/**',
@@ -69,7 +70,8 @@ export default [
         plugin: 'readonly',
         Renderer: 'readonly',
         redis: 'readonly',
-        mongodbDb: 'readonly'
+        mongodbDb: 'readonly',
+        MongoService: 'readonly'
       }
     },
     rules: {

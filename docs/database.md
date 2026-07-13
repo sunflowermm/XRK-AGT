@@ -24,9 +24,9 @@
 | 存储 | 典型用途 |
 |------|----------|
 | **Redis** | 进程/机器人状态（`AGT:restart:`、`AGT:shutdown:`）、插件计数与会话键、HTTP 控制面、重启插件上下文 |
-| **MongoDB** | 需持久化文档的业务数据（工作流 memory、部分 system-Core 能力）；系统监控健康检查会 ping |
+| **MongoDB** | 业务持久化（**mongodb-Core** 统一管理集合/迁移/Repository）；连接在 Runtime，业务禁止裸用 `mongodbDb` |
 
-具体键名与集合以各 Core 消费代码为准；插件优先 **裸名 `redis`** 或 `getRedis()`；Db 实例用 **`mongodbDb`**（裸名）或 `#infrastructure/database/index.js` 的 `getMongoDb()`。
+具体键名与集合以各 Core 消费代码为准；插件优先 **裸名 `redis`** 或 `getRedis()`。**MongoDB 业务层**见 [`core/mongodb-Core/README.md`](../core/mongodb-Core/README.md)：`MongoService` 全局或 `import ... from mongodb-Core/lib/index.js`。
 
 ---
 
@@ -177,6 +177,7 @@ CommonConfig 列表中含历史字段 `db`；当前连接以 **`redis` + `mongod
 - [app-dev.md](app-dev.md) — `cfg.redis` / `cfg.mongodb` 与全局配置表
 - [docker.md](docker.md) — 容器、卷、环境变量
 - [config-base.md](config-base.md) — ConfigBase 读写与复制默认模板
+- [mongodb-core.md](mongodb-core.md) — MongoDB-Core 业务持久化层
 - [底层架构设计.md](底层架构设计.md) — 基础设施分层
 
 ---

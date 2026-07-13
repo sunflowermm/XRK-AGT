@@ -3,7 +3,7 @@ import fs from 'fs';
 import AIStream from '#infrastructure/aistream/aistream.js';
 import BotUtil from '#utils/botutil.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
-import { PARSEABLE_EMOTIONS } from '#utils/emotion-utils.js';
+import { PARSEABLE_EMOTIONS, QQ_EMOJI_REACTION_IDS, EMOJI_REACTION_TYPES } from '#utils/emotion-utils.js';
 import {
   actionAck,
   createUserVisibleTurnState,
@@ -20,18 +20,6 @@ import {
 } from '#infrastructure/aistream/stream-request-context.js';
 import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/aistream/chat-pipeline.js';
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
-
-// 表情回应映射
-const EMOJI_REACTIONS = {
-  '开心': ['4', '14', '21', '28', '76', '79', '99', '182', '201', '290'],
-  '惊讶': ['26', '32', '97', '180', '268', '289'],
-  '伤心': ['5', '9', '106', '111', '173', '174'],
-  '大笑': ['4', '12', '28', '101', '182', '281'],
-  '害怕': ['26', '27', '41', '96'],
-  '喜欢': ['42', '63', '85', '116', '122', '319'],
-  '爱心': ['66', '122', '319'],
-  '生气': ['8', '23', '39', '86', '179', '265']
-};
 
 function randomRange(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -266,79 +254,44 @@ export default class ChatStream extends AIStream {
     });
 
     this.registerMCPTool('emojiReaction', {
-      description: '对群消息进行表情回应。支持：开心、惊讶、伤心、大笑、害怕、喜欢、爱心、生气。不指定消息ID时自动选择最近一条他人消息。仅群聊环境可用。',
+      description: '对群消息进行表情回应。支持：开心、惊讶、伤心、大笑、害怕、喜欢、爱心、生气。不指定 msgId 时选最近一条他人消息。仅群聊。',
       inputSchema: {
         type: 'object',
         properties: {
-          msgId: {
-            type: 'string',
-            description: '要回应的消息ID（可选，不填则自动选择最近一条消息）'
-          },
+          msgId: { type: 'string', description: '要回应的消息 ID（可选）' },
           emojiType: {
             type: 'string',
-            description: '表情类型（必填）。可选值：开心、惊讶、伤心、大笑、害怕、喜欢、爱心、生气。根据消息内容和用户意图选择合适的表情。',
-            enum: ['开心', '惊讶', '伤心', '大笑', '害怕', '喜欢', '爱心', '生气']
-          }
+            description: '表情类型',
+            enum: EMOJI_REACTION_TYPES,
+          },
         },
-        required: ['emojiType']
+        required: ['emojiType'],
       },
       handler: async (args = {}, context = {}) => {
         const e = context.e;
-        BotUtil.makeLog(
-          'debug',
-          `[chat.emojiReaction] 调用上下文: hasE=${Boolean(e)}, isGroup=${e?.isGroup}, message_type=${e?.message_type}, group_id=${e?.group_id}, user_id=${e?.user_id}`,
-          'ChatStream'
-        );
-        if (!e?.isGroup) {
-          return { success: false, error: '非群聊环境' };
-        }
+        if (!e?.isGroup) return { success: false, error: '非群聊环境' };
 
-        // 兼容英文枚举到内部中文映射
-        const typeMap = {
-          like: '喜欢',
-          love: '爱心',
-          laugh: '大笑',
-          wow: '惊讶',
-          sad: '伤心',
-          angry: '生气'
-        };
-        let emojiType = args.emojiType;
-        if (emojiType && typeMap[emojiType]) {
-          emojiType = typeMap[emojiType];
-        }
+        const typeMap = { like: '喜欢', love: '爱心', laugh: '大笑', wow: '惊讶', sad: '伤心', angry: '生气' };
+        let emojiType = typeMap[args.emojiType] ?? args.emojiType;
 
-        if (!EMOJI_REACTIONS[emojiType]) {
-          return { success: false, error: '无效表情类型' };
-        }
+        const emojiIds = QQ_EMOJI_REACTION_IDS[emojiType];
+        if (!emojiIds?.length) return { success: false, error: '无效表情类型' };
 
-        const emojiIds = EMOJI_REACTIONS[emojiType];
-        if (!emojiIds || emojiIds.length === 0) {
-          return { success: false, error: '表情类型无可用表情ID' };
-        }
-
-        // 如果没有传 msgId，则尝试使用最近一条他人消息的 ID
         let msgId = String(args.msgId ?? '').trim();
-        const historyKeyForEmoji = ChatStream.getEventHistoryKey(e);
-        if (!msgId && historyKeyForEmoji) {
-          const history = ChatStream.messageHistory.get(historyKeyForEmoji) || [];
-          const lastOtherMsg = [...history].reverse().find(
-            m => String(m.user_id) !== String(e.self_id) && m.message_id
-          );
-          if (lastOtherMsg) {
-            msgId = String(lastOtherMsg.message_id);
-          }
-        }
-
         if (!msgId) {
-          return { success: false, error: '找不到可回应的消息ID' };
+          const historyKey = ChatStream.getEventHistoryKey(e);
+          const history = historyKey ? (ChatStream.messageHistory.get(historyKey) || []) : [];
+          const last = [...history].reverse().find(
+            (m) => String(m.user_id) !== String(e.self_id) && m.message_id,
+          );
+          if (last) msgId = String(last.message_id);
         }
+        if (!msgId) return { success: false, error: '找不到可回应的消息 ID' };
 
         const emojiId = Number(emojiIds[Math.floor(Math.random() * emojiIds.length)]);
-
         try {
-          const group = e.group;
-          if (group && typeof group.setEmojiLike === 'function') {
-            const result = await group.setEmojiLike(msgId, emojiId, true);
+          if (e.group?.setEmojiLike) {
+            const result = await e.group.setEmojiLike(msgId, emojiId, true);
             if (result !== undefined) {
               await BotUtil.sleep(200);
               return { success: true, message: '表情回应成功', data: { msgId, emojiId, emojiType } };
@@ -349,7 +302,7 @@ export default class ChatStream extends AIStream {
           return { success: false, error: error.message };
         }
       },
-      enabled: true
+      enabled: true,
     });
 
     this.registerMCPTool('thumbUp', {
@@ -1230,38 +1183,57 @@ export default class ChatStream extends AIStream {
     const { e, question } = context;
     const persona =
       question?.persona ||
-      '你是一个对话助手：正常回答问题，语气自然简洁，不堆砌套话。';
+      '你是群里一起聊天的伙伴：像真人一样接话，听得懂玩笑和气氛，该正经说清、该闲聊就短打。';
+    const botName = e?.bot?.nickname || e?.bot?.info?.nickname || e?.bot?.name || 'Bot';
+
+    const lines = [
+      `# ${botName}`,
+      persona,
+      '',
+      '## 对用户说话',
+      '- **reply**：拟定回复正文（框架在本轮 tool 结束后发到 QQ）。支持 `|` 分句、`[CQ:reply,id=消息ID]` 引用；表情包用 `[开心]` 等标记（见 emotion 工具说明）',
+      '- **emojiReaction**：对群消息做表情回应（开心/惊讶/伤心等）',
+      '- **poke / send_image / 群管工具**：按 MCP 定义调用；无权限则说明，勿假装成功',
+      '- 工具回执会说明已拟定/已发出内容；用户已能看到后不要重复 reply',
+      '- 只回答 `[当前消息]` 所指内容，勿复读整段群聊记录',
+      '',
+      '## 记录格式',
+      '- 历史为 `昵称(QQ)[ID:xxx]: 内容`，ID 可用于 reply 引用',
+      '',
+      '## 工作区',
+      '- 下文「Workspace context」含 AGENTS / rules / skills（由 aistream.agentWorkspace 注入）',
+      '- 文件与命令工具见 tools / desktop 等工作流 MCP',
+    ];
+
+    return this.finalizeSystemPromptContent(lines.join('\n'));
+  }
+
+  /** 动态轮次上下文（独立 user 消息，不污染可缓存的 system 前缀） */
+  _buildVolatileTurnContext(e, question) {
+    if (!e) return '';
     const dateStr = question?.dateStr || new Date().toLocaleString('zh-CN');
-    let embeddingHint = '';
-    if (this.embeddingConfig?.enabled) {
-      embeddingHint = '\n（系统可能按历史记忆与知识库补充上下文）\n';
-    }
-    const toolHint =
-      '工具：以本请求下发的 MCP/Function 定义为准，按名称与参数调用；勿在正文中伪造协议或未执行的操作。工具回执会说明「你已发出/拟定什么」；用户已能看到或已拟定后，不要重复 reply。';
-
-    if (!e) {
-      return this.finalizeSystemPromptContent(
-        `人设：${persona}\n时间：${dateStr}\n${embeddingHint}\n${toolHint}`
-      );
-    }
-
-    const botRole = question?.botRole || (await this.getBotRole(e));
     const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot';
-    const isMaster = e.isMaster === true;
-    const selfId = e.self_id ?? '';
-    const userId = e.user_id ?? '';
-    const groupId = e.group_id ?? e.group?.group_id ?? '';
+    const botRole = question?.botRole || '';
+    const sessionLine = e.isGroup && e.group_id
+      ? `${botName}｜QQ ${e.self_id}｜群 ${e.group_id}${botRole ? `｜${botRole}` : ''}`
+      : `${botName}｜QQ ${e.self_id}｜私聊 ${e.user_id}`;
+    const parts = [`会话：${sessionLine}`, `当前时间：${dateStr}`];
+    if (e.isMaster === true) parts.push('当前发言者为主人，指令优先、少反驳。');
+    if (question?.isGlobalTrigger) parts.push('【随机旁观】你闲来无事看群聊，自然接话即可，不必解决问题。');
+    return `【本轮上下文】\n${parts.join('\n')}`;
+  }
 
-    const core = `人设：${persona}
-身份：昵称=${botName}，机器人账号=${selfId}${groupId ? `，当前群=${groupId}` : ''}，群内角色=${botRole}${isMaster ? '（当前用户为配置中的主权限用户）' : ''}
-时间：${dateStr}
-${embeddingHint}
-风格：简洁、贴题；不确定时用一句话确认。
-${toolHint}
-群管/互动类：仅在用户明确要求时调用对应工具；无权限则说明原因，勿假装成功。
-setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=${userId}；他人→按其账号。`;
-
-    return this.finalizeSystemPromptContent(core);
+  async buildEnhancedContext(e, question, messages) {
+    const enhanced = [...messages];
+    const ctx = question && typeof question === 'object' ? { ...question } : {};
+    if (e && ctx.botRole == null) {
+      ctx.botRole = await this.getBotRole(e);
+    }
+    const volatile = this._buildVolatileTurnContext(e, ctx);
+    if (volatile) {
+      enhanced.splice(1, 0, { role: 'user', content: volatile });
+    }
+    return enhanced;
   }
 
   async _extractImagesFromEvent(e) {
@@ -1322,14 +1294,13 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
       ? question
       : (question?.content ?? question?.text ?? '');
 
-    // 从事件中提取图片（OneBot 消息段）
+    const isGlobalTrigger = !!(question && typeof question === 'object' && question.isGlobalTrigger);
     const { images, replyImages } = await this._extractImagesFromEvent(e);
 
-    // 若无图片，则仍然用纯文本，兼容旧逻辑
     if (images.length === 0 && replyImages.length === 0) {
       messages.push({
         role: 'user',
-        content: text
+        content: isGlobalTrigger ? { text, isGlobalTrigger: true } : text,
       });
     } else {
       messages.push({
@@ -1337,8 +1308,9 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
         content: {
           text: text || '',
           images,
-          replyImages
-        }
+          replyImages,
+          ...(isGlobalTrigger ? { isGlobalTrigger: true } : {}),
+        },
       });
     }
 
@@ -1571,41 +1543,40 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
     return mid ? `[CQ:reply,id=${mid}]${body}` : body;
   }
 
-  async execute(e, messages, config) {
+  /** 合并 LLM 正文与 reply 工具拟定内容 */
+  _resolveOutboundText(llmText, turn) {
+    let text = (llmText ?? '').toString().trim();
+    if (!text && turn?.queuedReplyContent) {
+      return this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
+    }
+    if (text && turn?.queuedReplyContent && isOverlappingUserVisible(text, turn.queuedReplyContent)) {
+      return this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
+    }
+    return text;
+  }
+
+  async execute(e, question, config) {
     return runWithStreamRequestContext({ e, turnState: createUserVisibleTurnState() }, () =>
       withStreamLoaderEvent(e, async () => {
         try {
-          messages = await assembleChatLlmMessages(this, e, messages);
+          if (e) this.recordMessage(e);
+
+          const messages = await assembleChatLlmMessages(this, e, question);
           logLlmMessagePreview(this, messages, 'ChatStream');
 
           const turn = getStreamRequestContext()?.turnState;
           const aiResult = await this.callAI(messages, config);
-          if (!aiResult) {
-            return null;
-          }
-          const { content: text, executedToolNames } = aiResult;
-          let trimmed = (text ?? '').toString().trim();
-          if (!trimmed && turn?.queuedReplyContent) {
-            trimmed = this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
-          }
-          if (
-            trimmed &&
-            turn?.queuedReplyContent &&
-            isOverlappingUserVisible(trimmed, turn.queuedReplyContent)
-          ) {
-            trimmed = this._formatQueuedReplyForSend(turn.queuedReplyContent, turn.queuedReplyMessageId);
-          }
+          if (!aiResult) return null;
+
+          const trimmed = this._resolveOutboundText(aiResult.content, turn);
           if (trimmed) {
-            await this.sendMessages(e, trimmed, executedToolNames);
-            this.recordAIResponse(e, trimmed, executedToolNames);
+            await this.sendMessages(e, trimmed, aiResult.executedToolNames ?? []);
+            this.recordAIResponse(e, trimmed, aiResult.executedToolNames ?? []);
             if (turn) turn.lastOutboundSummary = trimmed;
           }
           return trimmed || '';
         } catch (error) {
-          BotUtil.makeLog('error',
-            `工作流执行失败[${this.name}]: ${error.message}`,
-            'ChatStream'
-          );
+          BotUtil.makeLog('error', `工作流执行失败[${this.name}]: ${error.message}`, 'ChatStream');
           return null;
         }
       })
@@ -1788,6 +1759,26 @@ setCard：改机器人自己→self_id=${selfId}；改当前说话人→user_id=
       }
       if (messages.length > 50) ChatStream.messageHistory.set(historyKey, messages.slice(-50));
     }
+  }
+
+  /**
+   * 清除指定会话的 chat 历史（对齐 XRK-Yunzai ChatStream.clearConversation）
+   * @param {string} scopeId - getEventHistoryKey 或 group/user id
+   */
+  static async clearConversation(scopeId, { e: _e = null } = {}) {
+    const key = String(scopeId);
+    const result = { success: true, cleared: { history: false, memory: false } };
+    try {
+      if (ChatStream.messageHistory.has(key)) {
+        ChatStream.messageHistory.delete(key);
+        result.cleared.history = true;
+      }
+      BotUtil.makeLog('debug', `[ChatStream] clearConversation scope=${key}`, 'ChatStream');
+    } catch (error) {
+      result.success = false;
+      BotUtil.makeLog('error', `[ChatStream] clearConversation: ${error.message}`, 'ChatStream');
+    }
+    return result;
   }
 
   async cleanup() {
