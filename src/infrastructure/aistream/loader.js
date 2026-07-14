@@ -650,16 +650,37 @@ class StreamLoader {
           stream
         };
         try {
-          if (tool.handler) {
-            const result = await tool.handler(args, { ...context, stream });
-            if (result === undefined) return { success: true, message: '操作已执行' };
-            if (typeof result === 'object' && ('success' in result || 'error' in result)) return result;
-            return { success: true, data: result };
+          if (!tool.handler) {
+            return { success: false, error: 'Handler not found' };
           }
-          return { success: false, error: 'Handler not found' };
+          const result = await tool.handler(args, { ...context, stream });
+          let normalized;
+          if (result === undefined) normalized = { success: true, message: '操作已执行' };
+          else if (typeof result === 'object' && ('success' in result || 'error' in result)) normalized = result;
+          else normalized = { success: true, data: result };
+
+          // 非对外可视工具摘要写入会话历史，供下一轮 prompt（见 ChatStream.recordToolCallResult）
+          if (typeof stream.recordToolCallResult === 'function') {
+            try {
+              const ev = context.e;
+              if (ev) stream.recordToolCallResult(ev, fullToolName, normalized, args || {});
+            } catch (recErr) {
+              BotUtil.makeLog('debug', `recordToolCallResult: ${recErr.message}`, 'StreamLoader');
+            }
+          }
+          return normalized;
         } catch (error) {
           BotUtil.makeLog('error', `MCP工具调用失败[${fullToolName}]: ${error.message}`, 'StreamLoader');
-          return { success: false, error: error.message };
+          const fail = { success: false, error: error.message };
+          if (typeof stream.recordToolCallResult === 'function') {
+            try {
+              const ev = context.e;
+              if (ev) stream.recordToolCallResult(ev, fullToolName, fail, args || {});
+            } catch (recErr) {
+              BotUtil.makeLog('debug', `recordToolCallResult on error: ${recErr.message}`, 'StreamLoader');
+            }
+          }
+          return fail;
         }
       }
     });

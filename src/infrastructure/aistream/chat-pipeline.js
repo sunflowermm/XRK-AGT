@@ -1,7 +1,14 @@
 import BotUtil from '#utils/botutil.js';
 
 /**
- * LLM 消息组装（工作流 / HTTP 共用，保证 prompt 结构与成本策略一致）
+ * LLM 消息组装（工作流 / HTTP 共用）。
+ *
+ * 稳定分层（内容语义对齐 Yunzai，实现仍走本仓库 Loader / AIStream）：
+ * 1. `buildChatContext` — `system`（人设+协议+工作区）+ 当前用户消息骨架
+ * 2. `mergeMessageHistory` — 群/会话笔录为 user 块（【我】/【我·工具】/他人），当前轮 `[当前消息]`
+ * 3. `buildEnhancedContext` — 易变切片（时间/会话/主人）插入 system 后，勿塞进 system 以免搅乱前缀缓存
+ *
+ * 工具调用轨迹：用户可见靠 reply MCP；下一轮延续靠 `recordToolCallResult`，不往用户气泡贴「使用了」。
  */
 export async function assembleChatLlmMessages(stream, e, question) {
   const questionObj = question != null && typeof question === 'object' && !Array.isArray(question)

@@ -70,17 +70,14 @@
 **参数**：
 - `filePath` (string, 必需): 文件路径
 
-#### `tools.modify_file`
-修改文件内容
+#### `tools.search_replace`
+按精确子串替换文件内容（改代码优先于此；勿用已移除的 `modify_file`）。
 
 **参数**：
 - `filePath` (string, 必需): 文件路径
-- `content` (string, 必需): 要添加或替换的内容
-- `mode` (string, 可选): 修改模式
-  - `replace`: 替换全部内容（默认）
-  - `append`: 追加到末尾
-  - `prepend`: 插入到开头
-- `lineNumber` (integer, 可选): 插入行号（仅在replace模式下有效）
+- `old_string` (string, 必需): 要替换的原文（须唯一匹配，除非 `replace_all`）
+- `new_string` (string, 必需): 替换后文本
+- `replace_all` (boolean, 可选): 是否替换全部匹配
 
 #### `tools.grep`
 在文件中搜索文本
@@ -106,7 +103,7 @@
 **参数**：
 - `command` (string, 必需): 要执行的命令
 
-**注意**：仅在Windows上支持
+**注意**：`run` 在 Windows 与 Unix 均可使用（Unix 为 `/bin/sh -lc`）。
 
 ### 2. 记忆系统工具（memory工作流）
 

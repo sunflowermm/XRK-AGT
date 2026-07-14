@@ -4,6 +4,20 @@ import { exec } from './exec-async.js';
 import { getDefaultDesktopDirSync } from '#utils/user-dirs.js';
 const IS_WINDOWS = process.platform === 'win32';
 
+/** @param {string} haystack @param {string} needle */
+function countOccurrences(haystack, needle) {
+  if (!needle) return 0;
+  let count = 0;
+  let pos = 0;
+  while (true) {
+    const idx = haystack.indexOf(needle, pos);
+    if (idx === -1) break;
+    count++;
+    pos = idx + needle.length;
+  }
+  return count;
+}
+
 /**
  * 统一基础工具系统
  * 提供文件操作、文本处理等核心功能，类似Cursor的工具集
@@ -23,6 +37,48 @@ export class BaseTools {
     try {
       const content = await fs.readFile(fullPath, encoding);
       return { success: true, content, path: fullPath };
+    } catch (error) {
+      return { success: false, error: error.message, path: fullPath };
+    }
+  }
+
+  /**
+   * 按 oldText 精确替换为 newText（须唯一，除非 replaceAll）。
+   * 语义对齐 Yunzai BaseTools.searchReplace。
+   */
+  async searchReplace(filePath, oldText, newText, options = {}) {
+    const { replaceAll = false } = options;
+    if (oldText == null || oldText === '') {
+      return { success: false, error: 'oldText 不能为空' };
+    }
+    if (newText == null) {
+      return { success: false, error: 'newText 不能省略（可传空字符串）' };
+    }
+    const fullPath = this.resolvePath(filePath);
+    try {
+      const existing = await fs.readFile(fullPath, 'utf8');
+      const count = countOccurrences(existing, oldText);
+      if (count === 0) {
+        return { success: false, error: '未找到 oldText，请 read 核对片段或扩大上下文', path: fullPath };
+      }
+      if (!replaceAll && count > 1) {
+        return {
+          success: false,
+          error: `oldText 出现 ${count} 次，请加长上下文使其唯一，或设 replaceAll=true`,
+          path: fullPath,
+          occurrences: count
+        };
+      }
+      const newContent = replaceAll
+        ? existing.split(oldText).join(newText)
+        : existing.replace(oldText, newText);
+      await fs.writeFile(fullPath, newContent, 'utf8');
+      return {
+        success: true,
+        path: fullPath,
+        replacements: replaceAll ? count : 1,
+        replaceAll: !!replaceAll
+      };
     } catch (error) {
       return { success: false, error: error.message, path: fullPath };
     }

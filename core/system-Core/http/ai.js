@@ -393,7 +393,8 @@ async function handleChatCompletionsV3(req, res) {
           message: { role: 'assistant', content: text || '' },
           finish_reason: 'stop'
         }],
-        ...(executedToolNames.length > 0 ? { mcp_tools: executedToolNames.map((name) => ({ name })) }: {}),
+        // Web 工具卡片只读此字段（与 SSE metadata.mcp_tools 同形态），与 QQ 气泡文案无关
+        ...(executedToolNames.length > 0 ? { mcp_tools: executedToolNames.map((name) => ({ name })) } : {}),
         usage: {
           prompt_tokens: promptTokens,
           completion_tokens: completionTokens,

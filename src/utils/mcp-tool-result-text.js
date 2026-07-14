@@ -40,3 +40,39 @@ export function summarizeToolResultText(result, maxLen = MCP_TOOL_TEXT_MAX_JSON)
   }
   return '已执行';
 }
+
+const HISTORY_ARG_KEYS = ['command', 'query', 'path', 'url', 'messageId', 'limit', 'content', 'saveAs'];
+
+/**
+ * 写入下一轮群聊 prompt 的工具摘要（短；对外 reply 类工具应跳过记录）。
+ * 语义对齐 XRK-Yunzai：只进历史，不出现在用户可见气泡。
+ *
+ * @param {string} toolName
+ * @param {unknown} result
+ * @param {Record<string, unknown> | null} [args]
+ * @param {number} [maxLen=600]
+ * @returns {string}
+ */
+export function summarizeToolForHistory(toolName, result, args = null, maxLen = 600) {
+  const full = String(toolName || 'tool');
+  const shortName = full.includes('.') ? full.split('.').slice(-2).join('.') : full;
+  let argHint = '';
+  if (args && typeof args === 'object') {
+    for (const key of HISTORY_ARG_KEYS) {
+      if (args[key] == null || args[key] === '') continue;
+      const s = String(args[key]).replace(/\s+/g, ' ').trim();
+      if (!s) continue;
+      argHint = s.length > 100 ? `${s.slice(0, 100)}…` : s;
+      break;
+    }
+  }
+  const head = argHint ? `${shortName}「${argHint}」` : shortName;
+  if (result && typeof result === 'object' && /** @type {{ success?: boolean }} */ (result).success === false) {
+    const err = typeof /** @type {{ error?: unknown }} */ (result).error === 'string'
+      ? /** @type {{ error: string }} */ (result).error
+      : (/** @type {{ error?: { message?: string } }} */ (result).error?.message || summarizeToolResultText(result, 200));
+    return capToolText(`${head} → 失败: ${String(err).slice(0, 220)}`, maxLen);
+  }
+  const body = summarizeToolResultText(result, Math.max(80, maxLen - head.length - 4));
+  return `${head} → ${body}`.slice(0, maxLen + 80);
+}

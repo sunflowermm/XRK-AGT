@@ -10,7 +10,6 @@ import {
   formatReplyQueuedAck,
   formatSessionWhere,
   formatUserVisibleDuplicateAck,
-  formatUserVisibleSentAck,
   isOverlappingUserVisible
 } from '#utils/chat-user-visible-ack.js';
 import { withStreamLoaderEvent } from '#infrastructure/aistream/stream-loader-context.js';
@@ -29,6 +28,7 @@ import {
   resolveOutgoingMessage,
   splitProtocolParts,
 } from '#utils/chat-reply-protocol.js';
+import { summarizeToolForHistory } from '#utils/mcp-tool-result-text.js';
 
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 const IMAGE_SEND_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
@@ -37,11 +37,27 @@ function randomRange(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+/** 剥离历史遗留的「使用了/执行了」调试前缀，避免再喂给模型 */
+function stripLegacyToolUsagePrefix(text) {
+  return String(text ?? '')
+    .replace(/^［使用了:[^］]*］\s*/u, '')
+    .replace(/^\[执行了:[^\]]*\]\s*/u, '')
+    .trim();
+}
+
 /** 聊天工作流：群聊/互动/群管 MCP 工具 */
 export default class ChatStream extends AIStream {
   static emotionImages = {};
   static messageHistory = new Map();
   static cleanupTimer = null;
+  /**
+   * 已通过用户可见动作体现的工具，不再重复记【我·工具】（基名匹配）。
+   */
+  static TOOL_HISTORY_SKIP = new Set([
+    'reply', 'emotion', 'send_file', 'send_image', 'poke',
+    'relayPrivate', 'relayPrivateImage', 'relayPrivateEmotion', 'relayPrivateFile',
+    'thumbUp', 'emojiReaction', 'recall'
+  ]);
 
   constructor() {
     super({
@@ -125,6 +141,150 @@ export default class ChatStream extends AIStream {
     return null;
   }
 
+  /** 群管写操作：机器人须为群主/管理员 */
+  async _requireGroupAdmin(context) {
+    const groupCheck = this._requireGroup(context);
+    if (groupCheck) return groupCheck;
+    const role = await this.getBotRole(context.e);
+    if (role !== '群主' && role !== '管理员') {
+      return { success: false, error: '需要群主或管理员权限' };
+    }
+    return null;
+  }
+
+  /** 查询类工具返回：附 data，提示勿重复调用 */
+  _queryToolRawDetail(description, data, e) {
+    const MAX = 4000;
+    let dataStr = '{}';
+    try {
+      dataStr = data != null ? (typeof data === 'string' ? data : JSON.stringify(data)) : '{}';
+    } catch {
+      dataStr = String(data);
+    }
+    if (dataStr.length > MAX) dataStr = `${dataStr.slice(0, MAX)}\n...[已截断]`;
+    const head = e?.isGroup && e?.group_id
+      ? `你已在群 ${e.group_id} 获取${description}。根据 data 回复，勿再调用。`
+      : e?.user_id
+        ? `你已获取与 ${e.user_id} 相关的${description}。根据 data 回复，勿再调用。`
+        : `你已获取${description}。根据 data 回复，勿再调用。`;
+    return `${head}\n\ndata:\n${dataStr}`;
+  }
+
+  _normalizeTargetQq(qq) {
+    const s = String(qq ?? '').trim();
+    if (!/^\d{5,10}$/.test(s)) return null;
+    const n = parseInt(s, 10);
+    if (!Number.isFinite(n) || n < 1) return null;
+    return String(n);
+  }
+
+  async _pickFriendSender(e, qq) {
+    const targetQq = this._normalizeTargetQq(qq);
+    if (!targetQq) return { error: 'qq 须为 5-10 位数字' };
+    const bot = e?.bot;
+    if (!bot?.pickFriend) return { error: '当前环境不支持私聊传话' };
+    if (typeof bot.getFriendMap === 'function') {
+      try { await bot.getFriendMap(); } catch { /* ignore */ }
+    }
+    const inList =
+      bot.fl?.has?.(targetQq) ||
+      bot.fl?.has?.(parseInt(targetQq, 10)) ||
+      bot.fl?.get?.(targetQq) != null ||
+      bot.fl?.get?.(parseInt(targetQq, 10)) != null;
+    if (!inList) {
+      return { error: `QQ ${targetQq} 不在机器人好友列表，无法私聊传话` };
+    }
+    const friend = bot.pickFriend(targetQq);
+    if (!friend?.sendMsg) return { error: '无法获取好友私聊发送能力' };
+    const info = bot.fl?.get?.(targetQq) || bot.fl?.get?.(parseInt(targetQq, 10)) || {};
+    return { friend, targetQq, displayName: info.remark || info.nickname || targetQq };
+  }
+
+  _relayPrivateFail(targetQq, message) {
+    const detail = String(message?.message || message || '私聊发送失败').trim();
+    const normalized = detail.startsWith('QQ ') ? detail : `私聊未发出：${detail}`;
+    return {
+      success: false,
+      error: normalized,
+      raw: `${normalized}。禁止 reply 声称已发送；请向当前会话如实说明。`
+    };
+  }
+
+  async _wrapRelayPrivateHandler(targetQq, fn, delay = 300) {
+    try {
+      const result = await fn();
+      if (result?.success === false) {
+        return this._relayPrivateFail(targetQq, result.error || result.raw || '私聊发送失败');
+      }
+      if (delay > 0) await BotUtil.sleep(delay);
+      return result;
+    } catch (err) {
+      return this._relayPrivateFail(targetQq, err);
+    }
+  }
+
+  _relayFromWhere(e) {
+    return e?.isGroup && e?.group_id ? `群 ${e.group_id}` : '当前会话';
+  }
+
+  _relayPrivateAck(e, picked, detail) {
+    return actionAck(`你已从${this._relayFromWhere(e)}向好友 ${picked.displayName}(${picked.targetQq}) ${detail}`);
+  }
+
+  /** 向好友发协议正文（| 分句 / at 标记不适用好友） */
+  async _relayPrivateOutbound(friend, { content, imagePaths = [] } = {}) {
+    const text = String(content ?? '').trim();
+    const parts = text ? splitProtocolParts(text) : [''];
+    let totalSent = 0;
+    const allSentContent = [];
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const { displayText, segments } = resolveOutgoingMessage(part, { fallbackReplyId: null });
+      const segs = [...(segments || [])];
+      if (i === 0 && imagePaths.length) {
+        for (const p of imagePaths) segs.unshift(segment.image(p));
+      }
+      const payload = buildOutboundSegments({ replyId: null, segments: segs });
+      if (!payload.length && !imagePaths.length) continue;
+      await friend.sendMsg(payload.length ? payload : [segment.image(imagePaths[0])]);
+      totalSent++;
+      if (displayText) allSentContent.push(displayText);
+    }
+    return { totalSent, allSentContent };
+  }
+
+  async _relayPrivateImageSend(friend, absPath, text = '') {
+    const caption = String(text ?? '').trim();
+    if (!caption) {
+      await friend.sendMsg([segment.image(absPath)]);
+      return { totalSent: 1, allSentContent: [] };
+    }
+    const forbidden = replyContentForbidden(caption);
+    if (forbidden) return { error: forbidden };
+    return this._relayPrivateOutbound(friend, { content: caption, imagePaths: [absPath] });
+  }
+
+  async _relayPrivateFileSend(friend, absPath, displayName, text = '') {
+    const caption = String(text ?? '').trim();
+    if (caption) {
+      const forbidden = replyContentForbidden(caption);
+      if (forbidden) return { error: forbidden };
+      const { totalSent } = await this._relayPrivateOutbound(friend, { content: caption });
+      if (totalSent < 1) return { error: '未能发出私聊附言' };
+    }
+    if (!friend?.sendFile) return { error: '无法私聊发送文件' };
+    await friend.sendFile(absPath, displayName);
+    return { success: true };
+  }
+
+  /** 好友管理写操作：仅主人 */
+  _requireMaster(context) {
+    if (context.e?.isMaster !== true) {
+      return { success: false, error: '需要主人权限' };
+    }
+    return null;
+  }
+
   _getTurnState(context) {
     const turn = context?.turnState ?? getStreamRequestContext()?.turnState;
     if (turn) return turn;
@@ -181,48 +341,8 @@ export default class ChatStream extends AIStream {
    * 所有功能都通过 MCP 工具提供
    */
   registerAllFunctions() {
-    // 表情包（作为消息段的一部分，不在工具调用/函数解析中处理）
-    // 表情包标记会在parseCQToSegments中解析，保持顺序
+    // 群聊 @ 用 reply content 内 `[at:QQ]`，勿单独发空 @（已删无意义 at 工具）
 
-    this.registerMCPTool('at', {
-      description:
-        '群聊中 @ 指定成员（仅发送 @ 段，正文仍由你生成）。参数 qq 为对方账号。非群聊不可用。',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          qq: {
-            type: 'string',
-            description: '要@的用户QQ号（必填）。例如："123456789"。必须是群内的成员QQ号。'
-          }
-        },
-        required: ['qq']
-      },
-      handler: async (args = {}, context = {}) => {
-        const groupCheck = this._requireGroup(context);
-        if (groupCheck) return groupCheck;
-
-        const qq = String(args.qq || '').trim();
-        if (!qq) {
-          return { success: false, error: 'QQ号不能为空' };
-        }
-
-        return this._wrapHandler(async () => {
-          const seg = segment;
-          await context.e.reply([seg.at(qq)]);
-          const where = formatSessionWhere(context.e);
-          return {
-            success: true,
-            raw: formatUserVisibleSentAck(where, `@${qq}`)
-          };
-        }, 200);
-      },
-      enabled: true
-    });
-
-    /**
-     * 戳一戳（群成员/好友/设备用户）
-     * 群聊走 group.pokeMember；私聊走 reply({ type:'poke', qq }) 或好友 API；设备/Web 走 reply 下发给前端展示。
-     */
     this.registerMCPTool('poke', {
       description: '戳一戳对方（QQ 系统戳一戳，用户可见）。群聊戳成员，私聊戳好友。qq 不填则当前说话人。禁止用文字 *戳戳* 代替本工具。',
       inputSchema: {
@@ -353,6 +473,133 @@ export default class ChatStream extends AIStream {
         });
       },
       enabled: true,
+    });
+
+    this.registerMCPTool('relayPrivate', {
+      description: '向指定好友私聊传话（不在当前群露出正文）。qq 须为好友；content 支持 | 分句。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: { type: 'number', description: '目标好友 QQ' },
+          content: { type: 'string', description: '私聊正文' }
+        },
+        required: ['qq', 'content']
+      },
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        const picked = await this._pickFriendSender(e, args.qq);
+        if (picked.error) return this._relayPrivateFail(String(args.qq ?? ''), picked.error);
+        const rawContent = String(args.content ?? '').trim();
+        if (!rawContent) return { success: false, error: 'content 不能为空' };
+        const forbidden = replyContentForbidden(rawContent);
+        if (forbidden) return { success: false, error: forbidden };
+        return this._wrapRelayPrivateHandler(picked.targetQq, async () => {
+          const { totalSent, allSentContent } = await this._relayPrivateOutbound(picked.friend, {
+            content: rawContent
+          });
+          if (totalSent < 1) return { success: false, error: '未能向好友发出任何私聊消息' };
+          return {
+            success: true,
+            raw: this._relayPrivateAck(e, picked, `私聊发出 ${totalSent} 条：${allSentContent.join(' | ')}`)
+          };
+        });
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('relayPrivateImage', {
+      description: '向好友私聊发送工作区图片。qq、filePath 必填；text 可选附言。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: { type: 'number' },
+          filePath: { type: 'string' },
+          text: { type: 'string' }
+        },
+        required: ['qq', 'filePath']
+      },
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        const picked = await this._pickFriendSender(e, args.qq);
+        if (picked.error) return this._relayPrivateFail(String(args.qq ?? ''), picked.error);
+        const resolved = this._resolveWorkspaceFile(context, args.filePath, { requireImage: true });
+        if (resolved.error) return { success: false, error: resolved.error };
+        return this._wrapRelayPrivateHandler(picked.targetQq, async () => {
+          const sendResult = await this._relayPrivateImageSend(picked.friend, resolved.absPath, args.text);
+          if (sendResult.error) return { success: false, error: sendResult.error };
+          return {
+            success: true,
+            raw: this._relayPrivateAck(e, picked, `私聊发送图片「${resolved.displayName}」`)
+          };
+        });
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('relayPrivateFile', {
+      description: '向好友私聊发送工作区非图片文件。qq、filePath 必填。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: { type: 'number' },
+          filePath: { type: 'string' },
+          name: { type: 'string' },
+          text: { type: 'string' }
+        },
+        required: ['qq', 'filePath']
+      },
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        const picked = await this._pickFriendSender(e, args.qq);
+        if (picked.error) return this._relayPrivateFail(String(args.qq ?? ''), picked.error);
+        const resolved = this._resolveWorkspaceFile(context, args.filePath, { rejectImage: true });
+        if (resolved.error) return { success: false, error: resolved.error };
+        return this._wrapRelayPrivateHandler(picked.targetQq, async () => {
+          const displayName = String(args.name ?? resolved.displayName).trim() || resolved.displayName;
+          const sendResult = await this._relayPrivateFileSend(
+            picked.friend, resolved.absPath, displayName, args.text
+          );
+          if (sendResult.error) return { success: false, error: sendResult.error };
+          return {
+            success: true,
+            raw: this._relayPrivateAck(e, picked, `私聊发送文件「${displayName}」`)
+          };
+        });
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('relayPrivateEmotion', {
+      description: '向好友私聊发表情包。qq、emotionType 必填。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: { type: 'number' },
+          emotionType: { type: 'string', enum: [...PARSEABLE_EMOTIONS] },
+          text: { type: 'string' }
+        },
+        required: ['qq', 'emotionType']
+      },
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        const picked = await this._pickFriendSender(e, args.qq);
+        if (picked.error) return this._relayPrivateFail(String(args.qq ?? ''), picked.error);
+        const t = String(args.emotionType ?? '').trim();
+        if (!PARSEABLE_EMOTIONS.includes(t)) return { success: false, error: '无效表情类型' };
+        const image = this.getRandomEmotionImage(t);
+        if (!image) {
+          return { success: false, error: `表情包(${t})暂无图片` };
+        }
+        return this._wrapRelayPrivateHandler(picked.targetQq, async () => {
+          const sendResult = await this._relayPrivateImageSend(picked.friend, image, args.text);
+          if (sendResult.error) return { success: false, error: sendResult.error };
+          return {
+            success: true,
+            raw: this._relayPrivateAck(e, picked, `私聊发出表情包(${t})`)
+          };
+        });
+      },
+      enabled: true
     });
 
     this.registerMCPTool('reply', {
@@ -486,25 +733,6 @@ export default class ChatStream extends AIStream {
         return this._wrapHandler(async () => {
           await member.thumbUp(thumbCount);
           return { success: true, message: '点赞成功', data: { qq: args.qq, count: thumbCount } };
-        });
-      },
-      enabled: true
-    });
-
-    this.registerMCPTool('sign', {
-      description: '群签到',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      handler: async (_args = {}, context = {}) => {
-        const groupCheck = this._requireGroup(context);
-        if (groupCheck) return groupCheck;
-        
-        return this._wrapHandler(async () => {
-          await context.e.group.sign();
-          return { success: true, message: '签到成功' };
         });
       },
       enabled: true
@@ -975,60 +1203,6 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    this.registerMCPTool('getGroupInfoEx', {
-      description: '获取当前群扩展信息（如 getInfoEx）。仅群聊。',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      handler: async (_args = {}, context = {}) => {
-        const groupCheck = this._requireGroup(context);
-        if (groupCheck) return groupCheck;
-        
-        return this._wrapHandler(async () => {
-          const group = context.e.group;
-          if (group && typeof group.getInfoEx === 'function') {
-            const info = await group.getInfoEx();
-            BotUtil.makeLog('debug', `获取群信息ex成功: ${JSON.stringify(info)}`, 'ChatStream');
-            return { success: true, data: info };
-          }
-          return { success: false, error: 'API不可用' };
-        }, 0).catch(error => {
-          BotUtil.makeLog('warn', `获取群信息ex失败: ${error.message}`, 'ChatStream');
-          return { success: false, error: error.message };
-        });
-      },
-      enabled: true
-    });
-
-    this.registerMCPTool('getAtAllRemain', {
-      description: '获取群@全体成员的剩余次数',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      handler: async (_args = {}, context = {}) => {
-        const groupCheck = this._requireGroup(context);
-        if (groupCheck) return groupCheck;
-        
-        return this._wrapHandler(async () => {
-          const group = context.e.group;
-          if (group && typeof group.getAtAllRemain === 'function') {
-            const remain = await group.getAtAllRemain();
-            BotUtil.makeLog('debug', `@全体成员剩余次数: ${JSON.stringify(remain)}`, 'ChatStream');
-            return { success: true, data: remain };
-          }
-          return { success: false, error: 'API不可用' };
-        }, 0).catch(error => {
-          BotUtil.makeLog('warn', `获取@全体剩余次数失败: ${error.message}`, 'ChatStream');
-          return { success: false, error: error.message };
-        });
-      },
-      enabled: true
-    });
-
     this.registerMCPTool('getBanList', {
       description: '获取当前被禁言的成员列表',
       inputSchema: {
@@ -1086,13 +1260,11 @@ export default class ChatStream extends AIStream {
           }
 
           if (e.bot?.sendApi) {
-            const result = await e.bot.sendApi('set_group_todo', {
+            await e.bot.sendApi('set_group_todo', {
               group_id: e.group_id,
               message_id: msgId
             });
-            if (result !== undefined) {
-              return { success: true, message: '设置群代办成功', data: { msgId } };
-            }
+            return { success: true, raw: actionAck(`你已在群 ${e.group_id} 将消息 ${msgId} 设为群待办。`) };
           }
           return { success: false, error: 'API不可用' };
         });
@@ -1100,7 +1272,273 @@ export default class ChatStream extends AIStream {
       enabled: true
     });
 
-    // 获取好友列表（QQ号、昵称、备注）
+    this.registerMCPTool('completeGroupTodo', {
+      description: '完成群待办。msgId 必填。仅群聊，需管理权限。',
+      inputSchema: {
+        type: 'object',
+        properties: { msgId: { type: 'number' } },
+        required: ['msgId']
+      },
+      handler: async (args = {}, context = {}) => {
+        const adminCheck = await this._requireGroupAdmin(context);
+        if (adminCheck) return adminCheck;
+        const msgId = String(args.msgId ?? '').trim();
+        if (!msgId) return { success: false, error: '消息ID不能为空' };
+        return this._wrapHandler(async () => {
+          const e = context.e;
+          if (e.group?.completeTodo) await e.group.completeTodo(msgId);
+          else await e.bot.sendApi('complete_group_todo', { group_id: e.group_id, message_id: msgId });
+          return { success: true, raw: actionAck(`你已在群 ${e.group_id} 完成消息 ${msgId} 的群待办。`) };
+        });
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('cancelGroupTodo', {
+      description: '取消群待办。msgId 必填。仅群聊，需管理权限。',
+      inputSchema: {
+        type: 'object',
+        properties: { msgId: { type: 'number' } },
+        required: ['msgId']
+      },
+      handler: async (args = {}, context = {}) => {
+        const adminCheck = await this._requireGroupAdmin(context);
+        if (adminCheck) return adminCheck;
+        const msgId = String(args.msgId ?? '').trim();
+        if (!msgId) return { success: false, error: '消息ID不能为空' };
+        return this._wrapHandler(async () => {
+          const e = context.e;
+          if (e.group?.cancelTodo) await e.group.cancelTodo(msgId);
+          else await e.bot.sendApi('cancel_group_todo', { group_id: e.group_id, message_id: msgId });
+          return { success: true, raw: actionAck(`你已在群 ${e.group_id} 取消消息 ${msgId} 的群待办。`) };
+        });
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('listAnnouncements', {
+      description: '获取当前群公告列表。仅群聊。',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async (_args = {}, context = {}) => {
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
+        const e = context.e;
+        let data;
+        if (e.group?.getAnnouncements) data = await e.group.getAnnouncements();
+        else data = await e.bot.sendApi('_get_group_notice', { group_id: String(e.group_id) });
+        return { success: true, raw: this._queryToolRawDetail('群公告列表', data, e), data };
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('getGroupInfo', {
+      description: '获取群基础信息（群名、群号、成员数等）。仅群聊。',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async (_args = {}, context = {}) => {
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
+        const e = context.e;
+        try {
+          let info = null;
+          if (typeof e.group?.getInfo === 'function') info = await e.group.getInfo();
+          else if (e.bot?.sendApi) {
+            const result = await e.bot.sendApi('get_group_info', { group_id: e.group_id });
+            info = result?.data || result || null;
+          }
+          if (!info) return { success: false, error: '无法获取群信息' };
+          return { success: true, data: info, raw: this._queryToolRawDetail('群基础信息', info, e) };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('getMemberInfo', {
+      description: '获取群成员信息。qq 必填。仅群聊。',
+      inputSchema: {
+        type: 'object',
+        properties: { qq: { type: 'number' } },
+        required: ['qq']
+      },
+      handler: async (args = {}, context = {}) => {
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
+        const e = context.e;
+        const qq = String(args.qq ?? '').trim();
+        if (!qq) return { success: false, error: 'QQ号不能为空' };
+        try {
+          let info = null;
+          const member = e.group?.pickMember?.(qq);
+          if (member && typeof member.getInfo === 'function') info = await member.getInfo();
+          if (!info && e.bot?.sendApi) {
+            const result = await e.bot.sendApi('get_group_member_info', {
+              group_id: e.group_id,
+              user_id: qq
+            });
+            info = result?.data || result || null;
+          }
+          if (!info) return { success: false, error: '无法获取成员信息' };
+          return {
+            success: true,
+            data: info,
+            raw: this._queryToolRawDetail(`成员 ${qq} 的信息`, info, e)
+          };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('getFriendInfo', {
+      description: '获取好友/陌生人资料。qq 必填。',
+      inputSchema: {
+        type: 'object',
+        properties: { qq: { type: 'number', description: '目标 QQ' } },
+        required: ['qq']
+      },
+      handler: async (args = {}, context = {}) => {
+        const e = context.e;
+        const qq = String(args.qq ?? '').trim();
+        if (!qq) return { success: false, error: 'QQ号不能为空' };
+        try {
+          const bot = e?.bot;
+          let info = null;
+          const friend = bot?.pickFriend?.(qq);
+          if (friend && typeof friend.getInfo === 'function') info = await friend.getInfo();
+          if (!info && bot?.sendApi) {
+            const result = await bot.sendApi('get_stranger_info', { user_id: qq });
+            info = result?.data || result || null;
+          }
+          if (!info) return { success: false, error: '无法获取好友信息' };
+          return { success: true, data: info, raw: this._queryToolRawDetail(`QQ ${qq} 的资料`, info, e) };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('readChatRecord', {
+      description:
+        '读取当前群结构化聊天记录（本地缓存+适配器同步）。messageId 查单条；limit 默认 30。仅群聊。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          messageId: { type: 'string', description: '可选，单条消息 ID' },
+          limit: { type: 'number', description: '最近条数 1-50，默认 30' }
+        },
+        required: []
+      },
+      handler: async (args = {}, context = {}) => {
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
+        const e = context.e;
+        await this.syncHistoryFromAdapter(e);
+        const historyKey = ChatStream.getEventHistoryKey(e);
+        const history = ChatStream.messageHistory.get(historyKey) || [];
+        const msgId = String(args.messageId ?? '').trim();
+        if (msgId) {
+          const one = history.find((m) => String(m.message_id || m.real_id) === msgId);
+          if (!one) return { success: false, error: '本地历史无此消息，可能已过期' };
+          const data = {
+            message_id: one.message_id,
+            user_id: one.user_id,
+            nickname: one.nickname,
+            message: one.message,
+            time: one.time,
+            isBot: one.isBot === true,
+            isTool: one.isTool === true
+          };
+          return {
+            success: true,
+            data,
+            raw: this._queryToolRawDetail(`消息 ${msgId}`, data, e)
+          };
+        }
+        const limit = Math.min(Math.max(parseInt(args.limit, 10) || 30, 1), 50);
+        const slice = history.slice(-limit);
+        const data = {
+          limit,
+          count: slice.length,
+          messages: slice.map((m) => ({
+            message_id: m.message_id || m.real_id,
+            user_id: m.user_id,
+            nickname: m.nickname,
+            message: stripLegacyToolUsagePrefix(m.message || ''),
+            time: m.time,
+            isBot: m.isBot === true,
+            isTool: m.isTool === true
+          }))
+        };
+        return {
+          success: true,
+          data,
+          raw: this._queryToolRawDetail('群聊记录', data, e)
+        };
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('setFriendRemark', {
+      description: '设置好友备注。qq、remark 必填。仅主人。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          qq: { type: 'number' },
+          remark: { type: 'string' }
+        },
+        required: ['qq', 'remark']
+      },
+      handler: async (args = {}, context = {}) => {
+        const masterCheck = this._requireMaster(context);
+        if (masterCheck) return masterCheck;
+        const qq = String(args.qq ?? '').trim();
+        const remark = String(args.remark ?? '').trim();
+        if (!qq || !remark) return { success: false, error: 'qq 与 remark 必填' };
+        return this._wrapHandler(async () => {
+          const e = context.e;
+          if (e.bot?.sendApi) {
+            await e.bot.sendApi('set_friend_remark', { user_id: qq, remark });
+          } else {
+            const friend = e.bot?.pickFriend?.(qq);
+            if (friend?.setRemark) await friend.setRemark(remark);
+            else return { success: false, error: '当前适配器不支持设置备注' };
+          }
+          return { success: true, raw: actionAck(`已将 QQ ${qq} 备注设为「${remark}」`) };
+        });
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('deleteFriend', {
+      description: '删除好友。qq 必填。仅主人；不可恢复。',
+      inputSchema: {
+        type: 'object',
+        properties: { qq: { type: 'number' } },
+        required: ['qq']
+      },
+      handler: async (args = {}, context = {}) => {
+        const masterCheck = this._requireMaster(context);
+        if (masterCheck) return masterCheck;
+        const qq = String(args.qq ?? '').trim();
+        if (!qq) return { success: false, error: 'qq 必填' };
+        return this._wrapHandler(async () => {
+          const e = context.e;
+          if (e.bot?.sendApi) {
+            await e.bot.sendApi('delete_friend', { user_id: qq });
+          } else {
+            const friend = e.bot?.pickFriend?.(qq);
+            if (friend?.delete) await friend.delete();
+            else return { success: false, error: '当前适配器不支持删除好友' };
+          }
+          return { success: true, raw: actionAck(`已删除好友 QQ ${qq}`) };
+        });
+      },
+      enabled: true
+    });
+
     this.registerMCPTool('getFriendList', {
       description: '获取当前机器人的好友列表（QQ号、昵称、备注）',
       inputSchema: {
@@ -1224,6 +1662,144 @@ export default class ChatStream extends AIStream {
       },
       enabled: true
     });
+
+    this.registerMCPTool('listEssence', {
+      description: '列出当前群精华消息。仅群聊。',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async (_args = {}, context = {}) => {
+        const groupCheck = this._requireGroup(context);
+        if (groupCheck) return groupCheck;
+        const e = context.e;
+        try {
+          let list = null;
+          if (typeof e.group?.getEssence === 'function') {
+            list = await e.group.getEssence();
+          } else if (typeof e.group?.getEssenceMsg === 'function') {
+            list = await e.group.getEssenceMsg();
+          } else if (e.bot?.sendApi) {
+            const result = await e.bot.sendApi('get_essence_msg_list', { group_id: e.group_id });
+            list = result?.data ?? result;
+          }
+          if (!list) return { success: false, error: '当前适配器不支持拉取精华列表' };
+          const data = Array.isArray(list) ? list : list?.messages || list;
+          return {
+            success: true,
+            data: { essence: data },
+            raw: this._queryToolRawDetail('群精华消息', data, e)
+          };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('handleRequest', {
+      description:
+        '处理加好友/加群申请（多面）：action=list 列出 pending；approve/deny 需 flag。仅主人。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'list | approve | deny',
+            enum: ['list', 'approve', 'deny']
+          },
+          flag: { type: 'string', description: '申请 flag（approve/deny 必填）' },
+          type: {
+            type: 'string',
+            description: 'list 时可筛 friend|group',
+            enum: ['friend', 'group']
+          },
+          remark: { type: 'string', description: '通过好友时可设备注' },
+          reason: { type: 'string', description: '拒绝加群时可附理由' }
+        },
+        required: ['action']
+      },
+      handler: async (args = {}, context = {}) => {
+        const masterCheck = this._requireMaster(context);
+        if (masterCheck) return masterCheck;
+        const e = context.e;
+        const bot = e?.bot;
+        if (!bot) return { success: false, error: '无机器人实例' };
+
+        const action = String(args.action ?? '').trim().toLowerCase();
+        const pending = Array.isArray(bot.request_list) ? bot.request_list : [];
+
+        if (action === 'list') {
+          const typeFilter = args.type ? String(args.type).trim() : '';
+          const rows = pending
+            .filter((r) => r && (!typeFilter || r.request_type === typeFilter))
+            .map((r) => ({
+              flag: r.flag,
+              type: r.request_type,
+              sub_type: r.sub_type,
+              user_id: r.user_id,
+              group_id: r.group_id,
+              comment: r.comment || ''
+            }));
+          return {
+            success: true,
+            data: { count: rows.length, requests: rows },
+            raw: this._queryToolRawDetail('待处理申请', rows, e)
+          };
+        }
+
+        if (action !== 'approve' && action !== 'deny') {
+          return { success: false, error: 'action 须为 list|approve|deny' };
+        }
+
+        const flag = String(args.flag ?? '').trim();
+        if (!flag) return { success: false, error: 'approve/deny 须提供 flag' };
+        const approve = action === 'approve';
+        const hit = pending.find((r) => String(r?.flag) === flag);
+
+        return this._wrapHandler(async () => {
+          if (hit && typeof hit.approve === 'function') {
+            if (hit.request_type === 'friend') {
+              await hit.approve(approve, args.remark);
+            } else {
+              await hit.approve(approve, args.reason);
+            }
+          } else {
+            const asGroup = args.type === 'group' || (hit && hit.request_type === 'group');
+            if (asGroup) {
+              if (typeof bot.setGroupAddRequest === 'function') {
+                await bot.setGroupAddRequest(flag, approve, args.reason, hit?.sub_type || 'add');
+              } else if (bot.sendApi) {
+                await bot.sendApi('set_group_add_request', {
+                  flag,
+                  sub_type: hit?.sub_type || 'add',
+                  approve,
+                  reason: args.reason
+                });
+              } else {
+                return { success: false, error: '当前适配器不支持处理加群申请' };
+              }
+            } else if (typeof bot.setFriendAddRequest === 'function') {
+              await bot.setFriendAddRequest(flag, approve, args.remark);
+            } else if (bot.sendApi) {
+              await bot.sendApi('set_friend_add_request', {
+                flag,
+                approve,
+                remark: args.remark
+              });
+            } else {
+              return { success: false, error: '当前适配器不支持处理好友申请' };
+            }
+          }
+
+          if (Array.isArray(bot.request_list)) {
+            bot.request_list = bot.request_list.filter((r) => String(r?.flag) !== flag);
+          }
+          return {
+            success: true,
+            raw: actionAck(`${approve ? '已通过' : '已拒绝'}申请 flag=${flag}`)
+          };
+        });
+      },
+      enabled: true
+    });
   }
 
   /**
@@ -1302,23 +1878,27 @@ export default class ChatStream extends AIStream {
            roleValue === 'admin' ? '管理员' : '成员';
   }
 
-  recordAIResponse(e, text, executedFunctions = []) {
+  /**
+   * 将本轮对外发出的文本记入会话历史（【我】）。
+   * 不写工具名列表——用户已看到 reply 内容；非可视工具走 `recordToolCallResult`。
+   *
+   * @param {object} e
+   * @param {string} text
+   */
+  recordAIResponse(e, text) {
     if (!text || !text.trim()) return;
-    
-    const functionInfo = executedFunctions.length > 0 
-      ? `[执行了: ${executedFunctions.join(', ')}] ` 
-      : '';
+
     const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot';
-    const message = `${functionInfo}${text}`;
     const msgData = {
       user_id: e.self_id,
       nickname: botName,
-      message,
-      message_id: Date.now().toString(),
+      message: stripLegacyToolUsagePrefix(text),
+      message_id: `local_${Date.now()}`,
       time: Date.now(),
-      platform: e.isDevice ? 'device' : 'onebot'
+      platform: e.isDevice ? 'device' : 'onebot',
+      isBot: true
     };
-    
+
     const historyKey = ChatStream.getEventHistoryKey(e);
     if (historyKey) {
       const history = ChatStream.messageHistory.get(historyKey) || [];
@@ -1342,22 +1922,24 @@ export default class ChatStream extends AIStream {
       persona,
       '',
       '## 对用户说话（须调 MCP，勿用文字假装）',
-      '- **reply**：当前会话文字。`|` 分句 · `[回复:消息ID]`（可省略，默认引用 [当前消息]）· 群聊 `[at:数字QQ]`',
-      '- **poke**：戳一戳；用户说「戳我/戳一下」必须调用',
-      '- **emotion** / **send_image**：表情包或工作区图片',
-      '- **send_file**：工作区非图片文件',
-      '- **emojiReaction**：群消息表情回应',
-      '- **tools.***（已合并）：工作区 read/write/run 等',
-      '- 禁止 `@QQ`/`@昵称`；无权限或失败时如实说明',
-      '- 工具回执说明已拟定/已发出；用户已能看到后不要重复 reply',
-      '- 只回答 `[当前消息]`，勿复读整段群聊记录',
+      '- **reply**：当前会话。`|` 分句 · `[回复:ID]` · 群聊 `[at:QQ]`',
+      '- **poke** / **emotion** / **send_image** / **send_file** / **emojiReaction**：戳一戳、表情、图文件、表情回应',
+      '- **relayPrivate***：向好友私聊传话（正文不在群里露出）',
+      '',
+      '## 群管 / 查询 / 好友（多面能力）',
+      '- 群管：mute/unmute、muteAll、setCard、kick、announce、recall、setEssence/listEssence、setGroupTodo 等（无权限如实说明）',
+      '- 查询：getGroupInfo / getMemberInfo / getGroupMembers / getBanList / listAnnouncements / **readChatRecord**',
+      '- 好友：getFriendList / getFriendInfo；备注与删友（setFriendRemark / deleteFriend）仅主人',
+      '- 申请：**handleRequest**（list/approve/deny）处理加好友/加群，仅主人',
+      '- **tools.***：工作区 read / grep / search_replace / write / run',
+      '- 禁止 `@QQ`/`@昵称`；用户已能看见后勿重复 reply；只答 `[当前消息]`',
       '',
       '## 记录',
-      '- `昵称(QQ)[ID:xxx]` 为消息 ID，引用他人发言写 `[回复:xxx]`',
+      '- `昵称(QQ)[ID:xxx]` 为消息 ID，引用写 `[回复:xxx]`',
       '',
       '## 工作区与 skills',
-      '- 「Workspace context」含 AGENTS / rules / **skills**（按 `<location>` 用 tools.read 加载 SKILL.md）',
-      '- 工作区根目录与 tools 流一致；发文件前确认路径存在',
+      '- 「Workspace context」含 AGENTS / rules / **skills**（按 location 用 tools.read 加载）',
+      '- 发文件前确认工作区路径存在',
     ];
 
     return this.finalizeSystemPromptContent(lines.join('\n'));
@@ -1584,13 +2166,15 @@ export default class ChatStream extends AIStream {
         }
 
         const nickname = sender.card || sender.nickname || msg.nickname || '未知';
+        const uid = msg.user_id ?? sender.user_id;
         newMessages.push({
-          user_id: msg.user_id ?? sender.user_id,
+          user_id: uid,
           nickname,
-          message: text,
+          message: stripLegacyToolUsagePrefix(text),
           message_id: idStr,
           time: msg.time || Date.now(),
-          platform: e.isDevice ? 'device' : 'onebot'
+          platform: e.isDevice ? 'device' : 'onebot',
+          isBot: e.self_id != null && uid != null && String(uid) === String(e.self_id)
         });
       }
 
@@ -1614,6 +2198,74 @@ export default class ChatStream extends AIStream {
     }
   }
 
+  static _shouldRecordToolInHistory(toolName) {
+    const base = String(toolName || '').split('.').pop();
+    return Boolean(base) && !ChatStream.TOOL_HISTORY_SKIP.has(base);
+  }
+
+  /**
+   * 笔录行格式：【我】/【我·工具·名】/ 他人昵称(QQ)[ID:…]
+   * @param {object} msg
+   * @param {object} [e]
+   * @returns {string}
+   */
+  _formatHistoryMessage(msg, e = null) {
+    const msgId = msg.message_id || msg.real_id || '未知';
+    const raw = stripLegacyToolUsagePrefix((msg.message || '').replace(/\n/g, ' '));
+    const selfId = e?.self_id != null ? String(e.self_id) : null;
+    const isBot =
+      msg.isBot === true ||
+      msg.isTool === true ||
+      (selfId != null && msg.user_id != null && String(msg.user_id) === selfId);
+
+    if (isBot && msg.isTool) {
+      const label = msg.toolName ? String(msg.toolName) : '工具';
+      return `【我·工具·${label}】${raw}`;
+    }
+    if (isBot) {
+      return `【我】${raw}`;
+    }
+    const userId = msg.user_id || msg.userId || '未知';
+    const nickname = msg.nickname || '未知用户';
+    return `${nickname}(${userId})[ID:${msgId}]: ${raw}`;
+  }
+
+  /**
+   * 非对外可视工具摘要写入会话历史，供下一轮延续任务。
+   * reply/emotion 等已由 recordAIResponse 覆盖，跳过。
+   *
+   * @param {object} e
+   * @param {string} toolName
+   * @param {unknown} result
+   * @param {Record<string, unknown>|null} [args]
+   */
+  recordToolCallResult(e, toolName, result, args = null) {
+    if (!ChatStream._shouldRecordToolInHistory(toolName)) return;
+    const historyKey = ChatStream.getEventHistoryKey(e);
+    if (!historyKey) return;
+    try {
+      const summary = summarizeToolForHistory(toolName, result, args);
+      if (!summary?.trim()) return;
+      const msgData = {
+        user_id: e.self_id,
+        nickname: e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'Bot',
+        message: summary.trim(),
+        message_id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        time: Date.now(),
+        platform: e.isDevice ? 'device' : 'onebot',
+        isBot: true,
+        isTool: true,
+        toolName: String(toolName || '')
+      };
+      const history = ChatStream.messageHistory.get(historyKey) || [];
+      history.push(msgData);
+      if (history.length > 50) history.shift();
+      ChatStream.messageHistory.set(historyKey, history);
+    } catch (err) {
+      BotUtil.makeLog('debug', `recordToolCallResult: ${err?.message}`, 'ChatStream');
+    }
+  }
+
   async mergeMessageHistory(messages, e) {
     if (!e || messages.length < 2) return messages;
     const source = this.getHistorySource(e);
@@ -1633,11 +2285,6 @@ export default class ChatStream extends AIStream {
       ? userMessage.content
       : (userMessage.content?.text ?? '');
 
-    const formatMessage = (msg) => {
-      const msgId = msg.message_id || msg.real_id || '未知';
-      return `${msg.nickname}(${msg.user_id})[ID:${msgId}]: ${msg.message}`;
-    };
-
     const filteredHistory = history.filter(msg =>
       String(msg.message_id) !== String(currentMsgId)
     );
@@ -1653,49 +2300,68 @@ export default class ChatStream extends AIStream {
     }
 
     const sectionLabel = String(historyKey).startsWith('device_') ? '[近期对话]' : '[群聊记录]';
+    const historyLimit = isGlobalTrigger ? 20 : 15;
+    const recentMessages = uniqueHistory.slice(-historyLimit);
+    const historyFooter = isGlobalTrigger
+      ? ''
+      : '\n\n（说明：以上从上到下由早到晚；【我·工具】= 该步已完成；【我】= 你已回复；**只回应下方 `[当前消息]`**。）';
+
     if (isGlobalTrigger) {
-      const recentMessages = uniqueHistory.slice(-15);
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `${sectionLabel}\n${recentMessages.map(formatMessage).join('\n')}\n\n你闲来无事点开群聊，看到这些发言。请根据你的个性和人设，自然地表达情绪和感受，不要试图解决问题。`
+          content:
+            `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
+            '\n\n你闲来无事点开群聊，看到这些发言。请像群里真人一样接一两句：对准气氛或某条发言；勿全文总结、勿逐条点评、勿重复【我】已说过的话。'
         });
       }
     } else {
-      const recentMessages = uniqueHistory.slice(-10);
-      
-      // 分别显示历史记录和当前消息
       if (recentMessages.length > 0) {
         mergedMessages.push({
           role: 'user',
-          content: `${sectionLabel}\n${recentMessages.map(formatMessage).join('\n')}`
+          content:
+            `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
+            historyFooter
         });
       }
-      
-      // 当前消息：有 ID 时加 [当前消息] 前缀，否则保留多模态结构
+
       if (!currentContent) {
-        // no-op
-      } else if (typeof userMessage.content === 'object' && userMessage.content !== null && userMessage.content.text) {
+        // 无文本时仍可能有多模态附图，交给下方结构
+      }
+      if (typeof userMessage.content === 'object' && userMessage.content !== null) {
         const content = userMessage.content;
-        const prefix = currentMsgId !== '未知' ? `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ` : '';
-        mergedMessages.push({
-          role: 'user',
-          content: {
-            text: prefix ? `${prefix}${content.text || content.content || currentContent}` : (content.text || currentContent),
-            images: content.images || [],
-            replyImages: content.replyImages || []
-          }
-        });
-      } else if (currentMsgId !== '未知') {
+        const hasMedia =
+          ((content.images || []).length > 0) || ((content.replyImages || []).length > 0);
+        const lineBody =
+          (currentContent && String(currentContent).trim())
+            ? currentContent
+            : (hasMedia ? '[附图]' : '');
+        if (lineBody || hasMedia) {
+          const prefix =
+            currentMsgId !== '未知'
+              ? `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: `
+              : '';
+          mergedMessages.push({
+            role: 'user',
+            content: {
+              text: prefix
+                ? `${prefix}${content.text || content.content || lineBody}`
+                : (content.text || lineBody),
+              images: content.images || [],
+              replyImages: content.replyImages || []
+            }
+          });
+        }
+      } else if (currentContent && currentMsgId !== '未知') {
         mergedMessages.push({
           role: 'user',
           content: `[当前消息]\n${currentUserNickname}(${e.user_id})[ID:${currentMsgId}]: ${currentContent}`
         });
-      } else {
+      } else if (currentContent) {
         mergedMessages.push(userMessage);
       }
     }
-    
+
     return mergedMessages;
   }
 
@@ -1722,10 +2388,10 @@ export default class ChatStream extends AIStream {
           const trimmed = this._resolveOutboundText(aiResult.content, turn);
           if (trimmed) {
             const fallbackReplyId = turn?.queuedReplyMessageId ?? ChatStream.resolveEventMessageId(e);
-            await this.sendMessages(e, trimmed, aiResult.executedToolNames ?? [], { fallbackReplyId });
+            await this.sendMessages(e, trimmed, { fallbackReplyId });
             const { displayText } = resolveOutgoingMessage(trimmed, { fallbackReplyId });
             const historyText = displayText || trimmed;
-            this.recordAIResponse(e, historyText, aiResult.executedToolNames ?? []);
+            this.recordAIResponse(e, historyText);
             if (turn) turn.lastOutboundSummary = historyText;
           }
           return trimmed || '';
@@ -1863,19 +2529,21 @@ export default class ChatStream extends AIStream {
     return { replyId, segments: mergedSegments };
   }
 
-  async sendMessages(e, cleanText, executedToolNames = [], { fallbackReplyId = null, replyFallbackOnAllParts = true } = {}) {
+  /**
+   * 向用户发送协议正文。不附加工具名调试前缀（工具对用户不可见）。
+   *
+   * @param {object} e
+   * @param {string} cleanText
+   * @param {{ fallbackReplyId?: string|null, replyFallbackOnAllParts?: boolean }} [opts]
+   */
+  async sendMessages(e, cleanText, { fallbackReplyId = null, replyFallbackOnAllParts = true } = {}) {
     if (!cleanText?.trim() || !e?.reply) return;
 
-    const toolPrefix = executedToolNames.length > 0
-      ? `［使用了: ${executedToolNames.join('、')}］ `
-      : '';
     const parts = splitProtocolParts(cleanText);
     if (!parts.length) return;
 
     for (let i = 0; i < parts.length; i++) {
-      let part = parts[i];
-      if (i === 0 && toolPrefix) part = toolPrefix + part;
-
+      const part = parts[i];
       const useFallback = replyFallbackOnAllParts || i === 0;
       const { replyId, segments } = resolveOutgoingMessage(part, {
         fallbackReplyId: useFallback ? fallbackReplyId : null

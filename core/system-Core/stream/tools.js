@@ -10,13 +10,13 @@ const IS_WINDOWS = process.platform === 'win32';
 /**
  * 基础工具工作流（配置：aistream.tools.file）
  *
- * MCP：read / grep / write / delete_file / modify_file / list_files / run
+ * MCP：read / grep / search_replace / write / delete_file / list_files / run
  */
 export default class ToolsStream extends AIStream {
   constructor() {
     super({
       name: 'tools',
-      description: '基础工具工作流（read/grep/write/run）',
+      description: '基础工具：read/grep/search_replace/write/delete_file/list_files/run',
       version: '1.0.6',
       author: 'XRK',
       priority: 200, // 高优先级，基础工具
@@ -158,8 +158,41 @@ export default class ToolsStream extends AIStream {
       enabled: true
     });
 
+    this.registerMCPTool('search_replace', {
+      description:
+        '按 oldText 精确替换为 newText（定向改代码）。oldText 须唯一；多处相同则加长上下文或 replaceAll=true。改前先 read 确认片段。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: '文件路径' },
+          oldText: { type: 'string', description: '要被替换的原文（含足够上下文）' },
+          newText: { type: 'string', description: '替换后的文本（可为空字符串）' },
+          replaceAll: { type: 'boolean', description: '是否替换所有匹配', default: false }
+        },
+        required: ['filePath', 'oldText', 'newText']
+      },
+      handler: async (args = {}) => {
+        const { filePath, oldText, newText, replaceAll = false } = args;
+        if (!filePath) return { success: false, error: '文件路径不能为空' };
+        const result = await this.tools.searchReplace(filePath, oldText, newText, { replaceAll });
+        if (result.success) {
+          return {
+            success: true,
+            raw: `已替换 ${result.replacements} 处${result.replaceAll ? '（全部）' : ''}：${result.path}`,
+            data: result
+          };
+        }
+        return {
+          success: false,
+          error: result.error,
+          data: result.occurrences ? { occurrences: result.occurrences } : undefined
+        };
+      },
+      enabled: true
+    });
+
     this.registerMCPTool('write', {
-      description: '写入文件内容（完全覆盖）。文件不存在时自动创建。如需追加请使用 modify_file。',
+      description: '整文件写入（覆盖）。新建或重写用此工具；局部改动优先 search_replace。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -221,88 +254,6 @@ export default class ToolsStream extends AIStream {
             data: {
               filePath: fullPath,
               message: '文件删除成功'
-            }
-          };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
-      },
-      enabled: true
-    });
-
-    this.registerMCPTool('modify_file', {
-      description: '修改文件内容。支持三种模式：replace（替换全部或指定行）、append（追加到末尾）、prepend（插入到开头）。',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          filePath: {
-            type: 'string',
-            description: '文件路径'
-          },
-          content: {
-            type: 'string',
-            description: '要添加或替换的内容'
-          },
-          mode: {
-            type: 'string',
-            enum: ['replace', 'append', 'prepend'],
-            description: '修改模式：replace(替换全部或指定行)、append(追加到末尾)、prepend(插入到开头)',
-            default: 'replace'
-          },
-          lineNumber: {
-            type: 'integer',
-            description: '行号（仅在replace模式下有效，从1开始）'
-          }
-        },
-        required: ['filePath', 'content']
-      },
-      handler: async (args = {}, context = {}) => {
-        const { filePath, content, mode = 'replace', lineNumber } = args;
-        if (!filePath || content === undefined) {
-          return { success: false, error: '文件路径和内容不能为空' };
-        }
-
-        const fullPath = this.tools.resolvePath(filePath);
-        try {
-          const fs = await import('fs/promises');
-          let fileContent = '';
-          
-          try {
-            fileContent = await fs.readFile(fullPath, 'utf8');
-          } catch {
-            if (mode === 'replace') {
-              fileContent = '';
-            } else {
-              return { success: false, error: '文件不存在，无法使用append或prepend模式' };
-            }
-          }
-
-          let newContent = '';
-          if (mode === 'replace') {
-            if (lineNumber !== undefined && lineNumber > 0) {
-              const lines = fileContent.split('\n');
-              if (lineNumber <= lines.length) {
-                lines[lineNumber - 1] = content;
-                newContent = lines.join('\n');
-              } else {
-                return { success: false, error: `行号 ${lineNumber} 超出文件行数 ${lines.length}` };
-              }
-            } else {
-              newContent = content;
-            }
-          } else if (mode === 'append') {
-            newContent = fileContent + (fileContent && !fileContent.endsWith('\n') ? '\n' : '') + content;
-          } else if (mode === 'prepend') {
-            newContent = content + (fileContent && !fileContent.startsWith('\n') ? '\n' : '') + fileContent;
-          }
-
-          await fs.writeFile(fullPath, newContent, 'utf8');
-          return {
-            success: true,
-            data: {
-              filePath: fullPath,
-              mode,
-              message: `文件${mode === 'replace' ? '替换' : mode === 'append' ? '追加' : '插入'}成功`
             }
           };
         } catch (error) {
@@ -454,7 +405,9 @@ export default class ToolsStream extends AIStream {
 
   buildSystemPrompt() {
     const ws = this.workspace;
-    return `本工作流通过 MCP 提供文件与命令类工具（read/grep/write/delete_file/modify_file/list_files/run）。新建文件用 write（自动建目录）。当前工作区：${ws}。read 受 maxReadChars 截断；run 受 aistream.tools.file 开关与超时约束。勿伪造命令输出。`;
+    return `【基础工具】read / grep / search_replace / write / delete_file / list_files / run
+工作区 cwd: ${ws}
+改代码：grep → read → search_replace；整文件用 write。已移除 modify_file。run 受超时约束，勿伪造输出。`;
   }
 }
 

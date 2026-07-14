@@ -28,13 +28,12 @@ const execCommand = (command, options = {}) => {
  * 桌面与通用助手工作流
  * 
  * 所有功能都通过 MCP 工具提供：
- * - 系统操作：show_desktop、open_system_tool、lock_screen、power_control
- * - 文件操作：create_folder、open_explorer、open_application
- * - 网络操作：open_browser
- * - 命令执行：cleanup_processes（注意：执行命令请使用 tools 工作流的 run 工具）
- * - 信息读取：screenshot、system_info、disk_space（注意：列出文件请使用 tools 工作流的 list_files 工具）
- * - 办公文档：由 tools.run + office-* skills 处理（本流不再提供 docx/xlsx 生成 MCP）
- * - 剪贴板 / 打开路径：read_clipboard、write_clipboard、open_path（跨平台）
+ * - 系统：show_desktop、open_system_tool、lock_screen、power_control、get_time
+ * - 打开：open_application、open_browser、open_path（建目录用 tools.run）
+ * - 信息：screenshot、system_info、disk_space（列文件用 tools.list_files）
+ * - 进程：cleanup_processes（Shell 命令用 tools.run）
+ * - 剪贴板：read_clipboard、write_clipboard
+ * - 办公文档：tools.run + office-* skills
  */
 export default class DesktopStream extends AIStream {
 
@@ -359,7 +358,7 @@ export default class DesktopStream extends AIStream {
     });
 
     this.registerMCPTool('system_info', {
-      description: '查看系统信息。返回CPU和内存使用情况。',
+      description: '查看本机 CPU / 内存占用。',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -399,6 +398,21 @@ export default class DesktopStream extends AIStream {
           BotUtil.makeLog('error', `[desktop] 获取系统信息失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('SYSTEM_INFO_FAILED', err.message);
         }
+      },
+      enabled: true
+    });
+
+    this.registerMCPTool('get_time', {
+      description: '获取服务器当前本地时间与时区（无需再猜时间）。',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => {
+        const now = new Date();
+        return this.successResponse({
+          iso: now.toISOString(),
+          local: now.toLocaleString('zh-CN', { hour12: false }),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown',
+          epochMs: now.getTime()
+        });
       },
       enabled: true
     });
@@ -519,63 +533,6 @@ export default class DesktopStream extends AIStream {
         } catch (err) {
           BotUtil.makeLog('error', `[desktop] 电源控制失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('POWER_CONTROL_FAILED', err.message);
-        }
-      },
-      enabled: true
-    });
-
-    this.registerMCPTool('create_folder', {
-      description: '在当前 Agent 工作区（data/ai-workspace）下创建文件夹，跨平台。',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          folderName: {
-            type: 'string',
-            description: '文件夹名称'
-          }
-        },
-        required: ['folderName']
-      },
-      handler: async (args = {}, _context = {}) => {
-        const { folderName } = args;
-        if (!folderName) {
-          return this.errorResponse('INVALID_PARAM', '文件夹名称不能为空');
-        }
-
-        try {
-          const workspace = this.getWorkspace();
-          const safeName = this.sanitizeFileName(folderName);
-          const folderPath = path.join(workspace, safeName);
-
-          await fs.mkdir(folderPath, { recursive: true });
-
-          return this.successResponse({ 
-            message: `已创建文件夹: ${safeName}`,
-            folderPath,
-            folderName: safeName
-          });
-        } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 创建文件夹失败: ${err.message}`, 'DesktopStream');
-          return this.errorResponse('CREATE_FOLDER_FAILED', err.message);
-        }
-      },
-      enabled: true
-    });
-
-    this.registerMCPTool('open_explorer', {
-      description: '在文件管理器中打开当前 Agent 工作区目录，跨平台。',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      handler: async (_args = {}, _context = {}) => {
-        try {
-          await this.openPathDetached(this.getWorkspace());
-          return this.successResponse({ message: '已打开工作区目录', path: this.getWorkspace() });
-        } catch (err) {
-          BotUtil.makeLog('error', `[desktop] 打开文件管理器失败: ${err.message}`, 'DesktopStream');
-          return this.errorResponse('OPEN_EXPLORER_FAILED', err.message);
         }
       },
       enabled: true
@@ -917,15 +874,13 @@ ${persona}
 - 文件操作默认在此目录进行
 
 【工具说明】
-所有功能都通过MCP工具调用协议提供，包括：
-- 系统操作：show_desktop, open_system_tool, lock_screen, power_control
-- 文件操作：create_folder, open_explorer, open_application
-- 网络操作：open_browser
-- 命令执行：cleanup_processes（注意：执行命令请使用 tools 工作流的 run 工具）
-- 信息读取：screenshot, system_info, disk_space（注意：列出文件请使用 tools 工作流的 list_files 工具）
-- 办公文档：使用 tools 工作流的 read/write/run，并遵循 office-* skills（本流不提供 docx/xlsx 生成）
-- 剪贴板与打开路径：read_clipboard, write_clipboard, open_path
-- 开放域检索：web.web_search（见 agent-search skill）
+所有能力经 MCP（本流）：
+- 系统：show_desktop, open_system_tool, lock_screen, power_control, get_time
+- 打开：open_application, open_browser, open_path（已移除 create_folder/open_explorer，建目录用 tools.run，开资源管理器用 open_path）
+- 信息：screenshot, system_info, disk_space；列文件用 tools.list_files
+- 剪贴板：read_clipboard / write_clipboard
+- 进程：cleanup_processes；命令执行用 tools.run
+- 检索：web.web_search
 
 ${fileContext ? `【上下文】\n${fileContext}\n` : ''}
 【时间】

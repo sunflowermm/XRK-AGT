@@ -318,11 +318,12 @@ flowchart TB
 **优先级**: 10  
 
 **功能分类**：
-- **互动**：`at`、`poke`、`reply`、`emojiReaction`、`thumbUp`、`sign`
-- **群管理**：`mute`/`unmute`、`muteAll`/`unmuteAll`、`setCard`、`setGroupName`
-- **权限**：`setAdmin`/`unsetAdmin`、`setTitle`、`kick`
-- **消息**：`setEssence`/`removeEssence`、`announce`、`recall`、`setGroupTodo`
-- **查询**：`getGroupInfoEx`、`getAtAllRemain`、`getBanList`、`getFriendList`、`getGroupMembers` 等
+- **互动**：`reply`、`poke`、`emotion`、`send_image`/`send_file`、`emojiReaction`、`thumbUp`、`relayPrivate*`
+- **群管理**：`mute`/`unmute`、`muteAll`/`unmuteAll`、`setCard`、`setGroupName`、`kick`、`announce`、`recall`
+- **权限**：`setAdmin`/`unsetAdmin`、`setTitle`
+- **精华/待办**：`setEssence`/`removeEssence`/`listEssence`、`setGroupTodo`/`completeGroupTodo`/`cancelGroupTodo`
+- **查询**：`getGroupInfo`、`getMemberInfo`、`getBanList`、`listAnnouncements`、`readChatRecord`、`getFriendList`、`getFriendInfo`、`getGroupMembers`
+- **好友/申请（主人）**：`setFriendRemark`、`deleteFriend`、`handleRequest`（list/approve/deny）
 
 **使用示例**：
 ```javascript
@@ -335,14 +336,13 @@ const stream = await this.getStream('chat');
 **优先级**: 100  
 
 **功能分类**：
-- **系统**：`show_desktop`、`open_system_tool`、`lock_screen`、`power_control`（实现随平台选用 Shell/AppleScript/systemd 等，详见工具描述）
-- **文件/资源管理器**：`create_folder`、`open_explorer`、`open_application`、`open_path`
-- **网络**：`open_browser`
-- **其它**：`cleanup_processes`（清理 `BaseTools` 登记的 PID：Windows `taskkill`，Unix `SIGTERM`）、`screenshot`、`system_info`、`disk_space`
+- **系统**：`show_desktop`、`open_system_tool`、`lock_screen`、`power_control`、`get_time`（实现随平台选用 Shell/AppleScript/systemd 等，详见工具描述）
+- **打开**：`open_application`、`open_browser`、`open_path`（建目录用 `tools.run`，开资源管理器用 `open_path`）
+- **其它**：`cleanup_processes`、`screenshot`、`system_info`、`disk_space`
 - **办公文档**：不在 desktop 注册 MCP；由 `tools` 工作流 + `office-*` skills（`run`/pandoc/pandas）处理
 - **剪贴板**：`read_clipboard`、`write_clipboard`
 
-长时间命令执行请优先使用 **`tools.run`**，而非杜撰的 `execute_powershell` 工具名。
+长时间命令执行请优先使用 **`tools.run`**。
 
 **使用示例**：
 ```javascript
@@ -354,7 +354,7 @@ const stream = await this.getStream('desktop');
 **文件**: `core/system-Core/stream/tools.js`  
 **优先级**: 200  
 
-**工具**：`read`、`grep`、`write`、`delete_file`、`modify_file`、`list_files`、`run`（新建文件用 `write`，自动建目录）  
+**工具**：`read`、`grep`、`search_replace`、`write`、`delete_file`、`list_files`、`run`（新建文件用 `write`，自动建目录；改代码优先 `search_replace`）  
 
 **配置**：`aistream.tools.file`（`workspace`、`maxReadChars`、`grepMaxResults`、`runEnabled`、`runTimeoutMs`、`maxCommandOutputChars`）。`run` 在 Windows 与 Unix 下均可使用（Unix 为 `/bin/sh -lc`）。
 
@@ -392,7 +392,7 @@ const stream = await this.getStream('desktop');
 **实现库**：`core/system-Core/lib/crawl/`（`PlaywrightAgentSession`、`crawl-config.buildBrowserRuntime`、`createLocalFontScreenshotHelper`；SSRF 与 `web_fetch` 同源）  
 **配置**：`aistream.crawl.browser` + **`renderer.playwright`**（`data/server_bots/{port}/renderers/playwright/config.yaml`，见 commonconfig `renderer` 段）
 **配置**：浏览器工作流参数以 `core/system-Core/stream/browser.js` 及其实现代码为准。  
-**MCP 工具**（受控浏览器）：`browser_status`、`browser_start`、`browser_goto`、`browser_tabs`、`browser_tab_new`、`browser_tab_close`、`browser_tab_focus`、`browser_snapshot`、`browser_act`（含 `batch`）、`browser_click`、`browser_type`、`browser_wait`、`browser_console`、`browser_network`、`browser_dialog_arm`、`browser_dialog_respond`、`browser_observed_state`、`browser_evaluate`、`browser_page_text`、`browser_screenshot`、`browser_close`  
+**MCP 工具**（受控浏览器）：`browser_status`、`browser_start`、`browser_goto`、`browser_tabs`、`browser_tab_*`、`browser_snapshot`、`browser_act`（click|type|wait|evaluate|batch）、`browser_console`、`browser_network`、`browser_dialog_*`、`browser_observed_state`、`browser_page_text`、`browser_screenshot`、`browser_close`。薄包装 `browser_click/type/wait/evaluate` 已移除，统一走 `browser_act`。  
 
 实现库：`core/system-Core/lib/crawl/` — `ssrf-policy.js`（DNS pinning）、`fetch-guard.js`、`ssrf-ip-policy.js`、`playwright-session.js`、`pw-page-state.js`、`pw-role-snapshot.js`、`pw-ref-locator.js`、`browser-navigation-guard.js`（`page.route` 导航拦截）、`act-policy.js`。  
 

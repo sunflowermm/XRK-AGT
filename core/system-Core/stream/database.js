@@ -128,17 +128,17 @@ export default class DatabaseStream extends AIStream {
      * { db: "faq" }
      */
     this.registerMCPTool('query_knowledge', {
-      description: '从知识库查询知识。用于检索 FAQ、产品信息、文档等；支持关键词匹配。未指定关键词时返回该库全部条目。',
+      description: '从知识库按关键词检索（子串匹配，非向量语义）。未指定 keyword 则返回该库全部条目。',
       inputSchema: {
         type: 'object',
         properties: {
           db: {
             type: 'string',
-            description: '知识库名称（必填）。要查询的知识库，例如："faq"、"products"、"docs"等。必须是一个已存在的知识库。'
+            description: '知识库名称'
           },
           keyword: {
             type: 'string',
-            description: '搜索关键词（可选，支持语义搜索，不指定则返回所有知识）'
+            description: '关键词（可选；省略则列出该库全部）'
           }
         },
         required: ['db']
@@ -237,32 +237,40 @@ export default class DatabaseStream extends AIStream {
      * { db: "faq", condition: "*" }
      */
     this.registerMCPTool('delete_knowledge', {
-      description: '从知识库删除知识。当需要删除错误的知识、清理过时信息、清空知识库时使用此工具。支持按ID删除（精确删除）、按条件删除（key=value格式）或删除所有知识（condition="*"）。需要先通过 query_knowledge 获取知识ID。',
+      description:
+        '删除知识库条目。须指定 condition：知识 ID、或 key=value；清空整库须 condition="*" 且 confirm=true。',
       inputSchema: {
         type: 'object',
         properties: {
-          db: {
-            type: 'string',
-            description: '知识库名称'
-          },
+          db: { type: 'string', description: '知识库名称' },
           condition: {
             type: 'string',
-            description: '删除条件。可以是：1) 知识ID（数字字符串，如"1234567890"）精确删除一条知识；2) 条件表达式（key=value格式，如"category=old"）删除匹配条件的知识；3) "*" 删除知识库中的所有知识。'
+            description: '知识 ID / key=value / "*"（清空）'
+          },
+          confirm: {
+            type: 'boolean',
+            description: 'condition 为 * 时必须为 true',
+            default: false
           }
         },
-        required: ['db']
+        required: ['db', 'condition']
       },
       handler: async (args = {}, _context = {}) => {
-        const { db, condition } = args;
+        const { db, condition, confirm } = args;
         if (!db) return { success: false, error: '知识库名称不能为空' };
+        const cond = String(condition ?? '').trim();
+        if (!cond) return { success: false, error: 'condition 必填（勿默认清空）' };
+        if (cond === '*' && confirm !== true) {
+          return { success: false, error: '清空知识库须 condition="*" 且 confirm=true' };
+        }
 
-        const count = await this.deleteKnowledge(db, condition || '*');
-        
+        const count = await this.deleteKnowledge(db, cond);
+
         return {
           success: true,
           data: {
             db,
-            condition: condition || '*',
+            condition: cond,
             deletedCount: count,
             message: `已删除 ${count} 条知识`
           }
@@ -430,7 +438,11 @@ export default class DatabaseStream extends AIStream {
    * 构建系统提示（辅助工作流，合并时不会被调用）
    */
   buildSystemPrompt() {
-    return '知识库工作流插件，为其他工作流提供知识存储和检索能力。';
+    return [
+      '知识库 MCP：save_knowledge / query_knowledge / list_knowledge / delete_knowledge。',
+      'query 为关键词子串匹配（非向量语义）。',
+      'delete 须显式 condition；清空整库须 condition="*" 且 confirm=true。'
+    ].join('\n');
   }
 
   /**
