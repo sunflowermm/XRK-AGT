@@ -125,7 +125,13 @@ system-Core HTTP（如 `core/system-Core/http/core.js`）与 `src/modules/system
 
 连接失败时，非生产环境日志会提示手动启动命令。完整编排见 [docker.md](docker.md)。
 
-**Windows**：推荐安装 **Memurai Developer**（Redis API 兼容，Windows 服务名 `Memurai`，开机自启）。`start.bat` / `scripts/ensure-redis.cmd` 会 `net start Memurai` 并探测 `127.0.0.1:6379`；CLI 可用 `memurai-cli`（或 `%ProgramFiles%\Memurai\memurai-cli.exe`）。不要用 WSL Redis（localhost 转发易断）。
+**Windows**（`start.bat` → `scripts/ensure-redis.cmd`，探测 `127.0.0.1:6379`）：
+
+1. 已在监听则直接通过  
+2. 依次尝试服务 **`Memurai`**、**`Redis`**（MSI「Redis for Windows」常用服务名）  
+3. 再试 `%ProgramFiles%\Redis\redis-server.exe` / Memurai 可执行文件 / PATH 上的 `redis-server`
+
+推荐 **Memurai Developer**（服务开机自启，CLI：`memurai-cli` 或 `%ProgramFiles%\Memurai\memurai-cli.exe`）。MSI Redis 亦可；勿用 WSL Redis（localhost 转发易断）。`ensure-redis.cmd` / `probe-redis-port.ps1` 已入库，勿再整目录忽略 `scripts/`。
 
 ---
 

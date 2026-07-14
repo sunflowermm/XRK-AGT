@@ -47,7 +47,7 @@ export default async function redisInit() {
     createClient: () => createClient(clientConfig),
     onBeforeRetry: attemptRedisStart,
     devHint: process.platform === 'win32'
-      ? '手动启动: net start Memurai  或 scripts\\ensure-redis.cmd'
+      ? '手动启动: net start Memurai / net start Redis  或 scripts\\ensure-redis.cmd'
       : '手动启动: redis-server --daemonize yes'
   })
 
@@ -133,12 +133,12 @@ async function attemptRedisStart(retryCount) {
   }
 }
 
-/** Windows：复用 scripts/ensure-redis.cmd（Memurai / 原生 redis-server）。 */
+/** Windows：复用 scripts/ensure-redis.cmd（Memurai / MSI Redis / redis-server）。 */
 async function startRedisOnWindows() {
   try {
     await access(ENSURE_REDIS_CMD)
   } catch {
-    throw new Error(`缺少 ${ENSURE_REDIS_CMD}`)
+    throw new Error(`缺少 ${ENSURE_REDIS_CMD}（勿将 ensure-redis.cmd 从仓中忽略）`)
   }
   const result = await execCommandResult(`"${ENSURE_REDIS_CMD}"`)
   const out = `${result.stdout}${result.stderr}`

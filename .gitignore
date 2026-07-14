@@ -107,8 +107,10 @@ trash/
 # Framework tests（本地/CI 使用，不作为发行内容入库）
 tests/
 
-# 本地运维脚本（不入库；Docker 栈见 src/utils/docker-stack.mjs）
-scripts/
+# 本地运维脚本默认不入库；Redis 引导必须随仓（否 start.bat 会报 path not found）
+scripts/*
+!scripts/ensure-redis.cmd
+!scripts/probe-redis-port.ps1
 *.reg
 
 # 本地 Windows 注册表/卸载项清理备份（scripts/clean-empty-shell-uninstall.ps1）
